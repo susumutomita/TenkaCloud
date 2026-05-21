@@ -36,14 +36,14 @@ describe("ApplicationAdminConsoleHosting", () => {
   });
 
   describe("テナント ID を渡してインスタンス化したとき", () => {
-    it("S3 Bucket / CloudFront Distribution / OAI を 1 セット作るべき", () => {
+    it("should create 1 set of S3 Bucket / CloudFront Distribution / OAI", () => {
       const template = synth("tenant-1");
       template.resourceCountIs("AWS::S3::Bucket", 1);
       template.resourceCountIs("AWS::CloudFront::Distribution", 1);
       template.resourceCountIs("AWS::CloudFront::CloudFrontOriginAccessIdentity", 1);
     });
 
-    it("S3 Bucket は public access を完全に block すべき", () => {
+    it("S3 Bucket should fully block public access", () => {
       const template = synth("tenant-1");
       template.hasResourceProperties("AWS::S3::Bucket", {
         PublicAccessBlockConfiguration: {
@@ -55,7 +55,7 @@ describe("ApplicationAdminConsoleHosting", () => {
       });
     });
 
-    it("S3 Bucket は server-side encryption を要求すべき", () => {
+    it("S3 Bucket should require server-side encryption", () => {
       const template = synth("tenant-1");
       template.hasResourceProperties("AWS::S3::Bucket", {
         BucketEncryption: {
@@ -66,7 +66,7 @@ describe("ApplicationAdminConsoleHosting", () => {
       });
     });
 
-    it("CloudFront Distribution は HTTPS リダイレクトと SPA fallback (403/404 → /index.html 200) を持つべき", () => {
+    it("CloudFront Distribution should have HTTPS redirect and SPA fallback (403/404 → /index.html 200)", () => {
       const template = synth("tenant-1");
       template.hasResourceProperties("AWS::CloudFront::Distribution", {
         DistributionConfig: {
@@ -82,7 +82,7 @@ describe("ApplicationAdminConsoleHosting", () => {
 
     // Issue #896: CSP3 spec で wildcard は **leftmost only**。 中段 `*` 入りの host-source は
     // ブラウザが silently ignore して全 fetch が \"Refused to connect by CSP\" で fail する。
-    it("Content-Security-Policy connect-src は middle wildcard を含むべきでない (CSP3 spec)", () => {
+    it("Content-Security-Policy connect-src should not contain middle wildcards (CSP3 spec)", () => {
       const template = synth("tenant-1");
       const policies = template.findResources("AWS::CloudFront::ResponseHeadersPolicy");
       const policy = Object.values(policies)[0];
@@ -92,7 +92,7 @@ describe("ApplicationAdminConsoleHosting", () => {
       expect(cspJson).not.toContain("*.lambda-url.*");
     });
 
-    it("Content-Security-Policy connect-src に execute-api / lambda-url / cognito を含むべき", () => {
+    it("Content-Security-Policy connect-src should include execute-api / lambda-url / cognito", () => {
       const template = synth("tenant-1");
       const policies = template.findResources("AWS::CloudFront::ResponseHeadersPolicy");
       const policy = Object.values(policies)[0];
@@ -104,7 +104,7 @@ describe("ApplicationAdminConsoleHosting", () => {
       expect(cspJson).toContain("amazoncognito.com");
     });
 
-    it("distributionDomainName と distributionUrl を property として公開すべき", () => {
+    it("should expose distributionDomainName and distributionUrl as properties", () => {
       const app = new cdk.App();
       const stack = new cdk.Stack(app, "TestStack");
       const hosting = new ApplicationAdminConsoleHosting(stack, "Hosting", {
@@ -116,7 +116,7 @@ describe("ApplicationAdminConsoleHosting", () => {
   });
 
   describe("pooled テナントの場合 (tenantId = pooled)", () => {
-    it("silo と同じ構造 (Bucket / Distribution / OAI) を持つべき (構造は分岐させない設計)", () => {
+    it("should mirror the silo structure (Bucket / Distribution / OAI) (no structural divergence by design)", () => {
       const template = synth("pooled");
       template.resourceCountIs("AWS::S3::Bucket", 1);
       template.resourceCountIs("AWS::CloudFront::Distribution", 1);
@@ -156,12 +156,12 @@ describe("ApplicationAdminConsoleHosting", () => {
       throw new Error("runtime-config.json asset not found");
     }
 
-    it("BucketDeployment Custom Resource が 2 個に増えるべき (dist と runtime-config)", () => {
+    it("should grow to 2 BucketDeployment Custom Resources (dist and runtime-config)", () => {
       const { template } = synthWithRuntimeConfig();
       template.resourceCountIs("Custom::CDKBucketDeployment", 2);
     });
 
-    it("CloudFront 既存 distribution が同じ Bucket に対して使われ続けるべき (新 Bucket を作らない)", () => {
+    it("should keep using the existing CloudFront distribution against the same Bucket (no new Bucket)", () => {
       const { template } = synthWithRuntimeConfig();
       template.resourceCountIs("AWS::S3::Bucket", 1);
       template.resourceCountIs("AWS::CloudFront::Distribution", 1);

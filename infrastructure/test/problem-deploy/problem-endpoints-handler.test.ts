@@ -64,28 +64,28 @@ beforeEach(() => {
 });
 
 describe("listProblemEndpoints", () => {
-  it("team の deployment が無いときは unauthorized を返すべき", async () => {
+  it("should return unauthorized when the team has no deployments", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([]);
     const shared = buildShared({ problemsEndpoints: { "battle-1": [SLOT_FRONTEND] } });
     const r = await listProblemEndpoints(shared, "key", "battle-1");
     expect(r.kind).toBe("unauthorized");
   });
 
-  it("team に該当 problemId が無いときも unauthorized を返すべき", async () => {
+  it("should also return unauthorized when the team does not have the problemId", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([{ ...teamRow, problemId: "other-problem" }]);
     const shared = buildShared({ problemsEndpoints: { "battle-1": [SLOT_FRONTEND] } });
     const r = await listProblemEndpoints(shared, "key", "battle-1");
     expect(r.kind).toBe("unauthorized");
   });
 
-  it("metadata.endpoints[] が空 (= flag-only 問題) は no_endpoints を返すべき", async () => {
+  it("should return no_endpoints when metadata.endpoints[] is empty (flag-only problem)", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([teamRow]);
     const shared = buildShared({ problemsEndpoints: {} });
     const r = await listProblemEndpoints(shared, "key", "battle-1");
     expect(r.kind).toBe("no_endpoints");
   });
 
-  it("override 無しで slot 一覧と default URL を返すべき", async () => {
+  it("should return slot list and default URLs with no overrides", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([teamRow]);
     const ddbSend = vi.fn().mockResolvedValueOnce({ Items: [] });
     const shared = buildShared({
@@ -105,7 +105,7 @@ describe("listProblemEndpoints", () => {
     });
   });
 
-  it("override 行がある slot は effectiveUrl が override で埋まるべき", async () => {
+  it("effectiveUrl should be populated by override for slots with override rows", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([teamRow]);
     const ddbSend = vi.fn().mockResolvedValueOnce({
       Items: [
@@ -135,14 +135,14 @@ describe("listProblemEndpoints", () => {
     });
   });
 
-  it("endpointsTableName が未配線なら misconfigured を返すべき", async () => {
+  it("should return misconfigured when endpointsTableName is unwired", async () => {
     const shared = buildShared({ endpointsTableName: "" });
     const r = await listProblemEndpoints(shared, "key", "battle-1");
     expect(r.kind).toBe("misconfigured");
     expect(mockedQueryTeamItems).not.toHaveBeenCalled();
   });
 
-  it("#703: defaultKey は常に metadata の default.key で埋まり、stackOutputs 無しでも UI が hint を出せるべき", async () => {
+  it("#703: should always populate defaultKey from metadata default.key so the UI can hint even without stackOutputs", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([
       { ...teamRow, stackOutputs: undefined, problemId: "battle-1" },
     ]);
@@ -167,7 +167,7 @@ describe("listProblemEndpoints", () => {
 });
 
 describe("upsertProblemEndpointOverride", () => {
-  it("override 不可 slot は slot_not_overridable を返し DDB Put しないべき", async () => {
+  it("should return slot_not_overridable without DDB Put for non-overridable slots", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([teamRow]);
     const ddbSend = vi.fn();
     const shared = buildShared({
@@ -186,7 +186,7 @@ describe("upsertProblemEndpointOverride", () => {
     expect(ddbSend).not.toHaveBeenCalled();
   });
 
-  it("URL が不正なら invalid_url を返し DDB Put しないべき", async () => {
+  it("should return invalid_url without DDB Put when the URL is invalid", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([teamRow]);
     const ddbSend = vi.fn();
     const shared = buildShared({
@@ -205,7 +205,7 @@ describe("upsertProblemEndpointOverride", () => {
     expect(ddbSend).not.toHaveBeenCalled();
   });
 
-  it("ftp:// など http(s) 以外の scheme は invalid_url を返すべき", async () => {
+  it("should return invalid_url for schemes other than http(s) such as ftp://", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([teamRow]);
     const shared = buildShared({
       problemsEndpoints: { "battle-1": [SLOT_FRONTEND] },
@@ -238,7 +238,7 @@ describe("upsertProblemEndpointOverride", () => {
     ["IPv6-mapped IMDS (dotted)", "http://[::ffff:169.254.169.254]/latest/meta-data/"],
     ["IPv6-mapped IMDS (hex)", "http://[::ffff:a9fe:a9fe]/latest/meta-data/"],
     ["IPv6-mapped loopback", "http://[::ffff:127.0.0.1]/admin"],
-  ])("SSRF blocklist: %s host は invalid_url を返すべき", async (_, url) => {
+  ])("SSRF blocklist: should return invalid_url for %s host", async (_, url) => {
     mockedQueryTeamItems.mockResolvedValueOnce([teamRow]);
     const ddbSend = vi.fn();
     const shared = buildShared({
@@ -257,7 +257,7 @@ describe("upsertProblemEndpointOverride", () => {
     expect(ddbSend).not.toHaveBeenCalled();
   });
 
-  it("metadata に無い slot は unknown_slot を返すべき", async () => {
+  it("should return unknown_slot for slots missing from metadata", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([teamRow]);
     const shared = buildShared({
       problemsEndpoints: { "battle-1": [SLOT_FRONTEND] },
@@ -274,7 +274,7 @@ describe("upsertProblemEndpointOverride", () => {
     expect(r.kind).toBe("unknown_slot");
   });
 
-  it("成功時は DDB Put して view を返すべき", async () => {
+  it("should DDB Put and return the view on success", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([teamRow]);
     const ddbSend = vi
       .fn()
@@ -322,7 +322,7 @@ describe("upsertProblemEndpointOverride", () => {
 });
 
 describe("deleteProblemEndpointOverride", () => {
-  it("metadata に無い slot は unknown_slot を返すべき", async () => {
+  it("should return unknown_slot for slots missing from metadata", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([teamRow]);
     const shared = buildShared({
       problemsEndpoints: { "battle-1": [SLOT_FRONTEND] },
@@ -332,7 +332,7 @@ describe("deleteProblemEndpointOverride", () => {
     expect(r.kind).toBe("unknown_slot");
   });
 
-  it("成功時は DDB DeleteItem を発行して view を返すべき", async () => {
+  it("should issue DDB DeleteItem and return the view on success", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([teamRow]);
     const ddbSend = vi.fn().mockResolvedValueOnce({}).mockResolvedValueOnce({ Items: [] });
     const shared = buildShared({

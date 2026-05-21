@@ -66,7 +66,7 @@ describe("ProblemPanel deploy terminal", () => {
     apiMocks.getDeployLogs.mockRejectedValue(new Error("not configured"));
   });
 
-  it("deployLog の terminal 行を表示すべき", () => {
+  it("should display deployLog terminal entries", () => {
     render(
       withI18n(
         <ProblemPanel
@@ -83,7 +83,7 @@ describe("ProblemPanel deploy terminal", () => {
     expect(screen.getByText("CloudFormation stack creation is in progress.")).toBeInTheDocument();
   });
 
-  it("非 terminal status では CodeBuild live log を取得して terminal に表示すべき", async () => {
+  it("should fetch CodeBuild live logs and display them in the terminal for non-terminal status", async () => {
     apiMocks.getDeployLogs.mockResolvedValueOnce({
       jobId: baseProblem.jobId,
       buildStatus: "IN_PROGRESS",
@@ -119,7 +119,7 @@ describe("ProblemPanel deploy terminal", () => {
     );
   });
 
-  it("expiresAt から自動削除までの残り時間を表示すべき", () => {
+  it("should display the remaining time until auto-delete based on expiresAt", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-20T00:00:00.000Z"));
     render(
@@ -141,7 +141,7 @@ describe("ProblemPanel deploy terminal", () => {
     expect(screen.getByText(/teardown/)).toBeInTheDocument();
   });
 
-  it("AUTO_DELETED status を停止済みとして表示すべき", () => {
+  it("should display AUTO_DELETED status as stopped", () => {
     render(
       withI18n(
         <ProblemPanel
@@ -161,7 +161,7 @@ describe("ProblemPanel submit helpers", () => {
   const t = (key: string, params?: Readonly<Record<string, string | number>>) =>
     params?.errorCode ? `${key}:${params.errorCode}` : key;
 
-  it("ok / already_scored のとき score refresh 対象にすべき", () => {
+  it("should mark ok / already_scored as score refresh targets", () => {
     expect(shouldRefreshAfterFlagSubmit({ kind: "ok", scoreDelta: 10, totalScore: 20 })).toBe(true);
     expect(shouldRefreshAfterFlagSubmit({ kind: "already_scored", totalScore: 20 })).toBe(true);
     expect(
@@ -174,7 +174,7 @@ describe("ProblemPanel submit helpers", () => {
     ).toBe(false);
   });
 
-  it("scoring gate error をユーザー向け文言に整形すべき", () => {
+  it("should format scoring gate errors into user-facing text", () => {
     expect(
       formatProblemPanelActionError(
         t,
@@ -184,7 +184,7 @@ describe("ProblemPanel submit helpers", () => {
     ).toBe("problem_panel.scoring_gate_paused");
   });
 
-  it("validation error を指定 key の errorCode 付き文言に整形すべき", () => {
+  it("should format validation errors into text using the specified key with errorCode", () => {
     expect(
       formatProblemPanelActionError(
         t,
@@ -194,7 +194,7 @@ describe("ProblemPanel submit helpers", () => {
     ).toBe("problem_panel.submit_error_prefix:invalid_flag");
   });
 
-  it("Error 以外も string 化すべき", () => {
+  it("should stringify non-Error values", () => {
     expect(formatProblemPanelActionError(t, "boom", "problem_panel.validation_error")).toBe("boom");
   });
 });

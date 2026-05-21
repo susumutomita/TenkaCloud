@@ -7,21 +7,21 @@ import {
 } from "../../src/pages/TeamSetup";
 
 describe("TeamSetup helpers", () => {
-  it("team name を trim し、有効な入力を判定すべき", () => {
+  it("should trim team name and judge valid input", () => {
     expect(describeTeamNameDraft("  Team Alpha  ")).toEqual({
       trimmed: "Team Alpha",
       invalid: false,
     });
   });
 
-  it("不正文字を含む team name を invalid にすべき", () => {
+  it("should mark team names containing invalid characters as invalid", () => {
     expect(describeTeamNameDraft("Team!")).toEqual({
       trimmed: "Team!",
       invalid: true,
     });
   });
 
-  it("sessionToken があり非空かつ valid で送信中でなければ submit 可能にすべき", () => {
+  it("should allow submit when sessionToken exists, value is non-empty and valid, and not submitting", () => {
     expect(
       canSubmitTeamName({
         sessionToken: "session-token",
@@ -32,7 +32,7 @@ describe("TeamSetup helpers", () => {
     ).toBe(true);
   });
 
-  it("sessionToken 不在 / 空 / invalid / submitting は submit 不可にすべき", () => {
+  it("should disallow submit when sessionToken is missing / empty / invalid / submitting", () => {
     expect(
       canSubmitTeamName({
         sessionToken: undefined,
@@ -67,13 +67,13 @@ describe("TeamSetup helpers", () => {
     ).toBe(false);
   });
 
-  it("validation error は i18n 済み message に整形すべき", () => {
+  it("should format validation errors into an i18n message", () => {
     expect(
       formatTeamSetupSubmitError(new PortalValidationError("invalid"), "validation failed"),
     ).toBe("validation failed");
   });
 
-  it("Error 以外も string 化すべき", () => {
+  it("should stringify non-Error values", () => {
     expect(formatTeamSetupSubmitError("boom", "validation failed")).toBe("boom");
   });
 });

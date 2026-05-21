@@ -52,7 +52,7 @@ describe("toSummary", () => {
     expect(JSON.stringify(s)).not.toContain("SECRET_LOGIN_KEY_DO_NOT_LEAK");
   });
 
-  it("公開フィールドはそのまま入るべき", () => {
+  it("public fields should be included as-is", () => {
     const s = toSummary(sampleRow());
     expect(s.jobId).toBe("01HABC");
     expect(s.problemId).toBe("security-battle-royale");
@@ -65,7 +65,7 @@ describe("toSummary", () => {
 describe("listDeployments", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("GSI1 に対して TENANT#<id> で Query を投げるべき", async () => {
+  it("should issue a Query against GSI1 with TENANT#<id>", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()], LastEvaluatedKey: undefined });
 
@@ -80,7 +80,7 @@ describe("listDeployments", () => {
     expect(cmd.input.ScanIndexForward).toBe(false);
   });
 
-  it("teamLoginKey を返り値に出さないべき (DDB の row には含まれていても)", async () => {
+  it("should not surface teamLoginKey in the return value (even if present in the DDB row)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()], LastEvaluatedKey: undefined });
 
@@ -89,7 +89,7 @@ describe("listDeployments", () => {
     expect(JSON.stringify(out.items[0])).not.toContain("SECRET_LOGIN_KEY_DO_NOT_LEAK");
   });
 
-  it("problemId が指定されたら filter するべき", async () => {
+  it("should filter when problemId is specified", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [
@@ -106,7 +106,7 @@ describe("listDeployments", () => {
     expect(out.items.map((i) => i.jobId)).toEqual(["JOB1"]);
   });
 
-  it("LastEvaluatedKey を base64url cursor で返すべき", async () => {
+  it("should return LastEvaluatedKey as a base64url cursor", async () => {
     const { shared, ddbSend } = buildShared();
     const lastKey = { PK: "DEPLOYMENT#X", SK: "META" };
     ddbSend.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: lastKey });
@@ -117,7 +117,7 @@ describe("listDeployments", () => {
     expect(decoded).toEqual(lastKey);
   });
 
-  it("cursor を渡すと ExclusiveStartKey として渡されるべき", async () => {
+  it("should forward the cursor as ExclusiveStartKey", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
     const startKey = { PK: "DEPLOYMENT#Y", SK: "META" };
@@ -129,7 +129,7 @@ describe("listDeployments", () => {
     expect(cmd.input.ExclusiveStartKey).toEqual(startKey);
   });
 
-  it("不正な cursor は無視して最初から開始するべき", async () => {
+  it("should ignore invalid cursors and start from the beginning", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
 
@@ -139,7 +139,7 @@ describe("listDeployments", () => {
     expect(cmd.input.ExclusiveStartKey).toBeUndefined();
   });
 
-  it("Issue #862: cursor が allowlist 外の key を含むなら無視するべき (= injection 防御)", async () => {
+  it("Issue #862: should ignore cursors containing keys outside the allowlist (injection guard)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
     // 攻撃者が任意 key/value を送る試行
@@ -153,7 +153,7 @@ describe("listDeployments", () => {
     expect(cmd.input.ExclusiveStartKey).toBeUndefined();
   });
 
-  it("Issue #862: cursor が長すぎたら無視するべき (= DoS 防御)", async () => {
+  it("Issue #862: should ignore overly long cursors (DoS guard)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
     const cursor = "a".repeat(1024); // 512 上限超え
@@ -177,7 +177,7 @@ describe("listDeployments", () => {
     expect(cmd.input.ExclusiveStartKey).toBeUndefined();
   });
 
-  it("limit は 1〜200 にクランプされるべき", async () => {
+  it("should clamp limit to 1–200", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValue({ Items: [], LastEvaluatedKey: undefined });
 
@@ -193,7 +193,7 @@ describe("listDeployments", () => {
 describe("getDeployment", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("PK=DEPLOYMENT#<jobId> SK=META で GetItem を投げるべき", async () => {
+  it("should issue a GetItem on PK=DEPLOYMENT#<jobId> SK=META", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow() });
 
@@ -204,7 +204,7 @@ describe("getDeployment", () => {
     expect(cmd.input.Key).toEqual({ PK: "DEPLOYMENT#01HABC", SK: "META" });
   });
 
-  it("行が無ければ undefined を返すべき", async () => {
+  it("should return undefined when the row is missing", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: undefined });
 
@@ -212,7 +212,7 @@ describe("getDeployment", () => {
     expect(out).toBeUndefined();
   });
 
-  it("tenantId が一致しない行はクロステナント漏洩防止で undefined を返すべき", async () => {
+  it("should return undefined for rows whose tenantId does not match (cross-tenant leak guard)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow({ tenantId: "tenant-other" }) });
 
@@ -220,7 +220,7 @@ describe("getDeployment", () => {
     expect(out).toBeUndefined();
   });
 
-  it("operator には teamLoginKey を含めて返すべき", async () => {
+  it("should include teamLoginKey for operators", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow() });
 
@@ -229,7 +229,7 @@ describe("getDeployment", () => {
     expect(out?.teamLoginKey).toBe("SECRET_LOGIN_KEY_DO_NOT_LEAK");
   });
 
-  it("一覧では teamLoginKey を含めないべき", async () => {
+  it("listing should not include teamLoginKey", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
 

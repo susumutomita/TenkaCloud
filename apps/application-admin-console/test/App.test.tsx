@@ -54,22 +54,22 @@ describe("App", () => {
     localStorage.clear();
   });
 
-  describe("/login に直接アクセスしたとき", () => {
-    it("LoginPage が表示されサインインボタンを持つべき", async () => {
+  describe("when accessing /login directly", () => {
+    it("should render LoginPage with a sign-in button", async () => {
       renderApp("/login");
       expect(await screen.findByRole("button", { name: "サインイン" })).toBeInTheDocument();
     });
   });
 
-  describe("未認証で / にアクセスしたとき", () => {
-    it("LoginPage へ redirect され、サインインボタンが表示されるべき", async () => {
+  describe("when accessing / unauthenticated", () => {
+    it("should redirect to LoginPage and show the sign-in button", async () => {
       renderApp("/");
       expect(await screen.findByRole("button", { name: "サインイン" })).toBeInTheDocument();
     });
   });
 
-  describe("有効な token を sessionStorage に持って / にアクセスしたとき", () => {
-    it("JWT custom:tenantName を greeting に表示すべき", async () => {
+  describe("when accessing / with a valid token in sessionStorage", () => {
+    it("should display JWT custom:tenantName in the greeting", async () => {
       loginAs({
         email: "admin@example.com",
         "custom:tenantId": "t-acme",
@@ -82,7 +82,7 @@ describe("App", () => {
       ).toBeInTheDocument();
     });
 
-    it("custom:tenantName が無いときは fallback プレースホルダ (= UUID-like tenantId を welcome に出さない、 Issue #830)", async () => {
+    it("should use the fallback placeholder when custom:tenantName is missing (= do not show a UUID-like tenantId in the welcome, Issue #830)", async () => {
       loginAs({
         email: "admin@example.com",
         "custom:tenantId": "3f01a734-9652-4065-a391-fa1b4d45ae26",
@@ -98,7 +98,7 @@ describe("App", () => {
       expect(screen.getByText(/テナント名が JWT に含まれていません/)).toBeInTheDocument();
     });
 
-    it("config.tenantName の placeholder ('Shared Pooled Tenant') を画面に出してはいけない", async () => {
+    it("should NOT show the config.tenantName placeholder ('Shared Pooled Tenant') on screen", async () => {
       loginAs({
         email: "admin@example.com",
         "custom:tenantId": "t-acme",

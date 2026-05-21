@@ -45,7 +45,7 @@ function fakeClient(response: unknown): { client: ApiClient; calls: CapturedCall
 }
 
 describe("EVENT_ID_RE", () => {
-  it("ULID 形式のみマッチするべき", () => {
+  it("should match ULID format only", () => {
     expect(EVENT_ID_RE.test("01KQZRZSTT6EQC9JVK4FQKRKKM")).toBe(true);
     expect(EVENT_ID_RE.test("not-a-ulid")).toBe(false);
     expect(EVENT_ID_RE.test("01kqzrzstt6eqc9jvk4fqkrkkm")).toBe(false); // lowercase
@@ -54,13 +54,13 @@ describe("EVENT_ID_RE", () => {
 });
 
 describe("listEvents", () => {
-  it("limit / cursor を query string に詰めるべき", async () => {
+  it("should pack limit / cursor into the query string", async () => {
     const { client, calls } = fakeClient({ items: [] });
     await listEvents(client, { limit: 50, cursor: "abc" });
     expect(calls[0]?.path).toBe("events?limit=50&cursor=abc");
   });
 
-  it("オプション無しは plain `events` を呼ぶべき", async () => {
+  it("should call plain `events` when no options are provided", async () => {
     const { client, calls } = fakeClient({ items: [] });
     await listEvents(client);
     expect(calls[0]?.path).toBe("events");
@@ -68,7 +68,7 @@ describe("listEvents", () => {
 });
 
 describe("getEvent", () => {
-  it("eventId を URL encode して GET するべき", async () => {
+  it("should URL-encode eventId and GET it", async () => {
     const { client, calls } = fakeClient({ eventId: "EV1" });
     await getEvent(client, "EV1");
     expect(calls[0]?.path).toBe("events/EV1");
@@ -77,7 +77,7 @@ describe("getEvent", () => {
 });
 
 describe("createEvent", () => {
-  it("POST /events に body をそのまま送るべき", async () => {
+  it("should POST body as-is to /events", async () => {
     const { client, calls } = fakeClient({
       eventId: "EV1",
       status: "DRAFT",
@@ -104,7 +104,7 @@ describe("createEvent", () => {
 });
 
 describe("bulkDeployEvent", () => {
-  it("POST /events/{id}/deploy を空 body で呼び結果 BulkResult を返すべき", async () => {
+  it("should POST /events/{id}/deploy with an empty body and return BulkResult", async () => {
     const { client, calls } = fakeClient({ eventId: "EV1", enqueued: 6, skipped: 0 });
     const out = await bulkDeployEvent(client, "EV1");
     expect(calls[0]?.path).toBe("events/EV1/deploy");
@@ -114,20 +114,20 @@ describe("bulkDeployEvent", () => {
   });
 
   // #555: opt-in body の partial deploy / retry-failed 経路
-  it("retryFailedOnly: true を body にそのまま乗せて POST するべき", async () => {
+  it("should POST with retryFailedOnly: true passed through in body", async () => {
     const { client, calls } = fakeClient({ eventId: "EV1", enqueued: 2, skipped: 0 });
     await bulkDeployEvent(client, "EV1", { retryFailedOnly: true });
     expect(calls[0]?.path).toBe("events/EV1/deploy");
     expect(calls[0]?.body).toEqual({ retryFailedOnly: true });
   });
 
-  it("teamIds / problemIds を body にそのまま乗せて POST するべき (部分 deploy)", async () => {
+  it("should POST with teamIds / problemIds passed through in body (partial deploy)", async () => {
     const { client, calls } = fakeClient({ eventId: "EV1", enqueued: 2, skipped: 0 });
     await bulkDeployEvent(client, "EV1", { teamIds: ["t1"], problemIds: ["hello-world"] });
     expect(calls[0]?.body).toEqual({ teamIds: ["t1"], problemIds: ["hello-world"] });
   });
 
-  it("forceRedeploy: true を body にそのまま乗せて POST するべき", async () => {
+  it("should POST with forceRedeploy: true passed through in body", async () => {
     const { client, calls } = fakeClient({ eventId: "EV1", enqueued: 2, skipped: 0 });
     await bulkDeployEvent(client, "EV1", { forceRedeploy: true });
     expect(calls[0]?.body).toEqual({ forceRedeploy: true });
@@ -135,7 +135,7 @@ describe("bulkDeployEvent", () => {
 });
 
 describe("bulkTeardownEvent", () => {
-  it("DELETE /events/{id} を呼んで BulkResult を返すべき (delJson 経由)", async () => {
+  it("should DELETE /events/{id} and return BulkResult (via delJson)", async () => {
     const { client, calls } = fakeClient({ eventId: "EV1", enqueued: 6, skipped: 0 });
     const out = await bulkTeardownEvent(client, "EV1");
     expect(calls[0]?.path).toBe("events/EV1");
@@ -145,7 +145,7 @@ describe("bulkTeardownEvent", () => {
 });
 
 describe("endEvent", () => {
-  it("POST /events/{id}/end を空 body で呼び EndEventResult を返すべき", async () => {
+  it("should POST /events/{id}/end with an empty body and return EndEventResult", async () => {
     const { client, calls } = fakeClient({
       endsAt: "2026-05-08T10:00:00.000Z",
       updatedDeployments: 12,
@@ -160,7 +160,7 @@ describe("endEvent", () => {
 });
 
 describe("archiveEvent", () => {
-  it("POST /events/{id}/archive を空 body で呼び ArchiveEventResult を返すべき", async () => {
+  it("should POST /events/{id}/archive with an empty body and return ArchiveEventResult", async () => {
     const { client, calls } = fakeClient({ archivedAt: "2026-05-09T10:00:00.000Z" });
     const out = await archiveEvent(client, "EV1");
     expect(calls[0]?.path).toBe("events/EV1/archive");

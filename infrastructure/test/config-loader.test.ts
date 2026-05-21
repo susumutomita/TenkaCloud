@@ -33,31 +33,31 @@ describe("expandPlaceholders", () => {
   });
 
   describe("env が定義されているとき", () => {
-    it("env 値で placeholder を置換するべき", () => {
+    it("should substitute placeholders with env values", () => {
       process.env.MY_VAR = "hello";
       expect(expandPlaceholders(`value=${ph("MY_VAR")}`, process.env)).toBe("value=hello");
     });
 
-    it("default 値があっても env 値を優先するべき", () => {
+    it("should prefer env values over defaults", () => {
       process.env.MY_VAR = "envValue";
       expect(expandPlaceholders(`v=${ph("MY_VAR", "fallback")}`, process.env)).toBe("v=envValue");
     });
   });
 
   describe("env が未定義 + default 値があるとき", () => {
-    it("default 値で placeholder を置換するべき", () => {
+    it("should substitute placeholders with default values", () => {
       delete process.env.MY_VAR;
       expect(expandPlaceholders(`v=${ph("MY_VAR", "fallback")}`, process.env)).toBe("v=fallback");
     });
   });
 
   describe("env が未定義 + default 値も無いとき", () => {
-    it("default では throw するべき", () => {
+    it("should throw by default", () => {
       delete process.env.MY_VAR;
       expect(() => expandPlaceholders(`v=${ph("MY_VAR")}`, process.env)).toThrowError(/MY_VAR/);
     });
 
-    it("tolerant=true なら literal placeholder を残すべき (consumer が読まない field の保護)", () => {
+    it("should retain literal placeholders when tolerant=true (protecting fields the consumer does not read)", () => {
       delete process.env.MY_VAR;
       expect(expandPlaceholders(`v=${ph("MY_VAR")}`, process.env, { tolerant: true })).toBe(
         `v=${ph("MY_VAR")}`,
@@ -91,13 +91,13 @@ describe("loadConfig (環境別 config.json + .env)", () => {
   }
 
   describe("config.json が存在しないとき", () => {
-    it("undefined を返すべき (caller が default にフォールバック)", () => {
+    it("should return undefined (so caller falls back to default)", () => {
       expect(loadConfig("development", baseDir)).toBeUndefined();
     });
   });
 
   describe("dynamoDbConfig セクションを持つ config.json があるとき", () => {
-    it("literal 値をそのまま返すべき", () => {
+    it("should return literal values as-is", () => {
       writeConfig("development", {
         dynamoDbConfig: { billingMode: "PROVISIONED", readCapacity: 5, writeCapacity: 7 },
       });
@@ -109,7 +109,7 @@ describe("loadConfig (環境別 config.json + .env)", () => {
       });
     });
 
-    it("placeholder を env で展開して返すべき", () => {
+    it("should expand placeholders with env and return", () => {
       writeConfig("development", {
         dynamoDbConfig: {
           billingMode: ph("DYNAMODB_BILLING_MODE", "PROVISIONED"),
@@ -129,7 +129,7 @@ describe("loadConfig (環境別 config.json + .env)", () => {
       });
     });
 
-    it("env が未設定なら placeholder の default 値を使うべき", () => {
+    it("should use the placeholder default value when env is unset", () => {
       writeConfig("development", {
         dynamoDbConfig: {
           billingMode: ph("DYNAMODB_BILLING_MODE", "PROVISIONED"),
@@ -151,7 +151,7 @@ describe("loadConfig (環境別 config.json + .env)", () => {
   });
 
   describe("dynamoDbConfig 以外のセクションに env 未設定の placeholder があるとき", () => {
-    it("tolerant モードで literal placeholder を残し、dynamoDbConfig は通常通り使えるべき", () => {
+    it("should retain literal placeholders in tolerant mode while keeping dynamoDbConfig usable as usual", () => {
       writeConfig("development", {
         controlPlaneConfig: {
           systemAdminEmail: ph("TenkaCloud_ADMIN_EMAIL"),

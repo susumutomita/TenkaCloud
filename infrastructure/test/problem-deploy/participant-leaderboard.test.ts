@@ -41,7 +41,7 @@ describe("buildLeaderboardEntries (pure)", () => {
     expect(buildLeaderboardEntries([], "T1")).toEqual([]);
   });
 
-  it("複数 team / 複数 problem を team で集計しスコア降順 + rank 付与するべき", () => {
+  it("should aggregate multiple teams / multiple problems per team, sort by score desc, and assign rank", () => {
     const items = [
       sampleRow({ teamId: "T1", problemId: "p1", score: 100, status: "COMPLETE" }),
       sampleRow({ teamId: "T1", problemId: "p2", score: 50, status: "COMPLETE" }),
@@ -57,7 +57,7 @@ describe("buildLeaderboardEntries (pure)", () => {
     expect(out[2]).toMatchObject({ rank: 3, teamId: "T3", score: 150 });
   });
 
-  it("isMyTeam=true で自分の team をマークするべき (UI ハイライト用)", () => {
+  it("should mark own team with isMyTeam=true (for UI highlighting)", () => {
     const items = [
       sampleRow({ teamId: "T1", problemId: "p1", score: 100 }),
       sampleRow({ teamId: "T2", problemId: "p1", score: 200 }),
@@ -77,7 +77,7 @@ describe("buildLeaderboardEntries (pure)", () => {
     expect(out.find((e) => e.teamId === "T2")?.teamName).toBe("team-2");
   });
 
-  it("DELETING / DELETED 行は集計から除外するべき", () => {
+  it("should exclude DELETING / DELETED rows from aggregation", () => {
     const items = [
       sampleRow({ teamId: "T1", score: 100, status: "COMPLETE" }),
       sampleRow({ teamId: "T1", score: 999, status: "DELETING" }),
@@ -98,7 +98,7 @@ describe("buildLeaderboardEntries (pure)", () => {
     expect(out[0]?.score).toBe(100);
   });
 
-  it("score / completedProblems の集計が正しいべき", () => {
+  it("score / completedProblems aggregation should be correct", () => {
     const items = [
       sampleRow({ teamId: "T1", problemId: "p1", score: 100, status: "COMPLETE" }),
       sampleRow({ teamId: "T1", problemId: "p2", score: 50, status: "COMPLETE" }),
@@ -113,7 +113,7 @@ describe("buildLeaderboardEntries (pure)", () => {
     });
   });
 
-  it("teamLoginKey / tenantId / awsAccountId 等 operator 内部情報を出力に含めないべき", () => {
+  it("should not include operator-internal info (teamLoginKey / tenantId / awsAccountId) in output", () => {
     const items = [
       sampleRow({
         teamId: "T1",
@@ -133,7 +133,7 @@ describe("buildLeaderboardEntries (pure)", () => {
 describe("getLeaderboard (integration)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("正常系: team scope query → event scope query → 集計 view を返すべき", async () => {
+  it("normal case: should return aggregated view via team scope query → event scope query", async () => {
     const { shared, ddbSend } = buildShared();
     // 1st: GSI2 query (自 team の deployment)
     ddbSend.mockResolvedValueOnce({

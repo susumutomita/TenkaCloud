@@ -15,8 +15,8 @@ function buildToken(payload: Record<string, unknown>): string {
 }
 
 describe("decodeIdToken", () => {
-  describe("Cognito id_token 相当の payload を含む JWT を渡したとき", () => {
-    it("email と custom:tenantId を抽出できるべき", () => {
+  describe("when given a JWT containing a Cognito id_token-equivalent payload", () => {
+    it("should extract email and custom:tenantId", () => {
       const token = buildToken({
         sub: "user-1",
         email: "a@b.com",
@@ -29,8 +29,8 @@ describe("decodeIdToken", () => {
     });
   });
 
-  describe("payload に custom:tenantId が無いとき", () => {
-    it("tenantId は undefined、email は返るべき", () => {
+  describe("when payload has no custom:tenantId", () => {
+    it("should return undefined tenantId but still return email", () => {
       const token = buildToken({ email: "a@b.com" });
       const claims = decodeIdToken(token);
       expect(claims?.email).toBe("a@b.com");
@@ -38,15 +38,15 @@ describe("decodeIdToken", () => {
     });
   });
 
-  describe("JWT の段数が 3 で無いとき", () => {
-    it("null を返すべき", () => {
+  describe("when JWT does not have 3 segments", () => {
+    it("should return null", () => {
       expect(decodeIdToken("header.body")).toBeNull();
       expect(decodeIdToken("single")).toBeNull();
     });
   });
 
-  describe("payload が JSON で無いとき", () => {
-    it("null を返すべき (例外を投げない)", () => {
+  describe("when payload is not JSON", () => {
+    it("should return null (without throwing)", () => {
       // 有効 base64 だけど JSON で無い
       const malformed = `aaaa.${btoa("not json")}.sig`;
       expect(decodeIdToken(malformed)).toBeNull();

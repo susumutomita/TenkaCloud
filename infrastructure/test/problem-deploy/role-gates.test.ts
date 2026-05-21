@@ -297,17 +297,17 @@ describe("ADR-020 Phase B.1 (#948): deploy-handler route role gates", () => {
       process.env.DEFAULT_USER_ROLE = "TenantViewer";
     });
 
-    it("GET /problems/:id/deployments は 200 を返すべき (= dropdown populate のため Viewer も pass)", async () => {
+    it("GET /problems/:id/deployments should return 200 (Viewer should also pass for dropdown population)", async () => {
       const res = await deployApp.request(`/problems/${PROBLEM}/deployments`);
       expect(res.status).toBe(200);
     });
 
-    it("GET /deployments/:jobId は pass するべき", async () => {
+    it("GET /deployments/:jobId should pass", async () => {
       const res = await deployApp.request(`/deployments/${ULID}`);
       await expectNotForbidden(res);
     });
 
-    it("POST /problems/:id/deploy は 403 forbidden_role になるべき", async () => {
+    it("POST /problems/:id/deploy should return 403 forbidden_role", async () => {
       const res = await deployApp.request(`/problems/${PROBLEM}/deploy`, {
         method: "POST",
         body: JSON.stringify({
@@ -320,7 +320,7 @@ describe("ADR-020 Phase B.1 (#948): deploy-handler route role gates", () => {
       await expectForbidden(res);
     });
 
-    it("POST /deployments/retry は 403 になるべき", async () => {
+    it("POST /deployments/retry should return 403", async () => {
       const res = await deployApp.request("/deployments/retry", {
         method: "POST",
         body: JSON.stringify({ failedJobIds: [ULID] }),
@@ -329,7 +329,7 @@ describe("ADR-020 Phase B.1 (#948): deploy-handler route role gates", () => {
       await expectForbidden(res);
     });
 
-    it("DELETE /deployments/:jobId は 403 になるべき", async () => {
+    it("DELETE /deployments/:jobId should return 403", async () => {
       const res = await deployApp.request(`/deployments/${ULID}`, { method: "DELETE" });
       await expectForbidden(res);
     });

@@ -17,79 +17,79 @@ import {
  */
 
 describe("resolveEventStatusTransition (#557 #539 pure logic)", () => {
-  it("DEPLOYING + 全 COMPLETE なら READY に遷移すべき", () => {
+  it("should transition to READY when DEPLOYING + all COMPLETE", () => {
     expect(resolveEventStatusTransition("DEPLOYING", ["COMPLETE", "COMPLETE"])).toBe("READY");
   });
 
-  it("DEPLOYING + COMPLETE/FAILED 混在なら READY に遷移すべき (FAILED も terminal 扱い)", () => {
+  it("should transition to READY on DEPLOYING + mixed COMPLETE/FAILED (FAILED treated as terminal)", () => {
     expect(resolveEventStatusTransition("DEPLOYING", ["COMPLETE", "FAILED", "COMPLETE"])).toBe(
       "READY",
     );
   });
 
-  it("DEPLOYING + PENDING が 1 件でも残るなら undefined を返すべき (= まだ動かさない)", () => {
+  it("should return undefined when even one DEPLOYING + PENDING remains (don't move yet)", () => {
     expect(resolveEventStatusTransition("DEPLOYING", ["COMPLETE", "PENDING"])).toBeUndefined();
   });
 
-  it("DEPLOYING + IN_PROGRESS が残るなら undefined を返すべき", () => {
+  it("should return undefined when DEPLOYING + IN_PROGRESS remain", () => {
     expect(resolveEventStatusTransition("DEPLOYING", ["COMPLETE", "IN_PROGRESS"])).toBeUndefined();
   });
 
-  it("TEARDOWN + 全 DELETED なら ARCHIVED に遷移すべき", () => {
+  it("should transition to ARCHIVED on TEARDOWN + all DELETED", () => {
     expect(resolveEventStatusTransition("TEARDOWN", ["DELETED", "DELETED"])).toBe("ARCHIVED");
   });
 
-  it("TEARDOWN + DELETED/FAILED 混在なら ARCHIVED に遷移すべき (= teardown 失敗行も引きずらない)", () => {
+  it("should transition to ARCHIVED on TEARDOWN + mixed DELETED/FAILED (don't drag teardown failures)", () => {
     expect(resolveEventStatusTransition("TEARDOWN", ["DELETED", "FAILED"])).toBe("ARCHIVED");
   });
 
-  it("TEARDOWN + DELETING が残るなら undefined を返すべき (= まだ削除中)", () => {
+  it("should return undefined when TEARDOWN + DELETING remain (still deleting)", () => {
     expect(resolveEventStatusTransition("TEARDOWN", ["DELETED", "DELETING"])).toBeUndefined();
   });
 
-  it("子 deployment 0 件なら undefined を返すべき (= bulk-deploy/delete 前の race state、 触らない)", () => {
+  it("should return undefined when child deployments are 0 (pre-bulk-deploy/delete race state, don't touch)", () => {
     expect(resolveEventStatusTransition("DEPLOYING", [])).toBeUndefined();
     expect(resolveEventStatusTransition("TEARDOWN", [])).toBeUndefined();
   });
 
-  it("対象外 status (DRAFT / ENDED / ARCHIVED) は defense-in-depth で undefined を返すべき", () => {
+  it("should return undefined for out-of-scope status (DRAFT / ENDED / ARCHIVED) (defense in depth)", () => {
     expect(resolveEventStatusTransition("DRAFT", ["COMPLETE"])).toBeUndefined();
     expect(resolveEventStatusTransition("ENDED", ["DELETED"])).toBeUndefined();
     expect(resolveEventStatusTransition("ARCHIVED", ["DELETED"])).toBeUndefined();
   });
 
   // Issue #1038 P0 #3: READY + endsAt 経過の自動 ENDED 遷移
-  it("READY + endsAt が現在時刻を過ぎていたら ENDED に遷移すべき", () => {
+  it("should transition to ENDED when READY + endsAt is past now", () => {
     const endsAt = "2026-05-15T00:00:00.000Z";
     const nowMs = Date.parse("2026-05-15T00:00:01.000Z");
     expect(resolveEventStatusTransition("READY", [], { endsAt, nowMs })).toBe("ENDED");
   });
 
-  it("READY + endsAt がちょうど現在時刻なら ENDED に遷移すべき (= 境界包含)", () => {
+  it("should transition to ENDED when READY + endsAt equals now (boundary inclusive)", () => {
     const endsAt = "2026-05-15T00:00:00.000Z";
     const nowMs = Date.parse(endsAt);
     expect(resolveEventStatusTransition("READY", [], { endsAt, nowMs })).toBe("ENDED");
   });
 
-  it("READY + endsAt がまだ未来なら undefined を返すべき (= 触らない)", () => {
+  it("should return undefined when READY + endsAt is still in the future (don't touch)", () => {
     const endsAt = "2026-05-15T01:00:00.000Z";
     const nowMs = Date.parse("2026-05-15T00:00:00.000Z");
     expect(resolveEventStatusTransition("READY", [], { endsAt, nowMs })).toBeUndefined();
   });
 
-  it("READY + endsAt 不在なら undefined を返すべき (= 無期限 event は触らない)", () => {
+  it("should return undefined when READY + endsAt is absent (don't touch open-ended events)", () => {
     const nowMs = Date.parse("2026-05-15T00:00:00.000Z");
     expect(resolveEventStatusTransition("READY", [], { nowMs })).toBeUndefined();
   });
 
-  it("READY + 不正な endsAt (parse 不能) なら undefined を返すべき", () => {
+  it("should return undefined for READY + invalid endsAt (unparseable)", () => {
     const nowMs = Date.parse("2026-05-15T00:00:00.000Z");
     expect(
       resolveEventStatusTransition("READY", [], { endsAt: "not-a-date", nowMs }),
     ).toBeUndefined();
   });
 
-  it("READY + context 未指定なら undefined を返すべき (= 旧 caller の互換)", () => {
+  it("should return undefined for READY without context (legacy caller compat)", () => {
     expect(resolveEventStatusTransition("READY", [])).toBeUndefined();
     expect(resolveEventStatusTransition("READY", ["COMPLETE"])).toBeUndefined();
   });
@@ -117,7 +117,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
   });
   afterEach(() => ddbSend.mockReset());
 
-  it("DEPLOYING で子 deployments 全 COMPLETE → Update で READY に遷移すべき", async () => {
+  it("should transition to READY via Update when DEPLOYING and all child deployments are COMPLETE", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [{ PK: "EVENT#EV1", tenantId: "tenant-acme", eventId: "EV1", status: "DEPLOYING" }],
       LastEvaluatedKey: undefined,
@@ -144,7 +144,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     expect(updateCmd.input.ConditionExpression).toContain("#status = :current");
   });
 
-  it("TEARDOWN で子 deployments 全 DELETED → Update で ARCHIVED に遷移すべき", async () => {
+  it("should transition to ARCHIVED via Update when TEARDOWN and all child deployments are DELETED", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [{ PK: "EVENT#EV2", tenantId: "tenant-acme", eventId: "EV2", status: "TEARDOWN" }],
     });
@@ -162,7 +162,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     expect(updateCmd.input.ExpressionAttributeValues[":current"]).toBe("TEARDOWN");
   });
 
-  it("DEPLOYING で PENDING が残る → Update を発行しないべき (= まだ READY ではない)", async () => {
+  it("should not issue Update when DEPLOYING with PENDING remaining (not READY yet)", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [{ PK: "EVENT#EV3", tenantId: "tenant-acme", eventId: "EV3", status: "DEPLOYING" }],
     });
@@ -174,7 +174,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     expect(ddbSend).toHaveBeenCalledTimes(2);
   });
 
-  it("複数 Event を **並列** に処理すべき (= 1 件遅延が他を block しない)", async () => {
+  it("should process multiple Events **in parallel** (one slow event must not block others)", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [
         { PK: "EVENT#A", tenantId: "tenant-acme", eventId: "A", status: "DEPLOYING" },
@@ -194,7 +194,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     expect(ddbSend).toHaveBeenCalledTimes(5);
   });
 
-  it("Event 更新の CCF (= operator race) は throw せず silent skip すべき", async () => {
+  it("should silently skip without throwing on Event update CCF (operator race)", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [{ PK: "EVENT#EV4", tenantId: "tenant-acme", eventId: "EV4", status: "DEPLOYING" }],
     });
@@ -207,7 +207,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     await expect(reconcileEventStatuses(ctx, NOW_ISO)).resolves.toBeUndefined();
   });
 
-  it("Scan が pagination するべき (= LastEvaluatedKey 有り → 次 Scan)", async () => {
+  it("Scan should paginate (with LastEvaluatedKey → next Scan)", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [{ PK: "EVENT#P1", tenantId: "t", eventId: "P1", status: "DEPLOYING" }],
       LastEvaluatedKey: { PK: "cursor" },
@@ -224,7 +224,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     expect(scan2.input.ExclusiveStartKey).toEqual({ PK: "cursor" });
   });
 
-  it("Deployment Query が pagination するべき (= Filter 後の空 page を越えて READY 判定する)", async () => {
+  it("Deployment Query should paginate (judging READY across empty pages after filtering)", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [
         {
@@ -264,7 +264,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     expect(updateCmd.input.ExpressionAttributeValues[":next"]).toBe("READY");
   });
 
-  it("Deployment Query の後続 page に非 terminal があれば READY にしないべき", async () => {
+  it("should not mark READY if subsequent Deployment Query pages contain non-terminal rows", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [
         {
@@ -296,7 +296,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
   });
 
   // Issue #828: stuck DELETING rescue path の test
-  it("TEARDOWN で `DELETING` が 30 min 以上停滞していたら FAILED に rescue + ARCHIVED に遷移すべき", async () => {
+  it("should rescue stuck `DELETING` rows for 30+ min to FAILED and transition to ARCHIVED during TEARDOWN", async () => {
     const now = "2026-05-15T01:00:00.000Z";
     const stale = "2026-05-15T00:25:00.000Z"; // 35 min 前 (= threshold 30 min を超過)
     ddbSend.mockResolvedValueOnce({
@@ -337,7 +337,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     expect(eventUpdate.input.ExpressionAttributeValues[":next"]).toBe("ARCHIVED");
   });
 
-  it("TEARDOWN でも `DELETING` が threshold 未満 (= まだ削除中) なら rescue も ARCHIVED 遷移も発火させないべき", async () => {
+  it("should not trigger rescue or ARCHIVED transition during TEARDOWN when `DELETING` is below threshold (still deleting)", async () => {
     const now = "2026-05-15T01:00:00.000Z";
     const recent = "2026-05-15T00:50:00.000Z"; // 10 min 前 (= threshold 未満)
     ddbSend.mockResolvedValueOnce({
@@ -358,7 +358,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     expect(ddbSend).toHaveBeenCalledTimes(2);
   });
 
-  it("`isStuckDeletingForTeardown` pure logic は eventStatus / status / threshold を組み合わせて判定すべき", () => {
+  it("`isStuckDeletingForTeardown` pure logic should combine eventStatus / status / threshold", () => {
     const nowMs = Date.parse("2026-05-15T01:00:00.000Z");
     const stale = "2026-05-15T00:00:00.000Z"; // 60 min 前
     const recent = "2026-05-15T00:55:00.000Z"; // 5 min 前
@@ -386,7 +386,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     ).toBe(false);
   });
 
-  it("`rescueStuckDeletingDeployments` は PK 欠落行を rescue skip すべき (= projection 漏れ safety)", async () => {
+  it("`rescueStuckDeletingDeployments` should skip rescue for rows missing PK (projection-leak safety)", async () => {
     const nowMs = Date.parse("2026-05-15T01:00:00.000Z");
     await rescueStuckDeletingDeployments(
       ctx,
@@ -397,7 +397,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     expect(ddbSend).not.toHaveBeenCalled();
   });
 
-  it("`rescueStuckDeletingDeployments` の UpdateItem CCF (= 並行 MarkDeleted/MarkFailed) は silent skip すべき", async () => {
+  it("`rescueStuckDeletingDeployments` should silently skip on UpdateItem CCF (= concurrent MarkDeleted/MarkFailed)", async () => {
     const nowMs = Date.parse("2026-05-15T01:00:00.000Z");
     ddbSend.mockImplementationOnce(async () => {
       const err: Error & { name?: string } = new Error("conditional check failed");
@@ -419,7 +419,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     ).resolves.toBe(0);
   });
 
-  it("Event filter は DEPLOYING / READY / TEARDOWN 対象であるべき (= ENDED / ARCHIVED は触らない)", async () => {
+  it("Event filter should target DEPLOYING / READY / TEARDOWN (don't touch ENDED / ARCHIVED)", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [] });
     await reconcileEventStatuses(ctx, NOW_ISO);
     const scanCmd = ddbSend.mock.calls[0]?.[0] as {
@@ -440,7 +440,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
   });
 
   // Issue #1038 P0 #3: READY + endsAt 経過で自動 ENDED 遷移
-  it("READY で endsAt が現在時刻を過ぎていたら Update で ENDED に遷移すべき (= deployment 行は query しない)", async () => {
+  it("should transition to ENDED via Update when READY and endsAt is past now (don't query deployment rows)", async () => {
     const now = "2026-05-15T01:00:00.000Z";
     const pastEnd = "2026-05-15T00:30:00.000Z";
     ddbSend.mockResolvedValueOnce({
@@ -472,7 +472,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     expect(updateCmd.input.ConditionExpression).toContain("#status = :current");
   });
 
-  it("READY で endsAt がまだ未来なら Update を発行しないべき", async () => {
+  it("should not issue Update when READY and endsAt is still in the future", async () => {
     const now = "2026-05-15T00:00:00.000Z";
     const future = "2026-05-15T01:00:00.000Z";
     ddbSend.mockResolvedValueOnce({
@@ -491,7 +491,7 @@ describe("reconcileEventStatuses (#557 #539 DDB integration)", () => {
     expect(ddbSend).toHaveBeenCalledTimes(1);
   });
 
-  it("READY で endsAt 不在 (= 無期限 event) なら Update も Query も発行しないべき", async () => {
+  it("should issue neither Update nor Query when READY and endsAt is absent (open-ended event)", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [
         {

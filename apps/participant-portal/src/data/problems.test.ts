@@ -22,7 +22,7 @@ function requireProblemMetadata(problemId: string): ProblemCatalogEntry {
 }
 
 describe("findProblemMetadata (Portal build-time catalog #550)", () => {
-  it("hello-world (Challenge sample) が引けて narrative field を含むべき", () => {
+  it("should look up hello-world (Challenge sample) and include narrative fields", () => {
     const m = findProblemMetadata("hello-world");
     expect(m).toBeDefined();
     expect(m?.category).toBe("Challenge");
@@ -33,17 +33,17 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
     expect(m?.shortDescription.length).toBeGreaterThan(0);
   });
 
-  it("hello-world-battle (Battle uptime sample) が引けて category=Battle であるべき", () => {
+  it("should look up hello-world-battle (Battle uptime sample) and have category=Battle", () => {
     const m = findProblemMetadata("hello-world-battle");
     expect(m).toBeDefined();
     expect(m?.category).toBe("Battle");
   });
 
-  it("存在しない id は undefined を返すべき", () => {
+  it("should return undefined for a non-existent id", () => {
     expect(findProblemMetadata("does-not-exist")).toBeUndefined();
   });
 
-  it("Portal は deploy 内部情報 (cfnTemplate 等) を expose しないべき (#550 設計判断)", () => {
+  it("should not expose deploy-internal info (cfnTemplate etc.) from Portal (#550 design decision)", () => {
     const m = findProblemMetadata("hello-world");
     expect(m).toBeDefined();
     // 答えの hint になりうる deploy 内部情報は Portal の型に含めない
@@ -54,7 +54,7 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
   });
 
   // ADR-012 Phase 4: phases / disruptions を portal が予告 panel に出すための data shape pin。
-  it("microservice-migration-battle で phases / disruptions が露出されるべき (ADR-012 Phase 4)", () => {
+  it("should expose phases / disruptions on microservice-migration-battle (ADR-012 Phase 4)", () => {
     const m = findProblemMetadata("microservice-migration-battle");
     expect(m).toBeDefined();
     expect(m?.phases.length).toBeGreaterThanOrEqual(2);
@@ -64,7 +64,7 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
     expect(m?.disruptions[0]?.defaultAfterMinutes).toBe(60);
   });
 
-  it("phases / disruptions に operator 内部 field (effect / parameters / eventDetailType) を露出しないべき", () => {
+  it("should not expose operator-internal fields (effect / parameters / eventDetailType) on phases / disruptions", () => {
     const m = findProblemMetadata("microservice-migration-battle");
     const json = JSON.stringify(m);
     // 採点 internals / Phase 2 用 trigger 情報は競技者には不要 (= 答えの hint や noise 防止)
@@ -74,14 +74,14 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
     expect(json).not.toContain("scorePathOverride");
   });
 
-  it("phases / disruptions が無い問題は空配列を返すべき", () => {
+  it("should return empty arrays for problems without phases / disruptions", () => {
     const m = findProblemMetadata("hello-world");
     expect(m?.phases).toEqual([]);
     expect(m?.disruptions).toEqual([]);
   });
 
   // ADR-012 Phase 5: endpoints[] を portal plugin が build-time catalog から直接読めることを pin。
-  it("microservice-migration-battle で endpoints[] が露出されるべき (ADR-012 Phase 5)", () => {
+  it("should expose endpoints[] on microservice-migration-battle (ADR-012 Phase 5)", () => {
     const m = findProblemMetadata("microservice-migration-battle");
     expect(m?.endpoints).toHaveLength(3);
     expect(m?.endpoints.map((e) => e.slot)).toEqual(
@@ -93,12 +93,12 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
     expect(users?.overridable).toBe(true);
   });
 
-  it("endpoints[] が無い問題は空配列を返すべき", () => {
+  it("should return empty array for problems without endpoints[]", () => {
     expect(findProblemMetadata("hello-world")?.endpoints).toEqual([]);
   });
 
   // ADR-008 / Issue #574 Phase 1: visibility field を catalog に露出する。
-  it("既存 4 問題はすべて visibility='public' で露出されるべき", () => {
+  it("should expose all 4 existing problems with visibility='public'", () => {
     for (const id of [
       "hello-world",
       "hello-world-battle",
@@ -112,7 +112,7 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
 
   // Issue #583 Phase 5: i18n override の locale fallback chain。
   describe("resolveLocalizedNarrative (Phase 5)", () => {
-    it("locale='ja' なら top-level の値をそのまま返すべき", () => {
+    it("should return top-level values as-is for locale='ja'", () => {
       const m = requireProblemMetadata("hello-world");
       const r = resolveLocalizedNarrative(m, "ja");
       expect(r.name).toBe("Hello World (Sample)");
@@ -121,7 +121,7 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
       expect(r.description).toContain("加藤さん");
     });
 
-    it("locale='en' の override が宣言されていれば英語を返すべき (hello-world)", () => {
+    it("should return English when locale='en' override is declared (hello-world)", () => {
       const m = requireProblemMetadata("hello-world");
       const r = resolveLocalizedNarrative(m, "en");
       expect(r.shortDescription).toMatch(/Minimal Challenge/);
@@ -129,7 +129,7 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
       expect(r.learningGoals.length).toBeGreaterThanOrEqual(2);
     });
 
-    it("全 4 既存問題が en の翻訳を持つべき (#1108 で ja+en のみサポート)", () => {
+    it("should have en translations for all 4 existing problems (#1108 only ja+en supported)", () => {
       for (const id of [
         "hello-world",
         "hello-world-battle",
@@ -142,7 +142,7 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
       }
     });
 
-    it("security-battle-royale の locale='en' で英語翻訳を返すべき", () => {
+    it("should return English translation for security-battle-royale at locale='en'", () => {
       const m = requireProblemMetadata("security-battle-royale");
       const r = resolveLocalizedNarrative(m, "en");
       expect(r.shortDescription).toMatch(/Attack\/defend/);

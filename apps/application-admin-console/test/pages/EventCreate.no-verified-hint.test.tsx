@@ -61,7 +61,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("EventCreatePage #719 verified account 0 件の救済 UX", () => {
-  it("verified account が 0 件なら Alert と Competitor Accounts link を表示すべき", async () => {
+  it("should show Alert and Competitor Accounts link when there are zero verified accounts", async () => {
     mocks.listCompetitorAccounts.mockResolvedValueOnce({ items: [] });
     renderPage();
 
@@ -79,7 +79,7 @@ describe("EventCreatePage #719 verified account 0 件の救済 UX", () => {
     expect(disabledSelect).toBeDisabled();
   });
 
-  it("verified=true が 1 件あれば Alert を出さず dropdown を通常 render すべき", async () => {
+  it("should NOT show Alert and render dropdown normally when at least 1 verified=true account exists", async () => {
     mocks.listCompetitorAccounts.mockResolvedValueOnce({
       items: [
         {

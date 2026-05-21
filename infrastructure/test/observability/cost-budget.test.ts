@@ -10,7 +10,7 @@ import { CostBudget } from "../../lib/observability/cost-budget";
  */
 
 describe("CostBudget", () => {
-  it("budget と SNS topic を作成し、 default 閾値 80% / 100% で 2 件の Notification を生成すべき", () => {
+  it("should create a budget and SNS topic, generating 2 Notifications at default thresholds 80% / 100%", () => {
     const app = new App();
     const stack = new Stack(app, "TestStack");
     new CostBudget(stack, "Budget", {
@@ -36,7 +36,7 @@ describe("CostBudget", () => {
     expect(notifications?.length).toBe(2);
   });
 
-  it("notificationEmails に重複があっても SNS Subscription は 1 件にまとまるべき", () => {
+  it("should collapse duplicate notificationEmails into a single SNS Subscription", () => {
     const app = new App();
     const stack = new Stack(app, "TestStack");
     new CostBudget(stack, "Budget", {
@@ -49,7 +49,7 @@ describe("CostBudget", () => {
     template.resourceCountIs("AWS::SNS::Subscription", 1);
   });
 
-  it("notificationEmails が空でも construct 自体は壊れず、 Subscription は 0 件すべき", () => {
+  it("should keep the construct intact and have 0 Subscriptions when notificationEmails is empty", () => {
     const app = new App();
     const stack = new Stack(app, "TestStack");
     new CostBudget(stack, "Budget", {
@@ -63,7 +63,7 @@ describe("CostBudget", () => {
     template.resourceCountIs("AWS::SNS::Subscription", 0);
   });
 
-  it("thresholdPercents 上書きで Notification 数が変わるべき", () => {
+  it("overriding thresholdPercents should change the Notification count", () => {
     const app = new App();
     const stack = new Stack(app, "TestStack");
     new CostBudget(stack, "Budget", {
@@ -85,7 +85,7 @@ describe("CostBudget", () => {
 
   // Issue #952 / PR-957 user feedback: TenkaCloud リソースだけを集計するため、 user-defined
   // cost allocation tag (= App scope `Project=TenkaCloud`) で filter を絞る経路を pin する。
-  it("costAllocationTags を渡すと CfnBudget の CostFilters に `user:<Key>$<Value>` 形式で入るべき", () => {
+  it("should add `user:<Key>$<Value>` entries to CfnBudget CostFilters when costAllocationTags is passed", () => {
     const app = new App();
     const stack = new Stack(app, "TestStack");
     new CostBudget(stack, "Budget", {
@@ -105,7 +105,7 @@ describe("CostBudget", () => {
     expect(costFilters["user:Project"]).toEqual(["Project$TenkaCloud"]);
   });
 
-  it("costAllocationTags 未指定なら CostFilters key 自体が無いべき (= 全アカウント費用が対象)", () => {
+  it("should omit the CostFilters key entirely when costAllocationTags is unset (all account spend counted)", () => {
     const app = new App();
     const stack = new Stack(app, "TestStack");
     new CostBudget(stack, "Budget", {

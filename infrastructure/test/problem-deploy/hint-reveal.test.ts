@@ -66,7 +66,7 @@ describe("isHintRevealed (#742 Phase 2)", () => {
 });
 
 describe("findHintReveal (#742 Phase 2)", () => {
-  it("該当 record を返すべき", () => {
+  it("should return the matching record", () => {
     const records = [{ hintId: "h1", revealedAt: "t1", penaltyApplied: 5 }];
     expect(findHintReveal(records, "h1")).toEqual({
       hintId: "h1",
@@ -75,7 +75,7 @@ describe("findHintReveal (#742 Phase 2)", () => {
     });
   });
 
-  it("undefined records / 不在 hintId は undefined を返すべき", () => {
+  it("should return undefined for undefined records / missing hintId", () => {
     expect(findHintReveal(undefined, "h1")).toBeUndefined();
     expect(findHintReveal([], "h1")).toBeUndefined();
   });

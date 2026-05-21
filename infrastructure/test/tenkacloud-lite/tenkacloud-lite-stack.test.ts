@@ -49,24 +49,24 @@ function synth(): Template {
 }
 
 describe("TenkaCloudLiteStack (#778 ADR-016 Phase 3)", () => {
-  it("Cognito UserPool / UserPoolClient / UserPoolDomain を 1 セット作るべき (= AppPlaneCore 由来)", () => {
+  it("should create 1 set of Cognito UserPool / UserPoolClient / UserPoolDomain (from AppPlaneCore)", () => {
     const template = synth();
     template.resourceCountIs("AWS::Cognito::UserPool", 1);
     template.resourceCountIs("AWS::Cognito::UserPoolClient", 1);
     template.resourceCountIs("AWS::Cognito::UserPoolDomain", 1);
   });
 
-  it("Tenant REST API Gateway を 1 つ作るべき", () => {
+  it("should create 1 Tenant REST API Gateway", () => {
     const template = synth();
     template.resourceCountIs("AWS::ApiGateway::RestApi", 1);
   });
 
-  it("ApplicationAdminConsoleHosting (= CloudFront) を 1 つ作るべき", () => {
+  it("should create 1 ApplicationAdminConsoleHosting (= CloudFront)", () => {
     const template = synth();
     template.resourceCountIs("AWS::CloudFront::Distribution", 1);
   });
 
-  it("CfnOutput に Application Admin Console URL / Cognito Domain / Tenant API / TenantId を含むべき", () => {
+  it("should include Application Admin Console URL / Cognito Domain / Tenant API / TenantId in CfnOutput", () => {
     const template = synth();
     template.hasOutput("ApplicationAdminConsoleUrl", Match.objectLike({}));
     template.hasOutput("CognitoDomainUrl", Match.objectLike({}));
@@ -74,7 +74,7 @@ describe("TenkaCloudLiteStack (#778 ADR-016 Phase 3)", () => {
     template.hasOutput("TenantId", Match.objectLike({ Value: "local" }));
   });
 
-  it("Cognito UserPool domain prefix は tenantId=local を埋めるべき (= region globally unique 性)", () => {
+  it("Cognito UserPool domain prefix should embed tenantId=local (region-global uniqueness)", () => {
     const template = synth();
     template.hasResourceProperties(
       "AWS::Cognito::UserPoolDomain",
@@ -84,7 +84,7 @@ describe("TenkaCloudLiteStack (#778 ADR-016 Phase 3)", () => {
     );
   });
 
-  it("SBT / pipeline 系 resource (TenantMappingTable / SaaSPipeline) を持ち込まないべき", () => {
+  it("should not include SBT / pipeline resources (TenantMappingTable / SaaSPipeline)", () => {
     const template = synth();
     // Lite mode は SBT TenantMappingTable を参照しないので、 DynamoDB Table を作らない。
     template.resourceCountIs("AWS::DynamoDB::Table", 0);
@@ -92,7 +92,7 @@ describe("TenkaCloudLiteStack (#778 ADR-016 Phase 3)", () => {
     template.resourceCountIs("AWS::CodePipeline::Pipeline", 0);
   });
 
-  it("public な API key (Usage Plan / API Key) は dormant な dummy 設定で立つべき (= Lite では使わない)", () => {
+  it("public API keys (Usage Plan / API Key) should be provisioned in a dormant dummy configuration (unused in Lite)", () => {
     const template = synth();
     // Usage Plan + API Key は AppPlaneCore (= ApiGateway construct) が作るので、 Lite でも
     // resource は出る。 ただし dummy SSM lookup なので runtime で実 key は引かれない。

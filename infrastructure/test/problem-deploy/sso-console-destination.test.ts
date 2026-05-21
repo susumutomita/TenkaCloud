@@ -16,7 +16,7 @@ const REGION = "ap-northeast-1";
 const NAME_PREFIX = "tc-hello-world-team-3";
 
 describe("buildConsoleDestination (#946)", () => {
-  it("ssmParameterName 未指定なら CFn stacks 画面を返すべき (= 旧挙動 / multi-resource 問題用)", () => {
+  it("should return the CFn stacks screen when ssmParameterName is unspecified (legacy behavior / multi-resource problems)", () => {
     const url = buildConsoleDestination({
       region: REGION,
       namePrefix: NAME_PREFIX,
@@ -27,7 +27,7 @@ describe("buildConsoleDestination (#946)", () => {
     );
   });
 
-  it("ssmParameterName が有効なら SSM Parameter detail URL を返すべき (= deep link、 list view 不要)", () => {
+  it("should return the SSM Parameter detail URL when ssmParameterName is valid (deep link, no list view)", () => {
     const url = buildConsoleDestination({
       region: REGION,
       namePrefix: NAME_PREFIX,
@@ -38,7 +38,7 @@ describe("buildConsoleDestination (#946)", () => {
     );
   });
 
-  it("ssmParameterName に許可外文字 (= `#` / `?`) を含むなら CFn fallback すべき (= URL injection 防御)", () => {
+  it("should fall back to CFn when ssmParameterName contains disallowed characters (`#` / `?`) (URL injection guard)", () => {
     const malicious = "/tc#injection?query";
     const url = buildConsoleDestination({
       region: REGION,
@@ -50,7 +50,7 @@ describe("buildConsoleDestination (#946)", () => {
     expect(url).not.toContain(encodeURIComponent(malicious));
   });
 
-  it("ssmParameterName が `/` で始まらないなら CFn fallback すべき", () => {
+  it("should fall back to CFn when ssmParameterName does not start with `/`", () => {
     const url = buildConsoleDestination({
       region: REGION,
       namePrefix: NAME_PREFIX,
@@ -59,7 +59,7 @@ describe("buildConsoleDestination (#946)", () => {
     expect(url).toContain("/cloudformation/home");
   });
 
-  it("ssmParameterName が空文字なら CFn fallback すべき", () => {
+  it("should fall back to CFn when ssmParameterName is empty", () => {
     const url = buildConsoleDestination({
       region: REGION,
       namePrefix: NAME_PREFIX,

@@ -40,31 +40,31 @@ describe("filterProblems (Issue #834)", () => {
     }),
   ];
 
-  it("空 criteria は全件返すべき", () => {
+  it("should return all items for empty criteria", () => {
     expect(filterProblems(problems, EMPTY_FILTER_CRITERIA)).toHaveLength(3);
   });
 
-  it("search が name に substring match すれば残るべき (case-insensitive)", () => {
+  it("should keep items whose name substring-matches search (case-insensitive)", () => {
     const res = filterProblems(problems, { ...EMPTY_FILTER_CRITERIA, search: "BATTLE" });
     expect(res.map((p) => p.id)).toEqual(["p2", "p3"]);
   });
 
-  it("search は shortDescription / tags も走査すべき", () => {
+  it("should scan shortDescription / tags for search as well", () => {
     const res = filterProblems(problems, { ...EMPTY_FILTER_CRITERIA, search: "migration" });
     expect(res.map((p) => p.id)).toEqual(["p3"]);
   });
 
-  it("category filter が 1 つ指定されたら AND 条件で絞るべき", () => {
+  it("should narrow via AND when one category filter is specified", () => {
     const res = filterProblems(problems, { ...EMPTY_FILTER_CRITERIA, categories: ["Battle"] });
     expect(res.map((p) => p.id)).toEqual(["p2", "p3"]);
   });
 
-  it("status filter で draft のみ残すべき", () => {
+  it("should keep only draft items via status filter", () => {
     const res = filterProblems(problems, { ...EMPTY_FILTER_CRITERIA, statuses: ["draft"] });
     expect(res.map((p) => p.id)).toEqual(["p2"]);
   });
 
-  it("difficulty multi-select で複数 level を OR で残すべき", () => {
+  it("should keep multiple levels via OR for difficulty multi-select", () => {
     const res = filterProblems(problems, {
       ...EMPTY_FILTER_CRITERIA,
       difficulties: [1, 5],
@@ -72,7 +72,7 @@ describe("filterProblems (Issue #834)", () => {
     expect(res.map((p) => p.id)).toEqual(["p1", "p3"]);
   });
 
-  it("tag filter mode=or は いずれか含む 行を残すべき", () => {
+  it("should keep rows that contain any tag when tag filter mode=or", () => {
     const res = filterProblems(problems, {
       ...EMPTY_FILTER_CRITERIA,
       tags: ["lambda", "flag"],
@@ -81,7 +81,7 @@ describe("filterProblems (Issue #834)", () => {
     expect(res.map((p) => p.id)).toEqual(["p1", "p3"]);
   });
 
-  it("tag filter mode=and は 全て含む 行のみ残すべき", () => {
+  it("should keep only rows that contain all tags when tag filter mode=and", () => {
     const res = filterProblems(problems, {
       ...EMPTY_FILTER_CRITERIA,
       tags: ["ec2", "lambda"],
@@ -90,7 +90,7 @@ describe("filterProblems (Issue #834)", () => {
     expect(res.map((p) => p.id)).toEqual(["p3"]);
   });
 
-  it("複数 filter は AND で組み合わさるべき", () => {
+  it("should combine multiple filters via AND", () => {
     const res = filterProblems(problems, {
       ...EMPTY_FILTER_CRITERIA,
       search: "battle",
@@ -100,34 +100,34 @@ describe("filterProblems (Issue #834)", () => {
     expect(res.map((p) => p.id)).toEqual(["p3"]);
   });
 
-  it("0 hit になっても空配列を返す (= UI 側で empty state)", () => {
+  it("should return an empty array on zero hits (= UI handles empty state)", () => {
     const res = filterProblems(problems, { ...EMPTY_FILTER_CRITERIA, search: "nonexistent" });
     expect(res).toEqual([]);
   });
 });
 
 describe("isFilterActive", () => {
-  it("空 criteria は active=false", () => {
+  it("should return active=false for empty criteria", () => {
     expect(isFilterActive(EMPTY_FILTER_CRITERIA)).toBe(false);
   });
 
-  it("search 1 文字でも active=true", () => {
+  it("should return active=true even with a single search character", () => {
     expect(isFilterActive({ ...EMPTY_FILTER_CRITERIA, search: "x" })).toBe(true);
   });
 
-  it("各 filter の少なくとも 1 つが non-empty なら active", () => {
+  it("should return active when at least one filter is non-empty", () => {
     expect(isFilterActive({ ...EMPTY_FILTER_CRITERIA, categories: ["Battle"] })).toBe(true);
     expect(isFilterActive({ ...EMPTY_FILTER_CRITERIA, tags: ["sample"] })).toBe(true);
     expect(isFilterActive({ ...EMPTY_FILTER_CRITERIA, difficulties: [1] })).toBe(true);
   });
 
-  it("search が空白のみは active=false (= trim 比較)", () => {
+  it("should return active=false for whitespace-only search (= trim comparison)", () => {
     expect(isFilterActive({ ...EMPTY_FILTER_CRITERIA, search: "   " })).toBe(false);
   });
 });
 
 describe("collectTagFacets", () => {
-  it("出現頻度の降順 + タイは alphabetical で sort すべき", () => {
+  it("should sort by descending frequency with alphabetical tiebreaker", () => {
     const problems = [
       sample({ id: "p1", tags: ["a", "b", "c"] }),
       sample({ id: "p2", tags: ["a", "b"] }),
@@ -141,30 +141,30 @@ describe("collectTagFacets", () => {
     ]);
   });
 
-  it("空配列なら空 facets", () => {
+  it("should return empty facets for an empty array", () => {
     expect(collectTagFacets([])).toEqual([]);
   });
 });
 
 describe("toggleTagFilter (Issue #835)", () => {
-  it("空 → 1 タグ click でそのタグ 1 件のみ active", () => {
+  it("should make only that single tag active when clicking one tag from empty", () => {
     const next = toggleTagFilter(EMPTY_FILTER_CRITERIA, "sample");
     expect(next.tags).toEqual(["sample"]);
   });
 
-  it("既に同タグ 1 件のみ active → 同タグ click で clear (toggle)", () => {
+  it("should clear (toggle) when clicking the same tag that is already the only active one", () => {
     const start = { ...EMPTY_FILTER_CRITERIA, tags: ["sample"] };
     const next = toggleTagFilter(start, "sample");
     expect(next.tags).toEqual([]);
   });
 
-  it("別タグが active なら 「そのタグだけで絞り込み」 に切り替わるべき (= 単 click は全面切替)", () => {
+  it("should switch to 'narrow by that tag only' when another tag is active (= single click is full replace)", () => {
     const start = { ...EMPTY_FILTER_CRITERIA, tags: ["sample"] };
     const next = toggleTagFilter(start, "battle");
     expect(next.tags).toEqual(["battle"]);
   });
 
-  it("他 filter (search / category 等) は維持すべき", () => {
+  it("should preserve other filters (search / category etc.)", () => {
     const start = {
       ...EMPTY_FILTER_CRITERIA,
       search: "x",

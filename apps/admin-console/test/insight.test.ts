@@ -28,7 +28,7 @@ describe("fetchTenantsInsightSummary", () => {
     vi.unstubAllGlobals();
   });
 
-  it("AdminInsight URL が空文字 (= 未配線) のとき null を返すべき", async () => {
+  it("should return null when the AdminInsight URL is empty (= not wired)", async () => {
     const res = await fetchTenantsInsightSummary(
       { ...baseConfig, adminInsightApiUrl: "" },
       "id-token",
@@ -38,13 +38,13 @@ describe("fetchTenantsInsightSummary", () => {
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
-  it("tenantIds が空配列なら fetch せず { items: [] } を返すべき", async () => {
+  it("should return { items: [] } without fetching when tenantIds is an empty array", async () => {
     const res = await fetchTenantsInsightSummary(baseConfig, "id-token", []);
     expect(res).toEqual({ items: [] });
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
-  it("正常系: AdminInsight API を bearer 認証付きで叩くべき", async () => {
+  it("should call the AdminInsight API with bearer authentication on the happy path", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -63,7 +63,7 @@ describe("fetchTenantsInsightSummary", () => {
     });
   });
 
-  it("403 (SystemAdmin claim 無し) のときは null を返すべき (= column hide)", async () => {
+  it("should return null on 403 (no SystemAdmin claim) (= column hide)", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       new Response(JSON.stringify({ error: "forbidden" }), { status: 403 }),
     );
@@ -71,7 +71,7 @@ describe("fetchTenantsInsightSummary", () => {
     expect(res).toBeNull();
   });
 
-  it("500 など 403 以外の error は throw すべき", async () => {
+  it("should throw on non-403 errors such as 500", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
       new Response(JSON.stringify({ error: "internal" }), { status: 500 }),
     );
@@ -83,7 +83,7 @@ describe("fetchTenantsInsightSummary", () => {
 });
 
 describe("indexSummaryByTenantId", () => {
-  it("tenantId をキーにした Record を返すべき", () => {
+  it("should return a Record keyed by tenantId", () => {
     const items: TenantInsightSummary[] = [
       { tenantId: "t-1", activeDeploys: 1, failedDeploys: 0, totalEvents: 2 },
       { tenantId: "t-2", activeDeploys: 0, failedDeploys: 3, totalEvents: 1 },
@@ -93,7 +93,7 @@ describe("indexSummaryByTenantId", () => {
     expect(index["t-2"]?.failedDeploys).toBe(3);
   });
 
-  it("空 items で空 Record を返すべき", () => {
+  it("should return an empty Record for empty items", () => {
     expect(indexSummaryByTenantId({ items: [] })).toEqual({});
   });
 });

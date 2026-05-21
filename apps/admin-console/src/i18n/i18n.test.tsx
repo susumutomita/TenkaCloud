@@ -20,12 +20,12 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     return <I18nProvider>{children}</I18nProvider>;
   }
 
-  it("default locale は ja (navigator.language 未対応の test 環境 default)", () => {
+  it("should use ja as the default locale (test-env default when navigator.language is not supported)", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     expect(result.current.locale).toMatch(/^(ja|en)$/);
   });
 
-  it("setLocale が localStorage に永続化し次回起動で復元すべき", () => {
+  it("should persist setLocale to localStorage and restore it on next startup", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     act(() => result.current.setLocale("en"));
     expect(result.current.locale).toBe("en");
@@ -33,7 +33,7 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     expect(window.localStorage.getItem("tenkacloud.admin.locale")).toBe("en");
   });
 
-  it("t() は dot-separated key で nested dictionary を引くべき", () => {
+  it("should look up the nested dictionary via dot-separated keys in t()", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     act(() => result.current.setLocale("ja"));
     expect(result.current.t("app.title")).toBe("TenkaCloud 管理コンソール");
@@ -41,7 +41,7 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     expect(result.current.t("app.title")).toBe("TenkaCloud Admin Console");
   });
 
-  it("locale で key 未定義なら en で fallback、 en にも無ければ raw key", () => {
+  it("should fall back to en when a key is undefined for the locale, and to the raw key when also missing in en", () => {
     const { result } = renderHook(() => useT(), { wrapper });
     // 全 locale にあるキー → 翻訳成功
     expect(result.current("nav.tenants")).toBeTruthy();
@@ -50,7 +50,7 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     expect(result.current("nonexistent.key")).toBe("nonexistent.key");
   });
 
-  it("SUPPORTED_LOCALES = 2 言語 [ja, en] (#1078 で zh/es 廃止)", () => {
+  it("should expose SUPPORTED_LOCALES as 2 languages [ja, en] (zh/es removed in #1078)", () => {
     const supported: readonly LocaleCode[] = ["ja", "en"];
     for (const code of supported) {
       const dict = _testInternals.LOCALE_DICTIONARIES[code];
@@ -60,7 +60,7 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     }
   });
 
-  it("admin drill-down namespace の key set が ja/en で一致すべき", () => {
+  it("should keep the admin drill-down namespace key set identical between ja/en", () => {
     const namespaces = ["admin_event_detail", "admin_deployment_detail"];
     const collectLeafKeys = (node: unknown, prefix = ""): string[] => {
       if (typeof node !== "object" || node === null) return [prefix];
@@ -76,7 +76,7 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     }
   });
 
-  it("locale 変更時に <html lang> が追従すべき", () => {
+  it("should make <html lang> follow the locale on change", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     act(() => result.current.setLocale("en"));
     expect(document.documentElement.lang).toBe("en");
@@ -84,13 +84,13 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     expect(document.documentElement.lang).toBe("ja");
   });
 
-  it("useI18n を Provider 外で呼ぶと throw すべき (= configuration error の早期発見)", () => {
+  it("should throw when useI18n is called outside the Provider (= early detection of configuration error)", () => {
     // renderHook で wrapper を渡さないと throws する
     expect(() => renderHook(() => useI18n())).toThrow(/I18nProvider/);
   });
 
   // 翻訳結果が UI に出ることを実 render で確認
-  it("Provider 配下で翻訳結果が UI に反映されるべき", () => {
+  it("should reflect translation results in the UI under the Provider", () => {
     function Probe() {
       const t = useT();
       return <div>{t("app.loading")}</div>;
@@ -107,15 +107,15 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
 });
 
 describe("interpolate (#655)", () => {
-  it("単一 placeholder を埋め込むべき", () => {
+  it("should embed a single placeholder", () => {
     expect(interpolate("Hello {name}!", { name: "World" })).toBe("Hello World!");
   });
 
-  it("複数 placeholder を 1 pass で埋め込むべき", () => {
+  it("should embed multiple placeholders in a single pass", () => {
     expect(interpolate("{a} - {b} - {a}", { a: "X", b: "Y" })).toBe("X - Y - X");
   });
 
-  it("値に placeholder と同形 string が含まれても 2 重置換しないべき (= 病的 input 防御)", () => {
+  it("should not double-substitute when a value contains a string identical to a placeholder (= pathological input defense)", () => {
     // 旧来の .replace().replace() chain だと {tenantName} = "{tenantId}" のとき
     // 続く tenantId 置換で意図せず展開された。 1 pass regex なら問題なし。
     expect(
@@ -126,11 +126,11 @@ describe("interpolate (#655)", () => {
     ).toBe("name={tenantId} id=abc-123");
   });
 
-  it("未定義 key は空文字列に置換し raw {name} を UI に漏らさないべき", () => {
+  it("should substitute undefined keys with an empty string and not leak raw {name} to the UI", () => {
     expect(interpolate("Hello {missing}!", {})).toBe("Hello !");
   });
 
-  it("placeholder が無い template はそのまま返すべき", () => {
+  it("should return a template without placeholders unchanged", () => {
     expect(interpolate("no placeholder", { a: "X" })).toBe("no placeholder");
   });
 });

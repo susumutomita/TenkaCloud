@@ -38,7 +38,7 @@ describe("ParticipantPortalHosting", () => {
   });
 
   describe("CloudFront security headers (CSP) — Issue #896", () => {
-    it("connect-src に execute-api / lambda-url の region 付き wildcard を含むべき", () => {
+    it("connect-src should include region-scoped wildcards for execute-api / lambda-url", () => {
       const template = synth();
       const policies = template.findResources("AWS::CloudFront::ResponseHeadersPolicy");
       const policy = Object.values(policies)[0];
@@ -48,7 +48,7 @@ describe("ParticipantPortalHosting", () => {
       expect(cspJson).toContain(".lambda-url.");
     });
 
-    it("middle wildcard (CSP3 spec 違反 pattern) を含むべきでない", () => {
+    it("should not contain middle wildcards (CSP3 spec violation pattern)", () => {
       const template = synth();
       const policies = template.findResources("AWS::CloudFront::ResponseHeadersPolicy");
       const policy = Object.values(policies)[0];

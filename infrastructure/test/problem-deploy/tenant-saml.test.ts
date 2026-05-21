@@ -38,21 +38,21 @@ import type { CompetitorAccountsSharedResources } from "../../lib/problem-deploy
  */
 
 describe("TenantSamlConfigInputSchema (Zod)", () => {
-  it("metadataUrl が HTTPS なら通すべき", () => {
+  it("should pass through when metadataUrl is HTTPS", () => {
     const r = TenantSamlConfigInputSchema.safeParse({
       metadataUrl: "https://idp.example.com/metadata.xml",
     });
     expect(r.success).toBe(true);
   });
 
-  it("HTTP の metadataUrl は reject すべき (= 平文 metadata 経路を作らない)", () => {
+  it("should reject HTTP metadataUrl (no plaintext metadata path)", () => {
     const r = TenantSamlConfigInputSchema.safeParse({
       metadataUrl: "http://idp.example.com/metadata.xml",
     });
     expect(r.success).toBe(false);
   });
 
-  it("providerName は英数字 + -_ の 3-32 字に絞るべき", () => {
+  it("providerName should be restricted to 3-32 chars of alphanumerics + -_", () => {
     expect(
       TenantSamlConfigInputSchema.safeParse({
         metadataUrl: "https://idp.example.com/metadata.xml",
@@ -86,13 +86,13 @@ describe("TenantSamlConfigInputSchema (Zod)", () => {
 });
 
 describe("normalizeAttributeMapping", () => {
-  it("undefined なら default email mapping のみ返すべき", () => {
+  it("should return only the default email mapping when undefined", () => {
     expect(normalizeAttributeMapping(undefined)).toEqual({
       email: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
     });
   });
 
-  it("caller の email override が default に勝つべき (= Entra ID 等)", () => {
+  it("caller email override should win over the default (e.g. Entra ID)", () => {
     expect(normalizeAttributeMapping({ email: "urn:custom:user/email" })).toEqual({
       email: "urn:custom:user/email",
     });
@@ -115,7 +115,7 @@ describe("extractUserPoolIdFromIss", () => {
     ).toBe("ap-northeast-1_AbCdEfG12");
   });
 
-  it("undefined / 空文字 / 不正 URL は undefined を返すべき", () => {
+  it("should return undefined for undefined / empty string / invalid URL", () => {
     expect(extractUserPoolIdFromIss(undefined)).toBeUndefined();
     expect(extractUserPoolIdFromIss("")).toBeUndefined();
     expect(extractUserPoolIdFromIss("https://example.com")).toBeUndefined();
@@ -138,7 +138,7 @@ function makeCognitoDeps() {
 }
 
 describe("upsertSamlProvider", () => {
-  it("既存 (Describe 成功) なら UpdateIdentityProviderCommand を送るべき", async () => {
+  it("should send UpdateIdentityProviderCommand when the provider already exists (Describe succeeds)", async () => {
     const { send, deps } = makeCognitoDeps();
     send.mockResolvedValueOnce({}); // describe ok
     send.mockResolvedValueOnce({}); // update
@@ -152,7 +152,7 @@ describe("upsertSamlProvider", () => {
     expect(send.mock.calls[1][0]).toBeInstanceOf(UpdateIdentityProviderCommand);
   });
 
-  it("Describe が ResourceNotFoundException なら CreateIdentityProviderCommand に倒れるべき", async () => {
+  it("should fall through to CreateIdentityProviderCommand on Describe ResourceNotFoundException", async () => {
     const { send, deps } = makeCognitoDeps();
     const err = new Error("not found") as Error & { name?: string };
     err.name = "ResourceNotFoundException";
@@ -364,7 +364,7 @@ describe("handleGetTenantSamlConfig", () => {
 });
 
 describe("handlePutTenantSamlConfig", () => {
-  it("validation 失敗なら 400 を返し Cognito / DDB を呼ばないべき", async () => {
+  it("should return 400 without calling Cognito / DDB on validation failure", async () => {
     const { shared, ddbSend, cognitoSend } = makeSharedAndDdb();
     const r = await handlePutTenantSamlConfig(
       shared,
@@ -414,7 +414,7 @@ describe("handlePutTenantSamlConfig", () => {
     expect(ddbSend).toHaveBeenCalledTimes(1);
   });
 
-  it("enforceSamlOnly=true なら enforceSamlOnlyOnClient (= SupportedIdentityProviders=[SAML] のみ) を呼ぶべき", async () => {
+  it("should call enforceSamlOnlyOnClient (SupportedIdentityProviders=[SAML] only) when enforceSamlOnly=true", async () => {
     const { shared, ddbSend, cognitoSend } = makeSharedAndDdb();
     cognitoSend.mockResolvedValueOnce({}); // describe IdP ok (= exists)
     cognitoSend.mockResolvedValueOnce({}); // update IdP

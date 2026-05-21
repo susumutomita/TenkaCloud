@@ -51,7 +51,7 @@ function buildIO(opts: {
 }
 
 describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
-  it("引数なし / help / -h / --help でヘルプを出して exit 0 を返すべき", async () => {
+  it("should print help and exit 0 on no-arg / help / -h / --help", async () => {
     for (const argv of [[], ["help"], ["-h"], ["--help"]]) {
       const { io, stdout } = buildIO({});
       const code = await main(argv, io);
@@ -66,7 +66,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     }
   });
 
-  it("未知の subcommand では exit 1 + stderr にメッセージ + help を出すべき", async () => {
+  it("should exit 1 + print a message to stderr + show help on unknown subcommand", async () => {
     const { io, stdout, stderr } = buildIO({});
     const code = await main(["frobnicate"], io);
     expect(code).toBe(1);
@@ -74,7 +74,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(stdout.join("")).toContain("使い方:");
   });
 
-  it("up は prepare-source-bundle.sh と cdk deploy を順に inherit 呼びすべき", async () => {
+  it("up should invoke prepare-source-bundle.sh and cdk deploy in order via inherit", async () => {
     const { io, calls } = buildIO({
       inheritExitCode: 0,
       capture: () => ({ code: 0, stdout: "https://example.cloudfront.net", stderr: "" }),
@@ -103,7 +103,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(deployCall.args).toContain("never");
   });
 
-  it("up は prepare-source-bundle.sh が non-zero で落ちたら cdk deploy を呼ばずに早期 return すべき", async () => {
+  it("up should early-return without calling cdk deploy when prepare-source-bundle.sh exits non-zero", async () => {
     // 1st spawn (= prepare-source-bundle.sh) で失敗させ、 2nd (= cdk deploy) は呼ばれないことを確認
     let firstCall = true;
     const calls: Array<{ cmd: string; args: readonly string[] }> = [];
@@ -127,14 +127,14 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(calls[0]?.cmd).toBe("bash");
   });
 
-  it("up は cdk deploy が non-zero で落ちたら早期 return し AWS CLI を呼ばないべき", async () => {
+  it("up should early-return without calling AWS CLI when cdk deploy exits non-zero", async () => {
     const { io, calls } = buildIO({ inheritExitCode: 2 });
     const code = await main(["up"], io);
     expect(code).toBe(2);
     expect(calls.filter((c) => c.cmd === "aws")).toHaveLength(0);
   });
 
-  it("down は app stack を先に destroy → problem-deploy stack の順で呼ぶべき", async () => {
+  it("down should destroy the app stack first and then the problem-deploy stack", async () => {
     const { io, calls } = buildIO({ inheritExitCode: 0 });
     const code = await main(["down"], io);
     expect(code).toBe(0);
@@ -148,14 +148,14 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     }
   });
 
-  it("down は 1 回目の destroy が落ちたら 2 回目を呼ばずに同じ exit code を返すべき", async () => {
+  it("down should return the same exit code without calling the second destroy when the first one fails", async () => {
     const { io, calls } = buildIO({ inheritExitCode: 3 });
     const code = await main(["down"], io);
     expect(code).toBe(3);
     expect(calls.filter((c) => c.args.includes("destroy"))).toHaveLength(1);
   });
 
-  it("portal-url は問題 deploy stack の ParticipantPortalApiUrl output を describe-stacks で問い合わせるべき", async () => {
+  it("portal-url should query the problem-deploy stack's ParticipantPortalApiUrl output via describe-stacks", async () => {
     const { io, calls, stdout } = buildIO({
       capture: () => ({ code: 0, stdout: "https://portal.example.com\n", stderr: "" }),
     });
@@ -170,7 +170,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(stdout.join("")).toContain("https://portal.example.com");
   });
 
-  it("console-url は AppPlane stack の ApplicationAdminConsoleUrl output を問い合わせるべき", async () => {
+  it("console-url should query the AppPlane stack's ApplicationAdminConsoleUrl output", async () => {
     const { io, calls, stdout } = buildIO({
       capture: () => ({ code: 0, stdout: "https://console.example.com\n", stderr: "" }),
     });
@@ -182,7 +182,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(stdout.join("")).toContain("https://console.example.com");
   });
 
-  it("output が空文字なら not found を stderr に出して exit 1 を返すべき", async () => {
+  it("should print not found to stderr and return exit 1 when output is empty", async () => {
     const { io, stderr } = buildIO({
       capture: () => ({ code: 0, stdout: "  \n", stderr: "" }),
     });
@@ -191,7 +191,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(stderr.join("")).toContain("not found");
   });
 
-  it("describe-stacks が non-zero で落ちたら NOT_DEPLOYED として status に出すべき", async () => {
+  it("should surface status as NOT_DEPLOYED when describe-stacks exits non-zero", async () => {
     const { io, stdout } = buildIO({
       capture: () => ({ code: 255, stdout: "", stderr: "Stack does not exist" }),
     });
@@ -204,7 +204,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(text.match(/NOT_DEPLOYED/g)?.length).toBe(2);
   });
 
-  it("status は describe-stacks 結果を 1 行ずつ標準出力に出すべき", async () => {
+  it("status should print describe-stacks results one line at a time to stdout", async () => {
     const { io, stdout } = buildIO({
       capture: (_cmd, args) => {
         const stackName = args[args.indexOf("--stack-name") + 1];
@@ -241,7 +241,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
       }
     }
 
-    it("TENANT_ADMIN_EMAIL が空でも deploy は通り、 admin-create-user は呼ばないべき", async () => {
+    it("should let deploy pass without calling admin-create-user when TENANT_ADMIN_EMAIL is empty", async () => {
       delete process.env.TENANT_ADMIN_EMAIL;
       delete process.env.SYSTEM_ADMIN_EMAIL;
       try {
@@ -259,7 +259,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
       }
     });
 
-    it("TENANT_ADMIN_EMAIL が設定されているとき、 describe-user-pool-domain → admin-get-user → admin-create-user の順で呼ぶべき", async () => {
+    it("should call describe-user-pool-domain → admin-get-user → admin-create-user in order when TENANT_ADMIN_EMAIL is set", async () => {
       process.env.TENANT_ADMIN_EMAIL = "admin@example.com";
       try {
         let capturedDomain: string | undefined;
@@ -305,7 +305,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
       }
     });
 
-    it("admin-get-user が成功すれば既存 user として admin-create-user を呼ばないべき (idempotent)", async () => {
+    it("should not call admin-create-user when admin-get-user succeeds (idempotent)", async () => {
       process.env.TENANT_ADMIN_EMAIL = "admin@example.com";
       try {
         const { io, calls } = buildIO({
@@ -339,7 +339,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
       }
     });
 
-    it("TENANT_ADMIN_EMAIL 未設定でも SYSTEM_ADMIN_EMAIL があれば fallback すべき", async () => {
+    it("should fall back to SYSTEM_ADMIN_EMAIL when TENANT_ADMIN_EMAIL is unset", async () => {
       delete process.env.TENANT_ADMIN_EMAIL;
       process.env.SYSTEM_ADMIN_EMAIL = "system@example.com";
       try {

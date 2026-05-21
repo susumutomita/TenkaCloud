@@ -4,7 +4,7 @@ import { computeTenantProgress, isInProgress } from "../../src/lib/tenant-progre
 const BASE = Date.parse("2026-05-13T20:00:00.000Z");
 
 describe("computeTenantProgress", () => {
-  it('createdAt の 3 分後は "3 分経過" + severity=ok を返すべき', () => {
+  it('should return "3 分経過" + severity=ok 3 minutes after createdAt', () => {
     const out = computeTenantProgress({
       createdAt: "2026-05-13T19:57:00.000Z",
       nowMs: BASE,
@@ -13,7 +13,7 @@ describe("computeTenantProgress", () => {
     expect(out.label).toBe("3 分経過");
   });
 
-  it("createdAt の 32 分後は severity=warning に切り替わるべき", () => {
+  it("should switch to severity=warning 32 minutes after createdAt", () => {
     const out = computeTenantProgress({
       createdAt: "2026-05-13T19:28:00.000Z",
       nowMs: BASE,
@@ -22,7 +22,7 @@ describe("computeTenantProgress", () => {
     expect(out.label).toBe("32 分経過");
   });
 
-  it("createdAt の 75 分後は severity=danger に切り替わるべき (= 失敗ハング示唆)", () => {
+  it("should switch to severity=danger 75 minutes after createdAt (= suggests failure hang)", () => {
     const out = computeTenantProgress({
       createdAt: "2026-05-13T18:45:00.000Z",
       nowMs: BASE,
@@ -31,18 +31,18 @@ describe("computeTenantProgress", () => {
     expect(out.label).toBe("1 時間 15 分経過");
   });
 
-  it('createdAt 不在の場合は label="—" + severity=ok を返すべき', () => {
+  it('should return label="—" + severity=ok when createdAt is absent', () => {
     const out = computeTenantProgress({ createdAt: undefined, nowMs: BASE });
     expect(out.severity).toBe("ok");
     expect(out.label).toBe("—");
   });
 
-  it('createdAt が parse 不能な string の場合も label="—" を返すべき (defensive)', () => {
+  it('should return label="—" when createdAt is an unparsable string as well (defensive)', () => {
     const out = computeTenantProgress({ createdAt: "not-an-iso-date", nowMs: BASE });
     expect(out.label).toBe("—");
   });
 
-  it("createdAt が未来 (= clock skew) でも負数経過ではなく 0 秒経過扱い", () => {
+  it("should treat a future createdAt (= clock skew) as 0 seconds elapsed rather than negative", () => {
     const out = computeTenantProgress({
       createdAt: "2026-05-13T20:01:00.000Z",
       nowMs: BASE,
@@ -51,7 +51,7 @@ describe("computeTenantProgress", () => {
     expect(out.label).toBe("0 秒経過");
   });
 
-  it("経過時間が正確に 30 分 (= 境界値) の場合は severity=warning に切り替わるべき", () => {
+  it("should switch to severity=warning when elapsed time is exactly 30 minutes (= boundary value)", () => {
     const out = computeTenantProgress({
       createdAt: "2026-05-13T19:30:00.000Z",
       nowMs: BASE,
@@ -59,7 +59,7 @@ describe("computeTenantProgress", () => {
     expect(out.severity).toBe("warning");
   });
 
-  it("経過時間が 30 分 - 1 ms (= 境界値直前) は severity=ok を維持するべき", () => {
+  it("should keep severity=ok at 30 minutes - 1 ms (= just before the boundary)", () => {
     const out = computeTenantProgress({
       createdAt: "2026-05-13T19:30:00.001Z",
       nowMs: BASE,
@@ -67,7 +67,7 @@ describe("computeTenantProgress", () => {
     expect(out.severity).toBe("ok");
   });
 
-  it("経過時間が正確に 60 分 (= 境界値) の場合は severity=danger に切り替わるべき", () => {
+  it("should switch to severity=danger when elapsed time is exactly 60 minutes (= boundary value)", () => {
     const out = computeTenantProgress({
       createdAt: "2026-05-13T19:00:00.000Z",
       nowMs: BASE,
@@ -75,7 +75,7 @@ describe("computeTenantProgress", () => {
     expect(out.severity).toBe("danger");
   });
 
-  it("経過時間が 60 分 - 1 ms (= 境界値直前) は severity=warning を維持するべき", () => {
+  it("should keep severity=warning at 60 minutes - 1 ms (= just before the boundary)", () => {
     const out = computeTenantProgress({
       createdAt: "2026-05-13T19:00:00.001Z",
       nowMs: BASE,
@@ -85,19 +85,19 @@ describe("computeTenantProgress", () => {
 });
 
 describe("isInProgress", () => {
-  it('SBT が返す "In progress" を真と判定するべき', () => {
+  it('should treat the "In progress" value returned by SBT as true', () => {
     expect(isInProgress("In progress")).toBe(true);
   });
 
-  it('ULID backend が返す "IN_PROGRESS" を真と判定するべき (defensive)', () => {
+  it('should treat the "IN_PROGRESS" value returned by the ULID backend as true (defensive)', () => {
     expect(isInProgress("IN_PROGRESS")).toBe(true);
   });
 
-  it('"Provisioning" も真と判定するべき (= SBT v0.3.10 系)', () => {
+  it('should also treat "Provisioning" as true (= SBT v0.3.10 line)', () => {
     expect(isInProgress("Provisioning")).toBe(true);
   });
 
-  it("Complete / Failed / Deleted / undefined は偽を返すべき", () => {
+  it("should return false for Complete / Failed / Deleted / undefined", () => {
     expect(isInProgress("Complete")).toBe(false);
     expect(isInProgress("Failed")).toBe(false);
     expect(isInProgress("Deleted")).toBe(false);

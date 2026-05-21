@@ -108,8 +108,8 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("EventDetailPage #741 終了予約 validation", () => {
-  it("開始時刻以前の終了日時なら errorText を出して 設定 button を disabled にすべき", async () => {
+describe("EventDetailPage #741 end-time reservation validation", () => {
+  it("should show errorText and disable Submit button when end time is at or before start time", async () => {
     const dialog = await openEndsAtModal();
     await fillEndsAt(dialog, "2026-05-14T09:00:00.000Z");
 
@@ -121,7 +121,7 @@ describe("EventDetailPage #741 終了予約 validation", () => {
     expect(mocks.setEventSchedule).not.toHaveBeenCalled();
   });
 
-  it("開始時刻より後の終了日時なら 設定 button を有効化して schedule API を呼ぶべき", async () => {
+  it("should enable Submit button and call schedule API when end time is after start time", async () => {
     const dialog = await openEndsAtModal();
     await fillEndsAt(dialog, "2026-05-14T11:00:00.000Z");
 

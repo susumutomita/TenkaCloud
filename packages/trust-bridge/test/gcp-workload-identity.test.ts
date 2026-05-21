@@ -54,7 +54,7 @@ function makeStubClient(captures?: {
 }
 
 describe("GcpWorkloadIdentityFederationExchange (#795 Phase 4 prototype)", () => {
-  it("provider が gcp でない intent では provider-mismatch を投げるべき", async () => {
+  it("should throw provider-mismatch for an intent whose provider is not gcp", async () => {
     const ex = new GcpWorkloadIdentityFederationExchange({
       stsClient: makeStubClient(),
       toSubjectToken: () => "jwt-placeholder",
@@ -71,7 +71,7 @@ describe("GcpWorkloadIdentityFederationExchange (#795 Phase 4 prototype)", () =>
     ).rejects.toMatchObject({ reason: "provider-mismatch" });
   });
 
-  it("wifAudience が無いと context-missing を投げるべき", async () => {
+  it("should throw context-missing when wifAudience is absent", async () => {
     const ex = new GcpWorkloadIdentityFederationExchange({
       stsClient: makeStubClient(),
       toSubjectToken: () => "jwt",
@@ -84,7 +84,7 @@ describe("GcpWorkloadIdentityFederationExchange (#795 Phase 4 prototype)", () =>
     ).rejects.toMatchObject({ reason: "context-missing" });
   });
 
-  it("oauthScopes が空配列なら context-missing を投げるべき", async () => {
+  it("should throw context-missing when oauthScopes is an empty array", async () => {
     const ex = new GcpWorkloadIdentityFederationExchange({
       stsClient: makeStubClient(),
       toSubjectToken: () => "jwt",
@@ -98,7 +98,7 @@ describe("GcpWorkloadIdentityFederationExchange (#795 Phase 4 prototype)", () =>
     ).rejects.toMatchObject({ reason: "context-missing" });
   });
 
-  it("成功 path で GCP STS → IAM Credentials を順次呼び credential を返すべき", async () => {
+  it("should call GCP STS then IAM Credentials in sequence and return a credential on the success path", async () => {
     let exchangeIn: GcpStsExchangeInput | undefined;
     let generateIn: GenerateServiceAccountTokenInput | undefined;
     const ex = new GcpWorkloadIdentityFederationExchange({
@@ -132,7 +132,7 @@ describe("GcpWorkloadIdentityFederationExchange (#795 Phase 4 prototype)", () =>
     expect(result.forRequestId).toBe("req-gcp-1");
   });
 
-  it("GCP STS が throw したら provider-api-error に wrap するべき", async () => {
+  it("should wrap a GCP STS throw into provider-api-error", async () => {
     const ex = new GcpWorkloadIdentityFederationExchange({
       stsClient: {
         exchangeToken: async () => {
@@ -153,7 +153,7 @@ describe("GcpWorkloadIdentityFederationExchange (#795 Phase 4 prototype)", () =>
     ).rejects.toBeInstanceOf(ExchangeError);
   });
 
-  it("IAM credentials API が throw したら provider-api-error に wrap し federated step は完了済であるべき", async () => {
+  it("should wrap an IAM credentials API throw into provider-api-error after the federated step has completed", async () => {
     let federatedReached = false;
     const ex = new GcpWorkloadIdentityFederationExchange({
       stsClient: {

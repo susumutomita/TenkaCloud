@@ -49,7 +49,7 @@ function deps(options: { externalId?: string } = {}) {
 }
 
 describe("describeStackForDeployment input-shape diagnostics (regression #?)", () => {
-  it("detail.jobId が undefined のとき deploy.describe-stack.input-received を error level で emit し、 既存の missing required field エラーを保つべき", async () => {
+  it("should emit deploy.describe-stack.input-received at error level when detail.jobId is undefined and preserve the existing missing-required-field error", async () => {
     const { deps: d } = deps();
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
@@ -70,7 +70,7 @@ describe("describeStackForDeployment input-shape diagnostics (regression #?)", (
     }
   });
 
-  it("detail 自体が undefined のときも shape log を emit して missing required field を保つべき", async () => {
+  it("should still emit the shape log and report missing required field even when detail itself is undefined", async () => {
     const { deps: d } = deps();
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
@@ -88,7 +88,7 @@ describe("describeStackForDeployment input-shape diagnostics (regression #?)", (
     }
   });
 
-  it("正常 path (= jobId / namePrefix / region 全部揃う) では shape log を出さないべき", async () => {
+  it("should not emit the shape log on the normal path (jobId / namePrefix / region all present)", async () => {
     const { deps: d } = deps();
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
@@ -103,7 +103,7 @@ describe("describeStackForDeployment input-shape diagnostics (regression #?)", (
 });
 
 describe("describeStackForDeployment", () => {
-  it("competitorRoleArn がある場合は ExternalId 付き AssumeRole 後に DescribeStacks すべき", async () => {
+  it("should DescribeStacks after AssumeRole with ExternalId when competitorRoleArn is set", async () => {
     const { deps: d, ssmSend, stsSend, cfnSend, cfnClient } = deps();
 
     const out = await describeStackForDeployment(
@@ -137,7 +137,7 @@ describe("describeStackForDeployment", () => {
     expect(describeCmd.input.StackName).toBe("tc-microservice-migration-battle-team-1");
   });
 
-  it("AssumeRole metadata が無い旧 event は same-account DescribeStacks に倒すべき", async () => {
+  it("should fall back to same-account DescribeStacks for legacy events without AssumeRole metadata", async () => {
     const { deps: d, ssmSend, stsSend, cfnClient } = deps();
 
     await describeStackForDeployment(input, d);
@@ -150,7 +150,7 @@ describe("describeStackForDeployment", () => {
     });
   });
 
-  it("AssumeRole metadata が片方だけなら構成エラーにすべき", async () => {
+  it("should raise a config error if only one side of the AssumeRole metadata is present", async () => {
     const { deps: d } = deps();
 
     await expect(
@@ -166,7 +166,7 @@ describe("describeStackForDeployment", () => {
     ).rejects.toThrow("competitorRoleArn and externalIdParameterName must be provided together");
   });
 
-  it("current ExternalId で AssumeRole が失敗したら 1 世代前で再試行すべき", async () => {
+  it("should retry with the previous generation when AssumeRole fails on the current ExternalId", async () => {
     const { deps: d, ssmSend, stsSend } = deps();
     ssmSend
       .mockResolvedValueOnce({ Parameter: { Value: "current", Version: 3 } })

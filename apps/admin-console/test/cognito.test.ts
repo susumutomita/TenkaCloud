@@ -19,14 +19,14 @@ const config: AppConfig = {
 describe("loadStoredTokens", () => {
   beforeEach(() => sessionStorage.clear());
 
-  describe("sessionStorage にトークンが無いとき", () => {
-    it("null を返すべき", () => {
+  describe("when there is no token in sessionStorage", () => {
+    it("should return null", () => {
       expect(loadStoredTokens()).toBeNull();
     });
   });
 
-  describe("保存されたトークンが既に expire しているとき", () => {
-    it("null を返すべき", () => {
+  describe("when the stored token has already expired", () => {
+    it("should return null", () => {
       const expired: TokenSet = {
         idToken: "id",
         accessToken: "ac",
@@ -37,8 +37,8 @@ describe("loadStoredTokens", () => {
     });
   });
 
-  describe("有効なトークンが保存されているとき", () => {
-    it("その TokenSet を返すべき", () => {
+  describe("when a valid token is stored", () => {
+    it("should return that TokenSet", () => {
       const valid: TokenSet = {
         idToken: "id",
         accessToken: "ac",
@@ -56,8 +56,8 @@ describe("completeLogin", () => {
     sessionStorage.clear();
   });
 
-  describe("PKCE verifier が session に無いとき", () => {
-    it("エラーを投げるべき", async () => {
+  describe("when the PKCE verifier is missing from the session", () => {
+    it("should throw an error", async () => {
       // Issue #873: vitest 4.x で `.rejects.toThrow(/regex/)` の message 照合 regression あり。
       await expect(completeLogin(config, "code")).rejects.toMatchObject({
         message: expect.stringContaining("PKCE verifier missing"),
@@ -65,7 +65,7 @@ describe("completeLogin", () => {
     });
   });
 
-  describe("Cognito が 200 とトークンを返したとき", () => {
+  describe("when Cognito returns 200 with tokens", () => {
     let tokens: TokenSet;
     beforeEach(async () => {
       sessionStorage.setItem("TenkaCloud.pkce_verifier", "v");
@@ -88,29 +88,29 @@ describe("completeLogin", () => {
       tokens = await completeLogin(config, "code", "STATE-OK");
     });
 
-    it("id_token を TokenSet.idToken に入れるべき", () => {
+    it("should put id_token into TokenSet.idToken", () => {
       expect(tokens.idToken).toBe("ID");
     });
 
-    it("access_token を TokenSet.accessToken に入れるべき", () => {
+    it("should put access_token into TokenSet.accessToken", () => {
       expect(tokens.accessToken).toBe("AC");
     });
 
-    it("refresh_token を TokenSet.refreshToken に入れるべき", () => {
+    it("should put refresh_token into TokenSet.refreshToken", () => {
       expect(tokens.refreshToken).toBe("RF");
     });
 
-    it("expires_in を未来時刻 (expiresAt) に換算するべき", () => {
+    it("should convert expires_in into a future timestamp (expiresAt)", () => {
       expect(tokens.expiresAt).toBeGreaterThan(Date.now());
     });
 
-    it("トークンを sessionStorage に永続化するべき", () => {
+    it("should persist tokens to sessionStorage", () => {
       expect(loadStoredTokens()?.idToken).toBe("ID");
     });
   });
 
-  describe("Cognito が 4xx を返したとき", () => {
-    it("ステータスと detail を含むエラーを投げるべき", async () => {
+  describe("when Cognito returns 4xx", () => {
+    it("should throw an error including the status and detail", async () => {
       sessionStorage.setItem("TenkaCloud.pkce_verifier", "v");
       // Issue #861: state validation 経由で state を渡す。
       sessionStorage.setItem("TenkaCloud.oauth_state", "STATE-OK");
@@ -130,7 +130,7 @@ describe("completeLogin", () => {
   });
 
   describe("Issue #861: state validation fail-closed", () => {
-    it("returnedState 不一致は throw", async () => {
+    it("should throw when returnedState does not match", async () => {
       sessionStorage.setItem("TenkaCloud.pkce_verifier", "v");
       sessionStorage.setItem("TenkaCloud.oauth_state", "EXPECTED");
       await expect(completeLogin(config, "code", "ATTACKER-STATE")).rejects.toMatchObject({
@@ -138,7 +138,7 @@ describe("completeLogin", () => {
       });
     });
 
-    it("sessionStorage に state が無いとき (= session clear / CSRF 経路) も throw", async () => {
+    it("should throw when state is missing from sessionStorage (= session clear / CSRF path)", async () => {
       sessionStorage.setItem("TenkaCloud.pkce_verifier", "v");
       // STATE_KEY を入れない
       await expect(completeLogin(config, "code", "ATTACKER-STATE")).rejects.toMatchObject({
@@ -146,7 +146,7 @@ describe("completeLogin", () => {
       });
     });
 
-    it("returnedState 未指定でも throw (= 旧 silent skip の bypass を塞ぐ)", async () => {
+    it("should throw even when returnedState is not specified (= closes the old silent-skip bypass)", async () => {
       sessionStorage.setItem("TenkaCloud.pkce_verifier", "v");
       sessionStorage.setItem("TenkaCloud.oauth_state", "EXPECTED");
       await expect(completeLogin(config, "code")).rejects.toMatchObject({
@@ -157,7 +157,7 @@ describe("completeLogin", () => {
 });
 
 describe("clearTokens", () => {
-  it("保存された verifier とトークンを両方削除すべき", () => {
+  it("should delete both the stored verifier and the tokens", () => {
     sessionStorage.setItem("TenkaCloud.pkce_verifier", "v");
     sessionStorage.setItem("TenkaCloud.tokens", "{}");
     clearTokens();

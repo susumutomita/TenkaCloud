@@ -20,12 +20,12 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     return <I18nProvider>{children}</I18nProvider>;
   }
 
-  it("default locale は ja (navigator.language 未対応の test 環境 default)", () => {
+  it("should default locale to ja (test env default when navigator.language is unsupported)", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     expect(result.current.locale).toMatch(/^(ja|en)$/);
   });
 
-  it("setLocale が localStorage に永続化し次回起動で復元すべき", () => {
+  it("should persist setLocale to localStorage and restore it on next startup", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     act(() => result.current.setLocale("en"));
     expect(result.current.locale).toBe("en");
@@ -33,7 +33,7 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     expect(window.localStorage.getItem("tenkacloud.portal.locale")).toBe("en");
   });
 
-  it("t() は dot-separated key で nested dictionary を引くべき", () => {
+  it("should look up a nested dictionary with a dot-separated key via t()", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     act(() => result.current.setLocale("ja"));
     expect(result.current.t("app.title")).toBe("TenkaCloud 競技者ポータル");
@@ -41,7 +41,7 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     expect(result.current.t("app.title")).toBe("TenkaCloud Participant Portal");
   });
 
-  it("locale で key 未定義なら en で fallback、 en にも無ければ raw key", () => {
+  it("should fall back to en when the key is undefined for the locale, and to raw key when en lacks it too", () => {
     const { result } = renderHook(() => useT(), { wrapper });
     // 全 locale にあるキー → 翻訳成功
     expect(result.current("nav.problems")).toBeTruthy();
@@ -50,7 +50,7 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     expect(result.current("nonexistent.key")).toBe("nonexistent.key");
   });
 
-  it("t() は params を {name} placeholder で補間すべき (Phase 2 page-level)", () => {
+  it("should interpolate params into {name} placeholders via t() (Phase 2 page-level)", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     act(() => result.current.setLocale("ja"));
     expect(result.current.t("home.welcome", { teamName: "Team Alpha" })).toBe(
@@ -62,12 +62,12 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     );
   });
 
-  it("params 未指定の placeholder は raw のまま残る (= missing key debug 用)", () => {
+  it("should leave placeholders without supplied params as raw (= for missing key debug)", () => {
     expect(_testInternals.interpolate("Hello, {name}!", {})).toBe("Hello, {name}!");
     expect(_testInternals.interpolate("a={a} b={b}", { a: 1 })).toBe("a=1 b={b}");
   });
 
-  it("SUPPORTED_LOCALES = 2 言語 [ja, en] (#1078 で zh/es 廃止)", () => {
+  it("should support 2 languages in SUPPORTED_LOCALES [ja, en] (#1078 removed zh/es)", () => {
     const supported: readonly LocaleCode[] = ["ja", "en"];
     for (const code of supported) {
       const dict = _testInternals.LOCALE_DICTIONARIES[code];
@@ -77,7 +77,7 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     }
   });
 
-  it("locale 変更時に <html lang> が追従すべき", () => {
+  it("should update <html lang> when locale changes", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     act(() => result.current.setLocale("en"));
     expect(document.documentElement.lang).toBe("en");
@@ -85,13 +85,13 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
     expect(document.documentElement.lang).toBe("ja");
   });
 
-  it("useI18n を Provider 外で呼ぶと throw すべき (= configuration error の早期発見)", () => {
+  it("should throw when useI18n is called outside the Provider (= early detection of configuration errors)", () => {
     // renderHook で wrapper を渡さないと throws する
     expect(() => renderHook(() => useI18n())).toThrow(/I18nProvider/);
   });
 
   // 翻訳結果が UI に出ることを実 render で確認
-  it("Provider 配下で翻訳結果が UI に反映されるべき", () => {
+  it("should reflect translation results in the UI under the Provider", () => {
     function Probe() {
       const t = useT();
       return <div>{t("app.loading")}</div>;

@@ -33,7 +33,7 @@ function buildShared(): {
 describe("verifyCompetitorAccount", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("STS AssumeRole を ExternalId 付きで発行し、成功時に verified=true を立てるべき", async () => {
+  it("should issue STS AssumeRole with ExternalId and set verified=true on success", async () => {
     const { shared, ddbSend, ssmSend, stsSend } = buildShared();
     // 1. DDB.Get で row 取得
     ddbSend.mockResolvedValueOnce({
@@ -84,7 +84,7 @@ describe("verifyCompetitorAccount", () => {
     expect(out.verifiedAt).toBeTruthy();
   });
 
-  it("row が無ければ CompetitorAccountNotFoundError を投げるべき", async () => {
+  it("should throw CompetitorAccountNotFoundError when the row is missing", async () => {
     const { shared, ddbSend, ssmSend, stsSend } = buildShared();
     // DDB Get + SSM GetParameter は Promise.all で並列発火されるので両方 mock 必要
     ddbSend.mockResolvedValueOnce({}); // not found
@@ -102,7 +102,7 @@ describe("verifyCompetitorAccount", () => {
     expect(stsSend.mock.calls.length).toBe(0);
   });
 
-  it("SSM に ExternalId が無ければ ExternalIdMissingError を投げ STS を呼ばないべき", async () => {
+  it("should throw ExternalIdMissingError without calling STS when ExternalId is missing in SSM", async () => {
     const { shared, ddbSend, ssmSend, stsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: {
@@ -127,7 +127,7 @@ describe("verifyCompetitorAccount", () => {
     expect(stsSend.mock.calls.length).toBe(0);
   });
 
-  it("STS AssumeRole 失敗時は AssumeRoleSanityCheckFailedError に変換するべき (= operator に AccessDenied を見せる)", async () => {
+  it("should convert STS AssumeRole failure to AssumeRoleSanityCheckFailedError (show AccessDenied to operator)", async () => {
     const { shared, ddbSend, ssmSend, stsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: {
@@ -158,7 +158,7 @@ describe("verifyCompetitorAccount", () => {
     expect(ddbSend.mock.calls.length).toBe(1);
   });
 
-  it("#856: AssumeRole が AccessDenied + version > 1 のとき 1 generation 前の ExternalId で retry して成功すべき (rotate race grace)", async () => {
+  it("#856: should retry with the previous-generation ExternalId on AccessDenied when version > 1 (rotate race grace)", async () => {
     const { shared, ddbSend, ssmSend, stsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: {
@@ -203,7 +203,7 @@ describe("verifyCompetitorAccount", () => {
     expect(secondStsCmd.input.ExternalId).toBe("external-id-old");
   });
 
-  it("#856: version=1 のときは fallback せず即失敗するべき (= rotate 未経験 / Trust Policy 真の不整合)", async () => {
+  it("#856: should fail immediately without fallback when version=1 (= no rotation yet / real Trust Policy mismatch)", async () => {
     const { shared, ddbSend, ssmSend, stsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: {

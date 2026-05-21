@@ -86,8 +86,8 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("EventDetailPage #555 失敗分を再実行 button", () => {
-  it("FAILED な deployment が 0 件のときは button を表示しないべき", async () => {
+describe("EventDetailPage #555 retry-failed button", () => {
+  it("should NOT show button when there are zero FAILED deployments", async () => {
     mocks.getEvent.mockResolvedValueOnce({
       ...baseDetail,
       deploymentsByProblem: {
@@ -102,7 +102,7 @@ describe("EventDetailPage #555 失敗分を再実行 button", () => {
     expect(screen.queryByText(/失敗分を再実行/)).not.toBeInTheDocument();
   });
 
-  it("FAILED な deployment があると 件数つきで button を表示するべき", async () => {
+  it("should show button with count when FAILED deployments exist", async () => {
     mocks.getEvent.mockResolvedValueOnce({
       ...baseDetail,
       deploymentsByProblem: {
@@ -116,7 +116,7 @@ describe("EventDetailPage #555 失敗分を再実行 button", () => {
     expect(await screen.findByText(/失敗分を再実行 \(2 件\)/)).toBeInTheDocument();
   });
 
-  it("button を押すと bulkDeployEvent を retryFailedOnly=true で呼ぶべき", async () => {
+  it("should call bulkDeployEvent with retryFailedOnly=true when button is pressed", async () => {
     mocks.getEvent.mockResolvedValue({
       ...baseDetail,
       deploymentsByProblem: {
@@ -132,7 +132,7 @@ describe("EventDetailPage #555 失敗分を再実行 button", () => {
     });
   });
 
-  it("ARCHIVED 状態の event では button を disable するべき", async () => {
+  it("should disable button when event is in ARCHIVED state", async () => {
     mocks.getEvent.mockResolvedValueOnce({
       ...baseDetail,
       status: "ARCHIVED",
@@ -148,8 +148,8 @@ describe("EventDetailPage #555 失敗分を再実行 button", () => {
   });
 });
 
-describe("EventDetailPage #756 再デプロイ button", () => {
-  it("COMPLETE な deployment が 0 件のときは button を表示しないべき", async () => {
+describe("EventDetailPage #756 re-deploy button", () => {
+  it("should NOT show button when there are zero COMPLETE deployments", async () => {
     mocks.getEvent.mockResolvedValueOnce({
       ...baseDetail,
       deploymentsByProblem: {
@@ -164,7 +164,7 @@ describe("EventDetailPage #756 再デプロイ button", () => {
     expect(screen.queryByText(/再デプロイ/)).not.toBeInTheDocument();
   });
 
-  it("COMPLETE な deployment があると 件数つきで button を表示するべき", async () => {
+  it("should show button with count when COMPLETE deployments exist", async () => {
     mocks.getEvent.mockResolvedValueOnce({
       ...baseDetail,
       deploymentsByProblem: {
@@ -178,7 +178,7 @@ describe("EventDetailPage #756 再デプロイ button", () => {
     expect(await screen.findByText(/再デプロイ \(2 件\)/)).toBeInTheDocument();
   });
 
-  it("button を押すと bulkDeployEvent を forceRedeploy=true で呼ぶべき", async () => {
+  it("should call bulkDeployEvent with forceRedeploy=true when button is pressed", async () => {
     mocks.getEvent.mockResolvedValue({
       ...baseDetail,
       deploymentsByProblem: {

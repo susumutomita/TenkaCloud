@@ -75,7 +75,7 @@ const VALID_DEPLOY_BODY = {
 describe("POST /problems/:problemId/deploy", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("Phase 2.2: UnverifiedCompetitorAccountError は 422 + awsAccountId を返すべき", async () => {
+  it("Phase 2.2: should return 422 + awsAccountId on UnverifiedCompetitorAccountError", async () => {
     mocks.startDeployment.mockRejectedValueOnce(
       new UnverifiedCompetitorAccountError("123456789012"),
     );
@@ -94,7 +94,7 @@ describe("POST /problems/:problemId/deploy", () => {
 describe("GET /problems/:problemId/deployments", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("正常系: 200 と items を返すべき", async () => {
+  it("normal case: should return 200 with items", async () => {
     mocks.listDeployments.mockResolvedValueOnce({
       items: [{ jobId: "JOB1", status: "IN_PROGRESS" }],
       nextCursor: "abc",
@@ -117,7 +117,7 @@ describe("GET /problems/:problemId/deployments", () => {
     expect(res.status).toBe(400);
   });
 
-  it("limit / cursor を listDeployments に渡すべき", async () => {
+  it("should pass limit / cursor through to listDeployments", async () => {
     mocks.listDeployments.mockResolvedValueOnce({ items: [], nextCursor: undefined });
     await app.request("/problems/security-battle-royale/deployments?limit=10&cursor=xyz");
     expect(mocks.listDeployments).toHaveBeenCalledWith(
@@ -138,7 +138,7 @@ describe("GET /problems/:problemId/deployments", () => {
 describe("GET /deployments/:jobId", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("正常系: 200 と item を返すべき", async () => {
+  it("normal case: should return 200 with item", async () => {
     mocks.getDeployment.mockResolvedValueOnce({ jobId: ULID, status: "COMPLETE" });
     const res = await app.request(`/deployments/${ULID}`);
     expect(res.status).toBe(200);
@@ -168,7 +168,7 @@ describe("GET /deployments/:jobId", () => {
 describe("DELETE /deployments/:jobId", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("正常系: 202 と previousStatus を返すべき", async () => {
+  it("normal case: should return 202 with previousStatus", async () => {
     mocks.requestTeardown.mockResolvedValueOnce({
       kind: "accepted",
       previousStatus: "IN_PROGRESS",
@@ -219,7 +219,7 @@ describe("DELETE /deployments/:jobId", () => {
 describe("GET /deployments/:jobId/stack-progress", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("正常系: 200 と progress を返すべき", async () => {
+  it("normal case: should return 200 with progress", async () => {
     mocks.getStackProgress.mockResolvedValueOnce({
       kind: "ok",
       progress: {
@@ -251,7 +251,7 @@ describe("GET /deployments/:jobId/stack-progress", () => {
     expect(res.status).toBe(404);
   });
 
-  it("stack 未割当 (deploy 極初期) は 409 を返すべき", async () => {
+  it("should return 409 when no stack is assigned yet (very early deploy)", async () => {
     mocks.getStackProgress.mockResolvedValueOnce({ kind: "stack_not_yet_created" });
     const res = await app.request(`/deployments/${ULID}/stack-progress`);
     expect(res.status).toBe(409);
@@ -259,7 +259,7 @@ describe("GET /deployments/:jobId/stack-progress", () => {
     expect(body.error).toBe("stack_not_yet_created");
   });
 
-  it("CFn 上で stack 未在は 200 + consoleUrl のみ返すべき", async () => {
+  it("should return only 200 + consoleUrl when the stack is missing on CFn", async () => {
     mocks.getStackProgress.mockResolvedValueOnce({
       kind: "stack_not_found_in_cfn",
       consoleUrl: "https://example.com/cfn",

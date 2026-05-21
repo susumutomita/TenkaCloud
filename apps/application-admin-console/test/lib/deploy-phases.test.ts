@@ -88,7 +88,7 @@ const progressWithFailed: StackProgress = {
 };
 
 describe("derivePhases", () => {
-  it("status=COMPLETE のとき 5 phase が全部 Complete (or Skipped) で表示されるべき", () => {
+  it("should show all 5 phases as Complete (or Skipped) when status=COMPLETE", () => {
     const phases = derivePhases({ ...baseDeployment, status: "COMPLETE" }, progressAllComplete);
     expect(phases.map((p) => p.id)).toEqual([
       "enqueued",
@@ -104,20 +104,20 @@ describe("derivePhases", () => {
     expect(phases[4].status).toBe("complete"); // Final
   });
 
-  it("status=FAILED かつ CFn 進行ありのとき CloudFormation Deploy phase が Failed で表示されるべき", () => {
+  it("should show CloudFormation Deploy phase as Failed when status=FAILED with CFn progress", () => {
     const phases = derivePhases({ ...baseDeployment, status: "FAILED" }, progressWithFailed);
     expect(pick(phases, "building").status).toBe("complete"); // CFn 観測あり → Build は通った
     expect(pick(phases, "cfn-deploy").status).toBe("failed");
     expect(pick(phases, "complete").status).toBe("failed");
   });
 
-  it("status=FAILED かつ CFn 未観測のとき Building phase が Failed で表示されるべき", () => {
+  it("should show Building phase as Failed when status=FAILED with no CFn observed", () => {
     const phases = derivePhases({ ...baseDeployment, status: "FAILED" }, emptyProgress);
     expect(pick(phases, "building").status).toBe("failed");
     expect(pick(phases, "cfn-deploy").status).toBe("pending");
   });
 
-  it("status=IN_PROGRESS かつ CFn 進行中のとき該当 phase が In Progress で表示されるべき", () => {
+  it("should show the relevant phase as In Progress when status=IN_PROGRESS with CFn in progress", () => {
     const phases = derivePhases(
       { ...baseDeployment, status: "IN_PROGRESS" },
       progressWithCreateInProgress,
@@ -126,24 +126,24 @@ describe("derivePhases", () => {
     expect(pick(phases, "cfn-deploy").status).toBe("in-progress");
   });
 
-  it("stackEvents が空かつ status=IN_PROGRESS のとき CloudFormation Deploy phase は Pending で表示されるべき", () => {
+  it("should show CloudFormation Deploy phase as Pending when stackEvents is empty and status=IN_PROGRESS", () => {
     const phases = derivePhases({ ...baseDeployment, status: "IN_PROGRESS" }, emptyProgress);
     expect(pick(phases, "cfn-deploy").status).toBe("pending");
   });
 
-  it("stackProgress=null のときも phase 列が 5 個生成されるべき", () => {
+  it("should still generate 5 phases when stackProgress=null", () => {
     const phases = derivePhases({ ...baseDeployment, status: "PENDING" }, null);
     expect(phases).toHaveLength(5);
     expect(phases[1].status).toBe("pending"); // building pending
     expect(phases[2].status).toBe("pending"); // cfn pending
   });
 
-  it("status=DELETED のとき Final phase が Skipped で表示されるべき", () => {
+  it("should show Final phase as Skipped when status=DELETED", () => {
     const phases = derivePhases({ ...baseDeployment, status: "DELETED" }, progressAllComplete);
     expect(pick(phases, "complete").status).toBe("skipped");
   });
 
-  it("status=EXPIRED / AUTO_DELETED のとき自動削除 lifecycle として表示すべき", () => {
+  it("should display as auto-delete lifecycle when status=EXPIRED / AUTO_DELETED", () => {
     const expired = derivePhases({ ...baseDeployment, status: "EXPIRED" }, emptyProgress);
     expect(pick(expired, "cfn-deploy").status).toBe("skipped");
     expect(pick(expired, "complete").status).toBe("failed");
@@ -155,7 +155,7 @@ describe("derivePhases", () => {
 
   // #818 regression: past CREATE_IN_PROGRESS event が history に残っていても、
   // stack 自体は CREATE_COMPLETE に到達しているなら cfn-deploy phase は complete。
-  it("stackStatus=CREATE_COMPLETE のとき過去 IN_PROGRESS event があっても complete にすべき (#818)", () => {
+  it("should mark complete even when past IN_PROGRESS events remain, if stackStatus=CREATE_COMPLETE (#818)", () => {
     const stuck: StackProgress = {
       ...emptyProgress,
       stackStatus: "CREATE_COMPLETE",
@@ -178,7 +178,7 @@ describe("derivePhases", () => {
     expect(pick(phases, "cfn-deploy").status).toBe("complete");
   });
 
-  it("stackStatus 未指定でも LogicalId 別最新 event を見て complete を返すべき (#818)", () => {
+  it("should return complete by looking at latest event per LogicalId even when stackStatus is missing (#818)", () => {
     // stackStatus 取得失敗の fallback path。 同 LogicalId に IN_PROGRESS と
     // COMPLETE 両方あるとき、 最新 (= COMPLETE) を採用する。
     const fallback: StackProgress = {
@@ -202,7 +202,7 @@ describe("derivePhases", () => {
     expect(pick(phases, "cfn-deploy").status).toBe("complete");
   });
 
-  it("stackStatus=ROLLBACK_COMPLETE は failed にすべき (#818)", () => {
+  it("should mark stackStatus=ROLLBACK_COMPLETE as failed (#818)", () => {
     const rolledBack: StackProgress = {
       ...emptyProgress,
       stackStatus: "ROLLBACK_COMPLETE",
@@ -212,7 +212,7 @@ describe("derivePhases", () => {
     expect(pick(phases, "cfn-deploy").status).toBe("failed");
   });
 
-  it("stackStatus=CREATE_IN_PROGRESS は in-progress にすべき (#818)", () => {
+  it("should mark stackStatus=CREATE_IN_PROGRESS as in-progress (#818)", () => {
     const inProgress: StackProgress = {
       ...emptyProgress,
       stackStatus: "CREATE_IN_PROGRESS",
@@ -224,14 +224,14 @@ describe("derivePhases", () => {
 });
 
 describe("deploySummaryTitle", () => {
-  it("COMPLETE のとき succeeded を含むべき", () => {
+  it("should include succeeded when status=COMPLETE", () => {
     expect(deploySummaryTitle({ ...baseDeployment, status: "COMPLETE" })).toMatch(/succeeded/);
   });
-  it("FAILED のとき failed を含むべき", () => {
+  it("should include failed when status=FAILED", () => {
     expect(deploySummaryTitle({ ...baseDeployment, status: "FAILED" })).toMatch(/failed/);
   });
 
-  it("EXPIRED / AUTO_DELETED のとき lifecycle label を含むべき", () => {
+  it("should include lifecycle label when status=EXPIRED / AUTO_DELETED", () => {
     expect(deploySummaryTitle({ ...baseDeployment, status: "EXPIRED" })).toMatch(/expired/);
     expect(deploySummaryTitle({ ...baseDeployment, status: "AUTO_DELETED" })).toMatch(
       /auto-deleted/,
@@ -240,7 +240,7 @@ describe("deploySummaryTitle", () => {
 });
 
 describe("buildTerminalLog", () => {
-  it("Phase ごとの header 行と events 行を出すべき", () => {
+  it("should emit header lines and event lines per phase", () => {
     const phases = derivePhases({ ...baseDeployment, status: "COMPLETE" }, progressAllComplete);
     const lines = buildTerminalLog(
       { ...baseDeployment, status: "COMPLETE" },
@@ -255,11 +255,11 @@ describe("buildTerminalLog", () => {
       "> Health Check [skipped]",
       "> Complete / Teardown [complete]",
     ]);
-    // CFn events 行に logicalResourceId が含まれるべき。
+    // CFn event lines should include logicalResourceId.
     expect(lines.some((l) => l.text.includes("MyBucket"))).toBe(true);
   });
 
-  it("consoleUrl があるとき Building phase 内に CodeBuild console link が出るべき", () => {
+  it("should show CodeBuild console link inside Building phase when consoleUrl is present", () => {
     const phases = derivePhases(
       { ...baseDeployment, status: "IN_PROGRESS" },
       progressWithCreateInProgress,

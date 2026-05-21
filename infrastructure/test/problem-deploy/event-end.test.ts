@@ -32,7 +32,7 @@ function conditionalFailure(): Error {
 describe("endEvent", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("正常系: Event 行を ENDED に更新し全 deployment 行に eventEndsAt を伝播するべき", async () => {
+  it("normal case: should update the Event row to ENDED and propagate eventEndsAt to all deployment rows", async () => {
     const { shared, ddbSend } = buildShared();
     // 1st: Event UpdateCommand returns Attributes (= status=READY が条件を満たした)
     ddbSend.mockResolvedValueOnce({
@@ -98,7 +98,7 @@ describe("endEvent", () => {
     }
   });
 
-  it("status != READY (= DRAFT 等) なら not_endable で 409 相当を返すべき", async () => {
+  it("should return 409-equivalent not_endable when status != READY (e.g. DRAFT)", async () => {
     const { shared, ddbSend } = buildShared();
     // 1st: Event Update が ConditionalCheckFailed
     ddbSend.mockRejectedValueOnce(conditionalFailure());
@@ -116,7 +116,7 @@ describe("endEvent", () => {
     expect(ddbSend).toHaveBeenCalledTimes(2);
   });
 
-  it("Event 行不在 (probe で Item 無し) は not_found を返すべき", async () => {
+  it("should return not_found when the Event row is absent (probe finds no Item)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockRejectedValueOnce(conditionalFailure());
     ddbSend.mockResolvedValueOnce({ Item: undefined });
@@ -126,7 +126,7 @@ describe("endEvent", () => {
     expect(ddbSend).toHaveBeenCalledTimes(2);
   });
 
-  it("tenant 不一致 (probe で別 tenant) は not_found を返すべき (cross-tenant 漏洩防止)", async () => {
+  it("should return not_found on tenant mismatch (probe finds a different tenant) (cross-tenant leak guard)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockRejectedValueOnce(conditionalFailure());
     ddbSend.mockResolvedValueOnce({
@@ -154,7 +154,7 @@ describe("endEvent", () => {
     expect(updCmds).toHaveLength(0);
   });
 
-  it("Event 更新 + 全 deployment update の updatedAt は同じ now 値を使うべき", async () => {
+  it("should use the same now value for updatedAt across Event and all deployment updates", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Attributes: { eventId: "EV1", tenantId: "tenant-acme", status: "ENDED", endsAt: NOW_ISO },

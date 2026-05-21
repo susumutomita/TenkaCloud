@@ -17,7 +17,7 @@ import type { FlagScoringMetadata } from "../../lib/utils/scoring-metadata";
  */
 
 describe("flag kind in polling dispatcher", () => {
-  it("polling 経由では何もしないべき (= scoreDelta=0、 scoreEvents 空)", () => {
+  it("should do nothing via polling (scoreDelta=0, empty scoreEvents)", () => {
     const input: KindHandlerInput<FlagScoringMetadata> = {
       deployment: { PK: "DEPLOYMENT#JOB1", jobId: "JOB1", problemId: "hello-world" },
       scoring: { kind: "flag", flagOutputKey: "ParameterValue", points: 100 },
@@ -35,20 +35,20 @@ describe("flag kind in polling dispatcher", () => {
 });
 
 describe("flagMatches (shared helper、 submit-flag と共有)", () => {
-  it("一致するなら true を返すべき", () => {
+  it("should return true on match", () => {
     expect(flagMatches("hello", "hello")).toBe(true);
   });
 
-  it("両端 trim 後の一致を判定すべき", () => {
+  it("should compare equality after trimming both ends", () => {
     expect(flagMatches("  hello  ", "hello")).toBe(true);
     expect(flagMatches("hello\n", "hello")).toBe(true);
   });
 
-  it("大文字小文字は区別すべき (= case-sensitive)", () => {
+  it("should be case-sensitive", () => {
     expect(flagMatches("Hello", "hello")).toBe(false);
   });
 
-  it("中央のスペースは区別すべき", () => {
+  it("should distinguish spaces in the middle", () => {
     expect(flagMatches("hello world", "hello  world")).toBe(false);
   });
 });

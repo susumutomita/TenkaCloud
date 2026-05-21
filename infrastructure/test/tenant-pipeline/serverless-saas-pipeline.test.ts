@@ -25,7 +25,7 @@ function synth(): Template {
 }
 
 describe("ServerlessSaaSPipeline runtimes", () => {
-  it("tenant pipeline の Python Lambda は最新 runtime を使うべき", () => {
+  it("tenant pipeline Python Lambda should use the latest runtime", () => {
     const tpl = synth();
     tpl.hasResourceProperties(
       "AWS::Lambda::Function",
@@ -43,7 +43,7 @@ describe("ServerlessSaaSPipeline runtimes", () => {
     );
   });
 
-  it("tenant provisioning CodeBuild は最新 standard image を使うべき", () => {
+  it("tenant provisioning CodeBuild should use the latest standard image", () => {
     const tpl = synth();
     tpl.hasResourceProperties(
       "AWS::CodeBuild::Project",
@@ -58,7 +58,7 @@ describe("ServerlessSaaSPipeline runtimes", () => {
 });
 
 describe("ServerlessSaaSPipeline state machine name", () => {
-  it("同一 account/region の複数 deploy で衝突しないよう app と environment を含めるべき", () => {
+  it("should include app and environment to avoid collisions on multiple deploys in the same account/region", () => {
     const tpl = synth();
     tpl.hasResourceProperties(
       "AWS::StepFunctions::StateMachine",

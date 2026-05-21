@@ -22,7 +22,7 @@ describe("queryDeploymentsByEvent (Issue #670)", () => {
     problemsCatalog: {},
   });
 
-  it("projection に `#s` が含まれるなら ExpressionAttributeNames で alias を提供すべき", async () => {
+  it("should provide an ExpressionAttributeNames alias when projection contains `#s`", async () => {
     const send = vi.fn().mockResolvedValue({ Items: [] });
     await queryDeploymentsByEvent(
       buildShared(send),

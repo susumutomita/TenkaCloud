@@ -39,7 +39,7 @@ describe("AdminConsoleHostingStack", () => {
   });
 
   describe("CloudFront security headers (CSP wildcard, Issue #1031)", () => {
-    it("connect-src に execute-api region wildcard を含むべき", () => {
+    it("connect-src should include the execute-api region wildcard", () => {
       const template = synth();
       const policies = template.findResources("AWS::CloudFront::ResponseHeadersPolicy");
       const policy = Object.values(policies)[0];
@@ -48,7 +48,7 @@ describe("AdminConsoleHostingStack", () => {
       expect(cspJson).toContain("https://*.execute-api.ap-northeast-1.amazonaws.com");
     });
 
-    it("connect-src に Cognito domain wildcard を含むべき", () => {
+    it("connect-src should include the Cognito domain wildcard", () => {
       const template = synth();
       const policies = template.findResources("AWS::CloudFront::ResponseHeadersPolicy");
       const policy = Object.values(policies)[0];
@@ -57,7 +57,7 @@ describe("AdminConsoleHostingStack", () => {
       expect(cspJson).toContain("https://cognito-idp.ap-northeast-1.amazonaws.com");
     });
 
-    it("form-action に Cognito domain wildcard を含むべき (= Hosted UI sign-in form)", () => {
+    it("form-action should include the Cognito domain wildcard (Hosted UI sign-in form)", () => {
       const template = synth();
       const policies = template.findResources("AWS::CloudFront::ResponseHeadersPolicy");
       const policy = Object.values(policies)[0];
@@ -67,7 +67,7 @@ describe("AdminConsoleHostingStack", () => {
   });
 
   describe("Issue #1031: runtime-config 分離", () => {
-    it("RuntimeConfigDeployment を本 stack に持たないべき (= AdminConsoleRuntimeConfigStack に移管)", () => {
+    it("should not have RuntimeConfigDeployment in this stack (migrated to AdminConsoleRuntimeConfigStack)", () => {
       const template = synth();
       // BucketDeployment は 1 つだけ (= SiteDeployment for dist/)、 旧 RuntimeConfigDeployment は無い。
       const bucketDeployments = template.findResources("Custom::CDKBucketDeployment");

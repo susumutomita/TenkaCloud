@@ -47,7 +47,7 @@ function buildShared(): {
 describe("createCompetitorAccount", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("SSM SecureString に ExternalId を Put し DDB に verified=false の row を書くべき", async () => {
+  it("should Put ExternalId into SSM SecureString and write a verified=false row to DDB", async () => {
     const { shared, ddbSend, ssmSend } = buildShared();
     // 1 回目の SSM.Get は ParameterNotFound、続く Put は成功、最後 DDB.Put 成功。
     ssmSend
@@ -96,7 +96,7 @@ describe("createCompetitorAccount", () => {
     expect(out.verified).toBe(false);
   });
 
-  it("SSM に既存値があれば ExternalId を回さず既存値を返すべき (= 冪等)", async () => {
+  it("should return the existing value without rotating ExternalId when present in SSM (idempotent)", async () => {
     const { shared, ddbSend, ssmSend } = buildShared();
     ssmSend.mockResolvedValueOnce({ Parameter: { Value: "existing-external-id-xyz" } });
     ddbSend.mockResolvedValueOnce({});
@@ -116,7 +116,7 @@ describe("createCompetitorAccount", () => {
     expect(out.externalId).toBe("existing-external-id-xyz");
   });
 
-  it("同 (tenantId, awsAccountId) を 2 度作ろうとすると DuplicateCompetitorAccountError を投げるべき", async () => {
+  it("should throw DuplicateCompetitorAccountError on attempts to create the same (tenantId, awsAccountId) twice", async () => {
     const { shared, ddbSend, ssmSend } = buildShared();
     ssmSend.mockResolvedValueOnce({ Parameter: { Value: "ext-id" } });
     ddbSend.mockRejectedValueOnce(
@@ -140,7 +140,7 @@ describe("createCompetitorAccount", () => {
 describe("listCompetitorAccounts", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("Query PK=TENANT# / SK begins_with ACCOUNT# で全 row を返すべき", async () => {
+  it("should return all rows via Query PK=TENANT# / SK begins_with ACCOUNT#", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [
@@ -181,7 +181,7 @@ describe("listCompetitorAccounts", () => {
 describe("getCompetitorAccount", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("Get が undefined Item を返すと undefined を返すべき", async () => {
+  it("should return undefined when Get returns an undefined Item", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({});
     const out = await getCompetitorAccount(shared, "tenant-acme", "999999999999");
@@ -194,7 +194,7 @@ describe("getCompetitorAccount", () => {
 describe("markCompetitorAccountVerified", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("UpdateCommand で verified=true / verifiedAt を立てるべき", async () => {
+  it("should set verified=true / verifiedAt via UpdateCommand", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Attributes: {
@@ -226,7 +226,7 @@ describe("markCompetitorAccountVerified", () => {
     expect(out.verifiedAt).toBe(NOW_ISO);
   });
 
-  it("ConditionalCheckFailedException は CompetitorAccountNotFoundError に変換するべき", async () => {
+  it("should convert ConditionalCheckFailedException to CompetitorAccountNotFoundError", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockRejectedValueOnce(
       Object.assign(new Error("conflict"), { name: "ConditionalCheckFailedException" }),
@@ -245,7 +245,7 @@ describe("markCompetitorAccountVerified", () => {
 describe("deleteCompetitorAccount", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("row が存在しなければ CompetitorAccountNotFoundError を投げるべき", async () => {
+  it("should throw CompetitorAccountNotFoundError when the row does not exist", async () => {
     const { shared, ddbSend, ssmSend } = buildShared();
     // ConditionExpression が落ちて ConditionalCheckFailedException を SDK が投げる挙動。
     ddbSend.mockRejectedValueOnce(
@@ -261,7 +261,7 @@ describe("deleteCompetitorAccount", () => {
     expect(ssmSend.mock.calls.length).toBe(0);
   });
 
-  it("最後の 1 行を消したら SSM の ExternalId も削除するべき", async () => {
+  it("should also delete the ExternalId from SSM when the last remaining row is removed", async () => {
     const { shared, ddbSend, ssmSend } = buildShared();
     ddbSend
       // DeleteCommand 成功
@@ -277,7 +277,7 @@ describe("deleteCompetitorAccount", () => {
     expect(ssmSend.mock.calls.length).toBe(1);
   });
 
-  it("他の row が残っていれば SSM の ExternalId は触らないべき", async () => {
+  it("should not touch SSM ExternalId while other rows remain", async () => {
     const { shared, ddbSend, ssmSend } = buildShared();
     ddbSend
       .mockResolvedValueOnce({})
@@ -293,7 +293,7 @@ describe("deleteCompetitorAccount", () => {
 describe("rotateExternalIdForAccount", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("SSM Parameter を Overwrite=true で Put し DDB の rotatedAt を更新するべき", async () => {
+  it("should Put the SSM Parameter with Overwrite=true and update DDB rotatedAt", async () => {
     const { shared, ddbSend, ssmSend } = buildShared();
     // 1. DDB Get で既存 row 確認 → Item あり
     ddbSend.mockResolvedValueOnce({
@@ -358,7 +358,7 @@ describe("rotateExternalIdForAccount", () => {
     expect(out.rotatedAt).toBe(NOW_ISO);
   });
 
-  it("row が無ければ CompetitorAccountNotFoundError を投げ SSM Put しないべき", async () => {
+  it("should throw CompetitorAccountNotFoundError without SSM Put when the row is missing", async () => {
     const { shared, ddbSend, ssmSend } = buildShared();
     // Get が Item を返さない
     ddbSend.mockResolvedValueOnce({});
@@ -377,7 +377,7 @@ describe("rotateExternalIdForAccount", () => {
     expect(ssmSend.mock.calls.length).toBe(0);
   });
 
-  it("SSM に現 ExternalId が無ければ ExternalIdMissingForRotationError を投げ Put しないべき", async () => {
+  it("should throw ExternalIdMissingForRotationError without Put when no current ExternalId exists in SSM", async () => {
     const { shared, ddbSend, ssmSend } = buildShared();
     // 1. Get Item OK
     ddbSend.mockResolvedValueOnce({
@@ -408,7 +408,7 @@ describe("rotateExternalIdForAccount", () => {
     expect(ssmSend.mock.calls.length).toBe(1);
   });
 
-  it("Issue #868: verified=false な row への rotate は CompetitorAccountNotVerifiedError を投げ SSM Put しないべき", async () => {
+  it("Issue #868: should throw CompetitorAccountNotVerifiedError without SSM Put when rotating a verified=false row", async () => {
     const { shared, ddbSend, ssmSend } = buildShared();
     // verified=false な row
     ddbSend.mockResolvedValueOnce({

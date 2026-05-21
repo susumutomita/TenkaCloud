@@ -36,7 +36,7 @@ function validIntent(overrides: Partial<CloudActionIntent> = {}): CloudActionInt
 }
 
 describe("CloudActionIntentSchema (#795 Phase 1)", () => {
-  it("正常な intent は parse 成功して original を返すべき", () => {
+  it("should parse a valid intent successfully and return the original", () => {
     const result = parseCloudActionIntent(validIntent());
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -45,7 +45,7 @@ describe("CloudActionIntentSchema (#795 Phase 1)", () => {
     }
   });
 
-  it("未知の version は reject すべき (= 将来の v2 で discriminate するため)", () => {
+  it("should reject an unknown version (= so we can discriminate a future v2)", () => {
     const bad = { ...validIntent(), version: "tenkacloud.cloud-action-intent.v2" };
     const result = parseCloudActionIntent(bad);
     expect(result.ok).toBe(false);
@@ -54,7 +54,7 @@ describe("CloudActionIntentSchema (#795 Phase 1)", () => {
     }
   });
 
-  it("provider が enum 外なら reject すべき", () => {
+  it("should reject a provider outside of the enum", () => {
     const bad = validIntent();
     const result = parseCloudActionIntent({
       ...bad,
@@ -63,7 +63,7 @@ describe("CloudActionIntentSchema (#795 Phase 1)", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("ttlSeconds が 0 以下なら reject すべき (= 即失効 intent の禁止)", () => {
+  it("should reject ttlSeconds of 0 or less (= forbid intents that expire instantly)", () => {
     const bad = validIntent();
     const result = parseCloudActionIntent({
       ...bad,
@@ -72,7 +72,7 @@ describe("CloudActionIntentSchema (#795 Phase 1)", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("ttlSeconds が 3600 を超えたら reject すべき (= short-TTL 原則の機械強制)", () => {
+  it("should reject ttlSeconds greater than 3600 (= machine-enforced short-TTL principle)", () => {
     const bad = validIntent();
     const result = parseCloudActionIntent({
       ...bad,
@@ -81,7 +81,7 @@ describe("CloudActionIntentSchema (#795 Phase 1)", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("expiresAt が ISO datetime 形式でなければ reject すべき", () => {
+  it("should reject expiresAt that is not in ISO datetime format", () => {
     const bad = validIntent();
     const result = parseCloudActionIntent({
       ...bad,
@@ -90,7 +90,7 @@ describe("CloudActionIntentSchema (#795 Phase 1)", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("schema 外の property があれば reject すべき (= strict mode で confused deputy 防御)", () => {
+  it("should reject any property outside the schema (= strict mode defends against confused deputy)", () => {
     const result = parseCloudActionIntent({
       ...validIntent(),
       somethingExtra: "should-be-rejected",
@@ -100,26 +100,26 @@ describe("CloudActionIntentSchema (#795 Phase 1)", () => {
 });
 
 describe("canonicalize (#795 Phase 1)", () => {
-  it("同じ object literal は順序が違っても同じ byte に正規化されるべき", () => {
+  it("should canonicalize the same object literal to identical bytes regardless of key order", () => {
     const a = canonicalize({ b: 1, a: 2 });
     const b = canonicalize({ a: 2, b: 1 });
     expect(a).toBe(b);
     expect(a).toBe('{"a":2,"b":1}');
   });
 
-  it("array の要素順は preserve されるべき (= 意図的順序を破壊しない)", () => {
+  it("should preserve array element order (= do not destroy intentional ordering)", () => {
     expect(canonicalize([3, 1, 2])).toBe("[3,1,2]");
   });
 
-  it("undefined property は drop されるべき (= optional field の有無で hash 不変)", () => {
+  it("should drop undefined properties (= hash stays stable across presence of optional fields)", () => {
     expect(canonicalize({ a: 1, b: undefined })).toBe('{"a":1}');
   });
 
-  it("null は preserve されるべき (= explicit null と undefined の意味差を保つ)", () => {
+  it("should preserve null (= keep the semantic difference between explicit null and undefined)", () => {
     expect(canonicalize({ a: null })).toBe('{"a":null}');
   });
 
-  it("nested object も再帰的に sort されるべき", () => {
+  it("should sort nested objects recursively", () => {
     const a = canonicalize({ outer: { z: 1, a: 2 }, alpha: 1 });
     const b = canonicalize({ alpha: 1, outer: { a: 2, z: 1 } });
     expect(a).toBe(b);

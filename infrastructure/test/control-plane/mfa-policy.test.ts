@@ -13,27 +13,27 @@ import {
  * SMS なし / 12 文字以上 / 4 種混在 を baseline とする。
  */
 describe("SystemAdmin の Cognito UserPool MFA / password policy (Issue #1035)", () => {
-  it("MFA は REQUIRED (= ON) に強制すべき", () => {
+  it("should force MFA to REQUIRED (ON)", () => {
     expect(SYSTEM_ADMIN_MFA_CONFIGURATION).toBe("ON");
   });
 
-  it("第二要素は TOTP (SOFTWARE_TOKEN_MFA) のみとし SMS は許可しないべき", () => {
+  it("should accept only TOTP (SOFTWARE_TOKEN_MFA) as the second factor and disallow SMS", () => {
     expect(SYSTEM_ADMIN_ENABLED_MFAS).toEqual(["SOFTWARE_TOKEN_MFA"]);
     expect(SYSTEM_ADMIN_ENABLED_MFAS).not.toContain("SMS_MFA");
   });
 
-  it("password 最小長は 12 文字以上であるべき (SBT default 8 文字を上書き)", () => {
+  it("password minimum length should be 12 or more (overriding SBT default 8)", () => {
     expect(SYSTEM_ADMIN_PASSWORD_POLICY.MinimumLength).toBeGreaterThanOrEqual(12);
   });
 
-  it("password は lower / upper / number / symbol の 4 種を必須にすべき", () => {
+  it("password should require all 4 of lower / upper / number / symbol", () => {
     expect(SYSTEM_ADMIN_PASSWORD_POLICY.RequireLowercase).toBe(true);
     expect(SYSTEM_ADMIN_PASSWORD_POLICY.RequireUppercase).toBe(true);
     expect(SYSTEM_ADMIN_PASSWORD_POLICY.RequireNumbers).toBe(true);
     expect(SYSTEM_ADMIN_PASSWORD_POLICY.RequireSymbols).toBe(true);
   });
 
-  it("一時パスワード有効期間は 7 日以内に制限すべき (= 招待後の総当たり面を縮減)", () => {
+  it("temporary-password validity should be limited to within 7 days (shrinking brute-force surface after invite)", () => {
     expect(SYSTEM_ADMIN_PASSWORD_POLICY.TemporaryPasswordValidityDays).toBeLessThanOrEqual(7);
   });
 });

@@ -65,7 +65,7 @@ function makeStub(
 }
 
 describe("AwsAssumeRoleExchange (#795 Phase 2)", () => {
-  it("provider が aws でない intent では provider-mismatch を投げるべき", async () => {
+  it("should throw provider-mismatch for an intent whose provider is not aws", async () => {
     const ex = new AwsAssumeRoleExchange({ sts: makeStub() });
     const intent = makeIntent({
       target: { provider: "gcp", providerAccountRef: "my-project" },
@@ -75,21 +75,21 @@ describe("AwsAssumeRoleExchange (#795 Phase 2)", () => {
     ).rejects.toMatchObject({ reason: "provider-mismatch" });
   });
 
-  it("context.roleArn が無いと context-missing を投げるべき", async () => {
+  it("should throw context-missing when context.roleArn is absent", async () => {
     const ex = new AwsAssumeRoleExchange({ sts: makeStub() });
     await expect(
       ex.exchange(makeIntent(), { externalId: "ext-1" } as Record<string, unknown>),
     ).rejects.toMatchObject({ reason: "context-missing" });
   });
 
-  it("context.externalId が無いと context-missing を投げるべき (= ADR-002 必須化)", async () => {
+  it("should throw context-missing when context.externalId is absent (= mandated by ADR-002)", async () => {
     const ex = new AwsAssumeRoleExchange({ sts: makeStub() });
     await expect(
       ex.exchange(makeIntent(), { roleArn: "arn:aws:iam::1:role/x" } as Record<string, unknown>),
     ).rejects.toMatchObject({ reason: "context-missing" });
   });
 
-  it("ttlSeconds が STS 最小 900 未満なら ttl-exceeded-provider-limit を投げるべき", async () => {
+  it("should throw ttl-exceeded-provider-limit when ttlSeconds is below the STS minimum of 900", async () => {
     const ex = new AwsAssumeRoleExchange({ sts: makeStub() });
     const intent = makeIntent();
     const short: CloudActionIntent = {
@@ -104,7 +104,7 @@ describe("AwsAssumeRoleExchange (#795 Phase 2)", () => {
     ).rejects.toMatchObject({ reason: "ttl-exceeded-provider-limit" });
   });
 
-  it("STS が throw したら provider-api-error に wrap するべき (= underlying 保持)", async () => {
+  it("should wrap an STS throw into provider-api-error (= preserving the underlying error)", async () => {
     const failingSts: StsAssumeRoleClient = {
       assumeRole: async () => {
         throw new Error("STS unreachable");
@@ -125,7 +125,7 @@ describe("AwsAssumeRoleExchange (#795 Phase 2)", () => {
     }
   });
 
-  it("成功 path で AssumeRoleCommand input に DurationSeconds / ExternalId / Policy / Tags を正しく載せるべき", async () => {
+  it("should populate AssumeRoleCommand input with DurationSeconds / ExternalId / Policy / Tags on the success path", async () => {
     let captured: AssumeRoleInput | undefined;
     const sts = makeStub({}, (input) => {
       captured = input;
@@ -151,7 +151,7 @@ describe("AwsAssumeRoleExchange (#795 Phase 2)", () => {
     expect(result.externalId).toBe("ext-secret");
   });
 
-  it("RoleSessionName は default で intent claim から組み立て、 64 文字 cap されるべき", async () => {
+  it("should build RoleSessionName from intent claims by default and cap it at 64 characters", async () => {
     let captured: AssumeRoleInput | undefined;
     const sts = makeStub({}, (input) => {
       captured = input;
@@ -170,7 +170,7 @@ describe("AwsAssumeRoleExchange (#795 Phase 2)", () => {
     expect(captured?.RoleSessionName.length).toBeLessThanOrEqual(64);
   });
 
-  it("requestedScopes が空なら Policy 省略されるべき (= default = role policy のみ)", async () => {
+  it("should omit Policy when requestedScopes is empty (= default falls back to the role policy alone)", async () => {
     let captured: AssumeRoleInput | undefined;
     const sts = makeStub({}, (input) => {
       captured = input;
@@ -188,7 +188,7 @@ describe("AwsAssumeRoleExchange (#795 Phase 2)", () => {
     expect(captured?.Policy).toBeUndefined();
   });
 
-  it("Expiration が string で返ってきても ISO に正規化されるべき", async () => {
+  it("should normalize Expiration to ISO even when returned as a string", async () => {
     const sts: StsAssumeRoleClient = {
       assumeRole: async () => ({
         Credentials: {

@@ -37,28 +37,28 @@ describe("App", () => {
     sessionStorage.clear();
   });
 
-  describe("/login にアクセスしたとき", () => {
-    it("LoginPage が表示されサインインボタンを持つべき", async () => {
+  describe("when accessing /login", () => {
+    it("should render LoginPage with a sign-in button", async () => {
       renderApp("/login");
       expect(await screen.findByRole("button", { name: "サインイン" })).toBeInTheDocument();
     });
   });
 
-  describe("未認証で / にアクセスしたとき", () => {
-    it("LoginPage へ redirect されるべき", async () => {
+  describe("when accessing / while unauthenticated", () => {
+    it("should redirect to LoginPage", async () => {
       renderApp("/");
       expect(await screen.findByRole("button", { name: "サインイン" })).toBeInTheDocument();
     });
   });
 
-  describe("チームログインキー入力 → サインイン", () => {
-    it("空のキーではサインインボタンは disable されているべき", async () => {
+  describe("team login key input -> sign-in", () => {
+    it("should disable the sign-in button when the key is empty", async () => {
       renderApp("/login");
       const button = await screen.findByRole("button", { name: "サインイン" });
       expect(button).toBeDisabled();
     });
 
-    it("非空のキーを入れて submit すると Home (Welcome) に遷移するべき", async () => {
+    it("should navigate to Home (Welcome) when submitting a non-empty key", async () => {
       const user = userEvent.setup();
       renderApp("/login");
 
@@ -77,8 +77,8 @@ describe("App", () => {
     });
   });
 
-  describe("既ログイン状態で /login に再アクセスしたとき (Issue #496)", () => {
-    it("Home に redirect されサインイン画面は表示されないべき (= 黙々 team 切替の防止)", async () => {
+  describe("when re-accessing /login while already logged in (Issue #496)", () => {
+    it("should redirect to Home and not show the sign-in screen (= prevent silent team switching)", async () => {
       const user = userEvent.setup();
       // 1 度ログインして session を作る
       const { unmount } = renderApp("/login");

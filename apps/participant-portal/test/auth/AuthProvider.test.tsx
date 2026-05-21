@@ -31,13 +31,13 @@ describe("AuthProvider", () => {
     vi.restoreAllMocks();
   });
 
-  it("初期状態は ready=true / session なしであるべき", () => {
+  it("should be ready=true with no session in initial state", () => {
     const { result } = renderAuth(devConfig);
     expect(result.current.ready).toBe(true);
     expect(result.current.session).toBeNull();
   });
 
-  it("dev config で login すると mock session が発行されるべき", async () => {
+  it("should issue a mock session on login with dev config", async () => {
     const { result } = renderAuth(devConfig);
     await act(async () => {
       await result.current.login("abc-123-team");
@@ -46,7 +46,7 @@ describe("AuthProvider", () => {
     expect(result.current.session?.teamId).toMatch(/^team-/);
   });
 
-  it("空白のみのキーを渡したら throw、session は変わらないべき", async () => {
+  it("should throw and not change session when passed a whitespace-only key", async () => {
     const { result } = renderAuth(devConfig);
     await act(async () => {
       // Issue #873: regex regression を回避。
@@ -57,7 +57,7 @@ describe("AuthProvider", () => {
     expect(result.current.session).toBeNull();
   });
 
-  it("Unicode (日本語) のキーでもクラッシュせず session 発行できるべき", async () => {
+  it("should issue a session without crashing for a Unicode (Japanese) key", async () => {
     const { result } = renderAuth(devConfig);
     await act(async () => {
       await result.current.login("日本語キー");
@@ -66,7 +66,7 @@ describe("AuthProvider", () => {
     expect(result.current.session?.teamId).toMatch(/^team-/);
   });
 
-  it("logout で session が消えるべき", async () => {
+  it("should clear the session on logout", async () => {
     const { result } = renderAuth(devConfig);
     await act(async () => {
       await result.current.login("abc-123-team");
@@ -78,7 +78,7 @@ describe("AuthProvider", () => {
     expect(result.current.session).toBeNull();
   });
 
-  it("backend mode: /portal/me を Bearer 付きで叩き session を構築するべき", async () => {
+  it("backend mode: should call /portal/me with Bearer and build a session", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -118,7 +118,7 @@ describe("AuthProvider", () => {
     expect(result.current.session?.expiresAt).toBe(1_700_000_000_000);
   });
 
-  it("backend mode: 401 で PortalAuthError を throw、session は変わらないべき", async () => {
+  it("backend mode: should throw PortalAuthError on 401 and not change session", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
     const { result } = renderAuth(prodConfig);
     await act(async () => {
@@ -130,12 +130,12 @@ describe("AuthProvider", () => {
     expect(result.current.session).toBeNull();
   });
 
-  it("Provider 外で useAuth() を呼んだら error を throw するべき", () => {
+  it("should throw an error when useAuth() is called outside the Provider", () => {
     expect(() => renderHook(() => useAuth())).toThrow(/AuthProvider/);
   });
 
   describe("Issue #859: idle timeout (6 hours)", () => {
-    it("5h 59min 経過しても logout しないべき (= 競技中の長時間 idle を許容)", async () => {
+    it("should not logout after 5h 59min elapsed (= tolerate long idle during competition)", async () => {
       vi.useFakeTimers();
       try {
         const { result } = renderAuth(devConfig);
@@ -155,7 +155,7 @@ describe("AuthProvider", () => {
       }
     });
 
-    it("6h 無操作で auto-logout するべき (= 競技後の安全弁)", async () => {
+    it("should auto-logout after 6h of inactivity (= safety valve after competition)", async () => {
       vi.useFakeTimers();
       try {
         const { result } = renderAuth(devConfig);
@@ -174,7 +174,7 @@ describe("AuthProvider", () => {
       }
     });
 
-    it("user 操作で 6h timer は reset されるべき", async () => {
+    it("should reset the 6h timer on user activity", async () => {
       vi.useFakeTimers();
       try {
         const { result } = renderAuth(devConfig);

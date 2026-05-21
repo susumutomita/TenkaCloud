@@ -24,7 +24,7 @@ function intent(): CloudActionIntent {
 }
 
 describe("JWS HS256 sign / verify (#795 Phase 1)", () => {
-  it("正しい secret で署名 → 検証が成功し、 元 intent を取り出せるべき", () => {
+  it("should sign with the correct secret, verify successfully, and recover the original intent", () => {
     const secret = randomBytes(32);
     const token = signIntent(intent(), { secret });
     const result = verifySignature(token, { resolveSecret: () => secret });
@@ -35,7 +35,7 @@ describe("JWS HS256 sign / verify (#795 Phase 1)", () => {
     }
   });
 
-  it("token 形式が壊れていたら malformed-token を返すべき", () => {
+  it("should return malformed-token when the token format is broken", () => {
     const result = verifySignature("not.a.token.extra", {
       resolveSecret: () => new Uint8Array(),
     });
@@ -43,7 +43,7 @@ describe("JWS HS256 sign / verify (#795 Phase 1)", () => {
     if (!result.ok) expect(result.reason).toBe("malformed-token");
   });
 
-  it("secret が resolve できなければ secret-not-resolved を返すべき", () => {
+  it("should return secret-not-resolved when the secret cannot be resolved", () => {
     const secret = randomBytes(32);
     const token = signIntent(intent(), { secret });
     const result = verifySignature(token, { resolveSecret: () => undefined });
@@ -51,7 +51,7 @@ describe("JWS HS256 sign / verify (#795 Phase 1)", () => {
     if (!result.ok) expect(result.reason).toBe("secret-not-resolved");
   });
 
-  it("異なる secret で検証すると signature-mismatch を返すべき", () => {
+  it("should return signature-mismatch when verifying with a different secret", () => {
     const signer = randomBytes(32);
     const verifier = randomBytes(32);
     const token = signIntent(intent(), { secret: signer });
@@ -60,7 +60,7 @@ describe("JWS HS256 sign / verify (#795 Phase 1)", () => {
     if (!result.ok) expect(result.reason).toBe("signature-mismatch");
   });
 
-  it("不明 alg の header を持つ token は unknown-algorithm を返すべき", () => {
+  it("should return unknown-algorithm for a token whose header carries an unknown alg", () => {
     const secret = randomBytes(32);
     const token = signIntent(intent(), { secret });
     const [, payload, sig] = token.split(".");
@@ -74,7 +74,7 @@ describe("JWS HS256 sign / verify (#795 Phase 1)", () => {
     if (!result.ok) expect(result.reason).toBe("unknown-algorithm");
   });
 
-  it("kid が options で渡されたら header に乗り、 resolveSecret に渡るべき", () => {
+  it("should put kid from options into the header and pass it to resolveSecret", () => {
     const k1 = randomBytes(32);
     const k2 = randomBytes(32);
     const token = signIntent(intent(), { secret: k1, kid: "key-1" });

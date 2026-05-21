@@ -41,12 +41,12 @@ function baseProblem(scoring: unknown): Record<string, unknown> {
   };
 }
 
-describe("[#742 Phase 5] SCHEMA.json: hints は全 5 kind で valid であるべき", () => {
+describe("[#742 Phase 5] SCHEMA.json: hints should be valid across all 5 kinds", () => {
   const validate = createValidator();
   const validV2Hint = { id: "hint-1", content: "first hint", penalty: 10 } as const;
   const validV1Hint = "legacy string hint";
 
-  it("kind=flag で hints (v2) を受け入れるべき", () => {
+  it("should accept hints (v2) for kind=flag", () => {
     const ok = validate(
       baseProblem({
         kind: "flag",
@@ -59,7 +59,7 @@ describe("[#742 Phase 5] SCHEMA.json: hints は全 5 kind で valid であるべ
     expect(ok).toBe(true);
   });
 
-  it("kind=uptime (legacy) で hints を受け入れるべき", () => {
+  it("should accept hints for kind=uptime (legacy)", () => {
     const ok = validate(
       baseProblem({
         kind: "uptime",
@@ -72,7 +72,7 @@ describe("[#742 Phase 5] SCHEMA.json: hints は全 5 kind で valid であるべ
     expect(ok).toBe(true);
   });
 
-  it("kind=uptime-flat で hints を受け入れるべき", () => {
+  it("should accept hints for kind=uptime-flat", () => {
     const ok = validate(
       baseProblem({
         kind: "uptime-flat",
@@ -85,7 +85,7 @@ describe("[#742 Phase 5] SCHEMA.json: hints は全 5 kind で valid であるべ
     expect(ok).toBe(true);
   });
 
-  it("kind=uptime-multi で hints を受け入れるべき", () => {
+  it("should accept hints for kind=uptime-multi", () => {
     const ok = validate(
       baseProblem({
         kind: "uptime-multi",
@@ -98,7 +98,7 @@ describe("[#742 Phase 5] SCHEMA.json: hints は全 5 kind で valid であるべ
     expect(ok).toBe(true);
   });
 
-  it("kind=phased-polling で hints を受け入れるべき", () => {
+  it("should accept hints for kind=phased-polling", () => {
     const ok = validate(
       baseProblem({
         kind: "phased-polling",
@@ -112,7 +112,7 @@ describe("[#742 Phase 5] SCHEMA.json: hints は全 5 kind で valid であるべ
     expect(ok).toBe(true);
   });
 
-  it("kind=attack-detection で hints を受け入れるべき", () => {
+  it("should accept hints for kind=attack-detection", () => {
     const ok = validate(
       baseProblem({
         kind: "attack-detection",
@@ -126,10 +126,10 @@ describe("[#742 Phase 5] SCHEMA.json: hints は全 5 kind で valid であるべ
   });
 });
 
-describe("[#742 Phase 5] SCHEMA.json: hints の不正 shape を reject すべき", () => {
+describe("[#742 Phase 5] SCHEMA.json: should reject invalid hints shape", () => {
   const validate = createValidator();
 
-  it("hints 要素から `id` が欠落していたら reject すべき (= v2 object の required)", () => {
+  it("should reject when a hints element is missing `id` (required in v2 object)", () => {
     const ok = validate(
       baseProblem({
         kind: "flag",
@@ -141,7 +141,7 @@ describe("[#742 Phase 5] SCHEMA.json: hints の不正 shape を reject すべき
     expect(ok).toBe(false);
   });
 
-  it("hints[].penalty が負値なら reject すべき (= minimum 0)", () => {
+  it("should reject when hints[].penalty is negative (minimum 0)", () => {
     const ok = validate(
       baseProblem({
         kind: "uptime-flat",
@@ -153,7 +153,7 @@ describe("[#742 Phase 5] SCHEMA.json: hints の不正 shape を reject すべき
     expect(ok).toBe(false);
   });
 
-  it("hints[] に object 内 unknown property があったら reject すべき (= additionalProperties false)", () => {
+  it("should reject hints[] objects with unknown properties (additionalProperties false)", () => {
     const ok = validate(
       baseProblem({
         kind: "attack-detection",
@@ -165,7 +165,7 @@ describe("[#742 Phase 5] SCHEMA.json: hints の不正 shape を reject すべき
     expect(ok).toBe(false);
   });
 
-  it("hints が array でなければ reject すべき", () => {
+  it("should reject when hints is not an array", () => {
     const ok = validate(
       baseProblem({
         kind: "flag",

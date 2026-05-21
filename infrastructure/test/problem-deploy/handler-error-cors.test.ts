@@ -81,7 +81,7 @@ eventApp.get(TEST_THROW_PATH, () => {
 });
 
 describe("Hono handler onError (#559 defensive layer)", () => {
-  it("deploy-handler: 未捕捉 throw でも 500 + CORS headers + JSON `error` を返すべき", async () => {
+  it("deploy-handler: should return 500 + CORS headers + JSON `error` even on uncaught throws", async () => {
     const res = await deployApp.request(TEST_THROW_PATH);
     expect(res.status).toBe(500);
     // CORS middleware が onError 経路でも適用される (#559 防御の本旨)
@@ -92,7 +92,7 @@ describe("Hono handler onError (#559 defensive layer)", () => {
     expect(body.message).toBeUndefined();
   });
 
-  it("event-handler: 未捕捉 throw でも 500 + CORS headers + JSON `error` を返すべき", async () => {
+  it("event-handler: should return 500 + CORS headers + JSON `error` even on uncaught throws", async () => {
     const res = await eventApp.request(TEST_THROW_PATH);
     expect(res.status).toBe(500);
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
@@ -101,7 +101,7 @@ describe("Hono handler onError (#559 defensive layer)", () => {
     expect(body.message).toBeUndefined();
   });
 
-  it("既存 handler の内部 catch 経路も 500 + CORS で返るべき (= 既存挙動の regression 防止)", async () => {
+  it("existing handler internal catch paths should also return 500 + CORS (regression guard)", async () => {
     // 既存 handler は throw を内部 catch → `c.json({ error: "internal_error" }, 500)` する。
     // onError ではなく通常の return path だが、CORS middleware が等しく適用されることを pin。
     deployMocks.listDeployments.mockRejectedValueOnce(new Error("inner catch path"));

@@ -14,7 +14,7 @@ function buildDeps(send: ReturnType<typeof vi.fn>) {
 }
 
 describe("resolveVerifiedCompetitorAccount", () => {
-  it("verified=true の行が存在するとき RoleArn / externalIdParameterName を返すべき", async () => {
+  it("should return RoleArn / externalIdParameterName when a verified=true row exists", async () => {
     const send = vi.fn().mockResolvedValue({
       Item: {
         PK: `TENANT#${TENANT_ID}`,
@@ -37,7 +37,7 @@ describe("resolveVerifiedCompetitorAccount", () => {
     expect(send.mock.calls[0]?.[0]).toBeInstanceOf(GetCommand);
   });
 
-  it("verified=false の行は null を返すべき (= backend reject の trigger)", async () => {
+  it("should return null for verified=false rows (trigger for backend reject)", async () => {
     const send = vi.fn().mockResolvedValue({
       Item: {
         PK: `TENANT#${TENANT_ID}`,
@@ -50,13 +50,13 @@ describe("resolveVerifiedCompetitorAccount", () => {
     expect(out).toBeNull();
   });
 
-  it("行が存在しないとき null を返すべき", async () => {
+  it("should return null when the row does not exist", async () => {
     const send = vi.fn().mockResolvedValue({});
     const out = await resolveVerifiedCompetitorAccount(buildDeps(send), TENANT_ID, ACCOUNT_ID);
     expect(out).toBeNull();
   });
 
-  it("competitorRoleName が空文字のとき null を返すべき (= deploy 不能の防御)", async () => {
+  it("should return null when competitorRoleName is empty (defense against deploy-impossible state)", async () => {
     const send = vi.fn().mockResolvedValue({
       Item: {
         verified: true,

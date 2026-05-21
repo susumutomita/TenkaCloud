@@ -24,8 +24,8 @@ function buildApiMock(overrides: Partial<ApiClient> = {}): {
 }
 
 describe("createTenant", () => {
-  describe("SBT v0.3.9 の POST /tenants で onboarding を起動させるとき", () => {
-    it("POST /tenants に飛ばすべき", async () => {
+  describe("when starting onboarding via SBT v0.3.9 POST /tenants", () => {
+    it("should send a POST to /tenants", async () => {
       const { api, post } = buildApiMock();
       post.mockResolvedValueOnce({
         data: {
@@ -44,7 +44,7 @@ describe("createTenant", () => {
       expect(path).toBe("tenants");
     });
 
-    it("body は flat shape で送るべき (tenantName / email / tier / tenantStatus)", async () => {
+    it("should send the body as a flat shape (tenantName / email / tier / tenantStatus)", async () => {
       const { api, post } = buildApiMock();
       post.mockResolvedValueOnce({
         data: {
@@ -67,7 +67,7 @@ describe("createTenant", () => {
       });
     });
 
-    it("tenantStatus の初期値は 'In progress' 固定であるべき", async () => {
+    it("should fix the initial tenantStatus value as 'In progress'", async () => {
       const { api, post } = buildApiMock();
       post.mockResolvedValueOnce({
         data: {
@@ -86,8 +86,8 @@ describe("createTenant", () => {
     });
   });
 
-  describe("サーバが data を返すとき", () => {
-    it("data 中の tenant を返すべき", async () => {
+  describe("when the server returns data", () => {
+    it("should return the tenant inside data", async () => {
       const { api, post } = buildApiMock();
       post.mockResolvedValueOnce({
         data: {
@@ -106,8 +106,8 @@ describe("createTenant", () => {
     });
   });
 
-  describe("サーバがエラーを投げたとき", () => {
-    it("そのまま伝搬すべき", async () => {
+  describe("when the server throws an error", () => {
+    it("should propagate it as-is", async () => {
       const { api, post } = buildApiMock();
       post.mockRejectedValueOnce(new Error("API 500"));
 
@@ -120,8 +120,8 @@ describe("createTenant", () => {
 });
 
 describe("listTenants", () => {
-  describe("サーバが `{data: [...]}` を返すとき", () => {
-    it("data 配列を返すべき", async () => {
+  describe("when the server returns `{data: [...]}`", () => {
+    it("should return the data array", async () => {
       const { api, get } = buildApiMock();
       get.mockResolvedValueOnce({
         data: [
@@ -142,8 +142,8 @@ describe("listTenants", () => {
     });
   });
 
-  describe("サーバが配列を直接返すとき", () => {
-    it("その配列を返すべき", async () => {
+  describe("when the server returns an array directly", () => {
+    it("should return that array", async () => {
       const { api, get } = buildApiMock();
       get.mockResolvedValueOnce([
         {
@@ -161,8 +161,8 @@ describe("listTenants", () => {
     });
   });
 
-  describe("サーバが data 無しで返すとき", () => {
-    it("空配列を返すべき", async () => {
+  describe("when the server returns without data", () => {
+    it("should return an empty array", async () => {
       const { api, get } = buildApiMock();
       get.mockResolvedValueOnce({});
 
@@ -174,8 +174,8 @@ describe("listTenants", () => {
 });
 
 describe("deleteTenant", () => {
-  describe("SBT の /tenants DELETE を叩くとき", () => {
-    it("`tenants/<id>` パスを URL エンコードして呼ぶべき", async () => {
+  describe("when calling SBT's /tenants DELETE", () => {
+    it("should URL-encode the `tenants/<id>` path", async () => {
       const { api, del } = buildApiMock();
       del.mockResolvedValueOnce(undefined);
 
@@ -187,8 +187,8 @@ describe("deleteTenant", () => {
 });
 
 describe("parseTenantConfig", () => {
-  describe("provision-tenant.sh が出力する完全な JSON を渡したとき", () => {
-    it("4 フィールド全部 (userPoolId / appClientId / apiGatewayUrl / applicationAdminConsoleUrl) を返すべき", () => {
+  describe("when passed the full JSON that provision-tenant.sh emits", () => {
+    it("should return all 4 fields (userPoolId / appClientId / apiGatewayUrl / applicationAdminConsoleUrl)", () => {
       const raw = JSON.stringify({
         userPoolId: "ap-northeast-1_xxx",
         appClientId: "abc",
@@ -203,20 +203,20 @@ describe("parseTenantConfig", () => {
     });
   });
 
-  describe("undefined を渡したとき", () => {
-    it("空オブジェクトを返すべき", () => {
+  describe("when passed undefined", () => {
+    it("should return an empty object", () => {
       expect(parseTenantConfig(undefined)).toEqual({});
     });
   });
 
-  describe("不正な JSON 文字列を渡したとき", () => {
-    it("空オブジェクトにフォールバックすべき (例外を投げない)", () => {
+  describe("when passed an invalid JSON string", () => {
+    it("should fall back to an empty object (without throwing)", () => {
       expect(parseTenantConfig("not json")).toEqual({});
     });
   });
 
-  describe("一部フィールドだけの JSON を渡したとき", () => {
-    it("欠落フィールドは undefined のまま、存在するフィールドは取れるべき", () => {
+  describe("when passed JSON with only some fields", () => {
+    it("should leave missing fields undefined and return the present ones", () => {
       const raw = JSON.stringify({ userPoolId: "p" });
       const parsed = parseTenantConfig(raw);
       expect(parsed.userPoolId).toBe("p");
@@ -224,8 +224,8 @@ describe("parseTenantConfig", () => {
     });
   });
 
-  describe("#57 で追加した provisioning 情報", () => {
-    it("provisioningBuildId / projectName / region / accountId を返すべき", () => {
+  describe("provisioning info added in #57", () => {
+    it("should return provisioningBuildId / projectName / region / accountId", () => {
       const raw = JSON.stringify({
         provisioningBuildId: "proj:abcd-1234",
         provisioningProjectName: "proj",
@@ -242,8 +242,8 @@ describe("parseTenantConfig", () => {
 });
 
 describe("buildCodeBuildBuildUrl", () => {
-  describe("必須 4 要素が全部揃っているとき", () => {
-    it("AWS Console CodeBuild build の deep link URL を返すべき", () => {
+  describe("when all 4 required elements are present", () => {
+    it("should return a deep link URL to the AWS Console CodeBuild build", () => {
       const url = buildCodeBuildBuildUrl({
         buildId: "proj:abcd-1234",
         projectName: "proj",
@@ -255,7 +255,7 @@ describe("buildCodeBuildBuildUrl", () => {
       );
     });
 
-    it("buildId 中の `:` を URL エンコード (%3A) すべき", () => {
+    it("should URL-encode `:` (as %3A) inside buildId", () => {
       const url = buildCodeBuildBuildUrl({
         buildId: "proj:uuid",
         projectName: "proj",
@@ -267,8 +267,8 @@ describe("buildCodeBuildBuildUrl", () => {
     });
   });
 
-  describe("buildId が undefined / unknown のとき", () => {
-    it("undefined で null を返すべき", () => {
+  describe("when buildId is undefined / unknown", () => {
+    it("should return null for undefined", () => {
       expect(
         buildCodeBuildBuildUrl({
           buildId: undefined,
@@ -279,7 +279,7 @@ describe("buildCodeBuildBuildUrl", () => {
       ).toBeNull();
     });
 
-    it("'unknown' リテラルで null を返すべき (install.sh fallback 値)", () => {
+    it("should return null for the literal 'unknown' (install.sh fallback value)", () => {
       expect(
         buildCodeBuildBuildUrl({
           buildId: "unknown",
@@ -291,8 +291,8 @@ describe("buildCodeBuildBuildUrl", () => {
     });
   });
 
-  describe("いずれかの要素が空文字のとき", () => {
-    it("null を返すべき (region 空)", () => {
+  describe("when any element is an empty string", () => {
+    it("should return null (region empty)", () => {
       expect(
         buildCodeBuildBuildUrl({
           buildId: "proj:uuid",
@@ -306,80 +306,80 @@ describe("buildCodeBuildBuildUrl", () => {
 });
 
 describe("tenantStatusBadgeColor", () => {
-  describe("provision-tenant.sh が書き込む実際の tenantStatus 値に対して", () => {
-    it("'Complete' を green にマップすべき (= provisioning 完了)", () => {
+  describe("for the actual tenantStatus values that provision-tenant.sh writes", () => {
+    it("should map 'Complete' to green (= provisioning complete)", () => {
       expect(tenantStatusBadgeColor("Complete")).toBe("green");
     });
 
-    it("'In progress' を blue にマップすべき (= provisioning 進行中)", () => {
+    it("should map 'In progress' to blue (= provisioning in progress)", () => {
       expect(tenantStatusBadgeColor("In progress")).toBe("blue");
     });
 
-    it("'Failed' を red にマップすべき (= provisioning 失敗)", () => {
+    it("should map 'Failed' to red (= provisioning failed)", () => {
       expect(tenantStatusBadgeColor("Failed")).toBe("red");
     });
 
-    it("'Deleted' を grey にマップすべき (= deprovisioned tenant)", () => {
+    it("should map 'Deleted' to grey (= deprovisioned tenant)", () => {
       expect(tenantStatusBadgeColor("Deleted")).toBe("grey");
     });
   });
 
-  describe("大文字 / 小文字ゆれを吸収するとき", () => {
-    it("'complete' (小文字) でも green を返すべき", () => {
+  describe("when absorbing upper/lower case variants", () => {
+    it("should return green for 'complete' (lowercase)", () => {
       expect(tenantStatusBadgeColor("complete")).toBe("green");
     });
 
-    it("'COMPLETE' (大文字) でも green を返すべき", () => {
+    it("should return green for 'COMPLETE' (uppercase)", () => {
       expect(tenantStatusBadgeColor("COMPLETE")).toBe("green");
     });
 
-    it("'failed' (小文字) でも red を返すべき", () => {
+    it("should return red for 'failed' (lowercase)", () => {
       expect(tenantStatusBadgeColor("failed")).toBe("red");
     });
 
-    it("'in progress' (小文字) でも blue を返すべき", () => {
+    it("should return blue for 'in progress' (lowercase)", () => {
       expect(tenantStatusBadgeColor("in progress")).toBe("blue");
     });
   });
 
-  describe("未知の値が来たとき", () => {
-    it("grey にフォールバックすべき (= 未定義状態)", () => {
+  describe("when an unknown value arrives", () => {
+    it("should fall back to grey (= undefined state)", () => {
       expect(tenantStatusBadgeColor("Unknown")).toBe("grey");
     });
 
-    it("空文字でも grey を返すべき", () => {
+    it("should return grey for an empty string", () => {
       expect(tenantStatusBadgeColor("")).toBe("grey");
     });
 
-    it("undefined / null 相当の文字列でも grey を返すべき", () => {
+    it("should return grey for strings equivalent to undefined / null", () => {
       expect(tenantStatusBadgeColor("undefined")).toBe("grey");
     });
   });
 });
 
 describe("tierBadgeColor", () => {
-  describe("各 tier に異なる色を割り当てるとき", () => {
-    it("basic は grey (= pooled の最小構成) であるべき", () => {
+  describe("when assigning a different color to each tier", () => {
+    it("should make basic grey (= pooled minimum configuration)", () => {
       expect(tierBadgeColor("basic")).toBe("grey");
     });
 
-    it("advanced は blue (= pooled の中間構成) であるべき", () => {
+    it("should make advanced blue (= pooled intermediate configuration)", () => {
       expect(tierBadgeColor("advanced")).toBe("blue");
     });
 
-    it("platinum は green (= silo 専用 stack) であるべき", () => {
+    it("should make platinum green (= silo-dedicated stack)", () => {
       expect(tierBadgeColor("platinum")).toBe("green");
     });
   });
 
-  describe("大文字 / 小文字ゆれを吸収するとき", () => {
-    it("'PLATINUM' でも green を返すべき (provision-tenant.sh の TIER 大文字比較に整合)", () => {
+  describe("when absorbing upper/lower case variants", () => {
+    it("should return green for 'PLATINUM' (consistent with provision-tenant.sh TIER uppercase comparison)", () => {
       expect(tierBadgeColor("PLATINUM")).toBe("green");
     });
   });
 
-  describe("未知の tier 値が来たとき", () => {
-    it("grey にフォールバックすべき", () => {
+  describe("when an unknown tier value arrives", () => {
+    it("should fall back to grey", () => {
       expect(tierBadgeColor("nonexistent")).toBe("grey");
     });
   });

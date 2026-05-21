@@ -5,12 +5,12 @@ import { extractBearerToken } from "../../lib/problem-deploy/handlers/participan
 const VALID = "AbCdEfGhIjKlMnOpQrStUvWxYzAbCdEfGhIjKlMnOpQ"; // 43 文字 base64url
 
 describe("extractBearerToken", () => {
-  it("Bearer プレフィックスから 43 文字 base64url を抜くべき", () => {
+  it("should extract a 43-char base64url token from the Bearer prefix", () => {
     expect(VALID).toHaveLength(43);
     expect(extractBearerToken(`Bearer ${VALID}`)).toBe(VALID);
   });
 
-  it("プレフィックス大文字小文字に寛容であるべき", () => {
+  it("should be tolerant of prefix case", () => {
     expect(extractBearerToken(`bearer ${VALID}`)).toBe(VALID);
     expect(extractBearerToken(`BEARER ${VALID}`)).toBe(VALID);
   });

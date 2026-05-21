@@ -99,7 +99,7 @@ describe("setDisplayTeamName", () => {
     expect(updateCmd.input.ReturnValues).toBe("ALL_NEW");
   });
 
-  it("正常系 (N deployments): team の全 editable 行を Promise.all で並列 update するべき", async () => {
+  it("normal case (N deployments): should Promise.all update all editable rows for the team", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [

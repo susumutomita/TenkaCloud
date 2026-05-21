@@ -52,7 +52,7 @@ const dep = (over: Record<string, unknown> = {}) => ({
 describe("bulkTeardownEvent", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("正常系: Get(Event) 確認 → eventId フィルタ後 deployment を DELETING に並列更新し DeployDeleteRequested を publish するべき", async () => {
+  it("normal case: should Get(Event) confirm → filter deployment by eventId, parallel-update to DELETING, and publish DeployDeleteRequested", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // Get(Event)
     ddbSend.mockResolvedValueOnce({
@@ -104,7 +104,7 @@ describe("bulkTeardownEvent", () => {
     expect(putCmd.input.Entries?.[0]?.DetailType).toBe("DeployDeleteRequested");
   });
 
-  it("event 不在は not_found を返し Deployments query を呼ばないべき", async () => {
+  it("should return not_found without calling Deployments query when the event is absent", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: undefined });
 
@@ -114,7 +114,7 @@ describe("bulkTeardownEvent", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("tenantId 不一致は not_found を返すべき (クロステナント漏洩防止)", async () => {
+  it("should return not_found on tenantId mismatch (cross-tenant leak guard)", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent({ tenantId: "tenant-other" }) });
 
@@ -123,7 +123,7 @@ describe("bulkTeardownEvent", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("既に DELETING / DELETED な行は skip して publish しないべき", async () => {
+  it("should skip and not publish for rows already DELETING / DELETED", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({
@@ -144,7 +144,7 @@ describe("bulkTeardownEvent", () => {
     }
   });
 
-  it("DeployDeleteRequested detail に AssumeRole metadata を含めるべき (#758)", async () => {
+  it("should include AssumeRole metadata in DeployDeleteRequested detail (#758)", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({
@@ -172,7 +172,7 @@ describe("bulkTeardownEvent", () => {
     expect(detail.externalIdParameterName).toBe("/development/tenants/tenant-acme/external-id");
   });
 
-  it("event は存在するが deployment 0 件 (まだ deploy してない) なら enqueued=0 を返すべき", async () => {
+  it("should return enqueued=0 when the event exists but has 0 deployments (not yet deployed)", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({ Items: [] });
@@ -182,7 +182,7 @@ describe("bulkTeardownEvent", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("ConditionalCheckFailed (並行更新) は skip して例外を伝播しないべき", async () => {
+  it("should skip and not propagate exceptions on ConditionalCheckFailed (concurrent update)", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     // Event status update (= 後続の 4th call) は通常 success を返す fallback。
     // #557 で 1 deployment + Event status の 2 件目 UpdateCommand が増えたため。
@@ -203,7 +203,7 @@ describe("bulkTeardownEvent", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("Event status update が CCF (= ARCHIVED 等) でも例外を伝播せず deployment 削除は完了するべき (#557)", async () => {
+  it("should still complete deployment delete without propagating exceptions even if Event status update hits CCF (e.g. ARCHIVED) (#557)", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent({ status: "ARCHIVED" }) });
     // GetCommand 後の "ARCHIVED" 判定は handler では行わないので Query へ進む。
@@ -229,7 +229,7 @@ describe("bulkTeardownEvent", () => {
     expect(out.kind).toBe("ok");
   });
 
-  it("Deployments query は GSI1 (TENANT) を引いて in-memory で eventId フィルタするべき", async () => {
+  it("Deployments query should hit GSI1 (TENANT) and filter eventId in-memory", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({ Items: [] });

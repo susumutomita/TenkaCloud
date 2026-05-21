@@ -3,12 +3,12 @@ import { DeploymentStatusSchema } from "../../lib/problem-deploy/handlers/deploy
 import { DELETED_LIKE_STATUSES } from "../../lib/problem-deploy/handlers/shared/constants";
 
 describe("DeploymentStatusSchema", () => {
-  it("auto-delete lifecycle status を許可すべき", () => {
+  it("should allow auto-delete lifecycle status", () => {
     expect(DeploymentStatusSchema.parse("EXPIRED")).toBe("EXPIRED");
     expect(DeploymentStatusSchema.parse("AUTO_DELETED")).toBe("AUTO_DELETED");
   });
 
-  it("EXPIRED / AUTO_DELETED は削除済み扱いにすべき", () => {
+  it("should treat EXPIRED / AUTO_DELETED as deleted", () => {
     expect(DELETED_LIKE_STATUSES.has("EXPIRED")).toBe(true);
     expect(DELETED_LIKE_STATUSES.has("AUTO_DELETED")).toBe(true);
   });

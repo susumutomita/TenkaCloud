@@ -29,7 +29,7 @@ function buildShared(): {
 describe("lockScoring", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("READY + 未 lock 状態のとき scoringLocked=true / scoringLockedAt / scoringLockedBy を SET し ok を返すべき", async () => {
+  it("should SET scoringLocked=true / scoringLockedAt / scoringLockedBy and return ok when READY and unlocked", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Attributes: { tenantId: "t1", status: "READY", scoringLocked: true },
@@ -54,7 +54,7 @@ describe("lockScoring", () => {
     expect(cmd.input.ConditionExpression).toContain("tenantId = :tenantId");
   });
 
-  it("ENDED 状態でも lock 可能であるべき (= 表彰フェーズ用途)", async () => {
+  it("should allow locking even in ENDED state (for the awarding phase)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Attributes: { tenantId: "t1", status: "ENDED", scoringLocked: true },
@@ -67,7 +67,7 @@ describe("lockScoring", () => {
     expect(cmd.input.ConditionExpression).toContain(":ended");
   });
 
-  it("ConditionalCheckFailed + 行不在のとき not_found を返すべき", async () => {
+  it("should return not_found on ConditionalCheckFailed + missing row", async () => {
     const { shared, ddbSend } = buildShared();
     const err = Object.assign(new Error("Condition"), { name: "ConditionalCheckFailedException" });
     ddbSend.mockRejectedValueOnce(err).mockResolvedValueOnce({ Item: undefined });
@@ -78,7 +78,7 @@ describe("lockScoring", () => {
     expect(ddbSend.mock.calls[1]?.[0]).toBeInstanceOf(GetCommand);
   });
 
-  it("ConditionalCheckFailed + tenant 不一致のとき not_found を返すべき (= tenant 跨ぎ防止)", async () => {
+  it("should return not_found on ConditionalCheckFailed + tenant mismatch (cross-tenant guard)", async () => {
     const { shared, ddbSend } = buildShared();
     const err = Object.assign(new Error("Condition"), { name: "ConditionalCheckFailedException" });
     ddbSend
@@ -90,7 +90,7 @@ describe("lockScoring", () => {
     expect(out).toEqual({ kind: "not_found" });
   });
 
-  it("ConditionalCheckFailed + status=DRAFT のとき not_lockable を返すべき", async () => {
+  it("should return not_lockable on ConditionalCheckFailed + status=DRAFT", async () => {
     const { shared, ddbSend } = buildShared();
     const err = Object.assign(new Error("Condition"), { name: "ConditionalCheckFailedException" });
     ddbSend
@@ -102,7 +102,7 @@ describe("lockScoring", () => {
     expect(out).toEqual({ kind: "not_lockable", status: "DRAFT" });
   });
 
-  it("ConditionalCheckFailed + 既に lock 済のとき already を返すべき (= idempotent)", async () => {
+  it("should return already on ConditionalCheckFailed when already locked (idempotent)", async () => {
     const { shared, ddbSend } = buildShared();
     const err = Object.assign(new Error("Condition"), { name: "ConditionalCheckFailedException" });
     ddbSend.mockRejectedValueOnce(err).mockResolvedValueOnce({
@@ -118,7 +118,7 @@ describe("lockScoring", () => {
 describe("unlockScoring", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("lock 済 + READY のとき scoringLocked を REMOVE し ok を返すべき", async () => {
+  it("should REMOVE scoringLocked and return ok when locked and READY", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Attributes: { tenantId: "t1", status: "READY" },
@@ -134,7 +134,7 @@ describe("unlockScoring", () => {
     expect(cmd.input.ConditionExpression).toContain("scoringLocked = :t");
   });
 
-  it("そもそも unlocked のとき already を返すべき (= idempotent)", async () => {
+  it("should return already when already unlocked (idempotent)", async () => {
     const { shared, ddbSend } = buildShared();
     const err = Object.assign(new Error("Condition"), { name: "ConditionalCheckFailedException" });
     ddbSend.mockRejectedValueOnce(err).mockResolvedValueOnce({
@@ -146,7 +146,7 @@ describe("unlockScoring", () => {
     expect(out).toEqual({ kind: "already", scoringLocked: false });
   });
 
-  it("status=ARCHIVED で lock=true のとき not_lockable を返すべき", async () => {
+  it("should return not_lockable when status=ARCHIVED and lock=true", async () => {
     const { shared, ddbSend } = buildShared();
     const err = Object.assign(new Error("Condition"), { name: "ConditionalCheckFailedException" });
     ddbSend.mockRejectedValueOnce(err).mockResolvedValueOnce({

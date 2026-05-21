@@ -4,7 +4,7 @@ import { decideReconcile } from "../../lib/tenant-status-reconciler/status-polic
 const NOW = Date.parse("2026-05-13T22:00:00.000Z");
 
 describe("decideReconcile", () => {
-  it('status が "In progress" でない場合は skip すべき (= 既に Complete/Failed/Deleted は触らない)', () => {
+  it('should skip when status is not "In progress" (don\'t touch already Complete/Failed/Deleted)', () => {
     expect(
       decideReconcile({
         tenantStatus: "Complete",
@@ -33,7 +33,7 @@ describe("decideReconcile", () => {
     expect(out.action).toBe("complete");
   });
 
-  it('"IN_PROGRESS" (大文字) でも同じく判定すべき (= case-insensitive)', () => {
+  it('should classify "IN_PROGRESS" (uppercase) the same way (case-insensitive)', () => {
     expect(
       decideReconcile({
         tenantStatus: "IN_PROGRESS",
@@ -44,7 +44,7 @@ describe("decideReconcile", () => {
     ).toBe("complete");
   });
 
-  it('"Provisioning" (SBT v0.3.10 系) でも同じく判定すべき', () => {
+  it('should classify "Provisioning" (SBT v0.3.10 lineage) the same way', () => {
     expect(
       decideReconcile({
         tenantStatus: "Provisioning",

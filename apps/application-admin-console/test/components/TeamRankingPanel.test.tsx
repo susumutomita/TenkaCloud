@@ -26,7 +26,7 @@ function team(
 }
 
 describe("computeRanking (Issue #1071)", () => {
-  it("score 降順で順位を割り当てるべき", () => {
+  it("should assign rank in descending score order", () => {
     const rows = computeRanking([
       team("t-1", "alpha", [{ points: 100, occurredAt: "2026-05-19T10:00:00.000Z" }]),
       team("t-2", "beta", [{ points: 300, occurredAt: "2026-05-19T10:00:00.000Z" }]),
@@ -39,7 +39,7 @@ describe("computeRanking (Issue #1071)", () => {
     ]);
   });
 
-  it("同点は最終 update が早い方を上位とすべき (= 標準 tie-break)", () => {
+  it("should rank ties by earliest last update first (= standard tie-break)", () => {
     const rows = computeRanking([
       team("t-1", "later", [{ points: 100, occurredAt: "2026-05-19T10:05:00.000Z" }]),
       team("t-2", "earlier", [{ points: 100, occurredAt: "2026-05-19T10:00:00.000Z" }]),
@@ -48,7 +48,7 @@ describe("computeRanking (Issue #1071)", () => {
     expect(rows[1].teamName).toBe("later");
   });
 
-  it("同点は同順位を割り当てるべき (= 1, 1, 3 のように skip)", () => {
+  it("should assign equal ranks to ties (= skip like 1, 1, 3)", () => {
     const rows = computeRanking([
       team("t-1", "a", [{ points: 200, occurredAt: "2026-05-19T10:00:00.000Z" }]),
       team("t-2", "b", [{ points: 200, occurredAt: "2026-05-19T10:00:00.000Z" }]),
@@ -57,7 +57,7 @@ describe("computeRanking (Issue #1071)", () => {
     expect(rows.map((r) => r.rank)).toEqual([1, 1, 3]);
   });
 
-  it("events 0 件の team も 0 pt で順位に含めるべき", () => {
+  it("should include teams with zero events at 0 pt in the ranking", () => {
     const rows = computeRanking([
       team("t-1", "no-events", []),
       team("t-2", "scored", [{ points: 50, occurredAt: "2026-05-19T10:00:00.000Z" }]),
@@ -68,7 +68,7 @@ describe("computeRanking (Issue #1071)", () => {
     ]);
   });
 
-  it("複数 events を合計すべき", () => {
+  it("should sum multiple events", () => {
     const rows = computeRanking([
       team("t-1", "multi", [
         { points: 30, occurredAt: "2026-05-19T10:00:00.000Z" },

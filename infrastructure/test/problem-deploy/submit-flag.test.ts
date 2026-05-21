@@ -53,7 +53,7 @@ describe("submitFlag", () => {
     ddbSend = built.ddbSend;
   });
 
-  it("teamLoginKey が一致する row が無いときは unauthorized を返すべき", async () => {
+  it("should return unauthorized when no row matches teamLoginKey", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [] });
     const out = await submitFlag(
       shared,
@@ -65,13 +65,13 @@ describe("submitFlag", () => {
     expect(out).toEqual({ kind: "unauthorized" });
   });
 
-  it("scoring 設定が無い problemId は not_flag_problem を返すべき", async () => {
+  it("should return not_flag_problem for problemIds without scoring config", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ problemId: "no-scoring" })] });
     const out = await submitFlag(shared, flagScoring, "KEY", "no-scoring", "anything");
     expect(out).toEqual({ kind: "not_flag_problem" });
   });
 
-  it("既に flagSubmitted=true なら already_scored を返すべき (= 重複加算しない)", async () => {
+  it("should return already_scored when flagSubmitted=true already (don't double-count)", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [sampleRow({ flagSubmitted: true, score: 100 })],
     });
@@ -87,7 +87,7 @@ describe("submitFlag", () => {
     expect(ddbSend).toHaveBeenCalledTimes(1);
   });
 
-  it("stackOutputs に flagOutputKey が無いとき (= deploy 未完了) は no_outputs を返すべき", async () => {
+  it("should return no_outputs when stackOutputs lacks flagOutputKey (deploy not yet complete)", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [sampleRow({ stackOutputs: undefined })],
     });
@@ -95,7 +95,7 @@ describe("submitFlag", () => {
     expect(out).toEqual({ kind: "no_outputs" });
   });
 
-  it("submitted flag が expected と一致しなければ wrong + scoreDelta=0 を返すべき (penalty 未設定なら UpdateItem 呼ばない)", async () => {
+  it("should return wrong + scoreDelta=0 when the submitted flag does not match expected (no UpdateItem when penalty unset)", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 25, wrongAnswerCount: 3 })] });
     const out = await submitFlag(shared, flagScoring, "KEY", "hello-world", "wrong-answer");
     // Issue #817: penalty=0 / 未設定の場合は scoreDelta=0、 既存 wrongCount を返す互換挙動。
@@ -103,7 +103,7 @@ describe("submitFlag", () => {
     expect(ddbSend).toHaveBeenCalledTimes(1); // Query のみ、Update なし (= Free Tier WCU 節約)
   });
 
-  it("Issue #817: wrongAnswerPenalty > 0 で不正解なら score を減算 + wrongAnswerCount を ADD すべき", async () => {
+  it("Issue #817: should deduct score and ADD to wrongAnswerCount on wrong answer when wrongAnswerPenalty > 0", async () => {
     const penaltyScoring: Record<string, ProblemScoringMetadata> = {
       "hello-world": {
         kind: "flag",
@@ -128,7 +128,7 @@ describe("submitFlag", () => {
     expect(updateCmd.input.ConditionExpression).toContain("attribute_not_exists(flagSubmitted)");
   });
 
-  it("Issue #817: penalty で score が負数になっても totalScore は 0 で clamp して返すべき", async () => {
+  it("Issue #817: should clamp totalScore at 0 even when penalty drives score negative", async () => {
     const penaltyScoring: Record<string, ProblemScoringMetadata> = {
       "hello-world": {
         kind: "flag",
@@ -146,7 +146,7 @@ describe("submitFlag", () => {
     expect(out).toEqual({ kind: "wrong", scoreDelta: -50, totalScore: 0, wrongCount: 1 });
   });
 
-  it("Issue #817: penalty 経路で flagSubmitted=true との race (= CCF) は already_scored に倒すべき", async () => {
+  it("Issue #817: should fall to already_scored on CCF race with flagSubmitted=true on the penalty path", async () => {
     const penaltyScoring: Record<string, ProblemScoringMetadata> = {
       "hello-world": {
         kind: "flag",
@@ -167,7 +167,7 @@ describe("submitFlag", () => {
     expect(out).toEqual({ kind: "already_scored", totalScore: 100 });
   });
 
-  it("正解なら ADD score :pts SET flagSubmitted=true で UpdateItem し ok を返すべき", async () => {
+  it("should UpdateItem with ADD score :pts SET flagSubmitted=true and return ok on correct answer", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
     ddbSend.mockResolvedValueOnce({ Attributes: { score: 100 } });
     const out = await submitFlag(
@@ -187,7 +187,7 @@ describe("submitFlag", () => {
     expect(updateCmd.input.ConditionExpression).toContain("attribute_not_exists(flagSubmitted)");
   });
 
-  it("trim した値が一致すれば ok を返すべき (= 末尾改行などで弾かない)", async () => {
+  it("should return ok when trimmed values match (don't reject on trailing newlines)", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
     ddbSend.mockResolvedValueOnce({ Attributes: { score: 100 } });
     const out = await submitFlag(
@@ -200,7 +200,7 @@ describe("submitFlag", () => {
     expect(out.kind).toBe("ok");
   });
 
-  it("ConditionalCheckFailedException は already_scored で吸収するべき (= 並行 submit 対策)", async () => {
+  it("should absorb ConditionalCheckFailedException as already_scored (concurrent submit guard)", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 0 })] });
     const condErr = Object.assign(new Error("conditional check failed"), {
       name: "ConditionalCheckFailedException",
@@ -216,7 +216,7 @@ describe("submitFlag", () => {
     expect(out).toEqual({ kind: "already_scored", totalScore: 100 });
   });
 
-  it("Query は GSI2 を `TEAMKEY#<key>` で叩くべき", async () => {
+  it("Query should hit GSI2 with `TEAMKEY#<key>`", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
     ddbSend.mockResolvedValueOnce({ Attributes: { score: 100 } });
     await submitFlag(
@@ -238,7 +238,7 @@ describe("submitFlag", () => {
   describe("competition scoring gate (Issue #13)", () => {
     const eventRow = sampleRow({ eventId: "EVT1", score: 0 });
 
-    it("Event 行が無い場合 fail-closed で scoring_not_started を返すべき", async () => {
+    it("should fail-closed with scoring_not_started when the Event row is missing", async () => {
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
       ddbSend.mockResolvedValueOnce({}); // EventMeta GetItem returns no Item
       const out = await submitFlag(
@@ -251,7 +251,7 @@ describe("submitFlag", () => {
       expect(out).toEqual({ kind: "scoring_not_started" });
     });
 
-    it("startsAt 未設定 (READY だが時刻未指定) なら scoring_not_started を返すべき", async () => {
+    it("should return scoring_not_started when startsAt is unset (READY but time unspecified)", async () => {
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
       ddbSend.mockResolvedValueOnce({ Item: { status: "READY" } });
       const out = await submitFlag(
@@ -264,7 +264,7 @@ describe("submitFlag", () => {
       expect(out.kind).toBe("scoring_not_started");
     });
 
-    it("now < startsAt なら scoring_not_started を返し startsAt を含めるべき", async () => {
+    it("should return scoring_not_started with startsAt when now < startsAt", async () => {
       const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
       ddbSend.mockResolvedValueOnce({ Item: { status: "READY", startsAt: future } });
@@ -278,7 +278,7 @@ describe("submitFlag", () => {
       expect(out).toEqual({ kind: "scoring_not_started", startsAt: future });
     });
 
-    it("endsAt 設定 + now > endsAt なら scoring_ended を返すべき", async () => {
+    it("should return scoring_ended when endsAt is set and now > endsAt", async () => {
       const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       const before = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
@@ -295,7 +295,7 @@ describe("submitFlag", () => {
       expect(out).toEqual({ kind: "scoring_ended", endsAt: past });
     });
 
-    it("status=ENDED なら startsAt があっても scoring_ended を返すべき", async () => {
+    it("should return scoring_ended when status=ENDED, even if startsAt is set", async () => {
       const before = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
       ddbSend.mockResolvedValueOnce({ Item: { status: "ENDED", startsAt: before } });
@@ -309,7 +309,7 @@ describe("submitFlag", () => {
       expect(out.kind).toBe("scoring_ended");
     });
 
-    it("startsAt 過去 + endsAt 未来 + status=READY なら gate を通って ok 加点すべき", async () => {
+    it("should pass the gate and award as ok when startsAt past + endsAt future + status=READY", async () => {
       const before = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
@@ -343,7 +343,7 @@ describe("submitFlag", () => {
       expect(out).toEqual({ kind: "scoring_locked" });
     });
 
-    it("eventId 不在の row (= standalone deploy) では gate を skip して ok を返すべき (旧挙動互換)", async () => {
+    it("should skip the gate and return ok for rows without eventId (standalone deploy, legacy compat)", async () => {
       // event scope 無し → gate check しない → 即加点経路へ
       ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] }); // eventId 無し
       ddbSend.mockResolvedValueOnce({ Attributes: { score: 100 } });

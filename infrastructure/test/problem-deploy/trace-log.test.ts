@@ -22,7 +22,7 @@ describe("trace-log helpers", () => {
     errorSpy.mockRestore();
   });
 
-  it("logDeployTrace は JSON 1 行で event / level=info / component=problem-deploy / timestamp を出力するべき", () => {
+  it("logDeployTrace should emit a single JSON line with event / level=info / component=problem-deploy / timestamp", () => {
     logDeployTrace("deploy.create.enqueued", { jobId: "01ABC", correlationId: "01ABC" });
     expect(logSpy).toHaveBeenCalledTimes(1);
     const payload = JSON.parse(logSpy.mock.calls[0]?.[0] as string);
@@ -34,7 +34,7 @@ describe("trace-log helpers", () => {
     expect(payload.correlationId).toBe("01ABC");
   });
 
-  it("warnDeployTrace は level=warn を吐くべき (= grace-fallback 等の通知用)", () => {
+  it("warnDeployTrace should emit at level=warn (for grace-fallback notifications etc.)", () => {
     warnDeployTrace("deploy.describe-stack.assume-role.grace-fallback", {
       jobId: "01XYZ",
       externalIdVersion: 3,
@@ -45,14 +45,14 @@ describe("trace-log helpers", () => {
     expect(payload.externalIdVersion).toBe(3);
   });
 
-  it("errorDeployTrace は level=error を吐くべき", () => {
+  it("errorDeployTrace should emit at level=error", () => {
     errorDeployTrace("deploy.cfn.deploy.failed", { jobId: "01ZZZ" });
     expect(errorSpy).toHaveBeenCalledTimes(1);
     const payload = JSON.parse(errorSpy.mock.calls[0]?.[0] as string);
     expect(payload.level).toBe("error");
   });
 
-  it("undefined な field は出力 JSON から除外すべき (= log size 節約 + Logs Insights の column 汚染防止)", () => {
+  it("should omit undefined fields from output JSON (save log size + avoid Logs Insights column pollution)", () => {
     logDeployTrace("deploy.test", {
       jobId: "01ABC",
       optional: undefined,
@@ -63,21 +63,21 @@ describe("trace-log helpers", () => {
     expect(payload.defined).toBe("value");
   });
 
-  it("fields 引数を省略しても crash せず最小 JSON を出すべき", () => {
+  it("should emit minimal JSON without crashing even when fields argument is omitted", () => {
     logDeployTrace("deploy.healthz");
     const payload = JSON.parse(logSpy.mock.calls[0]?.[0] as string);
     expect(payload.event).toBe("deploy.healthz");
     expect(payload.level).toBe("info");
   });
 
-  it("timestamp は ISO 8601 文字列で再 parse 可能であるべき", () => {
+  it("timestamp should be an ISO 8601 string that re-parses", () => {
     logDeployTrace("deploy.test");
     const payload = JSON.parse(logSpy.mock.calls[0]?.[0] as string);
     const parsed = new Date(payload.timestamp);
     expect(Number.isNaN(parsed.getTime())).toBe(false);
   });
 
-  it("net JSON はパース可能で多重 quote / newline を破壊しないべき", () => {
+  it("net JSON should be parseable and not break on nested quotes / newlines", () => {
     logDeployTrace("deploy.eventbridge.publish.succeeded", {
       detailType: 'DeployCreate"Requested',
       resource: "line1\nline2",

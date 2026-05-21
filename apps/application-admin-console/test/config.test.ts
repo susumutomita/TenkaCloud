@@ -9,7 +9,7 @@ const env = {
 };
 
 describe("loadConfig", () => {
-  describe("/runtime-config.json が必須フィールドを全部返したとき", () => {
+  describe("when /runtime-config.json returns all required fields", () => {
     async function loadWithFullRuntime() {
       vi.stubGlobal(
         "fetch",
@@ -31,31 +31,31 @@ describe("loadConfig", () => {
       return loadConfig(env);
     }
 
-    it("cognitoDomain を runtime-config から取るべき", async () => {
+    it("should take cognitoDomain from runtime-config", async () => {
       expect((await loadWithFullRuntime()).cognitoDomain).toBe(
         "https://prod-tenant.auth.ap-northeast-1.amazoncognito.com",
       );
     });
 
-    it("cognitoClientId を runtime-config.userClientId から取るべき (key が異なる)", async () => {
+    it("should take cognitoClientId from runtime-config.userClientId (different key)", async () => {
       expect((await loadWithFullRuntime()).cognitoClientId).toBe("prod-client-id");
     });
 
-    it("tenantId を runtime-config から取るべき", async () => {
+    it("should take tenantId from runtime-config", async () => {
       expect((await loadWithFullRuntime()).tenantId).toBe("tenant-prod-1");
     });
 
-    it("tenantName を runtime-config から取るべき", async () => {
+    it("should take tenantName from runtime-config", async () => {
       expect((await loadWithFullRuntime()).tenantName).toBe("DENSO 第一事業部");
     });
 
-    it("apiBaseUrl を runtime-config.apiUrl から取るべき (key が異なる)", async () => {
+    it("should take apiBaseUrl from runtime-config.apiUrl (different key)", async () => {
       expect((await loadWithFullRuntime()).apiBaseUrl).toBe("https://prod-api.example.com/prod");
     });
   });
 
-  describe("/runtime-config.json が 404 を返したとき (dev fallback)", () => {
-    it("VITE_COGNITO_* env と DEV_FALLBACK_* placeholder から AppConfig を組み立てるべき", async () => {
+  describe("when /runtime-config.json returns 404 (dev fallback)", () => {
+    it("should assemble AppConfig from VITE_COGNITO_* env and DEV_FALLBACK_* placeholders", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
       const config = await loadConfig(env);
       expect(config.cognitoDomain).toBe("https://dev-cognito.example.com");
@@ -66,8 +66,8 @@ describe("loadConfig", () => {
     });
   });
 
-  describe("/runtime-config.json が 200 だがいずれかのフィールドを欠いているとき", () => {
-    it("cognitoDomain 欠け → env fallback に進むべき", async () => {
+  describe("when /runtime-config.json is 200 but missing some field", () => {
+    it("should fall back to env when cognitoDomain is missing", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(
@@ -87,7 +87,7 @@ describe("loadConfig", () => {
       expect(config.tenantId).toBe("dev-local");
     });
 
-    it("apiUrl 欠け → env fallback に進むべき", async () => {
+    it("should fall back to env when apiUrl is missing", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockResolvedValue(
@@ -108,7 +108,7 @@ describe("loadConfig", () => {
   });
 
   describe("Issue #871: runtime-config.json validation", () => {
-    it("apiUrl が http:// なら env fallback に倒れるべき (= mixed content / MITM 防御)", async () => {
+    it("should fall back to env when apiUrl is http:// (= mixed content / MITM defense)", async () => {
       vi.spyOn(console, "error").mockImplementation(() => undefined);
       vi.stubGlobal(
         "fetch",
@@ -129,7 +129,7 @@ describe("loadConfig", () => {
       expect(config.apiBaseUrl).toBe("http://localhost:3999");
     });
 
-    it("cognitoDomain が amazoncognito.com 以外なら env fallback に倒れるべき (= allowlist)", async () => {
+    it("should fall back to env when cognitoDomain is not amazoncognito.com (= allowlist)", async () => {
       vi.spyOn(console, "error").mockImplementation(() => undefined);
       vi.stubGlobal(
         "fetch",
@@ -150,7 +150,7 @@ describe("loadConfig", () => {
       expect(config.cognitoDomain).toBe("https://dev-cognito.example.com");
     });
 
-    it("apiUrl が `javascript:` などの非 URL ならは env fallback に倒れるべき", async () => {
+    it("should fall back to env when apiUrl is a non-URL such as `javascript:`", async () => {
       vi.spyOn(console, "error").mockImplementation(() => undefined);
       vi.stubGlobal(
         "fetch",
@@ -173,7 +173,7 @@ describe("loadConfig", () => {
   });
 
   describe("redirectUri", () => {
-    it("常に window.location.origin/callback で組み立てられるべき", async () => {
+    it("should always be assembled as window.location.origin/callback", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
       const config = await loadConfig(env);
       expect(config.redirectUri).toBe(`${window.location.origin}/callback`);
@@ -181,7 +181,7 @@ describe("loadConfig", () => {
   });
 
   describe("scope", () => {
-    it("env に指定が無いとき デフォルト 'openid email profile' を返すべき", async () => {
+    it("should return default 'openid email profile' when env does not specify it", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
       const config = await loadConfig(env);
       expect(config.scope).toBe("openid email profile");
