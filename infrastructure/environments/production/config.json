@@ -29,5 +29,10 @@
     "keepNoncurrentVersions": "${SOURCE_BUNDLE_KEEP_VERSIONS:-5}",
     "expireAfterDays": "${SOURCE_BUNDLE_EXPIRE_DAYS:-1}"
   },
-  "monthlyCostLimitUsd": "${MONTHLY_COST_LIMIT_USD:-200}"
+  "monthlyCostLimitUsd": "${MONTHLY_COST_LIMIT_USD:-200}",
+  "challengePayloadConfig": {
+    "bucketPrefix": "tc-challenges-",
+    "githubRepository": "susumutomita/TenkaCloudChallenge",
+    "githubBranches": ["main"]
+  }
 }

@@ -75,6 +75,21 @@ export interface AppConfig {
   /** ADR-008 Phase 2 (#642): private 問題 payload を格納する S3 bucket 名 (未設定なら undefined)。 */
   readonly challengePayloadBucketName: string | undefined;
 
+  /**
+   * ADR-003 Phase 2 / problem catalog split: TenkaCloudChallenge repo 用の
+   * S3 bucket + GitHub OIDC IAM Role を立てる構成。 未設定なら ChallengePayloadStack
+   * は立てない (= 旧 `CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET` env override 経路のみ動く)。
+   */
+  readonly challengePayload:
+    | {
+        readonly bucketName: string;
+        readonly githubRepository: string;
+        readonly githubBranches: readonly string[];
+        readonly existingOidcProviderArn: string | undefined;
+        readonly noncurrentExpirationDays: number | undefined;
+      }
+    | undefined;
+
   /** Bulk Deploy の CodeBuild 並列度 (未設定なら AWS account-level quota に任せる)。 */
   readonly deployConcurrentBuildLimit: number | undefined;
 

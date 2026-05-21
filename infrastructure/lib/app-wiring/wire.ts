@@ -8,6 +8,7 @@ import { CodeBuildUseAwsManagedKms } from "../cdk-aspect/codebuild-use-aws-manag
 import { DestroyPolicySetter } from "../cdk-aspect/destroy-policy-setter.js";
 import { DynamoDbLowCapacity } from "../cdk-aspect/dynamodb-low-capacity.js";
 import { KmsKeyShortPendingWindow } from "../cdk-aspect/kms-key-short-pending-window.js";
+import { ChallengePayloadStack } from "../challenge-payload/challenge-payload-stack.js";
 import { ControlPlaneStack } from "../control-plane-stack.js";
 import { ObservabilityStack } from "../observability/cloudwatch-dashboard-stack.js";
 import { CostBudget } from "../observability/cost-budget.js";
@@ -92,6 +93,37 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
     new DynamoDbLowCapacity(config.dynamoReadCapacity, config.dynamoWriteCapacity),
   );
 
+  // ADR-003 Phase 2 / catalog split: TenkaCloudChallenge repo の publish.yml が S3 に
+  // payload を push するための bucket + OIDC IAM Role を立てる。 config.challengePayload が
+  // 設定されていれば stack を立てる (= 旧 env override `CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET`
+  // は互換目的で残す = override 優先)。
+  let challengePayloadStack: ChallengePayloadStack | undefined;
+  if (config.challengePayload && !config.challengePayloadBucketName) {
+    challengePayloadStack = new ChallengePayloadStack(
+      app,
+      stackId("tenkacloud-challenge-payload", config.environment),
+      {
+        ...config.stackEnv,
+        environmentName: config.environment,
+        bucketName: config.challengePayload.bucketName,
+        githubRepository: config.challengePayload.githubRepository,
+        githubBranches: config.challengePayload.githubBranches,
+        ...(config.challengePayload.existingOidcProviderArn
+          ? { existingOidcProviderArn: config.challengePayload.existingOidcProviderArn }
+          : {}),
+        ...(config.challengePayload.noncurrentExpirationDays !== undefined
+          ? { noncurrentExpirationDays: config.challengePayload.noncurrentExpirationDays }
+          : {}),
+      },
+    );
+    cdk.Aspects.of(challengePayloadStack).add(new DestroyPolicySetter());
+  }
+  const challengePayloadBucketName =
+    config.challengePayloadBucketName ?? challengePayloadStack?.bucketName;
+
+  // deploy 順序: ChallengePayloadStack の bucket が先に立ってから ProblemDeployBackend を deploy
+  // しないと、 Worker Lambda が起動時に bucket name を IAM policy で参照する経路で
+  // race condition が起きる。 explicit dependency で順序を pin。
   const problemDeployBackendStack = new ProblemDeployBackendStack(
     app,
     stackId("tenkacloud-problem-deploy", config.environment),
@@ -107,9 +139,7 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       problemsVisibility: config.problems.visibility as ProblemDeployBackendVisibility,
       // Issue #888: per-problem `disruptions[]` を Lambda env に injection
       problemsDisruptions: config.problems.disruptions as Readonly<Record<string, unknown>>,
-      ...(config.challengePayloadBucketName
-        ? { challengePayloadBucketName: config.challengePayloadBucketName }
-        : {}),
+      ...(challengePayloadBucketName ? { challengePayloadBucketName } : {}),
       participantPortal: config.participantPortal as
         | { runtimeConfig: ParticipantPortalRuntimeConfig | "default-dev-mock" }
         | undefined,
@@ -120,6 +150,9 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   cdk.Aspects.of(problemDeployBackendStack).add(
     new DynamoDbLowCapacity(config.dynamoReadCapacity, config.dynamoWriteCapacity),
   );
+  if (challengePayloadStack) {
+    problemDeployBackendStack.addDependency(challengePayloadStack);
+  }
 
   // Issue #814 Phase 2: bootstrap を adminConsoleInsight より先に instantiate する。
   // adminConsoleInsight が bootstrap の `deprovisioningStateMachineArn` を受け取り、
