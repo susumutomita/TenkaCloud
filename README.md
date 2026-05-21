@@ -76,41 +76,39 @@ Teardown:
 make destroy
 ```
 
-## Example Competitions
+## Problem catalog
 
-| Competition | Difficulty | What players practice |
-| --- | --- | --- |
-| [Hello World](./problems/challenges/hello-world/) | 1 | Read an SSM Parameter and submit a flag |
-| [Hello World Battle](./problems/battles/hello-world-battle/) | 1 | Keep nginx + API endpoints alive under uptime scoring |
-| [Security Battle Royale](./problems/battles/security-battle-royale/) | 3 | Patch a vulnerable web app while preserving availability |
-| [Microservice Migration Battle](./problems/battles/microservice-migration-battle/) | 4 | Split a monolith into Lambda, ECS, and App Runner under time pressure |
-| [StackStack](./problems/battles/stackstack/) | 4 | Ship AI-generated apps safely across auth, network, rate, audit, and UX controls |
+Problems live in a **separate repo**: [susumutomita/TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge). It is mounted here as a git submodule at `problems/`, so `make deploy` bundles whichever catalog snapshot the submodule pointer references.
 
-Browse the curated catalog: [Competition Gallery](./docs/gallery.md).
+See the catalog repo's README for the current list of shipped problems. We deliberately do not duplicate that list here to avoid drift whenever a problem is added.
+
+A high-level pictorial view of the platform's example competitions also lives in the [Competition Gallery](./docs/gallery.md), curated for visitors.
 
 ## Create Your First Problem
 
-A problem is a self-contained directory:
+Problem authoring happens in the catalog repo, not here. A problem is a self-contained directory under `battles/<id>/` or `challenges/<id>/` in that repo:
 
 ```text
-problems/<category>/<id>/
-├── metadata.json    # catalog display + scoring rule + portal slot wiring
-├── template.yaml    # CloudFormation deployed to the competitor account
-└── portal/          # optional React.lazy components for the Participant Portal
+metadata.json    # catalog display + scoring rule + portal slot wiring
+template.yaml    # CloudFormation deployed to the competitor account
+portal/          # optional React components for the Participant Portal
+services/        # optional in-stack code (docker-compose / Lambda payload / etc)
 ```
 
-Create a scaffold:
+The scaffolding CLI is still hosted in this platform repo because it depends on shared TypeScript packages:
 
 ```bash
 bun run scripts/tenkacloud-problem.ts create my-first-challenge --kind flag
 bun run scripts/tenkacloud-problem.ts validate my-first-challenge
 ```
 
+Move the generated directory into your local clone of the catalog repo, open a PR there, and a platform-side maintainer bumps the submodule pointer once it merges.
+
 Authoring references:
 
-- [30-minute problem authoring guide](./docs/problems/AUTHORING.html)
-- [Problem schema](./problems/SCHEMA.json)
-- [Problem catalog README](./problems/README.md)
+- [30-minute problem authoring guide](./docs/problems/AUTHORING.html) — platform-side authoring narrative
+- [Problem schema (`SCHEMA.json`)](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/SCHEMA.json) — catalog repo, source of truth
+- [Catalog repo README](https://github.com/susumutomita/TenkaCloudChallenge#readme) — contributor flow on the catalog side
 
 ## Architecture
 
@@ -132,10 +130,16 @@ Core planes:
 
 Start with these architecture docs:
 
-- [ADR-012: Problem plugin architecture](./docs/architecture/adr-012-problem-plugin-architecture.html)
-- [ADR-016: TenkaCloud Lite mode](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html)
-- [ADR-017: Cloud Action Intent / Trust Bridge](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html)
-- [Cloud Action Intent protocol spec](./docs/architecture/cloud-action-intent.html)
+- **For first-time contributors** (10-min reads):
+  - [`docs/architecture/OVERVIEW.md`](./docs/architecture/OVERVIEW.md) — full architectural narrative
+  - [`CONTRIBUTOR_MAP.md`](./CONTRIBUTOR_MAP.md) — "I want to do X" navigation
+  - [`docs/architecture/MODULE_MAP.md`](./docs/architecture/MODULE_MAP.md) — "where is X" directory map
+  - [`docs/architecture/GLOSSARY.md`](./docs/architecture/GLOSSARY.md) — term definitions with ADR back-links
+- **Decision rationales (ADRs)**:
+  - [ADR-012: Problem plugin architecture](./docs/architecture/adr-012-problem-plugin-architecture.html)
+  - [ADR-016: TenkaCloud Lite mode](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html)
+  - [ADR-017: Cloud Action Intent / Trust Bridge](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html)
+  - [Cloud Action Intent protocol spec](./docs/architecture/cloud-action-intent.html)
 
 ## Full Deployment
 
