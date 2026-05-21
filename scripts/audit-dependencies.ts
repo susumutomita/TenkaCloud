@@ -72,25 +72,49 @@ function safeIsDirectory(path: string): boolean {
   }
 }
 
-function scanNodeModules(rootNodeModules: string): readonly Finding[] {
-  if (!existsSync(rootNodeModules)) return [];
-  const findings: Finding[] = [];
+interface PackageDirEntry {
+  readonly pkgDir: string;
+  readonly expectedName: string;
+}
+
+/**
+ * `@scope/` ディレクトリ配下の packages を列挙する。 metadata dir / non-dir は skip。
+ */
+function* iterateScopedPackageDirs(
+  scopeDir: string,
+  scopeName: string,
+): Generator<PackageDirEntry> {
+  for (const scoped of readdirSync(scopeDir)) {
+    if (scoped.startsWith(".")) continue;
+    const pkgPath = join(scopeDir, scoped);
+    if (!safeIsDirectory(pkgPath)) continue;
+    yield { pkgDir: pkgPath, expectedName: `${scopeName}/${scoped}` };
+  }
+}
+
+/**
+ * `node_modules/<pkg>` または `node_modules/@scope/<pkg>` の package dir を順に列挙する。
+ * `.` で始まる metadata dir (= `.bin` / `.cache` 等) や non-directory entry は skip。
+ */
+function* iterateInstalledPackageDirs(rootNodeModules: string): Generator<PackageDirEntry> {
+  if (!existsSync(rootNodeModules)) return;
   for (const entry of readdirSync(rootNodeModules)) {
     if (entry.startsWith(".")) continue;
     const entryPath = join(rootNodeModules, entry);
     if (!safeIsDirectory(entryPath)) continue;
     if (entry.startsWith("@")) {
-      for (const scoped of readdirSync(entryPath)) {
-        if (scoped.startsWith(".")) continue;
-        const pkgPath = join(entryPath, scoped);
-        if (!safeIsDirectory(pkgPath)) continue;
-        const f = inspectPackage(pkgPath, `${entry}/${scoped}`);
-        if (f) findings.push(f);
-      }
+      yield* iterateScopedPackageDirs(entryPath, entry);
     } else {
-      const f = inspectPackage(entryPath, entry);
-      if (f) findings.push(f);
+      yield { pkgDir: entryPath, expectedName: entry };
     }
+  }
+}
+
+function scanNodeModules(rootNodeModules: string): readonly Finding[] {
+  const findings: Finding[] = [];
+  for (const { pkgDir, expectedName } of iterateInstalledPackageDirs(rootNodeModules)) {
+    const f = inspectPackage(pkgDir, expectedName);
+    if (f) findings.push(f);
   }
   return findings;
 }
@@ -134,26 +158,48 @@ function readRootPackage(): PackageJson {
   }
 }
 
+/**
+ * `<wsPath>/package.json` を読み name を返す。 存在 / parse 失敗時は undefined。
+ */
+function readPackageNameAt(wsPath: string): string | undefined {
+  const pkgJson = join(wsPath, "package.json");
+  if (!existsSync(pkgJson)) return undefined;
+  try {
+    const pkg = JSON.parse(readFileSync(pkgJson, "utf8")) as PackageJson;
+    return pkg.name;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * apps/* / packages/* / infrastructure の各 workspace package dir を列挙する。
+ * `infrastructure` だけは 1 package、 残り 2 つは subdir ごとに 1 package。
+ */
+function* iterateWorkspacePackageDirs(): Generator<string> {
+  const groups: readonly { readonly dir: string; readonly singlePackage: boolean }[] = [
+    { dir: "apps", singlePackage: false },
+    { dir: "packages", singlePackage: false },
+    { dir: "infrastructure", singlePackage: true },
+  ];
+  for (const { dir, singlePackage } of groups) {
+    const base = join(REPO_ROOT, dir);
+    if (!existsSync(base) || statSync(base).isFile()) continue;
+    if (singlePackage) {
+      yield base;
+      continue;
+    }
+    for (const entry of readdirSync(base)) yield join(base, entry);
+  }
+}
+
 function listWorkspacePackages(): readonly string[] {
   const names: string[] = [];
   const root = readRootPackage();
   if (root.name) names.push(root.name);
-  for (const dir of ["apps", "packages", "infrastructure"]) {
-    const base = join(REPO_ROOT, dir);
-    if (!existsSync(base)) continue;
-    if (statSync(base).isFile()) continue;
-    const entries = dir === "infrastructure" ? ["."] : readdirSync(base);
-    for (const entry of entries) {
-      const wsPath = dir === "infrastructure" ? base : join(base, entry);
-      const pkgJson = join(wsPath, "package.json");
-      if (!existsSync(pkgJson)) continue;
-      try {
-        const pkg = JSON.parse(readFileSync(pkgJson, "utf8")) as PackageJson;
-        if (pkg.name) names.push(pkg.name);
-      } catch {
-        // ignore
-      }
-    }
+  for (const wsPath of iterateWorkspacePackageDirs()) {
+    const name = readPackageNameAt(wsPath);
+    if (name) names.push(name);
   }
   return names;
 }
