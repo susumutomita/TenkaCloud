@@ -83,6 +83,22 @@ interface TeamValidation {
   readonly hasDuplicateSlug: boolean;
 }
 
+/**
+ * Issue #1201: 問題行の初期 region を決める純関数。
+ *
+ * - 問題 metadata に `defaultRegion` が宣言されていればそれを採用
+ * - 未宣言なら `globalDefault` (= 通常 `DEFAULT_AWS_REGION.code`) にフォールバック
+ *
+ * 「全 event が ap-northeast-1 に集中して quota 上限に到達する」 問題を、 問題側
+ * (= 動作確認済 region を一番よく知っている人) の宣言で散らすための仕掛け。
+ */
+export function resolveInitialRegion(
+  metaDefaultRegion: string | undefined,
+  globalDefault: string,
+): string {
+  return metaDefaultRegion ?? globalDefault;
+}
+
 export function resizeTeamRows(prev: TeamRow[], next: number): TeamRow[] {
   if (next === prev.length) return prev;
   if (next < prev.length) return prev.slice(0, Math.max(next, 0));
@@ -238,7 +254,10 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
           return {
             problemId: opt.value,
             problemName: meta?.name ?? opt.value,
-            defaultRegion: DEFAULT_AWS_REGION.code,
+            // Issue #1201: 問題 metadata の defaultRegion を初期値に採用 (= 全 event
+            // が ap-northeast-1 に集中するのを防ぐ)。 未宣言なら従来通り
+            // DEFAULT_AWS_REGION にフォールバック。 operator は wizard で override 可能。
+            defaultRegion: meta?.defaultRegion ?? DEFAULT_AWS_REGION.code,
           };
         });
     });

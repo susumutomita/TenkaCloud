@@ -22,6 +22,12 @@ export interface ProblemSummary {
   /** 想定プレイ時間 */
   estimatedDuration: string;
   tags: readonly string[];
+  /**
+   * Issue #1201: 問題作成者が宣言する推奨 deploy 先 region。 EventCreate wizard が
+   * 各問題行の region 初期値として採用する。 未宣言なら従来通り
+   * `DEFAULT_AWS_REGION` にフォールバック。 operator は wizard で override 可能。
+   */
+  defaultRegion?: string;
 }
 
 export interface ProblemDetail extends ProblemSummary {
@@ -53,6 +59,8 @@ interface ProblemMetadata {
   learningGoals: string[];
   cfnTemplate: string;
   cfnParameters?: Record<string, string>;
+  /** Issue #1201: 問題作成者宣言の推奨 region。 wizard が初期値に使う。 */
+  defaultRegion?: string;
 }
 
 // `import.meta.glob` で repo root の `problems/*/*/metadata.json` を build 時 / HMR 時に
@@ -76,6 +84,7 @@ function metadataToDetail(metadata: ProblemMetadata): ProblemDetail {
     description: metadata.description,
     exposedPorts: metadata.exposedPorts,
     learningGoals: metadata.learningGoals,
+    ...(metadata.defaultRegion ? { defaultRegion: metadata.defaultRegion } : {}),
   };
 }
 
@@ -98,5 +107,6 @@ export function listProblemSummaries(): readonly ProblemSummary[] {
     difficulty: p.difficulty,
     estimatedDuration: p.estimatedDuration,
     tags: p.tags,
+    ...(p.defaultRegion ? { defaultRegion: p.defaultRegion } : {}),
   }));
 }

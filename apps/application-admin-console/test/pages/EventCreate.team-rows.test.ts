@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseTeamCountInput, resizeTeamRows, validateTeamRows } from "../../src/pages/EventCreate";
+import {
+  parseTeamCountInput,
+  resizeTeamRows,
+  resolveInitialRegion,
+  validateTeamRows,
+} from "../../src/pages/EventCreate";
 
 describe("resizeTeamRows", () => {
   it("should return the same array reference when team count is unchanged", () => {
@@ -75,5 +80,21 @@ describe("parseTeamCountInput", () => {
 
   it("should return 0 as-is for input '0'", () => {
     expect(parseTeamCountInput("0")).toBe(0);
+  });
+});
+
+describe("resolveInitialRegion (Issue #1201)", () => {
+  it("should prefer the problem metadata defaultRegion when declared", () => {
+    expect(resolveInitialRegion("us-east-1", "ap-northeast-1")).toBe("us-east-1");
+  });
+
+  it("should fall back to the global default when the problem does not declare one", () => {
+    expect(resolveInitialRegion(undefined, "ap-northeast-1")).toBe("ap-northeast-1");
+  });
+
+  it("should treat empty string as declared (= the operator can author it intentionally to force the global default off)", () => {
+    // 仕様: 空文字は宣言済として扱う (= 後で metadata validator が拒否すべき)。 ここでは
+    // 純関数の動作を pin するだけ。
+    expect(resolveInitialRegion("", "ap-northeast-1")).toBe("");
   });
 });
