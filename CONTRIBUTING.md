@@ -11,6 +11,16 @@ make install
 make start
 ```
 
+## Where to start (under 15 minutes)
+
+For first-time contributors, read in this order:
+
+1. [`docs/architecture/OVERVIEW.md`](./docs/architecture/OVERVIEW.md) — what TenkaCloud is, the 4 planes, why Lite vs SaaS exists
+2. [`CONTRIBUTOR_MAP.md`](./CONTRIBUTOR_MAP.md) — pick the recipe matching your goal (new problem / Lambda bug / admin UI / etc)
+3. [`docs/architecture/GLOSSARY.md`](./docs/architecture/GLOSSARY.md) — definitions for AppPlane / ControlPlane / TrustBridge / ParticipantViewerRole / etc
+
+For directory-level "where is X" lookups, [`docs/architecture/MODULE_MAP.md`](./docs/architecture/MODULE_MAP.md) is the index.
+
 ## Development flow
 
 1. Pick an issue (`good first issue` / `help wanted`) or a starter task from
