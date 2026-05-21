@@ -1,18 +1,10 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>TenkaCloud — Cloud competition, made simple.</title>
 <meta name="description" content="TenkaCloud is an open-source cloud-competition platform on real AWS. Mix Battle (real-time) and Challenge (self-paced) drills in one event. Apache 2.0." />
-<!--
-  Issue #952 / PR-958 follow-up: the waitlist Google Form URL is configurable by
-  rewriting this meta tag. We ship this page as static HTML on GitHub Pages, so
-  no env injection — the deployer edits the value directly. If empty / placeholder,
-  the waitlist section degrades to a "coming soon" alert.
-  Embedded URL format: `https://docs.google.com/forms/d/e/<FORM_ID>/viewform?embedded=true`
--->
-<meta name="tenkacloud:waitlist-form-url" content="" />
 <meta property="og:title" content="TenkaCloud — Cloud competition, made simple." />
 <meta property="og:description" content="An open-source cloud-competition platform that runs on real AWS. Mix Battle and Challenge drills in one event. Apache 2.0." />
 <meta property="og:type" content="website" />
@@ -239,6 +231,20 @@ section .lead {
 #modes .wrap > h2,
 #modes .wrap > .lead,
 .audience-intro { text-align: center; margin-left: auto; margin-right: auto; }
+/* section h2 / .lead は左寄せ default なので、 audience-intro 内では明示的に
+   margin 0 auto で中央寄せ (= max-width が効いた上で水平センター)。 */
+.audience-intro h2,
+.audience-intro .lead { margin-left: auto; margin-right: auto; }
+.audience-intro .lead a { color: var(--ink); text-decoration: underline; }
+.audience-intro .lead code {
+  font-family: var(--font-mono); font-size: 0.92em;
+  background: var(--paper-3); padding: 1px 6px; border-radius: 4px;
+}
+.extend-cta {
+  margin-top: 12px; display: inline-flex; gap: 24px; flex-wrap: wrap; justify-content: center;
+}
+.extend-cta .more { font-size: 13px; color: #0066cc; text-decoration: none; }
+.extend-cta .more:hover { text-decoration: underline; }
 
 /* ============== TWO-UP FEATURE ============== */
 .twoup { display: grid; grid-template-columns: 1fr 1fr; gap: 52px; max-width: 980px; margin: 0 auto; }
@@ -643,6 +649,87 @@ section .lead {
 .stat .n .u { font-size: 0.55em; color: var(--ink-3); margin-left: 2px; font-weight: 500; }
 .stat .l { font-size: 12px; color: var(--ink-2); max-width: 200px; line-height: 1.45; margin: 0 auto; font-weight: 600; }
 
+/* ============== PRICING ============== */
+.pricing-head { text-align: center; max-width: 720px; margin: 0 auto 56px; }
+.pricing-head .eyebrow { color: var(--ink-3); margin-bottom: 12px; }
+.pricing-head h2 {
+  font-size: clamp(30px, 3.8vw, 44px);
+  font-weight: 600; letter-spacing: -0.03em;
+  margin: 0 0 16px;
+}
+.pricing-head p { color: var(--ink-2); font-size: 17px; line-height: 1.55; margin: 0; }
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  max-width: var(--w);
+  margin: 0 auto;
+}
+.pricing-card {
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: 20px; padding: 36px 28px;
+  display: flex; flex-direction: column; gap: 14px;
+  position: relative;
+}
+.pricing-card.featured {
+  background: var(--ink); color: var(--paper);
+  border-color: var(--ink);
+}
+.pricing-card.featured .pricing-tier,
+.pricing-card.featured .pricing-scope,
+.pricing-card.featured .pricing-sub,
+.pricing-card.featured .pricing-list,
+.pricing-card.featured .pricing-list li { color: rgba(255,255,255,0.85); }
+.pricing-card.featured .pricing-list li::before { background: rgba(255,255,255,0.55); }
+.pricing-card.featured .pricing-price { color: var(--paper); }
+.pricing-tier {
+  font-size: 13px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.pricing-price {
+  font-size: 40px; font-weight: 600; letter-spacing: -0.02em;
+  line-height: 1.1; color: var(--ink);
+}
+.pricing-price .pricing-unit {
+  font-size: 14px; color: var(--ink-3); font-weight: 400; margin-left: 4px;
+}
+.pricing-card.featured .pricing-price .pricing-unit { color: rgba(255,255,255,0.55); }
+.pricing-scope { font-size: 13px; color: var(--ink-3); }
+.pricing-sub { font-size: 14px; color: var(--ink-2); line-height: 1.5; margin: 4px 0 8px; }
+.pricing-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.pricing-list li {
+  font-size: 13px; line-height: 1.5; color: var(--ink-2);
+  padding-left: 18px; position: relative;
+}
+.pricing-list li::before {
+  content: ""; position: absolute; left: 0; top: 8px;
+  width: 8px; height: 8px; border-radius: 999px; background: var(--ink-3);
+}
+.pricing-fineprint { font-size: 11px; line-height: 1.5; color: var(--ink-3); margin: 4px 0 0; }
+.pricing-card.featured .pricing-fineprint { color: rgba(255,255,255,0.55); }
+.pricing-cta {
+  margin-top: auto;
+  height: 44px; padding: 0 22px;
+  border-radius: 999px;
+  font-size: 14px; font-weight: 500;
+  text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 1px solid transparent;
+}
+.pricing-cta.primary { background: var(--paper); color: var(--ink); }
+.pricing-cta.secondary {
+  background: transparent; color: var(--ink);
+  border-color: var(--line);
+}
+.pricing-card.featured .pricing-cta.primary {
+  background: var(--paper); color: var(--ink);
+}
+.pricing-card.featured .pricing-cta.secondary {
+  background: transparent; color: var(--paper);
+  border-color: rgba(255,255,255,0.3);
+}
+
 /* ============== ENTERPRISE CTA ============== */
 .ent-cta {
   background:
@@ -683,10 +770,6 @@ section .lead {
 }
 
 /* ============== FOOTER ============== */
-.cta-pair { padding: 24px 0 36px; }
-.cta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; max-width: 940px; margin: 0 auto; }
-
-/* ============== FOOTER ============== */
 footer { padding: 28px 0 24px; background: var(--paper-3); color: var(--ink-3); }
 footer .wrap {
   display: grid; grid-template-columns: 1.8fr 1fr 1fr 1fr 1fr;
@@ -708,13 +791,14 @@ footer .legal {
 /* ============== RESPONSIVE ============== */
 @media (max-width: 980px) {
   .nav-links { display: none; }
-  .hero-grid, .twoup, .onboard-layout, .trust, .stats, .cta-grid { grid-template-columns: 1fr; }
+  .hero-grid, .twoup, .onboard-layout, .trust, .stats, .pricing-grid { grid-template-columns: 1fr; }
   .hero { padding-top: 44px; }
   .hero h1, .hero .sub { max-width: none; }
   .app-body { grid-template-columns: 1fr; }
   .app-sidebar { display: none; }
   .aud { grid-template-columns: 1fr; }
   .steps { grid-template-columns: 1fr; }
+  .pricing-card { padding: 32px 24px; }
   footer .wrap { grid-template-columns: 1fr 1fr; }
   section { padding: 46px 0; }
 }
@@ -723,7 +807,6 @@ footer .legal {
   .hero h1 { font-size: 42px; }
   .metric-grid { grid-template-columns: 1fr 1fr; }
   .dashboard { padding: 12px; }
-  .cta-grid { gap: 14px; }
   footer .wrap { grid-template-columns: 1fr; }
 }
 </style>
@@ -736,8 +819,9 @@ footer .legal {
     <div class="nav-links">
       <a href="#modes" data-i18n="nav.product">プロダクト</a>
       <a href="#onboard" data-i18n="nav.problems">問題</a>
+      <a href="#extend" data-i18n="nav.extend">問題を作る</a>
       <a href="https://github.com/susumutomita/TenkaCloud#readme" target="_blank" rel="noopener noreferrer" data-i18n="nav.docs">ドキュメント</a>
-      <a href="#waitlist" data-i18n="nav.waitlist">ウェイトリスト</a>
+      <a href="#pricing" data-i18n="nav.pricing">料金</a>
       <a href="#contact" data-i18n="nav.contact">お問い合わせ</a>
       <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer" data-i18n="nav.github">GitHub</a>
     </div>
@@ -972,7 +1056,7 @@ footer .legal {
     </div>
     <div class="col">
       <div class="role" data-i18n="aud.b.role">イベント主催</div>
-      <h3 data-i18n="aud.b.h">GameDay を、1 画面で。</h3>
+      <h3 data-i18n="aud.b.h">競技イベントを、1 画面で。</h3>
       <p data-i18n="aud.b.p">競技者ごとの環境を自動で配ってまわす。準備に費やしていた一週間が、半日で終わる。</p>
       <a class="more" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.b.more">運営ガイド</span> ›</a>
     </div>
@@ -1075,20 +1159,82 @@ footer .legal {
   </div>
 </section>
 
-<section class="cta-pair">
-  <div class="wrap cta-grid">
-    <div class="ent-cta" id="waitlist">
-      <div class="eyebrow" data-i18n="waitlist.eyebrow">ベータの招待を受け取る</div>
-      <h2 data-i18n="waitlist.h2">ウェイトリストに登録する。</h2>
-      <p data-i18n="waitlist.p">公開アリーナの招待 / 開催ご相談の連絡先を残しておくと、 準備が整い次第お知らせします。 OSS なので料金はありません。</p>
-      <div class="btns">
-        <a class="btn-primary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="waitlist.fallback">フォームを開く</span> →</a>
+<section id="extend">
+  <div class="wrap audience-intro">
+    <div class="eyebrow" data-i18n="extend.eyebrow">問題は、増やせる</div>
+    <h2 data-i18n="extend.h2">足りない問題は、自分で作ればいい。</h2>
+    <p class="lead" data-i18n="extend.lead">問題カタログは <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> リポジトリで完全に開かれていて、 metadata.json + template.yaml の 2 ファイルを書けば 1 問追加できます。 Claude Code 等のコーディングエージェント向けに 問題作成 skill (<code>new-problem</code>) も同梱されているので、 「こういう問題を作りたい」 とアイデアを話すだけで、 初めてでも 1 問が形になります。</p>
+    <div class="extend-cta">
+      <a class="more" href="https://github.com/susumutomita/TenkaCloudChallenge#readme" target="_blank" rel="noopener noreferrer"><span data-i18n="extend.cta1">問題カタログを見る</span> ›</a>
+      <a class="more" href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/.claude/skills/new-problem/SKILL.md#new-problem--scaffold-a-tenkacloudchallenge-problem" target="_blank" rel="noopener noreferrer"><span data-i18n="extend.cta2">new-problem skill</span> ›</a>
+    </div>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="wrap">
+    <div class="pricing-head">
+      <div class="eyebrow" data-i18n="pricing.eyebrow">料金</div>
+      <h2 data-i18n="pricing.h2">イベント規模に合わせて。</h2>
+      <p data-i18n="pricing.p">プラットフォーム本体は Apache 2.0 の OSS なので、 コード利用は永続無料です。 規模が大きくなった / 自前で運用したくない場合に、 構築と当日運営を代行します。</p>
+    </div>
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <div class="pricing-tier" data-i18n="pricing.community.tier">Community</div>
+        <div class="pricing-price">
+          <span data-i18n="pricing.community.price">無料</span>
+        </div>
+        <div class="pricing-scope" data-i18n="pricing.community.scope">自分で開催</div>
+        <p class="pricing-sub" data-i18n="pricing.community.note">自前 AWS アカウントに OSS を deploy して、 規模問わず開催。</p>
+        <ul class="pricing-list">
+          <li data-i18n="pricing.community.f1">運営コンソール / 参加者ポータル / 問題カタログ 全機能</li>
+          <li data-i18n="pricing.community.f2">公開問題セット (= Battle / Challenge)</li>
+          <li data-i18n="pricing.community.f3">サポートは GitHub Issues / Discussions</li>
+        </ul>
+        <a class="pricing-cta secondary" href="https://github.com/susumutomita/TenkaCloud#readme" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.community.cta">セットアップ手順</span> →</a>
+      </div>
+
+      <div class="pricing-card featured">
+        <div class="pricing-tier" data-i18n="pricing.hosted.tier">Hosted</div>
+        <div class="pricing-price">
+          <span data-i18n="pricing.hosted.price">100万円</span><span class="pricing-unit" data-i18n="pricing.hosted.unit">〜 / 回</span>
+        </div>
+        <div class="pricing-scope" data-i18n="pricing.hosted.scope">5 チームまで (〜 20 人)</div>
+        <p class="pricing-sub" data-i18n="pricing.hosted.note">構築から当日進行まで、 運営を丸ごと代行します。</p>
+        <ul class="pricing-list">
+          <li data-i18n="pricing.hosted.f1">AWS account 準備 / deploy 支援</li>
+          <li data-i18n="pricing.hosted.f2">当日の進行 + on-call / Red Team 役</li>
+          <li data-i18n="pricing.hosted.f3">事後の振り返りレポート (= 採点履歴 / 攻撃可視化)</li>
+          <li data-i18n="pricing.hosted.f4">問題セットの選定</li>
+        </ul>
+        <p class="pricing-fineprint" data-i18n="pricing.hosted.fineprint">※ AWS account はお客様側でご用意ください。 こちらでご用意する場合は別途お見積もり。</p>
+        <a class="pricing-cta primary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.hosted.cta">お見積もり依頼</span> →</a>
+      </div>
+
+      <div class="pricing-card">
+        <div class="pricing-tier" data-i18n="pricing.enterprise.tier">Enterprise</div>
+        <div class="pricing-price">
+          <span data-i18n="pricing.enterprise.price">ご相談</span>
+        </div>
+        <div class="pricing-scope" data-i18n="pricing.enterprise.scope">それ以上</div>
+        <p class="pricing-sub" data-i18n="pricing.enterprise.note">20 人を超える規模はご相談ください。</p>
+        <ul class="pricing-list">
+          <li data-i18n="pricing.enterprise.f1">20 〜 100 人規模の同時開催</li>
+          <li data-i18n="pricing.enterprise.f2">問題追加の技術支援</li>
+          <li data-i18n="pricing.enterprise.f3">継続的なイベント開催 (= 新卒教育 / 社内研修 等)</li>
+        </ul>
+        <a class="pricing-cta secondary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.enterprise.cta">お問い合わせ</span> →</a>
       </div>
     </div>
-    <div class="ent-cta" id="contact">
-      <div class="eyebrow" data-i18n="ent.eyebrow">もし、こんな使い方をしたいなら</div>
-      <h2 data-i18n="ent.h2">クローズドな会場で、走らせたい人へ。</h2>
-      <p data-i18n="ent.p">社内勉強会、学校の授業、クローズドなインシデントレスポンス演習 — 公開アリーナで難しい使い方を考えているなら、相談してください。OSS なので料金はありません。</p>
+  </div>
+</section>
+
+<section id="contact">
+  <div class="wrap">
+    <div class="ent-cta">
+      <div class="eyebrow" data-i18n="ent.eyebrow">どのプランがよいか分からない</div>
+      <h2 data-i18n="ent.h2">まずは話してみませんか。</h2>
+      <p data-i18n="ent.p">社内勉強会、 学校の授業、 クローズドなインシデントレスポンス演習 — 規模 / 期間 / 参加者像を聞いた上で、 適切なプランを一緒に決めます。</p>
       <div class="btns">
         <a class="btn-primary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="ent.cta1">お問い合わせ</span> →</a>
         <a class="btn-ghost" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="ent.cta2">GitHub を見る</span> →</a>
@@ -1144,8 +1290,9 @@ footer .legal {
     ja: {
       "nav.product": "プロダクト",
       "nav.problems": "問題",
+      "nav.extend": "問題を作る",
       "nav.docs": "ドキュメント",
-      "nav.waitlist": "ウェイトリスト",
+      "nav.pricing": "料金",
       "nav.contact": "お問い合わせ",
       "nav.github": "GitHub",
 
@@ -1231,8 +1378,8 @@ footer .legal {
       "aud.a.p": "本物の AWS で問題を解き、ランクを上げる。成果は履歴に残せる、技術の足跡になる。",
       "aud.a.more": "参加者ポータル",
       "aud.b.role": "イベント主催",
-      "aud.b.h": "GameDay を、1 画面で。",
-      "aud.b.p": "競技者ごとの環境を自動で配ってまわす。準備に費やしていた一週間が、半日で終わる。",
+      "aud.b.h": "競技イベントを、1 画面で。",
+      "aud.b.p": "競技者ごとの環境を自動で配って回す。 準備に費やしていた一週間が、 半日で終わる。",
       "aud.b.more": "運営ガイド",
       "aud.c.role": "学校・コミュニティ",
       "aud.c.h": "AWS を、教材にする。",
@@ -1256,26 +1403,56 @@ footer .legal {
         ["クロスアカウント AssumeRole + ExternalId。", "競技者アカウントへの操作は、すべて固有 ExternalId 付き。Role ARN を知っているだけでは、何もできない。"],
         ["撤収は、いつでも自分の手で。", "ポータルから 1 クリックでスタックごと削除。リソースの取り残しも、想定外の請求もない。"],
         ["コードは全部、GitHub にある。", "Lambda、Step Functions、IaC。何が動いているか、自分の目で読める。Apache License 2.0。"],
-        ["Free Tier の中で、走り続ける。", "DynamoDB は 1 RCU / 1 WCU 固定。アイドル中の課金は、ゼロ。"]
+        ["アイドル中は、お金がかからない。", "Lambda / DynamoDB / API Gateway すべて従量課金。 イベントを開催しない期間は、 実質ゼロで維持できる。"]
       ],
 
       "stats": [
-        { n: "100", u: "+",   l: "公開済みの問題。3 カテゴリ・5 難易度。" },
-        { n: "3",   u: "min", l: "競技者アカウントへの平均デプロイ時間。" },
-        { n: "0",   u: "$/h", l: "アイドル時の運用コスト。" },
-        { n: "100", u: "%",   l: "OSS / Apache 2.0。すべて読める。" }
+        { n: "0",   u: "$/h",  l: "アイドル時の運用コスト。" },
+        { n: "100", u: "%",    l: "OSS / Apache 2.0。すべて読める。" },
+        { n: "2",   u: "files",l: "metadata.json + template.yaml で 1 問追加。" },
+        { n: "1",   u: "click",l: "競技者は AWS Console に federation ログイン。" }
       ],
 
-      "waitlist.eyebrow": "ベータの招待を受け取る",
-      "waitlist.h2": "ウェイトリストに登録する。",
-      "waitlist.p": "公開アリーナの招待 / 開催ご相談の連絡先を残しておくと、 準備が整い次第お知らせします。 OSS なので料金はありません。",
-      "waitlist.noscript": "JavaScript を有効にすると登録フォームが表示されます。",
-      "waitlist.fallback": "フォームを開く",
-      "waitlist.unconfigured": "ウェイトリストはまもなく公開予定です。",
+      "extend.eyebrow": "問題は、増やせる",
+      "extend.h2": "足りない問題は、自分で作ればいい。",
+      "extend.lead": "問題カタログは <a href=\"https://github.com/susumutomita/TenkaCloudChallenge\" target=\"_blank\" rel=\"noopener noreferrer\">TenkaCloudChallenge</a> リポジトリで完全に開かれていて、 metadata.json + template.yaml の 2 ファイルを書けば 1 問追加できます。 Claude Code 等のコーディングエージェント向けに 問題作成 skill (<code>new-problem</code>) も同梱されているので、 「こういう問題を作りたい」 とアイデアを話すだけで、 初めてでも 1 問が形になります。",
+      "extend.cta1": "問題カタログを見る",
+      "extend.cta2": "new-problem skill",
 
-      "ent.eyebrow": "もし、こんな使い方をしたいなら",
-      "ent.h2": "クローズドな会場で、走らせたい人へ。",
-      "ent.p": "社内勉強会、学校の授業、クローズドなインシデントレスポンス演習 — 公開アリーナで難しい使い方を考えているなら、相談してください。OSS なので料金はありません。",
+      "pricing.eyebrow": "料金",
+      "pricing.h2": "イベント規模に合わせて。",
+      "pricing.p": "プラットフォーム本体は Apache 2.0 の OSS なので、 コード利用は永続無料です。 規模が大きくなった / 自前で運用したくない場合に、 構築と当日運営を代行します。",
+      "pricing.community.tier": "Community",
+      "pricing.community.price": "無料",
+      "pricing.community.scope": "自分で開催",
+      "pricing.community.note": "自前 AWS アカウントに OSS を deploy して、 規模問わず開催。",
+      "pricing.community.f1": "運営コンソール / 参加者ポータル / 問題カタログ 全機能",
+      "pricing.community.f2": "公開問題セット (= Battle / Challenge)",
+      "pricing.community.f3": "サポートは GitHub Issues / Discussions",
+      "pricing.community.cta": "セットアップ手順",
+      "pricing.hosted.tier": "Hosted",
+      "pricing.hosted.price": "100万円",
+      "pricing.hosted.unit": "〜 / 回",
+      "pricing.hosted.scope": "5 チームまで (〜 20 人)",
+      "pricing.hosted.note": "構築から当日進行まで、 運営を丸ごと代行します。",
+      "pricing.hosted.f1": "AWS account 準備 / deploy 支援",
+      "pricing.hosted.f2": "当日の進行 + on-call / Red Team 役",
+      "pricing.hosted.f3": "事後の振り返りレポート (= 採点履歴 / 攻撃可視化)",
+      "pricing.hosted.f4": "問題セットの選定",
+      "pricing.hosted.fineprint": "※ AWS account はお客様側でご用意ください。 こちらでご用意する場合は別途お見積もり。",
+      "pricing.hosted.cta": "お見積もり依頼",
+      "pricing.enterprise.tier": "Enterprise",
+      "pricing.enterprise.price": "ご相談",
+      "pricing.enterprise.scope": "それ以上",
+      "pricing.enterprise.note": "20 人を超える規模はご相談ください。",
+      "pricing.enterprise.f1": "20 〜 100 人規模の同時開催",
+      "pricing.enterprise.f2": "問題追加の技術支援",
+      "pricing.enterprise.f3": "継続的なイベント開催 (= 新卒教育 / 社内研修 等)",
+      "pricing.enterprise.cta": "お問い合わせ",
+
+      "ent.eyebrow": "どのプランがよいか分からない",
+      "ent.h2": "まずは話してみませんか。",
+      "ent.p": "社内勉強会、 学校の授業、 クローズドなインシデントレスポンス演習 — 規模 / 期間 / 参加者像を聞いた上で、 適切なプランを一緒に決めます。",
       "ent.cta1": "お問い合わせ",
       "ent.cta2": "GitHub を見る",
 
@@ -1288,8 +1465,9 @@ footer .legal {
     en: {
       "nav.product": "Product",
       "nav.problems": "Problems",
+      "nav.extend": "Author problems",
       "nav.docs": "Docs",
-      "nav.waitlist": "Waitlist",
+      "nav.pricing": "Pricing",
       "nav.contact": "Contact",
       "nav.github": "GitHub",
 
@@ -1375,7 +1553,7 @@ footer .legal {
       "aud.a.p": "Solve problems on real AWS, climb the rank, earn badges your résumé can prove.",
       "aud.a.more": "Participant portal",
       "aud.b.role": "Organizers",
-      "aud.b.h": "Run a GameDay from one screen.",
+      "aud.b.h": "Run a competition from one screen.",
       "aud.b.p": "Every team's environment, provisioned automatically. The week of prep collapses to an afternoon.",
       "aud.b.more": "Operator guide",
       "aud.c.role": "Schools & community",
@@ -1400,26 +1578,56 @@ footer .legal {
         ["Cross-account AssumeRole + ExternalId.", "Every call into a player account carries a unique ExternalId. Knowing the Role ARN gets an attacker nothing."],
         ["Tear it down whenever, yourself.", "One click in the portal removes the stack. No orphans, no surprise charges."],
         ["The code is on GitHub.", "Lambdas, Step Functions, the IaC — read what runs, line by line. Apache License 2.0."],
-        ["Runs inside Free Tier.", "DynamoDB pinned at 1 RCU / 1 WCU. Idle cost is zero."]
+        ["Costs nothing while idle.", "Lambda / DynamoDB / API Gateway are all pay-per-use. Between events, the platform sits at essentially zero spend."]
       ],
 
       "stats": [
-        { n: "100", u: "+",   l: "Public problems. 3 categories, 5 difficulty tiers." },
-        { n: "3",   u: "min", l: "Average deploy time into a player account." },
-        { n: "0",   u: "$/h", l: "Operating cost while idle." },
-        { n: "100", u: "%",   l: "Open source. Apache 2.0. End to end." }
+        { n: "0",   u: "$/h",  l: "Operating cost while idle." },
+        { n: "100", u: "%",    l: "Open source. Apache 2.0. End to end." },
+        { n: "2",   u: "files",l: "metadata.json + template.yaml to ship a problem." },
+        { n: "1",   u: "click",l: "Participants federate into the AWS Console." }
       ],
 
-      "waitlist.eyebrow": "Get an invite to the beta",
-      "waitlist.h2": "Join the waitlist.",
-      "waitlist.p": "Leave your email for the public arena invite or to discuss hosting your own event. We'll reach out when we're ready. OSS — no fee.",
-      "waitlist.noscript": "Enable JavaScript to see the signup form.",
-      "waitlist.fallback": "Open the form",
-      "waitlist.unconfigured": "The waitlist will be open soon.",
+      "extend.eyebrow": "Catalog grows with you",
+      "extend.h2": "Missing a problem? Author your own.",
+      "extend.lead": "The problem catalog lives in the open <a href=\"https://github.com/susumutomita/TenkaCloudChallenge\" target=\"_blank\" rel=\"noopener noreferrer\">TenkaCloudChallenge</a> repo — write two files (metadata.json + template.yaml) and you have a new problem. A <code>new-problem</code> skill is shipped for Claude Code and other coding agents, so even first-timers can ship a problem just by describing the idea.",
+      "extend.cta1": "Browse the catalog",
+      "extend.cta2": "new-problem skill",
 
-      "ent.eyebrow": "If you need it private",
-      "ent.h2": "Running it in a closed setting?",
-      "ent.p": "Internal study groups, classroom courses, closed-door incident-response drills — anything the public arena can't easily host. Reach out. It's OSS; there's no fee.",
+      "pricing.eyebrow": "Pricing",
+      "pricing.h2": "Pick the size that fits.",
+      "pricing.p": "The platform itself is Apache 2.0 OSS — using the code is free forever. Pay only when you'd rather hand off the operational side at scale.",
+      "pricing.community.tier": "Community",
+      "pricing.community.price": "Free",
+      "pricing.community.scope": "Self-hosted, any size",
+      "pricing.community.note": "Deploy the OSS on your own AWS account and run events of any scale yourself.",
+      "pricing.community.f1": "All admin console / participant portal / catalog features",
+      "pricing.community.f2": "Public problem set (Battle / Challenge)",
+      "pricing.community.f3": "Support via GitHub Issues / Discussions",
+      "pricing.community.cta": "Setup guide",
+      "pricing.hosted.tier": "Hosted",
+      "pricing.hosted.price": "¥1M",
+      "pricing.hosted.unit": "+ / event",
+      "pricing.hosted.scope": "Up to 5 teams (~20 people)",
+      "pricing.hosted.note": "We handle setup, run the day, and tear down.",
+      "pricing.hosted.f1": "Pre-event AWS account prep + deploy automation",
+      "pricing.hosted.f2": "Live MC + on-call / Red Team role",
+      "pricing.hosted.f3": "Post-event report (scoring history, attack timeline)",
+      "pricing.hosted.f4": "Problem selection",
+      "pricing.hosted.fineprint": "* You bring your own AWS account. If we need to provide one, we'll quote separately.",
+      "pricing.hosted.cta": "Request a quote",
+      "pricing.enterprise.tier": "Enterprise",
+      "pricing.enterprise.price": "Custom",
+      "pricing.enterprise.scope": "Beyond that",
+      "pricing.enterprise.note": "Reach out for events over 20 people.",
+      "pricing.enterprise.f1": "Concurrent events for 20–100 people",
+      "pricing.enterprise.f2": "Engineering support for new problem authoring",
+      "pricing.enterprise.f3": "Recurring event delivery (e.g. new-grad onboarding, internal training)",
+      "pricing.enterprise.cta": "Get in touch",
+
+      "ent.eyebrow": "Not sure which plan fits",
+      "ent.h2": "Let's talk.",
+      "ent.p": "Internal study groups, classroom courses, closed incident-response drills — share your scale, timing, and audience, and we'll figure out the right plan together.",
       "ent.cta1": "Get in touch",
       "ent.cta2": "View on GitHub",
 
@@ -1502,7 +1710,11 @@ footer .legal {
     var dict = I18N[lang];
     document.querySelectorAll("[data-i18n]").forEach(function (el) {
       var key = el.getAttribute("data-i18n");
-      if (dict[key] != null) el.textContent = dict[key];
+      if (dict[key] == null) return;
+      // i18n 文字列は本 HTML 内に静的にハードコードされているので、 author-trusted。
+      // インライン `<a>` や `<code>` を含む lead で innerHTML を使う必要があるため、
+      // 全 i18n key で innerHTML 経由で render する (= textContent と違って HTML が escape されない)。
+      el.innerHTML = dict[key];
     });
     document.querySelectorAll(".nav-right .lang").forEach(function (btn) {
       var isActive = btn.getAttribute("data-lang") === lang;
@@ -1512,46 +1724,6 @@ footer .legal {
     renderProductRows(lang);
     renderTrustBullets(lang);
     renderStats(lang);
-    renderWaitlist(lang);
-  }
-
-  /**
-   * Issue #952: Google Form の waitlist 埋め込み。 form URL は <meta name="tenkacloud:waitlist-form-url">
-   * から読む。 値が空 / placeholder のままなら waitlist section を「準備中」アラートに降格する。
-   * Google Forms の embed URL は `https://docs.google.com/forms/d/e/<FORM_ID>/viewform?embedded=true`。
-   */
-  function renderWaitlist(lang) {
-    var meta = document.querySelector('meta[name="tenkacloud:waitlist-form-url"]');
-    var url = (meta && meta.getAttribute("content") || "").trim();
-    var embed = document.getElementById("waitlist-embed");
-    var fallback = document.getElementById("waitlist-fallback");
-    var link = document.getElementById("waitlist-fallback-link");
-    if (!embed) return;
-    if (!url || url.indexOf("docs.google.com/forms") === -1) {
-      embed.innerHTML = '<p class="sub" style="margin-top:18px;">' + I18N[lang]["waitlist.unconfigured"] + '</p>';
-      if (fallback) fallback.hidden = true;
-      return;
-    }
-    // iframe を 1 回だけ inject (= lang 切替で再描画しない)。
-    if (!embed.querySelector("iframe")) {
-      var iframe = document.createElement("iframe");
-      iframe.src = url;
-      iframe.width = "100%";
-      iframe.height = "740";
-      iframe.frameBorder = "0";
-      iframe.marginHeight = "0";
-      iframe.marginWidth = "0";
-      iframe.setAttribute("title", "TenkaCloud waitlist (Google Forms)");
-      iframe.style.border = "0";
-      iframe.style.maxWidth = "720px";
-      iframe.style.display = "block";
-      iframe.style.margin = "24px auto 0";
-      embed.appendChild(iframe);
-    }
-    if (link && fallback) {
-      link.href = url;
-      fallback.hidden = false;
-    }
   }
 
   /**
@@ -1559,7 +1731,7 @@ footer .legal {
    *   1. `?lang=ja|en` URL query (= shareable links)
    *   2. localStorage `tenkacloud.lang` (= sticky user choice)
    *   3. navigator.language starts with `ja` (= visitor's browser preference)
-   *   4. default `ja`
+   *   4. default `en` (= 英語を 1st citizen に置く OSS / 海外への露出を想定)
    */
   function detectInitialLang() {
     var params = new URLSearchParams(window.location.search || "");
@@ -1571,9 +1743,9 @@ footer .legal {
     } catch (_) {
       /* localStorage blocked (= privacy mode); fall through */
     }
-    var nav = (navigator.language || "ja").toLowerCase();
+    var nav = (navigator.language || "en").toLowerCase();
     if (nav.indexOf("ja") === 0) return "ja";
-    return "ja";
+    return "en";
   }
 
   function persistLang(lang) {
