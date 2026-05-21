@@ -29,7 +29,7 @@ import type { ApiKeySSMParameterNames, AppConfig, ProblemsCatalogBundle } from "
  */
 export interface ResolveAppConfigInput {
   readonly env: NodeJS.ProcessEnv;
-  /** `bin/infrastructure.ts` の __dirname (= `infrastructure/bin`)。 .env / config.json の base path 解決に使う。 */
+  /** `bin/infrastructure.ts` の import.meta.dirname (= `infrastructure/bin`)。 .env / config.json の base path 解決に使う。 */
   readonly binDir: string;
   /**
    * テストから filesystem 読みを差し替えるための optional hook。 既定では実 dotenv / fs。

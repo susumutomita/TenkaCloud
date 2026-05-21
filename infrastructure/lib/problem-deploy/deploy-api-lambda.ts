@@ -76,7 +76,7 @@ export class DeployApiLambda extends Construct {
     this.fn = new NodejsFunction(this, "Function", {
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
-      entry: path.resolve(__dirname, "handlers/deploy-handler/index.ts"),
+      entry: path.resolve(import.meta.dirname, "handlers/deploy-handler/index.ts"),
       handler: "handler",
       timeout: Duration.seconds(15),
       memorySize: 256,

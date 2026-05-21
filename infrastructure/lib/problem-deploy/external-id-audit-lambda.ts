@@ -50,7 +50,7 @@ export class ExternalIdAuditLambda extends Construct {
     this.fn = new NodejsFunction(this, "Function", {
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
-      entry: path.resolve(__dirname, "handlers/external-id-audit-handler/index.ts"),
+      entry: path.resolve(import.meta.dirname, "handlers/external-id-audit-handler/index.ts"),
       handler: "handler",
       // DDB Scan + PutMetricData 1 回。MVP 規模で 5s 以内に終わる想定だが余裕で 60s。
       timeout: Duration.seconds(60),

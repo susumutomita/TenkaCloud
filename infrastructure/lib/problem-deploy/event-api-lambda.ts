@@ -91,7 +91,7 @@ export class EventApiLambda extends Construct {
     this.fn = new NodejsFunction(this, "Function", {
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
-      entry: path.resolve(__dirname, "handlers/event-handler/index.ts"),
+      entry: path.resolve(import.meta.dirname, "handlers/event-handler/index.ts"),
       handler: "handler",
       // Bulk teardown は teams × problems 全行を Update + chunk publish するので
       // teams=25 × problems=30 = 750 行で 30 秒前後を見込む。Phase 3 で Distributed

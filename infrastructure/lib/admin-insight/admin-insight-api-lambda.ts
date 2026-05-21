@@ -76,7 +76,7 @@ export class AdminInsightApiLambda extends Construct {
     this.fn = new NodejsFunction(this, "Function", {
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
-      entry: path.resolve(__dirname, "handlers/admin-insight-handler/index.ts"),
+      entry: path.resolve(import.meta.dirname, "handlers/admin-insight-handler/index.ts"),
       handler: "handler",
       // Per-tenant Query を Promise.all で並列発火するので、tenant 数 100 件 × DDB 往復 ~50ms
       // ≒ 5s が最大。安全側で 15s。

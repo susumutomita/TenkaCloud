@@ -162,7 +162,7 @@ export class ParticipantPortalLambda extends Construct {
     this.fn = new NodejsFunction(this, "Function", {
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
-      entry: path.resolve(__dirname, "handlers/participant-handler/index.ts"),
+      entry: path.resolve(import.meta.dirname, "handlers/participant-handler/index.ts"),
       handler: "handler",
       timeout: Duration.seconds(10),
       // Issue #672: bundle が 33MB と巨大 (= AWS SDK / Hono / zod 等が含まれる) で

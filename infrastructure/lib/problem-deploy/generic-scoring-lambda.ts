@@ -75,7 +75,7 @@ export class GenericScoringLambda extends Construct {
     this.fn = new NodejsFunction(this, "Function", {
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
-      entry: path.resolve(__dirname, "handlers/generic-scoring-handler/index.ts"),
+      entry: path.resolve(import.meta.dirname, "handlers/generic-scoring-handler/index.ts"),
       handler: "handler",
       timeout: Duration.minutes(2),
       // #746: 旧 256MB だと cold start で OOM + init timeout が頻発し採点 Lambda が

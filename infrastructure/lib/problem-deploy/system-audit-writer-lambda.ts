@@ -50,7 +50,7 @@ export class SystemAuditWriterLambda extends Construct {
     this.fn = new NodejsFunction(this, "Function", {
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
-      entry: path.resolve(__dirname, "handlers/system-audit-writer/index.ts"),
+      entry: path.resolve(import.meta.dirname, "handlers/system-audit-writer/index.ts"),
       handler: "handler",
       timeout: Duration.seconds(10),
       memorySize: 256,

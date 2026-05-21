@@ -49,7 +49,7 @@ export class CompetitorBootstrapHosting extends Construct {
 
     new BucketDeployment(this, "Deployment", {
       sources: [
-        Source.asset(path.join(__dirname, "..", "..", "templates"), {
+        Source.asset(path.join(import.meta.dirname, "..", "..", "templates"), {
           exclude: ["*", "!competitor-bootstrap.yaml"],
         }),
       ],

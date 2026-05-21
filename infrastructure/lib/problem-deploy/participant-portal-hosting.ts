@@ -96,7 +96,15 @@ export class ParticipantPortalHosting extends Construct {
     this.distributionDomainName = this.distribution.distributionDomainName;
     this.distributionUrl = `https://${this.distribution.distributionDomainName}`;
 
-    const distDir = path.join(__dirname, "..", "..", "..", "apps", "participant-portal", "dist");
+    const distDir = path.join(
+      import.meta.dirname,
+      "..",
+      "..",
+      "..",
+      "apps",
+      "participant-portal",
+      "dist",
+    );
     new BucketDeployment(this, "SiteDeployment", {
       sources: [Source.asset(distDir)],
       destinationBucket: this.bucket,

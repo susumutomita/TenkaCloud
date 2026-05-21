@@ -29,7 +29,7 @@ export class DescribeStackLambda extends Construct {
     this.fn = new NodejsFunction(this, "Function", {
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
-      entry: path.resolve(__dirname, "handlers/describe-stack-handler/index.ts"),
+      entry: path.resolve(import.meta.dirname, "handlers/describe-stack-handler/index.ts"),
       handler: "handler",
       timeout: Duration.seconds(30),
       memorySize: 256,

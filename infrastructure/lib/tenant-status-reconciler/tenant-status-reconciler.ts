@@ -44,7 +44,7 @@ export class TenantStatusReconciler extends Construct {
     this.fn = new NodejsFunction(this, "Function", {
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
-      entry: path.resolve(__dirname, "handlers/handler.ts"),
+      entry: path.resolve(import.meta.dirname, "handlers/handler.ts"),
       handler: "handler",
       timeout: Duration.seconds(60),
       memorySize: 256,

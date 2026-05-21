@@ -17,7 +17,10 @@ import * as stepfunctions from "aws-cdk-lib/aws-stepfunctions";
 import type { Construct } from "constructs";
 
 const DEPLOYMENT_STATE_MACHINE_NAME_SUFFIX = "saas-deployment-machine";
-const TENANT_UPDATE_SCRIPT_PATH = path.join(__dirname, "../../../scripts/update-tenant.sh");
+const TENANT_UPDATE_SCRIPT_PATH = path.join(
+  import.meta.dirname,
+  "../../../scripts/update-tenant.sh",
+);
 const TENANT_PIPELINE_LAMBDA_RUNTIME = lambda.Runtime.PYTHON_3_14;
 const TENANT_PIPELINE_CODEBUILD_IMAGE_ID = "aws/codebuild/standard:8.0";
 const TENANT_PIPELINE_CODEBUILD_NODE_VERSION = 24;
@@ -74,7 +77,7 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
     });
     // Lambda handler のソースは Construct と co-locate (handlers/)。旧 ref-arch では
     // リポジトリルート src/ にあったが #76 で整理した。
-    const handlersPath = path.join(__dirname, "handlers");
+    const handlersPath = path.join(import.meta.dirname, "handlers");
     const lambdaFunctionPrep = new lambda.Function(this, "prep-deploy", {
       handler: "lambda-prepare-deploy.lambda_handler",
       runtime: TENANT_PIPELINE_LAMBDA_RUNTIME,
@@ -296,7 +299,7 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
       },
     });
 
-    const filePath = require("node:path").join(__dirname, "deployemntstatemachine.asl.json");
+    const filePath = path.join(import.meta.dirname, "deployemntstatemachine.asl.json");
     const file = fs.readFileSync(filePath);
 
     new stepfunctions.CfnStateMachine(this, "DeploymentCfnStateMachine", {

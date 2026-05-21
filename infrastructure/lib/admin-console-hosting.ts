@@ -88,7 +88,7 @@ export class AdminConsoleHostingStack extends cdk.Stack {
     this.distributionDomainName = this.distribution.distributionDomainName;
 
     // dist/ をアップロード (URL 非依存の静的ファイル)
-    const distDir = path.join(__dirname, "..", "..", "apps", "admin-console", "dist");
+    const distDir = path.join(import.meta.dirname, "..", "..", "apps", "admin-console", "dist");
     new BucketDeployment(this, "SiteDeployment", {
       sources: [Source.asset(distDir)],
       destinationBucket: this.siteBucket,
