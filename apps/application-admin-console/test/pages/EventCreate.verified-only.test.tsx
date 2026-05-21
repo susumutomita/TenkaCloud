@@ -73,7 +73,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("EventCreatePage (Phase 2.2 verified-only)", () => {
-  it("account option は 12 桁 ID を主ラベルにして alias を補足表示するべき", () => {
+  it("should use the 12-digit ID as main label and show alias as supplementary text for account option", () => {
     const account = {
       awsAccountId: "111111111111",
       region: "ap-northeast-1",
@@ -92,7 +92,7 @@ describe("EventCreatePage (Phase 2.2 verified-only)", () => {
     expect(formatVerifiedAccountSummary(account)).toBe("111111111111 (production-shared-account)");
   });
 
-  it("0 件のとき Competitor Accounts への導線 (Alert) を表示するべき", async () => {
+  it("should show Alert with link to Competitor Accounts when there are zero accounts", async () => {
     mocks.listCompetitorAccounts.mockResolvedValueOnce({ items: [] });
     renderPage();
     // listCompetitorAccounts が呼ばれた後、warning Alert が出る
@@ -105,7 +105,7 @@ describe("EventCreatePage (Phase 2.2 verified-only)", () => {
     expect(screen.getByText(/Competitor Accounts へ移動/)).toBeInTheDocument();
   });
 
-  it("verified=false の account は drop-down 選択肢に出さないべき", async () => {
+  it("should NOT include verified=false accounts in dropdown options", async () => {
     mocks.listCompetitorAccounts.mockResolvedValueOnce({
       items: [
         {
@@ -146,7 +146,7 @@ describe("EventCreatePage (Phase 2.2 verified-only)", () => {
     expect(screen.queryByText(/Unverified Team B/)).not.toBeInTheDocument();
   });
 
-  it("API 取得 error は赤 Alert で operator に通知するべき", async () => {
+  it("should notify operator of API fetch error via red Alert", async () => {
     mocks.listCompetitorAccounts.mockRejectedValueOnce(new Error("network down"));
     renderPage();
     await waitFor(() => {

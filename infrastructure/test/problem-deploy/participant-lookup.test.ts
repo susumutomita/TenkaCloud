@@ -41,7 +41,7 @@ const sampleRow = (over: Record<string, unknown> = {}) => ({
 describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("GSI2 を TEAMKEY#<key> で Query するべき (Limit なし、team scope の全行を取る)", async () => {
+  it("should Query GSI2 with TEAMKEY#<key> (no Limit; fetch all rows in team scope)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
 
@@ -92,14 +92,14 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
   });
 
   // Issue #607: createdAt を portal API に露出 (= phase countdown timeline で使う)。
-  it("Issue #607: problem.createdAt を ParticipantProblemView に echo するべき", async () => {
+  it("Issue #607: should echo problem.createdAt into ParticipantProblemView", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
     const view = await lookupTeamByLoginKey(shared, "KEY1");
     expect(view?.problems[0]?.createdAt).toBe("2026-05-04T15:00:00.000Z");
   });
 
-  it("deployLog は DDB の進捗から競技者向け terminal 行を返すべき", async () => {
+  it("deployLog should return participant-facing terminal lines from DDB progress", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [
@@ -126,7 +126,7 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(JSON.stringify(log)).not.toContain("tc-secret-team");
   });
 
-  it("deployLog は失敗理由を terminal 行に含めるべき", async () => {
+  it("deployLog should include the failure reason in the terminal lines", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [
@@ -146,7 +146,7 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     });
   });
 
-  it("Phase 2a 経由の eventId / teamId 列が team に伝播するべき", async () => {
+  it("should propagate eventId / teamId columns from the Phase 2a path into team", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [sampleRow({ eventId: "EV1", teamId: "T1" })],
@@ -184,7 +184,7 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(view).toBeUndefined();
   });
 
-  it("一部だけ DELETED な team は live な行のみで problems[] を構築するべき", async () => {
+  it("should build problems[] from live rows only for teams partially DELETED", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [
@@ -229,7 +229,7 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(view?.problems[0]?.stackOutputs).toEqual({});
   });
 
-  it("flag 形式 problem では flagOutputKey の値を stackOutputs から strip するべき (= 答え露出防止)", async () => {
+  it("should strip the flagOutputKey value from stackOutputs for flag-form problems (prevent answer leak)", async () => {
     const scoring = {
       "security-battle-royale": {
         kind: "flag" as const,
@@ -255,7 +255,7 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(view?.problems[0]?.scoring?.points).toBe(100);
   });
 
-  it("score / lastScoredAt / lastResult / scoring を problem view に含めるべき", async () => {
+  it("should include score / lastScoredAt / lastResult / scoring in the problem view", async () => {
     const scoring = {
       "security-battle-royale": { kind: "uptime" as const, pointsPerSuccess: 50 },
     };
@@ -279,7 +279,7 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(p?.scoring?.pointsPerSuccess).toBe(50);
   });
 
-  it("score 未設定の row は 0 を返すべき (default)", async () => {
+  it("should return 0 for rows without score (default)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
 
@@ -289,7 +289,7 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
 
   /* ADR-005 Phase 3.1: applicationStatus aggregate ----------------------- */
 
-  it("uptime kind problem の applicationStatus を aggregate (healthy) で返すべき", async () => {
+  it("should return uptime-kind problem applicationStatus as aggregate (healthy)", async () => {
     const scoring = {
       "security-battle-royale": {
         kind: "uptime" as const,
@@ -361,7 +361,7 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(view?.problems[0]?.applicationStatus?.totalCount).toBe(0);
   });
 
-  it("flag kind problem は applicationStatus を露出しないべき (= Challenge は対象外)", async () => {
+  it("flag kind problem should not expose applicationStatus (Challenges are out of scope)", async () => {
     const scoring = {
       "hello-world": { kind: "flag" as const, flagOutputKey: "F", points: 100 },
     };
@@ -379,7 +379,7 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(view?.problems[0]?.applicationStatus).toBeUndefined();
   });
 
-  it("applicationStatus に endpoint 名 / URL を絶対に含めないべき (snapshot guard)", async () => {
+  it("should never include endpoint names / URLs in applicationStatus (snapshot guard)", async () => {
     const scoring = { p: { kind: "uptime" as const, pointsPerSuccess: 5, endpoints: [] } };
     const { shared, ddbSend } = buildShared(scoring);
     ddbSend.mockResolvedValueOnce({

@@ -31,7 +31,7 @@ function synth(props?: { concurrentBuildLimit?: number }): Template {
 }
 
 describe("DeployCodeBuildProject — concurrent build limit (#538)", () => {
-  it("`concurrentBuildLimit` を未指定なら ConcurrentBuildLimit プロパティを設定しないべき", () => {
+  it("should omit the ConcurrentBuildLimit property when `concurrentBuildLimit` is unset", () => {
     // 未指定 = AWS account 全体の concurrent build limit (default 60) をフルに使う。
     // この既定挙動を変えないことが本 PR の前提 (= 既存運用への regression を出さない)。
     const tpl = synth();
@@ -42,7 +42,7 @@ describe("DeployCodeBuildProject — concurrent build limit (#538)", () => {
     expect(project?.Properties?.ConcurrentBuildLimit).toBeUndefined();
   });
 
-  it("`concurrentBuildLimit: 200` を渡したら CFn の ConcurrentBuildLimit に反映されるべき", () => {
+  it("should reflect `concurrentBuildLimit: 200` in CFn ConcurrentBuildLimit", () => {
     // Service Quota request で account を 200 に上げた operator が、本 project に明示的に
     // cap を伝える経路。CDK Project は `concurrentBuildLimit` を ConcurrentBuildLimit
     // CFn property にそのまま渡す。
@@ -53,7 +53,7 @@ describe("DeployCodeBuildProject — concurrent build limit (#538)", () => {
     );
   });
 
-  it("`concurrentBuildLimit: 60` (= AWS account default) を渡しても CFn property に反映されるべき", () => {
+  it("should reflect `concurrentBuildLimit: 60` (= AWS account default) in the CFn property", () => {
     // 60 は AWS 既定の hard cap と同値。明示的に 60 を設定して「project がこの cap を
     // 越えない」ことを宣言的にしたい運用 (= dev 環境のコスト暴走防止) に使う。
     const tpl = synth({ concurrentBuildLimit: 60 });
@@ -65,7 +65,7 @@ describe("DeployCodeBuildProject — concurrent build limit (#538)", () => {
 });
 
 describe("DeployCodeBuildProject — Phase 2.2 cross-account perms (Issue #459)", () => {
-  it("CodeBuild Project Role に sts:AssumeRole (`arn:aws:iam::*:role/TenkaCloud-*`) を付与するべき", () => {
+  it("should grant sts:AssumeRole (`arn:aws:iam::*:role/TenkaCloud-*`) to the CodeBuild Project Role", () => {
     const tpl = synth();
     // Project Role の inline policy に AssumeRole を含む statement が出るべき。
     tpl.hasResourceProperties(
@@ -84,7 +84,7 @@ describe("DeployCodeBuildProject — Phase 2.2 cross-account perms (Issue #459)"
     );
   });
 
-  it("CodeBuild Project Role に SSM SecureString Read (= tenant path prefix scope) を付与するべき", () => {
+  it("should grant SSM SecureString Read (tenant path prefix scope) to the CodeBuild Project Role", () => {
     const tpl = synth();
     tpl.hasResourceProperties(
       "AWS::IAM::Policy",
@@ -103,7 +103,7 @@ describe("DeployCodeBuildProject — Phase 2.2 cross-account perms (Issue #459)"
     );
   });
 
-  it("CodeBuild env variables に AssumeRole と per-deployment ExternalId 用の env を宣言するべき", () => {
+  it("should declare AssumeRole and per-deployment ExternalId env vars in the CodeBuild env", () => {
     const tpl = synth();
     tpl.hasResourceProperties(
       "AWS::CodeBuild::Project",

@@ -87,7 +87,7 @@ describe("phased-polling kind", () => {
     vi.unstubAllGlobals();
   });
 
-  it("Phase 0 (30分経過) + ec2 platform で +100 加点すべき", async () => {
+  it("should award +100 for Phase 0 (after 30 minutes) + ec2 platform", async () => {
     // meta → ec2、 score → 200
     fetchMock
       .mockResolvedValueOnce({ status: 200, text: async () => JSON.stringify({ platform: "ec2" }) })
@@ -96,7 +96,7 @@ describe("phased-polling kind", () => {
     expect(result.scoreDelta).toBe(100);
   });
 
-  it("Phase 1 (degraded、 60 分後) + ec2 platform で degradedPoints (+10) を加点すべき", async () => {
+  it("should award degradedPoints (+10) for Phase 1 (degraded, after 60 minutes) + ec2 platform", async () => {
     fetchMock
       .mockResolvedValueOnce({ status: 200, text: async () => JSON.stringify({ platform: "ec2" }) })
       .mockResolvedValueOnce({ status: 200, text: async () => "" });
@@ -106,7 +106,7 @@ describe("phased-polling kind", () => {
     expect(result.scoreDelta).toBe(10);
   });
 
-  it("Phase 2 (legacy、 90 分後) は scorePath を /score?legacy=true に切替えるべき", async () => {
+  it("Phase 2 (legacy, after 90 minutes) should switch scorePath to /score?legacy=true", async () => {
     fetchMock
       .mockResolvedValueOnce({ status: 200, text: async () => JSON.stringify({ platform: "ec2" }) })
       .mockResolvedValueOnce({ status: 200, text: async () => "" });
@@ -118,7 +118,7 @@ describe("phased-polling kind", () => {
     expect(scoreCall).toBe("https://api.example.com/users/score?legacy=true");
   });
 
-  it("platform=lambda なら +1000 加点すべき (+ all-slots-on-lambda bonus +5000、 1 slot で satisfy)", async () => {
+  it("should award +1000 for platform=lambda (+ all-slots-on-lambda bonus +5000 satisfied by 1 slot)", async () => {
     fetchMock
       .mockResolvedValueOnce({
         status: 200,
@@ -130,7 +130,7 @@ describe("phased-polling kind", () => {
     expect(result.scoreDelta).toBe(1000 + 5000);
   });
 
-  it("/score が 500 なら failurePenalty (-100) を加点すべき", async () => {
+  it("should award failurePenalty (-100) when /score returns 500", async () => {
     fetchMock
       .mockResolvedValueOnce({ status: 200, text: async () => JSON.stringify({ platform: "ec2" }) })
       .mockResolvedValueOnce({ status: 500, text: async () => "" });
@@ -139,7 +139,7 @@ describe("phased-polling kind", () => {
     expect(result.lastResult).toBe("fail");
   });
 
-  it("platform 不明 (meta 応答 body 不正) なら failurePenalty 適用すべき", async () => {
+  it("should apply failurePenalty when the platform is unknown (invalid meta response body)", async () => {
     fetchMock
       .mockResolvedValueOnce({ status: 200, text: async () => "" })
       .mockResolvedValueOnce({ status: 200, text: async () => "" });
@@ -147,7 +147,7 @@ describe("phased-polling kind", () => {
     expect(result.scoreDelta).toBe(-100);
   });
 
-  it("bonus all-slots-on-platforms: 全 slot が lambda にあれば +5000 を 1 回だけ加算すべき", async () => {
+  it("bonus all-slots-on-platforms: should add +5000 once if all slots are on lambda", async () => {
     // meta=lambda, score=ok
     fetchMock.mockImplementation(async (url: string) => {
       if (url.endsWith("/meta")) {
@@ -168,7 +168,7 @@ describe("phased-polling kind", () => {
     expect(next.scoreDelta).toBe(1000);
   });
 
-  it("responsePenalty (= responseTimeMs > 1500) は遅い slot に -10 を追加適用すべき", async () => {
+  it("responsePenalty (responseTimeMs > 1500) should additionally apply -10 to slow slots", async () => {
     // status=200 だが responseTimeMs を 2000 にしたい → fetch mock で setTimeout で遅延を作る
     fetchMock.mockImplementation(async (url: string) => {
       if (url.endsWith("/meta")) {

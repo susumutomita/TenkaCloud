@@ -44,13 +44,13 @@ afterEach(() => {
 });
 
 describe("PortalPluginSlots (ADR-012 Phase 5)", () => {
-  it("どの slot にも loader が無いなら null を返して何も render しないべき", () => {
+  it("should return null and render nothing when no slot has a loader", () => {
     mockLoadPluginSlot.mockReturnValue(undefined);
     const { container } = render(<PortalPluginSlots {...baseProps} />);
     expect(container.firstChild).toBeNull();
   });
 
-  it("StatusPanel slot が解決できれば該当 component を render すべき", async () => {
+  it("should render the component when the StatusPanel slot resolves", async () => {
     function FakeStatusPanel() {
       return <div data-testid="fake-status">fake status</div>;
     }
@@ -61,7 +61,7 @@ describe("PortalPluginSlots (ADR-012 Phase 5)", () => {
     await waitFor(() => expect(screen.getByTestId("fake-status")).toBeInTheDocument());
   });
 
-  it("plugin が throw すると ErrorBoundary が fallback Alert に降ろすべき (= portal 全体は落ちない)", async () => {
+  it("should let ErrorBoundary fall back to an Alert when a plugin throws (= the whole portal does not crash)", async () => {
     function CrashyPanel(): never {
       throw new Error("plugin runtime crash");
     }
@@ -89,7 +89,7 @@ describe("PortalPluginSlots (ADR-012 Phase 5)", () => {
     }
   });
 
-  it("複数 slot が宣言されていれば PORTAL_SLOT_NAMES の literal 順 (StatusPanel → RegistrationPanel → HelpDrawer) で render すべき", async () => {
+  it("should render multiple declared slots in PORTAL_SLOT_NAMES literal order (StatusPanel -> RegistrationPanel -> HelpDrawer)", async () => {
     function StatusComp() {
       return <div data-testid="slot-status">status</div>;
     }
@@ -115,7 +115,7 @@ describe("PortalPluginSlots (ADR-012 Phase 5)", () => {
   });
 
   // ErrorBoundary class を直接 vs 統合した render path を pin。 stale state を防ぐため別 instance で。
-  it("ErrorBoundary 単体: child の throw を catch して指定 slotName を header に含めるべき", () => {
+  it("ErrorBoundary alone: should catch a child throw and include the given slotName in the header", () => {
     class ProbeErrorBoundary extends Component<
       { slotName: string; children: ReactNode },
       { hasError: boolean; message?: string }

@@ -7,30 +7,30 @@ import { buildInviteEmailBody, INVITE_EMAIL_SUBJECT } from "../lib/control-plane
  * drop。 stack 統合は cdk synth 経路で確認する。
  */
 describe("buildInviteEmailBody (Issue #714 English-only)", () => {
-  it("admin-console origin が解決済なら CloudFront URL を本文に埋めるべき", () => {
+  it("should embed the CloudFront URL in the body once the admin-console origin is resolved", () => {
     const body = buildInviteEmailBody("https://d1234abc.cloudfront.net");
     expect(body).toContain("https://d1234abc.cloudfront.net");
     expect(body).not.toMatch(/http:\/\/localhost/);
   });
 
-  it("origin 未確定 (= Phase 1 deploy) は operator 連絡を促す英語 fallback を返すべき", () => {
+  it("should return an English fallback prompting operator contact when origin is undetermined (Phase 1 deploy)", () => {
     const body = buildInviteEmailBody(undefined);
     expect(body).toMatch(/contact your operator/i);
     expect(body).not.toMatch(/http:\/\/localhost/);
   });
 
-  it("空文字列も fallback 扱いとすべき (= env 未設定と同等)", () => {
+  it("should treat empty string as fallback too (equivalent to unset env)", () => {
     const body = buildInviteEmailBody("");
     expect(body).toMatch(/contact your operator/i);
   });
 
-  it("Cognito placeholder ({username} / {####}) を本文に保持すべき", () => {
+  it("should preserve Cognito placeholders ({username} / {####}) in the body", () => {
     const body = buildInviteEmailBody("https://example.com");
     expect(body).toContain("{username}");
     expect(body).toContain("{####}");
   });
 
-  it("English-only に揃え、 日本語セクションは含めないべき (#714)", () => {
+  it("should keep to English-only without any Japanese section (#714)", () => {
     const body = buildInviteEmailBody("https://example.com");
     expect(body).toContain("Welcome to TenkaCloud Admin Console");
     expect(body).not.toMatch(/へようこそ/);
@@ -39,19 +39,19 @@ describe("buildInviteEmailBody (Issue #714 English-only)", () => {
     expect(body).not.toMatch(/運営にお問い合わせください/);
   });
 
-  it("subject も英語のみで TenkaCloud 名称に上書きされているべき", () => {
+  it("subject should also be English-only and overridden with the TenkaCloud name", () => {
     expect(INVITE_EMAIL_SUBJECT).toMatch(/TenkaCloud Admin Console/);
     expect(INVITE_EMAIL_SUBJECT).not.toMatch(/control plane/i);
     expect(INVITE_EMAIL_SUBJECT).not.toMatch(/招待/);
   });
 
-  it("URL は body に 1 度だけ出現するべき (= 旧 ja+en 重複を排除)", () => {
+  it("the URL should appear in the body exactly once (drop legacy ja+en duplication)", () => {
     const body = buildInviteEmailBody("https://d999.cloudfront.net");
     const matches = body.match(/https:\/\/d999\.cloudfront\.net/g);
     expect(matches).toHaveLength(1);
   });
 
-  it("各セクションを空行で分離し、 改行 collapse 耐性のある形にすべき (#714)", () => {
+  it("should separate sections with blank lines and stay resilient against newline collapsing (#714)", () => {
     const body = buildInviteEmailBody("https://example.com");
     // 空行が body に最低 1 つあり、 welcome / key:value block / next step instruction が分離される
     expect(body).toMatch(/\n\n/);

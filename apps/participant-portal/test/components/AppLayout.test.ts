@@ -34,16 +34,16 @@ function leaderboard(entries: LeaderboardResponse["entries"]) {
 }
 
 describe("AppLayout top navigation helpers", () => {
-  it("backend mode では取得済み score を合算表示すべき", () => {
+  it("should display the sum of fetched scores in backend mode", () => {
     expect(formatTopNavScore("backend", teamView([10, 15, -3]))).toBe("22 pt");
   });
 
-  it("backend 未取得または mock mode では score fallback を表示すべき", () => {
+  it("should display the score fallback when backend has not loaded or in mock mode", () => {
     expect(formatTopNavScore("backend", null)).toBe("…");
     expect(formatTopNavScore("dev-mock", teamView([10]))).toBe("—");
   });
 
-  it("backend mode では自チーム rank と総チーム数を表示すべき", () => {
+  it("should display own team rank and total team count in backend mode", () => {
     expect(
       formatTopNavRank(
         "backend",
@@ -72,14 +72,14 @@ describe("AppLayout top navigation helpers", () => {
     ).toBe("1/2");
   });
 
-  it("rank が取得不能な場合は状態に応じた fallback を表示すべき", () => {
+  it("should display a state-appropriate fallback when rank is unavailable", () => {
     expect(formatTopNavRank("dev-mock", null, false)).toBe("—");
     expect(formatTopNavRank("backend", null, true)).toBe("—");
     expect(formatTopNavRank("backend", null, false)).toBe("…");
     expect(formatTopNavRank("backend", leaderboard([]), false)).toBe("…");
   });
 
-  it("対応 locale id だけを受け入れるべき", () => {
+  it("should accept only supported locale ids", () => {
     expect(isSupportedLocaleId("ja")).toBe(true);
     expect(isSupportedLocaleId("en")).toBe(true);
     expect(isSupportedLocaleId("fr")).toBe(false);

@@ -6,15 +6,15 @@ import { isBootstrapUrlMissing } from "./competitor-bootstrap";
  * UI 側はこの判定を使って CompetitorAccounts 画面に警告 banner を出す。
  */
 describe("isBootstrapUrlMissing (Issue #1055)", () => {
-  it("undefined は missing として扱うべき", () => {
+  it("should treat undefined as missing", () => {
     expect(isBootstrapUrlMissing(undefined)).toBe(true);
   });
 
-  it("空文字列は missing として扱うべき", () => {
+  it("should treat empty string as missing", () => {
     expect(isBootstrapUrlMissing("")).toBe(true);
   });
 
-  it("S3 URL が注入されていれば missing ではないべき", () => {
+  it("should NOT treat an injected S3 URL as missing", () => {
     expect(
       isBootstrapUrlMissing(
         "https://tenkacloud-bootstrap-123.s3.ap-northeast-1.amazonaws.com/competitor-bootstrap.yaml",
@@ -22,7 +22,7 @@ describe("isBootstrapUrlMissing (Issue #1055)", () => {
     ).toBe(false);
   });
 
-  it("GitHub raw URL (= 旧 fallback) も missing 扱いはしない (= 値が入っている時点で operator 配線済の判定)", () => {
+  it("should NOT treat a GitHub raw URL (= legacy fallback) as missing (= any value present means operator is wired up)", () => {
     // fallback URL も「URL が注入されている」 扱いにする (= 警告は出さない)。
     // raw URL 自体が CFn で reject される問題は #1053 で別途解決される。
     expect(

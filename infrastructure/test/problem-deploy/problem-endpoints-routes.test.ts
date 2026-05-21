@@ -46,12 +46,12 @@ function bearer(token: string): HeadersInit {
 describe("GET /portal/me/problems/:problemId/endpoints", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("Authorization header が無いときは 401 を返すべき", async () => {
+  it("should return 401 when the Authorization header is missing", async () => {
     const res = await app.request("/portal/me/problems/hello-world-battle/endpoints");
     expect(res.status).toBe(StatusCodes.UNAUTHORIZED);
   });
 
-  it("problemId が pattern と合わないときは 400 を返すべき", async () => {
+  it("should return 400 when problemId does not match the pattern", async () => {
     const res = await app.request("/portal/me/problems/INVALID_UPPER/endpoints", {
       headers: bearer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
     });
@@ -59,7 +59,7 @@ describe("GET /portal/me/problems/:problemId/endpoints", () => {
     expect(mocks.listProblemEndpoints).not.toHaveBeenCalled();
   });
 
-  it("ok outcome は 200 と endpoints / teamId を返すべき", async () => {
+  it("ok outcome should return 200 with endpoints / teamId", async () => {
     mocks.listProblemEndpoints.mockResolvedValueOnce({
       kind: "ok",
       teamId: "team-x",
@@ -81,7 +81,7 @@ describe("GET /portal/me/problems/:problemId/endpoints", () => {
     expect(body.endpoints).toHaveLength(1);
   });
 
-  it("no_endpoints outcome は 404 を返すべき", async () => {
+  it("no_endpoints outcome should return 404", async () => {
     mocks.listProblemEndpoints.mockResolvedValueOnce({ kind: "no_endpoints" });
     const res = await app.request("/portal/me/problems/hello-world/endpoints", {
       headers: bearer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
@@ -89,7 +89,7 @@ describe("GET /portal/me/problems/:problemId/endpoints", () => {
     expect(res.status).toBe(StatusCodes.NOT_FOUND);
   });
 
-  it("unauthorized outcome は 401 を返すべき", async () => {
+  it("unauthorized outcome should return 401", async () => {
     mocks.listProblemEndpoints.mockResolvedValueOnce({ kind: "unauthorized" });
     const res = await app.request("/portal/me/problems/hello-world/endpoints", {
       headers: bearer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
@@ -101,7 +101,7 @@ describe("GET /portal/me/problems/:problemId/endpoints", () => {
 describe("POST /portal/me/problems/:problemId/endpoints/:slot", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("body が JSON でなければ 400 を返すべき", async () => {
+  it("should return 400 when the body is not JSON", async () => {
     const res = await app.request("/portal/me/problems/hello-world-battle/endpoints/frontend", {
       method: "POST",
       headers: bearer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
@@ -111,7 +111,7 @@ describe("POST /portal/me/problems/:problemId/endpoints/:slot", () => {
     expect(mocks.upsertProblemEndpointOverride).not.toHaveBeenCalled();
   });
 
-  it("slot が pattern と合わないなら 400 を返すべき", async () => {
+  it("should return 400 when slot does not match the pattern", async () => {
     const res = await app.request("/portal/me/problems/hello-world-battle/endpoints/UPPER_CASE", {
       method: "POST",
       headers: bearer("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
@@ -120,7 +120,7 @@ describe("POST /portal/me/problems/:problemId/endpoints/:slot", () => {
     expect(res.status).toBe(StatusCodes.BAD_REQUEST);
   });
 
-  it("invalid_url outcome は 400 を返すべき", async () => {
+  it("invalid_url outcome should return 400", async () => {
     mocks.upsertProblemEndpointOverride.mockResolvedValueOnce({ kind: "invalid_url" });
     const res = await app.request("/portal/me/problems/hello-world-battle/endpoints/frontend", {
       method: "POST",
@@ -130,7 +130,7 @@ describe("POST /portal/me/problems/:problemId/endpoints/:slot", () => {
     expect(res.status).toBe(StatusCodes.BAD_REQUEST);
   });
 
-  it("slot_not_overridable outcome は 409 を返すべき", async () => {
+  it("slot_not_overridable outcome should return 409", async () => {
     mocks.upsertProblemEndpointOverride.mockResolvedValueOnce({ kind: "slot_not_overridable" });
     const res = await app.request("/portal/me/problems/hello-world-battle/endpoints/frontend", {
       method: "POST",
@@ -140,7 +140,7 @@ describe("POST /portal/me/problems/:problemId/endpoints/:slot", () => {
     expect(res.status).toBe(StatusCodes.CONFLICT);
   });
 
-  it("ok outcome は 200 と更新後 view を返すべき", async () => {
+  it("ok outcome should return 200 with the updated view", async () => {
     mocks.upsertProblemEndpointOverride.mockResolvedValueOnce({
       kind: "ok",
       teamId: "team-x",
@@ -168,7 +168,7 @@ describe("POST /portal/me/problems/:problemId/endpoints/:slot", () => {
 describe("DELETE /portal/me/problems/:problemId/endpoints/:slot", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("ok outcome は 200 を返すべき", async () => {
+  it("ok outcome should return 200", async () => {
     mocks.deleteProblemEndpointOverride.mockResolvedValueOnce({
       kind: "ok",
       teamId: "team-x",
@@ -181,7 +181,7 @@ describe("DELETE /portal/me/problems/:problemId/endpoints/:slot", () => {
     expect(res.status).toBe(StatusCodes.OK);
   });
 
-  it("unknown_slot outcome は 400 を返すべき", async () => {
+  it("unknown_slot outcome should return 400", async () => {
     mocks.deleteProblemEndpointOverride.mockResolvedValueOnce({ kind: "unknown_slot" });
     const res = await app.request("/portal/me/problems/hello-world-battle/endpoints/frontend", {
       method: "DELETE",
@@ -190,7 +190,7 @@ describe("DELETE /portal/me/problems/:problemId/endpoints/:slot", () => {
     expect(res.status).toBe(StatusCodes.BAD_REQUEST);
   });
 
-  it("no_endpoints outcome は 404 を返すべき", async () => {
+  it("no_endpoints outcome should return 404", async () => {
     mocks.deleteProblemEndpointOverride.mockResolvedValueOnce({ kind: "no_endpoints" });
     const res = await app.request("/portal/me/problems/hello-world-battle/endpoints/frontend", {
       method: "DELETE",
@@ -199,7 +199,7 @@ describe("DELETE /portal/me/problems/:problemId/endpoints/:slot", () => {
     expect(res.status).toBe(StatusCodes.NOT_FOUND);
   });
 
-  it("unauthorized outcome は 401 を返すべき", async () => {
+  it("unauthorized outcome should return 401", async () => {
     mocks.deleteProblemEndpointOverride.mockResolvedValueOnce({ kind: "unauthorized" });
     const res = await app.request("/portal/me/problems/hello-world-battle/endpoints/frontend", {
       method: "DELETE",

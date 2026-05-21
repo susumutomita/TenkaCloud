@@ -122,7 +122,7 @@ const sampleTeams = (n: number) =>
 describe("bulkDeployEvent", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("正常系: teams × problems を全展開して deployment 行を Put + DeployCreateRequested を publish するべき", async () => {
+  it("normal case: should expand teams × problems fully, Put deployment rows, and publish DeployCreateRequested", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // GetCommand
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(3) }); // QueryCommand teams
@@ -164,7 +164,7 @@ describe("bulkDeployEvent", () => {
     expect(putCmd.input.Entries?.[0]?.DetailType).toBe("DeployCreateRequested");
   });
 
-  it("event 不在は not_found を返し DDB write / publish しないべき", async () => {
+  it("should return not_found without DDB write / publish when the event is absent", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: undefined });
 
@@ -174,7 +174,7 @@ describe("bulkDeployEvent", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("tenantId 不一致は not_found を返し書き込みを行わないべき (クロステナント漏洩防止)", async () => {
+  it("should return not_found without writing on tenantId mismatch (cross-tenant leak guard)", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent({ tenantId: "tenant-other" }) });
 
@@ -184,7 +184,7 @@ describe("bulkDeployEvent", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("teams または problems が 0 件なら enqueued=0 を返し書き込みしないべき", async () => {
+  it("should return enqueued=0 without writing when teams or problems is empty", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent({ problems: [] }) });
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(3) });
@@ -195,7 +195,7 @@ describe("bulkDeployEvent", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("カタログにない problemId は skipped にカウントするべき", async () => {
+  it("should count problemIds absent from the catalog as skipped", async () => {
     const { shared, ddbSend, eventsSend } = buildShared({
       problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
     });
@@ -209,7 +209,7 @@ describe("bulkDeployEvent", () => {
     expect(out).toEqual({ kind: "ok", result: { eventId: "EV1", enqueued: 2, skipped: 2 } });
   });
 
-  it("TransactWrite は 25 items 上限で chunk 化するべき", async () => {
+  it("TransactWrite should chunk at the 25-items cap", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(15) });
@@ -226,7 +226,7 @@ describe("bulkDeployEvent", () => {
     expect(transactCmds[1]?.input.TransactItems).toHaveLength(5);
   });
 
-  it("PutEvents は 10 entries 上限で chunk 化するべき", async () => {
+  it("PutEvents should chunk at the 10-entries cap", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(15) });
@@ -243,7 +243,7 @@ describe("bulkDeployEvent", () => {
     expect(putCmds[2]?.input.Entries).toHaveLength(10);
   });
 
-  it("PutEvents の partial failure は該当 deployment を FAILED にして retry 可能にすべき", async () => {
+  it("PutEvents partial failure should mark the affected deployments as FAILED and keep them retryable", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
@@ -277,7 +277,7 @@ describe("bulkDeployEvent", () => {
     );
   });
 
-  it("PutEvents の timeout/reject は chunk 内 deployment を FAILED にして retry 可能にすべき", async () => {
+  it("PutEvents timeout/reject should mark the deployments in the chunk as FAILED and keep them retryable", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
@@ -306,7 +306,7 @@ describe("bulkDeployEvent", () => {
     ).toBe(true);
   });
 
-  it("各 deployment 行の ConditionExpression で同 jobId 二重生成を防ぐべき", async () => {
+  it("should prevent double creation on the same jobId via ConditionExpression on each deployment row", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
@@ -324,7 +324,7 @@ describe("bulkDeployEvent", () => {
     }
   });
 
-  it("Event.startsAt を deployment 行に eventStartsAt として denormalize するべき", async () => {
+  it("should denormalize Event.startsAt into the deployment row as eventStartsAt", async () => {
     // operator が Bulk Deploy 前に schedule 済 (startsAt 設定済) だった場合、
     // 新規 deployment 行が gate 値を持って作られるシナリオ。
     const { shared, ddbSend, eventsSend } = buildShared();
@@ -364,7 +364,7 @@ describe("bulkDeployEvent", () => {
     }
   });
 
-  it("#528: deployment 行の awsAccountId は **team** の awsAccountId を使うべき", async () => {
+  it("#528: should use the **team** awsAccountId for the deployment row's awsAccountId", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(2) });
@@ -418,7 +418,7 @@ describe("bulkDeployEvent", () => {
     }
   });
 
-  it("#528: team.awsAccountId も problem.defaultAwsAccountId も無いと skip するべき", async () => {
+  it("#528: should skip when neither team.awsAccountId nor problem.defaultAwsAccountId is present", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     // problem.defaultAwsAccountId を外した event
     ddbSend.mockResolvedValueOnce({
@@ -447,7 +447,7 @@ describe("bulkDeployEvent", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("成功後に Event status を DRAFT → DEPLOYING に倒すべき (status badge 視認用)", async () => {
+  it("should flip Event status DRAFT → DEPLOYING after success (for status-badge visibility)", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
@@ -471,7 +471,7 @@ describe("bulkDeployEvent", () => {
   });
 
   // #555: 既存 (teamId, problemId) と衝突する組は再 PUT しない (= idempotent skip)
-  it("既存 deployment 行と (eventId, teamId, problemId) が衝突する組は skipped に計上するべき", async () => {
+  it("should count combinations colliding with existing deployment rows on (eventId, teamId, problemId) as skipped", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // 2 problems
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(2) }); // 2 teams = 4 通り
@@ -490,7 +490,7 @@ describe("bulkDeployEvent", () => {
     expect(out).toEqual({ kind: "ok", result: { eventId: "EV1", enqueued: 2, skipped: 2 } });
   });
 
-  it("duplicate event で全組み合わせが既存 PENDING なら write / publish しないべき", async () => {
+  it("should not write / publish on duplicate event when every combination is already PENDING", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // 2 problems
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) }); // 1 team = 2 通り
@@ -510,7 +510,7 @@ describe("bulkDeployEvent", () => {
   });
 
   // #555: retryFailedOnly = true → FAILED 行のみ再生成、PENDING/COMPLETE はスルー
-  it("retryFailedOnly = true は FAILED 行だけ DELETE + 新規 PENDING を CREATE するべき", async () => {
+  it("should DELETE only FAILED rows and CREATE new PENDING rows when retryFailedOnly = true", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // 2 problems
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(2) }); // 2 teams = 4 通り
@@ -553,7 +553,7 @@ describe("bulkDeployEvent", () => {
   });
 
   // #555: retryFailedOnly でも FAILED が無ければ何もしない
-  it("retryFailedOnly = true で FAILED 行が 0 件なら enqueued=0 で write も publish もしないべき", async () => {
+  it("should return enqueued=0 without writing or publishing when retryFailedOnly = true and there are 0 FAILED rows", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(2) });
@@ -573,7 +573,7 @@ describe("bulkDeployEvent", () => {
   });
 
   // #756: forceRedeploy = true → COMPLETE 済み stack を新 template で update し直す
-  it("forceRedeploy = true は COMPLETE 行を DELETE + 新規 PENDING を CREATE するべき", async () => {
+  it("should DELETE COMPLETE rows and CREATE new PENDING rows when forceRedeploy = true", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // 2 problems
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(2) }); // 2 teams = 4 通り
@@ -606,7 +606,7 @@ describe("bulkDeployEvent", () => {
   });
 
   // #555: teamIds で range を絞る (= 後追い team / 該当 team の env だけ deploy)
-  it("teamIds 指定 で指定 team のみ deploy するべき", async () => {
+  it("should deploy only the specified teams when teamIds is supplied", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // 2 problems
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(3) }); // 3 teams、うち T2 のみ deploy
@@ -630,7 +630,7 @@ describe("bulkDeployEvent", () => {
   });
 
   // #555: problemIds で range を絞る (= 後追い問題 / 修正済問題だけ deploy)
-  it("problemIds 指定 で指定 problem のみ deploy するべき", async () => {
+  it("should deploy only the specified problems when problemIds is supplied", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // 2 problems
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(2) }); // 2 teams、うち hello-world のみ
@@ -654,7 +654,7 @@ describe("bulkDeployEvent", () => {
   });
 
   // #555: retryFailedOnly + teamIds の組み合わせ (= 特定 team の失敗だけ retry)
-  it("retryFailedOnly + teamIds の組み合わせで指定 team の FAILED だけ retry するべき", async () => {
+  it("should retry only FAILED rows for the specified team when retryFailedOnly + teamIds are combined", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(2) }); // T1, T2
@@ -689,7 +689,7 @@ describe("bulkDeployEvent", () => {
 
   // Phase 2.2 (Issue #459) Worker cross-account 化:
   // CompetitorAccounts table で verified=true 行が無い awsAccountId は reject されるべき
-  it("verified=false / 未登録の awsAccountId は plan から落ちて unverified に計上するべき", async () => {
+  it("should drop verified=false / unregistered awsAccountId from the plan and count it as unverified", async () => {
     const { shared, ddbSend, eventsSend, setVerifiedAccounts } = buildShared();
     // T1 (111111111111) のみ verified、T2 (222222222222) は未登録
     setVerifiedAccounts(new Set(["111111111111"]));
@@ -722,7 +722,7 @@ describe("bulkDeployEvent", () => {
   });
 
   // Phase 2.2: 全 team が unverified なら write も publish もしない (fail-closed)
-  it("全 team が unverified なら write / publish せず enqueued=0 で返すべき", async () => {
+  it("should return enqueued=0 without write / publish when all teams are unverified", async () => {
     const { shared, ddbSend, eventsSend, setVerifiedAccounts } = buildShared();
     setVerifiedAccounts(new Set()); // verified なし
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
@@ -740,7 +740,7 @@ describe("bulkDeployEvent", () => {
   });
 
   // Phase 2.2: DeployCreateRequested の detail に competitorRoleArn / externalIdParameterName を埋めるべき
-  it("DeployCreateRequested detail に AssumeRole 用の competitorRoleArn と externalIdParameterName を含めるべき", async () => {
+  it("should include competitorRoleArn and externalIdParameterName for AssumeRole in DeployCreateRequested detail", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) }); // T1 only
@@ -766,7 +766,7 @@ describe("bulkDeployEvent", () => {
   // useBulkDistributedMap=true + bulkDeployPayloadBucket 設定済のとき、 fan-out (= N×M
   // 個の DeployCreateRequested publish) ではなく S3 PutObject + 1 BulkDeployCreateRequested
   // publish に切替わるべき。
-  it("useBulkDistributedMap=true なら S3 PutObject + 1 BulkDeployCreateRequested に切替えるべき", async () => {
+  it("should switch to S3 PutObject + 1 BulkDeployCreateRequested when useBulkDistributedMap=true", async () => {
     const s3Send = vi.fn().mockResolvedValue({});
     const { shared, ddbSend, eventsSend } = buildShared({
       s3: { send: s3Send } as unknown as EventSharedResources["s3"],
@@ -809,7 +809,7 @@ describe("bulkDeployEvent", () => {
     expect(bulkDetail.itemCount).toBe(body.length);
   });
 
-  it("useBulkDistributedMap=true でも S3 PutObject が失敗したら 全 plan を FAILED に倒すべき", async () => {
+  it("should fall all plans to FAILED when S3 PutObject fails, even with useBulkDistributedMap=true", async () => {
     const s3Send = vi.fn().mockRejectedValue(new Error("S3 throttle"));
     const { shared, ddbSend, eventsSend } = buildShared({
       s3: { send: s3Send } as unknown as EventSharedResources["s3"],
@@ -828,7 +828,7 @@ describe("bulkDeployEvent", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("useBulkDistributedMap=false なら旧 fan-out 経路を維持すべき (= rollback safety)", async () => {
+  it("should keep the old fan-out path when useBulkDistributedMap=false (rollback safety)", async () => {
     const s3Send = vi.fn().mockResolvedValue({});
     const { shared, ddbSend, eventsSend } = buildShared({
       s3: { send: s3Send } as unknown as EventSharedResources["s3"],

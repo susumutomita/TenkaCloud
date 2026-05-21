@@ -38,7 +38,7 @@ function makeIntent(overrides: Partial<CloudActionIntent> = {}): VerifiedCloudAc
 }
 
 describe("MockCloudAdapter (#1122)", () => {
-  it("実 provider API を呼ばず擬似 credential と成功 signal を返すべき", async () => {
+  it("should return a fake credential and success signal without calling a real provider API", async () => {
     const adapter = new MockCloudAdapter({
       now: () => new Date("2026-05-15T19:00:00.000Z"),
     });
@@ -63,27 +63,27 @@ describe("MockCloudAdapter (#1122)", () => {
     });
   });
 
-  it("target provider が adapter provider と違う場合は provider-mismatch を投げるべき", async () => {
+  it("should throw provider-mismatch when the target provider differs from the adapter provider", async () => {
     const adapter = new MockCloudAdapter({ provider: "gcp" });
     await expect(adapter.exchange(makeIntent(), {})).rejects.toMatchObject({
       reason: "provider-mismatch",
     });
   });
 
-  it("ttlSeconds は options.maxTtlSeconds を超えると ttl-exceeded-provider-limit を投げるべき", async () => {
+  it("should throw ttl-exceeded-provider-limit when ttlSeconds exceeds options.maxTtlSeconds", async () => {
     const adapter = new MockCloudAdapter({ maxTtlSeconds: 300 });
     await expect(adapter.exchange(makeIntent(), {})).rejects.toMatchObject({
       reason: "ttl-exceeded-provider-limit",
     });
   });
 
-  it("context の traceLabel を signal に引き継ぐべき", async () => {
+  it("should propagate the context traceLabel into the signal", async () => {
     const adapter = new MockCloudAdapter();
     const credential = await adapter.exchange(makeIntent(), { traceLabel: "offline-demo" });
     expect(credential.deploymentSignal.traceLabel).toBe("offline-demo");
   });
 
-  it("ExchangeError として扱えるべき", async () => {
+  it("should be treatable as an ExchangeError", async () => {
     const adapter = new MockCloudAdapter({ provider: "azure" });
     try {
       await adapter.exchange(makeIntent(), {});

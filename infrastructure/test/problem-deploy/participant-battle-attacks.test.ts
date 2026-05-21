@@ -34,7 +34,7 @@ const teamRow = (over: Record<string, unknown> = {}) => ({
 describe("listBattleAttacks", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("不正な jobId (ULID 形式でない) は invalid_jobid を返すべき", async () => {
+  it("should return invalid_jobid for invalid jobId (not ULID form)", async () => {
     const { shared } = buildShared();
     const out = await listBattleAttacks(shared, TEAM_KEY, "not-ulid", 30, NOW_MS);
     expect(out).toEqual({ kind: "invalid_jobid" });

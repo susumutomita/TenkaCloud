@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 describe("participant-portal-runtime-config (#1122)", () => {
-  it("mock mode の runtime-config を標準出力に生成すべき", () => {
+  it("should emit the mock-mode runtime-config to stdout", () => {
     const result = runConfig(["--cloud-mode", "mock", "--print"]);
     expect(result.status).toBe(0);
     const json = JSON.parse(result.stdout);
@@ -48,7 +48,7 @@ describe("participant-portal-runtime-config (#1122)", () => {
     expect(json.localstackEndpoint).toBeUndefined();
   });
 
-  it("localstack mode は localhost endpoint を正規化して出力すべき", () => {
+  it("localstack mode should normalize and output the localhost endpoint", () => {
     const result = runConfig([
       "--cloud-mode",
       "localstack",
@@ -64,7 +64,7 @@ describe("participant-portal-runtime-config (#1122)", () => {
     expect(json.localstackEndpoint).toBe("http://localhost:4566");
   });
 
-  it("localstack mode は localhost 以外の endpoint を拒否すべき", () => {
+  it("localstack mode should reject endpoints other than localhost", () => {
     const result = runConfig([
       "--cloud-mode",
       "localstack",
@@ -77,7 +77,7 @@ describe("participant-portal-runtime-config (#1122)", () => {
     expect(result.stderr).toContain("LocalStack endpoint must be http(s) localhost");
   });
 
-  it("backend mode は HTTPS の apiBaseUrl だけを受け付けるべき", () => {
+  it("backend mode should accept only HTTPS apiBaseUrl", () => {
     const ok = runConfig([
       "--cloud-mode",
       "real",
@@ -103,7 +103,7 @@ describe("participant-portal-runtime-config (#1122)", () => {
     expect(ng.stderr).toContain("--api-base-url must be HTTPS");
   });
 
-  it("--out 指定時は runtime-config.json を書き出すべき", () => {
+  it("should write runtime-config.json when --out is specified", () => {
     const dir = mkdtempSync(join(tmpdir(), "tc-runtime-config-"));
     tempDirs.push(dir);
     const out = join(dir, "runtime-config.json");

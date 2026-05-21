@@ -80,7 +80,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("EventDetailPage #531 Wizard", () => {
-  it("DRAFT のとき「次のアクション」 Alert で Deploy を案内するべき", async () => {
+  it("should guide to Deploy via the 'next action' Alert when status=DRAFT", async () => {
     mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "DRAFT" });
     renderPage();
     await waitFor(() => expect(screen.getAllByText(/Test Event/).length).toBeGreaterThan(0));
@@ -88,21 +88,21 @@ describe("EventDetailPage #531 Wizard", () => {
     expect(alert).toBeInTheDocument();
   });
 
-  it("READY + startsAt なしのとき開始時刻設定を案内するべき", async () => {
+  it("should guide to setting start time when READY without startsAt", async () => {
     mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "READY", startsAt: undefined });
     renderPage();
     const alert = await screen.findByText(/競技開始時刻を設定/);
     expect(alert).toBeInTheDocument();
   });
 
-  it("ENDED のとき Bulk Teardown (Delete) を案内するべき", async () => {
+  it("should guide to Bulk Teardown (Delete) when status=ENDED", async () => {
     mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "ENDED" });
     renderPage();
     const alert = await screen.findByText(/「Delete」 で全 deployment/);
     expect(alert).toBeInTheDocument();
   });
 
-  it("Wizard StepIndicator は 5 段のラベル (作成 / Deploy / 開始時刻設定 / 競技中 / 終了) を表示すべき", async () => {
+  it("should display Wizard StepIndicator with 5 labels (create / Deploy / set start time / in competition / end)", async () => {
     mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "DRAFT" });
     renderPage();
     await waitFor(() => expect(screen.getAllByText(/Test Event/).length).toBeGreaterThan(0));

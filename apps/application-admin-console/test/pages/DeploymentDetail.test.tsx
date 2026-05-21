@@ -89,8 +89,8 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("DeploymentDetailPage (Netlify 風 phase + log view)", () => {
-  it("deployment status=COMPLETE のとき 5 phase が全部 Complete (or Skipped) で表示されるべき", async () => {
+describe("DeploymentDetailPage (Netlify-style phase + log view)", () => {
+  it("should show all 5 phases as Complete (or Skipped) when deployment status=COMPLETE", async () => {
     mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "COMPLETE" });
     mocks.getStackProgress.mockResolvedValue({
       ...emptyProgress,
@@ -114,7 +114,7 @@ describe("DeploymentDetailPage (Netlify 風 phase + log view)", () => {
     await waitFor(() => expect(mocks.getDeployment).toHaveBeenCalled());
     await screen.findByTestId("phase-enqueued");
 
-    // 5 phase が表示されているべき
+    // all 5 phases should be displayed
     for (const id of ["enqueued", "building", "cfn-deploy", "health-check", "complete"]) {
       expect(screen.getByTestId(`phase-${id}`)).toBeInTheDocument();
     }
@@ -136,7 +136,7 @@ describe("DeploymentDetailPage (Netlify 風 phase + log view)", () => {
     expect(completePhase.getByText("Complete")).toBeInTheDocument();
   });
 
-  it("deployment status=FAILED のとき Building / CloudFormation Deploy phase が Failed で表示されるべき", async () => {
+  it("should show Building / CloudFormation Deploy phase as Failed when deployment status=FAILED", async () => {
     mocks.getDeployment.mockResolvedValue({
       ...baseDeployment,
       status: "FAILED",
@@ -159,7 +159,7 @@ describe("DeploymentDetailPage (Netlify 風 phase + log view)", () => {
     expect(screen.getAllByText(/CodeBuild failed/).length).toBeGreaterThan(0);
   });
 
-  it("deployment status=IN_PROGRESS のとき 該当 phase が In Progress で表示されるべき", async () => {
+  it("should show the relevant phase as In Progress when deployment status=IN_PROGRESS", async () => {
     mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "IN_PROGRESS" });
     mocks.getStackProgress.mockResolvedValue({
       ...emptyProgress,
@@ -179,7 +179,7 @@ describe("DeploymentDetailPage (Netlify 風 phase + log view)", () => {
     expect(cfn.getByText("In Progress")).toBeInTheDocument();
   });
 
-  it("stackEvents が空のとき CloudFormation Deploy phase は Pending で表示されるべき", async () => {
+  it("should show CloudFormation Deploy phase as Pending when stackEvents is empty", async () => {
     mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "IN_PROGRESS" });
     mocks.getStackProgress.mockResolvedValue(emptyProgress);
     renderPage();
@@ -188,7 +188,7 @@ describe("DeploymentDetailPage (Netlify 風 phase + log view)", () => {
     expect(cfn.getByText("Pending")).toBeInTheDocument();
   });
 
-  it("stackProgress に stuck 診断があると原因要約と復旧ヒントを表示すべき", async () => {
+  it("should show cause summary and remediation hint when stackProgress contains stuck diagnosis", async () => {
     mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "IN_PROGRESS" });
     mocks.getStackProgress.mockResolvedValue({
       ...emptyProgress,
@@ -222,7 +222,7 @@ describe("DeploymentDetailPage (Netlify 風 phase + log view)", () => {
     expect(screen.getAllByText(/WebServer/).length).toBeGreaterThan(0);
   });
 
-  it("Maximize log button を押すと modal が開いて terminal-style log が表示されるべき", async () => {
+  it("should open modal and display terminal-style log when Maximize log button is pressed", async () => {
     mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "IN_PROGRESS" });
     mocks.getStackProgress.mockResolvedValue({
       ...emptyProgress,
@@ -249,7 +249,7 @@ describe("DeploymentDetailPage (Netlify 風 phase + log view)", () => {
     expect(within(terminalLog).getByText(/CREATE_IN_PROGRESS MyBucket/)).toBeInTheDocument();
   });
 
-  it("consoleUrl があるとき Building phase 内に CodeBuild console link が出るべき", async () => {
+  it("should show CodeBuild console link inside Building phase when consoleUrl is present", async () => {
     mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "IN_PROGRESS" });
     mocks.getStackProgress.mockResolvedValue({
       ...emptyProgress,

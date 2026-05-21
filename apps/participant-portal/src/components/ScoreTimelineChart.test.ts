@@ -3,7 +3,7 @@ import type { TeamScoreEvents } from "../api/portal-client";
 import { buildCumulativePoints, toScoreTimelineLoadError } from "./ScoreTimelineChart";
 
 describe("ScoreTimelineChart helpers", () => {
-  it("score events を累積 point に変換し invalid timestamp は除外すべき", () => {
+  it("should convert score events into cumulative points and exclude invalid timestamps", () => {
     const team: TeamScoreEvents = {
       teamId: "team-a",
       teamName: "Team A",
@@ -43,7 +43,7 @@ describe("ScoreTimelineChart helpers", () => {
     expect(points[0]?.x.toISOString()).toBe("2026-05-20T10:00:00.000Z");
   });
 
-  it("AbortError は skip、それ以外は error message に変換すべき", () => {
+  it("should skip AbortError and convert other errors into an error message", () => {
     const abort = new Error("aborted");
     abort.name = "AbortError";
 

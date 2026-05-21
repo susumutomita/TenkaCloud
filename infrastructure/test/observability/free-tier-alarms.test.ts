@@ -22,7 +22,7 @@ function buildStack() {
 }
 
 describe("FreeTierAlarms (#952 cost guardrails)", () => {
-  it("Lambda 2 個 + DDB 1 個なら計 6 個の Alarm を生成すべき (Lambda invocations + Lambda errors + DDB read/write)", () => {
+  it("should generate 6 Alarms for 2 Lambdas + 1 DDB table (Lambda invocations + Lambda errors + DDB read/write)", () => {
     const { stack, topic } = buildStack();
     new FreeTierAlarms(stack, "Alarms", {
       notificationTopic: topic,
@@ -70,7 +70,7 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
     });
   });
 
-  it("各 Alarm は SNS topic action を持つべき", () => {
+  it("each Alarm should have an SNS topic action", () => {
     const { stack, topic } = buildStack();
     new FreeTierAlarms(stack, "Alarms", {
       notificationTopic: topic,
@@ -84,7 +84,7 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
     expect(Array.isArray(first?.Properties?.AlarmActions)).toBe(true);
   });
 
-  it("override threshold が反映されるべき", () => {
+  it("override threshold should be applied", () => {
     const { stack, topic } = buildStack();
     new FreeTierAlarms(stack, "Alarms", {
       notificationTopic: topic,
@@ -104,7 +104,7 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
     });
   });
 
-  it("英数以外を含む resource 名 (= dot / hyphen) でも logical ID 衝突しないべき", () => {
+  it("should not collide on logical IDs even for resource names containing non-alphanumerics (dot / hyphen)", () => {
     const { stack, topic } = buildStack();
     new FreeTierAlarms(stack, "Alarms", {
       notificationTopic: topic,
@@ -116,7 +116,7 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
     tpl.resourceCountIs("AWS::CloudWatch::Alarm", 4);
   });
 
-  it("#1080: Lambda errors alarm を立てるべき (metric=Errors / threshold=default 50)", () => {
+  it("#1080: should provision a Lambda errors alarm (metric=Errors / threshold=default 50)", () => {
     const { stack, topic } = buildStack();
     new FreeTierAlarms(stack, "Alarms", {
       notificationTopic: topic,
@@ -132,7 +132,7 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
     });
   });
 
-  it("#1080: API Gateway 5XX alarm を HTTP / REST 両方に立てるべき", () => {
+  it("#1080: should provision an API Gateway 5XX alarm for both HTTP and REST APIs", () => {
     const { stack, topic } = buildStack();
     new FreeTierAlarms(stack, "Alarms", {
       notificationTopic: topic,

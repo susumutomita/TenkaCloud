@@ -27,7 +27,7 @@ import {
 const REPO_ROOT = new URL("../../../", import.meta.url).pathname;
 
 describe("check-template-cfn-refs script (#951 sub-2)", () => {
-  it("既存 5 問題 template は全 pass するべき (= smoke test)", () => {
+  it("all 5 existing problem templates should pass (smoke test)", () => {
     const result = spawnSync("bun", ["run", "scripts/check-template-cfn-refs.ts"], {
       cwd: REPO_ROOT,
       encoding: "utf-8",
@@ -101,7 +101,7 @@ Outputs:
 });
 
 describe("check-template-cfn-refs unit (= 抽出した helper の挙動を pin)", () => {
-  it("parseSections: Resources / Parameters / Outputs を分離して name を集めるべき", () => {
+  it("parseSections: should separate Resources / Parameters / Outputs and collect names", () => {
     const yaml = `AWSTemplateFormatVersion: "2010-09-09"
 Parameters:
   NamePrefix:
@@ -123,7 +123,7 @@ Outputs:
     expect([...sections.outputs].sort()).toEqual(["RoleArn"]);
   });
 
-  it("parseSections: 他の top-level section (Conditions 等) に入ったら currentSection を抜けるべき", () => {
+  it("parseSections: should exit currentSection on entering other top-level sections (e.g. Conditions)", () => {
     const yaml = `Resources:
   A:
     Type: AWS::Foo
@@ -137,7 +137,7 @@ Resources:
     expect([...sections.resources].sort()).toEqual(["A", "B"]);
   });
 
-  it("collectRefs: !Ref shortform と Ref: longform の両方を拾うべき", () => {
+  it("collectRefs: should pick up both !Ref shortform and Ref: longform", () => {
     const yaml = `Resources:
   A:
     Properties:
@@ -148,7 +148,7 @@ Resources:
     expect(collectRefs(yaml).sort()).toEqual(["ExternalId", "NamePrefix"]);
   });
 
-  it("collectGetAttResources: !GetAtt と Fn::GetAtt の両方を拾うべき", () => {
+  it("collectGetAttResources: should pick up both !GetAtt and Fn::GetAtt", () => {
     const yaml = `Resources:
   Out:
     Value: !GetAtt Role.Arn
@@ -159,7 +159,7 @@ Resources:
     expect(collectGetAttResources(yaml).sort()).toEqual(["Bucket", "Role"]);
   });
 
-  it("collectSubRefs: \\${Var} は ref、 \\${X.Y} は getAtt、 \\${!Literal} は無視すべき", () => {
+  it("collectSubRefs: should treat \\${Var} as ref, \\${X.Y} as getAtt, and ignore \\${!Literal}", () => {
     const yaml = `Foo: !Sub "\${NamePrefix}-suffix"
 Bar: !Sub "arn:\${AWS::Partition}:s3:::bucket"
 Baz: !Sub "arn:s3:::\${Role.Arn}"

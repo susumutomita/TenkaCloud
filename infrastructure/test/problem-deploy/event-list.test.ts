@@ -23,7 +23,7 @@ function buildShared(): {
 describe("listEvents", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("GSI1 (TENANT#) を新しい順で query するべき", async () => {
+  it("should query GSI1 (TENANT#) in newest-first order", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [
@@ -57,7 +57,7 @@ describe("listEvents", () => {
     });
   });
 
-  it("LastEvaluatedKey があれば nextCursor を base64url で返すべき", async () => {
+  it("should return nextCursor as base64url when LastEvaluatedKey is present", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Items: [],
@@ -74,7 +74,7 @@ describe("listEvents", () => {
 describe("getEventDetail", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("正常系: Event + Teams を返し teamLoginKey も含むべき (詳細経路は露出する)", async () => {
+  it("normal case: should return Event + Teams including teamLoginKey (detail path exposes it)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: {
@@ -128,7 +128,7 @@ describe("getEventDetail", () => {
     expect(deploymentsQuery.input.ExpressionAttributeValues?.[":pk"]).toBe("TENANT#tenant-acme");
   });
 
-  it("競技者が portal で設定した displayTeamName を Deployments から merge するべき", async () => {
+  it("should merge displayTeamName set by participants in the portal from Deployments", async () => {
     // ADR-004 Phase 2c 統合ギャップの再発防止。participant の PATCH /portal/me は
     // DeploymentsTable のみ書き込む (TeamsTable には書けない) ため、operator 側 read で
     // merge する必要がある。
@@ -174,7 +174,7 @@ describe("getEventDetail", () => {
     expect(JSON.stringify(out)).not.toContain("leak-from-other-event");
   });
 
-  it("Event 行が無ければ undefined を返し teams 結果を漏らさないべき", async () => {
+  it("should return undefined and not leak team results when the Event row is missing", async () => {
     // Get と Query は Promise.all で並列発火するため、Event 不在でも teams query
     // 自体は走る (空 partition なので 1 RCU 程度)。重要なのは結果が caller に返らないこと。
     const { shared, ddbSend } = buildShared();
@@ -188,7 +188,7 @@ describe("getEventDetail", () => {
     expect(out).toBeUndefined();
   });
 
-  it("tenantId 不一致は undefined を返し teams 結果を漏らさないべき (クロステナント漏洩防止)", async () => {
+  it("should return undefined and not leak team results on tenantId mismatch (cross-tenant leak guard)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: {
@@ -206,7 +206,7 @@ describe("getEventDetail", () => {
     expect(out).toBeUndefined();
   });
 
-  it("Deployments の問題ごと jobId / teamId / status を deploymentsByProblem にまとめるべき", async () => {
+  it("should group per-problem jobId / teamId / status from Deployments into deploymentsByProblem", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: {
@@ -280,7 +280,7 @@ describe("getEventDetail", () => {
     expect(out?.deploymentsByProblem).toEqual({});
   });
 
-  it("不明な status 値の deployment 行は deploymentsByProblem から除外するべき (防御的)", async () => {
+  it("should exclude deployment rows with unknown status values from deploymentsByProblem (defensive)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: {

@@ -49,14 +49,14 @@ function buildInput(
 }
 
 describe("attack-detection kind", () => {
-  it("初回 tick (= prev 未設定) は baseline 記録のみで加点しないべき", () => {
+  it("first tick (prev unset) should only record baseline without awarding", () => {
     const result = runAttackDetectionKind(buildInput("5", undefined));
     expect(result.scoreDelta).toBe(0);
     expect(result.scoreEvents).toEqual([]);
     expect(result.newState).toEqual({ attackCount: 5 });
   });
 
-  it("counter が増えていれば差分 × pointsPerAttack を加点すべき", () => {
+  it("should award delta × pointsPerAttack when the counter increases", () => {
     // prev=5, current=8 → delta=3、 3 × 50 = 150 加点
     const result = runAttackDetectionKind(buildInput("8", 5));
     expect(result.scoreDelta).toBe(150);
@@ -64,44 +64,44 @@ describe("attack-detection kind", () => {
     expect(result.newState).toEqual({ attackCount: 8 });
   });
 
-  it("counter が変化なし (= 攻撃が止まっている) なら加点 0、 baseline は維持すべき", () => {
+  it("should award 0 and keep the baseline when the counter is unchanged (attack stopped)", () => {
     const result = runAttackDetectionKind(buildInput("5", 5));
     expect(result.scoreDelta).toBe(0);
     expect(result.scoreEvents).toEqual([]);
     expect(result.newState).toEqual({ attackCount: 5 });
   });
 
-  it("counter が巻き戻った場合は加点 0、 baseline を新値に追従すべき", () => {
+  it("should award 0 and follow the new baseline when the counter rewinds", () => {
     // prev=10, current=3 (reset?) → 加点なし、 baseline=3
     const result = runAttackDetectionKind(buildInput("3", 10));
     expect(result.scoreDelta).toBe(0);
     expect(result.newState).toEqual({ attackCount: 3 });
   });
 
-  it("statsOutputKey が stackOutputs に無いと noop になるべき (= deploy 未完了 / output 不在)", () => {
+  it("should noop when statsOutputKey is missing from stackOutputs (deploy not yet complete / output absent)", () => {
     const result = runAttackDetectionKind(buildInput(undefined, undefined));
     expect(result.scoreDelta).toBe(0);
     expect(result.scoreEvents).toEqual([]);
     expect(result.newState).toBeUndefined();
   });
 
-  it("counter が数値以外なら noop になるべき (= 不正データ防御)", () => {
+  it("should noop when counter is non-numeric (invalid-data guard)", () => {
     const result = runAttackDetectionKind(buildInput("not-a-number", 5));
     expect(result.scoreDelta).toBe(0);
   });
 
-  it("counter が負値なら noop になるべき (= 不正データ防御)", () => {
+  it("should noop when counter is negative (invalid-data guard)", () => {
     const result = runAttackDetectionKind(buildInput("-1", 0));
     expect(result.scoreDelta).toBe(0);
   });
 
-  it("counter が空文字なら noop になるべき (= Number('') = 0 で baseline 汚染防止)", () => {
+  it("should noop when counter is empty (Number('') = 0 baseline pollution guard)", () => {
     const result = runAttackDetectionKind(buildInput("", 5));
     expect(result.scoreDelta).toBe(0);
     expect(result.newState).toBeUndefined();
   });
 
-  it("counter が小数なら noop になるべき (= 不正データ防御)", () => {
+  it("should noop when counter is a decimal (invalid-data guard)", () => {
     const result = runAttackDetectionKind(buildInput("1.5", 1));
     expect(result.scoreDelta).toBe(0);
   });

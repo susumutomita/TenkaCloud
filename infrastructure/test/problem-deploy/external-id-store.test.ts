@@ -19,7 +19,7 @@ function buildDeps(): { deps: ExternalIdStoreDeps; ssmSend: ReturnType<typeof vi
 }
 
 describe("getExternalIdWithVersion", () => {
-  it("Value + Version をペアで返すべき", async () => {
+  it("should return Value + Version as a pair", async () => {
     const { deps, ssmSend } = buildDeps();
     ssmSend.mockResolvedValueOnce({
       Parameter: { Value: "current-external-id", Version: 7 },
@@ -32,14 +32,14 @@ describe("getExternalIdWithVersion", () => {
     expect(cmd.input.WithDecryption).toBe(true);
   });
 
-  it("ParameterNotFound なら undefined を返すべき", async () => {
+  it("should return undefined on ParameterNotFound", async () => {
     const { deps, ssmSend } = buildDeps();
     ssmSend.mockRejectedValueOnce(Object.assign(new Error("nope"), { name: "ParameterNotFound" }));
     const out = await getExternalIdWithVersion(deps, "tenant-acme");
     expect(out).toBeUndefined();
   });
 
-  it("Value または Version が欠落していれば undefined を返すべき", async () => {
+  it("should return undefined when Value or Version is missing", async () => {
     const { deps, ssmSend } = buildDeps();
     ssmSend.mockResolvedValueOnce({ Parameter: { Value: "only-value" } });
     const out = await getExternalIdWithVersion(deps, "tenant-acme");
@@ -48,7 +48,7 @@ describe("getExternalIdWithVersion", () => {
 });
 
 describe("getExternalIdByVersion", () => {
-  it("Name に `:<version>` を付けて旧 version を取得するべき", async () => {
+  it("should fetch a previous version by appending `:<version>` to Name", async () => {
     const { deps, ssmSend } = buildDeps();
     ssmSend.mockResolvedValueOnce({ Parameter: { Value: "old-external-id" } });
     const value = await getExternalIdByVersion(deps, "tenant-acme", 6);
@@ -58,21 +58,21 @@ describe("getExternalIdByVersion", () => {
     expect(cmd.input.WithDecryption).toBe(true);
   });
 
-  it("version が 0 以下なら SSM を叩かず undefined を返すべき (= rotate 未経験 / 1 generation back 不存在)", async () => {
+  it("should return undefined without hitting SSM when version <= 0 (no rotation yet / no 1-generation-back)", async () => {
     const { deps, ssmSend } = buildDeps();
     expect(await getExternalIdByVersion(deps, "tenant-acme", 0)).toBeUndefined();
     expect(await getExternalIdByVersion(deps, "tenant-acme", -1)).toBeUndefined();
     expect(ssmSend).not.toHaveBeenCalled();
   });
 
-  it("ParameterNotFound なら undefined を返すべき", async () => {
+  it("should return undefined on ParameterNotFound", async () => {
     const { deps, ssmSend } = buildDeps();
     ssmSend.mockRejectedValueOnce(Object.assign(new Error("nope"), { name: "ParameterNotFound" }));
     const value = await getExternalIdByVersion(deps, "tenant-acme", 6);
     expect(value).toBeUndefined();
   });
 
-  it("ParameterVersionNotFound (= 100 version cap で auto-drop 済) も undefined を返すべき", async () => {
+  it("should also return undefined on ParameterVersionNotFound (auto-dropped at the 100-version cap)", async () => {
     const { deps, ssmSend } = buildDeps();
     ssmSend.mockRejectedValueOnce(
       Object.assign(new Error("version dropped"), { name: "ParameterVersionNotFound" }),
@@ -81,7 +81,7 @@ describe("getExternalIdByVersion", () => {
     expect(value).toBeUndefined();
   });
 
-  it("その他 error は再 throw するべき (= 握り潰し fallback 禁止)", async () => {
+  it("should re-throw other errors (no swallowing fallbacks)", async () => {
     const { deps, ssmSend } = buildDeps();
     ssmSend.mockRejectedValueOnce(Object.assign(new Error("throttled"), { name: "Throttling" }));
     await expect(getExternalIdByVersion(deps, "tenant-acme", 6)).rejects.toThrow("throttled");

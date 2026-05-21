@@ -9,29 +9,29 @@ afterEach(() => localStorage.clear());
 
 describe("notifications-storage", () => {
   describe("loadLastSeenAt / saveLastSeenAt", () => {
-    it("初期状態では null を返すべき", () => {
+    it("should return null in initial state", () => {
       expect(loadLastSeenAt(EV_A)).toBeNull();
     });
 
-    it("saveSession した値を loadSession で取り出せる", () => {
+    it("should retrieve a saved value via loadSession", () => {
       saveLastSeenAt(EV_A, "2026-05-10T14:00:00.000Z");
       expect(loadLastSeenAt(EV_A)).toBe("2026-05-10T14:00:00.000Z");
     });
 
-    it("古い値で上書きしようとしても巻き戻さない (= max 採用)", () => {
+    it("should not roll back when trying to overwrite with an older value (= max wins)", () => {
       saveLastSeenAt(EV_A, "2026-05-10T14:00:00.000Z");
       saveLastSeenAt(EV_A, "2026-05-10T13:00:00.000Z");
       expect(localStorage.getItem(`${KEY_PREFIX}:${EV_A}`)).toBe("2026-05-10T14:00:00.000Z");
     });
 
-    it("空文字 / 空 eventId は無視するべき (graceful)", () => {
+    it("should ignore empty string / empty eventId (graceful)", () => {
       saveLastSeenAt(EV_A, "");
       expect(loadLastSeenAt(EV_A)).toBeNull();
       saveLastSeenAt("", "2026-05-10T14:00:00.000Z");
       expect(loadLastSeenAt("")).toBeNull();
     });
 
-    it("eventId ごとに独立した key で保存される (event 跨ぎで silent 既読化しない)", () => {
+    it("should store under an independent key per eventId (no silent read-marking across events)", () => {
       saveLastSeenAt(EV_A, "2026-05-10T14:00:00.000Z");
       // 別 event は影響を受けない
       expect(loadLastSeenAt(EV_B)).toBeNull();
@@ -48,19 +48,19 @@ describe("notifications-storage", () => {
       { occurredAt: "2026-05-10T12:00:00.000Z" },
     ];
 
-    it("lastSeen が null なら全件未読", () => {
+    it("should mark all items unread when lastSeen is null", () => {
       expect(countUnread(items, null)).toBe(3);
     });
 
-    it("lastSeen より新しい行のみ未読", () => {
+    it("should mark only rows newer than lastSeen as unread", () => {
       expect(countUnread(items, "2026-05-10T13:30:00.000Z")).toBe(1);
     });
 
-    it("lastSeen が最新と同値なら未読 0", () => {
+    it("should return 0 unread when lastSeen equals the latest item", () => {
       expect(countUnread(items, "2026-05-10T14:00:00.000Z")).toBe(0);
     });
 
-    it("空配列なら 0", () => {
+    it("should return 0 for an empty array", () => {
       expect(countUnread([], null)).toBe(0);
     });
   });

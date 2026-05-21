@@ -67,7 +67,7 @@ const sampleRow = (over: Record<string, unknown> = {}) => ({
 describe("requestTeardown", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("正常系: status を DELETING に書き換えて DeployDeleteRequested を publish するべき", async () => {
+  it("normal case: should rewrite status to DELETING and publish DeployDeleteRequested", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow() });
     ddbSend.mockResolvedValueOnce({});
@@ -101,7 +101,7 @@ describe("requestTeardown", () => {
     });
   });
 
-  it("stackId (ARN) があれば namePrefix ではなく ARN を stackName として publish するべき", async () => {
+  it("should publish the ARN as stackName instead of namePrefix when stackId (ARN) is present", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: sampleRow({
@@ -123,7 +123,7 @@ describe("requestTeardown", () => {
     );
   });
 
-  it("行が無ければ not_found を返し Update / PutEvents を呼ばないべき", async () => {
+  it("should return not_found without calling Update / PutEvents when the row is missing", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: undefined });
 
@@ -133,7 +133,7 @@ describe("requestTeardown", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("tenantId 不一致は not_found 扱いで存在を漏らさないべき", async () => {
+  it("should treat tenantId mismatch as not_found and not leak existence", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow({ tenantId: "tenant-other" }) });
 
@@ -142,7 +142,7 @@ describe("requestTeardown", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("既に DELETING / DELETED なら already_deleted を返すべき (no-op)", async () => {
+  it("should return already_deleted when already DELETING / DELETED (no-op)", async () => {
     for (const status of ["DELETING", "DELETED"]) {
       const { shared, ddbSend, eventsSend } = buildShared();
       ddbSend.mockResolvedValueOnce({ Item: sampleRow({ status }) });
@@ -154,7 +154,7 @@ describe("requestTeardown", () => {
     }
   });
 
-  it("ConditionalCheckFailed は race として返すべき (並行 update に負けたケース)", async () => {
+  it("should return race on ConditionalCheckFailed (lost concurrent update)", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow() });
     ddbSend.mockImplementationOnce(async (cmd) => {
@@ -171,7 +171,7 @@ describe("requestTeardown", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("region / awsAccountId / stackName が欠けていれば missing_required_fields を欠損 fields 付きで返すべき", async () => {
+  it("should return missing_required_fields with the missing fields when region / awsAccountId / stackName are absent", async () => {
     // race (= 並行 update に負けた) と区別する: corruption (DDB データ欠損) は
     // operator が watch する別の運用シグナルなので別 reason として返す。
     const { shared, ddbSend, eventsSend } = buildShared();
@@ -193,7 +193,7 @@ describe("requestTeardown", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("publishProblemEvent が失敗したら status を FAILED に compensating update して例外を伝播するべき", async () => {
+  it("should compensating-update status to FAILED and propagate the exception when publishProblemEvent fails", async () => {
     // DELETING のまま放置すると、次の呼び出しが already_deleted で no-op を返し
     // CFn stack が orphan 化するため、publish 失敗時は status を巻き戻す。
     const { shared, ddbSend, eventsSend } = buildShared();
@@ -220,7 +220,7 @@ describe("requestTeardown", () => {
     );
   });
 
-  it("最初の GetItem は PK=DEPLOYMENT#<jobId> SK=META を引くべき", async () => {
+  it("the first GetItem should hit PK=DEPLOYMENT#<jobId> SK=META", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow({ jobId: "JOB42" }) });
     ddbSend.mockResolvedValueOnce({});

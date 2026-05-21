@@ -37,7 +37,7 @@ function asJsonString(definitionString: unknown): string {
 }
 
 describe("BulkDeployCreateStateMachine", () => {
-  it("Distributed Map state を含むべき (= Standard Map ではない、 750 batch のため)", () => {
+  it("should include a Distributed Map state (not Standard Map; for 750 batch)", () => {
     const { template } = buildStack();
     const sm = Object.values(template.findResources("AWS::StepFunctions::StateMachine")).find(
       (r) => {
@@ -53,7 +53,7 @@ describe("BulkDeployCreateStateMachine", () => {
     expect(def).toContain('"ExecutionType":"STANDARD"');
   });
 
-  it("MaxConcurrency が ADR-001 §3 で fix された 50 であるべき", () => {
+  it("MaxConcurrency should be fixed at 50 per ADR-001 §3", () => {
     const { template } = buildStack();
     const sm = Object.values(template.findResources("AWS::StepFunctions::StateMachine")).find(
       (r) => {
@@ -81,7 +81,7 @@ describe("BulkDeployCreateStateMachine", () => {
     expect(def).toContain('"InputType":"JSON"');
   });
 
-  it("S3 Bucket への Read 権限が State Machine Role に付くべき", () => {
+  it("should attach S3 Bucket Read permissions to the State Machine Role", () => {
     const { template } = buildStack();
     // IAM policy で s3:GetObject + s3:ListBucket が付く
     template.hasResourceProperties(
@@ -98,7 +98,7 @@ describe("BulkDeployCreateStateMachine", () => {
     );
   });
 
-  it("Child State Machine の StartExecution 権限が付くべき", () => {
+  it("should attach StartExecution permission to the Child State Machine", () => {
     const { template } = buildStack();
     template.hasResourceProperties(
       "AWS::IAM::Policy",

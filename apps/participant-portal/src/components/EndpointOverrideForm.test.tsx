@@ -55,7 +55,7 @@ const baseProps = {
 };
 
 describe("EndpointOverrideForm (Issue #607)", () => {
-  it("mount 時に listProblemEndpoints を呼んで結果を render すべき", async () => {
+  it("should call listProblemEndpoints on mount and render the result", async () => {
     mockList.mockResolvedValue({
       teamId: "t1",
       endpoints: [
@@ -74,7 +74,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
     expect(mockList).toHaveBeenCalledWith("https://api.x", "k", "p1");
   });
 
-  it("overridable=false の slot は登録 form を出さず注記を出すべき", async () => {
+  it("should not render the registration form and instead show a note for slots with overridable=false", async () => {
     mockList.mockResolvedValue({
       teamId: "t1",
       endpoints: [
@@ -92,7 +92,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
     expect(screen.queryByRole("button", { name: "登録" })).not.toBeInTheDocument();
   });
 
-  it("endpoints が空配列なら section ごと render しないべき", async () => {
+  it("should not render the section at all when endpoints is empty", async () => {
     mockList.mockResolvedValue({ teamId: "t1", endpoints: [] });
     const { container } = render(withI18n(<EndpointOverrideForm {...baseProps} />));
     await waitFor(() => expect(mockList).toHaveBeenCalled());
@@ -100,7 +100,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
     expect(container.textContent).not.toContain("Endpoint 登録");
   });
 
-  it("#703: effectiveUrl 未取得 (= deploy 未完) なら raw `-` ではなく CFn Output key 名入りの hint を出すべき", async () => {
+  it("#703: should show a hint including the CFn Output key name instead of raw `-` when effectiveUrl is not yet available (= deploy not complete)", async () => {
     mockList.mockResolvedValue({
       teamId: "t1",
       endpoints: [
@@ -122,7 +122,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
     expect(screen.getByText(/まだ取得できていません/)).toBeInTheDocument();
   });
 
-  it("登録ボタンで putProblemEndpointOverride を呼び、 response の endpoints で再描画すべき", async () => {
+  it("should call putProblemEndpointOverride on the register button and re-render with response endpoints", async () => {
     const user = userEvent.setup();
     mockList.mockResolvedValue({
       teamId: "t1",
@@ -167,7 +167,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
     await waitFor(() => expect(screen.getByText("https://lambda.example/")).toBeInTheDocument());
   });
 
-  it("invalid_url の PortalValidationError は競技者向け日本語 inline error を出すべき", async () => {
+  it("should show a competitor-facing Japanese inline error for PortalValidationError with invalid_url", async () => {
     const user = userEvent.setup();
     mockList.mockResolvedValue({
       teamId: "t1",
@@ -184,7 +184,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
     await waitFor(() => expect(screen.getByText(/URL の形式が不正です/)).toBeInTheDocument());
   });
 
-  it("override 解除ボタンで deleteProblemEndpointOverride を呼ぶべき", async () => {
+  it("should call deleteProblemEndpointOverride when the override-clear button is pressed", async () => {
     const user = userEvent.setup();
     mockList.mockResolvedValue({
       teamId: "t1",
@@ -219,7 +219,7 @@ describe("EndpointOverrideForm (Issue #607)", () => {
     );
   });
 
-  it("空文字を登録しようとしたら API を呼ばず inline error を出すべき", async () => {
+  it("should not call the API and show an inline error when trying to register an empty string", async () => {
     const user = userEvent.setup();
     mockList.mockResolvedValue({
       teamId: "t1",

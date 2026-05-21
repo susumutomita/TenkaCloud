@@ -75,7 +75,7 @@ function sampleUptimeDeployment(over: Record<string, unknown> = {}) {
 }
 
 describe("generic scoring dispatcher: hello-world-battle (= legacy uptime) 挙動 preservation", () => {
-  it("scoring=uptime + 全 endpoint 200 で +100 加点し score-event を 1 件書くべき", async () => {
+  it("should award +100 and write 1 score-event when scoring=uptime + all endpoints return 200", async () => {
     process.env.BATTLE_PROBLEMS_SCORING = JSON.stringify({
       "hello-world-battle": {
         kind: "uptime",
@@ -144,7 +144,7 @@ describe("generic scoring dispatcher: hello-world-battle (= legacy uptime) 挙�
     expect(putCalls.length).toBe(1);
   });
 
-  it("scoring 設定が無い problemId は skip すべき (= 採点無効)", async () => {
+  it("should skip problemIds without scoring config (scoring disabled)", async () => {
     process.env.BATTLE_PROBLEMS_SCORING = JSON.stringify({});
     process.env.PROBLEM_ENDPOINTS = JSON.stringify({});
     process.env.BATTLE_PROBLEMS_PHASES = JSON.stringify({});
@@ -179,7 +179,7 @@ describe("generic scoring dispatcher: hello-world-battle (= legacy uptime) 挙�
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("kind=flag は polling では skip し fetch しないべき", async () => {
+  it("should skip and not fetch for kind=flag during polling", async () => {
     process.env.BATTLE_PROBLEMS_SCORING = JSON.stringify({
       "hello-world": { kind: "flag", flagOutputKey: "X", points: 100 },
     });
@@ -210,7 +210,7 @@ describe("generic scoring dispatcher: hello-world-battle (= legacy uptime) 挙�
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("scoringLocked=true な event は採点を skip すべき (#558 fail-closed)", async () => {
+  it("should skip scoring for events with scoringLocked=true (#558 fail-closed)", async () => {
     process.env.BATTLE_PROBLEMS_SCORING = JSON.stringify({
       "hello-world-battle": {
         kind: "uptime",

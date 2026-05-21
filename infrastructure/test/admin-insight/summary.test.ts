@@ -14,7 +14,7 @@ function buildShared(send: ReturnType<typeof vi.fn>) {
 describe("summarizeTenants", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("単一 tenant: active/failed deploy + total events を正しく集計するべき", async () => {
+  it("single tenant: should correctly aggregate active/failed deploy + total events", async () => {
     const send = vi.fn().mockImplementation(async (cmd: QueryCommand) => {
       const tableName = cmd.input.TableName;
       if (tableName === "TestDeployments") {
@@ -45,7 +45,7 @@ describe("summarizeTenants", () => {
     });
   });
 
-  it("重複 tenantId は 1 度しか query しないべき", async () => {
+  it("should query duplicate tenantIds only once", async () => {
     const send = vi.fn().mockResolvedValue({ Items: [], Count: 0 });
     const shared = buildShared(send);
     await summarizeTenants(shared, ["tenant-a", "tenant-a", "tenant-a"]);
@@ -54,14 +54,14 @@ describe("summarizeTenants", () => {
     expect(send).toHaveBeenCalledTimes(2);
   });
 
-  it("結果順は入力順 (重複除去後) を保つべき", async () => {
+  it("should preserve input order (after dedupe) in results", async () => {
     const send = vi.fn().mockResolvedValue({ Items: [], Count: 0 });
     const shared = buildShared(send);
     const result = await summarizeTenants(shared, ["tenant-c", "tenant-a", "tenant-b"]);
     expect(result.items.map((i) => i.tenantId)).toEqual(["tenant-c", "tenant-a", "tenant-b"]);
   });
 
-  it("空 tenantIds で空 items を返すべき (DDB を叩かない)", async () => {
+  it("should return empty items for empty tenantIds (no DDB call)", async () => {
     const send = vi.fn();
     const shared = buildShared(send);
     const result = await summarizeTenants(shared, []);
@@ -69,7 +69,7 @@ describe("summarizeTenants", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("page 跨ぎ (LastEvaluatedKey) があれば全 page 集計するべき", async () => {
+  it("should aggregate across all pages when LastEvaluatedKey indicates more pages", async () => {
     let deployCall = 0;
     const send = vi.fn().mockImplementation(async (cmd: QueryCommand) => {
       const tableName = cmd.input.TableName;
@@ -94,7 +94,7 @@ describe("summarizeTenants", () => {
     });
   });
 
-  it("Deployments query は GSI1 + TENANT#<id> partition key を使うべき", async () => {
+  it("Deployments query should use GSI1 + TENANT#<id> partition key", async () => {
     const send = vi.fn().mockResolvedValue({ Items: [], Count: 0 });
     const shared = buildShared(send);
     await summarizeTenants(shared, ["tenant-acme"]);
@@ -106,7 +106,7 @@ describe("summarizeTenants", () => {
     expect(deployQuery?.input.ExpressionAttributeValues?.[":pk"]).toBe("TENANT#tenant-acme");
   });
 
-  it("Events query は Select=COUNT で payload を最小化するべき", async () => {
+  it("Events query should minimize payload via Select=COUNT", async () => {
     const send = vi.fn().mockResolvedValue({ Items: [], Count: 0 });
     const shared = buildShared(send);
     await summarizeTenants(shared, ["tenant-acme"]);

@@ -4,7 +4,7 @@ import { computeEventWizardState, WIZARD_STEPS } from "../../src/lib/event-wizar
 const NOW_MS = new Date("2026-05-11T12:00:00Z").getTime();
 
 describe("computeEventWizardState", () => {
-  it("DRAFT のとき primary=deploy で「Deploy を押せ」を CTA に出すべき", () => {
+  it("should set primary=deploy with a 'press Deploy' CTA when status=DRAFT", () => {
     const out = computeEventWizardState({ status: "DRAFT" }, NOW_MS);
     expect(out.step).toBe("draft");
     expect(out.stepIndex).toBe(0);
@@ -13,7 +13,7 @@ describe("computeEventWizardState", () => {
     expect(out.alertType).toBe("info");
   });
 
-  it("DEPLOYING のとき primary=null で進捗 N/M を CTA に含めるべき", () => {
+  it("should set primary=null and include progress N/M in CTA when status=DEPLOYING", () => {
     const out = computeEventWizardState(
       {
         status: "DEPLOYING",
@@ -35,7 +35,7 @@ describe("computeEventWizardState", () => {
     expect(out.alertType).toBe("success");
   });
 
-  it("READY + startsAt なしのとき primary=start で「開始時刻を設定」を促すべき", () => {
+  it("should set primary=start and prompt to 'set the start time' when READY without startsAt", () => {
     const out = computeEventWizardState({ status: "READY" }, NOW_MS);
     expect(out.step).toBe("ready_unscheduled");
     expect(out.stepIndex).toBe(2);
@@ -44,7 +44,7 @@ describe("computeEventWizardState", () => {
     expect(out.alertType).toBe("info");
   });
 
-  it("READY + startsAt 未来のとき primary=null で開始予定を示すべき", () => {
+  it("should set primary=null and show the scheduled start when READY with future startsAt", () => {
     const future = new Date(NOW_MS + 60 * 60 * 1000).toISOString();
     const out = computeEventWizardState({ status: "READY", startsAt: future }, NOW_MS);
     expect(out.step).toBe("scheduled");
@@ -54,7 +54,7 @@ describe("computeEventWizardState", () => {
     expect(out.alertType).toBe("success");
   });
 
-  it("READY + startsAt 過去のとき step=in_competition で primary=null になるべき", () => {
+  it("should set step=in_competition and primary=null when READY with past startsAt", () => {
     const past = new Date(NOW_MS - 60 * 1000).toISOString();
     const out = computeEventWizardState({ status: "READY", startsAt: past }, NOW_MS);
     expect(out.step).toBe("in_competition");
@@ -64,7 +64,7 @@ describe("computeEventWizardState", () => {
     expect(out.alertType).toBe("success");
   });
 
-  it("ENDED のとき primary=delete で「Bulk Teardown を案内」すべき", () => {
+  it("should set primary=delete and guide to 'Bulk Teardown' when status=ENDED", () => {
     const out = computeEventWizardState({ status: "ENDED" }, NOW_MS);
     expect(out.step).toBe("ended");
     expect(out.stepIndex).toBe(4);
@@ -73,21 +73,21 @@ describe("computeEventWizardState", () => {
     expect(out.alertType).toBe("info");
   });
 
-  it("TEARDOWN のとき primary=null で「削除中」を warning で表示すべき", () => {
+  it("should set primary=null and show 'deleting' as warning when status=TEARDOWN", () => {
     const out = computeEventWizardState({ status: "TEARDOWN" }, NOW_MS);
     expect(out.primary).toBeNull();
     expect(out.cta).toMatch(/削除中/);
     expect(out.alertType).toBe("warning");
   });
 
-  it("ARCHIVED のとき primary=null で「閲覧のみ」と示すべき", () => {
+  it("should set primary=null and indicate 'read-only' when status=ARCHIVED", () => {
     const out = computeEventWizardState({ status: "ARCHIVED" }, NOW_MS);
     expect(out.step).toBe("archived");
     expect(out.primary).toBeNull();
     expect(out.cta).toMatch(/アーカイブ/);
   });
 
-  it("WIZARD_STEPS は重複なしの 5 段で順序固定であるべき", () => {
+  it("should keep WIZARD_STEPS as 5 unique steps with a fixed order", () => {
     expect(WIZARD_STEPS).toHaveLength(5);
     const keys = WIZARD_STEPS.map((s) => s.key);
     expect(new Set(keys).size).toBe(keys.length);

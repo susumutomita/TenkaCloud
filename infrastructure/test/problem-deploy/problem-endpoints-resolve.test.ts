@@ -31,7 +31,7 @@ const override = (slotName: string, url: string): EndpointOverrideItem => ({
 });
 
 describe("resolveEndpoints", () => {
-  it("CFn output 値を default URL として採用すべき (array 形式)", () => {
+  it("should adopt the CFn output value as the default URL (array form)", () => {
     const stackOutputs = JSON.stringify([
       { OutputKey: "FrontendUrl", OutputValue: "https://front.example.com/" },
     ]);
@@ -51,7 +51,7 @@ describe("resolveEndpoints", () => {
     ]);
   });
 
-  it("CFn output に該当 key が無いとき defaultUrl は undefined、effectiveUrl も undefined になるべき", () => {
+  it("should return defaultUrl and effectiveUrl as undefined when the CFn output key is missing", () => {
     const result = resolveEndpoints({
       slots: [slot("api", "MissingKey")],
       stackOutputs: JSON.stringify([]),
@@ -61,7 +61,7 @@ describe("resolveEndpoints", () => {
     expect(result).toEqual([{ slot: "api", overridable: false, defaultKey: "MissingKey" }]);
   });
 
-  it("override がある slot は effectiveUrl が override で埋まるべき", () => {
+  it("effectiveUrl should be populated by override for slots with an override", () => {
     const stackOutputs = JSON.stringify([
       { OutputKey: "FrontendUrl", OutputValue: "https://front.example.com/" },
     ]);
@@ -77,7 +77,7 @@ describe("resolveEndpoints", () => {
     });
   });
 
-  it("appendPath を含めた default URL を組み立てるべき", () => {
+  it("should assemble the default URL including appendPath", () => {
     const stackOutputs = JSON.stringify([
       { OutputKey: "BaseUrl", OutputValue: "https://api.example.com/" },
     ]);
@@ -93,7 +93,7 @@ describe("resolveEndpoints", () => {
     expect(result[0]?.defaultUrl).toBe("https://api.example.com/users");
   });
 
-  it("label / description を保持すべき", () => {
+  it("should preserve label / description", () => {
     const result = resolveEndpoints({
       slots: [slot("frontend", "FrontendUrl", { label: "Frontend", description: "nginx" })],
       stackOutputs: undefined,
@@ -106,7 +106,7 @@ describe("resolveEndpoints", () => {
     });
   });
 
-  it("metadata.endpoints[] が空なら空配列を返すべき", () => {
+  it("should return an empty array when metadata.endpoints[] is empty", () => {
     expect(resolveEndpoints({ slots: [], stackOutputs: undefined, overrides: [] })).toEqual([]);
   });
 });

@@ -30,7 +30,7 @@ function buildEvent(
 
 describe("system-audit-writer (Issue #1034)", () => {
   describe("mapEventToAudit", () => {
-    it("onboardingRequest を tenant_create_requested + success として SYSTEM scope に書くべき", () => {
+    it("should write onboardingRequest as tenant_create_requested + success into the SYSTEM scope", () => {
       const event = buildEvent("onboardingRequest", { tenantId: "t-01", tier: "STANDARD" });
       const row = mapEventToAudit(event);
       expect(row).not.toBeNull();
@@ -41,44 +41,44 @@ describe("system-audit-writer (Issue #1034)", () => {
       expect(row?.extra.tier).toBe("STANDARD");
     });
 
-    it("onboardingFailure は outcome=error に倒すべき", () => {
+    it("should fall onboardingFailure to outcome=error", () => {
       const row = mapEventToAudit(buildEvent("onboardingFailure", { tenantId: "t-02" }));
       expect(row?.outcome).toBe("error");
       expect(row?.action).toBe("tenant_create_failed");
     });
 
-    it("offboardingRequest は tenant_delete_requested を返すべき", () => {
+    it("offboardingRequest should return tenant_delete_requested", () => {
       const row = mapEventToAudit(buildEvent("offboardingRequest", { tenantId: "t-03" }));
       expect(row?.action).toBe("tenant_delete_requested");
       expect(row?.outcome).toBe("success");
     });
 
-    it("offboardingSuccess は tenant_delete_succeeded を返すべき", () => {
+    it("offboardingSuccess should return tenant_delete_succeeded", () => {
       const row = mapEventToAudit(buildEvent("offboardingSuccess", { tenantId: "t-03" }));
       expect(row?.action).toBe("tenant_delete_succeeded");
     });
 
-    it("offboardingFailure は outcome=error に倒すべき", () => {
+    it("should fall offboardingFailure to outcome=error", () => {
       const row = mapEventToAudit(buildEvent("offboardingFailure", { tenantId: "t-03" }));
       expect(row?.outcome).toBe("error");
       expect(row?.action).toBe("tenant_delete_failed");
     });
 
-    it("未知の detail-type は null を返して skip すべき", () => {
+    it("should return null and skip unknown detail-types", () => {
       const row = mapEventToAudit(
         buildEvent("unknownEvent" as SbtTenantEventDetailType, { tenantId: "t-x" }),
       );
       expect(row).toBeNull();
     });
 
-    it("event.time から occurredAtMs を抽出すべき (= EventBridge が記録した実発生時刻を保持)", () => {
+    it("should extract occurredAtMs from event.time (preserving EventBridge's recorded occurrence time)", () => {
       const row = mapEventToAudit(
         buildEvent("onboardingSuccess", { tenantId: "t-04" }, "2026-04-01T12:34:56.000Z"),
       );
       expect(row?.occurredAtMs).toBe(new Date("2026-04-01T12:34:56.000Z").getTime());
     });
 
-    it("tenantName / tier がある時は extra に含めるべき", () => {
+    it("should include tenantName / tier in extra when present", () => {
       const row = mapEventToAudit(
         buildEvent("onboardingSuccess", { tenantId: "t-05", tenantName: "Acme", tier: "PLATINUM" }),
       );
@@ -109,7 +109,7 @@ describe("system-audit-writer (Issue #1034)", () => {
       } as const;
     }
 
-    it("FAILED build は codebuild_failed + outcome=error として SYSTEM scope に書くべき", () => {
+    it("should write FAILED builds as codebuild_failed + outcome=error into the SYSTEM scope", () => {
       const row = mapEventToAudit(buildCodeBuildEvent("FAILED"));
       expect(row).not.toBeNull();
       expect(row?.tenantId).toBe("SYSTEM");
@@ -120,7 +120,7 @@ describe("system-audit-writer (Issue #1034)", () => {
       expect(row?.extra.buildStatus).toBe("FAILED");
     });
 
-    it("FAULT / STOPPED / TIMED_OUT も audit に書くべき (= silent failure 網羅)", () => {
+    it("should also audit FAULT / STOPPED / TIMED_OUT (covering silent failures)", () => {
       for (const status of ["FAULT", "STOPPED", "TIMED_OUT"]) {
         const row = mapEventToAudit(buildCodeBuildEvent(status));
         expect(row).not.toBeNull();
@@ -129,37 +129,37 @@ describe("system-audit-writer (Issue #1034)", () => {
       }
     });
 
-    it("SUCCEEDED build は audit に書かないべき (= noise 抑制、 silent failure の対象外)", () => {
+    it("should not audit SUCCEEDED builds (noise suppression, out of silent-failure scope)", () => {
       expect(mapEventToAudit(buildCodeBuildEvent("SUCCEEDED"))).toBeNull();
     });
 
-    it("IN_PROGRESS build も audit に書かないべき (= mid-flight 状態)", () => {
+    it("should not audit IN_PROGRESS builds (mid-flight state)", () => {
       expect(mapEventToAudit(buildCodeBuildEvent("IN_PROGRESS"))).toBeNull();
     });
 
-    it("build-id があれば extra.buildId に保存すべき (= CloudWatch Logs deep link 用)", () => {
+    it("should persist build-id into extra.buildId (for CloudWatch Logs deep link)", () => {
       const row = mapEventToAudit(buildCodeBuildEvent("FAILED"));
       expect(row?.extra.buildId).toMatch(/build\//);
     });
   });
 
   describe("resolveActor", () => {
-    it("detail.sub があれば優先すべき (= Cognito 安定識別子)", () => {
+    it("should prefer detail.sub (Cognito stable identifier)", () => {
       expect(resolveActor({ sub: "cog-sub-1", cognitoUsername: "alice@example" })).toEqual({
         actor: "cog-sub-1",
         actorUsername: "alice@example",
       });
     });
 
-    it("detail.sub が無ければ actor field を見るべき", () => {
+    it("should fall back to the actor field when detail.sub is missing", () => {
       expect(resolveActor({ actor: "fallback-actor" })).toEqual({ actor: "fallback-actor" });
     });
 
-    it("いずれも無ければ sbt-control-plane を fallback とすべき", () => {
+    it("should fall back to sbt-control-plane when none are set", () => {
       expect(resolveActor({})).toEqual({ actor: "sbt-control-plane" });
     });
 
-    it("cognitoUsername と username の両方があれば cognitoUsername を優先すべき", () => {
+    it("should prefer cognitoUsername when both cognitoUsername and username are present", () => {
       expect(resolveActor({ sub: "s", cognitoUsername: "a", username: "b" })).toEqual({
         actor: "s",
         actorUsername: "a",

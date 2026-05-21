@@ -33,7 +33,7 @@ const VIEW = {
 describe("getPortalMe", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("apiBaseUrl + /portal/me を Bearer 付きで GET し view を返すべき", async () => {
+  it("should GET apiBaseUrl + /portal/me with Bearer and return the view", async () => {
     const fetchMock = vi.fn().mockImplementation(() =>
       Promise.resolve(
         new Response(JSON.stringify(VIEW), {
@@ -54,7 +54,7 @@ describe("getPortalMe", () => {
     expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${KEY}`);
   });
 
-  it("末尾スラッシュの有無で URL は同じになるべき", async () => {
+  it("should produce the same URL regardless of trailing slash", async () => {
     const fetchMock = vi
       .fn()
       .mockImplementation(() =>
@@ -70,12 +70,12 @@ describe("getPortalMe", () => {
     expect(url1).toBe(url2);
   });
 
-  it("401 は PortalAuthError を投げるべき", async () => {
+  it("should throw PortalAuthError on 401", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
     await expect(getPortalMe("https://x", KEY)).rejects.toBeInstanceOf(PortalAuthError);
   });
 
-  it("500 は PortalNetworkError (status と body 含む)", async () => {
+  it("should throw PortalNetworkError on 500 (with status and body)", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation(() => Promise.resolve(new Response("ddb down", { status: 500 }))),
@@ -87,7 +87,7 @@ describe("getPortalMe", () => {
     });
   });
 
-  it("AbortSignal を fetch に伝播するべき", async () => {
+  it("should propagate AbortSignal to fetch", async () => {
     const fetchMock = vi
       .fn()
       .mockImplementation(() =>
@@ -104,7 +104,7 @@ describe("getPortalMe", () => {
 describe("getNotifications", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("/portal/me/notifications を Bearer 付きで GET し response を返すべき", async () => {
+  it("should GET /portal/me/notifications with Bearer and return the response", async () => {
     const payload = {
       eventId: "01HZX",
       items: [
@@ -133,7 +133,7 @@ describe("getNotifications", () => {
     expect(url.toString()).toBe("https://api.example.com/portal/me/notifications");
   });
 
-  it("404 (no_event) は undefined を返すべき (旧 jobId-based deployment 互換)", async () => {
+  it("should return undefined on 404 (no_event) (legacy jobId-based deployment compatibility)", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: "no_event" }), {
         status: 404,
@@ -144,7 +144,7 @@ describe("getNotifications", () => {
     expect(await getNotifications("https://x", KEY)).toBeUndefined();
   });
 
-  it("limit を渡したら ?limit=N で query に乗せる", async () => {
+  it("should include ?limit=N in the query when limit is passed", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue(
@@ -160,7 +160,7 @@ describe("getNotifications", () => {
 describe("getDeployLogs", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("jobId / nextToken / limit を query に乗せて CodeBuild log response を返すべき", async () => {
+  it("should put jobId / nextToken / limit on the query and return the CodeBuild log response", async () => {
     const payload = {
       jobId: "01H8XGJWBWBAQ4N6RZHM4S2KMV",
       buildStatus: "IN_PROGRESS",
@@ -196,7 +196,7 @@ describe("getDeployLogs", () => {
     expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${KEY}`);
   });
 
-  it("400 invalid_jobid は PortalValidationError として扱うべき", async () => {
+  it("should treat 400 invalid_jobid as PortalValidationError", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -216,7 +216,7 @@ describe("getDeployLogs", () => {
 describe("listProblemEndpoints (ADR-012 Phase 3.A / Issue #607)", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("/portal/me/problems/<id>/endpoints を Bearer 付きで GET すべき", async () => {
+  it("should GET /portal/me/problems/<id>/endpoints with Bearer", async () => {
     const payload = {
       teamId: "team-x",
       endpoints: [
@@ -245,7 +245,7 @@ describe("listProblemEndpoints (ADR-012 Phase 3.A / Issue #607)", () => {
     expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${KEY}`);
   });
 
-  it("problemId に special char を含むときも URL encode して送るべき", async () => {
+  it("should URL encode problemId when it contains special chars", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValue(
@@ -262,7 +262,7 @@ describe("listProblemEndpoints (ADR-012 Phase 3.A / Issue #607)", () => {
 describe("putProblemEndpointOverride", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("POST /portal/me/problems/<id>/endpoints/<slot> { url } を送り response を返すべき", async () => {
+  it("should POST /portal/me/problems/<id>/endpoints/<slot> { url } and return the response", async () => {
     const payload = {
       teamId: "team-x",
       endpoints: [{ slot: "users", overridable: true, effectiveUrl: "https://my-lambda.example/" }],
@@ -284,7 +284,7 @@ describe("putProblemEndpointOverride", () => {
     expect(JSON.parse(init.body as string)).toEqual({ url: "https://my-lambda.example/" });
   });
 
-  it("400 invalid_url は PortalValidationError(errorCode=invalid_url) を投げるべき", async () => {
+  it("should throw PortalValidationError(errorCode=invalid_url) on 400 invalid_url", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -303,7 +303,7 @@ describe("putProblemEndpointOverride", () => {
     }
   });
 
-  it("409 slot_not_overridable も PortalValidationError として扱うべき", async () => {
+  it("should treat 409 slot_not_overridable as PortalValidationError", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -322,7 +322,7 @@ describe("putProblemEndpointOverride", () => {
 describe("submitFlag", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("409 scoring_not_started は PortalScoringGateError として startsAt を保持すべき", async () => {
+  it("should retain startsAt as PortalScoringGateError on 409 scoring_not_started", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation(() =>
@@ -354,7 +354,7 @@ describe("submitFlag", () => {
 describe("deleteProblemEndpointOverride", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("DELETE /portal/me/problems/<id>/endpoints/<slot> を送り response を返すべき", async () => {
+  it("should DELETE /portal/me/problems/<id>/endpoints/<slot> and return the response", async () => {
     const payload = { teamId: "team-x", endpoints: [{ slot: "users", overridable: true }] };
     const fetchMock = vi
       .fn()
@@ -368,13 +368,13 @@ describe("deleteProblemEndpointOverride", () => {
 });
 
 describe("TERMINAL_STATUSES", () => {
-  it("COMPLETE / FAILED / DELETED を含むべき (poll 停止判定用)", () => {
+  it("should include COMPLETE / FAILED / DELETED (for poll stop decision)", () => {
     expect(TERMINAL_STATUSES.has("COMPLETE")).toBe(true);
     expect(TERMINAL_STATUSES.has("FAILED")).toBe(true);
     expect(TERMINAL_STATUSES.has("DELETED")).toBe(true);
   });
 
-  it("PENDING / IN_PROGRESS / DELETING は含まないべき", () => {
+  it("should not include PENDING / IN_PROGRESS / DELETING", () => {
     expect(TERMINAL_STATUSES.has("PENDING")).toBe(false);
     expect(TERMINAL_STATUSES.has("IN_PROGRESS")).toBe(false);
     expect(TERMINAL_STATUSES.has("DELETING")).toBe(false);

@@ -17,19 +17,19 @@ const PATH = "problems/test/template.yaml";
 
 describe("check-template-security helpers (#869 + #1124)", () => {
   describe("findIamActionWildcardFindings", () => {
-    it('Action: "*" を 1 件以上含むなら finding を返すべき', () => {
+    it('should return a finding when at least one Action: "*" is present', () => {
       const findings = findIamActionWildcardFindings(PATH, "Resources.A.Properties", ["*"]);
       expect(findings).toHaveLength(1);
       expect(findings[0]?.rule).toBe("iam-action-wildcard");
     });
 
-    it('Action 配列に "*" が無ければ 0 件にすべき', () => {
+    it('should return 0 findings when the Action array contains no "*"', () => {
       expect(findIamActionWildcardFindings(PATH, "loc", ["s3:GetObject", "s3:PutObject"])).toEqual(
         [],
       );
     });
 
-    it('複数の "*" は複数 finding として返すべき (= 同 statement 内重複も検出)', () => {
+    it('should return multiple findings for multiple "*"s (detect duplicates within the same statement)', () => {
       expect(findIamActionWildcardFindings(PATH, "loc", ["*", "*", "s3:GetObject"])).toHaveLength(
         2,
       );
@@ -37,14 +37,14 @@ describe("check-template-security helpers (#869 + #1124)", () => {
   });
 
   describe("findIamResourceWildcardFindings", () => {
-    it('Resource: "*" + allowlist 外の action なら finding を返すべき', () => {
+    it('should return a finding for Resource: "*" + actions outside the allowlist', () => {
       const findings = findIamResourceWildcardFindings(PATH, "loc", ["*"], ["s3:DeleteObject"]);
       expect(findings).toHaveLength(1);
       expect(findings[0]?.rule).toBe("iam-resource-wildcard");
       expect(findings[0]?.detail).toContain("s3:DeleteObject");
     });
 
-    it('Resource: "*" + allowlist 内 action だけなら finding を返さないべき', () => {
+    it('should not return a finding for Resource: "*" + actions strictly within the allowlist', () => {
       const findings = findIamResourceWildcardFindings(
         PATH,
         "loc",
@@ -54,7 +54,7 @@ describe("check-template-security helpers (#869 + #1124)", () => {
       expect(findings).toEqual([]);
     });
 
-    it('Resource: "*" が無ければ 0 件にすべき (= scoped ARN は OK)', () => {
+    it('should return 0 findings when Resource: "*" is absent (scoped ARNs are OK)', () => {
       expect(
         findIamResourceWildcardFindings(
           PATH,
@@ -65,7 +65,7 @@ describe("check-template-security helpers (#869 + #1124)", () => {
       ).toEqual([]);
     });
 
-    it('Resource: "*" + action 空配列なら finding を返すべき (= allowlist 判定不能)', () => {
+    it('should return a finding for Resource: "*" + empty action array (allowlist undecidable)', () => {
       const findings = findIamResourceWildcardFindings(PATH, "loc", ["*"], []);
       expect(findings).toHaveLength(1);
       expect(findings[0]?.detail).toContain("Resource");
@@ -73,7 +73,7 @@ describe("check-template-security helpers (#869 + #1124)", () => {
   });
 
   describe("findSgOpenNonWebFinding", () => {
-    it("0.0.0.0/0 から 80/443 以外への ingress は finding を返すべき", () => {
+    it("should return a finding for ingress from 0.0.0.0/0 to ports other than 80/443", () => {
       const finding = findSgOpenNonWebFinding(PATH, "Sg", 0, {
         CidrIp: "0.0.0.0/0",
         FromPort: 22,
@@ -82,7 +82,7 @@ describe("check-template-security helpers (#869 + #1124)", () => {
       expect(finding?.detail).toContain("port 22");
     });
 
-    it("0.0.0.0/0 + 80 / 443 は finding を返さないべき (= 競技 web は OK)", () => {
+    it("should not return a finding for 0.0.0.0/0 + 80 / 443 (competition web is OK)", () => {
       expect(
         findSgOpenNonWebFinding(PATH, "Sg", 0, { CidrIp: "0.0.0.0/0", FromPort: 80 }),
       ).toBeUndefined();
@@ -91,13 +91,13 @@ describe("check-template-security helpers (#869 + #1124)", () => {
       ).toBeUndefined();
     });
 
-    it("CidrIp が 0.0.0.0/0 でないなら finding を返さないべき", () => {
+    it("should not return a finding when CidrIp is not 0.0.0.0/0", () => {
       expect(
         findSgOpenNonWebFinding(PATH, "Sg", 0, { CidrIp: "10.0.0.0/8", FromPort: 22 }),
       ).toBeUndefined();
     });
 
-    it("FromPort が string でも number に変換して判定すべき", () => {
+    it("should convert FromPort to a number before evaluating, even if it is a string", () => {
       const finding = findSgOpenNonWebFinding(PATH, "Sg", 1, {
         CidrIp: "0.0.0.0/0",
         FromPort: "22",

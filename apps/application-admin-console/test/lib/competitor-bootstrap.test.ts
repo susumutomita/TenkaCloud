@@ -12,19 +12,19 @@ describe("buildLaunchStackUrl", () => {
     competitorRoleName: "TenkaCloudCompetitorRole",
   };
 
-  it("ap-northeast-1 を default region として CFn quickcreate URL を返すべき", () => {
+  it("should return a CFn quickcreate URL using ap-northeast-1 as default region", () => {
     const url = buildLaunchStackUrl(baseInput);
     expect(url).toContain("https://ap-northeast-1.console.aws.amazon.com/cloudformation/home");
     expect(url).toContain("#/stacks/quickcreate");
   });
 
-  it("templateURL に public repo の raw URL が pre-fill されるべき", () => {
+  it("should pre-fill templateURL with the public repo raw URL", () => {
     const url = buildLaunchStackUrl(baseInput);
     const decoded = decodeURIComponent(url);
     expect(decoded).toContain(COMPETITOR_BOOTSTRAP_TEMPLATE_URL);
   });
 
-  it("Parameter 3 値が CFn pre-fill query string として埋め込まれるべき", () => {
+  it("should embed the 3 Parameter values as CFn pre-fill query strings", () => {
     const url = buildLaunchStackUrl(baseInput);
     const decoded = decodeURIComponent(url);
     expect(decoded).toContain("param_TenkaCloudAccountId=123456789012");
@@ -32,7 +32,7 @@ describe("buildLaunchStackUrl", () => {
     expect(decoded).toContain("param_RoleName=TenkaCloudCompetitorRole");
   });
 
-  it("region を上書きできるべき", () => {
+  it("should allow region to be overridden", () => {
     const url = buildLaunchStackUrl({ ...baseInput, region: "us-east-1" });
     expect(url).toContain("https://us-east-1.console.aws.amazon.com/");
     expect(url).toContain("region=us-east-1");
@@ -46,20 +46,20 @@ describe("buildShareablePayload", () => {
     competitorRoleName: "TenkaCloudCompetitorRole",
   };
 
-  it("3 値すべてを含む shareable payload を返すべき", () => {
+  it("should return a shareable payload that includes all 3 values", () => {
     const payload = buildShareablePayload(input);
     expect(payload).toContain("123456789012");
     expect(payload).toContain("ext-abc-123");
     expect(payload).toContain("TenkaCloudCompetitorRole");
   });
 
-  it("CFn テンプレ raw URL と Quick-create URL の両方を含むべき", () => {
+  it("should include both the CFn template raw URL and the Quick-create URL", () => {
     const payload = buildShareablePayload(input);
     expect(payload).toContain(COMPETITOR_BOOTSTRAP_TEMPLATE_URL);
     expect(payload).toContain("quickcreate");
   });
 
-  it("競技者向けの手順テキストを含むべき", () => {
+  it("should include competitor-facing instruction text", () => {
     const payload = buildShareablePayload(input);
     expect(payload).toContain("deploy 手順");
     expect(payload).toContain("Verify");
@@ -67,7 +67,7 @@ describe("buildShareablePayload", () => {
 });
 
 describe("COMPETITOR_BOOTSTRAP_TEMPLATE_URL", () => {
-  it("public repo の raw URL を指すべき (= 競技者 access 可能)", () => {
+  it("should point to a public repo raw URL (= accessible to competitors)", () => {
     expect(COMPETITOR_BOOTSTRAP_TEMPLATE_URL).toMatch(
       /^https:\/\/raw\.githubusercontent\.com\/.+\/competitor-bootstrap\.yaml$/,
     );

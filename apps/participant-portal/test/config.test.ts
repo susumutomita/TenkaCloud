@@ -10,7 +10,7 @@ describe("loadConfig", () => {
     globalThis.fetch = realFetch;
   });
 
-  it("/runtime-config.json が 200 で返ったら値を取り出すべき", async () => {
+  it("should extract values when /runtime-config.json returns 200", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -28,7 +28,7 @@ describe("loadConfig", () => {
     expect(cfg.cloudMode).toBe("real");
   });
 
-  it("mode が runtime-config に無いときは fallback の dev-mock になるべき", async () => {
+  it("should fall back to dev-mock when mode is missing from runtime-config", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => ({ apiBaseUrl: "https://api.example.com" }),
@@ -38,7 +38,7 @@ describe("loadConfig", () => {
     expect(cfg.cloudMode).toBe("mock");
   });
 
-  it("cloudMode=localstack の runtime-config を読み込むべき", async () => {
+  it("should load runtime-config with cloudMode=localstack", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -56,7 +56,7 @@ describe("loadConfig", () => {
     expect(cfg.localstackEndpoint).toBe("http://localhost:4566");
   });
 
-  it("localstackEndpoint が localhost 以外なら表示用 endpoint として採用しないべき", async () => {
+  it("should not adopt localstackEndpoint as display endpoint when it is not localhost", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -71,7 +71,7 @@ describe("loadConfig", () => {
     expect(cfg.localstackEndpoint).toBeUndefined();
   });
 
-  it("一部キー欠落でも fallback で埋めるべき", async () => {
+  it("should fill missing keys with fallbacks", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => ({ apiBaseUrl: "https://x.example/api" }),
@@ -83,7 +83,7 @@ describe("loadConfig", () => {
     expect(cfg.eventRegion).toBe("ap-northeast-1");
   });
 
-  it("404 のときは fallback を返すべき", async () => {
+  it("should return fallback on 404", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: false,
       status: 404,
@@ -93,13 +93,13 @@ describe("loadConfig", () => {
     expect(cfg.apiBaseUrl).toContain("dev-mock");
   });
 
-  it("fetch が throw したら fallback を返すべき", async () => {
+  it("should return fallback when fetch throws", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("network down"));
     const cfg = await loadConfig();
     expect(cfg.apiBaseUrl).toContain("dev-mock");
   });
 
-  it("Issue #871: backend mode で apiBaseUrl が http:// なら fallback に倒れるべき", async () => {
+  it("Issue #871: should fall back when apiBaseUrl is http:// in backend mode", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,

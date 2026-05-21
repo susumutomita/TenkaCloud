@@ -55,7 +55,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("SendNotificationModal", () => {
-  it("初期状態: title / body 空で 送信 disabled", () => {
+  it("should disable submit when title and body are empty (initial state)", () => {
     render(
       withI18n(
         <SendNotificationModal
@@ -71,7 +71,7 @@ describe("SendNotificationModal", () => {
     expect(submit).toBeDisabled();
   });
 
-  it("title + body 入力後は 送信 enabled", async () => {
+  it("should enable submit after title and body are filled", async () => {
     const user = userEvent.setup();
     render(
       withI18n(
@@ -89,7 +89,7 @@ describe("SendNotificationModal", () => {
     expect(screen.getByRole("button", { name: "送信" })).toBeEnabled();
   });
 
-  it("送信成功: createNotification を正しい args で呼び onSuccess を呼ぶ", async () => {
+  it("should call createNotification with correct args and invoke onSuccess on success", async () => {
     const user = userEvent.setup();
     const onSuccess = vi.fn();
     mocks.createNotification.mockResolvedValueOnce({
@@ -120,7 +120,7 @@ describe("SendNotificationModal", () => {
     });
   });
 
-  it("送信失敗: API error を Alert に表示し onSuccess は呼ばない", async () => {
+  it("should show API error in Alert and NOT call onSuccess on failure", async () => {
     const user = userEvent.setup();
     const onSuccess = vi.fn();
     mocks.createNotification.mockRejectedValueOnce(new Error("ddb throttled"));
@@ -144,7 +144,7 @@ describe("SendNotificationModal", () => {
     expect(onSuccess).not.toHaveBeenCalled();
   });
 
-  it("title が 120 文字超なら errorText を出して 送信 disabled", () => {
+  it("should show errorText and disable submit when title exceeds 120 characters", () => {
     render(
       withI18n(
         <SendNotificationModal
@@ -165,24 +165,24 @@ describe("SendNotificationModal", () => {
 });
 
 describe("SendNotificationModal helpers", () => {
-  it("title / body が制限内で非空なら submit 可能にすべき", () => {
+  it("should allow submit when title and body are non-empty and within limits", () => {
     expect(isNotificationDraftValid({ title: "T", body: "B" })).toBe(true);
   });
 
-  it("title / body が空または上限超過なら submit 不可にすべき", () => {
+  it("should disallow submit when title or body is empty or exceeds the limit", () => {
     expect(isNotificationDraftValid({ title: "", body: "B" })).toBe(false);
     expect(isNotificationDraftValid({ title: "T", body: "" })).toBe(false);
     expect(isNotificationDraftValid({ title: "a".repeat(121), body: "B" })).toBe(false);
     expect(isNotificationDraftValid({ title: "T", body: "b".repeat(2001) })).toBe(false);
   });
 
-  it("ApiError は status 付き message に整形すべき", () => {
+  it("should format ApiError into a message that includes status", () => {
     expect(formatNotificationSubmitError(new ApiError(403, "forbidden"))).toBe(
       "403: API 403: forbidden",
     );
   });
 
-  it("Error 以外も string 化すべき", () => {
+  it("should stringify values that are not Error", () => {
     expect(formatNotificationSubmitError("failed")).toBe("failed");
   });
 });

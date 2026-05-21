@@ -74,11 +74,11 @@ describe("tenant ApiGateway", () => {
     return Object.values(resources)[0];
   }
 
-  it("/deployments resource が存在するべき", () => {
+  it("should expose the /deployments resource", () => {
     expect(findResource("deployments")).toBeDefined();
   });
 
-  it("/deployments に GET method が紐づいているべき (= サイドバー「デプロイ履歴」用)", () => {
+  it('should bind a GET method on /deployments (for the sidebar "Deploy history")', () => {
     const deploymentsResource = Object.entries(
       tpl.findResources("AWS::ApiGateway::Resource", { Properties: { PathPart: "deployments" } }),
     )[0]?.[0];
@@ -89,7 +89,7 @@ describe("tenant ApiGateway", () => {
     });
   });
 
-  it("/deployments/{jobId} に GET と DELETE が紐づいているべき", () => {
+  it("should bind GET and DELETE on /deployments/{jobId}", () => {
     const jobIdResource = Object.entries(
       tpl.findResources("AWS::ApiGateway::Resource", { Properties: { PathPart: "{jobId}" } }),
     )[0]?.[0];
@@ -104,7 +104,7 @@ describe("tenant ApiGateway", () => {
     });
   });
 
-  it("/deployments/{jobId}/stack-progress に GET / OPTIONS method が紐づいているべき", () => {
+  it("should bind GET / OPTIONS on /deployments/{jobId}/stack-progress", () => {
     const stackProgressResource = Object.entries(
       tpl.findResources("AWS::ApiGateway::Resource", {
         Properties: { PathPart: "stack-progress" },
@@ -121,12 +121,12 @@ describe("tenant ApiGateway", () => {
     });
   });
 
-  it("/problems/{problemId}/deploy に POST、/problems/{problemId}/deployments に GET が紐づくべき", () => {
+  it("should bind POST on /problems/{problemId}/deploy and GET on /problems/{problemId}/deployments", () => {
     expect(findResource("deploy")).toBeDefined();
     expect(findResource("{problemId}")).toBeDefined();
   });
 
-  it("/events/{eventId}/notifications resource + POST method が存在するべき (#553)", () => {
+  it("should expose the /events/{eventId}/notifications resource with a POST method (#553)", () => {
     // backend handler `POST /events/:eventId/notifications` (= ADR-006 通知 push) と
     // API Gateway route の配線がセットでないと frontend は "Failed to fetch" になる。
     // #535 と同種の「backend だけ merge、CDK 後追い」 regression を再発させないための pin。
@@ -142,7 +142,7 @@ describe("tenant ApiGateway", () => {
     });
   });
 
-  it("/admin/competitor-accounts と /admin/competitor-accounts/{awsAccountId}/verify を持つべき (Issue #459)", () => {
+  it("should have /admin/competitor-accounts and /admin/competitor-accounts/{awsAccountId}/verify (Issue #459)", () => {
     // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + verify
     expect(findResource("admin")).toBeDefined();
     expect(findResource("competitor-accounts")).toBeDefined();
@@ -165,7 +165,7 @@ describe("tenant ApiGateway", () => {
     });
   });
 
-  it("/admin/competitor-accounts/{awsAccountId}/rotate-external-id POST を持つべき (Issue #596)", () => {
+  it("should have POST /admin/competitor-accounts/{awsAccountId}/rotate-external-id (Issue #596)", () => {
     // Issue #596 / ADR-002 Phase 3.1: ExternalId rotation route
     expect(findResource("rotate-external-id")).toBeDefined();
     const rotateResourceId = Object.entries(

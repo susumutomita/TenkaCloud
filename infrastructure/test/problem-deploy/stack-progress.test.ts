@@ -79,14 +79,14 @@ function buildCfn(events: unknown[], resources: unknown[]) {
 }
 
 describe("buildCfnConsoleUrl", () => {
-  it("stackId があれば stackinfo deep link を返すべき", () => {
+  it("should return a stackinfo deep link when stackId is present", () => {
     const url = buildCfnConsoleUrl(REGION, STACK_NAME, STACK_ID);
     expect(url).toContain("ap-northeast-1.console.aws.amazon.com/cloudformation");
     expect(url).toContain("#/stacks/stackinfo");
     expect(url).toContain(encodeURIComponent(STACK_ID));
   });
 
-  it("stackId が無ければ filteringText 経由の一覧 URL を返すべき", () => {
+  it("should return the filteringText list URL when stackId is missing", () => {
     const url = buildCfnConsoleUrl(REGION, STACK_NAME);
     expect(url).toContain("#/stacks?filteringText=");
     expect(url).toContain(encodeURIComponent(STACK_NAME));
@@ -94,7 +94,7 @@ describe("buildCfnConsoleUrl", () => {
 });
 
 describe("getStackProgress", () => {
-  it("DDB に行が無ければ not_found を返すべき", async () => {
+  it("should return not_found when the row is missing in DDB", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: undefined });
 
@@ -108,7 +108,7 @@ describe("getStackProgress", () => {
     expect(out.kind).toBe("not_found");
   });
 
-  it("tenantId が一致しない行は not_found を返すべき (クロステナント漏洩防止)", async () => {
+  it("should return not_found for rows whose tenantId does not match (cross-tenant leak guard)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow({ tenantId: "tenant-evil" }) });
 
@@ -122,7 +122,7 @@ describe("getStackProgress", () => {
     expect(out.kind).toBe("not_found");
   });
 
-  it("namePrefix が未設定なら stack_not_yet_created を返すべき", async () => {
+  it("should return stack_not_yet_created when namePrefix is unset", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: sampleRow({ namePrefix: undefined, stackId: undefined }),
@@ -138,7 +138,7 @@ describe("getStackProgress", () => {
     expect(out.kind).toBe("stack_not_yet_created");
   });
 
-  it("CFn から StackEvents と StackResources を取得して返すべき", async () => {
+  it("should fetch and return StackEvents and StackResources from CFn", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow() });
 
@@ -191,7 +191,7 @@ describe("getStackProgress", () => {
     expect(out.progress.consoleUrl).toContain("#/stacks/stackinfo");
   });
 
-  it("IN_PROGRESS が閾値を超えて動かない場合は stuck 原因と復旧ヒントを返すべき", async () => {
+  it("should return stuck cause and recovery hint when IN_PROGRESS is frozen past the threshold", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: sampleRow({
@@ -235,7 +235,7 @@ describe("getStackProgress", () => {
     expect(out.progress.stuck?.remediationHint).toContain("service quota");
   });
 
-  it("IN_PROGRESS でも直近 event が新しければ stuck と判定しないべき", async () => {
+  it("should not classify as stuck when IN_PROGRESS but recent events are fresh", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: sampleRow({
@@ -268,7 +268,7 @@ describe("getStackProgress", () => {
     expect(out.progress.stuck).toBeUndefined();
   });
 
-  it("最新 20 件に events を切り詰めるべき", async () => {
+  it("should truncate events to the latest 20", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow() });
 
@@ -291,7 +291,7 @@ describe("getStackProgress", () => {
     expect(out.progress.events).toHaveLength(20);
   });
 
-  it("CFn が ValidationError(does not exist) を返したら stack_not_found_in_cfn にすべき", async () => {
+  it("should map ValidationError(does not exist) from CFn to stack_not_found_in_cfn", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow() });
 
@@ -310,7 +310,7 @@ describe("getStackProgress", () => {
     expect(out.consoleUrl).toContain("cloudformation");
   });
 
-  it("その他の CFn エラーは throw して呼び出し側で 500 を返させるべき", async () => {
+  it("should throw other CFn errors and let the caller return 500", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow() });
 
@@ -325,7 +325,7 @@ describe("getStackProgress", () => {
     ).rejects.toThrow("Throttling");
   });
 
-  it("stackId が確定済なら CFn 呼び出しに stackId を渡すべき (同名再作成事故防止)", async () => {
+  it("should pass stackId to the CFn call once stackId is finalized (prevent same-name recreation accidents)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow() });
     const cfn = buildCfn([], []);
@@ -336,7 +336,7 @@ describe("getStackProgress", () => {
     expect(events.input.StackName).toBe(STACK_ID);
   });
 
-  it("stackId 未割当なら namePrefix を CFn 引数に使うべき", async () => {
+  it("should use namePrefix as the CFn argument when stackId is unassigned", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow({ stackId: undefined }) });
     const cfn = buildCfn([], []);

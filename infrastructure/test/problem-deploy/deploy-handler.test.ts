@@ -84,7 +84,7 @@ const sampleRequest = (overrides: Partial<DeployInvocation> = {}): DeployInvocat
 describe("startDeployment", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("DDB に PutItem を 1 回 送るべき", async () => {
+  it("should send a single PutItem to DDB", async () => {
     const { ctx, putSend } = buildContext();
     await startDeployment(ctx, sampleRequest());
     expect(putSend).toHaveBeenCalledOnce();
@@ -103,7 +103,7 @@ describe("startDeployment", () => {
     );
   });
 
-  it("GSI2PK = TEAMKEY#<teamLoginKey> を sparse index 用に書き込むべき", async () => {
+  it("should write GSI2PK = TEAMKEY#<teamLoginKey> for the sparse index", async () => {
     const { ctx, putSend } = buildContext();
     await startDeployment(ctx, sampleRequest());
     const cmd = putSend.mock.calls[0]?.[0] as PutCommand;
@@ -113,7 +113,7 @@ describe("startDeployment", () => {
     expect(item?.GSI2SK).toBe(item?.GSI1SK);
   });
 
-  it("EventBridge に DeployCreateRequested イベントを送るべき", async () => {
+  it("should send a DeployCreateRequested event to EventBridge", async () => {
     const { ctx, eventsSend } = buildContext();
     await startDeployment(ctx, sampleRequest());
     expect(eventsSend).toHaveBeenCalledOnce();
@@ -129,7 +129,7 @@ describe("startDeployment", () => {
     expect(detail.namePrefix).toBe("tc-security-battle-royale-alpha-team");
   });
 
-  it("response に jobId / status / namePrefix / teamLoginKey / expiresAt を返すべき", async () => {
+  it("should return jobId / status / namePrefix / teamLoginKey / expiresAt in the response", async () => {
     const { ctx } = buildContext();
     const res = await startDeployment(ctx, sampleRequest());
     expect(res.jobId).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/); // ULID
@@ -139,7 +139,7 @@ describe("startDeployment", () => {
     expect(res.expiresAt).toBe(Math.floor((1_700_000_000_000 + 60_000) / 1000));
   });
 
-  it("生成される jobId は呼び出しごとに異なるべき", async () => {
+  it("generated jobIds should differ on each call", async () => {
     const { ctx } = buildContext();
     const a = await startDeployment(ctx, sampleRequest());
     const b = await startDeployment(ctx, sampleRequest());
@@ -147,14 +147,14 @@ describe("startDeployment", () => {
     expect(a.teamLoginKey).not.toBe(b.teamLoginKey);
   });
 
-  it("DDB Put が失敗したら EventBridge を呼ばずに throw するべき", async () => {
+  it("should throw without calling EventBridge when DDB Put fails", async () => {
     const { ctx, putSend, eventsSend } = buildContext();
     putSend.mockRejectedValueOnce(new Error("DDB down"));
     await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow("DDB down");
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  it("EventBridge publish が失敗したら deployment を FAILED に補償更新すべき", async () => {
+  it("should compensate by updating the deployment to FAILED when EventBridge publish fails", async () => {
     const { ctx, putSend, eventsSend } = buildContext();
     eventsSend.mockResolvedValueOnce({
       FailedEntryCount: 1,
@@ -181,7 +181,7 @@ describe("startDeployment", () => {
     expect(updateCmd?.input.ExpressionAttributeValues?.[":tenantId"]).toBeDefined();
   });
 
-  it("forward-compat フィールド (accountGroupId / problemSetId) も保存するべき", async () => {
+  it("should also persist forward-compat fields (accountGroupId / problemSetId)", async () => {
     const { ctx, putSend } = buildContext();
     await startDeployment(ctx, sampleRequest({ accountGroupId: "group-1", problemSetId: "set-1" }));
     const cmd = putSend.mock.calls[0]?.[0] as PutCommand;
@@ -198,7 +198,7 @@ describe("startDeployment", () => {
   });
 
   // Phase 2.2 (Issue #459): verified=true 行が無いと UnverifiedCompetitorAccountError を投げるべき
-  it("CompetitorAccounts に verified=true 行が無い awsAccountId は reject (Unverified… throw) するべき", async () => {
+  it("should reject awsAccountId without a verified=true CompetitorAccounts row (throw Unverified…)", async () => {
     const { ctx, putSend, eventsSend } = buildContext({}, { unverified: true });
     await expect(startDeployment(ctx, sampleRequest())).rejects.toBeInstanceOf(
       UnverifiedCompetitorAccountError,
@@ -208,7 +208,7 @@ describe("startDeployment", () => {
   });
 
   // Phase 2.2: DeployCreateRequested detail に competitorRoleArn / externalIdParameterName を含めるべき
-  it("DeployCreateRequested detail に AssumeRole 用 competitorRoleArn / externalIdParameterName を詰めるべき", async () => {
+  it("should pack competitorRoleArn / externalIdParameterName for AssumeRole into DeployCreateRequested detail", async () => {
     const { ctx, eventsSend } = buildContext();
     await startDeployment(ctx, sampleRequest());
     const cmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
@@ -242,7 +242,7 @@ describe("startDeployment", () => {
       expect(detail.challengePayloadUrl).toBeUndefined();
     });
 
-    it("private 問題 + bucket 設定 + S3 client があれば presigned URL を detail に詰めるべき", async () => {
+    it("should pack a presigned URL into detail when a private problem has a bucket configured and an S3 client", async () => {
       const { ctx, eventsSend } = buildContext({
         problemsVisibility: { "security-battle-royale": "private" },
         challengePayloadBucket: "tc-challenges-test",
@@ -268,7 +268,7 @@ describe("startDeployment", () => {
       expect(detail.challengePayloadUrl).toBeUndefined();
     });
 
-    it("private 問題 + bucket あり + s3 client 未注入なら error を throw すべき", async () => {
+    it("should throw an error for private problems with a bucket but no s3 client injected", async () => {
       const { ctx } = buildContext({
         problemsVisibility: { "security-battle-royale": "private" },
         challengePayloadBucket: "tc-challenges-test",

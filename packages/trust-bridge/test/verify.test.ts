@@ -26,7 +26,7 @@ function intent(overrides: Partial<CloudActionIntent["constraints"]> = {}): Clou
 }
 
 describe("verifyIntent (#795 Phase 1)", () => {
-  it("有効 token + future expiresAt + nonce 未使用なら ok=true でブランド型を返すべき", async () => {
+  it("should return ok=true with a branded type for a valid token, future expiresAt, and unused nonce", async () => {
     const secret = randomBytes(32);
     const token = signIntent(intent(), { secret });
     const result = await verifyIntent(token, {
@@ -39,7 +39,7 @@ describe("verifyIntent (#795 Phase 1)", () => {
     }
   });
 
-  it("expiresAt が now より過去なら expired を返すべき", async () => {
+  it("should return expired when expiresAt is in the past relative to now", async () => {
     const secret = randomBytes(32);
     const token = signIntent(intent({ expiresAt: "2026-05-15T10:00:00.000Z" }), { secret });
     const result = await verifyIntent(token, {
@@ -50,7 +50,7 @@ describe("verifyIntent (#795 Phase 1)", () => {
     if (!result.ok) expect(result.reason).toBe("expired");
   });
 
-  it("notBefore が now より未来なら not-yet-valid を返すべき", async () => {
+  it("should return not-yet-valid when notBefore is in the future relative to now", async () => {
     const secret = randomBytes(32);
     const token = signIntent(
       intent({
@@ -67,7 +67,7 @@ describe("verifyIntent (#795 Phase 1)", () => {
     if (!result.ok) expect(result.reason).toBe("not-yet-valid");
   });
 
-  it("nonce store が replay を返すと nonce-replay を返すべき (= replay attack 防御)", async () => {
+  it("should return nonce-replay when the nonce store reports replay (= defends against replay attacks)", async () => {
     const secret = randomBytes(32);
     const token = signIntent(intent(), { secret });
     const replayStore: NonceStore = {
@@ -82,7 +82,7 @@ describe("verifyIntent (#795 Phase 1)", () => {
     if (!result.ok) expect(result.reason).toBe("nonce-replay");
   });
 
-  it("nonce store が accepted を返すと verify は通るべき", async () => {
+  it("should pass verify when the nonce store reports accepted", async () => {
     const secret = randomBytes(32);
     const token = signIntent(intent(), { secret });
     let recorded = 0;
@@ -101,7 +101,7 @@ describe("verifyIntent (#795 Phase 1)", () => {
     expect(recorded).toBe(1);
   });
 
-  it("schema 違反な payload (= 不要 property 混入) は schema-invalid を返すべき", async () => {
+  it("should return schema-invalid for a payload that violates the schema (= contains unwanted properties)", async () => {
     const secret = randomBytes(32);
     // 直接 invalid payload を sign したいので、 schema を bypass して任意 object を渡す。
     const badPayload = {
@@ -120,7 +120,7 @@ describe("verifyIntent (#795 Phase 1)", () => {
     }
   });
 
-  it("signature が改ざんされていたら jws-signature-mismatch を返すべき", async () => {
+  it("should return jws-signature-mismatch when the signature has been tampered with", async () => {
     const signer = randomBytes(32);
     const verifier = randomBytes(32);
     const token = signIntent(intent(), { secret: signer });

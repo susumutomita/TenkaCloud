@@ -23,7 +23,7 @@ function buildMock() {
 }
 
 describe("listAuditEntries (#950)", () => {
-  it("scope=tenant は PK=TENANT#<id> で Query するべき", async () => {
+  it("scope=tenant should Query with PK=TENANT#<id>", async () => {
     const { ddb, send } = buildMock();
     send.mockResolvedValueOnce({
       Items: [
@@ -55,7 +55,7 @@ describe("listAuditEntries (#950)", () => {
     expect(cmd.input?.ScanIndexForward).toBe(false);
   });
 
-  it("scope=system は PK=SYSTEM#<env> で Query するべき", async () => {
+  it("scope=system should Query with PK=SYSTEM#<env>", async () => {
     const { ddb, send } = buildMock();
     send.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
     await listAuditEntries({ ddb: ddb as never, auditTableName: "T" }, { scope: "system" }, "prod");
@@ -65,7 +65,7 @@ describe("listAuditEntries (#950)", () => {
     );
   });
 
-  it("LastEvaluatedKey から nextCursor を base64 で返すべき", async () => {
+  it("should return nextCursor as base64 from LastEvaluatedKey", async () => {
     const { ddb, send } = buildMock();
     const lastKey = { PK: "TENANT#t-1", SK: "AUDIT#01HX" };
     send.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: lastKey });
@@ -77,7 +77,7 @@ describe("listAuditEntries (#950)", () => {
     expect(out.nextCursor).toBe(Buffer.from(JSON.stringify(lastKey)).toString("base64"));
   });
 
-  it("cursor を decode して ExclusiveStartKey に渡すべき", async () => {
+  it("should decode the cursor and pass it as ExclusiveStartKey", async () => {
     const { ddb, send } = buildMock();
     send.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
     const key = { PK: "TENANT#t-1", SK: "AUDIT#01HX" };
@@ -91,7 +91,7 @@ describe("listAuditEntries (#950)", () => {
     expect(cmd.input?.ExclusiveStartKey).toEqual(key);
   });
 
-  it("limit > 200 は 200 に clamp するべき", async () => {
+  it("should clamp limit > 200 to 200", async () => {
     const { ddb, send } = buildMock();
     send.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
     await listAuditEntries(
@@ -103,7 +103,7 @@ describe("listAuditEntries (#950)", () => {
     expect(cmd.input?.Limit).toBe(200);
   });
 
-  it("optional attrs (target / ipAddress / userAgent / extra) を含む item を正しく map するべき", async () => {
+  it("should correctly map items containing optional attrs (target / ipAddress / userAgent / extra)", async () => {
     const { ddb, send } = buildMock();
     send.mockResolvedValueOnce({
       Items: [

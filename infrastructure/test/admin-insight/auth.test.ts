@@ -27,7 +27,7 @@ describe("isSystemAdmin", () => {
     expect(isSystemAdmin(buildContext({ "custom:userRole": "SYSTEMADMIN" }))).toBe(false);
   });
 
-  it("custom:userRole の前後 whitespace は trim して評価すべき", () => {
+  it("should trim leading/trailing whitespace on custom:userRole before evaluation", () => {
     expect(isSystemAdmin(buildContext({ "custom:userRole": "  SystemAdmin  " }))).toBe(true);
   });
 
@@ -47,16 +47,16 @@ describe("isSystemAdmin", () => {
 });
 
 describe("resolveCognitoSub", () => {
-  it("sub claim があればその文字列を返すべき", () => {
+  it("should return the sub claim string when present", () => {
     expect(resolveCognitoSub(buildContext({ sub: "abc-123" }))).toBe("abc-123");
   });
 
-  it("sub が無いなら 'unknown' を返すべき", () => {
+  it("should return 'unknown' when sub is missing", () => {
     expect(resolveCognitoSub(buildContext())).toBe("unknown");
     expect(resolveCognitoSub(buildContext({}))).toBe("unknown");
   });
 
-  it("sub が空文字なら 'unknown' を返すべき", () => {
+  it("should return 'unknown' when sub is an empty string", () => {
     expect(resolveCognitoSub(buildContext({ sub: "" }))).toBe("unknown");
   });
 });

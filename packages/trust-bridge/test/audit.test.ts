@@ -33,7 +33,7 @@ function makeIntent(): CloudActionIntent {
 describe("buildAuditRecord (#795 Phase 1)", () => {
   const fixedNow = () => new Date("2026-05-15T19:30:00.000Z");
 
-  it("verify 成功 + override 無しなら decision=allow で intent の domain field を埋めるべき", () => {
+  it("should set decision=allow and populate domain fields from the intent on verify success without override", () => {
     const intent = makeIntent();
     const record = buildAuditRecord({
       outcome: { ok: true, intent: brandVerified(intent) },
@@ -57,7 +57,7 @@ describe("buildAuditRecord (#795 Phase 1)", () => {
     });
   });
 
-  it("override で deny を指定したら decision が deny になり denialReason も載るべき", () => {
+  it("should set decision to deny and include denialReason when override specifies deny", () => {
     const intent = makeIntent();
     const record = buildAuditRecord({
       outcome: { ok: true, intent: brandVerified(intent) },
@@ -69,7 +69,7 @@ describe("buildAuditRecord (#795 Phase 1)", () => {
     expect(record.denialReason).toBe("policy:scope-too-broad");
   });
 
-  it("verify 失敗系は decision=deny + denialReason=reason で unknown を埋めるべき", () => {
+  it("should record verify failures as decision=deny + denialReason=reason and fill missing fields with unknown", () => {
     const record = buildAuditRecord({
       outcome: { ok: false, reason: "expired" },
       now: fixedNow,
@@ -85,7 +85,7 @@ describe("buildAuditRecord (#795 Phase 1)", () => {
     });
   });
 
-  it("schema 無効系も deny + denialReason=schema-invalid で audit に残るべき", () => {
+  it("should also record schema-invalid cases as deny + denialReason=schema-invalid in audit", () => {
     const record = buildAuditRecord({
       outcome: { ok: false, reason: "schema-invalid", details: ["constraints.ttlSeconds"] },
       now: fixedNow,
@@ -94,7 +94,7 @@ describe("buildAuditRecord (#795 Phase 1)", () => {
     expect(record.denialReason).toBe("schema-invalid");
   });
 
-  it("source の optional field が無い intent では audit にも入らないべき (= clean serialization)", () => {
+  it("should omit source optional fields from audit when the intent lacks them (= clean serialization)", () => {
     const intent = makeIntent();
     const lean: CloudActionIntent = {
       ...intent,

@@ -31,11 +31,11 @@ const shared = {
 } as unknown as ParticipantSharedResources;
 
 describe("parseDeployLogLimit", () => {
-  it("未指定なら default limit を返すべき", () => {
+  it("should return the default limit when unspecified", () => {
     expect(parseDeployLogLimit(undefined)).toBe(50);
   });
 
-  it("1-100 の整数だけを許可すべき", () => {
+  it("should accept only integers from 1 to 100", () => {
     expect(parseDeployLogLimit("1")).toBe(1);
     expect(parseDeployLogLimit("100")).toBe(100);
     expect(parseDeployLogLimit("0")).toBeNull();
@@ -46,7 +46,7 @@ describe("parseDeployLogLimit", () => {
 });
 
 describe("getParticipantDeployLogs", () => {
-  it("teamLoginKey に紐づく deployment が無ければ unauthorized を返すべき", async () => {
+  it("should return unauthorized when there are no deployments linked to teamLoginKey", async () => {
     vi.mocked(queryTeamItems).mockResolvedValueOnce([]);
     const deps = buildDeps();
 
@@ -57,7 +57,7 @@ describe("getParticipantDeployLogs", () => {
     expect(deps.logs.send).not.toHaveBeenCalled();
   });
 
-  it("別 jobId は not_found を返し CodeBuild を呼ばないべき", async () => {
+  it("should return not_found without calling CodeBuild for a different jobId", async () => {
     vi.mocked(queryTeamItems).mockResolvedValueOnce([{ jobId: "01HOTHERJOBID012345678901" }]);
     const deps = buildDeps();
 
@@ -67,7 +67,7 @@ describe("getParticipantDeployLogs", () => {
     expect(deps.codebuild.send).not.toHaveBeenCalled();
   });
 
-  it("buildId 未採番なら空ログを 200 用 response として返すべき", async () => {
+  it("should return an empty log as a 200 response when buildId has not been assigned", async () => {
     vi.mocked(queryTeamItems).mockResolvedValueOnce([
       { jobId: JOB_ID, status: "PENDING", updatedAt: "2026-05-20T10:00:00.000Z" },
     ]);
@@ -87,7 +87,7 @@ describe("getParticipantDeployLogs", () => {
     expect(deps.codebuild.send).not.toHaveBeenCalled();
   });
 
-  it("CodeBuild の log group/stream から増分 log events を返すべき", async () => {
+  it("should return incremental log events from the CodeBuild log group/stream", async () => {
     vi.mocked(queryTeamItems).mockResolvedValueOnce([
       { jobId: JOB_ID, status: "IN_PROGRESS", buildId: "project:build-1" },
     ]);
@@ -146,7 +146,7 @@ describe("getParticipantDeployLogs", () => {
     });
   });
 
-  it("CodeBuild が terminal status なら complete=true を返すべき", async () => {
+  it("should return complete=true when CodeBuild is in a terminal status", async () => {
     vi.mocked(queryTeamItems).mockResolvedValueOnce([
       { jobId: JOB_ID, status: "IN_PROGRESS", buildId: "project:build-1" },
     ]);
@@ -170,7 +170,7 @@ describe("getParticipantDeployLogs", () => {
     expect(out.response.buildStatus).toBe("FAILED");
   });
 
-  it("flagOutputKey を含む CodeBuild log は redaction して返すべき", async () => {
+  it("should redact CodeBuild logs containing flagOutputKey before returning", async () => {
     const flagShared = {
       ...shared,
       problemsScoring: {

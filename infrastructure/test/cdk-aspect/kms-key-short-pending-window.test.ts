@@ -23,19 +23,19 @@ function buildHarness(pendingWindow: number): Template {
 }
 
 describe("KmsKeyShortPendingWindow", () => {
-  it("caller が 7 を渡すと PendingWindowInDays=7 になるべき", () => {
+  it("should set PendingWindowInDays=7 when the caller passes 7", () => {
     buildHarness(7).hasResourceProperties("AWS::KMS::Key", { PendingWindowInDays: 7 });
   });
 
-  it("caller が 30 を渡すと PendingWindowInDays=30 になるべき (= production 想定)", () => {
+  it("should set PendingWindowInDays=30 when the caller passes 30 (production)", () => {
     buildHarness(30).hasResourceProperties("AWS::KMS::Key", { PendingWindowInDays: 30 });
   });
 
-  it("caller が範囲内の任意値 (= 14) を渡すと PendingWindowInDays=14 になるべき", () => {
+  it("should set PendingWindowInDays=14 when the caller passes a value in range (= 14)", () => {
     buildHarness(14).hasResourceProperties("AWS::KMS::Key", { PendingWindowInDays: 14 });
   });
 
-  it("複数の KMS Key が混在する stack でも全件に同じ値が適用されるべき", () => {
+  it("should apply the same value to every KMS Key even in stacks with multiple KMS Keys mixed", () => {
     const app = new App();
     const stack = new Stack(app, "TestStack");
     new Key(stack, "KeyA");
@@ -51,7 +51,7 @@ describe("KmsKeyShortPendingWindow", () => {
     }
   });
 
-  it("KMS Key が無い stack には影響しないべき", () => {
+  it("should leave stacks without KMS Keys untouched", () => {
     const app = new App();
     const stack = new Stack(app, "TestStack");
     Aspects.of(stack).add(new KmsKeyShortPendingWindow(7));
@@ -61,19 +61,19 @@ describe("KmsKeyShortPendingWindow", () => {
   });
 
   describe("validation", () => {
-    it("AWS KMS の許容範囲 [7, 30] 外は throw するべき", () => {
+    it("should throw outside the AWS KMS allowed range [7, 30]", () => {
       expect(() => new KmsKeyShortPendingWindow(6)).toThrow(/must be an integer in \[7, 30\]/);
       expect(() => new KmsKeyShortPendingWindow(31)).toThrow(/must be an integer in \[7, 30\]/);
       expect(() => new KmsKeyShortPendingWindow(0)).toThrow(/must be an integer in \[7, 30\]/);
       expect(() => new KmsKeyShortPendingWindow(-1)).toThrow(/must be an integer in \[7, 30\]/);
     });
 
-    it("非整数 (= 14.5 / NaN) は throw するべき", () => {
+    it("should throw on non-integers (14.5 / NaN)", () => {
       expect(() => new KmsKeyShortPendingWindow(14.5)).toThrow(/must be an integer/);
       expect(() => new KmsKeyShortPendingWindow(Number.NaN)).toThrow(/must be an integer/);
     });
 
-    it("境界値 (= 7 / 30) は許容すべき", () => {
+    it("should allow boundary values (7 / 30)", () => {
       expect(() => new KmsKeyShortPendingWindow(KMS_PENDING_WINDOW_MIN_DAYS)).not.toThrow();
       expect(() => new KmsKeyShortPendingWindow(KMS_PENDING_WINDOW_MAX_DAYS)).not.toThrow();
     });

@@ -36,7 +36,7 @@ function withClaims(claims: Record<string, unknown>) {
 describe("GET /admin/insight/tenants/summary", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("SystemAdmin role claim があれば 200 を返すべき", async () => {
+  it("should return 200 when the SystemAdmin role claim is present", async () => {
     mocks.summarizeTenants.mockResolvedValueOnce({
       items: [{ tenantId: "t-1", activeDeploys: 2, failedDeploys: 0, totalEvents: 3 }],
     });
@@ -52,7 +52,7 @@ describe("GET /admin/insight/tenants/summary", () => {
     expect(body.items[0].tenantId).toBe("t-1");
   });
 
-  it("SystemAdmin claim 無し (Tenant Admin) は 403 を返すべき", async () => {
+  it("should return 403 when SystemAdmin claim is missing (Tenant Admin)", async () => {
     const res = await app.request(
       "/admin/insight/tenants/summary?tenantIds=t-1",
       {},
@@ -62,12 +62,12 @@ describe("GET /admin/insight/tenants/summary", () => {
     expect(mocks.summarizeTenants).not.toHaveBeenCalled();
   });
 
-  it("claims が無い (= JWT 経路を通っていない) なら 403 を返すべき", async () => {
+  it("should return 403 when claims are missing (= JWT path was not taken)", async () => {
     const res = await app.request("/admin/insight/tenants/summary?tenantIds=t-1");
     expect(res.status).toBe(403);
   });
 
-  it("custom:userRole の前後 whitespace は trim して認可するべき", async () => {
+  it("should trim leading/trailing whitespace on custom:userRole before authorizing", async () => {
     mocks.summarizeTenants.mockResolvedValueOnce({ items: [] });
     const res = await app.request(
       "/admin/insight/tenants/summary?tenantIds=t-1",
@@ -77,7 +77,7 @@ describe("GET /admin/insight/tenants/summary", () => {
     expect(res.status).toBe(200);
   });
 
-  it("tenantIds query が空なら 200 + 空 items を返すべき (DDB は叩かない)", async () => {
+  it("should return 200 + empty items when tenantIds query is empty (no DDB call)", async () => {
     const res = await app.request(
       "/admin/insight/tenants/summary",
       {},
@@ -110,7 +110,7 @@ describe("GET /admin/insight/tenants/summary", () => {
     expect(mocks.summarizeTenants).not.toHaveBeenCalled();
   });
 
-  it("内部 throw は 500 + body { error: 'internal_error' } を返すべき", async () => {
+  it("should return 500 + body { error: 'internal_error' } on internal throw", async () => {
     mocks.summarizeTenants.mockRejectedValueOnce(new Error("ddb down"));
     const res = await app.request(
       "/admin/insight/tenants/summary?tenantIds=t-1",
@@ -124,7 +124,7 @@ describe("GET /admin/insight/tenants/summary", () => {
     expect(JSON.stringify(body)).not.toContain("ddb down");
   });
 
-  it("ADR-011 D5 audit log: 各 read で admin.insight.read を console.log するべき", async () => {
+  it("ADR-011 D5 audit log: should console.log admin.insight.read on each read", async () => {
     const spy = vi.spyOn(console, "log").mockImplementation(() => undefined);
     mocks.summarizeTenants.mockResolvedValueOnce({ items: [] });
     await app.request(
@@ -147,7 +147,7 @@ describe("GET /admin/insight/tenants/summary", () => {
 });
 
 describe("GET /admin/insight/healthz", () => {
-  it("認可不要で 200 を返すべき (= API GW で除外する余地もあるが Lambda 側も対応)", async () => {
+  it("should return 200 without authorization (API GW may exclude it, but Lambda handles it too)", async () => {
     const res = await app.request("/admin/insight/healthz");
     expect(res.status).toBe(200);
     const body = await res.json();

@@ -11,7 +11,7 @@ import {
  * 漏れないことを assertion で確認 (= "portal は plugin の信頼境界" 原則)。
  */
 describe("buildPortalEndpointsFromOutputs", () => {
-  it("metadata.endpoints[] と stackOutputs から effectiveUrl を組み立てるべき", () => {
+  it("should build effectiveUrl from metadata.endpoints[] and stackOutputs", () => {
     const endpoints = buildPortalEndpointsFromOutputs("microservice-migration-battle", {
       BaseUrl: "http://ec2-1-2-3-4.compute.amazonaws.com",
     });
@@ -22,21 +22,21 @@ describe("buildPortalEndpointsFromOutputs", () => {
     expect(users?.overridable).toBe(true);
   });
 
-  it("stackOutputs に該当 key が無いなら defaultUrl は undefined にすべき", () => {
+  it("should leave defaultUrl undefined when stackOutputs lacks the key", () => {
     const endpoints = buildPortalEndpointsFromOutputs("microservice-migration-battle", {});
     expect(endpoints[0]?.defaultUrl).toBeUndefined();
     expect(endpoints[0]?.effectiveUrl).toBeUndefined();
   });
 
-  it("metadata.endpoints[] が無い問題 (hello-world) は空配列を返すべき", () => {
+  it("should return empty array for a problem (hello-world) without metadata.endpoints[]", () => {
     expect(buildPortalEndpointsFromOutputs("hello-world", {})).toEqual([]);
   });
 
-  it("存在しない problemId は空配列を返すべき", () => {
+  it("should return empty array for a non-existent problemId", () => {
     expect(buildPortalEndpointsFromOutputs("does-not-exist", {})).toEqual([]);
   });
 
-  it("malformed base URL (CFn output が空文字 / 不正) は context 付きで throw すべき (= silent skip しない)", () => {
+  it("should throw with context for malformed base URL (CFn output empty / invalid) (= no silent skip)", () => {
     // base に malformed URL を投入し joinUrl で `new URL("/users", "not-a-url/")` が
     // throw する case。 silent undefined fallback は metadata / output 異常を隠してしまうので、
     // context (= problemId / slot / key) 付き Error を rethrow することで debuggable にする。
@@ -49,7 +49,7 @@ describe("buildPortalEndpointsFromOutputs", () => {
 });
 
 describe("buildPortalPhases", () => {
-  it("publicHint=true な phases のみ返すべき (#689 — ネタバレ防止)", () => {
+  it("should return only phases with publicHint=true (#689 — spoiler prevention)", () => {
     // microservice-migration-battle は phases[] に degraded / legacy を持つが、 default
     // (= publicHint 未指定) では portal に出さない。 metadata 作者が明示的に publicHint=true
     // を立てた entry のみ portal に届く。
@@ -57,31 +57,31 @@ describe("buildPortalPhases", () => {
     expect(phases.every((p) => p.publicHint === true)).toBe(true);
   });
 
-  it("operator 内部 field (= effect / switchPlatformToDegraded) を plugin に流さない", () => {
+  it("should not leak operator-internal fields (= effect / switchPlatformToDegraded) to plugins", () => {
     const phases = buildPortalPhases("microservice-migration-battle");
     const json = JSON.stringify(phases);
     expect(json).not.toContain("switchPlatformToDegraded");
     expect(json).not.toContain("scorePathOverride");
   });
 
-  it("phases[] が無い問題は空配列を返すべき", () => {
+  it("should return empty array for problems without phases[]", () => {
     expect(buildPortalPhases("hello-world")).toEqual([]);
   });
 });
 
 describe("buildPortalDisruptions", () => {
-  it("publicHint=true な disruptions のみ返すべき (#689 — ネタバレ防止)", () => {
+  it("should return only disruptions with publicHint=true (#689 — spoiler prevention)", () => {
     const out = buildPortalDisruptions("microservice-migration-battle");
     expect(out.every((d) => d.publicHint === true)).toBe(true);
   });
 
-  it("disruptions[] が無い問題は空配列を返すべき", () => {
+  it("should return empty array for problems without disruptions[]", () => {
     expect(buildPortalDisruptions("hello-world")).toEqual([]);
     expect(buildPortalDisruptions("hello-world-battle")).toEqual([]);
     expect(buildPortalDisruptions("security-battle-royale")).toEqual([]);
   });
 
-  it("存在しない problemId は空配列を返すべき", () => {
+  it("should return empty array for a non-existent problemId", () => {
     expect(buildPortalDisruptions("does-not-exist")).toEqual([]);
   });
 });

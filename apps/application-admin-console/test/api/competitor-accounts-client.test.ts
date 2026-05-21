@@ -38,7 +38,7 @@ function fakeClient(response: unknown): { client: ApiClient; calls: CapturedCall
 }
 
 describe("listCompetitorAccounts", () => {
-  it("GET /admin/competitor-accounts を呼ぶべき", async () => {
+  it("should call GET /admin/competitor-accounts", async () => {
     const { client, calls } = fakeClient({ items: [] });
     await listCompetitorAccounts(client);
     expect(calls[0]?.path).toBe("admin/competitor-accounts");
@@ -47,7 +47,7 @@ describe("listCompetitorAccounts", () => {
 });
 
 describe("createCompetitorAccount", () => {
-  it("POST /admin/competitor-accounts に body を送り externalId を含む response を返すべき", async () => {
+  it("should POST body to /admin/competitor-accounts and return response with externalId", async () => {
     const { client, calls } = fakeClient({
       awsAccountId: "222222222222",
       region: "ap-northeast-1",
@@ -72,7 +72,7 @@ describe("createCompetitorAccount", () => {
 });
 
 describe("verifyCompetitorAccount", () => {
-  it("POST /admin/competitor-accounts/{awsAccountId}/verify を呼ぶべき (URL encode)", async () => {
+  it("should call POST /admin/competitor-accounts/{awsAccountId}/verify (URL encode)", async () => {
     const { client, calls } = fakeClient({
       awsAccountId: "222222222222",
       region: "ap-northeast-1",
@@ -90,7 +90,7 @@ describe("verifyCompetitorAccount", () => {
 });
 
 describe("deleteCompetitorAccount", () => {
-  it("DELETE /admin/competitor-accounts/{awsAccountId} を呼ぶべき", async () => {
+  it("should call DELETE /admin/competitor-accounts/{awsAccountId}", async () => {
     const { client, calls } = fakeClient({});
     await deleteCompetitorAccount(client, "222222222222");
     expect(calls[0]?.path).toBe("admin/competitor-accounts/222222222222");

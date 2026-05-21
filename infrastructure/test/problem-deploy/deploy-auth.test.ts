@@ -18,7 +18,7 @@ import {
 } from "../../lib/problem-deploy/handlers/deploy-handler/auth";
 
 describe("extractTenantIdFromClaims", () => {
-  it("custom:tenantId が文字列なら返すべき", () => {
+  it("should return custom:tenantId when it is a string", () => {
     expect(extractTenantIdFromClaims({ "custom:tenantId": "tenant-acme" })).toBe("tenant-acme");
   });
 
@@ -41,7 +41,7 @@ describe("extractTenantIdFromClaims", () => {
     expect(extractTenantIdFromClaims({ sub: "u-1" })).toBeUndefined();
   });
 
-  it("trim して返すべき (Cognito の trailing space 揺れ対策)", () => {
+  it("should trim and return (guard against Cognito trailing-space drift)", () => {
     expect(extractTenantIdFromClaims({ "custom:tenantId": "  tenant-acme  " })).toBe("tenant-acme");
   });
 });
@@ -63,19 +63,19 @@ describe("resolveTenantId", () => {
     else process.env.DEFAULT_TENANT_ID = original;
   });
 
-  it("JWT claim が居れば優先するべき", () => {
+  it("should prefer the JWT claim when present", () => {
     process.env.DEFAULT_TENANT_ID = "tenant-from-env";
     const c = buildCtx({ "custom:tenantId": "tenant-from-jwt" });
     expect(resolveTenantId(c)).toBe("tenant-from-jwt");
   });
 
-  it("JWT claim が無ければ DEFAULT_TENANT_ID env を返すべき", () => {
+  it("should fall back to DEFAULT_TENANT_ID env when JWT claim is missing", () => {
     process.env.DEFAULT_TENANT_ID = "tenant-from-env";
     const c = buildCtx();
     expect(resolveTenantId(c)).toBe("tenant-from-env");
   });
 
-  it("env も無ければ MissingTenantClaimError を throw すべき (= Issue #843 fail-closed)", () => {
+  it("should throw MissingTenantClaimError when env is also missing (Issue #843 fail-closed)", () => {
     delete process.env.DEFAULT_TENANT_ID;
     const c = buildCtx();
     expect(() => resolveTenantId(c)).toThrow(MissingTenantClaimError);
@@ -91,7 +91,7 @@ describe("resolveTenantId", () => {
 /* ---- Issue #854: TenantAdmin role enforcement ---- */
 
 describe("extractUserRoleFromClaims (Issue #854)", () => {
-  it("custom:userRole が文字列なら trim して返すべき", () => {
+  it("should return custom:userRole trimmed when it is a string", () => {
     expect(extractUserRoleFromClaims({ "custom:userRole": "TenantAdmin" })).toBe("TenantAdmin");
     expect(extractUserRoleFromClaims({ "custom:userRole": "  TenantAdmin  " })).toBe("TenantAdmin");
   });
@@ -111,18 +111,18 @@ describe("resolveUserRole (Issue #854)", () => {
     else process.env.DEFAULT_USER_ROLE = original;
   });
 
-  it("JWT claim が居れば優先するべき", () => {
+  it("should prefer the JWT claim when present", () => {
     process.env.DEFAULT_USER_ROLE = "from-env";
     const c = buildCtx({ "custom:userRole": "TenantAdmin" });
     expect(resolveUserRole(c)).toBe("TenantAdmin");
   });
 
-  it("JWT claim が無ければ DEFAULT_USER_ROLE env を返すべき", () => {
+  it("should fall back to DEFAULT_USER_ROLE env when JWT claim is missing", () => {
     process.env.DEFAULT_USER_ROLE = "TenantAdmin";
     expect(resolveUserRole(buildCtx())).toBe("TenantAdmin");
   });
 
-  it("env も無ければ undefined を返すべき", () => {
+  it("should return undefined when env is also missing", () => {
     delete process.env.DEFAULT_USER_ROLE;
     expect(resolveUserRole(buildCtx())).toBeUndefined();
   });
@@ -189,12 +189,12 @@ function buildRestCtx(claims?: Record<string, string>): Context {
 }
 
 describe("extractClaims (REST API vs HTTP API authorizer 形式)", () => {
-  it("HTTP API V2 形式 (= authorizer.jwt.claims) を読むべき", () => {
+  it("should read HTTP API V2 form (authorizer.jwt.claims)", () => {
     const c = buildCtx({ "custom:tenantId": "tenant-http-api" });
     expect(extractClaims(c)).toEqual({ "custom:tenantId": "tenant-http-api" });
   });
 
-  it("REST API + Cognito 形式 (= authorizer.claims、 .jwt. wrap 無し) を読むべき", () => {
+  it("should read the REST API + Cognito form (authorizer.claims, no .jwt. wrap)", () => {
     const c = buildRestCtx({ "custom:tenantId": "tenant-rest-api" });
     expect(extractClaims(c)).toEqual({ "custom:tenantId": "tenant-rest-api" });
   });
@@ -208,11 +208,11 @@ describe("extractClaims (REST API vs HTTP API authorizer 形式)", () => {
 /* ---- ADR-020 / Issue #926 Phase B: role enum + requireRole ---- */
 
 describe("TENANT_ROLES enum (ADR-020)", () => {
-  it("3 role を持つべき (Admin / Operator / Viewer)", () => {
+  it("should have 3 roles (Admin / Operator / Viewer)", () => {
     expect(TENANT_ROLES).toEqual(["TenantAdmin", "TenantOperator", "TenantViewer"]);
   });
 
-  it("const exports は role 文字列と一致するべき", () => {
+  it("const exports should match the role strings", () => {
     expect(TENANT_ADMIN_ROLE).toBe("TenantAdmin");
     expect(TENANT_OPERATOR_ROLE).toBe("TenantOperator");
     expect(TENANT_VIEWER_ROLE).toBe("TenantViewer");
@@ -270,7 +270,7 @@ describe("requireTenantAdmin alias (= requireRole(c, [TENANT_ADMIN_ROLE]))", () 
     else process.env.DEFAULT_USER_ROLE = original;
   });
 
-  it("TenantOperator は requireTenantAdmin で reject されるべき (= Phase B alias が degrade しない)", () => {
+  it("TenantOperator should be rejected by requireTenantAdmin (Phase B alias does not degrade)", () => {
     delete process.env.DEFAULT_USER_ROLE;
     const c = buildCtx({ "custom:userRole": "TenantOperator" });
     expect(() => requireTenantAdmin(c)).toThrow(ForbiddenRoleError);
@@ -293,20 +293,20 @@ describe("resolveTenantId / resolveUserRole / resolveCognitoSub (REST API path)"
     else process.env.DEFAULT_USER_ROLE = originalRole;
   });
 
-  it("REST API claim path から tenantId を resolve するべき", () => {
+  it("should resolve tenantId from the REST API claim path", () => {
     delete process.env.DEFAULT_TENANT_ID;
     const c = buildRestCtx({ "custom:tenantId": "tenant-rest-api" });
     expect(resolveTenantId(c)).toBe("tenant-rest-api");
   });
 
-  it("REST API claim path から userRole を resolve するべき (Issue #903 forbidden_role 修正)", () => {
+  it("should resolve userRole from the REST API claim path (Issue #903 forbidden_role fix)", () => {
     delete process.env.DEFAULT_USER_ROLE;
     const c = buildRestCtx({ "custom:userRole": "TenantAdmin" });
     expect(resolveUserRole(c)).toBe("TenantAdmin");
     expect(() => requireTenantAdmin(c)).not.toThrow();
   });
 
-  it("REST API claim path から Cognito sub を resolve するべき", () => {
+  it("should resolve Cognito sub from the REST API claim path", () => {
     const c = buildRestCtx({ sub: "user-rest-api" });
     expect(resolveCognitoSub(c)).toBe("user-rest-api");
   });

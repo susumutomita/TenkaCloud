@@ -19,25 +19,25 @@ describe("isWithinFreezeWindow (Issue #1038 P1 #9 follow-up)", () => {
   const endsAt = "2026-05-19T01:00:00.000Z";
   const endsAtMs = Date.parse(endsAt);
 
-  it("default は 30 分前から freeze するべき (= 既存挙動を維持)", () => {
+  it("should freeze from 30 minutes before by default (existing behavior)", () => {
     expect(isWithinFreezeWindow(endsAt, endsAtMs - 31 * 60 * 1000)).toBe(false);
     expect(isWithinFreezeWindow(endsAt, endsAtMs - 30 * 60 * 1000)).toBe(true);
     expect(isWithinFreezeWindow(endsAt, endsAtMs - 1 * 60 * 1000)).toBe(true);
   });
 
-  it("operator が 60 分を指定したら 60 分前から freeze するべき", () => {
+  it("should freeze from 60 minutes before when operator specifies 60 minutes", () => {
     expect(isWithinFreezeWindow(endsAt, endsAtMs - 61 * 60 * 1000, 60)).toBe(false);
     expect(isWithinFreezeWindow(endsAt, endsAtMs - 60 * 60 * 1000, 60)).toBe(true);
     expect(isWithinFreezeWindow(endsAt, endsAtMs - 30 * 60 * 1000, 60)).toBe(true);
   });
 
-  it("operator が 10 分を指定したら 10 分前から freeze するべき (= 既存より短い window)", () => {
+  it("should freeze from 10 minutes before when operator specifies 10 minutes (shorter window than default)", () => {
     expect(isWithinFreezeWindow(endsAt, endsAtMs - 31 * 60 * 1000, 10)).toBe(false);
     expect(isWithinFreezeWindow(endsAt, endsAtMs - 11 * 60 * 1000, 10)).toBe(false);
     expect(isWithinFreezeWindow(endsAt, endsAtMs - 10 * 60 * 1000, 10)).toBe(true);
   });
 
-  it("operator が 0 を指定したら freeze 無効になるべき (= 終了直前でも順位公開)", () => {
+  it("should disable freeze when operator specifies 0 (ranking stays public even at the end)", () => {
     expect(isWithinFreezeWindow(endsAt, endsAtMs - 1 * 60 * 1000, 0)).toBe(false);
     expect(isWithinFreezeWindow(endsAt, endsAtMs - 0, 0)).toBe(false);
   });
@@ -71,7 +71,7 @@ describe("isWithinFreezeWindow (Issue #1038 P1 #9 follow-up)", () => {
     expect(isWithinFreezeWindow(endsAt, endsAtMs - 31 * 60 * 1000, 999)).toBe(false);
   });
 
-  it("DEFAULT_FREEZE_MINUTES が export されているべき (= operator UI default 表示用)", () => {
+  it("DEFAULT_FREEZE_MINUTES should be exported (for operator UI default display)", () => {
     expect(DEFAULT_FREEZE_MINUTES).toBe(30);
   });
 

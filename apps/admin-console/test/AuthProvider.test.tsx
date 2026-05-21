@@ -56,7 +56,7 @@ describe("AuthProvider idle timeout (#859)", () => {
     vi.useRealTimers();
   });
 
-  it("tokens が無いときは idle timer を起動しないべき", async () => {
+  it("should not start the idle timer when there are no tokens", async () => {
     render(
       <AuthProvider config={config}>
         <TokensDisplay />
@@ -73,7 +73,7 @@ describe("AuthProvider idle timeout (#859)", () => {
     expect(beginLogoutMock).not.toHaveBeenCalled();
   });
 
-  it("tokens 有りで 15 min 無操作なら beginLogout を呼ぶべき", async () => {
+  it("should call beginLogout when tokens are present and 15 min pass without activity", async () => {
     const valid = {
       idToken: "id",
       accessToken: "ac",
@@ -106,7 +106,7 @@ describe("AuthProvider idle timeout (#859)", () => {
     expect(beginLogoutMock).toHaveBeenCalledTimes(1);
   });
 
-  it("user 操作 (keydown) で idle timer は reset されるべき", async () => {
+  it("should reset the idle timer on user activity (keydown)", async () => {
     const valid = {
       idToken: "id",
       accessToken: "ac",
