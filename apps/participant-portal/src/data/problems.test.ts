@@ -135,11 +135,18 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
 
     it("should return en override fields when locale='en' (hello-world)", () => {
       const m = requireProblemMetadata("hello-world");
-      const r = resolveLocalizedNarrative(m, "en");
-      expect(r.shortDescription).toMatch(/Minimal Challenge/);
-      expect(r.learningGoals.length).toBeGreaterThanOrEqual(2);
+      const ja = resolveLocalizedNarrative(m, "ja");
+      const en = resolveLocalizedNarrative(m, "en");
+      // i18n override が適用されていれば ja と en の shortDescription は別物。
+      // 問題本文は時期によって書き換わる (= 特定 sentinel 文字列に pin しない)。
+      expect(en.shortDescription).not.toBe(ja.shortDescription);
+      // en は CJK 文字 (ひらがな / カタカナ / 漢字) を含まないはず。
+      expect(en.shortDescription).not.toMatch(
+        /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u,
+      );
+      expect(en.learningGoals.length).toBeGreaterThanOrEqual(2);
       // fairness contract: description は narrative の戻り値型から削除済
-      expect((r as unknown as { description?: string }).description).toBeUndefined();
+      expect((en as unknown as { description?: string }).description).toBeUndefined();
     });
 
     it("全 4 既存問題が en の翻訳を持つべき (#1108 で ja+en のみサポート)", () => {
