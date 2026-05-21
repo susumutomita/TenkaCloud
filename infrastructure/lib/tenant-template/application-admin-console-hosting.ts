@@ -150,7 +150,7 @@ export class ApplicationAdminConsoleHosting extends Construct {
     // CodeBuild 実行時 (silo stack) は STAGING/apps/application-admin-console/dist。
     // どちらも install.sh が事前に build + 配置する。
     const distDir = path.join(
-      __dirname,
+      import.meta.dirname,
       "..",
       "..",
       "..",

@@ -19,7 +19,7 @@ const app = new cdk.App();
 
 const config = resolveAppConfig({
   env: process.env,
-  binDir: __dirname,
+  binDir: import.meta.dirname,
 });
 
 buildTenkaCloudApp(app, config);

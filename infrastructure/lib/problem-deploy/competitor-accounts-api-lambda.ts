@@ -53,7 +53,7 @@ export class CompetitorAccountsApiLambda extends Construct {
     this.fn = new NodejsFunction(this, "Function", {
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
-      entry: path.resolve(__dirname, "handlers/competitor-accounts-handler/index.ts"),
+      entry: path.resolve(import.meta.dirname, "handlers/competitor-accounts-handler/index.ts"),
       handler: "handler",
       // verify endpoint は STS AssumeRole 1 回 (= ~1s) + DDB Update なので 10s で十分。
       timeout: Duration.seconds(15),

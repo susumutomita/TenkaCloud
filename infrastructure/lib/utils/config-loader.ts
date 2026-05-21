@@ -1,9 +1,18 @@
 import * as fs from "node:fs";
+import { createRequire } from "node:module";
 import * as path from "node:path";
-import Ajv from "ajv";
-import addFormats from "ajv-formats";
+import { Ajv } from "ajv";
+import type { FormatsPlugin } from "ajv-formats";
 import type { Logger } from "winston";
 import type { Config } from "../config/config-interface.js";
+
+// ajv-formats 3 は CJS `export default formatsPlugin` で publish。 ESM
+// (= `"type": "module"`) では tsc が default import の値を namespace 扱いするため
+// callable として呼べない。 `createRequire(import.meta.url)` で CJS resolver から
+// runtime 関数を取り出し、型は named export の `FormatsPlugin` interface を当てる
+// (= `Plugin<Opts>` を継承する callable interface)。
+const require = createRequire(import.meta.url);
+const addFormats = require("ajv-formats").default as FormatsPlugin;
 
 export interface ExpandOptions {
   /**
@@ -126,7 +135,7 @@ export function loadConfig(envName: string, baseDir: string): Config | undefined
  * Validate a Config object against the JSON Schema.
  */
 export function validateConfig(config: Config, logger: Logger): void {
-  const schemaPath = path.resolve(__dirname, "../config/config-schema.json");
+  const schemaPath = path.resolve(import.meta.dirname, "../config/config-schema.json");
   let schemaContent: string;
   try {
     schemaContent = fs.readFileSync(schemaPath, "utf-8");

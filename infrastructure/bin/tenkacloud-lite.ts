@@ -28,7 +28,7 @@ import { TenkaCloudLiteStack } from "../lib/tenkacloud-lite/index.js";
  */
 
 const app = new cdk.App();
-const config = resolveAppConfig({ env: process.env, binDir: __dirname });
+const config = resolveAppConfig({ env: process.env, binDir: import.meta.dirname });
 
 /**
  * Issue #992: 同 AWS account に複数 env を deploy できるよう stack ID に env suffix を付ける。
