@@ -33,6 +33,30 @@ export interface Config {
    * を渡すときに使う。
    */
   readonly budgetAlarmEmails?: readonly string[];
+
+  /**
+   * ADR-003 Phase 2 / problem catalog split: TenkaCloudChallenge repo の publish.yml が
+   * S3 にアップロードするための bucket + GitHub OIDC IAM Role 設定。 未指定なら
+   * `ChallengePayloadStack` は立てない (= 旧 `CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET` env override
+   * 経路だけ動く互換 mode)。
+   */
+  readonly challengePayloadConfig?: ChallengePayloadConfig;
+}
+
+export interface ChallengePayloadConfig {
+  /** Bucket 名 prefix。 environment 名が suffix される (= `tc-challenges-development` 等)。 */
+  readonly bucketPrefix: string;
+  /** OIDC AssumeRole を許可する GitHub repo (例 `susumutomita/TenkaCloudChallenge`)。 */
+  readonly githubRepository: string;
+  /** AssumeRole を許可する branch ref 一覧。 未指定なら `["main"]`。 */
+  readonly githubBranches?: readonly string[];
+  /**
+   * 既存の GitHub OIDC provider ARN。 AWS account に既に存在する場合は import する
+   * (= 1 account に同 URL の OIDC provider は 1 つしか作れない)。 未指定なら本 stack が新規作成。
+   */
+  readonly existingOidcProviderArn?: string;
+  /** Noncurrent S3 object を削除するまでの日数 (default 30)。 */
+  readonly noncurrentExpirationDays?: number | string;
 }
 
 // Issue #1066: SAML IdP 機能を全廃。 MFA 必須化 (Issue #1035) で代替済。

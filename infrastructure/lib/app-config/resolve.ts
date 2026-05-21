@@ -171,6 +171,31 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
 
   const challengePayloadBucketName = env.CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET || undefined;
 
+  // ADR-003 Phase 2 / catalog split: config.json の `challengePayloadConfig` から
+  // ChallengePayloadStack のパラメータを読み取る。 未設定なら stack を立てない (= 旧
+  // env override `CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET` だけで動く互換 mode)。
+  const cpConfig = config?.challengePayloadConfig;
+  const challengePayload = cpConfig
+    ? {
+        bucketName: `${String(cpConfig.bucketPrefix)}${environment}`,
+        githubRepository: String(cpConfig.githubRepository),
+        githubBranches:
+          Array.isArray(cpConfig.githubBranches) && cpConfig.githubBranches.length > 0
+            ? (cpConfig.githubBranches as readonly string[])
+            : (["main"] as const),
+        existingOidcProviderArn:
+          typeof cpConfig.existingOidcProviderArn === "string" &&
+          cpConfig.existingOidcProviderArn !== ""
+            ? cpConfig.existingOidcProviderArn
+            : env.CDK_PARAM_GITHUB_OIDC_PROVIDER_ARN || undefined,
+        noncurrentExpirationDays:
+          cpConfig.noncurrentExpirationDays !== undefined &&
+          cpConfig.noncurrentExpirationDays !== null
+            ? Number(cpConfig.noncurrentExpirationDays)
+            : undefined,
+      }
+    : undefined;
+
   const rawConcurrentLimit = env.CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT;
   const deployConcurrentBuildLimit =
     rawConcurrentLimit && rawConcurrentLimit.trim() !== "" ? Number(rawConcurrentLimit) : undefined;
@@ -238,6 +263,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     participantPortal,
     problems,
     challengePayloadBucketName,
+    challengePayload,
     deployConcurrentBuildLimit,
     monthlyCostLimitUsd,
     budgetAlarmEmails,
