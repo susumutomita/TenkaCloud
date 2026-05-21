@@ -215,6 +215,59 @@ interface PortalFetchOptions {
   readonly returnUndefinedOn404?: boolean;
 }
 
+interface PortalErrorBody {
+  readonly error?: string;
+  readonly startsAt?: string;
+  readonly endsAt?: string;
+}
+
+function applyPortalQuery(url: URL, query?: Readonly<Record<string, string>>): void {
+  if (!query) return;
+  for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
+}
+
+function buildPortalFetchInit(teamLoginKey: string, options: PortalFetchOptions): RequestInit {
+  const headers: Record<string, string> = { authorization: `Bearer ${teamLoginKey}` };
+  const hasBody = options.body !== undefined;
+  if (hasBody) headers["content-type"] = "application/json";
+  return {
+    method: options.method ?? "GET",
+    headers,
+    body: hasBody ? JSON.stringify(options.body) : undefined,
+    signal: options.signal,
+  };
+}
+
+async function readPortalErrorBody(res: Response): Promise<PortalErrorBody> {
+  return (await res.json().catch(() => ({}))) as PortalErrorBody;
+}
+
+function isScoringGateError(
+  error: string | undefined,
+): error is "scoring_not_started" | "scoring_ended" | "scoring_locked" {
+  return error === "scoring_not_started" || error === "scoring_ended" || error === "scoring_locked";
+}
+
+async function throwPortalErrorResponse(res: Response, options: PortalFetchOptions): Promise<void> {
+  if (res.status === StatusCodes.UNAUTHORIZED) throw new PortalAuthError();
+  if (res.status === StatusCodes.BAD_REQUEST && options.throwOn400) {
+    const body = await readPortalErrorBody(res);
+    throw new PortalValidationError(body.error ?? "invalid_request");
+  }
+  if (res.status === StatusCodes.CONFLICT && options.throwOn409) {
+    const body = await readPortalErrorBody(res);
+    // Issue #1006: scoring gate 系の 409 は startsAt / endsAt を持つ専用 error にする。
+    if (isScoringGateError(body.error)) {
+      throw new PortalScoringGateError(body.error, body.startsAt, body.endsAt);
+    }
+    throw new PortalValidationError(body.error ?? "conflict");
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new PortalNetworkError(res.status, body);
+  }
+}
+
 /**
  * Portal API 共通 fetch。401→PortalAuthError / !ok→PortalNetworkError は全 endpoint
  * 共通なので 1 箇所に集約。400 (validation) と 404 (no-content) は opt-in。
@@ -226,45 +279,10 @@ async function portalFetch<T>(
   options: PortalFetchOptions = {},
 ): Promise<T | undefined> {
   const url = buildPortalUrl(apiBaseUrl, path);
-  if (options.query) {
-    for (const [k, v] of Object.entries(options.query)) url.searchParams.set(k, v);
-  }
-  const headers: Record<string, string> = { authorization: `Bearer ${teamLoginKey}` };
-  const hasBody = options.body !== undefined;
-  if (hasBody) headers["content-type"] = "application/json";
-
-  const res = await fetch(url, {
-    method: options.method ?? "GET",
-    headers,
-    body: hasBody ? JSON.stringify(options.body) : undefined,
-    signal: options.signal,
-  });
-  if (res.status === StatusCodes.UNAUTHORIZED) throw new PortalAuthError();
+  applyPortalQuery(url, options.query);
+  const res = await fetch(url, buildPortalFetchInit(teamLoginKey, options));
   if (res.status === StatusCodes.NOT_FOUND && options.returnUndefinedOn404) return undefined;
-  if (res.status === StatusCodes.BAD_REQUEST && options.throwOn400) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new PortalValidationError(body.error ?? "invalid_request");
-  }
-  if (res.status === StatusCodes.CONFLICT && options.throwOn409) {
-    const body = (await res.json().catch(() => ({}))) as {
-      error?: string;
-      startsAt?: string;
-      endsAt?: string;
-    };
-    // Issue #1006: scoring gate 系の 409 は startsAt / endsAt を持つ専用 error にする。
-    if (
-      body.error === "scoring_not_started" ||
-      body.error === "scoring_ended" ||
-      body.error === "scoring_locked"
-    ) {
-      throw new PortalScoringGateError(body.error, body.startsAt, body.endsAt);
-    }
-    throw new PortalValidationError(body.error ?? "conflict");
-  }
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new PortalNetworkError(res.status, body);
-  }
+  await throwPortalErrorResponse(res, options);
   return (await res.json()) as T;
 }
 

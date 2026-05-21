@@ -7,8 +7,10 @@ import {
   listProblemEndpoints,
   PortalAuthError,
   PortalNetworkError,
+  PortalScoringGateError,
   PortalValidationError,
   putProblemEndpointOverride,
+  submitFlag,
   TERMINAL_STATUSES,
 } from "../../src/api/portal-client";
 
@@ -314,6 +316,38 @@ describe("putProblemEndpointOverride", () => {
     await expect(
       putProblemEndpointOverride("https://x", KEY, "p1", "fixed-slot", "https://x.com"),
     ).rejects.toBeInstanceOf(PortalValidationError);
+  });
+});
+
+describe("submitFlag", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("409 scoring_not_started は PortalScoringGateError として startsAt を保持すべき", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: "scoring_not_started",
+              startsAt: "2026-05-21T10:00:00.000Z",
+            }),
+            {
+              status: 409,
+              headers: { "content-type": "application/json" },
+            },
+          ),
+        ),
+      ),
+    );
+
+    await expect(submitFlag("https://x", KEY, "hello-world", "FLAG{demo}")).rejects.toMatchObject({
+      kind: "scoring_not_started",
+      startsAt: "2026-05-21T10:00:00.000Z",
+    });
+    await expect(submitFlag("https://x", KEY, "hello-world", "FLAG{demo}")).rejects.toBeInstanceOf(
+      PortalScoringGateError,
+    );
   });
 });
 
