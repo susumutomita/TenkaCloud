@@ -11,6 +11,7 @@ import TopNavigation, {
 } from "@cloudscape-design/components/top-navigation";
 import { type ReactNode, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router";
+import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { TeamViewProvider, useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
@@ -24,6 +25,88 @@ const LOCALE_DICTIONARIES_NAME: Record<LocaleCode, string> = {
   ja: "日本語",
   en: "English",
 };
+
+type Translate = (key: string) => string;
+
+export function isSupportedLocaleId(id: string): id is LocaleCode {
+  return (SUPPORTED_LOCALES as readonly string[]).includes(id);
+}
+
+export function formatTopNavScore(
+  mode: AppConfig["mode"],
+  view: ParticipantTeamView | null,
+): string {
+  if (mode !== "backend") return "—";
+  if (!view) return "…";
+  const totalScore = view.problems.reduce((sum, p) => sum + p.score, 0);
+  return `${totalScore} pt`;
+}
+
+export function formatTopNavRank(
+  mode: AppConfig["mode"],
+  leaderboard: LeaderboardResponse | null,
+  leaderboardNoEvent: boolean,
+): string {
+  if (mode !== "backend" || leaderboardNoEvent) return "—";
+  const myEntry = leaderboard?.entries.find((e) => e.isMyTeam);
+  const totalEntries = leaderboard?.entries.length;
+  return myEntry && totalEntries ? `${myEntry.rank}/${totalEntries}` : "…";
+}
+
+function buildLocaleUtility(
+  locale: LocaleCode,
+  setLocale: (locale: LocaleCode) => void,
+  t: Translate,
+): TopNavigationProps.Utility {
+  return {
+    type: "menu-dropdown",
+    iconName: "globe",
+    ariaLabel: t("switcher.aria_label"),
+    text: LOCALE_DICTIONARIES_NAME[locale] ?? locale,
+    items: SUPPORTED_LOCALES.map((code) => ({
+      id: code,
+      text: LOCALE_DICTIONARIES_NAME[code] ?? code,
+    })),
+    onItemClick: ({ detail }) => {
+      if (isSupportedLocaleId(detail.id)) setLocale(detail.id);
+    },
+  };
+}
+
+function buildScoreRankUtility(
+  score: string,
+  rank: string,
+  navigate: (href: string) => void,
+): TopNavigationProps.Utility {
+  return {
+    type: "button",
+    text: `Score: ${score}  /  Rank: ${rank}`,
+    iconName: "status-positive",
+    onClick: () => {
+      navigate("/scoreboard");
+    },
+  };
+}
+
+function buildProfileUtility(
+  teamName: string,
+  logout: () => void,
+  navigate: (href: string) => void,
+  t: Translate,
+): TopNavigationProps.Utility {
+  return {
+    type: "menu-dropdown",
+    text: teamName,
+    iconName: "user-profile",
+    items: [{ id: "logout", text: t("nav.sign_out") }],
+    onItemClick: ({ detail }) => {
+      if (detail.id === "logout") {
+        logout();
+        navigate("/login");
+      }
+    },
+  };
+}
 
 function OfflineCloudModeAlert({ config }: { config: AppConfig }) {
   const { t } = useI18n();
@@ -109,66 +192,21 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
   const utilities = useMemo<TopNavigationProps.Utility[]>(() => {
     // Issue #583 Phase 1.A: locale switcher utility は session 有無に依存しない (= ログイン
     // 前 / login page でも切替可能)。
-    const localeUtility: TopNavigationProps.Utility = {
-      type: "menu-dropdown",
-      iconName: "globe",
-      ariaLabel: t("switcher.aria_label"),
-      text: LOCALE_DICTIONARIES_NAME[locale] ?? locale,
-      items: SUPPORTED_LOCALES.map((code) => ({
-        id: code,
-        text: LOCALE_DICTIONARIES_NAME[code] ?? code,
-      })),
-      onItemClick: ({ detail }) => {
-        if ((SUPPORTED_LOCALES as readonly string[]).includes(detail.id)) {
-          setLocale(detail.id as LocaleCode);
-        }
-      },
-    };
+    const localeUtility = buildLocaleUtility(locale, setLocale, t);
     if (!auth.session) return [localeUtility];
     // Score: backend mode のときだけ実値、未取得なら "…"、dev-mock なら "—"。
-    const totalScore = teamView.view
-      ? teamView.view.problems.reduce((sum, p) => sum + p.score, 0)
-      : null;
-    const score =
-      config.mode === "backend" ? (totalScore !== null ? `${totalScore} pt` : "…") : "—";
+    const score = formatTopNavScore(config.mode, teamView.view);
     // Rank: leaderboard.entries.find(isMyTeam) の rank / 全 entries 数。
     // Phase 1 以前 (eventId 無し) は leaderboardNoEvent → "—"、未取得は "…"。
-    const myEntry = teamView.leaderboard?.entries.find((e) => e.isMyTeam);
-    const totalEntries = teamView.leaderboard?.entries.length;
-    const rank =
-      config.mode !== "backend"
-        ? "—"
-        : teamView.leaderboardNoEvent
-          ? "—"
-          : myEntry && totalEntries
-            ? `${myEntry.rank}/${totalEntries}`
-            : "…";
+    const rank = formatTopNavRank(config.mode, teamView.leaderboard, teamView.leaderboardNoEvent);
     return [
       localeUtility,
       // #547: 旧 `menu-dropdown` + 空 items は chevron で展開できそうに見えて何も出ない
       // という UX bug。Score / Rank の click は scoreboard ページへの遷移が自然なので
       // `type: "button"` + onClick で /scoreboard に飛ばす (= dropdown の意図不明
       // affordance を排除)。
-      {
-        type: "button",
-        text: `Score: ${score}  /  Rank: ${rank}`,
-        iconName: "status-positive",
-        onClick: () => {
-          navigate("/scoreboard");
-        },
-      },
-      {
-        type: "menu-dropdown",
-        text: auth.session.teamName,
-        iconName: "user-profile",
-        items: [{ id: "logout", text: t("nav.sign_out") }],
-        onItemClick: ({ detail }) => {
-          if (detail.id === "logout") {
-            auth.logout();
-            navigate("/login");
-          }
-        },
-      },
+      buildScoreRankUtility(score, rank, navigate),
+      buildProfileUtility(auth.session.teamName, auth.logout, navigate, t),
     ];
   }, [
     auth.session,
