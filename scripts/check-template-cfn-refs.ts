@@ -58,6 +58,32 @@ const PSEUDO_PARAMETERS = new Set([
 const REQUIRED_RESOURCE_NAMES = ["ParticipantViewerRole"] as const;
 const REQUIRED_OUTPUT_KEYS = ["ParticipantViewerRoleArn"] as const;
 
+type CfnSection = "resources" | "parameters" | "outputs";
+
+const SECTION_HEADER_RE: Record<CfnSection, RegExp> = {
+  resources: /^Resources:\s*$/,
+  parameters: /^Parameters:\s*$/,
+  outputs: /^Outputs:\s*$/,
+};
+const OTHER_TOP_LEVEL_SECTION_RE = /^[A-Za-z][^:]*:\s*$/;
+const INDENTED_NAME_RE = /^ {2}([A-Za-z][A-Za-z0-9]*):\s*$/;
+
+/**
+ * `Resources:` / `Parameters:` / `Outputs:` のいずれか、 または他の top-level section header
+ * (= 既知 section を抜ける合図) を 1 行から検出する。
+ *
+ * - 該当 section に入る場合: そのキー
+ * - 他の top-level に入る場合: "exit" (= currentSection を null に倒す)
+ * - section header でない (= 内容行) 場合: null
+ */
+function detectSectionHeader(line: string): CfnSection | "exit" | null {
+  for (const section of ["resources", "parameters", "outputs"] as const) {
+    if (SECTION_HEADER_RE[section].test(line)) return section;
+  }
+  if (OTHER_TOP_LEVEL_SECTION_RE.test(line)) return "exit";
+  return null;
+}
+
 /**
  * YAML を line-by-line で section 別に分割する単純な parser。 完全な YAML AST は使わない (= 短文・
  * tab/空白 mix の防御に弱い既存 YAML library 依存を避ける)。 各 section の resource / parameter / output
@@ -68,41 +94,28 @@ function parseSections(yaml: string): {
   parameters: Set<string>;
   outputs: Set<string>;
 } {
-  const lines = yaml.split(/\r?\n/);
-  const resources = new Set<string>();
-  const parameters = new Set<string>();
-  const outputs = new Set<string>();
-  let currentSection: "resources" | "parameters" | "outputs" | null = null;
+  const buckets: Record<CfnSection, Set<string>> = {
+    resources: new Set<string>(),
+    parameters: new Set<string>(),
+    outputs: new Set<string>(),
+  };
+  let currentSection: CfnSection | null = null;
 
-  for (const line of lines) {
-    // Top-level section header (= `Resources:` / `Parameters:` / `Outputs:` at column 0)
-    if (/^Resources:\s*$/.test(line)) {
-      currentSection = "resources";
-      continue;
-    }
-    if (/^Parameters:\s*$/.test(line)) {
-      currentSection = "parameters";
-      continue;
-    }
-    if (/^Outputs:\s*$/.test(line)) {
-      currentSection = "outputs";
-      continue;
-    }
-    // 次の top-level section に入ったら終了 (= column 0 の `<Section>:` で抜ける)
-    if (/^[A-Za-z]/.test(line) && line.endsWith(":")) {
+  for (const line of yaml.split(/\r?\n/)) {
+    const header = detectSectionHeader(line);
+    if (header === "exit") {
       currentSection = null;
       continue;
     }
+    if (header) {
+      currentSection = header;
+      continue;
+    }
     if (!currentSection) continue;
-    // Section 内の `  <Name>:` (= 2-space indent + identifier + `:`) を拾う
-    const m = line.match(/^ {2}([A-Za-z][A-Za-z0-9]*):\s*$/);
-    if (!m?.[1]) continue;
-    const name = m[1];
-    if (currentSection === "resources") resources.add(name);
-    if (currentSection === "parameters") parameters.add(name);
-    if (currentSection === "outputs") outputs.add(name);
+    const name = INDENTED_NAME_RE.exec(line)?.[1];
+    if (name) buckets[currentSection].add(name);
   }
-  return { resources, parameters, outputs };
+  return buckets;
 }
 
 /**
@@ -162,36 +175,39 @@ function collectSubRefs(yaml: string): { refs: string[]; getAtts: string[] } {
   return { refs, getAtts };
 }
 
-function checkTemplate(templatePath: string): Finding[] {
+function checkRequiredDeclarations(
+  templatePath: string,
+  resources: Set<string>,
+  outputs: Set<string>,
+): Finding[] {
   const findings: Finding[] = [];
-  const yaml = readFileSync(templatePath, "utf8");
-  const { resources, parameters, outputs } = parseSections(yaml);
-
-  // 必須 Resource / Output (= ADR-002 Phase 2.1)
   for (const required of REQUIRED_RESOURCE_NAMES) {
-    if (!resources.has(required)) {
-      findings.push({
-        templatePath,
-        rule: "required-resource-missing",
-        detail: `Resources.${required} is required (= ADR-002 Phase 2.1: 全 problem template で参加者 federation 用 Role を宣言する)`,
-      });
-    }
+    if (resources.has(required)) continue;
+    findings.push({
+      templatePath,
+      rule: "required-resource-missing",
+      detail: `Resources.${required} is required (= ADR-002 Phase 2.1: 全 problem template で参加者 federation 用 Role を宣言する)`,
+    });
   }
   for (const required of REQUIRED_OUTPUT_KEYS) {
-    if (!outputs.has(required)) {
-      findings.push({
-        templatePath,
-        rule: "required-output-missing",
-        detail: `Outputs.${required} is required (= sso.ts handler が読む key)`,
-      });
-    }
+    if (outputs.has(required)) continue;
+    findings.push({
+      templatePath,
+      rule: "required-output-missing",
+      detail: `Outputs.${required} is required (= sso.ts handler が読む key)`,
+    });
   }
+  return findings;
+}
 
-  // !Ref / Ref: の resolve
-  const directRefs = collectRefs(yaml);
-  const subRefs = collectSubRefs(yaml);
-  const allRefs = [...directRefs, ...subRefs.refs];
-  for (const ref of allRefs) {
+function checkUnresolvedRefs(
+  templatePath: string,
+  refs: readonly string[],
+  resources: Set<string>,
+  parameters: Set<string>,
+): Finding[] {
+  const findings: Finding[] = [];
+  for (const ref of refs) {
     if (PSEUDO_PARAMETERS.has(ref)) continue;
     if (resources.has(ref) || parameters.has(ref)) continue;
     findings.push({
@@ -200,9 +216,16 @@ function checkTemplate(templatePath: string): Finding[] {
       detail: `Ref: ${ref} — not declared in Resources / Parameters / pseudo`,
     });
   }
+  return findings;
+}
 
-  // !GetAtt の resource 部分
-  const getAttResources = [...collectGetAttResources(yaml), ...subRefs.getAtts];
+function checkUnresolvedGetAttResources(
+  templatePath: string,
+  getAttResources: readonly string[],
+  resources: Set<string>,
+  parameters: Set<string>,
+): Finding[] {
+  const findings: Finding[] = [];
   for (const r of getAttResources) {
     if (PSEUDO_PARAMETERS.has(r)) continue;
     if (resources.has(r) || parameters.has(r)) continue;
@@ -212,8 +235,31 @@ function checkTemplate(templatePath: string): Finding[] {
       detail: `GetAtt ${r}.* — resource not declared`,
     });
   }
-
   return findings;
+}
+
+export type { Finding };
+export { collectGetAttResources, collectRefs, collectSubRefs, parseSections };
+
+export function checkTemplate(templatePath: string): Finding[] {
+  const yaml = readFileSync(templatePath, "utf8");
+  const { resources, parameters, outputs } = parseSections(yaml);
+  const subRefs = collectSubRefs(yaml);
+  return [
+    ...checkRequiredDeclarations(templatePath, resources, outputs),
+    ...checkUnresolvedRefs(
+      templatePath,
+      [...collectRefs(yaml), ...subRefs.refs],
+      resources,
+      parameters,
+    ),
+    ...checkUnresolvedGetAttResources(
+      templatePath,
+      [...collectGetAttResources(yaml), ...subRefs.getAtts],
+      resources,
+      parameters,
+    ),
+  ];
 }
 
 function findTemplates(): string[] {
@@ -254,4 +300,4 @@ function main(): void {
   process.exit(1);
 }
 
-main();
+if (import.meta.main) main();
