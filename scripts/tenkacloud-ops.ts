@@ -57,11 +57,114 @@ export interface CliIO {
 
 const TENKACLOUD_STACK_PREFIXES = ["tenkacloud-", "serverless-saas-ref-arch-", "tc-"] as const;
 
-interface CfnStackSummary {
+const CFN_STACK_STATUS_FILTER = [
+  "CREATE_IN_PROGRESS",
+  "CREATE_FAILED",
+  "CREATE_COMPLETE",
+  "ROLLBACK_IN_PROGRESS",
+  "ROLLBACK_FAILED",
+  "ROLLBACK_COMPLETE",
+  "DELETE_IN_PROGRESS",
+  "DELETE_FAILED",
+  "UPDATE_IN_PROGRESS",
+  "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS",
+  "UPDATE_COMPLETE",
+  "UPDATE_ROLLBACK_IN_PROGRESS",
+  "UPDATE_ROLLBACK_FAILED",
+  "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS",
+  "UPDATE_ROLLBACK_COMPLETE",
+  "REVIEW_IN_PROGRESS",
+  "IMPORT_IN_PROGRESS",
+  "IMPORT_COMPLETE",
+  "IMPORT_ROLLBACK_IN_PROGRESS",
+  "IMPORT_ROLLBACK_FAILED",
+  "IMPORT_ROLLBACK_COMPLETE",
+] as const;
+
+export interface CfnStackSummary {
   readonly StackName: string;
   readonly StackStatus: string;
   readonly LastUpdatedTime?: string;
   readonly CreationTime?: string;
+}
+
+export interface StackHealthBuckets {
+  readonly healthy: readonly CfnStackSummary[];
+  readonly inProgress: readonly CfnStackSummary[];
+  readonly failed: readonly CfnStackSummary[];
+}
+
+export function buildListStacksArgs(region?: string): readonly string[] {
+  const args: string[] = [
+    "cloudformation",
+    "list-stacks",
+    "--stack-status-filter",
+    ...CFN_STACK_STATUS_FILTER,
+    "--output",
+    "json",
+  ];
+  if (region) args.push("--region", region);
+  return args;
+}
+
+export function parseStackSummariesJson(
+  stdout: string,
+): { ok: true; stacks: readonly CfnStackSummary[] } | { ok: false; error: string } {
+  try {
+    const parsed = JSON.parse(stdout) as { StackSummaries?: CfnStackSummary[] };
+    return { ok: true, stacks: parsed.StackSummaries ?? [] };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export function filterTenkaCloudStacks(
+  stacks: readonly CfnStackSummary[],
+): readonly CfnStackSummary[] {
+  return stacks.filter((s) => TENKACLOUD_STACK_PREFIXES.some((p) => s.StackName.startsWith(p)));
+}
+
+export function classifyStacks(stacks: readonly CfnStackSummary[]): StackHealthBuckets {
+  const healthy: CfnStackSummary[] = [];
+  const inProgress: CfnStackSummary[] = [];
+  const failed: CfnStackSummary[] = [];
+  for (const s of stacks) {
+    if (s.StackStatus.includes("FAILED") || s.StackStatus.includes("ROLLBACK")) {
+      failed.push(s);
+    } else if (s.StackStatus.includes("IN_PROGRESS")) {
+      inProgress.push(s);
+    } else {
+      healthy.push(s);
+    }
+  }
+  return { healthy, inProgress, failed };
+}
+
+// exit code: failed 1 件以上で 2、 in_progress のみで 1、 すべて healthy で 0
+export function computeHealthExitCode(buckets: StackHealthBuckets): 0 | 1 | 2 {
+  if (buckets.failed.length > 0) return 2;
+  if (buckets.inProgress.length > 0) return 1;
+  return 0;
+}
+
+function printHealthSummary(
+  io: CliIO,
+  ours: readonly CfnStackSummary[],
+  buckets: StackHealthBuckets,
+  region: string | undefined,
+): void {
+  const widest = ours.reduce((m, s) => Math.max(m, s.StackName.length), 0);
+  const summarize = (label: string, list: readonly CfnStackSummary[]): void => {
+    if (list.length === 0) return;
+    io.stdout(`\n${label} (${list.length})\n`);
+    for (const s of list) {
+      io.stdout(`  ${s.StackName.padEnd(widest)}  ${s.StackStatus}\n`);
+    }
+  };
+  io.stdout(`TenkaCloud stacks: ${ours.length} total (region=${region ?? "default"})\n`);
+  summarize("FAILED / ROLLBACK", buckets.failed);
+  summarize("IN_PROGRESS", buckets.inProgress);
+  summarize("HEALTHY", buckets.healthy);
 }
 
 /**
@@ -72,93 +175,24 @@ interface CfnStackSummary {
  *   - 名前 prefix が tenkacloud-* / serverless-saas-ref-arch-* / tc-* のいずれか
  */
 export async function runHealth(io: CliIO, region?: string): Promise<number> {
-  const args = [
-    "cloudformation",
-    "list-stacks",
-    "--stack-status-filter",
-    "CREATE_IN_PROGRESS",
-    "CREATE_FAILED",
-    "CREATE_COMPLETE",
-    "ROLLBACK_IN_PROGRESS",
-    "ROLLBACK_FAILED",
-    "ROLLBACK_COMPLETE",
-    "DELETE_IN_PROGRESS",
-    "DELETE_FAILED",
-    "UPDATE_IN_PROGRESS",
-    "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS",
-    "UPDATE_COMPLETE",
-    "UPDATE_ROLLBACK_IN_PROGRESS",
-    "UPDATE_ROLLBACK_FAILED",
-    "UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS",
-    "UPDATE_ROLLBACK_COMPLETE",
-    "REVIEW_IN_PROGRESS",
-    "IMPORT_IN_PROGRESS",
-    "IMPORT_COMPLETE",
-    "IMPORT_ROLLBACK_IN_PROGRESS",
-    "IMPORT_ROLLBACK_FAILED",
-    "IMPORT_ROLLBACK_COMPLETE",
-    "--output",
-    "json",
-  ];
-  if (region) {
-    args.push("--region", region);
-  }
-
-  const result = await io.spawnCapture("aws", args);
+  const result = await io.spawnCapture("aws", buildListStacksArgs(region));
   if (result.code !== 0) {
     io.stderr(`aws cloudformation list-stacks failed (exit ${result.code}):\n${result.stderr}`);
     return result.code === 0 ? 1 : result.code;
   }
-
-  let parsed: { StackSummaries?: CfnStackSummary[] };
-  try {
-    parsed = JSON.parse(result.stdout);
-  } catch (e) {
-    io.stderr(`failed to parse aws output: ${e instanceof Error ? e.message : String(e)}`);
+  const parsed = parseStackSummariesJson(result.stdout);
+  if (!parsed.ok) {
+    io.stderr(`failed to parse aws output: ${parsed.error}`);
     return 1;
   }
-
-  const all = parsed.StackSummaries ?? [];
-  const ours = all.filter((s) => TENKACLOUD_STACK_PREFIXES.some((p) => s.StackName.startsWith(p)));
-
+  const ours = filterTenkaCloudStacks(parsed.stacks);
   if (ours.length === 0) {
     io.stdout("(no TenkaCloud stacks found)\n");
     return 0;
   }
-
-  // 状態ごとに健全 / 注意 / 異常を分類
-  const healthy: CfnStackSummary[] = [];
-  const inProgress: CfnStackSummary[] = [];
-  const failed: CfnStackSummary[] = [];
-
-  for (const s of ours) {
-    if (s.StackStatus.includes("FAILED") || s.StackStatus.includes("ROLLBACK")) {
-      failed.push(s);
-    } else if (s.StackStatus.includes("IN_PROGRESS")) {
-      inProgress.push(s);
-    } else {
-      healthy.push(s);
-    }
-  }
-
-  const widest = ours.reduce((m, s) => Math.max(m, s.StackName.length), 0);
-  const summarize = (label: string, list: readonly CfnStackSummary[]): void => {
-    if (list.length === 0) return;
-    io.stdout(`\n${label} (${list.length})\n`);
-    for (const s of list) {
-      io.stdout(`  ${s.StackName.padEnd(widest)}  ${s.StackStatus}\n`);
-    }
-  };
-
-  io.stdout(`TenkaCloud stacks: ${ours.length} total (region=${region ?? "default"})\n`);
-  summarize("FAILED / ROLLBACK", failed);
-  summarize("IN_PROGRESS", inProgress);
-  summarize("HEALTHY", healthy);
-
-  // exit code: failed 1 件以上で 2、 in_progress のみで 1、 すべて healthy で 0
-  if (failed.length > 0) return 2;
-  if (inProgress.length > 0) return 1;
-  return 0;
+  const buckets = classifyStacks(ours);
+  printHealthSummary(io, ours, buckets, region);
+  return computeHealthExitCode(buckets);
 }
 
 function defaultSpawnCapture(): SpawnCapture {
