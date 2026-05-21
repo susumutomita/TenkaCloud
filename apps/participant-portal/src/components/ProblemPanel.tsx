@@ -1,6 +1,7 @@
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Container from "@cloudscape-design/components/container";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -71,19 +72,14 @@ function useNowMs(intervalMs: number): number {
 
 function describeRemainingUntilAutoDelete(t: ProblemPanelT, diffMs: number): string {
   const totalMinutes = Math.max(1, Math.ceil(diffMs / 60_000));
-  if (totalMinutes < 60) {
-    return t("problem_panel.auto_delete_remaining_minutes", { minutes: totalMinutes });
-  }
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return t("problem_panel.auto_delete_remaining_hours", { hours, minutes });
+  return t("problem_panel.auto_delete_remaining_minutes", { minutes: totalMinutes });
 }
 
 function buildAutoDeleteNotice(
   t: ProblemPanelT,
   expiresAt: number,
   nowMs: number,
-): { readonly type: "info" | "warning"; readonly body: string } | undefined {
+): { readonly type: "warning"; readonly body: string } | undefined {
   if (!Number.isFinite(expiresAt) || expiresAt <= 0) return undefined;
   const expiresAtMs = expiresAt * 1000;
   const expiresAtLabel = new Date(expiresAtMs).toLocaleString();
@@ -94,17 +90,14 @@ function buildAutoDeleteNotice(
       body: t("problem_panel.auto_delete_expired_body", { expiresAt: expiresAtLabel }),
     };
   }
-  const remaining = describeRemainingUntilAutoDelete(t, diffMs);
   if (diffMs <= AUTO_DELETE_SOON_THRESHOLD_MS) {
+    const remaining = describeRemainingUntilAutoDelete(t, diffMs);
     return {
       type: "warning",
       body: t("problem_panel.auto_delete_soon_body", { remaining, expiresAt: expiresAtLabel }),
     };
   }
-  return {
-    type: "info",
-    body: t("problem_panel.auto_delete_body", { remaining, expiresAt: expiresAtLabel }),
-  };
+  return undefined;
 }
 
 function useLiveDeployLog({
@@ -197,7 +190,7 @@ function ProblemPanelAlerts({
 }: {
   problem: ParticipantProblemView;
   isStale: boolean;
-  autoDeleteNotice?: { readonly type: "info" | "warning"; readonly body: string };
+  autoDeleteNotice?: { readonly type: "warning"; readonly body: string };
   now: number;
   t: ProblemPanelT;
 }) {
@@ -288,6 +281,7 @@ export function ProblemPanel({
           <DeployTerminal
             entries={displayedDeployLog.entries}
             title={t("problem_panel.deploy_log_header")}
+            defaultExpanded={!TERMINAL_STATUSES.has(problem.status)}
           />
         )}
 
@@ -358,16 +352,16 @@ function classifyCodeBuildLog(message: string): DeploymentLogEntry["level"] {
 function DeployTerminal({
   entries,
   title,
+  defaultExpanded,
 }: {
   entries: readonly DeploymentLogEntry[];
   title: string;
+  defaultExpanded: boolean;
 }) {
   return (
-    <section aria-label={title}>
-      <Box variant="h3">{title}</Box>
+    <ExpandableSection headerText={title} defaultExpanded={defaultExpanded}>
       <div
         style={{
-          marginTop: 8,
           maxHeight: 240,
           overflowY: "auto",
           borderRadius: 6,
@@ -388,7 +382,7 @@ function DeployTerminal({
           </div>
         ))}
       </div>
-    </section>
+    </ExpandableSection>
   );
 }
 

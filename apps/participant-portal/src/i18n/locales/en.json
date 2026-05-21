@@ -243,8 +243,6 @@
     "stale_body": "{ago} since last scoring. Something in your service may not be responding as expected.",
     "auto_delete_header": "Auto-delete scheduled",
     "auto_delete_remaining_minutes": "{minutes} min",
-    "auto_delete_remaining_hours": "{hours} h {minutes} min",
-    "auto_delete_body": "This sandbox is scheduled for automatic deletion in about {remaining} ({expiresAt}).",
     "auto_delete_soon_body": "Automatic deletion is approaching: about {remaining} remaining ({expiresAt}). Save anything you still need before teardown starts.",
     "auto_delete_expired_body": "The automatic deletion time has passed ({expiresAt}). Teardown may already be running or queued.",
     "current_score_label": "Current score",
