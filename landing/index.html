@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ja">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -23,20 +23,24 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
 <style>
 :root {
-  --ink:        #1d1d1f;
-  --ink-2:      #424245;
-  --ink-3:      #6e6e73;
-  --ink-4:      #86868b;
-  --line:       #d2d2d7;
-  --line-soft:  #e8e8ed;
+  --ink:        #07111f;
+  --ink-2:      #263241;
+  --ink-3:      #5d6877;
+  --ink-4:      #8a94a3;
+  --blue:       #0969da;
+  --green:      #008a55;
+  --line:       #d9dee8;
+  --line-soft:  #edf0f5;
   --paper:      #ffffff;
-  --paper-2:    #fbfbfd;
-  --paper-3:    #f5f5f7;
+  --paper-2:    #fbfcfe;
+  --paper-3:    #f5f7fb;
+  --dark:       #07111f;
 
   --font-sans: "Inter", "Noto Sans JP", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --w: 980px;
+  --w: 1280px;
+  --radius: 10px;
 }
 
 * { box-sizing: border-box; }
@@ -44,75 +48,106 @@ html, body { margin: 0; padding: 0; }
 body {
   font-family: var(--font-sans);
   color: var(--ink);
-  background: var(--paper);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(243,246,251,0.92), rgba(255,255,255,0) 360px),
+    var(--paper);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   font-weight: 400;
   line-height: 1.5;
 }
 
-.wrap { max-width: var(--w); margin: 0 auto; padding: 0 22px; }
+.wrap { max-width: var(--w); margin: 0 auto; padding: 0 28px; }
 
 /* ============== NAV ============== */
 .nav {
   position: sticky; top: 0; z-index: 50;
-  background: rgba(255,255,255,0.72);
+  background: rgba(255,255,255,0.86);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   border-bottom: 1px solid rgba(0,0,0,0.06);
-  height: 48px;
+  height: 56px;
 }
 .nav .wrap {
   height: 100%;
   display: flex; align-items: center; justify-content: space-between;
-  max-width: 1024px;
+  max-width: var(--w);
 }
 .nav .brand {
-  font-weight: 500; font-size: 19px; letter-spacing: -0.02em;
+  font-weight: 800; font-size: 20px; letter-spacing: -0.03em;
   color: var(--ink);
 }
-.nav-links { display: flex; gap: 28px; font-size: 12px; }
+.nav-links { display: flex; gap: 42px; font-size: 12px; font-weight: 700; }
 .nav-links a { color: var(--ink-2); text-decoration: none; cursor: pointer; }
 .nav-links a:hover { color: var(--ink); }
-.nav-right { display: flex; align-items: center; gap: 18px; font-size: 12px; }
-.nav-right .lang { color: var(--ink-3); cursor: pointer; background: none; border: none; padding: 0; font: inherit; }
-.nav-right .lang.on { color: var(--ink); font-weight: 500; }
+.nav-right { display: flex; align-items: center; gap: 18px; font-size: 12px; font-weight: 700; }
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 2px;
+}
+.nav-right .lang {
+  color: var(--ink-3);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font: inherit;
+  font-weight: 800;
+}
+.nav-right .lang.on {
+  color: var(--ink);
+  background: #eef3fb;
+}
 .nav-right .sep { color: var(--line); }
+.github-mark {
+  width: 18px; height: 18px; color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center;
+}
 
 /* ============== TYPE ============== */
-h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.025em; margin: 0; color: var(--ink); }
+h1, h2, h3, h4 { font-weight: 800; letter-spacing: -0.04em; margin: 0; color: var(--ink); }
 p { margin: 0; }
 
 .eyebrow {
-  font-size: 14px; font-weight: 500;
+  font-size: 12px; font-weight: 700;
   color: var(--ink-3); margin-bottom: 6px;
 }
 
 /* ============== HERO ============== */
-.hero { text-align: center; padding: 96px 22px 24px; }
+.hero { padding: 72px 0 26px; }
+.hero-grid {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  gap: 70px;
+  align-items: center;
+}
+.hero-copy { padding-top: 12px; }
 .hero h1 {
-  font-size: clamp(48px, 7vw, 80px);
-  font-weight: 600;
-  letter-spacing: -0.035em;
-  line-height: 1.05;
-  max-width: 880px;
-  margin: 0 auto 18px;
+  font-size: clamp(48px, 5vw, 66px);
+  line-height: 1.12;
+  max-width: 420px;
+  margin: 0 0 26px;
   text-wrap: balance;
 }
-.hero h1 em { font-style: normal; font-weight: 600; color: var(--ink-3); }
+.hero h1 em { font-style: normal; font-weight: 800; color: var(--ink-3); }
 .hero .sub {
-  font-size: clamp(20px, 2.2vw, 26px);
-  line-height: 1.32;
+  font-size: 17px;
+  line-height: 1.85;
   color: var(--ink-2);
-  max-width: 720px;
-  margin: 0 auto;
-  font-weight: 400;
-  letter-spacing: -0.01em;
+  max-width: 410px;
+  margin: 0;
+  font-weight: 500;
+  letter-spacing: 0;
   text-wrap: balance;
 }
 .hero .cta-row {
-  display: flex; gap: 22px; justify-content: center;
-  margin-top: 28px; font-size: 17px;
+  display: flex; gap: 30px; justify-content: flex-start;
+  margin-top: 30px; font-size: 15px; font-weight: 800;
 }
 .hero .cta-row a {
   color: #0066cc; text-decoration: none;
@@ -120,113 +155,109 @@ p { margin: 0; }
 }
 .hero .cta-row a:hover { text-decoration: underline; }
 
-.hero-visual { margin: 56px auto 0; max-width: 1024px; padding: 0 22px; }
-
-/* device-like glass card showing the product */
-.product-card {
-  position: relative;
-  background: var(--paper-3);
-  border-radius: 28px;
-  padding: 56px 48px;
-  overflow: hidden;
-}
-.product-card .inner {
-  position: relative;
+.hero-visual { min-width: 0; }
+.app-window {
   background: var(--paper);
-  border-radius: 18px;
-  box-shadow: 0 1px 0 rgba(0,0,0,0.04), 0 20px 60px -20px rgba(0,0,0,0.18);
+  border: 1px solid #b8c0cc;
+  border-radius: 10px;
+  box-shadow: 0 22px 66px rgba(8,20,37,0.1);
   overflow: hidden;
-  border: 1px solid var(--line-soft);
 }
-.product-card .toolbar {
-  display: flex; align-items: center; gap: 8px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line-soft);
-  background: var(--paper-2);
-}
-.product-card .toolbar .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--line); }
-.product-card .toolbar .url {
-  margin-left: auto; margin-right: auto;
-  font-family: var(--font-mono); font-size: 11px; color: var(--ink-3);
-}
-.product-card .body { display: grid; grid-template-columns: 220px 1fr; min-height: 360px; }
-.product-card .sidebar {
-  border-right: 1px solid var(--line-soft);
-  padding: 20px 16px; background: var(--paper-2);
-}
-.product-card .sidebar .group {
-  font-size: 10px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--ink-4); margin: 14px 8px 6px;
-}
-.product-card .sidebar a {
-  display: flex; align-items: center; gap: 10px;
-  padding: 7px 10px; border-radius: 6px;
-  font-size: 13px; color: var(--ink-2); text-decoration: none;
-}
-.product-card .sidebar a.on { background: var(--paper-3); color: var(--ink); font-weight: 500; }
-.product-card .sidebar a .b { width: 6px; height: 6px; border-radius: 50%; background: var(--line); }
-.product-card .sidebar a.battle .b { background: #ff453a; }
-.product-card .sidebar a.challenge .b { background: #30b766; }
-
-.product-card .main { padding: 24px 28px; }
-.product-card .main h3 { font-size: 20px; margin-bottom: 4px; }
-.product-card .main .breadcrumb { font-size: 12px; color: var(--ink-3); margin-bottom: 18px; }
-.product-card .main .row {
-  display: grid; grid-template-columns: 1fr 80px 80px 80px;
+.app-topbar {
+  height: 42px;
+  background: #07111f;
+  color: #fff;
+  display: flex;
   align-items: center;
-  padding: 14px 0;
-  border-top: 1px solid var(--line-soft);
-  font-size: 13px;
+  justify-content: space-between;
+  padding: 0 18px;
+  font-size: 12px;
+  font-weight: 800;
 }
-.product-card .main .row:last-child { border-bottom: 1px solid var(--line-soft); }
-.product-card .main .row .name { font-weight: 500; color: var(--ink); }
-.product-card .main .row .id { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); margin-top: 2px; display: block; }
-.product-card .main .row .tag {
-  font-size: 10px; padding: 2px 8px; border-radius: 999px;
-  display: inline-block; font-weight: 500;
+.app-chrome-meta { display: flex; gap: 18px; color: rgba(255,255,255,0.9); font-family: var(--font-sans); }
+.app-body { display: grid; grid-template-columns: 150px 1fr; min-height: 578px; }
+.app-sidebar {
+  background: #fbfcff;
+  border-right: 1px solid #c6ceda;
+  padding: 18px 18px;
+  font-size: 12px;
+  font-weight: 700;
 }
-.product-card .main .row .tag.battle { background: rgba(255,69,58,0.1); color: #b8261d; }
-.product-card .main .row .tag.challenge { background: rgba(48,183,102,0.1); color: #1d7a44; }
-.product-card .main .row .stars { display: inline-flex; gap: 2px; }
-.product-card .main .row .stars i { width: 6px; height: 6px; border-radius: 1px; background: var(--line); display: inline-block; }
-.product-card .main .row .stars i.on { background: var(--ink); }
-.product-card .main .row .pts { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); text-align: right; }
+.app-menu-title { display: flex; justify-content: space-between; margin: 0 -18px 20px; padding: 0 18px 18px; border-bottom: 1px solid #c6ceda; font-size: 17px; }
+.app-menu-group { margin: 18px 0 7px; color: var(--ink); font-size: 12px; }
+.app-sidebar a { display: block; padding: 5px 0 5px 12px; color: #253247; text-decoration: none; font-size: 12px; font-weight: 600; }
+.app-sidebar a.on { color: var(--blue); font-weight: 800; }
+.dashboard { padding: 22px 28px 24px; background: #fff; }
+.dashboard h3 { font-size: 21px; letter-spacing: -0.02em; }
+.dashboard-sub { color: var(--ink-2); font-size: 13px; margin: 4px 0 18px; }
+.metric-card, .chart-card, .challenge-card, .credential-card {
+  border: 1px solid #b8c0cc;
+  border-radius: 13px;
+  background: #fff;
+}
+.metric-card { padding: 18px 22px 20px; margin-bottom: 20px; }
+.metric-title { font-size: 17px; font-weight: 900; margin-bottom: 15px; }
+.metric-grid { display: grid; grid-template-columns: 1.25fr 1fr 1fr 1fr; gap: 18px; }
+.metric-grid > div:not(:first-child) { border-left: 1px solid #c6ceda; padding-left: 24px; }
+.metric-label { color: var(--ink); font-size: 12px; font-weight: 800; }
+.metric-value { font-size: 27px; font-weight: 900; margin-top: 4px; letter-spacing: -0.03em; white-space: nowrap; }
+.metric-value.green { color: #00a15f; }
+.metric-value.blue { color: #0958d9; }
+.chart-card { padding: 18px 22px 16px; margin-bottom: 20px; }
+.chart-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.chart-title { font-size: 17px; font-weight: 900; }
+.chart-desc { font-size: 12px; color: var(--ink); margin: -8px 0 14px; }
+.select-pill { border: 1px solid #9ca8b8; border-radius: 6px; color: var(--ink-3); font-size: 11px; padding: 7px 9px; min-width: 180px; text-align: right; }
+.line-chart { display: block; width: 100%; height: auto; }
+.chart-legend { display: flex; gap: 18px; font-size: 11px; color: var(--ink); margin-top: 7px; }
+.challenge-card { padding: 18px 22px; }
+.challenge-card h4 { font-size: 17px; letter-spacing: -0.01em; margin-bottom: 8px; }
+.challenge-card p { font-size: 13px; color: var(--ink); margin-bottom: 12px; }
+.tiny-button { background: var(--blue); color: #fff; border: 0; border-radius: 18px; height: 32px; padding: 0 18px; font-size: 13px; font-weight: 800; }
 
 /* ============== SECTIONS ============== */
-section { padding: 120px 22px; }
-section.alt { background: var(--paper-3); }
+section { padding: 56px 0; }
+section.alt { background: transparent; padding: 26px 0; }
+section.alt .wrap {
+  background: var(--paper-3);
+  border-radius: var(--radius);
+  padding-top: 34px;
+  padding-bottom: 26px;
+}
 section .wrap { max-width: var(--w); }
 section h2 {
-  font-size: clamp(34px, 4.4vw, 56px);
-  font-weight: 600; letter-spacing: -0.03em;
-  line-height: 1.08; max-width: 760px; margin: 0 0 16px;
+  font-size: clamp(34px, 3.2vw, 46px);
+  line-height: 1.18; max-width: 760px; margin: 0 0 12px;
   text-wrap: balance;
 }
 section .lead {
-  font-size: clamp(18px, 1.6vw, 21px);
+  font-size: 15px;
   color: var(--ink-2); max-width: 640px;
-  line-height: 1.45; margin: 0 0 56px;
+  line-height: 1.65; margin: 0 0 42px;
 }
+#modes .wrap > .eyebrow,
+#modes .wrap > h2,
+#modes .wrap > .lead,
+.audience-intro { text-align: center; margin-left: auto; margin-right: auto; }
 
 /* ============== TWO-UP FEATURE ============== */
-.twoup { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.twoup { display: grid; grid-template-columns: 1fr 1fr; gap: 52px; max-width: 980px; margin: 0 auto; }
 .tile {
-  background: var(--paper-3); border-radius: 22px; padding: 44px;
-  min-height: 460px; display: flex; flex-direction: column;
+  background: transparent; border-radius: 0; padding: 0;
+  min-height: 0; display: flex; flex-direction: column;
 }
-.tile .kicker { font-size: 13px; color: var(--ink-3); font-weight: 500; margin-bottom: 10px; }
+.tile .kicker { font-size: 17px; color: var(--ink); font-weight: 900; margin-bottom: 8px; }
 .tile h3 {
-  font-size: 32px; font-weight: 600; letter-spacing: -0.025em;
-  line-height: 1.1; margin-bottom: 12px; text-wrap: balance;
+  display: none;
 }
-.tile p { font-size: 16px; line-height: 1.5; color: var(--ink-2); max-width: 340px; }
-.tile .demo { margin-top: auto; }
+.tile p { font-size: 13px; line-height: 1.55; color: var(--ink-2); max-width: 350px; margin-bottom: 20px; font-weight: 600; }
+.tile .demo { margin-top: 0; }
 
 .demo-scoreboard {
   background: var(--paper);
-  border: 1px solid var(--line-soft);
-  border-radius: 14px; overflow: hidden;
+  border: 1px solid #dce2ec;
+  border-radius: 10px; overflow: hidden;
+  box-shadow: 0 10px 34px rgba(8,20,37,0.06);
 }
 .demo-scoreboard .head {
   display: flex; justify-content: space-between; align-items: center;
@@ -241,10 +272,11 @@ section .lead {
   background: #ff453a; animation: ping 1.6s infinite;
 }
 @keyframes ping { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.demo-scoreboard .mock-chart { padding: 18px 18px 8px; border-bottom: 1px solid var(--line-soft); }
 .demo-scoreboard .row {
-  display: grid; grid-template-columns: 24px 1fr 80px;
-  align-items: center; padding: 12px 16px;
-  border-top: 1px solid var(--line-soft); font-size: 13px;
+  display: grid; grid-template-columns: 58px 1fr 80px;
+  align-items: center; padding: 8px 16px;
+  border-top: 1px solid var(--line-soft); font-size: 11px;
 }
 .demo-scoreboard .row:first-child { border-top: none; }
 .demo-scoreboard .row .rank { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
@@ -254,216 +286,445 @@ section .lead {
 .demo-scoreboard .row .pts { text-align: right; font-family: var(--font-mono); font-weight: 500; color: var(--ink); }
 
 .demo-flag {
-  background: var(--paper); border: 1px solid var(--line-soft);
-  border-radius: 14px; padding: 20px;
+  background: var(--paper); border: 1px solid #dce2ec;
+  border-radius: 10px; padding: 18px;
+  min-height: 276px;
+  box-shadow: 0 10px 34px rgba(8,20,37,0.06);
 }
-.demo-flag .label {
-  font-family: var(--font-mono); font-size: 10px;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--ink-3); margin-bottom: 8px;
+.portal-preview {
+  background: #fff;
+  border: 1px solid #b8c0cc;
+  border-radius: 10px;
+  box-shadow: 0 14px 42px rgba(8,20,37,0.08);
+  padding: 20px;
+  min-height: 0;
 }
-.demo-flag .input {
-  height: 38px; border: 1px solid var(--line); border-radius: 8px;
-  padding: 0 12px; display: flex; align-items: center;
-  font-family: var(--font-mono); font-size: 12px; color: var(--ink);
-  margin-bottom: 12px; background: var(--paper);
+.portal-page-title {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin-bottom: 3px;
 }
-.demo-flag .input .cursor {
-  width: 1px; height: 14px; background: var(--ink); margin-left: 2px;
-  animation: cursor 1s steps(2) infinite;
+.portal-page-desc {
+  color: var(--ink-2);
+  font-size: 11px;
+  line-height: 1.45;
+  margin-bottom: 14px;
 }
-@keyframes cursor { 50% { opacity: 0; } }
-.demo-flag .submit {
-  display: inline-flex; align-items: center; gap: 8px;
-  height: 32px; padding: 0 14px;
-  background: var(--ink); color: var(--paper);
-  border-radius: 999px; font-size: 12px; font-weight: 500; border: none;
+.portal-container {
+  border: 1px solid #b8c0cc;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #fff;
 }
-.demo-flag .points { margin-top: 14px; font-size: 12px; color: var(--ink-3); font-family: var(--font-mono); }
-.demo-flag .points b { color: var(--ink); font-weight: 600; }
+.portal-container + .portal-container { margin-top: 12px; }
+.portal-container-title {
+  font-size: 15px;
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+.portal-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.score-events-preview .portal-chart { height: 152px; }
+.portal-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 10px;
+}
+.portal-table th {
+  text-align: left;
+  color: var(--ink);
+  font-weight: 900;
+  padding: 7px 5px;
+  border-bottom: 1px solid #dce2ec;
+}
+.portal-table td {
+  padding: 7px 5px;
+  border-bottom: 1px solid #eef1f5;
+  color: var(--ink-2);
+  vertical-align: middle;
+}
+.portal-table th:nth-child(1) { width: 56px; }
+.portal-table th:nth-child(3) { width: 104px; }
+.portal-table th:nth-child(4) { width: 58px; }
+.portal-code {
+  display: block;
+  font-family: var(--font-mono);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.portal-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.portal-badge.green { background: #e9f7ee; color: #037f0c; }
+.portal-badge.blue { background: #eaf3ff; color: var(--blue); }
+.portal-badge.red { background: #fff0f0; color: #d91515; }
+.portal-badge.grey { background: #f2f3f5; color: #5b6770; }
+.portal-points.positive { color: #037f0c; font-weight: 900; }
+.portal-points.negative { color: #d91515; font-weight: 900; }
+.portal-tabs {
+  display: inline-flex;
+  gap: 0;
+  margin-bottom: 14px;
+  padding: 2px;
+  border: 1px solid #b8c0cc;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+.portal-tab {
+  border-left: 1px solid #dce2ec;
+  border-radius: 0;
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--ink);
+}
+.portal-tab:first-child { border-left: 0; }
+.portal-tab.active {
+  color: #fff;
+  background: #e6f1ff;
+  background: var(--blue);
+}
+.quest-card-list { display: grid; gap: 8px; }
+.quest-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 10px;
+  border: 1px solid #dce2ec;
+  border-radius: 8px;
+  font-size: 10px;
+  background: #fff;
+}
+.quest-card code {
+  color: var(--blue);
+  font-weight: 900;
+  margin-right: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.portal-collapsed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #c8d0dc;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 900;
+}
+.status-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-2);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.status-text::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #037f0c;
+}
+.status-text.pending::before {
+  background: #87919f;
+}
+.quest-tabs { display: flex; gap: 8px; align-items: center; margin: 10px 0 18px; font-size: 11px; font-weight: 800; }
+.quest-tab { padding: 5px 12px; border-radius: 999px; background: #eef5ff; color: var(--blue); }
+.quest-list { display: grid; gap: 9px; }
+.quest-row {
+  display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--blue);
+}
+.quest-badge { color: #fff; background: #ef4444; border-radius: 4px; padding: 3px 6px; font-size: 9px; }
+.quest-badge.challenge { background: var(--blue); }
+.quest-meta { color: var(--ink-3); font-size: 10px; }
 
 /* ============== AUDIENCE 3-up ============== */
 .aud {
   display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 1px; background: var(--line-soft);
-  border-top: 1px solid var(--line-soft);
-  border-bottom: 1px solid var(--line-soft);
+  gap: 18px; background: transparent;
+  border: 0;
+  max-width: var(--w);
+  margin: 0 auto;
+  padding: 0 28px;
 }
 .aud .col {
   background: var(--paper);
-  padding: 48px 36px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 28px 30px;
   display: flex; flex-direction: column;
-  min-height: 320px;
+  min-height: 178px;
 }
 .aud .col .role {
   font-size: 12px; color: var(--ink-3); font-weight: 500;
   font-family: var(--font-mono);
   letter-spacing: 0.04em; text-transform: uppercase;
-  margin-bottom: 22px;
+  margin-bottom: 16px;
 }
 .aud .col h3 {
-  font-size: 26px; line-height: 1.15; font-weight: 600;
+  font-size: 22px; line-height: 1.18; font-weight: 800;
   letter-spacing: -0.02em; margin-bottom: 10px; text-wrap: balance;
 }
-.aud .col p { font-size: 15px; line-height: 1.5; color: var(--ink-2); margin: 0; flex: 1; }
+.aud .col p { font-size: 12px; line-height: 1.65; color: var(--ink-2); margin: 0; flex: 1; font-weight: 500; }
 .aud .col .more { margin-top: 24px; font-size: 13px; color: #0066cc; text-decoration: none; }
 .aud .col .more:hover { text-decoration: underline; }
 
 /* ============== STEPS ============== */
-.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 48px; }
+.onboard-layout { display: grid; grid-template-columns: 330px 1fr; gap: 48px; align-items: center; }
+.onboard-layout .lead { margin-bottom: 0; }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.step {
+  background: #fff;
+  border: 1px solid #dce2ec;
+  border-radius: 10px;
+  padding: 26px 22px 22px;
+  min-height: 214px;
+}
 .step .n {
   font-size: 12px; font-weight: 500; color: var(--ink-3);
   margin-bottom: 14px; font-family: var(--font-mono);
 }
 .step h4 {
-  font-size: 22px; font-weight: 600;
+  font-size: 15px; font-weight: 800;
   letter-spacing: -0.02em; margin-bottom: 10px;
 }
-.step p { font-size: 15px; line-height: 1.5; color: var(--ink-2); margin: 0; }
-.step .code {
-  margin-top: 16px;
-  font-family: var(--font-mono); font-size: 11px;
-  color: var(--ink-2);
-  background: var(--paper);
-  border: 1px solid var(--line-soft);
-  border-radius: 8px;
-  padding: 10px 12px;
-  display: block;
-  overflow-x: auto;
-  white-space: nowrap;
-  line-height: 1.6;
+.step p { font-size: 12px; line-height: 1.6; color: var(--ink-2); margin: 0; font-weight: 500; }
+.step-icon {
+  width: 64px; height: 64px; margin: 26px auto 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--blue);
 }
 
 /* ============== TRUST ============== */
-.trust { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
+.trust { display: grid; grid-template-columns: 1fr 520px; gap: 80px; align-items: center; }
 .trust .copy h2 { font-size: clamp(30px, 3.8vw, 44px); margin-bottom: 16px; }
 .trust ul { list-style: none; padding: 0; margin: 24px 0 0; display: grid; gap: 14px; }
 .trust ul li {
-  display: grid; grid-template-columns: 18px 1fr; gap: 14px;
-  font-size: 15px; line-height: 1.5; color: var(--ink-2);
+  display: grid; grid-template-columns: 18px 1fr; gap: 12px;
+  font-size: 14px; line-height: 1.55; color: var(--ink-2);
+  font-weight: 500;
 }
 .trust ul li::before {
-  content: "";
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--ink); margin-top: 8px;
+  content: "✓";
+  width: 16px; height: 16px;
+  color: var(--green); margin-top: 0;
+  background: transparent;
+  font-weight: 900;
 }
 .trust ul li b { color: var(--ink); font-weight: 600; }
 
-.flow { background: var(--paper); border: 1px solid var(--line-soft); border-radius: 18px; padding: 28px; }
-.flow .node {
-  background: var(--paper-2); border: 1px solid var(--line-soft);
-  border-radius: 10px; padding: 14px 16px;
-  font-family: var(--font-mono); font-size: 12px; color: var(--ink);
-  display: flex; justify-content: space-between; align-items: center;
+.flow {
+  background: var(--paper);
+  border: 1px solid #b8c0cc;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 12px 38px rgba(8,20,37,0.06);
 }
-.flow .node .tag { font-size: 10px; color: var(--ink-3); }
-.flow .arr {
-  display: flex; align-items: center; gap: 10px; padding: 10px 16px;
-  font-family: var(--font-mono); font-size: 11px; color: var(--ink-3);
+.sso-preview {
+  display: grid;
+  gap: 14px;
 }
-.flow .arr .line { flex: 1; height: 1px; background: var(--line); position: relative; }
-.flow .arr .line::after {
-  content: ""; position: absolute; right: 0; top: -3px;
-  width: 0; height: 0;
-  border-left: 6px solid var(--line);
-  border-top: 3.5px solid transparent;
-  border-bottom: 3.5px solid transparent;
+.credential-title {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin-bottom: 3px;
 }
-.flow .sub { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 4px; }
-.flow .sub .leaf {
-  background: var(--paper-2); border: 1px solid var(--line-soft);
-  border-radius: 8px; padding: 10px 12px;
-  font-family: var(--font-mono); font-size: 11px;
-  color: var(--ink-2);
-  display: flex; flex-direction: column; gap: 4px;
+.credential-sub { color: var(--ink-2); font-size: 12px; line-height: 1.45; }
+.sso-alert {
+  border: 1px solid #b6d7ff;
+  border-radius: 10px;
+  background: #f1f8ff;
+  padding: 12px 14px;
+  font-size: 11px;
+  line-height: 1.45;
 }
-.flow .sub .leaf .ok { color: #1d7a44; font-size: 10px; }
+.sso-alert b {
+  display: block;
+  color: var(--ink);
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.credential-list { display: grid; gap: 12px; }
+.credential-row {
+  border: 1px solid #c8d0dc;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #fff;
+  font-size: 11px;
+}
+.credential-row-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.credential-row code {
+  font-family: var(--font-mono);
+  font-weight: 900;
+  color: var(--ink);
+}
+.credential-row button {
+  background: var(--blue);
+  color: #fff;
+  border: 0;
+  border-radius: 18px;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.credential-kv {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  border-top: 1px solid #eef1f5;
+  padding-top: 11px;
+}
+.credential-kv span {
+  display: block;
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+.credential-kv code,
+.credential-kv strong {
+  font-size: 11px;
+  font-weight: 800;
+}
 
 /* ============== STATS ============== */
 .stats {
   display: grid; grid-template-columns: repeat(4, 1fr);
-  border-top: 1px solid var(--line-soft);
-  border-bottom: 1px solid var(--line-soft);
+  border: 0;
+  background: var(--paper-3);
+  border-radius: 8px;
+  padding: 26px 0;
 }
-.stat { padding: 56px 24px 56px 0; border-right: 1px solid var(--line-soft); }
+.stat { padding: 0 24px; border-right: 0; text-align: center; }
 .stat:last-child { border-right: none; }
 .stat .n {
-  font-size: clamp(40px, 4.4vw, 64px);
-  font-weight: 600; letter-spacing: -0.04em;
+  font-size: clamp(38px, 4vw, 54px);
+  font-weight: 900; letter-spacing: -0.05em;
   line-height: 1; color: var(--ink); margin-bottom: 8px;
 }
 .stat .n .u { font-size: 0.55em; color: var(--ink-3); margin-left: 2px; font-weight: 500; }
-.stat .l { font-size: 13px; color: var(--ink-3); max-width: 200px; line-height: 1.45; }
+.stat .l { font-size: 12px; color: var(--ink-2); max-width: 200px; line-height: 1.45; margin: 0 auto; font-weight: 600; }
 
 /* ============== ENTERPRISE CTA ============== */
 .ent-cta {
-  background: var(--ink); color: var(--paper);
-  border-radius: 28px; padding: 80px 56px; text-align: center;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(58,75,98,0.35), rgba(7,17,31,0) 58%),
+    var(--dark);
+  color: var(--paper);
+  border-radius: 10px; padding: 42px 36px; text-align: center;
+  min-height: 188px;
 }
 .ent-cta .eyebrow { color: rgba(255,255,255,0.55); margin-bottom: 12px; }
 .ent-cta h2 {
   color: var(--paper);
-  font-size: clamp(34px, 4.6vw, 56px);
-  font-weight: 600; letter-spacing: -0.03em;
-  margin: 0 auto 16px; max-width: 680px; text-wrap: balance;
+  font-size: clamp(28px, 3.2vw, 38px);
+  margin: 0 auto 12px; max-width: 520px; text-wrap: balance;
 }
 .ent-cta p {
   color: rgba(255,255,255,0.7);
-  font-size: 18px; max-width: 540px;
-  margin: 0 auto 36px; line-height: 1.5;
+  font-size: 13px; max-width: 500px;
+  margin: 0 auto 24px; line-height: 1.65;
 }
 .ent-cta .btns { display: inline-flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 .ent-cta .btn-primary {
-  height: 46px; padding: 0 26px;
+  height: 35px; padding: 0 20px;
   background: var(--paper); color: var(--ink);
   border-radius: 999px;
-  font-size: 15px; font-weight: 500; border: none; cursor: pointer;
+  font-size: 12px; font-weight: 800; border: none; cursor: pointer;
   text-decoration: none;
   display: inline-flex; align-items: center; gap: 6px;
 }
 .ent-cta .btn-ghost {
-  height: 46px; padding: 0 26px;
+  height: 35px; padding: 0 20px;
   background: transparent; color: var(--paper);
   border-radius: 999px;
   border: 1px solid rgba(255,255,255,0.3);
-  font-size: 15px; font-weight: 500;
+  font-size: 12px; font-weight: 800;
   text-decoration: none;
   display: inline-flex; align-items: center; gap: 6px;
 }
 
 /* ============== FOOTER ============== */
-footer { padding: 56px 22px 32px; background: var(--paper-3); color: var(--ink-3); }
+.cta-pair { padding: 24px 0 36px; }
+.cta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; max-width: 940px; margin: 0 auto; }
+
+/* ============== FOOTER ============== */
+footer { padding: 28px 0 24px; background: var(--paper-3); color: var(--ink-3); }
 footer .wrap {
-  display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr;
-  gap: 40px; max-width: 1024px;
+  display: grid; grid-template-columns: 1.8fr 1fr 1fr 1fr 1fr;
+  gap: 44px; max-width: var(--w);
 }
-footer h5 { font-size: 12px; font-weight: 600; color: var(--ink); margin: 0 0 12px; }
-footer a { display: block; color: var(--ink-3); text-decoration: none; font-size: 12px; padding: 4px 0; }
+footer h5 { font-size: 11px; font-weight: 800; color: var(--ink); margin: 0 0 10px; }
+footer a { display: block; color: var(--ink-3); text-decoration: none; font-size: 11px; padding: 3px 0; }
 footer a:hover { color: var(--ink); text-decoration: underline; }
-footer .brand { font-size: 19px; font-weight: 500; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 8px; }
-footer .tag { font-size: 12px; color: var(--ink-3); line-height: 1.5; max-width: 280px; }
+footer .brand { font-size: 14px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 12px; }
+footer .tag { font-size: 10px; color: var(--ink-3); line-height: 1.6; max-width: 280px; }
 footer .legal {
   grid-column: 1 / -1;
-  margin-top: 24px; padding-top: 24px;
-  border-top: 1px solid var(--line);
+  margin-top: 12px; padding-top: 12px;
+  border-top: 0;
   display: flex; justify-content: space-between;
-  font-size: 11px; color: var(--ink-4);
+  font-size: 10px; color: var(--ink-4);
 }
 
 /* ============== RESPONSIVE ============== */
-@media (max-width: 860px) {
-  .twoup, .steps, .aud, .trust, .stats { grid-template-columns: 1fr; }
-  .stats { gap: 1px; background: var(--line-soft); border: none; }
-  .stat { border-right: none; background: var(--paper); padding: 32px 22px; }
-  .product-card { padding: 24px; }
-  .product-card .body { grid-template-columns: 1fr; }
-  .product-card .sidebar { display: none; }
-  .product-card .main .row { grid-template-columns: 1fr auto; }
-  .product-card .main .row > :nth-child(3),
-  .product-card .main .row > :nth-child(4) { display: none; }
-  .ent-cta { padding: 56px 28px; border-radius: 18px; }
+@media (max-width: 980px) {
+  .nav-links { display: none; }
+  .hero-grid, .twoup, .onboard-layout, .trust, .stats, .cta-grid { grid-template-columns: 1fr; }
+  .hero { padding-top: 44px; }
+  .hero h1, .hero .sub { max-width: none; }
+  .app-body { grid-template-columns: 1fr; }
+  .app-sidebar { display: none; }
+  .aud { grid-template-columns: 1fr; }
+  .steps { grid-template-columns: 1fr; }
   footer .wrap { grid-template-columns: 1fr 1fr; }
-  section { padding: 80px 22px; }
+  section { padding: 46px 0; }
+}
+@media (max-width: 640px) {
+  .wrap, .aud { padding-left: 18px; padding-right: 18px; }
+  .hero h1 { font-size: 42px; }
+  .metric-grid { grid-template-columns: 1fr 1fr; }
+  .dashboard { padding: 12px; }
+  .cta-grid { gap: 14px; }
+  footer .wrap { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -481,61 +742,112 @@ footer .legal {
       <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer" data-i18n="nav.github">GitHub</a>
     </div>
     <div class="nav-right">
-      <button class="lang on" data-lang="en" type="button">EN</button>
-      <span class="sep">·</span>
-      <button class="lang" data-lang="ja" type="button">JA</button>
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button class="lang on" data-lang="ja" type="button">日本語</button>
+        <button class="lang" data-lang="en" type="button">English</button>
+      </div>
+      <a class="github-mark" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.67 0 8.2c0 3.62 2.29 6.69 5.47 7.78.4.08.55-.18.55-.4 0-.2-.01-.86-.01-1.56-2.01.38-2.53-.5-2.69-.96-.09-.24-.48-.96-.82-1.15-.28-.15-.68-.53-.01-.54.63-.01 1.08.59 1.23.84.72 1.24 1.87.89 2.33.68.07-.53.28-.89.51-1.09-1.78-.21-3.64-.91-3.64-4.04 0-.89.31-1.62.82-2.19-.08-.21-.36-1.04.08-2.16 0 0 .67-.22 2.2.84A7.34 7.34 0 0 1 8 3.98c.68 0 1.36.09 2 .27 1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.95.08 2.16.51.57.82 1.3.82 2.19 0 3.14-1.87 3.83-3.65 4.04.29.26.54.75.54 1.51 0 1.09-.01 1.96-.01 2.23 0 .22.15.48.55.4A8.16 8.16 0 0 0 16 8.2C16 3.67 12.42 0 8 0Z"/></svg>
+      </a>
     </div>
   </div>
 </nav>
 
 <section class="hero">
-  <h1>
-    <span data-i18n="hero.h1a">社内のクラウド研修を、</span><em data-i18n="hero.h1b">ハンズオン演習に変える。</em>
-  </h1>
-  <p class="sub" data-i18n="hero.sub">Battle (リアルタイム対戦) と Challenge (個別演習) を、 競技者の実 AWS アカウントへ自動 deploy。 採点と進捗管理は組み込み済み。</p>
-  <div class="cta-row">
-    <a
-      class="cta-primary"
-      href="https://github.com/susumutomita/TenkaCloud#default-lite-mode-5-minutes-single-tenant--make-deploy"
-      target="_blank"
-      rel="noopener noreferrer"
-      data-cta="try-5min"
-    >
-      <span data-i18n="hero.cta1">5 分で試す</span> ›
-    </a>
-    <a
-      href="https://github.com/susumutomita/TenkaCloud"
-      target="_blank"
-      rel="noopener noreferrer"
-      data-cta="github"
-    >
-      <span data-i18n="hero.cta2">GitHub を見る</span> ›
-    </a>
-  </div>
-
-  <div class="hero-visual">
-    <div class="product-card">
-      <div class="inner">
-        <div class="toolbar">
-          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-          <span class="url">portal.tenkacloud.dev / problems</span>
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <h1>
+        <span data-i18n="hero.h1a">社内のクラウド研修を、</span><em data-i18n="hero.h1b">ハンズオン演習に変える。</em>
+      </h1>
+      <p class="sub" data-i18n="hero.sub">Battle (リアルタイム対戦) と Challenge (個別演習) を、 競技者の実 AWS アカウントへ自動 deploy。 採点と進捗管理は組み込み済み。</p>
+      <div class="cta-row">
+        <a
+          class="cta-primary"
+          href="https://github.com/susumutomita/TenkaCloud#default-lite-mode-5-minutes-single-tenant--make-deploy"
+          target="_blank"
+          rel="noopener noreferrer"
+          data-cta="try-5min"
+        >
+          <span data-i18n="hero.cta1">5 分で試す</span> →
+        </a>
+        <a
+          href="https://github.com/susumutomita/TenkaCloud/discussions"
+          target="_blank"
+          rel="noopener noreferrer"
+          data-cta="contact"
+        >
+          <span data-i18n="ent.cta1">お問い合わせ</span> →
+        </a>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="app-window">
+        <div class="app-topbar">
+          <span>TenkaCloud — TenkaCloud Battle</span>
+          <span class="app-chrome-meta"><span data-i18n="app.lang">◉ 日本語 ▼</span><span>◎ Score: -3805 pt / Rank: 2/2</span><span data-i18n="app.profile">♙ ゲスト ▼</span></span>
         </div>
-        <div class="body">
-          <div class="sidebar">
-            <div class="group">Workspace</div>
-            <a class="on"><span class="b battle"></span><span data-i18n="product.sidebar.0">問題</span></a>
-            <a><span class="b"></span><span data-i18n="product.sidebar.1">リーダーボード</span></a>
-            <a><span class="b"></span><span data-i18n="product.sidebar.2">イベント</span></a>
-            <a><span class="b"></span><span data-i18n="product.sidebar.3">ドキュメント</span></a>
-            <div class="group">Categories</div>
-            <a class="battle"><span class="b battle"></span>Battle</a>
-            <a class="challenge"><span class="b challenge"></span>Challenge</a>
-          </div>
-          <div class="main">
-            <div class="breadcrumb" data-i18n="product.breadcrumb">Workspace · open-arena · Season 01</div>
-            <h3 data-i18n="product.title">問題カタログ</h3>
-            <div style="margin-top:14px;" id="product-rows"></div>
-          </div>
+        <div class="app-body">
+          <aside class="app-sidebar">
+            <div class="app-menu-title"><span data-i18n="app.menu">メニュー</span><span>⌄</span></div>
+            <div class="app-menu-group" data-i18n="app.event">• イベント</div>
+            <a class="on" data-i18n="app.home">ホーム</a>
+            <a data-i18n="app.scoreboard">スコアボード</a>
+            <a data-i18n="app.score_events">スコアイベント</a>
+            <a data-i18n="app.notifications">お知らせ</a>
+            <div class="app-menu-group">• Quests</div>
+            <a data-i18n="app.problems">問題一覧</a>
+            <div class="app-menu-group" data-i18n="app.tools">• ツール</div>
+            <a data-i18n="app.sso">SSO 資格情報</a>
+          </aside>
+          <main class="dashboard">
+            <h3 data-i18n="app.welcome">ようこそ、ゲストさん</h3>
+            <div class="dashboard-sub" data-i18n="app.welcome_sub">TenkaCloud Battle へようこそ</div>
+            <div class="metric-card">
+              <div class="metric-title" data-i18n="app.team_score">チーム累計スコア</div>
+              <div class="metric-grid">
+                <div><div class="metric-label" data-i18n="app.total">合計</div><div class="metric-value green">-3805 pt</div></div>
+                <div><div class="metric-label" data-i18n="app.rank">順位</div><div class="metric-value blue">2 / 2</div></div>
+                <div><div class="metric-label" data-i18n="app.problem_count">問題数</div><div class="metric-value">3</div></div>
+                <div><div class="metric-label" data-i18n="app.completed">完了済</div><div class="metric-value">1</div></div>
+              </div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-head">
+                <div>
+                  <div class="chart-title" data-i18n="app.score_trend">スコア推移</div>
+                  <div class="chart-desc" data-i18n="app.score_trend_desc">同 event 内の全 2 チームを表示</div>
+                </div>
+                <div class="select-pill" data-i18n="app.select_team">event / チームを選択　⌄</div>
+              </div>
+              <svg class="line-chart" viewBox="0 0 760 300" role="img" aria-label="score chart">
+                <rect x="0" y="0" width="760" height="300" fill="#fff"/>
+                <g stroke="#e5e9f0" stroke-width="1">
+                  <path d="M50 25H735M50 65H735M50 105H735M50 145H735M50 185H735M50 225H735M50 265H735"/>
+                  <path d="M50 25V265M130 25V265M210 25V265M290 25V265M370 25V265M450 25V265M530 25V265M610 25V265M690 25V265"/>
+                </g>
+                <polyline fill="none" stroke="#28a35f" stroke-width="2.5" points="50,42 90,51 90,66 130,70 130,82 170,89 170,104 210,108 210,121 250,126 250,140 290,145 290,159 330,163 330,177 370,181 370,194 410,199 410,212 450,216 450,229 490,233 490,245 530,250 530,258 570,262 570,270 610,274 610,282 650,286 650,292 735,298"/>
+                <polyline fill="none" stroke="#1f78d1" stroke-width="2.5" points="50,44 90,54 90,73 130,77 130,94 170,100 170,116 210,121 210,137 250,143 250,158 290,164 290,179 330,185 330,199 370,205 370,219 410,224 410,238 450,243 450,256 490,261 490,272 530,277 530,287 570,291 570,299 610,304 610,312 650,316 650,324 735,334"/>
+                <g font-family="JetBrains Mono, monospace" font-size="11" fill="#344155">
+                  <text x="34" y="29">0</text><text x="18" y="69">-500</text><text x="12" y="109">-1000</text><text x="12" y="149">-1500</text><text x="12" y="189">-2000</text><text x="12" y="229">-2500</text><text x="12" y="269">-3000</text>
+                  <text x="82" y="288">21:37</text><text x="162" y="288">21:39</text><text x="242" y="288">21:41</text><text x="322" y="288">21:43</text><text x="402" y="288">21:45</text><text x="482" y="288">21:47</text><text x="562" y="288">21:49</text><text x="642" y="288">21:51</text>
+                </g>
+                <g transform="translate(575 145)">
+                  <rect width="150" height="74" rx="8" fill="#fff" stroke="#aeb7c5"/>
+                  <text x="13" y="22" font-family="JetBrains Mono, monospace" font-size="12" font-weight="700" fill="#111827">21:50</text>
+                  <path d="M14 42H26" stroke="#1f78d1" stroke-width="4" stroke-linecap="round"/>
+                  <text x="32" y="45" font-family="JetBrains Mono, monospace" font-size="11" fill="#111827">gan        -2900 pt</text>
+                  <path d="M14 59H26" stroke="#28a35f" stroke-width="4" stroke-linecap="round"/>
+                  <text x="32" y="62" font-family="JetBrains Mono, monospace" font-size="11" fill="#111827" data-i18n="app.chart_you">(ゲスト あなた) -2705 pt</text>
+                </g>
+              </svg>
+              <div class="chart-legend"><span style="color:#1f78d1">━ gan</span><span style="color:#28a35f" data-i18n="app.legend_you">━ (ゲスト あなた)</span></div>
+            </div>
+            <div class="challenge-card">
+              <h4 data-i18n="app.challenge_title">問題に挑戦</h4>
+              <p data-i18n="app.challenge_body">3問が deploy 済です。問題一覧から挑戦してください。</p>
+              <button class="tiny-button" type="button" data-i18n="app.open_problems">問題一覧を開く</button>
+            </div>
+          </main>
         </div>
       </div>
     </div>
@@ -553,12 +865,51 @@ footer .legal {
         <h3 data-i18n="modes.battle.h">Battle.</h3>
         <p data-i18n="modes.battle.p">稼働率で競う、リアルタイム対戦。毎分のヘルスチェックを生き残ったチームが、勝つ。</p>
         <div class="demo">
-          <div class="demo-scoreboard">
-            <div class="head">
-              <span>SECURITY BATTLE ROYALE</span>
-              <span class="live"><span class="d"></span><span data-i18n="modes.battle.live">ROUND 03 · LIVE</span></span>
+          <div class="portal-preview score-events-preview">
+            <div class="portal-page-title" data-i18n="preview.score_events.title">Score events</div>
+            <div class="portal-page-desc" data-i18n="preview.score_events.desc">自チームのスコア変動履歴 (30 秒ごと自動更新、新しい順 100 件まで)</div>
+            <div class="portal-container">
+              <div class="portal-container-title" data-i18n="preview.score_events.chart">累計 score 推移</div>
+              <svg class="portal-chart" viewBox="0 0 560 210" role="img" aria-label="score events chart">
+                <rect width="560" height="210" fill="#fff"/>
+                <g stroke="#e5e9f0" stroke-width="1">
+                  <path d="M45 20H535M45 58H535M45 96H535M45 134H535M45 172H535"/>
+                  <path d="M45 20V172M125 20V172M205 20V172M285 20V172M365 20V172M445 20V172M535 20V172"/>
+                </g>
+                <polyline fill="none" stroke="#0972d3" stroke-width="3" points="45,38 86,48 86,58 126,64 126,76 166,82 166,92 206,99 206,109 246,116 246,126 286,132 286,142 326,148 326,157 366,162 366,168 406,173 406,178 446,182 446,186 535,191"/>
+                <g font-family="JetBrains Mono, monospace" font-size="10" fill="#5d6877">
+                  <text x="10" y="24">0</text><text x="8" y="62">-500</text><text x="3" y="100">-1000</text><text x="3" y="138">-1500</text><text x="3" y="176">-2000</text>
+                  <text x="40" y="197">21:37:00</text><text x="198" y="197">21:43:00</text><text x="356" y="197">21:49:00</text>
+                </g>
+              </svg>
             </div>
-            <div id="scoreboard-rows"></div>
+            <div class="portal-container">
+              <div class="portal-container-title" data-i18n="preview.score_events.history">履歴 (100)</div>
+              <table class="portal-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="preview.score_events.col_time">発生時刻</th>
+                    <th data-i18n="preview.score_events.col_problem">問題</th>
+                    <th data-i18n="preview.score_events.col_type">種類</th>
+                    <th data-i18n="preview.score_events.col_points">変動</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td data-i18n="preview.score_events.time_now">数秒前</td>
+                    <td><code class="portal-code">microservice-migration-battle</code></td>
+                    <td><span class="portal-badge green">Battle (uptime)</span></td>
+                    <td><span class="portal-points negative">-100 pt</span></td>
+                  </tr>
+                  <tr>
+                    <td data-i18n="preview.score_events.time_minute">1 分前</td>
+                    <td><code class="portal-code">hello-world</code></td>
+                    <td><span class="portal-badge blue">Challenge (flag)</span></td>
+                    <td><span class="portal-points positive">+800 pt</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -567,11 +918,38 @@ footer .legal {
         <h3 data-i18n="modes.challenge.h">Challenge.</h3>
         <p data-i18n="modes.challenge.p">問題を解き、フラグを提出する。AWS の一つひとつのサービスを、ひとつずつ理解していく。</p>
         <div class="demo">
-          <div class="demo-flag">
-            <div class="label">Flag</div>
-            <div class="input"><span data-i18n="modes.challenge.input">Hello from tc-iam-…</span><span class="cursor"></span></div>
-            <button class="submit" type="button">Submit ›</button>
-            <div class="points">+<b>800 pts</b> · iam-escape-room</div>
+          <div class="portal-preview">
+            <div class="portal-page-title" data-i18n="preview.quests.title">問題一覧 (Quests)</div>
+            <div class="portal-page-desc" data-i18n="preview.quests.desc">自チームに deploy された問題のカタログ。各カードからアクセス先 URL に直接遷移できます。</div>
+            <div class="portal-tabs" aria-label="カテゴリで絞り込み">
+              <span class="portal-tab active" data-i18n="preview.quests.all">すべて (3)</span>
+              <span class="portal-tab">Battle (2)</span>
+              <span class="portal-tab">Challenge (1)</span>
+            </div>
+            <div class="portal-container">
+              <div class="portal-container-title" data-i18n="preview.quests.unsolved">未解決 (3)</div>
+              <div class="quest-card-list">
+                <div class="quest-card">
+                  <code>microservice-migration-battle</code>
+                  <span class="portal-badge red">Battle</span>
+                  <span class="portal-badge grey" data-i18n="preview.quests.diff_mid">難易度: 中級</span>
+                  <span class="status-text" data-i18n="preview.quests.in_progress">挑戦中</span>
+                </div>
+                <div class="quest-card">
+                  <code>hello-world</code>
+                  <span class="portal-badge blue">Challenge</span>
+                  <span class="portal-badge grey" data-i18n="preview.quests.diff_intro">難易度: 入門</span>
+                  <span class="status-text pending" data-i18n="preview.quests.unsolved_status">未解答</span>
+                </div>
+                <div class="quest-card">
+                  <code>hello-world-battle</code>
+                  <span class="portal-badge red">Battle</span>
+                  <span class="portal-badge grey" data-i18n="preview.quests.diff_mid">難易度: 中級</span>
+                  <span class="status-text" data-i18n="preview.quests.in_progress">挑戦中</span>
+                </div>
+              </div>
+            </div>
+            <div class="portal-collapsed" data-i18n="preview.quests.cleared">⌄ 解決済み (0)</div>
           </div>
         </div>
       </div>
@@ -580,7 +958,7 @@ footer .legal {
 </section>
 
 <section>
-  <div class="wrap">
+  <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="aud.eyebrow">誰のための</div>
     <h2 data-i18n="aud.h2">出る人にも、開く人にも。</h2>
     <p class="lead" data-i18n="aud.lead">個人のエンジニアから、勉強会の主催者、教育の現場まで。AWS コンソールを開かずに、競技は始まる。</p>
@@ -609,27 +987,31 @@ footer .legal {
 
 <section class="alt" id="onboard">
   <div class="wrap">
-    <div class="eyebrow" data-i18n="onboard.eyebrow">オンボーディング</div>
-    <h2 data-i18n="onboard.h2">AWS との接続は、3 ステップ。</h2>
-    <p class="lead" data-i18n="onboard.lead">「自分のアカウントに何をされるか」をなくす設計。最小権限の AssumeRole 一本だけで、すべてが動く。</p>
-    <div class="steps">
-      <div class="step">
-        <div class="n">01</div>
-        <h4 data-i18n="onboard.s1.h">テンプレートを、1 度だけ。</h4>
-        <p data-i18n="onboard.s1.p">CloudFormation を自分のアカウントに 1 回デプロイ。それで IAM Role が用意される。</p>
-        <div class="code"><div>$ aws cloudformation create-stack \</div><div>&nbsp;&nbsp;&nbsp;&nbsp;--stack-name tenka-bootstrap \</div><div>&nbsp;&nbsp;&nbsp;&nbsp;--template-url https://…</div></div>
+    <div class="onboard-layout">
+      <div>
+        <div class="eyebrow" data-i18n="onboard.eyebrow">オンボーディング</div>
+        <h2 data-i18n="onboard.h2">AWS との接続は、3 ステップ。</h2>
+        <p class="lead" data-i18n="onboard.lead">「自分のアカウントに何をされるか」をなくす設計。最小権限の AssumeRole 一本だけで、すべてが動く。</p>
       </div>
-      <div class="step">
-        <div class="n">02</div>
-        <h4 data-i18n="onboard.s2.h">ExternalId で、固く守る。</h4>
-        <p data-i18n="onboard.s2.p">TenkaCloud は固有の ExternalId 付きでしか、その Role を引き受けられない。Role ARN だけでは入れない。</p>
-        <div class="code"><div>Principal: tenkacloud-control-plane</div><div>Condition:</div><div>&nbsp;&nbsp;sts:ExternalId: TC-EXT-•••</div></div>
-      </div>
-      <div class="step">
-        <div class="n">03</div>
-        <h4 data-i18n="onboard.s3.h">ポータルから、競技へ。</h4>
-        <p data-i18n="onboard.s3.p">ログインすれば、問題環境が自動で立ち上がる。エンドポイントと点数は、その瞬間から見える。</p>
-        <div class="code"><div>$ open https://portal.tenkacloud.dev</div><div>→ <span data-i18n="onboard.s3.line2">問題が割り当てられました</span></div><div>→ Frontend URL: https://t1…</div></div>
+      <div class="steps">
+        <div class="step">
+          <div class="n">01</div>
+          <h4 data-i18n="onboard.s1.h">テンプレートを、1 度だけ。</h4>
+          <p data-i18n="onboard.s1.p">CloudFormation を自分のアカウントに 1 回デプロイ。それで IAM Role が用意される。</p>
+          <div class="step-icon"><svg viewBox="0 0 64 64" width="64" height="64"><path d="M21 43H17a10 10 0 0 1 0-20 15 15 0 0 1 28-5 12 12 0 0 1 2 24h-5" fill="none" stroke="#a855f7" stroke-width="3"/><path d="M32 48V29m0 0-8 8m8-8 8 8" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        </div>
+        <div class="step">
+          <div class="n">02</div>
+          <h4 data-i18n="onboard.s2.h">ExternalId で、固く守る。</h4>
+          <p data-i18n="onboard.s2.p">TenkaCloud は固有の ExternalId 付きでしか、その Role を引き受けられない。Role ARN だけでは入れない。</p>
+          <div class="step-icon"><svg viewBox="0 0 64 64" width="64" height="64"><circle cx="32" cy="23" r="10" fill="none" stroke="#22c55e" stroke-width="4"/><path d="M15 53c3-11 10-17 17-17s14 6 17 17" fill="none" stroke="#07111f" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="23" r="16" fill="none" stroke="#a855f7" stroke-width="2" opacity=".45"/></svg></div>
+        </div>
+        <div class="step">
+          <div class="n">03</div>
+          <h4 data-i18n="onboard.s3.h">ポータルから、競技へ。</h4>
+          <p data-i18n="onboard.s3.p">ログインすれば、問題環境が自動で立ち上がる。エンドポイントと点数は、その瞬間から見える。</p>
+          <div class="step-icon"><svg viewBox="0 0 64 64" width="64" height="64"><rect x="12" y="14" width="40" height="31" rx="3" fill="none" stroke="#07111f" stroke-width="3"/><path d="M20 50h24" stroke="#07111f" stroke-width="3" stroke-linecap="round"/><circle cx="32" cy="30" r="8" fill="none" stroke="#2563eb" stroke-width="3"/></svg></div>
+        </div>
       </div>
     </div>
   </div>
@@ -643,19 +1025,44 @@ footer .legal {
         <h2 data-i18n="trust.h2">あなたの AWS は、ずっとあなたのもの。</h2>
         <ul id="trust-bullets"></ul>
       </div>
-      <div class="flow">
-        <div class="node">
-          <span>TenkaCloud · Control Plane</span>
-          <span class="tag">SaaS</span>
+      <div class="flow sso-preview">
+        <div class="credential-title">SSO Credentials</div>
+        <div class="credential-sub" data-i18n="preview.sso.desc">AWS Console にワンクリックで federate ログイン。自前の AWS アカウント不要。</div>
+        <div class="sso-alert">
+          <b data-i18n="preview.sso.howto">使い方</b>
+          <span data-i18n="preview.sso.body">下のボタンを押すと新しいタブで AWS Console (CloudFormation スタック画面) が自動でログイン状態で開きます。session の TTL は 1 時間です。</span>
         </div>
-        <div class="arr">
-          <span>AssumeRole + ExternalId</span>
-          <span class="line"></span>
-        </div>
-        <div class="sub">
-          <div class="leaf"><span>acct-a</span><span class="ok">● deployed</span></div>
-          <div class="leaf"><span>acct-b</span><span class="ok">● deployed</span></div>
-          <div class="leaf"><span>acct-c</span><span class="ok">● deployed</span></div>
+        <div class="credential-list">
+          <div class="credential-row">
+            <div class="credential-row-head">
+              <code>microservice-migration-battle</code>
+              <button type="button"><span data-i18n="preview.sso.button">AWS Console を開く</span> ↗</button>
+            </div>
+            <div class="credential-kv">
+              <div><span>AWS Account</span><code>c7782015332</code></div>
+              <div><span>Region</span><strong>us-east-1</strong></div>
+            </div>
+          </div>
+          <div class="credential-row">
+            <div class="credential-row-head">
+              <code>hello-world</code>
+              <button type="button"><span data-i18n="preview.sso.button">AWS Console を開く</span> ↗</button>
+            </div>
+            <div class="credential-kv">
+              <div><span>AWS Account</span><code>677c9285832</code></div>
+              <div><span>Region</span><strong>ap-northeast-1</strong></div>
+            </div>
+          </div>
+          <div class="credential-row">
+            <div class="credential-row-head">
+              <code>hello-world-battle</code>
+              <button type="button"><span data-i18n="preview.sso.button">AWS Console を開く</span> ↗</button>
+            </div>
+            <div class="credential-kv">
+              <div><span>AWS Account</span><code>677c9285832</code></div>
+              <div><span>Region</span><strong>us-east-1</strong></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -668,31 +1075,23 @@ footer .legal {
   </div>
 </section>
 
-<section id="waitlist">
-  <div class="wrap">
-    <div class="ent-cta">
+<section class="cta-pair">
+  <div class="wrap cta-grid">
+    <div class="ent-cta" id="waitlist">
       <div class="eyebrow" data-i18n="waitlist.eyebrow">ベータの招待を受け取る</div>
       <h2 data-i18n="waitlist.h2">ウェイトリストに登録する。</h2>
       <p data-i18n="waitlist.p">公開アリーナの招待 / 開催ご相談の連絡先を残しておくと、 準備が整い次第お知らせします。 OSS なので料金はありません。</p>
-      <div id="waitlist-embed">
-        <noscript data-i18n="waitlist.noscript">Enable JavaScript to see the signup form.</noscript>
-      </div>
-      <div class="btns" id="waitlist-fallback" hidden>
-        <a class="btn-primary" href="#" id="waitlist-fallback-link" target="_blank" rel="noopener noreferrer"><span data-i18n="waitlist.fallback">フォームを開く</span> ›</a>
+      <div class="btns">
+        <a class="btn-primary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="waitlist.fallback">フォームを開く</span> →</a>
       </div>
     </div>
-  </div>
-</section>
-
-<section id="contact">
-  <div class="wrap">
-    <div class="ent-cta">
+    <div class="ent-cta" id="contact">
       <div class="eyebrow" data-i18n="ent.eyebrow">もし、こんな使い方をしたいなら</div>
       <h2 data-i18n="ent.h2">クローズドな会場で、走らせたい人へ。</h2>
       <p data-i18n="ent.p">社内勉強会、学校の授業、クローズドなインシデントレスポンス演習 — 公開アリーナで難しい使い方を考えているなら、相談してください。OSS なので料金はありません。</p>
       <div class="btns">
-        <a class="btn-primary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="ent.cta1">お問い合わせ</span> ›</a>
-        <a class="btn-ghost" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="ent.cta2">GitHub を見る</span> ›</a>
+        <a class="btn-primary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="ent.cta1">お問い合わせ</span> →</a>
+        <a class="btn-ghost" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="ent.cta2">GitHub を見る</span> →</a>
       </div>
     </div>
   </div>
@@ -710,6 +1109,12 @@ footer .legal {
       <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer" data-i18n="footer.p1">問題カタログ</a>
       <a data-i18n="footer.p2">参加者ポータル</a>
       <a data-i18n="footer.p3">運営コンソール</a>
+    </div>
+    <div>
+      <h5 data-i18n="footer.usage">使い方</h5>
+      <a href="https://github.com/susumutomita/TenkaCloud#readme" target="_blank" rel="noopener noreferrer" data-i18n="footer.u0">はじめる</a>
+      <a href="https://github.com/susumutomita/TenkaCloud#readme" target="_blank" rel="noopener noreferrer" data-i18n="footer.u1">ドキュメント</a>
+      <a href="https://github.com/susumutomita/TenkaCloud#readme" target="_blank" rel="noopener noreferrer" data-i18n="footer.u2">運用ガイド</a>
     </div>
     <div>
       <h5>Resources</h5>
@@ -749,6 +1154,32 @@ footer .legal {
       "hero.sub": "Battle (リアルタイム対戦) と Challenge (個別演習) を、 競技者の実 AWS アカウントへ自動 deploy。 採点と進捗管理は組み込み済み。",
       "hero.cta1": "5 分で試す",
       "hero.cta2": "GitHub を見る",
+      "app.lang": "◉ 日本語 ▼",
+      "app.profile": "♙ ゲスト ▼",
+      "app.menu": "メニュー",
+      "app.event": "• イベント",
+      "app.home": "ホーム",
+      "app.scoreboard": "スコアボード",
+      "app.score_events": "スコアイベント",
+      "app.notifications": "お知らせ",
+      "app.problems": "問題一覧",
+      "app.tools": "• ツール",
+      "app.sso": "SSO 資格情報",
+      "app.welcome": "ようこそ、ゲストさん",
+      "app.welcome_sub": "TenkaCloud Battle へようこそ",
+      "app.team_score": "チーム累計スコア",
+      "app.total": "合計",
+      "app.rank": "順位",
+      "app.problem_count": "問題数",
+      "app.completed": "完了済",
+      "app.score_trend": "スコア推移",
+      "app.score_trend_desc": "同 event 内の全 2 チームを表示",
+      "app.select_team": "event / チームを選択　⌄",
+      "app.chart_you": "(ゲスト あなた) -2705 pt",
+      "app.legend_you": "━ (ゲスト あなた)",
+      "app.challenge_title": "問題に挑戦",
+      "app.challenge_body": "3問が deploy 済です。問題一覧から挑戦してください。",
+      "app.open_problems": "問題一覧を開く",
 
       "product.title": "問題カタログ",
       "product.breadcrumb": "Workspace · open-arena · Season 01",
@@ -768,6 +1199,29 @@ footer .legal {
       "modes.challenge.h": "Challenge.",
       "modes.challenge.p": "問題を解き、フラグを提出する。AWS の一つひとつのサービスを、ひとつずつ理解していく。",
       "modes.challenge.input": "Hello from tc-iam-…",
+      "preview.score_events.title": "Score events",
+      "preview.score_events.desc": "自チームのスコア変動履歴 (30 秒ごと自動更新、新しい順 100 件まで)",
+      "preview.score_events.chart": "累計 score 推移",
+      "preview.score_events.history": "履歴 (100)",
+      "preview.score_events.col_time": "発生時刻",
+      "preview.score_events.col_problem": "問題",
+      "preview.score_events.col_type": "種類",
+      "preview.score_events.col_points": "変動",
+      "preview.score_events.time_now": "数秒前",
+      "preview.score_events.time_minute": "1 分前",
+      "preview.quests.title": "問題一覧 (Quests)",
+      "preview.quests.desc": "自チームに deploy された問題のカタログ。各カードからアクセス先 URL に直接遷移できます。",
+      "preview.quests.all": "すべて (3)",
+      "preview.quests.unsolved": "未解決 (3)",
+      "preview.quests.diff_mid": "難易度: 中級",
+      "preview.quests.diff_intro": "難易度: 入門",
+      "preview.quests.in_progress": "挑戦中",
+      "preview.quests.unsolved_status": "未解答",
+      "preview.quests.cleared": "⌄ 解決済み (0)",
+      "preview.sso.desc": "AWS Console にワンクリックで federate ログイン。自前の AWS アカウント不要。",
+      "preview.sso.howto": "使い方",
+      "preview.sso.body": "下のボタンを押すと新しいタブで AWS Console (CloudFormation スタック画面) が自動でログイン状態で開きます。session の TTL は 1 時間です。",
+      "preview.sso.button": "AWS Console を開く",
 
       "aud.eyebrow": "誰のための",
       "aud.h2": "出る人にも、開く人にも。",
@@ -827,6 +1281,7 @@ footer .legal {
 
       "footer.tag": "AWS の実環境で競う、オープンソースのクラウド競技基盤。Apache 2.0。",
       "footer.p0": "概要", "footer.p1": "問題カタログ", "footer.p2": "参加者ポータル", "footer.p3": "運営コンソール",
+      "footer.usage": "使い方", "footer.u0": "はじめる", "footer.u1": "ドキュメント", "footer.u2": "運用ガイド",
       "footer.r0": "ドキュメント", "footer.r1": "アーキテクチャ", "footer.r2": "Changelog",
       "footer.legal": "© 2026 TenkaCloud · Susumu Tomita · Apache License 2.0"
     },
@@ -843,6 +1298,32 @@ footer .legal {
       "hero.sub": "Battle (real-time) and Challenge (self-paced) drills, auto-deployed to each participant's own AWS account. Scoring and progress tracking are built in.",
       "hero.cta1": "Try in 5 minutes",
       "hero.cta2": "View on GitHub",
+      "app.lang": "◉ English ▼",
+      "app.profile": "♙ Guest ▼",
+      "app.menu": "Menu",
+      "app.event": "• Event",
+      "app.home": "Home",
+      "app.scoreboard": "Scoreboard",
+      "app.score_events": "Score events",
+      "app.notifications": "Notifications",
+      "app.problems": "Problems",
+      "app.tools": "• Tools",
+      "app.sso": "SSO Credentials",
+      "app.welcome": "Welcome, Guest",
+      "app.welcome_sub": "Welcome to TenkaCloud Battle",
+      "app.team_score": "Team cumulative score",
+      "app.total": "Total",
+      "app.rank": "Rank",
+      "app.problem_count": "Problems",
+      "app.completed": "Completed",
+      "app.score_trend": "Score trend",
+      "app.score_trend_desc": "Showing all 2 teams in this event",
+      "app.select_team": "Select event / team　⌄",
+      "app.chart_you": "(Guest you) -2705 pt",
+      "app.legend_you": "━ (Guest you)",
+      "app.challenge_title": "Take on problems",
+      "app.challenge_body": "3 problems are deployed. Open the problem list to start.",
+      "app.open_problems": "Open problem list",
 
       "product.title": "Problem catalog",
       "product.breadcrumb": "Workspace · open-arena · Season 01",
@@ -862,6 +1343,29 @@ footer .legal {
       "modes.challenge.h": "Challenge.",
       "modes.challenge.p": "Solve the problem, submit the flag, earn the points. Learn one AWS service at a time, in depth.",
       "modes.challenge.input": "Hello from tc-iam-…",
+      "preview.score_events.title": "Score events",
+      "preview.score_events.desc": "Your team's score-change history, auto-refreshed every 30 seconds. Up to 100 newest events.",
+      "preview.score_events.chart": "Cumulative score trend",
+      "preview.score_events.history": "History (100)",
+      "preview.score_events.col_time": "Occurred",
+      "preview.score_events.col_problem": "Problem",
+      "preview.score_events.col_type": "Type",
+      "preview.score_events.col_points": "Delta",
+      "preview.score_events.time_now": "Seconds ago",
+      "preview.score_events.time_minute": "1 min ago",
+      "preview.quests.title": "Problem list (Quests)",
+      "preview.quests.desc": "A catalog of problems deployed to your team. Jump directly to each access URL from its card.",
+      "preview.quests.all": "All (3)",
+      "preview.quests.unsolved": "Unsolved (3)",
+      "preview.quests.diff_mid": "Difficulty: intermediate",
+      "preview.quests.diff_intro": "Difficulty: intro",
+      "preview.quests.in_progress": "In progress",
+      "preview.quests.unsolved_status": "Unanswered",
+      "preview.quests.cleared": "⌄ Cleared (0)",
+      "preview.sso.desc": "One-click federated login to AWS Console. No personal AWS account required.",
+      "preview.sso.howto": "How to use",
+      "preview.sso.body": "Press a button below to open AWS Console, already signed in, in a new tab. The session TTL is one hour.",
+      "preview.sso.button": "Open AWS Console",
 
       "aud.eyebrow": "Who it's for",
       "aud.h2": "For the people who play. And the people who host.",
@@ -921,6 +1425,7 @@ footer .legal {
 
       "footer.tag": "An open-source cloud-competition platform that runs on real AWS. Apache 2.0.",
       "footer.p0": "Overview", "footer.p1": "Problems", "footer.p2": "Participant portal", "footer.p3": "Operator console",
+      "footer.usage": "Usage", "footer.u0": "Start", "footer.u1": "Docs", "footer.u2": "Operations guide",
       "footer.r0": "Docs", "footer.r1": "Architecture", "footer.r2": "Changelog",
       "footer.legal": "© 2026 TenkaCloud · Susumu Tomita · Apache License 2.0"
     }
@@ -934,6 +1439,8 @@ footer .legal {
   ];
 
   function renderProductRows(lang) {
+    var productRows = document.getElementById("product-rows");
+    if (!productRows) return;
     var html = PRODUCT_ROWS.map(function (r) {
       var stars = [1,2,3,4,5].map(function (i) {
         return '<i class="' + (i <= r.diff ? 'on' : '') + '"></i>';
@@ -946,7 +1453,7 @@ footer .legal {
         + '<span class="pts">' + r.pts + '</span>'
         + '</div>';
     }).join('');
-    document.getElementById("product-rows").innerHTML = html;
+    productRows.innerHTML = html;
   }
 
   function renderTrustBullets(lang) {
@@ -976,6 +1483,8 @@ footer .legal {
   ];
 
   function renderScoreboard(tick) {
+    var scoreboardRows = document.getElementById("scoreboard-rows");
+    if (!scoreboardRows) return;
     var html = SCORE_BASE.map(function (r, i) {
       var pts = r.pts + (tick * (4 - i) * 7);
       var leadCls = i === 0 ? " lead" : "";
@@ -985,7 +1494,7 @@ footer .legal {
         + '<span class="pts">' + pts.toLocaleString() + '</span>'
         + '</div>';
     }).join('');
-    document.getElementById("scoreboard-rows").innerHTML = html;
+    scoreboardRows.innerHTML = html;
   }
 
   function applyLang(lang) {
@@ -996,7 +1505,9 @@ footer .legal {
       if (dict[key] != null) el.textContent = dict[key];
     });
     document.querySelectorAll(".nav-right .lang").forEach(function (btn) {
-      btn.classList.toggle("on", btn.getAttribute("data-lang") === lang);
+      var isActive = btn.getAttribute("data-lang") === lang;
+      btn.classList.toggle("on", isActive);
+      btn.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
     renderProductRows(lang);
     renderTrustBullets(lang);
@@ -1048,7 +1559,7 @@ footer .legal {
    *   1. `?lang=ja|en` URL query (= shareable links)
    *   2. localStorage `tenkacloud.lang` (= sticky user choice)
    *   3. navigator.language starts with `ja` (= visitor's browser preference)
-   *   4. default `en` (= English is the primary language; #1183 follow-up)
+   *   4. default `ja`
    */
   function detectInitialLang() {
     var params = new URLSearchParams(window.location.search || "");
@@ -1060,9 +1571,9 @@ footer .legal {
     } catch (_) {
       /* localStorage blocked (= privacy mode); fall through */
     }
-    var nav = (navigator.language || "en").toLowerCase();
+    var nav = (navigator.language || "ja").toLowerCase();
     if (nav.indexOf("ja") === 0) return "ja";
-    return "en";
+    return "ja";
   }
 
   function persistLang(lang) {
@@ -1073,15 +1584,28 @@ footer .legal {
     }
   }
 
+  function reflectLangInUrl(lang) {
+    try {
+      var url = new URL(window.location.href);
+      url.searchParams.set("lang", lang);
+      window.history.replaceState({}, "", url);
+    } catch (_) {
+      /* URL API unavailable; language switching still works in-place */
+    }
+  }
+
   document.querySelectorAll(".nav-right .lang").forEach(function (btn) {
     btn.addEventListener("click", function () {
       var lang = btn.getAttribute("data-lang");
       applyLang(lang);
       persistLang(lang);
+      reflectLangInUrl(lang);
     });
   });
 
-  applyLang(detectInitialLang());
+  var initialLang = detectInitialLang();
+  applyLang(initialLang);
+  reflectLangInUrl(initialLang);
 
   var tick = 0;
   renderScoreboard(tick);
