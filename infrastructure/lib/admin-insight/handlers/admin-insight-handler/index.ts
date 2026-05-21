@@ -216,7 +216,9 @@ app.get("/admin/insight/state-machine-executions", async (c) => {
 
 // ====== Issue #950 (ADR-020 Phase D): admin audit log read route ======
 
-app.get("/admin/insight/audit", async (c) => {
+app.get("/admin/insight/audit", handleAuditEntries);
+
+async function handleAuditEntries(c: Context): Promise<Response> {
   const forbidden = auditAndAuthorize(c, "/admin/insight/audit");
   if (forbidden) return forbidden;
   if (!shared.auditTableName || shared.auditTableName.length === 0) {
@@ -228,27 +230,17 @@ app.get("/admin/insight/audit", async (c) => {
       StatusCodes.SERVICE_UNAVAILABLE,
     );
   }
-  const rawScope = c.req.query("scope") ?? "tenant";
-  if (rawScope !== "tenant" && rawScope !== "system") {
-    return c.json({ error: "invalid_scope" }, StatusCodes.BAD_REQUEST);
-  }
-  const scope = rawScope as "tenant" | "system";
-  const tenantId = c.req.query("tenantId");
-  if (scope === "tenant") {
-    if (!tenantId || !TENANT_ID_RE.test(tenantId)) {
-      return c.json({ error: "invalid_tenant_id" }, StatusCodes.BAD_REQUEST);
-    }
-  }
-  const parsedLimit = parseLimit(c.req.query("limit"));
-  if (!parsedLimit) return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
+  const input = parseAuditListInput(c);
+  if ("response" in input) return input.response;
+  const { scope, tenantId, limit, cursor } = input;
   try {
     const result = await listAuditEntries(
       { ddb: shared.ddb, auditTableName: shared.auditTableName },
       {
         scope,
         ...(tenantId ? { tenantId } : {}),
-        ...(parsedLimit.limit !== undefined ? { limit: parsedLimit.limit } : {}),
-        ...(c.req.query("cursor") ? { cursor: c.req.query("cursor") as string } : {}),
+        ...(limit ? { limit } : {}),
+        ...(cursor ? { cursor } : {}),
       },
       shared.environmentName,
     );
@@ -258,7 +250,31 @@ app.get("/admin/insight/audit", async (c) => {
     console.error("[admin-insight] listAuditEntries failed", { scope, tenantId, message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
-});
+}
+
+function parseAuditListInput(c: Context):
+  | {
+      readonly scope: "tenant" | "system";
+      readonly tenantId: string | undefined;
+      readonly limit: number | undefined;
+      readonly cursor: string | undefined;
+    }
+  | { readonly response: Response } {
+  const rawScope = c.req.query("scope") ?? "tenant";
+  if (rawScope !== "tenant" && rawScope !== "system") {
+    return { response: c.json({ error: "invalid_scope" }, StatusCodes.BAD_REQUEST) };
+  }
+  const scope = rawScope as "tenant" | "system";
+  const tenantId = c.req.query("tenantId");
+  if (scope === "tenant" && (!tenantId || !TENANT_ID_RE.test(tenantId))) {
+    return { response: c.json({ error: "invalid_tenant_id" }, StatusCodes.BAD_REQUEST) };
+  }
+  const parsedLimit = parseLimit(c.req.query("limit"));
+  if (!parsedLimit) {
+    return { response: c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST) };
+  }
+  return { scope, tenantId, limit: parsedLimit.limit, cursor: c.req.query("cursor") };
+}
 
 export const handler = handle(app) as (
   event: LambdaEvent,

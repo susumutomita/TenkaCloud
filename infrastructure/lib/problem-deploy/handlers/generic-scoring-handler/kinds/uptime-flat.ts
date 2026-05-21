@@ -80,15 +80,21 @@ export async function runUptimeFlatKind(
 
   return {
     scoreDelta: allOk ? scoring.pointsPerSuccess : 0,
-    scoreEvents: allOk
-      ? [{ source: "uptime", points: scoring.pointsPerSuccess, occurredAt: nowIso }]
-      : attackDetected
-        ? [{ source: "attack-detected", points: 0, occurredAt: nowIso }]
-        : [],
+    scoreEvents: buildScoreEvents(allOk, attackDetected, scoring.pointsPerSuccess, nowIso),
     endpointsHealthJson: JSON.stringify(newHealth),
     lastResult: allOk ? "ok" : "fail",
     ...(attackDetected ? { attackDetected: true } : {}),
   };
+}
+
+function buildScoreEvents(
+  allOk: boolean,
+  attackDetected: boolean,
+  points: number,
+  occurredAt: string,
+): KindResult["scoreEvents"] {
+  if (allOk) return [{ source: "uptime", points, occurredAt }];
+  return attackDetected ? [{ source: "attack-detected", points: 0, occurredAt }] : [];
 }
 
 interface ResolvedEndpoint {

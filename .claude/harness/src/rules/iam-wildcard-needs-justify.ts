@@ -40,46 +40,48 @@ export const iamWildcardNeedsJustify: Rule = {
   id: "iam-wildcard-needs-justify",
   severity: "error",
   check(ctx: RuleContext): readonly Finding[] {
-    const findings: Finding[] = [];
-    for (const path of ctx.files) {
-      if (!path.startsWith("infrastructure/lib/")) continue;
-      if (!path.endsWith(".ts")) continue;
-      let content: string;
-      try {
-        content = ctx.readFile(path);
-      } catch {
-        continue;
-      }
-      const lines = content.split("\n");
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (!line || !STAR_RE.test(line)) continue;
-        // 直前 10 行 + 直後 10 行 を inspect (= PolicyStatement の構造で `effect: / actions: /
-        // resources:` の前に複数行 comment + addToRolePolicy 呼び出しが入るため、 5 行では
-        // window が足りないケースが頻発する。 直後 10 行は同 PolicyStatement 内の Condition /
-        // EncryptionContext を拾うため)。
-        const start = Math.max(0, i - 10);
-        const end = Math.min(lines.length, i + 10);
-        const window = lines.slice(start, end).join("\n");
-        const justified = JUSTIFY_KEYWORDS.some((re) => re.test(window));
-        if (!justified) {
-          findings.push({
-            ruleId: "iam-wildcard-needs-justify",
-            severity: "error",
-            filePath: path,
-            line: i + 1,
-            match: line.trim(),
-            message:
-              'IAM Resource wildcard (`resources: ["*"]`) を新規導入する場合、 直前 5 行以内に ' +
-              "理由を明示する comment が必要 (`justify:` / `Condition` / `Issue #...` 等のキーワード)。",
-            recommendation:
-              "IAM Resource を具体 ARN に絞れないか再検討してください。 もし wildcard が必要なら、 " +
-              "直前に `// justify: <reason>` の comment を入れてください。 例: " +
-              "`// justify: CloudFormation Describe* は AWS API design 上 Resource 必須無し` 等。",
-          });
-        }
-      }
-    }
-    return findings;
+    return ctx.files.flatMap((path) => findWildcardFindings(ctx, path));
   },
 };
+
+function findWildcardFindings(ctx: RuleContext, path: string): Finding[] {
+  if (!path.startsWith("infrastructure/lib/") || !path.endsWith(".ts")) return [];
+  try {
+    return collectWildcardFindings(path, ctx.readFile(path).split("\n"));
+  } catch {
+    return [];
+  }
+}
+
+function collectWildcardFindings(path: string, lines: readonly string[]): Finding[] {
+  const findings: Finding[] = [];
+  for (const [i, line] of lines.entries()) {
+    if (!line || !STAR_RE.test(line) || hasNearbyJustification(lines, i)) continue;
+    findings.push({
+      ruleId: "iam-wildcard-needs-justify",
+      severity: "error",
+      filePath: path,
+      line: i + 1,
+      match: line.trim(),
+      message:
+        'IAM Resource wildcard (`resources: ["*"]`) を新規導入する場合、 直前 5 行以内に ' +
+        "理由を明示する comment が必要 (`justify:` / `Condition` / `Issue #...` 等のキーワード)。",
+      recommendation:
+        "IAM Resource を具体 ARN に絞れないか再検討してください。 もし wildcard が必要なら、 " +
+        "直前に `// justify: <reason>` の comment を入れてください。 例: " +
+        "`// justify: CloudFormation Describe* は AWS API design 上 Resource 必須無し` 等。",
+    });
+  }
+  return findings;
+}
+
+function hasNearbyJustification(lines: readonly string[], index: number): boolean {
+  // 直前 10 行 + 直後 10 行 を inspect (= PolicyStatement の構造で `effect: / actions: /
+  // resources:` の前に複数行 comment + addToRolePolicy 呼び出しが入るため、 5 行では
+  // window が足りないケースが頻発する。 直後 10 行は同 PolicyStatement 内の Condition /
+  // EncryptionContext を拾うため)。
+  const start = Math.max(0, index - 10);
+  const end = Math.min(lines.length, index + 10);
+  const window = lines.slice(start, end).join("\n");
+  return JUSTIFY_KEYWORDS.some((re) => re.test(window));
+}

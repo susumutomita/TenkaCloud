@@ -111,148 +111,217 @@ export async function getConsoleSigninUrl(
   jobId: string,
 ): Promise<SsoOutcome> {
   if (!ULID_RE.test(jobId)) return { kind: "invalid_jobid" };
-
-  const items = await queryTeamItems(shared, teamLoginKey);
-  if (items.length === 0) return { kind: "unauthorized" };
-
-  const deployment = items.find((i) => i.jobId === jobId) as Partial<DeploymentItem> | undefined;
+  const deployment = await loadSsoDeployment(shared, teamLoginKey, jobId);
   if (!deployment) return { kind: "unauthorized" };
+  const ready = validateSsoDeployment(jobId, deployment);
+  if ("kind" in ready) return ready;
+  const credentials = await assumeParticipantCredentials(shared, ready, jobId);
+  if ("kind" in credentials) return credentials;
+  const signinToken = await fetchSigninToken(jobId, credentials);
+  if (typeof signinToken !== "string") return signinToken;
 
+  // Issue #946: stack outputs に `ParameterName` があれば SSM Parameter detail page に直接遷移
+  // させる (= AWS Console SSM Parameter Store の list view を経由しないため
+  // ssm:DescribeParameters 不要、 JAM/GameDay baseline IAM (PR-933 / ADR-021) と整合)。
+  // それ以外は従来通り CFn stacks 画面 (= multi-resource 問題で Resources tab 経由)。
+  const ssmParameterNameRaw = ready.parsedOutputs.ParameterName;
+  const destination = buildConsoleDestination({
+    region: ready.region,
+    namePrefix: ready.namePrefix,
+    ssmParameterName: typeof ssmParameterNameRaw === "string" ? ssmParameterNameRaw : undefined,
+  });
+  const loginUrl = `${FEDERATION_ENDPOINT}?Action=login&Issuer=${encodeURIComponent(TENKACLOUD_ISSUER)}&Destination=${encodeURIComponent(destination)}&SigninToken=${encodeURIComponent(signinToken)}`;
+
+  // Issue #1003: AWS Console "400 Bad Request" を発見した時の診断補助。 loginUrl は
+  // typical 1800-2400 文字。 一部 proxy / ブラウザは長い URL を勝手に truncate するので、
+  // 上限を 4096 で警告 + 構成要素長を log に残す (= 「token が破損していたのか URL が長すぎたのか」 を
+  // CloudWatch Logs Insights で切り分け可能にする)。
+  const componentLengths = {
+    issuer: TENKACLOUD_ISSUER.length,
+    destination: destination.length,
+    signinTokenRaw: signinToken.length,
+    encodedSigninToken: encodeURIComponent(signinToken).length,
+    total: loginUrl.length,
+  };
+  if (loginUrl.length > 4096) {
+    console.warn("[sso] loginUrl exceeds 4096 chars (may be truncated by proxies)", {
+      jobId,
+      ...componentLengths,
+    });
+  }
+  logDeployTrace("portal.sso.ok", { jobId, problemId: ready.problemId, ...componentLengths });
+
+  return { kind: "ok", loginUrl };
+}
+
+interface ReadySsoDeployment {
+  readonly deployment: Partial<DeploymentItem>;
+  readonly status: DeploymentStatus;
+  readonly problemId: string | undefined;
+  readonly tenantId: string;
+  readonly region: string;
+  readonly namePrefix: string;
+  readonly competitorRoleArn: string;
+  readonly participantRoleArn: string;
+  readonly parsedOutputs: Record<string, string>;
+}
+
+async function loadSsoDeployment(
+  shared: ParticipantSharedResources,
+  teamLoginKey: string,
+  jobId: string,
+): Promise<Partial<DeploymentItem> | undefined> {
+  const items = await queryTeamItems(shared, teamLoginKey);
+  return items.find((item) => item.jobId === jobId) as Partial<DeploymentItem> | undefined;
+}
+
+function validateSsoDeployment(
+  jobId: string,
+  deployment: Partial<DeploymentItem>,
+): ReadySsoDeployment | SsoOutcome {
   const status = (deployment.status ?? "PENDING") as DeploymentStatus;
   const problemId = typeof deployment.problemId === "string" ? deployment.problemId : undefined;
   if (DELETED_LIKE_STATUSES.has(status)) return { kind: "unauthorized" };
-
-  // Issue #759: 各 not_ready 経路で structured log を 1 件 emit する。
-  // CloudWatch Logs Insights:
-  //   `filter event like /^portal\.sso\.not_ready\./ | sort @timestamp desc`
-  // で どの gate で死んだか 1 引きで切り分け可能にする。 旧実装は全 6 経路がサイレントで、
-  // operator が deployment item を引いて目視確認するしかなかった (= #756 調査で実体験)。
   if (status === "IN_PROGRESS" || status === "PENDING") {
-    logDeployTrace("portal.sso.not_ready.in_progress", { jobId, problemId, status });
-    return { kind: "not_ready" };
+    return logSsoNotReady("portal.sso.not_ready.in_progress", { jobId, problemId, status });
   }
-  // Issue #862: namePrefix の format pin (= URL query injection 防御)
+  const identifiers = validateSsoIdentifiers(jobId, deployment, problemId, status);
+  if ("kind" in identifiers) return identifiers;
+  return validateParticipantRole(jobId, deployment, problemId, status, identifiers);
+}
+
+function validateSsoIdentifiers(
+  jobId: string,
+  deployment: Partial<DeploymentItem>,
+  problemId: string | undefined,
+  status: DeploymentStatus,
+):
+  | Pick<ReadySsoDeployment, "tenantId" | "region" | "namePrefix" | "competitorRoleArn">
+  | SsoOutcome {
   if (typeof deployment.namePrefix !== "string" || !NAME_PREFIX_RE.test(deployment.namePrefix)) {
-    logDeployTrace("portal.sso.not_ready.namePrefix_missing", { jobId, problemId, status });
-    return { kind: "not_ready" };
+    return logSsoNotReady("portal.sso.not_ready.namePrefix_missing", { jobId, problemId, status });
   }
-  // Issue #862: AWS region pattern を再 validate (= URL injection 経路を塞ぐ defense-in-depth)
-  const region =
-    typeof deployment.region === "string" && AWS_REGION_RE.test(deployment.region)
-      ? deployment.region
-      : undefined;
-  if (!region) {
-    logDeployTrace("portal.sso.not_ready.region_missing", { jobId, problemId, status });
-    return { kind: "not_ready" };
+  if (typeof deployment.region !== "string" || !AWS_REGION_RE.test(deployment.region)) {
+    return logSsoNotReady("portal.sso.not_ready.region_missing", { jobId, problemId, status });
   }
-  const tenantId = typeof deployment.tenantId === "string" ? deployment.tenantId : undefined;
-  if (!tenantId) {
-    logDeployTrace("portal.sso.not_ready.tenantId_missing", { jobId, problemId, status });
-    return { kind: "not_ready" };
+  if (typeof deployment.tenantId !== "string") {
+    return logSsoNotReady("portal.sso.not_ready.tenantId_missing", { jobId, problemId, status });
   }
-  // Issue #862: competitorRoleArn の format pin (= IAM Role ARN regex で再 validate)
-  const competitorRoleArn =
-    typeof deployment.competitorRoleArn === "string" &&
-    IAM_ROLE_ARN_RE.test(deployment.competitorRoleArn)
-      ? deployment.competitorRoleArn
-      : undefined;
-  if (!competitorRoleArn) {
-    logDeployTrace("portal.sso.not_ready.competitorRoleArn_missing", {
+  if (
+    typeof deployment.competitorRoleArn !== "string" ||
+    !IAM_ROLE_ARN_RE.test(deployment.competitorRoleArn)
+  ) {
+    return logSsoNotReady("portal.sso.not_ready.competitorRoleArn_missing", {
       jobId,
       problemId,
-      tenantId,
+      tenantId: deployment.tenantId,
     });
-    return { kind: "not_ready" };
   }
-  // Issue #862: ParticipantViewerRoleArn の format pin (= stack output 改竄経路の防御)
+  return {
+    tenantId: deployment.tenantId,
+    region: deployment.region,
+    namePrefix: deployment.namePrefix,
+    competitorRoleArn: deployment.competitorRoleArn,
+  };
+}
+
+function validateParticipantRole(
+  jobId: string,
+  deployment: Partial<DeploymentItem>,
+  problemId: string | undefined,
+  status: DeploymentStatus,
+  identifiers: Pick<ReadySsoDeployment, "tenantId" | "region" | "namePrefix" | "competitorRoleArn">,
+): ReadySsoDeployment | SsoOutcome {
   const parsedOutputs = parseStackOutputs(deployment.stackOutputs);
-  const participantRoleArnRaw = parsedOutputs.ParticipantViewerRoleArn;
-  const participantRoleArn =
-    typeof participantRoleArnRaw === "string" && IAM_ROLE_ARN_RE.test(participantRoleArnRaw)
-      ? participantRoleArnRaw
-      : undefined;
-  if (!participantRoleArn) {
-    // 世代不一致 (= problem template が ParticipantViewerRole を持つ世代より古い) の
-    // 切り分けを 1 引きで可能にするため、 stack outputs の他 key 一覧を log に残す。
-    logDeployTrace("portal.sso.not_ready.participantViewerRole_missing", {
+  const participantRoleArn = parsedOutputs.ParticipantViewerRoleArn;
+  if (typeof participantRoleArn !== "string" || !IAM_ROLE_ARN_RE.test(participantRoleArn)) {
+    return logSsoNotReady("portal.sso.not_ready.participantViewerRole_missing", {
       jobId,
       problemId,
-      tenantId,
+      tenantId: identifiers.tenantId,
       outputKeys: Object.keys(parsedOutputs),
     });
-    return { kind: "not_ready" };
   }
-  if (!shared.ssm || !shared.env) {
-    // Issue #864: tenantId / ARN は CloudWatch Logs に残さない (= 情報漏洩面の縮小)。
-    console.error("[sso] ExternalId store is not configured", { jobId });
-    return { kind: "assume_role_failed", reason: "ExternalId store is not configured" };
-  }
+  return { deployment, problemId, status, parsedOutputs, participantRoleArn, ...identifiers };
+}
 
-  const tenantExternalId = await getExternalId({ ssm: shared.ssm, env: shared.env }, tenantId);
-  if (!tenantExternalId) {
-    console.error("[sso] tenant ExternalId missing", { jobId });
-    return { kind: "assume_role_failed", reason: "Tenant ExternalId missing" };
-  }
+function logSsoNotReady(event: string, detail: Record<string, unknown>): SsoOutcome {
+  logDeployTrace(event, detail);
+  return { kind: "not_ready" };
+}
 
-  let session: {
-    Credentials?: { AccessKeyId?: string; SecretAccessKey?: string; SessionToken?: string };
-  };
+async function assumeParticipantCredentials(
+  shared: ParticipantSharedResources,
+  ready: ReadySsoDeployment,
+  jobId: string,
+): Promise<NonNullable<ReturnType<typeof toSdkCredentials>> | SsoOutcome> {
+  const externalId = await loadTenantExternalId(shared, ready.tenantId, jobId);
+  if (typeof externalId !== "string") return externalId;
   try {
-    const competitorSession = await sts.send(
+    const competitor = await sts.send(
       new AssumeRoleCommand({
-        RoleArn: competitorRoleArn,
+        RoleArn: ready.competitorRoleArn,
         RoleSessionName: `participant-sso-${jobId}`,
-        ExternalId: tenantExternalId,
+        ExternalId: externalId,
         DurationSeconds: FEDERATION_SESSION_DURATION_SEC,
       }),
     );
-    const competitorCredentials = toSdkCredentials(competitorSession.Credentials);
-    if (!competitorCredentials) {
-      // Issue #864: ARN を log に出さない。 jobId のみで CloudWatch Logs Insights から
-      // deployment item に join できる (= ARN は item 側から後追い参照可能、 log 側に重複させない)。
-      console.error("[sso] CompetitorDeployRole AssumeRole returned empty Credentials", { jobId });
-      return { kind: "assume_role_failed", reason: "Credentials field empty" };
-    }
-    const innerSts = new STSClient({ credentials: competitorCredentials });
-    // Audit table #8: 旧 RoleSessionName は `participant-viewer-${jobId}` で generic だった (=
-    // AWS Console 上部 federation user 表示で問題名が分からない、 image #30 の指摘)。 problemId を
-    // 含めて `${problemId}-${jobId}` 形式に変更。 IAM の RoleSessionName 制約: 2-64 文字 / pattern
-    // `[\\w+=,.@-]+`。 problemId max ~30 文字 + '-' + ULID jobId 26 文字 = 最大 57 文字で収まる。
-    // problemId は metadata.json の id (= kebab-case slug) なので IAM 許容 pattern に合致する。
-    session = await innerSts.send(
-      new AssumeRoleCommand({
-        RoleArn: participantRoleArn,
-        RoleSessionName: `${problemId}-${jobId}`,
-        ExternalId: jobId,
-        DurationSeconds: FEDERATION_SESSION_DURATION_SEC,
-      }),
-    );
+    const competitorCredentials = toSdkCredentials(competitor.Credentials);
+    if (!competitorCredentials) return missingSsoCredentials("CompetitorDeployRole", jobId);
+    const session = await assumeParticipantRole(competitorCredentials, ready, jobId);
+    const credentials = toSdkCredentials(session.Credentials);
+    return credentials ?? missingSsoCredentials("ParticipantViewerRole", jobId);
   } catch (err) {
-    // Issue #864: ARN / message を log に残さず、 error 種別 (= class name) のみで切り分け可能にする。
-    // operator は jobId で deployment item を引いて ARN を確認できる (= 別経路で参照可能)。
     const errorName = err instanceof Error ? err.name : "Unknown";
     console.error("[sso] AssumeRole failed", { jobId, errorName });
     return { kind: "assume_role_failed", reason: errorName };
   }
-  const creds = session.Credentials;
-  if (!creds?.AccessKeyId || !creds.SecretAccessKey || !creds.SessionToken) {
-    console.error("[sso] ParticipantViewerRole AssumeRole returned empty Credentials", { jobId });
-    return { kind: "assume_role_failed", reason: "Credentials field empty" };
+}
+
+async function loadTenantExternalId(
+  shared: ParticipantSharedResources,
+  tenantId: string,
+  jobId: string,
+): Promise<string | SsoOutcome> {
+  if (!shared.ssm || !shared.env) {
+    console.error("[sso] ExternalId store is not configured", { jobId });
+    return { kind: "assume_role_failed", reason: "ExternalId store is not configured" };
   }
+  const externalId = await getExternalId({ ssm: shared.ssm, env: shared.env }, tenantId);
+  if (externalId) return externalId;
+  console.error("[sso] tenant ExternalId missing", { jobId });
+  return { kind: "assume_role_failed", reason: "Tenant ExternalId missing" };
+}
 
-  // signin.aws.amazon.com/federation 仕様の Session JSON。
-  //   sessionId = AccessKeyId
-  //   sessionKey = SecretAccessKey
-  //   sessionToken = SessionToken
+function assumeParticipantRole(
+  credentials: NonNullable<ReturnType<typeof toSdkCredentials>>,
+  ready: ReadySsoDeployment,
+  jobId: string,
+) {
+  return new STSClient({ credentials }).send(
+    new AssumeRoleCommand({
+      RoleArn: ready.participantRoleArn,
+      RoleSessionName: `${ready.problemId}-${jobId}`,
+      ExternalId: jobId,
+      DurationSeconds: FEDERATION_SESSION_DURATION_SEC,
+    }),
+  );
+}
+
+function missingSsoCredentials(role: string, jobId: string): SsoOutcome {
+  console.error(`[sso] ${role} AssumeRole returned empty Credentials`, { jobId });
+  return { kind: "assume_role_failed", reason: "Credentials field empty" };
+}
+
+async function fetchSigninToken(
+  jobId: string,
+  credentials: NonNullable<ReturnType<typeof toSdkCredentials>>,
+): Promise<string | SsoOutcome> {
   const sessionJson = JSON.stringify({
-    sessionId: creds.AccessKeyId,
-    sessionKey: creds.SecretAccessKey,
-    sessionToken: creds.SessionToken,
+    sessionId: credentials.accessKeyId,
+    sessionKey: credentials.secretAccessKey,
+    sessionToken: credentials.sessionToken,
   });
-
-  // #747: AssumeRole 由来の temporary credentials で federation する場合、 SessionDuration
-  // パラメータは **省略必須** (AWS 仕様)。 渡すと endpoint が 400 で reject する。
-  // session 寿命は AssumeRole 時の DurationSeconds (= 3600s) を継承する。
   const tokenUrl = `${FEDERATION_ENDPOINT}?Action=getSigninToken&Session=${encodeURIComponent(sessionJson)}`;
   const tokenRes = await fetch(tokenUrl, { method: "GET" });
   if (!tokenRes.ok) {
@@ -264,41 +333,7 @@ export async function getConsoleSigninUrl(
     return { kind: "federation_endpoint_failed", status: tokenRes.status };
   }
   const tokenJson = (await tokenRes.json()) as { SigninToken?: unknown };
-  if (typeof tokenJson.SigninToken !== "string") {
-    console.error("[sso] federation token malformed", { jobId });
-    return { kind: "federation_token_malformed" };
-  }
-
-  // Issue #946: stack outputs に `ParameterName` があれば SSM Parameter detail page に直接遷移
-  // させる (= AWS Console SSM Parameter Store の list view を経由しないため
-  // ssm:DescribeParameters 不要、 JAM/GameDay baseline IAM (PR-933 / ADR-021) と整合)。
-  // それ以外は従来通り CFn stacks 画面 (= multi-resource 問題で Resources tab 経由)。
-  const ssmParameterNameRaw = parsedOutputs.ParameterName;
-  const destination = buildConsoleDestination({
-    region,
-    namePrefix: deployment.namePrefix,
-    ssmParameterName: typeof ssmParameterNameRaw === "string" ? ssmParameterNameRaw : undefined,
-  });
-  const loginUrl = `${FEDERATION_ENDPOINT}?Action=login&Issuer=${encodeURIComponent(TENKACLOUD_ISSUER)}&Destination=${encodeURIComponent(destination)}&SigninToken=${encodeURIComponent(tokenJson.SigninToken)}`;
-
-  // Issue #1003: AWS Console "400 Bad Request" を発見した時の診断補助。 loginUrl は
-  // typical 1800-2400 文字。 一部 proxy / ブラウザは長い URL を勝手に truncate するので、
-  // 上限を 4096 で警告 + 構成要素長を log に残す (= 「token が破損していたのか URL が長すぎたのか」 を
-  // CloudWatch Logs Insights で切り分け可能にする)。
-  const componentLengths = {
-    issuer: TENKACLOUD_ISSUER.length,
-    destination: destination.length,
-    signinTokenRaw: tokenJson.SigninToken.length,
-    encodedSigninToken: encodeURIComponent(tokenJson.SigninToken).length,
-    total: loginUrl.length,
-  };
-  if (loginUrl.length > 4096) {
-    console.warn("[sso] loginUrl exceeds 4096 chars (may be truncated by proxies)", {
-      jobId,
-      ...componentLengths,
-    });
-  }
-  logDeployTrace("portal.sso.ok", { jobId, problemId, ...componentLengths });
-
-  return { kind: "ok", loginUrl };
+  if (typeof tokenJson.SigninToken === "string") return tokenJson.SigninToken;
+  console.error("[sso] federation token malformed", { jobId });
+  return { kind: "federation_token_malformed" };
 }

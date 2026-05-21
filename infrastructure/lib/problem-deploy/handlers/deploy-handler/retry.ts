@@ -101,7 +101,7 @@ async function retryOne(
     }),
   );
   const item = out.Item as Partial<DeploymentItem> | undefined;
-  if (!item || !item.jobId) {
+  if (!item?.jobId) {
     return { jobId, action: "skipped", reason: "not_found" };
   }
   if (item.tenantId !== callerTenantId) {
@@ -115,50 +115,73 @@ async function retryOne(
 
   // FAILED → PENDING に巻き戻す。 ConditionExpression で並走時の race (= 既に他経路で再 trigger
   // されている / 同じ retry 配列内の重複) を防ぐ。
-  const updatedAt = new Date(now()).toISOString();
+  const updated = await transitionRetryToPending(shared, callerTenantId, jobId, now);
+  if (!updated) return { jobId, action: "skipped", reason: "not_failed" };
+
+  // 元 deploy 時に書いた item + shared.problemsCatalog から DeployCreateRequestedDetail
+  // を再構築する。 namePrefix / region / awsAccountId / competitor metadata は item に持って
+  // いる。 problemDir は shared.problemsCatalog (= module-load 時の static catalog) で
+  // problemId から解決。
+  const detail = buildRetryDetail(shared, item, callerTenantId, jobId);
+  if (!detail) return { jobId, action: "skipped", reason: "unknown_problem" };
+  // 既知 limitation: challengePayloadUrl (= private 問題用 presigned URL) は retry で再生成
+  // しない。 期限切れ URL を渡すと CodeBuild 内で 403 になり再度 FAILED に倒れる。 private
+  // 問題の retry は当面 manual (= operator が新 deploy として再投入) で運用、 Phase 2.D
+  // follow-up で presigned URL regen を入れる予定。
+  const published = await publishRetryEvent(shared, callerTenantId, jobId, detail, now);
+  if (!published) return { jobId, action: "skipped", reason: "publish_failed" };
+
+  logDeployTrace("deploy.retry.requeued", {
+    jobId,
+    correlationId: jobId,
+    tenantId: callerTenantId,
+    problemId: detail.problemId,
+  });
+  return { jobId, action: "requeued" };
+}
+
+async function transitionRetryToPending(
+  shared: DeploySharedResources,
+  tenantId: string,
+  jobId: string,
+  now: () => number,
+): Promise<boolean> {
   try {
     await shared.ddb.send(
       new UpdateCommand({
         TableName: shared.tableName,
         Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
         UpdateExpression: "SET #s = :pending, updatedAt = :updatedAt REMOVE failureReason",
-        // FAILED かつ caller の tenantId 一致のときだけ書き戻す (= cross-tenant defense-in-depth)。
         ConditionExpression: "#s = :failed AND tenantId = :tenantId",
         ExpressionAttributeNames: { "#s": "status" },
         ExpressionAttributeValues: {
           ":pending": "PENDING",
           ":failed": "FAILED",
-          ":updatedAt": updatedAt,
-          ":tenantId": callerTenantId,
+          ":updatedAt": new Date(now()).toISOString(),
+          ":tenantId": tenantId,
         },
       }),
     );
+    return true;
   } catch (err) {
-    // ConditionExpression 違反 = 他経路で先に retry された / status 変動。 best-effort で skip 扱い。
-    const name = err instanceof Error ? err.name : "unknown";
-    if (name === "ConditionalCheckFailedException") {
-      return { jobId, action: "skipped", reason: "not_failed" };
-    }
+    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return false;
     throw err;
   }
+}
 
-  // 元 deploy 時に書いた item + shared.problemsCatalog から DeployCreateRequestedDetail
-  // を再構築する。 namePrefix / region / awsAccountId / competitor metadata は item に持って
-  // いる。 problemDir は shared.problemsCatalog (= module-load 時の static catalog) で
-  // problemId から解決。
+function buildRetryDetail(
+  shared: DeploySharedResources,
+  item: Partial<DeploymentItem>,
+  tenantId: string,
+  jobId: string,
+): DeployCreateRequestedDetail | undefined {
   const problemId = String(item.problemId ?? "");
   const problemDir = shared.problemsCatalog[problemId];
-  if (!problemDir) {
-    return { jobId, action: "skipped", reason: "unknown_problem" };
-  }
-  // 既知 limitation: challengePayloadUrl (= private 問題用 presigned URL) は retry で再生成
-  // しない。 期限切れ URL を渡すと CodeBuild 内で 403 になり再度 FAILED に倒れる。 private
-  // 問題の retry は当面 manual (= operator が新 deploy として再投入) で運用、 Phase 2.D
-  // follow-up で presigned URL regen を入れる予定。
-  const detail: DeployCreateRequestedDetail = {
+  if (!problemDir) return undefined;
+  return {
     jobId,
     correlationId: jobId,
-    tenantId: callerTenantId,
+    tenantId,
     problemId,
     problemDir,
     teamSlug: String(item.teamName ?? ""),
@@ -170,7 +193,15 @@ async function retryOne(
       ? { externalIdParameterName: item.externalIdParameterName }
       : {}),
   };
+}
 
+async function publishRetryEvent(
+  shared: DeploySharedResources,
+  tenantId: string,
+  jobId: string,
+  detail: DeployCreateRequestedDetail,
+  now: () => number,
+): Promise<boolean> {
   try {
     await publishProblemEvent({
       client: shared.events,
@@ -179,46 +210,45 @@ async function retryOne(
       jobId,
       detail,
     });
+    return true;
   } catch (err) {
-    // event publish 失敗時は PENDING に戻したのを FAILED に巻き戻す (= operator が再 retry
-    // 可能な状態を維持)。 巻き戻しの失敗は無視 (= best-effort)。
-    try {
-      await shared.ddb.send(
-        new UpdateCommand({
-          TableName: shared.tableName,
-          Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-          UpdateExpression: "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason",
-          ConditionExpression: "#s = :pending AND tenantId = :tenantId",
-          ExpressionAttributeNames: { "#s": "status" },
-          ExpressionAttributeValues: {
-            ":failed": "FAILED",
-            ":pending": "PENDING",
-            ":updatedAt": new Date(now()).toISOString(),
-            ":reason": "Failed to re-publish DeployCreateRequested event during retry",
-            ":tenantId": callerTenantId,
-          },
-        }),
-      );
-    } catch {
-      // ignore: best-effort rollback
-    }
-    const message = err instanceof Error ? err.message : "unknown";
+    await compensateRetryPublishFailure(shared, tenantId, jobId, now);
     logDeployTrace("deploy.retry.publish_failed", {
       jobId,
       correlationId: jobId,
-      tenantId: callerTenantId,
-      message,
+      tenantId,
+      message: err instanceof Error ? err.message : "unknown",
     });
-    return { jobId, action: "skipped", reason: "publish_failed" };
+    return false;
   }
+}
 
-  logDeployTrace("deploy.retry.requeued", {
-    jobId,
-    correlationId: jobId,
-    tenantId: callerTenantId,
-    problemId: detail.problemId,
-  });
-  return { jobId, action: "requeued" };
+async function compensateRetryPublishFailure(
+  shared: DeploySharedResources,
+  tenantId: string,
+  jobId: string,
+  now: () => number,
+): Promise<void> {
+  try {
+    await shared.ddb.send(
+      new UpdateCommand({
+        TableName: shared.tableName,
+        Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
+        UpdateExpression: "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason",
+        ConditionExpression: "#s = :pending AND tenantId = :tenantId",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":failed": "FAILED",
+          ":pending": "PENDING",
+          ":updatedAt": new Date(now()).toISOString(),
+          ":reason": "Failed to re-publish DeployCreateRequested event during retry",
+          ":tenantId": tenantId,
+        },
+      }),
+    );
+  } catch {
+    // ignore: best-effort rollback
+  }
 }
 
 /**

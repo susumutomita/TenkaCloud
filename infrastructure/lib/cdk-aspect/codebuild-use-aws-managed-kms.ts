@@ -36,60 +36,68 @@ import type { IConstruct } from "constructs";
 export class CodeBuildUseAwsManagedKms implements IAspect {
   public visit(node: IConstruct): void {
     if (node instanceof CfnProject) {
-      // step 1. EncryptionKey property を完全削除 → CodeBuild の AWS-managed default に倒れる。
-      // 明示的に "alias/aws/s3" をセットするより future-proof (= AWS default が変わっても追従)。
-      node.addPropertyDeletionOverride("EncryptionKey");
+      removeProjectEncryptionKey(node);
       return;
     }
 
     if (node instanceof CfnPolicy) {
-      // step 2. policyDocument を resolve して plain JSON にし、Resource の Fn::GetAtt が
-      // EncryptionKey 系の logical ID を指す statement を除去する。残った statement で
-      // property override する。
-      const stack = Stack.of(node);
-      const resolved = stack.resolve(node.policyDocument) as
-        | { Statement?: PolicyStatement[]; Version?: string }
-        | undefined;
-      const statements = resolved?.Statement;
-      if (!Array.isArray(statements)) return;
-      const filtered = statements.filter((s) => !referencesEncryptionKey(s));
-      if (filtered.length === statements.length) return; // 無変更
-      if (filtered.length === 0) {
-        // 全 statement が消えた = この policy は全部 KMS key 用だった。policy ごと削除。
-        // scope が無い CfnPolicy が存在することは現 SBT では無いが、将来構造が変わって
-        // scope=undefined になったら silent failure (空 PolicyDocument が template に残り
-        // CFn validation で失敗) するので明示的に throw する。
-        const parent = node.node.scope;
-        if (!parent) {
-          throw new Error(
-            `[CodeBuildUseAwsManagedKms] CfnPolicy '${node.node.path}' has no scope; ` +
-              `cannot remove orphan empty policy. SBT 構造が変わった可能性、本 Aspect の追従が必要。`,
-          );
-        }
-        parent.node.tryRemoveChild(node.node.id);
-        return;
-      }
-      node.addPropertyOverride("PolicyDocument.Statement", filtered);
+      removePolicyEncryptionKeyStatements(node);
       return;
     }
 
     if (node instanceof CfnKey) {
-      // step 3. CfnKey の Construct path に "EncryptionKey" が含まれていることを確認した
-      // 上で、その「EncryptionKey」セグメントに対応する L2 Key construct (= ancestor) を
-      // 親から remove する。SBT BashJobRunner の構造は 2 種類ある:
-      //   - L1 直接型: parent / "ProvisioningJobcodeBuildProjectEncryptionKey..." (CfnKey)
-      //     → CfnKey の id に "EncryptionKey" が含まれる
-      //   - L2 wrapper 型: parent / "EncryptionKey" (L2 Key) / "Resource" (CfnKey)
-      //     → "EncryptionKey" L2 Key を find して remove する
-      if (!node.node.path.includes("EncryptionKey")) return;
-      let target: IConstruct = node;
-      while (!target.node.id.includes("EncryptionKey") && target.node.scope) {
-        target = target.node.scope;
-      }
-      if (target.node.id.includes("EncryptionKey")) {
-        target.node.scope?.node.tryRemoveChild(target.node.id);
-      }
+      removeEncryptionKeyConstruct(node);
     }
+  }
+}
+
+function removeProjectEncryptionKey(node: CfnProject): void {
+  // step 1. EncryptionKey property を完全削除 → CodeBuild の AWS-managed default に倒れる。
+  // 明示的に "alias/aws/s3" をセットするより future-proof (= AWS default が変わっても追従)。
+  node.addPropertyDeletionOverride("EncryptionKey");
+}
+
+function removePolicyEncryptionKeyStatements(node: CfnPolicy): void {
+  // step 2. policyDocument を resolve して plain JSON にし、Resource の Fn::GetAtt が
+  // EncryptionKey 系の logical ID を指す statement を除去する。残った statement で
+  // property override する。
+  const resolved = Stack.of(node).resolve(node.policyDocument) as
+    | { Statement?: PolicyStatement[]; Version?: string }
+    | undefined;
+  const statements = resolved?.Statement;
+  if (!Array.isArray(statements)) return;
+  const filtered = statements.filter((s) => !referencesEncryptionKey(s));
+  if (filtered.length === statements.length) return;
+  if (filtered.length === 0) {
+    removeEmptyPolicy(node);
+    return;
+  }
+  node.addPropertyOverride("PolicyDocument.Statement", filtered);
+}
+
+function removeEmptyPolicy(node: CfnPolicy): void {
+  // 全 statement が消えた = この policy は全部 KMS key 用だった。policy ごと削除。
+  const parent = node.node.scope;
+  if (!parent) {
+    throw new Error(
+      `[CodeBuildUseAwsManagedKms] CfnPolicy '${node.node.path}' has no scope; ` +
+        `cannot remove orphan empty policy. SBT 構造が変わった可能性、本 Aspect の追従が必要。`,
+    );
+  }
+  parent.node.tryRemoveChild(node.node.id);
+}
+
+function removeEncryptionKeyConstruct(node: CfnKey): void {
+  // step 3. CfnKey の Construct path に "EncryptionKey" が含まれていることを確認した
+  // 上で、その「EncryptionKey」セグメントに対応する L2 Key construct (= ancestor) を
+  // 親から remove する。
+  if (!node.node.path.includes("EncryptionKey")) return;
+  let target: IConstruct = node;
+  while (!target.node.id.includes("EncryptionKey") && target.node.scope) {
+    target = target.node.scope;
+  }
+  if (target.node.id.includes("EncryptionKey")) {
+    target.node.scope?.node.tryRemoveChild(target.node.id);
   }
 }
 

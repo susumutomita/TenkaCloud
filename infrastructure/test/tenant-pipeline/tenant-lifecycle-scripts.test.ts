@@ -112,9 +112,9 @@ describe("tenant lifecycle scripts", () => {
   it("update-tenant.sh should poll the stack via wait_for_stack_idle right before cdk deploy", () => {
     const script = readRepoFile("scripts/update-tenant.sh");
     expect(script).toContain("wait_for_stack_idle()");
-    expect(script).toContain('wait_for_stack_idle "${STACK_NAME}"');
+    expect(script).toContain(`wait_for_stack_idle "\${STACK_NAME}"`);
     // poll は cdk deploy より **前** に呼ばれていること (= race を防ぐ順序)
-    const waitIdx = script.indexOf('wait_for_stack_idle "${STACK_NAME}"');
+    const waitIdx = script.indexOf(`wait_for_stack_idle "\${STACK_NAME}"`);
     const deployIdx = script.indexOf("bun cdk deploy");
     expect(waitIdx).toBeGreaterThan(0);
     expect(deployIdx).toBeGreaterThan(waitIdx);

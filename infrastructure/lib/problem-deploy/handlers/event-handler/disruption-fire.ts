@@ -112,35 +112,8 @@ async function tryClaimIdempotency(
   }
   // loser: 既存 row を Get で取り直し、 duplicate を返す
   for (let attempt = 0; attempt <= DUPLICATE_RESOLVE_RETRIES; attempt++) {
-    const out = await shared.ddb.send(
-      new GetCommand({
-        TableName: shared.disruptionsTableName,
-        Key: { PK: idempotencyKey, SK: "METADATA" },
-        ConsistentRead: true,
-      }),
-    );
-    const item = out.Item as Partial<DisruptionAuditRow> | undefined;
-    if (item?.auditId) {
-      return {
-        kind: "duplicate",
-        row: {
-          auditId: item.auditId,
-          tenantId: String(item.tenantId ?? input.tenantId),
-          eventId: String(item.eventId ?? input.eventId),
-          problemId: String(item.problemId ?? input.problemId),
-          disruptionId: String(item.disruptionId ?? input.disruptionId),
-          firedBy: String(item.firedBy ?? input.firedBy),
-          firedAt: String(item.firedAt ?? new Date(input.nowMs).toISOString()),
-          scope: (item.scope ?? input.scope) as DisruptionFireInput["scope"],
-          targetTeamIds: Array.isArray(item.targetTeamIds) ? (item.targetTeamIds as string[]) : [],
-          parameters: (item.parameters && typeof item.parameters === "object"
-            ? item.parameters
-            : {}) as Readonly<Record<string, unknown>>,
-          requestId: String(item.requestId ?? input.requestId),
-          expiresAt: Number(item.expiresAt ?? 0),
-        },
-      };
-    }
+    const duplicate = await getDuplicateDisruption(shared, input, idempotencyKey);
+    if (duplicate) return { kind: "duplicate", row: duplicate };
     if (attempt < DUPLICATE_RESOLVE_RETRIES) await sleep(DUPLICATE_RESOLVE_RETRY_MS);
   }
   // race winner が item 書き込み前に死んだ等の極端ケース: 自分が claim を取り直すために throw
@@ -148,6 +121,45 @@ async function tryClaimIdempotency(
     `disruption fire idempotency claim failed for requestId=${input.requestId}: ` +
       "conditional check failed but no prior row visible after retries",
   );
+}
+
+async function getDuplicateDisruption(
+  shared: EventSharedResources,
+  input: DisruptionFireInput,
+  idempotencyKey: string,
+): Promise<DisruptionAuditRow | undefined> {
+  const out = await shared.ddb.send(
+    new GetCommand({
+      TableName: shared.disruptionsTableName,
+      Key: { PK: idempotencyKey, SK: "METADATA" },
+      ConsistentRead: true,
+    }),
+  );
+  const item = out.Item as Partial<DisruptionAuditRow> | undefined;
+  return item?.auditId ? normalizeDuplicateDisruption(item, item.auditId, input) : undefined;
+}
+
+function normalizeDuplicateDisruption(
+  item: Partial<DisruptionAuditRow>,
+  auditId: string,
+  input: DisruptionFireInput,
+): DisruptionAuditRow {
+  return {
+    auditId,
+    tenantId: String(item.tenantId ?? input.tenantId),
+    eventId: String(item.eventId ?? input.eventId),
+    problemId: String(item.problemId ?? input.problemId),
+    disruptionId: String(item.disruptionId ?? input.disruptionId),
+    firedBy: String(item.firedBy ?? input.firedBy),
+    firedAt: String(item.firedAt ?? new Date(input.nowMs).toISOString()),
+    scope: (item.scope ?? input.scope) as DisruptionFireInput["scope"],
+    targetTeamIds: Array.isArray(item.targetTeamIds) ? (item.targetTeamIds as string[]) : [],
+    parameters: (item.parameters && typeof item.parameters === "object"
+      ? item.parameters
+      : {}) as Readonly<Record<string, unknown>>,
+    requestId: String(item.requestId ?? input.requestId),
+    expiresAt: Number(item.expiresAt ?? 0),
+  };
 }
 
 /**

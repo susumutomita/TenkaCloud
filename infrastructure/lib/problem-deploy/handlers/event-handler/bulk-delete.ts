@@ -1,6 +1,6 @@
 import { PutEventsCommand, type PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { DeploymentStatus } from "../deploy-handler/types.js";
+import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import {
   type DeployDeleteRequestedDetail,
@@ -21,6 +21,8 @@ export type BulkTeardownOutcome =
   | { kind: "not_found" };
 
 const PUT_EVENTS_BATCH = 10;
+
+type UpdateOutcome = { entry: PutEventsRequestEntry } | { skip: true };
 
 /**
  * `DELETE /events/{eventId}` の実体。
@@ -58,86 +60,11 @@ export async function bulkTeardownEvent(
   }
 
   const updatedAt = new Date(nowMs).toISOString();
-  type UpdateOutcome = { entry: PutEventsRequestEntry } | { skip: true };
 
   // 各 deployment の status=DELETING update を Promise.all で並列発火 (750 件 × 50ms
   // = 37.5s の逐次は Lambda timeout に到達する)。各 update は独立で互いに依存しない。
   const outcomes = await Promise.all(
-    targets.map(async (item): Promise<UpdateOutcome> => {
-      const status = (item.status ?? "PENDING") as DeploymentStatus;
-      if (status === "DELETING" || status === "DELETED") return { skip: true };
-
-      const jobId = String(item.jobId ?? "");
-      const region = String(item.region ?? "");
-      const awsAccountId = String(item.awsAccountId ?? "");
-      const stackName = String(item.stackId ?? item.namePrefix ?? "");
-      if (!jobId || !region || !awsAccountId || !stackName) return { skip: true };
-
-      try {
-        await shared.ddb.send(
-          new UpdateCommand({
-            TableName: shared.deploymentsTableName,
-            Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-            UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt",
-            ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :i, :c, :f)",
-            ExpressionAttributeNames: { "#s": "status" },
-            ExpressionAttributeValues: {
-              ":deleting": "DELETING",
-              ":updatedAt": updatedAt,
-              ":tenantId": tenantId,
-              ":p": "PENDING",
-              ":i": "IN_PROGRESS",
-              ":c": "COMPLETE",
-              ":f": "FAILED",
-            },
-          }),
-        );
-      } catch (err) {
-        const code = (err as { name?: string })?.name ?? "";
-        if (code === "ConditionalCheckFailedException") return { skip: true };
-        throw err;
-      }
-
-      const detail: DeployDeleteRequestedDetail = {
-        jobId,
-        correlationId: jobId,
-        tenantId,
-        stackName,
-        region,
-        awsAccountId,
-      };
-      const rowHasAssumeRoleMetadata =
-        typeof item.competitorRoleArn === "string" &&
-        item.competitorRoleArn.length > 0 &&
-        typeof item.externalIdParameterName === "string" &&
-        item.externalIdParameterName.length > 0;
-      const verified = rowHasAssumeRoleMetadata
-        ? undefined
-        : await resolveVerifiedCompetitorAccount(
-            {
-              ddb: shared.ddb,
-              competitorAccountsTableName: shared.competitorAccountsTableName,
-              env: shared.env,
-            },
-            tenantId,
-            awsAccountId,
-          );
-      detail.competitorRoleArn = rowHasAssumeRoleMetadata
-        ? item.competitorRoleArn
-        : verified?.competitorRoleArn;
-      detail.externalIdParameterName = rowHasAssumeRoleMetadata
-        ? item.externalIdParameterName
-        : verified?.externalIdParameterName;
-      return {
-        entry: {
-          EventBusName: shared.eventBusName,
-          Source: EVENT_SOURCE,
-          DetailType: EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
-          Detail: JSON.stringify(detail),
-          Resources: [`tenkacloud:deployment:${jobId}`],
-        },
-      };
-    }),
+    targets.map((item) => prepareBulkTeardownEntry(shared, tenantId, updatedAt, item)),
   );
 
   const entries: PutEventsRequestEntry[] = [];
@@ -183,4 +110,121 @@ export async function bulkTeardownEvent(
   await Promise.all([...putChunks, updateStatus]);
 
   return { kind: "ok", result: { eventId, enqueued: entries.length, skipped } };
+}
+
+async function prepareBulkTeardownEntry(
+  shared: EventSharedResources,
+  tenantId: string,
+  updatedAt: string,
+  item: Partial<DeploymentItem>,
+): Promise<UpdateOutcome> {
+  const status = (item.status ?? "PENDING") as DeploymentStatus;
+  if (status === "DELETING" || status === "DELETED") return { skip: true };
+  const target = getBulkTeardownTarget(item);
+  if (!target) return { skip: true };
+  const transitioned = await transitionBulkTargetToDeleting(
+    shared,
+    tenantId,
+    updatedAt,
+    target.jobId,
+  );
+  if (!transitioned) return { skip: true };
+  const detail = await buildBulkTeardownDetail(shared, tenantId, item, target);
+  return {
+    entry: {
+      EventBusName: shared.eventBusName,
+      Source: EVENT_SOURCE,
+      DetailType: EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
+      Detail: JSON.stringify(detail),
+      Resources: [`tenkacloud:deployment:${target.jobId}`],
+    },
+  };
+}
+
+function getBulkTeardownTarget(item: Partial<DeploymentItem>):
+  | {
+      readonly jobId: string;
+      readonly region: string;
+      readonly awsAccountId: string;
+      readonly stackName: string;
+    }
+  | undefined {
+  const target = {
+    jobId: String(item.jobId ?? ""),
+    region: String(item.region ?? ""),
+    awsAccountId: String(item.awsAccountId ?? ""),
+    stackName: String(item.stackId ?? item.namePrefix ?? ""),
+  };
+  return Object.values(target).every(Boolean) ? target : undefined;
+}
+
+async function transitionBulkTargetToDeleting(
+  shared: EventSharedResources,
+  tenantId: string,
+  updatedAt: string,
+  jobId: string,
+): Promise<boolean> {
+  try {
+    await shared.ddb.send(
+      new UpdateCommand({
+        TableName: shared.deploymentsTableName,
+        Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
+        UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt",
+        ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :i, :c, :f)",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":deleting": "DELETING",
+          ":updatedAt": updatedAt,
+          ":tenantId": tenantId,
+          ":p": "PENDING",
+          ":i": "IN_PROGRESS",
+          ":c": "COMPLETE",
+          ":f": "FAILED",
+        },
+      }),
+    );
+    return true;
+  } catch (err) {
+    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return false;
+    throw err;
+  }
+}
+
+async function buildBulkTeardownDetail(
+  shared: EventSharedResources,
+  tenantId: string,
+  item: Partial<DeploymentItem>,
+  target: NonNullable<ReturnType<typeof getBulkTeardownTarget>>,
+): Promise<DeployDeleteRequestedDetail> {
+  const verified = hasAssumeRoleMetadata(item)
+    ? undefined
+    : await resolveVerifiedCompetitorAccount(
+        {
+          ddb: shared.ddb,
+          competitorAccountsTableName: shared.competitorAccountsTableName,
+          env: shared.env,
+        },
+        tenantId,
+        target.awsAccountId,
+      );
+  return {
+    ...target,
+    correlationId: target.jobId,
+    tenantId,
+    competitorRoleArn: hasAssumeRoleMetadata(item)
+      ? item.competitorRoleArn
+      : verified?.competitorRoleArn,
+    externalIdParameterName: hasAssumeRoleMetadata(item)
+      ? item.externalIdParameterName
+      : verified?.externalIdParameterName,
+  };
+}
+
+function hasAssumeRoleMetadata(item: Partial<DeploymentItem>): boolean {
+  return (
+    typeof item.competitorRoleArn === "string" &&
+    item.competitorRoleArn.length > 0 &&
+    typeof item.externalIdParameterName === "string" &&
+    item.externalIdParameterName.length > 0
+  );
 }

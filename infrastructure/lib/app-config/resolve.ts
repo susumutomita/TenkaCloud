@@ -42,67 +42,179 @@ export interface ResolveAppConfigInput {
 
 export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   const env = input.env;
-  const fsOps = input.fs ?? fs;
-  const loadDotenv = input.dotenvConfig ?? ((opts) => void dotenv.config(opts));
+  const environment = loadEnvironment(input);
+  const systemAdminEmail = requireSystemAdminEmail(env);
+  const tenant = resolveTenant(env);
+  const s3SourceBucket = getEnvFromEnv(env, "CDK_PARAM_S3_BUCKET_NAME");
+  const sourceZip = getEnvFromEnv(env, "CDK_SOURCE_NAME");
+  const commitId = getEnvFromEnv(env, "CDK_PARAM_COMMIT_ID");
+  injectSbtDefaults(env);
+  const stageName = env.CDK_PARAM_STAGE_NAME || "prod";
+  const lambdaReserveConcurrency = Number(env.CDK_PARAM_LAMBDA_RESERVE_CONCURRENCY || "1");
+  const lambdaCanaryDeploymentPreference =
+    env.CDK_PARAM_LAMBDA_CANARY_DEPLOYMENT_PREFERENCE || "True";
+  const aws = resolveAwsEnvironment(env);
+  const config = loadConfig(environment, input.binDir);
+  const dynamo = resolveDynamoConfig(env, config);
+  const naming = resolveAppNaming(config, environment);
+  const apiKeys = resolveApiKeys(env, naming, environment);
+  const participantPortal = resolveParticipantPortal(env, aws.awsRegion);
+  const problems = discoverAppProblems(input);
+  const challengePayloadBucketName = env.CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET || undefined;
+  const challengePayload = resolveChallengePayload(env, config, environment);
+  const deployConcurrentBuildLimit = resolveDeployConcurrentBuildLimit(env);
 
-  const environment = env.CDK_PARAM_ENVIRONMENT ?? "development";
+  // Issue #1031: 旧 `CDK_PARAM_ADMIN_CONSOLE_ORIGIN` env 直読みは廃止。 admin-console-hosting
+  // が先に立ち、 cross-stack ref で control-plane / admin-console-insight に流れる。
+  // Issue #1053: 旧 `CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL` も同じく cross-stack ref へ。
+
+  // Issue #839 follow-up: SAML IdP 設定を config.json から取り出す (= 未設定なら undefined)。
+  // tenant-stack 側 (= application-admin-console / pooled tenant + per-tenant silo + Lite) と
+  // control-plane 側 (= admin-console / SBT ControlPlane) で独立して enable できる。
+  // Issue #1066: SAML IdP 関連 (tenantSamlConfig / controlPlaneConfig.samlIdp) は廃止済。
+
+  // Issue #952 epic / cost guardrails
+  // schema (config-schema.json) は integer / 数値文字列 ("50") の双方を許容するため、
+  // ここでも `${MONTHLY_COST_LIMIT_USD:-50}` 経由で来た文字列を Number で正規化する。
+  const budget = resolveBudgetConfig(config);
+
+  return {
+    environment,
+    ...naming,
+    systemAdminEmail,
+    ...tenant,
+    s3SourceBucket,
+    sourceZip,
+    commitId,
+    stageName,
+    lambdaReserveConcurrency,
+    lambdaCanaryDeploymentPreference,
+    ...aws,
+    ...dynamo,
+    ...apiKeys,
+    ...participantPortal,
+    problems,
+    challengePayloadBucketName,
+    challengePayload,
+    deployConcurrentBuildLimit,
+    ...budget,
+  };
+}
+
+type LoadedConfig = ReturnType<typeof loadConfig>;
+
+function loadEnvironment(input: ResolveAppConfigInput): string {
+  const environment = input.env.CDK_PARAM_ENVIRONMENT ?? "development";
   const envFilePath = path.resolve(input.binDir, `../environments/${environment}/.env`);
-  if (fsOps.existsSync(envFilePath)) {
-    loadDotenv({ path: envFilePath });
+  if ((input.fs ?? fs).existsSync(envFilePath)) {
+    (input.dotenvConfig ?? ((opts) => void dotenv.config(opts)))({ path: envFilePath });
     console.log(`[bin] Loaded env from ${envFilePath}`);
   }
+  return environment;
+}
 
-  // required env: SystemAdmin の email (= SBT が ControlPlane で作る admin user 宛)。
+function requireSystemAdminEmail(env: NodeJS.ProcessEnv): string {
   const systemAdminEmail = env.CDK_PARAM_SYSTEM_ADMIN_EMAIL;
-  if (!systemAdminEmail) {
-    throw new Error("Please provide system admin email");
-  }
+  if (!systemAdminEmail) throw new Error("Please provide system admin email");
+  return systemAdminEmail;
+}
 
+function resolveTenant(
+  env: NodeJS.ProcessEnv,
+): Pick<AppConfig, "tenantId" | "tenantName" | "isPooledDeploy"> {
   const pooledId = "pooled";
   if (!env.CDK_PARAM_TENANT_ID) {
     console.log('Tenant ID is empty, a default tenant id "pooled" will be assigned');
   }
   const tenantId = env.CDK_PARAM_TENANT_ID || pooledId;
   const isPooledDeploy = tenantId === pooledId;
-  const tenantName =
-    env.CDK_PARAM_TENANT_NAME || (isPooledDeploy ? "Shared Pooled Tenant" : tenantId);
+  return {
+    tenantId,
+    isPooledDeploy,
+    tenantName: env.CDK_PARAM_TENANT_NAME || (isPooledDeploy ? "Shared Pooled Tenant" : tenantId),
+  };
+}
 
-  const s3SourceBucket = getEnvFromEnv(env, "CDK_PARAM_S3_BUCKET_NAME");
-  const sourceZip = getEnvFromEnv(env, "CDK_SOURCE_NAME");
-  const commitId = getEnvFromEnv(env, "CDK_PARAM_COMMIT_ID");
-
-  // SBT ref-arch 互換: process.env 直読み経路がまだあるので default をここで注入する。
+function injectSbtDefaults(env: NodeJS.ProcessEnv): void {
   if (!env.CDK_PARAM_IDP_NAME) env.CDK_PARAM_IDP_NAME = "COGNITO";
   if (!env.CDK_PARAM_SYSTEM_ADMIN_ROLE_NAME) env.CDK_PARAM_SYSTEM_ADMIN_ROLE_NAME = "SystemAdmin";
+}
 
-  const stageName = env.CDK_PARAM_STAGE_NAME || "prod";
-  const lambdaReserveConcurrency = Number(env.CDK_PARAM_LAMBDA_RESERVE_CONCURRENCY || "1");
-  const lambdaCanaryDeploymentPreference =
-    env.CDK_PARAM_LAMBDA_CANARY_DEPLOYMENT_PREFERENCE || "True";
-
+function resolveAwsEnvironment(
+  env: NodeJS.ProcessEnv,
+): Pick<AppConfig, "awsRegion" | "awsAccountId" | "stackEnv"> {
   const awsRegion = env.CDK_PARAM_AWS_REGION ?? env.CDK_DEFAULT_REGION ?? "";
   const awsAccountId = env.CDK_PARAM_AWS_ACCOUNT_ID ?? env.CDK_DEFAULT_ACCOUNT ?? "";
-  const stackEnv =
-    awsAccountId && awsRegion ? { env: { account: awsAccountId, region: awsRegion } } : {};
+  return {
+    awsRegion,
+    awsAccountId,
+    stackEnv:
+      awsAccountId && awsRegion ? { env: { account: awsAccountId, region: awsRegion } } : {},
+  };
+}
 
-  const config = loadConfig(environment, input.binDir);
+function resolveDynamoConfig(
+  env: NodeJS.ProcessEnv,
+  config: LoadedConfig,
+): Pick<
+  AppConfig,
+  | "dynamoBillingMode"
+  | "isDynamoProvisioned"
+  | "dynamoReadCapacity"
+  | "dynamoWriteCapacity"
+  | "kmsPendingWindowInDays"
+> {
   const ddb = config?.dynamoDbConfig;
   const dynamoBillingMode =
     ddb?.billingMode === "PAY_PER_REQUEST" ? BillingMode.PAY_PER_REQUEST : BillingMode.PROVISIONED;
-  const isDynamoProvisioned = dynamoBillingMode === BillingMode.PROVISIONED;
-  const dynamoReadCapacity = Number(env.CDK_PARAM_DYNAMODB_READ_CAPACITY || ddb?.readCapacity || 1);
-  const dynamoWriteCapacity = Number(
-    env.CDK_PARAM_DYNAMODB_WRITE_CAPACITY || ddb?.writeCapacity || 1,
-  );
-  const kmsPendingWindowInDays = Number(
-    env.CDK_PARAM_KMS_PENDING_WINDOW_DAYS || config?.kmsConfig?.pendingWindowInDays || 7,
-  );
+  return {
+    dynamoBillingMode,
+    isDynamoProvisioned: dynamoBillingMode === BillingMode.PROVISIONED,
+    dynamoReadCapacity: Number(env.CDK_PARAM_DYNAMODB_READ_CAPACITY || ddb?.readCapacity || 1),
+    dynamoWriteCapacity: Number(env.CDK_PARAM_DYNAMODB_WRITE_CAPACITY || ddb?.writeCapacity || 1),
+    kmsPendingWindowInDays: Number(
+      env.CDK_PARAM_KMS_PENDING_WINDOW_DAYS || config?.kmsConfig?.pendingWindowInDays || 7,
+    ),
+  };
+}
 
+function resolveAppNaming(
+  config: LoadedConfig,
+  environment: string,
+): Pick<AppConfig, "appNameLower" | "namePrefix" | "isProductionLike"> {
   const appNameLower = (config?.appName ?? "tenkacloud").toLowerCase();
-  const namePrefix = `${appNameLower}-${environment}`;
-  const isProductionLike = environment === "production" || environment === "staging";
+  return {
+    appNameLower,
+    namePrefix: `${appNameLower}-${environment}`,
+    isProductionLike: environment === "production" || environment === "staging",
+  };
+}
 
-  const apiKeySSMParameterNames: ApiKeySSMParameterNames = {
+function resolveApiKeys(
+  env: NodeJS.ProcessEnv,
+  naming: Pick<AppConfig, "appNameLower" | "namePrefix" | "isProductionLike">,
+  environment: string,
+): Pick<
+  AppConfig,
+  | "apiKeyPlatinumTierParameter"
+  | "apiKeyPremiumTierParameter"
+  | "apiKeyStandardTierParameter"
+  | "apiKeyBasicTierParameter"
+  | "apiKeySSMParameterNames"
+> {
+  const resolve = (envVar: string, tier: string): string =>
+    resolveApiKeyValue({ env, envVar, tier, environment, ...naming });
+  return {
+    apiKeyPlatinumTierParameter: resolve("CDK_PARAM_API_KEY_PLATINUM_TIER_PARAMETER", "platinum"),
+    apiKeyPremiumTierParameter: resolve("CDK_PARAM_API_KEY_PREMIUM_TIER_PARAMETER", "premium"),
+    apiKeyStandardTierParameter: resolve("CDK_PARAM_API_KEY_STANDARD_TIER_PARAMETER", "standard"),
+    apiKeyBasicTierParameter: resolve("CDK_PARAM_API_KEY_BASIC_TIER_PARAMETER", "basic"),
+    apiKeySSMParameterNames: buildApiKeyParameterNames(naming.namePrefix),
+  };
+}
+
+function buildApiKeyParameterNames(namePrefix: string): ApiKeySSMParameterNames {
+  return {
     basic: {
       keyId: `${namePrefix}-apiKeyBasicTierKeyId`,
       value: `${namePrefix}-apiKeyBasicTierValue`,
@@ -120,153 +232,85 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
       value: `${namePrefix}-apiKeyPlatinumTierValue`,
     },
   };
+}
 
-  const resolve = (envVar: string, tier: string): string =>
-    resolveApiKeyValue({
-      env,
-      envVar,
-      tier,
-      environment,
-      appNameLower,
-      isProductionLike,
-    });
-
-  const apiKeyPlatinumTierParameter = resolve(
-    "CDK_PARAM_API_KEY_PLATINUM_TIER_PARAMETER",
-    "platinum",
-  );
-  const apiKeyPremiumTierParameter = resolve("CDK_PARAM_API_KEY_PREMIUM_TIER_PARAMETER", "premium");
-  const apiKeyStandardTierParameter = resolve(
-    "CDK_PARAM_API_KEY_STANDARD_TIER_PARAMETER",
-    "standard",
-  );
-  const apiKeyBasicTierParameter = resolve("CDK_PARAM_API_KEY_BASIC_TIER_PARAMETER", "basic");
-
+function resolveParticipantPortal(
+  env: NodeJS.ProcessEnv,
+  awsRegion: string,
+): Pick<AppConfig, "enableParticipantPortal" | "participantPortal"> {
   const enableParticipantPortal = env.CDK_PARAM_ENABLE_PARTICIPANT_PORTAL === "true";
-  const participantPortalEventTitle = env.CDK_PARAM_PARTICIPANT_PORTAL_EVENT_TITLE;
-  const participantPortalRuntimeConfig: ParticipantPortalRuntimeConfig | "default-dev-mock" =
-    participantPortalEventTitle
-      ? {
-          eventTitle: participantPortalEventTitle,
-          eventRegion: awsRegion || "ap-northeast-1",
-          mode: "dev-mock",
-        }
-      : "default-dev-mock";
-  const participantPortal = enableParticipantPortal
-    ? { runtimeConfig: participantPortalRuntimeConfig }
-    : undefined;
+  const title = env.CDK_PARAM_PARTICIPANT_PORTAL_EVENT_TITLE;
+  const runtimeConfig: ParticipantPortalRuntimeConfig | "default-dev-mock" = title
+    ? { eventTitle: title, eventRegion: awsRegion || "ap-northeast-1", mode: "dev-mock" }
+    : "default-dev-mock";
+  return {
+    enableParticipantPortal,
+    participantPortal: enableParticipantPortal ? { runtimeConfig } : undefined,
+  };
+}
 
+function discoverAppProblems(input: ResolveAppConfigInput): ProblemsCatalogBundle {
   const problemsRoot = path.resolve(input.binDir, "..", "..", "problems");
-  const problems =
-    input.discoverProblems !== undefined
-      ? input.discoverProblems(problemsRoot)
-      : ({
-          catalog: discoverProblemsCatalog(problemsRoot),
-          scoring: discoverProblemsScoring(problemsRoot),
-          endpoints: discoverProblemsEndpoints(problemsRoot),
-          phases: discoverProblemsPhases(problemsRoot),
-          visibility: discoverProblemsVisibility(problemsRoot),
-          disruptions: discoverProblemsDisruptions(problemsRoot),
-        } satisfies ProblemsCatalogBundle);
+  if (input.discoverProblems) return input.discoverProblems(problemsRoot);
+  return {
+    catalog: discoverProblemsCatalog(problemsRoot),
+    scoring: discoverProblemsScoring(problemsRoot),
+    endpoints: discoverProblemsEndpoints(problemsRoot),
+    phases: discoverProblemsPhases(problemsRoot),
+    visibility: discoverProblemsVisibility(problemsRoot),
+    disruptions: discoverProblemsDisruptions(problemsRoot),
+  };
+}
 
-  const challengePayloadBucketName = env.CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET || undefined;
+function resolveChallengePayload(
+  env: NodeJS.ProcessEnv,
+  config: LoadedConfig,
+  environment: string,
+): AppConfig["challengePayload"] {
+  const challenge = config?.challengePayloadConfig;
+  if (!challenge) return undefined;
+  return {
+    bucketName: `${String(challenge.bucketPrefix)}${environment}`,
+    githubRepository: String(challenge.githubRepository),
+    githubBranches:
+      Array.isArray(challenge.githubBranches) && challenge.githubBranches.length > 0
+        ? (challenge.githubBranches as readonly string[])
+        : (["main"] as const),
+    existingOidcProviderArn:
+      typeof challenge.existingOidcProviderArn === "string" &&
+      challenge.existingOidcProviderArn !== ""
+        ? challenge.existingOidcProviderArn
+        : env.CDK_PARAM_GITHUB_OIDC_PROVIDER_ARN || undefined,
+    noncurrentExpirationDays:
+      challenge.noncurrentExpirationDays !== undefined &&
+      challenge.noncurrentExpirationDays !== null
+        ? Number(challenge.noncurrentExpirationDays)
+        : undefined,
+  };
+}
 
-  // ADR-003 Phase 2 / catalog split: config.json の `challengePayloadConfig` から
-  // ChallengePayloadStack のパラメータを読み取る。 未設定なら stack を立てない (= 旧
-  // env override `CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET` だけで動く互換 mode)。
-  const cpConfig = config?.challengePayloadConfig;
-  const challengePayload = cpConfig
-    ? {
-        bucketName: `${String(cpConfig.bucketPrefix)}${environment}`,
-        githubRepository: String(cpConfig.githubRepository),
-        githubBranches:
-          Array.isArray(cpConfig.githubBranches) && cpConfig.githubBranches.length > 0
-            ? (cpConfig.githubBranches as readonly string[])
-            : (["main"] as const),
-        existingOidcProviderArn:
-          typeof cpConfig.existingOidcProviderArn === "string" &&
-          cpConfig.existingOidcProviderArn !== ""
-            ? cpConfig.existingOidcProviderArn
-            : env.CDK_PARAM_GITHUB_OIDC_PROVIDER_ARN || undefined,
-        noncurrentExpirationDays:
-          cpConfig.noncurrentExpirationDays !== undefined &&
-          cpConfig.noncurrentExpirationDays !== null
-            ? Number(cpConfig.noncurrentExpirationDays)
-            : undefined,
-      }
-    : undefined;
-
-  const rawConcurrentLimit = env.CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT;
-  const deployConcurrentBuildLimit =
-    rawConcurrentLimit && rawConcurrentLimit.trim() !== "" ? Number(rawConcurrentLimit) : undefined;
-  if (deployConcurrentBuildLimit !== undefined && !Number.isInteger(deployConcurrentBuildLimit)) {
+function resolveDeployConcurrentBuildLimit(env: NodeJS.ProcessEnv): number | undefined {
+  const raw = env.CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT;
+  const limit = raw && raw.trim() !== "" ? Number(raw) : undefined;
+  if (limit !== undefined && !Number.isInteger(limit)) {
     throw new Error(
-      `CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT は整数で指定してください (got: ${rawConcurrentLimit})`,
+      `CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT は整数で指定してください (got: ${raw})`,
     );
   }
+  return limit;
+}
 
-  // Issue #1031: 旧 `CDK_PARAM_ADMIN_CONSOLE_ORIGIN` env 直読みは廃止。 admin-console-hosting
-  // が先に立ち、 cross-stack ref で control-plane / admin-console-insight に流れる。
-  // Issue #1053: 旧 `CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL` も同じく cross-stack ref へ。
-
-  // Issue #839 follow-up: SAML IdP 設定を config.json から取り出す (= 未設定なら undefined)。
-  // tenant-stack 側 (= application-admin-console / pooled tenant + per-tenant silo + Lite) と
-  // control-plane 側 (= admin-console / SBT ControlPlane) で独立して enable できる。
-  // Issue #1066: SAML IdP 関連 (tenantSamlConfig / controlPlaneConfig.samlIdp) は廃止済。
-
-  // Issue #952 epic / cost guardrails
-  // schema (config-schema.json) は integer / 数値文字列 ("50") の双方を許容するため、
-  // ここでも `${MONTHLY_COST_LIMIT_USD:-50}` 経由で来た文字列を Number で正規化する。
-  const rawMonthlyCostLimit = config?.monthlyCostLimitUsd;
-  const parsedMonthlyCostLimit =
-    rawMonthlyCostLimit !== undefined && rawMonthlyCostLimit !== null
-      ? Number(rawMonthlyCostLimit)
-      : Number.NaN;
-  const monthlyCostLimitUsd =
-    Number.isFinite(parsedMonthlyCostLimit) && parsedMonthlyCostLimit > 0
-      ? parsedMonthlyCostLimit
-      : undefined;
-  const budgetAlarmEmails =
-    Array.isArray(config?.budgetAlarmEmails) && config.budgetAlarmEmails.length > 0
-      ? config.budgetAlarmEmails
-      : undefined;
-
+function resolveBudgetConfig(
+  config: LoadedConfig,
+): Pick<AppConfig, "monthlyCostLimitUsd" | "budgetAlarmEmails"> {
+  const raw = config?.monthlyCostLimitUsd;
+  const parsed = raw !== undefined && raw !== null ? Number(raw) : Number.NaN;
   return {
-    environment,
-    isProductionLike,
-    appNameLower,
-    namePrefix,
-    systemAdminEmail,
-    tenantId,
-    tenantName,
-    isPooledDeploy,
-    s3SourceBucket,
-    sourceZip,
-    commitId,
-    stageName,
-    lambdaReserveConcurrency,
-    lambdaCanaryDeploymentPreference,
-    awsAccountId,
-    awsRegion,
-    stackEnv,
-    dynamoBillingMode,
-    isDynamoProvisioned,
-    dynamoReadCapacity,
-    dynamoWriteCapacity,
-    kmsPendingWindowInDays,
-    apiKeyPlatinumTierParameter,
-    apiKeyPremiumTierParameter,
-    apiKeyStandardTierParameter,
-    apiKeyBasicTierParameter,
-    apiKeySSMParameterNames,
-    enableParticipantPortal,
-    participantPortal,
-    problems,
-    challengePayloadBucketName,
-    challengePayload,
-    deployConcurrentBuildLimit,
-    monthlyCostLimitUsd,
-    budgetAlarmEmails,
+    monthlyCostLimitUsd: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
+    budgetAlarmEmails:
+      Array.isArray(config?.budgetAlarmEmails) && config.budgetAlarmEmails.length > 0
+        ? config.budgetAlarmEmails
+        : undefined,
   };
 }
 

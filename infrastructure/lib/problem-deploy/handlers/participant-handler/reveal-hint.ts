@@ -1,5 +1,6 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
+import type { ProblemScoringMetadata, ProgressiveHint } from "../../../utils/scoring-metadata.js";
+import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
 import { writeScoreEvent } from "../shared/score-event.js";
 import { evaluateGate, getEventGate } from "./event-gate.js";
@@ -46,15 +47,12 @@ export async function revealHint(
   if (items.length === 0) return { kind: "unauthorized" };
 
   const item = items.find((i) => i.problemId === problemId);
-  if (!item?.PK || !item.problemId) return { kind: "unauthorized" };
+  if (!isRevealHintItem(item)) return { kind: "unauthorized" };
 
   // Issue #1005: ヒント開封も submit-flag と同じ scoring gate を通す。
   // 開始前 / 終了後 / scoringLocked では penalty を accrue させない (= 公平性)。
-  if (typeof item.eventId === "string" && item.eventId.length > 0) {
-    const gate = await getEventGate(shared, item.eventId);
-    const blocked = evaluateGate(gate, Date.now());
-    if (blocked) return blocked;
-  }
+  const blocked = await getHintGateBlock(shared, item);
+  if (blocked) return blocked;
 
   const scoring = scoringMap[item.problemId];
   // Phase 3 は flag kind 限定で hints をサポート (= Phase 5 で他 4 kind に拡張)。
@@ -76,71 +74,36 @@ export async function revealHint(
     };
   }
 
+  return updateHintReveal(shared, item, hint, hintId);
+}
+
+function isRevealHintItem(
+  item: Partial<DeploymentItem> | undefined,
+): item is Partial<DeploymentItem> & { PK: string; problemId: string } {
+  return typeof item?.PK === "string" && typeof item.problemId === "string";
+}
+
+async function getHintGateBlock(
+  shared: ParticipantSharedResources,
+  item: Partial<DeploymentItem>,
+): Promise<RevealHintOutcome | undefined> {
+  if (typeof item.eventId !== "string" || item.eventId.length === 0) return undefined;
+  const gate = await getEventGate(shared, item.eventId);
+  return evaluateGate(gate, Date.now());
+}
+
+async function updateHintReveal(
+  shared: ParticipantSharedResources,
+  item: Partial<DeploymentItem> & { PK: string; problemId: string },
+  hint: ProgressiveHint,
+  hintId: string,
+): Promise<RevealHintOutcome> {
   const now = new Date().toISOString();
   const record = { hintId: hint.id, revealedAt: now, penaltyApplied: hint.penalty };
-
-  // ConditionExpression で同 hintId が既に居る場合の race を block。 hintsRevealed が
-  // 未存在 (= attribute 不在) でも attribute_not_exists で通すように OR 結合する。
-  // list_append で既存配列に append、 if_not_exists で 「初回 reveal なら新規空配列」
-  // フォールバックを噛ませる。
-  // score は ADD で -penalty を加算 (= 負数 ADD で減算)。 penalty=0 のときは 0 ADD で no-op。
   try {
-    const updated = await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.tableName,
-        Key: { PK: item.PK, SK: "META" },
-        UpdateExpression:
-          "SET hintsRevealed = list_append(if_not_exists(hintsRevealed, :empty), :record), updatedAt = :now " +
-          "ADD score :neg",
-        ConditionExpression:
-          "attribute_not_exists(hintsRevealed) OR NOT contains(hintsRevealed, :recordForContains)",
-        ExpressionAttributeValues: {
-          ":empty": [],
-          ":record": [record],
-          // `contains` は list の要素を文字列でも sub-object でも比較可能。 ただし DDB の
-          // contains は equality 比較なので、 同じ hintId でも revealedAt / penaltyApplied が
-          // 違うと別物扱いになる。 これは race condition で安全側 (= 二重 reveal が新 record で
-          // 防げる)、 ただし完全な idempotency は読み戻しで保証する。
-          ":recordForContains": record,
-          ":now": now,
-          // hint.penalty=0 のとき `-0` を生成しないよう、 0 のときは 0 をそのまま渡す
-          // (= `Object.is(-0, 0)` は false なので test / JSON で混乱しないため)。
-          ":neg": hint.penalty === 0 ? 0 : -hint.penalty,
-        },
-        ReturnValues: "ALL_NEW",
-      }),
-    );
+    const updated = await writeHintReveal(shared, item.PK, hint, record, now);
     const totalScore = Number((updated.Attributes as { score?: unknown })?.score ?? -hint.penalty);
-
-    // Issue #1038 P1 #8: hint 開封の score event を履歴に書く (= 旧来 score だけ ADD して
-    // score event 行を作らず、 portal の Score events ページが「-30pt なのに履歴 0 件」 と
-    // 表示する不整合を起こしていた)。 best-effort で書き、 失敗時は log のみ (= 親 score
-    // の整合性は ADD で既に成立、 履歴の loss だけ受容、 既存 writeScoreEvent と同方針)。
-    if (hint.penalty !== 0) {
-      try {
-        await writeScoreEvent(
-          shared.ddb,
-          shared.tableName,
-          {
-            jobId: String(item.jobId ?? ""),
-            problemId: item.problemId,
-            ...(typeof item.teamId === "string" ? { teamId: item.teamId } : {}),
-            ...(typeof item.eventId === "string" ? { eventId: item.eventId } : {}),
-            expiresAt: Number(item.expiresAt ?? 0),
-          },
-          "hint",
-          -hint.penalty,
-          now,
-        );
-      } catch (err) {
-        console.warn("[reveal-hint] writeScoreEvent failed (best-effort)", {
-          jobId: item.jobId,
-          hintId,
-          message: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-
+    await writeHintScoreEvent(shared, item, hint, hintId, now);
     return {
       kind: "ok",
       content: hint.content,
@@ -159,5 +122,65 @@ export async function revealHint(
       };
     }
     throw err;
+  }
+}
+
+function writeHintReveal(
+  shared: ParticipantSharedResources,
+  PK: string,
+  hint: ProgressiveHint,
+  record: { readonly hintId: string; readonly revealedAt: string; readonly penaltyApplied: number },
+  now: string,
+) {
+  return shared.ddb.send(
+    new UpdateCommand({
+      TableName: shared.tableName,
+      Key: { PK, SK: "META" },
+      UpdateExpression:
+        "SET hintsRevealed = list_append(if_not_exists(hintsRevealed, :empty), :record), updatedAt = :now " +
+        "ADD score :neg",
+      ConditionExpression:
+        "attribute_not_exists(hintsRevealed) OR NOT contains(hintsRevealed, :recordForContains)",
+      ExpressionAttributeValues: {
+        ":empty": [],
+        ":record": [record],
+        ":recordForContains": record,
+        ":now": now,
+        ":neg": hint.penalty === 0 ? 0 : -hint.penalty,
+      },
+      ReturnValues: "ALL_NEW",
+    }),
+  );
+}
+
+async function writeHintScoreEvent(
+  shared: ParticipantSharedResources,
+  item: Partial<DeploymentItem> & { problemId: string },
+  hint: ProgressiveHint,
+  hintId: string,
+  now: string,
+): Promise<void> {
+  if (hint.penalty === 0) return;
+  try {
+    await writeScoreEvent(
+      shared.ddb,
+      shared.tableName,
+      {
+        jobId: String(item.jobId ?? ""),
+        problemId: item.problemId,
+        ...(typeof item.teamId === "string" ? { teamId: item.teamId } : {}),
+        ...(typeof item.eventId === "string" ? { eventId: item.eventId } : {}),
+        expiresAt: Number(item.expiresAt ?? 0),
+      },
+      "hint",
+      -hint.penalty,
+      now,
+    );
+  } catch (err) {
+    console.warn("[reveal-hint] writeScoreEvent failed (best-effort)", {
+      jobId: item.jobId,
+      hintId,
+      message: err instanceof Error ? err.message : String(err),
+    });
   }
 }

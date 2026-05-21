@@ -1,5 +1,5 @@
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeploySharedResources } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
 import {

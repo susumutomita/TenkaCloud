@@ -53,40 +53,14 @@ export async function requestTeardown(
   // 削除した場合) でも namePrefix は deploy 時に必ず確定している。
   const stackName = String(item.stackId ?? item.namePrefix ?? "");
 
-  const missing: string[] = [];
-  if (!region) missing.push("region");
-  if (!awsAccountId) missing.push("awsAccountId");
-  if (!stackName) missing.push("stackName");
+  const missing = missingTeardownFields({ region, awsAccountId, stackName });
   if (missing.length > 0) {
     return { kind: "missing_required_fields", fields: missing };
   }
 
   const updatedAt = new Date(nowMs).toISOString();
-  const update: UpdateCommandInput = {
-    TableName: shared.tableName,
-    Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-    UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt",
-    ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :i, :c, :f)",
-    ExpressionAttributeNames: { "#s": "status" },
-    ExpressionAttributeValues: {
-      ":deleting": "DELETING",
-      ":updatedAt": updatedAt,
-      ":tenantId": tenantId,
-      ":p": "PENDING",
-      ":i": "IN_PROGRESS",
-      ":c": "COMPLETE",
-      ":f": "FAILED",
-    },
-  };
-  try {
-    await shared.ddb.send(new UpdateCommand(update));
-  } catch (err) {
-    const code = (err as { name?: string })?.name ?? "";
-    if (code === "ConditionalCheckFailedException") {
-      return { kind: "race", reason: "tenant_or_status_mismatch" };
-    }
-    throw err;
-  }
+  const transition = await transitionTeardownToDeleting(shared, tenantId, jobId, updatedAt);
+  if (transition) return transition;
 
   // Phase 2.2 (Issue #459): delete も cross-account 化。verified=true 行が見つかった
   // 場合のみ AssumeRole 用 metadata を詰める (= 旧 deployment 行で competitor が未登録の
@@ -111,50 +85,109 @@ export async function requestTeardown(
     competitorRoleArn: verified?.competitorRoleArn,
     externalIdParameterName: verified?.externalIdParameterName,
   };
+  await publishTeardown(shared, tenantId, nowMs, detail);
+
+  return { kind: "accepted", previousStatus: status };
+}
+
+function missingTeardownFields(fields: {
+  readonly region: string;
+  readonly awsAccountId: string;
+  readonly stackName: string;
+}): string[] {
+  return (Object.entries(fields) as Array<[string, string]>)
+    .filter(([, value]) => !value)
+    .map(([field]) => field);
+}
+
+async function transitionTeardownToDeleting(
+  shared: DeploySharedResources,
+  tenantId: string,
+  jobId: string,
+  updatedAt: string,
+): Promise<Extract<TeardownOutcome, { kind: "race" }> | undefined> {
+  try {
+    await shared.ddb.send(
+      new UpdateCommand(buildTeardownUpdate(shared, tenantId, jobId, updatedAt)),
+    );
+    return undefined;
+  } catch (err) {
+    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") {
+      return { kind: "race", reason: "tenant_or_status_mismatch" };
+    }
+    throw err;
+  }
+}
+
+function buildTeardownUpdate(
+  shared: DeploySharedResources,
+  tenantId: string,
+  jobId: string,
+  updatedAt: string,
+): UpdateCommandInput {
+  return {
+    TableName: shared.tableName,
+    Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
+    UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt",
+    ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :i, :c, :f)",
+    ExpressionAttributeNames: { "#s": "status" },
+    ExpressionAttributeValues: {
+      ":deleting": "DELETING",
+      ":updatedAt": updatedAt,
+      ":tenantId": tenantId,
+      ":p": "PENDING",
+      ":i": "IN_PROGRESS",
+      ":c": "COMPLETE",
+      ":f": "FAILED",
+    },
+  };
+}
+
+async function publishTeardown(
+  shared: DeploySharedResources,
+  tenantId: string,
+  nowMs: number,
+  detail: DeployDeleteRequestedDetail,
+): Promise<void> {
   try {
     await publishProblemEvent({
       client: shared.events,
       busName: shared.eventBusName,
       detailType: EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
-      jobId,
+      jobId: detail.jobId,
       detail,
     });
-    logDeployTrace("deploy.delete.enqueued", {
-      jobId,
-      correlationId: jobId,
-      tenantId,
-      stackName,
-      region,
-      awsAccountId,
-    });
+    logDeployTrace("deploy.delete.enqueued", detail);
   } catch (err) {
-    // publish 失敗時の compensation: status を FAILED に倒し failureReason を残す。
-    // DELETING のまま放置すると、次の呼び出しが `already_deleted` で no-op を返し、
-    // CFn stack が orphan 化する (= 削除できない状態に陥る) ため。
-    // best-effort で、compensation 自体が失敗しても元の publish エラーを伝播する。
-    try {
-      await shared.ddb.send(
-        new UpdateCommand({
-          TableName: shared.tableName,
-          Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-          UpdateExpression: "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason",
-          // #872: compensation path にも tenantId condition を載せ defense-in-depth。
-          ConditionExpression: "tenantId = :tenantId AND #s = :deleting",
-          ExpressionAttributeNames: { "#s": "status" },
-          ExpressionAttributeValues: {
-            ":failed": "FAILED",
-            ":deleting": "DELETING",
-            ":updatedAt": new Date(nowMs).toISOString(),
-            ":reason": "Failed to publish DeployDeleteRequested event",
-            ":tenantId": tenantId,
-          },
-        }),
-      );
-    } catch {
-      // best-effort: compensation 失敗は黙って捨て、元の publish エラーを表に出す
-    }
+    await compensateFailedTeardownPublish(shared, tenantId, detail.jobId, nowMs);
     throw err;
   }
+}
 
-  return { kind: "accepted", previousStatus: status };
+async function compensateFailedTeardownPublish(
+  shared: DeploySharedResources,
+  tenantId: string,
+  jobId: string,
+  nowMs: number,
+): Promise<void> {
+  try {
+    await shared.ddb.send(
+      new UpdateCommand({
+        TableName: shared.tableName,
+        Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
+        UpdateExpression: "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason",
+        ConditionExpression: "tenantId = :tenantId AND #s = :deleting",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":failed": "FAILED",
+          ":deleting": "DELETING",
+          ":updatedAt": new Date(nowMs).toISOString(),
+          ":reason": "Failed to publish DeployDeleteRequested event",
+          ":tenantId": tenantId,
+        },
+      }),
+    );
+  } catch {
+    // best-effort: compensation 失敗は黙って捨て、元の publish エラーを表に出す
+  }
 }

@@ -74,6 +74,20 @@ function sampleUptimeDeployment(over: Record<string, unknown> = {}) {
   };
 }
 
+function handleUptimeDispatcherCommand(cmd: { constructor: { name: string } }): object {
+  const name = cmd.constructor.name;
+  if (name === "ScanCommand") return handleUptimeDispatcherScan(cmd);
+  if (name === "BatchGetCommand") return { Responses: { TestEvents: [] } };
+  return {};
+}
+
+function handleUptimeDispatcherScan(cmd: { constructor: { name: string } }): object {
+  const tableName = (cmd as { input: { TableName: string } }).input.TableName;
+  if (tableName === "TestEvents") return { Items: [] };
+  if (tableName === "TestDeployments") return { Items: [sampleUptimeDeployment()] };
+  return {};
+}
+
 describe("generic scoring dispatcher: hello-world-battle (= legacy uptime) 挙動 preservation", () => {
   it("should award +100 and write 1 score-event when scoring=uptime + all endpoints return 200", async () => {
     process.env.BATTLE_PROBLEMS_SCORING = JSON.stringify({
@@ -96,20 +110,9 @@ describe("generic scoring dispatcher: hello-world-battle (= legacy uptime) 挙�
     // 4. Endpoints Query (= 0 overrides)
     // 5. UpdateItem (= score 加算)
     // 6. PutItem (= score-event 行)
-    ddbSend.mockImplementation(async (cmd: { constructor: { name: string } }) => {
-      const name = cmd.constructor.name;
-      if (name === "ScanCommand") {
-        // 最初は Events Scan, 次は Deployments Scan を distinguish — input.TableName で識別
-        const tn = (cmd as { input: { TableName: string } }).input.TableName;
-        if (tn === "TestEvents") return { Items: [] };
-        if (tn === "TestDeployments") return { Items: [sampleUptimeDeployment()] };
-      }
-      if (name === "BatchGetCommand") return { Responses: { TestEvents: [] } };
-      if (name === "QueryCommand") return { Items: [] };
-      if (name === "UpdateCommand") return {};
-      if (name === "PutCommand") return {};
-      return {};
-    });
+    ddbSend.mockImplementation(async (cmd: { constructor: { name: string } }) =>
+      handleUptimeDispatcherCommand(cmd),
+    );
 
     fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
 

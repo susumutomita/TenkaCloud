@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -159,7 +159,7 @@ Resources:
     expect(collectGetAttResources(yaml).sort()).toEqual(["Bucket", "Role"]);
   });
 
-  it("collectSubRefs: should treat \\${Var} as ref, \\${X.Y} as getAtt, and ignore \\${!Literal}", () => {
+  it(`collectSubRefs: should treat \\\${Var} as ref, \\\${X.Y} as getAtt, and ignore \\\${!Literal}`, () => {
     const yaml = `Foo: !Sub "\${NamePrefix}-suffix"
 Bar: !Sub "arn:\${AWS::Partition}:s3:::bucket"
 Baz: !Sub "arn:s3:::\${Role.Arn}"

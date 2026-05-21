@@ -87,52 +87,66 @@ export async function verifyCompetitorAccount(
   if (!externalIdWithVersion) throw new ExternalIdMissingError(ctx.tenantId);
 
   const roleArn = `arn:aws:iam::${ctx.awsAccountId}:role/${account.competitorRoleName}`;
-  const sts = shared.sts as STSClient;
-
-  const tryAssumeRole = async (externalId: string): Promise<void> => {
-    await sts.send(
-      new AssumeRoleCommand({
-        RoleArn: roleArn,
-        RoleSessionName: SANITY_CHECK_SESSION_NAME,
-        ExternalId: externalId,
-        DurationSeconds: MIN_ASSUME_ROLE_SESSION_SECONDS,
-      }),
-    );
-  };
-
   try {
-    await tryAssumeRole(externalIdWithVersion.value);
+    await assumeCompetitorRole(shared.sts as STSClient, roleArn, externalIdWithVersion.value);
   } catch (err) {
-    const errorName = err instanceof Error ? err.name : "Unknown";
-    const errorMessage = err instanceof Error ? err.message : String(err);
-
-    // Issue #856: rotate race grace fallback。 1 generation 前の ExternalId を 1 回だけ retry。
-    if (shouldRetryWithPreviousVersion(errorName) && externalIdWithVersion.version > 1) {
-      const previousExternalId = await getExternalIdByVersion(
-        externalIdDeps,
-        ctx.tenantId,
-        externalIdWithVersion.version - 1,
-      );
-      if (previousExternalId) {
-        try {
-          await tryAssumeRole(previousExternalId);
-          // grace fallback 成功: 旧 version で AssumeRole が通ったので verify 完了扱い。
-          return markCompetitorAccountVerified(shared, {
-            tenantId: ctx.tenantId,
-            awsAccountId: ctx.awsAccountId,
-            verifiedAt: new Date(ctx.nowMs).toISOString(),
-          });
-        } catch (retryErr) {
-          const retryName = retryErr instanceof Error ? retryErr.name : "Unknown";
-          const retryMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
-          throw new AssumeRoleSanityCheckFailedError(ctx.awsAccountId, retryName, retryMessage);
-        }
-      }
+    const retried = await retryPreviousExternalId(shared, ctx, roleArn, externalIdWithVersion, err);
+    if (!retried) {
+      throw toSanityCheckError(ctx.awsAccountId, err);
     }
-
-    throw new AssumeRoleSanityCheckFailedError(ctx.awsAccountId, errorName, errorMessage);
   }
 
+  return markVerified(shared, ctx);
+}
+
+async function assumeCompetitorRole(
+  sts: STSClient,
+  roleArn: string,
+  externalId: string,
+): Promise<void> {
+  await sts.send(
+    new AssumeRoleCommand({
+      RoleArn: roleArn,
+      RoleSessionName: SANITY_CHECK_SESSION_NAME,
+      ExternalId: externalId,
+      DurationSeconds: MIN_ASSUME_ROLE_SESSION_SECONDS,
+    }),
+  );
+}
+
+async function retryPreviousExternalId(
+  shared: CompetitorAccountsSharedResources,
+  ctx: VerifyCompetitorAccountContext,
+  roleArn: string,
+  current: { readonly value: string; readonly version: number },
+  err: unknown,
+): Promise<boolean> {
+  const errorName = err instanceof Error ? err.name : "Unknown";
+  if (!shouldRetryWithPreviousVersion(errorName) || current.version <= 1) return false;
+  const previousExternalId = await getExternalIdByVersion(
+    { ssm: shared.ssm, env: shared.env },
+    ctx.tenantId,
+    current.version - 1,
+  );
+  if (!previousExternalId) return false;
+  try {
+    await assumeCompetitorRole(shared.sts as STSClient, roleArn, previousExternalId);
+    return true;
+  } catch (retryErr) {
+    throw toSanityCheckError(ctx.awsAccountId, retryErr);
+  }
+}
+
+function toSanityCheckError(awsAccountId: string, err: unknown): AssumeRoleSanityCheckFailedError {
+  const name = err instanceof Error ? err.name : "Unknown";
+  const message = err instanceof Error ? err.message : String(err);
+  return new AssumeRoleSanityCheckFailedError(awsAccountId, name, message);
+}
+
+function markVerified(
+  shared: CompetitorAccountsSharedResources,
+  ctx: VerifyCompetitorAccountContext,
+): Promise<CompetitorAccountSummary> {
   return markCompetitorAccountVerified(shared, {
     tenantId: ctx.tenantId,
     awsAccountId: ctx.awsAccountId,

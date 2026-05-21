@@ -247,36 +247,46 @@ function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetada
     for (const problem of fs.readdirSync(categoryDir, { withFileTypes: true })) {
       if (!problem.isDirectory()) continue;
       const metadataPath = path.join(categoryDir, problem.name, "metadata.json");
-      if (!fs.existsSync(metadataPath)) continue;
-      try {
-        const meta = JSON.parse(fs.readFileSync(metadataPath, "utf-8")) as {
-          id?: unknown;
-          scoring?: unknown;
-          endpoints?: unknown;
-          phases?: unknown;
-          visibility?: unknown;
-          disruptions?: unknown;
-        };
-        if (typeof meta.id !== "string" || meta.id.length === 0) {
-          console.warn(`[discoverProblemsCatalog] ${metadataPath}: missing or invalid 'id' field`);
-          continue;
-        }
-        yield {
-          id: meta.id,
-          category: category.name,
-          dirName: problem.name,
-          scoring: meta.scoring,
-          endpoints: meta.endpoints,
-          phases: meta.phases,
-          visibility: meta.visibility,
-          disruptions: meta.disruptions,
-        };
-      } catch (err) {
-        console.warn(
-          `[discoverProblemsCatalog] ${metadataPath}: parse failed (${(err as Error).message}). ` +
-            `Run 'make validate-problems' to see schema errors.`,
-        );
-      }
+      const metadata = readProblemMetadata(metadataPath, category.name, problem.name);
+      if (metadata) yield metadata;
     }
+  }
+}
+
+function readProblemMetadata(
+  metadataPath: string,
+  category: string,
+  dirName: string,
+): ProblemMetadataEntry | undefined {
+  if (!fs.existsSync(metadataPath)) return undefined;
+  try {
+    const meta = JSON.parse(fs.readFileSync(metadataPath, "utf-8")) as {
+      id?: unknown;
+      scoring?: unknown;
+      endpoints?: unknown;
+      phases?: unknown;
+      visibility?: unknown;
+      disruptions?: unknown;
+    };
+    if (typeof meta.id !== "string" || meta.id.length === 0) {
+      console.warn(`[discoverProblemsCatalog] ${metadataPath}: missing or invalid 'id' field`);
+      return undefined;
+    }
+    return {
+      id: meta.id,
+      category,
+      dirName,
+      scoring: meta.scoring,
+      endpoints: meta.endpoints,
+      phases: meta.phases,
+      visibility: meta.visibility,
+      disruptions: meta.disruptions,
+    };
+  } catch (err) {
+    console.warn(
+      `[discoverProblemsCatalog] ${metadataPath}: parse failed (${(err as Error).message}). ` +
+        `Run 'make validate-problems' to see schema errors.`,
+    );
+    return undefined;
   }
 }
