@@ -53,7 +53,7 @@
     "@cdklabs/sbt-aws": "0.3.9",
     "ajv": "8.18.0",
     "ajv-formats": "^3.0.1",
-    "aws-cdk-lib": "^2.254.0",
+    "aws-cdk-lib": "^2.256.1",
     "constructs": "^10.6.0",
     "dotenv": "^17.4.2",
     "http-status-codes": "^2.3.0",
