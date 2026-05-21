@@ -173,30 +173,28 @@ function extractErrorCode(envelope: BackendErrorEnvelope): string | null {
  * - 未知の code でも、 raw JSON は drop して title だけ表示
  * - HTTP status code は title に併記 (= 422 / 500 / 等を operator が判別可能に)
  */
+function fromBackendEnvelope(status: number, envelope: BackendErrorEnvelope): FriendlyError {
+  const code = extractErrorCode(envelope);
+  if (code && KNOWN_ERRORS[code]) return KNOWN_ERRORS[code];
+  const msg = typeof envelope.message === "string" ? envelope.message : undefined;
+  const codeOrMsg = code ?? msg;
+  return {
+    title: codeOrMsg ? `エラー (${status}) — ${codeOrMsg}` : `エラー (${status})`,
+    hint: code && msg ? msg : undefined,
+  };
+}
+
+function fromApiError(err: ApiError): FriendlyError {
+  const envelope = extractBackendEnvelope(err.message);
+  if (envelope) return fromBackendEnvelope(err.status, envelope);
+  return {
+    title: `エラー (${err.status})`,
+    hint: err.message.replace(/^API \d+:\s*/, "").trim() || undefined,
+  };
+}
+
 export function toFriendlyError(err: unknown): FriendlyError {
-  if (err instanceof ApiError) {
-    const envelope = extractBackendEnvelope(err.message);
-    if (envelope) {
-      const code = extractErrorCode(envelope);
-      if (code && KNOWN_ERRORS[code]) {
-        return KNOWN_ERRORS[code];
-      }
-      // title に code (or message) を併記、 hint には message が code と異なる時のみ詰める
-      // (= title と hint で同じ文字列を表示しないため)。
-      const msg = typeof envelope.message === "string" ? envelope.message : undefined;
-      const codeOrMsg = code ?? msg;
-      return {
-        title: codeOrMsg ? `エラー (${err.status}) — ${codeOrMsg}` : `エラー (${err.status})`,
-        hint: code && msg ? msg : undefined,
-      };
-    }
-    return {
-      title: `エラー (${err.status})`,
-      hint: err.message.replace(/^API \d+:\s*/, "").trim() || undefined,
-    };
-  }
-  if (err instanceof Error) {
-    return { title: err.message };
-  }
+  if (err instanceof ApiError) return fromApiError(err);
+  if (err instanceof Error) return { title: err.message };
   return { title: String(err) };
 }
