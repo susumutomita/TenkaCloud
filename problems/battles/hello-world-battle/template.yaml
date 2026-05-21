@@ -180,11 +180,6 @@ Resources:
                 Action:
                   - ssm:TerminateSession
                 Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:session/${NamePrefix}*"
-              - Sid: DescribeOwnStack
-                Effect: Allow
-                Action:
-                  - cloudformation:DescribeStacks
-                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${NamePrefix}/*"
               - Sid: FilterOwnLambdaLogs
                 Effect: Allow
                 Action:

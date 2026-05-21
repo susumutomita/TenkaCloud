@@ -63,14 +63,6 @@ Resources:
                   # GetParametersByPath is resource-scopable via path-prefix ARN.
                   - ssm:GetParametersByPath
                 Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
-              - Sid: DescribeOwnStack
-                Effect: Allow
-                Action:
-                  - cloudformation:DescribeStacks
-                  - cloudformation:DescribeStackResources
-                  - cloudformation:DescribeStackEvents
-                  - cloudformation:GetTemplate
-                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${NamePrefix}/*"
 
   HelloParameter:
     Type: AWS::SSM::Parameter
@@ -88,15 +80,15 @@ Outputs:
   ParameterValue:
     Description: SSM Parameter value (echoed in Outputs for smoke test verification).
     Value: !Sub "Hello from ${NamePrefix}"
-  # Issue #1094: AWS Console deep link to the specific parameter detail page.
-  # competitors click this from the Participant Portal and land directly on
-  # the parameter view (= ssm:GetParameter, no DescribeParameters required).
-  # The top-level Parameter Store list view requires ssm:DescribeParameters
-  # which the participant-viewer Role intentionally lacks (ADR-021, no cross-
-  # tenant leak), so the deep link is the supported solve path.
+  # AWS Console home (region-scoped). Competitors land here and navigate to
+  # SSM Parameter Store themselves -- this is a learning problem, not a
+  # spoon-fed deep link. The Parameter Store list view stays empty by design
+  # (ADR-021: participant Role lacks ssm:DescribeParameters), so the intended
+  # solve path is CLI (`aws ssm get-parameter --name /<NamePrefix>/hello`) or
+  # typing the parameter name in Console directly.
   ParameterConsoleUrl:
-    Description: AWS Console deep link to the Parameter Store entry (no DescribeParameters needed).
-    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/%2F${NamePrefix}%2Fhello/description?region=${AWS::Region}"
+    Description: AWS Console home (region-scoped). Navigate to SSM Parameter Store from here.
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/console/home?region=${AWS::Region}#"
   NamePrefix:
     Description: Common resource prefix that this stack used.
     Value: !Ref NamePrefix
