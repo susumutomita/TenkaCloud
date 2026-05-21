@@ -188,9 +188,12 @@ describe("getConsoleSigninUrl", () => {
     expect(result.loginUrl).toContain("https://signin.aws.amazon.com/federation");
     expect(result.loginUrl).toContain("Action=login");
     expect(result.loginUrl).toContain("SigninToken=SIGNIN_TOKEN_VALUE");
-    expect(result.loginUrl).toContain("cloudformation");
-    // 競技者の namePrefix で stacks フィルタを掛ける
-    expect(result.loginUrl).toContain(encodeURIComponent("tc-security-battle-royale-alpha"));
+    // destination は問題のデプロイリージョン (= ready.region) の AWS Console home に固定
+    expect(result.loginUrl).toContain(
+      encodeURIComponent(
+        "https://ap-northeast-1.console.aws.amazon.com/console/home?region=ap-northeast-1",
+      ),
+    );
 
     // #747: getSigninToken request URL に SessionDuration param が含まれてはいけない
     // (AssumeRole 由来 credentials では federation endpoint が 400 を返すため)。
