@@ -1,5 +1,5 @@
 /**
- * DeploymentDetail を Netlify 風の 5 phase に変換するロジック。
+ * DeploymentDetail を Netlify 風の 4 phase に変換するロジック。
  *
  * 既存の backend を変えずに、`DeploymentSummary` + `StackProgress` だけから派生する。
  * Phase の status は次の順で決まる:
@@ -8,8 +8,7 @@
  *      Complete、まだなら IN_PROGRESS は In Progress、FAILED + 観測なし は Failed。
  *   3. CloudFormation Deploy — events を見て判定。すべて `_COMPLETE` なら Complete、
  *      `_FAILED` を含めば Failed、`_IN_PROGRESS` を含めば In Progress、空なら Pending。
- *   4. Health Check — placeholder。常に Skipped (= 将来の Lambda 連携枠)。
- *   5. Complete / Teardown — deployment.status を素直に反映。
+ *   4. Complete / Teardown — deployment.status を素直に反映。
  *
  * Backend を変えない frontend-only の派生なので、ここに集約することで View 側を薄く保つ。
  */
@@ -23,7 +22,7 @@ import type {
 
 export type PhaseStatus = "complete" | "in-progress" | "failed" | "skipped" | "pending";
 
-export type PhaseId = "enqueued" | "building" | "cfn-deploy" | "health-check" | "complete";
+export type PhaseId = "enqueued" | "building" | "cfn-deploy" | "complete";
 
 export interface DeployPhase {
   readonly id: PhaseId;
@@ -154,8 +153,12 @@ export function deriveFinalStatus(status: DeploymentStatus): PhaseStatus {
 }
 
 /**
- * 5 phase 派生のコア関数。`stackProgress` は未取得 (= null) を許容する:
+ * 4 phase 派生のコア関数。`stackProgress` は未取得 (= null) を許容する:
  * その場合 `Building` / `CloudFormation Deploy` は status だけから推定する。
+ *
+ * 旧 5 phase に居た Health Check は ADR-012 Phase 3.B で GenericScoringLambda に
+ * 置き換わり (= deploy-time の health check 連携枠としては復活しない設計) のため、
+ * 永続 Skipped な dead UI を消した。
  */
 export function derivePhases(
   deployment: DeploymentSummary,
@@ -172,12 +175,6 @@ export function derivePhases(
       id: "cfn-deploy",
       name: "CloudFormation Deploy",
       status: deriveCfnDeployStatus(status, stackProgress),
-    },
-    {
-      id: "health-check",
-      name: "Health Check",
-      status: "skipped",
-      note: "Skipped — will be wired to HealthCheck Lambda in a future iteration",
     },
     { id: "complete", name: "Complete / Teardown", status: deriveFinalStatus(status) },
   ];
@@ -293,15 +290,13 @@ function phaseBodyLines(
       return buildingPhaseLines(stackProgress);
     case "cfn-deploy":
       return cfnDeployPhaseLines(stackProgress);
-    case "health-check":
-      return [{ header: false, text: phase.note ?? "Skipped" }];
     case "complete":
       return completePhaseLines(deployment);
   }
 }
 
 /**
- * 5 phase を 1 本の terminal log に展開する。phase ヘッダ行 + events 行を順に並べる。
+ * 4 phase を 1 本の terminal log に展開する。phase ヘッダ行 + events 行を順に並べる。
  */
 export function buildTerminalLog(
   deployment: DeploymentSummary,

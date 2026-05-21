@@ -88,20 +88,19 @@ const progressWithFailed: StackProgress = {
 };
 
 describe("derivePhases", () => {
-  it("should show all 5 phases as Complete (or Skipped) when status=COMPLETE", () => {
+  it("should show all 4 phases as Complete when status=COMPLETE", () => {
     const phases = derivePhases({ ...baseDeployment, status: "COMPLETE" }, progressAllComplete);
-    expect(phases.map((p) => p.id)).toEqual([
-      "enqueued",
-      "building",
-      "cfn-deploy",
-      "health-check",
-      "complete",
-    ]);
+    expect(phases.map((p) => p.id)).toEqual(["enqueued", "building", "cfn-deploy", "complete"]);
     expect(phases[0].status).toBe("complete"); // Enqueued
     expect(phases[1].status).toBe("complete"); // Building
     expect(phases[2].status).toBe("complete"); // CFn Deploy
-    expect(phases[3].status).toBe("skipped"); // Health Check (placeholder)
-    expect(phases[4].status).toBe("complete"); // Final
+    expect(phases[3].status).toBe("complete"); // Final
+  });
+
+  it("should not include the dead Health Check placeholder phase", () => {
+    const phases = derivePhases({ ...baseDeployment, status: "COMPLETE" }, progressAllComplete);
+    expect(phases.map((p) => p.id)).not.toContain("health-check");
+    expect(phases.every((p) => p.status !== "skipped" || p.id === "complete")).toBe(true);
   });
 
   it("should show CloudFormation Deploy phase as Failed when status=FAILED with CFn progress", () => {
@@ -131,9 +130,9 @@ describe("derivePhases", () => {
     expect(pick(phases, "cfn-deploy").status).toBe("pending");
   });
 
-  it("should still generate 5 phases when stackProgress=null", () => {
+  it("should still generate 4 phases when stackProgress=null", () => {
     const phases = derivePhases({ ...baseDeployment, status: "PENDING" }, null);
-    expect(phases).toHaveLength(5);
+    expect(phases).toHaveLength(4);
     expect(phases[1].status).toBe("pending"); // building pending
     expect(phases[2].status).toBe("pending"); // cfn pending
   });
@@ -252,7 +251,6 @@ describe("buildTerminalLog", () => {
       "> Enqueued [complete]",
       "> Building [complete]",
       "> CloudFormation Deploy [complete]",
-      "> Health Check [skipped]",
       "> Complete / Teardown [complete]",
     ]);
     // CFn event lines should include logicalResourceId.

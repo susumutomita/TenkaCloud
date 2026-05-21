@@ -372,7 +372,6 @@
     "phase_building_description": "CodeBuild assembles the CFn to deploy the problem template to the competitor account.",
     "phase_building_link": "Open CodeBuild / CloudFormation logs in AWS Console",
     "phase_building_url_unavailable": "CodeBuild console URL is not yet available.",
-    "phase_health_skipped": "Skipped",
     "label_final_status": "Final status",
     "label_last_updated": "Last updated",
     "label_failure_reason": "Failure reason",

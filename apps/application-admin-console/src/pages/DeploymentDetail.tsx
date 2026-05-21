@@ -469,12 +469,6 @@ function PhaseBody(props: {
           t={t}
         />
       );
-    case "health-check":
-      return (
-        <Box variant="p" color="text-status-info">
-          {phase.note ?? t("deployment_detail.phase_health_skipped")}
-        </Box>
-      );
     case "complete":
       return (
         <KeyValuePairs
