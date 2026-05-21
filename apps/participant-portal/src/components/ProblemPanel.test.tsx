@@ -78,7 +78,7 @@ describe("ProblemPanel deploy terminal", () => {
       ),
     );
 
-    expect(screen.getByLabelText(/Deployment terminal|デプロイ terminal/)).toBeInTheDocument();
+    expect(screen.getByText(/Deployment terminal|デプロイ terminal/)).toBeInTheDocument();
     expect(screen.getByText("Deployment job was queued.")).toBeInTheDocument();
     expect(screen.getByText("CloudFormation stack creation is in progress.")).toBeInTheDocument();
   });
