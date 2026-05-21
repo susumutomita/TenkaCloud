@@ -6,7 +6,6 @@ import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
-import { encodeLargeEnvValue } from "../utils/env-encoding";
 import {
   LAMBDA_NODEJS_BUNDLING_TARGET,
   LAMBDA_NODEJS_RUNTIME,
@@ -89,12 +88,6 @@ export class GenericScoringLambda extends Construct {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
         EVENTS_TABLE_NAME: props.eventsTable.tableName,
         PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName,
-        // Issue #810: AWS Lambda env vars 4 KB 上限を回避するため gzip+base64 で
-        // 圧縮する。 旧形式 (= plain JSON) も decodeLargeEnvValue が backward compat
-        // で読めるので、 既存 test fixture / local dev は破壊しない。
-        BATTLE_PROBLEMS_SCORING: encodeLargeEnvValue(JSON.stringify(props.problemsScoring)),
-        PROBLEM_ENDPOINTS: encodeLargeEnvValue(JSON.stringify(props.problemsEndpoints)),
-        BATTLE_PROBLEMS_PHASES: encodeLargeEnvValue(JSON.stringify(props.problemsPhases)),
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -102,6 +95,20 @@ export class GenericScoringLambda extends Construct {
         target: LAMBDA_NODEJS_BUNDLING_TARGET,
         sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
         externalModules: [],
+        // problem catalog (scoring / endpoints / phases) を bundle 時に literal 置換する。
+        // 旧 #810 の gzip+base64 env var は問題が増えるたび 4 KB 上限に張り付き、
+        // stackstack 追加で deploy 不可になった。 esbuild define で
+        // process.env.X を build 時に固定 JSON 文字列にし env を 0 化する。
+        // tests は process.env 経由で fixture を注入するので影響なし。
+        define: {
+          "process.env.BATTLE_PROBLEMS_SCORING": JSON.stringify(
+            JSON.stringify(props.problemsScoring),
+          ),
+          "process.env.PROBLEM_ENDPOINTS": JSON.stringify(JSON.stringify(props.problemsEndpoints)),
+          "process.env.BATTLE_PROBLEMS_PHASES": JSON.stringify(
+            JSON.stringify(props.problemsPhases),
+          ),
+        },
       },
     });
 
