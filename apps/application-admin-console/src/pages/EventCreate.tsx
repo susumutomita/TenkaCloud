@@ -66,6 +66,27 @@ interface ProblemRow {
   problemId: string;
   problemName: string;
   defaultRegion: string;
+  /** Issue #1201 Phase 2: 問題が動作確認済 region 集合。 wizard picker の選択肢を絞る。 */
+  supportedRegions?: readonly string[];
+}
+
+/**
+ * Issue #1201 Phase 2: region picker の選択肢を `supportedRegions` で絞る純関数。
+ *
+ * - `supportedRegions` が undefined / 空 → 全 region (= 後方互換)
+ * - 宣言されていれば、 集合と AWS_REGIONS の intersection で picker を構築
+ * - 未知 region code (= AWS_REGIONS に無い文字列) は無視 (= UI に壊れた option を出さない)
+ */
+export function resolveRegionOptions(
+  supportedRegions: readonly string[] | undefined,
+  baseOptions: readonly SelectProps.Option[],
+): readonly SelectProps.Option[] {
+  if (!supportedRegions || supportedRegions.length === 0) return baseOptions;
+  const allowed = new Set(supportedRegions);
+  const intersection = baseOptions.filter((o) => o.value && allowed.has(o.value));
+  // 宣言が無効 (= AWS_REGIONS と 1 件もマッチしない) のときは base に倒す。
+  // ここで空配列を返すと wizard が壊れるので fail-safe。
+  return intersection.length > 0 ? intersection : baseOptions;
 }
 
 /**
@@ -258,6 +279,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             // が ap-northeast-1 に集中するのを防ぐ)。 未宣言なら従来通り
             // DEFAULT_AWS_REGION にフォールバック。 operator は wizard で override 可能。
             defaultRegion: meta?.defaultRegion ?? DEFAULT_AWS_REGION.code,
+            ...(meta?.supportedRegions ? { supportedRegions: meta.supportedRegions } : {}),
           };
         });
     });
@@ -559,21 +581,23 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
                     {
                       id: "region",
                       header: t("event_create.col_region"),
-                      cell: (r) => (
-                        <Select
-                          selectedOption={
-                            REGION_OPTIONS.find((o) => o.value === r.defaultRegion) ??
-                            REGION_OPTIONS[0]
-                          }
-                          options={REGION_OPTIONS}
-                          onChange={({ detail }) =>
-                            updateProblemRow(r.problemId, {
-                              defaultRegion: detail.selectedOption?.value ?? r.defaultRegion,
-                            })
-                          }
-                          expandToViewport
-                        />
-                      ),
+                      cell: (r) => {
+                        const options = resolveRegionOptions(r.supportedRegions, REGION_OPTIONS);
+                        return (
+                          <Select
+                            selectedOption={
+                              options.find((o) => o.value === r.defaultRegion) ?? options[0]
+                            }
+                            options={[...options]}
+                            onChange={({ detail }) =>
+                              updateProblemRow(r.problemId, {
+                                defaultRegion: detail.selectedOption?.value ?? r.defaultRegion,
+                              })
+                            }
+                            expandToViewport
+                          />
+                        );
+                      },
                     },
                   ]}
                 />

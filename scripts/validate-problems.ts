@@ -64,7 +64,57 @@ function checkCrossRefs(metaPath: string, meta: Metadata): ValidationError[] {
     ...checkScoringOutputRefs(meta, yaml, cfnTemplate),
     ...checkEndpointOutputRefs(meta, yaml, cfnTemplate),
     ...checkDashboardSlotFiles(meta, dir),
+    ...checkRegionConsistency(meta),
   ];
+}
+
+/**
+ * Issue #1201 Phase 2: `defaultRegion` / `supportedRegions` の整合性 check。
+ *
+ *   - 両 field とも AWS region 形式 `^[a-z]{2,3}-[a-z]+-\d+$` であること
+ *   - `defaultRegion` 宣言 + `supportedRegions` 宣言 の場合、 `defaultRegion ∈
+ *     supportedRegions` であること (= wizard が picker から拾えない region に倒れない)
+ *   - `supportedRegions` が空配列のときは 「宣言したのに空」 として reject
+ *
+ * 未宣言 (= optional 未使用) は OK (= 後方互換)。
+ */
+export function checkRegionConsistency(meta: Metadata): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const REGION_RE = /^[a-z]{2,3}-[a-z]+-\d{1,2}$/;
+  const defaultRegion = typeof meta.defaultRegion === "string" ? meta.defaultRegion : undefined;
+  const supportedRegions = Array.isArray(meta.supportedRegions)
+    ? (meta.supportedRegions as unknown[])
+    : undefined;
+
+  if (defaultRegion !== undefined && !REGION_RE.test(defaultRegion)) {
+    errors.push(
+      `defaultRegion="${defaultRegion}" は AWS region 形式と一致しません (例: ap-northeast-1)`,
+    );
+  }
+  if (supportedRegions !== undefined) {
+    if (supportedRegions.length === 0) {
+      errors.push(
+        "supportedRegions が空配列です。 宣言するなら 1 件以上指定するか field 自体を省略してください",
+      );
+    }
+    for (const r of supportedRegions) {
+      if (typeof r !== "string" || !REGION_RE.test(r)) {
+        errors.push(
+          `supportedRegions に AWS region 形式でない値が含まれています: ${JSON.stringify(r)}`,
+        );
+      }
+    }
+    if (
+      defaultRegion !== undefined &&
+      supportedRegions.every((r) => typeof r === "string") &&
+      !supportedRegions.includes(defaultRegion)
+    ) {
+      errors.push(
+        `defaultRegion="${defaultRegion}" が supportedRegions=${JSON.stringify(supportedRegions)} に含まれていません (= wizard で picker から選べない region を初期値にしている)`,
+      );
+    }
+  }
+  return errors;
 }
 
 function checkScoringOutputRefs(
