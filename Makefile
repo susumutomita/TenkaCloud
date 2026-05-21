@@ -50,8 +50,12 @@ check-template-security: ; bun run scripts/check-template-security.ts
 # Issue #951 sub-2: 問題 template.yaml の構造的整合性 (= !Ref / !GetAtt が declared resource を指す)
 check-template-cfn-refs: ; bun run scripts/check-template-cfn-refs.ts
 audit-deps:    ; bun run audit:dependencies
-check:         install lint test validate-problems check-problems-index check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs audit-deps check-synth
-before-commit: lint test validate-problems check-problems-index check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs audit-deps check-synth
+# `check-problems-index` は submodule (= TenkaCloudChallenge) 側 catalog CI に責任を移譲した
+# ため、 本体 before-commit / check からは外す。 platform 側 build:problems-index を走らせると
+# catalog repo の biome JSON formatter (= 別 lock 版) と微妙な drift が出てしまうため、
+# index.json の正本性は catalog 側で担保する設計。
+check:         install lint test validate-problems check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs audit-deps check-synth
+before-commit: lint test validate-problems check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs audit-deps check-synth
 
 # `cdk synth` が通ることを保証 (= ts-node / tsx の module resolution、 stack 構築の type error
 # 等を本番 deploy 前にキャッチ)。 Makefile placeholder env で全 stack を synth するので AWS 認証は不要。

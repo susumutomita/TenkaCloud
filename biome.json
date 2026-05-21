@@ -20,7 +20,8 @@
       "!**/cdk.out",
       "!**/coverage",
       "!**/build",
-      "!references"
+      "!references",
+      "!problems"
     ]
   },
   "formatter": {
