@@ -25,6 +25,34 @@ const LOCALE_DICTIONARIES_NAME: Record<LocaleCode, string> = {
   en: "English",
 };
 
+interface TeamNameDraft {
+  readonly trimmed: string;
+  readonly invalid: boolean;
+}
+
+interface TeamNameSubmitState extends TeamNameDraft {
+  readonly sessionToken?: string;
+  readonly submitting: boolean;
+}
+
+export function describeTeamNameDraft(teamName: string): TeamNameDraft {
+  const trimmed = teamName.trim();
+  return {
+    trimmed,
+    invalid: teamName.length > 0 && !TEAM_NAME_RE.test(trimmed),
+  };
+}
+
+export function canSubmitTeamName(state: TeamNameSubmitState): boolean {
+  return !!state.sessionToken && state.trimmed.length > 0 && !state.invalid && !state.submitting;
+}
+
+export function formatTeamSetupSubmitError(err: unknown, validationMessage: string): string {
+  if (err instanceof PortalValidationError) return validationMessage;
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
 /**
  * 競技者がログイン直後に通る team name 入力ページ。 `PATCH /portal/me` でサーバ側
  * `displayTeamName` を設定し、 AuthProvider のセッションを更新して `/` に戻る。
@@ -45,16 +73,23 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const trimmed = teamName.trim();
-  const invalid = teamName.length > 0 && !TEAM_NAME_RE.test(trimmed);
-  const canSubmit = !!auth.session?.sessionToken && trimmed.length > 0 && !invalid && !submitting;
+  const draft = describeTeamNameDraft(teamName);
+  const canSubmit = canSubmitTeamName({
+    ...draft,
+    sessionToken: auth.session?.sessionToken,
+    submitting,
+  });
 
   const handleSubmit = async () => {
     if (!canSubmit || !auth.session) return;
     setSubmitting(true);
     setError(null);
     try {
-      const view = await updateTeamName(config.apiBaseUrl, auth.session.sessionToken, trimmed);
+      const view = await updateTeamName(
+        config.apiBaseUrl,
+        auth.session.sessionToken,
+        draft.trimmed,
+      );
       auth.updateSession({
         teamName: view.team.teamName,
         teamNameSetByCompetitor: view.team.teamNameSetByCompetitor,
@@ -66,11 +101,7 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
         navigate("/login");
         return;
       }
-      if (err instanceof PortalValidationError) {
-        setError(t("team_setup.validation_failed"));
-      } else {
-        setError(err instanceof Error ? err.message : String(err));
-      }
+      setError(formatTeamSetupSubmitError(err, t("team_setup.validation_failed")));
     } finally {
       setSubmitting(false);
     }
@@ -120,14 +151,14 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
                 label={t("team_setup.field_label")}
                 description={t("team_setup.field_description")}
                 constraintText={t("team_setup.field_constraint")}
-                errorText={invalid ? t("team_setup.field_invalid_format") : undefined}
+                errorText={draft.invalid ? t("team_setup.field_invalid_format") : undefined}
               >
                 <Input
                   value={teamName}
                   placeholder={t("team_setup.field_placeholder")}
                   disabled={submitting}
                   onChange={({ detail }) => setTeamName(detail.value)}
-                  invalid={invalid}
+                  invalid={draft.invalid}
                 />
               </FormField>
               <Button
