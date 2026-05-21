@@ -85,6 +85,75 @@ function eventsToPhaseStatus(events: readonly StackProgressEvent[]): PhaseStatus
 }
 
 /**
+ * Phase 2: Building の status を判定する。
+ * - CFn 進行が観測されていれば必ず complete (= CodeBuild は成功して CFn に渡した)
+ * - 観測されていない場合は status のみから推定 (= PENDING / IN_PROGRESS / FAILED / terminal)
+ */
+export function deriveBuildingStatus(
+  status: DeploymentStatus,
+  hasObservedCfn: boolean,
+): PhaseStatus {
+  if (hasObservedCfn) return "complete";
+  if (status === "PENDING") return "pending";
+  if (status === "IN_PROGRESS") return "in-progress";
+  if (status === "FAILED") return "failed";
+  // terminal statuses (= COMPLETE / DELETING / DELETED / EXPIRED / AUTO_DELETED) は build 通過済。
+  return "complete";
+}
+
+const CFN_SKIPPED_TERMINAL_STATUSES: ReadonlySet<DeploymentStatus> = new Set([
+  "DELETING",
+  "DELETED",
+  "EXPIRED",
+  "AUTO_DELETED",
+]);
+
+/**
+ * CFn 未割当 (= events 空) 時の cfn-deploy phase status を status だけから推定する。
+ */
+function deriveCfnStatusWithoutEvents(status: DeploymentStatus): PhaseStatus {
+  if (status === "COMPLETE") return "complete";
+  if (status === "FAILED") return "pending";
+  if (CFN_SKIPPED_TERMINAL_STATUSES.has(status)) return "skipped";
+  return "pending";
+}
+
+/**
+ * Phase 3: CloudFormation Deploy の status を判定する。
+ * Issue #818: 優先順位 (1) stackStatus が権威 (2) event history (= LogicalId 別最新)
+ * (3) status + 観測有無の組み合わせ。
+ */
+export function deriveCfnDeployStatus(
+  status: DeploymentStatus,
+  stackProgress: StackProgress | null,
+): PhaseStatus {
+  const fromStackStatus = stackStatusToPhaseStatus(stackProgress?.stackStatus);
+  if (fromStackStatus !== undefined) return fromStackStatus;
+  const events = stackProgress?.events ?? [];
+  if (events.length === 0) return deriveCfnStatusWithoutEvents(status);
+  return eventsToPhaseStatus(events);
+}
+
+const FINAL_STATUS_FROM_DEPLOYMENT: Partial<Record<DeploymentStatus, PhaseStatus>> = {
+  COMPLETE: "complete",
+  FAILED: "failed",
+  DELETING: "in-progress",
+  DELETED: "skipped",
+  EXPIRED: "failed",
+  AUTO_DELETED: "skipped",
+};
+
+/**
+ * Phase 5: Complete / Teardown の status を deployment.status から判定する。
+ */
+export function deriveFinalStatus(status: DeploymentStatus): PhaseStatus {
+  const direct = FINAL_STATUS_FROM_DEPLOYMENT[status];
+  if (direct !== undefined) return direct;
+  if (COMPLETE_STATUSES.has(status)) return "complete";
+  return "pending";
+}
+
+/**
  * 5 phase 派生のコア関数。`stackProgress` は未取得 (= null) を許容する:
  * その場合 `Building` / `CloudFormation Deploy` は status だけから推定する。
  */
@@ -96,92 +165,22 @@ export function derivePhases(
   const events = stackProgress?.events ?? [];
   const hasObservedCfn = events.length > 0 || (stackProgress?.resources.length ?? 0) > 0;
 
-  // Phase 1: Enqueued — deployment row が存在する時点で常に Complete。
-  const enqueued: DeployPhase = {
-    id: "enqueued",
-    name: "Enqueued",
-    status: "complete",
-  };
-
-  // Phase 2: Building — CodeBuild step。
-  // - CFn 進行が観測されている (= events / resources がある) → Build は Complete
-  // - status=FAILED かつ CFn 進行が観測されていない → Build で Failed (= CodeBuild 失敗)
-  // - status=IN_PROGRESS かつ CFn 未観測 → In Progress
-  // - status=PENDING → Pending
-  // - status=COMPLETE / DELETING / DELETED / EXPIRED / AUTO_DELETED → Complete (terminal)
-  let buildingStatus: PhaseStatus;
-  if (hasObservedCfn) {
-    buildingStatus = "complete";
-  } else if (status === "PENDING") {
-    buildingStatus = "pending";
-  } else if (status === "IN_PROGRESS") {
-    buildingStatus = "in-progress";
-  } else if (status === "FAILED") {
-    buildingStatus = "failed";
-  } else {
-    // terminal statuses — CFn が観測できなくても build は通っていた。
-    buildingStatus = "complete";
-  }
-  const building: DeployPhase = {
-    id: "building",
-    name: "Building",
-    status: buildingStatus,
-  };
-
-  // Phase 3: CloudFormation Deploy — stack events を見る。
-  // CFn 未割当 (= events 空 + status=PENDING/IN_PROGRESS) は Pending。
-  // status=FAILED かつ events 空 → 上の Building で Failed を消化したので CFn 側は Pending のまま。
-  let cfnStatus: PhaseStatus;
-  // Issue #818: 優先順位 (1) stackStatus が権威 (2) event history (= LogicalId 別最新)
-  // (3) status + 観測有無の組み合わせ
-  const fromStackStatus = stackStatusToPhaseStatus(stackProgress?.stackStatus);
-  if (fromStackStatus !== undefined) {
-    cfnStatus = fromStackStatus;
-  } else if (events.length === 0) {
-    if (status === "COMPLETE") cfnStatus = "complete";
-    else if (status === "FAILED") cfnStatus = "pending";
-    else if (
-      status === "DELETING" ||
-      status === "DELETED" ||
-      status === "EXPIRED" ||
-      status === "AUTO_DELETED"
-    )
-      cfnStatus = "skipped";
-    else cfnStatus = "pending";
-  } else {
-    cfnStatus = eventsToPhaseStatus(events);
-  }
-  const cfnDeploy: DeployPhase = {
-    id: "cfn-deploy",
-    name: "CloudFormation Deploy",
-    status: cfnStatus,
-  };
-
-  // Phase 4: Health Check — 将来枠。常に Skipped。
-  const healthCheck: DeployPhase = {
-    id: "health-check",
-    name: "Health Check",
-    status: "skipped",
-    note: "Skipped — will be wired to HealthCheck Lambda in a future iteration",
-  };
-
-  // Phase 5: Complete / Teardown — deployment.status を素直に。
-  let finalStatus: PhaseStatus;
-  if (status === "COMPLETE") finalStatus = "complete";
-  else if (status === "FAILED") finalStatus = "failed";
-  else if (status === "DELETING") finalStatus = "in-progress";
-  else if (status === "DELETED") finalStatus = "skipped";
-  else if (status === "EXPIRED") finalStatus = "failed";
-  else if (status === "AUTO_DELETED") finalStatus = "skipped";
-  else if (COMPLETE_STATUSES.has(status)) finalStatus = "complete";
-  else finalStatus = "pending";
-  const complete: DeployPhase = {
-    id: "complete",
-    name: "Complete / Teardown",
-    status: finalStatus,
-  };
-
-  return [enqueued, building, cfnDeploy, healthCheck, complete];
+  return [
+    { id: "enqueued", name: "Enqueued", status: "complete" },
+    { id: "building", name: "Building", status: deriveBuildingStatus(status, hasObservedCfn) },
+    {
+      id: "cfn-deploy",
+      name: "CloudFormation Deploy",
+      status: deriveCfnDeployStatus(status, stackProgress),
+    },
+    {
+      id: "health-check",
+      name: "Health Check",
+      status: "skipped",
+      note: "Skipped — will be wired to HealthCheck Lambda in a future iteration",
+    },
+    { id: "complete", name: "Complete / Teardown", status: deriveFinalStatus(status) },
+  ];
 }
 
 /**
@@ -233,6 +232,74 @@ export interface LogLine {
   readonly text: string;
 }
 
+function enqueuedPhaseLines(deployment: DeploymentSummary): LogLine[] {
+  const ts = formatLogTimestamp(deployment.createdAt);
+  return [
+    { header: false, timestamp: ts, text: `Enqueued deployment ${deployment.jobId}` },
+    {
+      header: false,
+      timestamp: ts,
+      text: `tenantId=${deployment.tenantId} problemId=${deployment.problemId} teamName=${deployment.teamName}`,
+    },
+  ];
+}
+
+function buildingPhaseLines(stackProgress: StackProgress | null): LogLine[] {
+  return [
+    stackProgress?.consoleUrl
+      ? { header: false, text: `CodeBuild console: ${stackProgress.consoleUrl}` }
+      : { header: false, text: "CodeBuild console URL not yet available" },
+  ];
+}
+
+function cfnDeployPhaseLines(stackProgress: StackProgress | null): LogLine[] {
+  const events = stackProgress?.events ?? [];
+  if (events.length === 0) {
+    return [{ header: false, text: "No CloudFormation events observed yet." }];
+  }
+  return events.map((e) => {
+    const reason = e.resourceStatusReason ? ` — ${e.resourceStatusReason}` : "";
+    return {
+      header: false,
+      timestamp: formatLogTimestamp(e.timestamp),
+      text: `${e.resourceStatus} ${e.logicalResourceId} (${e.resourceType})${reason}`,
+    };
+  });
+}
+
+function completePhaseLines(deployment: DeploymentSummary): LogLine[] {
+  const lines: LogLine[] = [
+    {
+      header: false,
+      timestamp: formatLogTimestamp(deployment.updatedAt),
+      text: `Deployment status: ${deployment.status}`,
+    },
+  ];
+  if (deployment.failureReason) {
+    lines.push({ header: false, text: `Failure reason: ${deployment.failureReason}` });
+  }
+  return lines;
+}
+
+function phaseBodyLines(
+  phase: DeployPhase,
+  deployment: DeploymentSummary,
+  stackProgress: StackProgress | null,
+): LogLine[] {
+  switch (phase.id) {
+    case "enqueued":
+      return enqueuedPhaseLines(deployment);
+    case "building":
+      return buildingPhaseLines(stackProgress);
+    case "cfn-deploy":
+      return cfnDeployPhaseLines(stackProgress);
+    case "health-check":
+      return [{ header: false, text: phase.note ?? "Skipped" }];
+    case "complete":
+      return completePhaseLines(deployment);
+  }
+}
+
 /**
  * 5 phase を 1 本の terminal log に展開する。phase ヘッダ行 + events 行を順に並べる。
  */
@@ -242,79 +309,9 @@ export function buildTerminalLog(
   phases: readonly DeployPhase[],
 ): readonly LogLine[] {
   const lines: LogLine[] = [];
-
   for (const phase of phases) {
-    lines.push({
-      header: true,
-      text: `> ${phase.name} [${phase.status}]`,
-    });
-
-    switch (phase.id) {
-      case "enqueued":
-        lines.push({
-          header: false,
-          timestamp: formatLogTimestamp(deployment.createdAt),
-          text: `Enqueued deployment ${deployment.jobId}`,
-        });
-        lines.push({
-          header: false,
-          timestamp: formatLogTimestamp(deployment.createdAt),
-          text: `tenantId=${deployment.tenantId} problemId=${deployment.problemId} teamName=${deployment.teamName}`,
-        });
-        break;
-      case "building":
-        if (stackProgress?.consoleUrl) {
-          lines.push({
-            header: false,
-            text: `CodeBuild console: ${stackProgress.consoleUrl}`,
-          });
-        } else {
-          lines.push({
-            header: false,
-            text: "CodeBuild console URL not yet available",
-          });
-        }
-        break;
-      case "cfn-deploy": {
-        const events = stackProgress?.events ?? [];
-        if (events.length === 0) {
-          lines.push({
-            header: false,
-            text: "No CloudFormation events observed yet.",
-          });
-        } else {
-          for (const e of events) {
-            const reason = e.resourceStatusReason ? ` — ${e.resourceStatusReason}` : "";
-            lines.push({
-              header: false,
-              timestamp: formatLogTimestamp(e.timestamp),
-              text: `${e.resourceStatus} ${e.logicalResourceId} (${e.resourceType})${reason}`,
-            });
-          }
-        }
-        break;
-      }
-      case "health-check":
-        lines.push({
-          header: false,
-          text: phase.note ?? "Skipped",
-        });
-        break;
-      case "complete":
-        lines.push({
-          header: false,
-          timestamp: formatLogTimestamp(deployment.updatedAt),
-          text: `Deployment status: ${deployment.status}`,
-        });
-        if (deployment.failureReason) {
-          lines.push({
-            header: false,
-            text: `Failure reason: ${deployment.failureReason}`,
-          });
-        }
-        break;
-    }
+    lines.push({ header: true, text: `> ${phase.name} [${phase.status}]` });
+    lines.push(...phaseBodyLines(phase, deployment, stackProgress));
   }
-
   return lines;
 }
