@@ -37,6 +37,12 @@ export CDK_SOURCE_NAME="${CDK_SOURCE_NAME:-source.zip}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TENKACLOUD_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# `problems/` は TenkaCloudChallenge repo の git submodule。 ローカル clone 直後や
+# 浅い CI checkout だと中身が空のまま source.zip に同梱されてしまうので、 ここで明示的に
+# initialize / update する。 既存環境では no-op (= 早期 return)。
+echo "[prepare-source-bundle] ensuring problems/ submodule is initialized..."
+(cd "${TENKACLOUD_ROOT}" && git submodule update --init --recursive --force problems)
+
 echo "[prepare-source-bundle] bucket=${CDK_PARAM_S3_BUCKET_NAME} key=${CDK_SOURCE_NAME}"
 
 # bucket を作成 (= 既存なら skip、 idempotent)

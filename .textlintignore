@@ -30,11 +30,11 @@ references/**
 README.md
 CONTRIBUTING.md
 apps/*/README.md
-# 問題ディレクトリ直下の README は JA narrative + EN AWS 製品名 (Session Manager / Parameter Store /
-# Auto Scaling 等) を多用する。 spellcheck-tech-word が AWS 公式の英語製品名を
-# "セッション" 等のカタカナに書き換える誤検出を起こすため、 JA / EN とも除外する。
-problems/**/README.md
-problems/**/README.en.md
+# `problems/` 自体は TenkaCloudChallenge repo の git submodule で、 本体 lint policy を
+# 適用する責務は無いため全配下を除外する (= submodule 側の catalog CI で validate を担当)。
+# 問題ディレクトリ直下の README が JA narrative + EN AWS 製品名 (Session Manager /
+# Parameter Store / Auto Scaling 等) を多用する件もここで合わせて除外される。
+problems/**
 
 # 外部 spec の vendor 翻訳。 textlint の社内 style rule (= 句点 / 接続詞 / 曖昧表現)
 # を当てると原典の意図がずれる。
