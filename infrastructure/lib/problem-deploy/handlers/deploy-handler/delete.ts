@@ -1,5 +1,6 @@
 import { GetCommand, UpdateCommand, type UpdateCommandInput } from "@aws-sdk/lib-dynamodb";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
+import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
   type DeployDeleteRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
@@ -59,7 +60,7 @@ export async function requestTeardown(
   }
 
   const updatedAt = new Date(nowMs).toISOString();
-  const transition = await transitionTeardownToDeleting(shared, tenantId, jobId, updatedAt);
+  const transition = await transitionTeardownToDeleting(shared, tenantId, jobId, updatedAt, nowMs);
   if (transition) return transition;
 
   // Phase 2.2 (Issue #459): delete も cross-account 化。verified=true 行が見つかった
@@ -105,10 +106,11 @@ async function transitionTeardownToDeleting(
   tenantId: string,
   jobId: string,
   updatedAt: string,
+  nowMs: number,
 ): Promise<Extract<TeardownOutcome, { kind: "race" }> | undefined> {
   try {
     await shared.ddb.send(
-      new UpdateCommand(buildTeardownUpdate(shared, tenantId, jobId, updatedAt)),
+      new UpdateCommand(buildTeardownUpdate(shared, tenantId, jobId, updatedAt, nowMs)),
     );
     return undefined;
   } catch (err) {
@@ -124,11 +126,15 @@ function buildTeardownUpdate(
   tenantId: string,
   jobId: string,
   updatedAt: string,
+  nowMs: number,
 ): UpdateCommandInput {
   return {
     TableName: shared.tableName,
     Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-    UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt",
+    // Issue #1200: DELETING に遷移したタイミングで expiresAt を 7 日 retention に refresh する
+    // (= teardown が成功して DELETED に最終遷移するまでに competition session TTL (8h) が
+    // 切れて DDB から消える事故を防ぐ。 DELETING 中の audit trail を保護する)。
+    UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt, expiresAt = :expiresAt",
     ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :i, :c, :f)",
     ExpressionAttributeNames: { "#s": "status" },
     ExpressionAttributeValues: {
@@ -139,6 +145,7 @@ function buildTeardownUpdate(
       ":i": "IN_PROGRESS",
       ":c": "COMPLETE",
       ":f": "FAILED",
+      ":expiresAt": deploymentTerminalExpiresAt(nowMs),
     },
   };
 }
@@ -175,7 +182,9 @@ async function compensateFailedTeardownPublish(
       new UpdateCommand({
         TableName: shared.tableName,
         Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-        UpdateExpression: "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason",
+        // Issue #1200: FAILED 化のタイミングで expiresAt を 7 日 retention に refresh。
+        UpdateExpression:
+          "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason, expiresAt = :expiresAt",
         ConditionExpression: "tenantId = :tenantId AND #s = :deleting",
         ExpressionAttributeNames: { "#s": "status" },
         ExpressionAttributeValues: {
@@ -184,6 +193,7 @@ async function compensateFailedTeardownPublish(
           ":updatedAt": new Date(nowMs).toISOString(),
           ":reason": "Failed to publish DeployDeleteRequested event",
           ":tenantId": tenantId,
+          ":expiresAt": deploymentTerminalExpiresAt(nowMs),
         },
       }),
     );
