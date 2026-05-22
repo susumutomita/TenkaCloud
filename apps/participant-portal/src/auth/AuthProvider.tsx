@@ -114,6 +114,17 @@ export function AuthProvider({ config, children }: { config: AppConfig; children
     [config],
   );
 
+  // LP iframe からの demo 起動: `?demo=1` を query に乗せて開くと、 dev-mock モード
+  // のときだけ固定 team で auto-login して dashboard を即表示する。 production
+  // (`mode === "backend"`) では何もしない (= teamLoginKey の入力を強制)。
+  useEffect(() => {
+    if (session) return;
+    if (config.mode !== "dev-mock") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("demo") !== "1") return;
+    void login("demo-team");
+  }, [session, config.mode, login]);
+
   const logout = useCallback(() => {
     clearSession();
     setSession(null);
