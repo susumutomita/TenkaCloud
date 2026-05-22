@@ -15,6 +15,7 @@ import {
   type ScoreEventView,
 } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
+import { DEV_MOCK_SCORE_EVENTS } from "../auth/dev-mock-fixtures";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
 import { describeAgo, formatOccurredAtTooltip } from "../lib/format";
@@ -94,6 +95,15 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
       clearInterval(interval);
     };
   }, [isBackend, sessionToken, tick]);
+
+  // LP 「モックで試す」 動線: dev-mock mode では backend を叩かないので、 fixture を
+  // 1 度だけ seed する (= 競技中のスコア推移 chart + 履歴 table をデモで見せる)。
+  useEffect(() => {
+    if (isBackend) return;
+    if (!sessionToken) return;
+    if (data) return;
+    setData(DEV_MOCK_SCORE_EVENTS);
+  }, [isBackend, sessionToken, data]);
 
   const series = useMemo(() => (data ? buildCumulativeSeries(data.entries) : []), [data]);
 

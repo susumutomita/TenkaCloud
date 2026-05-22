@@ -60,6 +60,13 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
 
   const openConsole = async (jobId: string) => {
     if (!sessionToken || pending) return;
+    // dev-mock mode: backend を呼ぶと localhost への fetch が "Failed to fetch" になるため、
+    // 試行せず info メッセージで「モックでは AWS Console を開けません」 を表示する (= LP demo
+    // 訪問者が clicked して赤い error alert に驚かないようにする)。
+    if (!isBackend) {
+      setOpenError(t("sso_credentials.mock_open_blocked"));
+      return;
+    }
     setPending(jobId);
     setOpenError(null);
     try {
@@ -90,8 +97,12 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
       )}
       {openError && (
         <Alert
-          type="error"
-          header={t("sso_credentials.open_failed_header")}
+          type={isBackend ? "error" : "info"}
+          header={
+            isBackend
+              ? t("sso_credentials.open_failed_header")
+              : t("sso_credentials.mock_open_header")
+          }
           dismissible
           onDismiss={() => setOpenError(null)}
         >
@@ -157,6 +168,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
                   sessionToken={sessionToken}
                   jobId={problem.jobId}
                   onAuthError={auth.logout}
+                  mockBlocked={!isBackend}
                 />
               )}
             </SpaceBetween>

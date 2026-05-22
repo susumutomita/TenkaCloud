@@ -2,25 +2,29 @@ import type {
   LeaderboardResponse,
   NotificationsResponse,
   ParticipantTeamView,
+  ScoreEventsResponse,
 } from "../api/portal-client";
 
 /**
  * `mode === "dev-mock"` のとき backend が存在しないので、 portal の各画面が空 state
- * になってしまう (= LP の 「モックで試す」 動線でユーザーが操作できなくなる)。
+ * になってしまう (= LP の 「モックで試す」 動線で competitor が操作できなくなる)。
  *
- * 本 module は TeamViewProvider が dev-mock 起動時に seed する固定 fixture を提供する。
- * production (= backend mode) では参照されない (= bundle dead-code 化される — Vite の
- * tree-shake と `import.meta.env.MODE !== "test"` ガードは不要、 caller 側で if 分岐
- * してくれば OK)。
+ * 本 module は dev-mock 起動時に各 page が seed する固定 fixture を提供する。
+ * production (= backend mode) では参照されない (= caller 側で `if (isBackend) return`
+ * ガードする想定)。
  *
- * 内容は実イベントを想像できる形にしたい:
- *   - 3 problem (hello-world / hello-world-battle / microservice-migration-battle)
- *   - 6 team の leaderboard (= デモチームが上位、 競争感を出す)
- *   - 2 通の operator notification (= 開始 + ヒント reveal)
+ * 内容は 「AWS ハンズオン演習」 として一目で分かる 2 問構成 (= 利用者方針):
+ *   - 1 Challenge (= S3 静的 site でホスト + flag 提出)
+ *   - 1 Battle   (= Lambda + API Gateway の uptime 維持)
+ *
+ * 過剰に問題を増やすと 「何を見せたいか」 がブレるので、 demo は 2 問固定。
  */
 
 const NOW_ISO = "2026-05-22T13:42:00Z";
 const DEPLOY_EXPIRES_AT = Math.floor(Date.parse("2026-05-22T19:42:00Z") / 1000);
+
+const CHALLENGE_PROBLEM_ID = "s3-static-site-hosting";
+const BATTLE_PROBLEM_ID = "lambda-api-uptime";
 
 export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
   team: {
@@ -32,12 +36,12 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
   problems: [
     {
       jobId: "01HZX0K3M3K9ZQHB3MRQHBA1B2",
-      problemId: "hello-world",
+      problemId: CHALLENGE_PROBLEM_ID,
       region: "ap-northeast-1",
       awsAccountId: "999999999999",
       status: "COMPLETE",
       stackOutputs: {
-        Endpoint: "https://hello-world.demo.tenkacloud.example/",
+        WebsiteEndpoint: "https://demo-tenkacloud-static.s3-website-ap-northeast-1.amazonaws.com/",
       },
       expiresAt: DEPLOY_EXPIRES_AT,
       score: 800,
@@ -53,12 +57,12 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
     },
     {
       jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
-      problemId: "hello-world-battle",
+      problemId: BATTLE_PROBLEM_ID,
       region: "ap-northeast-1",
       awsAccountId: "999999999999",
       status: "COMPLETE",
       stackOutputs: {
-        Endpoint: "https://hello-world-battle.demo.tenkacloud.example/",
+        ApiEndpoint: "https://demo-api.execute-api.ap-northeast-1.amazonaws.com/prod/health",
       },
       expiresAt: DEPLOY_EXPIRES_AT,
       score: 420,
@@ -70,34 +74,9 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       },
       applicationStatus: {
         overall: "healthy",
-        healthyCount: 3,
-        totalCount: 3,
+        healthyCount: 1,
+        totalCount: 1,
         checkedAt: "2026-05-22T13:41:00Z",
-      },
-      deployLog: { cursor: "", entries: [] },
-      createdAt: "2026-05-22T13:00:00Z",
-    },
-    {
-      jobId: "01HZX0KKJ9T75GMRJWPC36KS81",
-      problemId: "microservice-migration-battle",
-      region: "us-east-1",
-      awsAccountId: "999999999999",
-      status: "COMPLETE",
-      stackOutputs: {
-        Endpoint: "https://migration.demo.tenkacloud.example/",
-      },
-      expiresAt: DEPLOY_EXPIRES_AT,
-      score: 180,
-      lastScoredAt: "2026-05-22T13:40:30Z",
-      lastResult: "fail",
-      scoring: {
-        kind: "uptime-multi",
-      },
-      applicationStatus: {
-        overall: "degraded",
-        healthyCount: 2,
-        totalCount: 3,
-        checkedAt: "2026-05-22T13:40:30Z",
       },
       deployLog: { cursor: "", entries: [] },
       createdAt: "2026-05-22T13:00:00Z",
@@ -113,54 +92,45 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       rank: 1,
       teamId: "team-alpha",
       teamName: "Alpha Squad",
-      score: 1860,
+      score: 1620,
       completedProblems: 2,
-      totalProblems: 3,
+      totalProblems: 2,
       isMyTeam: false,
     },
     {
       rank: 2,
       teamId: "team-bravo",
       teamName: "Bravo Crew",
-      score: 1640,
-      completedProblems: 2,
-      totalProblems: 3,
+      score: 1480,
+      completedProblems: 1,
+      totalProblems: 2,
       isMyTeam: false,
     },
     {
       rank: 3,
       teamId: "team-demo-1",
       teamName: "Demo Team",
-      score: 1400,
+      score: 1220,
       completedProblems: 1,
-      totalProblems: 3,
+      totalProblems: 2,
       isMyTeam: true,
     },
     {
       rank: 4,
       teamId: "team-delta",
       teamName: "Delta Force",
-      score: 1120,
+      score: 940,
       completedProblems: 1,
-      totalProblems: 3,
+      totalProblems: 2,
       isMyTeam: false,
     },
     {
       rank: 5,
       teamId: "team-echo",
       teamName: "Echo Five",
-      score: 940,
-      completedProblems: 1,
-      totalProblems: 3,
-      isMyTeam: false,
-    },
-    {
-      rank: 6,
-      teamId: "team-foxtrot",
-      teamName: "Foxtrot Six",
       score: 720,
       completedProblems: 0,
-      totalProblems: 3,
+      totalProblems: 2,
       isMyTeam: false,
     },
   ],
@@ -174,16 +144,89 @@ export const DEV_MOCK_NOTIFICATIONS: NotificationsResponse = {
     {
       notificationId: "notif-002",
       title: "ヒントが解放されました",
-      body: "hello-world-battle の Phase 2 ヒントが開放されました。 ペナルティを払って閲覧できます。",
+      body: `${BATTLE_PROBLEM_ID} の Phase 2 ヒントが開放されました。 ペナルティを払って閲覧できます。`,
       severity: "info",
       occurredAt: "2026-05-22T13:30:00Z",
     },
     {
       notificationId: "notif-001",
       title: "競技開始",
-      body: "TenkaCloud Battle (demo) を開始しました。 各チームに 3 問が deploy されています。 頑張ってください!",
+      body: "TenkaCloud Battle (demo) を開始しました。 各チームに 2 問が deploy されています。 頑張ってください!",
       severity: "info",
       occurredAt: NOW_ISO,
+    },
+  ],
+};
+
+/**
+ * 自チームの score 変動履歴。 ScoreEventsPage が直接 fetch する API の dev-mock 版。
+ * occurredAt 降順 (新しい順) で並べる。
+ */
+export const DEV_MOCK_SCORE_EVENTS: ScoreEventsResponse = {
+  entries: [
+    {
+      jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
+      problemId: BATTLE_PROBLEM_ID,
+      source: "uptime",
+      points: 60,
+      result: "ok",
+      occurredAt: "2026-05-22T13:41:00Z",
+    },
+    {
+      jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
+      problemId: BATTLE_PROBLEM_ID,
+      source: "uptime",
+      points: 60,
+      result: "ok",
+      occurredAt: "2026-05-22T13:40:00Z",
+    },
+    {
+      jobId: "01HZX0K3M3K9ZQHB3MRQHBA1B2",
+      problemId: CHALLENGE_PROBLEM_ID,
+      source: "flag",
+      points: 800,
+      result: "ok",
+      occurredAt: "2026-05-22T13:38:11Z",
+    },
+    {
+      jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
+      problemId: BATTLE_PROBLEM_ID,
+      source: "hint",
+      points: -50,
+      result: "ok",
+      occurredAt: "2026-05-22T13:35:00Z",
+    },
+    {
+      jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
+      problemId: BATTLE_PROBLEM_ID,
+      source: "uptime",
+      points: 60,
+      result: "ok",
+      occurredAt: "2026-05-22T13:31:00Z",
+    },
+    {
+      jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
+      problemId: BATTLE_PROBLEM_ID,
+      source: "uptime",
+      points: 60,
+      result: "ok",
+      occurredAt: "2026-05-22T13:21:00Z",
+    },
+    {
+      jobId: "01HZX0K3M3K9ZQHB3MRQHBA1B2",
+      problemId: CHALLENGE_PROBLEM_ID,
+      source: "flag-wrong",
+      points: -10,
+      result: "wrong",
+      occurredAt: "2026-05-22T13:15:00Z",
+    },
+    {
+      jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
+      problemId: BATTLE_PROBLEM_ID,
+      source: "uptime",
+      points: 60,
+      result: "ok",
+      occurredAt: "2026-05-22T13:01:00Z",
     },
   ],
 };

@@ -78,7 +78,13 @@ function normalizeLocalstackEndpoint(value: unknown): string | undefined {
 
 export async function loadConfig(): Promise<AppConfig> {
   try {
-    const res = await fetch("/runtime-config.json", { cache: "no-store" });
+    // GitHub Pages の sub-path 配信 (= `/TenkaCloud/portal-demo/` 等) でも 正しく
+    // runtime-config.json を引けるよう、 Vite の `BASE_URL` (= build 時の `--base`) を
+    // prefix にする。 root 配信 (= CloudFront) では `BASE_URL = "/"` なので従来通り
+    // `/runtime-config.json` を引く。
+    const res = await fetch(`${import.meta.env.BASE_URL}runtime-config.json`, {
+      cache: "no-store",
+    });
     if (!res.ok) {
       console.info("[config] no runtime-config.json (dev mode), using fallback");
       return DEV_FALLBACK;
