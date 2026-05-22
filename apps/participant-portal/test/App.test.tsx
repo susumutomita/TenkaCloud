@@ -62,7 +62,7 @@ describe("App", () => {
       const user = userEvent.setup();
       renderApp("/login");
 
-      const input = screen.getByPlaceholderText("チームに配布されたキー");
+      const input = screen.getByPlaceholderText("例: demo (何でも OK)");
       await user.type(input, "ABCDEF1234");
 
       const button = await screen.findByRole("button", { name: "サインイン" });
@@ -82,7 +82,7 @@ describe("App", () => {
       const user = userEvent.setup();
       // 1 度ログインして session を作る
       const { unmount } = renderApp("/login");
-      const input = screen.getByPlaceholderText("チームに配布されたキー");
+      const input = screen.getByPlaceholderText("例: demo (何でも OK)");
       await user.type(input, "TEAM-A-KEY");
       await user.click(await screen.findByRole("button", { name: "サインイン" }));
       await screen.findByRole("heading", { level: 1, name: /ようこそ/ });

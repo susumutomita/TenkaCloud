@@ -11,6 +11,11 @@ on:
     branches: [main]
     paths:
       - 'landing/**'
+      # 「モックで試す」 動線で配信する participant-portal が rebuild 対象なので、
+      # apps/participant-portal/** の変更でも Pages を再 deploy する。 さもないと
+      # portal demo の fixtures / UI 変更が landing 経由でしか反映されない (= PR #1217
+      # で score events fixture / mock info UX が live に反映されなかった原因)。
+      - 'apps/participant-portal/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 

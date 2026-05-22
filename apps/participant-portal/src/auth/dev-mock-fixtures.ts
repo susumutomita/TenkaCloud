@@ -44,13 +44,14 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         WebsiteEndpoint: "https://demo-tenkacloud-static.s3-website-ap-northeast-1.amazonaws.com/",
       },
       expiresAt: DEPLOY_EXPIRES_AT,
-      score: 800,
-      lastScoredAt: "2026-05-22T13:38:11Z",
-      lastResult: "ok",
+      // 未提出状態でデモを始める (= LP visitor が submit ボタンを押すまでの体験を作る)。
+      // flag が正解になったあとの体験は FlagSubmissionPanel が local state で celebration を
+      // 出すので、 view 側の更新は必須ではない。
+      score: 0,
       scoring: {
         kind: "flag",
         points: 800,
-        flagSubmitted: true,
+        flagSubmitted: false,
       },
       deployLog: { cursor: "", entries: [] },
       createdAt: "2026-05-22T13:00:00Z",

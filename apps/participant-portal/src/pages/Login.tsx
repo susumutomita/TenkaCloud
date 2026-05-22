@@ -29,6 +29,10 @@ export function LoginPage({ config }: { config: AppConfig }) {
   const [teamLoginKey, setTeamLoginKey] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // LP 「モックで試す」 動線では backend が存在せず login key 文字列 が任意 (= 競技
+  // 主催者が発行する短命キーは無い)。 ユーザーに 「何を入れればいいか分からない」 と
+  // 思わせないために info banner / placeholder / description を dev-mock 用に出し分ける。
+  const isMock = config.mode !== "backend";
 
   // 既ログイン状態で /login に来た場合は home に redirect (= 別 key 黙々上書き防止)。
   // ready=false の間は loadSession の結果待ちで何も決められないので render を保留。
@@ -80,15 +84,25 @@ export function LoginPage({ config }: { config: AppConfig }) {
                 {error}
               </Alert>
             )}
-            <Alert type="info" header={t("login.info_header")}>
-              {t("login.info_body")}
+            <Alert
+              type="info"
+              header={isMock ? t("login.mock_info_header") : t("login.info_header")}
+            >
+              {isMock ? t("login.mock_info_body") : t("login.info_body")}
             </Alert>
-            <FormField label={t("login.field_label")} description={t("login.field_description")}>
+            <FormField
+              label={t("login.field_label")}
+              description={
+                isMock ? t("login.mock_field_description") : t("login.field_description")
+              }
+            >
               <Input
                 value={teamLoginKey}
-                type="password"
+                type={isMock ? "text" : "password"}
                 onChange={({ detail }) => setTeamLoginKey(detail.value)}
-                placeholder={t("login.field_placeholder")}
+                placeholder={
+                  isMock ? t("login.mock_field_placeholder") : t("login.field_placeholder")
+                }
                 disabled={submitting}
               />
             </FormField>

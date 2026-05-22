@@ -88,6 +88,17 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
     setSubmitting(true);
     setError(null);
     try {
+      // dev-mock mode: backend が無いので 直接 session を更新する (= localStorage に永続化、
+      // `auth.updateSession` が saveSession を呼ぶ)。 backend mode と同じ UX (= submit 後
+      // home に navigate) を保ち、 「Failed to fetch」 赤エラーを回避する。
+      if (config.mode !== "backend") {
+        auth.updateSession({
+          teamName: draft.trimmed,
+          teamNameSetByCompetitor: true,
+        });
+        navigate("/");
+        return;
+      }
       const view = await updateTeamName(
         config.apiBaseUrl,
         auth.session.sessionToken,
