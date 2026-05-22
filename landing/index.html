@@ -771,6 +771,34 @@ section .lead {
   display: inline-flex; align-items: center; gap: 6px;
 }
 
+/* ============== CONTACT FORM ============== */
+.contact-form {
+  max-width: 680px; margin: 32px auto 0; display: flex; flex-direction: column; gap: 18px;
+  text-align: left; color: var(--paper);
+}
+.contact-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.contact-field { display: flex; flex-direction: column; gap: 6px; }
+.contact-label { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.78); }
+.contact-label em { color: #ff8b6b; font-style: normal; }
+.contact-field input,
+.contact-field select,
+.contact-field textarea {
+  background: rgba(255,255,255,0.06); color: var(--paper);
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;
+  padding: 10px 12px; font: inherit; font-size: 14px; line-height: 1.5;
+  width: 100%;
+}
+.contact-field input:focus,
+.contact-field select:focus,
+.contact-field textarea:focus {
+  outline: 2px solid rgba(255,255,255,0.4); outline-offset: 1px;
+}
+.contact-fineprint { font-size: 11px; color: rgba(255,255,255,0.58); margin: 0; line-height: 1.6; }
+.contact-fineprint a { color: rgba(255,255,255,0.86); text-decoration: underline; }
+.contact-feedback { margin: 4px 0 0; padding: 10px 14px; border-radius: 8px; font-size: 13px; }
+.contact-feedback.success { background: rgba(76,175,80,0.18); color: #c6f3cb; }
+.contact-feedback.error { background: rgba(252,77,117,0.18); color: #ffd3dd; }
+
 /* ============== FOOTER ============== */
 footer { padding: 28px 0 24px; background: var(--paper-3); color: var(--ink-3); }
 footer .wrap {
@@ -792,9 +820,12 @@ footer .legal {
   grid-column: 1 / -1;
   margin-top: 8px; padding-top: 8px;
   border-top: 0;
-  display: flex; justify-content: space-between;
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px;
   font-size: 10px; color: var(--ink-4);
 }
+footer .legal a { color: var(--ink-3); text-decoration: none; }
+footer .legal a:hover { text-decoration: underline; }
+footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; }
 
 /* ============== RESPONSIVE ============== */
 @media (max-width: 980px) {
@@ -838,6 +869,18 @@ footer .legal {
   footer .legal { flex-direction: column; align-items: flex-start; gap: 4px; }
   /* section の縦 padding を mobile で詰める */
   section { padding: 36px 0; }
+  /* Contact form 2col → 1col stack */
+  .contact-row { grid-template-columns: 1fr; gap: 12px; }
+  .contact-form { gap: 14px; }
+  .contact-field input, .contact-field select, .contact-field textarea { font-size: 16px; }
+  /* iOS Safari の input zoom 防止に 16px を維持 */
+  /* ent-cta inner padding を mobile で詰める */
+  .ent-cta { padding: 28px 22px; }
+  .ent-cta h2 { font-size: clamp(22px, 6vw, 30px); }
+  /* hero CTA を横並びから縦並びへ (= タッチターゲット拡大) */
+  .hero .cta-row a { width: 100%; justify-content: center; padding: 10px 16px; }
+  /* nav-right brand 隠す (= ロゴはあるので冗長) */
+  .nav-brand-sub { display: none; }
 }
 @media (max-width: 420px) {
   /* 最小幅 (iPhone SE 等) で最後の調整 — 横スクロール / 文字溢れ 防止 */
@@ -1280,11 +1323,50 @@ footer .legal {
       <div class="eyebrow" data-i18n="ent.eyebrow">どのプランがよいか分からない</div>
       <h2 data-i18n="ent.h2">まずは話してみませんか。</h2>
       <p data-i18n="ent.p">クラウド人材育成プログラム、 内製化推進、 継続的な AWS 演習 — 規模 / 期間 / 参加者像を聞いた上で、 適切なプランを一緒に決めます。</p>
+    </div>
+    <form id="contact-form" class="contact-form" onsubmit="return submitContactForm(event);">
+      <div class="contact-row">
+        <label class="contact-field">
+          <span class="contact-label" data-i18n="contact.field_name">お名前 <em>*</em></span>
+          <input type="text" name="name" required maxlength="80" autocomplete="name" />
+        </label>
+        <label class="contact-field">
+          <span class="contact-label" data-i18n="contact.field_company">所属組織</span>
+          <input type="text" name="company" maxlength="120" autocomplete="organization" />
+        </label>
+      </div>
+      <div class="contact-row">
+        <label class="contact-field">
+          <span class="contact-label" data-i18n="contact.field_email">メールアドレス <em>*</em></span>
+          <input type="email" name="email" required maxlength="120" autocomplete="email" />
+        </label>
+        <label class="contact-field">
+          <span class="contact-label" data-i18n="contact.field_plan">興味のあるプラン</span>
+          <select name="plan">
+            <option value="" data-i18n="contact.plan_unknown">未定 / 相談したい</option>
+            <option value="starter">Starter (50万円 / 回)</option>
+            <option value="hosted">Hosted Event (150万円 / 回)</option>
+            <option value="annual">Annual Arena (600万円 / 年)</option>
+            <option value="oss" data-i18n="contact.plan_oss">OSS 自己ホストの相談</option>
+            <option value="other" data-i18n="contact.plan_other">その他 / カスタム</option>
+          </select>
+        </label>
+      </div>
+      <label class="contact-field">
+        <span class="contact-label" data-i18n="contact.field_scale">想定規模 / 開催時期</span>
+        <input type="text" name="scale" maxlength="120" placeholder="例: 20 人 / 2026 年 Q3" />
+      </label>
+      <label class="contact-field">
+        <span class="contact-label" data-i18n="contact.field_message">メッセージ</span>
+        <textarea name="message" rows="4" maxlength="2000" data-i18n-attr-placeholder="contact.field_message_placeholder" placeholder="解決したい課題、 参加者の技術レベル、 過去の研修の振り返り 等、 何でもお書きください。"></textarea>
+      </label>
+      <p class="contact-fineprint" data-i18n="contact.fineprint">送信先: TenkaCloud 運営 (富田進)。 ご記入いただいた情報は、 お問い合わせ対応と見積もり提示のみに利用します (= <a href="./privacy.html">プライバシーポリシー</a>)。</p>
       <div class="btns">
-        <a class="btn-primary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="ent.cta1">お問い合わせ</span> →</a>
+        <button class="btn-primary" type="submit"><span data-i18n="contact.submit">送信する</span> →</button>
         <a class="btn-ghost" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="ent.cta2">GitHub を見る</span> →</a>
       </div>
-    </div>
+      <p id="contact-feedback" class="contact-feedback" hidden></p>
+    </form>
   </div>
 </section>
 
@@ -1323,6 +1405,11 @@ footer .legal {
     <p class="disclaimer" data-i18n="footer.disclaimer">TenkaCloud は独立した OSS プロジェクトであり、 Amazon Web Services, Inc. またはその関連会社による提供・後援・承認を受けたものではありません。 AWS および関連する名称は Amazon.com, Inc. またはその関連会社の商標です。</p>
     <div class="legal">
       <span data-i18n="footer.legal">© 2026 TenkaCloud · Susumu Tomita · Apache License 2.0</span>
+      <span class="footer-legal-links">
+        <a href="./privacy.html"><span data-i18n="footer.privacy">プライバシーポリシー</span></a> ·
+        <a href="./terms.html"><span data-i18n="footer.terms">利用規約</span></a> ·
+        <a href="./legal.html"><span data-i18n="footer.tokushoho">特定商取引法に基づく表記</span></a>
+      </span>
       <span>v0.2.0 · ja · en</span>
     </div>
   </div>
@@ -1506,13 +1593,28 @@ footer .legal {
       "ent.p": "クラウド人材育成プログラム、 内製化推進、 継続的な AWS 演習 — 規模 / 期間 / 参加者像を聞いた上で、 適切なプランを一緒に決めます。",
       "ent.cta1": "お問い合わせ",
       "ent.cta2": "GitHub を見る",
+      "contact.field_name": "お名前 *",
+      "contact.field_company": "所属組織",
+      "contact.field_email": "メールアドレス *",
+      "contact.field_plan": "興味のあるプラン",
+      "contact.plan_unknown": "未定 / 相談したい",
+      "contact.plan_oss": "OSS 自己ホストの相談",
+      "contact.plan_other": "その他 / カスタム",
+      "contact.field_scale": "想定規模 / 開催時期",
+      "contact.field_message": "メッセージ",
+      "contact.field_message_placeholder": "解決したい課題、 参加者の技術レベル、 過去の研修の振り返り 等、 何でもお書きください。",
+      "contact.fineprint": "送信先: TenkaCloud 運営 (富田進)。 ご記入いただいた情報は、 お問い合わせ対応と見積もり提示のみに利用します (= <a href=\"./privacy.html\">プライバシーポリシー</a>)。",
+      "contact.submit": "送信する",
 
       "footer.tag": "AWS を題材にしたクラウド実戦演習を開催するための OSS ツール。 Apache 2.0。",
       "footer.disclaimer": "TenkaCloud は独立した OSS プロジェクトであり、 Amazon Web Services, Inc. またはその関連会社による提供・後援・承認を受けたものではありません。 AWS および関連する名称は Amazon.com, Inc. またはその関連会社の商標です。",
       "footer.p0": "概要", "footer.p1": "問題カタログ", "footer.p2": "参加者ポータル", "footer.p3": "運営コンソール",
       "footer.usage": "使い方", "footer.u0": "はじめる", "footer.u1": "ドキュメント", "footer.u2": "運用ガイド",
       "footer.r0": "ドキュメント", "footer.r1": "アーキテクチャ", "footer.r2": "Changelog",
-      "footer.legal": "© 2026 TenkaCloud · Susumu Tomita · Apache License 2.0"
+      "footer.legal": "© 2026 TenkaCloud · Susumu Tomita · Apache License 2.0",
+      "footer.privacy": "プライバシーポリシー",
+      "footer.terms": "利用規約",
+      "footer.tokushoho": "特定商取引法に基づく表記"
     },
     en: {
       "nav.product": "Product",
@@ -1687,13 +1789,28 @@ footer .legal {
       "ent.p": "Cloud enablement programs, internal onboarding, recurring AWS drills — share your scale, cadence, and audience, and we'll figure out the right setup together.",
       "ent.cta1": "Get in touch",
       "ent.cta2": "View on GitHub",
+      "contact.field_name": "Name *",
+      "contact.field_company": "Organization",
+      "contact.field_email": "Email *",
+      "contact.field_plan": "Plan you're interested in",
+      "contact.plan_unknown": "Not sure / let's talk",
+      "contact.plan_oss": "OSS self-host help",
+      "contact.plan_other": "Other / custom",
+      "contact.field_scale": "Expected scale / timing",
+      "contact.field_message": "Message",
+      "contact.field_message_placeholder": "Tell us the problem you're trying to solve, your participants' technical level, lessons from past trainings — anything that helps.",
+      "contact.fineprint": "Sent to: TenkaCloud (Susumu Tomita). Your input is used only for replying and quoting (see <a href=\"./privacy.html\">Privacy Policy</a>).",
+      "contact.submit": "Send",
 
       "footer.tag": "An open-source tool for hosting hands-on cloud drills on real AWS. Apache 2.0.",
       "footer.disclaimer": "TenkaCloud is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Amazon Web Services, Inc. AWS and related marks are trademarks of Amazon.com, Inc. or its affiliates.",
       "footer.p0": "Overview", "footer.p1": "Problems", "footer.p2": "Participant portal", "footer.p3": "Operator console",
       "footer.usage": "Usage", "footer.u0": "Start", "footer.u1": "Docs", "footer.u2": "Operations guide",
       "footer.r0": "Docs", "footer.r1": "Architecture", "footer.r2": "Changelog",
-      "footer.legal": "© 2026 TenkaCloud · Susumu Tomita · Apache License 2.0"
+      "footer.legal": "© 2026 TenkaCloud · Susumu Tomita · Apache License 2.0",
+      "footer.privacy": "Privacy Policy",
+      "footer.terms": "Terms of Service",
+      "footer.tokushoho": "Business identification (Japan TokushoHo)"
     }
   };
 
@@ -1840,6 +1957,69 @@ footer .legal {
   var tick = 0;
   renderScoreboard(tick);
   setInterval(function () { tick += 1; renderScoreboard(tick); }, 1500);
+
+  // Contact form submission. backend が無いので 入力内容を mailto: URL に組み立てて
+  // ユーザーの mail client を開く (= GitHub Pages の static site にできる最小実装)。
+  // 将来 backend (= Lambda Function URL) を立てたら fetch に差し替え。
+  window.submitContactForm = function (event) {
+    event.preventDefault();
+    var form = event.target;
+    var data = new FormData(form);
+    var name = String(data.get("name") || "").trim();
+    var email = String(data.get("email") || "").trim();
+    var company = String(data.get("company") || "").trim();
+    var plan = String(data.get("plan") || "").trim();
+    var scale = String(data.get("scale") || "").trim();
+    var message = String(data.get("message") || "").trim();
+    var feedback = document.getElementById("contact-feedback");
+    if (!name || !email) {
+      feedback.hidden = false;
+      feedback.className = "contact-feedback error";
+      feedback.textContent = "お名前とメールアドレスは必須です。";
+      return false;
+    }
+    var lines = [
+      "TenkaCloud お問い合わせ",
+      "",
+      "お名前: " + name,
+      "所属組織: " + (company || "(未記入)"),
+      "メールアドレス: " + email,
+      "興味のあるプラン: " + (plan || "(未指定)"),
+      "想定規模 / 開催時期: " + (scale || "(未記入)"),
+      "",
+      "メッセージ:",
+      message || "(なし)",
+      "",
+      "---",
+      "送信元: " + window.location.href,
+    ];
+    var body = encodeURIComponent(lines.join("\n"));
+    var subject = encodeURIComponent("[TenkaCloud] " + (plan || "お問い合わせ") + " — " + name);
+    // mailto: で運営者の窓口に飛ばす。 アドレスは GitHub プロフィール経由でも辿れる
+    // 公開窓口を使う想定 (= privacy.html / legal.html では 「請求があった場合に開示」
+    // を明示しているので、 ここでは GitHub Discussions URL にフォールバックする選択肢
+    // も保持)。
+    var primary = "mailto:oyster880+tenkacloud@gmail.com?subject=" + subject + "&body=" + body;
+    var discussionUrl =
+      "https://github.com/susumutomita/TenkaCloud/discussions/new?category=general&body=" + body;
+
+    // ユーザーの環境で mailto: が開けない (= web mail のみ) ケースに備え、 1.5 秒後に
+    // 「mailto が起動しなければ GitHub Discussions で送信」 リンクを提示する。
+    var w = window.open(primary, "_self");
+    feedback.hidden = false;
+    feedback.className = "contact-feedback success";
+    feedback.innerHTML =
+      "メーラーを起動しました。 もし開かない場合は、 こちらの " +
+      '<a href="' +
+      discussionUrl +
+      '" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline">' +
+      "GitHub Discussions から送信</a> もご利用いただけます。 ご連絡お待ちしています。";
+    if (!w) {
+      // mailto: opener が拒否された (= popup blocker)。 location.href fallback。
+      window.location.href = primary;
+    }
+    return false;
+  };
 })();
 </script>
 
