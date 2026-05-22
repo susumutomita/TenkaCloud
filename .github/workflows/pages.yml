@@ -50,8 +50,15 @@ jobs:
       - name: Install dependencies (ignore lifecycle scripts)
         run: bun install --frozen-lockfile --ignore-scripts
       - name: Build participant-portal demo
+        # `bun run --filter <pkg>` 経由だと workspace 解決のタイミングで "No packages
+        # matched the filter" を返すことがあるため、 workspace ディレクトリへ cd して
+        # 直接 vite を呼ぶ。 base=/TenkaCloud/portal-demo/ で BrowserRouter basename +
+        # 静的 asset path の両方を解決する (= main.tsx 側は `import.meta.env.BASE_URL`)。
+        working-directory: apps/participant-portal
         run: |
-          bun run --filter @TenkaCloud/participant-portal vite build --base=/TenkaCloud/portal-demo/
+          bun x vite build --base=/TenkaCloud/portal-demo/
+      - name: Stage participant-portal demo under landing/portal-demo/
+        run: |
           mkdir -p landing/portal-demo
           cp -r apps/participant-portal/dist/. landing/portal-demo/
       # 全 third-party action は **commit SHA で pin** する (tag は移動可能なため supply-chain

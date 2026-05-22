@@ -197,6 +197,34 @@ export class PortalScoringGateError extends Error {
   }
 }
 
+export type AssumeRoleStage = "competitor" | "participant_viewer";
+
+/**
+ * Issue #1197: backend が `assume_role_failed` を返した時に stage / reason を保持する error。
+ *
+ * stage:
+ *  - `competitor`: tenant の CompetitorDeployRole を AssumeRole 失敗。 ExternalId 不一致 /
+ *    trust policy 不備 / role 未作成 が主因。
+ *  - `participant_viewer`: 問題ごとの ParticipantViewerRole 失敗。 stack output の
+ *    `ParticipantViewerRoleArn` が trust policy で CompetitorDeployRole を許可していない、
+ *    または ExternalId (= jobId) が伝搬していない。
+ *
+ * UI は stage に応じて 「どちら側を直すべきか」 を競技者 / operator に案内できる。
+ */
+export class PortalAssumeRoleError extends Error {
+  constructor(
+    public readonly stage: AssumeRoleStage,
+    public readonly reason: string,
+  ) {
+    super(`Portal AssumeRole failed (${stage}): ${reason}`);
+    this.name = "PortalAssumeRoleError";
+  }
+}
+
+function isAssumeRoleStage(value: unknown): value is AssumeRoleStage {
+  return value === "competitor" || value === "participant_viewer";
+}
+
 function buildPortalUrl(apiBaseUrl: string, path: string): URL {
   const base = apiBaseUrl.endsWith("/") ? apiBaseUrl : `${apiBaseUrl}/`;
   return new URL(path, base);
@@ -213,12 +241,21 @@ interface PortalFetchOptions {
   readonly throwOn409?: boolean;
   /** 404 を `undefined` として返す (= "存在しない" を許容するエンドポイント)。 */
   readonly returnUndefinedOn404?: boolean;
+  /**
+   * Issue #1197: 500 + error="assume_role_failed" を `PortalAssumeRoleError` に変換する。
+   * SSO / CLI credentials のように 「どちらの AssumeRole 段で落ちたか」 を UI が必要と
+   * する endpoint で opt-in する。 他の 500 は従来通り `PortalNetworkError`。
+   */
+  readonly throwOnAssumeRoleFailed?: boolean;
 }
 
 interface PortalErrorBody {
   readonly error?: string;
   readonly startsAt?: string;
   readonly endsAt?: string;
+  /** Issue #1197: assume_role_failed の付加情報。 stage = どちらの段で落ちたか、 reason = STS error name。 */
+  readonly stage?: string;
+  readonly reason?: string;
 }
 
 function applyPortalQuery(url: URL, query?: Readonly<Record<string, string>>): void {
@@ -248,6 +285,29 @@ function isScoringGateError(
   return error === "scoring_not_started" || error === "scoring_ended" || error === "scoring_locked";
 }
 
+async function throwConflictError(res: Response): Promise<never> {
+  const body = await readPortalErrorBody(res);
+  // Issue #1006: scoring gate 系の 409 は startsAt / endsAt を持つ専用 error にする。
+  if (isScoringGateError(body.error)) {
+    throw new PortalScoringGateError(body.error, body.startsAt, body.endsAt);
+  }
+  throw new PortalValidationError(body.error ?? "conflict");
+}
+
+/**
+ * Issue #1197: 500 + error="assume_role_failed" を `PortalAssumeRoleError` に変換する。
+ * 他の 500 は呼び元の throwOnAssumeRoleFailed が opt-in なときだけ通り、 fallback で
+ * `PortalNetworkError` に倒す (= 後続の `if (!res.ok)` が拾う想定)。
+ */
+async function throwAssumeRoleFailedError(res: Response): Promise<never> {
+  const body = await readPortalErrorBody(res);
+  if (body.error === "assume_role_failed") {
+    const stage = isAssumeRoleStage(body.stage) ? body.stage : "competitor";
+    throw new PortalAssumeRoleError(stage, body.reason ?? "Unknown");
+  }
+  throw new PortalNetworkError(res.status, body.error ?? "internal_error");
+}
+
 async function throwPortalErrorResponse(res: Response, options: PortalFetchOptions): Promise<void> {
   if (res.status === StatusCodes.UNAUTHORIZED) throw new PortalAuthError();
   if (res.status === StatusCodes.BAD_REQUEST && options.throwOn400) {
@@ -255,12 +315,10 @@ async function throwPortalErrorResponse(res: Response, options: PortalFetchOptio
     throw new PortalValidationError(body.error ?? "invalid_request");
   }
   if (res.status === StatusCodes.CONFLICT && options.throwOn409) {
-    const body = await readPortalErrorBody(res);
-    // Issue #1006: scoring gate 系の 409 は startsAt / endsAt を持つ専用 error にする。
-    if (isScoringGateError(body.error)) {
-      throw new PortalScoringGateError(body.error, body.startsAt, body.endsAt);
-    }
-    throw new PortalValidationError(body.error ?? "conflict");
+    await throwConflictError(res);
+  }
+  if (res.status === StatusCodes.INTERNAL_SERVER_ERROR && options.throwOnAssumeRoleFailed) {
+    await throwAssumeRoleFailedError(res);
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -447,6 +505,9 @@ export async function getLeaderboardScoreEvents(
  * SSO Credentials: AWS Console ワンクリック login URL を発行する API。
  * 競技者が click すると Lambda が STS AssumeRole + federation で SigninToken を
  * 発行し、URL を返す。frontend は window.open でその URL を開く (= 自前 AWS ログイン不要)。
+ *
+ * Issue #1197: 500 + assume_role_failed を `PortalAssumeRoleError` (= stage / reason 付き)
+ * に変換する。 UI が 「どちらの AssumeRole 段で落ちたか」 を表示できる。
  */
 export async function getConsoleSigninUrl(
   apiBaseUrl: string,
@@ -458,9 +519,44 @@ export async function getConsoleSigninUrl(
     apiBaseUrl,
     "portal/me/console-signin-url",
     teamLoginKey,
-    { query: { jobId }, throwOn400: true, signal },
+    { query: { jobId }, throwOn400: true, throwOnAssumeRoleFailed: true, signal },
   )) as { loginUrl: string };
   return data.loginUrl;
+}
+
+/**
+ * Issue #1197: CLI / SDK 用一時資格情報。 backend は Console federation と同じ 2 段
+ * AssumeRole (= CompetitorDeployRole → ParticipantViewerRole) を実行し、 federation
+ * endpoint を呼ばずに credentials を返す。
+ *
+ * UI は受け取った credentials を:
+ *   - shell snippet (= `export AWS_ACCESS_KEY_ID=...`) として表示・コピー
+ *   - 残り TTL countdown を表示 (= expiration ISO 8601)
+ * の用途に使う。 localStorage 等への persist は避ける (= 漏洩窓を伸ばさない)。
+ */
+export interface CliCredentialsView {
+  readonly accessKeyId: string;
+  readonly secretAccessKey: string;
+  readonly sessionToken: string;
+  /** ISO 8601 string。 STS Credentials.Expiration を直接 echo。 */
+  readonly expiration: string;
+  readonly region: string;
+  readonly awsAccountId: string;
+}
+
+export async function getCliCredentials(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<CliCredentialsView> {
+  const data = (await portalFetch<{ credentials: CliCredentialsView }>(
+    apiBaseUrl,
+    "portal/me/cli-credentials",
+    teamLoginKey,
+    { query: { jobId }, throwOn400: true, throwOnAssumeRoleFailed: true, signal },
+  )) as { credentials: CliCredentialsView };
+  return data.credentials;
 }
 
 /**

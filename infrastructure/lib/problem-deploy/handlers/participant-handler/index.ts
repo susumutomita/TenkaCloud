@@ -25,7 +25,7 @@ import { revealHint } from "./reveal-hint.js";
 import { respondError, withBearerAuth } from "./route-helpers.js";
 import { listScoreEvents } from "./score-events.js";
 import { buildParticipantSharedResources } from "./shared.js";
-import { getConsoleSigninUrl } from "./sso.js";
+import { getCliCredentials, getConsoleSigninUrl } from "./sso.js";
 import { submitFlag } from "./submit-flag.js";
 import { setDisplayTeamName } from "./update.js";
 
@@ -41,6 +41,7 @@ const SLOT_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
  *   GET   /portal/me                    — Authorization: Bearer <teamLoginKey>
  *                                         → { team, problems[] }
  *   GET   /portal/me/console-signin-url — AWS Console federation login URL 発行
+ *   GET   /portal/me/cli-credentials    — Issue #1197: CLI / SDK 用一時資格情報を発行 (= 同 AssumeRole chain、 federation endpoint 不要)
  *   PATCH /portal/me                    — body: { teamName: string }
  *   POST  /portal/me/submit-flag        — body: { problemId: string, flag: string }
  *
@@ -75,8 +76,38 @@ app.get("/portal/me/console-signin-url", (c) =>
     if (!jobId) return respondError(c, "missing_jobid");
     const outcome = await getConsoleSigninUrl(shared, token, jobId);
     if (outcome.kind === "ok") return c.json({ loginUrl: outcome.loginUrl }, HTTP_OK);
+    if (outcome.kind === "assume_role_failed") {
+      // Issue #1197: 500 body に stage / reason を含める (= UI が 「どちらの段で / なぜ
+      // 落ちたか」 を表示できる)。 機微情報 (= ARN や ExternalId 値) は含めない、 種別のみ。
+      return respondError(c, outcome.kind, { stage: outcome.stage, reason: outcome.reason });
+    }
     return respondError(c, outcome.kind);
   }),
+);
+
+/**
+ * Issue #1197: CLI / SDK 用一時資格情報。 Console federation と同じ 2 段 AssumeRole で発行
+ * した credentials を JSON で返す。 IAM scope は Console と同一 (= ParticipantViewerRole)。
+ *
+ * rate limit: WRITE_LOW — 「credentials 発行」 は 1 セッション 1 回相当の希少 operation、
+ * brute force 標的にもなり得るので submit-flag より緩めに 12 req/min で絞る。
+ */
+app.get("/portal/me/cli-credentials", (c) =>
+  withBearerAuth(
+    c,
+    "cli-credentials",
+    async (token) => {
+      const jobId = c.req.query("jobId");
+      if (!jobId) return respondError(c, "missing_jobid");
+      const outcome = await getCliCredentials(shared, token, jobId);
+      if (outcome.kind === "ok") return c.json({ credentials: outcome.credentials }, HTTP_OK);
+      if (outcome.kind === "assume_role_failed") {
+        return respondError(c, outcome.kind, { stage: outcome.stage, reason: outcome.reason });
+      }
+      return respondError(c, outcome.kind);
+    },
+    RATE_LIMITS.WRITE_LOW,
+  ),
 );
 
 // Issue #767: notifications は frontend polling が 5s 間隔 → READ_HIGH (= 2 RPS sustained / 60 burst)。
