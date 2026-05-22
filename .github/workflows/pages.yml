@@ -38,6 +38,22 @@ jobs:
       - name: Setup safe-chain
         continue-on-error: true
         run: bunx @aikidosec/safe-chain setup-ci
+      # Build participant-portal as static demo (dev-mock mode) and place under
+      # landing/portal-demo/ so the LP can iframe a live mock. base=/TenkaCloud/portal-demo/
+      # matches GitHub Pages project-page subpath; BrowserRouter picks this up via
+      # `import.meta.env.BASE_URL`.
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: 1.3.11
+      - name: Install dependencies (ignore lifecycle scripts)
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Build participant-portal demo
+        run: |
+          bun run --filter @TenkaCloud/participant-portal vite build --base=/TenkaCloud/portal-demo/
+          mkdir -p landing/portal-demo
+          cp -r apps/participant-portal/dist/. landing/portal-demo/
       # 全 third-party action は **commit SHA で pin** する (tag は移動可能なため supply-chain
       # 攻撃面になる)。version comment は更新の参考、書き換えは Renovate に任せる。
       # actions/configure-pages v5.0.0

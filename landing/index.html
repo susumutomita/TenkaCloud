@@ -246,6 +246,17 @@ section .lead {
 .extend-cta .more { font-size: 13px; color: #0066cc; text-decoration: none; }
 .extend-cta .more:hover { text-decoration: underline; }
 
+/* ============== PORTAL IFRAME (live mock demo) ============== */
+.portal-iframe {
+  width: 100%;
+  height: 520px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  display: block;
+}
+.portal-iframe-note { font-size: 11px; color: var(--ink-3); margin: 8px 0 0; line-height: 1.5; }
+
 /* ============== TWO-UP FEATURE ============== */
 .twoup { display: grid; grid-template-columns: 1fr 1fr; gap: 52px; max-width: 980px; margin: 0 auto; }
 .tile {
@@ -801,21 +812,55 @@ footer .legal {
   .nav-links { display: none; }
   .hero-grid, .twoup, .onboard-layout, .trust, .stats, .pricing-grid { grid-template-columns: 1fr; }
   .hero { padding-top: 44px; }
+  .hero-grid { gap: 40px; }
   .hero h1, .hero .sub { max-width: none; }
   .app-body { grid-template-columns: 1fr; }
   .app-sidebar { display: none; }
   .aud { grid-template-columns: 1fr; }
   .steps { grid-template-columns: 1fr; }
   .pricing-card { padding: 32px 24px; }
+  .pricing-head { margin-bottom: 36px; }
   footer .wrap { grid-template-columns: 1fr 1fr; }
   section { padding: 46px 0; }
 }
 @media (max-width: 640px) {
   .wrap, .aud { padding-left: 18px; padding-right: 18px; }
-  .hero h1 { font-size: 42px; }
+  .hero { padding-top: 36px; }
+  .hero h1 { font-size: 38px; line-height: 1.18; }
+  .hero .sub { font-size: 15px; line-height: 1.7; }
+  .hero .cta-row { gap: 18px; flex-wrap: wrap; }
   .metric-grid { grid-template-columns: 1fr 1fr; }
   .dashboard { padding: 12px; }
-  footer .wrap { grid-template-columns: 1fr; }
+  /* 4 stat → 2x2 grid (= 横並びだと narrow で潰れる) */
+  .stats { grid-template-columns: repeat(2, 1fr); gap: 20px 8px; padding: 18px 0; }
+  .stat { padding: 0 12px; }
+  .stat .n { font-size: 36px; }
+  .stat .l { font-size: 12px; }
+  /* h2 / lead が narrow で巨大化するのを抑える */
+  section h2 { font-size: clamp(26px, 7vw, 36px); }
+  .pricing-head h2 { font-size: clamp(26px, 7vw, 36px); }
+  .pricing-head p { font-size: 15px; }
+  .pricing-card { padding: 28px 22px; }
+  .pricing-price { font-size: 34px; }
+  /* audience-intro / extend section の h2 が narrow で 1 行に収まらないケースの調整 */
+  .audience-intro h2 { font-size: clamp(26px, 7vw, 36px); }
+  /* footer 2-col → 1-col、 disclaimer の余白を縮める */
+  footer .wrap { grid-template-columns: 1fr; gap: 24px; }
+  footer .legal { flex-direction: column; align-items: flex-start; gap: 4px; }
+  /* section の縦 padding を mobile で詰める */
+  section { padding: 36px 0; }
+}
+@media (max-width: 420px) {
+  /* 最小幅 (iPhone SE 等) で最後の調整 — 横スクロール / 文字溢れ 防止 */
+  .wrap, .aud { padding-left: 14px; padding-right: 14px; }
+  .hero h1 { font-size: 32px; }
+  .hero .sub { font-size: 14px; }
+  .stat .n { font-size: 30px; }
+  .pricing-card { padding: 24px 18px; }
+  .pricing-price { font-size: 30px; }
+  .pricing-list li { font-size: 12px; }
+  /* nav 右側を縮める (= ロゴと言語切替が干渉しない) */
+  .nav-right .lang { padding: 0 8px; font-size: 11px; }
 }
 </style>
 </head>
@@ -957,7 +1002,15 @@ footer .legal {
         <h3 data-i18n="modes.battle.h">Battle.</h3>
         <p data-i18n="modes.battle.p">稼働率で競う、リアルタイム対戦。毎分のヘルスチェックを生き残ったチームが、勝つ。</p>
         <div class="demo">
-          <div class="portal-preview score-events-preview">
+          <iframe
+            class="portal-iframe"
+            src="./portal-demo/?demo=1"
+            title="TenkaCloud Participant Portal — Battle demo (mock data)"
+            loading="lazy"
+            sandbox="allow-scripts allow-same-origin"
+          ></iframe>
+          <p class="portal-iframe-note" data-i18n="preview.iframe.note">↑ 実機 (mock data)。 競技中はスコア推移 / 攻撃履歴 / 問題一覧 が同じ画面で動きます。</p>
+          <div hidden class="portal-preview score-events-preview">
             <div class="portal-page-title" data-i18n="preview.score_events.title">Score events</div>
             <div class="portal-page-desc" data-i18n="preview.score_events.desc">自チームのスコア変動履歴 (30 秒ごと自動更新、新しい順 100 件まで)</div>
             <div class="portal-container">
@@ -1010,7 +1063,15 @@ footer .legal {
         <h3 data-i18n="modes.challenge.h">Challenge.</h3>
         <p data-i18n="modes.challenge.p">問題を解き、フラグを提出する。AWS の一つひとつのサービスを、ひとつずつ理解していく。</p>
         <div class="demo">
-          <div class="portal-preview">
+          <iframe
+            class="portal-iframe"
+            src="./portal-demo/?demo=1"
+            title="TenkaCloud Participant Portal — Challenge demo (mock data)"
+            loading="lazy"
+            sandbox="allow-scripts allow-same-origin"
+          ></iframe>
+          <p class="portal-iframe-note" data-i18n="preview.iframe.note2">↑ 実機 (mock data)。 競技者は自チームに deploy された問題一覧から挑戦できます。</p>
+          <div hidden class="portal-preview">
             <div class="portal-page-title" data-i18n="preview.quests.title">問題一覧 (Quests)</div>
             <div class="portal-page-desc" data-i18n="preview.quests.desc">自チームに deploy された問題のカタログ。各カードからアクセス先 URL に直接遷移できます。</div>
             <div class="portal-tabs" aria-label="カテゴリで絞り込み">
