@@ -780,9 +780,15 @@ footer a { display: block; color: var(--ink-3); text-decoration: none; font-size
 footer a:hover { color: var(--ink); text-decoration: underline; }
 footer .brand { font-size: 14px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 12px; }
 footer .tag { font-size: 10px; color: var(--ink-3); line-height: 1.6; max-width: 280px; }
+footer .disclaimer {
+  grid-column: 1 / -1;
+  margin: 16px 0 0; padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 10px; color: var(--ink-4); line-height: 1.6;
+}
 footer .legal {
   grid-column: 1 / -1;
-  margin-top: 12px; padding-top: 12px;
+  margin-top: 8px; padding-top: 8px;
   border-top: 0;
   display: flex; justify-content: space-between;
   font-size: 10px; color: var(--ink-4);
@@ -1045,7 +1051,7 @@ footer .legal {
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="aud.eyebrow">誰のための</div>
     <h2 data-i18n="aud.h2">出る人にも、開く人にも。</h2>
-    <p class="lead" data-i18n="aud.lead">個人のエンジニアから、勉強会の主催者、教育の現場まで。AWS コンソールを開かずに、競技は始まる。</p>
+    <p class="lead" data-i18n="aud.lead">個人のエンジニアから、 勉強会の主催者、 教育の現場まで。 参加者ごとの環境払い出し / ログイン / 採点 / 進捗管理 まで、 ひとつの画面で完結します。</p>
   </div>
   <div class="aud">
     <div class="col">
@@ -1111,7 +1117,7 @@ footer .legal {
       </div>
       <div class="flow sso-preview">
         <div class="credential-title">SSO Credentials</div>
-        <div class="credential-sub" data-i18n="preview.sso.desc">AWS Console にワンクリックで federate ログイン。自前の AWS アカウント不要。</div>
+        <div class="credential-sub" data-i18n="preview.sso.desc">AWS Console にワンクリックで federate ログイン。 参加者個人の AWS アカウントは不要 — 主催者が用意した環境へ、 ポータルから安全にアクセスできます。</div>
         <div class="sso-alert">
           <b data-i18n="preview.sso.howto">使い方</b>
           <span data-i18n="preview.sso.body">下のボタンを押すと新しいタブで AWS Console (CloudFormation スタック画面) が自動でログイン状態で開きます。session の TTL は 1 時間です。</span>
@@ -1275,6 +1281,7 @@ footer .legal {
       <a href="https://github.com/susumutomita/TenkaCloud/issues" target="_blank" rel="noopener noreferrer">Issues</a>
       <a href="https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer">Contribute</a>
     </div>
+    <p class="disclaimer" data-i18n="footer.disclaimer">TenkaCloud は独立した OSS プロジェクトであり、 Amazon Web Services, Inc. またはその関連会社による提供・後援・承認を受けたものではありません。 AWS および関連する名称は Amazon.com, Inc. またはその関連会社の商標です。</p>
     <div class="legal">
       <span data-i18n="footer.legal">© 2026 TenkaCloud · Susumu Tomita · Apache License 2.0</span>
       <span>v0.2.0 · ja · en</span>
@@ -1365,14 +1372,14 @@ footer .legal {
       "preview.quests.in_progress": "挑戦中",
       "preview.quests.unsolved_status": "未解答",
       "preview.quests.cleared": "⌄ 解決済み (0)",
-      "preview.sso.desc": "AWS Console にワンクリックで federate ログイン。自前の AWS アカウント不要。",
+      "preview.sso.desc": "AWS Console にワンクリックで federate ログイン。 参加者個人の AWS アカウントは不要 — 主催者が用意した環境へ、 ポータルから安全にアクセスできます。",
       "preview.sso.howto": "使い方",
       "preview.sso.body": "下のボタンを押すと新しいタブで AWS Console (CloudFormation スタック画面) が自動でログイン状態で開きます。session の TTL は 1 時間です。",
       "preview.sso.button": "AWS Console を開く",
 
       "aud.eyebrow": "誰のための",
       "aud.h2": "出る人にも、開く人にも。",
-      "aud.lead": "個人のエンジニアから、勉強会の主催者、教育の現場まで。AWS コンソールを開かずに、競技は始まる。",
+      "aud.lead": "個人のエンジニアから、 勉強会の主催者、 教育の現場まで。 参加者ごとの環境払い出し / ログイン / 採点 / 進捗管理 まで、 ひとつの画面で完結します。",
       "aud.a.role": "エンジニア",
       "aud.a.h": "実戦で、腕を上げる。",
       "aud.a.p": "本物の AWS で問題を解き、ランクを上げる。成果は履歴に残せる、技術の足跡になる。",
@@ -1456,7 +1463,8 @@ footer .legal {
       "ent.cta1": "お問い合わせ",
       "ent.cta2": "GitHub を見る",
 
-      "footer.tag": "AWS の実環境で競う、オープンソースのクラウド競技基盤。Apache 2.0。",
+      "footer.tag": "AWS を題材にしたクラウド実戦演習を開催するための OSS ツール。 Apache 2.0。",
+      "footer.disclaimer": "TenkaCloud は独立した OSS プロジェクトであり、 Amazon Web Services, Inc. またはその関連会社による提供・後援・承認を受けたものではありません。 AWS および関連する名称は Amazon.com, Inc. またはその関連会社の商標です。",
       "footer.p0": "概要", "footer.p1": "問題カタログ", "footer.p2": "参加者ポータル", "footer.p3": "運営コンソール",
       "footer.usage": "使い方", "footer.u0": "はじめる", "footer.u1": "ドキュメント", "footer.u2": "運用ガイド",
       "footer.r0": "ドキュメント", "footer.r1": "アーキテクチャ", "footer.r2": "Changelog",
@@ -1540,14 +1548,14 @@ footer .legal {
       "preview.quests.in_progress": "In progress",
       "preview.quests.unsolved_status": "Unanswered",
       "preview.quests.cleared": "⌄ Cleared (0)",
-      "preview.sso.desc": "One-click federated login to AWS Console. No personal AWS account required.",
+      "preview.sso.desc": "One-click federated login to AWS Console. No personal AWS account required — participants access the environment the host has prepared, safely from the portal.",
       "preview.sso.howto": "How to use",
       "preview.sso.body": "Press a button below to open AWS Console, already signed in, in a new tab. The session TTL is one hour.",
       "preview.sso.button": "Open AWS Console",
 
       "aud.eyebrow": "Who it's for",
       "aud.h2": "For the people who play. And the people who host.",
-      "aud.lead": "Solo engineers, meetup organizers, classrooms. Run an event, or join one — without ever opening the AWS Console.",
+      "aud.lead": "Solo engineers, meetup organizers, classrooms. Per-participant environments, login, scoring, and progress tracking — all in one screen.",
       "aud.a.role": "Engineers",
       "aud.a.h": "Sharpen on the real thing.",
       "aud.a.p": "Solve problems on real AWS, climb the rank, earn badges your résumé can prove.",
@@ -1631,7 +1639,8 @@ footer .legal {
       "ent.cta1": "Get in touch",
       "ent.cta2": "View on GitHub",
 
-      "footer.tag": "An open-source cloud-competition platform that runs on real AWS. Apache 2.0.",
+      "footer.tag": "An open-source tool for hosting hands-on cloud drills on real AWS. Apache 2.0.",
+      "footer.disclaimer": "TenkaCloud is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Amazon Web Services, Inc. AWS and related marks are trademarks of Amazon.com, Inc. or its affiliates.",
       "footer.p0": "Overview", "footer.p1": "Problems", "footer.p2": "Participant portal", "footer.p3": "Operator console",
       "footer.usage": "Usage", "footer.u0": "Start", "footer.u1": "Docs", "footer.u2": "Operations guide",
       "footer.r0": "Docs", "footer.r1": "Architecture", "footer.r2": "Changelog",
