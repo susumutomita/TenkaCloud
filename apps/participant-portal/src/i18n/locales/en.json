@@ -67,7 +67,11 @@
     "info_body": "Enter the team-level login key shared by your operator. Per-individual accounts are not created.",
     "field_label": "Team login key",
     "field_description": "Short-lived key issued by the operator at problem deploy time",
-    "field_placeholder": "Key distributed to your team"
+    "field_placeholder": "Key distributed to your team",
+    "mock_info_header": "Demo mode — any string works to sign in",
+    "mock_info_body": "In a real event you would enter the short-lived team login key issued by the operator. This demo has no backend, so anything you type signs you in as a fixed \"Demo Team\" and lets you explore the portal.",
+    "mock_field_description": "Any string is fine for the demo (e.g. demo / abc / aaa). Because there is no backend, the value is not sent to any AWS environment and is only kept in localStorage.",
+    "mock_field_placeholder": "e.g. demo (anything works)"
   },
   "team_setup": {
     "title": "Choose your team name",
@@ -285,6 +289,8 @@
     "submit_button": "Submit flag (+{points} pt)",
     "flag_field_label": "Flag (Stack Output value)",
     "flag_placeholder": "Enter value",
+    "flag_mock_placeholder": "e.g. tenkacloudsample",
+    "flag_mock_hint": "Demo mode — type `tenkacloudsample` to feel the correct-answer celebration (partial matches work too; Easter eggs like `claude` / `42` also count).",
     "ok_alert_header": "🎉 Correct!  +{delta} pt",
     "ok_alert_body": "Congratulations. Your total score is {total} pt.",
     "wrong_with_penalty_header": "Wrong ({delta} pt) — total {total} pt",

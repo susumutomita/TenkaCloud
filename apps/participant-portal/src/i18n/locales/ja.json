@@ -67,7 +67,11 @@
     "info_body": "運営から共有されたチーム単位のログインキーを入力してください。個人ごとのアカウントは作成されません。",
     "field_label": "チームログインキー",
     "field_description": "問題 deploy 時に運営が発行する短命キー",
-    "field_placeholder": "チームに配布されたキー"
+    "field_placeholder": "チームに配布されたキー",
+    "mock_info_header": "これはデモモードです — 任意の文字列でサインインできます",
+    "mock_info_body": "本番のイベントでは、 運営が発行するチームログインキー (= 短命キー) を入力します。 このデモでは backend が無いため、 何でも入力してサインインすれば、 固定の「Demo Team」 として portal の各画面を確認できます。",
+    "mock_field_description": "デモ用なので、 任意の文字列を入れてください (例: demo / abc / aaa)。 backend を経由しないため、 値は AWS 環境にも localStorage 以外にも保存されません。",
+    "mock_field_placeholder": "例: demo (何でも OK)"
   },
   "team_setup": {
     "title": "チーム名を決めよう",
@@ -285,6 +289,8 @@
     "submit_button": "Flag 提出 (+{points} pt)",
     "flag_field_label": "Flag (Stack Output 値)",
     "flag_placeholder": "値を入力",
+    "flag_mock_placeholder": "例: tenkacloudsample",
+    "flag_mock_hint": "デモモードです — `tenkacloudsample` と入力すると正解の体験が出ます (= 部分一致でも OK。 `claude` / `42` 等の Easter egg もあります)。",
     "ok_alert_header": "🎉 正解！  +{delta} pt",
     "ok_alert_body": "おめでとうございます。 合計スコアは {total} pt です。",
     "wrong_with_penalty_header": "不正解 ({delta} pt) — 累計 {total} pt",

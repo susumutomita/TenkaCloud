@@ -29,6 +29,7 @@ export function FlagSubmissionPanel({
   points,
   hints,
   onScored,
+  isMock = false,
 }: {
   apiBaseUrl: string;
   sessionToken: string;
@@ -37,14 +38,24 @@ export function FlagSubmissionPanel({
   points: number;
   hints: readonly ParticipantHintView[];
   onScored: () => Promise<void>;
+  /**
+   * dev-mock mode (= LP の 「モックで試す」 動線)。 true のとき submit を backend に投げず、
+   * local state で 「正解 → celebration」 「不正解 → 減点 + リトライ」 を再現する。
+   * 本物の AWS 環境は無いので flag の中身は問わず、 任意 1 文字以上の入力で OK とする。
+   */
+  isMock?: boolean;
 }) {
   const t = useT();
   const [flag, setFlag] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<SubmitFlagOutcome | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // dev-mock では submit 後の view refetch が空振りするので、 「celebration を出した
+  // 後は同じ panel で 提出済み 表示にしない」 (= 再度 submit form を出さない) ために
+  // local flag を保持する。
+  const [mockCleared, setMockCleared] = useState(false);
 
-  if (flagSubmitted) {
+  if (flagSubmitted || mockCleared) {
     // audit #6: 既出提出 (= reload した後の表示)。 「事務的 提出済み」 ではなく祝祭的 message。
     return (
       <Alert type="success" header={t("problem_panel.celebrate_header", { points })}>
@@ -60,9 +71,12 @@ export function FlagSubmissionPanel({
     setSubmitError(null);
     setOutcome(null);
     try {
-      const result = await submitFlag(apiBaseUrl, sessionToken, problemId, flag);
+      const result = isMock
+        ? simulateMockFlagSubmit(flag, points)
+        : await submitFlag(apiBaseUrl, sessionToken, problemId, flag);
       setOutcome(result);
-      if (shouldRefreshAfterFlagSubmit(result)) await onScored();
+      if (result.kind === "ok") setMockCleared(true);
+      if (!isMock && shouldRefreshAfterFlagSubmit(result)) await onScored();
     } catch (err) {
       setSubmitError(formatProblemPanelActionError(t, err, "problem_panel.submit_error_prefix"));
     } finally {
@@ -89,11 +103,18 @@ export function FlagSubmissionPanel({
             </Button>
           }
         >
-          <FormField label={t("problem_panel.flag_field_label")}>
+          <FormField
+            label={t("problem_panel.flag_field_label")}
+            description={isMock ? t("problem_panel.flag_mock_hint") : undefined}
+          >
             <Input
               value={flag}
               onChange={(e) => setFlag(e.detail.value)}
-              placeholder={t("problem_panel.flag_placeholder")}
+              placeholder={
+                isMock
+                  ? t("problem_panel.flag_mock_placeholder")
+                  : t("problem_panel.flag_placeholder")
+              }
               disabled={submitting}
             />
           </FormField>
@@ -140,6 +161,47 @@ export function FlagSubmissionPanel({
       )}
     </SpaceBetween>
   );
+}
+
+/**
+ * dev-mock 用 mock flag 検証。 LP visitor が submit 体験を試せるよう、 固定の
+ * 「正解」 文字列 `tenkacloudsample` (case-insensitive、 部分一致) のときに celebration を
+ * 出し、 それ以外は不正解 (= 減点 + リトライ) にする。 placeholder で答えを示唆する。
+ */
+export const MOCK_CORRECT_FLAG = "tenkacloudsample";
+
+/**
+ * Easter eggs. ふざけて submit してくれた visitor へのリワード (= 全部 正解扱い)。
+ *  - `42`               : The Hitchhiker's Guide to the Galaxy
+ *  - `claude`           : 開発で使ってる AI agent への nod
+ *  - `kaizen`           : 改善 = 日本語の karma
+ *  - `tenkadev`         : 開発者専用 dev wink
+ *  - `konnichiwa`       : ja LP visitor 向け hello
+ *  - `tenka`            : 部分マッチで通したいゆるさ
+ */
+const MOCK_EASTER_EGGS: readonly string[] = [
+  "42",
+  "claude",
+  "kaizen",
+  "tenkadev",
+  "konnichiwa",
+  "tenka",
+];
+
+function simulateMockFlagSubmit(flag: string, points: number): SubmitFlagOutcome {
+  const trimmed = flag.trim().toLowerCase();
+  if (trimmed.length === 0) {
+    return { kind: "wrong", scoreDelta: -10, totalScore: -10, wrongCount: 1 };
+  }
+  // `tenkacloudsample` を含むか、 逆に `tenkacloudsample` が入力を含むときも OK
+  // (= ユーザが `tenkacloud` だけ入れても通る、 typo に少し寛容)。
+  if (trimmed.includes(MOCK_CORRECT_FLAG) || MOCK_CORRECT_FLAG.includes(trimmed)) {
+    return { kind: "ok", scoreDelta: points, totalScore: points };
+  }
+  if (MOCK_EASTER_EGGS.some((egg) => trimmed === egg)) {
+    return { kind: "ok", scoreDelta: points, totalScore: points };
+  }
+  return { kind: "wrong", scoreDelta: -10, totalScore: -10, wrongCount: 1 };
 }
 
 function canSubmitFlag(flag: string, submitting: boolean): boolean {
