@@ -708,6 +708,8 @@ section .lead {
 }
 .pricing-fineprint { font-size: 11px; line-height: 1.5; color: var(--ink-3); margin: 4px 0 0; }
 .pricing-card.featured .pricing-fineprint { color: rgba(255,255,255,0.55); }
+.pricing-tail { text-align: center; margin: 32px 0 0; font-size: 13px; color: var(--ink-3); }
+.pricing-tail a { color: var(--ink); text-decoration: underline; }
 .pricing-cta {
   margin-top: auto;
   height: 44px; padding: 0 22px;
@@ -1182,28 +1184,29 @@ footer .legal {
     <div class="pricing-head">
       <div class="eyebrow" data-i18n="pricing.eyebrow">料金</div>
       <h2 data-i18n="pricing.h2">イベント規模に合わせて。</h2>
-      <p data-i18n="pricing.p">プラットフォーム本体は Apache 2.0 の OSS なので、 コード利用は永続無料です。 規模が大きくなった / 自前で運用したくない場合に、 構築と当日運営を代行します。</p>
+      <p data-i18n="pricing.p">プラットフォーム本体は Apache 2.0 の OSS なので、 <strong>自前 AWS アカウントに deploy して開催すれば無料</strong>。 構築や当日運営を任せたい方向けに、 規模に合わせた有料プランをご用意しています。</p>
     </div>
     <div class="pricing-grid">
       <div class="pricing-card">
-        <div class="pricing-tier" data-i18n="pricing.community.tier">Community</div>
+        <div class="pricing-tier" data-i18n="pricing.starter.tier">Starter</div>
         <div class="pricing-price">
-          <span data-i18n="pricing.community.price">無料</span>
+          <span data-i18n="pricing.starter.price">50万円</span><span class="pricing-unit" data-i18n="pricing.starter.unit">/ 回</span>
         </div>
-        <div class="pricing-scope" data-i18n="pricing.community.scope">自分で開催</div>
-        <p class="pricing-sub" data-i18n="pricing.community.note">自前 AWS アカウントに OSS を deploy して、 規模問わず開催。</p>
+        <div class="pricing-scope" data-i18n="pricing.starter.scope">お試し (〜 2 チーム)</div>
+        <p class="pricing-sub" data-i18n="pricing.starter.note">まずは小規模で運営代行を試したい方向け。</p>
         <ul class="pricing-list">
-          <li data-i18n="pricing.community.f1">運営コンソール / 参加者ポータル / 問題カタログ 全機能</li>
-          <li data-i18n="pricing.community.f2">公開問題セット (= Battle / Challenge)</li>
-          <li data-i18n="pricing.community.f3">サポートは GitHub Issues / Discussions</li>
+          <li data-i18n="pricing.starter.f1">2 チームまでの同時開催</li>
+          <li data-i18n="pricing.starter.f2">deploy / 当日進行サポート</li>
+          <li data-i18n="pricing.starter.f3">公開問題セットから選定</li>
         </ul>
-        <a class="pricing-cta secondary" href="https://github.com/susumutomita/TenkaCloud#readme" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.community.cta">セットアップ手順</span> →</a>
+        <p class="pricing-fineprint" data-i18n="pricing.starter.fineprint">※ AWS account はお客様側でご用意ください。</p>
+        <a class="pricing-cta secondary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.starter.cta">お見積もり依頼</span> →</a>
       </div>
 
       <div class="pricing-card featured">
         <div class="pricing-tier" data-i18n="pricing.hosted.tier">Hosted</div>
         <div class="pricing-price">
-          <span data-i18n="pricing.hosted.price">100万円</span><span class="pricing-unit" data-i18n="pricing.hosted.unit">〜 / 回</span>
+          <span data-i18n="pricing.hosted.price">100万円</span><span class="pricing-unit" data-i18n="pricing.hosted.unit">/ 回</span>
         </div>
         <div class="pricing-scope" data-i18n="pricing.hosted.scope">5 チームまで (〜 20 人)</div>
         <p class="pricing-sub" data-i18n="pricing.hosted.note">構築から当日進行まで、 運営を丸ごと代行します。</p>
@@ -1220,18 +1223,20 @@ footer .legal {
       <div class="pricing-card">
         <div class="pricing-tier" data-i18n="pricing.enterprise.tier">Enterprise</div>
         <div class="pricing-price">
-          <span data-i18n="pricing.enterprise.price">ご相談</span>
+          <span data-i18n="pricing.enterprise.price">300万円</span><span class="pricing-unit" data-i18n="pricing.enterprise.unit">/ 年</span>
         </div>
-        <div class="pricing-scope" data-i18n="pricing.enterprise.scope">それ以上</div>
-        <p class="pricing-sub" data-i18n="pricing.enterprise.note">20 人を超える規模はご相談ください。</p>
+        <div class="pricing-scope" data-i18n="pricing.enterprise.scope">年間契約 (= 年 4 回開催)</div>
+        <p class="pricing-sub" data-i18n="pricing.enterprise.note">新卒教育 / 社内研修など継続開催したい方向け。</p>
         <ul class="pricing-list">
-          <li data-i18n="pricing.enterprise.f1">20 〜 100 人規模の同時開催</li>
+          <li data-i18n="pricing.enterprise.f1">年 4 回までの同時開催 (= 1 回 5 チーム / 〜 20 人)</li>
           <li data-i18n="pricing.enterprise.f2">問題追加の技術支援</li>
           <li data-i18n="pricing.enterprise.f3">継続的なイベント開催 (= 新卒教育 / 社内研修 等)</li>
         </ul>
-        <a class="pricing-cta secondary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.enterprise.cta">お問い合わせ</span> →</a>
+        <p class="pricing-fineprint" data-i18n="pricing.enterprise.fineprint">※ AWS account はお客様側でご用意ください。</p>
+        <a class="pricing-cta secondary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.enterprise.cta">お見積もり依頼</span> →</a>
       </div>
     </div>
+    <p class="pricing-tail" data-i18n="pricing.tail">それ以上の規模 / 特別要件は <a href="#contact">お問い合わせ</a> ください。</p>
   </div>
 </section>
 
@@ -1428,18 +1433,20 @@ footer .legal {
 
       "pricing.eyebrow": "料金",
       "pricing.h2": "イベント規模に合わせて。",
-      "pricing.p": "プラットフォーム本体は Apache 2.0 の OSS なので、 コード利用は永続無料です。 規模が大きくなった / 自前で運用したくない場合に、 構築と当日運営を代行します。",
-      "pricing.community.tier": "Community",
-      "pricing.community.price": "無料",
-      "pricing.community.scope": "自分で開催",
-      "pricing.community.note": "自前 AWS アカウントに OSS を deploy して、 規模問わず開催。",
-      "pricing.community.f1": "運営コンソール / 参加者ポータル / 問題カタログ 全機能",
-      "pricing.community.f2": "公開問題セット (= Battle / Challenge)",
-      "pricing.community.f3": "サポートは GitHub Issues / Discussions",
-      "pricing.community.cta": "セットアップ手順",
+      "pricing.p": "プラットフォーム本体は Apache 2.0 の OSS なので、 <strong>自前 AWS アカウントに deploy して開催すれば無料</strong>。 構築や当日運営を任せたい方向けに、 規模に合わせた有料プランをご用意しています。",
+      "pricing.starter.tier": "Starter",
+      "pricing.starter.price": "50万円",
+      "pricing.starter.unit": "/ 回",
+      "pricing.starter.scope": "お試し (〜 2 チーム)",
+      "pricing.starter.note": "まずは小規模で運営代行を試したい方向け。",
+      "pricing.starter.f1": "2 チームまでの同時開催",
+      "pricing.starter.f2": "deploy / 当日進行サポート",
+      "pricing.starter.f3": "公開問題セットから選定",
+      "pricing.starter.fineprint": "※ AWS account はお客様側でご用意ください。",
+      "pricing.starter.cta": "お見積もり依頼",
       "pricing.hosted.tier": "Hosted",
       "pricing.hosted.price": "100万円",
-      "pricing.hosted.unit": "〜 / 回",
+      "pricing.hosted.unit": "/ 回",
       "pricing.hosted.scope": "5 チームまで (〜 20 人)",
       "pricing.hosted.note": "構築から当日進行まで、 運営を丸ごと代行します。",
       "pricing.hosted.f1": "AWS account 準備 / deploy 支援",
@@ -1449,13 +1456,16 @@ footer .legal {
       "pricing.hosted.fineprint": "※ AWS account はお客様側でご用意ください。 こちらでご用意する場合は別途お見積もり。",
       "pricing.hosted.cta": "お見積もり依頼",
       "pricing.enterprise.tier": "Enterprise",
-      "pricing.enterprise.price": "ご相談",
-      "pricing.enterprise.scope": "それ以上",
-      "pricing.enterprise.note": "20 人を超える規模はご相談ください。",
-      "pricing.enterprise.f1": "20 〜 100 人規模の同時開催",
+      "pricing.enterprise.price": "300万円",
+      "pricing.enterprise.unit": "/ 年",
+      "pricing.enterprise.scope": "年間契約 (= 年 4 回開催)",
+      "pricing.enterprise.note": "新卒教育 / 社内研修など継続開催したい方向け。",
+      "pricing.enterprise.f1": "年 4 回までの同時開催 (= 1 回 5 チーム / 〜 20 人)",
       "pricing.enterprise.f2": "問題追加の技術支援",
       "pricing.enterprise.f3": "継続的なイベント開催 (= 新卒教育 / 社内研修 等)",
-      "pricing.enterprise.cta": "お問い合わせ",
+      "pricing.enterprise.fineprint": "※ AWS account はお客様側でご用意ください。",
+      "pricing.enterprise.cta": "お見積もり依頼",
+      "pricing.tail": "それ以上の規模 / 特別要件は <a href=\"#contact\">お問い合わせ</a> ください。",
 
       "ent.eyebrow": "どのプランがよいか分からない",
       "ent.h2": "まずは話してみませんか。",
@@ -1604,34 +1614,39 @@ footer .legal {
 
       "pricing.eyebrow": "Pricing",
       "pricing.h2": "Pick the size that fits.",
-      "pricing.p": "The platform itself is Apache 2.0 OSS — using the code is free forever. Pay only when you'd rather hand off the operational side at scale.",
-      "pricing.community.tier": "Community",
-      "pricing.community.price": "Free",
-      "pricing.community.scope": "Self-hosted, any size",
-      "pricing.community.note": "Deploy the OSS on your own AWS account and run events of any scale yourself.",
-      "pricing.community.f1": "All admin console / participant portal / catalog features",
-      "pricing.community.f2": "Public problem set (Battle / Challenge)",
-      "pricing.community.f3": "Support via GitHub Issues / Discussions",
-      "pricing.community.cta": "Setup guide",
+      "pricing.p": "The platform itself is Apache 2.0 OSS, so <strong>self-hosting on your own AWS account is free</strong>. Pay only when you'd rather hand off setup and day-of operations to us.",
+      "pricing.starter.tier": "Starter",
+      "pricing.starter.price": "¥500K",
+      "pricing.starter.unit": "/ event",
+      "pricing.starter.scope": "Trial (up to 2 teams)",
+      "pricing.starter.note": "For first-time hosts who want to test the operated experience small.",
+      "pricing.starter.f1": "Concurrent events for up to 2 teams",
+      "pricing.starter.f2": "Deploy / day-of support",
+      "pricing.starter.f3": "Selected from the public problem set",
+      "pricing.starter.fineprint": "* You bring your own AWS account.",
+      "pricing.starter.cta": "Request a quote",
       "pricing.hosted.tier": "Hosted",
       "pricing.hosted.price": "¥1M",
-      "pricing.hosted.unit": "+ / event",
+      "pricing.hosted.unit": "/ event",
       "pricing.hosted.scope": "Up to 5 teams (~20 people)",
       "pricing.hosted.note": "We handle setup, run the day, and tear down.",
-      "pricing.hosted.f1": "Pre-event AWS account prep + deploy automation",
+      "pricing.hosted.f1": "AWS account prep / deploy support",
       "pricing.hosted.f2": "Live MC + on-call / Red Team role",
       "pricing.hosted.f3": "Post-event report (scoring history, attack timeline)",
       "pricing.hosted.f4": "Problem selection",
       "pricing.hosted.fineprint": "* You bring your own AWS account. If we need to provide one, we'll quote separately.",
       "pricing.hosted.cta": "Request a quote",
       "pricing.enterprise.tier": "Enterprise",
-      "pricing.enterprise.price": "Custom",
-      "pricing.enterprise.scope": "Beyond that",
-      "pricing.enterprise.note": "Reach out for events over 20 people.",
-      "pricing.enterprise.f1": "Concurrent events for 20–100 people",
+      "pricing.enterprise.price": "¥3M",
+      "pricing.enterprise.unit": "/ year",
+      "pricing.enterprise.scope": "Annual contract (4 events / year)",
+      "pricing.enterprise.note": "For recurring delivery — new-grad onboarding, internal training, etc.",
+      "pricing.enterprise.f1": "Up to 4 events per year (5 teams / ~20 people each)",
       "pricing.enterprise.f2": "Engineering support for new problem authoring",
       "pricing.enterprise.f3": "Recurring event delivery (e.g. new-grad onboarding, internal training)",
-      "pricing.enterprise.cta": "Get in touch",
+      "pricing.enterprise.fineprint": "* You bring your own AWS account.",
+      "pricing.enterprise.cta": "Request a quote",
+      "pricing.tail": "Beyond these tiers / special requirements: please <a href=\"#contact\">get in touch</a>.",
 
       "ent.eyebrow": "Not sure which plan fits",
       "ent.h2": "Let's talk.",

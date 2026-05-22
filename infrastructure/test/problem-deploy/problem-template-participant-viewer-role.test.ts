@@ -68,6 +68,17 @@ const RESOURCE_STAR_OK_SIDS = new Set([
   // dedicated AWS account に閉じる (= 他 tenant の cloudshell に触れない)。
   // Resource-level scope は CloudShell API が持たないため、 Resource:"*" 必須。
   "OpenCloudShellSession",
+  // TenkaCloudChallenge PR #20 (migration deploy IAM):
+  // ecs:RegisterTaskDefinition / DeregisterTaskDefinition / DescribeTaskDefinition
+  // は AWS 仕様で resource-level permission を受け付けない。 単独では tenant 越境
+  // にならない — 登録した TD を deploy するには ecs:CreateService / RunTask が必要で、
+  // それらは ${NamePrefix}* な cluster / service ARN にスコープ済み。
+  "ManageOwnTaskDefinitions",
+  // TenkaCloudChallenge PR #20 (migration deploy IAM):
+  // ecr:GetAuthorizationToken は account-scoped で 12 時間 token を返すだけ。
+  // token は呼び出し元 identity に bind されており、 そのうえで repository ARN ベース
+  // の ecr:* grant が掛かっている範囲 (= ${NamePrefix}*) しか push/pull できない。
+  "EcrAuthForOwnPush",
 ]);
 
 describe("problem template ParticipantViewerRole (#744)", () => {
