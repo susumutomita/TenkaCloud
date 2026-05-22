@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>プライバシーポリシー — TenkaCloud</title>
+<meta name="robots" content="index, follow" />
+<link rel="canonical" href="https://susumutomita.github.io/TenkaCloud/privacy.html" />
+<style>
+:root {
+  --bg: #fafafa;
+  --paper: #fff;
+  --ink: #0b0e14;
+  --ink-2: #2d343d;
+  --ink-3: #5b6470;
+  --line: #d8dde4;
+  --accent: #0066cc;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--ink); margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif; line-height: 1.8; font-size: 15px; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 0 24px 80px; }
+header.top { border-bottom: 1px solid var(--line); margin-bottom: 36px; }
+header.top .wrap { padding-top: 18px; padding-bottom: 18px; display: flex; justify-content: space-between; align-items: center; }
+.brand { color: var(--ink); text-decoration: none; font-weight: 800; letter-spacing: -0.01em; font-size: 18px; }
+.back { color: var(--accent); text-decoration: none; font-size: 14px; }
+.back:hover { text-decoration: underline; }
+h1 { font-size: 32px; line-height: 1.2; margin: 24px 0 8px; letter-spacing: -0.01em; }
+.lede { color: var(--ink-2); margin: 0 0 32px; font-size: 16px; }
+.meta { color: var(--ink-3); font-size: 13px; margin: 0 0 40px; }
+h2 { font-size: 20px; margin: 36px 0 12px; line-height: 1.3; }
+h3 { font-size: 16px; margin: 24px 0 8px; }
+p, ul, ol { margin: 0 0 16px; color: var(--ink-2); }
+ul, ol { padding-left: 22px; }
+li { margin-bottom: 6px; }
+a { color: var(--accent); }
+strong { color: var(--ink); }
+.divider { border: 0; border-top: 1px solid var(--line); margin: 48px 0 32px; }
+footer.bottom { color: var(--ink-3); font-size: 13px; text-align: center; padding: 36px 0; border-top: 1px solid var(--line); }
+@media (max-width: 640px) {
+  .wrap { padding: 0 16px 60px; }
+  h1 { font-size: 26px; }
+  h2 { font-size: 18px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./">TenkaCloud</a>
+    <a class="back" href="./">← ホームへ戻る</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <h1>プライバシーポリシー</h1>
+  <p class="lede">TenkaCloud (以下「本サービス」) における個人情報の取扱いについて。</p>
+  <p class="meta">最終更新: 2026-05-23 · 運営者: 富田進 (Susumu Tomita)</p>
+
+  <h2>1. 取得する情報</h2>
+  <p>本サービスの提供および商談対応のため、以下の情報を取得することがあります。</p>
+  <ul>
+    <li><strong>お問い合わせ情報</strong>: お名前、 所属組織、 連絡先メールアドレス、 お問い合わせ本文。</li>
+    <li><strong>イベント運営代行に伴う情報</strong>: お客様が運営するイベントの参加者情報 (= チーム名 / 表示名)、 提出ログ、 スコア履歴等。 本サービスの SaaS インフラ (= AWS) 上に保存され、 イベント終了後 7 日経過で自動削除される。</li>
+    <li><strong>アクセスログ</strong>: ランディングページおよびポータルへのアクセスに伴う IP アドレス、 User-Agent、 リファラ等。 GitHub Pages / Amazon CloudFront のアクセスログとして 標準保管される。</li>
+  </ul>
+
+  <h2>2. 利用目的</h2>
+  <ul>
+    <li>お問い合わせへの返信および見積もり提示。</li>
+    <li>本サービスの運営、 障害対応、 セキュリティ監査。</li>
+    <li>本サービスの改善に伴う 統計的分析 (= 個人を特定しない形)。</li>
+    <li>法令に基づく対応 (= 警察 / 裁判所 等からの正当な要請)。</li>
+  </ul>
+
+  <h2>3. 第三者提供</h2>
+  <p>あらかじめお客様の同意を得た場合、 または法令に基づく場合を除き、 個人情報を第三者に提供することはありません。 ただし以下のクラウドサービス提供者にデータが保存されることがあります (= いずれもインフラとしての利用、 内容を読み取られることは想定していない)。</p>
+  <ul>
+    <li>Amazon Web Services, Inc. (= 本サービスの SaaS インフラ提供者)</li>
+    <li>GitHub, Inc. (= ランディングページ配信、 OSS リポジトリ提供者)</li>
+  </ul>
+
+  <h2>4. 保管期間</h2>
+  <ul>
+    <li><strong>お問い合わせ情報</strong>: 商談終了後 2 年間。</li>
+    <li><strong>イベント運営代行の参加者データ</strong>: イベント終了後 7 日間 (= DynamoDB の TTL feature による自動削除、 Issue #1200)。</li>
+    <li><strong>アクセスログ</strong>: AWS / GitHub の標準保管期間に従う。</li>
+  </ul>
+
+  <h2>5. 開示・訂正・削除請求</h2>
+  <p>お客様ご自身の個人情報について、 開示・訂正・削除のご請求は<a href="#contact">お問い合わせ窓口</a>までご連絡ください。 本人確認の上、 法令に基づき速やかに対応します。</p>
+
+  <h2>6. Cookie / トラッキング</h2>
+  <p>本ランディングページ自体は Cookie を設定しません。 ただし参加者ポータル (= portal-demo / 本番ポータル) は、 セッション管理のため localStorage を使用します。 トラッキング目的の Cookie / 解析ツールは使用していません (= 2026-05 時点)。</p>
+
+  <h2>7. 改定</h2>
+  <p>本ポリシーは、 法令の変更や本サービスの内容の変更に応じて改定されることがあります。 重要な改定があった場合は、 本ページに掲載することで お知らせとします。</p>
+
+  <h2 id="contact">8. お問い合わせ窓口</h2>
+  <p>個人情報に関するお問い合わせは、 以下までご連絡ください。</p>
+  <ul>
+    <li>窓口: TenkaCloud 運営 (富田進)</li>
+    <li>連絡方法: <a href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer">GitHub Discussions</a> または LP の<a href="./#contact">お問い合わせフォーム</a></li>
+  </ul>
+
+  <hr class="divider" />
+  <p class="meta">準拠法: 日本国法 · 管轄裁判所: 富田進の所在地を管轄する裁判所</p>
+</main>
+
+<footer class="bottom">
+  © 2026 TenkaCloud · <a href="./terms.html">利用規約</a> · <a href="./legal.html">特定商取引法に基づく表記</a> · <a href="./">ホーム</a>
+</footer>
+</body>
+</html>
