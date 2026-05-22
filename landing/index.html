@@ -246,17 +246,6 @@ section .lead {
 .extend-cta .more { font-size: 13px; color: #0066cc; text-decoration: none; }
 .extend-cta .more:hover { text-decoration: underline; }
 
-/* ============== PORTAL IFRAME (live mock demo) ============== */
-.portal-iframe {
-  width: 100%;
-  height: 520px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--paper);
-  display: block;
-}
-.portal-iframe-note { font-size: 11px; color: var(--ink-3); margin: 8px 0 0; line-height: 1.5; }
-
 /* ============== TWO-UP FEATURE ============== */
 .twoup { display: grid; grid-template-columns: 1fr 1fr; gap: 52px; max-width: 980px; margin: 0 auto; }
 .tile {
@@ -900,12 +889,12 @@ footer .legal {
       <div class="cta-row">
         <a
           class="cta-primary"
-          href="https://github.com/susumutomita/TenkaCloud#default-lite-mode-5-minutes-single-tenant--make-deploy"
+          href="./portal-demo/?demo=1"
           target="_blank"
           rel="noopener noreferrer"
           data-cta="try-5min"
         >
-          <span data-i18n="hero.cta1">5 分で試す</span> →
+          <span data-i18n="hero.cta1">モックで試す</span> →
         </a>
         <a
           href="https://github.com/susumutomita/TenkaCloud/discussions"
@@ -1002,15 +991,7 @@ footer .legal {
         <h3 data-i18n="modes.battle.h">Battle.</h3>
         <p data-i18n="modes.battle.p">稼働率で競う、リアルタイム対戦。毎分のヘルスチェックを生き残ったチームが、勝つ。</p>
         <div class="demo">
-          <iframe
-            class="portal-iframe"
-            src="./portal-demo/?demo=1"
-            title="TenkaCloud Participant Portal — Battle demo (mock data)"
-            loading="lazy"
-            sandbox="allow-scripts allow-same-origin"
-          ></iframe>
-          <p class="portal-iframe-note" data-i18n="preview.iframe.note">↑ 実機 (mock data)。 競技中はスコア推移 / 攻撃履歴 / 問題一覧 が同じ画面で動きます。</p>
-          <div hidden class="portal-preview score-events-preview">
+          <div class="portal-preview score-events-preview">
             <div class="portal-page-title" data-i18n="preview.score_events.title">Score events</div>
             <div class="portal-page-desc" data-i18n="preview.score_events.desc">自チームのスコア変動履歴 (30 秒ごと自動更新、新しい順 100 件まで)</div>
             <div class="portal-container">
@@ -1063,15 +1044,7 @@ footer .legal {
         <h3 data-i18n="modes.challenge.h">Challenge.</h3>
         <p data-i18n="modes.challenge.p">問題を解き、フラグを提出する。AWS の一つひとつのサービスを、ひとつずつ理解していく。</p>
         <div class="demo">
-          <iframe
-            class="portal-iframe"
-            src="./portal-demo/?demo=1"
-            title="TenkaCloud Participant Portal — Challenge demo (mock data)"
-            loading="lazy"
-            sandbox="allow-scripts allow-same-origin"
-          ></iframe>
-          <p class="portal-iframe-note" data-i18n="preview.iframe.note2">↑ 実機 (mock data)。 競技者は自チームに deploy された問題一覧から挑戦できます。</p>
-          <div hidden class="portal-preview">
+          <div class="portal-preview">
             <div class="portal-page-title" data-i18n="preview.quests.title">問題一覧 (Quests)</div>
             <div class="portal-page-desc" data-i18n="preview.quests.desc">自チームに deploy された問題のカタログ。各カードからアクセス先 URL に直接遷移できます。</div>
             <div class="portal-tabs" aria-label="カテゴリで絞り込み">
@@ -1289,7 +1262,7 @@ footer .legal {
         <div class="pricing-scope" data-i18n="pricing.enterprise.scope">年間契約 (= 「社内の演習基盤」 として継続運用)</div>
         <p class="pricing-sub" data-i18n="pricing.enterprise.note">新卒教育 / 内製化推進 / CCoE プログラムなど、 単発でなく <strong>常設の演習場</strong> として運用したい組織向け。</p>
         <ul class="pricing-list">
-          <li data-i18n="pricing.enterprise.f1">複数開催 (= 年 4 回以上、 部門別 / 期別)</li>
+          <li data-i18n="pricing.enterprise.f1">複数開催 (= 年 4 回、 部門別 / 期別)</li>
           <li data-i18n="pricing.enterprise.f2">問題セットの roadmap 提案 + facilitator 向け運営手順</li>
           <li data-i18n="pricing.enterprise.f3">事後レポーティング (= 採点履歴 / 受講者進捗 / 攻撃可視化)</li>
         </ul>
@@ -1372,7 +1345,7 @@ footer .legal {
       "hero.h1a": "社内のクラウド研修を、",
       "hero.h1b": "ハンズオン演習に変える。",
       "hero.sub": "Battle (リアルタイム対戦) と Challenge (個別演習) を、 チームごとに 隔離された AWS 環境へ自動 deploy。 採点 / 進捗管理 / AWS Console アクセス は組み込み済み。",
-      "hero.cta1": "5 分で試す",
+      "hero.cta1": "モックで試す",
       "hero.cta2": "GitHub を見る",
       "app.lang": "◉ 日本語 ▼",
       "app.profile": "♙ ゲスト ▼",
@@ -1521,7 +1494,7 @@ footer .legal {
       "pricing.enterprise.unit": "〜 / 年",
       "pricing.enterprise.scope": "年間契約 (= 「社内の演習基盤」 として継続運用)",
       "pricing.enterprise.note": "新卒教育 / 内製化推進 / CCoE プログラムなど、 単発でなく <strong>常設の演習場</strong> として運用したい組織向け。",
-      "pricing.enterprise.f1": "複数開催 (= 年 4 回以上、 部門別 / 期別)",
+      "pricing.enterprise.f1": "複数開催 (= 年 4 回、 部門別 / 期別)",
       "pricing.enterprise.f2": "問題セットの roadmap 提案 + facilitator 向け運営手順",
       "pricing.enterprise.f3": "事後レポーティング (= 採点履歴 / 受講者進捗 / 攻撃可視化)",
       "pricing.enterprise.fineprint": "※ 規模 / 内容に応じて見積もり。 AWS account はお客様側でご用意ください。",
@@ -1553,7 +1526,7 @@ footer .legal {
       "hero.h1a": "Run team-based cloud drills on real AWS, ",
       "hero.h1b": "without building the event platform yourself.",
       "hero.sub": "Battle (real-time) and Challenge (self-paced) drills, auto-deployed into <strong>isolated AWS environments for each team</strong>. Scoring, progress tracking, and AWS Console access are built in.",
-      "hero.cta1": "Try in 5 minutes",
+      "hero.cta1": "Play the mock",
       "hero.cta2": "View on GitHub",
       "app.lang": "◉ English ▼",
       "app.profile": "♙ Guest ▼",
@@ -1702,7 +1675,7 @@ footer .legal {
       "pricing.enterprise.unit": "+ / year",
       "pricing.enterprise.scope": "Annual contract — your <strong>internal cloud arena</strong>",
       "pricing.enterprise.note": "For organizations running new-grad onboarding, CCoE programs, or platform enablement <strong>as a recurring program</strong>, not a one-off event.",
-      "pricing.enterprise.f1": "Multiple events per year (4+, by department / cohort)",
+      "pricing.enterprise.f1": "Up to 4 events per year (by department / cohort)",
       "pricing.enterprise.f2": "Problem-set roadmap + facilitator enablement materials",
       "pricing.enterprise.f3": "Program reporting (scoring history, learner progress, attack visibility)",
       "pricing.enterprise.fineprint": "* Quoted by scope and scale. You bring your own AWS account.",
