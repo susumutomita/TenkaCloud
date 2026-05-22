@@ -6,6 +6,7 @@ import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
+import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
   type DeployCreateRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
@@ -222,7 +223,10 @@ export async function startDeployment(
         new UpdateCommand({
           TableName: ctx.tableName,
           Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-          UpdateExpression: "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason",
+          // Issue #1200: FAILED terminal 化のタイミングで expiresAt を 7 日 retention に
+          // refresh する (= 旧来 create 時の 8h session TTL を上書きし、 audit 履歴を 7 日残す)。
+          UpdateExpression:
+            "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason, expiresAt = :expiresAt",
           // #872: compensation 経路に tenantId condition (= 直前 PutItem 自身が item.tenantId を
           // 書いているので transitively 一致するが、 write レベルで明示する defense-in-depth)。
           ConditionExpression: "tenantId = :tenantId AND #s = :pending",
@@ -233,6 +237,7 @@ export async function startDeployment(
             ":updatedAt": new Date(ctx.now()).toISOString(),
             ":reason": "Failed to publish DeployCreateRequested event",
             ":tenantId": item.tenantId,
+            ":expiresAt": deploymentTerminalExpiresAt(ctx.now()),
           },
         }),
       );

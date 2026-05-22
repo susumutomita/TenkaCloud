@@ -1,5 +1,6 @@
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ULID_RE as JOB_ID_RE } from "../shared/constants.js";
+import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
   type DeployCreateRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
@@ -234,7 +235,9 @@ async function compensateRetryPublishFailure(
       new UpdateCommand({
         TableName: shared.tableName,
         Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-        UpdateExpression: "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason",
+        // Issue #1200: FAILED terminal 化のタイミングで expiresAt を 7 日 retention に refresh。
+        UpdateExpression:
+          "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason, expiresAt = :expiresAt",
         ConditionExpression: "#s = :pending AND tenantId = :tenantId",
         ExpressionAttributeNames: { "#s": "status" },
         ExpressionAttributeValues: {
@@ -243,6 +246,7 @@ async function compensateRetryPublishFailure(
           ":updatedAt": new Date(now()).toISOString(),
           ":reason": "Failed to re-publish DeployCreateRequested event during retry",
           ":tenantId": tenantId,
+          ":expiresAt": deploymentTerminalExpiresAt(now()),
         },
       }),
     );
