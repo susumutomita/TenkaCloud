@@ -20,6 +20,11 @@ import {
 import type { AppConfig } from "../config";
 import { countUnread, loadLastSeenAt, saveLastSeenAt } from "../lib/notifications-storage";
 import { useAuth } from "./AuthProvider";
+import {
+  DEV_MOCK_LEADERBOARD,
+  DEV_MOCK_NOTIFICATIONS,
+  DEV_MOCK_TEAM_VIEW,
+} from "./dev-mock-fixtures";
 
 // Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒は 12 req/min/team で過多、 競技中に
 // N 競技者 = N team × 12 = N×12 req/min で participant-portal Lambda + DDB を圧迫していた)。
@@ -303,6 +308,18 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
       setNotificationsError(err instanceof Error ? err.message : String(err));
     }
   }, [isBackend, sessionToken, config.apiBaseUrl, auth, eventIdForKey]);
+
+  // LP 「モックで試す」 動線: dev-mock mode + session 在りのとき、 backend API が無くても
+  // 各画面が空にならないよう固定 fixture を 1 度だけ seed する。 polling は走らない。
+  // production (= backend mode) では `if (!isBackend) return` ガードで素通り。
+  useEffect(() => {
+    if (isBackend) return;
+    if (!sessionToken) return;
+    if (view) return;
+    setView(DEV_MOCK_TEAM_VIEW);
+    setLeaderboard(DEV_MOCK_LEADERBOARD);
+    setNotifications(DEV_MOCK_NOTIFICATIONS);
+  }, [isBackend, sessionToken, view]);
 
   useEffect(() => {
     if (!isBackend || !sessionToken) return;
