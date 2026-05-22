@@ -29,11 +29,17 @@ export function CliCredentialsPanel({
   sessionToken,
   jobId,
   onAuthError,
+  mockBlocked = false,
 }: {
   readonly apiBaseUrl: string;
   readonly sessionToken: string;
   readonly jobId: string;
   readonly onAuthError: () => void;
+  /**
+   * dev-mock mode 等で backend に到達できない時に true。 「資格情報を発行」 ボタンの
+   * 代わりに「モックモードでは発行できません」 info を出して赤い error を回避する。
+   */
+  readonly mockBlocked?: boolean;
 }) {
   const t = useT();
   const [credentials, setCredentials] = useState<CliCredentialsView | null>(null);
@@ -94,7 +100,12 @@ export function CliCredentialsPanel({
             {error}
           </Alert>
         )}
-        {!credentials && (
+        {mockBlocked && (
+          <Alert type="info" header={t("sso_credentials.cli.mock_blocked_header")}>
+            {t("sso_credentials.cli.mock_blocked_body")}
+          </Alert>
+        )}
+        {!credentials && !mockBlocked && (
           <Button
             variant="normal"
             iconName="key"
