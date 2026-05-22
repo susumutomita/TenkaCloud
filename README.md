@@ -3,12 +3,13 @@
 
 # TenkaCloud
 
-**Run AWS GameDay like GitHub Pages.**
+**Self-host AWS GameDay competitions as easily as a GitHub Pages site.**
 
-Create cloud competitions in 5 minutes, deploy problems into each team's AWS
-account, and watch scores update from a participant portal.
+Stand up a cloud competition in 5 minutes, deploy each problem straight into the
+team's own AWS account, and watch the scoreboard update live in a participant
+portal.
 
-[30 sec demo](#30-second-demo) · [Try Lite](#try-lite-in-5-minutes) · [Create first problem](#create-your-first-problem)
+[30 sec demo](#30-second-demo) · [Try Lite](#try-lite-mode-in-5-minutes) · [Create first problem](#create-your-first-problem)
 
 [![CI](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
@@ -26,31 +27,35 @@ TenkaCloud turns a problem directory into a playable cloud competition:
 
 ![TenkaCloud Lite demo flow](./docs/assets/tenkacloud-lite-demo.svg)
 
-1. Author a problem with `metadata.json` and `template.yaml`.
+1. Author a problem as a `metadata.json` + `template.yaml` pair.
 2. Start Lite mode for a single event.
-3. Deploy into each competitor's AWS account with AssumeRole + ExternalId.
-4. Let participants recover, migrate, harden, or capture flags.
-5. Score from health checks, flag submission, phased polling, or attack detection.
+3. Deploy the problem into each competitor's AWS account via AssumeRole + ExternalId.
+4. Participants work through the scenario — restoring a broken service, migrating
+   workloads, hardening a config, or capturing a flag.
+5. The platform scores them automatically — by health check, flag submission,
+   phased polling, or attack detection, depending on the problem.
 
 ## Why TenkaCloud
 
-Cloud competitions usually require a custom control plane, a deploy pipeline into
-competitor accounts, a scoreboard, and per-team portals. TenkaCloud bundles those
-pieces into one open-source platform.
+Running a cloud competition normally means building four things from scratch: a
+control plane, a pipeline that deploys problem infrastructure into each
+competitor's account, a scoreboard, and per-team portals. TenkaCloud ships all
+four as one open-source platform.
 
-| Need | TenkaCloud gives you |
+| If you need to… | …TenkaCloud gives you |
 | --- | --- |
-| Run a one-off internal GameDay | Lite mode: Application Admin Console + Participant Portal + deploy backend |
-| Deploy real infrastructure | CloudFormation lands in each competitor account via AssumeRole + ExternalId |
-| Add new scenarios quickly | Problem plugin model: `metadata.json` + `template.yaml` + optional portal UI |
-| Keep costs predictable | DynamoDB tables are forced to PROVISIONED 1 RCU / 1 WCU by a CDK Aspect |
-| Grow into SaaS mode | SBT control plane, pooled/silo tenants, Cognito, EventBridge, and tenant pipeline |
+| Run a one-off internal GameDay | **Lite mode** — Application Admin Console + Participant Portal + deploy backend, no multi-tenant setup |
+| Deploy real AWS infrastructure | CloudFormation is created directly inside each competitor's AWS account using AssumeRole + a per-tenant ExternalId |
+| Add new scenarios quickly | A **problem plugin model**: drop in `metadata.json` + `template.yaml` (and optional portal UI) and the platform picks it up |
+| Keep costs predictable | A CDK Aspect pins every DynamoDB table to 1 RCU / 1 WCU PROVISIONED so the platform fits inside the AWS Free Tier |
+| Grow into a SaaS product | **SaaS mode** — SBT-based control plane, pooled and silo tenant tiers, Cognito, EventBridge, and a per-tenant provisioning pipeline |
 
-## Try Lite In 5 Minutes
+## Try Lite Mode in 5 Minutes
 
-Lite mode is the fastest path for one organizer running one competition. It skips
-the SBT control plane and deploys the Application Admin Console, Participant
-Portal, and deploy backend for a fixed local tenant.
+Lite mode is the fastest path when one organizer is running one event. It skips
+the SBT control plane entirely and stands up just three things — the Application
+Admin Console, the Participant Portal, and the deploy backend — under a single
+hard-coded tenant ID.
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git
@@ -65,10 +70,10 @@ make deploy
 
 You get:
 
-- **Application Admin Console**: choose problems, create deploys, watch progress.
-- **Participant Portal**: team login, problem details, hints, submissions, scores.
-- **Problem Deploy Backend**: DynamoDB + Lambda + Step Functions + CodeBuild.
-- **Sample problems**: start with Hello World, then move to Battle scenarios.
+- **Application Admin Console** — pick problems, kick off deploys, watch progress.
+- **Participant Portal** — team login, problem details, hints, submissions, scores.
+- **Problem deploy backend** — DynamoDB + Lambda + Step Functions + CodeBuild.
+- **Sample problems** — start with Hello World, then move on to Battle scenarios.
 
 Teardown:
 
@@ -78,31 +83,31 @@ make destroy
 
 ## Problem catalog
 
-Problems live in a **separate repo**: [susumutomita/TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge). It is mounted here as a git submodule at `problems/`, so `make deploy` bundles whichever catalog snapshot the submodule pointer references.
+Problems live in a **separate repo**: [susumutomita/TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge). It is mounted here as a git submodule under `problems/`, so `make deploy` ships whatever catalog version the submodule currently points at.
 
-See the catalog repo's README for the current list of shipped problems. We deliberately do not duplicate that list here to avoid drift whenever a problem is added.
+For the current list of shipped problems, see the catalog repo's README. We do not mirror that list here so it cannot fall out of sync whenever a problem is added or removed.
 
-A high-level pictorial view of the platform's example competitions also lives in the [Competition Gallery](./docs/gallery.md), curated for visitors.
+For a visual tour of the bundled example competitions, see the [Competition Gallery](./docs/gallery.md).
 
 ## Create Your First Problem
 
-Problem authoring happens in the catalog repo, not here. A problem is a self-contained directory under `battles/<id>/` or `challenges/<id>/` in that repo:
+Problem authoring happens in the catalog repo, not in this one. A problem is a self-contained directory under `battles/<id>/` or `challenges/<id>/`:
 
 ```text
 metadata.json    # catalog display + scoring rule + portal slot wiring
-template.yaml    # CloudFormation deployed to the competitor account
+template.yaml    # CloudFormation deployed into the competitor's account
 portal/          # optional React components for the Participant Portal
-services/        # optional in-stack code (docker-compose / Lambda payload / etc)
+services/        # optional in-stack code (docker-compose / Lambda payload / etc.)
 ```
 
-The scaffolding CLI is still hosted in this platform repo because it depends on shared TypeScript packages:
+The scaffolding CLI itself lives in this platform repo (it depends on shared TypeScript packages):
 
 ```bash
 bun run scripts/tenkacloud-problem.ts create my-first-challenge --kind flag
 bun run scripts/tenkacloud-problem.ts validate my-first-challenge
 ```
 
-Move the generated directory into your local clone of the catalog repo, open a PR there, and a platform-side maintainer bumps the submodule pointer once it merges.
+Move the generated directory into your local clone of the catalog repo and open a PR there. Once that PR merges, a platform-side maintainer bumps the submodule pointer in this repo to pull it in.
 
 Authoring references:
 
@@ -116,17 +121,19 @@ TenkaCloud has two operating modes:
 
 | Mode | Use it when | Entry point |
 | --- | --- | --- |
-| **Lite** | You run one event and do not need tenant onboarding | `make deploy` |
-| **SaaS** | You need a multi-tenant control plane and tenant provisioning pipeline | `make deploy-saas` |
+| **Lite** | You are running a single event and do not need tenant onboarding | `make deploy` |
+| **SaaS** | You need a multi-tenant control plane and a per-tenant provisioning pipeline | `make deploy-saas` |
 
 Core planes:
 
-- **Control Plane**: SBT tenant management, EventBridge bus, tenant pipeline.
-- **Application Plane**: tenant admin console, participant portal, Cognito, APIs.
-- **Problem Deploy Plane**: deploy worker that assumes the competitor role and
-  creates CloudFormation stacks.
-- **Trust Bridge**: `@TenkaCloud/trust-bridge` Cloud Action Intent protocol for
-  cross-cloud authority transfer.
+- **Control Plane** — SBT-based tenant management, EventBridge bus, tenant pipeline.
+- **Application Plane** — tenant admin console, participant portal, Cognito, APIs.
+- **Problem Deploy Plane** — worker Lambda that assumes the role in the
+  competitor's account and creates the problem's CloudFormation stack there.
+- **Trust Bridge** — the `@TenkaCloud/trust-bridge` package, which implements
+  the Cloud Action Intent protocol: a signed intent gets exchanged for
+  short-lived AWS credentials so the platform can act inside a competitor's
+  account without ever holding long-lived keys.
 
 Start with these architecture docs:
 
@@ -143,8 +150,8 @@ Start with these architecture docs:
 
 ## Full Deployment
 
-Use SaaS mode when you want tenant onboarding, pooled/silo tiers, and the full SBT
-control plane:
+Use SaaS mode when you need tenant onboarding, pooled / silo tenant tiers, and
+the full SBT-based control plane:
 
 ```bash
 cp infrastructure/environments/development/.env.example \
