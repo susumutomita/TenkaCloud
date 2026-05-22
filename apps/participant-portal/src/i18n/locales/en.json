@@ -226,7 +226,7 @@
   },
   "sso_credentials": {
     "title": "SSO Credentials",
-    "description": "One-click federated sign-in to the AWS Console. No personal AWS account needed.",
+    "description": "One-click federated sign-in to the AWS Console. No personal AWS account needed — access the environment the host prepared, safely from the portal.",
     "open_failed_header": "Could not open AWS Console",
     "validation_error": "Validation error: {errorCode}",
     "howto_header": "How to use",
@@ -235,7 +235,28 @@
     "open_console_button": "Open AWS Console",
     "open_console_aria": "Open AWS Console for {problemId}",
     "label_aws_account": "AWS Account",
-    "label_region": "Region"
+    "label_region": "Region",
+    "cli": {
+      "section_header": "CLI / SDK temporary credentials",
+      "body": "Issue 1-hour temporary credentials for AWS CLI / boto3 / Terraform usage. Same IAM scope as the Console (ParticipantViewerRole).",
+      "issue_button": "Issue credentials",
+      "reissue_button": "Re-issue",
+      "clear_button": "Clear from screen",
+      "reveal_secrets_button": "Reveal secrets",
+      "hide_secrets_button": "Hide secrets",
+      "copy_export_button": "Copy export snippet",
+      "field_access_key_id": "AWS_ACCESS_KEY_ID",
+      "field_secret_access_key": "AWS_SECRET_ACCESS_KEY",
+      "field_session_token": "AWS_SESSION_TOKEN",
+      "ttl_remaining": "Expires in {remaining}",
+      "expired_note": "These credentials have expired. Please re-issue.",
+      "expired_status": "Expired",
+      "error_header": "Failed to issue credentials",
+      "assume_role_failed": "AssumeRole failed ({stage}): {reason}",
+      "stage_competitor": "AssumeRole into the competitor account",
+      "stage_participant_viewer": "AssumeRole into per-problem ParticipantViewerRole",
+      "security_note": "* Credentials are never persisted off-screen. They disappear on reload / navigation. Be careful where you paste — leaks can't be revoked early."
+    }
   },
   "problem_panel": {
     "kind_flag": "Challenge (flag submission)",

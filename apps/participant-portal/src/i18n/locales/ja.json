@@ -226,7 +226,7 @@
   },
   "sso_credentials": {
     "title": "SSO Credentials",
-    "description": "AWS Console にワンクリックで federate ログイン。自前の AWS アカウント不要。",
+    "description": "AWS Console にワンクリックで federate ログイン。 参加者個人の AWS アカウントは不要 — 主催者が用意した環境へポータルから安全にアクセスできます。",
     "open_failed_header": "AWS Console を開けませんでした",
     "validation_error": "バリデーションエラー: {errorCode}",
     "howto_header": "使い方",
@@ -235,7 +235,28 @@
     "open_console_button": "AWS Console を開く",
     "open_console_aria": "{problemId} の AWS Console を開く",
     "label_aws_account": "AWS Account",
-    "label_region": "Region"
+    "label_region": "Region",
+    "cli": {
+      "section_header": "CLI / SDK の一時資格情報",
+      "body": "AWS CLI / boto3 / Terraform などから直接操作したい場合に、 1 時間有効の一時資格情報を発行します。 IAM スコープは Console と同じ (ParticipantViewerRole)。",
+      "issue_button": "資格情報を発行する",
+      "reissue_button": "再発行",
+      "clear_button": "画面から消す",
+      "reveal_secrets_button": "シークレットを表示",
+      "hide_secrets_button": "シークレットを隠す",
+      "copy_export_button": "export スニペットをコピー",
+      "field_access_key_id": "AWS_ACCESS_KEY_ID",
+      "field_secret_access_key": "AWS_SECRET_ACCESS_KEY",
+      "field_session_token": "AWS_SESSION_TOKEN",
+      "ttl_remaining": "あと {remaining} で expire します",
+      "expired_note": "資格情報は expire しました。 再発行してください。",
+      "expired_status": "Expired",
+      "error_header": "資格情報の発行に失敗しました",
+      "assume_role_failed": "AssumeRole が失敗しました ({stage}): {reason}",
+      "stage_competitor": "競技者アカウントへの AssumeRole",
+      "stage_participant_viewer": "問題ごとの ParticipantViewerRole",
+      "security_note": "※ 資格情報は画面外には保存されません。 ページを離れる / 再読み込みで消えます。 漏洩リスクを下げるため、 共有や貼り付け先には注意してください。"
+    }
   },
   "problem_panel": {
     "kind_flag": "Challenge (flag 提出)",

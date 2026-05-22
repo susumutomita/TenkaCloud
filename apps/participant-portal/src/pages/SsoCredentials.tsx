@@ -6,11 +6,39 @@ import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useState } from "react";
-import { getConsoleSigninUrl, PortalAuthError, PortalValidationError } from "../api/portal-client";
+import {
+  getConsoleSigninUrl,
+  PortalAssumeRoleError,
+  PortalAuthError,
+  PortalValidationError,
+} from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
+import { CliCredentialsPanel } from "../components/CliCredentialsPanel";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
+
+type TranslateFn = (key: string, vars?: Record<string, string>) => string;
+
+/**
+ * 「Console 開く」 ボタン押下時の error → 表示文字列 / 動作 への変換。
+ * 戻り値が `"auth_logout"` のときは 「session 期限切れにつき logout する」 シグナル。
+ * それ以外の文字列は Alert に出すメッセージ。
+ */
+function describeOpenConsoleError(err: unknown, t: TranslateFn): string {
+  if (err instanceof PortalAuthError) return "auth_logout";
+  if (err instanceof PortalAssumeRoleError) {
+    // Issue #1197: stage を翻訳して 「どちらの段が落ちたか」 を表示する。
+    return t("sso_credentials.cli.assume_role_failed", {
+      stage: t(`sso_credentials.cli.stage_${err.stage}`),
+      reason: err.reason,
+    });
+  }
+  if (err instanceof PortalValidationError) {
+    return t("sso_credentials.validation_error", { errorCode: err.errorCode });
+  }
+  return err instanceof Error ? err.message : String(err);
+}
 
 /**
  * AWS Console ワンクリック login。競技者は自前 AWS ログイン不要で、Portal の button
@@ -38,15 +66,12 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
       const loginUrl = await getConsoleSigninUrl(config.apiBaseUrl, sessionToken, jobId);
       window.open(loginUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
-      if (err instanceof PortalAuthError) {
+      const message = describeOpenConsoleError(err, t);
+      if (message === "auth_logout") {
         auth.logout();
         return;
       }
-      if (err instanceof PortalValidationError) {
-        setOpenError(t("sso_credentials.validation_error", { errorCode: err.errorCode }));
-        return;
-      }
-      setOpenError(err instanceof Error ? err.message : String(err));
+      setOpenError(message);
     } finally {
       setPending(null);
     }
@@ -115,16 +140,26 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
               </Header>
             }
           >
-            <KeyValuePairs
-              columns={2}
-              items={[
-                {
-                  label: t("sso_credentials.label_aws_account"),
-                  value: <code>{problem.awsAccountId}</code>,
-                },
-                { label: t("sso_credentials.label_region"), value: problem.region },
-              ]}
-            />
+            <SpaceBetween size="m">
+              <KeyValuePairs
+                columns={2}
+                items={[
+                  {
+                    label: t("sso_credentials.label_aws_account"),
+                    value: <code>{problem.awsAccountId}</code>,
+                  },
+                  { label: t("sso_credentials.label_region"), value: problem.region },
+                ]}
+              />
+              {sessionToken && (
+                <CliCredentialsPanel
+                  apiBaseUrl={config.apiBaseUrl}
+                  sessionToken={sessionToken}
+                  jobId={problem.jobId}
+                  onAuthError={auth.logout}
+                />
+              )}
+            </SpaceBetween>
           </Container>
         ))}
     </SpaceBetween>
