@@ -88,6 +88,18 @@ const RESOURCE_STAR_OK_ACTIONS = new Set([
   "cloudshell:StopEnvironment",
   "cloudshell:DeleteEnvironment",
   "cloudshell:PutCredentials",
+  // ECS task definition lifecycle — AWS doesn't expose resource-level permissions
+  // for Register/Deregister/Describe TD. Registering a TD doesn't deploy it; the
+  // deploy requires ARN-scoped ecs:CreateService / RunTask on ${NamePrefix}*
+  // clusters which is enforced separately. Safe at Resource:"*".
+  // (TenkaCloudChallenge PR #20 — migration-deploy IAM for migration-battle / stackstack.)
+  "ecs:RegisterTaskDefinition",
+  "ecs:DeregisterTaskDefinition",
+  "ecs:DescribeTaskDefinition",
+  // ECR authorization token — account-scoped 12-hour token bound to the calling
+  // identity. The token only unlocks repositories the role's ARN-scoped ecr:*
+  // grants already permit; safe at Resource:"*".
+  "ecr:GetAuthorizationToken",
 ]);
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
