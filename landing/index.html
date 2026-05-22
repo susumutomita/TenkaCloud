@@ -896,7 +896,7 @@ footer .legal {
       <h1>
         <span data-i18n="hero.h1a">社内のクラウド研修を、</span><em data-i18n="hero.h1b">ハンズオン演習に変える。</em>
       </h1>
-      <p class="sub" data-i18n="hero.sub">Battle (リアルタイム対戦) と Challenge (個別演習) を、 競技者の実 AWS アカウントへ自動 deploy。 採点と進捗管理は組み込み済み。</p>
+      <p class="sub" data-i18n="hero.sub">Battle (リアルタイム対戦) と Challenge (個別演習) を、 チームごとに 隔離された AWS 環境へ自動 deploy。 採点 / 進捗管理 / AWS Console アクセス は組み込み済み。</p>
       <div class="cta-row">
         <a
           class="cta-primary"
@@ -1113,26 +1113,26 @@ footer .legal {
 <section>
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="aud.eyebrow">誰のための</div>
-    <h2 data-i18n="aud.h2">出る人にも、開く人にも。</h2>
-    <p class="lead" data-i18n="aud.lead">個人のエンジニアから、 勉強会の主催者、 教育の現場まで。 参加者ごとの環境払い出し / ログイン / 採点 / 進捗管理 まで、 ひとつの画面で完結します。</p>
+    <h2 data-i18n="aud.h2">クラウド実戦力を、組織で育てる。</h2>
+    <p class="lead" data-i18n="aud.lead">クラウド人材育成 (= CCoE) / Platform / SRE / Security 部門が、 イベント基盤を自前で作らずに ハンズオン AWS 演習 を開催 / 運営できます。 環境払い出し / ログイン / 採点 / 進捗管理 まで、 ひとつの画面で完結。</p>
   </div>
   <div class="aud">
     <div class="col">
-      <div class="role" data-i18n="aud.a.role">エンジニア</div>
-      <h3 data-i18n="aud.a.h">実戦で、腕を上げる。</h3>
-      <p data-i18n="aud.a.p">本物の AWS で問題を解き、ランクを上げる。成果は履歴に残せる、技術の足跡になる。</p>
-      <a class="more" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.a.more">参加者ポータル</span> ›</a>
+      <div class="role" data-i18n="aud.a.role">CCoE / クラウド人材育成</div>
+      <h3 data-i18n="aud.a.h">研修を、常設の演習場へ。</h3>
+      <p data-i18n="aud.a.p">新卒オンボーディング / 内製化推進 / 部門横断の継続的な AWS 演習を、 同じプラットフォーム上で繰り返し開催できる。 単発ハンズオンから 「社内の演習基盤」 へ。</p>
+      <a class="more" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.a.more">導入のご相談</span> ›</a>
     </div>
     <div class="col">
-      <div class="role" data-i18n="aud.b.role">イベント主催</div>
-      <h3 data-i18n="aud.b.h">競技イベントを、1 画面で。</h3>
-      <p data-i18n="aud.b.p">競技者ごとの環境を自動で配ってまわす。準備に費やしていた一週間が、半日で終わる。</p>
+      <div class="role" data-i18n="aud.b.role">Platform / SRE</div>
+      <h3 data-i18n="aud.b.h">演習設計を、 1 画面で。</h3>
+      <p data-i18n="aud.b.p">チームごとに隔離された AWS 環境を自動で配り、 採点 / 進捗 / Console アクセス を集約。 1 週間かかっていた準備が半日に短縮。 facilitator の負荷も下げる。</p>
       <a class="more" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.b.more">運営ガイド</span> ›</a>
     </div>
     <div class="col">
-      <div class="role" data-i18n="aud.c.role">学校・コミュニティ</div>
-      <h3 data-i18n="aud.c.h">AWS を、教材にする。</h3>
-      <p data-i18n="aud.c.p">授業や勉強会で、本物の AWS を題材にできる。問題はオープン。新しい問題の提案も歓迎します。</p>
+      <div class="role" data-i18n="aud.c.role">エンジニア / 個人参加</div>
+      <h3 data-i18n="aud.c.h">実戦で、腕を上げる。</h3>
+      <p data-i18n="aud.c.p">本物の AWS で問題を解き、 ランクを上げる。 OSS なので、 勉強会 / 学校 / コミュニティが 自前 AWS 環境で無料開催することも可能。</p>
       <a class="more" href="https://github.com/susumutomita/TenkaCloudChallenge#readme" target="_blank" rel="noopener noreferrer"><span data-i18n="aud.c.more">問題を作る</span> ›</a>
     </div>
   </div>
@@ -1282,18 +1282,19 @@ footer .legal {
       </div>
 
       <div class="pricing-card">
-        <div class="pricing-tier" data-i18n="pricing.enterprise.tier">Enterprise</div>
+        <div class="pricing-tier" data-i18n="pricing.enterprise.tier">Annual Arena</div>
         <div class="pricing-price">
-          <span data-i18n="pricing.enterprise.price">300万円</span><span class="pricing-unit" data-i18n="pricing.enterprise.unit">/ 年</span>
+          <span data-i18n="pricing.enterprise.price">600万円</span><span class="pricing-unit" data-i18n="pricing.enterprise.unit">〜 / 年</span>
         </div>
-        <div class="pricing-scope" data-i18n="pricing.enterprise.scope">年間契約 (= 年 4 回開催)</div>
-        <p class="pricing-sub" data-i18n="pricing.enterprise.note">新卒教育 / 社内研修など継続開催したい方向け。</p>
+        <div class="pricing-scope" data-i18n="pricing.enterprise.scope">年間契約 (= 「社内の演習基盤」 として継続運用)</div>
+        <p class="pricing-sub" data-i18n="pricing.enterprise.note">新卒教育 / 内製化推進 / CCoE プログラムなど、 単発でなく <strong>常設の演習場</strong> として運用したい組織向け。</p>
         <ul class="pricing-list">
-          <li data-i18n="pricing.enterprise.f1">年 4 回までの同時開催 (= 1 回 5 チーム / 〜 20 人)</li>
-          <li data-i18n="pricing.enterprise.f2">継続的なイベント開催 (= 新卒教育 / 社内研修 等)</li>
+          <li data-i18n="pricing.enterprise.f1">複数開催 (= 年 4 回以上、 部門別 / 期別)</li>
+          <li data-i18n="pricing.enterprise.f2">問題セットの roadmap 提案 + facilitator 向け運営手順</li>
+          <li data-i18n="pricing.enterprise.f3">事後レポーティング (= 採点履歴 / 受講者進捗 / 攻撃可視化)</li>
         </ul>
-        <p class="pricing-fineprint" data-i18n="pricing.enterprise.fineprint">※ AWS account はお客様側でご用意ください。</p>
-        <a class="pricing-cta secondary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.enterprise.cta">お見積もり依頼</span> →</a>
+        <p class="pricing-fineprint" data-i18n="pricing.enterprise.fineprint">※ 規模 / 内容に応じて見積もり。 AWS account はお客様側でご用意ください。</p>
+        <a class="pricing-cta secondary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="pricing.enterprise.cta">プログラム相談</span> →</a>
       </div>
     </div>
     <p class="pricing-tail" data-i18n="pricing.tail"><strong>カスタム問題の追加開発</strong>は要件定義から実装まで通常の受託開発と同じスコープになるため、 別途お見積もりします。 それ以上の規模 / 特別要件も含めて、 <a href="#contact">お問い合わせ</a> ください。</p>
@@ -1305,7 +1306,7 @@ footer .legal {
     <div class="ent-cta">
       <div class="eyebrow" data-i18n="ent.eyebrow">どのプランがよいか分からない</div>
       <h2 data-i18n="ent.h2">まずは話してみませんか。</h2>
-      <p data-i18n="ent.p">社内勉強会、 学校の授業、 クローズドなインシデントレスポンス演習 — 規模 / 期間 / 参加者像を聞いた上で、 適切なプランを一緒に決めます。</p>
+      <p data-i18n="ent.p">クラウド人材育成プログラム、 内製化推進、 継続的な AWS 演習 — 規模 / 期間 / 参加者像を聞いた上で、 適切なプランを一緒に決めます。</p>
       <div class="btns">
         <a class="btn-primary" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer"><span data-i18n="ent.cta1">お問い合わせ</span> →</a>
         <a class="btn-ghost" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="ent.cta2">GitHub を見る</span> →</a>
@@ -1370,7 +1371,7 @@ footer .legal {
 
       "hero.h1a": "社内のクラウド研修を、",
       "hero.h1b": "ハンズオン演習に変える。",
-      "hero.sub": "Battle (リアルタイム対戦) と Challenge (個別演習) を、 競技者の実 AWS アカウントへ自動 deploy。 採点と進捗管理は組み込み済み。",
+      "hero.sub": "Battle (リアルタイム対戦) と Challenge (個別演習) を、 チームごとに 隔離された AWS 環境へ自動 deploy。 採点 / 進捗管理 / AWS Console アクセス は組み込み済み。",
       "hero.cta1": "5 分で試す",
       "hero.cta2": "GitHub を見る",
       "app.lang": "◉ 日本語 ▼",
@@ -1443,19 +1444,19 @@ footer .legal {
       "preview.sso.button": "AWS Console を開く",
 
       "aud.eyebrow": "誰のための",
-      "aud.h2": "出る人にも、開く人にも。",
-      "aud.lead": "個人のエンジニアから、 勉強会の主催者、 教育の現場まで。 参加者ごとの環境払い出し / ログイン / 採点 / 進捗管理 まで、 ひとつの画面で完結します。",
-      "aud.a.role": "エンジニア",
-      "aud.a.h": "実戦で、腕を上げる。",
-      "aud.a.p": "本物の AWS で問題を解き、ランクを上げる。成果は履歴に残せる、技術の足跡になる。",
-      "aud.a.more": "参加者ポータル",
-      "aud.b.role": "イベント主催",
-      "aud.b.h": "競技イベントを、1 画面で。",
-      "aud.b.p": "競技者ごとの環境を自動で配って回す。 準備に費やしていた一週間が、 半日で終わる。",
+      "aud.h2": "クラウド実戦力を、組織で育てる。",
+      "aud.lead": "クラウド人材育成 (= CCoE) / Platform / SRE / Security 部門が、 イベント基盤を自前で作らずに ハンズオン AWS 演習 を開催 / 運営できます。 環境払い出し / ログイン / 採点 / 進捗管理 まで、 ひとつの画面で完結。",
+      "aud.a.role": "CCoE / クラウド人材育成",
+      "aud.a.h": "研修を、常設の演習場へ。",
+      "aud.a.p": "新卒オンボーディング / 内製化推進 / 部門横断の継続的な AWS 演習を、 同じプラットフォーム上で繰り返し開催できる。 単発ハンズオンから 「社内の演習基盤」 へ。",
+      "aud.a.more": "導入のご相談",
+      "aud.b.role": "Platform / SRE",
+      "aud.b.h": "演習設計を、 1 画面で。",
+      "aud.b.p": "チームごとに隔離された AWS 環境を自動で配り、 採点 / 進捗 / Console アクセス を集約。 1 週間かかっていた準備が半日に短縮。 facilitator の負荷も下げる。",
       "aud.b.more": "運営ガイド",
-      "aud.c.role": "学校・コミュニティ",
-      "aud.c.h": "AWS を、教材にする。",
-      "aud.c.p": "授業や勉強会で、本物の AWS を題材にできる。問題はオープン。新しい問題の提案も歓迎します。",
+      "aud.c.role": "エンジニア / 個人参加",
+      "aud.c.h": "実戦で、腕を上げる。",
+      "aud.c.p": "本物の AWS で問題を解き、 ランクを上げる。 OSS なので、 勉強会 / 学校 / コミュニティが 自前 AWS 環境で無料開催することも可能。",
       "aud.c.more": "問題を作る",
 
       "onboard.eyebrow": "オンボーディング",
@@ -1479,7 +1480,7 @@ footer .legal {
       ],
 
       "stats": [
-        { n: "0",   u: "$/h",  l: "アイドル時の運用コスト。" },
+        { n: "≈0", u: "$/h",  l: "アイドル時の運用コストはほぼゼロを目指した設計。" },
         { n: "100", u: "%",    l: "OSS / Apache 2.0。すべて読める。" },
         { n: "2",   u: "files",l: "metadata.json + template.yaml で 1 問追加。" },
         { n: "1",   u: "click",l: "競技者は AWS Console に federation ログイン。" }
@@ -1492,14 +1493,14 @@ footer .legal {
       "extend.cta2": "new-problem skill",
 
       "pricing.eyebrow": "料金",
-      "pricing.h2": "イベント規模に合わせて。",
-      "pricing.p": "プラットフォーム本体は Apache 2.0 の OSS なので、 <strong>自前 AWS アカウントに deploy して開催すれば無料</strong>。 構築や当日運営を任せたい方向けに、 規模に合わせた有料プランをご用意しています。",
+      "pricing.h2": "単発イベントから、 常設の演習場へ。",
+      "pricing.p": "プラットフォーム本体は Apache 2.0 の OSS なので、 <strong>自前 AWS アカウントに deploy して開催すれば無料</strong>。 構築や当日運営を任せたい / 継続開催したい方向けに、 規模に合わせた有料プランをご用意しています。",
       "pricing.starter.tier": "Starter",
       "pricing.starter.price": "50万円",
       "pricing.starter.unit": "/ 回",
-      "pricing.starter.scope": "お試し (〜 2 チーム)",
-      "pricing.starter.note": "まずは小規模で運営代行を試したい方向け。",
-      "pricing.starter.f1": "2 チームまでの同時開催",
+      "pricing.starter.scope": "お試し (= 1 回 / 2 チームまで)",
+      "pricing.starter.note": "初回 / 小規模で運営代行の体験を試したい方向け。",
+      "pricing.starter.f1": "1 イベントあたり 2 チームまで",
       "pricing.starter.f2": "deploy / 当日進行サポート",
       "pricing.starter.f3": "公開問題セットから選定",
       "pricing.starter.fineprint": "※ AWS account はお客様側でご用意ください。",
@@ -1507,28 +1508,29 @@ footer .legal {
       "pricing.hosted.tier": "Hosted",
       "pricing.hosted.price": "100万円",
       "pricing.hosted.unit": "/ 回",
-      "pricing.hosted.scope": "5 チームまで (〜 20 人)",
-      "pricing.hosted.note": "構築から当日進行まで、 運営を丸ごと代行します。",
+      "pricing.hosted.scope": "1 回 5 チーム (〜 20 人) まで",
+      "pricing.hosted.note": "構築から当日進行まで、 単発イベントを 丸ごと運営代行します。",
       "pricing.hosted.f1": "AWS account 準備 / deploy 支援",
       "pricing.hosted.f2": "当日の進行 + on-call / Red Team 役",
       "pricing.hosted.f3": "事後の振り返りレポート (= 採点履歴 / 攻撃可視化)",
       "pricing.hosted.f4": "問題セットの選定",
       "pricing.hosted.fineprint": "※ AWS account はお客様側でご用意ください。 こちらでご用意する場合は別途お見積もり。",
       "pricing.hosted.cta": "お見積もり依頼",
-      "pricing.enterprise.tier": "Enterprise",
-      "pricing.enterprise.price": "300万円",
-      "pricing.enterprise.unit": "/ 年",
-      "pricing.enterprise.scope": "年間契約 (= 年 4 回開催)",
-      "pricing.enterprise.note": "新卒教育 / 社内研修など継続開催したい方向け。",
-      "pricing.enterprise.f1": "年 4 回までの同時開催 (= 1 回 5 チーム / 〜 20 人)",
-      "pricing.enterprise.f2": "継続的なイベント開催 (= 新卒教育 / 社内研修 等)",
-      "pricing.enterprise.fineprint": "※ AWS account はお客様側でご用意ください。",
-      "pricing.enterprise.cta": "お見積もり依頼",
+      "pricing.enterprise.tier": "Annual Arena",
+      "pricing.enterprise.price": "600万円",
+      "pricing.enterprise.unit": "〜 / 年",
+      "pricing.enterprise.scope": "年間契約 (= 「社内の演習基盤」 として継続運用)",
+      "pricing.enterprise.note": "新卒教育 / 内製化推進 / CCoE プログラムなど、 単発でなく <strong>常設の演習場</strong> として運用したい組織向け。",
+      "pricing.enterprise.f1": "複数開催 (= 年 4 回以上、 部門別 / 期別)",
+      "pricing.enterprise.f2": "問題セットの roadmap 提案 + facilitator 向け運営手順",
+      "pricing.enterprise.f3": "事後レポーティング (= 採点履歴 / 受講者進捗 / 攻撃可視化)",
+      "pricing.enterprise.fineprint": "※ 規模 / 内容に応じて見積もり。 AWS account はお客様側でご用意ください。",
+      "pricing.enterprise.cta": "プログラム相談",
       "pricing.tail": "<strong>カスタム問題の追加開発</strong>は要件定義から実装まで通常の受託開発と同じスコープになるため、 別途お見積もりします。 それ以上の規模 / 特別要件も含めて、 <a href=\"#contact\">お問い合わせ</a> ください。",
 
       "ent.eyebrow": "どのプランがよいか分からない",
       "ent.h2": "まずは話してみませんか。",
-      "ent.p": "社内勉強会、 学校の授業、 クローズドなインシデントレスポンス演習 — 規模 / 期間 / 参加者像を聞いた上で、 適切なプランを一緒に決めます。",
+      "ent.p": "クラウド人材育成プログラム、 内製化推進、 継続的な AWS 演習 — 規模 / 期間 / 参加者像を聞いた上で、 適切なプランを一緒に決めます。",
       "ent.cta1": "お問い合わせ",
       "ent.cta2": "GitHub を見る",
 
@@ -1548,9 +1550,9 @@ footer .legal {
       "nav.contact": "Contact",
       "nav.github": "GitHub",
 
-      "hero.h1a": "Turn internal cloud training ",
-      "hero.h1b": "into hands-on exercises in minutes.",
-      "hero.sub": "Battle (real-time) and Challenge (self-paced) drills, auto-deployed to each participant's own AWS account. Scoring and progress tracking are built in.",
+      "hero.h1a": "Run team-based cloud drills on real AWS, ",
+      "hero.h1b": "without building the event platform yourself.",
+      "hero.sub": "Battle (real-time) and Challenge (self-paced) drills, auto-deployed into <strong>isolated AWS environments for each team</strong>. Scoring, progress tracking, and AWS Console access are built in.",
       "hero.cta1": "Try in 5 minutes",
       "hero.cta2": "View on GitHub",
       "app.lang": "◉ English ▼",
@@ -1623,19 +1625,19 @@ footer .legal {
       "preview.sso.button": "Open AWS Console",
 
       "aud.eyebrow": "Who it's for",
-      "aud.h2": "For the people who play. And the people who host.",
-      "aud.lead": "Solo engineers, meetup organizers, classrooms. Per-participant environments, login, scoring, and progress tracking — all in one screen.",
-      "aud.a.role": "Engineers",
-      "aud.a.h": "Sharpen on the real thing.",
-      "aud.a.p": "Solve problems on real AWS, climb the rank, earn badges your résumé can prove.",
-      "aud.a.more": "Participant portal",
-      "aud.b.role": "Organizers",
-      "aud.b.h": "Run a competition from one screen.",
-      "aud.b.p": "Every team's environment, provisioned automatically. The week of prep collapses to an afternoon.",
+      "aud.h2": "Build cloud capability across the org.",
+      "aud.lead": "For Cloud Enablement (CCoE), Platform / SRE, and Security teams that need hands-on AWS training — without rebuilding the event platform. Environment provisioning, login, scoring, and progress tracking — all in one screen.",
+      "aud.a.role": "Cloud Enablement / CCoE",
+      "aud.a.h": "Turn training into a recurring arena.",
+      "aud.a.p": "New-grad onboarding, internalization programs, cross-team AWS drills — all running on the same platform, repeatedly. Move from one-off workshops to <strong>a reusable internal cloud arena</strong>.",
+      "aud.a.more": "Talk to us",
+      "aud.b.role": "Platform / SRE",
+      "aud.b.h": "Design drills from one screen.",
+      "aud.b.p": "Each team gets an isolated AWS environment, automatically provisioned. Scoring, progress, and Console access are aggregated. A week of setup collapses to an afternoon, freeing up facilitators.",
       "aud.b.more": "Operator guide",
-      "aud.c.role": "Schools & community",
-      "aud.c.h": "Teach with real AWS.",
-      "aud.c.p": "Use real AWS as a textbook. Every problem is open — and new ones are welcome from anyone.",
+      "aud.c.role": "Engineers / individual learners",
+      "aud.c.h": "Sharpen on the real thing.",
+      "aud.c.p": "Solve problems on live AWS infrastructure and climb the rank. The platform is OSS, so meetups, schools, and communities can also self-host on their own AWS account for free.",
       "aud.c.more": "Author a problem",
 
       "onboard.eyebrow": "Onboarding",
@@ -1655,11 +1657,11 @@ footer .legal {
         ["Cross-account AssumeRole + ExternalId.", "Every call into a player account carries a unique ExternalId. Knowing the Role ARN gets an attacker nothing."],
         ["Tear it down whenever, yourself.", "One click in the portal removes the stack. No orphans, no surprise charges."],
         ["The code is on GitHub.", "Lambdas, Step Functions, the IaC — read what runs, line by line. Apache License 2.0."],
-        ["Costs nothing while idle.", "Lambda / DynamoDB / API Gateway are all pay-per-use. Between events, the platform sits at essentially zero spend."]
+        ["Near-zero idle cost.", "Lambda / DynamoDB / API Gateway are all pay-per-use. Between events, the platform sits at near-zero spend (subject to AWS minimum service charges)."]
       ],
 
       "stats": [
-        { n: "0",   u: "$/h",  l: "Operating cost while idle." },
+        { n: "≈0", u: "$/h",  l: "Designed for near-zero idle cost." },
         { n: "100", u: "%",    l: "Open source. Apache 2.0. End to end." },
         { n: "2",   u: "files",l: "metadata.json + template.yaml to ship a problem." },
         { n: "1",   u: "click",l: "Participants federate into the AWS Console." }
@@ -1672,43 +1674,44 @@ footer .legal {
       "extend.cta2": "new-problem skill",
 
       "pricing.eyebrow": "Pricing",
-      "pricing.h2": "Pick the size that fits.",
-      "pricing.p": "The platform itself is Apache 2.0 OSS, so <strong>self-hosting on your own AWS account is free</strong>. Pay only when you'd rather hand off setup and day-of operations to us.",
+      "pricing.h2": "Start small. Turn it into a recurring cloud arena.",
+      "pricing.p": "The platform itself is Apache 2.0 OSS, so <strong>self-hosting on your own AWS account is free</strong>. Pay only when you want setup, day-of operations, or a multi-event program run for you.",
       "pricing.starter.tier": "Starter",
       "pricing.starter.price": "¥500K",
       "pricing.starter.unit": "/ event",
-      "pricing.starter.scope": "Trial (up to 2 teams)",
-      "pricing.starter.note": "For first-time hosts who want to test the operated experience small.",
-      "pricing.starter.f1": "Concurrent events for up to 2 teams",
+      "pricing.starter.scope": "Pilot (1 event, up to 2 teams)",
+      "pricing.starter.note": "For first-time hosts who want to validate the operated experience at a small scale.",
+      "pricing.starter.f1": "Up to 2 teams per pilot event",
       "pricing.starter.f2": "Deploy / day-of support",
       "pricing.starter.f3": "Selected from the public problem set",
       "pricing.starter.fineprint": "* You bring your own AWS account.",
       "pricing.starter.cta": "Request a quote",
-      "pricing.hosted.tier": "Hosted",
+      "pricing.hosted.tier": "Hosted Event",
       "pricing.hosted.price": "¥1M",
       "pricing.hosted.unit": "/ event",
-      "pricing.hosted.scope": "Up to 5 teams (~20 people)",
-      "pricing.hosted.note": "We handle setup, run the day, and tear down.",
+      "pricing.hosted.scope": "Up to 5 teams / ~20 participants per event",
+      "pricing.hosted.note": "We handle setup, run the day, and tear down — one full event, operated.",
       "pricing.hosted.f1": "AWS account prep / deploy support",
-      "pricing.hosted.f2": "Live MC + on-call / Red Team role",
+      "pricing.hosted.f2": "Live facilitation + on-call / Red Team role",
       "pricing.hosted.f3": "Post-event report (scoring history, attack timeline)",
       "pricing.hosted.f4": "Problem selection",
       "pricing.hosted.fineprint": "* You bring your own AWS account. If we need to provide one, we'll quote separately.",
       "pricing.hosted.cta": "Request a quote",
-      "pricing.enterprise.tier": "Enterprise",
-      "pricing.enterprise.price": "¥3M",
-      "pricing.enterprise.unit": "/ year",
-      "pricing.enterprise.scope": "Annual contract (4 events / year)",
-      "pricing.enterprise.note": "For recurring delivery — new-grad onboarding, internal training, etc.",
-      "pricing.enterprise.f1": "Up to 4 events per year (5 teams / ~20 people each)",
-      "pricing.enterprise.f2": "Recurring event delivery (e.g. new-grad onboarding, internal training)",
-      "pricing.enterprise.fineprint": "* You bring your own AWS account.",
-      "pricing.enterprise.cta": "Request a quote",
+      "pricing.enterprise.tier": "Annual Arena",
+      "pricing.enterprise.price": "¥6M",
+      "pricing.enterprise.unit": "+ / year",
+      "pricing.enterprise.scope": "Annual contract — your <strong>internal cloud arena</strong>",
+      "pricing.enterprise.note": "For organizations running new-grad onboarding, CCoE programs, or platform enablement <strong>as a recurring program</strong>, not a one-off event.",
+      "pricing.enterprise.f1": "Multiple events per year (4+, by department / cohort)",
+      "pricing.enterprise.f2": "Problem-set roadmap + facilitator enablement materials",
+      "pricing.enterprise.f3": "Program reporting (scoring history, learner progress, attack visibility)",
+      "pricing.enterprise.fineprint": "* Quoted by scope and scale. You bring your own AWS account.",
+      "pricing.enterprise.cta": "Talk about a program",
       "pricing.tail": "<strong>Custom problem authoring</strong> follows the same scope as regular software development (requirements → implementation), so we quote it separately. <a href=\"#contact\">Get in touch</a> for that and for anything beyond these tiers.",
 
       "ent.eyebrow": "Not sure which plan fits",
       "ent.h2": "Let's talk.",
-      "ent.p": "Internal study groups, classroom courses, closed incident-response drills — share your scale, timing, and audience, and we'll figure out the right plan together.",
+      "ent.p": "Cloud enablement programs, internal onboarding, recurring AWS drills — share your scale, cadence, and audience, and we'll figure out the right setup together.",
       "ent.cta1": "Get in touch",
       "ent.cta2": "View on GitHub",
 
