@@ -19,6 +19,9 @@ const ROOTS = [
   "apps/admin-console/src",
   "apps/application-admin-console/src",
   "apps/participant-portal/src",
+  // Issue #1252: CLI も `StatusCodes.*` 規約に従わせる。 旧 oauth.ts が
+  // `res.writeHead(400)` 等のリテラルを使っていたが、 StatusCodes に置換済。
+  "apps/cli/src",
 ];
 
 const SKIP_DIRS = new Set(["node_modules", "dist", "cdk.out", ".next", "build"]);

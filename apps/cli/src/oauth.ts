@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { StatusCodes } from "http-status-codes";
 import { generatePkcePair, type PkcePair } from "./pkce.ts";
 
 /**
@@ -60,17 +61,17 @@ function startLoopbackServer(): Promise<LoopbackServerResult> {
       const code = url.searchParams.get("code");
       const error = url.searchParams.get("error");
       if (error) {
-        res.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+        res.writeHead(StatusCodes.BAD_REQUEST, { "content-type": "text/plain; charset=utf-8" });
         res.end(`OAuth error: ${error}`);
         codeReject?.(new Error(`OAuth error: ${error}`));
         return;
       }
       if (!code) {
-        res.writeHead(400, { "content-type": "text/plain; charset=utf-8" });
+        res.writeHead(StatusCodes.BAD_REQUEST, { "content-type": "text/plain; charset=utf-8" });
         res.end("Missing 'code' query parameter.");
         return;
       }
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.writeHead(StatusCodes.OK, { "content-type": "text/html; charset=utf-8" });
       res.end(
         "<html><body><h1>TenkaCloud CLI: sign-in 完了</h1><p>このタブを閉じて CLI に戻ってください。</p></body></html>",
       );

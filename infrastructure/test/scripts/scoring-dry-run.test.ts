@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { runAttackDetectionDryRun } from "../../../scripts/problem-cli/dry-run/attack-detection";
 import { runDryRun } from "../../../scripts/tenkacloud-problem";
 
 /**
@@ -95,10 +96,59 @@ describe("scoring dry-run (#951 sub #3)", () => {
     expect(r.summary).toContain("not found");
   });
 
-  it("attack-detection kind: 未配備 (= 既存問題に存在しない) は new problem 追加時に test 拡張", () => {
-    // 既存 problems/ には attack-detection kind の 問題は存在しないため、 統合 test はここでは
-    // skip。 dry-run の attack-detection branch 自体は runDryRun の関数として実装済み (= 未配備
-    // でも本 test ファイルは broken にしない)。
-    expect(true).toBe(true);
+  describe("attack-detection kind (= synthetic fixture; #1248)", () => {
+    // 既存 problems/ には attack-detection kind の 問題が存在しないため、 runDryRun (= dir 解決
+    // 経由) ではなく runAttackDetectionDryRun を直接 invoke して branch を exercise する。
+    const baseInput = (
+      overrides: Partial<{
+        pointsPerAttack: number;
+        cycles: number;
+        pattern: string;
+      }>,
+    ) => ({
+      args: {
+        problemId: "synthetic-attack-detection",
+        cycles: overrides.cycles ?? undefined,
+        pattern: overrides.pattern ?? undefined,
+      },
+      dir: "/tmp/synthetic",
+      meta: {},
+      scoring: { kind: "attack-detection", pointsPerAttack: overrides.pointsPerAttack ?? 50 },
+      lines: [] as string[],
+      kind: "attack-detection",
+    });
+
+    it("should compute earned = sum(deltas) × pointsPerAttack for digit pattern", () => {
+      const r = runAttackDetectionDryRun(baseInput({ cycles: 5, pattern: "12345" }));
+      // (1+2+3+4+5) × 50 = 750
+      expect(r.ok).toBe(true);
+      expect(r.summary).toContain("total 15 detections");
+      expect(r.summary).toContain("earned=750");
+    });
+
+    it("should default pattern to all-1s when omitted", () => {
+      const r = runAttackDetectionDryRun(baseInput({ cycles: 4, pointsPerAttack: 25 }));
+      // 1 attack/cycle × 4 cycles × 25 = 100
+      expect(r.summary).toContain("earned=100");
+    });
+
+    it("should skip invalid pattern chars (non-digit) without crashing", () => {
+      const r = runAttackDetectionDryRun(baseInput({ cycles: 3, pattern: "2x3" }));
+      // 2 + (skip) + 3 = 5 detections × 50 = 250
+      expect(r.summary).toContain("earned=250");
+      expect(r.lines.some((l) => l.includes('invalid char "x"'))).toBe(true);
+    });
+
+    it("should produce a length-mismatch note when pattern shorter than cycles", () => {
+      const r = runAttackDetectionDryRun(baseInput({ cycles: 5, pattern: "11" }));
+      expect(r.lines.some((l) => l.includes("pattern length (2) !== cycles (5)"))).toBe(true);
+    });
+
+    it("should emit zero earned when pointsPerAttack is 0", () => {
+      const r = runAttackDetectionDryRun(
+        baseInput({ cycles: 3, pattern: "999", pointsPerAttack: 0 }),
+      );
+      expect(r.summary).toContain("earned=0");
+    });
   });
 });
