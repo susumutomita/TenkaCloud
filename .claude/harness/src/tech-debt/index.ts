@@ -4,10 +4,16 @@ import { type BaselineFile, isBaselined, loadBaseline } from "../baseline.ts";
 import type { Finding, Rule, Severity } from "../types.ts";
 import { listAllTrackedFiles, listStagedFiles } from "../utils/staged-files.ts";
 import { assertionRoulette } from "./assertion-roulette.ts";
+import { circularDependency } from "./circular-dependency.ts";
 import { highCoupling } from "./high-coupling.ts";
 import { magicNumber } from "./magic-number.ts";
 
-export const TECH_DEBT_RULES: readonly Rule[] = [assertionRoulette, highCoupling, magicNumber];
+export const TECH_DEBT_RULES: readonly Rule[] = [
+  assertionRoulette,
+  highCoupling,
+  magicNumber,
+  circularDependency,
+];
 
 export interface RunOptions {
   readonly cwd: string;
@@ -50,6 +56,8 @@ Rules:
   assertion-roulette   Test files with > 5 expect() calls per it()/test() block.
   high-coupling        Production files importing >= 16 modules at top (>= 41 -> error).
   magic-number         Status codes / timeouts / ports as numeric literals in production code.
+  circular-dependency  ES module import cycles detected via Tarjan SCC (size >= 4 -> error).
+                       In-tree implementation; no dep on madge or any external tool.
 
 Baselines:
   Per-rule baseline at .claude/harness/baselines/tech-debt-<rule-id>.json.
