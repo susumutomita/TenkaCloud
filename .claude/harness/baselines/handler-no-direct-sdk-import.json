@@ -26,24 +26,6 @@
     },
     {
       "ruleId": "handler-no-direct-sdk-import",
-      "filePath": "infrastructure/lib/problem-deploy/handlers/external-id-audit-handler/index.ts",
-      "line": 5,
-      "match": "@aws-sdk/client-cloudwatch"
-    },
-    {
-      "ruleId": "handler-no-direct-sdk-import",
-      "filePath": "infrastructure/lib/problem-deploy/handlers/external-id-audit-handler/index.ts",
-      "line": 6,
-      "match": "@aws-sdk/client-dynamodb"
-    },
-    {
-      "ruleId": "handler-no-direct-sdk-import",
-      "filePath": "infrastructure/lib/problem-deploy/handlers/external-id-audit-handler/index.ts",
-      "line": 7,
-      "match": "@aws-sdk/lib-dynamodb"
-    },
-    {
-      "ruleId": "handler-no-direct-sdk-import",
       "filePath": "infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/index.ts",
       "line": 7,
       "match": "@aws-sdk/lib-dynamodb"

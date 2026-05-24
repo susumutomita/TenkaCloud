@@ -1,12 +1,10 @@
-import {
-  CloudWatchClient,
-  type CloudWatchClientConfig,
-  PutMetricDataCommand,
-} from "@aws-sdk/client-cloudwatch";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
 import type { CompetitorAccountItem } from "../competitor-accounts-handler/types.js";
+import {
+  composeRepositories,
+  type Repositories,
+  type RotationAgeMetricDatum,
+} from "./repository.js";
 
 /**
  * Phase 3.2 / Issue #603: ExternalId rotation 監査 Lambda。
@@ -26,27 +24,21 @@ import type { CompetitorAccountItem } from "../competitor-accounts-handler/types
  *   - 1 metric = 1 (tenantId, awsAccountId) dimension。operator が CloudWatch Alarm で
  *     "RotationAge > 90 days" を 1 ルールでカバーできる。
  *
- * Metric namespace / dimension:
+ * Issue #1237: SDK の Command 構築は `repository.ts` に閉じ込める。本 index.ts は
+ * 「環境変数 → repository 呼び出し → 結果の構造化ログ」のオーケストレーションに専念
+ * し、`@aws-sdk/*` を直接 import しない (= `handler-no-direct-sdk-import` 不変条件)。
+ *
+ * Metric namespace / dimension (= repository が保証する物理形):
  *   - Namespace: `TenkaCloud/CompetitorAccounts`
  *   - MetricName: `RotationAge`
  *   - Dimensions: `TenantId`, `AwsAccountId`, `Environment`
  *   - Unit: `None` (= 日数 raw)
  */
 
-const METRIC_NAMESPACE = "TenkaCloud/CompetitorAccounts";
-const METRIC_NAME = "RotationAge";
-
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-/**
- * PutMetricData は 1 call あたり 1000 datapoint まで。MVP 規模で 1000 を超えることは
- * 無いが、防御的に chunk 化する。
- */
-const PUT_METRIC_BATCH_SIZE = 1000;
-
 export interface AuditDependencies {
-  readonly ddb: Pick<DynamoDBDocumentClient, "send">;
-  readonly cw: Pick<CloudWatchClient, "send">;
+  readonly repositories: Repositories;
   readonly tableName: string;
   readonly environmentName: string;
   readonly now: () => number;
@@ -67,26 +59,18 @@ export function computeRotationAgeDays(
   return Math.floor(ageMs / MS_PER_DAY);
 }
 
-interface AuditDatapoint {
-  readonly tenantId: string;
-  readonly awsAccountId: string;
-  readonly ageDays: number;
-}
-
-export async function collectRotationAges(deps: AuditDependencies): Promise<AuditDatapoint[]> {
+export async function collectRotationAges(
+  deps: AuditDependencies,
+): Promise<RotationAgeMetricDatum[]> {
   const nowMs = deps.now();
-  const datapoints: AuditDatapoint[] = [];
-  let exclusiveStartKey: Record<string, unknown> | undefined;
+  const datapoints: RotationAgeMetricDatum[] = [];
+  let cursor: Record<string, unknown> | undefined;
   do {
-    const out = await deps.ddb.send(
-      new ScanCommand({
-        TableName: deps.tableName,
-        ProjectionExpression: "tenantId, awsAccountId, rotatedAt, createdAt",
-        ExclusiveStartKey: exclusiveStartKey,
-      }),
-    );
-    const items = (out.Items ?? []) as Partial<CompetitorAccountItem>[];
-    for (const item of items) {
+    const page = await deps.repositories.competitorAccounts.scanPage({
+      tableName: deps.tableName,
+      cursor,
+    });
+    for (const item of page.items) {
       if (typeof item.tenantId !== "string" || typeof item.awsAccountId !== "string") continue;
       datapoints.push({
         tenantId: item.tenantId,
@@ -94,36 +78,20 @@ export async function collectRotationAges(deps: AuditDependencies): Promise<Audi
         ageDays: computeRotationAgeDays(item, nowMs),
       });
     }
-    exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-  } while (exclusiveStartKey);
+    cursor = page.nextCursor;
+  } while (cursor);
   return datapoints;
 }
 
 export async function emitRotationAgeMetrics(
   deps: AuditDependencies,
-  datapoints: readonly AuditDatapoint[],
+  datapoints: readonly RotationAgeMetricDatum[],
 ): Promise<void> {
-  if (datapoints.length === 0) return;
-  const timestamp = new Date(deps.now());
-  for (let i = 0; i < datapoints.length; i += PUT_METRIC_BATCH_SIZE) {
-    const slice = datapoints.slice(i, i + PUT_METRIC_BATCH_SIZE);
-    await deps.cw.send(
-      new PutMetricDataCommand({
-        Namespace: METRIC_NAMESPACE,
-        MetricData: slice.map((d) => ({
-          MetricName: METRIC_NAME,
-          Value: d.ageDays,
-          Unit: "None",
-          Timestamp: timestamp,
-          Dimensions: [
-            { Name: "TenantId", Value: d.tenantId },
-            { Name: "AwsAccountId", Value: d.awsAccountId },
-            { Name: "Environment", Value: deps.environmentName },
-          ],
-        })),
-      }),
-    );
-  }
+  await deps.repositories.rotationAgeMetrics.putRotationAge({
+    datapoints,
+    environmentName: deps.environmentName,
+    timestamp: new Date(deps.now()),
+  });
 }
 
 export async function runAudit(deps: AuditDependencies): Promise<{ readonly count: number }> {
@@ -132,14 +100,9 @@ export async function runAudit(deps: AuditDependencies): Promise<{ readonly coun
   return { count: datapoints.length };
 }
 
-// Lambda module-scope client (warm invoke で reuse、cold start 軽減)。
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
-const cw = new CloudWatchClient({} satisfies CloudWatchClientConfig);
-
 export async function handler(): Promise<void> {
   const deps: AuditDependencies = {
-    ddb,
-    cw,
+    repositories: composeRepositories(),
     tableName: getEnv("COMPETITOR_ACCOUNTS_TABLE_NAME"),
     environmentName: getEnv("DEPLOY_ENVIRONMENT"),
     now: () => Date.now(),
