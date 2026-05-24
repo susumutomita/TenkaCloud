@@ -598,8 +598,8 @@ unread として TopNav に表示</b>。サーバー API には read endpoint �
 <ol>
 <li>Events table の write 権限を持つ event-handler Lambda が <code>NOTIFICATION#&lt;ts&gt;#&lt;ulid&gt;</code> SK で行を書けることを CDK レベルで確認 (= 既存権限で OK と想定、不足なら追加)</li>
 <li><code>POST /events/:id/notifications</code> handler 実装 (validation + DDB PutItem)</li>
-<li>tenant API GW route 追加 (<b>user 担当</b>)</li>
-<li>ParticipantPortalLambda の IAM に events table Query 追加 (<b>user 担当</b>)</li>
+<li>tenant API GW route 追加 (infra layer)</li>
+<li>ParticipantPortalLambda の IAM に events table Query 追加 (infra layer)</li>
 <li><code>GET /portal/me/notifications</code> handler 実装 (auth → eventId 解決 → DDB Query)</li>
 </ol>
 

@@ -74,7 +74,7 @@
 <h3>1. Phase 2.1 = 本 PR で扱う scope</h3>
 
 <ul>
-<li><strong>backend (= Claude 担当)</strong>:
+<li><strong>backend</strong>:
   <ul>
     <li><code>CompetitorAccountsTable</code> CDK construct (PROVISIONED 1/1)</li>
     <li><code>CompetitorAccountsApiLambda</code> CDK construct + IAM (SSM / STS / KMS)</li>
@@ -83,7 +83,7 @@
     <li>tenant API GW route の配線 (<code>/admin/competitor-accounts*</code>) + Cognito JWT authorizer 共通化</li>
   </ul>
 </li>
-<li><strong>frontend (= Claude 担当)</strong>:
+<li><strong>frontend</strong>:
   <ul>
     <li>新 API client (<code>api/competitor-accounts-client.ts</code>)</li>
     <li>新 page <code>CompetitorAccountsPage</code> (一覧 / Add modal / Verify / Delete)</li>

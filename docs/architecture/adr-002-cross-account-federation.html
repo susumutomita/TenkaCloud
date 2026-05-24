@@ -326,34 +326,33 @@
 </section>
 
 <section>
-<h2>Implementation ownership</h2>
+<h2>Implementation scope</h2>
 
-<p><code>AGENTS.md</code> の役割分担に従い、CDK / IAM / CFn template / <code>bin/infrastructure.ts</code> 関連は
-<b>user 担当</b>、apps / Lambda handler ロジック / docs は <b>Claude 担当</b> とする。</p>
+<p>Phase 2.1 で投入する変更は次の領域に分割される。 CDK / IAM / CFn template / <code>bin/infrastructure.ts</code> 系統 (= infra 層) と、 apps / Lambda handler / docs 系統 (= app 層) を別 PR に切り分け、 infra 側を先行させてから app 側を続ける。</p>
 
 <table>
-<thead><tr><th>領域</th><th>Owner</th><th>備考</th></tr></thead>
+<thead><tr><th>領域</th><th>Layer</th><th>備考</th></tr></thead>
 <tbody>
-<tr><td><code>CompetitorAccountsTable</code> CDK construct (新規)</td><td><span class="badge warn">user</span></td><td>DDB schema、<code>DynamoDbLowCapacity</code> Aspect 整合の確認込み</td></tr>
-<tr><td>SSM SecureString helper construct + IAM policy</td><td><span class="badge warn">user</span></td><td><code>ssm:GetParameter</code> の resource 絞り込み、KMS managed key の参照</td></tr>
-<tr><td>tenant API Gateway 新 routes (<code>/tenants/{me}/accounts*</code>) の <code>addResource/addMethod</code> 配線</td><td><span class="badge warn">user</span></td><td>既存 <code>api-gateway.ts</code> の延長</td></tr>
-<tr><td><code>bin/infrastructure.ts</code> の env 整理 (<code>CDK_PARAM_DEPLOY_EXTERNAL_ID</code> → <code>..._DEV_FALLBACK</code> rename)</td><td><span class="badge warn">user</span></td><td>env 注入経路の見直し</td></tr>
-<tr><td><code>competitor-bootstrap.yaml</code> の Parameter 説明文改訂</td><td><span class="badge warn">user</span></td><td>CFn template (= IAM Role 定義) は user 領域</td></tr>
-<tr><td>新 Lambda handler (<code>/tenants/{me}/accounts*</code> の Hono route 実装)</td><td><span class="badge accept">Claude</span></td><td>DDB CRUD + SSM Put/Delete のロジック、テスト込み</td></tr>
-<tr><td>Worker Lambda の AssumeRole 経路書き換え (<code>externalId</code> を deployment 行 / SSM から読む)</td><td><span class="badge accept">Claude</span></td><td>env 廃止に合わせて handler 側の書き換えとテスト</td></tr>
-<tr><td>application-admin-console「Competitor Accounts」画面 (一覧 / 追加 / verify / 削除)</td><td><span class="badge accept">Claude</span></td><td>Cloudscape Cards / Modal / Form</td></tr>
-<tr><td><code>DeployForm.tsx</code> の AWS Account ID 自由入力 → verified Select 置換</td><td><span class="badge accept">Claude</span></td><td><code>useCompetitorAccounts()</code> hook + UI</td></tr>
-<tr><td>Lambda + frontend のテスト</td><td><span class="badge accept">Claude</span></td><td>infra の test (<code>Template.fromStack</code>) は user</td></tr>
-<tr><td><code>infrastructure/templates/README.md</code> 改訂</td><td><span class="badge accept">Claude</span></td><td>docs</td></tr>
+<tr><td><code>CompetitorAccountsTable</code> CDK construct (新規)</td><td><span class="badge warn">infra</span></td><td>DDB schema、<code>DynamoDbLowCapacity</code> Aspect 整合の確認込み</td></tr>
+<tr><td>SSM SecureString helper construct + IAM policy</td><td><span class="badge warn">infra</span></td><td><code>ssm:GetParameter</code> の resource 絞り込み、KMS managed key の参照</td></tr>
+<tr><td>tenant API Gateway 新 routes (<code>/tenants/{me}/accounts*</code>) の <code>addResource/addMethod</code> 配線</td><td><span class="badge warn">infra</span></td><td>既存 <code>api-gateway.ts</code> の延長</td></tr>
+<tr><td><code>bin/infrastructure.ts</code> の env 整理 (<code>CDK_PARAM_DEPLOY_EXTERNAL_ID</code> → <code>..._DEV_FALLBACK</code> rename)</td><td><span class="badge warn">infra</span></td><td>env 注入経路の見直し</td></tr>
+<tr><td><code>competitor-bootstrap.yaml</code> の Parameter 説明文改訂</td><td><span class="badge warn">infra</span></td><td>CFn template (= IAM Role 定義) は infra 領域</td></tr>
+<tr><td>新 Lambda handler (<code>/tenants/{me}/accounts*</code> の Hono route 実装)</td><td><span class="badge accept">app</span></td><td>DDB CRUD + SSM Put/Delete のロジック、テスト込み</td></tr>
+<tr><td>Worker Lambda の AssumeRole 経路書き換え (<code>externalId</code> を deployment 行 / SSM から読む)</td><td><span class="badge accept">app</span></td><td>env 廃止に合わせて handler 側の書き換えとテスト</td></tr>
+<tr><td>application-admin-console「Competitor Accounts」画面 (一覧 / 追加 / verify / 削除)</td><td><span class="badge accept">app</span></td><td>Cloudscape Cards / Modal / Form</td></tr>
+<tr><td><code>DeployForm.tsx</code> の AWS Account ID 自由入力 → verified Select 置換</td><td><span class="badge accept">app</span></td><td><code>useCompetitorAccounts()</code> hook + UI</td></tr>
+<tr><td>Lambda + frontend のテスト</td><td><span class="badge accept">app</span></td><td>infra の test (<code>Template.fromStack</code>) は infra 側 PR に含める</td></tr>
+<tr><td><code>infrastructure/templates/README.md</code> 改訂</td><td><span class="badge accept">app</span></td><td>docs</td></tr>
 </tbody>
 </table>
 
 <p>着手順は次のとおり。</p>
 
 <ol>
-<li><b>user</b> が Phase 2.1 の CDK 部分 (DDB / SSM helper / API GW route 配線) を 1 PR で出す。</li>
-<li><b>Claude</b> が直後に Lambda handler + frontend を 1〜2 PR で続ける。同 PR 内で legacy env を読むコードを同 commit で撤去する (CLAUDE.md「fallback 禁止」原則と整合)。</li>
-<li>Phase 2.2 の migration script (旧 deployment 行の <code>externalId</code> 補填) は <b>Claude</b> が書き、ただし script を回す deploy は <b>user</b> が手動で実施する。</li>
+<li>Phase 2.1 の <b>infra</b> 部分 (DDB / SSM helper / API GW route 配線) を 1 PR で投入する。</li>
+<li>直後に Lambda handler + frontend を 1〜2 PR で続け、 同 PR 内で legacy env を読むコードを同 commit で撤去する (CLAUDE.md「fallback 禁止」原則と整合)。</li>
+<li>Phase 2.2 の migration script (旧 deployment 行の <code>externalId</code> 補填) を実装し、 deploy 実行は手動で行う。</li>
 </ol>
 </section>
 
