@@ -17,6 +17,11 @@
     "false-positive を抑えつつ阻止件数を最大化する trade-off を観察する"
   ],
   "cfnTemplate": "template.yaml",
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
   "endpoints": [
     {
       "slot": "main",

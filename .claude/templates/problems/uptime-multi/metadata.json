@@ -20,6 +20,11 @@
     "frontend / api / db など層別 service 依存を解消する 「分離設計」 を実装で示す"
   ],
   "cfnTemplate": "template.yaml",
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
   "endpoints": [
     {
       "slot": "frontend",
