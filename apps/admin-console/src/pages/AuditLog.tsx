@@ -33,16 +33,35 @@ export function validateAuditLoadInput(scope: AuditScope, tenantId: string, t: T
   return null;
 }
 
+export interface AuditFilterState {
+  readonly from: string;
+  readonly to: string;
+  readonly principal: string;
+  readonly action: string;
+}
+
+export const EMPTY_AUDIT_FILTERS: AuditFilterState = {
+  from: "",
+  to: "",
+  principal: "",
+  action: "",
+};
+
 export function buildAuditListInput(
   scope: AuditScope,
   tenantId: string,
   cursor: string | undefined,
+  filters: AuditFilterState = EMPTY_AUDIT_FILTERS,
 ): AuditListInput {
   return {
     scope,
     ...(scope === "tenant" ? { tenantId: tenantId.trim() } : {}),
     limit: AUDIT_PAGE_LIMIT,
     ...(cursor ? { cursor } : {}),
+    ...(filters.from.trim() ? { from: filters.from.trim() } : {}),
+    ...(filters.to.trim() ? { to: filters.to.trim() } : {}),
+    ...(filters.principal.trim() ? { principal: filters.principal.trim() } : {}),
+    ...(filters.action.trim() ? { action: filters.action.trim() } : {}),
   };
 }
 
@@ -58,6 +77,32 @@ export function describeAuditLoadError(err: unknown, t: TFn): string {
   if (err instanceof AuditApiError) return describeAuditError(err);
   if (err instanceof Error) return err.message;
   return t("audit_log.fetch_failed");
+}
+
+export function buildAuditExportInput(
+  scope: AuditScope,
+  tenantId: string,
+  filters: AuditFilterState,
+): Parameters<AuditClient["exportCsv"]>[0] {
+  return {
+    scope,
+    ...(scope === "tenant" ? { tenantId: tenantId.trim() } : {}),
+    ...(filters.from.trim() ? { from: filters.from.trim() } : {}),
+    ...(filters.to.trim() ? { to: filters.to.trim() } : {}),
+    ...(filters.principal.trim() ? { principal: filters.principal.trim() } : {}),
+    ...(filters.action.trim() ? { action: filters.action.trim() } : {}),
+  };
+}
+
+function triggerCsvDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /**
@@ -81,6 +126,21 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
+  const [filterPrincipal, setFilterPrincipal] = useState("");
+  const [filterAction, setFilterAction] = useState("");
+
+  const filters: AuditFilterState = useMemo(
+    () => ({
+      from: filterFrom,
+      to: filterTo,
+      principal: filterPrincipal,
+      action: filterAction,
+    }),
+    [filterFrom, filterTo, filterPrincipal, filterAction],
+  );
 
   const load = useCallback(
     async (cursor: string | undefined) => {
@@ -93,7 +153,7 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
       setLoading(true);
       setError(null);
       try {
-        const page = await client.list(buildAuditListInput(scope, tenantId, cursor));
+        const page = await client.list(buildAuditListInput(scope, tenantId, cursor, filters));
         setItems((prev) => mergeAuditItems(prev, page.items, cursor));
         setNextCursor(page.nextCursor);
       } catch (err) {
@@ -102,8 +162,28 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
         setLoading(false);
       }
     },
-    [client, scope, tenantId, t],
+    [client, scope, tenantId, t, filters],
   );
+
+  const onExport = useCallback(async () => {
+    if (!client) return;
+    const validationError = validateAuditLoadInput(scope, tenantId, t);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setExporting(true);
+    setError(null);
+    try {
+      const blob = await client.exportCsv(buildAuditExportInput(scope, tenantId, filters));
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      triggerCsvDownload(blob, `audit-${scope}-${stamp}.csv`);
+    } catch (err) {
+      setError(describeAuditLoadError(err, t));
+    } finally {
+      setExporting(false);
+    }
+  }, [client, scope, tenantId, t, filters]);
 
   useEffect(() => {
     // 初期 mount で system scope を 1 回 load。 client が ready になった時点で発火。
@@ -139,17 +219,27 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
       <Header
         variant="h1"
         actions={
-          <Button
-            variant="primary"
-            onClick={() => {
-              setNextCursor(undefined);
-              void load(undefined);
-            }}
-            loading={loading}
-            disabled={loading}
-          >
-            {t("audit_log.load_button")}
-          </Button>
+          <SpaceBetween size="xs" direction="horizontal">
+            <Button
+              variant="normal"
+              onClick={() => {
+                setNextCursor(undefined);
+                void load(undefined);
+              }}
+              loading={loading}
+              disabled={loading || exporting}
+            >
+              {t("audit_log.load_button")}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void onExport()}
+              loading={exporting}
+              disabled={loading || exporting}
+            >
+              {t("audit_log.export_csv")}
+            </Button>
+          </SpaceBetween>
         }
       >
         {t("audit_log.page_title")}
@@ -175,6 +265,26 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
               placeholder={t("audit_log.tenant_id_placeholder")}
             />
           )}
+          <Input
+            value={filterFrom}
+            onChange={(e) => setFilterFrom(e.detail.value)}
+            placeholder={t("audit_log.filter_from")}
+          />
+          <Input
+            value={filterTo}
+            onChange={(e) => setFilterTo(e.detail.value)}
+            placeholder={t("audit_log.filter_to")}
+          />
+          <Input
+            value={filterPrincipal}
+            onChange={(e) => setFilterPrincipal(e.detail.value)}
+            placeholder={t("audit_log.filter_principal")}
+          />
+          <Input
+            value={filterAction}
+            onChange={(e) => setFilterAction(e.detail.value)}
+            placeholder={t("audit_log.filter_action")}
+          />
         </SpaceBetween>
       </Container>
 

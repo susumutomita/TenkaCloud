@@ -175,6 +175,11 @@
     "loading_text": "Loading…",
     "col_ip": "IP",
     "col_tenant": "Tenant",
-    "empty_hint_filter": "Verify the scope / tenantId."
+    "empty_hint_filter": "Verify the scope / tenantId.",
+    "export_csv": "Export CSV",
+    "filter_from": "from (ISO8601)",
+    "filter_to": "to (ISO8601)",
+    "filter_principal": "principal (sub / username)",
+    "filter_action": "action"
   }
 }

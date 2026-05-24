@@ -29,13 +29,25 @@ export interface AuditPage {
 
 export type AuditScope = "tenant" | "system";
 
+export interface AuditListInput {
+  scope: AuditScope;
+  tenantId?: string;
+  limit?: number;
+  cursor?: string;
+  /** Issue #1292: ISO8601 lower bound (occurredAt >= from)。 */
+  from?: string;
+  /** Issue #1292: ISO8601 upper bound (occurredAt <= to)。 */
+  to?: string;
+  /** Issue #1292: principal (sub / username) で完全一致 filter。 */
+  principal?: string;
+  /** Issue #1292: action 名で完全一致 filter。 */
+  action?: string;
+}
+
 export interface AuditClient {
-  list(input: {
-    scope: AuditScope;
-    tenantId?: string;
-    limit?: number;
-    cursor?: string;
-  }): Promise<AuditPage>;
+  list(input: AuditListInput): Promise<AuditPage>;
+  /** Issue #1292: CSV export (= 全 page を辿って Blob で返す)。 */
+  exportCsv(input: Omit<AuditListInput, "limit" | "cursor">): Promise<Blob>;
 }
 
 export class AuditApiError extends Error {
@@ -48,11 +60,42 @@ export class AuditApiError extends Error {
   }
 }
 
+function applyFilterParams(url: URL, input: Partial<AuditListInput>): void {
+  if (input.from) url.searchParams.set("from", input.from);
+  if (input.to) url.searchParams.set("to", input.to);
+  if (input.principal) url.searchParams.set("principal", input.principal);
+  if (input.action) url.searchParams.set("action", input.action);
+}
+
 export function createAuditClient(config: AppConfig, idToken: string): AuditClient | null {
   if (!config.adminInsightApiUrl) return null;
   const base = config.adminInsightApiUrl.endsWith("/")
     ? config.adminInsightApiUrl
     : `${config.adminInsightApiUrl}/`;
+
+  const fetchOrThrow = async (url: URL): Promise<Response> => {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        authorization: `Bearer ${idToken}`,
+        "content-type": "application/json",
+      },
+    });
+    if (!res.ok) {
+      let errorCode: string | undefined;
+      try {
+        const body = await res.json();
+        if (typeof body === "object" && body !== null && "error" in body) {
+          errorCode = String((body as { error: unknown }).error);
+        }
+      } catch {
+        /* noop */
+      }
+      throw new AuditApiError(res.status, errorCode);
+    }
+    return res;
+  };
+
   return {
     async list(input) {
       const url = new URL("admin/insight/audit", base);
@@ -60,26 +103,17 @@ export function createAuditClient(config: AppConfig, idToken: string): AuditClie
       if (input.tenantId) url.searchParams.set("tenantId", input.tenantId);
       if (input.limit !== undefined) url.searchParams.set("limit", String(input.limit));
       if (input.cursor) url.searchParams.set("cursor", input.cursor);
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          authorization: `Bearer ${idToken}`,
-          "content-type": "application/json",
-        },
-      });
-      if (!res.ok) {
-        let errorCode: string | undefined;
-        try {
-          const body = await res.json();
-          if (typeof body === "object" && body !== null && "error" in body) {
-            errorCode = String((body as { error: unknown }).error);
-          }
-        } catch {
-          /* noop */
-        }
-        throw new AuditApiError(res.status, errorCode);
-      }
+      applyFilterParams(url, input);
+      const res = await fetchOrThrow(url);
       return (await res.json()) as AuditPage;
+    },
+    async exportCsv(input) {
+      const url = new URL("admin/insight/audit/export", base);
+      url.searchParams.set("scope", input.scope);
+      if (input.tenantId) url.searchParams.set("tenantId", input.tenantId);
+      applyFilterParams(url, input);
+      const res = await fetchOrThrow(url);
+      return await res.blob();
     },
   };
 }

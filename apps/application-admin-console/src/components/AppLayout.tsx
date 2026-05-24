@@ -103,9 +103,12 @@ export function ShellLayout({ children }: { children: ReactNode }) {
               { type: "link", href: "/problems", text: t("nav.problems") },
               { type: "link", href: "/deployments", text: t("nav.deployments") },
               { type: "link", href: "/competitor-accounts", text: t("nav.competitor_accounts") },
-              // Issue #1066: SAML SSO 設定は廃止 (= MFA 強制 #1035 で代替済、 spec 簡素化)。
-              // App Plane の tenant user 管理は plane 分離方針で廃止
-              // ([[feedback-no-cross-plane-data-leak]])。
+              // Issue #1292: 自テナント監査ログ (= deploy / event 操作の audit)。
+              { type: "link", href: "/audit-log", text: t("nav.audit_log") },
+              // Issue #1294: per-tenant SAML SSO (silo tier only — page shows a warning
+              // alert for pooled tenants). Reintroduces the link removed in #1066 (which
+              // had been replaced by hard MFA), now scoped to silo + multi-IdP.
+              { type: "link", href: "/identity-providers", text: "Identity providers" },
             ]}
             onFollow={(e) => {
               if (!e.detail.external) {

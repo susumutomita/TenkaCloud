@@ -26,6 +26,14 @@ export interface AuditListInput {
   readonly limit?: number;
   /** base64(LastEvaluatedKey) */
   readonly cursor?: string;
+  /** Issue #1292: ISO8601 lower bound (= 含む)。 occurredAt >= from で filter。 */
+  readonly from?: string;
+  /** Issue #1292: ISO8601 upper bound (= 含む)。 occurredAt <= to で filter。 */
+  readonly to?: string;
+  /** Issue #1292: principal (= actor sub or actorUsername) で filter (= 完全一致)。 */
+  readonly principal?: string;
+  /** Issue #1292: action 名で filter (= 完全一致)。 */
+  readonly action?: string;
 }
 
 export interface AuditItem {
@@ -81,13 +89,89 @@ export async function listAuditEntries(
       ExclusiveStartKey: decodeCursor(input.cursor),
     }),
   );
-  const items = (out.Items ?? []).map((row) => toAuditItem(row, input.scope));
+  const rawItems = (out.Items ?? []).map((row) => toAuditItem(row, input.scope));
+  const items = applyFilters(rawItems, input);
   return {
     items,
     ...(out.LastEvaluatedKey
       ? { nextCursor: encodeCursor(out.LastEvaluatedKey as Record<string, unknown>) }
       : {}),
   };
+}
+
+/**
+ * Issue #1292: client-side filter (= DDB Query は PK 固定 + ScanIndexForward=false で取った後)。
+ * RCU 都合で server-side FilterExpression を増やすより、 1 page=50 行に対して JS で
+ * shallow filter する方が cost コントロールしやすい。 大規模な horizon は CSV export
+ * (= 全頁繰り) で対応する。
+ */
+function applyFilters(items: readonly AuditItem[], input: AuditListInput): AuditItem[] {
+  return items.filter((item) => {
+    if (input.from && item.occurredAt < input.from) return false;
+    if (input.to && item.occurredAt > input.to) return false;
+    if (input.action && item.action !== input.action) return false;
+    if (input.principal) {
+      const matchActor = item.actor === input.principal;
+      const matchUsername = item.actorUsername === input.principal;
+      if (!matchActor && !matchUsername) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Issue #1292: CSV export 用に全 page を辿って 1 回で集約する。 retention 365 日 × 1 op/日
+ * ≒ 365 行が典型なので、 page 数も 1 桁。 上限 5000 行で truncate。
+ *
+ * CSV escape: RFC 4180 準拠で `,` / `"` / `\n` を含む値は `"..."` で囲み、 内部 `"` を `""` に。
+ */
+export async function exportAuditEntriesCsv(
+  deps: AuditDeps,
+  input: Omit<AuditListInput, "limit" | "cursor">,
+  env: string,
+  options: { maxRows?: number } = {},
+): Promise<string> {
+  const maxRows = options.maxRows ?? 5000;
+  const collected: AuditItem[] = [];
+  let cursor: string | undefined;
+  for (let pageIdx = 0; pageIdx < 200; pageIdx++) {
+    const page = await listAuditEntries(deps, { ...input, limit: LIST_LIMIT_MAX, cursor }, env);
+    for (const item of page.items) {
+      collected.push(item);
+      if (collected.length >= maxRows) return formatCsv(collected);
+    }
+    if (!page.nextCursor) break;
+    cursor = page.nextCursor;
+  }
+  return formatCsv(collected);
+}
+
+const CSV_COLUMNS = [
+  "occurredAt",
+  "tenantId",
+  "actor",
+  "actorUsername",
+  "action",
+  "outcome",
+  "target",
+  "ipAddress",
+  "userAgent",
+] as const;
+
+function formatCsv(items: readonly AuditItem[]): string {
+  const lines = [CSV_COLUMNS.join(",")];
+  for (const item of items) {
+    const row = item as unknown as Record<string, unknown>;
+    lines.push(CSV_COLUMNS.map((col) => csvEscape(String(row[col] ?? ""))).join(","));
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function csvEscape(value: string): string {
+  if (value.includes(",") || value.includes('"') || value.includes("\n") || value.includes("\r")) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
 }
 
 function toAuditItem(row: unknown, scope: AuditListInput["scope"]): AuditItem {

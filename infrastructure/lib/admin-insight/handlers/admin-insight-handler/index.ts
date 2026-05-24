@@ -4,7 +4,7 @@ import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
-import { listAuditEntries } from "./audit.js";
+import { exportAuditEntriesCsv, listAuditEntries } from "./audit.js";
 import { isSystemAdmin, resolveCognitoSub } from "./auth.js";
 import { defaultPipelineClient, listPipelineExecutions } from "./pipeline-executions.js";
 import { buildSharedResources } from "./shared.js";
@@ -215,8 +215,10 @@ app.get("/admin/insight/state-machine-executions", async (c) => {
 // 引き続き `/admin/insight/audit` で参照可能。
 
 // ====== Issue #950 (ADR-020 Phase D): admin audit log read route ======
+// Issue #1292: filter + CSV export 追加 (= date range / principal / action)。
 
 app.get("/admin/insight/audit", handleAuditEntries);
+app.get("/admin/insight/audit/export", handleAuditExport);
 
 async function handleAuditEntries(c: Context): Promise<Response> {
   const forbidden = auditAndAuthorize(c, "/admin/insight/audit");
@@ -232,7 +234,7 @@ async function handleAuditEntries(c: Context): Promise<Response> {
   }
   const input = parseAuditListInput(c);
   if ("response" in input) return input.response;
-  const { scope, tenantId, limit, cursor } = input;
+  const { scope, tenantId, limit, cursor, from, to, principal, action } = input;
   try {
     const result = await listAuditEntries(
       { ddb: shared.ddb, auditTableName: shared.auditTableName },
@@ -241,6 +243,10 @@ async function handleAuditEntries(c: Context): Promise<Response> {
         ...(tenantId ? { tenantId } : {}),
         ...(limit ? { limit } : {}),
         ...(cursor ? { cursor } : {}),
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        ...(principal ? { principal } : {}),
+        ...(action ? { action } : {}),
       },
       shared.environmentName,
     );
@@ -252,12 +258,59 @@ async function handleAuditEntries(c: Context): Promise<Response> {
   }
 }
 
+async function handleAuditExport(c: Context): Promise<Response> {
+  const forbidden = auditAndAuthorize(c, "/admin/insight/audit/export");
+  if (forbidden) return forbidden;
+  if (!shared.auditTableName || shared.auditTableName.length === 0) {
+    return c.json({ error: "audit_log_unconfigured" }, StatusCodes.SERVICE_UNAVAILABLE);
+  }
+  const input = parseAuditListInput(c);
+  if ("response" in input) return input.response;
+  const { scope, tenantId, from, to, principal, action } = input;
+  try {
+    const csv = await exportAuditEntriesCsv(
+      { ddb: shared.ddb, auditTableName: shared.auditTableName },
+      {
+        scope,
+        ...(tenantId ? { tenantId } : {}),
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        ...(principal ? { principal } : {}),
+        ...(action ? { action } : {}),
+      },
+      shared.environmentName,
+    );
+    const filename = buildExportFilename(scope, tenantId);
+    return new Response(csv, {
+      status: StatusCodes.OK,
+      headers: {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="${filename}"`,
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[admin-insight] exportAuditEntriesCsv failed", { scope, tenantId, message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+}
+
+function buildExportFilename(scope: "tenant" | "system", tenantId: string | undefined): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const slot = scope === "system" ? "platform" : `tenant-${tenantId ?? "unknown"}`;
+  return `audit-${slot}-${stamp}.csv`;
+}
+
 function parseAuditListInput(c: Context):
   | {
       readonly scope: "tenant" | "system";
       readonly tenantId: string | undefined;
       readonly limit: number | undefined;
       readonly cursor: string | undefined;
+      readonly from: string | undefined;
+      readonly to: string | undefined;
+      readonly principal: string | undefined;
+      readonly action: string | undefined;
     }
   | { readonly response: Response } {
   const rawScope = c.req.query("scope") ?? "tenant";
@@ -273,7 +326,29 @@ function parseAuditListInput(c: Context):
   if (!parsedLimit) {
     return { response: c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST) };
   }
-  return { scope, tenantId, limit: parsedLimit.limit, cursor: c.req.query("cursor") };
+  const from = c.req.query("from");
+  const to = c.req.query("to");
+  if (from && !isIsoTimestamp(from)) {
+    return { response: c.json({ error: "invalid_from" }, StatusCodes.BAD_REQUEST) };
+  }
+  if (to && !isIsoTimestamp(to)) {
+    return { response: c.json({ error: "invalid_to" }, StatusCodes.BAD_REQUEST) };
+  }
+  return {
+    scope,
+    tenantId,
+    limit: parsedLimit.limit,
+    cursor: c.req.query("cursor"),
+    from,
+    to,
+    principal: c.req.query("principal"),
+    action: c.req.query("action"),
+  };
+}
+
+function isIsoTimestamp(value: string): boolean {
+  const d = new Date(value);
+  return !Number.isNaN(d.getTime());
 }
 
 export const handler = handle(app) as (

@@ -4,6 +4,7 @@ import { AuditApiError } from "../src/api/audit-client";
 import {
   buildAuditListInput,
   describeAuditLoadError,
+  EMPTY_AUDIT_FILTERS,
   mergeAuditItems,
   validateAuditLoadInput,
 } from "../src/pages/AuditLog";
@@ -42,6 +43,32 @@ describe("AuditLog helpers", () => {
       cursor: "next",
     });
     expect(buildAuditListInput("system", " tenant-a ", undefined)).toEqual({
+      scope: "system",
+      limit: 50,
+    });
+  });
+
+  it("should attach filter params when provided and trim whitespace (#1292)", () => {
+    expect(
+      buildAuditListInput("tenant", "tenant-a", undefined, {
+        from: " 2026-05-20T00:00:00.000Z ",
+        to: " 2026-05-21T00:00:00.000Z ",
+        principal: " alice@example.com ",
+        action: " create_event ",
+      }),
+    ).toEqual({
+      scope: "tenant",
+      tenantId: "tenant-a",
+      limit: 50,
+      from: "2026-05-20T00:00:00.000Z",
+      to: "2026-05-21T00:00:00.000Z",
+      principal: "alice@example.com",
+      action: "create_event",
+    });
+  });
+
+  it("should omit empty filters using EMPTY_AUDIT_FILTERS (#1292)", () => {
+    expect(buildAuditListInput("system", "", undefined, EMPTY_AUDIT_FILTERS)).toEqual({
       scope: "system",
       limit: 50,
     });

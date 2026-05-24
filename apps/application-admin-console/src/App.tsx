@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
+import { AuditLogPage } from "./pages/AuditLog";
 import { CallbackPage } from "./pages/Callback";
 import { CompetitorAccountsPage } from "./pages/CompetitorAccounts";
 import { DeploymentDetailPage } from "./pages/DeploymentDetail";
@@ -54,6 +55,8 @@ export function App({ config }: { config: AppConfig }) {
         <Route path="/events" element={guarded(<EventListPage config={config} />)} />
         <Route path="/events/new" element={guarded(<EventCreatePage config={config} />)} />
         <Route path="/events/:eventId" element={guarded(<EventDetailPage config={config} />)} />
+        {/* Issue #1292: Tenant Admin 向け audit log view (= 自テナント scope only) */}
+        <Route path="/audit-log" element={guarded(<AuditLogPage config={config} />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
