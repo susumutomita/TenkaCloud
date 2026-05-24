@@ -51,9 +51,30 @@ function findMetadataFiles(dir: string): string[] {
  * 実 deploy で CFn が CREATE_COMPLETE しても、 これらの参照が解決できないと
  * scoring engine / portal が壊れるので、 ここで先に止める。
  */
+function resolveTemplatePath(meta: Metadata): string {
+  // [ADR-023] Prefer `runtime.entry` when declared; fall back to legacy `cfnTemplate`; finally default.
+  const runtime = meta.runtime as Record<string, unknown> | undefined;
+  if (runtime && typeof runtime.entry === "string") return runtime.entry;
+  return typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : "template.yaml";
+}
+
+function checkRuntimeConsistency(meta: Metadata): ValidationError[] {
+  // [ADR-023] If both `runtime` and `cfnTemplate` are declared, they must agree (= compat window).
+  const runtime = meta.runtime as Record<string, unknown> | undefined;
+  if (!runtime) return [];
+  const entry = typeof runtime.entry === "string" ? runtime.entry : undefined;
+  const cfnTemplate = typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : undefined;
+  if (entry && cfnTemplate && entry !== cfnTemplate) {
+    return [
+      `runtime.entry="${entry}" と cfnTemplate="${cfnTemplate}" が一致しません (ADR-023 D2 compat window)`,
+    ];
+  }
+  return [];
+}
+
 function checkCrossRefs(metaPath: string, meta: Metadata): ValidationError[] {
   const dir = dirname(metaPath);
-  const cfnTemplate = typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : "template.yaml";
+  const cfnTemplate = resolveTemplatePath(meta);
   const templatePath = join(dir, cfnTemplate);
 
   if (!existsSync(templatePath)) {
@@ -61,6 +82,7 @@ function checkCrossRefs(metaPath: string, meta: Metadata): ValidationError[] {
   }
   const yaml = readFileSync(templatePath, "utf8");
   return [
+    ...checkRuntimeConsistency(meta),
     ...checkScoringOutputRefs(meta, yaml, cfnTemplate),
     ...checkEndpointOutputRefs(meta, yaml, cfnTemplate),
     ...checkDashboardSlotFiles(meta, dir),

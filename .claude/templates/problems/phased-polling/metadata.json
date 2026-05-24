@@ -17,6 +17,11 @@
     "段階的進行で運用優先度 (= まず動かす / 次に最適化) を切り替える判断練習"
   ],
   "cfnTemplate": "template.yaml",
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
   "endpoints": [
     {
       "slot": "main",

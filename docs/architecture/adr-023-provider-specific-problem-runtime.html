@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ADR-023: Provider-specific problem runtime model for multi-cloud drills</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.draft   { background: #ddf4ff; color: var(--c-link); }
+  .callout { padding: .8rem 1rem; border-left: 4px solid var(--c-warn); background: #fff8c5; border-radius: 3px; margin: 1rem 0; }
+  .callout.danger { border-color: var(--c-reject); background: #ffe9e9; }
+  .callout.info { border-color: var(--c-link); background: #ddf4ff; }
+  .callout.ok { border-color: var(--c-accept); background: #ddf4e0; }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  .col-accept { color: var(--c-accept); font-weight: 600; }
+  .col-reject { color: var(--c-reject); font-weight: 600; }
+  .col-warn   { color: var(--c-warn);   font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ADR-023: Provider-specific problem runtime model for multi-cloud drills</h1>
+  <p><em>Formalize what a TenkaCloud problem runtime is, why CloudFormation-like properties are required, why Terraform is not the default, and how the existing AWS catalog evolves without breakage.</em></p>
+  <div class="meta">
+    <div><b>Status:</b> <span class="badge accept">Accepted</span> 2026-05-24</div>
+    <div><b>Supersedes:</b> (none)</div>
+    <div><b>Related:</b>
+      <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> (problem plugin architecture),
+      <a href="./adr-017-cloud-action-intent-trust-bridge.html">ADR-017</a> (Trust Bridge: provider/action/engine abstraction)
+    </div>
+  </div>
+</header>
+
+<section>
+<h2>Context</h2>
+
+<p>TenkaCloud currently treats a problem as a self-contained package deployed into each team's isolated AWS environment using <code>metadata.json</code> + <code>template.yaml</code>. Three earlier ADRs frame how we got here:</p>
+
+<ul>
+  <li><a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> established that the <strong>problem is a plugin</strong> and the <strong>platform is the host</strong>. Problem-specific scoring, endpoint wiring, portal slots, disruptions are declared in metadata; the platform dispatches against a generic contract.</li>
+  <li><a href="./adr-017-cloud-action-intent-trust-bridge.html">ADR-017</a> introduced a <code>provider</code> / <code>action</code> / <code>engine</code> abstraction for cross-account authority transfer (Trust Bridge), but kept the problem runtime itself implicitly AWS/CloudFormation.</li>
+  <li>The deploy worker today reads <code>metadata.cfnTemplate</code>, AssumeRoles into the competitor account using a tenant <code>ExternalId</code>, and runs CFn <code>CreateStack</code>. The provider/engine is hard-wired AWS/CloudFormation in the codepath.</li>
+</ul>
+
+<p>To evolve toward multi-cloud drills (Azure, GCP, Kubernetes) without sacrificing the property that has made the current model simple and safe — <em>the cloud owns the runtime, owns the state, and owns the teardown</em> — we must define the problem runtime contract explicitly. This ADR exists because, without it, downstream PRs are at risk of three foreseeable bad directions:</p>
+
+<ol>
+  <li><strong>Terraform-by-default multi-cloud.</strong> Easy slogan, but it requires the platform to host an external runner and own state, locking, backend, and partial-failure cleanup. Those are not problem-author concerns today; making them so would shift work back to the platform that ADR-012 deliberately pushed out.</li>
+  <li><strong>Universal cloud-agnostic problem DSL.</strong> Conceptually interesting, but effectively a compiler from an abstract resource model to provider-native services. Many TenkaCloud problems exist <em>because</em> of provider-specific semantics (BigQuery analytics, Entra ID conditional access, Security Hub findings) and cannot be expressed in such a DSL without losing the point of the drill.</li>
+  <li><strong>Ad hoc provider-specific hacks.</strong> Wiring Azure / GCP / Kubernetes directly into the deploy worker without a documented runtime contract repeats the pre-ADR-012 failure mode: every new problem shape forces a platform change.</li>
+</ol>
+
+<p>Issue #1265 captured these concerns. Issue #1266 asked for the ADR to land them. Issue #1267 is the matching schema / CLI seam.</p>
+</section>
+
+<section>
+<h2>Decision</h2>
+
+<h3>D1: Multi-cloud means provider-specific problems first</h3>
+
+<p>The first supported multi-cloud expansion is <strong>provider-specific problems</strong>. A problem declares its target provider and engine; the catalog presents them side-by-side; the deploy dispatcher selects the right execution path. The same conceptual problem on two providers stays two separate problems.</p>
+
+<p>Portable same-shape problem families (one conceptual problem, multiple provider implementations bundled together) are a <strong>later</strong>, second-stage model and are sketched here only as a reservation.</p>
+
+<p>Cloud-agnostic single-problem compilation (write once, deploy to AWS / Azure / GCP from a single abstract definition) is <strong>explicitly out of scope</strong> for the near-term roadmap.</p>
+
+<h3>D2: Runtime contract — explicit metadata, AWS/CloudFormation the only executable combination today</h3>
+
+<p>Problem metadata gains an optional <code>runtime</code> object:</p>
+
+<pre>{
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  }
+}</pre>
+
+<p>Backward compatibility:</p>
+
+<ul>
+  <li>If <code>runtime</code> is absent and <code>cfnTemplate</code> exists, the validator normalizes the metadata as if <code>{ provider: "aws", engine: "cloudformation", entry: &lt;cfnTemplate&gt; }</code> were declared. Every existing problem in the catalog keeps validating without modification.</li>
+  <li>If both <code>runtime</code> and <code>cfnTemplate</code> are declared, the two must be consistent — <code>runtime.entry === cfnTemplate</code> — or validation fails with a clear message during the dual-field compatibility window.</li>
+  <li>Long term, <code>runtime.entry</code> is the primary field; <code>cfnTemplate</code> stays as a deprecated alias and is not removed until the entire catalog has migrated.</li>
+</ul>
+
+<p>Schema accepts the <code>runtime</code> field with a permissive shape (any string for <code>provider</code> / <code>engine</code>, regex on <code>entry</code>) so that reserving a future provider value does not require a schema bump. The narrow <strong>executable</strong> set is enforced at the CLI / validator layer, where the error message is descriptive. Today the only executable combination is <code>aws</code> + <code>cloudformation</code>.</p>
+
+<h3>D3: Runtime requirements a first-class engine must satisfy</h3>
+
+<table>
+<thead>
+  <tr><th>Requirement</th><th>Why</th></tr>
+</thead>
+<tbody>
+  <tr>
+    <td>Provider-owned execution environment</td>
+    <td>The platform must not host a generic IaC runner on the default path. Submitting a CFn template to the AWS CFn service is sufficient; the platform does not run <code>terraform apply</code>.</td>
+  </tr>
+  <tr>
+    <td>Provider-managed state</td>
+    <td>The cloud's deployment system owns the resource graph. The platform stores deploy metadata (deployment id, status, outputs) but never the source of truth of cloud state. No state file, no lock backend.</td>
+  </tr>
+  <tr>
+    <td>Single primary deployable artifact</td>
+    <td>Authoring, review, distribution, and standalone validation are simple when <em>one file</em> represents the deploy. Multi-file modules and shared registries push complexity onto the catalog.</td>
+  </tr>
+  <tr>
+    <td>Standalone validation</td>
+    <td>An author must be able to deploy and verify their problem outside TenkaCloud using the provider's native tooling (<code>aws cloudformation deploy</code>, <code>az deployment group create</code>, <code>kubectl apply</code>, etc.). OSS contribution depends on this property.</td>
+  </tr>
+  <tr>
+    <td>Self-contained teardown</td>
+    <td>The provider's deployment lifecycle must expose a clear destroy operation. No hidden state file must be required to clean up.</td>
+  </tr>
+  <tr>
+    <td>Minimal platform coupling</td>
+    <td>Platform passes parameters in, reads outputs back, hands the outputs to the scoring dispatcher. Problem-specific deploy mechanics never require platform code changes.</td>
+  </tr>
+</tbody>
+</table>
+
+<h3>D4: First-class candidate runtimes</h3>
+
+<table>
+<thead>
+  <tr><th>Provider</th><th>Engine</th><th>Status</th><th>Notes</th></tr>
+</thead>
+<tbody>
+  <tr>
+    <td><code>aws</code></td>
+    <td><code>cloudformation</code></td>
+    <td><span class="badge accept">Executable</span></td>
+    <td>The current default and the only combination the deploy worker can run today.</td>
+  </tr>
+  <tr>
+    <td><code>azure</code></td>
+    <td><code>bicep</code> / <code>arm</code></td>
+    <td><span class="badge warn">Reserved</span></td>
+    <td>Satisfies D3 (Azure-owned execution / state / teardown via Deployment resource). Acceptable target for a Phase 3 experiment.</td>
+  </tr>
+  <tr>
+    <td><code>kubernetes</code></td>
+    <td><code>helm</code> / <code>manifest</code> / <code>kustomize</code></td>
+    <td><span class="badge warn">Reserved</span></td>
+    <td>Cluster owns state; teardown via release / namespace deletion. The cluster authority transfer model needs a separate ADR (related to ADR-017).</td>
+  </tr>
+  <tr>
+    <td><code>gcp</code></td>
+    <td><code>native-or-investigated-runtime</code></td>
+    <td><span class="badge warn">Needs investigation</span></td>
+    <td>The CloudFormation-equivalent on GCP (Deployment Manager is deprecated, Config Connector / Infra Manager / Terraform via Google) is not obvious. Investigation required before reservation.</td>
+  </tr>
+</tbody>
+</table>
+
+<h3>D5: Terraform is explicitly not the default multi-cloud runtime</h3>
+
+<div class="callout danger">
+<strong>Why Terraform-by-default is rejected:</strong> it fails the runtime requirements in D3.
+<ul>
+  <li><strong>External runner.</strong> The platform must host a Terraform-capable execution environment (worker container, version pinning, provider plugins). That is a new long-lived component to operate and secure.</li>
+  <li><strong>External state.</strong> Terraform requires a state file. The platform becomes responsible for backend choice (S3 + DynamoDB lock today; what about Azure / GCP?), encryption, ACL, and per-team state isolation. None of this exists in the current CloudFormation path.</li>
+  <li><strong>Locking.</strong> Concurrent <code>apply</code> against the same state requires coordination. Cloud-native engines provide this implicitly per Stack / Deployment / Release; Terraform demands explicit lock backend operations.</li>
+  <li><strong>Partial-failure cleanup.</strong> A crashed run can leave state and reality out of sync, with no provider-owned reconciliation. Authors and operators must reason about <code>terraform state rm</code> and similar low-level operations.</li>
+  <li><strong>Standalone validation.</strong> An author wanting to verify a problem outside TenkaCloud must also stand up the state backend, defeating the property that today they can just run <code>aws cloudformation deploy</code>.</li>
+</ul>
+Terraform is not banned as a problem-author tool — an author may use it locally to design a stack — but the <strong>deployed artifact</strong> must be a provider-native template that the cloud itself executes.
+</div>
+
+<h3>D6: Pulumi is unevaluated</h3>
+
+<p>Pulumi is marked <span class="badge warn">Needs investigation</span> and is neither accepted nor rejected by this ADR. Its execution model (program rather than declarative artifact), state model (Pulumi Service / self-managed backend), standalone validation flow, and teardown semantics need to be inspected against D3 before any decision. A separate ADR may follow if there is demand.</p>
+
+<h3>D7: Problem family model (reservation only)</h3>
+
+<p>For the second-stage model, the same conceptual problem with provider-specific implementations could be expressed as:</p>
+
+<pre>{
+  "id": "public-object-storage-remediation",
+  "kind": "problem-family",
+  "learningObjectives": ["..."],
+  "variants": [
+    { "provider": "aws",   "engine": "cloudformation", "entry": "aws/template.yaml" },
+    { "provider": "azure", "engine": "bicep",          "entry": "azure/main.bicep" }
+  ]
+}</pre>
+
+<p>This is documented here as a reservation only. The schema in Phase 1 does not introduce <code>kind: "problem-family"</code>. Adding it requires a follow-up ADR once we have at least one working non-AWS provider.</p>
+
+<h3>D8: Cloud-agnostic single-problem deployment is out of scope</h3>
+
+<p>A shape such as:</p>
+
+<pre>{
+  "id": "cloud-agnostic-object-storage-remediation",
+  "kind": "universal-problem",
+  "abstractResources": [
+    { "type": "object-storage", "publicAccess": true },
+    { "type": "identity", "permissions": "overbroad" }
+  ],
+  "compileTo": ["aws", "azure", "gcp"]
+}</pre>
+
+<p>requires a cloud drill compiler that maps an abstract resource model to provider-native services and failure modes. The model breaks down for provider-native services (BigQuery, Entra ID, IAM, Security Hub) where the point of the drill is the provider-specific semantics. TenkaCloud does not commit to this direction in the near-term roadmap. Such a compiler is closer to a separate research / product invention than a platform extension and is explicitly out of scope of this ADR and the issues it tracks.</p>
+</section>
+
+<section>
+<h2>Options considered</h2>
+
+<h3>Option A: Keep AWS-only until full multi-cloud is implementable <span class="badge reject">Rejected</span></h3>
+
+<table>
+<thead><tr><th>Pros</th><th>Cons</th></tr></thead>
+<tbody>
+<tr>
+  <td>
+    <ul>
+      <li>No schema churn.</li>
+      <li>No partial abstraction in code.</li>
+      <li>Smallest current product surface.</li>
+    </ul>
+  </td>
+  <td>
+    <ul>
+      <li>Misses the chance to define the design boundary while the runtime path is still single-engine.</li>
+      <li>Future contributors are likely to default to "just add Terraform" because no documented contract steers them otherwise.</li>
+      <li>OSS messaging on multi-cloud stays vague, which slows community contribution.</li>
+    </ul>
+  </td>
+</tr>
+</tbody>
+</table>
+
+<h3>Option B: Add runtime metadata now, support AWS only <span class="badge accept">Accepted</span></h3>
+
+<table>
+<thead><tr><th>Pros</th><th>Cons</th></tr></thead>
+<tbody>
+<tr>
+  <td>
+    <ul>
+      <li>Backward compatible — every existing problem normalizes to the same shape.</li>
+      <li>The extension seam is explicit; future provider work is a localized PR rather than a platform refactor.</li>
+      <li>Documentation and authoring guides can speak honestly about future provider-specific support without overpromising.</li>
+      <li>Validator rejects unsupported provider/engine values clearly, so authors do not silently ship a non-executable problem.</li>
+      <li>Avoids premature Azure / GCP / Kubernetes execution work; the engine count stays at one until a real second provider is wired up.</li>
+    </ul>
+  </td>
+  <td>
+    <ul>
+      <li>Adds future-looking metadata before any non-AWS runtime exists.</li>
+      <li>Risk that contributors infer "Azure is supported" from the schema's permissiveness if docs are unclear. Mitigated by: (a) CLI error message naming the only executable combination, (b) AUTHORING.html stating AWS/CloudFormation is the only executable runtime today.</li>
+    </ul>
+  </td>
+</tr>
+</tbody>
+</table>
+
+<h3>Option C: Introduce Terraform as the universal engine <span class="badge reject">Rejected</span></h3>
+
+<table>
+<thead><tr><th>Pros</th><th>Cons</th></tr></thead>
+<tbody>
+<tr>
+  <td>
+    <ul>
+      <li>Superficially broad provider coverage from a single engine.</li>
+      <li>Familiar to many infrastructure engineers.</li>
+    </ul>
+  </td>
+  <td>
+    <ul>
+      <li>Fails every requirement in D3 (external runner, external state, locking, partial-failure cleanup, harder standalone validation).</li>
+      <li>Makes the platform responsible for another execution and security boundary.</li>
+      <li>Pulls authoring complexity back to the platform — the opposite of ADR-012.</li>
+    </ul>
+  </td>
+</tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Migration plan</h2>
+
+<table>
+<thead>
+  <tr><th>Phase</th><th>Scope</th><th>Status</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td>Phase 0</td>
+  <td>This ADR — direction, requirements, terminology, non-goals.</td>
+  <td><span class="badge accept">Shipped</span> with this PR</td>
+</tr>
+<tr>
+  <td>Phase 1</td>
+  <td>Schema accepts optional <code>runtime</code>; validator normalizes legacy <code>cfnTemplate</code>; CLI <code>create</code> scaffolds the <code>runtime</code> block; CLI <code>validate</code> rejects unsupported provider/engine combinations.</td>
+  <td><span class="badge accept">Shipped</span> with this PR (Issue #1267)</td>
+</tr>
+<tr>
+  <td>Phase 2</td>
+  <td>Deploy worker reads normalized runtime metadata internally. Still only the <code>aws</code> + <code>cloudformation</code> path is wired. Dispatch table exists but has one entry. No behavior change for existing problems.</td>
+  <td><span class="badge draft">Planned</span> (Issue #1268, separate PR)</td>
+</tr>
+<tr>
+  <td>Phase 3</td>
+  <td>One non-AWS provider experiment behind a feature flag. Most likely <code>azure</code> + <code>bicep</code> or <code>kubernetes</code> + <code>helm</code>, chosen for the cleanest cloud-owned execution / state / teardown story. Includes ADR-017-equivalent authority transfer for the second provider.</td>
+  <td><span class="badge draft">Planned</span> (separate ADR + PRs)</td>
+</tr>
+<tr>
+  <td>Phase 4</td>
+  <td>Problem-family model (D7) revisited only after Phase 3 succeeds with at least one second provider.</td>
+  <td><span class="badge draft">Reserved</span></td>
+</tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Consequences</h2>
+
+<h3>Gains</h3>
+
+<ul>
+  <li>The multi-cloud roadmap has a documented boundary: provider-specific first, family later, cloud-agnostic never (as a single-problem compiler).</li>
+  <li>The platform retains its CloudFormation-like simplicity: the cloud owns execution, state, and teardown.</li>
+  <li>Catalog metadata can already distinguish AWS problems from reserved-but-not-yet-executable provider targets, enabling honest authoring documentation.</li>
+  <li>Future PRs that add a second provider have a single seam to extend (runtime dispatch) rather than the whole deploy worker.</li>
+</ul>
+
+<h3>Costs</h3>
+
+<ul>
+  <li>An optional metadata field exists that today only takes one effective value. The cost is borne by the schema and CLI; existing problems are unaffected.</li>
+  <li>Documentation must keep emphasizing that the schema reserves provider values that are not yet executable, to avoid raising expectations.</li>
+  <li>If Phase 3 is delayed indefinitely, the reservation has carrying cost in code review and harness rules. Mitigated by Phase 1 / Phase 2 being thin (validator + dispatch table only).</li>
+</ul>
+</section>
+
+<section>
+<h2>Open questions</h2>
+
+<ul>
+  <li>Which second provider lands first in Phase 3 — Azure / Bicep, Kubernetes / Helm, or another. Decision deferred to a separate ADR once the maintainer team has bandwidth to operate a non-AWS test environment.</li>
+  <li>Authority transfer model for non-AWS providers — ADR-017 covers AWS AssumeRole + ExternalId; Azure Service Principal, Kubernetes ServiceAccount, and GCP Workload Identity Federation each need their own document.</li>
+  <li>Catalog UI presentation of reserved providers — whether to surface them as "coming soon" cards or hide them entirely until executable. UI decision, not schema decision; can be made when Phase 3 is scheduled.</li>
+  <li>Whether <code>cfnTemplate</code> ever gets removed. The current decision is "deprecated alias, not removed until the catalog is migrated"; the trigger for removal is a separate PR after Phase 2.</li>
+</ul>
+</section>
+
+</body>
+</html>

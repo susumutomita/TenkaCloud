@@ -19,6 +19,11 @@
     "問題文と CFn Outputs を突き合わせて 「採点対象の値」 を特定する"
   ],
   "cfnTemplate": "template.yaml",
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
   "scoring": {
     "kind": "flag",
     "flagOutputKey": "FlagValue",

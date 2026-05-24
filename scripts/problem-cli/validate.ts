@@ -2,7 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { KINDS } from "./constants";
-import { findProblemDir, getTemplateName } from "./problem-loader";
+import {
+  EXECUTABLE_ENGINE,
+  EXECUTABLE_PROVIDER,
+  findProblemDir,
+  getTemplateName,
+  normalizeRuntime,
+} from "./problem-loader";
 
 export interface ValidateResult {
   readonly ok: boolean;
@@ -26,6 +32,7 @@ export function runValidate(problemId: string): ValidateResult {
   if (!meta) {
     return { ok: false, errors };
   }
+  validateRuntime(meta, errors);
   const cfnTemplate = getTemplateName(meta);
   const templatePath = join(dir, cfnTemplate);
   const ctx: ValidationContext = { dir, problemId, meta, templatePath };
@@ -34,6 +41,37 @@ export function runValidate(problemId: string): ValidateResult {
   validateEndpointOutputs(ctx, errors);
   validateDashboardSlots(ctx, errors);
   return { ok: errors.length === 0, errors };
+}
+
+/**
+ * [ADR-023] Phase 1: optional `runtime` field の検証。
+ *   - normalize 失敗 (= 不完全な runtime block) は明示エラー
+ *   - `runtime` と `cfnTemplate` 両方宣言時は `runtime.entry === cfnTemplate` を強制 (= 互換期間)
+ *   - 認識できる combination は `aws` + `cloudformation` のみ。 それ以外は reservation として
+ *     reject する (= author が deploy できない問題を ship するのを止める)
+ */
+function validateRuntime(meta: Record<string, unknown>, errors: string[]): void {
+  const runtimeBlock = meta.runtime;
+  if (runtimeBlock !== undefined) {
+    const normalized = normalizeRuntime(meta);
+    if (!normalized) {
+      errors.push(
+        "runtime block must declare provider / engine / entry (all strings). See ADR-023.",
+      );
+      return;
+    }
+    const cfnTemplate = typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : undefined;
+    if (cfnTemplate !== undefined && cfnTemplate !== normalized.entry) {
+      errors.push(
+        `runtime.entry="${normalized.entry}" and cfnTemplate="${cfnTemplate}" must match during the dual-field compatibility window (ADR-023 D2).`,
+      );
+    }
+    if (normalized.provider !== EXECUTABLE_PROVIDER || normalized.engine !== EXECUTABLE_ENGINE) {
+      errors.push(
+        `Runtime ${normalized.provider}/${normalized.engine} is recognized but not executable in this platform version. Only ${EXECUTABLE_PROVIDER}/${EXECUTABLE_ENGINE} is supported today (ADR-023 D4).`,
+      );
+    }
+  }
 }
 
 function loadMetadataForValidation(

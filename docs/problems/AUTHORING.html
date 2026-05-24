@@ -215,6 +215,7 @@ bun run scripts/tenkacloud-problem.ts list-kinds</pre>
   <tr><td><code>exposedPorts</code></td><td>○</td><td>deploy 後に競技者へ払い出す port</td></tr>
   <tr><td><code>learningGoals</code></td><td>○</td><td>想定学習目的 (非空 array)</td></tr>
   <tr><td><code>cfnTemplate</code></td><td>○</td><td>"template.yaml" など</td></tr>
+  <tr><td><code>runtime</code></td><td>—</td><td>[ADR-023] <code>{provider, engine, entry}</code>。 推奨だが省略可 (= legacy <code>cfnTemplate</code> から自動推論)。 後述</td></tr>
   <tr><td><code>scoring</code></td><td>—</td><td>1 kind 1 設定 (Step 0 参照)。 省略で採点無効</td></tr>
   <tr><td><code>endpoints[]</code></td><td>—</td><td>Battle で endpoint を持つなら宣言 (= 後述)</td></tr>
   <tr><td><code>phases[]</code></td><td>—</td><td>phased-polling 系で時間経過 rule を入れるなら宣言</td></tr>
@@ -260,6 +261,22 @@ bun run scripts/tenkacloud-problem.ts list-kinds</pre>
     "parameters": { "delayMs": 200 }
   }
 ]</pre>
+
+<h3>runtime (= <a href="../architecture/adr-023-provider-specific-problem-runtime.html">ADR-023</a>)</h3>
+
+<p>optional metadata field。 問題が deploy される対象 cloud と engine を明示宣言する。 推奨形式:</p>
+
+<pre>"runtime": {
+  "provider": "aws",
+  "engine": "cloudformation",
+  "entry": "template.yaml"
+}</pre>
+
+<div class="callout warn">
+<strong>現状 executable な組み合わせは <code>provider=aws</code> + <code>engine=cloudformation</code> のみ。</strong> schema は将来の provider 値 (<code>azure</code> / <code>kubernetes</code> / <code>gcp</code>) を reservation として受理するが、 CLI validator (<code>scripts/tenkacloud-problem.ts validate</code>) と deploy worker は今 reject する。 詳細と migration plan は <a href="../architecture/adr-023-provider-specific-problem-runtime.html">ADR-023</a> 参照。
+</div>
+
+<p>後方互換: <code>runtime</code> を省略すると validator が legacy <code>cfnTemplate</code> から <code>{provider:'aws', engine:'cloudformation', entry:cfnTemplate}</code> に正規化する。 既存 catalog 問題はそのまま valid。 両方宣言する場合は <code>runtime.entry === cfnTemplate</code> でなければ validator が reject する (= 互換期間の整合性制約)。</p>
 </section>
 
 <section id="template">
