@@ -54,12 +54,10 @@
       "modes.lead":
         "リアルタイムの Battle と、じっくり解く Challenge。1 つのイベントに混ぜて使える。",
       "modes.battle.kicker": "Battle",
-      "modes.battle.h": "Battle.",
       "modes.battle.p":
         "稼働率で競う、リアルタイム対戦。毎分のヘルスチェックを生き残ったチームが、勝つ。",
       "modes.battle.live": "ROUND 03 · LIVE",
       "modes.challenge.kicker": "Challenge",
-      "modes.challenge.h": "Challenge.",
       "modes.challenge.p":
         "問題を解き、フラグを提出する。AWS の一つひとつのサービスを、ひとつずつ理解していく。",
       "modes.challenge.input": "Hello from tc-iam-…",
@@ -298,12 +296,10 @@
       "modes.h2": "Live battles. Solo challenges. Or both.",
       "modes.lead": "Real-time Battles and patient Challenges, in a single event if you want.",
       "modes.battle.kicker": "Battle",
-      "modes.battle.h": "Battle.",
       "modes.battle.p":
         "Uptime, in real time. A health check probes every team every minute — the last one standing wins.",
       "modes.battle.live": "ROUND 03 · LIVE",
       "modes.challenge.kicker": "Challenge",
-      "modes.challenge.h": "Challenge.",
       "modes.challenge.p":
         "Solve the problem, submit the flag, earn the points. Learn one AWS service at a time, in depth.",
       "modes.challenge.input": "Hello from tc-iam-…",
