@@ -95,6 +95,10 @@ format_check: lint-format
 HARNESS := bun run .claude/harness/bin
 harness:      ; $(HARNESS)/architecture.ts --staged --fail-on=error
 harness-test: ; cd .claude/harness && bun vitest run
+# Issue #1227: 全 tracked file を scan して assertion-roulette / high-coupling / magic-number
+# を検出。 baseline 越え (= 新規違反) があれば exit 2 で落ちる。 既存違反は
+# .claude/harness/baselines/tech-debt-*.json で凍結。 baseline を更新したいときは
+#   bun run .claude/harness/bin/tech-debt.ts --baseline
 tech-debt:    ; $(HARNESS)/tech-debt.ts
 
 # ===== CDK =====
