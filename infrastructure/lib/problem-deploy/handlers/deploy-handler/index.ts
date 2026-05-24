@@ -4,6 +4,7 @@ import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
 import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
+import { RuntimeNotSupportedError } from "../shared/runtime/index.js";
 import {
   ForbiddenRoleError,
   MissingTenantClaimError,
@@ -172,6 +173,21 @@ app.post("/problems/:problemId/deploy", async (c) => {
           awsAccountId: err.awsAccountId,
           message:
             "AWS Account ID が CompetitorAccounts table で verified=true 状態でないため deploy できません。",
+        },
+        StatusCodes.UNPROCESSABLE_ENTITY,
+      );
+    }
+    // [ADR-023 / Issue #1268] Problem metadata declared a runtime we cannot
+    // execute today (e.g. azure/bicep). 422: request is well-formed, but the
+    // business invariant "platform has an adapter for this provider/engine" is
+    // not satisfied. No cloud mutation happens on this path.
+    if (err instanceof RuntimeNotSupportedError) {
+      return c.json(
+        {
+          error: "runtime_not_supported",
+          provider: err.runtime.provider,
+          engine: err.runtime.engine,
+          message: err.message,
         },
         StatusCodes.UNPROCESSABLE_ENTITY,
       );
