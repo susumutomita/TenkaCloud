@@ -76,6 +76,13 @@ Invariants に加えて、実装レベルの原則を機械検査するルール
 - `adr-self-contained`
   `docs/architecture/adr-*.html` に chat 文脈、段階的反映 metadata、AI agent との役割分担メモが含まれると error。ADR は OSS readers が単独で読める正本として書く。既存違反は `.claude/harness/baselines/adr-self-contained.json` に baseline 化し、新規 regression だけを捕まえる。
 
+- `no-conflict-markers`
+  Git merge / rebase 中に残った conflict marker (`<<<<<<<` / `=======` / `>>>>>>>` の行頭) を任意の TS / TSX / JS / JSX / JSON / MD / HTML / CSS / YAML / SH に検出すると error。 commit に conflict marker が紛れて push されるのを止める第一線。
+
+  これと対をなす Git 層チェックが `make check-no-conflicts` (= `scripts/check-no-conflicts.ts`)。 こちらは `git merge-tree HEAD origin/main` で「現在のブランチが origin/main に clean に merge できるか」を dry-run 検査する。 PR を出す瞬間に DIRTY (= 上流が進んだ) になるのを未然に防ぐ。 `make before-commit` に組み込まれており、 fail すると pre-commit で止まる。
+
+  両方とも記憶[[feedback_pull_main_before_task]]に紐づく仕掛け。
+
 ## Enforcement
 
 - `make harness` (= `bun run .claude/harness/bin/architecture.ts --staged --fail-on=error`)

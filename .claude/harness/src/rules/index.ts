@@ -4,6 +4,7 @@ import { fileTooLarge } from "./file-too-large.ts";
 import { handlerNoDirectSdkImport } from "./handler-no-direct-sdk-import.ts";
 import { handlerTenantIsolation } from "./handler-tenant-isolation.ts";
 import { iamWildcardNeedsJustify } from "./iam-wildcard-needs-justify.ts";
+import { noConflictMarkers } from "./no-conflict-markers.ts";
 
 export const architectureRules = [
   adrMustBeHtml,
@@ -14,4 +15,6 @@ export const architectureRules = [
   handlerNoDirectSdkImport,
   // Issue #997 / tenant 分離 audit
   handlerTenantIsolation,
+  // feedback_pull_main_before_task: PR の conflict を防ぐ第一線。 commit 内の marker 検知
+  noConflictMarkers,
 ] as const;
