@@ -7,62 +7,41 @@ import {
   ForbiddenRoleError,
   MissingTenantClaimError,
   requireRole,
-  resolveCognitoSub,
-  resolveTenantId,
-  TENANT_ADMIN_ROLE,
-  TENANT_OPERATOR_ROLE,
   TENANT_ROLES,
 } from "../deploy-handler/auth.js";
-import { NotificationCreateRequestSchema } from "../shared/notification.js";
-import { archiveEvent } from "./archive.js";
-import { bulkTeardownEvent } from "./bulk-delete.js";
-import { bulkDeployEvent } from "./bulk-deploy.js";
-import { createEvent, DuplicateInternalSlugError, DuplicateProblemIdError } from "./create.js";
-import { createNotification } from "./create-notification.js";
-import { fireDisruption, listDisruptionAudit, listDisruptionCatalog } from "./disruption-fire.js";
-import { endEvent } from "./end-event.js";
-import { getEventDetail, listEvents } from "./list.js";
-import { lockScoring, unlockScoring } from "./lock-scoring.js";
-import {
-  handleRouteError,
-  parseJsonBody,
-  parseOptionalJsonBody,
-  requireEventOwnership,
-  withEventId,
-  withJsonBody,
-} from "./route-helpers.js";
-import { setEventSchedule } from "./schedule.js";
+import { registerBulkDeployRoutes } from "./routes/bulk-deploy.js";
+import { registerDisruptionRoutes } from "./routes/disruptions.js";
+import { registerEventRoutes } from "./routes/events.js";
+import { registerLifecycleRoutes } from "./routes/lifecycle.js";
+import { registerNotificationRoutes } from "./routes/notifications.js";
+import { registerScoringRoutes } from "./routes/scoring.js";
 import { buildEventSharedResources } from "./shared.js";
-import {
-  BulkDeployRequestSchema,
-  CreateEventRequestSchema,
-  DisruptionFireRequestSchema,
-  ScheduleEventRequestSchema,
-} from "./types.js";
 
 /**
  * Event API Lambda の Hono app (ADR-004 Phase 1+2a, ADR-006 Notifications)。routes:
  *   POST   /events
  *   GET    /events
  *   GET    /events/:eventId
- *   POST   /events/:eventId/deploy         — Bulk deploy (teams × problems を fan-out)
+ *   PATCH  /events/:eventId/schedule
+ *   POST   /events/:eventId/end
+ *   POST   /events/:eventId/lock-scoring
+ *   DELETE /events/:eventId/lock-scoring
  *   POST   /events/:eventId/notifications  — 運営 → 競技者 通知 1 件作成 (ADR-006)
+ *   POST   /events/:eventId/archive
+ *   POST   /events/:eventId/deploy         — Bulk deploy (teams × problems を fan-out)
+ *   GET    /events/:eventId/disruptions          — Red Team disruption catalog (#888 Phase A)
+ *   GET    /events/:eventId/disruptions/audit    — Disruption 発火履歴
+ *   POST   /events/:eventId/disruptions/fire     — Disruption を fire
  *   DELETE /events/:eventId                — Bulk teardown
  *
  * Auth: tenant API GW + Cognito JWT authorizer。tenantId は JWT `custom:tenantId` claim
  * から `resolveTenantId` で抽出する (DeployApi Lambda と同じ shape)。
+ *
+ * 各 route group の実装は `./routes/<group>.ts` に分割。 本 index は
+ * middleware / onError handler / route group の wiring のみを担当する (Issue #1250)。
  */
 
-const LIST_LIMIT_MAX = 200;
-
 const shared = buildEventSharedResources();
-
-function parseLimit(value: string | undefined): { ok: true; limit: number | undefined } | null {
-  if (value === undefined) return { ok: true, limit: undefined };
-  const limit = Number.parseInt(value, 10);
-  if (!Number.isFinite(limit) || limit < 1 || limit > LIST_LIMIT_MAX) return null;
-  return { ok: true, limit };
-}
 
 const app = new Hono();
 
@@ -130,441 +109,12 @@ app.use("/events/*", async (c, next) => {
 
 app.get("/events/healthz", (c) => c.json({ ok: true }));
 
-app.post(
-  "/events",
-  withJsonBody(
-    CreateEventRequestSchema,
-    async ({ c, body }) => {
-      try {
-        const response = await createEvent(
-          shared,
-          { tenantId: resolveTenantId(c), nowMs: Date.now() },
-          body,
-        );
-        return c.json(response, StatusCodes.CREATED);
-      } catch (err) {
-        if (err instanceof DuplicateInternalSlugError) {
-          return c.json(
-            { error: "duplicate_internal_slug", slug: err.slug },
-            StatusCodes.BAD_REQUEST,
-          );
-        }
-        if (err instanceof DuplicateProblemIdError) {
-          return c.json(
-            { error: "duplicate_problem_id", problemId: err.problemId },
-            StatusCodes.BAD_REQUEST,
-          );
-        }
-        return handleRouteError(c, "[events] createEvent failed", {}, err);
-      }
-    },
-    { roles: [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE] },
-  ),
-);
-
-app.get("/events", async (c) => {
-  const parsedLimit = parseLimit(c.req.query("limit"));
-  if (!parsedLimit) return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
-  try {
-    const response = await listEvents(shared, {
-      tenantId: resolveTenantId(c),
-      limit: parsedLimit.limit,
-      cursor: c.req.query("cursor"),
-    });
-    return c.json(response, StatusCodes.OK);
-  } catch (err) {
-    return handleRouteError(c, "[events] listEvents failed", {}, err);
-  }
-});
-
-app.get(
-  "/events/:eventId",
-  withEventId(async ({ c, eventId }) => {
-    // Issue #1038 P1 #7: opt-in で全 team の累計 score event timeline を返す。
-    // default (= "true" 以外) は scoreEventsByTeam を省き、 既存 caller を素通り。
-    const withScoreEvents = c.req.query("withScoreEvents") === "true";
-    try {
-      const detail = await getEventDetail(shared, resolveTenantId(c), eventId, {
-        withScoreEvents,
-      });
-      if (!detail) return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-      return c.json(detail, StatusCodes.OK);
-    } catch (err) {
-      return handleRouteError(c, "[events] getEventDetail failed", { eventId }, err);
-    }
-  }),
-);
-
-app.patch(
-  "/events/:eventId/schedule",
-  withEventId(
-    async ({ c, eventId }) => {
-      const parsed = await parseJsonBody(c, ScheduleEventRequestSchema);
-      if (!parsed.ok) return parsed.response;
-      const nowMs = Date.now();
-      // `startNow: true` は server now を ISO8601 化して startsAt に解決 (= 即座に開始)。
-      // #536: endsAt も同 endpoint で受け、predictive scheduling を可能に。
-      const resolvedStartsAt = parsed.data.startNow
-        ? new Date(nowMs).toISOString()
-        : parsed.data.startsAt;
-      const resolvedEndsAt = parsed.data.endsAt;
-      try {
-        const outcome = await setEventSchedule(shared, resolveTenantId(c), eventId, {
-          startsAt: resolvedStartsAt,
-          endsAt: resolvedEndsAt,
-          scoreboardFreezeMinutes: parsed.data.scoreboardFreezeMinutes,
-          nowMs,
-        });
-        if (outcome.kind === "not_found")
-          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-        if (outcome.kind === "past_starts_at") {
-          // #537: 過去 startsAt を frontend が迂回した場合の防御線。SLACK (= 60s) より過去なら
-          // 「即座に開始」 button を使うべきなので reject。
-          return c.json(
-            {
-              error: "past_starts_at",
-              message:
-                "startsAt が過去の時刻です。「即座に開始」 button を使うか、未来の時刻を指定してください。",
-              startsAt: outcome.startsAt,
-              serverNow: new Date(outcome.nowMs).toISOString(),
-            },
-            StatusCodes.BAD_REQUEST,
-          );
-        }
-        if (outcome.kind === "past_ends_at") {
-          // #536: 過去 endsAt を弾く。「Event を終了」 button (= 即終了) は別 endpoint なので、
-          // 本 schedule API には未来の endsAt のみ来る想定。
-          return c.json(
-            {
-              error: "past_ends_at",
-              message:
-                "endsAt が過去の時刻です。「Event を終了」 button (= 即時) を使うか、未来の時刻を指定してください。",
-              endsAt: outcome.endsAt,
-              serverNow: new Date(outcome.nowMs).toISOString(),
-            },
-            StatusCodes.BAD_REQUEST,
-          );
-        }
-        if (outcome.kind === "ends_before_starts") {
-          // #536: 競技時間 0 以下を弾く。
-          return c.json(
-            {
-              error: "ends_before_starts",
-              message: "endsAt は startsAt より後の時刻を指定してください。",
-              startsAt: outcome.startsAt,
-              endsAt: outcome.endsAt,
-            },
-            StatusCodes.BAD_REQUEST,
-          );
-        }
-        if (outcome.kind === "no_op") {
-          return c.json(
-            { error: "no_op", message: "更新対象が指定されていません" },
-            StatusCodes.BAD_REQUEST,
-          );
-        }
-        return c.json(
-          {
-            startsAt: outcome.startsAt,
-            endsAt: outcome.endsAt,
-            updatedDeployments: outcome.updatedDeployments,
-          },
-          StatusCodes.OK,
-        );
-      } catch (err) {
-        return handleRouteError(c, "[events] setEventSchedule failed", { eventId }, err);
-      }
-    },
-    { roles: [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE] },
-  ),
-);
-
-app.post(
-  "/events/:eventId/end",
-  withEventId(
-    async ({ c, eventId }) => {
-      try {
-        const outcome = await endEvent(shared, resolveTenantId(c), eventId, Date.now());
-        if (outcome.kind === "not_found")
-          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-        if (outcome.kind === "not_endable") {
-          return c.json(
-            { error: "not_endable", currentStatus: outcome.status },
-            StatusCodes.CONFLICT,
-          );
-        }
-        return c.json(
-          { endsAt: outcome.endsAt, updatedDeployments: outcome.updatedDeployments },
-          StatusCodes.OK,
-        );
-      } catch (err) {
-        return handleRouteError(c, "[events] endEvent failed", { eventId }, err);
-      }
-    },
-    { roles: [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE] },
-  ),
-);
-
-// #558: scoring lock — operator が表彰フェーズで採点を凍結 / 解除する。
-//   - POST  /events/:eventId/lock-scoring : 採点 lock (scoringLocked=true)
-//   - DELETE /events/:eventId/lock-scoring : 採点 unlock (scoringLocked を REMOVE)
-// idempotent: already locked / unlocked のときは 200 + body に現状を返す。
-// status=READY / ENDED のみ lockable (= 加点経路があり得る state)。
-app.post(
-  "/events/:eventId/lock-scoring",
-  withEventId(
-    async ({ c, eventId }) => {
-      try {
-        const outcome = await lockScoring(
-          shared,
-          resolveTenantId(c),
-          eventId,
-          resolveCognitoSub(c),
-          Date.now(),
-        );
-        if (outcome.kind === "not_found")
-          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-        if (outcome.kind === "not_lockable") {
-          return c.json(
-            { error: "not_lockable", currentStatus: outcome.status },
-            StatusCodes.CONFLICT,
-          );
-        }
-        return c.json(
-          {
-            scoringLocked: outcome.scoringLocked,
-            scoringLockedAt: outcome.kind === "ok" ? outcome.scoringLockedAt : undefined,
-            idempotent: outcome.kind === "already",
-          },
-          StatusCodes.OK,
-        );
-      } catch (err) {
-        return handleRouteError(c, "[events] lockScoring failed", { eventId }, err);
-      }
-    },
-    { roles: [TENANT_ADMIN_ROLE] },
-  ),
-);
-
-app.delete(
-  "/events/:eventId/lock-scoring",
-  withEventId(
-    async ({ c, eventId }) => {
-      try {
-        const outcome = await unlockScoring(shared, resolveTenantId(c), eventId, Date.now());
-        if (outcome.kind === "not_found")
-          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-        if (outcome.kind === "not_lockable") {
-          return c.json(
-            { error: "not_lockable", currentStatus: outcome.status },
-            StatusCodes.CONFLICT,
-          );
-        }
-        return c.json(
-          {
-            scoringLocked: outcome.scoringLocked,
-            idempotent: outcome.kind === "already",
-          },
-          StatusCodes.OK,
-        );
-      } catch (err) {
-        return handleRouteError(c, "[events] unlockScoring failed", { eventId }, err);
-      }
-    },
-    { roles: [TENANT_ADMIN_ROLE] },
-  ),
-);
-
-app.post(
-  "/events/:eventId/notifications",
-  withEventId(
-    async ({ c, eventId }) => {
-      const parsed = await parseJsonBody(c, NotificationCreateRequestSchema);
-      if (!parsed.ok) return parsed.response;
-      try {
-        const outcome = await createNotification(
-          shared,
-          resolveTenantId(c),
-          eventId,
-          resolveCognitoSub(c),
-          parsed.data,
-        );
-        if (outcome.kind === "not_found")
-          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-        return c.json(
-          { notificationId: outcome.notificationId, occurredAt: outcome.occurredAt },
-          StatusCodes.CREATED,
-        );
-      } catch (err) {
-        return handleRouteError(c, "[events] createNotification failed", { eventId }, err);
-      }
-    },
-    { roles: [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE] },
-  ),
-);
-
-app.post(
-  "/events/:eventId/archive",
-  withEventId(
-    async ({ c, eventId }) => {
-      try {
-        const outcome = await archiveEvent(shared, resolveTenantId(c), eventId, Date.now());
-        if (outcome.kind === "not_found")
-          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-        if (outcome.kind === "not_archivable") {
-          return c.json(
-            { error: "not_archivable", currentStatus: outcome.status },
-            StatusCodes.CONFLICT,
-          );
-        }
-        return c.json({ archivedAt: outcome.archivedAt }, StatusCodes.OK);
-      } catch (err) {
-        return handleRouteError(c, "[events] archiveEvent failed", { eventId }, err);
-      }
-    },
-    { roles: [TENANT_ADMIN_ROLE] },
-  ),
-);
-
-app.post(
-  "/events/:eventId/deploy",
-  withEventId(
-    async ({ c, eventId }) => {
-      // #555: body は opt-in。空 body は bulk-all 扱い (= 後方互換)。値が来た場合だけ
-      // validate (= retryFailedOnly / teamIds / problemIds の filter として使う)。
-      const parsed = await parseOptionalJsonBody(c, BulkDeployRequestSchema);
-      if (!parsed.ok) return parsed.response;
-      try {
-        const outcome = await bulkDeployEvent(
-          shared,
-          resolveTenantId(c),
-          eventId,
-          Date.now(),
-          parsed.data,
-        );
-        if (outcome.kind === "not_found")
-          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-        return c.json(outcome.result, StatusCodes.ACCEPTED);
-      } catch (err) {
-        return handleRouteError(c, "[events] bulkDeployEvent failed", { eventId }, err);
-      }
-    },
-    { roles: [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE] },
-  ),
-);
-
-// Issue #888 Phase A: Red Team Disruption Injection
-//   GET    /events/:eventId/disruptions          — event 内 disruption catalog
-//   GET    /events/:eventId/disruptions/audit    — 発火履歴 (pagination)
-//   POST   /events/:eventId/disruptions/fire     — disruption を fire
-app.get(
-  "/events/:eventId/disruptions",
-  withEventId(async ({ c, eventId }) => {
-    try {
-      // PR #889 review: 他 tenant の event を obscured ID で覗くのを防ぐため tenant ownership 必須
-      const tenantId = resolveTenantId(c);
-      const ownershipError = await requireEventOwnership({ c, shared, eventId, tenantId });
-      if (ownershipError) return ownershipError;
-      const out = await listDisruptionCatalog(shared, eventId);
-      return c.json(out, StatusCodes.OK);
-    } catch (err) {
-      return handleRouteError(c, "[disruptions] catalog failed", { eventId }, err);
-    }
-  }),
-);
-
-app.get(
-  "/events/:eventId/disruptions/audit",
-  withEventId(async ({ c, eventId }) => {
-    const limitRaw = c.req.query("limit");
-    const parsed = parseLimit(limitRaw);
-    if (!parsed) return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
-    const cursor = c.req.query("cursor");
-    try {
-      // PR #889 review: 他 tenant の audit log を覗かれないよう tenant ownership 必須
-      const tenantId = resolveTenantId(c);
-      const ownershipError = await requireEventOwnership({ c, shared, eventId, tenantId });
-      if (ownershipError) return ownershipError;
-      const out = await listDisruptionAudit(shared, eventId, {
-        limit: parsed.limit,
-        cursor,
-      });
-      return c.json(out, StatusCodes.OK);
-    } catch (err) {
-      return handleRouteError(c, "[disruptions] audit list failed", { eventId }, err);
-    }
-  }),
-);
-
-app.post(
-  "/events/:eventId/disruptions/fire",
-  withEventId(
-    async ({ c, eventId }) => {
-      // PR #889 review: 既存 route と整合する Zod parse に統一 (= cross-field 制約も含めて検証)
-      const parsed = await parseJsonBody(c, DisruptionFireRequestSchema);
-      if (!parsed.ok) return parsed.response;
-      const req = parsed.data;
-      try {
-        // PR #889 review: 他 tenant の event に fire できないよう ownership 必須
-        const tenantId = resolveTenantId(c);
-        const ownershipError = await requireEventOwnership({ c, shared, eventId, tenantId });
-        if (ownershipError) return ownershipError;
-        const outcome = await fireDisruption(shared, {
-          tenantId,
-          eventId,
-          problemId: req.problemId,
-          disruptionId: req.disruptionId,
-          parameters: req.parameters ?? {},
-          scope: req.scope,
-          targetTeamIds: req.targetTeamIds ?? [],
-          ...(req.randomCount !== undefined ? { randomCount: req.randomCount } : {}),
-          requestId: req.requestId,
-          firedBy: resolveCognitoSub(c),
-          nowMs: Date.now(),
-        });
-        if (outcome.kind === "ok") return c.json(outcome.result, StatusCodes.CREATED);
-        if (outcome.kind === "duplicate") return c.json(outcome.result, StatusCodes.OK);
-        if (outcome.kind === "unknown_problem")
-          return c.json({ error: "unknown_problem" }, StatusCodes.BAD_REQUEST);
-        if (outcome.kind === "unknown_disruption")
-          return c.json({ error: "unknown_disruption" }, StatusCodes.BAD_REQUEST);
-        if (outcome.kind === "invalid_parameters")
-          return c.json(
-            { error: "invalid_parameters", message: outcome.reason },
-            StatusCodes.BAD_REQUEST,
-          );
-        if (outcome.kind === "invalid_scope")
-          return c.json(
-            { error: "invalid_scope", message: outcome.reason },
-            StatusCodes.BAD_REQUEST,
-          );
-        if (outcome.kind === "no_targets")
-          return c.json({ error: "no_targets" }, StatusCodes.CONFLICT);
-        return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-      } catch (err) {
-        return handleRouteError(c, "[disruptions] fire failed", { eventId }, err);
-      }
-    },
-    { roles: [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE] },
-  ),
-);
-
-app.delete(
-  "/events/:eventId",
-  withEventId(
-    async ({ c, eventId }) => {
-      try {
-        const outcome = await bulkTeardownEvent(shared, resolveTenantId(c), eventId, Date.now());
-        if (outcome.kind === "not_found")
-          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
-        return c.json(outcome.result, StatusCodes.ACCEPTED);
-      } catch (err) {
-        return handleRouteError(c, "[events] bulkTeardownEvent failed", { eventId }, err);
-      }
-    },
-    { roles: [TENANT_ADMIN_ROLE] },
-  ),
-);
+registerEventRoutes(app, shared);
+registerLifecycleRoutes(app, shared);
+registerScoringRoutes(app, shared);
+registerNotificationRoutes(app, shared);
+registerBulkDeployRoutes(app, shared);
+registerDisruptionRoutes(app, shared);
 
 export const handler = handle(app) as (
   event: LambdaEvent,

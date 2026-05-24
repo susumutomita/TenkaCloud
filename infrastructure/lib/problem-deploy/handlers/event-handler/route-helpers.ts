@@ -8,6 +8,22 @@ import type { EventSharedResources } from "./shared.js";
 
 type RouteResult = Response | Promise<Response>;
 
+export const LIST_LIMIT_MAX = 200;
+
+/**
+ * Parse a `limit` query string. Returns `null` if it is present but invalid
+ * (so the caller can return a 400), and `{ ok: true, limit: undefined }` when
+ * unspecified (so the downstream service applies its own default).
+ */
+export function parseLimit(
+  value: string | undefined,
+): { ok: true; limit: number | undefined } | null {
+  if (value === undefined) return { ok: true, limit: undefined };
+  const limit = Number.parseInt(value, 10);
+  if (!Number.isFinite(limit) || limit < 1 || limit > LIST_LIMIT_MAX) return null;
+  return { ok: true, limit };
+}
+
 interface RouteContext {
   readonly c: Context;
 }
