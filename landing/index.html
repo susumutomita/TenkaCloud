@@ -1569,6 +1569,23 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
       "contact.field_message_placeholder": "解決したい課題、 参加者の技術レベル、 過去の研修の振り返り 等、 何でもお書きください。",
       "contact.fineprint": "送信先: 合同会社BULL (TenkaCloud 運営)。 ご記入いただいた情報は、 お問い合わせ対応と見積もり提示のみに利用します (= <a href=\"./privacy.html\">プライバシーポリシー</a>)。",
       "contact.submit": "送信する",
+      "contact.feedback_required_missing": "お名前とメールアドレスは必須です。",
+      "contact.feedback_success_prefix": "メーラーを起動しました。 もし開かない場合は、 こちらの ",
+      "contact.feedback_success_link_label": "GitHub Discussions から送信",
+      "contact.feedback_success_suffix": " もご利用いただけます。 ご連絡お待ちしています。",
+      "contact.mail_body_header": "TenkaCloud お問い合わせ",
+      "contact.mail_label_name": "お名前",
+      "contact.mail_label_company": "所属組織",
+      "contact.mail_label_email": "メールアドレス",
+      "contact.mail_label_plan": "興味のあるプラン",
+      "contact.mail_label_scale": "想定規模 / 開催時期",
+      "contact.mail_label_message": "メッセージ",
+      "contact.mail_label_sent_from": "送信元",
+      "contact.mail_blank": "(未記入)",
+      "contact.mail_unspecified": "(未指定)",
+      "contact.mail_none": "(なし)",
+      "contact.mail_subject_prefix": "[TenkaCloud]",
+      "contact.mail_subject_fallback": "お問い合わせ",
 
       "footer.tag": "AWS を題材にしたクラウド実戦演習を開催するための OSS ツール。 Apache 2.0。",
       "footer.disclaimer": "TenkaCloud は独立した OSS プロジェクトであり、 Amazon Web Services, Inc. またはその関連会社による提供・後援・承認を受けたものではありません。 AWS および関連する名称は Amazon.com, Inc. またはその関連会社の商標です。",
@@ -1765,6 +1782,23 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
       "contact.field_message_placeholder": "Tell us the problem you're trying to solve, your participants' technical level, lessons from past trainings — anything that helps.",
       "contact.fineprint": "Sent to: BULL LLC (operator of TenkaCloud). Your input is used only for replying and quoting (see <a href=\"./privacy.en.html\">Privacy Policy</a>).",
       "contact.submit": "Send",
+      "contact.feedback_required_missing": "Name and email are required.",
+      "contact.feedback_success_prefix": "Your mail client should have opened. If not, you can also send via ",
+      "contact.feedback_success_link_label": "GitHub Discussions",
+      "contact.feedback_success_suffix": ". We'll get back to you.",
+      "contact.mail_body_header": "TenkaCloud — Contact",
+      "contact.mail_label_name": "Name",
+      "contact.mail_label_company": "Organization",
+      "contact.mail_label_email": "Email",
+      "contact.mail_label_plan": "Plan of interest",
+      "contact.mail_label_scale": "Expected scale / timing",
+      "contact.mail_label_message": "Message",
+      "contact.mail_label_sent_from": "Sent from",
+      "contact.mail_blank": "(blank)",
+      "contact.mail_unspecified": "(unspecified)",
+      "contact.mail_none": "(none)",
+      "contact.mail_subject_prefix": "[TenkaCloud]",
+      "contact.mail_subject_fallback": "Inquiry",
 
       "footer.tag": "An open-source tool for hosting hands-on cloud drills on real AWS. Apache 2.0.",
       "footer.disclaimer": "TenkaCloud is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Amazon Web Services, Inc. AWS and related marks are trademarks of Amazon.com, Inc. or its affiliates.",
@@ -1885,6 +1919,14 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
   // Contact form submission. backend が無いので 入力内容を mailto: URL に組み立てて
   // ユーザーの mail client を開く (= GitHub Pages の static site にできる最小実装)。
   // 将来 backend (= Lambda Function URL) を立てたら fetch に差し替え。
+  // Contact form i18n は LP の他要素と同じ I18N dict (= contact.feedback_*) から
+  // 取り出す。 fallback は ja の string (= I18N load 失敗時の保険)。
+  function tContact(key, fallback) {
+    var lang = document.documentElement.lang || "ja";
+    var dict = (I18N[lang] || {});
+    return dict[key] || fallback;
+  }
+
   window.submitContactForm = function (event) {
     event.preventDefault();
     var form = event.target;
@@ -1899,30 +1941,44 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
     if (!name || !email) {
       feedback.hidden = false;
       feedback.className = "contact-feedback error";
-      feedback.textContent = "お名前とメールアドレスは必須です。";
+      feedback.textContent = tContact(
+        "contact.feedback_required_missing",
+        "お名前とメールアドレスは必須です。",
+      );
       return false;
     }
+    var bodyHeader = tContact("contact.mail_body_header", "TenkaCloud お問い合わせ");
+    var labelName = tContact("contact.mail_label_name", "お名前");
+    var labelCompany = tContact("contact.mail_label_company", "所属組織");
+    var labelEmail = tContact("contact.mail_label_email", "メールアドレス");
+    var labelPlan = tContact("contact.mail_label_plan", "興味のあるプラン");
+    var labelScale = tContact("contact.mail_label_scale", "想定規模 / 開催時期");
+    var labelMessage = tContact("contact.mail_label_message", "メッセージ");
+    var labelSentFrom = tContact("contact.mail_label_sent_from", "送信元");
+    var blank = tContact("contact.mail_blank", "(未記入)");
+    var unspecified = tContact("contact.mail_unspecified", "(未指定)");
+    var noneLabel = tContact("contact.mail_none", "(なし)");
     var lines = [
-      "TenkaCloud お問い合わせ",
+      bodyHeader,
       "",
-      "お名前: " + name,
-      "所属組織: " + (company || "(未記入)"),
-      "メールアドレス: " + email,
-      "興味のあるプラン: " + (plan || "(未指定)"),
-      "想定規模 / 開催時期: " + (scale || "(未記入)"),
+      labelName + ": " + name,
+      labelCompany + ": " + (company || blank),
+      labelEmail + ": " + email,
+      labelPlan + ": " + (plan || unspecified),
+      labelScale + ": " + (scale || blank),
       "",
-      "メッセージ:",
-      message || "(なし)",
+      labelMessage + ":",
+      message || noneLabel,
       "",
       "---",
-      "送信元: " + window.location.href,
+      labelSentFrom + ": " + window.location.href,
     ];
     var body = encodeURIComponent(lines.join("\n"));
-    var subject = encodeURIComponent("[TenkaCloud] " + (plan || "お問い合わせ") + " — " + name);
-    // mailto: で運営者の窓口に飛ばす。 アドレスは GitHub プロフィール経由でも辿れる
-    // 公開窓口を使う想定 (= privacy.html / legal.html では 「請求があった場合に開示」
-    // を明示しているので、 ここでは GitHub Discussions URL にフォールバックする選択肢
-    // も保持)。
+    var subjectPrefix = tContact("contact.mail_subject_prefix", "[TenkaCloud]");
+    var subjectFallback = tContact("contact.mail_subject_fallback", "お問い合わせ");
+    var subject = encodeURIComponent(
+      subjectPrefix + " " + (plan || subjectFallback) + " — " + name,
+    );
     var primary = "mailto:oyster880+tenkacloud@gmail.com?subject=" + subject + "&body=" + body;
     var discussionUrl =
       "https://github.com/susumutomita/TenkaCloud/discussions/new?category=general&body=" + body;
@@ -1932,12 +1988,26 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
     var w = window.open(primary, "_self");
     feedback.hidden = false;
     feedback.className = "contact-feedback success";
+    var successPrefix = tContact(
+      "contact.feedback_success_prefix",
+      "メーラーを起動しました。 もし開かない場合は、 こちらの ",
+    );
+    var successLinkLabel = tContact(
+      "contact.feedback_success_link_label",
+      "GitHub Discussions から送信",
+    );
+    var successSuffix = tContact(
+      "contact.feedback_success_suffix",
+      " もご利用いただけます。 ご連絡お待ちしています。",
+    );
     feedback.innerHTML =
-      "メーラーを起動しました。 もし開かない場合は、 こちらの " +
+      successPrefix +
       '<a href="' +
       discussionUrl +
       '" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline">' +
-      "GitHub Discussions から送信</a> もご利用いただけます。 ご連絡お待ちしています。";
+      successLinkLabel +
+      "</a>" +
+      successSuffix;
     if (!w) {
       // mailto: opener が拒否された (= popup blocker)。 location.href fallback。
       window.location.href = primary;
