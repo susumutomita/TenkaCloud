@@ -5,14 +5,6 @@ import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
 import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
 import {
-  HTTP_ACCEPTED,
-  HTTP_BAD_REQUEST,
-  HTTP_CONFLICT,
-  HTTP_INTERNAL_ERROR,
-  HTTP_NOT_FOUND,
-  HTTP_OK,
-} from "../shared/http-status.js";
-import {
   ForbiddenRoleError,
   MissingTenantClaimError,
   requireRole,
@@ -143,29 +135,32 @@ app.post("/problems/:problemId/deploy", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
   const problemId = c.req.param("problemId");
   if (!problemId || !PROBLEM_ID_RE.test(problemId)) {
-    return c.json({ error: "invalid_problem_id" }, HTTP_BAD_REQUEST);
+    return c.json({ error: "invalid_problem_id" }, StatusCodes.BAD_REQUEST);
   }
 
   let body: unknown;
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: "invalid_body" }, HTTP_BAD_REQUEST);
+    return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
   }
 
   const parsed = DeployRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ error: "validation_failed", issues: parsed.error.issues }, HTTP_BAD_REQUEST);
+    return c.json(
+      { error: "validation_failed", issues: parsed.error.issues },
+      StatusCodes.BAD_REQUEST,
+    );
   }
 
   const ctx = buildContext(shared, resolveTenantId(c));
 
   try {
     const response = await startDeployment(ctx, { ...parsed.data, problemId });
-    return c.json(response, HTTP_ACCEPTED);
+    return c.json(response, StatusCodes.ACCEPTED);
   } catch (err) {
     if (err instanceof UnknownProblemError) {
-      return c.json({ error: "unknown_problem", problemId }, HTTP_NOT_FOUND);
+      return c.json({ error: "unknown_problem", problemId }, StatusCodes.NOT_FOUND);
     }
     // Phase 2.2 (Issue #459): verified=true 行が無い account への deploy は 422 (semantically
     // 適切: request 自体は well-formed だが、business invariant が満たされない)。operator は
@@ -183,17 +178,17 @@ app.post("/problems/:problemId/deploy", async (c) => {
     }
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] startDeployment failed", { problemId, message });
-    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });
 
 app.get("/problems/:problemId/deployments", async (c) => {
   const problemId = c.req.param("problemId");
   if (!problemId || !PROBLEM_ID_RE.test(problemId)) {
-    return c.json({ error: "invalid_problem_id" }, HTTP_BAD_REQUEST);
+    return c.json({ error: "invalid_problem_id" }, StatusCodes.BAD_REQUEST);
   }
   const parsedLimit = parseLimit(c.req.query("limit"));
-  if (!parsedLimit) return c.json({ error: "invalid_limit" }, HTTP_BAD_REQUEST);
+  if (!parsedLimit) return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
   try {
     const response = await listDeployments(shared, {
       tenantId: resolveTenantId(c),
@@ -201,44 +196,44 @@ app.get("/problems/:problemId/deployments", async (c) => {
       limit: parsedLimit.limit,
       cursor: c.req.query("cursor"),
     });
-    return c.json(response, HTTP_OK);
+    return c.json(response, StatusCodes.OK);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] listDeployments failed", { problemId, message });
-    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });
 
 app.get("/deployments", async (c) => {
   const parsedLimit = parseLimit(c.req.query("limit"));
-  if (!parsedLimit) return c.json({ error: "invalid_limit" }, HTTP_BAD_REQUEST);
+  if (!parsedLimit) return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
   try {
     const response = await listDeployments(shared, {
       tenantId: resolveTenantId(c),
       limit: parsedLimit.limit,
       cursor: c.req.query("cursor"),
     });
-    return c.json(response, HTTP_OK);
+    return c.json(response, StatusCodes.OK);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] listDeployments(tenant-wide) failed", { message });
-    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });
 
 app.get("/deployments/:jobId", async (c) => {
   const jobId = c.req.param("jobId");
   if (!jobId || !JOB_ID_RE.test(jobId)) {
-    return c.json({ error: "invalid_job_id" }, HTTP_BAD_REQUEST);
+    return c.json({ error: "invalid_job_id" }, StatusCodes.BAD_REQUEST);
   }
   try {
     const item = await getDeployment(shared, resolveTenantId(c), jobId);
-    if (!item) return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
-    return c.json(item, HTTP_OK);
+    if (!item) return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+    return c.json(item, StatusCodes.OK);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] getDeployment failed", { jobId, message });
-    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });
 
@@ -305,24 +300,24 @@ app.post("/deployments/retry", async (c) => {
   try {
     body = await c.req.json();
   } catch {
-    return c.json({ error: "invalid_body" }, HTTP_BAD_REQUEST);
+    return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
   }
   let request: ReturnType<typeof validateRetryRequest>;
   try {
     request = validateRetryRequest(body);
   } catch (err) {
     if (err instanceof InvalidRetryRequestError) {
-      return c.json({ error: "invalid_request", message: err.message }, HTTP_BAD_REQUEST);
+      return c.json({ error: "invalid_request", message: err.message }, StatusCodes.BAD_REQUEST);
     }
     throw err;
   }
   try {
     const result = await retryDeployments(shared, resolveTenantId(c), request);
-    return c.json(result, HTTP_OK);
+    return c.json(result, StatusCodes.OK);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] retryDeployments failed", { message });
-    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });
 
@@ -330,26 +325,29 @@ app.delete("/deployments/:jobId", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
   const jobId = c.req.param("jobId");
   if (!jobId || !JOB_ID_RE.test(jobId)) {
-    return c.json({ error: "invalid_job_id" }, HTTP_BAD_REQUEST);
+    return c.json({ error: "invalid_job_id" }, StatusCodes.BAD_REQUEST);
   }
   try {
     const outcome = await requestTeardown(shared, resolveTenantId(c), jobId, Date.now());
-    if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+    if (outcome.kind === "not_found") return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
     if (outcome.kind === "already_deleted") {
-      return c.json({ status: "already_deleted" }, HTTP_OK);
+      return c.json({ status: "already_deleted" }, StatusCodes.OK);
     }
-    if (outcome.kind === "race") return c.json({ error: "conflict" }, HTTP_CONFLICT);
+    if (outcome.kind === "race") return c.json({ error: "conflict" }, StatusCodes.CONFLICT);
     if (outcome.kind === "missing_required_fields") {
       return c.json(
         { error: "missing_required_fields", fields: outcome.fields },
-        HTTP_INTERNAL_ERROR,
+        StatusCodes.INTERNAL_SERVER_ERROR,
       );
     }
-    return c.json({ status: "accepted", previousStatus: outcome.previousStatus }, HTTP_ACCEPTED);
+    return c.json(
+      { status: "accepted", previousStatus: outcome.previousStatus },
+      StatusCodes.ACCEPTED,
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] requestTeardown failed", { jobId, message });
-    return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });
 

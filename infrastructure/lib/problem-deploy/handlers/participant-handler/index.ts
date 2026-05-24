@@ -8,7 +8,6 @@ import {
   upsertProblemEndpointOverride,
 } from "../problem-endpoints-handler/endpoints.js";
 import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
-import { HTTP_OK } from "../shared/http-status.js";
 import { RATE_LIMITS } from "../shared/rate-limiter.js";
 import { BATTLE_ATTACKS_SINCE_MIN_DEFAULT, listBattleAttacks } from "./battle-attacks.js";
 import { castEvent, INBOX_SINCE_MS_MAX, readInbox } from "./cast-event.js";
@@ -58,7 +57,7 @@ app.get("/portal/me", (c) =>
   withBearerAuth(c, "lookup", async (token) => {
     const view = await lookupTeamByLoginKey(shared, token);
     if (!view) return respondError(c, "unauthorized");
-    return c.json(view, HTTP_OK);
+    return c.json(view, StatusCodes.OK);
   }),
 );
 
@@ -66,7 +65,7 @@ app.get("/portal/me/score-events", (c) =>
   withBearerAuth(c, "score-events", async (token) => {
     const outcome = await listScoreEvents(shared, token);
     if (outcome.kind === "unauthorized") return respondError(c, "unauthorized");
-    return c.json(outcome.response, HTTP_OK);
+    return c.json(outcome.response, StatusCodes.OK);
   }),
 );
 
@@ -75,7 +74,7 @@ app.get("/portal/me/console-signin-url", (c) =>
     const jobId = c.req.query("jobId");
     if (!jobId) return respondError(c, "missing_jobid");
     const outcome = await getConsoleSigninUrl(shared, token, jobId);
-    if (outcome.kind === "ok") return c.json({ loginUrl: outcome.loginUrl }, HTTP_OK);
+    if (outcome.kind === "ok") return c.json({ loginUrl: outcome.loginUrl }, StatusCodes.OK);
     if (outcome.kind === "assume_role_failed") {
       // Issue #1197: 500 body に stage / reason を含める (= UI が 「どちらの段で / なぜ
       // 落ちたか」 を表示できる)。 機微情報 (= ARN や ExternalId 値) は含めない、 種別のみ。
@@ -100,7 +99,8 @@ app.get("/portal/me/cli-credentials", (c) =>
       const jobId = c.req.query("jobId");
       if (!jobId) return respondError(c, "missing_jobid");
       const outcome = await getCliCredentials(shared, token, jobId);
-      if (outcome.kind === "ok") return c.json({ credentials: outcome.credentials }, HTTP_OK);
+      if (outcome.kind === "ok")
+        return c.json({ credentials: outcome.credentials }, StatusCodes.OK);
       if (outcome.kind === "assume_role_failed") {
         return respondError(c, outcome.kind, { stage: outcome.stage, reason: outcome.reason });
       }
@@ -185,7 +185,7 @@ app.get("/portal/me/battle-attacks", (c) =>
     const sinceMin =
       sinceMinRaw === undefined ? BATTLE_ATTACKS_SINCE_MIN_DEFAULT : Number(sinceMinRaw);
     const outcome = await listBattleAttacks(shared, token, jobId, sinceMin);
-    if (outcome.kind === "ok") return c.json(outcome.response, HTTP_OK);
+    if (outcome.kind === "ok") return c.json(outcome.response, StatusCodes.OK);
     return respondError(c, outcome.kind);
   }),
 );
@@ -207,7 +207,7 @@ app.get("/portal/me/deploy-logs", (c) =>
         nextToken: c.req.query("nextToken"),
         limit,
       });
-      if (outcome.kind === "ok") return c.json(outcome.response, HTTP_OK);
+      if (outcome.kind === "ok") return c.json(outcome.response, StatusCodes.OK);
       return respondError(c, outcome.kind);
     },
     RATE_LIMITS.READ_HIGH,
@@ -217,7 +217,7 @@ app.get("/portal/me/deploy-logs", (c) =>
 app.get("/portal/leaderboard", (c) =>
   withBearerAuth(c, "leaderboard", async (token) => {
     const outcome = await getLeaderboard(shared, token);
-    if (outcome.kind === "ok") return c.json(outcome.response, HTTP_OK);
+    if (outcome.kind === "ok") return c.json(outcome.response, StatusCodes.OK);
     return respondError(c, outcome.kind);
   }),
 );
@@ -227,7 +227,7 @@ app.get("/portal/leaderboard", (c) =>
 app.get("/portal/leaderboard/score-events", (c) =>
   withBearerAuth(c, "leaderboard-score-events", async (token) => {
     const outcome = await getLeaderboardScoreEvents(shared, token);
-    if (outcome.kind === "ok") return c.json(outcome.response, HTTP_OK);
+    if (outcome.kind === "ok") return c.json(outcome.response, StatusCodes.OK);
     return respondError(c, outcome.kind);
   }),
 );
@@ -242,7 +242,7 @@ app.patch("/portal/me", (c) =>
       if (body === null) return respondError(c, "invalid_body");
       const teamName = (body as { teamName?: unknown }).teamName;
       const outcome = await setDisplayTeamName(shared, token, teamName);
-      if (outcome.kind === "ok") return c.json(outcome.view, HTTP_OK);
+      if (outcome.kind === "ok") return c.json(outcome.view, StatusCodes.OK);
       return respondError(c, outcome.kind);
     },
     RATE_LIMITS.WRITE_LOW,
@@ -312,7 +312,7 @@ function respondSubmitFlagOutcome(
   ) {
     return respondError(c, outcome.kind);
   }
-  return c.json(outcome, HTTP_OK);
+  return c.json(outcome, StatusCodes.OK);
 }
 
 function respondHintRevealOutcome(
@@ -334,7 +334,7 @@ function respondHintRevealOutcome(
     return respondError(c, outcome.kind);
   }
   // ok / already_revealed どちらも 200 で content + score を返す (= idempotent UX)。
-  return c.json(outcome, HTTP_OK);
+  return c.json(outcome, StatusCodes.OK);
 }
 
 // ADR-012 Phase 3.A: Endpoint registry (override) routes — 競技者が自 team の slot URL を

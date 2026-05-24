@@ -13,15 +13,6 @@ import {
   TENANT_OPERATOR_ROLE,
   TENANT_ROLES,
 } from "../deploy-handler/auth.js";
-import {
-  HTTP_ACCEPTED,
-  HTTP_BAD_REQUEST,
-  HTTP_CONFLICT,
-  HTTP_CREATED,
-  HTTP_INTERNAL_ERROR,
-  HTTP_NOT_FOUND,
-  HTTP_OK,
-} from "../shared/http-status.js";
 import { NotificationCreateRequestSchema } from "../shared/notification.js";
 import { archiveEvent } from "./archive.js";
 import { bulkTeardownEvent } from "./bulk-delete.js";
@@ -150,15 +141,18 @@ app.post(
           { tenantId: resolveTenantId(c), nowMs: Date.now() },
           body,
         );
-        return c.json(response, HTTP_CREATED);
+        return c.json(response, StatusCodes.CREATED);
       } catch (err) {
         if (err instanceof DuplicateInternalSlugError) {
-          return c.json({ error: "duplicate_internal_slug", slug: err.slug }, HTTP_BAD_REQUEST);
+          return c.json(
+            { error: "duplicate_internal_slug", slug: err.slug },
+            StatusCodes.BAD_REQUEST,
+          );
         }
         if (err instanceof DuplicateProblemIdError) {
           return c.json(
             { error: "duplicate_problem_id", problemId: err.problemId },
-            HTTP_BAD_REQUEST,
+            StatusCodes.BAD_REQUEST,
           );
         }
         return handleRouteError(c, "[events] createEvent failed", {}, err);
@@ -170,14 +164,14 @@ app.post(
 
 app.get("/events", async (c) => {
   const parsedLimit = parseLimit(c.req.query("limit"));
-  if (!parsedLimit) return c.json({ error: "invalid_limit" }, HTTP_BAD_REQUEST);
+  if (!parsedLimit) return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
   try {
     const response = await listEvents(shared, {
       tenantId: resolveTenantId(c),
       limit: parsedLimit.limit,
       cursor: c.req.query("cursor"),
     });
-    return c.json(response, HTTP_OK);
+    return c.json(response, StatusCodes.OK);
   } catch (err) {
     return handleRouteError(c, "[events] listEvents failed", {}, err);
   }
@@ -193,8 +187,8 @@ app.get(
       const detail = await getEventDetail(shared, resolveTenantId(c), eventId, {
         withScoreEvents,
       });
-      if (!detail) return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
-      return c.json(detail, HTTP_OK);
+      if (!detail) return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+      return c.json(detail, StatusCodes.OK);
     } catch (err) {
       return handleRouteError(c, "[events] getEventDetail failed", { eventId }, err);
     }
@@ -221,7 +215,8 @@ app.patch(
           scoreboardFreezeMinutes: parsed.data.scoreboardFreezeMinutes,
           nowMs,
         });
-        if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+        if (outcome.kind === "not_found")
+          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
         if (outcome.kind === "past_starts_at") {
           // #537: 過去 startsAt を frontend が迂回した場合の防御線。SLACK (= 60s) より過去なら
           // 「即座に開始」 button を使うべきなので reject。
@@ -233,7 +228,7 @@ app.patch(
               startsAt: outcome.startsAt,
               serverNow: new Date(outcome.nowMs).toISOString(),
             },
-            HTTP_BAD_REQUEST,
+            StatusCodes.BAD_REQUEST,
           );
         }
         if (outcome.kind === "past_ends_at") {
@@ -247,7 +242,7 @@ app.patch(
               endsAt: outcome.endsAt,
               serverNow: new Date(outcome.nowMs).toISOString(),
             },
-            HTTP_BAD_REQUEST,
+            StatusCodes.BAD_REQUEST,
           );
         }
         if (outcome.kind === "ends_before_starts") {
@@ -259,13 +254,13 @@ app.patch(
               startsAt: outcome.startsAt,
               endsAt: outcome.endsAt,
             },
-            HTTP_BAD_REQUEST,
+            StatusCodes.BAD_REQUEST,
           );
         }
         if (outcome.kind === "no_op") {
           return c.json(
             { error: "no_op", message: "更新対象が指定されていません" },
-            HTTP_BAD_REQUEST,
+            StatusCodes.BAD_REQUEST,
           );
         }
         return c.json(
@@ -274,7 +269,7 @@ app.patch(
             endsAt: outcome.endsAt,
             updatedDeployments: outcome.updatedDeployments,
           },
-          HTTP_OK,
+          StatusCodes.OK,
         );
       } catch (err) {
         return handleRouteError(c, "[events] setEventSchedule failed", { eventId }, err);
@@ -290,13 +285,17 @@ app.post(
     async ({ c, eventId }) => {
       try {
         const outcome = await endEvent(shared, resolveTenantId(c), eventId, Date.now());
-        if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+        if (outcome.kind === "not_found")
+          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
         if (outcome.kind === "not_endable") {
-          return c.json({ error: "not_endable", currentStatus: outcome.status }, HTTP_CONFLICT);
+          return c.json(
+            { error: "not_endable", currentStatus: outcome.status },
+            StatusCodes.CONFLICT,
+          );
         }
         return c.json(
           { endsAt: outcome.endsAt, updatedDeployments: outcome.updatedDeployments },
-          HTTP_OK,
+          StatusCodes.OK,
         );
       } catch (err) {
         return handleRouteError(c, "[events] endEvent failed", { eventId }, err);
@@ -323,9 +322,13 @@ app.post(
           resolveCognitoSub(c),
           Date.now(),
         );
-        if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+        if (outcome.kind === "not_found")
+          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
         if (outcome.kind === "not_lockable") {
-          return c.json({ error: "not_lockable", currentStatus: outcome.status }, HTTP_CONFLICT);
+          return c.json(
+            { error: "not_lockable", currentStatus: outcome.status },
+            StatusCodes.CONFLICT,
+          );
         }
         return c.json(
           {
@@ -333,7 +336,7 @@ app.post(
             scoringLockedAt: outcome.kind === "ok" ? outcome.scoringLockedAt : undefined,
             idempotent: outcome.kind === "already",
           },
-          HTTP_OK,
+          StatusCodes.OK,
         );
       } catch (err) {
         return handleRouteError(c, "[events] lockScoring failed", { eventId }, err);
@@ -349,16 +352,20 @@ app.delete(
     async ({ c, eventId }) => {
       try {
         const outcome = await unlockScoring(shared, resolveTenantId(c), eventId, Date.now());
-        if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+        if (outcome.kind === "not_found")
+          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
         if (outcome.kind === "not_lockable") {
-          return c.json({ error: "not_lockable", currentStatus: outcome.status }, HTTP_CONFLICT);
+          return c.json(
+            { error: "not_lockable", currentStatus: outcome.status },
+            StatusCodes.CONFLICT,
+          );
         }
         return c.json(
           {
             scoringLocked: outcome.scoringLocked,
             idempotent: outcome.kind === "already",
           },
-          HTTP_OK,
+          StatusCodes.OK,
         );
       } catch (err) {
         return handleRouteError(c, "[events] unlockScoring failed", { eventId }, err);
@@ -382,10 +389,11 @@ app.post(
           resolveCognitoSub(c),
           parsed.data,
         );
-        if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+        if (outcome.kind === "not_found")
+          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
         return c.json(
           { notificationId: outcome.notificationId, occurredAt: outcome.occurredAt },
-          HTTP_CREATED,
+          StatusCodes.CREATED,
         );
       } catch (err) {
         return handleRouteError(c, "[events] createNotification failed", { eventId }, err);
@@ -401,11 +409,15 @@ app.post(
     async ({ c, eventId }) => {
       try {
         const outcome = await archiveEvent(shared, resolveTenantId(c), eventId, Date.now());
-        if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
+        if (outcome.kind === "not_found")
+          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
         if (outcome.kind === "not_archivable") {
-          return c.json({ error: "not_archivable", currentStatus: outcome.status }, HTTP_CONFLICT);
+          return c.json(
+            { error: "not_archivable", currentStatus: outcome.status },
+            StatusCodes.CONFLICT,
+          );
         }
-        return c.json({ archivedAt: outcome.archivedAt }, HTTP_OK);
+        return c.json({ archivedAt: outcome.archivedAt }, StatusCodes.OK);
       } catch (err) {
         return handleRouteError(c, "[events] archiveEvent failed", { eventId }, err);
       }
@@ -430,8 +442,9 @@ app.post(
           Date.now(),
           parsed.data,
         );
-        if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
-        return c.json(outcome.result, HTTP_ACCEPTED);
+        if (outcome.kind === "not_found")
+          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+        return c.json(outcome.result, StatusCodes.ACCEPTED);
       } catch (err) {
         return handleRouteError(c, "[events] bulkDeployEvent failed", { eventId }, err);
       }
@@ -453,7 +466,7 @@ app.get(
       const ownershipError = await requireEventOwnership({ c, shared, eventId, tenantId });
       if (ownershipError) return ownershipError;
       const out = await listDisruptionCatalog(shared, eventId);
-      return c.json(out, HTTP_OK);
+      return c.json(out, StatusCodes.OK);
     } catch (err) {
       return handleRouteError(c, "[disruptions] catalog failed", { eventId }, err);
     }
@@ -465,7 +478,7 @@ app.get(
   withEventId(async ({ c, eventId }) => {
     const limitRaw = c.req.query("limit");
     const parsed = parseLimit(limitRaw);
-    if (!parsed) return c.json({ error: "invalid_limit" }, HTTP_BAD_REQUEST);
+    if (!parsed) return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
     const cursor = c.req.query("cursor");
     try {
       // PR #889 review: 他 tenant の audit log を覗かれないよう tenant ownership 必須
@@ -476,7 +489,7 @@ app.get(
         limit: parsed.limit,
         cursor,
       });
-      return c.json(out, HTTP_OK);
+      return c.json(out, StatusCodes.OK);
     } catch (err) {
       return handleRouteError(c, "[disruptions] audit list failed", { eventId }, err);
     }
@@ -509,18 +522,25 @@ app.post(
           firedBy: resolveCognitoSub(c),
           nowMs: Date.now(),
         });
-        if (outcome.kind === "ok") return c.json(outcome.result, HTTP_CREATED);
-        if (outcome.kind === "duplicate") return c.json(outcome.result, HTTP_OK);
+        if (outcome.kind === "ok") return c.json(outcome.result, StatusCodes.CREATED);
+        if (outcome.kind === "duplicate") return c.json(outcome.result, StatusCodes.OK);
         if (outcome.kind === "unknown_problem")
-          return c.json({ error: "unknown_problem" }, HTTP_BAD_REQUEST);
+          return c.json({ error: "unknown_problem" }, StatusCodes.BAD_REQUEST);
         if (outcome.kind === "unknown_disruption")
-          return c.json({ error: "unknown_disruption" }, HTTP_BAD_REQUEST);
+          return c.json({ error: "unknown_disruption" }, StatusCodes.BAD_REQUEST);
         if (outcome.kind === "invalid_parameters")
-          return c.json({ error: "invalid_parameters", message: outcome.reason }, HTTP_BAD_REQUEST);
+          return c.json(
+            { error: "invalid_parameters", message: outcome.reason },
+            StatusCodes.BAD_REQUEST,
+          );
         if (outcome.kind === "invalid_scope")
-          return c.json({ error: "invalid_scope", message: outcome.reason }, HTTP_BAD_REQUEST);
-        if (outcome.kind === "no_targets") return c.json({ error: "no_targets" }, HTTP_CONFLICT);
-        return c.json({ error: "internal_error" }, HTTP_INTERNAL_ERROR);
+          return c.json(
+            { error: "invalid_scope", message: outcome.reason },
+            StatusCodes.BAD_REQUEST,
+          );
+        if (outcome.kind === "no_targets")
+          return c.json({ error: "no_targets" }, StatusCodes.CONFLICT);
+        return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
       } catch (err) {
         return handleRouteError(c, "[disruptions] fire failed", { eventId }, err);
       }
@@ -535,8 +555,9 @@ app.delete(
     async ({ c, eventId }) => {
       try {
         const outcome = await bulkTeardownEvent(shared, resolveTenantId(c), eventId, Date.now());
-        if (outcome.kind === "not_found") return c.json({ error: "not_found" }, HTTP_NOT_FOUND);
-        return c.json(outcome.result, HTTP_ACCEPTED);
+        if (outcome.kind === "not_found")
+          return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+        return c.json(outcome.result, StatusCodes.ACCEPTED);
       } catch (err) {
         return handleRouteError(c, "[events] bulkTeardownEvent failed", { eventId }, err);
       }
