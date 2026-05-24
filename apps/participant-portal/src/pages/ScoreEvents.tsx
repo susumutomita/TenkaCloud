@@ -17,6 +17,7 @@ import {
 import { useAuth } from "../auth/AuthProvider";
 import { DEV_MOCK_SCORE_EVENTS } from "../auth/dev-mock-fixtures";
 import type { AppConfig } from "../config";
+import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
 import { describeAgo, formatOccurredAtTooltip } from "../lib/format";
 
@@ -61,13 +62,13 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
   const t = useT();
   const sessionToken = auth.session?.sessionToken ?? null;
-  const isBackend = config.mode === "backend";
+  const isMock = useIsMock();
 
   const [data, setData] = useState<ScoreEventsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const tick = useCallback(async () => {
-    if (!isBackend || !sessionToken) return;
+    if (isMock || !sessionToken) return;
     try {
       const next = await getScoreEvents(config.apiBaseUrl, sessionToken);
       setData(next);
@@ -79,10 +80,10 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
       }
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [isBackend, sessionToken, config.apiBaseUrl, auth]);
+  }, [isMock, sessionToken, config.apiBaseUrl, auth]);
 
   useEffect(() => {
-    if (!isBackend || !sessionToken) return;
+    if (isMock || !sessionToken) return;
     let cancelled = false;
     const run = async () => {
       if (cancelled) return;
@@ -94,16 +95,16 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [isBackend, sessionToken, tick]);
+  }, [isMock, sessionToken, tick]);
 
   // LP 「モックで試す」 動線: dev-mock mode では backend を叩かないので、 fixture を
   // 1 度だけ seed する (= 競技中のスコア推移 chart + 履歴 table をデモで見せる)。
   useEffect(() => {
-    if (isBackend) return;
+    if (!isMock) return;
     if (!sessionToken) return;
     if (data) return;
     setData(DEV_MOCK_SCORE_EVENTS);
-  }, [isBackend, sessionToken, data]);
+  }, [isMock, sessionToken, data]);
 
   const series = useMemo(() => (data ? buildCumulativeSeries(data.entries) : []), [data]);
 
@@ -121,7 +122,7 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
           {error}
         </Alert>
       )}
-      {isBackend && !data && !error && (
+      {!isMock && !data && !error && (
         <Box textAlign="center" padding="l">
           <Spinner /> {t("app.loading")}
         </Box>

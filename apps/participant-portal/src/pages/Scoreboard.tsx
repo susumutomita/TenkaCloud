@@ -8,6 +8,7 @@ import Table from "@cloudscape-design/components/table";
 import type { LeaderboardEntry } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
+import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
 
 /**
@@ -20,7 +21,7 @@ import { useT } from "../i18n";
  */
 export function ScoreboardPage({ config }: { config: AppConfig }) {
   const t = useT();
-  const isBackend = config.mode === "backend";
+  const isMock = useIsMock();
   const { leaderboard, leaderboardError, leaderboardNoEvent } = useTeamView();
 
   return (
@@ -42,7 +43,7 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
           {t("scoreboard.no_event_body")}
         </Alert>
       )}
-      {isBackend && !leaderboard && !leaderboardError && !leaderboardNoEvent && (
+      {!isMock && !leaderboard && !leaderboardError && !leaderboardNoEvent && (
         <Box textAlign="center" padding="l">
           <Spinner /> {t("app.loading")}
         </Box>
