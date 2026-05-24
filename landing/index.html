@@ -259,44 +259,6 @@ section .lead {
 .tile p { font-size: 13px; line-height: 1.55; color: var(--ink-2); max-width: 350px; margin-bottom: 20px; font-weight: 600; }
 .tile .demo { margin-top: 0; }
 
-.demo-scoreboard {
-  background: var(--paper);
-  border: 1px solid #dce2ec;
-  border-radius: 10px; overflow: hidden;
-  box-shadow: 0 10px 34px rgba(8,20,37,0.06);
-}
-.demo-scoreboard .head {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line-soft);
-  font-size: 11px; color: var(--ink-3);
-  font-family: var(--font-mono);
-}
-.demo-scoreboard .head .live { display: inline-flex; align-items: center; gap: 6px; color: #b8261d; }
-.demo-scoreboard .head .live .d {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: #ff453a; animation: ping 1.6s infinite;
-}
-@keyframes ping { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-.demo-scoreboard .mock-chart { padding: 18px 18px 8px; border-bottom: 1px solid var(--line-soft); }
-.demo-scoreboard .row {
-  display: grid; grid-template-columns: 58px 1fr 80px;
-  align-items: center; padding: 8px 16px;
-  border-top: 1px solid var(--line-soft); font-size: 11px;
-}
-.demo-scoreboard .row:first-child { border-top: none; }
-.demo-scoreboard .row .rank { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
-.demo-scoreboard .row.lead .rank { color: var(--ink); font-weight: 700; }
-.demo-scoreboard .row .name { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); }
-.demo-scoreboard .row.lead .name { color: var(--ink); font-weight: 500; }
-.demo-scoreboard .row .pts { text-align: right; font-family: var(--font-mono); font-weight: 500; color: var(--ink); }
-
-.demo-flag {
-  background: var(--paper); border: 1px solid #dce2ec;
-  border-radius: 10px; padding: 18px;
-  min-height: 276px;
-  box-shadow: 0 10px 34px rgba(8,20,37,0.06);
-}
 .portal-preview {
   background: #fff;
   border: 1px solid #b8c0cc;
@@ -1816,31 +1778,6 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
     }
   };
 
-  var PRODUCT_ROWS = [
-    { cat: "Battle",    id: "security-battle-royale", name: { ja: "Security Battle Royale", en: "Security Battle Royale" }, diff: 3, pts: "1,200 pts" },
-    { cat: "Challenge", id: "iam-escape-room",        name: { ja: "IAM Escape Room",        en: "IAM Escape Room"        }, diff: 4, pts: "  800 pts" },
-    { cat: "Challenge", id: "cost-optimizer",         name: { ja: "Cost Optimizer",         en: "Cost Optimizer"         }, diff: 2, pts: "  400 pts" },
-    { cat: "Battle",    id: "lambda-cold-war",        name: { ja: "Lambda Cold War",        en: "Lambda Cold War"        }, diff: 4, pts: "1,000 pts" }
-  ];
-
-  function renderProductRows(lang) {
-    var productRows = document.getElementById("product-rows");
-    if (!productRows) return;
-    var html = PRODUCT_ROWS.map(function (r) {
-      var stars = [1,2,3,4,5].map(function (i) {
-        return '<i class="' + (i <= r.diff ? 'on' : '') + '"></i>';
-      }).join('');
-      var tagClass = r.cat === "Battle" ? "battle" : "challenge";
-      return '<div class="row">'
-        + '<div><div class="name">' + r.name[lang] + '</div><span class="id">' + r.id + '</span></div>'
-        + '<span class="tag ' + tagClass + '">' + r.cat + '</span>'
-        + '<span class="stars">' + stars + '</span>'
-        + '<span class="pts">' + r.pts + '</span>'
-        + '</div>';
-    }).join('');
-    productRows.innerHTML = html;
-  }
-
   function renderTrustBullets(lang) {
     var bullets = I18N[lang]["trust.bullets"];
     var html = bullets.map(function (entry) {
@@ -1860,28 +1797,6 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
     document.getElementById("stats-grid").innerHTML = html;
   }
 
-  var SCORE_BASE = [
-    { name: "team-shogun",    pts: 8420 },
-    { name: "team-honnoji",   pts: 7990 },
-    { name: "team-sekigahara", pts: 7710 },
-    { name: "team-osaka",     pts: 6420 }
-  ];
-
-  function renderScoreboard(tick) {
-    var scoreboardRows = document.getElementById("scoreboard-rows");
-    if (!scoreboardRows) return;
-    var html = SCORE_BASE.map(function (r, i) {
-      var pts = r.pts + (tick * (4 - i) * 7);
-      var leadCls = i === 0 ? " lead" : "";
-      return '<div class="row' + leadCls + '">'
-        + '<span class="rank">' + (i + 1) + '</span>'
-        + '<span class="name">' + r.name + '</span>'
-        + '<span class="pts">' + pts.toLocaleString() + '</span>'
-        + '</div>';
-    }).join('');
-    scoreboardRows.innerHTML = html;
-  }
-
   function applyLang(lang) {
     document.documentElement.lang = lang;
     var dict = I18N[lang];
@@ -1898,7 +1813,6 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
       btn.classList.toggle("on", isActive);
       btn.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
-    renderProductRows(lang);
     renderTrustBullets(lang);
     renderStats(lang);
     // Legal page link 群を locale に合わせて swap (= en visitor が ./privacy.html (ja)
@@ -1967,10 +1881,6 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
   var initialLang = detectInitialLang();
   applyLang(initialLang);
   reflectLangInUrl(initialLang);
-
-  var tick = 0;
-  renderScoreboard(tick);
-  setInterval(function () { tick += 1; renderScoreboard(tick); }, 1500);
 
   // Contact form submission. backend が無いので 入力内容を mailto: URL に組み立てて
   // ユーザーの mail client を開く (= GitHub Pages の static site にできる最小実装)。
