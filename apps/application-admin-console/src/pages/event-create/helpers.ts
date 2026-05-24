@@ -1,0 +1,159 @@
+/**
+ * EventCreate wizard 用の pure helper / constants 集約。
+ *
+ * Issue #1241: EventCreate.tsx が 657 行に膨らんだので section components に分割した。
+ * このファイルは React 非依存の純粋な constants / type / 関数だけを置き、
+ * - section components (`EventCreate<X>Section.tsx`)
+ * - parent (`EventCreate.tsx`)
+ * - unit tests (`test/pages/EventCreate.team-rows.test.ts`)
+ *
+ * の 3 者から共有される。
+ */
+import type { MultiselectProps, SelectProps } from "@cloudscape-design/components";
+import type { CompetitorAccountSummary } from "../../api/competitor-accounts-client";
+import { AWS_REGIONS } from "../../data/aws-regions";
+import type { useT } from "../../i18n";
+
+export const NAME_MAX = 120;
+// MUST match infrastructure/lib/problem-deploy/handlers/event-handler/types.ts (zod schema)。
+// drift すると frontend が通した値を backend が reject する。
+export const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
+export const ACCOUNT_ID_RE = /^\d{12}$/;
+export const TEAMS_MIN = 1;
+export const TEAMS_MAX = 99;
+export const TEAM_COUNT_INPUT_MAX_LEN = 3; // TEAMS_MAX が 99 = 2 桁、+1 余裕で 3 桁まで入力受理
+export const INITIAL_TEAM_COUNT = 3;
+
+export const REGION_OPTIONS: SelectProps.Option[] = AWS_REGIONS.map((r) => ({
+  value: r.code,
+  label: r.label,
+}));
+
+/**
+ * #528: 各 team の deploy 先 AWS Account ID は **team 単位** に。region は問題テンプレが
+ * 特定 region 依存の場合があるので問題単位を維持。
+ */
+export interface TeamRow {
+  internalSlug: string;
+  awsAccountId: string;
+}
+
+export interface ProblemRow {
+  problemId: string;
+  problemName: string;
+  defaultRegion: string;
+  /** Issue #1201 Phase 2: 問題が動作確認済 region 集合。 wizard picker の選択肢を絞る。 */
+  supportedRegions?: readonly string[];
+}
+
+export interface TeamValidation {
+  readonly allSlugsValid: boolean;
+  readonly allAccountsValid: boolean;
+  readonly hasDuplicateSlug: boolean;
+}
+
+/** Team table の row 描画に使う view-model (idx を抱える)。 */
+export type TeamTableItem = TeamRow & { idx: number };
+
+/** Multiselect option (value 必須) */
+export type ProblemOption = MultiselectProps.Option & { value: string };
+
+export function buildVerifiedAccountOption(a: CompetitorAccountSummary): SelectProps.Option {
+  const descriptionParts = [a.alias, a.region, a.competitorRoleName].filter(
+    (p): p is string => typeof p === "string" && p.length > 0,
+  );
+  return {
+    value: a.awsAccountId,
+    label: a.awsAccountId,
+    labelTag: a.alias,
+    description: descriptionParts.join(" / "),
+    filteringTags: descriptionParts,
+  };
+}
+
+export function formatVerifiedAccountSummary(a: CompetitorAccountSummary): string {
+  return a.alias ? `${a.awsAccountId} (${a.alias})` : a.awsAccountId;
+}
+
+/**
+ * Issue #1201 Phase 2: region picker の選択肢を `supportedRegions` で絞る純関数。
+ *
+ * - `supportedRegions` が undefined / 空 → 全 region (= 後方互換)
+ * - 宣言されていれば、 集合と AWS_REGIONS の intersection で picker を構築
+ * - 未知 region code (= AWS_REGIONS に無い文字列) は無視 (= UI に壊れた option を出さない)
+ */
+export function resolveRegionOptions(
+  supportedRegions: readonly string[] | undefined,
+  baseOptions: readonly SelectProps.Option[],
+): readonly SelectProps.Option[] {
+  if (!supportedRegions || supportedRegions.length === 0) return baseOptions;
+  const allowed = new Set(supportedRegions);
+  const intersection = baseOptions.filter((o) => o.value && allowed.has(o.value));
+  // 宣言が無効 (= AWS_REGIONS と 1 件もマッチしない) のときは base に倒す。
+  // ここで空配列を返すと wizard が壊れるので fail-safe。
+  return intersection.length > 0 ? intersection : baseOptions;
+}
+
+/**
+ * Issue #1201: 問題行の初期 region を決める純関数。
+ *
+ * - 問題 metadata に `defaultRegion` が宣言されていればそれを採用
+ * - 未宣言なら `globalDefault` (= 通常 `DEFAULT_AWS_REGION.code`) にフォールバック
+ *
+ * 「全 event が ap-northeast-1 に集中して quota 上限に到達する」 問題を、 問題側
+ * (= 動作確認済 region を一番よく知っている人) の宣言で散らすための仕掛け。
+ */
+export function resolveInitialRegion(
+  metaDefaultRegion: string | undefined,
+  globalDefault: string,
+): string {
+  return metaDefaultRegion ?? globalDefault;
+}
+
+export function resizeTeamRows(prev: TeamRow[], next: number): TeamRow[] {
+  if (next === prev.length) return prev;
+  if (next < prev.length) return prev.slice(0, Math.max(next, 0));
+  const additions = Array.from({ length: next - prev.length }, (_, i) => ({
+    internalSlug: `team-${prev.length + i + 1}`,
+    awsAccountId: "",
+  }));
+  return [...prev, ...additions];
+}
+
+export function validateTeamRows(teamRows: readonly TeamRow[]): TeamValidation {
+  let allSlugsValid = true;
+  let allAccountsValid = true;
+  const slugs = new Set<string>();
+  let hasDuplicateSlug = false;
+  for (const t of teamRows) {
+    if (!SLUG_RE.test(t.internalSlug)) allSlugsValid = false;
+    if (!ACCOUNT_ID_RE.test(t.awsAccountId)) allAccountsValid = false;
+    if (slugs.has(t.internalSlug)) hasDuplicateSlug = true;
+    else slugs.add(t.internalSlug);
+  }
+  return { allSlugsValid, allAccountsValid, hasDuplicateSlug };
+}
+
+export function parseTeamCountInput(value: string): number | undefined {
+  const next = Number.parseInt(value.replace(/\D/g, "").slice(0, TEAM_COUNT_INPUT_MAX_LEN), 10);
+  return Number.isFinite(next) ? Math.max(0, Math.min(TEAMS_MAX, next)) : undefined;
+}
+
+export function getNameErrorText(
+  t: ReturnType<typeof useT>,
+  name: string,
+  nameInvalid: boolean,
+): string | undefined {
+  return nameInvalid && name.length > 0
+    ? t("event_create.name_invalid", { max: NAME_MAX })
+    : undefined;
+}
+
+export function getTeamCountErrorText(
+  t: ReturnType<typeof useT>,
+  teamCountInvalid: boolean,
+): string | undefined {
+  return teamCountInvalid
+    ? t("event_create.team_count_invalid", { min: TEAMS_MIN, max: TEAMS_MAX })
+    : undefined;
+}
