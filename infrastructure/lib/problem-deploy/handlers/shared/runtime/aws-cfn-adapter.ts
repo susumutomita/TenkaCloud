@@ -1,0 +1,118 @@
+/**
+ * [ADR-023 / Issue #1268] AWS CloudFormation runtime adapter.
+ *
+ * Wraps the existing AWS-only deploy behavior so callers can resolve a
+ * `ProblemRuntimeAdapter` and call `.deploy(...)` without knowing this is the
+ * CFn path. This is a behavior-preserving abstraction: the adapter calls the
+ * same `publishProblemEvent` with the same shape that pre-#1268 code did, so
+ * the downstream Step Functions / CodeBuild pipeline is untouched.
+ *
+ * Phase 1 scope (this issue):
+ *   - `deploy`: publish `DeployCreateRequested` to EventBridge. Identical to
+ *     the legacy inline call in `deploy.ts`.
+ *   - `collectOutputs` / `getStatus` / `destroy`: not wired in this PR.
+ *     Existing call sites (`describe-stack-handler`, `delete.ts`) keep using
+ *     their direct CFn SDK calls. The methods exist on the interface so
+ *     future adapters can be drop-in; here they throw a clearly named
+ *     `AdapterMethodNotWiredError` if someone tries to use them via the
+ *     adapter before the matching follow-up PR lands.
+ *
+ * Why partial wiring is OK now: the interface is the seam, not the migration
+ * lever. Migrating existing call sites onto the adapter is its own PR with
+ * its own regression analysis; bundling it into the abstraction PR would
+ * violate INVARIANT_PR_SHIPS_WORKING_INCREMENT.
+ */
+
+import type { EventBridgeClient } from "@aws-sdk/client-eventbridge";
+import {
+  type DeployCreateRequestedDetail,
+  EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
+  publishProblemEvent,
+} from "../events.js";
+import type {
+  ProblemRuntimeAdapter,
+  RuntimeCollectOutputsInput,
+  RuntimeDeployInput,
+  RuntimeDeployResult,
+  RuntimeDestroyInput,
+  RuntimeDestroyResult,
+  RuntimeOutputs,
+  RuntimeStatus,
+  RuntimeStatusInput,
+} from "./adapter.js";
+import { EXECUTABLE_ENGINE, EXECUTABLE_PROVIDER } from "./normalize.js";
+
+/**
+ * Resources injected by the deploy handler when constructing the adapter.
+ * Mirrors the slice of `DeployContext` the existing publish-event path uses.
+ */
+export interface AwsCloudFormationAdapterContext {
+  readonly events: EventBridgeClient;
+  readonly eventBusName: string;
+}
+
+/**
+ * Thrown when an adapter method that exists on the interface but is not
+ * wired into this adapter is called. Today: `collectOutputs` / `getStatus` /
+ * `destroy`. We throw loudly rather than silently no-oping (= AGENTS.md "no
+ * silent fallbacks via mocks / stubs / empty-array returns").
+ */
+export class AdapterMethodNotWiredError extends Error {
+  constructor(method: string) {
+    super(
+      `AwsCloudFormationRuntimeAdapter.${method} is not wired in Phase 1 (Issue #1268). ` +
+        `Existing handlers must keep using their direct CloudFormation SDK calls until the ` +
+        `migration PR lands. See ADR-023 D6.`,
+    );
+    this.name = "AdapterMethodNotWiredError";
+  }
+}
+
+export class AwsCloudFormationRuntimeAdapter implements ProblemRuntimeAdapter {
+  public readonly provider = EXECUTABLE_PROVIDER;
+  public readonly engine = EXECUTABLE_ENGINE;
+
+  constructor(private readonly ctx: AwsCloudFormationAdapterContext) {}
+
+  async deploy(input: RuntimeDeployInput): Promise<RuntimeDeployResult> {
+    // Build the legacy detail shape unchanged. Behavior preservation requires
+    // that downstream consumers (`DeployCreateStateMachine`, CodeBuild scripts)
+    // see exactly the same field set as before the adapter existed.
+    const detail: DeployCreateRequestedDetail = {
+      jobId: input.jobId,
+      correlationId: input.correlationId,
+      tenantId: input.tenantId,
+      problemId: input.problemId,
+      problemDir: input.problemDir,
+      teamSlug: input.teamSlug,
+      namePrefix: input.namePrefix,
+      region: input.region,
+      awsAccountId: input.awsAccountId,
+      ...(input.competitorRoleArn ? { competitorRoleArn: input.competitorRoleArn } : {}),
+      ...(input.externalIdParameterName
+        ? { externalIdParameterName: input.externalIdParameterName }
+        : {}),
+      ...(input.challengePayloadUrl ? { challengePayloadUrl: input.challengePayloadUrl } : {}),
+    };
+    await publishProblemEvent({
+      client: this.ctx.events,
+      busName: this.ctx.eventBusName,
+      detailType: EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
+      jobId: input.jobId,
+      detail,
+    });
+    return { status: "pending" };
+  }
+
+  async collectOutputs(_input: RuntimeCollectOutputsInput): Promise<RuntimeOutputs> {
+    throw new AdapterMethodNotWiredError("collectOutputs");
+  }
+
+  async getStatus(_input: RuntimeStatusInput): Promise<RuntimeStatus> {
+    throw new AdapterMethodNotWiredError("getStatus");
+  }
+
+  async destroy(_input: RuntimeDestroyInput): Promise<RuntimeDestroyResult> {
+    throw new AdapterMethodNotWiredError("destroy");
+  }
+}

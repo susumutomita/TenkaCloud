@@ -8,10 +8,11 @@ import { parseProblemsCatalog } from "../shared/catalog.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
-  type DeployCreateRequestedDetail,
-  EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
-  publishProblemEvent,
-} from "../shared/events.js";
+  EXECUTABLE_ENGINE,
+  EXECUTABLE_PROVIDER,
+  type ProblemRuntime,
+  selectAdapter,
+} from "../shared/runtime/index.js";
 import { logDeployTrace } from "../shared/trace-log.js";
 import { emitShadowAudit } from "../shared/trust-bridge-shadow.js";
 import {
@@ -54,6 +55,16 @@ export interface DeployContext {
   readonly problemsVisibility?: Readonly<Record<string, PrivateVisibility>>;
   readonly challengePayloadBucket?: string;
   readonly s3?: S3Client;
+  /**
+   * [ADR-023 / Issue #1268] Optional per-problemId runtime resolver. If
+   * undefined OR if it returns undefined for a given problemId, the deploy
+   * worker assumes `aws/cloudformation` — which preserves pre-#1268 behavior
+   * exactly (every problem in the catalog today is CFn-backed).
+   *
+   * Tests pin this to assert that an `azure/bicep` problem is rejected with
+   * `RuntimeNotSupportedError` BEFORE any DDB Put / EventBridge publish runs.
+   */
+  readonly resolveProblemRuntime?: (problemId: string) => ProblemRuntime | undefined;
 }
 
 export type DeployInvocation = DeployRequest & {
@@ -95,6 +106,21 @@ export async function startDeployment(
 ): Promise<DeployResponse> {
   const problemDir = ctx.problemsCatalog[request.problemId];
   if (!problemDir) throw new UnknownProblemError(request.problemId);
+
+  // [ADR-023 / Issue #1268] Resolve runtime BEFORE any cloud mutation. Default
+  // is aws/cloudformation (= the only registered adapter today), which keeps
+  // legacy problems and explicit `runtime: aws/cloudformation` declarations on
+  // the exact same path. A mismatched runtime (e.g. azure/bicep) raises
+  // `RuntimeNotSupportedError` here — pre-DDB-Put / pre-EventBridge — so the
+  // platform never half-creates an AWS-shaped artifact for a non-AWS problem.
+  const runtime: ProblemRuntime = ctx.resolveProblemRuntime?.(request.problemId) ?? {
+    provider: EXECUTABLE_PROVIDER,
+    engine: EXECUTABLE_ENGINE,
+    entry: "template.yaml",
+  };
+  const adapter = selectAdapter(runtime, {
+    aws: { events: ctx.events, eventBusName: ctx.eventBusName },
+  });
 
   // Phase 2.2 (Issue #459): verified=true な行が無ければ deploy しない (= fail-closed)。
   // 同 account deploy の dev fallback も廃止 — 全 deploy は verified なれた account のみ。
@@ -171,23 +197,6 @@ export async function startDeployment(
     });
   }
 
-  const detail: DeployCreateRequestedDetail = {
-    jobId: item.jobId,
-    correlationId: item.jobId,
-    tenantId: item.tenantId,
-    problemId: item.problemId,
-    problemDir,
-    teamSlug,
-    namePrefix: item.namePrefix,
-    region: item.region,
-    awsAccountId: item.awsAccountId,
-    // Phase 2.2: AssumeRole 用 metadata。`resolveVerifiedCompetitorAccount` の戻り値から
-    // そのまま詰める。CodeBuild script (deploy-battles.sh wrapper) が SSM ExternalId を
-    // fetch して AssumeRole する。
-    competitorRoleArn: verified.competitorRoleArn,
-    externalIdParameterName: verified.externalIdParameterName,
-    ...(challengePayloadUrl ? { challengePayloadUrl } : {}),
-  };
   // Issue #795 ADR-017 Phase 3 (shadow integration): 既存 deploy flow を変更せず、
   // CloudActionIntent を構築 + audit log を CloudWatch に emit する。 失敗系も
   // fail-open (= 既存の publishProblemEvent / DDB Put には影響を与えない)。
@@ -210,12 +219,25 @@ export async function startDeployment(
     ],
   });
   try {
-    await publishProblemEvent({
-      client: ctx.events,
-      busName: ctx.eventBusName,
-      detailType: EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
+    // [ADR-023 / Issue #1268] dispatch via runtime adapter. For AWS / CFn (=
+    // the only registered adapter today) this is byte-for-byte the same
+    // `publishProblemEvent` the legacy inline code did — see
+    // `AwsCloudFormationRuntimeAdapter.deploy`. No new IAM, no new SDK calls.
+    await adapter.deploy({
       jobId,
-      detail,
+      correlationId: jobId,
+      tenantId: item.tenantId,
+      problemId: item.problemId,
+      problemDir,
+      teamSlug,
+      namePrefix: item.namePrefix,
+      region: item.region,
+      awsAccountId: item.awsAccountId,
+      ...(verified.competitorRoleArn ? { competitorRoleArn: verified.competitorRoleArn } : {}),
+      ...(verified.externalIdParameterName
+        ? { externalIdParameterName: verified.externalIdParameterName }
+        : {}),
+      ...(challengePayloadUrl ? { challengePayloadUrl } : {}),
     });
   } catch (err) {
     try {
