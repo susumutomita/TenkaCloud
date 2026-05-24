@@ -9,6 +9,7 @@ import {
   requireRole,
   TENANT_ROLES,
 } from "../deploy-handler/auth.js";
+import { registerAuditLogRoutes } from "./routes/audit-log.js";
 import { registerBulkDeployRoutes } from "./routes/bulk-deploy.js";
 import { registerDisruptionRoutes } from "./routes/disruptions.js";
 import { registerEventRoutes } from "./routes/events.js";
@@ -115,6 +116,8 @@ registerScoringRoutes(app, shared);
 registerNotificationRoutes(app, shared);
 registerBulkDeployRoutes(app, shared);
 registerDisruptionRoutes(app, shared);
+// Issue #1292: Tenant Admin 向け audit log read routes (= /admin/audit-log + /export)。
+registerAuditLogRoutes(app, shared);
 
 export const handler = handle(app) as (
   event: LambdaEvent,

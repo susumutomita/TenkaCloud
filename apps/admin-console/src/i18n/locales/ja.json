@@ -175,6 +175,11 @@
     "loading_text": "読み込み中…",
     "col_ip": "IP",
     "col_tenant": "Tenant",
-    "empty_hint_filter": "scope / tenantId を確認してください。"
+    "empty_hint_filter": "scope / tenantId を確認してください。",
+    "export_csv": "CSV エクスポート",
+    "filter_from": "from (ISO8601)",
+    "filter_to": "to (ISO8601)",
+    "filter_principal": "principal (sub / username)",
+    "filter_action": "action"
   }
 }

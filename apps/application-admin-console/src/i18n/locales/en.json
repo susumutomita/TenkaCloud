@@ -15,7 +15,8 @@
     "teams": "Teams",
     "problems": "Problems",
     "deployments": "Deployments",
-    "competitor_accounts": "Competitor Accounts"
+    "competitor_accounts": "Competitor Accounts",
+    "audit_log": "Audit log"
   },
   "auth": {
     "sign_out": "Sign out"
