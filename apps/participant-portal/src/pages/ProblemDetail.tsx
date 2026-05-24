@@ -149,7 +149,6 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           apiBaseUrl={config.apiBaseUrl}
           sessionToken={sessionToken ?? ""}
           onScored={refresh}
-          isMock={config.mode !== "backend"}
         />
       )}
 
