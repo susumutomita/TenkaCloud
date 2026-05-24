@@ -1,3 +1,4 @@
+import { beginLogin, beginLogout, loadStoredTokens, type TokenSet } from "@tenkacloud/auth-client";
 import {
   createContext,
   type ReactNode,
@@ -9,7 +10,6 @@ import {
   useState,
 } from "react";
 import type { AppConfig } from "../config";
-import { beginLogin, beginLogout, loadStoredTokens, type TokenSet } from "./cognito";
 
 interface AuthState {
   tokens: TokenSet | null;

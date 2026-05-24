@@ -1,3 +1,5 @@
+import { isCognitoDomain, isHttpsUrl } from "@tenkacloud/auth-client";
+
 export interface AppConfig {
   readonly cognitoDomain: string;
   readonly cognitoClientId: string;
@@ -49,34 +51,8 @@ interface RuntimeConfig {
   readonly cloudWatchDashboardName?: string;
 }
 
-/**
- * Issue #871: runtime-config.json は S3 + CloudFront 経由なので tampering surface は
- * 限定的だが、 万一 bucket compromise / MITM で apiUrl が attacker URL に書き換えられた
- * 場合に frontend が JWT を漏らさないよう、 URL の protocol / host を validate する。
- *
- *   - apiUrl: \`https://\` 必須 (= mixed content / MITM 防御)
- *   - cognitoDomain: \`https://\` 必須 かつ \`.amazoncognito.com\` 終端
- *     (= Cognito Hosted UI ドメインの allowlist)
- *
- * 検証失敗時は null を返し、 caller を env-based dev fallback に倒す
- * (= production deploy では env が空なので throw に倒れ、 早期に検知できる)。
- */
-function isHttpsUrl(value: string): boolean {
-  try {
-    return new URL(value).protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function isCognitoDomain(value: string): boolean {
-  try {
-    const u = new URL(value);
-    return u.protocol === "https:" && u.host.endsWith(".amazoncognito.com");
-  } catch {
-    return false;
-  }
-}
+// Issue #871 / #1246: runtime-config.json URL validators (isHttpsUrl / isCognitoDomain) are
+// imported from @tenkacloud/auth-client to keep the allowlist identical across admin SPAs.
 
 async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
   try {

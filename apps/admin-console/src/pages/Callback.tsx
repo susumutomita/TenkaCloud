@@ -1,10 +1,10 @@
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Spinner from "@cloudscape-design/components/spinner";
+import { completeLogin } from "@tenkacloud/auth-client";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
-import { completeLogin } from "../auth/cognito";
 import type { AppConfig } from "../config";
 
 export function CallbackPage({ config }: { config: AppConfig }) {

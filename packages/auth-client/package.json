@@ -1,0 +1,22 @@
+{
+  "name": "@tenkacloud/auth-client",
+  "version": "0.1.0",
+  "description": "Shared Cognito Hosted UI OAuth 2.0 Code + PKCE client for TenkaCloud admin SPAs (Issue #1246)",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='dist/**' --coverage.exclude='**/*.test.ts'"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.6"
+  }
+}
