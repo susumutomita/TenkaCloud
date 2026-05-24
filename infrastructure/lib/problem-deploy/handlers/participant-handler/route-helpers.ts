@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { StatusCodes } from "http-status-codes";
+import type { z } from "zod";
 import {
   participantRateLimiter,
   RATE_LIMITS,
@@ -110,4 +111,85 @@ export async function withBearerAuth(
     console.error(`[portal] ${routeName} failed`, { message });
     return respondError(c, "internal_error");
   }
+}
+
+/**
+ * Issue #1242: route 入口で JSON body を zod schema で検証する共通ヘルパー。
+ *
+ * 旧 index.ts は body を `Record<string, unknown>` から手 cast していたが、
+ * field 型 / 必須性が grep でしか見えなかった (= deploy-handler / event-handler は既に
+ * zod で揃っているのに participant-handler だけ取り残されていた)。
+ *
+ * - JSON parse 失敗 → `invalid_body` (400)
+ * - schema validate 失敗 → `validation_failed` + flattened issues (400)
+ * - 成功 → typed data を返す (caller は narrow した値を service に渡せる)
+ *
+ * 既存 frontend は `{ error: "invalid_body" }` を pin しているテストが多いため、 JSON
+ * parse 失敗時の error code は維持。 schema 不一致は新エラー code `validation_failed`
+ * (= deploy-handler と揃える) を出す。
+ */
+export async function parseJsonBody<TSchema extends z.ZodType>(
+  c: Context,
+  schema: TSchema,
+): Promise<{ ok: true; data: z.infer<TSchema> } | { ok: false; response: Response }> {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return { ok: false, response: respondError(c, "invalid_body") };
+  }
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      response: c.json(
+        { error: "validation_failed", issues: parsed.error.issues },
+        StatusCodes.BAD_REQUEST,
+      ),
+    };
+  }
+  return { ok: true, data: parsed.data };
+}
+
+/**
+ * Query string を schema で検証する。 失敗時は `validation_failed` (400)。
+ * 成功時は typed object を返す。
+ */
+export function parseQuery<TSchema extends z.ZodType>(
+  c: Context,
+  schema: TSchema,
+): { ok: true; data: z.infer<TSchema> } | { ok: false; response: Response } {
+  const parsed = schema.safeParse(c.req.query());
+  if (!parsed.success) {
+    return {
+      ok: false,
+      response: c.json(
+        { error: "validation_failed", issues: parsed.error.issues },
+        StatusCodes.BAD_REQUEST,
+      ),
+    };
+  }
+  return { ok: true, data: parsed.data };
+}
+
+/**
+ * Path param を schema で検証する。 失敗時は `validation_failed` (400)。
+ * 成功時は typed object を返す。 旧 handler は `c.req.param(name)` を 1 個ずつ取って
+ * regex check していたので、 同等の挙動を 1 schema にまとめる。
+ */
+export function parseParams<TSchema extends z.ZodType>(
+  c: Context,
+  schema: TSchema,
+): { ok: true; data: z.infer<TSchema> } | { ok: false; response: Response } {
+  const parsed = schema.safeParse(c.req.param());
+  if (!parsed.success) {
+    return {
+      ok: false,
+      response: c.json(
+        { error: "validation_failed", issues: parsed.error.issues },
+        StatusCodes.BAD_REQUEST,
+      ),
+    };
+  }
+  return { ok: true, data: parsed.data };
 }
