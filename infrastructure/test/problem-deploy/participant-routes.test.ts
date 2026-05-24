@@ -169,4 +169,88 @@ describe("GET /portal/me/deploy-logs", () => {
 
     expect(res.status).toBe(404);
   });
+
+  it("should return 400 validation_failed for non-ULID jobId (zod schema)", async () => {
+    const res = await app.request("/portal/me/deploy-logs?jobId=not-a-ulid", {
+      headers: { authorization: `Bearer ${VALID_KEY}` },
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("validation_failed");
+    expect(mocks.getParticipantDeployLogs).not.toHaveBeenCalled();
+  });
+});
+
+describe("PATCH /portal/me (Issue #1242 zod body validation)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("should return 400 invalid_body for malformed JSON", async () => {
+    const res = await app.request("/portal/me", {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${VALID_KEY}`, "content-type": "application/json" },
+      body: "{not-json",
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("invalid_body");
+  });
+
+  it("should return 400 validation_failed for missing teamName", async () => {
+    const res = await app.request("/portal/me", {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${VALID_KEY}`, "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("validation_failed");
+  });
+
+  it("should return 400 validation_failed for wrong-type teamName", async () => {
+    const res = await app.request("/portal/me", {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${VALID_KEY}`, "content-type": "application/json" },
+      body: JSON.stringify({ teamName: 42 }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("validation_failed");
+  });
+});
+
+describe("POST /portal/me/submit-flag (Issue #1242 zod body validation)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("should return 400 validation_failed for missing flag", async () => {
+    const res = await app.request("/portal/me/submit-flag", {
+      method: "POST",
+      headers: { authorization: `Bearer ${VALID_KEY}`, "content-type": "application/json" },
+      body: JSON.stringify({ problemId: "ddos-uptime" }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("validation_failed");
+  });
+
+  it("should return 400 validation_failed for non-regex problemId", async () => {
+    const res = await app.request("/portal/me/submit-flag", {
+      method: "POST",
+      headers: { authorization: `Bearer ${VALID_KEY}`, "content-type": "application/json" },
+      body: JSON.stringify({ problemId: "BadProblem", flag: "x" }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("validation_failed");
+  });
+
+  it("should return 400 invalid_body for malformed JSON", async () => {
+    const res = await app.request("/portal/me/submit-flag", {
+      method: "POST",
+      headers: { authorization: `Bearer ${VALID_KEY}`, "content-type": "application/json" },
+      body: "{",
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("invalid_body");
+  });
 });
