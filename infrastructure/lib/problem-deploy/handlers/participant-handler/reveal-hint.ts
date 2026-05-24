@@ -161,6 +161,11 @@ async function writeHintScoreEvent(
   now: string,
 ): Promise<void> {
   if (hint.penalty === 0) return;
+  // #1243: 旧実装は Put 失敗を console.warn で握り潰していたが、 score 減点 (UpdateItem) は
+  // 確定しているのに score event 履歴が空のままになり、 「-10 pt なのに履歴 0 件」 表示の
+  // 不整合を生んでいた (submit-flag #745 と同じ root cause)。 AGENTS.md 「モック / スタブで
+  // 握り潰す fallback 禁止」 違反だったので、 失敗は log した上で throw し、
+  // route-helpers の internal_error 経路で 500 を返す (= CloudWatch + Portal retry に乗せる)。
   try {
     await writeScoreEvent(
       shared.ddb,
@@ -177,10 +182,11 @@ async function writeHintScoreEvent(
       now,
     );
   } catch (err) {
-    console.warn("[reveal-hint] writeScoreEvent failed (best-effort)", {
+    console.error("[reveal-hint] writeScoreEvent failed", {
       jobId: item.jobId,
       hintId,
       message: err instanceof Error ? err.message : String(err),
     });
+    throw err;
   }
 }
