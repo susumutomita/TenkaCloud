@@ -123,6 +123,8 @@ export function loadAllBaselines(dir: string): BaselineFile {
   const entries: BaselineFile["entries"][number][] = [];
   for (const name of names) {
     if (!name.endsWith(".json")) continue;
+    // tech-debt-*.json は tech-debt analyzer 所有。 architecture harness は読まない。
+    if (name.startsWith("tech-debt-")) continue;
     const file = loadBaseline(join(dir, name));
     entries.push(...file.entries);
   }
