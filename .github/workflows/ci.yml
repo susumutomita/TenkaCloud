@@ -12,7 +12,14 @@ permissions:
   actions: read
 
 on:
+  # PR-time: lint / typecheck / test / build を走らせて regression を block
   pull_request:
+  # main への commit / merge 時にも走らせて codecov に BASE coverage を upload する。
+  # これがないと PR diff の coverage delta が "missing BASE report" になり、
+  # 「modified lines are covered」しか出ない (= 数値比較ができない)。
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
