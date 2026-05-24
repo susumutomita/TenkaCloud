@@ -128,7 +128,7 @@
 <section>
 <h2>Open Questions — Recommendations</h2>
 
-<p>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/644">#644</a> の判断対象として 7 件。 Claude 側の提案を pin し、 user の確認を経て Status を Draft → Proposed に移す前提です。</p>
+<p>Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/644">#644</a> で検討対象となった 7 件。 各 question について本 ADR が採用する recommendation と rationale を以下に固定する。</p>
 
 <table>
 <thead><tr><th>#</th><th>Question</th><th>Recommendation</th><th>Rationale</th></tr></thead>
@@ -178,44 +178,39 @@
 </tbody>
 </table>
 
-<p><strong>Status</strong>: 上記 7 件の recommendation を user が accept した時点で本 ADR を Draft → Proposed に移行し、 Rollout Phase 3 (scoring Lambda 実装) に着手可。</p>
+<p><strong>Status</strong>: 上記 7 件の recommendation を確定したことで本 ADR は Proposed に移行し、 Rollout Phase 1 以降の実装に着手できる状態とする。</p>
 </section>
 
 <section>
 <h2>Rollout</h2>
 
 <table>
-<thead><tr><th>Phase</th><th>内容</th><th>担当</th></tr></thead>
+<thead><tr><th>Phase</th><th>内容</th><th>Layer</th></tr></thead>
 <tbody>
-  <tr>
-    <td>0</td>
-    <td>本 ADR の Open questions を user と一緒に解消、 Status を Draft → Proposed に移す</td>
-    <td>Claude (= ADR 改訂)</td>
-  </tr>
   <tr>
     <td>1</td>
     <td>SCHEMA に <code>triggers[]</code> 追加 (Schema 互換性: optional)、 既存 Phase 1 metadata は無変更で OK</td>
-    <td>Claude</td>
+    <td>docs / schema</td>
   </tr>
   <tr>
     <td>2</td>
     <td>cross-account EventBridge bus + resource policy + 競技者 account 側 Rule の CDK</td>
-    <td>user (= インフラ)</td>
+    <td>infra</td>
   </tr>
   <tr>
     <td>3</td>
     <td>scoring Lambda に triggers eval + cross-account PutEvents 実装</td>
-    <td>Claude</td>
+    <td>app</td>
   </tr>
   <tr>
     <td>4</td>
     <td>application-admin-console に Disruption console page + <code>DisruptionOverrides</code> table</td>
-    <td>Claude</td>
+    <td>app</td>
   </tr>
   <tr>
     <td>5</td>
     <td>microservice-migration-battle の disruption に condition trigger を追加 (= POC integration)</td>
-    <td>Claude</td>
+    <td>app</td>
   </tr>
 </tbody>
 </table>
