@@ -86,7 +86,17 @@ export async function loadConfig(): Promise<AppConfig> {
       cache: "no-store",
     });
     if (!res.ok) {
-      console.info("[config] no runtime-config.json (dev mode), using fallback");
+      // Issue #1247: 旧来は console.info の silent fallback だった (= production 配信
+      // で runtime-config.json を S3/CloudFront 配備し忘れたとき、 dev-mock に倒れて
+      // 「動くように見える」 misconfig 事故が起きた)。 fetch 自体が失敗 (= 404 / 5xx)
+      // した時点で、 ブラウザの DevTools にも残るよう console.error に格上げ。 fallback
+      // は dev 体験のため依然 DEV_FALLBACK を返すが、 operator が気付けるシグナルは出す。
+      console.error("[config] runtime-config.json not reachable", {
+        url: `${import.meta.env.BASE_URL}runtime-config.json`,
+        status: res.status,
+        statusText: res.statusText,
+        fallback: DEV_FALLBACK.mode,
+      });
       return DEV_FALLBACK;
     }
     const runtime = (await res.json()) as RuntimeConfig;
