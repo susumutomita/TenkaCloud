@@ -8,12 +8,6 @@
     },
     {
       "ruleId": "file-too-large",
-      "filePath": "apps/application-admin-console/src/pages/DeploymentDetail.tsx",
-      "line": 1,
-      "match": "ge-800-lines"
-    },
-    {
-      "ruleId": "file-too-large",
       "filePath": "apps/application-admin-console/src/pages/EventDetail.tsx",
       "line": 1,
       "match": "ge-800-lines"
