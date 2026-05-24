@@ -32,12 +32,6 @@
     },
     {
       "ruleId": "file-too-large",
-      "filePath": "infrastructure/lib/problem-deploy/handlers/event-handler/bulk-deploy.ts",
-      "line": 1,
-      "match": "ge-500-lines"
-    },
-    {
-      "ruleId": "file-too-large",
       "filePath": "infrastructure/lib/problem-deploy/handlers/event-handler/index.ts",
       "line": 1,
       "match": "ge-500-lines"
