@@ -123,6 +123,11 @@ PR body に <code>## 物理影響</code> セクションを置く。そこで <c
 <li><p><code>adr-self-contained</code>
 <code>docs/architecture/adr-*.html</code> に chat 文脈、段階的反映 metadata、AI agent との役割分担メモが含まれると error。ADR は OSS readers が単独で読める正本として書く。既存違反は <code>.claude/harness/baselines/adr-self-contained.json</code> に baseline 化し、新規 regression だけを捕まえる。</p>
 </li>
+<li><p><code>no-conflict-markers</code>
+Git merge / rebase 中に残った conflict marker (<code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code> / <code>=======</code> / <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> の行頭) を任意の TS / TSX / JS / JSX / JSON / MD / HTML / CSS / YAML / SH に検出すると error。 commit に conflict marker が紛れて push されるのを止める第一線。</p>
+<p>これと対をなす Git 層チェックが <code>make check-no-conflicts</code> (= <code>scripts/check-no-conflicts.ts</code>)。 こちらは <code>git merge-tree HEAD origin/main</code> で「現在のブランチが origin/main に clean に merge できるか」を dry-run 検査する。 PR を出す瞬間に DIRTY (= 上流が進んだ) になるのを未然に防ぐ。 <code>make before-commit</code> に組み込まれており、 fail すると pre-commit で止まる。</p>
+<p>両方とも記憶[[feedback_pull_main_before_task]]に紐づく仕掛け。</p>
+</li>
 </ul>
 <h2>Enforcement</h2>
 <ul>

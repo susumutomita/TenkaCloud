@@ -56,13 +56,17 @@ check-template-cfn-refs: ; bun run scripts/check-template-cfn-refs.ts
 # 現状は既存 5 テンプレが未対応なので standalone target のみ。 TenkaCloudChallenge 側で
 # templates を更新してから before-commit / check に組み込む (follow-up PR で wire)。
 check-template-cli-access: ; bun run scripts/check-template-cli-access.ts
+# feedback_pull_main_before_task: 現在のブランチが origin/main と clean に merge 可能かを
+# git merge-tree (= read-only dry-run) で検査。 conflict 発生時は exit 1 で fail。
+# CI / pre-push hook ともに、 「PR を出した瞬間に DIRTY になる」 のを未然に防ぐ。
+check-no-conflicts: ; bun run scripts/check-no-conflicts.ts
 audit-deps:    ; bun run audit:dependencies
 # `check-problems-index` は submodule (= TenkaCloudChallenge) 側 catalog CI に責任を移譲した
 # ため、 本体 before-commit / check からは外す。 platform 側 build:problems-index を走らせると
 # catalog repo の biome JSON formatter (= 別 lock 版) と微妙な drift が出てしまうため、
 # index.json の正本性は catalog 側で担保する設計。
-check:         install lint test validate-problems check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs audit-deps check-synth
-before-commit: lint test validate-problems check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs audit-deps check-synth
+check:         install lint test validate-problems check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs check-no-conflicts audit-deps check-synth
+before-commit: lint test validate-problems check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs check-no-conflicts audit-deps check-synth
 
 # `cdk synth` が通ることを保証 (= ts-node / tsx の module resolution、 stack 構築の type error
 # 等を本番 deploy 前にキャッチ)。 Makefile placeholder env で全 stack を synth するので AWS 認証は不要。
