@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "./App";
 import { loadConfig } from "./config";
+import { AppConfigProvider } from "./config-context";
 import { I18nProvider } from "./i18n";
 
 const root = document.getElementById("root");
@@ -18,9 +19,11 @@ loadConfig()
     createRoot(root).render(
       <StrictMode>
         <I18nProvider>
-          <BrowserRouter basename={ROUTER_BASENAME}>
-            <App config={config} />
-          </BrowserRouter>
+          <AppConfigProvider config={config}>
+            <BrowserRouter basename={ROUTER_BASENAME}>
+              <App config={config} />
+            </BrowserRouter>
+          </AppConfigProvider>
         </I18nProvider>
       </StrictMode>,
     );

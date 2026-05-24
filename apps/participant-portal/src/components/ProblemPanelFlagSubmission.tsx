@@ -13,6 +13,8 @@ import {
   type SubmitFlagOutcome,
   submitFlag,
 } from "../api/portal-client";
+import { useIsMock } from "../config-context";
+import { evaluateMockFlag } from "../dev-mock/flag-submit";
 import { useT } from "../i18n";
 import { describeAgo } from "../lib/format";
 import { CelebrationOverlay } from "./CelebrationOverlay";
@@ -29,7 +31,6 @@ export function FlagSubmissionPanel({
   points,
   hints,
   onScored,
-  isMock = false,
 }: {
   apiBaseUrl: string;
   sessionToken: string;
@@ -38,14 +39,12 @@ export function FlagSubmissionPanel({
   points: number;
   hints: readonly ParticipantHintView[];
   onScored: () => Promise<void>;
-  /**
-   * dev-mock mode (= LP の 「モックで試す」 動線)。 true のとき submit を backend に投げず、
-   * local state で 「正解 → celebration」 「不正解 → 減点 + リトライ」 を再現する。
-   * 本物の AWS 環境は無いので flag の中身は問わず、 任意 1 文字以上の入力で OK とする。
-   */
-  isMock?: boolean;
 }) {
   const t = useT();
+  // dev-mock mode (= LP 「モックで試す」 動線) のとき submit を backend に投げず、
+  // dev-mock/flag-submit.evaluateMockFlag で local 評価する。 mode は AppConfig
+  // context から直接読む (= 旧 isMock prop drill を撤去)。
+  const isMock = useIsMock();
   const [flag, setFlag] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<SubmitFlagOutcome | null>(null);
@@ -72,7 +71,7 @@ export function FlagSubmissionPanel({
     setOutcome(null);
     try {
       const result = isMock
-        ? simulateMockFlagSubmit(flag, points)
+        ? evaluateMockFlag(flag, points)
         : await submitFlag(apiBaseUrl, sessionToken, problemId, flag);
       setOutcome(result);
       if (result.kind === "ok") setMockCleared(true);
@@ -161,47 +160,6 @@ export function FlagSubmissionPanel({
       )}
     </SpaceBetween>
   );
-}
-
-/**
- * dev-mock 用 mock flag 検証。 LP visitor が submit 体験を試せるよう、 固定の
- * 「正解」 文字列 `tenkacloudsample` (case-insensitive、 部分一致) のときに celebration を
- * 出し、 それ以外は不正解 (= 減点 + リトライ) にする。 placeholder で答えを示唆する。
- */
-export const MOCK_CORRECT_FLAG = "tenkacloudsample";
-
-/**
- * Easter eggs. ふざけて submit してくれた visitor へのリワード (= 全部 正解扱い)。
- *  - `42`               : The Hitchhiker's Guide to the Galaxy
- *  - `claude`           : 開発で使ってる AI agent への nod
- *  - `kaizen`           : 改善 = 日本語の karma
- *  - `tenkadev`         : 開発者専用 dev wink
- *  - `konnichiwa`       : ja LP visitor 向け hello
- *  - `tenka`            : 部分マッチで通したいゆるさ
- */
-const MOCK_EASTER_EGGS: readonly string[] = [
-  "42",
-  "claude",
-  "kaizen",
-  "tenkadev",
-  "konnichiwa",
-  "tenka",
-];
-
-function simulateMockFlagSubmit(flag: string, points: number): SubmitFlagOutcome {
-  const trimmed = flag.trim().toLowerCase();
-  if (trimmed.length === 0) {
-    return { kind: "wrong", scoreDelta: -10, totalScore: -10, wrongCount: 1 };
-  }
-  // `tenkacloudsample` を含むか、 逆に `tenkacloudsample` が入力を含むときも OK
-  // (= ユーザが `tenkacloud` だけ入れても通る、 typo に少し寛容)。
-  if (trimmed.includes(MOCK_CORRECT_FLAG) || MOCK_CORRECT_FLAG.includes(trimmed)) {
-    return { kind: "ok", scoreDelta: points, totalScore: points };
-  }
-  if (MOCK_EASTER_EGGS.some((egg) => trimmed === egg)) {
-    return { kind: "ok", scoreDelta: points, totalScore: points };
-  }
-  return { kind: "wrong", scoreDelta: -10, totalScore: -10, wrongCount: 1 };
 }
 
 function canSubmitFlag(flag: string, submitting: boolean): boolean {

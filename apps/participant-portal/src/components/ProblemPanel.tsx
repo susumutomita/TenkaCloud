@@ -224,14 +224,11 @@ export function ProblemPanel({
   apiBaseUrl,
   sessionToken,
   onScored,
-  isMock = false,
 }: {
   problem: ParticipantProblemView;
   apiBaseUrl: string;
   sessionToken: string;
   onScored: () => Promise<void>;
-  /** dev-mock mode: backend を呼ばず submit を local で評価する (= LP 「モックで試す」 用)。 */
-  isMock?: boolean;
 }) {
   const t = useT();
   const now = useNowMs(COUNTDOWN_REFRESH_MS);
@@ -318,7 +315,6 @@ export function ProblemPanel({
             points={flagScoring.points ?? 0}
             hints={flagScoring.hints ?? []}
             onScored={onScored}
-            isMock={isMock}
           />
         )}
         {shouldShowAutoRefreshNote(problem.status) && (
