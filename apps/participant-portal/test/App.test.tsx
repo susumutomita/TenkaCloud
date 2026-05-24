@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it } from "vitest";
 import { App } from "../src/App";
 import type { AppConfig } from "../src/config";
+import { AppConfigProvider } from "../src/config-context";
 import { I18nProvider } from "../src/i18n";
 
 const config: AppConfig = {
@@ -21,9 +22,11 @@ function renderApp(initialPath: string) {
   localStorage.setItem("tenkacloud.portal.locale", "ja");
   return render(
     <I18nProvider>
-      <MemoryRouter initialEntries={[initialPath]}>
-        <App config={config} />
-      </MemoryRouter>
+      <AppConfigProvider config={config}>
+        <MemoryRouter initialEntries={[initialPath]}>
+          <App config={config} />
+        </MemoryRouter>
+      </AppConfigProvider>
     </I18nProvider>,
   );
 }

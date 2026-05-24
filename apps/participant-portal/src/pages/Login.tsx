@@ -11,6 +11,7 @@ import { useState } from "react";
 import { Navigate, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
 
 /**
@@ -32,7 +33,8 @@ export function LoginPage({ config }: { config: AppConfig }) {
   // LP 「モックで試す」 動線では backend が存在せず login key 文字列 が任意 (= 競技
   // 主催者が発行する短命キーは無い)。 ユーザーに 「何を入れればいいか分からない」 と
   // 思わせないために info banner / placeholder / description を dev-mock 用に出し分ける。
-  const isMock = config.mode !== "backend";
+  // 旧: const isMock = config.mode !== "backend"; → useIsMock() (Thermo-Nuclear review P1)
+  const isMock = useIsMock();
 
   // 既ログイン状態で /login に来た場合は home に redirect (= 別 key 黙々上書き防止)。
   // ready=false の間は loadSession の結果待ちで何も決められないので render を保留。

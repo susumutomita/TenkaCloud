@@ -8,7 +8,7 @@ import Spinner from "@cloudscape-design/components/spinner";
 import { useEffect } from "react";
 import type { NotificationView } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
-import type { AppConfig } from "../config";
+import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
 import { describeAgo } from "../lib/format";
 
@@ -27,11 +27,11 @@ const SEVERITY_COLOR: Record<NotificationView["severity"], "blue" | "red"> = {
  * Phase 1 以前の旧 deployment (eventId 無し) は backend が 404 を返すので、
  * `notificationsNoEvent` で告知して空白を出す。
  */
-export function NotificationsPage({ config }: { config: AppConfig }) {
+export function NotificationsPage() {
   const { notifications, notificationsError, notificationsNoEvent, markNotificationsSeen } =
     useTeamView();
   const t = useT();
-  const isBackend = config.mode === "backend";
+  const isMock = useIsMock();
   const items = notifications?.items;
 
   // page を開いたら latest occurredAt を context+localStorage に書いて未読 badge を **即時** 0 化。
@@ -61,7 +61,7 @@ export function NotificationsPage({ config }: { config: AppConfig }) {
           {t("notifications.no_event_body")}
         </Alert>
       )}
-      {isBackend && !notifications && !notificationsError && !notificationsNoEvent && (
+      {!isMock && !notifications && !notificationsError && !notificationsNoEvent && (
         <Box textAlign="center" padding="l">
           <Spinner /> {t("notifications.loading")}
         </Box>

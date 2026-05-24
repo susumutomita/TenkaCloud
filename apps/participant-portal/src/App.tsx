@@ -57,11 +57,8 @@ export function App({ config }: { config: AppConfig }) {
           path="/score-events"
           element={guarded(config, <ScoreEventsPage config={config} />)}
         />
-        <Route
-          path="/notifications"
-          element={guarded(config, <NotificationsPage config={config} />)}
-        />
-        <Route path="/problems" element={guarded(config, <QuestsPage config={config} />)} />
+        <Route path="/notifications" element={guarded(config, <NotificationsPage />)} />
+        <Route path="/problems" element={guarded(config, <QuestsPage />)} />
         <Route
           path="/problems/:jobId"
           element={guarded(config, <ProblemDetailPage config={config} />)}

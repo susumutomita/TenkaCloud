@@ -16,7 +16,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import type { ParticipantProblemView, ParticipantScoringInfo } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
-import type { AppConfig } from "../config";
+import { useIsMock } from "../config-context";
 import { findProblemMetadata } from "../data/problems";
 import { useT } from "../i18n";
 import { categoryOf } from "../lib/category";
@@ -101,11 +101,11 @@ function isCleared(problem: ParticipantProblemView): boolean {
  * 「section 分け」 で並列表示する。 未解決 section は常時 expand、 解決済み section は
  * ExpandableSection (= 初期 collapsed)、 ひと目で残タスクと既獲得を区別できる。
  */
-export function QuestsPage({ config }: { config: AppConfig }) {
+export function QuestsPage() {
   const { view, error } = useTeamView();
   const navigate = useNavigate();
   const t = useT();
-  const isBackend = config.mode === "backend";
+  const isMock = useIsMock();
   const [filter, setFilter] = useState<CategoryFilter>("all");
 
   const allProblems = useMemo(() => view?.problems ?? [], [view]);
@@ -200,7 +200,7 @@ export function QuestsPage({ config }: { config: AppConfig }) {
         {unsolved.length > 0 ? (
           <Cards<ParticipantProblemView>
             items={unsolved}
-            loading={isBackend && !view && !error}
+            loading={!isMock && !view && !error}
             loadingText={t("quests.loading_text")}
             cardDefinition={renderCard}
             cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 2 }]}

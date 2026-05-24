@@ -15,6 +15,7 @@ import { useNavigate } from "react-router";
 import { PortalAuthError, PortalValidationError, updateTeamName } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { useIsMock } from "../config-context";
 import { type LocaleCode, SUPPORTED_LOCALES, useI18n, useT } from "../i18n";
 
 const TEAM_NAME_RE = /^[A-Za-z0-9 _\-぀-ヿ一-鿿]{1,40}$/;
@@ -69,6 +70,7 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
   const navigate = useNavigate();
   const t = useT();
   const { locale, setLocale } = useI18n();
+  const isMock = useIsMock();
   // Issue #1191: 既に teamName を設定済の競技者が dropdown 経由でこのページを開く
   // ケースが edit mode。 初期表示の入力欄に現在の名前を埋めておく + Cancel で `/` に戻る。
   const isEditMode = auth.session?.teamNameSetByCompetitor === true;
@@ -91,7 +93,7 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
       // dev-mock mode: backend が無いので 直接 session を更新する (= localStorage に永続化、
       // `auth.updateSession` が saveSession を呼ぶ)。 backend mode と同じ UX (= submit 後
       // home に navigate) を保ち、 「Failed to fetch」 赤エラーを回避する。
-      if (config.mode !== "backend") {
+      if (isMock) {
         auth.updateSession({
           teamName: draft.trimmed,
           teamNameSetByCompetitor: true,

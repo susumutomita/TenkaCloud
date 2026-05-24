@@ -18,6 +18,7 @@ import {
   PortalAuthError,
 } from "../api/portal-client";
 import type { AppConfig } from "../config";
+import { useIsMock } from "../config-context";
 import { countUnread, loadLastSeenAt, saveLastSeenAt } from "../lib/notifications-storage";
 import { useAuth } from "./AuthProvider";
 import {
@@ -223,7 +224,7 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
   // codex review: `lastSeenAt` を eventId scope にして「同 browser で別 event ログイン
   // 後、前 event の lastSeen を引きずって新 event の通知を silent 既読化」を防ぐ。
   const eventIdForKey = auth.session?.eventId ?? "";
-  const isBackend = config.mode === "backend";
+  const isMock = useIsMock();
   const [view, setView] = useState<ParticipantTeamView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardResponse | null>(null);
@@ -274,7 +275,7 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
 
   /** 5 秒 tick: `/portal/me` + `/portal/leaderboard`。Notifications は別系統。 */
   const refresh = useCallback(async () => {
-    if (!isBackend || !sessionToken) return;
+    if (isMock || !sessionToken) return;
     const [meResult, leaderboardResult] = await Promise.allSettled([
       getPortalMe(config.apiBaseUrl, sessionToken),
       getLeaderboard(config.apiBaseUrl, sessionToken),
@@ -282,11 +283,11 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
 
     if (!applyPortalMeDecision(toPortalMeRefreshDecision(meResult))) return;
     applyLeaderboardDecision(toLeaderboardRefreshDecision(leaderboardResult));
-  }, [isBackend, sessionToken, config.apiBaseUrl, applyPortalMeDecision, applyLeaderboardDecision]);
+  }, [isMock, sessionToken, config.apiBaseUrl, applyPortalMeDecision, applyLeaderboardDecision]);
 
   /** 60 秒 tick: `/portal/me/notifications` 専用。Events table の RCU を守る。 */
   const refreshNotifications = useCallback(async () => {
-    if (!isBackend || !sessionToken) return;
+    if (isMock || !sessionToken) return;
     try {
       const next = await getNotifications(config.apiBaseUrl, sessionToken);
       if (next === undefined) {
@@ -307,22 +308,22 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
       }
       setNotificationsError(err instanceof Error ? err.message : String(err));
     }
-  }, [isBackend, sessionToken, config.apiBaseUrl, auth, eventIdForKey]);
+  }, [isMock, sessionToken, config.apiBaseUrl, auth, eventIdForKey]);
 
   // LP 「モックで試す」 動線: dev-mock mode + session 在りのとき、 backend API が無くても
   // 各画面が空にならないよう固定 fixture を 1 度だけ seed する。 polling は走らない。
-  // production (= backend mode) では `if (!isBackend) return` ガードで素通り。
+  // production (= backend mode) では `if (isMock) return` ガードで素通り。
   useEffect(() => {
-    if (isBackend) return;
+    if (!isMock) return;
     if (!sessionToken) return;
     if (view) return;
     setView(DEV_MOCK_TEAM_VIEW);
     setLeaderboard(DEV_MOCK_LEADERBOARD);
     setNotifications(DEV_MOCK_NOTIFICATIONS);
-  }, [isBackend, sessionToken, view]);
+  }, [isMock, sessionToken, view]);
 
   useEffect(() => {
-    if (!isBackend || !sessionToken) return;
+    if (isMock || !sessionToken) return;
     let cancelled = false;
     stopPollingRef.current = false;
     const tick = async () => {
@@ -335,10 +336,10 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
       cancelled = true;
       clearInterval(interval);
     };
-  }, [isBackend, sessionToken, refresh]);
+  }, [isMock, sessionToken, refresh]);
 
   useEffect(() => {
-    if (!isBackend || !sessionToken) return;
+    if (isMock || !sessionToken) return;
     let cancelled = false;
     const tick = async () => {
       if (cancelled) return;
@@ -350,7 +351,7 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
       cancelled = true;
       clearInterval(interval);
     };
-  }, [isBackend, sessionToken, refreshNotifications]);
+  }, [isMock, sessionToken, refreshNotifications]);
 
   // codex review P3: page を開いた瞬間の既読化を **localStorage と Context state 両方** に
   // 反映して、TopNav 未読 badge が次の 60s tick を待たず即 0 化する。

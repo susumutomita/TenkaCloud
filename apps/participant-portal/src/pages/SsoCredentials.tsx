@@ -16,6 +16,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { CliCredentialsPanel } from "../components/CliCredentialsPanel";
 import type { AppConfig } from "../config";
+import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
 
 type TranslateFn = (key: string, vars?: Record<string, string>) => string;
@@ -53,7 +54,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
   const t = useT();
   const sessionToken = auth.session?.sessionToken ?? null;
   const { view, error } = useTeamView();
-  const isBackend = config.mode === "backend";
+  const isMock = useIsMock();
 
   const [pending, setPending] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
@@ -63,7 +64,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
     // dev-mock mode: backend を呼ぶと localhost への fetch が "Failed to fetch" になるため、
     // 試行せず info メッセージで「モックでは AWS Console を開けません」 を表示する (= LP demo
     // 訪問者が clicked して赤い error alert に驚かないようにする)。
-    if (!isBackend) {
+    if (isMock) {
       setOpenError(t("sso_credentials.mock_open_blocked"));
       return;
     }
@@ -97,11 +98,9 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
       )}
       {openError && (
         <Alert
-          type={isBackend ? "error" : "info"}
+          type={isMock ? "info" : "error"}
           header={
-            isBackend
-              ? t("sso_credentials.open_failed_header")
-              : t("sso_credentials.mock_open_header")
+            isMock ? t("sso_credentials.mock_open_header") : t("sso_credentials.open_failed_header")
           }
           dismissible
           onDismiss={() => setOpenError(null)}
@@ -114,7 +113,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
         <Box variant="p">{t("sso_credentials.howto_body")}</Box>
       </Alert>
 
-      {isBackend && !view && !error && <Box>{t("app.loading")}</Box>}
+      {!isMock && !view && !error && <Box>{t("app.loading")}</Box>}
 
       {view && view.problems.length === 0 && (
         <Container>
@@ -168,7 +167,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
                   sessionToken={sessionToken}
                   jobId={problem.jobId}
                   onAuthError={auth.logout}
-                  mockBlocked={!isBackend}
+                  mockBlocked={isMock}
                 />
               )}
             </SpaceBetween>

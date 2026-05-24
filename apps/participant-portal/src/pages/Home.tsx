@@ -11,6 +11,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { ScoreTimelineChart } from "../components/ScoreTimelineChart";
 import type { AppConfig } from "../config";
+import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
 
 /**
@@ -28,7 +29,7 @@ function truncateTeamName(name: string): string {
 export function HomePage({ config }: { config: AppConfig }) {
   const auth = useAuth();
   const sessionToken = auth.session?.sessionToken ?? null;
-  const isBackend = config.mode === "backend";
+  const isMock = useIsMock();
   const t = useT();
   const navigate = useNavigate();
   // Polling は ShellLayout の TeamViewProvider で一括管理される (TopNav も同じデータを共有)。
@@ -51,12 +52,12 @@ export function HomePage({ config }: { config: AppConfig }) {
           {error}
         </Alert>
       )}
-      {isBackend && !view && !error && <Box>{t("app.loading")}</Box>}
+      {!isMock && !view && !error && <Box>{t("app.loading")}</Box>}
 
       {view && <TeamScorePanel view={view} leaderboard={leaderboard} />}
 
       {/* Audit table #12: 競技開始からのスコア推移を 折れ線グラフで可視化 (= dashboard 中段)。 */}
-      {isBackend && sessionToken && view && view.problems.length > 0 && (
+      {!isMock && sessionToken && view && view.problems.length > 0 && (
         <ScoreTimelineChart apiBaseUrl={config.apiBaseUrl} sessionToken={sessionToken} />
       )}
 
