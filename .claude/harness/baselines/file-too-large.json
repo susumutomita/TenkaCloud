@@ -26,12 +26,6 @@
     },
     {
       "ruleId": "file-too-large",
-      "filePath": "apps/participant-portal/src/api/portal-client.ts",
-      "line": 1,
-      "match": "ge-500-lines"
-    },
-    {
-      "ruleId": "file-too-large",
       "filePath": "infrastructure/lib/admin-insight/handlers/admin-insight-handler/index.ts",
       "line": 1,
       "match": "ge-500-lines"
