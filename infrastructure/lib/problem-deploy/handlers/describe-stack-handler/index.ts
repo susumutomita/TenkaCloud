@@ -2,7 +2,7 @@ import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-clo
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Credentials } from "@aws-sdk/client-sts";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
-import { errorDeployTrace, logDeployTrace, warnDeployTrace } from "../shared/trace-log.js";
+import { errorDeployTrace, logDeployTrace } from "../shared/trace-log.js";
 
 export interface DescribeStackStateMachineInput {
   readonly detail?: {
@@ -39,6 +39,24 @@ function assertCompleteCredentials(credentials: Credentials | undefined): Creden
   return credentials;
 }
 
+/**
+ * Issue #1245 + #856: rotation race の AssumeRole 失敗のうち、 ExternalId mismatch に起因する
+ * 4xx だけを 1 generation 前で retry する。 Network / Throttling / 5xx 系は retry せず即 fail。
+ *
+ * `verify.ts` 側の `shouldRetryWithPreviousVersion` と同じ error name 集合を共有し、
+ * blanket-catch (= 全 error で previous version を試す) のような band-aid を避ける。
+ */
+const ASSUME_ROLE_FALLBACK_ERROR_NAMES: ReadonlySet<string> = new Set([
+  "AccessDenied",
+  "AccessDeniedException",
+  "Forbidden",
+]);
+
+function shouldRetryWithPreviousVersion(err: unknown): boolean {
+  const name = err instanceof Error ? err.name : "";
+  return ASSUME_ROLE_FALLBACK_ERROR_NAMES.has(name);
+}
+
 async function assumeCompetitorRole(
   deps: DescribeStackDeps,
   params: {
@@ -56,49 +74,86 @@ async function assumeCompetitorRole(
   if (!hasRole || !hasExternalId) {
     throw new Error("competitorRoleArn and externalIdParameterName must be provided together");
   }
+  // 上の 2 guard で competitorRoleArn / externalIdParameterName が string であることは確定。
+  const competitorRoleArn = params.competitorRoleArn as string;
+  const externalIdParameterName = params.externalIdParameterName as string;
 
   const externalIdOut = await deps.ssm.send(
     new GetParameterCommand({
-      Name: params.externalIdParameterName,
+      Name: externalIdParameterName,
       WithDecryption: true,
     }),
   );
   const externalId = externalIdOut.Parameter?.Value;
   if (!externalId) {
-    throw new Error(`ExternalId not found in SSM SecureString: ${params.externalIdParameterName}`);
+    throw new Error(`ExternalId not found in SSM SecureString: ${externalIdParameterName}`);
   }
 
   try {
-    return await assumeRoleWithExternalId(deps, params.competitorRoleArn, params.jobId, externalId);
+    return await assumeRoleWithExternalId(deps, competitorRoleArn, params.jobId, externalId);
   } catch (currentErr) {
-    const previousVersion = Number(externalIdOut.Parameter?.Version ?? 0) - 1;
-    if (previousVersion <= 0) throw currentErr;
-    const previousExternalIdOut = await deps.ssm.send(
-      new GetParameterCommand({
-        Name: `${params.externalIdParameterName}:${previousVersion}`,
-        WithDecryption: true,
-      }),
-    );
-    const previousExternalId = previousExternalIdOut.Parameter?.Value;
-    if (!previousExternalId) throw currentErr;
-    const credentials = await assumeRoleWithExternalId(
-      deps,
-      params.competitorRoleArn,
-      params.jobId,
-      previousExternalId,
-    );
-    console.warn("[describe-stack] grace_fallback_used", {
-      jobId: params.jobId,
-      externalIdVersion: previousVersion,
-    });
-    warnDeployTrace("deploy.describe-stack.assume-role.grace-fallback", {
-      jobId: params.jobId,
-      correlationId: params.jobId,
+    return await retryWithPreviousExternalId(deps, {
       region: params.region,
-      externalIdVersion: previousVersion,
+      jobId: params.jobId,
+      competitorRoleArn,
+      externalIdParameterName,
+      currentVersion: Number(externalIdOut.Parameter?.Version ?? 0),
+      currentErr,
     });
-    return credentials;
   }
+}
+
+/**
+ * Issue #1245: rotation race の retry path を 1 関数に切り出す。
+ *
+ * 旧 implementation の問題点:
+ *   - 全 error class で blanket fallback (= Throttling / Network 系も前 version で retry していた)
+ *   - 成功時の log が `console.warn` の自由 string であり、 metrics filter が当てづらく silent
+ *
+ * 修正後:
+ *   - `shouldRetryWithPreviousVersion` で AccessDenied 系 (= ExternalId mismatch) に絞る
+ *   - 1 generation 前 SSM version が無ければ original error を rethrow (= silent skip しない)
+ *   - 成功時は `errorDeployTrace` で `deploy.describe-stack.assume-role.grace-fallback` を発火し、
+ *     operator alarm に pick up させる (= grace 多発 = rotation pipeline のバグ可視化)
+ *   - retry でも ExternalId は必ず渡される (= 「ExternalId 無し AssumeRole」は禁止)
+ */
+async function retryWithPreviousExternalId(
+  deps: DescribeStackDeps,
+  args: {
+    readonly region: string;
+    readonly jobId: string;
+    readonly competitorRoleArn: string;
+    readonly externalIdParameterName: string;
+    readonly currentVersion: number;
+    readonly currentErr: unknown;
+  },
+): Promise<Credentials> {
+  const { currentErr } = args;
+  if (!shouldRetryWithPreviousVersion(currentErr)) throw currentErr;
+  const previousVersion = args.currentVersion - 1;
+  if (previousVersion <= 0) throw currentErr;
+  const previousExternalIdOut = await deps.ssm.send(
+    new GetParameterCommand({
+      Name: `${args.externalIdParameterName}:${previousVersion}`,
+      WithDecryption: true,
+    }),
+  );
+  const previousExternalId = previousExternalIdOut.Parameter?.Value;
+  if (!previousExternalId) throw currentErr;
+  const credentials = await assumeRoleWithExternalId(
+    deps,
+    args.competitorRoleArn,
+    args.jobId,
+    previousExternalId,
+  );
+  errorDeployTrace("deploy.describe-stack.assume-role.grace-fallback", {
+    jobId: args.jobId,
+    correlationId: args.jobId,
+    region: args.region,
+    externalIdVersion: previousVersion,
+    reason: currentErr instanceof Error ? currentErr.name : "Unknown",
+  });
+  return credentials;
 }
 
 async function assumeRoleWithExternalId(

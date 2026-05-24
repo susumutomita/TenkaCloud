@@ -123,7 +123,11 @@ class PluginErrorBoundary extends Component<
   }
 
   componentDidCatch(err: Error, info: ErrorInfo): void {
-    console.warn(`[portal-plugin] slot=${this.props.slotName} crashed`, {
+    // Issue #1251: 旧 implementation は console.warn で silent に流していたため、 production で
+    // operator が plugin crash を発見できなかった。 user-visible Alert は ErrorBoundary の
+    // render path で出すので「画面が真っ白」にはならない (= decorative ではなく degraded UX) が、
+    // backend 観測のため console.error に昇格させ、 RUM / Sentry error pipeline で pick up する。
+    console.error(`[portal-plugin] slot=${this.props.slotName} crashed`, {
       message: err.message,
       stack: info.componentStack,
     });

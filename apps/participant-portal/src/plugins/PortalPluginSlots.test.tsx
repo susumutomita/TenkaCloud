@@ -61,16 +61,16 @@ describe("PortalPluginSlots (ADR-012 Phase 5)", () => {
     await waitFor(() => expect(screen.getByTestId("fake-status")).toBeInTheDocument());
   });
 
-  it("should let ErrorBoundary fall back to an Alert when a plugin throws (= the whole portal does not crash)", async () => {
+  it("should let ErrorBoundary fall back to an Alert when a plugin throws (= the whole portal does not crash) and elevate the log to console.error (Issue #1251)", async () => {
     function CrashyPanel(): never {
       throw new Error("plugin runtime crash");
     }
     mockLoadPluginSlot.mockImplementation((_problemId, slotName) =>
       slotName === "StatusPanel" ? CrashyPanel : undefined,
     );
-    // ErrorBoundary class が componentDidCatch で warn log → suppress
+    // warn は出てはいけない (= 旧 band-aid の silent warn を撤去済)
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    // React は ErrorBoundary に到達するまで error を console.error する。 test noise を抑止。
+    // React 自体の "Error in component" + ErrorBoundary の componentDidCatch が両方 console.error する。
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     try {
       render(<PortalPluginSlots {...baseProps} />);
@@ -78,10 +78,15 @@ describe("PortalPluginSlots (ADR-012 Phase 5)", () => {
         // Alert header text (Cloudscape Alert は header を visible に出す)
         expect(screen.getByText(/Plugin "StatusPanel" failed to render/)).toBeInTheDocument();
       });
-      // ErrorBoundary の componentDidCatch で warn を発火することを確認
-      expect(warnSpy).toHaveBeenCalledWith(
+      // ErrorBoundary の componentDidCatch は console.error で発火する (= operator が見える)
+      expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining("[portal-plugin] slot=StatusPanel crashed"),
         expect.anything(),
+      );
+      // 旧 silent fallback (= console.warn) は撤去済 (= warn では出ない)
+      const warnCalls = warnSpy.mock.calls.map((c) => String(c[0]));
+      expect(warnCalls.some((c) => c.includes("[portal-plugin] slot=StatusPanel crashed"))).toBe(
+        false,
       );
     } finally {
       warnSpy.mockRestore();

@@ -34,15 +34,15 @@ describe("trace-log helpers", () => {
     expect(payload.correlationId).toBe("01ABC");
   });
 
-  it("warnDeployTrace should emit at level=warn (for grace-fallback notifications etc.)", () => {
-    warnDeployTrace("deploy.describe-stack.assume-role.grace-fallback", {
+  it("warnDeployTrace should emit at level=warn (for soft-degraded notifications)", () => {
+    warnDeployTrace("deploy.create.partial-degraded", {
       jobId: "01XYZ",
-      externalIdVersion: 3,
+      reason: "ssm-delete-noop",
     });
     expect(warnSpy).toHaveBeenCalledTimes(1);
     const payload = JSON.parse(warnSpy.mock.calls[0]?.[0] as string);
     expect(payload.level).toBe("warn");
-    expect(payload.externalIdVersion).toBe(3);
+    expect(payload.reason).toBe("ssm-delete-noop");
   });
 
   it("errorDeployTrace should emit at level=error", () => {

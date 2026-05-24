@@ -103,8 +103,10 @@ export function loadPluginSlot(
         // metadata では宣言されているのに glob で見つからない (= portal/<file>.tsx の typo /
         // deploy 漏れ / file 名 mismatch)。 silent skip だと config bug が誰にも気付かれない
         // ので、 erroring lazy を返して ErrorBoundary 経由で UI に降ろす。
+        // Issue #1251: warn ではなく error level で emit (= backend log ingestion / Sentry / RUM の
+        // error pipeline で pick up される)。 throw も合わせて行うことで「silent fallback」を廃止。
         const msg = `[portal-plugin] unresolved slot: problemId=${problemId}, slot=${slotName}, path=${slotPath}`;
-        console.warn(msg);
+        console.error(msg);
         return Promise.reject(new Error(msg));
       });
   slotComponentCache.set(cacheKey, lazyComp);

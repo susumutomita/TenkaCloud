@@ -166,12 +166,13 @@ describe("describeStackForDeployment", () => {
     ).rejects.toThrow("competitorRoleArn and externalIdParameterName must be provided together");
   });
 
-  it("should retry with the previous generation when AssumeRole fails on the current ExternalId", async () => {
+  it("should retry with the previous generation when AssumeRole fails with AccessDenied (rotation race window)", async () => {
     const { deps: d, ssmSend, stsSend } = deps();
     ssmSend
       .mockResolvedValueOnce({ Parameter: { Value: "current", Version: 3 } })
       .mockResolvedValueOnce({ Parameter: { Value: "previous", Version: 2 } });
-    stsSend.mockRejectedValueOnce(new Error("AccessDenied")).mockResolvedValueOnce({
+    const accessDenied = Object.assign(new Error("not authorized"), { name: "AccessDenied" });
+    stsSend.mockRejectedValueOnce(accessDenied).mockResolvedValueOnce({
       Credentials: {
         AccessKeyId: "AKIA2",
         SecretAccessKey: "secret2",
@@ -195,5 +196,75 @@ describe("describeStackForDeployment", () => {
     expect(previousGet.input.Name).toBe("/development/tenants/tenant-acme/external-id:2");
     const retryAssume = stsSend.mock.calls[1]?.[0] as AssumeRoleCommand;
     expect(retryAssume.input.ExternalId).toBe("previous");
+    // ExternalId は常に retry でも渡されること (= 「ExternalId 無し AssumeRole」は禁止)
+    expect(retryAssume.input.ExternalId).toBeDefined();
+  });
+
+  it("should NOT retry with the previous generation when AssumeRole fails with a non-AccessDenied error (= no blanket band-aid)", async () => {
+    const { deps: d, ssmSend, stsSend } = deps();
+    ssmSend.mockResolvedValueOnce({ Parameter: { Value: "current", Version: 3 } });
+    const throttling = Object.assign(new Error("rate exceeded"), { name: "ThrottlingException" });
+    stsSend.mockRejectedValueOnce(throttling);
+
+    await expect(
+      describeStackForDeployment(
+        {
+          detail: {
+            ...input.detail,
+            competitorRoleArn: "arn:aws:iam::449699636068:role/TenkaCloud-CompetitorDeploy-Role",
+            externalIdParameterName: "/development/tenants/tenant-acme/external-id",
+          },
+        },
+        d,
+      ),
+    ).rejects.toThrow("rate exceeded");
+    // SSM は current version 1 回しか引かれない (= previous version の SSM lookup 自体起きない)
+    expect(ssmSend).toHaveBeenCalledTimes(1);
+    // STS も 1 回しか発火しない (= retry なし)
+    expect(stsSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("should emit deploy.describe-stack.assume-role.grace-fallback at error level so operators can alarm on rotation-race retries", async () => {
+    const { deps: d, ssmSend, stsSend } = deps();
+    ssmSend
+      .mockResolvedValueOnce({ Parameter: { Value: "current", Version: 5 } })
+      .mockResolvedValueOnce({ Parameter: { Value: "previous", Version: 4 } });
+    const accessDenied = Object.assign(new Error("denied"), { name: "AccessDeniedException" });
+    stsSend.mockRejectedValueOnce(accessDenied).mockResolvedValueOnce({
+      Credentials: {
+        AccessKeyId: "AKIA2",
+        SecretAccessKey: "secret2",
+        SessionToken: "token2",
+      },
+    });
+
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await describeStackForDeployment(
+        {
+          detail: {
+            ...input.detail,
+            competitorRoleArn: "arn:aws:iam::449699636068:role/TenkaCloud-CompetitorDeploy-Role",
+            externalIdParameterName: "/development/tenants/tenant-acme/external-id",
+          },
+        },
+        d,
+      );
+      const errCalls = errSpy.mock.calls.map((c) => String(c[0]));
+      const graceErr = errCalls.find((c) =>
+        c.includes("deploy.describe-stack.assume-role.grace-fallback"),
+      );
+      expect(graceErr).toBeDefined();
+      expect(graceErr).toContain('"level":"error"');
+      expect(graceErr).toContain('"externalIdVersion":4');
+      expect(graceErr).toContain('"reason":"AccessDeniedException"');
+      // band-aid だった silent console.warn は撤去済 (warn では出ない)
+      const warnCalls = warnSpy.mock.calls.map((c) => String(c[0]));
+      expect(warnCalls.some((c) => c.includes("grace_fallback_used"))).toBe(false);
+    } finally {
+      errSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
   });
 });
