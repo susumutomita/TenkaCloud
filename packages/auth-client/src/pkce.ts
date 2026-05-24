@@ -1,6 +1,10 @@
 /**
  * PKCE (RFC 7636) helpers for OAuth 2.0 Code Flow with public clients.
  * Verifier is 43-128 chars of [A-Z,a-z,0-9,-._~]. Challenge is base64url(SHA-256(verifier)).
+ *
+ * Browser-only: relies on `crypto.getRandomValues` and `crypto.subtle.digest`.
+ * Issue #1246: extracted from per-app duplicates (admin-console / application-admin-console)
+ * into the shared `@tenkacloud/auth-client` package.
  */
 
 function base64UrlEncode(bytes: Uint8Array): string {

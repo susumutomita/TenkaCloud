@@ -1,15 +1,37 @@
-import type { AppConfig } from "../config";
-import { deriveChallenge, generateVerifier } from "./pkce";
-
 /**
- * apps/admin-console/src/auth/cognito.ts と同実装 (AppConfig は本 app では
- * apiBaseUrl を持たないが、本ファイルは apiBaseUrl を参照しないので影響なし)。
- * 将来 packages/auth-shared に切り出すかは別 Issue。
+ * Cognito Hosted UI OAuth 2.0 Code Flow + PKCE shared client.
+ *
+ * Issue #1246: extracted from per-app duplicates in `apps/admin-console/src/auth/cognito.ts`
+ * and `apps/application-admin-console/src/auth/cognito.ts`. The flow is identical between the
+ * two SPAs (begin login -> Cognito callback -> exchange code for tokens -> store in
+ * sessionStorage -> begin logout revokes refresh token and clears Hosted UI cookie).
+ *
+ * Behavior preserved verbatim including:
+ *   - Issue #861: fail-closed OAuth state validation (missing state in sessionStorage is treated
+ *     as CSRF / session loss).
+ *   - Issue #833: `/oauth2/revoke` (best-effort) + clear sessionStorage + `/logout` redirect.
+ *     The logout URL carries `client_id` + `logout_uri` + `redirect_uri` + `response_type=code`
+ *     so it works under both legacy and OIDC-conformant UserPool modes (Cognito legacy logout
+ *     endpoint ignores extra params).
  */
+
+import { deriveChallenge, generateVerifier } from "./pkce";
 
 const VERIFIER_KEY = "TenkaCloud.pkce_verifier";
 const STATE_KEY = "TenkaCloud.oauth_state";
 const TOKENS_KEY = "TenkaCloud.tokens";
+
+/**
+ * Minimal config surface the OAuth client needs. The hosting SPA `AppConfig` is a superset
+ * (it also carries `apiBaseUrl`, tenant metadata, etc) and matches structurally so callers
+ * pass their full `AppConfig` directly.
+ */
+export interface CognitoOAuthConfig {
+  readonly cognitoDomain: string;
+  readonly cognitoClientId: string;
+  readonly redirectUri: string;
+  readonly scope: string;
+}
 
 export interface TokenSet {
   idToken: string;
@@ -18,7 +40,7 @@ export interface TokenSet {
   expiresAt: number;
 }
 
-export async function beginLogin(config: AppConfig): Promise<void> {
+export async function beginLogin(config: CognitoOAuthConfig): Promise<void> {
   const verifier = generateVerifier();
   const challenge = await deriveChallenge(verifier);
   const state = generateVerifier(32);
@@ -38,15 +60,17 @@ export async function beginLogin(config: AppConfig): Promise<void> {
 }
 
 export async function completeLogin(
-  config: AppConfig,
+  config: CognitoOAuthConfig,
   code: string,
   returnedState?: string,
 ): Promise<TokenSet> {
   const verifier = sessionStorage.getItem(VERIFIER_KEY);
   if (!verifier) throw new Error("PKCE verifier missing (session lost before callback)");
 
-  // Issue #861: state check を fail-closed に。 不在 (= session 切れ / sessionStorage clear)
-  // を CSRF / phishing 経路の signal として throw する。
+  // Issue #861: state check は **fail-closed**。 旧コードは expectedState が null のとき check
+  // を skip していたため、 attacker が victim の sessionStorage を clear してから callback URL を
+  // 送り付けると state validation を bypass できた。 sessionStorage に state が無い時点で
+  // beginLogin() を再走行しないと到達不能経路なので、 不在は CSRF / session 切れの signal。
   const expectedState = sessionStorage.getItem(STATE_KEY);
   if (!expectedState || returnedState !== expectedState) {
     throw new Error("OAuth state mismatch or missing (possible CSRF attempt or session lost)");
@@ -124,12 +148,14 @@ export function clearTokens(): void {
  * 修正:
  *   1. refresh token があれば `/oauth2/revoke` で server-side revoke
  *   2. sessionStorage を clearTokens
- *   3. `/logout?client_id=...&logout_uri=...` に redirect し Cognito cookie を破棄
+ *   3. `/logout?client_id=...&logout_uri=...&redirect_uri=...&response_type=code`
+ *      に redirect し Cognito cookie を破棄
  *
- * `logout_uri` は UserPoolClient の sign-out URLs に登録されている origin に
- * redirect する (= 多くの環境で `<redirectUri origin>/login` を登録済)。
+ * `logout_uri` (= legacy) と `redirect_uri` (= OIDC-conformant) の **両方を付ける**。
+ * OIDC-conformant mode の UserPool では `redirect_uri` が必須で、 legacy mode は余分な param を
+ * ignore するため、 両方付けることでどちらの環境でも動く (= AWS Cognito 仕様)。
  */
-export async function beginLogout(config: AppConfig): Promise<void> {
+export async function beginLogout(config: CognitoOAuthConfig): Promise<void> {
   // (1) refresh token の server-side revoke (= best-effort、 失敗しても続行)
   const stored = loadStoredTokens();
   if (stored?.refreshToken) {
@@ -149,13 +175,15 @@ export async function beginLogout(config: AppConfig): Promise<void> {
   }
   // (2) local 側 token を確実に破棄
   clearTokens();
-  // (3) Hosted UI cookie を破棄するため `/logout` に redirect。 logout_uri は
-  //     UserPoolClient の `Allowed sign-out URLs` に含まれている origin に揃える。
+  // (3) Hosted UI cookie を破棄するため `/logout` に redirect。 sign-out URL は
+  //     UserPoolClient の `Allowed sign-out URLs` に含まれている origin に揃える
+  //     (= 多くの環境で `<redirectUri origin>/login` を登録済)。
   const logoutUrl = new URL(`${config.cognitoDomain}/logout`);
   logoutUrl.searchParams.set("client_id", config.cognitoClientId);
-  // redirectUri の origin + "/login" を logout 後の戻り先にする (= 既存 PKCE callback
-  // と同 origin、 UserPoolClient の sign-out URL 設定と整合)。
   const callbackOrigin = new URL(config.redirectUri).origin;
-  logoutUrl.searchParams.set("logout_uri", `${callbackOrigin}/login`);
+  const postLogoutUri = `${callbackOrigin}/login`;
+  logoutUrl.searchParams.set("logout_uri", postLogoutUri);
+  logoutUrl.searchParams.set("redirect_uri", postLogoutUri);
+  logoutUrl.searchParams.set("response_type", "code");
   window.location.assign(logoutUrl.toString());
 }

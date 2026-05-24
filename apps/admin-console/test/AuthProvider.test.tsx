@@ -8,7 +8,9 @@ import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const beginLogoutMock = vi.fn();
-vi.mock("../src/auth/cognito", async (importOriginal) => {
+// Issue #1246: AuthProvider imports beginLogin / beginLogout / loadStoredTokens from the
+// shared @tenkacloud/auth-client package (formerly per-app src/auth/cognito).
+vi.mock("@tenkacloud/auth-client", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,

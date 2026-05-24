@@ -1,10 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// Issue #1246: re-targets the shared @tenkacloud/auth-client (formerly src/auth/cognito).
+// Kept as an integration regression so application-admin-console keeps consumer guarantees.
 import {
   clearTokens,
   completeLogin,
   loadStoredTokens,
   type TokenSet,
-} from "../../src/auth/cognito";
+} from "@tenkacloud/auth-client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "../../src/config";
 
 const config: AppConfig = {

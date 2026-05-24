@@ -1,5 +1,6 @@
+// Issue #1246: re-targets the shared @tenkacloud/auth-client (formerly src/auth/pkce).
+import { deriveChallenge, generateVerifier } from "@tenkacloud/auth-client";
 import { describe, expect, it } from "vitest";
-import { deriveChallenge, generateVerifier } from "../src/auth/pkce";
 
 describe("generateVerifier", () => {
   describe("when called with a specified length", () => {

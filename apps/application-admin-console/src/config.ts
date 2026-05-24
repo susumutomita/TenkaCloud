@@ -1,3 +1,5 @@
+import { isCognitoDomain, isHttpsUrl } from "@tenkacloud/auth-client";
+
 export interface AppConfig {
   readonly cognitoDomain: string;
   readonly cognitoClientId: string;
@@ -46,29 +48,8 @@ interface RuntimeConfig {
   readonly isolation?: "pooled" | "silo";
 }
 
-/**
- * Issue #871: runtime-config.json の URL validate (= S3 / CloudFront tampering 対策)。
- *   - apiUrl: \`https://\` 必須
- *   - cognitoDomain: \`https://\` 必須 + \`.amazoncognito.com\` 終端 (allowlist)
- *
- * 検証失敗時は null → caller が env fallback に倒れる (= production では env が空で throw)。
- */
-function isHttpsUrl(value: string): boolean {
-  try {
-    return new URL(value).protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-function isCognitoDomain(value: string): boolean {
-  try {
-    const u = new URL(value);
-    return u.protocol === "https:" && u.host.endsWith(".amazoncognito.com");
-  } catch {
-    return false;
-  }
-}
+// Issue #871 / #1246: runtime-config.json URL validators (isHttpsUrl / isCognitoDomain) are
+// imported from @tenkacloud/auth-client to keep the allowlist identical across admin SPAs.
 
 async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
   try {
