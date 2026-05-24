@@ -189,6 +189,35 @@ describe("revealHint (#742 Phase 3)", () => {
     ).rejects.toThrow(/DDB throttle/);
   });
 
+  it("should throw and surface to CloudWatch when writeScoreEvent fails (Issue #1243)", async () => {
+    // #1243: 旧実装は score-event PutItem 失敗を console.warn で握り潰し、 score 減点は
+    // 確定したのに履歴が空のまま 「-10 pt なのに履歴 0 件」 表示矛盾を生んでいた。
+    // 新契約: 失敗は throw して route-helpers の internal_error 経路で 500 を返し、
+    // CloudWatch + portal retry に乗せる。
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 100 })] }); // queryTeamItems
+    ddbSend.mockResolvedValueOnce({ Attributes: { score: 90 } }); // UpdateItem (hint reveal)
+    ddbSend.mockRejectedValueOnce(new Error("DDB PutItem throttle")); // writeScoreEvent
+    await expect(
+      revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1"),
+    ).rejects.toThrow(/DDB PutItem throttle/);
+    // score event 試行は 3 回目の DDB call (= query + update + put)
+    expect(ddbSend).toHaveBeenCalledTimes(3);
+  });
+
+  it("should not call writeScoreEvent (no throw on hidden write) when hint penalty is 0", async () => {
+    // penalty=0 は score event を書かない契約。 PutItem を呼ばないので writeScoreEvent 失敗
+    // の throw 経路にも入らない (= 既存の penalty=0 挙動を pin する)。
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 100 })] });
+    ddbSend.mockResolvedValueOnce({ Attributes: { score: 100 } });
+    const scoring = buildScoringMap([{ id: "hint-1", content: "free", penalty: 0 }]);
+    const out = await revealHint(shared, scoring, TEAM_KEY, "hello-world", "hint-1");
+    expect(out.kind).toBe("ok");
+    // query + update のみ (= 2 call)、 PutCommand は呼ばれない
+    expect(ddbSend).toHaveBeenCalledTimes(2);
+  });
+
   // ---- Issue #1005 / scoring gate (= submit-flag と同じ gate を hint reveal でも通す) ----
   describe("competition scoring gate (Issue #1005)", () => {
     const eventRow = sampleRow({ eventId: "EVT1", score: 0 });

@@ -88,6 +88,62 @@ function handleUptimeDispatcherScan(cmd: { constructor: { name: string } }): obj
   return {};
 }
 
+/**
+ * Failure-injection scenario for #1244 tests: configures uptime scoring + canned mock
+ * sequence (Events/Deployments Scan, scoringLocked BatchGet, optional UpdateItem error,
+ * optional PutItem error). Extracted to keep individual `it` bodies under the biome
+ * complexity threshold.
+ */
+function setupUptimeFailureScenario(failure: {
+  readonly updateThrows?: boolean;
+  readonly putThrows?: boolean;
+}): void {
+  process.env.BATTLE_PROBLEMS_SCORING = JSON.stringify({
+    "hello-world-battle": {
+      kind: "uptime",
+      endpoints: [{ outputKey: "FrontendUrl", path: "/", expectStatus: [200] }],
+      pointsPerSuccess: 100,
+    },
+  });
+  process.env.PROBLEM_ENDPOINTS = JSON.stringify({});
+  process.env.BATTLE_PROBLEMS_PHASES = JSON.stringify({});
+  ddbSend.mockImplementation(async (cmd: { constructor: { name: string } }) =>
+    handleUptimeFailureCommand(cmd, failure),
+  );
+  fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+}
+
+function handleUptimeFailureCommand(
+  cmd: { constructor: { name: string } },
+  failure: { readonly updateThrows?: boolean; readonly putThrows?: boolean },
+): object {
+  const name = cmd.constructor.name;
+  if (name === "ScanCommand") return handleUptimeDispatcherScan(cmd);
+  if (name === "BatchGetCommand") return { Responses: { TestEvents: [] } };
+  if (name === "UpdateCommand") {
+    if (failure.updateThrows) throw new Error("DDB Update throttle");
+    return {};
+  }
+  if (name === "PutCommand") {
+    if (failure.putThrows) throw new Error("DDB PutItem throttle");
+    return {};
+  }
+  return {};
+}
+
+async function runDispatcherHandlerOnce(): Promise<void> {
+  const { handler } = await import(
+    "../../lib/problem-deploy/handlers/generic-scoring-handler/index"
+  );
+  await handler();
+}
+
+function countCommands(calls: ReadonlyArray<readonly unknown[]>, commandName: string): number {
+  return calls.filter(
+    (c) => (c[0] as { constructor: { name: string } }).constructor.name === commandName,
+  ).length;
+}
+
 describe("generic scoring dispatcher: hello-world-battle (= legacy uptime) 挙動 preservation", () => {
   it("should award +100 and write 1 score-event when scoring=uptime + all endpoints return 200", async () => {
     process.env.BATTLE_PROBLEMS_SCORING = JSON.stringify({
@@ -211,6 +267,48 @@ describe("generic scoring dispatcher: hello-world-battle (= legacy uptime) 挙�
       restore();
     }
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("should attempt PutItem (score-event) and let it surface when UpdateItem succeeds (#1244)", async () => {
+    // #1244 behavioral pin: writeScoreEvent failures now throw (vs. swallow) so they surface
+    // to CloudWatch via the outer processDeployment .catch (= log + 1 tick skip + retry).
+    // We test the failure-surface contract by failing the PutCommand and asserting:
+    //   - handler() still resolves (= per-deployment isolation preserved, other deployments unaffected)
+    //   - PutCommand WAS attempted (= writeScoreEvent did fire and bubbled up, not silently skipped)
+    setupUptimeFailureScenario({ putThrows: true });
+    const restore = freezeNow();
+    try {
+      // handler stays resolved: per-deployment isolation (outer .catch) preserved.
+      await expect(runDispatcherHandlerOnce()).resolves.toBeUndefined();
+    } finally {
+      restore();
+    }
+
+    // PutCommand was attempted (= writeScoreEvent fired). Pre-fix would have also attempted
+    // it; the difference is the throw path now reaches outer processDeployment.catch instead
+    // of being swallowed by the inner try/catch inside appendKindScoreEvents.
+    expect(countCommands(ddbSend.mock.calls, "PutCommand")).toBe(1);
+  });
+
+  it("should isolate UpdateItem failures via outer .catch instead of silent inner swallow (#1244)", async () => {
+    // #1244: 旧実装は UpdateItem 失敗時に inner で console.warn + return し、 同 tick で
+    // score-event も skip して silent に 1 tick を消費していた。 新契約: throw して
+    // outer processDeployment.catch に届くので、 handler は他 deployment を続行できる。
+    // 本 test では UpdateItem を throw させて handler が正常終了する (= per-deployment 隔離が
+    // 保たれている) ことと、 同 tick で PutCommand が試行されない (= UpdateItem 失敗時の
+    // 既存 short-circuit が保たれている) ことを pin する。
+    setupUptimeFailureScenario({ updateThrows: true });
+    const restore = freezeNow();
+    try {
+      await expect(runDispatcherHandlerOnce()).resolves.toBeUndefined();
+    } finally {
+      restore();
+    }
+
+    // UpdateItem 失敗で同 tick の PutItem (score-event) を試行しないことを pin
+    // (= short-circuit 維持。 旧実装と挙動同じ、 ただし inner swallow ではなく throw 経由で
+    // outer .catch に届く)。
+    expect(countCommands(ddbSend.mock.calls, "PutCommand")).toBe(0);
   });
 
   it("should skip scoring for events with scoringLocked=true (#558 fail-closed)", async () => {

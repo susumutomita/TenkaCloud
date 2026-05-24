@@ -56,11 +56,16 @@ export interface ScoreEventItem {
 
 /**
  * 採点イベントを 1 行 PutItem する。HealthCheck (uptime / attack-detected) と
- * submit-flag (flag) から呼ばれるので shared/ に置く。書き込み失敗は親 score 加算と
- * 整合性が崩れるが、caller が catch して log のみ残す方針 (= MVP は best-effort)。
+ * submit-flag (flag) / reveal-hint (hint) / generic-scoring から呼ばれるので shared/ に置く。
+ *
+ * #745 / #1243 / #1244: 書き込み失敗は throw する。 旧来の caller は console.warn で握り潰して
+ * いたが、 親 score 加算と event 履歴の不整合 (= 「-10 pt なのに履歴 0 件」 / 「+100 pt なのに
+ * timeline 0 件」) の温床になり、 portal の表示矛盾を生んでいた。 silent data loss より
+ * visible failure を優先 (= CloudWatch + retry に乗せる)。
  *
  * `parent` から jobId / teamId / eventId / expiresAt を継承して event row を組む。
- * `result` は source に応じて自動決定 (= attack-detected なら "down"、それ以外は "ok")。
+ * `result` は source に応じて自動決定 (= attack-detected なら "down"、 flag-wrong なら "wrong"、
+ * それ以外は "ok")。
  */
 export async function writeScoreEvent(
   ddb: DynamoDBDocumentClient,

@@ -169,8 +169,15 @@ async function processDeployment(
 
 /**
  * KindResult を deployment 行に書き戻す。 score 加算 / endpointsHealth 更新 / lastResult 更新 /
- * scoringState 更新 を 1 UpdateItem で atomic に行う。 score event 行 (= ulid SK の sparse row)
- * は別途 best-effort で書く。
+ * scoringState 更新 を 1 UpdateItem で atomic に行う。 続けて score event 行 (= ulid SK の sparse row)
+ * を append する。
+ *
+ * #1244: 旧実装は UpdateItem 失敗を console.warn + return で握り潰し、 さらに writeScoreEvent
+ * 失敗も warn のみで swallow していた。 結果として portal の score / timeline 不整合の温床に
+ * なっていたため、 失敗は log した上で throw する (= 1 deployment の失敗は outer の
+ * `processDeployment` `.catch` で他 deployment と隔離されるが、 CloudWatch には残り
+ * EventBridge 次 tick で retry される)。 AGENTS.md 「モック / スタブで握り潰す fallback 禁止」
+ * に整合。
  */
 async function applyKindResult(
   shared: GenericScoringSharedResources,
@@ -181,24 +188,17 @@ async function applyKindResult(
   if (!item.PK) return;
   const update = buildKindResultUpdate(result, nowIso);
 
-  try {
-    await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.deploymentsTableName,
-        Key: { PK: item.PK, SK: "META" },
-        UpdateExpression: update.expression,
-        ExpressionAttributeValues: update.values,
-      }),
-    );
-  } catch (err) {
-    console.warn(`[generic-scoring] UpdateItem failed jobId=${item.jobId}`, {
-      message: err instanceof Error ? err.message : String(err),
-    });
-    return;
-  }
+  await shared.ddb.send(
+    new UpdateCommand({
+      TableName: shared.deploymentsTableName,
+      Key: { PK: item.PK, SK: "META" },
+      UpdateExpression: update.expression,
+      ExpressionAttributeValues: update.values,
+    }),
+  );
 
-  // score event 行 (= 履歴 marker) を best-effort で append。失敗は警告 log のみ
-  // (= 採点 / 健全性 update は既に確定済、整合性より可用性優先)。
+  // score event 行 (= 履歴 marker) を append。失敗は throw して outer
+  // `processDeployment` の .catch (= 1 tick skip + warn log) に委ねる (= 次 tick で retry)。
   await appendKindScoreEvents(shared, item, result);
 }
 
@@ -240,6 +240,9 @@ async function appendKindScoreEvents(
     expiresAt: item.expiresAt ?? 0,
   };
   for (const ev of result.scoreEvents) {
+    // #1244: 失敗は log + throw。 上位 (= processDeployment の .catch) で 1 deployment 単位に
+    // 隔離されるので他 deployment の採点は止まらないが、 score event 抜けは CloudWatch に
+    // 残り、 次 tick で同 source が再評価されたときに再書き込みされる。
     try {
       await writeScoreEvent(
         shared.ddb,
@@ -250,9 +253,12 @@ async function appendKindScoreEvents(
         ev.occurredAt,
       );
     } catch (err) {
-      console.warn(`[generic-scoring] score-event write failed jobId=${item.jobId}`, {
+      console.error(`[generic-scoring] score-event write failed jobId=${item.jobId}`, {
+        source: ev.source,
+        points: ev.points,
         message: err instanceof Error ? err.message : String(err),
       });
+      throw err;
     }
   }
 }
