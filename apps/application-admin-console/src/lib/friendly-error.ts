@@ -41,7 +41,7 @@ const KNOWN_ERRORS: Readonly<Record<string, FriendlyError>> = {
     hint: "指定した Role 名が、 競技者の AWS account に存在しません",
     possibleCauses: [
       "competitor-bootstrap.yaml が deploy されていない",
-      "Role 名の入力が間違っている (= default `TenkaCloud-CompetitorDeploy-Role` か確認)",
+      "Role 名の入力が間違っている (= モーダルが提案する `TenkaCloud-{tenantId}-deploy-Role` 形式と一致するか確認)",
       "競技者が手動で Role を削除した",
     ],
   },

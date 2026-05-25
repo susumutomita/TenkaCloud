@@ -14,6 +14,7 @@ import { FriendlyErrorAlert } from "../../components/FriendlyErrorAlert";
 import type { AppConfig } from "../../config";
 import { useT } from "../../i18n";
 import { type FriendlyError, toFriendlyError } from "../../lib/friendly-error";
+import { defaultCompetitorRoleName } from "../../lib/resource-naming";
 
 const ACCOUNT_ID_RE = /^\d{12}$/;
 const ALIAS_MAX = 120;
@@ -28,10 +29,13 @@ interface AddAccountModalProps {
 export function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAccountModalProps) {
   const apiClient = useApiClient(config);
   const t = useT();
+  // Issue #1314: Plane (= tenantId) scope を含む unique 名を default で提案する。
+  // 同一競技者 AWS account を複数 Plane に並列接続できる (= 名前衝突しない)。
+  const suggestedRoleName = defaultCompetitorRoleName({ tenantId: config.tenantId });
   const [awsAccountId, setAwsAccountId] = useState("");
   const [alias, setAlias] = useState("");
   const [region, setRegion] = useState("ap-northeast-1");
-  const [competitorRoleName, setCompetitorRoleName] = useState("TenkaCloud-CompetitorDeploy-Role");
+  const [competitorRoleName, setCompetitorRoleName] = useState(suggestedRoleName);
   const [inFlight, setInFlight] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
 
@@ -39,7 +43,7 @@ export function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAc
     setAwsAccountId("");
     setAlias("");
     setRegion("ap-northeast-1");
-    setCompetitorRoleName("TenkaCloud-CompetitorDeploy-Role");
+    setCompetitorRoleName(suggestedRoleName);
     setError(null);
   };
 

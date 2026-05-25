@@ -43,13 +43,13 @@ export const CreateCompetitorAccountRequestSchema = z
      */
     region: z.string().regex(AWS_REGION_RE, "AWS region 形式が不正です").default("ap-northeast-1"),
     /**
-     * 競技者側 bootstrap が作る IAM Role 名。`competitor-bootstrap.yaml` の default は
-     * `TenkaCloud-CompetitorDeploy-Role`。tenant ごとに変える運用も許す。
+     * 競技者側 bootstrap が作る IAM Role 名。 Issue #1314 以降、 frontend は
+     * `defaultCompetitorRoleName({ tenantId })` で Plane scope の unique 名 (例
+     * `TenkaCloud-acme-deploy-Role`) を提案する。 operator はそれを編集できるが、
+     * 固定 default を schema 側で持つと **caller の tenantId が抜けたとき暗黙に
+     * 名前衝突する** ため zod default は外す (= 呼び側で必ず明示)。
      */
-    competitorRoleName: z
-      .string()
-      .regex(IAM_ROLE_NAME_RE, "IAM Role 名の形式が不正です")
-      .default("TenkaCloud-CompetitorDeploy-Role"),
+    competitorRoleName: z.string().regex(IAM_ROLE_NAME_RE, "IAM Role 名の形式が不正です"),
     /** operator 表示用ラベル (例: `Team Acme prod`)。任意。 */
     alias: z.string().min(1).max(120).optional(),
   })
