@@ -11,7 +11,7 @@
  * auto-redirect to Cognito on mount (= no intermediate "Sign in" click).
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const beginLoginMock = vi.fn();
@@ -38,6 +38,7 @@ const config: AppConfig = {
   tenantId: "tenant-test",
   tenantName: "Shared Pooled Tenant",
   apiBaseUrl: "https://api.example.com/prod",
+  samlIdpDirectory: {},
 };
 
 function renderLogin() {
@@ -45,7 +46,7 @@ function renderLogin() {
   return render(
     <I18nProvider>
       <AuthProvider config={config}>
-        <LoginPage />
+        <LoginPage config={config} />
       </AuthProvider>
     </I18nProvider>,
   );
@@ -91,7 +92,7 @@ describe("application-admin-console LoginPage (#1329)", () => {
     expect(mailto).toHaveAttribute("href", "mailto:support@tenkacloud.cloud");
   });
 
-  it("should not re-fire beginLogin on re-render after error", async () => {
+  it("should not re-fire beginLogin on re-render after error (#1360)", async () => {
     beginLoginMock.mockRejectedValue(new Error("PKCE generation failed"));
     const { rerender } = renderLogin();
     await waitFor(() => {
@@ -100,11 +101,37 @@ describe("application-admin-console LoginPage (#1329)", () => {
     rerender(
       <I18nProvider>
         <AuthProvider config={config}>
-          <LoginPage />
+          <LoginPage config={config} />
         </AuthProvider>
       </I18nProvider>,
     );
     await new Promise((r) => setTimeout(r, 20));
     expect(beginLoginMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Issue #1340 Phase 2: SAML directory が入ると Login が email 入力 → IdP 解決 flow に切り替わる。
+
+  it("should switch to the email-driven SAML flow when samlIdpDirectory has at least one provider (#1340)", async () => {
+    beginLoginMock.mockResolvedValue(undefined);
+    const samlConfig: AppConfig = {
+      ...config,
+      samlIdpDirectory: { "acme.example": ["tenant-entra"] },
+    };
+    localStorage.setItem("tenkacloud.application-admin.locale", "ja");
+    render(
+      <I18nProvider>
+        <AuthProvider config={samlConfig}>
+          <LoginPage config={samlConfig} />
+        </AuthProvider>
+      </I18nProvider>,
+    );
+    // SAML 有効時は email FormField が出る (= 旧 1-step button flow ではない / auto-redirect も走らない)。
+    const emailInput = await screen.findByPlaceholderText("you@example.com");
+    fireEvent.change(emailInput, { target: { value: "alice@acme.example" } });
+    // Cloudscape Input の onChange shape との互換のため value 反映だけ確認 → submit。
+    fireEvent.submit(emailInput.closest("form")!);
+    await waitFor(() => {
+      expect(beginLoginMock).toHaveBeenCalledWith(samlConfig, { identityProvider: "tenant-entra" });
+    });
   });
 });

@@ -187,4 +187,58 @@ describe("loadConfig", () => {
       expect(config.scope).toBe("openid email profile");
     });
   });
+
+  // Issue #1340 Phase 2: per-tenant SAML directory が runtime-config から取り出されること。
+  describe("samlIdpDirectory (#1340)", () => {
+    it("should be empty object when runtime-config does not include the field (= legacy stacks)", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              cognitoDomain: "https://prod-tenant.auth.ap-northeast-1.amazoncognito.com",
+              userClientId: "x",
+              tenantId: "t",
+              tenantName: "n",
+              apiUrl: "https://a.example.com",
+            }),
+            { status: 200 },
+          ),
+        ),
+      );
+      const config = await loadConfig(env);
+      expect(config.samlIdpDirectory).toEqual({});
+    });
+
+    it("should pass through runtime-config.samlIdpDirectory verbatim", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              cognitoDomain: "https://prod-tenant.auth.ap-northeast-1.amazoncognito.com",
+              userClientId: "x",
+              tenantId: "t",
+              tenantName: "n",
+              apiUrl: "https://a.example.com",
+              samlIdpDirectory: {
+                "acme.example": ["tenant-entra"],
+              },
+            }),
+            { status: 200 },
+          ),
+        ),
+      );
+      const config = await loadConfig(env);
+      expect(config.samlIdpDirectory).toEqual({
+        "acme.example": ["tenant-entra"],
+      });
+    });
+
+    it("should default to empty object in dev fallback (= no /runtime-config.json available)", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+      const config = await loadConfig(env);
+      expect(config.samlIdpDirectory).toEqual({});
+    });
+  });
 });

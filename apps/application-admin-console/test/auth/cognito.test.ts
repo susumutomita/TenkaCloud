@@ -17,6 +17,7 @@ const config: AppConfig = {
   tenantId: "tenant-test",
   tenantName: "テスト事業部",
   apiBaseUrl: "https://api.example.com/prod",
+  samlIdpDirectory: {},
 };
 
 describe("loadStoredTokens", () => {

@@ -91,6 +91,9 @@ const liteStack = new TenkaCloudLiteStack(app, stackId("tenkacloud-lite"), {
   ...(problemDeployBackend.participantPortalUrl
     ? { participantPortalUrl: problemDeployBackend.participantPortalUrl }
     : {}),
+  // Issue #1340 Phase 2: opt-in per-tenant SAML (= 未設定なら空配列で no-op)。
+  samlIdps: config.tenantSamlIdps,
+  samlAdminAllowlist: config.tenantSamlAdminAllowlist,
 });
 cdk.Aspects.of(liteStack).add(
   new DynamoDbLowCapacity(config.dynamoReadCapacity, config.dynamoWriteCapacity),

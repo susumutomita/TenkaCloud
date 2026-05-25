@@ -70,6 +70,23 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
    * 未指定なら 90 日 default (OSS / self-hosted)。
    */
   readonly auditRetentionDays?: number;
+  /**
+   * Issue #1340 Phase 2: per-tenant sign-in audit を attach する tenant 群。 各エントリは
+   *   - `tenantId` (= `TENANT#<tenantId>` partition)
+   *   - `userPoolId` (= CloudTrail event filter で使う文字列 ID、 cross-stack ref で TenantTemplateStack
+   *     / TenkaCloudLiteStack から渡す)
+   * を持つ。 空 / 未指定なら audit Lambda は作らない (= 後方互換、 Phase 1 のみ動作)。
+   *
+   * 同 stack に集約する理由: `adminAuditLogTable` は ProblemDeployBackendStack 所有で、 cross-stack
+   * ref として AdminConsoleInsightStack に流れている。 tenant 側 stack から adminAuditLogTable を
+   * 直接読みに行くと逆向きの cross-stack ref が増え cyclic 化する。 AdminConsoleInsightStack は
+   * Control Plane (Phase 1 audit Lambda) + Application Plane (Phase 2 audit Lambda) の両方を
+   * 同じ table に書き込ませる **観測ハブ** として位置付ける (= ADR-011 D6 の admin insight 集約)。
+   */
+  readonly tenantSignInAudit?: ReadonlyArray<{
+    readonly tenantId: string;
+    readonly userPoolId: string;
+  }>;
 }
 
 /**
@@ -258,7 +275,25 @@ export class AdminConsoleInsightStack extends cdk.Stack {
         userPoolId: props.cognitoUserPool.userPoolId,
         adminAuditLogTable: props.adminAuditLogTable,
         environmentName: props.environmentName,
+        // Phase 1 は tenantId 未指定 → handler が SYSTEM にフォールバック (= 既存挙動)。
       });
+    }
+
+    // Issue #1340 Phase 2: per-tenant SAML sign-in events も同 audit log table に書く。
+    // `tenantSignInAudit` は 0..N tenant の (tenantId, userPoolId) pair を持ち、 tenant ごとに
+    // CloudTrail Cognito event filter + Lambda + EventBridge Rule を 1 セット立てる。
+    // 各 Lambda には AUDIT_TENANT_ID env を渡し、 `TENANT#<tenantId>` partition に書く。
+    if (props.adminAuditLogTable && props.environmentName && props.tenantSignInAudit) {
+      for (const tenant of props.tenantSignInAudit) {
+        // construct id は tenantId を含めて衝突回避 (= ULID / "pooled" / "local" のいずれも CFn 識別子に使える)。
+        // `.` / 非英数 はサニタイズ済の前提 (= ULID / 既知 reserved tenantId 規約)。
+        new SignInAuditLambda(this, `SignInAudit-${tenant.tenantId}`, {
+          userPoolId: tenant.userPoolId,
+          adminAuditLogTable: props.adminAuditLogTable,
+          environmentName: props.environmentName,
+          auditTenantId: tenant.tenantId,
+        });
+      }
     }
 
     this.apiUrl = httpApi.apiEndpoint;

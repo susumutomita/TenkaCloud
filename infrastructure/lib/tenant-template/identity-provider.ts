@@ -114,6 +114,13 @@ export class IdentityProvider extends Construct {
    */
   public readonly cognitoDomainUrl: string;
   public readonly identityDetails: IdentityDetails;
+  /**
+   * Issue #1340 Phase 2: SAML IdP attach 用に CfnUserPoolClient (L1) を expose する。
+   * `attachTenantSamlIdentityProviders` が SupportedIdentityProviders に追加するため
+   * (= L2 `UserPoolClient` は addPropertyOverride を持たない)。 L2 から `node.defaultChild`
+   * で取り出した escape hatch。 SAML 未設定なら本 ref は使われない (= NO-OP)。
+   */
+  public readonly cfnTenantUserPoolClient: aws_cognito.CfnUserPoolClient;
 
   constructor(scope: Construct, id: string, props: IdentityProviderProps) {
     super(scope, id);
@@ -269,6 +276,11 @@ export class IdentityProvider extends Construct {
         ],
       },
     });
+    // Issue #1340 Phase 2: SAML IdP の SupportedIdentityProviders 上書きで L1 escape hatch を使う。
+    // L2 `UserPoolClient.node.defaultChild` は L1 `CfnUserPoolClient` を返す (CDK 仕様)。
+    this.cfnTenantUserPoolClient = this.tenantUserPoolClient.node
+      .defaultChild as aws_cognito.CfnUserPoolClient;
+
     this.identityDetails = {
       name: "Cognito",
       details: {

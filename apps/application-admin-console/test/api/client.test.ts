@@ -10,6 +10,7 @@ const config: AppConfig = {
   tenantId: "t-1",
   tenantName: "T1",
   apiBaseUrl: "https://api.example.com/prod",
+  samlIdpDirectory: {},
 };
 
 describe("createApiClient", () => {

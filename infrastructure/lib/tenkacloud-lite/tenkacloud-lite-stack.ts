@@ -3,6 +3,7 @@ import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { Construct } from "constructs";
 import { buildAppPlaneCore } from "../app-plane-core/index.js";
 import { SamlIdpsTable } from "../problem-deploy/saml-idps-table.js";
+import type { SamlIdpConfig } from "../tenant-template/saml-identity-providers.js";
 
 /**
  * Issue #778 ADR-016 Phase 3: TenkaCloud Lite mode の専用 stack。
@@ -41,7 +42,17 @@ export interface TenkaCloudLiteStackProps extends StackProps {
    * `buildAppPlaneCore` 経由で `ApplicationAdminConsoleHosting` の runtime-config に焼く。
    */
   readonly competitorBootstrapTemplateUrl: string;
-  // Issue #1066: SAML IdP 連携は廃止 (= MFA 必須化 #1035 で代替)。
+  /**
+   * Issue #1340 Phase 2: opt-in per-tenant SAML IdP 群 (= env `TENANT_SAML_IDPS` を parse 済)。
+   * Lite mode は単一 tenant の 1 UserPool 固定なので、 silo / per-tenant deploy と同じ扱いで
+   * attach できる (= pooled 経路は持たない)。 未指定 / 空配列なら従来 Cognito local auth + MFA のみ。
+   */
+  readonly samlIdps?: readonly SamlIdpConfig[];
+  /**
+   * Issue #1340 Phase 2: federated 管理者 allowlist (`provider/email`)。 `samlIdps` 設定時のみ意味を持つ。
+   * 空配列 = federated sign-in 全拒否 (fail-safe)。
+   */
+  readonly samlAdminAllowlist?: readonly string[];
 }
 
 /**
@@ -61,6 +72,17 @@ export class TenkaCloudLiteStack extends Stack {
   public readonly cognitoDomainUrl: string;
   /** tenant API の REST URL。 frontend が deploy / event CRUD に使う。 */
   public readonly tenantApiUrl: string;
+  /**
+   * Issue #1340 Phase 2: tenant UserPool ID (= 文字列、 sign-in audit Lambda の EventBridge
+   * rule filter に渡す cross-stack ref 用)。 Lite mode で SAML attach した tenant UserPool への
+   * sign-in event を別 stack が listen するためのフック。
+   */
+  public readonly tenantUserPoolId: string;
+  /**
+   * Issue #1340 Phase 2: per-tenant SAML HRD directory。 SAML 未設定なら空 object。
+   * 既に runtime-config.json に焼かれているため stack 外公開は cross-stack 配線テスト用。
+   */
+  public readonly samlIdpDirectory: Readonly<Record<string, readonly string[]>>;
 
   constructor(scope: Construct, id: string, props: TenkaCloudLiteStackProps) {
     super(scope, id, props);
@@ -90,6 +112,10 @@ export class TenkaCloudLiteStack extends Stack {
       samlIdpsTable: samlIdps.table,
       participantPortalUrl: props.participantPortalUrl,
       competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl,
+      // Issue #1340 Phase 2: env-driven SAML attach (Lite mode は単一 tenant なので
+      // pooled / silo の判定不要、 そのまま渡す)。 未指定なら no-op。
+      samlIdps: props.samlIdps ?? [],
+      samlAdminAllowlist: props.samlAdminAllowlist ?? [],
       // Issue #1327: Lite mode は 1 tenant 専用 (tenantId="local") なので全 user が
       // 暗黙に TenantAdmin。 Cognito Pre-Token Generation trigger で JWT 発行時に
       // `custom:userRole=TenantAdmin` + `custom:tenantId=local` を注入し、
@@ -110,6 +136,8 @@ export class TenkaCloudLiteStack extends Stack {
     this.applicationAdminConsoleUrl = appPlane.applicationAdminConsoleUrl;
     this.cognitoDomainUrl = appPlane.identityProvider.cognitoDomainUrl;
     this.tenantApiUrl = appPlane.apiGateway.restApi.url;
+    this.tenantUserPoolId = appPlane.identityProvider.tenantUserPool.userPoolId;
+    this.samlIdpDirectory = appPlane.samlIdpDirectory;
 
     new CfnOutput(this, "ApplicationAdminConsoleUrl", {
       value: this.applicationAdminConsoleUrl,

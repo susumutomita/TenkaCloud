@@ -68,6 +68,14 @@ interface RuntimeConfigProps {
    * "silo" は PLATINUM tier の独立 UserPool。 SAML SSO 設定が安全に有効化できる。
    */
   readonly isolation: "pooled" | "silo";
+  /**
+   * Issue #1340 Phase 2: SAML HRD directory (= email ドメイン → 接続済み SAML provider 名)。
+   * application-admin-console の Login 画面が email から候補 IdP を解決して
+   * `identity_provider=` を組み立てる public metadata。 SAML 未設定なら空 object `{}`
+   * (= 全 email が Cognito local auth に流れる、 既存動作互換)。 未認証 Login が読む値なので
+   * 非秘匿で runtime-config.json に書き込んで OK。
+   */
+  readonly samlIdpDirectory: Readonly<Record<string, readonly string[]>>;
 }
 
 /**
@@ -180,13 +188,17 @@ export class ApplicationAdminConsoleHosting extends Construct {
    *   - participantPortalUrl: 競技者向け Portal の CloudFront URL (sparse、未設定なら field 自体を出さない)
    */
   deployRuntimeConfig(props: RuntimeConfigProps): void {
-    const data: Record<string, string> = {
+    const data: Record<string, unknown> = {
       cognitoDomain: props.cognitoDomain,
       userClientId: props.cognitoClientId,
       tenantId: props.tenantId,
       tenantName: props.tenantName,
       apiUrl: props.apiUrl.replace(/\/$/, ""),
       isolation: props.isolation,
+      // Issue #1340 Phase 2: SAML 未設定なら空 object `{}` で焼く (= frontend は loadConfig 側で
+      // 空 fallback 済、 値の有無で動作分岐させる必要は無いが空でも 「key 自体は存在する」 が
+      // 望ましい (= future-proof の defensive defaults))。
+      samlIdpDirectory: props.samlIdpDirectory,
       ...(props.participantPortalUrl ? { participantPortalUrl: props.participantPortalUrl } : {}),
       ...(props.competitorBootstrapTemplateUrl
         ? { competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl }

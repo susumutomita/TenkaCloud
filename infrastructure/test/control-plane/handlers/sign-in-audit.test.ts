@@ -151,4 +151,44 @@ describe("control-plane sign-in audit handler (#1335)", () => {
     ).resolves.toBeUndefined();
     expect(consoleSpy).toHaveBeenCalled();
   });
+
+  // Issue #1340 Phase 2: per-tenant 配線では AUDIT_TENANT_ID env で partition を切り替える。
+  // Phase 1 (env 未指定) は SYSTEM のまま、 Phase 2 (env=<tenantId>) は writeAuditEvent に
+  // tenantId が伝わって `TENANT#<tenantId>` partition に書かれる動作を pin する。
+
+  it("should fall back to tenantId='SYSTEM' when AUDIT_TENANT_ID env is unset (Phase 1 compat)", async () => {
+    delete process.env.AUDIT_TENANT_ID;
+    const spy = vi.spyOn(auditLog, "writeAuditEvent").mockResolvedValue(true);
+    const { handler } = await importHandler();
+    await handler(
+      buildCloudTrailEvent({
+        eventName: "InitiateAuth",
+        responseElements: {
+          authenticationResult: { IdToken: "..." },
+          user: { Username: "u@example.com" },
+        },
+      }),
+    );
+    expect(spy.mock.calls[0]?.[0]?.tenantId).toBe("SYSTEM");
+  });
+
+  it("should write to tenantId=<value> when AUDIT_TENANT_ID env is set (= per-tenant Phase 2 wiring)", async () => {
+    process.env.AUDIT_TENANT_ID = "tenant-acme-1";
+    try {
+      const spy = vi.spyOn(auditLog, "writeAuditEvent").mockResolvedValue(true);
+      const { handler } = await importHandler();
+      await handler(
+        buildCloudTrailEvent({
+          eventName: "InitiateAuth",
+          responseElements: {
+            authenticationResult: { IdToken: "..." },
+            user: { Username: "alice@acme.example" },
+          },
+        }),
+      );
+      expect(spy.mock.calls[0]?.[0]?.tenantId).toBe("tenant-acme-1");
+    } finally {
+      delete process.env.AUDIT_TENANT_ID;
+    }
+  });
 });

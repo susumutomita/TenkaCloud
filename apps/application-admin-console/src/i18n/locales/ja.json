@@ -39,7 +39,10 @@
     "footer_privacy": "プライバシーポリシー",
     "footer_terms": "利用規約",
     "footer_tokushoho": "特定商取引法に基づく表記",
-    "language_switcher_aria": "言語切替 / Language"
+    "language_switcher_aria": "言語切替 / Language",
+    "saml_email_label": "会社のメールアドレス",
+    "saml_pick_idp": "このドメインには複数の ID プロバイダが接続されています。サインインする IdP を選択してください。",
+    "saml_back_to_email": "別のメールアドレスを使用する"
   },
   "home": {
     "header_description": "TenkaCloud Battle / Challenge — テナント管理コンソール",
