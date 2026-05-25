@@ -29,7 +29,7 @@
     "@aws-sdk/client-ssm": "^3.1048.0",
     "@aws-sdk/client-sts": "^3.1047.0",
     "@aws-sdk/lib-dynamodb": "^3.1048.0",
-    "@aws-sdk/s3-request-presigner": "^3.1048.0",
+    "@aws-sdk/s3-request-presigner": "^3.1053.0",
     "@biomejs/biome": "^2.4.15",
     "@types/aws-lambda": "^8.10.161",
     "@types/node": "^24.12.4",
