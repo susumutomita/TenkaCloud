@@ -11,6 +11,7 @@ import { DeploymentsPage } from "./pages/Deployments";
 import { EventCreatePage } from "./pages/EventCreate";
 import { EventDetailPage } from "./pages/EventDetail";
 import { EventListPage } from "./pages/EventList";
+import { EventReportPage } from "./pages/EventReport";
 import { HomePage } from "./pages/Home";
 import { IdentityProvidersPage } from "./pages/IdentityProviders";
 import { LoginPage } from "./pages/Login";
@@ -56,6 +57,11 @@ export function App({ config }: { config: AppConfig }) {
         <Route path="/events" element={guarded(<EventListPage config={config} />)} />
         <Route path="/events/new" element={guarded(<EventCreatePage config={config} />)} />
         <Route path="/events/:eventId" element={guarded(<EventDetailPage config={config} />)} />
+        {/* PR-1191: print-friendly Event Report deliverable for Hosted / Annual Arena. */}
+        <Route
+          path="/events/:eventId/report"
+          element={guarded(<EventReportPage config={config} />)}
+        />
         {/* Issue #1292: Tenant Admin 向け audit log view (= 自テナント scope only) */}
         <Route path="/audit-log" element={guarded(<AuditLogPage config={config} />)} />
         {/* Issue #1294: Tenant SAML SSO IdP CRUD (silo tier only) */}
