@@ -81,12 +81,20 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("EventDetailPage #708 Force ARCHIVED rescue", () => {
+  // #1318: tabs 構造化により Force ARCHIVED は Operations tab に移動。
+  // status=TEARDOWN の Event 詳細を開いて Operations tab を選択する helper。
+  async function openOperationsTab() {
+    const opsTab = await screen.findByRole("tab", { name: /Operations|運用/ });
+    await userEvent.click(opsTab);
+  }
+
   it("should show Force ARCHIVED button + rescue Alert when Event is in TEARDOWN", async () => {
     mocks.getEvent.mockResolvedValueOnce(baseDetail);
     renderPage();
     await waitFor(() =>
       expect(screen.getAllByText(/Stuck Teardown Event/).length).toBeGreaterThan(0),
     );
+    await openOperationsTab();
     expect(await screen.findByTestId("force-archive-button")).toBeInTheDocument();
     expect(screen.getByText(/削除が進まない場合/)).toBeInTheDocument();
   });
@@ -97,6 +105,7 @@ describe("EventDetailPage #708 Force ARCHIVED rescue", () => {
     await waitFor(() =>
       expect(screen.getAllByText(/Stuck Teardown Event/).length).toBeGreaterThan(0),
     );
+    await openOperationsTab();
     expect(screen.queryByTestId("force-archive-button")).not.toBeInTheDocument();
   });
 
@@ -104,6 +113,7 @@ describe("EventDetailPage #708 Force ARCHIVED rescue", () => {
     mocks.getEvent.mockResolvedValue(baseDetail);
     mocks.archiveEvent.mockResolvedValue({ ok: true, archivedAt: "2026-05-13T00:00:00.000Z" });
     renderPage();
+    await openOperationsTab();
     const trigger = await screen.findByTestId("force-archive-button");
     await userEvent.click(trigger);
     const confirm = await screen.findByTestId("force-archive-confirm");

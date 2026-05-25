@@ -305,7 +305,14 @@
     "modal_schedule_confirm_label": "Set",
     "modal_endsat_body": "When the specified time passes, HealthCheck stops scoring. Unlike the \"End Event\" button (immediate), the status stays READY (operator does not need to press \"End Event\" manually). The local browser time you enter is converted to UTC (minute precision).",
     "modal_endsat_starts_at_hint": "Start time",
-    "notification_sent_body": "Will appear on the competitors' Participant Portal /notifications within 60 seconds."
+    "notification_sent_body": "Will appear on the competitors' Participant Portal /notifications within 60 seconds.",
+    "tab_overview": "Overview",
+    "tab_schedule": "Schedule",
+    "tab_problems": "Problems",
+    "tab_teams": "Teams",
+    "tab_scoreboard": "Scoreboard",
+    "tab_notifications": "Notifications",
+    "tab_operations": "Operations"
   },
   "send_notification": {
     "header": "Send notification",

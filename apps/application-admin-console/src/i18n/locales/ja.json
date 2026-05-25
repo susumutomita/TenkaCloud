@@ -305,7 +305,14 @@
     "modal_schedule_confirm_label": "設定",
     "modal_endsat_body": "指定時刻を超えると HealthCheck が採点を停止します。 「Event を終了」 button (= 即時) と違い、 status は READY のまま (= operator は手動で 「Event を終了」 を押す必要なし)。 ブラウザのローカル時刻で入力した値を UTC に変換します (分精度)。",
     "modal_endsat_starts_at_hint": "開始時刻",
-    "notification_sent_body": "競技者の Participant Portal /notifications で 60 秒以内に表示されます。"
+    "notification_sent_body": "競技者の Participant Portal /notifications で 60 秒以内に表示されます。",
+    "tab_overview": "概要",
+    "tab_schedule": "スケジュール",
+    "tab_problems": "問題",
+    "tab_teams": "チーム",
+    "tab_scoreboard": "スコアボード",
+    "tab_notifications": "通知",
+    "tab_operations": "運用"
   },
   "send_notification": {
     "header": "通知を送る",
