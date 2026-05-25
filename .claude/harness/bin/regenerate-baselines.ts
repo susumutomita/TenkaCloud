@@ -20,6 +20,7 @@ import { adrSelfContained } from "../src/rules/adr-self-contained.ts";
 import { fileTooLarge } from "../src/rules/file-too-large.ts";
 import { handlerNoDirectSdkImport } from "../src/rules/handler-no-direct-sdk-import.ts";
 import { iamWildcardNeedsJustify } from "../src/rules/iam-wildcard-needs-justify.ts";
+import { lambdaEnvSize } from "../src/rules/lambda-env-size.ts";
 import { listAllTrackedFiles } from "../src/utils/staged-files.ts";
 
 const RULES = {
@@ -28,6 +29,7 @@ const RULES = {
   "adr-must-be-html": adrMustBeHtml,
   "adr-self-contained": adrSelfContained,
   "iam-wildcard-needs-justify": iamWildcardNeedsJustify,
+  "lambda-env-size": lambdaEnvSize,
 } as const;
 
 const args = process.argv.slice(2);

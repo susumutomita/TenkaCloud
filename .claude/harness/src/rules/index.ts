@@ -4,6 +4,7 @@ import { fileTooLarge } from "./file-too-large.ts";
 import { handlerNoDirectSdkImport } from "./handler-no-direct-sdk-import.ts";
 import { handlerTenantIsolation } from "./handler-tenant-isolation.ts";
 import { iamWildcardNeedsJustify } from "./iam-wildcard-needs-justify.ts";
+import { lambdaEnvSize } from "./lambda-env-size.ts";
 import { noConflictMarkers } from "./no-conflict-markers.ts";
 
 export const architectureRules = [
@@ -17,4 +18,6 @@ export const architectureRules = [
   handlerTenantIsolation,
   // feedback_pull_main_before_task: PR の conflict を防ぐ第一線。 commit 内の marker 検知
   noConflictMarkers,
+  // Issue #1309 / Lambda env 4KB hard limit 再発防止 (= #1308 root cause)
+  lambdaEnvSize,
 ] as const;

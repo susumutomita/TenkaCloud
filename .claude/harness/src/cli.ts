@@ -7,6 +7,7 @@ import { fileTooLarge } from "./rules/file-too-large.ts";
 import { handlerNoDirectSdkImport } from "./rules/handler-no-direct-sdk-import.ts";
 import { handlerTenantIsolation } from "./rules/handler-tenant-isolation.ts";
 import { iamWildcardNeedsJustify } from "./rules/iam-wildcard-needs-justify.ts";
+import { lambdaEnvSize } from "./rules/lambda-env-size.ts";
 import type { Finding, Rule, Severity } from "./types.ts";
 import { listAllTrackedFiles, listStagedFiles } from "./utils/staged-files.ts";
 
@@ -30,6 +31,8 @@ const ALL_RULES: readonly Rule[] = [
   handlerNoDirectSdkImport,
   // Issue #997 / tenant 分離 audit
   handlerTenantIsolation,
+  // Issue #1309 / Lambda env 4KB hard limit 再発防止 (= #1308 root cause)
+  lambdaEnvSize,
 ];
 
 const SEVERITY_RANK: Record<Severity, number> = {
@@ -78,6 +81,7 @@ Rules:
   iam-wildcard-needs-justify    Wildcard IAM policies need an inline justification comment.
   file-too-large                Single .ts/.tsx files must not exceed 500 (warn) / 800 (error) lines.
   handler-no-direct-sdk-import  handlers/<x>/index.ts must not import @aws-sdk/client-* directly.
+  lambda-env-size               AWS::Lambda::Function env total must stay under 3KB (4KB hard limit - 1KB margin).
 
 Baselines:
   Each rule may have a baseline file at .claude/harness/baselines/<rule-id>.json.
