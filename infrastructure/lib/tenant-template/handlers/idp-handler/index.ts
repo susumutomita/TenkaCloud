@@ -53,9 +53,41 @@ const cognito = new CognitoIdentityProviderClient({});
 const TABLE_NAME = requireEnv("SAML_IDPS_TABLE_NAME");
 const USER_POOL_ID = requireEnv("TENANT_USER_POOL_ID");
 
+/**
+ * Defense-in-depth tier guard.
+ *
+ * The UI hides IdP CRUD for pooled-tier tenants, but a TenantAdmin with a
+ * valid JWT could bypass the SPA and call this API directly. In a pooled
+ * UserPool that would mutate the SHARED UserPool's federated IdPs — a
+ * cross-tenant data-plane impact.
+ *
+ * The CDK wiring deploys this Lambda only for silo (PLATINUM) tenants and
+ * sets `IDP_TIER_GUARD=silo` on that Lambda. If the env is absent or any
+ * other value (= the Lambda was wired into a pooled deployment by mistake),
+ * the handler returns 503 for every request — fail-closed at runtime even
+ * if the CDK side regresses.
+ *
+ * [USER-REVIEW]: CDK must set `IDP_TIER_GUARD=silo` only on silo-tenant
+ * Lambdas. Pooled deployments should not have this handler at all; the env
+ * check is the second line of defense.
+ */
+const IDP_TIER_GUARD = process.env.IDP_TIER_GUARD;
+
 const app = buildIdpApp({
   pathPrefix: "/tenant/idp",
   resolveScope: (c: Context): IdpScope | { readonly forbidden: Response } => {
+    if (IDP_TIER_GUARD !== "silo") {
+      return {
+        forbidden: c.json(
+          {
+            error: "tenant_tier_not_silo",
+            message:
+              "Per-tenant SAML IdP CRUD requires a silo UserPool (PLATINUM tier). Contact support to upgrade.",
+          },
+          StatusCodes.SERVICE_UNAVAILABLE,
+        ),
+      };
+    }
     if (!isTenantAdmin(c)) {
       return {
         forbidden: c.json({ error: "forbidden" }, StatusCodes.FORBIDDEN),
