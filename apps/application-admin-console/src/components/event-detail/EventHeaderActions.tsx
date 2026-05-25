@@ -1,7 +1,9 @@
 import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import { useNavigate } from "react-router";
 import type { ApiClient } from "../../api/client";
 import type { BulkDeployBody, EventDetail } from "../../api/events-client";
+import { isReportReady } from "../../lib/event-report-stats";
 import type { WizardState } from "../../lib/event-wizard";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
@@ -39,6 +41,7 @@ export function EventHeaderActions({
   readonly t: Translate;
   readonly wizard: WizardState | null;
 }) {
+  const navigate = useNavigate();
   return (
     <SpaceBetween direction="horizontal" size="xs">
       <Button onClick={onBack}>{t("event_detail.back_to_list")}</Button>
@@ -111,6 +114,11 @@ export function EventHeaderActions({
       >
         {t("event_detail.delete_button")}
       </Button>
+      {isReportReady(detail) && detail && (
+        <Button iconName="file" onClick={() => navigate(`/events/${detail.eventId}/report`)}>
+          {t("event_detail.print_report")}
+        </Button>
+      )}
     </SpaceBetween>
   );
 }
