@@ -87,7 +87,17 @@ async function openEndsAtModal() {
   await waitFor(() =>
     expect(screen.getAllByText(/Schedule Validation Event/).length).toBeGreaterThan(0),
   );
-  await userEvent.click(screen.getByRole("button", { name: "日時を指定して終了" }));
+  // #1318: tabs 構造化により 競技スケジュール section は Schedule tab に移動。
+  const scheduleTab = await screen.findByRole("tab", { name: /Schedule|スケジュール/ });
+  await userEvent.click(scheduleTab);
+  // Cloudscape Tabs は active tab の content のみ描画する (lazy)。 tab 切替後に button が
+  // mount されるまで wait する。
+  const pickButton = await screen.findByRole(
+    "button",
+    { name: "日時を指定して終了" },
+    { timeout: 4000 },
+  );
+  await userEvent.click(pickButton);
   return screen.getByRole("dialog", { name: "競技終了日時を指定 (予約)" });
 }
 
@@ -104,11 +114,15 @@ beforeEach(() => {
   mocks.getEvent.mockResolvedValue(baseDetail);
   mocks.setEventSchedule.mockResolvedValue({ endsAt: "2026-05-14T11:00:00.000Z" });
   window.localStorage.setItem("tenkacloud.application-admin.locale", "ja");
+  // #1318: URL hash の リーク防止 (tabs.test 等が hash を書き換える可能性)
+  window.history.replaceState(null, "", "/");
 });
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("EventDetailPage #741 end-time reservation validation", () => {
+  // #1318: tabs 切替 + modal 起動 + 入力 + 検証 を 1 テスト内で行うため、 並列実行時の負荷を考慮し
+  // 既定の 5000ms より長めの timeout を設定 (= 機能フローは同じ)。
   it("should show errorText and disable Submit button when end time is at or before start time", async () => {
     const dialog = await openEndsAtModal();
     await fillEndsAt(dialog, "2026-05-14T09:00:00.000Z");
@@ -119,7 +133,7 @@ describe("EventDetailPage #741 end-time reservation validation", () => {
     const submit = within(dialog).getByRole("button", { name: "設定" });
     expect(submit).toBeDisabled();
     expect(mocks.setEventSchedule).not.toHaveBeenCalled();
-  });
+  }, 15000);
 
   it("should enable Submit button and call schedule API when end time is after start time", async () => {
     const dialog = await openEndsAtModal();
@@ -133,5 +147,5 @@ describe("EventDetailPage #741 end-time reservation validation", () => {
     expect(mocks.setEventSchedule).toHaveBeenCalledWith(expect.anything(), EVENT_ID, {
       endsAt: new Date("2026-05-14T11:00:00.000Z").toISOString(),
     });
-  });
+  }, 15000);
 });

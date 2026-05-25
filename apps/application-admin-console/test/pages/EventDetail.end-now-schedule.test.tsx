@@ -83,13 +83,20 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("EventDetailPage #740 competition schedule end operations", () => {
+  // #1318: tabs 構造化により 競技スケジュール section は Schedule tab に移動。
+  async function openScheduleTab() {
+    const scheduleTab = await screen.findByRole("tab", { name: /Schedule|スケジュール/ });
+    await userEvent.click(scheduleTab);
+  }
+
   it("should call schedule API with endsAt=now when the 'End immediately' button is pressed", async () => {
     renderPage();
     await waitFor(() =>
       expect(screen.getAllByText(/Schedule Action Event/).length).toBeGreaterThan(0),
     );
+    await openScheduleTab();
 
-    await userEvent.click(screen.getByRole("button", { name: "即座に終了" }));
+    await userEvent.click(await screen.findByRole("button", { name: "即座に終了" }));
 
     await waitFor(() => expect(mocks.setEventSchedule).toHaveBeenCalled());
     expect(mocks.setEventSchedule).toHaveBeenCalledWith(expect.anything(), EVENT_ID, {
@@ -102,8 +109,9 @@ describe("EventDetailPage #740 competition schedule end operations", () => {
     await waitFor(() =>
       expect(screen.getAllByText(/Schedule Action Event/).length).toBeGreaterThan(0),
     );
+    await openScheduleTab();
 
     expect(screen.queryByText(/#\d{3,}/)).not.toBeInTheDocument();
-    expect(screen.getByText(/status は変えずに採点 gate を閉じます/)).toBeInTheDocument();
+    expect(await screen.findByText(/status は変えずに採点 gate を閉じます/)).toBeInTheDocument();
   });
 });

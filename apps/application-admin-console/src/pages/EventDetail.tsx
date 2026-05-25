@@ -3,26 +3,30 @@ import Box from "@cloudscape-design/components/box";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
+import Tabs from "@cloudscape-design/components/tabs";
+import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { type ApiClient, useApiClient } from "../api/client";
 import { EVENT_ID_RE, type EventDetail } from "../api/events-client";
-import { DeployProgressPanel } from "../components/event-detail/DeployProgressPanel";
 import { EventDangerZone } from "../components/event-detail/EventDangerZone";
 import { EventHeaderActions } from "../components/event-detail/EventHeaderActions";
-import { EventNotificationsPanel } from "../components/event-detail/EventNotificationsPanel";
-import { EventParticipantsPanel } from "../components/event-detail/EventParticipantsPanel";
-import { EventProblemSetPanel } from "../components/event-detail/EventProblemSetPanel";
-import { EventSchedulePanel } from "../components/event-detail/EventSchedulePanel";
-import { EventTeamsPanel } from "../components/event-detail/EventTeamsPanel";
-import { EventWizardPanel } from "../components/event-detail/EventWizardPanel";
-import { ScoringLockPanel } from "../components/event-detail/ScoringLockPanel";
-import { TeamRankingPanel } from "../components/TeamRankingPanel";
-import { TeamScoreEventsPanel } from "../components/TeamScoreEventsPanel";
 import type { AppConfig } from "../config";
 import { useEventDetail } from "../hooks/useEventDetail";
 import { useEventOperations, validateEndsAtInput } from "../hooks/useEventOperations";
 import { useT } from "../i18n";
 import { computeEventWizardState, type WizardState } from "../lib/event-wizard";
+import {
+  EVENT_TAB_IDS,
+  type EventTabId,
+  NotificationsTab,
+  OperationsTab,
+  OverviewTab,
+  ProblemsTab,
+  readTabFromHash,
+  ScheduleTab,
+  ScoreboardTab,
+  TeamsTab,
+} from "./event-detail/tabs";
 
 type EventOperations = ReturnType<typeof useEventOperations>;
 type Translate = ReturnType<typeof useT>;
@@ -60,6 +64,41 @@ function summarizeDeployments(detail: EventDetail): DeploymentCounts {
     ...counts,
     allDoneCount: counts.completeCount + counts.failedCount,
   };
+}
+
+/**
+ * Issue #1318: URL fragment (`#tab=<id>`) と active tab state を同期させる hook。
+ *
+ * - 初回 mount 時に hash から初期 tab を読む (= deep-link)
+ * - tab 切替時に hash を更新 (= shareable URL)
+ * - ブラウザの 戻る/進む (`hashchange`) で tab が追従する
+ *
+ * `history.replaceState` で hash を更新するため history entry は増えない (= 戻るボタンが
+ * 1 click で list に戻る挙動を維持)。
+ */
+function useTabFragmentSync(): readonly [EventTabId, (next: EventTabId) => void] {
+  const [activeTab, setActiveTab] = useState<EventTabId>(() => {
+    if (typeof window === "undefined") return "overview";
+    return readTabFromHash(window.location.hash);
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onHashChange = () => setActiveTab(readTabFromHash(window.location.hash));
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  const setTab = useCallback((next: EventTabId) => {
+    setActiveTab(next);
+    if (typeof window === "undefined") return;
+    // pathname + search を維持しつつ hash だけ書き換え。 overview は default なので hash を消す。
+    const base = `${window.location.pathname}${window.location.search}`;
+    const target = next === "overview" ? base : `${base}#tab=${next}`;
+    window.history.replaceState(null, "", target);
+  }, []);
+
+  return [activeTab, setTab];
 }
 
 export function EventDetailPage({ config }: { config: AppConfig }) {
@@ -181,6 +220,61 @@ function EventDetailErrorOnly({
   );
 }
 
+/**
+ * Issue #1318: tab 一覧を組み立てて Cloudscape `Tabs` に渡す。
+ *
+ * 7 tabs の content は `event-detail/tabs.tsx` に切り出した tab component に委譲。
+ * このページ component は composition (= 配線) だけに留め、 1 ファイル肥大化を防ぐ。
+ */
+function renderTabs({
+  apiClient,
+  config,
+  counts,
+  detail,
+  manualRefresh,
+  manualRefreshInFlight,
+  operations,
+  t,
+  wizard,
+}: {
+  readonly apiClient: ApiClient | null;
+  readonly config: AppConfig;
+  readonly counts: DeploymentCounts;
+  readonly detail: EventDetail;
+  readonly manualRefresh: () => void;
+  readonly manualRefreshInFlight: boolean;
+  readonly operations: EventOperations;
+  readonly t: Translate;
+  readonly wizard: WizardState;
+}) {
+  const props = {
+    apiClient,
+    config,
+    counts,
+    detail,
+    manualRefresh,
+    manualRefreshInFlight,
+    operations,
+    t,
+    wizard,
+  };
+  // EVENT_TAB_IDS の順序は workflow 順 (Overview → Schedule → ...) と同一。
+  const contentByTab = {
+    overview: <OverviewTab {...props} />,
+    schedule: <ScheduleTab {...props} />,
+    problems: <ProblemsTab {...props} />,
+    teams: <TeamsTab {...props} />,
+    scoreboard: <ScoreboardTab {...props} />,
+    notifications: <NotificationsTab {...props} />,
+    operations: <OperationsTab {...props} />,
+  } as const;
+  return EVENT_TAB_IDS.map((id) => ({
+    id,
+    label: t(`event_detail.tab_${id}`),
+    content: <SpaceBetween size="l">{contentByTab[id]}</SpaceBetween>,
+  }));
+}
+
 function EventDetailLoaded({
   apiClient,
   config,
@@ -215,6 +309,7 @@ function EventDetailLoaded({
   );
   const endsAtErrorText = endsAtValidation.errorKey ? t(endsAtValidation.errorKey) : undefined;
   const endsAtInvalid = endsAtErrorText !== undefined;
+  const [activeTab, setActiveTab] = useTabFragmentSync();
 
   return (
     <SpaceBetween size="l">
@@ -244,14 +339,6 @@ function EventDetailLoaded({
         {detail.name}
       </Header>
 
-      <EventWizardPanel
-        detail={detail}
-        forceArchiveInFlight={operations.forceArchiveInFlight}
-        onForceArchive={() => operations.setConfirmForceArchive(true)}
-        t={t}
-        wizard={wizard}
-      />
-
       {error && (
         <Alert type="error" header={t("event_detail.error_header")}>
           {error}
@@ -271,49 +358,27 @@ function EventDetailLoaded({
         </Alert>
       )}
 
-      <DeployProgressPanel
-        allDoneCount={counts.allDoneCount}
-        completeCount={counts.completeCount}
-        failedCount={counts.failedCount}
-        inFlightCount={counts.inFlightCount}
-        manualRefreshInFlight={manualRefreshInFlight}
-        onManualRefresh={() => void manualRefresh()}
-        t={t}
-        totalDeployCount={counts.totalDeployCount}
+      <Tabs
+        activeTabId={activeTab}
+        onChange={({ detail: d }) => {
+          // Cloudscape の TabChangeDetail.activeTabId は string。 既知 id にのみ反映。
+          const next = d.activeTabId;
+          if (next === "overview" || EVENT_TAB_IDS.includes(next as EventTabId)) {
+            setActiveTab(next as EventTabId);
+          }
+        }}
+        tabs={renderTabs({
+          apiClient,
+          config,
+          counts,
+          detail,
+          manualRefresh,
+          manualRefreshInFlight,
+          operations,
+          t,
+          wizard,
+        })}
       />
-
-      <ScoringLockPanel detail={detail} t={t} />
-
-      <EventSchedulePanel
-        apiClient={apiClient}
-        detail={detail}
-        endsAtInFlight={operations.endsAtInFlight}
-        freezeMinutesInFlight={operations.freezeMinutesInFlight}
-        freezeMinutesInput={operations.freezeMinutesInput}
-        onEndNowSchedule={() => void operations.handleEndNowSchedule()}
-        onOpenEndsAtModal={() => operations.setEndsAtModalOpen(true)}
-        onOpenScheduleModal={() => operations.setScheduleModalOpen(true)}
-        onSaveFreezeMinutes={() => void operations.handleSaveFreezeMinutes()}
-        onStartNow={() => void operations.handleStartNow()}
-        onUpdateFreezeMinutes={operations.setFreezeMinutesInput}
-        scheduleInFlight={operations.scheduleInFlight}
-        t={t}
-        wizard={wizard}
-      />
-
-      <EventNotificationsPanel
-        detail={detail}
-        onOpen={() => operations.setNotifyModalOpen(true)}
-        t={t}
-      />
-
-      <EventProblemSetPanel detail={detail} t={t} />
-
-      {detail?.scoreEventsByTeam && <TeamScoreEventsPanel teams={detail.scoreEventsByTeam} />}
-      {detail?.scoreEventsByTeam && <TeamRankingPanel teams={detail.scoreEventsByTeam} />}
-
-      <EventParticipantsPanel config={config} detail={detail} t={t} />
-      <EventTeamsPanel detail={detail} t={t} />
 
       <EventDangerZone
         config={config}
