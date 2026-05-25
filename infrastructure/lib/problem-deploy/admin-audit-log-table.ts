@@ -1,5 +1,5 @@
 import { RemovalPolicy } from "aws-cdk-lib";
-import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
+import { AttributeType, BillingMode, StreamViewType, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
 
 /**
@@ -23,12 +23,15 @@ import { Construct } from "constructs";
  *   - ipAddress: source IP (X-Forwarded-For)
  *   - userAgent: User-Agent header
  *   - occurredAt: ISO8601 (caller の Date.now() 由来)
- *   - ttl: 90 日後の unix timestamp (= 自動削除、 audit 要件は 90 日想定)
+ *   - ttl: env `AUDIT_RETENTION_DAYS` (= 90 default / SOC2 365) 後の unix timestamp
  *
  * provisioned 1/1 (DynamoDbLowCapacity Aspect で更に均す)。 audit write は admin 操作毎の 1 行で
  * 極低 QPS、 read は監査画面の paginate のみ。 Free Tier 25 RCU/WCU に十分収まる。
  *
  * 削除方針: RETAIN。 stack delete で audit 履歴を意図せず消さない (= 監査要件)。 必要なら手動。
+ *
+ * Stream (Issue #1341): NEW_IMAGE で audit-archive-writer Lambda が PutObject に変換し、
+ * Object Lock 付き S3 bucket に immutable archive する (= SOC2 CC6 + 7-year retention)。
  */
 export class AdminAuditLogTable extends Construct {
   public readonly table: Table;
@@ -43,8 +46,10 @@ export class AdminAuditLogTable extends Construct {
       writeCapacity: 1,
       removalPolicy: RemovalPolicy.RETAIN,
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: false },
-      // 90 日で自動削除 (= caller が `ttl` attribute に Date.now()/1000 + 90*86400 を入れる)
+      // env `AUDIT_RETENTION_DAYS` (= 90 default / SOC2 365 等) を caller が ttl に書く。
       timeToLiveAttribute: "ttl",
+      // Issue #1341: NEW_IMAGE stream を audit-archive-writer Lambda に流して S3 に長期保管する。
+      stream: StreamViewType.NEW_IMAGE,
     });
 
     // GSI1: actor 別の audit query (= 「ユーザー X が何をしたか」 を 1 引きで)
