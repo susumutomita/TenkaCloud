@@ -81,6 +81,9 @@ out
 # AWS CDK synth output
 cdk.out
 
+# AWS CDK test synth output (issue #1295: keep cdk.out* out of $TMPDIR)
+cdk.out.test/
+
 # Nuxt.js build / generate output
 .nuxt
 dist
