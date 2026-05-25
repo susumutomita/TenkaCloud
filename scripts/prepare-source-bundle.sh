@@ -91,11 +91,26 @@ mkdir -p "${STAGING}"
 trap "rm -rf '${STAGING}'" EXIT INT TERM
 echo "[prepare-source-bundle] staging at ${STAGING}..."
 
+# `cp -R` は node_modules / dist / cdk.out をまず全部コピーしてから line 114 の find
+# で削除する pattern だったため、 巨大な node_modules を copy → delete で 30-60 秒
+# ハングしているように見えた (Issue: prepare-source-bundle hang on re-run)。
+# rsync で除外パスを source 側で skip すれば copy 自体が短くなる。
+# macOS / Linux 標準 rsync で動作。
+RSYNC_EXCLUDES=(
+  --exclude=node_modules
+  --exclude=cdk.out
+  --exclude=dist
+  --exclude=.cache
+  --exclude=.env
+  --exclude=.env.local
+  --exclude=.DS_Store
+)
+
 # SBT ref-arch 互換: infrastructure → cdk リネーム
-cp -R infrastructure "${STAGING}/cdk"
-cp -R scripts "${STAGING}/scripts"
-cp -R problems "${STAGING}/problems"
-cp -R packages "${STAGING}/packages"
+rsync -a "${RSYNC_EXCLUDES[@]}" infrastructure/ "${STAGING}/cdk/"
+rsync -a "${RSYNC_EXCLUDES[@]}" scripts/ "${STAGING}/scripts/"
+rsync -a "${RSYNC_EXCLUDES[@]}" problems/ "${STAGING}/problems/"
+rsync -a "${RSYNC_EXCLUDES[@]}" packages/ "${STAGING}/packages/"
 cp .nvmrc "${STAGING}/.nvmrc"
 cp package.json "${STAGING}/package.json"
 
@@ -110,9 +125,8 @@ with open(p, 'w') as f:
     json.dump(pkg, f, indent=2)
 "
 
-# clean up
-find "${STAGING}" -type d \( -name node_modules -o -name cdk.out -o -name dist \) -prune -exec rm -rf {} +
-find "${STAGING}" -type f \( -name ".env" -o -name ".env.local" \) -delete
+# rsync の --exclude が source 側で skip 済なので、 残り find clean up は念のための
+# 二重防御 (= rsync 漏れ + apps/ サブコピー時の .DS_Store 防止)。
 find "${STAGING}" -name ".DS_Store" -delete
 
 # dist は個別 copy (= 上記 find で消されているので)

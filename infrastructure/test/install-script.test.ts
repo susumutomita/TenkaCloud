@@ -44,7 +44,11 @@ describe("scripts/install.sh (Issue #1031: single-phase deploy)", () => {
   });
 
   it("prepare-source-bundle.sh should copy the `packages` directory to the staging root (workspace:* protocol)", () => {
-    expect(prepareBundle).toContain(`cp -R packages "\${STAGING}/packages"`);
+    // Issue: prepare-source-bundle hang on re-run — switched from `cp -R` to `rsync -a` with
+    // source-side excludes (node_modules / cdk.out / dist) to avoid copy-then-delete pattern.
+    expect(prepareBundle).toContain(
+      `rsync -a "\${RSYNC_EXCLUDES[@]}" packages/ "\${STAGING}/packages/"`,
+    );
   });
 
   it("prepare-source-bundle.sh should rewrite staging package.json workspaces from `infrastructure` to `cdk`", () => {
