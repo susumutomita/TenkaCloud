@@ -1,6 +1,8 @@
 import type { Stack } from "aws-cdk-lib";
+import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
+import { SamlIdpLambda } from "../problem-deploy/saml-idp-lambda.js";
 import { ApiGateway } from "../tenant-template/api-gateway.js";
 import { ApplicationAdminConsoleHosting } from "../tenant-template/application-admin-console-hosting.js";
 import { IdentityProvider } from "../tenant-template/identity-provider.js";
@@ -48,6 +50,14 @@ export interface AppPlaneCoreProps {
   readonly deployApiLambda: IFunction;
   readonly eventApiLambda: IFunction;
   readonly competitorAccountsApiLambda: IFunction;
+  /**
+   * Issue #1312: SAML IdP CRUD 用 DDB Table。 渡された時に本 helper が
+   *   - `SamlIdpLambda` を新規 instantiate (UserPool は同 stack で立てた `IdentityProvider.tenantUserPool` 直結)
+   *   - ApiGateway に `/tenant/idp*` route を生やす
+   * を組み合わせて配線する。 SamlIdpLambda を caller 側で先に立てると ProblemDeploy → Lite UserPool の
+   * 逆方向参照になり `addDependency` cycle になるため、 同 stack 内 instantiation を Lite mode 配線契約とする。
+   */
+  readonly samlIdpsTable?: Table;
   readonly participantPortalUrl?: string;
   readonly competitorBootstrapTemplateUrl?: string;
   /**
@@ -64,6 +74,11 @@ export interface AppPlaneCoreHandles {
   readonly identityProvider: IdentityProvider;
   readonly apiGateway: ApiGateway;
   readonly applicationAdminConsoleUrl: string;
+  /**
+   * Issue #1312: `samlIdpsTable` を渡したときに作られる SAML IdP CRUD Lambda。
+   * 未配線時は undefined。
+   */
+  readonly samlIdpLambda?: SamlIdpLambda;
 }
 
 /**
@@ -94,6 +109,16 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
     applicationAdminConsoleUrl: applicationAdminConsoleHosting.distributionUrl,
   });
 
+  // Issue #1312: samlIdpsTable が渡されていれば SAML IdP CRUD Lambda を同 stack で立てる
+  // (= UserPool を cross-stack ref で渡すと cyclic dependency になるため同 stack 配置が契約)。
+  const samlIdpLambda = props.samlIdpsTable
+    ? new SamlIdpLambda(scope, "SamlIdp", {
+        samlIdpsTable: props.samlIdpsTable,
+        userPool: identityProvider.tenantUserPool,
+        idpTierGuard: "silo",
+      })
+    : undefined;
+
   const apiGateway = new ApiGateway(scope, "ApiGateway", {
     tenantId: props.tenantId,
     isPooledDeploy: props.isPooledDeploy,
@@ -102,6 +127,7 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
     deployApiLambda: props.deployApiLambda,
     eventApiLambda: props.eventApiLambda,
     competitorAccountsApiLambda: props.competitorAccountsApiLambda,
+    ...(samlIdpLambda ? { samlIdpLambda: samlIdpLambda.fn } : {}),
     apiKeyBasicTier: {
       apiKeyId: props.apiKeyConfig.ssmLookup(props.apiKeyConfig.ssmParameterNames.basic.keyId),
       value: props.apiKeyConfig.ssmLookup(props.apiKeyConfig.ssmParameterNames.basic.value),
@@ -142,5 +168,6 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
     identityProvider,
     apiGateway,
     applicationAdminConsoleUrl: applicationAdminConsoleHosting.distributionUrl,
+    ...(samlIdpLambda ? { samlIdpLambda } : {}),
   };
 }

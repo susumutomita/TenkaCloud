@@ -10,6 +10,7 @@ describe("ProblemDeployBackendStack (MVP-1) — DDB tables", () => {
     // ADR-012 Phase 3.A で ProblemEndpoints、 Issue #888 で Disruptions (Red Team audit + idempotency)、
     // Issue #950 (ADR-020 Phase D) で AdminAuditLog (admin 操作監査)。
     // 7 Table すべて DynamoDbLowCapacity Aspect で 1/1 PROVISIONED に均される。
+    // (Issue #1312 SamlIdps は cross-stack cyclic dependency 回避のため TenkaCloudLiteStack に同居。)
     tpl.resourceCountIs("AWS::DynamoDB::Table", 7);
     tpl.hasResourceProperties(
       "AWS::DynamoDB::Table",

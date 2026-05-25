@@ -140,6 +140,46 @@ describe("ProblemDeployBackendStack (MVP-1) — SystemAuditWriter Lambda (Issue 
   });
 });
 
+describe("ProblemDeployBackendStack — EventApi Lambda audit log read grant (#1313)", () => {
+  const tpl = synthDefault();
+
+  it("EventApi Role default policy should include both DDB read + write actions (= grantReadWriteData)", () => {
+    // Issue #1313: PR #1297 で event-handler 内に registerAuditLogRoutes (GET /admin/audit-log + /export) が
+    // wire 済だが、 EventApiLambda の IAM grant は `grantWriteData` だけだったため、 read 経路が
+    // AccessDenied で 5xx を返し UI は "Failed to fetch" を表示していた。
+    //
+    // `grantReadWriteData` に上げると read + write 両方の DynamoDB actions が EventApi role に
+    // 付与される (= AccessDenied 解消)。 EventApi Role の DefaultPolicy 内に read + write 双方の
+    // 代表 action が同居していることを直接 inspect で確認する (= grantReadWriteData の証跡)。
+    const policies = tpl.findResources("AWS::IAM::Policy");
+    const eventApiPolicy = Object.entries(policies).find(
+      ([logicalId]) =>
+        logicalId.includes("EventApi") &&
+        logicalId.includes("ServiceRole") &&
+        logicalId.includes("DefaultPolicy"),
+    );
+    expect(eventApiPolicy).toBeDefined();
+    const stmt = (
+      eventApiPolicy?.[1] as {
+        Properties?: { PolicyDocument?: { Statement?: ReadonlyArray<Record<string, unknown>> } };
+      }
+    )?.Properties?.PolicyDocument?.Statement;
+    expect(Array.isArray(stmt)).toBe(true);
+    // Action は string | string[] のどちらでも来る。 一連の actions を flat 化して set で見る。
+    const allActions = new Set<string>();
+    for (const s of stmt ?? []) {
+      const action = s.Action as string | string[] | undefined;
+      if (typeof action === "string") allActions.add(action);
+      else if (Array.isArray(action)) for (const a of action) allActions.add(a);
+    }
+    // grantReadWriteData の代表的 actions (= read+write 両方が混在する)
+    expect(allActions.has("dynamodb:Query")).toBe(true);
+    expect(allActions.has("dynamodb:GetItem")).toBe(true);
+    expect(allActions.has("dynamodb:PutItem")).toBe(true);
+    expect(allActions.has("dynamodb:UpdateItem")).toBe(true);
+  });
+});
+
 describe("ProblemDeployBackendStack (MVP-1) — Competitor Accounts API Lambda (Issue #459 / ADR-002 Phase 2.1)", () => {
   const tpl = synthDefault();
 

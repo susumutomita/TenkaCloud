@@ -2,6 +2,7 @@ import { CfnOutput, Stack, type StackProps } from "aws-cdk-lib";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { Construct } from "constructs";
 import { buildAppPlaneCore } from "../app-plane-core/index.js";
+import { SamlIdpsTable } from "../problem-deploy/saml-idps-table.js";
 
 /**
  * Issue #778 ADR-016 Phase 3: TenkaCloud Lite mode の専用 stack。
@@ -72,6 +73,12 @@ export class TenkaCloudLiteStack extends Stack {
     const liteApiKeyPlaceholder = `tenkacloud-lite-${props.environment}-placeholder`;
     const dummyLookup = (): string => liteApiKeyPlaceholder;
 
+    // Issue #1312: SAML IdP CRUD 用 DDB Table を本 stack で立て、 AppPlaneCore に渡す。
+    // helper は `samlIdpsTable` 受け取り時に同 stack 内で `SamlIdpLambda` を立て、 ApiGateway に
+    // `/tenant/idp*` route を配線する (= UserPool と SAML IdP Lambda を同 stack 同居させて
+    // cross-stack cyclic dependency を避ける契約)。
+    const samlIdps = new SamlIdpsTable(this, "SamlIdps");
+
     const appPlane = buildAppPlaneCore(this, {
       tenantId: LITE_TENANT_ID,
       tenantName: LITE_TENANT_NAME,
@@ -80,6 +87,7 @@ export class TenkaCloudLiteStack extends Stack {
       deployApiLambda: props.deployApiLambda,
       eventApiLambda: props.eventApiLambda,
       competitorAccountsApiLambda: props.competitorAccountsApiLambda,
+      samlIdpsTable: samlIdps.table,
       participantPortalUrl: props.participantPortalUrl,
       competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl,
       apiKeyConfig: {

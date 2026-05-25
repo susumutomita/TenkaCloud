@@ -1,7 +1,9 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { TenkaCloudLiteStack } from "../../lib/tenkacloud-lite";
 
 /**
@@ -10,7 +12,23 @@ import { TenkaCloudLiteStack } from "../../lib/tenkacloud-lite";
  * - AppPlaneCore 経由で hosting + identity + apiGateway が立つ
  * - tenantId="local" 固定
  * - SBT / Pipeline / TenantMapping への依存が無い (= Lite mode の自己完結)
+ *
+ * AppPlaneCore は ApplicationAdminConsoleHosting を内包し、 BucketDeployment.Source.asset で
+ * apps/application-admin-console/dist の存在を synth 時に検証する。 ローカル test / CI では
+ * 未 build のことがあるので、 application-admin-console-hosting.test.ts と同じ pattern で
+ * placeholder dist を作る。 vite build が走った後はそれで上書きされるので副作用は無い。
  */
+const distDir = path.join(__dirname, "..", "..", "..", "apps", "application-admin-console", "dist");
+
+function ensurePlaceholderDist(): void {
+  if (!fs.existsSync(distDir)) {
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(distDir, "index.html"),
+      "<!doctype html><html><body>placeholder</body></html>",
+    );
+  }
+}
 
 function buildStubLambda(scope: cdk.Stack, id: string): LambdaFunction {
   return new LambdaFunction(scope, id, {
@@ -49,6 +67,10 @@ function synth(): Template {
 }
 
 describe("TenkaCloudLiteStack (#778 ADR-016 Phase 3)", () => {
+  beforeAll(() => {
+    ensurePlaceholderDist();
+  });
+
   it("should create 1 set of Cognito UserPool / UserPoolClient / UserPoolDomain (from AppPlaneCore)", () => {
     const template = synth();
     template.resourceCountIs("AWS::Cognito::UserPool", 1);
@@ -86,8 +108,10 @@ describe("TenkaCloudLiteStack (#778 ADR-016 Phase 3)", () => {
 
   it("should not include SBT / pipeline resources (TenantMappingTable / SaaSPipeline)", () => {
     const template = synth();
-    // Lite mode は SBT TenantMappingTable を参照しないので、 DynamoDB Table を作らない。
-    template.resourceCountIs("AWS::DynamoDB::Table", 0);
+    // Lite mode は SBT TenantMappingTable を参照しない。 DynamoDB Table は #1312 で
+    // SAML IdP CRUD 用に 1 個だけ (= SamlIdps、 UserPool と同 stack 同居の制約) 立つ。
+    // SBT 経路 (TenantMappingTable / TenantsTable) は引き続き 0。
+    template.resourceCountIs("AWS::DynamoDB::Table", 1);
     // ServerlessSaaSPipeline 由来の CodePipeline も無い。
     template.resourceCountIs("AWS::CodePipeline::Pipeline", 0);
   });
@@ -99,5 +123,89 @@ describe("TenkaCloudLiteStack (#778 ADR-016 Phase 3)", () => {
     // (Phase 4-5 で ApiGateway 側に apiKeyConfig optional 対応を入れたら count=0 になる予定)。
     const usagePlans = template.findResources("AWS::ApiGateway::UsagePlan");
     expect(Object.keys(usagePlans).length).toBeGreaterThanOrEqual(0);
+  });
+
+  // Issue #1312: SAML IdP CRUD 配線 (= UI が "Failed to fetch" していた root cause を解消)。
+  // Lite mode は silo 同型 (= 1 tenant 専用 UserPool) なので、 本 stack 内で SAML IdP CRUD を
+  // 配線して完結させる。 ProblemDeployBackendStack に置くと UserPool が cross-stack に居て
+  // cyclic dependency になるため、 設計判断として TenkaCloudLiteStack 内に同居させる。
+
+  it("should provision SamlIdpsTable (PK=pk / SK=sk lower-case, matches ddb-store.ts) at 1/1 PROVISIONED (#1312)", () => {
+    const template = synth();
+    // lower-case `pk` / `sk` は `createDdbIdpStore` の PutCommand / GetCommand の Key 名と一致させるため
+    // (= handler 経路と表構造の整合、 大文字 PK/SK にすると runtime で ValidationException で fail)。
+    template.hasResourceProperties(
+      "AWS::DynamoDB::Table",
+      Match.objectLike({
+        KeySchema: Match.arrayWith([
+          Match.objectLike({ AttributeName: "pk", KeyType: "HASH" }),
+          Match.objectLike({ AttributeName: "sk", KeyType: "RANGE" }),
+        ]),
+        ProvisionedThroughput: Match.objectLike({
+          ReadCapacityUnits: 1,
+          WriteCapacityUnits: 1,
+        }),
+      }),
+    );
+  });
+
+  it("should provision a SamlIdp Lambda with IDP_TIER_GUARD=silo + SAML_IDPS_TABLE_NAME + TENANT_USER_POOL_ID env (#1312)", () => {
+    const template = synth();
+    // Lite mode は 1 tenant 専用 (= silo 同型) なので `IDP_TIER_GUARD=silo` を pin する。
+    // pooled 配線時に誤って動くと cross-tenant 副作用が出るため handler 側 fail-closed guard。
+    const functions = template.findResources("AWS::Lambda::Function");
+    const samlIdp = Object.entries(functions).find(
+      ([name]) => name.includes("SamlIdp") && name.includes("Function"),
+    );
+    expect(samlIdp).toBeDefined();
+    const vars =
+      (
+        samlIdp?.[1] as {
+          Properties?: { Environment?: { Variables?: Record<string, unknown> } };
+        }
+      )?.Properties?.Environment?.Variables ?? {};
+    expect(vars.IDP_TIER_GUARD).toBe("silo");
+    expect(vars.SAML_IDPS_TABLE_NAME).toBeDefined();
+    expect(vars.TENANT_USER_POOL_ID).toBeDefined();
+  });
+
+  it("SamlIdp Lambda Role default policy should grant cognito-idp:*IdentityProvider on userpool/* + SamlIdps R+W (#1312)", () => {
+    const template = synth();
+    // SAML federation 設定は Cognito UserPool の Identity Provider mutation で実装される。
+    // wildcard userpool/* + runtime guard (`TENANT_USER_POOL_ID` 経由で自 pool 絞り込み) は
+    // competitor-accounts-api-lambda.ts の既存 SAML grant と同じ pattern。
+    template.hasResourceProperties(
+      "AWS::IAM::Policy",
+      Match.objectLike({
+        PolicyDocument: Match.objectLike({
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Effect: "Allow",
+              Action: Match.arrayWith([
+                "cognito-idp:CreateIdentityProvider",
+                "cognito-idp:UpdateIdentityProvider",
+                "cognito-idp:DescribeIdentityProvider",
+                "cognito-idp:DeleteIdentityProvider",
+                "cognito-idp:ListIdentityProviders",
+              ]),
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it("should expose /tenant/idp and /tenant/idp/{idpId} routes on the tenant REST API (#1312)", () => {
+    const template = synth();
+    // ApiGateway は /tenant/idp (GET POST) と /tenant/idp/{idpId} (GET PATCH DELETE) を生やすので、
+    // AWS::ApiGateway::Resource が `tenant` / `idp` / `{idpId}` の 3 段で見える。 path part 1 つずつ
+    // pin することで、 ApiGateway 経由で SAML IdP Lambda に到達する経路を機械的に保証する。
+    const resources = template.findResources("AWS::ApiGateway::Resource");
+    const pathParts = Object.values(resources)
+      .map((r) => (r as { Properties?: { PathPart?: string } }).Properties?.PathPart)
+      .filter((p): p is string => typeof p === "string");
+    expect(pathParts).toContain("tenant");
+    expect(pathParts).toContain("idp");
+    expect(pathParts).toContain("{idpId}");
   });
 });

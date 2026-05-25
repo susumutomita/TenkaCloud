@@ -34,6 +34,14 @@ interface ApiGatewayProps {
    * (Issue #459 / ADR-002 Phase 2.1)。`/admin/competitor-accounts*` routes を proxy する。
    */
   competitorAccountsApiLambda: IFunction;
+  /**
+   * Issue #1312: SAML IdP CRUD 用の Application Plane Lambda
+   * (`ProblemDeployBackendStack.samlIdpLambda`)。 `/tenant/idp*` route を proxy する。
+   * Lite mode では silo 同型 (= 1 tenant 専用 UserPool) のため有効、 pooled では handler 側
+   * `IDP_TIER_GUARD` env が `"silo"` 以外なら 503 を返す fail-closed guard で防ぐ。
+   * 未配線 (= 旧 stack) なら route を生やさない (= NO-OP)。
+   */
+  samlIdpLambda?: IFunction;
   apiKeyBasicTier: CustomApiKey;
   apiKeyStandardTier: CustomApiKey;
   apiKeyPremiumTier: CustomApiKey;
@@ -190,5 +198,25 @@ export class ApiGateway extends Construct {
     const usersById = users.addResource("{username}");
     usersById.addMethod("DELETE", competitorAccountsIntegration, deployMethodOptions);
     usersById.addMethod("PATCH", competitorAccountsIntegration, deployMethodOptions);
+
+    // Issue #1312: per-tenant SAML IdP CRUD route。 Application Plane (silo / Lite) のみ有効。
+    //   /tenant/idp                  GET=list / POST=create
+    //   /tenant/idp/{idpId}          GET=detail / PATCH=update / DELETE=remove
+    //
+    // 同 Cognito authorizer を共有して JWT claim 由来 tenantId で越境防止 (= idp-handler 側で
+    // `resolveScope` が claim から tenantId を取り、 SamlIdpsTable の `pk = tenantId` で固定)。
+    // pooled tier (= UserPool 共有) で誤起動すると cross-tenant 副作用が出るため、 handler の
+    // `IDP_TIER_GUARD` env が `"silo"` 以外なら 503 を返す fail-closed guard で防ぐ。
+    if (props.samlIdpLambda) {
+      const idpIntegration = new LambdaIntegration(props.samlIdpLambda);
+      const tenant = this.restApi.root.addResource("tenant");
+      const idp = tenant.addResource("idp");
+      idp.addMethod("GET", idpIntegration, deployMethodOptions);
+      idp.addMethod("POST", idpIntegration, deployMethodOptions);
+      const idpById = idp.addResource("{idpId}");
+      idpById.addMethod("GET", idpIntegration, deployMethodOptions);
+      idpById.addMethod("PATCH", idpIntegration, deployMethodOptions);
+      idpById.addMethod("DELETE", idpIntegration, deployMethodOptions);
+    }
   }
 }

@@ -28,18 +28,12 @@
 import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import type { Context } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
-import { StatusCodes } from "http-status-codes";
-import {
-  isTenantAdmin,
-  resolveTenantId,
-} from "../../../control-plane/handlers/idp-handler/auth.js";
 import { createCognitoIdpAdapter } from "../../../control-plane/handlers/idp-handler/cognito-adapter.js";
-import type { IdpScope } from "../../../control-plane/handlers/idp-handler/core.js";
 import { createDdbIdpStore } from "../../../control-plane/handlers/idp-handler/ddb-store.js";
 import { buildIdpApp } from "../../../control-plane/handlers/idp-handler/routes.js";
+import { createTenantIdpResolveScope } from "./tier-guard.js";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -71,36 +65,9 @@ const USER_POOL_ID = requireEnv("TENANT_USER_POOL_ID");
  * Lambdas. Pooled deployments should not have this handler at all; the env
  * check is the second line of defense.
  */
-const IDP_TIER_GUARD = process.env.IDP_TIER_GUARD;
-
 const app = buildIdpApp({
   pathPrefix: "/tenant/idp",
-  resolveScope: (c: Context): IdpScope | { readonly forbidden: Response } => {
-    if (IDP_TIER_GUARD !== "silo") {
-      return {
-        forbidden: c.json(
-          {
-            error: "tenant_tier_not_silo",
-            message:
-              "Per-tenant SAML IdP CRUD requires a silo UserPool (PLATINUM tier). Contact support to upgrade.",
-          },
-          StatusCodes.SERVICE_UNAVAILABLE,
-        ),
-      };
-    }
-    if (!isTenantAdmin(c)) {
-      return {
-        forbidden: c.json({ error: "forbidden" }, StatusCodes.FORBIDDEN),
-      };
-    }
-    const tenantId = resolveTenantId(c);
-    if (!tenantId) {
-      return {
-        forbidden: c.json({ error: "forbidden_missing_tenant" }, StatusCodes.FORBIDDEN),
-      };
-    }
-    return { kind: "tenant", tenantId };
-  },
+  resolveScope: createTenantIdpResolveScope(process.env.IDP_TIER_GUARD),
   deps: {
     store: createDdbIdpStore({ ddb, tableName: TABLE_NAME }),
     cognito: createCognitoIdpAdapter({ client: cognito, userPoolId: USER_POOL_ID }),
