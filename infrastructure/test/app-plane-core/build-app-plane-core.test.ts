@@ -83,6 +83,55 @@ describe("buildAppPlaneCore", () => {
     expect(logouts.length).toBeGreaterThan(0);
   });
 
+  // Issue #1327: SaaS mode (= `liteAdminClaimsInjection` 未指定) では Pre-Token Generation Lambda を
+  // 立てない (= SBT pipeline / provision-tenant.sh の role 割り当てを汚さない)。 既存 SaaS / Full mode の
+  // CFn 物理差分が 0 件であることを機械的に保証する。
+
+  it("should NOT attach a Pre-Token Generation Lambda when liteAdminClaimsInjection is not set (SaaS mode regression guard)", () => {
+    const template = synth();
+    const userPools = template.findResources("AWS::Cognito::UserPool");
+    const userPool = Object.values(userPools)[0];
+    const lambdaConfig = (userPool?.Properties as { LambdaConfig?: Record<string, unknown> })
+      ?.LambdaConfig;
+    // LambdaConfig 自体が無いか、 PreTokenGeneration key が無い (= SaaS mode regression なし)。
+    expect(lambdaConfig?.PreTokenGeneration).toBeUndefined();
+  });
+
+  it("should attach a Pre-Token Generation Lambda when liteAdminClaimsInjection is true (#1327)", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "TestStack", {
+      env: { account: "123456789012", region: "ap-northeast-1" },
+    });
+    buildAppPlaneCore(stack, {
+      tenantId: "tenant-1",
+      tenantName: "Tenant 1",
+      environment: "development",
+      isPooledDeploy: false,
+      deployApiLambda: buildStubLambda(stack, "StubDeploy"),
+      eventApiLambda: buildStubLambda(stack, "StubEvent"),
+      competitorAccountsApiLambda: buildStubLambda(stack, "StubCompetitorAccounts"),
+      liteAdminClaimsInjection: true,
+      apiKeyConfig: {
+        ssmParameterNames: {
+          basic: { keyId: "basic-id", value: "basic-val" },
+          standard: { keyId: "standard-id", value: "standard-val" },
+          premium: { keyId: "premium-id", value: "premium-val" },
+          platinum: { keyId: "platinum-id", value: "platinum-val" },
+        },
+        ssmLookup: (name: string) => `SSM:${name}`,
+      },
+    });
+    const template = Template.fromStack(stack);
+    template.hasResourceProperties(
+      "AWS::Cognito::UserPool",
+      Match.objectLike({
+        LambdaConfig: Match.objectLike({
+          PreTokenGeneration: Match.anyValue(),
+        }),
+      }),
+    );
+  });
+
   it("the returned applicationAdminConsoleUrl should equal hosting.distributionUrl", () => {
     const app = new cdk.App();
     const stack = new cdk.Stack(app, "TestStack", {

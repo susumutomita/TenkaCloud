@@ -90,6 +90,12 @@ export class TenkaCloudLiteStack extends Stack {
       samlIdpsTable: samlIdps.table,
       participantPortalUrl: props.participantPortalUrl,
       competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl,
+      // Issue #1327: Lite mode は 1 tenant 専用 (tenantId="local") なので全 user が
+      // 暗黙に TenantAdmin。 Cognito Pre-Token Generation trigger で JWT 発行時に
+      // `custom:userRole=TenantAdmin` + `custom:tenantId=local` を注入し、
+      // SAML IdP / 監査ログ ページの `requireRole(c, [TENANT_ADMIN_ROLE])` を成立させる。
+      // SaaS mode (= TenantTemplateStack) では本 flag は未指定 (= attach なし)。
+      liteAdminClaimsInjection: true,
       apiKeyConfig: {
         ssmParameterNames: {
           basic: { keyId: `${liteApiKeyPlaceholder}-basic-id`, value: liteApiKeyPlaceholder },

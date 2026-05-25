@@ -6,6 +6,7 @@ import { SamlIdpLambda } from "../problem-deploy/saml-idp-lambda.js";
 import { ApiGateway } from "../tenant-template/api-gateway.js";
 import { ApplicationAdminConsoleHosting } from "../tenant-template/application-admin-console-hosting.js";
 import { IdentityProvider } from "../tenant-template/identity-provider.js";
+import { LiteAdminClaimsLambda } from "./lite-admin-claims-lambda.js";
 
 /**
  * Issue #778 ADR-016 Phase 1: TenantTemplateStack から共通 App Plane コア構成を抽出する。
@@ -66,6 +67,16 @@ export interface AppPlaneCoreProps {
    * 配線をスキップする (= 後続 phase で ApiGateway 側にも optional 化を入れる予定)。
    */
   readonly apiKeyConfig: AppPlaneCoreApiKeyConfig;
+  /**
+   * Issue #1327: Lite mode 専用の opt-in flag。 `true` のとき Cognito Pre-Token Generation
+   * Lambda を UserPool に attach し、 JWT 発行直前に `custom:userRole = "TenantAdmin"` +
+   * `custom:tenantId = "local"` を注入する。
+   *
+   * SaaS mode (= SBT pipeline / `provision-tenant.sh` 経路) では `undefined` / `false` を渡し、
+   * Lambda trigger を一切立てない (= role 割り当ては SaaS 側 admin-create-user 経路に任せる)。
+   * 既定 `false` にすることで、 既存 SaaS / Full mode の CFn 物理差分を 0 件に保つ。
+   */
+  readonly liteAdminClaimsInjection?: boolean;
   // Issue #1066: SAML IdP 機能を廃止 (= MFA 必須化 #1035 で代替)。
 }
 
@@ -79,6 +90,11 @@ export interface AppPlaneCoreHandles {
    * 未配線時は undefined。
    */
   readonly samlIdpLambda?: SamlIdpLambda;
+  /**
+   * Issue #1327: `liteAdminClaimsInjection: true` を渡したときに立つ Pre-Token Generation Lambda。
+   * SaaS mode 経路では undefined のまま (= attach なし)。
+   */
+  readonly liteAdminClaimsLambda?: LiteAdminClaimsLambda;
 }
 
 /**
@@ -116,6 +132,15 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
         samlIdpsTable: props.samlIdpsTable,
         userPool: identityProvider.tenantUserPool,
         idpTierGuard: "silo",
+      })
+    : undefined;
+
+  // Issue #1327: Lite mode opt-in で Cognito Pre-Token Generation Lambda を UserPool に attach。
+  // SaaS mode 経路 (= flag 未指定 / false) では Lambda を一切立てず、 既存 stack の CFn 物理差分を
+  // 0 件に保つ。 Lambda は event を mutate して返すだけ (= IAM / external API call 不要)。
+  const liteAdminClaimsLambda = props.liteAdminClaimsInjection
+    ? new LiteAdminClaimsLambda(scope, "LiteAdminClaims", {
+        userPool: identityProvider.tenantUserPool,
       })
     : undefined;
 
@@ -169,5 +194,6 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
     apiGateway,
     applicationAdminConsoleUrl: applicationAdminConsoleHosting.distributionUrl,
     ...(samlIdpLambda ? { samlIdpLambda } : {}),
+    ...(liteAdminClaimsLambda ? { liteAdminClaimsLambda } : {}),
   };
 }
