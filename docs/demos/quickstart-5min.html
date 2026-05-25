@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>5-minute clone-to-running-event quickstart</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>5-minute clone-to-running-event quickstart</h1>
+<blockquote>
+<p>日本語版: <a href="./quickstart-5min.ja.md">quickstart-5min.ja.md</a></p>
+</blockquote>
+<p><strong>One-liner</strong>: TenkaCloud is an open-source cloud-competition platform on real AWS. Clone the repo, run <code>make deploy</code>, and inside ten minutes you have an admin console, a deployed problem, and a participant portal where one team can solve a real AWS task and see their score change.</p>
+<p>This walkthrough takes about <strong>5 minutes of talking time</strong> plus an out-of-band deploy that runs in the background. Practice it once, and you can rerun it at a meetup, a sales call, or a recording セッション without surprises。</p>
+<h2>Prerequisites</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>AWS account</td>
+<td>Lite mode deploys into one account, Free-Tier friendly.</td>
+</tr>
+<tr>
+<td><code>bun</code> 1.3.11+</td>
+<td>The monorepo uses Bun workspaces, no <code>npm</code> / <code>npx</code>.</td>
+</tr>
+<tr>
+<td><code>git</code> 2.40+</td>
+<td>Submodules deliver the problem catalog under <code>problems/</code>.</td>
+</tr>
+<tr>
+<td>AWS CLI v2</td>
+<td>Used for <code>aws sso login</code> / credentials in front of the CDK.</td>
+</tr>
+</tbody></table>
+<p>You do <strong>not</strong> need Cognito, SBT, or any pre-configured tenant for this walkthrough. Lite mode wires <code>tenantId=&quot;local&quot;</code> automatically.</p>
+<h2>Step 1 — Clone and install (≈ 30 s talking time)</h2>
+<p><strong>Action.</strong></p>
+<pre><code class="language-bash">git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make install
+</code></pre>
+<p><strong>What just happened.</strong> Bun installed the workspaces (<code>infrastructure</code> plus three SPAs), the <code>problems/</code> submodule was checked out, and lifecycle scripts were skipped by default (see the supply-chain notes in <code>CLAUDE.md</code>).</p>
+<p><strong>Fallback.</strong> If submodules show as empty, run <code>git submodule update --init --recursive problems</code>. Never use <code>--no-verify</code> on any commit step.</p>
+<h2>Step 2 — Deploy Lite mode (≈ 30 s talking time, ~10 min background)</h2>
+<p><strong>Action.</strong> In a separate terminal, kick off:</p>
+<pre><code class="language-bash">make deploy
+</code></pre>
+<p>Keep talking while it runs. Lite mode (introduced in #955) stands up exactly two stacks: <code>AppPlaneCore</code> (<code>tenantId=&quot;local&quot;</code>) and <code>ProblemDeployBackend</code> (the participant portal).</p>
+<p><strong>What just happened.</strong> CDK synth + deploy produced:</p>
+<ul>
+<li>A single-tenant Cognito UserPool for the organizer</li>
+<li>A DynamoDB table forced to 1 RCU / 1 WCU by the <code>DynamoDbLowCapacity</code> Aspect (Free-Tier safe)</li>
+<li>The Application Admin Console hosted on S3 + CloudFront</li>
+<li>The Participant Portal hosted on S3 + CloudFront</li>
+<li>An EventBridge bus that all four planes share</li>
+</ul>
+<p><strong>Fallback.</strong> Pre-deploy before the talk. If the deploy fails mid-talk, switch tabs to the pre-deployed Console URL.</p>
+<h2>Step 3 — Open the Application Admin Console and create event &quot;Demo 5min&quot; (≈ 1 min)</h2>
+<p><strong>Action.</strong> Open the CloudFront URL printed by <code>make deploy</code> ending in <code>application-admin-console</code>. Log in with the organizer Cognito user, then:</p>
+<ol>
+<li>Click <strong>New event</strong></li>
+<li>Name: <code>Demo 5min</code></li>
+<li>Save</li>
+</ol>
+<p><strong>What just happened.</strong> The Application Plane wrote an <code>Event</code> row keyed by <code>(tenantId=&quot;local&quot;, eventId)</code>. No CFn stack runs yet — events are pure metadata.</p>
+<p><strong>Fallback.</strong> If the console is blank, hard-refresh once. <code>runtime-config.json</code> is fetched at boot and a stale browser cache will hide it.</p>
+<h2>Step 4 — Add the <code>hello-world</code> problem (≈ 1 min)</h2>
+<p><strong>Action.</strong> Inside the new event:</p>
+<ol>
+<li>Click <strong>Add problem</strong></li>
+<li>Pick <code>hello-world</code> (Challenge, Difficulty 1 / 5, estimated 1 minute)</li>
+<li>Confirm</li>
+</ol>
+<p><strong>What just happened.</strong> The catalog (<code>problems/index.json</code>) was loaded from the submodule. <code>hello-world</code> is the minimal <code>flag</code> scoring problem: it deploys one <code>AWS::SSM::Parameter</code> plus a <code>ParticipantViewerRole</code> that lets the team read only their own SSM prefix (see <code>problems/challenges/hello-world/README.md</code>). No EC2, no VPC, no public endpoint, no real spend.</p>
+<p><strong>Fallback.</strong> If the catalog list is empty, the submodule did not check out. Re-run <code>git submodule update --init --recursive problems</code> and refresh.</p>
+<h2>Step 5 — Bulk-deploy to the team (≈ 1 min talking time, ~2 min background)</h2>
+<p><strong>Action.</strong> Pick the demo team (or create a placeholder team), then click <strong>Deploy to all teams</strong>.</p>
+<p><strong>What just happened.</strong> The Application Plane emitted a <code>DeployRequested</code> event onto the EventBridge bus. The <code>ProblemDeployBackend</code> Worker Lambda picked it up, AssumeRoled into the competitor account using the tenant&#39;s <code>ExternalId</code> (always required — see <code>CLAUDE.md</code>), and ran CFn <code>CreateStack</code> with <code>problems/challenges/hello-world/template.yaml</code>. The deployments table now shows the stack as <code>IN_PROGRESS</code>, then <code>READY</code>.</p>
+<p><strong>Fallback.</strong> While the stack is creating, walk the audience through <code>problems/challenges/hello-world/template.yaml</code>. It is one page of CFn — that <strong>is</strong> the demo.</p>
+<h2>Step 6 — Open the Participant Portal, submit the flag, watch the score (≈ 1 min)</h2>
+<p><strong>Action.</strong> Open the participant portal URL (also printed by <code>make deploy</code>), log in as the team, then:</p>
+<ol>
+<li>Read the problem instructions: &quot;Open AWS Console → SSM Parameter Store → <code>/&lt;NamePrefix&gt;/hello</code>, copy the value.&quot;</li>
+<li>The participant clicks <strong>Open AWS Console</strong> (one-click SSO via federation → AssumeRole into the team&#39;s read-only <code>ParticipantViewerRole</code>).</li>
+<li>They copy <code>Hello from &lt;NamePrefix&gt;</code> and paste it into the flag-submission box on the portal.</li>
+<li>The scoreboard increments by <strong>+100 pt</strong>.</li>
+</ol>
+<p><strong>What just happened.</strong> The portal called the scoring Lambda (the generic dispatcher from ADR-012). The Lambda saw <code>kind: &quot;flag&quot;</code>, compared the submitted string against the stored answer, wrote a <code>ScoreEvent</code>, and re-emitted <code>ScoreUpdated</code> on the EventBridge bus. The scoreboard subscribed to that event and refreshed.</p>
+<p><strong>Fallback.</strong> If federation is not configured for the demo account, paste the flag value directly. The flag path does not require Console access — the Console SSO is a &quot;wow&quot; for the demo, not a requirement.</p>
+<h2>Total run-time</h2>
+<table>
+<thead>
+<tr>
+<th>Segment</th>
+<th>Talking</th>
+<th>Background</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Step 1 — clone &amp; install</td>
+<td>30 s</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Step 2 — <code>make deploy</code></td>
+<td>30 s</td>
+<td>~10 min (live)</td>
+</tr>
+<tr>
+<td>Step 3 — create event</td>
+<td>1 min</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Step 4 — add problem</td>
+<td>1 min</td>
+<td>-</td>
+</tr>
+<tr>
+<td>Step 5 — bulk deploy</td>
+<td>1 min</td>
+<td>~2 min</td>
+</tr>
+<tr>
+<td>Step 6 — solve and score</td>
+<td>1 min</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>Total speaking</strong></td>
+<td>≈ 5 min</td>
+<td></td>
+</tr>
+</tbody></table>
+<p>Background steps run while you talk. The longest live wait is Step 5 (~2 minutes), which is filled by reading the one-page CFn template aloud.</p>
+<h2>Troubleshooting one-liners</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>make install</code> is slow</td>
+<td>First run only, subsequent runs hit the Bun cache.</td>
+</tr>
+<tr>
+<td><code>make deploy</code> says &quot;credentials&quot;</td>
+<td>Run <code>aws sso login</code> then retry. CDK uses the default profile chain.</td>
+</tr>
+<tr>
+<td>Problem catalog is empty in the console</td>
+<td><code>git submodule update --init --recursive problems</code> and refresh the browser.</td>
+</tr>
+<tr>
+<td>CFn stack stays <code>CREATE_IN_PROGRESS</code></td>
+<td>One of the rollout templates is waiting on a service quota; check CloudTrail.</td>
+</tr>
+<tr>
+<td>Flag submission returns 401</td>
+<td>The portal Cognito セッション expired; sign out, sign back in, resubmit.</td>
+</tr>
+<tr>
+<td>Scoreboard does not refresh</td>
+<td>Wait 5 seconds — the portal polls (no SSE, by design — see AGENTS.md).</td>
+</tr>
+<tr>
+<td>Want to tear it all down</td>
+<td><code>make destroy</code> (= <code>make lite-down</code>). Idempotent from partial-failure state.</td>
+</tr>
+</tbody></table>
+<h2>What to say at the close</h2>
+<ul>
+<li>&quot;That was a <strong>single tenant</strong> path. The same flow, behind SBT control-plane multi-tenancy, is <code>make deploy-saas</code> — three phases, 15 to 20 minutes, BASIC / STANDARD / PREMIUM tier pooling plus PLATINUM silo per tenant.&quot;</li>
+<li>&quot;Problems ship as <code>metadata.json</code> + a one-page <code>template.yaml</code> + an optional <code>portal/</code> plugin. That is the contract — anyone can author one without touching the platform code (ADR-012).&quot;</li>
+<li>&quot;Apache 2.0. The platform is the host, the problems are the plugins. Add your own.&quot;</li>
+</ul>
+<h2>Where to go next</h2>
+<ul>
+<li><a href="./sales-pitch-15min.md"><code>docs/demos/sales-pitch-15min.md</code></a> — same flow with pain-point talking points</li>
+<li><a href="./architecture-tour-30min.md"><code>docs/demos/architecture-tour-30min.md</code></a> — under-the-hood walkthrough</li>
+<li><a href="../../problems/README.md"><code>problems/README.md</code></a> — write your own problem</li>
+<li><a href="../architecture/OVERVIEW.md"><code>docs/architecture/OVERVIEW.md</code></a> — 10-minute architecture overview</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/demos/quickstart-5min.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/demos/quickstart-5min.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>

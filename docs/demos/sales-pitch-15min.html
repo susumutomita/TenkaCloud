@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>15-minute sales / facilitator pitch</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>15-minute sales / facilitator pitch</h1>
+<blockquote>
+<p>日本語版: <a href="./sales-pitch-15min.ja.md">sales-pitch-15min.ja.md</a></p>
+</blockquote>
+<p>This is the 15-minute version of the quickstart, intended for facilitators running a sales walkthrough or a community organizer pitch. Same flow as <a href="./quickstart-5min.md"><code>quickstart-5min.md</code></a>, but with <strong>pain → fit talking points</strong> and <strong>pricing tier references</strong> at each step.</p>
+<h2>Opening (≈ 1 min)</h2>
+<p><strong>Pain.</strong> Cloud training inside enterprises today usually falls into one of two failure modes.</p>
+<ul>
+<li><strong>Slide-only training</strong>: developers sit through a deck, never touch a console, and forget everything within a week.</li>
+<li><strong>Free-form sandbox</strong>: developers get an AWS account, no scope, no scoring, no progress visibility — and the platform team owns blast-RADIUS incidents forever.</li>
+</ul>
+<p><strong>Fit.</strong> TenkaCloud sits in between. Organizers deploy curated problems into isolated environments. Participants solve them in real AWS. Scoring and progress are wired in. Blast RADIUS is bounded by the problem template plus a read-only <code>ParticipantViewerRole</code>.</p>
+<p><strong>Positioning line.</strong></p>
+<blockquote>
+<p>TenkaCloud is an open-source cloud-competition platform on real AWS. Organizers deploy hands-on problems into isolated environments, participants solve them in the cloud, and problem packs can be reused and contributed like OSS.</p>
+</blockquote>
+<h2>Step 1 — Clone and install (≈ 1 min)</h2>
+<p><strong>Action.</strong> Same as quickstart Step 1.</p>
+<p><strong>Talking point.</strong> &quot;The platform itself is Apache 2.0. We do not gate features behind a commercial fork. Customer-specific extensions go into private problem repositories, not into the platform — that boundary is enforced by <code>ADR-008</code> and the submodule layout.&quot;</p>
+<p><strong>Pricing hint.</strong> Self-host is free. Managed-tier pricing lives at the SaaS layer, not the OSS platform.</p>
+<h2>Step 2 — Deploy Lite mode (≈ 2 min)</h2>
+<p><strong>Action.</strong> Same as quickstart Step 2. While <code>make deploy</code> runs, walk through the cost story.</p>
+<p><strong>Talking point.</strong> &quot;DynamoDB tables are forced to 1 RCU / 1 WCU by a CDK Aspect. CloudFront, S3, and Lambda all fit inside the Free Tier for a small event. We have customers running a 30-person event for the cost of a coffee.&quot;</p>
+<p><strong>Pricing hint.</strong> Starter / Hosted Event run on the shared pooled <code>application-admin-console</code> (cheaper). Annual Arena buyers who need per-tenant isolation (compliance, data residency) get a dedicated silo stack.</p>
+<h2>Step 3 — Create the event (≈ 1 min)</h2>
+<p><strong>Action.</strong> Same as quickstart Step 3.</p>
+<p><strong>Talking point.</strong> &quot;Events are pure metadata. You can run a dress rehearsal on a single team before opening it to 200 people. The platform does not change behavior based on event size — same Lambdas, same DDB, same EventBridge.&quot;</p>
+<p><strong>Pricing hint.</strong> Per-event branding (logo, custom welcome copy) is included from Hosted Event tier upward. Lite mode (free) ships the open-source default.</p>
+<h2>Step 4 — Add the <code>hello-world</code> problem (≈ 2 min)</h2>
+<p><strong>Action.</strong> Same as quickstart Step 4. Open <code>problems/challenges/hello-world/</code> in a second tab and show the three files.</p>
+<p><strong>Talking point.</strong> &quot;This is a problem. Three files: <code>metadata.json</code> (catalog + scoring config), <code>template.yaml</code> (one-page CFn), and an optional <code>portal/</code> plugin. Anyone — including your enterprise&#39;s own SRE team — can author one without forking the platform. That is <code>ADR-012</code>, the problem-plugin architecture.&quot;</p>
+<p><strong>Pricing hint.</strong> The community-contributed catalog is free. The enterprise problem pack (security operations / multi-region failover / data-mesh drills) is curated and licensed separately. See <a href="../../problems/CATALOG.md"><code>problems/CATALOG.md</code></a>.</p>
+<h2>Step 5 — Bulk-deploy to teams (≈ 3 min)</h2>
+<p><strong>Action.</strong> Same as quickstart Step 5. While the deploy runs, walk through <code>template.yaml</code> on screen.</p>
+<p><strong>Talking point.</strong> &quot;The problem is deployed via CloudFormation <code>CreateStack</code> into a <strong>separate AWS account</strong> owned by the team. We AssumeRole using an <code>ExternalId</code> that is unique per tenant — <code>CLAUDE.md</code> calls this out as non-negotiable. The platform team does not own the team&#39;s runtime; the team&#39;s account does.&quot;</p>
+<p><strong>Pricing hint.</strong> Cross-account <code>AssumeRole</code> is included at every tier. The one-time competitor-side bootstrap is <code>infrastructure/templates/competitor-bootstrap.yaml</code>, a single CFn that creates the role with <code>ExternalId</code>.</p>
+<h2>Step 6 — Solve and score (≈ 3 min)</h2>
+<p><strong>Action.</strong> Same as quickstart Step 6. After the score increments, switch back to the admin console scoreboard.</p>
+<p><strong>Talking point.</strong> &quot;Scoring is one of five built-in kinds — <code>flag</code>, <code>uptime-flat</code>, <code>uptime-multi</code>, <code>phased-polling</code>, <code>attack-detection</code>. Each problem picks one. The platform has a single generic scoring Lambda that dispatches to the right kind — no problem-specific code in the platform. That keeps the operational surface small.&quot;</p>
+<p><strong>Pricing hint.</strong> Real-time scoreboard refresh, multi-team dashboards, and disruption-phase visibility ship at Hosted Event tier and above. Starter has the same scoring path with simpler dashboards.</p>
+<h2>Closing (≈ 2 min)</h2>
+<p>Cover three points:</p>
+<ol>
+<li><strong>Reality check.</strong> What we ship today: cross-account isolated deploy, five scoring kinds, EventBridge state reconciliation (<code>ADR-014</code>), polling-based UI (no SSE — see <code>AGENTS.md</code>). What we are working toward: voting-based community catalog (<code>ADR-024</code>), provider-specific runtimes for non-AWS (<code>ADR-023</code>). We do not claim &quot;production-grade multi-cloud&quot; or &quot;full SOC2&quot; today.</li>
+<li><strong>Operating model.</strong> Lite mode = <code>make deploy</code>, 1 organizer / 1 event, 10-minute setup. SaaS mode = <code>make deploy-saas</code>, multi-tenant, pooled + silo tier mix, 15 to 20 minutes to bring up the control plane.</li>
+<li><strong>CTA.</strong> Pick a starter problem (<code>hello-world</code>, <code>s3-public-bucket</code>, <code>lambda-cold-start</code>). Run one dry-run with your own SRE team. The longest commitment is one <code>make deploy</code> run.</li>
+</ol>
+<h2>Pain → fit mapping summary</h2>
+<table>
+<thead>
+<tr>
+<th>Pain</th>
+<th>TenkaCloud fit</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>&quot;Our training is slides; nothing sticks.&quot;</td>
+<td>Hands-on real-AWS problems with deterministic scoring path.</td>
+</tr>
+<tr>
+<td>&quot;Sandbox accounts blow up our blast RADIUS.&quot;</td>
+<td>Per-team isolated account + <code>ExternalId</code> AssumeRole + scoped <code>ParticipantViewerRole</code>.</td>
+</tr>
+<tr>
+<td>&quot;Each event needs custom scoring.&quot;</td>
+<td>Five scoring kinds (<code>flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code>).</td>
+</tr>
+<tr>
+<td>&quot;We need event-day operations to be calm.&quot;</td>
+<td>EventBridge-driven reconciliation (ADR-014), polling-based UI, idempotent teardown.</td>
+</tr>
+<tr>
+<td>&quot;We want our SRE team to author problems.&quot;</td>
+<td>Three files per problem. <code>ADR-012</code> problem-plugin architecture. No platform fork.</td>
+</tr>
+<tr>
+<td>&quot;We may want to leave AWS in the future.&quot;</td>
+<td><code>ADR-023</code> provider-specific runtime roadmap. Today: AWS only; honest about scope.</td>
+</tr>
+</tbody></table>
+<h2>Pricing tier reference</h2>
+<p>These are the published commercial tiers on the landing page. Numbers below match <code>landing/index.html</code> (<code>#pricing</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Price</th>
+<th>Scope</th>
+<th>Use case</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Starter</td>
+<td>500,000 JPY / run</td>
+<td>Up to 2 teams</td>
+<td>Trial run, prove the workflow with one small group.</td>
+</tr>
+<tr>
+<td>Hosted Event</td>
+<td>1,500,000 JPY / run</td>
+<td>Up to 5 teams (≈ 20 people)</td>
+<td>One-off event with full ops support (deploy / on-call / Red Team).</td>
+</tr>
+<tr>
+<td>Annual Arena</td>
+<td>6,000,000 JPY / year</td>
+<td>Multiple events</td>
+<td>Repeatable in-house training program with branded portal / catalog.</td>
+</tr>
+</tbody></table>
+<p>Under the hood, SaaS mode (<code>make deploy-saas</code>) further splits tenants into pooled vs silo Application Planes (BASIC / STANDARD / PREMIUM share one pooled stack; PLATINUM gets a dedicated silo stack). Buyers do not need to pick that — it is selected for them based on the chosen commercial tier.</p>
+<p>Lite mode (<code>make deploy</code>) does not use tiers at all — it is the OSS self-host path, free, one-organizer / one-event.</p>
+<h2>Where to go next</h2>
+<ul>
+<li><a href="./architecture-tour-30min.md"><code>docs/demos/architecture-tour-30min.md</code></a> — the technical deep-dive for CCoE / platform-team evaluators</li>
+<li><a href="../../problems/README.md"><code>problems/README.md</code></a> — write your own problem</li>
+<li><a href="../architecture/OVERVIEW.md"><code>docs/architecture/OVERVIEW.md</code></a> — 10-minute architecture overview</li>
+<li><a href="../../ROADMAP.md"><code>ROADMAP.md</code></a> — what is shipped vs in flight (sales-team honesty card)</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/demos/sales-pitch-15min.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/demos/sales-pitch-15min.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>

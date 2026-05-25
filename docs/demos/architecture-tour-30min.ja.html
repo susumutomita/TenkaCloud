@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>30 分の技術評価者向けアーキテクチャツアー</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>30 分の技術評価者向けアーキテクチャツアー</h1>
+<blockquote>
+<p>English: <a href="./architecture-tour-30min.md">architecture-tour-30min.md</a></p>
+</blockquote>
+<p>これは CCoE / プラットフォームチーム評価者向けの技術深掘りパスです。 5 分の quickstart は視聴済み、 もしくは <a href="./quickstart-5min.ja.md"><code>docs/demos/quickstart-5min.ja.md</code></a> を読了済みである前提です。 想定時間 : ファシリ込みで約 30 分。</p>
+<h2>オープニング (約 2 分)</h2>
+<p>枠を設定します。 TenkaCloud は <code>@cdklabs/sbt-aws</code> 0.3.9 上に構築され、 4 つの plane が EventBridge bus で通信します。 各 plane → セキュリティ → マルチクラウドロードマップの順に歩きます。</p>
+<p><strong>事前読み物</strong>。</p>
+<ul>
+<li><a href="../architecture/OVERVIEW.md"><code>docs/architecture/OVERVIEW.md</code></a> — 10 分の overview</li>
+<li><a href="../architecture/MODULE_MAP.md"><code>docs/architecture/MODULE_MAP.md</code></a> — ディレクトリ → モジュール index</li>
+<li><a href="../architecture/GLOSSARY.md"><code>docs/architecture/GLOSSARY.md</code></a> — 用語定義 + ADR バックリンク</li>
+</ul>
+<h2>Plane 1 — Control Plane (約 5 分)</h2>
+<p><strong>対象ファイル</strong>。 <code>infrastructure/lib/control-plane-stack.ts</code></p>
+<p><strong>トークポイント</strong>。</p>
+<ul>
+<li>Control Plane は SBT の <code>ControlPlane</code> construct をラップする。 Cognito UserPool / Tenant CRUD API / EventBridge bus は再実装しない — それは SBT 契約。 <code>docs/architecture/harness.md</code> の <code>INVARIANT_CONTROL_PLANE_USES_SBT</code> 参照。</li>
+<li>Control Plane は <strong>テナント管理者</strong> であって、 テナントランタイムではない。 テナントランタイムデータをここに置くと <code>INVARIANT_CONTROL_PLANE_DOES_NOT_HOST_TENANT_RUNTIME</code> 違反となり、 PR レビューで <code>make harness</code> が失敗する。</li>
+<li><code>admin-console</code> (Vite + React 19 + Cloudscape) が System Admin UI。 boot 時に <code>runtime-config.json</code> を fetch し、 Cognito JWT で Tenant CRUD API を呼ぶ。</li>
+</ul>
+<p><strong>ADR 参照</strong>。</p>
+<ul>
+<li><code>ADR-018</code> — Pooled UserPool SAML 分離 (テナント identity の namespacing)</li>
+<li><code>ADR-020</code> — 認可モデル (claim 形状、 scope ルール)</li>
+</ul>
+<p><strong>確認テクニック</strong>。 <code>make synth</code> を実行して <code>ControlPlaneStack</code> リソースを grep すれば SBT 配線の健全性を確認できます。</p>
+<h2>Plane 2 — Application Plane (約 5 分)</h2>
+<p><strong>対象ファイル</strong>。</p>
+<ul>
+<li><code>infrastructure/lib/tenant-template/</code> — テナント 1 つの API + Cognito + UI ホスティング</li>
+<li><code>infrastructure/lib/tenant-pipeline/</code> — CodePipeline 経由のテナント別 provisioning (PLATINUM tier のみ)</li>
+<li><code>infrastructure/lib/bootstrap-template/</code> — <code>TenantMappingTable</code> (どのテナントがどの tier か)</li>
+</ul>
+<p><strong>トークポイント</strong>。</p>
+<ul>
+<li>Pooled tier (BASIC / STANDARD / PREMIUM) は <strong>1 つ</strong> の <code>serverless-saas-ref-arch-tenant-template-pooled</code> stack を共有。 テナント行は <code>TenantId</code> で partition された DynamoDB に存在。 これが最も安いモデル。</li>
+<li>PLATINUM tier は <code>ServerlessSaaSPipeline</code> を起動し、 CodeBuild で専用 <code>serverless-saas-ref-arch-tenant-template-&lt;tenantId&gt;</code> を build。 この stack は他テナントから隔離された専有 stack — 別 Cognito、 別 DDB、 別 Application Console URL。</li>
+<li>フロントエンド <code>application-admin-console</code> は全 tier で <strong>同じ dist</strong>。 差分は <code>runtime-config.json</code> で実行時に注入。 これが <code>INVARIANT_APP_CODE_IS_UNMODIFIED</code> : アプリ成果物はテナント ID で分岐しない。</li>
+</ul>
+<p><strong>ADR 参照</strong>。</p>
+<ul>
+<li><code>ADR-004</code> — Event-team データモデル</li>
+<li><code>ADR-016</code> — TenkaCloud Lite App Plane Core (Lite mode が使う <code>tenantId=&quot;local&quot;</code> 単純化)</li>
+<li><code>ADR-019</code> — クロスアカウント stack カタログ</li>
+</ul>
+<h2>Plane 3 — Problem Deploy Backend (約 5 分)</h2>
+<p><strong>対象ファイル</strong>。</p>
+<ul>
+<li><code>infrastructure/lib/problem-deploy/</code> — Deployments DDB + Worker Lambda + 採点 dispatcher + JWT 認証 HTTP API</li>
+<li><code>infrastructure/templates/competitor-bootstrap.yaml</code> — 競技者アカウントで 1 度だけ実行する CFn</li>
+</ul>
+<p><strong>トークポイント</strong>。</p>
+<ul>
+<li>Worker Lambda は EventBridge bus の <code>DeployRequested</code> イベントを subscribe。 発火するとテナントの <code>ExternalId</code> (必須 / opt out 不可) で competitor アカウントへ AssumeRole し、 問題の <code>template.yaml</code> で CFn <code>CreateStack</code> を実行。</li>
+<li>採点は 1 本の Lambda に集約し、 <code>kind</code> で dispatch。 5 種は <code>flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code>。 <strong>プラットフォーム側に問題固有コードは置かない</strong> — <code>ADR-012</code>。</li>
+<li>Reconciliation は EventBridge 駆動 (<code>ADR-014</code>)。 フロントエンドは polling (SSE は使わない — <code>AGENTS.md</code>)、 EventBridge は polling を補強するので long-lived socket は不要。</li>
+<li>Worker Lambda は Step Functions が前段に立ち、 retry / delete のオーケストレーションを担う。 idempotency は state を <code>(tenantId, eventId, teamId, problemId)</code> で key 化して保つ。</li>
+</ul>
+<p><strong>ADR 参照</strong>。</p>
+<ul>
+<li><code>ADR-001</code> — Problem deploy CRUD モデル</li>
+<li><code>ADR-002</code> および <code>ADR-009</code> — クロスアカウントフェデレーション</li>
+<li><code>ADR-012</code> — 問題プラグインアーキテクチャ (プラットフォームの中心)</li>
+<li><code>ADR-013</code> — Disruption phase 2 (条件起動の phase 進行)</li>
+<li><code>ADR-014</code> — EventBridge 駆動の state reconciliation</li>
+<li><code>ADR-017</code> — Cloud Action インテント / Trust Bridge</li>
+</ul>
+<h2>Plane 4 — Participant Portal (約 4 分)</h2>
+<p><strong>対象ファイル</strong>。</p>
+<ul>
+<li><code>apps/participant-portal/</code> — Vite + React 19 + Cloudscape SPA</li>
+<li><code>infrastructure/lib/problem-deploy/</code> (Participant Portal hosting は <code>CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true</code> で有効)</li>
+</ul>
+<p><strong>トークポイント</strong>。</p>
+<ul>
+<li>ポータルは team の Cognito UserPool 経由で参加者をログインさせる。 ログイン後、 team が deploy 済みの問題 / endpoint / flag / disruption phase を fetch。</li>
+<li>ワンクリック AWS Console SSO は、 team の読み取り専用 <code>ParticipantViewerRole</code> への federation で実装 (scoping IAM 文は各問題の <code>template.yaml</code> 参照)。</li>
+<li>チーム間 coordination (router 更新 / 同盟 / 共有リソース queue) は <strong>プラットフォームに焼き込まない</strong>。 問題の <code>portal/</code> プラグインへ dispatch する (<code>ADR-022</code>)。 プラットフォームは primitive を提供し、 意味論は問題が所有する。</li>
+</ul>
+<p><strong>ADR 参照</strong>。</p>
+<ul>
+<li><code>ADR-005</code> — Battle Portal UI</li>
+<li><code>ADR-006</code> — Notifications</li>
+<li><code>ADR-022</code> — Inter-team coordination plugin</li>
+</ul>
+<h2>セキュリティポスチャー (約 5 分)</h2>
+<p><strong>トークポイント</strong>。</p>
+<ul>
+<li><strong>AssumeRole は常に <code>ExternalId</code> 必須</strong>。 CDK パラメータ <code>CDK_PARAM_DEPLOY_EXTERNAL_ID</code> は省略不可。 competitor アカウントは <code>(TenkaCloud platform account, ExternalId)</code> のみ信頼する role でブートストラップ。</li>
+<li><strong>bootstrap CFn は least privilege</strong>。 <code>infrastructure/templates/competitor-bootstrap.yaml</code> は CFn CreateStack と各問題テンプレートが触れる AWS サービスの和集合のみ付与。 問題が god mode role をもらうことはない。</li>
+<li><strong>認可は infra 層で注入、 アプリ層ではやらない</strong>。 リポジトリのどこにも <code>AUTH_SKIP</code> は存在しない (<code>INVARIANT_AUTH_INJECTED_AT_INFRA_LAYER</code>)。 すべてのリクエストは API Gateway で Cognito JWT 検証を通る。</li>
+<li><strong>テナント分離は stack 分離 + DDB partition key</strong>。 single-table のクロステナント設計は使わない。 Pooled tier は stack 共有 + <code>TenantId</code> partition、 PLATINUM tier は専用 stack。</li>
+<li><strong>サプライチェイン防御 (mini Shai-Hulud 2nd wave)</strong>。 4 層 : Bun の <code>trustedDependencies</code> 空 allowlist、 <code>.npmrc</code> で <code>ignore-scripts=true</code> + 7 日間 quarantine、 <code>make audit-deps</code> が CI で baseline diff、 <code>make install_ci</code> が <code>--ignore-scripts</code> + Aikido Safe Chain。</li>
+<li><strong>on-demand DynamoDB は禁止</strong>。 CDK Aspect <code>DynamoDbLowCapacity</code> が全テーブルを 1 RCU / 1 WCU PROVISIONED に強制。 レビュー規律ではなく construction レベルで Free Tier safe。</li>
+<li><strong><code>@aws-sdk/client-secrets-manager</code> 禁止</strong>。 SecureString は SSM Parameter Store のみ。 <code>make harness</code> の <code>secrets-manager-forbidden</code> で機械的に強制。</li>
+</ul>
+<p><strong>ADR 参照</strong>。</p>
+<ul>
+<li><code>ADR-021</code> — 依存メジャーバンプ判断 (壊さずに更新する方針)</li>
+<li><code>ADR-022</code> (tenant-isolation-audit) — テナント分離をどう検証するか</li>
+</ul>
+<h2>運用 (約 2 分)</h2>
+<p><strong>トークポイント</strong>。</p>
+<ul>
+<li><strong>同じコードから 2 つの deploy mode</strong>。 <code>make deploy</code> (Lite、 デフォルト) と <code>make deploy-saas</code> (マルチテナント)。 同じ Lambda と同じ採点 kind を再利用 — control plane stack 数と tenant pipeline だけが違う。</li>
+<li><strong>冪等な teardown</strong>。 <code>scripts/cleanup.sh</code> はどんな partial-failure / partial-delete 状態からも安全に再実行できる。</li>
+<li><strong>polling UI は意図設計</strong>。 SSE / WebSocket は <code>AGENTS.md</code> で禁止 — Lambda 運用モデルと衝突するから。 フロントエンドは polling、 EventBridge が polling を補強。</li>
+<li><strong>PR Discipline は機械強制</strong>。 すべての PR で <code>make harness</code> が invariant を検査する —「PR body に <code>## Regression analysis</code> セクションがある」「PR body に <code>## Physical impact</code> セクションがある」など。 アーキテクチャ invariant と PR 衛生は同じチェック。</li>
+</ul>
+<h2>マルチクラウドロードマップ (約 2 分)</h2>
+<p><strong>トークポイント</strong>。</p>
+<ul>
+<li>今日は <strong>AWS のみ</strong>。 production-grade マルチクラウドは名乗らない。 Cognito を Azure AD だと言い張ったりしない。</li>
+<li>計画 : <code>ADR-023</code> (provider-specific 問題 runtime)。 問題はターゲットプロバイダ (<code>aws</code> / <code>azure</code> / <code>gcp</code>) を宣言できるようになり、 プラットフォームが deploy と採点を provider 別 worker に dispatch する。 プラットフォーム層 (events / 採点 kind / EventBridge) はクラウド非依存のまま。</li>
+<li>コミュニティ寄稿モデル : <code>ADR-024</code> (コミュニティ投票 + 問題レジストリ)。 投票 + キュレーション付きの問題レジストリで、 問題パックが fork にならずに伝播。</li>
+</ul>
+<p><strong>ADR 参照</strong>。</p>
+<ul>
+<li><code>ADR-023</code> — Provider-specific 問題 runtime</li>
+<li><code>ADR-024</code> — Community voting and problem registry</li>
+</ul>
+<h2>Q&amp;A の枠 (約 1 分)</h2>
+<p>質問を受けるときは、 回答を必ずファイルパスか ADR に紐付けます。 ファイルパスにも ADR にも紐付かない回答が出てきたら、 それは ADR を新規に書くべきサインです。 harness ルールの <code>adr-must-be-html</code> と <code>adr-self-contained</code> (<code>docs/architecture/harness.md</code>) が ADR を OSS readers 向け self-contained に保ちます。</p>
+<h2>次に読むもの</h2>
+<ul>
+<li><a href="../architecture/harness.md"><code>docs/architecture/harness.md</code></a> — invariant + PR Discipline (正本)</li>
+<li><a href="../architecture/adr-012-problem-plugin-architecture.html"><code>docs/architecture/adr-012-problem-plugin-architecture.html</code></a> — 中心となる設計決定</li>
+<li><a href="../../infrastructure/templates/README.md"><code>infrastructure/templates/README.md</code></a> — 競技者側ブートストラップ</li>
+<li><a href="../../problems/README.ja.md"><code>problems/README.ja.md</code></a> — 問題作成</li>
+<li><a href="../../ROADMAP.md"><code>ROADMAP.md</code></a> — 出荷済み / 進行中の差分</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/demos/architecture-tour-30min.ja.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/demos/architecture-tour-30min.ja.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>
