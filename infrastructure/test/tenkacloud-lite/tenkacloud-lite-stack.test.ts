@@ -195,6 +195,30 @@ describe("TenkaCloudLiteStack (#778 ADR-016 Phase 3)", () => {
     );
   });
 
+  // Issue #1327: Lite mode user に `custom:userRole=TenantAdmin` + `custom:tenantId=local` を
+  // JWT 発行時に注入する Pre-Token Generation Lambda が UserPool に attach されていることを pin。
+
+  it("should attach a Pre-Token Generation Lambda trigger on the Lite UserPool (#1327)", () => {
+    const template = synth();
+    template.hasResourceProperties(
+      "AWS::Cognito::UserPool",
+      Match.objectLike({
+        LambdaConfig: Match.objectLike({
+          PreTokenGeneration: Match.anyValue(),
+        }),
+      }),
+    );
+  });
+
+  it("should bundle a LiteAdminClaims Lambda Function for the Pre-Token Generation trigger (#1327)", () => {
+    const template = synth();
+    const functions = template.findResources("AWS::Lambda::Function");
+    const liteAdminClaims = Object.entries(functions).find(
+      ([name]) => name.includes("LiteAdminClaims") && name.includes("Function"),
+    );
+    expect(liteAdminClaims).toBeDefined();
+  });
+
   it("should expose /tenant/idp and /tenant/idp/{idpId} routes on the tenant REST API (#1312)", () => {
     const template = synth();
     // ApiGateway は /tenant/idp (GET POST) と /tenant/idp/{idpId} (GET PATCH DELETE) を生やすので、
