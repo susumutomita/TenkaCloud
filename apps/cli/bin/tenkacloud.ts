@@ -1,19 +1,34 @@
 #!/usr/bin/env bun
 /**
- * Issue #988: TenkaCloud CLI entry point (Phase 1 scaffold)。
+ * Issue #988 (Phase 1) + Issue #1305 (Phase 2): TenkaCloud CLI entry point。
  *
- * Phase 1 で実装する subcommand:
+ * Phase 1 subcommand:
  *   - tenkacloud login    : Cognito Hosted UI を loopback PKCE で叩いて token 取得
  *   - tenkacloud logout   : credential store を空にする
  *   - tenkacloud whoami   : 現在の id_token claim を表示
  *   - tenkacloud status   : サインイン状態 (token expiry 残時間) を表示
  *
- * Phase 2 以降で `tenants list` 等を実装する。 Phase 1 は OAuth flow と
- * credential storage の安定化が目的。
+ * Phase 2 subcommand (#1305):
+ *   - tenkacloud tenants <list|get|create|delete>
+ *   - tenkacloud events <list|get|create|end|archive|report>
+ *   - tenkacloud deploy <eventId> <teamId> <problemId>
+ *   - tenkacloud deploy <bulk|status|logs>
+ *   - tenkacloud scoreboard <eventId>
+ *   - tenkacloud score-events <eventId> [--team --from --to]
+ *   - tenkacloud idp <list|create|update|delete>
+ *   - tenkacloud audit <query|export>
  */
 
 import { spawn } from "node:child_process";
+import { runAudit } from "../src/commands/audit.ts";
+import { runDeploy } from "../src/commands/deploy.ts";
+import { runEvents } from "../src/commands/events.ts";
+import { runIdp } from "../src/commands/idp.ts";
+import { runScoreboard, runScoreEvents } from "../src/commands/scoreboard.ts";
+import { runTenants } from "../src/commands/tenants.ts";
+import { MissingApiBaseError } from "../src/config/api-urls.ts";
 import { clearTokens, isExpired, loadTokens, saveTokens } from "../src/credential-store.ts";
+import { ApiError } from "../src/http/fetch-with-auth.ts";
 import { signInWithCognito } from "../src/oauth.ts";
 
 function readEnvConfig() {
@@ -30,6 +45,17 @@ function readEnvConfig() {
     process.exit(2);
   }
   return { hostedUiDomain, clientId, issuer };
+}
+
+function readHostedUiDomain(): string {
+  const v = process.env.TENKACLOUD_COGNITO_HOSTED_UI_DOMAIN;
+  if (!v) {
+    console.error(
+      "Error: TENKACLOUD_COGNITO_HOSTED_UI_DOMAIN が未設定です (= refresh token 用に必要)",
+    );
+    process.exit(2);
+  }
+  return v;
 }
 
 function openBrowser(url: string): Promise<void> {
@@ -115,7 +141,7 @@ function cmdStatus(): number {
   }
   if (isExpired(tokens)) {
     console.log(
-      "token が expire しています (= refresh は Phase 2 で実装)。 `tenkacloud login` を再実行してください。",
+      "token が expire しています。 Phase 2 では API call 時に自動 refresh されます。 refresh も失敗する場合は `tenkacloud login` を再実行してください。",
     );
     return 1;
   }
@@ -124,22 +150,89 @@ function cmdStatus(): number {
   return 0;
 }
 
-const USAGE = `tenkacloud — TenkaCloud CLI (Phase 1 scaffold)
+const USAGE = `tenkacloud — TenkaCloud CLI
 
-Usage:
-  tenkacloud login     Cognito Hosted UI 経由でサインイン (PKCE + loopback)
-  tenkacloud logout    credential store を空にする
-  tenkacloud whoami    現在の ID token claim を JSON で表示
-  tenkacloud status    サインイン状態を表示
+Auth:
+  tenkacloud login                 Cognito Hosted UI 経由でサインイン (PKCE + loopback)
+  tenkacloud logout                credential store を空にする
+  tenkacloud whoami                現在の ID token claim を JSON で表示
+  tenkacloud status                サインイン状態を表示
 
-Env (required for login):
+System Admin (Control Plane):
+  tenkacloud tenants list                              tenant 一覧
+  tenkacloud tenants get <tenantId>                    tenant 詳細
+  tenkacloud tenants create --name --tier --admin-email  新規 tenant 作成
+  tenkacloud tenants delete <tenantId>                 tenant 削除
+
+Tenant Admin (Application Plane):
+  tenkacloud events list [--status <s>]                event 一覧
+  tenkacloud events get <eventId>                      event 詳細
+  tenkacloud events create --name --start --end --problemset
+  tenkacloud events end <eventId>                      競技終了
+  tenkacloud events archive <eventId>                  archive
+  tenkacloud events report <eventId>                   markdown 形式 summary
+
+Problem deploy:
+  tenkacloud deploy <eventId> <teamId> <problemId>     1 deployment を発火
+  tenkacloud deploy bulk <eventId>                     全 team x 全 problem を一括 deploy
+  tenkacloud deploy status <deploymentId>              deployment status
+  tenkacloud deploy logs <deploymentId>                deployment logs
+
+Scoreboard:
+  tenkacloud scoreboard <eventId>                      scoreboard を表示
+  tenkacloud score-events <eventId> [--team --from --to]  score events を fetch
+
+SAML IdP:
+  tenkacloud idp list
+  tenkacloud idp create --name --metadata-url
+  tenkacloud idp update <idpId> --metadata-url
+  tenkacloud idp delete <idpId>
+
+Audit:
+  tenkacloud audit query [--from --to --principal --action]
+  tenkacloud audit export --from --to --out <path>
+
+Output flags (どの subcommand でも):
+  --json  raw JSON 出力 (= jq 用)
+  --csv   CSV 出力 (= Excel 用)
+  default: pretty ascii table
+
+Env (login):
   TENKACLOUD_COGNITO_HOSTED_UI_DOMAIN
   TENKACLOUD_COGNITO_CLI_CLIENT_ID
   TENKACLOUD_COGNITO_ISSUER
+
+Env (Phase 2 API base URLs):
+  TENKACLOUD_API_BASE_CONTROL  (= System Admin / tenants)
+  TENKACLOUD_API_BASE_TENANT   (= Tenant Admin / events / idp / audit)
+  TENKACLOUD_API_BASE_DEPLOY   (= Problem deploy)
+  TENKACLOUD_API_BASE_EVENT    (= Scoreboard / score-events)
 `;
+
+async function runWithErrorHandling(fn: () => Promise<number>): Promise<number> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof MissingApiBaseError) {
+      console.error(`Error: ${err.message}`);
+      return 2;
+    }
+    if (err instanceof ApiError) {
+      console.error(`Error: ${err.userMessage}`);
+      return err.status === 401 ? 2 : 1;
+    }
+    if (err instanceof Error) {
+      console.error(`Error: ${err.message}`);
+      return 1;
+    }
+    console.error(`Error: ${String(err)}`);
+    return 1;
+  }
+}
 
 async function main(): Promise<void> {
   const cmd = process.argv[2];
+  const restArgs = process.argv.slice(3);
   let code: number;
   switch (cmd) {
     case "login":
@@ -153,6 +246,41 @@ async function main(): Promise<void> {
       break;
     case "status":
       code = cmdStatus();
+      break;
+    case "tenants":
+      code = await runWithErrorHandling(() =>
+        runTenants(restArgs, { auth: { hostedUiDomain: readHostedUiDomain() } }),
+      );
+      break;
+    case "events":
+      code = await runWithErrorHandling(() =>
+        runEvents(restArgs, { auth: { hostedUiDomain: readHostedUiDomain() } }),
+      );
+      break;
+    case "deploy":
+      code = await runWithErrorHandling(() =>
+        runDeploy(restArgs, { auth: { hostedUiDomain: readHostedUiDomain() } }),
+      );
+      break;
+    case "scoreboard":
+      code = await runWithErrorHandling(() =>
+        runScoreboard(restArgs, { auth: { hostedUiDomain: readHostedUiDomain() } }),
+      );
+      break;
+    case "score-events":
+      code = await runWithErrorHandling(() =>
+        runScoreEvents(restArgs, { auth: { hostedUiDomain: readHostedUiDomain() } }),
+      );
+      break;
+    case "idp":
+      code = await runWithErrorHandling(() =>
+        runIdp(restArgs, { auth: { hostedUiDomain: readHostedUiDomain() } }),
+      );
+      break;
+    case "audit":
+      code = await runWithErrorHandling(() =>
+        runAudit(restArgs, { auth: { hostedUiDomain: readHostedUiDomain() } }),
+      );
       break;
     case "-h":
     case "--help":
