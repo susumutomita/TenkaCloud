@@ -29,7 +29,7 @@ import { useApiClient } from "../api/client";
 import { EVENT_ID_RE, type EventDetail } from "../api/events-client";
 import type { AppConfig } from "../config";
 import { useEventDetail } from "../hooks/useEventDetail";
-import { useT } from "../i18n";
+import { type LocaleCode, useI18n } from "../i18n";
 import { EVENT_REPORT_PRINT_CSS } from "../lib/event-report-print-css";
 import {
   buildDisruptionLog,
@@ -41,6 +41,13 @@ import {
   type ScoreboardRow,
   summarizeEvent,
 } from "../lib/event-report-stats";
+import {
+  buildEventReportHtml,
+  EVENT_REPORT_PAGE_CLASS,
+  type EventReportExport,
+  type EventReportLabels,
+} from "./event-report/exporters/html";
+import { buildEventReportMarkdown } from "./event-report/exporters/markdown";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -84,7 +91,7 @@ function formatScheduleRange(detail: EventDetail): string {
 export function EventReportPage({ config }: { config: AppConfig }) {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
-  const t = useT();
+  const { t, locale } = useI18n();
   const apiClient = useApiClient(config);
   const eventIdValid = !!eventId && EVENT_ID_RE.test(eventId);
 
@@ -122,6 +129,7 @@ export function EventReportPage({ config }: { config: AppConfig }) {
       detail={detail}
       navigateBack={() => navigate(`/events/${eventId}`)}
       t={t}
+      locale={locale}
     />
   );
 }
@@ -131,11 +139,13 @@ function EventReportLoaded({
   detail,
   navigateBack,
   t,
+  locale,
 }: {
   readonly config: AppConfig;
   readonly detail: EventDetail;
   readonly navigateBack: () => void;
   readonly t: Translate;
+  readonly locale: LocaleCode;
 }) {
   const [coverNote, setCoverNote] = useState<string>(t("event_report.cover_note_default"));
 
@@ -148,30 +158,178 @@ function EventReportLoaded({
   const disruptions = useMemo(() => buildDisruptionLog(detail), [detail]);
   const generatedAt = useMemo(() => new Date().toISOString().replace("T", " ").slice(0, 16), []);
 
+  const exportView = useMemo<EventReportExport>(
+    () =>
+      buildExportView({
+        config,
+        coverNote,
+        detail,
+        summary,
+        scoreboard,
+        breakdown,
+        disruptions,
+        generatedAt,
+        locale,
+        t,
+      }),
+    [
+      config,
+      coverNote,
+      detail,
+      summary,
+      scoreboard,
+      breakdown,
+      disruptions,
+      generatedAt,
+      locale,
+      t,
+    ],
+  );
+
   return (
-    <Box data-tenkacloud-print-root="true">
-      <PrintControls navigateBack={navigateBack} t={t} />
-      <HeaderSection
-        coverNote={coverNote}
-        detail={detail}
-        generatedAt={generatedAt}
-        onCoverNoteChange={setCoverNote}
-        t={t}
-        tenantName={config.tenantName}
-      />
-      <SummarySection summary={summary} t={t} />
-      <ScoreboardSection rows={scoreboard} t={t} />
-      <ProblemBreakdownSection rows={breakdown} t={t} />
-      {disruptions.length > 0 && <DisruptionSection entries={disruptions} t={t} />}
-      <FooterSection generatedAt={generatedAt} t={t} />
+    <Box>
+      <div className={EVENT_REPORT_PAGE_CLASS} data-tenkacloud-print-root="true">
+        <PrintControls
+          eventId={detail.eventId}
+          exportView={exportView}
+          navigateBack={navigateBack}
+          t={t}
+        />
+        <HeaderSection
+          coverNote={coverNote}
+          detail={detail}
+          generatedAt={generatedAt}
+          onCoverNoteChange={setCoverNote}
+          t={t}
+          tenantName={config.tenantName}
+        />
+        <SummarySection summary={summary} t={t} />
+        <ScoreboardSection rows={scoreboard} t={t} />
+        <ProblemBreakdownSection rows={breakdown} t={t} />
+        {disruptions.length > 0 && <DisruptionSection entries={disruptions} t={t} />}
+        <FooterSection generatedAt={generatedAt} t={t} />
+      </div>
     </Box>
   );
 }
 
+/**
+ * page state + i18n から `EventReportExport` (= exporter 入力 ViewModel) を組む。
+ *
+ * 「t() 解決済 label を `EventReportLabels` に詰める」 ことで exporter 側は i18n を
+ * 知らずに済む (= ja / en どちらの export も同じ pure function で再現可能)。
+ */
+function buildExportView(args: {
+  readonly config: AppConfig;
+  readonly coverNote: string;
+  readonly detail: EventDetail;
+  readonly summary: ReturnType<typeof summarizeEvent>;
+  readonly scoreboard: readonly ScoreboardRow[];
+  readonly breakdown: readonly ProblemBreakdownRow[];
+  readonly disruptions: readonly DisruptionEntry[];
+  readonly generatedAt: string;
+  readonly locale: LocaleCode;
+  readonly t: Translate;
+}): EventReportExport {
+  const {
+    config,
+    coverNote,
+    detail,
+    summary,
+    scoreboard,
+    breakdown,
+    disruptions,
+    generatedAt,
+    locale,
+    t,
+  } = args;
+  const labels: EventReportLabels = {
+    fieldOrganizer: t("event_report.field_organizer"),
+    fieldEventId: t("event_report.field_event_id"),
+    fieldSchedule: t("event_report.field_schedule"),
+    fieldStatus: t("event_report.field_status"),
+    fieldGeneratedAt: t("event_report.field_generated_at"),
+    coverNoteLabel: t("event_report.cover_note_label"),
+    sectionSummary: t("event_report.section_summary"),
+    sectionScoreboard: t("event_report.section_scoreboard"),
+    sectionProblems: t("event_report.section_problems"),
+    sectionDisruptions: t("event_report.section_disruptions"),
+    sectionFooter: t("event_report.section_footer"),
+    statTeams: t("event_report.stat_teams"),
+    statParticipants: t("event_report.stat_participants"),
+    statProblems: t("event_report.stat_problems"),
+    statTotalDeployments: t("event_report.stat_total_deployments"),
+    statSuccessRate: t("event_report.stat_success_rate"),
+    statSuccessRateBreakdown: t("event_report.stat_success_rate_breakdown", {
+      ok: summary.successfulDeployments,
+      failed: summary.failedDeployments,
+    }),
+    successRateFormatted: formatPercent(summary.successRate),
+    colRank: t("event_report.col_rank"),
+    colTeam: t("event_report.col_team"),
+    colScore: t("event_report.col_score"),
+    colProblemsSolved: t("event_report.col_problems_solved"),
+    colProblemId: t("event_report.col_problem_id"),
+    colRegion: t("event_report.col_region"),
+    colSolvedCount: t("event_report.col_solved_count"),
+    colAvgScore: t("event_report.col_avg_score"),
+    colDeployments: t("event_report.col_deployments"),
+    colOccurredAt: t("event_report.col_occurred_at"),
+    colSource: t("event_report.col_source"),
+    colPoints: t("event_report.col_points"),
+    scoreboardEmpty: t("event_report.scoreboard_empty"),
+    problemsEmpty: t("event_report.problems_empty"),
+    disruptionsDescription: t("event_report.disruptions_description"),
+    footerGeneratedBy: t("event_report.footer_generated_by"),
+    footerBranding: t("event_report.footer_branding"),
+  };
+  return {
+    locale,
+    title: t("event_report.title"),
+    eventName: detail.name,
+    eventId: detail.eventId,
+    tenantName: config.tenantName,
+    scheduleRange: formatScheduleRange(detail),
+    status: detail.status,
+    generatedAt,
+    coverNote,
+    summary,
+    scoreboard,
+    breakdown,
+    disruptions,
+    labels,
+  };
+}
+
+/**
+ * Blob + ephemeral anchor で download をトリガー。 `URL.createObjectURL` を 1 tick 後に
+ * `revokeObjectURL` して memory を返す。 SSR (= jsdom 経由を含む) で document が居ない場合は
+ * no-op。
+ */
+function triggerBlobDownload(content: string, mimeType: string, filename: string): void {
+  if (typeof document === "undefined" || typeof URL === "undefined") return;
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  // body に append しないとモバイル Safari で click が無視されることがある。
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  // 早期 revoke は Firefox で download が破棄されるので next tick で。
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 function PrintControls({
+  eventId,
+  exportView,
   navigateBack,
   t,
 }: {
+  readonly eventId: string;
+  readonly exportView: EventReportExport;
   readonly navigateBack: () => void;
   readonly t: Translate;
 }) {
@@ -182,6 +340,35 @@ function PrintControls({
         <Button
           variant="primary"
           iconName="download"
+          data-testid="event-report-download-html"
+          onClick={() => {
+            triggerBlobDownload(
+              buildEventReportHtml(exportView),
+              "text/html;charset=utf-8",
+              `event-${eventId}.html`,
+            );
+          }}
+        >
+          {t("event_report.download_html_button")}
+        </Button>
+        <Button
+          variant="primary"
+          iconName="download"
+          data-testid="event-report-download-md"
+          onClick={() => {
+            triggerBlobDownload(
+              buildEventReportMarkdown(exportView),
+              "text/markdown;charset=utf-8",
+              `event-${eventId}.md`,
+            );
+          }}
+        >
+          {t("event_report.download_md_button")}
+        </Button>
+        <Button
+          variant="normal"
+          iconName="file"
+          data-testid="event-report-print-button"
           onClick={() => {
             if (typeof window !== "undefined") window.print();
           }}

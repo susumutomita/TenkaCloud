@@ -351,6 +351,8 @@
     "title": "イベントレポート",
     "back": "Event 詳細に戻る",
     "print_button": "印刷",
+    "download_html_button": "HTML をダウンロード",
+    "download_md_button": "Markdown をダウンロード",
     "loading": "読み込み中…",
     "error_header": "Event の読み込みに失敗しました",
     "error_unknown": "不明なエラーが発生しました",
