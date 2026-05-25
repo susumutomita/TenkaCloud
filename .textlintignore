@@ -5,6 +5,8 @@ dist
 build
 coverage
 .git
+.cache/
+.cache/**
 plans.md
 Plan.md
 docs/plans/
