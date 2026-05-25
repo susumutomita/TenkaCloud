@@ -34,3 +34,35 @@ export function buildStackPrefix(problemId: string, teamName: string): string {
   const teamSlug = slugify(teamName);
   return `tc-${probSlug}-${teamSlug}`;
 }
+
+/**
+ * Issue #1314: 競技者 IAM Role 名は **Application Plane (= tenantId) ごとに unique** に
+ * 生成する。 同一 AWS account が 別 Plane / 別 event に並列参加するとき、 固定名
+ * `TenkaCloud-CompetitorDeploy-Role` を再利用すると CFn create-stack が
+ * `AlreadyExistsException` で fail するため、 Plane scope の namespace を含める。
+ *
+ *   TenkaCloud-{tenantId}-{namespace}-Role
+ *
+ * IAM Role 名 charclass (`[A-Za-z0-9_+=,.@-]{1,64}`) は CFn `competitor-bootstrap.yaml` の
+ * `AllowedPattern` と一致。 backend (`infrastructure/lib/problem-deploy/handlers/shared/events.ts`)
+ * の `defaultCompetitorRoleName` と同じロジック (= 1 場所に集約せず重複している理由は、
+ * SPA bundle が Lambda code を import すると node 専用 dep が芋づる的に入るため)。
+ */
+const IAM_ROLE_SANITIZE_RE = /[^A-Za-z0-9_+=,.@-]+/g;
+const IAM_ROLE_MAX_LENGTH = 64;
+
+function sanitizeRoleSegment(segment: string): string {
+  return segment.replace(IAM_ROLE_SANITIZE_RE, "-").replace(/^-+|-+$/g, "");
+}
+
+export function defaultCompetitorRoleName(opts: { tenantId: string; namespace?: string }): string {
+  const tenant = sanitizeRoleSegment(opts.tenantId) || "tenant";
+  const ns = sanitizeRoleSegment(opts.namespace ?? "deploy") || "deploy";
+  const candidate = `TenkaCloud-${tenant}-${ns}-Role`;
+  if (candidate.length <= IAM_ROLE_MAX_LENGTH) return candidate;
+  const suffix = `-${ns}-Role`;
+  const prefix = "TenkaCloud-";
+  const room = IAM_ROLE_MAX_LENGTH - prefix.length - suffix.length;
+  const truncated = tenant.slice(0, Math.max(1, room));
+  return `${prefix}${truncated}${suffix}`;
+}

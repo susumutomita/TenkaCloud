@@ -517,7 +517,7 @@
     "add_modal_region_label": "Region",
     "add_modal_region_description": "deploy 先 region (default: ap-northeast-1)",
     "add_modal_role_label": "IAM Role 名",
-    "add_modal_role_description": "競技者側 bootstrap で deploy する Role 名 (default: TenkaCloud-CompetitorDeploy-Role)",
+    "add_modal_role_description": "競技者側 bootstrap で deploy する Role 名。 default は `TenkaCloud-{tenantId}-deploy-Role` 形式で Plane ごとに unique なので、 同一 AWS アカウントを複数 Plane (= 別 event / 別 TenkaCloud 環境) に並列接続できます。",
     "secret_modal_header": "競技者に共有する情報",
     "secret_modal_close": "閉じる",
     "secret_modal_warning_header": "この画面でのみ ExternalId を確認できます",

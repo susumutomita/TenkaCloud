@@ -27,6 +27,53 @@ export const EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED = "DeployDeleteRequested"
  */
 export const EVENT_DETAIL_TYPE_BULK_DEPLOY_CREATE_REQUESTED = "BulkDeployCreateRequested" as const;
 
+/**
+ * Issue #1314: 競技者 IAM Role 名は **Application Plane (= tenantId) ごとに unique** に
+ * 生成する。 同一 AWS account が 別 Plane / 別 event に並列参加するときに固定名
+ * (`TenkaCloud-CompetitorDeploy-Role`) を再利用すると CFn create-stack が
+ * `AlreadyExistsException` で fail するため、 Plane scope の namespace を含める。
+ *
+ * 命名規約:
+ *
+ *   TenkaCloud-{tenantId}-{namespace}-Role
+ *
+ * - `tenantId`: Application Plane の識別子 (Lite mode は `"local"`)。
+ * - `namespace`: event / scenario 単位の suffix (default `"deploy"`)。 同 tenant 内で
+ *   さらに複数 deploy 経路を扱うときに operator が区別できるようにする。
+ *
+ * IAM Role 名の charclass (`[A-Za-z0-9_+=,.@-]{1,64}`) は CFn `competitor-bootstrap.yaml` の
+ * `AllowedPattern` と一致。 invalid char (空白 / `/` 等) を呼び側が混入させると AWS が
+ * reject するため、 generator 側で sanitize する責任を持つ。
+ *
+ * Backward-compat: 既存 DDB レコードの `competitorRoleName` は そのまま読まれる
+ * (= AssumeRole 経路は DDB を source of truth にしている)。 新規追加 (= AddAccountModal)
+ * の提案 default のみ本 helper が source。
+ */
+const IAM_ROLE_SANITIZE_RE = /[^A-Za-z0-9_+=,.@-]+/g;
+const IAM_ROLE_MAX_LENGTH = 64;
+
+function sanitizeRoleSegment(segment: string): string {
+  return segment.replace(IAM_ROLE_SANITIZE_RE, "-").replace(/^-+|-+$/g, "");
+}
+
+export function defaultCompetitorRoleName(opts: { tenantId: string; namespace?: string }): string {
+  const tenant = sanitizeRoleSegment(opts.tenantId) || "tenant";
+  const ns = sanitizeRoleSegment(opts.namespace ?? "deploy") || "deploy";
+  const candidate = `TenkaCloud-${tenant}-${ns}-Role`;
+  if (candidate.length <= IAM_ROLE_MAX_LENGTH) return candidate;
+  // 64 文字超過時は tenant segment を truncate (= 末尾 `-Role` は保持)。
+  const suffix = `-${ns}-Role`;
+  const prefix = "TenkaCloud-";
+  const room = IAM_ROLE_MAX_LENGTH - prefix.length - suffix.length;
+  const truncated = tenant.slice(0, Math.max(1, room));
+  return `${prefix}${truncated}${suffix}`;
+}
+
+/**
+ * @deprecated Issue #1314: 固定 Role 名は 同 AWS account が複数 Plane に並列参加するとき
+ * 衝突する。 新規 caller は `defaultCompetitorRoleName({ tenantId })` を使うこと。
+ * 既存配備 (DDB に固定名で保存済) は そのまま動作 (DDB が source of truth)。
+ */
 export const COMPETITOR_ROLE_NAME_DEFAULT = "TenkaCloud-CompetitorDeploy-Role" as const;
 
 /**
