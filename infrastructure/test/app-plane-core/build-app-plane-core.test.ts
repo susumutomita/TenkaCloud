@@ -93,11 +93,13 @@ describe("buildAppPlaneCore", () => {
     const userPool = Object.values(userPools)[0];
     const lambdaConfig = (userPool?.Properties as { LambdaConfig?: Record<string, unknown> })
       ?.LambdaConfig;
-    // LambdaConfig 自体が無いか、 PreTokenGeneration key が無い (= SaaS mode regression なし)。
+    // LambdaConfig 自体が無いか、 PreTokenGeneration / PreTokenGenerationConfig key が無い
+    // (= SaaS mode regression なし)。 V1 / V2 どちらの key も未設定であることを確認する。
     expect(lambdaConfig?.PreTokenGeneration).toBeUndefined();
+    expect(lambdaConfig?.PreTokenGenerationConfig).toBeUndefined();
   });
 
-  it("should attach a Pre-Token Generation Lambda when liteAdminClaimsInjection is true (#1327)", () => {
+  it("should attach a Pre-Token Generation V2 Lambda when liteAdminClaimsInjection is true (#1327 / #1358)", () => {
     const app = new cdk.App();
     const stack = new cdk.Stack(app, "TestStack", {
       env: { account: "123456789012", region: "ap-northeast-1" },
@@ -122,14 +124,27 @@ describe("buildAppPlaneCore", () => {
       },
     });
     const template = Template.fromStack(stack);
+    // #1358: V2 trigger を採用すると Cognito UserPool は LambdaConfig.PreTokenGenerationConfig
+    // (= LambdaArn + LambdaVersion: V2_0) として設定される。 V1 trigger の旧 key
+    // (PreTokenGeneration) が混入していないことも併せて確認する。
     template.hasResourceProperties(
       "AWS::Cognito::UserPool",
       Match.objectLike({
         LambdaConfig: Match.objectLike({
-          PreTokenGeneration: Match.anyValue(),
+          PreTokenGenerationConfig: Match.objectLike({
+            LambdaArn: Match.anyValue(),
+            LambdaVersion: "V2_0",
+          }),
         }),
       }),
     );
+    const userPools = template.findResources("AWS::Cognito::UserPool");
+    const userPool = Object.values(userPools)[0];
+    const lambdaConfig = (userPool?.Properties as { LambdaConfig?: Record<string, unknown> })
+      ?.LambdaConfig;
+    // V1 key (= PreTokenGeneration) は使わない (= #1358 root cause: V1 は access token のみ
+    // override 可能で ID token に claim が乗らないため Application Plane handler が 403 を返す)。
+    expect(lambdaConfig?.PreTokenGeneration).toBeUndefined();
   });
 
   it("the returned applicationAdminConsoleUrl should equal hosting.distributionUrl", () => {
