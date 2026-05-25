@@ -3,13 +3,40 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import DatePicker from "@cloudscape-design/components/date-picker";
 import FormField from "@cloudscape-design/components/form-field";
+import Input from "@cloudscape-design/components/input";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import TimeInput from "@cloudscape-design/components/time-input";
+import { useEffect, useState } from "react";
 import type { EventDetail } from "../../api/events-client";
 import type { AppConfig } from "../../config";
 import type { EndsAtValidation } from "../../hooks/useEventOperations";
 import { SendNotificationModal } from "../SendNotificationModal";
+
+/**
+ * Issue #1350: Bulk teardown は 「DELETE」 と入力させない限り confirm button を活性化しない。
+ * undo 不可な操作なので誤クリックでの誤発火を防ぐ。
+ *
+ * (一括 redeploy も似た性質だが、 redeploy は既存 stack 更新で復旧可能なので別 modal で扱う。)
+ */
+const TEARDOWN_CONFIRM_TEXT = "DELETE";
+
+function useTeardownConfirmInput(modalOpen: boolean): {
+  readonly input: string;
+  readonly setInput: (next: string) => void;
+  readonly canSubmit: boolean;
+} {
+  const [input, setInput] = useState("");
+  useEffect(() => {
+    // modal を閉じた / 再オープン時に毎回入力をリセット。
+    if (!modalOpen) setInput("");
+  }, [modalOpen]);
+  return {
+    input,
+    setInput,
+    canSubmit: input.trim().toUpperCase() === TEARDOWN_CONFIRM_TEXT,
+  };
+}
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -92,6 +119,7 @@ export function EventDangerZone({
   readonly setScheduleTime: (value: string) => void;
   readonly t: Translate;
 }) {
+  const teardownConfirm = useTeardownConfirmInput(confirmTeardown);
   return (
     <>
       <Modal
@@ -153,7 +181,12 @@ export function EventDangerZone({
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button onClick={onDismissTeardown}>{t("event_detail.modal_cancel")}</Button>
-              <Button variant="primary" onClick={onBulkTeardown}>
+              <Button
+                variant="primary"
+                disabled={!teardownConfirm.canSubmit}
+                data-testid="modal-teardown-confirm"
+                onClick={onBulkTeardown}
+              >
                 {t("event_detail.modal_teardown_confirm")}
               </Button>
             </SpaceBetween>
@@ -161,10 +194,27 @@ export function EventDangerZone({
         }
       >
         <SpaceBetween size="s">
+          <Alert type="warning" header={t("event_detail.modal_teardown_blast_radius_header")}>
+            {t("event_detail.modal_teardown_blast_radius_body", {
+              teamCount: detail?.teams.length ?? 0,
+              problemCount: detail?.problems.length ?? 0,
+            })}
+          </Alert>
           <Box>{t("event_detail.modal_teardown_body")}</Box>
           <Box variant="small" color="text-status-warning">
             {t("event_detail.modal_teardown_extra")}
           </Box>
+          <FormField
+            label={t("event_detail.modal_teardown_confirm_input_label")}
+            description={t("event_detail.modal_teardown_confirm_input_description")}
+          >
+            <Input
+              value={teardownConfirm.input}
+              onChange={(e) => teardownConfirm.setInput(e.detail.value)}
+              placeholder={TEARDOWN_CONFIRM_TEXT}
+              data-testid="modal-teardown-confirm-input"
+            />
+          </FormField>
         </SpaceBetween>
       </Modal>
 
