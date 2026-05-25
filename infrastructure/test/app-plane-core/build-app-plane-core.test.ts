@@ -1,8 +1,27 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { buildAppPlaneCore } from "../../lib/app-plane-core";
+
+/**
+ * BucketDeployment(Source.asset(dist)) は synth 時に path 存在を検証する。
+ * CI は make build より前に make test-coverage を走らせるため SPA dist が無く、
+ * `CannotFindAsset` で fail する。 application-admin-console-hosting.test.ts と
+ * 同じ pattern で placeholder dist を mkdir する。
+ */
+const distDir = path.join(__dirname, "..", "..", "..", "apps", "application-admin-console", "dist");
+beforeAll(() => {
+  if (!fs.existsSync(distDir)) {
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(distDir, "index.html"),
+      "<!doctype html><html><body>placeholder</body></html>",
+    );
+  }
+});
 
 /**
  * Issue #778 ADR-016 Phase 1: AppPlaneCore builder の契約 pin。
