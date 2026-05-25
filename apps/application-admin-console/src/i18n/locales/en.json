@@ -324,7 +324,18 @@
     "tab_teams": "Teams",
     "tab_scoreboard": "Scoreboard",
     "tab_notifications": "Notifications",
-    "tab_operations": "Operations"
+    "tab_operations": "Operations",
+    "operations_header": "Operations — advanced",
+    "operations_intro": "This tab is not for normal workflow. It collects advanced operations like delete, bulk redeploy, and recovery. Use the other tabs for day-to-day work.",
+    "operations_bulk_header": "Bulk operations",
+    "operations_bulk_description": "Run deploy / teardown against every problem in the Event at once (same as the header buttons).",
+    "operations_bulk_deploy": "Redeploy all problems",
+    "operations_bulk_teardown": "Teardown all problems",
+    "operations_deploy_progress_header": "Deploy progress (detail)",
+    "operations_deploy_progress_empty": "No deploy has been kicked off yet. Press \"Redeploy all problems\" above to start.",
+    "operations_delete_header": "Delete Event (danger zone)",
+    "operations_delete_button": "Delete Event",
+    "operations_delete_warning": "Deleting the Event removes all related deployments / score events / notifications. This cannot be undone. To stop deployments while keeping the Event, use \"Teardown all problems\" above."
   },
   "send_notification": {
     "header": "Send notification",
