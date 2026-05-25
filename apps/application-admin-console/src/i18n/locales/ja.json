@@ -312,7 +312,18 @@
     "tab_teams": "チーム",
     "tab_scoreboard": "スコアボード",
     "tab_notifications": "通知",
-    "tab_operations": "運用"
+    "tab_operations": "運用",
+    "operations_header": "運用 — 高度操作",
+    "operations_intro": "この tab は通常運用では使いません。 削除・一括再 deploy・トラブル復旧などの高度操作を集約しています。 普段の workflow は他 tab を使ってください。",
+    "operations_bulk_header": "一括操作",
+    "operations_bulk_description": "Event 配下の全 problem に対して一括で deploy / teardown を実行します (header の button と同じ動作)。",
+    "operations_bulk_deploy": "全 problem を再 deploy",
+    "operations_bulk_teardown": "全 problem を teardown",
+    "operations_deploy_progress_header": "Deploy 進捗詳細",
+    "operations_deploy_progress_empty": "まだ deploy が行われていません。 上の 「全 problem を再 deploy」 を押すと開始します。",
+    "operations_delete_header": "Event 削除 (danger zone)",
+    "operations_delete_button": "Event 削除",
+    "operations_delete_warning": "Event を削除すると関連する全 deployment / score event / 通知が消えます。 取り消しできません。 Event を残したまま deployment だけを止めたい場合は、 上の 「全 problem を teardown」 を使ってください。"
   },
   "send_notification": {
     "header": "通知を送る",
