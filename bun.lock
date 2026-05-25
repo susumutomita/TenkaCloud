@@ -76,6 +76,9 @@
       "bin": {
         "tenkacloud": "./bin/tenkacloud.ts",
       },
+      "dependencies": {
+        "http-status-codes": "^2.3.0",
+      },
       "devDependencies": {
         "@types/node": "^24.12.4",
         "typescript": "~5.9.3",
