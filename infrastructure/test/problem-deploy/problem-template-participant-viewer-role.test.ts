@@ -85,6 +85,13 @@ const RESOURCE_STAR_OK_SIDS = new Set([
   // (= 参加者は console / CLI で自分の LB / TG / Listener / TargetHealth を観測する
   // のに必要)。 per-team dedicated AWS account 前提で cross-tenant leak リスクなし。
   "ReadLoadBalancerState",
+  // Issue #1316: hello-world hint で案内している AWS Console の SSM Parameter
+  // detail page は navigation chrome (sidebar list / breadcrumb) で
+  // ssm:DescribeParameters を呼ぶ。 これは AWS IAM 仕様で resource-level perm
+  // を受け付けない metadata-only API。 per-team dedicated AWS account 前提で
+  // cross-tenant leak リスクなし。 ConsoleEc2Metadata / ManageOwnTaskDefinitions
+  // / ReadLoadBalancerState と同じ扱い。
+  "DescribeOwnParameters",
 ]);
 
 describe("problem template ParticipantViewerRole (#744)", () => {
