@@ -5,6 +5,7 @@ import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import type { IBucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import {
   LAMBDA_NODEJS_BUNDLING_TARGET,
@@ -52,6 +53,17 @@ export interface AdminInsightApiLambdaProps {
    * 未指定なら route は 503 を返す (= 旧 stack 互換)。
    */
   readonly adminAuditLogTable?: Table;
+  /**
+   * Issue #1341 (#1335 Phase 3): SOC2 immutable audit archive bucket。 指定時は
+   * `/admin/audit/export` route が GetObject / ListObjectsV2 で JSONL export を返す。
+   * 未指定なら route は 503 を返す (= legacy stack 互換 / OSS deploy で archive 不要時)。
+   */
+  readonly auditArchiveBucket?: IBucket;
+  /**
+   * Issue #1341: SOC2 1-year retention env (= `AUDIT_RETENTION_DAYS`)。 enterprise / hosted は
+   * `365` を渡す。 未指定なら handler default の 90 日 (= OSS / self-hosted)。
+   */
+  readonly auditRetentionDays?: number;
 }
 
 /**
@@ -94,6 +106,11 @@ export class AdminInsightApiLambda extends Construct {
         CONTROL_PLANE_USER_POOL_ID: props.controlPlaneUserPool?.userPoolId ?? "",
         // Issue #950 (ADR-020 Phase D): admin audit log table 名 (= read-only 経由で表示)
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
+        // Issue #1341 (#1335 Phase 3): SOC2 immutable archive bucket 名 + 365 retention env。
+        AUDIT_ARCHIVE_BUCKET_NAME: props.auditArchiveBucket?.bucketName ?? "",
+        ...(props.auditRetentionDays !== undefined
+          ? { AUDIT_RETENTION_DAYS: String(props.auditRetentionDays) }
+          : {}),
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -113,6 +130,9 @@ export class AdminInsightApiLambda extends Construct {
     // Issue #950 (ADR-020 Phase D): admin audit log の read-only access (GSI も含む)
     props.adminAuditLogTable?.grantReadData(this.fn);
     props.teamsTable.grantReadData(this.fn);
+    // Issue #1341 (#1335 Phase 3): SOC2 archive bucket からの GetObject / ListBucket。
+    // write は archive Lambda 専用なので read のみ付与 (= least-privilege)。
+    props.auditArchiveBucket?.grantRead(this.fn);
 
     // Phase 1.B (#598) CFn Describe: deploy job 詳細ページの "Stack 進行状況" セクションが
     // DescribeStackEvents / DescribeStackResources を直接叩く。Resource:* なのは、CFn の

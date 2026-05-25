@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type AuditClient,
   extractAuditContext,
+  resolveAuditRetentionDays,
+  SOC2_AUDIT_RETENTION_DAYS,
   writeAuditEvent,
 } from "../../lib/problem-deploy/handlers/shared/audit-log";
 
@@ -16,15 +18,19 @@ import {
 
 const ORIGINAL_TABLE = process.env.ADMIN_AUDIT_LOG_TABLE_NAME;
 const ORIGINAL_ENV = process.env.DEPLOY_ENVIRONMENT;
+const ORIGINAL_RETENTION = process.env.AUDIT_RETENTION_DAYS;
 beforeEach(() => {
   process.env.ADMIN_AUDIT_LOG_TABLE_NAME = "TestAuditLog";
   process.env.DEPLOY_ENVIRONMENT = "test-env";
+  delete process.env.AUDIT_RETENTION_DAYS;
 });
 afterEach(() => {
   if (ORIGINAL_TABLE === undefined) delete process.env.ADMIN_AUDIT_LOG_TABLE_NAME;
   else process.env.ADMIN_AUDIT_LOG_TABLE_NAME = ORIGINAL_TABLE;
   if (ORIGINAL_ENV === undefined) delete process.env.DEPLOY_ENVIRONMENT;
   else process.env.DEPLOY_ENVIRONMENT = ORIGINAL_ENV;
+  if (ORIGINAL_RETENTION === undefined) delete process.env.AUDIT_RETENTION_DAYS;
+  else process.env.AUDIT_RETENTION_DAYS = ORIGINAL_RETENTION;
 });
 
 function buildMockClient(): { client: AuditClient; send: ReturnType<typeof vi.fn> } {
@@ -62,7 +68,25 @@ describe("writeAuditEvent (#950)", () => {
     expect(item.outcome).toBe("success");
     expect(item.target).toBe("bob@example.com");
     expect(item.occurredAt).toBe("2026-05-17T12:00:00.000Z");
-    // ttl = occurredAtMs/1000 + 90*86400
+    // ttl = occurredAtMs/1000 + 90*86400 (= default OSS retention; Issue #1341)
+    expect(item.ttl).toBe(Math.floor(baseEvent.occurredAtMs / 1000) + 90 * 86400);
+  });
+
+  it("should use 365-day TTL when AUDIT_RETENTION_DAYS=365 (Issue #1341 SOC2)", async () => {
+    process.env.AUDIT_RETENTION_DAYS = "365";
+    const { client, send } = buildMockClient();
+    await writeAuditEvent(baseEvent, client);
+    const cmd = send.mock.calls[0]?.[0] as { input?: Record<string, unknown> };
+    const item = cmd.input?.Item as Record<string, unknown>;
+    expect(item.ttl).toBe(Math.floor(baseEvent.occurredAtMs / 1000) + 365 * 86400);
+  });
+
+  it("should fall back to 90 days for invalid AUDIT_RETENTION_DAYS values", async () => {
+    process.env.AUDIT_RETENTION_DAYS = "not-a-number";
+    const { client, send } = buildMockClient();
+    await writeAuditEvent(baseEvent, client);
+    const cmd = send.mock.calls[0]?.[0] as { input?: Record<string, unknown> };
+    const item = cmd.input?.Item as Record<string, unknown>;
     expect(item.ttl).toBe(Math.floor(baseEvent.occurredAtMs / 1000) + 90 * 86400);
   });
 
@@ -123,6 +147,31 @@ describe("writeAuditEvent (#950)", () => {
     const cmd = send.mock.calls[0]?.[0] as { input?: Record<string, unknown> };
     const item = cmd.input?.Item as Record<string, unknown>;
     expect(item.extra).toEqual({ newRole: "TenantViewer", reason: "downgrade" });
+  });
+});
+
+describe("resolveAuditRetentionDays (#1341)", () => {
+  it("should default to 90 when env is unset", () => {
+    delete process.env.AUDIT_RETENTION_DAYS;
+    expect(resolveAuditRetentionDays()).toBe(90);
+  });
+
+  it("should accept 365 for SOC2 enterprise hosted", () => {
+    process.env.AUDIT_RETENTION_DAYS = "365";
+    expect(resolveAuditRetentionDays()).toBe(365);
+    expect(SOC2_AUDIT_RETENTION_DAYS).toBe(365);
+  });
+
+  it("should clamp values larger than 3650 (= 10 years)", () => {
+    process.env.AUDIT_RETENTION_DAYS = "9999";
+    expect(resolveAuditRetentionDays()).toBe(3650);
+  });
+
+  it("should reject negative or zero values and fall back to 90", () => {
+    process.env.AUDIT_RETENTION_DAYS = "-30";
+    expect(resolveAuditRetentionDays()).toBe(90);
+    process.env.AUDIT_RETENTION_DAYS = "0";
+    expect(resolveAuditRetentionDays()).toBe(90);
   });
 });
 

@@ -25,10 +25,36 @@ import { ulid } from "ulid";
  *
  * env: `ADMIN_AUDIT_LOG_TABLE_NAME` が空文字 / 未設定なら write は no-op (= 旧 stack 互換、
  * audit 行 0 件で正常動作)。 CDK 側で table 配線が landed したあとから自動で記録され始める。
+ *
+ * Retention (Issue #1341 / #1335 Phase 3): SOC2 typical 1-year retention 要件のため、
+ * `AUDIT_RETENTION_DAYS` env で TTL 日数を override できる。 default 90 日 (= OSS / self-hosted)、
+ * enterprise hosted は env で 365 を指定する。 immutable archive (= S3 Object Lock 1-year compliance)
+ * は別経路 (= DDB Stream → S3 Lambda) で長期保管する設計のため、 TTL 365 でも free tier 圧迫は
+ * 1 op/日 × 365 ≒ 365 行で minor (= 1/1 RCU/WCU で吸収できる)。
  */
 
-const AUDIT_TTL_DAYS = 90;
-const AUDIT_TTL_SECONDS = AUDIT_TTL_DAYS * 86400;
+const DEFAULT_AUDIT_TTL_DAYS = 90;
+const ENTERPRISE_AUDIT_TTL_DAYS = 365;
+const SECONDS_PER_DAY = 86400;
+
+/**
+ * Issue #1341: env `AUDIT_RETENTION_DAYS` を解釈する。 未設定 / 空文字 / 不正値は
+ * 90 日 default に倒す (= OSS 互換)。 正の整数に限り受理する (= 入力 sanitize)。
+ */
+export function resolveAuditRetentionDays(): number {
+  const raw = process.env.AUDIT_RETENTION_DAYS;
+  if (!raw) return DEFAULT_AUDIT_TTL_DAYS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_AUDIT_TTL_DAYS;
+  // SOC2 typical 1-year (= 365)、 finance 7-year (= 2555) の範囲を許容。 上限は 10 年 (= 3650)
+  // でガード (= 設定ミスで TTL が極端に長くなり ttl pruning が事実上 disabled になるのを防ぐ)。
+  const MAX_DAYS = 3650;
+  if (parsed > MAX_DAYS) return MAX_DAYS;
+  return parsed;
+}
+
+/** SOC2 enterprise default. Re-exported for CDK tests and ADR alignment. */
+export const SOC2_AUDIT_RETENTION_DAYS = ENTERPRISE_AUDIT_TTL_DAYS;
 
 export type AuditOutcome = "success" | "forbidden" | "not_found" | "conflict" | "error";
 
@@ -86,7 +112,7 @@ export async function writeAuditEvent(
   const occurredAt = new Date(event.occurredAtMs).toISOString();
   const id = ulid(event.occurredAtMs);
   const pk = event.tenantId === "SYSTEM" ? `SYSTEM#${cfg.env}` : `TENANT#${event.tenantId}`;
-  const ttl = Math.floor(event.occurredAtMs / 1000) + AUDIT_TTL_SECONDS;
+  const ttl = Math.floor(event.occurredAtMs / 1000) + resolveAuditRetentionDays() * SECONDS_PER_DAY;
 
   const item: Record<string, unknown> = {
     PK: pk,
