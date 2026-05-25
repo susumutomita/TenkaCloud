@@ -337,6 +337,11 @@ function respondHintRevealOutcome(
   if (outcome.kind === "scoring_ended") {
     return respondError(c, "scoring_ended", { endsAt: outcome.endsAt });
   }
+  if (outcome.kind === "hint_out_of_order") {
+    // Issue #1315: UI が 「Hint N-1 を先に reveal」 文言を組み立てるため、 missingHintId を
+    // body に含めて返す (= scoring_not_started + startsAt と同じ pattern)。
+    return respondError(c, "hint_out_of_order", { missingHintId: outcome.missingHintId });
+  }
   if (
     outcome.kind === "unauthorized" ||
     outcome.kind === "not_flag_problem" ||

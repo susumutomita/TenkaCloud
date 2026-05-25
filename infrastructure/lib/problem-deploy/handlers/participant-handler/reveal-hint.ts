@@ -28,6 +28,13 @@ export type RevealHintOutcome =
   | { kind: "not_flag_problem" }
   | { kind: "unknown_hint" }
   /**
+   * Issue #1315: ヒント順序制約。 Hint N は Hint 1..N-1 がすべて reveal 済のときのみ
+   * 開封できる (progressive hint convention)。 違反時は missingHintId (= 次に開ける
+   * べき直前 hint) を含めて 409 を返し、 UI は 「Hint N-1 を先に reveal してください」
+   * の親切文言を出す。
+   */
+  | { kind: "hint_out_of_order"; missingHintId: string }
+  /**
    * Issue #1005: 競技開始前 / 終了後 / scoringLocked 状態でヒント開封を block する。
    * submit-flag と同じ gate を共有 (event-gate.ts)。 旧来 reveal-hint は gate を見ず、
    * 開始前に開けて -penalty が accrue する公平性破壊バグがあった。
@@ -58,7 +65,10 @@ export async function revealHint(
   // Phase 3 は flag kind 限定で hints をサポート (= Phase 5 で他 4 kind に拡張)。
   if (scoring?.kind !== "flag") return { kind: "not_flag_problem" };
 
-  const hint = scoring.hints?.find((h) => h.id === hintId);
+  const hints = scoring.hints ?? [];
+  const hintIndex = hints.findIndex((h) => h.id === hintId);
+  if (hintIndex < 0) return { kind: "unknown_hint" };
+  const hint = hints[hintIndex];
   if (!hint) return { kind: "unknown_hint" };
 
   // 既に reveal 済か read-through で先に check (= UI の 「locked → unlocked」 UX で同 hint を
@@ -74,7 +84,34 @@ export async function revealHint(
     };
   }
 
+  // Issue #1315: 順序制約。 Hint N (index > 0) は Hint 1..N-1 がすべて reveal 済の
+  // ときのみ開封可。 違反時は missing する 「次に開けるべき直前 hint」 の id を返す
+  // (= UI で 「Hint N-1 を先に reveal」 文言を組み立てるため)。
+  const missingPredecessor = findMissingPredecessor(hints, hintIndex, alreadyRevealed);
+  if (missingPredecessor) {
+    return { kind: "hint_out_of_order", missingHintId: missingPredecessor };
+  }
+
   return updateHintReveal(shared, item, hint, hintId);
+}
+
+/**
+ * 順序制約 enforcer。 Hint index 0 は無条件 OK。 index > 0 のとき、 index 未満の hint が
+ * 1 つでも未 reveal なら最初の未 reveal hint の id を返す (= UI へのヒント)。
+ * 全先行 hint が reveal 済なら undefined。
+ */
+function findMissingPredecessor(
+  hints: readonly ProgressiveHint[],
+  targetIndex: number,
+  alreadyRevealed: readonly { readonly hintId: string }[],
+): string | undefined {
+  if (targetIndex <= 0) return undefined;
+  const revealedIds = new Set(alreadyRevealed.map((r) => r.hintId));
+  for (let i = 0; i < targetIndex; i++) {
+    const predecessor = hints[i];
+    if (predecessor && !revealedIds.has(predecessor.id)) return predecessor.id;
+  }
+  return undefined;
 }
 
 function isRevealHintItem(

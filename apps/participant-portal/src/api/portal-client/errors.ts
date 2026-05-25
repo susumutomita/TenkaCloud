@@ -9,7 +9,15 @@ import type { AssumeRoleStage } from "./types";
  */
 
 export class PortalValidationError extends Error {
-  constructor(public readonly errorCode: string) {
+  /**
+   * Issue #1315: 400 / 409 で backend が `error` 以外の付加 field (例: `missingHintId`) を
+   * 返すケース向けの optional 受け皿。 UI 側で error 種別ごとに必要な field を引き出して
+   * 親切メッセージを組み立てる (= 各 error 種別ごとに sub-class を量産しない軽量解)。
+   */
+  constructor(
+    public readonly errorCode: string,
+    public readonly details?: Readonly<Record<string, unknown>>,
+  ) {
     super("入力値が不正です。");
     this.name = "PortalValidationError";
   }
