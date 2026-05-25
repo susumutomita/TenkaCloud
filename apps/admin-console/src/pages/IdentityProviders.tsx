@@ -4,6 +4,7 @@ import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
+import Icon from "@cloudscape-design/components/icon";
 import Input from "@cloudscape-design/components/input";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -18,6 +19,8 @@ import {
 } from "../api/idp-client";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { useLang } from "../i18n";
+import { formatRelativeTime } from "../lib/format";
 
 /**
  * Issue #1293: System Admin → list / add / edit / delete SAML IdPs attached to
@@ -38,6 +41,7 @@ import type { AppConfig } from "../config";
  */
 export function IdentityProvidersPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
+  const lang = useLang();
   const client: IdpClient | null = useMemo(
     () => (auth.tokens ? createIdpClient(config, auth.tokens.idToken) : null),
     [auth.tokens, config],
@@ -78,10 +82,25 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
 
   if (!config.apiBaseUrl) {
     return (
-      <Alert type="warning">
-        IdP CRUD API is not wired up in this environment. Set
-        <code> apiBaseUrl </code> in runtime-config.json or the dev .env.
-      </Alert>
+      <Container
+        header={
+          <Header
+            variant="h1"
+            description="SAML identity providers attached to the System Admin Cognito UserPool."
+          >
+            Identity providers
+          </Header>
+        }
+      >
+        <Alert type="warning" header="IdP CRUD API not wired up in this environment">
+          <SpaceBetween size="xs">
+            <Box>
+              Set <code>apiBaseUrl</code> in runtime-config.json or the dev <code>.env</code> and
+              reload the page.
+            </Box>
+          </SpaceBetween>
+        </Alert>
+      </Container>
     );
   }
 
@@ -116,7 +135,10 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
             {
               id: "updatedAt",
               header: "Updated",
-              cell: (i: IdpSummary) => i.updatedAt,
+              // Issue #1362: ISO 生値ではなく 「N 日前」 表示 + hover で絶対時刻 tooltip。
+              cell: (i: IdpSummary) => (
+                <span title={i.updatedAt}>{formatRelativeTime(i.updatedAt, lang)}</span>
+              ),
             },
             {
               id: "actions",
@@ -157,8 +179,18 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
           loading={items === null}
           loadingText="Loading…"
           empty={
-            <Box textAlign="center">
-              No IdPs configured. Click <strong>Add SAML IdP</strong> to register one.
+            // Issue #1362: アイコン + 説明 + 行動誘導の 3 段で 「dev 感のある空表示」 を脱却。
+            <Box textAlign="center" padding="l">
+              <SpaceBetween size="xs">
+                <Box variant="strong" color="text-status-inactive">
+                  <Icon name="lock-private" size="big" variant="subtle" /> No SAML IdPs configured
+                  yet
+                </Box>
+                <Box color="text-body-secondary">
+                  Sign-in falls back to local Cognito email + password. Click{" "}
+                  <strong>Add SAML IdP</strong> to wire Entra ID / Okta / etc.
+                </Box>
+              </SpaceBetween>
             </Box>
           }
         />

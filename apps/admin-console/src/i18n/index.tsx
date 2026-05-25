@@ -139,6 +139,11 @@ export function useT(): (
   return useI18n().t;
 }
 
+/** Issue #1362: format helper に locale を渡すための shortcut hook。 */
+export function useLang(): LocaleCode {
+  return useI18n().locale;
+}
+
 /**
  * 翻訳テンプレートに `{name}` 形式の placeholder を埋め込む helper。
  *

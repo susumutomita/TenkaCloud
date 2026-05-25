@@ -3,6 +3,7 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
+import Icon from "@cloudscape-design/components/icon";
 import Input from "@cloudscape-design/components/input";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
@@ -17,6 +18,8 @@ import {
 } from "../api/audit-log-client";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { useLang } from "../i18n";
+import { formatRelativeTime } from "../lib/format";
 
 const PAGE_LIMIT = 50;
 
@@ -64,6 +67,7 @@ export function describeError(err: unknown): string {
  */
 export function AuditLogPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
+  const lang = useLang();
   const client: TenantAuditClient | null = useMemo(
     () => (auth.tokens ? createTenantAuditClient(config, auth.tokens.idToken) : null),
     [auth.tokens, config],
@@ -216,7 +220,12 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
         loadingText="読み込み中…"
         items={items}
         columnDefinitions={[
-          { id: "occurredAt", header: "発生日時", cell: (i) => i.occurredAt },
+          {
+            id: "occurredAt",
+            header: "発生日時",
+            // Issue #1362: ISO 生値ではなく 「N 分前」 表示 + hover で絶対時刻 tooltip。
+            cell: (i) => <span title={i.occurredAt}>{formatRelativeTime(i.occurredAt, lang)}</span>,
+          },
           { id: "actor", header: "実行者", cell: (i) => i.actorUsername ?? i.actor },
           { id: "action", header: "操作", cell: (i) => i.action },
           { id: "outcome", header: "結果", cell: (i) => outcomeIndicator(i.outcome) },
@@ -224,10 +233,15 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
           { id: "ipAddress", header: "IP", cell: (i) => i.ipAddress ?? "-" },
         ]}
         empty={
-          <Box textAlign="center" padding="m">
-            <SpaceBetween size="s">
-              <b>該当する監査ログはありません</b>
-              <span>フィルターを変更するか、 再読み込みしてください。</span>
+          // Issue #1362: アイコン + 強調 + 行動誘導の 3 段で empty state を friendly に。
+          <Box textAlign="center" padding="l">
+            <SpaceBetween size="xs">
+              <Box variant="strong" color="text-status-inactive">
+                <Icon name="file" size="big" variant="subtle" /> 該当する監査ログはありません
+              </Box>
+              <Box color="text-body-secondary">
+                フィルターを変更するか、 再読み込みしてください。
+              </Box>
             </SpaceBetween>
           </Box>
         }

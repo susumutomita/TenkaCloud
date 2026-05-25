@@ -147,5 +147,10 @@ export function useT(): (
   return useI18n().t;
 }
 
+/** Issue #1362: format helper に locale を渡すための shortcut hook。 */
+export function useLang(): LocaleCode {
+  return useI18n().locale;
+}
+
 /** Tests / debug 用に dictionaries を露出。 portal 本体からは使わない。 */
 export const _testInternals = { LOCALE_DICTIONARIES, resolveKey, detectBrowserLocale, interpolate };

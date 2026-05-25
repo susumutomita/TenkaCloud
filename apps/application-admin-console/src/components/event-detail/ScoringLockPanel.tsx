@@ -5,10 +5,22 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import type { EventDetail } from "../../api/events-client";
+import { useLang } from "../../i18n";
+import { formatRelativeTime, type SupportedLang } from "../../lib/format";
 import { eventStatusBadge, Field } from "./shared";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
+/**
+ * Issue #1362: Qiita 「用途別グルーピング」 + 「DB 生値そのまま表示しない」 を適用。
+ *
+ *   - 「現状 (status)」 = 上段 = Event の status / scoring lock 状態
+ *   - 「リソース (resources)」 = 下段 = チーム数 / 問題数 / 作成からの経過
+ *   - createdAt は ISO 文字列ではなく `formatRelativeTime` で 「N 日前」 表示
+ *     (= ユーザーが mental cast 不要)
+ *
+ * `useLang()` で現在 locale を取って format helper に渡す。
+ */
 export function ScoringLockPanel({
   detail,
   t,
@@ -16,8 +28,12 @@ export function ScoringLockPanel({
   readonly detail: EventDetail;
   readonly t: Translate;
 }) {
+  const lang: SupportedLang = useLang() === "en" ? "en" : "ja";
   return (
-    <Container header={<Header variant="h2">{t("event_detail.event_summary_header")}</Header>}>
+    <Container
+      data-testid="event-overview-summary-container"
+      header={<Header variant="h2">{t("event_detail.event_summary_header")}</Header>}
+    >
       <SpaceBetween size="m">
         {detail.scoringLocked === true && (
           <Alert
@@ -41,7 +57,12 @@ export function ScoringLockPanel({
           </Field>
           <Field label={t("event_detail.field_team_count")}>{detail.teamCount}</Field>
           <Field label={t("event_detail.field_problem_count")}>{detail.problems.length}</Field>
-          <Field label={t("event_detail.field_created_at")}>{detail.createdAt}</Field>
+          <Field
+            label={t("event_detail.field_created_at")}
+            // Issue #1362: ISO の生値ではなく 「N 日前」 表示。 hover で絶対時刻 tooltip。
+          >
+            <span title={detail.createdAt}>{formatRelativeTime(detail.createdAt, lang)}</span>
+          </Field>
         </ColumnLayout>
       </SpaceBetween>
     </Container>

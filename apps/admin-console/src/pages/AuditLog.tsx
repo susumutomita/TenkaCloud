@@ -3,6 +3,7 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
+import Icon from "@cloudscape-design/components/icon";
 import Input from "@cloudscape-design/components/input";
 import Select from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -19,7 +20,8 @@ import {
 } from "../api/audit-client";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
-import { useT } from "../i18n";
+import { useLang, useT } from "../i18n";
+import { formatRelativeTime } from "../lib/format";
 
 const AUDIT_PAGE_LIMIT = 50;
 
@@ -116,6 +118,7 @@ function triggerCsvDownload(blob: Blob, filename: string): void {
 export function AuditLogPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
   const t = useT();
+  const lang = useLang();
   const client: AuditClient | null = useMemo(
     () => (auth.tokens ? createAuditClient(config, auth.tokens.idToken) : null),
     [auth.tokens, config],
@@ -302,7 +305,8 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
           {
             id: "occurredAt",
             header: t("audit_log.col_occurred_at"),
-            cell: (i) => i.occurredAt,
+            // Issue #1362: ISO 生値ではなく 「N 分前」 表示 + hover で絶対時刻 tooltip。
+            cell: (i) => <span title={i.occurredAt}>{formatRelativeTime(i.occurredAt, lang)}</span>,
           },
           {
             id: "actor",
@@ -336,10 +340,13 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
           },
         ]}
         empty={
-          <Box textAlign="center" padding="m">
-            <SpaceBetween size="s">
-              <b>{t("audit_log.empty_header")}</b>
-              <span>{t("audit_log.empty_hint_filter")}</span>
+          // Issue #1362: アイコン + 強調 + 行動誘導の 3 段で empty state を friendly に。
+          <Box textAlign="center" padding="l">
+            <SpaceBetween size="xs">
+              <Box variant="strong" color="text-status-inactive">
+                <Icon name="file" size="big" variant="subtle" /> {t("audit_log.empty_header")}
+              </Box>
+              <Box color="text-body-secondary">{t("audit_log.empty_hint_filter")}</Box>
             </SpaceBetween>
           </Box>
         }

@@ -85,6 +85,17 @@ export function readTabFromHash(hash: string): EventTabId {
   return isEventTabId(candidate) ? candidate : "overview";
 }
 
+/**
+ * Issue #1362: Qiita 「用途別グルーピング」 原則で Overview tab を 3 グループに整理。
+ *
+ *   1. 現状 (status)        — Event 概要 (ScoringLockPanel) + 現在のフェーズ
+ *   2. 次のアクション (hero) — operator が押すべき button (EventWizardPanel の CTA half)
+ *   3. リソース / Deploy 進捗 — チーム / 問題 / deployment 進捗
+ *
+ * `EventWizardPanel` 内部で「現状 (phase indicator)」 と「次のアクション (CTA)」 を別
+ * Container に分割している (= 上の 1+2)。 視線は 画面 title → 現状 → 次のアクション →
+ * リソース の順に降りていく。
+ */
 export function OverviewTab({
   counts,
   detail,
@@ -95,8 +106,8 @@ export function OverviewTab({
 }: EventTabContentProps) {
   return (
     <>
-      <EventWizardPanel t={t} wizard={wizard} />
       <ScoringLockPanel detail={detail} t={t} />
+      <EventWizardPanel t={t} wizard={wizard} />
       <DeployProgressPanel
         allDoneCount={counts.allDoneCount}
         completeCount={counts.completeCount}
