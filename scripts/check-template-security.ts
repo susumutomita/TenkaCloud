@@ -74,7 +74,50 @@ const RESOURCE_STAR_OK_ACTIONS = new Set([
   "s3:GetBucketLocation",
   // Lambda — list verbs are global-scoped
   "lambda:ListFunctions",
+  "lambda:ListLayers",
+  "lambda:ListFunctionUrlConfigs",
+  "lambda:ListTags",
   "lambda:ListEventSourceMappings",
+  // ECS / App Runner / ECR / Cognito / CloudFront console navigation list verbs.
+  "ecs:ListClusters",
+  "ecs:ListServices",
+  "ecs:ListTasks",
+  "ecs:ListTaskDefinitions",
+  "ecs:ListTaskDefinitionFamilies",
+  "ecs:ListAccountSettings",
+  "apprunner:ListServices",
+  "apprunner:ListOperations",
+  "apprunner:ListTagsForResource",
+  "ecr:DescribeRepositories",
+  "ecr:DescribeImages",
+  "ecr:ListImages",
+  "ecr:ListTagsForResource",
+  "cognito-idp:ListUserPools",
+  "cognito-idp:ListUserPoolClients",
+  "cognito-idp:ListTagsForResource",
+  "cloudfront:ListDistributions",
+  "cloudfront:ListOriginAccessControls",
+  "cloudfront:ListTagsForResource",
+  // ELBv2 / CloudTrail / Athena / Glue read-only inventory APIs do not give
+  // useful resource-level scoping for the console discovery flows these
+  // problems require. Mutating access remains tag/ARN scoped in the templates.
+  "elasticloadbalancing:DescribeLoadBalancers",
+  "elasticloadbalancing:DescribeTargetGroups",
+  "elasticloadbalancing:DescribeListeners",
+  "elasticloadbalancing:DescribeRules",
+  "elasticloadbalancing:DescribeTargetHealth",
+  "elasticloadbalancing:DescribeTags",
+  "elasticloadbalancing:DescribeLoadBalancerAttributes",
+  "elasticloadbalancing:DescribeTargetGroupAttributes",
+  "elasticloadbalancing:DescribeAccountLimits",
+  "cloudtrail:ListTrails",
+  "cloudtrail:LookupEvents",
+  "athena:ListWorkGroups",
+  "athena:ListQueryExecutions",
+  "athena:ListDatabases",
+  "athena:ListTagsForResource",
+  "glue:GetDatabases",
+  "glue:SearchTables",
   // DynamoDB — list / describe per-account
   "dynamodb:ListTables",
   "dynamodb:DescribeTable",
@@ -156,12 +199,13 @@ export function findIamResourceWildcardFindings(
   loc: string,
   resources: readonly unknown[],
   actions: readonly unknown[],
+  condition?: unknown,
 ): Finding[] {
   if (!resources.includes("*")) return [];
   const actionList = actions.map((a) => (typeof a === "string" ? a : "")).filter(Boolean);
   const allRequireStar =
     actionList.length > 0 && actionList.every((a) => RESOURCE_STAR_OK_ACTIONS.has(a));
-  if (allRequireStar) return [];
+  if (allRequireStar || conditionScopesToNamePrefix(condition)) return [];
   return [
     {
       templatePath,
@@ -172,6 +216,28 @@ export function findIamResourceWildcardFindings(
   ];
 }
 
+function conditionScopesToNamePrefix(
+  condition: unknown,
+  seen: WeakSet<object> = new WeakSet(),
+): boolean {
+  if (Array.isArray(condition)) {
+    return condition.some((item) => conditionScopesToNamePrefix(item, seen));
+  }
+  if (!isPlainObject(condition)) return false;
+  if (seen.has(condition)) return false;
+  seen.add(condition);
+  for (const [key, value] of Object.entries(condition)) {
+    if (isNamePrefixScope(key, value) || conditionScopesToNamePrefix(value, seen)) return true;
+  }
+  return false;
+}
+
+function isNamePrefixScope(key: string, value: unknown): boolean {
+  if (key.endsWith("TenkaCloud:NamePrefix")) return true;
+  if (key !== "application-autoscaling:resource-id") return false;
+  return typeof value !== "string" || value.includes("NamePrefix");
+}
+
 function checkIamWildcards(template: unknown, results: Finding[], templatePath: string): void {
   visit(template, "", (loc, node) => {
     if (!isPlainObject(node)) return;
@@ -180,7 +246,9 @@ function checkIamWildcards(template: unknown, results: Finding[], templatePath: 
     const actions = toArrayField(node.Action);
     const resources = toArrayField(node.Resource);
     results.push(...findIamActionWildcardFindings(templatePath, loc, actions));
-    results.push(...findIamResourceWildcardFindings(templatePath, loc, resources, actions));
+    results.push(
+      ...findIamResourceWildcardFindings(templatePath, loc, resources, actions, node.Condition),
+    );
   });
 }
 

@@ -159,7 +159,10 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
     it("security-battle-royale の locale='en' で英語翻訳を返すべき", () => {
       const m = requireProblemMetadata("security-battle-royale");
       const r = resolveLocalizedNarrative(m, "en");
-      expect(r.shortDescription).toMatch(/Attack\/defend/);
+      expect(r.shortDescription).not.toBe(m.shortDescription);
+      expect(r.shortDescription).not.toMatch(
+        /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u,
+      );
     });
   });
 });

@@ -110,23 +110,15 @@ export interface LineScanResult {
 export function extractIntegersFromLine(line: string, initialState: ScannerState): LineScanResult {
   const ints: IntegerHit[] = [];
   let i = 0;
-  // line-comment は次の \n で終端する状態だが、 line-by-line scan の本関数は \n を見ない。
-  // 呼び出し元が前行の末尾で state="line-comment" のまま渡してきたら、 本関数開始時点で
-  // code に戻す (= line-comment は line 境界で必ず終わる)。
-  let state: ScannerState = initialState === "line-comment" ? "code" : initialState;
+  let state = resetLineComment(initialState);
   while (i < line.length) {
     const c = line[i] ?? "";
     const next = line[i + 1] ?? "";
     if (state === "code" && /[0-9]/.test(c)) {
-      const skip = consumeIdentifierIfDigitFollowsAlpha(line, i);
-      if (skip > i) {
-        i = skip;
-        continue;
-      }
-      const parsed = consumeNumericLiteral(line, i);
-      if (parsed) {
-        ints.push({ value: parsed.value, col: i });
-        i = parsed.end;
+      const numeric = scanNumericAt(line, i);
+      if (numeric?.value !== undefined) ints.push({ value: numeric.value, col: i });
+      if (numeric?.nextIndex !== undefined) {
+        i = numeric.nextIndex;
         continue;
       }
     }
@@ -138,6 +130,26 @@ export function extractIntegersFromLine(line: string, initialState: ScannerState
   // line-comment で行末まで進んだ場合、 次行は新しい code 状態から始める。
   if (state === "line-comment") state = "code";
   return { ints, nextState: state };
+}
+
+function resetLineComment(initialState: ScannerState): ScannerState {
+  // line-comment は次の \n で終端する状態だが、 line-by-line scan の本関数は \n を見ない。
+  // 呼び出し元が前行の末尾で state="line-comment" のまま渡してきたら、 本関数開始時点で
+  // code に戻す (= line-comment は line 境界で必ず終わる)。
+  return initialState === "line-comment" ? "code" : initialState;
+}
+
+interface NumericScanResult {
+  readonly nextIndex: number;
+  readonly value?: number;
+}
+
+function scanNumericAt(line: string, i: number): NumericScanResult | undefined {
+  const skip = consumeIdentifierIfDigitFollowsAlpha(line, i);
+  if (skip > i) return { nextIndex: skip };
+  const parsed = consumeNumericLiteral(line, i);
+  if (!parsed) return undefined;
+  return { value: parsed.value, nextIndex: parsed.end };
 }
 
 function consumeIdentifierIfDigitFollowsAlpha(line: string, i: number): number {

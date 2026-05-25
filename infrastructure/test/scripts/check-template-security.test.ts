@@ -54,6 +54,30 @@ describe("check-template-security helpers (#869 + #1124)", () => {
       expect(findings).toEqual([]);
     });
 
+    it('should not return a finding for Resource: "*" when a NamePrefix tag condition scopes the statement', () => {
+      const findings = findIamResourceWildcardFindings(PATH, "loc", ["*"], ["ec2:CreateTags"], {
+        StringEquals: {
+          "aws:RequestTag/TenkaCloud:NamePrefix": "tc-demo-team",
+        },
+      });
+      expect(findings).toEqual([]);
+    });
+
+    it("should not return a finding when an AWS service-specific condition scopes the statement to NamePrefix", () => {
+      const findings = findIamResourceWildcardFindings(
+        PATH,
+        "loc",
+        ["*"],
+        ["application-autoscaling:RegisterScalableTarget"],
+        {
+          StringLike: {
+            "application-autoscaling:resource-id": "service/NamePrefix*",
+          },
+        },
+      );
+      expect(findings).toEqual([]);
+    });
+
     it('should allow the CloudShell participant baseline on Resource: "*"', () => {
       const findings = findIamResourceWildcardFindings(
         PATH,
