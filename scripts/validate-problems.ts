@@ -262,6 +262,46 @@ function validateMetadataFiles(
   return failed;
 }
 
+/**
+ * Issue #1347: Ajv raw error -> author-friendly hint。 metadata.json はほぼ全ての contributor が
+ * 初見で開く file なので、 「何が悪い + どう fix するか」 を 1 行で返す。 Ajv の `keyword` / `params`
+ * から派生する典型 case を抑える。 想定外 case は元の `err.message` をそのまま出す。
+ */
+type AjvError = NonNullable<ReturnType<Ajv2020["compile"]>["errors"]>[number];
+
+function paramStr(err: AjvError, key: string): string {
+  return String((err.params as Record<string, unknown>)[key] ?? "");
+}
+
+const AJV_HINT_HANDLERS: Record<string, (path: string, err: AjvError) => string> = {
+  required: (path, err) =>
+    `${path} 必須 field "${paramStr(err, "missingProperty")}" がありません — SCHEMA.json の description を参照、 値を追加してください`,
+  enum: (path, err) => {
+    const allowed = (err.params as Record<string, unknown>).allowedValues;
+    const list = Array.isArray(allowed) ? allowed.map((v) => JSON.stringify(v)).join(" | ") : "";
+    return `${path} ${err.message ?? ""} — 有効値は ${list}`;
+  },
+  type: (path, err) => `${path} 型が違います (expected: ${paramStr(err, "type")})`,
+  pattern: (path, err) =>
+    `${path} 値が pattern /${paramStr(err, "pattern")}/ に一致しません (例: kebab-case 制約等)`,
+  minLength: (path, err) => `${path} 文字数が短すぎ (limit: ${paramStr(err, "limit")})`,
+  maxLength: (path, err) => `${path} 文字数が長すぎ (limit: ${paramStr(err, "limit")})`,
+  minItems: (path, err) => `${path} 要素数が少なすぎ (limit: ${paramStr(err, "limit")})`,
+  maxItems: (path, err) => `${path} 要素数が多すぎ (limit: ${paramStr(err, "limit")})`,
+  additionalProperties: (path, err) =>
+    `${path} 未知の field "${paramStr(err, "additionalProperty")}" — typo か、 SCHEMA.json に未定義の field`,
+  const: (path, err) => {
+    const want = JSON.stringify((err.params as Record<string, unknown>).allowedValue);
+    return `${path} 値は ${want} でなければなりません`;
+  },
+};
+
+export function describeAjvError(err: AjvError): string {
+  const path = err.instancePath || "(root)";
+  const handler = AJV_HINT_HANDLERS[err.keyword];
+  return handler ? handler(path, err) : `${path} ${err.message ?? ""}`;
+}
+
 function printSchemaErrors(
   file: string,
   data: Metadata,
@@ -269,12 +309,15 @@ function printSchemaErrors(
 ): void {
   console.error(`NG  ${relative(REPO_ROOT, file)}`);
   for (const err of errors) {
-    console.error(`     ${err.instancePath || "(root)"} ${err.message ?? ""}`);
+    console.error(`     ${describeAjvError(err)}`);
   }
   const expectedId = file.split("/").slice(-2, -1)[0];
   if (data.id && data.id !== expectedId) {
     console.error(`     id (${data.id}) はディレクトリ名 (${expectedId}) と一致させてください`);
   }
+  console.error(
+    `     詳細: docs/problems/CONTRIBUTING.md "Validation errors and how to read them" 参照`,
+  );
 }
 
 function printCrossRefErrors(file: string, errors: ValidationError[]): void {

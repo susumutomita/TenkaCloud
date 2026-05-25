@@ -25,9 +25,12 @@ Examples:
   bun run scripts/tenkacloud-problem.ts inspect hello-world
 
 See also:
-  docs/problems/AUTHORING.html  — 30 分 onboarding guide
-  problems/SCHEMA.json          — metadata.json schema
-  .claude/skills/create-problem — Claude Code skill (= /create-problem)
+  docs/problems/CONTRIBUTING.md  — external contributor quickstart (decision tree + lifecycle)
+  docs/problems/AUTHORING.html   — 30 分 onboarding guide (full field reference)
+  docs/problems/EXAMPLES.md      — design retrospectives on the 5 reference problems
+  docs/problems/AI-WORKFLOW.md   — Claude Code / Codex CLI authoring workflow
+  problems/SCHEMA.json           — metadata.json schema
+  .claude/skills/create-problem  — Claude Code skill (= /create-problem)
 `);
 }
 
