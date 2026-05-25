@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Live monitoring</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>Live monitoring</h1>
+<blockquote>
+<p>English: <a href="./live-monitoring.md">live-monitoring.md</a></p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>属性</th>
+<th>値</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Audience</td>
+<td>オンコールオペレータ (= イベント中にプラットフォームを健全に保つ人)</td>
+</tr>
+<tr>
+<td>使うタイミング</td>
+<td>イベント開始から終了まで継続。 各 triage 判断で <a href="./incident-response.ja.md">インシデント対応</a> と必ず併用。</td>
+</tr>
+<tr>
+<td>所要時間</td>
+<td>継続。 Scoreboard 用とダッシュボード用の 2 タブを常時開く想定</td>
+</tr>
+<tr>
+<td>出力</td>
+<td>「観測したもの」 / 「打ち手」 / 「Teardown に持ち越したもの」 を 1 ライン単位で記録したイベントタイムライン</td>
+</tr>
+</tbody></table>
+<p>イベント中のオペレータの仕事は問題を直すことではなく、 <strong>素早く観測し、 正確に分類し、 そのあとで初めて動く</strong> ことです。 ライブプラットフォームで圧力下のもと打つアクションは、 事態を悪化させるリスクを持ちます。 このループを締めるための構造が本 runbook です。</p>
+<h2>常時開いておく 3 タブ</h2>
+<table>
+<thead>
+<tr>
+<th>タブ</th>
+<th>URL</th>
+<th>何を見るか</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Scoreboard</td>
+<td>Participant portal の scoreboard ビュー</td>
+<td>急なスコア下落 / 0 点のまま動かないチーム / 異常なスパイク</td>
+</tr>
+<tr>
+<td>オペレータダッシュボード</td>
+<td>Application Admin Console の deploy / scoring ビュー</td>
+<td>詰まった deployment / scoring 遅延 / 通知配信</td>
+</tr>
+<tr>
+<td>Deploy trace</td>
+<td><a href="../operations/deploy-trace.md"><code>docs/operations/deploy-trace.md</code></a> の手順で <code>jobId</code> で CloudWatch Logs Insights をフィルタ</td>
+<td>チーム別 deploy 失敗 / CFn rollback</td>
+</tr>
+</tbody></table>
+<p>画面占有が 2 枚しか取れないなら、 オペレータダッシュボードを落として scoreboard + deploy trace を残す。 Scoreboard が参加者の体験で、 deploy trace がプラットフォームの真実だからです。</p>
+<h2>「健全」 とは</h2>
+<table>
+<thead>
+<tr>
+<th>シグナル</th>
+<th>健全状態</th>
+<th>行動閾値</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>チーム別 scoring tick</td>
+<td>Polling 間隔ごとに更新 (uptime は 1 分ごと / flag は提出時)</td>
+<td>10 分間更新が無いチームがあれば endpoint stuck を疑う</td>
+</tr>
+<tr>
+<td>チーム別 deploy 状態</td>
+<td>選定問題すべてが <code>CREATE_COMPLETE</code></td>
+<td><code>CREATE_IN_PROGRESS</code> のまま 15 分超過するチームは要疑</td>
+</tr>
+<tr>
+<td>通知配信</td>
+<td><code>info</code> / <code>warning</code> が polling tick 以内に portal に出る (= 現状 5 秒、 <a href="../operations/notifications.md"><code>docs/operations/notifications.md</code></a> を参照)</td>
+<td>30 秒経って出ないなら 「壊れた」 と扱う</td>
+</tr>
+<tr>
+<td>Lambda エラー率</td>
+<td>ほぼゼロ</td>
+<td>Deploy worker / scoring Lambda で持続的に 5 件/分以上が出たら triage 開始</td>
+</tr>
+</tbody></table>
+<h2>Triage 判断: 再 deploy が必要 vs 単独 team 問題</h2>
+<p>オペレータは「1 チームの症状」を直そうとして、 全チームに効く根本原因を見落としがちです。 次の decision tree を使うこと。</p>
+<pre><code>観測: あるチームから endpoint が落ちている と報告
+│
+├── 他チームでも落ちているか?
+│   ├── YES → プラットフォーム全体障害。 [インシデント対応](./incident-response.ja.md) を開く。
+│   │         原因を理解するまで個別 stack を再 deploy しない。
+│   │
+│   └── NO  → 単独チーム。 そのチームの deploy trace を読む。
+│             │
+│             ├── スタックが CREATE_FAILED / ROLLBACK_COMPLETE か?
+│             │   → Yes。 単独チーム再 deploy が妥当。
+│             │
+│             ├── CREATE_COMPLETE だが endpoint 不通か?
+│             │   → Yes。 チームによる構成変更が原因の可能性大。
+│             │     チームに伝えるだけにとどめる。 盲目的 redeploy は
+│             │     チームの進捗を消すので行わない。
+│             │
+│             └── 判断不能か?
+│                 → [インシデント対応](./incident-response.ja.md) を開く。
+│                   動く前に必ず記録する。
+</code></pre>
+<p>頻出ミスは反射的な再 deploy です。 Redeploy はチームの state を消去します。 すでに scoring に flag が反映済みなら、 redeploy がその成果を無効化することがある。</p>
+<h2>Scoreboard の見方</h2>
+<p>絶対値ではなく形を見ます。</p>
+<table>
+<thead>
+<tr>
+<th>形</th>
+<th>解釈</th>
+<th>1st check</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1 チームだけ 0 点で平坦</td>
+<td>そのチームがログイン不可、 または stack 失敗</td>
+<td>プラットフォーム障害と決めつける前に、 ログイン状態を <a href="./participant-onboarding.ja.md">participant onboarding</a> で確認</td>
+</tr>
+<tr>
+<td>全チームが直近 5 分間平坦</td>
+<td>Scoring loop 停止</td>
+<td>Scoring Lambda の invocation count と error rate を確認</td>
+</tr>
+<tr>
+<td>1 チームのスコアだけ後退</td>
+<td>Uptime scoring のペナルティが発火。 endpoint 落ちか確認</td>
+<td>そのチームの endpoint 障害。 仕様どおりの挙動</td>
+</tr>
+<tr>
+<td>全チームのスコアが同時に後退</td>
+<td>Health check Lambda の誤発火か、 AWS region 障害</td>
+<td>即座に <a href="./incident-response.ja.md">インシデント対応</a> へ</td>
+</tr>
+</tbody></table>
+<h2>イベント中の通知ポリシー</h2>
+<p>通知は控えめに。 Participant portal の polling 間隔は 5 秒。 過剰通知は疲弊を生む。 設計選択は <a href="../architecture/adr-006-notifications.html">ADR-006</a> を参照。</p>
+<ul>
+<li>参加者が把握すべきだが行動は不要、 という場合に <code>info</code>。 例:「14:30 から scoring 再開しました」。</li>
+<li>参加者が行動しないと不利益、 という場合のみ <code>warning</code>。 例:「15:00 から 5 分間 health check を停止」。</li>
+<li><code>warning</code> は 1 イベント 5 件まで。 6 件目を打ちたくなったら、 それは <code>info</code> で十分なメッセージ。</li>
+</ul>
+<h2>イベントタイムラインの記録</h2>
+<p>観測も打ち手も、 1 ライン単位でタイムラインに追記します。</p>
+<pre><code>HH:MM | observed | scoreboard で team-A が 8 分間平坦
+HH:MM | acted    | team-A の deploy trace を確認、 CFn ROLLBACK_COMPLETE を発見
+HH:MM | acted    | Application Admin Console から redeploy を発行
+HH:MM | observed | team-A の scoring 再開
+</code></pre>
+<p>このタイムラインが事後レビューとインシデント postmortem の入力になります。</p>
+<h2>うまくいかなかったら</h2>
+<table>
+<thead>
+<tr>
+<th>症状</th>
+<th>1st response</th>
+<th>エスカレーション</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>全員の scoreboard が止まる</td>
+<td>まず scoring Lambda の invocation count と error rate を確認。 60 秒以内に <code>info</code> 通知を送る。</td>
+<td><a href="./incident-response.ja.md">インシデント対応</a> の 「scoring 更新が止まる」 を開く。</td>
+</tr>
+<tr>
+<td>プラットフォーム障害か単独チームか判別できない</td>
+<td>デフォルトでプラットフォーム調査に倒す。 「無事の調査コスト」 は 「盲目的 redeploy のコスト」 よりはるかに安い。</td>
+<td><a href="./incident-response.ja.md">インシデント対応</a>。</td>
+</tr>
+<tr>
+<td>誤った <code>warning</code> を送った</td>
+<td>通知は edit / delete できない (<a href="../operations/notifications.md"><code>docs/operations/notifications.md</code></a>)。 直ちに修正用 <code>info</code> を送る。</td>
+<td>誤通知で参加者が動いてしまった場合は、 タイムラインと事後レポートに必ず記録。</td>
+</tr>
+<tr>
+<td>サポートチャネルが質問で溢れる</td>
+<td><a href="./participant-onboarding.ja.md">participant onboarding</a> のルーティング表を再 pin。 古い順から triage。</td>
+<td>オペレータ容量を超えそうなら 「現在調査中、 10 分ごとに状況更新」 という <code>info</code> を打ち、 cadence を維持。</td>
+</tr>
+<tr>
+<td>動いていいか迷う</td>
+<td>動かない。 もう 1 分観測し、 facilitator に相談してから打つ。</td>
+<td><a href="./incident-response.ja.md">インシデント対応</a> — 各エントリに 「1st response」 ブランチがあるので、 安全に動ける。</td>
+</tr>
+</tbody></table>
+<h2>関連 runbook / ADR</h2>
+<ul>
+<li>前: <a href="./pre-event-checklist.ja.md">事前チェックリスト</a> / <a href="./dry-run.ja.md">Dry run</a> / <a href="./participant-onboarding.ja.md">participant onboarding</a>。</li>
+<li>併用: <a href="./incident-response.ja.md">インシデント対応</a> — 動くときは必ず対応する incident 種別を開く。</li>
+<li>イベント後: <a href="./teardown.ja.md">Teardown</a>。</li>
+<li>背景: <a href="../architecture/adr-006-notifications.html">ADR-006: Notifications</a> / <a href="../architecture/adr-014-eventbridge-driven-state-reconciliation.html">ADR-014: EventBridge 駆動 state reconciliation</a> / <a href="../operations/deploy-trace.md"><code>docs/operations/deploy-trace.md</code></a> / <a href="../operations/notifications.md"><code>docs/operations/notifications.md</code></a>。</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/runbooks/live-monitoring.ja.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/runbooks/live-monitoring.ja.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>

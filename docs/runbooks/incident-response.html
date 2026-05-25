@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Incident response</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>Incident response</h1>
+<blockquote>
+<p>Japanese: <a href="./incident-response.ja.md">incident-response.ja.md</a></p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Audience</td>
+<td>On-call operator (the person triaging an active incident)</td>
+</tr>
+<tr>
+<td>When to use</td>
+<td>When <a href="./live-monitoring.md">live monitoring</a> sends you here, or when a participant report cannot be resolved within one minute of observation</td>
+</tr>
+<tr>
+<td>Estimated time</td>
+<td>5 to 30 minutes per incident</td>
+</tr>
+<tr>
+<td>Output</td>
+<td>Either the incident is resolved with a recorded action, or it is escalated with a documented reason</td>
+</tr>
+</tbody></table>
+<p>This runbook covers the four most common incident classes during a hosted event. Each section follows the same shape: <strong>symptoms → 1st response → safe remediation → escalation</strong>. Do not improvise; pick the matching section and follow it.</p>
+<blockquote>
+<p><strong>Before you act:</strong> Record one observation line in the event timeline (see <a href="./live-monitoring.md#recording-the-event-timeline">live monitoring</a>). Every act-without-observe step is how operators make outages worse.</p>
+</blockquote>
+<h2>Section 1: Lambda errors</h2>
+<h3>Symptoms</h3>
+<ul>
+<li>CloudWatch shows a non-zero error rate on the deploy worker, scoring Lambda, or one of the API handlers.</li>
+<li>Operator dashboard shows deployments stuck in <code>IN_PROGRESS</code> or scoring loop frozen.</li>
+<li>Participants report stale scoreboard or &quot;deploy never finishes&quot;.</li>
+</ul>
+<h3>1st response (under 5 minutes)</h3>
+<ol>
+<li>Confirm which Lambda is erroring. Filter CloudWatch by function name.</li>
+<li>Read the most recent error log. Look for stack trace, error class, and タイムスタンプ.</li>
+<li>Classify: is this a transient AWS error (throttling, timeout, networking) or a code-level error (TypeError, deserialization failure)?</li>
+</ol>
+<h3>Safe remediation</h3>
+<table>
+<thead>
+<tr>
+<th>Error class</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Transient AWS error (rate limit, timeout, DNS)</td>
+<td>Wait two minutes. Most resolve themselves under retry. Send <code>info</code> notification if participants notice.</td>
+</tr>
+<tr>
+<td>Cold-start latency only</td>
+<td>No action; latency is not an incident. Continue <a href="./live-monitoring.md">live monitoring</a>.</td>
+</tr>
+<tr>
+<td>Code-level error (TypeError, schema validation)</td>
+<td>Capture log lines into the event timeline. Do not patch code mid-event; redeploying the platform during a live event is forbidden. Note the affected scoring or deploy path and continue.</td>
+</tr>
+<tr>
+<td>Repeated <code>AccessDenied</code> from AssumeRole</td>
+<td>The ExternalId is wrong for that team. Verify the team metadata and re-issue the credentials.</td>
+</tr>
+</tbody></table>
+<h3>Escalation</h3>
+<ul>
+<li>If the error rate is sustained more than 5 errors / minute for 5 minutes, send <code>warning</code> notification and brief the facilitator.</li>
+<li>If the error affects every team, treat as platform-wide incident and consider pausing scoring until resolved.</li>
+</ul>
+<h2>Section 2: DynamoDB throttling</h2>
+<h3>Symptoms (DynamoDB throttling)</h3>
+<ul>
+<li>CloudWatch DynamoDB metric <code>UserErrors</code> or <code>ThrottledRequests</code> is non-zero.</li>
+<li>Participant portal scoreboard is slow or returns sporadic errors.</li>
+<li>Operator dashboard shows lag between event-time and scoreboard time.</li>
+</ul>
+<h3>1st response (under 5 minutes) — DynamoDB throttling</h3>
+<ol>
+<li>Identify the table being throttled (<code>Deployments</code>, <code>Apps</code>, <code>Events</code>, <code>TenantMappingTable</code>, etc.).</li>
+<li>Check the read / write capacity. Every TenkaCloud table is forced to PROVISIONED 1 RCU / 1 WCU by the <a href="../../infrastructure/lib/cdk-aspect"><code>DynamoDbLowCapacity</code></a> aspect for AWS Free Tier safety.</li>
+<li>Decide whether the throttling is caused by participant traffic (legitimate) or by a runaway Lambda (incident).</li>
+</ol>
+<h3>Safe remediation — DynamoDB throttling</h3>
+<table>
+<thead>
+<tr>
+<th>Cause</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Legitimate traffic burst (event spike)</td>
+<td>Send <code>info</code> notification &quot;scoreboard refresh may be delayed&quot; and wait for the burst to subside. Do not raise capacity in the middle of the event unless every Free Tier guard rail decision has been re-discussed.</td>
+</tr>
+<tr>
+<td>Runaway Lambda hot-looping</td>
+<td>Identify and stop the Lambda invocation source. Most often a misconfigured EventBridge rule firing in a loop.</td>
+</tr>
+<tr>
+<td>Operator-induced scan / list</td>
+<td>Stop the scan. Most operator queries should target specific keys.</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>Do not</strong> flip the table to <code>PAY_PER_REQUEST</code> mid-event. The aspect enforces PROVISIONED 1/1; switching modes requires a CDK change and is forbidden inline.</p>
+</blockquote>
+<h3>Escalation — DynamoDB throttling</h3>
+<ul>
+<li>If throttling cannot be relieved in 10 minutes, pause scoring and send <code>warning</code> notification before participants notice systematic data loss.</li>
+<li>Document the table and the cause in the event timeline for post-event review.</li>
+</ul>
+<h2>Section 3: Cognito sign-in failure</h2>
+<h3>Symptoms (Cognito sign-in failure)</h3>
+<ul>
+<li>Participant reports cannot log in via the participant portal.</li>
+<li>Application Admin Console SSO login fails.</li>
+<li>Operator sees Cognito Hosted UI errors in CloudWatch.</li>
+</ul>
+<h3>1st response (under 5 minutes) — Cognito sign-in failure</h3>
+<ol>
+<li>Confirm the scope: one participant, one team, or all participants.</li>
+<li>For a single participant: ask them to clear cookies and retry. Verify the participant portal URL has no trailing whitespace.</li>
+<li>For a single team: check the team&#39;s metadata is wired. Confirm SSO IdP configuration if federated.</li>
+<li>For all participants: this is a platform-wide incident. Treat as Section 4 or as Lambda errors depending on the failure mode.</li>
+</ol>
+<h3>Safe remediation — Cognito sign-in failure</h3>
+<table>
+<thead>
+<tr>
+<th>Failure mode</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Wrong login key (typo, trailing space)</td>
+<td>Re-send the correct key over the agreed channel from <a href="./participant-onboarding.md">participant onboarding</a>.</td>
+</tr>
+<tr>
+<td>Cognito Hosted UI 5xx</td>
+<td>Wait 60 seconds and retry. Most Cognito Hosted UI errors are transient.</td>
+</tr>
+<tr>
+<td>OAuth callback URL mismatch</td>
+<td>The participant portal URL changed since deploy. Confirm the callback URL in Cognito matches the current CloudFront URL. Re-deploy is the fix; do not patch Cognito by hand.</td>
+</tr>
+<tr>
+<td>SAML IdP rejecting the assertion</td>
+<td>Check the IdP-side log first. See <a href="../operations/application-plane-saml-setup.md"><code>docs/operations/application-plane-saml-setup.md</code></a>.</td>
+</tr>
+<tr>
+<td>Account is locked</td>
+<td>Cognito locks after multiple failed attempts. Wait 15 minutes or unlock via the AWS Console.</td>
+</tr>
+</tbody></table>
+<h3>Escalation — Cognito sign-in failure</h3>
+<ul>
+<li>If multiple teams cannot log in, hold the event and send <code>warning</code> notification before announcing further actions.</li>
+<li>If the callback URL is wrong, this is a deploy-time bug — do not attempt to fix in-flight, document and recover via <a href="./teardown.md">teardown</a>.</li>
+</ul>
+<h2>Section 4: CloudFormation stack ROLLBACK</h2>
+<h3>Symptoms (CFn stack ROLLBACK)</h3>
+<ul>
+<li>One or more team stacks show <code>CREATE_FAILED</code>, <code>ROLLBACK_IN_PROGRESS</code>, or <code>ROLLBACK_COMPLETE</code> in the operator dashboard or the team account.</li>
+<li>Participant reports their endpoint is unreachable.</li>
+<li>Deploy trace shows <code>deploy.cfn.deploy.failed</code>.</li>
+</ul>
+<h3>1st response (under 5 minutes) — CFn stack ROLLBACK</h3>
+<ol>
+<li>Identify the failing stack and the failure reason from CFn stack events.</li>
+<li>Classify the failure:<ul>
+<li><strong>Quota</strong> (account-level limit, e.g., VPC, EIP, Lambda)</li>
+<li><strong>Region restriction</strong> (service not available in the chosen region)</li>
+<li><strong>IAM</strong> (missing permission for the AssumeRole path, often ExternalId-related)</li>
+<li><strong>Template defect</strong> (bug in the problem template — should have been caught in <a href="./dry-run.md">dry run</a>)</li>
+</ul>
+</li>
+</ol>
+<h3>Safe remediation — CFn stack ROLLBACK</h3>
+<table>
+<thead>
+<tr>
+<th>Failure class</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Quota</td>
+<td>Request a quota increase or move the team to a different region if the problem allows. Do not work around quota by manually creating resources.</td>
+</tr>
+<tr>
+<td>Region restriction</td>
+<td>Drop the problem for that team or change the region (only if a single-region change is safe per the problem template).</td>
+</tr>
+<tr>
+<td>IAM</td>
+<td>Verify ExternalId, the competitor-bootstrap.yaml IAM role is rolled out, and the participant viewer role has the right policy. AssumeRole into competitor accounts always requires ExternalId; this is a hard invariant (see <a href="../../CLAUDE.md">CLAUDE.md</a> security section).</td>
+</tr>
+<tr>
+<td>Template defect</td>
+<td>Do not patch in-flight. Drop the problem for the affected teams, send <code>warning</code> notification, and capture for post-event fix.</td>
+</tr>
+</tbody></table>
+<h3>Safe redeploy</h3>
+<p>If you decide to redeploy (single-team only, after the triage in <a href="./live-monitoring.md">live monitoring</a>):</p>
+<ol>
+<li>Initiate teardown of the failed stack first (<code>scripts/delete-battles.sh</code> or the Application Admin Console teardown action). Confirm <code>DELETE_COMPLETE</code> before re-creating.</li>
+<li>Re-issue <code>DeployRequested</code> from the operator UI.</li>
+<li>Watch the deploy trace for the new <code>jobId</code>. Do not declare success until <code>deploy.cfn.deploy.succeeded</code> appears.</li>
+</ol>
+<h3>Escalation — CFn stack ROLLBACK</h3>
+<ul>
+<li>If multiple teams fail simultaneously with the same cause, treat as platform-wide. Pause scoring, send <code>warning</code>, and do not redeploy until you understand the cause.</li>
+<li>If ROLLBACK leaves orphaned resources, document and follow up in <a href="./teardown.md">teardown</a>.</li>
+</ul>
+<h2>Universal post-incident steps</h2>
+<p>After every incident:</p>
+<ol>
+<li>Append the final timeline entries (observed, acted, resolved).</li>
+<li>Send one <code>info</code> notification: &quot;Issue resolved; scoring is current as of HH:MM.&quot;</li>
+<li>File a post-event issue describing the cause, action, and any code-level follow-up.</li>
+<li>If the incident produced orphan resources or unclear scoring state, escalate to <a href="./teardown.md">teardown</a> for handling at event end.</li>
+</ol>
+<h2>Related runbooks and ADRs</h2>
+<ul>
+<li>Use together with: <a href="./live-monitoring.md">live monitoring</a> — every incident starts from a live monitoring observation.</li>
+<li>After event: <a href="./teardown.md">teardown</a> — orphan resources from incidents are recovered here.</li>
+<li>Background: <a href="../architecture/adr-006-notifications.html">ADR-006: Notifications</a> (you cannot edit notifications, so wording matters), <a href="../architecture/adr-014-eventbridge-driven-state-reconciliation.html">ADR-014: EventBridge-driven state reconciliation</a> (why state converges asynchronously), <a href="../operations/deploy-trace.md"><code>docs/operations/deploy-trace.md</code></a> (jobId tracing for incidents).</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/runbooks/incident-response.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/runbooks/incident-response.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>

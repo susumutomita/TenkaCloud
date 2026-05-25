@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Live monitoring</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>Live monitoring</h1>
+<blockquote>
+<p>Japanese: <a href="./live-monitoring.ja.md">live-monitoring.ja.md</a></p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Audience</td>
+<td>On-call operator (the person who keeps the platform healthy during the event)</td>
+</tr>
+<tr>
+<td>When to use</td>
+<td>Continuously from event start to event end. Pair with <a href="./incident-response.md">incident response</a> at every triage decision.</td>
+</tr>
+<tr>
+<td>Estimated time</td>
+<td>Continuous; expect one focused tab on the scoreboard and one on dashboards</td>
+</tr>
+<tr>
+<td>Output</td>
+<td>An event timeline showing what was observed, what was acted on, and what was deferred to teardown</td>
+</tr>
+</tbody></table>
+<p>The operator&#39;s job during the event is not to fix problems — it is to <strong>observe quickly, classify accurately, and only then act</strong>. Every action taken under pressure on a live platform risks making it worse. This runbook is the structure that keeps the observe-classify-act loop tight.</p>
+<h2>Three tabs to keep open</h2>
+<table>
+<thead>
+<tr>
+<th>Tab</th>
+<th>URL</th>
+<th>What you watch for</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Scoreboard</td>
+<td>Participant portal scoreboard view</td>
+<td>Sudden score drops, teams stuck at zero, anomalous spikes</td>
+</tr>
+<tr>
+<td>Operator dashboard</td>
+<td>Application Admin Console deploy / scoring view</td>
+<td>Stuck deployments, scoring lag, notification delivery</td>
+</tr>
+<tr>
+<td>Deploy trace</td>
+<td>CloudWatch Logs Insights filtered by <code>jobId</code> (see <a href="../operations/deploy-trace.md"><code>docs/operations/deploy-trace.md</code></a>)</td>
+<td>Per-team deploy failures, CFn rollback events</td>
+</tr>
+</tbody></table>
+<p>If you only have screen real estate for two tabs, drop &quot;operator dashboard&quot; and keep scoreboard + deploy trace. The scoreboard is the participant&#39;s experience; the deploy trace is the platform&#39;s truth.</p>
+<h2>What &quot;healthy&quot; looks like</h2>
+<table>
+<thead>
+<tr>
+<th>Signal</th>
+<th>Healthy state</th>
+<th>Action threshold</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Per-team scoring tick</td>
+<td>Updating every polling interval (uptime: every minute; flag: on submission)</td>
+<td>If a team has not advanced for 10 minutes, suspect a stuck endpoint</td>
+</tr>
+<tr>
+<td>Per-team deploy status</td>
+<td><code>CREATE_COMPLETE</code> for every selected problem</td>
+<td>Any team stuck in <code>CREATE_IN_PROGRESS</code> past 15 minutes is suspicious</td>
+</tr>
+<tr>
+<td>Notification delivery</td>
+<td><code>info</code> and <code>warning</code> reach the portal within the polling tick (currently 5 seconds, see <a href="../operations/notifications.md"><code>docs/operations/notifications.md</code></a>)</td>
+<td>If a sent notification does not appear in 30 seconds, treat as broken</td>
+</tr>
+<tr>
+<td>Lambda error rate</td>
+<td>Near zero</td>
+<td>Any sustained non-zero rate (more than 5 errors / minute) on the deploy worker or scoring Lambda triggers triage</td>
+</tr>
+</tbody></table>
+<h2>Triage decision: redeploy needed vs single-team issue</h2>
+<p>Operators frequently waste time fixing one team&#39;s symptom when the root cause affects every team. Use this decision tree.</p>
+<pre><code>Observation: a team reports their endpoint is down.
+│
+├── Are other teams also seeing it down?
+│   ├── YES → Platform-wide issue. Open [incident response](./incident-response.md).
+│   │         Do NOT redeploy individual stacks until you understand the cause.
+│   │
+│   └── NO  → Single-team issue. Check the team&#39;s deploy trace.
+│             │
+│             ├── Stack in CREATE_FAILED / ROLLBACK_COMPLETE state?
+│             │   → Yes. Single-team redeploy is the right action.
+│             │
+│             ├── Stack in CREATE_COMPLETE but endpoint unreachable?
+│             │   → Yes. Likely a team-induced misconfiguration (they
+│             │     edited the resource). Tell them; do not redeploy
+│             │     blind — that erases their progress.
+│             │
+│             └── Cannot tell?
+│                 → Open [incident response](./incident-response.md).
+│                   Document before acting.
+</code></pre>
+<p>The most common mistake is reflexive redeploy. Redeploying a team&#39;s stack erases their state. If a participant submitted a flag and the scoring already counted it, a redeploy may invalidate the work that produced the flag.</p>
+<h2>Scoreboard watch points</h2>
+<p>Look for shapes, not absolute numbers.</p>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>Likely interpretation</th>
+<th>First check</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>One team flat at zero</td>
+<td>They cannot log in or their stack failed to deploy</td>
+<td>Confirm their login first (<a href="./participant-onboarding.md">participant onboarding</a>) before assuming a platform fault</td>
+</tr>
+<tr>
+<td>All teams flat for the last 5 minutes</td>
+<td>Scoring loop is stuck</td>
+<td>Check the scoring Lambda invocation count and error rate</td>
+</tr>
+<tr>
+<td>One team&#39;s score drops backward</td>
+<td>Uptime scoring penalty fired — check whether their endpoint went down</td>
+<td>Their endpoint dropped; legitimate scoring behavior</td>
+</tr>
+<tr>
+<td>All teams&#39; scores drop backward simultaneously</td>
+<td>Health check Lambda misfired or AWS region-level disruption</td>
+<td>Open <a href="./incident-response.md">incident response</a> immediately</td>
+</tr>
+</tbody></table>
+<h2>Notification policy during live monitoring</h2>
+<p>Use notifications sparingly. The participant portal poll interval is 5 seconds; over-notifying creates fatigue. See <a href="../architecture/adr-006-notifications.html">ADR-006</a> for the design choices.</p>
+<ul>
+<li>Send <code>info</code> when you change something the participant should know about but they do not need to react. Example: &quot;Scoring resumed after the 14:30 maintenance pause.&quot;</li>
+<li>Send <code>warning</code> only when participants must take action or risk losing time. Example: &quot;Endpoint health check paused for 5 minutes from 15:00.&quot;</li>
+<li>Hard limit of five <code>warning</code> messages per event. If you exceed five, you are using <code>warning</code> for items that should be <code>info</code>.</li>
+</ul>
+<h2>Recording the event timeline</h2>
+<p>For every observation and action, append one line to the event timeline:</p>
+<pre><code>HH:MM | observed | scoreboard shows team-A flat for 8 minutes
+HH:MM | acted    | inspected team-A deploy trace, found CFn ROLLBACK_COMPLETE
+HH:MM | acted    | initiated redeploy via Application Admin Console
+HH:MM | observed | team-A scoring resumed
+</code></pre>
+<p>This timeline is the input to the post-event review and to any incident postmortem.</p>
+<h2>If it goes wrong</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>First response</th>
+<th>Escalation</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Scoreboard is frozen for everyone</td>
+<td>Check the scoring Lambda invocation count and error rate first. Send an <code>info</code> notification within 60 seconds.</td>
+<td>Open <a href="./incident-response.md">incident response</a> under &quot;scoring not updating&quot;.</td>
+</tr>
+<tr>
+<td>You cannot tell whether it is the platform or one team</td>
+<td>Default to platform-wide investigation. The cost of investigating a non-issue is much lower than the cost of redeploying a team blindly.</td>
+<td><a href="./incident-response.md">incident response</a>.</td>
+</tr>
+<tr>
+<td>You sent the wrong <code>warning</code> notification</td>
+<td>You cannot edit or delete a notification (see <a href="../operations/notifications.md"><code>docs/operations/notifications.md</code></a>). Send a follow-up <code>info</code> immediately to correct it.</td>
+<td>If the wrong notification caused participants to act, document it in the event timeline and post-event report.</td>
+</tr>
+<tr>
+<td>Participants flood the support channel</td>
+<td>Pin the question routing table from <a href="./participant-onboarding.md">participant onboarding</a>. Triage from oldest to newest.</td>
+<td>If volume exceeds operator capacity, send an <code>info</code> &quot;we are investigating, expect updates every 10 minutes&quot; and keep the cadence.</td>
+</tr>
+<tr>
+<td>You are unsure whether to act</td>
+<td>Do not act. Observe for another minute, ask the facilitator, and only then act.</td>
+<td><a href="./incident-response.md">incident response</a> — every entry has a &quot;1st response&quot; branch that lets you act safely.</td>
+</tr>
+</tbody></table>
+<h2>Related runbooks and ADRs</h2>
+<ul>
+<li>Previous: <a href="./pre-event-checklist.md">pre-event checklist</a>, <a href="./dry-run.md">dry run</a>, <a href="./participant-onboarding.md">participant onboarding</a>.</li>
+<li>Use together with: <a href="./incident-response.md">incident response</a> — open the matching incident type when you act.</li>
+<li>After event: <a href="./teardown.md">teardown</a>.</li>
+<li>Background: <a href="../architecture/adr-006-notifications.html">ADR-006: Notifications</a>, <a href="../architecture/adr-014-eventbridge-driven-state-reconciliation.html">ADR-014: EventBridge-driven state reconciliation</a>, <a href="../operations/deploy-trace.md"><code>docs/operations/deploy-trace.md</code></a>, <a href="../operations/notifications.md"><code>docs/operations/notifications.md</code></a>.</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/runbooks/live-monitoring.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/runbooks/live-monitoring.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>
