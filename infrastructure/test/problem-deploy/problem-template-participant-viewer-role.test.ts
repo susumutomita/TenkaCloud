@@ -79,6 +79,12 @@ const RESOURCE_STAR_OK_SIDS = new Set([
   // token は呼び出し元 identity に bind されており、 そのうえで repository ARN ベース
   // の ecr:* grant が掛かっている範囲 (= ${NamePrefix}*) しか push/pull できない。
   "EcrAuthForOwnPush",
+  // TenkaCloudChallenge PR #23 (catalog promotion: microservice-migration-battle / stackstack):
+  // elasticloadbalancing:Describe* は AWS IAM 仕様で resource-level permission も
+  // tag-based Condition も受け付けない metadata-only API。 ec2:Describe* と同じ扱い
+  // (= 参加者は console / CLI で自分の LB / TG / Listener / TargetHealth を観測する
+  // のに必要)。 per-team dedicated AWS account 前提で cross-tenant leak リスクなし。
+  "ReadLoadBalancerState",
 ]);
 
 describe("problem template ParticipantViewerRole (#744)", () => {

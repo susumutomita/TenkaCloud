@@ -5,6 +5,7 @@ import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
 import { AuditLogPage } from "./pages/AuditLog";
 import { CallbackPage } from "./pages/Callback";
+import { IdentityProvidersPage } from "./pages/IdentityProviders";
 import { JobsPage } from "./pages/Jobs";
 import { LoginPage } from "./pages/Login";
 import { OperationsPage } from "./pages/Operations";
@@ -89,6 +90,17 @@ export function App({ config }: { config: AppConfig }) {
             <RequireAuth>
               <ShellLayout>
                 <OperationsPage config={config} />
+              </ShellLayout>
+            </RequireAuth>
+          }
+        />
+        {/* Issue #1293: SAML IdP CRUD for Control Plane Cognito UserPool */}
+        <Route
+          path="/identity-providers"
+          element={
+            <RequireAuth>
+              <ShellLayout>
+                <IdentityProvidersPage config={config} />
               </ShellLayout>
             </RequireAuth>
           }

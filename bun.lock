@@ -124,6 +124,7 @@
         "@aws-sdk/client-codepipeline": "^3.1048.0",
         "@aws-sdk/client-sfn": "^3.1048.0",
         "@cdklabs/sbt-aws": "0.3.9",
+        "@tenkacloud/saml-utils": "workspace:*",
         "ajv": "8.18.0",
         "ajv-formats": "^3.0.1",
         "aws-cdk-lib": "^2.256.1",
@@ -177,6 +178,18 @@
       },
       "peerDependencies": {
         "react": "^19.0.0",
+      },
+    },
+    "packages/saml-utils": {
+      "name": "@tenkacloud/saml-utils",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "^3.25.76",
+      },
+      "devDependencies": {
+        "@types/node": "^24.12.4",
+        "typescript": "^5.9.3",
+        "vitest": "^4.1.6",
       },
     },
     "packages/trust-bridge": {
@@ -624,6 +637,8 @@
     "@tenkacloud/auth-client": ["@tenkacloud/auth-client@workspace:packages/auth-client"],
 
     "@tenkacloud/portal-plugin-sdk": ["@tenkacloud/portal-plugin-sdk@workspace:packages/portal-plugin-sdk"],
+
+    "@tenkacloud/saml-utils": ["@tenkacloud/saml-utils@workspace:packages/saml-utils"],
 
     "@testing-library/dom": ["@testing-library/dom@10.4.1", "", { "dependencies": { "@babel/code-frame": "^7.10.4", "@babel/runtime": "^7.12.5", "@types/aria-query": "^5.0.1", "aria-query": "5.3.0", "dom-accessibility-api": "^0.5.9", "lz-string": "^1.5.0", "picocolors": "1.1.1", "pretty-format": "^27.0.2" } }, "sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg=="],
 
