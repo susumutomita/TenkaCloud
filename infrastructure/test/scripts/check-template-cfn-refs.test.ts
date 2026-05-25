@@ -27,14 +27,20 @@ import {
 const REPO_ROOT = new URL("../../../", import.meta.url).pathname;
 
 describe("check-template-cfn-refs script (#951 sub-2)", () => {
-  it("all 5 existing problem templates should pass (smoke test)", () => {
+  // Smoke test against the live problems/ catalog. The count grows with each
+  // new problem added; bump this assertion when adding a new template (so the
+  // test remains a regression boundary instead of a moving target).
+  // Current count: 7 (= 5 ready + 2 draft after Issue #1346 starter-catalog
+  // expansion: hello-world / hello-world-battle / microservice-migration-battle
+  // / security-battle-royale / stackstack / public-s3-remediation / iam-least-privilege).
+  it("all existing problem templates should pass (smoke test)", () => {
     const result = spawnSync("bun", ["run", "scripts/check-template-cfn-refs.ts"], {
       cwd: REPO_ROOT,
       encoding: "utf-8",
     });
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("OK:");
-    expect(result.stdout).toContain("5 template(s)");
+    expect(result.stdout).toContain("7 template(s)");
   });
 });
 
