@@ -1,7 +1,9 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { TenkaCloudLiteStack } from "../../lib/tenkacloud-lite";
 
 /**
@@ -10,7 +12,23 @@ import { TenkaCloudLiteStack } from "../../lib/tenkacloud-lite";
  * - AppPlaneCore 経由で hosting + identity + apiGateway が立つ
  * - tenantId="local" 固定
  * - SBT / Pipeline / TenantMapping への依存が無い (= Lite mode の自己完結)
+ *
+ * AppPlaneCore は ApplicationAdminConsoleHosting を内包し、 BucketDeployment.Source.asset で
+ * apps/application-admin-console/dist の存在を synth 時に検証する。 ローカル test / CI では
+ * 未 build のことがあるので、 application-admin-console-hosting.test.ts と同じ pattern で
+ * placeholder dist を作る。 vite build が走った後はそれで上書きされるので副作用は無い。
  */
+const distDir = path.join(__dirname, "..", "..", "..", "apps", "application-admin-console", "dist");
+
+function ensurePlaceholderDist(): void {
+  if (!fs.existsSync(distDir)) {
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(distDir, "index.html"),
+      "<!doctype html><html><body>placeholder</body></html>",
+    );
+  }
+}
 
 function buildStubLambda(scope: cdk.Stack, id: string): LambdaFunction {
   return new LambdaFunction(scope, id, {
@@ -49,6 +67,10 @@ function synth(): Template {
 }
 
 describe("TenkaCloudLiteStack (#778 ADR-016 Phase 3)", () => {
+  beforeAll(() => {
+    ensurePlaceholderDist();
+  });
+
   it("should create 1 set of Cognito UserPool / UserPoolClient / UserPoolDomain (from AppPlaneCore)", () => {
     const template = synth();
     template.resourceCountIs("AWS::Cognito::UserPool", 1);
