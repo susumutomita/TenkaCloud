@@ -351,6 +351,8 @@
     "title": "Event Report",
     "back": "Back to Event",
     "print_button": "Print",
+    "download_html_button": "Download HTML",
+    "download_md_button": "Download Markdown",
     "loading": "Loading…",
     "error_header": "Failed to load Event",
     "error_unknown": "An unknown error occurred",

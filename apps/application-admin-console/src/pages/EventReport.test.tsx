@@ -186,4 +186,55 @@ describe("EventReportPage", () => {
     unmount();
     expect(document.getElementById("tenkacloud-event-report-print-style")).toBeNull();
   });
+
+  it("should expose a download HTML button and trigger a Blob download on click (#1317)", async () => {
+    renderPage(makeDetail());
+    await screen.findByText("Spring Cloud Cup 2026");
+
+    // jsdom が URL.createObjectURL を持たないので spy で代用。 click を確認できれば
+    // blob path に乗っていることを検証できる。
+    const createSpy = vi.fn().mockReturnValue("blob:test-html");
+    const revokeSpy = vi.fn();
+    Object.defineProperty(URL, "createObjectURL", { value: createSpy, configurable: true });
+    Object.defineProperty(URL, "revokeObjectURL", { value: revokeSpy, configurable: true });
+
+    const button = screen.getByTestId("event-report-download-html") as HTMLButtonElement;
+    expect(button).toBeInTheDocument();
+    expect(button.textContent).toMatch(/HTML/);
+
+    fireEvent.click(button);
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    const blobArg = createSpy.mock.calls[0]?.[0] as Blob;
+    expect(blobArg).toBeInstanceOf(Blob);
+    expect(blobArg.type).toContain("text/html");
+  });
+
+  it("should expose a download Markdown button and trigger a Blob download on click (#1317)", async () => {
+    renderPage(makeDetail());
+    await screen.findByText("Spring Cloud Cup 2026");
+
+    const createSpy = vi.fn().mockReturnValue("blob:test-md");
+    const revokeSpy = vi.fn();
+    Object.defineProperty(URL, "createObjectURL", { value: createSpy, configurable: true });
+    Object.defineProperty(URL, "revokeObjectURL", { value: revokeSpy, configurable: true });
+
+    const button = screen.getByTestId("event-report-download-md") as HTMLButtonElement;
+    expect(button).toBeInTheDocument();
+    expect(button.textContent).toMatch(/Markdown/);
+
+    fireEvent.click(button);
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    const blobArg = createSpy.mock.calls[0]?.[0] as Blob;
+    expect(blobArg).toBeInstanceOf(Blob);
+    expect(blobArg.type).toContain("text/markdown");
+  });
+
+  it("should wrap the printable content in the .event-report-page container (#1317 whitelist anchor)", async () => {
+    renderPage(makeDetail());
+    await screen.findByText("Spring Cloud Cup 2026");
+    const root = document.querySelector(".event-report-page");
+    expect(root).not.toBeNull();
+    // 本文の core text が root の子孫に居ること
+    expect(root?.textContent ?? "").toContain("Spring Cloud Cup 2026");
+  });
 });
