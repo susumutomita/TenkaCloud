@@ -14,7 +14,12 @@ import type { AppConfig } from "../config";
 interface AuthState {
   tokens: TokenSet | null;
   ready: boolean;
-  login: () => void;
+  /**
+   * Cognito Hosted UI へ redirect する。 Issue #1329: LoginPage が signing-in /
+   * error UI 状態を出せるよう Promise を返す (= 旧 fire-and-forget の `void` 戻り値だと
+   * PKCE 派生 / redirect URL 構築の失敗を UI に出せなかった)。
+   */
+  login: () => Promise<void>;
   logout: () => void;
   setTokens: (tokens: TokenSet) => void;
 }
@@ -75,9 +80,7 @@ export function AuthProvider({ config, children }: { config: AppConfig; children
     () => ({
       tokens,
       ready,
-      login: () => {
-        void beginLogin(config);
-      },
+      login: () => beginLogin(config),
       logout,
       setTokens: (t) => setTokensState(t),
     }),

@@ -27,7 +27,19 @@
   "login": {
     "header": "Application Admin Console",
     "description": "テナント開発者としてサインインしてください。Cognito の Hosted UI に遷移します。",
-    "submit": "サインイン"
+    "submit": "サインイン",
+    "title": "TenkaCloud Application Admin Console",
+    "subtitle": "ご契約テナントの運営者アカウントでサインインしてください。",
+    "sign_in_button": "サインイン",
+    "signing_in": "Cognito にリダイレクト中…",
+    "error_header": "サインインに失敗しました",
+    "error_body": "サインイン中に問題が発生しました。",
+    "support_contact": "support@tenkacloud.cloud にお問い合わせください。",
+    "footer_operator": "運営: 合同会社 BULL",
+    "footer_privacy": "プライバシーポリシー",
+    "footer_terms": "利用規約",
+    "footer_tokushoho": "特定商取引法に基づく表記",
+    "language_switcher_aria": "言語切替 / Language"
   },
   "home": {
     "header_description": "TenkaCloud Battle / Challenge — テナント管理コンソール",

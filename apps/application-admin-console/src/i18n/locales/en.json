@@ -27,7 +27,19 @@
   "login": {
     "header": "Application Admin Console",
     "description": "Sign in as a tenant developer. You will be redirected to the Cognito Hosted UI.",
-    "submit": "Sign in"
+    "submit": "Sign in",
+    "title": "TenkaCloud Application Admin Console",
+    "subtitle": "Sign in with your tenant operator account.",
+    "sign_in_button": "Sign in",
+    "signing_in": "Redirecting to Cognito…",
+    "error_header": "Sign-in failed",
+    "error_body": "We could not start the sign-in flow.",
+    "support_contact": "Please contact support@tenkacloud.cloud.",
+    "footer_operator": "Operator: BULL LLC",
+    "footer_privacy": "Privacy policy",
+    "footer_terms": "Terms of use",
+    "footer_tokushoho": "Specified Commercial Transactions Act disclosure",
+    "language_switcher_aria": "Language switcher"
   },
   "home": {
     "header_description": "TenkaCloud Battle / Challenge — Tenant admin console",
