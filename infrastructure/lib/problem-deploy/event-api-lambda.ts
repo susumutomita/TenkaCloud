@@ -154,8 +154,12 @@ export class EventApiLambda extends Construct {
     // Issue #888: disruption audit + idempotency 用に RW、 EventBus PutEvents は既存付与で十分
     // (= disruption fire でも同 bus に publish するため)。
     props.disruptionsTable.grantReadWriteData(this.fn);
-    // Issue #950 (ADR-020 Phase D): admin 操作 audit log は write-only で十分。
-    props.adminAuditLogTable?.grantWriteData(this.fn);
+    // Issue #950 (ADR-020 Phase D): admin 操作 audit log は write が中心 (mutate 系 handler の append)。
+    // Issue #1313: 追加で Tenant Admin Console 向け read endpoint
+    //   GET /admin/audit-log (`registerAuditLogRoutes`) が同 Lambda 内に register 済 (Issue #1292)
+    // のため、 read 権限も必須。 旧 `grantWriteData` だけだと AccessDenied で 5xx になり、
+    // UI が "Failed to fetch" を表示する (PR review で `[USER-REVIEW]` として残っていた配線完了)。
+    props.adminAuditLogTable?.grantReadWriteData(this.fn);
     // Issue #910 (#895 Phase 2.C.2.b): bulk payload bucket への PutObject 権限。 bucket が
     // 渡されたときのみ grant (= 未配線時の余分な IAM を避ける)。 useBulkDistributedMap が
     // false でも grant を入れておくと、 flag を flip するだけで切替できる (= 段階移行)。
