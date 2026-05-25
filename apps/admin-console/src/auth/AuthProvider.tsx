@@ -1,4 +1,10 @@
-import { beginLogin, beginLogout, loadStoredTokens, type TokenSet } from "@tenkacloud/auth-client";
+import {
+  type BeginLoginOptions,
+  beginLogin,
+  beginLogout,
+  loadStoredTokens,
+  type TokenSet,
+} from "@tenkacloud/auth-client";
 import {
   createContext,
   type ReactNode,
@@ -16,10 +22,11 @@ interface AuthState {
   ready: boolean;
   /**
    * Cognito Hosted UI へ redirect する。 Issue #1329: LoginPage が signing-in /
-   * error UI 状態を出せるよう Promise を返す (= 旧 fire-and-forget の `void` 戻り値だと
-   * PKCE 派生 / redirect URL 構築の失敗を UI に出せなかった)。
+   * error UI 状態を出せるよう Promise を返す。
+   * Issue #1335 Phase 1: `identityProvider` 未指定なら local Cognito sign-in、 指定すると
+   * `identity_provider=` を付けて SAML IdP に直接飛ばす (= SP-initiated HRD bypass)。
    */
-  login: () => Promise<void>;
+  login: (options?: BeginLoginOptions) => Promise<void>;
   logout: () => void;
   setTokens: (tokens: TokenSet) => void;
 }
@@ -80,7 +87,7 @@ export function AuthProvider({ config, children }: { config: AppConfig; children
     () => ({
       tokens,
       ready,
-      login: () => beginLogin(config),
+      login: (options) => beginLogin(config, options),
       logout,
       setTokens: (t) => setTokensState(t),
     }),

@@ -27,7 +27,7 @@ const { I18nProvider } = await import("../../src/i18n");
 
 import type { AppConfig } from "../../src/config";
 
-const config: AppConfig = {
+const baseConfig: AppConfig = {
   cognitoDomain: "https://example.auth.ap-northeast-1.amazoncognito.com",
   cognitoClientId: "abc",
   redirectUri: "http://localhost:5173/callback",
@@ -39,15 +39,17 @@ const config: AppConfig = {
   awsAccountId: "",
   adminInsightApiUrl: "",
   cloudWatchDashboardName: "",
+  samlIdpDirectory: {},
 };
 
-function renderLogin() {
+function renderLogin(overrides: Partial<AppConfig> = {}) {
   // pin Japanese locale so assertions are stable under jsdom (= navigator.language defaults).
   localStorage.setItem("tenkacloud.admin.locale", "ja");
+  const config: AppConfig = { ...baseConfig, ...overrides };
   return render(
     <I18nProvider>
       <AuthProvider config={config}>
-        <LoginPage />
+        <LoginPage config={config} />
       </AuthProvider>
     </I18nProvider>,
   );
@@ -102,5 +104,74 @@ describe("admin-console LoginPage (#1329)", () => {
     // mailto link presence: support@tenkacloud.cloud
     const mailto = screen.getByRole("link", { name: /support@tenkacloud\.cloud/ });
     expect(mailto).toHaveAttribute("href", "mailto:support@tenkacloud.cloud");
+  });
+});
+
+describe("admin-console LoginPage SAML flow (#1335)", () => {
+  beforeEach(() => {
+    beginLoginMock.mockReset();
+  });
+  afterEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it("should redirect to the single matching IdP when only one provider serves the email domain", async () => {
+    beginLoginMock.mockResolvedValue(undefined);
+    renderLogin({ samlIdpDirectory: { "example.com": ["corp-entra"] } });
+    const emailInput = screen.getByLabelText(/会社のメールアドレス/);
+    fireEvent.change(emailInput, { target: { value: "alice@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "サインイン" }));
+    await waitFor(() => {
+      expect(beginLoginMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ identityProvider: "corp-entra" }),
+      );
+    });
+  });
+
+  it("should fall back to Cognito local sign-in when the email domain has no matching IdP", async () => {
+    beginLoginMock.mockResolvedValue(undefined);
+    renderLogin({ samlIdpDirectory: { "example.com": ["corp-entra"] } });
+    fireEvent.change(screen.getByLabelText(/会社のメールアドレス/), {
+      target: { value: "outsider@other.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "サインイン" }));
+    await waitFor(() => {
+      expect(beginLoginMock).toHaveBeenCalledTimes(1);
+    });
+    // Local sign-in path does not pass identity_provider.
+    const callArgs = beginLoginMock.mock.calls[0];
+    expect(callArgs?.[1]).toBeUndefined();
+  });
+
+  it("should show the IdP picker when multiple providers serve the same email domain", async () => {
+    renderLogin({
+      samlIdpDirectory: { "example.com": ["corp-entra", "corp-okta"] },
+    });
+    fireEvent.change(screen.getByLabelText(/会社のメールアドレス/), {
+      target: { value: "alice@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "サインイン" }));
+    expect(await screen.findByRole("button", { name: "corp-entra" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "corp-okta" })).toBeInTheDocument();
+  });
+
+  it("should redirect to the picked IdP when the user clicks one of the picker buttons", async () => {
+    beginLoginMock.mockResolvedValue(undefined);
+    renderLogin({
+      samlIdpDirectory: { "example.com": ["corp-entra", "corp-okta"] },
+    });
+    fireEvent.change(screen.getByLabelText(/会社のメールアドレス/), {
+      target: { value: "alice@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "サインイン" }));
+    fireEvent.click(await screen.findByRole("button", { name: "corp-okta" }));
+    await waitFor(() => {
+      expect(beginLoginMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ identityProvider: "corp-okta" }),
+      );
+    });
   });
 });

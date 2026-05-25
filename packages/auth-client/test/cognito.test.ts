@@ -76,6 +76,18 @@ describe("beginLogin", () => {
     expect(sessionStorage.getItem(VERIFIER_KEY)).toBeTruthy();
     expect(sessionStorage.getItem(STATE_KEY)).toBeTruthy();
   });
+
+  it("should NOT append identity_provider when no IdP is requested (= local Cognito sign-in)", async () => {
+    await beginLogin(CONFIG);
+    const url = new URL(assignSpy.mock.calls[0][0] as string);
+    expect(url.searchParams.has("identity_provider")).toBe(false);
+  });
+
+  it("should append identity_provider when one is supplied (Issue #1335 SAML HRD bypass)", async () => {
+    await beginLogin(CONFIG, { identityProvider: "corp-entra" });
+    const url = new URL(assignSpy.mock.calls[0][0] as string);
+    expect(url.searchParams.get("identity_provider")).toBe("corp-entra");
+  });
 });
 
 describe("completeLogin", () => {

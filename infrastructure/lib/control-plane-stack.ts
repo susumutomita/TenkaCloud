@@ -4,6 +4,7 @@ import type {
   CfnUserPool,
   CfnUserPoolClient,
   IUserPool,
+  UserPool,
   UserPoolClient,
   UserPoolDomain,
 } from "aws-cdk-lib/aws-cognito";
@@ -16,6 +17,12 @@ import {
   SYSTEM_ADMIN_MFA_CONFIGURATION,
   SYSTEM_ADMIN_PASSWORD_POLICY,
 } from "./control-plane/mfa-policy.js";
+import { attachFederatedAdminAllowlist } from "./control-plane/saml-admin-allowlist.js";
+import {
+  attachSamlIdentityProviders,
+  type IdpDirectory,
+  type SamlIdpConfig,
+} from "./control-plane/saml-identity-providers.js";
 
 interface ControlPlaneStackProps extends cdk.StackProps {
   systemAdminEmail: string;
@@ -25,7 +32,17 @@ interface ControlPlaneStackProps extends cdk.StackProps {
    * 未指定 (= optional) は test や hosting stack 不在ケースで許容。
    */
   adminConsoleOrigin?: string;
-  // Issue #1066: SAML IdP 機能を廃止 (= MFA 必須化 #1035 で代替)。
+  /**
+   * Issue #1335 Phase 1: opt-in で attach する SAML IdP 群。 未指定 / 空配列なら従来通り
+   * Cognito local auth のみ (= MFA 強制)。 設定時のみ allowlist + sign-in audit が動く。
+   * env から bin/infrastructure → app-config で parse 済の正規化 list を受ける。
+   */
+  samlIdps?: readonly SamlIdpConfig[];
+  /**
+   * Issue #1335 Phase 1: federated 管理者 allowlist (`provider/email`)。 `samlIdps` 設定時
+   * のみ意味を持つ。 空配列 = federated sign-in 全拒否 (fail-safe)。
+   */
+  samlAdminAllowlist?: readonly string[];
 }
 
 /**
@@ -68,6 +85,12 @@ export class ControlPlaneStack extends cdk.Stack {
    * findChild で取り出して `.baseUrl()` を呼ぶ。
    */
   public readonly cognitoDomain: string;
+  /**
+   * Issue #1335 Phase 1: admin-console の Login 画面に渡す HRD directory (domain → providerName[])。
+   * SAML 未設定なら空 object。 `AdminConsoleRuntimeConfigStack` が `runtime-config.json` に
+   * 焼き込んで配信する (= 未認証の Login 画面が読む public, 非秘匿)。
+   */
+  public readonly samlIdpDirectory: IdpDirectory;
 
   constructor(scope: Construct, id: string, props: ControlPlaneStackProps) {
     super(scope, id, props);
@@ -159,7 +182,23 @@ export class ControlPlaneStack extends cdk.Stack {
       retention: RetentionDays.ONE_WEEK,
     });
 
-    // Issue #1066: SAML IdP 機能は廃止 (= MFA 必須化 #1035 で代替)。
+    // Issue #1335 Phase 1: opt-in SAML SSO attach。
+    //
+    // 1. SAML IdP attach: env 未設定 (samlIdps が空 / undefined) なら何もしない (= 既存
+    //    Cognito local auth + MFA 強制のまま)。 設定時のみ UserPool に SAML provider を
+    //    attach し、 client の SupportedIdentityProviders を COGNITO + 各 provider に拡張。
+    // 2. federated admin allowlist: SAML が有効なときだけ attach。 空配列でも attach する
+    //    (= fail-safe、 「誰でも管理者」 構成事故を防ぐ)。
+    // 3. sign-in audit Lambda は AdminConsoleInsightStack 側で attach する (= 同 stack に
+    //    adminAuditLogTable と Control Plane UserPool が cross-stack ref で揃うため、
+    //    Control Plane → Insight 方向の 1 way ref で配線できる)。
+    const samlIdps = props.samlIdps ?? [];
+    const userPool = cognitoAuth.userPool as UserPool;
+    this.samlIdpDirectory = attachSamlIdentityProviders(this, userPool, cfnUserClient, samlIdps);
+    if (samlIdps.length > 0) {
+      // SAML 有効時のみ Pre sign-up allowlist を attach。 空配列でも attach する (fail-safe)。
+      attachFederatedAdminAllowlist(this, userPool, props.samlAdminAllowlist ?? []);
+    }
 
     this.eventBusArn = controlPlane.eventManager.busArn;
     this.regApiGatewayUrl = controlPlane.controlPlaneAPIGatewayUrl;

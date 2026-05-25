@@ -82,6 +82,9 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       ...config.stackEnv,
       systemAdminEmail: config.systemAdminEmail,
       adminConsoleOrigin,
+      // Issue #1335 Phase 1: opt-in SAML SSO (= 未設定なら空配列で no-op)。
+      samlIdps: config.controlPlaneSamlIdps,
+      samlAdminAllowlist: config.controlPlaneSamlAdminAllowlist,
     },
   );
   controlPlaneStack.addDependency(adminConsoleHostingStack);
@@ -177,6 +180,11 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       deprovisioningStateMachineArn: bootstrapTemplateStack.deprovisioningStateMachineArn,
       // Issue #950 (ADR-020 Phase D): admin audit log table を cross-stack read で渡す
       adminAuditLogTable: problemDeployBackendStack.adminAuditLogTable,
+      // Issue #1335 Phase 1: Control Plane UserPool に Pre-Token Generation trigger を attach し、
+      // sign-in 成功時に audit 行を書き出す。 UserPool + Audit Table が両方ある stack は本 stack のみ
+      // (= Control Plane が UserPool を作り、 ProblemDeploy が audit table を作る、 2 つの cross-stack
+      // ref が交わる唯一の stack)。
+      environmentName: config.environment,
     },
   );
   adminConsoleInsightStack.addDependency(controlPlaneStack);
@@ -325,6 +333,9 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       adminInsightApiUrl: adminConsoleInsightStack.apiUrl,
       competitorBootstrapTemplateUrl: problemDeployBackendStack.competitorBootstrapTemplateUrl,
       cloudWatchDashboardName: observabilityStack.dashboardName,
+      // Issue #1335 Phase 1: SAML HRD directory (domain → providerName[])。 admin-console Login が
+      // email から候補 IdP を解決して `identity_provider=` を組み立てる (= 公開 metadata、 非秘匿)。
+      samlIdpDirectory: controlPlaneStack.samlIdpDirectory,
     },
   );
   adminConsoleRuntimeConfigStack.addDependency(observabilityStack);

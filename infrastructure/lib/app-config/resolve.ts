@@ -2,6 +2,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { BillingMode } from "aws-cdk-lib/aws-dynamodb";
 import * as dotenv from "dotenv";
+import { parseAdminAllowlist } from "../control-plane/saml-admin-allowlist.js";
+import { parseSamlIdpConfig } from "../control-plane/saml-identity-providers.js";
 import { getEnv } from "../helper-functions.js";
 import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting.js";
 import { loadConfig } from "../utils/config-loader.js";
@@ -78,6 +80,13 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   // ここでも `${MONTHLY_COST_LIMIT_USD:-50}` 経由で来た文字列を Number で正規化する。
   const budget = resolveBudgetConfig(config);
 
+  // Issue #1335 Phase 1: Control Plane SAML opt-in env を parse (= 未設定なら空配列)。
+  // 不正な JSON / 形式は parseSamlIdpConfig / parseAdminAllowlist が throw する (fail-loud)。
+  const controlPlaneSamlIdps = parseSamlIdpConfig(env.CONTROL_PLANE_SAML_IDPS);
+  const controlPlaneSamlAdminAllowlist = parseAdminAllowlist(
+    env.CONTROL_PLANE_SAML_ADMIN_ALLOWLIST,
+  );
+
   return {
     environment,
     ...naming,
@@ -97,6 +106,8 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     challengePayloadBucketName,
     challengePayload,
     deployConcurrentBuildLimit,
+    controlPlaneSamlIdps,
+    controlPlaneSamlAdminAllowlist,
     ...budget,
   };
 }

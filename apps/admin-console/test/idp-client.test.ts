@@ -14,6 +14,7 @@ const baseConfig: AppConfig = {
   awsAccountId: "",
   adminInsightApiUrl: "",
   cloudWatchDashboardName: "",
+  samlIdpDirectory: {},
 };
 
 describe("createIdpClient", () => {

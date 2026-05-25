@@ -6,6 +6,7 @@ import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations
 import type { IUserPool } from "aws-cdk-lib/aws-cognito";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { Construct } from "constructs";
+import { SignInAuditLambda } from "../control-plane/sign-in-audit-lambda.js";
 import { AdminInsightApiLambda } from "./admin-insight-api-lambda.js";
 
 export interface AdminConsoleInsightStackProps extends cdk.StackProps {
@@ -51,6 +52,12 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
    * (= 旧 stack 互換)。
    */
   readonly adminAuditLogTable?: Table;
+  /**
+   * Issue #1335 Phase 1: sign-in audit Lambda の env (`SYSTEM#<env>` suffix と一致)。
+   * `cognitoUserPool` + `adminAuditLogTable` が両方ある場合のみ SignInAuditLambda を attach する。
+   * 未指定 (= 既存テスト) なら audit Lambda は作らない (= 後方互換)。
+   */
+  readonly environmentName?: string;
 }
 
 /**
@@ -213,6 +220,18 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       methods: [HttpMethod.GET],
       integration,
     });
+
+    // Issue #1335 Phase 1: Control Plane Cognito sign-in events を CloudTrail / EventBridge 経由で
+    // listen し、 AdminAuditLogTable に audit 行を書き出す Lambda + Rule。 UserPool への直接の
+    // trigger 配線 (= addTrigger) は ControlPlane → ProblemDeploy → ControlPlane の循環依存を
+    // 引き起こすため避け、 string ID 一致で event filter する設計に揃える。
+    if (props.adminAuditLogTable && props.environmentName) {
+      new SignInAuditLambda(this, "SignInAudit", {
+        userPoolId: props.cognitoUserPool.userPoolId,
+        adminAuditLogTable: props.adminAuditLogTable,
+        environmentName: props.environmentName,
+      });
+    }
 
     this.apiUrl = httpApi.apiEndpoint;
     this.apiId = httpApi.apiId;
