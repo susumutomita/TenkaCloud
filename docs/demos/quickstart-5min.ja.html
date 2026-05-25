@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>5 分で「clone から動くイベント」まで quickstart</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>5 分で「clone から動くイベント」まで quickstart</h1>
+<blockquote>
+<p>English: <a href="./quickstart-5min.md">quickstart-5min.md</a></p>
+</blockquote>
+<p><strong>ワンライナー</strong> : TenkaCloud は実 AWS 上で動くオープンソースのクラウド競技プラットフォームです。 リポジトリを clone して <code>make deploy</code> するだけで、 10 分以内に admin console / デプロイ済みの問題 / 参加者ポータルが揃い、 1 チームが実 AWS タスクを解いてスコアが動く様子まで見せられます。</p>
+<p>このウォークスルーは <strong>トーク時間は約 5 分</strong>、 背後で deploy が走るスタイルです。 1 度練習しておけば、 LT / セールス商談 / 録画のいずれでも同じ流れで再現できます。</p>
+<h2>前提</h2>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>AWS アカウント</td>
+<td>Lite mode は 1 アカウントへ deploy。 Free Tier に収まる設計です。</td>
+</tr>
+<tr>
+<td><code>bun</code> 1.3.11+</td>
+<td>モノレポは Bun workspaces を使用。 <code>npm</code> / <code>npx</code> は不要です。</td>
+</tr>
+<tr>
+<td><code>git</code> 2.40+</td>
+<td>問題カタログは <code>problems/</code> サブモジュールとして提供されます。</td>
+</tr>
+<tr>
+<td>AWS CLI v2</td>
+<td>CDK 実行前の <code>aws sso login</code> / 認証情報に利用します。</td>
+</tr>
+</tbody></table>
+<p>このウォークスルーには Cognito / SBT / 事前テナント作成は <strong>不要</strong> です。 Lite mode が <code>tenantId=&quot;local&quot;</code> を自動配線します。</p>
+<h2>ステップ 1 — clone &amp; install (約 30 秒)</h2>
+<p><strong>操作</strong>。</p>
+<pre><code class="language-bash">git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make install
+</code></pre>
+<p><strong>何が起きたか</strong>。 Bun が workspaces (infrastructure と 3 つの SPA) を install し、 <code>problems/</code> サブモジュールが展開され、 ライフサイクルスクリプトは <code>CLAUDE.md</code> の supply chain ガードに従ってデフォルトで skip されます。</p>
+<p><strong>フォールバック</strong>。 サブモジュールが空に見える場合は <code>git submodule update --init --recursive problems</code> を実行。 commit 系コマンドで <code>--no-verify</code> は使いません。</p>
+<h2>ステップ 2 — Lite mode を deploy する (トーク 30 秒、 背後 10 分)</h2>
+<p><strong>操作</strong>。 別ターミナルで次を起動します。</p>
+<pre><code class="language-bash">make deploy
+</code></pre>
+<p>走っている間、 トークは続けます。 Lite mode (#955) は 2 つの stack だけを立てます : <code>AppPlaneCore</code> (<code>tenantId=&quot;local&quot;</code>) と <code>ProblemDeployBackend</code> (参加者ポータル)。</p>
+<p><strong>何が起きたか</strong>。 CDK synth + deploy で次が出来ます。</p>
+<ul>
+<li>主催者用の single-tenant Cognito UserPool</li>
+<li><code>DynamoDbLowCapacity</code> Aspect で 1 RCU / 1 WCU に固定された DynamoDB テーブル (Free Tier 内)</li>
+<li>S3 + CloudFront でホストされた Application Admin Console</li>
+<li>S3 + CloudFront でホストされた Participant Portal</li>
+<li>4 plane が共有する EventBridge バス</li>
+</ul>
+<p><strong>フォールバック</strong>。 トーク前に事前 deploy 済みにしておき、 失敗したら事前 deploy の Console URL に切り替えます。</p>
+<h2>ステップ 3 — Application Admin Console を開き、 「Demo 5min」イベントを作る (約 1 分)</h2>
+<p><strong>操作</strong>。 <code>make deploy</code> が出力する <code>application-admin-console</code> 用 CloudFront URL を開き、 主催者 Cognito ユーザーでログイン。</p>
+<ol>
+<li><strong>New event</strong> をクリック</li>
+<li>名前 : <code>Demo 5min</code></li>
+<li>保存</li>
+</ol>
+<p><strong>何が起きたか</strong>。 Application Plane が <code>(tenantId=&quot;local&quot;, eventId)</code> を key とする <code>Event</code> 行を書き込みました。 ここでは CFn stack はまだ走りません — event は単なるメタデータです。</p>
+<p><strong>フォールバック</strong>。 画面が真っ白な場合は 1 度ハードリフレッシュ。 <code>runtime-config.json</code> は boot 時に fetch されるので、 古いキャッシュが原因です。</p>
+<h2>ステップ 4 — <code>hello-world</code> 問題を追加する (約 1 分)</h2>
+<p><strong>操作</strong>。 作成したイベント内で次を実行する。</p>
+<ol>
+<li><strong>Add problem</strong> をクリック</li>
+<li><code>hello-world</code> (Challenge、 難易度 1 / 5、 想定 1 分) を選ぶ</li>
+<li>確定</li>
+</ol>
+<p><strong>何が起きたか</strong>。 サブモジュールからカタログ (<code>problems/index.json</code>) が読み込まれました。 <code>hello-world</code> は最小の <code>flag</code> 採点問題で、 <code>AWS::SSM::Parameter</code> を 1 つと、 自分の SSM prefix だけ読める <code>ParticipantViewerRole</code> を作ります (詳細は <code>problems/challenges/hello-world/README.ja.md</code> 参照)。 EC2 / VPC / 公開エンドポイントは作らず、 実コストはほぼゼロです。</p>
+<p><strong>フォールバック</strong>。 カタログ一覧が空ならサブモジュールが展開されていません。 <code>git submodule update --init --recursive problems</code> を再実行してリフレッシュ。</p>
+<h2>ステップ 5 — bulk deploy をチームに撃つ (トーク 1 分、 背後 2 分)</h2>
+<p><strong>操作</strong>。 デモ用のチームを選択 (または placeholder チームを作成) して、 <strong>Deploy to all teams</strong> をクリック。</p>
+<p><strong>何が起きたか</strong>。 Application Plane が <code>DeployRequested</code> イベントを EventBridge bus に発火。 <code>ProblemDeployBackend</code> Worker Lambda がそれを拾い、 テナントの <code>ExternalId</code> で competitor アカウントへ AssumeRole し (<code>CLAUDE.md</code> の通り必須)、 <code>problems/challenges/hello-world/template.yaml</code> を CFn <code>CreateStack</code>。 デプロイテーブルが <code>IN_PROGRESS</code> → <code>READY</code> と推移します。</p>
+<p><strong>フォールバック</strong>。 stack 生成中は <code>problems/challenges/hello-world/template.yaml</code> を画面で見せながら歩きます。 1 ページの CFn — それがデモの本体です。</p>
+<h2>ステップ 6 — Participant Portal を開き、 flag を提出してスコアが動くのを見る (約 1 分)</h2>
+<p><strong>操作</strong>。 <code>make deploy</code> が出力した participant portal URL を開き、 チームでログイン。</p>
+<ol>
+<li>問題説明を読む :「AWS Console → SSM Parameter Store → <code>/&lt;NamePrefix&gt;/hello</code> の値をコピー」</li>
+<li>参加者は <strong>Open AWS Console</strong> をクリック (フェデレーション → 読み取り専用 <code>ParticipantViewerRole</code> への AssumeRole で 1 click SSO)</li>
+<li><code>Hello from &lt;NamePrefix&gt;</code> をコピーしてポータルの flag 入力欄に貼り付け</li>
+<li>スコアボードが <strong>+100 pt</strong> 加算される</li>
+</ol>
+<p><strong>何が起きたか</strong>。 ポータルが採点 Lambda (ADR-012 の generic dispatcher) を呼び出しました。 Lambda は <code>kind: &quot;flag&quot;</code> を判別し、 提出文字列と正解を照合、 <code>ScoreEvent</code> を書き込み、 EventBridge bus に <code>ScoreUpdated</code> を再発火。 スコアボードがそれを購読してリフレッシュします。</p>
+<p><strong>フォールバック</strong>。 フェデレーションがデモアカウントで未設定なら、 flag の値を直接貼り付けます。 flag 経路には Console アクセスは不要 — Console SSO は「見栄え」要素で、 必須ではありません。</p>
+<h2>トータル実行時間</h2>
+<table>
+<thead>
+<tr>
+<th>区間</th>
+<th>トーク</th>
+<th>背後</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>ステップ 1 — clone &amp; install</td>
+<td>30 秒</td>
+<td>-</td>
+</tr>
+<tr>
+<td>ステップ 2 — <code>make deploy</code></td>
+<td>30 秒</td>
+<td>約 10 分 (live)</td>
+</tr>
+<tr>
+<td>ステップ 3 — create event</td>
+<td>1 分</td>
+<td>-</td>
+</tr>
+<tr>
+<td>ステップ 4 — 問題を追加</td>
+<td>1 分</td>
+<td>-</td>
+</tr>
+<tr>
+<td>ステップ 5 — bulk deploy</td>
+<td>1 分</td>
+<td>約 2 分</td>
+</tr>
+<tr>
+<td>ステップ 6 — 解いてスコア反映</td>
+<td>1 分</td>
+<td>-</td>
+</tr>
+<tr>
+<td><strong>合計トーク</strong></td>
+<td>約 5 分</td>
+<td></td>
+</tr>
+</tbody></table>
+<p>背後の処理はトーク中に走らせます。 最も長い live 待ちはステップ 5 の約 2 分で、 ここは 1 ページの CFn テンプレートを音読して埋めます。</p>
+<h2>トラブルシュートのワンライナー</h2>
+<table>
+<thead>
+<tr>
+<th>症状</th>
+<th>対処</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>make install</code> が遅い</td>
+<td>初回だけ。 2 回目以降は Bun キャッシュが効きます。</td>
+</tr>
+<tr>
+<td><code>make deploy</code> が「credentials」エラー</td>
+<td><code>aws sso login</code> の後にリトライ。 CDK は default profile chain を使います。</td>
+</tr>
+<tr>
+<td>管理コンソールに問題カタログが出ない</td>
+<td><code>git submodule update --init --recursive problems</code> を実行してブラウザを更新。</td>
+</tr>
+<tr>
+<td>CFn stack が <code>CREATE_IN_PROGRESS</code> のまま動かない</td>
+<td>service quota 待ちの可能性。 CloudTrail を確認。</td>
+</tr>
+<tr>
+<td>flag 提出で 401</td>
+<td>ポータルの Cognito セッション切れ。 一度サインアウトしてから再提出。</td>
+</tr>
+<tr>
+<td>スコアボードが更新されない</td>
+<td>5 秒待つ。 ポータルは polling (SSE は意図的に使わない — AGENTS.md 参照)。</td>
+</tr>
+<tr>
+<td>全部消したい</td>
+<td><code>make destroy</code> (= <code>make lite-down</code>)。 partial-failure 状態でも冪等。</td>
+</tr>
+</tbody></table>
+<h2>締めのトーク例</h2>
+<ul>
+<li>「これは <strong>single-tenant</strong> 経路。 SBT control-plane でマルチテナントにしたければ <code>make deploy-saas</code> — 3 フェーズ / 15 〜 20 分、 BASIC / STANDARD / PREMIUM の pooled tier と PLATINUM の silo tier を提供」</li>
+<li>「問題は <code>metadata.json</code> + 1 ページの <code>template.yaml</code> + 任意の <code>portal/</code> プラグインで配布。 プラットフォームコードに触れずに誰でも問題を作れる (ADR-012)」</li>
+<li>「ライセンスは Apache 2.0。 プラットフォームが host、 問題が plugin。 ご自身の問題を持ち込んでほしい」</li>
+</ul>
+<h2>次に読むもの</h2>
+<ul>
+<li><a href="./sales-pitch-15min.ja.md"><code>docs/demos/sales-pitch-15min.ja.md</code></a> — 同じ流れにペイン軸のトークポイントを添えた版</li>
+<li><a href="./architecture-tour-30min.ja.md"><code>docs/demos/architecture-tour-30min.ja.md</code></a> — 内部実装の歩き方</li>
+<li><a href="../../problems/README.ja.md"><code>problems/README.ja.md</code></a> — 自分の問題を書く</li>
+<li><a href="../architecture/OVERVIEW.md"><code>docs/architecture/OVERVIEW.md</code></a> — 10 分のアーキテクチャ overview</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/demos/quickstart-5min.ja.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/demos/quickstart-5min.ja.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>

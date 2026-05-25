@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>TenkaCloud デモスクリプト</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>TenkaCloud デモスクリプト</h1>
+<blockquote>
+<p>English: <a href="./README.md">README.md</a></p>
+</blockquote>
+<p>このフォルダには、 初見の訪問者 / セールス会話 / 技術評価者向けのナレーション付きウォークスルーをまとめています。</p>
+<p>聴衆と時間枠に合わせてスクリプトを選んでください。</p>
+<table>
+<thead>
+<tr>
+<th>スクリプト</th>
+<th>聴衆</th>
+<th>時間</th>
+<th>ゴール</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="./quickstart-5min.ja.md"><code>quickstart-5min.ja.md</code></a></td>
+<td>初見の訪問者</td>
+<td>5 分</td>
+<td>clone → Lite mode deploy → 1 イベントを end-to-end で走らせる</td>
+</tr>
+<tr>
+<td><a href="./sales-pitch-15min.ja.md"><code>sales-pitch-15min.ja.md</code></a></td>
+<td>セールス / コミュニティ運営 / プリセールス</td>
+<td>15 分</td>
+<td>同じ流れにトークポイントと料金体系を添える</td>
+</tr>
+<tr>
+<td><a href="./architecture-tour-30min.ja.md"><code>architecture-tour-30min.ja.md</code></a></td>
+<td>技術評価者 / CCoE</td>
+<td>30 分</td>
+<td>4 plane の解説 + ADR 参照 + セキュリティ</td>
+</tr>
+</tbody></table>
+<p>全スクリプトで同じデモ問題 (<code>hello-world</code> Challenge) を使うので、 1 度練習すれば複数の場面で録画を流用できます。</p>
+<h2>どれを使うか</h2>
+<ul>
+<li><strong>JAWS-UG / 勉強会の LT</strong> → 5 分の quickstart。 5 分で live deploy は危険なので、 各ステップに「事前デプロイ済みを見せる」フォールバックを記載済み。</li>
+<li><strong>顧客とのセールス商談</strong> → 15 分の pitch。 各ステップに「課題 → プロダクト適合」のトークポイントと料金 tier のヒントを付与。</li>
+<li><strong>CCoE / プラットフォームチームのレビュー</strong> → 30 分の architecture tour。 4 plane / EventBridge 契約 / ADR 参照 / マルチクラウドロードマップまで網羅。</li>
+</ul>
+<h2>表記ルール</h2>
+<ul>
+<li>各ステップに番号を振り、 <strong>想定時間</strong> / <strong>操作</strong> / <strong>何が起きたか</strong> / <strong>失敗時のフォールバック</strong> をセットで記述。</li>
+<li>コマンドは Lite mode (<code>make deploy</code>) 前提。 SaaS mode にも触れるが、 デモのデフォルト経路ではない。</li>
+<li>ADR の引用は <code>ADR-NNN</code> 形式 (例 : 問題プラグイン構造は <code>ADR-012</code>)。 詳細は <a href="../architecture/"><code>docs/architecture/</code></a> を参照。</li>
+<li>主張は TenkaCloud が現時点で出荷しているものに限定。「フル SOC2」「production-grade なマルチクラウド」のような断定は避ける。 進行中の項目は <a href="../../ROADMAP.md"><code>ROADMAP.md</code></a> を参照。</li>
+</ul>
+<h2>事前チェックリスト</h2>
+<p>トークの前に 1 度だけ走らせてください。</p>
+<pre><code class="language-bash">git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make install
+make before-commit          # sanity check : lint と test を通す
+make deploy                  # Lite mode、 約 10 分
+</code></pre>
+<p>AWS Console は対象アカウントを別タブに開いておきます。 live deploy が失敗したら、 各スクリプトに記載されたスクリーンショットにフォールバックします。</p>
+<h2>関連リンク</h2>
+<ul>
+<li><a href="../architecture/OVERVIEW.md"><code>docs/architecture/OVERVIEW.md</code></a> — 10 分のアーキテクチャ overview</li>
+<li><a href="../../CONTRIBUTOR_MAP.md"><code>CONTRIBUTOR_MAP.md</code></a> — コントリビューター向けレシピ index</li>
+<li><a href="../../problems/README.md"><code>problems/README.md</code></a> — 問題作成 overview</li>
+<li><a href="../../ROADMAP.md"><code>ROADMAP.md</code></a> — 出荷済み / 進行中の差分</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/demos/README.ja.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/demos/README.ja.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>
