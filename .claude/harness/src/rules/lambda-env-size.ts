@@ -177,44 +177,62 @@ export function checkTemplates(opts: CheckTemplatesOptions): Finding[] {
     const resources = template.Resources ?? {};
     for (const [logicalId, resource] of Object.entries(resources)) {
       if (resource.Type !== "AWS::Lambda::Function") continue;
-      const envVars = resource.Properties?.Environment?.Variables ?? {};
-      const measurement = measureEnvVariables(envVars);
-      const bucket = bucketFor(measurement.totalBytes);
-      if (bucket === "ok") continue;
-      const severity = bucket === "ge-warning" ? "warning" : "error";
-      const overLimitNote =
-        bucket === "ge-hard-limit"
-          ? ` (= AWS Lambda 4KB hard limit ${HARD_LIMIT_BYTES} bytes 超過、 deploy で必ず fail する)`
-          : bucket === "ge-error"
-            ? ` (= 4KB hard limit ${HARD_LIMIT_BYTES} bytes に対し残 margin ${HARD_LIMIT_BYTES - measurement.totalBytes} bytes)`
-            : ` (= 4KB hard limit ${HARD_LIMIT_BYTES} bytes に対し残 margin ${HARD_LIMIT_BYTES - measurement.totalBytes} bytes、 早めに掃除推奨)`;
-      findings.push({
-        ruleId: "lambda-env-size",
-        severity,
-        filePath: relPath,
-        line: 1,
-        // bucket 単位で baseline match (= 同 bucket 内なら byte 増減で baseline 外れない)
-        match: `${stackName}::${logicalId}::${bucket}`,
-        message:
-          `Lambda \`${logicalId}\` in stack \`${stackName}\` has total env size ` +
-          `${measurement.totalBytes} bytes${overLimitNote}. ` +
-          `Largest var: \`${measurement.largestKey}\` (${measurement.largestBytes} bytes).`,
-        recommendation:
-          "AWS Lambda 4KB hard limit. Move large env data to one of: " +
-          "(1) bundled module via esbuild `bundling.define` (literal substitution at build time, = #1158 / #1308 catalog pattern); " +
-          "(2) S3 + lazy fetch at cold start; " +
-          "(3) SSM Parameter Store SecureString (cost-zero, AGENTS.md secrets-manager-forbidden rule). " +
-          "See #1308 for the catalog/disruption bundling pattern.",
-      });
+      const finding = findingForLambdaEnv({ relPath, stackName, logicalId, resource });
+      if (finding) findings.push(finding);
     }
   }
   return findings;
 }
 
+interface LambdaEnvFindingInput {
+  readonly relPath: string;
+  readonly stackName: string;
+  readonly logicalId: string;
+  readonly resource: CfnResource;
+}
+
+function findingForLambdaEnv(input: LambdaEnvFindingInput): Finding | undefined {
+  const { relPath, stackName, logicalId, resource } = input;
+  const envVars = resource.Properties?.Environment?.Variables ?? {};
+  const measurement = measureEnvVariables(envVars);
+  const bucket = bucketFor(measurement.totalBytes);
+  if (bucket === "ok") return undefined;
+  const severity = bucket === "ge-warning" ? "warning" : "error";
+  return {
+    ruleId: "lambda-env-size",
+    severity,
+    filePath: relPath,
+    line: 1,
+    // bucket 単位で baseline match (= 同 bucket 内なら byte 増減で baseline 外れない)
+    match: `${stackName}::${logicalId}::${bucket}`,
+    message:
+      `Lambda \`${logicalId}\` in stack \`${stackName}\` has total env size ` +
+      `${measurement.totalBytes} bytes${overLimitNote(bucket, measurement.totalBytes)}. ` +
+      `Largest var: \`${measurement.largestKey}\` (${measurement.largestBytes} bytes).`,
+    recommendation:
+      "AWS Lambda 4KB hard limit. Move large env data to one of: " +
+      "(1) bundled module via esbuild `bundling.define` (literal substitution at build time, = #1158 / #1308 catalog pattern); " +
+      "(2) S3 + lazy fetch at cold start; " +
+      "(3) SSM Parameter Store SecureString (cost-zero, AGENTS.md secrets-manager-forbidden rule). " +
+      "See #1308 for the catalog/disruption bundling pattern.",
+  };
+}
+
+function overLimitNote(bucket: ReturnType<typeof bucketFor>, totalBytes: number): string {
+  if (bucket === "ge-hard-limit") {
+    return ` (= AWS Lambda 4KB hard limit ${HARD_LIMIT_BYTES} bytes 超過、 deploy で必ず fail する)`;
+  }
+  const margin = HARD_LIMIT_BYTES - totalBytes;
+  if (bucket === "ge-error") {
+    return ` (= 4KB hard limit ${HARD_LIMIT_BYTES} bytes に対し残 margin ${margin} bytes)`;
+  }
+  return ` (= 4KB hard limit ${HARD_LIMIT_BYTES} bytes に対し残 margin ${margin} bytes、 早めに掃除推奨)`;
+}
+
 export const lambdaEnvSize: Rule = {
   id: "lambda-env-size",
   severity: "error",
-  check(ctx: RuleContext): readonly Finding[] {
+  check(_ctx: RuleContext): readonly Finding[] {
     const cwd = process.cwd();
     if (!isCdkOutFresh(cwd)) {
       // cdk.out が無い fresh clone / synth 未実行ケース。 false negative より silent skip

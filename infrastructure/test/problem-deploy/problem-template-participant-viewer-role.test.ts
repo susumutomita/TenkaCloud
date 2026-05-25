@@ -20,8 +20,6 @@ const TEMPLATES = [
       "ssm:StartSession",
       "ssm:TerminateSession",
       "cloudformation:DescribeStacks",
-      "logs:FilterLogEvents",
-      "lambda:GetFunction",
     ],
   },
   {
@@ -85,6 +83,16 @@ const RESOURCE_STAR_OK_SIDS = new Set([
   // (= 参加者は console / CLI で自分の LB / TG / Listener / TargetHealth を観測する
   // のに必要)。 per-team dedicated AWS account 前提で cross-tenant leak リスクなし。
   "ReadLoadBalancerState",
+  // TenkaCloudChallenge PR #25: microservice-migration-battle intentionally
+  // allows Console navigation list APIs. These reveal account-local names but
+  // do not grant cross-resource access; mutating/inspect grants remain
+  // ${NamePrefix}*-scoped in the same role.
+  "ConsoleListLambda",
+  "ConsoleListEcs",
+  "ConsoleListAppRunner",
+  "ConsoleListEcr",
+  "ConsoleListLogs",
+  "ConsoleListIamRoles",
   // Issue #1316: hello-world hint で案内している AWS Console の SSM Parameter
   // detail page は navigation chrome (sidebar list / breadcrumb) で
   // ssm:DescribeParameters を呼ぶ。 これは AWS IAM 仕様で resource-level perm
