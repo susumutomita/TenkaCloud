@@ -88,7 +88,6 @@ export class DeployApiLambda extends Construct {
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
         // #686: legacy "unknown-tenant" fallback は削除 (= JWT claim 欠落時は handler が 401)
         ...(props.defaultTenantId ? { DEFAULT_TENANT_ID: props.defaultTenantId } : {}),
-        BATTLE_PROBLEMS_CATALOG: JSON.stringify(props.problemsCatalog),
         // ADR-008 Phase 3 (Issue #642): visibility + bucket env、 default は dormant
         BATTLE_PROBLEMS_VISIBILITY: JSON.stringify(props.problemsVisibility),
         CHALLENGE_PAYLOAD_BUCKET: props.challengePayloadBucketName ?? "",
@@ -101,6 +100,16 @@ export class DeployApiLambda extends Construct {
         target: LAMBDA_NODEJS_BUNDLING_TARGET,
         sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
         externalModules: [],
+        // Issue #1308: BATTLE_PROBLEMS_CATALOG は問題が増えるたび growing し 4 KB Lambda env
+        // hard limit に張り付いた (= EventApi / DeployApi の deploy が CREATE_FAILED)。 #1158
+        // (GenericScoring / ParticipantPortal) と同じ esbuild define で build 時に literal 置換
+        // し env を 0 化する。 handler は process.env を読む既存 code のまま (= build 後に literal
+        // JSON 文字列が埋まる)。 tests は process.env 経由で fixture を注入するので影響なし。
+        define: {
+          "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
+            JSON.stringify(props.problemsCatalog),
+          ),
+        },
       },
     });
 
