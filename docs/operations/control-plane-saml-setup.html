@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Control Plane SAML SSO setup (Issue #1335 Phase 1)</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>Control Plane SAML SSO setup (Issue #1335 Phase 1)</h1>
+<p>System Admin 用 admin-console (<code>apps/admin-console</code>) を組織の IdP (Entra ID / Okta 等) による
+SAML SSO でサインインできるようにする手順。 <strong>同一メールドメインに複数 IdP が並立するケース</strong>
+(親会社 / 子会社、 部門ごとに別 IdP を立てている等) に対応する。</p>
+<blockquote>
+<p>本書のドメイン・IdP 名はすべて記入例 (<code>example.com</code> / <code>corp-entra</code> / <code>corp-okta</code>)。 実値に
+置き換えること。</p>
+</blockquote>
+<h2>全体像</h2>
+<ul>
+<li>TenkaCloud 側は <code>CONTROL_PLANE_SAML_IDPS</code> で宣言した IdP 群を、 Control Plane Cognito UserPool に
+SAML provider として attach する。 opt-in で、 未設定なら従来通り Cognito local auth + MFA 強制
+のみ (= ADR-020 / Issue #1035) のまま。</li>
+<li>どのメールを管理者として認可するかは <code>CONTROL_PLANE_SAML_ADMIN_ALLOWLIST</code> (provider 束縛 allowlist)
+で明示する。 <strong>ここに無い federated ユーザーはサインイン不可</strong> (空 = 全拒否の fail-safe)。</li>
+<li>サインインの経路は 2 つ。<ul>
+<li><strong>SP-initiated</strong> (admin-console からサインイン): メール入力後、 ドメインに対応する IdP 候補を
+解決する。 候補 1 件なら自動 redirect、 複数なら IdP 選択、 0 件なら Cognito local。</li>
+<li><strong>IdP-initiated</strong> (Entra MyApps / Okta ダッシュボードのタイル): そのまま受け入れる。</li>
+</ul>
+</li>
+<li>すべてのサインイン成功は <code>AdminAuditLogTable</code> (= ADR-020 Phase D) の <code>SYSTEM#&lt;env&gt;</code> 区画に
+1 行 <code>auth.sign_in_succeeded</code> として記録される (= CloudTrail / EventBridge Lambda 経由、 SOC2 oriented
+audit 要件の最低限)。</li>
+</ul>
+<h2>手順 1: IdP 側で TenkaCloud を SP として登録</h2>
+<p>IdP に SAML アプリケーションを 1 つ作成し、 以下を設定する。 <code>&lt;cognito-domain&gt;</code> と <code>&lt;user-pool-id&gt;</code>
+はデプロイ時に払い出される (= admin-console の <code>runtime-config.json</code> の <code>cognitoDomain</code> /
+ControlPlaneStack の <code>cognitoUserPool.userPoolId</code> で確認できる)。</p>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>値</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>SP エンティティ ID (Audience)</td>
+<td><code>urn:amazon:cognito:sp:&lt;user-pool-id&gt;</code></td>
+</tr>
+<tr>
+<td>ACS URL (Reply / Assertion Consumer Service)</td>
+<td><code>https://&lt;cognito-domain&gt;/saml2/idpresponse</code></td>
+</tr>
+<tr>
+<td>NameID format</td>
+<td><strong>persistent</strong> (immutable な subject、 後述)</td>
+</tr>
+<tr>
+<td>必須属性マッピング</td>
+<td><code>email</code> → <code>http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress</code></td>
+</tr>
+</tbody></table>
+<p>要件は次のとおり。</p>
+<ul>
+<li><strong>有効な署名証明書</strong> を持つ metadata を発行できること (Cognito は署名を検証する)。</li>
+<li><strong>NameID は persistent</strong> にする。 Cognito はこれを federated username (<code>{provider}_{subject}</code>) の
+subject に使い、 <strong>なりすまし防止と監査の immutable ID</strong> とする。 email は表示・名寄せ用であり、
+識別子ではない。</li>
+<li>IdP-initiated を使う場合は、 IdP 側でタイル (Entra: MyApps、 Okta: ダッシュボード) を有効化する。</li>
+</ul>
+<p>登録後、 IdP の <strong>federation metadata URL</strong> (例 <code>https://login.example/.../federationmetadata.xml</code>)
+を控える。</p>
+<h2>手順 2: TenkaCloud 側で IdP を宣言する</h2>
+<p>Control Plane デプロイ時の環境変数で設定する (= <code>infrastructure/environments/&lt;env&gt;/.env</code>)。</p>
+<h3><code>CONTROL_PLANE_SAML_IDPS</code> — attach する IdP 群 (JSON 配列)</h3>
+<pre><code class="language-json">[
+  { &quot;name&quot;: &quot;corp-entra&quot;, &quot;metadataUrl&quot;: &quot;https://login.example/meta&quot;, &quot;emailDomains&quot;: [&quot;example.com&quot;] },
+  { &quot;name&quot;: &quot;corp-okta&quot;,  &quot;metadataUrl&quot;: &quot;https://okta.example/meta&quot;,  &quot;emailDomains&quot;: [&quot;example.com&quot;] }
+]
+</code></pre>
+<ul>
+<li><code>name</code>: Cognito provider 名。 命名規約 <code>{scope}-{vendor}</code> (例 <code>corp-entra</code> / <code>corp-okta</code>) で同一
+ドメイン衝突を回避する。 3〜32 文字、 英数 + <code>-</code> / <code>_</code>。 <strong><code>_</code> 区切りで prefix 衝突する名前は避ける</strong>
+(例 <code>corp</code> と <code>corp_evil</code>)。</li>
+<li><code>metadataUrl</code>: 手順 1 で控えた IdP の metadata URL (https 必須)。</li>
+<li><code>emailDomains</code>: この IdP で認証するメールドメイン (1 件以上)。 同一ドメインに複数 IdP を並べてよい
+(上記は <code>example.com</code> に Entra と Okta が並立する例)。</li>
+</ul>
+<p>未設定 (または空) なら SAML は無効で、 従来通り Cognito local auth + MFA 強制のみになる。</p>
+<h3><code>CONTROL_PLANE_SAML_ADMIN_ALLOWLIST</code> — 管理者として認可するメール (provider 束縛)</h3>
+<pre><code class="language-text">corp-entra/alice@example.com,corp-okta/bob@example.com
+</code></pre>
+<p>(JSON 配列 <code>[&quot;corp-entra/alice@example.com&quot;, ...]</code> でも可)</p>
+<ul>
+<li>各エントリは <strong><code>provider/email</code></strong>。「どの IdP 経由で来た、 どのメールを管理者とみなすか」を
+明示する。</li>
+<li>これにより、 ある IdP に許可したメールを <strong>別の IdP が assertion で詐称してもブロック</strong> できる
+(provider 跨ぎの信頼プール化を防ぐ)。</li>
+<li><strong>空 = federated サインイン全拒否</strong>。 SAML を有効化したのに allowlist 未設定、 という事故で「誰でも管理者」になるのを防ぐ fail-safe。</li>
+</ul>
+<blockquote>
+<p>Control Plane の API 認可は token の issuer + audience 検証のみ (scope 無効) なので、 この allowlist が
+「管理者になれる人」 を絞る唯一のサーバ側ゲートになる。 必ず設定すること。</p>
+</blockquote>
+<h2>手順 3: デプロイと動作確認</h2>
+<ol>
+<li>上記 env を設定して Control Plane stack を再デプロイする (= <code>make deploy-saas</code>)。 Cognito
+UserPool に SAML provider が attach され、 <code>admin-console</code> の <code>runtime-config.json</code> に
+<code>samlIdpDirectory</code> (ドメイン → provider 名配列) が配信される。</li>
+<li><strong>SP-initiated</strong>: 管理画面を開き、 メールを入力する。<ul>
+<li>候補 1 件: その IdP に自動で飛ぶ。</li>
+<li>候補複数 (同一ドメインに Entra + Okta 等): IdP 選択 (「corp-entra」「corp-okta」ボタン) が出る。</li>
+<li>候補 0 件: Cognito local auth (= 既存 MFA 経路)。</li>
+</ul>
+</li>
+<li><strong>IdP-initiated</strong>: IdP のタイルから入り、 そのままサインインできること。</li>
+<li>allowlist に無いメールではサインインが拒否されること (<code>This federated identity is not authorized to access the admin console.</code>)。</li>
+<li>監査ログ画面 (<code>/audit-log</code>、 scope=system) で <code>auth.sign_in_succeeded</code> 行が増えていること。
+<code>extra.idp</code> に解決した provider 名 (<code>corp-entra</code> 等) または <code>COGNITO</code> (local) が入っている。</li>
+</ol>
+<h2>失効 (アクセス権の取り消し) について</h2>
+<p>allowlist から削除しただけでは、 <strong>既にサインイン実績のある federated ユーザーは Cognito 上に残る</strong>
+(Pre sign-up は初回フェデレーション時のみ発火するため)。 失効させるには次の 2 段階で行う。</p>
+<ol>
+<li><code>CONTROL_PLANE_SAML_ADMIN_ALLOWLIST</code> から該当 <code>provider/email</code> を削除して再デプロイ
+(= 以後の新規 federated サインインは拒否される)。</li>
+<li>既存 user は AWS Console / CLI で <code>cognito-idp admin-delete-user</code> で deprovision する
+(= Cognito UserPool 内の federated identity を削除すれば再 federation 時に再び Pre sign-up を
+経由する)。</li>
+</ol>
+<h2>監査ログとの連携</h2>
+<p>本機能で書き込まれる sign-in audit 行は ADR-020 Phase D / Issue #1292 の audit UI (= admin-console
+の <code>/audit-log</code> page) で読み出せる。 SOC2 oriented 要件 (= Issue #1335) の最低 1 行を担保する位置付け。</p>
+<ul>
+<li>action: <code>auth.sign_in_succeeded</code></li>
+<li>tenantId: <code>SYSTEM</code> (Control Plane のサインインなので tenant に紐づかない)</li>
+<li>actor: Cognito <code>sub</code> (immutable identity)</li>
+<li>actorUsername: email or federated username</li>
+<li>extra.idp: <code>COGNITO</code> / <code>corp-entra</code> 等</li>
+</ul>
+<p>Phase 6 で CloudTrail Cognito events を追加取り込みすることで、 失敗系 (= <code>auth.sign_in_denied</code>)
+や IdP callback 失敗を補完する予定 (= Issue #1335 issue body 参照)。</p>
+<h2>関連</h2>
+<ul>
+<li><code>infrastructure/lib/control-plane/saml-identity-providers.ts</code> — SAML attach 本体</li>
+<li><code>infrastructure/lib/control-plane/saml-admin-allowlist.ts</code> — provider 束縛 allowlist + Pre sign-up Lambda</li>
+<li><code>infrastructure/lib/control-plane/sign-in-audit-lambda.ts</code> — CloudTrail / EventBridge Lambda (audit emit)</li>
+<li><code>apps/admin-console/src/auth/idp-resolution.ts</code> — HRD 解決 (email → IdP 候補)</li>
+<li>ADR-020 Phase D / Issue #1292 — Admin audit log の data model</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/operations/control-plane-saml-setup.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/operations/control-plane-saml-setup.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>

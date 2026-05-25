@@ -33,6 +33,12 @@ export interface AppConfig {
    * AWS Console deep link を組み立てる。 空文字なら link を出さない (= dev fallback)。
    */
   readonly cloudWatchDashboardName: string;
+  /**
+   * Issue #1335 Phase 1: SAML HRD directory (= email ドメイン → 接続済み SAML provider 名)。
+   * Login 画面が email から候補 IdP を解決して `identity_provider` を組み立てる。
+   * SAML 未設定なら空 object `{}` (= 全 email が Cognito local auth に流れる)。
+   */
+  readonly samlIdpDirectory: Readonly<Record<string, readonly string[]>>;
 }
 
 /**
@@ -49,6 +55,7 @@ interface RuntimeConfig {
   readonly awsAccountId?: string;
   readonly adminInsightApiUrl?: string;
   readonly cloudWatchDashboardName?: string;
+  readonly samlIdpDirectory?: Readonly<Record<string, readonly string[]>>;
 }
 
 // Issue #871 / #1246: runtime-config.json URL validators (isHttpsUrl / isCognitoDomain) are
@@ -83,6 +90,7 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       awsAccountId: data.awsAccountId,
       adminInsightApiUrl: data.adminInsightApiUrl,
       cloudWatchDashboardName: data.cloudWatchDashboardName,
+      samlIdpDirectory: data.samlIdpDirectory,
     };
   } catch {
     return null;
@@ -121,6 +129,8 @@ export async function loadConfig(
       awsAccountId: runtime.awsAccountId ?? "",
       adminInsightApiUrl: runtime.adminInsightApiUrl ?? "",
       cloudWatchDashboardName: runtime.cloudWatchDashboardName ?? "",
+      // Issue #1335 Phase 1: SAML 未設定 stack も無音で動かすため空 object fallback。
+      samlIdpDirectory: runtime.samlIdpDirectory ?? {},
     };
   }
 
@@ -145,5 +155,7 @@ export async function loadConfig(
     adminInsightApiUrl: env.VITE_ADMIN_INSIGHT_API_URL ?? "",
     // #1080: dev fallback では CloudWatch Dashboard リンクを出さない
     cloudWatchDashboardName: "",
+    // Issue #1335 Phase 1: dev では SAML 経路を出さない (= 空 directory で local 一択)。
+    samlIdpDirectory: {},
   };
 }

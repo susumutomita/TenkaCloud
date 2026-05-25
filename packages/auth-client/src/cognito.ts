@@ -40,7 +40,19 @@ export interface TokenSet {
   expiresAt: number;
 }
 
-export async function beginLogin(config: CognitoOAuthConfig): Promise<void> {
+export interface BeginLoginOptions {
+  /**
+   * Issue #1335 Phase 1: SP-initiated SAML SSO で Cognito Hosted UI の Home Realm Discovery を
+   * bypass し、 指定 IdP に直接飛ばす。 `idp-resolution.resolveIdp` が `kind: "redirect"` /
+   * `"select"` の場合だけ渡る (= local Cognito sign-in は未指定で従来動作)。
+   */
+  readonly identityProvider?: string;
+}
+
+export async function beginLogin(
+  config: CognitoOAuthConfig,
+  options: BeginLoginOptions = {},
+): Promise<void> {
   const verifier = generateVerifier();
   const challenge = await deriveChallenge(verifier);
   const state = generateVerifier(32);
@@ -55,6 +67,12 @@ export async function beginLogin(config: CognitoOAuthConfig): Promise<void> {
   url.searchParams.set("state", state);
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("code_challenge", challenge);
+  if (options.identityProvider) {
+    // Cognito 公式仕様 (= AWS doc: Using the Authorize endpoint): `identity_provider=<providerName>`
+    // で IdP 直指定。 managed login の domain-based HRD を bypass する。 multi-IdP per email
+    // domain 対応 (Issue #1335) の鍵。
+    url.searchParams.set("identity_provider", options.identityProvider);
+  }
 
   window.location.assign(url.toString());
 }

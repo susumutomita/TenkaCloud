@@ -46,6 +46,11 @@ export interface AdminConsoleRuntimeConfigStackProps extends cdk.StackProps {
    * 形式の URL を組み立てる。
    */
   readonly cloudWatchDashboardName: string;
+  /**
+   * Issue #1335 Phase 1: SAML HRD directory (domain → providerName[])。 admin-console Login が
+   * 未認証で読む public な metadata なので runtime-config.json に焼く。 SAML 未設定なら `{}`。
+   */
+  readonly samlIdpDirectory: Readonly<Record<string, readonly string[]>>;
 }
 
 export class AdminConsoleRuntimeConfigStack extends cdk.Stack {
@@ -63,6 +68,9 @@ export class AdminConsoleRuntimeConfigStack extends cdk.Stack {
       adminInsightApiUrl: props.adminInsightApiUrl.replace(/\/$/, ""),
       competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl,
       cloudWatchDashboardName: props.cloudWatchDashboardName,
+      // Issue #1335 Phase 1: SAML HRD directory (= 未認証で読まれる、 admin-console Login で
+      // email から候補 IdP を解決する)。 設定なし時は `{}` で焼かれる (= Login は local fallback)。
+      samlIdpDirectory: props.samlIdpDirectory,
     };
 
     new BucketDeployment(this, "RuntimeConfigDeployment", {

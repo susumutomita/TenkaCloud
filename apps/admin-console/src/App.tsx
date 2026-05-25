@@ -24,7 +24,7 @@ export function App({ config }: { config: AppConfig }) {
   return (
     <AuthProvider config={config}>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login" element={<LoginPage config={config} />} />
         <Route path="/callback" element={<CallbackPage config={config} />} />
         <Route
           path="/tenants"

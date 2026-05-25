@@ -52,7 +52,10 @@
     "footer_privacy": "Privacy policy",
     "footer_terms": "Terms of use",
     "footer_tokushoho": "Specified Commercial Transactions Act disclosure",
-    "language_switcher_aria": "Language switcher"
+    "language_switcher_aria": "Language switcher",
+    "saml_email_label": "Work email",
+    "saml_pick_idp": "Multiple identity providers are connected for this domain. Pick one to continue.",
+    "saml_back_to_email": "Use a different email"
   },
   "tenant_list": {
     "header": "Tenants",

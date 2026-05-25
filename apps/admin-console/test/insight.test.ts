@@ -18,6 +18,7 @@ const baseConfig: AppConfig = {
   awsAccountId: "",
   adminInsightApiUrl: "https://insight.example.com",
   cloudWatchDashboardName: "",
+  samlIdpDirectory: {},
 };
 
 describe("fetchTenantsInsightSummary", () => {

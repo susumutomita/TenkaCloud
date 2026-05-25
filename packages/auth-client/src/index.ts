@@ -15,6 +15,7 @@
  */
 
 export {
+  type BeginLoginOptions,
   beginLogin,
   beginLogout,
   type CognitoOAuthConfig,

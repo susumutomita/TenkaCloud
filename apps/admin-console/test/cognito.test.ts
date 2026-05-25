@@ -21,6 +21,7 @@ const config: AppConfig = {
   awsAccountId: "",
   adminInsightApiUrl: "",
   cloudWatchDashboardName: "",
+  samlIdpDirectory: {},
 };
 
 describe("loadStoredTokens", () => {

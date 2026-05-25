@@ -98,7 +98,25 @@ export interface AppConfig {
   // に流れる (= Phase 3 env-var dance が不要になる)。
   // Issue #1053: 旧 `competitorBootstrapTemplateUrlEnv` も同じく cross-stack ref へ移行。
 
-  // Issue #1066: SAML IdP 連携は廃止 (= MFA #1035 で代替)。
+  // Issue #1066: SAML IdP 連携を一度撤廃 (= MFA #1035 で代替)。
+  // Issue #1335 Phase 1: 商用 enterprise 向けに opt-in declarative SAML を復活。
+  // 未設定なら従来通り Cognito local auth + MFA 強制のみ。
+
+  /**
+   * Issue #1335 Phase 1: System Admin (Control Plane) 側 SAML IdP 群。 env
+   * `CONTROL_PLANE_SAML_IDPS` (JSON 配列) を parse 済み。 空配列なら SAML 無効。
+   */
+  readonly controlPlaneSamlIdps: ReadonlyArray<{
+    readonly name: string;
+    readonly metadataUrl: string;
+    readonly emailDomains: readonly string[];
+  }>;
+  /**
+   * Issue #1335 Phase 1: federated 管理者 allowlist (`provider/email`)。 env
+   * `CONTROL_PLANE_SAML_ADMIN_ALLOWLIST` を parse 済み。 SAML 有効時のみ意味を持つ。
+   * 空配列 = federated sign-in 全拒否 (fail-safe)。
+   */
+  readonly controlPlaneSamlAdminAllowlist: readonly string[];
 
   /**
    * Issue #952 epic / cost guardrails: AWS Budgets monthly limit (USD)。 未指定 / 0 なら
