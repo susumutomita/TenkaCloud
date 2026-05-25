@@ -42,6 +42,8 @@ interface PortalErrorBody {
   /** Issue #1197: assume_role_failed の付加情報。 stage = どちらの段で落ちたか、 reason = STS error name。 */
   readonly stage?: string;
   readonly reason?: string;
+  /** Issue #1315: hint_out_of_order の 「次に開けるべき直前 hint」 id。 */
+  readonly missingHintId?: string;
 }
 
 function isAssumeRoleStage(value: unknown): value is AssumeRoleStage {
@@ -85,6 +87,13 @@ async function throwConflictError(res: Response): Promise<never> {
   // Issue #1006: scoring gate 系の 409 は startsAt / endsAt を持つ専用 error にする。
   if (isScoringGateError(body.error)) {
     throw new PortalScoringGateError(body.error, body.startsAt, body.endsAt);
+  }
+  // Issue #1315: hint_out_of_order は body.missingHintId を details に詰めて UI が
+  // 「Hint N-1 を先に reveal してください」 文言を組み立てられるようにする。
+  if (body.error === "hint_out_of_order") {
+    throw new PortalValidationError("hint_out_of_order", {
+      missingHintId: body.missingHintId,
+    });
   }
   throw new PortalValidationError(body.error ?? "conflict");
 }

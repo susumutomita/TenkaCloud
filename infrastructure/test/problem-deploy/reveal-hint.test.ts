@@ -130,6 +130,91 @@ describe("revealHint (#742 Phase 3)", () => {
     expect(input.ExpressionAttributeValues?.[":neg"]).toBe(-10);
   });
 
+  // ---- Issue #1315: progressive hint の順序制約 (= Hint N は Hint 1..N-1 reveal 後のみ) ----
+  describe("hint reveal order constraint (Issue #1315)", () => {
+    it("should accept reveal of hint 1 unconditionally (no predecessor)", async () => {
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 100 })] });
+      ddbSend.mockResolvedValueOnce({ Attributes: { score: 90 } });
+      const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
+      expect(out.kind).toBe("ok");
+    });
+
+    it("should reject reveal of hint 2 when hint 1 not yet revealed", async () => {
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 100, hintsRevealed: [] })] });
+      const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-2");
+      expect(out.kind).toBe("hint_out_of_order");
+      if (out.kind !== "hint_out_of_order") return;
+      expect(out.missingHintId).toBe("hint-1");
+      // DDB UpdateItem は走らない (= score / hintsRevealed は変更されない)
+      expect(ddbSend).toHaveBeenCalledTimes(1);
+    });
+
+    it("should accept reveal of hint 2 after hint 1 revealed", async () => {
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({
+        Items: [
+          sampleRow({
+            score: 90,
+            hintsRevealed: [
+              { hintId: "hint-1", revealedAt: "2026-05-15T01:00:00.000Z", penaltyApplied: 10 },
+            ],
+          }),
+        ],
+      });
+      ddbSend.mockResolvedValueOnce({ Attributes: { score: 70 } });
+      const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-2");
+      expect(out.kind).toBe("ok");
+      if (out.kind !== "ok") return;
+      expect(out.penaltyApplied).toBe(20);
+      expect(out.totalScore).toBe(70);
+    });
+
+    it("should preserve already_revealed (= same hint twice) when the hint is already in hintsRevealed", async () => {
+      // Regression pin: 順序制約の追加で 「既出 hint の二度押し」 idempotent 路を壊さないこと。
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({
+        Items: [
+          sampleRow({
+            score: 90,
+            hintsRevealed: [
+              { hintId: "hint-1", revealedAt: "2026-05-15T01:00:00.000Z", penaltyApplied: 10 },
+            ],
+          }),
+        ],
+      });
+      const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
+      expect(out.kind).toBe("already_revealed");
+      // UpdateItem は呼ばれない (= idempotent)
+      expect(ddbSend).toHaveBeenCalledTimes(1);
+    });
+
+    it("should report missing predecessor as the first unrevealed hint when skipping multiple", async () => {
+      // hints = [1,2,3]、 1 だけ reveal 済で 3 を request → missingHintId は 2 を返す。
+      const { shared, ddbSend } = buildShared();
+      const scoring = buildScoringMap([
+        { id: "hint-1", content: "h1", penalty: 5 },
+        { id: "hint-2", content: "h2", penalty: 10 },
+        { id: "hint-3", content: "h3", penalty: 15 },
+      ]);
+      ddbSend.mockResolvedValueOnce({
+        Items: [
+          sampleRow({
+            score: 95,
+            hintsRevealed: [
+              { hintId: "hint-1", revealedAt: "2026-05-15T01:00:00.000Z", penaltyApplied: 5 },
+            ],
+          }),
+        ],
+      });
+      const out = await revealHint(shared, scoring, TEAM_KEY, "hello-world", "hint-3");
+      expect(out.kind).toBe("hint_out_of_order");
+      if (out.kind !== "hint_out_of_order") return;
+      expect(out.missingHintId).toBe("hint-2");
+    });
+  });
+
   it("既に reveal 済の hintId は already_revealed (= content + 既存 score を返す、 idempotent)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({

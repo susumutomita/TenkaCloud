@@ -9,6 +9,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useState } from "react";
 import {
   type ParticipantHintView,
+  PortalValidationError,
   revealHint,
   type SubmitFlagOutcome,
   submitFlag,
@@ -167,6 +168,26 @@ function canSubmitFlag(flag: string, submitting: boolean): boolean {
 }
 
 /**
+ * Issue #1315: 409 hint_out_of_order は missingHintId を hints から index 引きして
+ * 「ヒント N を先に公開してください」 の親切文言を出す。 他の error は既存の
+ * formatProblemPanelActionError 経路に委譲する。
+ */
+function formatRevealError(
+  t: (key: string, params?: Readonly<Record<string, string | number>>) => string,
+  err: unknown,
+  hints: readonly ParticipantHintView[],
+): string {
+  if (err instanceof PortalValidationError && err.errorCode === "hint_out_of_order") {
+    const missingId =
+      typeof err.details?.missingHintId === "string" ? err.details.missingHintId : undefined;
+    const missingIdx = missingId ? hints.findIndex((h) => h.id === missingId) : -1;
+    const indexLabel = missingIdx >= 0 ? missingIdx + 1 : 1;
+    return t("problem_panel.hint_out_of_order_error", { index: indexLabel });
+  }
+  return formatProblemPanelActionError(t, err, "problem_panel.validation_error");
+}
+
+/**
  * Issue #742 Phase 4: progressive hint UI。
  *
  * - revealed=false (locked): 「ヒント N (-X pt)」 + 「reveal」 button
@@ -203,7 +224,7 @@ function HintsPanel({
       await revealHint(apiBaseUrl, sessionToken, problemId, hintId);
       await onRevealed();
     } catch (err) {
-      setRevealError(formatProblemPanelActionError(t, err, "problem_panel.validation_error"));
+      setRevealError(formatRevealError(t, err, hints));
     } finally {
       setRevealing(null);
       setPendingReveal(null);
@@ -218,42 +239,58 @@ function HintsPanel({
         header={t("problem_panel.hint_header", { revealed: revealedCount, total: hints.length })}
       >
         <SpaceBetween size="xs">
-          {hints.map((h, i) => (
-            <Box key={h.id}>
-              {h.revealed ? (
-                <Box>
-                  <strong>{t("problem_panel.hint_label_colon", { index: i + 1 })}</strong>{" "}
-                  {h.content}
-                  {h.revealedAt && (
-                    <Box variant="small" color="text-status-info" margin={{ top: "xxs" }}>
-                      {t("problem_panel.hint_revealed_ago", {
-                        ago: describeAgo(h.revealedAt, Date.now()),
-                      })}
-                    </Box>
-                  )}
-                </Box>
-              ) : (
-                <Box>
-                  <strong>{t("problem_panel.hint_label", { index: i + 1 })}</strong>{" "}
-                  <span style={{ color: h.penalty > 0 ? "#b54708" : "#475467" }}>
-                    {t("problem_panel.hint_penalty_note", { penalty: h.penalty })}
-                  </span>{" "}
-                  <Button
-                    variant="normal"
-                    iconName="lock-private"
-                    loading={revealing === h.id}
-                    disabled={revealing !== null && revealing !== h.id}
-                    onClick={() => {
-                      setPendingReveal(h);
-                      setPendingIndex(i);
-                    }}
-                  >
-                    {t("problem_panel.hint_reveal_button")}
-                  </Button>
-                </Box>
-              )}
-            </Box>
-          ))}
+          {hints.map((h, i) => {
+            // Issue #1315: progressive hint 順序制約。 Hint N (index i) は Hint 1..i が
+            // すべて revealed=true のときのみ button 有効。 backend (409 hint_out_of_order)
+            // と同じ contract を UI で先回り disable し、 不要な round trip を抑える。
+            const predecessorsRevealed = hints.slice(0, i).every((prev) => prev.revealed);
+            const lockedByOrder = !predecessorsRevealed;
+            const ariaLabel = lockedByOrder
+              ? t("problem_panel.hint_predecessor_required_aria", { index: i })
+              : undefined;
+            return (
+              <Box key={h.id}>
+                {h.revealed ? (
+                  <Box>
+                    <strong>{t("problem_panel.hint_label_colon", { index: i + 1 })}</strong>{" "}
+                    {h.content}
+                    {h.revealedAt && (
+                      <Box variant="small" color="text-status-info" margin={{ top: "xxs" }}>
+                        {t("problem_panel.hint_revealed_ago", {
+                          ago: describeAgo(h.revealedAt, Date.now()),
+                        })}
+                      </Box>
+                    )}
+                  </Box>
+                ) : (
+                  <Box>
+                    <strong>{t("problem_panel.hint_label", { index: i + 1 })}</strong>{" "}
+                    <span style={{ color: h.penalty > 0 ? "#b54708" : "#475467" }}>
+                      {t("problem_panel.hint_penalty_note", { penalty: h.penalty })}
+                    </span>{" "}
+                    <Button
+                      variant="normal"
+                      iconName="lock-private"
+                      loading={revealing === h.id}
+                      disabled={lockedByOrder || (revealing !== null && revealing !== h.id)}
+                      ariaLabel={ariaLabel}
+                      onClick={() => {
+                        setPendingReveal(h);
+                        setPendingIndex(i);
+                      }}
+                    >
+                      {t("problem_panel.hint_reveal_button")}
+                    </Button>
+                    {lockedByOrder && (
+                      <Box variant="small" color="text-status-inactive" margin={{ top: "xxs" }}>
+                        {t("problem_panel.hint_predecessor_required", { index: i })}
+                      </Box>
+                    )}
+                  </Box>
+                )}
+              </Box>
+            );
+          })}
           {revealError && (
             <Box color="text-status-error" variant="small">
               {revealError}

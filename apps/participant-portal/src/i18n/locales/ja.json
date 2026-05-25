@@ -321,7 +321,10 @@
     "hint_confirm_submit": "公開する",
     "hint_confirm_penalty": "公開すると {penalty} pt 減点されます。 一度公開すると元に戻せません。",
     "hint_confirm_no_penalty": "このヒントには減点はありません。 公開するとヒントが表示されます。",
-    "hint_confirm_footer": "ヒント本文は公開後に表示されます。"
+    "hint_confirm_footer": "ヒント本文は公開後に表示されます。",
+    "hint_predecessor_required": "ヒント {index} を先に公開してください。",
+    "hint_predecessor_required_aria": "ヒント {index} を先に公開すると、このヒントが公開できます。",
+    "hint_out_of_order_error": "ヒント {index} を先に公開してください。"
   },
   "score_timeline": {
     "header": "スコア推移",
