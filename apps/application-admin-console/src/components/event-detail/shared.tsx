@@ -8,6 +8,7 @@ import type {
   EventDetail,
   EventStatus,
 } from "../../api/events-client";
+import { computeEffectiveStatus, type EffectiveStatus } from "../../lib/effective-event-status";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -30,6 +31,39 @@ export const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"
   TEARDOWN: "red",
   ARCHIVED: "grey",
 };
+
+/**
+ * #1330: effective status (= time-aware) ごとの badge 色。 RUNNING は競技進行中なので
+ * 引き続き green、 READY は「未開始」 を示すため blue に降格 (= 真の RUNNING との差別化)。
+ */
+export const EFFECTIVE_STATUS_COLOR: Record<EffectiveStatus, "blue" | "green" | "grey" | "red"> = {
+  DRAFT: "blue",
+  DEPLOYING: "blue",
+  READY: "blue",
+  RUNNING: "green",
+  ENDED: "grey",
+  TEARDOWN: "red",
+  ARCHIVED: "grey",
+};
+
+/**
+ * #1330: Event detail の status badge。 Phase indicator と同じ time-aware ロジックで
+ * effective status を計算して表示する (= DB の raw status は不変)。
+ */
+export function eventStatusBadge(
+  detail: Pick<EventDetail, "status" | "startsAt" | "endsAt">,
+  now: Date = new Date(),
+) {
+  const effective = computeEffectiveStatus(
+    {
+      status: detail.status,
+      startsAt: detail.startsAt ?? null,
+      endsAt: detail.endsAt ?? null,
+    },
+    now,
+  );
+  return <Badge color={EFFECTIVE_STATUS_COLOR[effective]}>{effective}</Badge>;
+}
 
 /**
  * 1 problem 行の deploy 状況サマリ: `成功 N / 全 M` + 失敗があれば赤 Badge を併記。
