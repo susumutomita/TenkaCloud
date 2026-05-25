@@ -3,13 +3,13 @@
 
 # TenkaCloud
 
-**Run team-based cloud drills on real AWS, without building the event platform yourself.**
+**Run real cloud drills. Build reusable problem catalogs.**
 
-Open-source platform for hands-on AWS competitions. Battle (real-time) and Challenge
-(self-paced) drills are auto-deployed into isolated AWS environments for each team,
-with scoring, progress tracking, and AWS Console access built in.
+TenkaCloud is an OSS platform for running real cloud drills: teams solve hands-on
+cloud problems in isolated AWS environments, while organizers manage events, scoring,
+and reusable problem catalogs from a single console.
 
-[Landing page](https://susumutomita.github.io/TenkaCloud/) · [Play the mock](https://susumutomita.github.io/TenkaCloud/portal-demo/?demo=1) · [30 sec demo](#30-second-demo) · [Try Lite](#try-lite-mode-in-5-minutes) · [Create first problem](#create-your-first-problem)
+[Landing page](https://susumutomita.github.io/TenkaCloud/) · [Play the mock](https://susumutomita.github.io/TenkaCloud/portal-demo/?demo=1) · [Quickstart](#quickstart-lite-mode) · [Problem catalog](#problem-catalog) · [Architecture](#architecture)
 
 [![CI](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
@@ -23,79 +23,50 @@ with scoring, progress tracking, and AWS Console access built in.
 
 ---
 
-## Who it's for
+## What is TenkaCloud
 
-Hands-on AWS training that you can run repeatedly inside your organization — without
-building the event platform from scratch.
+A self-hostable, OSS competition platform that turns hands-on AWS scenarios into a
+running event in about 30 minutes. Each team gets an isolated AWS environment
+provisioned via cross-account `AssumeRole` + `ExternalId`. Problems are plain files
+(`metadata.json` + `template.yaml`) versioned in a sibling catalog repo, so anything
+you write once becomes a reusable training asset.
 
-- **Cloud Enablement / CCoE teams** running new-grad onboarding, internalization
-  programs, or recurring cross-team AWS drills.
-- **Platform / SRE teams** that need to design and operate drills for their org
-  (each team gets its own isolated AWS environment, scoring and Console access are
-  aggregated, a week of setup collapses into an afternoon).
-- **Engineers, meetups, and schools** that just want to self-host the OSS on their
-  own AWS account and run something for free.
+Two delivery modes share the same platform:
 
-Two modes co-exist in a single event:
+- **Battle** — real-time uptime drills. A health probe hits every team every minute;
+  the last team standing wins.
+- **Challenge** — self-paced problems with flag submissions. Learn one AWS service at
+  a time, in depth.
 
-- **Battle** — real-time uptime drills where a health probe hits every team every
-  minute. Last team standing wins.
-- **Challenge** — self-paced problems where you solve and submit a flag. Learn one
-  AWS service at a time, in depth.
+> [image needed: hero screenshot of the Application Admin Console event page]
+> Place a screenshot at `docs/assets/screenshots/admin-console-event.png` and replace
+> this placeholder. Suggested capture: an active event with two teams, the Problems
+> tab open, deploy status visible.
 
-## 30-Second Demo
+## Who is it for
 
-TenkaCloud turns a problem directory into a playable cloud competition:
+Four audiences shape the product. If you recognize yourself below, TenkaCloud is for
+you.
 
-![TenkaCloud Lite demo flow](./docs/assets/tenkacloud-lite-demo.svg)
-
-1. Author a problem as a `metadata.json` + `template.yaml` pair.
-2. Start Lite mode for a single event.
-3. Each team's stack is deployed into an isolated AWS environment via AssumeRole
-   (with a per-tenant ExternalId).
-4. Participants work through the scenario — restoring a broken service, migrating
-   workloads, hardening a config, or capturing a flag.
-5. The platform scores them automatically — by health check, flag submission,
-   phased polling, or attack detection, depending on the problem.
-
-Want to see the participant experience before deploying anything? **[Play the
-mock](https://susumutomita.github.io/TenkaCloud/portal-demo/?demo=1)** — same
-codebase, fixture data, no AWS account needed.
-
-## Why TenkaCloud
-
-Running a cloud competition normally means building four things from scratch: a
-control plane, a pipeline that deploys problem infrastructure into each team's
-account, a scoreboard, and per-team portals. TenkaCloud ships all four as one
-open-source platform.
-
-| If you need to… | …TenkaCloud gives you |
+| Audience | What you get |
 | --- | --- |
-| Run a one-off internal cloud drill | **Lite mode** — Application Admin Console + Participant Portal + deploy backend, no multi-tenant setup |
-| Deploy real AWS infrastructure per team | CloudFormation is created directly inside each team's isolated AWS environment using AssumeRole + a per-tenant ExternalId |
-| Add new scenarios quickly | A **problem plugin model** — drop in `metadata.json` + `template.yaml` (and optional portal UI) and the platform picks it up |
-| Keep costs predictable | A CDK Aspect pins every DynamoDB table to 1 RCU / 1 WCU PROVISIONED, designed for near-zero idle cost |
-| Run it as a recurring program | **SaaS mode** — SBT-based control plane, pooled and silo tenant tiers, Cognito, EventBridge, and a per-tenant provisioning pipeline |
+| **CCoE leads** running an org-wide cloud enablement program | A repeatable event runtime — new-grad onboarding, internalization drills, cross-team competitions — without re-building the platform every quarter. |
+| **Cloud communities, meetups, and schools** | A free, self-hostable competition stack on your own AWS account. No SaaS fees, no per-seat pricing, no participant data leaving your account. |
+| **Facilitators and event organizers** | One screen for deploy, scoring, leaderboard, and per-team Console federation. A week of setup collapses to an afternoon. |
+| **Platform / SRE engineers** | A plugin model where a problem is two files plus an optional portal React component. The platform is the host; problems are the plugins (ADR-012). |
 
-## Self-host vs operated
+## Quickstart (Lite mode)
 
-The platform itself is Apache 2.0 — **self-hosting on your own AWS account is
-free**. Three optional paid plans exist for organizations that want setup, day-of
-operations, or a recurring program run for them: **Starter** (one pilot event),
-**Hosted Event** (a single operated event), and **Annual Arena** (an annual
-program with multiple events per year). Details on the [landing page](https://susumutomita.github.io/TenkaCloud/#pricing).
-
-## Try Lite Mode in 5 Minutes
-
-Lite mode is the fastest path when one organizer is running one event. It skips
-the SBT control plane entirely and stands up just three things — the Application
-Admin Console, the Participant Portal, and the deploy backend — under a single
-hard-coded tenant ID.
+Lite mode is the fastest path: one organizer, one event, one AWS account. It skips
+the SBT control plane entirely and stands up just the Application Admin Console, the
+Participant Portal, and the deploy backend. From `git clone` to a first running event
+takes roughly 30 minutes — most of that time is `cdk deploy` waiting on AWS.
 
 ```bash
-git clone https://github.com/susumutomita/TenkaCloud.git
+git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make install
+
 cp infrastructure/environments/development/.env.example \
    infrastructure/environments/development/.env
 # edit AWS_ACCOUNT_ID and TENANT_ADMIN_EMAIL
@@ -103,28 +74,78 @@ cp infrastructure/environments/development/.env.example \
 make deploy
 ```
 
-You get:
+When the deploy finishes you get:
 
 - **Application Admin Console** — pick problems, kick off deploys, watch progress.
 - **Participant Portal** — team login, problem details, hints, submissions, scores.
 - **Problem deploy backend** — DynamoDB + Lambda + Step Functions + CodeBuild.
-- **Sample problems** — start with Hello World, then move on to Battle scenarios.
 
-Teardown:
+Teardown is a single command: `make destroy`.
 
-```bash
-make destroy
-```
+> [image needed: participant portal Quests page]
+> Place a screenshot at `docs/assets/screenshots/participant-portal-quests.png`
+> showing the deployed problem list with status badges and difficulty.
 
 ## Problem catalog
 
-Problems live in a **separate repo**: [susumutomita/TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge). It is mounted here as a git submodule under `problems/`, so `make deploy` ships whatever catalog version the submodule currently points at.
+Problems live in a separate repo: [susumutomita/TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge).
+It is mounted here as a git submodule under `problems/`, so `make deploy` ships
+whichever catalog version the submodule currently points at.
 
-For the current list of shipped problems, see the catalog repo's README. We do not mirror that list here so it cannot fall out of sync whenever a problem is added or removed.
+Five problems ship today (see the catalog repo's [CATALOG.md](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/CATALOG.md) for the source of truth):
 
-A high-level visual overview of the platform's example competitions also lives in the [Competition Gallery](./docs/gallery.md).
+| Problem | Mode | Difficulty | One-line summary |
+| --- | --- | --- | --- |
+| `hello-world` | Challenge | Intro | Read a greeting out of SSM Parameter Store and submit it as a flag. The hello-world for the platform itself. |
+| `hello-world-battle` | Battle | Intro | Keep an EC2-hosted nginx frontend + Python API both returning 200 every minute to score uptime. |
+| `microservice-migration-battle` | Battle | Advanced | Split a 3-service EC2 monolith into Lambda + ECS Fargate + App Runner under a phased polling clock. |
+| `security-battle-royale` | Battle | Advanced | Keep a fictional e-commerce site (`Unicorn.Rentals`) returning 200 while under live attack. Availability over polish. |
+| `stackstack` | Battle | Advanced | Production-harden AI-generated scaffolds across 5 axes (auth / network / rate / audit / ux). Managed-runtime cutover multiplies the score 10x. |
 
-## Create Your First Problem
+> [image needed: catalog screenshot]
+> Place a screenshot at `docs/assets/screenshots/problem-catalog.png` showing the
+> Application Admin Console Problems tab with the five entries above.
+
+A high-level walkthrough of each problem also lives in the [Competition Gallery](./docs/gallery.md).
+
+## Architecture
+
+TenkaCloud is a multi-plane CDK app: a Control Plane (SBT-based tenant manager), an
+Application Plane (Tenant Admin Console + Participant Portal), and a Problem Deploy
+backend that AssumeRoles into each competitor's isolated AWS account via a per-team
+`ExternalId`. Problems are plugins (ADR-012); the platform is the host.
+
+![TenkaCloud Lite demo flow](./docs/assets/tenkacloud-lite-demo.svg)
+
+Two operating modes share the same code:
+
+| Mode | Use it when | Entry point |
+| --- | --- | --- |
+| **Lite** | One organizer, one event, one AWS account | `make deploy` |
+| **SaaS** | Multi-tenant control plane with a per-tenant provisioning pipeline | `make deploy-saas` |
+
+Start with these architecture docs:
+
+- [`docs/architecture/OVERVIEW.md`](./docs/architecture/OVERVIEW.md) — full architectural narrative
+- [`CONTRIBUTOR_MAP.md`](./CONTRIBUTOR_MAP.md) — "I want to do X" navigation
+- [`docs/architecture/MODULE_MAP.md`](./docs/architecture/MODULE_MAP.md) — "where is X" directory map
+- [`docs/architecture/GLOSSARY.md`](./docs/architecture/GLOSSARY.md) — term definitions with ADR back-links
+
+Decision rationales (ADRs):
+
+- [ADR-012: Problem plugin architecture](./docs/architecture/adr-012-problem-plugin-architecture.html)
+- [ADR-016: TenkaCloud Lite mode](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html)
+- [ADR-017: Cloud Action Intent / Trust Bridge](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html)
+
+## Self-host vs operated
+
+The platform itself is Apache 2.0 — **self-hosting on your own AWS account is free**.
+Three optional paid plans exist for organizations that want setup, day-of operations,
+or a recurring program run for them: **Starter** (one pilot event), **Hosted Event**
+(a single operated event), and **Annual Arena** (an annual program with multiple
+events per year). Details on the [landing page](https://susumutomita.github.io/TenkaCloud/#pricing).
+
+## Create your first problem
 
 Problem authoring happens in the catalog repo, not here. A problem is a self-contained directory under `battles/<id>/` or `challenges/<id>/` in that repo:
 
@@ -150,39 +171,7 @@ Authoring references:
 - [Problem schema (`SCHEMA.json`)](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/SCHEMA.json) — catalog repo, source of truth
 - [Catalog repo README](https://github.com/susumutomita/TenkaCloudChallenge#readme) — contributor flow on the catalog side
 
-## Architecture
-
-TenkaCloud has two operating modes:
-
-| Mode | Use it when | Entry point |
-| --- | --- | --- |
-| **Lite** | You run one event and do not need tenant onboarding | `make deploy` |
-| **SaaS** | You need a multi-tenant control plane and tenant provisioning pipeline | `make deploy-saas` |
-
-Core planes:
-
-- **Control Plane** — SBT tenant management, EventBridge bus, tenant pipeline.
-- **Application Plane** — tenant admin console, participant portal, Cognito, APIs.
-- **Problem Deploy Plane** — deploy worker that assumes the per-tenant role and
-  creates CloudFormation stacks inside each team's isolated AWS environment.
-- **Trust Bridge** — `@TenkaCloud/trust-bridge` Cloud Action Intent protocol that
-  translates a signed deploy intent into short-lived AWS credentials, so the
-  platform never holds long-lived keys for a team's account.
-
-Start with these architecture docs:
-
-- **For first-time contributors** (10-min reads):
-  - [`docs/architecture/OVERVIEW.md`](./docs/architecture/OVERVIEW.md) — full architectural narrative
-  - [`CONTRIBUTOR_MAP.md`](./CONTRIBUTOR_MAP.md) — "I want to do X" navigation
-  - [`docs/architecture/MODULE_MAP.md`](./docs/architecture/MODULE_MAP.md) — "where is X" directory map
-  - [`docs/architecture/GLOSSARY.md`](./docs/architecture/GLOSSARY.md) — term definitions with ADR back-links
-- **Decision rationales (ADRs)**:
-  - [ADR-012: Problem plugin architecture](./docs/architecture/adr-012-problem-plugin-architecture.html)
-  - [ADR-016: TenkaCloud Lite mode](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html)
-  - [ADR-017: Cloud Action Intent / Trust Bridge](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html)
-  - [Cloud Action Intent protocol spec](./docs/architecture/cloud-action-intent.html)
-
-## Full Deployment
+## Full deployment (SaaS mode)
 
 Use SaaS mode when you want tenant onboarding, pooled/silo tiers, and the full SBT
 control plane:

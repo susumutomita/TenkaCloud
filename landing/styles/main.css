@@ -130,6 +130,14 @@ p { margin: 0; }
   display: inline-flex; align-items: center; gap: 4px;
 }
 .hero .cta-row a:hover { text-decoration: underline; }
+.hero .hero-trust {
+  margin: 22px 0 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  letter-spacing: 0.01em;
+  opacity: 0.78;
+}
 
 .hero-visual { min-width: 0; }
 .app-window {
