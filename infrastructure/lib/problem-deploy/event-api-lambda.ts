@@ -109,10 +109,8 @@ export class EventApiLambda extends Construct {
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
         // #686: legacy "unknown-tenant" fallback は削除 (= JWT claim 欠落時は handler が 401)
         ...(props.defaultTenantId ? { DEFAULT_TENANT_ID: props.defaultTenantId } : {}),
-        BATTLE_PROBLEMS_CATALOG: JSON.stringify(props.problemsCatalog),
         // Issue #888: disruption fire / catalog / audit Lambda 経路で参照
         DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName,
-        BATTLE_PROBLEMS_DISRUPTIONS: JSON.stringify(props.problemsDisruptions),
         // Issue #910 (#895 Phase 2.C.2.b): bulk batch payload S3 bucket + feature flag。
         // bucket 未配線時は空文字、 flag は default false (= 旧 fan-out 維持)。
         BULK_DEPLOY_PAYLOAD_BUCKET: props.bulkDeployPayloadBucket?.bucketName ?? "",
@@ -126,6 +124,20 @@ export class EventApiLambda extends Construct {
         target: LAMBDA_NODEJS_BUNDLING_TARGET,
         sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
         externalModules: [],
+        // Issue #1308: BATTLE_PROBLEMS_CATALOG + BATTLE_PROBLEMS_DISRUPTIONS は問題が増える
+        // たび growing し、 4 KB Lambda env hard limit に張り付いた (= EventApi の deploy が
+        // CREATE_FAILED)。 #1158 (GenericScoring / ParticipantPortal) と同じ esbuild define で
+        // build 時に literal 置換し env を 0 化する。 handler は process.env を読む既存 code の
+        // まま (= build 後に literal JSON 文字列が埋まる)。 tests は process.env 経由で fixture を
+        // 注入するので影響なし。
+        define: {
+          "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
+            JSON.stringify(props.problemsCatalog),
+          ),
+          "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
+            JSON.stringify(props.problemsDisruptions),
+          ),
+        },
       },
     });
 
