@@ -6,6 +6,7 @@
       "nav.extend": "問題を作る",
       "nav.community": "コミュニティ",
       "nav.docs": "ドキュメント",
+      "nav.offerings": "商用プラン",
       "nav.pricing": "料金",
       "nav.contact": "お問い合わせ",
       "nav.github": "GitHub",
@@ -183,6 +184,30 @@
       "community.reviewer.cta": "Review checklist",
       "community.more":
         "全 6 役割を見る (Tester / Problem Author / Scenario Reviewer / Event Facilitator / Platform Contributor / Sponsor-Requester)",
+      "offerings.eyebrow": "商用プラン",
+      "offerings.h2": "プロダクト化された 4 つの提供形態。",
+      "offerings.lead":
+        'OSS プラットフォーム本体は Apache 2.0 で 無料 のまま。 構築 / 当日運営 / 年間プログラム / 独自問題開発を任せたい組織向けに、 形 (スコープ / 成果物 / 除外 / 提供モデル) を明文化した 4 つのプロダクト化された提供形態 を用意しています。 詳細は <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/commercial/PACKAGES.html" target="_blank" rel="noopener noreferrer">PACKAGES.html</a> を参照してください。',
+      "offerings.a.role": "Hosted Event",
+      "offerings.a.h": "単発イベントを、 丸ごと運営代行。",
+      "offerings.a.p":
+        "1〜3 日のクラウド演習を、 公開 OSS 問題カタログから選定して 弊社が end-to-end で運営。 設計 / お客様 AWS への deploy / 事前 dry-run / 当日の live 進行 / 事後レポート。 <strong>1 回 fixed price</strong>。",
+      "offerings.a.more": "スコープと成果物を見る",
+      "offerings.b.role": "Annual Arena",
+      "offerings.b.h": "年間プログラム + KPI ダッシュボード。",
+      "offerings.b.p":
+        "1 組織で年 4〜6 回の運営代行イベント、 御社固有 問題カタログ (= IP は御社所有) の継続成長、 HR / L&amp;D 向け KPI ダッシュボード。 <strong>年間 base + 1 イベントごとの変動費</strong>。",
+      "offerings.b.more": "スコープと成果物を見る",
+      "offerings.c.role": "Custom Problem",
+      "offerings.c.h": "御社スタックに合わせた、 独自演習を 1 問。",
+      "offerings.c.p":
+        "御社の実スタック / 過去インシデントに合わせて 1 問を新規作成。 シナリオ設計 / 実装 / dry-run / facilitator notes 一式。 <strong>サニタイズされたシナリオのみ — 本番アクセスは行いません。 1 問 fixed price</strong>。",
+      "offerings.c.more": "スコープと成果物を見る",
+      "offerings.d.role": "CCoE Enablement (add-on)",
+      "offerings.d.h": "アドバイザリ、 別契約。",
+      "offerings.d.p":
+        "CCoE 運用モデル / 研修ロードマップ / カタログロードマップ / 内部展開戦略 の月次リテイナー。 上記 3 つの productized 提供には <strong>絶対に bundle しません</strong>。 両方ご希望なら 2 つの契約に分けます。",
+      "offerings.d.more": "スコープと成果物を見る",
 
       "pricing.eyebrow": "料金",
       "pricing.h2": "単発イベントから、 年間プログラムへ。",
@@ -274,6 +299,7 @@
       "nav.extend": "Author problems",
       "nav.community": "Community",
       "nav.docs": "Docs",
+      "nav.offerings": "Commercial",
       "nav.pricing": "Pricing",
       "nav.contact": "Contact",
       "nav.github": "GitHub",
@@ -450,6 +476,30 @@
       "community.reviewer.cta": "Review checklist",
       "community.more":
         "See all 6 roles (Tester / Problem Author / Scenario Reviewer / Event Facilitator / Platform Contributor / Sponsor-Requester)",
+      "offerings.eyebrow": "Commercial offerings",
+      "offerings.h2": "Four productized offerings — formally documented.",
+      "offerings.lead":
+        'The OSS platform stays free under Apache 2.0. For organizations that want setup, live operations, or a program run for them, we offer four productized packages. Each has a fixed shape — scope, deliverables, exclusions, delivery model — written up in <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/commercial/PACKAGES.html" target="_blank" rel="noopener noreferrer">PACKAGES.html</a>.',
+      "offerings.a.role": "Hosted Event",
+      "offerings.a.h": "One operated drill, end to end.",
+      "offerings.a.p":
+        "A 1-3 day cloud drill on the public OSS catalog, run by us. Event design, deploy into your AWS account, dry run, live facilitation, post-event report. <strong>Per-event fixed price</strong>.",
+      "offerings.a.more": "Scope &amp; deliverables",
+      "offerings.b.role": "Annual Arena",
+      "offerings.b.h": "A 12-month program with KPIs.",
+      "offerings.b.p":
+        "4-6 operated events per year for one org, a growing private problem catalog (you own the IP), and a KPI dashboard for HR / L&amp;D. <strong>Annual base + per-event variable</strong>.",
+      "offerings.b.more": "Scope &amp; deliverables",
+      "offerings.c.role": "Custom Problem",
+      "offerings.c.h": "A drill that matches your stack.",
+      "offerings.c.p":
+        "One problem authored to your scenario — past incident or capability gap. Scenario interview, build, dry-run, facilitator notes. <strong>Sanitized scenario only — never production access. Per-problem fixed price.</strong>",
+      "offerings.c.more": "Scope &amp; deliverables",
+      "offerings.d.role": "CCoE Enablement (add-on)",
+      "offerings.d.h": "Advisory, sold separately.",
+      "offerings.d.p":
+        "A monthly retainer for operating-model / training-roadmap work. <strong>Never bundled</strong> into the three offerings above, so events stay productized. If you want both, that is two line items.",
+      "offerings.d.more": "Scope &amp; deliverables",
 
       "pricing.eyebrow": "Pricing",
       "pricing.h2": "Start small. Move to a yearly program.",
