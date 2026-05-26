@@ -63,6 +63,8 @@
     "fetch_error_header": "取得に失敗しました",
     "loading": "読み込み中...",
     "empty": "テナントがまだ登録されていません。",
+    "empty_body": "最初のテナントを作成すると、 そのテナントの管理者を招待し、 問題を deploy できるようになります。",
+    "retry": "再試行",
     "col_tenant_id": "テナント ID",
     "col_tenant_name": "名称",
     "col_email": "管理者メール",

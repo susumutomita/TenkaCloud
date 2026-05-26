@@ -63,6 +63,8 @@
     "fetch_error_header": "Failed to load",
     "loading": "Loading...",
     "empty": "No tenants registered yet.",
+    "empty_body": "Create your first tenant to invite an admin and deploy problems.",
+    "retry": "Retry",
     "col_tenant_id": "Tenant ID",
     "col_tenant_name": "Name",
     "col_email": "Admin email",

@@ -1,13 +1,12 @@
 import Alert from "@cloudscape-design/components/alert";
-import Box from "@cloudscape-design/components/box";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import Spinner from "@cloudscape-design/components/spinner";
 import Tabs from "@cloudscape-design/components/tabs";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import { type ApiClient, useApiClient } from "../api/client";
 import { EVENT_ID_RE, type EventDetail } from "../api/events-client";
+import { ErrorState, LoadingState } from "../components/design-system";
 import { EventDangerZone } from "../components/event-detail/EventDangerZone";
 import { EventHeaderActions } from "../components/event-detail/EventHeaderActions";
 import type { AppConfig } from "../config";
@@ -130,11 +129,8 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   }
 
   if (!detail && !error) {
-    return (
-      <Box textAlign="center" padding="l">
-        <Spinner /> {t("event_detail.loading_spinner")}
-      </Box>
-    );
+    // Issue #1366: 共有 LoadingState に切替 (DESIGN-SYSTEM 10 章)。
+    return <LoadingState label={t("event_detail.loading_spinner")} />;
   }
 
   if (!detail) {
@@ -212,9 +208,8 @@ function EventDetailErrorOnly({
         {t("event_detail.loading_title")}
       </Header>
       {error && (
-        <Alert type="error" header={t("event_detail.error_header")}>
-          {error}
-        </Alert>
+        // Issue #1366: error-only branch (= detail 取得失敗) を共有 ErrorState に統一。
+        <ErrorState title={t("event_detail.error_header")} hint={error} />
       )}
     </SpaceBetween>
   );
@@ -340,9 +335,9 @@ function EventDetailLoaded({
       </Header>
 
       {error && (
-        <Alert type="error" header={t("event_detail.error_header")}>
-          {error}
-        </Alert>
+        // Issue #1366: detail は取得済 (= 表示は壊さない) で、 個別 operation の失敗を error
+        // として alert する用途。 dismiss を付けて user が閉じられるようにする。
+        <ErrorState title={t("event_detail.error_header")} hint={error} />
       )}
       {operations.bulkResult && (
         <Alert
