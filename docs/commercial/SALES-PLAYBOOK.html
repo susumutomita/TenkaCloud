@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TenkaCloud — Commercial Sales Playbook</title>
+<meta name="description" content="One-page sales playbook per commercial package: 30-second elevator, qualifying questions, common objections, next-step CTA.">
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+    --c-hosted: #0969da;
+    --c-arena: #6f42c1;
+    --c-custom: #bf3989;
+    --c-addon: #9a6700;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 1080px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.7rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.6rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; color: var(--c-muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.5; }
+  .badge.hosted  { background: #ddf4ff; color: var(--c-hosted); }
+  .badge.arena   { background: #f1e7ff; color: var(--c-arena); }
+  .badge.custom  { background: #ffe7f3; color: var(--c-custom); }
+  .badge.addon   { background: #fff8c5; color: var(--c-addon); }
+  .pkg-card {
+    border: 1px solid var(--c-border); border-radius: 8px; padding: 1.4rem 1.6rem;
+    margin: 2rem 0; background: var(--c-bg); position: relative;
+  }
+  .pkg-card.hosted { border-left: 6px solid var(--c-hosted); }
+  .pkg-card.arena  { border-left: 6px solid var(--c-arena); }
+  .pkg-card.custom { border-left: 6px solid var(--c-custom); }
+  .pkg-card.addon  { border-left: 6px solid var(--c-addon); }
+  .pkg-card h2 { margin-top: 0; }
+  .elevator {
+    background: var(--c-bg-soft); padding: 1rem 1.2rem; border-radius: 6px;
+    margin: .8rem 0 1.2rem; font-size: 1.05rem; line-height: 1.5;
+    border-left: 4px solid var(--c-link);
+  }
+  .pkg-card.hosted .elevator { border-left-color: var(--c-hosted); }
+  .pkg-card.arena  .elevator { border-left-color: var(--c-arena); }
+  .pkg-card.custom .elevator { border-left-color: var(--c-custom); }
+  .pkg-card.addon  .elevator { border-left-color: var(--c-addon); }
+  .two-col {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem;
+    margin: 1rem 0;
+  }
+  @media (max-width: 720px) {
+    .two-col { grid-template-columns: 1fr; }
+  }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 8px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  table.qa td:first-child { width: 50%; font-weight: 600; }
+  table.obj td:first-child { width: 40%; font-weight: 600; }
+  ul { margin: 0.4rem 0; padding-left: 1.5rem; }
+  li { margin: 0.2rem 0; }
+  .cta {
+    background: var(--c-bg-soft); padding: .8rem 1rem; border-radius: 6px;
+    margin: 1rem 0 0; font-size: 0.95rem;
+    border: 1px dashed var(--c-border);
+  }
+  .cta strong { color: var(--c-link); }
+  .pkg-card.hosted .cta strong { color: var(--c-hosted); }
+  .pkg-card.arena  .cta strong { color: var(--c-arena); }
+  .pkg-card.custom .cta strong { color: var(--c-custom); }
+  .pkg-card.addon  .cta strong { color: var(--c-addon); }
+  .intro p { font-size: 0.97rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TenkaCloud — Commercial Sales Playbook</h1>
+  <p><em>One page per package. Use these in qualifying calls, when writing a follow-up email, or when handing off an inbound to a collaborator.</em></p>
+  <div class="meta">
+    <div><b>Companion to:</b> <a href="./PACKAGES.html">PACKAGES.html</a> (scope source of truth)</div>
+    <div><b>Tracks:</b> <a href="https://github.com/susumutomita/TenkaCloud/issues/1354">#1354</a></div>
+    <div><b>Audience:</b> Anyone fielding a TenkaCloud inquiry — including the maintainer, collaborators, community advocates.</div>
+  </div>
+</header>
+
+<section class="intro">
+<h2>How to use this playbook</h2>
+<p>The packages page (<a href="./PACKAGES.html">PACKAGES.html</a>) is the formal scope document. This page is the conversational one: how to <em>describe</em> a package in 30 seconds, what to <em>ask</em> a prospect, what to <em>answer</em> when they push back, and what the <em>next step</em> looks like. Read it before a qualifying call; copy the elevator into a follow-up email; share a single section as a link.</p>
+
+<h3>Three rules before any call</h3>
+<ol>
+  <li><b>OSS is free. Don't sell it.</b> If the buyer wants to self-host on their own AWS account, point them at the README and the landing page Quickstart. Make it easy for them to leave the call as a happy OSS user — they will come back when they need facilitation.</li>
+  <li><b>Productized vs. consulting.</b> If the conversation drifts toward open-ended advisory work, that is CCoE Enablement — surface it explicitly, do not fold it into Hosted Event or Annual Arena.</li>
+  <li><b>No production access, ever.</b> Custom Problem is a sanitized scenario. If the buyer wants a replica of their production system with live data, stop the conversation and route to security review before continuing.</li>
+</ol>
+</section>
+
+<!-- ========== Hosted Event ========== -->
+<div class="pkg-card hosted" id="hosted-event">
+  <h2><span class="badge hosted">Hosted Event</span> One-page sell sheet</h2>
+
+  <h3>30-second elevator</h3>
+  <div class="elevator">
+    TenkaCloud is an OSS cloud-drill platform that runs hands-on AWS competitions on each team's isolated AWS environment. With <strong>Hosted Event</strong>, we run a 1-3 day drill for you, end to end — we pick the problems from the public catalog, deploy into your AWS account, dry-run it, facilitate the live event, and hand you a post-event report. You get one credible event without building the platform yourself, and the OSS is yours forever to keep running internally.
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h3>Qualifying questions</h3>
+      <table class="qa">
+        <tbody>
+          <tr><td>How many participants and teams?</td><td>Up to ~30 fits comfortably; 30-60 is doable; &gt; 60 should be quoted as a custom event.</td></tr>
+          <tr><td>When is the event?</td><td>Need ~4 weeks lead time. Less than 2 weeks &rarr; decline or scope down.</td></tr>
+          <tr><td>Do you have an AWS account you can dedicate to this?</td><td>Default is buyer-provided. If no, quote AWS account provisioning as a line item.</td></tr>
+          <tr><td>Public catalog OK, or do you need company-specific problems?</td><td>Public-only &rarr; pure Hosted Event. Company-specific &rarr; Hosted Event + Custom Problem line item.</td></tr>
+          <tr><td>One-shot, or first of many?</td><td>If "first of many," surface Annual Arena early — better economics for both sides.</td></tr>
+          <tr><td>Internal change-management work expected?</td><td>If yes &rarr; flag CCoE Enablement as a separate conversation; do not fold in.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3>Common objections</h3>
+      <table class="obj">
+        <tbody>
+          <tr><td>"Can we just self-host?"</td><td>Yes — that is the OSS path and we encourage it. Hosted Event is for organizations that want the operational guarantee of a facilitated event without the platform learning curve.</td></tr>
+          <tr><td>"It's too expensive vs. a free CTF."</td><td>Hosted Event delivers an event on <em>your</em> AWS account with real isolated infrastructure per team, branded portal, scoring, and a written post-event report. CTF SaaS does not provision real AWS for participants.</td></tr>
+          <tr><td>"Can you fly out / be on-site?"</td><td>Yes — quoted as a separate travel + day-rate line item, not bundled into the base fee.</td></tr>
+          <tr><td>"What if the platform breaks mid-event?"</td><td>Dry run catches almost everything. Live event has a real-time on-call commitment (= 30-min hot-fix target, see SLA-lite in PACKAGES.html). Worst case, fall back to the public OSS catalog manually.</td></tr>
+          <tr><td>"Why isn't pricing on your website?"</td><td>Public starting price is on the landing page. Final quote depends on size, mix, and AWS-account ownership.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="cta">
+    <strong>Next step:</strong> "Want to lock the date? I'll send a one-page SoW with the problem mix and the dry-run window. Tell me the rough participant count and your preferred date window." Link the prospect to <a href="./PACKAGES.html#hosted-event">PACKAGES.html — Hosted Event</a> for the formal scope.
+  </div>
+</div>
+
+<!-- ========== Annual Arena ========== -->
+<div class="pkg-card arena" id="annual-arena">
+  <h2><span class="badge arena">Annual Arena</span> One-page sell sheet</h2>
+
+  <h3>30-second elevator</h3>
+  <div class="elevator">
+    <strong>Annual Arena</strong> turns TenkaCloud into a year-long capability program. We run 4-6 operated events for your organization, grow a private problem catalog that reflects your stack, and give your HR / L&amp;D team a KPI dashboard they can show to leadership. It is the right fit when "we want one event" turns into "we want a credible CCoE training program on an annual budget line."
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h3>Qualifying questions</h3>
+      <table class="qa">
+        <tbody>
+          <tr><td>Do you have an annual L&amp;D / CCoE budget line, or is this discretionary spend?</td><td>Annual Arena belongs on an annual line. Discretionary &rarr; start with Hosted Event.</td></tr>
+          <tr><td>How many cohorts / audiences?</td><td>3-4 cohorts (new grad, mid, platform team) is typical. More is fine; fewer probably means Hosted Event &times; 2-3 is cheaper.</td></tr>
+          <tr><td>Do you have a private catalog wishlist?</td><td>If yes &rarr; surface Custom Problem line items inside the contract. If no &rarr; defer until Q2.</td></tr>
+          <tr><td>Who reads the KPI dashboard?</td><td>If "the CCoE lead" &rarr; standard dashboard. If "the CTO / VP of Engineering" &rarr; we structure the metrics differently.</td></tr>
+          <tr><td>Renewal expectation?</td><td>3-year horizon is healthiest. 1-year-only buyers may be better served by Hosted Event &times; N.</td></tr>
+          <tr><td>Internal change-management expected?</td><td>If yes &rarr; offer CCoE Enablement as a parallel retainer, not folded in.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3>Common objections</h3>
+      <table class="obj">
+        <tbody>
+          <tr><td>"4-6 events feels like a lot."</td><td>Most buyers settle on 4 in year one. Six is the upper end for very large orgs (new-grad cohort + mid cohort + platform deep-dive + executive demo).</td></tr>
+          <tr><td>"Why pay annually instead of buying Hosted Event each time?"</td><td>Annual Arena adds the program-level deliverables (private catalog, KPI dashboard, quarterly review, two waived Custom Problem design fees) that don't exist in standalone Hosted Event. Per-event price is also lower.</td></tr>
+          <tr><td>"Can we own the private catalog?"</td><td>Yes — the buyer owns IP of the private catalog. We curate it; we do not own it.</td></tr>
+          <tr><td>"What if we miss an event date?"</td><td>Event slots are reschedulable inside the contract year with 4 weeks notice. Slots not used by year-end do not roll over (otherwise the contract becomes unbounded).</td></tr>
+          <tr><td>"Is this a SaaS subscription?"</td><td>No. The platform is OSS and runs on your AWS. You are paying for operated events + program-level deliverables, not for software access.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="cta">
+    <strong>Next step:</strong> "Let's do a 30-min program-design session: cohorts, cadence, and what the KPI dashboard needs to show. I'll come back with a draft program memo before we talk pricing." Link to <a href="./PACKAGES.html#annual-arena">PACKAGES.html — Annual Arena</a>.
+  </div>
+</div>
+
+<!-- ========== Custom Problem ========== -->
+<div class="pkg-card custom" id="custom-problem">
+  <h2><span class="badge custom">Custom Problem</span> One-page sell sheet</h2>
+
+  <h3>30-second elevator</h3>
+  <div class="elevator">
+    A <strong>Custom Problem</strong> is a single hands-on drill authored to match your stack or a past incident. We do a 60-minute scenario interview, design the problem with you, implement it as a self-contained directory (metadata.json + template.yaml), validate it end-to-end against a real AWS account, and hand it over. You own the IP. It runs on the same OSS platform any TenkaCloud event uses.
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h3>Qualifying questions</h3>
+      <table class="qa">
+        <tbody>
+          <tr><td>What is the drill <em>about</em> in one sentence?</td><td>If they can't say it in a sentence, the scope is not ready — do a discovery call first.</td></tr>
+          <tr><td>Past incident, or "we want our teams to know X"?</td><td>Past incident &rarr; richer scenario, faster build. Capability gap &rarr; longer design phase.</td></tr>
+          <tr><td>Which AWS services need to be in the problem?</td><td>Map to the 5-kind decision tree (flag / uptime-flat / uptime-multi / phased-polling / attack-detection).</td></tr>
+          <tr><td>Will you run the problem yourself, or do you also want us to facilitate?</td><td>Just the asset &rarr; Custom Problem only. Also operate it &rarr; Custom Problem + Hosted Event.</td></tr>
+          <tr><td>Public catalog contribution OK?</td><td>If yes &rarr; lower price (we get to ship to the OSS catalog). If no &rarr; private delivery, standard price.</td></tr>
+          <tr><td>Does the design require production access?</td><td>If yes &rarr; <strong>stop and route to security review</strong>. Custom Problem is sanitized scenarios only.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3>Common objections</h3>
+      <table class="obj">
+        <tbody>
+          <tr><td>"Can we mirror our production architecture exactly?"</td><td>We can mirror the <em>shape</em> (services, interactions, failure modes). We never mirror data, secrets, or live credentials. Sanitized scenarios only.</td></tr>
+          <tr><td>"How realistic can the scenario be?"</td><td>Very — most engagements deliver a problem indistinguishable from a real on-call exercise. Realism is in the failure modes, not in the data.</td></tr>
+          <tr><td>"What if the scenario grows during build?"</td><td>The scope brief from the scenario interview is the source of truth. Growth beyond it is a revision line item, not a free addition.</td></tr>
+          <tr><td>"Can you maintain the problem as our stack evolves?"</td><td>Yes, as a revision (typically 25-50% of the original fee per revision cycle). Maintenance is not bundled.</td></tr>
+          <tr><td>"Why not just write it ourselves?"</td><td>You can — the OSS toolchain is documented and there is an AGENT.md / SKILL.md for AI agents to scaffold problems. Custom Problem is for buyers who want the design + scoring + dry-run done by someone who has shipped many of these.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="cta">
+    <strong>Next step:</strong> "Let's book the 60-minute scenario interview. Come with 1-3 candidate scenarios and rough success criteria for each — I'll come back with a scope brief and which of the 5 scoring kinds fits." Link to <a href="./PACKAGES.html#custom-problem">PACKAGES.html — Custom Problem</a>.
+  </div>
+</div>
+
+<!-- ========== CCoE Enablement ========== -->
+<div class="pkg-card addon" id="ccoe-enablement">
+  <h2><span class="badge addon">CCoE Enablement</span> One-page sell sheet</h2>
+
+  <h3>30-second elevator</h3>
+  <div class="elevator">
+    <strong>CCoE Enablement</strong> is a monthly advisory retainer for buyers who need help with the operating model around their cloud enablement — not just events. Weekly working sessions, a monthly written deliverable, async Q&amp;A in between. <strong>Sold separately</strong> from event delivery so events stay productized. If you want both events and advisory, that is two line items, not one.
+  </div>
+
+  <div class="two-col">
+    <div>
+      <h3>Qualifying questions</h3>
+      <table class="qa">
+        <tbody>
+          <tr><td>What does success look like in 6 months?</td><td>If "we ran events" &rarr; not CCoE Enablement; that is Hosted Event or Annual Arena. If "the org operates differently" &rarr; CCoE Enablement.</td></tr>
+          <tr><td>Who is the executive sponsor inside your org?</td><td>No sponsor = no political traction = retainer will not land. Decline politely.</td></tr>
+          <tr><td>Have you tried internal change before?</td><td>If "yes and it failed" &rarr; what was missing? Usually it's a written operating model and an external second voice.</td></tr>
+          <tr><td>Are you also running TenkaCloud events?</td><td>If yes &rarr; great, the two pair well as separate contracts. If no &rarr; flag that we are not a generic strategy consultancy; we are TenkaCloud's authors offering advisory adjacent to the platform we ship.</td></tr>
+          <tr><td>Expected duration?</td><td>Default 3-6 months. &lt; 3 months rarely produces enough artifacts to land internally.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3>Common objections</h3>
+      <table class="obj">
+        <tbody>
+          <tr><td>"Why isn't this bundled with Annual Arena?"</td><td>Bundling turns Annual Arena into open-ended consulting. The clarity of the productized service is its value — and a small team cannot deliver predictable events and predictable consulting under one bill.</td></tr>
+          <tr><td>"You're not a Big-4 strategy firm."</td><td>Correct — and that is the point. The advisory is grounded in shipping a working OSS cloud-training platform, not slide decks. Buyers who want a Big-4 deliverable should use Big 4.</td></tr>
+          <tr><td>"Can we just hire you for a one-off workshop?"</td><td>No. A one-day workshop without a follow-through retainer does not produce anything that lands internally. Either run it as a Hosted Event (and call it that), or commit to the minimum 3-month retainer.</td></tr>
+          <tr><td>"Will you write our internal political comms?"</td><td>No. We supply the artifacts (operating model, roadmap, KPI definitions); landing them with stakeholders is the buyer's responsibility.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="cta">
+    <strong>Next step:</strong> "Let's do a 30-min sponsor alignment call — I want to make sure there's an executive sponsor on your side before we sign anything. If there is, I'll send a 3-month retainer SoW." Link to <a href="./PACKAGES.html#ccoe-enablement">PACKAGES.html — CCoE Enablement</a>.
+  </div>
+</div>
+
+<section>
+<h2>Cross-package handling</h2>
+
+<h3>Inbound triage</h3>
+<table>
+<thead><tr><th>Signal</th><th>Likely package</th></tr></thead>
+<tbody>
+<tr><td>"We want to run a hands-on event next month."</td><td>Hosted Event</td></tr>
+<tr><td>"We have an annual CCoE budget and want recurring drills."</td><td>Annual Arena</td></tr>
+<tr><td>"We had an outage last quarter; can you build a drill around it?"</td><td>Custom Problem (possibly + Hosted Event to run it)</td></tr>
+<tr><td>"We need to restructure our cloud-enablement program."</td><td>CCoE Enablement</td></tr>
+<tr><td>"We want to self-host but need help getting deploy working."</td><td>Free — point at README + Discussions. No paid offer fits.</td></tr>
+<tr><td>"Can you replicate our production stack?"</td><td>Re-frame as a sanitized Custom Problem. If they insist on production, decline.</td></tr>
+</tbody>
+</table>
+
+<h3>Reference links</h3>
+<ul>
+  <li><a href="./PACKAGES.html">Commercial Packages</a> — formal scope document for each offering</li>
+  <li><a href="../../README.md">README</a> — OSS quickstart, "Self-host vs operated" framing</li>
+  <li><a href="https://susumutomita.github.io/TenkaCloud/">Landing page</a> — public pricing summary + contact form</li>
+  <li><a href="https://github.com/susumutomita/TenkaCloud/issues/1336">Epic #1336</a> — commercial launch readiness context</li>
+</ul>
+
+</section>
+
+</body>
+</html>
