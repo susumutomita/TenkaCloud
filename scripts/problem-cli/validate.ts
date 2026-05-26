@@ -111,7 +111,9 @@ function validateScoringKind(ctx: ValidationContext, errors: string[]): void {
   const kind = scoring?.kind;
   if (typeof kind !== "string") return;
   if (!(KINDS as readonly string[]).includes(kind) && kind !== "uptime") {
-    errors.push(`scoring.kind="${kind}" is not a recognized kind`);
+    errors.push(
+      `scoring.kind="${kind}" is not a recognized kind — set it to one of ${KINDS.map((k) => `"${k}"`).join(" | ")}`,
+    );
   }
   if (!existsSync(templatePath)) return;
   const yaml = readFileSync(templatePath, "utf8");
@@ -128,14 +130,16 @@ function validateScoringOutputKey(
     const flagKey = scoring.flagOutputKey;
     if (typeof flagKey === "string" && !yaml.includes(`${flagKey}:`)) {
       errors.push(
-        `scoring.flagOutputKey="${flagKey}" not found in template.yaml Outputs (= scoring engine が読めない)`,
+        `scoring.flagOutputKey="${flagKey}" not found in template.yaml Outputs (= scoring engine が読めない) — add an "Outputs.${flagKey}:" entry to template.yaml or fix the metadata key`,
       );
     }
   }
   if (kind === "attack-detection") {
     const statsKey = scoring.statsOutputKey;
     if (typeof statsKey === "string" && !yaml.includes(`${statsKey}:`)) {
-      errors.push(`scoring.statsOutputKey="${statsKey}" not found in template.yaml Outputs`);
+      errors.push(
+        `scoring.statsOutputKey="${statsKey}" not found in template.yaml Outputs — add an "Outputs.${statsKey}:" entry whose Value is the integer attack count`,
+      );
     }
   }
 }
@@ -150,7 +154,7 @@ function validateEndpointOutputs(ctx: ValidationContext, errors: string[]): void
     const key = def?.key;
     if (typeof key === "string" && !yaml.includes(`${key}:`)) {
       errors.push(
-        `endpoints[slot=${String(ep.slot)}].default.key="${key}" not found in template.yaml Outputs`,
+        `endpoints[slot=${String(ep.slot)}].default.key="${key}" not found in template.yaml Outputs — add an "Outputs.${key}:" entry exposing the public URL`,
       );
     }
   }
@@ -165,7 +169,9 @@ function validateDashboardSlots(ctx: ValidationContext, errors: string[]): void 
     if (typeof slotPath === "string") {
       const physical = join(dir, slotPath);
       if (!existsSync(physical)) {
-        errors.push(`dashboard.slots["${slotName}"]="${slotPath}" file not found at ${physical}`);
+        errors.push(
+          `dashboard.slots["${slotName}"]="${slotPath}" file not found at ${physical} — create the .tsx file at that path, or remove the slot from metadata.json`,
+        );
       }
     }
   }

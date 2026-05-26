@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Contributing problems to TenkaCloud — 30-minute quickstart</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>Contributing problems to TenkaCloud — 30-minute quickstart</h1>
+<blockquote>
+<p>Audience: external contributors who want to ship a new TenkaCloud problem in one focused PR.
+Source of truth for the file format: <a href="../../problems/SCHEMA.json"><code>problems/SCHEMA.json</code></a> + <a href="./AUTHORING.html"><code>AUTHORING.html</code></a>.
+Source of truth for catalog conventions: <a href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/AGENT.md"><code>problems/AGENT.md</code></a> in the catalog submodule.</p>
+</blockquote>
+<p>This guide is the <strong>shortest path</strong> for someone outside the maintainer&#39;s head to get a problem reviewed and merged. It complements <code>AUTHORING.html</code> (= the 30-minute onboarding tour) and <code>AGENT.md</code> in the catalog submodule (= the invariant list). Read this first when you want to know <strong>what to do</strong>; read those when you want to know <strong>what each field means</strong>.</p>
+<p>Japanese mirror: <a href="./CONTRIBUTING.ja.md"><code>CONTRIBUTING.ja.md</code></a>.</p>
+<h2>Where problems live (= submodule, not this repo)</h2>
+<p>The platform repository (<code>TenkaCloud</code>) and the catalog repository (<code>TenkaCloudChallenge</code>) are physically decoupled.</p>
+<pre><code>TenkaCloud/                           ← platform (CDK + 3 SPAs + scoring engine)
+└── problems/                         ← git submodule
+    └── (real files live in github.com/susumutomita/TenkaCloudChallenge)
+</code></pre>
+<p>You submit problem PRs to <strong><code>susumutomita/TenkaCloudChallenge</code></strong>, not to <code>TenkaCloud</code>. The platform repo only needs a submodule pointer bump when a catalog change should ship.</p>
+<p>To work locally:</p>
+<pre><code class="language-bash">git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make install
+# the working tree under problems/ is now a checkout of TenkaCloudChallenge
+</code></pre>
+<p>If you cloned without <code>--recurse-submodules</code>:</p>
+<pre><code class="language-bash">git submodule update --init --recursive problems
+</code></pre>
+<h2>30-minute quickstart (= scaffold → edit → validate → PR)</h2>
+<h3>1. Pick the scoring kind (= the most important decision)</h3>
+<p>A TenkaCloud problem ships exactly one of five built-in scoring kinds. The platform&#39;s generic scoring Lambda dispatches on this value; problem-specific scoring code is forbidden by <a href="../architecture/adr-012-problem-plugin-architecture.html">ADR-012</a>.</p>
+<p>Use this decision tree:</p>
+<pre><code class="language-text">Does the competitor submit a single value (a &quot;flag&quot;) to win?
+├── Yes → kind = &quot;flag&quot;               (Challenge, e.g. read an SSM Parameter, find an S3 object)
+└── No
+    │
+    Does the competitor have to keep something running?
+    ├── Yes
+    │   │
+    │   Is there exactly one endpoint to keep alive?
+    │   ├── Yes → kind = &quot;uptime-flat&quot;    (Battle, one nginx, one API)
+    │   └── No, several endpoints together → kind = &quot;uptime-multi&quot;
+    │       (Battle, frontend + api + worker; scoring rewards &quot;all green at once&quot;)
+    │
+    └── No
+        │
+        Does the rule change over time (e.g. a migration deadline, a load surge)?
+        ├── Yes → kind = &quot;phased-polling&quot;
+        │   (Battle, phases[].afterMinutes shifts scoring; classic for migration races)
+        │
+        └── Is the goal to detect or block attacks?
+            └── Yes → kind = &quot;attack-detection&quot;
+                (Battle, WAF / SOC; scores +N per detected attack)
+</code></pre>
+<p>If none fits, the problem is probably <strong>not yet a TenkaCloud problem</strong> — file an issue first.</p>
+<h3>2. Scaffold the directory</h3>
+<pre><code class="language-bash">bun run scripts/tenkacloud-problem.ts create my-problem --kind flag
+# or for guided interactive input:
+bun run scripts/tenkacloud-problem.ts create
+</code></pre>
+<p>The CLI creates <code>problems/&lt;category&gt;/my-problem/{metadata.json,template.yaml}</code> from <code>.claude/templates/problems/&lt;kind&gt;/</code>. <code>&lt;category&gt;</code> is inferred from <code>&lt;kind&gt;</code> (flag → <code>challenges/</code>, otherwise <code>battles/</code>); override with <code>--category Battle|Challenge</code>.</p>
+<p>Alternative: in Claude Code, run <code>/create-problem</code>. The skill walks through the same steps interactively.</p>
+<h3>3. Edit the scaffold</h3>
+<p>The scaffold contains <code>__PROBLEM_NAME__</code>, <code>__TAG__</code>, <code>__LEARNING_GOAL_1__</code>, <code>__HINT_1__</code> and similar placeholders. <strong>Grep for <code>__</code> and replace every occurrence</strong> — JSON Schema accepts placeholders because they are strings, but the catalog UI and scoring engine will misbehave.</p>
+<p>Minimum edits:</p>
+<ul>
+<li><code>name</code>, <code>shortDescription</code>, <code>description</code> — write them as if the reader has zero context. Battles usually open with a one-paragraph fictional incident.</li>
+<li><code>tags</code> — kebab-case, at least one.</li>
+<li><code>learningGoals</code> — at least one bullet.</li>
+<li><code>i18n.en.*</code> — required mirror for <code>name</code> / <code>shortDescription</code> / <code>description</code> / <code>learningGoals</code>. Locale support is <code>ja</code> + <code>en</code> only (no other locales).</li>
+<li><code>template.yaml</code> — replace placeholder resources with real CFn. Every resource name, tag, and Group name must be prefixed with <code>${NamePrefix}</code> so multiple teams can deploy into the same AWS account.</li>
+</ul>
+<h3>4. Validate locally</h3>
+<pre><code class="language-bash"># JSON Schema validation across the whole catalog
+make validate-problems
+
+# Per-problem cross-checks (Outputs ↔ metadata wiring, dashboard slot files)
+bun run scripts/tenkacloud-problem.ts validate my-problem
+
+# Optional: dry-run the scoring engine without deploying CFn
+bun run scripts/tenkacloud-problem.ts dry-run my-problem --submitted &quot;expected-flag-value&quot;
+
+# Inspect the rendered metadata + template summary
+bun run scripts/tenkacloud-problem.ts inspect my-problem
+</code></pre>
+<p>If <code>make validate-problems</code> or <code>validate</code> errors, see <a href="#validation-errors-and-how-to-read-them">Validation errors</a> below.</p>
+<h3>5. Deploy once into a sandbox AWS account (= &quot;tested&quot; status)</h3>
+<p>The platform never marks a problem <code>ready</code> until at least one human has deployed it end to end. Use a personal sandbox AWS account:</p>
+<pre><code class="language-bash">aws cloudformation deploy \
+  --template-file problems/&lt;category&gt;/my-problem/template.yaml \
+  --stack-name tc-my-problem-test \
+  --parameter-overrides NamePrefix=tc-my-problem-test \
+  --capabilities CAPABILITY_NAMED_IAM
+</code></pre>
+<p>Then exercise the scoring path manually (submit the flag, hit the endpoints, wait for a disruption to fire — whichever applies). If it scores, the problem is &quot;tested&quot; in the lifecycle sense (see below).</p>
+<p>Tear down:</p>
+<pre><code class="language-bash">aws cloudformation delete-stack --stack-name tc-my-problem-test
+</code></pre>
+<h3>6. Open the PR (= against the submodule repo)</h3>
+<p>In the <code>problems/</code> working tree:</p>
+<pre><code class="language-bash">cd problems
+git checkout -b feat/my-problem
+git add battles/my-problem  # or challenges/my-problem
+git commit -m &quot;feat: add my-problem&quot;
+git push origin feat/my-problem
+gh pr create --repo susumutomita/TenkaCloudChallenge \
+  --title &quot;feat: add my-problem&quot; \
+  --body &quot;...&quot;
+</code></pre>
+<p>PR body checklist:</p>
+<ul>
+<li>What category, kind, and difficulty.</li>
+<li>Test plan: which <code>validate</code> / <code>dry-run</code> commands you ran, plus the AWS account you sandbox-deployed into (no account IDs).</li>
+<li>Whether the problem is <code>draft</code> (most first PRs), <code>tested</code>, or <code>ready</code> (see lifecycle below).</li>
+<li>Any cost the participant will incur (target: zero outside Free Tier).</li>
+</ul>
+<p>A submodule-pointer bump PR against <code>TenkaCloud</code> is <strong>not your responsibility</strong> — the maintainer or a separate PR handles that.</p>
+<h2>Lifecycle: draft → tested → ready → official → deprecated</h2>
+<p><code>metadata.json</code> <code>status</code> is a JSON Schema enum with three values: <code>draft</code>, <code>ready</code>, <code>deprecated</code>. The full five-stage lifecycle uses these three plus two conventions tracked in PR descriptions, the catalog <code>CATALOG.md</code>, or commit history.</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th><code>status</code> field</th>
+<th>Means</th>
+<th>Visible in catalog?</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>draft</strong></td>
+<td><code>&quot;status&quot;: &quot;draft&quot;</code></td>
+<td>Author work-in-progress. Scaffold compiles, schema passes, <strong>not yet deployed end-to-end.</strong></td>
+<td>No (filtered out)</td>
+</tr>
+<tr>
+<td><strong>tested</strong></td>
+<td><code>&quot;status&quot;: &quot;draft&quot;</code></td>
+<td>Author has deployed once into a sandbox AWS account and confirmed scoring. Note &quot;tested in AWS sandbox&quot; in PR body.</td>
+<td>No</td>
+</tr>
+<tr>
+<td><strong>ready</strong></td>
+<td><code>&quot;status&quot;: &quot;ready&quot;</code></td>
+<td>Maintainer review passed. Public catalog entry. Anyone can spin it up at an event.</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><strong>official</strong></td>
+<td><code>&quot;status&quot;: &quot;ready&quot;</code></td>
+<td>Used at least once in a real public event (JAWS-UG, CCoE training). Add an <code>official-yyyy-mm</code> tag and link the event in <code>README.md</code>.</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><strong>deprecated</strong></td>
+<td><code>&quot;status&quot;: &quot;deprecated&quot;</code></td>
+<td>Replaced or no longer maintained. Catalog filters by default. Keep the dir for historical reference.</td>
+<td>No</td>
+</tr>
+</tbody></table>
+<p>Promotion from <code>draft</code> to <code>ready</code> is a separate PR (not the original add) so reviewers can compare before/after. Mention the test event or sandbox results in that PR body.</p>
+<h2>Validation errors and how to read them</h2>
+<p>The CLI validator (<code>scripts/tenkacloud-problem.ts validate</code>) and <code>make validate-problems</code> produce messages like the table below. Each row maps a real error to its fix.</p>
+<table>
+<thead>
+<tr>
+<th>Symptom (substring of the error)</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>scoring.kind=&quot;...&quot; is not a recognized kind</code></td>
+<td>Typo in <code>scoring.kind</code></td>
+<td>Set it to exactly one of <code>flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code>.</td>
+</tr>
+<tr>
+<td><code>scoring.flagOutputKey=&quot;X&quot; not found in template.yaml Outputs</code></td>
+<td><code>metadata.scoring.flagOutputKey</code> references a CFn <code>Output</code> key that doesn&#39;t exist</td>
+<td>Open <code>template.yaml</code>, add an <code>Outputs.X:</code> entry, or fix the metadata key. Both sides must match exactly.</td>
+</tr>
+<tr>
+<td><code>scoring.statsOutputKey=&quot;X&quot; not found in template.yaml Outputs</code></td>
+<td>Same as above for <code>attack-detection</code></td>
+<td>Add an <code>Outputs.X:</code> entry whose <code>Value</code> is the integer attack count.</td>
+</tr>
+<tr>
+<td><code>endpoints[slot=N].default.key=&quot;X&quot; not found in template.yaml Outputs</code></td>
+<td><code>endpoints[].default.key</code> points at a missing Output</td>
+<td>Add the <code>Outputs.X:</code> entry (typically the public URL of the endpoint slot).</td>
+</tr>
+<tr>
+<td><code>dashboard.slots[&quot;X&quot;]=&quot;path&quot; file not found at ...</code></td>
+<td>A <code>dashboard.slots</code> entry references a portal plugin file that does not exist</td>
+<td>Either create the <code>.tsx</code> file at the referenced path, or remove the slot entry.</td>
+</tr>
+<tr>
+<td><code>metadata.id=&quot;X&quot; does not match dir name &quot;Y&quot;</code></td>
+<td><code>metadata.id</code> and the directory name diverged</td>
+<td>Rename the directory or fix <code>metadata.id</code>. They must be identical.</td>
+</tr>
+<tr>
+<td><code>runtime block must declare provider / engine / entry</code></td>
+<td>Partial <code>runtime</code> field (e.g. only <code>entry</code>)</td>
+<td>Either set all three keys or drop the <code>runtime</code> block (the validator falls back to legacy <code>cfnTemplate</code>).</td>
+</tr>
+<tr>
+<td><code>runtime.entry=&quot;A&quot; and cfnTemplate=&quot;B&quot; must match</code></td>
+<td>Both <code>runtime</code> and <code>cfnTemplate</code> are set but disagree</td>
+<td>Make <code>runtime.entry === cfnTemplate</code> during the ADR-023 compatibility window.</td>
+</tr>
+<tr>
+<td><code>Runtime &lt;provider&gt;/&lt;engine&gt; is recognized but not executable</code></td>
+<td>Reserved future runtime (e.g. <code>azure/arm</code>, <code>kubernetes/helm</code>)</td>
+<td>Switch to <code>aws/cloudformation</code>. Other providers parse but are not yet executable.</td>
+</tr>
+<tr>
+<td><code>cfnTemplate file &quot;...&quot; not found</code></td>
+<td>Filename mismatch</td>
+<td>Ensure the file referenced by <code>cfnTemplate</code> (or <code>runtime.entry</code>) exists in the problem directory.</td>
+</tr>
+<tr>
+<td><code>metadata.json parse error: ...</code></td>
+<td>Invalid JSON (trailing comma, unquoted key)</td>
+<td>Run the file through a JSON formatter; placeholders must stay quoted.</td>
+</tr>
+</tbody></table>
+<p>For schema errors from <code>make validate-problems</code> that include <code>instancePath</code> (= JSON pointer like <code>/scoring/points</code>), open <code>metadata.json</code>, follow that path, and fix the offending value. The schema&#39;s <code>description</code> fields (<a href="../../problems/SCHEMA.json"><code>problems/SCHEMA.json</code></a>) explain each property.</p>
+<h3>Common <code>template.yaml</code> mistakes</h3>
+<p>These are not caught by JSON Schema but are caught by CFn at deploy time or by AWS cost surprise:</p>
+<ul>
+<li><strong>Missing <code>${NamePrefix}</code> on a resource name</strong> — two teams collide at deploy time. Always wrap names with <code>!Sub &quot;${NamePrefix}-...&quot;</code>.</li>
+<li><strong><code>!Sub</code> without closing brace</strong> — <code>!Sub &quot;tc-${NamePrefix-bucket&quot;</code> instead of <code>!Sub &quot;tc-${NamePrefix}-bucket&quot;</code>. Read the line CFn reports and look for the missing <code>}</code>.</li>
+<li><strong>Non-idempotent disruption Lambda</strong> — EventBridge Scheduler re-fires; wrap <code>tc qdisc add ...</code> with <code>|| true</code> so EEXIST does not crash later cycles.</li>
+<li><strong>PAY_PER_REQUEST DynamoDB</strong> — forbidden. Use <code>BillingMode: PROVISIONED</code> with 1 RCU / 1 WCU; the platform&#39;s CDK Aspect enforces this for platform tables, but problem templates must self-discipline.</li>
+<li><strong><code>Resource: &quot;*&quot;</code> IAM</strong> — only allowed for CloudShell and a documented list. The catalog&#39;s <code>AGENT.md</code> lists the exception comment markers; do not remove them.</li>
+</ul>
+<h2>AI-assisted authoring (= optional, additive)</h2>
+<p>Claude Code ships with a <code>/create-problem</code> skill that runs the same scaffold + edit flow with an AI in the loop. It is not required — every step is reproducible by hand. See <a href="./AI-WORKFLOW.md"><code>AI-WORKFLOW.md</code></a> for the recommended prompts.</p>
+<h2>Checklist before opening the PR</h2>
+<ul>
+<li><input disabled="" type="checkbox"> <code>metadata.id</code> matches the directory name.</li>
+<li><input disabled="" type="checkbox"> <code>category</code> is <code>&quot;Battle&quot;</code> or <code>&quot;Challenge&quot;</code> (capitalized).</li>
+<li><input disabled="" type="checkbox"> <code>status</code> is <code>&quot;draft&quot;</code> for a first submission.</li>
+<li><input disabled="" type="checkbox"> <code>scoring.kind</code> is one of the five built-ins.</li>
+<li><input disabled="" type="checkbox"> Every <code>__PLACEHOLDER__</code> in <code>metadata.json</code> has been replaced.</li>
+<li><input disabled="" type="checkbox"> Every endpoint / scoring key referenced from <code>metadata.json</code> exists as a key in <code>template.yaml</code> <code>Outputs:</code>.</li>
+<li><input disabled="" type="checkbox"> Every resource name in <code>template.yaml</code> is prefixed with <code>${NamePrefix}</code>.</li>
+<li><input disabled="" type="checkbox"> <code>make validate-problems</code> passes.</li>
+<li><input disabled="" type="checkbox"> <code>bun run scripts/tenkacloud-problem.ts validate &lt;id&gt;</code> passes.</li>
+<li><input disabled="" type="checkbox"> Deploy + scoring tested at least once in a sandbox AWS account (PR body mentions it).</li>
+<li><input disabled="" type="checkbox"> <code>i18n.en.*</code> mirrors are filled in for <code>name</code> / <code>shortDescription</code> / <code>description</code> / <code>learningGoals</code>.</li>
+<li><input disabled="" type="checkbox"> PR body describes Summary, Test plan, Regression analysis, Physical impact.</li>
+</ul>
+<h2>See also</h2>
+<ul>
+<li><a href="./AUTHORING.html"><code>AUTHORING.html</code></a> — 30-minute onboarding with the full field list.</li>
+<li><a href="./AI-WORKFLOW.md"><code>AI-WORKFLOW.md</code></a> — Claude Code / Codex CLI workflow for problem authoring.</li>
+<li><a href="./EXAMPLES.md"><code>EXAMPLES.md</code></a> — design retrospectives on the five reference problems.</li>
+<li><a href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/AGENT.md"><code>problems/AGENT.md</code></a> — catalog repo invariants (deploy-time rules enforced by <code>bun run validate</code>).</li>
+<li><a href="../architecture/adr-012-problem-plugin-architecture.html">ADR-012</a> — the plugin architecture that makes this possible.</li>
+<li><a href="../architecture/adr-023-provider-specific-problem-runtime.html">ADR-023</a> — the <code>runtime</code> field and future multi-provider support.</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/problems/CONTRIBUTING.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/problems/CONTRIBUTING.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>AI-assisted problem authoring workflow</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>AI-assisted problem authoring workflow</h1>
+<blockquote>
+<p>Audience: contributors who want to use Claude Code or Codex CLI as the <em>drafting tool</em> for a TenkaCloud problem.
+Prerequisite: read <a href="./CONTRIBUTING.md"><code>CONTRIBUTING.md</code></a> first. AI assistance is <strong>additive</strong>, not required.</p>
+</blockquote>
+<p>This document is the human-readable companion to the <code>/create-problem</code> Claude Code skill. The skill itself is at <code>.claude/skills/create-problem/SKILL.md</code>. Use this file when you want to understand the recommended human-driven prompts and review checkpoints around the skill, or when you are using Codex CLI (which does not load <code>.claude/skills/</code>).</p>
+<h2>When AI assistance helps</h2>
+<p>AI is good at:</p>
+<ul>
+<li>Filling in metadata fields once you have decided the design (= <code>name</code> / <code>description</code> / <code>learningGoals</code> translations, tag lists, hint copy).</li>
+<li>Catching missing <code>${NamePrefix}</code> prefixes by reading the template carefully.</li>
+<li>Drafting <code>i18n.en.*</code> mirrors from a Japanese-first description (or vice versa).</li>
+<li>Translating a vague &quot;I want a problem where the contestant must split a monolith&quot; into a concrete <code>scoring.kind</code> choice.</li>
+</ul>
+<p>AI is bad at:</p>
+<ul>
+<li>Knowing which AWS services are in the AWS Free Tier today.</li>
+<li>Estimating whether your disruption Lambda is genuinely idempotent.</li>
+<li>Knowing the deploy cost of your template without actually deploying it.</li>
+</ul>
+<p>Treat AI as a drafting partner. Every output still has to pass <code>make validate-problems</code>, <code>bun run scripts/tenkacloud-problem.ts validate &lt;id&gt;</code>, and a real sandbox-account deploy.</p>
+<h2>Recommended workflow with Claude Code</h2>
+<h3>Step 0. Set the role</h3>
+<p>Before any prompt, point Claude at <code>CLAUDE.md</code> and <code>AGENTS.md</code> (= top-level repository instructions) so it knows the platform&#39;s prohibitions (no <code>npx</code>, no <code>rm</code>, HTTP status codes via <code>StatusCodes.*</code>, polling over SSE, etc.). The repo&#39;s harness will catch obvious violations, but it is faster if Claude knows up front.</p>
+<h3>Step 1. Use the <code>/create-problem</code> skill</h3>
+<p>In the Claude Code REPL:</p>
+<pre><code class="language-text">/create-problem
+</code></pre>
+<p>The skill walks through:</p>
+<ol>
+<li><strong>Title and 1-line description.</strong> What is the problem called and what does the contestant do in one sentence?</li>
+<li><strong>Learning goals.</strong> Two or three bullets describing what the contestant should walk away understanding.</li>
+<li><strong>Difficulty and duration.</strong> 1 = entry, 5 = expert. Duration is a free-form string like <code>60〜90 分</code>.</li>
+<li><strong>Scoring kind.</strong> The skill walks you through the decision tree from <code>CONTRIBUTING.md</code>. Pick exactly one of the five built-ins.</li>
+<li><strong>Scaffold generation.</strong> The skill invokes <code>bun run scripts/tenkacloud-problem.ts create &lt;id&gt; --kind &lt;kind&gt;</code> and shows the resulting files.</li>
+<li><strong>Edit guidance.</strong> The skill enumerates every <code>__PLACEHOLDER__</code> left in the scaffold and prompts for replacement values.</li>
+</ol>
+<p>After Step 5, <strong>stop and read the generated files yourself</strong> before letting the skill drive the placeholder edits. The fastest review is <code>git diff</code> against an empty branch.</p>
+<h3>Step 2. Hand-edit the riskiest parts</h3>
+<p>These need a human&#39;s eye, even after the skill suggests text:</p>
+<ul>
+<li><strong><code>template.yaml</code> resource names and IAM policies.</strong> AI is fluent in CFn syntax but routinely drops <code>${NamePrefix}</code> from at least one resource name. Grep the template for resource names that do not contain <code>!Sub</code>.</li>
+<li><strong>AWS cost estimate.</strong> Ask the skill to estimate, then verify against the AWS Pricing Calculator or your own knowledge. If the answer involves PAY_PER_REQUEST DynamoDB, NAT Gateway, or large EBS volumes, push back.</li>
+<li><strong>Disruption idempotency.</strong> If the problem uses an EventBridge Scheduler + Lambda, ask Claude to explain in plain English why the Lambda is safe to re-fire. If the explanation includes &quot;the first call creates a resource&quot;, the Lambda is not idempotent — fix it.</li>
+</ul>
+<h3>Step 3. Validate with the CLI</h3>
+<p>The skill prompts these, but verify manually:</p>
+<pre><code class="language-bash">make validate-problems
+bun run scripts/tenkacloud-problem.ts validate &lt;id&gt;
+bun run scripts/tenkacloud-problem.ts dry-run &lt;id&gt; --submitted &quot;expected-flag-value&quot;
+bun run scripts/tenkacloud-problem.ts inspect &lt;id&gt;
+</code></pre>
+<p>If any fail, paste the full error back into Claude with &quot;what does this mean and how do I fix it?&quot; The CLI&#39;s error messages are designed to map to concrete fixes (see the table in <code>CONTRIBUTING.md</code>), but Claude can read the surrounding context to disambiguate.</p>
+<h3>Step 4. Deploy into a sandbox AWS account</h3>
+<p>This is the only step Claude cannot do for you. Use a personal AWS account, not a shared production account:</p>
+<pre><code class="language-bash">aws cloudformation deploy \
+  --template-file problems/&lt;category&gt;/&lt;id&gt;/template.yaml \
+  --stack-name tc-&lt;id&gt;-test \
+  --parameter-overrides NamePrefix=tc-&lt;id&gt;-test \
+  --capabilities CAPABILITY_NAMED_IAM
+</code></pre>
+<p>Exercise the scoring path (= submit a flag, hit the endpoints, wait for a phase, fire a disruption). Capture the AWS Console screenshots or the <code>aws cloudformation describe-stacks</code> output for the PR body.</p>
+<h3>Step 5. Tear down</h3>
+<pre><code class="language-bash">aws cloudformation delete-stack --stack-name tc-&lt;id&gt;-test
+</code></pre>
+<h3>Step 6. Open the PR</h3>
+<p>The catalog repo is a submodule, so the PR goes to <code>susumutomita/TenkaCloudChallenge</code>, not to <code>TenkaCloud</code>. See <code>CONTRIBUTING.md</code> for the exact commands. Claude can draft the PR body — ask it to include Summary, Test plan, Regression analysis, and Physical impact sections.</p>
+<h2>Workflow with Codex CLI</h2>
+<p>Codex CLI loads <code>AGENTS.md</code> (= the repository-level agent guide) but not the <code>.claude/skills/</code> directory. The <code>/create-problem</code> skill is therefore not available. Instead, give Codex plain natural-language instructions equivalent to the skill&#39;s steps:</p>
+<pre><code class="language-text">Draft a new TenkaCloud problem with these properties:
+- title: &quot;&lt;title&gt;&quot;
+- one-line description: &quot;&lt;sentence&gt;&quot;
+- learning goals: &lt;bullets&gt;
+- difficulty: &lt;1-5&gt;
+- duration: &quot;&lt;free text&gt;&quot;
+- scoring kind: &lt;one of flag / uptime-flat / uptime-multi / phased-polling / attack-detection&gt;
+
+Use the CLI:
+  bun run scripts/tenkacloud-problem.ts create &lt;id&gt; --kind &lt;kind&gt;
+
+Then fill in the placeholders in metadata.json, write the template.yaml,
+and run:
+  make validate-problems
+  bun run scripts/tenkacloud-problem.ts validate &lt;id&gt;
+
+Open a PR to susumutomita/TenkaCloudChallenge (the catalog submodule).
+The PR body must include Summary, Test plan, Regression analysis, and
+Physical impact sections.
+</code></pre>
+<p>Codex CLI follows the role split in <code>AGENTS.md</code>: it can write <code>apps/</code>, <code>scripts/</code>, and <code>problems/</code> content, but does not touch CDK (<code>infrastructure/</code>) or IAM templates on its own initiative. Problem authoring is fully in scope.</p>
+<h2>Prompts that work well</h2>
+<h3>&quot;Translate this problem statement into a scoring kind.&quot;</h3>
+<blockquote>
+<p>I want a problem where the contestant must keep a Lambda function healthy while operator-fired probes try to overload it. There is no flag. The score should reward sustained 200 responses. Which built-in scoring kind?</p>
+</blockquote>
+<p>Expected answer: <code>uptime-flat</code> (one endpoint, sustained health). If the contestant must keep multiple Lambdas healthy and a cycle pays only when all are green, <code>uptime-multi</code>.</p>
+<h3>&quot;Fill in <code>i18n.en.*</code> from the Japanese fields.&quot;</h3>
+<blockquote>
+<p>Given this Japanese <code>description</code>, write the matching <code>i18n.en.description</code> field. Keep the tone matter-of-fact, keep the fictional Kato-san narrative as &#39;Kato-san&#39; (no honorifics). Maintain code blocks verbatim.</p>
+</blockquote>
+<p>This is the highest-leverage AI use case. The output is almost always usable with light editing.</p>
+<h3>&quot;Why is my <code>validate</code> failing?&quot;</h3>
+<blockquote>
+<p>I ran <code>bun run scripts/tenkacloud-problem.ts validate my-problem</code> and got <code>scoring.flagOutputKey=&quot;FlagValue&quot; not found in template.yaml Outputs</code>. Here is my template.yaml. What is wrong?</p>
+</blockquote>
+<p>AI is good at reading the template and spotting that <code>Outputs:</code> has <code>FlagValueParam:</code> instead of <code>FlagValue:</code>.</p>
+<h3>&quot;Estimate the AWS cost of this template.&quot;</h3>
+<blockquote>
+<p>Estimate the per-hour AWS cost of this CFn template, assuming us-east-1 pricing as of today. Flag any resource that is not in the AWS Free Tier.</p>
+</blockquote>
+<p>The answer is a starting point, not authoritative. Always verify against the AWS Pricing Calculator before publishing.</p>
+<h2>Prompts that do not work well</h2>
+<h3>&quot;Decide whether this problem is a good idea.&quot;</h3>
+<p>AI cannot judge whether your problem teaches anything novel, fits the catalog&#39;s identity, or duplicates an existing problem. Ask a human reviewer.</p>
+<h3>&quot;Write the whole problem from a vague brief.&quot;</h3>
+<p>The author still has to make the design decisions (= what&#39;s the scoring axis, what&#39;s the failure mode, what&#39;s the cost ceiling). AI is good at filling forms once the design is fixed. It is bad at design itself.</p>
+<h3>&quot;Pick the AWS resources for me.&quot;</h3>
+<p>AWS Free Tier eligibility changes over time. NAT Gateway costs money. EBS gp3 volumes do not. RDS Free Tier eligibility resets per account. AI&#39;s training data on AWS pricing is not reliable enough to be a primary source.</p>
+<h2>Review checkpoints (= what a human must verify)</h2>
+<p>Before opening the PR, regardless of how much AI helped:</p>
+<ul>
+<li><input disabled="" type="checkbox"> The problem teaches something a human would want to learn.</li>
+<li><input disabled="" type="checkbox"> The <code>${NamePrefix}</code> prefix appears on every resource name in <code>template.yaml</code>.</li>
+<li><input disabled="" type="checkbox"> The Outputs referenced by <code>metadata.json</code> exist verbatim in <code>template.yaml</code>.</li>
+<li><input disabled="" type="checkbox"> The deploy cost is documented in the PR body (target: zero or near-zero per contestant セッション).</li>
+<li><input disabled="" type="checkbox"> The scoring kind matches the actual scoring axis (= no <code>flag</code> problems that need polling, no <code>uptime-flat</code> problems that should be <code>uptime-multi</code>).</li>
+<li><input disabled="" type="checkbox"> The Japanese and English descriptions tell the same story.</li>
+<li><input disabled="" type="checkbox"> At least one sandbox-account deploy + scoring run happened.</li>
+</ul>
+<p>The harness, validator, and <code>make before-commit</code> catch many bugs, but they cannot catch design mistakes. Human review is the last gate.</p>
+<h2>See also</h2>
+<ul>
+<li><a href="./CONTRIBUTING.md"><code>CONTRIBUTING.md</code></a> — the human workflow (start here).</li>
+<li><a href="./AUTHORING.html"><code>AUTHORING.html</code></a> — 30-minute onboarding with the full field reference.</li>
+<li><a href="./EXAMPLES.md"><code>EXAMPLES.md</code></a> — five reference problems with design retrospectives.</li>
+<li><code>.claude/skills/create-problem/SKILL.md</code> — the <code>/create-problem</code> skill source.</li>
+<li><a href="../../AGENTS.md"><code>AGENTS.md</code></a> — repository-level agent guide (loaded by both Claude Code and Codex CLI).</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/problems/AI-WORKFLOW.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/problems/AI-WORKFLOW.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>

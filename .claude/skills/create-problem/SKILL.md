@@ -6,7 +6,25 @@ allowed-tools: Bash(make validate-problems:*), Bash(bun run scripts/tenkacloud-p
 
 # create-problem (ADR-012 Phase 6 拡張版)
 
-TenkaCloud に新しい問題を追加する skill。**正本は [`problems/SCHEMA.json`](../../../problems/SCHEMA.json) と [`docs/problems/AUTHORING.html`](../../../docs/problems/AUTHORING.html)**。1 dir = 1 問題、`metadata.json` + `template.yaml` の 2 file が必須、 portal plugin (= `portal/<Slot>.tsx`) は任意。
+TenkaCloud に新しい問題を追加する skill。**正本は [`problems/SCHEMA.json`](../../../problems/SCHEMA.json) と [`docs/problems/AUTHORING.html`](../../../docs/problems/AUTHORING.html)**。 外部 contributor 向け quickstart は [`docs/problems/CONTRIBUTING.md`](../../../docs/problems/CONTRIBUTING.md)、 AI agent flow は [`docs/problems/AI-WORKFLOW.md`](../../../docs/problems/AI-WORKFLOW.md)。 1 dir = 1 問題、`metadata.json` + `template.yaml` の 2 file が必須、 portal plugin (= `portal/<Slot>.tsx`) は任意。
+
+## 対話 flow (= ユーザーに順に訊く)
+
+scaffold 生成の前に次を順番に聞き出す (= 答えが揃わないまま CLI を走らせない):
+
+1. **問題タイトル + 1 行 description** — UI に出る name と shortDescription の素材。
+2. **学習目標 (= learning goals)** — 「ユーザーが何を理解する?」 を bullet で 2〜3 つ。
+3. **想定 difficulty + duration** — difficulty 1〜5、 duration は free string (`60〜90 分` 等)。
+4. **scoring kind** — 下の決定木 / Step 0 を見て 5 種から 1 つに絞る。 迷っているうちは scaffold しない。
+5. **scaffold + 編集ガイド** — `bun run scripts/tenkacloud-problem.ts create <id> --kind <kind>` で雛形を生成し、 残った `__PLACEHOLDER__` を上の回答で埋める。
+
+決定木 (= scoring kind):
+
+- 1 つの値 (= flag) を提出して終わる → `flag` (Challenge)
+- endpoint が 1 つ、 常時 200 で加点 → `uptime-flat` (Battle)
+- 複数 endpoint、 全部同時 200 で加点 → `uptime-multi` (Battle)
+- 時間経過で rule が変わる (= 移行 deadline 等) → `phased-polling` (Battle)
+- 攻撃検知数で勝敗が決まる → `attack-detection` (Battle)
 
 ## ディレクトリ規約
 
@@ -225,8 +243,11 @@ aws cloudformation deploy \
 ## 参考
 
 - 雛形 templates: [`.claude/templates/problems/<kind>/`](../../templates/problems/) — 5 kind 分の skeleton
-- 30 分 onboarding: [`docs/problems/AUTHORING.html`](../../../docs/problems/AUTHORING.html)
-- スキーマ: [`problems/SCHEMA.json`](../../../problems/SCHEMA.json)
+- 外部 contributor quickstart: [`docs/problems/CONTRIBUTING.md`](../../../docs/problems/CONTRIBUTING.md) — 30 分 quickstart + decision tree + lifecycle + validation error 表
+- 30 分 onboarding (= field reference): [`docs/problems/AUTHORING.html`](../../../docs/problems/AUTHORING.html)
+- 既存 5 問題の design 振り返り: [`docs/problems/EXAMPLES.md`](../../../docs/problems/EXAMPLES.md)
+- AI agent flow (= Claude Code / Codex CLI): [`docs/problems/AI-WORKFLOW.md`](../../../docs/problems/AI-WORKFLOW.md)
+- スキーマ正本: [`problems/SCHEMA.json`](../../../problems/SCHEMA.json)
 - 実例:
   - flag (Challenge): [`problems/challenges/hello-world/`](../../../problems/challenges/hello-world/)
   - uptime-flat (Battle): [`problems/battles/hello-world-battle/`](../../../problems/battles/hello-world-battle/)

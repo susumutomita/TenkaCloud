@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Problem design retrospectives — five reference problems</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>Problem design retrospectives — five reference problems</h1>
+<blockquote>
+<p>Audience: new problem authors who want to learn from existing problems before writing their own.
+Read alongside <a href="./CONTRIBUTING.md"><code>CONTRIBUTING.md</code></a> (= how to ship) and <a href="./AUTHORING.html"><code>AUTHORING.html</code></a> (= 30-minute onboarding).</p>
+</blockquote>
+<p>This file is a design post-mortem of the five reference problems currently in the catalog. The goal is to make the <em>why</em> explicit — the constraints that shaped each problem and the trade-offs the author accepted. Reading these saves you from rediscovering the same lessons.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Problem</th>
+<th>Category</th>
+<th>Kind</th>
+<th>Difficulty</th>
+<th>Cost target</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><a href="#1-hello-world-flag"><code>hello-world</code></a></td>
+<td>Challenge</td>
+<td>flag</td>
+<td>1</td>
+<td>Zero (SSM Standard)</td>
+</tr>
+<tr>
+<td>2</td>
+<td><a href="#2-hello-world-battle-uptime-flat"><code>hello-world-battle</code></a></td>
+<td>Battle</td>
+<td>uptime-flat</td>
+<td>1</td>
+<td>Free Tier (t3.micro)</td>
+</tr>
+<tr>
+<td>3</td>
+<td><a href="#3-security-battle-royale-uptime-multi"><code>security-battle-royale</code></a></td>
+<td>Battle</td>
+<td>uptime-multi</td>
+<td>4</td>
+<td>&lt; $0.10 / 90 min</td>
+</tr>
+<tr>
+<td>4</td>
+<td><a href="#4-microservice-migration-battle-phased-polling"><code>microservice-migration-battle</code></a></td>
+<td>Battle</td>
+<td>phased-polling</td>
+<td>4</td>
+<td>&lt; $0.50 / 120 min</td>
+</tr>
+<tr>
+<td>5</td>
+<td><a href="#5-stackstack-phased-polling--disruptions"><code>stackstack</code></a></td>
+<td>Battle</td>
+<td>phased-polling</td>
+<td>4</td>
+<td>&lt; $0.50 / 120 min</td>
+</tr>
+</tbody></table>
+<p>The problems are listed by increasing complexity. If you are writing your first problem, study <code>hello-world</code> and <code>hello-world-battle</code> first.</p>
+<h2>1. <code>hello-world</code> (flag)</h2>
+<p><strong>One-line design intent.</strong> Smoke-test the entire deploy → flag-submission → score pipeline with zero AWS cost.</p>
+<p><strong>Why this design.</strong></p>
+<ul>
+<li><code>flag</code> is the simplest kind: one CFn deploy, one SSM Parameter, one submission, one comparison.</li>
+<li>Only resource is an SSM Parameter Store entry on Standard tier. Free, scoped to one team via <code>${NamePrefix}</code>.</li>
+<li>The Output <code>ParameterConsoleUrl</code> deeplinks straight to the AWS Console. That makes the &quot;find the value&quot; UX a single click rather than a CLI quest, which keeps difficulty=1 honest.</li>
+<li>Hints carry penalties (10 / 20 pt out of 100) so the system can be exercised end-to-end without making the problem trivial.</li>
+</ul>
+<p><strong>Trade-off accepted.</strong></p>
+<ul>
+<li>&quot;Read a parameter&quot; is not a realistic SRE scenario. The fictional Kato-san narrative (= predecessor left it behind) is there purely so the problem <strong>feels</strong> like an SRE situation. The mechanism is sanity-check; the <em>story</em> is character-building.</li>
+</ul>
+<p><strong>Reusable patterns.</strong></p>
+<ul>
+<li>Single-Parameter-Store flag is the right shape for any &quot;verify the candidate can find X in the AWS Console&quot; Challenge.</li>
+<li>Console deeplink Output (<code>ParameterConsoleUrl</code>) is more discoverable than CLI guidance. Copy this pattern when teaching navigation.</li>
+</ul>
+<h2>2. <code>hello-world-battle</code> (uptime-flat)</h2>
+<p><strong>One-line design intent.</strong> Smallest Battle that exercises the platform&#39;s per-minute polling scoring engine, on free-tier EC2.</p>
+<p><strong>Why this design.</strong></p>
+<ul>
+<li>One VPC, one t3.micro, one nginx, one Python <code>/healthz</code>. The CFn surface is intentionally minimal so new authors can read the whole template in one sitting.</li>
+<li>The <code>FrontendUrl</code> / <code>ApiUrl</code> Outputs are emitted <strong>empty</strong> by design (= invariant #9 in the catalog <code>AGENT.md</code>). Competitors must paste the URLs into the Participant Portal override fields. This prevents &quot;deploy auto-earns points&quot; and forces the contestant to engage with the portal before scoring starts.</li>
+<li>SSM セッション Manager is used instead of SSH. No key management, no inbound port 22, and the same recovery flow works for every team.</li>
+</ul>
+<p><strong>Trade-off accepted.</strong></p>
+<ul>
+<li>Two endpoint slots could have been <code>uptime-multi</code>, but <code>uptime-flat</code> with a single combined success condition is simpler to author. The cost is that partial recovery (frontend up, API down) does not earn partial credit. Author judged that &quot;all-or-nothing&quot; is the right teaching message for &quot;uptime is binary in a Battle context&quot;.</li>
+</ul>
+<p><strong>Reusable patterns.</strong></p>
+<ul>
+<li>Empty Output + portal override is the canonical way to gate scoring on competitor action.</li>
+<li><code>Ec2HostHint</code> Output (= public DNS hint) makes the override step a copy-paste rather than a discovery puzzle.</li>
+<li>t3.micro within Free Tier is a hard ceiling. Heavier compute belongs in a difficulty=3+ problem with cost warnings.</li>
+</ul>
+<h2>3. <code>security-battle-royale</code> (uptime-multi)</h2>
+<p><strong>One-line design intent.</strong> Force the contestant to keep two services (nginx + Flask) returning 200 <em>simultaneously</em> while patching a real codebase under operator-fired attack probes.</p>
+<p><strong>Why this design.</strong></p>
+<ul>
+<li>Two endpoint slots scored with <code>uptime-multi</code>: a cycle pays out only when <em>both</em> are green. This rewards holistic uptime over single-service heroics.</li>
+<li>Real code (MySQL + Flask + nginx in docker-compose on one EC2) so the contestant has to read someone else&#39;s code under time pressure, which is the actual SRE incident-response skill.</li>
+<li><code>${NamePrefix}</code> isolation per team means cross-tenant attacks are physically impossible. The &quot;Battle&quot; framing is intra-team — operator probes, not other teams.</li>
+<li>Default <code>AllowedCidr: 0.0.0.0/0</code> because the problem is designed to be played publicly. The operator can tighten this via CFn parameter for closed events.</li>
+</ul>
+<p><strong>Trade-off accepted.</strong></p>
+<ul>
+<li>A real Flask app introduces an authoring burden (the code has to be both vulnerable enough to teach and stable enough to demo). Author chose pre-baked vulnerable patterns rather than CVE-grade exploits, keeping the difficulty at 4 rather than 5.</li>
+<li>Cost rises to ~$0.10 per 90 minutes (t3.small). Free Tier no longer covers it. This is the cost ceiling for an unfunded contestant practice セッション.</li>
+</ul>
+<p><strong>Reusable patterns.</strong></p>
+<ul>
+<li><code>uptime-multi</code> with <code>failurePenalty</code> rewards graceful hardening (= &quot;let some attacks through, keep 200 returning&quot;) over perfect hardening (= &quot;lock everything down, app dies&quot;).</li>
+<li>&quot;Inherited codebase&quot; narrative removes the &quot;this is contrived&quot; complaint. The Kato-san character is the platform-wide convention for this kind of story setup.</li>
+</ul>
+<h2>4. <code>microservice-migration-battle</code> (phased-polling)</h2>
+<p><strong>One-line design intent.</strong> Teach the strangler-fig migration pattern by paying out <em>more</em> per minute as the contestant peels services off an EC2 monolith onto managed runtimes.</p>
+<p><strong>Why this design.</strong></p>
+<ul>
+<li>Three services (users / orders / catalog) initially co-located on one EC2 behind nginx. Each service exposes <code>GET /meta</code> so the scoring engine can ask &quot;where do you live now?&quot; and pay out per hosting tier.</li>
+<li><code>phased-polling</code> with <code>platformRules</code> (= per-hosting payout table) is the only kind where the <em>scoring weight changes with the contestant&#39;s own infrastructure choices</em>. EC2 pays the least, Lambda / ECS / App Runner pay progressively more.</li>
+<li><code>phases[].afterMinutes</code> shifts the rules at fixed offsets. This makes &quot;you waited too long to migrate&quot; a measurable score penalty rather than a vibe.</li>
+<li>Three endpoint slots, all <code>overridable: true</code>. The default URL is the EC2 monolith; the override is the new managed-runtime URL. The scoring engine probes whichever is current.</li>
+</ul>
+<p><strong>Trade-off accepted.</strong></p>
+<ul>
+<li>The author had to ship Dockerfiles that load cleanly on three different runtimes (Lambda, ECS Fargate, App Runner). That is non-trivial portage work. The reward is that the contestant gets to pick which service goes where, which is the actual product decision.</li>
+<li>IAM permissions for the contestant to deploy Lambda / ECS / App Runner are a separate concern, called out as a follow-up. As-shipped, the problem assumes the contestant has those rights in the sandbox account.</li>
+</ul>
+<p><strong>Reusable patterns.</strong></p>
+<ul>
+<li><code>/meta</code> self-report endpoint is the canonical way to let a contestant <em>change</em> their hosting tier without the platform having to detect it. Copy this when the contestant&#39;s choice of architecture is the answer.</li>
+<li><code>appendPath</code> in <code>endpoints[].default</code> lets one CFn Output (<code>BaseUrl</code>) serve multiple slots (<code>/users</code> / <code>/orders</code> / <code>/catalog</code>) cleanly.</li>
+<li>Phased polling without disruption is the minimum viable phase mechanic. Add disruption (see <code>stackstack</code>) when the rule-change should be operator-triggered rather than time-triggered.</li>
+</ul>
+<h2>5. <code>stackstack</code> (phased-polling + disruptions)</h2>
+<p><strong>One-line design intent.</strong> The five-axis Platform Engineering Battle: harden an AI-generated app along five control axes (auth / network / rate / audit / ux) while time-based phases and random org-event disruptions punish stalling.</p>
+<p><strong>Why this design.</strong></p>
+<ul>
+<li>Five endpoint slots, each representing a <em>control axis</em> rather than a service. This is the most ambitious shape currently in the catalog: the contestant is not migrating one app, but applying five different control disciplines in parallel.</li>
+<li>Each slot pays 10× more on a managed runtime than on EC2 (100 → 1,000 pt/cycle). The +30,000 all-managed bonus rewards complete migration, not partial credit.</li>
+<li>Phases at 30 / 60 / 90 minutes (<code>production-ramp</code>, <code>compliance-audit</code>, <code>incident-response</code>) degrade <em>every slot still on EC2</em>, not just the slow ones. This forces parallel work rather than sequential migration.</li>
+<li>Disruption catalog (CEO 5000-user demand, MFA mandate, PII finding, .env leak, AI-committed secret) fires at operator discretion. The contestant cannot plan the order in advance.</li>
+</ul>
+<p><strong>Trade-off accepted.</strong></p>
+<ul>
+<li>The metadata.json is much larger than the other four problems. The <code>phases[]</code> × <code>disruptions[]</code> × five slots combinatorial space pushes the schema near its expressivity limit. Authors should treat <code>stackstack</code> as the upper bound on how much should live in a single problem — beyond this, split into multiple problems.</li>
+<li>Cost and runtime grow accordingly. Author chose to keep deploy targets that fit within sandbox-account economics, but a &quot;real&quot; version of this problem would burn more.</li>
+</ul>
+<p><strong>Reusable patterns.</strong></p>
+<ul>
+<li>Five-axis control framing (auth / network / rate / audit / ux) is portable to other Platform Engineering scenarios. Copy the slot list and rework only the underlying app.</li>
+<li>Disruption catalog (= named events with <code>defaultAfterMinutes</code> and <code>operatorEditable</code> fields) is the right primitive for &quot;the operator should be able to fire chaos at will&quot;. Avoid hardcoding the disruption schedule when the operator wants discretion.</li>
+<li>All-managed bonus (= one-shot large payout for completing all slots) is a clean way to model &quot;production-ready certification&quot; without inflating per-cycle scores.</li>
+</ul>
+<h2>Patterns shared across all five</h2>
+<ul>
+<li><strong>Fictional Kato-san predecessor narrative.</strong> Every Battle problem opens with &quot;the previous SRE left this behind&quot;. This is the platform&#39;s standard way to make a synthetic problem feel like a real situation. Use it.</li>
+<li><strong><code>${NamePrefix}</code> on every resource.</strong> Without exception. Every author who skipped this discovered the bug on the second team&#39;s deploy.</li>
+<li><strong>Empty URL Output, override required (Battles).</strong> This is invariant #9 in the catalog <code>AGENT.md</code>. The Battle starts when the contestant says it does, not when CFn finishes.</li>
+<li><strong><code>i18n.en.*</code> mirrors.</strong> Every catalog problem is published in both Japanese and English. The platform&#39;s locale fallback chain is <code>en → ja → top-level</code>. Locale support is <code>ja</code> + <code>en</code> only (no other locales).</li>
+<li><strong>SSM セッション Manager over SSH.</strong> No key management, no port 22, works for every contestant. This is the canonical recovery channel.</li>
+<li><strong>Free Tier or near-Free Tier cost.</strong> The cost ceiling is a per-contestant practice セッション, not a funded event. Every problem author should be able to justify the cost line in the PR body.</li>
+</ul>
+<h2>See also</h2>
+<ul>
+<li><a href="./CONTRIBUTING.md"><code>CONTRIBUTING.md</code></a> — how to ship a new problem.</li>
+<li><a href="./AUTHORING.html"><code>AUTHORING.html</code></a> — 30-minute onboarding with the full field reference.</li>
+<li><a href="./AI-WORKFLOW.md"><code>AI-WORKFLOW.md</code></a> — using Claude Code / Codex CLI to draft a problem.</li>
+<li><a href="../architecture/adr-012-problem-plugin-architecture.html">ADR-012</a> — the plugin architecture underpinning all five.</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/problems/EXAMPLES.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/problems/EXAMPLES.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>
