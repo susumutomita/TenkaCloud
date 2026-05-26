@@ -134,6 +134,7 @@
     "submission_finished": "終了",
     "submission_preparing": "準備中",
     "submission_cleared": "クリア",
+    "submission_cleared_with_points": "クリア (+{points} pt)",
     "submission_unsolved": "未解答",
     "submission_in_progress": "挑戦中",
     "difficulty_label": "難易度: {label}",
@@ -338,5 +339,38 @@
     "aria_label": "競技開始からの全チームスコア推移 (累積)",
     "no_data": "データなし",
     "no_match": "範囲内にデータなし"
+  },
+  "countdown": {
+    "remaining_label": "残り",
+    "last_5_min": "ラスト 5 分",
+    "ended_label": "終了"
+  },
+  "next_action": {
+    "not_started_header": "競技はまだ開始していません",
+    "not_started_description": "競技開始後に問題詳細・ヒント・flag 提出が解放されます。",
+    "not_started_starts_at": "競技開始予定: {startsAt}",
+    "not_started_unknown": "運営の開始合図をお待ちください。",
+    "ended_header": "競技終了",
+    "ended_description": "お疲れさまでした。 結果は以下のとおりです。",
+    "ended_with_rank": "最終順位: {rank} / {total}",
+    "ended_no_rank": "最終結果は運営から発表されます。",
+    "running_header": "次にやること",
+    "running_description": "未解答問題が {count} 件あります。 1 問ずつ片付けていきましょう。",
+    "running_pick": "まず {problemId} を解く →",
+    "running_no_ready": "deploy 準備中です。 少しお待ちください。",
+    "running_open_button": "この問題を開く",
+    "all_cleared_header": "全問クリア",
+    "all_cleared_description": "deploy 済の全問題を解き終えました。 競技終了まで leaderboard を見守りましょう。",
+    "all_cleared_body": "お見事。 最終順位を待ちましょう。"
+  },
+  "friendly_error": {
+    "auth_expired": "ログイン期限切れ。 organizer から再配布された login key で再ログインしてください。",
+    "invalid_flag": "flag が違います。",
+    "invalid_flag_with_remaining": "flag が違います (残 {remaining} 回 試行可)。",
+    "invalid_url": "URL の形式が不正です (http:// または https:// で始まる絶対 URL を指定)。",
+    "validation_generic": "入力エラー: {code}",
+    "network": "通信エラー。 もう一度試して、それでも続くようなら運営に連絡してください。",
+    "network_with_correlation": "通信エラー。 もう一度試して、それでも続くようなら以下の correlation id を運営に伝えてください: {correlationId}",
+    "unknown": "問題が発生しました。 もう一度試してください。"
   }
 }
