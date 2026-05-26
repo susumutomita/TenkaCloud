@@ -195,19 +195,31 @@ describe("TenkaCloudLiteStack (#778 ADR-016 Phase 3)", () => {
     );
   });
 
-  // Issue #1327: Lite mode user に `custom:userRole=TenantAdmin` + `custom:tenantId=local` を
-  // JWT 発行時に注入する Pre-Token Generation Lambda が UserPool に attach されていることを pin。
+  // Issue #1327 / #1358: Lite mode user に `custom:userRole=TenantAdmin` + `custom:tenantId=local` を
+  // JWT 発行時に注入する Pre-Token Generation V2 Lambda が UserPool に attach されていることを pin。
+  // V2 trigger (= PreTokenGenerationConfig + LambdaVersion: V2_0) を使うことで ID token と access token
+  // の双方に claim が乗り、 Application Plane handler の `requireRole` が成立する (#1358 fix の根幹)。
 
-  it("should attach a Pre-Token Generation Lambda trigger on the Lite UserPool (#1327)", () => {
+  it("should attach a Pre-Token Generation V2 Lambda trigger on the Lite UserPool (#1327 / #1358)", () => {
     const template = synth();
     template.hasResourceProperties(
       "AWS::Cognito::UserPool",
       Match.objectLike({
         LambdaConfig: Match.objectLike({
-          PreTokenGeneration: Match.anyValue(),
+          PreTokenGenerationConfig: Match.objectLike({
+            LambdaArn: Match.anyValue(),
+            LambdaVersion: "V2_0",
+          }),
         }),
       }),
     );
+    // V1 key (PreTokenGeneration) が混入していないこと (= #1358 regression guard、 V1 だと
+    // ID token に claim が乗らないため使ってはならない)。
+    const userPools = template.findResources("AWS::Cognito::UserPool");
+    const userPool = Object.values(userPools)[0];
+    const lambdaConfig = (userPool?.Properties as { LambdaConfig?: Record<string, unknown> })
+      ?.LambdaConfig;
+    expect(lambdaConfig?.PreTokenGeneration).toBeUndefined();
   });
 
   it("should bundle a LiteAdminClaims Lambda Function for the Pre-Token Generation trigger (#1327)", () => {

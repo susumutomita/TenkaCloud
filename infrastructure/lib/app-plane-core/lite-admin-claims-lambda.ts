@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import { Duration } from "aws-cdk-lib";
 import type { UserPool } from "aws-cdk-lib/aws-cognito";
-import { UserPoolOperation } from "aws-cdk-lib/aws-cognito";
+import { LambdaVersion, UserPoolOperation } from "aws-cdk-lib/aws-cognito";
 import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
@@ -32,10 +32,15 @@ export interface LiteAdminClaimsLambdaProps {
  * 本 Lambda は event を mutate して返すだけ (= 外部 service call 不要)。 IAM 追加権限・
  * env / VPC は不要。 timeout 5s / memory 128MB で十分 (Cognito の sync invoke 上限 5s も満たす)。
  *
- * ## addTrigger の挙動
- * `userPool.addTrigger(UserPoolOperation.PRE_TOKEN_GENERATION, fn)` は CFn 上で UserPool の
- * `LambdaConfig.PreTokenGeneration` を本 Lambda の ARN に設定し、 同時に Cognito service
- * principal が本 Lambda を invoke するための resource-based policy も自動追加する。
+ * ## addTrigger の挙動 (= V2 trigger / #1358)
+ * `userPool.addTrigger(UserPoolOperation.PRE_TOKEN_GENERATION_CONFIG, fn, LambdaVersion.V2_0)`
+ * は CFn 上で UserPool の `LambdaConfig.PreTokenGenerationConfig` を本 Lambda の ARN +
+ * `LambdaVersion: V2_0` で設定し、 同時に Cognito service principal が本 Lambda を invoke
+ * するための resource-based policy も自動追加する。 V2 trigger を指定することで Cognito 側は
+ * V2 event shape (= `claimsAndScopeOverrideDetails.idTokenGeneration` を読む経路) で
+ * Lambda を呼び出し、 ID token / access token の双方に custom claim を inject 可能になる。
+ * V1 trigger (= `PRE_TOKEN_GENERATION`) は access token のみ override 可能で、 Application Plane
+ * handler が読む ID token に claim が乗らないため使用しない (= #1358 root cause)。
  */
 export class LiteAdminClaimsLambda extends Construct {
   public readonly fn: NodejsFunction;
@@ -64,10 +69,17 @@ export class LiteAdminClaimsLambda extends Construct {
       },
     });
 
-    // UserPool に Pre-Token Generation trigger として bind する。 これにより
-    //   - UserPool.LambdaConfig.PreTokenGeneration が fn ARN を指す
+    // UserPool に Pre-Token Generation V2 trigger として bind する。 これにより
+    //   - UserPool.LambdaConfig.PreTokenGenerationConfig.LambdaArn が fn ARN を指す
+    //   - UserPool.LambdaConfig.PreTokenGenerationConfig.LambdaVersion = "V2_0"
     //   - fn の resource-based policy に Cognito 経由の invoke 権限が自動追加される
-    // が同時に行われる。
-    props.userPool.addTrigger(UserPoolOperation.PRE_TOKEN_GENERATION, this.fn);
+    // が同時に行われる。 V2 を指定することで handler は V2 event shape
+    // (= `claimsAndScopeOverrideDetails`) を返し、 ID token / access token の双方に
+    // custom claim が乗る (= #1358 fix の根幹)。
+    props.userPool.addTrigger(
+      UserPoolOperation.PRE_TOKEN_GENERATION_CONFIG,
+      this.fn,
+      LambdaVersion.V2_0,
+    );
   }
 }
