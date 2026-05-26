@@ -163,6 +163,50 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   );
   cdk.Aspects.of(bootstrapTemplateStack).add(new DestroyPolicySetter());
 
+  const tenantTemplateStack = new TenantTemplateStack(
+    app,
+    stackId(`tenkacloud-tenant-template-${config.tenantId}`, config.environment),
+    {
+      ...config.stackEnv,
+      tenantId: config.tenantId,
+      tenantName: config.tenantName,
+      environment: config.environment,
+      stageName: config.stageName,
+      lambdaReserveConcurrency: config.lambdaReserveConcurrency,
+      lambdaCanaryDeploymentPreference: config.lambdaCanaryDeploymentPreference,
+      isPooledDeploy: config.isPooledDeploy,
+      ApiKeySSMParameterNames: config.apiKeySSMParameterNames,
+      tenantMappingTable: bootstrapTemplateStack.tenantMappingTable,
+      commitId: config.commitId,
+      deployApiLambda: problemDeployBackendStack.deployApiLambda,
+      eventApiLambda: problemDeployBackendStack.eventApiLambda,
+      competitorAccountsApiLambda: problemDeployBackendStack.competitorAccountsApiLambda,
+      participantPortalUrl: problemDeployBackendStack.participantPortalUrl,
+      // Issue #1053: hosting を ProblemDeployBackendStack に移管したため、 cross-stack ref で
+      // URL を受ける。 旧 `CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL` env-var dance は廃止。
+      competitorBootstrapTemplateUrl: problemDeployBackendStack.competitorBootstrapTemplateUrl,
+      // Issue #1340 Phase 2: opt-in per-tenant SAML SSO (= 未設定なら空配列で no-op)。
+      // pooled tier では本 props を受けても TenantTemplateStack が `isPooledDeploy` で
+      // ignore するため、 pooled / silo どちらでも同 env を渡してよい (ADR-018 と整合)。
+      samlIdps: config.tenantSamlIdps,
+      samlAdminAllowlist: config.tenantSamlAdminAllowlist,
+    },
+  );
+  tenantTemplateStack.addDependency(problemDeployBackendStack);
+  tenantTemplateStack.addDependency(bootstrapTemplateStack);
+  cdk.Tags.of(tenantTemplateStack).add("TenantId", config.tenantId);
+  cdk.Tags.of(tenantTemplateStack).add("IsPooledDeploy", String(config.isPooledDeploy));
+  cdk.Aspects.of(tenantTemplateStack).add(new DestroyPolicySetter());
+
+  // Issue #1340 Phase 2: tenant SAML が有効なときだけ per-tenant SignInAuditLambda を立てる
+  // (= 未設定 / pooled tier 経路では空配列 → AdminConsoleInsightStack は何も attach しない、
+  // 既存 stack の CFn 物理差分 0 件)。 silo / Lite 経路で SAML が attach されたときのみ
+  // tenantUserPoolId を渡し、 `TENANT#<tenantId>` partition に書く Lambda を集約する。
+  const tenantSignInAudit =
+    config.tenantSamlIdps.length > 0 && !config.isPooledDeploy
+      ? [{ tenantId: config.tenantId, userPoolId: tenantTemplateStack.tenantUserPoolId }]
+      : undefined;
+
   const adminConsoleInsightStack = new AdminConsoleInsightStack(
     app,
     stackId("tenkacloud-admin-console-insight", config.environment),
@@ -189,41 +233,14 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       // cross-stack で渡す。 ProblemDeployBackendStack の AuditArchiveBucket がここで bind される。
       auditArchiveBucket: problemDeployBackendStack.auditArchiveBucket,
       auditRetentionDays: 365,
+      // Issue #1340 Phase 2: tenant SAML 有効時のみ per-tenant audit Lambda を集約配線する。
+      ...(tenantSignInAudit ? { tenantSignInAudit } : {}),
     },
   );
   adminConsoleInsightStack.addDependency(controlPlaneStack);
   adminConsoleInsightStack.addDependency(problemDeployBackendStack);
   adminConsoleInsightStack.addDependency(bootstrapTemplateStack);
-
-  const tenantTemplateStack = new TenantTemplateStack(
-    app,
-    stackId(`tenkacloud-tenant-template-${config.tenantId}`, config.environment),
-    {
-      ...config.stackEnv,
-      tenantId: config.tenantId,
-      tenantName: config.tenantName,
-      environment: config.environment,
-      stageName: config.stageName,
-      lambdaReserveConcurrency: config.lambdaReserveConcurrency,
-      lambdaCanaryDeploymentPreference: config.lambdaCanaryDeploymentPreference,
-      isPooledDeploy: config.isPooledDeploy,
-      ApiKeySSMParameterNames: config.apiKeySSMParameterNames,
-      tenantMappingTable: bootstrapTemplateStack.tenantMappingTable,
-      commitId: config.commitId,
-      deployApiLambda: problemDeployBackendStack.deployApiLambda,
-      eventApiLambda: problemDeployBackendStack.eventApiLambda,
-      competitorAccountsApiLambda: problemDeployBackendStack.competitorAccountsApiLambda,
-      participantPortalUrl: problemDeployBackendStack.participantPortalUrl,
-      // Issue #1053: hosting を ProblemDeployBackendStack に移管したため、 cross-stack ref で
-      // URL を受ける。 旧 `CDK_PARAM_COMPETITOR_BOOTSTRAP_TEMPLATE_URL` env-var dance は廃止。
-      competitorBootstrapTemplateUrl: problemDeployBackendStack.competitorBootstrapTemplateUrl,
-    },
-  );
-  tenantTemplateStack.addDependency(problemDeployBackendStack);
-  tenantTemplateStack.addDependency(bootstrapTemplateStack);
-  cdk.Tags.of(tenantTemplateStack).add("TenantId", config.tenantId);
-  cdk.Tags.of(tenantTemplateStack).add("IsPooledDeploy", String(config.isPooledDeploy));
-  cdk.Aspects.of(tenantTemplateStack).add(new DestroyPolicySetter());
+  adminConsoleInsightStack.addDependency(tenantTemplateStack);
 
   const serverlessSaaSPipeline = new ServerlessSaaSPipeline(
     app,

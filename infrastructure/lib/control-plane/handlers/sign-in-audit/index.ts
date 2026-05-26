@@ -65,6 +65,23 @@ const SIGN_IN_EVENT_NAMES = new Set([
 const SYSTEM_TENANT = "SYSTEM";
 const COGNITO_LOCAL_IDP = "COGNITO";
 
+/**
+ * Issue #1340 Phase 2: 監査行の partition (tenantId) を env で切り替える。
+ *
+ *   - `AUDIT_TENANT_ID = "SYSTEM"` (Phase 1 既定): `writeAuditEvent` が `SYSTEM#<env>` に書く。
+ *     Control Plane (= SystemAdmin) UserPool 用の Lambda はこの値で配線される。
+ *   - `AUDIT_TENANT_ID = "<tenantId>"` (Phase 2 / Application Plane): per-tenant Lambda に
+ *     CDK 側で tenantId を渡し、 `TENANT#<tenantId>` partition に書く (= 既存 admin-audit
+ *     log の規約と整合、 `audit-log.ts` の writeAuditEvent が SYSTEM 以外なら自動 TENANT#)。
+ *
+ * 未設定なら Phase 1 互換で `SYSTEM` (= Control Plane UserPool 用の Lambda は env を
+ * 明示しなくても旧動作のまま)。
+ */
+function getAuditTenantId(): string {
+  const raw = process.env.AUDIT_TENANT_ID?.trim();
+  return raw && raw.length > 0 ? raw : SYSTEM_TENANT;
+}
+
 export function resolveIdpName(username: string | undefined): string {
   if (!username) return COGNITO_LOCAL_IDP;
   // Cognito federated username 規約: `{providerName}_{subject}`。 local Cognito user は
@@ -131,7 +148,9 @@ export async function handler(
   const occurredAtMs = event.time ? new Date(event.time).getTime() : Date.now();
   try {
     await writeAuditEvent({
-      tenantId: SYSTEM_TENANT,
+      // Issue #1340 Phase 2: tenantId は env 経由 (= Phase 1 Control Plane 配線は未指定で SYSTEM
+      // のまま、 Phase 2 per-tenant 配線では `<tenantId>` を渡して `TENANT#<tenantId>` partition に書く)。
+      tenantId: getAuditTenantId(),
       actor: row.actor,
       ...(row.actorUsername ? { actorUsername: row.actorUsername } : {}),
       action: row.action,

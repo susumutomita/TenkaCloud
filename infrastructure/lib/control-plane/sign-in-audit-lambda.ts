@@ -13,7 +13,7 @@ import {
 } from "../utils/lambda-runtime.js";
 
 export interface SignInAuditLambdaProps {
-  /** ADR-020 Phase D の admin audit log table (= `PK=SYSTEM#<env>` の sign-in 行を書く)。 */
+  /** ADR-020 Phase D の admin audit log table (= `PK=SYSTEM#<env>` 又は `PK=TENANT#<id>` の sign-in 行を書く)。 */
   readonly adminAuditLogTable: Table;
   /** `SYSTEM#<env>` の env suffix (= writeAuditEvent が `DEPLOY_ENVIRONMENT` を読む)。 */
   readonly environmentName: string;
@@ -24,6 +24,13 @@ export interface SignInAuditLambdaProps {
    * 循環依存を回避)。 文字列 ID で event filter する。
    */
   readonly userPoolId: string;
+  /**
+   * Issue #1340 Phase 2: 監査行 partition の tenantId。 Control Plane (Phase 1) は未指定で
+   * `SYSTEM` 既定にし `SYSTEM#<env>` に書く (= 旧動作互換)。 Application Plane (Phase 2) は
+   * tenantId を渡し、 `TENANT#<tenantId>` に書く (= 既存 admin-audit log の規約と整合)。
+   * 値は AUDIT_TENANT_ID env として Lambda に流す (= handler が tenant 分岐に使う)。
+   */
+  readonly auditTenantId?: string;
 }
 
 /**
@@ -62,6 +69,9 @@ export class SignInAuditLambda extends Construct {
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable.tableName,
         DEPLOY_ENVIRONMENT: props.environmentName,
         CONTROL_PLANE_USER_POOL_ID: props.userPoolId,
+        // Issue #1340 Phase 2: tenant 配線時のみ tenantId env を渡す (= 未指定なら handler が
+        // SYSTEM にフォールバック、 Phase 1 Control Plane 動作互換)。
+        ...(props.auditTenantId ? { AUDIT_TENANT_ID: props.auditTenantId } : {}),
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {

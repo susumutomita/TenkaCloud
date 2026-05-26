@@ -88,6 +88,7 @@ const CONFIG: AppConfig = {
   tenantId: "tenant-test",
   tenantName: "ACME Cloud Academy",
   apiBaseUrl: "https://api.example.com",
+  samlIdpDirectory: {},
 };
 
 function renderPage(detail: EventDetail) {

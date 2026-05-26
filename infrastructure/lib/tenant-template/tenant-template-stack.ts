@@ -10,6 +10,7 @@ import {
 import type { Construct } from "constructs";
 import { buildAppPlaneCore } from "../app-plane-core/index.js";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
+import type { SamlIdpConfig } from "./saml-identity-providers.js";
 
 interface TenantTemplateStackProps extends StackProps {
   stageName: string;
@@ -64,7 +65,21 @@ interface TenantTemplateStackProps extends StackProps {
    * install.sh が tenant-template-pooled を再 deploy するときに埋まる。
    */
   competitorBootstrapTemplateUrl?: string;
-  // Issue #1066: SAML IdP 連携は廃止 (= MFA 必須化 #1035 で代替)。
+  /**
+   * Issue #1340 Phase 2: opt-in で attach する per-tenant SAML IdP 群 (= env `TENANT_SAML_IDPS`
+   * を bin/infrastructure → app-config で parse 済の正規化 list)。 未指定 / 空配列なら従来
+   * Cognito local auth + MFA 強制のみ。 設定時のみ allowlist が動く。
+   *
+   * **ADR-018**: pooled tier (BASIC / STANDARD / PREMIUM) は UserPool を全 pooled tenant が
+   * 共有するため、 SAML attach は他 tenant に副作用を及ぼす。 本 stack は `isPooledDeploy=true`
+   * のとき samlIdps を ignore し、 silo (PLATINUM) instance / Lite mode のみ attach する。
+   */
+  samlIdps?: readonly SamlIdpConfig[];
+  /**
+   * Issue #1340 Phase 2: per-tenant federated 管理者 allowlist (`provider/email`)。
+   * `samlIdps` 設定時のみ意味を持つ。 空配列 = federated sign-in 全拒否 (fail-safe)。
+   */
+  samlAdminAllowlist?: readonly string[];
 }
 
 export class TenantTemplateStack extends Stack {
@@ -81,6 +96,19 @@ export class TenantTemplateStack extends Stack {
    * admin-console は pooled URL のみを runtime-config 経由で表示する。
    */
   public readonly applicationAdminConsoleUrl: string;
+  /**
+   * Issue #1340 Phase 2: tenant UserPool ID (= 文字列、 cross-stack ref で sign-in audit Lambda
+   * の EventBridge rule filter に渡す)。 audit Lambda は CloudTrail Cognito events を default
+   * EventBridge bus 経由で listen するため、 UserPool 構造体への直接 ref は持たない (= cross-stack
+   * の cyclic 依存を回避)。
+   */
+  public readonly tenantUserPoolId: string;
+  /**
+   * Issue #1340 Phase 2: per-tenant SAML HRD directory (domain → providerName[])。 SAML 未設定
+   * なら空 object。 既に `runtime-config.json` に焼かれて Login が読むため stack 外に公開する
+   * 必要は無いが、 cross-stack 配線テスト / audit 用に expose しておく。
+   */
+  public readonly samlIdpDirectory: Readonly<Record<string, readonly string[]>>;
 
   constructor(scope: Construct, id: string, props: TenantTemplateStackProps) {
     super(scope, id, props);
@@ -100,6 +128,14 @@ export class TenantTemplateStack extends Stack {
     // pooled / silo どちらの TenantTemplateStack インスタンスでも同じ構造を立てる。
     //   - pooled: install.sh phase 1 で 1 度だけ立つ共有 console
     //   - silo:   provision-tenant.sh が PLATINUM tier で per-tenant に立てる
+    // Issue #1340 Phase 2: pooled tier (= UserPool 共有) では SAML attach を一切しない
+    // (= ADR-018 と整合)。 silo / per-tenant deploy のときだけ env-driven SAML 設定を渡す。
+    // pooled 経路の CFn 物理差分は本 PR で 0 件 (= props.samlIdps を渡しても force-empty)。
+    const effectiveSamlIdps = props.isPooledDeploy ? [] : (props.samlIdps ?? []);
+    const effectiveSamlAdminAllowlist = props.isPooledDeploy
+      ? []
+      : (props.samlAdminAllowlist ?? []);
+
     const appPlaneCore = buildAppPlaneCore(this, {
       tenantId: props.tenantId,
       tenantName: props.tenantName,
@@ -110,6 +146,8 @@ export class TenantTemplateStack extends Stack {
       competitorAccountsApiLambda: props.competitorAccountsApiLambda,
       participantPortalUrl: props.participantPortalUrl,
       competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl,
+      samlIdps: effectiveSamlIdps,
+      samlAdminAllowlist: effectiveSamlAdminAllowlist,
       apiKeyConfig: {
         ssmParameterNames: props.ApiKeySSMParameterNames,
         ssmLookup: (name) => this.ssmLookup(name),
@@ -122,6 +160,8 @@ export class TenantTemplateStack extends Stack {
     this.tenantApiName = apiGateway.restApi.restApiName;
     this.tenantApiStageName = apiGateway.restApi.deploymentStage.stageName;
     this.applicationAdminConsoleUrl = applicationAdminConsoleHosting.distributionUrl;
+    this.tenantUserPoolId = identityProvider.tenantUserPool.userPoolId;
+    this.samlIdpDirectory = appPlaneCore.samlIdpDirectory;
 
     new AwsCustomResource(this, "CreateTenantMapping", {
       installLatestAwsSdk: true,

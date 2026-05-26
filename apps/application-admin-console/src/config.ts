@@ -35,6 +35,14 @@ export interface AppConfig {
    * 未注入 / undefined は安全側に倒して "pooled" 扱い (= SAML SSO 隠す)。
    */
   readonly isolation?: "pooled" | "silo";
+  /**
+   * Issue #1340 Phase 2: per-tenant SAML HRD directory (= email ドメイン → 接続済み SAML
+   * provider 名)。 Login 画面が email から候補 IdP を解決して `identity_provider=` を組み立てる。
+   * SAML 未設定なら空 object `{}` (= 全 email が Cognito local auth に流れる、 既存挙動互換)。
+   * tenant A の Login 画面は自分の CloudFront に置かれた runtime-config.json しか読まないため、
+   * 物理的に tenant B の directory は見えない (= isolation は infra layer で担保)。
+   */
+  readonly samlIdpDirectory: Readonly<Record<string, readonly string[]>>;
 }
 
 interface RuntimeConfig {
@@ -46,6 +54,7 @@ interface RuntimeConfig {
   readonly participantPortalUrl?: string;
   readonly competitorBootstrapTemplateUrl?: string;
   readonly isolation?: "pooled" | "silo";
+  readonly samlIdpDirectory?: Readonly<Record<string, readonly string[]>>;
 }
 
 // Issue #871 / #1246: runtime-config.json URL validators (isHttpsUrl / isCognitoDomain) are
@@ -90,6 +99,11 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
           ? data.competitorBootstrapTemplateUrl
           : undefined,
       isolation: data.isolation === "silo" ? "silo" : "pooled",
+      // Issue #1340 Phase 2: SAML 未設定 stack も無音で動かすため空 object fallback。
+      samlIdpDirectory:
+        data.samlIdpDirectory && typeof data.samlIdpDirectory === "object"
+          ? data.samlIdpDirectory
+          : {},
     };
   } catch {
     return null;
@@ -117,6 +131,8 @@ export async function loadConfig(
       participantPortalUrl: runtime.participantPortalUrl,
       competitorBootstrapTemplateUrl: runtime.competitorBootstrapTemplateUrl,
       isolation: runtime.isolation ?? "pooled",
+      // Issue #1340 Phase 2: SAML 未設定 stack も無音で動かすため空 object fallback。
+      samlIdpDirectory: runtime.samlIdpDirectory ?? {},
       redirectUri,
       scope,
     };
@@ -134,6 +150,8 @@ export async function loadConfig(
     tenantName: DEV_FALLBACK_TENANT_NAME,
     apiBaseUrl: env.VITE_API_BASE_URL ?? DEV_FALLBACK_API_BASE_URL,
     isolation: env.VITE_ISOLATION === "silo" ? "silo" : "pooled",
+    // Issue #1340 Phase 2: dev では SAML 経路を出さない (= 空 directory で local 一択)。
+    samlIdpDirectory: {},
     redirectUri,
     scope,
   };

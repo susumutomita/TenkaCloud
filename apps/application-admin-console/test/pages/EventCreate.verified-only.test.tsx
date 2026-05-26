@@ -45,6 +45,7 @@ const config: AppConfig = {
   tenantId: "tenant-test",
   tenantName: "Test Tenant",
   apiBaseUrl: "https://api.example.com/prod",
+  samlIdpDirectory: {},
 };
 
 const { EventCreatePage, buildVerifiedAccountOption, formatVerifiedAccountSummary } = await import(

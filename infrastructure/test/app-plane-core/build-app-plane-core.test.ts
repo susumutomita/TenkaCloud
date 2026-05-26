@@ -1,8 +1,27 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { buildAppPlaneCore } from "../../lib/app-plane-core";
+
+/**
+ * BucketDeployment(Source.asset(dist)) は synth 時に path 存在を検証する。
+ * CI は make build より前に make test-coverage を走らせるため SPA dist が無く、
+ * `CannotFindAsset` で fail する。 application-admin-console-hosting.test.ts と
+ * 同じ pattern で placeholder dist を mkdir する。
+ */
+const distDir = path.join(__dirname, "..", "..", "..", "apps", "application-admin-console", "dist");
+beforeAll(() => {
+  if (!fs.existsSync(distDir)) {
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(distDir, "index.html"),
+      "<!doctype html><html><body>placeholder</body></html>",
+    );
+  }
+});
 
 /**
  * Issue #778 ADR-016 Phase 1: AppPlaneCore builder の契約 pin。
@@ -173,5 +192,93 @@ describe("buildAppPlaneCore", () => {
     expect(handles.applicationAdminConsoleUrl).toBe(
       handles.applicationAdminConsoleHosting.distributionUrl,
     );
+  });
+
+  // Issue #1340 Phase 2: SAML attach の挙動 (= 未指定で no-op、 指定時のみ provider + allowlist 配線)。
+
+  it("should NOT create a UserPoolIdentityProvider when samlIdps is omitted (= no CFn physical diff for existing tenants)", () => {
+    const template = synth();
+    template.resourceCountIs("AWS::Cognito::UserPoolIdentityProvider", 0);
+  });
+
+  it("should attach SAML provider + allowlist Pre sign-up Lambda when samlIdps is non-empty (#1340)", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "TestStack", {
+      env: { account: "123456789012", region: "ap-northeast-1" },
+    });
+    const handles = buildAppPlaneCore(stack, {
+      tenantId: "tenant-1",
+      tenantName: "Tenant 1",
+      environment: "development",
+      isPooledDeploy: false,
+      deployApiLambda: buildStubLambda(stack, "StubDeploy"),
+      eventApiLambda: buildStubLambda(stack, "StubEvent"),
+      competitorAccountsApiLambda: buildStubLambda(stack, "StubCompetitorAccounts"),
+      samlIdps: [
+        {
+          name: "tenant-entra",
+          metadataUrl: "https://meta.example",
+          emailDomains: ["acme.example"],
+        },
+      ],
+      samlAdminAllowlist: ["tenant-entra/admin@acme.example"],
+      apiKeyConfig: {
+        ssmParameterNames: {
+          basic: { keyId: "b", value: "b" },
+          standard: { keyId: "s", value: "s" },
+          premium: { keyId: "p", value: "p" },
+          platinum: { keyId: "pl", value: "pl" },
+        },
+        ssmLookup: () => "SSM:x",
+      },
+    });
+    expect(handles.samlIdpDirectory).toEqual({ "acme.example": ["tenant-entra"] });
+
+    const template = Template.fromStack(stack);
+    template.resourceCountIs("AWS::Cognito::UserPoolIdentityProvider", 1);
+    template.hasResourceProperties("AWS::Cognito::UserPoolIdentityProvider", {
+      ProviderName: "tenant-entra",
+      ProviderType: "SAML",
+    });
+    // Pre sign-up trigger (= federated admin allowlist) が UserPool に attach されている
+    template.hasResourceProperties("AWS::Cognito::UserPool", {
+      LambdaConfig: Match.objectLike({ PreSignUp: Match.anyValue() }),
+    });
+  });
+
+  it("should NOT attach the federated allowlist Lambda when samlIdps is empty even if samlAdminAllowlist is provided", () => {
+    // 「allowlist だけ設定して SAML は未設定」 のケース。 SAML 経路が無いので allowlist の意味は無く、
+    // attach すると無駄な Pre sign-up trigger が UserPool に乗ってしまう。 builder は samlIdps が
+    // 空のとき allowlist Lambda を立てない契約 (= app-plane-core.ts の if guard) を pin する。
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "TestStack", {
+      env: { account: "123456789012", region: "ap-northeast-1" },
+    });
+    buildAppPlaneCore(stack, {
+      tenantId: "tenant-1",
+      tenantName: "Tenant 1",
+      environment: "development",
+      isPooledDeploy: false,
+      deployApiLambda: buildStubLambda(stack, "StubDeploy"),
+      eventApiLambda: buildStubLambda(stack, "StubEvent"),
+      competitorAccountsApiLambda: buildStubLambda(stack, "StubCompetitorAccounts"),
+      samlIdps: [],
+      samlAdminAllowlist: ["tenant-entra/admin@acme.example"],
+      apiKeyConfig: {
+        ssmParameterNames: {
+          basic: { keyId: "b", value: "b" },
+          standard: { keyId: "s", value: "s" },
+          premium: { keyId: "p", value: "p" },
+          platinum: { keyId: "pl", value: "pl" },
+        },
+        ssmLookup: () => "SSM:x",
+      },
+    });
+    const template = Template.fromStack(stack);
+    const userPools = template.findResources("AWS::Cognito::UserPool");
+    const userPool = Object.values(userPools)[0];
+    const lambdaConfig = (userPool?.Properties as { LambdaConfig?: Record<string, unknown> })
+      ?.LambdaConfig;
+    expect(lambdaConfig?.PreSignUp).toBeUndefined();
   });
 });

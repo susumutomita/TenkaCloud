@@ -119,6 +119,24 @@ export interface AppConfig {
   readonly controlPlaneSamlAdminAllowlist: readonly string[];
 
   /**
+   * Issue #1340 Phase 2: per-tenant Application Plane SAML IdP 群。 env
+   * `TENANT_SAML_IDPS` (JSON 配列) を parse 済み。 空配列なら SAML 無効。 pooled tier には
+   * attach されない (= ADR-018 で `TenantTemplateStack` が `isPooledDeploy` を見て ignore する)。
+   * silo (PLATINUM) instance / Lite mode (= 1 UserPool) のみ attach 可能。
+   */
+  readonly tenantSamlIdps: ReadonlyArray<{
+    readonly name: string;
+    readonly metadataUrl: string;
+    readonly emailDomains: readonly string[];
+  }>;
+  /**
+   * Issue #1340 Phase 2: per-tenant federated TenantAdmin allowlist (`provider/email`)。 env
+   * `TENANT_SAML_ADMIN_ALLOWLIST` を parse 済み。 `tenantSamlIdps` 設定時のみ意味を持つ。
+   * 空配列 = federated sign-in 全拒否 (fail-safe)。
+   */
+  readonly tenantSamlAdminAllowlist: readonly string[];
+
+  /**
    * Issue #952 epic / cost guardrails: AWS Budgets monthly limit (USD)。 未指定 / 0 なら
    * budget を立てない (= 旧挙動互換)。 development: 50, production: 200 を推奨。
    */

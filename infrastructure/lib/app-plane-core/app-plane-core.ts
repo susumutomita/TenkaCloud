@@ -6,6 +6,12 @@ import { SamlIdpLambda } from "../problem-deploy/saml-idp-lambda.js";
 import { ApiGateway } from "../tenant-template/api-gateway.js";
 import { ApplicationAdminConsoleHosting } from "../tenant-template/application-admin-console-hosting.js";
 import { IdentityProvider } from "../tenant-template/identity-provider.js";
+import { attachTenantFederatedAdminAllowlist } from "../tenant-template/saml-admin-allowlist.js";
+import {
+  attachTenantSamlIdentityProviders,
+  type IdpDirectory,
+  type SamlIdpConfig,
+} from "../tenant-template/saml-identity-providers.js";
 import { LiteAdminClaimsLambda } from "./lite-admin-claims-lambda.js";
 
 /**
@@ -77,7 +83,22 @@ export interface AppPlaneCoreProps {
    * 既定 `false` にすることで、 既存 SaaS / Full mode の CFn 物理差分を 0 件に保つ。
    */
   readonly liteAdminClaimsInjection?: boolean;
-  // Issue #1066: SAML IdP 機能を廃止 (= MFA 必須化 #1035 で代替)。
+  /**
+   * Issue #1340 Phase 2: per-tenant SAML IdP 群 (= env `TENANT_SAML_IDPS` を parse 済)。
+   * 未指定 / 空配列なら従来 Cognito local auth + MFA 強制のみ (= 既存 SaaS / Full mode の
+   * CFn 物理差分を 0 件に保つ opt-in)。
+   *
+   * pooled UserPool を共有する pooled tier (BASIC / STANDARD / PREMIUM) では SAML attach を
+   * **配線しない**。 caller 側 (= `TenantTemplateStack`) で pooled tier を判定して props を
+   * 渡さない (= ADR-018 `pooled-userpool-saml-isolation` と整合)。 Lite mode (= 単一 tenant、
+   * 1 UserPool) と silo (PLATINUM) tier では tenant 内で完結するため安全に attach できる。
+   */
+  readonly samlIdps?: readonly SamlIdpConfig[];
+  /**
+   * Issue #1340 Phase 2: federated 管理者 allowlist (`provider/email`)。 `samlIdps` 設定時
+   * のみ意味を持つ。 空配列 = federated sign-in 全拒否 (fail-safe)。
+   */
+  readonly samlAdminAllowlist?: readonly string[];
 }
 
 export interface AppPlaneCoreHandles {
@@ -95,6 +116,13 @@ export interface AppPlaneCoreHandles {
    * SaaS mode 経路では undefined のまま (= attach なし)。
    */
   readonly liteAdminClaimsLambda?: LiteAdminClaimsLambda;
+  /**
+   * Issue #1340 Phase 2: SAML HRD directory (= domain → providerName[])。 application-admin-console
+   * の Login が email から候補 IdP を解決して `identity_provider=` を組み立てる public metadata。
+   * SAML 未設定なら `{}` (= 全 email が Cognito local auth に流れる、 旧動作互換)。
+   * `runtime-config.json` の `samlIdpDirectory` field に焼き込まれる。
+   */
+  readonly samlIdpDirectory: IdpDirectory;
 }
 
 /**
@@ -144,6 +172,33 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
       })
     : undefined;
 
+  // Issue #1340 Phase 2: opt-in で per-tenant SAML IdP を UserPool に attach する。
+  //
+  // 1. attach: samlIdps 未指定 / 空なら何もしない (= 既存 CFn 物理差分 0 件)。 設定時は
+  //    UserPool に SAML provider を attach し、 client の SupportedIdentityProviders を
+  //    COGNITO + 各 provider に拡張。 directory は per-tenant runtime-config.json に焼く
+  //    (= tenant 越境はしない、 物理的 isolation)。
+  // 2. federated admin allowlist: SAML が attach された tenant でのみ Pre sign-up Lambda を
+  //    attach する。 空配列でも attach する (= fail-safe、 「テナント外 federated user が
+  //    全員 TenantAdmin」 構成事故を防ぐ)。
+  // 3. pooled tier の判定は caller (= `TenantTemplateStack`) が担う。 builder 自身は同 UserPool
+  //    instance に対して attach するだけで、 pooled / silo の境界を持たない (= ADR-018 相当の
+  //    pooled UserPool 共有 SAML を防ぐ責務は外側にある)。
+  const samlIdps = props.samlIdps ?? [];
+  const samlIdpDirectory = attachTenantSamlIdentityProviders(
+    scope,
+    identityProvider.tenantUserPool,
+    identityProvider.cfnTenantUserPoolClient,
+    samlIdps,
+  );
+  if (samlIdps.length > 0) {
+    attachTenantFederatedAdminAllowlist(
+      scope,
+      identityProvider.tenantUserPool,
+      props.samlAdminAllowlist ?? [],
+    );
+  }
+
   const apiGateway = new ApiGateway(scope, "ApiGateway", {
     tenantId: props.tenantId,
     isPooledDeploy: props.isPooledDeploy,
@@ -186,6 +241,9 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
     // UserPool mutate を伴う機能は他 tenant に副作用を及ぼす。 frontend は isolation を見て
     // pooled では SAML SSO page を隠し、 silo (PLATINUM) でのみ有効にする。
     isolation: props.isPooledDeploy ? "pooled" : "silo",
+    // Issue #1340 Phase 2: HRD directory を runtime-config.json に焼く (= 未認証 Login が読む
+    // public metadata、 非秘匿)。 SAML 未設定なら `{}`。
+    samlIdpDirectory,
   });
 
   return {
@@ -193,6 +251,7 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
     identityProvider,
     apiGateway,
     applicationAdminConsoleUrl: applicationAdminConsoleHosting.distributionUrl,
+    samlIdpDirectory,
     ...(samlIdpLambda ? { samlIdpLambda } : {}),
     ...(liteAdminClaimsLambda ? { liteAdminClaimsLambda } : {}),
   };

@@ -294,4 +294,54 @@ describe("resolveApiKeyValue", () => {
       }),
     ).toThrow(/MY_KEY が production 環境で未設定/);
   });
+
+  // Issue #1340 Phase 2: per-tenant SAML env を resolveAppConfig が正しく parse して AppConfig に
+  // 載せること。 未設定なら空配列、 不正値は fail-loud。
+  describe("tenant SAML env (#1340)", () => {
+    it("should default tenantSamlIdps / tenantSamlAdminAllowlist to empty when env is unset", () => {
+      const cfg = resolveAppConfig({
+        env: baseEnv(),
+        binDir: BIN_DIR,
+        fs: fsAlwaysMissing,
+        dotenvConfig: noopDotenv,
+        discoverProblems: stubProblems,
+      });
+      expect(cfg.tenantSamlIdps).toEqual([]);
+      expect(cfg.tenantSamlAdminAllowlist).toEqual([]);
+    });
+
+    it("should parse TENANT_SAML_IDPS JSON array and TENANT_SAML_ADMIN_ALLOWLIST comma list", () => {
+      const cfg = resolveAppConfig({
+        env: baseEnv({
+          TENANT_SAML_IDPS: JSON.stringify([
+            {
+              name: "tenant-entra",
+              metadataUrl: "https://meta.example",
+              emailDomains: ["acme.example"],
+            },
+          ]),
+          TENANT_SAML_ADMIN_ALLOWLIST: "tenant-entra/admin@acme.example",
+        }),
+        binDir: BIN_DIR,
+        fs: fsAlwaysMissing,
+        dotenvConfig: noopDotenv,
+        discoverProblems: stubProblems,
+      });
+      expect(cfg.tenantSamlIdps).toHaveLength(1);
+      expect(cfg.tenantSamlIdps[0]?.name).toBe("tenant-entra");
+      expect(cfg.tenantSamlAdminAllowlist).toEqual(["tenant-entra/admin@acme.example"]);
+    });
+
+    it("should fail-loud with the TENANT_SAML_IDPS env name when JSON is invalid (= ops debuggability)", () => {
+      expect(() =>
+        resolveAppConfig({
+          env: baseEnv({ TENANT_SAML_IDPS: "not-json" }),
+          binDir: BIN_DIR,
+          fs: fsAlwaysMissing,
+          dotenvConfig: noopDotenv,
+          discoverProblems: stubProblems,
+        }),
+      ).toThrow(/TENANT_SAML_IDPS/);
+    });
+  });
 });

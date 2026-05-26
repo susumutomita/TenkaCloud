@@ -39,6 +39,7 @@ const config: AppConfig = {
   tenantId: "tenant-test",
   tenantName: "Test Tenant",
   apiBaseUrl: "https://api.example.com/prod",
+  samlIdpDirectory: {},
 };
 
 const JOB_ID = "01HZX0K3M3K9ZQHB3MRQHBA1B2";

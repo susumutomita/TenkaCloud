@@ -6,6 +6,8 @@ import { parseAdminAllowlist } from "../control-plane/saml-admin-allowlist.js";
 import { parseSamlIdpConfig } from "../control-plane/saml-identity-providers.js";
 import { getEnv } from "../helper-functions.js";
 import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting.js";
+import { parseTenantAdminAllowlist } from "../tenant-template/saml-admin-allowlist.js";
+import { parseTenantSamlIdpConfig } from "../tenant-template/saml-identity-providers.js";
 import { loadConfig } from "../utils/config-loader.js";
 import {
   discoverProblemsCatalog,
@@ -87,6 +89,12 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     env.CONTROL_PLANE_SAML_ADMIN_ALLOWLIST,
   );
 
+  // Issue #1340 Phase 2: per-tenant Application Plane SAML opt-in env を parse (= 未設定なら
+  // 空配列、 既存 pooled / silo / Lite mode の CFn 物理差分は 0 件)。 Phase 1 と同じ
+  // parser を `TENANT_SAML_IDPS` / `TENANT_SAML_ADMIN_ALLOWLIST` env で呼び出す。
+  const tenantSamlIdps = parseTenantSamlIdpConfig(env.TENANT_SAML_IDPS);
+  const tenantSamlAdminAllowlist = parseTenantAdminAllowlist(env.TENANT_SAML_ADMIN_ALLOWLIST);
+
   return {
     environment,
     ...naming,
@@ -108,6 +116,8 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     deployConcurrentBuildLimit,
     controlPlaneSamlIdps,
     controlPlaneSamlAdminAllowlist,
+    tenantSamlIdps,
+    tenantSamlAdminAllowlist,
     ...budget,
   };
 }

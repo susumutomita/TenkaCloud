@@ -15,6 +15,7 @@ const baseConfig: AppConfig = {
   tenantName: "Acme",
   apiBaseUrl: "https://tenant.example.com/",
   isolation: "silo",
+  samlIdpDirectory: {},
 };
 
 describe("createTenantIdpClient", () => {

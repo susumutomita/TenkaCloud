@@ -13,6 +13,7 @@ const config: AppConfig = {
   tenantId: "tenant-test",
   tenantName: "Shared Pooled Tenant", // ← intentionally placeholder; runtime should not display this
   apiBaseUrl: "https://api.example.com/prod",
+  samlIdpDirectory: {},
 };
 
 function makeIdToken(claims: Record<string, string>): string {
