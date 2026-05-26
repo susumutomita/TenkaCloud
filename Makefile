@@ -14,7 +14,7 @@ export JSII_DEPRECATED := quiet
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
         check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-cli-access \
-        env-check env-check-lite synth check-synth diff bootstrap \
+        env-check env-check-lite env-init env-init-test synth check-synth diff bootstrap \
         deploy deploy-saas deploy-control-plane deploy-bootstrap destroy destroy-saas \
         deploy-battles destroy-battles \
         lite-up lite-down lite-status lite-portal-url lite-console-url \
@@ -142,8 +142,9 @@ env-check:
 env-check-lite:
 	@[ -f "$(ENV_FILE)" ] || { \
 		echo "ERROR: $(ENV_FILE) が存在しません。"; \
+		echo "       make env-init  で対話 wizard から生成できます (Issue #1345)、 または"; \
 		echo "       cp infrastructure/environments/$(ENV)/.env.example infrastructure/environments/$(ENV)/.env"; \
-		echo "       してから AWS_ACCOUNT_ID / TENANT_ADMIN_EMAIL を埋めてください。"; \
+		echo "       して AWS_ACCOUNT_ID / TENANT_ADMIN_EMAIL を埋めてください。"; \
 		exit 1; \
 	}
 	@if [ -z "$${TENANT_ADMIN_EMAIL}" ] && [ -z "$${SYSTEM_ADMIN_EMAIL}" ]; then \
@@ -151,6 +152,17 @@ env-check-lite:
 		echo "       SYSTEM_ADMIN_EMAIL でも代用可能ですが、 Lite mode では TENANT_ADMIN_EMAIL を推奨します"; \
 		exit 1; \
 	fi
+
+# Issue #1345: Lite mode の first-run UX。 .env.example を読んで対話的に必須 3 vars
+# (TENANT_ADMIN_EMAIL / AWS_REGION / CDK_PARAM_DEPLOY_EXTERNAL_ID) を埋め、
+# infrastructure/environments/$(ENV)/.env を生成する。 既存 .env があれば skip。
+env-init:
+	@ENV=$(ENV) bun run scripts/env-init.ts
+
+# Issue #1345: env-init.ts の shell-level integration test。 vitest 側 (= 純粋 logic)
+# とは別に、 bun spawn → file I/O 経路が壊れていないかを確認する smoke。
+env-init-test:
+	@bash scripts/test-env-init.sh
 
 synth:                build           ; $(CDK) synth
 diff:                 build           ; $(CDK) diff --all

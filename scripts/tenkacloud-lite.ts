@@ -59,6 +59,12 @@ export interface CliIO {
   readonly stderr: (text: string) => void;
   readonly spawnInherit: (cmd: string, args: readonly string[]) => Promise<number>;
   readonly spawnCapture: (cmd: string, args: readonly string[]) => Promise<SpawnCaptureResult>;
+  /**
+   * Issue #1345: destroy 前の y/N 確認 prompt。 非 TTY (= CI / pipe) では false を返す
+   * default を採用 (= make destroy --yes で bypass する経路を用意する)。 unit test では
+   * scripted answer を返す stub に差し替える。
+   */
+  readonly confirm: (question: string) => Promise<boolean>;
 }
 
 interface CommandSpec {
@@ -140,19 +146,20 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
     );
   }
 
-  // ProblemDeployBackendStack 内の DeployCodeBuildProject が `<bucket>/source.zip` を参照
-  // するため、 cdk deploy 前に source bundle を upload する。 SaaS install.sh と同じ shared
-  // shell (prepare-source-bundle.sh) を呼ぶ (= bash 1 source of truth、 SBT 制約下で host /
-  // CodeBuild 双方が読める形を維持)。 OO refactor (= TypeScript SourceBundle class 化) は
-  // 別 follow-up issue で扱う。
-  io.stdout("[lite] preparing source bundle (= bucket + source.zip)...\n");
+  // Issue #1345: 30-min first-run UX — 各 phase を「[i/N] ...」 で示す。
+  const totalSteps = 3;
+  io.stdout(`\n[lite] [1/${totalSteps}] preparing source bundle (= S3 bucket + source.zip)...\n`);
   const prepCode = await io.spawnInherit("bash", ["scripts/prepare-source-bundle.sh"]);
   if (prepCode !== 0) {
     io.stderr(`[lite] prepare-source-bundle.sh failed with exit code ${prepCode}\n`);
+    printFailureGuide(io, "source bundle 準備");
     return prepCode;
   }
 
-  io.stdout("[lite] deploying 2 stacks (= AppPlane + ProblemDeploy)...\n");
+  io.stdout(`\n[lite] [2/${totalSteps}] deploying 2 stacks (= AppPlane + ProblemDeploy)...\n`);
+  io.stdout(
+    "[lite]       初回 deploy は ~10 分かかります (= AWS の制約)。 cdk の出力を直接表示します。\n",
+  );
   const code = await io.spawnInherit(CDK_BIN, [
     ...CDK_OPTS,
     "deploy",
@@ -163,23 +170,20 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
   ]);
   if (code !== 0) {
     io.stderr(`[lite] cdk deploy failed with exit code ${code}\n`);
+    printFailureGuide(io, "CFn stack deploy");
     return code;
   }
-  io.stdout("\n[lite] deploy complete. URLs:\n");
-  await readOutput(
-    LITE_STACK_NAMES.app,
-    "ApplicationAdminConsoleUrl",
-    "  Application Admin Console: ",
-    io,
-  );
-  await readOutput(
+
+  io.stdout(`\n[lite] [3/${totalSteps}] resolving access URLs + creating Tenant Admin...\n`);
+  const consoleUrl = await readStackOutput(LITE_STACK_NAMES.app, "ApplicationAdminConsoleUrl", io);
+  const portalUrl = await readStackOutput(
     LITE_STACK_NAMES.problemDeploy,
     "ParticipantPortalApiUrl",
-    "  Participant Portal:        ",
     io,
   );
 
   // Tenant Admin user を Cognito に作る (= 初回 sign-in のため)。
+  let tenantAdminCreated = false;
   if (tenantAdminEmail) {
     const created = await ensureTenantAdminUser(tenantAdminEmail, io);
     if (created !== 0) {
@@ -189,9 +193,95 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
           "[lite]   aws cognito-idp list-user-pools --max-results 60\n" +
           "[lite]   aws cognito-idp admin-create-user --user-pool-id <id> --username <email> --user-attributes Name=email,Value=<email> Name=email_verified,Value=True --desired-delivery-mediums EMAIL\n",
       );
+    } else {
+      tenantAdminCreated = true;
     }
   }
+
+  printPostDeployGuide(io, {
+    consoleUrl,
+    portalUrl,
+    tenantAdminEmail,
+    tenantAdminCreated,
+  });
   return 0;
+}
+
+/**
+ * Issue #1345: deploy 失敗時に user が次に取るべき action を出す。 AWS / CDK の
+ * エラーメッセージは「token expired / permission denied / stack rolled back」 と
+ * 多様で、 ありがちなのは「ログを見る → teardown → 再実行」 の 3 step ループに
+ * 収まる。
+ */
+function printFailureGuide(io: CliIO, phase: string): void {
+  io.stderr(
+    [
+      "",
+      `[lite] ✗ ${phase} で失敗しました。`,
+      "[lite] 次のステップ:",
+      "[lite]   1. 直前のログ (= 上に表示された CDK / AWS CLI の出力) でエラー原因を確認",
+      "[lite]   2. make destroy           — 中途半端な stack を tear down (idempotent)",
+      "[lite]   3. このコマンドを再実行   — make deploy",
+      "[lite] よくある原因と対処:",
+      "[lite]   - credentials expired       → aws sso login / 新しい session を取得",
+      "[lite]   - role 不足                  → docs/lite-mode-prereqs.md を参照",
+      "[lite]   - bootstrap 未実行           → make bootstrap",
+      "[lite]   - region 不一致 (.env と現環境) → AWS_REGION を .env と一致させる",
+      "",
+    ].join("\n"),
+  );
+}
+
+interface PostDeployGuideInput {
+  readonly consoleUrl?: string | undefined;
+  readonly portalUrl?: string | undefined;
+  readonly tenantAdminEmail: string;
+  readonly tenantAdminCreated: boolean;
+}
+
+/**
+ * Issue #1345: deploy 完了直後に「次にやること」 を 1 画面で見せる post-deploy guide。
+ * 「Application Admin Console を開いて hello-world を deploy → Participant Portal で
+ * 確認」 までの最短経路を文字で示す。 URL が読めなかった場合 (= IAM 不足 / output 名
+ * 変更) でも guidance だけは出す。
+ */
+function printPostDeployGuide(io: CliIO, input: PostDeployGuideInput): void {
+  const lines: string[] = [
+    "",
+    "================================================================",
+    "✓ Lite mode deploy complete",
+    "================================================================",
+    "",
+    "Access URLs:",
+    `  - Application Admin Console: ${input.consoleUrl ?? "(unknown — make lite-console-url)"}`,
+    `  - Participant Portal:        ${input.portalUrl ?? "(unknown — make lite-portal-url)"}`,
+    "",
+  ];
+  if (input.tenantAdminEmail) {
+    lines.push(
+      input.tenantAdminCreated
+        ? `Tenant Admin invite を ${input.tenantAdminEmail} に送信しました (Cognito email)。`
+        : `Tenant Admin (${input.tenantAdminEmail}) は既存または作成に失敗。 上のログを参照。`,
+    );
+    lines.push("");
+  }
+  lines.push(
+    "Next steps:",
+    "  1. メールの一時パスワードで Application Admin Console にサインイン",
+    "  2. Event タブで 「Demo」 という名前の event を作成",
+    "  3. Problems タブから hello-world を deploy",
+    "  4. Participant Portal URL を team に共有 (login key は event 作成時に発行)",
+    "",
+    "Teardown:",
+    "  make destroy     — 全 stack を削除 (DDB / S3 含む、 確認 prompt あり)",
+    "",
+    "Docs:",
+    "  - docs/lite-mode-prereqs.md  — 前提条件 + 必要 IAM permission",
+    "  - README.md (Quickstart)     — 30-min first-run の全体像",
+    "================================================================",
+    "",
+  );
+  io.stdout(lines.join("\n"));
 }
 
 /**
@@ -271,7 +361,24 @@ async function ensureTenantAdminUser(email: string, io: CliIO): Promise<number> 
   return 0;
 }
 
-async function cmdDown(_args: readonly string[], io: CliIO): Promise<number> {
+async function cmdDown(args: readonly string[], io: CliIO): Promise<number> {
+  // Issue #1345: destroy は idempotent でも DB データ消去を伴うので、 first-run user の
+  // 誤爆を避けるため確認 prompt を入れる。 `--yes` / `-y` で skip 可能 (= CI / cleanup
+  // script から呼ぶときは bypass)。
+  const skipConfirm =
+    args.includes("--yes") || args.includes("-y") || process.env.TENKACLOUD_LITE_DOWN_YES === "1";
+  if (!skipConfirm) {
+    const confirmed = await io.confirm(
+      "[lite] make destroy は Lite mode の **全 stack** (= AppPlane + ProblemDeploy) を削除します。\n" +
+        "[lite] DynamoDB の Deployments / Apps / DDB データ、 S3 bucket の portal asset / source bundle、\n" +
+        "[lite] Cognito UserPool (= Tenant Admin user 含む) も RemovalPolicy=DESTROY で消えます。\n" +
+        "[lite] 続行しますか? (y/N): ",
+    );
+    if (!confirmed) {
+      io.stdout("[lite] aborted (no resources were modified).\n");
+      return 0;
+    }
+  }
   io.stdout("[lite] destroying 2 stacks...\n");
   // app stack を先に destroy (= cross-stack 参照 (DeployApi Lambda 等) の依存方向に合わせる)。
   const code1 = await io.spawnInherit(CDK_BIN, [
@@ -371,6 +478,27 @@ export function defaultIO(): CliIO {
         proc.on("close", (code) => resolveFn({ code: code ?? 0, stdout, stderr }));
         proc.on("error", () => resolveFn({ code: 127, stdout, stderr }));
       }),
+    confirm: async (question) => {
+      // 非 TTY (= CI / pipe) では false を返して safety net とする。
+      // bypass したい場合は呼び出し側で --yes / TENKACLOUD_LITE_DOWN_YES=1 を渡す。
+      if (!process.stdin.isTTY) return false;
+      process.stdout.write(question);
+      // node:readline/promises に依存せず stdin から 1 chunk を待つ単純実装。
+      return await new Promise<boolean>((resolveFn) => {
+        let buf = "";
+        const onData = (chunk: Buffer | string) => {
+          buf += chunk.toString();
+          if (buf.includes("\n")) {
+            process.stdin.removeListener("data", onData);
+            process.stdin.pause();
+            const answer = buf.trim().toLowerCase();
+            resolveFn(answer === "y" || answer === "yes");
+          }
+        };
+        process.stdin.resume();
+        process.stdin.on("data", onData);
+      });
+    },
   };
 }
 

@@ -22,15 +22,18 @@ interface SpawnCall {
 function buildIO(opts: {
   readonly inheritExitCode?: number;
   readonly capture?: (cmd: string, args: readonly string[]) => SpawnCaptureResult;
+  readonly confirmAnswer?: boolean;
 }): {
   readonly io: CliIO;
   readonly stdout: string[];
   readonly stderr: string[];
   readonly calls: SpawnCall[];
+  readonly confirms: string[];
 } {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const calls: SpawnCall[] = [];
+  const confirms: string[] = [];
   const io: CliIO = {
     stdout: (text) => {
       stdout.push(text);
@@ -46,8 +49,14 @@ function buildIO(opts: {
       calls.push({ cmd, args: [...args], mode: "capture" });
       return opts.capture ? opts.capture(cmd, [...args]) : { code: 0, stdout: "", stderr: "" };
     },
+    confirm: async (q) => {
+      confirms.push(q);
+      // unit test default: confirm pass-through (= 既存 down テストの flow を維持)。
+      // confirmAnswer を明示指定したケースだけ override。
+      return opts.confirmAnswer ?? true;
+    },
   };
-  return { io, stdout, stderr, calls };
+  return { io, stdout, stderr, calls, confirms };
 }
 
 function tenantAdminUpCapture(opts: {
@@ -138,7 +147,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     // 1st spawn (= prepare-source-bundle.sh) で失敗させ、 2nd (= cdk deploy) は呼ばれないことを確認
     let firstCall = true;
     const calls: Array<{ cmd: string; args: readonly string[] }> = [];
-    const io = {
+    const io: CliIO = {
       stdout: () => undefined,
       stderr: () => undefined,
       spawnInherit: async (cmd: string, args: readonly string[]) => {
@@ -150,6 +159,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
         return 0;
       },
       spawnCapture: async () => ({ code: 0, stdout: "", stderr: "" }),
+      confirm: async () => true,
     };
     const code = await main(["up"], io);
     expect(code).toBe(1);
@@ -165,6 +175,83 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(calls.filter((c) => c.cmd === "aws")).toHaveLength(0);
   });
 
+  // Issue #1345: deploy 失敗時は「次のステップ」 を stderr に出して user の次の動作を導く。
+  it("up should print a failure guide to stderr when prepare-source-bundle.sh fails (#1345)", async () => {
+    let firstCall = true;
+    const calls: Array<{ cmd: string; args: readonly string[] }> = [];
+    const stderrChunks: string[] = [];
+    const io: CliIO = {
+      stdout: () => undefined,
+      stderr: (text) => stderrChunks.push(text),
+      spawnInherit: async (cmd, args) => {
+        calls.push({ cmd, args });
+        if (firstCall) {
+          firstCall = false;
+          return 1;
+        }
+        return 0;
+      },
+      spawnCapture: async () => ({ code: 0, stdout: "", stderr: "" }),
+      confirm: async () => true,
+    };
+    const code = await main(["up"], io);
+    expect(code).toBe(1);
+    const stderr = stderrChunks.join("");
+    expect(stderr).toContain("次のステップ");
+    expect(stderr).toContain("make destroy");
+    expect(stderr).toContain("再実行");
+  });
+
+  // Issue #1345: deploy 成功時は post-deploy guide を stdout に出して 30-min 体験を完結させる。
+  // 3 つの観測 (banner / URLs / next-steps + progress 表記) に it を分割して assertion roulette を避ける。
+  describe("up post-deploy guide (#1345)", () => {
+    function buildPostDeployIO(): ReturnType<typeof buildIO> {
+      return buildIO({
+        inheritExitCode: 0,
+        capture: (_cmd, args) => {
+          if (args.join(" ").includes("ApplicationAdminConsoleUrl")) {
+            return { code: 0, stdout: "https://console.example.cloudfront.net\n", stderr: "" };
+          }
+          if (args.join(" ").includes("ParticipantPortalApiUrl")) {
+            return { code: 0, stdout: "https://portal.example.cloudfront.net\n", stderr: "" };
+          }
+          if (args.includes("describe-user-pool-domain")) {
+            return { code: 0, stdout: "ap-northeast-1_AbCdEf\n", stderr: "" };
+          }
+          return { code: 0, stdout: "", stderr: "" };
+        },
+      });
+    }
+
+    it("up should print a success banner and resolved access URLs", async () => {
+      const { io, stdout } = buildPostDeployIO();
+      const code = await main(["up"], io);
+      expect(code).toBe(0);
+      const out = stdout.join("");
+      expect(out).toContain("Lite mode deploy complete");
+      expect(out).toContain("https://console.example.cloudfront.net");
+      expect(out).toContain("https://portal.example.cloudfront.net");
+    });
+
+    it("up should print next-steps + teardown guidance after deploy", async () => {
+      const { io, stdout } = buildPostDeployIO();
+      await main(["up"], io);
+      const out = stdout.join("");
+      expect(out).toContain("Next steps");
+      expect(out).toContain("hello-world");
+      expect(out).toContain("Teardown");
+    });
+
+    it("up should number each phase as [i/3] progress markers", async () => {
+      const { io, stdout } = buildPostDeployIO();
+      await main(["up"], io);
+      const out = stdout.join("");
+      expect(out).toContain("[1/3]");
+      expect(out).toContain("[2/3]");
+      expect(out).toContain("[3/3]");
+    });
+  });
+
   it("down should destroy the app stack first and then the problem-deploy stack", async () => {
     const { io, calls } = buildIO({ inheritExitCode: 0 });
     const code = await main(["down"], io);
@@ -177,6 +264,46 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     for (const call of destroyCalls) {
       expect(call.args).toContain("--force");
     }
+  });
+
+  // Issue #1345: destroy 前に y/N 確認 prompt を入れる。 first-run user が誤爆して
+  // DB データを消すのを防ぐ。 `--yes` で bypass 可能。
+  it("down should ask for confirmation before destroying (#1345)", async () => {
+    const { io, calls, confirms } = buildIO({
+      inheritExitCode: 0,
+      confirmAnswer: true,
+    });
+    const code = await main(["down"], io);
+    expect(code).toBe(0);
+    expect(confirms).toHaveLength(1);
+    expect(confirms[0]).toContain("続行しますか");
+    const destroyCalls = calls.filter((c) => c.args.includes("destroy"));
+    expect(destroyCalls).toHaveLength(2);
+  });
+
+  it("down should abort without calling destroy when user answers N (#1345)", async () => {
+    const { io, calls, stdout, confirms } = buildIO({
+      inheritExitCode: 0,
+      confirmAnswer: false,
+    });
+    const code = await main(["down"], io);
+    expect(code).toBe(0);
+    expect(confirms).toHaveLength(1);
+    const destroyCalls = calls.filter((c) => c.args.includes("destroy"));
+    expect(destroyCalls).toHaveLength(0);
+    expect(stdout.join("")).toContain("aborted");
+  });
+
+  it("down --yes should bypass the confirmation prompt (#1345)", async () => {
+    const { io, calls, confirms } = buildIO({
+      inheritExitCode: 0,
+      confirmAnswer: false,
+    });
+    const code = await main(["down", "--yes"], io);
+    expect(code).toBe(0);
+    expect(confirms).toHaveLength(0);
+    const destroyCalls = calls.filter((c) => c.args.includes("destroy"));
+    expect(destroyCalls).toHaveLength(2);
   });
 
   it("down should return the same exit code without calling the second destroy when the first one fails", async () => {

@@ -489,25 +489,25 @@
     {
       "ruleId": "assertion-roulette",
       "filePath": "infrastructure/test/scripts/tenkacloud-lite.test.ts",
-      "line": 85,
+      "line": 94,
       "match": "ge-6-expects"
     },
     {
       "ruleId": "assertion-roulette",
       "filePath": "infrastructure/test/scripts/tenkacloud-lite.test.ts",
-      "line": 108,
+      "line": 117,
       "match": "ge-6-expects"
     },
     {
       "ruleId": "assertion-roulette",
       "filePath": "infrastructure/test/scripts/tenkacloud-lite.test.ts",
-      "line": 189,
+      "line": 316,
       "match": "ge-6-expects"
     },
     {
       "ruleId": "assertion-roulette",
       "filePath": "infrastructure/test/scripts/tenkacloud-lite.test.ts",
-      "line": 293,
+      "line": 420,
       "match": "ge-6-expects"
     },
     {
