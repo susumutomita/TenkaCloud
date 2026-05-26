@@ -1,4 +1,3 @@
-import Alert from "@cloudscape-design/components/alert";
 import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -27,6 +26,7 @@ import {
   tierBadgeColor,
 } from "../api/tenants";
 import { useAuth } from "../auth/AuthProvider";
+import { EmptyState, ErrorState } from "../components/design-system";
 import type { AppConfig } from "../config";
 import { interpolate, useT } from "../i18n";
 import { computeTenantProgress, isInProgress } from "../lib/tenant-progress";
@@ -169,14 +169,14 @@ export function TenantListPage({ config }: { config: AppConfig }) {
       </Header>
 
       {error && (
-        <Alert
-          type="error"
-          header={t("tenant_list.fetch_error_header")}
-          dismissible
+        // Issue #1366: 共有 ErrorState wrapper。 Alert 直接配置から DESIGN-SYSTEM 9 章準拠に統一。
+        // refresh で再取得できるので retry を提供 (= buyer 視点で「打ち手が無い」 を消す)。
+        <ErrorState
+          title={t("tenant_list.fetch_error_header")}
+          hint={error}
+          retry={{ label: t("tenant_list.retry"), onClick: () => void refresh() }}
           onDismiss={() => setError(null)}
-        >
-          {error}
-        </Alert>
+        />
       )}
 
       {deprovisionedCount > 0 && (
@@ -197,9 +197,16 @@ export function TenantListPage({ config }: { config: AppConfig }) {
         items={visibleTenants}
         trackBy="tenantId"
         empty={
-          <Box textAlign="center" color="inherit">
-            {t("tenant_list.empty")}
-          </Box>
+          // Issue #1366: 空 Box を DESIGN-SYSTEM 8 章 (EmptyState) に置換。 headline + body +
+          // primary action (= 「テナント作成」) で次の操作を明示する。
+          <EmptyState
+            headline={t("tenant_list.empty")}
+            body={t("tenant_list.empty_body")}
+            primaryAction={{
+              label: t("tenant_list.create_button"),
+              onClick: () => navigate("/tenants/new"),
+            }}
+          />
         }
         columnDefinitions={[
           { id: "tenantId", header: t("tenant_list.col_tenant_id"), cell: (row) => row.tenantId },

@@ -1,4 +1,3 @@
-import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
@@ -9,6 +8,7 @@ import { useNavigate } from "react-router";
 import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
+import { EmptyState, ErrorState, LoadingState } from "../components/design-system";
 import { NextActionHero } from "../components/NextActionHero";
 import { ScoreTimelineChart } from "../components/ScoreTimelineChart";
 import type { AppConfig } from "../config";
@@ -49,11 +49,10 @@ export function HomePage({ config }: { config: AppConfig }) {
       </Header>
 
       {error && (
-        <Alert type="error" header={t("app.fetch_status_failed")}>
-          {error}
-        </Alert>
+        // Issue #1366: 共有 ErrorState (DESIGN-SYSTEM 9 章) に統一。 raw Alert + raw string を廃止。
+        <ErrorState title={t("app.fetch_status_failed")} hint={error} />
       )}
-      {!isMock && !view && !error && <Box>{t("app.loading")}</Box>}
+      {!isMock && !view && !error && <LoadingState label={t("app.loading")} />}
 
       {/* Issue #1349: 「次にやること」 hero を一等地に置く (= 3 状態 = not_started /
        *  running / ended)。 視線は header → next action → 累計スコア → 推移 → 一覧 の順。 */}
@@ -80,8 +79,18 @@ export function HomePage({ config }: { config: AppConfig }) {
       )}
 
       {view && view.problems.length === 0 && (
+        // Issue #1366: 「問題が無い」 という空状態。 Container + 本文だけだと「次に何をするか」 が
+        // 分からないので DESIGN-SYSTEM 8 章準拠の EmptyState に置換。 primary action は scoreboard へ
+        // (= 観戦モード)。
         <Container header={<Header variant="h2">{t("home.no_problems_header")}</Header>}>
-          <Box>{t("home.no_problems_body")}</Box>
+          <EmptyState
+            headline={t("home.no_problems_header")}
+            body={t("home.no_problems_body")}
+            primaryAction={{
+              label: t("home.quests_quick_link_button"),
+              onClick: () => navigate("/scoreboard"),
+            }}
+          />
         </Container>
       )}
     </SpaceBetween>
