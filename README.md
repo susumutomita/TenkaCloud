@@ -99,7 +99,7 @@ Five problems ship today (see the catalog repo's [CATALOG.md](https://github.com
 | `hello-world` | Challenge | Intro | Read a greeting out of SSM Parameter Store and submit it as a flag. The hello-world for the platform itself. |
 | `hello-world-battle` | Battle | Intro | Keep an EC2-hosted nginx frontend + Python API both returning 200 every minute to score uptime. |
 | `microservice-migration-battle` | Battle | Advanced | Split a 3-service EC2 monolith into Lambda + ECS Fargate + App Runner under a phased polling clock. |
-| `security-battle-royale` | Battle | Advanced | Keep a fictional e-commerce site (`Unicorn.Rentals`) returning 200 while under live attack. Availability over polish. |
+| `security-battle-royale` | Battle | Advanced | Keep a fictional e-commerce site (`Tenryu.Mart`) returning 200 while under live attack. Availability over polish. |
 | `stackstack` | Battle | Advanced | Production-harden AI-generated scaffolds across 5 axes (auth / network / rate / audit / ux). Managed-runtime cutover multiplies the score 10x. |
 
 > [image needed: catalog screenshot]
