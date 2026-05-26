@@ -145,6 +145,18 @@ or a recurring program run for them: **Starter** (one pilot event), **Hosted Eve
 (a single operated event), and **Annual Arena** (an annual program with multiple
 events per year). Details on the [landing page](https://susumutomita.github.io/TenkaCloud/#pricing).
 
+### Commercial
+
+Four productized offerings are documented in
+[`docs/commercial/PACKAGES.html`](./docs/commercial/PACKAGES.html):
+
+- **Hosted Event** — a 1-3 day operated drill on the public OSS catalog (setup → live → report).
+- **Annual Arena** — a 12-month program with 4-6 operated events, a private problem catalog, and an HR / training KPI dashboard.
+- **Custom Problem** — a single problem authored to a buyer's stack or past incident, delivered as a self-contained problem directory (sanitized scenario; never production access).
+- **CCoE Enablement** — advisory retainer for operating-model work, sold separately so events stay productized.
+
+The OSS path stays free. Paid offerings fund facilitation, custom problems, and program-level support. See the [Sales Playbook](./docs/commercial/SALES-PLAYBOOK.html) for per-package elevator pitches, qualifying questions, and common objections.
+
 ## Create your first problem
 
 Problem authoring happens in the catalog repo, not here. A problem is a self-contained directory under `battles/<id>/` or `challenges/<id>/` in that repo:

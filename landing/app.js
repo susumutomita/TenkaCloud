@@ -4,6 +4,7 @@
       "nav.product": "プロダクト",
       "nav.problems": "問題",
       "nav.extend": "問題を作る",
+      "nav.community": "コミュニティ",
       "nav.docs": "ドキュメント",
       "nav.pricing": "料金",
       "nav.contact": "お問い合わせ",
@@ -161,6 +162,28 @@
       "extend.cta1": "問題カタログを見る",
       "extend.cta2": "new-problem skill",
 
+      "community.eyebrow": "コミュニティに参加",
+      "community.h2": "6 つの役割から、ひとつ選んで始める。",
+      "community.lead":
+        "TenkaCloud の堀は、 deploy ランタイムだけでなく <strong>コミュニティ問題カタログ</strong>。 メンテナに個別 onboard してもらわなくても、 役割を 1 つ選んで 30 分の初回 task を済ませれば、 公式コントリビュータになれます。",
+      "community.tester.role": "Tester",
+      "community.tester.h": "問題を遊んで、 papercut を報告する。",
+      "community.tester.p":
+        "30 分の playtest プロトコルに沿って 1 問解き、 構造化テンプレで feedback を出す。 CDK / TypeScript は不要。",
+      "community.tester.cta": "Playtest checklist",
+      "community.author.role": "Problem Author",
+      "community.author.h": "新しい問題を作る。",
+      "community.author.p":
+        "metadata.json + template.yaml の 2 ファイルで 1 問。 Claude Code の <code>/new-problem</code> skill で 30 分 onboarding。",
+      "community.author.cta": "Authoring guide",
+      "community.reviewer.role": "Scenario Reviewer",
+      "community.reviewer.h": "ルーブリックで PR を見る。",
+      "community.reviewer.p":
+        "採点公平性 / hint 段階 / 運否 skip / 推定所要時間 / シナリオ現実性 / template セキュリティの 6 項目。",
+      "community.reviewer.cta": "Review checklist",
+      "community.more":
+        "全 6 役割を見る (Tester / Problem Author / Scenario Reviewer / Event Facilitator / Platform Contributor / Sponsor-Requester)",
+
       "pricing.eyebrow": "料金",
       "pricing.h2": "単発イベントから、 年間プログラムへ。",
       "pricing.p":
@@ -249,6 +272,7 @@
       "nav.product": "Product",
       "nav.problems": "Problems",
       "nav.extend": "Author problems",
+      "nav.community": "Community",
       "nav.docs": "Docs",
       "nav.pricing": "Pricing",
       "nav.contact": "Contact",
@@ -404,6 +428,28 @@
         'The problem catalog lives in the open <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> repo — write two files (metadata.json + template.yaml) and you have a new problem. A <code>new-problem</code> skill is shipped for Claude Code and other coding agents, so even first-timers can ship a problem just by describing the idea.',
       "extend.cta1": "Browse the catalog",
       "extend.cta2": "new-problem skill",
+
+      "community.eyebrow": "Join the community",
+      "community.h2": "Pick one of six roles. Ship one starter task.",
+      "community.lead":
+        "TenkaCloud's moat is the <strong>community problem catalog</strong>, not only the deploy runtime. You do not need to be personally onboarded by the maintainer — choose a role, follow its 30-minute first task, and you are a recognized contributor.",
+      "community.tester.role": "Tester",
+      "community.tester.h": "Play the problems. File the papercuts.",
+      "community.tester.p":
+        "Follow a 30-minute playtest protocol on one problem, then file a structured feedback issue. No CDK / TypeScript needed.",
+      "community.tester.cta": "Playtest checklist",
+      "community.author.role": "Problem Author",
+      "community.author.h": "Ship a new problem.",
+      "community.author.p":
+        "Two files (metadata.json + template.yaml) and you have a problem. The <code>/new-problem</code> Claude Code skill onboards you in 30 minutes.",
+      "community.author.cta": "Authoring guide",
+      "community.reviewer.role": "Scenario Reviewer",
+      "community.reviewer.h": "Score PRs against a rubric.",
+      "community.reviewer.p":
+        "Six checks: scoring fairness, hint progression, no skip-by-luck, time-to-solve estimate, scenario realism, template security.",
+      "community.reviewer.cta": "Review checklist",
+      "community.more":
+        "See all 6 roles (Tester / Problem Author / Scenario Reviewer / Event Facilitator / Platform Contributor / Sponsor-Requester)",
 
       "pricing.eyebrow": "Pricing",
       "pricing.h2": "Start small. Move to a yearly program.",

@@ -33,6 +33,42 @@ Both must be green. If something fails, fix the code; do not edit `biome.json` /
 
 ---
 
+## "I want to playtest existing problems"
+
+**Read**:
+
+- [`docs/community/ONBOARDING.html`](./docs/community/ONBOARDING.html) — Tester role expectations + recognition.
+- [`docs/community/PLAYTEST-CHECKLIST.html`](./docs/community/PLAYTEST-CHECKLIST.html) — 30-minute protocol (pick a problem → `make deploy` Lite mode → register team → solve → score → file a structured report).
+
+**Edit**:
+
+- Nothing in this repo. Output is a new issue on the catalog repo ([TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge/issues/new?labels=problem-feedback)) for problem-specific bugs, or on this repo for platform-side bugs.
+
+**Gates**: none. Filing the issue itself is the deliverable.
+
+**Recognition**: Your handle stays on the GitHub issue history. Frequent testers land in `CONTRIBUTORS.md` under "Tester squad". See [Recognition](./docs/community/ONBOARDING.html#recognition).
+
+---
+
+## "I want to review problems"
+
+**Read**:
+
+- [`docs/community/ONBOARDING.html`](./docs/community/ONBOARDING.html) — Scenario Reviewer role expectations.
+- [`docs/community/PROBLEM-REVIEW-CHECKLIST.html`](./docs/community/PROBLEM-REVIEW-CHECKLIST.html) — 6-section rubric (scoring fairness / hint progression / no-skip-by-luck / time-to-solve / scenario realism / template security).
+- [ADR-012](./docs/architecture/adr-012-problem-plugin-architecture.html) — the plugin contract; useful when you read `metadata.json`.
+
+**Edit**:
+
+- Nothing. Output is PR review comments on open problem PRs at [TenkaCloudChallenge/pulls](https://github.com/susumutomita/TenkaCloudChallenge/pulls).
+- Use the reviewer summary template in section 8 of the checklist for the top-level review comment.
+
+**Gates**: none for you. Maintainers use your review as a merge gate.
+
+**Recognition**: GitHub PR review log + `CONTRIBUTORS.md` "Reviewers" + Discord role badge.
+
+---
+
 ## "I want to add a new problem"
 
 **Read**:
