@@ -12,6 +12,11 @@
  *                              fallback として local 経路を提供)
  *         - kind: "redirect" → `beginLogin({ identityProvider })` で IdP に直接 redirect
  *         - kind: "select"   → 候補 IdP の button 列を表示 (= 同一 domain 複数 IdP)
+ *
+ * Issue #1360: SAML 未設定の場合、 中間の 「サインイン」 button は無意味な 1 click を
+ * 増やすだけだったため、 mount 直後に `beginLogin()` を発火させて Cognito Hosted UI に
+ * 直接 redirect する。 SAML 設定済の場合は picker を出すために中間 page が必要なので
+ * 既存 UX を維持する。
  */
 
 import Alert from "@cloudscape-design/components/alert";
@@ -20,7 +25,7 @@ import Button from "@cloudscape-design/components/button";
 import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { distinctProviders, type IdpResolution, resolveIdp } from "../auth/idp-resolution";
 import { ProductLoginShell } from "../components/ProductLoginShell";
@@ -59,7 +64,21 @@ export function LoginPage({ config }: { config: AppConfig }) {
     }
   };
 
-  // === SAML 未設定: 旧 flow をそのまま返す ===
+  // Issue #1360: SAML 未設定なら mount 直後に Cognito へ自動 redirect する (= 中間 click
+  // を排除)。 React StrictMode 等の重複 mount で 2 度発火しないよう ref で guard。 error
+  // 発生時は flag を維持し、 user が button で再試行する経路に倒す。 依存に startLogin を
+  // 入れると毎 render で hook 再評価されるため samlEnabled のみに固定し、 重複発火は
+  // autoStartedRef で 1 度に絞り込む。
+  const autoStartedRef = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see comment above (#1360).
+  useEffect(() => {
+    if (samlEnabled) return;
+    if (autoStartedRef.current) return;
+    autoStartedRef.current = true;
+    void startLogin();
+  }, [samlEnabled]);
+
+  // === SAML 未設定: 自動 redirect 中の spinner / error fallback を表示 ===
   if (!samlEnabled) {
     return (
       <ProductLoginShell

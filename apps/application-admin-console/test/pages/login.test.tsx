@@ -2,13 +2,16 @@
  * Issue #1329: Tenant Admin Console login redesign regression tests.
  *
  * The page must:
- *   - render TenkaCloud product name + sign-in button
- *   - call beginLogin on button click
- *   - show signing-in state after click
+ *   - render TenkaCloud product name
+ *   - call beginLogin
+ *   - show signing-in state
  *   - show error fallback when beginLogin throws
+ *
+ * Issue #1360: application-admin-console has no SAML IdP picker, so the page must
+ * auto-redirect to Cognito on mount (= no intermediate "Sign in" click).
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const beginLoginMock = vi.fn();
@@ -57,43 +60,51 @@ describe("application-admin-console LoginPage (#1329)", () => {
     sessionStorage.clear();
   });
 
-  it("should render the TenkaCloud product name and sign-in button", () => {
+  it("should render the TenkaCloud product name in the heading", () => {
+    // hold beginLogin open so the auto-redirect spinner is visible.
+    beginLoginMock.mockImplementation(() => new Promise<void>(() => {}));
     renderLogin();
     expect(
       screen.getByRole("heading", { level: 1, name: /TenkaCloud Application Admin Console/ }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "サインイン" })).toBeInTheDocument();
   });
 
-  it("should call beginLogin when the sign-in button is clicked", async () => {
+  it("should auto-call beginLogin on mount (no intermediate click)", async () => {
     beginLoginMock.mockResolvedValue(undefined);
     renderLogin();
-    fireEvent.click(screen.getByRole("button", { name: "サインイン" }));
     await waitFor(() => {
       expect(beginLoginMock).toHaveBeenCalledTimes(1);
     });
   });
 
-  it("should show the signing-in state after the sign-in button is clicked", async () => {
-    let resolveLogin: (() => void) | undefined;
-    beginLoginMock.mockImplementation(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveLogin = resolve;
-        }),
-    );
+  it("should show the signing-in state while auto-redirecting", async () => {
+    beginLoginMock.mockImplementation(() => new Promise<void>(() => {}));
     renderLogin();
-    fireEvent.click(screen.getByRole("button", { name: "サインイン" }));
     expect(await screen.findByText(/Cognito にリダイレクト中/)).toBeInTheDocument();
-    resolveLogin?.();
   });
 
-  it("should show the error fallback when beginLogin throws", async () => {
+  it("should show the error fallback when beginLogin throws on auto-redirect", async () => {
     beginLoginMock.mockRejectedValue(new Error("PKCE generation failed"));
     renderLogin();
-    fireEvent.click(screen.getByRole("button", { name: "サインイン" }));
     expect(await screen.findByText(/サインインに失敗しました/)).toBeInTheDocument();
     const mailto = screen.getByRole("link", { name: /support@tenkacloud\.cloud/ });
     expect(mailto).toHaveAttribute("href", "mailto:support@tenkacloud.cloud");
+  });
+
+  it("should not re-fire beginLogin on re-render after error", async () => {
+    beginLoginMock.mockRejectedValue(new Error("PKCE generation failed"));
+    const { rerender } = renderLogin();
+    await waitFor(() => {
+      expect(beginLoginMock).toHaveBeenCalledTimes(1);
+    });
+    rerender(
+      <I18nProvider>
+        <AuthProvider config={config}>
+          <LoginPage />
+        </AuthProvider>
+      </I18nProvider>,
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    expect(beginLoginMock).toHaveBeenCalledTimes(1);
   });
 });

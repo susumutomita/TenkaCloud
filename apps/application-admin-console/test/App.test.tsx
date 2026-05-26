@@ -55,16 +55,29 @@ describe("App", () => {
   });
 
   describe("when accessing /login directly", () => {
-    it("should render LoginPage with a sign-in button", async () => {
+    it("should render LoginPage", async () => {
+      // Issue #1360: SAML 候補が無いので login page は中間 button を出さず Cognito へ
+      // 自動 redirect する。 LoginPage が mount された印として heading を確認する。
       renderApp("/login");
-      expect(await screen.findByRole("button", { name: "サインイン" })).toBeInTheDocument();
+      expect(
+        await screen.findByRole("heading", {
+          level: 1,
+          name: /TenkaCloud Application Admin Console/,
+        }),
+      ).toBeInTheDocument();
     });
   });
 
   describe("when accessing / unauthenticated", () => {
-    it("should redirect to LoginPage and show the sign-in button", async () => {
+    it("should redirect to LoginPage", async () => {
+      // Issue #1360: 同上 — sign-in button は出ず、 LoginPage 自動 redirect で spinner が出る。
       renderApp("/");
-      expect(await screen.findByRole("button", { name: "サインイン" })).toBeInTheDocument();
+      expect(
+        await screen.findByRole("heading", {
+          level: 1,
+          name: /TenkaCloud Application Admin Console/,
+        }),
+      ).toBeInTheDocument();
     });
   });
 
