@@ -205,6 +205,35 @@ If you are the user (or have explicit authorization):
 
 ---
 
+## "I want to sell TenkaCloud" (or field an inbound)
+
+**Read**:
+
+- [`docs/commercial/PACKAGES.html`](./docs/commercial/PACKAGES.html) — formal scope, deliverables, exclusions, delivery model, and pricing structure for the four commercial offerings (Hosted Event / Annual Arena / Custom Problem / CCoE Enablement add-on).
+- [`docs/commercial/SALES-PLAYBOOK.html`](./docs/commercial/SALES-PLAYBOOK.html) — one-page elevator + qualifying questions + common objections + next-step CTA per package.
+- The "Self-host vs operated" section of [`README.md`](./README.md#self-host-vs-operated) — the OSS &harr; commercial framing that buyers land on first.
+- The `#pricing` section of the [landing page](https://susumutomita.github.io/TenkaCloud/#pricing) — public starting prices and the contact form a prospect actually uses.
+
+**Edit (only if the offering itself changes)**:
+
+- `docs/commercial/PACKAGES.html` — scope source of truth. Touch this when you change what is in / out of a package.
+- `docs/commercial/SALES-PLAYBOOK.html` — conversational source of truth. Touch this when an objection keeps coming up or when the qualifying questions need tightening.
+- `landing/index.html` + `landing/app.js` — the public-facing summary (pricing cards + "Commercial Offerings" section). The packages page is the source of truth; the landing page is a short pointer.
+- `README.md` "Commercial" subsection — keep in sync with the packages page (do not duplicate scope; link).
+
+**Constraints**:
+
+- **OSS is free.** Do not pitch a paid package to someone who is happy self-hosting. Route them to the Quickstart instead.
+- **Productized vs. consulting.** Hosted Event / Annual Arena / Custom Problem each have fixed shape. Open-ended advisory work is CCoE Enablement — surface that explicitly, never fold it in.
+- **No production access.** Custom Problem is a sanitized scenario. If a prospect insists on production data / live credentials, stop and route to security review.
+
+**Gates**:
+
+- Edits to `docs/commercial/*.html` pass `make harness` (HTML ADR rules also cover commercial docs) and `make before-commit`.
+- Edits to `landing/index.html` + `landing/app.js` must keep both `ja` and `en` i18n keys in sync (the harness checks structural parity).
+
+---
+
 ## "I want to investigate a production incident"
 
 **Read**:

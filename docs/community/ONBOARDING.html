@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TenkaCloud Community Onboarding — Pick a role, ship your first contribution</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+    --c-purple: #6639ba;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 1040px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.7rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.3rem; margin-top: 2.4rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.1rem; margin-top: 1.8rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.8rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 8px 12px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .role-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin: 1.4rem 0; }
+  @media (max-width: 720px) { .role-grid { grid-template-columns: 1fr; } }
+  .role-card {
+    border: 1px solid var(--c-border); border-radius: 6px; padding: 1rem 1.2rem;
+    background: var(--c-bg-soft); border-top: 4px solid var(--c-link);
+  }
+  .role-card.tester    { border-top-color: var(--c-accept); }
+  .role-card.author    { border-top-color: var(--c-purple); }
+  .role-card.reviewer  { border-top-color: var(--c-warn); }
+  .role-card.facilitator { border-top-color: var(--c-link); }
+  .role-card.platform  { border-top-color: #d05e00; }
+  .role-card.sponsor   { border-top-color: var(--c-reject); }
+  .role-card h3 { margin-top: 0; font-size: 1.05rem; }
+  .role-card .role-title { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--c-muted); margin-bottom: 0.25rem; }
+  .role-card dl { margin: 0.5rem 0; }
+  .role-card dt { font-weight: 600; font-size: 0.85rem; color: var(--c-muted); margin-top: 0.45rem; }
+  .role-card dd { margin: 0.15rem 0 0 0; font-size: 0.92rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn   { background: #fff8c5; color: var(--c-warn); }
+  .badge.link   { background: #ddf4ff; color: var(--c-link); }
+  .badge.purple { background: #ede5fa; color: var(--c-purple); }
+  .badge.muted  { background: var(--c-bg-soft); color: var(--c-muted); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  .callout { border-left: 4px solid var(--c-link); padding: .6rem 1rem; background: var(--c-bg-soft); margin: 1rem 0; border-radius: 3px; }
+  .callout.warn { border-color: var(--c-warn); }
+  .callout.ok { border-color: var(--c-accept); }
+  ul.toc { background: var(--c-bg-soft); padding: 1rem 2rem; border-radius: 4px; }
+  .recipe { background: var(--c-bg-soft); padding: 1rem 1.2rem; margin: 1rem 0; border-radius: 4px; border-left: 4px solid var(--c-accept); }
+  .recipe h4 { margin-top: 0; color: var(--c-text); text-transform: none; letter-spacing: 0; font-size: 1.02rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TenkaCloud Community Onboarding</h1>
+  <p><em>Pick one of six roles. Each role has a 15-30 minute first task and a clear recognition path. You do not need to be personally onboarded by the maintainer.</em></p>
+  <div class="meta">
+    <div><b>For:</b> CCoE practitioners, AWS / JAWS-UG members, cloud security &amp; SRE engineers, training facilitators, problem authors, testers, reviewers</div>
+    <div><b>Coordination:</b> <a href="https://github.com/susumutomita/TenkaCloud/discussions">GitHub Discussions</a> (source of truth) + Discord (live coordination, optional)</div>
+    <div><b>Related:</b> <a href="../architecture/adr-024-community-voting-and-problem-registry.html">ADR-024</a> (community voting), <a href="../../CONTRIBUTOR_MAP.md">CONTRIBUTOR_MAP.md</a> (task recipes)</div>
+  </div>
+</header>
+
+<section>
+<h2>Contents</h2>
+<ul class="toc">
+  <li><a href="#how-this-works">1. How this works</a></li>
+  <li><a href="#role-chooser">2. Role chooser (6 roles)</a></li>
+  <li><a href="#first-pr">3. Role-specific first PR / contribution</a></li>
+  <li><a href="#recognition">4. How contribution gets recognized</a></li>
+  <li><a href="#communication">5. Where to communicate (GitHub vs Discord)</a></li>
+  <li><a href="#faq">6. FAQ</a></li>
+</ul>
+</section>
+
+<section id="how-this-works">
+<h2>1. How this works</h2>
+
+<p>TenkaCloud's moat is the <strong>community problem catalog</strong>, not only the deploy runtime. For that catalog to grow, external people must be able to contribute without being personally onboarded by the maintainer.</p>
+
+<p>This guide gives you a <strong>self-serve onboarding path</strong>: choose a role, follow its first task, ship one PR. After your first merged contribution you become a recognized community member (see <a href="#recognition">recognition</a>).</p>
+
+<p>The operating model follows the <strong>Option B</strong> recommendation from the design issue (<a href="https://github.com/susumutomita/TenkaCloud/issues/1364">#1364</a>):</p>
+
+<ul>
+  <li><strong>GitHub is the durable source of truth.</strong> Every decision, bug, and contribution lives in an issue or a PR.</li>
+  <li><strong>Discord is for live coordination.</strong> Problem testing sessions, dry runs, and squad chat. Anything decided there must be summarized back into a GitHub issue.</li>
+</ul>
+
+<p>You do not need a Discord account to contribute. GitHub-only contributors are first-class.</p>
+</section>
+
+<section id="role-chooser">
+<h2>2. Role chooser</h2>
+
+<p>Pick the role that matches what you want to spend your time on. You can hold multiple roles over time; most active contributors end up doing two.</p>
+
+<div class="role-grid">
+
+  <div class="role-card tester">
+    <div class="role-title">Role 1</div>
+    <h3>Tester <span class="badge accept">low barrier</span></h3>
+    <dl>
+      <dt>Expected contribution</dt>
+      <dd>Run existing problems, report unclear instructions, broken deploys, scoring bugs. Estimate difficulty and time-to-solve.</dd>
+      <dt>Required skill level</dt>
+      <dd>Comfortable with AWS Console &amp; CLI. No CDK / TypeScript knowledge needed.</dd>
+      <dt>First task</dt>
+      <dd>Run one starter problem and file feedback using <a href="./PLAYTEST-CHECKLIST.html">PLAYTEST-CHECKLIST.html</a> (30 min).</dd>
+      <dt>Where to communicate</dt>
+      <dd>Open a <code>problem-feedback</code> issue on GitHub. Discord <code>#tester-squad</code> for live sessions.</dd>
+      <dt>Time commitment</dt>
+      <dd>30-60 minutes per problem. Ad-hoc, no schedule.</dd>
+    </dl>
+  </div>
+
+  <div class="role-card author">
+    <div class="role-title">Role 2</div>
+    <h3>Problem Author <span class="badge purple">creative</span></h3>
+    <dl>
+      <dt>Expected contribution</dt>
+      <dd>Create new Challenge or Battle problems. Turn real incidents or training goals into drill scenarios.</dd>
+      <dt>Required skill level</dt>
+      <dd>One AWS service deeply (e.g., S3, IAM, Lambda). Basic CloudFormation. No platform internals required.</dd>
+      <dt>First task</dt>
+      <dd>Scaffold a small Challenge with the <code>/new-problem</code> skill or <code>scripts/tenkacloud-problem.ts create</code>. Walkthrough: <a href="../problems/AUTHORING.html">docs/problems/AUTHORING.html</a> (30 min onboarding).</dd>
+      <dt>Where to communicate</dt>
+      <dd>PR to the <a href="https://github.com/susumutomita/TenkaCloudChallenge">TenkaCloudChallenge</a> catalog repo. Discord <code>#problem-authors</code>.</dd>
+      <dt>Time commitment</dt>
+      <dd>2-6 hours per problem (faster with AI agent help).</dd>
+    </dl>
+  </div>
+
+  <div class="role-card reviewer">
+    <div class="role-title">Role 3</div>
+    <h3>Scenario Reviewer <span class="badge warn">judgement</span></h3>
+    <dl>
+      <dt>Expected contribution</dt>
+      <dd>Review whether a problem reflects real cloud practice. Check learning goals, hint progression, scoring fairness, scenario realism.</dd>
+      <dt>Required skill level</dt>
+      <dd>Production AWS experience (cloud security, SRE, platform). You have seen the real version of the incident a problem simulates.</dd>
+      <dt>First task</dt>
+      <dd>Review one open Challenge / Battle PR using <a href="./PROBLEM-REVIEW-CHECKLIST.html">PROBLEM-REVIEW-CHECKLIST.html</a>.</dd>
+      <dt>Where to communicate</dt>
+      <dd>GitHub PR review comments (durable). Discord <code>#reviewer-squad</code> for design discussion before review.</dd>
+      <dt>Time commitment</dt>
+      <dd>30-90 minutes per review. 1-2 reviews per month is enough.</dd>
+    </dl>
+  </div>
+
+  <div class="role-card facilitator">
+    <div class="role-title">Role 4</div>
+    <h3>Event Facilitator <span class="badge link">operational</span></h3>
+    <dl>
+      <dt>Expected contribution</dt>
+      <dd>Run small community / internal events. Test the runbooks. Report event ops feedback (what the docs miss, what felt slow on the day).</dd>
+      <dt>Required skill level</dt>
+      <dd>Have run a workshop / study group before. Comfortable being on-call for 2-3 hours.</dd>
+      <dt>First task</dt>
+      <dd>Join or run a mini dry-run with the <a href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/bundles/starter-event.json">starter-event</a> bundle (1 Challenge + 2 Battles, 60-90 min). Report observations as an issue.</dd>
+      <dt>Where to communicate</dt>
+      <dd>Discord <code>#facilitators</code> for dry-run scheduling. GitHub issue with the <code>facilitator-feedback</code> label for durable findings.</dd>
+      <dt>Time commitment</dt>
+      <dd>2-4 hours per dry-run. 1 dry-run per month sustains the squad.</dd>
+    </dl>
+  </div>
+
+  <div class="role-card platform">
+    <div class="role-title">Role 5</div>
+    <h3>Platform Contributor <span class="badge muted">deep</span></h3>
+    <dl>
+      <dt>Expected contribution</dt>
+      <dd>Fix Lambda bugs, build admin UI features, extend CDK, add Aspects, write ADRs. The "platform engineer of the platform" role.</dd>
+      <dt>Required skill level</dt>
+      <dd>TypeScript + Vitest + AWS CDK. Read <a href="../architecture/OVERVIEW.md">docs/architecture/OVERVIEW.md</a> first.</dd>
+      <dt>First task</dt>
+      <dd>Pick a <code>good first issue</code> from <a href="https://github.com/susumutomita/TenkaCloud/labels/good%20first%20issue">GitHub</a>, follow the matching recipe in <a href="../../CONTRIBUTOR_MAP.md">CONTRIBUTOR_MAP.md</a>.</dd>
+      <dt>Where to communicate</dt>
+      <dd>GitHub PR + issue. Discord <code>#platform-dev</code> for design questions.</dd>
+      <dt>Time commitment</dt>
+      <dd>1-2 evenings per PR. Variable.</dd>
+    </dl>
+  </div>
+
+  <div class="role-card sponsor">
+    <div class="role-title">Role 6</div>
+    <h3>Sponsor / Requester <span class="badge reject">demand</span></h3>
+    <dl>
+      <dt>Expected contribution</dt>
+      <dd>Request problem themes you want to see. Signal enterprise / community demand. Optionally sponsor problem development.</dd>
+      <dt>Required skill level</dt>
+      <dd>Know what training problem your org actually needs. No engineering required.</dd>
+      <dt>First task</dt>
+      <dd>Open a <strong>problem request</strong> issue using the <code>problem-request</code> template, including desired learning outcomes and difficulty. Private / anonymous path available — see <a href="#faq">FAQ</a>.</dd>
+      <dt>Where to communicate</dt>
+      <dd>GitHub issue (public requests) or the <a href="../../landing/index.html#contact">contact form</a> on the landing page (private / enterprise).</dd>
+      <dt>Time commitment</dt>
+      <dd>15-30 minutes per request.</dd>
+    </dl>
+  </div>
+
+</div>
+</section>
+
+<section id="first-pr">
+<h2>3. Role-specific first PR / contribution</h2>
+
+<p>Each role has a single concrete starter task. Doing one of these makes you a community member; you do not need a follow-up.</p>
+
+<div class="recipe">
+<h4>Tester — Run a starter problem and file feedback (30 min)</h4>
+<ol>
+  <li>Clone TenkaCloud, run <code>make install</code> + <code>make deploy</code> (Lite mode, ~10 min).</li>
+  <li>Pick one problem from the catalog (start with <code>hello-world</code>).</li>
+  <li>Register as a participant, solve it, score it.</li>
+  <li>Fill the playtest report template in <a href="./PLAYTEST-CHECKLIST.html">PLAYTEST-CHECKLIST.html</a>.</li>
+  <li>Open an issue with the <code>problem-feedback</code> label.</li>
+</ol>
+</div>
+
+<div class="recipe">
+<h4>Problem Author — Ship a small Challenge</h4>
+<ol>
+  <li>Read <a href="../problems/AUTHORING.html">docs/problems/AUTHORING.html</a> (30 min onboarding).</li>
+  <li>Decide which of the 5 scoring kinds your problem uses (<code>flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code>).</li>
+  <li>Scaffold: <code>bun run scripts/tenkacloud-problem.ts create &lt;id&gt; --kind &lt;kind&gt;</code> (or use the <code>/new-problem</code> Claude Code skill).</li>
+  <li>Fill <code>metadata.json</code> and <code>template.yaml</code>. Validate locally: <code>bun run scripts/tenkacloud-problem.ts validate &lt;id&gt;</code>.</li>
+  <li>Open a PR in the <a href="https://github.com/susumutomita/TenkaCloudChallenge">TenkaCloudChallenge</a> catalog repo.</li>
+</ol>
+</div>
+
+<div class="recipe">
+<h4>Scenario Reviewer — Review one problem PR</h4>
+<ol>
+  <li>Pick an open problem PR in <a href="https://github.com/susumutomita/TenkaCloudChallenge/pulls">TenkaCloudChallenge/pulls</a>.</li>
+  <li>Walk through <a href="./PROBLEM-REVIEW-CHECKLIST.html">PROBLEM-REVIEW-CHECKLIST.html</a> (scoring fairness, hint progression, no-skip-by-luck, time-to-solve estimate, scenario realism, template security).</li>
+  <li>Leave PR review comments referencing checklist items. An "Approve" is fine if every item passes; a "Request changes" review is fine when items fail.</li>
+  <li>For deeper template security concerns, cross-reference the <a href="https://github.com/susumutomita/TenkaCloud/issues/1353">#1353 hardening checklist</a>.</li>
+</ol>
+</div>
+
+<div class="recipe">
+<h4>Event Facilitator — Run a mini dry-run</h4>
+<ol>
+  <li>Schedule a 60-90 min slot with 2-4 testers (Discord <code>#facilitators</code>).</li>
+  <li>Deploy the <a href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/bundles/starter-event.json">starter-event</a> bundle (1 Challenge + 2 Battles).</li>
+  <li>Run the event: register teams, deploy problems, watch the scoreboard, debrief.</li>
+  <li>Open a GitHub issue with the <code>facilitator-feedback</code> label: what went well, what slowed the day, what the docs miss.</li>
+</ol>
+</div>
+
+<div class="recipe">
+<h4>Platform Contributor — Pick a <code>good first issue</code></h4>
+<ol>
+  <li>Browse <a href="https://github.com/susumutomita/TenkaCloud/labels/good%20first%20issue">good first issue</a> labels.</li>
+  <li>Map the issue to the right recipe in <a href="../../CONTRIBUTOR_MAP.md">CONTRIBUTOR_MAP.md</a> (Lambda bug / admin UI / Aspect / etc.).</li>
+  <li>Write tests first (<code>should ...</code> pattern), implement, run <code>make harness</code> + <code>make before-commit</code>, open a PR.</li>
+  <li>The PR body must include <code>## Regression analysis</code> and <code>## Physical impact</code> sections (see <a href="../architecture/harness.md">harness invariants</a>).</li>
+</ol>
+</div>
+
+<div class="recipe">
+<h4>Sponsor / Requester — Open a problem request</h4>
+<ol>
+  <li>Use the <code>problem-request</code> issue template.</li>
+  <li>Describe: target audience, desired learning outcome, AWS services involved, expected difficulty, whether it should be Battle or Challenge.</li>
+  <li>If your scenario is company-specific or sensitive, use the <a href="../../landing/index.html#contact">private contact form</a> instead. Maintainers can take it on as a paid problem development engagement.</li>
+</ol>
+</div>
+</section>
+
+<section id="recognition">
+<h2>4. How contribution gets recognized</h2>
+
+<p>Doing the first task does not make you invisible. Every community role has a public credit path.</p>
+
+<table>
+<thead>
+  <tr><th>Role</th><th>Recognition path</th><th>Where it appears</th></tr>
+</thead>
+<tbody>
+  <tr>
+    <td>Tester</td>
+    <td>Issue you filed is linked from the fixing PR's commit (<code>Closes #N</code>) — your handle stays in the GitHub history. Frequent testers are listed in <code>CONTRIBUTORS.md</code> under "Tester squad".</td>
+    <td>GitHub commit log + <a href="../../CONTRIBUTORS.md">CONTRIBUTORS.md</a> + Discord role badge</td>
+  </tr>
+  <tr>
+    <td>Problem Author</td>
+    <td>Your handle is the <code>author</code> field in <code>metadata.json</code>. The catalog UI shows the byline on every problem card.</td>
+    <td><code>problems/&lt;id&gt;/metadata.json</code> <code>author</code> field + catalog UI + <code>CONTRIBUTORS.md</code> "Problem authors"</td>
+  </tr>
+  <tr>
+    <td>Scenario Reviewer</td>
+    <td>Your GitHub review approval is preserved in the PR. Active reviewers get the "Reviewer squad" Discord role and a section in <code>CONTRIBUTORS.md</code>.</td>
+    <td>GitHub PR review log + <code>CONTRIBUTORS.md</code> "Reviewers"</td>
+  </tr>
+  <tr>
+    <td>Event Facilitator</td>
+    <td>Dry-run reports get credited Co-Authored-By trailers on any docs/runbook PR they trigger. Frequent facilitators land in <code>CONTRIBUTORS.md</code>.</td>
+    <td>Git commit trailer + <code>CONTRIBUTORS.md</code> "Facilitators" + Discord role</td>
+  </tr>
+  <tr>
+    <td>Platform Contributor</td>
+    <td>Standard GitHub PR authorship. Significant changes get a callout in release notes.</td>
+    <td>GitHub author history + release notes + <code>CONTRIBUTORS.md</code> "Contributors"</td>
+  </tr>
+  <tr>
+    <td>Sponsor / Requester</td>
+    <td>Public requesters are mentioned in the resulting problem's <code>metadata.json</code> <code>sponsored_by</code> field (opt-in). Private sponsors get an off-list credit unless they opt in.</td>
+    <td>Problem <code>metadata.sponsored_by</code> + landing page sponsor wall (opt-in)</td>
+  </tr>
+</tbody>
+</table>
+
+<p>The deeper recognition story (community voting, on-chain registry, reputation tokens) is designed in <a href="../architecture/adr-024-community-voting-and-problem-registry.html">ADR-024</a>. The Web3 layer is optional; nothing in this onboarding requires a wallet.</p>
+
+<div class="callout ok">
+  <strong>Bottom line:</strong> Every contribution is publicly creditable. You decide whether to be public or private; both are first-class.
+</div>
+</section>
+
+<section id="communication">
+<h2>5. Where to communicate</h2>
+
+<p>The rule is simple: <strong>decisions live on GitHub, energy lives on Discord</strong>.</p>
+
+<table>
+<thead>
+  <tr><th>Channel</th><th>Best for</th><th>Not for</th></tr>
+</thead>
+<tbody>
+  <tr>
+    <td><a href="https://github.com/susumutomita/TenkaCloud/issues">GitHub Issues</a></td>
+    <td>Bugs, problem feedback, problem requests, feature requests, architecture proposals</td>
+    <td>Real-time Q&amp;A, scheduling</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/susumutomita/TenkaCloud/discussions">GitHub Discussions</a></td>
+    <td>Open-ended questions, "how does X work?", design exploration</td>
+    <td>Tracking actionable work (use Issues)</td>
+  </tr>
+  <tr>
+    <td>Discord <code>#tester-squad</code></td>
+    <td>Live playtest sessions, "is anyone testing X right now?"</td>
+    <td>Bug reports (move to GitHub Issue)</td>
+  </tr>
+  <tr>
+    <td>Discord <code>#problem-authors</code></td>
+    <td>Brainstorming new problems, getting feedback on a scenario idea</td>
+    <td>Final review (use PR)</td>
+  </tr>
+  <tr>
+    <td>Discord <code>#reviewer-squad</code></td>
+    <td>Discussing review heuristics, rubric calibration</td>
+    <td>Per-PR review (use GitHub PR review)</td>
+  </tr>
+  <tr>
+    <td>Discord <code>#facilitators</code></td>
+    <td>Scheduling dry-runs, debriefing in real time</td>
+    <td>Permanent runbook updates (open a docs PR)</td>
+  </tr>
+  <tr>
+    <td>Discord <code>#platform-dev</code></td>
+    <td>Design questions on a draft PR, pairing</td>
+    <td>Decisions (write an ADR)</td>
+  </tr>
+  <tr>
+    <td>Discord <code>#announcements</code></td>
+    <td>Release notes, dry-run schedules, new problem ships</td>
+    <td>Discussion (open a thread on the announcement)</td>
+  </tr>
+</tbody>
+</table>
+
+<p>Anything decided on Discord must be summarized back into a GitHub issue or PR comment — Discord history is not durable enough to be the source of truth.</p>
+</section>
+
+<section id="faq">
+<h2>6. FAQ</h2>
+
+<details>
+<summary>I do not have a Discord account. Can I still contribute?</summary>
+<p>Yes. Discord is optional. Every role has a GitHub-only path. Open issues, file PRs, leave PR reviews — that is enough. Discord is for momentum, not gatekeeping.</p>
+</details>
+
+<details>
+<summary>My problem request is sensitive (company-specific incident, real customer data shapes). What do I do?</summary>
+<p>Use the <a href="../../landing/index.html#contact">contact form</a> on the landing page instead of opening a public issue. Maintainers can engage privately, sign NDA, or develop a closed-source problem on commission. The public OSS catalog only receives problems you have explicitly cleared for publication.</p>
+</details>
+
+<details>
+<summary>I want to do the Tester role, but Lite mode <code>make deploy</code> needs an AWS account. I do not have one.</summary>
+<p>Two options. (1) Use the <a href="https://aws.amazon.com/free/">AWS Free Tier</a> — TenkaCloud's <code>DynamoDbLowCapacity</code> Aspect forces every table to 1/1 RCU/WCU, so the platform itself fits inside Free Tier. The problem you deploy may consume a few cents per session. (2) Coordinate a Discord dry-run with a facilitator who has their own account; you join as a participant, not as an operator.</p>
+</details>
+
+<details>
+<summary>Can I become a Problem Author without AWS deep knowledge?</summary>
+<p>You need one AWS service you understand well — the problem typically only exercises a small subset of AWS. Use the <code>/new-problem</code> Claude Code skill if you want AI help with the CloudFormation. A Tester or Reviewer can pair with you to vet realism.</p>
+</details>
+
+<details>
+<summary>How do I become a maintainer?</summary>
+<p>Ship across two roles consistently for a quarter (e.g., Reviewer + Platform Contributor) and we will offer write access on either the platform repo or the catalog repo. We do not have a formal "vote you in" ceremony; it is a maintainer's invitation based on observed contribution quality.</p>
+</details>
+
+<details>
+<summary>What if my role does not appear in this list?</summary>
+<p>Open a <a href="https://github.com/susumutomita/TenkaCloud/discussions">Discussion</a>. The 6-role split was designed to cover the typical OSS contributor surface; new roles are welcome if they fill a real gap.</p>
+</details>
+
+</section>
+
+<footer>
+  <hr>
+  <p style="font-size: 0.85rem; color: var(--c-muted);">Designed in <a href="https://github.com/susumutomita/TenkaCloud/issues/1364">#1364</a>. Part of <a href="https://github.com/susumutomita/TenkaCloud/issues/1336">#1336</a> (commercial readiness). Companion docs: <a href="./PLAYTEST-CHECKLIST.html">PLAYTEST-CHECKLIST.html</a>, <a href="./PROBLEM-REVIEW-CHECKLIST.html">PROBLEM-REVIEW-CHECKLIST.html</a>.</p>
+</footer>
+
+</body>
+</html>
