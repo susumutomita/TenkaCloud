@@ -418,30 +418,63 @@ aws cloudformation deploy \
 </section>
 
 <section id="examples">
-<h2>9. 実例 4 問題</h2>
+<h2>9. 実例 (catalog 一覧)</h2>
+
+<p>Issue #1346 で構築された starter catalog は <strong>ready 5 問 + draft 2 問 + 1 イベント bundle</strong>。 各問題は <code>difficulty</code> / <code>estimatedDuration</code> / <code>learningGoals</code> を SCHEMA 必須項目として持つ (= UI catalog でフィルタ可)。</p>
 
 <table>
-<thead><tr><th>問題</th><th>kind</th><th>portal plugin?</th><th>disruption?</th><th>狙い</th></tr></thead>
+<thead><tr><th>問題</th><th>kind</th><th>status</th><th>difficulty</th><th>duration</th><th>狙い</th></tr></thead>
 <tbody>
   <tr>
     <td><a href="../../problems/challenges/hello-world/"><code>hello-world</code></a></td>
-    <td>flag</td><td>—</td><td>—</td>
+    <td>flag</td><td>ready</td><td>1</td><td>1 分</td>
     <td>1 回提出で完結する最小 Challenge。 SSM Parameter の値を当てる</td>
   </tr>
   <tr>
     <td><a href="../../problems/battles/hello-world-battle/"><code>hello-world-battle</code></a></td>
-    <td>uptime-flat</td><td>—</td><td>—</td>
-    <td>1 endpoint の uptime を保つ最小 Battle</td>
+    <td>uptime-flat</td><td>ready</td><td>1</td><td>30 分</td>
+    <td>2 endpoint の uptime を保つ最小 Battle (uptime warm-up)</td>
   </tr>
   <tr>
     <td><a href="../../problems/battles/security-battle-royale/"><code>security-battle-royale</code></a></td>
-    <td>uptime-multi</td><td>—</td><td>—</td>
+    <td>uptime-multi</td><td>ready</td><td>4</td><td>60〜90 分</td>
     <td>frontend + api 2 slot の同時稼働。 攻撃 / 防御の人間 vs 人間</td>
   </tr>
   <tr>
     <td><a href="../../problems/battles/microservice-migration-battle/"><code>microservice-migration-battle</code></a></td>
-    <td>phased-polling</td><td>○</td><td>○</td>
+    <td>phased-polling</td><td>ready</td><td>4</td><td>90〜120 分</td>
     <td>3 service を EC2 → Lambda/ECS/App Runner に分割。 phase + disruption + 専用 portal plugin の総合例</td>
+  </tr>
+  <tr>
+    <td><a href="../../problems/battles/stackstack/"><code>stackstack</code></a></td>
+    <td>phased-polling</td><td>ready</td><td>4</td><td>90〜120 分</td>
+    <td>AI 量産アプリを 5 軸 (auth / network / rate / audit / ux) で本番化する Platform Team Battle</td>
+  </tr>
+  <tr>
+    <td><a href="../../problems/challenges/public-s3-remediation/"><code>public-s3-remediation</code></a></td>
+    <td>flag</td><td>draft</td><td>2</td><td>20〜30 分</td>
+    <td>S3 公開設定の点検 + remediation の最小 CCoE 1 day example (Issue #1346 で追加)</td>
+  </tr>
+  <tr>
+    <td><a href="../../problems/challenges/iam-least-privilege/"><code>iam-least-privilege</code></a></td>
+    <td>flag</td><td>draft</td><td>2</td><td>20〜30 分</td>
+    <td>過剰権限 IAM Role の点検 + scope-down の最小 CCoE 1 day example (Issue #1346 で追加)</td>
+  </tr>
+</tbody>
+</table>
+
+<h3>Bundle (= 複数問題のセット)</h3>
+
+<p>Organizer が 1 イベント分の問題を一括で picker するための reference。 各 bundle は問題 ID 列 + 推奨順序 + 推定時間 + 学習目的 を JSON で持つ (= <a href="../../problems/bundles/README.md"><code>problems/bundles/README.md</code></a>)。 schema は WIP (Issue #1346 follow-up)。</p>
+
+<table>
+<thead><tr><th>Bundle</th><th>難易度</th><th>所要</th><th>構成</th><th>狙い</th></tr></thead>
+<tbody>
+  <tr>
+    <td><a href="../../problems/bundles/starter-event.json"><code>starter-event</code></a></td>
+    <td>beginner</td><td>60〜90 分</td>
+    <td>1 Challenge + 2 Battles (<code>hello-world</code> → <code>hello-world-battle</code> → <code>microservice-migration-battle</code>)</td>
+    <td>初めて TenkaCloud を流す organizer 向け 'drop-in 1 イベント' プリセット (CCoE / JAWS-UG meetup)</td>
   </tr>
 </tbody>
 </table>
