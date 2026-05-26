@@ -16,6 +16,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { TeamViewProvider, useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
 import { type LocaleCode, SUPPORTED_LOCALES, useI18n } from "../i18n";
+import { CountdownTimer } from "./CountdownTimer";
 
 /**
  * Issue #583 Phase 1.A: locale switcher の display 名 map。 各 locale.json 内
@@ -276,6 +277,11 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
         content={
           <SpaceBetween size="m">
             <OfflineCloudModeAlert config={config} />
+            {/* Issue #1349: 全画面共通の event countdown を header 下に固定。 endsAt が
+             *  legacy deployment で undefined のときは CountdownTimer 自身が null を返す。 */}
+            <Box float="right">
+              <CountdownTimer endsAt={teamView.leaderboard?.endsAt} />
+            </Box>
             {auth.session === null ? (
               <Box variant="strong" color="text-status-warning">
                 {t("app.no_session")}

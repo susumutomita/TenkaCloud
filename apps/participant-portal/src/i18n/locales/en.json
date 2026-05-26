@@ -134,6 +134,7 @@
     "submission_finished": "Finished",
     "submission_preparing": "Preparing",
     "submission_cleared": "Cleared",
+    "submission_cleared_with_points": "Cleared (+{points} pt)",
     "submission_unsolved": "Unsolved",
     "submission_in_progress": "In progress",
     "difficulty_label": "Difficulty: {label}",
@@ -338,5 +339,38 @@
     "aria_label": "Cumulative score timeline of all teams since competition start",
     "no_data": "No data",
     "no_match": "No data in range"
+  },
+  "countdown": {
+    "remaining_label": "Remaining",
+    "last_5_min": "Last 5 min",
+    "ended_label": "Ended"
+  },
+  "next_action": {
+    "not_started_header": "Competition has not started yet",
+    "not_started_description": "Problem details, hints, and flag submission unlock when the competition starts.",
+    "not_started_starts_at": "Starts at {startsAt}",
+    "not_started_unknown": "Waiting for the operator's start signal.",
+    "ended_header": "Competition ended",
+    "ended_description": "Thanks for participating. Results below.",
+    "ended_with_rank": "Final rank: {rank} / {total}",
+    "ended_no_rank": "Final results will be published by the operator.",
+    "running_header": "Next action",
+    "running_description": "{count} problem(s) unsolved. Open the next one to keep scoring.",
+    "running_pick": "Start with {problemId} →",
+    "running_no_ready": "Your deployments are still preparing. Hold on a moment.",
+    "running_open_button": "Open this problem",
+    "all_cleared_header": "All problems solved",
+    "all_cleared_description": "You've cleared every problem deployed to your team. Keep an eye on the leaderboard until the event ends.",
+    "all_cleared_body": "Nicely done. Awaiting final ranking."
+  },
+  "friendly_error": {
+    "auth_expired": "Your session has expired. Please sign in again with the login key your operator re-distributed.",
+    "invalid_flag": "That flag is incorrect.",
+    "invalid_flag_with_remaining": "That flag is incorrect ({remaining} attempt(s) left).",
+    "invalid_url": "Invalid URL (must be an absolute URL starting with http:// or https://).",
+    "validation_generic": "Validation error: {code}",
+    "network": "Network error. Please retry; if it persists, contact your operator.",
+    "network_with_correlation": "Network error. Please retry; if it persists, share this correlation id with your operator: {correlationId}",
+    "unknown": "Something went wrong. Please retry."
   }
 }

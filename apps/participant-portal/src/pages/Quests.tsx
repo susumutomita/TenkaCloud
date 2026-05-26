@@ -27,7 +27,13 @@ import { categoryOf } from "../lib/category";
  */
 type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
-function renderSubmissionState(
+/**
+ * Issue #1349: 採点状態 badge を unit test 可能な pure function に分離。 各
+ * problem の `status` (= deploy 進捗) と `scoring.flagSubmitted` / `score` を見て、
+ * 4 状態 (未着手 / Deploy 中 / 着手中 / 解答済) を返す。 解答済 (= flag 提出済) は
+ * `scoring.points` があれば 「+Npt」 を末尾に付ける (= 何点 取れたかを一目で出す)。
+ */
+export function renderSubmissionState(
   problem: ParticipantProblemView,
   t: TFn,
 ): {
@@ -49,8 +55,14 @@ function renderSubmissionState(
     return { type: "in-progress", label: t(`quests.status_label.${problem.status}`) };
   }
   if (problem.scoring?.kind === "flag") {
-    if (problem.scoring.flagSubmitted)
-      return { type: "success", label: t("quests.submission_cleared") };
+    if (problem.scoring.flagSubmitted) {
+      const points = problem.scoring.points;
+      const label =
+        points !== undefined
+          ? t("quests.submission_cleared_with_points", { points })
+          : t("quests.submission_cleared");
+      return { type: "success", label };
+    }
     return { type: "pending", label: t("quests.submission_unsolved") };
   }
   return { type: "info", label: t("quests.submission_in_progress") };
