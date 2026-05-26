@@ -5,6 +5,7 @@ import { handlerNoDirectSdkImport } from "./handler-no-direct-sdk-import.ts";
 import { handlerTenantIsolation } from "./handler-tenant-isolation.ts";
 import { iamWildcardNeedsJustify } from "./iam-wildcard-needs-justify.ts";
 import { lambdaEnvSize } from "./lambda-env-size.ts";
+import { noAwsTrademarkFictions } from "./no-aws-trademark-fictions.ts";
 import { noConflictMarkers } from "./no-conflict-markers.ts";
 
 export const architectureRules = [
@@ -20,4 +21,6 @@ export const architectureRules = [
   noConflictMarkers,
   // Issue #1309 / Lambda env 4KB hard limit 再発防止 (= #1308 root cause)
   lambdaEnvSize,
+  // AWS GameDay branding (= Unicorn.Rentals 等) を OSS / 商用 platform で流用しない // allow-aws-fiction: rule self-description
+  noAwsTrademarkFictions,
 ] as const;
