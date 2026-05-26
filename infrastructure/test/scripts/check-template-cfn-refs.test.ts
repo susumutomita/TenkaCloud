@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   collectGetAttResources,
   collectRefs,
@@ -54,6 +54,9 @@ describe("check-template-cfn-refs detection patterns (= 期待挙動 doc)", () =
   const tmpProblem = join(tmpDir, "problems/challenges/test-problem");
   beforeEach(() => {
     mkdirSync(tmpProblem, { recursive: true });
+  });
+  afterAll(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
   });
   afterEach(() => {
     try {
