@@ -270,6 +270,32 @@ If you are the user (or have explicit authorization):
 
 ---
 
+## "I want to decide if we're ready to launch"
+
+**Read**:
+
+- [`docs/go-to-market/launch-readiness.html`](./docs/go-to-market/launch-readiness.html) — the phase-gate checklist for OSS reveal (Phase A), first paid Hosted Event (Phase B), and enterprise annual discussion (Phase C). Each phase lists the required items with Status (Done / Gap / Roadmap) + linked evidence (PR# / file path), plus the items that are *not* required for that gate.
+- [`docs/go-to-market/community-first-launch.html`](./docs/go-to-market/community-first-launch.html) — the *signal* side: how to validate buyer intent with a small community-first release. This pairs with the gate doc (the gate decides *if we can*; the signal doc decides *if we should*).
+- The "Known limitations" section of `launch-readiness.html` — the customer-safe phrasing for what we do not have today (no SOC2 cert, no multi-cloud, no universal cloud problem compiler, no Web3 voting impl, no full self-service SaaS). Say these out loud in pitches.
+
+**Edit (when a phase decision is made)**:
+
+- `docs/go-to-market/launch-readiness.html` `§8 Decision log` — append a row when a Phase A / B / C go / no-go is called. Never rewrite history; the point of the log is the audit trail of *why we decided what we decided with the evidence we had*.
+- The Status badges in §1–§3 — flip rows from `Gap` to `Done` only when the linked PR has actually merged or a real dry-run has actually been executed. Roadmap items move to Done only when they ship inside the phase's required scope.
+
+**Constraints**:
+
+- **The gate is "enough, not perfect."** Do not turn `Required` rows into a wish list. If you want to add a row, justify it against the phase's decision question, not against your own ambition for the product.
+- **`Not required` rows stay listed.** They are verbatim from [`#1370`](https://github.com/susumutomita/TenkaCloud/issues/1370) so the boundary is auditable. Silently dropping them hides the trade-off we agreed to.
+- **The decision log is append-only.** If a previous decision turned out to be wrong, write a new row that supersedes it; do not edit the old row.
+
+**Gates**:
+
+- This doc is HTML by hand (no markdown source). It is out of scope of the harness `adr-must-be-html` / `adr-self-contained` rules (those only match `docs/architecture/adr-*`), but the same self-contained spirit applies: write for an OSS reader landing cold.
+- `make before-commit` must still pass; the doc is link-checked through the existing markdownlint / textlint surface where it is referenced from markdown.
+
+---
+
 ## "I want to investigate a production incident"
 
 **Read**:
