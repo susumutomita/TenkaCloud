@@ -246,6 +246,27 @@ If you are the user (or have explicit authorization):
 
 ---
 
+## "I want to understand or audit the security posture"
+
+**Read**:
+
+- [`docs/security/HARDENING-CHECKLIST.html`](./docs/security/HARDENING-CHECKLIST.html) — the item-by-item commercial hosted-event security baseline. Each control links to its evidence (file path / harness rule ID / ADR / runbook) and is tagged **Implemented / Gap / Roadmap**.
+- [`docs/security/README.md`](./docs/security/README.md) — landing + verification commands (each control has a `grep` / `make` / test command to run locally).
+- [`SECURITY.md`](./SECURITY.md) — private vulnerability disclosure channel (do not file public issues for sensitive disclosures).
+- [`docs/architecture/harness.md`](./docs/architecture/harness.md) — machine-checked invariants and enforcement rules (`secrets-manager-forbidden`, `handler-must-not-call-fetch`, `iam-wildcard-needs-justify`, `handler-tenant-isolation`, etc).
+
+**If you want to add a new control**:
+
+- Closing a documented gap usually means adding a harness rule under `.claude/harness/src/rules/` with a unit test under the same directory. Then update the relevant checklist row's status badge and evidence cell.
+- Stand-alone PR per rule, with the rule rationale in the body. Do not bundle rule additions with feature work.
+
+**Gates**:
+
+- `make harness` + `make harness-test` validate new rules.
+- `make before-commit` includes `make check-template-security` + `make audit-deps`.
+
+---
+
 ## "I want to update CI / lint / format config"
 
 Avoid this unless absolutely necessary. CLAUDE.md explicitly forbids editing `biome.json` / `vitest.config.ts` / `tsconfig.json` to mask code failures. The correct path is almost always to fix the code.
