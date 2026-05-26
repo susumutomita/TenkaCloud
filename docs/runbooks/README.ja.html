@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>イベント当日運用 Runbook 集</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>イベント当日運用 Runbook 集</h1>
+<blockquote>
+<p>English: <a href="./README.md">README.md</a></p>
+</blockquote>
+<p>このディレクトリは、 メンテナの記憶に頼らずに小規模 TenkaCloud イベントを一気通貫で運用するための、 オペレータ向け playbook です。 各 runbook は self-contained で、 Audience / When to use / Step-by-step + 所要時間 /「うまくいかなかったら」のブランチを必ず備えています。</p>
+<p>Runbook 全体は Lite mode (<code>make deploy</code>) をデフォルトとしています。 有償ホスト型イベントの大半は 1 オペレータ / 1 イベントだからです。 SaaS mode の差分は本文中に inline で記載します。</p>
+<h2>一覧</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Runbook</th>
+<th>Audience</th>
+<th>使うタイミング</th>
+<th>所要時間</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><a href="./pre-event-checklist.ja.md">事前チェックリスト</a></td>
+<td>Facilitator</td>
+<td>T-7 / T-1 / T-0 の 3 段階準備</td>
+<td>各 30 分 × 3 回</td>
+</tr>
+<tr>
+<td>2</td>
+<td><a href="./dry-run.ja.md">Dry run</a></td>
+<td>オペレータ</td>
+<td>本番 7 日前までに必ず実施</td>
+<td>90 分</td>
+</tr>
+<tr>
+<td>3</td>
+<td><a href="./participant-onboarding.ja.md">Participant onboarding</a></td>
+<td>Facilitator</td>
+<td>イベント当日朝、 kickoff 直前</td>
+<td>20 分</td>
+</tr>
+<tr>
+<td>4</td>
+<td><a href="./live-monitoring.ja.md">Live monitoring</a></td>
+<td>オンコールオペレータ</td>
+<td>イベント実施中ずっと</td>
+<td>継続</td>
+</tr>
+<tr>
+<td>5</td>
+<td><a href="./incident-response.ja.md">インシデント対応</a></td>
+<td>オンコールオペレータ</td>
+<td>アラートまたは参加者報告から</td>
+<td>1 件あたり 5 〜 30 分</td>
+</tr>
+<tr>
+<td>6</td>
+<td><a href="./teardown.ja.md">Teardown</a></td>
+<td>オペレータ</td>
+<td>イベント終了から 24 時間以内</td>
+<td>60 分</td>
+</tr>
+</tbody></table>
+<h2>Runbook 同士の相互参照</h2>
+<ul>
+<li><a href="./pre-event-checklist.ja.md">事前チェックリスト</a> は <a href="./dry-run.ja.md">Dry run</a> を T-7 のゲートとしてリンクする (=「dry run はスキップ不可」)。</li>
+<li><a href="./live-monitoring.ja.md">Live monitoring</a> は triage 判断ポイントで <a href="./incident-response.ja.md">インシデント対応</a> にリンクする。</li>
+<li><a href="./incident-response.ja.md">インシデント対応</a> と <a href="./teardown.ja.md">Teardown</a> はどちらも <a href="./live-monitoring.ja.md">Live monitoring</a> にバックリンクして、 すでに観測したものを文脈に持ち込む。</li>
+<li>すべての runbook は設計判断の正本として下記の ADR を参照する。<ul>
+<li><a href="../architecture/adr-006-notifications.html">ADR-006: Notifications</a> — オペレータから参加者への通知契約。</li>
+<li><a href="../architecture/adr-014-eventbridge-driven-state-reconciliation.html">ADR-014: EventBridge 駆動 state reconciliation</a> — SSE / WebSocket を使わずに状態を収束させる仕組み。</li>
+</ul>
+</li>
+</ul>
+<h2>スコープ外</h2>
+<ul>
+<li>自動検知 / 自動 rollback コード (= #1352 で別途追跡)。 本 runbook 群は <strong>オペレータの手動アクション</strong> に限定する。</li>
+<li>事後アンケート / コマーシャル follow up テンプレート (= 親 epic #1336 側で扱う)。</li>
+</ul>
+<h2>初任オペレータの読み順</h2>
+<ol>
+<li><a href="./pre-event-checklist.ja.md">事前チェックリスト</a> を一度通読し、 T-7 / T-1 / T-0 のリマインダーをカレンダーに入れる。</li>
+<li><a href="./dry-run.ja.md">Dry run</a> を最低 1 回実施する。 dry run はゲートであって本番ではない。</li>
+<li><a href="./live-monitoring.ja.md">Live monitoring</a> と <a href="./incident-response.ja.md">インシデント対応</a> をブラウザの隣接タブにブックマーク。 本番中はこの 2 枚だけ開いておく。</li>
+<li><a href="./teardown.ja.md">Teardown</a> は前日に目を通し、 終了後に手が止まらないようにする。</li>
+</ol>
+
+<div class="doc-source">Source: <code>docs/runbooks/README.ja.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/runbooks/README.ja.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>
