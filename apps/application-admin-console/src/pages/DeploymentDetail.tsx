@@ -15,6 +15,10 @@ import { BasicInfoSection } from "./deployment-detail/BasicInfoSection";
 import { CfnOutputsSection } from "./deployment-detail/CfnOutputsSection";
 import { DeployLogSection } from "./deployment-detail/DeployLogSection";
 import { DeploySummaryStyles } from "./deployment-detail/DeploySummaryStyles";
+import {
+  FailureGuidanceSection,
+  shouldShowFailureGuidance,
+} from "./deployment-detail/FailureGuidanceSection";
 import { HandoffSection } from "./deployment-detail/HandoffSection";
 import { TerminalLogView } from "./deployment-detail/TerminalLogView";
 import { useDeploymentDetail } from "./deployment-detail/useDeploymentDetail";
@@ -97,6 +101,10 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
         <Alert type="error" header={t("deployment_detail.failure_reason_header")}>
           {item.failureReason}
         </Alert>
+      )}
+
+      {shouldShowFailureGuidance(item.status) && (
+        <FailureGuidanceSection problemId={item.problemId} t={t} />
       )}
 
       <DeployLogSection

@@ -20,9 +20,12 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import type { ApiClient } from "../../api/client";
 import type { EventDetail } from "../../api/events-client";
 import { DeployProgressPanel } from "../../components/event-detail/DeployProgressPanel";
+import { EventChecklistPanel } from "../../components/event-detail/EventChecklistPanel";
 import { EventNotificationsPanel } from "../../components/event-detail/EventNotificationsPanel";
 import { EventParticipantsPanel } from "../../components/event-detail/EventParticipantsPanel";
+import { EventPhaseBanner } from "../../components/event-detail/EventPhaseBanner";
 import { EventProblemSetPanel } from "../../components/event-detail/EventProblemSetPanel";
+import { EventReadinessPanel } from "../../components/event-detail/EventReadinessPanel";
 import { EventSchedulePanel } from "../../components/event-detail/EventSchedulePanel";
 import { EventTeamsPanel } from "../../components/event-detail/EventTeamsPanel";
 import { EventRescuePanel, EventWizardPanel } from "../../components/event-detail/EventWizardPanel";
@@ -106,8 +109,17 @@ export function OverviewTab({
 }: EventTabContentProps) {
   return (
     <>
+      {/* Issue #1350: Setup / Live / Teardown の phase 帯を冒頭に表示 (色 cue) */}
+      <EventPhaseBanner detail={detail} t={t} />
       <ScoringLockPanel detail={detail} t={t} />
       <EventWizardPanel t={t} wizard={wizard} />
+      {/* Issue #1350: 4 項目の readiness check + 全 ✓ で 「準備完了」 大 badge */}
+      <EventReadinessPanel
+        completeCount={counts.completeCount}
+        detail={detail}
+        t={t}
+        totalDeployCount={counts.totalDeployCount}
+      />
       <DeployProgressPanel
         allDoneCount={counts.allDoneCount}
         completeCount={counts.completeCount}
@@ -118,6 +130,8 @@ export function OverviewTab({
         t={t}
         totalDeployCount={counts.totalDeployCount}
       />
+      {/* Issue #1350: T-7 / T-1 / T-0 / T+0 phase 別 operator checklist */}
+      <EventChecklistPanel t={t} />
     </>
   );
 }
