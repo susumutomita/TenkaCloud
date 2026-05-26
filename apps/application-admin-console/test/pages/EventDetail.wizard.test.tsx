@@ -112,4 +112,14 @@ describe("EventDetailPage #531 Wizard", () => {
     expect(screen.getByText(/4\. 競技中/)).toBeInTheDocument();
     expect(screen.getByText(/5\. 終了/)).toBeInTheDocument();
   });
+
+  // Issue #1362: Overview tab を 「現状 / 次のアクション / リソース」 用途別 3 グループに整理。
+  it("should split phase indicator and next-action CTA into two separately-headed Cloudscape containers", async () => {
+    mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "DRAFT" });
+    renderPage();
+    await waitFor(() => expect(screen.getAllByText(/Test Event/).length).toBeGreaterThan(0));
+    // 「現在のフェーズ」 と 「次のアクション」 がそれぞれ独立 h2 として render される
+    expect(screen.getByText(/現在のフェーズ/)).toBeInTheDocument();
+    expect(screen.getByText(/次のアクション/)).toBeInTheDocument();
+  });
 });

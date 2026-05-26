@@ -4,6 +4,7 @@ import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
+import Icon from "@cloudscape-design/components/icon";
 import Input from "@cloudscape-design/components/input";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -18,6 +19,8 @@ import {
 } from "../api/idp-client";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { useLang } from "../i18n";
+import { formatRelativeTime } from "../lib/format";
 
 /**
  * Issue #1294: Tenant Admin → list / add / edit / delete SAML IdPs attached
@@ -33,6 +36,7 @@ import type { AppConfig } from "../config";
  */
 export function IdentityProvidersPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
+  const lang = useLang();
   const client: TenantIdpClient | null = useMemo(
     () => (auth.tokens ? createTenantIdpClient(config, auth.tokens.idToken) : null),
     [auth.tokens, config],
@@ -72,20 +76,46 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
   );
 
   if (config.isolation !== "silo") {
+    // Issue #1362: forbidden 時の placeholder を 「単発 Alert」 から friendly な
+    // ヒーロー (= icon + 説明 + 次のアクション誘導) に格上げ。
     return (
-      <Alert type="warning" header="Per-tenant SAML SSO requires the silo isolation tier">
-        This tenant runs on a pooled Cognito UserPool. Per-tenant IdP CRUD is only available on
-        PLATINUM (silo) tier — please contact your account manager.
-      </Alert>
+      <Container
+        header={
+          <Header variant="h1" description="Per-tenant SAML SSO is a PLATINUM (silo) feature.">
+            Identity providers
+          </Header>
+        }
+      >
+        <Box textAlign="center" padding="xxl">
+          <SpaceBetween size="s">
+            <Box variant="strong">
+              <Icon name="lock-private" size="big" variant="subtle" /> Per-tenant SAML SSO requires
+              the silo isolation tier
+            </Box>
+            <Box color="text-body-secondary">
+              This tenant runs on a pooled Cognito UserPool. Per-tenant IdP CRUD is only available
+              on PLATINUM (silo) tier — please contact your account manager.
+            </Box>
+          </SpaceBetween>
+        </Box>
+      </Container>
     );
   }
 
   if (!config.apiBaseUrl) {
     return (
-      <Alert type="warning">
-        Tenant IdP CRUD API is not wired up in this environment. Set <code>apiBaseUrl</code> in
-        runtime-config.json or the dev .env.
-      </Alert>
+      <Container
+        header={
+          <Header variant="h1" description="SAML identity providers attached to this tenant.">
+            Identity providers
+          </Header>
+        }
+      >
+        <Alert type="warning" header="Tenant IdP CRUD API not wired up">
+          Set <code>apiBaseUrl</code> in runtime-config.json or the dev <code>.env</code> and reload
+          the page.
+        </Alert>
+      </Container>
     );
   }
 
@@ -120,7 +150,10 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
             {
               id: "updatedAt",
               header: "Updated",
-              cell: (i: TenantIdpSummary) => i.updatedAt,
+              // Issue #1362: ISO 生値ではなく 「N 日前」 表示 + hover で絶対時刻 tooltip。
+              cell: (i: TenantIdpSummary) => (
+                <span title={i.updatedAt}>{formatRelativeTime(i.updatedAt, lang)}</span>
+              ),
             },
             {
               id: "actions",
@@ -161,8 +194,18 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
           loading={items === null}
           loadingText="Loading…"
           empty={
-            <Box textAlign="center">
-              No IdPs configured. Click <strong>Add SAML IdP</strong> to register one.
+            // Issue #1362: アイコン + 説明 + 行動誘導の 3 段で UX を底上げ。
+            <Box textAlign="center" padding="l">
+              <SpaceBetween size="xs">
+                <Box variant="strong" color="text-status-inactive">
+                  <Icon name="lock-private" size="big" variant="subtle" /> No SAML IdPs configured
+                  yet
+                </Box>
+                <Box color="text-body-secondary">
+                  Tenant sign-in falls back to local Cognito email + password. Click{" "}
+                  <strong>Add SAML IdP</strong> to wire Entra ID / Okta / etc.
+                </Box>
+              </SpaceBetween>
             </Box>
           }
         />

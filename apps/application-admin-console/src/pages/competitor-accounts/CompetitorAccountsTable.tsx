@@ -1,7 +1,8 @@
-import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
+import Icon from "@cloudscape-design/components/icon";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
 import { useMemo } from "react";
 import type { CompetitorAccountSummary } from "../../api/competitor-accounts-client";
@@ -50,11 +51,14 @@ export function CompetitorAccountsTable({
       {
         id: "verified",
         header: t("competitor_accounts.col_status"),
+        // Issue #1362: Badge から StatusIndicator に変更。 built-in icon (= ✓ / ✗) と
+        // 色を Cloudscape の semantic types で共有し、 「状態 badge は icon + 色 + 位置」 で
+        // 強調する Qiita 原則に揃える。
         cell: (item) =>
           item.verified ? (
-            <Badge color="green">Verified</Badge>
+            <StatusIndicator type="success">Verified</StatusIndicator>
           ) : (
-            <Badge color="red">Unverified</Badge>
+            <StatusIndicator type="error">Unverified</StatusIndicator>
           ),
       },
       {
@@ -86,9 +90,15 @@ export function CompetitorAccountsTable({
     <Table
       items={items}
       columnDefinitions={columnDefinitions}
+      // Issue #1362: 空表示を icon + 説明 + 次のアクション誘導の 3 段に。
       empty={
         <Box textAlign="center" color="inherit" padding="xxl">
-          {t("competitor_accounts.table_empty")}
+          <SpaceBetween size="xs">
+            <Box variant="strong" color="text-status-inactive">
+              <Icon name="add-plus" size="big" variant="subtle" />{" "}
+              {t("competitor_accounts.table_empty")}
+            </Box>
+          </SpaceBetween>
         </Box>
       }
     />
