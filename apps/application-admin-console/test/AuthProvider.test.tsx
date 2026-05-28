@@ -1,11 +1,11 @@
 /**
- * Issue #859: idle session 自動ログアウトの regression test。
+ * Issue #859: idle session 自動ログアウトの regression test (application-admin-console)。
  *
  * 15 分間 mouse / keyboard 操作が無ければ logout を発火することを timer mock で pin。
  *
  * ADR-025: tokens は memory (React state) のみで保持し sessionStorage には残さないため、
- * テストは Callback 相当の `setTokens` でログイン状態を作る (= 旧 test の sessionStorage
- * シードは廃止)。logout は revoke 対象として現在の TokenSet を beginLogout に渡す。
+ * テストは Callback 相当の `setTokens` でログイン状態を作る。logout は revoke 対象として
+ * 現在の TokenSet を beginLogout に渡す。
  */
 
 import type { TokenSet } from "@tenkacloud/auth-client";
@@ -14,8 +14,6 @@ import { act, useEffect, useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const beginLogoutMock = vi.fn();
-// Issue #1246: AuthProvider imports beginLogin / beginLogout / purgeLegacyTokenStorage from
-// the shared @tenkacloud/auth-client package (formerly per-app src/auth/cognito).
 vi.mock("@tenkacloud/auth-client", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
@@ -32,15 +30,11 @@ import type { AppConfig } from "../src/config";
 const config: AppConfig = {
   cognitoDomain: "https://example.auth.ap-northeast-1.amazoncognito.com",
   cognitoClientId: "abc",
-  redirectUri: "http://localhost:5173/callback",
-  apiBaseUrl: "https://api.example.com",
-  scope: "openid email",
-  pooledApplicationAdminConsoleUrl: "",
-  provisioningCodeBuildProject: "unknown",
-  awsRegion: "",
-  awsAccountId: "",
-  adminInsightApiUrl: "",
-  cloudWatchDashboardName: "",
+  redirectUri: "http://localhost:5174/callback",
+  scope: "openid email profile",
+  tenantId: "tenant-test",
+  tenantName: "Shared Pooled Tenant",
+  apiBaseUrl: "https://api.example.com/prod",
   samlIdpDirectory: {},
 };
 
@@ -97,7 +91,6 @@ describe("AuthProvider idle timeout (#859)", () => {
     act(() => {
       vi.advanceTimersByTime(15 * 60 * 1000 + 1000);
     });
-    // beginLogout は呼ばれない
     expect(beginLogoutMock).not.toHaveBeenCalled();
   });
 
@@ -112,14 +105,13 @@ describe("AuthProvider idle timeout (#859)", () => {
     });
     expect(screen.getByTestId("tokens")).toHaveTextContent("has-tokens");
 
-    // 14 min 59 sec ではまだ呼ばれない
     await act(async () => {
       vi.advanceTimersByTime(14 * 60 * 1000 + 59 * 1000);
       await Promise.resolve();
     });
     expect(beginLogoutMock).not.toHaveBeenCalled();
 
-    // 残り 1 sec で発火。 ADR-025: revoke 対象の TokenSet が渡る。
+    // ADR-025: revoke 対象の TokenSet が渡る
     await act(async () => {
       vi.advanceTimersByTime(2 * 1000);
       await Promise.resolve();
@@ -142,7 +134,6 @@ describe("AuthProvider idle timeout (#859)", () => {
     });
     expect(screen.getByTestId("tokens")).toHaveTextContent("has-tokens");
 
-    // 10 min 経過 → keydown で reset → 14 min 経過 (total 24 min) でも logout しない
     await act(async () => {
       vi.advanceTimersByTime(10 * 60 * 1000);
       await Promise.resolve();
@@ -157,7 +148,6 @@ describe("AuthProvider idle timeout (#859)", () => {
     });
     expect(beginLogoutMock).not.toHaveBeenCalled();
 
-    // 残り 2 min 進めれば計 26 min、 reset 後 16 min で発火
     await act(async () => {
       vi.advanceTimersByTime(2 * 60 * 1000);
       await Promise.resolve();

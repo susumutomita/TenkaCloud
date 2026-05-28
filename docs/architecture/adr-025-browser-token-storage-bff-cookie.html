@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-025: 管理コンソールのトークン保管 — sessionStorage から first-party httpOnly cookie + BFF へ</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+    --c-purple: #6639ba;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  tr.chosen td { background: #ddf4e0; }
+  tr.danger td { background: #ffe9e9; }
+  tr.scope-out td { background: #f6f8fa; color: var(--c-muted); }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn   { background: #fff8c5; color: var(--c-warn); }
+  .badge.muted  { background: var(--c-bg-soft); color: var(--c-muted); }
+  .badge.chosen { background: #ddf4e0; color: var(--c-accept); }
+  .badge.draft  { background: #ddf4ff; color: var(--c-link); }
+  .decision-box {
+    border: 2px solid var(--c-accept); border-radius: 6px;
+    background: #f0faf2; padding: 1rem 1.2rem; margin: 1.2rem 0;
+  }
+  .decision-box h3 { margin-top: 0; color: var(--c-accept); }
+  .nongoals-box {
+    border: 2px solid var(--c-reject); border-radius: 6px;
+    background: #fff5f5; padding: 1rem 1.2rem; margin: 1.2rem 0;
+  }
+  .nongoals-box h3 { margin-top: 0; color: var(--c-reject); }
+  .nongoals-box ul { list-style: none; padding-left: 0; }
+  .nongoals-box li::before { content: "\00d7  "; color: var(--c-reject); font-weight: 700; }
+  .warn-box {
+    border: 2px solid var(--c-warn); border-radius: 6px;
+    background: #fffbe6; padding: 1rem 1.2rem; margin: 1.2rem 0;
+  }
+  .warn-box h3 { margin-top: 0; color: var(--c-warn); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  svg { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px; }
+  ul, ol { margin: 0.4rem 0; }
+  li { margin: 0.15rem 0; }
+  .tier-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.78rem; font-weight: 600; margin-right: .3rem; }
+  .tier-app { background: #ddf4ff; color: var(--c-link); }
+  .tier-infra { background: #fff5dc; color: var(--c-warn); }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-025: 管理コンソールのトークン保管 — sessionStorage から first-party httpOnly cookie + BFF へ</h1>
+  <p><em>System Admin (テナント管理) と Tenant Admin (アプリケーション管理) の 2 つのコンソールは、Cognito の id / access / refresh token を JavaScript から読める <code>sessionStorage</code> に保持している。これは XSS によるトークン持ち出しに対して構造的に無防備である。短期のアプリ層強化と、中期の first-party httpOnly cookie + BFF への移行を二段で定義する。</em></p>
+  <div class="meta">
+    <div><b>Status:</b> <span class="badge accept">Tier 1 Accepted</span> / <span class="badge draft">Tier 2 Proposed</span> 2026-05-28</div>
+    <div><b>Scope:</b> admin-console / application-admin-console</div>
+    <div><b>Related:</b>
+      <a href="./adr-020-authorization-model.html">ADR-020</a> (認可モデル: role enum),
+      <a href="./adr-018-pooled-userpool-saml-isolation.html">ADR-018</a> (pooled UserPool / SAML),
+      <a href="./adr-016-tenkacloud-lite-app-plane-core.html">ADR-016</a> (Lite mode)
+    </div>
+  </div>
+</header>
+
+<section>
+<h2>Context</h2>
+
+<p>TenkaCloud には認証境界を持つフロントエンドが 3 つある。本 ADR が対象とするのは、Cognito で認証する 2 つの管理コンソールである。</p>
+
+<table>
+<thead>
+<tr><th>アプリ</th><th>役割</th><th>認証方式</th><th>ブラウザ保管先</th><th>保管される値</th><th>本 ADR の対象</th></tr>
+</thead>
+<tbody>
+<tr class="danger">
+  <td><code>admin-console</code></td>
+  <td>System Admin<br>(テナント管理画面)</td>
+  <td rowspan="2">Cognito Hosted UI<br>OAuth 2.0 Code + PKCE</td>
+  <td rowspan="2"><code>sessionStorage</code><br>キー <code>TenkaCloud.tokens</code></td>
+  <td rowspan="2"><code>idToken</code> / <code>accessToken</code> / <strong><code>refreshToken</code></strong></td>
+  <td rowspan="2"><span class="badge reject">対象</span></td>
+</tr>
+<tr class="danger">
+  <td><code>application-admin-console</code></td>
+  <td>Tenant Admin<br>(アプリケーション管理画面)</td>
+</tr>
+<tr class="scope-out">
+  <td><code>participant-portal</code></td>
+  <td>競技者</td>
+  <td>per-team ログインキー</td>
+  <td><code>localStorage</code></td>
+  <td>ログインキー (短命 bearer)</td>
+  <td><span class="badge muted">対象外</span></td>
+</tr>
+</tbody>
+</table>
+
+<p>両コンソールは共有クライアント <code>packages/auth-client</code> 経由で同一の OAuth フローを通る。Hosted UI で code を受け取り、<code>code_verifier</code> を添えて token endpoint で交換し、得た <code>TokenSet</code> を <code>sessionStorage</code> に <code>JSON.stringify</code> して保存する。バックエンドは <code>Authorization: Bearer</code> ヘッダで JWT を受け取り、API Gateway の Cognito / JWT Authorizer が署名・失効を検証する。cookie 経由の認証は存在しない。SPA は CloudFront で配信され、API は別オリジンの API Gateway に置かれている。</p>
+
+<h3>participant-portal を対象外とする理由</h3>
+<p>competitor の認証はログインキーであり、その有効期間は 1 イベントの競技時間 (数時間) に限定される。キーが漏れても価値があるのはその競技の最中だけで、イベント終了後は無効になる。localStorage 保管は「タブ / リロードをまたいで session を保つ」という競技 UX 要件に対する、期間が区切られた許容リスクとして扱う。本 ADR は、より価値が高く長命な管理コンソールのトークンに焦点を絞る。</p>
+
+<h3>管理コンソールが本丸である理由</h3>
+<p>管理コンソールのトークンは competitor キーと性質が異なる。</p>
+<ul>
+  <li><strong>権限が広い。</strong> System Admin はテナント CRUD を、Tenant Admin はそのテナントの運用を握る。漏れた場合の被害はイベント 1 回に閉じない。</li>
+  <li><strong><code>refreshToken</code> が載っている。</strong> access / id token は 1h 程度で失効するが、refresh token が漏れると新しい token を継続的に再発行されうる。<code>sessionStorage</code> に置かれた refresh token はこの設計で最も価値の高い資産である。</li>
+  <li><strong>常用される業務画面。</strong> 競技時間に閉じず、日常的にログインされる。</li>
+</ul>
+
+<h3>既存の緩和策</h3>
+<p>このトークン保管設計に対しては、すでに「盗まれた後の窓を狭める」方向の防御が積まれている。</p>
+<ul>
+  <li><strong>idle timeout 15 分</strong> — 操作のない session を失効させ、盗まれた JWT の利用窓を <code>idToken</code> 寿命 (1h) より短くする。</li>
+  <li><strong>refresh token の server-side revoke</strong> — logout 時に <code>/oauth2/revoke</code> を叩き、Cognito Hosted UI の session cookie も <code>/logout</code> で破棄する。</li>
+  <li><strong>fail-closed な OAuth state 検証</strong> — <code>sessionStorage</code> に state が無い callback を CSRF / session 切れとして拒否する。</li>
+  <li><strong>XSS 注入面の縮小</strong> — <code>innerHTML</code> / <code>eval</code> / React の危険な HTML 注入 prop はリポジトリ規約で禁止。依存サプライチェーンは 4 層防御 (Bun <code>trustedDependencies</code> / <code>.npmrc</code> / audit / Safe Chain) で固めている。</li>
+</ul>
+
+<h3>残る構造的なギャップ</h3>
+<p>上記をもってしても、トークン本体が JavaScript から読める場所に置かれている事実は変わらない。XSS が一度成立すれば、攻撃スクリプトは次の一行で refresh token まで抜き出せる。</p>
+<pre>JSON.parse(sessionStorage.getItem("TenkaCloud.tokens")).refreshToken</pre>
+
+<div class="warn-box">
+<h3>誤解しやすい点: <code>sessionStorage</code> は <code>localStorage</code> より安全ではない</h3>
+<p>両者は同一オリジンの任意の JavaScript から等しく読める。XSS に対する防御力は同じで、違いは「タブを閉じると消えるか」という永続性だけである。管理コンソールが <code>sessionStorage</code> を使っていることは XSS 持ち出しへの防御にはならない。</p>
+</div>
+
+<p>この設計判断は、徳丸浩による「JWT を localStorage に置く時代から、ブラウザ境界では cookie に回帰する」という整理 (末尾の参考文献) が指摘するアンチパターンに該当する。本 ADR はその指摘を TenkaCloud のサーバーレス / コストゼロ制約の中でどう受けるかを定める。</p>
+</section>
+
+<section>
+<h2>脅威モデル</h2>
+
+<table>
+<thead>
+<tr><th>脅威</th><th>現状での成否</th><th>httpOnly cookie 化で変わるか</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>トークン持ち出し (exfiltration)</strong><br>XSS で refresh token を外部に送り、後から別環境でリプレイ</td>
+  <td><span class="badge reject">成立する</span><br>JS から読めるため抜き出して送信可能</td>
+  <td><span class="badge accept">遮断できる</span><br>httpOnly cookie は JS から読めず、外部へ持ち出せない</td>
+</tr>
+<tr>
+  <td><strong>session riding</strong><br>XSS が被害者ブラウザ上から認証付きリクエストを発行</td>
+  <td><span class="badge reject">成立する</span></td>
+  <td><span class="badge warn">残る</span><br>cookie は自動付与されるため、XSS は被害者ブラウザ上でなお認証付き操作ができる</td>
+</tr>
+<tr>
+  <td><strong>CSRF</strong><br>別オリジンから cookie を自動付与させて操作</td>
+  <td><span class="badge accept">該当しない</span><br>bearer ヘッダ方式は cookie を自動付与しないため CSRF 面が無い</td>
+  <td><span class="badge warn">新たに発生</span><br>cookie 方式は <code>SameSite</code> + origin/CSRF token の追加防御が必須になる</td>
+</tr>
+</tbody>
+</table>
+
+<div class="warn-box">
+<h3>httpOnly cookie は XSS そのものを防がない</h3>
+<p>cookie 化で得られるのは「トークン持ち出し耐性」であり、session riding は残る。したがって XSS の根本対策 (CSP、出力エスケープ、危険な HTML 注入 sink の禁止、依存サプライチェーン防御) は引き続き第一防御線である。本 ADR の cookie 移行はそれを置き換えるものではなく、漏出経路を 1 本断つ多層防御の追加である。</p>
+</div>
+</section>
+
+<section>
+<h2>Decision</h2>
+
+<div class="decision-box">
+  <h3>二段で、管理コンソールの高価値トークンを JS 可読ストレージから外す</h3>
+  <ol>
+    <li><span class="tier-tag tier-app">Tier 1 / アプリ層</span> <strong>即時の縮小 (インフラ変更なし、実装済)。</strong> 両コンソールの Cognito トークンを <code>sessionStorage</code> から <strong>メモリ (React state) のみ</strong>へ移し、永続層から JWT を消す。<code>completeLogin</code> は TokenSet を返すだけで保存せず、旧バージョンが残した token は起動時に purge する。</li>
+    <li><span class="tier-tag tier-infra">Tier 2 / インフラ層</span> <strong>目標アーキテクチャ。</strong> 同一オリジンの <strong>BFF (Backend for Frontend)</strong> を置き、Cognito トークンを server 側に保持する。ブラウザが持つのは不透明な <strong>httpOnly + Secure + SameSite cookie</strong> だけにする。OAuth code 交換は BFF 内で行い、<code>code_verifier</code> をブラウザから消す。</li>
+  </ol>
+  <p>Tier 1 はフロントエンドのみで完結し、すぐに「持ち出し時の価値」を下げる。Tier 2 は CloudFront / API Gateway / Lambda / cookie ドメインの設計変更を伴うインフラ層の判断であり、本 ADR はその設計の叩き台を提示する。</p>
+</div>
+
+<div class="warn-box">
+<h3>Tier 1 の既知のコスト: リロードは silent re-auth (リダイレクト往復)</h3>
+<p>セッションを保持しているのは <code>sessionStorage</code> ではなく Cognito Hosted UI 自身の session cookie (Cognito ドメイン上の httpOnly cookie、アプリの JS からは読めない) である。メモリ保持にすると、リロードで token が消えるたびに <code>/oauth2/authorize</code> への redirect 往復が挟まる。Cognito session cookie が生きていれば資格情報の再入力は発生しない (= ログアウトではなく無音バウンス) が、token 有効中のリロードでも即時復元はできなくなる (非 SAML 時はログイン画面が mount で自動 redirect するため手動クリックは増えない)。リロードまたぎを完全シームレスにするには server 側 httpOnly cookie が要る = それが Tier 2 を正当化する。</p>
+<p>付随する観察: 共有クライアントは <code>refreshToken</code> を保存していたが、用途は logout 時の <code>/oauth2/revoke</code> のみで、<code>grant_type=refresh_token</code> による無音のその場更新には使っていない。保存された refresh token は XSS に晒される一方で silent refresh の利益を生んでいなかった。メモリ化で機能的に失うものはない (logout の revoke はメモリ上の値を <code>beginLogout</code> に渡して継続する)。</p>
+</div>
+</section>
+
+<section>
+<h2>現状 vs 目標フロー</h2>
+
+<svg viewBox="0 0 920 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="12" width="100%" style="max-width: 920px; height: auto;">
+  <text x="20" y="24" font-weight="700" fill="#cf222e">現状: トークンは sessionStorage (JS 可読)</text>
+  <rect x="20" y="36" width="180" height="110" rx="6" fill="#fff5f5" stroke="#cf222e" stroke-width="1.5"/>
+  <text x="110" y="56" text-anchor="middle" font-weight="700">ブラウザ (管理 SPA)</text>
+  <rect x="36" y="68" width="148" height="30" rx="4" fill="#fff" stroke="#cf222e"/>
+  <text x="110" y="88" text-anchor="middle" fill="#cf222e">sessionStorage</text>
+  <text x="110" y="116" text-anchor="middle" font-size="11" fill="#59636e">idToken / accessToken</text>
+  <text x="110" y="132" text-anchor="middle" font-size="11" fill="#59636e">refreshToken</text>
+
+  <rect x="280" y="60" width="150" height="60" rx="6" fill="#fff" stroke="#59636e"/>
+  <text x="355" y="86" text-anchor="middle" font-weight="600">API Gateway</text>
+  <text x="355" y="104" text-anchor="middle" font-size="11" fill="#59636e">JWT Authorizer</text>
+
+  <path d="M200 90 L280 90" stroke="#59636e" stroke-width="1.5" fill="none" marker-end="url(#a25arrow)"/>
+  <text x="240" y="82" text-anchor="middle" font-size="11" fill="#cf222e">Bearer (JS で付与)</text>
+
+  <text x="110" y="172" text-anchor="middle" font-size="11" fill="#cf222e">XSS → getItem() で refresh token が抜ける</text>
+
+  <text x="500" y="24" font-weight="700" fill="#1a7f37">目標: トークンは server 側、ブラウザは httpOnly cookie</text>
+  <rect x="500" y="36" width="150" height="110" rx="6" fill="#f0faf2" stroke="#1a7f37" stroke-width="1.5"/>
+  <text x="575" y="56" text-anchor="middle" font-weight="700">ブラウザ (管理 SPA)</text>
+  <rect x="514" y="68" width="122" height="30" rx="4" fill="#fff" stroke="#1a7f37"/>
+  <text x="575" y="88" text-anchor="middle" fill="#1a7f37" font-size="11">httpOnly cookie</text>
+  <text x="575" y="116" text-anchor="middle" font-size="11" fill="#59636e">不透明な session id</text>
+  <text x="575" y="132" text-anchor="middle" font-size="11" fill="#59636e">JS から読めない</text>
+
+  <rect x="700" y="36" width="120" height="110" rx="6" fill="#ddf4ff" stroke="#0969da" stroke-width="1.5"/>
+  <text x="760" y="56" text-anchor="middle" font-weight="700" fill="#0969da">BFF</text>
+  <text x="760" y="78" text-anchor="middle" font-size="11" fill="#59636e">同一オリジン</text>
+  <text x="760" y="96" text-anchor="middle" font-size="11" fill="#59636e">code 交換</text>
+  <text x="760" y="114" text-anchor="middle" font-size="11" fill="#59636e">token 保持</text>
+
+  <rect x="700" y="170" width="120" height="50" rx="6" fill="#fff" stroke="#59636e"/>
+  <text x="760" y="200" text-anchor="middle" font-weight="600">API Gateway</text>
+
+  <path d="M650 91 L700 91" stroke="#1a7f37" stroke-width="1.5" fill="none" marker-end="url(#a25arrow)"/>
+  <text x="675" y="83" text-anchor="middle" font-size="11" fill="#1a7f37">cookie</text>
+  <path d="M760 146 L760 170" stroke="#0969da" stroke-width="1.5" fill="none" marker-end="url(#a25arrow)"/>
+  <text x="815" y="162" text-anchor="middle" font-size="11" fill="#0969da">Bearer JWT</text>
+
+  <text x="575" y="172" text-anchor="middle" font-size="11" fill="#1a7f37">XSS でも cookie は読めない</text>
+
+  <defs>
+    <marker id="a25arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#59636e"/>
+    </marker>
+  </defs>
+</svg>
+
+<p>目標フローでは、ブラウザは不透明な session 識別子を持つ httpOnly cookie だけを保持する。BFF が同一オリジンに座り、ブラウザからの cookie を受けて server 側に保持した JWT を API へ中継する。XSS が成立しても cookie は読めないため、refresh token を含むトークン本体は流出しない (session riding は残るため XSS 対策は別途必要)。</p>
+</section>
+
+<section>
+<h2>Options considered</h2>
+
+<table>
+<thead>
+<tr><th>Option</th><th>Pros</th><th>Cons</th><th>Verdict</th></tr>
+</thead>
+<tbody>
+<tr class="danger">
+  <td><strong>A. 現状維持</strong><br>sessionStorage に id/access/refresh token を保持</td>
+  <td>追加コストゼロ。実装変更なし</td>
+  <td>XSS でトークン持ち出しが成立。refresh token が流出すると継続的にリプレイされうる</td>
+  <td><span class="badge reject">Rejected</span></td>
+</tr>
+<tr>
+  <td><strong>B. アプリ層のみ: メモリ保持 + silent refresh</strong><br>永続ストレージをやめ、トークンを React state のみに置く</td>
+  <td>インフラ変更不要で即時に着手可能。永続層から JWT が消え、リロード後の残存 / 端末共有時の漏れがなくなる</td>
+  <td>session 中はトークンが JS ヒープに存在し、XSS から到達可能。持ち出し耐性は部分的</td>
+  <td><span class="badge warn">採用 (Tier 1)</span></td>
+</tr>
+<tr class="chosen">
+  <td><strong>C. first-party httpOnly cookie + 同一オリジン BFF</strong><br>BFF が token を server 保持、ブラウザは httpOnly cookie のみ</td>
+  <td>refresh token を含むトークン本体が JS から到達不能になり、持ち出しを構造的に遮断。失効を server 側で完全制御できる</td>
+  <td>BFF Lambda / CloudFront behavior / cookie ドメイン設計が必要。CSRF 防御の追加が必須。API への hop が 1 段増える</td>
+  <td><span class="badge chosen">採用 (Tier 2 目標)</span></td>
+</tr>
+<tr class="danger">
+  <td><strong>D. <code>SameSite=None</code> cross-site cookie を API Gateway に直送</strong><br>BFF を置かず、別オリジンの API に cookie を送る</td>
+  <td>BFF レイヤーが要らない</td>
+  <td>third-party cookie 廃止の流れで将来壊れる。<code>SameSite=None</code> は CSRF 面が広く、CORS credentials の取り回しも複雑。既存の JWT Authorizer が cookie を検証できない</td>
+  <td><span class="badge reject">Rejected</span></td>
+</tr>
+</tbody>
+</table>
+</section>
+
+<section>
+<h2>Tier 2 設計の論点</h2>
+
+<p>同一オリジン BFF を成立させるには、フロントエンド (CloudFront) と BFF を同じオリジンに揃える必要がある。代表的な構成は CloudFront に <code>/bff/*</code> 等の behavior を足し、その path だけを BFF (Lambda function URL もしくは API Gateway) にルーティングする方式である。これにより cookie は first-party になる。両管理コンソールはオリジンが分かれているため、各オリジンに BFF behavior を配置する。</p>
+
+<h3>API 到達経路の 2 案</h3>
+<table>
+<thead><tr><th>案</th><th>仕組み</th><th>トレードオフ</th></tr></thead>
+<tbody>
+<tr>
+  <td><strong>C-1. BFF が API を proxy</strong></td>
+  <td>ブラウザは API Gateway を直接叩かず、cookie 付きで BFF にだけアクセスする。BFF が session から JWT を取り出して API へ中継する</td>
+  <td>境界が一点に集約され分かりやすい。一方で管理画面の操作のたびに BFF を経由するため、Lambda invocation が増える</td>
+</tr>
+<tr>
+  <td><strong>C-2. API Gateway に cookie を読む Lambda authorizer</strong></td>
+  <td>ブラウザは API Gateway を直接叩き、Lambda authorizer が cookie から session を引いて JWT claims を注入する</td>
+  <td>hop が増えない。一方で既存の Cognito / JWT Authorizer を Lambda authorizer に差し替える必要があり、認可ロジック (<a href="./adr-020-authorization-model.html">ADR-020</a> の role enum) の再実装が要る</td>
+</tr>
+</tbody>
+</table>
+
+<h4>API 所有者によって C-1 / C-2 の選べる幅が変わる</h4>
+<p>cookie を読む authorizer (C-2) は、その API の authorizer を TenkaCloud が所有している場合にだけ差し込める。SBT (<code>@cdklabs/sbt-aws</code>) の <code>ControlPlane</code> が同梱する control-plane API は Cognito JWT authorizer を内蔵し、TenkaCloud はそれを差し替えられない (内部 child に手を入れる形になり脆い)。したがって経路ごとに選択肢が分かれる。</p>
+<table>
+<thead><tr><th>API パス</th><th>authorizer 所有</th><th>C-2 (cookie authorizer)</th><th>C-1 (BFF proxy)</th></tr></thead>
+<tbody>
+<tr class="danger"><td>admin-console → control-plane API</td><td><strong>SBT 所有</strong></td><td>不可</td><td>必須</td></tr>
+<tr><td>admin-console → AdminInsight HTTP API</td><td>TenkaCloud 所有</td><td>可</td><td>可</td></tr>
+<tr><td>application-admin-console → tenant-template API</td><td>TenkaCloud 所有</td><td>可</td><td>可</td></tr>
+<tr><td>→ problem-deploy / data-plane API</td><td>TenkaCloud 所有</td><td>可</td><td>可</td></tr>
+</tbody>
+</table>
+<p>BFF を SPA 前段に置くこと自体は TenkaCloud 自前のホスティング層 (CloudFront behavior + Lambda) の話で、SBT は禁じない。harness の <code>INVARIANT_CONTROL_PLANE_USES_SBT</code> も、BFF は control plane の置き換えではないため抵触しない。SBT が課す制約は「control-plane API の authorizer に手を入れられない」一点に限られ、そこは BFF proxy で囲えば回避できる。</p>
+
+<h3>session ストアの選択</h3>
+<p>コストゼロ原則 (Free Tier 25 RCU/WCU、Secrets Manager 禁止) を踏まえると、選択肢は次のいずれか。</p>
+<ul>
+  <li><strong>stateless 暗号化 cookie</strong> — session の中身を server 鍵で暗号化して cookie に格納し、ストアを持たない。鍵は SSM Parameter Store SecureString に置く (Secrets Manager は規約で禁止)。即時失効が弱いため失効リストの併用を要する。</li>
+  <li><strong>DynamoDB session テーブル</strong> — PROVISIONED 1/1 (<code>DynamoDbLowCapacity</code> Aspect 準拠) の session テーブルを持つ。server 側失効が容易。管理画面のアクセス頻度に対する RCU を見積もる。</li>
+</ul>
+
+<h3>CSRF 防御</h3>
+<p>cookie 方式は CSRF 面を新たに生むため、<code>SameSite=Strict</code> または <code>Lax</code> を基本とし、状態変更系には origin 検証または double-submit token を併用する。bearer ヘッダ方式では不要だった防御を足すことになる。</p>
+</section>
+
+<section>
+<h2>Non-goals</h2>
+<div class="nongoals-box">
+  <h3>本 ADR の対象外</h3>
+  <ul>
+    <li><strong>participant-portal のトークン保管。</strong> competitor のログインキーは競技時間に限定された短命 bearer であり、localStorage 保管は期間が区切られた許容リスクとして扱う。本 ADR では変更しない。</li>
+    <li><strong>XSS の根本対策の置き換えではない。</strong> CSP / 出力エスケープ / 危険な HTML 注入 sink の禁止 / 依存サプライチェーン防御は引き続き第一防御線として独立に維持する。</li>
+    <li><strong>Cognito そのものの置き換えではない。</strong> 認証基盤は Cognito (Hosted UI + OAuth Code + PKCE) のまま。変えるのはトークンのブラウザ保管方式だけ。</li>
+    <li><strong>認可モデルの変更ではない。</strong> role enum と plane 分離 (<a href="./adr-020-authorization-model.html">ADR-020</a>) はそのまま。</li>
+    <li><strong>SSE / WebSocket の導入ではない。</strong> フロントエンドの polling 方針は維持する。</li>
+  </ul>
+</div>
+</section>
+
+<section>
+<h2>Impact</h2>
+<table>
+<thead><tr><th>Surface</th><th>Tier 1 (アプリ層)</th><th>Tier 2 (インフラ層)</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>packages/auth-client</code> / 両コンソールの <code>AuthProvider</code></td>
+  <td>トークン保管を <code>sessionStorage</code> からメモリに移す。silent re-auth の経路を追加</td>
+  <td>token 取得を BFF cookie 経由に置き換え。code 交換を BFF へ移設</td>
+</tr>
+<tr>
+  <td>CloudFront / API Gateway / Lambda</td>
+  <td>変更なし</td>
+  <td>同一オリジン BFF behavior の追加、cookie ドメイン設計、authorizer もしくは proxy 経路の新設</td>
+</tr>
+<tr>
+  <td>session ストア</td>
+  <td>なし</td>
+  <td>暗号化 cookie (SSM SecureString 鍵) もしくは DDB session テーブル (PROVISIONED 1/1) の新設</td>
+</tr>
+<tr>
+  <td>認可 (<a href="./adr-020-authorization-model.html">ADR-020</a>)</td>
+  <td>変更なし</td>
+  <td>TenkaCloud 所有 API で C-2 を採る場合は JWT Authorizer → cookie 対応 Lambda authorizer へ移植 (SBT 所有の control-plane API は対象外、proxy で囲う)。role claim 検証ロジックは保持</td>
+</tr>
+<tr>
+  <td>participant-portal</td>
+  <td>変更なし</td>
+  <td>変更なし (対象外)</td>
+</tr>
+<tr>
+  <td>コスト</td>
+  <td>増加なし</td>
+  <td>BFF Lambda invocation + (DDB 案なら) session テーブル RCU</td>
+</tr>
+</tbody>
+</table>
+<p>Tier 1 はフロントエンド差分のみで観測可能な改善を出す。Tier 2 は CloudFront / API Gateway / IAM / cookie ドメインに踏み込むインフラ層の決定であり、各 Phase はそれぞれ独立した PR としてアーキテクチャ / セキュリティレビューを通す。本 ADR 自体はコード変更を伴わない設計合意である。</p>
+</section>
+
+<section>
+<h2>Open design questions</h2>
+<p>Tier 2 実装の収束のために残る論点。</p>
+<ul>
+  <li><strong>API 到達経路</strong> — SBT 所有の control-plane API は BFF proxy (C-1) 固定。TenkaCloud 所有 API は C-1 か cookie 対応 Lambda authorizer (C-2) かを invocation コストと authorizer 移植コストで比較する。</li>
+  <li><strong>session ストア</strong> — stateless 暗号化 cookie (即時失効が弱い) か DDB session テーブル (RCU を要する) か。idle timeout / logout 失効の要件との整合。</li>
+  <li><strong>cookie ドメイン</strong> — admin-console と application-admin-console のオリジン構成と、各 CloudFront behavior 上で BFF を同一オリジンに揃える具体的な配置。</li>
+  <li><strong>移行順序</strong> — bearer 系を一気に廃止せず、cookie と bearer を一定期間併存させるか。併存させる場合の認可面の二重化をどう閉じるか。</li>
+  <li><strong>CSRF 方式</strong> — <code>SameSite</code> の <code>Strict</code> / <code>Lax</code> 選択と、状態変更系に対する double-submit token / origin 検証の要否。</li>
+</ul>
+</section>
+
+<section>
+<h2>References</h2>
+<ul>
+  <li>徳丸浩「Web セッション管理と JWT・Cookie の歴史」 — <a href="https://zenn.dev/khale/articles/web-session-jwt-cookie-history">zenn.dev/khale/articles/web-session-jwt-cookie-history</a> (JS 可読ストレージへの JWT 保管が抱える XSS 持ち出しリスクと、ブラウザ境界での cookie 回帰の整理)</li>
+  <li><a href="./adr-020-authorization-model.html">ADR-020</a>: 認可モデル — role enum と段階導入</li>
+  <li><a href="./adr-018-pooled-userpool-saml-isolation.html">ADR-018</a>: pooled UserPool / SAML isolation</li>
+  <li>OWASP: HTML5 Security Cheat Sheet — Local Storage / Session Storage に機密トークンを置かない指針</li>
+</ul>
+</section>
+
+</body>
+</html>

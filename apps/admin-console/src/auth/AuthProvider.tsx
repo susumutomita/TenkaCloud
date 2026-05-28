@@ -2,7 +2,7 @@ import {
   type BeginLoginOptions,
   beginLogin,
   beginLogout,
-  loadStoredTokens,
+  purgeLegacyTokenStorage,
   type TokenSet,
 } from "@tenkacloud/auth-client";
 import {
@@ -48,7 +48,11 @@ export function AuthProvider({ config, children }: { config: AppConfig; children
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setTokensState(loadStoredTokens());
+    // ADR-025: tokens は memory (React state) のみで保持し sessionStorage には残さない
+    // (XSS によるトークン持ち出し面を断つ)。 旧バージョンが永続化した token を purge する。
+    // reload で memory が消えると RequireAuth → Login が Cognito Hosted UI へ auto-redirect し、
+    // 既存 session cookie 経由で silent re-auth に倒れる (= 完全シームレスではなく往復は挟む)。
+    purgeLegacyTokenStorage();
     setReady(true);
   }, []);
 
@@ -58,9 +62,10 @@ export function AuthProvider({ config, children }: { config: AppConfig; children
     // Issue #833: Cognito Hosted UI cookie + refresh token を server-side revoke
     // してから /logout に redirect する (= 旧コードは local sessionStorage のみ clear
     // で Cognito 側 cookie が残り silent re-login していた)。
+    // ADR-025: token は memory 保持なので、 revoke 対象の現在値を beginLogout に渡す。
     setTokensState(null);
-    void beginLogout(config);
-  }, [config]);
+    void beginLogout(config, tokens);
+  }, [config, tokens]);
 
   // Issue #859: idle timeout を tokens が存在するときのみ起動。
   useEffect(() => {

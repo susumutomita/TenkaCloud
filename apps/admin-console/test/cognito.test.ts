@@ -1,9 +1,9 @@
 // Issue #1246: re-targets the shared @tenkacloud/auth-client (formerly src/auth/cognito).
 // Kept as an integration regression so admin-console keeps its consumer-side guarantees.
 import {
-  clearTokens,
+  clearStoredAuthState,
   completeLogin,
-  loadStoredTokens,
+  purgeLegacyTokenStorage,
   type TokenSet,
 } from "@tenkacloud/auth-client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,37 +24,27 @@ const config: AppConfig = {
   samlIdpDirectory: {},
 };
 
-describe("loadStoredTokens", () => {
+describe("purgeLegacyTokenStorage (ADR-025)", () => {
   beforeEach(() => sessionStorage.clear());
+  afterEach(() => sessionStorage.clear()); // don't leak a seeded verifier into completeLogin tests
 
-  describe("when there is no token in sessionStorage", () => {
-    it("should return null", () => {
-      expect(loadStoredTokens()).toBeNull();
-    });
+  it("should evict a bearer token a previous app version persisted to sessionStorage", () => {
+    const stale: TokenSet = {
+      idToken: "id",
+      accessToken: "ac",
+      expiresAt: Date.now() + 60_000,
+    };
+    sessionStorage.setItem("TenkaCloud.tokens", JSON.stringify(stale));
+    purgeLegacyTokenStorage();
+    expect(sessionStorage.getItem("TenkaCloud.tokens")).toBeNull();
   });
 
-  describe("when the stored token has already expired", () => {
-    it("should return null", () => {
-      const expired: TokenSet = {
-        idToken: "id",
-        accessToken: "ac",
-        expiresAt: Date.now() - 1,
-      };
-      sessionStorage.setItem("TenkaCloud.tokens", JSON.stringify(expired));
-      expect(loadStoredTokens()).toBeNull();
-    });
-  });
-
-  describe("when a valid token is stored", () => {
-    it("should return that TokenSet", () => {
-      const valid: TokenSet = {
-        idToken: "id",
-        accessToken: "ac",
-        expiresAt: Date.now() + 60_000,
-      };
-      sessionStorage.setItem("TenkaCloud.tokens", JSON.stringify(valid));
-      expect(loadStoredTokens()).toEqual(valid);
-    });
+  it("should leave the in-flight PKCE verifier intact so /callback can still complete", () => {
+    sessionStorage.setItem("TenkaCloud.pkce_verifier", "v");
+    sessionStorage.setItem("TenkaCloud.tokens", "{}");
+    purgeLegacyTokenStorage();
+    expect(sessionStorage.getItem("TenkaCloud.pkce_verifier")).toBe("v");
+    expect(sessionStorage.getItem("TenkaCloud.tokens")).toBeNull();
   });
 });
 
@@ -112,8 +102,8 @@ describe("completeLogin", () => {
       expect(tokens.expiresAt).toBeGreaterThan(Date.now());
     });
 
-    it("should persist tokens to sessionStorage", () => {
-      expect(loadStoredTokens()?.idToken).toBe("ID");
+    it("should NOT persist tokens to sessionStorage (ADR-025: memory-only)", () => {
+      expect(sessionStorage.getItem("TenkaCloud.tokens")).toBeNull();
     });
   });
 
@@ -164,11 +154,11 @@ describe("completeLogin", () => {
   });
 });
 
-describe("clearTokens", () => {
-  it("should delete both the stored verifier and the tokens", () => {
+describe("clearStoredAuthState", () => {
+  it("should delete the stored verifier and any legacy token", () => {
     sessionStorage.setItem("TenkaCloud.pkce_verifier", "v");
     sessionStorage.setItem("TenkaCloud.tokens", "{}");
-    clearTokens();
+    clearStoredAuthState();
     expect(sessionStorage.getItem("TenkaCloud.pkce_verifier")).toBeNull();
     expect(sessionStorage.getItem("TenkaCloud.tokens")).toBeNull();
   });

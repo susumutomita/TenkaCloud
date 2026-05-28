@@ -1,10 +1,10 @@
 /**
  * Cognito id_token の payload を decode する (署名検証は別系統)。
  *
- * Cognito から issued された id_token は既に auth/cognito.ts の completeLogin で
- * sessionStorage に保存された信頼できる値。本 helper は payload の JSON を取り出す
- * だけで、改竄検知は行わない (本 app は token を外部から受け取る route がなく、
- * 常に自身が発行経路 = Cognito から直接受けるため)。
+ * Cognito から issued された id_token は completeLogin で取得し memory (React state) に
+ * 保持される信頼できる値 (ADR-025: web storage には永続化しない)。本 helper は payload の
+ * JSON を取り出すだけで、改竄検知は行わない (本 app は token を外部から受け取る route が
+ * なく、常に自身が発行経路 = Cognito から直接受けるため)。
  *
  * 戻り値: 欲しいフィールド (tenantId / email) だけ抽出した型。token 不正時は null。
  */

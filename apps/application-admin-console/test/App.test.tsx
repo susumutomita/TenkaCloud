@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 import type { AppConfig } from "../src/config";
 import { I18nProvider } from "../src/i18n";
@@ -27,13 +27,31 @@ function makeIdToken(claims: Record<string, string>): string {
   return `${encode({ alg: "RS256", typ: "JWT" })}.${encode(claims)}.signature`;
 }
 
-function loginAs(claims: Record<string, string>) {
+/**
+ * ADR-025: tokens are memory-only, so a test can no longer fake a session by writing to
+ * sessionStorage. Instead drive the real Cognito callback: seed the PKCE artifacts, stub the
+ * token exchange to return an id_token carrying the given claims, and render at /callback so
+ * the app exchanges → keeps the token in memory → navigates to the authenticated home.
+ */
+function stubLoginExchange(claims: Record<string, string>) {
+  sessionStorage.setItem("TenkaCloud.pkce_verifier", "test-verifier");
+  sessionStorage.setItem("TenkaCloud.oauth_state", "test-state");
   const idToken = makeIdToken(claims);
-  sessionStorage.setItem(
-    "TenkaCloud.tokens",
-    JSON.stringify({ idToken, accessToken: "ac", expiresAt: Date.now() + 60_000 }),
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/oauth2/token")) {
+        return new Response(
+          JSON.stringify({ id_token: idToken, access_token: "ac", expires_in: 3600 }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+    }),
   );
 }
+
+const CALLBACK_PATH = "/callback?code=test-code&state=test-state";
 
 function renderApp(initialPath: string) {
   // i18n Phase 1.C: main.tsx で I18nProvider が App を包むので test でも wrap する。
@@ -53,6 +71,7 @@ describe("App", () => {
   afterEach(() => {
     sessionStorage.clear();
     localStorage.clear();
+    vi.unstubAllGlobals();
   });
 
   describe("when accessing /login directly", () => {
@@ -82,27 +101,27 @@ describe("App", () => {
     });
   });
 
-  describe("when accessing / with a valid token in sessionStorage", () => {
+  describe("when completing the Cognito callback with a valid token (ADR-025: memory-only)", () => {
     it("should display JWT custom:tenantName in the greeting", async () => {
-      loginAs({
+      stubLoginExchange({
         email: "admin@example.com",
         "custom:tenantId": "t-acme",
         "custom:tenantName": "ACME 株式会社",
         "custom:tenantTier": "BASIC",
       });
-      renderApp("/");
+      renderApp(CALLBACK_PATH);
       expect(
         await screen.findByRole("heading", { level: 1, name: /ACME 株式会社 さん/ }),
       ).toBeInTheDocument();
     });
 
     it("should use the fallback placeholder when custom:tenantName is missing (= do not show a UUID-like tenantId in the welcome, Issue #830)", async () => {
-      loginAs({
+      stubLoginExchange({
         email: "admin@example.com",
         "custom:tenantId": "3f01a734-9652-4065-a391-fa1b4d45ae26",
         "custom:tenantTier": "BASIC",
       });
-      renderApp("/");
+      renderApp(CALLBACK_PATH);
       // welcome 文に UUID が漏れず、 fallback (= "テナント") に倒れる
       expect(
         await screen.findByRole("heading", { level: 1, name: /テナント さん/ }),
@@ -113,12 +132,12 @@ describe("App", () => {
     });
 
     it("should NOT show the config.tenantName placeholder ('Shared Pooled Tenant') on screen", async () => {
-      loginAs({
+      stubLoginExchange({
         email: "admin@example.com",
         "custom:tenantId": "t-acme",
         "custom:tenantName": "ACME 株式会社",
       });
-      renderApp("/");
+      renderApp(CALLBACK_PATH);
       // tenantName 表示が完了するまで待つ
       await screen.findByRole("heading", { level: 1, name: /ACME 株式会社/ });
       expect(screen.queryByText(/Shared Pooled Tenant/)).toBeNull();

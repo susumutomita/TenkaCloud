@@ -3,8 +3,15 @@
  *
  * Issue #1246: extracted from per-app duplicates in `apps/admin-console/src/auth/cognito.ts`
  * and `apps/application-admin-console/src/auth/cognito.ts`. The flow is identical between the
- * two SPAs (begin login -> Cognito callback -> exchange code for tokens -> store in
- * sessionStorage -> begin logout revokes refresh token and clears Hosted UI cookie).
+ * two SPAs (begin login -> Cognito callback -> exchange code for tokens -> return them to the
+ * caller -> begin logout revokes refresh token and clears Hosted UI cookie).
+ *
+ * ADR-025: tokens (id/access/refresh) are NEVER persisted to web storage. completeLogin
+ * returns the TokenSet and the caller (AuthProvider) keeps it in memory (React state) only,
+ * so an XSS payload has no sessionStorage / localStorage bearer token to read out. The only
+ * sessionStorage left is the short-lived PKCE verifier + OAuth state, which must survive the
+ * full-page redirect to Cognito and back. A reload drops the in-memory token and re-auths
+ * silently against the Cognito Hosted UI session cookie.
  *
  * Behavior preserved verbatim including:
  *   - Issue #861: fail-closed OAuth state validation (missing state in sessionStorage is treated
@@ -19,7 +26,10 @@ import { deriveChallenge, generateVerifier } from "./pkce";
 
 const VERIFIER_KEY = "TenkaCloud.pkce_verifier";
 const STATE_KEY = "TenkaCloud.oauth_state";
-const TOKENS_KEY = "TenkaCloud.tokens";
+// ADR-025: a previous app version persisted the bearer TokenSet under this key. Tokens are
+// now memory-only; the key is retained solely so `purgeLegacyTokenStorage` can evict a stale
+// token left behind in a tab that was already open before the upgrade.
+const LEGACY_TOKENS_KEY = "TenkaCloud.tokens";
 
 /**
  * Minimal config surface the OAuth client needs. The hosting SPA `AppConfig` is a superset
@@ -129,43 +139,48 @@ export async function completeLogin(
     refreshToken: json.refresh_token,
     expiresAt: Date.now() + json.expires_in * 1000,
   };
-  sessionStorage.setItem(TOKENS_KEY, JSON.stringify(tokens));
+  // ADR-025: do NOT persist tokens. Return to the caller for in-memory (React state) storage.
   return tokens;
 }
 
-export function loadStoredTokens(): TokenSet | null {
-  const raw = sessionStorage.getItem(TOKENS_KEY);
-  if (!raw) return null;
+/**
+ * ADR-025: evict any bearer TokenSet a previous app version persisted to sessionStorage.
+ * Tokens are now memory-only, so a leftover token in an already-open tab would needlessly
+ * stay readable by JavaScript. Call once on app init. The PKCE verifier + OAuth state are
+ * deliberately left intact so a /callback load mid-flow can still complete the exchange.
+ * Idempotent and tolerant of storage being unavailable (private mode).
+ */
+export function purgeLegacyTokenStorage(): void {
   try {
-    const tokens = JSON.parse(raw) as TokenSet;
-    if (tokens.expiresAt <= Date.now()) {
-      sessionStorage.removeItem(TOKENS_KEY);
-      return null;
-    }
-    return tokens;
+    sessionStorage.removeItem(LEGACY_TOKENS_KEY);
   } catch {
-    sessionStorage.removeItem(TOKENS_KEY);
-    return null;
+    // sessionStorage unavailable (private mode / disabled) — nothing to purge.
   }
 }
 
-export function clearTokens(): void {
-  sessionStorage.removeItem(TOKENS_KEY);
+/**
+ * Clear the in-flight PKCE verifier + OAuth state (and defensively the legacy token key).
+ * Used on logout and to abort a half-started login. completeLogin already clears the PKCE
+ * artifacts on its own success path.
+ */
+export function clearStoredAuthState(): void {
   sessionStorage.removeItem(VERIFIER_KEY);
   sessionStorage.removeItem(STATE_KEY);
+  sessionStorage.removeItem(LEGACY_TOKENS_KEY);
 }
 
 /**
  * Issue #833: Cognito Hosted UI session (= cookie) を revoke してから redirect する。
  *
- * 旧 logout は `clearTokens()` (= sessionStorage) のみで、 Cognito 側の session cookie
- * は browser に残ったまま。 次に `beginLogin` で /oauth2/authorize に redirect すると、
+ * 旧 logout は local sessionStorage の clear のみで、 Cognito 側の session cookie は
+ * browser に残ったまま。 次に `beginLogin` で /oauth2/authorize に redirect すると、
  * Cognito が既存 cookie で silent re-login させ、 Hosted UI を経由せずに画面に戻って
  * しまっていた。
  *
  * 修正:
- *   1. refresh token があれば `/oauth2/revoke` で server-side revoke
- *   2. sessionStorage を clearTokens
+ *   1. refresh token があれば `/oauth2/revoke` で server-side revoke (ADR-025: token は
+ *      memory 保持なので呼び出し元が現在の TokenSet を渡す)
+ *   2. sessionStorage の PKCE state を `clearStoredAuthState`
  *   3. `/logout?client_id=...&logout_uri=...&redirect_uri=...&response_type=code`
  *      に redirect し Cognito cookie を破棄
  *
@@ -173,16 +188,18 @@ export function clearTokens(): void {
  * OIDC-conformant mode の UserPool では `redirect_uri` が必須で、 legacy mode は余分な param を
  * ignore するため、 両方付けることでどちらの環境でも動く (= AWS Cognito 仕様)。
  */
-export async function beginLogout(config: CognitoOAuthConfig): Promise<void> {
+export async function beginLogout(
+  config: CognitoOAuthConfig,
+  tokens?: TokenSet | null,
+): Promise<void> {
   // (1) refresh token の server-side revoke (= best-effort、 失敗しても続行)
-  const stored = loadStoredTokens();
-  if (stored?.refreshToken) {
+  if (tokens?.refreshToken) {
     try {
       await fetch(`${config.cognitoDomain}/oauth2/revoke`, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          token: stored.refreshToken,
+          token: tokens.refreshToken,
           client_id: config.cognitoClientId,
         }),
       });
@@ -191,8 +208,8 @@ export async function beginLogout(config: CognitoOAuthConfig): Promise<void> {
       // ので silently 続ける。 logout redirect で Cognito cookie は消える。
     }
   }
-  // (2) local 側 token を確実に破棄
-  clearTokens();
+  // (2) PKCE transient + 旧永続 token を確実に破棄
+  clearStoredAuthState();
   // (3) Hosted UI cookie を破棄するため `/logout` に redirect。 sign-out URL は
   //     UserPoolClient の `Allowed sign-out URLs` に含まれている origin に揃える
   //     (= 多くの環境で `<redirectUri origin>/login` を登録済)。
