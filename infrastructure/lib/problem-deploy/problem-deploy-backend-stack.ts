@@ -6,7 +6,6 @@ import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
 import { AdminAuditLogTable } from "./admin-audit-log-table.js";
-import { AuditArchiveBucket } from "./audit-archive-bucket.js";
 import { BulkDeployCreateStateMachine } from "./bulk-deploy-create-state-machine.js";
 import { CompetitorAccountsApiLambda } from "./competitor-accounts-api-lambda.js";
 import { CompetitorAccountsTable } from "./competitor-accounts-table.js";
@@ -196,16 +195,6 @@ export class ProblemDeployBackendStack extends cdk.Stack {
    */
   public readonly adminAuditLogTable: Table;
   /**
-   * Issue #1341 (#1335 Phase 3): immutable audit archive bucket 名 (= Object Lock compliance、
-   * 7-year retention)。 AdminConsoleInsightStack が `/admin/audit/export` route で
-   * GetObject / ListObjectsV2 する経路に injected する。
-   */
-  public readonly auditArchiveBucketName: string;
-  /**
-   * Issue #1341: 同 bucket 参照 (= IAM grantRead を AdminConsoleInsightStack 側で行うため expose)。
-   */
-  public readonly auditArchiveBucket: import("aws-cdk-lib/aws-s3").IBucket;
-  /**
    * Issue #1053: 競技者向け CFn bootstrap template (`competitor-bootstrap.yaml`) の S3 public
    * URL。 旧実装は `AdminConsoleHostingStack` に同居していたが、 Lite mode で deploy されない
    * 構造的問題があったため、 両モードが無条件で deploy する本 stack へ移管した。 consumer は
@@ -257,15 +246,6 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // で 365 / SOC2 enterprise 用に上げる)。
     const adminAuditLog = new AdminAuditLogTable(this, "AdminAuditLog");
     this.adminAuditLogTable = adminAuditLog.table;
-
-    // Issue #1341 (#1335 Phase 3): immutable audit archive。 DDB Stream → Lambda → S3 (Object Lock
-    // compliance, 1-year) で 7 年 lifecycle に乗せる。 [USER-REVIEW] CDK 追加分。
-    const auditArchive = new AuditArchiveBucket(this, "AuditArchive", {
-      adminAuditLogTable: adminAuditLog.table,
-      environmentName: props.environmentName,
-    });
-    this.auditArchiveBucketName = auditArchive.bucket.bucketName;
-    this.auditArchiveBucket = auditArchive.bucket;
 
     // Issue #1053: 競技者向け CFn bootstrap template の S3 hosting を本 stack に持つ。
     // 旧 AdminConsoleHostingStack から移管 (= Lite / SaaS 両モード対応 + 3-phase env-var dance 解消)。
@@ -514,11 +494,6 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       value: endpoints.table.tableName,
       description:
         "ADR-012 Phase 3.A Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
-    });
-    new CfnOutput(this, "AuditArchiveBucketName", {
-      value: this.auditArchiveBucketName,
-      description:
-        "Issue #1341: SOC2 immutable audit archive bucket (Object Lock compliance, 1-year retention, 7-year lifecycle)。",
     });
   }
 }

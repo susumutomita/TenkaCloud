@@ -5,7 +5,6 @@ import { HttpUserPoolAuthorizer } from "aws-cdk-lib/aws-apigatewayv2-authorizers
 import { HttpLambdaIntegration } from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import type { IUserPool } from "aws-cdk-lib/aws-cognito";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
-import type { IBucket } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
 import { SignInAuditLambda } from "../control-plane/sign-in-audit-lambda.js";
 import { AdminInsightApiLambda } from "./admin-insight-api-lambda.js";
@@ -60,13 +59,7 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
    */
   readonly environmentName?: string;
   /**
-   * Issue #1341 (#1335 Phase 3): SOC2 immutable audit archive bucket (= Object Lock compliance、
-   * 7-year retention)。 `/admin/audit/export` の JSONL export 経路で read される。
-   * 未指定なら route は 503 を返す (= legacy / Lite mode 互換)。
-   */
-  readonly auditArchiveBucket?: IBucket;
-  /**
-   * Issue #1341: SOC2 1-year retention 用 env (= `AUDIT_RETENTION_DAYS=365`)。
+   * SOC2 1-year retention 用 env (= `AUDIT_RETENTION_DAYS=365`)。
    * 未指定なら 90 日 default (OSS / self-hosted)。
    */
   readonly auditRetentionDays?: number;
@@ -131,8 +124,6 @@ export class AdminConsoleInsightStack extends cdk.Stack {
         : {}),
       // Issue #950: admin audit log table の read-only access
       ...(props.adminAuditLogTable ? { adminAuditLogTable: props.adminAuditLogTable } : {}),
-      // Issue #1341: SOC2 immutable archive bucket への read-only access + retention env
-      ...(props.auditArchiveBucket ? { auditArchiveBucket: props.auditArchiveBucket } : {}),
       ...(props.auditRetentionDays !== undefined
         ? { auditRetentionDays: props.auditRetentionDays }
         : {}),
@@ -256,12 +247,6 @@ export class AdminConsoleInsightStack extends cdk.Stack {
     });
     httpApi.addRoutes({
       path: "/admin/insight/audit/export",
-      methods: [HttpMethod.GET],
-      integration,
-    });
-    // Issue #1341 (#1335 Phase 3): SOC2 immutable archive 経由の JSONL export
-    httpApi.addRoutes({
-      path: "/admin/audit/export",
       methods: [HttpMethod.GET],
       integration,
     });

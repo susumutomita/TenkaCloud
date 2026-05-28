@@ -47,7 +47,7 @@
 </head>
 <body>
 <h1>SOC2 evidence map — TenkaCloud</h1>
-<p>Status: Phase 3 (Issue #1341 / #1335). This document explains where each SOC2-relevant control&#39;s evidence lives, how an auditor or security team can extract it, the retention policy applied, and how tamper detection is structured. It assumes the platform is deployed in SaaS mode (= multi-tenant); the Lite mode picture is noted inline where it diverges.</p>
+<p>This document explains where each SOC2-relevant control&#39;s evidence lives, how an auditor or security team can extract it, the retention policy applied, and how tamper detection is structured. It assumes the platform is deployed in SaaS mode (= multi-tenant); the Lite mode picture is noted inline where it diverges.</p>
 <p>This is a readiness map, not a certification statement. Full SOC2 Type II certification requires an external assessor; this document covers the controls TenkaCloud implements directly.</p>
 <h2>Controls and evidence</h2>
 <table>
@@ -65,28 +65,21 @@
 <td><code>AdminAuditLog</code> DynamoDB table (<code>PK=TENANT#…</code> / <code>PK=SYSTEM#&lt;env&gt;</code>)</td>
 <td><code>GET /admin/insight/audit?scope=…&amp;from=&amp;to=&amp;principal=</code> returns paginated JSON; <code>GET /admin/insight/audit/export</code> returns CSV</td>
 <td>365 days in DDB when <code>AUDIT_RETENTION_DAYS=365</code> (default 90 for OSS)</td>
-<td>DDB <code>RemovalPolicy=RETAIN</code> + same-row TTL only; mirrored to immutable S3 (see CC6.2)</td>
-</tr>
-<tr>
-<td>CC6.2 — Append-only audit (immutability)</td>
-<td><code>tenkacloud-audit-archive-*</code> S3 bucket</td>
-<td><code>GET /admin/audit/export?from=YYYY-MM-DD&amp;to=YYYY-MM-DD&amp;format=jsonl</code> streams JSONL from the immutable archive</td>
-<td>Object Lock Compliance mode, 1-year minimum retention; lifecycle moves objects to Glacier after 90 days and deletes them after 7 years</td>
-<td>S3 Object Lock Compliance mode (= admin and root cannot overwrite or shorten retention); bucket versioning enforced; SSL-only access policy</td>
+<td>DDB <code>RemovalPolicy=RETAIN</code> + same-row TTL only</td>
 </tr>
 <tr>
 <td>CC6.3 — Authentication (sign-in audit)</td>
 <td>CloudTrail <code>AWS_Cognito</code> events + <code>AdminAuditLog</code> row when admin operations succeed/fail</td>
 <td>CloudWatch Logs Insights query on the SystemAuditWriter Lambda log group; combine with audit API for the admin-side outcome</td>
-<td>CloudTrail: 90 days managed; AdminAuditLog: per the bucket above</td>
-<td>CloudTrail digest validation + S3 Object Lock on archive bucket</td>
+<td>CloudTrail: 90 days managed; AdminAuditLog: per CC6.1</td>
+<td>CloudTrail digest validation</td>
 </tr>
 <tr>
 <td>CC6.6 — Privileged access change</td>
 <td><code>AdminAuditLog</code> rows with <code>action=patch_user_role</code> / <code>action=rotate_external_id</code> / <code>action=invite_user</code></td>
 <td>Same as CC6.1; filter by <code>action</code></td>
-<td>Same as CC6.1/CC6.2</td>
-<td>Same as CC6.2 (every admin write is mirrored into Object Lock storage by the DDB Stream → Lambda → S3 path)</td>
+<td>Same as CC6.1</td>
+<td>Same as CC6.1</td>
 </tr>
 <tr>
 <td>CC7.2 — Anomaly detection</td>
@@ -111,20 +104,6 @@
   -o audit-system-2026Q1.csv
 </code></pre>
 </li>
-<li><p><strong>Extract the immutable archive (= longer horizon, JSONL)</strong>.</p>
-<pre><code class="language-sh">curl -H &quot;Authorization: Bearer $JWT&quot; \
-  &quot;$ADMIN_INSIGHT_API/admin/audit/export?from=2025-05-01&amp;to=2026-05-01&amp;format=jsonl&quot; \
-  -o audit-archive-2025-2026.jsonl
-</code></pre>
-<p>The response is hard-capped at 100 MB per request. The header <code>x-export-truncated: true</code> indicates the auditor needs to issue further requests with narrower date ranges. <code>x-export-object-count</code> and <code>x-export-bytes</code> report what was actually returned.</p>
-</li>
-<li><p><strong>Cross-check the archive integrity in the AWS console</strong>.</p>
-<ul>
-<li>Open the <code>tenkacloud-audit-archive-&lt;account&gt;</code> bucket.</li>
-<li>Confirm &quot;Object Lock&quot; is enabled and the default retention mode is <code>Compliance</code> with 365-day retention.</li>
-<li>Pick one object; confirm its retention policy applies and that the &quot;Edit retention&quot; UI rejects a shortening attempt with an <code>AccessDenied</code> (even when called as root).</li>
-</ul>
-</li>
 </ol>
 <h2>Retention policy</h2>
 <table>
@@ -142,47 +121,23 @@
 <td>365 days (env <code>AUDIT_RETENTION_DAYS=365</code>)</td>
 <td>3650 days (= 10-year clamp)</td>
 </tr>
-<tr>
-<td>S3 archive Object Lock minimum</td>
-<td>365 days (Compliance mode)</td>
-<td>365 days</td>
-<td>Bucket-level constant; cannot be shortened post-creation</td>
-</tr>
-<tr>
-<td>S3 archive lifecycle Glacier transition</td>
-<td>90 days</td>
-<td>90 days</td>
-<td>Constant</td>
-</tr>
-<tr>
-<td>S3 archive lifecycle expiration</td>
-<td>7 years (2555 days)</td>
-<td>7 years</td>
-<td>Constant</td>
-</tr>
 </tbody></table>
-<p>The DDB TTL governs the operational window (= what the admin UI can paginate). The archive governs the audit window (= what is provable after the operational window expires).</p>
+<p>The DDB TTL governs the operational window (= what the admin UI can paginate).</p>
 <h2>Tamper detection</h2>
 <ul>
 <li><strong>DynamoDB layer</strong>. Writes are append-only by convention (no UPDATE / DELETE statements in any handler). The table itself uses <code>RemovalPolicy.RETAIN</code>, so even a stack delete does not drop rows. TTL expiry is the only sanctioned deletion path.</li>
-<li><strong>DynamoDB Streams</strong>. The table emits a <code>NEW_IMAGE</code> stream into the <code>AuditArchiveWriter</code> Lambda for every INSERT. MODIFY and REMOVE records are explicitly skipped, so TTL expiry never reaches the archive — only true admin writes are mirrored.</li>
-<li><strong>S3 Object Lock (Compliance mode)</strong>. Once the writer Lambda <code>PutObject</code>s an audit row, the object is immutable for the retention period (= 365 days). Compliance mode rejects retention shortening attempts from any IAM identity, including the AWS account root. Versioning is enforced as the Object Lock prerequisite.</li>
-<li><strong>Bucket policy</strong>. <code>enforceSSL: true</code> adds a <code>Deny</code> statement against <code>aws:SecureTransport=false</code>, so audit objects can only be read over TLS.</li>
-<li><strong>Public access</strong>. <code>BlockPublicAccess.BLOCK_ALL</code> denies any public ACL or policy from being added even by a future operator. The archive bucket can only be read by the IAM principal granted via <code>grantRead</code> on the <code>AdminInsightApiLambda</code>.</li>
-<li><strong>Read access</strong>. The export endpoint requires both an API Gateway JWT Authorizer (= ControlPlane Cognito UserPool) and the <code>cognito:groups ⊇ {SystemAdmin}</code> claim re-check in the Lambda handler. Tenant Admins receive <code>403 forbidden</code> before any S3 call is issued.</li>
+<li><strong>Read access</strong>. Both export endpoints require an API Gateway JWT Authorizer (= ControlPlane Cognito UserPool) and the <code>cognito:groups ⊇ {SystemAdmin}</code> claim re-check in the Lambda handler. Tenant Admins receive <code>403 forbidden</code>.</li>
 </ul>
 <h2>Known gaps and follow-ups</h2>
 <ul>
-<li><strong>CloudTrail digest validation is not yet automated</strong>. An auditor confirming Cognito sign-in events relies on standard AWS CloudTrail integrity hashes; we do not yet copy CloudTrail digests into the archive bucket. Tracked as a deferred item under #1335.</li>
-<li><strong>Cognito Advanced Security Features (= ASF) event ingestion</strong> is deferred. ASF emits richer authentication failure data than standard CloudTrail; wiring that into the same archive is planned but not in scope for this Phase 3 evidence map.</li>
-<li><strong>External SIEM forwarding</strong> (= Athena / OpenSearch / Splunk) is not configured. Auditors that need full-text query across the 7-year horizon should ingest the archive bucket into their SIEM directly (= the JSONL layout is Hive-partitioned by <code>year=</code>/<code>month=</code>/<code>day=</code>, so Athena <code>MSCK REPAIR TABLE</code> works out of the box).</li>
+<li><strong>CloudTrail digest validation is not yet automated</strong>. An auditor confirming Cognito sign-in events relies on standard AWS CloudTrail integrity hashes.</li>
+<li><strong>Cognito Advanced Security Features (= ASF) event ingestion</strong> is deferred. ASF emits richer authentication failure data than standard CloudTrail.</li>
+<li><strong>External SIEM forwarding</strong> (= Athena / OpenSearch / Splunk) is not configured.</li>
 </ul>
 <h2>References</h2>
 <ul>
-<li><code>infrastructure/lib/problem-deploy/admin-audit-log-table.ts</code> — DDB schema and stream configuration.</li>
-<li><code>infrastructure/lib/problem-deploy/audit-archive-bucket.ts</code> — S3 Object Lock bucket and writer Lambda construct.</li>
-<li><code>infrastructure/lib/problem-deploy/handlers/audit-archive-writer/index.ts</code> — DDB Stream → S3 JSONL conversion.</li>
-<li><code>infrastructure/lib/admin-insight/handlers/admin-insight-handler/audit-export-s3.ts</code> — <code>/admin/audit/export</code> export logic.</li>
+<li><code>infrastructure/lib/problem-deploy/admin-audit-log-table.ts</code> — DDB schema.</li>
+<li><code>infrastructure/lib/admin-insight/handlers/admin-insight-handler/index.ts</code> — <code>/admin/insight/audit</code> read + CSV export.</li>
 <li><code>docs/architecture/adr-020-authorization-model.html</code> — admin audit log scope and role split.</li>
 </ul>
 

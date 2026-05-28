@@ -1,5 +1,5 @@
 import { RemovalPolicy } from "aws-cdk-lib";
-import { AttributeType, BillingMode, StreamViewType, Table } from "aws-cdk-lib/aws-dynamodb";
+import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
 
 /**
@@ -29,9 +29,6 @@ import { Construct } from "constructs";
  * 極低 QPS、 read は監査画面の paginate のみ。 Free Tier 25 RCU/WCU に十分収まる。
  *
  * 削除方針: RETAIN。 stack delete で audit 履歴を意図せず消さない (= 監査要件)。 必要なら手動。
- *
- * Stream (Issue #1341): NEW_IMAGE で audit-archive-writer Lambda が PutObject に変換し、
- * Object Lock 付き S3 bucket に immutable archive する (= SOC2 CC6 + 7-year retention)。
  */
 export class AdminAuditLogTable extends Construct {
   public readonly table: Table;
@@ -48,8 +45,6 @@ export class AdminAuditLogTable extends Construct {
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: false },
       // env `AUDIT_RETENTION_DAYS` (= 90 default / SOC2 365 等) を caller が ttl に書く。
       timeToLiveAttribute: "ttl",
-      // Issue #1341: NEW_IMAGE stream を audit-archive-writer Lambda に流して S3 に長期保管する。
-      stream: StreamViewType.NEW_IMAGE,
     });
 
     // GSI1: actor 別の audit query (= 「ユーザー X が何をしたか」 を 1 引きで)
