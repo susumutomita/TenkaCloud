@@ -2,14 +2,20 @@
  * Issue #859: idle session 自動ログアウトの regression test。
  *
  * 15 分間 mouse / keyboard 操作が無ければ logout を発火することを timer mock で pin。
+ *
+ * ADR-025: tokens は memory (React state) のみで保持し sessionStorage には残さないため、
+ * テストは Callback 相当の `setTokens` でログイン状態を作る (= 旧 test の sessionStorage
+ * シードは廃止)。logout は revoke 対象として現在の TokenSet を beginLogout に渡す。
  */
+
+import type { TokenSet } from "@tenkacloud/auth-client";
 import { render, screen } from "@testing-library/react";
-import { act } from "react";
+import { act, useEffect, useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const beginLogoutMock = vi.fn();
-// Issue #1246: AuthProvider imports beginLogin / beginLogout / loadStoredTokens from the
-// shared @tenkacloud/auth-client package (formerly per-app src/auth/cognito).
+// Issue #1246: AuthProvider imports beginLogin / beginLogout / purgeLegacyTokenStorage from
+// the shared @tenkacloud/auth-client package (formerly per-app src/auth/cognito).
 vi.mock("@tenkacloud/auth-client", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
@@ -38,6 +44,13 @@ const config: AppConfig = {
   samlIdpDirectory: {},
 };
 
+const validTokens: TokenSet = {
+  idToken: "id",
+  accessToken: "ac",
+  refreshToken: "rf",
+  expiresAt: Date.now() + 60 * 60 * 1000,
+};
+
 function TokensDisplay() {
   const { tokens, ready } = useAuth();
   return (
@@ -46,6 +59,18 @@ function TokensDisplay() {
       <span data-testid="tokens">{tokens ? "has-tokens" : "no-tokens"}</span>
     </div>
   );
+}
+
+/** Callback 相当: mount 直後に一度だけ setTokens してログイン状態を作る (memory 保持)。 */
+function SignedIn({ tokens }: { tokens: TokenSet }) {
+  const { setTokens } = useAuth();
+  const done = useRef(false);
+  useEffect(() => {
+    if (done.current) return;
+    done.current = true;
+    setTokens(tokens);
+  }, [setTokens, tokens]);
+  return <TokensDisplay />;
 }
 
 describe("AuthProvider idle timeout (#859)", () => {
@@ -76,17 +101,10 @@ describe("AuthProvider idle timeout (#859)", () => {
     expect(beginLogoutMock).not.toHaveBeenCalled();
   });
 
-  it("should call beginLogout when tokens are present and 15 min pass without activity", async () => {
-    const valid = {
-      idToken: "id",
-      accessToken: "ac",
-      expiresAt: Date.now() + 60 * 60 * 1000,
-    };
-    sessionStorage.setItem("TenkaCloud.tokens", JSON.stringify(valid));
-
+  it("should call beginLogout with the current tokens when 15 min pass without activity", async () => {
     render(
       <AuthProvider config={config}>
-        <TokensDisplay />
+        <SignedIn tokens={validTokens} />
       </AuthProvider>,
     );
     await act(async () => {
@@ -101,30 +119,28 @@ describe("AuthProvider idle timeout (#859)", () => {
     });
     expect(beginLogoutMock).not.toHaveBeenCalled();
 
-    // 残り 1 sec で発火
+    // 残り 1 sec で発火。 ADR-025: revoke 対象の TokenSet が渡る。
     await act(async () => {
       vi.advanceTimersByTime(2 * 1000);
       await Promise.resolve();
     });
     expect(beginLogoutMock).toHaveBeenCalledTimes(1);
+    expect(beginLogoutMock).toHaveBeenCalledWith(
+      config,
+      expect.objectContaining({ idToken: "id", refreshToken: "rf" }),
+    );
   });
 
   it("should reset the idle timer on user activity (keydown)", async () => {
-    const valid = {
-      idToken: "id",
-      accessToken: "ac",
-      expiresAt: Date.now() + 60 * 60 * 1000,
-    };
-    sessionStorage.setItem("TenkaCloud.tokens", JSON.stringify(valid));
-
     render(
       <AuthProvider config={config}>
-        <TokensDisplay />
+        <SignedIn tokens={validTokens} />
       </AuthProvider>,
     );
     await act(async () => {
       await Promise.resolve();
     });
+    expect(screen.getByTestId("tokens")).toHaveTextContent("has-tokens");
 
     // 10 min 経過 → keydown で reset → 14 min 経過 (total 24 min) でも logout しない
     await act(async () => {

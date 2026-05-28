@@ -3,16 +3,20 @@ import {
   beginLogin,
   beginLogout,
   type CognitoOAuthConfig,
-  clearTokens,
+  clearStoredAuthState,
   completeLogin,
-  loadStoredTokens,
+  purgeLegacyTokenStorage,
+  type TokenSet,
 } from "../src/cognito";
 
 /**
  * Issue #1246: regression coverage for the shared Cognito OAuth client extracted from
  * admin-console + application-admin-console. Asserts behavior is preserved verbatim,
- * including Issue #861 (fail-closed state validation) and Issue #833 (revoke + OIDC
- * logout) guarantees.
+ * including Issue #861 (fail-closed state validation) and Issue #833 (revoke + OIDC logout).
+ *
+ * ADR-025: tokens are memory-only. The exchange must NOT write a bearer token to
+ * sessionStorage, `purgeLegacyTokenStorage` evicts a token left by a pre-upgrade tab, and
+ * `beginLogout` revokes the TokenSet handed to it by the caller rather than reading storage.
  */
 
 const TOKENS_KEY = "TenkaCloud.tokens";
@@ -26,7 +30,8 @@ const CONFIG: CognitoOAuthConfig = {
   scope: "openid email profile",
 };
 
-function storeTokens(refreshToken: string | undefined): void {
+/** Seed a bearer token under the legacy key, as a pre-ADR-025 app version would have. */
+function seedLegacyToken(refreshToken: string | undefined): void {
   sessionStorage.setItem(
     TOKENS_KEY,
     JSON.stringify({
@@ -36,6 +41,15 @@ function storeTokens(refreshToken: string | undefined): void {
       expiresAt: Date.now() + 60_000,
     }),
   );
+}
+
+function tokenSet(refreshToken: string | undefined): TokenSet {
+  return {
+    idToken: "id.jwt",
+    accessToken: "access.jwt",
+    refreshToken,
+    expiresAt: Date.now() + 60_000,
+  };
 }
 
 let assignSpy: ReturnType<typeof vi.fn>;
@@ -113,7 +127,7 @@ describe("completeLogin", () => {
     );
   });
 
-  it("should exchange the auth code for tokens, persist them, and clear PKCE artifacts on success", async () => {
+  it("should exchange the auth code for tokens, return them WITHOUT persisting, and clear PKCE artifacts (ADR-025)", async () => {
     sessionStorage.setItem(VERIFIER_KEY, "verifier-xyz");
     sessionStorage.setItem(STATE_KEY, "state-xyz");
     fetchSpy.mockResolvedValueOnce(
@@ -147,7 +161,8 @@ describe("completeLogin", () => {
 
     expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull();
     expect(sessionStorage.getItem(STATE_KEY)).toBeNull();
-    expect(sessionStorage.getItem(TOKENS_KEY)).not.toBeNull();
+    // ADR-025: the bearer token must never land in web storage (memory-only in the caller).
+    expect(sessionStorage.getItem(TOKENS_KEY)).toBeNull();
   });
 
   it("should throw with the Cognito error body when the token endpoint returns non-2xx", async () => {
@@ -161,47 +176,40 @@ describe("completeLogin", () => {
   });
 });
 
-describe("loadStoredTokens / clearTokens", () => {
-  it("should round-trip a stored token set that has not expired", () => {
-    storeTokens("refresh.jwt");
-    const loaded = loadStoredTokens();
-    expect(loaded?.accessToken).toBe("access.jwt");
+describe("purgeLegacyTokenStorage / clearStoredAuthState (ADR-025)", () => {
+  it("should evict a token a previous app version persisted, leaving PKCE artifacts intact", () => {
+    seedLegacyToken("refresh.jwt");
+    sessionStorage.setItem(VERIFIER_KEY, "verifier-still-needed");
+    sessionStorage.setItem(STATE_KEY, "state-still-needed");
+
+    purgeLegacyTokenStorage();
+
+    expect(sessionStorage.getItem(TOKENS_KEY)).toBeNull();
+    // a mid-flight /callback load must still find its PKCE artifacts to finish the exchange.
+    expect(sessionStorage.getItem(VERIFIER_KEY)).toBe("verifier-still-needed");
+    expect(sessionStorage.getItem(STATE_KEY)).toBe("state-still-needed");
   });
 
-  it("should drop and ignore an expired token set", () => {
-    sessionStorage.setItem(
-      TOKENS_KEY,
-      JSON.stringify({
-        idToken: "id",
-        accessToken: "access",
-        expiresAt: Date.now() - 1,
-      }),
-    );
-    expect(loadStoredTokens()).toBeNull();
+  it("should be a no-op when there is no legacy token", () => {
+    expect(() => purgeLegacyTokenStorage()).not.toThrow();
     expect(sessionStorage.getItem(TOKENS_KEY)).toBeNull();
   });
 
-  it("should drop and ignore corrupted JSON without throwing", () => {
-    sessionStorage.setItem(TOKENS_KEY, "{not json");
-    expect(loadStoredTokens()).toBeNull();
-    expect(sessionStorage.getItem(TOKENS_KEY)).toBeNull();
-  });
-
-  it("should clear tokens, verifier, and state all at once", () => {
+  it("should clear the PKCE verifier, OAuth state, and any legacy token at once", () => {
     sessionStorage.setItem(TOKENS_KEY, "x");
     sessionStorage.setItem(VERIFIER_KEY, "x");
     sessionStorage.setItem(STATE_KEY, "x");
-    clearTokens();
+    clearStoredAuthState();
     expect(sessionStorage.getItem(TOKENS_KEY)).toBeNull();
     expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull();
     expect(sessionStorage.getItem(STATE_KEY)).toBeNull();
   });
 });
 
-describe("beginLogout (Issue #833)", () => {
-  it("should POST the refresh token to /oauth2/revoke and clear sessionStorage", async () => {
-    storeTokens("refresh.jwt");
-    await beginLogout(CONFIG);
+describe("beginLogout (Issue #833 / ADR-025)", () => {
+  it("should POST the caller-supplied refresh token to /oauth2/revoke and clear sessionStorage", async () => {
+    seedLegacyToken("legacy-leftover"); // a stale persisted token from before the upgrade
+    await beginLogout(CONFIG, tokenSet("refresh.jwt"));
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [url, init] = fetchSpy.mock.calls[0];
@@ -213,16 +221,20 @@ describe("beginLogout (Issue #833)", () => {
     expect(sessionStorage.getItem(TOKENS_KEY)).toBeNull();
   });
 
-  it("should skip /oauth2/revoke when there is no refresh token but still redirect", async () => {
-    storeTokens(undefined);
+  it("should skip /oauth2/revoke when the supplied tokens have no refresh token but still redirect", async () => {
+    await beginLogout(CONFIG, tokenSet(undefined));
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(assignSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("should redirect without revoke when called with no tokens (post-reload logout)", async () => {
     await beginLogout(CONFIG);
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(assignSpy).toHaveBeenCalledTimes(1);
   });
 
   it("should redirect to /logout with client_id + logout_uri + redirect_uri + response_type=code (OIDC-conformant compatible)", async () => {
-    storeTokens("refresh.jwt");
-    await beginLogout(CONFIG);
+    await beginLogout(CONFIG, tokenSet("refresh.jwt"));
     expect(assignSpy).toHaveBeenCalledTimes(1);
     const redirectedTo = new URL(assignSpy.mock.calls[0][0] as string);
     expect(redirectedTo.origin + redirectedTo.pathname).toBe(`${CONFIG.cognitoDomain}/logout`);
@@ -233,9 +245,9 @@ describe("beginLogout (Issue #833)", () => {
   });
 
   it("should still redirect when /oauth2/revoke fails (= sign-out does not stall on revoke failure)", async () => {
-    storeTokens("refresh.jwt");
+    seedLegacyToken("legacy-leftover");
     fetchSpy.mockRejectedValueOnce(new Error("network down"));
-    await beginLogout(CONFIG);
+    await beginLogout(CONFIG, tokenSet("refresh.jwt"));
     expect(assignSpy).toHaveBeenCalledTimes(1);
     expect(sessionStorage.getItem(TOKENS_KEY)).toBeNull();
   });
