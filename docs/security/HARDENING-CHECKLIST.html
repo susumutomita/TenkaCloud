@@ -316,7 +316,7 @@
 </table>
 
 <h2>4. Data &amp; log handling</h2>
-<p>Audit data is the spine of any commercial security review. We use SSM SecureString for secrets (cost-zero principle), DDB Stream &rarr; immutable S3 Object Lock for long-retention audit archive, and field-level redaction before audit records are written.</p>
+<p>We use SSM SecureString for secrets (cost-zero principle) and field-level redaction before audit records are written. Long-retention immutable archive (S3 Object Lock) is intentionally NOT used &mdash; TenkaCloud is a competition platform, not a regulated-data workload, so the cost / lock-in trade-off does not pay off.</p>
 <table>
   <thead>
     <tr>
@@ -330,25 +330,11 @@
   </thead>
   <tbody>
     <tr>
-      <td class="area" rowspan="7">4<br>Data</td>
+      <td class="area" rowspan="5">4<br>Data</td>
       <td><span class="item-id">DAT-01</span></td>
       <td>Secrets go to SSM Parameter Store SecureString; Secrets Manager is forbidden</td>
       <td class="evidence">Harness enforcement rule <code>secrets-manager-forbidden</code> — <code>docs/architecture/harness.md</code>. Implementation in <code>.claude/harness/src/architecture.ts</code>. Rationale: Free Tier alignment + reduces blast radius vs. centralized secret manager.</td>
       <td>Agent / Reviewer</td>
-      <td><span class="badge ok">Implemented</span></td>
-    </tr>
-    <tr>
-      <td><span class="item-id">DAT-02</span></td>
-      <td>Audit archive in S3 Object Lock compliance mode (1 year), 7-year lifecycle expiration</td>
-      <td class="evidence"><code>infrastructure/lib/problem-deploy/audit-archive-bucket.ts</code> creates the bucket with <code>objectLockEnabled: true</code> + <code>ObjectLockRetention.compliance(365 days)</code> + Glacier transition at 90 days + 7-year expiration. <code>RemovalPolicy.RETAIN</code>. Writer Lambda has <code>grantPut</code> only (no delete / overwrite). Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/1341">#1341</a>.</td>
-      <td>User (CDK)</td>
-      <td><span class="badge ok">Implemented</span></td>
-    </tr>
-    <tr>
-      <td><span class="item-id">DAT-03</span></td>
-      <td>Audit log writer Lambda has least-privilege (PutObject only, no Get / Delete)</td>
-      <td class="evidence"><code>this.bucket.grantPut(this.writerLambda)</code> in <code>audit-archive-bucket.ts</code>. Read access is owned by a separate Lambda for the operator-facing audit export route.</td>
-      <td>User (CDK)</td>
       <td><span class="badge ok">Implemented</span></td>
     </tr>
     <tr>

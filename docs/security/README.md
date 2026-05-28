@@ -22,7 +22,6 @@ Run these before every paid event. All commands are non-destructive.
 | Template safety | Templates only contain printable ASCII (Description fields) | `make check-template-ascii` |
 | Template safety | Template CFn references resolve | `make check-template-cfn-refs` |
 | Data & log handling | Secrets Manager is not imported anywhere | `grep -R "@aws-sdk/client-secrets-manager" infrastructure/ apps/` (must return nothing) |
-| Data & log handling | Audit archive bucket has Object Lock + compliance mode | `bun run --filter @TenkaCloud/infrastructure test -- audit-archive-bucket` |
 | Data & log handling | Audit redact tests pass | `bun run --filter @TenkaCloud/infrastructure test -- audit-redact` |
 | Tenant isolation | Harness rule `handler-tenant-isolation` is green | `make harness` |
 | Participant safety | Flag submission uses `WRITE_VERY_LOW` rate limit | `grep -n WRITE_VERY_LOW infrastructure/lib/problem-deploy/handlers/participant-handler/` |

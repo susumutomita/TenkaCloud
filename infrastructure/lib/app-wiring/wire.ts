@@ -229,10 +229,6 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       // (= Control Plane が UserPool を作り、 ProblemDeploy が audit table を作る、 2 つの cross-stack
       // ref が交わる唯一の stack)。
       environmentName: config.environment,
-      // Issue #1341 (#1335 Phase 3): SOC2 immutable archive bucket + 365 day retention env を
-      // cross-stack で渡す。 ProblemDeployBackendStack の AuditArchiveBucket がここで bind される。
-      auditArchiveBucket: problemDeployBackendStack.auditArchiveBucket,
-      auditRetentionDays: 365,
       // Issue #1340 Phase 2: tenant SAML 有効時のみ per-tenant audit Lambda を集約配線する。
       ...(tenantSignInAudit ? { tenantSignInAudit } : {}),
     },

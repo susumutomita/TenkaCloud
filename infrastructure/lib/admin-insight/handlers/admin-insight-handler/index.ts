@@ -5,7 +5,6 @@ import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
 import { exportAuditEntriesCsv, listAuditEntries } from "./audit.js";
-import { buildDefaultS3ExportDeps, exportAuditArchive, isValidDate } from "./audit-export-s3.js";
 import { isSystemAdmin, resolveCognitoSub } from "./auth.js";
 import { defaultPipelineClient, listPipelineExecutions } from "./pipeline-executions.js";
 import { buildSharedResources } from "./shared.js";
@@ -220,8 +219,6 @@ app.get("/admin/insight/state-machine-executions", async (c) => {
 
 app.get("/admin/insight/audit", handleAuditEntries);
 app.get("/admin/insight/audit/export", handleAuditExport);
-// Issue #1341 (#1335 Phase 3): immutable S3 archive 経路の export (= 7-year retention)
-app.get("/admin/audit/export", handleAuditExportS3);
 
 async function handleAuditEntries(c: Context): Promise<Response> {
   const forbidden = auditAndAuthorize(c, "/admin/insight/audit");
@@ -294,62 +291,6 @@ async function handleAuditExport(c: Context): Promise<Response> {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[admin-insight] exportAuditEntriesCsv failed", { scope, tenantId, message });
-    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-  }
-}
-
-/**
- * Issue #1341 (#1335 Phase 3): immutable S3 audit archive 経由の date-range export。
- *
- * - SystemAdmin auth は `auditAndAuthorize` で 1 段目を担保
- * - `from` / `to` (= YYYY-MM-DD inclusive) を必須、 範囲不正なら 400 を返す
- * - response は JSONL (`application/x-ndjson`)、 100MB cap で truncated header を立てる
- * - bucket 未配線 (= env なし) なら 503 で legacy stack 互換
- */
-async function handleAuditExportS3(c: Context): Promise<Response> {
-  const forbidden = auditAndAuthorize(c, "/admin/audit/export");
-  if (forbidden) return forbidden;
-  const bucketName = process.env.AUDIT_ARCHIVE_BUCKET_NAME ?? "";
-  if (bucketName.length === 0) {
-    return c.json(
-      {
-        error: "audit_archive_unconfigured",
-        message: "AUDIT_ARCHIVE_BUCKET_NAME env が未設定です (= SOC2 archive bucket 配線漏れ)",
-      },
-      StatusCodes.SERVICE_UNAVAILABLE,
-    );
-  }
-  const from = c.req.query("from") ?? "";
-  const to = c.req.query("to") ?? "";
-  if (!isValidDate(from) || !isValidDate(to)) {
-    return c.json(
-      { error: "invalid_date_range", message: "from / to must be YYYY-MM-DD" },
-      StatusCodes.BAD_REQUEST,
-    );
-  }
-  if (from > to) {
-    return c.json({ error: "from_after_to" }, StatusCodes.BAD_REQUEST);
-  }
-  const format = c.req.query("format") ?? "jsonl";
-  if (format !== "jsonl") {
-    return c.json({ error: "unsupported_format" }, StatusCodes.BAD_REQUEST);
-  }
-  try {
-    const result = await exportAuditArchive(buildDefaultS3ExportDeps(bucketName), { from, to });
-    const filename = `audit-archive-${from}_to_${to}.jsonl`;
-    return new Response(result.body, {
-      status: StatusCodes.OK,
-      headers: {
-        "content-type": "application/x-ndjson; charset=utf-8",
-        "content-disposition": `attachment; filename="${filename}"`,
-        "x-export-object-count": String(result.objectCount),
-        "x-export-bytes": String(result.bytes),
-        "x-export-truncated": String(result.truncated),
-      },
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[admin-insight] exportAuditArchive failed", { from, to, message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 }
