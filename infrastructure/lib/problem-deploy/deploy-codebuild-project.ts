@@ -77,8 +77,35 @@ export interface DeployCodeBuildProjectProps {
 export class DeployCodeBuildProject extends Construct {
   public readonly project: Project;
 
+  /** CloudFormation execution role passed via `aws cloudformation deploy --role-arn`. */
+  public readonly cfnExecRole: iam.Role;
+
   constructor(scope: Construct, id: string, props: DeployCodeBuildProjectProps) {
     super(scope, id);
+
+    // #1381: CloudFormation 実行ロール。 問題テンプレが作る任意リソース (EC2 / IAM Role / S3 等)
+    // を CFn が create するための広域権限はこの **CFn 専用 service role** に閉じ込め、 CodeBuild role
+    // からは剥がす。 CodeBuild は同一 account deploy 時に `aws cloudformation deploy --role-arn` で
+    // この role を PassRole するだけ (= build script injection が直接 iam:CreateRole 等を呼べない)。
+    // 注: 悪意ある問題テンプレは CFn 経由で依然 admin IAM を作れる (= テンプレ境界の信頼は別問題、
+    // テンプレ審査 #1353 で担保)。 本変更が塞ぐのは「CodeBuild role 自体 = 実質 account admin」の方。
+    this.cfnExecRole = new iam.Role(this, "CfnExecRole", {
+      assumedBy: new iam.ServicePrincipal("cloudformation.amazonaws.com"),
+      inlinePolicies: {
+        ResourceCreation: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
+              actions: ["ec2:*", "iam:*", "ssm:*", "logs:*", "s3:*", "events:*", "lambda:*"],
+              // justify: (#1381) 問題テンプレが作る任意リソースを CFn が create するための広域権限。
+              // CodeBuild role からは剥がし、 cloudformation.amazonaws.com だけが assume できるこの
+              // 専用 role に閉じ込めた (= PassRole 条件付き)。 テンプレ自体の信頼境界は審査 #1353 で担保。
+              resources: ["*"],
+            }),
+          ],
+        }),
+      },
+    });
 
     this.project = new Project(this, "Project", {
       description: "TenkaCloud problem deploy executor (runs scripts/deploy-battles.sh).",
@@ -147,6 +174,12 @@ export class DeployCodeBuildProject extends Construct {
           type: BuildEnvironmentVariableType.PLAINTEXT,
           value: "",
         },
+        // #1381: same-account deploy で `aws cloudformation deploy --role-arn` に渡す CFn 実行ロール。
+        // cross-account 経路 (COMPETITOR_ROLE_ARN set) では使わない (assumed role の権限で動く)。
+        CFN_EXEC_ROLE_ARN: {
+          type: BuildEnvironmentVariableType.PLAINTEXT,
+          value: this.cfnExecRole.roleArn,
+        },
       },
       buildSpec: BuildSpec.fromObject({
         version: "0.2",
@@ -162,13 +195,12 @@ export class DeployCodeBuildProject extends Construct {
       }),
     });
 
-    // 同一 account 内の CFn deploy 権限を Project Role に付与する。MVP-1 は same-account
-    // のみなので Resource は account 内全リソースを許可 (CFn が必要な権限は問題テンプレ次第)。
-    // Phase 2 で cross-account になったら ここを sts:AssumeRole に絞り、target account 側で
-    // CFn 権限を持たせる。
-    // Issue #857 justify: same-account CFn deploy で問題 stack ARN を synth 時に決定不能
-    // (= competitor が CodeBuild script から動的に CreateStack するため)。 Phase 2 cross-account
-    // で AssumeRole + 競技者側 Role に CFn 権限を持たせる移行が予定済 (= MVP-1 の一時許容)。
+    const stack = Stack.of(this);
+
+    // #1381: stack 操作系の CFn action は deploy stack の命名規約 `tc-{problemSlug}-{teamSlug}`
+    // (= battles-common.sh build_name_prefix、 contract `^tc-[a-z0-9]+(-[a-z0-9]+)+$`) に scope する。
+    // region は deploy 先が可変なので `*`。 これにより CodeBuild role は自分が作る tc-* stack 以外を
+    // 操作できない。
     this.project.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
@@ -181,7 +213,6 @@ export class DeployCodeBuildProject extends Construct {
           "cloudformation:DescribeStackResource",
           "cloudformation:DescribeStackResources",
           "cloudformation:GetTemplate",
-          "cloudformation:GetTemplateSummary",
           "cloudformation:CreateChangeSet",
           "cloudformation:DescribeChangeSet",
           "cloudformation:ExecuteChangeSet",
@@ -189,19 +220,32 @@ export class DeployCodeBuildProject extends Construct {
           "cloudformation:ListChangeSets",
           "cloudformation:ListStackResources",
         ],
-        // Issue #857 justify: same-account の動的 stack ARN を synth 時に決定不能 (= 上のコメント参照)
+        resources: [`arn:aws:cloudformation:*:${stack.account}:stack/tc-*/*`],
+      }),
+    );
+    // template introspection 系 (`GetTemplateSummary` 等) は IAM の resource-level 制約を
+    // サポートしないため `*` 据え置き (= `aws cloudformation deploy` が parameter/capability 検出で叩く)。
+    this.project.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["cloudformation:GetTemplateSummary"],
+        // justify: (#1381) GetTemplateSummary は IAM の resource-level 制約をサポートしない
+        // (AWS API design)。 stack ARN に絞れないため `*` 据え置き。 stack 操作系は別 statement で tc-* に scope 済。
         resources: ["*"],
       }),
     );
 
-    // `security-battle-royale` 等の問題テンプレが作るリソース (EC2 / VPC / IAM Role 等)
-    // を CFn が自前で create するための権限。MVP-1 は same-account なので Project Role
-    // が直接これらを持つ必要がある。最小権限化は問題テンプレが固まってから別途検討。
+    // #1381: 問題テンプレが作る任意リソースの広域権限は CodeBuild role からは付けず、 CFn 実行ロール
+    // (cfnExecRole) に閉じ込めた。 CodeBuild は same-account deploy 時にその role を CFn に PassRole
+    // するだけ (= cloudformation.amazonaws.com にのみ渡せるよう条件付き)。
     this.project.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ["ec2:*", "iam:*", "ssm:*", "logs:*", "s3:*", "events:*", "lambda:*"],
-        resources: ["*"],
+        actions: ["iam:PassRole"],
+        resources: [this.cfnExecRole.roleArn],
+        conditions: {
+          StringEquals: { "iam:PassedToService": "cloudformation.amazonaws.com" },
+        },
       }),
     );
 
@@ -211,7 +255,6 @@ export class DeployCodeBuildProject extends Construct {
     //   2. `arn:aws:iam::<account>:role/TenkaCloud-*` に AssumeRole (with ExternalId)
     //   3. 取得した tmp credentials で `aws cloudformation deploy` を target account に実行
     // を行うため、本 Project Role に各権限を付与する。
-    const stack = Stack.of(this);
     const ssmArn = buildExternalIdParameterArnPattern(
       stack.region,
       stack.account,

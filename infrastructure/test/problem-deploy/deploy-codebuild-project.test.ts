@@ -120,3 +120,109 @@ describe("DeployCodeBuildProject — Phase 2.2 cross-account perms (Issue #459)"
     );
   });
 });
+
+describe("DeployCodeBuildProject — #1381 CFn service-role least-privilege", () => {
+  // CodeBuild role に attach された AWS::IAM::Policy 群の全 Action を集める。
+  // 注: cfnExecRole の広域権限は AWS::IAM::Role の inlinePolicies (= Policies) に入るので
+  // AWS::IAM::Policy には現れない。 よって AWS::IAM::Policy の Action 集合 = CodeBuild role 等の
+  // addToRolePolicy 由来であり、 ここに iam:*/ec2:* が無いことが CodeBuild role から剥がれた証拠。
+  function iamPolicyActions(tpl: Template): string[] {
+    const policies = tpl.findResources("AWS::IAM::Policy");
+    return Object.values(policies).flatMap((p) => {
+      const statements =
+        (p as { Properties?: { PolicyDocument?: { Statement?: unknown[] } } }).Properties
+          ?.PolicyDocument?.Statement ?? [];
+      return statements.flatMap((s) => {
+        const action = (s as { Action?: string | string[] }).Action;
+        return Array.isArray(action) ? action : typeof action === "string" ? [action] : [];
+      });
+    });
+  }
+
+  it("should NOT grant iam:* / ec2:* on the CodeBuild project role (moved to the CFn exec role)", () => {
+    const actions = iamPolicyActions(synth());
+    expect(actions).not.toContain("iam:*");
+    expect(actions).not.toContain("ec2:*");
+    expect(actions).not.toContain("s3:*");
+  });
+
+  it("should create a CloudFormation execution role assumable only by cloudformation.amazonaws.com with the resource-creation perms", () => {
+    const tpl = synth();
+    tpl.hasResourceProperties(
+      "AWS::IAM::Role",
+      Match.objectLike({
+        AssumeRolePolicyDocument: Match.objectLike({
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Effect: "Allow",
+              Action: "sts:AssumeRole",
+              Principal: { Service: "cloudformation.amazonaws.com" },
+            }),
+          ]),
+        }),
+        Policies: Match.arrayWith([
+          Match.objectLike({
+            PolicyDocument: Match.objectLike({
+              Statement: Match.arrayWith([
+                Match.objectLike({
+                  Effect: "Allow",
+                  Action: Match.arrayWith(["iam:*"]),
+                }),
+              ]),
+            }),
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it("should let CodeBuild only PassRole the exec role to CloudFormation (conditioned)", () => {
+    const tpl = synth();
+    tpl.hasResourceProperties(
+      "AWS::IAM::Policy",
+      Match.objectLike({
+        PolicyDocument: Match.objectLike({
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Effect: "Allow",
+              Action: "iam:PassRole",
+              Condition: {
+                StringEquals: { "iam:PassedToService": "cloudformation.amazonaws.com" },
+              },
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it("should scope stack-operating cloudformation actions to the tc-* stack name prefix", () => {
+    const tpl = synth();
+    tpl.hasResourceProperties(
+      "AWS::IAM::Policy",
+      Match.objectLike({
+        PolicyDocument: Match.objectLike({
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Effect: "Allow",
+              Action: Match.arrayWith(["cloudformation:CreateStack"]),
+              Resource: "arn:aws:cloudformation:*:123456789012:stack/tc-*/*",
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it("should pass CFN_EXEC_ROLE_ARN to the CodeBuild env (same-account --role-arn source)", () => {
+    const tpl = synth();
+    tpl.hasResourceProperties(
+      "AWS::CodeBuild::Project",
+      Match.objectLike({
+        Environment: Match.objectLike({
+          EnvironmentVariables: Match.arrayWith([Match.objectLike({ Name: "CFN_EXEC_ROLE_ARN" })]),
+        }),
+      }),
+    );
+  });
+});

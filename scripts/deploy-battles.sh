@@ -202,12 +202,21 @@ deploy_one() {
   TENKACLOUD_TENANT_ID="${TENKACLOUD_TENANT_ID:-unknown}"
   TENKACLOUD_JOB_ID="${TENKACLOUD_JOB_ID:-${TENKACLOUD_CORRELATION_ID:-unknown}}"
   TENKACLOUD_BATCH_ID="${TENKACLOUD_BATCH_ID:-${TENKACLOUD_JOB_ID}}"
+  # #1381: same-account 経路では CFn 専用 service role (CFN_EXEC_ROLE_ARN) を CFn に渡す。
+  # CodeBuild role 自体からは iam:*/ec2:* を剥がしたので、 リソース作成は CFn がこの role を
+  # assume して行う。 cross-account 経路 (COMPETITOR_ROLE_ARN set) では assumed competitor role
+  # の権限で動くため --role-arn は付けない。
+  local -a cfn_deploy_role_args=()
+  if [[ -z "${COMPETITOR_ROLE_ARN:-}" && -n "${CFN_EXEC_ROLE_ARN:-}" ]]; then
+    cfn_deploy_role_args=(--role-arn "${CFN_EXEC_ROLE_ARN}")
+  fi
   if ! aws cloudformation deploy \
     --region "${AWS_REGION}" \
     --stack-name "${name_prefix}" \
     --template-file "${template}" \
     --capabilities CAPABILITY_NAMED_IAM \
     --no-fail-on-empty-changeset \
+    ${cfn_deploy_role_args[@]+"${cfn_deploy_role_args[@]}"} \
     --parameter-overrides "${parameter_overrides[@]}" \
     --tags \
       "TenkaCloud:NamePrefix=${name_prefix}" \
