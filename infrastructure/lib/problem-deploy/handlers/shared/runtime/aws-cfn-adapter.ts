@@ -24,6 +24,7 @@
  */
 
 import type { EventBridgeClient } from "@aws-sdk/client-eventbridge";
+import { EXECUTABLE_ENGINE, EXECUTABLE_PROVIDER } from "@tenkacloud/problem-runtime";
 import {
   type DeployCreateRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
@@ -40,7 +41,6 @@ import type {
   RuntimeStatus,
   RuntimeStatusInput,
 } from "./adapter.js";
-import { EXECUTABLE_ENGINE, EXECUTABLE_PROVIDER } from "./normalize.js";
 
 /**
  * Resources injected by the deploy handler when constructing the adapter.

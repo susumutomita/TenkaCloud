@@ -13,13 +13,17 @@
  *   - A static switch makes the supported set greppable / auditable.
  */
 
+import {
+  classifyRuntimeSupport,
+  EXECUTABLE_ENGINE,
+  EXECUTABLE_PROVIDER,
+} from "@tenkacloud/problem-runtime";
 import type { ProblemRuntime, ProblemRuntimeAdapter } from "./adapter.js";
 import { RuntimeNotSupportedError } from "./adapter.js";
 import {
   type AwsCloudFormationAdapterContext,
   AwsCloudFormationRuntimeAdapter,
 } from "./aws-cfn-adapter.js";
-import { classifyRuntimeSupport, EXECUTABLE_ENGINE, EXECUTABLE_PROVIDER } from "./normalize.js";
 
 /**
  * Dependencies any adapter might need. Phase 1 only uses the AWS subset; the
