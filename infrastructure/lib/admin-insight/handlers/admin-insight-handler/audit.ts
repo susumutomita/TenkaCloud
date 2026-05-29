@@ -1,4 +1,5 @@
 import { type DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { csvEscapeField } from "../../../utils/csv.js";
 
 /**
  * Issue #950 (ADR-020 Phase D): admin audit log を tenant 別 / system 別に read する。
@@ -162,16 +163,9 @@ function formatCsv(items: readonly AuditItem[]): string {
   const lines = [CSV_COLUMNS.join(",")];
   for (const item of items) {
     const row = item as unknown as Record<string, unknown>;
-    lines.push(CSV_COLUMNS.map((col) => csvEscape(String(row[col] ?? ""))).join(","));
+    lines.push(CSV_COLUMNS.map((col) => csvEscapeField(String(row[col] ?? ""))).join(","));
   }
   return `${lines.join("\n")}\n`;
-}
-
-function csvEscape(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n") || value.includes("\r")) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
 }
 
 function toAuditItem(row: unknown, scope: AuditListInput["scope"]): AuditItem {

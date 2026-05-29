@@ -1,4 +1,5 @@
 import { type DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { csvEscapeField } from "../../../utils/csv.js";
 
 /**
  * Issue #1292: Tenant Admin 向けに 「自テナントの audit log」 を read する handler module。
@@ -165,14 +166,7 @@ function formatCsv(items: readonly TenantAuditItem[]): string {
   const lines = [CSV_COLUMNS.join(",")];
   for (const item of items) {
     const row = item as unknown as Record<string, unknown>;
-    lines.push(CSV_COLUMNS.map((col) => csvEscape(String(row[col] ?? ""))).join(","));
+    lines.push(CSV_COLUMNS.map((col) => csvEscapeField(String(row[col] ?? ""))).join(","));
   }
   return `${lines.join("\n")}\n`;
-}
-
-function csvEscape(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n") || value.includes("\r")) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
 }
