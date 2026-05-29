@@ -8,7 +8,7 @@ export JSII_DEPRECATED := quiet
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install_ci build typecheck test test-coverage clean-test-outdir check before-commit beforecommit \
+.PHONY: help install install_ci build typecheck test test-coverage coverage-gate clean-test-outdir check before-commit beforecommit \
         build-docs check-docs audit-deps build-problems-index check-problems-index \
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
@@ -37,6 +37,9 @@ build:         ; bun run build
 typecheck:     ; bun run typecheck
 test:          ; bun run test
 test-coverage: ; bun run test:coverage
+# #1424: ratchet gate over the lcov that `test-coverage` emits. Run `make test-coverage`
+# first (CI does). Fails if any workspace drops below its floor in scripts/coverage-baseline.json.
+coverage-gate: ; bun run scripts/check-coverage.ts
 # Issue #1295: vitest setup (infrastructure/test/setup.ts) pins
 # CDK_OUTDIR to infrastructure/cdk.out.test/<worker>. Output is
 # overwritten per synth (= no accumulation), but a manual purge is

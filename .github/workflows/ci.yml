@@ -71,6 +71,14 @@ jobs:
         run: |
           make test-coverage
 
+      # #1424: ratchet gate. Reuses the lcov just generated above (no extra run).
+      # Fails the build if any workspace's coverage drops below its recorded floor
+      # in scripts/coverage-baseline.json. Floors only move up (via --update after
+      # a genuine improvement), so coverage can never silently slide back.
+      - name: Coverage ratchet gate
+        run: |
+          make coverage-gate
+
       - name: Build
         run: |
           make build

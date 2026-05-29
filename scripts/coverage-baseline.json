@@ -1,0 +1,37 @@
+{
+  "infrastructure": {
+    "lines": 85.14,
+    "branches": 71.19,
+    "functions": 86.22
+  },
+  "apps/admin-console": {
+    "lines": 66.9,
+    "branches": 63.82,
+    "functions": 65.08
+  },
+  "apps/application-admin-console": {
+    "lines": 61.21,
+    "branches": 57.66,
+    "functions": 53.09
+  },
+  "apps/participant-portal": {
+    "lines": 60.21,
+    "branches": 48.18,
+    "functions": 58.78
+  },
+  "packages/trust-bridge": {
+    "lines": 94.64,
+    "branches": 90.22,
+    "functions": 95.24
+  },
+  "packages/auth-client": {
+    "lines": 100,
+    "branches": 100,
+    "functions": 100
+  },
+  "packages/saml-utils": {
+    "lines": 96.23,
+    "branches": 90,
+    "functions": 90
+  }
+}

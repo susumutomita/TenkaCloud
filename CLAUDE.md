@@ -53,6 +53,8 @@ We don't use a single-table DynamoDB design. Each stack owns its own tables (Ten
 | `make build`            | Build every workspace (`infrastructure` → 3 SPAs)                        |
 | `make typecheck`        | `tsc --noEmit` across every workspace                                    |
 | `make test`             | `vitest` across every workspace                                          |
+| `make test-coverage`    | `vitest --coverage` across every workspace (emits `coverage/lcov.info`)  |
+| `make coverage-gate`    | Ratchet gate (`scripts/check-coverage.ts`): fail if any workspace drops below its floor in `scripts/coverage-baseline.json`. Run after `make test-coverage` |
 | `make lint`             | markdownlint + textlint + biome                                          |
 | `make fix`              | Auto-fix variant of the above (`make format` works too)                  |
 | `make validate-problems`| Validate `problems/**/metadata.json` against `problems/SCHEMA.json`      |
