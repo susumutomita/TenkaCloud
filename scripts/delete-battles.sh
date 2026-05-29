@@ -43,10 +43,18 @@ trace_log "deploy.cfn.delete.start" stackName "${STACK_NAME}" region "${REGION}"
 # 既存リソースに影響なし)。pre-check の describe-stacks は TOCTOU race を生む (= check と
 # delete の間に他 actor が消すと describe は OK でも delete が ValidationError) ので入れない。
 # 直接 delete-stack → 既に削除済みなら "does not exist" を握って no-op exit、それ以外は loud に fail。
+# #1381: same-account 経路では deploy 時と同じ CFn service role を渡す (= CodeBuild role から
+# 直接の resource 削除権限を剥がした分、 CFn がこの role を assume して削除する)。 cross-account 経路は
+# assumed competitor role の権限で動くため --role-arn は付けない。
+cfn_delete_role_args=()
+if [[ -z "${COMPETITOR_ROLE_ARN:-}" && -n "${CFN_EXEC_ROLE_ARN:-}" ]]; then
+  cfn_delete_role_args=(--role-arn "${CFN_EXEC_ROLE_ARN}")
+fi
 delete_err="$(
   aws cloudformation delete-stack \
     --region "${REGION}" \
-    --stack-name "${STACK_NAME}" 2>&1
+    --stack-name "${STACK_NAME}" \
+    ${cfn_delete_role_args[@]+"${cfn_delete_role_args[@]}"} 2>&1
 )" || {
   if grep -qiE "ValidationError|does not exist" <<<"${delete_err}"; then
     trace_log "deploy.cfn.delete.already_deleted" stackName "${STACK_NAME}" region "${REGION}"
