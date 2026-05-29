@@ -9,10 +9,10 @@ import {
 import { Stack, type StackProps } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { EventBus } from "aws-cdk-lib/aws-events";
-import { PolicyDocument } from "aws-cdk-lib/aws-iam";
 import type { Construct } from "constructs";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
 import { TenantStatusReconciler } from "../tenant-status-reconciler/tenant-status-reconciler.js";
+import { buildTenantJobRunnerPermissions } from "./job-runner-permissions.js";
 import { TenantApiKey } from "./tenant-api-key.js";
 
 interface BootstrapTemplateStackProps extends StackProps {
@@ -70,25 +70,15 @@ export class BootstrapTemplateStack extends Stack {
         : {}),
     });
 
-    // Todo: reduce permission scope
+    // #1382: SBT reference-arch の BashJobRunner は example で `Action:* Resource:*` を渡すが、
+    // TenkaCloud の provision/deprovision script が実際に必要とする最小権限へ絞る
+    // (= SBT construct 自体は不変、 渡す permissions のみ TenkaCloud 固有に scope)。 詳細・前提は
+    // buildTenantJobRunnerPermissions の docblock 参照。 cross-account 化 (#857) で更に縮む。
+    const jobRunnerPermissions = buildTenantJobRunnerPermissions(this.account, this.region);
+
     const provisioningJobRunnerProps: BashJobRunnerProps = {
       eventManager: eventManager,
-      permissions: PolicyDocument.fromJson(
-        JSON.parse(`
-{
-  "Version":"2012-10-17",
-  "Statement":[
-      {
-        "Action":[
-            "*"
-        ],
-        "Resource":"*",
-        "Effect":"Allow"
-      }
-  ]
-}
-`),
-      ),
+      permissions: jobRunnerPermissions,
       script: fs.readFileSync("../scripts/provision-tenant.sh", "utf8"),
       postScript: "",
       environmentStringVariablesFromIncomingEvent: ["tenantId", "tier", "tenantName", "email"],
@@ -109,24 +99,11 @@ export class BootstrapTemplateStack extends Stack {
       incomingEvent: DetailType.ONBOARDING_REQUEST,
     };
 
+    // #1382: provisioning と同じ least-privilege scope を共有する (deprovision は cdk destroy +
+    // tenant user/group の削除なので、 provisioning の superset で過不足ない)。
     const deprovisioningJobRunnerProps: BashJobRunnerProps = {
       eventManager: eventManager,
-      permissions: PolicyDocument.fromJson(
-        JSON.parse(`
-{
-  "Version":"2012-10-17",
-  "Statement":[
-      {
-        "Action":[
-            "*"
-        ],
-        "Resource":"*",
-        "Effect":"Allow"
-      }
-  ]
-}
-`),
-      ),
+      permissions: jobRunnerPermissions,
       script: fs.readFileSync("../scripts/deprovision-tenant.sh", "utf8"),
       environmentStringVariablesFromIncomingEvent: ["tenantId"],
       environmentVariablesToOutgoingEvent: ["tenantStatus"],
