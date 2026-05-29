@@ -25,10 +25,14 @@ export {
   AwsCloudFormationRuntimeAdapter,
 } from "./aws-cfn-adapter.js";
 export {
+  classifyRuntimeSupport,
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
   isExecutableRuntime,
+  isReservedRuntime,
   normalizeRuntime,
+  RESERVED_RUNTIMES,
   type RuntimeMetadataInput,
+  type RuntimeSupport,
 } from "./normalize.js";
 export { type AdapterDependencies, selectAdapter } from "./registry.js";

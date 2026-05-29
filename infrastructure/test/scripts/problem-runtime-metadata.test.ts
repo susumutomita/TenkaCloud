@@ -10,7 +10,8 @@ import { runCreate, runValidate } from "../../../scripts/tenkacloud-problem";
  *   1. legacy (= `cfnTemplate` のみ) 問題は引き続き valid (= 後方互換)
  *   2. 明示宣言 `{aws, cloudformation, template.yaml}` は valid
  *   3. `runtime.entry` と `cfnTemplate` が食い違うと reject
- *   4. AWS / CloudFormation 以外の組み合わせは reservation として reject (= 実行不能であることを明示)
+ *   4. AWS / CloudFormation 以外は reject。 ADR-026/027 の roadmap provider (reserved) は
+ *      tracker #1408 を案内し、 それ以外 (unknown) は typo として案内する (= メッセージを分岐)
  *   5. `runCreate` (= `/create-problem` scaffold) が runtime block を含む metadata を吐く
  */
 
@@ -123,7 +124,9 @@ describe("ADR-023 / Issue #1267: provider-specific runtime metadata", () => {
     expect(r.errors.some((e) => e.includes("must match"))).toBe(true);
   });
 
-  it("should reject unsupported provider/engine with a clear reservation message", () => {
+  it("should reject a planned (reserved) provider/engine and point at the roadmap tracker", () => {
+    // azure/bicep is on the ADR-027 roadmap: rejected (no adapter yet) but the
+    // message must say "planned" and cite the tracker, not treat it as a typo.
     const uniqueId = `test-runtime-azure-${Date.now().toString(36)}`;
     writeFixtureProblem({
       uniqueId,
@@ -138,9 +141,30 @@ describe("ADR-023 / Issue #1267: provider-specific runtime metadata", () => {
     });
     const r = runValidate(uniqueId);
     expect(r.ok).toBe(false);
-    expect(r.errors.some((e) => e.includes("azure/bicep") && e.includes("not executable"))).toBe(
-      true,
-    );
+    expect(
+      r.errors.some(
+        (e) => e.includes("azure/bicep") && e.includes("planned") && e.includes("#1408"),
+      ),
+    ).toBe(true);
+    expect(r.errors.some((e) => e.includes("azure/bicep") && e.includes("typo"))).toBe(false);
+  });
+
+  it("should reject an unrecognized provider/engine as a likely typo", () => {
+    const uniqueId = `test-runtime-typo-${Date.now().toString(36)}`;
+    writeFixtureProblem({
+      uniqueId,
+      category: "challenges",
+      mutate: (meta) => {
+        meta.runtime = {
+          provider: "kuberntes", // intentional misspelling of "kubernetes"
+          engine: "helm",
+          entry: "template.yaml",
+        };
+      },
+    });
+    const r = runValidate(uniqueId);
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.includes("kuberntes/helm") && e.includes("typo"))).toBe(true);
   });
 
   it("should scaffold new problems with an explicit aws/cloudformation runtime block", () => {

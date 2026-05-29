@@ -67,3 +67,28 @@ export function normalizeRuntime(meta: ProblemMetadata): NormalizedRuntime | und
 export function isExecutableRuntime(runtime: NormalizedRuntime): boolean {
   return runtime.provider === EXECUTABLE_PROVIDER && runtime.engine === EXECUTABLE_ENGINE;
 }
+
+/**
+ * [ADR-026 / ADR-027] Runtimes recognized as **planned** roadmap providers but
+ * not yet executable (no engine adapter). Distinguishing them from a typo lets
+ * the validator tell an author "author it once the adapter lands (#1408)" vs
+ * "you misspelled the provider". Kept in lock-step with the Lambda-side
+ * `infrastructure/lib/problem-deploy/handlers/shared/runtime/normalize.ts`
+ * (the two run in separate bundles and cannot share a module).
+ */
+export const RESERVED_RUNTIMES: readonly { readonly provider: string; readonly engine: string }[] =
+  [
+    { provider: "sakura", engine: "apprun" }, // ADR-026
+    { provider: "azure", engine: "bicep" }, // ADR-027
+    { provider: "gcp", engine: "infra-manager" }, // ADR-027
+  ];
+
+export type RuntimeSupport = "executable" | "reserved" | "unknown";
+
+/** Classify a normalized runtime as executable / reserved (planned) / unknown (likely a typo). */
+export function classifyRuntimeSupport(runtime: NormalizedRuntime): RuntimeSupport {
+  if (isExecutableRuntime(runtime)) return "executable";
+  if (RESERVED_RUNTIMES.some((r) => r.provider === runtime.provider && r.engine === runtime.engine))
+    return "reserved";
+  return "unknown";
+}

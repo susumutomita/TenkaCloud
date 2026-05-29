@@ -19,11 +19,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AdapterMethodNotWiredError,
   AwsCloudFormationRuntimeAdapter,
+  classifyRuntimeSupport,
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
   isExecutableRuntime,
+  isReservedRuntime,
   normalizeRuntime,
   type ProblemRuntime,
+  RESERVED_RUNTIMES,
   RuntimeNotSupportedError,
   selectAdapter,
 } from "../../lib/problem-deploy/handlers/shared/runtime/index";
@@ -83,6 +86,44 @@ describe("normalizeRuntime", () => {
   });
 });
 
+describe("classifyRuntimeSupport (ADR-026 / ADR-027 reserved runtimes)", () => {
+  it("should classify aws/cloudformation as executable", () => {
+    expect(
+      classifyRuntimeSupport({ provider: "aws", engine: "cloudformation", entry: "template.yaml" }),
+    ).toBe("executable");
+  });
+
+  it.each(
+    RESERVED_RUNTIMES.map((r) => [r.provider, r.engine] as const),
+  )("should classify the planned runtime %s/%s as reserved", (provider, engine) => {
+    const runtime: ProblemRuntime = { provider, engine, entry: "entry" };
+    expect(classifyRuntimeSupport(runtime)).toBe("reserved");
+    expect(isReservedRuntime(runtime)).toBe(true);
+  });
+
+  it("should reserve the three roadmap providers from ADR-026/027", () => {
+    expect(RESERVED_RUNTIMES).toEqual([
+      { provider: "sakura", engine: "apprun" },
+      { provider: "azure", engine: "bicep" },
+      { provider: "gcp", engine: "infra-manager" },
+    ]);
+  });
+
+  it("should classify an unrecognized runtime as unknown (likely a typo)", () => {
+    const runtime: ProblemRuntime = { provider: "kubernetes", engine: "helm", entry: "Chart.yaml" };
+    expect(classifyRuntimeSupport(runtime)).toBe("unknown");
+    expect(isReservedRuntime(runtime)).toBe(false);
+  });
+
+  it("should not treat a reserved provider with a different engine as reserved", () => {
+    // azure/bicep is reserved, but azure/arm-template is not — only the exact
+    // pair on the roadmap counts, so a typo'd engine still reads as unknown.
+    expect(classifyRuntimeSupport({ provider: "azure", engine: "arm-template", entry: "x" })).toBe(
+      "unknown",
+    );
+  });
+});
+
 describe("selectAdapter", () => {
   const deps = {
     aws: {
@@ -112,7 +153,25 @@ describe("selectAdapter", () => {
     expect(() => selectAdapter(runtime, deps)).toThrow(RuntimeNotSupportedError);
   });
 
-  it("should include the rejected runtime in the error so operators can diagnose", () => {
+  it("should point a planned (reserved) runtime at the roadmap tracker, not call it a typo", () => {
+    // azure/bicep is on the ADR-027 roadmap, so the rejection must say "planned"
+    // and cite the tracker — never the typo-oriented message.
+    const runtime: ProblemRuntime = { provider: "azure", engine: "bicep", entry: "main.bicep" };
+    try {
+      selectAdapter(runtime, deps);
+      throw new Error("expected selectAdapter to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(RuntimeNotSupportedError);
+      if (err instanceof RuntimeNotSupportedError) {
+        expect(err.message).toContain("azure/bicep");
+        expect(err.message).toContain("planned");
+        expect(err.message).toContain("#1408");
+        expect(err.message).not.toContain("typo");
+      }
+    }
+  });
+
+  it("should include the rejected runtime in the error and flag an unknown runtime as a typo", () => {
     const runtime: ProblemRuntime = {
       provider: "kubernetes",
       engine: "helm",
@@ -127,6 +186,7 @@ describe("selectAdapter", () => {
         expect(err.runtime).toEqual(runtime);
         expect(err.message).toContain("kubernetes/helm");
         expect(err.message).toContain("aws/cloudformation");
+        expect(err.message).toContain("typo");
       }
     }
   });

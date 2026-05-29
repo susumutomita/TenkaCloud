@@ -69,3 +69,36 @@ export function normalizeRuntime(meta: RuntimeMetadataInput): ProblemRuntime | u
 export function isExecutableRuntime(runtime: ProblemRuntime): boolean {
   return runtime.provider === EXECUTABLE_PROVIDER && runtime.engine === EXECUTABLE_ENGINE;
 }
+
+/**
+ * [ADR-026 / ADR-027] Runtimes the metadata layer recognizes as **planned** — a
+ * real provider/engine on the roadmap — but that are **not yet executable** (no
+ * adapter is registered, so the deploy worker rejects them before any cloud
+ * mutation). Distinguishing these from a typo lets the deploy error and the
+ * validator point authors at the tracker (#1408) instead of failing generically.
+ * Each engine PR (#1410 Azure, #1411 GCP, #1412 Sakura) moves its pair out of
+ * this set as it becomes executable.
+ *
+ * Kept in lock-step with `scripts/problem-cli/problem-loader.ts` (separate bundle).
+ */
+export const RESERVED_RUNTIMES: readonly { readonly provider: string; readonly engine: string }[] =
+  [
+    { provider: "sakura", engine: "apprun" }, // ADR-026
+    { provider: "azure", engine: "bicep" }, // ADR-027
+    { provider: "gcp", engine: "infra-manager" }, // ADR-027
+  ];
+
+export function isReservedRuntime(runtime: ProblemRuntime): boolean {
+  return RESERVED_RUNTIMES.some(
+    (r) => r.provider === runtime.provider && r.engine === runtime.engine,
+  );
+}
+
+export type RuntimeSupport = "executable" | "reserved" | "unknown";
+
+/** Classify a normalized runtime as executable / reserved (planned) / unknown (likely a typo). */
+export function classifyRuntimeSupport(runtime: ProblemRuntime): RuntimeSupport {
+  if (isExecutableRuntime(runtime)) return "executable";
+  if (isReservedRuntime(runtime)) return "reserved";
+  return "unknown";
+}

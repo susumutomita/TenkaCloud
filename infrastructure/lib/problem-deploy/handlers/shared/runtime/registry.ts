@@ -19,7 +19,7 @@ import {
   type AwsCloudFormationAdapterContext,
   AwsCloudFormationRuntimeAdapter,
 } from "./aws-cfn-adapter.js";
-import { EXECUTABLE_ENGINE, EXECUTABLE_PROVIDER } from "./normalize.js";
+import { classifyRuntimeSupport, EXECUTABLE_ENGINE, EXECUTABLE_PROVIDER } from "./normalize.js";
 
 /**
  * Dependencies any adapter might need. Phase 1 only uses the AWS subset; the
@@ -37,5 +37,9 @@ export function selectAdapter(
   if (runtime.provider === EXECUTABLE_PROVIDER && runtime.engine === EXECUTABLE_ENGINE) {
     return new AwsCloudFormationRuntimeAdapter(deps.aws);
   }
-  throw new RuntimeNotSupportedError(runtime);
+  // Planned providers (ADR-026/027) get a roadmap-aware message; everything else
+  // is treated as a likely typo. Both still throw — no adapter, no cloud mutation.
+  throw new RuntimeNotSupportedError(runtime, {
+    reserved: classifyRuntimeSupport(runtime) === "reserved",
+  });
 }
