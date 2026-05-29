@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { StatusCodes } from "http-status-codes";
 import {
   resolveTenantId,
+  resolveUserRole,
   TENANT_ADMIN_ROLE,
   TENANT_OPERATOR_ROLE,
 } from "../../deploy-handler/auth.js";
@@ -74,9 +75,14 @@ export function registerEventRoutes(app: Hono, shared: EventSharedResources): vo
       // Issue #1038 P1 #7: opt-in で全 team の累計 score event timeline を返す。
       // default (= "true" 以外) は scoreEventsByTeam を省き、 既存 caller を素通り。
       const withScoreEvents = c.req.query("withScoreEvents") === "true";
+      // #1392: teamLoginKey (participant bearer) は hand-off 担当の mutating role にのみ返す。
+      // 読取り専用の TenantViewer には露出しない (= getEventDetail は default-deny)。
+      const role = resolveUserRole(c);
+      const includeLoginKeys = role === TENANT_ADMIN_ROLE || role === TENANT_OPERATOR_ROLE;
       try {
         const detail = await getEventDetail(shared, resolveTenantId(c), eventId, {
           withScoreEvents,
+          includeLoginKeys,
         });
         if (!detail) return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
         return c.json(detail, StatusCodes.OK);
