@@ -48,6 +48,14 @@ describe("parseAdminAllowlist (#1335)", () => {
     expect(() => parseAdminAllowlist("ab/admin@example.com")).toThrow(/provider name is invalid/);
   });
 
+  it("#1386: should reject a provider name containing an underscore (prefix-collision avenue)", () => {
+    // `_` を provider 名に許すと `{provider}_{subject}` の境界が曖昧になり `corp` と `corp_evil` が
+    // 衝突しうる。 parse 時点で fail-loud に弾くことで誤マッチ経路を物理的に塞ぐ。
+    expect(() => parseAdminAllowlist("corp_evil/admin@example.com")).toThrow(
+      /provider name is invalid/,
+    );
+  });
+
   it("should surface the env var name in error messages", () => {
     expect(() => parseAdminAllowlist("bad", "TENANT_SAML_ADMIN_ALLOWLIST")).toThrow(
       /TENANT_SAML_ADMIN_ALLOWLIST/,
@@ -91,6 +99,22 @@ describe("PRE_SIGNUP_HANDLER sandbox semantics (#1335)", () => {
     await expect(
       handler(externalEvent("corp-okta_subject-xyz", "admin@example.com")),
     ).rejects.toThrow(/not authorized/);
+  });
+
+  it("#1386: should reject a sibling-prefix provider via exact {provider}_ boundary match", async () => {
+    // allowlist provider = "corp-entra"。 別 provider "corp-entra2" の federated username は
+    // 最初の `_` で分割した provider 部が "corp-entra2" となり、 完全一致しないので拒否される。
+    const handler = evalHandler("corp-entra/admin@example.com");
+    await expect(
+      handler(externalEvent("corp-entra2_subject-abc", "admin@example.com")),
+    ).rejects.toThrow(/not authorized/);
+  });
+
+  it("#1386: should reject a federated username with no underscore separator", async () => {
+    const handler = evalHandler("corp-entra/admin@example.com");
+    await expect(handler(externalEvent("corp-entra", "admin@example.com"))).rejects.toThrow(
+      /not authorized/,
+    );
   });
 
   it("should reject federated user not present in allowlist", async () => {
