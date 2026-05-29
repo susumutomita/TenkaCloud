@@ -1,7 +1,11 @@
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { type ParticipantSharedResources, queryTeamItems } from "../participant-handler/shared.js";
+import { isSsrfSafeUrl, unwrapIPv6MappedIPv4 } from "../shared/ssrf-guard.js";
 import { type ResolvedEndpoint, resolveEndpoints } from "./resolve.js";
 import { deleteOverride, putOverride, queryOverrides } from "./store.js";
+
+/** @deprecated re-export for existing tests; the SSRF guard now lives in `shared/ssrf-guard.ts`. */
+export const __testing_unwrapIPv6MappedIPv4 = unwrapIPv6MappedIPv4;
 
 /**
  * Endpoint registry (ADR-012 Phase 3.A) の business logic。
@@ -89,75 +93,17 @@ export type PutOverrideOutcome =
   | { kind: "no_endpoints" }
   | { kind: "misconfigured" };
 
-// SSRF defense-in-depth blocklist (Phase 3.B fetcher で DNS-rebinding-safe な
-// resolve-then-connect を実装するまでの暫定)。 host は IPv6 bracket を剥がし lowercase
-// 化した bare form に正規化してから lookup する。
-//
-// Issue #863: IPv6-mapped IPv4 (`::ffff:169.254.169.254`) や IPv4 short form
-// (`0xa9.0xfe.0xa9.0xfe`) で blocklist を bypass される攻撃を防ぐため、 host を
-// normalize してから check。 私設 IP (RFC 1918 等) は Battle 参加者の AWS endpoint 登録で
-// 必要なため intentional に許容する (= issue 内 design 判断)。
-const SSRF_BLOCKED_HOSTS = new Set([
-  "169.254.169.254", // AWS / Azure IMDS v4
-  "fd00:ec2::254", // AWS IMDS v6 (canonical)
-  "fd00:ec2:0:0:0:0:0:254", // AWS IMDS v6 (expanded)
-  "metadata.google.internal", // GCE metadata
-  "metadata",
-  "127.0.0.1",
-  "0.0.0.0",
-  "::1",
-  "0:0:0:0:0:0:0:1", // ::1 expanded
-  "localhost",
-]);
-
-/**
- * Issue #863: IPv6-mapped IPv4 (`::ffff:a.b.c.d` / `::ffff:AABB:CCDD`) を unwrap して
- * IPv4 dotted string を返す。 IPv4 native や IPv6 non-mapped はそのまま返す。
- *
- * 例:
- *   `::ffff:169.254.169.254` → `169.254.169.254`
- *   `::ffff:a9fe:a9fe`        → `169.254.169.254`
- *   `127.0.0.1`               → `127.0.0.1`
- */
-function unwrapIPv6MappedIPv4(host: string): string {
-  const lower = host.toLowerCase();
-  // dotted form: ::ffff:X.X.X.X
-  const dotted = lower.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
-  if (dotted) return dotted[1];
-  // hex form: ::ffff:AABB:CCDD → IPv4
-  const hex = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-  if (hex) {
-    const high = parseInt(hex[1], 16);
-    const low = parseInt(hex[2], 16);
-    if (high <= 0xffff && low <= 0xffff) {
-      return [(high >> 8) & 0xff, high & 0xff, (low >> 8) & 0xff, low & 0xff].join(".");
-    }
-  }
-  return host;
-}
-
-export const __testing_unwrapIPv6MappedIPv4 = unwrapIPv6MappedIPv4;
-
 /**
  * 競技者向け URL validation。`https?://...` のみ許容、 private IP / VPC 内 endpoint は許容
  * (= Battle で参加者が自分の AWS account 内 endpoint を登録するため public/private は問わない)。
- * SSRF 対策として metadata service / loopback literal は拒否。
+ * SSRF 対策として metadata service / loopback literal は拒否する。host blocklist + scheme check は
+ * `shared/ssrf-guard.ts` の `isSsrfSafeUrl` に集約 (scoring engine の probe 側と共有)。
  */
 function isValidOverrideUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const trimmed = value.trim();
   if (trimmed.length === 0 || trimmed.length > 2048) return false;
-  try {
-    const u = new URL(trimmed);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-    // Node の `URL.hostname` は IPv6 で `[::1]` のように bracket を含む。 lookup 前に strip。
-    const rawHost = u.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-    // Issue #863: IPv6-mapped IPv4 で blocklist を bypass されないよう unwrap してから check。
-    const host = unwrapIPv6MappedIPv4(rawHost);
-    return !SSRF_BLOCKED_HOSTS.has(host);
-  } catch {
-    return false;
-  }
+  return isSsrfSafeUrl(trimmed);
 }
 
 /**
