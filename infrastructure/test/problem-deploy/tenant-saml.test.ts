@@ -6,6 +6,7 @@ import {
   type UpdateUserPoolClientCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import type { DeleteCommand, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { StatusCodes } from "http-status-codes";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   allowCognitoOnClient,
@@ -371,7 +372,7 @@ describe("handleGetTenantSamlConfig", () => {
     const { shared, ddbSend } = makeSharedAndDdb();
     ddbSend.mockResolvedValueOnce({});
     const r = await handleGetTenantSamlConfig(shared, "t1");
-    expect(r.status).toBe(200);
+    expect(r.status).toBe(StatusCodes.OK);
     expect(r.body).toEqual({ enabled: false });
   });
 
@@ -390,7 +391,7 @@ describe("handleGetTenantSamlConfig", () => {
       },
     });
     const r = await handleGetTenantSamlConfig(shared, "t1");
-    expect(r.status).toBe(200);
+    expect(r.status).toBe(StatusCodes.OK);
     expect((r.body as { enabled: boolean }).enabled).toBe(true);
   });
 });
@@ -408,7 +409,7 @@ describe("handlePutTenantSamlConfig", () => {
       { tenantId: "t1", updatedBy: "sub", nowIso: "2026-05-16T00:00:00Z" },
       { metadataUrl: "http://insecure" }, // HTTP は reject
     );
-    expect(r.status).toBe(400);
+    expect(r.status).toBe(StatusCodes.BAD_REQUEST);
     expect(ddbSend).not.toHaveBeenCalled();
     expect(cognitoSend).not.toHaveBeenCalled();
   });
@@ -440,7 +441,7 @@ describe("handlePutTenantSamlConfig", () => {
         enforceSamlOnly: false,
       },
     );
-    expect(r.status).toBe(200);
+    expect(r.status).toBe(StatusCodes.OK);
     expect((r.body as { enabled: boolean }).enabled).toBe(true);
     expect(cognitoSend).toHaveBeenCalledTimes(4);
     expect(ddbSend).toHaveBeenCalledTimes(1);
@@ -493,7 +494,7 @@ describe("handleDeleteTenantSamlConfig", () => {
       { tenantId: "t1", updatedBy: "sub", nowIso: "2026-05-16T00:00:00Z" },
     );
 
-    expect(r.status).toBe(200);
+    expect(r.status).toBe(StatusCodes.OK);
     expect((r.body as { deleted: boolean }).deleted).toBe(true);
     // 4 cognito calls (Describe + Update for revert, Delete IdP) + 2 DDB calls (Get + Delete)
     expect(cognitoSend).toHaveBeenCalledTimes(3);

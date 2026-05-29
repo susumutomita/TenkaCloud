@@ -91,9 +91,9 @@ export async function handleGetTenantSamlConfig(
   );
   if (!view) {
     const disabled: TenantSamlConfigView = { enabled: false };
-    return { status: 200, body: disabled };
+    return { status: StatusCodes.OK, body: disabled };
   }
-  return { status: 200, body: view };
+  return { status: StatusCodes.OK, body: view };
 }
 
 /**
@@ -110,7 +110,7 @@ export async function handlePutTenantSamlConfig(
   const parsed = TenantSamlConfigInputSchema.safeParse(rawBody);
   if (!parsed.success) {
     return {
-      status: 400,
+      status: StatusCodes.BAD_REQUEST,
       body: { error: "validation_failed", issues: parsed.error.issues },
     };
   }
@@ -157,7 +157,7 @@ export async function handlePutTenantSamlConfig(
     }),
   );
 
-  return { status: 200, body: view };
+  return { status: StatusCodes.OK, body: view };
 }
 
 /**
@@ -202,7 +202,7 @@ export async function handleDeleteTenantSamlConfig(
     }),
   );
 
-  return { status: 200, body: { deleted: true } };
+  return { status: StatusCodes.OK, body: { deleted: true } };
 }
 
 /**
@@ -271,13 +271,13 @@ export async function routePut(deps: SamlOrchestratorDeps, c: Context): Promise<
   const cognitoDeps = await (deps.makeCognitoDeps?.(c) ?? defaultMakeCognitoDeps(deps.shared)(c));
   if (!cognitoDeps) {
     return {
-      status: 422,
+      status: StatusCodes.UNPROCESSABLE_ENTITY,
       body: { error: "missing_cognito_claims", message: "iss / aud claims are required" },
     };
   }
   const body = await c.req.json().catch(() => null);
   if (body === null) {
-    return { status: 400, body: { error: "invalid_body" } };
+    return { status: StatusCodes.BAD_REQUEST, body: { error: "invalid_body" } };
   }
   return handlePutTenantSamlConfig(
     deps.shared,
@@ -302,7 +302,7 @@ export async function routeDelete(
   const cognitoDeps = await (deps.makeCognitoDeps?.(c) ?? defaultMakeCognitoDeps(deps.shared)(c));
   if (!cognitoDeps) {
     return {
-      status: 422,
+      status: StatusCodes.UNPROCESSABLE_ENTITY,
       body: { error: "missing_cognito_claims", message: "iss / aud claims are required" },
     };
   }
