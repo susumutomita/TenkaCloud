@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ADR-027: Azure and GCP as federated problem-target providers</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.draft   { background: #ddf4ff; color: var(--c-link); }
+  .callout { padding: .8rem 1rem; border-left: 4px solid var(--c-warn); background: #fff8c5; border-radius: 3px; margin: 1rem 0; }
+  .callout.danger { border-color: var(--c-reject); background: #ffe9e9; }
+  .callout.info { border-color: var(--c-link); background: #ddf4ff; }
+  .callout.ok { border-color: var(--c-accept); background: #ddf4e0; }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  .col-accept { color: var(--c-accept); font-weight: 600; }
+  .col-reject { color: var(--c-reject); font-weight: 600; }
+  .col-warn   { color: var(--c-warn);   font-weight: 600; }
+  svg text { font-family: -apple-system, "Hiragino Sans", sans-serif; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ADR-027: Azure and GCP as federated problem-target providers</h1>
+  <p><em>Add Microsoft Azure and Google Cloud as problem targets using the existing Trust Bridge federation (short-lived credentials, not stored keys) and each cloud's native state-owning IaC — Azure Deployment Stacks (Bicep) and GCP Infrastructure Manager.</em></p>
+  <div class="meta">
+    <div><b>Status:</b> <span class="badge draft">Proposed</span> 2026-05-29</div>
+    <div><b>Builds on:</b> <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a>, <a href="./adr-017-cloud-action-intent-trust-bridge.html">ADR-017</a>, <a href="./adr-023-provider-specific-problem-runtime.html">ADR-023</a>, <a href="./adr-026-sakura-cloud-problem-provider.html">ADR-026</a></div>
+    <div><b>Scope:</b> problem runtime + credential path only — not the platform itself</div>
+  </div>
+</header>
+
+<h2>Context</h2>
+
+<p><a href="./adr-023-provider-specific-problem-runtime.html">ADR-023</a> set the multi-cloud contract: a problem declares <code>runtime: { provider, engine, entry }</code>; a first-class engine must let <em>the cloud own the runtime, state, and teardown</em> (D3, no platform-side state file/lock); Terraform is not the default <em>where the platform owns state</em> (D5). <a href="./adr-017-cloud-action-intent-trust-bridge.html">ADR-017</a> (Trust Bridge) abstracts cross-cloud authority transfer as "verified intent → short-lived provider-native credential", and <code>packages/trust-bridge</code> already ships adapters for <code>aws-assume-role</code>, <code>azure-federated-credential</code>, and <code>gcp-workload-identity</code>.</p>
+
+<p><a href="./adr-026-sakura-cloud-problem-provider.html">ADR-026</a> added Sakura Cloud, but on a <strong>stored-key</strong> path with a documented weaker isolation — because Sakura offers neither OIDC/STS federation nor a state-owning native IaC. <strong>Azure and GCP are the opposite case</strong>: both support Workload Identity Federation (an AWS workload exchanges its credentials for short-lived cloud-native credentials) <em>and</em> both have cloud-native IaC that owns state. They therefore belong on the <strong>federated</strong> path — the same strong, short-lived-credential isolation the AWS path enjoys — and the Trust Bridge adapters for them already exist. This ADR applies the ADR-023 runtime contract to Azure and GCP and selects each engine.</p>
+
+<div style="overflow-x:auto">
+<svg width="900" height="150" viewBox="0 0 900 150" role="img" aria-label="Provider authority + runtime matrix">
+  <rect x="10" y="20" width="215" height="110" rx="6" fill="#ddf4e0" stroke="#1a7f37"/>
+  <text x="117" y="42" text-anchor="middle" font-size="12" font-weight="600">AWS (today)</text>
+  <text x="117" y="64" text-anchor="middle" font-size="10" fill="#59636e">auth: AssumeRole + ExternalId</text>
+  <text x="117" y="80" text-anchor="middle" font-size="10" fill="#59636e">(short-lived, federated-like)</text>
+  <text x="117" y="102" text-anchor="middle" font-size="10" fill="#59636e">engine: CloudFormation</text>
+  <text x="117" y="118" text-anchor="middle" font-size="10" fill="#59636e">stack owns state/teardown</text>
+  <rect x="235" y="20" width="215" height="110" rx="6" fill="#ddf4ff" stroke="#0969da"/>
+  <text x="342" y="42" text-anchor="middle" font-size="12" font-weight="600">Azure (this ADR)</text>
+  <text x="342" y="64" text-anchor="middle" font-size="10" fill="#59636e">auth: Workload Identity Fed.</text>
+  <text x="342" y="80" text-anchor="middle" font-size="10" fill="#59636e">(Trust Bridge, short-lived)</text>
+  <text x="342" y="102" text-anchor="middle" font-size="10" fill="#59636e">engine: Bicep + Deployment Stacks</text>
+  <text x="342" y="118" text-anchor="middle" font-size="10" fill="#59636e">stack owns state/teardown</text>
+  <rect x="460" y="20" width="215" height="110" rx="6" fill="#ddf4ff" stroke="#0969da"/>
+  <text x="567" y="42" text-anchor="middle" font-size="12" font-weight="600">GCP (this ADR)</text>
+  <text x="567" y="64" text-anchor="middle" font-size="10" fill="#59636e">auth: Workload Identity Fed.</text>
+  <text x="567" y="80" text-anchor="middle" font-size="10" fill="#59636e">(Trust Bridge, short-lived)</text>
+  <text x="567" y="102" text-anchor="middle" font-size="10" fill="#59636e">engine: Infrastructure Manager</text>
+  <text x="567" y="118" text-anchor="middle" font-size="10" fill="#59636e">GCP owns Terraform state/lock</text>
+  <rect x="685" y="20" width="205" height="110" rx="6" fill="#fff8c5" stroke="#9a6700"/>
+  <text x="787" y="42" text-anchor="middle" font-size="12" font-weight="600">Sakura (ADR-026)</text>
+  <text x="787" y="64" text-anchor="middle" font-size="10" fill="#59636e">auth: stored API key</text>
+  <text x="787" y="80" text-anchor="middle" font-size="10" fill="#cf222e">(long-lived, weaker)</text>
+  <text x="787" y="102" text-anchor="middle" font-size="10" fill="#59636e">engine: AppRun (container)</text>
+  <text x="787" y="118" text-anchor="middle" font-size="10" fill="#59636e">AppRun owns runtime/teardown</text>
+</svg>
+</div>
+
+<h2>Decision</h2>
+
+<h3>D1: Azure and GCP use Trust Bridge federation — short-lived credentials, no stored keys</h3>
+<p>Both providers authenticate via <strong>Workload Identity Federation</strong>: the AWS-hosted deploy worker presents its identity (an OIDC token / AWS identity) and the team's Azure tenant or GCP project exchanges it for a short-lived, scoped, cloud-native credential. This is exactly the ADR-017 exchange, and the <code>azure-federated-credential</code> / <code>gcp-workload-identity</code> adapters in <code>packages/trust-bridge</code> already implement it. Unlike ADR-026 (Sakura), there is <strong>no long-lived stored key</strong> — these providers regain the AWS-grade isolation property (credentials expire). The per-team trust bootstrap (configure the team's workload identity pool / federated credential to trust the platform identity) is the Azure/GCP analog of the AWS competitor-account trust policy + ExternalId.</p>
+
+<h3>D2: Azure engine = Bicep + Deployment Stacks</h3>
+<p><strong>Azure Deployment Stacks</strong> (the <code>Microsoft.Resources/deploymentStacks</code> resource, GA since 2024) manage a collection of resources as one unit and own their lifecycle: <code>--action-on-unmanage deleteResources</code> tears the managed resources down. Authored in <strong>Bicep</strong>, this is the direct CloudFormation-equivalent and satisfies ADR-023 D3 with no platform-side state. ADR-023 D4 already named Bicep a first-class candidate.</p>
+<pre>"runtime": { "provider": "azure", "engine": "bicep", "entry": "main.bicep" }</pre>
+
+<h3>D3: GCP engine = Infrastructure Manager (cloud-owned Terraform)</h3>
+<p>ADR-023 D4's original GCP candidate, <strong>Deployment Manager, reaches end of support on 2026-03-31</strong> and is not a viable engine. The replacement, <strong>Infrastructure Manager (Infra Manager)</strong>, runs Terraform where <em>Google Cloud</em> owns the deployment, its state, and its lock — the platform holds no state file. That ownership is what matters for ADR-023 D3, and it resolves the ADR-023 D5 tension precisely: D5 rejected Terraform <em>where the platform owns state/lock</em>; with Infra Manager the cloud owns them, so D5 is satisfied, not violated.</p>
+<pre>"runtime": { "provider": "gcp", "engine": "infra-manager", "entry": "main.tf" }</pre>
+<div class="callout info">
+  <b>Why this is not a D5 violation.</b> D5's concern was the platform running a Terraform backend and owning locking / partial-failure cleanup. Infra Manager is a managed service: it stores state, takes locks, and reconciles inside Google Cloud. The platform calls "create/update/delete deployment" and reads outputs — identical in shape to calling CloudFormation. No <code>terraform.tfstate</code>, no lock backend on the platform side.
+</div>
+
+<h3>D4: Container engines (optional, container-shaped problems)</h3>
+<p>For purely container-shaped problems, <strong>Azure Container Apps</strong> and <strong>GCP Cloud Run</strong> are the AppRun analog (ADR-026 D1): the platform owns the running app + teardown. These are a lower priority than the IaC engines (which give AWS-parity breadth) and may be added later as <code>engine: "container-apps"</code> / <code>engine: "cloud-run"</code>. The IaC engines (D2/D3) are the primary parity with AWS CloudFormation.</p>
+
+<h3>D5: Executable runtime set</h3>
+<table>
+  <tr><th>provider</th><th>engine</th><th>entry</th><th>State owner</th><th>Auth</th></tr>
+  <tr><td><code>aws</code></td><td><code>cloudformation</code></td><td>template</td><td>CloudFormation</td><td>AssumeRole + ExternalId</td></tr>
+  <tr><td><code>azure</code></td><td><code>bicep</code></td><td><code>main.bicep</code></td><td>Deployment Stack</td><td>Trust Bridge (federation)</td></tr>
+  <tr><td><code>gcp</code></td><td><code>infra-manager</code></td><td><code>main.tf</code></td><td>Infra Manager (GCP)</td><td>Trust Bridge (federation)</td></tr>
+  <tr><td><code>sakura</code></td><td><code>apprun</code></td><td>image ref</td><td>AppRun</td><td>stored API key (ADR-026)</td></tr>
+</table>
+<p>The validator's executable allow-list grows to these four. The permissive schema (ADR-023 D2) already accepts the strings; only the executable set changes.</p>
+
+<h3>D6: Isolation, teardown, and scoring map cleanly</h3>
+<table>
+  <tr><th>Concept</th><th>Azure</th><th>GCP</th></tr>
+  <tr><td>Per-team isolation</td><td>Per-team subscription / resource group + workload identity federated credential trusting the platform</td><td>Per-team project + workload identity pool trusting the platform</td></tr>
+  <tr><td>Deploy unit / state owner</td><td>Deployment Stack</td><td>Infra Manager deployment</td></tr>
+  <tr><td>Teardown</td><td>Delete stack (<code>action-on-unmanage: deleteResources</code>)</td><td>Delete Infra Manager deployment</td></tr>
+  <tr><td>Scoring</td><td colspan="2">Provider-agnostic HTTP probe of a deploy output URL (<code>uptime</code> / <code>phased</code> / endpoint <code>flag</code>). <code>attack-detection</code> is AWS-specific.</td></tr>
+</table>
+
+<h3>D7: The control plane stays on AWS</h3>
+<p>Only the deploy engine, the credential path (already-built Trust Bridge adapters), and the scoring target become provider-aware. The Control Plane (SBT Cognito + EventBridge + tenant CRUD), Application Plane, deploy-worker host, and participant portal remain on AWS. Each provider-problem is a separate catalog entry (ADR-023 D7 family model); the same conceptual drill on AWS, Azure, and GCP is three problems.</p>
+
+<h2>Options considered</h2>
+<table>
+  <tr><th>Decision</th><th>Choice</th><th>Verdict</th><th>Why</th></tr>
+  <tr><td>Azure IaC engine</td><td>Bicep + Deployment Stacks</td><td><span class="badge accept">Accepted</span></td><td>GA, native state owner with managed teardown — clean ADR-023 D3 fit; Bicep named in ADR-023 D4.</td></tr>
+  <tr><td>Azure IaC engine</td><td>Raw ARM templates without stacks</td><td><span class="badge reject">Rejected</span></td><td>A bare deployment does not own teardown as a unit; Deployment Stacks add exactly the missing lifecycle ownership.</td></tr>
+  <tr><td>GCP IaC engine</td><td>Infrastructure Manager (managed TF)</td><td><span class="badge accept">Accepted</span></td><td>GCP owns state/lock ⇒ ADR-023 D3 satisfied, D5 tension resolved. Successor to the EOL Deployment Manager.</td></tr>
+  <tr><td>GCP IaC engine</td><td>Deployment Manager</td><td><span class="badge reject">Rejected</span></td><td>End of support 2026-03-31. Not viable for new work.</td></tr>
+  <tr><td>GCP IaC engine</td><td>Raw Terraform, platform-owned state</td><td><span class="badge reject">Rejected</span></td><td>Platform would own state/lock/cleanup — the exact thing ADR-023 D5 rejects.</td></tr>
+  <tr><td>Auth model</td><td>Trust Bridge federation (existing adapters)</td><td><span class="badge accept">Accepted</span></td><td>Both clouds support Workload Identity Federation ⇒ short-lived credentials ⇒ AWS-grade isolation; adapters already exist.</td></tr>
+  <tr><td>Auth model</td><td>Stored long-lived key (as Sakura)</td><td><span class="badge reject">Rejected</span></td><td>Unnecessary downgrade — these providers support federation, so use the stronger short-lived model.</td></tr>
+</table>
+
+<h2>Impact</h2>
+<table>
+  <tr><th>Surface</th><th>Change</th></tr>
+  <tr><td>Validator</td><td>Add <code>azure+bicep</code> and <code>gcp+infra-manager</code> to the executable set.</td></tr>
+  <tr><td>Deploy worker</td><td>Two new engine branches: Azure (create/update/delete a Deployment Stack from Bicep; read outputs) and GCP (create/update/delete an Infra Manager deployment from Terraform; read outputs).</td></tr>
+  <tr><td>Credential path</td><td>Wire the existing <code>azure-federated-credential</code> / <code>gcp-workload-identity</code> Trust Bridge adapters into the deploy worker's credential resolution. No new secret store (federation, not stored keys).</td></tr>
+  <tr><td>Per-team onboarding</td><td>The team configures a workload identity pool / federated credential in their Azure tenant / GCP project that trusts the platform identity (the federation trust bootstrap), analogous to the AWS trust-policy + ExternalId step.</td></tr>
+  <tr><td>Scoring / catalog</td><td>Scoring unchanged (HTTP probe). Catalog shows the provider so AWS / Azure / GCP / Sakura drills present side-by-side.</td></tr>
+  <tr><td>Control plane</td><td>Unchanged (D7).</td></tr>
+</table>
+
+<h2>Rollout</h2>
+<ol>
+  <li><strong>Schema + samples (no execution).</strong> Add <code>azure+bicep</code> and <code>gcp+infra-manager</code> to the validator and add a sample problem for each. AWS / Sakura paths untouched.</li>
+  <li><strong>Azure engine + federation.</strong> Wire the Azure Trust Bridge adapter into the deploy worker; implement the Deployment Stacks branch.</li>
+  <li><strong>GCP engine + federation.</strong> Wire the GCP Workload Identity adapter; implement the Infra Manager branch.</li>
+  <li><strong>Catalog provider badges.</strong> Surface provider in catalog + portal.</li>
+</ol>
+
+<h2>Open questions</h2>
+<ul>
+  <li><strong>Platform federated identity.</strong> What identity does the AWS-Lambda deploy worker present to Azure/GCP for the federation exchange (an AWS IAM role mapped into the team's workload identity pool, or a platform-issued OIDC token), and how is per-team scoping expressed in that pool's trust condition (the ExternalId analog).</li>
+  <li><strong>Per-team trust bootstrap UX.</strong> How a team registers the federation trust (workload identity pool / federated credential) during onboarding, and how revocation works.</li>
+  <li><strong>Engine control surface.</strong> Confirm the API/SDK calls for Azure Deployment Stacks and GCP Infra Manager (create/update/delete + output retrieval) and how parameters are passed in.</li>
+  <li><strong>Deny / safety settings.</strong> Use Deployment Stacks deny-settings and Infra Manager service-account scoping to bound what a problem deploy can touch in the team's account.</li>
+  <li><strong>Private artifact delivery.</strong> Bicep modules / Terraform sources / container images for private problems and how they map to the ADR-012 private-payload model.</li>
+</ul>
+
+<h2>References</h2>
+<ul>
+  <li><a href="./adr-017-cloud-action-intent-trust-bridge.html">ADR-017</a> — Trust Bridge (federation adapters for aws / azure / gcp already in <code>packages/trust-bridge</code>).</li>
+  <li><a href="./adr-023-provider-specific-problem-runtime.html">ADR-023</a> — provider-specific runtime; D3 (cloud owns state), D4 (Bicep candidate), D5 (Terraform-with-platform-state rejected).</li>
+  <li><a href="./adr-026-sakura-cloud-problem-provider.html">ADR-026</a> — Sakura (the non-federated, stored-key contrast).</li>
+  <li>Azure — Deployment Stacks (GA): <a href="https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deployment-stacks">learn.microsoft.com/.../bicep/deployment-stacks</a>.</li>
+  <li>GCP — Deployment Manager end of support 2026-03-31: <a href="https://cloud.google.com/deployment-manager/docs/deprecations">cloud.google.com/.../deprecations</a>; Infrastructure Manager (managed Terraform): <a href="https://docs.cloud.google.com/infrastructure-manager/docs/terraform">infrastructure-manager/docs/terraform</a>.</li>
+  <li>Workload Identity Federation (AWS/Azure → short-lived credentials): <a href="https://docs.cloud.google.com/iam/docs/workload-identity-federation-with-other-clouds">iam/docs/workload-identity-federation-with-other-clouds</a>.</li>
+</ul>
+
+</body>
+</html>
