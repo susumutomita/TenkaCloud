@@ -393,9 +393,15 @@ describe("ADR-020 Phase B.1 (#948): event-handler route role gates", () => {
       expect(res.status).toBe(200);
     });
 
-    it("GET /events/:id は pass", async () => {
+    it("GET /events/:id は pass するが teamLoginKey 露出を抑止する (#1392: includeLoginKeys=false)", async () => {
       const res = await eventApp.request(`/events/${ULID}`);
       await expectNotForbidden(res);
+      expect(eventMocks.getEventDetail).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        ULID,
+        expect.objectContaining({ includeLoginKeys: false }),
+      );
     });
 
     it("GET /events/:id/disruptions は pass (= disruption catalog 観覧)", async () => {
@@ -467,6 +473,17 @@ describe("ADR-020 Phase B.1 (#948): event-handler route role gates", () => {
         body: "",
       });
       await expectNotForbidden(res);
+    });
+
+    it("#1392: GET /events/:id は teamLoginKey を含めて呼ばれる (hand-off 担当 = includeLoginKeys=true)", async () => {
+      const res = await eventApp.request(`/events/${ULID}`);
+      await expectNotForbidden(res);
+      expect(eventMocks.getEventDetail).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        ULID,
+        expect.objectContaining({ includeLoginKeys: true }),
+      );
     });
 
     it("POST /events/:id/disruptions/fire は pass", async () => {

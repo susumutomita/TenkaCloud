@@ -74,7 +74,7 @@ describe("listEvents", () => {
 describe("getEventDetail", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("normal case: should return Event + Teams including teamLoginKey (detail path exposes it)", async () => {
+  it("normal case: should return Event + Teams, exposing teamLoginKey only when includeLoginKeys=true", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: {
@@ -101,7 +101,7 @@ describe("getEventDetail", () => {
     // いないので displayTeamName 行は無し。
     ddbSend.mockResolvedValueOnce({ Items: [] });
 
-    const out = await getEventDetail(shared, "tenant-acme", "EV1");
+    const out = await getEventDetail(shared, "tenant-acme", "EV1", { includeLoginKeys: true });
     expect(out).toBeDefined();
     expect(out?.eventId).toBe("EV1");
     expect(out?.problems).toHaveLength(1);
@@ -126,6 +126,35 @@ describe("getEventDetail", () => {
     expect(deploymentsQuery).toBeInstanceOf(QueryCommand);
     expect(deploymentsQuery.input.IndexName).toBe("GSI1");
     expect(deploymentsQuery.input.ExpressionAttributeValues?.[":pk"]).toBe("TENANT#tenant-acme");
+  });
+
+  it("#1392: should omit teamLoginKey by default (default-deny for read-only TenantViewer)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Item: {
+        eventId: "EV1",
+        tenantId: "tenant-acme",
+        name: "イベント A",
+        status: "DRAFT",
+        teamCount: 1,
+        problems: [],
+        createdAt: "2026-05-07T08:00:00.000Z",
+        updatedAt: "2026-05-07T08:00:00.000Z",
+        expiresAt: 9_999_999_999,
+      },
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [{ teamId: "T1", internalSlug: "team-alpha", teamLoginKey: "key-1" }],
+    });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+
+    // includeLoginKeys を渡さない (= default) → bearer credential は露出しない。
+    const out = await getEventDetail(shared, "tenant-acme", "EV1");
+    expect(out?.teams).toHaveLength(1);
+    expect(out?.teams[0]?.teamLoginKey).toBeUndefined();
+    // 他の team メタデータ (internalSlug 等) は引き続き返る。
+    expect(out?.teams[0]?.internalSlug).toBe("team-alpha");
+    expect(JSON.stringify(out)).not.toContain("key-1");
   });
 
   it("should merge displayTeamName set by participants in the portal from Deployments", async () => {

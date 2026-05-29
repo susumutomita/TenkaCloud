@@ -111,8 +111,10 @@ export async function listEvents(
 /**
  * 指定 eventId の Event 詳細 + Teams 一覧を返す。`tenantId` 不一致は undefined (404 相当)。
  *
- * teams[].teamLoginKey は **詳細経路でのみ露出** (operator が hand-off に使うため)。
- * 一覧経路 (`listEvents`) では teams 自体を返さない。
+ * teams[].teamLoginKey は participant の bearer credential であり、 **明示的に
+ * `opts.includeLoginKeys=true` を渡した呼び出しでのみ露出** する (default-deny)。 #1392: route 側で
+ * mutating role (TenantAdmin / TenantOperator = hand-off 担当) のときだけ true を渡し、 read-only の
+ * TenantViewer には返さない。 一覧経路 (`listEvents`) では teams 自体を返さない。
  *
  * Issue #1038 P1 #7: `opts.withScoreEvents=true` のとき全 team の累計 score event timeline を
  * `scoreEventsByTeam` に含める。 default (= false) は従来挙動を維持 (= 余分な DDB query を
@@ -122,7 +124,7 @@ export async function getEventDetail(
   shared: EventSharedResources,
   tenantId: string,
   eventId: string,
-  opts: { readonly withScoreEvents?: boolean } = {},
+  opts: { readonly withScoreEvents?: boolean; readonly includeLoginKeys?: boolean } = {},
 ): Promise<EventDetail | undefined> {
   // Event Get と Teams Query は依存関係なし → 並列発火でラウンドトリップを 1 回分節約。
   // Event / Teams / Deployments を並列発火。Deployments は競技者が PATCH /portal/me で
@@ -178,7 +180,9 @@ export async function getEventDetail(
       // 競技者が portal で設定した名前 (Deployments 経由) を優先、無ければ
       // TeamsTable.displayName (operator 事前設定があれば)、それも無ければ undefined。
       displayName: displayNameByTeamId.get(teamId) ?? fromTeamsTable,
-      teamLoginKey: typeof t.teamLoginKey === "string" ? t.teamLoginKey : undefined,
+      // #1392: bearer credential。 mutating role 経由 (includeLoginKeys) のときだけ露出する。
+      teamLoginKey:
+        opts.includeLoginKeys && typeof t.teamLoginKey === "string" ? t.teamLoginKey : undefined,
       // #528: team の deploy 先 AWS Account ID。旧 Event は undefined。
       awsAccountId: typeof t.awsAccountId === "string" ? t.awsAccountId : undefined,
     };
