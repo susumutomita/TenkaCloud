@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import { KINDS } from "./constants";
 import {
+  classifyRuntimeSupport,
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
   findProblemDir,
@@ -47,8 +48,10 @@ export function runValidate(problemId: string): ValidateResult {
  * [ADR-023] Phase 1: optional `runtime` field の検証。
  *   - normalize 失敗 (= 不完全な runtime block) は明示エラー
  *   - `runtime` と `cfnTemplate` 両方宣言時は `runtime.entry === cfnTemplate` を強制 (= 互換期間)
- *   - 認識できる combination は `aws` + `cloudformation` のみ。 それ以外は reservation として
- *     reject する (= author が deploy できない問題を ship するのを止める)
+ *   - executable な combination は `aws` + `cloudformation` のみ。 それ以外は reject する
+ *     (= author が deploy できない問題を ship するのを止める)。 reject 理由は 2 種に分岐:
+ *       - reserved (ADR-026/027 の roadmap provider, tracker #1408) → 「adapter 着地後に author 可」
+ *       - unknown (typo の可能性) → 「provider/engine の綴りを確認」
  */
 function validateRuntime(meta: Record<string, unknown>, errors: string[]): void {
   const runtimeBlock = meta.runtime;
@@ -66,9 +69,14 @@ function validateRuntime(meta: Record<string, unknown>, errors: string[]): void 
         `runtime.entry="${normalized.entry}" and cfnTemplate="${cfnTemplate}" must match during the dual-field compatibility window (ADR-023 D2).`,
       );
     }
-    if (normalized.provider !== EXECUTABLE_PROVIDER || normalized.engine !== EXECUTABLE_ENGINE) {
+    const support = classifyRuntimeSupport(normalized);
+    if (support === "reserved") {
       errors.push(
-        `Runtime ${normalized.provider}/${normalized.engine} is recognized but not executable in this platform version. Only ${EXECUTABLE_PROVIDER}/${EXECUTABLE_ENGINE} is supported today (ADR-023 D4).`,
+        `Runtime ${normalized.provider}/${normalized.engine} is a planned provider/engine (ADR-026/ADR-027, tracker #1408) but is not yet executable — author it once the engine adapter lands. Executable today: ${EXECUTABLE_PROVIDER}/${EXECUTABLE_ENGINE} (ADR-023 D4).`,
+      );
+    } else if (support === "unknown") {
+      errors.push(
+        `Runtime ${normalized.provider}/${normalized.engine} is not a recognized runtime (check provider/engine for typos). Executable today: ${EXECUTABLE_PROVIDER}/${EXECUTABLE_ENGINE} (ADR-023 D4).`,
       );
     }
   }

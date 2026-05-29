@@ -147,10 +147,22 @@ export interface ProblemRuntimeAdapter {
  * mismatch before any cloud mutation runs.
  */
 export class RuntimeNotSupportedError extends Error {
-  constructor(public readonly runtime: ProblemRuntime) {
+  /**
+   * `reserved` (default false) distinguishes a **planned** provider/engine
+   * (ADR-026/ADR-027, tracker #1408 — known roadmap, no adapter registered yet)
+   * from an **unknown** runtime (likely a typo in `metadata.runtime`). Both are
+   * rejected before any cloud mutation; only the operator-facing message differs.
+   * Classification is supplied by the caller (`registry.selectAdapter`) so this
+   * module stays free of a circular import back into `normalize`.
+   */
+  constructor(
+    public readonly runtime: ProblemRuntime,
+    opts: { readonly reserved?: boolean } = {},
+  ) {
     super(
-      `Runtime ${runtime.provider}/${runtime.engine} is recognized by metadata but not executable in this platform version. ` +
-        `Only aws/cloudformation is supported today (ADR-023 D4).`,
+      opts.reserved
+        ? `Runtime ${runtime.provider}/${runtime.engine} is a planned provider/engine (ADR-026/ADR-027, tracker #1408) but is not yet executable in this platform version — no adapter is registered.`
+        : `Runtime ${runtime.provider}/${runtime.engine} is not a recognized executable runtime (check metadata.runtime for typos). Only aws/cloudformation is supported today (ADR-023 D4).`,
     );
     this.name = "RuntimeNotSupportedError";
   }
