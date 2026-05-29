@@ -3,6 +3,14 @@ import { parseStackOutputs } from "../../shared/cfn-status.js";
 import { type KindHandlerInput, type KindResult, noopKindResult } from "../shared.js";
 
 /**
+ * 1 tick あたりに加点へ反映する attack 差分の上限 (#1389)。 attack counter は競技者が admin 権限
+ * を持つ自 account の CFn Output から読むため任意の巨大値を仕込める。 差分加点に上限を設けることで
+ * leaderboard の即時 inflation を防ぐ。 baseline は実値に追従させるため、 巨大ジャンプは 1 tick 分の
+ * 上限加点で止まり、 次 tick 以降は再加算されない。
+ */
+const MAX_ATTACK_DELTA_PER_TICK = 100;
+
+/**
  * `attack-detection` kind (ADR-012 Phase 3.B、 security-battle-royale の攻撃検知部 想定)。
  *
  * 問題 stack に同梱した attack counter (= CFn Output に counter 値を露出するか、 SSM Parameter
@@ -53,7 +61,10 @@ export function runAttackDetectionKind(
     };
   }
 
-  const points = delta * scoring.pointsPerAttack;
+  // 1 tick あたりの差分加点に上限を設ける (= 競技者が CFn Output に巨大値を仕込んでも leaderboard を
+  // 即時 inflation できない)。 baseline は実値 (current) に追従させ、 巨大ジャンプは 1 tick で止める。
+  const cappedDelta = Math.min(delta, MAX_ATTACK_DELTA_PER_TICK);
+  const points = cappedDelta * scoring.pointsPerAttack;
   return {
     scoreDelta: points,
     scoreEvents: [{ source: "uptime", points, occurredAt: nowIso }],

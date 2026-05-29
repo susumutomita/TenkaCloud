@@ -105,4 +105,20 @@ describe("attack-detection kind", () => {
     const result = runAttackDetectionKind(buildInput("1.5", 1));
     expect(result.scoreDelta).toBe(0);
   });
+
+  it("#1389: should clamp the per-tick award when the counter jumps by a huge delta (self-award guard)", () => {
+    // 競技者が CFn Output に 1e9 を仕込んでも 1 tick の加点は 100 × pointsPerAttack に制限される。
+    const result = runAttackDetectionKind(buildInput("1000000000", 0));
+    expect(result.scoreDelta).toBe(100 * 50); // MAX_ATTACK_DELTA_PER_TICK × pointsPerAttack
+    expect(result.scoreEvents).toEqual([{ source: "uptime", points: 5000, occurredAt: NOW_ISO }]);
+    // baseline は実値に追従するので次 tick は delta=0 (= 巨大ジャンプを再加算しない)
+    expect(result.newState).toEqual({ attackCount: 1000000000 });
+  });
+
+  it("#1389: should award the exact delta when it is at or below the per-tick cap", () => {
+    // delta=100 (= cap ちょうど) は満額、 clamp の境界を確認
+    const result = runAttackDetectionKind(buildInput("100", 0));
+    expect(result.scoreDelta).toBe(100 * 50);
+    expect(result.newState).toEqual({ attackCount: 100 });
+  });
 });

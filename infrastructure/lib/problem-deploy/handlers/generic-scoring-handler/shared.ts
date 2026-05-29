@@ -4,6 +4,7 @@ import { getEnv } from "../../../helper-functions.js";
 import { type ProblemEndpointSlot, parseEndpointsEnv } from "../../../utils/endpoints-metadata.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
+import { isSsrfSafeUrl } from "../shared/ssrf-guard.js";
 
 /**
  * Generic scoring dispatcher Lambda (ADR-012 Phase 3.B) の env / SDK clients を 1 まとまりで
@@ -100,21 +101,29 @@ export async function probeUrl(
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS);
   const start = Date.now();
+  // SSRF defense-in-depth: metadata-supplied path が絶対 URL として host を上書きする経路
+  // (joinUrl) は write-time validation を通らないため、 probe 直前にも blocklist host を弾く。
+  if (!isSsrfSafeUrl(url)) {
+    clearTimeout(timer);
+    return { ok: false, status: undefined, responseTimeMs: Date.now() - start };
+  }
   try {
     const res = await fetch(url, { method: "GET", signal: ctrl.signal });
     const responseTimeMs = Date.now() - start;
-    const ok = options.expectStatus
-      ? options.expectStatus.includes(res.status)
-      : res.status >= 200 && res.status < 300;
+    // redirect 追従で blocklist host (IMDS 等) に着地した応答は body を読まず not-ok 扱いにする
+    // (= write-time check を redirect で bypass されても内部応答を reflect しない)。
+    const finalUrl = res.url;
+    const safeFinal = !finalUrl || isSsrfSafeUrl(finalUrl);
+    const ok =
+      safeFinal &&
+      (options.expectStatus
+        ? options.expectStatus.includes(res.status)
+        : res.status >= 200 && res.status < 300);
     let body: string | undefined;
     if (options.readBody && ok) {
-      // body 読みは bonus / phased-polling の platform 判定で要る。大きい応答は切り詰める。
-      try {
-        const text = await res.text();
-        body = text.length > MAX_BODY_BYTES ? text.slice(0, MAX_BODY_BYTES) : text;
-      } catch {
-        body = undefined;
-      }
+      // body 読みは bonus / phased-polling の platform 判定で要る。応答を stream で読みつつ
+      // MAX_BODY_BYTES で打ち切り、 巨大応答による Lambda の OOM を防ぐ (#1387)。
+      body = await readCappedBody(res, MAX_BODY_BYTES);
     }
     return {
       ok,
@@ -127,6 +136,58 @@ export async function probeUrl(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * 応答 body を最大 `maxBytes` まで読んで decode する。stream (`res.body`) があれば chunk 単位で
+ * 読み、 上限到達時点で stream を cancel する (= `res.text()` の全文バッファによる OOM を回避)。
+ * stream を持たない応答 (= test の fetch mock 等、 既に in-memory な小 body) は `res.text()` で
+ * 取得してから切り詰める fallback。
+ */
+async function readCappedBody(
+  res: Awaited<ReturnType<typeof fetch>>,
+  maxBytes: number,
+): Promise<string | undefined> {
+  try {
+    const stream = res.body;
+    if (stream && typeof stream.getReader === "function") {
+      const bytes = await drainStreamCapped(stream.getReader(), maxBytes);
+      return new TextDecoder().decode(bytes);
+    }
+    // Stream 非対応の応答 (= test の fetch mock 等) のみ fallback。
+    const text = await res.text();
+    return text.length > maxBytes ? text.slice(0, maxBytes) : text;
+  } catch {
+    return undefined;
+  }
+}
+
+/** ReadableStream を最大 maxBytes まで読み、 上限到達で cancel して切り詰めた bytes を返す。 */
+async function drainStreamCapped(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  maxBytes: number,
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && value.length > 0) {
+        chunks.push(value);
+        total += value.length;
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return merged.length > maxBytes ? merged.subarray(0, maxBytes) : merged;
 }
 
 /**
