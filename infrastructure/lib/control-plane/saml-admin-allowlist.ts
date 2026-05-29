@@ -28,11 +28,11 @@ import type { Construct } from "constructs";
  *       を経由しない。 Control Plane では SAML identity を手動 link しないこと。
  */
 
-// provider 束縛は federated username `{provider}_{subject}` の prefix 一致で判定するため、
-// ある provider 名が別 provider 名の `_` 区切り prefix になっていると誤マッチしうる
-// (例: `corp` と `corp_evil`)。 provider 登録は operator (env-driven) なので攻撃者には到達
-// 不能だが、 命名は `_` 区切り prefix 衝突を避け `-` 区切りを推奨する。
-const PROVIDER_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{2,31}$/;
+// provider 束縛は federated username `{provider}_{subject}` を最初の `_` で分割し、 provider 部を
+// 完全一致で判定する (PRE_SIGNUP_HANDLER 参照)。 provider 名自体に `_` を許すと `{provider}_{subject}`
+// の境界が曖昧になり、 ある provider が別 provider の prefix に化けて誤マッチしうる
+// (例: `corp` と `corp_evil`)。 これを根本から塞ぐため provider 名は `_` を **禁止** し `-` 区切りのみ許可する。
+const PROVIDER_RE = /^[A-Za-z0-9][A-Za-z0-9-]{2,31}$/;
 // ざっくり email 形 (local@domain.tld、 空白・@・/ を含まない)。 厳密 RFC ではないが
 // `@` だけ・空 part 等の明らかな誤りを fail-loud で弾く。 突き合わせは完全一致。
 const EMAIL_RE = /^[^@\s/]+@[^@\s/]+\.[^@\s/]+$/;
@@ -97,10 +97,11 @@ export function parseAdminAllowlist(
 
 // Pre sign-up Lambda 本体 (inline, 依存なし)。 federated (外部 IdP) 初回 sign-in 時のみ
 // 発火し、 allowlist の `provider/email` を強制する: assertion の email が allowlist の
-// email と一致し、 かつ Cognito federated username (`{provider}_{subject}`) がその
-// allowlist エントリの provider で始まること。 両方満たすときだけ許可、 それ以外は throw で
-// account 作成を拒否する。 AdminCreateUser (SBT が systemAdmin を作る経路) や通常 sign-up
-// は素通しする。
+// email と一致し、 かつ Cognito federated username (`{provider}_{subject}`) を最初の `_` で
+// 分割した provider 部が allowlist エントリの provider と **完全一致** すること。 provider 名は
+// `_` 禁止 (PROVIDER_RE) なので最初の `_` が確実に provider/subject の境界になる。 両方満たす
+// ときだけ許可、 それ以外は throw で account 作成を拒否する。 AdminCreateUser (SBT が
+// systemAdmin を作る経路) や通常 sign-up は素通しする。
 //
 // export しているのはテストが 「実際にデプロイされる文字列」 を sandbox 評価して挙動を
 // 検証するため (= ロジックの二重定義による drift を避ける、 ProtoShip と同方針)。
@@ -113,8 +114,10 @@ exports.handler = async function (event) {
     var attrs = (event.request && event.request.userAttributes) || {};
     var email = String(attrs.email || "").trim().toLowerCase();
     var userName = String(event.userName || "").toLowerCase();
-    var ok = !!email && ALLOW.some(function (a) {
-      return a.email === email && userName.indexOf(a.provider + "_") === 0;
+    var sep = userName.indexOf("_");
+    var federatedProvider = sep > 0 ? userName.slice(0, sep) : "";
+    var ok = !!email && !!federatedProvider && ALLOW.some(function (a) {
+      return a.email === email && federatedProvider === a.provider;
     });
     if (!ok) {
       throw new Error("This federated identity is not authorized to access the admin console.");
