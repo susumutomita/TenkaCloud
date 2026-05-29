@@ -85,13 +85,13 @@ Set the frame: TenkaCloud is built on `@cdklabs/sbt-aws` 0.3.9 and obeys four pl
 
 - The portal logs participants in via the team's Cognito UserPool. After login, the portal fetches the team's deployed problems, endpoints, flags, and disruption phases.
 - One-click AWS Console SSO is implemented by federating into the team's read-only `ParticipantViewerRole` (see each problem's `template.yaml` for the scoping IAM statements).
-- Inter-team coordination (router updates / alliances / shared resource queues) is **not** baked into the platform. It is dispatched to the problem's portal plugin (`portal/`) per `ADR-022`. The platform exposes a primitive; the problem owns the semantics.
+- Inter-team coordination (router updates / alliances / shared resource queues) is **not** baked into the platform. It is dispatched to the problem's portal plugin (`portal/`) per `ADR-028`. The platform exposes a primitive; the problem owns the semantics.
 
 **ADR cross-references.**
 
 - `ADR-005` — Battle Portal UI
 - `ADR-006` — Notifications
-- `ADR-022` — Inter-team coordination plugin
+- `ADR-028` — Inter-team coordination plugin
 
 ## Security posture (≈ 5 min)
 
