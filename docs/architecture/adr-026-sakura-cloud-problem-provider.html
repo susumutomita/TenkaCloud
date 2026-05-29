@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ADR-026: Sakura Cloud as a problem-target provider (AppRun runtime)</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.draft   { background: #ddf4ff; color: var(--c-link); }
+  .callout { padding: .8rem 1rem; border-left: 4px solid var(--c-warn); background: #fff8c5; border-radius: 3px; margin: 1rem 0; }
+  .callout.danger { border-color: var(--c-reject); background: #ffe9e9; }
+  .callout.info { border-color: var(--c-link); background: #ddf4ff; }
+  .callout.ok { border-color: var(--c-accept); background: #ddf4e0; }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  .col-accept { color: var(--c-accept); font-weight: 600; }
+  .col-reject { color: var(--c-reject); font-weight: 600; }
+  .col-warn   { color: var(--c-warn);   font-weight: 600; }
+  svg text { font-family: -apple-system, "Hiragino Sans", sans-serif; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ADR-026: Sakura Cloud as a problem-target provider (AppRun runtime)</h1>
+  <p><em>How TenkaCloud runs competition problems on さくらのクラウド (Sakura Cloud) as the first non-AWS target — which engine satisfies the ADR-023 runtime contract, why the Trust Bridge federation model does not apply, and how the AWS control plane stays unchanged.</em></p>
+  <div class="meta">
+    <div><b>Status:</b> <span class="badge draft">Proposed</span> 2026-05-29</div>
+    <div><b>Builds on:</b> <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a>, <a href="./adr-017-cloud-action-intent-trust-bridge.html">ADR-017</a>, <a href="./adr-023-provider-specific-problem-runtime.html">ADR-023</a></div>
+    <div><b>Scope:</b> problem runtime + credential path only — not the platform itself</div>
+  </div>
+</header>
+
+<h2>Context</h2>
+
+<p><a href="./adr-023-provider-specific-problem-runtime.html">ADR-023</a> defined the multi-cloud expansion path: a problem declares <code>runtime: { provider, engine, entry }</code>, the deploy dispatcher selects the execution path, and the first non-AWS step is <strong>provider-specific problems</strong> (not a cloud-agnostic compiler). Two of its decisions constrain any new provider:</p>
+
+<ul>
+  <li><strong>ADR-023 D3</strong> — a first-class engine must let <em>the cloud own the runtime, the state, and the teardown</em>. The platform stores deploy metadata (id, status, outputs) but is never the source of truth of cloud state: <em>no state file, no lock backend</em>.</li>
+  <li><strong>ADR-023 D5</strong> — Terraform is explicitly <em>not</em> the default multi-cloud runtime, precisely because it would force the platform to own state, locking, and partial-failure cleanup.</li>
+</ul>
+
+<p>Today the only executable combination is <code>aws</code> + <code>cloudformation</code>: the deploy worker AssumeRoles into a team's isolated AWS account with a tenant ExternalId and runs CloudFormation <code>CreateStack</code>. <a href="./adr-017-cloud-action-intent-trust-bridge.html">ADR-017</a> (Trust Bridge) abstracts cross-cloud <em>authority transfer</em> as "verified intent → short-lived provider-native credential", with adapters for federation-capable providers (AWS STS AssumeRole, GCP Workload Identity, Azure Federated Credential).</p>
+
+<p>This ADR adds <strong>Sakura Cloud (さくらのクラウド)</strong> as the first non-AWS problem target. The motivation is concrete: a drill that runs on a Japanese public cloud ("a Sakura Cloud GameDay") is a differentiated, market-relevant offering and the first real exercise of the multi-cloud runtime contract. Sakura's service shape differs from AWS in two ways that this ADR must resolve before any code is written:</p>
+
+<table>
+  <tr><th>Dimension</th><th>AWS (today)</th><th>Sakura Cloud</th><th>Consequence</th></tr>
+  <tr>
+    <td>Cloud-native IaC that owns its own state</td>
+    <td>CloudFormation (a Stack owns the resource graph, teardown = <code>DeleteStack</code>)</td>
+    <td><strong>None.</strong> No CloudFormation-equivalent; no managed Kubernetes-as-a-Service. IaC is the community Terraform provider, or direct API calls.</td>
+    <td>A naïve "Terraform / API" engine would make the platform own state → violates ADR-023 D3 / D5.</td>
+  </tr>
+  <tr>
+    <td>Managed container runtime</td>
+    <td>(N/A for CFn problems)</td>
+    <td><strong>AppRun</strong> — GA since 2025-12-09, a serverless container platform on Kubernetes + Knative. Deploys a container image, auto-scales, the platform owns the application lifecycle and teardown.</td>
+    <td>AppRun <em>does</em> own runtime + teardown → satisfies ADR-023 D3 for container-shaped problems.</td>
+  </tr>
+  <tr>
+    <td>Authority model</td>
+    <td>STS AssumeRole + ExternalId → short-lived federated credential (fits Trust Bridge)</td>
+    <td>Static <strong>API key</strong>: an Access Token + Access Token Secret pair (created once, used via <code>SAKURACLOUD_ACCESS_TOKEN</code> / <code>_SECRET</code>). No OIDC / STS federation.</td>
+    <td>The Trust Bridge federation <em>exchange</em> (ADR-017) does not apply; Sakura needs a stored-scoped-credential path.</td>
+  </tr>
+</table>
+
+<h2>Decision</h2>
+
+<h3>D1: The first (and only) Sakura engine is <code>apprun</code></h3>
+<p>A Sakura problem is a <strong>container image</strong> run on AppRun. The deploy worker creates an AppRun application from the image, passes parameters as environment variables, and reads back the application's public URL as the deploy output. AppRun — being Knative on managed Kubernetes — owns the running application, its scaling, and its teardown (delete the application). This satisfies ADR-023 D3 without the platform holding any state file or lock backend.</p>
+
+<div style="overflow-x:auto">
+<svg width="900" height="170" viewBox="0 0 900 170" role="img" aria-label="Sakura AppRun deploy flow">
+  <rect x="10" y="55" width="150" height="60" rx="6" fill="#ddf4ff" stroke="#0969da"/>
+  <text x="85" y="80" text-anchor="middle" font-size="12" font-weight="600">Deploy worker</text>
+  <text x="85" y="98" text-anchor="middle" font-size="10" fill="#59636e">(AWS Lambda)</text>
+  <rect x="250" y="55" width="170" height="60" rx="6" fill="#f6f8fa" stroke="#59636e"/>
+  <text x="335" y="80" text-anchor="middle" font-size="12" font-weight="600">Sakura credential</text>
+  <text x="335" y="98" text-anchor="middle" font-size="10" fill="#59636e">scoped API key (SSM SecureString)</text>
+  <rect x="510" y="35" width="170" height="100" rx="6" fill="#ddf4e0" stroke="#1a7f37"/>
+  <text x="595" y="60" text-anchor="middle" font-size="12" font-weight="600">Sakura AppRun</text>
+  <text x="595" y="80" text-anchor="middle" font-size="10" fill="#59636e">owns runtime,</text>
+  <text x="595" y="95" text-anchor="middle" font-size="10" fill="#59636e">scaling, teardown</text>
+  <text x="595" y="115" text-anchor="middle" font-size="10" fill="#59636e">(Knative / k8s)</text>
+  <rect x="760" y="55" width="120" height="60" rx="6" fill="#fff8c5" stroke="#9a6700"/>
+  <text x="820" y="80" text-anchor="middle" font-size="12" font-weight="600">Scoring</text>
+  <text x="820" y="98" text-anchor="middle" font-size="10" fill="#59636e">HTTP probe URL</text>
+  <line x1="160" y1="85" x2="248" y2="85" stroke="#59636e" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="420" y1="85" x2="508" y2="85" stroke="#59636e" stroke-width="1.5" marker-end="url(#a)"/>
+  <line x1="680" y1="85" x2="758" y2="85" stroke="#9a6700" stroke-width="1.5" marker-end="url(#a)"/>
+  <defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#59636e"/></marker></defs>
+</svg>
+</div>
+
+<p>Container-shaped problems cover the bulk of TenkaCloud's scoring kinds — keep a service up (<code>uptime-flat</code> / <code>uptime-multi</code>), reach a deployment milestone (<code>phased-polling</code>), or serve a flag from an endpoint (<code>flag</code> via the app's HTTP surface). They do <em>not</em> cover AWS-infrastructure-shaped drills (VPC / IAM misconfiguration), which are AWS-specific by nature and stay on the <code>aws</code> + <code>cloudformation</code> path.</p>
+
+<h3>D2: Runtime metadata and the executable set</h3>
+<p>Per ADR-023 D2 the schema already accepts an arbitrary <code>runtime</code> shape. A Sakura problem declares:</p>
+<pre>"runtime": { "provider": "sakura", "engine": "apprun", "entry": "&lt;container-image-reference&gt;" }</pre>
+<p>The validator's <em>executable</em> set — enforced at the CLI / validator layer with a descriptive error — grows from one to two combinations:</p>
+<table>
+  <tr><th>provider</th><th>engine</th><th>entry</th><th>Executable</th></tr>
+  <tr><td><code>aws</code></td><td><code>cloudformation</code></td><td>template path</td><td><span class="col-accept">yes (today)</span></td></tr>
+  <tr><td><code>sakura</code></td><td><code>apprun</code></td><td>container image reference</td><td><span class="col-accept">yes (this ADR)</span></td></tr>
+  <tr><td>anything else</td><td>—</td><td>—</td><td><span class="col-reject">reserved, not executable</span></td></tr>
+</table>
+<p>Every existing problem keeps validating unchanged: absent <code>runtime</code> with a <code>cfnTemplate</code> still normalizes to <code>{ aws, cloudformation }</code> (ADR-023 D2).</p>
+
+<h3>D3: Credential model — stored scoped API key, not Trust Bridge federation</h3>
+<p>Sakura has no OIDC / STS federation, so the Trust Bridge <em>exchange</em> (verified intent → short-lived federated credential, ADR-017) cannot produce a Sakura credential. Sakura is therefore the <strong>first provider on a stored-credential path</strong>:</p>
+<ul>
+  <li>The team registers a <strong>least-scope Sakura API key</strong> (Access Token + Secret) for an isolated Sakura account / project.</li>
+  <li>The platform stores it as an <strong>SSM SecureString</strong>, one per team, mirroring how the AWS ExternalId is stored (per <code>infrastructure/lib/problem-deploy/handlers/shared/external-id-store.ts</code>; never returned in plaintext, encrypted with a condition-scoped key).</li>
+  <li>The deploy worker reads it at deploy time and calls the Sakura API to create / update / delete the AppRun application.</li>
+</ul>
+<div class="callout danger">
+  <b>Security note — weaker isolation than AWS.</b> A Sakura API key is long-lived, whereas the AWS path uses a 15-minute AssumeRole session. This is a strictly weaker property and must be compensated: scope the key to the minimum AppRun operations, store it only as SSM SecureString, support rotation (re-register), and prefer a dedicated per-team Sakura account so the key's blast radius is one team's project. The Trust Bridge stays AWS/GCP/Azure-only until Sakura offers a federation primitive.
+</div>
+
+<h3>D4: Full Sakura IaC (Terraform / direct API multi-resource) is out of scope</h3>
+<p>Deploying arbitrary multi-resource Sakura infrastructure (servers, switches, managed DB) has no cloud-native owner of state on Sakura — it would force the platform to run a Terraform backend or track created resource IDs, which ADR-023 D3 forbids and D5 explicitly rejects. It is deliberately excluded from the first engine and reserved, consistent with ADR-023's "provider-specific, cloud-owns-state first" stance.</p>
+
+<h3>D5: Isolation and teardown map cleanly</h3>
+<table>
+  <tr><th>Concept</th><th>AWS</th><th>Sakura</th></tr>
+  <tr><td>Per-team isolation</td><td>Isolated AWS account + ExternalId</td><td>Isolated Sakura account / project + scoped API key</td></tr>
+  <tr><td>Deploy unit</td><td>CloudFormation stack</td><td>AppRun application</td></tr>
+  <tr><td>Teardown</td><td><code>DeleteStack</code> (CFn owns it)</td><td>Delete AppRun application (AppRun owns it)</td></tr>
+  <tr><td>State source of truth</td><td>CloudFormation</td><td>AppRun</td></tr>
+</table>
+
+<h3>D6: Scoring is already provider-agnostic</h3>
+<p>The generic scoring engine (ADR-012 Phase 3.B) probes an HTTP endpoint. For a Sakura problem it probes the AppRun application URL exactly as it probes an AWS endpoint — <code>uptime-flat</code>, <code>uptime-multi</code>, <code>phased-polling</code>, and endpoint-served <code>flag</code> work unchanged. <code>attack-detection</code>, which reads a CloudFormation Output, is AWS-specific and not available for Sakura problems.</p>
+
+<h3>D7: The control plane stays on AWS</h3>
+<p>Only the <em>deploy engine</em>, the <em>credential adapter</em>, and the <em>scoring target</em> become provider-aware. The Control Plane (SBT Cognito + EventBridge + tenant CRUD), the Application Plane, the deploy worker host, and the participant portal remain on AWS exactly as today. This is a bounded addition to the dispatcher, not a platform migration.</p>
+
+<h2>Options considered</h2>
+<table>
+  <tr><th>Option</th><th>Verdict</th><th>Why</th></tr>
+  <tr>
+    <td><b>AppRun as the Sakura engine</b></td>
+    <td><span class="badge accept">Accepted</span></td>
+    <td>GA managed container runtime; AppRun owns runtime / scaling / teardown, satisfying ADR-023 D3 with no platform-side state. Matches the HTTP-probe scoring model.</td>
+  </tr>
+  <tr>
+    <td>Self-managed Kubernetes on Sakura VMs</td>
+    <td><span class="badge reject">Rejected</span></td>
+    <td>Sakura has no managed Kubernetes-as-a-Service; a self-built cluster makes the platform or team own cluster ops, networking, and lifecycle — the opposite of "cloud owns the runtime".</td>
+  </tr>
+  <tr>
+    <td>Terraform / direct Sakura API (full IaC) as the first engine</td>
+    <td><span class="badge reject">Rejected</span></td>
+    <td>No cloud-native state owner on Sakura ⇒ platform owns state / locking / cleanup ⇒ violates ADR-023 D3 and D5. Reserved for later, not first.</td>
+  </tr>
+  <tr>
+    <td>A federated Trust Bridge adapter for Sakura</td>
+    <td><span class="badge reject">N/A</span></td>
+    <td>Sakura exposes no OIDC / STS federation to exchange a verified intent into. A stored scoped API key (D3) is the only available model.</td>
+  </tr>
+  <tr>
+    <td>Port the whole platform (control + app plane) to Sakura</td>
+    <td><span class="badge reject">Rejected</span></td>
+    <td>The control plane is AWS-by-design (SBT, Cognito, EventBridge, Step Functions). Replacing them is a multi-month rebuild that contradicts the architecture and is unnecessary to run drills on Sakura.</td>
+  </tr>
+</table>
+
+<h2>Impact</h2>
+<table>
+  <tr><th>Surface</th><th>Change</th></tr>
+  <tr><td>Problem metadata / validator</td><td>Add <code>sakura</code> + <code>apprun</code> to the executable set; <code>entry</code> = container image reference.</td></tr>
+  <tr><td>Deploy worker</td><td>Provider/engine dispatch gains an AppRun branch: create / update / delete an AppRun application via the Sakura API; map parameters → env vars; read the app URL as the deploy output.</td></tr>
+  <tr><td>Credential storage</td><td>New per-team Sakura API-key store (SSM SecureString), parallel to the AWS ExternalId store. Registration + rotation UX in the tenant console.</td></tr>
+  <tr><td>Scoring</td><td>No change — HTTP probe of the AppRun URL. <code>attack-detection</code> unavailable for Sakura.</td></tr>
+  <tr><td>Catalog UI</td><td>Show the provider on each problem so AWS and Sakura drills present side-by-side (ADR-023 D1).</td></tr>
+  <tr><td>Cost</td><td>A Sakura account + AppRun usage (outside the AWS Free-Tier budget); the platform's AWS cost-zero posture is unchanged.</td></tr>
+  <tr><td>Control plane</td><td>Unchanged (D7).</td></tr>
+</table>
+
+<h2>Rollout</h2>
+<ol>
+  <li><strong>Schema + sample (no execution).</strong> Extend the validator's executable set and add a sample Sakura problem (<code>runtime: { sakura, apprun }</code>). The AWS path is untouched; the new combination validates.</li>
+  <li><strong>AppRun engine + credential.</strong> Implement the AppRun dispatch branch in the deploy worker and the Sakura API-key SecureString store. Behind the dispatcher, so AWS problems are unaffected.</li>
+  <li><strong>Catalog provider badges.</strong> Surface the provider in the catalog and portal so a Sakura drill is discoverable next to AWS drills.</li>
+</ol>
+
+<h2>Open questions</h2>
+<ul>
+  <li><strong>AppRun control surface.</strong> Confirm the AppRun API (and whether the Sakura Terraform provider covers AppRun yet) for application create / update / delete and public-URL retrieval, and pin the exact call sequence the deploy worker uses.</li>
+  <li><strong>Isolation tier.</strong> Whether AppRun's 専有型 (dedicated) is required for cross-team isolation, or 共用型 (shared) with per-team accounts suffices.</li>
+  <li><strong>Key lifecycle.</strong> Per-team Sakura API-key provisioning, rotation, and revocation flow — the long-lived-key risk (D3) needs an operational answer.</li>
+  <li><strong>Problem payload delivery.</strong> Whether private container images use a Sakura container registry, and how that maps to the private-payload model (<a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> / the S3 presigned-URL analog).</li>
+</ul>
+
+<h2>References</h2>
+<ul>
+  <li><a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> — problem = plugin, platform = host (generic scoring, runtime contract origin).</li>
+  <li><a href="./adr-017-cloud-action-intent-trust-bridge.html">ADR-017</a> — Cloud Action Intent / Trust Bridge (federated authority transfer; does not extend to Sakura).</li>
+  <li><a href="./adr-023-provider-specific-problem-runtime.html">ADR-023</a> — provider-specific problem runtime; D3 (cloud owns state) and D5 (Terraform not default) constrain this ADR.</li>
+  <li>Sakura Internet — AppRun GA announcement (2025-12-09): <a href="https://www.sakura.ad.jp/corporate/information/newsreleases/2025/12/09/1968222395/">newsreleases/2025/12/09</a>; product page: <a href="https://cloud.sakura.ad.jp/lp/apprun/">cloud.sakura.ad.jp/lp/apprun</a>.</li>
+  <li>Terraform for さくらのクラウド — provider &amp; API-key authentication: <a href="https://docs.usacloud.jp/terraform/provider/">docs.usacloud.jp/terraform/provider</a>.</li>
+</ul>
+
+</body>
+</html>
