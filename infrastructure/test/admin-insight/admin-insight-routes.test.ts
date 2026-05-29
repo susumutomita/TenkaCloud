@@ -33,6 +33,16 @@ function withClaims(claims: Record<string, unknown>) {
   };
 }
 
+describe("#1392: CORS is owned by API Gateway, not the Hono app", () => {
+  it("should NOT emit a wildcard Access-Control-Allow-Origin header from the Lambda", async () => {
+    const res = await app.request("/admin/insight/healthz");
+    expect(res.status).toBe(200);
+    // API Gateway HTTP API の corsPreflight allowlist が CORS を一元管理する。 handler 側で
+    // `cors({ origin: "*" })` を重ねていた wildcard を撤去したことを pin する。
+    expect(res.headers.get("access-control-allow-origin")).toBeNull();
+  });
+});
+
 describe("GET /admin/insight/tenants/summary", () => {
   beforeEach(() => vi.clearAllMocks());
 

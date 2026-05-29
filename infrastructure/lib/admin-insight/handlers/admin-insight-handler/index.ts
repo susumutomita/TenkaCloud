@@ -2,7 +2,6 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
-import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
 import { exportAuditEntriesCsv, listAuditEntries } from "./audit.js";
 import { isSystemAdmin, resolveCognitoSub } from "./auth.js";
@@ -49,16 +48,10 @@ const LIST_LIMIT_MAX = 200;
 
 const app = new Hono();
 
-app.use(
-  "*",
-  cors({
-    origin: "*",
-    allowHeaders: ["Authorization", "Content-Type"],
-    allowMethods: ["GET", "OPTIONS"],
-    maxAge: 600,
-  }),
-);
-
+// #1392: CORS は API Gateway HTTP API の corsPreflight (admin-console-insight-stack.ts) が
+// localhost dev + admin-console CloudFront origin の allowlist で一元管理する。 ここで Hono の
+// `cors({ origin: "*" })` を重ねると、 認証済み SystemAdmin surface に対し任意 origin への
+// `Access-Control-Allow-Origin: *` を返してしまうため middleware を置かない。
 app.onError((err, c) => {
   const message = err instanceof Error ? err.message : "unknown error";
   console.error("[admin-insight] uncaught handler error", { path: c.req.path, message });
