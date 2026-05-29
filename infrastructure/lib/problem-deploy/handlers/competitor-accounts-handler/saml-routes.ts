@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { StatusCodes } from "http-status-codes";
 import { extractClaims, resolveCognitoSub, resolveTenantId } from "../deploy-handler/auth.js";
 import {
   allowCognitoOnClient,
@@ -232,12 +233,39 @@ export function defaultMakeCognitoDeps(
   };
 }
 
+// #1385: pooled tier (BASIC / STANDARD / PREMIUM) は UserPool + UserPoolClient を全 pooled tenant で
+// 共有する (ADR-018)。 そこで SAML config を mutate (= UserPoolClient の SupportedIdentityProviders /
+// ExplicitAuthFlows 書き換え) すると他 pooled tenant のログインを巻き込む (cross-tenant DoS /
+// 認証ハイジャック)。 専有 UserPool を持つ silo (PLATINUM) / Lite mode のみ mutation を許可する。
+// `custom:tenantTier` は provision 時に server-set され、 API GW JWT authorizer が署名検証するため
+// 詐称不能。 claim 不在 (= silo / Lite / admin 経路) は許可側に倒す (pooled は必ず tier claim を持つ)。
+const POOLED_TIERS: ReadonlySet<string> = new Set(["BASIC", "STANDARD", "PREMIUM"]);
+
+export function pooledTierSamlBlock(c: Context): SamlRouteResult | undefined {
+  const claims = extractClaims(c) as JwtClaims | undefined;
+  const raw = claims?.["custom:tenantTier"];
+  const tier = typeof raw === "string" ? raw.trim().toUpperCase() : undefined;
+  if (tier && POOLED_TIERS.has(tier)) {
+    return {
+      status: StatusCodes.SERVICE_UNAVAILABLE,
+      body: {
+        error: "tenant_tier_not_silo",
+        message:
+          "SAML SSO configuration requires a dedicated UserPool (PLATINUM tier). Pooled tiers share a UserPool and cannot enable SAML.",
+      },
+    };
+  }
+  return undefined;
+}
+
 export async function routeGet(deps: SamlOrchestratorDeps, c: Context): Promise<SamlRouteResult> {
   const tenantId = resolveTenantId(c);
   return handleGetTenantSamlConfig(deps.shared, tenantId);
 }
 
 export async function routePut(deps: SamlOrchestratorDeps, c: Context): Promise<SamlRouteResult> {
+  const tierBlock = pooledTierSamlBlock(c);
+  if (tierBlock) return tierBlock;
   const tenantId = resolveTenantId(c);
   const sub = resolveCognitoSub(c);
   const cognitoDeps = await (deps.makeCognitoDeps?.(c) ?? defaultMakeCognitoDeps(deps.shared)(c));
@@ -267,6 +295,8 @@ export async function routeDelete(
   deps: SamlOrchestratorDeps,
   c: Context,
 ): Promise<SamlRouteResult> {
+  const tierBlock = pooledTierSamlBlock(c);
+  if (tierBlock) return tierBlock;
   const tenantId = resolveTenantId(c);
   const sub = resolveCognitoSub(c);
   const cognitoDeps = await (deps.makeCognitoDeps?.(c) ?? defaultMakeCognitoDeps(deps.shared)(c));
