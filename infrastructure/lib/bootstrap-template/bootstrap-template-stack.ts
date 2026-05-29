@@ -139,26 +139,24 @@ export class BootstrapTemplateStack extends Stack {
       jobRunnersList: [provisioningJobRunner, deprovisioningJobRunner],
     });
 
+    // #1384: TenantApiKey は API キー値を平文で受け取らない (API Gateway が auto-generate)。
+    // keyId / valueName のパラメータ名のみ渡す。
     new TenantApiKey(this, "BasicTierApiKey", {
-      apiKeyValue: props.apiKeyBasicTierParameter,
       ssmParameterApiKeyIdName: props.apiKeySSMParameterNames.basic.keyId,
       ssmParameterApiValueName: props.apiKeySSMParameterNames.basic.value,
     });
 
     new TenantApiKey(this, "StandardTierApiKey", {
-      apiKeyValue: props.apiKeyStandardTierParameter,
       ssmParameterApiKeyIdName: props.apiKeySSMParameterNames.standard.keyId,
       ssmParameterApiValueName: props.apiKeySSMParameterNames.standard.value,
     });
 
     new TenantApiKey(this, "PremiumTierApiKey", {
-      apiKeyValue: props.apiKeyPremiumTierParameter,
       ssmParameterApiKeyIdName: props.apiKeySSMParameterNames.premium.keyId,
       ssmParameterApiValueName: props.apiKeySSMParameterNames.premium.value,
     });
 
     new TenantApiKey(this, "PlatinumTierApiKey", {
-      apiKeyValue: props.apiKeyPlatinumTierParameter,
       ssmParameterApiKeyIdName: props.apiKeySSMParameterNames.platinum.keyId,
       ssmParameterApiValueName: props.apiKeySSMParameterNames.platinum.value,
     });
