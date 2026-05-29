@@ -124,6 +124,43 @@ describe("createIdp (Control Plane scope)", () => {
     const second = await createIdp(deps, scope, happyBody);
     expect("error" in second && second.error.kind).toBe("conflict");
   });
+
+  it("#1392: should lowercase idpId before storing (no case-variant duplicate providers)", async () => {
+    const deps = makeDeps();
+    const res = await createIdp(deps, scope, { ...happyBody, idpId: "Okta-ACME" });
+    expect("error" in res).toBe(false);
+    if ("error" in res) return;
+    expect(res.idpId).toBe("okta-acme");
+    expect(deps.cognito.created[0]?.idpId).toBe("okta-acme");
+    // 大文字違いで再作成しても同一 row 扱い → conflict
+    const dup = await createIdp(deps, scope, { ...happyBody, idpId: "okta-acme" });
+    expect("error" in dup && dup.error.kind).toBe("conflict");
+  });
+
+  it("#1392: should reject creation beyond SAML_IDP_LIMIT_PER_USERPOOL (25)", async () => {
+    const deps = makeDeps();
+    for (let i = 0; i < 25; i++) {
+      await deps.store.put(scope, {
+        idpId: `idp-${i}`,
+        displayName: `idp ${i}`,
+        metadataXml: VALID_METADATA,
+        attributeMapping: { email: "e" },
+        groupToRole: { admins: "TenantAdmin" },
+        createdAt: "2026-05-24T00:00:00.000Z",
+        updatedAt: "2026-05-24T00:00:00.000Z",
+      } as SamlIdpConfig);
+    }
+    const res = await createIdp(deps, scope, happyBody);
+    expect("error" in res).toBe(true);
+    if ("error" in res && res.error.kind === "conflict") {
+      expect(res.error.message).toMatch(/limit reached/);
+    } else {
+      throw new Error("expected a conflict error at the IdP limit");
+    }
+    // Cognito も DDB も触っていない (= 上限で fail-loud)
+    expect(deps.cognito.created).toHaveLength(0);
+    expect(await deps.store.get(scope, "okta-acme")).toBeNull();
+  });
 });
 
 describe("createIdp (Application Plane scope)", () => {

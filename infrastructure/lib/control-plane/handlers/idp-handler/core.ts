@@ -12,6 +12,7 @@
 
 import {
   CreateIdpInputSchema,
+  SAML_IDP_LIMIT_PER_USERPOOL,
   type SamlIdpConfig,
   type UpdateIdpInput,
   UpdateIdpInputSchema,
@@ -92,13 +93,26 @@ export async function createIdp(
   if (!validated.ok) {
     return { error: { kind: "invalid_metadata", reason: validated.reason ?? "unknown" } };
   }
-  const existing = await deps.store.get(scope, parsed.data.idpId);
+  // idpId は Cognito ProviderName になるため lowercase 正規化する (#1392): 大小文字違いの重複
+  // provider (`Foo` と `foo`) を防ぎ、 federated username の小文字化 (saml-admin-allowlist) と整合させる。
+  const idpId = parsed.data.idpId.toLowerCase();
+  const existing = await deps.store.get(scope, idpId);
   if (existing) {
-    return { error: { kind: "conflict", message: `idp ${parsed.data.idpId} already exists` } };
+    return { error: { kind: "conflict", message: `idp ${idpId} already exists` } };
+  }
+  // documented per-UserPool 上限 (= Cognito 制約 / list query が 25 件 bound 前提) を write 時に強制 (#1392)。
+  const current = await deps.store.list(scope);
+  if (current.length >= SAML_IDP_LIMIT_PER_USERPOOL) {
+    return {
+      error: {
+        kind: "conflict",
+        message: `idp limit reached (max ${SAML_IDP_LIMIT_PER_USERPOOL} per user pool)`,
+      },
+    };
   }
   const ts = nowIso(deps);
   const config: SamlIdpConfig = {
-    idpId: parsed.data.idpId,
+    idpId,
     displayName: parsed.data.displayName,
     ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
     metadataXml: parsed.data.metadataXml,
