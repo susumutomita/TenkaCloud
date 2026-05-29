@@ -115,10 +115,6 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       deploymentsTable: props.deploymentsTable,
       eventsTable: props.eventsTable,
       teamsTable: props.teamsTable,
-      // Issue #949: SystemAdmin user CRUD のため ControlPlane UserPool を渡す。
-      // Lambda は env CONTROL_PLANE_USER_POOL_ID + IAM Allow を取得し、
-      // /admin/insight/system-users route 群を実装する。
-      controlPlaneUserPool: props.cognitoUserPool,
       ...(props.deprovisioningStateMachineArn
         ? { deprovisioningStateMachineArn: props.deprovisioningStateMachineArn }
         : {}),
@@ -224,20 +220,11 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       integration,
     });
 
-    // Issue #949 (ADR-020 Phase C): SystemAdmin user の CRUD route 群。
-    // 全 route で JWT Authorizer + handler 内の `cognito:groups ⊇ {SystemAdmin}` の 2 段 check で
-    // 認可する。 list / detail は SystemAuditor も pass、 mutate (POST / DELETE / PATCH) は
-    // SystemAdmin only にする予定 (= handler 内 granular gate)。
-    httpApi.addRoutes({
-      path: "/admin/insight/system-users",
-      methods: [HttpMethod.GET, HttpMethod.POST],
-      integration,
-    });
-    httpApi.addRoutes({
-      path: "/admin/insight/system-users/{username}",
-      methods: [HttpMethod.GET, HttpMethod.DELETE, HttpMethod.PATCH],
-      integration,
-    });
+    // #1392: `/admin/insight/system-users*` routes は handler から削除済 (index.ts: UI 経路は
+    // token security hole になりやすいため Cognito 直 = admin-create-user / Hosted UI に倒した)。
+    // 配線だけ残ると handlerless route + 未使用の cognito-idp:Admin* 権限が standing privilege と
+    // して残り、 least-privilege に反する + 再 handler 追加時に無審査で再武装するため、 route 登録と
+    // Lambda 側の ControlPlane UserPool 権限/env を撤去した。
 
     // Issue #950 (ADR-020 Phase D): admin audit log read route (= cross-tenant 監査)
     httpApi.addRoutes({

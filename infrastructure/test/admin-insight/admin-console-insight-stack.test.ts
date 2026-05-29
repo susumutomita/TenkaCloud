@@ -204,6 +204,34 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
     });
   });
 
+  describe("#1392: dead system-users routes + unused Cognito Admin* IAM removed", () => {
+    it("should NOT register any /admin/insight/system-users route (handler was removed)", () => {
+      const tpl = synthInsightStack();
+      tpl.resourcePropertiesCountIs(
+        "AWS::ApiGatewayV2::Route",
+        { RouteKey: Match.stringLikeRegexp("system-users") },
+        0,
+      );
+    });
+
+    it("should NOT grant cognito-idp:Admin* on any IAM policy (no standing privilege)", () => {
+      const tpl = synthInsightStack();
+      tpl.resourcePropertiesCountIs(
+        "AWS::IAM::Policy",
+        {
+          PolicyDocument: {
+            Statement: Match.arrayWith([
+              Match.objectLike({
+                Action: Match.arrayWith(["cognito-idp:AdminCreateUser"]),
+              }),
+            ]),
+          },
+        },
+        0,
+      );
+    });
+  });
+
   describe("Outputs", () => {
     it("should expose AdminInsightApiUrl as a stack Output", () => {
       const tpl = synthInsightStack();
