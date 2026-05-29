@@ -130,8 +130,14 @@ export class CompetitorAccountsApiLambda extends Construct {
     //    全 UserPool に絞り (= account-level blast radius)、 runtime 側で JWT iss claim から
     //    呼び出した UserPool ID を抽出して self-targeting のみ許可する。
     //
-    //    cross-stack で具体 UserPool ARN を渡すと TenantTemplateStack ↔ ProblemDeployBackendStack
-    //    間に CFn export 依存が増えるため、 wildcard + runtime guard で代用する設計判断。
+    //    #1391: 具体 UserPool ARN への scope は **不能**。 silo (PLATINUM) tenant の UserPool は
+    //    provision-tenant.sh が per-tenant stack で動的に作るため、 この共有 Lambda の synth 時点では
+    //    ARN を列挙できない (random pool-id、 命名 prefix も無い)。 よって `userpool/*` は
+    //    アーキ上必須で、 越境防止の実効的な制御は IAM ではなく runtime の self-targeting guard
+    //    (`extractUserPoolIdFromIss`、 = API GW JWT authorizer が署名検証した iss の pool だけを mutate)。
+    //    guard の spoofing 耐性は tenant-saml.test.ts の adversarial cases で pin している。
+    //    cross-stack で ARN を export すると TenantTemplateStack ↔ ProblemDeployBackendStack 間に
+    //    CFn 循環依存が増えるトレードオフもある。
     this.fn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,

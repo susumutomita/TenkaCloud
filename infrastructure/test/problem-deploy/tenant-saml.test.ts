@@ -120,6 +120,39 @@ describe("extractUserPoolIdFromIss", () => {
     expect(extractUserPoolIdFromIss("https://example.com")).toBeUndefined();
     expect(extractUserPoolIdFromIss("not-a-url")).toBeUndefined();
   });
+
+  // #1391: this extraction is the runtime self-targeting control behind the (architecturally
+  // required) `cognito-idp:*` on `userpool/*` IAM grant — the Lambda mutates only the pool that
+  // issued the caller's (API-GW-signature-validated) JWT. These adversarial cases pin that an
+  // attacker cannot steer the extracted pool id to a victim pool via a crafted iss.
+  it.each([
+    ["http (not https) scheme", "http://cognito-idp.ap-northeast-1.amazonaws.com/ap-northeast-1_x"],
+    [
+      "suffix-domain spoof",
+      "https://cognito-idp.ap-northeast-1.amazonaws.com.evil.com/ap-northeast-1_x",
+    ],
+    [
+      "extra path segment / traversal",
+      "https://cognito-idp.ap-northeast-1.amazonaws.com/ap-northeast-1_x/../victim_pool",
+    ],
+    [
+      "query string appended",
+      "https://cognito-idp.ap-northeast-1.amazonaws.com/ap-northeast-1_x?next=victim",
+    ],
+    [
+      "embedded userinfo host spoof",
+      "https://cognito-idp.ap-northeast-1.amazonaws.com@evil.com/victim_pool",
+    ],
+    ["non-cognito host", "https://login.evil.com/ap-northeast-1_x"],
+  ])("should return undefined for a spoofed iss: %s", (_, iss) => {
+    expect(extractUserPoolIdFromIss(iss)).toBeUndefined();
+  });
+
+  it("should extract only the final pool-id segment exactly (no host/region carry-over)", () => {
+    expect(
+      extractUserPoolIdFromIss("https://cognito-idp.us-east-1.amazonaws.com/us-east-1_Pool9"),
+    ).toBe("us-east-1_Pool9");
+  });
 });
 
 /* ------------------------- Cognito SDK wrapper tests ------------------------- */
