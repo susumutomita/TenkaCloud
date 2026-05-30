@@ -261,4 +261,67 @@ describe("DeploymentDetailPage (Netlify-style phase + log view)", () => {
     // Building phase body 内の link を text で拾う。
     expect(screen.getByText(/Open CodeBuild \/ CloudFormation logs/)).toBeInTheDocument();
   });
+
+  it("should show an invalid-job-id alert for a malformed jobId (no fetch)", () => {
+    render(
+      <I18nProvider>
+        <MemoryRouter initialEntries={["/deployments/bad"]}>
+          <Routes>
+            <Route path="/deployments/:jobId" element={<DeploymentDetailPage config={config} />} />
+          </Routes>
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+    expect(screen.getByText("不正な Job ID です。")).toBeInTheDocument();
+    expect(mocks.getDeployment).not.toHaveBeenCalled();
+  });
+
+  it("should show a fetch-failed alert when loading the deployment errors", async () => {
+    mocks.getDeployment.mockRejectedValue(new Error("fetch boom"));
+    renderPage();
+    expect(await screen.findByText("ジョブの取得に失敗しました")).toBeInTheDocument();
+    expect(screen.getByText("fetch boom")).toBeInTheDocument();
+  });
+
+  it("should render failure-reason, hand-off, and CFn outputs sections when present", async () => {
+    mocks.getDeployment.mockResolvedValue({
+      ...baseDeployment,
+      status: "FAILED",
+      failureReason: "CFn rollback",
+      teamLoginKey: "KEY-123",
+      stackOutputs: JSON.stringify({ FrontendUrl: "https://app.example.com" }),
+    });
+    mocks.getStackProgress.mockResolvedValue(emptyProgress);
+    renderPage();
+    expect(await screen.findByText("失敗理由")).toBeInTheDocument(); // failure_reason_header
+    expect(screen.getAllByText("CFn rollback").length).toBeGreaterThan(0); // alert + guidance
+    expect(screen.getByText("競技者 hand-off")).toBeInTheDocument(); // handoff_header
+    expect(screen.getByText("https://app.example.com")).toBeInTheDocument(); // CfnOutputsSection
+  });
+
+  it("should fall back to the internal team name in the header when displayTeamName is absent", async () => {
+    mocks.getDeployment.mockResolvedValue({
+      ...baseDeployment,
+      displayTeamName: undefined,
+      status: "COMPLETE",
+    });
+    mocks.getStackProgress.mockResolvedValue(emptyProgress);
+    renderPage();
+    // header description = problemId · (displayTeamName ?? teamName) · Job ... → teamName。
+    expect(await screen.findByText(/· team-alpha · Job/)).toBeInTheDocument();
+  });
+
+  it("should close the maximize-log modal on dismiss", async () => {
+    mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "IN_PROGRESS" });
+    mocks.getStackProgress.mockResolvedValue(emptyProgress);
+    renderPage();
+    fireEvent.click(await screen.findByTestId("maximize-log"));
+    await screen.findByTestId("terminal-log");
+    // Modal の X (dismiss-control) → onDismiss → setLogModalOpen(false)。
+    fireEvent.click(
+      document.querySelector('button[class*="dismiss-control"]') as HTMLButtonElement,
+    );
+    // close 後も page 本体 (reload button) は残る。
+    expect(screen.getByRole("button", { name: "再読み込み" })).toBeInTheDocument();
+  });
 });

@@ -77,6 +77,9 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
     );
   }
 
+  // 上の loading (!item && !error) / error (error && !item) guard を抜けた時点で item は必ず
+  // non-null (型 narrowing 用の防御 guard、 return は不到達)。
+  /* v8 ignore next */
   if (!item) return null;
 
   const outputs = parseStackOutputs(item.stackOutputs);
