@@ -2,19 +2,18 @@ import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Header from "@cloudscape-design/components/header";
-import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
-import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
 import { useCallback, useMemo, useState } from "react";
 import { type NavigateFunction, useNavigate } from "react-router";
 import { useApiClient } from "../api/client";
+import { type DeploymentSummary, listAllDeployments } from "../api/deploy-client";
 import {
-  DEPLOYMENT_STATUS_INDICATOR,
-  type DeploymentSummary,
-  listAllDeployments,
-} from "../api/deploy-client";
+  deploymentStackNameCell,
+  deploymentStatusCell,
+  deploymentTeamCell,
+} from "../components/deployment-columns";
 import type { AppConfig } from "../config";
 import { usePollingList } from "../hooks/usePollingList";
 import { useT } from "../i18n";
@@ -33,18 +32,7 @@ function buildColumnDefinitions(
     {
       id: "team",
       header: t("deployments.col_team"),
-      cell: (item) => (
-        <Link
-          fontSize="body-m"
-          href={`/deployments/${encodeURIComponent(item.jobId)}`}
-          onFollow={(e) => {
-            e.preventDefault();
-            navigate(`/deployments/${encodeURIComponent(item.jobId)}`);
-          }}
-        >
-          {item.displayTeamName ?? item.teamName}
-        </Link>
-      ),
+      cell: deploymentTeamCell(navigate),
     },
     {
       id: "problemId",
@@ -54,16 +42,12 @@ function buildColumnDefinitions(
     {
       id: "status",
       header: t("deployments.col_status"),
-      cell: (item) => (
-        <StatusIndicator type={DEPLOYMENT_STATUS_INDICATOR[item.status]}>
-          {item.status}
-        </StatusIndicator>
-      ),
+      cell: deploymentStatusCell,
     },
     {
       id: "namePrefix",
       header: t("deployments.col_stack_name"),
-      cell: (item) => <code>{item.namePrefix}</code>,
+      cell: deploymentStackNameCell,
     },
     {
       id: "createdAt",
