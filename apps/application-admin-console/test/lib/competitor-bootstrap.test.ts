@@ -37,6 +37,17 @@ describe("buildLaunchStackUrl", () => {
     expect(url).toContain("https://us-east-1.console.aws.amazon.com/");
     expect(url).toContain("region=us-east-1");
   });
+
+  it("should prefer an injected templateUrl over the dev fallback when provided", () => {
+    // runtime-config 由来の S3 URL が注入された production 経路 (= resolveTemplateUrl の
+    // 「templateUrl あり」 分岐)。 fallback の GitHub raw URL は使わない。
+    const injected = "https://tc-templates.s3.amazonaws.com/competitor-bootstrap.yaml";
+    const decoded = decodeURIComponent(
+      buildLaunchStackUrl({ ...baseInput, templateUrl: injected }),
+    );
+    expect(decoded).toContain(injected);
+    expect(decoded).not.toContain(COMPETITOR_BOOTSTRAP_TEMPLATE_URL);
+  });
 });
 
 describe("buildShareablePayload", () => {

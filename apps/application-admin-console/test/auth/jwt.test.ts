@@ -38,6 +38,16 @@ describe("decodeIdToken", () => {
     });
   });
 
+  describe("when payload has no (string) email", () => {
+    it("should return undefined email but still resolve tenantId", () => {
+      // email field 不在 のとき email を undefined に倒す防御分岐。
+      const token = buildToken({ "custom:tenantId": "tenant-123" });
+      const claims = decodeIdToken(token);
+      expect(claims?.email).toBeUndefined();
+      expect(claims?.tenantId).toBe("tenant-123");
+    });
+  });
+
   describe("when JWT does not have 3 segments", () => {
     it("should return null", () => {
       expect(decodeIdToken("header.body")).toBeNull();

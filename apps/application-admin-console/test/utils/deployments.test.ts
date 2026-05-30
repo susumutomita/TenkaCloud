@@ -93,6 +93,13 @@ describe("deploymentsChanged", () => {
       ),
     ).toBe(false);
   });
+
+  it("配列に hole (undefined 要素) があれば true (= 防御 guard)", () => {
+    // 長さは同じだが要素が欠落している異常系。 index 比較で a / b が undefined になる
+    // 防御 guard を抜けて 「変化あり」 に倒す (= 安全側)。
+    const hole = [undefined] as unknown as DeploymentSummary[];
+    expect(deploymentsChanged(hole, hole)).toBe(true);
+  });
 });
 
 describe("constants", () => {
