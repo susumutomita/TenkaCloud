@@ -127,6 +127,19 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
       expect(r.learningGoals.length).toBeGreaterThanOrEqual(2);
     });
 
+    it("should fall back to base fields when i18n exists but lacks the requested locale", () => {
+      const base = requireProblemMetadata("hello-world");
+      // i18n is present but has no "en" entry → the no-override fallback branch.
+      const entry = {
+        ...base,
+        i18n: { ja: { name: "ja-name", shortDescription: "ja-desc", learningGoals: ["g"] } },
+      } as ProblemCatalogEntry;
+      const r = resolveLocalizedNarrative(entry, "en");
+      expect(r.name).toBe(base.name);
+      expect(r.shortDescription).toBe(base.shortDescription);
+      expect(r.learningGoals).toEqual(base.learningGoals);
+    });
+
     it("should return en override fields when locale='en' (hello-world)", () => {
       const m = requireProblemMetadata("hello-world");
       const ja = resolveLocalizedNarrative(m, "ja");
