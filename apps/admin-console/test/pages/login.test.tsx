@@ -13,6 +13,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const beginLoginMock = vi.fn();
@@ -130,6 +131,43 @@ describe("admin-console LoginPage (#1329)", () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(beginLoginMock).toHaveBeenCalledTimes(1);
   });
+
+  it("should not double-fire beginLogin under StrictMode (auto-start ref guard)", async () => {
+    // StrictMode は effect を mount→cleanup→mount で 2 度走らせる。 autoStartedRef が
+    // 2 度目を弾く (= if (autoStartedRef.current) return) ので beginLogin は 1 回だけ。
+    beginLoginMock.mockResolvedValue(undefined);
+    localStorage.setItem("tenkacloud.admin.locale", "ja");
+    render(
+      <StrictMode>
+        <I18nProvider>
+          <AuthProvider config={baseConfig}>
+            <LoginPage config={baseConfig} />
+          </AuthProvider>
+        </I18nProvider>
+      </StrictMode>,
+    );
+    await waitFor(() => expect(beginLoginMock).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(beginLoginMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("should let the user retry via the sign-in button after a non-Error auto-redirect failure", async () => {
+    // 非 Error の reject → `err instanceof Error ? err.message : ""` の "" 経路。
+    beginLoginMock.mockRejectedValueOnce("opaque failure");
+    renderLogin();
+    expect(await screen.findByText(/サインインに失敗しました/)).toBeInTheDocument();
+    // error 後は signing-in が解け、 retry button (onSignIn) が再表示される。
+    beginLoginMock.mockResolvedValueOnce(undefined);
+    fireEvent.click(screen.getByRole("button", { name: "サインイン" }));
+    await waitFor(() => expect(beginLoginMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("should switch locale via the language switcher", () => {
+    beginLoginMock.mockImplementation(() => new Promise<void>(() => {})); // hold open
+    renderLogin();
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
+  });
 });
 
 describe("admin-console LoginPage SAML flow (#1335)", () => {
@@ -198,5 +236,39 @@ describe("admin-console LoginPage SAML flow (#1335)", () => {
         expect.objectContaining({ identityProvider: "corp-okta" }),
       );
     });
+  });
+
+  it("should ignore an empty email submission", async () => {
+    beginLoginMock.mockResolvedValue(undefined);
+    renderLogin({ samlIdpDirectory: { "example.com": ["corp-entra"] } });
+    // email 空のまま submit → onSubmitEmail の `if (!trimmed) return`。
+    fireEvent.click(screen.getByRole("button", { name: "サインイン" }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(beginLoginMock).not.toHaveBeenCalled();
+  });
+
+  it("should return to the email form when the IdP picker is cancelled", async () => {
+    renderLogin({ samlIdpDirectory: { "example.com": ["corp-entra", "corp-okta"] } });
+    fireEvent.change(screen.getByLabelText(/会社のメールアドレス/), {
+      target: { value: "alice@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "サインイン" }));
+    await screen.findByRole("button", { name: "corp-entra" });
+    // cancel (onCancelPicker) → picker を畳んで email form に戻る。
+    fireEvent.click(screen.getByRole("button", { name: "別のメールアドレスを使用する" }));
+    expect(screen.getByLabelText(/会社のメールアドレス/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "corp-entra" })).not.toBeInTheDocument();
+  });
+
+  it("should surface a sign-in error inside the SAML email form", async () => {
+    // local fallback (no matching IdP) → startLogin → beginLogin reject → SAML shell の
+    // errorMessage ? <Alert> : null の Alert 経路 (cond@L188)。
+    beginLoginMock.mockRejectedValueOnce(new Error("redirect blew up"));
+    renderLogin({ samlIdpDirectory: { "example.com": ["corp-entra"] } });
+    fireEvent.change(screen.getByLabelText(/会社のメールアドレス/), {
+      target: { value: "outsider@other.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "サインイン" }));
+    expect(await screen.findByText(/サインインに失敗しました/)).toBeInTheDocument();
   });
 });
