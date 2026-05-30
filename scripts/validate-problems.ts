@@ -13,6 +13,14 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
+import {
+  classifyRuntimeSupport,
+  isExecutableRuntime,
+  normalizeRuntime,
+  RESERVED_RUNTIMES,
+  type RuntimeDescriptor,
+  type RuntimeMetadataInput,
+} from "@tenkacloud/problem-runtime";
 import Ajv2020 from "ajv";
 import addFormats from "ajv-formats";
 
@@ -51,11 +59,19 @@ function findMetadataFiles(dir: string): string[] {
  * 実 deploy で CFn が CREATE_COMPLETE しても、 これらの参照が解決できないと
  * scoring engine / portal が壊れるので、 ここで先に止める。
  */
-function resolveTemplatePath(meta: Metadata): string {
-  // [ADR-023] Prefer `runtime.entry` when declared; fall back to legacy `cfnTemplate`; finally default.
-  const runtime = meta.runtime as Record<string, unknown> | undefined;
-  if (runtime && typeof runtime.entry === "string") return runtime.entry;
-  return typeof meta.cfnTemplate === "string" ? meta.cfnTemplate : "template.yaml";
+/**
+ * [ADR-023 / ADR-026 / ADR-027] runtime の provider/engine が、 実行可能な
+ * `aws/cloudformation` でも、 ロードマップ予約済み (sakura/apprun・azure/bicep・
+ * gcp/infra-manager) でもないとき = typo の可能性が高いので止める。 予約済み runtime は
+ * まだ deploy できないが、 problem author が先行して書けるよう validation は通す。
+ */
+export function checkRuntimeSupport(runtime: RuntimeDescriptor): ValidationError[] {
+  if (classifyRuntimeSupport(runtime) !== "unknown") return [];
+  const reserved = RESERVED_RUNTIMES.map((r) => `${r.provider}/${r.engine}`).join(", ");
+  return [
+    `runtime "${runtime.provider}/${runtime.engine}" は実行可能 (aws/cloudformation) でも` +
+      ` 予約済みでもありません (typo の可能性)。 予約済み: ${reserved}`,
+  ];
 }
 
 function checkRuntimeConsistency(meta: Metadata): ValidationError[] {
@@ -72,22 +88,36 @@ function checkRuntimeConsistency(meta: Metadata): ValidationError[] {
   return [];
 }
 
-function checkCrossRefs(metaPath: string, meta: Metadata): ValidationError[] {
+export function checkCrossRefs(metaPath: string, meta: Metadata): ValidationError[] {
   const dir = dirname(metaPath);
-  const cfnTemplate = resolveTemplatePath(meta);
-  const templatePath = join(dir, cfnTemplate);
-
-  if (!existsSync(templatePath)) {
-    return [`cfnTemplate file "${cfnTemplate}" not found`];
+  // [ADR-023] 正本の正規化ロジック (problem-runtime) を共有して provider/engine/entry を解決。
+  const runtime = normalizeRuntime(meta as RuntimeMetadataInput);
+  if (!runtime) {
+    return ["runtime object が不正です (provider / engine / entry はすべて string 必須)"];
   }
-  const yaml = readFileSync(templatePath, "utf8");
-  return [
+  const templatePath = join(dir, runtime.entry);
+  if (!existsSync(templatePath)) {
+    return [`runtime entry file "${runtime.entry}" not found`];
+  }
+
+  const errors = [
+    ...checkRuntimeSupport(runtime),
     ...checkRuntimeConsistency(meta),
-    ...checkScoringOutputRefs(meta, yaml, cfnTemplate),
-    ...checkEndpointOutputRefs(meta, yaml, cfnTemplate),
     ...checkDashboardSlotFiles(meta, dir),
     ...checkRegionConsistency(meta),
   ];
+
+  // CFn Outputs 構文 (`Key:`) を前提にした cross-ref は executable な aws/cloudformation
+  // engine のときだけ意味を持つ。 予約済み (sakura/azure/gcp) は出力 binding 機構が
+  // provider 固有 + まだ deploy 不可なので、 ここでは file 存在のみ担保し CFn check は skip。
+  if (isExecutableRuntime(runtime)) {
+    const yaml = readFileSync(templatePath, "utf8");
+    errors.push(
+      ...checkScoringOutputRefs(meta, yaml, runtime.entry),
+      ...checkEndpointOutputRefs(meta, yaml, runtime.entry),
+    );
+  }
+  return errors;
 }
 
 const REGION_RE = /^[a-z]{2,3}-[a-z]+-\d{1,2}$/;
@@ -337,4 +367,8 @@ function reportResult(failed: number, total: number): void {
   console.log(`\n${total} 件の metadata.json はすべて有効です`);
 }
 
-main();
+// CLI として直接実行されたときだけ走らせる。 test が helper を import しても
+// validation 全体が走らないようにする (= 他 scripts/*.ts と同じ import.meta.main guard)。
+if (import.meta.main) {
+  main();
+}
