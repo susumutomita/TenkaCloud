@@ -1,7 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type ApiClient, ApiError } from "../../src/api/client";
-import type { EventDetail } from "../../src/api/events-client";
 import { useEventOperations, validateEndsAtInput } from "../../src/hooks/useEventOperations";
 
 /**
