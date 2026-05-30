@@ -205,22 +205,20 @@ export function QuestsPage() {
         label={t("quests.filter_label")}
       />
 
-      {/* Issue #1000: 未解決 section を常時 expand で先頭に並べる */}
+      {/* Issue #1000: 未解決 section を常時 expand で先頭に並べる。 Cards 自身の
+       *   loading / empty slot に委ねる (= 旧 ternary は loading 中も emptyUnsolved を
+       *   出してしまい spinner が死んでいた)。 */}
       <Container
         header={<Header counter={`(${unsolved.length})`}>{t("quests.section_unsolved")}</Header>}
       >
-        {unsolved.length > 0 ? (
-          <Cards<ParticipantProblemView>
-            items={unsolved}
-            loading={!isMock && !view && !error}
-            loadingText={t("quests.loading_text")}
-            cardDefinition={renderCard}
-            cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 2 }]}
-            empty={emptyUnsolved}
-          />
-        ) : (
-          emptyUnsolved
-        )}
+        <Cards<ParticipantProblemView>
+          items={unsolved}
+          loading={!isMock && !view && !error}
+          loadingText={t("quests.loading_text")}
+          cardDefinition={renderCard}
+          cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 2 }]}
+          empty={emptyUnsolved}
+        />
       </Container>
 
       {/* Issue #1000: 解決済み section は collapsible、 初期 collapsed (= 視線を未解決に集中) */}
@@ -229,17 +227,16 @@ export function QuestsPage() {
         variant="container"
         defaultExpanded={false}
       >
-        {cleared.length > 0 ? (
-          <Cards<ParticipantProblemView>
-            items={cleared}
-            cardDefinition={renderCard}
-            cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 2 }]}
-          />
-        ) : (
-          <Box textAlign="center" padding="m" color="text-status-inactive">
-            {t("quests.empty_cleared")}
-          </Box>
-        )}
+        <Cards<ParticipantProblemView>
+          items={cleared}
+          cardDefinition={renderCard}
+          cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 2 }]}
+          empty={
+            <Box textAlign="center" padding="m" color="text-status-inactive">
+              {t("quests.empty_cleared")}
+            </Box>
+          }
+        />
       </ExpandableSection>
     </SpaceBetween>
   );
