@@ -150,6 +150,20 @@ describe("buildEventReportMarkdown", () => {
     );
     expect(md).toContain("| 1 | A \\| B | 0 pt | 0 |");
   });
+
+  it("should render the empty-state label instead of a table when the scoreboard is empty", () => {
+    const md = buildEventReportMarkdown(makeExport({ scoreboard: [] }));
+    expect(md).toContain("## Final scoreboard");
+    expect(md).toContain("No score events.");
+    // 空のときは GFM table の separator 行を出さない。
+    expect(md).not.toContain("| Rank | Team | Score | Problems solved |");
+  });
+
+  it("should render the empty-state label instead of a table when the breakdown is empty", () => {
+    const md = buildEventReportMarkdown(makeExport({ breakdown: [] }));
+    expect(md).toContain("## Per-problem breakdown");
+    expect(md).toContain("No problems.");
+  });
 });
 
 describe("escapeMarkdownCell", () => {
