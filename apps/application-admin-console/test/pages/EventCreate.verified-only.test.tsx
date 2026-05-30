@@ -91,6 +91,8 @@ describe("EventCreatePage (Phase 2.2 verified-only)", () => {
     expect(option.labelTag).toBe("production-shared-account");
     expect(option.description).toContain("production-shared-account");
     expect(formatVerifiedAccountSummary(account)).toBe("111111111111 (production-shared-account)");
+    // alias が無い場合は account id だけを返す (no-alias 経路)。
+    expect(formatVerifiedAccountSummary({ ...account, alias: undefined })).toBe("111111111111");
   });
 
   it("should show Alert with link to Competitor Accounts when there are zero accounts", async () => {
