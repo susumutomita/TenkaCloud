@@ -221,6 +221,7 @@
     "info_header": "Problem info",
     "info_category": "Category",
     "info_difficulty": "Difficulty",
+    "info_runtime": "Runtime",
     "info_private_badge": "Answer hidden",
     "info_description_label": "Description",
     "difficulty_1": "Beginner",

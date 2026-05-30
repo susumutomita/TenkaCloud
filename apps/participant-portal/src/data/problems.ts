@@ -100,6 +100,8 @@ export interface ProblemCatalogEntry {
   readonly i18n?: {
     readonly en?: ProblemI18nOverride;
   };
+  /** ADR-026 / ADR-027: 問題が deploy される cloud (provider) と engine。 未宣言は aws/cloudformation。 */
+  readonly runtime: { readonly provider: string; readonly engine: string };
 }
 
 interface ProblemMetadata {
@@ -118,6 +120,8 @@ interface ProblemMetadata {
   exposedPorts?: { port: number; name: string }[];
   cfnTemplate?: string;
   cfnParameters?: Record<string, string>;
+  /** ADR-026 / ADR-027: 問題の実行環境 (provider/engine)。 未宣言は aws/cloudformation 既定。 */
+  runtime?: { provider?: string; engine?: string; entry?: string };
   endpoints?: {
     slot: string;
     default: { from: "cfn-output"; key: string; appendPath?: string };
@@ -247,6 +251,11 @@ export function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry 
       ? { dashboardSlots: dashboardSlots as ProblemDashboardSlots }
       : {}),
     ...(publicI18n ? { i18n: publicI18n } : {}),
+    // ADR-026 / ADR-027: 実行環境を露出。 未宣言の legacy 問題は aws/cloudformation 既定。
+    runtime: {
+      provider: metadata.runtime?.provider ?? "aws",
+      engine: metadata.runtime?.engine ?? "cloudformation",
+    },
   };
 }
 

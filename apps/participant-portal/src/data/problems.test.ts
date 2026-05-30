@@ -46,6 +46,21 @@ describe("metadataToEntry (fairness projection)", () => {
     expect(entry.endpoints[0]?.slot).toBe("main");
   });
 
+  it("should default the runtime to aws/cloudformation when none is declared (ADR-026/027)", () => {
+    expect(metadataToEntry(FAIRNESS_FIXTURE).runtime).toEqual({
+      provider: "aws",
+      engine: "cloudformation",
+    });
+  });
+
+  it("should project a declared multi-cloud runtime", () => {
+    const withRuntime = {
+      ...FAIRNESS_FIXTURE,
+      runtime: { provider: "azure", engine: "bicep", entry: "main.bicep" },
+    } as Parameters<typeof metadataToEntry>[0];
+    expect(metadataToEntry(withRuntime).runtime).toEqual({ provider: "azure", engine: "bicep" });
+  });
+
   it("should project i18n.en (dropping its description) and omit i18n when the override is empty", () => {
     const withI18n = {
       ...FAIRNESS_FIXTURE,
