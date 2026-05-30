@@ -25,6 +25,9 @@ import { findProblemMetadata, type ProblemDashboardSlots } from "../data/problem
  * `eager: false` で各 file を別 chunk に分け、 必要時のみ fetch される。
  * 戻り値 key の例: "../../../../problems/battles/microservice-migration-battle/portal/StatusPanel.tsx"
  */
+// glob pattern は Vite が build/HMR 時に解決する compile-time directive。 引数の path literal は
+// ランタイムでは実行されず coverage instrument 対象として到達不能なので ignore する。
+/* v8 ignore next 3 */
 const pluginModules = import.meta.glob<{ default: PortalSlotComponent }>(
   "../../../../problems/*/*/portal/*.tsx",
 );
@@ -42,10 +45,14 @@ const PLUGIN_ENTRY_BY_NEEDLE: ReadonlyMap<string, () => Promise<{ default: Porta
     for (const [key, loader] of Object.entries(pluginModules)) {
       // key = "../../../../problems/<category>/<problemId>/portal/<file>.tsx"
       const segments = key.split("/");
+      // glob は常に上記 6+ segment の portal path を返すため、 segment 数不足 / 非 portal の
+      // skip 分岐は valid な glob 結果では到達不能な防御ガード。
+      /* v8 ignore next */
       if (segments.length < 3) continue;
       const fileName = segments[segments.length - 1];
       const portalSegment = segments[segments.length - 2];
       const problemId = segments[segments.length - 3];
+      /* v8 ignore next */
       if (!fileName || !problemId || portalSegment !== "portal") continue;
       map.set(`${problemId}/portal/${fileName}`, loader);
     }
