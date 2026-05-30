@@ -135,9 +135,12 @@ class PluginErrorBoundary extends Component<
 
   render() {
     if (this.state.hasError) {
+      // getDerivedStateFromError は常に message を string で設定するため、 ?? fallback は到達不能。
+      /* v8 ignore next */
+      const message = this.state.message ?? "Unknown error";
       return (
         <Alert type="warning" header={`Plugin "${this.props.slotName}" failed to render`}>
-          {this.state.message ?? "Unknown error"}
+          {message}
         </Alert>
       );
     }
