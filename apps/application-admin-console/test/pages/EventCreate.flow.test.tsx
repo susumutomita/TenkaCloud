@@ -38,7 +38,11 @@ vi.mock("../../src/api/events-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/api/events-client")>();
   return { ...actual, createEvent: mockCreate, bulkDeployEvent: mockBulk };
 });
-vi.mock("../../src/data/problems", () => ({ listProblemSummaries: mockListProblems }));
+vi.mock("../../src/data/problems", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/data/problems")>();
+  // listProblemSummaries だけ差し替え、 isExecutableProblemRuntime (buildProblemOptions が使う) は実物。
+  return { ...actual, listProblemSummaries: mockListProblems };
+});
 vi.mock("../../src/pages/event-create/useCompetitorAccountsLoader", () => ({
   useCompetitorAccountsLoader: mockLoader,
 }));
@@ -71,6 +75,7 @@ const problem = (over: Partial<ProblemSummary> = {}): ProblemSummary =>
     tags: [],
     defaultRegion: "us-east-1",
     supportedRegions: ["us-east-1", "ap-northeast-1"],
+    runtime: { provider: "aws", engine: "cloudformation" },
     ...over,
   }) as ProblemSummary;
 

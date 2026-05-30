@@ -14,7 +14,11 @@ import type { ProblemSummary } from "../../src/data/problems";
 const { mockNav, mockList } = vi.hoisted(() => ({ mockNav: vi.fn(), mockList: vi.fn() }));
 
 vi.mock("react-router", () => ({ useNavigate: () => mockNav }));
-vi.mock("../../src/data/problems", () => ({ listProblemSummaries: mockList }));
+vi.mock("../../src/data/problems", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/data/problems")>();
+  // listProblemSummaries だけ差し替え、 PROVIDER_LABEL (badge 表示名) は実物。
+  return { ...actual, listProblemSummaries: mockList };
+});
 vi.mock("../../src/i18n", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/i18n")>();
   return { ...actual, useT: () => (key: string) => key };

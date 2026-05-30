@@ -12,6 +12,7 @@
 import type { MultiselectProps, SelectProps } from "@cloudscape-design/components";
 import type { CompetitorAccountSummary } from "../../api/competitor-accounts-client";
 import { AWS_REGIONS } from "../../data/aws-regions";
+import { isExecutableProblemRuntime } from "../../data/problems";
 import type { useT } from "../../i18n";
 
 export const NAME_MAX = 120;
@@ -57,6 +58,28 @@ export type TeamTableItem = TeamRow & { idx: number };
 
 /** Multiselect option (value 必須) */
 export type ProblemOption = MultiselectProps.Option & { value: string };
+
+/**
+ * ADR-026 / ADR-027 (#1414): event の problem picker option を組み立てる。 deploy 可能な
+ * (aws/cloudformation) 問題は選択可、 予約済み (sakura/azure/gcp = engine 未実装) は
+ * `disabled` + 「近日対応」 tag にして deploy 不可な問題を event に組み込めないようにする
+ * (= deployable-but-failing entry を防ぐ)。
+ */
+export function buildProblemOptions(
+  problems: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly runtime: { readonly provider: string; readonly engine: string };
+  }[],
+  reservedTag: string,
+): ProblemOption[] {
+  return problems.map((p) => {
+    const base = { value: p.id, label: `${p.name} (${p.id})` };
+    return isExecutableProblemRuntime(p.runtime)
+      ? base
+      : { ...base, disabled: true, labelTag: reservedTag };
+  });
+}
 
 export function buildVerifiedAccountOption(a: CompetitorAccountSummary): SelectProps.Option {
   const descriptionParts = [a.alias, a.region, a.competitorRoleName].filter(
