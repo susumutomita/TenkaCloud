@@ -5,10 +5,14 @@ import {
   bulkDeployEvent,
   bulkTeardownEvent,
   createEvent,
+  createNotification,
   EVENT_ID_RE,
   endEvent,
   getEvent,
   listEvents,
+  lockEventScoring,
+  setEventSchedule,
+  unlockEventScoring,
 } from "../../src/api/events-client";
 
 interface CapturedCall {
@@ -73,6 +77,12 @@ describe("getEvent", () => {
     await getEvent(client, "EV1");
     expect(calls[0]?.path).toBe("events/EV1");
     expect(calls[0]?.method).toBe("GET");
+  });
+
+  it("should append ?withScoreEvents=true when requested", async () => {
+    const { client, calls } = fakeClient({ eventId: "EV1" });
+    await getEvent(client, "EV1", { withScoreEvents: true });
+    expect(calls[0]?.path).toBe("events/EV1?withScoreEvents=true");
   });
 });
 
@@ -167,5 +177,55 @@ describe("archiveEvent", () => {
     expect(calls[0]?.method).toBe("POST");
     expect(calls[0]?.body).toEqual({});
     expect(out.archivedAt).toBe("2026-05-09T10:00:00.000Z");
+  });
+});
+
+describe("setEventSchedule", () => {
+  it("should PATCH /events/{id}/schedule with the body and return the result", async () => {
+    const { client, calls } = fakeClient({ startsAt: "2026-06-01T00:00:00Z" });
+    const out = await setEventSchedule(client, "EV1", { startsAt: "2026-06-01T00:00:00Z" });
+    expect(calls[0]?.path).toBe("events/EV1/schedule");
+    expect(calls[0]?.method).toBe("PATCH");
+    expect(calls[0]?.body).toEqual({ startsAt: "2026-06-01T00:00:00Z" });
+    expect((out as { startsAt: string }).startsAt).toBe("2026-06-01T00:00:00Z");
+  });
+});
+
+describe("lockEventScoring", () => {
+  it("should POST /events/{id}/lock-scoring with an empty body", async () => {
+    const { client, calls } = fakeClient({ scoringLocked: true });
+    const out = await lockEventScoring(client, "EV1");
+    expect(calls[0]?.path).toBe("events/EV1/lock-scoring");
+    expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.body).toEqual({});
+    expect(out.scoringLocked).toBe(true);
+  });
+});
+
+describe("unlockEventScoring", () => {
+  it("should DELETE /events/{id}/lock-scoring (via delJson)", async () => {
+    const { client, calls } = fakeClient({ scoringLocked: false });
+    const out = await unlockEventScoring(client, "EV1");
+    expect(calls[0]?.path).toBe("events/EV1/lock-scoring");
+    expect(calls[0]?.method).toBe("DELETE");
+    expect(out.scoringLocked).toBe(false);
+  });
+});
+
+describe("createNotification", () => {
+  it("should POST /events/{id}/notifications with the notification body", async () => {
+    const { client, calls } = fakeClient({
+      notificationId: "n1",
+      occurredAt: "2026-06-01T00:00:00Z",
+    });
+    const out = await createNotification(client, "EV1", {
+      title: "T",
+      body: "B",
+      severity: "warning",
+    });
+    expect(calls[0]?.path).toBe("events/EV1/notifications");
+    expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.body).toEqual({ title: "T", body: "B", severity: "warning" });
+    expect(out.notificationId).toBe("n1");
   });
 });
