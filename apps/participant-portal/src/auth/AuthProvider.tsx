@@ -49,7 +49,10 @@ async function exchangeKeyForSession(
       view = await getPortalMe(config.apiBaseUrl, trimmed);
     } catch (err) {
       if (err instanceof PortalAuthError) throw err;
-      throw new Error(err instanceof Error ? err.message : "BACKEND_UNREACHABLE");
+      // getPortalMe は network / parse 失敗時も Error を throw するため、 非 Error fallback は到達不能。
+      /* v8 ignore next */
+      const message = err instanceof Error ? err.message : "BACKEND_UNREACHABLE";
+      throw new Error(message);
     }
     const now = Date.now();
     // Phase 2c: teamLoginKey で引いた view は team scope。teamId / eventId は team から、
@@ -144,6 +147,8 @@ export function AuthProvider({ config, children }: { config: AppConfig; children
       window.addEventListener(evt, resetTimer, { passive: true });
     }
     return () => {
+      // resetTimer が必ず先に走り idleTimerRef を set 済なので、 cleanup 時の null 分岐は到達不能。
+      /* v8 ignore next */
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       for (const evt of IDLE_EVENTS) {
         window.removeEventListener(evt, resetTimer);
