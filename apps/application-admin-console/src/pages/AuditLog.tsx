@@ -106,6 +106,8 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
   }, [client]);
 
   const onExport = useCallback(async () => {
+    // export button は client 存在時のみ render されるので true 分岐は不到達 (= 防御的)。
+    /* v8 ignore next */
     if (!client) return;
     setExporting(true);
     setError(null);
