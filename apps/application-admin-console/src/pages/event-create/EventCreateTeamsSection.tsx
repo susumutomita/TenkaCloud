@@ -92,6 +92,8 @@ export function EventCreateTeamsSection({
                       empty={t("event_create.select_empty_message")}
                       onChange={({ detail }) =>
                         onUpdateTeamRow(tr.idx, {
+                          // Select の onChange は常に選択肢 (value 付き) を伴うので ?? の右辺は不到達 (= 防御)。
+                          /* v8 ignore next */
                           awsAccountId: detail.selectedOption?.value ?? "",
                         })
                       }
