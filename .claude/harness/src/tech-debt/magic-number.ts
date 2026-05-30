@@ -65,6 +65,17 @@ const TIMEOUT_CONTEXT_RES = [
 ];
 const PORT_CONTEXT_RE = /\b(port|PORT|listen|bind|endpoint|url|URL|origin)\b/;
 
+/**
+ * A SCREAMING_SNAKE_CASE constant assigned a numeric literal is the *named* form
+ * this rule recommends (e.g. `const POLL_INTERVAL_MS = 30_000`). The single
+ * declaration line must not itself be flagged for timeout / port literals —
+ * otherwise the detector flags the very fix it asks for. Bare *uses* elsewhere
+ * (`setTimeout(fn, 30000)`) are still flagged. HTTP status codes are excluded
+ * from this exemption: their named form is the `StatusCodes` enum, not a local
+ * `const HTTP_OK = 200`, so those declarations stay flagged.
+ */
+const NAMED_CONST_DECL_RE = /\b(?:const|let|var)\s+[A-Z][A-Z0-9_]*\s*(?::\s*[\w<>[\]]+\s*)?=/;
+
 function shouldInspect(path: string): boolean {
   if (!/\.tsx?$/.test(path)) return false;
   if (EXCLUDE_PATTERNS.some((re) => re.test(path))) return false;
@@ -84,9 +95,11 @@ function classify(value: number, lineText: string): Classification | undefined {
     return { kind: "http-status", value };
   }
   if (TIMEOUT_VALUES.has(value) && TIMEOUT_CONTEXT_RES.some((re) => re.test(lineText))) {
+    if (NAMED_CONST_DECL_RE.test(lineText)) return undefined;
     return { kind: "timeout-ms", value };
   }
   if (COMMON_PORTS.has(value) && PORT_CONTEXT_RE.test(lineText)) {
+    if (NAMED_CONST_DECL_RE.test(lineText)) return undefined;
     return { kind: "port", value };
   }
   return undefined;
