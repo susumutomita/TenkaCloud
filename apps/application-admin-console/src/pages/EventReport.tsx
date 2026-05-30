@@ -59,6 +59,8 @@ const PRINT_STYLE_ID = "tenkacloud-event-report-print-style";
  */
 function usePrintStylesheet(): void {
   useEffect(() => {
+    // SPA (SSR なし) なので document は常に存在 (= この guard は不到達、防御)。
+    /* v8 ignore next */
     if (typeof document === "undefined") return;
     let style = document.getElementById(PRINT_STYLE_ID) as HTMLStyleElement | null;
     let owned = false;
@@ -116,9 +118,12 @@ export function EventReportPage({ config }: { config: AppConfig }) {
   }
 
   if (!detail) {
+    // loading guard を抜けて detail が無い時点で error は必ず truthy (= ?? の右辺は防御、不到達)。
+    /* v8 ignore next */
+    const errorBody = error ?? t("event_report.error_unknown");
     return (
       <Alert type="error" header={t("event_report.error_header")}>
-        {error ?? t("event_report.error_unknown")}
+        {errorBody}
       </Alert>
     );
   }
@@ -307,6 +312,8 @@ function buildExportView(args: {
  * no-op。
  */
 function triggerBlobDownload(content: string, mimeType: string, filename: string): void {
+  // SPA では document / URL は常に存在 (= SSR 向け防御 guard、 不到達)。
+  /* v8 ignore next */
   if (typeof document === "undefined" || typeof URL === "undefined") return;
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -370,6 +377,8 @@ function PrintControls({
           iconName="file"
           data-testid="event-report-print-button"
           onClick={() => {
+            // SPA では window は常に存在 (= SSR 向け防御 guard の偽分岐は不到達)。
+            /* v8 ignore next */
             if (typeof window !== "undefined") window.print();
           }}
         >
