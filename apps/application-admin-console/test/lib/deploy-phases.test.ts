@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
-import type { DeploymentSummary, StackProgress } from "../../src/api/deploy-client";
+import type {
+  DeploymentStatus,
+  DeploymentSummary,
+  StackProgress,
+} from "../../src/api/deploy-client";
 import {
   buildTerminalLog,
   type DeployPhase,
   deploySummaryTitle,
+  deriveCfnDeployStatus,
+  deriveFinalStatus,
   derivePhases,
+  formatLogTimestamp,
   type PhaseId,
 } from "../../src/lib/deploy-phases";
 
@@ -235,6 +242,135 @@ describe("deploySummaryTitle", () => {
     expect(deploySummaryTitle({ ...baseDeployment, status: "AUTO_DELETED" })).toMatch(
       /auto-deleted/,
     );
+  });
+});
+
+describe("deriveCfnDeployStatus — stackStatus authority (#818)", () => {
+  const withStatus = (stackStatus: string): StackProgress => ({
+    ...emptyProgress,
+    stackStatus,
+    events: [],
+  });
+
+  it("should map every *_COMPLETE stack status to complete", () => {
+    for (const s of ["UPDATE_COMPLETE", "IMPORT_COMPLETE"]) {
+      expect(deriveCfnDeployStatus("IN_PROGRESS", withStatus(s))).toBe("complete");
+    }
+  });
+
+  it("should map *_FAILED and the rollback-complete variants to failed", () => {
+    for (const s of ["CREATE_FAILED", "UPDATE_ROLLBACK_COMPLETE", "IMPORT_ROLLBACK_COMPLETE"]) {
+      expect(deriveCfnDeployStatus("FAILED", withStatus(s))).toBe("failed");
+    }
+  });
+
+  it("should map any DELETE_* stack status to skipped", () => {
+    expect(deriveCfnDeployStatus("DELETING", withStatus("DELETE_IN_PROGRESS"))).toBe("skipped");
+  });
+
+  it("should fall through to status-only inference for an unrecognized stack status", () => {
+    // 未知 stackStatus → undefined → events 空 → status=COMPLETE 由来で complete。
+    expect(deriveCfnDeployStatus("COMPLETE", withStatus("UNKNOWN_STATE"))).toBe("complete");
+  });
+
+  it("should keep the latest event per LogicalId even when a later array entry is older", () => {
+    // stackStatus 無し → event history fallback。 配列後方に **古い** timestamp が来ても
+    // cur (= 新しい COMPLETE) を維持する (= cur.timestamp < e.timestamp が false の分岐)。
+    const outOfOrder: StackProgress = {
+      ...emptyProgress,
+      events: [
+        {
+          timestamp: "2026-05-11T01:09:10.000Z",
+          logicalResourceId: "MyBucket",
+          resourceType: "AWS::S3::Bucket",
+          resourceStatus: "CREATE_COMPLETE",
+        },
+        {
+          timestamp: "2026-05-11T01:09:00.000Z",
+          logicalResourceId: "MyBucket",
+          resourceType: "AWS::S3::Bucket",
+          resourceStatus: "CREATE_IN_PROGRESS",
+        },
+      ],
+    };
+    expect(deriveCfnDeployStatus("IN_PROGRESS", outOfOrder)).toBe("complete");
+  });
+});
+
+describe("deriveFinalStatus", () => {
+  it("should map each deployment status to its final phase status", () => {
+    expect(deriveFinalStatus("COMPLETE")).toBe("complete");
+    expect(deriveFinalStatus("FAILED")).toBe("failed");
+    expect(deriveFinalStatus("DELETING")).toBe("in-progress");
+    expect(deriveFinalStatus("DELETED")).toBe("skipped");
+    expect(deriveFinalStatus("EXPIRED")).toBe("failed");
+    expect(deriveFinalStatus("AUTO_DELETED")).toBe("skipped");
+  });
+
+  it("should default to pending for a non-terminal status (PENDING / IN_PROGRESS)", () => {
+    expect(deriveFinalStatus("PENDING")).toBe("pending");
+    expect(deriveFinalStatus("IN_PROGRESS")).toBe("pending");
+  });
+});
+
+describe("deploySummaryTitle — remaining statuses", () => {
+  it("should produce a label for in-progress / queued / teardown / removed statuses", () => {
+    expect(deploySummaryTitle({ ...baseDeployment, status: "IN_PROGRESS" })).toMatch(/in progress/);
+    expect(deploySummaryTitle({ ...baseDeployment, status: "PENDING" })).toMatch(/queued/);
+    expect(deploySummaryTitle({ ...baseDeployment, status: "DELETING" })).toMatch(/Tearing down/);
+    expect(deploySummaryTitle({ ...baseDeployment, status: "DELETED" })).toMatch(/removed/);
+  });
+
+  it("should fall back to a generic label for an unknown status", () => {
+    expect(deploySummaryTitle({ ...baseDeployment, status: "WAT" as DeploymentStatus })).toBe(
+      "Deploy for Alpha Team",
+    );
+  });
+
+  it("should use the raw teamName when displayTeamName is absent", () => {
+    expect(
+      deploySummaryTitle({ ...baseDeployment, status: "COMPLETE", displayTeamName: undefined }),
+    ).toBe("Deploy succeeded for team-alpha");
+  });
+});
+
+describe("formatLogTimestamp", () => {
+  it("should format a valid ISO timestamp as a 12-hour en-US time", () => {
+    expect(formatLogTimestamp("2026-05-11T01:09:00.000Z")).toMatch(/\d{1,2}:\d{2}:\d{2}\s?[AP]M/);
+  });
+
+  it("should return the raw string when the timestamp is unparseable", () => {
+    expect(formatLogTimestamp("not-a-date")).toBe("not-a-date");
+  });
+});
+
+describe("buildTerminalLog — branch coverage", () => {
+  it("should note missing console URL and no CFn events when stackProgress is null", () => {
+    const deployment = { ...baseDeployment, status: "PENDING" as DeploymentStatus };
+    const phases = derivePhases(deployment, null);
+    const lines = buildTerminalLog(deployment, null, phases);
+    expect(lines.some((l) => l.text.includes("CodeBuild console URL not yet available"))).toBe(
+      true,
+    );
+    expect(lines.some((l) => l.text.includes("No CloudFormation events observed yet."))).toBe(true);
+  });
+
+  it("should append the resourceStatusReason to a failed CFn event line", () => {
+    const deployment = { ...baseDeployment, status: "FAILED" as DeploymentStatus };
+    const phases = derivePhases(deployment, progressWithFailed);
+    const lines = buildTerminalLog(deployment, progressWithFailed, phases);
+    expect(lines.some((l) => l.text.includes("— Bucket name already exists"))).toBe(true);
+  });
+
+  it("should emit a Failure reason line when the deployment carries one", () => {
+    const deployment = {
+      ...baseDeployment,
+      status: "FAILED" as DeploymentStatus,
+      failureReason: "AssumeRole denied",
+    };
+    const phases = derivePhases(deployment, emptyProgress);
+    const lines = buildTerminalLog(deployment, emptyProgress, phases);
+    expect(lines.some((l) => l.text === "Failure reason: AssumeRole denied")).toBe(true);
   });
 });
 

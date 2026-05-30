@@ -67,6 +67,9 @@ function stackStatusToPhaseStatus(stackStatus: string | undefined): PhaseStatus 
  * 返していた。
  */
 function eventsToPhaseStatus(events: readonly StackProgressEvent[]): PhaseStatus {
+  // 唯一の caller (deriveCfnDeployStatus) が events.length===0 を先に弾くため、ここは
+  // 到達不能な防御 guard。 branch coverage のノイズになるので ignore。
+  /* v8 ignore next */
   if (events.length === 0) return "pending";
   const latestByLogicalId = new Map<string, StackProgressEvent>();
   for (const e of events) {
@@ -148,6 +151,9 @@ const FINAL_STATUS_FROM_DEPLOYMENT: Partial<Record<DeploymentStatus, PhaseStatus
 export function deriveFinalStatus(status: DeploymentStatus): PhaseStatus {
   const direct = FINAL_STATUS_FROM_DEPLOYMENT[status];
   if (direct !== undefined) return direct;
+  // COMPLETE_STATUSES のメンバーは全て FINAL_STATUS_FROM_DEPLOYMENT のキーでもあるため、
+  // map miss 時に has() が true になることはない (= 到達不能な防御 fallback)。
+  /* v8 ignore next */
   if (COMPLETE_STATUSES.has(status)) return "complete";
   return "pending";
 }
