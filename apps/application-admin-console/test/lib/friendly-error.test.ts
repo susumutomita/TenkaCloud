@@ -104,4 +104,50 @@ describe("toFriendlyError", () => {
     const fe = toFriendlyError(err);
     expect(fe.title).toMatch(/同 email/);
   });
+
+  it("should fall back to a status-only title when the body looks like JSON but is malformed", () => {
+    // `{` 始まりだが JSON として壊れている → extractBackendEnvelope の JSON.parse が throw →
+    // envelope=null → status だけの generic title + raw body を hint に残す。
+    const err = new ApiError(500, "{not: valid json");
+    const fe = toFriendlyError(err);
+    expect(fe.title).toBe("エラー (500)");
+    expect(fe.hint).toBe("{not: valid json");
+  });
+
+  it("should map a non-ApiError Error to its message and stringify unknown throwables", () => {
+    expect(toFriendlyError(new Error("network down")).title).toBe("network down");
+    expect(toFriendlyError("weird").title).toBe("weird");
+  });
+
+  it("should keep the raw error code + status when the code is unknown to the mapping", () => {
+    const fe = toFriendlyError(new ApiError(422, '{"error":"brand_new_code","message":"details"}'));
+    expect(fe.title).toBe("エラー (422) — brand_new_code");
+    expect(fe.hint).toBe("details");
+  });
+
+  it("should use the message when the error code is not a string", () => {
+    // error が非 string → code=null → message を title に併記、 hint は出さない。
+    const fe = toFriendlyError(new ApiError(422, '{"error":123,"message":"boom"}'));
+    expect(fe.title).toBe("エラー (422) — boom");
+    expect(fe.hint).toBeUndefined();
+  });
+
+  it("should show a status-only title when neither code nor message is present", () => {
+    const fe = toFriendlyError(new ApiError(500, '{"unrelated":"field"}'));
+    expect(fe.title).toBe("エラー (500)");
+    expect(fe.hint).toBeUndefined();
+  });
+
+  it("should fall back to the stripped raw message when the body is not JSON", () => {
+    // ApiError は `API <status>: <body>` を組むので、 body のみを渡す。
+    const fe = toFriendlyError(new ApiError(500, "plain failure text"));
+    expect(fe.title).toBe("エラー (500)");
+    expect(fe.hint).toBe("plain failure text");
+  });
+
+  it("should leave hint undefined when the non-JSON message is empty after stripping the prefix", () => {
+    const fe = toFriendlyError(new ApiError(500, ""));
+    expect(fe.title).toBe("エラー (500)");
+    expect(fe.hint).toBeUndefined();
+  });
 });
