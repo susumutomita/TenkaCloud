@@ -14,6 +14,10 @@ describe("formatRelativeTime", () => {
     expect(formatRelativeTime("", "ja", NOW)).toBe("—");
   });
 
+  it("should return em-dash for an unparseable (non-empty) ISO string", () => {
+    expect(formatRelativeTime("not-a-date", "ja", NOW)).toBe("—");
+  });
+
   it("should render under 30 seconds as 「今」 in ja and 'just now' in en", () => {
     expect(formatRelativeTime("2026-05-05T10:00:00.000Z", "ja", NOW)).toBe("今");
     expect(formatRelativeTime("2026-05-05T10:00:00.000Z", "en", NOW)).toBe("just now");
@@ -23,6 +27,12 @@ describe("formatRelativeTime", () => {
     expect(formatRelativeTime("2026-05-05T09:59:00.000Z", "ja", NOW)).toBe("1 分前");
     expect(formatRelativeTime("2026-05-05T09:00:00.000Z", "ja", NOW)).toBe("1 時間前");
     expect(formatRelativeTime("2026-05-04T10:00:00.000Z", "ja", NOW)).toBe("1 日前");
+  });
+
+  it("should render the minute / hour / day buckets in English too", () => {
+    expect(formatRelativeTime("2026-05-05T09:59:00.000Z", "en", NOW)).toBe("1 min ago");
+    expect(formatRelativeTime("2026-05-05T09:00:00.000Z", "en", NOW)).toBe("1 h ago");
+    expect(formatRelativeTime("2026-05-04T10:00:00.000Z", "en", NOW)).toBe("1 d ago");
   });
 
   it("should fall back to YYYY-MM-DD beyond 30 days", () => {
