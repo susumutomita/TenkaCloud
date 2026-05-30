@@ -30,6 +30,17 @@ const DIFFICULTY_KEY: Record<ProblemCatalogEntry["difficulty"], string> = {
   5: "problem_detail.difficulty_5",
 };
 
+/**
+ * ADR-026 / ADR-027: 問題の実行先 cloud を競技者に明示する badge 表示名。 brand 名なので
+ * locale 非依存。 未知 provider は raw 値をそのまま出す (= 新 provider 追加時の安全側 fallback)。
+ */
+const PROVIDER_LABEL: Record<string, string> = {
+  aws: "AWS",
+  sakura: "Sakura Cloud",
+  azure: "Azure",
+  gcp: "Google Cloud",
+};
+
 interface ProblemDetailGate {
   readonly kind: string;
 }
@@ -266,6 +277,13 @@ function ProblemInfoSection({
           </InfoCell>
           <InfoCell label={t("problem_detail.info_difficulty")}>
             {t(DIFFICULTY_KEY[metadata.difficulty])}
+          </InfoCell>
+          {/* ADR-026 / ADR-027: 問題が deploy される cloud を明示。 aws 以外 (multi-cloud) は
+              緑で強調し、 競技者が自分の対象 cloud account を取り違えないようにする。 */}
+          <InfoCell label={t("problem_detail.info_runtime")}>
+            <Badge color={metadata.runtime.provider === "aws" ? "grey" : "green"}>
+              {PROVIDER_LABEL[metadata.runtime.provider] ?? metadata.runtime.provider}
+            </Badge>
           </InfoCell>
         </ColumnLayout>
 

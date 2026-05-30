@@ -221,6 +221,7 @@
     "info_header": "問題情報",
     "info_category": "カテゴリ",
     "info_difficulty": "難易度",
+    "info_runtime": "実行環境",
     "info_private_badge": "答え非公開",
     "info_description_label": "問題説明",
     "difficulty_1": "入門",

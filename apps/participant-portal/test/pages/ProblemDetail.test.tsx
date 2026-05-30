@@ -71,6 +71,7 @@ const meta = (over: Record<string, any> = {}): any => ({
   difficulty: 3,
   endpoints: [{ id: "e1" }],
   dashboardSlots: { dashboard: ["slot.tsx"] },
+  runtime: { provider: "aws", engine: "cloudformation" },
   ...over,
 });
 // biome-ignore lint/suspicious/noExplicitAny: useTeamView の戻りを部分的に組む。
@@ -237,5 +238,26 @@ describe("ProblemDetailPage", () => {
     expect(screen.getByText("Challenge")).toBeInTheDocument();
     expect(screen.getByText("problem_detail.info_private_badge")).toBeInTheDocument();
     expect(screen.getByText("problem_detail.difficulty_5")).toBeInTheDocument();
+  });
+
+  it("should show the runtime provider badge (AWS for the default runtime)", () => {
+    mockFindMeta.mockReturnValue(meta()); // runtime aws/cloudformation 既定
+    mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
+    renderPage();
+    expect(screen.getByText("AWS")).toBeInTheDocument();
+  });
+
+  it("should map a reserved multi-cloud provider to its brand label", () => {
+    mockFindMeta.mockReturnValue(meta({ runtime: { provider: "sakura", engine: "apprun" } }));
+    mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
+    renderPage();
+    expect(screen.getByText("Sakura Cloud")).toBeInTheDocument();
+  });
+
+  it("should fall back to the raw provider id for an unmapped provider", () => {
+    mockFindMeta.mockReturnValue(meta({ runtime: { provider: "fly", engine: "machines" } }));
+    mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
+    renderPage();
+    expect(screen.getByText("fly")).toBeInTheDocument();
   });
 });
