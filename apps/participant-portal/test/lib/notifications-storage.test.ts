@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { countUnread, loadLastSeenAt, saveLastSeenAt } from "../../src/lib/notifications-storage";
 
 const KEY_PREFIX = "TenkaCloud.participant.lastSeenNotificationAt";
@@ -38,6 +38,19 @@ describe("notifications-storage", () => {
       saveLastSeenAt(EV_B, "2026-05-09T10:00:00.000Z");
       expect(loadLastSeenAt(EV_A)).toBe("2026-05-10T14:00:00.000Z");
       expect(loadLastSeenAt(EV_B)).toBe("2026-05-09T10:00:00.000Z");
+    });
+
+    it("should return null (not throw) when localStorage access is blocked (= private window)", () => {
+      // Safari private mode 等では getItem 自体が SecurityError を投げる。 unread badge の
+      // ために portal 全体を落とさず、 既読時刻不明 = null に倒すのが正しい防御挙動。
+      const spy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("SecurityError: localStorage is disabled");
+      });
+      try {
+        expect(loadLastSeenAt(EV_A)).toBeNull();
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 
