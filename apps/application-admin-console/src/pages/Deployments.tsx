@@ -17,6 +17,7 @@ import {
 } from "../api/deploy-client";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
+import { toErrorMessage } from "../lib/error-message";
 import {
   DEPLOYMENT_LIST_PAGE_SIZE,
   DEPLOYMENT_LIST_POLL_INTERVAL_MS,
@@ -91,7 +92,7 @@ export function DeploymentsPage({ config }: { config: AppConfig }) {
         setItems((prev) => (prev && !deploymentsChanged(prev, res.items) ? prev : res.items));
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(toErrorMessage(err));
       } finally {
         if (showSpinner) setManualRefreshing(false);
       }

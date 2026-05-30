@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ApiClient } from "../api/client";
 import { type EventDetail, getEvent } from "../api/events-client";
+import { toErrorMessage } from "../lib/error-message";
 
 export function useEventDetail(args: {
   readonly apiClient: ApiClient | null;
@@ -21,7 +22,7 @@ export function useEventDetail(args: {
       setDetail(nextDetail);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     }
   }, [apiClient, eventId, eventIdValid]);
 

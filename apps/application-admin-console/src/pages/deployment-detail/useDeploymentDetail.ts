@@ -10,6 +10,7 @@ import {
   TERMINAL_STATUSES,
 } from "../../api/deploy-client";
 import type { AppConfig } from "../../config";
+import { toErrorMessage } from "../../lib/error-message";
 import type { StackProgressErrorState } from "./types";
 
 // Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒 polling は 12 req/min/user で過多)。
@@ -60,7 +61,7 @@ export function useDeploymentDetail(
         setError(null);
         if (TERMINAL_STATUSES.has(fetched.status)) stopPollingRef.current = true;
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(toErrorMessage(err));
       } finally {
         if (showSpinner) setManualRefreshing(false);
       }
@@ -89,7 +90,7 @@ export function useDeploymentDetail(
             err.status === StatusCodes.GATEWAY_TIMEOUT)) ||
         err instanceof TypeError ||
         (err instanceof Error && /failed to fetch/i.test(err.message));
-      const message = err instanceof Error ? err.message : String(err);
+      const message = toErrorMessage(err);
       setStackProgressError({ message, notYetCreated });
     } finally {
       setStackProgressPending(false);
