@@ -12,7 +12,7 @@ import SegmentedControl, {
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { listProblemSummaries, type ProblemSummary } from "../data/problems";
+import { listProblemSummaries, PROVIDER_LABEL, type ProblemSummary } from "../data/problems";
 import { interpolate, useT } from "../i18n";
 import {
   collectTagFacets,
@@ -25,17 +25,6 @@ import {
 } from "../lib/problem-filter";
 
 const DIFFICULTY_LEVELS: DifficultyLevel[] = [1, 2, 3, 4, 5];
-
-/**
- * ADR-026 / ADR-027: イベントを組む organizer に、 各問題の deploy 先 cloud を明示する
- * badge 表示名。 brand 名なので locale 非依存。 未知 provider は raw 値をそのまま出す。
- */
-const PROVIDER_LABEL: Record<string, string> = {
-  aws: "AWS",
-  sakura: "Sakura Cloud",
-  azure: "Azure",
-  gcp: "Google Cloud",
-};
 
 /**
  * 問題一覧ページ。Cloudscape Cards で 1 件ずつカード表示する。

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   findProblem,
+  isExecutableProblemRuntime,
   listProblemSummaries,
   metadataToDetail,
   PROBLEM_CATALOG,
@@ -68,6 +69,21 @@ describe("metadataToDetail", () => {
       runtime: { provider: "gcp", engine: "infra-manager", entry: "main.tf" },
     });
     expect(detail.runtime).toEqual({ provider: "gcp", engine: "infra-manager" });
+  });
+});
+
+describe("isExecutableProblemRuntime (ADR-023 D4)", () => {
+  it("should be true only for aws/cloudformation", () => {
+    expect(isExecutableProblemRuntime({ provider: "aws", engine: "cloudformation" })).toBe(true);
+  });
+
+  it.each([
+    { provider: "sakura", engine: "apprun" },
+    { provider: "azure", engine: "bicep" },
+    { provider: "gcp", engine: "infra-manager" },
+    { provider: "aws", engine: "cdk" }, // 同 provider でも非 CFn engine は不可
+  ])("should be false for the reserved / non-CFn runtime $provider/$engine", (rt) => {
+    expect(isExecutableProblemRuntime(rt)).toBe(false);
   });
 });
 

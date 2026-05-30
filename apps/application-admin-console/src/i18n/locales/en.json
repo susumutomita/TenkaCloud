@@ -134,6 +134,7 @@
     "basic_info_header": "Basic info",
     "name_label": "Event name",
     "name_placeholder_example": "e.g. Tenka Battle Cup 2026",
+    "problem_reserved_tag": "Coming soon",
     "name_invalid": "1–{max} characters",
     "team_count_label": "Team count",
     "team_count_description": "{min}–{max} (TransactWrite limit minus 1 for the event row)",

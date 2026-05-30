@@ -21,6 +21,7 @@ import { EventCreateDeployPromptModal } from "./event-create/EventCreateDeployPr
 import { EventCreateProblemsetSection } from "./event-create/EventCreateProblemsetSection";
 import { EventCreateTeamsSection } from "./event-create/EventCreateTeamsSection";
 import {
+  buildProblemOptions,
   buildVerifiedAccountOption,
   INITIAL_TEAM_COUNT,
   NAME_MAX,
@@ -67,9 +68,11 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   const t = useT();
 
   const allProblems = useMemo(() => listProblemSummaries(), []);
+  // #1414: 予約済み runtime (sakura/azure/gcp) の問題は deploy 不可なので picker で
+  // disabled + 「近日対応」 にし、 event に組み込めないようにする。
   const problemOptions: MultiselectProps.Option[] = useMemo(
-    () => allProblems.map((p) => ({ value: p.id, label: `${p.name} (${p.id})` })),
-    [allProblems],
+    () => buildProblemOptions(allProblems, t("event_create.problem_reserved_tag")),
+    [allProblems, t],
   );
 
   // Phase 2.2 (Issue #459): verified=true な CompetitorAccounts のみを Select の選択肢にする。

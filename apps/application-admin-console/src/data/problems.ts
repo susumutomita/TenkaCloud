@@ -138,3 +138,25 @@ export function listProblemSummaries(): readonly ProblemSummary[] {
     /* v8 ignore stop */
   }));
 }
+
+/**
+ * ADR-026 / ADR-027: 問題の deploy 先 cloud の表示名 (brand 名なので locale 非依存)。
+ * 未知 provider は raw 値をそのまま出す (= 新 provider 追加時の安全側 fallback)。
+ */
+export const PROVIDER_LABEL: Record<string, string> = {
+  aws: "AWS",
+  sakura: "Sakura Cloud",
+  azure: "Azure",
+  gcp: "Google Cloud",
+};
+
+/**
+ * ADR-023 D4: 今 deploy 可能なのは aws/cloudformation だけ。 予約済み (sakura/azure/gcp) は
+ * engine 未実装なので deploy 不可。 catalog / picker はこれで「近日対応」を出し分ける。
+ */
+export function isExecutableProblemRuntime(runtime: {
+  readonly provider: string;
+  readonly engine: string;
+}): boolean {
+  return runtime.provider === "aws" && runtime.engine === "cloudformation";
+}
