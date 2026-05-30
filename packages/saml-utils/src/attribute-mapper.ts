@@ -91,12 +91,13 @@ export function buildApplicationPlaneUserPk(
 
 function normalizeGroups(value: readonly string[] | string | undefined): readonly string[] {
   if (value === undefined) return [];
-  if (Array.isArray(value)) return value.filter((g): g is string => typeof g === "string");
   if (typeof value === "string") {
     return value
       .split(",")
       .map((g) => g.trim())
       .filter((g) => g.length > 0);
   }
-  return [];
+  // value is a (readonly) string[] here — the only remaining type, so this is the
+  // total final branch (no unreachable fallthrough).
+  return value.filter((g): g is string => typeof g === "string");
 }
