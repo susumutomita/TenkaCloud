@@ -54,7 +54,7 @@ export function formatTopNavRank(
   return myEntry && totalEntries ? `${myEntry.rank}/${totalEntries}` : "…";
 }
 
-function buildLocaleUtility(
+export function buildLocaleUtility(
   locale: LocaleCode,
   setLocale: (locale: LocaleCode) => void,
   t: Translate,
@@ -66,6 +66,8 @@ function buildLocaleUtility(
     text: LOCALE_DICTIONARIES_NAME[locale] ?? locale,
     items: SUPPORTED_LOCALES.map((code) => ({
       id: code,
+      // SUPPORTED_LOCALES は dict と同期済なので ?? 右辺は型安全用の不到達分岐。
+      /* v8 ignore next */
       text: LOCALE_DICTIONARIES_NAME[code] ?? code,
     })),
     onItemClick: ({ detail }) => {
@@ -74,7 +76,7 @@ function buildLocaleUtility(
   };
 }
 
-function buildScoreRankUtility(
+export function buildScoreRankUtility(
   score: string,
   rank: string,
   navigate: (href: string) => void,
@@ -121,7 +123,7 @@ export function handleProfileMenuClick(
   }
 }
 
-function buildProfileUtility(
+export function buildProfileUtility(
   teamName: string,
   logout: () => void,
   navigate: (href: string) => void,
@@ -153,6 +155,22 @@ function OfflineCloudModeAlert({ config }: { config: AppConfig }) {
       {t("app.mock_cloud_body")}
     </Alert>
   );
+}
+
+/**
+ * SideNavigation の link click handler。 内部リンクは SPA navigate に差し替え、 external は
+ * ブラウザ既定に任せる (= unit test 可能な pure dispatcher として切り出し)。
+ */
+export function handleSideNavFollow(
+  event: {
+    readonly preventDefault: () => void;
+    readonly detail: { readonly external?: boolean; readonly href: string };
+  },
+  navigate: (href: string) => void,
+): void {
+  if (event.detail.external) return;
+  event.preventDefault();
+  navigate(event.detail.href);
 }
 
 /**
@@ -266,12 +284,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
             activeHref={location.pathname}
             header={{ href: "/", text: t("nav.menu_header") }}
             items={sideNavItems}
-            onFollow={(e) => {
-              if (!e.detail.external) {
-                e.preventDefault();
-                navigate(e.detail.href);
-              }
-            }}
+            onFollow={(e) => handleSideNavFollow(e, navigate)}
           />
         }
         content={
