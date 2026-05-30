@@ -7,7 +7,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { type NavigateFunction, useNavigate } from "react-router";
 import { useApiClient } from "../api/client";
 import {
@@ -16,8 +16,8 @@ import {
   listAllDeployments,
 } from "../api/deploy-client";
 import type { AppConfig } from "../config";
+import { usePollingList } from "../hooks/usePollingList";
 import { useT } from "../i18n";
-import { toErrorMessage } from "../lib/error-message";
 import {
   DEPLOYMENT_LIST_PAGE_SIZE,
   DEPLOYMENT_LIST_POLL_INTERVAL_MS,
@@ -77,45 +77,32 @@ export function DeploymentsPage({ config }: { config: AppConfig }) {
   const apiClient = useApiClient(config);
   const navigate = useNavigate();
   const t = useT();
-  const [items, setItems] = useState<readonly DeploymentSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [manualRefreshing, setManualRefreshing] = useState(false);
-
   const columnDefinitions = useMemo(() => buildColumnDefinitions(navigate, t), [navigate, t]);
 
-  const fetchOnce = useCallback(
-    async ({ showSpinner }: { showSpinner: boolean } = { showSpinner: false }) => {
-      if (!apiClient) return;
-      if (showSpinner) setManualRefreshing(true);
-      try {
-        const res = await listAllDeployments(apiClient, { limit: DEPLOYMENT_LIST_PAGE_SIZE });
-        setItems((prev) => (prev && !deploymentsChanged(prev, res.items) ? prev : res.items));
-        setError(null);
-      } catch (err) {
-        setError(toErrorMessage(err));
-      } finally {
-        if (showSpinner) setManualRefreshing(false);
-      }
-    },
+  const fetcher = useMemo(
+    () =>
+      apiClient
+        ? () =>
+            listAllDeployments(apiClient, { limit: DEPLOYMENT_LIST_PAGE_SIZE }).then((r) => r.items)
+        : null,
     [apiClient],
   );
+  const { items, error, refresh } = usePollingList(
+    fetcher,
+    DEPLOYMENT_LIST_POLL_INTERVAL_MS,
+    deploymentsChanged,
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    const tick = async () => {
-      // unmount 時に clearInterval するので interval 経由の再 tick は来ない。 cancelled=true を
-      // 踏むのは teardown と既 queue の tick が競合する稀ケースのみ (= 防御的、不到達)。
-      /* v8 ignore next */
-      if (cancelled) return;
-      await fetchOnce();
-    };
-    void tick();
-    const interval = setInterval(tick, DEPLOYMENT_LIST_POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [fetchOnce]);
+  // reload button は polling と同じ refresh を spinner 付きで叩くだけ。
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  const onReload = useCallback(async () => {
+    setManualRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setManualRefreshing(false);
+    }
+  }, [refresh]);
 
   if (!items && !error) {
     return (
@@ -139,7 +126,7 @@ export function DeploymentsPage({ config }: { config: AppConfig }) {
         variant="h1"
         description={t("deployments.description")}
         actions={
-          <Button onClick={() => fetchOnce({ showSpinner: true })} loading={manualRefreshing}>
+          <Button onClick={onReload} loading={manualRefreshing}>
             {t("deployments.reload")}
           </Button>
         }
