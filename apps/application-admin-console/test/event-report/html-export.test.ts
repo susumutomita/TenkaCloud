@@ -176,6 +176,18 @@ describe("buildEventReportHtml", () => {
   it("should use a serif font stack for print-readability parity with the page", () => {
     expect(buildEventReportHtml(makeExport())).toMatch(/font-family:[^;]*serif/i);
   });
+
+  it("should render the empty-state paragraph instead of a table when the scoreboard is empty", () => {
+    const html = buildEventReportHtml(makeExport({ scoreboard: [] }));
+    expect(html).toContain("No score events.");
+    // 空のときは scoreboard 行 (= "N pt" セル) を出さない。
+    expect(html).not.toContain(" pt</td>");
+  });
+
+  it("should render the empty-state paragraph instead of a table when the breakdown is empty", () => {
+    const html = buildEventReportHtml(makeExport({ breakdown: [] }));
+    expect(html).toContain("No problems.");
+  });
 });
 
 describe("escapeHtml", () => {
