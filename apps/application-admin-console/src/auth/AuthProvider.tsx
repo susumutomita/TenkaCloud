@@ -78,6 +78,9 @@ export function AuthProvider({ config, children }: { config: AppConfig; children
       window.addEventListener(evt, resetTimer, { passive: true });
     }
     return () => {
+      // cleanup 時は直前の resetTimer() で必ず timer が set 済 (この effect は tokens truthy
+      // のときだけ cleanup を登録し、 その run は必ず resetTimer() を呼ぶ)。 null 経路は不到達。
+      /* v8 ignore next */
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       for (const evt of IDLE_EVENTS) {
         window.removeEventListener(evt, resetTimer);
