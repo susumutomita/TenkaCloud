@@ -110,6 +110,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   // <html lang="..."> も locale に追従させる (= a11y / screen reader 対応)。
   useEffect(() => {
+    // SSR safety guard。 jsdom test 環境では document が常に存在するため到達不能。
+    /* v8 ignore next */
     if (typeof document === "undefined") return;
     document.documentElement.lang = locale;
   }, [locale]);
@@ -153,5 +155,12 @@ export function useLang(): LocaleCode {
   return useI18n().locale;
 }
 
-/** Tests / debug 用に dictionaries を露出。 portal 本体からは使わない。 */
-export const _testInternals = { LOCALE_DICTIONARIES, resolveKey, detectBrowserLocale, interpolate };
+/** Tests / debug 用に dictionaries / 内部 helper を露出。 portal 本体からは使わない。 */
+export const _testInternals = {
+  LOCALE_DICTIONARIES,
+  resolveKey,
+  detectBrowserLocale,
+  interpolate,
+  loadStoredLocale,
+  persistLocale,
+};
