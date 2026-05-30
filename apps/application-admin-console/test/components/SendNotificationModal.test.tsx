@@ -1,3 +1,4 @@
+import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -161,6 +162,87 @@ describe("SendNotificationModal", () => {
     fireEvent.change(titleInput, { target: { value: "a".repeat(121) } });
     fireEvent.change(screen.getByLabelText("本文"), { target: { value: "b" } });
     expect(screen.getByText(/120 文字以内/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "送信" })).toBeDisabled();
+  });
+
+  it("should reset and call onDismiss when cancel is clicked", () => {
+    const onDismiss = vi.fn();
+    render(
+      withI18n(
+        <SendNotificationModal
+          config={config}
+          visible={true}
+          eventId={EVENT_ID}
+          onDismiss={onDismiss}
+          onSuccess={vi.fn()}
+        />,
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "キャンセル" }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("should submit with the chosen severity from the select", async () => {
+    const user = userEvent.setup();
+    mocks.createNotification.mockResolvedValueOnce({ notificationId: "n", occurredAt: "now" });
+    render(
+      withI18n(
+        <SendNotificationModal
+          config={config}
+          visible={true}
+          eventId={EVENT_ID}
+          onDismiss={vi.fn()}
+          onSuccess={vi.fn()}
+        />,
+      ),
+    );
+    // severity Select を warning に切替 (Modal は portal なので document から探す)。
+    const select = createWrapper(document.body).findSelect();
+    select?.openDropdown();
+    select?.selectOptionByValue("warning");
+    await user.type(screen.getByLabelText("タイトル"), "T");
+    await user.type(screen.getByLabelText("本文"), "B");
+    await user.click(screen.getByRole("button", { name: "送信" }));
+    await waitFor(() =>
+      expect(mocks.createNotification).toHaveBeenCalledWith({}, EVENT_ID, {
+        title: "T",
+        body: "B",
+        severity: "warning",
+      }),
+    );
+  });
+
+  it("should disable submit when the API client is unavailable", () => {
+    mocks.useApiClient.mockReturnValue(null);
+    render(
+      withI18n(
+        <SendNotificationModal
+          config={config}
+          visible={true}
+          eventId={EVENT_ID}
+          onDismiss={vi.fn()}
+          onSuccess={vi.fn()}
+        />,
+      ),
+    );
+    expect(screen.getByRole("button", { name: "送信" })).toBeDisabled();
+  });
+
+  it("should show the body errorText and disable submit when body exceeds the limit", () => {
+    render(
+      withI18n(
+        <SendNotificationModal
+          config={config}
+          visible={true}
+          eventId={EVENT_ID}
+          onDismiss={vi.fn()}
+          onSuccess={vi.fn()}
+        />,
+      ),
+    );
+    fireEvent.change(screen.getByLabelText("タイトル"), { target: { value: "T" } });
+    fireEvent.change(screen.getByLabelText("本文"), { target: { value: "b".repeat(2001) } });
+    // bodyInvalid → errorText 描画 + submit 無効。
     expect(screen.getByRole("button", { name: "送信" })).toBeDisabled();
   });
 });

@@ -77,12 +77,17 @@ export function SendNotificationModal({
   };
 
   const handleDismiss = () => {
+    // cancel button は disabled={inFlight} なので inFlight 中は押せない (= 防御、不到達)。
+    /* v8 ignore next */
     if (inFlight) return;
     reset();
     onDismiss();
   };
 
   const handleSubmit = async () => {
+    // submit button は disabled (= !apiClient / 無効 draft / inFlight) なので、 ここに来る時点で
+    // apiClient あり & draft 有効。 = この guard の return は UI 経路では不到達 (防御)。
+    /* v8 ignore next */
     if (!apiClient || !isNotificationDraftValid({ title, body })) return;
     setInFlight(true);
     setError(null);
@@ -162,6 +167,8 @@ export function SendNotificationModal({
         <FormField label={t("send_notification.severity_label")}>
           <Select
             selectedOption={
+              // severity は常に severityOptions のいずれか → find は必ず一致 (?? 以降は防御)。
+              /* v8 ignore next */
               severityOptions.find((o) => o.value === severity) ?? severityOptions[0] ?? null
             }
             options={[...severityOptions]}
