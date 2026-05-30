@@ -24,7 +24,10 @@ export function TeamScorePanel({
   // rank / 全 team 数を出す。 entries が空 (= 凍結中 / event 未配線 / 自 team が落ちた)
   // のときは「—」 表示にして UI を壊さない。
   const myEntry = leaderboard?.entries.find((e) => e.isMyTeam);
-  const rankValue = myEntry ? `${myEntry.rank} / ${leaderboard?.entries.length ?? "—"}` : "—";
+  // myEntry が取れるのは leaderboard 非 null のときだけなので `&& leaderboard` で narrow し、
+  // 旧 `leaderboard?.entries.length ?? "—"` の不到達 fallback を消す。
+  const rankValue =
+    myEntry && leaderboard ? `${myEntry.rank} / ${leaderboard.entries.length}` : "—";
 
   return (
     <Container header={<Header variant="h2">{t("home.team_score_header")}</Header>}>
