@@ -111,7 +111,9 @@ function TeamScorePanel({
   // rank / 全 team 数を出す。 entries が空 (= 凍結中 / event 未配線 / 自 team が落ちた)
   // のときは「—」 表示にして UI を壊さない。
   const myEntry = leaderboard?.entries.find((e) => e.isMyTeam);
-  const rankValue = myEntry ? `${myEntry.rank} / ${leaderboard?.entries.length ?? "—"}` : "—";
+  // entries 不在 (= 凍結中 / event 未配線) は total を「—」 に倒す。 myEntry 不在も rank 全体を「—」。
+  const totalTeams = leaderboard?.entries.length ?? "—";
+  const rankValue = myEntry ? `${myEntry.rank} / ${totalTeams}` : "—";
 
   return (
     <Container header={<Header variant="h2">{t("home.team_score_header")}</Header>}>
