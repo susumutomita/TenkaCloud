@@ -3,6 +3,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useNavigate } from "react-router";
 import type { ApiClient } from "../../api/client";
 import type { BulkDeployBody, EventDetail } from "../../api/events-client";
+import { isTerminalEventStatus } from "../../lib/effective-event-status";
 import { isReportReady } from "../../lib/event-report-stats";
 import type { WizardState } from "../../lib/event-wizard";
 
@@ -52,9 +53,7 @@ export function EventHeaderActions({
           !detail ||
           detail.problems.length === 0 ||
           detail.teams.length === 0 ||
-          detail.status === "ENDED" ||
-          detail.status === "TEARDOWN" ||
-          detail.status === "ARCHIVED"
+          isTerminalEventStatus(detail.status)
         }
         onClick={() => onBulkDeploy()}
       >
@@ -63,13 +62,7 @@ export function EventHeaderActions({
       {failedCount > 0 && (
         <Button
           loading={bulkInFlight === "retry-failed"}
-          disabled={
-            !detail ||
-            detail.status === "ENDED" ||
-            detail.status === "TEARDOWN" ||
-            detail.status === "ARCHIVED" ||
-            bulkInFlight !== null
-          }
+          disabled={!detail || isTerminalEventStatus(detail.status) || bulkInFlight !== null}
           iconName="refresh"
           onClick={() => onBulkDeploy({ retryFailedOnly: true })}
         >
@@ -79,13 +72,7 @@ export function EventHeaderActions({
       {completeCount > 0 && (
         <Button
           loading={bulkInFlight === "redeploy"}
-          disabled={
-            !detail ||
-            detail.status === "ENDED" ||
-            detail.status === "TEARDOWN" ||
-            detail.status === "ARCHIVED" ||
-            bulkInFlight !== null
-          }
+          disabled={!detail || isTerminalEventStatus(detail.status) || bulkInFlight !== null}
           iconName="refresh"
           onClick={() => onBulkDeploy({ forceRedeploy: true })}
         >

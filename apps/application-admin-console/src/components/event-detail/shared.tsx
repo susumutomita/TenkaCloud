@@ -8,7 +8,11 @@ import type {
   EventDetail,
   EventStatus,
 } from "../../api/events-client";
-import { computeEffectiveStatus, type EffectiveStatus } from "../../lib/effective-event-status";
+import {
+  computeEffectiveStatus,
+  type EffectiveStatus,
+  isTerminalEventStatus,
+} from "../../lib/effective-event-status";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -141,7 +145,7 @@ export function scoringBadge(
 ) {
   if (detail.scoringLocked === true)
     return <Badge color="red">{t("event_detail.scoring_badge_locked")}</Badge>;
-  if (detail.status === "ENDED" || detail.status === "ARCHIVED" || detail.status === "TEARDOWN") {
+  if (isTerminalEventStatus(detail.status)) {
     return <Badge color="grey">{t("event_detail.scoring_badge_ended")}</Badge>;
   }
   if (!detail.startsAt)
