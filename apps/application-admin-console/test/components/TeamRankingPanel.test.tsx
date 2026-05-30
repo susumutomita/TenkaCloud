@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import type { TeamScoreEvents } from "../../src/api/events-client";
-import { computeRanking } from "../../src/components/TeamRankingPanel";
+import { computeRanking, TeamRankingPanel } from "../../src/components/TeamRankingPanel";
+
+vi.mock("../../src/i18n", () => ({ useT: () => (k: string) => k }));
 
 /**
  * Issue #1071: チーム順位計算の pure logic を pin。 events.points の合計を team 別に取り、
@@ -77,5 +80,46 @@ describe("computeRanking (Issue #1071)", () => {
       ]),
     ]);
     expect(rows[0].totalScore).toBe(70);
+  });
+
+  it("should tie-break two event-less teams (lastUpdate undefined) at equal rank", () => {
+    // 両者 0pt + events 無し → tie-break で a/b とも lastUpdateMs undefined (?? +Infinity 分岐)。
+    const rows = computeRanking([team("a", "Alpha", []), team("b", "Bravo", [])]);
+    expect(rows.every((r) => r.totalScore === 0)).toBe(true);
+    expect(rows[0].rank).toBe(1);
+    expect(rows[1].rank).toBe(1); // 同点同順位
+  });
+});
+
+describe("TeamRankingPanel (component)", () => {
+  it("should render nothing when there are no teams", () => {
+    const { container } = render(<TeamRankingPanel teams={[]} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("should render rank badges (1=green / 2-3=blue / 4+=plain), names, scores and last-update", () => {
+    const at = "2026-06-01T12:34:00Z";
+    render(
+      <TeamRankingPanel
+        teams={[
+          team("a", "Alpha", [{ points: 30, occurredAt: at }]),
+          team("b", "Bravo", [{ points: 20, occurredAt: at }]),
+          team("c", "Charlie", [{ points: 10, occurredAt: at }]),
+          team("d", "Delta", []), // 0 pt / イベント無し → lastUpdate "—"
+        ]}
+      />,
+    );
+    // rank セル: 1 / 2 / 3 / 4 (1=green badge, 2-3=blue badge, 4=plain Box)。
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+    // team 名 (code) + score。
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    expect(screen.getByText("Delta")).toBeInTheDocument();
+    expect(screen.getByText("30 pt")).toBeInTheDocument();
+    expect(screen.getByText("0 pt")).toBeInTheDocument();
+    // events 無しの team は lastUpdate が "—"。
+    expect(screen.getByText("—")).toBeInTheDocument();
   });
 });
