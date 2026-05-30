@@ -92,7 +92,10 @@ export function useTeamView(): TeamViewState {
  * Polling 結果が前回と意味的に同じなら true → setView を skip し React 再 render を抑制。
  * Home / TopNav の両方が context 経由で再 render するため、no-op 検出は重要。
  */
-function viewIsUnchanged(prev: ParticipantTeamView | null, next: ParticipantTeamView): boolean {
+export function viewIsUnchanged(
+  prev: ParticipantTeamView | null,
+  next: ParticipantTeamView,
+): boolean {
   if (!prev) return false;
   if (prev.team.teamName !== next.team.teamName) return false;
   if (prev.problems.length !== next.problems.length) return false;
@@ -116,7 +119,7 @@ function viewIsUnchanged(prev: ParticipantTeamView | null, next: ParticipantTeam
   return true;
 }
 
-function notificationsAreUnchanged(
+export function notificationsAreUnchanged(
   prev: NotificationsResponse | null,
   next: NotificationsResponse,
 ): boolean {
@@ -134,7 +137,7 @@ function notificationsAreUnchanged(
   return true;
 }
 
-function leaderboardIsUnchanged(
+export function leaderboardIsUnchanged(
   prev: LeaderboardResponse | null,
   next: LeaderboardResponse,
 ): boolean {
@@ -287,6 +290,9 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
 
   /** 60 秒 tick: `/portal/me/notifications` 専用。Events table の RCU を守る。 */
   const refreshNotifications = useCallback(async () => {
+    // 呼び出し元の useEffect が同条件を gate 済み (refresh と違い context に露出しない) ため
+    // true 分岐は不到達。 防御的に残す。
+    /* v8 ignore next */
     if (isMock || !sessionToken) return;
     try {
       const next = await getNotifications(config.apiBaseUrl, sessionToken);
@@ -324,33 +330,23 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
 
   useEffect(() => {
     if (isMock || !sessionToken) return;
-    let cancelled = false;
     stopPollingRef.current = false;
+    // 全 problem が terminal に達したら polling を止める。 旧 `cancelled` flag は await の
+    // 前で評価され不到達だった (= clearInterval が teardown を担う) ので撤去。
     const tick = async () => {
-      if (cancelled || stopPollingRef.current) return;
+      if (stopPollingRef.current) return;
       await refresh();
     };
     void tick();
     const interval = setInterval(tick, POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, [isMock, sessionToken, refresh]);
 
   useEffect(() => {
     if (isMock || !sessionToken) return;
-    let cancelled = false;
-    const tick = async () => {
-      if (cancelled) return;
-      await refreshNotifications();
-    };
-    void tick();
-    const interval = setInterval(tick, NOTIFICATIONS_POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    void refreshNotifications();
+    const interval = setInterval(refreshNotifications, NOTIFICATIONS_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
   }, [isMock, sessionToken, refreshNotifications]);
 
   // codex review P3: page を開いた瞬間の既読化を **localStorage と Context state 両方** に
