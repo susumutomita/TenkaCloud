@@ -47,8 +47,7 @@ export type VerifyFailureReason =
   | "unknown-algorithm"
   | "secret-not-resolved"
   | "signature-mismatch"
-  | "payload-parse-failed"
-  | "payload-schema-invalid";
+  | "payload-parse-failed";
 
 function base64urlEncode(bytes: Uint8Array): string {
   return Buffer.from(bytes)
