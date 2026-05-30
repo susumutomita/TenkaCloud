@@ -35,6 +35,14 @@ describe("computeEventWizardState", () => {
     expect(out.alertType).toBe("success");
   });
 
+  it("should omit the N/M progress tail when DEPLOYING with no deployments yet", () => {
+    // deploymentsByProblem 未提供 (= bulk deploy 直後で集計対象 0) のとき、 deploymentProgress
+    // が {0,0,0} を返し total===0 → CTA の進捗 tail を出さない防御分岐。
+    const out = computeEventWizardState({ status: "DEPLOYING" }, NOW_MS);
+    expect(out.step).toBe("deploying");
+    expect(out.cta).not.toMatch(/完了/);
+  });
+
   it("should set primary=start and prompt to 'set the start time' when READY without startsAt", () => {
     const out = computeEventWizardState({ status: "READY" }, NOW_MS);
     expect(out.step).toBe("ready_unscheduled");

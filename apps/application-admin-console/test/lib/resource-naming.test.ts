@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildStackPrefix, slugify } from "../../src/lib/resource-naming";
+import {
+  buildStackPrefix,
+  defaultCompetitorRoleName,
+  slugify,
+} from "../../src/lib/resource-naming";
 
 describe("slugify", () => {
   it("should replace non-alphanumeric characters with hyphens", () => {
@@ -41,5 +45,28 @@ describe("buildStackPrefix", () => {
 
   it("should still produce a prefix when team is empty (validation is the caller's responsibility)", () => {
     expect(buildStackPrefix("p1", "")).toBe("tc-p1-");
+  });
+});
+
+describe("defaultCompetitorRoleName", () => {
+  it("should build TenkaCloud-{tenant}-{namespace}-Role with the default namespace", () => {
+    expect(defaultCompetitorRoleName({ tenantId: "acme" })).toBe("TenkaCloud-acme-deploy-Role");
+    expect(defaultCompetitorRoleName({ tenantId: "acme", namespace: "scoring" })).toBe(
+      "TenkaCloud-acme-scoring-Role",
+    );
+  });
+
+  it("should fall back to 'tenant' / 'deploy' when the segments sanitize to empty", () => {
+    // `#` は IAM 許可文字集合外 → sanitize 後が空 → fallback segment に倒す防御分岐。
+    expect(defaultCompetitorRoleName({ tenantId: "###", namespace: "###" })).toBe(
+      "TenkaCloud-tenant-deploy-Role",
+    );
+  });
+
+  it("should truncate an over-long tenant id to keep the role name within the 64-char IAM limit", () => {
+    const name = defaultCompetitorRoleName({ tenantId: "a".repeat(80) });
+    expect(name.length).toBeLessThanOrEqual(64);
+    expect(name.startsWith("TenkaCloud-")).toBe(true);
+    expect(name.endsWith("-deploy-Role")).toBe(true);
   });
 });
