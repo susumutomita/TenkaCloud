@@ -12,6 +12,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const beginLoginMock = vi.fn();
@@ -51,6 +52,24 @@ function renderLogin() {
     </I18nProvider>,
   );
 }
+
+function renderSaml(samlIdpDirectory: Record<string, string[]>): AppConfig {
+  const samlConfig: AppConfig = { ...config, samlIdpDirectory };
+  localStorage.setItem("tenkacloud.application-admin.locale", "ja");
+  render(
+    <I18nProvider>
+      <AuthProvider config={samlConfig}>
+        <LoginPage config={samlConfig} />
+      </AuthProvider>
+    </I18nProvider>,
+  );
+  return samlConfig;
+}
+const emailField = () => screen.findByPlaceholderText("you@example.com");
+const submitEmail = (input: HTMLElement, value: string) => {
+  fireEvent.change(input, { target: { value } });
+  fireEvent.submit(input.closest("form") as HTMLFormElement);
+};
 
 describe("application-admin-console LoginPage (#1329)", () => {
   beforeEach(() => {
@@ -109,6 +128,40 @@ describe("application-admin-console LoginPage (#1329)", () => {
     expect(beginLoginMock).toHaveBeenCalledTimes(1);
   });
 
+  it("should render the error fallback even when beginLogin throws a non-Error", async () => {
+    beginLoginMock.mockRejectedValue("string failure");
+    renderLogin();
+    // err instanceof Error が false → message は "" だが error_header は表示される。
+    expect(await screen.findByText(/サインインに失敗しました/)).toBeInTheDocument();
+  });
+
+  it("should auto-redirect only once under StrictMode double-mount (#1360)", async () => {
+    beginLoginMock.mockResolvedValue(undefined);
+    localStorage.setItem("tenkacloud.application-admin.locale", "ja");
+    render(
+      <StrictMode>
+        <I18nProvider>
+          <AuthProvider config={config}>
+            <LoginPage config={config} />
+          </AuthProvider>
+        </I18nProvider>
+      </StrictMode>,
+    );
+    // StrictMode の effect 二重発火でも autoStartedRef guard で beginLogin は 1 回。
+    await waitFor(() => expect(beginLoginMock).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(beginLoginMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("should re-trigger sign-in from the shell button after an auto-redirect error", async () => {
+    beginLoginMock.mockRejectedValueOnce(new Error("first fail")).mockResolvedValue(undefined);
+    renderLogin();
+    await screen.findByText(/サインインに失敗しました/);
+    // 再サインイン button (= onSignIn → startLogin) を click。
+    fireEvent.click(screen.getByRole("button", { name: "サインイン" }));
+    await waitFor(() => expect(beginLoginMock).toHaveBeenCalledTimes(2));
+  });
+
   // Issue #1340 Phase 2: SAML directory が入ると Login が email 入力 → IdP 解決 flow に切り替わる。
 
   it("should switch to the email-driven SAML flow when samlIdpDirectory has at least one provider (#1340)", async () => {
@@ -127,11 +180,55 @@ describe("application-admin-console LoginPage (#1329)", () => {
     );
     // SAML 有効時は email FormField が出る (= 旧 1-step button flow ではない / auto-redirect も走らない)。
     const emailInput = await screen.findByPlaceholderText("you@example.com");
-    fireEvent.change(emailInput, { target: { value: "alice@acme.example" } });
     // Cloudscape Input の onChange shape との互換のため value 反映だけ確認 → submit。
-    fireEvent.submit(emailInput.closest("form")!);
+    submitEmail(emailInput, "alice@acme.example");
     await waitFor(() => {
       expect(beginLoginMock).toHaveBeenCalledWith(samlConfig, { identityProvider: "tenant-entra" });
     });
+  });
+
+  it("should fall back to a local sign-in when the email domain is unknown", async () => {
+    beginLoginMock.mockResolvedValue(undefined);
+    const cfg = renderSaml({ "acme.example": ["tenant-entra"] });
+    submitEmail(await emailField(), "bob@unknown.example");
+    // domain 不一致 → kind:"local" → identityProvider なしで beginLogin。
+    await waitFor(() => expect(beginLoginMock).toHaveBeenCalledWith(cfg, undefined));
+  });
+
+  it("should show an IdP picker for a multi-provider domain and redirect on pick", async () => {
+    beginLoginMock.mockResolvedValue(undefined);
+    const cfg = renderSaml({ "multi.example": ["idp-a", "idp-b"] });
+    submitEmail(await emailField(), "alice@multi.example");
+    const pickA = await screen.findByRole("button", { name: "idp-a" });
+    expect(screen.getByRole("button", { name: "idp-b" })).toBeInTheDocument();
+    fireEvent.click(pickA);
+    await waitFor(() =>
+      expect(beginLoginMock).toHaveBeenCalledWith(cfg, { identityProvider: "idp-a" }),
+    );
+  });
+
+  it("should return to the email form when the picker is cancelled", async () => {
+    renderSaml({ "multi.example": ["idp-a", "idp-b"] });
+    submitEmail(await emailField(), "alice@multi.example");
+    await screen.findByRole("button", { name: "idp-a" });
+    fireEvent.click(screen.getByRole("button", { name: "別のメールアドレスを使用する" }));
+    expect(await emailField()).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "idp-a" })).not.toBeInTheDocument();
+  });
+
+  it("should ignore submit when the email is empty", async () => {
+    beginLoginMock.mockResolvedValue(undefined);
+    renderSaml({ "acme.example": ["tenant-entra"] });
+    const input = await emailField();
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(beginLoginMock).not.toHaveBeenCalled();
+  });
+
+  it("should show the error fallback when beginLogin throws in the SAML flow", async () => {
+    beginLoginMock.mockRejectedValue(new Error("SAML boom"));
+    renderSaml({ "acme.example": ["tenant-entra"] });
+    submitEmail(await emailField(), "alice@acme.example");
+    expect(await screen.findByText(/サインインに失敗しました/)).toBeInTheDocument();
   });
 });
