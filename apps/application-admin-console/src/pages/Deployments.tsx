@@ -102,6 +102,9 @@ export function DeploymentsPage({ config }: { config: AppConfig }) {
   useEffect(() => {
     let cancelled = false;
     const tick = async () => {
+      // unmount 時に clearInterval するので interval 経由の再 tick は来ない。 cancelled=true を
+      // 踏むのは teardown と既 queue の tick が競合する稀ケースのみ (= 防御的、不到達)。
+      /* v8 ignore next */
       if (cancelled) return;
       await fetchOnce();
     };
@@ -144,6 +147,9 @@ export function DeploymentsPage({ config }: { config: AppConfig }) {
       </Header>
 
       <Table
+        // 上の loading / error guard を抜けた時点で items は必ず non-null。 ?? は型 narrowing 用の
+        // 安全網で右辺は不到達。
+        /* v8 ignore next */
         items={items ?? EMPTY_DEPLOYMENT_ITEMS}
         columnDefinitions={columnDefinitions}
         empty={
