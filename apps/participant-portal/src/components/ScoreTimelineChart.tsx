@@ -33,6 +33,14 @@ const RIVAL_COLORS = [
   "#b80f5a", // pink
 ];
 
+const MY_TEAM_COLOR = "#037f0c";
+
+/** rival series の色を巡回選択。 idx % length は常に有効なので ?? 右辺は型安全用の不到達分岐。 */
+function rivalColor(idx: number): string {
+  /* v8 ignore next */
+  return RIVAL_COLORS[idx % RIVAL_COLORS.length] ?? "#5b6770";
+}
+
 interface SeriesPoint {
   readonly x: Date;
   readonly y: number;
@@ -123,15 +131,15 @@ export function ScoreTimelineChart({
     let rivalIdx = 0;
     const built = ordered.map((team) => {
       const points = buildCumulativePoints(team);
-      const color = team.isMyTeam
-        ? "#037f0c"
-        : (RIVAL_COLORS[rivalIdx++ % RIVAL_COLORS.length] ?? "#5b6770");
+      const color = team.isMyTeam ? MY_TEAM_COLOR : rivalColor(rivalIdx++);
       return {
         title: team.isMyTeam
           ? t("score_timeline.you_suffix", { teamName: team.teamName })
           : team.teamName,
         type: "line" as const,
         data: points.map((p) => ({ x: p.x, y: p.y })),
+        // Cloudscape が tooltip hover 時にのみ呼ぶ formatter (= jsdom render では不到達)。
+        /* v8 ignore next */
         valueFormatter: (v: number) => `${v} pt`,
         color,
       };
@@ -171,6 +179,8 @@ export function ScoreTimelineChart({
     );
   }
 
+  // data が truthy のここでは seriesView は必ず非 null (= 型 narrowing 用、 true 分岐は不到達)。
+  /* v8 ignore next */
   if (!seriesView) return null;
 
   const localeTag = locale === "ja" ? "ja-JP" : "en-US";
