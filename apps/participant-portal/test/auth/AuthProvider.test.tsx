@@ -1,4 +1,4 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthProvider, useAuth } from "../../src/auth/AuthProvider";
 import type { AppConfig } from "../../src/config";
@@ -29,6 +29,8 @@ describe("AuthProvider", () => {
     localStorage.clear();
     sessionStorage.clear();
     vi.restoreAllMocks();
+    // ?demo=1 等の query が他 test に漏れないよう URL を戻す。
+    window.history.replaceState({}, "", "/");
   });
 
   it("should be ready=true with no session in initial state", () => {
@@ -132,6 +134,65 @@ describe("AuthProvider", () => {
 
   it("should throw an error when useAuth() is called outside the Provider", () => {
     expect(() => renderHook(() => useAuth())).toThrow(/AuthProvider/);
+  });
+
+  it("backend mode: should wrap a non-auth getPortalMe failure as a login error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+    const { result } = renderAuth(prodConfig);
+    await act(async () => {
+      await expect(result.current.login("AbCdEfGhIjKlMnOpQrStUvWx")).rejects.toBeInstanceOf(Error);
+    });
+    expect(result.current.session).toBeNull();
+  });
+
+  it("backend mode: should fall back to placeholders + default TTL when team/problem fields are absent", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ team: { teamName: "Alpha" }, problems: [] }), {
+          status: 200,
+        }),
+      ),
+    );
+    const { result } = renderAuth(prodConfig);
+    await act(async () => {
+      await result.current.login("AbCdEfGhIjKlMnOpQrStUvWx");
+    });
+    expect(result.current.session?.teamId).toBe("(unknown)");
+    expect(result.current.session?.eventId).toBe("(unknown)");
+    // expiresAt が default TTL (= 起動時刻 + 4h 付近) で 0 ではない。
+    expect(result.current.session?.expiresAt).toBeGreaterThan(Date.now());
+  });
+
+  it("dev-mock + ?demo=1: should auto-login a fixed demo team", async () => {
+    window.history.replaceState({}, "", "/?demo=1");
+    const { result } = renderAuth(devConfig);
+    await waitFor(() => expect(result.current.session).not.toBeNull());
+    expect(result.current.session?.teamId).toMatch(/^team-/);
+  });
+
+  describe("updateSession", () => {
+    it("should patch teamName and/or teamNameSetByCompetitor and persist", async () => {
+      const { result } = renderAuth(devConfig);
+      await act(async () => {
+        await result.current.login("abc-123-team");
+      });
+      act(() =>
+        result.current.updateSession({ teamName: "Renamed", teamNameSetByCompetitor: true }),
+      );
+      expect(result.current.session?.teamName).toBe("Renamed");
+      // 片方だけの patch も通る (= 各 spread 分岐)。
+      act(() => result.current.updateSession({ teamName: "Again" }));
+      expect(result.current.session?.teamName).toBe("Again");
+      act(() => result.current.updateSession({ teamNameSetByCompetitor: false }));
+      expect(result.current.session?.teamNameSetByCompetitor).toBe(false);
+    });
+
+    it("should be a no-op when there is no session", () => {
+      const { result } = renderAuth(devConfig);
+      act(() => result.current.updateSession({ teamName: "X" }));
+      expect(result.current.session).toBeNull();
+    });
   });
 
   describe("Issue #859: idle timeout (6 hours)", () => {
