@@ -64,10 +64,14 @@ export function EventPhaseBanner({
   );
   const phase = effectiveStatusToPhase(effective);
   if (phase === "live") {
+    // effective===RUNNING は computeEffectiveStatus rule 4 (READY + 過去 startsAt) からのみ
+    // 来るため、 ここで detail.startsAt は常に有効な過去日。 startMs が NaN になる経路は無く、
+    // 下の NaN / "—" fallback は到達不能な防御 (= coverage から除外)。
+    const nowMs = (now ?? new Date()).getTime();
+    /* v8 ignore next -- 到達不能: startsAt は live 時点で常に有効 (NaN 経路なし) */
     const startMs = detail.startsAt ? new Date(detail.startsAt).getTime() : NaN;
-    const elapsed = Number.isFinite(startMs)
-      ? formatElapsed(startMs, (now ?? new Date()).getTime())
-      : "—";
+    /* v8 ignore next -- 同上 ("—" fallback は不到達) */
+    const elapsed = Number.isFinite(startMs) ? formatElapsed(startMs, nowMs) : "—";
     return (
       <Alert
         type="success"
