@@ -354,6 +354,10 @@ describe("tenantStatusBadgeColor", () => {
     it("should return grey for strings equivalent to undefined / null", () => {
       expect(tenantStatusBadgeColor("undefined")).toBe("grey");
     });
+
+    it('should return grey for an undefined argument (= `?? ""` fallback)', () => {
+      expect(tenantStatusBadgeColor(undefined)).toBe("grey");
+    });
   });
 });
 
@@ -381,6 +385,10 @@ describe("tierBadgeColor", () => {
   describe("when an unknown tier value arrives", () => {
     it("should fall back to grey", () => {
       expect(tierBadgeColor("nonexistent")).toBe("grey");
+    });
+
+    it('should return grey for an undefined argument (= `?? ""` fallback)', () => {
+      expect(tierBadgeColor(undefined)).toBe("grey");
     });
   });
 });
