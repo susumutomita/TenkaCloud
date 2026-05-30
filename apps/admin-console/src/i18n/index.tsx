@@ -40,6 +40,8 @@ const LOCAL_STORAGE_KEY = "tenkacloud.admin.locale";
  * 一致なければ "ja" を default にする (= 既存 UI を維持)。
  */
 function detectBrowserLocale(): LocaleCode {
+  // SSR guard: navigator は browser / jsdom では常に定義済みなので不到達。
+  /* v8 ignore next */
   if (typeof navigator === "undefined") return "ja";
   const raw = (navigator.language || "ja").toLowerCase();
   for (const code of SUPPORTED_LOCALES) {
@@ -49,6 +51,8 @@ function detectBrowserLocale(): LocaleCode {
 }
 
 function loadStoredLocale(): LocaleCode | undefined {
+  // SSR guard: window は browser / jsdom では常に定義済みなので不到達。
+  /* v8 ignore next */
   if (typeof window === "undefined") return undefined;
   try {
     const stored = window.localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -62,6 +66,8 @@ function loadStoredLocale(): LocaleCode | undefined {
 }
 
 function persistLocale(code: LocaleCode): void {
+  // SSR guard: 同上 (不到達)。
+  /* v8 ignore next */
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(LOCAL_STORAGE_KEY, code);
@@ -98,6 +104,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   // <html lang="..."> も locale に追従させる (= a11y / screen reader 対応)。
   useEffect(() => {
+    // SSR guard: document は browser / jsdom では常に定義済みなので不到達。
+    /* v8 ignore next */
     if (typeof document === "undefined") return;
     document.documentElement.lang = locale;
   }, [locale]);
