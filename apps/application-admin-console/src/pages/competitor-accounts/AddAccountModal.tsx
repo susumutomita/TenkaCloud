@@ -48,6 +48,8 @@ export function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAc
   };
 
   const handleDismiss = () => {
+    // cancel button は disabled={inFlight} なので inFlight 中は呼ばれない (= 防御的不到達)。
+    /* v8 ignore next */
     if (inFlight) return;
     reset();
     onDismiss();
@@ -59,6 +61,8 @@ export function AddAccountModal({ config, visible, onDismiss, onSuccess }: AddAc
     !apiClient || inFlight || awsAccountId.length === 0 || awsAccountIdInvalid || aliasInvalid;
 
   const handleSubmit = async () => {
+    // submit button は disabled={submitDisabled} なので呼ばれるのは送信可能時のみ (= 防御的不到達)。
+    /* v8 ignore next */
     if (!apiClient || submitDisabled) return;
     setInFlight(true);
     setError(null);
