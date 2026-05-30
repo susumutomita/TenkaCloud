@@ -70,12 +70,12 @@ function useNowMs(intervalMs: number): number {
   return nowMs;
 }
 
-function describeRemainingUntilAutoDelete(t: ProblemPanelT, diffMs: number): string {
+export function describeRemainingUntilAutoDelete(t: ProblemPanelT, diffMs: number): string {
   const totalMinutes = Math.max(1, Math.ceil(diffMs / 60_000));
   return t("problem_panel.auto_delete_remaining_minutes", { minutes: totalMinutes });
 }
 
-function buildAutoDeleteNotice(
+export function buildAutoDeleteNotice(
   t: ProblemPanelT,
   expiresAt: number,
   nowMs: number,
@@ -145,23 +145,26 @@ function useLiveDeployLog({
   return liveDeployLog;
 }
 
-function selectDisplayedDeployLog(
+export function selectDisplayedDeployLog(
   liveDeployLog: DeploymentLogView | null,
   deployLog: DeploymentLogView,
 ): DeploymentLogView {
   return liveDeployLog && liveDeployLog.entries.length > 0 ? liveDeployLog : deployLog;
 }
 
-function describeProblemKind(t: ProblemPanelT, scoring: ParticipantProblemView["scoring"]): string {
+export function describeProblemKind(
+  t: ProblemPanelT,
+  scoring: ParticipantProblemView["scoring"],
+): string {
   if (!scoring) return t("problem_panel.kind_unknown");
   return t(SCORING_KIND_KEY[scoring.kind] ?? "problem_panel.kind_unknown");
 }
 
-function isUptimeScoring(scoring: ParticipantProblemView["scoring"]): boolean {
+export function isUptimeScoring(scoring: ParticipantProblemView["scoring"]): boolean {
   return scoring ? scoring.kind !== "flag" : false;
 }
 
-function isStaleProblem(problem: ParticipantProblemView, now: number): boolean {
+export function isStaleProblem(problem: ParticipantProblemView, now: number): boolean {
   const lastScoredMs = problem.lastScoredAt ? new Date(problem.lastScoredAt).getTime() : Number.NaN;
   return (
     isUptimeScoring(problem.scoring) &&
@@ -171,13 +174,15 @@ function isStaleProblem(problem: ParticipantProblemView, now: number): boolean {
   );
 }
 
-function getCompleteFlagScoring(problem: ParticipantProblemView): FlagScoringInfo | undefined {
+export function getCompleteFlagScoring(
+  problem: ParticipantProblemView,
+): FlagScoringInfo | undefined {
   const scoring = problem.scoring;
   if (problem.status !== "COMPLETE" || scoring?.kind !== "flag") return undefined;
   return scoring;
 }
 
-function shouldShowAutoRefreshNote(status: DeploymentStatus): boolean {
+export function shouldShowAutoRefreshNote(status: DeploymentStatus): boolean {
   return !TERMINAL_STATUSES.has(status);
 }
 
@@ -327,7 +332,7 @@ export function ProblemPanel({
   );
 }
 
-function mergeLiveDeployLog(
+export function mergeLiveDeployLog(
   prev: DeploymentLogView | null,
   response: DeployLogsResponse,
 ): DeploymentLogView {
@@ -342,7 +347,7 @@ function mergeLiveDeployLog(
   };
 }
 
-function classifyCodeBuildLog(message: string): DeploymentLogEntry["level"] {
+export function classifyCodeBuildLog(message: string): DeploymentLogEntry["level"] {
   if (/\b(error|failed|failure|timed out|fault)\b/i.test(message)) return "error";
   if (/\b(succeeded|complete|completed)\b/i.test(message)) return "success";
   if (/\b(warn|warning)\b/i.test(message)) return "warning";
@@ -386,7 +391,7 @@ function DeployTerminal({
   );
 }
 
-function formatTerminalTime(value: string): string {
+export function formatTerminalTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "--:--:--";
   return date.toLocaleTimeString(undefined, {
