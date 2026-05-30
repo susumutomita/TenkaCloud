@@ -12,6 +12,11 @@ permissions:
   actions: read
 
 on:
+  # main への push (= PR merge 後) でも CI を回し coverage を Codecov に upload する。
+  # これが無いと Codecov に BASE (main) の report が無く、 PR で「Please upload report for
+  # BASE」 警告 + diff 不能 (base が "?") になる。 Issue #993 の延長。
+  push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
