@@ -155,3 +155,16 @@ describe("AuthProvider idle timeout (#859)", () => {
     expect(beginLogoutMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("useAuth guard", () => {
+  it("should throw when used outside an AuthProvider", () => {
+    const Bare = () => {
+      useAuth();
+      return null;
+    };
+    // provider 外で useAuth → context null → 明示 error を投げる (誤用の早期検知)。
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(() => render(<Bare />)).toThrow("useAuth must be used inside <AuthProvider>");
+    spy.mockRestore();
+  });
+});
