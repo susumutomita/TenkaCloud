@@ -76,6 +76,15 @@ describe("storage", () => {
       expect(loadSession()).toBeNull();
     });
 
+    it("should return null (not throw) when localStorage access is blocked (= private window)", () => {
+      // Safari private mode 等では getItem 自体が SecurityError を投げる。 session 復元の
+      // ために portal を落とさず 「未ログイン扱い」 = null に倒すのが正しい防御挙動。
+      vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("SecurityError: localStorage is disabled");
+      });
+      expect(loadSession()).toBeNull();
+    });
+
     it("should be stored in `localStorage` and survive closing the tab (= even when sessionStorage is empty)", () => {
       saveSession(sample());
       sessionStorage.clear(); // tab を閉じた相当
