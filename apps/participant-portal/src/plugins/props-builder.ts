@@ -49,8 +49,13 @@ export function buildPortalEndpointsFromOutputs(
       try {
         defaultUrl = joinUrl(base, ep.default.appendPath);
       } catch (e) {
+        // `new URL()` は不正入力に対して必ず TypeError (= instanceof Error) を投げるため、
+        // String(e) 側は到達不能な防御 fallback。 分岐 coverage 上ノイズになるので ignore。
+        /* v8 ignore start */
+        const detail = e instanceof Error ? e.message : String(e);
+        /* v8 ignore stop */
         throw new Error(
-          `Failed to build endpoint URL for problemId=${problemId} slot=${ep.slot} key=${ep.default.key}: ${e instanceof Error ? e.message : String(e)}`,
+          `Failed to build endpoint URL for problemId=${problemId} slot=${ep.slot} key=${ep.default.key}: ${detail}`,
           { cause: e },
         );
       }
