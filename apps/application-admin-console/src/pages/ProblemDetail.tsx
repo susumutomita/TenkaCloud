@@ -9,7 +9,7 @@ import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Navigate, type NavigateFunction, useNavigate, useParams } from "react-router";
 import { useApiClient } from "../api/client";
 import {
@@ -19,8 +19,8 @@ import {
 } from "../api/deploy-client";
 import type { AppConfig } from "../config";
 import { findProblem } from "../data/problems";
+import { usePollingList } from "../hooks/usePollingList";
 import { useT } from "../i18n";
-import { toErrorMessage } from "../lib/error-message";
 import {
   DEPLOYMENT_LIST_PAGE_SIZE,
   DEPLOYMENT_LIST_POLL_INTERVAL_MS,
@@ -177,38 +177,22 @@ function ProblemDeploymentsSection({
 }) {
   const apiClient = useApiClient(config);
   const navigate = useNavigate();
-  const [items, setItems] = useState<readonly DeploymentSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchOnce = useCallback(async () => {
-    if (!apiClient) return;
-    try {
-      const res = await listDeployments(apiClient, problemId, {
-        limit: DEPLOYMENT_LIST_PAGE_SIZE,
-      });
-      setItems((prev) => (prev && !deploymentsChanged(prev, res.items) ? prev : res.items));
-      setError(null);
-    } catch (err) {
-      setError(toErrorMessage(err));
-    }
-  }, [apiClient, problemId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const tick = async () => {
-      // unmount 時に clearInterval するので interval 経由の再 tick は来ない。 cancelled=true を
-      // 踏むのは teardown と既 queue の tick が競合する稀ケースのみ (= 防御的、不到達)。
-      /* v8 ignore next */
-      if (cancelled) return;
-      await fetchOnce();
-    };
-    void tick();
-    const interval = setInterval(tick, DEPLOYMENT_LIST_POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [fetchOnce]);
+  const fetcher = useMemo(
+    () =>
+      apiClient
+        ? () =>
+            listDeployments(apiClient, problemId, { limit: DEPLOYMENT_LIST_PAGE_SIZE }).then(
+              (r) => r.items,
+            )
+        : null,
+    [apiClient, problemId],
+  );
+  const { items, error } = usePollingList(
+    fetcher,
+    DEPLOYMENT_LIST_POLL_INTERVAL_MS,
+    deploymentsChanged,
+  );
 
   const columns = useMemo(() => buildColumns(navigate, t), [navigate, t]);
 
