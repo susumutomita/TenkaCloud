@@ -125,7 +125,9 @@ describe("AuditClient.exportCsv", () => {
     expect(url.pathname).toBe("/prod/admin/insight/audit/export");
     expect(url.searchParams.get("tenantId")).toBe("t-1");
     expect(url.searchParams.get("action")).toBe("Login");
-    expect(blob).toBeInstanceOf(Blob);
+    // instanceof Blob は fetch 実装 (undici) と global Blob が別 realm だと CI で落ち、
+    // jsdom Blob は .text() を持たない。 両 impl 共通の .size で blob を realm 非依存に検証。
+    expect(blob?.size).toBeGreaterThan(0);
   });
 
   it("should omit tenantId from the export URL for a system-scope export", async () => {
