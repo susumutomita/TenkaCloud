@@ -64,6 +64,12 @@ describe("loadConfig", () => {
       expect(config.tenantName).toBe("Local Dev Tenant");
       expect(config.apiBaseUrl).toBe("http://localhost:3999");
     });
+
+    it("should fall back to env when the fetch itself throws (= offline / network error)", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+      const config = await loadConfig(env);
+      expect(config.tenantId).toBe("dev-local");
+    });
   });
 
   describe("when /runtime-config.json is 200 but missing some field", () => {
@@ -239,6 +245,70 @@ describe("loadConfig", () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
       const config = await loadConfig(env);
       expect(config.samlIdpDirectory).toEqual({});
+    });
+  });
+
+  describe("optional runtime-config fields + isolation", () => {
+    function loadWithRuntime(extra: Record<string, unknown>) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              cognitoDomain: "https://prod-tenant.auth.ap-northeast-1.amazoncognito.com",
+              userClientId: "x",
+              tenantId: "t",
+              tenantName: "n",
+              apiUrl: "https://a.example.com",
+              ...extra,
+            }),
+            { status: 200 },
+          ),
+        ),
+      );
+      return loadConfig(env);
+    }
+
+    it("should pass through string participantPortalUrl / competitorBootstrapTemplateUrl and isolation=silo", async () => {
+      const config = await loadWithRuntime({
+        participantPortalUrl: "https://portal.example.com",
+        competitorBootstrapTemplateUrl: "https://s3.example/bootstrap.yaml",
+        isolation: "silo",
+      });
+      expect(config.participantPortalUrl).toBe("https://portal.example.com");
+      expect(config.competitorBootstrapTemplateUrl).toBe("https://s3.example/bootstrap.yaml");
+      expect(config.isolation).toBe("silo");
+    });
+
+    it("should drop non-string optional URLs to undefined and non-silo isolation to pooled", async () => {
+      const config = await loadWithRuntime({
+        participantPortalUrl: 123,
+        competitorBootstrapTemplateUrl: false,
+        isolation: "bogus",
+      });
+      expect(config.participantPortalUrl).toBeUndefined();
+      expect(config.competitorBootstrapTemplateUrl).toBeUndefined();
+      expect(config.isolation).toBe("pooled");
+    });
+  });
+
+  describe("dev env fallback path", () => {
+    it("should honor VITE_ISOLATION=silo when assembling from env", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+      const config = await loadConfig({ ...env, VITE_ISOLATION: "silo" });
+      expect(config.isolation).toBe("silo");
+    });
+
+    it("should throw when a required env var is missing in the fallback path", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+      let threw = false;
+      try {
+        await loadConfig({});
+      } catch (e) {
+        threw = true;
+        expect((e as Error).message).toMatch(/Missing required env var/);
+      }
+      expect(threw).toBe(true);
     });
   });
 });
