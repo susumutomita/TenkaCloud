@@ -47,6 +47,8 @@ export function ShellLayout({ children }: { children: ReactNode }) {
           },
         ],
         onItemClick: ({ detail }) => {
+          // user menu の item は signout のみなので detail.id は常に "signout" (= 偽は不到達)。
+          /* v8 ignore next */
           if (detail.id === "signout") {
             auth.logout();
             navigate("/login");
@@ -59,9 +61,15 @@ export function ShellLayout({ children }: { children: ReactNode }) {
     type: "menu-dropdown",
     iconName: "globe",
     ariaLabel: t("nav.locale_switcher_aria"),
+    // locale / code は SUPPORTED_LOCALES = LOCALE_NAME の key と一致するので ?? の右辺は不到達
+    // (= noUncheckedIndexedAccess 下で型を満たすための防御的フォールバック)。
+    /* v8 ignore next */
     text: LOCALE_NAME[locale] ?? locale,
+    /* v8 ignore next */
     items: SUPPORTED_LOCALES.map((code) => ({ id: code, text: LOCALE_NAME[code] ?? code })),
     onItemClick: ({ detail }) => {
+      // items は SUPPORTED_LOCALES のみなので detail.id は常に既知 locale (= includes 偽は不到達)。
+      /* v8 ignore next */
       if ((SUPPORTED_LOCALES as readonly string[]).includes(detail.id)) {
         setLocale(detail.id as LocaleCode);
       }
@@ -111,6 +119,8 @@ export function ShellLayout({ children }: { children: ReactNode }) {
               { type: "link", href: "/identity-providers", text: "Identity providers" },
             ]}
             onFollow={(e) => {
+              // SideNavigation の link は全て internal (external:true なし) なので偽は不到達。
+              /* v8 ignore next */
               if (!e.detail.external) {
                 e.preventDefault();
                 navigate(e.detail.href);
