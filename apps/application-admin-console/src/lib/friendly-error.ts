@@ -152,10 +152,11 @@ function extractBackendEnvelope(rawMessage: string): BackendErrorEnvelope | null
   if (!body.startsWith("{")) return null;
   try {
     const parsed = JSON.parse(body) as unknown;
-    if (parsed && typeof parsed === "object") {
-      return parsed as BackendErrorEnvelope;
-    }
-    return null;
+    // body は "{" 始まりに限定済 (上の guard) なので parse 成功時は必ず object。
+    // 非 object 分岐は到達不能な防御 guard。
+    /* v8 ignore next */
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as BackendErrorEnvelope;
   } catch {
     return null;
   }
