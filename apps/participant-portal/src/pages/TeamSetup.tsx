@@ -55,6 +55,34 @@ export function formatTeamSetupSubmitError(err: unknown, validationMessage: stri
 }
 
 /**
+ * TopNavigation の言語切替 dropdown utility を組む。 component から切り出して onItemClick の
+ * 分岐 (= SUPPORTED_LOCALES に含まれる id のみ setLocale) を単体で検証できるようにした。
+ */
+export function buildLocaleUtility(
+  locale: LocaleCode,
+  t: (key: string) => string,
+  setLocale: (code: LocaleCode) => void,
+): TopNavigationProps.Utility {
+  return {
+    type: "menu-dropdown",
+    iconName: "globe",
+    ariaLabel: t("switcher.aria_label"),
+    text: LOCALE_DICTIONARIES_NAME[locale] ?? locale,
+    items: SUPPORTED_LOCALES.map((code) => ({
+      id: code,
+      // SUPPORTED_LOCALES は dict と同期済なので ?? 右辺は型安全用の不到達分岐。
+      /* v8 ignore next */
+      text: LOCALE_DICTIONARIES_NAME[code] ?? code,
+    })),
+    onItemClick: ({ detail }) => {
+      if ((SUPPORTED_LOCALES as readonly string[]).includes(detail.id)) {
+        setLocale(detail.id as LocaleCode);
+      }
+    },
+  };
+}
+
+/**
  * 競技者がログイン直後に通る team name 入力ページ。 `PATCH /portal/me` でサーバ側
  * `displayTeamName` を設定し、 AuthProvider のセッションを更新して `/` に戻る。
  *
@@ -86,6 +114,9 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
   });
 
   const handleSubmit = async () => {
+    // submit button は disabled={!canSubmit} なので canSubmit=false では呼ばれない。
+    // canSubmit は sessionToken を要求するので auth.session も非 null。 = 防御的な不到達分岐。
+    /* v8 ignore next */
     if (!canSubmit || !auth.session) return;
     setSubmitting(true);
     setError(null);
@@ -123,24 +154,10 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
     }
   };
 
-  const utilities = useMemo<TopNavigationProps.Utility[]>(() => {
-    const localeUtility: TopNavigationProps.Utility = {
-      type: "menu-dropdown",
-      iconName: "globe",
-      ariaLabel: t("switcher.aria_label"),
-      text: LOCALE_DICTIONARIES_NAME[locale] ?? locale,
-      items: SUPPORTED_LOCALES.map((code) => ({
-        id: code,
-        text: LOCALE_DICTIONARIES_NAME[code] ?? code,
-      })),
-      onItemClick: ({ detail }) => {
-        if ((SUPPORTED_LOCALES as readonly string[]).includes(detail.id)) {
-          setLocale(detail.id as LocaleCode);
-        }
-      },
-    };
-    return [localeUtility];
-  }, [locale, setLocale, t]);
+  const utilities = useMemo<TopNavigationProps.Utility[]>(
+    () => [buildLocaleUtility(locale, t, setLocale)],
+    [locale, setLocale, t],
+  );
 
   return (
     <>
