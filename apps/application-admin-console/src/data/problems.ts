@@ -35,6 +35,8 @@ export interface ProblemSummary {
    * 未宣言なら全 AWS region から選べる (= 後方互換)。
    */
   supportedRegions?: readonly string[];
+  /** ADR-026 / ADR-027: 問題が deploy される cloud (provider) と engine。 未宣言は aws/cloudformation。 */
+  runtime: { readonly provider: string; readonly engine: string };
 }
 
 export interface ProblemDetail extends ProblemSummary {
@@ -66,6 +68,8 @@ export interface ProblemMetadata {
   learningGoals: string[];
   cfnTemplate: string;
   cfnParameters?: Record<string, string>;
+  /** ADR-026 / ADR-027: 問題の実行環境 (provider/engine)。 未宣言は aws/cloudformation 既定。 */
+  runtime?: { provider?: string; engine?: string; entry?: string };
   /** Issue #1201: 問題作成者宣言の推奨 region。 wizard が初期値に使う。 */
   defaultRegion?: string;
   /** Issue #1201 Phase 2: 動作確認済 region 集合。 wizard が picker の選択肢を絞る。 */
@@ -93,6 +97,11 @@ export function metadataToDetail(metadata: ProblemMetadata): ProblemDetail {
     description: metadata.description,
     exposedPorts: metadata.exposedPorts,
     learningGoals: metadata.learningGoals,
+    // ADR-026 / ADR-027: 実行環境。 未宣言の legacy 問題は aws/cloudformation 既定。
+    runtime: {
+      provider: metadata.runtime?.provider ?? "aws",
+      engine: metadata.runtime?.engine ?? "cloudformation",
+    },
     ...(metadata.defaultRegion ? { defaultRegion: metadata.defaultRegion } : {}),
     ...(metadata.supportedRegions && metadata.supportedRegions.length > 0
       ? { supportedRegions: metadata.supportedRegions }
@@ -119,6 +128,7 @@ export function listProblemSummaries(): readonly ProblemSummary[] {
     difficulty: p.difficulty,
     estimatedDuration: p.estimatedDuration,
     tags: p.tags,
+    runtime: p.runtime,
     // region 系は ProblemSummary でも optional。 現状 catalog の全 problem が region を宣言
     // するため omit 分岐 (= region 無し problem) は実データで到達しない (= 将来 problem 用に保持)。
     // mapping 本体の分岐網羅は metadataToDetail のユニットテストで担保済。

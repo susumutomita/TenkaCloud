@@ -23,6 +23,7 @@ function p(over: Partial<ProblemSummary> & { id: string }): ProblemSummary {
     difficulty: 3,
     estimatedDuration: "30m",
     tags: [],
+    runtime: { provider: "aws", engine: "cloudformation" },
     ...over,
   };
 }

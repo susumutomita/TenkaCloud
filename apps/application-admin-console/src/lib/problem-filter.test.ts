@@ -17,6 +17,7 @@ const sample = (over: Partial<ProblemSummary> = {}): ProblemSummary => ({
   difficulty: 1,
   estimatedDuration: "30 分",
   tags: ["sample", "challenge", "ssm", "flag"],
+  runtime: { provider: "aws", engine: "cloudformation" },
   ...over,
 });
 

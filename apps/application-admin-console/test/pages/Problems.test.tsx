@@ -32,6 +32,7 @@ const summary = (over: Partial<ProblemSummary> = {}): ProblemSummary =>
     difficulty: 1,
     estimatedDuration: "30m",
     tags: ["web", "sqli"],
+    runtime: { provider: "aws", engine: "cloudformation" },
     ...over,
   }) as ProblemSummary;
 const CATALOG: ProblemSummary[] = [
@@ -77,6 +78,18 @@ describe("ProblemsPage", () => {
     expect(
       screen.getAllByText("Battle").some((e) => e.closest(".awsui_badge, [class*=badge]")),
     ).toBe(true);
+  });
+
+  it("should render the runtime provider badge per card (AWS / multi-cloud brand / raw fallback)", () => {
+    mockList.mockReturnValue([
+      summary({ id: "a", name: "Alpha" }), // aws 既定
+      summary({ id: "s", name: "Sky", runtime: { provider: "sakura", engine: "apprun" } }),
+      summary({ id: "f", name: "Fly", runtime: { provider: "fly", engine: "machines" } }),
+    ]);
+    renderPage();
+    expect(screen.getByText("AWS")).toBeInTheDocument();
+    expect(screen.getByText("Sakura Cloud")).toBeInTheDocument();
+    expect(screen.getByText("fly")).toBeInTheDocument(); // 未知 provider は raw id
   });
 
   it("should filter by search text and show a filtered counter + clear button", () => {

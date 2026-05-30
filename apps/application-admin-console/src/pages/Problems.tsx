@@ -27,6 +27,17 @@ import {
 const DIFFICULTY_LEVELS: DifficultyLevel[] = [1, 2, 3, 4, 5];
 
 /**
+ * ADR-026 / ADR-027: イベントを組む organizer に、 各問題の deploy 先 cloud を明示する
+ * badge 表示名。 brand 名なので locale 非依存。 未知 provider は raw 値をそのまま出す。
+ */
+const PROVIDER_LABEL: Record<string, string> = {
+  aws: "AWS",
+  sakura: "Sakura Cloud",
+  azure: "Azure",
+  gcp: "Google Cloud",
+};
+
+/**
  * 問題一覧ページ。Cloudscape Cards で 1 件ずつカード表示する。
  * クリックすると /problems/:id へ遷移して詳細 + Deploy ボタン。
  *
@@ -200,6 +211,10 @@ export function ProblemsPage() {
               content: (item) => (
                 <SpaceBetween direction="horizontal" size="xs">
                   <Badge color={item.category === "Battle" ? "red" : "blue"}>{item.category}</Badge>
+                  {/* ADR-026 / ADR-027: deploy 先 cloud。 aws 以外 (multi-cloud) は緑で強調。 */}
+                  <Badge color={item.runtime.provider === "aws" ? "grey" : "green"}>
+                    {PROVIDER_LABEL[item.runtime.provider] ?? item.runtime.provider}
+                  </Badge>
                   <Badge color="grey">
                     {interpolate(t("problems.badge_difficulty"), {
                       label: difficultyLabel(item.difficulty),
