@@ -13,7 +13,7 @@ import { ScoreEventsPage } from "./pages/ScoreEvents";
 import { SsoCredentialsPage } from "./pages/SsoCredentials";
 import { TeamSetupPage } from "./pages/TeamSetup";
 
-function RequireAuth({
+export function RequireAuth({
   requireTeamName,
   children,
 }: {
