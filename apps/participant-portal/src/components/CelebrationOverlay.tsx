@@ -32,12 +32,15 @@ function buildParticles(seed: number): readonly Particle[] {
   for (let i = 0; i < PARTICLE_COUNT; i++) {
     const r = ((Math.sin(seed * 9301 + i * 49297) + 1) / 2 + 0.001) % 1;
     const r2 = ((Math.sin(seed * 233 + i * 7919) + 1) / 2 + 0.001) % 1;
+    // i % COLORS.length は常に有効 index なので ?? は noUncheckedIndexedAccess 用の到達不能防御。
+    /* v8 ignore next */
+    const color = COLORS[i % COLORS.length] ?? "#fc4d75";
     out.push({
       id: i,
       left: r * 100,
       delay: r2 * 500,
       duration: 1800 + r * 1000,
-      color: COLORS[i % COLORS.length] ?? "#fc4d75",
+      color,
       rotate: r * 360,
       size: 6 + r2 * 8,
     });
