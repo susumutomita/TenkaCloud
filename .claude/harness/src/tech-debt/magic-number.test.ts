@@ -65,6 +65,46 @@ describe("magic-number", () => {
       expect(findings).toHaveLength(1);
       expect(findings[0]?.match).toBe("timeout-ms:30000");
     });
+
+    it("should NOT flag a SCREAMING_SNAKE named timeout constant (= the recommended named form)", () => {
+      // `const POLL_INTERVAL_MS = 30_000;` contains the hint word "INTERVAL" but is
+      // itself the named constant the rule asks for — flagging it would flag the fix.
+      const code = "const POLL_INTERVAL_MS = 30_000;";
+      const findings = magicNumber.check({
+        files: [PROD_PATH],
+        readFile: () => code,
+      });
+      expect(findings).toHaveLength(0);
+    });
+
+    it("should NOT flag an exported named timeout constant", () => {
+      const code = "export const NOTIFICATIONS_POLL_INTERVAL_MS = 60_000;";
+      const findings = magicNumber.check({
+        files: [PROD_PATH],
+        readFile: () => code,
+      });
+      expect(findings).toHaveLength(0);
+    });
+
+    it("should still flag a bare timeout literal used at a call site", () => {
+      // The exemption is only for the named declaration, not for bare uses.
+      const code = "const NOTIFY_MS = 60_000;\nsetTimeout(() => setCopied(false), 30000);";
+      const findings = magicNumber.check({
+        files: [PROD_PATH],
+        readFile: () => code,
+      });
+      expect(findings).toHaveLength(1);
+      expect(findings[0]?.match).toBe("timeout-ms:30000");
+    });
+
+    it("should still flag a camelCase numeric binding (only SCREAMING_SNAKE is the named form)", () => {
+      const code = "const pollIntervalMs = 30000;";
+      const findings = magicNumber.check({
+        files: [PROD_PATH],
+        readFile: () => code,
+      });
+      expect(findings).toHaveLength(1);
+    });
   });
 
   describe("port detection", () => {
