@@ -128,6 +128,9 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             const meta = allProblems.find((p) => p.id === opt.value);
             return {
               problemId: opt.value,
+              // option は problemOptions (= allProblems 由来) なので meta は必ず見つかる。
+              // = meta?. の null 側 / ?? opt.value は不到達 (防御)。
+              /* v8 ignore next */
               problemName: meta?.name ?? opt.value,
               // Issue #1201: 問題 metadata の defaultRegion を初期値に採用 (= 全 event
               // が ap-northeast-1 に集中するのを防ぐ)。 未宣言なら従来通り
@@ -171,6 +174,9 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   const [deployStarting, setDeployStarting] = useState(false);
 
   const handleSubmit = async () => {
+    // submit button は disabled={!canSubmit} なので canSubmit 偽では発火し得ず、 canSubmit 真なら
+    // apiClient は非 null (canSubmit に含む)。 = この guard の return は UI 経路では不到達 (防御)。
+    /* v8 ignore next */
     if (!canSubmit || !apiClient) return;
     setSubmitting(true);
     setError(null);
@@ -196,6 +202,9 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   };
 
   const handleDeployNow = async () => {
+    // modal は deployPromptTarget!==null のときだけ表示され、 そのとき apiClient も非 null。
+    // = この guard の return は不到達 (防御)。
+    /* v8 ignore next */
     if (!deployPromptTarget || !apiClient) return;
     setDeployStarting(true);
     try {
@@ -214,6 +223,8 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   };
 
   const handleDeployLater = () => {
+    // modal は deployPromptTarget!==null のときだけ表示されるので return は不到達 (防御)。
+    /* v8 ignore next */
     if (!deployPromptTarget) return;
     navigate(`/events/${deployPromptTarget.eventId}`);
     setDeployPromptTarget(null);
