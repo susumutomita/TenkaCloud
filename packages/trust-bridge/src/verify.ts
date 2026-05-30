@@ -70,8 +70,6 @@ function mapJwsReason(reason: VerifyOutcome & { ok: false }): IntentVerifyFailur
       return "jws-signature-mismatch";
     case "payload-parse-failed":
       return "jws-payload-parse-failed";
-    case "payload-schema-invalid":
-      return "schema-invalid";
   }
 }
 
@@ -92,18 +90,26 @@ export async function verifyIntent(
   const intent = schemaOutcome.intent;
   const now = (options.now ?? (() => new Date()))();
   const expiresAt = new Date(intent.constraints.expiresAt);
+  // Defense-in-depth: ConstraintsSchema enforces `z.string().datetime()`, so a value reaching
+  // here always parses to a valid Date — provably unreachable through the validated path. Kept
+  // in case the schema is ever loosened.
+  /* v8 ignore start */
   if (Number.isNaN(expiresAt.getTime())) {
-    // datetime() で schema が弾く想定だが防御的に。
     return { ok: false, reason: "schema-invalid", details: ["constraints.expiresAt"] };
   }
+  /* v8 ignore stop */
   if (expiresAt.getTime() <= now.getTime()) {
     return { ok: false, reason: "expired" };
   }
   if (intent.constraints.notBefore) {
     const nbf = new Date(intent.constraints.notBefore);
+    // Defense-in-depth: `notBefore` is `z.string().datetime().optional()`, so a present value
+    // always parses — provably unreachable through the validated path.
+    /* v8 ignore start */
     if (Number.isNaN(nbf.getTime())) {
       return { ok: false, reason: "schema-invalid", details: ["constraints.notBefore"] };
     }
+    /* v8 ignore stop */
     if (now.getTime() < nbf.getTime()) {
       return { ok: false, reason: "not-yet-valid" };
     }
