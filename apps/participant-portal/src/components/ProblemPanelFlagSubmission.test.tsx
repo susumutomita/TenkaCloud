@@ -8,9 +8,12 @@ import { I18nProvider } from "../i18n";
 import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
 
 /**
- * Issue #1315: progressive hint reveal の順序制約 (= Hint N は Hint 1..N-1 が
- * revealed のときのみ enable) と、 backend 409 hint_out_of_order を受け取ったときの
- * UI message 表示を pin する。
+ * FlagSubmissionPanel + HintsPanel を実 provider (AppConfigProvider + I18nProvider) で
+ * render し、 flag submit (mock / backend × ok / wrong±penalty / already_scored / error /
+ * 空入力) と progressive hint reveal (順序制約 #1315 / confirm modal / 成功 / error /
+ * hint_out_of_order / dismiss / cancel / penalty 有無) を pin する。
+ *
+ * submitFlag / revealHint だけ mock し、 evaluateMockFlag・PortalValidationError・i18n は実物。
  */
 
 const apiMocks = vi.hoisted(() => ({
@@ -23,16 +26,15 @@ vi.mock("../api/portal-client", async (importOriginal) => {
   return { ...actual, revealHint: apiMocks.revealHint, submitFlag: apiMocks.submitFlag };
 });
 
-function withProviders(node: React.ReactNode) {
-  // mode="backend" (= isMock=false) で revealHint API を実際に叩く (= mock 経由) ルートを通す。
+function withProviders(node: React.ReactNode, mode: "backend" | "dev-mock" = "backend") {
   return (
     <AppConfigProvider
       config={{
         apiBaseUrl: "https://api.example.com",
         eventTitle: "Test event",
         eventRegion: "ap-northeast-1",
-        mode: "backend",
-        cloudMode: "real",
+        mode,
+        cloudMode: mode === "backend" ? "real" : "mock",
       }}
     >
       <I18nProvider>{node}</I18nProvider>
@@ -40,21 +42,132 @@ function withProviders(node: React.ReactNode) {
   );
 }
 
+const baseProps = {
+  apiBaseUrl: "https://api.example.com",
+  sessionToken: "team-key",
+  problemId: "hello-world",
+  flagSubmitted: false,
+  points: 100,
+  hints: [],
+  onScored: async () => undefined,
+} as const;
+
+function renderPanel(
+  overrides: Partial<React.ComponentProps<typeof FlagSubmissionPanel>> = {},
+  mode: "backend" | "dev-mock" = "backend",
+) {
+  return render(withProviders(<FlagSubmissionPanel {...baseProps} {...overrides} />, mode));
+}
+
+const SUBMIT = "Submit flag (+100 pt)";
+
+beforeEach(() => {
+  // locale を en に固定して文言 assertion を deterministic にする。
+  window.localStorage.setItem("tenkacloud.portal.locale", "en");
+  apiMocks.revealHint.mockReset();
+  apiMocks.submitFlag.mockReset();
+});
+
+afterEach(() => {
+  vi.clearAllMocks();
+  window.localStorage.clear();
+});
+
+describe("FlagSubmissionPanel submit flow", () => {
+  it("should show the celebrate alert when the flag is already submitted", () => {
+    renderPanel({ flagSubmitted: true });
+    expect(
+      screen.getByText("You've already solved this problem. Move on to the next!"),
+    ).toBeInTheDocument();
+  });
+
+  it("should not submit an empty flag", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    expect(apiMocks.submitFlag).not.toHaveBeenCalled();
+  });
+
+  it("should celebrate locally in dev-mock mode on a correct flag", async () => {
+    const user = userEvent.setup();
+    renderPanel({}, "dev-mock");
+    await user.type(screen.getByRole("textbox"), "tenkacloud");
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    expect(await screen.findByText(/🎉 Correct!/)).toBeInTheDocument();
+    expect(apiMocks.submitFlag).not.toHaveBeenCalled();
+  });
+
+  it("should celebrate and refresh on a correct backend flag", async () => {
+    const user = userEvent.setup();
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    apiMocks.submitFlag.mockResolvedValue({ kind: "ok", scoreDelta: 50, totalScore: 150 });
+    renderPanel({ onScored });
+    await user.type(screen.getByRole("textbox"), "stack-output-abc123");
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    expect(await screen.findByText(/🎉 Correct!\s+\+50 pt/)).toBeInTheDocument();
+    expect(apiMocks.submitFlag).toHaveBeenCalledWith(
+      "https://api.example.com",
+      "team-key",
+      "hello-world",
+      "stack-output-abc123",
+    );
+    expect(onScored).toHaveBeenCalled();
+  });
+
+  it("should show a penalty warning on a wrong backend flag", async () => {
+    const user = userEvent.setup();
+    apiMocks.submitFlag.mockResolvedValue({
+      kind: "wrong",
+      scoreDelta: -10,
+      totalScore: 40,
+      wrongCount: 2,
+    });
+    renderPanel();
+    await user.type(screen.getByRole("textbox"), "bad");
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    expect(await screen.findByText("Wrong (-10 pt) — total 40 pt")).toBeInTheDocument();
+  });
+
+  it("should show a plain wrong warning when there is no penalty", async () => {
+    const user = userEvent.setup();
+    apiMocks.submitFlag.mockResolvedValue({
+      kind: "wrong",
+      scoreDelta: 0,
+      totalScore: 0,
+      wrongCount: 1,
+    });
+    renderPanel();
+    await user.type(screen.getByRole("textbox"), "bad");
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    expect(await screen.findByText("Check the value and try again.")).toBeInTheDocument();
+  });
+
+  it("should show the already-scored info", async () => {
+    const user = userEvent.setup();
+    apiMocks.submitFlag.mockResolvedValue({ kind: "already_scored", totalScore: 100 });
+    renderPanel();
+    await user.type(screen.getByRole("textbox"), "late");
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    expect(await screen.findByText("Already solved (total 100 pt).")).toBeInTheDocument();
+  });
+
+  it("should surface a submit error", async () => {
+    const user = userEvent.setup();
+    apiMocks.submitFlag.mockRejectedValue(new Error("server boom"));
+    renderPanel();
+    await user.type(screen.getByRole("textbox"), "x");
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    expect(await screen.findByText("server boom")).toBeInTheDocument();
+  });
+});
+
 const HINTS_3 = [
   { id: "hint-1", penalty: 10, revealed: false },
   { id: "hint-2", penalty: 20, revealed: false },
   { id: "hint-3", penalty: 30, revealed: false },
 ];
 
-afterEach(() => {
-  vi.clearAllMocks();
-});
-
 describe("HintsPanel order constraint (Issue #1315)", () => {
-  beforeEach(() => {
-    apiMocks.revealHint.mockReset();
-  });
-
   function findRevealButtons(): HTMLButtonElement[] {
     // disabled な reveal button は aria-label に "Reveal Hint N first..." を持つ。
     // enabled な reveal button は inner text "Reveal hint" を持つ。 両方を拾うため
@@ -65,19 +178,7 @@ describe("HintsPanel order constraint (Issue #1315)", () => {
   }
 
   it("should enable only the first hint button when no hint is revealed", () => {
-    render(
-      withProviders(
-        <FlagSubmissionPanel
-          apiBaseUrl="https://api.example.com"
-          sessionToken="team-key"
-          problemId="hello-world"
-          flagSubmitted={false}
-          points={100}
-          hints={HINTS_3}
-          onScored={async () => undefined}
-        />,
-      ),
-    );
+    renderPanel({ hints: HINTS_3 });
     const buttons = findRevealButtons();
     expect(buttons).toHaveLength(3);
     expect(buttons[0]).toBeEnabled();
@@ -90,20 +191,8 @@ describe("HintsPanel order constraint (Issue #1315)", () => {
       { ...HINTS_3[0], revealed: true, content: "h1 content" },
       HINTS_3[1],
       HINTS_3[2],
-    ] as typeof HINTS_3;
-    render(
-      withProviders(
-        <FlagSubmissionPanel
-          apiBaseUrl="https://api.example.com"
-          sessionToken="team-key"
-          problemId="hello-world"
-          flagSubmitted={false}
-          points={100}
-          hints={hints}
-          onScored={async () => undefined}
-        />,
-      ),
-    );
+    ];
+    renderPanel({ hints });
     const buttons = findRevealButtons();
     // hint-1 は revealed なので reveal button は出ない (= 2 個)
     expect(buttons).toHaveLength(2);
@@ -111,38 +200,99 @@ describe("HintsPanel order constraint (Issue #1315)", () => {
     expect(buttons[1]).toBeDisabled(); // hint-3
   });
 
-  it("should display a friendly error message when backend returns 409 hint_out_of_order", async () => {
-    // ユーザーが hint 1 を即座に reveal しようとした瞬間 (= state はまだ revealed=false で
-    // button enable) に race condition で hint-2 が backend に到達するケースを想定。
-    // backend の 409 hint_out_of_order を受け取って 「ヒント N を先に公開してください」 を出す。
+  it("should render revealed hint content with a relative timestamp", () => {
+    const { container } = renderPanel({
+      hints: [
+        {
+          id: "hint-1",
+          penalty: 10,
+          revealed: true,
+          content: "the secret answer",
+          revealedAt: "2026-05-20T00:00:00Z",
+        },
+        HINTS_3[1],
+      ],
+    });
+    expect(container.textContent).toContain("the secret answer");
+  });
+});
+
+describe("HintsPanel reveal flow", () => {
+  const oneHint = [{ id: "hint-1", penalty: 10, revealed: false }];
+
+  async function openConfirm(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "Reveal hint" }));
+    return screen.findByRole("button", { name: /^Reveal$/ });
+  }
+
+  it("should reveal a hint after confirmation and refresh", async () => {
+    const user = userEvent.setup();
+    apiMocks.revealHint.mockResolvedValue(undefined);
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    renderPanel({ hints: oneHint, onScored });
+    await user.click(await openConfirm(user));
+    await waitFor(() =>
+      expect(apiMocks.revealHint).toHaveBeenCalledWith(
+        "https://api.example.com",
+        "team-key",
+        "hello-world",
+        "hint-1",
+      ),
+    );
+    expect(onScored).toHaveBeenCalled();
+  });
+
+  it("should display a friendly error when backend returns 409 hint_out_of_order", async () => {
+    const user = userEvent.setup();
     apiMocks.revealHint.mockRejectedValueOnce(
       new PortalValidationError("hint_out_of_order", { missingHintId: "hint-1" }),
     );
-    const user = userEvent.setup();
-    render(
-      withProviders(
-        <FlagSubmissionPanel
-          apiBaseUrl="https://api.example.com"
-          sessionToken="team-key"
-          problemId="hello-world"
-          flagSubmitted={false}
-          points={100}
-          // hint-1 を artificially enable して click → reject される動線
-          hints={[{ ...HINTS_3[0], revealed: false }]}
-          onScored={async () => undefined}
-        />,
-      ),
-    );
-    const revealButton = screen.getByRole("button", { name: /Reveal hint|ヒントを公開する/ });
-    await user.click(revealButton);
-    // confirm modal の submit を押す
-    const confirmButton = await screen.findByRole("button", { name: /^Reveal$|^公開する$/ });
-    await user.click(confirmButton);
+    renderPanel({ hints: oneHint });
+    await user.click(await openConfirm(user));
+    expect(await screen.findByText("Reveal Hint 1 first before this one.")).toBeInTheDocument();
+  });
 
-    await waitFor(() => {
-      // 「ヒント 1 を先に公開してください」 / 「Reveal Hint 1 first before this one.」 を期待
-      const errorEl = screen.queryByText(/Hint 1 first|ヒント 1 を先に公開/);
-      expect(errorEl).not.toBeNull();
-    });
+  it("should default the ordered-hint index to 1 when missingHintId is absent", async () => {
+    const user = userEvent.setup();
+    apiMocks.revealHint.mockRejectedValueOnce(new PortalValidationError("hint_out_of_order"));
+    renderPanel({ hints: oneHint });
+    await user.click(await openConfirm(user));
+    expect(await screen.findByText("Reveal Hint 1 first before this one.")).toBeInTheDocument();
+  });
+
+  it("should show the generic message for a non-validation reveal error", async () => {
+    const user = userEvent.setup();
+    apiMocks.revealHint.mockRejectedValueOnce(new Error("reveal boom"));
+    renderPanel({ hints: oneHint });
+    await user.click(await openConfirm(user));
+    expect(await screen.findByText("reveal boom")).toBeInTheDocument();
+  });
+
+  it("should cancel the confirmation without calling the API", async () => {
+    const user = userEvent.setup();
+    renderPanel({ hints: oneHint });
+    await openConfirm(user);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(apiMocks.revealHint).not.toHaveBeenCalled();
+  });
+
+  it("should dismiss the confirmation modal via the close button", async () => {
+    const user = userEvent.setup();
+    renderPanel({ hints: oneHint });
+    await openConfirm(user);
+    // Cloudscape Modal の閉じる (X) ボタンは portal 上に出るので document から引く → onDismiss 発火。
+    const dismiss = document.querySelector<HTMLButtonElement>('button[class*="dismiss-control"]');
+    expect(dismiss).not.toBeNull();
+    await user.click(dismiss as HTMLButtonElement);
+    expect(apiMocks.revealHint).not.toHaveBeenCalled();
+  });
+
+  it("should show the no-penalty confirmation copy for a free hint", async () => {
+    const user = userEvent.setup();
+    renderPanel({ hints: [{ id: "hint-1", penalty: 0, revealed: false }] });
+    await user.click(screen.getByRole("button", { name: "Reveal hint" }));
+    expect(
+      await screen.findByText("No penalty for this hint. Revealing will display the content."),
+    ).toBeInTheDocument();
   });
 });
