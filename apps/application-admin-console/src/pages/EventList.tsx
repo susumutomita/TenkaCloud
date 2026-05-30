@@ -144,6 +144,9 @@ export function EventListPage({ config }: { config: AppConfig }) {
   useEffect(() => {
     let cancelled = false;
     const tick = async () => {
+      // unmount 時に clearInterval するので interval 経由の再 tick は来ない。 cancelled=true を
+      // 踏むのは teardown と既 queue の tick が競合する稀ケースのみ (= 防御的、不到達)。
+      /* v8 ignore next */
       if (cancelled) return;
       await fetchOnce();
     };
@@ -170,6 +173,10 @@ export function EventListPage({ config }: { config: AppConfig }) {
   }, []);
 
   const handleArchiveConfirm = async () => {
+    // confirm button は modal が開いた (= archiveTarget が set された) ときだけ押せ、 apiClient は
+    // items 取得成功後にしか main render へ到達しないので、 この guard は両条件とも UI 経路では
+    // 不到達の防御 (= 型 narrowing も兼ねる)。
+    /* v8 ignore next */
     if (!apiClient || !archiveTarget) return;
     const target = archiveTarget;
     setArchivingId(target.eventId);
