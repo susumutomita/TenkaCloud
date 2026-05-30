@@ -38,6 +38,8 @@ export function DeployLogSection({
 
   const scrollDeployLog = useCallback((direction: "top" | "bottom") => {
     const el = deployLogRef.current;
+    // ref は描画済 div を指すので button 押下時は常に non-null (= この guard は防御、不到達)。
+    /* v8 ignore next */
     if (!el) return;
     el.scrollIntoView({ block: direction === "top" ? "start" : "end", behavior: "smooth" });
   }, []);
