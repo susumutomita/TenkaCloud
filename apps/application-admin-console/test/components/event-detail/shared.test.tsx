@@ -26,13 +26,11 @@ const dep = (status: EventDeploymentSummary["status"], jobId: string): EventDepl
 describe("eventStatusBadge", () => {
   it("should render the effective status (time-aware) as a badge", () => {
     render(
-      <>
-        {eventStatusBadge({
-          status: "DRAFT",
-          startsAt: undefined,
-          endsAt: undefined,
-        } as EventDetail)}
-      </>,
+      eventStatusBadge({
+        status: "DRAFT",
+        startsAt: undefined,
+        endsAt: undefined,
+      } as EventDetail),
     );
     expect(screen.getByText("DRAFT")).toBeInTheDocument();
   });
@@ -40,16 +38,14 @@ describe("eventStatusBadge", () => {
   it("should compute RUNNING for a READY event currently in its window", () => {
     const now = new Date("2026-06-01T12:00:00Z");
     render(
-      <>
-        {eventStatusBadge(
-          {
-            status: "READY",
-            startsAt: "2026-06-01T00:00:00Z",
-            endsAt: "2026-06-02T00:00:00Z",
-          } as EventDetail,
-          now,
-        )}
-      </>,
+      eventStatusBadge(
+        {
+          status: "READY",
+          startsAt: "2026-06-01T00:00:00Z",
+          endsAt: "2026-06-02T00:00:00Z",
+        } as EventDetail,
+        now,
+      ),
     );
     expect(screen.getByText("RUNNING")).toBeInTheDocument();
   });
@@ -57,16 +53,16 @@ describe("eventStatusBadge", () => {
 
 describe("renderProblemDeployStatus", () => {
   it("should show the undeployed hint for missing or empty deployments", () => {
-    const a = render(<>{renderProblemDeployStatus(undefined, t)}</>);
+    const a = render(renderProblemDeployStatus(undefined, t));
     expect(screen.getByText("event_detail.deploy_status_undeployed")).toBeInTheDocument();
     a.unmount();
-    render(<>{renderProblemDeployStatus([], t)}</>);
+    render(renderProblemDeployStatus([], t));
     expect(screen.getByText("event_detail.deploy_status_undeployed")).toBeInTheDocument();
   });
 
   it("should show the complete ratio without extra badges when all done", () => {
     const { container } = render(
-      <>{renderProblemDeployStatus([dep("COMPLETE", "j1"), dep("AUTO_DELETED", "j2")], t)}</>,
+      renderProblemDeployStatus([dep("COMPLETE", "j1"), dep("AUTO_DELETED", "j2")], t),
     );
     expect(container.textContent).toContain("2 / 2"); // complete / total
     expect(screen.queryByText("event_detail.deploy_status_failed_badge")).not.toBeInTheDocument();
@@ -75,18 +71,16 @@ describe("renderProblemDeployStatus", () => {
 
   it("should add failed and in-flight badges when present", () => {
     render(
-      <>
-        {renderProblemDeployStatus(
-          [
-            dep("COMPLETE", "j1"),
-            dep("FAILED", "j2"),
-            dep("EXPIRED", "j3"),
-            dep("PENDING", "j4"),
-            dep("IN_PROGRESS", "j5"),
-          ],
-          t,
-        )}
-      </>,
+      renderProblemDeployStatus(
+        [
+          dep("COMPLETE", "j1"),
+          dep("FAILED", "j2"),
+          dep("EXPIRED", "j3"),
+          dep("PENDING", "j4"),
+          dep("IN_PROGRESS", "j5"),
+        ],
+        t,
+      ),
     );
     expect(screen.getByText("event_detail.deploy_status_failed_badge")).toBeInTheDocument();
     expect(screen.getByText("event_detail.deploy_status_in_flight")).toBeInTheDocument();
@@ -95,12 +89,12 @@ describe("renderProblemDeployStatus", () => {
 
 describe("renderProblemJobLinks", () => {
   it("should show an em-dash when there are no deployments", () => {
-    render(<>{renderProblemJobLinks([])}</>);
+    render(renderProblemJobLinks([]));
     expect(screen.getByText("—")).toBeInTheDocument();
   });
 
   it("should render a job link + status badge per deployment", () => {
-    render(<>{renderProblemJobLinks([dep("COMPLETE", "j1"), dep("FAILED", "j2")])}</>);
+    render(renderProblemJobLinks([dep("COMPLETE", "j1"), dep("FAILED", "j2")]));
     expect(screen.getByText("Job #1 ↗")).toBeInTheDocument();
     expect(screen.getByText("Job #2 ↗")).toBeInTheDocument();
     expect(screen.getByText("COMPLETE")).toBeInTheDocument();
@@ -109,8 +103,7 @@ describe("renderProblemJobLinks", () => {
 });
 
 describe("scoringBadge", () => {
-  const badge = (detail: Partial<EventDetail>) =>
-    render(<>{scoringBadge(detail as EventDetail, t)}</>);
+  const badge = (detail: Partial<EventDetail>) => render(scoringBadge(detail as EventDetail, t));
 
   it("should show locked when scoring is locked", () => {
     badge({ scoringLocked: true, status: "READY" });
