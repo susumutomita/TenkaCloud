@@ -21,6 +21,7 @@ import {
 } from "../api/events-client";
 import type { AppConfig } from "../config";
 import { interpolate, useT } from "../i18n";
+import { toErrorMessage } from "../lib/error-message";
 
 const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"> = {
   DRAFT: "blue",
@@ -117,7 +118,7 @@ export function describeArchiveError(err: unknown, name: string, t: TFn): string
       ? interpolate(t("event_list.archive_conflict_known"), { name, current })
       : interpolate(t("event_list.archive_conflict_unknown"), { name });
   }
-  return err instanceof Error ? err.message : String(err);
+  return toErrorMessage(err);
 }
 
 export function EventListPage({ config }: { config: AppConfig }) {
@@ -137,7 +138,7 @@ export function EventListPage({ config }: { config: AppConfig }) {
       setItems(res.items);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     }
   }, [apiClient]);
 

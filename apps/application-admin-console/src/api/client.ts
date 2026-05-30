@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { toErrorMessage } from "../lib/error-message";
 
 /**
  * apps/admin-console/src/api/client.ts と同実装 (tenant API 呼び出し用の最小 HTTP client)。
@@ -37,7 +38,7 @@ export function createApiClient(baseUrl: string, idToken: string): ApiClient {
       // 上位 UI で 「ネットワーク経路エラー」 として region / API URL / 推奨手順を
       // 含む operator-friendly message に変換できるようにする。 status=0 を sentinel
       // にして上位 friendly-error mapping から判別する。
-      const detail = err instanceof Error ? err.message : String(err);
+      const detail = toErrorMessage(err);
       throw new ApiError(
         0,
         `Network error: ${detail} (URL: ${url.toString()}, method: ${init.method ?? "GET"})`,

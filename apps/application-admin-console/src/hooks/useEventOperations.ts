@@ -13,6 +13,7 @@ import {
   setEventSchedule,
   unlockEventScoring,
 } from "../api/events-client";
+import { toErrorMessage } from "../lib/error-message";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -74,7 +75,7 @@ function formatEndEventError(err: unknown, t: Translate): string {
       ? t("event_detail.error_end_status_with_current", { current })
       : t("event_detail.error_end_status");
   }
-  return err instanceof Error ? err.message : String(err);
+  return toErrorMessage(err);
 }
 
 export function useEventOperations(args: {
@@ -125,7 +126,7 @@ export function useEventOperations(args: {
       setBulkResult(res);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     } finally {
       setBulkInFlight(null);
     }
@@ -141,7 +142,7 @@ export function useEventOperations(args: {
       setBulkResult(res);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     } finally {
       setBulkInFlight(null);
     }
@@ -155,7 +156,7 @@ export function useEventOperations(args: {
       await setEventSchedule(apiClient, eventId, { startNow: true });
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     } finally {
       setScheduleInFlight(null);
     }
@@ -177,7 +178,7 @@ export function useEventOperations(args: {
       setScheduleTime("");
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     } finally {
       setScheduleInFlight(null);
     }
@@ -201,7 +202,7 @@ export function useEventOperations(args: {
       setEndsAtTime("");
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     } finally {
       setEndsAtInFlight(false);
     }
@@ -215,7 +216,7 @@ export function useEventOperations(args: {
       await setEventSchedule(apiClient, eventId, { endsAt: new Date(Date.now()).toISOString() });
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     } finally {
       setEndsAtInFlight(false);
     }
@@ -239,7 +240,7 @@ export function useEventOperations(args: {
       await setEventSchedule(apiClient, eventId, { scoreboardFreezeMinutes: n });
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     } finally {
       setFreezeMinutesInFlight(false);
     }
@@ -256,7 +257,7 @@ export function useEventOperations(args: {
       if (err instanceof ApiError && err.status === StatusCodes.CONFLICT) {
         setError(t("event_detail.error_lock_status"));
       } else {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(toErrorMessage(err));
       }
     } finally {
       setScoringLockInFlight(null);
@@ -274,7 +275,7 @@ export function useEventOperations(args: {
       if (err instanceof ApiError && err.status === StatusCodes.CONFLICT) {
         setError(t("event_detail.error_unlock_status"));
       } else {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(toErrorMessage(err));
       }
     } finally {
       setScoringLockInFlight(null);
@@ -290,7 +291,7 @@ export function useEventOperations(args: {
       await archiveEvent(apiClient, eventId);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     } finally {
       setForceArchiveInFlight(false);
     }

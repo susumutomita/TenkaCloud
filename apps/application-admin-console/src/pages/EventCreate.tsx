@@ -14,6 +14,7 @@ import { DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries } from "../data/problems";
 import { useT } from "../i18n";
 import { filterVerifiedAccounts } from "../lib/competitor-accounts-filter";
+import { toErrorMessage } from "../lib/error-message";
 import { EventCreateAccountsAlerts } from "./event-create/EventCreateAccountsAlerts";
 import { EventCreateBasicInfoSection } from "./event-create/EventCreateBasicInfoSection";
 import { EventCreateDeployPromptModal } from "./event-create/EventCreateDeployPromptModal";
@@ -189,7 +190,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
       // Issue #1067: 即 navigate せず deploy 促し modal を出す。
       setDeployPromptTarget({ eventId: res.eventId });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -205,7 +206,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     } catch (err) {
       // bulk deploy 失敗時も Event 自体は作成済なので EventDetail に navigate して
       // operator が手動 deploy できる経路を残す。 error 表示は EventDetail 側 polling で拾われる。
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
       navigate(`/events/${deployPromptTarget.eventId}`);
     } finally {
       setDeployStarting(false);

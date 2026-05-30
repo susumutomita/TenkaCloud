@@ -20,6 +20,7 @@ import {
 import type { AppConfig } from "../config";
 import { findProblem } from "../data/problems";
 import { useT } from "../i18n";
+import { toErrorMessage } from "../lib/error-message";
 import {
   DEPLOYMENT_LIST_PAGE_SIZE,
   DEPLOYMENT_LIST_POLL_INTERVAL_MS,
@@ -188,7 +189,7 @@ function ProblemDeploymentsSection({
       setItems((prev) => (prev && !deploymentsChanged(prev, res.items) ? prev : res.items));
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     }
   }, [apiClient, problemId]);
 
