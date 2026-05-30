@@ -49,7 +49,7 @@ export function computeEffectiveStatus(
   now: Date = new Date(),
 ): EffectiveStatus {
   // 1. terminal status は時刻無関係 (= 運営者が明示的に倒した状態を尊重)
-  if (event.status === "ARCHIVED" || event.status === "TEARDOWN" || event.status === "ENDED") {
+  if (isTerminalEventStatus(event.status)) {
     return event.status;
   }
   // 2. deploy 前後の status は時刻に意味がない (= 競技開始時刻を過ぎていても deploy 未完了は RUNNING ではない)
@@ -68,4 +68,20 @@ export function computeEffectiveStatus(
 
   // 5. それ以外 (= READY + startsAt 未来 or startsAt なし)
   return event.status;
+}
+
+/**
+ * これ以上 deploy / 編集できない終端 status (= 運営者が明示終了させた状態) かを判定する。
+ * `status === "ENDED" || "TEARDOWN" || "ARCHIVED"` が EventHeaderActions (×3) / OperationsTab /
+ * scoringBadge / computeEffectiveStatus に 6 箇所コピペされていたのを集約する。
+ * (EventPhaseBanner は raw status ではなく EffectiveStatus = RUNNING を含む別ドメインなので対象外。)
+ */
+const TERMINAL_EVENT_STATUSES: ReadonlySet<EventStatus> = new Set<EventStatus>([
+  "ENDED",
+  "TEARDOWN",
+  "ARCHIVED",
+]);
+
+export function isTerminalEventStatus(status: EventStatus): boolean {
+  return TERMINAL_EVENT_STATUSES.has(status);
 }

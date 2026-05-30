@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeEffectiveStatus } from "../../src/lib/effective-event-status";
+import type { EventStatus } from "../../src/api/events-client";
+import {
+  computeEffectiveStatus,
+  isTerminalEventStatus,
+} from "../../src/lib/effective-event-status";
 
 const PAST = "2026-05-01T00:00:00Z";
 const FUTURE = "2099-01-01T00:00:00Z";
@@ -94,5 +98,23 @@ describe("computeEffectiveStatus", () => {
   it("should default the `now` argument to current time when omitted", () => {
     // PAST < Date.now() なので RUNNING になるはず。
     expect(computeEffectiveStatus({ status: "READY", startsAt: PAST })).toBe("RUNNING");
+  });
+});
+
+describe("isTerminalEventStatus", () => {
+  it.each<EventStatus>([
+    "ENDED",
+    "TEARDOWN",
+    "ARCHIVED",
+  ])("should be true for terminal status %s", (status) => {
+    expect(isTerminalEventStatus(status)).toBe(true);
+  });
+
+  it.each<EventStatus>([
+    "DRAFT",
+    "DEPLOYING",
+    "READY",
+  ])("should be false for non-terminal status %s", (status) => {
+    expect(isTerminalEventStatus(status)).toBe(false);
   });
 });

@@ -5,6 +5,7 @@ import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { DeployProgressPanel } from "../../components/event-detail/DeployProgressPanel";
 import { EventRescuePanel } from "../../components/event-detail/EventWizardPanel";
+import { isTerminalEventStatus } from "../../lib/effective-event-status";
 import type { EventTabContentProps } from "./tab-content-props";
 
 /**
@@ -30,8 +31,7 @@ export function OperationsTab({
   operations,
   t,
 }: EventTabContentProps) {
-  const bulkDisabled =
-    detail.status === "ENDED" || detail.status === "TEARDOWN" || detail.status === "ARCHIVED";
+  const bulkDisabled = isTerminalEventStatus(detail.status);
   return (
     <SpaceBetween size="l">
       <Header variant="h2">{t("event_detail.operations_header")}</Header>
