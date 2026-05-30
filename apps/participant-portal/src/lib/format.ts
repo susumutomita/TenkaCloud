@@ -1,37 +1,12 @@
 /**
- * Issue #1362: Qiita 原則 「DB 生値そのまま表示しない」 のための pure formatter。
+ * Issue #1362 / #1446: Qiita 原則 「DB 生値そのまま表示しない」 のための pure formatter。
  *
- * admin-console / application-admin-console 側にも同 API を置く (= mono-repo 内 3 SPA で
- * 同じ「N 分前」「ステータス和訳」 を再利用)。
+ * 汎用の `formatRelativeTime` は #1446 で `@tenkacloud/format` に集約し re-export する
+ * (呼び出し元 `from "../lib/format"` は不変)。 participant-portal 固有の formatter
+ * (`formatOccurredAtTooltip` / `describeAgo` = score 専用、 別ドメイン) はここに残す。
  */
 
-export type SupportedLang = "ja" | "en";
-
-/**
- * ISO timestamp → 「N 分前 / N 時間前 / N 日前 / 今」 の人間可読形式。
- *
- * `describeAgo` (= score 専用 / 「N 秒前」 まで細かく見せる) とは別系統。 こちらは
- * 一般 UI (= 「最終ログイン」 「公開時刻」 等) 向けで 秒精度は出さない。
- */
-export function formatRelativeTime(
-  iso: string | null | undefined,
-  lang: SupportedLang = "ja",
-  now: Date = new Date(),
-): string {
-  if (!iso) return "—";
-  const ms = new Date(iso).getTime();
-  if (!Number.isFinite(ms)) return "—";
-  const diff = Math.max(0, now.getTime() - ms);
-  const sec = Math.floor(diff / 1000);
-  if (sec < 30) return lang === "ja" ? "今" : "just now";
-  const min = Math.floor(sec / 60);
-  if (min < 60) return lang === "ja" ? `${min} 分前` : `${min} min ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return lang === "ja" ? `${hr} 時間前` : `${hr} h ago`;
-  const day = Math.floor(hr / 24);
-  if (day < 30) return lang === "ja" ? `${day} 日前` : `${day} d ago`;
-  return iso.slice(0, 10);
-}
+export { formatRelativeTime, type SupportedLang } from "@tenkacloud/format";
 
 /**
  * Score events cell の hover tooltip 用「UTC + ローカル時刻」併記文字列。

@@ -15,6 +15,7 @@
   "dependencies": {
     "@cloudscape-design/components": "^3.0.1297",
     "@cloudscape-design/global-styles": "^1.0.59",
+    "@tenkacloud/format": "workspace:*",
     "@tenkacloud/portal-plugin-sdk": "workspace:*",
     "dompurify": "^3.4.4",
     "http-status-codes": "^2.3.0",

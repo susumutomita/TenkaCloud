@@ -16,6 +16,7 @@
     "@cloudscape-design/components": "^3.0.1297",
     "@cloudscape-design/global-styles": "^1.0.59",
     "@tenkacloud/auth-client": "workspace:*",
+    "@tenkacloud/format": "workspace:*",
     "http-status-codes": "^2.3.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
