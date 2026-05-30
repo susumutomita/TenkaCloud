@@ -42,6 +42,15 @@ describe("EmptyState", () => {
     btn.click();
     expect(onClick).toHaveBeenCalled();
   });
+
+  it("should render the primary action as an href link with target _self", () => {
+    render(
+      <EmptyState headline="Browse" primaryAction={{ label: "Open catalog", href: "/catalog" }} />,
+    );
+    const link = screen.getByRole("link", { name: "Open catalog" });
+    expect(link).toHaveAttribute("href", "/catalog");
+    expect(link).toHaveAttribute("target", "_self");
+  });
 });
 
 describe("ErrorState", () => {
