@@ -32,6 +32,12 @@ describe("distinctProviders (#1340)", () => {
     });
     expect(new Set(out)).toEqual(new Set(["corp-entra", "corp-okta"]));
   });
+
+  it("should skip blank / whitespace-only provider names (= directory hygiene)", () => {
+    expect(distinctProviders({ "a.com": ["", "  ", "corp-okta"] as unknown as string[] })).toEqual([
+      "corp-okta",
+    ]);
+  });
 });
 
 describe("resolveIdp (#1340)", () => {
@@ -39,6 +45,10 @@ describe("resolveIdp (#1340)", () => {
     expect(resolveIdp("alice@nope.com", { "example.com": ["corp-entra"] })).toEqual({
       kind: "local",
     });
+  });
+
+  it("should resolve `local` when the email has no domain at all (no @)", () => {
+    expect(resolveIdp("no-at-sign", { "example.com": ["corp-entra"] })).toEqual({ kind: "local" });
   });
 
   it("should auto-redirect when exactly one provider serves the domain", () => {
