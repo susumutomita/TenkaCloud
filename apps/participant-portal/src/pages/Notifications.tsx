@@ -38,7 +38,11 @@ export function NotificationsPage() {
   // markNotificationsSeen は巻き戻し防止 + 同値 skip なので no-op が連続しても害なし。
   useEffect(() => {
     if (items && items.length > 0) {
-      markNotificationsSeen(items[0]?.occurredAt ?? "");
+      // length>0 を確認済なので items[0] は必ず存在する (= ?. / ?? "" は noUncheckedIndexedAccess
+      // 用の防御で実行時には到達不能)。
+      /* v8 ignore next */
+      const latest = items[0]?.occurredAt ?? "";
+      markNotificationsSeen(latest);
     }
   }, [items, markNotificationsSeen]);
 
