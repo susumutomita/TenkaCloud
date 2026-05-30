@@ -20,6 +20,8 @@ import { resolveTenantDisplayName } from "../lib/tenant-display";
 const ONBOARDING_DISMISSED_KEY = "TenkaCloud.applicationAdmin.onboardingDismissed";
 
 function readOnboardingDismissed(): boolean {
+  // SPA (SSR なし) なので window は常に定義済 = この SSR guard は不到達 (防御)。
+  /* v8 ignore next */
   if (typeof window === "undefined") return false;
   try {
     return window.localStorage.getItem(ONBOARDING_DISMISSED_KEY) === "true";
@@ -29,10 +31,17 @@ function readOnboardingDismissed(): boolean {
 }
 
 function writeOnboardingDismissed(value: boolean): void {
+  // SPA (SSR なし) なので window は常に定義済 = この SSR guard は不到達 (防御)。
+  /* v8 ignore next */
   if (typeof window === "undefined") return;
   try {
-    if (value) window.localStorage.setItem(ONBOARDING_DISMISSED_KEY, "true");
-    else window.localStorage.removeItem(ONBOARDING_DISMISSED_KEY);
+    // Home からは dismiss (value=true) のみ呼ぶので else (removeItem) は現状不到達 (対称性のため残す防御)。
+    /* v8 ignore next 4 */
+    if (value) {
+      window.localStorage.setItem(ONBOARDING_DISMISSED_KEY, "true");
+    } else {
+      window.localStorage.removeItem(ONBOARDING_DISMISSED_KEY);
+    }
   } catch {
     // localStorage 不可 (= private mode 等) は no-op、毎回表示で安全側
   }
@@ -173,7 +182,7 @@ function KeyValue({
   return (
     <div>
       <Box variant="awsui-key-label">{label}</Box>
-      {valueNode ?? <Box variant="p">{value ?? ""}</Box>}
+      {valueNode ?? <Box variant="p">{value}</Box>}
     </div>
   );
 }
