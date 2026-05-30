@@ -1,6 +1,14 @@
 import { act, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { _testInternals, I18nProvider, interpolate, type LocaleCode, useI18n, useT } from "./index";
+import {
+  _testInternals,
+  I18nProvider,
+  interpolate,
+  type LocaleCode,
+  useI18n,
+  useLang,
+  useT,
+} from "./index";
 
 /**
  * Issue #583 i18n Phase 1.B: admin-console の自前 i18n の pin。
@@ -132,5 +140,51 @@ describe("interpolate (#655)", () => {
 
   it("should return a template without placeholders unchanged", () => {
     expect(interpolate("no placeholder", { a: "X" })).toBe("no placeholder");
+  });
+});
+
+describe("detectBrowserLocale", () => {
+  const setLanguage = (value: string) =>
+    Object.defineProperty(navigator, "language", { value, configurable: true });
+  const original = navigator.language;
+  afterEach(() => setLanguage(original));
+
+  it("should map en-* / ja-* and fall back to ja for unsupported / empty languages", () => {
+    const { detectBrowserLocale } = _testInternals;
+    setLanguage("en-US");
+    expect(detectBrowserLocale()).toBe("en");
+    setLanguage("ja-JP");
+    expect(detectBrowserLocale()).toBe("ja");
+    setLanguage("fr-FR"); // 非対応 → ja
+    expect(detectBrowserLocale()).toBe("ja");
+    setLanguage(""); // navigator.language が空 → `|| "ja"` の RHS
+    expect(detectBrowserLocale()).toBe("ja");
+  });
+});
+
+describe("resolveKey", () => {
+  it("should resolve nested strings and return undefined for non-string / non-object descents", () => {
+    const { resolveKey } = _testInternals;
+    expect(resolveKey({ a: { b: "hit" } }, "a.b")).toBe("hit");
+    expect(resolveKey({ a: { b: "hit" } }, "a")).toBeUndefined(); // node が object → undefined
+    expect(resolveKey({ a: "leaf" }, "a.b.c")).toBeUndefined(); // string を descend → undefined
+  });
+});
+
+describe("t with params / useLang", () => {
+  function wrapper({ children }: { children: React.ReactNode }) {
+    return <I18nProvider>{children}</I18nProvider>;
+  }
+
+  it("should interpolate params passed to t()", () => {
+    const { result } = renderHook(() => useT(), { wrapper });
+    // 既知 key が無くても raw key (= template) に param を埋め込む経路を通す。
+    expect(result.current("greeting {who}", { who: "World" })).toBe("greeting World");
+  });
+
+  it("should expose the active locale via useLang", () => {
+    const { result } = renderHook(() => ({ i18n: useI18n(), lang: useLang() }), { wrapper });
+    act(() => result.current.i18n.setLocale("en"));
+    expect(result.current.lang).toBe("en");
   });
 });

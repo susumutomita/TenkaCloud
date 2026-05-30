@@ -42,6 +42,16 @@ describe("EmptyState", () => {
     btn.click();
     expect(onClick).toHaveBeenCalled();
   });
+
+  it("should render the primary action as a same-tab link when href is given", () => {
+    // primaryAction.href が指定されると target="_self" (同タブ遷移) の link button になる。
+    render(
+      <EmptyState headline="No problems" primaryAction={{ label: "Browse", href: "/problems" }} />,
+    );
+    const link = screen.getByRole("link", { name: "Browse" });
+    expect(link).toHaveAttribute("href", "/problems");
+    expect(link).toHaveAttribute("target", "_self");
+  });
 });
 
 describe("ErrorState", () => {
