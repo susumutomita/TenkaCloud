@@ -6,6 +6,17 @@
  * not leak provider-specific types into the rest of the handler code.
  */
 
+export {
+  classifyRuntimeSupport,
+  EXECUTABLE_ENGINE,
+  EXECUTABLE_PROVIDER,
+  isExecutableRuntime,
+  isReservedRuntime,
+  normalizeRuntime,
+  RESERVED_RUNTIMES,
+  type RuntimeMetadataInput,
+  type RuntimeSupport,
+} from "@tenkacloud/problem-runtime";
 export type {
   ProblemRuntime,
   ProblemRuntimeAdapter,
@@ -24,15 +35,4 @@ export {
   type AwsCloudFormationAdapterContext,
   AwsCloudFormationRuntimeAdapter,
 } from "./aws-cfn-adapter.js";
-export {
-  classifyRuntimeSupport,
-  EXECUTABLE_ENGINE,
-  EXECUTABLE_PROVIDER,
-  isExecutableRuntime,
-  isReservedRuntime,
-  normalizeRuntime,
-  RESERVED_RUNTIMES,
-  type RuntimeMetadataInput,
-  type RuntimeSupport,
-} from "./normalize.js";
 export { type AdapterDependencies, selectAdapter } from "./registry.js";
