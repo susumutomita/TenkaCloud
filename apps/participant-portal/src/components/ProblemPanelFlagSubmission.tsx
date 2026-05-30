@@ -50,13 +50,26 @@ export function FlagSubmissionPanel({
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<SubmitFlagOutcome | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  // dev-mock では submit 後の view refetch が空振りするので、 「celebration を出した
-  // 後は同じ panel で 提出済み 表示にしない」 (= 再度 submit form を出さない) ために
-  // local flag を保持する。
-  const [mockCleared, setMockCleared] = useState(false);
+  // 正解直後 (mock / backend 共通): 祝祭 confetti + 獲得スコアを表示する。 outcome を保持
+  // している限りこの画面を維持するので submit form は再表示されない。 これが mock mode の
+  // 「refetch が空振りして提出済みに切り替わらない」 ケースも吸収するため、 旧 mockCleared
+  // state は不要になった (= 重複した状態を撤去)。
+  if (outcome?.kind === "ok") {
+    return (
+      <>
+        <CelebrationOverlay visible />
+        <Alert
+          type="success"
+          header={t("problem_panel.ok_alert_header", { delta: outcome.scoreDelta })}
+        >
+          {t("problem_panel.ok_alert_body", { total: outcome.totalScore })}
+        </Alert>
+      </>
+    );
+  }
 
-  if (flagSubmitted || mockCleared) {
-    // audit #6: 既出提出 (= reload した後の表示)。 「事務的 提出済み」 ではなく祝祭的 message。
+  if (flagSubmitted) {
+    // audit #6: reload 後など server 由来の 「提出済み」 表示。 事務的ではなく祝祭的 message。
     return (
       <Alert type="success" header={t("problem_panel.celebrate_header", { points })}>
         {t("problem_panel.celebrate_body")}
@@ -75,7 +88,6 @@ export function FlagSubmissionPanel({
         ? evaluateMockFlag(flag, points)
         : await submitFlag(apiBaseUrl, sessionToken, problemId, flag);
       setOutcome(result);
-      if (result.kind === "ok") setMockCleared(true);
       if (!isMock && shouldRefreshAfterFlagSubmit(result)) await onScored();
     } catch (err) {
       setSubmitError(formatProblemPanelActionError(t, err, "problem_panel.submit_error_prefix"));
@@ -120,15 +132,6 @@ export function FlagSubmissionPanel({
           </FormField>
         </Form>
       </form>
-      <CelebrationOverlay visible={outcome?.kind === "ok"} />
-      {outcome?.kind === "ok" && (
-        <Alert
-          type="success"
-          header={t("problem_panel.ok_alert_header", { delta: outcome.scoreDelta })}
-        >
-          {t("problem_panel.ok_alert_body", { total: outcome.totalScore })}
-        </Alert>
-      )}
       {outcome?.kind === "wrong" && (
         <Alert
           type="warning"
@@ -217,6 +220,9 @@ function HintsPanel({
   const [pendingIndex, setPendingIndex] = useState<number>(0);
 
   const handleReveal = async (hintId: string) => {
+    // 再入防止ガード。 唯一の呼び出し元 (confirm modal の submit button) は reveal 実行中
+    // `loading` で無効化されるので UI からは再入できない (= 防御的に残す不到達分岐)。
+    /* v8 ignore next */
     if (revealing) return;
     setRevealing(hintId);
     setRevealError(null);
@@ -317,6 +323,9 @@ function HintsPanel({
                 variant="primary"
                 loading={revealing !== null}
                 onClick={() => {
+                  // submit button は modal が visible (= pendingReveal !== null) のときだけ
+                  // 描画されるので null チェックは型絞り込み用。 else 側は不到達。
+                  /* v8 ignore next */
                   if (pendingReveal) void handleReveal(pendingReveal.id);
                 }}
               >
