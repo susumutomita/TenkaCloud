@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeAgo, formatRelativeTime } from "../../src/lib/format";
+import { describeAgo, formatOccurredAtTooltip, formatRelativeTime } from "../../src/lib/format";
 
 /**
  * `describeAgo` は score 停滞時間の人間可読フォーマット。
@@ -92,5 +92,31 @@ describe("formatRelativeTime", () => {
 
   it("should treat future timestamps as 「今」 (= clock skew defense)", () => {
     expect(formatRelativeTime("2026-05-05T11:00:00.000Z", "ja", NOW_DATE)).toBe("今");
+  });
+});
+
+/**
+ * Issue #548: `formatOccurredAtTooltip` は score events cell の hover tooltip 用に
+ * 「UTC ISO + ローカル時刻 (TZ)」を併記する。一次情報は相対時刻で十分なので絶対時刻は
+ * tooltip に逃がす設計。未採点 / invalid ISO は防御的に固定文字列を返す。
+ */
+describe("formatOccurredAtTooltip", () => {
+  it("should return 「未採点」 for undefined", () => {
+    expect(formatOccurredAtTooltip(undefined)).toBe("未採点");
+  });
+
+  it("should return 「?」 for an invalid ISO string (= 防御的 fallback)", () => {
+    expect(formatOccurredAtTooltip("not-a-date")).toBe("?");
+  });
+
+  it("should pair the UTC ISO with a local-time line and its IANA TZ", () => {
+    const iso = "2026-05-05T10:00:00.000Z";
+    const out = formatOccurredAtTooltip(iso);
+    // 1 行目に元の UTC ISO をそのまま残す (= UTC 基準で機械照合できる)。
+    expect(out.startsWith(`${iso}\n`)).toBe(true);
+    // 2 行目はブラウザ環境の解決済み IANA TZ を括弧書きで併記する。
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(out).toContain(`(${tz})`);
+    expect(out.split("\n")).toHaveLength(2);
   });
 });
