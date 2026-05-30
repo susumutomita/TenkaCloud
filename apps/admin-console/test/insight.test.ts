@@ -81,6 +81,36 @@ describe("fetchTenantsInsightSummary", () => {
       { message: expect.stringContaining("500") },
     );
   });
+
+  it("should fall back to statusText when the error body cannot be read", async () => {
+    // res.text() が reject するケース → `.catch(() => "")` で空文字に倒し、 statusText を使う。
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      statusText: "Bad Gateway",
+      text: () => Promise.reject(new Error("stream error")),
+    } as unknown as Response);
+    await expect(fetchTenantsInsightSummary(baseConfig, "id-token", ["t-1"])).rejects.toMatchObject(
+      {
+        message: expect.stringContaining("Bad Gateway"),
+      },
+    );
+  });
+
+  it("should normalize a base URL that already ends with '/'", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(JSON.stringify({ items: [] }), { status: 200 }),
+    );
+    await fetchTenantsInsightSummary(
+      { ...baseConfig, adminInsightApiUrl: "https://insight.example.com/" },
+      "id-token",
+      ["t-1"],
+    );
+    const [calledUrl] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(String(calledUrl)).toBe(
+      "https://insight.example.com/admin/insight/tenants/summary?tenantIds=t-1",
+    );
+  });
 });
 
 describe("indexSummaryByTenantId", () => {
