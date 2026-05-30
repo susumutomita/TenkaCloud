@@ -190,7 +190,9 @@ function omitUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
  *     `effect` / `parameters` / `operatorEditable` / `eventDetailType` 等の内部 trigger 詳細も全 drop
  *   - i18n.en も同じ contract で `description` を drop
  */
-function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry {
+// Exported for direct unit testing of the fairness projection (publicHint filter
+// + description drop). The build-time catalog calls it on the glob'd metadata.
+export function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry {
   const dashboardSlots = metadata.dashboard?.slots;
   const publicI18n = sanitizeI18n(metadata.i18n);
   return {
