@@ -69,6 +69,8 @@ export function EventTeamsPanel({
                     ariaLabel={t("event_detail.teams_col_login_key_aria", {
                       slug: tr.internalSlug,
                     })}
+                    // teamLoginKey truthy の row だけ copy button を出すので ?? "" 右辺は不到達。
+                    /* v8 ignore next */
                     onClick={() => void navigator.clipboard?.writeText(tr.teamLoginKey ?? "")}
                   />
                 </SpaceBetween>

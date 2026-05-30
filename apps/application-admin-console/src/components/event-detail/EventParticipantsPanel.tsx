@@ -39,6 +39,9 @@ export function EventParticipantsPanel({
                   iconName="copy"
                   ariaLabel={t("event_detail.participants_copy_aria")}
                   onClick={() =>
+                    // この closure は participantPortalUrl truthy 時のみ render されるので
+                    // ?? "" の右辺は不到達 (property narrowing 用の型ガード)。
+                    /* v8 ignore next */
                     void navigator.clipboard?.writeText(config.participantPortalUrl ?? "")
                   }
                 >
