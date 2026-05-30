@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  getBattleAttacks,
   getCliCredentials,
   getConsoleSigninUrl,
   getScoreEvents,
@@ -77,5 +78,21 @@ describe("getCliCredentials", () => {
     const result = await getCliCredentials(API, KEY, "JOB1");
     expect(result).toEqual(creds);
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/portal/me/cli-credentials");
+  });
+});
+
+describe("getBattleAttacks", () => {
+  it("should GET /portal/me/battle-attacks for the jobId and return the response", async () => {
+    const data = { attacks: [] };
+    const fetchMock = mockFetch(data);
+    const result = await getBattleAttacks(API, KEY, "JOB1");
+    expect(result).toEqual(data);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/portal/me/battle-attacks");
+  });
+
+  it("should include sinceMin in the query when provided", async () => {
+    const fetchMock = mockFetch({ attacks: [] });
+    await getBattleAttacks(API, KEY, "JOB1", 15);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("sinceMin=15");
   });
 });
