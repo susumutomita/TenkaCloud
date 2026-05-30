@@ -5,6 +5,7 @@ import {
   deleteDeployment,
   getDeployment,
   getStackProgress,
+  listAllDeployments,
   listDeployments,
   parseStackOutputs,
   startDeployment,
@@ -136,6 +137,8 @@ describe("parseStackOutputs", () => {
     expect(
       parseStackOutputs(
         JSON.stringify([
+          "not-an-object", // 非 object entry → skip (isObjectLike false)
+          null,
           { OutputKey: "FrontendUrl", OutputValue: "https://app.example.com" },
           { OutputKey: "IgnoredNumber", OutputValue: 123 },
           { OutputKey: 456, OutputValue: "ignored" },
@@ -162,6 +165,15 @@ describe("listDeployments", () => {
     const { client, calls } = fakeClient({ items: [], nextCursor: undefined });
     await listDeployments(client, "p", { limit: 10, cursor: "abc" });
     expect(calls[0]?.path).toBe("/problems/p/deployments?limit=10&cursor=abc");
+  });
+});
+
+describe("listAllDeployments", () => {
+  it("should call GET /deployments tenant-wide (no problemId scope)", async () => {
+    const { client, calls } = fakeClient({ items: [], nextCursor: undefined });
+    await listAllDeployments(client, { limit: 50 });
+    expect(calls[0]?.path).toBe("/deployments?limit=50");
+    expect(calls[0]?.method).toBe("GET");
   });
 });
 
