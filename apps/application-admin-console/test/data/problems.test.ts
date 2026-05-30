@@ -54,6 +54,21 @@ describe("metadataToDetail", () => {
     const detail = metadataToDetail({ ...BASE_METADATA, supportedRegions: [] });
     expect(detail.supportedRegions).toBeUndefined();
   });
+
+  it("should default the runtime to aws/cloudformation when none is declared (ADR-026/027)", () => {
+    expect(metadataToDetail(BASE_METADATA).runtime).toEqual({
+      provider: "aws",
+      engine: "cloudformation",
+    });
+  });
+
+  it("should project a declared multi-cloud runtime", () => {
+    const detail = metadataToDetail({
+      ...BASE_METADATA,
+      runtime: { provider: "gcp", engine: "infra-manager", entry: "main.tf" },
+    });
+    expect(detail.runtime).toEqual({ provider: "gcp", engine: "infra-manager" });
+  });
 });
 
 describe("findProblem", () => {
