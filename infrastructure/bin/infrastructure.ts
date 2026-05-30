@@ -17,6 +17,17 @@ import { buildTenkaCloudApp } from "../lib/app-wiring/index.js";
 
 const app = new cdk.App();
 
+// #1446 follow-up: pre-commit `make check-synth` は synth の shape (module 解決 / 型 /
+// construct ツリー / template 生成) だけを検証するのが目的で、 Lambda の実 Docker バンドルは
+// 不要。 SBT の Python Lambda 等のバンドルは毎回 `cdk-<hash>` イメージを生成し CDK が掃除しない
+// ため Docker ディスクが膨らみ synth が ENOSPC で失敗していた。 `CDK_SKIP_BUNDLING=1` のときは
+// `aws:cdk:bundling-stacks` を空にして全 stack のバンドルを skip する (= 検証は通り Docker 不要)。
+// CLI の `-c` は `aws:` prefix を拒否するため context は code 側で設定する。 実バンドルは
+// `make synth` / `make deploy` (env 無し) で従来どおり走る。
+if (process.env.CDK_SKIP_BUNDLING === "1") {
+  app.node.setContext("aws:cdk:bundling-stacks", []);
+}
+
 const config = resolveAppConfig({
   env: process.env,
   binDir: import.meta.dirname,
