@@ -110,7 +110,9 @@ describe("createTenantAuditClient.exportCsv", () => {
     const [url] = fetchMock.mock.calls[0] as [URL];
     expect(url.pathname).toBe("/prod/admin/audit-log/export");
     expect(url.searchParams.get("from")).toBe("2026-01-01T00:00:00Z");
-    expect(blob).toBeInstanceOf(Blob);
+    // instanceof Blob は undici/global の realm 差で CI 落ち、 jsdom Blob は .text() 無し。
+    // 両 impl 共通の .size で realm 非依存に検証する。
+    expect(blob?.size).toBeGreaterThan(0);
   });
 });
 
