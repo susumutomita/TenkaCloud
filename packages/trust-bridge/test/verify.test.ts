@@ -205,4 +205,29 @@ describe("verifyIntent (#795 Phase 1)", () => {
     const result = await verifyIntent(token, { resolveSecret: () => secret });
     expect(result.ok).toBe(true);
   });
+
+  it("should proceed to ok=true when the nonce store accepts the nonce", async () => {
+    const secret = randomBytes(32);
+    const token = signIntent(intent(), { secret });
+    const acceptStore: NonceStore = { recordNonce: async () => "accepted" };
+    const result = await verifyIntent(token, {
+      resolveSecret: () => secret,
+      now: () => new Date("2026-05-15T19:00:00.000Z"),
+      nonceStore: acceptStore,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("should accept a token whose notBefore is already in the past", async () => {
+    const secret = randomBytes(32);
+    const token = signIntent(
+      intent({ notBefore: "2026-05-15T18:00:00.000Z", expiresAt: "2026-05-15T22:00:00.000Z" }),
+      { secret },
+    );
+    const result = await verifyIntent(token, {
+      resolveSecret: () => secret,
+      now: () => new Date("2026-05-15T19:00:00.000Z"),
+    });
+    expect(result.ok).toBe(true);
+  });
 });

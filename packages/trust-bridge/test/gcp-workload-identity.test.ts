@@ -84,6 +84,19 @@ describe("GcpWorkloadIdentityFederationExchange (#795 Phase 4 prototype)", () =>
     ).rejects.toMatchObject({ reason: "context-missing" });
   });
 
+  it("should throw context-missing when serviceAccountEmail is absent", async () => {
+    const ex = new GcpWorkloadIdentityFederationExchange({
+      stsClient: makeStubClient(),
+      toSubjectToken: () => "jwt",
+    });
+    await expect(
+      ex.exchange(makeIntent(), {
+        wifAudience: "audience",
+        oauthScopes: ["scope"],
+      } as Record<string, unknown>),
+    ).rejects.toMatchObject({ reason: "context-missing" });
+  });
+
   it("should throw context-missing when oauthScopes is an empty array", async () => {
     const ex = new GcpWorkloadIdentityFederationExchange({
       stsClient: makeStubClient(),

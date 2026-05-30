@@ -57,6 +57,19 @@ describe("buildAuditRecord (#795 Phase 1)", () => {
     });
   });
 
+  it("should default createdAt to the current time and include targetId when the source has one", () => {
+    const base = makeIntent();
+    const intent = brandVerified({ ...base, source: { ...base.source, targetId: "target-7" } });
+    const record = buildAuditRecord({
+      outcome: { ok: true, intent },
+      issuedCredentialExpiresAt: "2026-05-15T19:45:00.000Z",
+      // `now` omitted on purpose → exercises the `() => new Date()` default.
+    });
+    expect(record.decision).toBe("allow");
+    expect(record.targetId).toBe("target-7");
+    expect(typeof record.createdAt).toBe("string");
+  });
+
   it("should set decision to deny and include denialReason when override specifies deny", () => {
     const intent = makeIntent();
     const record = buildAuditRecord({

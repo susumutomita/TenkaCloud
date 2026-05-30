@@ -115,7 +115,8 @@ export function canonicalize(value: unknown): string {
   }
   const entries = Object.entries(value as Record<string, unknown>)
     .filter(([, v]) => v !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    // Object keys are unique, so the equal case never occurs: a is either < or > b.
+    .sort(([a], [b]) => (a < b ? -1 : 1));
   const body = entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalize(v)}`).join(",");
   return `{${body}}`;
 }
