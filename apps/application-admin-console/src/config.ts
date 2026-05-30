@@ -130,9 +130,13 @@ export async function loadConfig(
       apiBaseUrl: runtime.apiUrl,
       participantPortalUrl: runtime.participantPortalUrl,
       competitorBootstrapTemplateUrl: runtime.competitorBootstrapTemplateUrl,
+      // fetchRuntimeConfig は isolation / samlIdpDirectory を常に populate する (= line 101 /
+      // 103-106) ため、 ここの `??` fallback は到達不能。 値の解決自体は fetchRuntimeConfig 側の
+      // テストで担保済。
+      /* v8 ignore start */
       isolation: runtime.isolation ?? "pooled",
-      // Issue #1340 Phase 2: SAML 未設定 stack も無音で動かすため空 object fallback。
       samlIdpDirectory: runtime.samlIdpDirectory ?? {},
+      /* v8 ignore stop */
       redirectUri,
       scope,
     };
