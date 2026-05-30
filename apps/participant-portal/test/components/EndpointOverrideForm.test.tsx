@@ -137,7 +137,9 @@ describe("EndpointOverrideForm", () => {
       save();
       // eslint-disable-next-line no-await-in-loop
       await waitFor(() =>
-        expect(screen.getByText(new RegExp(expected.replace(/[.]/g, "\\.")))).toBeInTheDocument(),
+        // 部分一致は RegExp ではなく substring matcher で行う (= 正規表現メタ文字を escape する
+        // 必要が無く、 CodeQL の incomplete-string-escaping 警告を避ける)。
+        expect(screen.getByText(expected, { exact: false })).toBeInTheDocument(),
       );
     }
   });
