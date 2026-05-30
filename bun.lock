@@ -127,6 +127,7 @@
         "@aws-sdk/client-codepipeline": "^3.1048.0",
         "@aws-sdk/client-sfn": "^3.1048.0",
         "@cdklabs/sbt-aws": "0.3.9",
+        "@tenkacloud/problem-runtime": "workspace:*",
         "@tenkacloud/saml-utils": "workspace:*",
         "ajv": "8.18.0",
         "ajv-formats": "^3.0.1",
@@ -181,6 +182,15 @@
       },
       "peerDependencies": {
         "react": "^19.0.0",
+      },
+    },
+    "packages/problem-runtime": {
+      "name": "@tenkacloud/problem-runtime",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/node": "^24.12.4",
+        "typescript": "^5.9.3",
+        "vitest": "^4.1.6",
       },
     },
     "packages/saml-utils": {
@@ -640,6 +650,8 @@
     "@tenkacloud/auth-client": ["@tenkacloud/auth-client@workspace:packages/auth-client"],
 
     "@tenkacloud/portal-plugin-sdk": ["@tenkacloud/portal-plugin-sdk@workspace:packages/portal-plugin-sdk"],
+
+    "@tenkacloud/problem-runtime": ["@tenkacloud/problem-runtime@workspace:packages/problem-runtime"],
 
     "@tenkacloud/saml-utils": ["@tenkacloud/saml-utils@workspace:packages/saml-utils"],
 

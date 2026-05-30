@@ -1,12 +1,10 @@
 import Alert from "@cloudscape-design/components/alert";
-import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import LineChart from "@cloudscape-design/components/line-chart";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
-import Table from "@cloudscape-design/components/table";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getScoreEvents,
@@ -19,23 +17,9 @@ import { DEV_MOCK_SCORE_EVENTS } from "../auth/dev-mock-fixtures";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
-import { describeAgo, formatOccurredAtTooltip } from "../lib/format";
+import { ScoreEventsTable } from "./ScoreEventsTable";
 
 const POLL_INTERVAL_MS = 30_000;
-
-const SOURCE_KEY: Record<ScoreEventView["source"], string> = {
-  uptime: "score_events.source_uptime",
-  flag: "score_events.source_flag",
-  "flag-wrong": "score_events.source_flag_wrong",
-  hint: "score_events.source_hint",
-};
-
-const SOURCE_COLOR: Record<ScoreEventView["source"], "blue" | "green" | "grey" | "red"> = {
-  uptime: "green",
-  flag: "blue",
-  "flag-wrong": "red",
-  hint: "grey",
-};
 
 interface ChartPoint {
   readonly x: Date;
@@ -173,57 +157,7 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
             </Header>
           }
         >
-          <Table<ScoreEventView>
-            variant="embedded"
-            items={[...data.entries]}
-            columnDefinitions={[
-              {
-                id: "occurredAt",
-                header: t("score_events.col_occurred_at"),
-                cell: (e) => (
-                  <span title={formatOccurredAtTooltip(e.occurredAt)}>
-                    {describeAgo(e.occurredAt, Date.now())}
-                  </span>
-                ),
-              },
-              {
-                id: "problemId",
-                header: t("score_events.col_problem"),
-                cell: (e) => <code>{e.problemId}</code>,
-              },
-              {
-                id: "source",
-                header: t("score_events.col_source"),
-                cell: (e) => (
-                  <Badge color={SOURCE_COLOR[e.source]}>{t(SOURCE_KEY[e.source])}</Badge>
-                ),
-                width: 180,
-              },
-              {
-                id: "points",
-                header: t("score_events.col_points"),
-                cell: (e) =>
-                  e.points >= 0 ? (
-                    <Box variant="strong" color="text-status-success">
-                      +{e.points} pt
-                    </Box>
-                  ) : (
-                    <Box variant="strong" color="text-status-error">
-                      {e.points} pt
-                    </Box>
-                  ),
-                width: 100,
-              },
-            ]}
-            empty={
-              <Box textAlign="center" padding="l">
-                <Box variant="strong">{t("score_events.empty_header")}</Box>
-                <Box variant="small" color="text-status-inactive" padding={{ top: "s" }}>
-                  {t("score_events.empty_hint")}
-                </Box>
-              </Box>
-            }
-          />
+          <ScoreEventsTable entries={data.entries} />
         </Container>
       )}
     </SpaceBetween>

@@ -89,6 +89,48 @@ describe("AwsAssumeRoleExchange (#795 Phase 2)", () => {
     ).rejects.toMatchObject({ reason: "context-missing" });
   });
 
+  it("should add eventId and teamId session tags when the intent carries them", async () => {
+    let captured: AssumeRoleInput | undefined;
+    const ex = new AwsAssumeRoleExchange({
+      sts: makeStub({}, (input) => {
+        captured = input;
+      }),
+    });
+    const intent = makeIntent({
+      source: {
+        system: "tenkacloud",
+        tenantId: "tenant-a",
+        workloadId: "deploy-worker",
+        eventId: "event-7",
+        teamId: "team-7",
+      },
+    });
+    const out = await ex.exchange(intent, {
+      roleArn: "arn:aws:iam::123456789012:role/x",
+      externalId: "ext-1",
+    });
+    expect(out).toBeDefined();
+    const tags = captured?.Tags ?? [];
+    expect(tags).toEqual(
+      expect.arrayContaining([
+        { Key: "tenkacloud:eventId", Value: "event-7" },
+        { Key: "tenkacloud:teamId", Value: "team-7" },
+      ]),
+    );
+  });
+
+  it("should omit optional session tags when the source carries only required fields", async () => {
+    const ex = new AwsAssumeRoleExchange({ sts: makeStub() });
+    const intent = makeIntent({
+      source: { system: "tenkacloud", tenantId: "tenant-a", workloadId: "deploy-worker" },
+    });
+    const out = await ex.exchange(intent, {
+      roleArn: "arn:aws:iam::123456789012:role/x",
+      externalId: "ext-1",
+    });
+    expect(out).toBeDefined();
+  });
+
   it("should throw ttl-exceeded-provider-limit when ttlSeconds is below the STS minimum of 900", async () => {
     const ex = new AwsAssumeRoleExchange({ sts: makeStub() });
     const intent = makeIntent();

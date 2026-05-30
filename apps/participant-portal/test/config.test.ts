@@ -116,4 +116,63 @@ describe("loadConfig", () => {
     expect(cfg.mode).toBe("dev-mock");
     expect(cfg.cloudMode).toBe("mock");
   });
+
+  it("Issue #871: should fall back when apiBaseUrl is an unparseable URL in backend mode", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        // `http://` 検査以前に `new URL()` 自体が throw する不正値。 HTTPS 強制ガードが
+        // 例外を握り潰して 「HTTPS でない」 = fallback に倒すこと (= fail closed) を確認。
+        apiBaseUrl: "not-a-valid-url",
+        mode: "backend",
+      }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.apiBaseUrl).toContain("dev-mock");
+    expect(cfg.mode).toBe("dev-mock");
+  });
+
+  it("should drop an unparseable localstackEndpoint (= new URL throws) to undefined", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        apiBaseUrl: "https://api.example.com",
+        mode: "backend",
+        cloudMode: "localstack",
+        // host 検査以前に `new URL()` が throw する不正値 → undefined に倒す (= fail closed)。
+        localstackEndpoint: "http://",
+      }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.cloudMode).toBe("localstack");
+    expect(cfg.localstackEndpoint).toBeUndefined();
+  });
+
+  it("should leave localstackEndpoint undefined when cloudMode=localstack but the key is omitted", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        apiBaseUrl: "https://api.example.com",
+        mode: "backend",
+        cloudMode: "localstack",
+        // localstackEndpoint 未指定 (= 非 string) → normalizeLocalstackEndpoint 早期 return。
+      }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.cloudMode).toBe("localstack");
+    expect(cfg.localstackEndpoint).toBeUndefined();
+  });
+
+  it("should fall back apiBaseUrl to the dev default when the key is omitted (dev-mock mode)", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      // apiBaseUrl を省いた dev-mock 配信 → `?? DEV_FALLBACK.apiBaseUrl` で既定値を採用。
+      json: async () => ({ eventTitle: "No-API Event" }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.apiBaseUrl).toBe("http://localhost:3199/dev-mock");
+    expect(cfg.mode).toBe("dev-mock");
+    expect(cfg.eventTitle).toBe("No-API Event");
+  });
 });

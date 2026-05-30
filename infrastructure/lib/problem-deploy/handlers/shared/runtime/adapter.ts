@@ -20,6 +20,8 @@
  * Phase 2+ will introduce new adapters without changing this interface.
  */
 
+import type { RuntimeDescriptor } from "@tenkacloud/problem-runtime";
+
 /**
  * Coarse runtime status. Provider-specific statuses (e.g. CFn
  * `CREATE_IN_PROGRESS` / `UPDATE_ROLLBACK_FAILED`) must be projected onto this
@@ -43,16 +45,12 @@ export type RuntimeStatus =
   | "destroyed";
 
 /**
- * Normalized runtime descriptor. Mirrors the metadata-level descriptor in
- * `scripts/problem-cli/problem-loader.ts` so the same problem produces the
- * same shape regardless of who reads it. Lambda-local copy because the Lambda
- * bundle must not depend on `scripts/`.
+ * Normalized runtime descriptor. Canonical definition lives in
+ * `@tenkacloud/problem-runtime` (the single source of truth shared by the deploy
+ * worker and the problem CLI, #1423); `ProblemRuntime` is the deploy-side name
+ * for it so existing call sites keep reading naturally.
  */
-export interface ProblemRuntime {
-  readonly provider: string;
-  readonly engine: string;
-  readonly entry: string;
-}
+export type ProblemRuntime = RuntimeDescriptor;
 
 /**
  * Inputs for `adapter.deploy(...)`. Kept narrow on purpose; adapter

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { SAML_METADATA_MAX_BYTES, validateSamlMetadata } from "../src/metadata.js";
+import {
+  SAML_METADATA_MAX_BYTES,
+  toCognitoProviderDetails,
+  validateSamlMetadata,
+} from "../src/metadata.js";
 
 const OKTA_LIKE = `<?xml version="1.0" encoding="UTF-8"?>
 <md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="http://www.okta.com/exk1tenant">
@@ -15,6 +19,14 @@ const OKTA_LIKE = `<?xml version="1.0" encoding="UTF-8"?>
     <md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="https://example.okta.com/app/sso/saml"/>
   </md:IDPSSODescriptor>
 </md:EntityDescriptor>`;
+
+describe("toCognitoProviderDetails", () => {
+  it("should pin MetadataFile to the provided XML and return a frozen object", () => {
+    const details = toCognitoProviderDetails({ metadataXml: OKTA_LIKE });
+    expect(details.MetadataFile).toBe(OKTA_LIKE);
+    expect(Object.isFrozen(details)).toBe(true);
+  });
+});
 
 describe("validateSamlMetadata", () => {
   it("should accept a well-formed Okta-like metadata XML and extract the entityID", () => {

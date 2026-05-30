@@ -124,13 +124,13 @@
 <ul>
 <li>ポータルは team の Cognito UserPool 経由で参加者をログインさせる。 ログイン後、 team が deploy 済みの問題 / endpoint / flag / disruption phase を fetch。</li>
 <li>ワンクリック AWS Console SSO は、 team の読み取り専用 <code>ParticipantViewerRole</code> への federation で実装 (scoping IAM 文は各問題の <code>template.yaml</code> 参照)。</li>
-<li>チーム間 coordination (router 更新 / 同盟 / 共有リソース queue) は <strong>プラットフォームに焼き込まない</strong>。 問題の <code>portal/</code> プラグインへ dispatch する (<code>ADR-022</code>)。 プラットフォームは primitive を提供し、 意味論は問題が所有する。</li>
+<li>チーム間 coordination (router 更新 / 同盟 / 共有リソース queue) は <strong>プラットフォームに焼き込まない</strong>。 問題の <code>portal/</code> プラグインへ dispatch する (<code>ADR-028</code>)。 プラットフォームは primitive を提供し、 意味論は問題が所有する。</li>
 </ul>
 <p><strong>ADR 参照</strong>。</p>
 <ul>
 <li><code>ADR-005</code> — Battle Portal UI</li>
 <li><code>ADR-006</code> — Notifications</li>
-<li><code>ADR-022</code> — Inter-team coordination plugin</li>
+<li><code>ADR-028</code> — Inter-team coordination plugin</li>
 </ul>
 <h2>セキュリティポスチャー (約 5 分)</h2>
 <p><strong>トークポイント</strong>。</p>

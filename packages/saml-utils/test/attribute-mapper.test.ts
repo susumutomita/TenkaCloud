@@ -59,6 +59,18 @@ describe("buildIdentityClaim", () => {
     });
   });
 
+  it("should omit optional fields and default emailSnapshot to empty when absent", () => {
+    const claim = buildIdentityClaim(idp, { idpId: "okta", subjectId: "sub-1" });
+    expect(claim).toEqual({
+      idpId: "okta",
+      subjectId: "sub-1",
+      emailSnapshot: "",
+      roles: [],
+    });
+    expect(claim).not.toHaveProperty("tenantId");
+    expect(claim).not.toHaveProperty("displayName");
+  });
+
   it("should throw when subjectId is empty", () => {
     expect(() => buildIdentityClaim(idp, { idpId: "x", subjectId: "" })).toThrow();
   });

@@ -124,13 +124,13 @@
 <ul>
 <li>The portal logs participants in via the team&#39;s Cognito UserPool. After login, the portal fetches the team&#39;s deployed problems, endpoints, flags, and disruption phases.</li>
 <li>One-click AWS Console SSO is implemented by federating into the team&#39;s read-only <code>ParticipantViewerRole</code> (see each problem&#39;s <code>template.yaml</code> for the scoping IAM statements).</li>
-<li>Inter-team coordination (router updates / alliances / shared resource queues) is <strong>not</strong> baked into the platform. It is dispatched to the problem&#39;s portal plugin (<code>portal/</code>) per <code>ADR-022</code>. The platform exposes a primitive; the problem owns the semantics.</li>
+<li>Inter-team coordination (router updates / alliances / shared resource queues) is <strong>not</strong> baked into the platform. It is dispatched to the problem&#39;s portal plugin (<code>portal/</code>) per <code>ADR-028</code>. The platform exposes a primitive; the problem owns the semantics.</li>
 </ul>
 <p><strong>ADR cross-references.</strong></p>
 <ul>
 <li><code>ADR-005</code> — Battle Portal UI</li>
 <li><code>ADR-006</code> — Notifications</li>
-<li><code>ADR-022</code> — Inter-team coordination plugin</li>
+<li><code>ADR-028</code> — Inter-team coordination plugin</li>
 </ul>
 <h2>Security posture (≈ 5 min)</h2>
 <p><strong>Talking points.</strong></p>

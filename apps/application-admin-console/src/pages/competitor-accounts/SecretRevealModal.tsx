@@ -16,6 +16,9 @@ import {
   COMPETITOR_BOOTSTRAP_TEMPLATE_URL,
 } from "../../lib/competitor-bootstrap";
 
+/** How long the "Copied" confirmation stays lit after copying the full payload. */
+const COPIED_FEEDBACK_RESET_MS = 2_000;
+
 interface SecretRevealModalProps {
   secret: CreateCompetitorAccountResponse | null;
   onDismiss: () => void;
@@ -37,7 +40,7 @@ export function SecretRevealModal({ secret, onDismiss, templateUrl }: SecretReve
   const onCopyAll = async () => {
     await navigator.clipboard.writeText(payload);
     setAllCopied(true);
-    setTimeout(() => setAllCopied(false), 2000);
+    setTimeout(() => setAllCopied(false), COPIED_FEEDBACK_RESET_MS);
   };
   return (
     <Modal

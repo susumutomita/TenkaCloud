@@ -1,9 +1,79 @@
 import { describe, expect, it } from "vitest";
 import {
   findProblemMetadata,
+  metadataToEntry,
   type ProblemCatalogEntry,
   resolveLocalizedNarrative,
 } from "./problems";
+
+const FAIRNESS_FIXTURE = {
+  id: "demo",
+  name: "Demo",
+  category: "Challenge",
+  status: "draft",
+  difficulty: 2,
+  estimatedDuration: "30 min",
+  shortDescription: "competitor-safe short description",
+  description: "SECRET scoring rules — must never reach the portal bundle",
+  tags: ["sample"],
+  learningGoals: ["learn"],
+  endpoints: [
+    { slot: "main", default: { from: "cfn-output", key: "Url" }, overridable: true, label: "App" },
+  ],
+  phases: [
+    { name: "public phase", afterMinutes: 5, description: "shown", publicHint: true },
+    { name: "secret phase", afterMinutes: 10, effect: { x: 1 }, publicHint: false },
+  ],
+  disruptions: [
+    { id: "d1", name: "public disruption", defaultAfterMinutes: 3, publicHint: true },
+    { id: "d2", name: "secret disruption", parameters: { y: 2 }, publicHint: false },
+  ],
+} as Parameters<typeof metadataToEntry>[0];
+
+describe("metadataToEntry (fairness projection)", () => {
+  it("should keep only publicHint:true phases/disruptions and drop the description", () => {
+    const entry = metadataToEntry(FAIRNESS_FIXTURE);
+
+    // Fairness contract: competitor-facing bundle must not carry the authoring `description`.
+    expect((entry as unknown as { description?: string }).description).toBeUndefined();
+
+    // Only the publicHint:true phase/disruption survive (secret ones are filtered out).
+    expect(entry.phases.map((p) => p.name)).toEqual(["public phase"]);
+    expect(entry.disruptions.map((d) => d.id)).toEqual(["d1"]);
+
+    // Endpoints are projected through.
+    expect(entry.endpoints).toHaveLength(1);
+    expect(entry.endpoints[0]?.slot).toBe("main");
+  });
+
+  it("should project i18n.en (dropping its description) and omit i18n when the override is empty", () => {
+    const withI18n = {
+      ...FAIRNESS_FIXTURE,
+      i18n: {
+        en: {
+          name: "EN Name",
+          shortDescription: "EN short",
+          learningGoals: ["g"],
+          description: "secret en",
+        },
+      },
+    } as Parameters<typeof metadataToEntry>[0];
+    const entry = metadataToEntry(withI18n);
+    expect(entry.i18n?.en?.name).toBe("EN Name");
+    expect((entry.i18n?.en as unknown as { description?: string })?.description).toBeUndefined();
+
+    // An all-undefined en override collapses to no i18n field at all.
+    const emptyI18n = {
+      ...FAIRNESS_FIXTURE,
+      i18n: { en: {} },
+    } as Parameters<typeof metadataToEntry>[0];
+    expect(metadataToEntry(emptyI18n).i18n).toBeUndefined();
+
+    // i18n present but with no `en` key at all → also collapses to no i18n.
+    const noEn = { ...FAIRNESS_FIXTURE, i18n: {} } as Parameters<typeof metadataToEntry>[0];
+    expect(metadataToEntry(noEn).i18n).toBeUndefined();
+  });
+});
 
 /**
  * #550: Portal の build-time catalog が `problems/<category>/<id>/metadata.json` を
@@ -125,6 +195,45 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
       expect(r.name).toBe("Hello World (Sample)");
       expect(r.shortDescription.length).toBeGreaterThan(0);
       expect(r.learningGoals.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("should fall back to base fields when i18n exists but lacks the requested locale", () => {
+      const base = requireProblemMetadata("hello-world");
+      // i18n is present but has no "en" entry → the no-override fallback branch.
+      const entry = {
+        ...base,
+        i18n: { ja: { name: "ja-name", shortDescription: "ja-desc", learningGoals: ["g"] } },
+      } as ProblemCatalogEntry;
+      const r = resolveLocalizedNarrative(entry, "en");
+      expect(r.name).toBe(base.name);
+      expect(r.shortDescription).toBe(base.shortDescription);
+      expect(r.learningGoals).toEqual(base.learningGoals);
+    });
+
+    it("should fall back per-field when the en override is partial", () => {
+      const base = requireProblemMetadata("hello-world");
+      // Only `name` is overridden → the other fields fall back to the base entry.
+      const entry = { ...base, i18n: { en: { name: "EN Only" } } } as ProblemCatalogEntry;
+      const r = resolveLocalizedNarrative(entry, "en");
+      expect(r.name).toBe("EN Only");
+      expect(r.shortDescription).toBe(base.shortDescription);
+      expect(r.learningGoals).toEqual(base.learningGoals);
+    });
+
+    it("should use a full en override including learningGoals when present", () => {
+      const base = requireProblemMetadata("hello-world");
+      const entry = {
+        ...base,
+        i18n: {
+          en: {
+            name: "EN",
+            shortDescription: "EN short",
+            learningGoals: ["en-goal-1", "en-goal-2"],
+          },
+        },
+      } as ProblemCatalogEntry;
+      const r = resolveLocalizedNarrative(entry, "en");
+      expect(r.learningGoals).toEqual(["en-goal-1", "en-goal-2"]);
     });
 
     it("should return en override fields when locale='en' (hello-world)", () => {

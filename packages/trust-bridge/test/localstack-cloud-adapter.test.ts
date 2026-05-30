@@ -74,6 +74,20 @@ describe("LocalStackCloudAdapter (#1122)", () => {
     expect(credential.endpointUrl).toBe("http://127.0.0.1:4567");
   });
 
+  it("should default region to ap-northeast-1 when neither intent nor adapter sets it", async () => {
+    const adapter = new LocalStackCloudAdapter({ endpointUrl: "http://localhost:4566" });
+    const intent = makeIntent({ target: { provider: "aws", providerAccountRef: "000000000000" } });
+    const credential = await adapter.exchange(intent, {});
+    expect(credential.region).toBe("ap-northeast-1");
+  });
+
+  it("should throw for an invalid endpoint URL passed via context", async () => {
+    const adapter = new LocalStackCloudAdapter({ endpointUrl: "http://localhost:4566" });
+    await expect(
+      adapter.exchange(makeIntent(), { endpointUrl: "not-a-valid-url" }),
+    ).rejects.toBeInstanceOf(ExchangeError);
+  });
+
   it("should throw provider-mismatch when the target provider is not aws", async () => {
     const adapter = new LocalStackCloudAdapter();
     await expect(
