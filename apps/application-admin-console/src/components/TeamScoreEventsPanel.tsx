@@ -43,7 +43,11 @@ export function TeamScoreEventsPanel({ teams }: { teams: readonly TeamScoreEvent
       title: team.teamName || team.teamId,
       type: "line" as const,
       data: buildCumulative(team).map((p) => ({ x: p.x, y: p.y })),
+      // Cloudscape が tooltip hover 時のみ呼ぶ formatter (= jsdom render では不到達)。
+      /* v8 ignore next */
       valueFormatter: (v: number) => `${v} pt`,
+      // idx % length は常に有効なので ?? 右辺は型安全用の不到達分岐。
+      /* v8 ignore next */
       color: PALETTE[idx % PALETTE.length] ?? "#5b6770",
     }));
     const allTs = series.flatMap((s) => s.data.map((d) => d.x.getTime()));
