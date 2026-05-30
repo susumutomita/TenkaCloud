@@ -1,0 +1,158 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { PortalAuthError, type ScoreEventView } from "../../src/api/portal-client";
+import type { AppConfig } from "../../src/config";
+
+/**
+ * ScoreEventsPage (累積スコア LineChart + 履歴 Table) の render 分岐と polling tick の
+ * 結果ハンドリング (loading / error / PortalAuthError→logout / 成功 / mock seed / 空) を pin
+ * する。 ScoreEventsTable は stub せず実物で render し、 source badge / points 正負 / 空状態を
+ * 同時に網羅する。 buildCumulativeSeries の sort・同値・無効 timestamp skip も同経路で踏む。
+ */
+const { mockAuth, mockIsMock, mockGet } = vi.hoisted(() => ({
+  mockAuth: vi.fn(),
+  mockIsMock: vi.fn(),
+  mockGet: vi.fn(),
+}));
+
+vi.mock("../../src/i18n", () => ({
+  useT: () => (key: string, params?: Readonly<Record<string, string | number>>) =>
+    params ? `${key}|${JSON.stringify(params)}` : key,
+}));
+vi.mock("../../src/config-context", () => ({ useIsMock: mockIsMock }));
+vi.mock("../../src/auth/AuthProvider", () => ({ useAuth: mockAuth }));
+vi.mock("../../src/api/portal-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/api/portal-client")>();
+  return { ...actual, getScoreEvents: mockGet };
+});
+
+const { ScoreEventsPage } = await import("../../src/pages/ScoreEvents");
+
+const config = { apiBaseUrl: "https://api.example.com" } as AppConfig;
+const logout = vi.fn();
+const renderPage = () => render(<ScoreEventsPage config={config} />);
+
+const ev = (over: Partial<ScoreEventView>): ScoreEventView => ({
+  jobId: "job-1",
+  problemId: "p",
+  source: "flag",
+  points: 10,
+  result: "ok",
+  occurredAt: "2026-05-22T13:00:00Z",
+  ...over,
+});
+
+beforeAll(() => {
+  // Cloudscape LineChart は ResizeObserver を使うので jsdom 用に最小 stub を与える。
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+});
+
+beforeEach(() => {
+  mockAuth.mockReturnValue({ session: { sessionToken: "team-key" }, logout });
+  mockIsMock.mockReturnValue(false);
+  mockGet.mockReset();
+});
+
+afterEach(() => vi.clearAllMocks());
+
+describe("ScoreEventsPage", () => {
+  it("should show the loading spinner before the first tick resolves", () => {
+    mockGet.mockReturnValue(new Promise<never>(() => undefined)); // never resolves
+    renderPage();
+    expect(screen.getByText("app.loading")).toBeInTheDocument();
+  });
+
+  it("should surface a fetch error", async () => {
+    mockGet.mockRejectedValue(new Error("network down"));
+    renderPage();
+    expect(await screen.findByText("network down")).toBeInTheDocument();
+  });
+
+  it("should stringify a non-Error fetch rejection", async () => {
+    mockGet.mockRejectedValue("plain failure");
+    renderPage();
+    expect(await screen.findByText("plain failure")).toBeInTheDocument();
+  });
+
+  it("should log out on a PortalAuthError without showing an error alert", async () => {
+    mockGet.mockRejectedValue(new PortalAuthError());
+    renderPage();
+    await waitFor(() => expect(logout).toHaveBeenCalled());
+    expect(screen.queryByText("app.fetch_status_failed")).not.toBeInTheDocument();
+  });
+
+  it("should render the cumulative chart and history table for all source/point kinds", async () => {
+    mockGet.mockResolvedValue({
+      entries: [
+        ev({
+          problemId: "p-flag",
+          source: "flag",
+          points: 100,
+          occurredAt: "2026-05-22T13:00:00Z",
+        }),
+        ev({ problemId: "p-up", source: "uptime", points: 60, occurredAt: "2026-05-22T12:00:00Z" }),
+        // p-flag と同一 timestamp → sort comparator の === 0 経路。
+        ev({
+          problemId: "p-wrong",
+          source: "flag-wrong",
+          points: -10,
+          occurredAt: "2026-05-22T13:00:00Z",
+        }),
+        ev({ problemId: "p-hint", source: "hint", points: -5, occurredAt: "2026-05-22T14:00:00Z" }),
+        // 無効 timestamp → buildCumulativeSeries の !Number.isFinite continue。
+        ev({ problemId: "p-bad", source: "uptime", points: 5, occurredAt: "not-a-date" }),
+      ],
+    });
+    renderPage();
+    expect(await screen.findByText("score_events.cumulative_header")).toBeInTheDocument();
+    expect(screen.getByText('score_events.history_header|{"count":5}')).toBeInTheDocument();
+    // table rows
+    expect(screen.getByText("p-flag")).toBeInTheDocument();
+    expect(screen.getByText("p-hint")).toBeInTheDocument();
+    // source badge: 全 4 種 (uptime は 2 件)
+    expect(screen.getByText("score_events.source_flag")).toBeInTheDocument();
+    expect(screen.getByText("score_events.source_flag_wrong")).toBeInTheDocument();
+    expect(screen.getByText("score_events.source_hint")).toBeInTheDocument();
+    expect(screen.getAllByText("score_events.source_uptime")).toHaveLength(2);
+    // points 正負の両分岐
+    expect(screen.getByText("+100 pt")).toBeInTheDocument();
+    expect(screen.getByText("-10 pt")).toBeInTheDocument();
+  });
+
+  it("should render the empty table and no chart when there are no entries", async () => {
+    mockGet.mockResolvedValue({ entries: [] });
+    renderPage();
+    expect(await screen.findByText("score_events.empty_header")).toBeInTheDocument();
+    expect(screen.queryByText("score_events.cumulative_header")).not.toBeInTheDocument();
+  });
+
+  it("should seed dev-mock fixtures without calling the backend in mock mode", async () => {
+    mockIsMock.mockReturnValue(true);
+    renderPage();
+    expect(await screen.findByText("score_events.cumulative_header")).toBeInTheDocument();
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  it("should not poll and stay on the spinner without a session token", () => {
+    mockAuth.mockReturnValue({ session: null, logout });
+    renderPage();
+    expect(screen.getByText("app.loading")).toBeInTheDocument();
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  it("should not seed dev-mock fixtures in mock mode without a session token", () => {
+    mockIsMock.mockReturnValue(true);
+    mockAuth.mockReturnValue({ session: null, logout });
+    renderPage();
+    // mock mode かつ session 無し → seed されないので chart も table も出ない。
+    expect(screen.queryByText("score_events.cumulative_header")).not.toBeInTheDocument();
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+});

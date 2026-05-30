@@ -52,6 +52,9 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
   const [error, setError] = useState<string | null>(null);
 
   const tick = useCallback(async () => {
+    // 呼び出し元の useEffect が同条件を gate 済み。 ここは getScoreEvents に渡す
+    // sessionToken を string へ narrow するための型ガードで、 true 分岐は不到達。
+    /* v8 ignore next */
     if (isMock || !sessionToken) return;
     try {
       const next = await getScoreEvents(config.apiBaseUrl, sessionToken);
@@ -68,17 +71,9 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
 
   useEffect(() => {
     if (isMock || !sessionToken) return;
-    let cancelled = false;
-    const run = async () => {
-      if (cancelled) return;
-      await tick();
-    };
-    void run();
-    const interval = setInterval(run, POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    void tick();
+    const interval = setInterval(tick, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
   }, [isMock, sessionToken, tick]);
 
   // LP 「モックで試す」 動線: dev-mock mode では backend を叩かないので、 fixture を
@@ -91,6 +86,13 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
   }, [isMock, sessionToken, data]);
 
   const series = useMemo(() => (data ? buildCumulativeSeries(data.entries) : []), [data]);
+  // chart x 軸 domain。 series が空なら undefined (= LineChart は empty 表示)。 旧実装の
+  // `series[0]?.x ?? new Date()` は系列欠損時に「現在時刻」を軸端に捏造する silent fallback
+  // だったので、 明示的に undefined を返すよう改めた (no-silent-fallback)。
+  const firstPoint = series[0];
+  const lastPoint = series[series.length - 1];
+  const xDomain: [Date, Date] | undefined =
+    firstPoint && lastPoint ? [firstPoint.x, lastPoint.x] : undefined;
 
   return (
     <SpaceBetween size="l">
@@ -122,11 +124,7 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
                 data: series.map((p) => ({ x: p.x, y: p.y })),
               },
             ]}
-            xDomain={
-              series.length > 0
-                ? [series[0]?.x ?? new Date(), series[series.length - 1]?.x ?? new Date()]
-                : undefined
-            }
+            xDomain={xDomain}
             xScaleType="time"
             xTitle={t("score_events.chart_x_title")}
             yTitle={t("score_events.chart_y_title")}
