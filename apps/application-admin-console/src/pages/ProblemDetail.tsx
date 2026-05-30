@@ -5,18 +5,17 @@ import Button from "@cloudscape-design/components/button";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
-import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
 import { useMemo } from "react";
 import { Navigate, type NavigateFunction, useNavigate, useParams } from "react-router";
 import { useApiClient } from "../api/client";
+import { type DeploymentSummary, listDeployments } from "../api/deploy-client";
 import {
-  DEPLOYMENT_STATUS_INDICATOR,
-  type DeploymentSummary,
-  listDeployments,
-} from "../api/deploy-client";
+  deploymentStackNameCell,
+  deploymentStatusCell,
+  deploymentTeamCell,
+} from "../components/deployment-columns";
 import type { AppConfig } from "../config";
 import { findProblem } from "../data/problems";
 import { usePollingList } from "../hooks/usePollingList";
@@ -131,32 +130,17 @@ function buildColumns(
     {
       id: "team",
       header: t("problem_detail.col_team"),
-      cell: (item) => (
-        <Link
-          fontSize="body-m"
-          href={`/deployments/${encodeURIComponent(item.jobId)}`}
-          onFollow={(e) => {
-            e.preventDefault();
-            navigate(`/deployments/${encodeURIComponent(item.jobId)}`);
-          }}
-        >
-          {item.displayTeamName ?? item.teamName}
-        </Link>
-      ),
+      cell: deploymentTeamCell(navigate),
     },
     {
       id: "status",
       header: t("problem_detail.col_status_header"),
-      cell: (item) => (
-        <StatusIndicator type={DEPLOYMENT_STATUS_INDICATOR[item.status]}>
-          {item.status}
-        </StatusIndicator>
-      ),
+      cell: deploymentStatusCell,
     },
     {
       id: "namePrefix",
       header: t("problem_detail.col_stack_name"),
-      cell: (item) => <code>{item.namePrefix}</code>,
+      cell: deploymentStackNameCell,
     },
     {
       id: "createdAt",
