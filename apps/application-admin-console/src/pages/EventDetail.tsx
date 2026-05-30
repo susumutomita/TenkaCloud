@@ -77,11 +77,15 @@ function summarizeDeployments(detail: EventDetail): DeploymentCounts {
  */
 function useTabFragmentSync(): readonly [EventTabId, (next: EventTabId) => void] {
   const [activeTab, setActiveTab] = useState<EventTabId>(() => {
+    // SSR guard: window は browser / test env では常に定義済みなので不到達。
+    /* v8 ignore next */
     if (typeof window === "undefined") return "overview";
     return readTabFromHash(window.location.hash);
   });
 
   useEffect(() => {
+    // SSR guard: 同上 (不到達)。
+    /* v8 ignore next */
     if (typeof window === "undefined") return;
     const onHashChange = () => setActiveTab(readTabFromHash(window.location.hash));
     window.addEventListener("hashchange", onHashChange);
@@ -90,6 +94,8 @@ function useTabFragmentSync(): readonly [EventTabId, (next: EventTabId) => void]
 
   const setTab = useCallback((next: EventTabId) => {
     setActiveTab(next);
+    // SSR guard: 同上 (不到達)。
+    /* v8 ignore next */
     if (typeof window === "undefined") return;
     // pathname + search を維持しつつ hash だけ書き換え。 overview は default なので hash を消す。
     const base = `${window.location.pathname}${window.location.search}`;
@@ -128,12 +134,13 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
     return <Navigate to="/events" replace />;
   }
 
-  if (!detail && !error) {
-    // Issue #1366: 共有 LoadingState に切替 (DESIGN-SYSTEM 10 章)。
-    return <LoadingState label={t("event_detail.loading_spinner")} />;
-  }
-
   if (!detail) {
+    // detail 未取得時は loading (error なし) と error-only (取得失敗) の 2 経路に分かれる。
+    // ここで分岐すると error が string に narrow され、 error-only 側の冗長な guard が消える。
+    if (!error) {
+      // Issue #1366: 共有 LoadingState に切替 (DESIGN-SYSTEM 10 章)。
+      return <LoadingState label={t("event_detail.loading_spinner")} />;
+    }
     return (
       <EventDetailErrorOnly
         apiClient={apiClient}
@@ -174,7 +181,8 @@ function EventDetailErrorOnly({
   t,
 }: {
   readonly apiClient: ApiClient | null;
-  readonly error: string | null;
+  // error は呼び出し元 (EventDetailPage) で truthy に narrow 済み (loading 経路は分岐済み)。
+  readonly error: string;
   readonly eventId: string;
   readonly navigateBack: () => void;
   readonly operations: EventOperations;
@@ -207,10 +215,8 @@ function EventDetailErrorOnly({
       >
         {t("event_detail.loading_title")}
       </Header>
-      {error && (
-        // Issue #1366: error-only branch (= detail 取得失敗) を共有 ErrorState に統一。
-        <ErrorState title={t("event_detail.error_header")} hint={error} />
-      )}
+      {/* Issue #1366: error-only branch (= detail 取得失敗) を共有 ErrorState に統一。 */}
+      <ErrorState title={t("event_detail.error_header")} hint={error} />
     </SpaceBetween>
   );
 }
