@@ -67,6 +67,8 @@ export function EventCreateProblemsetSection({
                       options={[...options]}
                       onChange={({ detail }) =>
                         onUpdateProblemRow(r.problemId, {
+                          // Select の onChange は常に選択肢 (value 付き) を伴うので ?? の右辺は不到達 (= 防御)。
+                          /* v8 ignore next */
                           defaultRegion: detail.selectedOption?.value ?? r.defaultRegion,
                         })
                       }
