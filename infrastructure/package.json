@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "@TenkaCloud/trust-bridge": "workspace:*",
+    "@tenkacloud/coordination-plugin-sdk": "workspace:*",
     "@tenkacloud/problem-runtime": "workspace:*",
     "@tenkacloud/saml-utils": "workspace:*",
     "@aws-cdk/aws-lambda-python-alpha": "^2.140.0-alpha.0",
