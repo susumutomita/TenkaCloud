@@ -12,13 +12,7 @@
 
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import {
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  StatusBadge,
-  statusToTone,
-} from "../../src/components/design-system";
+import { EmptyState, ErrorState, LoadingState, StatusBadge, statusToTone } from "../src";
 
 describe("EmptyState", () => {
   it("should render headline only when body and action are omitted", () => {
@@ -43,12 +37,13 @@ describe("EmptyState", () => {
     expect(onClick).toHaveBeenCalled();
   });
 
-  it("should render the primary action as an href link with target _self", () => {
+  it("should render the primary action as a same-tab link when href is given", () => {
+    // primaryAction.href が指定されると target="_self" (同タブ遷移) の link button になる。
     render(
-      <EmptyState headline="Browse" primaryAction={{ label: "Open catalog", href: "/catalog" }} />,
+      <EmptyState headline="No problems" primaryAction={{ label: "Browse", href: "/problems" }} />,
     );
-    const link = screen.getByRole("link", { name: "Open catalog" });
-    expect(link).toHaveAttribute("href", "/catalog");
+    const link = screen.getByRole("link", { name: "Browse" });
+    expect(link).toHaveAttribute("href", "/problems");
     expect(link).toHaveAttribute("target", "_self");
   });
 });
