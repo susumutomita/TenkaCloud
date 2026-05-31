@@ -28,6 +28,7 @@
         "@cloudscape-design/global-styles": "^1.0.59",
         "@tenkacloud/auth-client": "workspace:*",
         "@tenkacloud/format": "workspace:*",
+        "@tenkacloud/web-kit": "workspace:*",
         "http-status-codes": "^2.3.0",
         "react": "^19.2.6",
         "react-dom": "^19.2.6",
@@ -54,6 +55,7 @@
         "@cloudscape-design/global-styles": "^1.0.59",
         "@tenkacloud/auth-client": "workspace:*",
         "@tenkacloud/format": "workspace:*",
+        "@tenkacloud/web-kit": "workspace:*",
         "http-status-codes": "^2.3.0",
         "react": "^19.2.6",
         "react-dom": "^19.2.6",
@@ -95,6 +97,7 @@
         "@cloudscape-design/global-styles": "^1.0.59",
         "@tenkacloud/format": "workspace:*",
         "@tenkacloud/portal-plugin-sdk": "workspace:*",
+        "@tenkacloud/web-kit": "workspace:*",
         "dompurify": "^3.4.4",
         "http-status-codes": "^2.3.0",
         "marked": "^18.0.3",
@@ -234,6 +237,26 @@
         "@types/node": "^24.12.4",
         "typescript": "^5.9.3",
         "vitest": "^4.1.6",
+      },
+    },
+    "packages/web-kit": {
+      "name": "@tenkacloud/web-kit",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@cloudscape-design/components": "^3.0.1297",
+        "@testing-library/jest-dom": "^6.9.1",
+        "@testing-library/react": "^16.3.2",
+        "@types/react": "^19.2.14",
+        "@types/react-dom": "^19.2.3",
+        "jsdom": "^25.0.1",
+        "react": "^19.2.6",
+        "react-dom": "^19.2.6",
+        "typescript": "~5.9.3",
+        "vitest": "^4.1.6",
+      },
+      "peerDependencies": {
+        "@cloudscape-design/components": "^3.0.1297",
+        "react": "^19.2.6",
       },
     },
   },
@@ -677,6 +700,8 @@
     "@tenkacloud/problem-runtime": ["@tenkacloud/problem-runtime@workspace:packages/problem-runtime"],
 
     "@tenkacloud/saml-utils": ["@tenkacloud/saml-utils@workspace:packages/saml-utils"],
+
+    "@tenkacloud/web-kit": ["@tenkacloud/web-kit@workspace:packages/web-kit"],
 
     "@testing-library/dom": ["@testing-library/dom@10.4.1", "", { "dependencies": { "@babel/code-frame": "^7.10.4", "@babel/runtime": "^7.12.5", "@types/aria-query": "^5.0.1", "aria-query": "5.3.0", "dom-accessibility-api": "^0.5.9", "lz-string": "^1.5.0", "picocolors": "1.1.1", "pretty-format": "^27.0.2" } }, "sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg=="],
 

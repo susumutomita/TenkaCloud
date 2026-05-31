@@ -8,6 +8,7 @@ import Popover from "@cloudscape-design/components/popover";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
 import Toggle from "@cloudscape-design/components/toggle";
+import { EmptyState, ErrorState } from "@tenkacloud/web-kit";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useApiClient } from "../api/client";
@@ -26,7 +27,6 @@ import {
   tierBadgeColor,
 } from "../api/tenants";
 import { useAuth } from "../auth/AuthProvider";
-import { EmptyState, ErrorState } from "../components/design-system";
 import type { AppConfig } from "../config";
 import { interpolate, useT } from "../i18n";
 import { computeTenantProgress, isInProgress } from "../lib/tenant-progress";
