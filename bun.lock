@@ -133,6 +133,7 @@
         "@aws-sdk/client-codepipeline": "^3.1048.0",
         "@aws-sdk/client-sfn": "^3.1048.0",
         "@cdklabs/sbt-aws": "0.3.9",
+        "@tenkacloud/coordination-plugin-sdk": "workspace:*",
         "@tenkacloud/problem-runtime": "workspace:*",
         "@tenkacloud/saml-utils": "workspace:*",
         "ajv": "8.18.0",
