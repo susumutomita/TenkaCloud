@@ -10,7 +10,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
 import { StatusCodes } from "http-status-codes";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { type NavigateFunction, useNavigate } from "react-router";
 import { type ApiClient, ApiError, useApiClient } from "../api/client";
 import {
@@ -20,6 +20,7 @@ import {
   listEvents,
 } from "../api/events-client";
 import type { AppConfig } from "../config";
+import { usePollingList } from "../hooks/usePollingList";
 import { interpolate, useT } from "../i18n";
 import { toErrorMessage } from "../lib/error-message";
 
@@ -125,39 +126,27 @@ export function EventListPage({ config }: { config: AppConfig }) {
   const apiClient = useApiClient(config);
   const navigate = useNavigate();
   const t = useT();
-  const [items, setItems] = useState<readonly EventSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<EventSummary | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  // archive 操作の sticky エラーは polling の transient error と分離する (= 単一責務、
+  // polling 成功で消えてほしくない / dismiss も別管理)。 表示は actionError を優先。
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  const fetchOnce = useCallback(async () => {
-    if (!apiClient) return;
-    try {
-      const res = await listEvents(apiClient, { limit: PAGE_SIZE });
-      setItems(res.items);
-      setError(null);
-    } catch (err) {
-      setError(toErrorMessage(err));
-    }
-  }, [apiClient]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const tick = async () => {
-      // unmount 時に clearInterval するので interval 経由の再 tick は来ない。 cancelled=true を
-      // 踏むのは teardown と既 queue の tick が競合する稀ケースのみ (= 防御的、不到達)。
-      /* v8 ignore next */
-      if (cancelled) return;
-      await fetchOnce();
-    };
-    void tick();
-    const interval = setInterval(tick, POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [fetchOnce]);
+  // 一覧の polling (初回 fetch + 30s 間隔 + unmount guard + error 文字列化) は usePollingList に
+  // 集約済 (Deployments / ProblemDetail と同形)。 旧 copy-paste useEffect を排した (#1418 DRY)。
+  const fetcher = useMemo(
+    () =>
+      apiClient ? () => listEvents(apiClient, { limit: PAGE_SIZE }).then((res) => res.items) : null,
+    [apiClient],
+  );
+  const {
+    items,
+    error: pollError,
+    refresh,
+    clearError,
+  } = usePollingList<EventSummary>(fetcher, POLL_INTERVAL_MS);
+  const error = actionError ?? pollError;
 
   const visible = useMemo(() => {
     if (!items) return [];
@@ -182,12 +171,12 @@ export function EventListPage({ config }: { config: AppConfig }) {
     const target = archiveTarget;
     setArchivingId(target.eventId);
     setArchiveTarget(null);
-    setError(null);
+    setActionError(null);
     try {
       await archive(apiClient, target.eventId);
-      await fetchOnce();
+      await refresh();
     } catch (err) {
-      setError(describeArchiveError(err, target.name, t));
+      setActionError(describeArchiveError(err, target.name, t));
     } finally {
       setArchivingId(null);
     }
@@ -225,7 +214,10 @@ export function EventListPage({ config }: { config: AppConfig }) {
           type="error"
           header={t("event_list.error_header")}
           dismissible
-          onDismiss={() => setError(null)}
+          onDismiss={() => {
+            setActionError(null);
+            clearError();
+          }}
         >
           {error}
         </Alert>
