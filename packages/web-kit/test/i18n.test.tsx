@@ -100,6 +100,33 @@ describe("createI18n internals", () => {
   });
 });
 
+describe("createI18n interpolate override", () => {
+  // fail-closed: 未供給 placeholder を [missing] に置換 (既定の keep-placeholder と区別できる印)。
+  const failClosed = (template: string, params?: Readonly<Record<string, string | number>>) =>
+    template.replace(/\{(\w+)\}/g, (_m, name) =>
+      params && name in params ? String(params[name]) : "[missing]",
+    );
+
+  it("should use a custom interpolate for t() and expose it via internals", () => {
+    const kit = createI18n<L>({
+      dictionaries,
+      supportedLocales: ["ja", "en"],
+      defaultLocale: "ja",
+      fallbackLocale: "en",
+      storageKey: STORAGE_KEY,
+      interpolate: failClosed,
+    });
+    expect(kit.internals.interpolate).toBe(failClosed);
+    vi.stubGlobal("navigator", { language: "ja-JP" });
+    const { I18nProvider } = kit;
+    const { result } = renderHook(() => kit.useT(), {
+      wrapper: ({ children }: { children: ReactNode }) => <I18nProvider>{children}</I18nProvider>,
+    });
+    // greet = "こんにちは {name}"。 name 未供給 → 既定なら "{name}" 残し、 override なら "[missing]"。
+    expect(result.current("greet", {})).toBe("こんにちは [missing]");
+  });
+});
+
 describe("I18nProvider + hooks", () => {
   // jsdom の navigator.language は "en-US" 既定なので、 ja-default を期待する test では
   // navigator を ja に固定する (stored-locale が無いケースの detect 経路を決定的にする)。

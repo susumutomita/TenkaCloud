@@ -59,6 +59,13 @@ export interface I18nConfig<L extends string> {
   readonly fallbackLocale: L;
   /** localStorage の永続化キー (SPA ごとに異なる)。 */
   readonly storageKey: string;
+  /**
+   * placeholder 補間関数の上書き (省略時は keep-placeholder の既定 {@link interpolate})。
+   * admin-console のように fail-closed (= 未供給 placeholder を空文字に落とす) など、
+   * SPA 固有の補間ポリシーを注入するための hook。 `t` と `internals.interpolate` の双方が
+   * これを使う (= SPA 内で挙動が一貫する)。
+   */
+  readonly interpolate?: typeof interpolate;
 }
 
 export interface I18nContextValue<L extends string> {
@@ -86,6 +93,7 @@ export interface I18nKit<L extends string> {
 /** config を閉じ込めた i18n Context + hooks を 1 組生成する。 */
 export function createI18n<L extends string>(config: I18nConfig<L>): I18nKit<L> {
   const { dictionaries, supportedLocales, defaultLocale, fallbackLocale, storageKey } = config;
+  const interpolateFn = config.interpolate ?? interpolate;
 
   function detectBrowserLocale(): L {
     // SSR guard: navigator は browser / jsdom では常に定義済みなので不到達。
@@ -147,7 +155,7 @@ export function createI18n<L extends string>(config: I18nConfig<L>): I18nKit<L> 
         // 1) 指定 locale で lookup → 2) fallback locale → 3) raw key
         const v = resolveKey(dictionaries[locale], key);
         const template = v ?? resolveKey(dictionaries[fallbackLocale], key) ?? key;
-        return interpolate(template, params);
+        return interpolateFn(template, params);
       },
       [locale],
     );
@@ -174,7 +182,7 @@ export function createI18n<L extends string>(config: I18nConfig<L>): I18nKit<L> 
     internals: {
       dictionaries,
       resolveKey,
-      interpolate,
+      interpolate: interpolateFn,
       detectBrowserLocale,
       loadStoredLocale,
       persistLocale,
