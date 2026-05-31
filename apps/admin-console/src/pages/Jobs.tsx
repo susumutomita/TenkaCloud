@@ -46,11 +46,11 @@ const STATUS_COLOR: Record<string, "blue" | "green" | "grey" | "red"> = {
   Superseded: "grey",
 };
 
-function colorFor(status: string): "blue" | "green" | "grey" | "red" {
+export function colorFor(status: string): "blue" | "green" | "grey" | "red" {
   return STATUS_COLOR[status] ?? "grey";
 }
 
-function formatElapsed(startIso: string | undefined, endIso: string | undefined): string {
+export function formatElapsed(startIso: string | undefined, endIso: string | undefined): string {
   if (!startIso) return "—";
   const start = Date.parse(startIso);
   if (Number.isNaN(start)) return "—";
@@ -98,6 +98,9 @@ export function JobsPage({ config }: { config: AppConfig }) {
   useEffect(() => {
     let cancelled = false;
     const tick = async () => {
+      // cleanup が cancelled=true にした後の遅延 tick を弾く防御。 setInterval は cleanup で
+      // 即 clear され、 fake timer test では unmount 後に tick が発火しないので不到達。
+      /* v8 ignore next */
       if (cancelled) return;
       await fetchOnce();
     };
@@ -237,7 +240,7 @@ export function JobsPage({ config }: { config: AppConfig }) {
  * deprovisioning SM の ListExecutions を返す。 503 (= not_configured、 旧 stack 互換) は
  * legacy placeholder にフォールバック。
  */
-function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
+export function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
   const auth = useAuth();
   const t = useT();
   const [items, setItems] = useState<readonly StateMachineExecutionItem[] | null>(null);
@@ -249,6 +252,9 @@ function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
   const region = config.awsRegion || "ap-northeast-1";
 
   const fetchOnce = useCallback(async () => {
+    // defensive guard: 下の useEffect が `!idToken` を先に弾くため fetchOnce は token 有り時しか
+    // 呼ばれない (= この early return は不到達)。 JobsPage 側は effect に guard が無いので到達する。
+    /* v8 ignore next */
     if (!idToken) return;
     try {
       const res = await fetchStateMachineExecutions(config, idToken, { limit: PAGE_SIZE });
