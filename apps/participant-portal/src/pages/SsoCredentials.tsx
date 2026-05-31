@@ -18,6 +18,7 @@ import { CliCredentialsPanel } from "../components/CliCredentialsPanel";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
+import { toErrorMessage } from "../lib/error-message";
 
 type TranslateFn = (key: string, vars?: Record<string, string>) => string;
 
@@ -38,7 +39,7 @@ function describeOpenConsoleError(err: unknown, t: TranslateFn): string {
   if (err instanceof PortalValidationError) {
     return t("sso_credentials.validation_error", { errorCode: err.errorCode });
   }
-  return err instanceof Error ? err.message : String(err);
+  return toErrorMessage(err);
 }
 
 /**

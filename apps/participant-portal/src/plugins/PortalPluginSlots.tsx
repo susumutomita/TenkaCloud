@@ -16,6 +16,7 @@ import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import { PORTAL_SLOT_NAMES, type PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { Component, type ErrorInfo, type ReactNode, Suspense, useMemo } from "react";
+import { toErrorMessage } from "../lib/error-message";
 import { loadPluginSlot } from "./loader";
 import {
   buildPortalDisruptions,
@@ -118,7 +119,7 @@ class PluginErrorBoundary extends Component<
   static getDerivedStateFromError(err: unknown): ErrorBoundaryState {
     return {
       hasError: true,
-      message: err instanceof Error ? err.message : String(err),
+      message: toErrorMessage(err),
     };
   }
 

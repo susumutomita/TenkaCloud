@@ -19,6 +19,7 @@ import {
 } from "../api/portal-client";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
+import { toErrorMessage } from "../lib/error-message";
 import { countUnread, loadLastSeenAt, saveLastSeenAt } from "../lib/notifications-storage";
 import { useAuth } from "./AuthProvider";
 import {
@@ -175,7 +176,7 @@ export type LeaderboardRefreshDecision =
   | { readonly kind: "auth-error" };
 
 function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  return toErrorMessage(err);
 }
 
 function shouldStopProblemPolling(view: ParticipantTeamView): boolean {
@@ -312,7 +313,7 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
         auth.logout();
         return;
       }
-      setNotificationsError(err instanceof Error ? err.message : String(err));
+      setNotificationsError(toErrorMessage(err));
     }
   }, [isMock, sessionToken, config.apiBaseUrl, auth, eventIdForKey]);
 

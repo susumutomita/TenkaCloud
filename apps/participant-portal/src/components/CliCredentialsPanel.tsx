@@ -13,6 +13,7 @@ import {
   PortalValidationError,
 } from "../api/portal-client";
 import { useT } from "../i18n";
+import { toErrorMessage } from "../lib/error-message";
 
 /**
  * Issue #1197: CLI / SDK 用一時資格情報を取得して表示する 1 problem 単位の panel。
@@ -72,7 +73,7 @@ export function CliCredentialsPanel({
         setError(t("sso_credentials.validation_error", { errorCode: err.errorCode }));
         return;
       }
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     } finally {
       setLoading(false);
     }
