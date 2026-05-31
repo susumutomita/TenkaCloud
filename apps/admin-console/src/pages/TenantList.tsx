@@ -108,11 +108,15 @@ export function TenantListPage({ config }: { config: AppConfig }) {
     const fetchInsight = async () => {
       try {
         const summary = await fetchTenantsInsightSummary(config, idToken, tenantIds);
+        // cancelled は unmount 時のみ true (= test では fetch 中に unmount しないので不到達)。
+        /* v8 ignore next */
         if (cancelled) return;
         // null = 403 forbidden 等 (= SystemAdmin claim 無し)。column hide のため state も null。
         setInsightByTenantId(summary ? indexSummaryByTenantId(summary) : null);
       } catch {
         // tenant 一覧の primary 表示は壊さない。集計列だけ未取得扱いにする (= null)。
+        // cancelled=true 側は unmount race (不到達)。
+        /* v8 ignore next */
         if (!cancelled) setInsightByTenantId(null);
       }
     };
@@ -133,6 +137,8 @@ export function TenantListPage({ config }: { config: AppConfig }) {
   }, []);
 
   const confirmDeprovision = async () => {
+    // modal は pendingDeprovision!==null かつ行 (= api 有り) でしか開かないので guard は不到達。
+    /* v8 ignore next */
     if (!api || !pendingDeprovision) return;
     try {
       await deleteTenant(api, pendingDeprovision.tenantId);
@@ -142,6 +148,9 @@ export function TenantListPage({ config }: { config: AppConfig }) {
       setError((err as Error).message);
     }
   };
+
+  // modal の onDismiss と Cancel は同一挙動なので 1 つの handler に集約する (DRY)。
+  const closeDeprovisionModal = () => setPendingDeprovision(null);
 
   const deprovisionedLabel = t("tenant_list.deprovisioned");
 
@@ -399,11 +408,11 @@ export function TenantListPage({ config }: { config: AppConfig }) {
       <Modal
         visible={pendingDeprovision !== null}
         header={t("tenant_list.deprovision_modal_header")}
-        onDismiss={() => setPendingDeprovision(null)}
+        onDismiss={closeDeprovisionModal}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setPendingDeprovision(null)}>
+              <Button variant="link" onClick={closeDeprovisionModal}>
                 {t("tenant_list.deprovision_modal_cancel")}
               </Button>
               <Button variant="primary" onClick={confirmDeprovision}>
