@@ -20,6 +20,7 @@ import {
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
 import { interpolate, useT } from "../i18n";
+import { toErrorMessage } from "../lib/error-message";
 
 /**
  * Issue #658: admin-console の Tenant Provisioning Jobs 一覧 page。
@@ -89,7 +90,7 @@ export function JobsPage({ config }: { config: AppConfig }) {
       if (err instanceof AdminInsightApiError && err.status === StatusCodes.FORBIDDEN) {
         setForbidden(true);
       } else {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(toErrorMessage(err));
       }
     }
   }, [config, idToken]);
@@ -265,7 +266,7 @@ function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
         setForbidden(true);
         return;
       }
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     }
   }, [config, idToken]);
 
