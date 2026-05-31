@@ -21,6 +21,7 @@ import {
 } from "../api/tenants";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
+import { toErrorMessage } from "../lib/error-message";
 
 type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -69,7 +70,7 @@ export function TenantDetailPage({ config }: { config: AppConfig }) {
         setError(null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     } finally {
       setLoading(false);
     }
