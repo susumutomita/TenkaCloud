@@ -42,10 +42,9 @@ test-coverage: ; bun run test:coverage
 # 生成してから実行する (CI は test-coverage の直後に走らせる)。 infrastructure は owner lane
 # のため gate 対象外 (現在値のみ表示)。
 coverage-gate: ; bun run scripts/check-coverage-gate.ts
-# Issue #1295: vitest setup (infrastructure/test/setup.ts) pins
-# CDK_OUTDIR to infrastructure/cdk.out.test/<worker>. Output is
-# overwritten per synth (= no accumulation), but a manual purge is
-# useful when switching branches or after large suite refactors.
+# Issues #1295 / #1551: vitest setup pins CDK_OUTDIR to the repo-local
+# infrastructure/cdk.out.test/<worker>. The package test wrapper purges it
+# before and after normal runs; this target remains for interrupted processes.
 clean-test-outdir: ; rm -rf infrastructure/cdk.out.test
 validate-problems: ; bun run validate:problems
 build-problems-index: ; bun run build:problems-index

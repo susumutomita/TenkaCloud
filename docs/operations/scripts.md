@@ -43,6 +43,7 @@ implicit.
 | `scripts/lib/battles-common.sh` | `active-helper` | `deploy-battles.sh`; `delete-battles.sh`; `destroy-battles.sh` | sourced shell helper | No direct run | problem deploy | - |
 | `scripts/lib/install-node.sh` | `active-helper` | `provision-tenant.sh`; `update-tenant.sh`; `deprovision-tenant.sh` | CodeBuild bootstrap | No direct run | tenant lifecycle | - |
 | `scripts/migrate-tier-premium-to-platinum.sh` | `archived-migration` / `candidate-for-removal` | Manual only; no active Makefile / CI caller | local operator migration | Risky: mutates tenant DDB rows; use `--dry-run` first | historical migration | Remove after confirming no pre-PR-56 tenants remain in supported environments |
+| `scripts/package-source-bundle.sh` | `active-helper` | `prepare-source-bundle.sh`; infrastructure tests | local deploy packaging | Yes, AWS credentials are not required | deploy packaging | - |
 | `scripts/prepare-source-bundle.sh` | `active-local-ops` | `install.sh`; `tenkacloud-lite.ts`; infrastructure tests | local operator | Yes with AWS env configured; creates/updates source bucket | deploy packaging | - |
 | `scripts/print-source-bundle-lifecycle.ts` | `active-helper` | `prepare-source-bundle.sh` | local deploy packaging | Yes, read-only stdout emitter | deploy packaging | - |
 | `scripts/provision-tenant.sh` | `active-codebuild` | SBT tenant onboarding pipeline | CodeBuild | No direct local run | tenant lifecycle | - |
@@ -78,3 +79,21 @@ Makefile targets, CodeBuild commands, docs, tests, and operator habits.
 `delete-battles.sh` is also historically named, but it is the active CodeBuild
 delete path. Treat it as product runtime until a dedicated rename PR updates all
 callers.
+
+## Source bundle packaging contract
+
+`scripts/prepare-source-bundle.sh` owns AWS orchestration: source bucket setup,
+lifecycle configuration, frontend builds, archive upload, and cleanup.
+`scripts/package-source-bundle.sh` owns deterministic local packaging and does
+not call AWS APIs.
+
+The local packager copies only the root allowlist: `infrastructure/` as `cdk/`,
+`scripts/`, `problems/`, `packages/`, the root `.nvmrc`, the root
+`package.json`, and the two required frontend `dist/` directories. Generated
+directories such as `node_modules`, `cdk.out*`, `coverage`, `.cache`, and
+`.git` are excluded before copy. Unknown repo-root directories are omitted by
+construction.
+
+The packager fails before archive creation when staged files exceed
+`SOURCE_BUNDLE_MAX_STAGING_MB` (default: `256`) and before upload when the
+archive exceeds `SOURCE_BUNDLE_MAX_ARCHIVE_MB` (default: `128`).

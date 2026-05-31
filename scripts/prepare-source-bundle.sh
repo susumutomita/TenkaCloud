@@ -80,65 +80,43 @@ echo "[prepare-source-bundle] building apps/application-admin-console..."
 echo "[prepare-source-bundle] building apps/participant-portal..."
 (cd apps/participant-portal && bun install --ignore-scripts && bun run build) >/dev/null
 
-# Issue #1056: staging は fixed path (= <repo>/.cache/source-bundle/) に置く。 旧実装の
-# `mktemp -d` (= /var/folders/.../T/tmp.* random 名) は Ctrl+C / 異常終了 / set -e 前段失敗で
-# orphan 化し、 macOS の periodic GC を待たねば消えないため PC ディスクを圧迫していた。
-# fixed path にして 開始時に必ず clean + EXIT/INT/TERM 全 signal で trap して確実に剥がす。
-# `.cache/` は repo の .gitignore で除外済。
-STAGING="${TENKACLOUD_ROOT}/.cache/source-bundle"
-rm -rf "${STAGING}"
-mkdir -p "${STAGING}"
-trap "rm -rf '${STAGING}'" EXIT INT TERM
-echo "[prepare-source-bundle] staging at ${STAGING}..."
+# Keep local packaging separate from AWS orchestration so fixture tests can
+# validate the archive contract without credentials. The work directory is
+# fixed and cleaned on every exit to avoid orphaned multi-gigabyte archives.
+SOURCE_BUNDLE_WORK_DIR="${SOURCE_BUNDLE_WORK_DIR:-${TENKACLOUD_ROOT}/.cache/source-bundle}"
+SOURCE_BUNDLE_ARCHIVE_PATH="${SOURCE_BUNDLE_ARCHIVE_PATH:-${SOURCE_BUNDLE_WORK_DIR}/${CDK_SOURCE_NAME}}"
+case "${SOURCE_BUNDLE_WORK_DIR}" in
+  "" | "/" | "${TENKACLOUD_ROOT}")
+    echo "[prepare-source-bundle] ERROR: unsafe SOURCE_BUNDLE_WORK_DIR=${SOURCE_BUNDLE_WORK_DIR}" >&2
+    exit 1
+    ;;
+esac
+case "${SOURCE_BUNDLE_WORK_DIR}" in
+  /*) ;;
+  *)
+    echo "[prepare-source-bundle] ERROR: SOURCE_BUNDLE_WORK_DIR must be absolute" >&2
+    exit 1
+    ;;
+esac
+if [ -L "${SOURCE_BUNDLE_WORK_DIR}" ]; then
+  echo "[prepare-source-bundle] ERROR: SOURCE_BUNDLE_WORK_DIR must not be a symlink" >&2
+  exit 1
+fi
+cleanup_source_bundle_work_dir() {
+  if [ -d "${SOURCE_BUNDLE_WORK_DIR}" ]; then
+    find "${SOURCE_BUNDLE_WORK_DIR}" -depth -mindepth 1 -delete
+  fi
+}
+trap cleanup_source_bundle_work_dir EXIT INT TERM
 
-# `cp -R` は node_modules / dist / cdk.out をまず全部コピーしてから line 114 の find
-# で削除する pattern だったため、 巨大な node_modules を copy → delete で 30-60 秒
-# ハングしているように見えた (Issue: prepare-source-bundle hang on re-run)。
-# rsync で除外パスを source 側で skip すれば copy 自体が短くなる。
-# macOS / Linux 標準 rsync で動作。
-RSYNC_EXCLUDES=(
-  --exclude=node_modules
-  --exclude=cdk.out
-  --exclude=dist
-  --exclude=.cache
-  --exclude=.env
-  --exclude=.env.local
-  --exclude=.DS_Store
-)
+echo "[prepare-source-bundle] packaging local archive..."
+SOURCE_BUNDLE_ROOT="${TENKACLOUD_ROOT}" \
+  SOURCE_BUNDLE_WORK_DIR="${SOURCE_BUNDLE_WORK_DIR}" \
+  SOURCE_BUNDLE_ARCHIVE_PATH="${SOURCE_BUNDLE_ARCHIVE_PATH}" \
+  bash "${SCRIPT_DIR}/package-source-bundle.sh"
 
-# SBT ref-arch 互換: infrastructure → cdk リネーム
-rsync -a "${RSYNC_EXCLUDES[@]}" infrastructure/ "${STAGING}/cdk/"
-rsync -a "${RSYNC_EXCLUDES[@]}" scripts/ "${STAGING}/scripts/"
-rsync -a "${RSYNC_EXCLUDES[@]}" problems/ "${STAGING}/problems/"
-rsync -a "${RSYNC_EXCLUDES[@]}" packages/ "${STAGING}/packages/"
-cp .nvmrc "${STAGING}/.nvmrc"
-cp package.json "${STAGING}/package.json"
-
-# package.json の workspaces: "infrastructure" → "cdk" 置換 (= staging で名前が変わるため)
-python3 -c "
-import json
-p = '${STAGING}/package.json'
-with open(p) as f:
-    pkg = json.load(f)
-pkg['workspaces'] = [w if w != 'infrastructure' else 'cdk' for w in pkg.get('workspaces', [])]
-with open(p, 'w') as f:
-    json.dump(pkg, f, indent=2)
-"
-
-# rsync の --exclude が source 側で skip 済なので、 残り find clean up は念のための
-# 二重防御 (= rsync 漏れ + apps/ サブコピー時の .DS_Store 防止)。
-find "${STAGING}" -name ".DS_Store" -delete
-
-# dist は個別 copy (= 上記 find で消されているので)
-mkdir -p "${STAGING}/apps/application-admin-console"
-cp -R apps/application-admin-console/dist "${STAGING}/apps/application-admin-console/"
-mkdir -p "${STAGING}/apps/participant-portal"
-cp -R apps/participant-portal/dist "${STAGING}/apps/participant-portal/"
-
-# zip + upload
-cd "${STAGING}"
-zip -rq "${CDK_SOURCE_NAME}" .
+echo "[prepare-source-bundle] uploading ${SOURCE_BUNDLE_ARCHIVE_PATH}..."
 CDK_PARAM_COMMIT_ID=$(aws s3api put-object --bucket "${CDK_PARAM_S3_BUCKET_NAME}" \
-  --key "${CDK_SOURCE_NAME}" --body "./${CDK_SOURCE_NAME}" --output text)
+  --key "${CDK_SOURCE_NAME}" --body "${SOURCE_BUNDLE_ARCHIVE_PATH}" --output text)
 export CDK_PARAM_COMMIT_ID
 echo "[prepare-source-bundle] uploaded s3://${CDK_PARAM_S3_BUCKET_NAME}/${CDK_SOURCE_NAME} (etag=${CDK_PARAM_COMMIT_ID})"

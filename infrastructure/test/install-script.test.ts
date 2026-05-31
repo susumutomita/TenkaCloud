@@ -14,10 +14,12 @@ import { describe, expect, it } from "vitest";
 
 const INSTALL_SH_PATH = join(__dirname, "..", "..", "scripts", "install.sh");
 const PREPARE_BUNDLE_SH_PATH = join(__dirname, "..", "..", "scripts", "prepare-source-bundle.sh");
+const PACKAGE_BUNDLE_SH_PATH = join(__dirname, "..", "..", "scripts", "package-source-bundle.sh");
 
 describe("scripts/install.sh (Issue #1031: single-phase deploy)", () => {
   const source = readFileSync(INSTALL_SH_PATH, "utf8");
   const prepareBundle = readFileSync(PREPARE_BUNDLE_SH_PATH, "utf8");
+  const packageBundle = readFileSync(PACKAGE_BUNDLE_SH_PATH, "utf8");
 
   it("should deploy all stacks in one shot via `bun cdk deploy --all` (#1031)", () => {
     // bash の \ 継続を許容するため、 `--all` と `--require-approval never` を別 line 検査で。
@@ -38,21 +40,23 @@ describe("scripts/install.sh (Issue #1031: single-phase deploy)", () => {
     expect(source).not.toContain("CDK_PARAM_ADMIN_INSIGHT_API_URL");
   });
 
-  // prepare-source-bundle.sh が staging logic の DRY 集約点であることを pin。
-  it("prepare-source-bundle.sh should copy the repo root `package.json` to the staging root", () => {
-    expect(prepareBundle).toContain(`cp package.json "\${STAGING}/package.json"`);
+  // package-source-bundle.sh が local packaging logic の DRY 集約点であることを pin。
+  it("prepare-source-bundle.sh should delegate local packaging to the AWS-free helper", () => {
+    expect(prepareBundle).toContain(`bash "\${SCRIPT_DIR}/package-source-bundle.sh"`);
   });
 
-  it("prepare-source-bundle.sh should copy the `packages` directory to the staging root (workspace:* protocol)", () => {
+  it("package-source-bundle.sh should copy the `packages` directory to the staging root (workspace:* protocol)", () => {
     // Issue: prepare-source-bundle hang on re-run — switched from `cp -R` to `rsync -a` with
-    // source-side excludes (node_modules / cdk.out / dist) to avoid copy-then-delete pattern.
-    expect(prepareBundle).toContain(
-      `rsync -a "\${RSYNC_EXCLUDES[@]}" packages/ "\${STAGING}/packages/"`,
-    );
+    // source-side excludes (node_modules / cdk.out* / dist) to avoid copy-then-delete pattern.
+    expect(packageBundle).toContain(`copy_tree "packages" "packages"`);
   });
 
-  it("prepare-source-bundle.sh should rewrite staging package.json workspaces from `infrastructure` to `cdk`", () => {
-    expect(prepareBundle).toContain("pkg['workspaces'] = [w if w != 'infrastructure' else 'cdk'");
+  it("package-source-bundle.sh should exclude every CDK output directory from staging", () => {
+    expect(packageBundle).toContain("--exclude='cdk.out*'");
+  });
+
+  it("package-source-bundle.sh should rewrite staging package.json workspaces from `infrastructure` to `cdk`", () => {
+    expect(packageBundle).toContain('workspace if workspace != "infrastructure" else "cdk"');
   });
 
   it("install.sh should source prepare-source-bundle.sh and delegate staging without inlining duplicates", () => {
