@@ -8,7 +8,7 @@ export JSII_DEPRECATED := quiet
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install_ci build typecheck test test-coverage clean-test-outdir check before-commit beforecommit \
+.PHONY: help install install_ci build typecheck test test-coverage coverage-gate clean-test-outdir check before-commit beforecommit \
         build-docs check-docs audit-deps build-problems-index check-problems-index \
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
@@ -37,6 +37,11 @@ build:         ; bun run build
 typecheck:     ; bun run typecheck
 test:          ; bun run test
 test-coverage: ; bun run test:coverage
+# Issue #1424: agent-owned workspace (3 SPA + 共有 package) が 100% coverage を維持しているか
+# を lcov から検証する gate。 `make test-coverage` で各 workspace の coverage/lcov.info を
+# 生成してから実行する (CI は test-coverage の直後に走らせる)。 infrastructure は owner lane
+# のため gate 対象外 (現在値のみ表示)。
+coverage-gate: ; bun run scripts/check-coverage-gate.ts
 # Issue #1295: vitest setup (infrastructure/test/setup.ts) pins
 # CDK_OUTDIR to infrastructure/cdk.out.test/<worker>. Output is
 # overwritten per synth (= no accumulation), but a manual purge is

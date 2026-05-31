@@ -76,6 +76,12 @@ jobs:
         run: |
           make test-coverage
 
+      # Issue #1424: agent-owned workspace (3 SPA + 共有 package) の 100% coverage を enforce。
+      # test-coverage が生成した lcov.info を読み 100% 未満なら CI を落とす (= 回帰検知)。
+      - name: Coverage gate (100% for agent-owned workspaces)
+        run: |
+          make coverage-gate
+
       - name: Build
         run: |
           make build
