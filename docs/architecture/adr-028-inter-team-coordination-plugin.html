@@ -46,7 +46,7 @@
   <h1>ADR-028: Inter-team coordination plugin contract</h1>
   <p><em>Battle 問題が宣言する他チーム interaction primitive を platform が dispatch する plugin 契約</em></p>
   <div class="meta">
-    <div><b>Status:</b> <span class="badge draft">Draft</span> 2026-05-20</div>
+    <div><b>Status:</b> <span class="badge draft">Proposed</span> 2026-05-20</div>
     <div><b>Related:</b>
       <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> (problem = plugin, platform = host)
     </div>
@@ -100,26 +100,27 @@
 </section>
 
 <section>
-<h2>Decision (= 仮)</h2>
+<h2>Decision</h2>
 
 <h3>D1: metadata に <code>interTeamCoordination</code> field を追加</h3>
 
 <p>SCHEMA を拡張し、 問題が次のように coordination plugin を宣言する。</p>
 
 <pre>"interTeamCoordination": {
-  "module": "coordination/router.ts",
-  "kind": "router",
-  "summary": "team が公開する service URL を register / lookup する router。"
+  "plugin": "coordination/router.ts",
+  "name": "サービスルーター",
+  "description": "team が公開する service URL を register / lookup する router。",
+  "publicHint": true
 }</pre>
 
-<p><code>module</code> は問題ディレクトリ相対 path、 <code>kind</code> は問題 author が付ける free-form なラベル (catalog / debug 表示用、 platform は意味解釈しない)、 <code>summary</code> は 1 行説明 (portal 表示用)。 field 自体は optional。 省略すると inter-team interaction 無しの Battle として動く (= goal #4 fallback)。</p>
+<p><code>plugin</code> は問題ディレクトリ相対 path (pattern <code>^coordination/[A-Za-z0-9._-]+\.ts$</code>、 dashboard.slots の <code>portal/*.tsx</code> 規約と同形)、 <code>name</code> / <code>description</code> は portal / operator 表示用の人間可読情報、 <code>publicHint</code> は <code>disruptions</code> と同じ fairness フラグで、 <code>true</code> のときだけ participant-portal に coordination の存在を予告表示する (default は hide = fail-closed)。 field 自体は optional。 省略すると inter-team interaction 無しの Battle として動く (= goal #4 fallback)。 platform は <code>plugin</code> の意味論を解釈せず host するだけ。</p>
 
 <h3>D2: Plugin contract = TypeScript interface (state machine + 3 hooks)</h3>
 
-<p>plugin module は次の interface を default export する。 platform 側 SDK は <code>@TenkaCloud/coordination-plugin-sdk</code> として型と util を提供する。</p>
+<p>plugin module は次の interface を default export する。 platform 側 SDK <code>@tenkacloud/coordination-plugin-sdk</code> が型 (<code>CoordinationPlugin</code>) と純 util を提供する: <code>defineCoordinationPlugin()</code> (型推論付き authoring helper)、 <code>dispatchOp()</code> (validate→apply の純 reducer)、 <code>runTick()</code>、 <code>safeProjectForTeam()</code> (plugin が throw しても fallback を返す fail-safe projection)。 dispatcher はこれら純 util を副作用 (DDB / S3) の外側で呼ぶだけで、 問題依存の意味論を一切持たない。</p>
 
 <pre>// problems/&lt;category&gt;/&lt;id&gt;/coordination/router.ts
-import type { CoordinationPlugin } from "@TenkaCloud/coordination-plugin-sdk";
+import { type CoordinationPlugin, defineCoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
 
 interface RouterState {
   readonly routes: Record&lt;string /* teamId */, string /* serviceUrl */&gt;;
@@ -129,7 +130,7 @@ type RouterOp =
   | { kind: "register"; serviceUrl: string }
   | { kind: "unregister" };
 
-const plugin: CoordinationPlugin&lt;RouterState, RouterOp&gt; = {
+const router: CoordinationPlugin&lt;RouterState, RouterOp&gt; = {
   initialState(_ctx) {
     return { routes: {} };
   },
@@ -158,7 +159,7 @@ const plugin: CoordinationPlugin&lt;RouterState, RouterOp&gt; = {
   },
 };
 
-export default plugin;</pre>
+export default defineCoordinationPlugin(router);</pre>
 
 <p>5 つの hook は state machine の必要最小:</p>
 
@@ -198,7 +199,7 @@ export default plugin;</pre>
 
 <h3>D5: per-team projection が見える場所</h3>
 
-<p>各 team の <code>/portal/me</code> response に <code>coordination: PluginProjection</code> field を追加。 plugin の <code>projectForTeam(state, teamId)</code> 結果がそのまま入る。 portal の <code>dashboard.slots</code> で問題が独自 UI を render する (= router なら他 team の URL 表、 alliance なら同盟関係 graph、 等)。 portal 標準 UI は coordination state を直接 render しない (= 問題依存 UI を platform が知る必要がない)。</p>
+<p><strong>2 系統</strong>に分かれる。 (1) <em>静的予告</em>: <code>interTeamCoordination</code> の <code>name</code> / <code>description</code> を <code>publicHint: true</code> のときだけ portal catalog (<code>PortalCoordinationEntry</code>) 経由で plugin slot props (<code>PortalSlotProps.coordination</code>) に流す (= disruptions と同じ fairness projection。 deploy 前から「この問題には coordination がある」 と予告できる)。 (2) <em>動的 projection</em>: 各 team の <code>/portal/me</code> response に <code>coordination: PluginProjection</code> field を追加し、 dispatcher が <code>safeProjectForTeam(plugin, state, teamId, fallback)</code> で plugin の <code>projectForTeam</code> を <strong>fail-safe</strong> に呼ぶ (= plugin が throw しても fallback を返し portal を壊さない)。 portal の <code>dashboard.slots</code> で問題が独自 UI を render する (= router なら他 team の URL 表、 alliance なら同盟関係 graph、 等)。 portal 標準 UI は coordination state を直接 render しない (= 問題依存 UI を platform が知る必要がない)。</p>
 
 <h3>D6: platform 側 dispatcher Lambda の責務</h3>
 
@@ -207,9 +208,9 @@ export default plugin;</pre>
 <ul>
 <li>portal API <code>POST /portal/me/coordination/&lt;eventId&gt;</code> の backend</li>
 <li>plugin module を S3 (= ADR-008 で problems を payload 配信する経路) から fetch + bun runtime で load</li>
-<li><code>validateOp</code> → <code>applyOp</code> → DDB write の sequence を実行</li>
-<li>scoring tick で <code>tick</code> を呼ぶ (= 同 Lambda の別 entrypoint)</li>
-<li>plugin の <code>projectForTeam</code> を participant lookup から call する経路を export</li>
+<li>SDK の <code>dispatchOp(plugin, state, teamId, op)</code> (= <code>validateOp</code> → ok なら <code>applyOp</code> の純 reducer) を DDB read と optimistic-lock write の間で実行 (= 副作用は dispatcher、 意味論は plugin)</li>
+<li>scoring tick で SDK の <code>runTick(plugin, state, eventNowMs)</code> を呼ぶ (= 同 Lambda の別 entrypoint)</li>
+<li>participant lookup から <code>safeProjectForTeam</code> で plugin の <code>projectForTeam</code> を fail-safe に call する経路を export</li>
 </ul>
 
 <p>plugin code は bun の <code>import()</code> で動的 load。 sandbox は別 isolate を立てない (= cost と複雑度のため)。 plugin の bug は当該 event のみに影響し、 platform 全体には波及しない (= optimistic locking + DDB write failure で停止する)。</p>
@@ -263,7 +264,7 @@ export default plugin;</pre>
 <h3>Phase 1: SDK + dispatcher + DSL ship</h3>
 
 <ul>
-<li><code>@TenkaCloud/coordination-plugin-sdk</code> パッケージ作成 (= TypeScript types + util)</li>
+<li><code>@tenkacloud/coordination-plugin-sdk</code> パッケージ作成 (= TypeScript types + util)</li>
 <li><code>problems/SCHEMA.json</code> に <code>interTeamCoordination</code> optional field 追加</li>
 <li><code>CoordinationDispatcherFunction</code> Lambda + <code>EventCoordinationState</code> DDB table を <code>infrastructure/lib/problem-deploy/</code> に追加</li>
 <li>portal API <code>POST /portal/me/coordination/&lt;eventId&gt;</code> 追加</li>
