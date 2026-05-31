@@ -1,0 +1,76 @@
+/**
+ * @tenkacloud/coordination-plugin-sdk — ADR-028 inter-team coordination の plugin contract。
+ *
+ * Battle の「参加者間 interaction」 (router / 同盟 / 共有資源 queue 等) は問題ごとに意味が違うため、
+ * platform に hardcode せず **問題が state machine を同梱して差し替える** plugin 方式にする
+ * (ADR-022 → renumber ADR-028 / memory: 問題は plugin、 platform は host)。 問題は
+ * `problems/<id>/coordination/<name>.ts` で `CoordinationPlugin` を default export し、 platform の
+ * dispatcher Lambda (= 本 SDK の純 reducer を実行) が tenant/event 単位の 1 row state を駆動する。
+ *
+ * 本パッケージは **型 + 純 util だけ** を提供する (React / AWS SDK 非依存。 portal-plugin-sdk と
+ * 同形)。 実際の DDB 永続化 / cross-account 配送は platform 側 (infrastructure、 ADR-028 D3/D4)。
+ *
+ * Status: ADR-028 は Draft。 contract が変われば本 SDK も追従する (version 互換は別途)。
+ */
+
+/** event 開始時に `initialState` へ渡る文脈。 機密は含めない (= 問題 plugin に見せてよい範囲)。 */
+export interface CoordinationContext {
+  readonly eventId: string;
+  /** 参加チームの teamId 一覧 (= 初期 state を teams 数に応じて組むため)。 */
+  readonly teamIds: readonly string[];
+}
+
+/** operation の受理可否。 不可のとき error は機械可読な短い理由コード。 */
+export type ValidateResult = { readonly ok: true } | { readonly ok: false; readonly error: string };
+
+/**
+ * 問題が default export する coordination state machine。
+ *
+ * - `State` は plugin 固有の共有状態 (= 1 event 1 row、 N teams で共有)。
+ * - `Op` は team が送る operation (= cast-event payload)。
+ * - `Projection` は各 team の portal に返す投影 (= 他 team の機密を漏らさない)。
+ *
+ * 全 hook は **副作用なしの純関数**。 platform はこれらを呼ぶだけで、 問題依存の意味論を知らない。
+ */
+export interface CoordinationPlugin<State, Op, Projection = unknown> {
+  /** event 開始時の初期 state。 */
+  initialState(ctx: CoordinationContext): State;
+  /** operation を受理可能か判定 (= rate limit / 入力検証 / phase 制約)。 */
+  validateOp(state: State, teamId: string, op: Op): ValidateResult;
+  /** state を変える純関数 (= 副作用なし)。 validateOp が ok のときだけ呼ばれる。 */
+  applyOp(state: State, teamId: string, op: Op): State;
+  /** scoring engine が tick ごとに呼ぶ optional hook (= 経過時間で alliance 解消等)。 */
+  tick?(state: State, eventNowMs: number): State;
+  /** その team の portal に渡す projection (= 他 team の機密を漏らさない投影)。 */
+  projectForTeam(state: State, teamId: string): Projection;
+}
+
+/** {@link dispatchOp} の結果。 受理時は次 state、 拒否時は validateOp の error。 */
+export type DispatchResult<State> =
+  | { readonly ok: true; readonly state: State }
+  | { readonly ok: false; readonly error: string };
+
+/**
+ * dispatcher の純 core: validate → (ok なら) apply。 validateOp が拒否したら state は不変。
+ * platform の dispatcher Lambda はこの純関数を「DDB から read → dispatchOp → ok なら
+ * optimistic-lock write」 の中で使う (= 副作用は platform 側、 意味論は plugin 側)。
+ */
+export function dispatchOp<State, Op>(
+  plugin: CoordinationPlugin<State, Op>,
+  state: State,
+  teamId: string,
+  op: Op,
+): DispatchResult<State> {
+  const verdict = plugin.validateOp(state, teamId, op);
+  if (!verdict.ok) return { ok: false, error: verdict.error };
+  return { ok: true, state: plugin.applyOp(state, teamId, op) };
+}
+
+/** tick hook を持つ plugin だけ state を進める。 未定義なら state をそのまま返す (= no-op)。 */
+export function runTick<State, Op>(
+  plugin: CoordinationPlugin<State, Op>,
+  state: State,
+  eventNowMs: number,
+): State {
+  return plugin.tick ? plugin.tick(state, eventNowMs) : state;
+}

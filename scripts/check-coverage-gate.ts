@@ -31,6 +31,7 @@ export const GATED_WORKSPACES = [
   "packages/saml-utils",
   "packages/trust-bridge",
   "packages/format",
+  "packages/coordination-plugin-sdk",
 ] as const;
 
 /** gate しないが現在値を表示する workspace (owner lane、 100% への道筋表示用)。 */

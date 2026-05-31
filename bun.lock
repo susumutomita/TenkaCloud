@@ -175,6 +175,14 @@
         "vitest": "^4.1.6",
       },
     },
+    "packages/coordination-plugin-sdk": {
+      "name": "@tenkacloud/coordination-plugin-sdk",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.9.3",
+        "vitest": "^4.1.6",
+      },
+    },
     "packages/format": {
       "name": "@tenkacloud/format",
       "version": "0.1.0",
@@ -659,6 +667,8 @@
     "@swc/types": ["@swc/types@0.1.26", "", { "dependencies": { "@swc/counter": "^0.1.3" } }, "sha512-lyMwd7WGgG79RS7EERZV3T8wMdmPq3xwyg+1nmAM64kIhx5yl+juO2PYIHb7vTiPgPCj8LYjsNV2T5wiQHUEaw=="],
 
     "@tenkacloud/auth-client": ["@tenkacloud/auth-client@workspace:packages/auth-client"],
+
+    "@tenkacloud/coordination-plugin-sdk": ["@tenkacloud/coordination-plugin-sdk@workspace:packages/coordination-plugin-sdk"],
 
     "@tenkacloud/format": ["@tenkacloud/format@workspace:packages/format"],
 
