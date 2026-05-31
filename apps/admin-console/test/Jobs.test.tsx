@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { StatusCodes } from "http-status-codes";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminInsightApiError } from "../src/api/admin-drill-down";
 import type { AppConfig } from "../src/config";
@@ -95,7 +96,7 @@ describe("JobsPage", () => {
   });
 
   it("should render the forbidden alert on a 403 AdminInsightApiError", async () => {
-    mockFetchPipeline.mockRejectedValue(new AdminInsightApiError(403, "denied"));
+    mockFetchPipeline.mockRejectedValue(new AdminInsightApiError(StatusCodes.FORBIDDEN, "denied"));
     render(<JobsPage config={config} />);
     expect(await screen.findByText("jobs_page.forbidden_header")).toBeInTheDocument();
   });
@@ -162,7 +163,7 @@ describe("DeprovisioningJobsTab", () => {
   });
 
   it("should render the forbidden alert on a 403", async () => {
-    mockFetchSfn.mockRejectedValue(new AdminInsightApiError(403, "denied"));
+    mockFetchSfn.mockRejectedValue(new AdminInsightApiError(StatusCodes.FORBIDDEN, "denied"));
     render(<DeprovisioningJobsTab config={config} />);
     expect(await screen.findByText("jobs_page.forbidden_header")).toBeInTheDocument();
   });
@@ -175,7 +176,9 @@ describe("DeprovisioningJobsTab", () => {
   });
 
   it("should treat a non-403 AdminInsightApiError as a fetch failure (not forbidden)", async () => {
-    mockFetchSfn.mockRejectedValue(new AdminInsightApiError(500, "server error"));
+    mockFetchSfn.mockRejectedValue(
+      new AdminInsightApiError(StatusCodes.INTERNAL_SERVER_ERROR, "server error"),
+    );
     render(<DeprovisioningJobsTab config={config} />);
     expect(await screen.findByText("jobs_page.fetch_failed_header")).toBeInTheDocument();
     expect(screen.queryByText("jobs_page.forbidden_header")).not.toBeInTheDocument();
