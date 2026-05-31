@@ -79,9 +79,18 @@ before-commit: lint test validate-problems check-docs check-http-status check-te
 
 # `cdk synth` が通ることを保証 (= ts-node / tsx の module resolution、 stack 構築の type error
 # 等を本番 deploy 前にキャッチ)。 Makefile placeholder env で全 stack を synth するので AWS 認証は不要。
+#
+# #1446 follow-up: 毎コミット (pre-commit) で走るこの gate は「synth の shape (module 解決 /
+# 型 / construct ツリー / template 生成)」 を検証するのが目的で、 Lambda の実バンドルは不要。
+# 実バンドル (SBT の Python CognitoAuth 等を Docker で pip install) は毎回 `cdk-<hash>` イメージを
+# 生成し、 CDK はそれを掃除しないため Docker ディスクが青天井に膨らみ synth が ENOSPC で失敗していた。
+# よって check-synth では `CDK_SKIP_BUNDLING=1` を渡し、 bin/infrastructure.ts 側で
+# `aws:cdk:bundling-stacks=[]` を setContext して Docker バンドルを skip する
+# (= module 解決 / 型 / construct の検証はそのまま、 Docker 不要・高速・イメージ非蓄積)。
+# 実バンドルは `make synth` / `make deploy` 側で従来どおり行う (= env var 無しなら全 stack をバンドル)。
 check-synth:
-	@$(MAKE) synth >/dev/null 2>&1 || { echo "ERROR: cdk synth failed (= make deploy も失敗します)。 make synth で詳細を確認してください。"; exit 1; }
-	@echo "OK  cdk synth (= deploy 経路の module resolution が通る)"
+	@CDK_SKIP_BUNDLING=1 $(MAKE) synth >/dev/null 2>&1 || { echo "ERROR: cdk synth failed (= make deploy も失敗します)。 CDK_SKIP_BUNDLING=1 make synth で詳細を確認してください。"; exit 1; }
+	@echo "OK  cdk synth (module 解決 / 型 / construct を検証、 Docker バンドルは skip — 実バンドルは make synth)"
 
 # ===== Lint / Fix =====
 lint:   lint-md lint-text lint-format
