@@ -242,6 +242,9 @@
     "packages/web-kit": {
       "name": "@tenkacloud/web-kit",
       "version": "0.1.0",
+      "dependencies": {
+        "@tenkacloud/auth-client": "workspace:*",
+      },
       "devDependencies": {
         "@cloudscape-design/components": "^3.0.1297",
         "@testing-library/jest-dom": "^6.9.1",
