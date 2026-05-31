@@ -153,6 +153,9 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
                   <Button
                     variant="inline-link"
                     onClick={async () => {
+                      // defensive: 行 (= items) は client.list 成功時のみ存在するので Delete button
+                      // が押せる時点で client は必ず非 null (= この guard は不到達)。
+                      /* v8 ignore next */
                       if (!client) return;
                       if (!confirm(`Delete IdP "${i.idpId}"?`)) return;
                       setBusy(true);
