@@ -19,6 +19,7 @@ import type {
   PortalSlotProps,
 } from "@tenkacloud/portal-plugin-sdk";
 import { findProblemMetadata } from "../data/problems";
+import { toErrorMessage } from "../lib/error-message";
 
 /**
  * `base` + 任意 `appendPath` を結合して absolute URL を返す。 不正な URL は throw
@@ -52,7 +53,7 @@ export function buildPortalEndpointsFromOutputs(
         // `new URL()` は不正入力に対して必ず TypeError (= instanceof Error) を投げるため、
         // String(e) 側は到達不能な防御 fallback。 分岐 coverage 上ノイズになるので ignore。
         /* v8 ignore start */
-        const detail = e instanceof Error ? e.message : String(e);
+        const detail = toErrorMessage(e);
         /* v8 ignore stop */
         throw new Error(
           `Failed to build endpoint URL for problemId=${problemId} slot=${ep.slot} key=${ep.default.key}: ${detail}`,

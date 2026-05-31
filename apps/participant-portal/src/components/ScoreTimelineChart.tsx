@@ -9,6 +9,7 @@ import {
   type TeamScoreEvents,
 } from "../api/portal-client";
 import { useI18n, useT } from "../i18n";
+import { toErrorMessage } from "../lib/error-message";
 
 /**
  * audit table #12 + Issue #1038 P1 #6: 競技開始からの得点状況を折れ線グラフで可視化する。
@@ -69,7 +70,7 @@ export function buildCumulativePoints(team: TeamScoreEvents): readonly SeriesPoi
 
 export function toScoreTimelineLoadError(err: unknown): ScoreTimelineLoadResult {
   if (err instanceof Error && err.name === "AbortError") return { kind: "skip" };
-  return { kind: "error", message: err instanceof Error ? err.message : String(err) };
+  return { kind: "error", message: toErrorMessage(err) };
 }
 
 async function fetchScoreTimelineData(

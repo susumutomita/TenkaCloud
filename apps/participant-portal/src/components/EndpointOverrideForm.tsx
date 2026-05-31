@@ -31,6 +31,7 @@ import {
   putProblemEndpointOverride,
 } from "../api/portal-client";
 import { useT } from "../i18n";
+import { toErrorMessage } from "../lib/error-message";
 
 interface EndpointOverrideFormProps {
   readonly apiBaseUrl: string;
@@ -69,7 +70,7 @@ function formatValidationError(err: unknown, t: TFn): string {
         return t("problem_detail.endpoint_error_generic", { errorCode: err.errorCode });
     }
   }
-  return err instanceof Error ? err.message : String(err);
+  return toErrorMessage(err);
 }
 
 export function EndpointOverrideForm({
@@ -96,7 +97,7 @@ export function EndpointOverrideForm({
       })
       .catch((err) => {
         if (cancelled) return;
-        setListError(err instanceof Error ? err.message : String(err));
+        setListError(toErrorMessage(err));
       });
     return () => {
       cancelled = true;

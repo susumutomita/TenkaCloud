@@ -17,6 +17,7 @@ import { DEV_MOCK_SCORE_EVENTS } from "../auth/dev-mock-fixtures";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
+import { toErrorMessage } from "../lib/error-message";
 import { ScoreEventsTable } from "./ScoreEventsTable";
 
 const POLL_INTERVAL_MS = 30_000;
@@ -65,7 +66,7 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
         auth.logout();
         return;
       }
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toErrorMessage(err));
     }
   }, [isMock, sessionToken, config.apiBaseUrl, auth]);
 
