@@ -270,6 +270,15 @@ implicit.</p>
 <td>Remove after confirming no pre-PR-56 tenants remain in supported environments</td>
 </tr>
 <tr>
+<td><code>scripts/package-source-bundle.sh</code></td>
+<td><code>active-helper</code></td>
+<td><code>prepare-source-bundle.sh</code>; infrastructure tests</td>
+<td>local deploy packaging</td>
+<td>Yes, AWS credentials are not required</td>
+<td>deploy packaging</td>
+<td>-</td>
+</tr>
+<tr>
 <td><code>scripts/prepare-source-bundle.sh</code></td>
 <td><code>active-local-ops</code></td>
 <td><code>install.sh</code>; <code>tenkacloud-lite.ts</code>; infrastructure tests</td>
@@ -364,6 +373,20 @@ Makefile targets, CodeBuild commands, docs, tests, and operator habits.</p>
 <p><code>delete-battles.sh</code> is also historically named, but it is the active CodeBuild
 delete path. Treat it as product runtime until a dedicated rename PR updates all
 callers.</p>
+<h2>Source bundle packaging contract</h2>
+<p><code>scripts/prepare-source-bundle.sh</code> owns AWS orchestration: source bucket setup,
+lifecycle configuration, frontend builds, archive upload, and cleanup.
+<code>scripts/package-source-bundle.sh</code> owns deterministic local packaging and does
+not call AWS APIs.</p>
+<p>The local packager copies only the root allowlist: <code>infrastructure/</code> as <code>cdk/</code>,
+<code>scripts/</code>, <code>problems/</code>, <code>packages/</code>, the root <code>.nvmrc</code>, the root
+<code>package.json</code>, and the two required frontend <code>dist/</code> directories. Generated
+directories such as <code>node_modules</code>, <code>cdk.out*</code>, <code>coverage</code>, <code>.cache</code>, and
+<code>.git</code> are excluded before copy. Unknown repo-root directories are omitted by
+construction.</p>
+<p>The packager fails before archive creation when staged files exceed
+<code>SOURCE_BUNDLE_MAX_STAGING_MB</code> (default: <code>256</code>) and before upload when the
+archive exceeds <code>SOURCE_BUNDLE_MAX_ARCHIVE_MB</code> (default: <code>128</code>).</p>
 
 <div class="doc-source">Source: <code>docs/operations/scripts.md</code> — このファイルは
 <code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず

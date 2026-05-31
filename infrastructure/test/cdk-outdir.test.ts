@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 /**
  * Issue #1295: CDK tests must not leak `cdk.outXXXXXX` directories into
  * `$TMPDIR`. The test setup pins `process.env.CDK_OUTDIR` to a repo-local,
- * gitignored path (`infrastructure/cdk.out.test/<workerId>/`). Synth output
- * gets overwritten per worker so disk usage caps at one assembly's worth.
+ * gitignored path (`infrastructure/cdk.out.test/<workerId>/`). The outer
+ * test/run-vitest.ts wrapper purges worker directories between test runs.
  */
 describe("CDK test outdir pinning (issue #1295)", () => {
   it("should pin process.env.CDK_OUTDIR to a repo-local cdk.out.test path", () => {

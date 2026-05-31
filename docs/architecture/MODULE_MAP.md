@@ -94,6 +94,7 @@ All Lambdas use Hono on Lambda + Cognito JWT auth. Validation with Zod at the bo
 | `install.sh`                          | SaaS mode 3-phase install (`make deploy-saas`). Sources `prepare-source-bundle.sh`.          |
 | `cleanup.sh`                          | Idempotent teardown of every SaaS stack + S3 buckets.                                        |
 | `prepare-source-bundle.sh`            | Builds `source.zip` for CodeBuild. Initializes the `problems/` submodule first.              |
+| `package-source-bundle.sh`            | Builds the AWS-free local `source.zip` archive from an explicit root allowlist.              |
 | `deploy-battles.sh`                   | Run inside CodeBuild. `aws cloudformation deploy` against the competitor account.            |
 | `delete-battles.sh` / `destroy-battles.sh` | Mirror for stack teardown.                                                              |
 | `provision-tenant.sh` / `deprovision-tenant.sh` | Per-tenant CodeBuild scripts for the SaaS tenant pipeline.                          |
