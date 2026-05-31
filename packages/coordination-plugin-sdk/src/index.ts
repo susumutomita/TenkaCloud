@@ -74,3 +74,34 @@ export function runTick<State, Op>(
 ): State {
   return plugin.tick ? plugin.tick(state, eventNowMs) : state;
 }
+
+/**
+ * 問題が default export する plugin を **型推論付き** で書くための identity helper。
+ * `export default defineCoordinationPlugin({ ... })` とすると、 各 hook の State / Op / Projection が
+ * 相互推論される (= 問題 author が型注釈を手書きせずに contract へ従える。 defineConfig 同形)。
+ * 実体は引数をそのまま返すだけ。 ADR-028 の参照 Battle 問題はこれ経由で書く。
+ */
+export function defineCoordinationPlugin<State, Op, Projection = unknown>(
+  plugin: CoordinationPlugin<State, Op, Projection>,
+): CoordinationPlugin<State, Op, Projection> {
+  return plugin;
+}
+
+/**
+ * {@link CoordinationPlugin.projectForTeam} を **fail-safe** に包む。 plugin (= 問題が同梱) が
+ * throw しても portal を壊さず `fallback` を返す。 これにより buggy / 未対応な問題でも参加者画面が
+ * 落ちない (ADR-028 acceptance「safe fallback for problems that don't opt in」)。 機密の非漏洩は
+ * 呼び出し側が「空 / 当たり障りのない」 fallback を渡すことで担保する (= 他 team state を出さない)。
+ */
+export function safeProjectForTeam<State, Op, Projection>(
+  plugin: CoordinationPlugin<State, Op, Projection>,
+  state: State,
+  teamId: string,
+  fallback: Projection,
+): Projection {
+  try {
+    return plugin.projectForTeam(state, teamId);
+  } catch {
+    return fallback;
+  }
+}
