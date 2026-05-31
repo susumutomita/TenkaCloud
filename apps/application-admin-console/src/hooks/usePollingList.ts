@@ -8,6 +8,8 @@ export interface PollingListState<T> {
   readonly error: string | null;
   /** 手動再取得 (reload button 等)。 polling と同じ経路を 1 回実行する。 */
   readonly refresh: () => Promise<void>;
+  /** error alert の dismiss 用に手動で error を消す。 次 polling 成功/失敗で再評価される。 */
+  readonly clearError: () => void;
 }
 
 /**
@@ -31,6 +33,8 @@ export function usePollingList<T>(
 ): PollingListState<T> {
   const [items, setItems] = useState<readonly T[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const clearError = useCallback(() => setError(null), []);
 
   const refresh = useCallback(async () => {
     if (!fetcher) return;
@@ -60,5 +64,5 @@ export function usePollingList<T>(
     };
   }, [refresh, intervalMs]);
 
-  return { items, error, refresh };
+  return { items, error, refresh, clearError };
 }
