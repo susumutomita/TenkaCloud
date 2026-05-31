@@ -24,12 +24,15 @@ vi.mock("./props-builder", () => ({
   buildPortalEndpointsFromOutputs: vi.fn(() => []),
   buildPortalPhases: vi.fn(() => []),
   buildPortalDisruptions: vi.fn(() => []),
+  buildPortalCoordination: vi.fn(() => undefined),
   buildPortalTeam: vi.fn((team) => team),
 }));
 
 const { loadPluginSlot } = await import("./loader");
+const { buildPortalCoordination } = await import("./props-builder");
 const { PortalPluginSlots } = await import("./PortalPluginSlots");
 const mockLoadPluginSlot = loadPluginSlot as ReturnType<typeof vi.fn>;
+const mockBuildCoordination = buildPortalCoordination as ReturnType<typeof vi.fn>;
 
 const baseProps = {
   problemId: "fake-problem",
@@ -41,6 +44,7 @@ const baseProps = {
 
 afterEach(() => {
   mockLoadPluginSlot.mockReset();
+  mockBuildCoordination.mockReset();
 });
 
 describe("PortalPluginSlots (ADR-012 Phase 5)", () => {
@@ -59,6 +63,18 @@ describe("PortalPluginSlots (ADR-012 Phase 5)", () => {
     );
     render(<PortalPluginSlots {...baseProps} />);
     await waitFor(() => expect(screen.getByTestId("fake-status")).toBeInTheDocument());
+  });
+
+  it("should pass interTeamCoordination to the slot props when present (#1420)", async () => {
+    mockBuildCoordination.mockReturnValue({ name: "Router", description: "service mesh" });
+    function CoordPanel(props: { coordination?: { name?: string } }) {
+      return <div data-testid="coord">{props.coordination?.name}</div>;
+    }
+    mockLoadPluginSlot.mockImplementation((_problemId, slotName) =>
+      slotName === "StatusPanel" ? CoordPanel : undefined,
+    );
+    render(<PortalPluginSlots {...baseProps} />);
+    await waitFor(() => expect(screen.getByTestId("coord")).toHaveTextContent("Router"));
   });
 
   it("should let ErrorBoundary fall back to an Alert when a plugin throws (= the whole portal does not crash) and elevate the log to console.error (Issue #1251)", async () => {

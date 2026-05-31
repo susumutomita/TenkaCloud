@@ -39,6 +39,16 @@ export interface ProblemDisruptionEntry {
 }
 
 /**
+ * ADR-028 / Issue #1420: portal が表示してよい参加者間 coordination の公開情報。
+ * `publicHint === true` の問題だけ catalog に narrow される (= disruptions と同じ fairness 方針)。
+ * plugin path は platform 内部 (dispatcher が S3 から load) なので portal には出さない。
+ */
+export interface ProblemCoordinationEntry {
+  readonly name?: string;
+  readonly description?: string;
+}
+
+/**
  * ADR-012 Phase 5: 1 problem に紐づく portal plugin slot map。 `dashboard.slots[slotName]`
  * の各 entry は metadata.json で `portal/<SlotName>.tsx` 形式の相対 path を持つ。 portal
  * の plugin loader (= src/plugins/loader.ts) がこれを glob で照合して該当 chunk を lazy load する。
@@ -96,6 +106,8 @@ export interface ProblemCatalogEntry {
   readonly disruptions: readonly ProblemDisruptionEntry[];
   /** ADR-012 Phase 5: dashboard.slots[slotName] = portal/<file>.tsx 相対 path の map。 */
   readonly dashboardSlots?: ProblemDashboardSlots;
+  /** ADR-028 / Issue #1420: 参加者間 coordination の公開情報 (`publicHint: true` の問題のみ)。 */
+  readonly interTeamCoordination?: ProblemCoordinationEntry;
   /** Issue #583 Phase 5: 競技者向け field の locale override (en のみ、 #1108 で es / zh は廃止)。 ja は top-level。 */
   readonly i18n?: {
     readonly en?: ProblemI18nOverride;
@@ -148,6 +160,12 @@ interface ProblemMetadata {
   }[];
   dashboard?: {
     slots?: Record<string, string>;
+  };
+  interTeamCoordination?: {
+    plugin: string;
+    name?: string;
+    description?: string;
+    publicHint?: boolean;
   };
   /** ADR Issue #583 Phase 5 / #1108: 競技者向け field の locale override。 ja 自体は top-level が正本。 サポート対象は en のみ。 */
   i18n?: {
@@ -249,6 +267,15 @@ export function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry 
         ) ?? [],
     ...(dashboardSlots && Object.keys(dashboardSlots).length > 0
       ? { dashboardSlots: dashboardSlots as ProblemDashboardSlots }
+      : {}),
+    // ADR-028 / #1420: publicHint===true の coordination だけ portal に narrow (= disruptions と同方針)。
+    ...(metadata.interTeamCoordination?.publicHint === true
+      ? {
+          interTeamCoordination: omitUndefined({
+            name: metadata.interTeamCoordination.name,
+            description: metadata.interTeamCoordination.description,
+          }) as ProblemCoordinationEntry,
+        }
       : {}),
     ...(publicI18n ? { i18n: publicI18n } : {}),
     // ADR-026 / ADR-027: 実行環境を露出。 未宣言の legacy 問題は aws/cloudformation 既定。

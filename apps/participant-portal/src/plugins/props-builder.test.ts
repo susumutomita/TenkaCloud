@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPortalCoordination,
   buildPortalDisruptions,
   buildPortalEndpointsFromOutputs,
   buildPortalPhases,
@@ -83,5 +84,22 @@ describe("buildPortalDisruptions", () => {
 
   it("should return empty array for a non-existent problemId", () => {
     expect(buildPortalDisruptions("does-not-exist")).toEqual([]);
+  });
+});
+
+describe("buildPortalCoordination (#1420)", () => {
+  it("should return the public coordination info for a problem that declares it (publicHint=true)", () => {
+    const out = buildPortalCoordination("microservice-migration-battle");
+    expect(out?.name).toBeTruthy();
+    expect(out?.description).toBeTruthy();
+  });
+
+  it("should return undefined for problems without interTeamCoordination", () => {
+    expect(buildPortalCoordination("hello-world")).toBeUndefined();
+    expect(buildPortalCoordination("hello-world-battle")).toBeUndefined();
+  });
+
+  it("should return undefined for a non-existent problemId", () => {
+    expect(buildPortalCoordination("does-not-exist")).toBeUndefined();
   });
 });
