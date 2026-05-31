@@ -164,3 +164,36 @@ describe("projectCoordinationForTeam", () => {
     expect(await projectCoordinationForTeam(store, counter, base)).toEqual({ count: 0 });
   });
 });
+
+describe("coordination context guard (#1420 review)", () => {
+  it("should reject a dispatch when ctx.eventId differs from the persisted eventId", async () => {
+    const { store, send } = fakeStore({ getItem: undefined });
+    const out = await dispatchCoordinationOp(store, counter, {
+      ...base,
+      ctx: { eventId: "OTHER", teamIds: ["t1"] },
+      op: { kind: "inc" },
+      nowIso: "now",
+    });
+    expect(out).toEqual({ kind: "rejected", error: "context_mismatch" });
+    expect(send).not.toHaveBeenCalled(); // fail-fast: no read/write
+  });
+
+  it("should reject a dispatch when the team is not in ctx.teamIds", async () => {
+    const { store } = fakeStore({ getItem: undefined });
+    const out = await dispatchCoordinationOp(store, counter, {
+      ...base,
+      teamId: "intruder",
+      op: { kind: "inc" },
+      nowIso: "now",
+    });
+    expect(out).toEqual({ kind: "rejected", error: "context_mismatch" });
+  });
+
+  it("should return the fallback projection on an inconsistent context", async () => {
+    const { store, send } = fakeStore({ getItem: { state: { count: 9 }, version: 1 } });
+    expect(
+      await projectCoordinationForTeam(store, counter, { ...base, teamId: "intruder" }),
+    ).toEqual({ count: -1 });
+    expect(send).not.toHaveBeenCalled();
+  });
+});

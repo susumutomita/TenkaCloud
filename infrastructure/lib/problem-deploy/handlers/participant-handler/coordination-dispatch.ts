@@ -37,6 +37,15 @@ export type CoordinationDispatchOutcome =
   | { readonly kind: "rejected"; readonly error: string }
   | { readonly kind: "conflict" };
 
+/** ctx.eventId が永続化 key (eventId) と一致し、 認証 team が ctx.teamIds に含まれるか。 */
+function isContextConsistent(input: {
+  readonly eventId: string;
+  readonly teamId: string;
+  readonly ctx: CoordinationContext;
+}): boolean {
+  return input.ctx.eventId === input.eventId && input.ctx.teamIds.includes(input.teamId);
+}
+
 /**
  * op を受理 → 適用 → 永続化し、 当該 team 向け projection を返す。
  *   1. 現在 state を読む (無ければ plugin.initialState で初期化、 version 0)
@@ -49,6 +58,10 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
   plugin: CoordinationPlugin<State, Op, Projection>,
   input: CoordinationDispatchInput<Op>,
 ): Promise<CoordinationDispatchOutcome> {
+  // ctx (= 初期化に使う event 文脈) が永続化 key (eventId) / 認証 team とズレていたら、
+  // 別 event 用に組んだ state を保存 / 配信してしまう。 read/write 前に fail-closed で弾く。
+  if (!isContextConsistent(input)) return { kind: "rejected", error: "context_mismatch" };
+
   const existing = await readCoordinationState(store, input.tenantId, input.eventId);
   const state = (existing?.state as State) ?? plugin.initialState(input.ctx);
   const version = existing?.version ?? 0;
@@ -90,6 +103,8 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
     readonly fallbackProjection: unknown;
   },
 ): Promise<unknown> {
+  // ctx 不整合 (= 別 event 用 ctx / team が event 外) は fail-closed で fallback を返す (= 機密非漏洩)。
+  if (!isContextConsistent(input)) return input.fallbackProjection;
   const existing = await readCoordinationState(store, input.tenantId, input.eventId);
   const state = (existing?.state as State) ?? plugin.initialState(input.ctx);
   return safeProjectForTeam(plugin, state, input.teamId, input.fallbackProjection as Projection);
