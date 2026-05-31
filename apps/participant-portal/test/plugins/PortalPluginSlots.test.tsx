@@ -13,6 +13,7 @@ vi.mock("../../src/plugins/loader", () => ({ loadPluginSlot: mockLoad }));
 vi.mock("../../src/plugins/props-builder", () => ({
   buildPortalPhases: () => [],
   buildPortalDisruptions: () => [],
+  buildPortalCoordination: () => undefined,
   buildPortalEndpointsFromOutputs: () => [],
   buildPortalTeam: (team: unknown) => team,
 }));

@@ -42,6 +42,11 @@ export interface PortalSlotProps {
   readonly endpoints: readonly PortalEndpoint[];
   readonly phases: readonly PortalPhaseEntry[];
   readonly disruptions: readonly PortalDisruptionEntry[];
+  /**
+   * ADR-028 / Issue #1420: 参加者間 coordination の公開情報 (= `publicHint: true` の問題のみ)。
+   * 未宣言 / non-public な問題では undefined (= plugin 側で `props.coordination?.` で安全に扱う)。
+   */
+  readonly coordination?: PortalCoordinationEntry;
   readonly nowIso: string;
 }
 
@@ -77,6 +82,16 @@ export interface PortalDisruptionEntry {
   readonly defaultAfterMinutes?: number;
   readonly description?: string;
   readonly publicHint?: boolean;
+}
+
+/**
+ * ADR-028 / Issue #1420: 参加者間 coordination の公開情報。 `publicHint=true` の問題のみ portal
+ * (= props-builder) で narrow され plugin に届く。 plugin 側で publicHint を見る必要は無い。
+ * plugin path 等の platform 内部 field は portal には流さない (= 表示用の name / description のみ)。
+ */
+export interface PortalCoordinationEntry {
+  readonly name?: string;
+  readonly description?: string;
 }
 
 /**

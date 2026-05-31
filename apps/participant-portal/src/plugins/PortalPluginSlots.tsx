@@ -19,6 +19,7 @@ import { Component, type ErrorInfo, type ReactNode, Suspense, useMemo } from "re
 import { toErrorMessage } from "../lib/error-message";
 import { loadPluginSlot } from "./loader";
 import {
+  buildPortalCoordination,
   buildPortalDisruptions,
   buildPortalEndpointsFromOutputs,
   buildPortalPhases,
@@ -48,6 +49,7 @@ export function PortalPluginSlots({
   // から narrowed)。 endpoints は stackOutputs 依存なので別 memo に切る。
   const phases = useMemo(() => buildPortalPhases(problemId), [problemId]);
   const disruptions = useMemo(() => buildPortalDisruptions(problemId), [problemId]);
+  const coordination = useMemo(() => buildPortalCoordination(problemId), [problemId]);
   const endpoints = useMemo(
     () => buildPortalEndpointsFromOutputs(problemId, stackOutputs),
     [problemId, stackOutputs],
@@ -68,9 +70,10 @@ export function PortalPluginSlots({
       endpoints,
       phases,
       disruptions,
+      ...(coordination ? { coordination } : {}),
       nowIso,
     }),
-    [teamProp, problemId, jobId, score, endpoints, phases, disruptions, nowIso],
+    [teamProp, problemId, jobId, score, endpoints, phases, disruptions, coordination, nowIso],
   );
 
   const slotsToRender = useMemo(

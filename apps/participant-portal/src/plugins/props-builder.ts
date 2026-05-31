@@ -13,6 +13,7 @@
  */
 
 import type {
+  PortalCoordinationEntry,
   PortalDisruptionEntry,
   PortalEndpoint,
   PortalPhaseEntry,
@@ -86,6 +87,15 @@ export function buildPortalPhases(problemId: string): readonly PortalPhaseEntry[
 export function buildPortalDisruptions(problemId: string): readonly PortalDisruptionEntry[] {
   const disruptions = findProblemMetadata(problemId)?.disruptions ?? [];
   return disruptions.filter((d) => d.publicHint === true);
+}
+
+/**
+ * ADR-028 / Issue #1420: 参加者間 coordination の公開情報を plugin props 用に取り出す。
+ * catalog 側 `metadataToEntry` が既に `publicHint === true` で narrow 済 (= non-public は
+ * entry 自体が無い)ので、 ここは catalog の値をそのまま返す。 未宣言 problem は undefined。
+ */
+export function buildPortalCoordination(problemId: string): PortalCoordinationEntry | undefined {
+  return findProblemMetadata(problemId)?.interTeamCoordination;
 }
 
 /**
