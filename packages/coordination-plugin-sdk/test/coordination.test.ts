@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { type CoordinationPlugin, dispatchOp, runTick } from "../src/index";
+import {
+  type CoordinationPlugin,
+  defineCoordinationPlugin,
+  dispatchOp,
+  runTick,
+  safeProjectForTeam,
+} from "../src/index";
 
 /**
  * ADR-028 (#1420): coordination plugin contract の純 util を pin する。 ADR の router 例を
@@ -91,5 +97,42 @@ describe("runTick", () => {
     });
     const live = { allies: ["t2"], expiresAtMs: 5000 };
     expect(runTick(alliance, live, 1000)).toBe(live);
+  });
+});
+
+describe("defineCoordinationPlugin", () => {
+  it("should return the plugin unchanged (identity helper for type inference)", () => {
+    const defined = defineCoordinationPlugin(router);
+    expect(defined).toBe(router);
+    // 推論された plugin は dispatchOp にそのまま渡せる。
+    const r = dispatchOp(defined, { routes: {} }, "t1", {
+      kind: "register",
+      serviceUrl: "https://t1.example",
+    });
+    expect(r).toEqual({ ok: true, state: { routes: { t1: "https://t1.example" } } });
+  });
+});
+
+describe("safeProjectForTeam", () => {
+  it("should return the plugin projection on the happy path", () => {
+    expect(
+      safeProjectForTeam(router, { routes: { t1: "https://x" } }, "t2", { otherRoutes: {} }),
+    ).toEqual({ otherRoutes: { t1: "https://x" } });
+  });
+
+  it("should fall back when the plugin projection throws (fail-safe, no portal crash)", () => {
+    const buggy: CoordinationPlugin<
+      RouterState,
+      RouterOp,
+      { otherRoutes: Record<string, string> }
+    > = {
+      ...router,
+      projectForTeam: () => {
+        throw new Error("plugin bug");
+      },
+    };
+    expect(
+      safeProjectForTeam(buggy, { routes: { t1: "https://x" } }, "t2", { otherRoutes: {} }),
+    ).toEqual({ otherRoutes: {} });
   });
 });
