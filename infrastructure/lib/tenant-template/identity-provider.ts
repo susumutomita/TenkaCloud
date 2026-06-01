@@ -129,6 +129,12 @@ export class IdentityProvider extends Construct {
     // は Gmail で改行が collapse して読めない問題があった。 多言語化が必要なら CustomMessage
     // Lambda Trigger + SES への移行 (= 別 issue) で対応する。
     this.tenantUserPool = new aws_cognito.UserPool(this, "tenantUserPool", {
+      // V2 pre-token-generation トリガ (= lite-admin-claims、 Issue #1327 / #1358) が id/access token に
+      // `custom:userRole=TenantAdmin` 等を注入するには UserPool が **Essentials 以上** の feature plan で
+      // なければならない。 Lite plan では V2 の token customization が無視され claim が乗らず、 tenant API の
+      // requireRole が 403 "not a TenantAdmin" を返す (= 監査ログ / IdP 画面の失敗の根因)。 admin のみが
+      // Cognito を使い MAU は極小なので Essentials 無料枠 (10k MAU) 内に収まる (cost-zero 原則を維持)。
+      featurePlan: aws_cognito.FeaturePlan.ESSENTIALS,
       autoVerify: { email: true },
       accountRecovery: aws_cognito.AccountRecovery.EMAIL_ONLY,
       // ADR-020 Phase E / audit MFA: tenant admin consoles は destructive 操作を扱う
