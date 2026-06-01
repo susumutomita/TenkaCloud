@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { usePolling } from "@tenkacloud/web-kit";
+import { useCallback, useState } from "react";
 import { toErrorMessage } from "../lib/error-message";
 
 export interface PollingListState<T> {
@@ -47,22 +48,9 @@ export function usePollingList<T>(
     }
   }, [fetcher, hasChanged]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const tick = async () => {
-      // unmount 時に clearInterval するので interval 経由の再 tick は来ない。 cancelled=true を
-      // 踏むのは teardown と既 queue の tick が競合する稀ケースのみ (= 防御的、不到達)。
-      /* v8 ignore next */
-      if (cancelled) return;
-      await refresh();
-    };
-    void tick();
-    const interval = setInterval(tick, intervalMs);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [refresh, intervalMs]);
+  // 即時 fetch + interval polling + unmount cleanup は web-kit の共有 primitive に委譲する
+  // (#1418: polling timer の boilerplate を usePolling 1 箇所へ集約。 admin-console も同 hook を使う)。
+  usePolling(refresh, intervalMs);
 
   return { items, error, refresh, clearError };
 }
