@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@tenkacloud/web-kit";
 import { StatusCodes } from "http-status-codes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, useApiClient } from "../../api/client";
@@ -10,7 +11,6 @@ import {
   TERMINAL_STATUSES,
 } from "../../api/deploy-client";
 import type { AppConfig } from "../../config";
-import { toErrorMessage } from "../../lib/error-message";
 import type { StackProgressErrorState } from "./types";
 
 // Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒 polling は 12 req/min/user で過多)。

@@ -4,6 +4,7 @@ import Button from "@cloudscape-design/components/button";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useEffect, useState } from "react";
 import {
   type CliCredentialsView,
@@ -13,7 +14,6 @@ import {
   PortalValidationError,
 } from "../api/portal-client";
 import { useT } from "../i18n";
-import { toErrorMessage } from "../lib/error-message";
 
 /**
  * Issue #1197: CLI / SDK 用一時資格情報を取得して表示する 1 problem 単位の panel。

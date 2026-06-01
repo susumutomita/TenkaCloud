@@ -22,6 +22,7 @@ import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useEffect, useState } from "react";
 import {
   deleteProblemEndpointOverride,
@@ -31,7 +32,6 @@ import {
   putProblemEndpointOverride,
 } from "../api/portal-client";
 import { useT } from "../i18n";
-import { toErrorMessage } from "../lib/error-message";
 
 interface EndpointOverrideFormProps {
   readonly apiBaseUrl: string;

@@ -1,7 +1,7 @@
+import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useMemo } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
-import { toErrorMessage } from "../lib/error-message";
 
 /**
  * apps/admin-console/src/api/client.ts と同実装 (tenant API 呼び出し用の最小 HTTP client)。

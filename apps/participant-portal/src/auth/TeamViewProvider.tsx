@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@tenkacloud/web-kit";
 import {
   createContext,
   type ReactNode,
@@ -19,7 +20,6 @@ import {
 } from "../api/portal-client";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
-import { toErrorMessage } from "../lib/error-message";
 import { countUnread, loadLastSeenAt, saveLastSeenAt } from "../lib/notifications-storage";
 import { useAuth } from "./AuthProvider";
 import {

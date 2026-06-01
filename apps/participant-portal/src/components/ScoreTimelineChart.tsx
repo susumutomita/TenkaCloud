@@ -2,6 +2,7 @@ import Box from "@cloudscape-design/components/box";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import LineChart from "@cloudscape-design/components/line-chart";
+import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useEffect, useMemo, useState } from "react";
 import {
   getLeaderboardScoreEvents,
@@ -9,7 +10,6 @@ import {
   type TeamScoreEvents,
 } from "../api/portal-client";
 import { useI18n, useT } from "../i18n";
-import { toErrorMessage } from "../lib/error-message";
 
 /**
  * audit table #12 + Issue #1038 P1 #6: 競技開始からの得点状況を折れ線グラフで可視化する。

@@ -1,3 +1,4 @@
+import { toErrorMessage } from "@tenkacloud/web-kit";
 import { StatusCodes } from "http-status-codes";
 import { useState } from "react";
 import { type ApiClient, ApiError } from "../api/client";
@@ -13,7 +14,6 @@ import {
   setEventSchedule,
   unlockEventScoring,
 } from "../api/events-client";
-import { toErrorMessage } from "../lib/error-message";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 

@@ -9,7 +9,7 @@ import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
-import { usePolling } from "@tenkacloud/web-kit";
+import { toErrorMessage, usePolling } from "@tenkacloud/web-kit";
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useApiClient } from "../api/client";
@@ -22,7 +22,6 @@ import {
 } from "../api/tenants";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
-import { toErrorMessage } from "../lib/error-message";
 
 type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 

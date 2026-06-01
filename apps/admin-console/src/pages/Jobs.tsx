@@ -8,7 +8,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Table from "@cloudscape-design/components/table";
 import Tabs from "@cloudscape-design/components/tabs";
-import { usePolling } from "@tenkacloud/web-kit";
+import { toErrorMessage, usePolling } from "@tenkacloud/web-kit";
 import { StatusCodes } from "http-status-codes";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -21,7 +21,6 @@ import {
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
 import { interpolate, useT } from "../i18n";
-import { toErrorMessage } from "../lib/error-message";
 
 /**
  * Issue #658: admin-console の Tenant Provisioning Jobs 一覧 page。

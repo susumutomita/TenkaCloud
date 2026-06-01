@@ -1,6 +1,5 @@
-import { usePolling } from "@tenkacloud/web-kit";
+import { toErrorMessage, usePolling } from "@tenkacloud/web-kit";
 import { useCallback, useState } from "react";
-import { toErrorMessage } from "../lib/error-message";
 
 export interface PollingListState<T> {
   /** 取得済の一覧。 初回 fetch 前 / fetcher 不在は null (= loading 判定に使う)。 */
