@@ -30,11 +30,12 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { distinctProviders, type IdpResolution, resolveIdp } from "../auth/idp-resolution";
+import { rememberLoginReturnPath } from "../auth/login-return-path";
 import { ProductLoginShell } from "../components/ProductLoginShell";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
 
-export function LoginPage({ config }: { config: AppConfig }) {
+export function LoginPage({ config, returnPath }: { config: AppConfig; returnPath?: string }) {
   const auth = useAuth();
   const t = useT();
   // mount 直後に auto-redirect を 1 回だけ走らせる guard (#1360)。 React StrictMode の 2 度
@@ -56,6 +57,7 @@ export function LoginPage({ config }: { config: AppConfig }) {
   const startLogin = async (options?: { identityProvider?: string }) => {
     setSigningIn(true);
     setErrorMessage(undefined);
+    rememberLoginReturnPath(returnPath);
     try {
       await auth.login(options);
       // 成功時は Cognito Hosted UI への redirect が走るため、 ここに到達しない (= browser

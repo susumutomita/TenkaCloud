@@ -2,6 +2,7 @@ import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import type { NavigateFunction } from "react-router";
 import type {
   EventDeploymentStatus,
   EventDeploymentSummary,
@@ -110,7 +111,10 @@ export function renderProblemDeployStatus(
 /**
  * 1 problem 行の deploy job click-through link 列 (#533)。
  */
-export function renderProblemJobLinks(deployments: readonly EventDeploymentSummary[] | undefined) {
+export function renderProblemJobLinks(
+  deployments: readonly EventDeploymentSummary[] | undefined,
+  navigate?: NavigateFunction,
+) {
   if (!deployments || deployments.length === 0) {
     return (
       <Box variant="small" color="text-status-inactive">
@@ -126,6 +130,11 @@ export function renderProblemJobLinks(deployments: readonly EventDeploymentSumma
             href={`/deployments/${encodeURIComponent(d.jobId)}`}
             external={false}
             ariaLabel={`Deploy job 詳細 (status: ${d.status})`}
+            onFollow={(e) => {
+              if (!navigate) return;
+              e.preventDefault();
+              navigate(`/deployments/${encodeURIComponent(d.jobId)}`);
+            }}
           >
             Job #{i + 1} ↗
           </Link>

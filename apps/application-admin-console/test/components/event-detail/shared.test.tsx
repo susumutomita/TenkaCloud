@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import type {
   EventDeploymentSummary,
   EventDetail,
@@ -99,6 +100,13 @@ describe("renderProblemJobLinks", () => {
     expect(screen.getByText("Job #2 ↗")).toBeInTheDocument();
     expect(screen.getByText("COMPLETE")).toBeInTheDocument();
     expect(screen.getByText("FAILED")).toBeInTheDocument();
+  });
+
+  it("should use SPA navigation when following a job link so the memory-only token survives", async () => {
+    const navigate = vi.fn();
+    render(renderProblemJobLinks([dep("COMPLETE", "j1")], navigate));
+    await userEvent.click(screen.getByText("Job #1 ↗"));
+    expect(navigate).toHaveBeenCalledWith("/deployments/j1");
   });
 });
 

@@ -2,6 +2,7 @@ import Box from "@cloudscape-design/components/box";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Table from "@cloudscape-design/components/table";
+import { useNavigate } from "react-router";
 import type { EventDetail } from "../../api/events-client";
 import { renderProblemDeployStatus, renderProblemJobLinks } from "./shared";
 
@@ -14,6 +15,7 @@ export function EventProblemSetPanel({
   readonly detail: EventDetail;
   readonly t: Translate;
 }) {
+  const navigate = useNavigate();
   return (
     <Container
       header={
@@ -49,7 +51,7 @@ export function EventProblemSetPanel({
           {
             id: "jobs",
             header: t("event_detail.problemset_col_jobs"),
-            cell: (p) => renderProblemJobLinks(detail.deploymentsByProblem[p.problemId]),
+            cell: (p) => renderProblemJobLinks(detail.deploymentsByProblem[p.problemId], navigate),
           },
         ]}
         empty={<Box>{t("event_detail.problemset_empty")}</Box>}

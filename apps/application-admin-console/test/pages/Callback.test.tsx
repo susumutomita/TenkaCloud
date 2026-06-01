@@ -26,12 +26,16 @@ const { CallbackPage } = await import("../../src/pages/Callback");
 const config = {} as AppConfig;
 
 beforeEach(() => {
+  sessionStorage.clear();
   mockNav.mockClear();
   mockSetTokens.mockClear();
   mockComplete.mockReset().mockResolvedValue({ idToken: "tok" });
   mockParams.mockReturnValue(new URLSearchParams("code=abc&state=xyz"));
 });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  sessionStorage.clear();
+  vi.clearAllMocks();
+});
 
 describe("CallbackPage", () => {
   it("should show an error when no code is present and not exchange", () => {
@@ -48,6 +52,17 @@ describe("CallbackPage", () => {
     await waitFor(() => expect(mockSetTokens).toHaveBeenCalledWith({ idToken: "tok" }));
     expect(mockComplete).toHaveBeenCalledWith(config, "abc", "xyz");
     expect(mockNav).toHaveBeenCalledWith("/", { replace: true });
+  });
+
+  it("should return to the remembered deep link after a successful exchange", async () => {
+    sessionStorage.setItem(
+      "TenkaCloud.application_admin.login_return_path",
+      "/deployments/job-1?view=logs#latest",
+    );
+    render(<CallbackPage config={config} />);
+    await waitFor(() => expect(mockSetTokens).toHaveBeenCalledWith({ idToken: "tok" }));
+    expect(mockNav).toHaveBeenCalledWith("/deployments/job-1?view=logs#latest", { replace: true });
+    expect(sessionStorage.getItem("TenkaCloud.application_admin.login_return_path")).toBeNull();
   });
 
   it("should pass undefined state when the state param is absent", async () => {
