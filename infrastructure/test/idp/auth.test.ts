@@ -15,6 +15,14 @@ function ctx(claims?: Record<string, unknown>): Context {
   } as unknown as Context;
 }
 
+function restApiCtx(claims?: Record<string, unknown>): Context {
+  return {
+    env: {
+      event: claims ? { requestContext: { authorizer: { claims } } } : undefined,
+    },
+  } as unknown as Context;
+}
+
 describe("isSystemAdmin", () => {
   it("should be true only when custom:userRole === SystemAdmin", () => {
     expect(isSystemAdmin(ctx({ "custom:userRole": "SystemAdmin" }))).toBe(true);
@@ -29,6 +37,10 @@ describe("isTenantAdmin", () => {
     expect(isTenantAdmin(ctx({ "custom:userRole": "TenantAdmin" }))).toBe(true);
     expect(isTenantAdmin(ctx({ "custom:userRole": "SystemAdmin" }))).toBe(false);
   });
+
+  it("should read custom:userRole from the REST API Cognito authorizer claims path", () => {
+    expect(isTenantAdmin(restApiCtx({ "custom:userRole": "TenantAdmin" }))).toBe(true);
+  });
 });
 
 describe("resolveTenantId", () => {
@@ -38,6 +50,9 @@ describe("resolveTenantId", () => {
   it("should return undefined when claim is missing or empty", () => {
     expect(resolveTenantId(ctx({ "custom:tenantId": "" }))).toBeUndefined();
     expect(resolveTenantId(ctx())).toBeUndefined();
+  });
+  it("should read custom:tenantId from the REST API Cognito authorizer claims path", () => {
+    expect(resolveTenantId(restApiCtx({ "custom:tenantId": "lite-local" }))).toBe("lite-local");
   });
 });
 

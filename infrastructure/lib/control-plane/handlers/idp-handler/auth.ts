@@ -7,18 +7,28 @@
  * string and the tenant-scope binding differ.
  */
 
-import type { APIGatewayProxyEventV2WithJWTAuthorizer } from "aws-lambda";
+import type {
+  APIGatewayProxyEventV2WithJWTAuthorizer,
+  APIGatewayProxyWithCognitoAuthorizerEvent,
+} from "aws-lambda";
 import type { Context } from "hono";
 
 type JwtClaimValue = string | number | boolean | string[];
 type JwtClaims = { readonly [name: string]: JwtClaimValue };
+type AuthorizerEvent =
+  | APIGatewayProxyEventV2WithJWTAuthorizer
+  | APIGatewayProxyWithCognitoAuthorizerEvent;
 
 const SYSTEM_ADMIN_ROLE = "SystemAdmin";
 const TENANT_ADMIN_ROLE = "TenantAdmin";
 
 function readClaim(c: Context, name: string): string | undefined {
-  const event = (c.env as { event?: APIGatewayProxyEventV2WithJWTAuthorizer } | undefined)?.event;
-  const claims = event?.requestContext?.authorizer?.jwt?.claims as JwtClaims | undefined;
+  const event = (c.env as { event?: AuthorizerEvent } | undefined)?.event;
+  const authorizer = event?.requestContext?.authorizer;
+  if (!authorizer) return undefined;
+  const v2 = (authorizer as { jwt?: { claims?: unknown } }).jwt?.claims;
+  const v1 = (authorizer as { claims?: unknown }).claims;
+  const claims = (v2 && typeof v2 === "object" ? v2 : v1) as JwtClaims | undefined;
   const raw = claims?.[name];
   return typeof raw === "string" ? raw : undefined;
 }
