@@ -5,6 +5,7 @@ import Header from "@cloudscape-design/components/header";
 import LineChart from "@cloudscape-design/components/line-chart";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
+import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getScoreEvents,
@@ -17,7 +18,6 @@ import { DEV_MOCK_SCORE_EVENTS } from "../auth/dev-mock-fixtures";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
-import { toErrorMessage } from "../lib/error-message";
 import { ScoreEventsTable } from "./ScoreEventsTable";
 
 const POLL_INTERVAL_MS = 30_000;

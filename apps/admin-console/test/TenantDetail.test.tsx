@@ -5,7 +5,7 @@ import { TenantDetailPage } from "../src/pages/TenantDetail";
 
 /**
  * Issue #1418: 未テストだった admin TenantDetail page を 100% に。
- * useParams / useApiClient / listTenants / parseTenantConfig / i18n / toErrorMessage を mock し、
+ * useParams / useApiClient / listTenants / parseTenantConfig / i18n を mock し、
  * missing-id / api 不在 / loading / found (full+minimal の fallback 分岐) / not-found / fetch error /
  * back / polling を網羅する。
  */
@@ -38,7 +38,7 @@ vi.mock("../src/i18n", () => {
     params ? `${key}|${JSON.stringify(params)}` : key;
   return { useT: () => stableT };
 });
-vi.mock("../src/lib/error-message", () => ({ toErrorMessage: (e: unknown) => String(e) }));
+// toErrorMessage は web-kit の共有純関数 (#1418)。 mock せず実物を使い、 raw message を assert する。
 
 const fullTenant = {
   tenantId: "t1",
@@ -119,13 +119,13 @@ describe("TenantDetailPage", () => {
     h.mockListTenants.mockRejectedValue(new Error("list boom"));
     render(<TenantDetailPage config={{} as AppConfig} />);
     expect(await screen.findByText("tenant_detail.fetch_failed_header")).toBeInTheDocument();
-    expect(screen.getByText("Error: list boom")).toBeInTheDocument();
+    expect(screen.getByText("list boom")).toBeInTheDocument();
     // error 状態の button は back_to_list と alert dismiss の 2 つ。 text を持たない方が dismiss。
     const dismiss = screen
       .getAllByRole("button")
       .find((b) => b.textContent?.trim() !== "tenant_detail.back_to_list");
     fireEvent.click(dismiss as HTMLElement);
-    await waitFor(() => expect(screen.queryByText("Error: list boom")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("list boom")).not.toBeInTheDocument());
   });
 
   it("should navigate back to the tenant list", async () => {

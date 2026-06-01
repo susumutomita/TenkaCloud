@@ -15,8 +15,8 @@
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import { PORTAL_SLOT_NAMES, type PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
+import { toErrorMessage } from "@tenkacloud/web-kit";
 import { Component, type ErrorInfo, type ReactNode, Suspense, useMemo } from "react";
-import { toErrorMessage } from "../lib/error-message";
 import { loadPluginSlot } from "./loader";
 import {
   buildPortalCoordination,

@@ -9,6 +9,7 @@
 export { AuthProvider, type AuthState, useAuth } from "./auth";
 export { EmptyState, type EmptyStateAction, type EmptyStateProps } from "./EmptyState";
 export { ErrorState, type ErrorStateProps } from "./ErrorState";
+export { toErrorMessage } from "./error-message";
 export {
   createI18n,
   type I18nConfig,

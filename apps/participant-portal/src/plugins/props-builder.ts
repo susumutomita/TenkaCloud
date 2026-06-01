@@ -19,8 +19,8 @@ import type {
   PortalPhaseEntry,
   PortalSlotProps,
 } from "@tenkacloud/portal-plugin-sdk";
+import { toErrorMessage } from "@tenkacloud/web-kit";
 import { findProblemMetadata } from "../data/problems";
-import { toErrorMessage } from "../lib/error-message";
 
 /**
  * `base` + 任意 `appendPath` を結合して absolute URL を返す。 不正な URL は throw

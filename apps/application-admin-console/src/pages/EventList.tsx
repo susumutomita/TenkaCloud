@@ -9,6 +9,7 @@ import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
+import { toErrorMessage } from "@tenkacloud/web-kit";
 import { StatusCodes } from "http-status-codes";
 import { useCallback, useMemo, useState } from "react";
 import { type NavigateFunction, useNavigate } from "react-router";
@@ -22,7 +23,6 @@ import {
 import type { AppConfig } from "../config";
 import { usePollingList } from "../hooks/usePollingList";
 import { interpolate, useT } from "../i18n";
-import { toErrorMessage } from "../lib/error-message";
 
 const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"> = {
   DRAFT: "blue",

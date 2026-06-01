@@ -5,6 +5,7 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useState } from "react";
 import {
   getConsoleSigninUrl,
@@ -18,7 +19,6 @@ import { CliCredentialsPanel } from "../components/CliCredentialsPanel";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
-import { toErrorMessage } from "../lib/error-message";
 
 type TranslateFn = (key: string, vars?: Record<string, string>) => string;
 
