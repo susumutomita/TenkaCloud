@@ -36,7 +36,7 @@ import { computeTenantProgress, isInProgress } from "../lib/tenant-progress";
  * 5 tenants × ~50 deployments を 60s ごとに refresh して RCU 消費は 1 tenant あたり ~1 query。
  * Phase 3 dashboard で tenant 数が伸びるなら pre-aggregation table に置き換え。
  */
-const INSIGHT_POLLING_INTERVAL_MS = 60 * 1000;
+const TENANT_LIST_POLLING_INTERVAL_MS = 60 * 1000;
 
 /**
  * deprovision 済みの tenant かどうかを判定する。
@@ -123,7 +123,7 @@ export function TenantListPage({ config }: { config: AppConfig }) {
     void fetchInsight();
     const handle = window.setInterval(() => {
       void fetchInsight();
-    }, INSIGHT_POLLING_INTERVAL_MS);
+    }, TENANT_LIST_POLLING_INTERVAL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(handle);
@@ -132,7 +132,7 @@ export function TenantListPage({ config }: { config: AppConfig }) {
 
   // #657: 経過時間の severity を 60 秒周期で再評価。 setInterval は cleanup 必須。
   useEffect(() => {
-    const handle = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    const handle = window.setInterval(() => setNowMs(Date.now()), TENANT_LIST_POLLING_INTERVAL_MS);
     return () => window.clearInterval(handle);
   }, []);
 
