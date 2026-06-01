@@ -32,14 +32,18 @@ describe("isScoringActive (relocated from health-check-handler)", () => {
   it("should return true when eventStartsAt is at or before now (competition started, scoring active)", () => {
     expect(isScoringActive({ eventStartsAt: NOW }, NOW)).toBe(true);
     expect(isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z" }, NOW)).toBe(true);
-    expect(isScoringActive({ eventStartsAt: "2025-01-01T00:00:00.000Z" }, NOW)).toBe(true);
   });
 
-  it("should return true with no end-gate when eventEndsAt is unset (legacy deployment / no-end event existing behavior)", () => {
+  it("should return true with no end-gate when eventEndsAt is unset and within the liveness cap", () => {
     expect(isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z" }, NOW)).toBe(true);
     expect(
       isScoringActive({ eventStartsAt: "2026-05-08T09:00:00.000Z", eventEndsAt: undefined }, NOW),
     ).toBe(true);
+  });
+
+  it("should terminate a no-endsAt round once past the MAX_ROUND_DURATION cap (#1421 ADR-029 liveness)", () => {
+    // 開始から 16 ヶ月後 (>> 30 日 cap) は endsAt 未設定でも terminal 扱い → 無限採点を排除。
+    expect(isScoringActive({ eventStartsAt: "2025-01-01T00:00:00.000Z" }, NOW)).toBe(false);
   });
 
   it("should return true when eventEndsAt is set and now < eventEndsAt (still competing)", () => {
