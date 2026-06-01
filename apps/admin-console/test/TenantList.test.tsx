@@ -52,7 +52,10 @@ vi.mock("../src/lib/tenant-progress", () => ({
     return { label: "1m", severity: "normal" };
   },
 }));
-vi.mock("@tenkacloud/web-kit", () => ({
+// usePolling は純 timer hook なので実物を残し (= setInterval 捕捉が効く)、 Cloudscape 依存の
+// EmptyState / ErrorState だけ軽量 stub で差し替える。
+vi.mock("@tenkacloud/web-kit", async (importOriginal) => ({
+  ...((await importOriginal()) as Record<string, unknown>),
   EmptyState: ({
     headline,
     primaryAction,

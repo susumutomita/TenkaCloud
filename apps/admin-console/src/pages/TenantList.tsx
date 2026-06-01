@@ -8,7 +8,7 @@ import Popover from "@cloudscape-design/components/popover";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
 import Toggle from "@cloudscape-design/components/toggle";
-import { EmptyState, ErrorState } from "@tenkacloud/web-kit";
+import { EmptyState, ErrorState, usePolling } from "@tenkacloud/web-kit";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useApiClient } from "../api/client";
@@ -99,42 +99,26 @@ export function TenantListPage({ config }: { config: AppConfig }) {
   // tenants が解決済みなら AdminInsight API を叩いて集計を join する。
   // tokens が無い / config.adminInsightApiUrl 未設定なら fetch を skip して null のまま
   // にしておく (= column 自体を表示しない、UI に「未配線」状態を持ち込まない安全装置)。
-  useEffect(() => {
+  const pollInsight = useCallback(async () => {
     const idToken = auth.tokens?.idToken;
     if (!idToken || !tenants || !config.adminInsightApiUrl) return;
     const tenantIds = tenants.map((t) => t.tenantId);
-
-    let cancelled = false;
-    const fetchInsight = async () => {
-      try {
-        const summary = await fetchTenantsInsightSummary(config, idToken, tenantIds);
-        // cancelled は unmount 時のみ true (= test では fetch 中に unmount しないので不到達)。
-        /* v8 ignore next */
-        if (cancelled) return;
-        // null = 403 forbidden 等 (= SystemAdmin claim 無し)。column hide のため state も null。
-        setInsightByTenantId(summary ? indexSummaryByTenantId(summary) : null);
-      } catch {
-        // tenant 一覧の primary 表示は壊さない。集計列だけ未取得扱いにする (= null)。
-        // cancelled=true 側は unmount race (不到達)。
-        /* v8 ignore next */
-        if (!cancelled) setInsightByTenantId(null);
-      }
-    };
-    void fetchInsight();
-    const handle = window.setInterval(() => {
-      void fetchInsight();
-    }, TENANT_LIST_POLLING_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(handle);
-    };
+    try {
+      const summary = await fetchTenantsInsightSummary(config, idToken, tenantIds);
+      // null = 403 forbidden 等 (= SystemAdmin claim 無し)。column hide のため state も null。
+      setInsightByTenantId(summary ? indexSummaryByTenantId(summary) : null);
+    } catch {
+      // tenant 一覧の primary 表示は壊さない。集計列だけ未取得扱いにする (= null)。
+      setInsightByTenantId(null);
+    }
   }, [auth.tokens?.idToken, tenants, config]);
 
-  // #657: 経過時間の severity を 60 秒周期で再評価。 setInterval は cleanup 必須。
-  useEffect(() => {
-    const handle = window.setInterval(() => setNowMs(Date.now()), TENANT_LIST_POLLING_INTERVAL_MS);
-    return () => window.clearInterval(handle);
-  }, []);
+  // 即時 fetch + 60s polling + unmount cleanup は usePolling (web-kit) に集約 (#1418 DRY)。
+  usePolling(pollInsight, TENANT_LIST_POLLING_INTERVAL_MS);
+
+  // #657: 経過時間の severity を 60 秒周期で再評価 (即時実行は不要なので immediate=false)。
+  const tickNow = useCallback(() => setNowMs(Date.now()), []);
+  usePolling(tickNow, TENANT_LIST_POLLING_INTERVAL_MS, { immediate: false });
 
   const confirmDeprovision = async () => {
     // modal は pendingDeprovision!==null かつ行 (= api 有り) でしか開かないので guard は不到達。

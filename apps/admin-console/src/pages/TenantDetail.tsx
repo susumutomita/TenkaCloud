@@ -9,7 +9,8 @@ import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePolling } from "@tenkacloud/web-kit";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useApiClient } from "../api/client";
 import {
@@ -76,13 +77,8 @@ export function TenantDetailPage({ config }: { config: AppConfig }) {
     }
   }, [api, tenantId, t]);
 
-  useEffect(() => {
-    void refresh();
-    const handle = window.setInterval(() => {
-      void refresh();
-    }, POLL_INTERVAL_MS);
-    return () => window.clearInterval(handle);
-  }, [refresh]);
+  // 初回 fetch + 60s polling + unmount cleanup は usePolling (web-kit) に集約 (#1418 DRY)。
+  usePolling(refresh, POLL_INTERVAL_MS);
 
   const parsedConfig = useMemo(() => parseTenantConfig(tenant?.tenantConfig), [tenant]);
 
