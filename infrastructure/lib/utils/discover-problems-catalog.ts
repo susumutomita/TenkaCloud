@@ -155,6 +155,15 @@ export function discoverProblemsVisibility(problemsRoot: string): Record<string,
  *
  * `disruptions` を持たない問題はキーごと出さない (= env var を最小化)。
  */
+/**
+ * [ADR-013 Phase 2 / Issue #1422] condition-triggered disruption の発火条件。 OR で結合され、
+ * 最初に true になった trigger で発火する (= scoring Lambda 側 eval、 重複は idempotency で抑制)。
+ */
+export type DisruptionTrigger =
+  | { readonly kind: "after-deploy"; readonly afterMinutes: number }
+  | { readonly kind: "team-score-above"; readonly threshold: number }
+  | { readonly kind: "phase-entered"; readonly phaseName: string };
+
 export interface ProblemDisruptionEntry {
   readonly id: string;
   readonly name: string;
@@ -164,6 +173,31 @@ export interface ProblemDisruptionEntry {
   readonly operatorEditable?: readonly string[];
   readonly parameters?: Readonly<Record<string, unknown>>;
   readonly publicHint?: boolean;
+  /** [ADR-013 Phase 2 / #1422] 宣言時のみ condition-triggered 発火が有効 (省略 = Phase 1 self-fire のみ)。 */
+  readonly triggers?: readonly DisruptionTrigger[];
+}
+
+/** SCHEMA `disruptions[].triggers[]` (oneOf) を型付きで取り出す。 不正 / 不明 kind は drop。 */
+export function parseDisruptionTriggers(value: unknown): DisruptionTrigger[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: DisruptionTrigger[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const t = raw as {
+      kind?: unknown;
+      afterMinutes?: unknown;
+      threshold?: unknown;
+      phaseName?: unknown;
+    };
+    if (t.kind === "after-deploy" && typeof t.afterMinutes === "number") {
+      out.push({ kind: "after-deploy", afterMinutes: t.afterMinutes });
+    } else if (t.kind === "team-score-above" && typeof t.threshold === "number") {
+      out.push({ kind: "team-score-above", threshold: t.threshold });
+    } else if (t.kind === "phase-entered" && typeof t.phaseName === "string") {
+      out.push({ kind: "phase-entered", phaseName: t.phaseName });
+    }
+  }
+  return out.length > 0 ? out : undefined;
 }
 
 export function discoverProblemsDisruptions(
@@ -182,6 +216,23 @@ export function discoverProblemsDisruptions(
   return result;
 }
 
+/**
+ * Lambda env (= `BATTLE_PROBLEMS_DISRUPTIONS`、 `discoverProblemsDisruptions` の出力を JSON 化した
+ * もの) を `{ [problemId]: ProblemDisruptionEntry[] }` に戻す。 未設定 / 壊れた JSON は空 map。
+ */
+export function parseDisruptionsCatalogEnv(
+  raw: string | undefined,
+): Record<string, readonly ProblemDisruptionEntry[]> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return parsed as Record<string, readonly ProblemDisruptionEntry[]>;
+  } catch {
+    return {};
+  }
+}
+
 function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefined {
   if (!value || typeof value !== "object") return undefined;
   const v = value as {
@@ -193,6 +244,7 @@ function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefine
     operatorEditable?: unknown;
     parameters?: unknown;
     publicHint?: unknown;
+    triggers?: unknown;
   };
   if (
     typeof v.id !== "string" ||
@@ -201,6 +253,7 @@ function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefine
   ) {
     return undefined;
   }
+  const triggers = parseDisruptionTriggers(v.triggers);
   return {
     id: v.id,
     name: v.name,
@@ -219,6 +272,7 @@ function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefine
       ? { parameters: v.parameters as Record<string, unknown> }
       : {}),
     ...(typeof v.publicHint === "boolean" ? { publicHint: v.publicHint } : {}),
+    ...(triggers ? { triggers } : {}),
   };
 }
 

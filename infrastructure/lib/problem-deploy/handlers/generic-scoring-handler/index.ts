@@ -9,6 +9,7 @@ import { decodeLargeEnvValue } from "../../../utils/env-encoding.js";
 import { buildEndpointPK } from "../../problem-endpoints-table.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { writeScoreEvent } from "../shared/score-event.js";
+import { maybeFireConditionDisruptions } from "./condition-disruption-fire.js";
 import { reconcileEventStatuses } from "./event-reconciler.js";
 import { runAttackDetectionKind } from "./kinds/attack-detection.js";
 import { runPhasedPollingKind } from "./kinds/phased-polling.js";
@@ -165,6 +166,20 @@ async function processDeployment(
   }
 
   await applyKindResult(shared, item, result, nowIso);
+
+  // #1422 (ADR-013 Phase 2): 採点後の score / phase / 経過分で condition-triggered disruption を
+  // 評価し、 成立した disruption を in-account event bus に発火する (= cross-account forward は #1419)。
+  // score 書き込み (applyKindResult) の後に走らせ、 publish 失敗は outer processDeployment の .catch
+  // に委ねる (= score は確定済、 disruption は次 tick で再評価)。
+  await maybeFireConditionDisruptions(
+    shared,
+    item,
+    result,
+    prevState,
+    phasesByProblemId,
+    nowMs,
+    nowIso,
+  );
 }
 
 /**

@@ -1,6 +1,11 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
+import {
+  type ProblemDisruptionEntry,
+  parseDisruptionsCatalogEnv,
+} from "../../../utils/discover-problems-catalog.js";
 import { type ProblemEndpointSlot, parseEndpointsEnv } from "../../../utils/endpoints-metadata.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
@@ -21,6 +26,11 @@ export interface GenericScoringSharedResources {
   readonly endpointsTableName: string;
   readonly problemsScoring: Record<string, ProblemScoringMetadata>;
   readonly problemsEndpoints: Record<string, readonly ProblemEndpointSlot[]>;
+  /** [#1422] condition-triggered disruption の catalog (= `BATTLE_PROBLEMS_DISRUPTIONS` env)。 */
+  readonly problemsDisruptions: Record<string, readonly ProblemDisruptionEntry[]>;
+  /** [#1422] condition-triggered fire の publish 先 event bus (= 空なら発火 skip)。 */
+  readonly eventBusName: string;
+  readonly events: EventBridgeClient;
 }
 
 export function buildSharedResources(): GenericScoringSharedResources {
@@ -31,6 +41,9 @@ export function buildSharedResources(): GenericScoringSharedResources {
     endpointsTableName: getEnv("PROBLEM_ENDPOINTS_TABLE_NAME"),
     problemsScoring: parseScoringEnv(process.env.BATTLE_PROBLEMS_SCORING),
     problemsEndpoints: parseEndpointsEnv(process.env.PROBLEM_ENDPOINTS),
+    problemsDisruptions: parseDisruptionsCatalogEnv(process.env.BATTLE_PROBLEMS_DISRUPTIONS),
+    eventBusName: process.env.DEPLOY_EVENT_BUS_NAME ?? "",
+    events: new EventBridgeClient({}),
   };
 }
 
@@ -46,6 +59,11 @@ export function buildSharedResources(): GenericScoringSharedResources {
 export interface DeploymentScoringState {
   readonly bonusAwarded?: Readonly<Record<string, boolean>>;
   readonly attackCount?: number;
+  /**
+   * [#1422] 既に condition-triggered で発火済みの disruptionId 群。 OR semantics + 一度発火したら
+   * 以降抑制する idempotency record (= ADR-013 OQ#5)。 publish 成功後にだけ追記する。
+   */
+  readonly firedDisruptions?: readonly string[];
 }
 
 export function parseScoringState(raw: string | undefined): DeploymentScoringState {
@@ -67,10 +85,33 @@ export function parseScoringState(raw: string | undefined): DeploymentScoringSta
         )
       : undefined;
   const attackCount = typeof p.attackCount === "number" ? p.attackCount : undefined;
+  const firedRaw = (parsed as { firedDisruptions?: unknown }).firedDisruptions;
+  const firedDisruptions = Array.isArray(firedRaw)
+    ? firedRaw.filter((s): s is string => typeof s === "string")
+    : undefined;
   return {
     ...(bonusAwarded ? { bonusAwarded } : {}),
     ...(attackCount !== undefined ? { attackCount } : {}),
+    ...(firedDisruptions && firedDisruptions.length > 0 ? { firedDisruptions } : {}),
   };
+}
+
+/**
+ * [#1422] `phaseElapsedMin` から active phase を確定する。 phases[] は afterMinutes 昇順 (= metadata
+ * 規約) を前提に、 elapsed 以下の最後の entry を返す。 順序保証されない場合に備えて defensive に sort。
+ *
+ * phased-polling kind と condition-trigger 評価 (disruption-triggers.ts) で共有する (= DRY)。
+ */
+export function resolveActivePhase(
+  phases: readonly PhaseEntry[],
+  elapsedMin: number,
+): PhaseEntry | undefined {
+  const sorted = [...phases].sort((a, b) => a.afterMinutes - b.afterMinutes);
+  let active: PhaseEntry | undefined;
+  for (const p of sorted) {
+    if (elapsedMin >= p.afterMinutes) active = p;
+  }
+  return active;
 }
 
 /**

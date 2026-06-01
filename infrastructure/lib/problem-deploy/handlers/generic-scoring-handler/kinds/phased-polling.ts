@@ -8,8 +8,8 @@ import {
   type KindResult,
   type KindScoreEvent,
   noopKindResult,
-  type PhaseEntry,
   probeUrl,
+  resolveActivePhase,
 } from "../shared.js";
 
 /**
@@ -213,23 +213,6 @@ function scorePhasedBonuses(
     if (bonus.once) awarded[bonus.kind] = true;
   }
   return { scoreDelta, scoreEvents, awarded };
-}
-
-/**
- * `phaseElapsedMin` から active phase を確定。phases[] は afterMinutes 昇順 (= metadata
- * 規約) を前提に、 elapsed 以下の最後の entry を返す。順序保証されない場合に備えて defensive
- * に sort する。
- */
-function resolveActivePhase(
-  phases: readonly PhaseEntry[],
-  elapsedMin: number,
-): PhaseEntry | undefined {
-  const sorted = [...phases].sort((a, b) => a.afterMinutes - b.afterMinutes);
-  let active: PhaseEntry | undefined;
-  for (const p of sorted) {
-    if (elapsedMin >= p.afterMinutes) active = p;
-  }
-  return active;
 }
 
 /**

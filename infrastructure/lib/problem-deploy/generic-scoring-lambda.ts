@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import { Duration } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
-import { Rule, Schedule } from "aws-cdk-lib/aws-events";
+import { type IEventBus, Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
@@ -41,6 +41,16 @@ export interface GenericScoringLambdaProps {
    * を持たない問題は不在キー。
    */
   readonly problemsPhases: Readonly<Record<string, unknown>>;
+  /**
+   * [#1422 / ADR-013 Phase 2] `{ [problemId]: ProblemDisruptionEntry[] }`。 `triggers[]` を持つ
+   * disruption を tick で eval し condition-triggered 発火する。 disruptions[] 無しの問題は不在キー。
+   */
+  readonly problemsDisruptions: Readonly<Record<string, unknown>>;
+  /**
+   * [#1422] condition-triggered disruption の publish 先 event bus (= 手動 fire と同じ deploy bus)。
+   * scoring Lambda に `events:PutEvents` を least-privilege で付与する。
+   */
+  readonly eventBus: IEventBus;
 }
 
 /**
@@ -88,6 +98,8 @@ export class GenericScoringLambda extends Construct {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
         EVENTS_TABLE_NAME: props.eventsTable.tableName,
         PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName,
+        // #1422: condition-triggered disruption の publish 先 (手動 fire と同じ deploy bus)。
+        DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -108,6 +120,10 @@ export class GenericScoringLambda extends Construct {
           "process.env.BATTLE_PROBLEMS_PHASES": JSON.stringify(
             JSON.stringify(props.problemsPhases),
           ),
+          // #1422: condition-triggered disruption catalog を build 時 literal 置換 (env 4KB 回避)。
+          "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
+            JSON.stringify(props.problemsDisruptions),
+          ),
         },
       },
     });
@@ -120,6 +136,9 @@ export class GenericScoringLambda extends Construct {
     props.eventsTable.grantReadWriteData(this.fn);
     // Endpoint registry: per (tenant, team, problem) の override 行を Query する (= read-only)。
     props.endpointsTable.grantReadData(this.fn);
+    // #1422: condition-triggered disruption を event bus に publish する (= events:PutEvents、
+    // 当該 bus に scope された least-privilege)。
+    props.eventBus.grantPutEventsTo(this.fn);
 
     // EventBridge `rate(1 minute)`. Lambda 自身の invoke 権限は LambdaFunction target が自動付与。
     new Rule(this, "Schedule", {
