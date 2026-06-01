@@ -214,6 +214,7 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
       {showCreate ? (
         <CreateIdpModal
           client={client}
+          cognitoDomain={config.cognitoDomain}
           onClose={() => setShowCreate(false)}
           onCreated={async () => {
             setShowCreate(false);

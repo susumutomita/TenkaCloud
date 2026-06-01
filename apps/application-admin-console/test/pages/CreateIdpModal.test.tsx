@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import createWrapper from "@cloudscape-design/components/test-utils/dom";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TenantIdpClient } from "../../src/api/idp-client";
 import { CreateIdpModal } from "../../src/pages/CreateIdpModal";
@@ -11,12 +12,23 @@ import { CreateIdpModal } from "../../src/pages/CreateIdpModal";
 const makeClient = (create: ReturnType<typeof vi.fn>) => ({ create }) as unknown as TenantIdpClient;
 const props = (over = {}) => ({
   client: makeClient(vi.fn().mockResolvedValue(undefined)),
+  cognitoDomain: "auth.example.com",
   onClose: vi.fn(),
   onCreated: vi.fn().mockResolvedValue(undefined),
   busy: false,
   setBusy: vi.fn(),
   ...over,
 });
+const metadataTextarea = () => screen.getAllByRole("textbox")[4] as HTMLTextAreaElement;
+const metadataFileInput = () =>
+  document.querySelector<HTMLInputElement>('input[type="file"]') as HTMLInputElement;
+const metadataFile = (contents: string | Promise<string>, error?: Error) => {
+  const file = new File(["ignored"], "metadata.xml", { type: "text/xml" });
+  Object.defineProperty(file, "text", {
+    value: error ? vi.fn().mockRejectedValue(error) : vi.fn().mockResolvedValue(contents),
+  });
+  return file;
+};
 
 afterEach(() => vi.clearAllMocks());
 
@@ -88,5 +100,107 @@ describe("CreateIdpModal", () => {
     expect(onClose).toHaveBeenCalled();
     rerender(<CreateIdpModal {...props({ onClose, busy: true })} />);
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+  });
+
+  it("should load an uploaded XML file into the editable metadata textarea", async () => {
+    render(<CreateIdpModal {...props()} />);
+    const input = metadataFileInput();
+    expect(input).toHaveAttribute("accept", ".xml,text/xml,application/xml");
+    fireEvent.change(input, { target: { files: [metadataFile("<EntityDescriptor />")] } });
+    await waitFor(() => expect(metadataTextarea()).toHaveValue("<EntityDescriptor />"));
+    fireEvent.change(metadataTextarea(), { target: { value: "<edited />" } });
+    expect(metadataTextarea()).toHaveValue("<edited />");
+  });
+
+  it("should surface an empty uploaded XML file and clear the error after manual paste", async () => {
+    render(<CreateIdpModal {...props()} />);
+    fireEvent.change(metadataFileInput(), { target: { files: [metadataFile("  ")] } });
+    expect(await screen.findByText("The selected metadata XML file is empty.")).toBeInTheDocument();
+    fireEvent.change(metadataTextarea(), { target: { value: "<pasted />" } });
+    expect(screen.queryByText("The selected metadata XML file is empty.")).not.toBeInTheDocument();
+  });
+
+  it("should surface an XML file read failure and allow clearing the selected file", async () => {
+    render(<CreateIdpModal {...props()} />);
+    fireEvent.change(metadataFileInput(), {
+      target: { files: [metadataFile("", new Error("disk read failed"))] },
+    });
+    expect(
+      await screen.findByText(
+        "Could not read the selected metadata XML file. Try another file or paste the XML below.",
+      ),
+    ).toBeInTheDocument();
+    createWrapper(document.body).findFileUpload()?.findFileToken(1)?.findRemoveButton().click();
+    await waitFor(() =>
+      expect(
+        screen.queryByText(
+          "Could not read the selected metadata XML file. Try another file or paste the XML below.",
+        ),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("should ignore a stale XML file read after a newer upload finishes", async () => {
+    let finishStaleRead: (contents: string) => void = () => undefined;
+    const staleRead = new Promise<string>((resolve) => {
+      finishStaleRead = resolve;
+    });
+    render(<CreateIdpModal {...props()} />);
+    fireEvent.change(metadataFileInput(), { target: { files: [metadataFile(staleRead)] } });
+    fireEvent.change(metadataFileInput(), { target: { files: [metadataFile("<current />")] } });
+    await waitFor(() => expect(metadataTextarea()).toHaveValue("<current />"));
+    await act(async () => {
+      finishStaleRead("<stale />");
+      await staleRead;
+    });
+    expect(metadataTextarea()).toHaveValue("<current />");
+  });
+
+  it("should derive the ACS URL from both bare and HTTPS Cognito domains", () => {
+    const { rerender } = render(<CreateIdpModal {...props()} />);
+    expect(screen.getByText("https://auth.example.com/saml2/idpresponse")).toBeInTheDocument();
+    rerender(<CreateIdpModal {...props({ cognitoDomain: "https://auth.example.com" })} />);
+    expect(screen.getByText("https://auth.example.com/saml2/idpresponse")).toBeInTheDocument();
+    expect(screen.queryByText(/https:\/\/https:\/\//)).not.toBeInTheDocument();
+  });
+
+  it("should show provider-specific setup guides and copyable Cognito SP values", () => {
+    render(<CreateIdpModal {...props()} />);
+    expect(screen.getByText("Generic SAML setup guide")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Give the IdP administrator the ACS URL, SP Entity ID, and email attribute/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("urn:amazon:cognito:sp:<userPoolId>")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Replace <userPoolId> with the relevant User Pool ID from the AWS Cognito/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/identity\/claims\/emailaddress/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy ACS URL (Reply / SSO URL)" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Copy SP Entity ID / Identifier (Audience)" }),
+    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Copy Email attribute mapping" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Microsoft Entra ID" }));
+    expect(screen.getByText("Microsoft Entra ID setup guide")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "In Microsoft Entra ID, open Enterprise applications -> New application -> Single sign-on -> SAML.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Google Workspace" }));
+    expect(screen.getByText("Google Workspace setup guide")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "In Google Workspace, open Admin console -> Apps -> Web and mobile apps -> Add custom SAML app.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Okta" }));
+    expect(screen.getByText("Okta setup guide")).toBeInTheDocument();
+    expect(
+      screen.getByText("In Okta, open Applications -> Create App Integration -> SAML 2.0."),
+    ).toBeInTheDocument();
   });
 });

@@ -30,8 +30,8 @@ vi.mock("../../src/auth/AuthProvider", () => ({ useAuth: mockUseAuth }));
 vi.mock("../../src/i18n", () => ({ useLang: () => "en" }));
 vi.mock("../../src/pages/CreateIdpModal", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: stub props。
-  CreateIdpModal: ({ onClose, onCreated }: any) => (
-    <div data-testid="create-modal">
+  CreateIdpModal: ({ cognitoDomain, onClose, onCreated }: any) => (
+    <div data-testid="create-modal" data-cognito-domain={cognitoDomain}>
       <button type="button" onClick={onClose}>
         stub-close
       </button>
@@ -130,6 +130,10 @@ describe("IdentityProvidersPage", () => {
     await screen.findByText(/No SAML IdPs configured yet/);
     fireEvent.click(screen.getByRole("button", { name: "Add SAML IdP" }));
     expect(screen.getByTestId("create-modal")).toBeInTheDocument();
+    expect(screen.getByTestId("create-modal")).toHaveAttribute(
+      "data-cognito-domain",
+      "auth.example.com",
+    );
 
     fireEvent.click(screen.getByText("stub-created"));
     await waitFor(() => expect(screen.queryByTestId("create-modal")).not.toBeInTheDocument());
