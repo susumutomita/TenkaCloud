@@ -10,7 +10,8 @@
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
-    "lib": ["ES2024", "DOM"]
+    "lib": ["ES2024", "DOM"],
+    "types": ["node"]
   },
   "include": ["bin/**/*.ts", "src/**/*.ts"]
 }
