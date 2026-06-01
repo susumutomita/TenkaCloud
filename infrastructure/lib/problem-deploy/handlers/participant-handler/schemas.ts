@@ -105,6 +105,16 @@ export const CastEventBodySchema = z.object({
 export type CastEventBody = z.infer<typeof CastEventBodySchema>;
 
 /**
+ * POST /portal/me/coordination/op — body は { op }。 op の意味論 (alliance / route / 等) は
+ * 問題同梱 plugin の validateOp が判定するので、 schema は op の存在だけを要求し中身は通す
+ * (= 過剰な platform 側 validation を持ち込まない。 size は DDB 400KB 制約が loud に弾く)。
+ */
+export const CoordinationOpBodySchema = z.object({
+  op: z.unknown(),
+});
+export type CoordinationOpBody = z.infer<typeof CoordinationOpBodySchema>;
+
+/**
  * POST /portal/me/problems/:problemId/endpoints/:slot — body は { url }。
  * URL の細かい validation (= http/https / 長さ / プライベート IP 等) は
  * `isValidOverrideUrl` (= service 側) が一手に行うので、 schema は `string` のみ要求。

@@ -11,6 +11,14 @@ import { RATE_LIMITS } from "../shared/rate-limiter.js";
 import { BATTLE_ATTACKS_SINCE_MIN_DEFAULT, listBattleAttacks } from "./battle-attacks.js";
 import { castEvent, INBOX_SINCE_MS_MAX, readInbox } from "./cast-event.js";
 import {
+  type CoordinationHandlerDeps,
+  handleCoordinationOp,
+  handleCoordinationProjection,
+  makeCoordinationScopeResolver,
+  parseCoordinationConfig,
+} from "./coordination-handler.js";
+import type { PluginImporter } from "./coordination-plugin-loader.js";
+import {
   defaultDeployLogDeps,
   getParticipantDeployLogs,
   parseDeployLogLimit,
@@ -30,6 +38,7 @@ import {
 import {
   BattleAttacksQuerySchema,
   CastEventBodySchema,
+  CoordinationOpBodySchema,
   DeployLogsQuerySchema,
   EventInboxQuerySchema,
   NotificationsQuerySchema,
@@ -66,6 +75,39 @@ import { setDisplayTeamName } from "./update.js";
  * `participant-handler/schemas.ts` の zod schema 経由で全 route 統一 validate する。
  */
 const shared = buildParticipantSharedResources();
+
+// ADR-028 D6 (#1420): 問題同梱 coordination plugin を S3 (ADR-008 payload 経路) から materialize して
+// import する実装は別 increment (= seam)。 未配線の間は reject → loader が null 化 → route は
+// `unavailable` / fallback projection で安全に応答する (= 機能は inert だが participant API は壊れない)。
+const coordinationImporter: PluginImporter = (ref) =>
+  Promise.reject(new Error(`coordination plugin importer not configured: ${ref}`));
+const coordinationDeps: CoordinationHandlerDeps = {
+  importer: coordinationImporter,
+  store: { ddb: shared.ddb, tableName: shared.tableName },
+  resolveScope: makeCoordinationScopeResolver(
+    shared,
+    parseCoordinationConfig(process.env.PROBLEM_COORDINATION),
+  ),
+};
+
+/** coordination handler の outcome を HTTP 応答に写す (= StatusCodes 名で意図を明示)。 */
+function respondCoordination(
+  c: Context,
+  outcome: Awaited<ReturnType<typeof handleCoordinationProjection>>,
+): Response {
+  switch (outcome.kind) {
+    case "ok":
+      return c.json({ projection: outcome.projection }, StatusCodes.OK);
+    case "rejected":
+      return c.json({ error: outcome.error }, StatusCodes.UNPROCESSABLE_ENTITY);
+    case "conflict":
+      return c.json({ error: "conflict" }, StatusCodes.CONFLICT);
+    case "unavailable":
+      return c.json({ error: "unavailable" }, StatusCodes.SERVICE_UNAVAILABLE);
+    default:
+      return c.json({ error: "not_configured" }, StatusCodes.NOT_FOUND);
+  }
+}
 const app = new Hono();
 
 app.get("/portal/healthz", (c) => c.json({ ok: true }));
@@ -142,6 +184,38 @@ app.get("/portal/me/notifications", (c) =>
       if (outcome.kind === "ok") return c.json(outcome.response, StatusCodes.OK);
       return respondError(c, outcome.kind);
     },
+    RATE_LIMITS.READ_HIGH,
+  ),
+);
+
+// ADR-028 D4/D5 (#1420): 参加者間 coordination の op 提出 + projection polling。
+// semantics は問題同梱 plugin (動的 import) に閉じ、 platform は dispatch / projection だけを担う。
+// importer 未配線 (seam) の間は unavailable / fallback で安全に応答する。
+app.post("/portal/me/coordination/op", (c) =>
+  withBearerAuth(
+    c,
+    "coordination-op",
+    async (token) => {
+      const parsed = await parseJsonBody(c, CoordinationOpBodySchema);
+      if (!parsed.ok) return parsed.response;
+      const outcome = await handleCoordinationOp(
+        coordinationDeps,
+        token,
+        parsed.data.op,
+        new Date().toISOString(),
+      );
+      return respondCoordination(c, outcome);
+    },
+    RATE_LIMITS.WRITE_LOW,
+  ),
+);
+
+app.get("/portal/me/coordination/projection", (c) =>
+  withBearerAuth(
+    c,
+    "coordination-projection",
+    async (token) =>
+      respondCoordination(c, await handleCoordinationProjection(coordinationDeps, token)),
     RATE_LIMITS.READ_HIGH,
   ),
 );
