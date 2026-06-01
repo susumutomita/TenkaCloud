@@ -16,7 +16,8 @@
     "problems": "Problems",
     "deployments": "Deployments",
     "competitor_accounts": "Competitor Accounts",
-    "audit_log": "監査ログ"
+    "audit_log": "監査ログ",
+    "admin_section": "管理"
   },
   "auth": {
     "sign_out": "サインアウト"
