@@ -47,8 +47,6 @@ const {
   formatTopNavRank,
   formatTopNavScore,
   handleProfileMenuClick,
-  isSupportedLocaleId,
-  buildLocaleUtility,
   buildScoreRankUtility,
   buildProfileUtility,
   handleSideNavFollow,
@@ -122,12 +120,6 @@ describe("AppLayout top navigation helpers", () => {
     expect(formatTopNavRank("backend", null, false)).toBe("…");
     expect(formatTopNavRank("backend", leaderboard([]), false)).toBe("…");
   });
-
-  it("should accept only supported locale ids", () => {
-    expect(isSupportedLocaleId("ja")).toBe(true);
-    expect(isSupportedLocaleId("en")).toBe(true);
-    expect(isSupportedLocaleId("fr")).toBe(false);
-  });
 });
 
 describe("profile dropdown menu (Issue #1191)", () => {
@@ -164,7 +156,7 @@ describe("profile dropdown menu (Issue #1191)", () => {
 });
 
 // ── utility builders (callbacks unit-tested directly) ────────────────────────
-type MenuUtil = Extract<ReturnType<typeof buildLocaleUtility>, { type: "menu-dropdown" }>;
+type MenuUtil = Extract<ReturnType<typeof buildProfileUtility>, { type: "menu-dropdown" }>;
 type ButtonUtil = Extract<ReturnType<typeof buildScoreRankUtility>, { type: "button" }>;
 
 describe("utility builders", () => {
@@ -175,20 +167,6 @@ describe("utility builders", () => {
     expect(u.text).toContain("1/2");
     u.onClick?.({} as never);
     expect(navigate).toHaveBeenCalledWith("/scoreboard");
-  });
-
-  it("should build a locale dropdown that switches only to supported locales", () => {
-    const setLocale = vi.fn();
-    const u = buildLocaleUtility("ja", setLocale, (k) => k) as MenuUtil;
-    expect(u.text).toBe("日本語");
-    expect(u.items?.map((i) => i.id)).toEqual(["ja", "en"]);
-    u.onItemClick?.({ detail: { id: "en" } } as never);
-    expect(setLocale).toHaveBeenCalledWith("en");
-    u.onItemClick?.({ detail: { id: "bogus" } } as never);
-    expect(setLocale).toHaveBeenCalledTimes(1);
-    expect((buildLocaleUtility("zz" as LocaleCode, setLocale, (k) => k) as MenuUtil).text).toBe(
-      "zz",
-    );
   });
 
   it("should build a profile dropdown that dispatches menu clicks", () => {

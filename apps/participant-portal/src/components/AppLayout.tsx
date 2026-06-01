@@ -15,23 +15,11 @@ import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-cli
 import { useAuth } from "../auth/AuthProvider";
 import { TeamViewProvider, useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
-import { type LocaleCode, SUPPORTED_LOCALES, useI18n } from "../i18n";
+import { useI18n } from "../i18n";
 import { CountdownTimer } from "./CountdownTimer";
-
-/**
- * Issue #583 Phase 1.A: locale switcher の display 名 map。 各 locale.json 内
- * `locale.name` を import せず literal で持つ (= bundle size 抑制 / 起動時依存削減)。
- */
-const LOCALE_DICTIONARIES_NAME: Record<LocaleCode, string> = {
-  ja: "日本語",
-  en: "English",
-};
+import { buildLocaleUtility } from "./locale-switcher";
 
 type Translate = (key: string) => string;
-
-export function isSupportedLocaleId(id: string): id is LocaleCode {
-  return (SUPPORTED_LOCALES as readonly string[]).includes(id);
-}
 
 export function formatTopNavScore(
   mode: AppConfig["mode"],
@@ -52,28 +40,6 @@ export function formatTopNavRank(
   const myEntry = leaderboard?.entries.find((e) => e.isMyTeam);
   const totalEntries = leaderboard?.entries.length;
   return myEntry && totalEntries ? `${myEntry.rank}/${totalEntries}` : "…";
-}
-
-export function buildLocaleUtility(
-  locale: LocaleCode,
-  setLocale: (locale: LocaleCode) => void,
-  t: Translate,
-): TopNavigationProps.Utility {
-  return {
-    type: "menu-dropdown",
-    iconName: "globe",
-    ariaLabel: t("switcher.aria_label"),
-    text: LOCALE_DICTIONARIES_NAME[locale] ?? locale,
-    items: SUPPORTED_LOCALES.map((code) => ({
-      id: code,
-      // SUPPORTED_LOCALES は dict と同期済なので ?? 右辺は型安全用の不到達分岐。
-      /* v8 ignore next */
-      text: LOCALE_DICTIONARIES_NAME[code] ?? code,
-    })),
-    onItemClick: ({ detail }) => {
-      if (isSupportedLocaleId(detail.id)) setLocale(detail.id);
-    },
-  };
 }
 
 export function buildScoreRankUtility(

@@ -35,13 +35,8 @@ vi.mock("../../src/api/portal-client", async (importOriginal) => {
   return { ...actual, updateTeamName: mockUpdate };
 });
 
-const {
-  TeamSetupPage,
-  describeTeamNameDraft,
-  canSubmitTeamName,
-  formatTeamSetupSubmitError,
-  buildLocaleUtility,
-} = await import("../../src/pages/TeamSetup");
+const { TeamSetupPage, describeTeamNameDraft, canSubmitTeamName, formatTeamSetupSubmitError } =
+  await import("../../src/pages/TeamSetup");
 
 const config = { apiBaseUrl: "https://api.example.com", eventTitle: "Test event" } as AppConfig;
 const updateSession = vi.fn();
@@ -112,25 +107,6 @@ describe("pure helpers", () => {
     );
     expect(formatTeamSetupSubmitError(new Error("boom"), "x")).toBe("boom");
     expect(formatTeamSetupSubmitError("plain", "x")).toBe("plain");
-  });
-
-  it("should build a locale utility that only switches to supported locales", () => {
-    const u = buildLocaleUtility("ja", (k) => k, mockSetLocale) as Extract<
-      ReturnType<typeof buildLocaleUtility>,
-      { type: "menu-dropdown" }
-    >;
-    expect(u.text).toBe("日本語");
-    expect(u.items?.map((i) => i.id)).toEqual(["ja", "en"]);
-    u.onItemClick?.({ detail: { id: "en" } } as never);
-    expect(mockSetLocale).toHaveBeenCalledWith("en");
-    u.onItemClick?.({ detail: { id: "bogus" } } as never);
-    expect(mockSetLocale).toHaveBeenCalledTimes(1); // bogus ignored
-    // 未知 locale → text は fallback で locale 文字列そのまま。
-    const unknown = buildLocaleUtility("zz" as LocaleCode, (k) => k, mockSetLocale) as Extract<
-      ReturnType<typeof buildLocaleUtility>,
-      { type: "menu-dropdown" }
-    >;
-    expect(unknown.text).toBe("zz");
   });
 });
 

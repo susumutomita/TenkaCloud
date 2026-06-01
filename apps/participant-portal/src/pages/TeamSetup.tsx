@@ -14,17 +14,12 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { PortalAuthError, PortalValidationError, updateTeamName } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
+import { buildLocaleUtility } from "../components/locale-switcher";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
-import { type LocaleCode, SUPPORTED_LOCALES, useI18n, useT } from "../i18n";
+import { useI18n, useT } from "../i18n";
 
 const TEAM_NAME_RE = /^[A-Za-z0-9 _\-぀-ヿ一-鿿]{1,40}$/;
-
-/** #1092: AppLayout の locale name と同期 (= 別 component に export せず literal で抑える)。 */
-const LOCALE_DICTIONARIES_NAME: Record<LocaleCode, string> = {
-  ja: "日本語",
-  en: "English",
-};
 
 interface TeamNameDraft {
   readonly trimmed: string;
@@ -52,34 +47,6 @@ export function formatTeamSetupSubmitError(err: unknown, validationMessage: stri
   if (err instanceof PortalValidationError) return validationMessage;
   if (err instanceof Error) return err.message;
   return String(err);
-}
-
-/**
- * TopNavigation の言語切替 dropdown utility を組む。 component から切り出して onItemClick の
- * 分岐 (= SUPPORTED_LOCALES に含まれる id のみ setLocale) を単体で検証できるようにした。
- */
-export function buildLocaleUtility(
-  locale: LocaleCode,
-  t: (key: string) => string,
-  setLocale: (code: LocaleCode) => void,
-): TopNavigationProps.Utility {
-  return {
-    type: "menu-dropdown",
-    iconName: "globe",
-    ariaLabel: t("switcher.aria_label"),
-    text: LOCALE_DICTIONARIES_NAME[locale] ?? locale,
-    items: SUPPORTED_LOCALES.map((code) => ({
-      id: code,
-      // SUPPORTED_LOCALES は dict と同期済なので ?? 右辺は型安全用の不到達分岐。
-      /* v8 ignore next */
-      text: LOCALE_DICTIONARIES_NAME[code] ?? code,
-    })),
-    onItemClick: ({ detail }) => {
-      if ((SUPPORTED_LOCALES as readonly string[]).includes(detail.id)) {
-        setLocale(detail.id as LocaleCode);
-      }
-    },
-  };
 }
 
 /**
@@ -155,7 +122,7 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
   };
 
   const utilities = useMemo<TopNavigationProps.Utility[]>(
-    () => [buildLocaleUtility(locale, t, setLocale)],
+    () => [buildLocaleUtility(locale, setLocale, t)],
     [locale, setLocale, t],
   );
 
