@@ -5,6 +5,7 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import { BudgetConsumptionPanel } from "../components/BudgetConsumptionPanel";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
 
@@ -61,6 +62,8 @@ export function OperationsPage({ config }: { config: AppConfig }) {
       <Container header={<Header variant="h2">{t("operations.budget_header")}</Header>}>
         <SpaceBetween size="m">
           <Box variant="p">{t("operations.budget_body")}</Box>
+          {/* Issue #1431: 現在のコスト予算消化を in-console で表示 (= AWS Budgets DescribeBudget、無料)。 */}
+          <BudgetConsumptionPanel config={config} />
           <SpaceBetween direction="horizontal" size="xs">
             <Button iconName="external" href={budgetsUrl} target="_blank">
               {t("operations.open_budgets_button")}

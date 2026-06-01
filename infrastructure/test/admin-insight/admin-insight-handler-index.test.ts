@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   listStateMachineExecutions: vi.fn(),
   listAuditEntries: vi.fn(),
   exportAuditEntriesCsv: vi.fn(),
+  getCostSummary: vi.fn(),
 }));
 const P = "../../lib/admin-insight/handlers/admin-insight-handler";
 vi.mock("../../lib/admin-insight/handlers/admin-insight-handler/shared", () => ({
@@ -47,6 +48,10 @@ vi.mock("../../lib/admin-insight/handlers/admin-insight-handler/state-machine-ex
 vi.mock("../../lib/admin-insight/handlers/admin-insight-handler/audit", () => ({
   listAuditEntries: mocks.listAuditEntries,
   exportAuditEntriesCsv: mocks.exportAuditEntriesCsv,
+}));
+vi.mock("../../lib/admin-insight/handlers/admin-insight-handler/cost", () => ({
+  defaultBudgetsClient: () => ({}),
+  getCostSummary: mocks.getCostSummary,
 }));
 
 const { app } = await import(`${P}/index`);
@@ -286,6 +291,66 @@ describe("GET /admin/insight/audit/export", () => {
     );
     const arg = mocks.exportAuditEntriesCsv.mock.calls[0][1];
     expect(arg).toMatchObject({ from: expect.any(String), principal: "p", action: "a" });
+  });
+});
+
+describe("GET /admin/insight/cost (Issue #1431)", () => {
+  // route は process.env.COST_BUDGET_ACCOUNT_ID / COST_BUDGET_NAME を request 時に読む。
+  afterEach(() => {
+    delete process.env.COST_BUDGET_ACCOUNT_ID;
+    delete process.env.COST_BUDGET_NAME;
+  });
+
+  it("should 403 a non-SystemAdmin", async () => {
+    mocks.isSystemAdmin.mockReturnValue(false);
+    expect((await app.request("/admin/insight/cost")).status).toBe(StatusCodes.FORBIDDEN);
+  });
+
+  it("should 200 available:false when the account id env is empty", async () => {
+    process.env.COST_BUDGET_NAME = "tenkacloud-dev-monthly-cost";
+    const res = await app.request("/admin/insight/cost");
+    expect(res.status).toBe(StatusCodes.OK);
+    expect(await res.json()).toEqual({ available: false });
+    expect(mocks.getCostSummary).not.toHaveBeenCalled();
+  });
+
+  it("should 200 available:false when the budget name env is empty", async () => {
+    process.env.COST_BUDGET_ACCOUNT_ID = "123456789012";
+    const res = await app.request("/admin/insight/cost");
+    expect(res.status).toBe(StatusCodes.OK);
+    expect(await res.json()).toEqual({ available: false });
+    expect(mocks.getCostSummary).not.toHaveBeenCalled();
+  });
+
+  it("should 200 available:true with the budget summary when wired", async () => {
+    process.env.COST_BUDGET_ACCOUNT_ID = "123456789012";
+    process.env.COST_BUDGET_NAME = "tenkacloud-dev-monthly-cost";
+    mocks.getCostSummary.mockResolvedValueOnce({
+      limitUsd: 100,
+      actualSpendUsd: 42,
+      forecastedSpendUsd: 75,
+      percentConsumed: 42,
+      unit: "USD",
+    });
+    const res = await app.request("/admin/insight/cost");
+    expect(res.status).toBe(StatusCodes.OK);
+    expect(await res.json()).toEqual({
+      available: true,
+      limitUsd: 100,
+      actualSpendUsd: 42,
+      forecastedSpendUsd: 75,
+      percentConsumed: 42,
+      unit: "USD",
+    });
+  });
+
+  it("should 200 available:false when DescribeBudget throws (budget missing / no permission)", async () => {
+    process.env.COST_BUDGET_ACCOUNT_ID = "123456789012";
+    process.env.COST_BUDGET_NAME = "tenkacloud-dev-monthly-cost";
+    mocks.getCostSummary.mockRejectedValueOnce(new Error("ResourceNotFound"));
+    const res = await app.request("/admin/insight/cost");
+    expect(res.status).toBe(StatusCodes.OK);
+    expect(await res.json()).toEqual({ available: false });
   });
 });
 

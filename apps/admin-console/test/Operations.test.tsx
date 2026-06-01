@@ -9,6 +9,11 @@ import { OperationsPage } from "../src/pages/Operations";
  * page なので、 configured / not-configured の 2 シナリオで全分岐を網羅する。
  */
 vi.mock("../src/i18n", () => ({ useT: () => (key: string) => key }));
+// cost panel は自前のテスト (BudgetConsumptionPanel.test.tsx) で網羅するため、 page テストでは
+// useAuth / fetch を持ち込まないよう stub する (= OperationsPage は presentational のまま検証)。
+vi.mock("../src/components/BudgetConsumptionPanel", () => ({
+  BudgetConsumptionPanel: () => null,
+}));
 
 describe("OperationsPage", () => {
   it("should build the CloudWatch dashboard deep link when configured", () => {

@@ -231,6 +231,12 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       environmentName: config.environment,
       // Issue #1340 Phase 2: tenant SAML 有効時のみ per-tenant audit Lambda を集約配線する。
       ...(tenantSignInAudit ? { tenantSignInAudit } : {}),
+      // Issue #1431: in-console cost panel。 CostBudget は addCostGuardrails で
+      // `monthlyCostLimitUsd > 0` のときだけ `tenkacloud-<env>-monthly-cost` という名前で作られる。
+      // 同じ条件のときだけ budget 名を渡し、 admin-insight Lambda が DescribeBudget (無料) で読む。
+      ...(config.monthlyCostLimitUsd && config.monthlyCostLimitUsd > 0
+        ? { costBudgetName: `tenkacloud-${config.environment}-monthly-cost` }
+        : {}),
     },
   );
   adminConsoleInsightStack.addDependency(controlPlaneStack);

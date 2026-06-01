@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  type CostSummaryResponse,
+  fetchCostSummary,
   fetchTenantsInsightSummary,
   indexSummaryByTenantId,
   type TenantInsightSummary,
@@ -110,6 +112,68 @@ describe("fetchTenantsInsightSummary", () => {
     expect(String(calledUrl)).toBe(
       "https://insight.example.com/admin/insight/tenants/summary?tenantIds=t-1",
     );
+  });
+});
+
+describe("fetchCostSummary", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("should return null when the AdminInsight URL is empty (= not wired)", async () => {
+    const res = await fetchCostSummary({ ...baseConfig, adminInsightApiUrl: "" }, "id-token");
+    expect(res).toBeNull();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("should return the budget summary on the happy path with bearer auth", async () => {
+    const summary: CostSummaryResponse = {
+      available: true,
+      limitUsd: 100,
+      actualSpendUsd: 42,
+      forecastedSpendUsd: 75,
+      percentConsumed: 42,
+      unit: "USD",
+    };
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(JSON.stringify(summary), { status: 200 }),
+    );
+    const res = await fetchCostSummary(baseConfig, "id-token");
+    expect(res).toEqual(summary);
+    const [calledUrl, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(String(calledUrl)).toBe("https://insight.example.com/admin/insight/cost");
+    expect((init as RequestInit).headers).toMatchObject({ authorization: "Bearer id-token" });
+  });
+
+  it("should return null on 403 (no SystemAdmin claim)", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "forbidden" }), { status: 403 }),
+    );
+    expect(await fetchCostSummary(baseConfig, "id-token")).toBeNull();
+  });
+
+  it("should throw on non-403 errors such as 500", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "internal" }), { status: 500 }),
+    );
+    await expect(fetchCostSummary(baseConfig, "id-token")).rejects.toMatchObject({
+      message: expect.stringContaining("500"),
+    });
+  });
+
+  it("should fall back to statusText when the error body cannot be read", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      statusText: "Bad Gateway",
+      text: () => Promise.reject(new Error("stream error")),
+    } as unknown as Response);
+    await expect(fetchCostSummary(baseConfig, "id-token")).rejects.toMatchObject({
+      message: expect.stringContaining("Bad Gateway"),
+    });
   });
 });
 

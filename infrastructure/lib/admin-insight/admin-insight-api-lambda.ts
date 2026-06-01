@@ -47,6 +47,17 @@ export interface AdminInsightApiLambdaProps {
    * 未指定なら handler default の 90 日 (= OSS / self-hosted)。
    */
   readonly auditRetentionDays?: number;
+  /**
+   * Issue #1431: in-console cost visibility。 `CostBudget` が作る月次予算名 (= `<prefix>-monthly-cost`)。
+   * 指定時は handler が AWS Budgets `DescribeBudget` (無料) で消化率を返す。 未指定なら
+   * `/admin/insight/cost` は `available:false` を返す (= cost-zero、 Cost Explorer は使わない)。
+   */
+  readonly costBudgetName?: string;
+  /**
+   * `DescribeBudget` に必須の AWS account id。 `costBudgetName` 指定時のみ使う。 Stack の account
+   * を渡す (env-agnostic token なら deploy 時に解決される)。
+   */
+  readonly costBudgetAccountId?: string;
 }
 
 /**
@@ -89,6 +100,10 @@ export class AdminInsightApiLambda extends Construct {
         ...(props.auditRetentionDays !== undefined
           ? { AUDIT_RETENTION_DAYS: String(props.auditRetentionDays) }
           : {}),
+        // Issue #1431: AWS Budgets DescribeBudget で月次コスト消化率を返す (= 無料 API)。
+        // 未指定なら空 → handler は available:false (= 外部リンク表示) に倒す。
+        COST_BUDGET_NAME: props.costBudgetName ?? "",
+        COST_BUDGET_ACCOUNT_ID: props.costBudgetAccountId ?? "",
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -157,6 +172,21 @@ export class AdminInsightApiLambda extends Construct {
             props.deprovisioningStateMachineArn
               .replace(":stateMachine:", ":execution:")
               .concat(":*"),
+          ],
+        }),
+      );
+    }
+
+    // Issue #1431: in-console cost visibility。 AWS Budgets DescribeBudget は無料 (Cost Explorer
+    // GetCostAndUsage は $0.01/req のため cost-zero 原則で使わない)。 budget は global service なので
+    // ARN に region を含まない。 単一の月次予算 ARN に scope して最小権限で固定。
+    if (props.costBudgetName && props.costBudgetAccountId) {
+      this.fn.addToRolePolicy(
+        new PolicyStatement({
+          effect: Effect.ALLOW,
+          actions: ["budgets:ViewBudget"],
+          resources: [
+            `arn:aws:budgets::${props.costBudgetAccountId}:budget/${props.costBudgetName}`,
           ],
         }),
       );
