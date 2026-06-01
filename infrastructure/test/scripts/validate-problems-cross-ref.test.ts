@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { checkCoordinationPluginFile } from "../../../scripts/validate-problems";
 
 /**
  * Issue #951 sub #2: validate-problems.ts の cross-ref check が壊れた問題 (=
@@ -38,5 +39,37 @@ describe("validate-problems cross-ref check (#951 sub #2)", () => {
       cwd: REPO_ROOT,
     });
     expect(out).toContain("件の metadata.json はすべて有効です");
+  });
+});
+
+describe("checkCoordinationPluginFile (#1420)", () => {
+  // microservice-migration-battle は interTeamCoordination.plugin=coordination/router.ts を宣言する
+  // 唯一の参照問題 (submodule)。 実在 path での positive と、 不在 path での negative を pin する。
+  const MS_DIR = join(REPO_ROOT, "problems/battles/microservice-migration-battle");
+
+  it("should pass when the declared coordination plugin file exists", () => {
+    expect(
+      checkCoordinationPluginFile(
+        { interTeamCoordination: { plugin: "coordination/router.ts" } },
+        MS_DIR,
+      ),
+    ).toEqual([]);
+  });
+
+  it("should error when the coordination plugin file is missing", () => {
+    const errors = checkCoordinationPluginFile(
+      { interTeamCoordination: { plugin: "coordination/does-not-exist.ts" } },
+      MS_DIR,
+    );
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("coordination/does-not-exist.ts");
+  });
+
+  it("should be a no-op when interTeamCoordination is absent", () => {
+    expect(checkCoordinationPluginFile({}, MS_DIR)).toEqual([]);
+  });
+
+  it("should be a no-op when plugin is not a string", () => {
+    expect(checkCoordinationPluginFile({ interTeamCoordination: {} }, MS_DIR)).toEqual([]);
   });
 });
