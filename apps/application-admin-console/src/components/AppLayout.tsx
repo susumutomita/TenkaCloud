@@ -111,12 +111,20 @@ export function ShellLayout({ children }: { children: ReactNode }) {
               { type: "link", href: "/problems", text: t("nav.problems") },
               { type: "link", href: "/deployments", text: t("nav.deployments") },
               { type: "link", href: "/competitor-accounts", text: t("nav.competitor_accounts") },
-              // Issue #1292: 自テナント監査ログ (= deploy / event 操作の audit)。
-              { type: "link", href: "/audit-log", text: t("nav.audit_log") },
-              // Issue #1294: per-tenant SAML SSO (silo tier only — page shows a warning
-              // alert for pooled tenants). Reintroduces the link removed in #1066 (which
-              // had been replaced by hard MFA), now scoped to silo + multi-IdP.
-              { type: "link", href: "/identity-providers", text: "Identity providers" },
+              // 管理系 (監査ログ / IdP) は日常運用メニューと混ざると見つけにくいので、 1 つの
+              // category section にまとめて flat な羅列を解消する。
+              {
+                type: "section",
+                text: t("nav.admin_section"),
+                items: [
+                  // Issue #1292: 自テナント監査ログ (= deploy / event 操作の audit)。
+                  { type: "link", href: "/audit-log", text: t("nav.audit_log") },
+                  // Issue #1294: per-tenant SAML SSO (silo tier only — page shows a warning
+                  // alert for pooled tenants). Reintroduces the link removed in #1066 (which
+                  // had been replaced by hard MFA), now scoped to silo + multi-IdP.
+                  { type: "link", href: "/identity-providers", text: "Identity providers" },
+                ],
+              },
             ]}
             onFollow={(e) => {
               // SideNavigation の link は全て internal (external:true なし) なので偽は不到達。

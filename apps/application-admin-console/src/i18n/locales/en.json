@@ -16,7 +16,8 @@
     "problems": "Problems",
     "deployments": "Deployments",
     "competitor_accounts": "Competitor Accounts",
-    "audit_log": "Audit log"
+    "audit_log": "Audit log",
+    "admin_section": "Admin"
   },
   "auth": {
     "sign_out": "Sign out"
