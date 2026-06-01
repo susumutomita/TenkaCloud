@@ -108,6 +108,15 @@ describe("renderProblemJobLinks", () => {
     await userEvent.click(screen.getByText("Job #1 ↗"));
     expect(navigate).toHaveBeenCalledWith("/deployments/j1");
   });
+
+  it("should fall back to the default anchor when no navigate fn is provided", async () => {
+    // navigate 省略時は onFollow が早期 return し (preventDefault せず)、 通常の anchor 遷移に委ねる。
+    render(renderProblemJobLinks([dep("COMPLETE", "j1")]));
+    const link = screen.getByText("Job #1 ↗");
+    await userEvent.click(link);
+    // 早期 return するため例外を投げず、 link は描画されたまま (= SPA navigation を行わない)。
+    expect(link).toBeInTheDocument();
+  });
 });
 
 describe("scoringBadge", () => {
