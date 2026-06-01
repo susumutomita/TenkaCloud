@@ -99,6 +99,17 @@ describe("App", () => {
         }),
       ).toBeInTheDocument();
     });
+
+    it("should remember a deep link before redirecting through the login page", async () => {
+      renderApp("/deployments/job-1?view=logs#latest");
+      await screen.findByRole("heading", {
+        level: 1,
+        name: /TenkaCloud Application Admin Console/,
+      });
+      expect(sessionStorage.getItem("TenkaCloud.application_admin.login_return_path")).toBe(
+        "/deployments/job-1?view=logs#latest",
+      );
+    });
   });
 
   describe("when completing the Cognito callback with a valid token (ADR-025: memory-only)", () => {

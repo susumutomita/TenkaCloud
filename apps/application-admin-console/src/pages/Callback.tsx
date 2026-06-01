@@ -5,6 +5,7 @@ import { completeLogin } from "@tenkacloud/auth-client";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
+import { consumeLoginReturnPath } from "../auth/login-return-path";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
 
@@ -29,7 +30,7 @@ export function CallbackPage({ config }: { config: AppConfig }) {
     completeLogin(config, code, state)
       .then((tokens) => {
         auth.setTokens(tokens);
-        navigate("/", { replace: true });
+        navigate(consumeLoginReturnPath(), { replace: true });
       })
       .catch((err: Error) => setError(err.message));
   }, [params, config, auth, navigate, t]);

@@ -1,6 +1,7 @@
 import "@cloudscape-design/global-styles/index.css";
-import { Navigate, Route, Routes } from "react-router";
+import { Navigate, Route, Routes, useLocation } from "react-router";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
+import { buildLoginReturnPath, readLoginReturnPathState } from "./auth/login-return-path";
 import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
 import { AuditLogPage } from "./pages/AuditLog";
@@ -20,8 +21,11 @@ import { ProblemsPage } from "./pages/Problems";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
+  const location = useLocation();
   if (!auth.ready) return null;
-  if (!auth.tokens) return <Navigate to="/login" replace />;
+  if (!auth.tokens) {
+    return <Navigate to="/login" replace state={{ returnPath: buildLoginReturnPath(location) }} />;
+  }
   return <>{children}</>;
 }
 
@@ -33,11 +37,16 @@ function guarded(element: React.ReactNode) {
   );
 }
 
+function LoginRoute({ config }: { config: AppConfig }) {
+  const location = useLocation();
+  return <LoginPage config={config} returnPath={readLoginReturnPathState(location.state)} />;
+}
+
 export function App({ config }: { config: AppConfig }) {
   return (
     <AuthProvider config={config}>
       <Routes>
-        <Route path="/login" element={<LoginPage config={config} />} />
+        <Route path="/login" element={<LoginRoute config={config} />} />
         <Route path="/callback" element={<CallbackPage config={config} />} />
         <Route path="/" element={guarded(<HomePage />)} />
         <Route path="/problems" element={guarded(<ProblemsPage />)} />

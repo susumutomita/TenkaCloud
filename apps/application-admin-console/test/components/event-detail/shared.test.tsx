@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import type {
   EventDeploymentSummary,
   EventDetail,
@@ -99,6 +100,22 @@ describe("renderProblemJobLinks", () => {
     expect(screen.getByText("Job #2 ↗")).toBeInTheDocument();
     expect(screen.getByText("COMPLETE")).toBeInTheDocument();
     expect(screen.getByText("FAILED")).toBeInTheDocument();
+  });
+
+  it("should use SPA navigation when following a job link so the memory-only token survives", async () => {
+    const navigate = vi.fn();
+    render(renderProblemJobLinks([dep("COMPLETE", "j1")], navigate));
+    await userEvent.click(screen.getByText("Job #1 ↗"));
+    expect(navigate).toHaveBeenCalledWith("/deployments/j1");
+  });
+
+  it("should fall back to the default anchor when no navigate fn is provided", async () => {
+    // navigate 省略時は onFollow が早期 return し (preventDefault せず)、 通常の anchor 遷移に委ねる。
+    render(renderProblemJobLinks([dep("COMPLETE", "j1")]));
+    const link = screen.getByText("Job #1 ↗");
+    await userEvent.click(link);
+    // 早期 return するため例外を投げず、 link は描画されたまま (= SPA navigation を行わない)。
+    expect(link).toBeInTheDocument();
   });
 });
 

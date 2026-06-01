@@ -199,6 +199,14 @@ export class ApiGateway extends Construct {
     usersById.addMethod("DELETE", competitorAccountsIntegration, deployMethodOptions);
     usersById.addMethod("PATCH", competitorAccountsIntegration, deployMethodOptions);
 
+    // Issue #1292: Tenant Admin 向け監査ログ read / CSV export。
+    // EventApi handler 側の `/admin/audit-log*` route と同じ EventApi integration に公開する。
+    // API Gateway resource が無いと request は Lambda に届かず、Gateway 自身の 403 に CORS
+    // header が付かないため browser では response body ではなく "Failed to fetch" になる。
+    const auditLog = admin.addResource("audit-log");
+    auditLog.addMethod("GET", eventIntegration, deployMethodOptions);
+    auditLog.addResource("export").addMethod("GET", eventIntegration, deployMethodOptions);
+
     // Issue #1312: per-tenant SAML IdP CRUD route。 Application Plane (silo / Lite) のみ有効。
     //   /tenant/idp                  GET=list / POST=create
     //   /tenant/idp/{idpId}          GET=detail / PATCH=update / DELETE=remove
