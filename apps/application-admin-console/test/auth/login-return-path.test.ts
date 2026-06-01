@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildLoginReturnPath,
   consumeLoginReturnPath,
@@ -19,6 +19,11 @@ describe("login return path", () => {
     });
     expect(path).toBe("/deployments/job-1?view=logs#latest");
     expect(readLoginReturnPathState({ returnPath: path })).toBe(path);
+  });
+
+  it("should fall back to home when the current location is not a safe deep link", () => {
+    // sanitize が undefined を返す location は `?? DEFAULT_RETURN_PATH` で home に倒す (line 13 の枝)。
+    expect(buildLoginReturnPath({ pathname: "/login", search: "", hash: "" })).toBe("/");
   });
 
   it("should consume the remembered path exactly once", () => {
@@ -43,5 +48,14 @@ describe("login return path", () => {
     sessionStorage.setItem(KEY, "/deployments/stale");
     rememberLoginReturnPath(undefined);
     expect(sessionStorage.getItem(KEY)).toBeNull();
+  });
+
+  it("should fall back to home when sessionStorage is unavailable", () => {
+    // privacy-restricted ブラウザ等で getItem が throw する catch 経路 (= home へフォールバック)。
+    const spy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("storage blocked");
+    });
+    expect(consumeLoginReturnPath()).toBe("/");
+    spy.mockRestore();
   });
 });
