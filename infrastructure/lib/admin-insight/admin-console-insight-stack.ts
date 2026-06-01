@@ -64,6 +64,13 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
    */
   readonly auditRetentionDays?: number;
   /**
+   * Issue #1431: in-console cost visibility。 `CostBudget` が作る月次予算名
+   * (= `tenkacloud-<env>-monthly-cost`)。 budget は `monthlyCostLimitUsd > 0` の環境でのみ作られるため、
+   * その時だけ渡す。 指定時は admin-insight Lambda が AWS Budgets `DescribeBudget` (無料) で消化率を返す。
+   * 未指定なら `/admin/insight/cost` は `available:false` を返す。
+   */
+  readonly costBudgetName?: string;
+  /**
    * Issue #1340 Phase 2: per-tenant sign-in audit を attach する tenant 群。 各エントリは
    *   - `tenantId` (= `TENANT#<tenantId>` partition)
    *   - `userPoolId` (= CloudTrail event filter で使う文字列 ID、 cross-stack ref で TenantTemplateStack
@@ -122,6 +129,12 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       ...(props.adminAuditLogTable ? { adminAuditLogTable: props.adminAuditLogTable } : {}),
       ...(props.auditRetentionDays !== undefined
         ? { auditRetentionDays: props.auditRetentionDays }
+        : {}),
+      // Issue #1431: cost panel。 budget が配線された環境でのみ DescribeBudget を許可する。
+      // accountId は Stack の account (= deploy 時に解決される token / 具体値) を使い、
+      // wire.ts に account を二重配線しない。
+      ...(props.costBudgetName
+        ? { costBudgetName: props.costBudgetName, costBudgetAccountId: this.account }
         : {}),
     });
     this.lambdaFunctionName = lambda.fn.functionName;
@@ -234,6 +247,13 @@ export class AdminConsoleInsightStack extends cdk.Stack {
     });
     httpApi.addRoutes({
       path: "/admin/insight/audit/export",
+      methods: [HttpMethod.GET],
+      integration,
+    });
+
+    // Issue #1431: in-console cost / budget visibility route (= AWS Budgets DescribeBudget、無料)。
+    httpApi.addRoutes({
+      path: "/admin/insight/cost",
       methods: [HttpMethod.GET],
       integration,
     });

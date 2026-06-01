@@ -9,7 +9,7 @@ import { AdminConsoleInsightStack } from "../../lib/admin-insight/admin-console-
  * ADR-011 #590 Phase 1.A — AdminConsoleInsightStack の CFn 構造を assertion で固定する。
  * cross-stack 参照を simulate するため UserPool / Tables は同 app 内 helper stack に作る。
  */
-function synthInsightStack(adminConsoleOrigin?: string): Template {
+function synthInsightStack(adminConsoleOrigin?: string, costBudgetName?: string): Template {
   const app = new cdk.App();
   const fixtures = new cdk.Stack(app, "Fixtures", {
     env: { account: "123456789012", region: "ap-northeast-1" },
@@ -39,6 +39,7 @@ function synthInsightStack(adminConsoleOrigin?: string): Template {
     eventsTable: events,
     teamsTable: teams,
     adminConsoleOrigin,
+    ...(costBudgetName ? { costBudgetName } : {}),
   });
   return Template.fromStack(stack);
 }
@@ -228,6 +229,62 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
           },
         },
         0,
+      );
+    });
+  });
+
+  describe("Issue #1431: in-console cost panel", () => {
+    it("should register GET /admin/insight/cost on the JWT Authorizer", () => {
+      const tpl = synthInsightStack();
+      const routes = tpl.findResources("AWS::ApiGatewayV2::Route", {
+        Properties: { RouteKey: "GET /admin/insight/cost" },
+      });
+      expect(Object.keys(routes)).toHaveLength(1);
+      const route = Object.values(routes)[0] as { Properties: { AuthorizationType: string } };
+      expect(route.Properties.AuthorizationType).toBe("JWT");
+    });
+
+    it("should NOT grant budgets:ViewBudget when no budget is wired", () => {
+      const tpl = synthInsightStack();
+      function collectActions(t: Template): string[] {
+        return Object.values(t.findResources("AWS::IAM::Policy")).flatMap((p) => {
+          const s = (p as { Properties?: { PolicyDocument?: { Statement?: unknown[] } } })
+            .Properties?.PolicyDocument?.Statement;
+          return (s ?? []).flatMap((st) => {
+            const a = (st as { Action?: string | string[] }).Action;
+            return Array.isArray(a) ? a : typeof a === "string" ? [a] : [];
+          });
+        });
+      }
+      expect(collectActions(tpl)).not.toContain("budgets:ViewBudget");
+    });
+
+    it("should pass COST_BUDGET_NAME env + grant budgets:ViewBudget when a budget is wired", () => {
+      const tpl = synthInsightStack(undefined, "tenkacloud-development-monthly-cost");
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Environment: Match.objectLike({
+            Variables: Match.objectLike({
+              COST_BUDGET_NAME: "tenkacloud-development-monthly-cost",
+              COST_BUDGET_ACCOUNT_ID: "123456789012",
+            }),
+          }),
+        }),
+      );
+      tpl.hasResourceProperties(
+        "AWS::IAM::Policy",
+        Match.objectLike({
+          PolicyDocument: Match.objectLike({
+            Statement: Match.arrayWith([
+              Match.objectLike({
+                Action: "budgets:ViewBudget",
+                Resource:
+                  "arn:aws:budgets::123456789012:budget/tenkacloud-development-monthly-cost",
+              }),
+            ]),
+          }),
+        }),
       );
     });
   });

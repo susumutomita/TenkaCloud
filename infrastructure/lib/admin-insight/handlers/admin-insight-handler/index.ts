@@ -5,6 +5,7 @@ import { handle } from "hono/aws-lambda";
 import { StatusCodes } from "http-status-codes";
 import { exportAuditEntriesCsv, listAuditEntries } from "./audit.js";
 import { isSystemAdmin, resolveCognitoSub } from "./auth.js";
+import { defaultBudgetsClient, getCostSummary } from "./cost.js";
 import { defaultPipelineClient, listPipelineExecutions } from "./pipeline-executions.js";
 import { buildSharedResources } from "./shared.js";
 import { defaultSfnClient, listStateMachineExecutions } from "./state-machine-executions.js";
@@ -212,6 +213,33 @@ app.get("/admin/insight/state-machine-executions", async (c) => {
 
 app.get("/admin/insight/audit", handleAuditEntries);
 app.get("/admin/insight/audit/export", handleAuditExport);
+
+// ====== Issue #1431: in-console cost / budget visibility (AWS Budgets, 無料) ======
+app.get("/admin/insight/cost", handleCostSummary);
+
+async function handleCostSummary(c: Context): Promise<Response> {
+  if (!isSystemAdmin(c)) {
+    return c.json({ error: "forbidden" }, StatusCodes.FORBIDDEN);
+  }
+  const accountId = process.env.COST_BUDGET_ACCOUNT_ID ?? "";
+  const budgetName = process.env.COST_BUDGET_NAME ?? "";
+  // budget / IAM 未配線 (= env 空) は available:false で graceful。 admin-console は
+  // この場合 Billing console への外部リンク表示に留め、 画面を壊さない。
+  if (!accountId || !budgetName) {
+    return c.json({ available: false }, StatusCodes.OK);
+  }
+  try {
+    const summary = await getCostSummary({
+      budgets: defaultBudgetsClient(),
+      accountId,
+      budgetName,
+    });
+    return c.json({ available: true, ...summary }, StatusCodes.OK);
+  } catch {
+    // budget 未作成 / 権限不足 (ResourceNotFound / AccessDenied) も available:false に倒す。
+    return c.json({ available: false }, StatusCodes.OK);
+  }
+}
 
 async function handleAuditEntries(c: Context): Promise<Response> {
   const forbidden = auditAndAuthorize(c, "/admin/insight/audit");
