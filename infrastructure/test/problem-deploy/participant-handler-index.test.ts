@@ -31,6 +31,8 @@ const mocks = vi.hoisted(() => ({
   listProblemEndpoints: vi.fn(),
   upsertProblemEndpointOverride: vi.fn(),
   deleteProblemEndpointOverride: vi.fn(),
+  handleCoordinationOp: vi.fn(),
+  handleCoordinationProjection: vi.fn(),
 }));
 
 vi.mock("../../lib/problem-deploy/handlers/participant-handler/shared", () => ({
@@ -83,6 +85,15 @@ vi.mock("../../lib/problem-deploy/handlers/participant-handler/battle-attacks", 
 vi.mock("../../lib/problem-deploy/handlers/participant-handler/deploy-logs", async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   getParticipantDeployLogs: mocks.getParticipantDeployLogs,
+}));
+
+// coordination-handler は handler 2 本だけ mock (= route glue を pin)。 makeCoordinationScopeResolver /
+// parseCoordinationConfig は index.ts の init で呼ばれるので無害な stub を返す (= resolver は未使用)。
+vi.mock("../../lib/problem-deploy/handlers/participant-handler/coordination-handler", () => ({
+  handleCoordinationOp: mocks.handleCoordinationOp,
+  handleCoordinationProjection: mocks.handleCoordinationProjection,
+  makeCoordinationScopeResolver: () => async () => null,
+  parseCoordinationConfig: () => ({}),
 }));
 
 const { app } = await import("../../lib/problem-deploy/handlers/participant-handler/index");
@@ -483,5 +494,56 @@ describe("DELETE /portal/me/problems/:problemId/endpoints/:slot", () => {
   it("should map a service failure to an error", async () => {
     mocks.deleteProblemEndpointOverride.mockResolvedValueOnce({ kind: "slot_not_overridable" });
     expect((await send("DELETE", path)).status).toBe(StatusCodes.CONFLICT);
+  });
+});
+
+describe("POST /portal/me/coordination/op", () => {
+  const OP = "/portal/me/coordination/op";
+  it("should 401 without a bearer token", async () => {
+    expect((await app.request(OP, { method: "POST" })).status).toBe(StatusCodes.UNAUTHORIZED);
+  });
+  it("should 200 with the projection on ok", async () => {
+    mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "ok", projection: { count: 1 } });
+    const res = await send("POST", OP, { op: { kind: "inc" } });
+    expect(res.status).toBe(StatusCodes.OK);
+    expect(await res.json()).toEqual({ projection: { count: 1 } });
+  });
+  it("should 422 with the error on a plugin rejection", async () => {
+    mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "rejected", error: "bad_op" });
+    const res = await send("POST", OP, { op: { kind: "bad" } });
+    expect(res.status).toBe(StatusCodes.UNPROCESSABLE_ENTITY);
+    expect(await res.json()).toEqual({ error: "bad_op" });
+  });
+  it("should 409 on a write conflict", async () => {
+    mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "conflict" });
+    expect((await send("POST", OP, { op: {} })).status).toBe(StatusCodes.CONFLICT);
+  });
+  it("should 503 when the plugin is unavailable (importer seam)", async () => {
+    mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "unavailable" });
+    expect((await send("POST", OP, { op: {} })).status).toBe(StatusCodes.SERVICE_UNAVAILABLE);
+  });
+  it("should 404 when coordination is not configured for the team", async () => {
+    mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "not_configured" });
+    expect((await send("POST", OP, { op: {} })).status).toBe(StatusCodes.NOT_FOUND);
+  });
+});
+
+describe("GET /portal/me/coordination/projection", () => {
+  const PROJ = "/portal/me/coordination/projection";
+  it("should 401 without a bearer token", async () => {
+    expect((await app.request(PROJ)).status).toBe(StatusCodes.UNAUTHORIZED);
+  });
+  it("should 200 with the team projection", async () => {
+    mocks.handleCoordinationProjection.mockResolvedValueOnce({
+      kind: "ok",
+      projection: { allies: [] },
+    });
+    const res = await get(PROJ);
+    expect(res.status).toBe(StatusCodes.OK);
+    expect(await res.json()).toEqual({ projection: { allies: [] } });
+  });
+  it("should 404 when coordination is not configured", async () => {
+    mocks.handleCoordinationProjection.mockResolvedValueOnce({ kind: "not_configured" });
+    expect((await get(PROJ)).status).toBe(StatusCodes.NOT_FOUND);
   });
 });
