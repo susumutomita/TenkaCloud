@@ -117,6 +117,40 @@ describe("ProblemDeployBackendStack (MVP-1) — GenericScoring Lambda", () => {
     expect(vars.PROBLEM_ENDPOINTS).toBeUndefined();
     expect(vars.BATTLE_PROBLEMS_PHASES).toBeUndefined();
   });
+
+  it("GenericScoring Lambda should receive the deploy event bus name for condition-triggered disruptions (#1422)", () => {
+    // #1422: condition-triggered disruption の publish 先 bus を env で渡す。 catalog
+    // (BATTLE_PROBLEMS_DISRUPTIONS) は scoring / phases 同様 esbuild define で build 時 literal 化し env から除く。
+    const functions = tpl.findResources("AWS::Lambda::Function");
+    const genericScoring = Object.entries(functions).find(
+      ([name]) => name.includes("GenericScoring") && name.includes("Function"),
+    );
+    const vars =
+      (
+        genericScoring?.[1] as {
+          Properties?: { Environment?: { Variables?: Record<string, unknown> } };
+        }
+      )?.Properties?.Environment?.Variables ?? {};
+    expect(vars.DEPLOY_EVENT_BUS_NAME).toBeDefined();
+    expect(vars.BATTLE_PROBLEMS_DISRUPTIONS).toBeUndefined();
+  });
+
+  it("GenericScoring Lambda role should be granted events:PutEvents (#1422)", () => {
+    // grantPutEventsTo が当該 bus に scope した events:PutEvents statement を出すことを pin。
+    const policies = tpl.findResources("AWS::IAM::Policy");
+    const hasPutEvents = Object.values(policies).some((p) => {
+      const statements =
+        (p as { Properties?: { PolicyDocument?: { Statement?: unknown[] } } }).Properties
+          ?.PolicyDocument?.Statement ?? [];
+      return statements.some((s) => {
+        const action = (s as { Action?: string | string[] }).Action;
+        return Array.isArray(action)
+          ? action.includes("events:PutEvents")
+          : action === "events:PutEvents";
+      });
+    });
+    expect(hasPutEvents).toBe(true);
+  });
 });
 
 describe("ProblemDeployBackendStack (MVP-1) — SystemAuditWriter Lambda (Issue #1034)", () => {

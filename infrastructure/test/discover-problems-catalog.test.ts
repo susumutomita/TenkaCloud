@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   discoverProblemsCatalog,
+  discoverProblemsDisruptions,
   discoverProblemsScoring,
   discoverProblemsVisibility,
 } from "../lib/utils/discover-problems-catalog";
@@ -188,5 +189,39 @@ describe("discoverProblemsVisibility (Issue #642)", () => {
 
   it("空 workspace は空 map (= 全 public 扱い)", () => {
     expect(discoverProblemsVisibility(workspace)).toEqual({});
+  });
+});
+
+describe("discoverProblemsDisruptions triggers[] (#1422)", () => {
+  it("should surface condition triggers parsed from metadata.disruptions[]", () => {
+    writeProblem("battles", "latency-battle", {
+      id: "latency-battle",
+      disruptions: [
+        {
+          id: "latency",
+          name: "EC2 latency",
+          eventDetailType: "DegradedDisruptionFired",
+          parameters: { delayMs: 200 },
+          triggers: [
+            { kind: "after-deploy", afterMinutes: 60 },
+            { kind: "team-score-above", threshold: 5000 },
+            { kind: "bogus" },
+          ],
+        },
+      ],
+    });
+    const result = discoverProblemsDisruptions(workspace);
+    expect(result["latency-battle"]?.[0]?.triggers).toEqual([
+      { kind: "after-deploy", afterMinutes: 60 },
+      { kind: "team-score-above", threshold: 5000 },
+    ]);
+  });
+
+  it("should omit triggers when the disruption declares none (Phase 1 self-fire only)", () => {
+    writeProblem("battles", "plain-battle", {
+      id: "plain-battle",
+      disruptions: [{ id: "d1", name: "n", eventDetailType: "X" }],
+    });
+    expect(discoverProblemsDisruptions(workspace)["plain-battle"]?.[0]?.triggers).toBeUndefined();
   });
 });

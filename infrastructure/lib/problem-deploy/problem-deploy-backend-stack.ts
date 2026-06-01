@@ -423,6 +423,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       problemsScoring: props.problemsScoring,
       problemsEndpoints: props.problemsEndpoints,
       problemsPhases: props.problemsPhases ?? {},
+      // #1422 (ADR-013 Phase 2): condition-triggered disruption の eval + in-account 発火。
+      problemsDisruptions: props.problemsDisruptions ?? {},
+      eventBus,
     });
     this.genericScoringLambda = genericScoring.fn;
 
