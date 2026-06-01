@@ -104,6 +104,7 @@ export function checkCrossRefs(metaPath: string, meta: Metadata): ValidationErro
     ...checkRuntimeSupport(runtime),
     ...checkRuntimeConsistency(meta),
     ...checkDashboardSlotFiles(meta, dir),
+    ...checkCoordinationPluginFile(meta, dir),
     ...checkRegionConsistency(meta),
   ];
 
@@ -243,6 +244,23 @@ function checkDashboardSlotFiles(meta: Metadata, dir: string): ValidationError[]
   }
 
   return errors;
+}
+
+/**
+ * interTeamCoordination.plugin (ADR-028 / #1420) が物理 file として存在するか cross-ref する。
+ * dashboard.slots (portal/*.tsx) と同方針 — platform の dispatcher が runtime に動的 import する
+ * ため、 存在しない path を宣言したまま catalog に載ると実行時に coordination が無言で無効化され
+ * 出題者は気付けない。 SCHEMA は path pattern までしか保証しないので file 実在はここで止める。
+ * interTeamCoordination 未宣言の problem は無影響 (= 早期 return)。
+ */
+export function checkCoordinationPluginFile(meta: Metadata, dir: string): ValidationError[] {
+  const coordination = meta.interTeamCoordination as Record<string, unknown> | undefined;
+  const plugin = coordination?.plugin;
+  if (typeof plugin !== "string") return [];
+  if (!existsSync(join(dir, plugin))) {
+    return [`interTeamCoordination.plugin="${plugin}" file not found`];
+  }
+  return [];
 }
 
 function main(): void {
