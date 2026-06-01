@@ -8,8 +8,9 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Table from "@cloudscape-design/components/table";
 import Tabs from "@cloudscape-design/components/tabs";
+import { usePolling } from "@tenkacloud/web-kit";
 import { StatusCodes } from "http-status-codes";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   AdminInsightApiError,
   fetchPipelineExecutions,
@@ -95,24 +96,9 @@ export function JobsPage({ config }: { config: AppConfig }) {
     }
   }, [config, idToken]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const tick = async () => {
-      // cleanup が cancelled=true にした後の遅延 tick を弾く防御。 setInterval は cleanup で
-      // 即 clear され、 fake timer test では unmount 後に tick が発火しないので不到達。
-      /* v8 ignore next */
-      if (cancelled) return;
-      await fetchOnce();
-    };
-    void tick();
-    const handle = window.setInterval(() => {
-      void tick();
-    }, POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(handle);
-    };
-  }, [fetchOnce]);
+  // 初回 fetch + 60s polling + unmount cleanup は usePolling (web-kit) に集約 (#1418 DRY)。
+  // idToken 不在は fetchOnce 側が弾く (= JobsPage は effect レベルの gate を持たない既存挙動)。
+  usePolling(fetchOnce, POLL_INTERVAL_MS);
 
   const columns = useMemo(
     () => [
@@ -276,12 +262,9 @@ export function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
     }
   }, [config, idToken]);
 
-  useEffect(() => {
-    if (!idToken) return;
-    void fetchOnce();
-    const interval = setInterval(() => void fetchOnce(), POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [fetchOnce, idToken]);
+  // 初回 fetch + 60s polling + unmount cleanup は usePolling (web-kit) に集約 (#1418 DRY)。
+  // idToken 解決前は enabled=false で timer を張らない (既存の effect gate を踏襲)。
+  usePolling(fetchOnce, POLL_INTERVAL_MS, { enabled: Boolean(idToken) });
 
   const sfnListUrl = useMemo(
     () => `https://${region}.console.aws.amazon.com/states/home?region=${region}#/statemachines`,
