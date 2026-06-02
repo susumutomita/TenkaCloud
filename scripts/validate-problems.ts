@@ -23,6 +23,10 @@ import {
 } from "@tenkacloud/problem-runtime";
 import Ajv2020 from "ajv";
 import addFormats from "ajv-formats";
+import {
+  checkDisruptionActionOutputRefs,
+  checkDisruptionActions,
+} from "./lib/disruption-action-check";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 const PROBLEMS_DIR = join(REPO_ROOT, "problems");
@@ -105,6 +109,7 @@ export function checkCrossRefs(metaPath: string, meta: Metadata): ValidationErro
     ...checkRuntimeConsistency(meta),
     ...checkDashboardSlotFiles(meta, dir),
     ...checkCoordinationPluginFile(meta, dir),
+    ...checkDisruptionActions(meta),
     ...checkRegionConsistency(meta),
   ];
 
@@ -116,6 +121,7 @@ export function checkCrossRefs(metaPath: string, meta: Metadata): ValidationErro
     errors.push(
       ...checkScoringOutputRefs(meta, yaml, runtime.entry),
       ...checkEndpointOutputRefs(meta, yaml, runtime.entry),
+      ...checkDisruptionActionOutputRefs(meta, yaml, runtime.entry),
     );
   }
   return errors;
