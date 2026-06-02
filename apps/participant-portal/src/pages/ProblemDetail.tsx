@@ -183,6 +183,8 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           score={problem.score}
           team={view.team}
           stackOutputs={problem.stackOutputs}
+          coordinationApiUrl={config.coordinationApiUrl}
+          sessionToken={sessionToken ?? undefined}
         />
       )}
     </SpaceBetween>

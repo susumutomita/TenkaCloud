@@ -47,7 +47,35 @@ export interface PortalSlotProps {
    * 未宣言 / non-public な問題では undefined (= plugin 側で `props.coordination?.` で安全に扱う)。
    */
   readonly coordination?: PortalCoordinationEntry;
+  /**
+   * ADR-028/030 / Issue #1420: coordination dispatcher を team の credential で叩く **live** client。
+   * portal が `coordinationApiUrl` (= dispatcher URL) + session を持つときだけ束縛される (= 未配線 /
+   * coordination 無効の問題では undefined)。 plugin は `props.coordinationClient?.submitOp(op)` で op を
+   * 投げ、 `getProjection()` で自チーム視点の projection を読む (= live route directory 等)。
+   */
+  readonly coordinationClient?: PortalCoordinationClient;
   readonly nowIso: string;
+}
+
+/**
+ * coordination op の結果 (= dispatcher の HTTP status を写した discriminated union)。 plugin は
+ * `kind` で分岐する (ok=projection 反映 / rejected=理由表示 / not_configured・unavailable=機能オフ表示)。
+ */
+export type PortalCoordinationOutcome =
+  | { readonly kind: "ok"; readonly projection: unknown }
+  | { readonly kind: "rejected"; readonly error: string }
+  | { readonly kind: "conflict" }
+  | { readonly kind: "unavailable" }
+  | { readonly kind: "not_configured" }
+  | { readonly kind: "unauthorized" };
+
+/**
+ * team の credential に束縛済の coordination client (portal が注入)。 plugin は URL / token を知らずに
+ * op 投入 + projection 取得ができる (= 認証は infra 層、 INVARIANT_AUTH_INJECTED_AT_INFRA_LAYER 準拠)。
+ */
+export interface PortalCoordinationClient {
+  readonly submitOp: (op: unknown) => Promise<PortalCoordinationOutcome>;
+  readonly getProjection: () => Promise<PortalCoordinationOutcome>;
 }
 
 /**
