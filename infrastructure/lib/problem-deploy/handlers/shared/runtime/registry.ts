@@ -25,6 +25,18 @@ import {
   AwsCloudFormationRuntimeAdapter,
 } from "./aws-cfn-adapter.js";
 import {
+  AZURE_ENGINE,
+  AZURE_PROVIDER,
+  type AzureBicepAdapterContext,
+  AzureBicepRuntimeAdapter,
+} from "./azure-bicep-adapter.js";
+import {
+  GCP_ENGINE,
+  GCP_PROVIDER,
+  type GcpInfraManagerAdapterContext,
+  GcpInfraManagerRuntimeAdapter,
+} from "./gcp-infra-manager-adapter.js";
+import {
   SAKURA_ENGINE,
   SAKURA_PROVIDER,
   type SakuraAppRunAdapterContext,
@@ -42,6 +54,10 @@ export interface AdapterDependencies {
   readonly aws: AwsCloudFormationAdapterContext;
   /** [ADR-026 / #1412] sakura/apprun — present only when the handler has the account-gated client + key. */
   readonly sakura?: SakuraAppRunAdapterContext;
+  /** [ADR-027 / #1410] azure/bicep — present only when the handler wired the WIF credential + ARM client. */
+  readonly azure?: AzureBicepAdapterContext;
+  /** [ADR-027 / #1411] gcp/infra-manager — present only when the handler wired the WIF credential + IM client. */
+  readonly gcp?: GcpInfraManagerAdapterContext;
 }
 
 export function selectAdapter(
@@ -56,6 +72,15 @@ export function selectAdapter(
   // through to the reserved-runtime error (no silent stub, no cloud mutation).
   if (runtime.provider === SAKURA_PROVIDER && runtime.engine === SAKURA_ENGINE && deps.sakura) {
     return new SakuraAppRunRuntimeAdapter(deps.sakura, runtime);
+  }
+  // [ADR-027 / #1410-1411] azure/bicep + gcp/infra-manager are executable only when the handler
+  // wired the account-gated WIF context (trust-bridge credential + provider client). Until then
+  // they fall through to the reserved-runtime error (no silent stub, no cloud mutation).
+  if (runtime.provider === AZURE_PROVIDER && runtime.engine === AZURE_ENGINE && deps.azure) {
+    return new AzureBicepRuntimeAdapter(deps.azure, runtime);
+  }
+  if (runtime.provider === GCP_PROVIDER && runtime.engine === GCP_ENGINE && deps.gcp) {
+    return new GcpInfraManagerRuntimeAdapter(deps.gcp, runtime);
   }
   // Planned providers (ADR-026/027) get a roadmap-aware message; everything else
   // is treated as a likely typo. Both still throw — no adapter, no cloud mutation.
