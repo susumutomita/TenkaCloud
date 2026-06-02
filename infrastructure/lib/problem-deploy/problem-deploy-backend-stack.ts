@@ -10,6 +10,7 @@ import { BulkDeployCreateStateMachine } from "./bulk-deploy-create-state-machine
 import { CompetitorAccountsApiLambda } from "./competitor-accounts-api-lambda.js";
 import { CompetitorAccountsTable } from "./competitor-accounts-table.js";
 import { CompetitorBootstrapHosting } from "./competitor-bootstrap-hosting.js";
+import { CoordinationDispatcherLambda } from "./coordination-dispatcher-lambda.js";
 import { DeployApiLambda } from "./deploy-api-lambda.js";
 import { DeployCodeBuildProject } from "./deploy-codebuild-project.js";
 import { DeployCreateStateMachine } from "./deploy-create-state-machine.js";
@@ -453,6 +454,25 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       new CfnOutput(this, "ParticipantPortalApiUrl", {
         value: portalLambda.url.url,
         description: "Participant Portal Lambda Function URL (auth via teamLoginKey bearer).",
+      });
+
+      // ADR-030 Phase 2 (#1420): inter-team coordination dispatch を participant-portal Lambda
+      // (sts:AssumeRole / ssm / kms 保持) から分離し、 coordination state 行しか触れない最小 IAM の
+      // 専用 Lambda で動かす。 未信頼の問題同梱 plugin を将来 in-process 実行しても competitor
+      // 資格情報・他テナントデータに到達できない (ADR-030 S2)。 plugin の実 import は Phase 3 の seam。
+      const coordinationDispatcher = new CoordinationDispatcherLambda(
+        this,
+        "CoordinationDispatcher",
+        {
+          deploymentsTable: deployments.table,
+          eventsTable: events.table,
+          environmentName: props.environmentName,
+        },
+      );
+      new CfnOutput(this, "CoordinationDispatcherApiUrl", {
+        value: coordinationDispatcher.url.url,
+        description:
+          "Coordination Dispatcher Lambda Function URL (ADR-030 最小 IAM、 teamLoginKey bearer 認証)。",
       });
 
       const portal = new ParticipantPortalHosting(this, "ParticipantPortal");
