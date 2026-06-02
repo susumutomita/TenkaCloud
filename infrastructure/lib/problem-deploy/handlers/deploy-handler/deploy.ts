@@ -5,12 +5,23 @@ import { SSMClient } from "@aws-sdk/client-ssm";
 import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
+import { createAzureDeploymentStacksRestClient } from "../../runtime-clients/azure-deployment-stacks-rest-client.js";
+import {
+  type AzureEntraTokenClient,
+  createAzureEntraTokenClient,
+} from "../../runtime-clients/azure-entra-token-client.js";
 import { createSakuraAppRunRestClient } from "../../runtime-clients/sakura-apprun-rest-client.js";
+import {
+  type AzureDeployCredential,
+  getAzureCredential,
+} from "../shared/azure-credential-store.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
   type AdapterDependencies,
+  AZURE_ENGINE,
+  AZURE_PROVIDER,
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
   type ProblemRuntime,
@@ -68,6 +79,11 @@ export interface DeployContext {
    */
   readonly ssm?: Pick<SSMClient, "send">;
   readonly sakuraAppRunBaseUrl?: string;
+  /**
+   * [ADR-032 / Issue #1410] azure/bicep deploy 用の Entra ID client_credentials token client。
+   * 省略時は本番 authority (login.microsoftonline.com) の実装を使う (= test では fake 注入)。
+   */
+  readonly azureEntraTokenClient?: AzureEntraTokenClient;
   /**
    * [ADR-023 / Issue #1268] Optional per-problemId runtime resolver. If
    * undefined OR if it returns undefined for a given problemId, the deploy
@@ -139,9 +155,55 @@ function buildSakuraAdapterContext(
 }
 
 /**
- * runtime に応じた adapter 依存を組む。 aws は常に存在し、 sakura/apprun は SSM (per-team key store) が
- * 配線されたときだけ追加する (= 未配線なら selectAdapter が reserved error)。 deps を組む条件分岐を
- * startDeployment から切り出して責務を分離する (SRP)。
+ * [ADR-027 / ADR-032 / #1410] azure/bicep の adapter context を組む。 getCredential は per-team の
+ * Azure deploy 設定 (app registration secret + subscription/RG) を SSM SecureString から引き、 未登録なら
+ * loud に throw、 client_credentials grant で ARM token を得る。 client は同 config の subscription/RG で
+ * Deployment Stacks REST client を束ねる。 adapter は必ず getCredential → client の順で呼ぶので、 解決した
+ * config を closure に保持して client factory が subscription/RG を読む (= AzureCredential は accessToken のみ運ぶ)。
+ */
+function buildAzureAdapterContext(
+  ssm: Pick<SSMClient, "send">,
+  env: string,
+  tenantId: string,
+  teamSlug: string,
+  tokenClient: AzureEntraTokenClient,
+): NonNullable<AdapterDependencies["azure"]> {
+  let resolved: AzureDeployCredential | undefined;
+  return {
+    getCredential: async () => {
+      const config = await getAzureCredential({ ssm, env }, tenantId, teamSlug);
+      if (!config) {
+        throw new Error(
+          `no Azure credential registered for tenant ${tenantId} team ${teamSlug} ` +
+            "(register the app registration secret + subscription/resourceGroup in the per-team SSM SecureString store)",
+        );
+      }
+      resolved = config;
+      const accessToken = await tokenClient.getToken({
+        azureTenantId: config.azureTenantId,
+        clientId: config.clientId,
+        clientSecret: config.clientSecret,
+      });
+      return { accessToken };
+    },
+    client: (credential) => {
+      // adapter は resolveClient で getCredential を await してから client を呼ぶので resolved は必ず埋まる。
+      if (!resolved) {
+        throw new Error("Azure adapter context: getCredential must resolve before client");
+      }
+      return createAzureDeploymentStacksRestClient(credential, {
+        subscriptionId: resolved.subscriptionId,
+        resourceGroup: resolved.resourceGroup,
+        ...(resolved.location ? { location: resolved.location } : {}),
+      });
+    },
+  };
+}
+
+/**
+ * runtime に応じた adapter 依存を組む。 aws は常に存在し、 sakura/apprun・azure/bicep は SSM (per-team
+ * credential store) が配線されたときだけ追加する (= 未配線なら selectAdapter が reserved error)。 deps を
+ * 組む条件分岐を startDeployment から切り出して責務を分離する (SRP)。
  */
 function buildAdapterDependencies(
   ctx: DeployContext,
@@ -149,7 +211,8 @@ function buildAdapterDependencies(
   teamSlug: string,
 ): AdapterDependencies {
   const aws = { events: ctx.events, eventBusName: ctx.eventBusName };
-  if (ctx.ssm && runtime.provider === SAKURA_PROVIDER && runtime.engine === SAKURA_ENGINE) {
+  if (!ctx.ssm) return { aws };
+  if (runtime.provider === SAKURA_PROVIDER && runtime.engine === SAKURA_ENGINE) {
     return {
       aws,
       sakura: buildSakuraAdapterContext(
@@ -158,6 +221,18 @@ function buildAdapterDependencies(
         ctx.tenantId,
         teamSlug,
         ctx.sakuraAppRunBaseUrl,
+      ),
+    };
+  }
+  if (runtime.provider === AZURE_PROVIDER && runtime.engine === AZURE_ENGINE) {
+    return {
+      aws,
+      azure: buildAzureAdapterContext(
+        ctx.ssm,
+        ctx.env,
+        ctx.tenantId,
+        teamSlug,
+        ctx.azureEntraTokenClient ?? createAzureEntraTokenClient(),
       ),
     };
   }

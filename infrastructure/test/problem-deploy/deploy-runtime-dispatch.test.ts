@@ -234,3 +234,81 @@ describe("startDeployment sakura/apprun dispatch (ADR-026 / Issue #1412)", () =>
     expect(eventsSend).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * [ADR-032 / Issue #1410] azure/bicep dispatch wiring。 SSM (per-team Azure credential) + Entra token client
+ * が配線されたときだけ executable になり、 ARM Deployment Stacks REST へ deploy する (EventBridge は使わない)。
+ * config 未登録は loud throw、 SSM 未配線では reserved のまま。 verified-AWS-account gate は #1412 同様 follow-up。
+ */
+describe("startDeployment azure/bicep dispatch (ADR-032 / Issue #1410)", () => {
+  const azureRuntime: ProblemRuntime = { provider: "azure", engine: "bicep", entry: "main.json" };
+  const AZURE_CONFIG = {
+    azureTenantId: "dir-1",
+    clientId: "app-1",
+    clientSecret: "shh",
+    subscriptionId: "sub-1",
+    resourceGroup: "rg-1",
+  };
+
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  function ssmReturning(value: string | undefined): { send: ReturnType<typeof vi.fn> } {
+    return {
+      send: vi.fn(async (cmd: unknown) => {
+        if (cmd instanceof GetParameterCommand) {
+          return value === undefined
+            ? Promise.reject(Object.assign(new Error("nope"), { name: "ParameterNotFound" }))
+            : { Parameter: { Value: value } };
+        }
+        return {};
+      }),
+    };
+  }
+
+  it("should deploy via ARM (not EventBridge), resolving config from SSM + ARM token via the Entra client", async () => {
+    const armFetch = vi.fn().mockResolvedValueOnce(new Response("{}", { status: 200 })); // PUT deploymentStacks
+    vi.stubGlobal("fetch", armFetch);
+    const tokenClient = { getToken: vi.fn().mockResolvedValue("arm-token") };
+    const { ctx, putSend, eventsSend } = buildContext({
+      ssm: ssmReturning(JSON.stringify(AZURE_CONFIG)) as unknown as DeployContext["ssm"],
+      azureEntraTokenClient: tokenClient as unknown as DeployContext["azureEntraTokenClient"],
+      resolveProblemRuntime: () => azureRuntime,
+    });
+    const res = await startDeployment(ctx, sampleRequest());
+    expect(res.status).toBe("PENDING");
+    expect(tokenClient.getToken).toHaveBeenCalledWith(
+      expect.objectContaining({ azureTenantId: "dir-1", clientId: "app-1", clientSecret: "shh" }),
+    );
+    expect(armFetch).toHaveBeenCalledTimes(1);
+    expect(armFetch.mock.calls[0][1].method).toBe("PUT");
+    expect(eventsSend).not.toHaveBeenCalled();
+    expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(true);
+  });
+
+  it("should throw loudly when no Azure credential is registered", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { status: 200 })),
+    );
+    const tokenClient = { getToken: vi.fn() };
+    const { ctx } = buildContext({
+      ssm: ssmReturning(undefined) as unknown as DeployContext["ssm"],
+      azureEntraTokenClient: tokenClient as unknown as DeployContext["azureEntraTokenClient"],
+      resolveProblemRuntime: () => azureRuntime,
+    });
+    await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow(/no Azure credential/);
+    expect(tokenClient.getToken).not.toHaveBeenCalled();
+  });
+
+  it("should stay reserved (RuntimeNotSupportedError) for azure/bicep when SSM is not wired", async () => {
+    const { ctx, putSend, eventsSend } = buildContext({
+      resolveProblemRuntime: () => azureRuntime,
+    });
+    await expect(startDeployment(ctx, sampleRequest())).rejects.toBeInstanceOf(
+      RuntimeNotSupportedError,
+    );
+    expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(false);
+    expect(eventsSend).not.toHaveBeenCalled();
+  });
+});

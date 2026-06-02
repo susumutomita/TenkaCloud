@@ -12,6 +12,7 @@ import {
   LAMBDA_NODEJS_RUNTIME,
   LAMBDA_SOURCE_MAP_ENABLED,
 } from "../utils/lambda-runtime.js";
+import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/sakura-credential-store.js";
 
@@ -148,18 +149,25 @@ export class DeployApiLambda extends Construct {
       stack.account,
       props.environmentName,
     );
-    // [ADR-026 / #1412] per-team Sakura API key (SSM SecureString) も同 Lambda が deploy 時に decrypt
-    // 取得する。 ExternalId と同じ prefix-scope + AWS managed key 復号で最小権限を保つ。
+    // [ADR-026/027/032 / #1412 #1410] per-team の Sakura API key / Azure deploy credential (SSM SecureString)
+    // も同 Lambda が deploy 時に decrypt 取得する。 ExternalId と同じ prefix-scope + AWS managed key 復号で
+    // 最小権限を保つ。
     const sakuraSsmArn = buildSakuraCredentialParameterArnPattern(
       stack.region,
       stack.account,
       props.environmentName,
     );
+    const azureSsmArn = buildAzureCredentialParameterArnPattern(
+      stack.region,
+      stack.account,
+      props.environmentName,
+    );
+    const credentialSsmArns = [ssmArn, sakuraSsmArn, azureSsmArn];
     this.fn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ["ssm:GetParameter"],
-        resources: [ssmArn, sakuraSsmArn],
+        resources: credentialSsmArns,
       }),
     );
     this.fn.addToRolePolicy(
@@ -168,7 +176,7 @@ export class DeployApiLambda extends Construct {
         actions: ["kms:Decrypt"],
         resources: ["*"],
         conditions: {
-          StringLike: { "kms:EncryptionContext:PARAMETER_ARN": [ssmArn, sakuraSsmArn] },
+          StringLike: { "kms:EncryptionContext:PARAMETER_ARN": credentialSsmArns },
         },
       }),
     );
