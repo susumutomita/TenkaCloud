@@ -90,7 +90,22 @@ describe("createApiClient", () => {
     });
   });
 
-  describe("PATCH / DELETE verbs", () => {
+  describe("PUT / PATCH / DELETE verbs", () => {
+    it("should send PUT with a JSON body and return the parsed response", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(new Response(JSON.stringify({ registered: true }), { status: 200 }));
+      vi.stubGlobal("fetch", fetchMock);
+      const res = await createApiClient(config.apiBaseUrl, "T").put<{ registered: boolean }>(
+        "admin/team-cloud-credentials/sakura/team-a",
+        { accessToken: "x" },
+      );
+      const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+      expect(init.method).toBe("PUT");
+      expect(init.body).toBe('{"accessToken":"x"}');
+      expect(res).toEqual({ registered: true });
+    });
+
     it("should send PATCH with a JSON body", async () => {
       const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
       vi.stubGlobal("fetch", fetchMock);

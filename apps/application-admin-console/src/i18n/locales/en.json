@@ -634,5 +634,23 @@
     "secret_modal_manual_header": "Manual deploy details",
     "secret_modal_template_label": "CFn template",
     "secret_modal_manual_hint": "You can also pass the 3 values as Parameters to CloudFormation create-stack."
+  },
+  "team_cloud_credentials": {
+    "title": "Team cloud credentials (non-AWS runtimes)",
+    "description": "Before deploying non-AWS problems (Sakura / Azure / GCP), register each team's cloud credential. Secrets are stored encrypted as SSM SecureString and are never returned by listing. Re-register the same team to rotate.",
+    "provider_label": "Provider",
+    "team_label": "Team slug",
+    "team_description": "The slug derived from the team name at deploy time (lowercase, digits, hyphens).",
+    "team_invalid": "Use only lowercase letters, digits, and hyphens",
+    "credential_label": "Credential (JSON)",
+    "credential_description": "Provider-specific JSON. Sakura: {accessToken, accessTokenSecret} / Azure: {azureTenantId, clientId, clientSecret, subscriptionId, resourceGroup} / GCP: {wifAudience, serviceAccountEmail, projectId, location}.",
+    "register_button": "Register / Update",
+    "status_button": "Check status",
+    "revoke_button": "Revoke",
+    "invalid_json": "The credential JSON is invalid. Please enter valid JSON.",
+    "registered": "Registered (deploys will authenticate with this credential).",
+    "revoked": "Revoked.",
+    "status_registered": "Registered.",
+    "status_unregistered": "Not registered."
   }
 }

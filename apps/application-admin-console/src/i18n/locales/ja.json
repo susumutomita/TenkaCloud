@@ -634,5 +634,23 @@
     "secret_modal_manual_header": "手動 deploy の詳細",
     "secret_modal_template_label": "CFn template",
     "secret_modal_manual_hint": "上記 3 値を Parameter として CloudFormation create-stack でも deploy できます。"
+  },
+  "team_cloud_credentials": {
+    "title": "Team クラウド認証情報 (非 AWS runtime)",
+    "description": "非 AWS の問題 (Sakura / Azure / GCP) を deploy する前に、 team ごとのクラウド認証情報を登録します。 secret は SSM SecureString に暗号化保存され、 一覧では返りません。 鍵を更新したい場合は同じ team に再登録してください (= rotation)。",
+    "provider_label": "プロバイダ",
+    "team_label": "Team slug",
+    "team_description": "deploy 時の team 名から生成される slug (小文字・数字・ハイフン)。",
+    "team_invalid": "小文字・数字・ハイフンのみで入力してください",
+    "credential_label": "認証情報 (JSON)",
+    "credential_description": "プロバイダ別の JSON。 Sakura: {accessToken, accessTokenSecret} / Azure: {azureTenantId, clientId, clientSecret, subscriptionId, resourceGroup} / GCP: {wifAudience, serviceAccountEmail, projectId, location}。",
+    "register_button": "登録 / 更新",
+    "status_button": "登録状況を確認",
+    "revoke_button": "失効",
+    "invalid_json": "認証情報 JSON が不正です。 正しい JSON を入力してください。",
+    "registered": "登録しました (deploy 時にこの鍵で認証されます)。",
+    "revoked": "失効しました。",
+    "status_registered": "登録済みです。",
+    "status_unregistered": "未登録です。"
   }
 }

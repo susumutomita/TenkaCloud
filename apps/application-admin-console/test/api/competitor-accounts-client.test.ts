@@ -20,6 +20,7 @@ function fakeClient(response: unknown): { client: ApiClient; calls: CapturedCall
       calls.push({ path, method: "GET" });
       return Promise.resolve(response);
     }),
+    put: vi.fn().mockResolvedValue(response),
     post: vi.fn().mockImplementation((path: string, body: unknown) => {
       calls.push({ path, method: "POST", body });
       return Promise.resolve(response);

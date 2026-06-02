@@ -17,6 +17,7 @@ import { AddAccountModal } from "./competitor-accounts/AddAccountModal";
 import { CompetitorAccountDeleteModal } from "./competitor-accounts/CompetitorAccountDeleteModal";
 import { CompetitorAccountsTable } from "./competitor-accounts/CompetitorAccountsTable";
 import { SecretRevealModal } from "./competitor-accounts/SecretRevealModal";
+import { TeamCloudCredentialsPanel } from "./competitor-accounts/TeamCloudCredentialsPanel";
 import { useCompetitorAccounts } from "./competitor-accounts/useCompetitorAccounts";
 
 export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
@@ -70,6 +71,9 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         onVerify={(awsAccountId) => void verify(awsAccountId)}
         onRequestDelete={setDeleteTarget}
       />
+
+      {/* [ADR-026/027/032 / #1413] 非 AWS 問題 (sakura/azure/gcp) の per-team 認証情報 onboarding。 */}
+      <TeamCloudCredentialsPanel config={config} />
 
       <AddAccountModal
         config={config}

@@ -17,6 +17,9 @@ vi.mock("../../src/i18n", () => {
 vi.mock("../../src/pages/competitor-accounts/useCompetitorAccounts", () => ({
   useCompetitorAccounts: mockHook,
 }));
+vi.mock("../../src/pages/competitor-accounts/TeamCloudCredentialsPanel", () => ({
+  TeamCloudCredentialsPanel: () => <div data-testid="team-cloud-credentials" />,
+}));
 vi.mock("../../src/pages/competitor-accounts/CompetitorAccountsTable", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: stub props。
   CompetitorAccountsTable: ({ onVerify, onRequestDelete }: any) => (
