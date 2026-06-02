@@ -78,6 +78,23 @@ const DEFAULT_TTL_MS = 8 * 60 * 60 * 1000;
 
 const toEpochSeconds = (ms: number): number => Math.floor(ms / 1000);
 
+/**
+ * [ADR-026/027/032 / #1410-1412] 非 AWS runtime のときだけ provider/engine/entry を DeploymentItem に
+ * 載せる (= teardown / status の adapter 経路判別)。 AWS/CFn は field を載せず従来行と byte-identical。
+ */
+function runtimeItemFields(
+  runtime: ProblemRuntime,
+): Pick<DeploymentItem, "runtimeProvider" | "runtimeEngine" | "runtimeEntry"> {
+  if (runtime.provider === EXECUTABLE_PROVIDER && runtime.engine === EXECUTABLE_ENGINE) {
+    return {};
+  }
+  return {
+    runtimeProvider: runtime.provider,
+    runtimeEngine: runtime.engine,
+    runtimeEntry: runtime.entry,
+  };
+}
+
 export class UnknownProblemError extends Error {
   constructor(problemId: string) {
     super(`unknown problemId: ${problemId}`);
@@ -168,6 +185,9 @@ export async function startDeployment(
     expiresAt,
     accountGroupId: request.accountGroupId,
     problemSetId: request.problemSetId,
+    // [ADR-026/027/032 / #1410-1412] 非 AWS runtime のときだけ provider/engine/entry を永続化する
+    // (= teardown / status が adapter 経由で動く判別。 AWS 行は従来どおり field なしで byte-identical)。
+    ...runtimeItemFields(runtime),
   };
 
   await ctx.ddb.send(
