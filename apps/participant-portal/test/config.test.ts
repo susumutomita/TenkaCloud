@@ -175,4 +175,47 @@ describe("loadConfig", () => {
     expect(cfg.mode).toBe("dev-mock");
     expect(cfg.eventTitle).toBe("No-API Event");
   });
+
+  // #1420: coordination dispatcher URL の parse + HTTPS gate。
+  it("should carry an HTTPS coordinationApiUrl in backend mode", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        apiBaseUrl: "https://api.example.com",
+        mode: "backend",
+        coordinationApiUrl: "https://coord.example.com",
+      }),
+    });
+    expect((await loadConfig()).coordinationApiUrl).toBe("https://coord.example.com");
+  });
+
+  it("should drop a non-HTTPS coordinationApiUrl in backend mode but keep the portal usable", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        apiBaseUrl: "https://api.example.com",
+        mode: "backend",
+        coordinationApiUrl: "http://coord.example.com",
+      }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.coordinationApiUrl).toBeUndefined();
+    expect(cfg.apiBaseUrl).toBe("https://api.example.com");
+  });
+
+  it("should allow a non-HTTPS coordinationApiUrl in dev-mock mode", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ mode: "dev-mock", coordinationApiUrl: "http://localhost:9100" }),
+    });
+    expect((await loadConfig()).coordinationApiUrl).toBe("http://localhost:9100");
+  });
+
+  it("should leave coordinationApiUrl undefined when the key is omitted", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ apiBaseUrl: "https://api.example.com", mode: "backend" }),
+    });
+    expect((await loadConfig()).coordinationApiUrl).toBeUndefined();
+  });
 });
