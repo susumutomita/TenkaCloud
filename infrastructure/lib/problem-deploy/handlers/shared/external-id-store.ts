@@ -2,11 +2,11 @@ import { randomBytes } from "node:crypto";
 import {
   DeleteParameterCommand,
   GetParameterCommand,
-  ParameterNotFound,
   ParameterType,
   PutParameterCommand,
   type SSMClient,
 } from "@aws-sdk/client-ssm";
+import { isParameterNotFound, isParameterVersionNotFound } from "./ssm-parameter.js";
 
 /**
  * SSM Parameter Store SecureString ベースの per-tenant ExternalId ストア
@@ -23,11 +23,7 @@ import {
 /** SSM の許容 char class (`[A-Za-z0-9_=,.@:/-]`) + 長さ要件を満たす 64 文字の random hex。 */
 const EXTERNAL_ID_BYTE_LENGTH = 32; // hex 化で 64 文字 → competitor-bootstrap.yaml の MaxLength=128 内、MinLength=16 を満たす
 
-// SSM SDK は ParameterNotFound を class でも err.name でも投げる (= 環境 / version 依存の挙動を吸収)。
-function isParameterNotFound(err: unknown): boolean {
-  if (err instanceof ParameterNotFound) return true;
-  return err instanceof Error && err.name === "ParameterNotFound";
-}
+// ParameterNotFound / ParameterVersionNotFound 判定は shared/ssm-parameter.ts に集約 (= Sakura key store と共有、 DRY)。
 
 export function buildExternalIdParameterName(env: string, tenantId: string): string {
   // env / tenantId は POSIX 風 path の segment に直接埋めるため、許容 charclass の事前 sanitize は caller 側責任。
@@ -122,7 +118,7 @@ export async function getExternalIdByVersion(
   } catch (err) {
     if (isParameterNotFound(err)) return undefined;
     // ParameterVersionNotFound: SSM が 100 version cap で auto-drop 済 (= 旧 version が消えた)。
-    if (err instanceof Error && err.name === "ParameterVersionNotFound") return undefined;
+    if (isParameterVersionNotFound(err)) return undefined;
     throw err;
   }
 }
