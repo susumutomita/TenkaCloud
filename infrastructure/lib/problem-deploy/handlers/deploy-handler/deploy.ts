@@ -1,4 +1,3 @@
-import type { GcpStsClient } from "@TenkaCloud/trust-bridge";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { S3Client } from "@aws-sdk/client-s3";
@@ -6,8 +5,6 @@ import { SSMClient } from "@aws-sdk/client-ssm";
 import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
-import type { AzureEntraTokenClient } from "../../runtime-clients/azure-entra-token-client.js";
-import type { GcpAwsSubjectTokenSigner } from "../../runtime-clients/gcp-aws-subject-token.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
@@ -24,29 +21,30 @@ import {
   parseProblemsVisibility,
   resolveChallengePayloadBucket,
 } from "../shared/visibility.js";
-import { buildAdapterDependencies } from "./adapter-dependencies.js";
+import { type AdapterDependencyConfig, buildAdapterDependencies } from "./adapter-dependencies.js";
 import { buildStackPrefix, slugify } from "./naming.js";
 import { generateChallengePayloadUrl } from "./presigned-url.js";
 import { generateTeamLoginKey } from "./team-key.js";
 import type { DeploymentItem, DeployRequest, DeployResponse } from "./types.js";
 
-export interface DeployContext {
+/**
+ * deploy worker の実行コンテキスト。 provider 別 adapter 依存の DI surface (env / tenantId / events /
+ * eventBusName + sakura/azure/gcp の account-gated client) は [[AdapterDependencyConfig]] を継承して 1 箇所で
+ * 定義する (= DeployContext と builder 間の重複排除、 DRY)。 ここでは deploy 固有の DDB / TTL / catalog /
+ * visibility / runtime resolver を追加する。
+ */
+export interface DeployContext extends AdapterDependencyConfig {
   readonly tableName: string;
   /**
    * Phase 2.2 (Issue #459): CompetitorAccounts table 名 + SSM SecureString path env 名。
    * `startDeployment` が verified=true gate と AssumeRole metadata 注入に使う。
    */
   readonly competitorAccountsTableName: string;
-  readonly env: string;
-  readonly eventBusName: string;
   readonly ddb: DynamoDBDocumentClient;
-  readonly events: EventBridgeClient;
   /** epoch ms 提供。テストで決定論的にできるよう DI。 */
   readonly now: () => number;
   /** stack の自動 teardown までの猶予時間。default 8 時間。 */
   readonly ttlMs?: number;
-  /** caller (TenantAdmin JWT) の `custom:tenantId`。 */
-  readonly tenantId: string;
   /**
    * problemId → problemDir のマップ (例: `{"hello-world": "problems/challenges/hello-world"}`)。
    * MVP-1 で env (`BATTLE_PROBLEMS_CATALOG` JSON) from inject される hard-coded catalog。
@@ -60,26 +58,6 @@ export interface DeployContext {
   readonly problemsVisibility?: Readonly<Record<string, PrivateVisibility>>;
   readonly challengePayloadBucket?: string;
   readonly s3?: S3Client;
-  /**
-   * [ADR-026 / Issue #1412] sakura/apprun deploy の account-gated 配線。 `ssm` は per-team Sakura
-   * API key store (SSM SecureString) の読取、 `sakuraAppRunBaseUrl` は AppRun REST base URL の override。
-   * 未配線 (= ssm undefined) なら sakura/apprun 問題は selectAdapter で reserved error のまま (= 従来動作)。
-   */
-  readonly ssm?: Pick<SSMClient, "send">;
-  readonly sakuraAppRunBaseUrl?: string;
-  /**
-   * [ADR-032 / Issue #1410] azure/bicep deploy 用の Entra ID client_credentials token client。
-   * 省略時は本番 authority (login.microsoftonline.com) の実装を使う (= test では fake 注入)。
-   */
-  readonly azureEntraTokenClient?: AzureEntraTokenClient;
-  /**
-   * [ADR-032 / Issue #1411] gcp/infra-manager deploy 用の GCP STS client / AWS subject-token signer。
-   * 省略時は本番実装 (= GCP STS REST + SigV4) を使う (= test では fake 注入)。 `awsRegion` は SigV4 署名
-   * 対象 STS の region (省略時は Lambda 実行 region `AWS_REGION`)。
-   */
-  readonly gcpStsClient?: GcpStsClient;
-  readonly gcpSubjectTokenSigner?: GcpAwsSubjectTokenSigner;
-  readonly awsRegion?: string;
   /**
    * [ADR-023 / Issue #1268] Optional per-problemId runtime resolver. If
    * undefined OR if it returns undefined for a given problemId, the deploy
