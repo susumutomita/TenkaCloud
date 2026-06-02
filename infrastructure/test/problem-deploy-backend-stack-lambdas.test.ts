@@ -89,6 +89,13 @@ describe("ProblemDeployBackendStack (MVP-1) — Deploy API Lambda (invoked from 
       }),
     );
   });
+
+  // [ADR-026 / #1412] sakura/apprun deploy 用に per-team Sakura API-key SecureString を decrypt 取得する
+  // grant が必要。 ExternalId path と同様 prefix-scope された ARN が deploy Lambda の policy に乗っていること。
+  it("should grant ssm:GetParameter on the per-team Sakura API-key SecureString path (#1412)", () => {
+    const serialized = JSON.stringify(tpl.findResources("AWS::IAM::Policy"));
+    expect(serialized).toContain("tenants/*/teams/*/sakura-api-key");
+  });
 });
 
 describe("ProblemDeployBackendStack (MVP-1) — GenericScoring Lambda", () => {

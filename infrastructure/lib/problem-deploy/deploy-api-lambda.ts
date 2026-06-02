@@ -13,6 +13,7 @@ import {
   LAMBDA_SOURCE_MAP_ENABLED,
 } from "../utils/lambda-runtime.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
+import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/sakura-credential-store.js";
 
 export interface DeployApiLambdaProps {
   readonly deploymentsTable: Table;
@@ -147,11 +148,18 @@ export class DeployApiLambda extends Construct {
       stack.account,
       props.environmentName,
     );
+    // [ADR-026 / #1412] per-team Sakura API key (SSM SecureString) も同 Lambda が deploy 時に decrypt
+    // 取得する。 ExternalId と同じ prefix-scope + AWS managed key 復号で最小権限を保つ。
+    const sakuraSsmArn = buildSakuraCredentialParameterArnPattern(
+      stack.region,
+      stack.account,
+      props.environmentName,
+    );
     this.fn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ["ssm:GetParameter"],
-        resources: [ssmArn],
+        resources: [ssmArn, sakuraSsmArn],
       }),
     );
     this.fn.addToRolePolicy(
@@ -160,7 +168,7 @@ export class DeployApiLambda extends Construct {
         actions: ["kms:Decrypt"],
         resources: ["*"],
         conditions: {
-          StringLike: { "kms:EncryptionContext:PARAMETER_ARN": ssmArn },
+          StringLike: { "kms:EncryptionContext:PARAMETER_ARN": [ssmArn, sakuraSsmArn] },
         },
       }),
     );
