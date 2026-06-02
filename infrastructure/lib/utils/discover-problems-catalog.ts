@@ -185,6 +185,43 @@ export type DisruptionTrigger =
   | { readonly kind: "team-score-above"; readonly threshold: number }
   | { readonly kind: "phase-entered"; readonly phaseName: string };
 
+/**
+ * [ADR-031 / Issue #1419] cross-account disruption の宣言的アクション種別。 executor がこの kind で
+ * AssumeRole 後に叩く API を 1 本に dispatch する (ssm:SendCommand / lambda:InvokeFunction /
+ * cloudformation:UpdateStack)。 platform は kind を dispatch するだけ、 障害の中身は問題が所有する。
+ */
+export type DisruptionActionKind = "ssm-run-command" | "lambda-invoke" | "cfn-stack-update";
+
+export const DISRUPTION_ACTION_KINDS: readonly DisruptionActionKind[] = [
+  "ssm-run-command",
+  "lambda-invoke",
+  "cfn-stack-update",
+];
+
+/**
+ * [ADR-029 INV-2 / ADR-031] 障害の復旧宣言。 「いかなる disruption も永続しない」ための必須要素で、
+ * executor は注入と同時に `afterSeconds` 後 (または round 終了 / clear API) の revert を予約する。
+ */
+export interface DisruptionActionRevert {
+  readonly afterSeconds: number;
+  readonly documentName?: string;
+  readonly paramTemplate?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * [ADR-031 / Issue #1419] disruption が競技者アカウントで起こす障害の宣言。 `targetRef` は team の
+ * `stackOutputs` の key (= 注入対象を CFn 出力から解決)、 `paramTemplate` の `{{key}}` 置換は
+ * `parameters` / `operatorEditable` 由来の値のみを参照できる (= injection 面の縮小)。 `revert` は必須。
+ */
+export interface DisruptionAction {
+  readonly kind: DisruptionActionKind;
+  readonly targetRef: string;
+  readonly documentName?: string;
+  readonly functionRef?: string;
+  readonly paramTemplate?: Readonly<Record<string, unknown>>;
+  readonly revert: DisruptionActionRevert;
+}
+
 export interface ProblemDisruptionEntry {
   readonly id: string;
   readonly name: string;
@@ -196,6 +233,61 @@ export interface ProblemDisruptionEntry {
   readonly publicHint?: boolean;
   /** [ADR-013 Phase 2 / #1422] 宣言時のみ condition-triggered 発火が有効 (省略 = Phase 1 self-fire のみ)。 */
   readonly triggers?: readonly DisruptionTrigger[];
+  /** [ADR-031 / #1419] cross-account 実行アクション (省略 = Phase A 監査のみ = 後方互換)。 */
+  readonly action?: DisruptionAction;
+}
+
+/**
+ * SCHEMA `disruptions[].action` を型付きで取り出す。 executor が安全に実行できる形 (= kind が
+ * allow-list 内、 targetRef が string、 revert.afterSeconds が正の有限数) のときだけ返し、 それ以外は
+ * undefined (= fail-safe で Phase A 監査のみに倒す)。 宣言時の strict 検証は validate-problems が担う。
+ */
+export function parseDisruptionAction(value: unknown): DisruptionAction | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const v = value as {
+    kind?: unknown;
+    targetRef?: unknown;
+    documentName?: unknown;
+    functionRef?: unknown;
+    paramTemplate?: unknown;
+    revert?: unknown;
+  };
+  if (!isDisruptionActionKind(v.kind) || typeof v.targetRef !== "string" || v.targetRef === "") {
+    return undefined;
+  }
+  const revert = parseDisruptionActionRevert(v.revert);
+  if (!revert) return undefined;
+  return {
+    kind: v.kind,
+    targetRef: v.targetRef,
+    ...(typeof v.documentName === "string" ? { documentName: v.documentName } : {}),
+    ...(typeof v.functionRef === "string" ? { functionRef: v.functionRef } : {}),
+    ...(isPlainObject(v.paramTemplate) ? { paramTemplate: v.paramTemplate } : {}),
+    revert,
+  };
+}
+
+function isDisruptionActionKind(value: unknown): value is DisruptionActionKind {
+  return (
+    typeof value === "string" && DISRUPTION_ACTION_KINDS.includes(value as DisruptionActionKind)
+  );
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseDisruptionActionRevert(value: unknown): DisruptionActionRevert | undefined {
+  if (!isPlainObject(value)) return undefined;
+  const afterSeconds = value.afterSeconds;
+  if (typeof afterSeconds !== "number" || !Number.isFinite(afterSeconds) || afterSeconds <= 0) {
+    return undefined;
+  }
+  return {
+    afterSeconds,
+    ...(typeof value.documentName === "string" ? { documentName: value.documentName } : {}),
+    ...(isPlainObject(value.paramTemplate) ? { paramTemplate: value.paramTemplate } : {}),
+  };
 }
 
 /** SCHEMA `disruptions[].triggers[]` (oneOf) を型付きで取り出す。 不正 / 不明 kind は drop。 */
@@ -266,6 +358,7 @@ function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefine
     parameters?: unknown;
     publicHint?: unknown;
     triggers?: unknown;
+    action?: unknown;
   };
   if (
     typeof v.id !== "string" ||
@@ -275,6 +368,7 @@ function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefine
     return undefined;
   }
   const triggers = parseDisruptionTriggers(v.triggers);
+  const action = parseDisruptionAction(v.action);
   return {
     id: v.id,
     name: v.name,
@@ -294,6 +388,7 @@ function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefine
       : {}),
     ...(typeof v.publicHint === "boolean" ? { publicHint: v.publicHint } : {}),
     ...(triggers ? { triggers } : {}),
+    ...(action ? { action } : {}),
   };
 }
 
