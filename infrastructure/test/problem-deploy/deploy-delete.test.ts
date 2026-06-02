@@ -1,6 +1,6 @@
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requestTeardown } from "../../lib/problem-deploy/handlers/deploy-handler/delete";
 import type { DeploySharedResources } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
 
@@ -230,5 +230,86 @@ describe("requestTeardown", () => {
     const getCmd = ddbSend.mock.calls[0]?.[0] as GetCommand;
     expect(getCmd).toBeInstanceOf(GetCommand);
     expect(getCmd.input.Key).toEqual({ PK: "DEPLOYMENT#JOB42", SK: "META" });
+  });
+});
+
+/**
+ * [ADR-026/027/032 / #1410-1412] 非 AWS runtime (sakura/apprun) の teardown は CFn DeleteStack event を
+ * publish せず adapter.destroy (cloud REST) で削除する。 status は DELETING に倒し、 EventBridge は使わない。
+ */
+describe("requestTeardown (non-AWS runtime via adapter)", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  function buildSakuraShared(): {
+    shared: DeploySharedResources;
+    ddbSend: ReturnType<typeof vi.fn>;
+    eventsSend: ReturnType<typeof vi.fn>;
+    ssmSend: ReturnType<typeof vi.fn>;
+  } {
+    const ddbSend = vi.fn();
+    const eventsSend = vi.fn();
+    const ssmSend = vi.fn(async () => ({
+      Parameter: { Value: JSON.stringify({ accessToken: "tok", accessTokenSecret: "sec" }) },
+    }));
+    const shared = {
+      tableName: "TestDeployments",
+      competitorAccountsTableName: "TestCompetitorAccounts",
+      env: "development",
+      eventBusName: "test-bus",
+      ddb: { send: ddbSend } as unknown as DeploySharedResources["ddb"],
+      events: { send: eventsSend } as unknown as DeploySharedResources["events"],
+      problemsCatalog: {},
+      ssm: { send: ssmSend },
+    } as unknown as DeploySharedResources;
+    return { shared, ddbSend, eventsSend, ssmSend };
+  }
+
+  const sakuraRow = (over: Record<string, unknown> = {}) => ({
+    ...sampleRow(),
+    runtimeProvider: "sakura",
+    runtimeEngine: "apprun",
+    runtimeEntry: "registry/img:1",
+    ...over,
+  });
+
+  it("should transition DELETING + call adapter.destroy (AppRun REST) without publishing a CFn delete event", async () => {
+    const { shared, ddbSend, eventsSend, ssmSend } = buildSakuraShared();
+    ddbSend.mockResolvedValueOnce({ Item: sakuraRow() }); // Get row
+    ddbSend.mockResolvedValueOnce({}); // transition → DELETING
+    // AppRun REST: findByName (list) → delete by id
+    const appRunFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [{ id: "a1", name: "tc-p-t" }] }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", appRunFetch);
+
+    const res = await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
+    expect(res).toEqual({ kind: "accepted", previousStatus: "COMPLETE" });
+    // DELETING transition は走る
+    expect(ddbSend.mock.calls.some((c) => c[0] instanceof UpdateCommand)).toBe(true);
+    // CFn delete event は publish しない
+    expect(eventsSend).not.toHaveBeenCalled();
+    // SSM から鍵を引き AppRun REST を叩いた (list + DELETE)
+    expect(ssmSend).toHaveBeenCalled();
+    expect(appRunFetch.mock.calls[1][1].method).toBe("DELETE");
+  });
+
+  it("should compensate to FAILED when adapter.destroy throws", async () => {
+    const { shared, ddbSend, eventsSend } = buildSakuraShared();
+    ddbSend.mockResolvedValueOnce({ Item: sakuraRow() }); // Get
+    ddbSend.mockResolvedValueOnce({}); // DELETING
+    ddbSend.mockResolvedValueOnce({}); // compensation → FAILED
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(new Response("boom", { status: 500 })), // list 失敗
+    );
+    await expect(requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS)).rejects.toThrow();
+    expect(eventsSend).not.toHaveBeenCalled();
+    // 補償 Update (DELETING → FAILED) が走った (= orphan 防止)
+    const updates = ddbSend.mock.calls.filter((c) => c[0] instanceof UpdateCommand);
+    expect(updates.length).toBeGreaterThanOrEqual(2);
   });
 });

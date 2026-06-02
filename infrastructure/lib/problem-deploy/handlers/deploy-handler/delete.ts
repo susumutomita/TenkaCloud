@@ -6,8 +6,16 @@ import {
   EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
   publishProblemEvent,
 } from "../shared/events.js";
+import {
+  EXECUTABLE_ENGINE,
+  EXECUTABLE_PROVIDER,
+  type ProblemRuntime,
+  selectAdapter,
+} from "../shared/runtime/index.js";
 import { logDeployTrace } from "../shared/trace-log.js";
+import { buildAdapterDependencies } from "./adapter-dependencies.js";
 import type { DeploySharedResources } from "./deploy.js";
+import { slugify } from "./naming.js";
 import type { DeploymentItem, DeploymentStatus } from "./types.js";
 
 export type TeardownOutcome =
@@ -46,6 +54,13 @@ export async function requestTeardown(
   if (item.tenantId !== tenantId) return { kind: "not_found" };
   const status = (item.status ?? "PENDING") as DeploymentStatus;
   if (status === "DELETING" || status === "DELETED") return { kind: "already_deleted" };
+
+  // [ADR-026/027/032 / #1410-1412] 非 AWS runtime (sakura/azure/gcp) は CFn DeleteStack ではなく
+  // adapter.destroy (cloud REST) で teardown する。 runtimeProvider が無い行は従来どおり AWS/CFn 経路。
+  const runtime = resolveItemRuntime(item);
+  if (runtime.provider !== EXECUTABLE_PROVIDER || runtime.engine !== EXECUTABLE_ENGINE) {
+    return teardownViaAdapter(shared, tenantId, jobId, item, runtime, status, nowMs);
+  }
 
   const region = String(item.region ?? "");
   const awsAccountId = String(item.awsAccountId ?? "");
@@ -89,6 +104,70 @@ export async function requestTeardown(
   await publishTeardown(shared, tenantId, nowMs, detail);
 
   return { kind: "accepted", previousStatus: status };
+}
+
+/** deployment 行から runtime を復元する。 runtimeProvider/Engine/Entry が無ければ aws/cloudformation (legacy)。 */
+function resolveItemRuntime(item: Partial<DeploymentItem>): ProblemRuntime {
+  if (item.runtimeProvider && item.runtimeEngine && item.runtimeEntry) {
+    return {
+      provider: item.runtimeProvider,
+      engine: item.runtimeEngine,
+      entry: item.runtimeEntry,
+    };
+  }
+  return { provider: EXECUTABLE_PROVIDER, engine: EXECUTABLE_ENGINE, entry: "template.yaml" };
+}
+
+/**
+ * [ADR-026/027/032 / #1410-1412] 非 AWS runtime の teardown。 status を DELETING に倒し、 adapter.destroy で
+ * cloud REST 削除を enqueue する (EventBridge / CFn は使わない)。 DELETED への最終遷移は status polling
+ * (adapter.getStatus → destroyed) が確定する想定 (= AWS の State Machine 確定と同じ非同期セマンティクス)。
+ * adapter.destroy 失敗時は DELETING → FAILED に巻き戻す (= AWS publish 失敗時と同じ補償)。
+ */
+async function teardownViaAdapter(
+  shared: DeploySharedResources,
+  tenantId: string,
+  jobId: string,
+  item: Partial<DeploymentItem>,
+  runtime: ProblemRuntime,
+  previousStatus: DeploymentStatus,
+  nowMs: number,
+): Promise<TeardownOutcome> {
+  const updatedAt = new Date(nowMs).toISOString();
+  const transition = await transitionTeardownToDeleting(shared, tenantId, jobId, updatedAt, nowMs);
+  if (transition) return transition;
+
+  const teamSlug = slugify(String(item.teamName ?? ""));
+  const adapter = selectAdapter(
+    runtime,
+    buildAdapterDependencies({ ...shared, tenantId }, runtime, teamSlug),
+  );
+  try {
+    await adapter.destroy({
+      jobId,
+      namePrefix: String(item.namePrefix ?? ""),
+      region: String(item.region ?? ""),
+      awsAccountId: String(item.awsAccountId ?? ""),
+    });
+  } catch (err) {
+    await compensateFailedTeardownPublish(
+      shared,
+      tenantId,
+      jobId,
+      nowMs,
+      `Failed to destroy ${runtime.provider}/${runtime.engine} runtime`,
+    );
+    throw err;
+  }
+  logDeployTrace("deploy.delete.adapter.enqueued", {
+    jobId,
+    correlationId: jobId,
+    tenantId,
+    provider: runtime.provider,
+    engine: runtime.engine,
+    namePrefix: String(item.namePrefix ?? ""),
+  });
+  return { kind: "accepted", previousStatus };
 }
 
 function missingTeardownFields(fields: {
@@ -176,6 +255,7 @@ async function compensateFailedTeardownPublish(
   tenantId: string,
   jobId: string,
   nowMs: number,
+  reason = "Failed to publish DeployDeleteRequested event",
 ): Promise<void> {
   try {
     await shared.ddb.send(
@@ -191,7 +271,7 @@ async function compensateFailedTeardownPublish(
           ":failed": "FAILED",
           ":deleting": "DELETING",
           ":updatedAt": new Date(nowMs).toISOString(),
-          ":reason": "Failed to publish DeployDeleteRequested event",
+          ":reason": reason,
           ":tenantId": tenantId,
           ":expiresAt": deploymentTerminalExpiresAt(nowMs),
         },

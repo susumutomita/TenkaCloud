@@ -81,6 +81,15 @@ export interface DeploymentItem {
   teamLoginKey: string;
   status: DeploymentStatus;
 
+  /**
+   * [ADR-026/027/032 / #1410-1412] 非 AWS runtime の問題 (sakura/azure/gcp) を deploy したときの
+   * provider / engine / entry。 teardown / status が CFn 経由か adapter 経由かの判別に使う。
+   * **absent = aws/cloudformation** (legacy 行 / 既定。 = 従来どおり CFn 経路)。
+   */
+  runtimeProvider?: string;
+  runtimeEngine?: string;
+  runtimeEntry?: string;
+
   /** worker (CFn 起動側) が埋める */
   stackId?: string;
   /** Step Functions の CodeBuildStartBuild output (= `Build.Id`) から永続化する build ID。 */
