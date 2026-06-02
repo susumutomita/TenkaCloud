@@ -4,8 +4,8 @@ import Button from "@cloudscape-design/components/button";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
-import { toErrorMessage } from "@tenkacloud/web-kit";
-import { useEffect, useState } from "react";
+import { toErrorMessage, useNowMs } from "@tenkacloud/web-kit";
+import { useState } from "react";
 import {
   type CliCredentialsView,
   getCliCredentials,
@@ -291,10 +291,7 @@ export function describeRemainingTime(expirationIso: string, nowMs: number): Cou
 }
 
 function useCountdown(expirationIso: string): CountdownState {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
+  // 1 秒 tick の時計は web-kit useNowMs に集約 (= credential 失効までの残時間表示用)。
+  const now = useNowMs(1000);
   return describeRemainingTime(expirationIso, now);
 }

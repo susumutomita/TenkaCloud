@@ -5,7 +5,7 @@ import Header from "@cloudscape-design/components/header";
 import LineChart from "@cloudscape-design/components/line-chart";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
-import { toErrorMessage } from "@tenkacloud/web-kit";
+import { toErrorMessage, usePolling } from "@tenkacloud/web-kit";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getScoreEvents,
@@ -70,12 +70,9 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
     }
   }, [isMock, sessionToken, config.apiBaseUrl, auth]);
 
-  useEffect(() => {
-    if (isMock || !sessionToken) return;
-    void tick();
-    const interval = setInterval(tick, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [isMock, sessionToken, tick]);
+  // 即時 fetch + interval + unmount cleanup は usePolling (web-kit) に集約 (#1418 DRY)。
+  // enabled gate (= backend mode かつ session 在り) で tick 内の同条件 guard は不到達のまま。
+  usePolling(tick, POLL_INTERVAL_MS, { enabled: !isMock && Boolean(sessionToken) });
 
   // LP 「モックで試す」 動線: dev-mock mode では backend を叩かないので、 fixture を
   // 1 度だけ seed する (= 競技中のスコア推移 chart + 履歴 table をデモで見せる)。

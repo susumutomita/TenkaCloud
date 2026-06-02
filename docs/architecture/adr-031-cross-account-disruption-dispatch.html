@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-031: Cross-account disruption dispatch (Phase B)</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.draft { background: #ddf4ff; color: var(--c-link); }
+  .badge.accept { background: #dafbe1; color: var(--c-accept); }
+  .badge.reject { background: #ffe5e5; color: var(--c-reject); }
+  .badge.warn { background: #fff8c5; color: var(--c-warn); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  .risk-high { color: var(--c-reject); font-weight: 600; }
+  .risk-med { color: var(--c-warn); font-weight: 600; }
+  .ok { color: var(--c-accept); font-weight: 600; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  .seq { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; white-space: pre; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-031: Cross-account disruption dispatch (Phase B)</h1>
+  <p><em>operator が fire した disruption を競技者アカウントへ届け、 実際に障害を注入するための cross-account 経路と、 問題が宣言する障害アクションの契約</em></p>
+  <div class="meta">
+    <div><b>Status:</b> <span class="badge draft">Proposed</span> 2026-06-02</div>
+    <div><b>Related:</b>
+      <a href="./adr-013-disruption-phase2-condition-triggered.html">ADR-013</a> (disruption 宣言 / Phase A→B / condition trigger),
+      <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> (problem = plugin, platform = host),
+      <a href="./adr-029-attack-resilience-liveness.html">ADR-029</a> (game always ends / no disruption is permanent)
+    </div>
+  </div>
+</header>
+
+<h2>Context</h2>
+
+<p>
+障害注入 (Red Team disruption) の現状は <b>Phase A</b> 止まりである。 operator が
+<code>POST /events/:eventId/disruptions/fire</code> を叩くと、 platform 側
+(<code>event-handler/disruption-fire.ts</code>) は次を行う:
+</p>
+<ol>
+  <li>problem catalog で <code>(problemId, disruptionId)</code> を解決し、 <code>operatorEditable</code> allow-list で parameters を fold</li>
+  <li>event 配下 team を列挙し scope (<code>all</code> / <code>team</code> / <code>random-n</code>) を解決</li>
+  <li><code>REQUEST#{tenantId}#{requestId}</code> の conditional Put で冪等性を奪取 (race-safe)</li>
+  <li><b>operator アカウントの</b> EventBridge bus へ <code>*DisruptionFired</code> を publish</li>
+  <li>append-only の <code>AUDIT#</code> 行を Put</li>
+</ol>
+
+<p>
+問題は <b>4 で publish 先が operator アカウントの bus に閉じている</b>こと。 イベントは競技者アカウントへ届かず、
+<span class="risk-high">実際の障害は一切注入されない</span>。 コード上も
+<code>disruption-fire.ts</code> が「cross-account publish (= 競技者アカウントへの forward) は Phase B で追加する」と明記して
+意図的に deferred している。 監査ログと Logs Insights で「fire したという事実」は観測できるが、
+競技者の問題環境は無傷のままで、 ADR-013 が掲げた「本物の障害でレジリエンスを測る」競技性が成立していない
+(<a href="./adr-029-attack-resilience-liveness.html">ADR-029</a> が前提とする「障害 → 復旧」のループが回らない)。
+</p>
+
+<h3>既に存在する素材 (= 大げさにしないための足場)</h3>
+
+<table>
+  <thead><tr><th>素材</th><th>場所</th><th>Phase B で果たす役割</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>競技者アカウントへの AssumeRole + ExternalId パターン</td>
+      <td><code>describe-stack-handler/index.ts</code> / <code>competitor-accounts-handler/verify.ts</code></td>
+      <td>そのまま cross-account 実行の足場になる。 <code>RoleSessionName</code> / <code>ExternalId</code> / 1h セッションの作法が確立済</td>
+    </tr>
+    <tr>
+      <td><code>CompetitorDeployRole</code> = <code>AdministratorAccess</code></td>
+      <td><code>infrastructure/templates/competitor-bootstrap.yaml</code></td>
+      <td><span class="ok">障害注入に必要な権限は既に揃っている</span>。 #721 で個別最小権限の whack-a-mole を畳み、 信頼境界を「account + ExternalId の 2 要素」に集約済。 <b>bootstrap への追記は不要</b></td>
+    </tr>
+    <tr>
+      <td>disruption 宣言 (catalog)</td>
+      <td><code>metadata.json</code> の <code>disruptions[]</code> + <code>discover-problems-catalog.ts</code></td>
+      <td><code>id</code> / <code>eventDetailType</code> / <code>operatorEditable</code> / <code>parameters</code> / <code>triggers</code> を持つ。 障害の <em>記述</em>はあるが、 <b>どう注入するか (action)</b> の field が無い</td>
+    </tr>
+    <tr>
+      <td>冪等 fire + 監査</td>
+      <td><code>disruption-fire.ts</code> (Phase A)</td>
+      <td><code>REQUEST#</code> claim と <code>AUDIT#</code> はそのまま再利用。 Phase B は publish の <em>下流</em>に実行を足すだけで、 上流の意味論は不変</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+つまり Phase B は新しい信頼境界を作る話ではなく、 <b>「既に許可されている cross-account AssumeRole の上で、
+問題が宣言した障害アクションを実行する executor を 1 個足す」</b>話に落ちる。 唯一の設計上の欠落は
+「問題が cross-account でどんな障害を起こすか」を表す宣言契約 (= action) で、 本 ADR の主眼はそこにある。
+</p>
+
+<h2>Decision</h2>
+
+<p>
+fire の <b>publish と実行を分離</b>し、 publish 済イベントを拾う <b>cross-account disruption executor Lambda</b>
+を新設する。 executor は <code>CompetitorDeployRole</code> へ <code>ExternalId</code> 付きで AssumeRole し、
+問題 metadata が宣言した <b>declarative かつ allow-list 済の disruption action</b> を競技者アカウント内で実行する。
+platform は action の <em>種別を dispatch する</em>だけで、 障害の中身 (どの resource をどう叩くか) は問題が所有する
+(<a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> = problem is plugin, platform is host)。
+</p>
+
+<div class="seq">  operator ──POST /disruptions/fire──▶ disruption-fire (Phase A, 不変)
+                                          │ REQUEST# claim → publish *DisruptionFired → AUDIT#
+                                          ▼
+                              operator EventBridge bus
+                                          │  (rule: DetailType = *DisruptionFired)
+                                          ▼
+              ┌───────────── cross-account disruption executor (Phase B, 新設) ─────────────┐
+              │ 1. action 宣言を catalog で解決 (= 無ければ no-op で終了 = Phase A 互換)        │
+              │ 2. EXEC#{auditId}#{teamId} を conditional Put で冪等奪取                        │
+              │ 3. team の deployment から competitorRoleArn + ExternalId(SSM) + stackOutputs  │
+              │ 4. AssumeRole(ExternalId, 1h) → action.kind に応じた最小 API 1 本             │
+              │ 5. ADR-029 INV-2: revert を Scheduler に予約 (TTL 上限内で必ず復旧)            │
+              │ 6. EXEC# 行を terminal 状態へ更新 (= 監査 + 再実行抑止)                         │
+              └────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                                          ▼
+                          competitor account: 実際の障害 (netem delay / Lambda invoke / stack update)</div>
+
+<h3>Disruption action の宣言契約</h3>
+
+<p>
+<code>metadata.json</code> の各 disruption に省略可能な <code>action</code> を足す。 これが Phase B の唯一の schema 追加。
+action を持たない既存 disruption は <b>Phase A と同じく監査のみ</b>で振る舞いが変わらない (後方互換)。
+</p>
+
+<pre>{
+  "id": "ec2-latency-injection",
+  "eventDetailType": "DegradedDisruptionFired",
+  "operatorEditable": ["afterMinutes"],
+  "parameters": { "delayMs": 200, "device": "eth0" },
+  "action": {
+    "kind": "ssm-run-command",          // allow-list: ssm-run-command | lambda-invoke | cfn-stack-update
+    "targetRef": "WorkerInstanceIds",    // team stackOutputs の key (= 注入対象を CFn 出力から解決)
+    "documentName": "AWS-RunShellScript", // kind 固有 field (ssm)
+    "revert": {                           // ADR-029 INV-2: 永続障害の禁止 (= 必ず復旧)
+      "afterSeconds": 600,
+      "documentName": "AWS-RunShellScript"
+    },
+    "paramTemplate": {                    // parameters → API 引数。 値は parameters / operatorEditable 由来のみ
+      "commands": ["tc qdisc add dev {{device}} root netem delay {{delayMs}}ms"]
+    }
+  }
+}</pre>
+
+<table>
+  <thead><tr><th>action.kind</th><th>AssumeRole 後に叩く API</th><th>想定する障害</th></tr></thead>
+  <tbody>
+    <tr><td><code>ssm-run-command</code></td><td><code>ssm:SendCommand</code> (+ revert で復旧コマンド)</td><td>netem 遅延 / プロセス kill / disk fill 等、 instance 内の fault</td></tr>
+    <tr><td><code>lambda-invoke</code></td><td><code>lambda:InvokeFunction</code> (問題が同梱した fault Lambda)</td><td>問題側ロジックで任意の fault (= 最も柔軟。 復旧も同 Lambda の revert mode)</td></tr>
+    <tr><td><code>cfn-stack-update</code></td><td><code>cloudformation:UpdateStack</code> (parameter 上書き)</td><td>capacity 削減 / SG 閉塞など、 stack parameter で表せる fault。 revert = parameter を戻す</td></tr>
+  </tbody>
+</table>
+
+<p>
+<b>値の出所を 2 つに固定</b>する: ① <code>targetRef</code> は team の <code>stackOutputs</code> の key しか取れない
+(= 注入対象は CFn が出力した resource id に限定)、 ② <code>paramTemplate</code> の <code>{{...}}</code> 置換は
+<code>parameters</code> / <code>operatorEditable</code> で fold 済の値しか参照できない。 これにより
+operator も問題作者も「任意文字列を競技者アカウントの API へ直接流す」ことはできない (injection 面の縮小)。
+</p>
+
+<h2>Trust model</h2>
+
+<p>
+信頼境界は <b>既存の <code>CompetitorDeployRole</code> をそのまま再利用</b>し、 bootstrap template は変更しない。
+deploy worker と同一の 2 要素 (TenkaCloud account id + tenant 固有 <code>ExternalId</code>) で AssumeRole する。
+</p>
+
+<table>
+  <thead><tr><th>層</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr><td>誰が assume するか</td><td>executor Lambda の実行ロール (operator account)。 信頼 principal は bootstrap の trust policy が既に <code>${TenkaCloudAccountId}:root</code> + <code>sts:ExternalId</code> 条件で固定</td></tr>
+    <tr><td>ExternalId の出所</td><td>tenant ごとの SSM SecureString (<code>externalIdParameterName</code>)。 deploy / describe-stack と同一経路。 コードに埋め込まない</td></tr>
+    <tr><td>セッション</td><td><code>RoleSessionName = tc-disruption-{auditId}</code>、 <code>MaxSessionDuration 3600</code> は bootstrap が上限</td></tr>
+    <tr><td>権限の絞り</td><td>role 自体は <code>AdministratorAccess</code> だが、 executor が実際に呼ぶ API は action.kind ごとに <b>1 種類</b>に固定 (SendCommand / InvokeFunction / UpdateStack)。 コードが叩く面は最小</td></tr>
+    <tr><td>operator 側ロールの最小化</td><td>executor の実行ロールには <code>sts:AssumeRole</code> (競技者ロール ARN への resource 限定) + audit table の Put/Get + SSM GetParameter (ExternalId) のみ。 deploy worker と分離した専用ロール</td></tr>
+  </tbody>
+</table>
+
+<h3>Threat model</h3>
+
+<table>
+  <thead><tr><th>脅威</th><th>緩和</th></tr></thead>
+  <tbody>
+    <tr><td><span class="risk-med">Confused Deputy</span> (他テナントの環境へ誤注入)</td><td>AssumeRole は team の deployment 行が持つ <code>competitorRoleArn</code> + その tenant の ExternalId でのみ成立。 fire 時の <code>event.tenantId === ctx.tenantId</code> assert (Phase A) が上流で効く</td></tr>
+    <tr><td><span class="risk-med">Parameter injection</span> (任意コマンドを競技者環境で実行)</td><td><code>operatorEditable</code> allow-list で fold 済の値しか <code>paramTemplate</code> に入らない。 <code>targetRef</code> は stackOutputs の key のみ。 問題作者が書いた action 文字列は <code>check-template-security</code> / レビュー対象</td></tr>
+    <tr><td><span class="risk-med">Replay / 二重注入</span></td><td><code>EXEC#{auditId}#{teamId}</code> の conditional Put で per-team 冪等。 同一 fire の再配送 (EventBridge at-least-once) は no-op</td></tr>
+    <tr><td><span class="risk-high">永続障害</span> (復旧不能で競技停止)</td><td>ADR-029 INV-2。 <code>action.revert</code> 必須 (= 宣言が無ければ validate で reject)。 executor は注入と同時に revert を <code>aws-scheduler</code> へ予約し、 TTL 上限 (既定 30 分、 round 長を超えない) で必ず復旧</td></tr>
+    <tr><td><span class="risk-med">Blast radius</span></td><td>scope (all / team / random-n) と <code>MAX_AFFECTED_TEAMS</code> は Phase A で既に上限済。 executor は team 単位に分割実行し、 1 team の失敗が他へ波及しない</td></tr>
+  </tbody>
+</table>
+
+<h2>Liveness との結線 (ADR-029)</h2>
+
+<p>
+<a href="./adr-029-attack-resilience-liveness.html">ADR-029</a> の不変条件 <b>INV-2「いかなる disruption も永続しない」</b>を
+Phase B では <em>実行レベル</em>で保証する: <code>action.revert</code> を <b>schema 必須</b>とし、 executor は
+注入の直後に revert ジョブを予約する。 revert は ① 宣言された <code>afterSeconds</code> 経過、
+② round の <code>endsAt</code> 到達、 ③ 明示の clear API、 のいずれか早い方で発火する。 これにより
+「fire したが復旧機構が無い」状態を <b>宣言時 (validate) と実行時 (scheduler) の二重</b>で排除する。
+</p>
+
+<h2>Alternatives considered</h2>
+
+<table>
+  <thead><tr><th>案</th><th>判定</th><th>理由</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>競技者アカウントに EventBridge bus + resource policy を置き、 cross-account publish する</td>
+      <td><span class="badge reject">Rejected</span></td>
+      <td>bootstrap への <b>追記が必要</b> (bus + policy + 競技者側 rule + target Lambda)。 競技者の事前作業が増え、 「stack 1 個で revoke」の単純さを壊す。 また EventBridge の at-least-once と競技者側 rule の有無で「届いたか」の観測が難しい</td>
+    </tr>
+    <tr>
+      <td>SSM RunCommand 専用 (kind を ssm に固定)</td>
+      <td><span class="badge reject">Rejected</span></td>
+      <td>SSM Agent が載る EC2/On-Prem にしか効かない。 Lambda / 容量系 / SG 系の fault を表現できず、 問題の多様性 (ADR-012) を縛る。 ssm は <b>kind の 1 つ</b>として残す</td>
+    </tr>
+    <tr>
+      <td>問題ごとに専用 disruption Lambda を operator 側にデプロイ</td>
+      <td><span class="badge reject">Rejected</span></td>
+      <td>問題固有コードが platform に侵入する (ADR-012 違反)。 問題が増えるたび operator stack が膨らむ</td>
+    </tr>
+    <tr>
+      <td><b>AssumeRole + 宣言的 action を generic executor が dispatch</b></td>
+      <td><span class="badge accept">Accepted</span></td>
+      <td>既存 AssumeRole パターンと AdministratorAccess の上に乗るため <b>bootstrap 不変</b>。 問題は action を宣言するだけ (plugin)、 platform は dispatch するだけ (host)。 fault Lambda kind で任意の障害も表現可</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Consequences</h2>
+
+<h3 class="ok">Positive</h3>
+<ul>
+  <li>競技者アカウントで <b>実際に障害が起きる</b> = ADR-013 / ADR-029 が前提とする「障害 → 復旧」競技が成立する</li>
+  <li>競技者の追加作業ゼロ (bootstrap stack は従来のまま)。 信頼境界も deploy worker と同一で監査面が一本化</li>
+  <li>障害の中身は問題が所有 (plugin)。 platform は action.kind の dispatch に閉じ、 問題追加で platform を触らない</li>
+  <li>復旧が schema 必須 + scheduler 予約で二重に保証され、 「永続障害で競技停止」を構造的に防ぐ</li>
+</ul>
+
+<h3 class="risk-med">Negative / trade-off</h3>
+<ul>
+  <li>action 文字列 (paramTemplate / documentName) は問題作者が書く = レビュー対象が増える。 <code>check-template-security</code> 同様の静的検査を action にも広げる必要がある (実装 PR で追加)</li>
+  <li><code>AdministratorAccess</code> ロールの上で実行するため、 executor のバグの理論上の影響範囲は広い。 コードが叩く API を kind ごと 1 本に固定し、 値の出所を 2 経路に限定して縮小する</li>
+  <li>at-least-once 配送に対する per-team 冪等 (<code>EXEC#</code> 行) と revert 予約の整合を実装で正しく扱う必要がある</li>
+</ul>
+
+<h2>Migration</h2>
+
+<ol>
+  <li><b>本 ADR (design)</b>: cross-account 経路 + action 契約 + 信頼境界の確定。 bootstrap 不変であることの確認。</li>
+  <li><b>schema</b>: <code>discover-problems-catalog.ts</code> + <code>SCHEMA.json</code> に <code>action</code> (省略可) と <code>revert</code> 必須制約を追加。 parser に validate を足す。 action 無し = Phase A 互換 (監査のみ)。</li>
+  <li><b>executor</b>: <code>*DisruptionFired</code> を拾う専用 Lambda を新設 (deploy worker と分離した最小ロール)。 AssumeRole は <code>describe-stack-handler</code> パターンを踏襲。 unit test は STS / SSM / Lambda / CFn client を mock。</li>
+  <li><b>revert</b>: <code>aws-scheduler</code> 予約 + clear API。 ADR-029 INV-2 の実行時保証。</li>
+  <li><b>reference 問題</b>: <code>microservice-migration-battle</code> の <code>ec2-latency-injection</code> に <code>action</code> を宣言し、 LocalStack / 実環境で「fire → netem 遅延 → revert」を E2E 確認 (= #1419 Acceptance)。</li>
+</ol>
+
+<p>
+後方互換: 既存問題は <code>action</code> 未宣言なので Phase A と同じく監査のみ。 Phase B 配備後に
+問題側が段階的に <code>action</code> を足していける。 監査ログ (<code>AUDIT#</code>) の形は不変。
+</p>
+
+</body>
+</html>
