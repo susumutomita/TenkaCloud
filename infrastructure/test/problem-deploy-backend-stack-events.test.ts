@@ -5,14 +5,15 @@ import { synthDefault } from "./problem-deploy-backend-stack.test-helpers";
 describe("ProblemDeployBackendStack (MVP-1) — EventBridge Rules", () => {
   const tpl = synthDefault();
 
-  it("should have 7 EventBridge Rules (Create / Delete / BulkCreate / GenericScoring / ExternalIdAudit schedule / SystemAuditWriter (Issue #1034) / CodeBuildFailure (Issue #1029))", () => {
+  it("should have 8 EventBridge Rules (Create / Delete / BulkCreate / GenericScoring / ExternalIdAudit schedule / SystemAuditWriter (Issue #1034) / CodeBuildFailure (Issue #1029) / DisruptionExecutor (ADR-031 #1419))", () => {
     // 旧 2 (Create / Delete state-machine event rules)
     //   + BulkCreate (Issue #910 Phase 2.C: BulkDeployCreateRequested → Distributed Map)
     //   + GenericScoring schedule rate(1 minute) (= ADR-012 Phase 3.B、 旧 HealthCheck 後継)
     //   + ExternalIdAudit schedule rate(1 day) (= Phase 3.2 / Issue #603 で追加)
     // = 5。GenericScoring は scoring 問題が無い tenant でも reconcile 用に常時 instantiate される。
     // 旧 5 + Issue #1034 SystemAuditWriter (SBT bus) + Issue #1029 CodeBuildFailure (default bus)
-    tpl.resourceCountIs("AWS::Events::Rule", 7);
+    //   + ADR-031 #1419 DisruptionExecutor (tenkacloud.disruptions → cross-account fault executor)
+    tpl.resourceCountIs("AWS::Events::Rule", 8);
     tpl.hasResourceProperties(
       "AWS::Events::Rule",
       Match.objectLike({
