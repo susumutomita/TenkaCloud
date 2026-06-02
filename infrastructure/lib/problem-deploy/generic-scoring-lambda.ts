@@ -1,8 +1,9 @@
 import * as path from "node:path";
-import { Duration } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { type IEventBus, Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
+import * as iam from "aws-cdk-lib/aws-iam";
 import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
@@ -11,6 +12,9 @@ import {
   LAMBDA_NODEJS_RUNTIME,
   LAMBDA_SOURCE_MAP_ENABLED,
 } from "../utils/lambda-runtime.js";
+import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
+import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-credential-store.js";
+import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/sakura-credential-store.js";
 
 export interface GenericScoringLambdaProps {
   readonly deploymentsTable: ITable;
@@ -51,6 +55,11 @@ export interface GenericScoringLambdaProps {
    * scoring Lambda に `events:PutEvents` を least-privilege で付与する。
    */
   readonly eventBus: IEventBus;
+  /**
+   * [ADR-026/027/032 / #1410-1412] SSM SecureString path 構築 + 非 AWS runtime status reconciler の
+   * credential 解決用の environment 名 (`/<env>/tenants/.../{sakura-api-key|azure-credential|gcp-credential}`)。
+   */
+  readonly environmentName: string;
 }
 
 /**
@@ -100,6 +109,8 @@ export class GenericScoringLambda extends Construct {
         PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName,
         // #1422: condition-triggered disruption の publish 先 (手動 fire と同じ deploy bus)。
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
+        // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler の credential path 構築用。
+        DEPLOY_ENVIRONMENT: props.environmentName,
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -139,6 +150,32 @@ export class GenericScoringLambda extends Construct {
     // #1422: condition-triggered disruption を event bus に publish する (= events:PutEvents、
     // 当該 bus に scope された least-privilege)。
     props.eventBus.grantPutEventsTo(this.fn);
+
+    // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler が per-team credential
+    // (sakura/azure/gcp SecureString) を decrypt 取得する。 deploy-api-lambda と同じ prefix-scope。
+    const stack = Stack.of(this);
+    const credentialSsmArns = [
+      buildSakuraCredentialParameterArnPattern(stack.region, stack.account, props.environmentName),
+      buildAzureCredentialParameterArnPattern(stack.region, stack.account, props.environmentName),
+      buildGcpCredentialParameterArnPattern(stack.region, stack.account, props.environmentName),
+    ];
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["ssm:GetParameter"],
+        resources: credentialSsmArns,
+      }),
+    );
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["kms:Decrypt"],
+        resources: ["*"],
+        conditions: {
+          StringLike: { "kms:EncryptionContext:PARAMETER_ARN": credentialSsmArns },
+        },
+      }),
+    );
 
     // EventBridge `rate(1 minute)`. Lambda 自身の invoke 権限は LambdaFunction target が自動付与。
     new Rule(this, "Schedule", {

@@ -452,6 +452,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       // #1422 (ADR-013 Phase 2): condition-triggered disruption の eval + in-account 発火。
       problemsDisruptions: props.problemsDisruptions ?? {},
       eventBus,
+      // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler の credential path 構築用。
+      environmentName: props.environmentName,
     });
     this.genericScoringLambda = genericScoring.fn;
 

@@ -16,6 +16,7 @@ const EVENTS_TABLE = "TestEvents";
 const mocks = vi.hoisted(() => ({
   buildSharedResources: vi.fn(),
   reconcileEventStatuses: vi.fn(),
+  reconcileRuntimeStatuses: vi.fn(),
   isScoringActive: vi.fn(),
   runUptimeFlatKind: vi.fn(),
   runUptimeMultiKind: vi.fn(),
@@ -31,6 +32,12 @@ vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/event-reconci
   reconcileEventStatuses: mocks.reconcileEventStatuses,
   resolveEventStatusTransition: vi.fn(),
 }));
+vi.mock(
+  "../../lib/problem-deploy/handlers/generic-scoring-handler/runtime-status-reconciler",
+  () => ({
+    reconcileRuntimeStatuses: mocks.reconcileRuntimeStatuses,
+  }),
+);
 vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/scoring-active", () => ({
   isScoringActive: mocks.isScoringActive,
 }));
@@ -121,6 +128,7 @@ beforeEach(() => {
   cfg.queryThrows = false;
   mocks.isScoringActive.mockReturnValue(true);
   mocks.reconcileEventStatuses.mockResolvedValue(undefined);
+  mocks.reconcileRuntimeStatuses.mockResolvedValue(undefined);
   mocks.runUptimeFlatKind.mockResolvedValue(EMPTY_RESULT);
   mocks.runUptimeMultiKind.mockResolvedValue(EMPTY_RESULT);
   mocks.runPhasedPollingKind.mockResolvedValue(EMPTY_RESULT);
@@ -151,6 +159,8 @@ describe("handler scan loop", () => {
     const scans = ddb.send.mock.calls.filter((c) => c[0] instanceof ScanCommand);
     expect(scans).toHaveLength(2);
     expect(mocks.reconcileEventStatuses).toHaveBeenCalledTimes(1);
+    // [#1410-1412] 非 AWS runtime reconciler も 1 tick で 1 回 await される。
+    expect(mocks.reconcileRuntimeStatuses).toHaveBeenCalledTimes(1);
   });
 
   it("should swallow a reconcile failure without throwing", async () => {

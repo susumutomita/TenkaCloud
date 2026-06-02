@@ -170,6 +170,25 @@ describe("ProblemDeployBackendStack (MVP-1) — GenericScoring Lambda", () => {
     });
     expect(hasPutEvents).toBe(true);
   });
+
+  // [ADR-026/027/032 / #1410-1412] runtime status reconciler が非 AWS credential を decrypt 取得する。
+  it("should grant ssm:GetParameter on the per-team credential paths + DEPLOY_ENVIRONMENT env (#1410-1412)", () => {
+    const functions = tpl.findResources("AWS::Lambda::Function");
+    const genericScoring = Object.entries(functions).find(
+      ([name]) => name.includes("GenericScoring") && name.includes("Function"),
+    );
+    const vars =
+      (
+        genericScoring?.[1] as {
+          Properties?: { Environment?: { Variables?: Record<string, unknown> } };
+        }
+      )?.Properties?.Environment?.Variables ?? {};
+    expect(vars.DEPLOY_ENVIRONMENT).toBeDefined();
+    const policies = JSON.stringify(tpl.findResources("AWS::IAM::Policy"));
+    expect(policies).toContain("tenants/*/teams/*/sakura-api-key");
+    expect(policies).toContain("tenants/*/teams/*/azure-credential");
+    expect(policies).toContain("tenants/*/teams/*/gcp-credential");
+  });
 });
 
 describe("ProblemDeployBackendStack (MVP-1) — SystemAuditWriter Lambda (Issue #1034)", () => {
