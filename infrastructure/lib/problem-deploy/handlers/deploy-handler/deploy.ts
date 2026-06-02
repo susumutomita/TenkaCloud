@@ -1,18 +1,24 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { S3Client } from "@aws-sdk/client-s3";
+import { SSMClient } from "@aws-sdk/client-ssm";
 import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
+import { createSakuraAppRunRestClient } from "../../runtime-clients/sakura-apprun-rest-client.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
+  type AdapterDependencies,
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
   type ProblemRuntime,
+  SAKURA_ENGINE,
+  SAKURA_PROVIDER,
   selectAdapter,
 } from "../shared/runtime/index.js";
+import { getSakuraCredential } from "../shared/sakura-credential-store.js";
 import { logDeployTrace } from "../shared/trace-log.js";
 import { emitShadowAudit } from "../shared/trust-bridge-shadow.js";
 import {
@@ -56,6 +62,13 @@ export interface DeployContext {
   readonly challengePayloadBucket?: string;
   readonly s3?: S3Client;
   /**
+   * [ADR-026 / Issue #1412] sakura/apprun deploy の account-gated 配線。 `ssm` は per-team Sakura
+   * API key store (SSM SecureString) の読取、 `sakuraAppRunBaseUrl` は AppRun REST base URL の override。
+   * 未配線 (= ssm undefined) なら sakura/apprun 問題は selectAdapter で reserved error のまま (= 従来動作)。
+   */
+  readonly ssm?: Pick<SSMClient, "send">;
+  readonly sakuraAppRunBaseUrl?: string;
+  /**
    * [ADR-023 / Issue #1268] Optional per-problemId runtime resolver. If
    * undefined OR if it returns undefined for a given problemId, the deploy
    * worker assumes `aws/cloudformation` — which preserves pre-#1268 behavior
@@ -95,6 +108,63 @@ export class UnverifiedCompetitorAccountError extends Error {
 }
 
 /**
+ * [ADR-026 / #1412] sakura/apprun の adapter context を組む。 getApiKey は per-team SSM SecureString
+ * store を引き、 未登録なら loud に throw (= silent fallback 禁止)。 client は実 AppRun REST 実装を
+ * credential で束ねる factory。 SSM が配線されていない (= ctx.ssm undefined) ときは呼ばれない。
+ */
+function buildSakuraAdapterContext(
+  ssm: Pick<SSMClient, "send">,
+  env: string,
+  tenantId: string,
+  teamSlug: string,
+  sakuraAppRunBaseUrl: string | undefined,
+): NonNullable<AdapterDependencies["sakura"]> {
+  return {
+    getApiKey: async () => {
+      const credential = await getSakuraCredential({ ssm, env }, tenantId, teamSlug);
+      if (!credential) {
+        throw new Error(
+          `no Sakura API key registered for tenant ${tenantId} team ${teamSlug} ` +
+            "(register it in the per-team SSM SecureString store before deploying a sakura/apprun problem)",
+        );
+      }
+      return credential;
+    },
+    client: (credential) =>
+      createSakuraAppRunRestClient(
+        credential,
+        sakuraAppRunBaseUrl ? { baseUrl: sakuraAppRunBaseUrl } : {},
+      ),
+  };
+}
+
+/**
+ * runtime に応じた adapter 依存を組む。 aws は常に存在し、 sakura/apprun は SSM (per-team key store) が
+ * 配線されたときだけ追加する (= 未配線なら selectAdapter が reserved error)。 deps を組む条件分岐を
+ * startDeployment から切り出して責務を分離する (SRP)。
+ */
+function buildAdapterDependencies(
+  ctx: DeployContext,
+  runtime: ProblemRuntime,
+  teamSlug: string,
+): AdapterDependencies {
+  const aws = { events: ctx.events, eventBusName: ctx.eventBusName };
+  if (ctx.ssm && runtime.provider === SAKURA_PROVIDER && runtime.engine === SAKURA_ENGINE) {
+    return {
+      aws,
+      sakura: buildSakuraAdapterContext(
+        ctx.ssm,
+        ctx.env,
+        ctx.tenantId,
+        teamSlug,
+        ctx.sakuraAppRunBaseUrl,
+      ),
+    };
+  }
+  return { aws };
+}
+
+/**
  * 1 件の deploy job を起動する。
  *
  * DDB Put → EventBridge Publish の順序は失敗セマンティクスが要求する: PutEvents が
@@ -118,9 +188,9 @@ export async function startDeployment(
     engine: EXECUTABLE_ENGINE,
     entry: "template.yaml",
   };
-  const adapter = selectAdapter(runtime, {
-    aws: { events: ctx.events, eventBusName: ctx.eventBusName },
-  });
+  // teamSlug は sakura の per-team key 解決にも使うので runtime 解決直後に確定する。
+  const teamSlug = slugify(request.teamName);
+  const adapter = selectAdapter(runtime, buildAdapterDependencies(ctx, runtime, teamSlug));
 
   // Phase 2.2 (Issue #459): verified=true な行が無ければ deploy しない (= fail-closed)。
   // 同 account deploy の dev fallback も廃止 — 全 deploy は verified なれた account のみ。
@@ -138,7 +208,6 @@ export async function startDeployment(
   const jobId = ulid();
   const teamLoginKey = generateTeamLoginKey();
   const namePrefix = buildStackPrefix(request.problemId, request.teamName);
-  const teamSlug = slugify(request.teamName);
   const nowMs = ctx.now();
   const expiresAt = toEpochSeconds(nowMs + (ctx.ttlMs ?? DEFAULT_TTL_MS));
   const createdAt = new Date(nowMs).toISOString();
@@ -303,6 +372,10 @@ export interface DeploySharedResources {
   readonly problemsVisibility: Readonly<Record<string, PrivateVisibility>>;
   readonly challengePayloadBucket: string | undefined;
   readonly s3: S3Client;
+  /** [ADR-026 / #1412] per-team Sakura API key store の読取 client。 */
+  readonly ssm: SSMClient;
+  /** [ADR-026 / #1412] AppRun REST base URL の override (env)。 未設定なら本番 AppRun 共用型。 */
+  readonly sakuraAppRunBaseUrl: string | undefined;
 }
 
 export function buildSharedResources(): DeploySharedResources {
@@ -319,6 +392,8 @@ export function buildSharedResources(): DeploySharedResources {
     problemsVisibility: parseProblemsVisibility(process.env.BATTLE_PROBLEMS_VISIBILITY),
     challengePayloadBucket,
     s3: new S3Client({}),
+    ssm: new SSMClient({}),
+    sakuraAppRunBaseUrl: process.env.SAKURA_APPRUN_BASE_URL || undefined,
   };
 }
 

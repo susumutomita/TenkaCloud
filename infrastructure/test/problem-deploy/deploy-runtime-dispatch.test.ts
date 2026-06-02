@@ -11,8 +11,9 @@
  *      BEFORE any DDB Put or EventBridge publish — = no cloud mutation.
  */
 
+import { GetParameterCommand } from "@aws-sdk/client-ssm";
 import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type DeployContext,
   type DeployInvocation,
@@ -153,5 +154,83 @@ describe("startDeployment with runtime-aware dispatch (ADR-023 / Issue #1268)", 
       RuntimeNotSupportedError,
     );
     expect(ddbSendSpy).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * [ADR-026 / Issue #1412] sakura/apprun dispatch wiring。 SSM (per-team key store) が配線されたときだけ
+ * executable になり、 AppRun REST へ deploy する (EventBridge は使わない)。 鍵未登録は loud に throw、
+ * SSM 未配線では reserved のまま。 注: 現状の verified-AWS-account gate は provider 非依存なので test では
+ * verified account を mock で満たす (= gate の provider 対応は follow-up)。
+ */
+describe("startDeployment sakura/apprun dispatch (ADR-026 / Issue #1412)", () => {
+  const sakuraRuntime: ProblemRuntime = { provider: "sakura", engine: "apprun", entry: "img:1" };
+
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  function ssmReturning(value: string | undefined): {
+    ssm: { send: ReturnType<typeof vi.fn> };
+    ssmSend: ReturnType<typeof vi.fn>;
+  } {
+    const ssmSend = vi.fn(async (cmd: unknown) => {
+      if (cmd instanceof GetParameterCommand) {
+        return value === undefined
+          ? Promise.reject(Object.assign(new Error("nope"), { name: "ParameterNotFound" }))
+          : { Parameter: { Value: value } };
+      }
+      return {};
+    });
+    return { ssm: { send: ssmSend }, ssmSend };
+  }
+
+  it("should deploy via AppRun (not EventBridge) and resolve the key from SSM when wired", async () => {
+    const appRunFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "app-1" }), { status: 201 }));
+    vi.stubGlobal("fetch", appRunFetch);
+    const { ssm, ssmSend } = ssmReturning(
+      JSON.stringify({ accessToken: "tok", accessTokenSecret: "sec" }),
+    );
+    const { ctx, putSend, eventsSend } = buildContext({
+      ssm: ssm as unknown as DeployContext["ssm"],
+      resolveProblemRuntime: () => sakuraRuntime,
+    });
+    const res = await startDeployment(ctx, sampleRequest());
+    expect(res.status).toBe("PENDING");
+    // SSM から鍵を decrypt 取得した
+    expect(ssmSend.mock.calls.some((c) => c[0] instanceof GetParameterCommand)).toBe(true);
+    // AppRun REST を叩いた (list → create)、 EventBridge は使わない
+    expect(appRunFetch).toHaveBeenCalledTimes(2);
+    expect(appRunFetch.mock.calls[1][1].method).toBe("POST");
+    expect(eventsSend).not.toHaveBeenCalled();
+    // deployment 行は Put 済 (= AWS と同じ enqueue セマンティクス)
+    expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(true);
+  });
+
+  it("should throw loudly (no silent fallback) when no Sakura API key is registered", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { status: 200 })),
+    );
+    const { ssm } = ssmReturning(undefined); // ParameterNotFound
+    const { ctx } = buildContext({
+      ssm: ssm as unknown as DeployContext["ssm"],
+      resolveProblemRuntime: () => sakuraRuntime,
+    });
+    await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow(/no Sakura API key/);
+  });
+
+  it("should stay reserved (RuntimeNotSupportedError) for sakura/apprun when SSM is not wired", async () => {
+    const { ctx, putSend, eventsSend } = buildContext({
+      // ssm omitted → deps.sakura is never built
+      resolveProblemRuntime: () => sakuraRuntime,
+    });
+    await expect(startDeployment(ctx, sampleRequest())).rejects.toBeInstanceOf(
+      RuntimeNotSupportedError,
+    );
+    expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(false);
+    expect(eventsSend).not.toHaveBeenCalled();
   });
 });
