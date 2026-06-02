@@ -504,6 +504,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         ...baseConfig,
         apiBaseUrl: portalLambda.url.url,
         mode: "backend",
+        // #1420: 専用 coordination dispatcher の Function URL を portal へ配る (slot が叩く)。
+        coordinationApiUrl: coordinationDispatcher.url.url,
       });
       this.participantPortalUrl = portal.distributionUrl;
       new CfnOutput(this, "ParticipantPortalUrl", {

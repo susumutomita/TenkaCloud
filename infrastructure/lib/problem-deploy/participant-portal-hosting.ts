@@ -27,6 +27,11 @@ export interface ParticipantPortalRuntimeConfig {
    * "dev-mock": frontend 単体動作 (auth 偽装)。"backend": 実 backend を呼ぶ。
    */
   readonly mode: ParticipantPortalMode;
+  /**
+   * ADR-028/030 (#1420): 参加者間 coordination dispatcher の Function URL。 portal slot が
+   * coordination-client で叩く。 未配線なら省略 (= coordination 無効)。
+   */
+  readonly coordinationApiUrl?: string;
 }
 
 const DEFAULT_DEV_MOCK_RUNTIME_CONFIG = (region: string): ParticipantPortalRuntimeConfig => ({
@@ -124,6 +129,10 @@ export class ParticipantPortalHosting extends Construct {
           eventTitle: config.eventTitle,
           eventRegion: config.eventRegion,
           mode: config.mode,
+          // #1420: coordination dispatcher URL (= 専用 Lambda)。 未配線なら key を出さない。
+          ...(config.coordinationApiUrl
+            ? { coordinationApiUrl: config.coordinationApiUrl.replace(/\/$/, "") }
+            : {}),
         }),
       ],
       destinationBucket: this.bucket,

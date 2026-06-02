@@ -22,6 +22,11 @@ export interface AppConfig {
   readonly mode: AppMode;
   readonly cloudMode: CloudMode;
   readonly localstackEndpoint?: string;
+  /**
+   * ADR-028/030 (#1420): 参加者間 coordination dispatcher (専用 Lambda) の Function URL。
+   * 未配線 (= coordination 無効 / 旧 deploy) なら undefined。 portal slot が coordination-client で叩く。
+   */
+  readonly coordinationApiUrl?: string;
 }
 
 interface RuntimeConfig {
@@ -31,6 +36,7 @@ interface RuntimeConfig {
   readonly mode?: AppMode;
   readonly cloudMode?: CloudMode;
   readonly localstackEndpoint?: string;
+  readonly coordinationApiUrl?: string;
 }
 
 const DEV_FALLBACK: AppConfig = {
@@ -110,6 +116,12 @@ export async function loadConfig(): Promise<AppConfig> {
       });
       return DEV_FALLBACK;
     }
+    // #1420: coordination dispatcher URL も backend mode では HTTPS 必須 (= teamLoginKey 漏洩防止)。
+    // 非 HTTPS なら coordination だけ無効化し (= undefined)、 portal 本体は通常起動させる。
+    const coordinationApiUrl =
+      runtime.coordinationApiUrl && (mode !== "backend" || isHttpsUrl(runtime.coordinationApiUrl))
+        ? runtime.coordinationApiUrl
+        : undefined;
     return {
       apiBaseUrl,
       eventTitle: runtime.eventTitle ?? DEV_FALLBACK.eventTitle,
@@ -120,6 +132,7 @@ export async function loadConfig(): Promise<AppConfig> {
         cloudMode === "localstack"
           ? normalizeLocalstackEndpoint(runtime.localstackEndpoint)
           : undefined,
+      ...(coordinationApiUrl ? { coordinationApiUrl } : {}),
     };
   } catch {
     return DEV_FALLBACK;
