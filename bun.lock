@@ -142,6 +142,7 @@
         "aws-cdk-lib": "^2.256.1",
         "constructs": "^10.6.0",
         "dotenv": "^17.4.2",
+        "esbuild": "^0.27.7",
         "http-status-codes": "^2.3.0",
         "winston": "^3.19.0",
       },

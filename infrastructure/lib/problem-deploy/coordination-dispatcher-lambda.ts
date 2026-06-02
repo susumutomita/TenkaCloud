@@ -15,6 +15,7 @@ import {
   HttpMethod,
 } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import type { IBucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import {
   LAMBDA_NODEJS_BUNDLING_TARGET,
@@ -38,6 +39,12 @@ export interface CoordinationDispatcherLambdaProps {
    * 未宣言の問題はキー無し。 省略時は空 (= 全 route `not_configured`)。
    */
   readonly problemsCoordination?: Readonly<Record<string, unknown>>;
+  /**
+   * [ADR-030 Phase 3b / #1420] synth-bundle 済み coordination plugin (.mjs) を置く S3 bucket。
+   * dispatcher は `coordination/<problemId>.mjs` を runtime download → `import()` する。 read-only。
+   * 省略時は importer 未配線 → 全 route `unavailable`。
+   */
+  readonly pluginBucket?: IBucket;
 }
 
 /**
@@ -100,6 +107,10 @@ export class CoordinationDispatcherLambda extends Construct {
         // 共有 builder (buildParticipantSharedResources) の env 要件。 coordination では未使用。
         EVENTS_TABLE_NAME: props.eventsTable.tableName,
         DEPLOY_ENVIRONMENT: props.environmentName,
+        // ADR-030 Phase 3b: plugin .mjs を materialize する S3 bucket。 未指定なら importer 未配線。
+        ...(props.pluginBucket
+          ? { COORDINATION_PLUGIN_BUCKET: props.pluginBucket.bucketName }
+          : {}),
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -116,6 +127,10 @@ export class CoordinationDispatcherLambda extends Construct {
         },
       },
     });
+
+    // ADR-030 Phase 3b: plugin bundle bucket の read-only。 sts/ssm/kms は依然付与しないため、
+    // 動的 load した未信頼 plugin の到達範囲は coordination state 行 + 自身の bundle に限定される。
+    props.pluginBucket?.grantRead(this.fn);
 
     this.url = this.fn.addFunctionUrl({
       authType: FunctionUrlAuthType.NONE,

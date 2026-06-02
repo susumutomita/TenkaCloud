@@ -129,14 +129,17 @@ export function makeCoordinationScopeResolver(
   return async (teamLoginKey) => {
     const items = await queryTeamItems(shared, teamLoginKey);
     for (const item of items) {
-      const plugin = item.problemId ? config[item.problemId]?.plugin : undefined;
-      if (item.tenantId && item.eventId && item.teamId && plugin) {
+      const problemId = item.problemId;
+      const plugin = problemId ? config[problemId]?.plugin : undefined;
+      if (problemId && item.tenantId && item.eventId && item.teamId && plugin) {
         return {
           tenantId: item.tenantId,
           eventId: item.eventId,
           teamId: item.teamId,
           ctx: { eventId: item.eventId, teamIds: [item.teamId] },
-          moduleRef: plugin,
+          // ADR-030 Phase 3b: moduleRef は problemId (= importer の S3 key `coordination/<id>.mjs`)。
+          // plugin path は宣言の有無判定にのみ使い、 実 load は problemId-keyed bundle を引く。
+          moduleRef: problemId,
           fallbackProjection: {},
         };
       }

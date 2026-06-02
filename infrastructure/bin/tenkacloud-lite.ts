@@ -68,6 +68,10 @@ const problemDeployBackend = new ProblemDeployBackendStack(
     problemsDisruptions: (config.problems.disruptions ?? {}) as Readonly<Record<string, unknown>>,
     // #1420 ADR-030 Phase 3: Lite mode でも coordination plugin path を dispatcher へ渡す。
     problemsCoordination: (config.problems.coordination ?? {}) as Readonly<Record<string, unknown>>,
+    // #1420 ADR-030 Phase 3b: Lite mode でも synth-bundle 済み coordination plugin を S3 へ配置。
+    problemsCoordinationBundles: (config.problems.coordinationBundles ?? {}) as Readonly<
+      Record<string, string>
+    >,
     // Lite では participant portal を runtime-config "default-dev-mock" で立てる
     // (= portal Lambda + S3+CloudFront を持ち込む)。 frontend は backend mode で動く。
     participantPortal: { runtimeConfig: "default-dev-mock" },

@@ -3,7 +3,7 @@ import { CfnOutput } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { EventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
-import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
+import { BlockPublicAccess, Bucket, BucketEncryption, type IBucket } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
 import { AdminAuditLogTable } from "./admin-audit-log-table.js";
 import { BulkDeployCreateStateMachine } from "./bulk-deploy-create-state-machine.js";
@@ -11,6 +11,7 @@ import { CompetitorAccountsApiLambda } from "./competitor-accounts-api-lambda.js
 import { CompetitorAccountsTable } from "./competitor-accounts-table.js";
 import { CompetitorBootstrapHosting } from "./competitor-bootstrap-hosting.js";
 import { CoordinationDispatcherLambda } from "./coordination-dispatcher-lambda.js";
+import { CoordinationPluginBundle } from "./coordination-plugin-bundle.js";
 import { DeployApiLambda } from "./deploy-api-lambda.js";
 import { DeployCodeBuildProject } from "./deploy-codebuild-project.js";
 import { DeployCreateStateMachine } from "./deploy-create-state-machine.js";
@@ -99,6 +100,12 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * scope resolver が team→moduleRef を解決するのに使う。 未宣言の問題はキーが無い。
    */
   readonly problemsCoordination?: Readonly<Record<string, unknown>>;
+  /**
+   * ADR-030 Phase 3b (#1420): `problemId → bundledMjs`。 `bundleCoordinationPlugins` が synth 時に
+   * 各 coordination plugin を SDK inline 済み self-contained ESM に bundle したもの。 宣言問題がある時
+   * のみ専用 S3 bucket に配置し、 dispatcher が runtime に import() する。 未宣言なら空。
+   */
+  readonly problemsCoordinationBundles?: Readonly<Record<string, string>>;
   /**
    * Issue #910 (#895 Phase 2.C.2.b): bulk batch deploy を Distributed Map 経路で実行するか
    * (= EventApiLambda の \`BULK_DEPLOY_VIA_DISTRIBUTED_MAP\` env で切替)。 default=false で
@@ -464,8 +471,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
 
       // ADR-030 Phase 2 (#1420): inter-team coordination dispatch を participant-portal Lambda
       // (sts:AssumeRole / ssm / kms 保持) から分離し、 coordination state 行しか触れない最小 IAM の
-      // 専用 Lambda で動かす。 未信頼の問題同梱 plugin を将来 in-process 実行しても competitor
-      // 資格情報・他テナントデータに到達できない (ADR-030 S2)。 plugin の実 import は Phase 3 の seam。
+      // 専用 Lambda で動かす。 未信頼の問題同梱 plugin を in-process 実行しても competitor 資格情報・
+      // 他テナントデータに到達できない (ADR-030 S2)。
+      // Phase 3b: coordination plugin を宣言した問題があれば、 synth-bundle 済み .mjs を専用 S3 bucket に
+      // 配置し、 dispatcher が runtime に download → import() する (= S1 動的 load)。 0 件なら bucket 不要。
+      const coordinationBucket = coordinationPluginBucket(
+        this,
+        (props.problemsCoordinationBundles ?? {}) as Record<string, string>,
+      );
       const coordinationDispatcher = new CoordinationDispatcherLambda(
         this,
         "CoordinationDispatcher",
@@ -475,6 +488,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
           environmentName: props.environmentName,
           // ADR-030 Phase 3 config layer: 問題の coordination plugin path を scope resolver へ渡す。
           problemsCoordination: props.problemsCoordination ?? {},
+          // ADR-030 Phase 3b: plugin .mjs を materialize する S3 bucket (宣言問題がある時のみ)。
+          ...(coordinationBucket ? { pluginBucket: coordinationBucket } : {}),
         },
       );
       new CfnOutput(this, "CoordinationDispatcherApiUrl", {
@@ -527,4 +542,17 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         "ADR-012 Phase 3.A Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
     });
   }
+}
+
+/**
+ * #1420 ADR-030 Phase 3b: coordination plugin を宣言した問題がある時だけ bundle bucket を作る
+ * (= 0 件なら undefined を返し、 dispatcher は importer 未配線で全 route not_configured)。
+ * constructor から分離して認知的複雑度を抑える。
+ */
+function coordinationPluginBucket(
+  scope: Construct,
+  bundles: Record<string, string>,
+): IBucket | undefined {
+  if (Object.keys(bundles).length === 0) return undefined;
+  return new CoordinationPluginBundle(scope, "CoordinationPluginBundle", { bundles }).bucket;
 }
