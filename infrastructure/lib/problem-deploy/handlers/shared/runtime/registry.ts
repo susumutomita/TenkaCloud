@@ -24,14 +24,40 @@ import {
   type AwsCloudFormationAdapterContext,
   AwsCloudFormationRuntimeAdapter,
 } from "./aws-cfn-adapter.js";
+import {
+  AZURE_ENGINE,
+  AZURE_PROVIDER,
+  type AzureBicepAdapterContext,
+  AzureBicepRuntimeAdapter,
+} from "./azure-bicep-adapter.js";
+import {
+  GCP_ENGINE,
+  GCP_PROVIDER,
+  type GcpInfraManagerAdapterContext,
+  GcpInfraManagerRuntimeAdapter,
+} from "./gcp-infra-manager-adapter.js";
+import {
+  SAKURA_ENGINE,
+  SAKURA_PROVIDER,
+  type SakuraAppRunAdapterContext,
+  SakuraAppRunRuntimeAdapter,
+} from "./sakura-apprun-adapter.js";
 
 /**
- * Dependencies any adapter might need. Phase 1 only uses the AWS subset; the
- * shape is open so future adapters (Azure ARM client, kubectl client, etc.)
- * can be added without changing this signature.
+ * Dependencies any adapter might need. The AWS subset is always present; provider
+ * adapters whose I/O is account-gated (Sakura key + AppRun client, future Azure/GCP)
+ * are **optional** — the deploy handler wires them only when that provider is
+ * configured, so an un-provisioned provider stays `RuntimeNotSupportedError` (reserved)
+ * rather than failing at the cloud call. The adapter code + tests exist regardless.
  */
 export interface AdapterDependencies {
   readonly aws: AwsCloudFormationAdapterContext;
+  /** [ADR-026 / #1412] sakura/apprun — present only when the handler has the account-gated client + key. */
+  readonly sakura?: SakuraAppRunAdapterContext;
+  /** [ADR-027 / #1410] azure/bicep — present only when the handler wired the WIF credential + ARM client. */
+  readonly azure?: AzureBicepAdapterContext;
+  /** [ADR-027 / #1411] gcp/infra-manager — present only when the handler wired the WIF credential + IM client. */
+  readonly gcp?: GcpInfraManagerAdapterContext;
 }
 
 export function selectAdapter(
@@ -40,6 +66,21 @@ export function selectAdapter(
 ): ProblemRuntimeAdapter {
   if (runtime.provider === EXECUTABLE_PROVIDER && runtime.engine === EXECUTABLE_ENGINE) {
     return new AwsCloudFormationRuntimeAdapter(deps.aws);
+  }
+  // [ADR-026 / #1412] sakura/apprun is executable only when the handler wired the
+  // account-gated context (SSM key resolver + AppRun client). Until then it falls
+  // through to the reserved-runtime error (no silent stub, no cloud mutation).
+  if (runtime.provider === SAKURA_PROVIDER && runtime.engine === SAKURA_ENGINE && deps.sakura) {
+    return new SakuraAppRunRuntimeAdapter(deps.sakura, runtime);
+  }
+  // [ADR-027 / #1410-1411] azure/bicep + gcp/infra-manager are executable only when the handler
+  // wired the account-gated WIF context (trust-bridge credential + provider client). Until then
+  // they fall through to the reserved-runtime error (no silent stub, no cloud mutation).
+  if (runtime.provider === AZURE_PROVIDER && runtime.engine === AZURE_ENGINE && deps.azure) {
+    return new AzureBicepRuntimeAdapter(deps.azure, runtime);
+  }
+  if (runtime.provider === GCP_PROVIDER && runtime.engine === GCP_ENGINE && deps.gcp) {
+    return new GcpInfraManagerRuntimeAdapter(deps.gcp, runtime);
   }
   // Planned providers (ADR-026/027) get a roadmap-aware message; everything else
   // is treated as a likely typo. Both still throw — no adapter, no cloud mutation.

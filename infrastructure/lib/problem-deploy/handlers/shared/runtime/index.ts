@@ -35,4 +35,37 @@ export {
   type AwsCloudFormationAdapterContext,
   AwsCloudFormationRuntimeAdapter,
 } from "./aws-cfn-adapter.js";
+export {
+  AZURE_ENGINE,
+  AZURE_PROVIDER,
+  type AzureBicepAdapterContext,
+  AzureBicepRuntimeAdapter,
+  type AzureCredential,
+  type AzureDeploymentStackClient,
+  type AzureDeploymentStackSpec,
+  type AzureDeploymentStackState,
+  mapAzureProvisioningState,
+} from "./azure-bicep-adapter.js";
+export {
+  GCP_ENGINE,
+  GCP_PROVIDER,
+  type GcpCredential,
+  type GcpDeploymentSpec,
+  type GcpDeploymentState,
+  type GcpInfraManagerAdapterContext,
+  type GcpInfraManagerClient,
+  GcpInfraManagerRuntimeAdapter,
+  mapGcpDeploymentState,
+} from "./gcp-infra-manager-adapter.js";
 export { type AdapterDependencies, selectAdapter } from "./registry.js";
+export {
+  mapSakuraStatus,
+  SAKURA_ENGINE,
+  SAKURA_PROVIDER,
+  type SakuraApplicationState,
+  type SakuraAppRunAdapterContext,
+  type SakuraAppRunClient,
+  SakuraAppRunRuntimeAdapter,
+  type SakuraAppRunSpec,
+  type SakuraCredential,
+} from "./sakura-apprun-adapter.js";
