@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   discoverProblemsCatalog,
+  discoverProblemsCoordination,
   discoverProblemsDisruptions,
   discoverProblemsScoring,
   discoverProblemsVisibility,
@@ -223,5 +224,28 @@ describe("discoverProblemsDisruptions triggers[] (#1422)", () => {
       disruptions: [{ id: "d1", name: "n", eventDetailType: "X" }],
     });
     expect(discoverProblemsDisruptions(workspace)["plain-battle"]?.[0]?.triggers).toBeUndefined();
+  });
+});
+
+describe("discoverProblemsCoordination (ADR-028/030 Phase 3 #1420)", () => {
+  it("should collect interTeamCoordination.plugin per problem", () => {
+    writeProblem("battles", "router-battle", {
+      id: "router-battle",
+      interTeamCoordination: { plugin: "coordination/router.ts", name: "Router" },
+    });
+    expect(discoverProblemsCoordination(workspace)).toEqual({
+      "router-battle": { plugin: "coordination/router.ts" },
+    });
+  });
+
+  it("should omit problems without a valid coordination plugin path", () => {
+    writeProblem("challenges", "no-coord", { id: "no-coord" });
+    writeProblem("battles", "empty-plugin", { id: "empty-plugin", interTeamCoordination: {} });
+    writeProblem("battles", "non-string", {
+      id: "non-string",
+      interTeamCoordination: { plugin: 42 },
+    });
+    writeProblem("battles", "array-coord", { id: "array-coord", interTeamCoordination: [] });
+    expect(discoverProblemsCoordination(workspace)).toEqual({});
   });
 });

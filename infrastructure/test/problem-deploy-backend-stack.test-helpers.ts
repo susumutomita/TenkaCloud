@@ -1,5 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
+import { CoordinationDispatcherLambda } from "../lib/problem-deploy/coordination-dispatcher-lambda";
 import { ParticipantPortalLambda } from "../lib/problem-deploy/participant-portal-lambda";
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack";
 
@@ -92,6 +93,30 @@ export function synthParticipantPortalLambdaOnly(): Template {
     endpointsTable: endpoints,
     problemsScoring: {},
     problemsEndpoints: {},
+    environmentName: "development",
+  });
+  return Template.fromStack(stack);
+}
+
+/**
+ * ADR-030 Phase 2 (#1420): CoordinationDispatcherLambda 単体 synth。 stack 全体 synth は
+ * ParticipantPortalHosting の dist asset を要求するため、 IAM (最小権限) / Function URL の検証は
+ * construct 単体で行う (= synthParticipantPortalLambdaOnly と同方針)。
+ */
+export function synthCoordinationDispatcherLambdaOnly(): Template {
+  const app = new cdk.App();
+  const stack = new cdk.Stack(app, "TestStack");
+  const deployments = new cdk.aws_dynamodb.Table(stack, "Deployments", {
+    partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
+    sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
+  });
+  const events = new cdk.aws_dynamodb.Table(stack, "Events", {
+    partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
+    sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
+  });
+  new CoordinationDispatcherLambda(stack, "CoordinationDispatcher", {
+    deploymentsTable: deployments,
+    eventsTable: events,
     environmentName: "development",
   });
   return Template.fromStack(stack);

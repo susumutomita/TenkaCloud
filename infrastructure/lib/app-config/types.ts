@@ -153,4 +153,6 @@ export interface ProblemsCatalogBundle {
   readonly visibility: unknown;
   /** Issue #888: per-problem `disruptions[]` 宣言。 未宣言の問題はキー無し。 */
   readonly disruptions: unknown;
+  /** ADR-028/030 #1420: per-problem `interTeamCoordination.plugin` (= `{ [problemId]: { plugin } }`)。 未宣言はキー無し。 */
+  readonly coordination: unknown;
 }
