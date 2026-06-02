@@ -102,6 +102,12 @@ describe("ProblemDeployBackendStack (MVP-1) — Deploy API Lambda (invoked from 
     const serialized = JSON.stringify(tpl.findResources("AWS::IAM::Policy"));
     expect(serialized).toContain("tenants/*/teams/*/azure-credential");
   });
+
+  // [ADR-032 / #1411] gcp/infra-manager deploy も per-team GCP WIF config を decrypt 取得する。
+  it("should grant ssm:GetParameter on the per-team GCP credential SecureString path (#1411)", () => {
+    const serialized = JSON.stringify(tpl.findResources("AWS::IAM::Policy"));
+    expect(serialized).toContain("tenants/*/teams/*/gcp-credential");
+  });
 });
 
 describe("ProblemDeployBackendStack (MVP-1) — GenericScoring Lambda", () => {

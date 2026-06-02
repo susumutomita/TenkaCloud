@@ -312,3 +312,105 @@ describe("startDeployment azure/bicep dispatch (ADR-032 / Issue #1410)", () => {
     expect(eventsSend).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * [ADR-032 / Issue #1411] gcp/infra-manager dispatch wiring。 SSM (per-team WIF config) + STS client +
+ * subject-token signer が配線されたときだけ executable になり、 鍵レスで AWS subject → GCP STS →
+ * SA impersonation → Infra Manager REST へ deploy する (EventBridge 不使用)。 config 未登録は loud throw、
+ * SSM 未配線では reserved のまま。
+ */
+describe("startDeployment gcp/infra-manager dispatch (ADR-032 / Issue #1411)", () => {
+  const gcpRuntime: ProblemRuntime = {
+    provider: "gcp",
+    engine: "infra-manager",
+    entry: "gs://b/cfg",
+  };
+  const GCP_CONFIG = {
+    wifAudience:
+      "//iam.googleapis.com/projects/1/locations/global/workloadIdentityPools/p/providers/aws",
+    serviceAccountEmail: "deployer@proj.iam.gserviceaccount.com",
+    projectId: "proj-1",
+    location: "asia-northeast1",
+  };
+
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  function ssmReturning(value: string | undefined): { send: ReturnType<typeof vi.fn> } {
+    return {
+      send: vi.fn(async (cmd: unknown) => {
+        if (cmd instanceof GetParameterCommand) {
+          return value === undefined
+            ? Promise.reject(Object.assign(new Error("nope"), { name: "ParameterNotFound" }))
+            : { Parameter: { Value: value } };
+        }
+        return {};
+      }),
+    };
+  }
+
+  it("should deploy via Infra Manager (not EventBridge) after WIF exchange + SA impersonation", async () => {
+    // Infra Manager の getRaw (GET → 404) + create (POST) で 2 fetch。
+    const imFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("not found", { status: 404 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ name: "op" }), { status: 200 }));
+    vi.stubGlobal("fetch", imFetch);
+    const signer = { sign: vi.fn().mockResolvedValue({ url: "u", method: "POST", headers: [] }) };
+    const stsClient = {
+      exchangeToken: vi.fn().mockResolvedValue({ access_token: "fed", expires_in: 3600 }),
+      generateServiceAccountToken: vi
+        .fn()
+        .mockResolvedValue({ accessToken: "sa-token", expireTime: "z" }),
+    };
+    const { ctx, putSend, eventsSend } = buildContext({
+      ssm: ssmReturning(JSON.stringify(GCP_CONFIG)) as unknown as DeployContext["ssm"],
+      gcpStsClient: stsClient as unknown as DeployContext["gcpStsClient"],
+      gcpSubjectTokenSigner: signer as unknown as DeployContext["gcpSubjectTokenSigner"],
+      awsRegion: "ap-northeast-1",
+      resolveProblemRuntime: () => gcpRuntime,
+    });
+    const res = await startDeployment(ctx, sampleRequest());
+    expect(res.status).toBe("PENDING");
+    expect(signer.sign).toHaveBeenCalledWith({
+      region: "ap-northeast-1",
+      wifAudience: GCP_CONFIG.wifAudience,
+    });
+    expect(stsClient.exchangeToken).toHaveBeenCalledWith(
+      expect.objectContaining({ subjectTokenType: "urn:ietf:params:aws:token-type:aws4_request" }),
+    );
+    expect(stsClient.generateServiceAccountToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        serviceAccountEmail: GCP_CONFIG.serviceAccountEmail,
+        federatedToken: "fed",
+      }),
+    );
+    expect(imFetch.mock.calls[1][1].method).toBe("POST"); // Infra Manager create
+    expect(imFetch.mock.calls[1][1].headers.Authorization).toBe("Bearer sa-token");
+    expect(eventsSend).not.toHaveBeenCalled();
+    expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(true);
+  });
+
+  it("should throw loudly when no GCP credential is registered", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const signer = { sign: vi.fn() };
+    const stsClient = { exchangeToken: vi.fn(), generateServiceAccountToken: vi.fn() };
+    const { ctx } = buildContext({
+      ssm: ssmReturning(undefined) as unknown as DeployContext["ssm"],
+      gcpStsClient: stsClient as unknown as DeployContext["gcpStsClient"],
+      gcpSubjectTokenSigner: signer as unknown as DeployContext["gcpSubjectTokenSigner"],
+      resolveProblemRuntime: () => gcpRuntime,
+    });
+    await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow(/no GCP credential/);
+    expect(signer.sign).not.toHaveBeenCalled();
+  });
+
+  it("should stay reserved (RuntimeNotSupportedError) for gcp/infra-manager when SSM is not wired", async () => {
+    const { ctx, putSend, eventsSend } = buildContext({ resolveProblemRuntime: () => gcpRuntime });
+    await expect(startDeployment(ctx, sampleRequest())).rejects.toBeInstanceOf(
+      RuntimeNotSupportedError,
+    );
+    expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(false);
+    expect(eventsSend).not.toHaveBeenCalled();
+  });
+});

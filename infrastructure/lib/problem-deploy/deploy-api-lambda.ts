@@ -14,6 +14,7 @@ import {
 } from "../utils/lambda-runtime.js";
 import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
+import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-credential-store.js";
 import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/sakura-credential-store.js";
 
 export interface DeployApiLambdaProps {
@@ -149,9 +150,9 @@ export class DeployApiLambda extends Construct {
       stack.account,
       props.environmentName,
     );
-    // [ADR-026/027/032 / #1412 #1410] per-team の Sakura API key / Azure deploy credential (SSM SecureString)
-    // も同 Lambda が deploy 時に decrypt 取得する。 ExternalId と同じ prefix-scope + AWS managed key 復号で
-    // 最小権限を保つ。
+    // [ADR-026/027/032 / #1412 #1410 #1411] per-team の Sakura API key / Azure deploy credential /
+    // GCP WIF config (SSM SecureString) も同 Lambda が deploy 時に decrypt 取得する。 ExternalId と同じ
+    // prefix-scope + AWS managed key 復号で最小権限を保つ。
     const sakuraSsmArn = buildSakuraCredentialParameterArnPattern(
       stack.region,
       stack.account,
@@ -162,7 +163,12 @@ export class DeployApiLambda extends Construct {
       stack.account,
       props.environmentName,
     );
-    const credentialSsmArns = [ssmArn, sakuraSsmArn, azureSsmArn];
+    const gcpSsmArn = buildGcpCredentialParameterArnPattern(
+      stack.region,
+      stack.account,
+      props.environmentName,
+    );
+    const credentialSsmArns = [ssmArn, sakuraSsmArn, azureSsmArn, gcpSsmArn];
     this.fn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
