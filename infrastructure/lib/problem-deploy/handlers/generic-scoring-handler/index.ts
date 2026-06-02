@@ -15,6 +15,7 @@ import { runAttackDetectionKind } from "./kinds/attack-detection.js";
 import { runPhasedPollingKind } from "./kinds/phased-polling.js";
 import { runUptimeFlatKind } from "./kinds/uptime-flat.js";
 import { runUptimeMultiKind } from "./kinds/uptime-multi.js";
+import { reconcileRuntimeStatuses } from "./runtime-status-reconciler.js";
 import { isScoringActive } from "./scoring-active.js";
 import {
   buildSharedResources,
@@ -66,6 +67,14 @@ export async function handler(): Promise<void> {
     });
   });
 
+  // [ADR-026/027/032 / #1410-1412] 非 AWS runtime (sakura/azure/gcp) deployment の status / outputs を
+  // adapter.getStatus / collectOutputs で reconcile (= State Machine が無いので tick が進める)。 採点と並列。
+  const runtimeReconcilePromise = reconcileRuntimeStatuses(shared, nowIso).catch((err) => {
+    console.warn("[generic-scoring] reconcileRuntimeStatuses failed", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  });
+
   // metadata.json の `phases[]` は scoring とは別 field なので、 dispatcher で per-problemId
   // に展開する。Phase 3.B では `BATTLE_PROBLEMS_PHASES` env で渡す (= Lambda 配線で
   // discoverProblemsPhases から JSON 化)。env が無い場合は空 (= phases 無し)。
@@ -102,7 +111,7 @@ export async function handler(): Promise<void> {
     exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
   } while (exclusiveStartKey);
 
-  await reconcilePromise;
+  await Promise.all([reconcilePromise, runtimeReconcilePromise]);
 }
 
 /**

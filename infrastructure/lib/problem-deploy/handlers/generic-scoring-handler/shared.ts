@@ -1,5 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
+import { SSMClient } from "@aws-sdk/client-ssm";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
 import {
@@ -31,6 +32,13 @@ export interface GenericScoringSharedResources {
   /** [#1422] condition-triggered fire の publish 先 event bus (= 空なら発火 skip)。 */
   readonly eventBusName: string;
   readonly events: EventBridgeClient;
+  /**
+   * [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler が per-team credential を解決し
+   * adapter を組むための env / SSM client / AppRun base URL override。 absent runtime (= AWS) では未使用。
+   */
+  readonly env: string;
+  readonly ssm: SSMClient;
+  readonly sakuraAppRunBaseUrl?: string;
 }
 
 export function buildSharedResources(): GenericScoringSharedResources {
@@ -44,6 +52,11 @@ export function buildSharedResources(): GenericScoringSharedResources {
     problemsDisruptions: parseDisruptionsCatalogEnv(process.env.BATTLE_PROBLEMS_DISRUPTIONS),
     eventBusName: process.env.DEPLOY_EVENT_BUS_NAME ?? "",
     events: new EventBridgeClient({}),
+    // 非 AWS reconciler 専用 (= AWS only の運用では未使用)。 unset でも throw させず空文字に倒す
+    // (= 既存 scoring tick / test を壊さない)。 本番 Lambda は DEPLOY_ENVIRONMENT を必ず注入する。
+    env: process.env.DEPLOY_ENVIRONMENT ?? "",
+    ssm: new SSMClient({}),
+    sakuraAppRunBaseUrl: process.env.SAKURA_APPRUN_BASE_URL || undefined,
   };
 }
 
