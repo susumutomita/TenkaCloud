@@ -156,7 +156,8 @@ describe("makeCoordinationScopeResolver", () => {
       eventId: "e1",
       teamId: "t1",
       ctx: { eventId: "e1", teamIds: ["t1"] },
-      moduleRef: "coordination/alliance.ts",
+      // ADR-030 Phase 3b: moduleRef は problemId (= importer の S3 key `coordination/<id>.mjs`)。
+      moduleRef: "p1",
       fallbackProjection: {},
     });
   });

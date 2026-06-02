@@ -155,4 +155,6 @@ export interface ProblemsCatalogBundle {
   readonly disruptions: unknown;
   /** ADR-028/030 #1420: per-problem `interTeamCoordination.plugin` (= `{ [problemId]: { plugin } }`)。 未宣言はキー無し。 */
   readonly coordination: unknown;
+  /** ADR-030 Phase 3b #1420: `{ [problemId]: bundledMjs }` (= synth-bundle 済み coordination plugin)。 */
+  readonly coordinationBundles: unknown;
 }

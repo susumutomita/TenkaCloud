@@ -8,6 +8,7 @@ import { getEnv } from "../helper-functions.js";
 import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting.js";
 import { parseTenantAdminAllowlist } from "../tenant-template/saml-admin-allowlist.js";
 import { parseTenantSamlIdpConfig } from "../tenant-template/saml-identity-providers.js";
+import { bundleCoordinationPlugins } from "../utils/bundle-coordination-plugins.js";
 import { loadConfig } from "../utils/config-loader.js";
 import {
   discoverProblemsCatalog,
@@ -282,6 +283,8 @@ function discoverAppProblems(input: ResolveAppConfigInput): ProblemsCatalogBundl
     visibility: discoverProblemsVisibility(problemsRoot),
     disruptions: discoverProblemsDisruptions(problemsRoot),
     coordination: discoverProblemsCoordination(problemsRoot),
+    // ADR-030 Phase 3b: synth 時に coordination plugin を self-contained .mjs へ bundle (esbuild)。
+    coordinationBundles: bundleCoordinationPlugins(problemsRoot),
   };
 }
 

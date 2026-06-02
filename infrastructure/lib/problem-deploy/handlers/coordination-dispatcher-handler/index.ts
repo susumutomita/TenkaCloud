@@ -13,6 +13,7 @@ import { parseJsonBody, withBearerAuth } from "../participant-handler/route-help
 import { CoordinationOpBodySchema } from "../participant-handler/schemas.js";
 import { buildParticipantSharedResources } from "../participant-handler/shared.js";
 import { RATE_LIMITS } from "../shared/rate-limiter.js";
+import { defaultS3PluginImporter } from "./s3-plugin-importer.js";
 
 /**
  * ADR-030 Phase 2 (#1420): inter-team coordination dispatch を participant-portal Lambda から
@@ -24,13 +25,16 @@ import { RATE_LIMITS } from "../shared/rate-limiter.js";
  * 全テナントデータに到達しうる (ADR-030 S2 の脅威)。 本 Lambda は Deployments テーブルの
  * coordination / team-lookup 行しか触れない最小 IAM で動かし、 blast radius を IAM で構造的に縛る。
  *
- * importer は依然 seam (Phase 3 で レビュー済みカタログ bundle の S3 materialize を実装)。 未配線の
- * 間は load 不可 → `unavailable` / fallback projection で participant API を壊さない。
+ * ADR-030 Phase 3b: importer は `COORDINATION_PLUGIN_BUCKET` が配線されていれば S3 から
+ * synth-bundle 済み .mjs を materialize → `import()` する (= 最小 IAM 下での動的 load)。 未配線
+ * (= bucket env 空) なら reject し、 load 不可 → `unavailable` / fallback で participant API を壊さない。
  */
 const shared = buildParticipantSharedResources();
 
-const coordinationImporter: PluginImporter = (ref) =>
-  Promise.reject(new Error(`coordination plugin importer not configured: ${ref}`));
+const pluginBucket = process.env.COORDINATION_PLUGIN_BUCKET ?? "";
+const coordinationImporter: PluginImporter = pluginBucket
+  ? defaultS3PluginImporter(pluginBucket)
+  : (ref) => Promise.reject(new Error(`coordination plugin bucket not configured: ${ref}`));
 
 const coordinationDeps: CoordinationHandlerDeps = {
   importer: coordinationImporter,
