@@ -3,13 +3,12 @@ import Box from "@cloudscape-design/components/box";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import ProgressBar from "@cloudscape-design/components/progress-bar";
 import Spinner from "@cloudscape-design/components/spinner";
-import { usePolling } from "@tenkacloud/web-kit";
+import { toErrorMessage, usePolling } from "@tenkacloud/web-kit";
 import { useCallback, useState } from "react";
 import { type CostSummaryAvailable, fetchCostSummary } from "../api/insight";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
-import { toErrorMessage } from "../lib/error-message";
 
 // budget は AWS 側で日次更新されるため polling 圧は最小で十分 (= 5 分)。 DescribeBudget は無料。
 const COST_POLL_INTERVAL_MS = 300_000;
