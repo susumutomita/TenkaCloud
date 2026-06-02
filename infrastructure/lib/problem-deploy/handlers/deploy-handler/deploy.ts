@@ -1,9 +1,9 @@
+import type { GcpStsClient } from "@TenkaCloud/trust-bridge";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { S3Client } from "@aws-sdk/client-s3";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { GcpStsClient } from "@tenkacloud/trust-bridge";
 import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
 import type { AzureEntraTokenClient } from "../../runtime-clients/azure-entra-token-client.js";

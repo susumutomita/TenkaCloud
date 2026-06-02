@@ -1,6 +1,6 @@
+import type { GcpStsClient } from "@TenkaCloud/trust-bridge";
 import type { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import type { SSMClient } from "@aws-sdk/client-ssm";
-import type { GcpStsClient } from "@tenkacloud/trust-bridge";
 import { createAzureDeploymentStacksRestClient } from "../../runtime-clients/azure-deployment-stacks-rest-client.js";
 import {
   type AzureEntraTokenClient,

@@ -17,7 +17,7 @@ import type {
   GcpStsExchangeOutput,
   GenerateServiceAccountTokenInput,
   GenerateServiceAccountTokenOutput,
-} from "@tenkacloud/trust-bridge";
+} from "@TenkaCloud/trust-bridge";
 
 const DEFAULT_STS_BASE = "https://sts.googleapis.com/v1";
 const DEFAULT_IAM_CREDENTIALS_BASE = "https://iamcredentials.googleapis.com/v1";
