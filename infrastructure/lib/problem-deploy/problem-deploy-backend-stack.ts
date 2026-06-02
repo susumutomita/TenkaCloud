@@ -22,6 +22,7 @@ import {
 } from "./deploy-event-rule.js";
 import { DeploymentsTable } from "./deployments-table.js";
 import { DescribeStackLambda } from "./describe-stack-lambda.js";
+import { DisruptionExecutorLambda } from "./disruption-executor-lambda.js";
 import { DisruptionsTable } from "./disruptions-table.js";
 import { EventApiLambda } from "./event-api-lambda.js";
 import { EventsTable } from "./events-table.js";
@@ -348,6 +349,17 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       adminAuditLogTable: adminAuditLog.table,
     });
     this.eventApiLambda = eventApi.fn;
+
+    // [ADR-031 / Issue #1419] Disruption Phase B: operator fire が publish した `*DisruptionFired` を
+    // 拾い、 team deployment へ AssumeRole して実障害を注入し、 revert を予約する cross-account executor。
+    // action 未宣言の disruption は no-op (= Phase A 監査のみ、 後方互換)。
+    new DisruptionExecutorLambda(this, "DisruptionExecutor", {
+      environmentName: props.environmentName,
+      eventBus,
+      deploymentsTable: deployments.table,
+      disruptionsTable: disruptions.table,
+      problemsDisruptions: (props.problemsDisruptions ?? {}) as Readonly<Record<string, unknown>>,
+    });
 
     // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + STS verify Lambda。
     // 独立 Lambda にする理由: SSM SecureString R/W + STS AssumeRole の IAM scope を最小化するため。
