@@ -96,6 +96,12 @@ describe("ProblemDeployBackendStack (MVP-1) — Deploy API Lambda (invoked from 
     const serialized = JSON.stringify(tpl.findResources("AWS::IAM::Policy"));
     expect(serialized).toContain("tenants/*/teams/*/sakura-api-key");
   });
+
+  // [ADR-032 / #1410] azure/bicep deploy も per-team Azure credential を decrypt 取得する。
+  it("should grant ssm:GetParameter on the per-team Azure credential SecureString path (#1410)", () => {
+    const serialized = JSON.stringify(tpl.findResources("AWS::IAM::Policy"));
+    expect(serialized).toContain("tenants/*/teams/*/azure-credential");
+  });
 });
 
 describe("ProblemDeployBackendStack (MVP-1) — GenericScoring Lambda", () => {

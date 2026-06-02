@@ -1,12 +1,5 @@
-import {
-  DeleteParameterCommand,
-  GetParameterCommand,
-  ParameterType,
-  PutParameterCommand,
-  type SSMClient,
-} from "@aws-sdk/client-ssm";
 import type { SakuraCredential } from "./runtime/sakura-apprun-adapter.js";
-import { isParameterNotFound } from "./ssm-parameter.js";
+import { createSecureJsonStore, type SecureJsonStoreDeps } from "./secure-json-store.js";
 
 /**
  * [ADR-026 / Issue #1412] per-team Sakura API-key store (SSM SecureString)。
@@ -19,12 +12,13 @@ import { isParameterNotFound } from "./ssm-parameter.js";
  *
  * path 規約: `/{env}/tenants/{tenantId}/teams/{teamSlug}/sakura-api-key`
  *   - **1 team 1 鍵** (ExternalId は 1 tenant 1 値だが、 Sakura は per-team account で鍵を分けるため team 粒度)。
- *   - KMS は AWS managed (`alias/aws/ssm`、 コスト 0)。
- *   - tenantId / teamSlug を path 中段に置き、 IAM policy は prefix で絞り込む。
  *   - 値は `{accessToken, accessTokenSecret}` の JSON。 plaintext で返さず、 deploy worker が都度 decrypt 取得。
  *
- * `secrets-manager-forbidden` enforcement と整合: Secrets Manager は使わない (SSM SecureString のみ)。
+ * SSM SecureString の get/put/delete 機構は [[secure-json-store.ts]] (汎用) に集約 (= Azure secret store と共有、 DRY)。
+ * 本 module は Sakura 固有の path / parse / 名前付き API だけを持つ。 `secrets-manager-forbidden` 準拠。
  */
+
+export type SakuraCredentialStoreDeps = SecureJsonStoreDeps;
 
 export function buildSakuraCredentialParameterName(
   env: string,
@@ -45,11 +39,6 @@ export function buildSakuraCredentialParameterArnPattern(
   return `arn:aws:ssm:${region}:${account}:parameter/${env}/tenants/*/teams/*/sakura-api-key`;
 }
 
-export interface SakuraCredentialStoreDeps {
-  readonly ssm: Pick<SSMClient, "send">;
-  readonly env: string;
-}
-
 /** SSM から読んだ JSON 文字列を SakuraCredential に narrow する (= 自前保管形式の fail-safe parse)。 */
 function parseSakuraCredential(raw: string | undefined): SakuraCredential | undefined {
   if (typeof raw !== "string") return undefined;
@@ -66,65 +55,48 @@ function parseSakuraCredential(raw: string | undefined): SakuraCredential | unde
   return { accessToken, accessTokenSecret };
 }
 
+const store = createSecureJsonStore<SakuraCredential>({
+  buildName: buildSakuraCredentialParameterName,
+  parse: parseSakuraCredential,
+  serialize: (credential) =>
+    JSON.stringify({
+      accessToken: credential.accessToken,
+      accessTokenSecret: credential.accessTokenSecret,
+    }),
+});
+
 /**
  * team の Sakura API key を取得。 未登録 / 復号不能な形式なら `undefined`
  * (= 上位で 404 / RuntimeNotSupported に変換する余地を残す = fail-closed)。
  */
-export async function getSakuraCredential(
+export function getSakuraCredential(
   deps: SakuraCredentialStoreDeps,
   tenantId: string,
   teamSlug: string,
 ): Promise<SakuraCredential | undefined> {
-  const name = buildSakuraCredentialParameterName(deps.env, tenantId, teamSlug);
-  try {
-    const out = await deps.ssm.send(new GetParameterCommand({ Name: name, WithDecryption: true }));
-    return parseSakuraCredential(out.Parameter?.Value);
-  } catch (err) {
-    if (isParameterNotFound(err)) return undefined;
-    throw err;
-  }
+  return store.get(deps, tenantId, teamSlug);
 }
 
 /**
  * team の Sakura API key を登録 / 上書き (= register + rotation 兼用、 ADR-026 D3 rotation 対応)。
- *
- * `Overwrite: true` なので 2 回目以降は鍵を差し替える (= rotation = 再 register)。 ExternalId と違い
- * 「回さない」制約は無い (long-lived 鍵なので運用上 rotate を推奨)。 SSM は内部で version 履歴を保持する。
+ * `Overwrite: true` なので 2 回目以降は鍵を差し替える (= rotation = 再 register)。
  */
-export async function putSakuraCredential(
+export function putSakuraCredential(
   deps: SakuraCredentialStoreDeps,
   tenantId: string,
   teamSlug: string,
   credential: SakuraCredential,
 ): Promise<void> {
-  const name = buildSakuraCredentialParameterName(deps.env, tenantId, teamSlug);
-  await deps.ssm.send(
-    new PutParameterCommand({
-      Name: name,
-      Value: JSON.stringify({
-        accessToken: credential.accessToken,
-        accessTokenSecret: credential.accessTokenSecret,
-      }),
-      Type: ParameterType.SECURE_STRING,
-      Overwrite: true,
-      // KMS は AWS managed (alias/aws/ssm)。 明示 KeyId を渡さないと SSM が自動採用する (= コスト 0)。
-    }),
-  );
+  return store.put(deps, tenantId, teamSlug, credential);
 }
 
 /**
  * team の Sakura API key を削除 (= revoke / team teardown)。 存在しない場合は no-op (= idempotent)。
  */
-export async function deleteSakuraCredential(
+export function deleteSakuraCredential(
   deps: SakuraCredentialStoreDeps,
   tenantId: string,
   teamSlug: string,
 ): Promise<void> {
-  const name = buildSakuraCredentialParameterName(deps.env, tenantId, teamSlug);
-  try {
-    await deps.ssm.send(new DeleteParameterCommand({ Name: name }));
-  } catch (err) {
-    if (isParameterNotFound(err)) return;
-    throw err;
-  }
+  return store.delete(deps, tenantId, teamSlug);
 }
