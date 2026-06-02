@@ -253,14 +253,37 @@ function checkDashboardSlotFiles(meta: Metadata, dir: string): ValidationError[]
  * 出題者は気付けない。 SCHEMA は path pattern までしか保証しないので file 実在はここで止める。
  * interTeamCoordination 未宣言の problem は無影響 (= 早期 return)。
  */
+/**
+ * ADR-030 S1/S3 (#1420): coordination plugin は **副作用なしの純 reducer** でなければならない。
+ * platform の (最小 IAM とはいえ) dispatcher Lambda が in-process で動的 import するため、 AWS SDK /
+ * fetch / node 組み込み / 環境変数アクセスを含む plugin は資格情報・外部 I/O への足がかりになりうる。
+ * S1 の「reviewer checklist (import 監査)」を機械チェック化し、 これらを宣言した plugin は出題時に reject する。
+ */
+const COORDINATION_FORBIDDEN_PATTERNS: ReadonlyArray<{
+  readonly label: string;
+  readonly re: RegExp;
+}> = [
+  { label: "@aws-sdk import", re: /@aws-sdk\// },
+  { label: "node: builtin import", re: /["']node:/ },
+  { label: "process.env access", re: /process\s*\.\s*env/ },
+  { label: "fetch() call", re: /\bfetch\s*\(/ },
+];
+
 export function checkCoordinationPluginFile(meta: Metadata, dir: string): ValidationError[] {
   const coordination = meta.interTeamCoordination as Record<string, unknown> | undefined;
   const plugin = coordination?.plugin;
   if (typeof plugin !== "string") return [];
-  if (!existsSync(join(dir, plugin))) {
+  const pluginPath = join(dir, plugin);
+  if (!existsSync(pluginPath)) {
     return [`interTeamCoordination.plugin="${plugin}" file not found`];
   }
-  return [];
+  // ADR-030 S1: pure-reducer 規約を機械 enforce (= dispatcher が in-process 実行するため、
+  // 未信頼コードが資格情報・外部 I/O に到達する import を出題時に弾く)。
+  const source = readFileSync(pluginPath, "utf8");
+  return COORDINATION_FORBIDDEN_PATTERNS.filter(({ re }) => re.test(source)).map(
+    ({ label }) =>
+      `interTeamCoordination.plugin="${plugin}" must be a side-effect-free pure reducer (ADR-030 S1): forbidden ${label}`,
+  );
 }
 
 function main(): void {

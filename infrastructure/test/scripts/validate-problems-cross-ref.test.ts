@@ -1,6 +1,8 @@
 import { execSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { checkCoordinationPluginFile } from "../../../scripts/validate-problems";
 
 /**
@@ -71,5 +73,53 @@ describe("checkCoordinationPluginFile (#1420)", () => {
 
   it("should be a no-op when plugin is not a string", () => {
     expect(checkCoordinationPluginFile({ interTeamCoordination: {} }, MS_DIR)).toEqual([]);
+  });
+});
+
+describe("checkCoordinationPluginFile content scan (ADR-030 S1 #1420)", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "coord-plugin-"));
+    mkdirSync(join(dir, "coordination"), { recursive: true });
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  function writePlugin(content: string): Record<string, unknown> {
+    writeFileSync(join(dir, "coordination", "p.ts"), content);
+    return { interTeamCoordination: { plugin: "coordination/p.ts" } };
+  }
+
+  it("should pass a side-effect-free pure reducer", () => {
+    const meta = writePlugin(
+      'import { defineCoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";\n' +
+        "export default defineCoordinationPlugin({ initialState: () => ({}), " +
+        "validateOp: () => ({ ok: true }), applyOp: (s) => s, projectForTeam: (s) => s });\n",
+    );
+    expect(checkCoordinationPluginFile(meta, dir)).toEqual([]);
+  });
+
+  it("should reject an @aws-sdk import (credential reach)", () => {
+    const errs = checkCoordinationPluginFile(
+      writePlugin('import { S3Client } from "@aws-sdk/client-s3";\n'),
+      dir,
+    );
+    expect(errs).toHaveLength(1);
+    expect(errs[0]).toContain("@aws-sdk import");
+  });
+
+  it("should reject node: builtins, process.env, and fetch()", () => {
+    const errs = checkCoordinationPluginFile(
+      writePlugin(
+        'import { readFileSync } from "node:fs";\n' +
+          "const s = process.env.SECRET;\n" +
+          'await fetch("https://evil.example");\n',
+      ),
+      dir,
+    );
+    const joined = errs.join(" | ");
+    expect(joined).toContain("node: builtin import");
+    expect(joined).toContain("process.env access");
+    expect(joined).toContain("fetch() call");
+    expect(errs).toHaveLength(3);
   });
 });
