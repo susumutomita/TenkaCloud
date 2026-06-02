@@ -14,9 +14,14 @@
 
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
-import { PORTAL_SLOT_NAMES, type PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
+import {
+  PORTAL_SLOT_NAMES,
+  type PortalCoordinationClient,
+  type PortalSlotProps,
+} from "@tenkacloud/portal-plugin-sdk";
 import { toErrorMessage } from "@tenkacloud/web-kit";
 import { Component, type ErrorInfo, type ReactNode, Suspense, useMemo } from "react";
+import { getCoordinationProjection, submitCoordinationOp } from "../api/coordination-client";
 import { loadPluginSlot } from "./loader";
 import {
   buildPortalCoordination,
@@ -36,6 +41,10 @@ interface PortalPluginSlotsProps {
     readonly eventId?: string;
   };
   readonly stackOutputs: Record<string, string>;
+  /** [#1420] coordination dispatcher の Function URL (= config.coordinationApiUrl)。 未配線なら省略。 */
+  readonly coordinationApiUrl?: string;
+  /** [#1420] team の session token (= bearer)。 coordinationClient の束縛に使う。 */
+  readonly sessionToken?: string;
 }
 
 export function PortalPluginSlots({
@@ -44,6 +53,8 @@ export function PortalPluginSlots({
   score,
   team,
   stackOutputs,
+  coordinationApiUrl,
+  sessionToken,
 }: PortalPluginSlotsProps) {
   // problemId が変わらない限り phases / disruptions / slot 検索結果は不変 (= build-time catalog
   // から narrowed)。 endpoints は stackOutputs 依存なので別 memo に切る。
@@ -55,6 +66,15 @@ export function PortalPluginSlots({
     [problemId, stackOutputs],
   );
   const teamProp = useMemo(() => buildPortalTeam(team), [team]);
+  // [#1420] dispatcher URL + session が揃ったときだけ live coordination client を束縛する
+  // (= plugin は URL/token を知らず op 投入 + projection 取得できる)。 どちらか無ければ undefined。
+  const coordinationClient = useMemo<PortalCoordinationClient | undefined>(() => {
+    if (!coordinationApiUrl || !sessionToken) return undefined;
+    return {
+      submitOp: (op: unknown) => submitCoordinationOp(coordinationApiUrl, sessionToken, op),
+      getProjection: () => getCoordinationProjection(coordinationApiUrl, sessionToken),
+    };
+  }, [coordinationApiUrl, sessionToken]);
   // mount 時刻を pin (= 5s polling 由来の re-render で plugin が clock change を見ない方が
   // surprise が少ない、 「nowIso が動く」 ことに依存した plugin は plugin 内で自前
   // setInterval を持つべき)。 [] で intentional mount-pin。 problemId / jobId が変われば
@@ -71,9 +91,21 @@ export function PortalPluginSlots({
       phases,
       disruptions,
       ...(coordination ? { coordination } : {}),
+      ...(coordinationClient ? { coordinationClient } : {}),
       nowIso,
     }),
-    [teamProp, problemId, jobId, score, endpoints, phases, disruptions, coordination, nowIso],
+    [
+      teamProp,
+      problemId,
+      jobId,
+      score,
+      endpoints,
+      phases,
+      disruptions,
+      coordination,
+      coordinationClient,
+      nowIso,
+    ],
   );
 
   const slotsToRender = useMemo(

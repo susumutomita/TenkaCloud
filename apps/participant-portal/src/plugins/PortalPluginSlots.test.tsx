@@ -28,11 +28,23 @@ vi.mock("./props-builder", () => ({
   buildPortalTeam: vi.fn((team) => team),
 }));
 
+// #1420: coordination-client を mock し、 PortalPluginSlots が dispatcher URL + session を束ねた
+// coordinationClient を slot に渡すこと (= op/projection が正しい引数で client を叩く) を観測する。
+vi.mock("../api/coordination-client", () => ({
+  submitCoordinationOp: vi.fn().mockResolvedValue({ kind: "ok", projection: {} }),
+  getCoordinationProjection: vi.fn().mockResolvedValue({ kind: "ok", projection: {} }),
+}));
+
 const { loadPluginSlot } = await import("./loader");
 const { buildPortalCoordination } = await import("./props-builder");
+const { submitCoordinationOp, getCoordinationProjection } = await import(
+  "../api/coordination-client"
+);
 const { PortalPluginSlots } = await import("./PortalPluginSlots");
 const mockLoadPluginSlot = loadPluginSlot as ReturnType<typeof vi.fn>;
 const mockBuildCoordination = buildPortalCoordination as ReturnType<typeof vi.fn>;
+const mockSubmitOp = submitCoordinationOp as ReturnType<typeof vi.fn>;
+const mockGetProjection = getCoordinationProjection as ReturnType<typeof vi.fn>;
 
 const baseProps = {
   problemId: "fake-problem",
@@ -45,6 +57,8 @@ const baseProps = {
 afterEach(() => {
   mockLoadPluginSlot.mockReset();
   mockBuildCoordination.mockReset();
+  mockSubmitOp.mockClear();
+  mockGetProjection.mockClear();
 });
 
 describe("PortalPluginSlots (ADR-012 Phase 5)", () => {
@@ -75,6 +89,49 @@ describe("PortalPluginSlots (ADR-012 Phase 5)", () => {
     );
     render(<PortalPluginSlots {...baseProps} />);
     await waitFor(() => expect(screen.getByTestId("coord")).toHaveTextContent("Router"));
+  });
+
+  it("should bind a live coordination client when coordinationApiUrl + sessionToken are present and route op/projection through it (#1420)", async () => {
+    let captured: { submitOp: (op: unknown) => unknown; getProjection: () => unknown } | undefined;
+    function CoordClientPanel(props: {
+      coordinationClient?: { submitOp: (op: unknown) => unknown; getProjection: () => unknown };
+    }) {
+      captured = props.coordinationClient;
+      return <div data-testid="cc">{props.coordinationClient ? "bound" : "none"}</div>;
+    }
+    mockLoadPluginSlot.mockImplementation((_p, slotName) =>
+      slotName === "StatusPanel" ? CoordClientPanel : undefined,
+    );
+    render(
+      <PortalPluginSlots
+        {...baseProps}
+        coordinationApiUrl="https://coord.example"
+        sessionToken="key-1"
+      />,
+    );
+    await waitFor(() => expect(screen.getByTestId("cc")).toHaveTextContent("bound"));
+    // biome-ignore lint/style/noNonNullAssertion: render asserted the client is bound
+    await captured!.submitOp({ kind: "register-route", url: "https://svc" });
+    // biome-ignore lint/style/noNonNullAssertion: render asserted the client is bound
+    await captured!.getProjection();
+    expect(mockSubmitOp).toHaveBeenCalledWith("https://coord.example", "key-1", {
+      kind: "register-route",
+      url: "https://svc",
+    });
+    expect(mockGetProjection).toHaveBeenCalledWith("https://coord.example", "key-1");
+  });
+
+  it("should NOT bind a coordination client when the dispatcher URL or session is missing (#1420)", async () => {
+    function Panel(props: { coordinationClient?: unknown }) {
+      return <div data-testid="cc">{props.coordinationClient ? "bound" : "none"}</div>;
+    }
+    mockLoadPluginSlot.mockImplementation((_p, slotName) =>
+      slotName === "StatusPanel" ? Panel : undefined,
+    );
+    // dispatcher URL あり / session なし → 束縛しない (= 認証無しで coordination を叩かせない)
+    render(<PortalPluginSlots {...baseProps} coordinationApiUrl="https://coord.example" />);
+    await waitFor(() => expect(screen.getByTestId("cc")).toHaveTextContent("none"));
+    expect(mockSubmitOp).not.toHaveBeenCalled();
   });
 
   it("should let ErrorBoundary fall back to an Alert when a plugin throws (= the whole portal does not crash) and elevate the log to console.error (Issue #1251)", async () => {
