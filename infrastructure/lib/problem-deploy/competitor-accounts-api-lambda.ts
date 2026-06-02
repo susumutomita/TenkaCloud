@@ -10,7 +10,10 @@ import {
   LAMBDA_NODEJS_RUNTIME,
   LAMBDA_SOURCE_MAP_ENABLED,
 } from "../utils/lambda-runtime.js";
+import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
+import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-credential-store.js";
+import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/sakura-credential-store.js";
 
 export interface CompetitorAccountsApiLambdaProps {
   readonly competitorAccountsTable: Table;
@@ -86,11 +89,20 @@ export class CompetitorAccountsApiLambda extends Construct {
       stack.account,
       props.environmentName,
     );
+    // [ADR-026/027/032 / #1413] per-team cloud credential onboarding。 同 Lambda が TenantAdmin の
+    // register/rotate/revoke で sakura/azure/gcp の SecureString を Put/Delete/Get する。 ExternalId と
+    // 同じ prefix-scope (tenantId / teamSlug は wildcard) で最小権限を保つ。
+    const credentialSsmArns = [
+      ssmArn,
+      buildSakuraCredentialParameterArnPattern(stack.region, stack.account, props.environmentName),
+      buildAzureCredentialParameterArnPattern(stack.region, stack.account, props.environmentName),
+      buildGcpCredentialParameterArnPattern(stack.region, stack.account, props.environmentName),
+    ];
     this.fn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ["ssm:GetParameter", "ssm:PutParameter", "ssm:DeleteParameter"],
-        resources: [ssmArn],
+        resources: credentialSsmArns,
       }),
     );
     // SSM SecureString は AWS managed key (alias/aws/ssm) で暗号化される。
@@ -108,7 +120,7 @@ export class CompetitorAccountsApiLambda extends Construct {
         resources: ["*"],
         conditions: {
           StringLike: {
-            "kms:EncryptionContext:PARAMETER_ARN": ssmArn,
+            "kms:EncryptionContext:PARAMETER_ARN": credentialSsmArns,
           },
         },
       }),

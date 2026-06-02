@@ -284,6 +284,15 @@ describe("ProblemDeployBackendStack (MVP-1) — Competitor Accounts API Lambda (
     );
   });
 
+  // [ADR-026/027/032 / #1413] per-team cloud credential onboarding は同 Lambda が sakura/azure/gcp の
+  // SecureString を Put/Delete/Get する。 3 provider 分の path prefix ARN が policy に乗っていること。
+  it("should grant SSM access on the per-team sakura/azure/gcp credential SecureString paths (#1413)", () => {
+    const serialized = JSON.stringify(tpl.findResources("AWS::IAM::Policy"));
+    expect(serialized).toContain("tenants/*/teams/*/sakura-api-key");
+    expect(serialized).toContain("tenants/*/teams/*/azure-credential");
+    expect(serialized).toContain("tenants/*/teams/*/gcp-credential");
+  });
+
   it("Phase 3.2 / Issue #603: ExternalIdAudit Lambda should run on rate(1 day) and have PutMetricData (namespace-scoped)", () => {
     // rate(1 day) schedule は Events rules test でも assert 済だが、ここでは
     // ExternalIdAudit 経路の代表 evidence (COMPETITOR_ACCOUNTS_TABLE_NAME env + namespace 絞り込み IAM) を pin する。

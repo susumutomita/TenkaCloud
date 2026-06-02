@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
@@ -22,6 +22,12 @@ import {
   deleteCompetitorAccount,
   listCompetitorAccounts,
 } from "./store.js";
+import {
+  handleDeleteTeamCredential,
+  handleGetTeamCredentialStatus,
+  handleRegisterTeamCredential,
+  isTeamCredentialProvider,
+} from "./team-credentials-routes.js";
 import { CreateCompetitorAccountRequestSchema } from "./types.js";
 import {
   AssumeRoleSanityCheckFailedError,
@@ -303,6 +309,114 @@ app.delete("/admin/competitor-accounts/:awsAccountId", async (c) => {
     }
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[competitor-accounts] delete failed", { awsAccountId, message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+// [ADR-026/027/032 / Issue #1413] per-team cloud credential onboarding (sakura/azure/gcp)。
+// TenantAdmin が非 AWS 問題の deploy 前に per-team 認証情報を SSM SecureString store に登録 / 失効する。
+// path: /admin/team-cloud-credentials/{provider}/{teamSlug}。 tenantId は JWT claim (body 非信頼)。
+const TEAM_SLUG_RE = /^[a-z0-9-]+$/;
+
+function resolveTeamCredentialParams(
+  c: Context,
+): { provider: "sakura" | "azure" | "gcp"; teamSlug: string } | { error: string } {
+  const provider = c.req.param("provider");
+  const teamSlug = c.req.param("teamSlug");
+  if (!provider || !isTeamCredentialProvider(provider)) return { error: "unknown_provider" };
+  if (!teamSlug || !TEAM_SLUG_RE.test(teamSlug)) return { error: "invalid_team_slug" };
+  return { provider, teamSlug };
+}
+
+app.put("/admin/team-cloud-credentials/:provider/:teamSlug", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
+  const params = resolveTeamCredentialParams(c);
+  if ("error" in params) return c.json({ error: params.error }, StatusCodes.BAD_REQUEST);
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
+  }
+  const tenantId = resolveTenantId(c);
+  const audit = extractAuditContext(c);
+  try {
+    const result = await handleRegisterTeamCredential(
+      { shared },
+      params.provider,
+      tenantId,
+      params.teamSlug,
+      body,
+    );
+    void writeAuditEvent({
+      tenantId,
+      actor: audit.actor,
+      actorUsername: audit.actorUsername,
+      action: "register_team_cloud_credential",
+      outcome: result.status === StatusCodes.CREATED ? "success" : "error",
+      target: `${params.provider}:${params.teamSlug}`,
+      ipAddress: audit.ipAddress,
+      userAgent: audit.userAgent,
+      occurredAtMs: Date.now(),
+    });
+    return c.json(result.body as never, result.status as 201 | 400);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[team-credentials] register failed", {
+      provider: params.provider,
+      message,
+    });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+app.delete("/admin/team-cloud-credentials/:provider/:teamSlug", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
+  const params = resolveTeamCredentialParams(c);
+  if ("error" in params) return c.json({ error: params.error }, StatusCodes.BAD_REQUEST);
+  const tenantId = resolveTenantId(c);
+  const audit = extractAuditContext(c);
+  try {
+    const result = await handleDeleteTeamCredential(
+      { shared },
+      params.provider,
+      tenantId,
+      params.teamSlug,
+    );
+    void writeAuditEvent({
+      tenantId,
+      actor: audit.actor,
+      actorUsername: audit.actorUsername,
+      action: "revoke_team_cloud_credential",
+      outcome: "success",
+      target: `${params.provider}:${params.teamSlug}`,
+      ipAddress: audit.ipAddress,
+      userAgent: audit.userAgent,
+      occurredAtMs: Date.now(),
+    });
+    return c.json(result.body as never, result.status as 200);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[team-credentials] revoke failed", { provider: params.provider, message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+app.get("/admin/team-cloud-credentials/:provider/:teamSlug", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
+  const params = resolveTeamCredentialParams(c);
+  if ("error" in params) return c.json({ error: params.error }, StatusCodes.BAD_REQUEST);
+  try {
+    const result = await handleGetTeamCredentialStatus(
+      { shared },
+      params.provider,
+      resolveTenantId(c),
+      params.teamSlug,
+    );
+    return c.json(result.body as never, result.status as 200);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[team-credentials] status failed", { provider: params.provider, message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });
