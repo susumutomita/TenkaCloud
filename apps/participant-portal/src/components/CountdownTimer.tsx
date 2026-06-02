@@ -1,6 +1,6 @@
 import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
-import { useEffect, useState } from "react";
+import { useNowMs } from "@tenkacloud/web-kit";
 import { useT } from "../i18n";
 
 /**
@@ -56,12 +56,8 @@ export function computeCountdownState(
  */
 export function CountdownTimer({ endsAt }: { endsAt?: string }) {
   const t = useT();
-  const [nowMs, setNowMs] = useState<number>(() => Date.now());
-
-  useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
+  // 1 秒 tick の時計は web-kit useNowMs に集約 (= 60s data polling とは独立の client-side clock)。
+  const nowMs = useNowMs(1000);
 
   const state = computeCountdownState(endsAt, nowMs);
   if (state.kind === "no-event") return null;

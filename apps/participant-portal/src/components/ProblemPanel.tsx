@@ -8,6 +8,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator, {
   type StatusIndicatorProps,
 } from "@cloudscape-design/components/status-indicator";
+import { useNowMs } from "@tenkacloud/web-kit";
 import { useEffect, useState } from "react";
 import {
   type DeployLogsResponse,
@@ -61,15 +62,6 @@ const DEPLOY_LOG_LEVEL_COLOR: Record<DeploymentLogEntry["level"], string> = {
   error: "#ff9b9b",
 };
 
-function useNowMs(intervalMs: number): number {
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), intervalMs);
-    return () => window.clearInterval(timer);
-  }, [intervalMs]);
-  return nowMs;
-}
-
 export function describeRemainingUntilAutoDelete(t: ProblemPanelT, diffMs: number): string {
   const totalMinutes = Math.max(1, Math.ceil(diffMs / 60_000));
   return t("problem_panel.auto_delete_remaining_minutes", { minutes: totalMinutes });
@@ -111,6 +103,8 @@ function useLiveDeployLog({
 }): DeploymentLogView | null {
   const [liveDeployLog, setLiveDeployLog] = useState<DeploymentLogView | null>(null);
 
+  // この polling は usePolling に寄せない: tick 間で `nextToken` を引き継ぐ paging と、
+  // `response.complete` で自走停止する業務ロジックを持ち、 単純な timer 制御 (usePolling の責務) を超える。
   useEffect(() => {
     setLiveDeployLog(null);
     if (TERMINAL_STATUSES.has(problem.status)) return;

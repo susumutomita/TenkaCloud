@@ -100,6 +100,9 @@ export function ScoreTimelineChart({
   const [data, setData] = useState<LeaderboardScoreEventsResponse | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
+  // この polling は usePolling に寄せない: cleanup で in-flight fetch を `AbortController.abort()` で
+  // 中断する必要があり (= unmount 時の stale request 抑止)、 usePolling の cleanup (timer 停止のみ) では
+  // 表現できないため。
   useEffect(() => {
     let mounted = true;
     const controller = new AbortController();

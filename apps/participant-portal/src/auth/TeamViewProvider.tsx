@@ -1,4 +1,4 @@
-import { toErrorMessage } from "@tenkacloud/web-kit";
+import { toErrorMessage, usePolling } from "@tenkacloud/web-kit";
 import {
   createContext,
   type ReactNode,
@@ -329,6 +329,9 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
     setNotifications(DEV_MOCK_NOTIFICATIONS);
   }, [isMock, sessionToken, view]);
 
+  // me + leaderboard polling は usePolling に寄せず手書きのまま残す: 全 problem が terminal に
+  // 達したら次 tick を skip する `stopPollingRef` gate (= timer 制御ではなく業務的な停止条件) を
+  // 持ち、 enabled gate だけでは表現できないため (= usePolling の責務範囲外)。
   useEffect(() => {
     if (isMock || !sessionToken) return;
     stopPollingRef.current = false;
@@ -343,12 +346,11 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
     return () => clearInterval(interval);
   }, [isMock, sessionToken, refresh]);
 
-  useEffect(() => {
-    if (isMock || !sessionToken) return;
-    void refreshNotifications();
-    const interval = setInterval(refreshNotifications, NOTIFICATIONS_POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [isMock, sessionToken, refreshNotifications]);
+  // notifications は単純な「即時 + interval + cleanup」 なので usePolling (web-kit) に集約 (#1418 DRY)。
+  // enabled gate により refreshNotifications 冒頭の同条件 guard は不到達のまま (= v8 ignore 維持)。
+  usePolling(refreshNotifications, NOTIFICATIONS_POLL_INTERVAL_MS, {
+    enabled: !isMock && Boolean(sessionToken),
+  });
 
   // codex review P3: page を開いた瞬間の既読化を **localStorage と Context state 両方** に
   // 反映して、TopNav 未読 badge が次の 60s tick を待たず即 0 化する。
