@@ -60,8 +60,13 @@ export interface ExecutorDeps {
   ) => Promise<DeploymentTarget | undefined>;
   /** dispatch を競技者アカウントで実行 (= AssumeRole + SDK send は具体実装側)。 */
   readonly sendDispatch: (dispatch: DisruptionDispatch, target: DeploymentTarget) => Promise<void>;
-  /** revert を afterSeconds 後に予約 (ADR-029 INV-2)。 scheduler 機構は具体実装側。 */
+  /**
+   * revert を afterSeconds 後に予約 (ADR-029 INV-2)。 scheduler 機構は具体実装側。
+   * `detail` は冪等な schedule 名 (= EXEC# と対の requestId/teamId) と revert invocation payload の
+   * 組み立てに必要なため渡す (= 具体実装 scheduleRevert がそれらを使う)。
+   */
   readonly scheduleRevert: (
+    detail: DisruptionFiredDetail,
     dispatch: DisruptionDispatch,
     target: DeploymentTarget,
     afterSeconds: number,
@@ -111,7 +116,7 @@ export async function executeDisruptionAction(
 
   // ADR-029 INV-2: 注入したら必ず復旧を予約する (revert は schema 必須)。
   const revert = buildRevertDispatch(action, detail.parameters, target.stackOutputs);
-  await deps.scheduleRevert(revert, target, action.revert.afterSeconds);
+  await deps.scheduleRevert(detail, revert, target, action.revert.afterSeconds);
 
   return { kind: "ok", jobId: target.jobId };
 }

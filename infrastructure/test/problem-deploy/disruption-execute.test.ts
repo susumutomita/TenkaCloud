@@ -78,8 +78,9 @@ describe("executeDisruptionAction (ADR-031 #1419)", () => {
     expect(sentTarget).toBe(target);
 
     expect(deps.scheduleRevert).toHaveBeenCalledTimes(1);
-    const [revert, , afterSeconds] = (deps.scheduleRevert as ReturnType<typeof vi.fn>).mock
-      .calls[0];
+    const [detailArg, revert, , afterSeconds] = (deps.scheduleRevert as ReturnType<typeof vi.fn>)
+      .mock.calls[0];
+    expect(detailArg).toBe(detail); // revert payload / idempotent schedule name 用に detail を渡す
     expect(revert).toEqual({
       kind: "ssm-run-command",
       target: "i-aaa,i-bbb",
