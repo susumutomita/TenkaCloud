@@ -11,6 +11,7 @@ import { parseTenantSamlIdpConfig } from "../tenant-template/saml-identity-provi
 import { loadConfig } from "../utils/config-loader.js";
 import {
   discoverProblemsCatalog,
+  discoverProblemsCoordination,
   discoverProblemsDisruptions,
   discoverProblemsEndpoints,
   discoverProblemsPhases,
@@ -280,6 +281,7 @@ function discoverAppProblems(input: ResolveAppConfigInput): ProblemsCatalogBundl
     phases: discoverProblemsPhases(problemsRoot),
     visibility: discoverProblemsVisibility(problemsRoot),
     disruptions: discoverProblemsDisruptions(problemsRoot),
+    coordination: discoverProblemsCoordination(problemsRoot),
   };
 }
 

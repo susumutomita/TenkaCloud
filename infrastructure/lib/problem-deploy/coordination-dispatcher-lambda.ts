@@ -32,6 +32,12 @@ export interface CoordinationDispatcherLambdaProps {
   readonly eventsTable: ITable;
   /** `buildParticipantSharedResources` が要求する `DEPLOY_ENVIRONMENT`。 coordination では未使用。 */
   readonly environmentName: string;
+  /**
+   * [ADR-030 Phase 3 / #1420] `{ [problemId]: { plugin } }`。 問題が宣言する coordination plugin の
+   * module path。 scope resolver が team→moduleRef を解決するのに使う (= `PROBLEM_COORDINATION` env)。
+   * 未宣言の問題はキー無し。 省略時は空 (= 全 route `not_configured`)。
+   */
+  readonly problemsCoordination?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -101,6 +107,13 @@ export class CoordinationDispatcherLambda extends Construct {
         target: LAMBDA_NODEJS_BUNDLING_TARGET,
         sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
         externalModules: [],
+        // ADR-030 Phase 3 config layer: coordination catalog を build 時 literal 置換 (env 4KB 回避、
+        // scoring/disruptions と同方式)。 未宣言なら `{}` → scope resolver は全 team で not_configured。
+        define: {
+          "process.env.PROBLEM_COORDINATION": JSON.stringify(
+            JSON.stringify(props.problemsCoordination ?? {}),
+          ),
+        },
       },
     });
 

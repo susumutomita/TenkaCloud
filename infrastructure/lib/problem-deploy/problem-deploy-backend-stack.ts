@@ -94,6 +94,12 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    */
   readonly problemsDisruptions?: Readonly<Record<string, unknown>>;
   /**
+   * ADR-028/030 Phase 3 (#1420): `problemId → { plugin }` の map。 `discoverProblemsCoordination` で
+   * metadata.json の `interTeamCoordination.plugin` から自動収集。 CoordinationDispatcher Lambda の
+   * scope resolver が team→moduleRef を解決するのに使う。 未宣言の問題はキーが無い。
+   */
+  readonly problemsCoordination?: Readonly<Record<string, unknown>>;
+  /**
    * Issue #910 (#895 Phase 2.C.2.b): bulk batch deploy を Distributed Map 経路で実行するか
    * (= EventApiLambda の \`BULK_DEPLOY_VIA_DISTRIBUTED_MAP\` env で切替)。 default=false で
    * 旧 fan-out 経路を維持し、 deploy 後に true に切替えて Distributed Map に移行する。
@@ -467,6 +473,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
           deploymentsTable: deployments.table,
           eventsTable: events.table,
           environmentName: props.environmentName,
+          // ADR-030 Phase 3 config layer: 問題の coordination plugin path を scope resolver へ渡す。
+          problemsCoordination: props.problemsCoordination ?? {},
         },
       );
       new CfnOutput(this, "CoordinationDispatcherApiUrl", {

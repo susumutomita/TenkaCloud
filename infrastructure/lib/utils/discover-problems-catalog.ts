@@ -147,6 +147,27 @@ export function discoverProblemsVisibility(problemsRoot: string): Record<string,
 }
 
 /**
+ * [ADR-028 / ADR-030 Phase 3 / #1420] `{ [problemId]: { plugin } }` を返す。 problem が
+ * `interTeamCoordination.plugin` (= coordination plugin の module path) を宣言していれば収集する。
+ * CoordinationDispatcher Lambda の `PROBLEM_COORDINATION` env へ JSON 化して渡し、 scope resolver が
+ * team→moduleRef を解決するのに使う。 宣言の無い問題はキーごと不在 (= coordination 無効)。
+ */
+export function discoverProblemsCoordination(
+  problemsRoot: string,
+): Record<string, { readonly plugin: string }> {
+  const result: Record<string, { readonly plugin: string }> = {};
+  for (const meta of iterateProblemsMetadata(problemsRoot)) {
+    const coord = meta.interTeamCoordination;
+    if (!coord || typeof coord !== "object" || Array.isArray(coord)) continue;
+    const plugin = (coord as { plugin?: unknown }).plugin;
+    if (typeof plugin === "string" && plugin.length > 0) {
+      result[meta.id] = { plugin };
+    }
+  }
+  return result;
+}
+
+/**
  * Issue #888: 各 problem metadata.json から `disruptions[]` 宣言を抽出する。
  *
  * Lambda runtime に渡す形は `{ [problemId]: ProblemDisruptionEntry[] }`。 fire API が
@@ -285,6 +306,7 @@ interface ProblemMetadataEntry {
   phases: unknown;
   visibility: unknown;
   disruptions: unknown;
+  interTeamCoordination: unknown;
 }
 
 function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetadataEntry> {
@@ -321,6 +343,7 @@ function readProblemMetadata(
       phases?: unknown;
       visibility?: unknown;
       disruptions?: unknown;
+      interTeamCoordination?: unknown;
     };
     if (typeof meta.id !== "string" || meta.id.length === 0) {
       console.warn(`[discoverProblemsCatalog] ${metadataPath}: missing or invalid 'id' field`);
@@ -335,6 +358,7 @@ function readProblemMetadata(
       phases: meta.phases,
       visibility: meta.visibility,
       disruptions: meta.disruptions,
+      interTeamCoordination: meta.interTeamCoordination,
     };
   } catch (err) {
     console.warn(
