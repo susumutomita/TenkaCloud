@@ -36,3 +36,14 @@ export {
   AwsCloudFormationRuntimeAdapter,
 } from "./aws-cfn-adapter.js";
 export { type AdapterDependencies, selectAdapter } from "./registry.js";
+export {
+  mapSakuraStatus,
+  SAKURA_ENGINE,
+  SAKURA_PROVIDER,
+  type SakuraApplicationState,
+  type SakuraAppRunAdapterContext,
+  type SakuraAppRunClient,
+  SakuraAppRunRuntimeAdapter,
+  type SakuraAppRunSpec,
+  type SakuraCredential,
+} from "./sakura-apprun-adapter.js";
