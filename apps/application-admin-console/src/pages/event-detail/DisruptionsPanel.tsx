@@ -138,6 +138,7 @@ export function DisruptionsPanel({
       }
     >
       <SpaceBetween size="l">
+        <Alert type="warning">{t("disruptions.experimental_banner")}</Alert>
         {loadError ? <Alert type="error">{loadError}</Alert> : null}
         {lastFired ? (
           <Alert type="success" dismissible onDismiss={() => setLastFired(null)}>

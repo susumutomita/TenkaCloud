@@ -160,7 +160,11 @@ describe("DisruptionsPanel", () => {
     fireEvent.click(await screen.findByText("disruptions.fire_button"));
     fireEvent.click(screen.getByText("disruptions.confirm_fire"));
     await screen.findByText(/disruptions.fired_flash/);
-    createWrapper(document.body).findAlert()?.findDismissButton()?.click();
+    // the success flash is the dismissible alert (the experimental banner is not dismissible).
+    const flash = createWrapper(document.body)
+      .findAllAlerts()
+      .find((a) => a.findDismissButton() !== null);
+    flash?.findDismissButton()?.click();
     await waitFor(() => expect(screen.queryByText(/disruptions.fired_flash/)).toBeNull());
     // open + dismiss the modal via the X (Modal onDismiss)
     fireEvent.click(screen.getByText("disruptions.fire_button"));
