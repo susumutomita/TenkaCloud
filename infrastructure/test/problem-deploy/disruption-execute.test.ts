@@ -4,6 +4,7 @@ import {
   type DisruptionFiredDetail,
   type ExecutorDeps,
   executeDisruptionAction,
+  executeScheduledInject,
 } from "../../lib/problem-deploy/handlers/disruption-executor-handler/execute";
 import type { ProblemDisruptionEntry } from "../../lib/utils/discover-problems-catalog";
 
@@ -55,6 +56,7 @@ function makeDeps(over: Partial<ExecutorDeps> = {}): ExecutorDeps {
     resolveDeployment: vi.fn().mockResolvedValue(target),
     sendDispatch: vi.fn().mockResolvedValue(undefined),
     scheduleRevert: vi.fn().mockResolvedValue(undefined),
+    scheduleInject: vi.fn().mockResolvedValue(undefined),
     ...over,
   };
 }
@@ -131,5 +133,71 @@ describe("executeDisruptionAction (ADR-031 #1419)", () => {
     });
     await expect(executeDisruptionAction(detail, deps)).rejects.toThrow("SendCommand denied");
     expect(deps.scheduleRevert).not.toHaveBeenCalled();
+  });
+
+  // [ADR-037] scheduled fire
+  it("should defer the inject (schedule it) when afterMinutes > 0, after claiming", async () => {
+    const deps = makeDeps();
+    const scheduled: DisruptionFiredDetail = { ...detail, afterMinutes: 30 };
+    const outcome = await executeDisruptionAction(scheduled, deps);
+    expect(outcome).toEqual({ kind: "scheduled" });
+    // claim is taken first (dedupes EventBridge redelivery before scheduling)
+    expect(deps.claimExecution).toHaveBeenCalledTimes(1);
+    expect(deps.scheduleInject).toHaveBeenCalledTimes(1);
+    expect(deps.scheduleInject).toHaveBeenCalledWith(scheduled, 30);
+    // the inject itself does NOT run now
+    expect(deps.resolveDeployment).not.toHaveBeenCalled();
+    expect(deps.sendDispatch).not.toHaveBeenCalled();
+    expect(deps.scheduleRevert).not.toHaveBeenCalled();
+  });
+
+  it("should not defer when afterMinutes is 0 (immediate inject, regression)", async () => {
+    const deps = makeDeps();
+    const outcome = await executeDisruptionAction({ ...detail, afterMinutes: 0 }, deps);
+    expect(outcome).toEqual({ kind: "ok", jobId: "job-1" });
+    expect(deps.scheduleInject).not.toHaveBeenCalled();
+    expect(deps.sendDispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("should not schedule the inject when the fired event is a duplicate", async () => {
+    const deps = makeDeps({ claimExecution: vi.fn().mockResolvedValue("duplicate") });
+    expect(await executeDisruptionAction({ ...detail, afterMinutes: 30 }, deps)).toEqual({
+      kind: "duplicate",
+    });
+    expect(deps.scheduleInject).not.toHaveBeenCalled();
+  });
+});
+
+describe("executeScheduledInject (ADR-037 deferred inject)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("should inject + schedule revert WITHOUT re-claiming (claim taken at fire time)", async () => {
+    const deps = makeDeps();
+    const outcome = await executeScheduledInject(detail, deps);
+    expect(outcome).toEqual({ kind: "ok", jobId: "job-1" });
+    expect(deps.claimExecution).not.toHaveBeenCalled(); // already claimed at fired-event time
+    expect(deps.sendDispatch).toHaveBeenCalledTimes(1);
+    expect(deps.scheduleRevert).toHaveBeenCalledTimes(1);
+  });
+
+  it("should be a no-op (no_action) when the disruption declares no action", async () => {
+    const noAction: ProblemDisruptionEntry = { ...withAction, action: undefined };
+    const deps = makeDeps({
+      problemsDisruptions: { "microservice-migration-battle": [noAction] },
+    });
+    expect(await executeScheduledInject(detail, deps)).toEqual({ kind: "no_action" });
+    expect(deps.sendDispatch).not.toHaveBeenCalled();
+  });
+
+  it("should return unknown_disruption when not in the catalog", async () => {
+    expect(await executeScheduledInject(detail, makeDeps({ problemsDisruptions: {} }))).toEqual({
+      kind: "unknown_disruption",
+    });
+  });
+
+  it("should be a no-op (no_deployment) when the team has no resolvable deployment", async () => {
+    const deps = makeDeps({ resolveDeployment: vi.fn().mockResolvedValue(undefined) });
+    expect(await executeScheduledInject(detail, deps)).toEqual({ kind: "no_deployment" });
+    expect(deps.sendDispatch).not.toHaveBeenCalled();
   });
 });

@@ -723,6 +723,14 @@
     "teams_placeholder": "Select teams",
     "random_label": "Pick the pool of teams (a random subset is hit)",
     "random_description": "The platform hits a random subset sized to your selection.",
-    "fired_flash": "Fired \"{name}\" at {count} team(s)."
+    "timing_label": "Timing",
+    "timing_description": "Inject immediately, or schedule it to run after a number of minutes.",
+    "timing_immediate": "Run now",
+    "timing_scheduled": "Schedule (in N min)",
+    "after_minutes_label": "Run after (minutes)",
+    "after_minutes_description": "1–1440 minutes. The injection runs once this many minutes have elapsed.",
+    "after_minutes_error": "Enter a whole number between 1 and 1440.",
+    "fired_flash": "Fired \"{name}\" at {count} team(s).",
+    "scheduled_flash": "Scheduled \"{name}\" to fire in {minutes} minute(s)."
   }
 }

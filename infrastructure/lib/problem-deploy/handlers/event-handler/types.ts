@@ -374,8 +374,23 @@ export const DisruptionFireRequestSchema = z
     targetTeamIds: z.array(z.string().min(1).max(128)).max(200).optional(),
     randomCount: z.number().int().finite().min(1).max(200).optional(),
     requestId: z.string().min(8).max(128),
+    /**
+     * [ADR-037] 発火の timing。 `immediate` (既定) は従来どおり即注入、 `scheduled` は
+     * operator が `afterMinutes` 分後に注入を予約する (= executor が自分の aws-scheduler で遅延)。
+     */
+    timing: z.enum(["immediate", "scheduled"]).default("immediate"),
+    /** scheduled のみ必須。 1〜1440 分 (= 最長 24h)。 finite + integer で NaN / 小数を reject。 */
+    afterMinutes: z.number().int().finite().min(1).max(1440).optional(),
   })
   .strict()
+  .refine((v) => v.timing !== "scheduled" || v.afterMinutes !== undefined, {
+    message: "afterMinutes is required when timing is 'scheduled'",
+    path: ["afterMinutes"],
+  })
+  .refine((v) => v.timing === "scheduled" || v.afterMinutes === undefined, {
+    message: "afterMinutes is only valid when timing is 'scheduled'",
+    path: ["afterMinutes"],
+  })
   .refine((v) => v.scope !== "team" || (v.targetTeamIds && v.targetTeamIds.length > 0), {
     message: "targetTeamIds is required when scope is 'team'",
     path: ["targetTeamIds"],

@@ -5,9 +5,11 @@ import type {
   DisruptionFiredDetail,
 } from "../../lib/problem-deploy/handlers/disruption-executor-handler/execute";
 import {
+  injectScheduleName,
   revertAtExpression,
   revertScheduleName,
   type ScheduleRevertDeps,
+  scheduleInject,
   scheduleRevert,
 } from "../../lib/problem-deploy/handlers/disruption-executor-handler/schedule-revert";
 
@@ -99,5 +101,39 @@ describe("scheduleRevert (ADR-031 #1419)", () => {
     await expect(scheduleRevert(revert, detail, target, 600, deps)).rejects.toThrow(
       "ConflictException",
     );
+  });
+});
+
+describe("injectScheduleName", () => {
+  it("should be the idempotent tc-inject- twin of revert (requestId/teamId)", () => {
+    expect(injectScheduleName(detail)).toBe("tc-inject-req-1-team-1");
+    expect(injectScheduleName({ ...detail, requestId: "r".repeat(100) }).length).toBe(64);
+  });
+});
+
+describe("scheduleInject (ADR-037 scheduled fire)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("should create a one-shot at firedAt + afterMinutes invoking the target with mode:inject", async () => {
+    const { deps, send } = makeDeps();
+    await scheduleInject(detail, 30, deps);
+    const input = send.mock.calls[0][0].input;
+    expect(input.Name).toBe("tc-inject-req-1-team-1");
+    expect(input.ScheduleExpression).toBe("at(2026-06-02T00:30:00)");
+    expect(input.FlexibleTimeWindow).toEqual({ Mode: "OFF" });
+    expect(input.ActionAfterCompletion).toBe("DELETE");
+    expect(input.Target.Arn).toBe(deps.revertTargetArn);
+    const payload = JSON.parse(input.Target.Input);
+    expect(payload.mode).toBe("inject");
+    // detail.firedAt is bumped to the inject time so the later revert is relative to it,
+    // and afterMinutes is dropped so it does not re-defer.
+    expect(payload.detail.firedAt).toBe("2026-06-02T00:30:00.000Z");
+    expect(payload.detail).not.toHaveProperty("afterMinutes");
+    expect(payload.detail.disruptionId).toBe("ec2-latency-injection");
+  });
+
+  it("should propagate scheduler errors (inject scheduling failure is loud)", async () => {
+    const { deps } = makeDeps(vi.fn().mockRejectedValue(new Error("ConflictException")));
+    await expect(scheduleInject(detail, 30, deps)).rejects.toThrow("ConflictException");
   });
 });
