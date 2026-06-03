@@ -13,6 +13,7 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
+import { isAllowedCharCode } from "./lib/iam-description-ascii";
 
 /**
  * Issue #691: 問題側 yaml (= problems/<category>/<id>/template.yaml) も同じ
@@ -20,16 +21,6 @@ import { extname, join } from "node:path";
  * infrastructure/templates/ と並列に walk する。
  */
 const TEMPLATES_DIRS = ["infrastructure/templates", "problems"];
-
-function isAllowedCharCode(cp: number): boolean {
-  return (
-    cp === 0x09 ||
-    cp === 0x0a ||
-    cp === 0x0d ||
-    (cp >= 0x20 && cp <= 0x7e) ||
-    (cp >= 0xa1 && cp <= 0xff)
-  );
-}
 
 function isCfnTemplate(filename: string): boolean {
   // CFn template は `*.yaml` のみ (= ASCII restriction が IAM Description 経由で効く)。

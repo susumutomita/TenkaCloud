@@ -87,7 +87,7 @@ export class ChallengePayloadStack extends cdk.Stack {
 
     const role = new iam.Role(this, "PublishRole", {
       assumedBy: principal,
-      description: `Publish role for ${props.githubRepository} → ${bucket.bucketName} (ADR-003 Phase 2).`,
+      description: `Publish role for ${props.githubRepository} -> ${bucket.bucketName} (ADR-003 Phase 2).`,
       maxSessionDuration: cdk.Duration.hours(1),
     });
 
