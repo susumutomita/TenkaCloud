@@ -98,6 +98,20 @@ export interface UptimeMultiScoringMetadata {
     readonly path: string;
     readonly pointsPerBlock: number;
   };
+  /**
+   * [ADR-034 / #1666] 任意の attack-probes (= 防御テスト)。 採点 tick が各 probe の `slot`+`path` へ
+   * 攻撃 payload を送り (例: SQLi injection を POST)、 応答ステータスが `vulnerableStatus` に含まれれば
+   * (= 防御が破れた) `penalty` を減点する。 防御できているチームは減点 0。 app 計装不要・採点側で判定 (=
+   * scorer が攻撃して結果で採点)。 省略で無効・後方互換。 unreachable は減点しない (= 可用性は probedSlots が見る)。
+   */
+  readonly attackProbes?: readonly {
+    readonly slot: string;
+    readonly path: string;
+    readonly method?: "GET" | "POST";
+    readonly body?: string;
+    readonly vulnerableStatus: readonly number[];
+    readonly penalty: number;
+  }[];
   /** Issue #742 Phase 5: hints 共通 field。 */
   readonly hints?: readonly ProgressiveHint[];
 }
@@ -288,6 +302,7 @@ function parseUptimeMulti(value: unknown): UptimeMultiScoringMetadata | undefine
     pointsAllOk?: unknown;
     failurePenalty?: unknown;
     attackBlocked?: unknown;
+    attackProbes?: unknown;
     hints?: unknown;
   };
   if (!Array.isArray(u.probedSlots) || u.probedSlots.length === 0) return undefined;
@@ -298,13 +313,49 @@ function parseUptimeMulti(value: unknown): UptimeMultiScoringMetadata | undefine
   if (probedSlots.length === 0) return undefined;
   const hints = parseHints(u.hints);
   const attackBlocked = parseAttackBlocked(u.attackBlocked);
+  const attackProbes = Array.isArray(u.attackProbes)
+    ? u.attackProbes
+        .map(parseAttackProbe)
+        .filter((p): p is NonNullable<UptimeMultiScoringMetadata["attackProbes"]>[number] => !!p)
+    : undefined;
   return {
     kind: "uptime-multi",
     probedSlots,
     pointsAllOk: u.pointsAllOk,
     ...(typeof u.failurePenalty === "number" ? { failurePenalty: u.failurePenalty } : {}),
     ...(attackBlocked ? { attackBlocked } : {}),
+    ...(attackProbes && attackProbes.length > 0 ? { attackProbes } : {}),
     ...(hints ? { hints } : {}),
+  };
+}
+
+/** [ADR-034 / #1666] attack-probe 1 件を fail-safe に parse。 slot/path/vulnerableStatus/penalty 必須。 */
+function parseAttackProbe(
+  value: unknown,
+): NonNullable<UptimeMultiScoringMetadata["attackProbes"]>[number] | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const p = value as {
+    slot?: unknown;
+    path?: unknown;
+    method?: unknown;
+    body?: unknown;
+    vulnerableStatus?: unknown;
+    penalty?: unknown;
+  };
+  if (typeof p.slot !== "string" || p.slot.length === 0) return undefined;
+  if (typeof p.path !== "string" || p.path.length === 0) return undefined;
+  if (typeof p.penalty !== "number" || p.penalty <= 0) return undefined;
+  const vulnerableStatus = Array.isArray(p.vulnerableStatus)
+    ? p.vulnerableStatus.filter((s): s is number => typeof s === "number")
+    : [];
+  if (vulnerableStatus.length === 0) return undefined;
+  return {
+    slot: p.slot,
+    path: p.path,
+    ...(p.method === "POST" || p.method === "GET" ? { method: p.method } : {}),
+    ...(typeof p.body === "string" ? { body: p.body } : {}),
+    vulnerableStatus,
+    penalty: p.penalty,
   };
 }
 

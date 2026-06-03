@@ -93,22 +93,48 @@ export async function runUptimeMultiKind(
     }
   }
 
-  const scoreDelta = baseDelta + bonusPoints;
-  const uptimeEvents =
-    baseDelta !== 0
+  // [ADR-034 / #1666] optional attack-probes (= 防御テスト)。 scorer が各 probe へ攻撃 payload を送り、
+  // 応答ステータスが vulnerableStatus に含まれれば (= 防御が破れた) penalty を減点する。 防御できていれば 0。
+  // 未解決 slot / unreachable は減点しない (= 可用性は probedSlots が見る、 攻撃成否と分離)。
+  let attackPenalty = 0;
+  if (scoring.attackProbes && scoring.attackProbes.length > 0) {
+    const vulnerable = await Promise.all(
+      scoring.attackProbes.map(async (ap) => {
+        const base = resolveSlotBaseUrl(ap.slot);
+        if (!base) return false;
+        const probe = await probeUrl(joinUrl(base, ap.path), {
+          ...(ap.method ? { method: ap.method } : {}),
+          ...(ap.body !== undefined ? { body: ap.body } : {}),
+        });
+        return probe.status !== undefined && ap.vulnerableStatus.includes(probe.status);
+      }),
+    );
+    attackPenalty = scoring.attackProbes.reduce(
+      (sum, ap, i) => (vulnerable[i] ? sum + ap.penalty : sum),
+      0,
+    );
+  }
+
+  const scoreDelta = baseDelta + bonusPoints - attackPenalty;
+  const scoreEvents = [
+    ...(baseDelta !== 0
       ? [{ source: "uptime" as const, points: baseDelta, occurredAt: nowIso }]
       : attackDetected
         ? [{ source: "attack-detected" as const, points: 0, occurredAt: nowIso }]
-        : [];
+        : []),
+    ...(bonusPoints > 0
+      ? [{ source: "uptime" as const, points: bonusPoints, occurredAt: nowIso }]
+      : []),
+    ...(attackPenalty > 0
+      ? [{ source: "attack-detected" as const, points: -attackPenalty, occurredAt: nowIso }]
+      : []),
+  ];
   return {
     scoreDelta,
-    scoreEvents:
-      bonusPoints > 0
-        ? [...uptimeEvents, { source: "uptime" as const, points: bonusPoints, occurredAt: nowIso }]
-        : uptimeEvents,
+    scoreEvents,
     endpointsHealthJson: JSON.stringify(newHealth),
     lastResult: allOk ? "ok" : "fail",
-    ...(attackDetected ? { attackDetected: true } : {}),
+    ...(attackDetected || attackPenalty > 0 ? { attackDetected: true } : {}),
     ...(bonusState ? { newState: bonusState } : {}),
   };
 }
