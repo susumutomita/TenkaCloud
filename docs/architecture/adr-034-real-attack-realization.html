@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-034: Real attack realization (security-battle-royale)</title>
+<style>
+  :root {
+    --c-text: #1f2328; --c-muted: #59636e; --c-border: #d1d9e0; --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa; --c-accept: #1a7f37; --c-reject: #cf222e; --c-warn: #9a6700;
+    --c-link: #0969da; --c-code-bg: #eff1f3;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg); max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6; }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; }
+  .badge.draft { background: #ddf4ff; color: var(--c-link); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  .ok { color: var(--c-accept); font-weight: 600; }
+  .no { color: var(--c-reject); font-weight: 600; }
+  .warn { color: var(--c-warn); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-034: Real attack realization (security-battle-royale)</h1>
+  <p><em>operator が撃つ「攻撃」を、 実際に競技者アプリへ作用させて採点に反映するための実現パターンと、 攻撃ごとの実装レシピ・検証手順</em></p>
+  <div class="meta">
+    <div><b>Status:</b> <span class="badge draft">Proposed</span> 2026-06-03</div>
+    <div><b>Related:</b>
+      <a href="./adr-031-cross-account-disruption-dispatch.html">ADR-031</a> (cross-account 配送 / action),
+      <a href="./adr-033-scoring-side-disruption-effects.html">ADR-033</a> (scoring-side effect),
+      <a href="./adr-029-attack-resilience-game-always-ends.html">ADR-029</a> (revert / 永続禁止),
+      <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> (scoring kind = plugin)
+    </div>
+    <div><b>Issue:</b> #1666 (#1417 の子)</div>
+  </div>
+</header>
+
+<h2>背景 — なぜ stackstack と同じ手では実現できないか</h2>
+<p>
+ADR-033 で stackstack の disruption は「採点上の効果 (penalty)」として実装し、 fire→減点 を logic で完全検証できた (実クラウド不要)。 しかし <code>security-battle-royale</code> の 3 攻撃 (sqli-auth-bypass / sqli-data-exfil / availability-flood) は本質的に異なる: <strong>「競技者の防御が実際に持ちこたえるか」をテストする</strong>。 これは点を引くだけでは表現できない —
+</p>
+<ul>
+  <li>SQLi: 防御済 (parameterized query) のチームは <span class="ok">突破されない</span>、 脆弱なチームは <span class="no">突破される</span>。 結果は <strong>実アプリへ撃ってみないと分からない</strong>。 一律 penalty では「防御したのに減点」になり競技として破綻する。</li>
+  <li>availability-flood: rate-limit / 水平スケールで守ったチームは <span class="ok">生き残る</span>、 単一 Flask のままのチームは <span class="no">飽和</span>する。 これも実負荷をかけて初めて分かる。</li>
+</ul>
+<p>
+よって攻撃の実現は、 <strong>(1) 実際に作用させる配送機構</strong> (ADR-031 の cross-account action) と <strong>(2) その結果を採点へ戻す経路</strong> の 2 つを要する。 配送は ADR-031 で既存。 本 ADR は <strong>「結果→採点」をどう繋ぐか</strong>を攻撃の型ごとに決め、 security-battle-royale の 3 攻撃の実装レシピと検証手順を確定する。
+</p>
+
+<h2>決定 — 2 つの実現パターン</h2>
+<table>
+  <thead><tr><th>パターン</th><th>結果→採点の経路</th><th>該当攻撃</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>A. 可用性劣化型</b><br>(degrade → 既存 uptime が拾う)</td>
+      <td>攻撃 <code>action</code> (ADR-031) が実アプリを劣化させる (= プロセス飽和 / 接続枯渇)。 <strong>新しい採点経路は不要</strong> — 既存の <code>uptime-multi</code> probe が slot 不通を検知し、 そのサイクルの加点を失う (failurePenalty も適用可)。 復旧は ADR-029 の revert で必ず止める。</td>
+      <td><code>availability-flood</code> (= microservice-migration-battle の <code>ec2-latency-injection</code> と同型。 違いは netem 遅延ではなく負荷)。</td>
+    </tr>
+    <tr>
+      <td><b>B. 防御テスト型</b><br>(self-report → attack-detection が読む)</td>
+      <td>攻撃 <code>action</code> が probe を撃ち、 <strong>競技者アプリ自身が「ブロックしたか/突破されたか」を CFn Output の counter に self-report</strong> する (= アプリが攻撃検知を実装している前提)。 採点は <code>attack-detection</code> kind (ADR-012) が counter 増分を読み、 <strong>ブロックできたチームを加点</strong>する。 突破は減点しない (= 防御できた事実を評価)。</td>
+      <td><code>sqli-auth-bypass</code> / <code>sqli-data-exfil</code>。</td>
+    </tr>
+  </tbody>
+</table>
+<p>
+パターン A は「攻撃が刺されば既存 uptime が勝手に下がる」ので最小。 パターン B は「防御の成否」という uptime では測れない性質を、 <strong>アプリの self-report + attack-detection scoring</strong> で測る (platform は防御の中身を知らない — 問題が所有する、 ADR-012)。
+</p>
+
+<h2>security-battle-royale 実装レシピ</h2>
+<h3>availability-flood (パターン A)</h3>
+<p>
+disruption に <code>action</code> を追加。 template の <code>InstanceId</code> Output を <code>targetRef</code> に、 EC2 上で時間制限付きの HTTP 負荷を localhost のアプリ (frontend :80 / api :8080) にかける。 守り (nginx <code>limit_req</code> / 水平スケール) があれば uptime probe は通り続け、 無ければ飽和して落ちる。 revert で負荷を確実に止める (ADR-029)。
+</p>
+<pre>// metadata.disruptions[availability-flood].action (ADR-031)
+{
+  "kind": "ssm-run-command",
+  "targetRef": "InstanceId",
+  "documentName": "AWS-RunShellScript",
+  "paramTemplate": { "commands": [
+    "END=$(( $(date +%s) + {{durationSeconds}} ))",
+    "while [ $(date +%s) -lt $END ]; do for i in $(seq 1 {{concurrency}}); do curl -s -o /dev/null --max-time 2 http://localhost:8080/api/v1/apistatus & done; wait; done || true"
+  ] },
+  "revert": { "afterSeconds": {{durationSeconds}}+30, "documentName": "AWS-RunShellScript",
+              "paramTemplate": { "commands": ["pkill -f 'curl -s -o /dev/null' || true"] } }
+}
+// parameters: { "durationSeconds": 30, "concurrency": 50 } ; operatorEditable: ["afterMinutes","concurrency"]</pre>
+<p class="warn">
+⚠ 負荷の強さ (concurrency) は EC2 インスタンスサイズと「単一 Flask が飽和するが OS は落ちない」境界に依存する。 これは <strong>実機で 1 度 tune する必要がある</strong> (= 後述の検証手順)。 ec2-latency-injection の <code>tc netem</code> が決定的なのに対し、 負荷は環境依存。
+</p>
+
+<h3>sqli-auth-bypass / sqli-data-exfil (パターン B)</h3>
+<p>
+2 段構え。 <strong>(B-1) アプリ側</strong>: security-battle-royale の reference アプリが <code>/api/v1/auth</code> で SQLi をブロックしたら <code>blocked</code> counter を、 突破されたら <code>bypassed</code> counter を増やし、 CFn Output (<code>AttackBlockedCount</code>) に露出する。 <strong>(B-2) action</strong>: operator fire が ssm-run-command で localhost へ SQLi payload を撃つ (parameterized query なら失敗 = blocked)。 <strong>(B-3) scoring</strong>: kind を <code>attack-detection</code> に切替/併用し、 <code>AttackBlockedCount</code> の増分を加点する (ADR-012 の attack-detection は既存)。 突破 (bypassed) は減点せず 0 加点に留める (= 防御を評価、 失格にしない、 ADR-029 と整合)。
+</p>
+<p>
+これにより「防御できたチームだけが攻撃イベントで加点される」= 防御の成否が採点に正しく反映される。 platform は SQLi の中身を知らず、 counter を読むだけ (= 問題所有、 ADR-012)。
+</p>
+
+<h2>代替案と却下理由</h2>
+<table>
+  <thead><tr><th>案</th><th>却下理由</th></tr></thead>
+  <tbody>
+    <tr><td>3 攻撃すべてを ADR-033 の penalty effect で実現</td><td><span class="no">却下</span>。 防御の成否を測れない。 守ったチームも一律減点になり「攻撃を防ぐ」競技性が消える (= ハリボテ)。</td></tr>
+    <tr><td>availability-flood を CPU/メモリ stress で実現</td><td><span class="no">却下</span>。 飽和はするが「rate-limit / scale で守る」という教育的意図 (= リクエスト洪水) をテストしない。 HTTP 負荷で撃つ。</td></tr>
+    <tr><td>SQLi の成否を platform 側 probe の戻り値で判定</td><td><span class="no">却下</span>。 executor (ADR-031) は inject + revert を投げるだけで戻り値を採点へ運ぶ経路を持たない。 アプリ self-report + attack-detection counter が ADR-012 の既存機構に乗る。</td></tr>
+  </tbody>
+</table>
+
+<h2>影響 / 実装順序</h2>
+<ol>
+  <li><b>availability-flood</b> (パターン A): submodule に <code>action</code> 宣言追加 + <code>durationSeconds</code>/<code>concurrency</code> parameters。 validate-problems が action/targetRef/placeholder を検証 (account 不要)。 配送は既存 executor (#1419)。</li>
+  <li><b>SQLi</b> (パターン B): reference アプリに attack-detection counter (<code>AttackBlockedCount</code> Output) + scoring kind を <code>attack-detection</code> 併用に。 action で probe 配送。</li>
+  <li><b>実機 tune + 検証 (account 律速)</b>: 1 アカウントに脆弱版/防御版アプリをデプロイし、 各攻撃を fire して — flood は「防御版は uptime 維持・脆弱版は失点」、 SQLi は「防御版は AttackBlockedCount 増 = 加点・脆弱版は加点無し」 — を目視。 concurrency を飽和境界に tune。</li>
+</ol>
+<p>
+完了の定義は「防御したチームは攻撃を凌いで有利になり、 怠ったチームは不利になる」が実機で観測できること。 これは <strong>実クラウドアカウントを要する</strong> (stackstack の純採点圧力と違い、 防御の物理的成否を測るため)。 本 ADR は account 入手前に実装を最大限進めるための設計を確定する。
+</p>
+</body>
+</html>
