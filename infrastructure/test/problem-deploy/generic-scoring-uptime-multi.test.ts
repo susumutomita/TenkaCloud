@@ -221,4 +221,67 @@ describe("uptime-multi kind", () => {
     expect(result.scoreDelta).toBe(100);
     expect(result.newState).toBeUndefined();
   });
+
+  // [ADR-034 / #1666] attack-probes: scorer が攻撃 payload を送り、 防御が破れていれば減点 (= SQLi 防御テスト)。
+  function withAttackProbe(): KindHandlerInput<UptimeMultiScoringMetadata> {
+    const base = buildInput();
+    return {
+      ...base,
+      scoring: {
+        kind: "uptime-multi",
+        probedSlots: base.scoring.probedSlots,
+        pointsAllOk: 100,
+        attackProbes: [
+          {
+            slot: "api",
+            path: "/api/v1/auth",
+            method: "POST",
+            body: JSON.stringify({ username: "' OR '1'='1", password: "x" }),
+            vulnerableStatus: [200], // 認証 bypass で 200 = 脆弱
+            penalty: 60,
+          },
+        ],
+      },
+    };
+  }
+
+  it("should penalize when the SQLi attack-probe bypasses auth (defense failed)", async () => {
+    // slot probes ok (200) AND the attack POST returns 200 (bypassed) → vulnerable → -60.
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const result = await runUptimeMultiKind(withAttackProbe());
+    expect(result.scoreDelta).toBe(40); // 100 availability − 60 vulnerability
+    expect(result.attackDetected).toBe(true);
+    expect(result.scoreEvents).toContainEqual({
+      source: "attack-detected",
+      points: -60,
+      occurredAt: NOW_ISO,
+    });
+    // the attack probe was a POST carrying the injection payload.
+    const authCall = fetchMock.mock.calls.find(
+      (c: unknown[]) => typeof c[0] === "string" && (c[0] as string).includes("/api/v1/auth"),
+    );
+    expect((authCall?.[1] as { method?: string })?.method).toBe("POST");
+  });
+
+  it("should NOT penalize when the SQLi attack is rejected (defense held)", async () => {
+    // slot probes ok, but the attack POST returns 403 (rejected) → defended → no penalty.
+    fetchMock.mockImplementation(async (url: string) => ({
+      status: url.includes("/api/v1/auth") ? 403 : 200,
+      url,
+      text: async () => "",
+    }));
+    const result = await runUptimeMultiKind(withAttackProbe());
+    expect(result.scoreDelta).toBe(100); // full availability, no vulnerability penalty
+    expect(result.attackDetected).toBeUndefined();
+  });
+
+  it("should not penalize when the attack-probe endpoint is unreachable", async () => {
+    // can't conclude vulnerability from an unreachable app (availability is probedSlots' job).
+    fetchMock.mockImplementation(async (url: string) => {
+      if ((url as string).includes("/api/v1/auth")) throw new TypeError("network");
+      return { status: 200, url, text: async () => "" };
+    });
+    const result = await runUptimeMultiKind(withAttackProbe());
+    expect(result.scoreDelta).toBe(100);
+  });
 });

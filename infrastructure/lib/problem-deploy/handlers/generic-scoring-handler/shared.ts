@@ -193,6 +193,10 @@ export async function probeUrl(
     readonly expectStatus?: readonly number[];
     readonly timeoutMs?: number;
     readonly readBody?: boolean;
+    /** [ADR-034 / #1666] attack-probe 用。 既定 GET。 */
+    readonly method?: "GET" | "POST";
+    /** POST body (= 攻撃 payload)。 method=POST + body 指定時に content-type: application/json で送る。 */
+    readonly body?: string;
   } = {},
 ): Promise<ProbeResult> {
   const ctrl = new AbortController();
@@ -205,7 +209,13 @@ export async function probeUrl(
     return { ok: false, status: undefined, responseTimeMs: Date.now() - start };
   }
   try {
-    const res = await fetch(url, { method: "GET", signal: ctrl.signal });
+    const res = await fetch(url, {
+      method: options.method ?? "GET",
+      signal: ctrl.signal,
+      ...(options.method === "POST" && options.body !== undefined
+        ? { headers: { "content-type": "application/json" }, body: options.body }
+        : {}),
+    });
     const responseTimeMs = Date.now() - start;
     // redirect 追従で blocklist host (IMDS 等) に着地した応答は body を読まず not-ok 扱いにする
     // (= write-time check を redirect で bypass されても内部応答を reflect しない)。
