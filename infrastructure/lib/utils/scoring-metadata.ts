@@ -88,12 +88,16 @@ export interface UptimeMultiScoringMetadata {
   readonly pointsAllOk: number;
   readonly failurePenalty?: number;
   /**
-   * [ADR-034 / #1666] 任意の attack-blocked bonus。 宣言すると、 競技者 stack が「攻撃をブロックした回数」を
-   * 露出する CFn Output (`attackBlockedOutputKey`) の増分に応じて `pointsPerBlock` (既定 1) を加点する
-   * (= 可用性採点に防御テストの加点を重ねる、 attack-detection と同じ counter-delta ロジック)。 省略で無効・後方互換。
+   * [ADR-034 / #1666] 任意の attack-blocked bonus。 宣言すると採点 tick が `slot` の base URL + `path` を
+   * **live probe** し (= 静的 CFn output でなく、 走っているアプリの counter endpoint を読む)、 応答 body を
+   * ブロック回数 (整数) として parse して、 前回からの増分に `pointsPerBlock` を掛けて加点する (= 防御の成否を
+   * 可用性採点に重ねる。 attack-detection の counter-delta + cap を共有)。 省略で無効・後方互換。
    */
-  readonly attackBlockedOutputKey?: string;
-  readonly pointsPerBlock?: number;
+  readonly attackBlocked?: {
+    readonly slot: string;
+    readonly path: string;
+    readonly pointsPerBlock: number;
+  };
   /** Issue #742 Phase 5: hints 共通 field。 */
   readonly hints?: readonly ProgressiveHint[];
 }
@@ -283,8 +287,7 @@ function parseUptimeMulti(value: unknown): UptimeMultiScoringMetadata | undefine
     probedSlots?: unknown;
     pointsAllOk?: unknown;
     failurePenalty?: unknown;
-    attackBlockedOutputKey?: unknown;
-    pointsPerBlock?: unknown;
+    attackBlocked?: unknown;
     hints?: unknown;
   };
   if (!Array.isArray(u.probedSlots) || u.probedSlots.length === 0) return undefined;
@@ -294,22 +297,27 @@ function parseUptimeMulti(value: unknown): UptimeMultiScoringMetadata | undefine
     .filter((slot): slot is UptimeMultiProbedSlot => slot !== undefined);
   if (probedSlots.length === 0) return undefined;
   const hints = parseHints(u.hints);
-  // [ADR-034 / #1666] attack-blocked bonus は両 field が揃ったときだけ有効化 (= 片方欠けは無効)。
-  const attackBonus =
-    typeof u.attackBlockedOutputKey === "string" &&
-    u.attackBlockedOutputKey.length > 0 &&
-    typeof u.pointsPerBlock === "number" &&
-    u.pointsPerBlock > 0
-      ? { attackBlockedOutputKey: u.attackBlockedOutputKey, pointsPerBlock: u.pointsPerBlock }
-      : undefined;
+  const attackBlocked = parseAttackBlocked(u.attackBlocked);
   return {
     kind: "uptime-multi",
     probedSlots,
     pointsAllOk: u.pointsAllOk,
     ...(typeof u.failurePenalty === "number" ? { failurePenalty: u.failurePenalty } : {}),
-    ...(attackBonus ?? {}),
+    ...(attackBlocked ? { attackBlocked } : {}),
     ...(hints ? { hints } : {}),
   };
+}
+
+/** [ADR-034 / #1666] attack-blocked bonus は slot/path/pointsPerBlock が全て揃ったときだけ有効化。 */
+function parseAttackBlocked(
+  value: unknown,
+): UptimeMultiScoringMetadata["attackBlocked"] | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const a = value as { slot?: unknown; path?: unknown; pointsPerBlock?: unknown };
+  if (typeof a.slot !== "string" || a.slot.length === 0) return undefined;
+  if (typeof a.path !== "string" || a.path.length === 0) return undefined;
+  if (typeof a.pointsPerBlock !== "number" || a.pointsPerBlock <= 0) return undefined;
+  return { slot: a.slot, path: a.path, pointsPerBlock: a.pointsPerBlock };
 }
 
 function parseUptimeMultiSlot(value: unknown): UptimeMultiProbedSlot | undefined {

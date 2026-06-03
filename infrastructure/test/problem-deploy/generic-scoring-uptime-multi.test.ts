@@ -159,9 +159,8 @@ describe("uptime-multi kind", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.example.com/users/score");
   });
 
-  // [ADR-034 / #1666] optional attack-blocked bonus: 防御テストの加点を可用性採点に重ねる。
+  // [ADR-034 / #1666] optional attack-blocked bonus: アプリの counter endpoint を live probe して防御加点。
   function withAttackBonus(
-    blockedCount: string,
     prevAttackCount: number | undefined,
   ): KindHandlerInput<UptimeMultiScoringMetadata> {
     const base = buildInput();
@@ -171,24 +170,24 @@ describe("uptime-multi kind", () => {
         kind: "uptime-multi",
         probedSlots: base.scoring.probedSlots,
         pointsAllOk: 100,
-        attackBlockedOutputKey: "AttackBlockedCount",
-        pointsPerBlock: 25,
-      },
-      deployment: {
-        ...base.deployment,
-        stackOutputs: JSON.stringify({
-          FrontendUrl: "https://frontend.example.com",
-          ApiUrl: "https://api.example.com",
-          AttackBlockedCount: blockedCount,
-        }),
+        attackBlocked: { slot: "api", path: "/attack-stats", pointsPerBlock: 25 },
       },
       prevState: prevAttackCount === undefined ? {} : { attackCount: prevAttackCount },
     };
   }
 
+  /** slot probe は 200/空、 counter endpoint (/attack-stats) は body にブロック回数を返す fetch mock。 */
+  function mockProbesWithCounter(blockedCount: string): void {
+    fetchMock.mockImplementation(async (url: string) => ({
+      status: 200,
+      url,
+      text: async () => (url.includes("/attack-stats") ? blockedCount : ""),
+    }));
+  }
+
   it("should add an attack-blocked bonus on counter increment (defense held)", async () => {
-    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
-    const result = await runUptimeMultiKind(withAttackBonus("5", 2)); // delta 3 × 25 = 75
+    mockProbesWithCounter("5");
+    const result = await runUptimeMultiKind(withAttackBonus(2)); // delta 3 × 25 = 75
     expect(result.scoreDelta).toBe(175); // pointsAllOk 100 + bonus 75
     expect(result.newState).toEqual({ attackCount: 5 });
     expect(result.scoreEvents).toEqual([
@@ -198,13 +197,25 @@ describe("uptime-multi kind", () => {
   });
 
   it("should only record the baseline on the first tick (no bonus yet)", async () => {
-    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
-    const result = await runUptimeMultiKind(withAttackBonus("5", undefined));
+    mockProbesWithCounter("5");
+    const result = await runUptimeMultiKind(withAttackBonus(undefined));
     expect(result.scoreDelta).toBe(100); // availability only; bonus 0 on baseline
     expect(result.newState).toEqual({ attackCount: 5 });
   });
 
-  it("should not set newState or a bonus when attackBlockedOutputKey is absent (backward compat)", async () => {
+  it("should award no bonus when the counter endpoint is unreachable", async () => {
+    // slot probes ok, but the counter endpoint 500s → no bonus, no state.
+    fetchMock.mockImplementation(async (url: string) => ({
+      status: url.includes("/attack-stats") ? 500 : 200,
+      url,
+      text: async () => "",
+    }));
+    const result = await runUptimeMultiKind(withAttackBonus(2));
+    expect(result.scoreDelta).toBe(100);
+    expect(result.newState).toBeUndefined();
+  });
+
+  it("should not set newState or a bonus when attackBlocked is absent (backward compat)", async () => {
     fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
     const result = await runUptimeMultiKind(buildInput());
     expect(result.scoreDelta).toBe(100);

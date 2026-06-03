@@ -38,18 +38,20 @@ export async function runUptimeMultiKind(
   for (const o of overrides) overrideMap.set(o.slot, o.overrideUrl);
   const slotMap = new Map(slots.map((s) => [s.slot, s] as const));
 
+  // slot の effective base URL (= override ?? CFn output 由来 default) を解決する。 probedSlots と
+  // attack-blocked probe で共有。
+  const resolveSlotBaseUrl = (slotName: string): string | undefined => {
+    const overrideUrl = overrideMap.get(slotName);
+    if (overrideUrl) return overrideUrl;
+    const slot = slotMap.get(slotName);
+    if (!slot) return undefined;
+    const outputValue = outputs[slot.default.key];
+    return outputValue ? resolveDefaultUrl(outputValue, slot.default.appendPath) : undefined;
+  };
+
   const probes = await Promise.all(
     scoring.probedSlots.map(async (ps) => {
-      const overrideUrl = overrideMap.get(ps.slot);
-      let baseUrl: string | undefined;
-      if (overrideUrl) baseUrl = overrideUrl;
-      else {
-        const slot = slotMap.get(ps.slot);
-        if (slot) {
-          const outputValue = outputs[slot.default.key];
-          if (outputValue) baseUrl = resolveDefaultUrl(outputValue, slot.default.appendPath);
-        }
-      }
+      const baseUrl = resolveSlotBaseUrl(ps.slot);
       if (!baseUrl) return { key: ps.slot, ok: false, resolved: false };
       const probe = await probeUrl(joinUrl(baseUrl, ps.path), { expectStatus: ps.expectStatus });
       return { key: ps.slot, ok: probe.ok, resolved: true };
@@ -72,19 +74,22 @@ export async function runUptimeMultiKind(
   const baseDelta = allOk ? scoring.pointsAllOk : (scoring.failurePenalty ?? 0);
   const attackDetected = !allOk && deployment.lastResult === "ok";
 
-  // [ADR-034 / #1666] optional attack-blocked bonus (= 防御テストの加点を可用性採点に重ねる)。
-  // 宣言時のみ: 競技者 stack が露出する attack-blocked counter の増分で加点 + baseline を追従。
+  // [ADR-034 / #1666] optional attack-blocked bonus (= 防御テストの加点を可用性採点に重ねる)。 宣言時のみ:
+  // アプリの counter endpoint を **live probe** し (静的 CFn output でなく走行中の値)、 応答 body を
+  // ブロック回数として読み、 前回からの増分で加点 + baseline を追従。 probe 失敗 / 不正 body は加点 0。
   let bonusPoints = 0;
   let bonusState: { attackCount: number } | undefined;
-  if (scoring.attackBlockedOutputKey) {
-    const scored = scoreCounterDelta(
-      outputs[scoring.attackBlockedOutputKey],
-      prevState.attackCount,
-      scoring.pointsPerBlock ?? 1,
-    );
-    if (scored) {
-      bonusPoints = scored.points;
-      bonusState = { attackCount: scored.newCount };
+  if (scoring.attackBlocked) {
+    const base = resolveSlotBaseUrl(scoring.attackBlocked.slot);
+    if (base) {
+      const probe = await probeUrl(joinUrl(base, scoring.attackBlocked.path), { readBody: true });
+      const scored = probe.ok
+        ? scoreCounterDelta(probe.body, prevState.attackCount, scoring.attackBlocked.pointsPerBlock)
+        : undefined;
+      if (scored) {
+        bonusPoints = scored.points;
+        bonusState = { attackCount: scored.newCount };
+      }
     }
   }
 
