@@ -339,6 +339,12 @@ export function DisruptionsPanel({
               header: t("disruptions.col_affected"),
               cell: (r: DisruptionAuditRow) => String(r.targetTeamIds.length),
             },
+            {
+              // [ADR-037] scheduled fire の注入予定時刻 (即時 fire は "-")。
+              id: "scheduledFor",
+              header: t("disruptions.col_scheduled_for"),
+              cell: (r: DisruptionAuditRow) => r.scheduledFor ?? "-",
+            },
           ]}
           items={audit}
           empty={<Box textAlign="center">{t("disruptions.audit_empty")}</Box>}

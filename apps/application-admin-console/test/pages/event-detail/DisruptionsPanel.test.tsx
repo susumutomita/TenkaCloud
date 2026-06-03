@@ -270,7 +270,7 @@ describe("DisruptionsPanel", () => {
     expect(mockCatalog).toHaveBeenCalledWith(fakeApi, "EVT1");
   });
 
-  it("should render audit rows when present", async () => {
+  it("should render audit rows, showing scheduledFor for scheduled fires and '-' for immediate", async () => {
     mockAudit.mockResolvedValue({
       items: [
         {
@@ -284,9 +284,24 @@ describe("DisruptionsPanel", () => {
           parameters: {},
           requestId: "r1",
         },
+        {
+          auditId: "a2",
+          problemId: "p",
+          disruptionId: "availability-flood",
+          firedBy: "op",
+          firedAt: "2026-06-03T00:05:00Z",
+          scope: "all",
+          targetTeamIds: ["t1"],
+          parameters: {},
+          requestId: "r2",
+          scheduledFor: "2026-06-03T00:35:00Z", // [ADR-037] scheduled fire
+        },
       ],
     });
     renderPanel();
     expect(await screen.findByText("2026-06-03T00:00:00Z")).toBeInTheDocument();
+    // [ADR-037] scheduled row shows its injection time; immediate row shows "-"
+    expect(await screen.findByText("2026-06-03T00:35:00Z")).toBeInTheDocument();
+    expect(screen.getByText("disruptions.col_scheduled_for")).toBeInTheDocument();
   });
 });
