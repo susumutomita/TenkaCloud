@@ -47,6 +47,10 @@ coverage-gate: ; bun run scripts/check-coverage-gate.ts
 # before and after normal runs; this target remains for interrupted processes.
 clean-test-outdir: ; rm -rf infrastructure/cdk.out.test
 validate-problems: ; bun run validate:problems
+# Issue #1666: fire a problem's declared scoring.attackProbes at its local docker stack and
+# assert each lands on the vulnerable baseline (red-team proof, no cloud account). On-demand
+# (needs Docker, pulls images) — deliberately NOT in before-commit/check.
+verify-attacks: ; bun run verify:attacks-local $(PROBLEM)
 build-problems-index: ; bun run build:problems-index
 check-problems-index: ; bun run check:problems-index
 build-docs:    ; bun run scripts/build-docs.ts
