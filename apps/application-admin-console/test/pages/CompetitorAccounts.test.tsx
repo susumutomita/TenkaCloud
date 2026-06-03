@@ -117,6 +117,16 @@ describe("CompetitorAccountsPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("should hide the non-AWS team cloud credentials panel by default (feature off)", () => {
+    renderPage();
+    expect(screen.queryByTestId("team-cloud-credentials")).not.toBeInTheDocument();
+  });
+
+  it("should show the non-AWS team cloud credentials panel when featureNonAwsRuntime is on", () => {
+    renderPage(config({ featureNonAwsRuntime: true }));
+    expect(screen.getByTestId("team-cloud-credentials")).toBeInTheDocument();
+  });
+
   it("should show a friendly error alert (items undefined → table gets [])", () => {
     // items undefined + error → loading は抜けて table に items ?? [] の [] が渡る。
     mockHook.mockReturnValue(hookState({ items: undefined, error: { title: "load boom" } }));

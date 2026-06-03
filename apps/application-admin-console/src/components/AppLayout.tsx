@@ -23,7 +23,14 @@ const LOCALE_NAME: Record<LocaleCode, string> = {
  * placeholder のまま漏れるので、ここでは表示しない。Home ページ側で JWT custom 属性
  * (custom:tenantId / 将来 custom:tenantName) からユーザの所属テナントを描画する。
  */
-export function ShellLayout({ children }: { children: ReactNode }) {
+export function ShellLayout({
+  children,
+  samlSsoEnabled = false,
+}: {
+  children: ReactNode;
+  /** Feature-flagged: show the Identity providers (SAML SSO) nav item only when enabled. */
+  samlSsoEnabled?: boolean;
+}) {
   const auth = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -119,10 +126,17 @@ export function ShellLayout({ children }: { children: ReactNode }) {
                 items: [
                   // Issue #1292: 自テナント監査ログ (= deploy / event 操作の audit)。
                   { type: "link", href: "/audit-log", text: t("nav.audit_log") },
-                  // Issue #1294: per-tenant SAML SSO (silo tier only — page shows a warning
-                  // alert for pooled tenants). Reintroduces the link removed in #1066 (which
-                  // had been replaced by hard MFA), now scoped to silo + multi-IdP.
-                  { type: "link", href: "/identity-providers", text: "Identity providers" },
+                  // Issue #1294: per-tenant SAML SSO. Feature-flagged off until verified
+                  // end-to-end (otherwise operators mistake an unproven feature for ready).
+                  ...(samlSsoEnabled
+                    ? [
+                        {
+                          type: "link" as const,
+                          href: "/identity-providers",
+                          text: t("nav.identity_providers"),
+                        },
+                      ]
+                    : []),
                 ],
               },
             ]}

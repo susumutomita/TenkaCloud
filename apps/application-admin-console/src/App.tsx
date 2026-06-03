@@ -29,10 +29,10 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function guarded(element: React.ReactNode) {
+function guarded(element: React.ReactNode, config: AppConfig) {
   return (
     <RequireAuth>
-      <ShellLayout>{element}</ShellLayout>
+      <ShellLayout samlSsoEnabled={config.featureSamlSso}>{element}</ShellLayout>
     </RequireAuth>
   );
 }
@@ -48,35 +48,38 @@ export function App({ config }: { config: AppConfig }) {
       <Routes>
         <Route path="/login" element={<LoginRoute config={config} />} />
         <Route path="/callback" element={<CallbackPage config={config} />} />
-        <Route path="/" element={guarded(<HomePage />)} />
-        <Route path="/problems" element={guarded(<ProblemsPage />)} />
+        <Route path="/" element={guarded(<HomePage />, config)} />
+        <Route path="/problems" element={guarded(<ProblemsPage />, config)} />
         <Route
           path="/problems/:problemId"
-          element={guarded(<ProblemDetailPage config={config} />)}
+          element={guarded(<ProblemDetailPage config={config} />, config)}
         />
-        <Route path="/deployments" element={guarded(<DeploymentsPage config={config} />)} />
+        <Route path="/deployments" element={guarded(<DeploymentsPage config={config} />, config)} />
         <Route
           path="/deployments/:jobId"
-          element={guarded(<DeploymentDetailPage config={config} />)}
+          element={guarded(<DeploymentDetailPage config={config} />, config)}
         />
         <Route
           path="/competitor-accounts"
-          element={guarded(<CompetitorAccountsPage config={config} />)}
+          element={guarded(<CompetitorAccountsPage config={config} />, config)}
         />
-        <Route path="/events" element={guarded(<EventListPage config={config} />)} />
-        <Route path="/events/new" element={guarded(<EventCreatePage config={config} />)} />
-        <Route path="/events/:eventId" element={guarded(<EventDetailPage config={config} />)} />
+        <Route path="/events" element={guarded(<EventListPage config={config} />, config)} />
+        <Route path="/events/new" element={guarded(<EventCreatePage config={config} />, config)} />
+        <Route
+          path="/events/:eventId"
+          element={guarded(<EventDetailPage config={config} />, config)}
+        />
         {/* PR-1191: print-friendly Event Report deliverable for Hosted / Annual Arena. */}
         <Route
           path="/events/:eventId/report"
-          element={guarded(<EventReportPage config={config} />)}
+          element={guarded(<EventReportPage config={config} />, config)}
         />
         {/* Issue #1292: Tenant Admin 向け audit log view (= 自テナント scope only) */}
-        <Route path="/audit-log" element={guarded(<AuditLogPage config={config} />)} />
+        <Route path="/audit-log" element={guarded(<AuditLogPage config={config} />, config)} />
         {/* Issue #1294: Tenant SAML SSO IdP CRUD (silo tier only) */}
         <Route
           path="/identity-providers"
-          element={guarded(<IdentityProvidersPage config={config} />)}
+          element={guarded(<IdentityProvidersPage config={config} />, config)}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

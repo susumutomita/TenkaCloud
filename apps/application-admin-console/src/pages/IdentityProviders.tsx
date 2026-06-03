@@ -14,8 +14,10 @@ import {
   type TenantIdpSummary,
 } from "../api/idp-client";
 import { useAuth } from "../auth/AuthProvider";
+import { decodeIdToken } from "../auth/claims";
 import type { AppConfig } from "../config";
-import { useLang } from "../i18n";
+import { useLang, useT } from "../i18n";
+import { cognitoOrigin, userPoolIdFromIssuer } from "../lib/cognito";
 import { formatRelativeTime } from "../lib/format";
 import { CreateIdpModal } from "./CreateIdpModal";
 
@@ -33,10 +35,21 @@ import { CreateIdpModal } from "./CreateIdpModal";
  */
 export function IdentityProvidersPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
+  const t = useT();
   const lang = useLang();
   const client: TenantIdpClient | null = useMemo(
-    () => (auth.tokens ? createTenantIdpClient(config, auth.tokens.idToken) : null),
+    () =>
+      auth.tokens && config.featureSamlSso
+        ? createTenantIdpClient(config, auth.tokens.idToken)
+        : null,
     [auth.tokens, config],
+  );
+
+  // The SP Entity ID is `urn:amazon:cognito:sp:<userPoolId>`; the pool id lives in the signed-in
+  // admin's own ID token (`iss`), so we can show the real value instead of a placeholder to paste.
+  const userPoolId = useMemo(
+    () => userPoolIdFromIssuer(auth.tokens ? decodeIdToken(auth.tokens.idToken)?.iss : undefined),
+    [auth.tokens],
   );
 
   const [items, setItems] = useState<readonly TenantIdpSummary[] | null>(null);
@@ -61,7 +74,7 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
 
   const hostedUiTestSignInUrl = useCallback(
     (idpId: string) => {
-      const url = new URL(`https://${config.cognitoDomain}/oauth2/authorize`);
+      const url = new URL("/oauth2/authorize", cognitoOrigin(config.cognitoDomain));
       url.searchParams.set("client_id", config.cognitoClientId);
       url.searchParams.set("response_type", "code");
       url.searchParams.set("scope", config.scope);
@@ -72,27 +85,45 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
     [config],
   );
 
+  if (!config.featureSamlSso) {
+    // Feature-flagged off until verified end-to-end. Gate the page itself (not just the nav) so a
+    // direct URL does not expose an unproven feature.
+    return (
+      <Container
+        header={
+          <Header variant="h1" description={t("identity_providers.feature_disabled_body")}>
+            {t("identity_providers.title")}
+          </Header>
+        }
+      >
+        <Box textAlign="center" padding="xxl">
+          <Box variant="strong">
+            <Icon name="lock-private" size="big" variant="subtle" />{" "}
+            {t("identity_providers.feature_disabled_header")}
+          </Box>
+        </Box>
+      </Container>
+    );
+  }
+
   if (config.isolation !== "silo") {
     // Issue #1362: forbidden 時の placeholder を 「単発 Alert」 から friendly な
     // ヒーロー (= icon + 説明 + 次のアクション誘導) に格上げ。
     return (
       <Container
         header={
-          <Header variant="h1" description="Per-tenant SAML SSO is a PLATINUM (silo) feature.">
-            Identity providers
+          <Header variant="h1" description={t("identity_providers.silo_only_description")}>
+            {t("identity_providers.title")}
           </Header>
         }
       >
         <Box textAlign="center" padding="xxl">
           <SpaceBetween size="s">
             <Box variant="strong">
-              <Icon name="lock-private" size="big" variant="subtle" /> Per-tenant SAML SSO requires
-              the silo isolation tier
+              <Icon name="lock-private" size="big" variant="subtle" />{" "}
+              {t("identity_providers.silo_only_header")}
             </Box>
-            <Box color="text-body-secondary">
-              This tenant runs on a pooled Cognito UserPool. Per-tenant IdP CRUD is only available
-              on PLATINUM (silo) tier — please contact your account manager.
-            </Box>
+            <Box color="text-body-secondary">{t("identity_providers.silo_only_body")}</Box>
           </SpaceBetween>
         </Box>
       </Container>
@@ -103,14 +134,13 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
     return (
       <Container
         header={
-          <Header variant="h1" description="SAML identity providers attached to this tenant.">
-            Identity providers
+          <Header variant="h1" description={t("identity_providers.description")}>
+            {t("identity_providers.title")}
           </Header>
         }
       >
-        <Alert type="warning" header="Tenant IdP CRUD API not wired up">
-          Set <code>apiBaseUrl</code> in runtime-config.json or the dev <code>.env</code> and reload
-          the page.
+        <Alert type="warning" header={t("identity_providers.not_wired_header")}>
+          {t("identity_providers.not_wired_body")}
         </Alert>
       </Container>
     );
@@ -120,33 +150,37 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
     <SpaceBetween size="m">
       <Header
         variant="h1"
-        description={`SAML identity providers attached to ${config.tenantName}'s Cognito UserPool. The Hosted UI shows a picker for all configured IdPs.`}
+        description={t("identity_providers.description")}
         actions={
           <Button variant="primary" onClick={() => setShowCreate(true)}>
-            Add SAML IdP
+            {t("identity_providers.add_button")}
           </Button>
         }
       >
-        Identity providers
+        {t("identity_providers.title")}
       </Header>
       {loadError ? <Alert type="error">{loadError}</Alert> : null}
       <Container>
         <Table
           columnDefinitions={[
-            { id: "idpId", header: "ID", cell: (i: TenantIdpSummary) => i.idpId },
+            {
+              id: "idpId",
+              header: t("identity_providers.col_id"),
+              cell: (i: TenantIdpSummary) => i.idpId,
+            },
             {
               id: "displayName",
-              header: "Display name",
+              header: t("identity_providers.col_display_name"),
               cell: (i: TenantIdpSummary) => i.displayName,
             },
             {
               id: "description",
-              header: "Description",
-              cell: (i: TenantIdpSummary) => i.description ?? "—",
+              header: t("identity_providers.col_description"),
+              cell: (i: TenantIdpSummary) => i.description ?? t("identity_providers.value_dash"),
             },
             {
               id: "updatedAt",
-              header: "Updated",
+              header: t("identity_providers.col_updated"),
               // Issue #1362: ISO 生値ではなく 「N 日前」 表示 + hover で絶対時刻 tooltip。
               cell: (i: TenantIdpSummary) => (
                 <span title={i.updatedAt}>{formatRelativeTime(i.updatedAt, lang)}</span>
@@ -163,13 +197,14 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
                     href={hostedUiTestSignInUrl(i.idpId)}
                     target="_blank"
                   >
-                    Test sign-in
+                    {t("identity_providers.test_sign_in")}
                   </Button>
                   <Button
                     variant="inline-link"
                     onClick={async () => {
                       if (!client) return;
-                      if (!confirm(`Delete IdP "${i.idpId}"?`)) return;
+                      if (!confirm(t("identity_providers.delete_confirm", { idpId: i.idpId })))
+                        return;
                       setBusy(true);
                       try {
                         await client.remove(i.idpId);
@@ -181,7 +216,7 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
                       }
                     }}
                   >
-                    Delete
+                    {t("identity_providers.delete")}
                   </Button>
                 </SpaceBetween>
               ),
@@ -189,32 +224,27 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
           ]}
           items={items ?? []}
           loading={items === null}
-          loadingText="Loading…"
+          loadingText={t("identity_providers.loading")}
           empty={
             // Issue #1362: アイコン + 説明 + 行動誘導の 3 段で UX を底上げ。
             <Box textAlign="center" padding="l">
               <SpaceBetween size="xs">
                 <Box variant="strong" color="text-status-inactive">
-                  <Icon name="lock-private" size="big" variant="subtle" /> No SAML IdPs configured
-                  yet
+                  <Icon name="lock-private" size="big" variant="subtle" />{" "}
+                  {t("identity_providers.empty_header")}
                 </Box>
-                <Box color="text-body-secondary">
-                  Tenant sign-in falls back to local Cognito email + password. Click{" "}
-                  <strong>Add SAML IdP</strong> to wire Entra ID / Okta / etc.
-                </Box>
+                <Box color="text-body-secondary">{t("identity_providers.empty_body")}</Box>
               </SpaceBetween>
             </Box>
           }
         />
       </Container>
-      <Alert type="info">
-        Same email signed in via two different IdPs is treated as two separate identities (keyed by{" "}
-        <code>(tenantId, idpId, subjectId)</code>). Plan your group → role mapping accordingly.
-      </Alert>
+      <Alert type="info">{t("identity_providers.info_alert")}</Alert>
       {showCreate ? (
         <CreateIdpModal
           client={client}
           cognitoDomain={config.cognitoDomain}
+          userPoolId={userPoolId}
           onClose={() => setShowCreate(false)}
           onCreated={async () => {
             setShowCreate(false);
