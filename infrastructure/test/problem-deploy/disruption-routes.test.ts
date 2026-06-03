@@ -154,6 +154,31 @@ describe("POST /events/:eventId/disruptions/fire", () => {
     expect(call.targetTeamIds).toEqual(["team-1"]);
   });
 
+  it("[ADR-037] should 400 when timing=scheduled but afterMinutes is missing", async () => {
+    const res = await fire({ ...validFireBody, timing: "scheduled" });
+    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    expect(mocks.fireDisruption).not.toHaveBeenCalled();
+  });
+
+  it("[ADR-037] should 400 when afterMinutes is set without timing=scheduled", async () => {
+    const res = await fire({ ...validFireBody, afterMinutes: 30 });
+    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    expect(mocks.fireDisruption).not.toHaveBeenCalled();
+  });
+
+  it("[ADR-037] should pass afterMinutes to the service when timing=scheduled", async () => {
+    mocks.fireDisruption.mockResolvedValueOnce({ kind: "ok", result: { fired: 1 } });
+    const res = await fire({ ...validFireBody, timing: "scheduled", afterMinutes: 30 });
+    expect(res.status).toBe(StatusCodes.CREATED);
+    expect(mocks.fireDisruption.mock.calls[0][1].afterMinutes).toBe(30);
+  });
+
+  it("[ADR-037] should not pass afterMinutes for an immediate fire (default timing)", async () => {
+    mocks.fireDisruption.mockResolvedValueOnce({ kind: "ok", result: { fired: 1 } });
+    await fire(validFireBody);
+    expect(mocks.fireDisruption.mock.calls[0][1].afterMinutes).toBeUndefined();
+  });
+
   it("should include randomCount when scope=random-n", async () => {
     mocks.fireDisruption.mockResolvedValueOnce({ kind: "unknown_problem" });
     await fire({ ...validFireBody, scope: "random-n", randomCount: 2 });

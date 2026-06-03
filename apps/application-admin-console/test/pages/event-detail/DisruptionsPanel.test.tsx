@@ -176,6 +176,71 @@ describe("DisruptionsPanel", () => {
     await waitFor(() => expect(createWrapper(document.body).findModal()).toBeNull());
   });
 
+  it("[ADR-037] should fire immediately (no timing/afterMinutes) by default", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByText("disruptions.fire_button"));
+    fireEvent.click(screen.getByText("disruptions.confirm_fire"));
+    await waitFor(() => {
+      const arg = mockFire.mock.calls[0]?.[2];
+      expect(arg).not.toHaveProperty("timing");
+      expect(arg).not.toHaveProperty("afterMinutes");
+    });
+  });
+
+  it("[ADR-037] should fire with timing=scheduled + afterMinutes when scheduled", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByText("disruptions.fire_button"));
+    // switch the timing segmented control to "scheduled" (2nd segment)
+    modal()?.findContent().findSegmentedControl()?.findSegments()[1]?.click();
+    // set the minutes input
+    modal()?.findContent().findInput()?.setInputValue("45");
+    fireEvent.click(screen.getByText("disruptions.confirm_fire"));
+    await waitFor(() =>
+      expect(mockFire).toHaveBeenCalledWith(
+        fakeApi,
+        "EVT1",
+        expect.objectContaining({ timing: "scheduled", afterMinutes: 45 }),
+      ),
+    );
+    expect(await screen.findByText(/disruptions.scheduled_flash/)).toBeInTheDocument();
+  });
+
+  it("[ADR-037] should pre-fill the scheduled minutes from the declared defaultAfterMinutes", async () => {
+    mockCatalog.mockResolvedValue({
+      entries: [
+        {
+          problemId: "p",
+          disruption: {
+            id: "d",
+            name: "Latency",
+            description: "x",
+            eventDetailType: "E",
+            defaultAfterMinutes: 60,
+          },
+        },
+      ],
+    });
+    renderPanel();
+    fireEvent.click(await screen.findByText("disruptions.fire_button"));
+    modal()?.findContent().findSegmentedControl()?.findSegments()[1]?.click();
+    fireEvent.click(screen.getByText("disruptions.confirm_fire"));
+    await waitFor(() =>
+      expect(mockFire).toHaveBeenCalledWith(
+        fakeApi,
+        "EVT1",
+        expect.objectContaining({ timing: "scheduled", afterMinutes: 60 }),
+      ),
+    );
+  });
+
+  it("[ADR-037] should disable confirm when the scheduled minutes are out of range", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByText("disruptions.fire_button"));
+    modal()?.findContent().findSegmentedControl()?.findSegments()[1]?.click();
+    modal()?.findContent().findInput()?.setInputValue("0");
+    expect(screen.getByText("disruptions.confirm_fire").closest("button")).toBeDisabled();
+  });
+
   it("should fire a disruption that declares no parameters", async () => {
     mockCatalog.mockResolvedValue({
       entries: [
@@ -205,7 +270,7 @@ describe("DisruptionsPanel", () => {
     expect(mockCatalog).toHaveBeenCalledWith(fakeApi, "EVT1");
   });
 
-  it("should render audit rows when present", async () => {
+  it("should render audit rows, showing scheduledFor for scheduled fires and '-' for immediate", async () => {
     mockAudit.mockResolvedValue({
       items: [
         {
@@ -219,9 +284,24 @@ describe("DisruptionsPanel", () => {
           parameters: {},
           requestId: "r1",
         },
+        {
+          auditId: "a2",
+          problemId: "p",
+          disruptionId: "availability-flood",
+          firedBy: "op",
+          firedAt: "2026-06-03T00:05:00Z",
+          scope: "all",
+          targetTeamIds: ["t1"],
+          parameters: {},
+          requestId: "r2",
+          scheduledFor: "2026-06-03T00:35:00Z", // [ADR-037] scheduled fire
+        },
       ],
     });
     renderPanel();
     expect(await screen.findByText("2026-06-03T00:00:00Z")).toBeInTheDocument();
+    // [ADR-037] scheduled row shows its injection time; immediate row shows "-"
+    expect(await screen.findByText("2026-06-03T00:35:00Z")).toBeInTheDocument();
+    expect(screen.getByText("disruptions.col_scheduled_for")).toBeInTheDocument();
   });
 });

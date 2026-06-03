@@ -204,6 +204,11 @@ export async function fireDisruption(
   const auditId = ulid();
   const firedAt = new Date(input.nowMs).toISOString();
   const expiresAt = Math.floor(input.nowMs / 1000) + AUDIT_TTL_SECONDS;
+  // [ADR-037] scheduled fire: 実際の注入予定時刻を audit に残す (= 「N 分後に予約」 を可視化)。
+  // afterMinutes は route で 1..1440 に validate 済 (= 未指定 / 0 は即時 fire)。
+  const scheduledFor = input.afterMinutes
+    ? new Date(input.nowMs + input.afterMinutes * 60_000).toISOString()
+    : undefined;
   const draft: DisruptionAuditRow = {
     auditId,
     tenantId: input.tenantId,
@@ -217,6 +222,7 @@ export async function fireDisruption(
     parameters: mergedParameters,
     requestId: input.requestId,
     expiresAt,
+    ...(scheduledFor ? { scheduledFor } : {}),
   };
 
   // 4. Idempotency claim (= publish 前に排他を取る、 race-safe な順序)
@@ -310,6 +316,8 @@ async function publishEntries(
       parameters: mergedParameters,
       requestId: input.requestId,
       firedAt,
+      // [ADR-037] scheduled fire: executor がこの分数だけ注入を遅延予約する。 即時は省略。
+      ...(input.afterMinutes ? { afterMinutes: input.afterMinutes } : {}),
     }),
   }));
   const BATCH = 10;

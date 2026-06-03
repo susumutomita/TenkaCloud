@@ -25,7 +25,7 @@ import { logDeployTrace } from "../shared/trace-log.js";
 import type { DeploymentTarget, ExecutorDeps } from "./execute.js";
 import { claimExecution, type ExecutorResources, resolveDeployment } from "./executor-store.js";
 import { type RouteOutcome, routeDisruptionInvocation } from "./route.js";
-import { scheduleRevert } from "./schedule-revert.js";
+import { scheduleInject, scheduleRevert } from "./schedule-revert.js";
 import { type DispatchTarget, sendDispatch } from "./send-dispatch.js";
 
 const SESSION_NAME_PREFIX = "tc-disruption-";
@@ -89,7 +89,7 @@ function sdkClientConfig(target: DispatchTarget) {
 
 const deps: ExecutorDeps = {
   problemsDisruptions,
-  claimExecution: (detail) => claimExecution(resources, detail, Date.now()),
+  claimExecution: (detail, phase) => claimExecution(resources, detail, Date.now(), phase),
   resolveDeployment: (detail) => resolveDeployment(resources, detail),
   sendDispatch: wiredSendDispatch,
   scheduleRevert: (detail, dispatch, target, afterSeconds) =>
@@ -98,6 +98,8 @@ const deps: ExecutorDeps = {
       schedulerRoleArn,
       revertTargetArn,
     }),
+  scheduleInject: (detail, afterMinutes) =>
+    scheduleInject(detail, afterMinutes, { scheduler, schedulerRoleArn, revertTargetArn }),
 };
 
 /** Lambda handler。 inject / revert を route が判別し dispatch する。 outcome は observability の trace に出す。 */

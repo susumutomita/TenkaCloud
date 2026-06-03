@@ -14,6 +14,9 @@ import type { ApiClient } from "./client";
 
 export type DisruptionScope = "all" | "team" | "random-n";
 
+/** [ADR-037] When the injection runs: immediately, or scheduled `afterMinutes` from now. */
+export type DisruptionTiming = "immediate" | "scheduled";
+
 /** One declared disruption as surfaced by the catalog (a problem's metadata.json declaration). */
 export interface DisruptionCatalogItem {
   readonly id: string;
@@ -26,6 +29,8 @@ export interface DisruptionCatalogItem {
   readonly parameters?: Readonly<Record<string, unknown>>;
   /** Whether competitors can see this disruption exists (operator view shows all). */
   readonly publicHint?: boolean;
+  /** [ADR-037] Declared default delay (minutes) used to pre-fill the schedule input. */
+  readonly defaultAfterMinutes?: number;
 }
 
 export interface DisruptionCatalogEntry {
@@ -46,6 +51,10 @@ export interface FireDisruptionRequest {
   readonly parameters?: Readonly<Record<string, unknown>>;
   /** Idempotency key (>= 8 chars); re-firing with the same id is a no-op on the platform. */
   readonly requestId: string;
+  /** [ADR-037] `immediate` (default) injects now; `scheduled` defers by `afterMinutes`. */
+  readonly timing?: DisruptionTiming;
+  /** [ADR-037] Required when `timing === "scheduled"`; 1–1440 minutes. */
+  readonly afterMinutes?: number;
 }
 
 export interface FireDisruptionResult {
@@ -64,6 +73,8 @@ export interface DisruptionAuditRow {
   readonly targetTeamIds: readonly string[];
   readonly parameters: Readonly<Record<string, unknown>>;
   readonly requestId: string;
+  /** [ADR-037] For a scheduled fire, the time the injection is/was due (ISO8601). */
+  readonly scheduledFor?: string;
 }
 
 export interface DisruptionAuditResponse {

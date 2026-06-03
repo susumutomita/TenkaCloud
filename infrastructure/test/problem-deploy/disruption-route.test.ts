@@ -51,6 +51,7 @@ function makeDeps(over: Partial<ExecutorDeps> = {}): ExecutorDeps {
     resolveDeployment: vi.fn().mockResolvedValue(deploymentTarget),
     sendDispatch: vi.fn().mockResolvedValue(undefined),
     scheduleRevert: vi.fn().mockResolvedValue(undefined),
+    scheduleInject: vi.fn().mockResolvedValue(undefined),
     ...over,
   };
 }
@@ -74,6 +75,19 @@ describe("parseDisruptionFiredDetail", () => {
     expect(parseDisruptionFiredDetail(undefined)).toBeUndefined();
     expect(parseDisruptionFiredDetail({})).toBeUndefined();
     expect(parseDisruptionFiredDetail({ detail: { ...firedDetail, teamId: "" } })).toBeUndefined();
+  });
+
+  // [ADR-037] scheduled fire: afterMinutes は正の有限数のみ採用
+  it("should carry a positive finite afterMinutes and drop invalid ones", () => {
+    expect(parseDisruptionFiredDetail({ detail: { ...firedDetail, afterMinutes: 30 } })).toEqual({
+      ...firedDetail,
+      afterMinutes: 30,
+    });
+    for (const bad of [0, -5, Number.NaN, Number.POSITIVE_INFINITY, "30"]) {
+      expect(
+        parseDisruptionFiredDetail({ detail: { ...firedDetail, afterMinutes: bad } }),
+      ).not.toHaveProperty("afterMinutes");
+    }
   });
 });
 
@@ -106,6 +120,35 @@ describe("routeDisruptionInvocation (ADR-031 #1419)", () => {
     expect(deps.sendDispatch).toHaveBeenCalledWith(revertDispatch, deploymentTarget);
     expect(deps.claimExecution).not.toHaveBeenCalled();
     expect(deps.scheduleRevert).not.toHaveBeenCalled();
+  });
+
+  it("should defer the inject when the fired envelope carries afterMinutes > 0 (ADR-037)", async () => {
+    const deps = makeDeps();
+    const outcome = await routeDisruptionInvocation(
+      { detail: { ...firedDetail, afterMinutes: 30 } },
+      deps,
+    );
+    expect(outcome).toEqual({ kind: "scheduled" });
+    expect(deps.scheduleInject).toHaveBeenCalledTimes(1);
+    expect(deps.sendDispatch).not.toHaveBeenCalled();
+  });
+
+  it("should route a scheduler inject payload to executeScheduledInject (inject-phase claim)", async () => {
+    const deps = makeDeps();
+    const outcome = await routeDisruptionInvocation({ mode: "inject", detail: firedDetail }, deps);
+    expect(outcome).toEqual({ kind: "ok", jobId: "job-1" });
+    // distinct inject-phase claim fences aws-scheduler redelivery (not the fire-time event claim)
+    expect(deps.claimExecution).toHaveBeenCalledWith(firedDetail, "inject");
+    expect(deps.sendDispatch).toHaveBeenCalledTimes(1);
+    expect(deps.scheduleRevert).toHaveBeenCalledTimes(1);
+  });
+
+  it("should return invalid_event for an inject payload with a malformed detail", async () => {
+    const deps = makeDeps();
+    expect(
+      await routeDisruptionInvocation({ mode: "inject", detail: { teamId: "team-1" } }, deps),
+    ).toEqual({ kind: "invalid_event" });
+    expect(deps.sendDispatch).not.toHaveBeenCalled();
   });
 
   it("should return invalid_event for a malformed envelope (neither revert nor a valid detail)", async () => {

@@ -4,8 +4,10 @@ import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
+import Input from "@cloudscape-design/components/input";
 import Modal from "@cloudscape-design/components/modal";
 import Multiselect from "@cloudscape-design/components/multiselect";
+import SegmentedControl from "@cloudscape-design/components/segmented-control";
 import Select from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
@@ -16,6 +18,8 @@ import {
   type DisruptionAuditRow,
   type DisruptionCatalogEntry,
   type DisruptionScope,
+  type DisruptionTiming,
+  type FireDisruptionRequest,
   fetchDisruptionAudit,
   fetchDisruptionCatalog,
   fireDisruption,
@@ -25,12 +29,179 @@ import type { TeamSummary } from "../../api/events-client";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
+type TeamOption = { readonly value: string; readonly label: string };
+
 const SCOPE_OPTIONS: readonly DisruptionScope[] = ["all", "team", "random-n"];
 const AUDIT_LIMIT = 20;
+const DEFAULT_AFTER_MINUTES = 30;
+const MAX_AFTER_MINUTES = 1440;
 
 interface FireTarget {
   readonly problemId: string;
   readonly item: DisruptionCatalogEntry["disruption"];
+}
+
+/** Build the fire request from the modal state (pure — keeps the modal flat). */
+function buildFireRequest(
+  target: FireTarget,
+  scope: DisruptionScope,
+  selectedTeamIds: readonly string[],
+  timing: DisruptionTiming,
+  afterMinutes: number,
+): FireDisruptionRequest {
+  return {
+    problemId: target.problemId,
+    disruptionId: target.item.id,
+    scope,
+    ...(scope === "team" ? { targetTeamIds: selectedTeamIds } : {}),
+    ...(scope === "random-n" ? { randomCount: Math.max(selectedTeamIds.length, 1) } : {}),
+    ...(target.item.parameters ? { parameters: target.item.parameters } : {}),
+    ...(timing === "scheduled" ? { timing: "scheduled" as const, afterMinutes } : {}),
+    requestId: newFireRequestId(),
+  };
+}
+
+/**
+ * Fire modal — owns its own form state (scope / timing / minutes), fires once, and reports the
+ * success flash back to the panel. Extracted so the panel stays a thin list + the form is a
+ * cohesive unit ([ADR-037] adds the immediate/scheduled timing toggle here).
+ */
+function FireModal({
+  apiClient,
+  eventId,
+  target,
+  teamOptions,
+  t,
+  onClose,
+  onFired,
+}: {
+  readonly apiClient: ApiClient;
+  readonly eventId: string;
+  readonly target: FireTarget;
+  readonly teamOptions: readonly TeamOption[];
+  readonly t: Translate;
+  readonly onClose: () => void;
+  readonly onFired: (flash: string) => void;
+}) {
+  const [scope, setScope] = useState<DisruptionScope>("all");
+  const [selectedTeamIds, setSelectedTeamIds] = useState<readonly string[]>([]);
+  const [timing, setTiming] = useState<DisruptionTiming>("immediate");
+  const [afterMinutes, setAfterMinutes] = useState<number>(
+    target.item.defaultAfterMinutes ?? DEFAULT_AFTER_MINUTES,
+  );
+  const [firing, setFiring] = useState(false);
+  const [fireError, setFireError] = useState<string | null>(null);
+
+  const scheduleInvalid =
+    timing === "scheduled" &&
+    (!Number.isInteger(afterMinutes) || afterMinutes < 1 || afterMinutes > MAX_AFTER_MINUTES);
+  const fireDisabled =
+    firing || (scope === "team" && selectedTeamIds.length === 0) || scheduleInvalid;
+
+  const confirmFire = async () => {
+    setFiring(true);
+    setFireError(null);
+    try {
+      const result = await fireDisruption(
+        apiClient,
+        eventId,
+        buildFireRequest(target, scope, selectedTeamIds, timing, afterMinutes),
+      );
+      onFired(
+        timing === "scheduled"
+          ? t("disruptions.scheduled_flash", { name: target.item.name, minutes: afterMinutes })
+          : t("disruptions.fired_flash", {
+              name: target.item.name,
+              count: result.affectedTeamIds.length,
+            }),
+      );
+    } catch (err) {
+      setFireError(toErrorMessage(err));
+    } finally {
+      setFiring(false);
+    }
+  };
+
+  const teamPicker = (label: string, description?: string) => (
+    <FormField label={label} description={description}>
+      <Multiselect
+        selectedOptions={teamOptions.filter((o) => selectedTeamIds.includes(o.value))}
+        options={teamOptions}
+        onChange={(e) => setSelectedTeamIds(e.detail.selectedOptions.map((o) => o.value as string))}
+        placeholder={t("disruptions.teams_placeholder")}
+      />
+    </FormField>
+  );
+
+  return (
+    <Modal
+      visible
+      onDismiss={onClose}
+      header={t("disruptions.fire_modal_header", { name: target.item.name })}
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={onClose} disabled={firing}>
+              {t("disruptions.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => void confirmFire()}
+              loading={firing}
+              disabled={fireDisabled}
+            >
+              {t("disruptions.confirm_fire")}
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <SpaceBetween size="m">
+        {fireError ? <Alert type="error">{fireError}</Alert> : null}
+        <Box color="text-body-secondary">{target.item.description}</Box>
+        <FormField
+          label={t("disruptions.scope_label")}
+          description={t("disruptions.scope_description")}
+        >
+          <Select
+            selectedOption={{ value: scope, label: t(`disruptions.scope_${scope}`) }}
+            options={SCOPE_OPTIONS.map((s) => ({ value: s, label: t(`disruptions.scope_${s}`) }))}
+            onChange={(e) => setScope(e.detail.selectedOption.value as DisruptionScope)}
+          />
+        </FormField>
+        {scope === "team" ? teamPicker(t("disruptions.teams_label")) : null}
+        {scope === "random-n"
+          ? teamPicker(t("disruptions.random_label"), t("disruptions.random_description"))
+          : null}
+        <FormField
+          label={t("disruptions.timing_label")}
+          description={t("disruptions.timing_description")}
+        >
+          <SegmentedControl
+            selectedId={timing}
+            onChange={(e) => setTiming(e.detail.selectedId as DisruptionTiming)}
+            options={[
+              { id: "immediate", text: t("disruptions.timing_immediate") },
+              { id: "scheduled", text: t("disruptions.timing_scheduled") },
+            ]}
+          />
+        </FormField>
+        {timing === "scheduled" ? (
+          <FormField
+            label={t("disruptions.after_minutes_label")}
+            description={t("disruptions.after_minutes_description")}
+            errorText={scheduleInvalid ? t("disruptions.after_minutes_error") : undefined}
+          >
+            <Input
+              type="number"
+              value={String(afterMinutes)}
+              onChange={(e) => setAfterMinutes(Number(e.detail.value))}
+            />
+          </FormField>
+        ) : null}
+      </SpaceBetween>
+    </Modal>
+  );
 }
 
 /**
@@ -55,14 +226,10 @@ export function DisruptionsPanel({
   const [audit, setAudit] = useState<readonly DisruptionAuditRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [fireTarget, setFireTarget] = useState<FireTarget | null>(null);
-  const [scope, setScope] = useState<DisruptionScope>("all");
-  const [selectedTeamIds, setSelectedTeamIds] = useState<readonly string[]>([]);
-  const [firing, setFiring] = useState(false);
-  const [fireError, setFireError] = useState<string | null>(null);
   const [lastFired, setLastFired] = useState<string | null>(null);
 
   const reloadAudit = useCallback(async () => {
-    // Only called from confirmFire, which already guarded apiClient — defensive, unreachable.
+    // Only called after a successful fire (apiClient was present) — defensive, unreachable.
     /* v8 ignore next */
     if (!apiClient) return;
     const res = await fetchDisruptionAudit(apiClient, eventId, { limit: AUDIT_LIMIT });
@@ -83,51 +250,16 @@ export function DisruptionsPanel({
       .catch((err) => setLoadError(toErrorMessage(err)));
   }, [apiClient, eventId]);
 
-  const teamOptions = useMemo(
+  const teamOptions = useMemo<readonly TeamOption[]>(
     () => teams.map((tm) => ({ value: tm.teamId, label: tm.displayName || tm.internalSlug })),
     [teams],
   );
 
-  const openFire = (target: FireTarget) => {
-    setFireTarget(target);
-    setScope("all");
-    setSelectedTeamIds([]);
-    setFireError(null);
+  const onFired = (flash: string) => {
+    setLastFired(flash);
+    setFireTarget(null);
+    void reloadAudit();
   };
-
-  const confirmFire = useCallback(async () => {
-    // The confirm button only renders inside the modal (fireTarget set), and the catalog/Fire
-    // buttons only render when apiClient is present — so this guard is defensive, unreachable.
-    /* v8 ignore next */
-    if (!apiClient || !fireTarget) return;
-    setFiring(true);
-    setFireError(null);
-    try {
-      const result = await fireDisruption(apiClient, eventId, {
-        problemId: fireTarget.problemId,
-        disruptionId: fireTarget.item.id,
-        scope,
-        ...(scope === "team" ? { targetTeamIds: selectedTeamIds } : {}),
-        ...(scope === "random-n" ? { randomCount: Math.max(selectedTeamIds.length, 1) } : {}),
-        ...(fireTarget.item.parameters ? { parameters: fireTarget.item.parameters } : {}),
-        requestId: newFireRequestId(),
-      });
-      setLastFired(
-        t("disruptions.fired_flash", {
-          name: fireTarget.item.name,
-          count: result.affectedTeamIds.length,
-        }),
-      );
-      setFireTarget(null);
-      await reloadAudit();
-    } catch (err) {
-      setFireError(toErrorMessage(err));
-    } finally {
-      setFiring(false);
-    }
-  }, [apiClient, eventId, fireTarget, scope, selectedTeamIds, reloadAudit, t]);
-
-  const fireDisabled = firing || (scope === "team" && selectedTeamIds.length === 0);
 
   return (
     <Container
@@ -170,7 +302,7 @@ export function DisruptionsPanel({
               cell: (e: DisruptionCatalogEntry) => (
                 <Button
                   variant="inline-link"
-                  onClick={() => openFire({ problemId: e.problemId, item: e.disruption })}
+                  onClick={() => setFireTarget({ problemId: e.problemId, item: e.disruption })}
                 >
                   {t("disruptions.fire_button")}
                 </Button>
@@ -207,80 +339,29 @@ export function DisruptionsPanel({
               header: t("disruptions.col_affected"),
               cell: (r: DisruptionAuditRow) => String(r.targetTeamIds.length),
             },
+            {
+              // [ADR-037] scheduled fire の注入予定時刻 (即時 fire は "-")。
+              id: "scheduledFor",
+              header: t("disruptions.col_scheduled_for"),
+              cell: (r: DisruptionAuditRow) => r.scheduledFor ?? "-",
+            },
           ]}
           items={audit}
           empty={<Box textAlign="center">{t("disruptions.audit_empty")}</Box>}
         />
       </SpaceBetween>
 
-      {fireTarget ? (
-        <Modal
-          visible
-          onDismiss={() => setFireTarget(null)}
-          header={t("disruptions.fire_modal_header", { name: fireTarget.item.name })}
-          footer={
-            <Box float="right">
-              <SpaceBetween direction="horizontal" size="xs">
-                <Button onClick={() => setFireTarget(null)} disabled={firing}>
-                  {t("disruptions.cancel")}
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={() => void confirmFire()}
-                  loading={firing}
-                  disabled={fireDisabled}
-                >
-                  {t("disruptions.confirm_fire")}
-                </Button>
-              </SpaceBetween>
-            </Box>
-          }
-        >
-          <SpaceBetween size="m">
-            {fireError ? <Alert type="error">{fireError}</Alert> : null}
-            <Box color="text-body-secondary">{fireTarget.item.description}</Box>
-            <FormField
-              label={t("disruptions.scope_label")}
-              description={t("disruptions.scope_description")}
-            >
-              <Select
-                selectedOption={{ value: scope, label: t(`disruptions.scope_${scope}`) }}
-                options={SCOPE_OPTIONS.map((s) => ({
-                  value: s,
-                  label: t(`disruptions.scope_${s}`),
-                }))}
-                onChange={(e) => setScope(e.detail.selectedOption.value as DisruptionScope)}
-              />
-            </FormField>
-            {scope === "team" ? (
-              <FormField label={t("disruptions.teams_label")}>
-                <Multiselect
-                  selectedOptions={teamOptions.filter((o) => selectedTeamIds.includes(o.value))}
-                  options={teamOptions}
-                  onChange={(e) =>
-                    setSelectedTeamIds(e.detail.selectedOptions.map((o) => o.value as string))
-                  }
-                  placeholder={t("disruptions.teams_placeholder")}
-                />
-              </FormField>
-            ) : null}
-            {scope === "random-n" ? (
-              <FormField
-                label={t("disruptions.random_label")}
-                description={t("disruptions.random_description")}
-              >
-                <Multiselect
-                  selectedOptions={teamOptions.filter((o) => selectedTeamIds.includes(o.value))}
-                  options={teamOptions}
-                  onChange={(e) =>
-                    setSelectedTeamIds(e.detail.selectedOptions.map((o) => o.value as string))
-                  }
-                  placeholder={t("disruptions.teams_placeholder")}
-                />
-              </FormField>
-            ) : null}
-          </SpaceBetween>
-        </Modal>
+      {fireTarget && apiClient ? (
+        <FireModal
+          key={`${fireTarget.problemId}:${fireTarget.item.id}`}
+          apiClient={apiClient}
+          eventId={eventId}
+          target={fireTarget}
+          teamOptions={teamOptions}
+          t={t}
+          onClose={() => setFireTarget(null)}
+          onFired={onFired}
+        />
       ) : null}
     </Container>
   );

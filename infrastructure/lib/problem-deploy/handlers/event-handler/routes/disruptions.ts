@@ -114,6 +114,8 @@ export function registerDisruptionRoutes(app: Hono, shared: EventSharedResources
             scope: req.scope,
             targetTeamIds: req.targetTeamIds ?? [],
             ...(req.randomCount !== undefined ? { randomCount: req.randomCount } : {}),
+            // schema は afterMinutes を timing=scheduled の時のみ許す (= 存在 = scheduled)。
+            ...(req.afterMinutes !== undefined ? { afterMinutes: req.afterMinutes } : {}),
             requestId: req.requestId,
             firedBy: resolveCognitoSub(c),
             nowMs: Date.now(),

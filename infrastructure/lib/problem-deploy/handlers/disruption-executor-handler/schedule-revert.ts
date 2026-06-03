@@ -28,23 +28,64 @@ export interface ScheduleRevertDeps {
   readonly scheduler: Pick<SchedulerClient, "send">;
   /** schedule が target を起動するために assume する role の ARN (= construct が作成、 env 注入)。 */
   readonly schedulerRoleArn: string;
-  /** revert を実行する target (= executor Lambda 自身) の ARN。 */
+  /** schedule が呼び戻す target (= executor Lambda 自身) の ARN。 revert / inject 共通。 */
   readonly revertTargetArn: string;
 }
 
 const MAX_SCHEDULE_NAME = 64;
 
+function sanitizeScheduleName(raw: string): string {
+  return raw.replace(/[^0-9A-Za-z\-_.]/g, "-").slice(0, MAX_SCHEDULE_NAME);
+}
+
 /** `EXEC#{requestId}#{teamId}` と対の冪等な schedule 名。 aws-scheduler の name 制約に sanitize。 */
 export function revertScheduleName(detail: DisruptionFiredDetail): string {
-  return `tc-revert-${detail.requestId}-${detail.teamId}`
-    .replace(/[^0-9A-Za-z\-_.]/g, "-")
-    .slice(0, MAX_SCHEDULE_NAME);
+  return sanitizeScheduleName(`tc-revert-${detail.requestId}-${detail.teamId}`);
+}
+
+/** [ADR-037] scheduled fire の遅延注入 schedule 名。 revert と対の冪等キー (requestId/teamId)。 */
+export function injectScheduleName(detail: DisruptionFiredDetail): string {
+  return sanitizeScheduleName(`tc-inject-${detail.requestId}-${detail.teamId}`);
+}
+
+/** base 時刻 + afterSeconds の UTC を ISO と aws-scheduler の `at(...)` 式 (秒精度) で返す。 */
+function oneShotAt(baseIso: string, afterSeconds: number): { iso: string; expression: string } {
+  const at = new Date(new Date(baseIso).getTime() + afterSeconds * 1000);
+  const iso = at.toISOString();
+  return { iso, expression: `at(${iso.slice(0, 19)})` };
 }
 
 /** firedAt + afterSeconds の UTC 時刻を aws-scheduler の `at(...)` 式 (秒精度) に。 */
 export function revertAtExpression(firedAtIso: string, afterSeconds: number): string {
-  const at = new Date(new Date(firedAtIso).getTime() + afterSeconds * 1000);
-  return `at(${at.toISOString().slice(0, 19)})`;
+  return oneShotAt(firedAtIso, afterSeconds).expression;
+}
+
+/**
+ * executor 自身を呼び戻す one-shot schedule を 1 件登録する (= revert / inject 共通)。
+ * FlexibleTimeWindow=OFF / ActionAfterCompletion=DELETE (= 発火後に自動削除、 schedule が溜まらない)。
+ * SDK error は握り潰さず伝播 (= 予約失敗を loud にする。 INV-2 を黙って破らない)。
+ */
+function sendOneShot(
+  deps: ScheduleRevertDeps,
+  name: string,
+  expression: string,
+  input: Readonly<Record<string, unknown>>,
+): Promise<unknown> {
+  return deps.scheduler.send(
+    new CreateScheduleCommand({
+      Name: name,
+      ScheduleExpression: expression,
+      ScheduleExpressionTimezone: "UTC",
+      FlexibleTimeWindow: { Mode: FlexibleTimeWindowMode.OFF },
+      State: ScheduleState.ENABLED,
+      ActionAfterCompletion: ActionAfterCompletion.DELETE,
+      Target: {
+        Arn: deps.revertTargetArn,
+        RoleArn: deps.schedulerRoleArn,
+        Input: JSON.stringify(input),
+      },
+    }),
+  );
 }
 
 export async function scheduleRevert(
@@ -54,19 +95,34 @@ export async function scheduleRevert(
   afterSeconds: number,
   deps: ScheduleRevertDeps,
 ): Promise<void> {
-  await deps.scheduler.send(
-    new CreateScheduleCommand({
-      Name: revertScheduleName(detail),
-      ScheduleExpression: revertAtExpression(detail.firedAt, afterSeconds),
-      ScheduleExpressionTimezone: "UTC",
-      FlexibleTimeWindow: { Mode: FlexibleTimeWindowMode.OFF },
-      State: ScheduleState.ENABLED,
-      ActionAfterCompletion: ActionAfterCompletion.DELETE,
-      Target: {
-        Arn: deps.revertTargetArn,
-        RoleArn: deps.schedulerRoleArn,
-        Input: JSON.stringify({ mode: "revert", detail, dispatch: revert, target }),
-      },
-    }),
+  await sendOneShot(
+    deps,
+    revertScheduleName(detail),
+    revertAtExpression(detail.firedAt, afterSeconds),
+    {
+      mode: "revert",
+      detail,
+      dispatch: revert,
+      target,
+    },
   );
+}
+
+/**
+ * [ADR-037] scheduled fire: 注入を `afterMinutes` 分後に予約する。 schedule は executor を
+ * `{mode:"inject", detail}` payload で呼び戻す。 payload の `detail.firedAt` は注入予定時刻に
+ * 進め、 `afterMinutes` は落とす (= T+N の revert が注入時刻基準になる / 再遅延しない)。
+ */
+export async function scheduleInject(
+  detail: DisruptionFiredDetail,
+  afterMinutes: number,
+  deps: ScheduleRevertDeps,
+): Promise<void> {
+  const { iso, expression } = oneShotAt(detail.firedAt, afterMinutes * 60);
+  const { afterMinutes: _drop, ...rest } = detail;
+  const injectDetail: DisruptionFiredDetail = { ...rest, firedAt: iso };
+  await sendOneShot(deps, injectScheduleName(detail), expression, {
+    mode: "inject",
+    detail: injectDetail,
+  });
 }

@@ -103,6 +103,29 @@ describe("fireDisruption (#888)", () => {
     // PR #889 review: publish detail も mergedParameters を載せる
     const detail = JSON.parse(evCmd.input.Entries?.[0]?.Detail ?? "{}");
     expect(detail.parameters).toMatchObject({ throttleRps: 5, durationSec: 60 });
+    // [ADR-037] immediate fire: published detail に afterMinutes を載せない (regression)
+    expect(detail).not.toHaveProperty("afterMinutes");
+  });
+
+  it("[ADR-037] scheduled fire: published detail に afterMinutes、 audit に scheduledFor を載せる", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [{ teamId: "T1" }] }); // team list
+    ddbSend.mockResolvedValueOnce({}); // idempotency claim
+    eventsSend.mockResolvedValueOnce({ FailedEntryCount: 0, Entries: [{}] }); // PutEvents
+    ddbSend.mockResolvedValueOnce({}); // audit Put
+
+    const out = await fireDisruption(shared, baseInput({ afterMinutes: 30 }));
+    expect(out.kind).toBe("ok");
+    // published detail carries afterMinutes so the executor defers the inject
+    const evCmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
+    const detail = JSON.parse(evCmd.input.Entries?.[0]?.Detail ?? "{}");
+    expect(detail.afterMinutes).toBe(30);
+    // audit row records the scheduled-for time (firedAt + 30m)
+    const auditPut = ddbSend.mock.calls.find((c) =>
+      String((c[0] as { input?: { Item?: { SK?: string } } }).input?.Item?.SK).startsWith("AUDIT#"),
+    );
+    const auditItem = (auditPut?.[0] as { input: { Item: { scheduledFor?: string } } }).input.Item;
+    expect(auditItem.scheduledFor).toBe(new Date(NOW_MS + 30 * 60_000).toISOString());
   });
 
   it("scope=team で targetTeamIds dedupe + subset", async () => {

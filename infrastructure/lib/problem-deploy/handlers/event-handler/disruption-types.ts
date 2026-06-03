@@ -26,6 +26,11 @@ export interface DisruptionFireInput {
   readonly firedBy: string;
   /** 現在時刻 (ms)。 test で差し替え可能にする。 */
   readonly nowMs: number;
+  /**
+   * [ADR-037] scheduled fire の遅延分。 未指定 / 0 は即時注入 (= 従来)。 1 以上で
+   * executor が `afterMinutes` 分後に注入を予約する (= published Detail に乗せて executor へ渡す)。
+   */
+  readonly afterMinutes?: number;
 }
 
 export interface DisruptionFireResult {
@@ -56,6 +61,11 @@ export interface DisruptionAuditRow {
   readonly parameters: Readonly<Record<string, unknown>>;
   readonly requestId: string;
   readonly expiresAt: number;
+  /**
+   * [ADR-037] scheduled fire で注入が実行される予定時刻 (ISO8601, UTC)。 immediate fire では
+   * 未設定 (= firedAt と同時)。 audit 表示で 「N 分後に予約」 を可視化するために持つ。
+   */
+  readonly scheduledFor?: string;
 }
 
 export interface DisruptionCatalogEntry extends ProblemDisruptionEntry {

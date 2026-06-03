@@ -1,11 +1,13 @@
 /**
  * [ADR-031 / Issue #1419] executor Lambda の invocation router (= handler entry の純粋ロジック)。
  *
- * 同じ executor Lambda が 2 経路で起動される:
+ * 同じ executor Lambda が 3 経路で起動される:
  *   1. EventBridge `*DisruptionFired` rule → `{ ..., detail: DisruptionFiredDetail }` envelope (= 注入)
  *   2. aws-scheduler の one-shot → `{ mode: "revert", dispatch, target }` payload (= 復旧、 scheduleRevert が積む)
+ *   3. aws-scheduler の one-shot → `{ mode: "inject", detail }` payload (= [ADR-037] scheduled fire の T+N 遅延注入、 scheduleInject が積む)
  *
- * router は両者を判別し、 注入は `executeDisruptionAction`、 復旧は `sendDispatch` dep をそのまま再利用する
+ * router は 3 者を判別する。 注入 (1) は `executeDisruptionAction` (claim 込)、 遅延注入 (3) は
+ * `executeScheduledInject` (claim 済なので再取得しない)、 復旧 (2) は `sendDispatch` dep を再利用する
  * (= revert の credentials は wired sendDispatch dep が target から都度 AssumeRole する前提なので、 inject と
  * 同じ dep で送れる)。 不正 envelope は `invalid_event` (= loud に落とさず handler が log/metric にできる形)。
  *
@@ -20,12 +22,18 @@ import {
   type DisruptionFiredDetail,
   type ExecutorDeps,
   executeDisruptionAction,
+  executeScheduledInject,
 } from "./execute.js";
 
 interface RevertInvocation {
   readonly mode: "revert";
   readonly dispatch: DisruptionDispatch;
   readonly target: DeploymentTarget;
+}
+
+interface InjectInvocation {
+  readonly mode: "inject";
+  readonly detail: Record<string, unknown>;
 }
 
 export type RouteOutcome =
@@ -55,6 +63,11 @@ export function parseDisruptionFiredDetail(event: unknown): DisruptionFiredDetai
   if (!disruptionId || !eventId || !problemId || !tenantId || !teamId || !requestId || !firedAt) {
     return undefined;
   }
+  // [ADR-037] scheduled fire の遅延分。 正の有限数だけ採用 (= それ以外は即時注入扱い)。
+  const afterMinutes =
+    typeof d.afterMinutes === "number" && Number.isFinite(d.afterMinutes) && d.afterMinutes > 0
+      ? d.afterMinutes
+      : undefined;
   return {
     disruptionId,
     eventId,
@@ -64,6 +77,7 @@ export function parseDisruptionFiredDetail(event: unknown): DisruptionFiredDetai
     requestId,
     firedAt,
     parameters: isObject(d.parameters) ? d.parameters : {},
+    ...(afterMinutes !== undefined ? { afterMinutes } : {}),
   };
 }
 
@@ -71,6 +85,10 @@ function isRevertInvocation(event: unknown): event is RevertInvocation {
   return (
     isObject(event) && event.mode === "revert" && isObject(event.dispatch) && isObject(event.target)
   );
+}
+
+function isInjectInvocation(event: unknown): event is InjectInvocation {
+  return isObject(event) && event.mode === "inject" && isObject(event.detail);
 }
 
 /** executor Lambda の 1 invocation を inject / revert に振り分けて実行する。 */
@@ -83,6 +101,13 @@ export async function routeDisruptionInvocation(
     // (= dep が target から都度 AssumeRole する。 注入時 creds は永続しない)。
     await deps.sendDispatch(event.dispatch, event.target);
     return { kind: "reverted" };
+  }
+  if (isInjectInvocation(event)) {
+    // [ADR-037] scheduled fire の T+N 遅延注入: scheduleInject が積んだ {mode:"inject", detail} を
+    // 注入本体 (claim 済) として実行する。 detail の narrow は fired event と同じ parser を再利用。
+    const detail = parseDisruptionFiredDetail(event);
+    if (!detail) return { kind: "invalid_event" };
+    return executeScheduledInject(detail, deps);
   }
   const detail = parseDisruptionFiredDetail(event);
   if (!detail) return { kind: "invalid_event" };

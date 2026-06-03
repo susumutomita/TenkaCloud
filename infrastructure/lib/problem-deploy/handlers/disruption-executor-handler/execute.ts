@@ -37,6 +37,11 @@ export interface DisruptionFiredDetail {
   readonly parameters: Readonly<Record<string, unknown>>;
   readonly requestId: string;
   readonly firedAt: string;
+  /**
+   * [ADR-037] scheduled fire の遅延分。 未指定 / 0 は即時注入。 1 以上なら executor が
+   * `afterMinutes` 分後に注入を遅延予約する (= mode:"inject" で自分を呼び戻す)。
+   */
+  readonly afterMinutes?: number;
 }
 
 /** 注入対象 team deployment の解決結果。 */
@@ -52,8 +57,14 @@ export interface DeploymentTarget {
 export interface ExecutorDeps {
   /** problemsDisruptions catalog (= fire と同じ env 由来)。 */
   readonly problemsDisruptions: Readonly<Record<string, readonly ProblemDisruptionEntry[]>>;
-  /** `EXEC#{requestId}#{teamId}` の conditional claim。 claimed=winner / duplicate=既処理。 */
-  readonly claimExecution: (detail: DisruptionFiredDetail) => Promise<"claimed" | "duplicate">;
+  /**
+   * `EXEC#{requestId}#{teamId}` の conditional claim。 claimed=winner / duplicate=既処理。
+   * [ADR-037] phase="inject" は遅延注入用の別 claim key (= scheduler 再配送の二重注入を弾く)。
+   */
+  readonly claimExecution: (
+    detail: DisruptionFiredDetail,
+    phase?: "event" | "inject",
+  ) => Promise<"claimed" | "duplicate">;
   /** team+problem deployment を解決。 未 deploy / 未完了 / stackOutputs 無しは undefined。 */
   readonly resolveDeployment: (
     detail: DisruptionFiredDetail,
@@ -71,6 +82,11 @@ export interface ExecutorDeps {
     target: DeploymentTarget,
     afterSeconds: number,
   ) => Promise<void>;
+  /**
+   * [ADR-037] scheduled fire の遅延注入を `afterMinutes` 分後に予約する。 scheduler 機構は
+   * 具体実装側 (= scheduleRevert と同じ aws-scheduler one-shot を転用、 payload は mode:"inject")。
+   */
+  readonly scheduleInject: (detail: DisruptionFiredDetail, afterMinutes: number) => Promise<void>;
 }
 
 export type DisruptionExecuteOutcome =
@@ -78,7 +94,8 @@ export type DisruptionExecuteOutcome =
   | { readonly kind: "no_action" }
   | { readonly kind: "duplicate" }
   | { readonly kind: "unknown_disruption" }
-  | { readonly kind: "no_deployment" };
+  | { readonly kind: "no_deployment" }
+  | { readonly kind: "scheduled" };
 
 function resolveAction(
   catalog: ExecutorDeps["problemsDisruptions"],
@@ -93,21 +110,14 @@ function resolveAction(
 }
 
 /**
- * 1 件の fired disruption を実行する。 副作用は deps 経由のみ。 戻り値で結果を表す
- * (= caller の handler が log / metric に使う)。
+ * deployment を解決し、 inject dispatch を送って revert を予約する (= 即時注入の本体)。
+ * 即時 fire と scheduled fire の T+N 遅延注入で共有する (= claim 有無のみが両者の違い)。
  */
-export async function executeDisruptionAction(
+async function injectAndScheduleRevert(
   detail: DisruptionFiredDetail,
+  action: DisruptionAction,
   deps: ExecutorDeps,
 ): Promise<DisruptionExecuteOutcome> {
-  const action = resolveAction(deps.problemsDisruptions, detail.problemId, detail.disruptionId);
-  if (action === "unknown") return { kind: "unknown_disruption" };
-  // action 未宣言 = Phase A 監査のみ。 注入は起こさない (= 後方互換)。
-  if (!action) return { kind: "no_action" };
-
-  // EventBridge at-least-once の再配送を per-team 冪等で弾く。 claim は注入の前に取る。
-  if ((await deps.claimExecution(detail)) === "duplicate") return { kind: "duplicate" };
-
   const target = await deps.resolveDeployment(detail);
   if (!target) return { kind: "no_deployment" };
 
@@ -119,4 +129,50 @@ export async function executeDisruptionAction(
   await deps.scheduleRevert(detail, revert, target, action.revert.afterSeconds);
 
   return { kind: "ok", jobId: target.jobId };
+}
+
+/**
+ * 1 件の fired disruption を実行する。 副作用は deps 経由のみ。 戻り値で結果を表す
+ * (= caller の handler が log / metric に使う)。
+ *
+ * [ADR-037] `afterMinutes > 0` の scheduled fire は、 claim を取った上で注入を T+N に遅延予約し
+ * `scheduled` を返す (= 注入本体は T+N の {@link executeScheduledInject} で走る)。 claim は fired
+ * event 受信時に取るので、 EventBridge at-least-once の再配送は遅延予約より前に弾かれる。
+ */
+export async function executeDisruptionAction(
+  detail: DisruptionFiredDetail,
+  deps: ExecutorDeps,
+): Promise<DisruptionExecuteOutcome> {
+  const action = resolveAction(deps.problemsDisruptions, detail.problemId, detail.disruptionId);
+  if (action === "unknown") return { kind: "unknown_disruption" };
+  // action 未宣言 = Phase A 監査のみ。 注入は起こさない (= 後方互換)。
+  if (!action) return { kind: "no_action" };
+
+  // EventBridge at-least-once の再配送を per-team 冪等で弾く。 claim は注入 / 遅延予約の前に取る。
+  if ((await deps.claimExecution(detail)) === "duplicate") return { kind: "duplicate" };
+
+  // afterMinutes は route で 1..1440 に validate 済 (= 未指定 / 0 は即時)。 正値なら遅延予約。
+  if (detail.afterMinutes) {
+    await deps.scheduleInject(detail, detail.afterMinutes);
+    return { kind: "scheduled" };
+  }
+
+  return injectAndScheduleRevert(detail, action, deps);
+}
+
+/**
+ * [ADR-037] scheduled fire の T+N 遅延注入。 scheduler が積んだ `mode:"inject"` payload で起動される。
+ * aws-scheduler も at-least-once なので、 注入直前に **inject-phase の claim** を取り、 scheduler の
+ * 再配送による二重注入を弾く (= 即時 path が同一 invocation の event-phase claim で得るのと同じ冪等保証を、
+ * fired event と別経路で届く遅延注入にも与える)。 fired event 時の event-phase claim とは別 key。
+ */
+export async function executeScheduledInject(
+  detail: DisruptionFiredDetail,
+  deps: ExecutorDeps,
+): Promise<DisruptionExecuteOutcome> {
+  const action = resolveAction(deps.problemsDisruptions, detail.problemId, detail.disruptionId);
+  if (action === "unknown") return { kind: "unknown_disruption" };
+  if (!action) return { kind: "no_action" };
+  if ((await deps.claimExecution(detail, "inject")) === "duplicate") return { kind: "duplicate" };
+  return injectAndScheduleRevert(detail, action, deps);
 }
