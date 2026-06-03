@@ -17,9 +17,12 @@ export const FEATURE_REGISTRY = {
     defaultEnabled: false,
   },
   redTeam: {
+    // The headline Battle feature: visible by default so operators can find + use it. The panel
+    // carries an "experimental — not yet verified live on AWS" banner (the mechanism is unit-tested;
+    // the cross-account live run is what's unproven), so it is honestly labeled rather than hidden.
     description: "Operator red-team console — fire disruptions at teams during a Battle.",
     stability: "experimental",
-    defaultEnabled: false,
+    defaultEnabled: true,
   },
 } as const satisfies FeatureRegistry;
 

@@ -1,5 +1,4 @@
 import { DeployProgressPanel } from "../../components/event-detail/DeployProgressPanel";
-import { EventChecklistPanel } from "../../components/event-detail/EventChecklistPanel";
 import { EventPhaseBanner } from "../../components/event-detail/EventPhaseBanner";
 import { EventReadinessPanel } from "../../components/event-detail/EventReadinessPanel";
 import { EventWizardPanel } from "../../components/event-detail/EventWizardPanel";
@@ -48,8 +47,6 @@ export function OverviewTab({
         t={t}
         totalDeployCount={counts.totalDeployCount}
       />
-      {/* Issue #1350: T-7 / T-1 / T-0 / T+0 phase 別 operator checklist */}
-      <EventChecklistPanel t={t} />
     </>
   );
 }

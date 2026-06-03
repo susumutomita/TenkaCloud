@@ -57,7 +57,7 @@ describe("loadConfig", () => {
       expect((await loadWithFullRuntime()).features).toEqual({
         samlSso: false,
         nonAwsRuntime: false,
-        redTeam: false,
+        redTeam: true,
       });
     });
 
@@ -106,21 +106,21 @@ describe("loadConfig", () => {
     it("should default all features OFF when VITE_FEATURES is absent", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
       const config = await loadConfig(env);
-      expect(config.features).toEqual({ samlSso: false, nonAwsRuntime: false, redTeam: false });
+      expect(config.features).toEqual({ samlSso: false, nonAwsRuntime: false, redTeam: true });
     });
 
     it("should opt features in from a VITE_FEATURES JSON object", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
       const config = await loadConfig({ ...env, VITE_FEATURES: '{"samlSso":true}' });
-      expect(config.features).toEqual({ samlSso: true, nonAwsRuntime: false, redTeam: false });
+      expect(config.features).toEqual({ samlSso: true, nonAwsRuntime: false, redTeam: true });
     });
 
     it("should ignore invalid / non-object VITE_FEATURES and use defaults", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
       const bad = await loadConfig({ ...env, VITE_FEATURES: "not-json" });
-      expect(bad.features).toEqual({ samlSso: false, nonAwsRuntime: false, redTeam: false });
+      expect(bad.features).toEqual({ samlSso: false, nonAwsRuntime: false, redTeam: true });
       const arr = await loadConfig({ ...env, VITE_FEATURES: "[1,2]" });
-      expect(arr.features).toEqual({ samlSso: false, nonAwsRuntime: false, redTeam: false });
+      expect(arr.features).toEqual({ samlSso: false, nonAwsRuntime: false, redTeam: true });
     });
   });
 
