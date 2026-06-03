@@ -13,6 +13,7 @@ import {
   noopKindResult,
   probeUrl,
 } from "../shared.js";
+import { scoreCounterDelta } from "./attack-counter.js";
 
 /**
  * `uptime-multi` kind (ADR-012 Phase 3.B、 security-battle-royale 想定)。
@@ -29,7 +30,7 @@ import {
 export async function runUptimeMultiKind(
   input: KindHandlerInput<UptimeMultiScoringMetadata>,
 ): Promise<KindResult> {
-  const { deployment, scoring, slots, overrides, nowIso } = input;
+  const { deployment, scoring, slots, overrides, nowIso, prevState } = input;
   if (!deployment.PK || !deployment.problemId) return noopKindResult();
 
   const outputs = parseStackOutputs(deployment.stackOutputs);
@@ -68,19 +69,41 @@ export async function runUptimeMultiKind(
     newHealth[key] = { ok, checkedAt: nowIso, ...(since ? { since } : {}) };
   }
 
-  const scoreDelta = allOk ? scoring.pointsAllOk : (scoring.failurePenalty ?? 0);
+  const baseDelta = allOk ? scoring.pointsAllOk : (scoring.failurePenalty ?? 0);
   const attackDetected = !allOk && deployment.lastResult === "ok";
 
+  // [ADR-034 / #1666] optional attack-blocked bonus (= 防御テストの加点を可用性採点に重ねる)。
+  // 宣言時のみ: 競技者 stack が露出する attack-blocked counter の増分で加点 + baseline を追従。
+  let bonusPoints = 0;
+  let bonusState: { attackCount: number } | undefined;
+  if (scoring.attackBlockedOutputKey) {
+    const scored = scoreCounterDelta(
+      outputs[scoring.attackBlockedOutputKey],
+      prevState.attackCount,
+      scoring.pointsPerBlock ?? 1,
+    );
+    if (scored) {
+      bonusPoints = scored.points;
+      bonusState = { attackCount: scored.newCount };
+    }
+  }
+
+  const scoreDelta = baseDelta + bonusPoints;
+  const uptimeEvents =
+    baseDelta !== 0
+      ? [{ source: "uptime" as const, points: baseDelta, occurredAt: nowIso }]
+      : attackDetected
+        ? [{ source: "attack-detected" as const, points: 0, occurredAt: nowIso }]
+        : [];
   return {
     scoreDelta,
     scoreEvents:
-      scoreDelta !== 0
-        ? [{ source: "uptime", points: scoreDelta, occurredAt: nowIso }]
-        : attackDetected
-          ? [{ source: "attack-detected", points: 0, occurredAt: nowIso }]
-          : [],
+      bonusPoints > 0
+        ? [...uptimeEvents, { source: "uptime" as const, points: bonusPoints, occurredAt: nowIso }]
+        : uptimeEvents,
     endpointsHealthJson: JSON.stringify(newHealth),
     lastResult: allOk ? "ok" : "fail",
     ...(attackDetected ? { attackDetected: true } : {}),
+    ...(bonusState ? { newState: bonusState } : {}),
   };
 }

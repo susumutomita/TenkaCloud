@@ -87,6 +87,13 @@ export interface UptimeMultiScoringMetadata {
   readonly probedSlots: readonly UptimeMultiProbedSlot[];
   readonly pointsAllOk: number;
   readonly failurePenalty?: number;
+  /**
+   * [ADR-034 / #1666] 任意の attack-blocked bonus。 宣言すると、 競技者 stack が「攻撃をブロックした回数」を
+   * 露出する CFn Output (`attackBlockedOutputKey`) の増分に応じて `pointsPerBlock` (既定 1) を加点する
+   * (= 可用性採点に防御テストの加点を重ねる、 attack-detection と同じ counter-delta ロジック)。 省略で無効・後方互換。
+   */
+  readonly attackBlockedOutputKey?: string;
+  readonly pointsPerBlock?: number;
   /** Issue #742 Phase 5: hints 共通 field。 */
   readonly hints?: readonly ProgressiveHint[];
 }
@@ -276,6 +283,8 @@ function parseUptimeMulti(value: unknown): UptimeMultiScoringMetadata | undefine
     probedSlots?: unknown;
     pointsAllOk?: unknown;
     failurePenalty?: unknown;
+    attackBlockedOutputKey?: unknown;
+    pointsPerBlock?: unknown;
     hints?: unknown;
   };
   if (!Array.isArray(u.probedSlots) || u.probedSlots.length === 0) return undefined;
@@ -285,11 +294,20 @@ function parseUptimeMulti(value: unknown): UptimeMultiScoringMetadata | undefine
     .filter((slot): slot is UptimeMultiProbedSlot => slot !== undefined);
   if (probedSlots.length === 0) return undefined;
   const hints = parseHints(u.hints);
+  // [ADR-034 / #1666] attack-blocked bonus は両 field が揃ったときだけ有効化 (= 片方欠けは無効)。
+  const attackBonus =
+    typeof u.attackBlockedOutputKey === "string" &&
+    u.attackBlockedOutputKey.length > 0 &&
+    typeof u.pointsPerBlock === "number" &&
+    u.pointsPerBlock > 0
+      ? { attackBlockedOutputKey: u.attackBlockedOutputKey, pointsPerBlock: u.pointsPerBlock }
+      : undefined;
   return {
     kind: "uptime-multi",
     probedSlots,
     pointsAllOk: u.pointsAllOk,
     ...(typeof u.failurePenalty === "number" ? { failurePenalty: u.failurePenalty } : {}),
+    ...(attackBonus ?? {}),
     ...(hints ? { hints } : {}),
   };
 }
