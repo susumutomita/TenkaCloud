@@ -85,6 +85,15 @@ describe("ShellLayout", () => {
     expect(mockNav).toHaveBeenCalledWith("/problems");
   });
 
+  it("should show the Identity providers nav link only when samlSsoEnabled is true", () => {
+    const idpLink = (c: HTMLElement) =>
+      createWrapper(c).findSideNavigation()?.findLinkByHref("/identity-providers");
+    const off = render(<ShellLayout>child-content</ShellLayout>);
+    expect(idpLink(off.container)).toBeFalsy();
+    const on = render(<ShellLayout samlSsoEnabled>child-content</ShellLayout>);
+    expect(idpLink(on.container)).toBeTruthy();
+  });
+
   it("should show the user menu and sign out when an email claim is present", () => {
     mockAuth.mockReturnValue({ tokens: { idToken: "tok" }, logout });
     mockDecode.mockReturnValue({ email: "user@example.com" });

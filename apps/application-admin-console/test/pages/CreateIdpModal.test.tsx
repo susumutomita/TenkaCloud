@@ -220,4 +220,11 @@ describe("CreateIdpModal", () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it("should show the real SP Entity ID (and 'set as-is' guidance) when userPoolId is known", () => {
+    render(<CreateIdpModal {...props({ userPoolId: "ap-northeast-1_AbCd123" })} />);
+    expect(screen.getByText("urn:amazon:cognito:sp:ap-northeast-1_AbCd123")).toBeInTheDocument();
+    expect(screen.getByText(/Set this value as-is as the IdP's Audience/)).toBeInTheDocument();
+    expect(screen.queryByText(/Replace <userPoolId>/)).not.toBeInTheDocument();
+  });
 });
