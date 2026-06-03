@@ -158,4 +158,56 @@ describe("uptime-multi kind", () => {
     // joinUrl は appendPath (/users) と probe path (/score) を path-style concat する。
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.example.com/users/score");
   });
+
+  // [ADR-034 / #1666] optional attack-blocked bonus: 防御テストの加点を可用性採点に重ねる。
+  function withAttackBonus(
+    blockedCount: string,
+    prevAttackCount: number | undefined,
+  ): KindHandlerInput<UptimeMultiScoringMetadata> {
+    const base = buildInput();
+    return {
+      ...base,
+      scoring: {
+        kind: "uptime-multi",
+        probedSlots: base.scoring.probedSlots,
+        pointsAllOk: 100,
+        attackBlockedOutputKey: "AttackBlockedCount",
+        pointsPerBlock: 25,
+      },
+      deployment: {
+        ...base.deployment,
+        stackOutputs: JSON.stringify({
+          FrontendUrl: "https://frontend.example.com",
+          ApiUrl: "https://api.example.com",
+          AttackBlockedCount: blockedCount,
+        }),
+      },
+      prevState: prevAttackCount === undefined ? {} : { attackCount: prevAttackCount },
+    };
+  }
+
+  it("should add an attack-blocked bonus on counter increment (defense held)", async () => {
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const result = await runUptimeMultiKind(withAttackBonus("5", 2)); // delta 3 × 25 = 75
+    expect(result.scoreDelta).toBe(175); // pointsAllOk 100 + bonus 75
+    expect(result.newState).toEqual({ attackCount: 5 });
+    expect(result.scoreEvents).toEqual([
+      { source: "uptime", points: 100, occurredAt: NOW_ISO },
+      { source: "uptime", points: 75, occurredAt: NOW_ISO },
+    ]);
+  });
+
+  it("should only record the baseline on the first tick (no bonus yet)", async () => {
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const result = await runUptimeMultiKind(withAttackBonus("5", undefined));
+    expect(result.scoreDelta).toBe(100); // availability only; bonus 0 on baseline
+    expect(result.newState).toEqual({ attackCount: 5 });
+  });
+
+  it("should not set newState or a bonus when attackBlockedOutputKey is absent (backward compat)", async () => {
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const result = await runUptimeMultiKind(buildInput());
+    expect(result.scoreDelta).toBe(100);
+    expect(result.newState).toBeUndefined();
+  });
 });
