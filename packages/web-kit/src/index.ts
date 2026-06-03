@@ -11,6 +11,13 @@ export { EmptyState, type EmptyStateAction, type EmptyStateProps } from "./Empty
 export { ErrorState, type ErrorStateProps } from "./ErrorState";
 export { toErrorMessage } from "./error-message";
 export {
+  type FeatureRegistry,
+  type FeatureSpec,
+  type FeatureStability,
+  type ResolvedFeatures,
+  resolveFeatureFlags,
+} from "./feature-flags";
+export {
   createI18n,
   type I18nConfig,
   type I18nContextValue,

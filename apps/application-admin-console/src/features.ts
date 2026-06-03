@@ -1,0 +1,21 @@
+import type { FeatureRegistry, ResolvedFeatures } from "@tenkacloud/web-kit";
+
+/**
+ * ADR-035: the single source of truth for this console's feature flags. Add one entry per
+ * experimental feature (default OFF); gate UI on `config.features.<key>`; delete the entry when
+ * the feature graduates. Enable per environment via `runtime-config.json` `features: { <key>: true }`.
+ */
+export const FEATURE_REGISTRY = {
+  samlSso: {
+    description: "Per-tenant SAML SSO — the Identity providers page + nav.",
+    stability: "experimental",
+    defaultEnabled: false,
+  },
+  nonAwsRuntime: {
+    description: "Non-AWS (Sakura / Azure / GCP) team cloud-credentials panel.",
+    stability: "experimental",
+    defaultEnabled: false,
+  },
+} as const satisfies FeatureRegistry;
+
+export type AppFeatures = ResolvedFeatures<typeof FEATURE_REGISTRY>;

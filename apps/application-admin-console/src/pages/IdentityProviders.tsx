@@ -39,7 +39,7 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
   const lang = useLang();
   const client: TenantIdpClient | null = useMemo(
     () =>
-      auth.tokens && config.featureSamlSso
+      auth.tokens && config.features?.samlSso
         ? createTenantIdpClient(config, auth.tokens.idToken)
         : null,
     [auth.tokens, config],
@@ -85,7 +85,7 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
     [config],
   );
 
-  if (!config.featureSamlSso) {
+  if (!config.features?.samlSso) {
     // Feature-flagged off until verified end-to-end. Gate the page itself (not just the nav) so a
     // direct URL does not expose an unproven feature.
     return (

@@ -123,7 +123,7 @@ describe("CompetitorAccountsPage", () => {
   });
 
   it("should show the non-AWS team cloud credentials panel when featureNonAwsRuntime is on", () => {
-    renderPage(config({ featureNonAwsRuntime: true }));
+    renderPage(config({ features: { samlSso: false, nonAwsRuntime: true } }));
     expect(screen.getByTestId("team-cloud-credentials")).toBeInTheDocument();
   });
 
