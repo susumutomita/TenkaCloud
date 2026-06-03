@@ -11,6 +11,8 @@
 export interface IdTokenClaims {
   sub?: string;
   email?: string;
+  /** `https://cognito-idp.<region>.amazonaws.com/<userPoolId>` — used to derive the SP Entity ID. */
+  iss?: string;
   "custom:tenantId"?: string;
   "custom:tenantName"?: string;
   "custom:userRole"?: string;

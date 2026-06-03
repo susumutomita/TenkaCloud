@@ -27,7 +27,27 @@ vi.mock("../../src/api/idp-client", async (importOriginal) => {
   };
 });
 vi.mock("../../src/auth/AuthProvider", () => ({ useAuth: mockUseAuth }));
-vi.mock("../../src/i18n", () => ({ useLang: () => "en" }));
+vi.mock("../../src/i18n", async () => {
+  const en = (await import("../../src/i18n/locales/en.json")).default as Record<string, unknown>;
+  const resolve = (key: string): string => {
+    const v = key
+      .split(".")
+      .reduce<unknown>(
+        (o, k) => (o && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined),
+        en,
+      );
+    return typeof v === "string" ? v : key;
+  };
+  return {
+    useLang: () => "en",
+    useT: () => (key: string, params?: Record<string, string | number>) => {
+      let s = resolve(key);
+      if (params)
+        for (const [k, v] of Object.entries(params)) s = s.split(`{${k}}`).join(String(v));
+      return s;
+    },
+  };
+});
 vi.mock("../../src/pages/CreateIdpModal", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: stub props。
   CreateIdpModal: ({ cognitoDomain, onClose, onCreated }: any) => (
@@ -53,6 +73,7 @@ const config = (over: Partial<AppConfig> = {}): AppConfig =>
     tenantName: "Acme",
     apiBaseUrl: "https://api.example.com",
     isolation: "silo",
+    featureSamlSso: true,
     ...over,
   }) as AppConfig;
 const idp = (over: Partial<TenantIdpSummary> = {}): TenantIdpSummary =>
@@ -77,14 +98,20 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("IdentityProvidersPage", () => {
+  it("should show the feature-disabled hero (and skip fetch) when featureSamlSso is off", () => {
+    renderPage(config({ featureSamlSso: false }));
+    expect(screen.getByText("Identity providers are not available")).toBeInTheDocument();
+    expect(mockCreateClient).not.toHaveBeenCalled();
+  });
+
   it("should show the silo-only hero on a pooled tenant", () => {
     renderPage(config({ isolation: "pooled" }));
-    expect(screen.getByText(/requires\s*the silo isolation tier/i)).toBeInTheDocument();
+    expect(screen.getByText(/requires the silo plan/i)).toBeInTheDocument();
   });
 
   it("should warn when the IdP CRUD API base URL is not wired up", () => {
     renderPage(config({ apiBaseUrl: "" }));
-    expect(screen.getByText("Tenant IdP CRUD API not wired up")).toBeInTheDocument();
+    expect(screen.getByText("The identity-provider API is unavailable")).toBeInTheDocument();
   });
 
   it("should show the table loading state and skip fetch when there are no auth tokens", () => {

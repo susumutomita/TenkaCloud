@@ -4,6 +4,29 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TenantIdpClient } from "../../src/api/idp-client";
 import { CreateIdpModal } from "../../src/pages/CreateIdpModal";
 
+// i18n: resolve against the real en.json so assertions check the actual shipped copy.
+vi.mock("../../src/i18n", async () => {
+  const en = (await import("../../src/i18n/locales/en.json")).default as Record<string, unknown>;
+  const resolve = (key: string): string => {
+    const v = key
+      .split(".")
+      .reduce<unknown>(
+        (o, k) => (o && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined),
+        en,
+      );
+    return typeof v === "string" ? v : key;
+  };
+  return {
+    useLang: () => "en",
+    useT: () => (key: string, params?: Record<string, string | number>) => {
+      let s = resolve(key);
+      if (params)
+        for (const [k, v] of Object.entries(params)) s = s.split(`{${k}}`).join(String(v));
+      return s;
+    },
+  };
+});
+
 /**
  * CreateIdpModal (SAML IdP 登録モーダル)。 client は prop なので module mock 不要。 submit
  * (create + onCreated / description 省略 / error→describeTenantIdpError / client null guard) と
@@ -172,7 +195,7 @@ describe("CreateIdpModal", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("urn:amazon:cognito:sp:<userPoolId>")).toBeInTheDocument();
     expect(
-      screen.getByText(/Replace <userPoolId> with the relevant User Pool ID from the AWS Cognito/),
+      screen.getByText(/Replace <userPoolId> with your User Pool ID from the AWS Cognito/),
     ).toBeInTheDocument();
     expect(screen.getByText(/identity\/claims\/emailaddress/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy ACS URL (Reply / SSO URL)" })).toBeEnabled();

@@ -67,14 +67,14 @@ describe("EventCreatePage #719 verified account 0 件の救済 UX", () => {
     renderPage();
 
     expect(
-      await screen.findByText(/verified=true な Competitor Account がありません/),
+      await screen.findByText(/接続確認が完了した Competitor Account がありません/),
     ).toBeInTheDocument();
 
     const link = screen.getByRole("link", { name: "Competitor Accounts へ移動" });
     expect(link).toHaveAttribute("href", "/competitor-accounts");
 
     const disabledSelect = screen
-      .getAllByText("No verified accounts available. Add one first.")
+      .getAllByText("接続確認済みの account がありません。 先に追加してください。")
       .map((node) => node.closest("button"))
       .find((button): button is HTMLButtonElement => button instanceof HTMLButtonElement);
     expect(disabledSelect).toBeDisabled();
@@ -98,14 +98,14 @@ describe("EventCreatePage #719 verified account 0 件の救済 UX", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getAllByText(/verified account を選択/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/接続確認済みの account を選択/).length).toBeGreaterThan(0);
     });
 
     expect(
-      screen.queryByText(/verified=true な Competitor Account がありません/),
+      screen.queryByText(/接続確認が完了した Competitor Account がありません/),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByText("No verified accounts available. Add one first."),
+      screen.queryByText("接続確認済みの account がありません。 先に追加してください。"),
     ).not.toBeInTheDocument();
   });
 });

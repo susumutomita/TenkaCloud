@@ -12,10 +12,17 @@ import Textarea from "@cloudscape-design/components/textarea";
 import Tiles from "@cloudscape-design/components/tiles";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { describeTenantIdpError, type TenantIdpClient } from "../api/idp-client";
+import { useT } from "../i18n";
+import { cognitoOrigin, spEntityId } from "../lib/cognito";
+
+/** The translate function returned by `useT` (web-kit's `t(key, params?)`). */
+type TFn = ReturnType<typeof useT>;
 
 interface CreateIdpModalProps {
   readonly client: TenantIdpClient | null;
   readonly cognitoDomain: string;
+  /** User Pool ID derived from the admin's ID token, used to render the real SP Entity ID. */
+  readonly userPoolId?: string;
   readonly onClose: () => void;
   readonly onCreated: () => Promise<void>;
   readonly busy: boolean;
@@ -32,61 +39,25 @@ interface ProviderGuide {
 
 const DEFAULT_EMAIL_ATTRIBUTE =
   "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress";
-const SP_ENTITY_ID_PATTERN = "urn:amazon:cognito:sp:<userPoolId>";
 const METADATA_XML_ACCEPT = ".xml,text/xml,application/xml";
-const EMPTY_METADATA_FILE_ERROR = "The selected metadata XML file is empty.";
-const READ_METADATA_FILE_ERROR =
-  "Could not read the selected metadata XML file. Try another file or paste the XML below.";
 
-const PROVIDER_GUIDES: Record<SamlProvider, ProviderGuide> = {
-  entra: {
-    label: "Microsoft Entra ID",
-    description: "Microsoft Entra enterprise application",
-    steps: [
-      "In Microsoft Entra ID, open Enterprise applications -> New application -> Single sign-on -> SAML.",
-      "Set Reply URL to the ACS URL and Identifier to the SP Entity ID below.",
-      "Download Federation Metadata XML, then upload it below.",
-    ],
-  },
-  google: {
-    label: "Google Workspace",
-    description: "Google Admin custom SAML app",
-    steps: [
-      "In Google Workspace, open Admin console -> Apps -> Web and mobile apps -> Add custom SAML app.",
-      "Enter the ACS URL and Entity ID below.",
-      "Download the IdP metadata, then upload it below.",
-    ],
-  },
-  okta: {
-    label: "Okta",
-    description: "Okta SAML 2.0 app integration",
-    steps: [
-      "In Okta, open Applications -> Create App Integration -> SAML 2.0.",
-      "Set Single sign-on URL to the ACS URL and Audience URI to the SP Entity ID below.",
-      "Get the Identity Provider metadata URL or XML, then upload the XML below.",
-    ],
-  },
-  generic: {
-    label: "Generic SAML",
-    description: "Any SAML 2.0 identity provider",
-    steps: [
-      "Give the IdP administrator the ACS URL, SP Entity ID, and email attribute below.",
-      "Configure the IdP metadata XML, then upload it below.",
-    ],
-  },
-};
-
-const PROVIDER_TILES = (Object.entries(PROVIDER_GUIDES) as [SamlProvider, ProviderGuide][]).map(
-  ([value, guide]) => ({
-    value,
-    label: guide.label,
-    description: guide.description,
-  }),
-);
+/** Provider setup guides, built from i18n so the steps localize (generic has 2 steps, others 3). */
+function buildProviderGuides(t: TFn): Record<SamlProvider, ProviderGuide> {
+  const guide = (key: SamlProvider, stepCount: number): ProviderGuide => ({
+    label: t(`create_idp.guide_${key}_label`),
+    description: t(`create_idp.guide_${key}_description`),
+    steps: Array.from({ length: stepCount }, (_, i) => t(`create_idp.guide_${key}_step_${i + 1}`)),
+  });
+  return {
+    entra: guide("entra", 3),
+    google: guide("google", 3),
+    okta: guide("okta", 3),
+    generic: guide("generic", 2),
+  };
+}
 
 function buildCognitoAcsUrl(cognitoDomain: string): string {
-  const origin = cognitoDomain.startsWith("https://") ? cognitoDomain : `https://${cognitoDomain}`;
-  return new URL("/saml2/idpresponse", origin).toString();
+  return new URL("/saml2/idpresponse", cognitoOrigin(cognitoDomain)).toString();
 }
 
 function CopyableSetupValue({
@@ -98,15 +69,16 @@ function CopyableSetupValue({
   readonly value: string;
   readonly description: string;
 }) {
+  const t = useT();
   return (
     <SpaceBetween size="xxs">
       <Box variant="awsui-key-label">{label}</Box>
       <CopyToClipboard
         textToCopy={value}
-        copyButtonText={`Copy ${label}`}
-        copyButtonAriaLabel={`Copy ${label}`}
-        copySuccessText="Copied"
-        copyErrorText="Copy failed"
+        copyButtonText={t("create_idp.copy", { label })}
+        copyButtonAriaLabel={t("create_idp.copy", { label })}
+        copySuccessText={t("create_idp.copied")}
+        copyErrorText={t("create_idp.copy_failed")}
         variant="inline"
       />
       <Box color="text-body-secondary">{description}</Box>
@@ -121,11 +93,13 @@ function CopyableSetupValue({
 export function CreateIdpModal({
   client,
   cognitoDomain,
+  userPoolId,
   onClose,
   onCreated,
   busy,
   setBusy,
 }: CreateIdpModalProps) {
+  const t = useT();
   const [idpId, setIdpId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [description, setDescription] = useState("");
@@ -137,7 +111,18 @@ export function CreateIdpModal({
   const [error, setError] = useState<string | null>(null);
   const metadataReadRequestId = useRef(0);
   const acsUrl = useMemo(() => buildCognitoAcsUrl(cognitoDomain), [cognitoDomain]);
-  const providerGuide = PROVIDER_GUIDES[provider];
+  const guides = useMemo(() => buildProviderGuides(t), [t]);
+  const tiles = useMemo(
+    () =>
+      (Object.entries(guides) as [SamlProvider, ProviderGuide][]).map(([value, g]) => ({
+        value,
+        label: g.label,
+        description: g.description,
+      })),
+    [guides],
+  );
+  const providerGuide = guides[provider];
+  const spEntity = spEntityId(userPoolId);
 
   const onSubmit = useCallback(async () => {
     if (!client) return;
@@ -160,42 +145,45 @@ export function CreateIdpModal({
     }
   }, [client, idpId, displayName, description, metadataXml, emailAttr, onCreated, setBusy]);
 
-  const onMetadataFilesChange = useCallback(async (files: File[]) => {
-    const requestId = ++metadataReadRequestId.current;
-    setMetadataFiles(files);
-    setMetadataFileError(null);
-    const [file] = files;
-    if (!file) return;
-    const result = await file.text().then(
-      (contents) => ({ contents }),
-      () => ({ error: READ_METADATA_FILE_ERROR }),
-    );
-    if (requestId !== metadataReadRequestId.current) return;
-    if ("error" in result) {
-      setMetadataFileError(result.error);
-      return;
-    }
-    if (!result.contents.trim()) {
-      setMetadataFileError(EMPTY_METADATA_FILE_ERROR);
-      return;
-    }
-    setMetadataXml(result.contents);
-  }, []);
+  const onMetadataFilesChange = useCallback(
+    async (files: File[]) => {
+      const requestId = ++metadataReadRequestId.current;
+      setMetadataFiles(files);
+      setMetadataFileError(null);
+      const [file] = files;
+      if (!file) return;
+      const result = await file.text().then(
+        (contents) => ({ contents }),
+        () => ({ error: t("create_idp.read_metadata_error") }),
+      );
+      if (requestId !== metadataReadRequestId.current) return;
+      if ("error" in result) {
+        setMetadataFileError(result.error);
+        return;
+      }
+      if (!result.contents.trim()) {
+        setMetadataFileError(t("create_idp.empty_metadata_error"));
+        return;
+      }
+      setMetadataXml(result.contents);
+    },
+    [t],
+  );
 
   return (
     <Modal
       visible
       onDismiss={onClose}
-      header="Register SAML IdP"
+      header={t("create_idp.header")}
       size="large"
       footer={
         <Box float="right">
           <SpaceBetween direction="horizontal" size="xs">
             <Button onClick={onClose} disabled={busy}>
-              Cancel
+              {t("create_idp.cancel")}
             </Button>
             <Button variant="primary" onClick={onSubmit} loading={busy}>
-              Register
+              {t("create_idp.register")}
             </Button>
           </SpaceBetween>
         </Box>
@@ -203,52 +191,65 @@ export function CreateIdpModal({
     >
       <SpaceBetween size="m">
         {error ? <Alert type="error">{error}</Alert> : null}
-        <FormField label="IdP ID" description="Cognito ProviderName. 3–32 chars, [A-Za-z0-9_-].">
+        <FormField
+          label={t("create_idp.idp_id_label")}
+          description={t("create_idp.idp_id_description")}
+        >
           <Input value={idpId} onChange={(e) => setIdpId(e.detail.value)} />
         </FormField>
-        <FormField label="Display name">
+        <FormField label={t("create_idp.display_name_label")}>
           <Input value={displayName} onChange={(e) => setDisplayName(e.detail.value)} />
         </FormField>
-        <FormField label="Description (optional)">
+        <FormField label={t("create_idp.description_label")}>
           <Input value={description} onChange={(e) => setDescription(e.detail.value)} />
         </FormField>
-        <FormField label="Email attribute (SAML)">
+        <FormField label={t("create_idp.email_attr_label")}>
           <Input value={emailAttr} onChange={(e) => setEmailAttr(e.detail.value)} />
         </FormField>
         <FormField
-          label="Identity provider"
-          description="Choose a provider to show concise SAML application setup steps."
+          label={t("create_idp.provider_label")}
+          description={t("create_idp.provider_description")}
         >
           <Tiles
             value={provider}
-            items={PROVIDER_TILES}
+            items={tiles}
             columns={2}
             onChange={(e) => setProvider(e.detail.value as SamlProvider)}
           />
         </FormField>
-        <ExpandableSection defaultExpanded header={`${providerGuide.label} setup guide`}>
+        <ExpandableSection
+          defaultExpanded
+          header={t("create_idp.setup_guide_header", { provider: providerGuide.label })}
+        >
           <SpaceBetween size="s">
             {providerGuide.steps.map((step) => (
               <Box key={step}>{step}</Box>
             ))}
             <CopyableSetupValue
-              label="ACS URL (Reply / SSO URL)"
+              label={t("create_idp.acs_url_label")}
               value={acsUrl}
-              description="Enter this as the assertion consumer service, reply, or single sign-on URL."
+              description={t("create_idp.acs_url_description")}
             />
             <CopyableSetupValue
-              label="SP Entity ID / Identifier (Audience)"
-              value={SP_ENTITY_ID_PATTERN}
-              description="Replace <userPoolId> with the relevant User Pool ID from the AWS Cognito console."
+              label={t("create_idp.sp_entity_label")}
+              value={spEntity}
+              description={
+                userPoolId
+                  ? t("create_idp.sp_entity_description")
+                  : t("create_idp.sp_entity_description_placeholder")
+              }
             />
             <CopyableSetupValue
-              label="Email attribute mapping"
+              label={t("create_idp.email_attr_map_label")}
               value={emailAttr}
-              description="Map the IdP email claim to this SAML attribute. It follows the Email attribute (SAML) field above."
+              description={t("create_idp.email_attr_map_description")}
             />
           </SpaceBetween>
         </ExpandableSection>
-        <FormField label="Metadata XML file" description="Upload the IdP metadata as an .xml file.">
+        <FormField
+          label={t("create_idp.metadata_file_label")}
+          description={t("create_idp.metadata_file_description")}
+        >
           <FileUpload
             value={metadataFiles}
             accept={METADATA_XML_ACCEPT}
@@ -256,7 +257,10 @@ export function CreateIdpModal({
             onChange={(e) => void onMetadataFilesChange(e.detail.value)}
           />
         </FormField>
-        <FormField label="Metadata XML" description="Paste the full IdP metadata XML.">
+        <FormField
+          label={t("create_idp.metadata_xml_label")}
+          description={t("create_idp.metadata_xml_description")}
+        >
           <Textarea
             value={metadataXml}
             onChange={(e) => {

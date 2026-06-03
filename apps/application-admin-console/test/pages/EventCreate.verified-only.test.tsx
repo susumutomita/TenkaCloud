@@ -101,7 +101,7 @@ describe("EventCreatePage (Phase 2.2 verified-only)", () => {
     // listCompetitorAccounts が呼ばれた後、warning Alert が出る
     await waitFor(() => {
       expect(
-        screen.getByText(/verified=true な Competitor Account がありません/),
+        screen.getByText(/接続確認が完了した Competitor Account がありません/),
       ).toBeInTheDocument();
     });
     // 導線として Competitor Accounts への link を出す
@@ -139,9 +139,9 @@ describe("EventCreatePage (Phase 2.2 verified-only)", () => {
     });
     // Cloudscape Select の placeholder で「verified=true 行のみ」を operator に明示
     // verified=false (222) は drop-down に出ないことを確認するため、placeholder の存在を pin
-    // (= verified=true な選択肢があるなら placeholder は「verified account を選択」)。
+    // (= verified=true な選択肢があるなら placeholder は「接続確認済みの account を選択」)。
     await waitFor(() => {
-      const trigger = screen.queryAllByText(/verified account を選択/);
+      const trigger = screen.queryAllByText(/接続確認済みの account を選択/);
       expect(trigger.length).toBeGreaterThan(0);
     });
     // verified=false な account の alias は drop-down trigger に出ない

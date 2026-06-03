@@ -213,7 +213,7 @@ describe("DeploymentDetailPage (Netlify-style phase + log view)", () => {
       ],
     });
     renderPage();
-    await screen.findByText(/CFn Stack が stuck の可能性があります/);
+    await screen.findByText(/CloudFormation Stack が停止している可能性があります/);
 
     expect(screen.getByText(/45 分/)).toBeInTheDocument();
     expect(screen.getAllByText(/service quota exceeded/).length).toBeGreaterThan(0);

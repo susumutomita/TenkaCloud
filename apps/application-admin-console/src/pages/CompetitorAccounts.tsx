@@ -72,8 +72,9 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         onRequestDelete={setDeleteTarget}
       />
 
-      {/* [ADR-026/027/032 / #1413] 非 AWS 問題 (sakura/azure/gcp) の per-team 認証情報 onboarding。 */}
-      <TeamCloudCredentialsPanel config={config} />
+      {/* [ADR-026/027/032 / #1413] non-AWS (sakura/azure/gcp) per-team credential onboarding.
+          Feature-flagged off until the non-AWS runtimes are verified end-to-end. */}
+      {config.featureNonAwsRuntime ? <TeamCloudCredentialsPanel config={config} /> : null}
 
       <AddAccountModal
         config={config}
