@@ -105,12 +105,20 @@
 <td>イベント終了から 24 時間以内</td>
 <td>60 分</td>
 </tr>
+<tr>
+<td>7</td>
+<td><a href="./multi-cloud-providers.ja.md">マルチクラウドプロバイダ</a></td>
+<td>オペレータ</td>
+<td>セットアップ — 問題が Sakura / Azure / GCP を対象とする場合のみ、 deploy 前</td>
+<td>チーム × provider ごとに 20 分</td>
+</tr>
 </tbody></table>
 <h2>Runbook 同士の相互参照</h2>
 <ul>
 <li><a href="./pre-event-checklist.ja.md">事前チェックリスト</a> は <a href="./dry-run.ja.md">Dry run</a> を T-7 のゲートとしてリンクする (=「dry run はスキップ不可」)。</li>
 <li><a href="./live-monitoring.ja.md">Live monitoring</a> は triage 判断ポイントで <a href="./incident-response.ja.md">インシデント対応</a> にリンクする。</li>
 <li><a href="./incident-response.ja.md">インシデント対応</a> と <a href="./teardown.ja.md">Teardown</a> はどちらも <a href="./live-monitoring.ja.md">Live monitoring</a> にバックリンクして、 すでに観測したものを文脈に持ち込む。</li>
+<li><a href="./multi-cloud-providers.ja.md">マルチクラウドプロバイダ</a> はイベント当日でなくセットアップ runbook で、 非 AWS 問題を deploy する前にチームごとに実施する。 provider 別の <code>destroy</code> は <a href="./teardown.ja.md">Teardown</a> に集約される。</li>
 <li>すべての runbook は設計判断の正本として下記の ADR を参照する。<ul>
 <li><a href="../architecture/adr-006-notifications.html">ADR-006: Notifications</a> — オペレータから参加者への通知契約。</li>
 <li><a href="../architecture/adr-014-eventbridge-driven-state-reconciliation.html">ADR-014: EventBridge 駆動 state reconciliation</a> — SSE / WebSocket を使わずに状態を収束させる仕組み。</li>

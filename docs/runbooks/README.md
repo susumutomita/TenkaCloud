@@ -16,12 +16,14 @@ The runbooks assume Lite mode (`make deploy`) as the default, because most paid 
 | 4 | [Live monitoring](./live-monitoring.md) | On-call operator | During the event window | Continuous |
 | 5 | [Incident response](./incident-response.md) | On-call operator | Triggered by alarm or participant report | 5 to 30 min per incident |
 | 6 | [Teardown](./teardown.md) | Operator | Within 24 hours after the event ends | 60 min |
+| 7 | [Multi-cloud providers](./multi-cloud-providers.md) | Operator | Setup — only if a problem targets Sakura / Azure / GCP, before you deploy it | 20 min per team per provider |
 
 ## How the runbooks cross-link
 
 - [Pre-event checklist](./pre-event-checklist.md) links to [Dry run](./dry-run.md) as the T-7 gate ("you cannot skip the dry run").
 - [Live monitoring](./live-monitoring.md) links to [Incident response](./incident-response.md) at the triage decision point.
 - [Incident response](./incident-response.md) and [Teardown](./teardown.md) both cross-link back to [Live monitoring](./live-monitoring.md) for context on what was already observed.
+- [Multi-cloud providers](./multi-cloud-providers.md) is a setup runbook (not event-day): run it per team before deploying a non-AWS problem, and its per-provider `destroy` rolls up into [Teardown](./teardown.md).
 - All runbooks cite the relevant ADRs as the source of truth for design decisions:
   - [ADR-006: Notifications](../architecture/adr-006-notifications.html) — operator-to-participant messaging contract.
   - [ADR-014: EventBridge-driven state reconciliation](../architecture/adr-014-eventbridge-driven-state-reconciliation.html) — how state converges without SSE / WebSocket.

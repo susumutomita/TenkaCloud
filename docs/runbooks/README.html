@@ -105,12 +105,20 @@
 <td>Within 24 hours after the event ends</td>
 <td>60 min</td>
 </tr>
+<tr>
+<td>7</td>
+<td><a href="./multi-cloud-providers.md">Multi-cloud providers</a></td>
+<td>Operator</td>
+<td>Setup — only if a problem targets Sakura / Azure / GCP, before you deploy it</td>
+<td>20 min per team per provider</td>
+</tr>
 </tbody></table>
 <h2>How the runbooks cross-link</h2>
 <ul>
 <li><a href="./pre-event-checklist.md">Pre-event checklist</a> links to <a href="./dry-run.md">Dry run</a> as the T-7 gate (&quot;you cannot skip the dry run&quot;).</li>
 <li><a href="./live-monitoring.md">Live monitoring</a> links to <a href="./incident-response.md">Incident response</a> at the triage decision point.</li>
 <li><a href="./incident-response.md">Incident response</a> and <a href="./teardown.md">Teardown</a> both cross-link back to <a href="./live-monitoring.md">Live monitoring</a> for context on what was already observed.</li>
+<li><a href="./multi-cloud-providers.md">Multi-cloud providers</a> is a setup runbook (not event-day): run it per team before deploying a non-AWS problem, and its per-provider <code>destroy</code> rolls up into <a href="./teardown.md">Teardown</a>.</li>
 <li>All runbooks cite the relevant ADRs as the source of truth for design decisions:<ul>
 <li><a href="../architecture/adr-006-notifications.html">ADR-006: Notifications</a> — operator-to-participant messaging contract.</li>
 <li><a href="../architecture/adr-014-eventbridge-driven-state-reconciliation.html">ADR-014: EventBridge-driven state reconciliation</a> — how state converges without SSE / WebSocket.</li>

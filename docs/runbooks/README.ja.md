@@ -16,12 +16,14 @@ Runbook 全体は Lite mode (`make deploy`) をデフォルトとしています
 | 4 | [Live monitoring](./live-monitoring.ja.md) | オンコールオペレータ | イベント実施中ずっと | 継続 |
 | 5 | [インシデント対応](./incident-response.ja.md) | オンコールオペレータ | アラートまたは参加者報告から | 1 件あたり 5 〜 30 分 |
 | 6 | [Teardown](./teardown.ja.md) | オペレータ | イベント終了から 24 時間以内 | 60 分 |
+| 7 | [マルチクラウドプロバイダ](./multi-cloud-providers.ja.md) | オペレータ | セットアップ — 問題が Sakura / Azure / GCP を対象とする場合のみ、 deploy 前 | チーム × provider ごとに 20 分 |
 
 ## Runbook 同士の相互参照
 
 - [事前チェックリスト](./pre-event-checklist.ja.md) は [Dry run](./dry-run.ja.md) を T-7 のゲートとしてリンクする (=「dry run はスキップ不可」)。
 - [Live monitoring](./live-monitoring.ja.md) は triage 判断ポイントで [インシデント対応](./incident-response.ja.md) にリンクする。
 - [インシデント対応](./incident-response.ja.md) と [Teardown](./teardown.ja.md) はどちらも [Live monitoring](./live-monitoring.ja.md) にバックリンクして、 すでに観測したものを文脈に持ち込む。
+- [マルチクラウドプロバイダ](./multi-cloud-providers.ja.md) はイベント当日でなくセットアップ runbook で、 非 AWS 問題を deploy する前にチームごとに実施する。 provider 別の `destroy` は [Teardown](./teardown.ja.md) に集約される。
 - すべての runbook は設計判断の正本として下記の ADR を参照する。
   - [ADR-006: Notifications](../architecture/adr-006-notifications.html) — オペレータから参加者への通知契約。
   - [ADR-014: EventBridge 駆動 state reconciliation](../architecture/adr-014-eventbridge-driven-state-reconciliation.html) — SSE / WebSocket を使わずに状態を収束させる仕組み。
