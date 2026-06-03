@@ -15,6 +15,7 @@ import { useEventOperations, validateEndsAtInput } from "../hooks/useEventOperat
 import { useT } from "../i18n";
 import { computeEventWizardState, type WizardState } from "../lib/event-wizard";
 import {
+  DisruptionsTab,
   EVENT_TAB_IDS,
   type EventTabId,
   NotificationsTab,
@@ -268,12 +269,17 @@ function renderTabs({
     scoreboard: <ScoreboardTab {...props} />,
     notifications: <NotificationsTab {...props} />,
     operations: <OperationsTab {...props} />,
+    disruptions: <DisruptionsTab {...props} />,
   } as const;
-  return EVENT_TAB_IDS.map((id) => ({
-    id,
-    label: t(`event_detail.tab_${id}`),
-    content: <SpaceBetween size="l">{contentByTab[id]}</SpaceBetween>,
-  }));
+  // The red-team Disruptions tab is feature-flagged (config.features.redTeam) — hidden until the
+  // cross-account executor is verified live, so operators don't fire into an unproven path.
+  return EVENT_TAB_IDS.filter((id) => id !== "disruptions" || config.features?.redTeam).map(
+    (id) => ({
+      id,
+      label: t(`event_detail.tab_${id}`),
+      content: <SpaceBetween size="l">{contentByTab[id]}</SpaceBetween>,
+    }),
+  );
 }
 
 function EventDetailLoaded({
