@@ -120,6 +120,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   process.env.BATTLE_PROBLEMS_DISRUPTIONS = undefined;
   process.env.DEPLOY_EVENT_BUS_NAME = undefined;
+  process.env.DISRUPTIONS_TABLE_NAME = undefined;
 });
 
 describe("condition-triggered disruption fire", () => {
@@ -178,5 +179,177 @@ describe("condition-triggered disruption fire", () => {
     expect(ebSend).toHaveBeenCalledTimes(1);
     // publish 失敗 → 2nd UpdateCommand (firedDisruptions) は走らない (score の 1 件のみ)。
     expect(updateCommands().length).toBe(1);
+  });
+});
+
+/**
+ * [ADR-033 / #1665] scoring-side disruption effect の end-to-end。 fire 時に effect window を
+ * activeEffects に記録し、 次 tick で penalty を score から引くことを実 handler で pin する。
+ */
+const NOW_MS = new Date(NOW_ISO).getTime();
+
+function configureWithPenaltyEffect(): void {
+  process.env.BATTLE_PROBLEMS_SCORING = JSON.stringify({
+    "hello-world-battle": {
+      kind: "uptime",
+      endpoints: [{ outputKey: "FrontendUrl", path: "/", expectStatus: [200] }],
+      pointsPerSuccess: 100,
+    },
+  });
+  process.env.PROBLEM_ENDPOINTS = JSON.stringify({});
+  process.env.BATTLE_PROBLEMS_PHASES = JSON.stringify({});
+  process.env.BATTLE_PROBLEMS_DISRUPTIONS = JSON.stringify({
+    "hello-world-battle": [
+      {
+        id: "latency",
+        name: "EC2 latency",
+        eventDetailType: "DegradedDisruptionFired",
+        parameters: { delayMs: 200 },
+        triggers: [{ kind: "team-score-above", threshold: 50 }],
+        effect: { kind: "penalty", points: 40, durationSeconds: 300 },
+      },
+    ],
+  });
+}
+
+describe("scoring-side disruption effect (#1665)", () => {
+  it("should record an activeEffect window when a disruption with an effect fires", async () => {
+    configureWithPenaltyEffect();
+    mockDdb();
+    await runHandler();
+
+    const updates = updateCommands();
+    expect(updates.length).toBe(2); // score + fired-persist
+    const state = JSON.parse(
+      (updates[1].input.ExpressionAttributeValues as Record<string, string>)[":state"],
+    );
+    expect(state.firedDisruptions).toEqual(["latency"]);
+    expect(state.activeEffects).toEqual([
+      { disruptionId: "latency", points: 40, expiresAtMs: NOW_MS + 300_000 },
+    ]);
+  });
+
+  it("should subtract an active penalty from the score on the next tick", async () => {
+    configureWithPenaltyEffect();
+    // 既に fire 済 (= 再 fire しない) で、 active な penalty window が残っている deployment。
+    mockDdb({
+      scoringState: JSON.stringify({
+        firedDisruptions: ["latency"],
+        activeEffects: [{ disruptionId: "latency", points: 40, expiresAtMs: NOW_MS + 60_000 }],
+      }),
+    });
+    await runHandler();
+
+    // 再 fire は無い (idempotency) → UpdateCommand は score 適用の 1 件のみ。
+    const updates = updateCommands();
+    expect(updates.length).toBe(1);
+    const values = updates[0].input.ExpressionAttributeValues as Record<string, unknown>;
+    // uptime +100 から penalty 40 を引いて +60。
+    expect(values[":pts"]).toBe(60);
+    // 生き残った effect は scoringState に永続化される。
+    const state = JSON.parse(values[":state"] as string);
+    expect(state.activeEffects).toEqual([
+      { disruptionId: "latency", points: 40, expiresAtMs: NOW_MS + 60_000 },
+    ]);
+  });
+
+  it("should resume full scoring and drop the effect once the window expires", async () => {
+    configureWithPenaltyEffect();
+    mockDdb({
+      scoringState: JSON.stringify({
+        firedDisruptions: ["latency"],
+        activeEffects: [{ disruptionId: "latency", points: 40, expiresAtMs: NOW_MS - 1 }], // expired
+      }),
+    });
+    await runHandler();
+
+    const updates = updateCommands();
+    expect(updates.length).toBe(1);
+    const values = updates[0].input.ExpressionAttributeValues as Record<string, unknown>;
+    expect(values[":pts"]).toBe(100); // no penalty — full uptime score
+    const state = JSON.parse(values[":state"] as string);
+    expect(state.activeEffects).toBeUndefined(); // pruned
+  });
+});
+
+/**
+ * [ADR-033 / #1665] operator-fired disruption effect: 主催者が手動 fire した disruption (= disruptions
+ * audit table の AUDIT 行) を採点 tick が読み、 window 内なら減点する。 condition trigger 無しで動く本命経路。
+ */
+function configureOperatorEffect(): void {
+  process.env.BATTLE_PROBLEMS_SCORING = JSON.stringify({
+    "hello-world-battle": {
+      kind: "uptime",
+      endpoints: [{ outputKey: "FrontendUrl", path: "/", expectStatus: [200] }],
+      pointsPerSuccess: 100,
+    },
+  });
+  process.env.PROBLEM_ENDPOINTS = JSON.stringify({});
+  process.env.BATTLE_PROBLEMS_PHASES = JSON.stringify({});
+  // triggers 無し = operator-fired only。 effect 宣言で採点上の減点を持つ。
+  process.env.BATTLE_PROBLEMS_DISRUPTIONS = JSON.stringify({
+    "hello-world-battle": [
+      {
+        id: "ceo-pressure",
+        name: "CEO pressure",
+        eventDetailType: "X",
+        effect: { kind: "penalty", points: 40, durationSeconds: 300 },
+      },
+    ],
+  });
+  process.env.DISRUPTIONS_TABLE_NAME = "TestDisruptions";
+}
+
+function mockDdbWithAudit(auditRows: Array<Record<string, unknown>>): void {
+  // biome-ignore lint/suspicious/noExplicitAny: fake dispatches by command name + table.
+  ddbSend.mockImplementation(async (cmd: any) => {
+    const name = cmd.constructor.name;
+    if (name === "ScanCommand") {
+      const tn = cmd.input.TableName;
+      if (tn === "TestEvents") return { Items: [] };
+      if (tn === "TestDeployments") return { Items: [sampleDeployment()] };
+    }
+    if (name === "BatchGetCommand") return { Responses: { TestEvents: [] } };
+    if (name === "QueryCommand" && cmd.input.TableName === "TestDisruptions") {
+      return { Items: auditRows };
+    }
+    return {};
+  });
+}
+
+describe("operator-fired disruption effect (#1665)", () => {
+  it("should subtract an operator-fired penalty resolved from the audit table", async () => {
+    configureOperatorEffect();
+    mockDdbWithAudit([
+      {
+        disruptionId: "ceo-pressure",
+        problemId: "hello-world-battle",
+        targetTeamIds: ["team-1"],
+        firedAt: new Date(NOW_MS - 60_000).toISOString(), // 60s ago, within the 300s window
+      },
+    ]);
+    await runHandler();
+
+    // No condition trigger declared → no fire publish → only the score UpdateCommand.
+    expect(ebSend).not.toHaveBeenCalled();
+    const updates = updateCommands();
+    expect(updates.length).toBe(1);
+    const values = updates[0].input.ExpressionAttributeValues as Record<string, unknown>;
+    expect(values[":pts"]).toBe(60); // uptime +100 − operator penalty 40
+  });
+
+  it("should not penalize when the operator fire is outside the effect window", async () => {
+    configureOperatorEffect();
+    mockDdbWithAudit([
+      {
+        disruptionId: "ceo-pressure",
+        problemId: "hello-world-battle",
+        targetTeamIds: ["team-1"],
+        firedAt: new Date(NOW_MS - 400_000).toISOString(), // 400s ago > 300s window
+      },
+    ]);
+    await runHandler();
+    const values = updateCommands()[0].input.ExpressionAttributeValues as Record<string, unknown>;
+    expect(values[":pts"]).toBe(100); // window elapsed → full score
   });
 });

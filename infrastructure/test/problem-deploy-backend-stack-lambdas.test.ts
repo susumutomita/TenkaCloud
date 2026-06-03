@@ -132,6 +132,8 @@ describe("ProblemDeployBackendStack (MVP-1) — GenericScoring Lambda", () => {
     expect(vars.DEPLOYMENTS_TABLE_NAME).toBeDefined();
     expect(vars.EVENTS_TABLE_NAME).toBeDefined();
     expect(vars.PROBLEM_ENDPOINTS_TABLE_NAME).toBeDefined();
+    // [ADR-033 / #1665] operator-fired disruption の active 採点効果を解決する audit table。
+    expect(vars.DISRUPTIONS_TABLE_NAME).toBeDefined();
     expect(vars.BATTLE_PROBLEMS_SCORING).toBeUndefined();
     expect(vars.PROBLEM_ENDPOINTS).toBeUndefined();
     expect(vars.BATTLE_PROBLEMS_PHASES).toBeUndefined();

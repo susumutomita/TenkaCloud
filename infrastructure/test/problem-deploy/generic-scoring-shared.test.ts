@@ -187,6 +187,28 @@ describe("parseScoringState (ADR-012 Phase 3.B、 dispatcher state persistence)"
     expect(parseScoringState(JSON.stringify([1, 2]))).toEqual({});
     expect(parseScoringState(JSON.stringify(123))).toEqual({});
   });
+
+  it("should decode activeEffects and drop malformed entries (ADR-033 #1665)", () => {
+    const state = parseScoringState(
+      JSON.stringify({
+        activeEffects: [
+          { disruptionId: "d1", points: 40, expiresAtMs: 1_700_000_060_000 },
+          { disruptionId: "", points: 1, expiresAtMs: 1 }, // empty id → dropped
+          { disruptionId: "d2", points: "x", expiresAtMs: 1 }, // non-number points → dropped
+          { disruptionId: "d3", points: 5 }, // missing expiresAtMs → dropped
+          "nope", // non-object → dropped
+        ],
+      }),
+    );
+    expect(state.activeEffects).toEqual([
+      { disruptionId: "d1", points: 40, expiresAtMs: 1_700_000_060_000 },
+    ]);
+  });
+
+  it("should omit activeEffects when none survive parsing", () => {
+    expect(parseScoringState(JSON.stringify({ activeEffects: [] })).activeEffects).toBeUndefined();
+    expect(parseScoringState(JSON.stringify({ activeEffects: "x" })).activeEffects).toBeUndefined();
+  });
 });
 
 describe("probeUrl (SSRF revalidation + bounded body read)", () => {

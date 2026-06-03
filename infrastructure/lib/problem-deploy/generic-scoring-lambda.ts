@@ -51,6 +51,11 @@ export interface GenericScoringLambdaProps {
    */
   readonly problemsDisruptions: Readonly<Record<string, unknown>>;
   /**
+   * [ADR-033 / #1665] disruptions audit table。 operator-fired disruption の active 採点効果を tick で
+   * 解決するため read-only で query する (= scoring-side effect)。
+   */
+  readonly disruptionsTable: ITable;
+  /**
    * [#1422] condition-triggered disruption の publish 先 event bus (= 手動 fire と同じ deploy bus)。
    * scoring Lambda に `events:PutEvents` を least-privilege で付与する。
    */
@@ -111,6 +116,8 @@ export class GenericScoringLambda extends Construct {
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
         // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler の credential path 構築用。
         DEPLOY_ENVIRONMENT: props.environmentName,
+        // [ADR-033 / #1665] operator-fired disruption の active 採点効果を解決するための audit table。
+        DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName,
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -147,6 +154,9 @@ export class GenericScoringLambda extends Construct {
     props.eventsTable.grantReadWriteData(this.fn);
     // Endpoint registry: per (tenant, team, problem) の override 行を Query する (= read-only)。
     props.endpointsTable.grantReadData(this.fn);
+    // [ADR-033 / #1665] disruptions audit table: operator-fired disruption の active 採点効果を
+    // event ごとに Query する (= read-only、 scoring-side effect の解決)。
+    props.disruptionsTable.grantReadData(this.fn);
     // #1422: condition-triggered disruption を event bus に publish する (= events:PutEvents、
     // 当該 bus に scope された least-privilege)。
     props.eventBus.grantPutEventsTo(this.fn);

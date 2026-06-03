@@ -225,6 +225,29 @@ describe("discoverProblemsDisruptions triggers[] (#1422)", () => {
     });
     expect(discoverProblemsDisruptions(workspace)["plain-battle"]?.[0]?.triggers).toBeUndefined();
   });
+
+  it("should surface a valid scoring effect and drop a malformed one (ADR-033 #1665)", () => {
+    writeProblem("battles", "effect-battle", {
+      id: "effect-battle",
+      disruptions: [
+        {
+          id: "ceo-pressure",
+          name: "CEO pressure",
+          eventDetailType: "X",
+          effect: { kind: "penalty", points: 40, durationSeconds: 300 },
+        },
+        {
+          id: "bad-effect",
+          name: "bad",
+          eventDetailType: "X",
+          effect: { kind: "unavailability", points: 1, durationSeconds: 1 }, // unknown kind → dropped
+        },
+      ],
+    });
+    const entries = discoverProblemsDisruptions(workspace)["effect-battle"];
+    expect(entries?.[0]?.effect).toEqual({ kind: "penalty", points: 40, durationSeconds: 300 });
+    expect(entries?.[1]?.effect).toBeUndefined(); // fail-safe drop, entry still kept
+  });
 });
 
 describe("discoverProblemsCoordination (ADR-028/030 Phase 3 #1420)", () => {

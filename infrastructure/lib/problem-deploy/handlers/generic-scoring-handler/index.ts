@@ -10,6 +10,12 @@ import { buildEndpointPK } from "../../problem-endpoints-table.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { writeScoreEvent } from "../shared/score-event.js";
 import { maybeFireConditionDisruptions } from "./condition-disruption-fire.js";
+import {
+  applyDisruptionEffects,
+  type DisruptionAuditRowLike,
+  dedupeEffectsByDisruptionId,
+  resolveOperatorEffects,
+} from "./disruption-effects.js";
 import { reconcileEventStatuses } from "./event-reconciler.js";
 import { runAttackDetectionKind } from "./kinds/attack-detection.js";
 import { runPhasedPollingKind } from "./kinds/phased-polling.js";
@@ -18,7 +24,9 @@ import { runUptimeMultiKind } from "./kinds/uptime-multi.js";
 import { reconcileRuntimeStatuses } from "./runtime-status-reconciler.js";
 import { isScoringActive } from "./scoring-active.js";
 import {
+  type ActiveDisruptionEffect,
   buildSharedResources,
+  type DeploymentScoringState,
   type GenericScoringSharedResources,
   type KindHandlerInput,
   type KindResult,
@@ -80,6 +88,11 @@ export async function handler(): Promise<void> {
   // discoverProblemsPhases から JSON 化)。env が無い場合は空 (= phases 無し)。
   const phasesByProblemId = parsePhasesEnv(process.env.BATTLE_PROBLEMS_PHASES);
 
+  // [ADR-033 / #1665] operator-fired disruption の active 採点効果を event ごとに 1 度だけ query して
+  // (`${eventId}#${teamId}#${problemId}` 別に) 解決する。 disruptions table 未配線なら空 (= 無効・後方互換)。
+  const operatorEffects = new Map<string, ActiveDisruptionEffect[]>();
+  const queriedEvents = new Set<string>();
+
   let exclusiveStartKey: Record<string, unknown> | undefined;
   do {
     const out = await shared.ddb.send(
@@ -96,22 +109,73 @@ export async function handler(): Promise<void> {
 
     // #558: deployment が属する event の `scoringLocked` を per-invocation で BatchGet 取得。
     const lockedMap = await fetchScoringLockedMap(shared, items);
+    await loadOperatorEffects(shared, items, queriedEvents, operatorEffects, nowMs);
 
     await Promise.all(
       items.map(async (item) => {
-        await processDeployment(shared, item, lockedMap, phasesByProblemId, nowMs, nowIso).catch(
-          (err) => {
-            console.warn(`[generic-scoring] processDeployment failed jobId=${item.jobId}`, {
-              message: err instanceof Error ? err.message : String(err),
-            });
-          },
-        );
+        const key = `${item.eventId ?? ""}#${item.teamId ?? ""}#${item.problemId ?? ""}`;
+        await processDeployment(
+          shared,
+          item,
+          lockedMap,
+          phasesByProblemId,
+          operatorEffects.get(key) ?? [],
+          nowMs,
+          nowIso,
+        ).catch((err) => {
+          console.warn(`[generic-scoring] processDeployment failed jobId=${item.jobId}`, {
+            message: err instanceof Error ? err.message : String(err),
+          });
+        });
       }),
     );
     exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
   } while (exclusiveStartKey);
 
   await Promise.all([reconcilePromise, runtimeReconcilePromise]);
+}
+
+/** [ADR-033 / ADR-029] 採点効果の最大 window (= 1h)。 これより古い audit 行は active になりえない。 */
+const OPERATOR_EFFECT_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * [ADR-033 / #1665] この page の deployment が属する各 event について (未 query のものだけ) disruptions
+ * audit table を query し、 operator-fired disruption の active 採点効果を解決して `out` に蓄積する。
+ * key は `${eventId}#${teamId}#${problemId}`。 disruptions table 未配線なら no-op。
+ */
+async function loadOperatorEffects(
+  shared: GenericScoringSharedResources,
+  items: readonly Partial<DeploymentItem>[],
+  queriedEvents: Set<string>,
+  out: Map<string, ActiveDisruptionEffect[]>,
+  nowMs: number,
+): Promise<void> {
+  if (!shared.disruptionsTableName) return;
+  const since = `AUDIT#${new Date(nowMs - OPERATOR_EFFECT_WINDOW_MS).toISOString()}`;
+  const eventIds = new Set<string>();
+  for (const it of items) {
+    if (typeof it.eventId === "string" && it.eventId.length > 0 && !queriedEvents.has(it.eventId)) {
+      eventIds.add(it.eventId);
+    }
+  }
+  for (const eventId of eventIds) {
+    queriedEvents.add(eventId);
+    const res = await shared.ddb.send(
+      new QueryCommand({
+        TableName: shared.disruptionsTableName,
+        KeyConditionExpression: "PK = :pk AND SK >= :since",
+        ExpressionAttributeValues: { ":pk": `EVENT#${eventId}`, ":since": since },
+      }),
+    );
+    const rows = (res.Items ?? []) as DisruptionAuditRowLike[];
+    for (const [teamProblem, effects] of resolveOperatorEffects(
+      rows,
+      shared.problemsDisruptions,
+      nowMs,
+    )) {
+      out.set(`${eventId}#${teamProblem}`, effects);
+    }
+  }
 }
 
 /**
@@ -123,6 +187,7 @@ async function processDeployment(
   item: Partial<DeploymentItem>,
   lockedMap: Map<string, boolean>,
   phasesByProblemId: Record<string, readonly PhaseEntry[]>,
+  operatorEffects: readonly ActiveDisruptionEffect[],
   nowMs: number,
   nowIso: string,
 ): Promise<void> {
@@ -174,6 +239,10 @@ async function processDeployment(
     return;
   }
 
+  // [ADR-033 / #1665] active な disruption 採点効果 (condition-fired + operator-fired) を畳み込む。
+  // active 効果が無い問題は完全に挙動不変 (= 余分な scoringState write を出さない)。
+  result = foldActiveDisruptionEffects(result, prevState, operatorEffects, nowMs);
+
   await applyKindResult(shared, item, result, nowIso);
 
   // #1422 (ADR-013 Phase 2): 採点後の score / phase / 経過分で condition-triggered disruption を
@@ -189,6 +258,39 @@ async function processDeployment(
     nowMs,
     nowIso,
   );
+}
+
+/**
+ * [ADR-033 / #1665] active な disruption 採点効果を KindResult に畳み込む。 2 ソースを統合する:
+ *   - condition-triggered: deployment の `scoringState.activeEffects` (= maybeFireConditionDisruptions が記録)
+ *   - operator-fired: disruptions audit table から毎 tick 解決した効果 (= 永続せず derive)
+ * 同一 disruptionId は dedupe して二重減点を防ぐ。 condition 効果だけを永続 (operator は次 tick で再 derive)、
+ * 期限切れは prune。 どちらの効果も無い deployment は素通し (= 完全な後方互換)。 pure。
+ */
+function foldActiveDisruptionEffects(
+  result: KindResult,
+  prevState: DeploymentScoringState,
+  operatorEffects: readonly ActiveDisruptionEffect[],
+  nowMs: number,
+): KindResult {
+  const conditionSurviving = (prevState.activeEffects ?? []).filter((e) => e.expiresAtMs > nowMs);
+  const conditionExpiredSome = (prevState.activeEffects?.length ?? 0) !== conditionSurviving.length;
+  const combined = dedupeEffectsByDisruptionId([...conditionSurviving, ...operatorEffects]);
+  if (combined.length === 0 && !conditionExpiredSome) return result;
+
+  const { result: penalized } = applyDisruptionEffects(result, combined, nowMs);
+  // condition 効果だけを永続する (operator は audit から毎 tick 再 derive する)。 期限切れは prune。
+  let newState = penalized.newState;
+  if (conditionSurviving.length > 0 || conditionExpiredSome) {
+    const { activeEffects: _drop, ...base } = penalized.newState ?? prevState;
+    newState =
+      conditionSurviving.length > 0
+        ? { ...base, activeEffects: conditionSurviving }
+        : Object.keys(base).length > 0
+          ? base
+          : undefined;
+  }
+  return { ...penalized, newState };
 }
 
 /**

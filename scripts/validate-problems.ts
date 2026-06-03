@@ -26,6 +26,7 @@ import addFormats from "ajv-formats";
 import {
   checkDisruptionActionOutputRefs,
   checkDisruptionActions,
+  checkDisruptionEffects,
 } from "./lib/disruption-action-check";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
@@ -110,6 +111,7 @@ export function checkCrossRefs(metaPath: string, meta: Metadata): ValidationErro
     ...checkDashboardSlotFiles(meta, dir),
     ...checkCoordinationPluginFile(meta, dir),
     ...checkDisruptionActions(meta),
+    ...checkDisruptionEffects(meta),
     ...checkRegionConsistency(meta),
   ];
 

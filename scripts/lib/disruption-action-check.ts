@@ -121,6 +121,50 @@ export function checkDisruptionActions(meta: Metadata): ValidationError[] {
   return errors;
 }
 
+/** [ADR-033] 採点上の効果の上限秒 (= ADR-029 と揃え 1h、 永続障害を禁止)。 */
+const MAX_EFFECT_DURATION_SECONDS = 60 * 60;
+const DISRUPTION_EFFECT_KINDS = new Set(["penalty"]);
+
+function checkSingleDisruptionEffect(id: string, effect: unknown): ValidationError[] {
+  if (!effect || typeof effect !== "object" || Array.isArray(effect)) {
+    return [`disruptions[id=${id}].effect must be an object`];
+  }
+  const e = effect as Record<string, unknown>;
+  const errors: ValidationError[] = [];
+  if (typeof e.kind !== "string" || !DISRUPTION_EFFECT_KINDS.has(e.kind)) {
+    errors.push(`disruptions[id=${id}].effect.kind must be one of penalty`);
+  }
+  if (typeof e.points !== "number" || !Number.isFinite(e.points) || e.points <= 0) {
+    errors.push(`disruptions[id=${id}].effect.points must be a positive number`);
+  }
+  const dur = e.durationSeconds;
+  if (typeof dur !== "number" || !Number.isFinite(dur) || dur <= 0) {
+    errors.push(
+      `disruptions[id=${id}].effect.durationSeconds must be a positive number of seconds`,
+    );
+  } else if (dur > MAX_EFFECT_DURATION_SECONDS) {
+    errors.push(
+      `disruptions[id=${id}].effect.durationSeconds=${dur} exceeds the ${MAX_EFFECT_DURATION_SECONDS}s cap (ADR-029: no disruption may be permanent)`,
+    );
+  }
+  return errors;
+}
+
+/**
+ * [ADR-033 / #1665] disruptions[].effect (= 採点上の効果) の契約を enforce する。 kind=penalty /
+ * points 正 / durationSeconds 正かつ 1h 以内。 effect 未宣言は無影響 (= 後方互換)。
+ */
+export function checkDisruptionEffects(meta: Metadata): ValidationError[] {
+  const disruptions = Array.isArray(meta.disruptions) ? meta.disruptions : [];
+  const errors: ValidationError[] = [];
+  for (const raw of disruptions as Array<Record<string, unknown>>) {
+    if (!raw || typeof raw !== "object" || raw.effect === undefined) continue;
+    const id = typeof raw.id === "string" ? raw.id : "?";
+    errors.push(...checkSingleDisruptionEffect(id, raw.effect));
+  }
+  return errors;
+}
+
 /**
  * [ADR-031] action.targetRef / functionRef は team の stackOutputs (= CFn Output) key を指す。
  * executable runtime のときだけ template.yaml の Outputs に実在するかを cross-ref する
