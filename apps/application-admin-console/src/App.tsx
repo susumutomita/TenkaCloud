@@ -32,7 +32,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 function guarded(element: React.ReactNode, config: AppConfig) {
   return (
     <RequireAuth>
-      <ShellLayout samlSsoEnabled={config.featureSamlSso}>{element}</ShellLayout>
+      <ShellLayout samlSsoEnabled={config.features?.samlSso}>{element}</ShellLayout>
     </RequireAuth>
   );
 }

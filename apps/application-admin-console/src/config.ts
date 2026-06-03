@@ -1,4 +1,6 @@
 import { isCognitoDomain, isHttpsUrl } from "@tenkacloud/auth-client";
+import { resolveFeatureFlags } from "@tenkacloud/web-kit";
+import { type AppFeatures, FEATURE_REGISTRY } from "./features";
 
 export interface AppConfig {
   readonly cognitoDomain: string;
@@ -44,15 +46,12 @@ export interface AppConfig {
    */
   readonly samlIdpDirectory: Readonly<Record<string, readonly string[]>>;
   /**
-   * Feature flags for capabilities that are not yet verified end-to-end. Default OFF so operators
-   * never mistake an unproven feature for a ready one; flip to `true` per environment in
-   * runtime-config.json once the feature has been validated.
-   *   - featureSamlSso: the per-tenant SAML SSO (Identity providers) page + nav.
-   *   - featureNonAwsRuntime: the non-AWS (Sakura / Azure / GCP) team cloud-credentials panel.
-   * Optional so an omitted flag reads as off (undefined is falsy) — fail-safe by default.
+   * Resolved feature flags (ADR-035). The registry (src/features.ts) holds defaults; an environment
+   * opts a flag on via runtime-config.json `features: { <key>: true }`. Access as
+   * `config.features?.<key>` — unknown keys are a compile error. loadConfig always populates it;
+   * optional only so test fixtures can omit it (absent → every flag reads OFF, fail-safe).
    */
-  readonly featureSamlSso?: boolean;
-  readonly featureNonAwsRuntime?: boolean;
+  readonly features?: AppFeatures;
 }
 
 interface RuntimeConfig {
@@ -65,8 +64,8 @@ interface RuntimeConfig {
   readonly competitorBootstrapTemplateUrl?: string;
   readonly isolation?: "pooled" | "silo";
   readonly samlIdpDirectory?: Readonly<Record<string, readonly string[]>>;
-  readonly featureSamlSso: boolean;
-  readonly featureNonAwsRuntime: boolean;
+  /** Raw `features` override object from runtime-config.json; resolved against the registry in loadConfig. */
+  readonly features?: Readonly<Record<string, unknown>>;
 }
 
 // Issue #871 / #1246: runtime-config.json URL validators (isHttpsUrl / isCognitoDomain) are
@@ -116,9 +115,11 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
         data.samlIdpDirectory && typeof data.samlIdpDirectory === "object"
           ? data.samlIdpDirectory
           : {},
-      // Unverified features stay OFF unless runtime-config explicitly opts in (=== true).
-      featureSamlSso: data.featureSamlSso === true,
-      featureNonAwsRuntime: data.featureNonAwsRuntime === true,
+      // Raw feature overrides; resolved against the registry in loadConfig (ADR-035).
+      features:
+        data.features && typeof data.features === "object" && !Array.isArray(data.features)
+          ? data.features
+          : undefined,
     };
   } catch {
     return null;
@@ -152,8 +153,7 @@ export async function loadConfig(
       isolation: runtime.isolation ?? "pooled",
       samlIdpDirectory: runtime.samlIdpDirectory ?? {},
       /* v8 ignore stop */
-      featureSamlSso: runtime.featureSamlSso,
-      featureNonAwsRuntime: runtime.featureNonAwsRuntime,
+      features: resolveFeatureFlags(FEATURE_REGISTRY, runtime.features),
       redirectUri,
       scope,
     };
@@ -164,6 +164,18 @@ export async function loadConfig(
     if (!value) throw new Error(`Missing required env var: ${key}`);
     return value;
   };
+  /** Dev-only: parse VITE_FEATURES (a JSON object of overrides); invalid / absent → registry defaults. */
+  const parseDevFeatures = (raw: string | undefined): Record<string, unknown> | undefined => {
+    if (!raw) return undefined;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  };
   return {
     cognitoDomain: required("VITE_COGNITO_DOMAIN"),
     cognitoClientId: required("VITE_COGNITO_CLIENT_ID"),
@@ -173,9 +185,8 @@ export async function loadConfig(
     isolation: env.VITE_ISOLATION === "silo" ? "silo" : "pooled",
     // Issue #1340 Phase 2: dev では SAML 経路を出さない (= 空 directory で local 一択)。
     samlIdpDirectory: {},
-    // Unverified features default OFF in dev too; opt in with VITE_FEATURE_* to exercise them.
-    featureSamlSso: env.VITE_FEATURE_SAML_SSO === "true",
-    featureNonAwsRuntime: env.VITE_FEATURE_NON_AWS_RUNTIME === "true",
+    // Dev: opt features in with VITE_FEATURES='{"samlSso":true}'; absent → registry defaults (OFF).
+    features: resolveFeatureFlags(FEATURE_REGISTRY, parseDevFeatures(env.VITE_FEATURES)),
     redirectUri,
     scope,
   };

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-035: Centralized feature-flag framework</title>
+<style>
+  :root {
+    --c-text: #1f2328; --c-muted: #59636e; --c-border: #d1d9e0; --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa; --c-accept: #1a7f37; --c-reject: #cf222e; --c-warn: #9a6700;
+    --c-link: #0969da; --c-code-bg: #eff1f3;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg); max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6; }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 6px; padding: 0.8rem 1rem; overflow-x: auto; font-size: 0.85rem; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; }
+  .status { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; background: #dafbe1; color: var(--c-accept); }
+  .muted { color: var(--c-muted); }
+</style>
+</head>
+<body>
+<h1>ADR-035: Centralized feature-flag framework</h1>
+<p><span class="status">Accepted</span></p>
+
+<h2>Context</h2>
+<p>
+We need to ship experimental / not-yet-verified features (per-tenant SAML SSO, non-AWS problem
+runtimes) without operators mistaking them for production-ready, and we need to add more such
+features over time. The first cut introduced ad-hoc <code>config.featureSamlSso</code> /
+<code>config.featureNonAwsRuntime</code> booleans. Left unchecked, that pattern sprawls: flags get
+read with scattered <code>?? false</code> defaults, there is no single list of what exists, dead
+flags linger, and each SPA reinvents resolution — i.e. it becomes spaghetti.
+</p>
+
+<h2>Decision</h2>
+<p>One typed mechanism, shared across the three SPAs.</p>
+<table>
+  <tr><th>#</th><th>Decision</th><th>Why</th></tr>
+  <tr><td>1</td><td><b>Single registry per app</b> — <code>src/features.ts</code> declares every flag once: <code>key &rarr; { description, stability, defaultEnabled }</code>.</td><td>The whole flag list is one object; discoverable, no hunting.</td></tr>
+  <tr><td>2</td><td><b>Typed keys.</b> <code>ResolvedFeatures&lt;typeof FEATURE_REGISTRY&gt;</code> gives a union of valid keys; referencing an unknown flag is a compile error.</td><td>No string typos; deleting a graduated flag surfaces every dead usage.</td></tr>
+  <tr><td>3</td><td><b>Shared resolver</b> in <code>@tenkacloud/web-kit</code>: <code>resolveFeatureFlags(registry, overrides)</code> (pure).</td><td>Resolution + its tests live once, not per SPA.</td></tr>
+  <tr><td>4</td><td><b>One override channel</b> — <code>runtime-config.json</code> <code>features: { &lt;key&gt;: boolean }</code> (dev: <code>VITE_FEATURES</code> JSON).</td><td>Flip per environment with no rebuild; matches how the rest of runtime-config is injected.</td></tr>
+  <tr><td>5</td><td><b>Resolved once</b> in <code>config.ts</code> &rarr; <code>config.features</code>.</td><td>No scattered <code>?? false</code>; one resolution point.</td></tr>
+  <tr><td>6</td><td><b>One access pattern</b>: <code>config.features?.&lt;key&gt;</code>.</td><td>Consistent, refactor-safe.</td></tr>
+  <tr><td>7</td><td><b>Experimental &rArr; default OFF; graduate &rArr; delete the entry.</b></td><td>Keeps the flag table short and honest; no permanent flags.</td></tr>
+</table>
+
+<h3>Resolution rules (robust to a hand-edited config)</h3>
+<ul>
+  <li>A boolean override wins over the registry default.</li>
+  <li>A non-boolean override (<code>"true"</code>, <code>1</code>, <code>null</code>) is ignored &rarr; default wins.</li>
+  <li>An override key not in the registry is ignored — no crash, no silently-introduced flag.</li>
+  <li>Only registry keys appear in the result, so consumers get exactly the typed surface.</li>
+</ul>
+
+<h3>Authoring a new experimental feature</h3>
+<pre>// src/features.ts
+export const FEATURE_REGISTRY = {
+  myThing: { description: "...", stability: "experimental", defaultEnabled: false },
+} as const satisfies FeatureRegistry;
+
+// component
+if (!config.features?.myThing) return &lt;FeatureDisabled /&gt;;   // gate the page too, not just the nav</pre>
+
+<h2>Consequences</h2>
+<ul>
+  <li>Adding an experimental feature = one registry entry + gate on <code>config.features?.&lt;key&gt;</code>. Nothing else.</li>
+  <li>Flags are discoverable in one file per app; the resolver is shared + unit-tested once (web-kit).</li>
+  <li>Gate the <em>page/route</em>, not just the nav link, so a direct URL cannot expose a disabled feature.</li>
+  <li>To enable in an environment: set <code>features.&lt;key&gt;: true</code> in that environment's <code>runtime-config.json</code>. <span class="muted">Surfacing this as a deploy-time CDK parameter on the console hosting stacks is a follow-up; today the key is read from runtime-config.json.</span></li>
+</ul>
+
+<h2>Alternatives considered</h2>
+<table>
+  <tr><th>Option</th><th>Verdict</th></tr>
+  <tr><td>Scattered <code>config.featureX</code> booleans</td><td>Rejected — the spaghetti this ADR exists to prevent.</td></tr>
+  <tr><td>External flag service (LaunchDarkly etc.)</td><td>Rejected — violates the cost-zero principle; <code>runtime-config.json</code> is already our per-environment injection channel.</td></tr>
+  <tr><td>Build-time env only</td><td>Rejected — cannot flip a flag in a deployed environment without a rebuild.</td></tr>
+</table>
+
+<h2>Scope</h2>
+<p>
+Frontend (the three Cloudscape SPAs). Backend Lambda feature toggles, when needed, read their own
+environment / SSM and are out of scope here. The shared resolver lives in
+<code>packages/web-kit/src/feature-flags.ts</code>; the first registry is
+<code>apps/application-admin-console/src/features.ts</code> (<code>samlSso</code>,
+<code>nonAwsRuntime</code>).
+</p>
+</body>
+</html>

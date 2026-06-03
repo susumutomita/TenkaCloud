@@ -52,6 +52,33 @@ describe("loadConfig", () => {
     it("should take apiBaseUrl from runtime-config.apiUrl (different key)", async () => {
       expect((await loadWithFullRuntime()).apiBaseUrl).toBe("https://prod-api.example.com/prod");
     });
+
+    it("should default features OFF when runtime-config omits the features object", async () => {
+      expect((await loadWithFullRuntime()).features).toEqual({
+        samlSso: false,
+        nonAwsRuntime: false,
+      });
+    });
+
+    it("should resolve features from a runtime-config features override object", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              cognitoDomain: "https://prod-tenant.auth.ap-northeast-1.amazoncognito.com",
+              userClientId: "prod-client-id",
+              tenantId: "tenant-prod-1",
+              tenantName: "tenant",
+              apiUrl: "https://prod-api.example.com/prod",
+              features: { samlSso: true, nonAwsRuntime: true },
+            }),
+            { status: 200 },
+          ),
+        ),
+      );
+      expect((await loadConfig(env)).features).toEqual({ samlSso: true, nonAwsRuntime: true });
+    });
   });
 
   describe("when /runtime-config.json returns 404 (dev fallback)", () => {
@@ -69,6 +96,26 @@ describe("loadConfig", () => {
       vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
       const config = await loadConfig(env);
       expect(config.tenantId).toBe("dev-local");
+    });
+
+    it("should default all features OFF when VITE_FEATURES is absent", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+      const config = await loadConfig(env);
+      expect(config.features).toEqual({ samlSso: false, nonAwsRuntime: false });
+    });
+
+    it("should opt features in from a VITE_FEATURES JSON object", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+      const config = await loadConfig({ ...env, VITE_FEATURES: '{"samlSso":true}' });
+      expect(config.features).toEqual({ samlSso: true, nonAwsRuntime: false });
+    });
+
+    it("should ignore invalid / non-object VITE_FEATURES and use defaults", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
+      const bad = await loadConfig({ ...env, VITE_FEATURES: "not-json" });
+      expect(bad.features).toEqual({ samlSso: false, nonAwsRuntime: false });
+      const arr = await loadConfig({ ...env, VITE_FEATURES: "[1,2]" });
+      expect(arr.features).toEqual({ samlSso: false, nonAwsRuntime: false });
     });
   });
 
