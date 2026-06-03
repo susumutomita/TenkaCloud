@@ -6,6 +6,7 @@ import {
   TENANT_ADMIN_ROLE,
   TENANT_OPERATOR_ROLE,
 } from "../../deploy-handler/auth.js";
+import { auditEventAction } from "../audit.js";
 import { fireDisruption, listDisruptionAudit, listDisruptionCatalog } from "../disruption-fire.js";
 import type { DisruptionFireOutcome } from "../disruption-types.js";
 import {
@@ -120,6 +121,7 @@ export function registerDisruptionRoutes(app: Hono, shared: EventSharedResources
             firedBy: resolveCognitoSub(c),
             nowMs: Date.now(),
           });
+          if (outcome.kind === "ok") auditEventAction(c, "fire_disruption", eventId);
           return disruptionFireOutcomeResponse(c, outcome);
         } catch (err) {
           return handleRouteError(c, "[disruptions] fire failed", { eventId }, err);

@@ -699,7 +699,6 @@
   "disruptions": {
     "header": "Disruptions (レッドチーム)",
     "description": "競技中にチームへ宣言済みの障害を発火します。 各問題が自身の障害を宣言し、 platform がチームの deploy 済み stack に障害を注入して自動復旧します。",
-    "experimental_banner": "実験的機能: 障害注入の機構はユニットテスト済みですが、 クロスアカウント注入は実 AWS アカウントでの end-to-end 検証がまだです。 まずは本番以外のイベントでお試しください。",
     "col_name": "障害",
     "col_problem": "問題",
     "col_description": "説明",

@@ -699,7 +699,6 @@
   "disruptions": {
     "header": "Disruptions (red team)",
     "description": "Fire a declared disruption at teams during the Battle. Each problem declares its own disruptions; the platform injects the fault into the team's deployed stack and auto-reverts it.",
-    "experimental_banner": "Experimental: the disruption mechanism is unit-tested, but the cross-account injection has not yet been verified end-to-end on a live AWS account. Try it on a non-production event first.",
     "col_name": "Disruption",
     "col_problem": "Problem",
     "col_description": "Description",
