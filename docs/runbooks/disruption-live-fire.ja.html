@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Disruption live-fire — クロスアカウントの実障害 + 自動復旧を観測する</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>Disruption live-fire — クロスアカウントの実障害 + 自動復旧を観測する</h1>
+<blockquote>
+<p>English: <a href="./disruption-live-fire.md">disruption-live-fire.md</a></p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>対象者</td>
+<td>実 AWS アカウントでレッドチーム disruption の経路を検証する operator</td>
+</tr>
+<tr>
+<td>使う時</td>
+<td>リリースごとに 1 回、クロスアカウント disruption chain (<a href="https://github.com/susumutomita/TenkaCloud/issues/1419">#1419</a> / <a href="https://github.com/susumutomita/TenkaCloud/issues/1666">#1666</a>) が<strong>観測可能な障害</strong>を注入し<strong>自動復旧</strong>することを証明する</td>
+</tr>
+<tr>
+<td>所要時間</td>
+<td>約 10 分（team が 1 つ deploy 済みであること）</td>
+</tr>
+<tr>
+<td>成果物</td>
+<td><code>healthy → FAULTED → recovered</code> を示す <code>evidence.json</code>、executor Lambda のログ、audit 行</td>
+</tr>
+</tbody></table>
+<p>fire → inject → revert の chain は実装済みで、mock SDK でのユニットテストも通っている（operator fire → EventBridge → executor Lambda → <code>ExternalId</code> 付き <code>AssumeRole</code> で競技者アカウントへ → SSM <code>RunCommand</code> → 予約された revert）。mock では「実 stack に障害が着地し、時間内に復旧する」ことは証明できない。この runbook がそれを実行し、#1419/#1666 を閉じる証拠を取る。</p>
+<h2>前提</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>必要なもの</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Platform が deploy 済み（<code>make deploy-saas</code>、または Lite の <code>make deploy</code>）で、disruption executor Lambda + EventBridge rule が live</td>
+</tr>
+<tr>
+<td>2</td>
+<td>1 つの team が <strong>security-battle-royale</strong> を競技者アカウントへ deploy 済み（<code>competitor-bootstrap.yaml</code> role 配備、<code>CDK_PARAM_DEPLOY_EXTERNAL_ID</code> で <code>ExternalId</code> 設定済み）</td>
+</tr>
+<tr>
+<td>3</td>
+<td>team の app に到達可能：deployment の stack outputs から <code>Ec2HostHint</code> を控える。health URL は <code>http://&lt;Ec2HostHint&gt;:8080/api/v1/apistatus</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>operator</strong> の bearer token（<code>TenantAdmin</code> か <code>TenantOperator</code> role の Cognito JWT）。Application Admin Console のセッションから取得（ブラウザの dev-tools → request の <code>authorization</code> header）</td>
+</tr>
+</tbody></table>
+<p>デフォルトの対象 disruption は <strong><code>availability-flood</code></strong>（<code>ssm-run-command</code>）。team 自身の EC2 から <code>localhost</code> へ向けた制限付き HTTP flood で単一 Flask プロセスを約 30 秒飽和させ、<code>uptime-multi</code> scorer が slot の失敗を検知する。予約された revert（<code>afterSeconds: 90</code>）が残った負荷を kill する（ADR-029 INV-2 — いかなる disruption も永続しない）。</p>
+<h2>Step 1 — 送信する request を確認（AWS も token も不要）</h2>
+<pre><code class="language-bash">bun run scripts/disruption-live-fire.ts --dry-run \
+  --api https://&lt;event-api-id&gt;.execute-api.&lt;region&gt;.amazonaws.com \
+  --event &lt;eventId&gt; --team &lt;teamId&gt; \
+  --app-url http://&lt;Ec2HostHint&gt;:8080/api/v1/apistatus
+</code></pre>
+<p>実際に送る <code>POST /events/&lt;eventId&gt;/disruptions/fire</code> の body をそのまま表示する。live 呼び出し前に意図と照合する（request builder は <code>DisruptionFireRequestSchema</code> と同型で、ユニットテスト済み）。</p>
+<h2>Step 2 — fire して証拠を取る</h2>
+<pre><code class="language-bash">export DISRUPTION_JWT=&#39;&lt;operator-bearer-token&gt;&#39;
+bun run scripts/disruption-live-fire.ts \
+  --api https://&lt;event-api-id&gt;.execute-api.&lt;region&gt;.amazonaws.com \
+  --event &lt;eventId&gt; --team &lt;teamId&gt; \
+  --app-url http://&lt;Ec2HostHint&gt;:8080/api/v1/apistatus \
+  --evidence evidence.json
+</code></pre>
+<p>script は baseline を probe（healthy でなければ中断）→ fire → health URL を 5 秒ごとに 180 秒 poll → timeline を判定 → <code>evidence.json</code> を書き出す。</p>
+<p>次のように手動 <code>curl</code> でも fire できます（script はこれを自動化しているだけ）。</p>
+<pre><code class="language-bash">curl -X POST &quot;https://&lt;event-api-id&gt;.execute-api.&lt;region&gt;.amazonaws.com/events/&lt;eventId&gt;/disruptions/fire&quot; \
+  -H &quot;authorization: Bearer $DISRUPTION_JWT&quot; -H &quot;content-type: application/json&quot; \
+  -d &#39;{&quot;problemId&quot;:&quot;security-battle-royale&quot;,&quot;disruptionId&quot;:&quot;availability-flood&quot;,&quot;scope&quot;:&quot;team&quot;,&quot;targetTeamIds&quot;:[&quot;&lt;teamId&gt;&quot;],&quot;requestId&quot;:&quot;live-fire-0001abcd&quot;}&#39;
+</code></pre>
+<h2>Step 3 — verdict を読む</h2>
+<table>
+<thead>
+<tr>
+<th>Verdict</th>
+<th>意味</th>
+<th>何を示すか</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>PASS</code></td>
+<td>window 内で <code>healthy → FAULTED → recovered</code></td>
+<td>chain が実障害を注入し<strong>かつ</strong>自動復旧した — #1419/#1666 達成</td>
+</tr>
+<tr>
+<td><code>no-fault</code></td>
+<td>fire 後も unhealthy にならない</td>
+<td>disruption が stack に<strong>届いていない</strong>（executor Lambda ログ / <code>ExternalId</code> の trust / <code>InstanceId</code> stack output を確認）</td>
+</tr>
+<tr>
+<td><code>no-recovery</code></td>
+<td>障害は起きたが復旧しない（または遅い）</td>
+<td>inject は成功、revert が失敗 — 予約 revert を調査（ADR-029 INV-2）</td>
+</tr>
+<tr>
+<td><code>no-baseline</code></td>
+<td>fire 前から unhealthy</td>
+<td>先に deployment を直す。fire に障害を帰属できない</td>
+</tr>
+</tbody></table>
+<h2>残す証拠</h2>
+<ol>
+<li><code>evidence.json</code> — sample した timeline + verdict。</li>
+<li><strong>executor Lambda</strong> の CloudWatch ログ（<code>disruption-executor</code>）の fire 前後 — <code>AssumeRole</code> + <code>SendCommand</code> + 予約 revert が見える。</li>
+<li><strong>audit 行</strong>：<code>GET /events/&lt;eventId&gt;/disruptions/audit</code> が fire 記録（auditId、scope、対象 team）を返す。</li>
+</ol>
+<p>これらが揃えば、技術的 disruption が監査だけの no-op ではなく、実際に自己修復する障害を注入していることの live な証明になる。</p>
+
+<div class="doc-source">Source: <code>docs/runbooks/disruption-live-fire.ja.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/runbooks/disruption-live-fire.ja.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>

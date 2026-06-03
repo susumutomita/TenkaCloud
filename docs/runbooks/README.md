@@ -17,6 +17,7 @@ The runbooks assume Lite mode (`make deploy`) as the default, because most paid 
 | 5 | [Incident response](./incident-response.md) | On-call operator | Triggered by alarm or participant report | 5 to 30 min per incident |
 | 6 | [Teardown](./teardown.md) | Operator | Within 24 hours after the event ends | 60 min |
 | 7 | [Multi-cloud providers](./multi-cloud-providers.md) | Operator | Setup — only if a problem targets Sakura / Azure / GCP, before you deploy it | 20 min per team per provider |
+| 8 | [Disruption live-fire](./disruption-live-fire.md) | Operator | Once per release — validate the cross-account disruption path on real AWS | ~10 min |
 
 ## How the runbooks cross-link
 

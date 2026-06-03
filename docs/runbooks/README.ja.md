@@ -17,6 +17,7 @@ Runbook 全体は Lite mode (`make deploy`) をデフォルトとしています
 | 5 | [インシデント対応](./incident-response.ja.md) | オンコールオペレータ | アラートまたは参加者報告から | 1 件あたり 5 〜 30 分 |
 | 6 | [Teardown](./teardown.ja.md) | オペレータ | イベント終了から 24 時間以内 | 60 分 |
 | 7 | [マルチクラウドプロバイダ](./multi-cloud-providers.ja.md) | オペレータ | セットアップ — 問題が Sakura / Azure / GCP を対象とする場合のみ、 deploy 前 | チーム × provider ごとに 20 分 |
+| 8 | [Disruption live-fire](./disruption-live-fire.ja.md) | オペレータ | リリースごとに 1 回 — 実 AWS でクロスアカウント disruption 経路を検証 | 約 10 分 |
 
 ## Runbook 同士の相互参照
 
