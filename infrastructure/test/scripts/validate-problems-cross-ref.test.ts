@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   checkDisruptionActionOutputRefs,
   checkDisruptionActions,
+  checkDisruptionEffects,
 } from "../../../scripts/lib/disruption-action-check";
 import { checkCoordinationPluginFile } from "../../../scripts/validate-problems";
 
@@ -219,6 +220,61 @@ describe("checkDisruptionActions (ADR-031 #1419)", () => {
       disruptions: [{ id: "x", name: "x", eventDetailType: "X", action: "nope" }],
     });
     expect(errs.some((e) => e.includes("action must be an object"))).toBe(true);
+  });
+});
+
+describe("checkDisruptionEffects (ADR-033 #1665)", () => {
+  const withEffect = (effect: unknown) => ({
+    disruptions: [{ id: "ceo-pressure", name: "CEO", eventDetailType: "X", effect }],
+  });
+
+  it("should pass a well-formed penalty effect", () => {
+    expect(
+      checkDisruptionEffects(withEffect({ kind: "penalty", points: 40, durationSeconds: 300 })),
+    ).toEqual([]);
+  });
+
+  it("should be a no-op when no effect is declared (backward compat)", () => {
+    expect(
+      checkDisruptionEffects({ disruptions: [{ id: "x", name: "x", eventDetailType: "X" }] }),
+    ).toEqual([]);
+    expect(checkDisruptionEffects({})).toEqual([]);
+  });
+
+  it("should reject a kind outside the allow-list", () => {
+    const errs = checkDisruptionEffects(
+      withEffect({ kind: "unavailability", points: 1, durationSeconds: 1 }),
+    );
+    expect(errs.some((e) => e.includes("effect.kind must be one of penalty"))).toBe(true);
+  });
+
+  it("should reject non-positive points", () => {
+    expect(
+      checkDisruptionEffects(withEffect({ kind: "penalty", points: 0, durationSeconds: 60 })).some(
+        (e) => e.includes("effect.points must be a positive"),
+      ),
+    ).toBe(true);
+  });
+
+  it("should reject a non-positive or over-cap durationSeconds (ADR-029)", () => {
+    expect(
+      checkDisruptionEffects(withEffect({ kind: "penalty", points: 1, durationSeconds: 0 })).some(
+        (e) => e.includes("durationSeconds must be a positive"),
+      ),
+    ).toBe(true);
+    expect(
+      checkDisruptionEffects(
+        withEffect({ kind: "penalty", points: 1, durationSeconds: 3601 }),
+      ).some((e) => e.includes("exceeds the") && e.includes("3600")),
+    ).toBe(true);
+  });
+
+  it("should reject a non-object effect", () => {
+    expect(
+      checkDisruptionEffects(withEffect("nope")).some((e) =>
+        e.includes("effect must be an object"),
+      ),
+    ).toBe(true);
   });
 });
 
