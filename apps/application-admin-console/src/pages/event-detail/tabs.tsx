@@ -21,6 +21,7 @@ import { EventSchedulePanel } from "../../components/event-detail/EventScheduleP
 import { EventTeamsPanel } from "../../components/event-detail/EventTeamsPanel";
 import { TeamRankingPanel } from "../../components/TeamRankingPanel";
 import { TeamScoreEventsPanel } from "../../components/TeamScoreEventsPanel";
+import { DisruptionsPanel } from "./DisruptionsPanel";
 import type { EventTabContentProps } from "./tab-content-props";
 
 export { OperationsTab } from "./OperationsTab";
@@ -35,6 +36,8 @@ export const EVENT_TAB_IDS = [
   "scoreboard",
   "notifications",
   "operations",
+  // [#1417/#1666] feature-flagged (redTeam): the tab only renders when config.features.redTeam.
+  "disruptions",
 ] as const;
 
 export type EventTabId = (typeof EVENT_TAB_IDS)[number];
@@ -107,5 +110,11 @@ export function NotificationsTab({ detail, operations, t }: EventTabContentProps
       onOpen={() => operations.setNotifyModalOpen(true)}
       t={t}
     />
+  );
+}
+
+export function DisruptionsTab({ apiClient, detail, t }: EventTabContentProps) {
+  return (
+    <DisruptionsPanel apiClient={apiClient} eventId={detail.eventId} teams={detail.teams} t={t} />
   );
 }

@@ -16,6 +16,11 @@ export const FEATURE_REGISTRY = {
     stability: "experimental",
     defaultEnabled: false,
   },
+  redTeam: {
+    description: "Operator red-team console — fire disruptions at teams during a Battle.",
+    stability: "experimental",
+    defaultEnabled: false,
+  },
 } as const satisfies FeatureRegistry;
 
 export type AppFeatures = ResolvedFeatures<typeof FEATURE_REGISTRY>;
