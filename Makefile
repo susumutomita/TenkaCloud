@@ -95,6 +95,7 @@ before-commit: lint test validate-problems check-docs check-http-status check-te
 check-synth:
 	@CDK_SKIP_BUNDLING=1 $(MAKE) synth >/dev/null 2>&1 || { echo "ERROR: cdk synth failed (= make deploy も失敗します)。 CDK_SKIP_BUNDLING=1 make synth で詳細を確認してください。"; exit 1; }
 	@echo "OK  cdk synth (module 解決 / 型 / construct を検証、 Docker バンドルは skip — 実バンドルは make synth)"
+	@bun run scripts/check-synth-iam-ascii.ts
 
 # ===== Lint / Fix =====
 lint:   lint-md lint-text lint-format

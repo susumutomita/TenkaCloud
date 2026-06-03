@@ -1,6 +1,7 @@
 import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
+import { scanTemplateForIamDescriptions } from "../../scripts/lib/iam-description-ascii";
 import { ChallengePayloadStack } from "../lib/challenge-payload/challenge-payload-stack.js";
 
 /**
@@ -146,5 +147,13 @@ describe("ChallengePayloadStack", () => {
         branches: [],
       }),
     ).toThrow(/at least one entry/);
+  });
+
+  // Issue #664 regression: PublishRole's description interpolates the bucket name (a token), so it
+  // synthesizes to an Fn::Join. A non-Latin1 char in the literal fragment (a → arrow once did) makes
+  // IAM CREATE_FAILED. Guard the synthesized IAM descriptions with the same scanner check-synth uses.
+  it("should keep every IAM Role/ManagedPolicy description within the IAM Latin-1 range", () => {
+    const findings = scanTemplateForIamDescriptions(synth().toJSON());
+    expect(findings).toEqual([]);
   });
 });
