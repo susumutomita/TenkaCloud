@@ -222,6 +222,22 @@ export interface DisruptionAction {
   readonly revert: DisruptionActionRevert;
 }
 
+/**
+ * [ADR-033 / Issue #1665] disruption の **採点上の効果**。 実クラウドへの fault 注入 (= {@link DisruptionAction})
+ * とは別レイヤで、 採点エンジンが active window の間だけ team の点に直接効果を与える (= シナリオ圧力)。
+ *
+ * `kind: "penalty"` のみ実装済 (= active な各 tick で `points` を減点)。 `durationSeconds` は ADR-029
+ * 「いかなる障害も永続しない」に従い正の有限秒・上限 1h。 `unavailability` 等は follow-up。
+ */
+export type DisruptionEffect = {
+  readonly kind: "penalty";
+  readonly points: number;
+  readonly durationSeconds: number;
+};
+
+/** [ADR-033] 採点上の効果の上限秒 (= ADR-029 と揃え 1h、 永続障害を禁止)。 */
+export const DISRUPTION_EFFECT_MAX_DURATION_SECONDS = 3600;
+
 export interface ProblemDisruptionEntry {
   readonly id: string;
   readonly name: string;
@@ -235,6 +251,30 @@ export interface ProblemDisruptionEntry {
   readonly triggers?: readonly DisruptionTrigger[];
   /** [ADR-031 / #1419] cross-account 実行アクション (省略 = Phase A 監査のみ = 後方互換)。 */
   readonly action?: DisruptionAction;
+  /** [ADR-033 / #1665] 採点上の効果 (省略 = 効果なし = 後方互換)。 */
+  readonly effect?: DisruptionEffect;
+}
+
+/**
+ * SCHEMA `disruptions[].effect` を fail-safe に取り出す。 `kind="penalty"` / `points` が正の有限数 /
+ * `durationSeconds` が正の有限数かつ上限以内のときだけ返し、 それ以外は undefined (= 効果なしに倒す)。
+ * 宣言時の strict 検証は validate-problems が担う ({@link parseDisruptionAction} と同型)。
+ */
+export function parseDisruptionEffect(value: unknown): DisruptionEffect | undefined {
+  if (!isPlainObject(value)) return undefined;
+  if (value.kind !== "penalty") return undefined;
+  const points = value.points;
+  const durationSeconds = value.durationSeconds;
+  if (typeof points !== "number" || !Number.isFinite(points) || points <= 0) return undefined;
+  if (
+    typeof durationSeconds !== "number" ||
+    !Number.isFinite(durationSeconds) ||
+    durationSeconds <= 0 ||
+    durationSeconds > DISRUPTION_EFFECT_MAX_DURATION_SECONDS
+  ) {
+    return undefined;
+  }
+  return { kind: "penalty", points, durationSeconds };
 }
 
 /**
@@ -359,6 +399,7 @@ function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefine
     publicHint?: unknown;
     triggers?: unknown;
     action?: unknown;
+    effect?: unknown;
   };
   if (
     typeof v.id !== "string" ||
@@ -369,6 +410,7 @@ function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefine
   }
   const triggers = parseDisruptionTriggers(v.triggers);
   const action = parseDisruptionAction(v.action);
+  const effect = parseDisruptionEffect(v.effect);
   return {
     id: v.id,
     name: v.name,
@@ -389,6 +431,7 @@ function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefine
     ...(typeof v.publicHint === "boolean" ? { publicHint: v.publicHint } : {}),
     ...(triggers ? { triggers } : {}),
     ...(action ? { action } : {}),
+    ...(effect ? { effect } : {}),
   };
 }
 

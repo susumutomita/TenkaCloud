@@ -69,6 +69,16 @@ export function buildSharedResources(): GenericScoringSharedResources {
  * DDB の deployment.SK="META" 行に JSON 文字列で保存し、次 tick で read-through で復元する。
  * 失敗時 (= 壊れた JSON) は空 state にフォールバック (= 安全側、最初の tick は 0 加算)。
  */
+/**
+ * [ADR-033 / #1665] active な採点効果の 1 件。 disruption が fire したとき (condition-triggered) に
+ * `expiresAtMs` 付きで記録し、 採点 tick が window 内の各 tick で `points` を減点する。 期限切れは prune。
+ */
+export interface ActiveDisruptionEffect {
+  readonly disruptionId: string;
+  readonly points: number;
+  readonly expiresAtMs: number;
+}
+
 export interface DeploymentScoringState {
   readonly bonusAwarded?: Readonly<Record<string, boolean>>;
   readonly attackCount?: number;
@@ -77,6 +87,32 @@ export interface DeploymentScoringState {
    * 以降抑制する idempotency record (= ADR-013 OQ#5)。 publish 成功後にだけ追記する。
    */
   readonly firedDisruptions?: readonly string[];
+  /**
+   * [ADR-033 / #1665] active な採点効果 (= fire 済 disruption の減点 window)。 各 tick で適用し、
+   * `expiresAtMs <= now` のものは prune する。
+   */
+  readonly activeEffects?: readonly ActiveDisruptionEffect[];
+}
+
+/** [ADR-033] JSON から ActiveDisruptionEffect 配列を fail-safe に復元する。 不正要素は drop。 */
+function parseActiveEffects(raw: unknown): readonly ActiveDisruptionEffect[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const effects: ActiveDisruptionEffect[] = [];
+  for (const e of raw) {
+    if (!e || typeof e !== "object" || Array.isArray(e)) continue;
+    const { disruptionId, points, expiresAtMs } = e as Record<string, unknown>;
+    if (
+      typeof disruptionId === "string" &&
+      disruptionId.length > 0 &&
+      typeof points === "number" &&
+      Number.isFinite(points) &&
+      typeof expiresAtMs === "number" &&
+      Number.isFinite(expiresAtMs)
+    ) {
+      effects.push({ disruptionId, points, expiresAtMs });
+    }
+  }
+  return effects.length > 0 ? effects : undefined;
 }
 
 export function parseScoringState(raw: string | undefined): DeploymentScoringState {
@@ -102,10 +138,12 @@ export function parseScoringState(raw: string | undefined): DeploymentScoringSta
   const firedDisruptions = Array.isArray(firedRaw)
     ? firedRaw.filter((s): s is string => typeof s === "string")
     : undefined;
+  const activeEffects = parseActiveEffects((parsed as { activeEffects?: unknown }).activeEffects);
   return {
     ...(bonusAwarded ? { bonusAwarded } : {}),
     ...(attackCount !== undefined ? { attackCount } : {}),
     ...(firedDisruptions && firedDisruptions.length > 0 ? { firedDisruptions } : {}),
+    ...(activeEffects ? { activeEffects } : {}),
   };
 }
 

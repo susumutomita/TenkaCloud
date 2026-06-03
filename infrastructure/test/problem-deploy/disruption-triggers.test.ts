@@ -12,6 +12,7 @@ import {
   type DisruptionTrigger,
   type ProblemDisruptionEntry,
   parseDisruptionAction,
+  parseDisruptionEffect,
   parseDisruptionsCatalogEnv,
   parseDisruptionTriggers,
 } from "../../lib/utils/discover-problems-catalog";
@@ -148,6 +149,66 @@ describe("parseDisruptionAction (ADR-031 #1419)", () => {
       kind: "ssm-run-command",
       targetRef: "X",
       revert: { afterSeconds: 5 },
+    });
+  });
+});
+
+describe("parseDisruptionEffect (ADR-033 #1665)", () => {
+  it("should parse a valid penalty effect", () => {
+    expect(parseDisruptionEffect({ kind: "penalty", points: 40, durationSeconds: 300 })).toEqual({
+      kind: "penalty",
+      points: 40,
+      durationSeconds: 300,
+    });
+  });
+
+  it("should fail-safe to undefined for an unknown kind", () => {
+    expect(
+      parseDisruptionEffect({ kind: "unavailability", points: 1, durationSeconds: 1 }),
+    ).toBeUndefined();
+  });
+
+  it("should reject non-positive / non-finite points", () => {
+    expect(
+      parseDisruptionEffect({ kind: "penalty", points: 0, durationSeconds: 60 }),
+    ).toBeUndefined();
+    expect(
+      parseDisruptionEffect({ kind: "penalty", points: -5, durationSeconds: 60 }),
+    ).toBeUndefined();
+    expect(
+      parseDisruptionEffect({ kind: "penalty", points: "40", durationSeconds: 60 }),
+    ).toBeUndefined();
+  });
+
+  it("should reject duration <= 0 or above the 1h cap", () => {
+    expect(
+      parseDisruptionEffect({ kind: "penalty", points: 1, durationSeconds: 0 }),
+    ).toBeUndefined();
+    expect(
+      parseDisruptionEffect({ kind: "penalty", points: 1, durationSeconds: 3601 }),
+    ).toBeUndefined();
+    expect(parseDisruptionEffect({ kind: "penalty", points: 1, durationSeconds: 3600 })).toEqual({
+      kind: "penalty",
+      points: 1,
+      durationSeconds: 3600,
+    });
+  });
+
+  it("should fail-safe to undefined for non-object / array / null input", () => {
+    expect(parseDisruptionEffect(undefined)).toBeUndefined();
+    expect(parseDisruptionEffect(null)).toBeUndefined();
+    expect(parseDisruptionEffect("penalty")).toBeUndefined();
+    expect(parseDisruptionEffect([{ kind: "penalty" }])).toBeUndefined();
+  });
+
+  it("should preserve a declared effect through the catalog env round-trip", () => {
+    const env = JSON.stringify({
+      p1: [baseDisruption({ effect: { kind: "penalty", points: 10, durationSeconds: 120 } })],
+    });
+    expect(parseDisruptionsCatalogEnv(env).p1?.[0]?.effect).toEqual({
+      kind: "penalty",
+      points: 10,
+      durationSeconds: 120,
     });
   });
 });

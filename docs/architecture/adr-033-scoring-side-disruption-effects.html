@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-033: Scoring-side disruption effects</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.draft { background: #ddf4ff; color: var(--c-link); }
+  .badge.accept { background: #dafbe1; color: var(--c-accept); }
+  .badge.reject { background: #ffe5e5; color: var(--c-reject); }
+  .badge.warn { background: #fff8c5; color: var(--c-warn); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  .ok { color: var(--c-accept); font-weight: 600; }
+  .no { color: var(--c-reject); font-weight: 600; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  .seq { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; white-space: pre; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-033: Scoring-side disruption effects</h1>
+  <p><em>fire しても採点が動かない disruption に、 実クラウドへの fault 注入を伴わずに「採点上の効果 (減点 / 可用性ダウン)」を与えるための宣言契約と評価経路</em></p>
+  <div class="meta">
+    <div><b>Status:</b> <span class="badge draft">Proposed</span> 2026-06-03</div>
+    <div><b>Related:</b>
+      <a href="./adr-013-disruption-phase2-condition-triggered.html">ADR-013</a> (disruption 宣言 / Phase A→B / condition trigger),
+      <a href="./adr-031-cross-account-disruption-dispatch.html">ADR-031</a> (cross-account の実 fault 注入 <code>action</code>),
+      <a href="./adr-029-attack-resilience-game-always-ends.html">ADR-029</a> (game always ends),
+      <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> (problem = plugin, platform = host)
+    </div>
+    <div><b>Issue:</b> #1665 (#1417 の子)</div>
+  </div>
+</header>
+
+<h2>背景 — 何が壊れているか</h2>
+<p>
+2026-06-03 のコード監査で、 宣言済の disruption 9 件のうち <strong>採点や挙動に実際の効果を与えるのは 1 件だけ</strong> (= <code>microservice-migration-battle/ec2-latency-injection</code>、 ADR-031 の <code>action</code> で実 fault を注入) と判明した。 残り 8 件は fire しても <code>*DisruptionFired</code> イベントの publish と監査行の書き込みで終わり、 競技結果は 1 点も動かない。
+</p>
+<p>
+とくに <code>stackstack</code> (scoring kind = <code>phased-polling</code>) の 5 件は説明文で「追加減点」「<code>failurePenalty</code> を累積追加」「auth slot を 5 分間 503 にする (= 5 cycle ぶん加点 0)」と <strong>採点上の効果</strong>を約束しているが、 それを実現するコード経路が無い。 採点 kind (<code>uptime-multi</code> / <code>phased-polling</code> 等) は実エンドポイントを probe するだけで、 fire 済 disruption を一切参照しない。 = 説明文だけのハリボテ。
+</p>
+<p>
+これらは <em>本質的に「ビジネス/シナリオ上の圧力」</em>であり、 競技者アカウントの実インフラを物理的に壊す必要はない (CEO が 5000 人を要求 / Legal が PII を検出 / .env 流出で 5 分間ダウン扱い)。 必要なのは <strong>採点エンジンが、 ある期間その team の点に効果を与える</strong>ことである。 これは ADR-031 の cross-account 実 fault 注入とは別レイヤの実現手段で、 <strong>実クラウドアカウントを必要としない</strong>。
+</p>
+
+<h2>決定</h2>
+<p>
+disruption 宣言に省略可能な <code>effect</code> を追加し、 採点エンジンがその効果を <strong>active window の間だけ</strong> 各 tick で <code>KindResult</code> に畳み込む。 disruption の 2 つの実現手段を明確に分離する:
+</p>
+<table>
+  <thead><tr><th>手段</th><th>実現するもの</th><th>必要環境</th><th>ADR</th></tr></thead>
+  <tbody>
+    <tr><td><code>action</code></td><td>競技者アカウントの実インフラに <strong>物理 fault</strong> (latency / 503 / process kill)。 team の probe がそれを観測して採点が下がる。</td><td>実クラウド + AssumeRole</td><td>ADR-031</td></tr>
+    <tr><td><code>effect</code> (本 ADR)</td><td>採点エンジンが直接与える <strong>採点上の効果</strong> (減点 / 指定 slot を fail 扱い)。 物理 fault は起こさない。</td><td>不要 (platform 内で完結)</td><td>ADR-033</td></tr>
+  </tbody>
+</table>
+<p>
+両者は排他ではない。 1 つの disruption が <code>action</code> と <code>effect</code> の両方を持ってもよい (実 fault + 追加減点)。 どちらも無い disruption は従来どおり「監査のみ」(= 後方互換)。
+</p>
+
+<h3>effect の宣言契約</h3>
+<pre>// metadata.json の disruptions[].effect (省略可)
+{
+  "kind": "penalty",        // 指定点を減点する (= scoreDelta に負値を加える)
+  "points": 50,
+  "durationSeconds": 300
+}
+{
+  "kind": "unavailability", // 指定 slot を window 中 fail 扱いにする (= 加点を 0 にし failurePenalty を課す)
+  "slots": ["auth"],
+  "durationSeconds": 300
+}</pre>
+<ul>
+  <li><code>kind</code> は <code>"penalty" | "unavailability"</code> の allow-list。 未知の kind は validator で reject。</li>
+  <li><code>durationSeconds</code> は正の有限数で上限 <strong>3600 (1h)</strong>。 ADR-029 の「永続障害禁止」と同じ思想で、 効果は必ず期限切れする。</li>
+  <li><code>points</code> (penalty) は正の整数。 <code>slots</code> (unavailability) は問題の <code>endpoints[]</code> slot 名の部分集合 (validator が突合)。</li>
+</ul>
+
+<h3>評価経路 (active window の解決)</h3>
+<p>
+disruption は 2 経路で fire される: <strong>condition-triggered</strong> (ADR-013 Phase 2、 採点 tick が score/経過/phase で発火) と <strong>operator-fired</strong> (ADR-031、 operator が API で発火)。 本 ADR は両経路に効果を与えるが、 実装は段階を分ける:
+</p>
+<table>
+  <thead><tr><th>段階</th><th>fire 経路</th><th>active window の出所</th><th>追加 I/O</th></tr></thead>
+  <tbody>
+    <tr><td><b>Phase 1 (本 ADR の初回実装)</b></td><td>condition-triggered</td><td>採点 tick が発火と同時に <code>scoringState.activeEffects[]</code> に <code>{disruptionId, effect, expiresAtMs}</code> を記録。 以降の tick は <strong>自分の行の scoringState だけ</strong>を読んで適用 + 期限切れを prune。</td><td class="ok">なし (既存の UpdateItem に相乗り)</td></tr>
+    <tr><td>Phase 2 (follow-up)</td><td>operator-fired</td><td>採点 tick が event ごとに disruptions table の AUDIT# 行を 1 回 query し、 当該 team / 効果 window 内の effect を解決。</td><td>event あたり 1 query/tick</td></tr>
+  </tbody>
+</table>
+<p>
+Phase 1 を先に出すのは、 <strong>追加の DDB read を一切増やさず</strong> (cost-zero 原則) に効果機構を end-to-end で成立させ、 ユニットテストで完全に pin できるからである。 operator-fired (stackstack) は宣言に <code>triggers</code> を足せば Phase 1 で動くか、 Phase 2 の query 経路で拾う。
+</p>
+
+<h3>採点 tick への畳み込み</h3>
+<p>
+純関数 <code>applyDisruptionEffects(result, activeEffects, slots, nowMs)</code> が、 kind handler が出した <code>KindResult</code> を受け取り、 active な effect を畳み込んだ新しい <code>KindResult</code> を返す:
+</p>
+<ul>
+  <li><code>penalty</code>: <code>scoreDelta -= points</code>、 かつ <code>source="disruption-penalty"</code> の score event を 1 行追加 (= timeline に減点が見える)。</li>
+  <li><code>unavailability</code>: 対象 slot が <code>uptime-multi</code> / <code>phased-polling</code> の health 集計で fail 扱いになり、 当該 cycle の加点を 0 にして <code>failurePenalty</code> を課す。</li>
+  <li>期限切れ (<code>nowMs &gt;= expiresAtMs</code>) の effect は適用せず、 scoringState から除く。</li>
+  <li>active effect が無ければ <code>result</code> をそのまま返す (= 完全な後方互換)。</li>
+</ul>
+<div class="seq">condition fire (tick T0)            tick T1 (T0+60s)             tick TN (window 経過後)
+  ┌─────────────────┐               ┌────────────────┐           ┌──────────────────┐
+  │ trigger 成立      │               │ activeEffects   │           │ expiresAtMs 経過  │
+  │ effect を         │──scoringState │ を読む          │           │ → prune、 適用なし │
+  │ activeEffects に  │   に永続化     │ → scoreDelta    │           │ → 通常採点に復帰   │
+  │ 記録              │               │   -= points     │           │                  │
+  └─────────────────┘               └────────────────┘           └──────────────────┘</div>
+
+<h2>代替案と却下理由</h2>
+<table>
+  <thead><tr><th>案</th><th>却下理由</th></tr></thead>
+  <tbody>
+    <tr><td>全 disruption を ADR-031 の <code>action</code> (実 fault) で実現する</td><td><span class="no">却下</span>。 「CEO が 5000 人要求」「Legal が PII 検出」は物理 fault が存在しない純粋なシナリオ圧力。 実 fault に無理やり変換すると問題設計が歪む。 採点上の効果が正しい抽象。</td></tr>
+    <tr><td>採点エンジンが毎 tick disruptions table を query して active effect を解決 (Phase 2 を最初からやる)</td><td><span class="no">初回は却下</span>。 deployment ごとに read が増え 1/1 RCU を圧迫 (cost-zero 原則に反する)。 condition-triggered を scoringState 相乗りで先に出し、 operator-fired は別 slice で最小コストの query 設計にする。</td></tr>
+    <tr><td>effect を frontend / scoring の外 (例: 別 Lambda) で適用</td><td><span class="no">却下</span>。 採点の単一責務は generic-scoring に集約済 (ADR-012)。 効果も採点 tick 内で畳むのが SRP。</td></tr>
+    <tr><td>無期限の effect を許す</td><td><span class="no">却下</span>。 ADR-029「どの障害も永続しない / ゲームは必ず終わる」に反する。 <code>durationSeconds</code> 必須 + 上限 1h。</td></tr>
+  </tbody>
+</table>
+
+<h2>影響</h2>
+<ul>
+  <li><strong>SCHEMA</strong> (submodule <code>problems/SCHEMA.json</code>): <code>disruptions[].effect</code> を追加 (省略可、 enum + required + 上限)。</li>
+  <li><strong>catalog 型 + parser</strong> (<code>discover-problems-catalog.ts</code>): <code>DisruptionEffect</code> 型 + <code>parseDisruptionEffect</code> (fail-safe drop、 <code>parseDisruptionAction</code> と同型)。</li>
+  <li><strong>validator</strong> (<code>validate-problems</code>): kind allow-list / durationSeconds 上限 / unavailability の slots ⊆ endpoints を enforce。</li>
+  <li><strong>採点エンジン</strong>: <code>scoringState.activeEffects[]</code> + 純関数 <code>applyDisruptionEffects</code> + condition-fire 時の記録 + tick での適用/prune。</li>
+  <li><strong>参照問題</strong> (submodule): <code>stackstack</code> の減点系 disruption に <code>effect</code> を宣言し、 fire → 減点 → 復帰が実データで動くことを示す。</li>
+  <li>後方互換: <code>effect</code> 未宣言の disruption / 既存問題は挙動不変。</li>
+</ul>
+
+<h2>移行</h2>
+<ol>
+  <li>parent: catalog 型 + parser + 純関数 <code>applyDisruptionEffects</code> + scoringState 拡張 + tick 配線 + unit test (本 ADR の初回 PR、 condition-triggered 経路)。</li>
+  <li>submodule: SCHEMA + <code>stackstack</code> (または新規参照問題) の <code>effect</code> 宣言 + validator。 parent の pin bump。</li>
+  <li>follow-up (#1665 Phase 2): operator-fired 経路の active-effect query (最小コスト設計)。</li>
+</ol>
+<p>
+完了の定義は「fire → 採点が宣言どおり下がり、 window 経過で戻る」が <strong>ユニットテストで証明</strong>されること。 実クラウドや実競技は要らない。 これが満たされて初めて、 当該 disruption を「実装済」と呼ぶ。
+</p>
+</body>
+</html>

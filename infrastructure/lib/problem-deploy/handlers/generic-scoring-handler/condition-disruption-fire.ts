@@ -1,6 +1,7 @@
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem } from "../deploy-handler/types.js";
+import { buildActiveDisruptionEffect } from "./disruption-effects.js";
 import { evaluateDisruptionTriggers, type FiredDisruption } from "./disruption-triggers.js";
 import type {
   DeploymentScoringState,
@@ -55,15 +56,27 @@ export async function maybeFireConditionDisruptions(
 
   // score state は applyKindResult が既に result.newState を書いているので、 それ (無ければ prevState)
   // を base に firedDisruptions だけ merge する (= bonusAwarded / attackCount を温存)。
-  const baseState = result.newState ?? prevState;
+  const { activeEffects: priorEffects, ...baseState } = result.newState ?? prevState;
   const mergedFired = [...alreadyFired, ...fired.map((f) => f.disruptionId)];
+  // [ADR-033 / #1665] fire した disruption が effect を宣言していれば減点 window を記録する。
+  // 期限切れの prior 効果は prune し、 新規発火分を足す (= 次 tick 以降 applyDisruptionEffects が適用)。
+  const survivingPrior = (priorEffects ?? []).filter((e) => e.expiresAtMs > nowMs);
+  const newEffects = fired.flatMap((f) => {
+    const declared = disruptions.find((d) => d.id === f.disruptionId)?.effect;
+    return declared ? [buildActiveDisruptionEffect(f.disruptionId, declared, nowMs)] : [];
+  });
+  const activeEffects = [...survivingPrior, ...newEffects];
   await shared.ddb.send(
     new UpdateCommand({
       TableName: shared.deploymentsTableName,
       Key: { PK: item.PK, SK: "META" },
       UpdateExpression: "SET scoringState = :state, updatedAt = :now",
       ExpressionAttributeValues: {
-        ":state": JSON.stringify({ ...baseState, firedDisruptions: mergedFired }),
+        ":state": JSON.stringify({
+          ...baseState,
+          firedDisruptions: mergedFired,
+          ...(activeEffects.length > 0 ? { activeEffects } : {}),
+        }),
         ":now": nowIso,
       },
     }),

@@ -10,6 +10,7 @@ import { buildEndpointPK } from "../../problem-endpoints-table.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { writeScoreEvent } from "../shared/score-event.js";
 import { maybeFireConditionDisruptions } from "./condition-disruption-fire.js";
+import { applyDisruptionEffects } from "./disruption-effects.js";
 import { reconcileEventStatuses } from "./event-reconciler.js";
 import { runAttackDetectionKind } from "./kinds/attack-detection.js";
 import { runPhasedPollingKind } from "./kinds/phased-polling.js";
@@ -19,6 +20,7 @@ import { reconcileRuntimeStatuses } from "./runtime-status-reconciler.js";
 import { isScoringActive } from "./scoring-active.js";
 import {
   buildSharedResources,
+  type DeploymentScoringState,
   type GenericScoringSharedResources,
   type KindHandlerInput,
   type KindResult,
@@ -174,6 +176,10 @@ async function processDeployment(
     return;
   }
 
+  // [ADR-033 / #1665] active な disruption 採点効果 (= condition-fire 済の減点 window) を畳み込む。
+  // active 効果が無い問題は完全に挙動不変 (= 余分な scoringState write を出さない)。
+  result = foldActiveDisruptionEffects(result, prevState, nowMs);
+
   await applyKindResult(shared, item, result, nowIso);
 
   // #1422 (ADR-013 Phase 2): 採点後の score / phase / 経過分で condition-triggered disruption を
@@ -189,6 +195,26 @@ async function processDeployment(
     nowMs,
     nowIso,
   );
+}
+
+/**
+ * [ADR-033 / #1665] active な disruption 採点効果を KindResult に畳み込む (= condition-fire 済の
+ * 減点 window を当該 tick に適用 + 期限切れを prune)。 active 効果が無い deployment は result を素通し
+ * (= scoringState write を増やさず完全な後方互換)。 pure。
+ */
+function foldActiveDisruptionEffects(
+  result: KindResult,
+  prevState: DeploymentScoringState,
+  nowMs: number,
+): KindResult {
+  const prior = prevState.activeEffects ?? [];
+  if (prior.length === 0) return result;
+  const { result: effected, surviving } = applyDisruptionEffects(result, prior, nowMs);
+  const { activeEffects: _drop, ...baseState } = effected.newState ?? prevState;
+  return {
+    ...effected,
+    newState: surviving.length > 0 ? { ...baseState, activeEffects: surviving } : baseState,
+  };
 }
 
 /**
