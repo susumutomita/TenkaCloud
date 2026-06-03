@@ -451,6 +451,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       problemsPhases: props.problemsPhases ?? {},
       // #1422 (ADR-013 Phase 2): condition-triggered disruption の eval + in-account 発火。
       problemsDisruptions: props.problemsDisruptions ?? {},
+      // [ADR-033 / #1665] operator-fired disruption の active 採点効果を tick で解決する (read-only)。
+      disruptionsTable: disruptions.table,
       eventBus,
       // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler の credential path 構築用。
       environmentName: props.environmentName,

@@ -29,6 +29,8 @@ export interface GenericScoringSharedResources {
   readonly problemsEndpoints: Record<string, readonly ProblemEndpointSlot[]>;
   /** [#1422] condition-triggered disruption の catalog (= `BATTLE_PROBLEMS_DISRUPTIONS` env)。 */
   readonly problemsDisruptions: Record<string, readonly ProblemDisruptionEntry[]>;
+  /** [ADR-033 / #1665] operator-fired disruption の audit table (= 採点効果の active window 解決、 "" で無効)。 */
+  readonly disruptionsTableName: string;
   /** [#1422] condition-triggered fire の publish 先 event bus (= 空なら発火 skip)。 */
   readonly eventBusName: string;
   readonly events: EventBridgeClient;
@@ -50,6 +52,9 @@ export function buildSharedResources(): GenericScoringSharedResources {
     problemsScoring: parseScoringEnv(process.env.BATTLE_PROBLEMS_SCORING),
     problemsEndpoints: parseEndpointsEnv(process.env.PROBLEM_ENDPOINTS),
     problemsDisruptions: parseDisruptionsCatalogEnv(process.env.BATTLE_PROBLEMS_DISRUPTIONS),
+    // [ADR-033 / #1665] operator-fired disruption の audit 行を読む table (= 採点効果の active window 解決)。
+    // 未配線 (= "") なら operator-fired effect は無効 (condition-triggered のみ、 後方互換)。
+    disruptionsTableName: process.env.DISRUPTIONS_TABLE_NAME ?? "",
     eventBusName: process.env.DEPLOY_EVENT_BUS_NAME ?? "",
     events: new EventBridgeClient({}),
     // 非 AWS reconciler 専用 (= AWS only の運用では未使用)。 unset でも throw させず空文字に倒す

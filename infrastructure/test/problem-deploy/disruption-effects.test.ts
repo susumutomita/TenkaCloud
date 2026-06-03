@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   applyDisruptionEffects,
   buildActiveDisruptionEffect,
+  dedupeEffectsByDisruptionId,
+  resolveOperatorEffects,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/disruption-effects";
 import type {
   ActiveDisruptionEffect,
   KindResult,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/shared";
+import type { ProblemDisruptionEntry } from "../../lib/utils/discover-problems-catalog";
 
 /**
  * [ADR-033 / Issue #1665] scoring-side disruption effect の純ロジックを pin。
@@ -90,5 +93,82 @@ describe("applyDisruptionEffects (#1665)", () => {
     expect(out.result.scoreDelta).toBe(0);
     expect(out.result.scoreEvents).toBe(result.scoreEvents);
     expect(out.result.newState).toEqual({ attackCount: 3 });
+  });
+});
+
+describe("dedupeEffectsByDisruptionId (#1665)", () => {
+  it("should keep one entry per disruptionId with the maximum expiry", () => {
+    const out = dedupeEffectsByDisruptionId([
+      { disruptionId: "a", points: 10, expiresAtMs: 100 },
+      { disruptionId: "a", points: 10, expiresAtMs: 200 },
+      { disruptionId: "b", points: 5, expiresAtMs: 50 },
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out.find((e) => e.disruptionId === "a")?.expiresAtMs).toBe(200);
+  });
+});
+
+describe("resolveOperatorEffects (#1665)", () => {
+  const catalog = {
+    p1: [
+      {
+        id: "d1",
+        name: "n",
+        eventDetailType: "X",
+        effect: { kind: "penalty", points: 40, durationSeconds: 300 },
+      },
+      { id: "d2", name: "n", eventDetailType: "X" }, // no effect
+    ],
+  } as Record<string, readonly ProblemDisruptionEntry[]>;
+
+  it("should resolve an in-window operator fire to a team×problem effect", () => {
+    const firedAt = new Date(NOW - 60_000).toISOString();
+    const m = resolveOperatorEffects(
+      [{ disruptionId: "d1", problemId: "p1", targetTeamIds: ["t1", "t2"], firedAt }],
+      catalog,
+      NOW,
+    );
+    expect(m.get("t1#p1")).toEqual([
+      { disruptionId: "d1", points: 40, expiresAtMs: Date.parse(firedAt) + 300_000 },
+    ]);
+    expect(m.get("t2#p1")).toHaveLength(1);
+  });
+
+  it("should skip a fire whose effect window has elapsed", () => {
+    const firedAt = new Date(NOW - 400_000).toISOString(); // 400s ago > 300s duration
+    const m = resolveOperatorEffects(
+      [{ disruptionId: "d1", problemId: "p1", targetTeamIds: ["t1"], firedAt }],
+      catalog,
+      NOW,
+    );
+    expect(m.size).toBe(0);
+  });
+
+  it("should skip a disruption that declares no effect", () => {
+    const firedAt = new Date(NOW).toISOString();
+    const m = resolveOperatorEffects(
+      [{ disruptionId: "d2", problemId: "p1", targetTeamIds: ["t1"], firedAt }],
+      catalog,
+      NOW,
+    );
+    expect(m.size).toBe(0);
+  });
+
+  it("should ignore malformed audit rows (missing fields / bad firedAt / blank team)", () => {
+    const m = resolveOperatorEffects(
+      [
+        { disruptionId: "d1" }, // no problemId/targetTeamIds/firedAt
+        { disruptionId: "d1", problemId: "p1", targetTeamIds: ["t1"], firedAt: "not-a-date" },
+        {
+          disruptionId: "d1",
+          problemId: "p1",
+          targetTeamIds: ["", 5],
+          firedAt: new Date(NOW).toISOString(),
+        },
+      ],
+      catalog,
+      NOW,
+    );
+    expect(m.size).toBe(0);
   });
 });
