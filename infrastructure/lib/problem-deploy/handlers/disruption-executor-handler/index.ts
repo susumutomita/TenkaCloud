@@ -89,7 +89,7 @@ function sdkClientConfig(target: DispatchTarget) {
 
 const deps: ExecutorDeps = {
   problemsDisruptions,
-  claimExecution: (detail) => claimExecution(resources, detail, Date.now()),
+  claimExecution: (detail, phase) => claimExecution(resources, detail, Date.now(), phase),
   resolveDeployment: (detail) => resolveDeployment(resources, detail),
   sendDispatch: wiredSendDispatch,
   scheduleRevert: (detail, dispatch, target, afterSeconds) =>

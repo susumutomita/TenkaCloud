@@ -57,8 +57,14 @@ export interface DeploymentTarget {
 export interface ExecutorDeps {
   /** problemsDisruptions catalog (= fire と同じ env 由来)。 */
   readonly problemsDisruptions: Readonly<Record<string, readonly ProblemDisruptionEntry[]>>;
-  /** `EXEC#{requestId}#{teamId}` の conditional claim。 claimed=winner / duplicate=既処理。 */
-  readonly claimExecution: (detail: DisruptionFiredDetail) => Promise<"claimed" | "duplicate">;
+  /**
+   * `EXEC#{requestId}#{teamId}` の conditional claim。 claimed=winner / duplicate=既処理。
+   * [ADR-037] phase="inject" は遅延注入用の別 claim key (= scheduler 再配送の二重注入を弾く)。
+   */
+  readonly claimExecution: (
+    detail: DisruptionFiredDetail,
+    phase?: "event" | "inject",
+  ) => Promise<"claimed" | "duplicate">;
   /** team+problem deployment を解決。 未 deploy / 未完了 / stackOutputs 無しは undefined。 */
   readonly resolveDeployment: (
     detail: DisruptionFiredDetail,
@@ -155,9 +161,10 @@ export async function executeDisruptionAction(
 }
 
 /**
- * [ADR-037] scheduled fire の T+N 遅延注入。 scheduler が積んだ `mode:"inject"` payload で起動され、
- * 注入 + revert 予約を行う。 claim は fired event 受信時 ({@link executeDisruptionAction}) に取得済の
- * ため再取得しない (= 二重 claim で duplicate 判定にならない)。
+ * [ADR-037] scheduled fire の T+N 遅延注入。 scheduler が積んだ `mode:"inject"` payload で起動される。
+ * aws-scheduler も at-least-once なので、 注入直前に **inject-phase の claim** を取り、 scheduler の
+ * 再配送による二重注入を弾く (= 即時 path が同一 invocation の event-phase claim で得るのと同じ冪等保証を、
+ * fired event と別経路で届く遅延注入にも与える)。 fired event 時の event-phase claim とは別 key。
  */
 export async function executeScheduledInject(
   detail: DisruptionFiredDetail,
@@ -166,5 +173,6 @@ export async function executeScheduledInject(
   const action = resolveAction(deps.problemsDisruptions, detail.problemId, detail.disruptionId);
   if (action === "unknown") return { kind: "unknown_disruption" };
   if (!action) return { kind: "no_action" };
+  if ((await deps.claimExecution(detail, "inject")) === "duplicate") return { kind: "duplicate" };
   return injectAndScheduleRevert(detail, action, deps);
 }

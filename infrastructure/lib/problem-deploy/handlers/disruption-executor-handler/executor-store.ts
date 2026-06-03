@@ -26,15 +26,24 @@ export interface ExecutorResources {
 const DEFAULT_EXEC_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 /**
- * `EXEC#{requestId}#{teamId}` を conditional Put で奪う。 EventBridge at-least-once の再配送に対する
- * per-team 冪等性。 ConditionalCheckFailed = 既に処理済 (duplicate)、 それ以外の error は伝播。
+ * `EXEC#{requestId}#{teamId}` を conditional Put で奪う。 at-least-once 配送に対する per-team 冪等性。
+ * ConditionalCheckFailed = 既に処理済 (duplicate)、 それ以外の error は伝播。
+ *
+ * [ADR-037] phase で claim key を分ける:
+ *   - `"event"` (既定): fired event (EventBridge at-least-once) の重複を弾く。
+ *   - `"inject"`: scheduled fire の遅延注入 (aws-scheduler at-least-once) の重複を弾く。 遅延注入は
+ *     fired event とは別の配送経路なので、 別 key で claim しないと scheduler 再配送で二重注入になる。
  */
 export async function claimExecution(
   resources: ExecutorResources,
   detail: DisruptionFiredDetail,
   nowMs: number,
+  phase: "event" | "inject" = "event",
 ): Promise<"claimed" | "duplicate"> {
-  const pk = `EXEC#${detail.requestId}#${detail.teamId}`;
+  const pk =
+    phase === "inject"
+      ? `EXEC#${detail.requestId}#${detail.teamId}#INJECT`
+      : `EXEC#${detail.requestId}#${detail.teamId}`;
   try {
     await resources.ddb.send(
       new PutCommand({

@@ -133,11 +133,12 @@ describe("routeDisruptionInvocation (ADR-031 #1419)", () => {
     expect(deps.sendDispatch).not.toHaveBeenCalled();
   });
 
-  it("should route a scheduler inject payload to executeScheduledInject (no re-claim)", async () => {
+  it("should route a scheduler inject payload to executeScheduledInject (inject-phase claim)", async () => {
     const deps = makeDeps();
     const outcome = await routeDisruptionInvocation({ mode: "inject", detail: firedDetail }, deps);
     expect(outcome).toEqual({ kind: "ok", jobId: "job-1" });
-    expect(deps.claimExecution).not.toHaveBeenCalled(); // claim already taken at fire time
+    // distinct inject-phase claim fences aws-scheduler redelivery (not the fire-time event claim)
+    expect(deps.claimExecution).toHaveBeenCalledWith(firedDetail, "inject");
     expect(deps.sendDispatch).toHaveBeenCalledTimes(1);
     expect(deps.scheduleRevert).toHaveBeenCalledTimes(1);
   });

@@ -171,13 +171,21 @@ describe("executeDisruptionAction (ADR-031 #1419)", () => {
 describe("executeScheduledInject (ADR-037 deferred inject)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("should inject + schedule revert WITHOUT re-claiming (claim taken at fire time)", async () => {
+  it("should claim the inject phase, then inject + schedule revert", async () => {
     const deps = makeDeps();
     const outcome = await executeScheduledInject(detail, deps);
     expect(outcome).toEqual({ kind: "ok", jobId: "job-1" });
-    expect(deps.claimExecution).not.toHaveBeenCalled(); // already claimed at fired-event time
+    // inject-phase claim (distinct from the fire-time event claim) fences scheduler redelivery
+    expect(deps.claimExecution).toHaveBeenCalledWith(detail, "inject");
     expect(deps.sendDispatch).toHaveBeenCalledTimes(1);
     expect(deps.scheduleRevert).toHaveBeenCalledTimes(1);
+  });
+
+  it("should stop (duplicate) when the inject phase was already claimed (scheduler redelivery)", async () => {
+    const deps = makeDeps({ claimExecution: vi.fn().mockResolvedValue("duplicate") });
+    expect(await executeScheduledInject(detail, deps)).toEqual({ kind: "duplicate" });
+    expect(deps.sendDispatch).not.toHaveBeenCalled();
+    expect(deps.scheduleRevert).not.toHaveBeenCalled();
   });
 
   it("should be a no-op (no_action) when the disruption declares no action", async () => {

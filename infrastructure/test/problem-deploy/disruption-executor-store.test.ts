@@ -44,6 +44,18 @@ describe("claimExecution (ADR-031 #1419)", () => {
     expect(put.input.Item.expiresAt).toBe(Math.floor(1_000_000 / 1000) + 7 * 24 * 60 * 60);
   });
 
+  it("[ADR-037] should Put a distinct EXEC#...#INJECT row for phase='inject'", async () => {
+    const send = vi.fn().mockResolvedValue({});
+    expect(await claimExecution(makeResources(send), detail, 1_000_000, "inject")).toBe("claimed");
+    expect(send.mock.calls[0][0].input.Item.PK).toBe("EXEC#req-1#team-1#INJECT");
+  });
+
+  it("[ADR-037] phase='event' uses the same key as the default", async () => {
+    const send = vi.fn().mockResolvedValue({});
+    await claimExecution(makeResources(send), detail, 1_000_000, "event");
+    expect(send.mock.calls[0][0].input.Item.PK).toBe("EXEC#req-1#team-1");
+  });
+
   it("should return duplicate on ConditionalCheckFailed", async () => {
     const send = vi
       .fn()
