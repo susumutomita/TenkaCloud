@@ -219,11 +219,5 @@ describe("CreateIdpModal", () => {
         "In Google Workspace, open Admin console -> Apps -> Web and mobile apps -> Add custom SAML app.",
       ),
     ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("radio", { name: "Okta" }));
-    expect(screen.getByText("Okta setup guide")).toBeInTheDocument();
-    expect(
-      screen.getByText("In Okta, open Applications -> Create App Integration -> SAML 2.0."),
-    ).toBeInTheDocument();
   });
 });

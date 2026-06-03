@@ -29,7 +29,7 @@ interface CreateIdpModalProps {
   readonly setBusy: (b: boolean) => void;
 }
 
-type SamlProvider = "entra" | "google" | "okta" | "generic";
+type SamlProvider = "entra" | "google" | "generic";
 
 interface ProviderGuide {
   readonly label: string;
@@ -51,7 +51,6 @@ function buildProviderGuides(t: TFn): Record<SamlProvider, ProviderGuide> {
   return {
     entra: guide("entra", 3),
     google: guide("google", 3),
-    okta: guide("okta", 3),
     generic: guide("generic", 2),
   };
 }

@@ -675,7 +675,7 @@
     "delete": "削除",
     "delete_confirm": "IdP 「{idpId}」 を削除しますか？",
     "empty_header": "SAML IdP がまだ設定されていません",
-    "empty_body": "テナントのサインインはメールアドレスとパスワードになります。 「SAML IdP を追加」 から Entra ID や Okta などを接続できます。",
+    "empty_body": "テナントのサインインはメールアドレスとパスワードになります。 「SAML IdP を追加」 から Entra ID などの SAML プロバイダを接続できます。",
     "info_alert": "同じメールアドレスでも、 別々のプロバイダでサインインした場合は別々の ID として扱われます。 グループとロールの対応付けはこれを踏まえて設計してください。"
   },
   "create_idp": {
@@ -716,11 +716,6 @@
     "guide_google_step_1": "Google Workspace で 管理コンソール -> アプリ -> ウェブアプリとモバイルアプリ -> カスタム SAML アプリを追加 を開きます。",
     "guide_google_step_2": "下の ACS URL と Entity ID を入力します。",
     "guide_google_step_3": "IdP メタデータをダウンロードし、 下でアップロードします。",
-    "guide_okta_label": "Okta",
-    "guide_okta_description": "Okta の SAML 2.0 アプリ統合",
-    "guide_okta_step_1": "Okta で Applications -> Create App Integration -> SAML 2.0 を開きます。",
-    "guide_okta_step_2": "Single sign-on URL に下の ACS URL を、 Audience URI に下の SP Entity ID を設定します。",
-    "guide_okta_step_3": "IdP のメタデータ URL または XML を取得し、 下で XML をアップロードします。",
     "guide_generic_label": "汎用 SAML",
     "guide_generic_description": "任意の SAML 2.0 ID プロバイダ",
     "guide_generic_step_1": "IdP 管理者に、 下の ACS URL・SP Entity ID・メール属性を渡します。",

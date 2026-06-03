@@ -675,7 +675,7 @@
     "delete": "Delete",
     "delete_confirm": "Delete IdP \"{idpId}\"?",
     "empty_header": "No SAML IdPs configured yet",
-    "empty_body": "Tenant sign-in falls back to email + password. Click Add SAML IdP to connect Entra ID, Okta, and others.",
+    "empty_body": "Tenant sign-in falls back to email + password. Click Add SAML IdP to connect Entra ID or another SAML provider.",
     "info_alert": "The same email signed in through two different providers is treated as two separate identities. Plan your group-to-role mapping accordingly."
   },
   "create_idp": {
@@ -716,11 +716,6 @@
     "guide_google_step_1": "In Google Workspace, open Admin console -> Apps -> Web and mobile apps -> Add custom SAML app.",
     "guide_google_step_2": "Enter the ACS URL and Entity ID below.",
     "guide_google_step_3": "Download the IdP metadata, then upload it below.",
-    "guide_okta_label": "Okta",
-    "guide_okta_description": "Okta SAML 2.0 app integration",
-    "guide_okta_step_1": "In Okta, open Applications -> Create App Integration -> SAML 2.0.",
-    "guide_okta_step_2": "Set Single sign-on URL to the ACS URL and Audience URI to the SP Entity ID below.",
-    "guide_okta_step_3": "Get the Identity Provider metadata URL or XML, then upload the XML below.",
     "guide_generic_label": "Generic SAML",
     "guide_generic_description": "Any SAML 2.0 identity provider",
     "guide_generic_step_1": "Give the IdP administrator the ACS URL, SP Entity ID, and email attribute below.",
