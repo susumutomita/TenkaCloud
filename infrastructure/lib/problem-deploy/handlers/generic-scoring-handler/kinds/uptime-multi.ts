@@ -13,6 +13,7 @@ import {
   noopKindResult,
   probeUrl,
 } from "../shared.js";
+import { scoreCounterDelta } from "./attack-counter.js";
 
 /**
  * `uptime-multi` kind (ADR-012 Phase 3.B、 security-battle-royale 想定)。
@@ -29,7 +30,7 @@ import {
 export async function runUptimeMultiKind(
   input: KindHandlerInput<UptimeMultiScoringMetadata>,
 ): Promise<KindResult> {
-  const { deployment, scoring, slots, overrides, nowIso } = input;
+  const { deployment, scoring, slots, overrides, nowIso, prevState } = input;
   if (!deployment.PK || !deployment.problemId) return noopKindResult();
 
   const outputs = parseStackOutputs(deployment.stackOutputs);
@@ -37,18 +38,20 @@ export async function runUptimeMultiKind(
   for (const o of overrides) overrideMap.set(o.slot, o.overrideUrl);
   const slotMap = new Map(slots.map((s) => [s.slot, s] as const));
 
+  // slot の effective base URL (= override ?? CFn output 由来 default) を解決する。 probedSlots と
+  // attack-blocked probe で共有。
+  const resolveSlotBaseUrl = (slotName: string): string | undefined => {
+    const overrideUrl = overrideMap.get(slotName);
+    if (overrideUrl) return overrideUrl;
+    const slot = slotMap.get(slotName);
+    if (!slot) return undefined;
+    const outputValue = outputs[slot.default.key];
+    return outputValue ? resolveDefaultUrl(outputValue, slot.default.appendPath) : undefined;
+  };
+
   const probes = await Promise.all(
     scoring.probedSlots.map(async (ps) => {
-      const overrideUrl = overrideMap.get(ps.slot);
-      let baseUrl: string | undefined;
-      if (overrideUrl) baseUrl = overrideUrl;
-      else {
-        const slot = slotMap.get(ps.slot);
-        if (slot) {
-          const outputValue = outputs[slot.default.key];
-          if (outputValue) baseUrl = resolveDefaultUrl(outputValue, slot.default.appendPath);
-        }
-      }
+      const baseUrl = resolveSlotBaseUrl(ps.slot);
       if (!baseUrl) return { key: ps.slot, ok: false, resolved: false };
       const probe = await probeUrl(joinUrl(baseUrl, ps.path), { expectStatus: ps.expectStatus });
       return { key: ps.slot, ok: probe.ok, resolved: true };
@@ -68,19 +71,44 @@ export async function runUptimeMultiKind(
     newHealth[key] = { ok, checkedAt: nowIso, ...(since ? { since } : {}) };
   }
 
-  const scoreDelta = allOk ? scoring.pointsAllOk : (scoring.failurePenalty ?? 0);
+  const baseDelta = allOk ? scoring.pointsAllOk : (scoring.failurePenalty ?? 0);
   const attackDetected = !allOk && deployment.lastResult === "ok";
 
+  // [ADR-034 / #1666] optional attack-blocked bonus (= 防御テストの加点を可用性採点に重ねる)。 宣言時のみ:
+  // アプリの counter endpoint を **live probe** し (静的 CFn output でなく走行中の値)、 応答 body を
+  // ブロック回数として読み、 前回からの増分で加点 + baseline を追従。 probe 失敗 / 不正 body は加点 0。
+  let bonusPoints = 0;
+  let bonusState: { attackCount: number } | undefined;
+  if (scoring.attackBlocked) {
+    const base = resolveSlotBaseUrl(scoring.attackBlocked.slot);
+    if (base) {
+      const probe = await probeUrl(joinUrl(base, scoring.attackBlocked.path), { readBody: true });
+      const scored = probe.ok
+        ? scoreCounterDelta(probe.body, prevState.attackCount, scoring.attackBlocked.pointsPerBlock)
+        : undefined;
+      if (scored) {
+        bonusPoints = scored.points;
+        bonusState = { attackCount: scored.newCount };
+      }
+    }
+  }
+
+  const scoreDelta = baseDelta + bonusPoints;
+  const uptimeEvents =
+    baseDelta !== 0
+      ? [{ source: "uptime" as const, points: baseDelta, occurredAt: nowIso }]
+      : attackDetected
+        ? [{ source: "attack-detected" as const, points: 0, occurredAt: nowIso }]
+        : [];
   return {
     scoreDelta,
     scoreEvents:
-      scoreDelta !== 0
-        ? [{ source: "uptime", points: scoreDelta, occurredAt: nowIso }]
-        : attackDetected
-          ? [{ source: "attack-detected", points: 0, occurredAt: nowIso }]
-          : [],
+      bonusPoints > 0
+        ? [...uptimeEvents, { source: "uptime" as const, points: bonusPoints, occurredAt: nowIso }]
+        : uptimeEvents,
     endpointsHealthJson: JSON.stringify(newHealth),
     lastResult: allOk ? "ok" : "fail",
     ...(attackDetected ? { attackDetected: true } : {}),
+    ...(bonusState ? { newState: bonusState } : {}),
   };
 }
