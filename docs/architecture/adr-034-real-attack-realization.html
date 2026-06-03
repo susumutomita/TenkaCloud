@@ -127,5 +127,11 @@ disruption に <code>action</code> を追加。 template の <code>InstanceId</c
 <p>
 完了の定義は「防御したチームは攻撃を凌いで有利になり、 怠ったチームは不利になる」が実機で観測できること。 これは <strong>実クラウドアカウントを要する</strong> (stackstack の純採点圧力と違い、 防御の物理的成否を測るため)。 本 ADR は account 入手前に実装を最大限進めるための設計を確定する。
 </p>
+
+<h2>Open questions (パターン B の未解決点)</h2>
+<ul>
+  <li><b>scoring kind の衝突 (B-3)</b>: security-battle-royale は現在 <code>uptime-multi</code> で可用性を採点している。 ADR-012 は <strong>1 問題 1 scoring kind</strong> なので、 <code>attack-detection</code> へ「切替」ると可用性採点が消える。 よって SQLi 防御の採点は (a) <code>uptime-multi</code> に attack-counter ボーナス項を足す拡張、 (b) 可用性と攻撃検知を 1 つに束ねた新 kind、 (c) availability-flood (パターン A) と SQLi (パターン B) を別問題に分割、 のいずれかを要する。 <strong>本 ADR では未決</strong> — pattern A (availability-flood) は既存 <code>uptime-multi</code> のままで動くため先に出荷し、 SQLi の採点統合は別 ADR / 実装 PR で詰める。</li>
+  <li>reference アプリの attack-counter 自己申告 (B-1) の置き場 (template UserData か repo か) は security-battle-royale のアプリ構成に依存。</li>
+</ul>
 </body>
 </html>
