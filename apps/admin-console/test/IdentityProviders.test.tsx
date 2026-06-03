@@ -20,7 +20,27 @@ vi.mock("../src/api/idp-client", () => ({
   createIdpClient: mockCreateIdpClient,
   describeIdpError: (e: unknown) => (e instanceof Error ? e.message : String(e)),
 }));
-vi.mock("../src/i18n", () => ({ useLang: () => "en" }));
+vi.mock("../src/i18n", async () => {
+  const en = (await import("../src/i18n/locales/en.json")).default as Record<string, unknown>;
+  const resolve = (key: string): string => {
+    const v = key
+      .split(".")
+      .reduce<unknown>(
+        (o, k) => (o && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined),
+        en,
+      );
+    return typeof v === "string" ? v : key;
+  };
+  return {
+    useLang: () => "en",
+    useT: () => (key: string, params?: Record<string, string | number>) => {
+      let s = resolve(key);
+      if (params)
+        for (const [k, v] of Object.entries(params)) s = s.split(`{${k}}`).join(String(v));
+      return s;
+    },
+  };
+});
 vi.mock("../src/lib/format", () => ({ formatRelativeTime: (iso: string) => `rel:${iso}` }));
 vi.mock("../src/pages/CreateIdpModal", () => ({
   CreateIdpModal: ({
@@ -52,6 +72,7 @@ const config = {
   cognitoClientId: "client-123",
   scope: "openid email",
   redirectUri: "https://app.example.com/callback",
+  features: { samlSso: true },
 } as AppConfig;
 
 const idp = (over: Record<string, unknown> = {}) => ({
@@ -73,9 +94,17 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("IdentityProvidersPage", () => {
+  it("should show the feature-disabled hero (and skip fetch) when samlSso is off", () => {
+    render(
+      <IdentityProvidersPage config={{ ...config, features: { samlSso: false } } as AppConfig} />,
+    );
+    expect(screen.getByText("Identity providers are not available")).toBeInTheDocument();
+    expect(mockCreateIdpClient).not.toHaveBeenCalled();
+  });
+
   it("should show the not-wired alert when apiBaseUrl is missing", () => {
     render(<IdentityProvidersPage config={{ ...config, apiBaseUrl: "" } as AppConfig} />);
-    expect(screen.getByText(/IdP CRUD API not wired up/)).toBeInTheDocument();
+    expect(screen.getByText("The identity-provider API is unavailable")).toBeInTheDocument();
   });
 
   it("should not call list when there is no auth token (client null)", () => {

@@ -15,7 +15,8 @@ import {
 } from "../api/idp-client";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
-import { useLang } from "../i18n";
+import { useLang, useT } from "../i18n";
+import { cognitoOrigin } from "../lib/cognito";
 import { formatRelativeTime } from "../lib/format";
 import { CreateIdpModal } from "./CreateIdpModal";
 
@@ -23,24 +24,18 @@ import { CreateIdpModal } from "./CreateIdpModal";
  * Issue #1293: System Admin → list / add / edit / delete SAML IdPs attached to
  * the Control Plane Cognito UserPool.
  *
- * Notes for the operator UI:
- *   - **Multi-IdP per UserPool**. The Hosted UI picker shows all IdPs at the
- *     same time. There is no domain-based auto-routing — Issue #1293 calls this
- *     out explicitly because the same email domain may be served by both an
- *     Entra ID and an Okta tenant in parallel.
- *   - **`Cognito sub` does not collide across IdPs**. We surface a help text
- *     under the table to keep admins from confusing same-email sign-ins as the
- *     same identity.
- *
- * The page is metadata-driven only — actual sign-in is exercised by following
- * the "Test sign-in" button which jumps to the Hosted UI authorize endpoint with
+ * Feature-flagged (`samlSso`, ADR-035, default OFF) — hidden until the SAML sign-in path is
+ * verified live, so it isn't mistaken for ready. The Hosted UI picker shows all IdPs at once
+ * (no domain auto-routing); the "Test sign-in" button jumps to the authorize endpoint with
  * `identity_provider=<idpId>`.
  */
 export function IdentityProvidersPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
+  const t = useT();
   const lang = useLang();
   const client: IdpClient | null = useMemo(
-    () => (auth.tokens ? createIdpClient(config, auth.tokens.idToken) : null),
+    () =>
+      auth.tokens && config.features?.samlSso ? createIdpClient(config, auth.tokens.idToken) : null,
     [auth.tokens, config],
   );
 
@@ -66,7 +61,7 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
 
   const hostedUiTestSignInUrl = useCallback(
     (idpId: string) => {
-      const url = new URL(`https://${config.cognitoDomain}/oauth2/authorize`);
+      const url = new URL("/oauth2/authorize", cognitoOrigin(config.cognitoDomain));
       url.searchParams.set("client_id", config.cognitoClientId);
       url.searchParams.set("response_type", "code");
       url.searchParams.set("scope", config.scope);
@@ -77,25 +72,36 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
     [config],
   );
 
+  if (!config.features?.samlSso) {
+    return (
+      <Container
+        header={
+          <Header variant="h1" description={t("identity_providers.feature_disabled_body")}>
+            {t("identity_providers.title")}
+          </Header>
+        }
+      >
+        <Box textAlign="center" padding="xxl">
+          <Box variant="strong">
+            <Icon name="lock-private" size="big" variant="subtle" />{" "}
+            {t("identity_providers.feature_disabled_header")}
+          </Box>
+        </Box>
+      </Container>
+    );
+  }
+
   if (!config.apiBaseUrl) {
     return (
       <Container
         header={
-          <Header
-            variant="h1"
-            description="SAML identity providers attached to the System Admin Cognito UserPool."
-          >
-            Identity providers
+          <Header variant="h1" description={t("identity_providers.description")}>
+            {t("identity_providers.title")}
           </Header>
         }
       >
-        <Alert type="warning" header="IdP CRUD API not wired up in this environment">
-          <SpaceBetween size="xs">
-            <Box>
-              Set <code>apiBaseUrl</code> in runtime-config.json or the dev <code>.env</code> and
-              reload the page.
-            </Box>
-          </SpaceBetween>
+        <Alert type="warning" header={t("identity_providers.not_wired_header")}>
+          {t("identity_providers.not_wired_body")}
         </Alert>
       </Container>
     );
@@ -105,34 +111,37 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
     <SpaceBetween size="m">
       <Header
         variant="h1"
-        description="SAML identity providers attached to the System Admin Cognito UserPool. Same email may sign in via multiple IdPs — each is a separate identity."
+        description={t("identity_providers.description")}
         actions={
           <Button variant="primary" onClick={() => setShowCreate(true)}>
-            Add SAML IdP
+            {t("identity_providers.add_button")}
           </Button>
         }
       >
-        Identity providers
+        {t("identity_providers.title")}
       </Header>
       {loadError ? <Alert type="error">{loadError}</Alert> : null}
       <Container>
         <Table
           columnDefinitions={[
-            { id: "idpId", header: "ID", cell: (i: IdpSummary) => i.idpId },
+            {
+              id: "idpId",
+              header: t("identity_providers.col_id"),
+              cell: (i: IdpSummary) => i.idpId,
+            },
             {
               id: "displayName",
-              header: "Display name",
+              header: t("identity_providers.col_display_name"),
               cell: (i: IdpSummary) => i.displayName,
             },
             {
               id: "description",
-              header: "Description",
-              cell: (i: IdpSummary) => i.description ?? "—",
+              header: t("identity_providers.col_description"),
+              cell: (i: IdpSummary) => i.description ?? t("identity_providers.value_dash"),
             },
             {
               id: "updatedAt",
-              header: "Updated",
-              // Issue #1362: ISO 生値ではなく 「N 日前」 表示 + hover で絶対時刻 tooltip。
+              header: t("identity_providers.col_updated"),
               cell: (i: IdpSummary) => (
                 <span title={i.updatedAt}>{formatRelativeTime(i.updatedAt, lang)}</span>
               ),
@@ -148,16 +157,16 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
                     href={hostedUiTestSignInUrl(i.idpId)}
                     target="_blank"
                   >
-                    Test sign-in
+                    {t("identity_providers.test_sign_in")}
                   </Button>
                   <Button
                     variant="inline-link"
                     onClick={async () => {
-                      // defensive: 行 (= items) は client.list 成功時のみ存在するので Delete button
-                      // が押せる時点で client は必ず非 null (= この guard は不到達)。
+                      // defensive: rows only exist on client.list success, so client is non-null here.
                       /* v8 ignore next */
                       if (!client) return;
-                      if (!confirm(`Delete IdP "${i.idpId}"?`)) return;
+                      if (!confirm(t("identity_providers.delete_confirm", { idpId: i.idpId })))
+                        return;
                       setBusy(true);
                       try {
                         await client.remove(i.idpId);
@@ -169,7 +178,7 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
                       }
                     }}
                   >
-                    Delete
+                    {t("identity_providers.delete")}
                   </Button>
                 </SpaceBetween>
               ),
@@ -177,29 +186,21 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
           ]}
           items={items ?? []}
           loading={items === null}
-          loadingText="Loading…"
+          loadingText={t("identity_providers.loading")}
           empty={
-            // Issue #1362: アイコン + 説明 + 行動誘導の 3 段で 「dev 感のある空表示」 を脱却。
             <Box textAlign="center" padding="l">
               <SpaceBetween size="xs">
                 <Box variant="strong" color="text-status-inactive">
-                  <Icon name="lock-private" size="big" variant="subtle" /> No SAML IdPs configured
-                  yet
+                  <Icon name="lock-private" size="big" variant="subtle" />{" "}
+                  {t("identity_providers.empty_header")}
                 </Box>
-                <Box color="text-body-secondary">
-                  Sign-in falls back to local Cognito email + password. Click{" "}
-                  <strong>Add SAML IdP</strong> to wire Entra ID / Okta / etc.
-                </Box>
+                <Box color="text-body-secondary">{t("identity_providers.empty_body")}</Box>
               </SpaceBetween>
             </Box>
           }
         />
       </Container>
-      <Alert type="info">
-        Cognito treats <code>IdP A's user@example.com</code> and{" "}
-        <code>IdP B's user@example.com</code> as separate identities. Same email across multiple
-        IdPs ⇒ separate Users rows keyed by (idpId, subjectId).
-      </Alert>
+      <Alert type="info">{t("identity_providers.info_alert")}</Alert>
       {showCreate ? (
         <CreateIdpModal
           client={client}

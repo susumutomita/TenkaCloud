@@ -30,7 +30,7 @@ export function App({ config }: { config: AppConfig }) {
           path="/tenants"
           element={
             <RequireAuth>
-              <ShellLayout>
+              <ShellLayout samlSsoEnabled={config.features?.samlSso}>
                 <TenantListPage config={config} />
               </ShellLayout>
             </RequireAuth>
@@ -40,7 +40,7 @@ export function App({ config }: { config: AppConfig }) {
           path="/tenants/new"
           element={
             <RequireAuth>
-              <ShellLayout>
+              <ShellLayout samlSsoEnabled={config.features?.samlSso}>
                 <TenantCreatePage config={config} />
               </ShellLayout>
             </RequireAuth>
@@ -52,7 +52,7 @@ export function App({ config }: { config: AppConfig }) {
           path="/tenants/:tenantId"
           element={
             <RequireAuth>
-              <ShellLayout>
+              <ShellLayout samlSsoEnabled={config.features?.samlSso}>
                 <TenantDetailPage config={config} />
               </ShellLayout>
             </RequireAuth>
@@ -62,7 +62,7 @@ export function App({ config }: { config: AppConfig }) {
           path="/jobs"
           element={
             <RequireAuth>
-              <ShellLayout>
+              <ShellLayout samlSsoEnabled={config.features?.samlSso}>
                 <JobsPage config={config} />
               </ShellLayout>
             </RequireAuth>
@@ -77,7 +77,7 @@ export function App({ config }: { config: AppConfig }) {
           path="/audit-log"
           element={
             <RequireAuth>
-              <ShellLayout>
+              <ShellLayout samlSsoEnabled={config.features?.samlSso}>
                 <AuditLogPage config={config} />
               </ShellLayout>
             </RequireAuth>
@@ -88,7 +88,7 @@ export function App({ config }: { config: AppConfig }) {
           path="/operations"
           element={
             <RequireAuth>
-              <ShellLayout>
+              <ShellLayout samlSsoEnabled={config.features?.samlSso}>
                 <OperationsPage config={config} />
               </ShellLayout>
             </RequireAuth>
@@ -99,7 +99,7 @@ export function App({ config }: { config: AppConfig }) {
           path="/identity-providers"
           element={
             <RequireAuth>
-              <ShellLayout>
+              <ShellLayout samlSsoEnabled={config.features?.samlSso}>
                 <IdentityProvidersPage config={config} />
               </ShellLayout>
             </RequireAuth>

@@ -12,6 +12,7 @@
     "tenants_new": "テナント作成",
     "jobs": "プロビジョニング Jobs",
     "audit_log": "監査ログ",
+    "identity_providers": "ID プロバイダ",
     "operations": "運用ダッシュボード"
   },
   "operations": {
@@ -205,5 +206,38 @@
     "filter_to": "to (ISO8601)",
     "filter_principal": "principal (sub / username)",
     "filter_action": "action"
+  },
+  "identity_providers": {
+    "title": "ID プロバイダ",
+    "description": "System Admin のサインインに接続された SAML ID プロバイダの一覧です。 サインイン画面に、 設定済みのプロバイダの選択肢が表示されます。",
+    "add_button": "SAML IdP を追加",
+    "not_wired_header": "ID プロバイダ API を利用できません",
+    "not_wired_body": "この機能はお使いの環境では設定されていません。 管理者にお問い合わせください。",
+    "feature_disabled_header": "ID プロバイダは利用できません",
+    "feature_disabled_body": "System Admin の SAML SSO はこの環境ではまだ有効化されていません。 有効化するには管理者にお問い合わせください。",
+    "col_id": "ID",
+    "col_display_name": "表示名",
+    "col_description": "説明",
+    "col_updated": "更新",
+    "value_dash": "—",
+    "loading": "読み込み中…",
+    "test_sign_in": "サインインをテスト",
+    "delete": "削除",
+    "delete_confirm": "IdP 「{idpId}」 を削除しますか？",
+    "empty_header": "SAML IdP がまだ設定されていません",
+    "empty_body": "サインインはメールアドレスとパスワードになります。 「SAML IdP を追加」 から Entra ID などの SAML プロバイダを接続できます。",
+    "info_alert": "同じメールアドレスでも、 別々のプロバイダでサインインした場合は別々の ID として扱われます。 グループとロールの対応付けはこれを踏まえて設計してください。"
+  },
+  "create_idp": {
+    "header": "SAML IdP を登録",
+    "cancel": "キャンセル",
+    "register": "登録",
+    "idp_id_label": "IdP ID",
+    "idp_id_description": "プロバイダ名。 3〜32 文字 (英字・数字・アンダースコア・ハイフン)。",
+    "display_name_label": "表示名",
+    "description_label": "説明 (任意)",
+    "email_attr_label": "メール属性 (SAML)",
+    "metadata_xml_label": "メタデータ XML",
+    "metadata_xml_description": "IdP のメタデータ XML 全文を貼り付けてください。"
   }
 }

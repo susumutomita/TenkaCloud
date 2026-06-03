@@ -5,6 +5,29 @@ import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { IdpClient } from "../src/api/idp-client";
 import { CreateIdpModal } from "../src/pages/CreateIdpModal";
 
+// i18n: resolve against the real en.json so assertions check the actual shipped copy.
+vi.mock("../src/i18n", async () => {
+  const en = (await import("../src/i18n/locales/en.json")).default as Record<string, unknown>;
+  const resolve = (key: string): string => {
+    const v = key
+      .split(".")
+      .reduce<unknown>(
+        (o, k) => (o && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined),
+        en,
+      );
+    return typeof v === "string" ? v : key;
+  };
+  return {
+    useLang: () => "en",
+    useT: () => (key: string, params?: Record<string, string | number>) => {
+      let s = resolve(key);
+      if (params)
+        for (const [k, v] of Object.entries(params)) s = s.split(`{${k}}`).join(String(v));
+      return s;
+    },
+  };
+});
+
 /**
  * Issue #1418: 未テストだった admin CreateIdpModal (SAML IdP 登録モーダル) を 100% に。
  * client は prop 注入なので mock client を渡し、 Cloudscape test-utils で input/textarea を駆動。

@@ -8,6 +8,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Textarea from "@cloudscape-design/components/textarea";
 import { useCallback, useState } from "react";
 import { describeIdpError, type IdpClient } from "../api/idp-client";
+import { useT } from "../i18n";
 
 interface CreateIdpModalProps {
   readonly client: IdpClient | null;
@@ -22,6 +23,7 @@ interface CreateIdpModalProps {
  * Textarea 依存をこの module に閉じ込めた (= ページの高結合を解消)。
  */
 export function CreateIdpModal({ client, onClose, onCreated, busy, setBusy }: CreateIdpModalProps) {
+  const t = useT();
   const [idpId, setIdpId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [description, setDescription] = useState("");
@@ -56,15 +58,15 @@ export function CreateIdpModal({ client, onClose, onCreated, busy, setBusy }: Cr
     <Modal
       visible
       onDismiss={onClose}
-      header="Register SAML IdP"
+      header={t("create_idp.header")}
       footer={
         <Box float="right">
           <SpaceBetween direction="horizontal" size="xs">
             <Button onClick={onClose} disabled={busy}>
-              Cancel
+              {t("create_idp.cancel")}
             </Button>
             <Button variant="primary" onClick={onSubmit} loading={busy}>
-              Register
+              {t("create_idp.register")}
             </Button>
           </SpaceBetween>
         </Box>
@@ -72,19 +74,25 @@ export function CreateIdpModal({ client, onClose, onCreated, busy, setBusy }: Cr
     >
       <SpaceBetween size="m">
         {error ? <Alert type="error">{error}</Alert> : null}
-        <FormField label="IdP ID" description="Cognito ProviderName. 3–32 chars, [A-Za-z0-9_-].">
+        <FormField
+          label={t("create_idp.idp_id_label")}
+          description={t("create_idp.idp_id_description")}
+        >
           <Input value={idpId} onChange={(e) => setIdpId(e.detail.value)} />
         </FormField>
-        <FormField label="Display name">
+        <FormField label={t("create_idp.display_name_label")}>
           <Input value={displayName} onChange={(e) => setDisplayName(e.detail.value)} />
         </FormField>
-        <FormField label="Description (optional)">
+        <FormField label={t("create_idp.description_label")}>
           <Input value={description} onChange={(e) => setDescription(e.detail.value)} />
         </FormField>
-        <FormField label="Email attribute (SAML)">
+        <FormField label={t("create_idp.email_attr_label")}>
           <Input value={emailAttr} onChange={(e) => setEmailAttr(e.detail.value)} />
         </FormField>
-        <FormField label="Metadata XML" description="Paste the full IdP metadata XML.">
+        <FormField
+          label={t("create_idp.metadata_xml_label")}
+          description={t("create_idp.metadata_xml_description")}
+        >
           <Textarea
             value={metadataXml}
             onChange={(e) => setMetadataXml(e.detail.value)}

@@ -14,7 +14,14 @@ const LOCALE_NAME: Record<LocaleCode, string> = {
   en: "English",
 };
 
-export function ShellLayout({ children }: { children: ReactNode }) {
+export function ShellLayout({
+  children,
+  samlSsoEnabled = false,
+}: {
+  children: ReactNode;
+  /** Feature-flagged: show the Identity providers (SAML SSO) nav item only when enabled. */
+  samlSsoEnabled?: boolean;
+}) {
   const auth = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -63,7 +70,16 @@ export function ShellLayout({ children }: { children: ReactNode }) {
               { type: "link", href: "/tenants/new", text: t("nav.tenants_new") },
               { type: "link", href: "/jobs", text: t("nav.jobs") },
               { type: "link", href: "/audit-log", text: t("nav.audit_log") },
-              { type: "link", href: "/identity-providers", text: "Identity providers" },
+              // SAML SSO is feature-flagged off until verified (ADR-035) — hide the nav item.
+              ...(samlSsoEnabled
+                ? [
+                    {
+                      type: "link" as const,
+                      href: "/identity-providers",
+                      text: t("nav.identity_providers"),
+                    },
+                  ]
+                : []),
               { type: "link", href: "/operations", text: t("nav.operations") },
             ]}
             onFollow={(e) => {

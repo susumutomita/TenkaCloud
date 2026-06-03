@@ -1,4 +1,6 @@
 import { isCognitoDomain, isHttpsUrl } from "@tenkacloud/auth-client";
+import { resolveFeatureFlags } from "@tenkacloud/web-kit";
+import { type AppFeatures, FEATURE_REGISTRY } from "./features";
 
 export interface AppConfig {
   readonly cognitoDomain: string;
@@ -39,6 +41,12 @@ export interface AppConfig {
    * SAML 未設定なら空 object `{}` (= 全 email が Cognito local auth に流れる)。
    */
   readonly samlIdpDirectory: Readonly<Record<string, readonly string[]>>;
+  /**
+   * Resolved feature flags (ADR-035). Registry in src/features.ts; an environment opts a flag on
+   * via runtime-config.json `features: { <key>: true }`. Access as `config.features?.<key>`.
+   * loadConfig always populates it; optional only so test fixtures can omit it (absent → all OFF).
+   */
+  readonly features?: AppFeatures;
 }
 
 /**
@@ -56,6 +64,8 @@ interface RuntimeConfig {
   readonly adminInsightApiUrl?: string;
   readonly cloudWatchDashboardName?: string;
   readonly samlIdpDirectory?: Readonly<Record<string, readonly string[]>>;
+  /** Raw `features` override object from runtime-config.json; resolved against the registry in loadConfig. */
+  readonly features?: Readonly<Record<string, unknown>>;
 }
 
 // Issue #871 / #1246: runtime-config.json URL validators (isHttpsUrl / isCognitoDomain) are
@@ -91,6 +101,10 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
       adminInsightApiUrl: data.adminInsightApiUrl,
       cloudWatchDashboardName: data.cloudWatchDashboardName,
       samlIdpDirectory: data.samlIdpDirectory,
+      features:
+        data.features && typeof data.features === "object" && !Array.isArray(data.features)
+          ? data.features
+          : undefined,
     };
   } catch {
     return null;
@@ -131,6 +145,7 @@ export async function loadConfig(
       cloudWatchDashboardName: runtime.cloudWatchDashboardName ?? "",
       // Issue #1335 Phase 1: SAML 未設定 stack も無音で動かすため空 object fallback。
       samlIdpDirectory: runtime.samlIdpDirectory ?? {},
+      features: resolveFeatureFlags(FEATURE_REGISTRY, runtime.features),
     };
   }
 
@@ -139,6 +154,18 @@ export async function loadConfig(
     const value = env[key];
     if (!value) throw new Error(`Missing required env var: ${key}`);
     return value;
+  };
+  /** Dev-only: parse VITE_FEATURES (a JSON object of overrides); invalid / absent → registry defaults. */
+  const parseDevFeatures = (raw: string | undefined): Record<string, unknown> | undefined => {
+    if (!raw) return undefined;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : undefined;
+    } catch {
+      return undefined;
+    }
   };
   return {
     cognitoDomain: required("VITE_COGNITO_DOMAIN"),
@@ -157,5 +184,7 @@ export async function loadConfig(
     cloudWatchDashboardName: "",
     // Issue #1335 Phase 1: dev では SAML 経路を出さない (= 空 directory で local 一択)。
     samlIdpDirectory: {},
+    // Unverified features default OFF; opt in with VITE_FEATURES='{"samlSso":true}'.
+    features: resolveFeatureFlags(FEATURE_REGISTRY, parseDevFeatures(env.VITE_FEATURES)),
   };
 }

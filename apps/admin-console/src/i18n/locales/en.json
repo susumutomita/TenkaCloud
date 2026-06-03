@@ -12,6 +12,7 @@
     "tenants_new": "Create tenant",
     "jobs": "Provisioning Jobs",
     "audit_log": "Audit log",
+    "identity_providers": "Identity providers",
     "operations": "Operations"
   },
   "operations": {
@@ -205,5 +206,38 @@
     "filter_to": "to (ISO8601)",
     "filter_principal": "principal (sub / username)",
     "filter_action": "action"
+  },
+  "identity_providers": {
+    "title": "Identity providers",
+    "description": "SAML identity providers connected to the System Admin sign-in. The sign-in screen shows a picker for all configured providers.",
+    "add_button": "Add SAML IdP",
+    "not_wired_header": "The identity-provider API is unavailable",
+    "not_wired_body": "This feature is not configured for your environment. Please contact an administrator.",
+    "feature_disabled_header": "Identity providers are not available",
+    "feature_disabled_body": "System Admin SAML SSO is not enabled for this environment yet. Contact an administrator to turn it on.",
+    "col_id": "ID",
+    "col_display_name": "Display name",
+    "col_description": "Description",
+    "col_updated": "Updated",
+    "value_dash": "—",
+    "loading": "Loading…",
+    "test_sign_in": "Test sign-in",
+    "delete": "Delete",
+    "delete_confirm": "Delete IdP \"{idpId}\"?",
+    "empty_header": "No SAML IdPs configured yet",
+    "empty_body": "Sign-in falls back to email + password. Click Add SAML IdP to connect Entra ID or another SAML provider.",
+    "info_alert": "The same email signed in through two different providers is treated as two separate identities. Plan your group-to-role mapping accordingly."
+  },
+  "create_idp": {
+    "header": "Register SAML IdP",
+    "cancel": "Cancel",
+    "register": "Register",
+    "idp_id_label": "IdP ID",
+    "idp_id_description": "Provider name. 3–32 characters: letters, digits, _ or -.",
+    "display_name_label": "Display name",
+    "description_label": "Description (optional)",
+    "email_attr_label": "Email attribute (SAML)",
+    "metadata_xml_label": "Metadata XML",
+    "metadata_xml_description": "Paste the full IdP metadata XML."
   }
 }
