@@ -6,6 +6,7 @@ import {
   TENANT_ADMIN_ROLE,
   TENANT_OPERATOR_ROLE,
 } from "../../deploy-handler/auth.js";
+import { auditEventAction } from "../audit.js";
 import { bulkTeardownEvent } from "../bulk-delete.js";
 import { createEvent, DuplicateInternalSlugError, DuplicateProblemIdError } from "../create.js";
 import { getEventDetail, listEvents } from "../list.js";
@@ -33,6 +34,7 @@ export function registerEventRoutes(app: Hono, shared: EventSharedResources): vo
             { tenantId: resolveTenantId(c), nowMs: Date.now() },
             body,
           );
+          auditEventAction(c, "create_event", response.eventId);
           return c.json(response, StatusCodes.CREATED);
         } catch (err) {
           if (err instanceof DuplicateInternalSlugError) {
@@ -100,6 +102,7 @@ export function registerEventRoutes(app: Hono, shared: EventSharedResources): vo
           const outcome = await bulkTeardownEvent(shared, resolveTenantId(c), eventId, Date.now());
           if (outcome.kind === "not_found")
             return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+          auditEventAction(c, "delete_event", eventId);
           return c.json(outcome.result, StatusCodes.ACCEPTED);
         } catch (err) {
           return handleRouteError(c, "[events] bulkTeardownEvent failed", { eventId }, err);

@@ -6,6 +6,7 @@ import {
   TENANT_ADMIN_ROLE,
 } from "../../deploy-handler/auth.js";
 import { archiveEvent } from "../archive.js";
+import { auditEventAction } from "../audit.js";
 import { lockScoring, unlockScoring } from "../lock-scoring.js";
 import { handleRouteError, withEventId } from "../route-helpers.js";
 import type { EventSharedResources } from "../shared.js";
@@ -41,6 +42,7 @@ export function registerScoringRoutes(app: Hono, shared: EventSharedResources): 
               StatusCodes.CONFLICT,
             );
           }
+          auditEventAction(c, "lock_scoring", eventId);
           return c.json(
             {
               scoringLocked: outcome.scoringLocked,
@@ -71,6 +73,7 @@ export function registerScoringRoutes(app: Hono, shared: EventSharedResources): 
               StatusCodes.CONFLICT,
             );
           }
+          auditEventAction(c, "unlock_scoring", eventId);
           return c.json(
             {
               scoringLocked: outcome.scoringLocked,
@@ -100,6 +103,7 @@ export function registerScoringRoutes(app: Hono, shared: EventSharedResources): 
               StatusCodes.CONFLICT,
             );
           }
+          auditEventAction(c, "archive_event", eventId);
           return c.json({ archivedAt: outcome.archivedAt }, StatusCodes.OK);
         } catch (err) {
           return handleRouteError(c, "[events] archiveEvent failed", { eventId }, err);

@@ -7,6 +7,7 @@ import {
   TENANT_OPERATOR_ROLE,
 } from "../../deploy-handler/auth.js";
 import { NotificationCreateRequestSchema } from "../../shared/notification.js";
+import { auditEventAction } from "../audit.js";
 import { createNotification } from "../create-notification.js";
 import { handleRouteError, parseJsonBody, withEventId } from "../route-helpers.js";
 import type { EventSharedResources } from "../shared.js";
@@ -33,6 +34,7 @@ export function registerNotificationRoutes(app: Hono, shared: EventSharedResourc
           );
           if (outcome.kind === "not_found")
             return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+          auditEventAction(c, "create_notification", eventId);
           return c.json(
             { notificationId: outcome.notificationId, occurredAt: outcome.occurredAt },
             StatusCodes.CREATED,
