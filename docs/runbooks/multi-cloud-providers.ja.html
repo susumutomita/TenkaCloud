@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>マルチクラウド問題プロバイダ (Sakura / Azure / GCP)</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>マルチクラウド問題プロバイダ (Sakura / Azure / GCP)</h1>
+<blockquote>
+<p>English: <a href="./multi-cloud-providers.md">multi-cloud-providers.md</a></p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>対象者</td>
+<td>非 AWS 問題をチームに対して有効化するオペレータ (Tenant Admin)</td>
+</tr>
+<tr>
+<td>使うタイミング</td>
+<td>Sakura / Azure / GCP 問題を動かすチームごとに 1 回、その問題を deploy する前</td>
+</tr>
+<tr>
+<td>所要時間</td>
+<td>チーム × プロバイダごとに 20 分 (大半は一度きりのクラウド側 trust bootstrap)</td>
+</tr>
+<tr>
+<td>成果物</td>
+<td>チームの provider 別認証情報が登録され、問題の <code>runtime</code> が live な adapter に解決し、非 AWS deploy が <code>ready</code> に到達してきれいに撤去できる</td>
+</tr>
+</tbody></table>
+<p>TenkaCloud の control plane は常に AWS 上で動く。個々の <strong>問題</strong> は <code>aws/cloudformation</code> 以外の <code>runtime</code> を宣言することで別クラウドを対象にできる。deploy worker はその provider 用の <code>ProblemRuntimeAdapter</code> を解決し、短命の認証情報を交換して、provider ネイティブの deploy API を駆動する。この runbook は「チームが存在する」状態から「そのチームに非 AWS 問題を deploy できる」状態までのオペレータ手順を示す。</p>
+<p>各 provider の設計判断は ADR にある。背景は一度目を通しておくとよい。</p>
+<table>
+<thead>
+<tr>
+<th>Provider / engine</th>
+<th>Adapter</th>
+<th>認証モデル</th>
+<th>ADR</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>sakura/apprun</code></td>
+<td>Sakura AppRun</td>
+<td>API キー (access token + secret) を SSM SecureString に保管</td>
+<td><a href="../architecture/adr-026-sakura-cloud-problem-provider.html">ADR-026</a></td>
+</tr>
+<tr>
+<td><code>azure/bicep</code></td>
+<td>Azure Deployment Stacks</td>
+<td>app registration の client secret を SSM SecureString に保管 → <code>client_credentials</code> で ARM token</td>
+<td><a href="../architecture/adr-027-azure-gcp-federated-providers.html">ADR-027</a> / <a href="../architecture/adr-032-cross-cloud-federation-subject-token.html">ADR-032</a></td>
+</tr>
+<tr>
+<td><code>gcp/infra-manager</code></td>
+<td>GCP Infrastructure Manager</td>
+<td><strong>鍵レス</strong> Workload Identity Federation: 署名済 <code>sts:GetCallerIdentity</code> → GCP STS → service account impersonation</td>
+<td><a href="../architecture/adr-027-azure-gcp-federated-providers.html">ADR-027</a> / <a href="../architecture/adr-032-cross-cloud-federation-subject-token.html">ADR-032</a></td>
+</tr>
+</tbody></table>
+<h2>Step 1: クラウド側 trust bootstrap (一度きり、チームのクラウドアカウント側)</h2>
+<p>ここだけが TenkaCloud の外にある作業で、<strong>チーム自身の</strong> Sakura / Azure / GCP アカウント側で設定する。チームごとに 1 回行う。最小権限を徹底し、各認証情報は問題のリソースを deploy / delete できるだけにする。</p>
+<h3>Sakura</h3>
+<ul>
+<li><input disabled="" type="checkbox"> チームの Sakura アカウントで、AppRun にスコープした <strong>API キー</strong> (access token + access token secret) を発行する。</li>
+<li><input disabled="" type="checkbox"> 2 つの値を控える。long-lived なので rotation の頻度を決めておく (<a href="#rotation-%E3%81%A8-revocation">Rotation と revocation</a> 参照)。</li>
+</ul>
+<h3>Azure</h3>
+<ul>
+<li><input disabled="" type="checkbox"> チームの Entra ID directory に <strong>チーム専用の app registration</strong> を作り、<strong>client secret</strong> を発行する。</li>
+<li><input disabled="" type="checkbox"> その service principal に、<strong>対象 subscription / resource group</strong> へ最小ロール (問題テンプレートが触る action だけのカスタムロール等) を付与する。Owner は付けない。</li>
+<li><input disabled="" type="checkbox"> 控える値: <code>azureTenantId</code> (directory GUID)、<code>clientId</code>、<code>clientSecret</code>、<code>subscriptionId</code>、<code>resourceGroup</code>、任意の <code>location</code>。</li>
+</ul>
+<blockquote>
+<p>Azure には AWS-native な federation 経路がない (Entra の federated credential は OIDC issuer しか受け付けない)。ADR-032 は platform-as-OIDC-issuer サブシステムを意図的に後回しにしており、v1 は stored client secret を使う。Sakura キーと同等に扱うこと。</p>
+</blockquote>
+<h3>GCP (鍵レス)</h3>
+<ul>
+<li><input disabled="" type="checkbox"> チームの GCP プロジェクトに <strong>Workload Identity Pool</strong> と、platform の AWS deploy-worker identity を信頼する <strong>AWS provider</strong> を作る。</li>
+<li><input disabled="" type="checkbox"> 対象プロジェクトへ最小ロールを持つ <strong>service account</strong> を用意し、WIF principal に <code>roles/iam.serviceAccountTokenCreator</code> を付与する (impersonation binding)。</li>
+<li><input disabled="" type="checkbox"> 控える値: <code>wifAudience</code> (例 <code>//iam.googleapis.com/projects/&lt;n&gt;/locations/global/workloadIdentityPools/tenkacloud/providers/aws</code>)、<code>serviceAccountEmail</code>、<code>projectId</code>、<code>location</code>。</li>
+</ul>
+<blockquote>
+<p>GCP は唯一の鍵レス provider で、secret を一切保管しない。deploy worker は <code>GetCallerIdentity</code> リクエストに署名し、GCP STS で交換し、1 時間有効な token で service account を impersonate する。</p>
+</blockquote>
+<h2>Step 2: チーム別の認証情報を登録する</h2>
+<p>登録は <strong>Application Admin console → Competitor Accounts → &quot;Team cloud credentials&quot;</strong> パネルから行う。パネルは認証情報を <code>admin/team-cloud-credentials/:provider/:teamSlug</code> に <code>PUT</code> し、backend が provider 別の形を検証して SSM SecureString に書く。secret は write-only で、status 確認は boolean だけを返し secret は返さない。</p>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>貼り付ける認証情報 JSON</th>
+<th>SSM SecureString path</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>sakura</code></td>
+<td><code>{ &quot;accessToken&quot;: &quot;...&quot;, &quot;accessTokenSecret&quot;: &quot;...&quot; }</code></td>
+<td><code>/&lt;env&gt;/tenants/&lt;tenantId&gt;/teams/&lt;teamSlug&gt;/sakura-api-key</code></td>
+</tr>
+<tr>
+<td><code>azure</code></td>
+<td><code>{ &quot;azureTenantId&quot;: &quot;...&quot;, &quot;clientId&quot;: &quot;...&quot;, &quot;clientSecret&quot;: &quot;...&quot;, &quot;subscriptionId&quot;: &quot;...&quot;, &quot;resourceGroup&quot;: &quot;...&quot;, &quot;location&quot;: &quot;japaneast&quot; }</code></td>
+<td><code>/&lt;env&gt;/tenants/&lt;tenantId&gt;/teams/&lt;teamSlug&gt;/azure-credential</code></td>
+</tr>
+<tr>
+<td><code>gcp</code></td>
+<td><code>{ &quot;wifAudience&quot;: &quot;...&quot;, &quot;serviceAccountEmail&quot;: &quot;...&quot;, &quot;projectId&quot;: &quot;...&quot;, &quot;location&quot;: &quot;asia-northeast1&quot; }</code></td>
+<td><code>/&lt;env&gt;/tenants/&lt;tenantId&gt;/teams/&lt;teamSlug&gt;/gcp-credential</code></td>
+</tr>
+</tbody></table>
+<ul>
+<li><input disabled="" type="checkbox"> provider を選び、team slug (<code>^[a-z0-9-]+$</code>) を入力し、JSON を貼り付けて <strong>Register</strong> を押す。</li>
+<li><input disabled="" type="checkbox"> <strong>Status</strong> を押すと registered と表示されるはず。</li>
+<li><input disabled="" type="checkbox"> <code>&lt;env&gt;</code> は deploy 環境 (<code>development</code> / <code>staging</code> / <code>production</code>)。deploy worker の IAM はこれらの path にスコープした <code>ssm:GetParameter</code> + <code>kms:Decrypt</code> を既に付与済 (<code>deploy-api-lambda.ts</code>) なので、チームごとの IAM 変更は不要。</li>
+</ul>
+<h2>Step 3: 問題の runtime を宣言する</h2>
+<p>問題の <code>metadata.json</code> は <code>runtime</code> ブロックで対象を宣言する。無ければ legacy の <code>aws/cloudformation</code> として扱われる。</p>
+<pre><code class="language-jsonc">{ &quot;runtime&quot;: { &quot;provider&quot;: &quot;gcp&quot;, &quot;engine&quot;: &quot;infra-manager&quot;, &quot;entry&quot;: &quot;main.tf&quot; } }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <code>provider</code> / <code>engine</code> は上表の 3 行のいずれか。</li>
+<li><input disabled="" type="checkbox"> <code>make validate-problems</code> が runtime ブロックを <code>problems/SCHEMA.json</code> に対して検証する。</li>
+<li><input disabled="" type="checkbox"> provider の認証情報がチームに登録されていない場合、<code>selectAdapter</code> は <strong>クラウド変更の前に</strong> <code>RuntimeNotSupportedError</code> (reserved) を投げる。AWS への暗黙フォールバックはせず loud に落ちる。</li>
+</ul>
+<h2>Step 4: deploy・reconcile・撤去</h2>
+<p>流れは AWS 問題と同一で、adapter 抽象が provider 差を隠す。</p>
+<ol>
+<li><strong>Deploy</strong> — オペレータが問題をチームに deploy する。deploy worker は adapter 依存を組み (<code>buildAdapterDependencies</code>)、認証情報を交換し、<code>adapter.deploy</code> を呼ぶ。status は <code>deploying</code> から始まる。</li>
+<li><strong>Reconcile</strong> — generic-scoring の tick が <code>adapter.getStatus</code> / <code>adapter.collectOutputs</code> (runtime-status reconciler) を呼び、deployment 行を <code>ready</code> に進め、participant portal が見せる endpoint outputs を永続化する。</li>
+<li><strong>撤去</strong> — teardown は <code>adapter.destroy</code> を呼び、status は <code>destroying</code> を経て <code>destroyed</code> になる。イベント全体は通常の <a href="./teardown.md">teardown runbook</a> に従う。</li>
+</ol>
+<h2>Provider 別の検証チェックリスト</h2>
+<p>provider の実アカウントを入手したら一度実施する。これがマルチクラウド tracker (<a href="https://github.com/susumutomita/TenkaCloud/issues/1408">#1408</a>) と provider 別 issue (Sakura #1412 / Azure #1410 / GCP #1411 / federation onboarding #1413) の受け入れ証跡になる。機構と unit + contract test は既に出荷済で、このチェックリストは live での確認にあたる。</p>
+<ul>
+<li><input disabled="" type="checkbox"> チームのクラウドアカウント側で trust bootstrap (Step 1) 済、最小権限を適用。</li>
+<li><input disabled="" type="checkbox"> 認証情報を登録し <strong>Status</strong> が registered (Step 2)。</li>
+<li><input disabled="" type="checkbox"> その <code>runtime</code> を宣言した問題が <code>make validate-problems</code> を通る。</li>
+<li><input disabled="" type="checkbox"> deploy が <code>ready</code> に到達し、portal に endpoint output が出る。</li>
+<li><input disabled="" type="checkbox"> 未登録チームは <code>RuntimeNotSupportedError</code> で loud に落ち、リソースは作られない。</li>
+<li><input disabled="" type="checkbox"> teardown が <code>destroyed</code> に到達し、チームのクラウドアカウントに orphan が残らない (provider console で突き合わせ)。</li>
+<li><input disabled="" type="checkbox"> (GCP) SSM に secret が一切書かれていないことを確認 (非秘密の WIF config のみ)。</li>
+</ul>
+<h2>Rotation と revocation</h2>
+<ul>
+<li><strong>Rotate</strong> — 同じパネルから再登録する (<code>PUT</code> が SSM SecureString を上書きする)。Sakura キーと Azure client secret は long-lived なので、チームの通常頻度と漏洩疑いの後に rotate する。</li>
+<li><strong>Revoke</strong> — パネルの <strong>Revoke</strong> (<code>DELETE</code>) を使う。以降そのチームの deploy は再登録まで loud に落ちる (<code>no &lt;provider&gt; credential registered ...</code>)。provider console 側の secret も失効させる。</li>
+<li>GCP は rotate すべき stored secret が無い。impersonation binding を外すか、チームの GCP プロジェクトで WIF provider を無効化して revoke する。</li>
+</ul>
+<h2>トラブルシュート</h2>
+<table>
+<thead>
+<tr>
+<th>症状</th>
+<th>原因の可能性</th>
+<th>対応</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>deploy が <code>RuntimeNotSupportedError</code> (reserved) で拒否される</td>
+<td>チームに認証情報が未登録</td>
+<td>登録 (Step 2) してから再 deploy</td>
+</tr>
+<tr>
+<td><code>no &lt;provider&gt; credential registered for tenant ... team ...</code></td>
+<td>SecureString が無い、または team slug 誤り</td>
+<td>slug を見直して再登録</td>
+</tr>
+<tr>
+<td>deploy 時に Azure token エラー</td>
+<td>app registration の secret 失効、またはロールが狭すぎる</td>
+<td>secret を rotate / ロールをテンプレートの action に合わせて広げる</td>
+</tr>
+<tr>
+<td>GCP STS 交換が失敗</td>
+<td>WIF provider が worker identity を信頼していない、または impersonation binding が無い</td>
+<td>pool の AWS provider 条件と <code>serviceAccountTokenCreator</code> binding を見直す</td>
+</tr>
+<tr>
+<td>Sakura 401</td>
+<td>API キー失効または scope 誤り</td>
+<td>AppRun スコープのキーを再発行して再登録</td>
+</tr>
+</tbody></table>
+<h2>関連</h2>
+<ul>
+<li><a href="./teardown.md">Teardown</a> — provider 別 <code>destroy</code> が集約されるイベントレベルの撤去。</li>
+<li><a href="./incident-response.md">Incident response</a> — イベント中に非 AWS deploy が停滞した場合。</li>
+<li><a href="../architecture/adr-026-sakura-cloud-problem-provider.html">ADR-026</a> / <a href="../architecture/adr-027-azure-gcp-federated-providers.html">ADR-027</a> / <a href="../architecture/adr-032-cross-cloud-federation-subject-token.html">ADR-032</a> — provider と federation の設計。</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/runbooks/multi-cloud-providers.ja.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/runbooks/multi-cloud-providers.ja.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>

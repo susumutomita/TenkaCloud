@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Multi-cloud problem providers (Sakura / Azure / GCP)</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>Multi-cloud problem providers (Sakura / Azure / GCP)</h1>
+<blockquote>
+<p>Japanese: <a href="./multi-cloud-providers.ja.md">multi-cloud-providers.ja.md</a></p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Audience</td>
+<td>Operator (Tenant Admin) enabling a non-AWS problem for one or more teams</td>
+</tr>
+<tr>
+<td>When to use</td>
+<td>Once per team that will run a Sakura / Azure / GCP problem, before you deploy that problem</td>
+</tr>
+<tr>
+<td>Estimated time</td>
+<td>20 minutes per team per provider (most of it is the one-time cloud-side trust bootstrap)</td>
+</tr>
+<tr>
+<td>Output</td>
+<td>The team&#39;s per-provider credential is registered, the problem&#39;s <code>runtime</code> resolves to a live adapter, and a non-AWS deploy reaches <code>ready</code> and tears down cleanly</td>
+</tr>
+</tbody></table>
+<p>TenkaCloud&#39;s control plane always runs on AWS. Individual <strong>problems</strong> can target another cloud by declaring a <code>runtime</code> other than <code>aws/cloudformation</code>. The deploy worker resolves a <code>ProblemRuntimeAdapter</code> for that provider, exchanges a short-lived credential, and drives the provider&#39;s native deploy API. This runbook is the operator path from &quot;a team exists&quot; to &quot;a non-AWS problem deploys for that team.&quot;</p>
+<p>The design decisions behind each provider live in the ADRs — read them once for context:</p>
+<table>
+<thead>
+<tr>
+<th>Provider / engine</th>
+<th>Adapter</th>
+<th>Credential model</th>
+<th>ADR</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>sakura/apprun</code></td>
+<td>Sakura AppRun</td>
+<td>Stored API key (access token + secret) in SSM SecureString</td>
+<td><a href="../architecture/adr-026-sakura-cloud-problem-provider.html">ADR-026</a></td>
+</tr>
+<tr>
+<td><code>azure/bicep</code></td>
+<td>Azure Deployment Stacks</td>
+<td>Stored app-registration client secret in SSM SecureString → <code>client_credentials</code> ARM token</td>
+<td><a href="../architecture/adr-027-azure-gcp-federated-providers.html">ADR-027</a> / <a href="../architecture/adr-032-cross-cloud-federation-subject-token.html">ADR-032</a></td>
+</tr>
+<tr>
+<td><code>gcp/infra-manager</code></td>
+<td>GCP Infrastructure Manager</td>
+<td><strong>Keyless</strong> Workload Identity Federation: signed <code>sts:GetCallerIdentity</code> → GCP STS → service-account impersonation</td>
+<td><a href="../architecture/adr-027-azure-gcp-federated-providers.html">ADR-027</a> / <a href="../architecture/adr-032-cross-cloud-federation-subject-token.html">ADR-032</a></td>
+</tr>
+</tbody></table>
+<h2>Step 1: cloud-side trust bootstrap (one-time, in the team&#39;s cloud account)</h2>
+<p>This is the one piece that lives outside TenkaCloud — it is set up in the <strong>team&#39;s own</strong> Sakura / Azure / GCP account. Do it once per team. Apply least privilege: each credential should only be able to deploy and delete the problem&#39;s resources.</p>
+<h3>Sakura</h3>
+<ul>
+<li><input disabled="" type="checkbox"> In the team&#39;s Sakura account, issue an <strong>API key</strong> (access token + access token secret) scoped to AppRun.</li>
+<li><input disabled="" type="checkbox"> Note the two values. They are long-lived, so plan a rotation cadence (see <a href="#rotation-and-revocation">Rotation and revocation</a>).</li>
+</ul>
+<h3>Azure</h3>
+<ul>
+<li><input disabled="" type="checkbox"> Create a <strong>per-team app registration</strong> in the team&#39;s Entra ID directory and generate a <strong>client secret</strong>.</li>
+<li><input disabled="" type="checkbox"> Grant that service principal a minimal role (e.g. a custom role with only the resource actions the problem template touches) on the <strong>target subscription / resource group</strong> — not Owner.</li>
+<li><input disabled="" type="checkbox"> Record: <code>azureTenantId</code> (directory GUID), <code>clientId</code>, <code>clientSecret</code>, <code>subscriptionId</code>, <code>resourceGroup</code>, and optional <code>location</code>.</li>
+</ul>
+<blockquote>
+<p>Azure has no AWS-native federation path (Entra federated credentials accept only an OIDC issuer). ADR-032 deliberately defers the platform-as-OIDC-issuer subsystem; v1 uses a stored client secret, so treat it with the same care as the Sakura key.</p>
+</blockquote>
+<h3>GCP (keyless)</h3>
+<ul>
+<li><input disabled="" type="checkbox"> Create a <strong>Workload Identity Pool</strong> and an <strong>AWS provider</strong> in the team&#39;s GCP project that trusts the platform&#39;s AWS deploy-worker identity.</li>
+<li><input disabled="" type="checkbox"> Create (or pick) a <strong>service account</strong> with a minimal role on the target project, and grant the WIF principal <code>roles/iam.serviceAccountTokenCreator</code> on it (impersonation binding).</li>
+<li><input disabled="" type="checkbox"> Record: <code>wifAudience</code> (e.g. <code>//iam.googleapis.com/projects/&lt;n&gt;/locations/global/workloadIdentityPools/tenkacloud/providers/aws</code>), <code>serviceAccountEmail</code>, <code>projectId</code>, and <code>location</code>.</li>
+</ul>
+<blockquote>
+<p>GCP is the only keyless provider: no secret is ever stored. The deploy worker signs a <code>GetCallerIdentity</code> request, exchanges it at GCP STS, and impersonates the service account for a 1-hour token.</p>
+</blockquote>
+<h2>Step 2: register the per-team credential</h2>
+<p>Registration is done from the <strong>Application Admin console → Competitor Accounts → &quot;Team cloud credentials&quot;</strong> panel. The panel <code>PUT</code>s the credential to <code>admin/team-cloud-credentials/:provider/:teamSlug</code>; the backend validates the provider-specific shape and writes it to an SSM SecureString. The secret is write-only — the status check returns a boolean, never the secret.</p>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Credential JSON to paste</th>
+<th>SSM SecureString path</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>sakura</code></td>
+<td><code>{ &quot;accessToken&quot;: &quot;...&quot;, &quot;accessTokenSecret&quot;: &quot;...&quot; }</code></td>
+<td><code>/&lt;env&gt;/tenants/&lt;tenantId&gt;/teams/&lt;teamSlug&gt;/sakura-api-key</code></td>
+</tr>
+<tr>
+<td><code>azure</code></td>
+<td><code>{ &quot;azureTenantId&quot;: &quot;...&quot;, &quot;clientId&quot;: &quot;...&quot;, &quot;clientSecret&quot;: &quot;...&quot;, &quot;subscriptionId&quot;: &quot;...&quot;, &quot;resourceGroup&quot;: &quot;...&quot;, &quot;location&quot;: &quot;japaneast&quot; }</code></td>
+<td><code>/&lt;env&gt;/tenants/&lt;tenantId&gt;/teams/&lt;teamSlug&gt;/azure-credential</code></td>
+</tr>
+<tr>
+<td><code>gcp</code></td>
+<td><code>{ &quot;wifAudience&quot;: &quot;...&quot;, &quot;serviceAccountEmail&quot;: &quot;...&quot;, &quot;projectId&quot;: &quot;...&quot;, &quot;location&quot;: &quot;asia-northeast1&quot; }</code></td>
+<td><code>/&lt;env&gt;/tenants/&lt;tenantId&gt;/teams/&lt;teamSlug&gt;/gcp-credential</code></td>
+</tr>
+</tbody></table>
+<ul>
+<li><input disabled="" type="checkbox"> Select the provider, enter the team slug (<code>^[a-z0-9-]+$</code>), paste the JSON, and click <strong>Register</strong>.</li>
+<li><input disabled="" type="checkbox"> Click <strong>Status</strong> — it should report registered.</li>
+<li><input disabled="" type="checkbox"> <code>&lt;env&gt;</code> is the deploy environment (<code>development</code> / <code>staging</code> / <code>production</code>). The deploy worker&#39;s IAM already grants <code>ssm:GetParameter</code> + <code>kms:Decrypt</code> scoped to these paths (<code>deploy-api-lambda.ts</code>), so no IAM change is needed per team.</li>
+</ul>
+<h2>Step 3: declare the problem runtime</h2>
+<p>The problem&#39;s <code>metadata.json</code> declares the target with a <code>runtime</code> block; without it, a problem is treated as legacy <code>aws/cloudformation</code>.</p>
+<pre><code class="language-jsonc">{ &quot;runtime&quot;: { &quot;provider&quot;: &quot;gcp&quot;, &quot;engine&quot;: &quot;infra-manager&quot;, &quot;entry&quot;: &quot;main.tf&quot; } }
+</code></pre>
+<ul>
+<li><input disabled="" type="checkbox"> <code>provider</code> / <code>engine</code> must be one of the three rows in the table above.</li>
+<li><input disabled="" type="checkbox"> <code>make validate-problems</code> checks the runtime block against <code>problems/SCHEMA.json</code>.</li>
+<li><input disabled="" type="checkbox"> If the provider&#39;s credential is <strong>not</strong> registered for the team, <code>selectAdapter</code> raises <code>RuntimeNotSupportedError</code> (reserved) <strong>before any cloud mutation</strong> — a loud failure, never a silent fallback to AWS.</li>
+</ul>
+<h2>Step 4: deploy, reconcile, and tear down</h2>
+<p>The flow is identical to an AWS problem — the adapter abstraction hides the provider:</p>
+<ol>
+<li><strong>Deploy</strong> — the operator deploys the problem for the team. The deploy worker builds the adapter dependencies (<code>buildAdapterDependencies</code>), exchanges the credential, and calls <code>adapter.deploy</code>. Status starts at <code>deploying</code>.</li>
+<li><strong>Reconcile</strong> — the generic-scoring tick calls <code>adapter.getStatus</code> / <code>adapter.collectOutputs</code> (the runtime-status reconciler), advancing the deployment row to <code>ready</code> and persisting the endpoint outputs the participant portal shows.</li>
+<li><strong>Tear down</strong> — teardown calls <code>adapter.destroy</code>; status moves through <code>destroying</code> to <code>destroyed</code>. Follow the normal <a href="./teardown.md">teardown runbook</a> for the event as a whole.</li>
+</ol>
+<h2>Per-provider verification checklist</h2>
+<p>Run this once you have a real account for a provider. It is the acceptance evidence for the multi-cloud tracker (<a href="https://github.com/susumutomita/TenkaCloud/issues/1408">#1408</a>) and the per-provider issues (Sakura #1412 / Azure #1410 / GCP #1411 / federation onboarding #1413). The mechanism and its unit + contract tests already ship; this checklist is the live confirmation.</p>
+<ul>
+<li><input disabled="" type="checkbox"> Trust bootstrap done in the team&#39;s cloud account (Step 1), least privilege applied.</li>
+<li><input disabled="" type="checkbox"> Credential registered and <strong>Status</strong> reports registered (Step 2).</li>
+<li><input disabled="" type="checkbox"> A problem declaring that <code>runtime</code> passes <code>make validate-problems</code>.</li>
+<li><input disabled="" type="checkbox"> Deploy reaches <code>ready</code>; the portal shows the endpoint output.</li>
+<li><input disabled="" type="checkbox"> An unregistered team fails loud with <code>RuntimeNotSupportedError</code>, with no resource created.</li>
+<li><input disabled="" type="checkbox"> Teardown reaches <code>destroyed</code>; no orphan resource remains in the team&#39;s cloud account (cross-check the provider console).</li>
+<li><input disabled="" type="checkbox"> (GCP) Confirm no secret was ever written to SSM — only the non-secret WIF config.</li>
+</ul>
+<h2>Rotation and revocation</h2>
+<ul>
+<li><strong>Rotate</strong> — re-register through the same panel (<code>PUT</code> overwrites the SSM SecureString in place). Sakura keys and Azure client secrets are long-lived; rotate on the team&#39;s normal cadence and after any suspected exposure.</li>
+<li><strong>Revoke</strong> — use the panel&#39;s <strong>Revoke</strong> (<code>DELETE</code>). The next deploy for that team then fails loud (<code>no &lt;provider&gt; credential registered ...</code>) until re-registered. Also revoke the underlying secret in the provider&#39;s console.</li>
+<li>GCP has no stored secret to rotate; revoke by removing the impersonation binding or disabling the WIF provider in the team&#39;s GCP project.</li>
+</ul>
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Deploy rejected with <code>RuntimeNotSupportedError</code> (reserved)</td>
+<td>Credential not registered for the team</td>
+<td>Register it (Step 2), then redeploy</td>
+</tr>
+<tr>
+<td><code>no &lt;provider&gt; credential registered for tenant ... team ...</code></td>
+<td>SecureString missing or wrong team slug</td>
+<td>Re-check the slug and re-register</td>
+</tr>
+<tr>
+<td>Azure token error on deploy</td>
+<td>App-registration secret expired, or the role is too narrow</td>
+<td>Rotate the secret / widen the role to the template&#39;s actions</td>
+</tr>
+<tr>
+<td>GCP STS exchange fails</td>
+<td>WIF provider does not trust the worker identity, or impersonation binding missing</td>
+<td>Re-check the pool&#39;s AWS provider condition and the <code>serviceAccountTokenCreator</code> binding</td>
+</tr>
+<tr>
+<td>Sakura 401</td>
+<td>API key revoked or wrong scope</td>
+<td>Re-issue the AppRun-scoped key and re-register</td>
+</tr>
+</tbody></table>
+<h2>Related</h2>
+<ul>
+<li><a href="./teardown.md">Teardown</a> — the event-level teardown that the per-provider <code>destroy</code> rolls up into.</li>
+<li><a href="./incident-response.md">Incident response</a> — if a non-AWS deploy stalls during the event.</li>
+<li><a href="../architecture/adr-026-sakura-cloud-problem-provider.html">ADR-026</a> / <a href="../architecture/adr-027-azure-gcp-federated-providers.html">ADR-027</a> / <a href="../architecture/adr-032-cross-cloud-federation-subject-token.html">ADR-032</a> — the provider and federation design.</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/runbooks/multi-cloud-providers.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/runbooks/multi-cloud-providers.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>
