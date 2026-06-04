@@ -1,9 +1,14 @@
 import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
+import Pagination from "@cloudscape-design/components/pagination";
 import Table from "@cloudscape-design/components/table";
+import { useState } from "react";
 import type { ScoreEventView } from "../api/portal-client";
 import { useT } from "../i18n";
 import { describeAgo, formatOccurredAtTooltip } from "../lib/format";
+
+/** 履歴 1 ページの行数。 uptime Battle は毎分加点で行が増え続けるためページングする (#履歴多すぎ)。 */
+const PAGE_SIZE = 20;
 
 const SOURCE_KEY: Record<ScoreEventView["source"], string> = {
   uptime: "score_events.source_uptime",
@@ -25,10 +30,29 @@ const SOURCE_COLOR: Record<ScoreEventView["source"], "blue" | "green" | "grey" |
  */
 export function ScoreEventsTable({ entries }: { entries: readonly ScoreEventView[] }) {
   const t = useT();
+  const [pageIndex, setPageIndex] = useState(1);
+  const pagesCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
+  // entries は polling で増減しうるので、 範囲外に出た page を clamp する (= 末尾削除で空表示になるのを防ぐ)。
+  const currentPage = Math.min(pageIndex, pagesCount);
+  const pageItems = entries.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   return (
     <Table<ScoreEventView>
       variant="embedded"
-      items={[...entries]}
+      items={[...pageItems]}
+      pagination={
+        entries.length > PAGE_SIZE ? (
+          <Pagination
+            currentPageIndex={currentPage}
+            pagesCount={pagesCount}
+            onChange={(e) => setPageIndex(e.detail.currentPageIndex)}
+            ariaLabels={{
+              nextPageLabel: t("score_events.pagination_next"),
+              previousPageLabel: t("score_events.pagination_previous"),
+              pageLabel: (n) => t("score_events.pagination_page", { page: n }),
+            }}
+          />
+        ) : undefined
+      }
       columnDefinitions={[
         {
           id: "occurredAt",
