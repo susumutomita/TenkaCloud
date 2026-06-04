@@ -59,9 +59,6 @@ vi.mock("../../src/components/event-detail/EventHeaderActions", () => ({
       <button type="button" data-testid="hdr-lock" onClick={p.onLockScoring}>
         lock
       </button>
-      <button type="button" data-testid="hdr-teardown" onClick={p.onTeardown}>
-        teardown
-      </button>
       <button type="button" data-testid="hdr-unlock" onClick={p.onUnlockScoring}>
         unlock
       </button>
@@ -279,8 +276,6 @@ describe("EventDetailPage wiring", () => {
     expect(ops.setConfirmEnd).toHaveBeenCalledWith(true);
     fireEvent.click(screen.getByTestId("hdr-lock"));
     expect(ops.handleLockScoring).toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId("hdr-teardown"));
-    expect(ops.setConfirmTeardown).toHaveBeenCalledWith(true);
     fireEvent.click(screen.getByTestId("hdr-unlock"));
     expect(ops.handleUnlockScoring).toHaveBeenCalled();
   });
@@ -306,8 +301,6 @@ describe("EventDetailPage wiring", () => {
     expect(ops.handleLockScoring).toHaveBeenCalled();
     fireEvent.click(screen.getByTestId("hdr-unlock"));
     expect(ops.handleUnlockScoring).toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId("hdr-teardown"));
-    expect(ops.setConfirmTeardown).toHaveBeenCalledWith(true);
     fireEvent.click(screen.getByTestId("hdr-bulk-deploy"));
     expect(ops.handleBulkDeploy).toHaveBeenCalled();
 

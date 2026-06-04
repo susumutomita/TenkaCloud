@@ -109,7 +109,7 @@ describe("EventDetailPage #1318 tabs", () => {
     expect(screen.getByRole("tab", { name: /Teams|チーム/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Scoreboard|スコア/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Notifications|通知/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Operations|運用/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Advanced|高度操作/ })).toBeInTheDocument();
   });
 
   it("should render Overview tab content (Phase indicator) by default", async () => {
@@ -150,7 +150,7 @@ describe("EventDetailPage #1318 tabs", () => {
     renderPage();
     await waitFor(() => expect(screen.getAllByText(/Tabs Test Event/).length).toBeGreaterThan(0));
     const user = userEvent.setup();
-    const opsTab = screen.getByRole("tab", { name: /Operations|運用/ });
+    const opsTab = screen.getByRole("tab", { name: /Advanced|高度操作/ });
     await user.click(opsTab);
     // Force ARCHIVED rescue button が Operations tab に残る (= 情報欠落なし)
     await waitFor(() => {
