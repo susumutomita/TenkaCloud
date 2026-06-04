@@ -1,4 +1,4 @@
-import { aws_cognito, Stack } from "aws-cdk-lib";
+import { aws_cognito, Duration, Stack } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import type { IdentityDetails } from "../interfaces/identity-details.js";
 
@@ -234,6 +234,15 @@ export class IdentityProvider extends Construct {
     this.tenantUserPoolClient = new aws_cognito.UserPoolClient(this, "tenantUserPoolClient", {
       userPool: this.tenantUserPool,
       generateSecret: false,
+      // Issue #1696 (audit 3 / 12): セッション堅牢化。 access / id token は 60 分 (= 短命、
+      // logout 後の残存窓を狭める)。 refresh token は default 30 日が「長すぎる」指摘なので 1 日に
+      // 短縮する (運用ポリシーで調整可)。 enableTokenRevocation を明示 true にして、 frontend の
+      // beginLogout が呼ぶ `/oauth2/revoke` (#833) が実効的に refresh token を失効させられるよう
+      // 担保する (= CDK default も true だが、 監査要件として明示する)。
+      accessTokenValidity: Duration.minutes(60),
+      idTokenValidity: Duration.minutes(60),
+      refreshTokenValidity: Duration.days(1),
+      enableTokenRevocation: true,
       authFlows,
       writeAttributes: writeAttributes,
       readAttributes: readAttributes,

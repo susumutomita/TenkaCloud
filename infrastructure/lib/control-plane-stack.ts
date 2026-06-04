@@ -138,6 +138,22 @@ export class ControlPlaneStack extends cdk.Stack {
         : ["http://localhost", ...LOCALHOST_LOGOUT_URLS, ...extraLogoutUrls],
     );
 
+    // Issue #1696 (audit 3 / 12): SystemAdmin セッションの堅牢化。 SBT が内部生成する
+    // UserPoolUserClient に token validity を escape hatch で明示する。 access / id token は
+    // 60 分、 refresh token は default 30 日が「長すぎる」指摘なので 1 日に短縮 (運用で調整可)。
+    // `TokenValidityUnits` を明示しないと AccessTokenValidity=60 は 60 *時間* と解釈されるため
+    // 単位も必ず併せて指定する。 `EnableTokenRevocation` を明示 true にして、 frontend logout が
+    // 呼ぶ `/oauth2/revoke` (#833) が refresh token を実効的に失効できるよう担保する。
+    cfnUserClient.addPropertyOverride("AccessTokenValidity", 60);
+    cfnUserClient.addPropertyOverride("IdTokenValidity", 60);
+    cfnUserClient.addPropertyOverride("RefreshTokenValidity", 1);
+    cfnUserClient.addPropertyOverride("TokenValidityUnits", {
+      AccessToken: "minutes",
+      IdToken: "minutes",
+      RefreshToken: "days",
+    });
+    cfnUserClient.addPropertyOverride("EnableTokenRevocation", true);
+
     // Issue #653: SBT default の SystemAdmin 招待メール本文は `http://localhost` を
     // 埋めてしまうため、 admin-console origin に書き換える。 Phase 1 deploy 時は
     // CDK_PARAM_ADMIN_CONSOLE_ORIGIN 未確定なので fallback 文面、 Phase 3 再 deploy で
