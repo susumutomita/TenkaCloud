@@ -5,8 +5,11 @@
  * URL を本文に埋める (= Phase 3 再 deploy 後)。
  *
  * #714: 旧実装は ja + en を `—` で連結した 1 通だったが、 Gmail 等で改行が collapse されて
- * 「1 段落の長文」 になり可読性が低かった。 English-only に統一し、 各セクションを空行で
- * 分離する (= preview で改行が落ちても各 key:value が独立可読)。
+ * 「1 段落の長文」 になり可読性が低かった。 English-only に統一する。
+ *
+ * 改行は **`<br>`** を使う。 Cognito は招待メールを **HTML** として配信するため `\n` は空白に
+ * collapse され全文が 1 行に潰れる (tenant 招待で実機確認、 #903 と同根)。 段落間は `<br><br>`
+ * (= 配列の空要素)、 連続する credential 行は単一 `<br>`。
  */
 
 const FALLBACK_URL_PLACEHOLDER =
@@ -31,5 +34,5 @@ export function buildInviteEmailBody(adminConsoleOrigin: string | undefined): st
     "Temporary password: {####}",
     "",
     "You will be prompted to set a new password on first sign-in.",
-  ].join("\n");
+  ].join("<br>");
 }

@@ -10,9 +10,11 @@ const COGNITO_TEMP_PASSWORD = "{####}";
 
 /**
  * Issue #903: 招待メール文面を英語のみに統一する (= 旧 4 言語混在は Gmail で改行が collapse
- * して読めなくなる問題があった)。 Control Plane の System Admin 招待 (Issue #714) と同じ
- * 方針。 各 field を `\n\n` (paragraph break) で区切り、 Gmail / Outlook で改行が保たれる
- * よう整形する。
+ * して読めなくなる問題があった)。 Control Plane の System Admin 招待 (Issue #714) と同じ方針。
+ *
+ * 改行は **`<br>`** を使う。 Cognito は `InviteMessageTemplate` を **HTML メール**として配信する
+ * ため、 `\n` / `\n\n` は Gmail / Outlook で空白に collapse され、 全文が 1 行に潰れて読めなく
+ * なる (実機で確認)。 段落間は `<br><br>` (= 配列の空要素)、 連続する credential 行は単一 `<br>`。
  *
  * Cognito `InviteMessageTemplate` は **UserPool あたり 1 言語**しか保持できないので、
  * 多言語化が必要なら `custom:locale` 属性 + CustomMessage Lambda Trigger + SES への移行が
@@ -21,13 +23,10 @@ const COGNITO_TEMP_PASSWORD = "{####}";
 function buildInviteEmailBody(consoleUrl: string): string {
   return [
     "Welcome to TenkaCloud Battle / Challenge.",
-    "",
     "A temporary account has been issued so you can sign in to the Tenant Admin Console.",
     "",
     `Username: ${COGNITO_USERNAME}`,
-    "",
     `Temporary password: ${COGNITO_TEMP_PASSWORD}`,
-    "",
     `Sign-in URL: ${consoleUrl}`,
     "",
     "Set a new password on first sign-in. From the Tenant Admin Console you can create competition Events and hand out Participant Portal URLs.",
@@ -35,7 +34,7 @@ function buildInviteEmailBody(consoleUrl: string): string {
     "If this email looks unfamiliar, please discard it.",
     "",
     "-- TenkaCloud Operations",
-  ].join("\n");
+  ].join("<br>");
 }
 
 interface IdentityProviderProps {
