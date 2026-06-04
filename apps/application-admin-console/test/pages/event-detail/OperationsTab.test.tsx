@@ -8,10 +8,11 @@ import type {
 } from "../../../src/pages/event-detail/tab-content-props";
 
 /**
- * Issue #1318/#1328: Operations tab。 status 不問で常時 4 section (rescue / 一括操作 /
- * deploy 進捗 / 削除) を出す。 bulk deploy の disabled 条件 (問題0 / team0 / 終了系 status /
- * 実行中) / bulk teardown・delete の confirm 起動 / deploy 進捗 panel vs empty / loading 状態を
- * pin する。 子 panel は stub、 props は fixture。
+ * Issue #1318/#1328: Operations (= 高度操作) tab。 status 不問で常時 4 section (rescue / 一括操作 /
+ * deploy 進捗 / teardown danger-zone) を出す。 bulk deploy の disabled 条件 (問題0 / team0 /
+ * 終了系 status / 実行中) / danger-zone teardown の confirm 起動 / deploy 進捗 panel vs empty /
+ * loading 状態を pin する。 破壊的な teardown は danger-zone に 1 箇所だけ (header / 一括操作 と
+ * 重複させない)。 子 panel は stub、 props は fixture。
  */
 vi.mock("../../../src/components/event-detail/DeployProgressPanel", () => ({
   DeployProgressPanel: () => <div data-testid="deploy-progress-panel" />,
@@ -105,18 +106,21 @@ describe("OperationsTab", () => {
     expect(bulkDeployBtn()).toBeDisabled();
   });
 
-  it("should disable bulk actions and show loading while a bulk op is in flight", () => {
+  it("should disable bulk deploy while a bulk op is in flight", () => {
     renderTab({ operations: operations({ bulkInFlight: "deploy" }) });
     expect(bulkDeployBtn()).toBeDisabled();
-    expect(screen.getByTestId("operations-bulk-teardown")).toBeDisabled();
   });
 
-  it("should open the teardown confirmation from bulk teardown and delete buttons", () => {
+  it("should not render a teardown button in the bulk section (teardown lives only in the danger zone)", () => {
+    renderTab();
+    expect(screen.queryByTestId("operations-bulk-teardown")).not.toBeInTheDocument();
+  });
+
+  it("should open the teardown confirmation from the single danger-zone button", () => {
     const ops = operations();
     renderTab({ operations: ops });
-    fireEvent.click(screen.getByTestId("operations-bulk-teardown"));
     fireEvent.click(screen.getByTestId("operations-delete-button"));
-    expect(ops.setConfirmTeardown).toHaveBeenCalledTimes(2);
+    expect(ops.setConfirmTeardown).toHaveBeenCalledTimes(1);
     expect(ops.setConfirmTeardown).toHaveBeenCalledWith(true);
   });
 

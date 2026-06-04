@@ -18,10 +18,12 @@ import type { EventTabContentProps } from "./tab-content-props";
  *
  * 表示 section:
  *  1. EventRescuePanel — 既存。 status === TEARDOWN のときだけ render
- *  2. 一括操作 — Bulk redeploy / Bulk teardown。 header にも同等 button があるが Operations tab
- *     の主目的 (= 高度操作の集約先) として明示的に重複配置する
+ *  2. 一括操作 — Bulk redeploy。 header の Deploy と同じ動作 (= 全 problem を deploy)
  *  3. Deploy 進捗詳細 — DeployProgressPanel。 deployment が 0 件のときは empty hint
- *  4. Event 削除 (danger zone) — header の Delete と同じ confirmTeardown modal を開く
+ *  4. teardown (danger zone) — 破壊的な teardown はここに 1 箇所だけ置く。 header / 一括操作
+ *     から重複配置していた teardown を集約した (= 「Delete」「Event 削除」「teardown」 で
+ *     同じ操作が 3 箇所に散っていた不整合を解消)。 実体は全 deployment の削除で、 Event 行は
+ *     残る (= 再 deploy で復旧可能、 永続的な Event 削除ではない)。
  */
 export function OperationsTab({
   counts,
@@ -67,14 +69,6 @@ export function OperationsTab({
             onClick={() => void operations.handleBulkDeploy()}
           >
             {t("event_detail.operations_bulk_deploy")}
-          </Button>
-          <Button
-            data-testid="operations-bulk-teardown"
-            loading={operations.bulkInFlight === "teardown"}
-            disabled={operations.bulkInFlight !== null}
-            onClick={() => operations.setConfirmTeardown(true)}
-          >
-            {t("event_detail.operations_bulk_teardown")}
           </Button>
         </SpaceBetween>
       </Container>

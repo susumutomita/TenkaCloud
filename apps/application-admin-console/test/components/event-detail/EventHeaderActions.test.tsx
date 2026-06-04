@@ -6,9 +6,10 @@ import type { WizardState } from "../../../src/lib/event-wizard";
 
 /**
  * EventHeaderActions: Event Detail header の操作 button 群。 back / deploy / retry-failed /
- * redeploy / end / scoring lock-unlock / delete / print-report の表示条件・callback・disabled
+ * redeploy / end / scoring lock-unlock / print-report の表示条件・callback・disabled
  * (detail 不在 / 問題0 / team0 / 終了系 status / bulkInFlight / status!==READY / apiClient 不在) /
  * scoringLocked による lock-unlock 切替 / wizard primary による variant を pin する。
+ * 破壊的な teardown は header に置かず「高度操作」tab の danger zone に集約したので header には無い。
  * useNavigate / isReportReady を mock。
  */
 const { mockNav, mockIsReportReady } = vi.hoisted(() => ({
@@ -39,7 +40,6 @@ const props = (over: Partial<Props> = {}): Props => ({
   onBulkDeploy: vi.fn(),
   onEnd: vi.fn(),
   onLockScoring: vi.fn(),
-  onTeardown: vi.fn(),
   onUnlockScoring: vi.fn(),
   scoringLockInFlight: null,
   t: (k: string) => k,
@@ -62,7 +62,8 @@ describe("EventHeaderActions", () => {
     fireEvent.click(btn("event_detail.back_to_list"));
     expect(btn("event_detail.deploy_button")).toBeDisabled();
     expect(btn("event_detail.end_event")).toBeDisabled();
-    expect(btn("event_detail.delete_button")).toBeDisabled();
+    // teardown は header から撤去 (= 高度操作 tab の danger zone のみ)。
+    expect(queryBtn("event_detail.delete_button")).not.toBeInTheDocument();
     expect(queryBtn("event_detail.scoring_lock")).not.toBeInTheDocument();
   });
 
@@ -87,8 +88,6 @@ describe("EventHeaderActions", () => {
     expect(p.onEnd).toHaveBeenCalled();
     fireEvent.click(btn("event_detail.scoring_lock"));
     expect(p.onLockScoring).toHaveBeenCalled();
-    fireEvent.click(btn("event_detail.delete_button"));
-    expect(p.onTeardown).toHaveBeenCalled();
     fireEvent.click(btn("event_detail.print_report"));
     expect(mockNav).toHaveBeenCalledWith("/events/e1/report");
   });
@@ -133,10 +132,9 @@ describe("EventHeaderActions", () => {
     ).toBe(true);
   });
 
-  it("should mark the delete button primary when the wizard suggests delete", () => {
-    renderActions({ wizard: { primary: "delete" } as unknown as WizardState });
-    // wizard.primary === "delete" 分岐を踏む (variant=primary)。
-    expect(btn("event_detail.delete_button")).toBeInTheDocument();
+  it("should not render a teardown/delete button in the header (moved to the advanced tab danger zone)", () => {
+    renderActions({ detail: detail({ status: "READY" }) });
+    expect(queryBtn("event_detail.delete_button")).not.toBeInTheDocument();
   });
 
   it("should disable retry/redeploy while another bulk op is in flight and disable scoring lock without an API client", () => {

@@ -20,7 +20,6 @@ export function EventHeaderActions({
   onBulkDeploy,
   onEnd,
   onLockScoring,
-  onTeardown,
   onUnlockScoring,
   scoringLockInFlight,
   t,
@@ -36,7 +35,6 @@ export function EventHeaderActions({
   readonly onBulkDeploy: (body?: BulkDeployBody) => void;
   readonly onEnd: () => void;
   readonly onLockScoring: () => void;
-  readonly onTeardown: () => void;
   readonly onUnlockScoring: () => void;
   readonly scoringLockInFlight: "lock" | "unlock" | null;
   readonly t: Translate;
@@ -93,14 +91,8 @@ export function EventHeaderActions({
             : t("event_detail.scoring_lock")}
         </Button>
       )}
-      <Button
-        variant={wizard?.primary === "delete" ? "primary" : "normal"}
-        loading={bulkInFlight === "teardown"}
-        disabled={!detail}
-        onClick={onTeardown}
-      >
-        {t("event_detail.delete_button")}
-      </Button>
+      {/* Issue: header の "Delete" (実体は teardown) は削除。 破壊的な teardown は
+          「高度操作」 tab の danger zone に 1 箇所だけ置く (= header とタブで重複させない)。 */}
       {isReportReady(detail) && detail && (
         <Button iconName="file" onClick={() => navigate(`/events/${detail.eventId}/report`)}>
           {t("event_detail.print_report")}

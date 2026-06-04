@@ -12,9 +12,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  *
  * 本テストは 「status を問わず内容を持つ運用 tab」 を保証する:
  *
- * - DRAFT でも 運用 tab に高度操作 4 section が見える
+ * - DRAFT でも 高度操作 tab に 4 section が見える
  * - EventRescuePanel は引き続き TEARDOWN 時のみ表示 (conditional rescue は維持)
- * - Bulk 操作 (再 deploy / 全 teardown) / Event 削除 section は status を問わず表示
+ * - Bulk 再 deploy / teardown danger-zone section は status を問わず表示 (teardown は danger-zone のみ)
  */
 
 const mocks = vi.hoisted(() => ({
@@ -89,7 +89,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 async function openOperationsTab() {
-  const opsTab = await screen.findByRole("tab", { name: /Operations|運用/ });
+  const opsTab = await screen.findByRole("tab", { name: /Advanced|高度操作/ });
   await userEvent.click(opsTab);
 }
 
@@ -120,19 +120,19 @@ describe("EventDetailPage #1328 Operations tab", () => {
     expect(screen.getByTestId("operations-tab-intro")).toBeInTheDocument();
   });
 
-  it("should show Bulk operations buttons regardless of status", async () => {
+  it("should show the bulk redeploy button regardless of status", async () => {
     mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "DRAFT" });
     renderPage();
     await waitFor(() =>
       expect(screen.getAllByText(/Operations Tab Test Event/).length).toBeGreaterThan(0),
     );
     await openOperationsTab();
-    // 一括再 deploy / 一括 teardown の 2 button (本 section 内、 header の button と別カウント)
+    // 一括再 deploy のみ (teardown は danger-zone に集約したので本 section には無い)。
     expect(screen.getByTestId("operations-bulk-deploy")).toBeInTheDocument();
-    expect(screen.getByTestId("operations-bulk-teardown")).toBeInTheDocument();
+    expect(screen.queryByTestId("operations-bulk-teardown")).not.toBeInTheDocument();
   });
 
-  it("should show Event 削除 section regardless of status", async () => {
+  it("should show the teardown danger-zone section regardless of status", async () => {
     mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "ENDED" });
     renderPage();
     await waitFor(() =>

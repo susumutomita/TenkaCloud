@@ -206,7 +206,6 @@ function EventDetailErrorOnly({
             onBulkDeploy={(body) => void operations.handleBulkDeploy(body)}
             onEnd={() => operations.setConfirmEnd(true)}
             onLockScoring={() => void operations.handleLockScoring()}
-            onTeardown={() => operations.setConfirmTeardown(true)}
             onUnlockScoring={() => void operations.handleUnlockScoring()}
             scoringLockInFlight={operations.scoringLockInFlight}
             t={t}
@@ -335,7 +334,6 @@ function EventDetailLoaded({
             onBulkDeploy={(body) => void operations.handleBulkDeploy(body)}
             onEnd={() => operations.setConfirmEnd(true)}
             onLockScoring={() => void operations.handleLockScoring()}
-            onTeardown={() => operations.setConfirmTeardown(true)}
             onUnlockScoring={() => void operations.handleUnlockScoring()}
             scoringLockInFlight={operations.scoringLockInFlight}
             t={t}
