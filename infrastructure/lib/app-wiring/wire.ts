@@ -70,6 +70,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
     stackId("tenkacloud-admin-console-hosting", config.environment),
     {
       ...config.stackEnv,
+      // Issue #1695: config.json に customDomains.adminConsole があれば TLS 1.2 を強制 (opt-in)。
+      customDomain: config.customDomains?.adminConsole,
     },
   );
   cdk.Aspects.of(adminConsoleHostingStack).add(new DestroyPolicySetter());

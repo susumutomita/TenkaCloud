@@ -11,6 +11,10 @@ import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, CacheControl, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
+import {
+  buildCustomDomainDistributionProps,
+  type CustomDomainConfig,
+} from "../security/cloudfront-custom-domain.js";
 import { buildSecurityHeadersPolicy } from "../security/cloudfront-headers.js";
 
 export type ParticipantPortalMode = "dev-mock" | "backend";
@@ -53,7 +57,7 @@ export class ParticipantPortalHosting extends Construct {
   private readonly bucket: Bucket;
   private readonly distribution: Distribution;
 
-  constructor(scope: Construct, id: string) {
+  constructor(scope: Construct, id: string, customDomain?: CustomDomainConfig) {
     super(scope, id);
 
     this.bucket = new Bucket(this, "SiteBucket", {
@@ -84,6 +88,8 @@ export class ParticipantPortalHosting extends Construct {
     });
 
     this.distribution = new Distribution(this, "Distribution", {
+      // Issue #1695: customDomain 設定時のみ TLS 1.2 強制 (= ACM 証明書必須)。 未設定は NO-OP。
+      ...buildCustomDomainDistributionProps(this, "ViewerCertificate", customDomain),
       defaultBehavior: {
         origin: S3BucketOrigin.withOriginAccessIdentity(this.bucket, { originAccessIdentity: oai }),
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,

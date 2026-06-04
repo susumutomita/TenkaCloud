@@ -1,6 +1,7 @@
 import type { BillingMode } from "aws-cdk-lib/aws-dynamodb";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
 import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting.js";
+import type { CustomDomainsConfig } from "../security/cloudfront-custom-domain.js";
 
 export type { ApiKeySSMParameterNames };
 
@@ -89,6 +90,13 @@ export interface AppConfig {
         readonly noncurrentExpirationDays: number | undefined;
       }
     | undefined;
+
+  /**
+   * Issue #1695: 各 SPA hosting の opt-in カスタムドメイン + ACM 証明書設定 (config.json の
+   * `customDomains` をそのまま透過)。 設定された hosting のみ CloudFront viewer 最小 TLS を
+   * 1.2 に強制する。 未指定は NO-OP。
+   */
+  readonly customDomains: CustomDomainsConfig | undefined;
 
   /** Bulk Deploy の CodeBuild 並列度 (未設定なら AWS account-level quota に任せる)。 */
   readonly deployConcurrentBuildLimit: number | undefined;

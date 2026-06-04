@@ -11,6 +11,10 @@ import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
+import {
+  buildCustomDomainDistributionProps,
+  type CustomDomainConfig,
+} from "./security/cloudfront-custom-domain.js";
 import { buildSecurityHeadersPolicy } from "./security/cloudfront-headers.js";
 
 /**
@@ -29,7 +33,13 @@ import { buildSecurityHeadersPolicy } from "./security/cloudfront-headers.js";
  * 旧 admin-console-hosting にあった `competitor-bootstrap.yaml` の S3 host は Issue #1053 で
  * ProblemDeployBackendStack 配下に移管済。
  */
-export interface AdminConsoleHostingStackProps extends cdk.StackProps {}
+export interface AdminConsoleHostingStackProps extends cdk.StackProps {
+  /**
+   * Issue #1695: opt-in のカスタムドメイン + ACM 証明書。 設定時のみ TLS 1.2 を強制する
+   * (= `minimumProtocolVersion = TLS_V1_2_2021`)。 未設定なら default 証明書配信のまま (NO-OP)。
+   */
+  readonly customDomain?: CustomDomainConfig;
+}
 
 export class AdminConsoleHostingStack extends cdk.Stack {
   public readonly distributionDomainName: string;
@@ -69,6 +79,8 @@ export class AdminConsoleHostingStack extends cdk.Stack {
     });
 
     this.distribution = new Distribution(this, "Distribution", {
+      // Issue #1695: customDomain 設定時のみ domainNames + ACM 証明書 + TLS 1.2 強制。 未設定は NO-OP。
+      ...buildCustomDomainDistributionProps(this, "ViewerCertificate", props.customDomain),
       defaultBehavior: {
         origin: S3BucketOrigin.withOriginAccessIdentity(this.siteBucket, {
           originAccessIdentity: oai,
