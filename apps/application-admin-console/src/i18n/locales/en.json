@@ -66,6 +66,10 @@
     "tenant_info_name": "Tenant name",
     "tenant_info_id": "Tenant ID",
     "tenant_info_tier": "Plan",
+    "export_data": "Export data",
+    "export_description": "Download your tenant's events, deployments, and competitor accounts as a single JSON file (the audit log has its own CSV export on the Audit Log page).",
+    "export_error_header": "Export failed",
+    "export_error_generic": "Failed to export your data.",
     "value_unset": "(not set)",
     "value_unknown": "(unknown)"
   },
