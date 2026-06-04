@@ -13,6 +13,7 @@ import {
   TENANT_ROLES,
 } from "../deploy-handler/auth.js";
 import { extractAuditContext, writeAuditEvent } from "../shared/audit-log.js";
+import { secureApiHeaders } from "../shared/secure-headers.js";
 import { routeDelete, routeGet, routePut } from "./saml-routes.js";
 import { buildCompetitorAccountsSharedResources } from "./shared.js";
 import {
@@ -56,6 +57,9 @@ const AWS_ACCOUNT_ID_RE = /^\d{12}$/;
 const shared = buildCompetitorAccountsSharedResources();
 
 const app = new Hono();
+
+// #1694: API セキュリティヘッダを CORS より前 (outermost) に適用 (= onError 経路にも付与)。
+app.use("*", secureApiHeaders());
 
 app.use(
   "*",

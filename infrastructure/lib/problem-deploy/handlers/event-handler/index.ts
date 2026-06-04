@@ -9,6 +9,7 @@ import {
   requireRole,
   TENANT_ROLES,
 } from "../deploy-handler/auth.js";
+import { secureApiHeaders } from "../shared/secure-headers.js";
 import { registerAuditLogRoutes } from "./routes/audit-log.js";
 import { registerBulkDeployRoutes } from "./routes/bulk-deploy.js";
 import { registerDisruptionRoutes } from "./routes/disruptions.js";
@@ -45,6 +46,9 @@ import { buildEventSharedResources } from "./shared.js";
 const shared = buildEventSharedResources();
 
 const app = new Hono();
+
+// #1694: API セキュリティヘッダを CORS より前 (outermost) に適用 (= onError 経路にも付与)。
+app.use("*", secureApiHeaders());
 
 app.use(
   "*",

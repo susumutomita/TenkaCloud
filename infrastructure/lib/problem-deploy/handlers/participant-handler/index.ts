@@ -8,6 +8,7 @@ import {
   upsertProblemEndpointOverride,
 } from "../problem-endpoints-handler/endpoints.js";
 import { RATE_LIMITS } from "../shared/rate-limiter.js";
+import { secureApiHeaders } from "../shared/secure-headers.js";
 import { BATTLE_ATTACKS_SINCE_MIN_DEFAULT, listBattleAttacks } from "./battle-attacks.js";
 import { castEvent, INBOX_SINCE_MS_MAX, readInbox } from "./cast-event.js";
 import {
@@ -72,6 +73,11 @@ const shared = buildParticipantSharedResources();
 // Lambda は sts:AssumeRole / ssm / kms を持つため、 未信頼 plugin を実行する coordination は
 // ここに置かない (ADR-030 S2 = blast radius を IAM で封じる)。
 const app = new Hono();
+
+// #1694: 全レスポンスに API セキュリティヘッダ (nosniff / no-store / X-Frame-Options /
+// Referrer-Policy / JSON Content-Disposition)。 fetch/XHR では Content-Disposition は無視
+// されるため SPA は壊れず、 cli-credentials 等の機密 JSON が no-store になる。
+app.use("*", secureApiHeaders());
 
 app.get("/portal/healthz", (c) => c.json({ ok: true }));
 
