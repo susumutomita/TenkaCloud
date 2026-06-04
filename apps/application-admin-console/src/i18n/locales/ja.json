@@ -66,6 +66,10 @@
     "tenant_info_name": "テナント名",
     "tenant_info_id": "テナント ID",
     "tenant_info_tier": "プラン",
+    "export_data": "データをエクスポート",
+    "export_description": "自テナントのイベント・デプロイ・競技アカウントを 1 つの JSON にまとめてダウンロードします (監査ログは Audit Log ページの CSV を参照)。",
+    "export_error_header": "エクスポートに失敗しました",
+    "export_error_generic": "データのエクスポートに失敗しました。",
     "value_unset": "(未設定)",
     "value_unknown": "(unknown)"
   },

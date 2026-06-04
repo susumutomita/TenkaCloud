@@ -48,7 +48,7 @@ export function App({ config }: { config: AppConfig }) {
       <Routes>
         <Route path="/login" element={<LoginRoute config={config} />} />
         <Route path="/callback" element={<CallbackPage config={config} />} />
-        <Route path="/" element={guarded(<HomePage />, config)} />
+        <Route path="/" element={guarded(<HomePage config={config} />, config)} />
         <Route path="/problems" element={guarded(<ProblemsPage />, config)} />
         <Route
           path="/problems/:problemId"
