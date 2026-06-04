@@ -3,7 +3,13 @@ import { StatusCodes } from "http-status-codes";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { TenantAuditApiError, type TenantAuditItem } from "../../src/api/audit-log-client";
 import type { AppConfig } from "../../src/config";
-import { AuditLogPage, buildListInput, describeError, mergeItems } from "../../src/pages/AuditLog";
+import {
+  AuditLogPage,
+  buildListInput,
+  describeError,
+  describeTarget,
+  mergeItems,
+} from "../../src/pages/AuditLog";
 
 /**
  * Tenant Admin Console の AuditLogPage (#1292)。 pure helper (buildListInput / mergeItems /
@@ -49,6 +55,22 @@ describe("AuditLog helpers", () => {
     );
     expect(describeError(new Error("network down"))).toBe("network down");
     expect(describeError("weird")).toBe("audit log の取得に失敗しました");
+  });
+
+  it("should label the target by resource type inferred from the action", () => {
+    expect(describeTarget("create_event", "EV1")).toBe("Event EV1");
+    expect(describeTarget("fire_disruption", "EV1")).toBe("Event EV1");
+    expect(describeTarget("lock_scoring", "EV1")).toBe("Event EV1");
+    expect(describeTarget("bulk_deploy", "EV1")).toBe("Event EV1");
+    expect(describeTarget("create_notification", "EV1")).toBe("Event EV1");
+    expect(describeTarget("create_competitor_account", "672726205532")).toBe(
+      "AWS account 672726205532",
+    );
+    expect(describeTarget("register_team_cloud_credential", "team-1")).toBe(
+      "Team credential team-1",
+    );
+    expect(describeTarget("some_other_action", "raw-id")).toBe("raw-id");
+    expect(describeTarget("create_event", undefined)).toBe("-");
   });
 });
 

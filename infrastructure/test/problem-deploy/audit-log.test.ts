@@ -200,17 +200,23 @@ describe("extractAuditContext (#950)", () => {
     expect(ctx.userAgent).toBe("curl/8.0");
   });
 
-  it("should still extract actor from REST API form (authorizer.claims)", () => {
+  it("should extract actor + ipAddress + userAgent from REST API V1 form (authorizer.claims + identity.*)", () => {
+    // REST API v1 (= tenant API) は IP を requestContext.identity.* に置く。 旧実装は v2 の
+    // http.* しか読まず IP が常に "-" になっていた regression を pin する。
     const ctx = extractAuditContext({
       env: {
         event: {
           requestContext: {
-            authorizer: { claims: { sub: "def-456" } },
+            authorizer: { claims: { sub: "def-456", "cognito:username": "bob@example.com" } },
+            identity: { sourceIp: "198.51.100.7", userAgent: "Mozilla/5.0" },
           },
         },
       },
     });
     expect(ctx.actor).toBe("def-456");
+    expect(ctx.actorUsername).toBe("bob@example.com");
+    expect(ctx.ipAddress).toBe("198.51.100.7");
+    expect(ctx.userAgent).toBe("Mozilla/5.0");
   });
 
   it("claims 不在なら actor='unknown', 他は undefined", () => {

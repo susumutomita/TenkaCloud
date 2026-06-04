@@ -176,12 +176,17 @@ export function extractAuditContext(c: {
     typeof claims?.["cognito:username"] === "string"
       ? (claims["cognito:username"] as string)
       : undefined;
-  const http = (event?.requestContext as { http?: { sourceIp?: string; userAgent?: string } })
-    ?.http;
+  // HTTP API v2 → requestContext.http.* ; REST API v1 (= tenant API) → requestContext.identity.*。
+  // claims と同様に v1/v2 両方を fallback で読む。 旧実装は v2 path のみで、 REST v1 の tenant API
+  // では IP / userAgent が常に undefined → 監査ログの IP 列が "-" のままだった。
+  const requestContext = event?.requestContext as {
+    http?: { sourceIp?: string; userAgent?: string };
+    identity?: { sourceIp?: string; userAgent?: string };
+  };
   return {
     actor: sub,
     actorUsername: cognitoUsername,
-    ipAddress: http?.sourceIp,
-    userAgent: http?.userAgent,
+    ipAddress: requestContext?.http?.sourceIp ?? requestContext?.identity?.sourceIp,
+    userAgent: requestContext?.http?.userAgent ?? requestContext?.identity?.userAgent,
   };
 }

@@ -18,6 +18,24 @@ import type { SupportedLang } from "@tenkacloud/format";
 
 export { formatRelativeTime, type SupportedLang } from "@tenkacloud/format";
 
+/**
+ * ISO timestamp → 絶対時刻ラベル (= 「2026/06/04 08:53」)。 相対時刻 (formatRelativeTime) と
+ * 併記して使う (= 監査ログで 「いつ」 を相対だけでなく絶対でも示す)。 不正値はそのまま返す。
+ * 表示は閲覧者のローカル timezone (= operator が自分の時刻で読める)。
+ */
+export function formatDateTime(iso: string, lang: SupportedLang = "ja"): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return iso;
+  return new Intl.DateTimeFormat(lang === "ja" ? "ja-JP" : "en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(ms));
+}
+
 const EVENT_STATUS_LABELS: Record<string, { ja: string; en: string }> = {
   DRAFT: { ja: "下書き", en: "Draft" },
   DEPLOYING: { ja: "デプロイ中", en: "Deploying" },
