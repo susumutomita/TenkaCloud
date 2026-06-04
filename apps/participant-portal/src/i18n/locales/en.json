@@ -362,7 +362,10 @@
     "running_open_button": "Open this problem",
     "all_cleared_header": "All problems solved",
     "all_cleared_description": "You've cleared every problem deployed to your team. Keep an eye on the leaderboard until the event ends.",
-    "all_cleared_body": "Nicely done. Awaiting final ranking."
+    "all_cleared_body": "Nicely done. Awaiting final ranking.",
+    "defending_header": "Battle in progress",
+    "defending_description": "All your deployed problems are up and scoring. Uptime-style problems are never \"finished\" — you defend them until the event ends.",
+    "defending_body": "Keep your endpoints up to keep earning points. Defend them until the event ends."
   },
   "friendly_error": {
     "auth_expired": "Your session has expired. Please sign in again with the login key your operator re-distributed.",

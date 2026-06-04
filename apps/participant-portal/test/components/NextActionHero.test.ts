@@ -215,7 +215,7 @@ describe("computeNextActionState", () => {
     }
   });
 
-  it("should return all_cleared when every problem is solved", () => {
+  it("should return all_cleared only when every problem is a submitted flag", () => {
     const cleared = problem({
       jobId: "j-a",
       problemId: "p",
@@ -224,5 +224,37 @@ describe("computeNextActionState", () => {
     const v = view({ problems: [cleared], eventGate: { kind: "ok" } });
     const state = computeNextActionState({ view: v, leaderboard: null, nowMs: now });
     expect(state).toEqual({ kind: "all_cleared" });
+  });
+
+  it("should return defending (not all_cleared) for a scoring uptime Battle problem", () => {
+    // uptime は score>0 でも「解き終わり」が無い。 競技中に all_cleared を出すのは誤り (#this)。
+    const upAndScoring = problem({
+      jobId: "j-a",
+      problemId: "hello-world-battle",
+      status: "COMPLETE",
+      scoring: { kind: "uptime" },
+      score: 100,
+    });
+    const v = view({ problems: [upAndScoring], eventGate: { kind: "ok" } });
+    const state = computeNextActionState({ view: v, leaderboard: null, nowMs: now });
+    expect(state).toEqual({ kind: "defending" });
+  });
+
+  it("should return defending for a mixed event once all flags are submitted but uptime is up", () => {
+    const flagDone = problem({
+      jobId: "j-a",
+      problemId: "a-flag",
+      scoring: { kind: "flag", flagSubmitted: true },
+    });
+    const uptimeUp = problem({
+      jobId: "j-b",
+      problemId: "b-uptime",
+      status: "COMPLETE",
+      scoring: { kind: "uptime" },
+      score: 100,
+    });
+    const v = view({ problems: [flagDone, uptimeUp], eventGate: { kind: "ok" } });
+    const state = computeNextActionState({ view: v, leaderboard: null, nowMs: now });
+    expect(state).toEqual({ kind: "defending" });
   });
 });
