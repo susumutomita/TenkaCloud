@@ -19,9 +19,29 @@ import {
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
 import { useLang } from "../i18n";
-import { formatRelativeTime } from "../lib/format";
+import { formatDateTime, formatRelativeTime } from "../lib/format";
 
 const PAGE_LIMIT = 50;
+
+/**
+ * action から 対象 (target) resource の種別を推定し、 生 ID にラベルを付ける。 監査ログの
+ * 「対象」 が ULID / account id の生値だけだと 「何の ID か」 が分からないため。
+ */
+export function describeTarget(action: string, target: string | undefined): string {
+  if (!target) return "-";
+  if (action.includes("competitor_account")) return `AWS account ${target}`;
+  if (action.includes("credential")) return `Team credential ${target}`;
+  if (
+    action.includes("event") ||
+    action.includes("scoring") ||
+    action.includes("deploy") ||
+    action.includes("notification") ||
+    action.includes("disruption")
+  ) {
+    return `Event ${target}`;
+  }
+  return target;
+}
 
 type AuditFilters = {
   readonly from: string;
@@ -225,13 +245,22 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
           {
             id: "occurredAt",
             header: "発生日時",
-            // Issue #1362: ISO 生値ではなく 「N 分前」 表示 + hover で絶対時刻 tooltip。
-            cell: (i) => <span title={i.occurredAt}>{formatRelativeTime(i.occurredAt, lang)}</span>,
+            // 絶対時刻 + 相対時刻を併記 (= 「いつ」 を一目で。 相対だけだと 「今 / 17 分前」 で
+            // 何時か分からない、 絶対だけだと直近かどうか分かりにくい)。
+            cell: (i) => (
+              <span title={i.occurredAt}>
+                {formatDateTime(i.occurredAt, lang)}
+                <Box variant="small" color="text-status-inactive" display="inline">
+                  {" "}
+                  ({formatRelativeTime(i.occurredAt, lang)})
+                </Box>
+              </span>
+            ),
           },
           { id: "actor", header: "実行者", cell: (i) => i.actorUsername ?? i.actor },
           { id: "action", header: "操作", cell: (i) => i.action },
           { id: "outcome", header: "結果", cell: (i) => outcomeIndicator(i.outcome) },
-          { id: "target", header: "対象", cell: (i) => i.target ?? "-" },
+          { id: "target", header: "対象", cell: (i) => describeTarget(i.action, i.target) },
           { id: "ipAddress", header: "IP", cell: (i) => i.ipAddress ?? "-" },
         ]}
         empty={

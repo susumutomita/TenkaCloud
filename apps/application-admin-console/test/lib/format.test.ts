@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatEventStatus, formatRelativeTime, formatRole } from "../../src/lib/format";
+import {
+  formatDateTime,
+  formatEventStatus,
+  formatRelativeTime,
+  formatRole,
+} from "../../src/lib/format";
 
 /**
  * Issue #1362: 用途別グルーピング + 表示加工 helpers の pure-function 検証。
@@ -45,6 +50,19 @@ describe("formatRelativeTime", () => {
 
   it("should treat future timestamps as 「今」 (= clock skew defense)", () => {
     expect(formatRelativeTime("2026-05-05T11:00:00.000Z", "ja", NOW)).toBe("今");
+  });
+});
+
+describe("formatDateTime", () => {
+  it("should pass through an invalid ISO unchanged (= defensive fallback)", () => {
+    expect(formatDateTime("not-a-date")).toBe("not-a-date");
+  });
+
+  it("should render an absolute date-time for a valid ISO (ja + en)", () => {
+    const ja = formatDateTime("2026-05-05T10:00:00.000Z", "ja");
+    expect(ja).toContain("2026");
+    expect(ja).not.toBe("2026-05-05T10:00:00.000Z"); // not the raw ISO
+    expect(formatDateTime("2026-05-05T10:00:00.000Z", "en")).toContain("2026");
   });
 });
 
