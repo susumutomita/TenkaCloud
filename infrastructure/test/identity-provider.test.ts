@@ -197,9 +197,9 @@ describe("IdentityProvider", () => {
       expect(body).toContain(consoleUrl);
     });
 
-    it("Issue #903: should separate each field (Username / Temporary password / Sign-in URL) with paragraph breaks (double newline)", () => {
-      // Gmail / Outlook は単一改行を space に re-flow するので、 fields は \n\n で区切らないと
-      // 1 行に潰れて読めなくなる (= PR-582 で起きた regression、 Issue #903 でも継続維持)。
+    it("should separate fields with HTML <br> breaks (Cognito sends the invite as HTML, so \\n collapses)", () => {
+      // Cognito は招待メールを HTML 配信するため `\n` は Gmail / Outlook で space に collapse され、
+      // 全文が 1 行に潰れて読めなくなる (実機確認)。 改行は <br>、 段落間は <br><br> でないといけない。
       const consoleUrl = "https://d123abc.cloudfront.net";
       const { template } = synth("tenant-1", consoleUrl);
       const userPool = Object.values(template.findResources("AWS::Cognito::UserPool"))[0];
@@ -209,9 +209,12 @@ describe("IdentityProvider", () => {
             AdminCreateUserConfig?: { InviteMessageTemplate?: { EmailMessage?: string } };
           }
         )?.AdminCreateUserConfig?.InviteMessageTemplate?.EmailMessage ?? "";
-      expect(body).toMatch(/\n\nUsername: \{username\}\n\n/);
-      expect(body).toMatch(/\n\nTemporary password: \{####\}\n\n/);
-      expect(body).toMatch(/\n\nSign-in URL: /);
+      // credentials block: paragraph break before, single <br> between each line
+      expect(body).toContain(
+        "<br><br>Username: {username}<br>Temporary password: {####}<br>Sign-in URL: ",
+      );
+      // no raw newlines survive (would collapse in HTML mail → the run-on-paragraph bug)
+      expect(body).not.toContain("\n");
     });
 
     it("#529: should set the SMS message with Cognito placeholders to stay consistent with InviteMessageTemplate", () => {

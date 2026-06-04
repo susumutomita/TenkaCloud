@@ -51,10 +51,11 @@ describe("buildInviteEmailBody (Issue #714 English-only)", () => {
     expect(matches).toHaveLength(1);
   });
 
-  it("should separate sections with blank lines and stay resilient against newline collapsing (#714)", () => {
+  it("should separate sections with HTML <br> breaks (Cognito sends the invite as HTML, so \\n collapses)", () => {
     const body = buildInviteEmailBody("https://example.com");
-    // 空行が body に最低 1 つあり、 welcome / key:value block / next step instruction が分離される
-    expect(body).toMatch(/\n\n/);
+    // Cognito は HTML 配信なので `\n` は 1 行に collapse される。 段落間は <br><br>、 raw \n は無し。
+    expect(body).toContain("<br><br>");
+    expect(body).not.toContain("\n");
     expect(body.startsWith("Welcome to TenkaCloud Admin Console.")).toBe(true);
   });
 });
