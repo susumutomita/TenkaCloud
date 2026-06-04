@@ -133,6 +133,31 @@ describe("resolveDeployment (ADR-031 #1419)", () => {
     expect(target?.externalIdParameterName).toBeUndefined();
   });
 
+  it("#1710: should treat an asymmetric row (role set, externalId absent) as same-account", async () => {
+    // deploy-handler は competitorRoleArn を行に永続化するが externalIdParameterName は
+    // event detail にしか載せない (deploy.ts:177 vs 259-261)。 結果、 実際の Lite/SaaS 行は
+    // 「role 有・externalId 無」の非対称になる。 片方だけでは AssumeRole できない
+    // (assumeCompetitorRole の both-or-neither 契約) ので same-account injection 扱いにする。
+    // role だけを target に載せると assumeCompetitorRole が "must be provided together" で throw する。
+    const send = vi.fn().mockResolvedValue({
+      Items: [
+        {
+          ...completeRow,
+          competitorRoleArn: "arn:aws:iam::672726205532:role/TenkaCloud-local-deploy-Role",
+          externalIdParameterName: undefined,
+        },
+      ],
+    });
+    const target = await resolveDeployment(makeResources(send), detail);
+    expect(target).toEqual({
+      jobId: "job-1",
+      region: "ap-northeast-1",
+      stackOutputs: { WorkerInstanceIds: "i-aaa,i-bbb" },
+    });
+    expect(target?.competitorRoleArn).toBeUndefined();
+    expect(target?.externalIdParameterName).toBeUndefined();
+  });
+
   it("should default stackOutputs to {} when the row has no stackOutputs", async () => {
     const send = vi
       .fn()

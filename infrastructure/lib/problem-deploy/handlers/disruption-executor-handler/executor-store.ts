@@ -106,15 +106,23 @@ export async function resolveDeployment(
     (d) => d.status === "COMPLETE" && typeof d.jobId === "string" && typeof d.region === "string",
   );
   if (!ready) return undefined;
+  // #1710: cross-account fields は both-or-neither で扱う (= assumeCompetitorRole と同契約)。
+  // deploy-handler は competitorRoleArn を行に永続化するが externalIdParameterName は
+  // event detail にしか載せない (deploy.ts:177 vs 259-261) ため、 実際の行は role 有・externalId 無
+  // の非対称になる。 片方だけを target に載せると assumeCompetitorRole が
+  // "must be provided together" で throw する。 両者揃ったときだけ cross-account injection、
+  // それ以外は same-account injection (executor 自身の credentials) 扱いにする。
+  const crossAccount =
+    typeof ready.competitorRoleArn === "string" &&
+    typeof ready.externalIdParameterName === "string";
   return {
     jobId: ready.jobId as string,
     region: ready.region as string,
-    // SaaS は両方 string、 Lite は両方 undefined (= same-account injection)。
-    ...(typeof ready.competitorRoleArn === "string"
-      ? { competitorRoleArn: ready.competitorRoleArn }
-      : {}),
-    ...(typeof ready.externalIdParameterName === "string"
-      ? { externalIdParameterName: ready.externalIdParameterName }
+    ...(crossAccount
+      ? {
+          competitorRoleArn: ready.competitorRoleArn as string,
+          externalIdParameterName: ready.externalIdParameterName as string,
+        }
       : {}),
     stackOutputs: parseStackOutputs(ready.stackOutputs),
   };
