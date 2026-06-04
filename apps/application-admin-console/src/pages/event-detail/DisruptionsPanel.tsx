@@ -279,25 +279,32 @@ export function DisruptionsPanel({
 
         <Table
           variant="embedded"
+          // 障害 description は作者が書く長文 (= 1 段落) なので wrapLines で折り返し、 各列に幅を与えて
+          // 横溢れ (= 説明が見切れて「発火」ボタンが潰れる) を防ぐ (#1710 follow-up: UI 可読性)。
+          wrapLines
           columnDefinitions={[
             {
               id: "name",
               header: t("disruptions.col_name"),
               cell: (e: DisruptionCatalogEntry) => e.disruption.name,
+              width: 220,
             },
             {
               id: "problem",
               header: t("disruptions.col_problem"),
               cell: (e: DisruptionCatalogEntry) => e.problemId,
+              width: 220,
             },
             {
               id: "description",
               header: t("disruptions.col_description"),
               cell: (e: DisruptionCatalogEntry) => e.disruption.description,
+              maxWidth: 560,
             },
             {
               id: "fire",
               header: "",
+              width: 110,
               cell: (e: DisruptionCatalogEntry) => (
                 <Button
                   variant="inline-link"
