@@ -110,6 +110,27 @@ describe("ProblemDetailPage", () => {
     expect(mockNav).toHaveBeenCalledWith("/problems");
   });
 
+  it("should render the description as markdown (heading + code + image)", () => {
+    // Issue #1700: description は web-kit <Markdown> 経由で marked + DOMPurify 描画される。
+    mockFind.mockReturnValue(
+      problem({
+        description: "## 手順\n\n```\ncfn deploy\n```\n\n![diagram](https://example.com/d.png)",
+      }),
+    );
+    const { container } = renderPage();
+    // markdown 由来の見出し (Cloudscape section の <Header variant="h2"> と別物)
+    expect(screen.getByText("手順").tagName).toBe("H2");
+    expect(container.querySelector("pre code")?.textContent).toContain("cfn deploy");
+    expect(container.querySelector('img[src="https://example.com/d.png"]')).not.toBeNull();
+  });
+
+  it("should sanitize a malicious <script> in the description", () => {
+    mockFind.mockReturnValue(problem({ description: "<script>alert(1)</script>safe" }));
+    const { container } = renderPage();
+    expect(container.querySelector("script")).toBeNull();
+    expect(container.textContent).toContain("safe");
+  });
+
   it("should render the alternate badge branches for a Challenge/draft problem", () => {
     mockFind.mockReturnValue(problem({ category: "Challenge", status: "draft" }));
     renderPage();

@@ -7,6 +7,7 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
+import { Markdown } from "@tenkacloud/web-kit";
 import { useMemo } from "react";
 import { Navigate, type NavigateFunction, useNavigate, useParams } from "react-router";
 import { useApiClient } from "../api/client";
@@ -76,9 +77,9 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       </Container>
 
       <Container header={<Header variant="h2">{t("problem_detail.section_description")}</Header>}>
-        <Box variant="p">
-          <span style={{ whiteSpace: "pre-wrap" }}>{problem.description}</span>
-        </Box>
+        {/* Issue #1700: description は markdown (見出し / コードブロック / 画像) を含むため、
+            plain pre-wrap でなく web-kit の <Markdown> (marked + DOMPurify sanitize) で描画する。 */}
+        <Markdown source={problem.description} />
       </Container>
 
       <Container

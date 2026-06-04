@@ -15,7 +15,9 @@
     "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='dist/**' --coverage.exclude='**/*.test.tsx'"
   },
   "dependencies": {
-    "@tenkacloud/auth-client": "workspace:*"
+    "@tenkacloud/auth-client": "workspace:*",
+    "dompurify": "^3.4.4",
+    "marked": "^18.0.3"
   },
   "peerDependencies": {
     "@cloudscape-design/components": "^3.0.1297",
