@@ -77,6 +77,47 @@ describe("uptime-flat kind (ADR-012 Phase 3.B、 legacy uptime probe 動作不�
     expect(result.lastResult).toBe("fail");
   });
 
+  it("should deduct failurePenalty (opt-in) on a failed tick and emit a negative uptime event", async () => {
+    fetchMock
+      .mockResolvedValueOnce({ status: 200, text: async () => "" })
+      .mockResolvedValueOnce({ status: 500, text: async () => "" });
+    const result = await runUptimeFlatKind(
+      buildInput({
+        scoring: {
+          kind: "uptime-flat",
+          endpoints: [
+            { outputKey: "FrontendUrl", path: "/", expectStatus: [200] },
+            { outputKey: "ApiUrl", path: "/healthz", expectStatus: [200] },
+          ],
+          pointsPerSuccess: 100,
+          failurePenalty: -100,
+        },
+      }),
+    );
+    expect(result.scoreDelta).toBe(-100);
+    expect(result.scoreEvents).toEqual([{ source: "uptime", points: -100, occurredAt: NOW_ISO }]);
+    expect(result.lastResult).toBe("fail");
+  });
+
+  it("should still award pointsPerSuccess when all endpoints are ok even with failurePenalty set", async () => {
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const result = await runUptimeFlatKind(
+      buildInput({
+        scoring: {
+          kind: "uptime-flat",
+          endpoints: [
+            { outputKey: "FrontendUrl", path: "/", expectStatus: [200] },
+            { outputKey: "ApiUrl", path: "/healthz", expectStatus: [200] },
+          ],
+          pointsPerSuccess: 100,
+          failurePenalty: -100,
+        },
+      }),
+    );
+    expect(result.scoreDelta).toBe(100);
+    expect(result.scoreEvents).toEqual([{ source: "uptime", points: 100, occurredAt: NOW_ISO }]);
+  });
+
   it("should emit an attack-detected event when previous tick was ok and current tick fails (ADR-005 D2-A)", async () => {
     fetchMock.mockResolvedValue({ status: 500, text: async () => "" });
     const input = buildInput({

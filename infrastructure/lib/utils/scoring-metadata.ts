@@ -72,6 +72,12 @@ export interface UptimeFlatScoringMetadata {
   readonly kind: "uptime-flat" | "uptime";
   readonly endpoints: readonly UptimeFlatEndpoint[];
   readonly pointsPerSuccess: number;
+  /**
+   * health-check 失敗 tick の score delta。 省略時 0 (= 加点しないだけ、 従来挙動)。 **負値で減点**
+   * (= uptime-multi.failurePenalty と同契約)。 Battle で「落とされたら減点」を opt-in したい問題が指定する
+   * (例: -100)。 endpoint が 1 つでも fail した tick に加算される。
+   */
+  readonly failurePenalty?: number;
   /** Issue #742 Phase 5: 全 5 種 builtin kind で hints を許容する共通 field。 */
   readonly hints?: readonly ProgressiveHint[];
 }
@@ -252,7 +258,12 @@ function parseUptimeFlat(
   value: unknown,
   kindLiteral: "uptime" | "uptime-flat",
 ): UptimeFlatScoringMetadata | undefined {
-  const u = value as { endpoints?: unknown; pointsPerSuccess?: unknown; hints?: unknown };
+  const u = value as {
+    endpoints?: unknown;
+    pointsPerSuccess?: unknown;
+    failurePenalty?: unknown;
+    hints?: unknown;
+  };
   if (!Array.isArray(u.endpoints) || u.endpoints.length === 0) return undefined;
   if (typeof u.pointsPerSuccess !== "number" || u.pointsPerSuccess <= 0) return undefined;
   const endpoints = u.endpoints
@@ -266,6 +277,8 @@ function parseUptimeFlat(
     kind: kindLiteral,
     endpoints,
     pointsPerSuccess: u.pointsPerSuccess,
+    // 失敗時の減点 (opt-in、 負値)。 uptime-multi.failurePenalty と同じく number のときだけ採用。
+    ...(typeof u.failurePenalty === "number" ? { failurePenalty: u.failurePenalty } : {}),
     ...(hints ? { hints } : {}),
   };
 }
