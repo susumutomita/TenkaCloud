@@ -362,7 +362,10 @@
     "running_open_button": "この問題を開く",
     "all_cleared_header": "全問クリア",
     "all_cleared_description": "deploy 済の全問題を解き終えました。 競技終了まで leaderboard を見守りましょう。",
-    "all_cleared_body": "お見事。 最終順位を待ちましょう。"
+    "all_cleared_body": "お見事。 最終順位を待ちましょう。",
+    "defending_header": "競技継続中",
+    "defending_description": "deploy 済の問題はすべて稼働中です。 uptime 系の問題は「解き終わり」がなく、 競技終了まで防衛し続けます。",
+    "defending_body": "エンドポイントを稼働させ続けるほどスコアが伸びます。 競技終了まで守り抜きましょう。"
   },
   "friendly_error": {
     "auth_expired": "ログイン期限切れ。 organizer から再配布された login key で再ログインしてください。",

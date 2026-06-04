@@ -36,7 +36,11 @@ export type NextActionState =
       readonly unsolvedCount: number;
       readonly nextProblem?: ParticipantProblemView;
     }
-  | { readonly kind: "all_cleared" };
+  // all_cleared: 全 flag 問題を submit 済 (= Challenge 的な真の完了)。
+  // defending: deploy 済み問題はすべて稼働中だが、 uptime 等の継続採点問題があるため
+  //   「解き終わり」 は無く、 競技終了まで防衛を続ける (= Battle はまだ進行中)。
+  | { readonly kind: "all_cleared" }
+  | { readonly kind: "defending" };
 
 /**
  * 「次にやるべき問題」 を選ぶ pure function。
@@ -87,7 +91,11 @@ export function computeNextActionState(args: {
   }
   const unsolved = view.problems.filter(isProblemUnsolved);
   if (unsolved.length === 0 && view.problems.length > 0) {
-    return { kind: "all_cleared" };
+    // uptime / 継続採点問題は「解き終わる」概念が無く、 score>0 でも競技は続く。 全問題が flag
+    // (= 一発 capture) で submit 済のときだけ真の完了 (all_cleared)。 継続採点問題が 1 つでもあれば
+    // 競技継続中なので defending を出す (= 「全問クリア / 最終順位を待ちましょう」 の誤表示を防ぐ)。
+    const allClearable = view.problems.every((p) => p.scoring?.kind === "flag");
+    return allClearable ? { kind: "all_cleared" } : { kind: "defending" };
   }
   const next = pickNextProblem(view.problems);
   return { kind: "running", unsolvedCount: unsolved.length, nextProblem: next };
@@ -159,6 +167,22 @@ export function NextActionHero({
       >
         <Box variant="awsui-value-large" color="text-status-success">
           {t("next_action.all_cleared_body")}
+        </Box>
+      </Container>
+    );
+  }
+
+  if (state.kind === "defending") {
+    return (
+      <Container
+        header={
+          <Header variant="h2" description={t("next_action.defending_description")}>
+            {t("next_action.defending_header")}
+          </Header>
+        }
+      >
+        <Box variant="awsui-value-large" color="text-status-info">
+          {t("next_action.defending_body")}
         </Box>
       </Container>
     );

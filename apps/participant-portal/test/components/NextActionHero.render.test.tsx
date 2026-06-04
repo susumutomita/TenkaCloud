@@ -38,6 +38,13 @@ const SOLVED = {
   score: 100,
   scoring: { kind: "flag", flagSubmitted: true },
 };
+const UPTIME_UP = {
+  problemId: "p3",
+  jobId: "job-3",
+  status: "COMPLETE",
+  score: 100,
+  scoring: { kind: "uptime" },
+};
 
 afterEach(() => vi.clearAllMocks());
 
@@ -84,11 +91,19 @@ describe("NextActionHero (render)", () => {
     expect(noRank.container.textContent).toContain("next_action.ended_no_rank");
   });
 
-  it("should show all-cleared when every problem is solved", () => {
+  it("should show all-cleared when every problem is a submitted flag", () => {
     const { container } = render(
       <NextActionHero view={view({ problems: [SOLVED] as never })} leaderboard={null} />,
     );
     expect(container.textContent).toContain("next_action.all_cleared");
+  });
+
+  it("should show defending (not all-cleared) for a scoring uptime Battle problem", () => {
+    const { container } = render(
+      <NextActionHero view={view({ problems: [UPTIME_UP] as never })} leaderboard={null} />,
+    );
+    expect(container.textContent).toContain("next_action.defending");
+    expect(container.textContent).not.toContain("next_action.all_cleared");
   });
 
   it("should suggest the next problem and navigate to it on click", () => {
