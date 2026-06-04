@@ -34,7 +34,10 @@ export function runUptimeFlatDryRun(input: DryRunKindInput): DryRunResult {
       score += pointsPerSuccess * endpointCount;
       okCount += 1;
     } else {
-      score -= failurePenalty * endpointCount;
+      // failurePenalty は加算デルタ (負値で減点、 schema / runUptimeFlatKind と同契約)。
+      // 以前は `-= failurePenalty` で符号反転し、 負値が加点になっていた (= score=0 の問題でだけ
+      // 露見しなかった latent bug)。 `+=` で減点として正しく反映する。
+      score += failurePenalty * endpointCount;
       failCount += 1;
     }
   }

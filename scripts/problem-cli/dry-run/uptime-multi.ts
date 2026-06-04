@@ -32,7 +32,9 @@ export function runUptimeMultiDryRun(input: DryRunKindInput): DryRunResult {
       score += pointsAllOk;
       allOkCycles += 1;
     } else {
-      score -= failurePenalty;
+      // failurePenalty は加算デルタ (負値で減点、 runUptimeMultiKind と同契約)。 `-=` だと符号反転
+      // して負値が加点になる latent bug だった (= failurePenalty=0 の問題でだけ露見しなかった)。
+      score += failurePenalty;
       failCycles += 1;
     }
   }

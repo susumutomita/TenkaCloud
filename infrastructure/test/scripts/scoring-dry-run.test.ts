@@ -25,18 +25,19 @@ describe("scoring dry-run (#951 sub #3)", () => {
   });
 
   it("uptime-flat kind: 全 success cycles で `cycles × endpoints × pointsPerSuccess` 点", () => {
-    // hello-world-battle: 2 endpoints, 100 pt/success, failurePenalty=0
+    // hello-world-battle: 2 endpoints, 100 pt/success (failurePenalty=-100 だが全 success なので無関係)
     const r = runDryRun({ problemId: "hello-world-battle", cycles: 5, pattern: "sssss" });
     expect(r.ok).toBe(true);
     // 5 cycles × 2 endpoints × 100 pt = 1000
     expect(r.summary).toContain("earned=1000");
   });
 
-  it("uptime-flat kind: earned should drop on cycles with partial fail", () => {
+  it("uptime-flat kind: earned should drop on cycles with partial fail (failurePenalty deducts)", () => {
     const r = runDryRun({ problemId: "hello-world-battle", cycles: 4, pattern: "ssff" });
     expect(r.ok).toBe(true);
-    // 2 success cycles × 2 endpoints × 100 = 400 (failurePenalty=0)
-    expect(r.summary).toContain("earned=400");
+    // hello-world-battle は failurePenalty=-100 (2 endpoints)。
+    // 2 success × 2 × +100 = +400、 2 fail × 2 × -100 = -400 → 0。
+    expect(r.summary).toContain("earned=0");
   });
 
   it("uptime-flat kind: cycles=デフォルト=10 / pattern=デフォルト=all success", () => {
