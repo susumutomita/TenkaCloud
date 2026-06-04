@@ -1,3 +1,5 @@
+import type { CustomDomainsConfig } from "../security/cloudfront-custom-domain.js";
+
 /**
  * Root configuration for TenkaCloud infrastructure.
  * Loaded from environments/{ENV}/config.json with ${VAR} / ${VAR:-default} placeholder replacement.
@@ -41,6 +43,13 @@ export interface Config {
    * 経路だけ動く互換 mode)。
    */
   readonly challengePayloadConfig?: ChallengePayloadConfig;
+
+  /**
+   * Issue #1695: 各 SPA hosting にカスタムドメイン + ACM 証明書 (us-east-1) を割り当てて
+   * CloudFront の viewer 最小 TLS を 1.2 に強制する opt-in 設定。 未指定の hosting は default
+   * `*.cloudfront.net` 証明書配信のまま (= NO-OP、 既存挙動不変)。
+   */
+  readonly customDomains?: CustomDomainsConfig;
 }
 
 export interface ChallengePayloadConfig {

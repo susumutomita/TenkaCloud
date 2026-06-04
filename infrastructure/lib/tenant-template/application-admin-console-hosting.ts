@@ -11,11 +11,20 @@ import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, CacheControl, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
+import {
+  buildCustomDomainDistributionProps,
+  type CustomDomainConfig,
+} from "../security/cloudfront-custom-domain.js";
 import { buildSecurityHeadersPolicy } from "../security/cloudfront-headers.js";
 
 interface ApplicationAdminConsoleHostingProps {
   /** TenantTemplateStack を識別するためのテナント ID。pooled の場合は "pooled" */
   readonly tenantId: string;
+  /**
+   * Issue #1695: opt-in のカスタムドメイン + ACM 証明書。 設定時のみ TLS 1.2 を強制する。
+   * 未設定なら default 証明書配信のまま (NO-OP)。
+   */
+  readonly customDomain?: CustomDomainConfig;
 }
 
 interface RuntimeConfigProps {
@@ -104,7 +113,7 @@ export class ApplicationAdminConsoleHosting extends Construct {
   private readonly bucket: Bucket;
   private readonly distribution: Distribution;
 
-  constructor(scope: Construct, id: string, _props: ApplicationAdminConsoleHostingProps) {
+  constructor(scope: Construct, id: string, props: ApplicationAdminConsoleHostingProps) {
     super(scope, id);
 
     this.bucket = new Bucket(this, "SiteBucket", {
@@ -135,6 +144,8 @@ export class ApplicationAdminConsoleHosting extends Construct {
     });
 
     this.distribution = new Distribution(this, "Distribution", {
+      // Issue #1695: customDomain 設定時のみ TLS 1.2 強制 (= ACM 証明書必須)。 未設定は NO-OP。
+      ...buildCustomDomainDistributionProps(this, "ViewerCertificate", props.customDomain),
       defaultBehavior: {
         origin: S3BucketOrigin.withOriginAccessIdentity(this.bucket, { originAccessIdentity: oai }),
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,

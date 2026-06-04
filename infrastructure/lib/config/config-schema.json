@@ -10,6 +10,21 @@
     "bootstrapConfig"
   ],
   "$defs": {
+    "customDomainConfig": {
+      "type": "object",
+      "required": ["domainName", "certificateArn"],
+      "properties": {
+        "domainName": {
+          "type": "string",
+          "description": "viewer ドメイン名 (例: console.tenkacloud.cloud)。"
+        },
+        "certificateArn": {
+          "type": "string",
+          "description": "ACM 証明書 ARN。 CloudFront 仕様で us-east-1 の証明書であること。"
+        }
+      },
+      "additionalProperties": false
+    },
     "samlIdpConfig": {
       "type": "object",
       "required": ["metadataUrl"],
@@ -184,6 +199,16 @@
           ],
           "description": "Noncurrent 化してから expire までの日数 (default 30)。"
         }
+      },
+      "additionalProperties": false
+    },
+    "customDomains": {
+      "type": "object",
+      "description": "Issue #1695: 各 SPA hosting のカスタムドメイン + ACM 証明書 (us-east-1) 設定。 設定した hosting のみ CloudFront viewer 最小 TLS を 1.2 に強制する。 未指定は default 証明書配信 (NO-OP)。",
+      "properties": {
+        "adminConsole": { "$ref": "#/$defs/customDomainConfig" },
+        "applicationAdminConsole": { "$ref": "#/$defs/customDomainConfig" },
+        "participantPortal": { "$ref": "#/$defs/customDomainConfig" }
       },
       "additionalProperties": false
     }

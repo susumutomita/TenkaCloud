@@ -115,6 +115,8 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     problems,
     challengePayloadBucketName,
     challengePayload,
+    // Issue #1695: config.json の customDomains を AppConfig にそのまま透過 (opt-in TLS 1.2)。
+    customDomains: config?.customDomains,
     deployConcurrentBuildLimit,
     controlPlaneSamlIdps,
     controlPlaneSamlAdminAllowlist,

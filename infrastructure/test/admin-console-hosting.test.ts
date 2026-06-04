@@ -33,6 +33,18 @@ function synth(): Template {
   return Template.fromStack(stack);
 }
 
+function synthWithCustomDomain(): Template {
+  const app = new cdk.App();
+  const stack = new AdminConsoleHostingStack(app, "TestStack", {
+    env: { account: "123456789012", region: "ap-northeast-1" },
+    customDomain: {
+      domainName: "console.tenkacloud.cloud",
+      certificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/abc",
+    },
+  });
+  return Template.fromStack(stack);
+}
+
 describe("AdminConsoleHostingStack", () => {
   beforeAll(() => {
     ensurePlaceholderDist();
@@ -63,6 +75,31 @@ describe("AdminConsoleHostingStack", () => {
       const policy = Object.values(policies)[0];
       const cspJson = JSON.stringify(policy);
       expect(cspJson).toMatch(/form-action[^;]*amazoncognito\.com/);
+    });
+  });
+
+  describe("Issue #1695: opt-in custom domain → TLS 1.2", () => {
+    it("should use the default certificate and NOT pin a min TLS version when no custom domain is set", () => {
+      const dists = synth().findResources("AWS::CloudFront::Distribution");
+      const cfg = Object.values(dists)[0]?.Properties?.DistributionConfig;
+      // CDK は default 証明書のとき ViewerCertificate ブロックを emit しない (= CloudFront 既定)。
+      // よって alias も min TLS も付かない (= 現状デプロイの挙動と同一)。
+      expect(cfg?.Aliases).toBeUndefined();
+      expect(cfg?.ViewerCertificate?.MinimumProtocolVersion).toBeUndefined();
+    });
+
+    it("should enforce TLSv1.2_2021 with the ACM cert + alias when a custom domain is set", () => {
+      const template = synthWithCustomDomain();
+      template.hasResourceProperties("AWS::CloudFront::Distribution", {
+        DistributionConfig: {
+          Aliases: ["console.tenkacloud.cloud"],
+          ViewerCertificate: {
+            AcmCertificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/abc",
+            MinimumProtocolVersion: "TLSv1.2_2021",
+            SslSupportMethod: "sni-only",
+          },
+        },
+      });
     });
   });
 
