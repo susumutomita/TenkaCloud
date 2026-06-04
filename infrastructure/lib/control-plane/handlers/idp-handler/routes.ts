@@ -9,6 +9,7 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
+import { secureApiHeaders } from "../../../problem-deploy/handlers/shared/secure-headers.js";
 import { resolveCognitoSub } from "./auth.js";
 import {
   type AuditEventInput,
@@ -41,6 +42,9 @@ export interface RouteWiringOptions {
 
 export function buildIdpApp(opts: RouteWiringOptions): Hono {
   const app = new Hono();
+
+  // #1694: API セキュリティヘッダを CORS より前 (outermost) に適用 (= onError 経路にも付与)。
+  app.use("*", secureApiHeaders());
 
   app.use(
     "*",

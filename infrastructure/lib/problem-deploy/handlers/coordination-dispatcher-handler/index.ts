@@ -13,6 +13,7 @@ import { parseJsonBody, withBearerAuth } from "../participant-handler/route-help
 import { CoordinationOpBodySchema } from "../participant-handler/schemas.js";
 import { buildParticipantSharedResources } from "../participant-handler/shared.js";
 import { RATE_LIMITS } from "../shared/rate-limiter.js";
+import { secureApiHeaders } from "../shared/secure-headers.js";
 import { defaultS3PluginImporter } from "./s3-plugin-importer.js";
 
 /**
@@ -65,6 +66,10 @@ function respondCoordination(
 }
 
 const app = new Hono();
+
+// #1694: 全レスポンスに API セキュリティヘッダ (nosniff / no-store / X-Frame-Options /
+// Referrer-Policy / JSON Content-Disposition)。
+app.use("*", secureApiHeaders());
 
 app.get("/portal/healthz", (c) => c.json({ ok: true }));
 

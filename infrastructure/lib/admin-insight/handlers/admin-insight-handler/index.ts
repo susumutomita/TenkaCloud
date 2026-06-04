@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { StatusCodes } from "http-status-codes";
+import { secureApiHeaders } from "../../../problem-deploy/handlers/shared/secure-headers.js";
 import { exportAuditEntriesCsv, listAuditEntries } from "./audit.js";
 import { isSystemAdmin, resolveCognitoSub } from "./auth.js";
 import { defaultBudgetsClient, getCostSummary } from "./cost.js";
@@ -48,6 +49,11 @@ const MAX_TENANT_IDS = 100;
 const LIST_LIMIT_MAX = 200;
 
 const app = new Hono();
+
+// #1694: 全レスポンスに API セキュリティヘッダを付与 (nosniff / no-store / X-Frame-Options /
+// Referrer-Policy)。 audit CSV export は独自の Content-Disposition を持つため middleware は
+// それを尊重 (= 上書きしない)。
+app.use("*", secureApiHeaders());
 
 // #1392: CORS は API Gateway HTTP API の corsPreflight (admin-console-insight-stack.ts) が
 // localhost dev + admin-console CloudFront origin の allowlist で一元管理する。 ここで Hono の

@@ -5,6 +5,7 @@ import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
 import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
 import { RuntimeNotSupportedError } from "../shared/runtime/index.js";
+import { secureApiHeaders } from "../shared/secure-headers.js";
 import {
   ForbiddenRoleError,
   MissingTenantClaimError,
@@ -57,6 +58,11 @@ function parseLimit(value: string | undefined): { ok: true; limit: number | unde
 }
 
 const app = new Hono();
+
+// #1694: 全レスポンスに API セキュリティヘッダ (nosniff / no-store / X-Frame-Options /
+// Referrer-Policy / JSON Content-Disposition)。 CORS より前 (outermost) に置き、 onError
+// 経由のエラーレスポンスにも付くようにする。
+app.use("*", secureApiHeaders());
 
 // CORS は本 Lambda 側で打つ (= API Gateway の defaultCorsPreflightOptions は OPTIONS のみ
 // 対応で、実 POST/GET レスポンスには Access-Control-Allow-Origin が付かないため)。
