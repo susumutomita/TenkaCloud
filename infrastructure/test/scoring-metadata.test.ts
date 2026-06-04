@@ -206,6 +206,20 @@ describe("parseScoringMetadata", () => {
       expect(uf?.kind).toBe("uptime-flat");
       if (uf?.kind !== "uptime-flat") return;
       expect(uf.hints).toBeUndefined();
+      // failurePenalty 未指定は undefined (= 従来通り失敗時 0)。
+      expect(uf.failurePenalty).toBeUndefined();
+    });
+
+    it("uptime-flat should accept an opt-in failurePenalty (negative deduction on failed tick)", () => {
+      const uf = parseScoringMetadata({
+        kind: "uptime-flat",
+        endpoints: [{ slot: "main", path: "/", expectStatus: [200] }],
+        pointsPerSuccess: 100,
+        failurePenalty: -100,
+      });
+      expect(uf?.kind).toBe("uptime-flat");
+      if (uf?.kind !== "uptime-flat") return;
+      expect(uf.failurePenalty).toBe(-100);
     });
   });
 

@@ -78,9 +78,18 @@ export async function runUptimeFlatKind(
   // ADR-005 D2-A: 直前 tick が ok → 今 tick fail で attack-detected marker (= row 爆発防止)。
   const attackDetected = !allOk && deployment.lastResult === "ok";
 
+  // 失敗時の減点 (opt-in)。 failurePenalty は負値で減点 (uptime-multi と同契約)、 省略時 0 (= 従来挙動)。
+  const failureDelta = scoring.failurePenalty ?? 0;
+
   return {
-    scoreDelta: allOk ? scoring.pointsPerSuccess : 0,
-    scoreEvents: buildScoreEvents(allOk, attackDetected, scoring.pointsPerSuccess, nowIso),
+    scoreDelta: allOk ? scoring.pointsPerSuccess : failureDelta,
+    scoreEvents: buildScoreEvents(
+      allOk,
+      attackDetected,
+      scoring.pointsPerSuccess,
+      failureDelta,
+      nowIso,
+    ),
     endpointsHealthJson: JSON.stringify(newHealth),
     lastResult: allOk ? "ok" : "fail",
     ...(attackDetected ? { attackDetected: true } : {}),
@@ -91,9 +100,15 @@ function buildScoreEvents(
   allOk: boolean,
   attackDetected: boolean,
   points: number,
+  failureDelta: number,
   occurredAt: string,
 ): KindResult["scoreEvents"] {
   if (allOk) return [{ source: "uptime", points, occurredAt }];
+  // 減点が設定されていれば、 失敗 tick に -N の score event を残す (= 履歴に可視化、 監査痕跡)。
+  // 減点 0 のときは従来通り、 ok→fail 遷移の attack-detected marker のみ。
+  if (failureDelta !== 0) {
+    return [{ source: "uptime", points: failureDelta, occurredAt }];
+  }
   return attackDetected ? [{ source: "attack-detected", points: 0, occurredAt }] : [];
 }
 
