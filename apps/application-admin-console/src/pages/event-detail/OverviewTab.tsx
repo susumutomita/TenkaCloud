@@ -1,20 +1,16 @@
 import { DeployProgressPanel } from "../../components/event-detail/DeployProgressPanel";
 import { EventPhaseBanner } from "../../components/event-detail/EventPhaseBanner";
-import { EventReadinessPanel } from "../../components/event-detail/EventReadinessPanel";
 import { EventWizardPanel } from "../../components/event-detail/EventWizardPanel";
 import { ScoringLockPanel } from "../../components/event-detail/ScoringLockPanel";
 import type { EventTabContentProps } from "./tab-content-props";
 
 /**
- * Issue #1362: Qiita 「用途別グルーピング」 原則で Overview tab を 3 グループに整理。
+ * Overview tab. 上から: phase 帯 (Setup/Live/Teardown) → Event 概要 (status/teams/problems)
+ * → 現在のフェーズ (lifecycle 上の現在位置) → Deploy 進捗。
  *
- *   1. 現状 (status)        — Event 概要 (ScoringLockPanel) + 現在のフェーズ
- *   2. 次のアクション (hero) — operator が押すべき button (EventWizardPanel の CTA half)
- *   3. リソース / Deploy 進捗 — チーム / 問題 / deployment 進捗
- *
- * `EventWizardPanel` 内部で「現状 (phase indicator)」 と「次のアクション (CTA)」 を別
- * Container に分割している (= 上の 1+2)。 視線は 画面 title → 現状 → 次のアクション →
- * リソース の順に降りていく。
+ * 「Event 準備状況」 (readiness checklist) と 「次のアクション」 (CTA) は、 現在のフェーズ
+ * indicator が示す情報と重複していたため削除。 Deploy 進捗は phase indicator の直下に置き、
+ * 「今どの step にいるか」 と 「その deploy がどこまで進んだか」 を隣接させる。
  */
 export function OverviewTab({
   counts,
@@ -30,13 +26,6 @@ export function OverviewTab({
       <EventPhaseBanner detail={detail} t={t} />
       <ScoringLockPanel detail={detail} t={t} />
       <EventWizardPanel t={t} wizard={wizard} />
-      {/* Issue #1350: 4 項目の readiness check + 全 ✓ で 「準備完了」 大 badge */}
-      <EventReadinessPanel
-        completeCount={counts.completeCount}
-        detail={detail}
-        t={t}
-        totalDeployCount={counts.totalDeployCount}
-      />
       <DeployProgressPanel
         allDoneCount={counts.allDoneCount}
         completeCount={counts.completeCount}
