@@ -98,9 +98,7 @@
         "@tenkacloud/format": "workspace:*",
         "@tenkacloud/portal-plugin-sdk": "workspace:*",
         "@tenkacloud/web-kit": "workspace:*",
-        "dompurify": "^3.4.4",
         "http-status-codes": "^2.3.0",
-        "marked": "^18.0.3",
         "react": "^19.2.6",
         "react-dom": "^19.2.6",
         "react-router": "^7.15.1",
@@ -253,6 +251,8 @@
       "version": "0.1.0",
       "dependencies": {
         "@tenkacloud/auth-client": "workspace:*",
+        "dompurify": "^3.4.4",
+        "marked": "^18.0.3",
       },
       "devDependencies": {
         "@cloudscape-design/components": "^3.0.1297",
