@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PortalAuthError, type ScoreEventView } from "../../src/api/portal-client";
 import type { AppConfig } from "../../src/config";
@@ -124,6 +124,40 @@ describe("ScoreEventsPage", () => {
     // points 正負の両分岐
     expect(screen.getByText("+100 pt")).toBeInTheDocument();
     expect(screen.getByText("-10 pt")).toBeInTheDocument();
+  });
+
+  it("should paginate the history table at 20 rows per page (#履歴多すぎ)", async () => {
+    // 25 件 → page 1 に 20 行、 残り 5 行は page 2。 uptime Battle の毎分加点で履歴が膨らむため。
+    const entries = Array.from({ length: 25 }, (_, i) =>
+      ev({
+        problemId: `p-${String(i).padStart(2, "0")}`,
+        source: "uptime",
+        points: 100,
+        occurredAt: `2026-05-22T${String(23 - (i % 24)).padStart(2, "0")}:00:00Z`,
+      }),
+    );
+    mockGet.mockResolvedValue({ entries });
+    const { container } = renderPage();
+    await screen.findByText('score_events.history_header|{"count":25}');
+    // page 1: 20 行 (= 20 個の problemId <code> セル)
+    expect(container.querySelectorAll("code")).toHaveLength(20);
+    // pagination コントロールが出る
+    const next = screen.getByRole("button", { name: "score_events.pagination_next" });
+    fireEvent.click(next);
+    // page 2: 残り 5 行
+    expect(container.querySelectorAll("code")).toHaveLength(5);
+  });
+
+  it("should not show pagination when there are 20 or fewer entries", async () => {
+    mockGet.mockResolvedValue({
+      entries: Array.from({ length: 5 }, (_, i) => ev({ problemId: `q-${i}`, source: "uptime" })),
+    });
+    const { container } = renderPage();
+    await screen.findByText('score_events.history_header|{"count":5}');
+    expect(container.querySelectorAll("code")).toHaveLength(5);
+    expect(
+      screen.queryByRole("button", { name: "score_events.pagination_next" }),
+    ).not.toBeInTheDocument();
   });
 
   it("should render the empty table and no chart when there are no entries", async () => {
