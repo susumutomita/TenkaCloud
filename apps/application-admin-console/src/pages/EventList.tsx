@@ -9,7 +9,7 @@ import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
-import { toErrorMessage } from "@tenkacloud/web-kit";
+import { EmptyState, toErrorMessage } from "@tenkacloud/web-kit";
 import { StatusCodes } from "http-status-codes";
 import { useCallback, useMemo, useState } from "react";
 import { type NavigateFunction, useNavigate } from "react-router";
@@ -234,11 +234,19 @@ export function EventListPage({ config }: { config: AppConfig }) {
         columnDefinitions={columns}
         loadingText={t("event_list.loading")}
         empty={
-          <Box textAlign="center" color="inherit" padding="xxl">
-            {showArchived || archivedCount === 0
-              ? t("event_list.empty_no_event")
-              : t("event_list.empty_all_archived")}
-          </Box>
+          showArchived || archivedCount === 0 ? (
+            // 真に 0 件: ここから直接 event を作れる primary action を出す。
+            <EmptyState
+              headline={t("event_list.empty_no_event")}
+              primaryAction={{
+                label: t("event_list.create_button"),
+                onClick: () => navigate("/events/new"),
+              }}
+            />
+          ) : (
+            // 全件 archived で filter されている場合は作成導線を出さない (= 件数は存在する)。
+            <EmptyState headline={t("event_list.empty_all_archived")} />
+          )
         }
       />
 

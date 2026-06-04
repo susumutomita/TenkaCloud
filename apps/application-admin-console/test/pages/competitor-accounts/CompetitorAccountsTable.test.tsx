@@ -32,6 +32,7 @@ describe("CompetitorAccountsTable", () => {
         verifyInFlight={null}
         onVerify={onVerify}
         onRequestDelete={onRequestDelete}
+        onAdd={vi.fn()}
       />,
     );
     expect(screen.getByText("acct-1")).toBeInTheDocument();
@@ -55,21 +56,27 @@ describe("CompetitorAccountsTable", () => {
         verifyInFlight="acct-1"
         onVerify={vi.fn()}
         onRequestDelete={vi.fn()}
+        onAdd={vi.fn()}
       />,
     );
     // acct-2 (not in-flight) の verify button は disabled。
     expect(screen.getByRole("button", { name: "competitor_accounts.verify" })).toBeDisabled();
   });
 
-  it("should render the empty state with no items", () => {
+  it("should render the empty state with a primary action that fires onAdd", () => {
+    const onAdd = vi.fn();
     render(
       <CompetitorAccountsTable
         items={[]}
         verifyInFlight={null}
         onVerify={vi.fn()}
         onRequestDelete={vi.fn()}
+        onAdd={onAdd}
       />,
     );
     expect(screen.getByText("competitor_accounts.table_empty")).toBeInTheDocument();
+    // the empty state has a real, clickable add button (not a decorative "+")
+    fireEvent.click(screen.getByRole("button", { name: "competitor_accounts.add_button" }));
+    expect(onAdd).toHaveBeenCalledTimes(1);
   });
 });
