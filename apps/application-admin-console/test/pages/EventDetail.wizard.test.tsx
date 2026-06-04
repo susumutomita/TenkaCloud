@@ -81,28 +81,6 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("EventDetailPage #531 Wizard", () => {
-  it("should guide to Deploy via the 'next action' Alert when status=DRAFT", async () => {
-    mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "DRAFT" });
-    renderPage();
-    await waitFor(() => expect(screen.getAllByText(/Test Event/).length).toBeGreaterThan(0));
-    const alert = await screen.findByText(/「Deploy」 button で全 team/);
-    expect(alert).toBeInTheDocument();
-  });
-
-  it("should guide to setting start time when READY without startsAt", async () => {
-    mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "READY", startsAt: undefined });
-    renderPage();
-    const alert = await screen.findByText(/競技開始時刻を設定/);
-    expect(alert).toBeInTheDocument();
-  });
-
-  it("should guide to Bulk Teardown (Delete) when status=ENDED", async () => {
-    mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "ENDED" });
-    renderPage();
-    const alert = await screen.findByText(/「Delete」 で全 deployment/);
-    expect(alert).toBeInTheDocument();
-  });
-
   it("should display Wizard StepIndicator with 5 labels (create / Deploy / set start time / in competition / end)", async () => {
     mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "DRAFT" });
     renderPage();
@@ -114,13 +92,12 @@ describe("EventDetailPage #531 Wizard", () => {
     expect(screen.getByText(/5\. 終了/)).toBeInTheDocument();
   });
 
-  // Issue #1362: Overview tab を 「現状 / 次のアクション / リソース」 用途別 3 グループに整理。
-  it("should split phase indicator and next-action CTA into two separately-headed Cloudscape containers", async () => {
+  // Overview declutter: 「現在のフェーズ」 だけを残し、 重複していた 「次のアクション」 CTA は削除。
+  it("should render only the phase container (the next-action CTA was removed as redundant)", async () => {
     mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "DRAFT" });
     renderPage();
     await waitFor(() => expect(screen.getAllByText(/Test Event/).length).toBeGreaterThan(0));
-    // 「現在のフェーズ」 と 「次のアクション」 がそれぞれ独立 h2 として render される
     expect(screen.getByText(/現在のフェーズ/)).toBeInTheDocument();
-    expect(screen.getByText(/次のアクション/)).toBeInTheDocument();
+    expect(screen.queryByText(/次のアクション/)).not.toBeInTheDocument();
   });
 });
