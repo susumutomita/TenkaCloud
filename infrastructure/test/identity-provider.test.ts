@@ -45,6 +45,26 @@ describe("IdentityProvider", () => {
       );
     });
 
+    it("Issue #1696: should harden the tenant UserPoolClient session (60min access/id, 1day refresh, revocation on)", () => {
+      const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
+      // CDK の L2 UserPoolClient は token validity を CFn 上すべて minutes に正規化する
+      // (= refresh 1 day → 1440 min)。 値は機能的に 60min / 60min / 1day で正しい。
+      template.hasResourceProperties(
+        "AWS::Cognito::UserPoolClient",
+        Match.objectLike({
+          AccessTokenValidity: 60,
+          IdTokenValidity: 60,
+          RefreshTokenValidity: 1440,
+          TokenValidityUnits: {
+            AccessToken: "minutes",
+            IdToken: "minutes",
+            RefreshToken: "minutes",
+          },
+          EnableTokenRevocation: true,
+        }),
+      );
+    });
+
     it("UserPoolDomain prefix should use lowercased TenkaCloud-{env}-{tenantId}-{accountId}", () => {
       const { template } = synth("Tenant-ABC", "https://example.cloudfront.net", "Development");
       template.hasResourceProperties("AWS::Cognito::UserPoolDomain", {
