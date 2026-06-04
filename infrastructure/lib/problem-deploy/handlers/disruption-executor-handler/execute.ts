@@ -48,8 +48,13 @@ export interface DisruptionFiredDetail {
 export interface DeploymentTarget {
   readonly jobId: string;
   readonly region: string;
-  readonly competitorRoleArn: string;
-  readonly externalIdParameterName: string;
+  /**
+   * cross-account (SaaS) deploy の競技者ロール ARN。 Lite mode (= same-account) では未設定 (#1710)。
+   * 未設定なら executor は AssumeRole せず Lambda 自身の credentials で同一アカウントへ注入する。
+   */
+  readonly competitorRoleArn?: string;
+  /** cross-account deploy の ExternalId SSM パラメータ名。 Lite mode では未設定 (#1710)。 */
+  readonly externalIdParameterName?: string;
   /** CFn Outputs (= deployment row の stackOutputs JSON を parse 済)。 */
   readonly stackOutputs: Readonly<Record<string, string>>;
 }

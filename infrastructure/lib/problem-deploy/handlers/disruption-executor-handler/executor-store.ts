@@ -72,9 +72,14 @@ export async function claimExecution(
 }
 
 /**
- * fired `(tenantId, eventId, teamId, problemId)` の **COMPLETE** deployment を GSI1 query で解決し、
- * cross-account 注入に必要な情報が揃った行のみ返す。 未 deploy / 未完了 / cross-account 情報や
- * stackOutputs 欠落は undefined (= 注入対象なし、 caller が no-op にする)。
+ * fired `(tenantId, eventId, teamId, problemId)` の **COMPLETE** deployment を GSI1 query で解決する。
+ * 未 deploy / 未完了は undefined (= 注入対象なし、 caller が no-op にする)。
+ *
+ * #1710: competitorRoleArn / externalIdParameterName は **必須にしない**。 SaaS (cross-account) では
+ * 両方揃うが、 Lite mode (= same-account deploy) では両方とも未設定で、 その場合 executor は AssumeRole
+ * せず Lambda 自身の credentials で同一アカウントへ注入する (= `assumeCompetitorRole` が双方 absent で
+ * undefined creds を返す既存 same-account 経路)。 両者を必須にしていたため Lite では常に undefined →
+ * 障害が silently no-op していた。
  */
 export async function resolveDeployment(
   resources: ExecutorResources,
@@ -95,20 +100,22 @@ export async function resolveDeployment(
     }),
   );
   const items = (out.Items ?? []) as Partial<DeploymentItem>[];
+  // #1710: cross-account 情報 (competitorRoleArn / externalIdParameterName) は要求しない。
+  // 同一アカウント (Lite) deploy では両者とも欠落するのが正常。
   const ready = items.find(
-    (d) =>
-      d.status === "COMPLETE" &&
-      typeof d.jobId === "string" &&
-      typeof d.region === "string" &&
-      typeof d.competitorRoleArn === "string" &&
-      typeof d.externalIdParameterName === "string",
+    (d) => d.status === "COMPLETE" && typeof d.jobId === "string" && typeof d.region === "string",
   );
   if (!ready) return undefined;
   return {
     jobId: ready.jobId as string,
     region: ready.region as string,
-    competitorRoleArn: ready.competitorRoleArn as string,
-    externalIdParameterName: ready.externalIdParameterName as string,
+    // SaaS は両方 string、 Lite は両方 undefined (= same-account injection)。
+    ...(typeof ready.competitorRoleArn === "string"
+      ? { competitorRoleArn: ready.competitorRoleArn }
+      : {}),
+    ...(typeof ready.externalIdParameterName === "string"
+      ? { externalIdParameterName: ready.externalIdParameterName }
+      : {}),
     stackOutputs: parseStackOutputs(ready.stackOutputs),
   };
 }
