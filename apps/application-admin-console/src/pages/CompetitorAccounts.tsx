@@ -70,6 +70,7 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         verifyInFlight={verifyInFlight}
         onVerify={(awsAccountId) => void verify(awsAccountId)}
         onRequestDelete={setDeleteTarget}
+        onAdd={() => setAddModalVisible(true)}
       />
 
       {/* [ADR-026/027/032 / #1413] non-AWS (sakura/azure/gcp) per-team credential onboarding.

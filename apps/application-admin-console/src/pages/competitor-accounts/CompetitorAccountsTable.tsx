@@ -1,9 +1,9 @@
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
-import Icon from "@cloudscape-design/components/icon";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
+import { EmptyState } from "@tenkacloud/web-kit";
 import { useMemo } from "react";
 import type { CompetitorAccountSummary } from "../../api/competitor-accounts-client";
 import { useT } from "../../i18n";
@@ -13,6 +13,8 @@ interface CompetitorAccountsTableProps {
   verifyInFlight: string | null;
   onVerify: (awsAccountId: string) => void;
   onRequestDelete: (item: CompetitorAccountSummary) => void;
+  /** Empty-state primary action — opens the add-account modal (same as the header button). */
+  onAdd: () => void;
 }
 
 export function CompetitorAccountsTable({
@@ -20,6 +22,7 @@ export function CompetitorAccountsTable({
   verifyInFlight,
   onVerify,
   onRequestDelete,
+  onAdd,
 }: CompetitorAccountsTableProps) {
   const t = useT();
 
@@ -90,16 +93,13 @@ export function CompetitorAccountsTable({
     <Table
       items={items}
       columnDefinitions={columnDefinitions}
-      // Issue #1362: 空表示を icon + 説明 + 次のアクション誘導の 3 段に。
+      // Issue #1362 / empty-state UX: 空表示は説明 + 実際に押せる primary action を出す
+      // (= 装飾 icon ではなく、 ここから直接 account を追加できる)。
       empty={
-        <Box textAlign="center" color="inherit" padding="xxl">
-          <SpaceBetween size="xs">
-            <Box variant="strong" color="text-status-inactive">
-              <Icon name="add-plus" size="big" variant="subtle" />{" "}
-              {t("competitor_accounts.table_empty")}
-            </Box>
-          </SpaceBetween>
-        </Box>
+        <EmptyState
+          headline={t("competitor_accounts.table_empty")}
+          primaryAction={{ label: t("competitor_accounts.add_button"), onClick: onAdd }}
+        />
       }
     />
   );

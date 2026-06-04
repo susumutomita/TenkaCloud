@@ -22,13 +22,16 @@ vi.mock("../../src/pages/competitor-accounts/TeamCloudCredentialsPanel", () => (
 }));
 vi.mock("../../src/pages/competitor-accounts/CompetitorAccountsTable", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: stub props。
-  CompetitorAccountsTable: ({ onVerify, onRequestDelete }: any) => (
+  CompetitorAccountsTable: ({ onVerify, onRequestDelete, onAdd }: any) => (
     <div data-testid="accounts-table">
       <button type="button" onClick={() => onVerify("acct-1")}>
         stub-verify
       </button>
       <button type="button" onClick={() => onRequestDelete({ awsAccountId: "acct-1" })}>
         stub-request-delete
+      </button>
+      <button type="button" onClick={onAdd}>
+        stub-empty-add
       </button>
     </div>
   ),
@@ -150,6 +153,12 @@ describe("CompetitorAccountsPage", () => {
     // secret modal dismiss → 閉じる。
     fireEvent.click(screen.getByText("stub-secret-dismiss"));
     expect(screen.queryByTestId("secret-modal")).not.toBeInTheDocument();
+  });
+
+  it("should open the add modal from the table's empty-state add action", () => {
+    renderPage();
+    fireEvent.click(screen.getByText("stub-empty-add"));
+    expect(screen.getByTestId("add-modal")).toBeInTheDocument();
   });
 
   it("should close the add modal on dismiss", () => {

@@ -116,6 +116,18 @@ describe("EventListPage", () => {
     expect(mockNav).toHaveBeenCalledWith("/events/new");
   });
 
+  it("should show an empty-state create action that navigates when there are no events", async () => {
+    mockList.mockResolvedValue({ items: [] });
+    renderPage();
+    expect(await screen.findByText("event_list.empty_no_event")).toBeInTheDocument();
+    // header + empty-state both expose a create button; clicking the empty-state one navigates too
+    const createButtons = screen.getAllByRole("button", { name: "event_list.create_button" });
+    expect(createButtons.length).toBeGreaterThan(1);
+    mockNav.mockClear();
+    fireEvent.click(createButtons[createButtons.length - 1] as HTMLElement);
+    expect(mockNav).toHaveBeenCalledWith("/events/new");
+  });
+
   it("should disable archive for non-archivable statuses and enable it for DRAFT", async () => {
     mockList.mockResolvedValue({
       items: [
