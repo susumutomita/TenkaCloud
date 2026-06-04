@@ -7,8 +7,10 @@ import { DisruptionExecutorLambda } from "../../lib/problem-deploy/disruption-ex
 
 /**
  * [ADR-031 / #1419] cross-account disruption executor の CDK 境界を pin する。 核心は
- * 「自前 role は最小 (sts:AssumeRole は TenkaCloud-* のみ、 SendCommand/Invoke/UpdateStack は **持たない**)」
+ * 「自前 role は最小 (sts:AssumeRole は TenkaCloud-* のみ、 Invoke/UpdateStack は **持たない**)」
  * = 破壊力は assumed の CompetitorDeployRole に閉じ、 executor 自身の blast radius は IAM で封じる。
+ * #1710 例外: Lite (= same-account) 注入のため ssm:SendCommand のみ自前 role に付与し、 同一アカウントの
+ * instance + 標準 shell document に scope する。
  */
 
 const SYNTH_TIMEOUT_MS = 120_000;
@@ -92,11 +94,12 @@ describe("DisruptionExecutorLambda (ADR-031 #1419)", () => {
   );
 
   it(
-    "should NOT grant the executor's own role the destructive cross-account actions (they ride the assumed role)",
+    "should grant only ssm:SendCommand on the executor's own role (Lite same-account, #1710) — not Invoke/UpdateStack",
     () => {
       const actions = inlineActions(synth());
-      // 注入/復旧の破壊操作は assumed CompetitorDeployRole 経由。 executor 自身の role には付けない。
-      expect(actions).not.toContain("ssm:SendCommand");
+      // #1710: Lite (= same-account) では assumed role が無いので SendCommand は自前 role で行う。
+      expect(actions).toContain("ssm:SendCommand");
+      // 他 kind (lambda-invoke / cfn-stack-update) の破壊操作は依然 assumed role 経由のみ (自前 role には無い)。
       expect(actions).not.toContain("lambda:InvokeFunction"); // 自前 role には無い (= scheduler role 側のみ)
       expect(actions).not.toContain("cloudformation:UpdateStack");
       // 最小権限は揃っている。
@@ -105,6 +108,27 @@ describe("DisruptionExecutorLambda (ADR-031 #1419)", () => {
       expect(actions).toContain("scheduler:CreateSchedule");
       expect(actions).toContain("iam:PassRole");
       expect(actions).toContain("ssm:GetParameter");
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "#1710: ssm:SendCommand should be scoped to same-account instances + the standard shell document",
+    () => {
+      const tpl = synth();
+      tpl.hasResourceProperties(
+        "AWS::IAM::Policy",
+        Match.objectLike({
+          PolicyDocument: Match.objectLike({
+            Statement: Match.arrayWith([
+              Match.objectLike({
+                Action: "ssm:SendCommand",
+                Resource: Match.arrayWith([Match.stringLikeRegexp("document/AWS-RunShellScript")]),
+              }),
+            ]),
+          }),
+        }),
+      );
     },
     SYNTH_TIMEOUT_MS,
   );

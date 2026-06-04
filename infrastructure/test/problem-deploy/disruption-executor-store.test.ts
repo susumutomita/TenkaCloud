@@ -116,11 +116,21 @@ describe("resolveDeployment (ADR-031 #1419)", () => {
     expect(await resolveDeployment(makeResources(send), detail)).toBeUndefined();
   });
 
-  it("should skip a COMPLETE row missing cross-account fields", async () => {
-    const send = vi
-      .fn()
-      .mockResolvedValue({ Items: [{ ...completeRow, competitorRoleArn: undefined }] });
-    expect(await resolveDeployment(makeResources(send), detail)).toBeUndefined();
+  it("#1710: should return a same-account target for a Lite COMPLETE row without cross-account fields", async () => {
+    // Lite mode (= same-account deploy) は competitorRoleArn / externalIdParameterName を持たない。
+    // 旧実装はこれを skip して disruption が silently no-op していた。 今は target を返し、
+    // executor は AssumeRole せず自分の credentials で同一アカウントへ注入する。
+    const send = vi.fn().mockResolvedValue({
+      Items: [{ ...completeRow, competitorRoleArn: undefined, externalIdParameterName: undefined }],
+    });
+    const target = await resolveDeployment(makeResources(send), detail);
+    expect(target).toEqual({
+      jobId: "job-1",
+      region: "ap-northeast-1",
+      stackOutputs: { WorkerInstanceIds: "i-aaa,i-bbb" },
+    });
+    expect(target?.competitorRoleArn).toBeUndefined();
+    expect(target?.externalIdParameterName).toBeUndefined();
   });
 
   it("should default stackOutputs to {} when the row has no stackOutputs", async () => {

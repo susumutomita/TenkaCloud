@@ -36,8 +36,15 @@ export interface DisruptionExecutorLambdaProps {
  *   - ssm:GetParameter + kms:Decrypt は tenant ExternalId の SecureString のみ (describe-stack と同パターン)
  *   - DDB は deployments の Query (GSI1) + disruptions の PutItem (EXEC# 冪等) のみ
  *   - scheduler:CreateSchedule + iam:PassRole は revert scheduler role のみ
- * SDK の SendCommand / Invoke / UpdateStack 権限は **本 Lambda の role には無い** (= 注入は assumed
- * credentials で行う)。 = blast radius を IAM で封じつつ、 破壊操作は competitor の同意済 role に閉じる。
+ * SaaS (cross-account) では SDK の SendCommand / Invoke / UpdateStack 権限は **本 Lambda の role には
+ * 無い** (= 注入は assumed competitor 同意済 Admin role で行う)。 = blast radius を IAM で封じつつ、
+ * 破壊操作は competitor の同意済 role に閉じる。
+ *
+ * #1710 Lite mode 例外: Lite (= same-account deploy) では AssumeRole 先の競技者アカウントが存在せず、
+ * 注入は本 Lambda 自身の credentials で同一アカウントへ行う。 そのため ssm-run-command kind の注入
+ * (SendCommand) を **同一アカウントの instance + 標準 shell document に限定**して付与する。 SaaS では
+ * assumed Admin role 経由で注入するため本 grant は不使用 (= 同一アカウントの自テナント問題スタックに限定
+ * された余剰権限で、 Lite の単一テナント運用ではブラスト半径は organizer 自身の account に閉じる)。
  *
  * revert は scheduler が本 Lambda 自身を `mode:"revert"` payload で呼び戻す one-shot (= EXEC# 冪等 name)。
  */
@@ -128,6 +135,20 @@ export class DisruptionExecutorLambda extends Construct {
         effect: iam.Effect.ALLOW,
         actions: ["sts:AssumeRole"],
         resources: ["arn:aws:iam::*:role/TenkaCloud-*"],
+      }),
+    );
+    // #1710: Lite mode (= same-account) では AssumeRole 先が無く、 注入は本 Lambda の credentials で
+    // 行う。 ssm-run-command kind の注入/復旧 (SendCommand) を同一アカウントの instance と標準 shell
+    // document に限定して許可する。 SaaS では assumed Admin role で注入するため本 grant は不使用。
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["ssm:SendCommand"],
+        resources: [
+          `arn:aws:ec2:*:${stack.account}:instance/*`,
+          "arn:aws:ssm:*::document/AWS-RunShellScript",
+          `arn:aws:ssm:*:${stack.account}:document/SSM-SessionManagerRunShell`,
+        ],
       }),
     );
     // deployments: team deployment 解決は GSI1 Query のみ。
