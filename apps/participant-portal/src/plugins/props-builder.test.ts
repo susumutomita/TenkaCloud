@@ -78,8 +78,16 @@ describe("buildPortalDisruptions", () => {
 
   it("should return empty array for problems without disruptions[]", () => {
     expect(buildPortalDisruptions("hello-world")).toEqual([]);
-    expect(buildPortalDisruptions("hello-world-battle")).toEqual([]);
+    expect(buildPortalDisruptions("iam-least-privilege")).toEqual([]);
+    // security-battle-royale は disruptions[] を持つが全て publicHint!=true なので portal には出ない。
     expect(buildPortalDisruptions("security-battle-royale")).toEqual([]);
+  });
+
+  it("should surface the sample Battle's public red-team disruption (hello-world-battle)", () => {
+    // submodule bump (#38) で sample Battle に publicHint=true の red team が付いた。
+    const out = buildPortalDisruptions("hello-world-battle");
+    expect(out.map((d) => d.id)).toContain("frontend-down");
+    expect(out.every((d) => d.publicHint === true)).toBe(true);
   });
 
   it("should return empty array for a non-existent problemId", () => {
