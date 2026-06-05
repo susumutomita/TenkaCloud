@@ -51,14 +51,14 @@
   <h1>ADR-033: Scoring-side disruption effects</h1>
   <p><em>fire しても採点が動かない disruption に、 実クラウドへの fault 注入を伴わずに「採点上の効果 (減点 / 可用性ダウン)」を与えるための宣言契約と評価経路</em></p>
   <div class="meta">
-    <div><b>Status:</b> <span class="badge draft">Proposed</span> 2026-06-03</div>
+    <div><b>Status:</b> <span class="badge accept">Accepted</span> 2026-06-03</div>
     <div><b>Related:</b>
       <a href="./adr-013-disruption-phase2-condition-triggered.html">ADR-013</a> (disruption 宣言 / Phase A→B / condition trigger),
       <a href="./adr-031-cross-account-disruption-dispatch.html">ADR-031</a> (cross-account の実 fault 注入 <code>action</code>),
       <a href="./adr-029-attack-resilience-game-always-ends.html">ADR-029</a> (game always ends),
       <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> (problem = plugin, platform = host)
     </div>
-    <div><b>Issue:</b> #1665 (#1417 の子)</div>
+    <div><b>Issue:</b> #1665 (#1417 の子) — 実装: #1668（condition + operator fired）</div>
   </div>
 </header>
 
