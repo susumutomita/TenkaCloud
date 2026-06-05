@@ -30,9 +30,8 @@ describe("check-template-cfn-refs script (#951 sub-2)", () => {
   // Smoke test against the live problems/ catalog. The count grows with each
   // new problem added; bump this assertion when adding a new template (so the
   // test remains a regression boundary instead of a moving target).
-  // Current count: 7 (= 5 ready + 2 draft after Issue #1346 starter-catalog
-  // expansion: hello-world / hello-world-battle / microservice-migration-battle
-  // / security-battle-royale / stackstack / public-s3-remediation / iam-least-privilege).
+  // Current count: 112 (= the 7-template starter catalog plus the 105 AWS
+  // certification Challenges added in TenkaCloudChallenge #46).
   it("all existing problem templates should pass (smoke test)", () => {
     const result = spawnSync("bun", ["run", "scripts/check-template-cfn-refs.ts"], {
       cwd: REPO_ROOT,
@@ -40,7 +39,7 @@ describe("check-template-cfn-refs script (#951 sub-2)", () => {
     });
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("OK:");
-    expect(result.stdout).toContain("7 template(s)");
+    expect(result.stdout).toContain("112 template(s)");
   });
 });
 
