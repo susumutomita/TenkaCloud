@@ -18,6 +18,7 @@ import {
   type KindResult,
   noopKindResult,
   probeUrl,
+  uptimeEvent,
 } from "../shared.js";
 
 /**
@@ -103,11 +104,11 @@ function buildScoreEvents(
   failureDelta: number,
   occurredAt: string,
 ): KindResult["scoreEvents"] {
-  if (allOk) return [{ source: "uptime", points, occurredAt }];
+  if (allOk) return [uptimeEvent(points, occurredAt)];
   // 減点が設定されていれば、 失敗 tick に -N の score event を残す (= 履歴に可視化、 監査痕跡)。
   // 減点 0 のときは従来通り、 ok→fail 遷移の attack-detected marker のみ。
   if (failureDelta !== 0) {
-    return [{ source: "uptime", points: failureDelta, occurredAt }];
+    return [uptimeEvent(failureDelta, occurredAt)];
   }
   return attackDetected ? [{ source: "attack-detected", points: 0, occurredAt }] : [];
 }
