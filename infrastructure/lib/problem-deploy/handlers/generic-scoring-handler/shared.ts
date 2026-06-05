@@ -350,6 +350,14 @@ export interface KindScoreEvent {
   readonly occurredAt: string;
 }
 
+/**
+ * `source: "uptime"` の score event を組む共通ヘルパ。 uptime-flat / uptime-multi / phased-polling
+ * が同形の `{ source: "uptime", points, occurredAt }` を作るのを 1 箇所に集約する (= DRY)。
+ */
+export function uptimeEvent(points: number, occurredAt: string): KindScoreEvent {
+  return { source: "uptime", points, occurredAt };
+}
+
 export function noopKindResult(): KindResult {
   return { scoreDelta: 0, scoreEvents: [] };
 }
