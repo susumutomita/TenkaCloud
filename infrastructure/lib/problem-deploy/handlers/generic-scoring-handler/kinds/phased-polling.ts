@@ -10,6 +10,7 @@ import {
   noopKindResult,
   probeUrl,
   resolveActivePhase,
+  uptimeEvent,
 } from "../shared.js";
 
 /**
@@ -184,10 +185,6 @@ function scoreFailurePenalty(
   return points === 0
     ? { scoreDelta: 0, scoreEvents: [] }
     : { scoreDelta: points, scoreEvents: [uptimeEvent(points, occurredAt)] };
-}
-
-function uptimeEvent(points: number, occurredAt: string): KindScoreEvent {
-  return { source: "uptime", points, occurredAt };
 }
 
 function scorePhasedBonuses(
