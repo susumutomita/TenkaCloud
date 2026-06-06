@@ -14,8 +14,10 @@ TenkaCloud のピッチデッキを **リポジトリの今の実態から** 再
 正本（誇張しないための事実ソース）:
 
 - 位置づけ / タグライン: [`README.md`](../../../README.md) 冒頭、[`landing/llms.txt`](../../../landing/llms.txt)
-- 問題カタログ: `problems/<category>/<id>/metadata.json`（submodule。実体は
-  `/Users/susumu/product/TenkaCloudChallenge` の clone 側にあることが多い）
+- 問題カタログ: `problems/<category>/<id>/metadata.json`（git submodule）。必ず**リポジトリ相対の
+  `problems/`** を読む。個人マシンの絶対パスや外部 clone には依存しない（どの環境でも同じパスで動くように）。
+  submodule 未取得だと空なので、先に `git submodule status problems` で確認し、空なら
+  `git submodule update --init problems` で展開してから数える。
 - 採点エンジン: `infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/kinds/*.ts`
 - 障害注入 (赤チーム): `infrastructure/lib/problem-deploy/handlers/disruption-executor-handler/`、
   `disruption-executor-lambda.ts`、ADR-029/031/033/034
