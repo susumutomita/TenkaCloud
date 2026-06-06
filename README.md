@@ -62,6 +62,26 @@ the SBT control plane entirely and stands up just the Application Admin Console,
 Participant Portal, and the deploy backend. From `git clone` to a first running event
 takes roughly 30 minutes — most of that time is `cdk deploy` waiting on AWS.
 
+### Option A — one-click deploy (CloudFormation)
+
+Don't want to install anything locally? Launch a self-contained deployment pipeline
+straight into your AWS account:
+
+[![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/review?templateURL=https://raw.githubusercontent.com/susumutomita/TenkaCloud/main/infrastructure/templates/lite-pipeline.yaml&stackName=tenkacloud-lite-pipeline)
+
+The stack ([`infrastructure/templates/lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml))
+is a standalone single-file template — independent of the CDK app. It stands up a
+CodePipeline (`Source → optional Manual Approval → Build`) that clones the repo and
+runs `make deploy` (Lite mode) on CodeBuild. The one manual prerequisite is a
+**GitHub CodeStar Connection** (AWS Console → Developer Tools → Connections); paste
+its ARN and your admin email as stack parameters. Full walkthrough:
+[`infrastructure/templates/README.md`](./infrastructure/templates/README.md#one-click-lite-mode-deployment-pipeline).
+
+> If your console rejects the template URL, download `lite-pipeline.yaml` and use
+> CloudFormation's **Upload a template file** instead.
+
+### Option B — from your terminal
+
 ```bash
 git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
