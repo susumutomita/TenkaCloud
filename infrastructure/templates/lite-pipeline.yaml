@@ -170,7 +170,12 @@ Resources:
                 # Frozen + ignore-scripts matches the repo supply-chain policy (make install_ci).
                 - bun install --frozen-lockfile --ignore-scripts
                 # The problem catalog lives in a git submodule; pull it so `make deploy` ships it.
-                - git submodule update --init --recursive || echo "no submodules or already initialized"
+                # Only run when submodules are configured, but let a real checkout failure
+                # (auth/network) fail the build instead of masking it.
+                - |
+                  if [ -f .gitmodules ]; then
+                    git submodule update --init --recursive
+                  fi
             pre_build:
               commands:
                 - export AWS_REGION="${AWS_DEFAULT_REGION}"
