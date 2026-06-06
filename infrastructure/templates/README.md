@@ -114,6 +114,27 @@ CodeBuild は repo を clone → `bun install` → `make build` → `cdk bootstr
 `make deploy` を流す。`infrastructure/environments/<env>/.env` はビルド中に
 `TenantAdminEmail` パラメータから自動生成される。
 
+### Launch Stack ボタンを有効化する (= メンテナ向け、1 回だけ)
+
+CloudFormation の「クイック作成」は **S3 上のテンプレート URL しか受け付けない**
+(= `raw.githubusercontent.com` を指すと `TemplateURL must be a supported URL` で弾かれる)。
+README の Launch Stack ボタンを機能させるには、`lite-pipeline.yaml` を公開 S3 バケットへ
+ミラーする。正本は本リポジトリのまま、コピーだけを S3 に置く。
+
+```bash
+make publish-launch-template                       # 既定バケットへ公開
+make publish-launch-template ARGS="--write-readme" # README のボタン URL も自動更新
+```
+
+- デフォルトのバケット名は `tenkacloud-launch-<アカウント>-<リージョン>` (= なければ自動作成)
+- 公開読み取りは `lite-pipeline.yaml` 1 オブジェクトに限定する (= バケットポリシーで scope)
+- リージョンは `LAUNCH_TEMPLATE_REGION` (デフォルト `ap-northeast-1`)、バケット名は
+  `LAUNCH_TEMPLATE_BUCKET` で上書きできる
+- テンプレートを更新したら再実行してミラーを更新する
+
+CLI を使わない場合は、`lite-pipeline.yaml` をダウンロードして CloudFormation の
+**テンプレートファイルのアップロード** から流せば S3 なしでデプロイできる。
+
 ### 事前準備 (1 回だけ)
 
 GitHub への OAuth ハンドシェイクだけは CloudFormation で自動化できないため、

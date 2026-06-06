@@ -16,6 +16,7 @@ export JSII_DEPRECATED := quiet
         check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-cli-access \
         env-check env-check-lite env-init env-init-test synth check-synth diff bootstrap \
         deploy deploy-saas deploy-control-plane deploy-bootstrap destroy destroy-saas \
+        publish-launch-template \
         deploy-battles destroy-battles \
         lite-up lite-down lite-status lite-portal-url lite-console-url \
         ops-health
@@ -204,6 +205,15 @@ deploy-control-plane: env-check build ; $(CDK) deploy tenkacloud-control-plane $
 deploy-bootstrap:     env-check build ; $(CDK) deploy tenkacloud-bootstrap $(APPROVAL)
 destroy:              env-check-lite  ; bun run scripts/tenkacloud-lite.ts down
 destroy-saas:         env-check       ; bash scripts/cleanup.sh
+# ===== Launch Stack ボタン用テンプレ公開 =====
+# CloudFormation のクイック作成は S3 上のテンプレ URL しか受け付けない (= GitHub raw は不可)。
+# README の Launch Stack ボタンを「ワンクリック」で機能させるため、lite-pipeline.yaml を
+# 公開 S3 バケットへミラーし、動作する Launch Stack URL を表示 (+ --write-readme で README を自動更新)。
+# 公開対象はこの 1 ファイルのみ (= 既に GitHub 上で公開済みの IaC)。コストはほぼゼロ。
+#   make publish-launch-template                       # 既定バケットへ公開
+#   make publish-launch-template ARGS="--write-readme" # README のボタン URL も自動更新
+ARGS ?=
+publish-launch-template: ; bash scripts/publish-launch-template.sh $(ARGS)
 
 # ===== Problem deploy smoke test (MVP-0, ADR-001 PR-1.5) =====
 # 引数に問題フォルダを取り、順次 CFn deploy する開発者向け smoke test ツール。

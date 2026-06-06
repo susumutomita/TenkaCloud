@@ -67,7 +67,7 @@ takes roughly 30 minutes — most of that time is `cdk deploy` waiting on AWS.
 Don't want to install anything locally? Launch a self-contained deployment pipeline
 straight into your AWS account:
 
-[![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/review?templateURL=https://raw.githubusercontent.com/susumutomita/TenkaCloud/main/infrastructure/templates/lite-pipeline.yaml&stackName=tenkacloud-lite-pipeline)
+[![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/quickcreate?templateURL=https://tenkacloud-launch-ACCOUNT_ID-ap-northeast-1.s3.ap-northeast-1.amazonaws.com/lite-pipeline.yaml&stackName=tenkacloud-lite-pipeline)
 
 The stack ([`infrastructure/templates/lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml))
 is a standalone single-file template — independent of the CDK app. It stands up a
@@ -77,8 +77,15 @@ runs `make deploy` (Lite mode) on CodeBuild. The one manual prerequisite is a
 its ARN and your admin email as stack parameters. Full walkthrough:
 [`infrastructure/templates/README.md`](./infrastructure/templates/README.md#one-click-lite-mode-deployment-pipeline).
 
-> If your console rejects the template URL, download `lite-pipeline.yaml` and use
-> CloudFormation's **Upload a template file** instead.
+> **Maintainers:** CloudFormation only loads templates from Amazon S3 (a
+> `raw.githubusercontent.com` URL is rejected with `TemplateURL must be a
+> supported URL`), so the button points at an S3 mirror of `lite-pipeline.yaml`.
+> Publish it and rewrite the button URL above in one step —
+> `make publish-launch-template ARGS="--write-readme"` — then commit the change.
+>
+> No AWS CLI handy? Download
+> [`lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml) and use
+> CloudFormation's **Upload a template file** instead — no S3 needed.
 
 ### Option B — from your terminal
 
