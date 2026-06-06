@@ -217,10 +217,13 @@ destroy-saas:         env-check       ; bash scripts/cleanup.sh
 #   make docker-shell                  # interactive shell in the toolchain image
 #   make docker-build                  # rebuild the image after editing docker/Dockerfile
 # Override DOCKER_COMPOSE=docker-compose for legacy Compose v1.
+# DOCKER_USER passes the host uid/gid so the container drops root and repo writes (cdk.out)
+# stay owned by the host user (see docker/entrypoint.sh).
 DOCKER_COMPOSE ?= docker compose
-deploy-docker:    ; $(DOCKER_COMPOSE) run --rm tenkacloud make deploy ENV=$(ENV)
-destroy-docker:   ; $(DOCKER_COMPOSE) run --rm tenkacloud make destroy ENV=$(ENV)
-docker-shell:     ; $(DOCKER_COMPOSE) run --rm tenkacloud bash
+DOCKER_USER = TENKACLOUD_UID=$(shell id -u) TENKACLOUD_GID=$(shell id -g)
+deploy-docker:    ; $(DOCKER_USER) $(DOCKER_COMPOSE) run --rm tenkacloud make deploy ENV=$(ENV)
+destroy-docker:   ; $(DOCKER_USER) $(DOCKER_COMPOSE) run --rm tenkacloud make destroy ENV=$(ENV)
+docker-shell:     ; $(DOCKER_USER) $(DOCKER_COMPOSE) run --rm tenkacloud bash
 docker-build:     ; $(DOCKER_COMPOSE) build tenkacloud
 
 # ===== Problem deploy smoke test (MVP-0, ADR-001 PR-1.5) =====

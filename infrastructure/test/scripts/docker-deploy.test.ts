@@ -47,8 +47,10 @@ describe("one-Docker deploy wrapper", () => {
       expect(service.volumes).toContain(".:/workspace");
     });
 
-    it("should mount AWS credentials read-only so the deploy can authenticate", () => {
-      const awsMount = service.volumes?.find((v) => v.endsWith(":/root/.aws:ro"));
+    it("should mount AWS credentials read-only at the runtime HOME so the deploy can authenticate", () => {
+      // Mounted at the non-root user's HOME (not /root) so ~/.aws resolves after the
+      // entrypoint drops privileges to the host uid.
+      const awsMount = service.volumes?.find((v) => v.endsWith(":/home/tenkacloud/.aws:ro"));
       expect(awsMount).toBeDefined();
     });
 
@@ -81,6 +83,12 @@ describe("one-Docker deploy wrapper", () => {
     it("should not require AWS_PROFILE (a local `aws login` default profile is used automatically)", () => {
       expect(service.environment).not.toContain("AWS_PROFILE");
     });
+
+    it("should pass the host uid/gid through so the container can drop root", () => {
+      for (const key of ["TENKACLOUD_UID", "TENKACLOUD_GID"]) {
+        expect(service.environment).toContain(key);
+      }
+    });
   });
 
   describe("docker/entrypoint.sh", () => {
@@ -91,6 +99,13 @@ describe("one-Docker deploy wrapper", () => {
       // would otherwise shadow the mounted profile and make the AWS SDK fail rather than
       // fall back. The entrypoint must unset them unless a complete key pair is present.
       expect(entrypoint).toMatch(/unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN/);
+    });
+
+    it("should drop root to the host uid via gosu so repo writes stay host-owned", () => {
+      // chown the volume-backed node_modules, then hand off to the host uid. Without this,
+      // running non-root would fail to write cdk.out into the bind-mounted host repo.
+      expect(entrypoint).toMatch(/gosu /);
+      expect(entrypoint).toContain("TENKACLOUD_UID");
     });
   });
 
@@ -110,6 +125,10 @@ describe("one-Docker deploy wrapper", () => {
     it("should install the AWS CLI (deploy scripts shell out to `aws`)", () => {
       expect(dockerfile).toMatch(/awscli/);
     });
+
+    it("should install gosu so the entrypoint can drop to the host user", () => {
+      expect(dockerfile).toMatch(/gosu/);
+    });
   });
 
   describe("Makefile docker targets", () => {
@@ -126,6 +145,11 @@ describe("one-Docker deploy wrapper", () => {
       const recipe = recipeFor("deploy-docker");
       expect(recipe).toContain("$(DOCKER_COMPOSE)");
       expect(recipe).not.toContain("bun");
+    });
+
+    it("should run docker targets as the host user (non-root) via the host uid/gid", () => {
+      expect(makefile).toContain("id -u");
+      expect(recipeFor("deploy-docker")).toContain("$(DOCKER_USER)");
     });
 
     it("should declare the docker targets as .PHONY", () => {

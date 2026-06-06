@@ -24,9 +24,11 @@ services:
       # never leak into the Linux container. Populated by the entrypoint on first run.
       - tenkacloud-node-modules:/workspace/node_modules
       - tenkacloud-infra-node-modules:/workspace/infrastructure/node_modules
-      # AWS credentials/config, read-only. After a local `aws login` (or `aws configure`)
-      # the default profile / SSO cache here is used automatically — no AWS_PROFILE to set.
-      - ${HOME}/.aws:/root/.aws:ro
+      # AWS credentials/config, read-only, mounted at the container HOME (/home/tenkacloud)
+      # so it resolves for the non-root host user the entrypoint drops to. After a local
+      # `aws login` (or `aws configure`) the default profile / SSO cache here is used
+      # automatically — no AWS_PROFILE to set.
+      - ${HOME}/.aws:/home/tenkacloud/.aws:ro
     environment:
       # Host AWS auth. The mounted ~/.aws default profile is picked up automatically;
       # static/temporary keys in the shell are inherited too, but are optional.
@@ -35,6 +37,10 @@ services:
       - AWS_ACCESS_KEY_ID
       - AWS_SECRET_ACCESS_KEY
       - AWS_SESSION_TOKEN
+      # Host uid/gid the entrypoint drops to (set by the Makefile docker targets) so the
+      # toolchain runs non-root and repo writes stay owned by the host user.
+      - TENKACLOUD_UID
+      - TENKACLOUD_GID
       # Target environment (development | staging | production). Defaults to development.
       - ENV
       # Quiet CDK/JSII deprecation noise the same way the Makefile does.

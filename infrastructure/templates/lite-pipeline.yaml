@@ -157,6 +157,10 @@ Resources:
           version: 0.2
           phases:
             install:
+              # Node 22 is the newest version the managed CodeBuild standard image ships;
+              # node 24 is not yet a managed runtime (aws/aws-codebuild-docker-images#795).
+              # bun drives the toolchain and Node only backs the CDK CLI shebang + esbuild,
+              # which run on 22. Bump to 24 once CodeBuild offers it as a managed runtime.
               runtime-versions:
                 nodejs: 22
               commands:

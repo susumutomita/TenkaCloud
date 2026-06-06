@@ -16,17 +16,20 @@ FROM node:24-bookworm-slim
 ARG BUN_VERSION=1.3.11
 
 # Base packages: certificates + curl/unzip for the installers below, git for the bun
-# workspace, bash for the entrypoint, and make to drive the inner targets.
+# workspace, bash for the entrypoint, make to drive the inner targets, and gosu so the
+# entrypoint can drop from root to the host user's uid at runtime (docker/entrypoint.sh).
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
-       ca-certificates curl unzip git bash make \
+       ca-certificates curl unzip git bash make gosu \
   && rm -rf /var/lib/apt/lists/*
 
-# Bun (pinned). The official installer drops the binary in /root/.bun/bin.
-ENV BUN_INSTALL=/root/.bun
-ENV PATH=/root/.bun/bin:$PATH
+# Bun (pinned). Installed to a world-readable path so it stays runnable after the
+# entrypoint drops from root to the (arbitrary) host uid; the binary lands in /opt/bun/bin.
+ENV BUN_INSTALL=/opt/bun
+ENV PATH=/opt/bun/bin:$PATH
 RUN curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}" \
-  && bun --version
+  && bun --version \
+  && chmod -R a+rx /opt/bun
 
 # AWS CLI v2 (architecture-aware: x86_64 / aarch64). The deploy scripts
 # (tenkacloud-lite.ts / install.sh / cleanup.sh) shell out to `aws` for CFn outputs,
@@ -39,6 +42,12 @@ RUN arch="$(uname -m)" \
   && rm -rf /tmp/aws /tmp/awscliv2.zip
 
 WORKDIR /workspace
+
+# HOME for the runtime user. The container starts as root only long enough to chown the
+# volume-backed node_modules + this dir to the host uid, then gosu-drops to that uid
+# (docker/entrypoint.sh). docker-compose.yml mounts the host ~/.aws here read-only.
+ENV HOME=/home/tenkacloud
+RUN mkdir -p /home/tenkacloud
 
 # Install deps into the (volume-backed) node_modules, then exec the requested command.
 COPY docker/entrypoint.sh /usr/local/bin/tenkacloud-entrypoint

@@ -12,6 +12,17 @@
 # --ignore-scripts: same supply-chain posture as `make install` / `make install_ci`.
 set -euo pipefail
 
+# When started as root with a host uid (the Makefile passes TENKACLOUD_UID/GID), make the
+# volume-backed node_modules and HOME writable by that uid, then drop privileges to it with
+# gosu. This keeps writes to the bind-mounted repo (cdk.out, etc.) owned by the host user
+# and runs the toolchain as non-root. A plain `docker compose run` (no uid) stays root.
+if [ "$(id -u)" = "0" ] && [ -n "${TENKACLOUD_UID:-}" ]; then
+  target="${TENKACLOUD_UID}:${TENKACLOUD_GID:-$TENKACLOUD_UID}"
+  chown "${target}" "${HOME:-/home/tenkacloud}" 2>/dev/null || true
+  chown -R "${target}" /workspace/node_modules /workspace/infrastructure/node_modules 2>/dev/null || true
+  exec gosu "${target}" "$0" "$@"
+fi
+
 echo "==> Installing dependencies into the container (Linux-native, volume-backed node_modules)"
 bun install --frozen-lockfile --ignore-scripts
 
