@@ -100,19 +100,25 @@ trust を即時撤回できます。 削除後はあらためて生成した Ext
   CloudTrail でその AssumeRole / 後続の CFn / EC2 操作を監査できる。
 - スタック削除で権限を即時撤回できるので、競技終了後はスタックを消すと安全。
 
-## One-click Lite mode deployment pipeline
+## CloudFormation console Lite mode deployment pipeline
 
 ### 概要
 
-`lite-pipeline.yaml` は、README の **Launch Stack** ボタンから 1 クリックで起動できる
-独立したペライチ CloudFormation テンプレート。CDK アプリとは切り離されており、
-作るのは「デプロイ用パイプライン」だけ (= TenkaCloud 本体のスタックはパイプラインの
-Build ステップが `make deploy` を実行して作る)。
+`lite-pipeline.yaml` は、手元に Bun / CDK を入れずに Lite mode を deploy するための
+単一 CloudFormation テンプレートです。テンプレート自体が TenkaCloud 本体を作るのではなく、
+まず **デプロイ用パイプライン** を作ります。その後、CodeBuild がこの repo を checkout して
+`make deploy` を実行し、TenkaCloud 本体の Lite mode stack を作ります。
 
-パイプライン構成: `Source (GitHub) → Manual Approval (任意) → Build (CodeBuild で make deploy)`。
+構成は `Source (GitHub) → Manual Approval (任意) → Build (CodeBuild で make deploy)` です。
 CodeBuild は repo を clone → `bun install` → `make build` → `cdk bootstrap` → Lite mode の
-`make deploy` を流す。`infrastructure/environments/<env>/.env` はビルド中に
-`TenantAdminEmail` パラメータから自動生成される。
+`make deploy` を流します。`infrastructure/environments/<env>/.env` はビルド中に
+`TenantAdminEmail` パラメータから自動生成されます。
+
+> CloudFormation quick-create の `templateURL` は Amazon S3 URL のみ対応です。
+> GitHub raw URL (`raw.githubusercontent.com/.../lite-pipeline.yaml`) を直接渡す
+> Launch Stack ボタンは Console で `TemplateURL must be a supported URL` になり、
+> テンプレートを読み込めません。そのため README では **Upload a template file** 手順を
+> 正式手順にしています。
 
 ### 事前準備 (1 回だけ)
 
@@ -124,17 +130,23 @@ GitHub への OAuth ハンドシェイクだけは CloudFormation で自動化�
 
 ### デプロイ手順
 
-1. README の [Launch Stack](../../README.md#option-a--one-click-deploy-cloudformation) ボタンを押す (または Console の CloudFormation でこの yaml を upload する)
-2. 下表のパラメータを入力する
-3. 「IAM 権限変更を承認」にチェックして作成する。スタック作成時にパイプラインが 1 回自動実行されるので、承認ステージで承認すれば Lite デプロイが走る
+1. 事前準備で作った GitHub connection ARN を手元に置く
+2. README の [AWS Console pipeline](../../README.md#a-aws-console-pipeline-no-local-install) 手順から `lite-pipeline.yaml` を download する
+3. Console の CloudFormation で **Upload a template file** を選び、この yaml を upload する
+4. 下表のパラメータを入力する
+5. 「IAM 権限変更を承認」にチェックして作成する。スタック作成時にパイプラインが 1 回自動実行されるので、承認ステージで承認すれば Lite デプロイが走る
 
-| パラメータ            | 必須 | 説明                                                          |
-| --------------------- | ---- | ----------------------------------------------------------- |
-| `TenantAdminEmail`    | 必須 | Application Admin Console の初期ユーザー宛先                 |
-| `GitHubConnectionArn` | 必須 | 上で控えた CodeStar Connection の ARN                       |
-| `GitHubRepositoryId`  | 任意 | デフォルト `susumutomita/TenkaCloud` (fork したなら自分の owner/repo) |
-| `EnableManualApproval`| 任意 | `false` にすると承認なしの完全自動デプロイ                  |
-| `DeployExternalId`    | 任意 | 競技者アカウントへ AssumeRole する場合のみ                  |
+| パラメータ | 必須 | 説明 |
+| --- | --- | --- |
+| `Environment` | 任意 | `development` / `staging` / `production`。対応する `infrastructure/environments/<env>/config.json` と `.env` を使う |
+| `TenantAdminEmail` | 必須 | Application Admin Console の初期ユーザー宛先 |
+| `GitHubConnectionArn` | 必須 | 上で控えた CodeStar / CodeConnections connection ARN |
+| `GitHubRepositoryId` | 任意 | デフォルト `susumutomita/TenkaCloud`。fork したなら自分の `owner/repo` |
+| `SourceBranchName` | 任意 | deploy する branch。デフォルトは `main` |
+| `DeployExternalId` | 任意 | 競技者アカウントへ AssumeRole する場合のみ |
+| `EnableManualApproval` | 任意 | `false` にすると承認なしの完全自動デプロイ |
+| `BunVersion` | 任意 | CodeBuild に install する Bun。デフォルトは repo toolchain と同じ `1.3.11` |
+| `CodeBuildTimeoutMinutes` | 任意 | CodeBuild timeout。デフォルトは 90 分 |
 
 完了後、CodeBuild ログ末尾に Application Admin Console / Participant Portal の URL が出る。
 パイプライン自体は CloudFormation スタックを削除すれば消える (TenkaCloud 本体は
