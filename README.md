@@ -119,8 +119,10 @@ cp infrastructure/environments/development/.env.example \
 make deploy-docker     # builds the image (first run), installs deps, runs `make deploy`
 ```
 
-AWS auth comes from your `~/.aws` (mounted read-only) or from `AWS_PROFILE` /
-`AWS_ACCESS_KEY_ID` etc. in your shell. Pick the environment with
+AWS auth is automatic: run `aws sso login` (or `aws configure`) on the host first, then
+`make deploy-docker` reads your `~/.aws` (mounted read-only) — no `AWS_PROFILE` to set.
+Static/temporary keys in your shell (`AWS_ACCESS_KEY_ID` etc.) are inherited too. Pick the
+environment with
 `make deploy-docker ENV=production`. Teardown is `make destroy-docker`, and
 `make docker-shell` drops you into the toolchain container. See
 [`docker-compose.yml`](./docker-compose.yml) and [`docker/Dockerfile`](./docker/Dockerfile).

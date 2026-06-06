@@ -24,11 +24,12 @@ services:
       # never leak into the Linux container. Populated by the entrypoint on first run.
       - tenkacloud-node-modules:/workspace/node_modules
       - tenkacloud-infra-node-modules:/workspace/infrastructure/node_modules
-      # AWS credentials/config, read-only. Env-var credentials below also work.
+      # AWS credentials/config, read-only. After a local `aws login` (or `aws configure`)
+      # the default profile / SSO cache here is used automatically — no AWS_PROFILE to set.
       - ${HOME}/.aws:/root/.aws:ro
     environment:
-      # Host AWS auth — profile/region/keys win over the mounted files when set.
-      - AWS_PROFILE
+      # Host AWS auth. The mounted ~/.aws default profile is picked up automatically;
+      # static/temporary keys in the shell are inherited too, but are optional.
       - AWS_REGION
       - AWS_DEFAULT_REGION
       - AWS_ACCESS_KEY_ID

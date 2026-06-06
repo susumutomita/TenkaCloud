@@ -66,7 +66,6 @@ describe("one-Docker deploy wrapper", () => {
 
     it("should pass host AWS auth and the target ENV through to the container", () => {
       for (const key of [
-        "AWS_PROFILE",
         "AWS_REGION",
         "AWS_DEFAULT_REGION",
         "AWS_ACCESS_KEY_ID",
@@ -76,6 +75,10 @@ describe("one-Docker deploy wrapper", () => {
       ]) {
         expect(service.environment).toContain(key);
       }
+    });
+
+    it("should not require AWS_PROFILE (a local `aws login` default profile is used automatically)", () => {
+      expect(service.environment).not.toContain("AWS_PROFILE");
     });
   });
 
