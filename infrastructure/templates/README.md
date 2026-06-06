@@ -100,6 +100,52 @@ trust を即時撤回できます。 削除後はあらためて生成した Ext
   CloudTrail でその AssumeRole / 後続の CFn / EC2 操作を監査できる。
 - スタック削除で権限を即時撤回できるので、競技終了後はスタックを消すと安全。
 
+## One-click Lite mode deployment pipeline
+
+### 概要
+
+`lite-pipeline.yaml` は、README の **Launch Stack** ボタンから 1 クリックで起動できる
+独立したペライチ CloudFormation テンプレート。CDK アプリとは切り離されており、
+作るのは「デプロイ用パイプライン」だけ (= TenkaCloud 本体のスタックはパイプラインの
+Build ステップが `make deploy` を実行して作る)。
+
+パイプライン構成: `Source (GitHub) → Manual Approval (任意) → Build (CodeBuild で make deploy)`。
+CodeBuild は repo を clone → `bun install` → `make build` → `cdk bootstrap` → Lite mode の
+`make deploy` を流す。`infrastructure/environments/<env>/.env` はビルド中に
+`TenantAdminEmail` パラメータから自動生成される。
+
+### 事前準備 (1 回だけ)
+
+GitHub への OAuth ハンドシェイクだけは CloudFormation で自動化できないため、
+**CodeStar Connection** を先に手動で作る。
+
+1. AWS Console → Developer Tools → Connections →「Create connection」→ GitHub を選択
+2. 認可フローを完了し、ステータスが **Available** になった接続の ARN を控える
+
+### デプロイ手順
+
+1. README の [Launch Stack](../../README.md#option-a--one-click-deploy-cloudformation) ボタンを押す (または Console の CloudFormation でこの yaml を upload する)
+2. 下表のパラメータを入力する
+3. 「IAM 権限変更を承認」にチェックして作成する。スタック作成時にパイプラインが 1 回自動実行されるので、承認ステージで承認すれば Lite デプロイが走る
+
+| パラメータ            | 必須 | 説明                                                          |
+| --------------------- | ---- | ----------------------------------------------------------- |
+| `TenantAdminEmail`    | 必須 | Application Admin Console の初期ユーザー宛先                 |
+| `GitHubConnectionArn` | 必須 | 上で控えた CodeStar Connection の ARN                       |
+| `GitHubRepositoryId`  | 任意 | デフォルト `susumutomita/TenkaCloud` (fork したなら自分の owner/repo) |
+| `EnableManualApproval`| 任意 | `false` にすると承認なしの完全自動デプロイ                  |
+| `DeployExternalId`    | 任意 | 競技者アカウントへ AssumeRole する場合のみ                  |
+
+完了後、CodeBuild ログ末尾に Application Admin Console / Participant Portal の URL が出る。
+パイプライン自体は CloudFormation スタックを削除すれば消える (TenkaCloud 本体は
+`make destroy` で別途撤去する)。
+
+### コストの注意
+
+問題テンプレート (`problems/**/template.yaml`) は AWS 無料枠 0 円に収めているが、
+このパイプラインは CodePipeline V2 + CodeBuild + 小さな S3 を使うため厳密な 0 円ではない
+(月数回のデプロイで 1 ドル未満)。使い終えたらスタックを削除すれば課金は止まる。
+
 ## 関連
 
 - [`/problems/README.md`](../../problems/README.md) — 問題カタログ規約
