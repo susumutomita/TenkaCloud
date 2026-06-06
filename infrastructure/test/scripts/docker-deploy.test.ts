@@ -61,7 +61,8 @@ describe("one-Docker deploy wrapper", () => {
 
     it("should declare the named node_modules volumes at the top level", () => {
       const declared = Object.keys(compose.volumes ?? {});
-      expect(declared.length).toBeGreaterThanOrEqual(2);
+      expect(declared).toContain("tenkacloud-node-modules");
+      expect(declared).toContain("tenkacloud-infra-node-modules");
     });
 
     it("should pass host AWS auth and the target ENV through to the container", () => {
@@ -79,6 +80,17 @@ describe("one-Docker deploy wrapper", () => {
 
     it("should not require AWS_PROFILE (a local `aws login` default profile is used automatically)", () => {
       expect(service.environment).not.toContain("AWS_PROFILE");
+    });
+  });
+
+  describe("docker/entrypoint.sh", () => {
+    const entrypoint = read("docker/entrypoint.sh");
+
+    it("should drop empty or partial static AWS keys so the mounted ~/.aws login is used", () => {
+      // An empty/partial AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY forwarded from the host
+      // would otherwise shadow the mounted profile and make the AWS SDK fail rather than
+      // fall back. The entrypoint must unset them unless a complete key pair is present.
+      expect(entrypoint).toMatch(/unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN/);
     });
   });
 

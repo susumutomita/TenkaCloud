@@ -15,4 +15,13 @@ set -euo pipefail
 echo "==> Installing dependencies into the container (Linux-native, volume-backed node_modules)"
 bun install --frozen-lockfile --ignore-scripts
 
+# A local `aws login` (the mounted ~/.aws default profile / SSO cache) is the intended
+# credential source. docker-compose forwards AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY /
+# AWS_SESSION_TOKEN, but an empty or partial pair (e.g. a host that exports an empty
+# AWS_ACCESS_KEY_ID) would shadow that profile and make the AWS SDK / CLI fail instead of
+# falling back. Drop them unless a complete static key pair is actually present.
+if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+  unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+fi
+
 exec "$@"
