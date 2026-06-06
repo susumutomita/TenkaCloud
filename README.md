@@ -3,13 +3,14 @@
 
 # TenkaCloud
 
-**Run real cloud drills. Build reusable problem catalogs.**
+**Run real cloud drills. Build reusable AWS problem catalogs.**
 
-TenkaCloud is an OSS platform for running real cloud drills: teams solve hands-on
-cloud problems in isolated AWS environments, while organizers manage events, scoring,
-and reusable problem catalogs from a single console.
+TenkaCloud is a self-hostable, Apache-2.0 platform for running hands-on AWS
+competitions. Organizers manage events, teams, deploys, scoring, hints, and per-team
+AWS Console federation from one application; participants solve real AWS scenarios in
+isolated accounts.
 
-[Landing page](https://susumutomita.github.io/TenkaCloud/) · [Play the mock](https://susumutomita.github.io/TenkaCloud/portal-demo/?demo=1) · [Quickstart](#quickstart-lite-mode) · [Problem catalog](#problem-catalog) · [Architecture](#architecture)
+[Landing page](https://susumutomita.github.io/TenkaCloud/) · [Demo portal](https://susumutomita.github.io/TenkaCloud/portal-demo/?demo=1) · [Quickstart](#quickstart) · [Problem catalog](#problem-catalog) · [Architecture](#architecture)
 
 [![CI](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
@@ -19,94 +20,116 @@ and reusable problem catalogs from a single console.
 
 </div>
 
-> TenkaCloud is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Amazon Web Services, Inc. AWS and related marks are trademarks of Amazon.com, Inc. or its affiliates.
+> TenkaCloud is an independent open-source project and is not affiliated with,
+> endorsed by, or sponsored by Amazon Web Services, Inc. AWS and related marks are
+> trademarks of Amazon.com, Inc. or its affiliates.
 
 ---
 
-## What is TenkaCloud
+## What TenkaCloud gives you
 
-A self-hostable, OSS competition platform that turns hands-on AWS scenarios into a
-running event in about 30 minutes. Each team gets an isolated AWS environment
-provisioned via cross-account `AssumeRole` + `ExternalId`. Problems are plain files
-(`metadata.json` + `template.yaml`) versioned in a sibling catalog repo, so anything
-you write once becomes a reusable training asset.
+TenkaCloud turns a problem catalog into a live cloud drill:
 
-Two delivery modes share the same platform:
+1. **Create an event** in the Application Admin Console.
+2. **Select problems** from the catalog submodule (`problems/`).
+3. **Register teams** and their AWS account trust settings.
+4. **Deploy problem stacks** into each team's isolated AWS account with
+   cross-account `AssumeRole` + required `ExternalId`.
+5. **Run the event**: participants use the portal for instructions, hints,
+   submissions, scores, and one-click AWS Console federation.
 
-- **Battle** — real-time uptime drills. A health probe hits every team every minute;
-  the last team standing wins.
-- **Challenge** — self-paced problems with flag submissions. Learn one AWS service at
-  a time, in depth.
+Two problem styles share the same runtime:
 
-> [image needed: hero screenshot of the Application Admin Console event page]
-> Place a screenshot at `docs/assets/screenshots/admin-console-event.png` and replace
-> this placeholder. Suggested capture: an active event with two teams, the Problems
-> tab open, deploy status visible.
+| Style | Use it for | Scoring model |
+| --- | --- | --- |
+| **Challenge** | Self-paced AWS tasks and certification-style labs | Flag / answer submission |
+| **Battle** | Real-time operations drills | Health probes, phased polling, attack detection, or other catalog-declared scoring |
 
-## Who is it for
+## Quickstart
 
-Four audiences shape the product. If you recognize yourself below, TenkaCloud is for
-you.
+Most organizers should start with **Lite mode**. It deploys one local tenant and one
+event runtime into your AWS account, skipping the full SBT control plane.
 
-| Audience | What you get |
-| --- | --- |
-| **CCoE leads** running an org-wide cloud enablement program | A repeatable event runtime — new-grad onboarding, internalization drills, cross-team competitions — without re-building the platform every quarter. |
-| **Cloud communities, meetups, and schools** | A free, self-hostable competition stack on your own AWS account. No SaaS fees, no per-seat pricing, no participant data leaving your account. |
-| **Facilitators and event organizers** | One screen for deploy, scoring, leaderboard, and per-team Console federation. A week of setup collapses to an afternoon. |
-| **Platform / SRE engineers** | A plugin model where a problem is two files plus an optional portal React component. The platform is the host; problems are the plugins (ADR-012). |
+| Path | Best for | What runs |
+| --- | --- | --- |
+| [A. AWS Console pipeline](#a-aws-console-pipeline-no-local-install) | You do not want to install Bun / CDK locally | CloudFormation creates CodePipeline + CodeBuild; CodeBuild runs `make deploy` |
+| [B. Local terminal](#b-local-terminal) | You are comfortable running commands locally | Your shell runs `make deploy` |
+| [C. Docker](#c-docker-only-docker-on-the-host) | You have only Docker on the host (no Bun / Node) | A toolchain container runs `make deploy` |
+| [D. SaaS mode](#d-saas-mode-optional) | Multi-tenant SaaS / pooled and silo tenants | Your shell runs `make deploy-saas` |
 
-## Quickstart (Lite mode)
+### A. AWS Console pipeline (no local install)
 
-Lite mode is the fastest path: one organizer, one event, one AWS account. It skips
-the SBT control plane entirely and stands up just the Application Admin Console, the
-Participant Portal, and the deploy backend. From `git clone` to a first running event
-takes roughly 30 minutes — most of that time is `cdk deploy` waiting on AWS.
+CloudFormation quick-create buttons require the template file to be hosted in Amazon
+S3. This repository stores the template in GitHub, so the reliable no-local path is
+to download the template and upload it in the CloudFormation console.
 
-### Option A — one-click deploy (CloudFormation)
+1. Create a GitHub connection first:
+   AWS Console → **Developer Tools** → **Connections** → **Create connection** →
+   GitHub → finish the OAuth flow → copy the connection ARN.
+2. Download [`infrastructure/templates/lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml).
+3. Open the [CloudFormation create-stack page](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template)
+   in `ap-northeast-1`.
+4. Choose **Upload a template file**, upload `lite-pipeline.yaml`, and use
+   `tenkacloud-lite-pipeline` as the stack name.
+5. Fill in the parameters:
 
-Don't want to install anything locally? Launch a self-contained deployment pipeline
-straight into your AWS account:
+   | Parameter | Required | Value |
+   | --- | --- | --- |
+   | `TenantAdminEmail` | Yes | Initial Application Admin Console user email |
+   | `GitHubConnectionArn` | Yes | Connection ARN from step 1 |
+   | `GitHubRepositoryId` | No | Keep `susumutomita/TenkaCloud`, or set your fork as `owner/repo` |
+   | `SourceBranchName` | No | Branch to deploy; default is `main` |
+   | `EnableManualApproval` | No | Keep `true` to approve the pipeline run before deploy |
+   | `DeployExternalId` | No | Set only when you are ready to deploy into competitor accounts |
 
-[![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/review?templateURL=https://raw.githubusercontent.com/susumutomita/TenkaCloud/main/infrastructure/templates/lite-pipeline.yaml&stackName=tenkacloud-lite-pipeline)
+6. Acknowledge IAM changes and create the stack. The pipeline starts immediately;
+   approve the manual approval action if you left it enabled.
+7. When CodeBuild finishes, the build log prints the Application Admin Console and
+   Participant Portal URLs.
 
-The stack ([`infrastructure/templates/lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml))
-is a standalone single-file template — independent of the CDK app. It stands up a
-CodePipeline (`Source → optional Manual Approval → Build`) that clones the repo and
-runs `make deploy` (Lite mode) on CodeBuild. The one manual prerequisite is a
-**GitHub CodeStar Connection** (AWS Console → Developer Tools → Connections); paste
-its ARN and your admin email as stack parameters. Full walkthrough:
-[`infrastructure/templates/README.md`](./infrastructure/templates/README.md#one-click-lite-mode-deployment-pipeline).
+Full pipeline notes live in
+[`infrastructure/templates/README.md`](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline).
 
-> If your console rejects the template URL, download `lite-pipeline.yaml` and use
-> CloudFormation's **Upload a template file** instead.
+### B. Local terminal
 
-### Option B — from your terminal
+Use this path when you can install the repo toolchain locally.
 
 ```bash
 git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make install
-
-cp infrastructure/environments/development/.env.example \
-   infrastructure/environments/development/.env
-# edit AWS_ACCOUNT_ID and TENANT_ADMIN_EMAIL
-
+make env-init
 make deploy
 ```
 
-When the deploy finishes you get:
+`make env-init` creates `infrastructure/environments/development/.env` and prompts
+for the required Lite-mode values. If you prefer manual setup, copy the example file
+and edit it yourself:
 
-- **Application Admin Console** — pick problems, kick off deploys, watch progress.
-- **Participant Portal** — team login, problem details, hints, submissions, scores.
-- **Problem deploy backend** — DynamoDB + Lambda + Step Functions + CodeBuild.
+```bash
+cp infrastructure/environments/development/.env.example \
+   infrastructure/environments/development/.env
+# edit AWS_ACCOUNT_ID, AWS_REGION, and TENANT_ADMIN_EMAIL
+```
 
-Teardown is a single command: `make destroy`.
+After deploy, use these helpers:
 
-### Option C — deploy with only Docker (no bun/node on the host)
+```bash
+make lite-status
+make lite-console-url
+make lite-portal-url
+```
 
-On a machine where `bun` isn't installed (a fresh box, a CI runner, exe.dev), let Docker
-carry the toolchain. The only host dependency is Docker; the repo and your AWS
-credentials are mounted into a container that already has Bun, Node 24, and the AWS CLI.
+Teardown is:
+
+```bash
+make destroy
+```
+
+### C. Docker (only Docker on the host)
+
+Use this path on a machine that has only Docker — no Bun, Node, or AWS CLI. The
+toolchain rides in a container; the repo and your AWS credentials are mounted in.
 
 ```bash
 git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
@@ -114,124 +137,22 @@ cd TenkaCloud
 
 cp infrastructure/environments/development/.env.example \
    infrastructure/environments/development/.env
-# edit AWS_ACCOUNT_ID and TENANT_ADMIN_EMAIL
+# edit AWS_ACCOUNT_ID, AWS_REGION, and TENANT_ADMIN_EMAIL
 
 make deploy-docker     # builds the image (first run), installs deps, runs `make deploy`
 ```
 
 AWS auth is automatic: run `aws sso login` (or `aws configure`) on the host first, then
 `make deploy-docker` reads your `~/.aws` (mounted read-only) — no `AWS_PROFILE` to set.
-Static/temporary keys in your shell (`AWS_ACCESS_KEY_ID` etc.) are inherited too. Pick the
-environment with
-`make deploy-docker ENV=production`. Teardown is `make destroy-docker`, and
-`make docker-shell` drops you into the toolchain container. See
-[`docker-compose.yml`](./docker-compose.yml) and [`docker/Dockerfile`](./docker/Dockerfile).
+Static or temporary keys in your shell (`AWS_ACCESS_KEY_ID` etc.) are inherited too.
+Pick the environment with `make deploy-docker ENV=production`. Teardown is
+`make destroy-docker`, and `make docker-shell` opens a shell in the toolchain container.
+See [`docker-compose.yml`](./docker-compose.yml) and [`docker/Dockerfile`](./docker/Dockerfile).
 
-> [image needed: participant portal Quests page]
-> Place a screenshot at `docs/assets/screenshots/participant-portal-quests.png`
-> showing the deployed problem list with status badges and difficulty.
+### D. SaaS mode (optional)
 
-## Problem catalog
-
-Problems live in a separate repo: [susumutomita/TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge).
-It is mounted here as a git submodule under `problems/`, so `make deploy` ships
-whichever catalog version the submodule currently points at.
-
-Five problems ship today (see the catalog repo's [CATALOG.md](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/CATALOG.md) for the source of truth):
-
-| Problem | Mode | Difficulty | One-line summary |
-| --- | --- | --- | --- |
-| `hello-world` | Challenge | Intro | Read a greeting out of SSM Parameter Store and submit it as a flag. The hello-world for the platform itself. |
-| `hello-world-battle` | Battle | Intro | Keep an EC2-hosted nginx frontend + Python API both returning 200 every minute to score uptime. |
-| `microservice-migration-battle` | Battle | Advanced | Split a 3-service EC2 monolith into Lambda + ECS Fargate + App Runner under a phased polling clock. |
-| `security-battle-royale` | Battle | Advanced | Keep a fictional e-commerce site (`Tenryu.Mart`) returning 200 while under live attack. Availability over polish. |
-| `stackstack` | Battle | Advanced | Production-harden AI-generated scaffolds across 5 axes (auth / network / rate / audit / ux). Managed-runtime cutover multiplies the score 10x. |
-
-> [image needed: catalog screenshot]
-> Place a screenshot at `docs/assets/screenshots/problem-catalog.png` showing the
-> Application Admin Console Problems tab with the five entries above.
-
-A high-level walkthrough of each problem also lives in the [Competition Gallery](./docs/gallery.md).
-
-## Architecture
-
-TenkaCloud is a multi-plane CDK app: a Control Plane (SBT-based tenant manager), an
-Application Plane (Tenant Admin Console + Participant Portal), and a Problem Deploy
-backend that AssumeRoles into each competitor's isolated AWS account via a per-team
-`ExternalId`. Problems are plugins (ADR-012); the platform is the host.
-
-![TenkaCloud Lite demo flow](./docs/assets/tenkacloud-lite-demo.svg)
-
-Two operating modes share the same code:
-
-| Mode | Use it when | Entry point |
-| --- | --- | --- |
-| **Lite** | One organizer, one event, one AWS account | `make deploy` |
-| **SaaS** | Multi-tenant control plane with a per-tenant provisioning pipeline | `make deploy-saas` |
-
-Start with these architecture docs:
-
-- [`docs/architecture/OVERVIEW.md`](./docs/architecture/OVERVIEW.md) — full architectural narrative
-- [`CONTRIBUTOR_MAP.md`](./CONTRIBUTOR_MAP.md) — "I want to do X" navigation
-- [`docs/architecture/MODULE_MAP.md`](./docs/architecture/MODULE_MAP.md) — "where is X" directory map
-- [`docs/architecture/GLOSSARY.md`](./docs/architecture/GLOSSARY.md) — term definitions with ADR back-links
-
-Decision rationales (ADRs):
-
-- [ADR-012: Problem plugin architecture](./docs/architecture/adr-012-problem-plugin-architecture.html)
-- [ADR-016: TenkaCloud Lite mode](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html)
-- [ADR-017: Cloud Action Intent / Trust Bridge](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html)
-
-## Self-host vs operated
-
-The platform itself is Apache 2.0 — **self-hosting on your own AWS account is free**.
-Three optional paid plans exist for organizations that want setup, day-of operations,
-or a recurring program run for them: **Starter** (one pilot event), **Hosted Event**
-(a single operated event), and **Annual Arena** (an annual program with multiple
-events per year). Details on the [landing page](https://susumutomita.github.io/TenkaCloud/#pricing).
-
-### Commercial
-
-Four productized offerings are documented in
-[`docs/commercial/PACKAGES.html`](./docs/commercial/PACKAGES.html):
-
-- **Hosted Event** — a 1-3 day operated drill on the public OSS catalog (setup → live → report).
-- **Annual Arena** — a 12-month program with 4-6 operated events, a private problem catalog, and an HR / training KPI dashboard.
-- **Custom Problem** — a single problem authored to a buyer's stack or past incident, delivered as a self-contained problem directory (sanitized scenario; never production access).
-- **CCoE Enablement** — advisory retainer for operating-model work, sold separately so events stay productized.
-
-The OSS path stays free. Paid offerings fund facilitation, custom problems, and program-level support. See the [Sales Playbook](./docs/commercial/SALES-PLAYBOOK.html) for per-package elevator pitches, qualifying questions, and common objections.
-
-## Create your first problem
-
-Problem authoring happens in the catalog repo, not here. A problem is a self-contained directory under `battles/<id>/` or `challenges/<id>/` in that repo:
-
-```text
-metadata.json    # catalog display + scoring rule + portal slot wiring
-template.yaml    # CloudFormation deployed to the team's isolated AWS environment
-portal/          # optional React components for the Participant Portal
-services/        # optional in-stack code (docker-compose / Lambda payload / etc)
-```
-
-The scaffolding CLI is still hosted in this platform repo because it depends on shared TypeScript packages:
-
-```bash
-bun run scripts/tenkacloud-problem.ts create my-first-challenge --kind flag
-bun run scripts/tenkacloud-problem.ts validate my-first-challenge
-```
-
-Move the generated directory into your local clone of the catalog repo, open a PR there, and a platform-side maintainer bumps the submodule pointer once it merges.
-
-Authoring references:
-
-- [30-minute problem authoring guide](./docs/problems/AUTHORING.html) — platform-side authoring narrative
-- [Problem schema (`SCHEMA.json`)](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/SCHEMA.json) — catalog repo, source of truth
-- [Catalog repo README](https://github.com/susumutomita/TenkaCloudChallenge#readme) — contributor flow on the catalog side
-
-## Full deployment (SaaS mode)
-
-Use SaaS mode when you want tenant onboarding, pooled/silo tiers, and the full SBT
-control plane:
+Use SaaS mode only when you need tenant onboarding, pooled tiers
+(BASIC / STANDARD / PREMIUM), silo tenants (PLATINUM), and the SBT control plane.
 
 ```bash
 cp infrastructure/environments/development/.env.example \
@@ -241,25 +162,128 @@ cp infrastructure/environments/development/.env.example \
 make deploy-saas
 ```
 
-The repository also includes targeted commands for local development:
+Teardown is:
 
 ```bash
-make lite-status
-make lite-console-url
-make lite-portal-url
-make before-commit
-make harness
+make destroy-saas
 ```
+
+## What gets deployed
+
+Lite mode deploys the same application plane used by SaaS mode, but with
+`tenantId="local"`:
+
+- **Application Admin Console** — organizers create events, register teams, select
+  problems, start deploy jobs, and watch progress.
+- **Participant Portal** — teams read problem instructions, open hints, submit flags,
+  view scores, and federate into their own AWS account.
+- **Problem deploy backend** — DynamoDB, Lambda, Step Functions, CodeBuild,
+  EventBridge, and audit records for deploying catalog templates into competitor
+  accounts.
+
+## Problem catalog
+
+Problems live in the separate catalog repo
+[susumutomita/TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge).
+This platform repo mounts it as the `problems/` git submodule; `make deploy` ships the
+catalog version pinned by that submodule.
+
+The current pinned catalog contains **112 public problems**:
+
+| Category | Count | Notes |
+| --- | ---: | --- |
+| Challenge | 108 | AWS certification-style and service-specific tasks, all scored with catalog-declared flags / answers |
+| Battle | 4 | Real-time operations drills for uptime, migration, attack response, and production hardening |
+| Bundles | 1 | `starter-event`, a first-event bundle for new organizers |
+
+Useful catalog entry points:
+
+- [`problems/CATALOG.md`](./problems/CATALOG.md) — source of truth for the full catalog.
+- [`problems/CERTIFICATION-INDEX.md`](./problems/CERTIFICATION-INDEX.md) — maps labs to AWS certification domains.
+- [`docs/gallery.md`](./docs/gallery.md) — platform-side gallery and walkthrough notes.
+- [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — 30-minute authoring guide.
+
+## Create or update a problem
+
+Problem authoring happens in the catalog repo. A problem directory contains:
+
+```text
+metadata.json    # catalog display + scoring rule + portal slot wiring
+template.yaml    # CloudFormation deployed to the team's isolated AWS account
+portal/          # optional React components for the Participant Portal
+services/        # optional in-stack code or payloads
+```
+
+The platform repo still owns the scaffolding CLI because it depends on shared
+TypeScript packages:
+
+```bash
+bun run scripts/tenkacloud-problem.ts create my-first-challenge --kind flag
+bun run scripts/tenkacloud-problem.ts validate my-first-challenge
+```
+
+Move the generated problem into your local clone of
+[susumutomita/TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge),
+open a catalog PR, and then bump this repo's `problems/` submodule pointer after the
+catalog PR merges.
+
+## Architecture
+
+TenkaCloud has three planes:
+
+| Plane | What it owns |
+| --- | --- |
+| **Control Plane** | SaaS tenant onboarding, pooled / silo tenant routing, and SBT integration |
+| **Application Plane** | Tenant Admin Console, Participant Portal, Cognito, runtime config, and per-tenant app data |
+| **Problem Deploy Backend** | Cross-account problem deploy jobs, state machines, worker Lambdas, audit, and EventBridge reconciliation |
+
+![TenkaCloud Lite demo flow](./docs/assets/tenkacloud-lite-demo.svg)
+
+Start with these docs:
+
+- [`docs/architecture/OVERVIEW.md`](./docs/architecture/OVERVIEW.md) — end-to-end architecture narrative.
+- [`docs/architecture/MODULE_MAP.md`](./docs/architecture/MODULE_MAP.md) — directory and module map.
+- [`docs/architecture/GLOSSARY.md`](./docs/architecture/GLOSSARY.md) — terms with ADR back-links.
+- [`CONTRIBUTOR_MAP.md`](./CONTRIBUTOR_MAP.md) — "I want to do X" navigation.
+
+Key ADRs:
+
+- [ADR-012: Problem plugin architecture](./docs/architecture/adr-012-problem-plugin-architecture.html)
+- [ADR-016: TenkaCloud Lite mode](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html)
+- [ADR-017: Cloud Action Intent / Trust Bridge](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html)
+
+## Development commands
+
+| Command | Purpose |
+| --- | --- |
+| `make install` | Install Bun workspace dependencies with lifecycle scripts disabled, then bootstrap Husky |
+| `make build` | Build infrastructure, SPAs, and shared packages |
+| `make typecheck` | Run TypeScript type checks across workspaces |
+| `make test` | Run Vitest across workspaces |
+| `make validate-problems` | Validate the pinned catalog submodule |
+| `make harness` | Run architecture invariant checks |
+| `make before-commit` | Full local quality gate used before opening a PR |
+
+Toolchain source of truth is `mise.toml` and `package.json`: Bun 1.3.11,
+Node.js 24, AWS CDK 2, React 19, Vite 7, Hono on Lambda, DynamoDB, EventBridge,
+Step Functions, CloudFront, Cognito, Vitest, Biome, markdownlint, and textlint.
+
+## Self-hosting and operated options
+
+The platform is Apache-2.0 and can be self-hosted in your own AWS account. Optional
+commercial support is documented separately:
+
+- [`docs/commercial/PACKAGES.html`](./docs/commercial/PACKAGES.html) — packaged offerings.
+- [`docs/commercial/SALES-PLAYBOOK.html`](./docs/commercial/SALES-PLAYBOOK.html) — positioning, qualifying questions, and objections.
 
 ## Contributing
 
 Contributor path:
 
-- Read [CONTRIBUTING.md](./CONTRIBUTING.md).
-- Pick a starter task from [ROADMAP.md](./ROADMAP.md#good-first-issue-candidates).
-- Run `make before-commit` and `make harness` before opening a PR.
-
-AI agent guidelines: [AGENTS.md](./AGENTS.md) · [CLAUDE.md](./CLAUDE.md)
+1. Read [CONTRIBUTING.md](./CONTRIBUTING.md) and [AGENTS.md](./AGENTS.md).
+2. Use [CONTRIBUTOR_MAP.md](./CONTRIBUTOR_MAP.md) to find the right code area.
+3. Keep infrastructure / template changes separate from application-code changes.
+4. Run `make harness` and `make before-commit` before opening a PR.
 
 ## License
 
