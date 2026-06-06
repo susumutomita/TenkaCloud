@@ -102,6 +102,29 @@ When the deploy finishes you get:
 
 Teardown is a single command: `make destroy`.
 
+### Option C — deploy with only Docker (no bun/node on the host)
+
+On a machine where `bun` isn't installed (a fresh box, a CI runner, exe.dev), let Docker
+carry the toolchain. The only host dependency is Docker; the repo and your AWS
+credentials are mounted into a container that already has Bun, Node 24, and the AWS CLI.
+
+```bash
+git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+
+cp infrastructure/environments/development/.env.example \
+   infrastructure/environments/development/.env
+# edit AWS_ACCOUNT_ID and TENANT_ADMIN_EMAIL
+
+make deploy-docker     # builds the image (first run), installs deps, runs `make deploy`
+```
+
+AWS auth comes from your `~/.aws` (mounted read-only) or from `AWS_PROFILE` /
+`AWS_ACCESS_KEY_ID` etc. in your shell. Pick the environment with
+`make deploy-docker ENV=production`. Teardown is `make destroy-docker`, and
+`make docker-shell` drops you into the toolchain container. See
+[`docker-compose.yml`](./docker-compose.yml) and [`docker/Dockerfile`](./docker/Dockerfile).
+
 > [image needed: participant portal Quests page]
 > Place a screenshot at `docs/assets/screenshots/participant-portal-quests.png`
 > showing the deployed problem list with status badges and difficulty.

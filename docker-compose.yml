@@ -1,0 +1,44 @@
+# One-Docker-dependency deploy for TenkaCloud.
+#
+# A host with only Docker installed can deploy without bun / node / the AWS CLI:
+#
+#   make deploy-docker     # Lite mode (`make deploy`) inside the toolchain container
+#   make destroy-docker    # tear it down (`make destroy`)
+#   make docker-shell      # interactive shell in the toolchain image
+#
+# The repo is bind-mounted at /workspace; AWS credentials are bind-mounted read-only.
+# node_modules are kept on named volumes so the container always uses Linux-native
+# dependencies regardless of the host OS (and so repeat runs are fast).
+services:
+  tenkacloud:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: tenkacloud-deploy:local
+    working_dir: /workspace
+    # Forward Ctrl-C cleanly to a long-running cdk deploy.
+    init: true
+    volumes:
+      - .:/workspace
+      # Shadow host node_modules so macOS/Windows-built native binaries (esbuild etc.)
+      # never leak into the Linux container. Populated by the entrypoint on first run.
+      - tenkacloud-node-modules:/workspace/node_modules
+      - tenkacloud-infra-node-modules:/workspace/infrastructure/node_modules
+      # AWS credentials/config, read-only. Env-var credentials below also work.
+      - ${HOME}/.aws:/root/.aws:ro
+    environment:
+      # Host AWS auth — profile/region/keys win over the mounted files when set.
+      - AWS_PROFILE
+      - AWS_REGION
+      - AWS_DEFAULT_REGION
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - AWS_SESSION_TOKEN
+      # Target environment (development | staging | production). Defaults to development.
+      - ENV
+      # Quiet CDK/JSII deprecation noise the same way the Makefile does.
+      - JSII_DEPRECATED=quiet
+
+volumes:
+  tenkacloud-node-modules:
+  tenkacloud-infra-node-modules:
