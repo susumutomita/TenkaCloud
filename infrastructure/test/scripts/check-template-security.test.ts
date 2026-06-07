@@ -34,6 +34,10 @@ describe("check-template-security helpers (#869 + #1124)", () => {
         2,
       );
     });
+
+    it('should not flag Action: "*" on an explicit Deny statement (deny narrows access, never grants)', () => {
+      expect(findIamActionWildcardFindings(PATH, "loc", ["*"], "Deny")).toEqual([]);
+    });
   });
 
   describe("findIamResourceWildcardFindings", () => {
@@ -91,6 +95,43 @@ describe("check-template-security helpers (#869 + #1124)", () => {
           "cloudshell:StopEnvironment",
           "cloudshell:DeleteEnvironment",
           "cloudshell:PutCredentials",
+        ],
+      );
+      expect(findings).toEqual([]);
+    });
+
+    it('should not flag Resource: "*" on an explicit Deny statement (deny narrows access, never grants)', () => {
+      const findings = findIamResourceWildcardFindings(
+        PATH,
+        "loc",
+        ["*"],
+        ["ec2:DescribeInstanceAttribute"],
+        undefined,
+        "Deny",
+      );
+      expect(findings).toEqual([]);
+    });
+
+    it('should allow ec2:DescribeNetworkAcls on Resource: "*" (EC2 Describe* has no resource-level permissions)', () => {
+      const findings = findIamResourceWildcardFindings(
+        PATH,
+        "loc",
+        ["*"],
+        ["ec2:DescribeNetworkAcls", "ec2:DescribeInstances"],
+      );
+      expect(findings).toEqual([]);
+    });
+
+    it('should allow rds:Describe* console list verbs alongside elbv2 Describe* on Resource: "*"', () => {
+      const findings = findIamResourceWildcardFindings(
+        PATH,
+        "loc",
+        ["*"],
+        [
+          "elasticloadbalancing:DescribeLoadBalancers",
+          "elasticloadbalancing:DescribeTargetHealth",
+          "rds:DescribeDBClusters",
+          "rds:DescribeDBInstances",
         ],
       );
       expect(findings).toEqual([]);
