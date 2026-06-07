@@ -57,7 +57,7 @@
     "@cdklabs/sbt-aws": "0.3.9",
     "@smithy/protocol-http": "^5.3.14",
     "@smithy/signature-v4": "^5.4.3",
-    "@smithy/types": "^4.14.2",
+    "@smithy/types": "^4.14.3",
     "@tenkacloud/coordination-plugin-sdk": "workspace:*",
     "@tenkacloud/problem-runtime": "workspace:*",
     "@tenkacloud/saml-utils": "workspace:*",
