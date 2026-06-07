@@ -24,7 +24,7 @@
       "name": "@TenkaCloud/admin-console",
       "version": "0.1.0",
       "dependencies": {
-        "@cloudscape-design/components": "^3.0.1297",
+        "@cloudscape-design/components": "^3.0.1308",
         "@cloudscape-design/global-styles": "^1.0.59",
         "@tenkacloud/auth-client": "workspace:*",
         "@tenkacloud/format": "workspace:*",
@@ -51,7 +51,7 @@
       "name": "@TenkaCloud/application-admin-console",
       "version": "0.1.0",
       "dependencies": {
-        "@cloudscape-design/components": "^3.0.1297",
+        "@cloudscape-design/components": "^3.0.1308",
         "@cloudscape-design/global-styles": "^1.0.59",
         "@tenkacloud/auth-client": "workspace:*",
         "@tenkacloud/format": "workspace:*",
@@ -93,7 +93,7 @@
       "name": "@TenkaCloud/participant-portal",
       "version": "0.1.0",
       "dependencies": {
-        "@cloudscape-design/components": "^3.0.1297",
+        "@cloudscape-design/components": "^3.0.1308",
         "@cloudscape-design/global-styles": "^1.0.59",
         "@tenkacloud/format": "workspace:*",
         "@tenkacloud/portal-plugin-sdk": "workspace:*",
@@ -255,7 +255,7 @@
         "marked": "^18.0.3",
       },
       "devDependencies": {
-        "@cloudscape-design/components": "^3.0.1297",
+        "@cloudscape-design/components": "^3.0.1308",
         "@testing-library/jest-dom": "^6.9.1",
         "@testing-library/react": "^16.3.2",
         "@types/react": "^19.2.14",
@@ -268,7 +268,7 @@
         "vitest": "^4.1.6",
       },
       "peerDependencies": {
-        "@cloudscape-design/components": "^3.0.1297",
+        "@cloudscape-design/components": "^3.0.1308",
         "react": "^19.2.6",
       },
     },
@@ -454,7 +454,7 @@
 
     "@cloudscape-design/component-toolkit": ["@cloudscape-design/component-toolkit@1.0.0-beta.154", "", { "dependencies": { "tslib": "^2.3.1", "weekstart": "^2.0.0" }, "peerDependencies": { "react": ">=16.8.0" } }, "sha512-wGLG9MwPHAxyGMYFm6AncYJsYpNcezAbj9HJ63z5chW6FlTaQQOQrKs5TGd042wW4Sq/20HN+B3NSt7/tPYGxQ=="],
 
-    "@cloudscape-design/components": ["@cloudscape-design/components@3.0.1297", "", { "dependencies": { "@cloudscape-design/collection-hooks": "^1.0.0", "@cloudscape-design/component-toolkit": "^1.0.0-beta", "@cloudscape-design/test-utils-core": "^1.0.0", "@cloudscape-design/theming-runtime": "^1.0.0", "@dnd-kit/core": "^6.0.8", "@dnd-kit/sortable": "^7.0.2", "@dnd-kit/utilities": "^3.2.1", "ace-builds": "^1.34.0", "clsx": "^1.1.0", "d3-shape": "^1.3.7", "date-fns": "^2.25.0", "intl-messageformat": "^10.3.1", "mnth": "^2.0.0", "react-is": "^18.2.0", "react-transition-group": "^4.4.2", "tslib": "^2.4.0", "weekstart": "^1.1.0" }, "peerDependencies": { "react": ">=16.8.0" } }, "sha512-pL7A1JUc264Q/HRmMJB+nL5ro4mUFF21Xtro6VHRaPmzAwIJA+aUH3FTB33PVxush7bfX9/TfeOm4m/7WOZ84Q=="],
+    "@cloudscape-design/components": ["@cloudscape-design/components@3.0.1308", "", { "dependencies": { "@cloudscape-design/collection-hooks": "^1.0.0", "@cloudscape-design/component-toolkit": "^1.0.0-beta", "@cloudscape-design/test-utils-core": "^1.0.0", "@cloudscape-design/theming-runtime": "^1.0.0", "@dnd-kit/core": "^6.0.8", "@dnd-kit/sortable": "^7.0.2", "@dnd-kit/utilities": "^3.2.1", "ace-builds": "^1.34.0", "clsx": "^1.1.0", "d3-shape": "^1.3.7", "date-fns": "^2.25.0", "intl-messageformat": "^10.3.1", "mnth": "^2.0.0", "react-is": "^18.2.0", "react-transition-group": "^4.4.2", "tslib": "^2.4.0", "weekstart": "^1.1.0" }, "peerDependencies": { "react": ">=16.8.0" } }, "sha512-iyVokihHUzg/EGzPheNBODQ7ewmRcqEok1Zleu2nvECd1d4bcUbsaDpERSgtYDXoQDx4eEpndcxMLqJQPb7xqQ=="],
 
     "@cloudscape-design/global-styles": ["@cloudscape-design/global-styles@1.0.59", "", {}, "sha512-no87kLqFUMLOrKWUKm+NU8mm5cSokJCl302TOb/BNvbq8iL8ltHZAsUApRAnrH4H6wkIhw7Y5RYNxzRsehRhQA=="],
 
