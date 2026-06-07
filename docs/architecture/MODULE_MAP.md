@@ -156,7 +156,7 @@ To bump the submodule pointer: `git submodule update --remote problems && git ad
 | `infrastructure/package.json`       | CDK deps + per-stack vitest cases.                                                                  |
 | `apps/*/package.json`               | Per-app Vite + React deps + per-app vitest.                                                         |
 | `.github/workflows/ci.yml`          | PR-time gate: install_ci + audit-deps + lint_text + format_check + typecheck + test-coverage + build. |
-| `.claude/harness/`                  | Architecture invariant harness + tech-debt scanner. Source rules: `src/architecture.ts`, `src/tech-debt.ts`. |
+| `.claude/harness/`                  | Architecture invariant harness + tech-debt scanner. Entry points: `bin/architecture.ts`, `bin/tech-debt.ts`; rules one-per-file under `src/rules/` + `src/tech-debt/`. |
 | `biome.json`                        | Lint / format config. `files.includes` excludes the `problems/` submodule.                          |
 | `.textlintignore`                   | Excludes vendor docs + the `problems/` submodule from Japanese style linting.                       |
 
