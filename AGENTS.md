@@ -34,7 +34,7 @@ make before-commit   # lint (markdownlint + textlint + biome) / typecheck / test
 
 If something fails, fix the code. Don't paper over it by editing config files (`biome.json`, `vitest.config.ts`, `tsconfig.json`).
 
-If `make harness` fails, cross-reference the invariant ID with `docs/architecture/harness.md`. The harness's own unit tests are `make harness-test`, and the rule logic lives in `.claude/harness/src/architecture.ts` and `tech-debt.ts`.
+If `make harness` fails, cross-reference the invariant ID with `docs/architecture/harness.md`. The harness's own unit tests are `make harness-test`; the entry points are `.claude/harness/bin/architecture.ts` / `bin/tech-debt.ts`, and the rule logic lives one-rule-per-file under `.claude/harness/src/rules/` and `.claude/harness/src/tech-debt/`.
 
 CI (`.github/workflows/ci.yml`) runs `make install_ci` → textlint → format check → typecheck → test → build. If `make before-commit` passes locally, CI passes — that's the contract.
 

@@ -42,7 +42,7 @@ Two problem styles share the same runtime:
 
 | Style | Use it for | Scoring model |
 | --- | --- | --- |
-| **Challenge** | Self-paced AWS tasks and certification-style labs | Flag / answer submission |
+| **Challenge** | Self-paced AWS tasks and service-specific labs | Flag / answer submission |
 | **Battle** | Real-time operations drills | Health probes, phased polling, attack detection, or other catalog-declared scoring |
 
 ## Quickstart
@@ -164,18 +164,22 @@ Problems live in the separate catalog repo
 This platform repo mounts it as the `problems/` git submodule; `make deploy` ships the
 catalog version pinned by that submodule.
 
-The current pinned catalog contains **112 public problems**:
+The pinned catalog is a small, deliberately curated starter set — **6 problems plus
+one event bundle**. It is trimmed to high-quality, hand-reviewed scenarios rather than
+padded with low-value labs:
 
 | Category | Count | Notes |
 | --- | ---: | --- |
-| Challenge | 108 | AWS certification-style and service-specific tasks, all scored with catalog-declared flags / answers |
-| Battle | 4 | Real-time operations drills for uptime, migration, attack response, and production hardening |
-| Bundles | 1 | `starter-event`, a first-event bundle for new organizers |
+| Battle | 4 | Real-time operations drills: uptime, microservice migration, security defense, and platform operations |
+| Challenge | 2 | Self-paced AWS tasks scored with catalog-declared flags / answers (1 ready, 1 draft) |
+| Bundles | 1 | `starter-event`, a 60–90 minute first-event bundle (1 Challenge + 2 Battles) |
+
+`problems/CATALOG.md` in the catalog submodule is the always-current source of truth;
+the counts above track the submodule pin recorded in this repo.
 
 Useful catalog entry points:
 
 - [`problems/CATALOG.md`](./problems/CATALOG.md) — source of truth for the full catalog.
-- [`problems/CERTIFICATION-INDEX.md`](./problems/CERTIFICATION-INDEX.md) — maps labs to AWS certification domains.
 - [`docs/gallery.md`](./docs/gallery.md) — platform-side gallery and walkthrough notes.
 - [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — 30-minute authoring guide.
 
