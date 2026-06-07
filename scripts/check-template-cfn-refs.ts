@@ -23,12 +23,15 @@
  * 任せる。
  */
 
-import { readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
-const PROBLEMS_DIR = join(REPO_ROOT, "problems");
+const DEFAULT_PROBLEMS_DIR = join(REPO_ROOT, "problems");
+const PROBLEMS_DIR = process.env.PROBLEMS_DIR
+  ? resolve(process.env.PROBLEMS_DIR)
+  : DEFAULT_PROBLEMS_DIR;
 
 interface Finding {
   readonly templatePath: string;
@@ -239,7 +242,7 @@ function checkUnresolvedGetAttResources(
 }
 
 export type { Finding };
-export { collectGetAttResources, collectRefs, collectSubRefs, parseSections };
+export { collectGetAttResources, collectRefs, collectSubRefs, findTemplates, parseSections };
 
 export function checkTemplate(templatePath: string): Finding[] {
   const yaml = readFileSync(templatePath, "utf8");
@@ -262,22 +265,21 @@ export function checkTemplate(templatePath: string): Finding[] {
   ];
 }
 
-function findTemplates(): string[] {
+function findTemplates(problemsDir: string = PROBLEMS_DIR): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
-    const { readdirSync, statSync } = require("node:fs") as typeof import("node:fs");
     for (const entry of readdirSync(dir)) {
       const full = join(dir, entry);
       if (statSync(full).isDirectory()) walk(full);
       else if (entry === "template.yaml" || entry === "template.yml") out.push(full);
     }
   };
-  walk(PROBLEMS_DIR);
+  walk(problemsDir);
   return out;
 }
 
 function main(): void {
-  const templates = findTemplates();
+  const templates = findTemplates(PROBLEMS_DIR);
   if (templates.length === 0) {
     console.log("No template.yaml found under problems/.");
     return;
