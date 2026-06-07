@@ -52,7 +52,7 @@
     "@aws-sdk/client-codebuild": "^3.1048.0",
     "@aws-sdk/client-codepipeline": "^3.1048.0",
     "@aws-sdk/client-scheduler": "^3.1048.0",
-    "@aws-sdk/client-sfn": "^3.1048.0",
+    "@aws-sdk/client-sfn": "^3.1063.0",
     "@aws-sdk/credential-provider-node": "^3.972.42",
     "@cdklabs/sbt-aws": "0.3.9",
     "@smithy/protocol-http": "^5.3.14",
