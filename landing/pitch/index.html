@@ -3,329 +3,829 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TenkaCloud — AI 時代の GameDay を作る競技基盤 / StackStack ピッチ</title>
-<meta name="description" content="TenkaCloud は本物の AWS でクラウド演習を回す OSS 競技基盤。旗艦シナリオ StackStack は『AI で作れるが認証・セキュリティで公開できない』ラストワンマイルをゲーム化する。" />
+<title>TenkaCloud — クラウドエンジニアの天下一武道会を開催したい</title>
+<meta name="description" content="TenkaCloud の 10 分ピッチデッキ。" />
 <style>
   :root {
-    --ink:#07111f; --ink-2:#263241; --ink-3:#5d6877; --ink-4:#8a94a3;
-    --blue:#0969da; --green:#008a55; --amber:#9a6700; --red:#cf222e;
-    --line:#d9dee8; --line-soft:#edf0f5;
-    --paper:#ffffff; --paper-2:#fbfcfe; --paper-3:#f5f7fb; --dark:#07111f;
-    --font-sans:"Inter","Hiragino Sans","Noto Sans JP","Yu Gothic UI",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
-    --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
-    --w:1080px;
+    --navy:#071b3a;
+    --ink:#17283e;
+    --muted:#647386;
+    --blue:#1759a8;
+    --blue-2:#75a7d7;
+    --green:#1f8a5b;
+    --amber:#b97818;
+    --red:#c2474d;
+    --line:#d2deea;
+    --line-strong:#a9c0d7;
+    --paper:#fff;
+    --sans:"Inter","Hiragino Sans","Noto Sans JP","Yu Gothic UI",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   }
+
   * { box-sizing:border-box; }
   html { scroll-behavior:smooth; }
   body {
-    margin:0; color:var(--ink); background:var(--paper);
-    font-family:var(--font-sans); line-height:1.6;
-    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    margin:0;
+    background:#e8eef5;
+    color:var(--ink);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
   }
-  /* deck = vertical scroll-snap of full-height slides */
-  .deck { scroll-snap-type:y mandatory; height:100vh; overflow-y:scroll; }
+  h1,h2,h3,p { margin:0; }
+
+  .deck {
+    height:100vh;
+    overflow-y:scroll;
+    scroll-snap-type:y mandatory;
+  }
+
   .slide {
-    scroll-snap-align:start; min-height:100vh; width:100%;
-    display:flex; flex-direction:column; justify-content:center;
-    padding:6vh 7vw; position:relative;
-    border-bottom:1px solid var(--line-soft);
+    min-height:100vh;
+    display:grid;
+    place-items:center;
+    padding:22px;
+    scroll-snap-align:start;
   }
-  .slide .inner { max-width:var(--w); margin:0 auto; width:100%; }
-  .kicker { font-family:var(--font-mono); font-size:.8rem; letter-spacing:.08em;
-            text-transform:uppercase; color:var(--blue); margin:0 0 .9rem; font-weight:600; }
-  h1 { font-size:clamp(2.1rem,5vw,3.4rem); line-height:1.15; margin:.2rem 0 1rem; letter-spacing:-.01em; }
-  h2 { font-size:clamp(1.5rem,3.4vw,2.3rem); line-height:1.2; margin:.2rem 0 1.4rem; letter-spacing:-.01em; }
-  h3 { font-size:1.05rem; margin:1.4rem 0 .5rem; color:var(--ink-2); }
-  p { margin:.5rem 0; color:var(--ink-2); font-size:clamp(1rem,1.6vw,1.18rem); }
-  .lead { font-size:clamp(1.15rem,2.2vw,1.5rem); color:var(--ink); }
-  .muted { color:var(--ink-3); }
-  .mono { font-family:var(--font-mono); }
-  .accent { color:var(--blue); }
-  .ok { color:var(--green); }
-  strong { color:var(--ink); }
-  a { color:var(--blue); text-decoration:none; border-bottom:1px solid rgba(9,105,218,.3); }
 
-  /* title slide */
-  .title { background:
-      radial-gradient(circle at 18% 12%, rgba(9,105,218,.10), rgba(255,255,255,0) 46%),
-      radial-gradient(circle at 86% 88%, rgba(0,138,85,.10), rgba(255,255,255,0) 46%),
-      var(--paper); }
-  .wordmark { display:inline-flex; align-items:center; gap:.6rem; font-weight:800;
-              font-size:1.3rem; letter-spacing:-.02em; }
-  .wordmark .dot { width:.85rem; height:.85rem; border-radius:3px;
-                   background:linear-gradient(135deg,var(--blue),var(--green)); display:inline-block; }
-  .title-sub { font-size:clamp(1.1rem,2vw,1.45rem); color:var(--ink-2); margin-top:1.2rem; max-width:760px; }
-  .meta-row { margin-top:2.4rem; display:flex; flex-wrap:wrap; gap:.6rem 1.4rem;
-              font-family:var(--font-mono); font-size:.92rem; color:var(--ink-3); }
-  .meta-row b { color:var(--ink-2); font-weight:600; }
+  .canvas {
+    position:relative;
+    width:min(96vw,1180px);
+    aspect-ratio:16 / 9;
+    overflow:hidden;
+    padding:34px 42px 32px;
+    background:
+      linear-gradient(180deg,rgba(255,255,255,.98),rgba(248,251,255,.98)),
+      linear-gradient(90deg,rgba(23,89,168,.035) 1px,transparent 1px),
+      linear-gradient(0deg,rgba(23,89,168,.035) 1px,transparent 1px);
+    background-size:auto,56px 56px,56px 56px;
+    border:1px solid #cfdeed;
+    box-shadow:0 22px 64px rgba(7,27,58,.14);
+  }
 
-  /* tags */
-  .tag { display:inline-block; padding:2px 9px; border-radius:999px; font-size:.74rem;
-         font-weight:700; font-family:var(--font-mono); line-height:1.5; white-space:nowrap; vertical-align:middle; }
-  .tag.proven { background:#ddf4e0; color:var(--green); }
-  .tag.wip    { background:#fff8c5; color:var(--amber); }
-  .tag.idea   { background:#eef1f5; color:var(--ink-3); }
+  .canvas::before {
+    content:"";
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    background:
+      linear-gradient(90deg,rgba(255,255,255,.92) 0 42%,rgba(255,255,255,.64) 72%,rgba(255,255,255,.35)),
+      linear-gradient(180deg,rgba(255,255,255,.42),rgba(255,255,255,0));
+  }
+  .canvas > * { position:relative; z-index:1; }
 
-  /* grids & cards */
-  .grid { display:grid; gap:1rem; margin-top:1.3rem; }
-  .g2 { grid-template-columns:repeat(2,1fr); }
-  .g3 { grid-template-columns:repeat(3,1fr); }
-  .card { background:var(--paper-3); border:1px solid var(--line); border-radius:12px;
-          padding:1.1rem 1.2rem; }
-  .card h3 { margin:.1rem 0 .35rem; font-size:1rem; color:var(--ink); }
-  .card p { font-size:.96rem; margin:.2rem 0; color:var(--ink-3); }
-  .stat { font-family:var(--font-mono); font-size:2.2rem; font-weight:700; color:var(--blue); line-height:1; }
-  .stat.green { color:var(--green); }
+  .progress {
+    position:fixed;
+    top:0;
+    left:0;
+    z-index:20;
+    width:0;
+    height:4px;
+    background:linear-gradient(90deg,var(--blue),var(--green));
+    transition:width .18s ease;
+  }
 
-  /* tables */
-  table { border-collapse:collapse; width:100%; margin-top:1.2rem; font-size:.95rem; }
-  th,td { border:1px solid var(--line); padding:8px 11px; text-align:left; vertical-align:top; }
-  th { background:var(--paper-3); font-weight:700; color:var(--ink-2); }
-  td.mono, th.mono { font-family:var(--font-mono); font-size:.88rem; }
+  .counter {
+    position:fixed;
+    right:16px;
+    bottom:14px;
+    z-index:20;
+    padding:4px 11px;
+    border:1px solid var(--line);
+    border-radius:999px;
+    background:rgba(255,255,255,.9);
+    color:#617188;
+    font-family:var(--mono);
+    font-size:12px;
+    backdrop-filter:blur(5px);
+  }
 
-  /* flow / arrows */
-  .flow { display:flex; flex-wrap:wrap; align-items:stretch; gap:.6rem; margin-top:1.3rem; }
-  .flow .step { background:var(--paper-3); border:1px solid var(--line); border-radius:10px;
-                padding:.7rem .9rem; font-size:.92rem; flex:1 1 140px; }
-  .flow .step b { display:block; color:var(--ink); font-size:.96rem; margin-bottom:.15rem; }
-  .arrow { color:var(--ink-4); align-self:center; font-family:var(--font-mono); }
+  .topbar {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:18px;
+    min-height:34px;
+  }
 
-  ul.clean { margin:.8rem 0 0; padding-left:1.2rem; }
-  ul.clean li { margin:.45rem 0; color:var(--ink-2); font-size:clamp(1rem,1.5vw,1.14rem); }
-  .pill { display:inline-block; font-family:var(--font-mono); font-size:.82rem; background:var(--paper-3);
-          border:1px solid var(--line); border-radius:6px; padding:1px 7px; color:var(--ink-2); }
+  .section-label {
+    display:flex;
+    align-items:center;
+    gap:12px;
+    color:var(--blue);
+    font-size:15px;
+    font-weight:850;
+  }
 
-  .quote { border-left:4px solid var(--blue); background:var(--paper-3); padding:.9rem 1.2rem;
-           border-radius:0 8px 8px 0; font-size:clamp(1.05rem,1.8vw,1.3rem); color:var(--ink); margin-top:1.2rem; }
+  .badge {
+    display:grid;
+    place-items:center;
+    width:42px;
+    height:28px;
+    border-radius:6px;
+    background:#1759a8;
+    color:#fff;
+    font-family:var(--mono);
+    font-size:15px;
+    font-weight:900;
+    line-height:1;
+  }
 
-  /* fixed UI: progress + counter + hint */
-  .progress { position:fixed; top:0; left:0; height:3px; background:linear-gradient(90deg,var(--blue),var(--green));
-              width:0; z-index:100; transition:width .2s ease; }
-  .counter { position:fixed; bottom:14px; right:18px; z-index:100; font-family:var(--font-mono);
-             font-size:.8rem; color:var(--ink-3); background:rgba(255,255,255,.8);
-             border:1px solid var(--line); border-radius:999px; padding:3px 10px; backdrop-filter:blur(4px); }
-  .hint { position:fixed; bottom:14px; left:18px; z-index:100; font-family:var(--font-mono);
-          font-size:.74rem; color:var(--ink-4); }
-  .slide-no { position:absolute; top:5vh; right:7vw; font-family:var(--font-mono); font-size:.8rem; color:var(--ink-4); }
+  .wordmark {
+    display:flex;
+    align-items:center;
+    gap:9px;
+    color:var(--navy);
+    font-size:20px;
+    font-weight:900;
+    white-space:nowrap;
+  }
 
-  @media (max-width:720px){ .g2,.g3{grid-template-columns:1fr;} .slide{padding:7vh 8vw;} }
+  .wordmark img {
+    width:28px;
+    height:28px;
+    display:block;
+  }
 
-  /* print → 1 slide per page (Cmd-P で配布用 PDF) */
+  h1 {
+    color:var(--navy);
+    font-size:50px;
+    line-height:1.14;
+    letter-spacing:0;
+    font-weight:920;
+  }
+
+  h2 {
+    color:var(--navy);
+    font-size:35px;
+    line-height:1.23;
+    letter-spacing:0;
+    font-weight:900;
+  }
+
+  h3 {
+    color:var(--navy);
+    font-size:18px;
+    line-height:1.34;
+    font-weight:850;
+  }
+
+  p {
+    color:var(--ink);
+    font-size:16px;
+    line-height:1.48;
+  }
+
+  .lead {
+    color:var(--navy);
+    font-size:20px;
+    line-height:1.48;
+    font-weight:760;
+  }
+
+  .mono { font-family:var(--mono); }
+  .card {
+    background:rgba(255,255,255,.9);
+    border:1px solid var(--line);
+    border-radius:8px;
+    box-shadow:0 1px 0 rgba(255,255,255,.8) inset;
+  }
+
+  .story-slide {
+    height:100%;
+    display:grid;
+    grid-template-rows:auto auto 1fr auto;
+    gap:14px;
+  }
+  .origin-story {
+    grid-template-rows:auto auto auto auto;
+    align-content:start;
+    gap:12px;
+  }
+  .origin-story h2 {
+    line-height:1.18;
+  }
+
+  .hero {
+    height:100%;
+    display:grid;
+    grid-template-rows:auto 1fr auto;
+    gap:18px;
+  }
+
+  .hero-grid {
+    display:grid;
+    grid-template-columns:1fr .96fr;
+    gap:28px;
+    align-items:center;
+  }
+
+  .hero-copy {
+    display:grid;
+    gap:16px;
+  }
+
+  .hero-kicker {
+    width:max-content;
+    padding:5px 10px;
+    border:1px solid #b8d0e8;
+    border-radius:999px;
+    background:#f5fbff;
+    color:var(--blue);
+    font-family:var(--mono);
+    font-size:13px;
+    font-weight:900;
+  }
+
+  .cloud-line {
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+
+  .cloud-chip {
+    padding:6px 9px;
+    border:1px solid #c8d9e9;
+    border-radius:7px;
+    background:#fff;
+    color:var(--navy);
+    font-family:var(--mono);
+    font-size:12px;
+    font-weight:900;
+  }
+
+  .hero-steps {
+    padding:16px;
+    display:grid;
+    gap:9px;
+  }
+
+  .hero-steps-title,
+  .kind {
+    color:var(--blue);
+    font-family:var(--mono);
+    font-size:13px;
+    font-weight:900;
+  }
+
+  .step-row {
+    display:grid;
+    grid-template-columns:44px 1fr;
+    gap:14px;
+    align-items:start;
+    padding:12px 14px;
+    border-bottom:1px solid #e8eef6;
+  }
+  .step-row:last-child { border-bottom:0; }
+  .step-no {
+    display:grid;
+    place-items:center;
+    width:36px;
+    height:36px;
+    border-radius:50%;
+    background:#eef6ff;
+    border:1px solid #b9d2ec;
+    color:var(--blue);
+    font-family:var(--mono);
+    font-size:14px;
+    font-weight:900;
+  }
+  .step-row p {
+    margin-top:2px;
+    color:var(--muted);
+    font-size:14px;
+    font-weight:700;
+  }
+
+  .bottom-line {
+    padding:12px 16px;
+    border:1px solid var(--line-strong);
+    border-left:8px solid var(--blue-2);
+    border-radius:8px;
+    background:rgba(247,251,255,.92);
+    color:var(--navy);
+    font-size:19px;
+    font-weight:850;
+  }
+
+  .risk-board {
+    display:grid;
+    grid-template-columns:1.08fr .92fr;
+    gap:18px;
+    align-items:stretch;
+  }
+
+  .quote-card {
+    padding:22px;
+    display:grid;
+    align-content:center;
+    gap:18px;
+    border-left:8px solid var(--blue);
+  }
+  .quote-card p {
+    color:var(--navy);
+    font-size:25px;
+    line-height:1.38;
+    font-weight:850;
+  }
+  .origin-story .quote-card p {
+    font-size:24px;
+  }
+  .small-note {
+    color:var(--muted);
+    font-family:var(--mono);
+    font-size:13px;
+    font-weight:700;
+  }
+
+  .risk-list {
+    display:grid;
+    gap:8px;
+  }
+  .risk-item {
+    display:grid;
+    grid-template-columns:96px 1fr;
+    gap:12px;
+    align-items:center;
+    padding:10px 12px;
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:8px;
+  }
+  .risk-item b {
+    color:var(--blue);
+    font-family:var(--mono);
+    font-size:13px;
+  }
+  .risk-item span {
+    color:var(--ink);
+    font-size:14px;
+    font-weight:740;
+    line-height:1.32;
+  }
+  .origin-story .risk-item {
+    padding:9px 12px;
+  }
+  .origin-story .bottom-line {
+    font-size:18px;
+    padding:11px 16px;
+  }
+
+  .three-grid {
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:14px;
+  }
+  .info-card {
+    min-height:154px;
+    padding:17px;
+    display:grid;
+    gap:10px;
+    align-content:start;
+  }
+  .info-card p {
+    font-size:14px;
+    font-weight:700;
+  }
+
+  .room {
+    display:grid;
+    place-items:center;
+    min-height:88px;
+    border:1px solid var(--line-strong);
+    border-radius:8px;
+    background:#f7fbff;
+    color:var(--navy);
+    font-size:24px;
+    line-height:1.35;
+    text-align:center;
+    font-weight:900;
+  }
+
+  .host-slide {
+    height:100%;
+    display:grid;
+    grid-template-rows:auto auto auto 1fr auto;
+    gap:14px;
+  }
+  .host-slide h2 {
+    font-size:42px;
+    line-height:1.14;
+  }
+  .host-lead {
+    color:var(--navy);
+    font-size:22px;
+    line-height:1.4;
+    font-weight:850;
+  }
+  .host-lead strong {
+    color:var(--blue);
+    font-weight:900;
+  }
+  .mode-grid {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:0;
+    border:1px solid var(--line-strong);
+    border-radius:8px;
+    background:#fff;
+    overflow:hidden;
+  }
+  .mode-card {
+    min-height:142px;
+    padding:20px;
+    display:grid;
+    grid-template-columns:64px 1fr;
+    gap:16px;
+    align-items:start;
+  }
+  .mode-card + .mode-card {
+    border-left:1px solid var(--line-strong);
+  }
+  .mode-icon {
+    display:grid;
+    place-items:center;
+    width:54px;
+    height:54px;
+    border:2px solid #b6cbe5;
+    border-radius:16px;
+    background:#f7fbff;
+    color:var(--blue);
+    font-size:28px;
+    line-height:1;
+  }
+  .mode-card h3 {
+    font-size:25px;
+    margin-bottom:6px;
+  }
+  .mode-card p {
+    color:var(--ink);
+    font-size:17px;
+    line-height:1.46;
+    font-weight:780;
+  }
+  .plugin-box {
+    display:grid;
+    place-items:center;
+    min-height:104px;
+    padding:16px 20px;
+    border:1px solid #e2c45f;
+    border-radius:8px;
+    background:#fff9dc;
+    text-align:center;
+  }
+  .plugin-box h3 {
+    font-size:22px;
+    margin-bottom:6px;
+  }
+  .plugin-box p {
+    color:var(--ink);
+    font-size:16px;
+    line-height:1.45;
+    font-weight:760;
+  }
+  .plugin-box code {
+    font-family:var(--mono);
+    font-size:.92em;
+  }
+
+  .scenario {
+    height:100%;
+    display:grid;
+    grid-template-rows:auto 1fr auto;
+    gap:20px;
+  }
+  .scenario-grid {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:22px;
+    align-items:center;
+  }
+  .scenario-copy {
+    display:grid;
+    gap:18px;
+  }
+  .deadline {
+    width:max-content;
+    padding:9px 12px;
+    border:1px solid #a9c7e7;
+    border-radius:8px;
+    background:#f7fbff;
+    color:var(--blue);
+    font-family:var(--mono);
+    font-size:18px;
+    font-weight:900;
+  }
+  .slot-table {
+    padding:14px;
+    display:grid;
+    gap:8px;
+  }
+  .slot-row {
+    display:grid;
+    grid-template-columns:78px 1fr auto;
+    gap:10px;
+    align-items:center;
+    padding:10px 12px;
+    border-bottom:1px solid #e6edf5;
+  }
+  .slot-row:last-child { border-bottom:0; }
+  .slot-row b {
+    color:var(--blue);
+    font-family:var(--mono);
+    font-size:13px;
+  }
+  .slot-row span {
+    color:var(--ink);
+    font-size:14px;
+    font-weight:720;
+  }
+  .slot-row strong {
+    color:var(--green);
+    font-family:var(--mono);
+    font-size:13px;
+  }
+
+  .team-grid {
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:14px;
+    align-items:stretch;
+  }
+  .member-card {
+    min-height:210px;
+    padding:19px;
+    display:grid;
+    gap:10px;
+    align-content:start;
+  }
+  .member-mark {
+    display:grid;
+    place-items:center;
+    width:52px;
+    height:52px;
+    border-radius:12px;
+    background:linear-gradient(135deg,var(--blue),var(--green));
+    color:#fff;
+    font-size:24px;
+    font-weight:900;
+    line-height:1;
+  }
+  .member-card p {
+    font-size:14px;
+    font-weight:720;
+  }
+
+  @media (max-width:1040px) {
+    .canvas { padding:30px 34px 28px; }
+    h1 { font-size:42px; }
+    h2 { font-size:31px; }
+    .lead { font-size:18px; }
+    .quote-card p { font-size:22px; }
+  }
+
+  @media (max-width:760px) {
+    .slide { padding:10px; }
+    .canvas {
+      width:calc(100vw - 20px);
+      min-height:calc(100vh - 20px);
+      height:auto;
+      aspect-ratio:auto;
+      overflow:visible;
+      padding:18px;
+    }
+    h1 { font-size:32px; }
+    h2 { font-size:25px; }
+    p,.lead { font-size:15px; }
+    .hero-grid,
+    .risk-board,
+    .three-grid,
+    .scenario-grid,
+    .team-grid {
+      grid-template-columns:1fr;
+    }
+    .story-slide,
+    .hero,
+    .scenario {
+      height:auto;
+    }
+    .room { font-size:21px; }
+  }
+
   @media print {
-    .deck{height:auto;overflow:visible;}
-    .slide{min-height:auto;page-break-after:always;border:none;padding:7mm 12mm;}
-    .progress,.counter,.hint{display:none;}
-    body{font-size:11pt;}
+    body { background:#fff; }
+    .deck { height:auto; overflow:visible; }
+    .slide {
+      height:100vh;
+      min-height:auto;
+      padding:0;
+      page-break-after:always;
+      break-after:page;
+    }
+    .canvas {
+      width:100vw;
+      height:100vh;
+      border:0;
+      box-shadow:none;
+    }
+    .progress,.counter { display:none; }
   }
 </style>
 </head>
 <body>
 <div class="progress" id="progress"></div>
-<div class="counter" id="counter">1</div>
-<div class="hint">↓ / → / Space</div>
+<div class="counter" id="counter">1 / 7</div>
 
-<div class="deck" id="deck">
-
-  <!-- 1. TITLE -->
-  <section class="slide title">
-    <div class="inner">
-      <span class="wordmark"><span class="dot"></span>TenkaCloud</span>
-      <h1>AI 時代の GameDay を、<br>誰でも作れる競技基盤。</h1>
-      <p class="title-sub">本物の AWS でクラウド演習を回す OSS プラットフォーム。<br>
-        旗艦シナリオ <strong>StackStack</strong> — 「AI で作れる。でも“公開”できない」 ラストワンマイルをゲームにする。</p>
-      <div class="meta-row">
-        <span><b>SS BootCamp #4</b> Kickoff</span>
-        <span>2026-06-14 (日)</span>
-        <span>冨田 進</span>
-        <span class="mono">github.com/susumutomita/TenkaCloud</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- 2. PROBLEM -->
+<main class="deck" id="deck">
   <section class="slide">
-    <span class="slide-no">02</span>
-    <div class="inner">
-      <p class="kicker">Vibe Coding 時代の壁</p>
-      <h2>AI で“動くもの”はもう作れる。<br>詰まるのは、その先だ。</h2>
-      <p class="lead">Claude でアプリは 1 時間で立つ。だが本番に出す瞬間、全員が同じ壁にぶつかる:</p>
-      <div class="grid g3">
-        <div class="card"><h3>🔐 認証 / 認可</h3><p>とりあえず Basic 認証。SSO も権限分離も後回しのまま公開できない。</p></div>
-        <div class="card"><h3>🛡️ セキュリティ</h3><p>公開 S3、ワイルドカード IAM、秘密鍵の commit、レート制限なし。</p></div>
-        <div class="card"><h3>📊 運用 / 監査</h3><p>ログは標準出力だけ。落ちても気づけない。監査に出せない。</p></div>
-      </div>
-      <div class="quote">「AI が書く速さに、<strong>“安全に公開する”側</strong>が追いつけていない。」<br>
-        <span class="muted" style="font-size:.9rem">— これは個人開発者も、社内 Platform チームも、まったく同じ構図。</span></div>
-    </div>
-  </section>
-
-  <!-- 3. WHAT IS TENKACLOUD -->
-  <section class="slide">
-    <span class="slide-no">03</span>
-    <div class="inner">
-      <p class="kicker">TenkaCloud とは</p>
-      <h2>その壁の越え方を、<br>採点付きの演習にする OSS。</h2>
-      <p class="lead">スライドでも野放しのサンドボックスでもない。<strong>本物の AWS に問題を deploy し、毎分採点し、順位を出す。</strong></p>
-      <div class="grid g2">
-        <div class="card"><h3>⚔️ Battle</h3><p>リアルタイム対戦。ヘルスプローブが全チームを毎分叩く。生き残った Platform チームが勝つ。</p></div>
-        <div class="card"><h3>🎯 Challenge</h3><p>自分のペースで 1 サービスずつ深掘り。flag 提出で採点。</p></div>
-      </div>
-      <h3 style="margin-top:1.6rem">moat = 問題はプラグイン</h3>
-      <p>1 問題 = <span class="pill">metadata.json</span> + <span class="pill">template.yaml</span>（CFn ペライチ）+ 任意の portal 部品。
-        platform は host、問題は plugin（ADR-012）。<strong>一度書いた問題は、再利用できる資産になり、コミュニティで育つ。</strong></p>
-    </div>
-  </section>
-
-  <!-- 4. HOW IT WORKS -->
-  <section class="slide">
-    <span class="slide-no">04</span>
-    <div class="inner">
-      <p class="kicker">仕組み — 90 秒で</p>
-      <h2>各チームの AWS に隔離 deploy → 毎分採点 → 順位</h2>
-      <div class="flow">
-        <div class="step"><b>① 主催者</b>問題を選び deploy</div>
-        <span class="arrow">→</span>
-        <div class="step"><b>② 隔離環境</b>各チームの AWS に CFn（AssumeRole + ExternalId）</div>
-        <span class="arrow">→</span>
-        <div class="step"><b>③ 採点エンジン</b>毎分エンドポイントを probe</div>
-        <span class="arrow">→</span>
-        <div class="step"><b>④ Portal</b>スコア履歴・leaderboard をリアルタイム表示</div>
-      </div>
-      <div class="grid g3" style="margin-top:1.8rem">
-        <div class="card"><div class="stat green">~10–30<span style="font-size:1rem"> 分</span></div><p>Lite モードで 1 主催者 / 1 イベントが立つまで</p></div>
-        <div class="card"><div class="stat">クロスアカウント</div><p>チーム間は IAM とスタック分離で完全隔離。他チームのリソースは触れない</p></div>
-        <div class="card"><div class="stat">$0 〜</div><p>自分の AWS で self-host。SaaS 費用も席課金もデータ流出もなし</p></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 5. STACKSTACK -->
-  <section class="slide">
-    <span class="slide-no">05</span>
-    <div class="inner">
-      <p class="kicker">旗艦シナリオ — BootCamp で検証する本体</p>
-      <h2>StackStack — AI → Production ラストワンマイル</h2>
-      <p class="lead">あなたは Platform チーム。AI Builder 100 人が量産したアプリが、5 つの統制軸すべて未整備・EC2 1 台同居で積まれている。
-        <strong>90–120 分で“公開していい状態”に持っていけ。</strong></p>
-      <table>
-        <thead><tr><th class="mono">slot</th><th>統制軸</th><th>初期（EC2）</th><th>hardened（managed）</th></tr></thead>
-        <tbody>
-          <tr><td class="mono">auth</td><td>認証 / 認可</td><td>naive Basic 認証</td><td>Cognito / SSO</td></tr>
-          <tr><td class="mono">network</td><td>S3 / WAF / IAM</td><td>公開 S3 + ワイルドカード IAM</td><td>OAC + 絞った IAM</td></tr>
-          <tr><td class="mono">rate</td><td>レート制限 / DoS</td><td>無制限 Flask</td><td>API GW throttle</td></tr>
-          <tr><td class="mono">audit</td><td>ログ / 監査</td><td>標準出力のみ</td><td>CloudTrail + Athena + WORM</td></tr>
-          <tr><td class="mono">ux</td><td>可用性</td><td>EC2 1 台</td><td>Multi-AZ + ALB + Auto Scaling</td></tr>
-        </tbody>
-      </table>
-      <p style="margin-top:1.1rem"><strong class="accent">EC2 = 100pt/分</strong> → managed runtime に切り出すと <strong class="ok">1,000pt/分</strong>。
-        5 slot 全部 managed で <strong>+30,000pt（“production-ready” 認定、1 回）</strong>。
-        30 / 60 / 90 分で「公開期限」「PII 監査」「障害対応」フェーズが襲ってくる。</p>
-    </div>
-  </section>
-
-  <!-- 6. RED TEAM REALITY -->
-  <section class="slide">
-    <span class="slide-no">06</span>
-    <div class="inner">
-      <p class="kicker">赤チーム / 障害注入 — 実態（誇張なし）</p>
-      <h2>「混乱を注入する」 仕組みは、もう動いている。</h2>
-      <div class="grid g2">
-        <div class="card">
-          <h3><span class="tag proven">実証済</span> hello-world-battle の frontend-down</h3>
-          <p>operator が fire → EventBridge → executor Lambda が <span class="mono">SSM SendCommand</span> で nginx を停止 →
-            <span class="mono">failurePenalty -100</span> がスコア履歴に “谷” として現れる → 既定時間で <strong>自動復帰</strong>。
-            fire → 減点 → 復帰を実機で確認済み。ゲームが詰まることはない（idempotent な auto-revert）。</p>
+    <div class="canvas">
+      <div class="hero">
+        <div class="topbar">
+          <div class="section-label"><span class="badge">01</span><span>TenkaCloud とは</span></div>
+          <div class="wordmark"><img src="./assets/tenkacloud-icon.svg" alt="" />TenkaCloud</div>
         </div>
-        <div class="card">
-          <h3><span class="tag proven">実装済</span> StackStack の組織イベント — 5 件すべて実体化</h3>
-          <p><strong>注入 2 件</strong>（<span class="mono">.env</span> 流出 / AI が秘密鍵を commit）は実 SSM action で該当 slot を停止し強制 revert（ADR-031）。
-            <strong>減点 3 件</strong>（CEO 5000 人デモ / MFA 必須化 / Legal PII）は採点 tick で実減点し、window 経過で自動失効（ADR-033、#1668 出荷済）。
-            残るは <strong>本番イベントでの通し検証</strong>のみ。</p>
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <span class="hero-kicker">OSS CLOUD COMPETITION HOST</span>
+            <h1>クラウドエンジニアの<br>天下一武道会を開催したい。</h1>
+            <p class="lead">AWS GameDay / AWS Jam 的な熱量を、自分たちの問題で開催するための土台です。</p>
+            <div class="cloud-line">
+              <span class="cloud-chip">AWS</span>
+              <span class="cloud-chip">Google Cloud</span>
+              <span class="cloud-chip">Azure</span>
+              <span class="cloud-chip">さくら</span>
+              <span class="cloud-chip">Custom context</span>
+            </div>
+          </div>
+          <div class="card hero-steps">
+            <span class="hero-steps-title">RUN YOUR OWN CLOUD TOURNAMENT</span>
+            <div class="step-row"><span class="step-no">1</span><div><h3>問題を作る</h3><p>自分たちの文脈やマルチクラウド構成を競技問題にする。</p></div></div>
+            <div class="step-row"><span class="step-no">2</span><div><h3>参加者が解く</h3><p>本物のクラウド上で、チームが課題を解く。</p></div></div>
+            <div class="step-row"><span class="step-no">3</span><div><h3>頂点を決める</h3><p>TenkaCloud が採点、順位、ポータルを回す。</p></div></div>
+          </div>
+        </div>
+        <div class="bottom-line">面白かったクラウド競技を、自分たちの文脈で何度でも開催できるようにする。</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="canvas">
+      <div class="story-slide origin-story">
+        <div class="topbar">
+          <div class="section-label"><span class="badge">02</span><span>なぜ作ったのか</span></div>
+          <div class="wordmark"><img src="./assets/tenkacloud-icon.svg" alt="" />TenkaCloud</div>
+        </div>
+        <h2>AWS GameDay の熱量を、自分たちでも開催したかった。</h2>
+        <div class="risk-board">
+          <div class="card quote-card">
+            <p>でも、同じコンセプトを自由に開ける仕組みが見つからなかった。<br>だから作った。</p>
+            <span class="small-note">Origin</span>
+          </div>
+          <div class="risk-list">
+            <div class="risk-item"><b>LOVE</b><span>AWS GameDay / AWS Jam 的なコンテンツは、参加すると本当に楽しい。</span></div>
+            <div class="risk-item"><b>LOCKED</b><span>でも、好きな場所で好きなだけ開催できるわけではない。</span></div>
+            <div class="risk-item"><b>OWN IT</b><span>自分たちの問題、自分たちの文脈、自分たちの競技にしたい。</span></div>
+            <div class="risk-item"><b>TENKA</b><span>クラウドエンジニアの天下一武道会なら、もっと楽しいはず。</span></div>
+          </div>
+        </div>
+        <div class="bottom-line">世界一のクラウドエンジニアを決める競技を見たい。だって面白いじゃないですか。</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="canvas">
+      <div class="story-slide">
+        <div class="topbar">
+          <div class="section-label"><span class="badge">03</span><span>OSS / Maker Model</span></div>
+          <div class="wordmark"><img src="./assets/tenkacloud-icon.svg" alt="" />TenkaCloud</div>
+        </div>
+        <h2>問題をみんなが作れると、想像もできない面白さが出る。</h2>
+        <div class="three-grid">
+          <div class="card info-card"><span class="kind">OSS DESIGN</span><h3>設計から開く</h3><p>問題を閉じたコンテンツにせず、誰でも作れる形にする。</p></div>
+          <div class="card info-card"><span class="kind">MAKER MODEL</span><h3>問題作者を増やす</h3><p>スーパーマリオメーカーのように、作る人が増えるほど面白くなる。</p></div>
+          <div class="card info-card"><span class="kind">MULTI CLOUD</span><h3>クラウドも広げる</h3><p>AWS だけで終わらず、Google Cloud / Azure / さくらまで狙える。</p></div>
+        </div>
+        <div class="bottom-line">OSS にする理由は、問題も競技もコミュニティで増やせるようにするため。</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="canvas">
+      <div class="host-slide">
+        <div class="topbar">
+          <div class="section-label"><span class="badge">04</span><span>仕組み</span></div>
+          <div class="wordmark"><img src="./assets/tenkacloud-icon.svg" alt="" />TenkaCloud</div>
+        </div>
+        <h2>問題を、採点付きの演習にする OSS。</h2>
+        <p class="host-lead">本物の<strong>クラウド上</strong>に問題を <strong>deploy</strong> し、<strong>毎分採点</strong>し、<strong>順位を出す</strong>。</p>
+        <div class="mode-grid">
+          <div class="mode-card">
+            <div class="mode-icon">⚔</div>
+            <div>
+              <h3>Battle</h3>
+              <p>サービスを、次々に発生するインシデントや相手からの攻撃から守り、稼働させ続ける。</p>
+            </div>
+          </div>
+          <div class="mode-card">
+            <div class="mode-icon">◎</div>
+            <div>
+              <h3>Challenge</h3>
+              <p>自分のペースで 1 サービスずつ深掘り。flag 提出で採点。</p>
+            </div>
+          </div>
+        </div>
+        <div class="plugin-box">
+          <div>
+            <h3>問題はプラグイン</h3>
+            <p>1 問 = <code>metadata.json</code> + <code>template.yaml</code> + 任意の portal 部品。platform は host、問題は plugin。</p>
+          </div>
         </div>
       </div>
-      <div class="flow" style="margin-top:1.5rem">
-        <div class="step"><b>fire</b>operator が発火</div><span class="arrow">→</span>
-        <div class="step"><b>EventBridge</b>*DisruptionFired</div><span class="arrow">→</span>
-        <div class="step"><b>executor</b>SSM / Lambda / CFn で注入</div><span class="arrow">→</span>
-        <div class="step"><b>auto-revert</b>Scheduler 1-shot で復帰</div>
-      </div>
     </div>
   </section>
 
-  <!-- 7. WHAT WORKS NOW -->
   <section class="slide">
-    <span class="slide-no">07</span>
-    <div class="inner">
-      <p class="kicker">今動くもの — 正直な棚卸し</p>
-      <h2>ハリボテは出さない。実証済みだけ数える。</h2>
-      <div class="grid g3">
-        <div class="card"><div class="stat">4 + 3</div><p>Battle 4 問（hello-world-battle / security-battle-royale / microservice-migration-battle / StackStack）+ Challenge 3 問</p></div>
-        <div class="card"><div class="stat">5</div><p>採点 kind（flag / uptime-flat / uptime-multi / phased-polling / attack-detection）。うち 4 種をカタログで実使用</p></div>
-        <div class="card"><div class="stat green">10</div><p>宣言済み障害注入（赤チーム）。SSM 注入経路は実機で実証済み</p></div>
+    <div class="canvas">
+      <div class="story-slide">
+        <div class="topbar">
+          <div class="section-label"><span class="badge">05</span><span>なぜ TenkaCloud か</span></div>
+          <div class="wordmark"><img src="./assets/tenkacloud-icon.svg" alt="" />TenkaCloud</div>
+        </div>
+        <h2>たぶん誰もやってくれない。だから自分たちでやった。</h2>
+        <div class="three-grid">
+          <div class="card info-card"><span class="kind">HARD</span><h3>作るのが難しい</h3><p>環境、採点、順位、ポータルをまとめて回す必要がある。</p></div>
+          <div class="card info-card"><span class="kind">MULTI CLOUD</span><h3>一社ではやりにくい</h3><p>自社クラウド中心ではなく、複数クラウドをまたぐ競技にしたい。</p></div>
+          <div class="card info-card"><span class="kind">OSS HOST</span><h3>だから開く</h3><p>問題作者が自分の文脈でクラウドを組み合わせられるようにする。</p></div>
+        </div>
+        <div class="room">誰もやってくれないなら、自分たちで作って、みんなが問題を増やせるようにする。</div>
       </div>
-      <ul class="clean">
-        <li><span class="tag proven">実証済</span> 障害注入 fire → EventBridge → executor → SSM 注入 → <strong>自動復帰</strong>（Lite / 同一アカウント・クロスアカウント両対応）</li>
-        <li><span class="tag proven">実証済</span> ヘルスチェック失敗で減点する <span class="mono">failurePenalty</span>（uptime 系 / phased-polling）— 障害が履歴に可視化される</li>
-        <li><span class="tag proven">実証済</span> クロスアカウント分離・参加者 Portal（スコア履歴ページング・leaderboard）・主催コンソール（deploy / disruptions / 監査ログ）</li>
-        <li><span class="tag proven">実装済</span> StackStack の組織イベント = 5 件すべて実体化（注入 2 / 採点減点 3、ADR-033 は #1668 で出荷済・window 自動失効）</li>
-        <li><span class="tag wip">実装中</span> inter-team coordination plugin（問題側 plugin として dispatch）</li>
-        <li><span class="tag idea">構想</span> Azure / GCP / さくらクラウドへの problem-target 拡張（ADR-026/027、AWS control plane は不変）</li>
-      </ul>
     </div>
   </section>
 
-  <!-- 8. BOOTCAMP VALIDATION -->
   <section class="slide">
-    <span class="slide-no">08</span>
-    <div class="inner">
-      <p class="kicker">BootCamp で検証したいこと</p>
-      <h2>この場を、Vibe Coding の“詰まり”の実験場にしたい。</h2>
-      <p class="lead">いま AI でアプリを作っている参加者に、StackStack を実際に解いてもらう。知りたいのは 3 つ:</p>
-      <div class="grid g3">
-        <div class="card"><h3>① どこで詰まるか</h3><p>auth / 公開 S3 / 秘密情報 / レート制限 / 監視 — “公開の壁” のどれが一番きついか、実データで観たい。</p></div>
-        <div class="card"><h3>② どの体験が刺さるか</h3><p>毎分加点・順位・障害注入・“production-ready 認定” — どれが学びと熱量を生むか。</p></div>
-        <div class="card"><h3>③ 初見で問題を作れるか</h3><p><span class="pill">/new-problem</span> と AUTHORING で、参加者自身が自分の“詰まり”を問題として投稿できるか。</p></div>
+    <div class="canvas">
+      <div class="scenario">
+        <div class="topbar">
+          <div class="section-label"><span class="badge">06</span><span>オリジナル問題</span></div>
+          <div class="wordmark"><img src="./assets/tenkacloud-icon.svg" alt="" />TenkaCloud</div>
+        </div>
+        <div class="scenario-grid">
+          <div class="scenario-copy">
+            <h2>「AIで作れる。でも公開できない」を、安全な公開までゲーム化する。</h2>
+            <p class="lead">AI Builder 100 人の「動くアプリ」が、あなたの机に積まれた。90 分で、公開していい状態にせよ。</p>
+            <span class="deadline">problem: StackStack / 90 min</span>
+          </div>
+          <div class="card slot-table">
+            <div class="slot-row"><b>auth</b><span>Basic 認証</span><strong>SSO</strong></div>
+            <div class="slot-row"><b>network</b><span>公開 S3 / 広い IAM</span><strong>OAC</strong></div>
+            <div class="slot-row"><b>rate</b><span>無制限 API</span><strong>throttle</strong></div>
+            <div class="slot-row"><b>audit</b><span>標準出力だけ</span><strong>WORM</strong></div>
+            <div class="slot-row"><b>uptime</b><span>EC2 1 台</span><strong>Multi-AZ</strong></div>
+          </div>
+        </div>
+        <div class="bottom-line">認証・セキュリティ・監査・可用性の壁を、90 分の競技にする。</div>
       </div>
-      <div class="quote">作って終わりにしない。<strong>参加者の詰まりが、そのまま次の問題カタログになる。</strong></div>
     </div>
   </section>
 
-  <!-- 9. NEXT -->
   <section class="slide">
-    <span class="slide-no">09</span>
-    <div class="inner">
-      <p class="kicker">次の一手</p>
-      <h2>赤チームは実装済み。残るは本番での通し検証。</h2>
-      <ul class="clean">
-        <li><strong>本番 StackStack イベントの通し検証</strong> — 実 AWS で 5 slot を deploy → 組織イベントを fire → 注入（slot 停止→復帰）と減点（window 失効）を 1 イベント通して観測する。<span class="tag wip">本番検証</span></li>
-        <li><strong>初見で問題を作れるオーサリング</strong> — プロンプト / プラグインを足し、参加者が「自分が詰まった所」を 1 問にできる導線を太くする。</li>
-        <li><strong>このデッキ自体が最新を映す</strong> — <span class="pill">/pitchdeck</span> スキルでリポジトリの実態（件数・実証ラベル）から再生成。聞かれたら常に今の状態で話せる。</li>
-      </ul>
-      <h3 style="margin-top:1.6rem">先のロードマップ</h3>
-      <p>マルチクラウド problem-target（Azure / GCP / さくら）、inter-team coordination の問題側 plugin 化、large-event のスケール検証。</p>
-    </div>
-  </section>
-
-  <!-- 10. CLOSE -->
-  <section class="slide title">
-    <span class="slide-no">10</span>
-    <div class="inner">
-      <span class="wordmark"><span class="dot"></span>TenkaCloud</span>
-      <h1>一緒に、AI 時代の<br>クラウド演習を作りませんか。</h1>
-      <p class="title-sub">Apache-2.0 / self-hostable。問題はプラグイン、platform は host。
-        あなたの “公開できなかった経験” が、誰かの教材になる。</p>
-      <div class="meta-row">
-        <span><b>Repo</b> <span class="mono">github.com/susumutomita/TenkaCloud</span></span>
-        <span><b>Landing</b> <span class="mono">susumutomita.github.io/TenkaCloud</span></span>
-        <span><b>Mock</b> <span class="mono">/portal-demo/?demo=1</span></span>
+    <div class="canvas">
+      <div class="story-slide">
+        <div class="topbar">
+          <div class="section-label"><span class="badge">07</span><span>こんな人が作っています</span></div>
+          <div class="wordmark"><img src="./assets/tenkacloud-icon.svg" alt="" />TenkaCloud</div>
+        </div>
+        <h2>三人とも Game Day が大好きなメンバーが作っています。</h2>
+        <div class="team-grid">
+          <div class="card member-card">
+            <div class="member-mark">冨</div>
+            <span class="kind">FOUNDER</span>
+            <h3>冨田 進</h3>
+            <p>JAWS DAYS 2024 AWS Game Day 優勝。2026 準優勝。</p>
+          </div>
+          <div class="card member-card">
+            <div class="member-mark">C</div>
+            <span class="kind">TEAM</span>
+            <h3>チャーリー</h3>
+            <p>JAWS 名古屋運営メンバー。Game Day の熱量を広げたい人。</p>
+          </div>
+          <div class="card member-card">
+            <div class="member-mark">き</div>
+            <span class="kind">TEAM</span>
+            <h3>きせのん</h3>
+            <p>JAWS DAYS 2024 Game Day 優勝。AWS 全認定保有。</p>
+          </div>
+        </div>
+        <div class="bottom-line">作れる人はいるかもしれない。でも、熱量ある問題を作れる人はそうそういない。</div>
       </div>
     </div>
   </section>
-
-</div>
+</main>
 
 <script>
-  // 進捗バー + スライド番号。キーボードで次/前へスクロール（登壇操作）。
   (function () {
     var deck = document.getElementById("deck");
     var slides = Array.prototype.slice.call(deck.querySelectorAll(".slide"));
@@ -333,24 +833,34 @@
     var counter = document.getElementById("counter");
 
     function current() {
-      var top = deck.scrollTop, h = deck.clientHeight;
-      return Math.max(0, Math.min(slides.length - 1, Math.round(top / h)));
+      return Math.max(0, Math.min(slides.length - 1, Math.round(deck.scrollTop / deck.clientHeight)));
     }
+
     function paint() {
       var i = current();
       counter.textContent = (i + 1) + " / " + slides.length;
-      progress.style.width = ((i) / (slides.length - 1) * 100) + "%";
+      progress.style.width = (slides.length > 1 ? (i / (slides.length - 1)) * 100 : 100) + "%";
     }
+
     function go(i) {
-      i = Math.max(0, Math.min(slides.length - 1, i));
-      slides[i].scrollIntoView({ behavior: "smooth" });
+      slides[Math.max(0, Math.min(slides.length - 1, i))].scrollIntoView({ behavior:"smooth" });
     }
-    deck.addEventListener("scroll", paint, { passive: true });
-    window.addEventListener("keydown", function (e) {
-      if (["ArrowDown", "ArrowRight", "PageDown", " "].indexOf(e.key) > -1) { e.preventDefault(); go(current() + 1); }
-      else if (["ArrowUp", "ArrowLeft", "PageUp"].indexOf(e.key) > -1) { e.preventDefault(); go(current() - 1); }
-      else if (e.key === "Home") { e.preventDefault(); go(0); }
-      else if (e.key === "End") { e.preventDefault(); go(slides.length - 1); }
+
+    deck.addEventListener("scroll", paint, { passive:true });
+    window.addEventListener("keydown", function (event) {
+      if (["ArrowDown","ArrowRight","PageDown"," "].indexOf(event.key) > -1) {
+        event.preventDefault();
+        go(current() + 1);
+      } else if (["ArrowUp","ArrowLeft","PageUp"].indexOf(event.key) > -1) {
+        event.preventDefault();
+        go(current() - 1);
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        go(0);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        go(slides.length - 1);
+      }
     });
     paint();
   })();
