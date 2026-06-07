@@ -55,6 +55,7 @@ const RESOURCE_STAR_OK_ACTIONS = new Set([
   "ec2:DescribeRegions",
   "ec2:DescribeAvailabilityZones",
   "ec2:DescribeAccountAttributes",
+  "ec2:DescribeNetworkAcls",
   // IAM read (= self-reflection)
   "iam:GetRole",
   "iam:GetPolicy",
@@ -112,6 +113,10 @@ const RESOURCE_STAR_OK_ACTIONS = new Set([
   "elasticloadbalancing:DescribeAccountLimits",
   "cloudtrail:ListTrails",
   "cloudtrail:LookupEvents",
+  // RDS console list pages call Describe* without an identifier; an ARN-scoped
+  // policy breaks the list flow. Read-only — mutating RDS access stays scoped.
+  "rds:DescribeDBClusters",
+  "rds:DescribeDBInstances",
   "athena:ListWorkGroups",
   "athena:ListQueryExecutions",
   "athena:ListDatabases",
@@ -183,7 +188,10 @@ export function findIamActionWildcardFindings(
   templatePath: string,
   loc: string,
   actions: readonly unknown[],
+  effect?: unknown,
 ): Finding[] {
+  // Effect: Deny は権限を狭めるだけ。 wildcard はむしろ広く塞ぐ安全側なので対象外。
+  if (effect === "Deny") return [];
   return actions
     .filter((a) => a === "*")
     .map(() => ({
@@ -200,7 +208,10 @@ export function findIamResourceWildcardFindings(
   resources: readonly unknown[],
   actions: readonly unknown[],
   condition?: unknown,
+  effect?: unknown,
 ): Finding[] {
+  // Effect: Deny は権限を狭めるだけ。 wildcard はむしろ広く塞ぐ安全側なので対象外。
+  if (effect === "Deny") return [];
   if (!resources.includes("*")) return [];
   const actionList = actions.map((a) => (typeof a === "string" ? a : "")).filter(Boolean);
   const allRequireStar =
@@ -245,9 +256,16 @@ function checkIamWildcards(template: unknown, results: Finding[], templatePath: 
     if (!("Action" in node) && !("Resource" in node)) return;
     const actions = toArrayField(node.Action);
     const resources = toArrayField(node.Resource);
-    results.push(...findIamActionWildcardFindings(templatePath, loc, actions));
+    results.push(...findIamActionWildcardFindings(templatePath, loc, actions, node.Effect));
     results.push(
-      ...findIamResourceWildcardFindings(templatePath, loc, resources, actions, node.Condition),
+      ...findIamResourceWildcardFindings(
+        templatePath,
+        loc,
+        resources,
+        actions,
+        node.Condition,
+        node.Effect,
+      ),
     );
   });
 }
