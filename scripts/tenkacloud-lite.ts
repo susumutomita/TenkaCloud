@@ -146,6 +146,15 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
     );
   }
 
+  // Lite mode has no SBT Control Plane / system admin, but the shared CDK app
+  // (bin/tenkacloud-lite.ts → resolveAppConfig → requireSystemAdminEmail) still
+  // requires CDK_PARAM_SYSTEM_ADMIN_EMAIL. Derive it from the Lite tenant admin
+  // email so `make deploy` works with only TENANT_ADMIN_EMAIL set (the pipeline /
+  // Lite .env case). Never override an explicit value (SaaS-shared env).
+  if (tenantAdminEmail && !process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL) {
+    process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL = tenantAdminEmail;
+  }
+
   // Issue #1345: 30-min first-run UX — 各 phase を「[i/N] ...」 で示す。
   const totalSteps = 3;
   io.stdout(`\n[lite] [1/${totalSteps}] preparing source bundle (= S3 bucket + source.zip)...\n`);
