@@ -527,7 +527,7 @@
 </head>
 <body>
 <div class="progress" id="progress"></div>
-<div class="counter" id="counter">1 / 10</div>
+<div class="counter" id="counter">1 / 9</div>
 
 <main class="deck" id="deck">
   <!-- 01 ── Hero -->
@@ -688,7 +688,7 @@
         </div>
         <h2>TenkaCloud ── 天下一武道会を開くためのプラットフォーム。</h2>
         <div style="display:grid;gap:16px;align-content:center;">
-          <p class="lead">StackStack はその <strong>"第一試合"</strong>。問題は <strong>OSS で誰でも作れて</strong>、Battle / Challenge の競技を同じ土台でいくつでも開ける。</p>
+          <p class="lead">StackStack はその <strong>"第一試合"</strong>。問題は <strong>OSS で誰でも作れて</strong>、同じ土台で競技をいくつでも開ける。</p>
           <div class="three-grid">
             <div class="card info-card cat-card">
               <span class="demo-flag">今日のデモ</span>
@@ -708,7 +708,7 @@
             </div>
           </div>
         </div>
-        <div class="bottom-line">今は <strong>AWS</strong> 対応（他クラウドは順次）。OSS だから、問題は誰でも増やせる。<span class="gloss">用語 — CTF（Capture The Flag）：課題を解いて隠された "flag"（答えの文字列）を見つける競技。Challenge はこの形式。</span></div>
+        <div class="bottom-line">今は <strong>AWS</strong> 対応（他クラウドは順次）。OSS だから、問題は誰でも増やせる。</div>
       </div>
     </div>
   </section>
@@ -732,38 +732,12 @@
     </div>
   </section>
 
-  <!-- 07 ── Origin / why -->
-  <section class="slide">
-    <div class="canvas">
-      <div class="story-slide origin-story">
-        <div class="topbar">
-          <div class="section-label"><span class="badge">07</span><span>なぜ作ったのか</span></div>
-          <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
-        </div>
-        <h2>本物のクラウドで競う競技を、いつでも開催したかった。</h2>
-        <div class="risk-board">
-          <div class="card quote-card">
-            <p>でも、好きな問題を自由に開ける仕組みが見つからなかった。<br>生成AIの力を使えば自分たちでも作れると思った。</p>
-            <span class="small-note">Origin</span>
-          </div>
-          <div class="risk-list">
-            <div class="risk-item"><b>LOVE</b><span>本物のクラウド上で競う競技は、やってみると本当に楽しい。</span></div>
-            <div class="risk-item"><b>LOCKED</b><span>でも、好きな場所で好きなだけ開催できるわけではない。</span></div>
-            <div class="risk-item"><b>OWN IT</b><span>自分たちの問題、自分たちの文脈、自分たちの競技にしたい。</span></div>
-            <div class="risk-item"><b>HOST</b><span>誰でもホストできるように、OSS で作る。</span></div>
-          </div>
-        </div>
-        <div class="bottom-line">世界一のクラウドエンジニアを決める天下一武道会を開きたい。きっと、面白い。</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 08 ── Team -->
+  <!-- 07 ── Team -->
   <section class="slide">
     <div class="canvas">
       <div class="story-slide">
         <div class="topbar">
-          <div class="section-label"><span class="badge">08</span><span>Team</span></div>
+          <div class="section-label"><span class="badge">07</span><span>Team</span></div>
           <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
         </div>
         <h2>クラウド競技が大好きなメンバーが作っています。</h2>
@@ -794,12 +768,12 @@
     </div>
   </section>
 
-  <!-- 09 ── Who we're looking for -->
+  <!-- 08 ── Who we're looking for -->
   <section class="slide">
     <div class="canvas">
       <div class="story-slide">
         <div class="topbar">
-          <div class="section-label"><span class="badge">09</span><span>探しています</span></div>
+          <div class="section-label"><span class="badge">08</span><span>探しています</span></div>
           <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
         </div>
         <h2>一緒に作る仲間と、壁打ち相手を探しています。</h2>
@@ -808,7 +782,7 @@
           <div class="three-grid ask-grid">
             <div class="card info-card"><span class="kind">共同開発</span><h3>競技が好きな仲間</h3><p>AWS GameDay 等の競技が好きで、プラットフォームや問題を一緒に作れる人。</p></div>
             <div class="card info-card"><span class="kind">クラウド推進</span><h3>CCoE・教育の推進者</h3><p>企業でクラウドの利活用やセキュリティ教育を進めている人。</p></div>
-            <div class="card info-card"><span class="kind">壁打ち</span><h3>一緒に悩みたい論点</h3><p>① ライセンス：問題もコードも Apache 2.0、AGPL にすべきか。② 課金：マルチテナント SaaS（セルフサインアップ可）だが、実クラウドを不特定多数に開くと課金が読めず、まずは教育・コミュニティ開催から。</p></div>
+            <div class="card info-card"><span class="kind">壁打ち</span><h3>壁打ちしたい2つの問い</h3><p>① ライセンス：いまは Apache 2.0。<strong>AGPL にすべき？</strong>　② 課金：実クラウドを誰でも使えると費用が読めない。<strong>どう値付けする？</strong></p></div>
           </div>
         </div>
         <div class="bottom-line">ピンと来たら、ぜひ声をかけてください。<span class="gloss">用語 — CCoE：社内のクラウド推進チーム。Apache 2.0 / AGPL：OSS ライセンスの種類（AGPL はより強い公開義務）。</span></div>
@@ -816,12 +790,12 @@
     </div>
   </section>
 
-  <!-- 10 ── Thank you -->
+  <!-- 09 ── Thank you -->
   <section class="slide">
     <div class="canvas">
       <div class="thanks">
         <div class="topbar">
-          <div class="section-label"><span class="badge">10</span><span>Thank you</span></div>
+          <div class="section-label"><span class="badge">09</span><span>Thank you</span></div>
           <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
         </div>
         <div class="thanks-mid">
