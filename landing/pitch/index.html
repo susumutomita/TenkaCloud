@@ -454,6 +454,10 @@
     background:linear-gradient(135deg,var(--blue),var(--green)); color:#fff; font-size:24px; font-weight:900; line-height:1;
   }
   .member-card p { font-size:14px; font-weight:720; }
+  .member-card .qr-row { display:flex; gap:12px; margin-top:8px; }
+  .member-card .qr { text-align:center; }
+  .member-card .qr span { display:block; font-family:var(--mono); font-size:10px; color:var(--muted); margin-bottom:3px; }
+  .member-card .qr img { width:60px; height:60px; display:block; border:1px solid var(--line); border-radius:6px; background:#fff; }
 
   @media (max-width:1040px) {
     .canvas { padding:30px 34px 28px; }
@@ -724,9 +728,15 @@
         <h2>クラウド競技で勝ってきたメンバーが作っています。</h2>
         <div class="team-grid">
           <div class="card member-card">
+            <div class="member-mark">冨</div>
             <span class="kind">FOUNDER</span>
-            <h3>冨田 進</h3>
+            <h3>冨田 進 / Susumu Tomita</h3>
             <p>JAWS DAYS 2024 AWS Game Day 優勝。2026 準優勝。</p>
+            <div class="qr-row">
+              <div class="qr"><span>Portfolio</span><img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https%3A%2F%2Fsusumutomita.netlify.app%2F" alt="Portfolio QR" /></div>
+              <div class="qr"><span>LinkedIn</span><img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https%3A%2F%2Fwww.linkedin.com%2Fin%2Fsusumutomita%2F" alt="LinkedIn QR" /></div>
+              <div class="qr"><span>GitHub</span><img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https%3A%2F%2Fgithub.com%2Fsusumutomita" alt="GitHub QR" /></div>
+            </div>
           </div>
           <div class="card member-card">
             <div class="member-mark">C</div>
