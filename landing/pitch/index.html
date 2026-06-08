@@ -285,7 +285,7 @@
     font-weight:850;
   }
   .bottom-line strong { color:var(--blue); font-weight:900; }
-  .term-note { position:absolute; left:42px; right:42px; bottom:8px; font-size:11px; line-height:1.4; color:var(--muted); font-weight:600; z-index:1; }
+  .bottom-line .gloss { display:block; margin-top:8px; padding-top:8px; border-top:1px solid var(--line-strong); font-size:11px; line-height:1.45; color:var(--muted); font-weight:600; }
 
   .three-grid {
     display:grid;
@@ -524,7 +524,6 @@
       <div class="hero">
         <div class="topbar">
           <div class="section-label"><span class="badge">01</span><span>TenkaCloud とは</span></div>
-          <div class="term-note">用語 — AWS / Azure / Google Cloud：サーバーを借りられる大手クラウド。さくら：国産クラウド（さくらインターネット）。</div>
           <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
         </div>
         <div class="hero-grid">
@@ -547,7 +546,7 @@
             <div class="step-row"><span class="step-no">3</span><div><h3>毎分採点・順位</h3><p>状態を読んで自動採点。順位がリアルタイムで動く。</p></div></div>
           </div>
         </div>
-        <div class="bottom-line">舞台は OSS プラットフォーム TenkaCloud。本日は第一試合「<strong>StackStack</strong>」について話します。</div>
+        <div class="bottom-line">舞台は OSS プラットフォーム TenkaCloud。本日は第一試合「<strong>StackStack</strong>」について話します。<span class="gloss">用語 — AWS / Azure / Google Cloud：サーバーを借りられる大手クラウド。さくら：国産クラウド（さくらインターネット）。</span></div>
       </div>
     </div>
   </section>
@@ -558,7 +557,6 @@
       <div class="scenario">
         <div class="topbar">
           <div class="section-label"><span class="badge">02</span><span>本日の一番 — StackStack</span></div>
-          <div class="term-note">用語 — SSO：共通ログイン／S3：AWS のファイル保管／IAM：アクセス権限／WAF：不正通信の遮断／Multi-AZ：複数拠点で冗長化／Aurora：AWS の DB。</div>
           <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
         </div>
         <div class="scenario-grid">
@@ -575,7 +573,7 @@
             <div class="slot-row"><b>uptime</b><span>EC2 1 台</span><strong>→ Multi-AZ</strong></div>
           </div>
         </div>
-        <div class="bottom-line">"動く" から "出していい" までの距離 ── 認証・公開範囲・監査・可用性が、そのまま採点項目になる。</div>
+        <div class="bottom-line">"動く" から "出していい" までの距離 ── 認証・公開範囲・監査・可用性が、そのまま採点項目になる。<span class="gloss">用語 — SSO：共通ログイン／S3：AWS のファイル保管／IAM：アクセス権限／WAF：不正通信の遮断／Multi-AZ：複数拠点で冗長化／Aurora：AWS の DB。</span></div>
       </div>
     </div>
   </section>
@@ -586,7 +584,6 @@
       <div class="story-slide">
         <div class="topbar">
           <div class="section-label"><span class="badge">03</span><span>ゲームデザイン</span></div>
-          <div class="term-note">用語 — サプライチェーン攻撃：使っている部品（ライブラリ等）経由で仕込まれる攻撃。バックドア：こっそり作られる侵入用の裏口。</div>
           <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
         </div>
         <h2>クラウドに上げて、穴を塞ぎ、襲ってくる事故を捌く。</h2>
@@ -608,7 +605,7 @@
             <p>稼働を守り切れたか、対応はどれだけ速かったか。順位が確定する。</p>
           </div>
         </div>
-        <div class="bottom-line">勝つのは、何が起きても <strong>サイトを稼働させ続けた</strong> チーム。</div>
+        <div class="bottom-line">勝つのは、何が起きても <strong>サイトを稼働させ続けた</strong> チーム。<span class="gloss">用語 — サプライチェーン攻撃：使っている部品（ライブラリ等）経由で仕込まれる攻撃。バックドア：こっそり作られる侵入用の裏口。</span></div>
       </div>
     </div>
   </section>
@@ -619,7 +616,6 @@
       <div class="battle-slide">
         <div class="topbar">
           <div class="section-label"><span class="badge">04</span><span>Battle の仕組み</span></div>
-          <div class="term-note">用語 — ALB：アクセスを振り分ける入口（ロードバランサ）。AssumeRole：必要な時だけ一時的に権限を借りる AWS の仕組み。</div>
           <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
         </div>
         <h2>競技の進み方</h2>
@@ -665,7 +661,7 @@
             </div>
           </div>
         </div>
-        <div class="bottom-line">同じ仕組みで開ける競技は、<strong>StackStack だけじゃない</strong>。</div>
+        <div class="bottom-line">同じ仕組みで開ける競技は、<strong>StackStack だけじゃない</strong>。<span class="gloss">用語 — ALB：アクセスを振り分ける入口（ロードバランサ）。AssumeRole：必要な時だけ一時的に権限を借りる AWS の仕組み。</span></div>
       </div>
     </div>
   </section>
@@ -676,7 +672,6 @@
       <div class="story-slide">
         <div class="topbar">
           <div class="section-label"><span class="badge">05</span><span>プラットフォーム化</span></div>
-          <div class="term-note">用語 — CTF（Capture The Flag）：課題を解いて隠された "flag"（答えの文字列）を見つける競技。Challenge はこの形式。</div>
           <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
         </div>
         <h2>TenkaCloud ── 天下一武道会を開くためのプラットフォーム。</h2>
@@ -701,7 +696,7 @@
             </div>
           </div>
         </div>
-        <div class="bottom-line">対応クラウドは今のところ <strong>AWS</strong>（GCP / Azure / さくらは順次）。OSS だから、競技は <strong>いくつでも</strong>増やせる。</div>
+        <div class="bottom-line">対応クラウドは今のところ <strong>AWS</strong>（GCP / Azure / さくらは順次）。OSS だから、競技は <strong>いくつでも</strong>増やせる。<span class="gloss">用語 — CTF（Capture The Flag）：課題を解いて隠された "flag"（答えの文字列）を見つける競技。Challenge はこの形式。</span></div>
       </div>
     </div>
   </section>
@@ -736,7 +731,7 @@
         <h2>本物のクラウドで競う競技を、いつでも開催したかった。</h2>
         <div class="risk-board">
           <div class="card quote-card">
-            <p>でも、好きな問題を自由に開ける仕組みが見つからなかった。<br>だから作った。</p>
+            <p>でも、好きな問題を自由に開ける仕組みが見つからなかった。<br>生成AIの力を使えば自分たちでも作れると思った。</p>
             <span class="small-note">Origin</span>
           </div>
           <div class="risk-list">
@@ -793,7 +788,6 @@
       <div class="story-slide">
         <div class="topbar">
           <div class="section-label"><span class="badge">09</span><span>探しています</span></div>
-          <div class="term-note">CCoE：社内のクラウド推進チーム。Apache 2.0 / AGPL：OSS ライセンスの種類（AGPL はより強い公開義務）。</div>
           <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
         </div>
         <h2>一緒に作る仲間と、壁打ち相手を探しています。</h2>
@@ -805,7 +799,7 @@
             <div class="card info-card"><span class="kind">壁打ち</span><h3>一緒に悩みたい論点</h3><p>① ライセンス：問題もコードも Apache 2.0、AGPL にすべきか。② 課金：マルチテナント SaaS（セルフサインアップ可）だが、実クラウドを不特定多数に開くと課金が読めず、まずは教育・コミュニティ開催から。</p></div>
           </div>
         </div>
-        <div class="bottom-line">ピンと来たら、ぜひ声をかけてください。</div>
+        <div class="bottom-line">ピンと来たら、ぜひ声をかけてください。<span class="gloss">用語 — CCoE：社内のクラウド推進チーム。Apache 2.0 / AGPL：OSS ライセンスの種類（AGPL はより強い公開義務）。</span></div>
       </div>
     </div>
   </section>
