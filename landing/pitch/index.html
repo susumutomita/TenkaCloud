@@ -458,6 +458,13 @@
   .member-card .qr { text-align:center; }
   .member-card .qr span { display:block; font-family:var(--mono); font-size:10px; color:var(--muted); margin-bottom:3px; }
   .member-card .qr img { width:60px; height:60px; display:block; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  .thanks { height:100%; display:grid; grid-template-rows:auto 1fr; gap:18px; }
+  .thanks-mid { display:grid; place-items:center; align-content:center; gap:22px; text-align:center; }
+  .thanks-mid h1 { font-size:64px; }
+  .thanks-qr { display:flex; gap:34px; justify-content:center; flex-wrap:wrap; }
+  .thanks-qr .qr-item { text-align:center; }
+  .thanks-qr .qr-item span { display:block; font-family:var(--mono); font-size:13px; color:var(--muted); margin-bottom:6px; }
+  .thanks-qr .qr-item img { width:118px; height:118px; display:block; border:1px solid var(--line); border-radius:8px; background:#fff; }
 
   @media (max-width:1040px) {
     .canvas { padding:30px 34px 28px; }
@@ -505,7 +512,7 @@
 </head>
 <body>
 <div class="progress" id="progress"></div>
-<div class="counter" id="counter">1 / 9</div>
+<div class="counter" id="counter">1 / 10</div>
 
 <main class="deck" id="deck">
   <!-- 01 ── Hero -->
@@ -792,7 +799,28 @@
             <div class="card info-card"><span class="kind">壁打ち</span><h3>一緒に悩みたい論点</h3><p>① ライセンス：問題もコードも Apache 2.0、AGPL にすべきか。② 課金：マルチテナント SaaS（セルフサインアップ可）だが、実クラウドを不特定多数に開くと課金が読めず、まずは教育・コミュニティ開催から。</p></div>
           </div>
         </div>
-        <div class="bottom-line">ピンと来たら、ぜひ声をかけてください（連絡先は前ページの QR から）。</div>
+        <div class="bottom-line">ピンと来たら、ぜひ声をかけてください。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 ── Thank you -->
+  <section class="slide">
+    <div class="canvas">
+      <div class="thanks">
+        <div class="topbar">
+          <div class="section-label"><span class="badge">10</span><span>Thank you</span></div>
+          <div class="wordmark"><img src="./assets/tenkacloud-icon.svg" alt="" />TenkaCloud</div>
+        </div>
+        <div class="thanks-mid">
+          <h1>Thank you.</h1>
+          <p class="lead">触ってみてください。問題も、コードも、すべて OSS。</p>
+          <div class="thanks-qr">
+            <div class="qr-item"><span>Repository</span><img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fgithub.com%2Fsusumutomita%2FTenkaCloud" alt="Repository QR" /></div>
+            <div class="qr-item"><span>問題 (Problems)</span><img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fgithub.com%2Fsusumutomita%2FTenkaCloudChallenge" alt="Problems QR" /></div>
+            <div class="qr-item"><span>Landing</span><img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fsusumutomita.github.io%2FTenkaCloud%2F%3Flang%3Dja" alt="Landing QR" /></div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
