@@ -50,6 +50,10 @@ Two problem styles share the same runtime:
 Most organizers should start with **Lite mode**. It deploys one local tenant and one
 event runtime into your AWS account, skipping the full SBT control plane.
 
+> 📖 **Step-by-step walkthrough:** [`docs/deployment/README.md`](./docs/deployment/README.md)
+> covers both paths below in full detail — prerequisites, the pipeline's manual-approval
+> gate, signing in, re-running, and teardown. The summary below is the quick version.
+
 | Path | Best for | What runs |
 | --- | --- | --- |
 | [A. AWS Console pipeline](#a-aws-console-pipeline-no-local-install) | You do not want to install Bun / CDK locally | CloudFormation creates CodePipeline + CodeBuild; CodeBuild runs `make deploy` |
