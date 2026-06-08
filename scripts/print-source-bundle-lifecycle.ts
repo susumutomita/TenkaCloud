@@ -30,16 +30,32 @@ const configPath = path.resolve(
 );
 
 const content = readFileSync(configPath, "utf-8");
-const expanded = content.replace(/\$\{([^}]+)\}/g, (_, expression: string) => {
-  const [rawVarName, ...defaultParts] = expression.split(":-");
-  const varName = rawVarName.trim();
-  const defaultValue = defaultParts.length > 0 ? defaultParts.join(":-") : undefined;
-  const value = process.env[varName];
-  if (value !== undefined && value !== "") return JSON.stringify(value).slice(1, -1);
-  if (defaultValue !== undefined) return JSON.stringify(defaultValue).slice(1, -1);
-  throw new Error(`Environment variable ${varName} is not defined and no default provided`);
-});
 
-const config = JSON.parse(expanded) as { sourceBundleConfig?: SourceBundleConfig };
-const policy = buildSourceBundleLifecyclePolicy(config.sourceBundleConfig);
+// Expand ${VAR:-default} placeholders, but ONLY within the sourceBundleConfig
+// subtree. The rest of config.json carries placeholders that are irrelevant to
+// the lifecycle policy and unset in Lite mode — e.g. controlPlaneConfig.
+// systemAdminEmail = ${SYSTEM_ADMIN_EMAIL} (no default), which only SaaS mode
+// sets. Expanding the whole file would throw on those and break Lite `make
+// deploy`. The raw placeholders are valid JSON string values, so parse first,
+// then expand only the slice we actually consume.
+function expandPlaceholders(raw: string): string {
+  return raw.replace(/\$\{([^}]+)\}/g, (_, expression: string) => {
+    const [rawVarName, ...defaultParts] = expression.split(":-");
+    const varName = rawVarName.trim();
+    const defaultValue = defaultParts.length > 0 ? defaultParts.join(":-") : undefined;
+    const value = process.env[varName];
+    if (value !== undefined && value !== "") return JSON.stringify(value).slice(1, -1);
+    if (defaultValue !== undefined) return JSON.stringify(defaultValue).slice(1, -1);
+    throw new Error(`Environment variable ${varName} is not defined and no default provided`);
+  });
+}
+
+const rawConfig = JSON.parse(content) as { sourceBundleConfig?: SourceBundleConfig };
+const sourceBundleConfig =
+  rawConfig.sourceBundleConfig === undefined
+    ? undefined
+    : (JSON.parse(
+        expandPlaceholders(JSON.stringify(rawConfig.sourceBundleConfig)),
+      ) as SourceBundleConfig);
+const policy = buildSourceBundleLifecyclePolicy(sourceBundleConfig);
 console.log(JSON.stringify(policy));
