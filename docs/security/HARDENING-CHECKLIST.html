@@ -333,7 +333,7 @@
       <td class="area" rowspan="5">4<br>Data</td>
       <td><span class="item-id">DAT-01</span></td>
       <td>Secrets go to SSM Parameter Store SecureString; Secrets Manager is forbidden</td>
-      <td class="evidence">Harness enforcement rule <code>secrets-manager-forbidden</code> — <code>docs/architecture/harness.md</code>. Implementation in <code>.claude/harness/src/architecture.ts</code>. Rationale: Free Tier alignment + reduces blast radius vs. centralized secret manager.</td>
+      <td class="evidence">Harness enforcement rule <code>secrets-manager-forbidden</code> — <code>docs/architecture/harness.md</code>. Implementation under <code>.claude/harness/src/rules/</code>. Rationale: Free Tier alignment + reduces blast radius vs. centralized secret manager.</td>
       <td>Agent / Reviewer</td>
       <td><span class="badge ok">Implemented</span></td>
     </tr>

@@ -84,7 +84,7 @@
 <li><input disabled="" type="checkbox"> AWS account chosen for the event has at least one IAM admin user available to the operator on call.</li>
 <li><input disabled="" type="checkbox"> <code>infrastructure/environments/&lt;env&gt;/.env</code> exists and <code>make env-check-lite</code> (Lite mode) or <code>make env-check</code> (SaaS mode) returns no error.</li>
 <li><input disabled="" type="checkbox"> Billing alarm is configured for the event AWS account with a threshold appropriate for the planned problem catalog (a single Lite-mode event typically stays under the AWS Free Tier 25 RCU/WCU window enforced by the <code>DynamoDbLowCapacity</code> aspect, but per-team CFn stacks add cost).</li>
-<li><input disabled="" type="checkbox"> Source bundle bucket exists (run <code>make prepare-source-bundle</code> once if not).</li>
+<li><input disabled="" type="checkbox"> Source bundle bucket exists (<code>make deploy</code> creates it automatically; to pre-create it, run <code>bash scripts/prepare-source-bundle.sh</code>).</li>
 </ul>
 <h3>Deploy mode decision</h3>
 <ul>

@@ -209,13 +209,14 @@ catalog PR merges.
 
 ## Architecture
 
-TenkaCloud has three planes:
+TenkaCloud has four planes that talk through an EventBridge bus:
 
 | Plane | What it owns |
 | --- | --- |
 | **Control Plane** | SaaS tenant onboarding, pooled / silo tenant routing, and SBT integration |
-| **Application Plane** | Tenant Admin Console, Participant Portal, Cognito, runtime config, and per-tenant app data |
+| **Application Plane** | Tenant Admin Console, Cognito, runtime config, and per-tenant app data |
 | **Problem Deploy Backend** | Cross-account problem deploy jobs, state machines, worker Lambdas, audit, and EventBridge reconciliation |
+| **Participant Portal** | Per-team UI: problem endpoints, hints, submissions, scores, and AWS Console federation |
 
 ![TenkaCloud Lite demo flow](./docs/assets/tenkacloud-lite-demo.svg)
 

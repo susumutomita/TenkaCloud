@@ -198,7 +198,7 @@
 <hr>
 <h2>Plugin (problem-as-plugin)</h2>
 <p>The architectural pattern from ADR-012: a problem ships <strong>content + UI slot + scoring metadata</strong> to a generic platform host. The platform doesn&#39;t know what <code>microservice-migration-battle</code> <em>is</em>; it only knows how to read its <code>metadata.json</code>, deploy its <code>template.yaml</code>, mount its <code>portal/&lt;slot&gt;.tsx</code> into the participant portal, and poll its endpoints per the metadata.</p>
-<p>Three-asset model (+ optional fourth): <code>metadata.json</code> (required) + <code>template.yaml</code> (required) + <code>README.md</code> / <code>README.en.md</code> (required) + <code>portal/</code> (optional UI) + <code>services/</code> (optional in-stack code).</p>
+<p>Three-asset model (+ optional fourth): <code>metadata.json</code> (required) + <code>template.yaml</code> (required) + <code>README.md</code> (English, primary) / <code>README.ja.md</code> (Japanese mirror) (required) + <code>portal/</code> (optional UI) + <code>services/</code> (optional in-stack code).</p>
 <hr>
 <h2>Pooled vs Silo</h2>
 <p>The two SaaS tenant isolation models, both supported in SaaS mode.</p>
