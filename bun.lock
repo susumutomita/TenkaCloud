@@ -31,7 +31,7 @@
         "@tenkacloud/web-kit": "workspace:*",
         "http-status-codes": "^2.3.0",
         "react": "^19.2.7",
-        "react-dom": "^19.2.6",
+        "react-dom": "^19.2.7",
         "react-router": "^7.15.1",
       },
       "devDependencies": {
@@ -58,7 +58,7 @@
         "@tenkacloud/web-kit": "workspace:*",
         "http-status-codes": "^2.3.0",
         "react": "^19.2.7",
-        "react-dom": "^19.2.6",
+        "react-dom": "^19.2.7",
         "react-router": "^7.15.1",
       },
       "devDependencies": {
@@ -100,7 +100,7 @@
         "@tenkacloud/web-kit": "workspace:*",
         "http-status-codes": "^2.3.0",
         "react": "^19.2.7",
-        "react-dom": "^19.2.6",
+        "react-dom": "^19.2.7",
         "react-router": "^7.15.1",
         "zod": "^3.25.76",
       },
@@ -263,7 +263,7 @@
         "@vitejs/plugin-react-swc": "^4.3.1",
         "jsdom": "^25.0.1",
         "react": "^19.2.7",
-        "react-dom": "^19.2.6",
+        "react-dom": "^19.2.7",
         "typescript": "~6.0.3",
         "vitest": "^4.1.8",
       },
@@ -1600,7 +1600,7 @@
 
     "react": ["react@19.2.7", "", {}, "sha512-HNe9WslTbXmFK8o8cmwgAeJFSBvt1bPdHCVKtaaV+WlAN36mpT4hcRpwbf3fY56ar2oIXzsBpOAiIRHAdY0OlQ=="],
 
-    "react-dom": ["react-dom@19.2.6", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.6" } }, "sha512-0prMI+hvBbPjsWnxDLxlCGyM8PN6UuWjEUCYmZhO67xIV9Xasa/r/vDnq+Xyq4Lo27g8QSbO5YzARu0D1Sps3g=="],
+    "react-dom": ["react-dom@19.2.7", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.7" } }, "sha512-t0BRVXvbiE/o20Hfw669rLbMCDWtYZLvmJigy2f0MxsXF+71pxhR3xOkspmsO8h3ZlNzyibAmtCa3l4lYKk6gQ=="],
 
     "react-is": ["react-is@18.3.1", "", {}, "sha512-/LLMVyas0ljjAtoYiPqYiL8VWXzUUdThrmU5+n20DZv+a+ClRoevUzw5JxU+Ieh5/c87ytoTBV9G1FiKfNJdmg=="],
 
