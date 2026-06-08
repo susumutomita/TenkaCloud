@@ -394,6 +394,12 @@
   .cs-content { background:#f2f3f3; padding:14px 16px; min-height:0; overflow:hidden; }
   .cs-countdown { font-size:13px; color:#5f6b7a; margin-bottom:10px; font-weight:600; }
   .cs-countdown b { color:#16191f; font-weight:700; font-variant-numeric:tabular-nums; }
+  .cs-incident { margin-left:12px; font-family:var(--mono); font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; opacity:0; transition:opacity .3s ease; }
+  .cs-incident.show { opacity:1; }
+  .cs-incident.fire { color:#b8261d; background:#fdeceb; border:1px solid #f3c4c0; }
+  .cs-incident.ok { color:#1d7a44; background:#eafaf0; border:1px solid #cde9d7; }
+  .cs-badge.flash { animation:tcbadge .6s ease; }
+  @keyframes tcbadge { 0% { transform:scale(1.5); } 100% { transform:scale(1); } }
   .cs-container { background:#fff; border:1px solid #e9ebed; border-radius:8px; overflow:hidden; }
   .cs-ch {
     display:flex; align-items:baseline; gap:10px;
@@ -648,14 +654,14 @@
                 <div class="cs-sec">Event</div>
                 <div class="cs-link">Home</div>
                 <div class="cs-link on">Scoreboard</div>
-                <div class="cs-link">Notifications <span class="cs-badge">2</span></div>
+                <div class="cs-link">Notifications <span class="cs-badge" id="tcNotif">2</span></div>
                 <div class="cs-sec">Quests</div>
                 <div class="cs-link">StackStack</div>
                 <div class="cs-sec">Tools</div>
                 <div class="cs-link">CLI Credentials</div>
               </div>
               <div class="cs-content">
-                <div class="cs-countdown">残り <b id="tcClock">00:11:58</b></div>
+                <div class="cs-countdown">残り <b id="tcClock">00:11:58</b><span id="tcIncident" class="cs-incident"></span></div>
                 <div class="cs-container">
                   <div class="cs-ch">スコアボード <span class="cs-ch-cnt">4 チーム · 60 秒ごとに自動採点</span></div>
                   <div class="cs-table">
@@ -913,6 +919,7 @@
     setInterval(function () {
       var i = Math.floor(Math.random() * teams.length);
       teams[i].s += 40 + Math.floor(Math.random() * 220);
+      if (Math.random() < 0.25 && teams[i].done < TOTAL) teams[i].done++;
       render(teams[i].n);
     }, 1500);
 
@@ -926,6 +933,20 @@
         clock.textContent = (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
       }, 1000);
     }
+
+    var incidents = ["ai-wipes-database", "auth-setting-removed", "vibe-app-stopped", "site-defaced", "supply-chain-backdoor"];
+    var inc = document.getElementById("tcIncident");
+    var notif = document.getElementById("tcNotif");
+    var ix = 0, notifN = 2;
+    function fireIncident() {
+      var name = incidents[ix % incidents.length]; ix++;
+      if (inc) { inc.className = "cs-incident fire show"; inc.textContent = "\u26a0 " + name + " 発生"; }
+      if (notif) { notifN++; notif.textContent = notifN; notif.classList.remove("flash"); void notif.offsetWidth; notif.classList.add("flash"); }
+      setTimeout(function () { if (inc) { inc.className = "cs-incident ok show"; inc.textContent = "\u2713 " + name + " 復旧"; } }, 2600);
+      setTimeout(function () { if (inc) { inc.classList.remove("show"); } }, 3900);
+    }
+    setTimeout(fireIncident, 1200);
+    setInterval(fireIncident, 5000);
 
     var loopSteps = document.querySelectorAll(".battle-loop .bl-step");
     var loopArrs = document.querySelectorAll(".battle-loop .bl-arr");
