@@ -575,23 +575,19 @@
         <h2>クラウドに上げて、穴を塞ぎ、襲ってくる事故を捌く。</h2>
         <div class="timeline">
           <div class="tl-phase">
-            <span class="tl-t">0–15 min</span>
             <h3>クラウドで起動</h3>
             <p>ローカルでしか動かない AI 製アプリを、まず本物のクラウドで動かす。</p>
           </div>
           <div class="tl-phase">
-            <span class="tl-t">15–45 min</span>
             <h3>穴を塞ぐ</h3>
             <p>AI が作り置きしたリソース設定には穴がある。公開範囲・権限・認証を直す。</p>
           </div>
           <div class="tl-phase">
-            <span class="tl-t">45–85 min</span>
-            <h3>事故対応</h3>
+            <h3>インシデント対応</h3>
             <p>本番 DB の誤削除、サイト改ざん、サプライチェーン攻撃によるバックドア… 次々に発生。止めずに捌く。</p>
           </div>
           <div class="tl-phase">
-            <span class="tl-t">85–90 min</span>
-            <h3>生存判定</h3>
+            <h3>サイトを稼働させ続けると得点を獲得</h3>
             <p>稼働を守り切れたか、対応はどれだけ速かったか。順位が確定する。</p>
           </div>
         </div>
@@ -608,7 +604,7 @@
           <div class="section-label"><span class="badge">04</span><span>Battle の仕組み</span></div>
           <div class="wordmark"><img src="./assets/tenkacloud-icon.svg" alt="" />TenkaCloud</div>
         </div>
-        <h2>競技は、こう回る。審査員はいない。</h2>
+        <h2>競技の進み方</h2>
         <div class="battle-loop">
           <div class="bl-step"><b>1 · deploy</b><span>問題を本物のクラウドへ展開（AssumeRole + ExternalId）</span></div>
           <div class="bl-arr">→</div>
@@ -651,7 +647,7 @@
             </div>
           </div>
         </div>
-        <div class="bottom-line">審査員はいない。<strong>本物のクラウドの状態だけ</strong>が、点になる ── そしてこの仕組みは、StackStack 専用じゃない。</div>
+        <div class="bottom-line">同じ仕組みで開ける競技は、<strong>StackStack だけじゃない</strong>。</div>
       </div>
     </div>
   </section>
@@ -666,7 +662,7 @@
         </div>
         <h2>TenkaCloud ── 天下一武道会を開くためのプラットフォーム。</h2>
         <div style="display:grid;gap:16px;align-content:center;">
-          <p class="lead">StackStack は、その <strong>"第一試合"</strong> にすぎない。問題は plugin、TenkaCloud は host。AWS / GCP / Azure / さくら上で、<strong>Battle / Challenge</strong> の 2 競技パターンを、いくつでも開ける。</p>
+          <p class="lead">StackStack は、その <strong>"第一試合"</strong> にすぎない。問題は plugin、TenkaCloud は host。競技は2種類 ── <strong>Battle</strong>（攻撃や障害を捌きながらサービスを守り続けるリアルタイム対戦／下の3つ）と <strong>Challenge</strong>（1 問ずつ攻略して flag を出す個人戦／例: ネットワーク到達性）。</p>
           <div class="three-grid">
             <div class="card info-card cat-card">
               <span class="demo-flag">今日のデモ</span>
@@ -680,13 +676,13 @@
               <p>攻撃と障害が降り注ぐ中、サービスを落とさず守り抜く総力戦。</p>
             </div>
             <div class="card info-card cat-card">
-              <span class="kind challenge">CHALLENGE</span>
+              <span class="kind battle">BATTLE</span>
               <h3>Microservice Migration</h3>
               <p>巨大モノリスを、止めずにマイクロサービスへ移行しきる。</p>
             </div>
           </div>
         </div>
-        <div class="bottom-line">1 つの問題で終わらせない。クラウドエンジニアの実力を測る競技を、OSS で <strong>いくつでも</strong>。</div>
+        <div class="bottom-line">対応クラウドは今のところ <strong>AWS</strong>（GCP / Azure / さくらは順次）。OSS だから、競技は <strong>いくつでも</strong>増やせる。</div>
       </div>
     </div>
   </section>
@@ -712,7 +708,7 @@
             <div class="risk-item"><b>HOST</b><span>誰もホストを作ってくれないなら、OSS で作って開く。</span></div>
           </div>
         </div>
-        <div class="bottom-line">世界一のクラウドエンジニアを決める競技を見たい。だって面白いじゃないですか。</div>
+        <div class="bottom-line">世界一のクラウドエンジニアを決める天下一武道会を開きたい。きっと、面白い。</div>
       </div>
     </div>
   </section>
@@ -722,13 +718,12 @@
     <div class="canvas">
       <div class="story-slide">
         <div class="topbar">
-          <div class="section-label"><span class="badge">07</span><span>こんな人が作っています</span></div>
+          <div class="section-label"><span class="badge">07</span><span>Team</span></div>
           <div class="wordmark"><img src="./assets/tenkacloud-icon.svg" alt="" />TenkaCloud</div>
         </div>
         <h2>クラウド競技で勝ってきたメンバーが作っています。</h2>
         <div class="team-grid">
           <div class="card member-card">
-            <div class="member-mark">冨</div>
             <span class="kind">FOUNDER</span>
             <h3>冨田 進</h3>
             <p>JAWS DAYS 2024 AWS Game Day 優勝。2026 準優勝。</p>
