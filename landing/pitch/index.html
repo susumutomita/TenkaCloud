@@ -342,7 +342,10 @@
   }
   .bl-step b { font-family:var(--mono); font-size:13px; color:var(--blue); }
   .bl-step span { font-size:12px; color:var(--ink); font-weight:720; line-height:1.32; }
-  .bl-arr { display:grid; place-items:center; color:var(--blue-2); font-weight:900; font-size:17px; }
+  .bl-arr { display:grid; place-items:center; color:var(--blue-2); font-weight:900; font-size:17px; transition:color .25s ease, transform .25s ease; }
+  .bl-step { transition:border-color .25s ease, background .25s ease, box-shadow .25s ease; }
+  .bl-step.active { border-color:var(--blue); background:#eef5fd; box-shadow:0 0 0 2px rgba(9,105,218,.22); }
+  .bl-arr.on { color:var(--blue); transform:translateX(2px); }
 
   /* ── live portal (slide 04): real TenkaCloud UI = AWS Cloudscape ── */
   .tc-portal {
@@ -549,7 +552,7 @@
             <div class="step-row"><span class="step-no">3</span><div><h3>毎分採点・順位</h3><p>状態を読んで自動採点。順位がリアルタイムで動く。</p></div></div>
           </div>
         </div>
-        <div class="bottom-line">舞台は OSS プラットフォーム TenkaCloud。本日は第一試合「<strong>StackStack</strong>」について話します。<span class="gloss">用語 — AWS / Azure / Google Cloud：サーバーを借りられる大手クラウド。さくら：国産クラウド（さくらインターネット）。</span></div>
+        <div class="bottom-line">本日の一番は、第一試合「<strong>StackStack</strong>」。お題はシンプルです ──「AI で作って "動く" アプリ、あなたは本番に出せますか？」<span class="gloss">用語 — AWS / Azure / Google Cloud：サーバーを借りられる大手クラウド。さくら：国産クラウド（さくらインターネット）。</span></div>
       </div>
     </div>
   </section>
@@ -679,7 +682,7 @@
         </div>
         <h2>TenkaCloud ── 天下一武道会を開くためのプラットフォーム。</h2>
         <div style="display:grid;gap:16px;align-content:center;">
-          <p class="lead">StackStack は、その <strong>"第一試合"</strong> にすぎない。問題は plugin、TenkaCloud は host。競技は2種類 ── <strong>Battle</strong>（攻撃や障害を捌きながらサービスを守り続けるリアルタイム対戦／下の3つの例）と <strong>Challenge</strong>（1 問ずつ攻略して flag を探すCTF形式／例: ネットワーク到達性）。</p>
+          <p class="lead">StackStack は、その <strong>"第一試合"</strong> にすぎない。問題は plugin、TenkaCloud は host。競技は <strong>Battle</strong>（攻撃・障害を捌いて稼働を守る）と <strong>Challenge</strong>（1 問ずつ攻略して flag を出す）の 2 種類。</p>
           <div class="three-grid">
             <div class="card info-card cat-card">
               <span class="demo-flag">今日のデモ</span>
@@ -922,6 +925,17 @@
         var h = Math.floor(left / 3600), m = Math.floor((left % 3600) / 60), s = left % 60;
         clock.textContent = (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
       }, 1000);
+    }
+
+    var loopSteps = document.querySelectorAll(".battle-loop .bl-step");
+    var loopArrs = document.querySelectorAll(".battle-loop .bl-arr");
+    if (loopSteps.length) {
+      var li = 0;
+      setInterval(function () {
+        loopSteps.forEach(function (el, idx) { el.classList.toggle("active", idx === li); });
+        loopArrs.forEach(function (el, idx) { el.classList.toggle("on", idx === li); });
+        li = (li + 1) % loopSteps.length;
+      }, 1500);
     }
   })();
 </script>
