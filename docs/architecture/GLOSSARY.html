@@ -72,7 +72,7 @@
 <hr>
 <h2>ChallengePayloadStack</h2>
 <p>A CDK stack (<code>infrastructure/lib/challenge-payload/challenge-payload-stack.ts</code>) that materializes the S3 bucket + GitHub OIDC IAM Role used by an external &quot;additional problems&quot; repo. Currently <strong>dormant</strong> — no repo binds its <code>AWS_CHALLENGE_PUBLISH_ROLE_ARN</code> secret yet. Reserved for a future private/answer repo that does not want to ship via the OSS <code>problems/</code> submodule.</p>
-<p>Introduced by ADR-008 Phase 3 + Phase 4 (the bucket is the Phase 3 piece; the OIDC Role is the Phase 4 piece). The deploy-handler path that consumes its presigned URLs (= <code>resolveChallengePayloadBucket</code> → <code>CHALLENGE_PAYLOAD_URL</code> env into <code>deploy-battles.sh</code>) is also live but only fires when the bucket env is bound.</p>
+<p>Introduced by <a href="./adr-008-problem-payload-separation.html">ADR-008</a> Phase 3 + Phase 4 (the bucket is the Phase 3 piece; the OIDC Role is the Phase 4 piece). The deploy-handler path that consumes its presigned URLs (= <code>resolveChallengePayloadBucket</code> → <code>CHALLENGE_PAYLOAD_URL</code> env into <code>deploy-battles.sh</code>) is also live but only fires when the bucket env is bound.</p>
 <hr>
 <h2>CHALLENGE_PAYLOAD_URL</h2>
 <p>The env var that <code>deploy-handler</code> injects into a CodeBuild execution when a problem&#39;s payload should be fetched from S3 instead of read from the local <code>problems/</code> directory. When set, <code>scripts/deploy-battles.sh</code>&#39;s <code>resolve_problem_dir</code> downloads + unzips the URL into <code>/tmp/...</code> and substitutes that path before running <code>aws cloudformation deploy</code>. When unset, the script uses the in-repo <code>problems/&lt;category&gt;/&lt;id&gt;/</code> path directly (= source.zip bundled).</p>
@@ -229,7 +229,7 @@
 <p>The string that scopes every per-tenant resource. In Lite mode it is hardcoded to <code>&quot;local&quot;</code>. In SaaS mode it is <code>&quot;pooled&quot;</code> for pooled-tier tenants or a ULID for silo (PLATINUM) tenants. Used as the DDB partition key on every per-tenant table and as the EventBridge detail field for cross-plane routing.</p>
 <hr>
 <h2>TenkaCloudChallenge</h2>
-<p>The catalog repo: <a href="https://github.com/susumutomita/TenkaCloudChallenge">https://github.com/susumutomita/TenkaCloudChallenge</a>. Mounted as a Git submodule at <code>problems/</code> in this repo. Holds the actual problem content (battles + challenges) while the platform repo holds the host that deploys/scores them. The split is the physical manifestation of ADR-012 + ADR-008.</p>
+<p>The catalog repo: <a href="https://github.com/susumutomita/TenkaCloudChallenge">https://github.com/susumutomita/TenkaCloudChallenge</a>. Mounted as a Git submodule at <code>problems/</code> in this repo. Holds the actual problem content (battles + challenges) while the platform repo holds the host that deploys/scores them. The split is the physical manifestation of <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> + <a href="./adr-008-problem-payload-separation.html">ADR-008</a>.</p>
 <hr>
 <h2>Tier</h2>
 <p>The pricing tier a tenant belongs to: BASIC / STANDARD / PREMIUM / PLATINUM. The first three are pooled; PLATINUM is silo. Determined at tenant-create time and stored on <code>TenantDetails</code>. The pipeline decides pooled vs silo based on tier.</p>
