@@ -126,7 +126,7 @@ is a SaaS-only field and is not needed here.</p>
 </code></pre>
 <p><code>make deploy</code> runs three phases (it streams CDK output directly):</p>
 <ol>
-<li><strong>Prepare source bundle</strong> — packages <code>source.zip</code> and uploads it to an S3 bucket.</li>
+<li><strong>Prepare source bundle</strong> — packages <code>source.zip</code> and uploads it to a per-account S3 bucket (<code>tenkacloud-source-&lt;account&gt;-&lt;region&gt;</code>), created automatically on the first deploy. No bucket setup is needed, and the name is unique per account so a brand-new account works.</li>
 <li><strong>Deploy 2 stacks</strong> — <code>cdk deploy</code> of <code>tenkacloud-lite</code> + <code>tenkacloud-lite-problem-deploy</code> (~10 minutes the first time).</li>
 <li><strong>Resolve URLs + create the Tenant Admin</strong> — sends the Cognito invite email and prints the access URLs.</li>
 </ol>
