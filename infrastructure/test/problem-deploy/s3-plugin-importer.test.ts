@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   coordinationPluginS3Key,
   createS3PluginImporter,
+  pluginBundleDigest,
 } from "../../lib/problem-deploy/handlers/coordination-dispatcher-handler/s3-plugin-importer";
 import { loadCoordinationPlugin } from "../../lib/problem-deploy/handlers/participant-handler/coordination-plugin-loader";
 
@@ -60,5 +61,55 @@ describe("createS3PluginImporter", () => {
     const s3 = mockS3(undefined);
     const importer = createS3PluginImporter({ s3, bucket: "B" });
     await expect(importer("p1")).rejects.toThrow(/not found or empty/);
+  });
+});
+
+describe("createS3PluginImporter digest integrity (ADR-039 流用)", () => {
+  it("should compute a sha256:<hex> digest of the bundle bytes", () => {
+    expect(pluginBundleDigest(PLUGIN_JS)).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(pluginBundleDigest(PLUGIN_JS)).toBe(pluginBundleDigest(PLUGIN_JS));
+    expect(pluginBundleDigest(PLUGIN_JS)).not.toBe(pluginBundleDigest(`${PLUGIN_JS}// tampered`));
+  });
+
+  it("should import when the resolved expected digest matches", async () => {
+    const s3 = mockS3(PLUGIN_JS);
+    const importer = createS3PluginImporter({
+      s3,
+      bucket: "B",
+      resolveExpectedDigest: () => pluginBundleDigest(PLUGIN_JS),
+    });
+    const plugin = await loadCoordinationPlugin(importer, "ms-battle");
+    expect(plugin).not.toBeNull();
+  });
+
+  it("should fail closed (throw, no import) when the digest does not match the bytes", async () => {
+    // S3 bucket / publish 経路の改ざんを模す: 期待 digest と download bytes が食い違う。
+    const tamperedBody = `${PLUGIN_JS}globalThis.__pwned = true;\n`;
+    const s3 = mockS3(tamperedBody);
+    const importer = createS3PluginImporter({
+      s3,
+      bucket: "B",
+      resolveExpectedDigest: () => pluginBundleDigest(PLUGIN_JS),
+    });
+    await expect(importer("ms-battle")).rejects.toThrow(/digest mismatch/);
+    // loader 経由なら fail-closed で null (= plugin_unavailable)。
+    const s3b = mockS3(tamperedBody);
+    const importerB = createS3PluginImporter({
+      s3: s3b,
+      bucket: "B",
+      resolveExpectedDigest: () => pluginBundleDigest(PLUGIN_JS),
+    });
+    expect(await loadCoordinationPlugin(importerB, "ms-battle")).toBeNull();
+  });
+
+  it("should skip verification when the resolver returns undefined (module not pinned)", async () => {
+    const s3 = mockS3(PLUGIN_JS);
+    const importer = createS3PluginImporter({
+      s3,
+      bucket: "B",
+      resolveExpectedDigest: () => undefined,
+    });
+    const plugin = await loadCoordinationPlugin(importer, "ms-battle");
+    expect(plugin).not.toBeNull();
   });
 });

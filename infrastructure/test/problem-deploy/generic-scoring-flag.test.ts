@@ -51,4 +51,21 @@ describe("flagMatches (shared helper、 submit-flag と共有)", () => {
   it("should distinguish spaces in the middle", () => {
     expect(flagMatches("hello world", "hello  world")).toBe(false);
   });
+
+  it("should match a realistic per-deploy TC{...} flag exactly", () => {
+    const flag = "TC{a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6}";
+    expect(flagMatches(flag, flag)).toBe(true);
+    expect(flagMatches(`  ${flag}\n`, flag)).toBe(true);
+  });
+
+  it("should reject a near-miss that differs only in the last character (constant-time)", () => {
+    expect(
+      flagMatches("TC{a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6}", "TC{a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P7}"),
+    ).toBe(false);
+  });
+
+  it("should not treat empty input as a match for a non-empty flag", () => {
+    expect(flagMatches("", "TC{secret}")).toBe(false);
+    expect(flagMatches("   ", "TC{secret}")).toBe(false);
+  });
 });
