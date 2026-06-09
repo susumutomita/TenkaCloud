@@ -8,8 +8,12 @@ Contributions to TenkaCloud are welcome.
 git clone --recurse-submodules https://github.com/<your-username>/TenkaCloud.git
 cd TenkaCloud
 make install
-make start
+make build   # verify the toolchain compiles
 ```
+
+To run a single SPA locally, start its dev server from the app directory, e.g.
+`cd apps/application-admin-console && make dev`. To deploy into AWS, follow the
+[Quickstart](./README.md#quickstart).
 
 ## Where to start (under 15 minutes)
 

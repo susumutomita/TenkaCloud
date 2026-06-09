@@ -84,7 +84,7 @@
 <li><input disabled="" type="checkbox"> イベントに使う AWS アカウントに、 オペレータがオンコール中に呼べる IAM Admin ユーザーが少なくとも 1 名いること。</li>
 <li><input disabled="" type="checkbox"> <code>infrastructure/environments/&lt;env&gt;/.env</code> が存在し、 <code>make env-check-lite</code> (Lite mode) または <code>make env-check</code> (SaaS mode) がエラーを返さないこと。</li>
 <li><input disabled="" type="checkbox"> 想定 problem catalog に応じた閾値の billing alarm をイベント AWS アカウントに設定済み。 Lite mode の単発イベントは <code>DynamoDbLowCapacity</code> aspect が強制する AWS Free Tier 25 RCU/WCU 枠に概ね収まるが、 チーム別 CFn スタックは別途コストが発生する。</li>
-<li><input disabled="" type="checkbox"> Source bundle 用 S3 バケットが存在すること (= 未作成なら <code>make prepare-source-bundle</code> を 1 度実行)。</li>
+<li><input disabled="" type="checkbox"> Source bundle 用 S3 バケットが存在すること (= <code>make deploy</code> が自動作成する。 事前作成するなら <code>bash scripts/prepare-source-bundle.sh</code>)。</li>
 </ul>
 <h3>Deploy モードの決定</h3>
 <ul>

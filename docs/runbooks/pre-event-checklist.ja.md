@@ -20,7 +20,7 @@
 - [ ] イベントに使う AWS アカウントに、 オペレータがオンコール中に呼べる IAM Admin ユーザーが少なくとも 1 名いること。
 - [ ] `infrastructure/environments/<env>/.env` が存在し、 `make env-check-lite` (Lite mode) または `make env-check` (SaaS mode) がエラーを返さないこと。
 - [ ] 想定 problem catalog に応じた閾値の billing alarm をイベント AWS アカウントに設定済み。 Lite mode の単発イベントは `DynamoDbLowCapacity` aspect が強制する AWS Free Tier 25 RCU/WCU 枠に概ね収まるが、 チーム別 CFn スタックは別途コストが発生する。
-- [ ] Source bundle 用 S3 バケットが存在すること (= 未作成なら `make prepare-source-bundle` を 1 度実行)。
+- [ ] Source bundle 用 S3 バケットが存在すること (= `make deploy` が自動作成する。 事前作成するなら `bash scripts/prepare-source-bundle.sh`)。
 
 ### Deploy モードの決定
 

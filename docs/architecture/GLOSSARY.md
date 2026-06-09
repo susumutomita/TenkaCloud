@@ -163,7 +163,7 @@ The baseline policy must restrict `Resource: "*"` to either a tag-based Conditio
 
 The architectural pattern from ADR-012: a problem ships **content + UI slot + scoring metadata** to a generic platform host. The platform doesn't know what `microservice-migration-battle` *is*; it only knows how to read its `metadata.json`, deploy its `template.yaml`, mount its `portal/<slot>.tsx` into the participant portal, and poll its endpoints per the metadata.
 
-Three-asset model (+ optional fourth): `metadata.json` (required) + `template.yaml` (required) + `README.md` / `README.en.md` (required) + `portal/` (optional UI) + `services/` (optional in-stack code).
+Three-asset model (+ optional fourth): `metadata.json` (required) + `template.yaml` (required) + `README.md` (English, primary) / `README.ja.md` (Japanese mirror) (required) + `portal/` (optional UI) + `services/` (optional in-stack code).
 
 ---
 
