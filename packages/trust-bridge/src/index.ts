@@ -30,7 +30,6 @@ export type {
   StsAssumeRoleClient,
 } from "./aws-assume-role.js";
 export { AwsAssumeRoleExchange } from "./aws-assume-role.js";
-
 export type {
   AzureAdapterOptions,
   AzureCredential,
@@ -40,6 +39,21 @@ export type {
   AzureTokenExchangeOutput,
 } from "./azure-federated-credential.js";
 export { AzureFederatedCredentialExchange } from "./azure-federated-credential.js";
+export type {
+  ArtifactInspection,
+  ArtifactInspector,
+  ClaimInput,
+  CustomerExecutionAuthorized,
+  CustomerExecutionOutcome,
+  CustomerExecutionPlaneOptions,
+  CustomerExecutionPolicy,
+  CustomerExecutionRejected,
+  CustomerExecutionRejectionReason,
+  CustomerExecutionStage,
+  PolicyDecision,
+  PolicyEvaluator,
+} from "./customer-execution-plane.js";
+export { CustomerExecutionPlane, computeArtifactDigest } from "./customer-execution-plane.js";
 
 export type {
   GcpAdapterOptions,
