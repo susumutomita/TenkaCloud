@@ -138,11 +138,15 @@ export
 # synth/diff を Makefile 単体で通す時の placeholder (install.sh は deploy 時に上書きする)。
 CDK_PARAM_SYSTEM_ADMIN_EMAIL ?= $(SYSTEM_ADMIN_EMAIL)
 # Deploy uses a globally-unique, account-scoped source bucket — a fixed name
-# collides across accounts (S3 bucket names are global), so a brand-new AWS
-# account cannot create it. Compute it from AWS_ACCOUNT_ID/AWS_REGION when
-# available; fall back to a DNS-valid placeholder only for `make synth` without
-# creds (fromBucketName validates 3-63 lowercase chars).
-CDK_PARAM_S3_BUCKET_NAME ?= $(if $(strip $(AWS_ACCOUNT_ID)),tenkacloud-source-$(strip $(AWS_ACCOUNT_ID))-$(if $(strip $(AWS_REGION)),$(strip $(AWS_REGION)),ap-northeast-1),serverless-saas-placeholder)
+# collides across accounts (S3 bucket names are global). Compute it only when
+# BOTH the account and a region are known, resolving the region as
+# AWS_REGION -> AWS_DEFAULT_REGION to match prepare-source-bundle.sh's env order
+# (so the name the script uploads to and the name cdk reads always agree — we
+# never guess a region). Otherwise keep a DNS-valid placeholder for `make synth`
+# without creds (fromBucketName validates 3-63 lowercase chars); the script then
+# resolves the region itself (incl. `aws configure`) and computes the name.
+TC_SOURCE_REGION := $(or $(strip $(AWS_REGION)),$(strip $(AWS_DEFAULT_REGION)))
+CDK_PARAM_S3_BUCKET_NAME ?= $(if $(and $(strip $(AWS_ACCOUNT_ID)),$(TC_SOURCE_REGION)),tenkacloud-source-$(strip $(AWS_ACCOUNT_ID))-$(TC_SOURCE_REGION),serverless-saas-placeholder)
 CDK_SOURCE_NAME ?= source.zip
 CDK_PARAM_COMMIT_ID ?= placeholder
 
