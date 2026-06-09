@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-008: Problem payload separation — private / answer content via S3 + presigned URL</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.reject  { background: #ffd8d3; color: var(--c-reject); }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-008: Problem payload separation — private / answer content via S3 + presigned URL</h1>
+  <div class="meta">
+    <div><b>Status:</b><span class="badge accept">Accepted</span> 2026-05-13 — implemented but <strong>dormant</strong> (no repo binds the publish secret yet).</div>
+    <div><b>Related ADR:</b>
+      <a href="./adr-003-problem-catalog-ddb.html">ADR-003</a> (problem catalog) ·
+      <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> (problem = plugin)
+    </div>
+    <div><b>Related issues:</b> <a href="https://github.com/susumutomita/TenkaCloud/pull/1184">PR-1184</a> (ChallengePayloadStack)</div>
+  </div>
+</header>
+
+<section>
+<h2>Context</h2>
+
+<p>Problems are delivered as plugins (<a href="./adr-012-problem-plugin-architecture.html">ADR-012</a>): the public catalog lives in the <code>problems/</code> git submodule (<code>TenkaCloudChallenge</code>), is packaged into <code>source.zip</code>, and is deployed into each competitor account from its <code>metadata.json</code> + <code>template.yaml</code>.</p>
+
+<p>Two kinds of problem content do <strong>not</strong> belong in that public OSS submodule:</p>
+
+<ul>
+<li><strong>Answer / private competitive content</strong> — anything that would leak the solution if it shipped publicly (graded payloads, hidden flags, full exploit chains).</li>
+<li><strong>Large binary payloads</strong> — Docker images, datasets, or fixtures that would bloat the submodule and <code>source.zip</code>.</li>
+</ul>
+
+<p>We need a way for the deploy-handler to pull a per-problem payload <strong>at deploy time</strong> from a separate, optionally-private source, without bloating or exposing the OSS repo, and without long-lived credentials.</p>
+</section>
+
+<section>
+<h2>Decision</h2>
+
+<p>Separate the problem <strong>payload</strong> from the catalog. A private (or simply separate) repo publishes per-problem zips to an S3 bucket; the deploy-handler fetches them via a short-TTL presigned URL when it deploys a problem. The work lands in phases so each is independently observable.</p>
+
+<table>
+<thead><tr><th>Phase</th><th>What</th><th>Where</th></tr></thead>
+<tbody>
+<tr>
+  <td><strong>Phase 2</strong></td>
+  <td>Deploy-handler consumption path. When <code>challengePayloadBucketName</code> is bound, the handler resolves a <strong>15-minute TTL</strong> presigned URL for <code>s3://&lt;bucket&gt;/&lt;problemId&gt;/&lt;sha&gt;.zip</code> (and <code>latest.zip</code>) and passes it into the competitor-account deploy. Unbound → the in-submodule template is the only source.</td>
+  <td><code>ProblemDeployBackendStack</code> (<code>resolveChallengePayloadBucket</code> → <code>CHALLENGE_PAYLOAD_URL</code>)</td>
+</tr>
+<tr>
+  <td><strong>Phase 3</strong></td>
+  <td>Publish bucket. A versioned, fully-private S3 bucket for the payloads.</td>
+  <td><code>ChallengePayloadStack</code> (<code>infrastructure/lib/challenge-payload/</code>)</td>
+</tr>
+<tr>
+  <td><strong>Phase 4</strong></td>
+  <td>Publish identity. A GitHub OIDC IAM Role (least-privilege, scoped to the repo + branch via the OIDC <code>sub</code> claim) that the publishing repo's <code>publish.yml</code> AssumeRoles to upload changed problem dirs. <strong>No long-lived keys.</strong></td>
+  <td><code>ChallengePayloadStack</code> (OIDC role)</td>
+</tr>
+</tbody>
+</table>
+
+<h3>Binding</h3>
+
+<p>Activating the path is an explicit, manual bind on the publishing repo:</p>
+
+<ul>
+<li>bucket name → repo <code>vars</code> (display-only, no secret needed),</li>
+<li>publish Role ARN → repo <code>secrets.AWS_CHALLENGE_PUBLISH_ROLE_ARN</code>.</li>
+</ul>
+
+<p>Once bound, the repo's <code>main</code>-push trigger starts publishing and the deploy-handler starts resolving presigned URLs. Until then the path is dormant.</p>
+</section>
+
+<section>
+<h2>Consequences</h2>
+
+<h3>Positive</h3>
+<ul>
+<li>The public OSS catalog stays lean and safe to publish — private / answer content never ships in the submodule or <code>source.zip</code>.</li>
+<li>Presigned URLs are short-lived (15&nbsp;min), so a payload URL cannot be replayed long after a deploy.</li>
+<li>Publishing uses GitHub OIDC (no static AWS keys), scoped to a single repo + branch.</li>
+<li>Cost is ~zero while dormant; the bucket only accrues storage once a repo publishes.</li>
+</ul>
+
+<h3>Negative / open</h3>
+<ul>
+<li><strong>Dormant by default.</strong> No repo binds <code>AWS_CHALLENGE_PUBLISH_ROLE_ARN</code> today, so the deploy-handler falls back to the in-submodule template. The stack + handler path exist but are inactive until a private/answer repo opts in.</li>
+<li>A second source of truth for problem content (submodule template vs. published payload) — authors must understand which assets ship where.</li>
+</ul>
+
+<h3>Constraints</h3>
+<ul>
+<li>This is the cost-zero, least-privilege path: do <strong>not</strong> substitute long-lived publish keys or AWS Secrets Manager (see <code>secrets-manager-forbidden</code> in the architecture harness).</li>
+<li>The OIDC role trust policy must stay scoped to the publishing repo + branch via the <code>sub</code> claim; widening it re-opens a cross-repo publish vector.</li>
+</ul>
+</section>
+
+</body>
+</html>

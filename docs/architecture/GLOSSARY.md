@@ -36,7 +36,7 @@ Distinguished by `metadata.category` (= `"Battle"` or `"Challenge"`). Battle and
 
 A CDK stack (`infrastructure/lib/challenge-payload/challenge-payload-stack.ts`) that materializes the S3 bucket + GitHub OIDC IAM Role used by an external "additional problems" repo. Currently **dormant** — no repo binds its `AWS_CHALLENGE_PUBLISH_ROLE_ARN` secret yet. Reserved for a future private/answer repo that does not want to ship via the OSS `problems/` submodule.
 
-Introduced by ADR-008 Phase 3 + Phase 4 (the bucket is the Phase 3 piece; the OIDC Role is the Phase 4 piece). The deploy-handler path that consumes its presigned URLs (= `resolveChallengePayloadBucket` → `CHALLENGE_PAYLOAD_URL` env into `deploy-battles.sh`) is also live but only fires when the bucket env is bound.
+Introduced by [ADR-008](./adr-008-problem-payload-separation.html) Phase 3 + Phase 4 (the bucket is the Phase 3 piece; the OIDC Role is the Phase 4 piece). The deploy-handler path that consumes its presigned URLs (= `resolveChallengePayloadBucket` → `CHALLENGE_PAYLOAD_URL` env into `deploy-battles.sh`) is also live but only fires when the bucket env is bound.
 
 ---
 
@@ -220,7 +220,7 @@ The string that scopes every per-tenant resource. In Lite mode it is hardcoded t
 
 ## TenkaCloudChallenge
 
-The catalog repo: <https://github.com/susumutomita/TenkaCloudChallenge>. Mounted as a Git submodule at `problems/` in this repo. Holds the actual problem content (battles + challenges) while the platform repo holds the host that deploys/scores them. The split is the physical manifestation of ADR-012 + ADR-008.
+The catalog repo: <https://github.com/susumutomita/TenkaCloudChallenge>. Mounted as a Git submodule at `problems/` in this repo. Holds the actual problem content (battles + challenges) while the platform repo holds the host that deploys/scores them. The split is the physical manifestation of [ADR-012](./adr-012-problem-plugin-architecture.html) + [ADR-008](./adr-008-problem-payload-separation.html).
 
 ---
 

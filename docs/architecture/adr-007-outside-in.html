@@ -285,7 +285,7 @@ inside-out (現状) では「<b>動いた</b> = 各 layer の unit test が gree
 </tbody>
 </table>
 
-<p>追加で <strong>新 invariant <code>INVARIANT_PR_HAS_OUTSIDE_IN_SCENARIO</code></strong> を harness に追加する。最初は warn 出力のみ、Phase 2 で error 化する。harness の rule は <code>.claude/harness/src/architecture.ts</code> に新規 case を追加。</p>
+<p>追加で <strong>新 invariant <code>INVARIANT_PR_HAS_OUTSIDE_IN_SCENARIO</code></strong> を harness に追加する。最初は warn 出力のみ、Phase 2 で error 化する。harness の rule は <code>.claude/harness/src/rules/</code> に 1 file = 1 rule で追加 (entry は <code>.claude/harness/bin/architecture.ts</code>)。</p>
 </section>
 
 <section>

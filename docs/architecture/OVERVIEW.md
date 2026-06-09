@@ -104,7 +104,7 @@ problems/                                     problems/                         
 
 A new problem = a PR to the catalog repo + a `git submodule update --remote problems` bump here. No platform Lambda code changes. The host validates the metadata against `SCHEMA.json` (= source of truth for the contract between platform and catalog), then dispatches scoring based on `scoring.kind`.
 
-There's a second, dormant path for content that shouldn't ship via OSS submodule: `ChallengePayloadStack` (ADR-008 Phase 3) provides an S3 + GitHub OIDC route where a private "answer" repo can publish per-problem zips and the deploy-handler fetches them via presigned URL. It's available but currently no repo binds the secret.
+There's a second, dormant path for content that shouldn't ship via OSS submodule: `ChallengePayloadStack` ([ADR-008](./adr-008-problem-payload-separation.html) Phase 3) provides an S3 + GitHub OIDC route where a private "answer" repo can publish per-problem zips and the deploy-handler fetches them via presigned URL. It's available but currently no repo binds the secret.
 
 ## Data isolation
 
