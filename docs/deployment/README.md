@@ -94,7 +94,7 @@ make deploy
 
 `make deploy` runs three phases (it streams CDK output directly):
 
-1. **Prepare source bundle** — packages `source.zip` and uploads it to an S3 bucket.
+1. **Prepare source bundle** — packages `source.zip` and uploads it to a per-account S3 bucket (`tenkacloud-source-<account>-<region>`), created automatically on the first deploy. No bucket setup is needed, and the name is unique per account so a brand-new account works.
 2. **Deploy 2 stacks** — `cdk deploy` of `tenkacloud-lite` + `tenkacloud-lite-problem-deploy` (~10 minutes the first time).
 3. **Resolve URLs + create the Tenant Admin** — sends the Cognito invite email and prints the access URLs.
 

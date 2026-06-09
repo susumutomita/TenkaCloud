@@ -111,3 +111,38 @@ describe("scripts/prepare-source-bundle.sh region resolution", () => {
     expect(`${result.stdout}\n${result.stderr}`).toContain("REGION / ACCOUNT_ID を解決できません");
   });
 });
+
+describe("scripts/prepare-source-bundle.sh bucket resolution (fresh-account #1749)", () => {
+  it("should compute an account-scoped bucket when the name is unset", () => {
+    const result = resolveBundleEnv({ AWS_REGION: "ap-northeast-1" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain(
+      "CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-111122223333-ap-northeast-1",
+    );
+  });
+
+  it("should override the non-unique synth placeholder with an account-scoped name", () => {
+    // The Makefile's synth-only `serverless-saas-placeholder` is globally non-unique,
+    // so a fresh account cannot create it; the deploy path must replace it.
+    const result = resolveBundleEnv({
+      AWS_REGION: "ap-northeast-1",
+      CDK_PARAM_S3_BUCKET_NAME: "serverless-saas-placeholder",
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain(
+      "CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-111122223333-ap-northeast-1",
+    );
+  });
+
+  it("should honor an explicit, non-placeholder bucket override", () => {
+    const result = resolveBundleEnv({
+      AWS_REGION: "ap-northeast-1",
+      CDK_PARAM_S3_BUCKET_NAME: "my-own-source-bucket",
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("CDK_PARAM_S3_BUCKET_NAME=my-own-source-bucket");
+  });
+});

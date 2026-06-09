@@ -38,7 +38,15 @@ if [ -z "${REGION}" ] || [ -z "${ACCOUNT_ID}" ]; then
   exit 1
 fi
 
-export CDK_PARAM_S3_BUCKET_NAME="${CDK_PARAM_S3_BUCKET_NAME:-tenkacloud-source-${ACCOUNT_ID}-${REGION}}"
+# Resolve a globally-unique, account-scoped source bucket. A fixed name collides
+# across AWS accounts (S3 bucket names are global), so treat both an unset value
+# and the Makefile's synth-only `serverless-saas-placeholder` as "compute an
+# account-scoped name". This keeps the upload bucket consistent with what the CDK
+# app reads, and lets a brand-new account deploy without a name collision.
+if [ -z "${CDK_PARAM_S3_BUCKET_NAME:-}" ] || [ "${CDK_PARAM_S3_BUCKET_NAME}" = "serverless-saas-placeholder" ]; then
+  CDK_PARAM_S3_BUCKET_NAME="tenkacloud-source-${ACCOUNT_ID}-${REGION}"
+fi
+export CDK_PARAM_S3_BUCKET_NAME
 export CDK_SOURCE_NAME="${CDK_SOURCE_NAME:-source.zip}"
 
 # Resolve-only seam: stop after env resolution so the resolution contract can be
