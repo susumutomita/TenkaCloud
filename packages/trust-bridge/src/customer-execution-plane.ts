@@ -160,10 +160,12 @@ function digestsEqual(a: string, b: string): boolean {
   const bb = Buffer.from(b, "utf8");
   // Schema + computeArtifactDigest both yield the fixed `sha256:`+64hex shape, so
   // lengths always match here; the guard keeps timingSafeEqual from throwing if
-  // either side is ever loosened.
+  // either side is ever loosened — provably unreachable through the validated path.
+  /* v8 ignore start */
   if (ab.length !== bb.length) {
     return false;
   }
+  /* v8 ignore stop */
   return timingSafeEqual(ab, bb);
 }
 

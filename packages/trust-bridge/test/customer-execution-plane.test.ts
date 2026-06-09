@@ -152,6 +152,22 @@ describe("CustomerExecutionPlane.authorize (#1727 / ADR-039)", () => {
     });
   });
 
+  it("should surface schema-invalid details for a validly-signed but malformed payload (intent-authenticity)", async () => {
+    // JWS signature is valid (signed with SECRET) but the payload is not a
+    // CloudActionIntent, so verifyIntent returns schema-invalid + details.
+    const malformed = {
+      version: INTENT_VERSION,
+      requestId: "missing-everything-else",
+    } as unknown as CloudActionIntent;
+    const outcome = await plane().authorize({ token: token(malformed) });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) {
+      expect(outcome.stage).toBe("intent-authenticity");
+      expect(outcome.reason).toBe("schema-invalid");
+      expect((outcome.details ?? []).length).toBeGreaterThan(0);
+    }
+  });
+
   it("should reject an audience that is not this execution plane (intent-authorization)", async () => {
     const other = intent({ audience: "customer-exec-plane://someone-else" });
     const outcome = await plane().authorize({
@@ -393,6 +409,39 @@ describe("CustomerExecutionPlane.authorize (#1727 / ADR-039)", () => {
       ok: false,
       stage: "artifact-safety",
       reason: "artifact-inspection-error",
+    });
+  });
+
+  it("should authorize when the artifact inspector allows the bytes (artifact-safety)", async () => {
+    const inspector: ArtifactInspector = {
+      async inspect() {
+        return { decision: "allow" };
+      },
+    };
+    const outcome = await plane({ artifactInspector: inspector }).authorize({
+      token: token(),
+      artifact: { bytes: APPROVED_BYTES },
+    });
+    expect(outcome.ok).toBe(true);
+  });
+
+  it("should reject an action type the local policy does not permit (intent-authorization)", async () => {
+    const inspect = intent({
+      action: {
+        type: "inspect",
+        engine: "cloudformation",
+        requestedScopes: ["cloudformation:DescribeStacks"],
+      },
+    });
+    const outcome = await plane({
+      policy: { allowedActionTypes: ["deploy", "destroy"] },
+    }).authorize({
+      token: token(inspect),
+    });
+    expect(outcome).toMatchObject({
+      ok: false,
+      stage: "intent-authorization",
+      reason: "action-type-not-allowed",
     });
   });
 
