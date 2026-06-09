@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ADR-039: Customer Execution Plane — keep privileged deploy authority inside the customer boundary</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  tr.show td { background: #ddf4e0; }
+  tr.hide td { background: #ffe9e9; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept  { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject  { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn    { background: #fff8c5; color: var(--c-warn); }
+  .badge.muted   { background: var(--c-bg-soft); color: var(--c-muted); }
+  .decisions { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: .8rem; margin: 1rem 0; }
+  .decision-card { border: 1px solid var(--c-border); border-radius: 6px; padding: .8rem 1rem; background: var(--c-bg-soft); }
+  .decision-card .num { font-size: 0.78rem; font-weight: 700; color: var(--c-link); letter-spacing: 0.05em; }
+  .decision-card .title { font-weight: 600; margin: 0.2rem 0 0.4rem; }
+  .decision-card .body { font-size: 0.88rem; color: var(--c-text); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; }
+  li { margin: 0.15rem 0; }
+  .flow { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; white-space: pre;
+          background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 6px; padding: 1rem; overflow-x: auto; }
+  .props { counter-reset: prop; }
+  .props li { margin: 0.3rem 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-039: Customer Execution Plane — keep privileged deploy authority inside the customer boundary</h1>
+  <p><em>The hosted control plane sends a signed, digest-bound <code>CloudActionIntent</code>; a customer-controlled execution plane validates it against local policy and deploys with authority the hosted plane can never obtain. A signed signature is authenticity, not authorization.</em></p>
+  <div class="meta">
+    <div><b>Status:</b><span class="badge accept">Accepted</span> 2026-06-09 — design + library + PoC shipped; production agent phased</div>
+    <div><b>Extends:</b> <a href="adr-017-cloud-action-intent-trust-bridge.html">ADR-017</a></div>
+    <div><b>Builds on:</b> <a href="adr-002-cross-account-federation.html">ADR-002</a>, <a href="adr-009-cross-account-federation.html">ADR-009</a></div>
+    <div><b>Issue:</b> #1727</div>
+  </div>
+</header>
+
+<h2>1. Context</h2>
+
+<p>TenkaCloud's cross-account deployment path is intentionally centralized. The hosted control plane assumes a role in the competitor account and runs CloudFormation there:</p>
+
+<div class="flow">Tenant API
+  → EventBridge (DeployCreateRequested)
+  → Step Functions
+  → central Deploy CodeBuild project        (scripts/deploy-battles.sh)
+  → sts:AssumeRole into TenkaCloud-CompetitorDeploy-Role  (account-id + ExternalId trust)
+  → aws cloudformation deploy</div>
+
+<p>The competitor installs <code>infrastructure/templates/competitor-bootstrap.yaml</code>, which creates <code>TenkaCloud-CompetitorDeploy-Role</code>. The trust policy is restricted to the control-plane account id plus a tenant-scoped <code>ExternalId</code> (read from SSM SecureString in <code>scripts/deploy-battles.sh</code> before the switch to temporary credentials). The control-plane CodeBuild role may only assume roles matching <code>arn:aws:iam::*:role/TenkaCloud-*</code>.</p>
+
+<p>The role currently attaches the AWS-managed <code>AdministratorAccess</code> policy. This is a deliberate trade-off: challenge templates touch unpredictable services, so a granular policy would be a perpetual IAM whack-a-mole. It is already recorded as a documented gap (IAM-05) in the <a href="../security/HARDENING-CHECKLIST.html">hardening checklist</a>.</p>
+
+<h3>1.1 Existing defense in depth (not understated)</h3>
+
+<p>The current model already includes meaningful controls, and this ADR preserves all of them:</p>
+
+<ul>
+  <li>tenant-scoped <code>ExternalId</code> stored in SSM SecureString (no Secrets Manager — cost-zero principle)</li>
+  <li>verified competitor-account onboarding (<a href="adr-002-cross-account-federation.html">ADR-002</a> / <a href="adr-009-cross-account-federation.html">ADR-009</a>: <code>CompetitorAccounts</code> registry, only verified accounts are selectable)</li>
+  <li>a dedicated Lambda for account verification and secret handling</li>
+  <li><code>ExternalId</code> rotation-age audit (<code>external-id-audit-lambda.ts</code>, Issue #603)</li>
+  <li>role-name restriction via the <code>TenkaCloud-*</code> prefix</li>
+  <li>separation of the central CodeBuild role from the in-account CloudFormation execution role</li>
+  <li><code>tc-*</code> stack-name scoping where IAM supports it</li>
+  <li>problem-template review as a separate trust boundary</li>
+</ul>
+
+<h3>1.2 The residual blast radius this ADR addresses</h3>
+
+<p><code>ExternalId</code> defends against the <em>confused-deputy</em> problem: another tenant cannot trick the control plane into using account A's authority for account B. It does <strong>not</strong> protect a customer from compromise of the trusted control plane itself.</p>
+
+<p>If the control plane API, the deploy worker, and the secret-access path are compromised <em>together</em>, the attacker obtains the same temporary administrative authority used for legitimate deployment across every connected competitor account. The honest statement today is:</p>
+
+<blockquote><em>TenkaCloud uses tenant-scoped ExternalId, verified onboarding, temporary STS credentials, isolated workers, audit controls, and reviewed templates.</em></blockquote>
+
+<p>The statement the current model <strong>cannot</strong> make is:</p>
+
+<blockquote><em>A compromise of the TenkaCloud control plane cannot obtain administrative authority in connected customer accounts.</em></blockquote>
+
+<h2>2. Decision</h2>
+
+<p><strong>Accepted:</strong> add an enterprise <em>Customer Execution Plane</em> deployment mode that extends — not replaces — the Trust Bridge protocol from <a href="adr-017-cloud-action-intent-trust-bridge.html">ADR-017</a>. The hosted control plane signs a <code>CloudActionIntent</code> bound to an immutable artifact digest and a recipient audience; a customer-controlled execution component validates authenticity, applies local policy, verifies the artifact, and deploys using authority that is unavailable to the hosted control plane.</p>
+
+<p>The decisive change is not <em>where a queue consumer runs</em>. It is <em>where provider-native authority is exchanged and exercised</em>.</p>
+
+<div class="flow">TenkaCloud hosted control plane          Customer Execution Plane
+  - tenant/event/team/problem state         - outbound pull of work
+  - approved-artifact metadata              - JWS / issuer / audience / TTL / replay
+  - CloudActionIntent + JWS signing  ──────▶ - local PolicyEvaluator (fail-closed)
+  - status tracking (Deployments)           - artifact digest + provenance verify
+  - NO AWS credential                       - LOCAL authority acquisition
+  - NO customer-role AssumeRole             - CloudFormation deploy/delete
+                                            - signed result reporting
+                                                       │
+                                                       ▼
+                                       Dedicated challenge / sandbox accounts</div>
+
+<h3>2.1 Why a follow-on ADR rather than amending ADR-017</h3>
+
+<p>ADR-017 is <span class="badge accept">Accepted</span> and already shipped as <code>packages/trust-bridge</code> (schema, canonical serialization, JWS sign/verify, TTL, nonce hook, audit, AWS/GCP/Azure adapters). Amending an accepted, shipped ADR would obscure its record. ADR-039 is therefore a follow-on that <em>reuses</em> ADR-017's <code>CloudActionIntent</code>, <code>PolicyEvaluator</code>, and audit concepts and adds the customer-execution semantics on top. No competing signed-job protocol is introduced.</p>
+
+<h3>2.2 Decisions</h3>
+
+<div class="decisions">
+  <div class="decision-card">
+    <div class="num">D1</div>
+    <div class="title">Extend CloudActionIntent, don't fork it</div>
+    <div class="body">Add two backward-compatible, signature-covered fields to the existing v1 schema: top-level <code>audience</code> (recipient binding) and <code>action.artifact</code> (immutable <code>sha256:</code> digest). The central CodeBuild path keeps working — both fields are optional.</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D2</div>
+    <div class="title">Five-property separation, fail-closed</div>
+    <div class="body">authenticity → authorization → artifact integrity → artifact safety → execution authority. Each is a distinct, independently-failing stage. A valid signature satisfies only the first.</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D3</div>
+    <div class="title">PolicyEvaluator is local and pluggable</div>
+    <div class="body">ADR-017 D4's <code>PolicyEvaluator</code> is realized in code for the first time here. Authorship is the customer's (inline allowlist / OPA / Cedar). Any non-<code>allow</code> verdict — or a throwing evaluator — denies.</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D4</div>
+    <div class="title">Execution authority never leaves the customer</div>
+    <div class="body">The plane deploys via a LOCAL adapter (same-account CloudFormation service role / LocalStack), never by assuming a role the hosted control plane trusts. <code>authorize()</code> returns a verified intent, never provider credentials.</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D5</div>
+    <div class="title">Reuse the Deployments state model</div>
+    <div class="body">Results map back into the existing <code>Deployments</code> table + Step Functions semantics via signed result reporting. No second, unrelated product model.</div>
+  </div>
+  <div class="decision-card">
+    <div class="num">D6</div>
+    <div class="title">Coexist, then migrate</div>
+    <div class="body">The central AssumeRole path stays a supported compatibility mode per tenant/account. Modes are selected by configuration; the central path is not deleted before a migration story exists.</div>
+  </div>
+</div>
+
+<h2>3. Security properties (validated in order, fail-closed)</h2>
+
+<p>The proof-of-concept core (<code>packages/trust-bridge/src/customer-execution-plane.ts</code>) enforces these as separate stages so a failure names exactly which property was violated:</p>
+
+<ol class="props">
+  <li><strong>Intent authenticity</strong> — JWS signature, trusted issuer/secret, schema, <code>issued/notBefore/expiresAt</code> TTL, and nonce replay protection (delegated to <code>verifyIntent</code>). <em>Did TenkaCloud sign this exact request?</em></li>
+  <li><strong>Intent authorization</strong> — <code>audience</code> equals this plane; target <code>providerAccountRef</code> ∈ local allowlist; <code>region</code> ∈ local allowlist; action type permitted; <code>source.problemId</code> ∈ locally approved set; privilege-escalation tolerated only if locally allowed; TTL within the local ceiling; then the local <code>PolicyEvaluator</code>. <em>Does this customer allow this action here?</em></li>
+  <li><strong>Artifact integrity</strong> — the supplied bytes hash to the <code>sha256:</code> digest the signature covers (constant-time compare), with an optional size check. <em>Are these the approved bytes?</em></li>
+  <li><strong>Artifact safety</strong> — an optional fail-closed <code>ArtifactInspector</code> inspects the now-proven bytes (e.g. template risk analysis). <em>Is the approved template acceptable under local controls?</em></li>
+  <li><strong>Execution authority</strong> — exercised by the caller's LOCAL adapter, outside this module. The plane never holds or returns hosted authority. <em>Which local principal can deploy it?</em></li>
+</ol>
+
+<p>Modified, unsigned, expired, replayed, wrong-audience, wrong-target, unapproved-problem, over-budget, digest-mismatch, and locally-rejected intents are each rejected at the corresponding stage. The library's test suite (<code>test/customer-execution-plane.test.ts</code>) covers all of them.</p>
+
+<h3>3.1 CloudActionIntent v1 extension</h3>
+
+<pre>// Added to the existing schema (both optional → central CodeBuild path unaffected):
+audience?: string;                  // recipient execution-plane identity (JWT aud style)
+action.artifact?: {
+  digest: string;                   // "sha256:" + 64 lowercase hex, signature-covered
+  mediaType?: string;
+  sizeBytes?: number;
+};</pre>
+
+<p>The digest lives <em>inside</em> the signed payload, so the artifact binding cannot be altered without invalidating the signature. This is what makes "the bytes are bound to the intent" a cryptographic property rather than a convention.</p>
+
+<h3>3.2 Local authority &amp; CloudFormation execution-role strategy</h3>
+
+<p>The execution plane should not run CloudFormation as an administrator role directly. The preferred shape is a dedicated in-account <strong>CloudFormation service role</strong> that the plane passes to <code>CreateStack</code>, scoped by an <strong>SCP-protected dedicated challenge OU</strong>. Recommended customer-side controls: deny Organizations/billing mutation, deny production/shared-service roles, deny unapproved cross-account role chaining, region restriction, protection of CloudTrail/Config/GuardDuty, permission boundaries on challenge-created IAM roles, and stack naming/tagging contracts. This ADR does not claim <code>AdministratorAccess</code> can be removed from every challenge; the objective is to confine broad authority to isolated accounts and customer-controlled execution.</p>
+
+<h2>4. Delivery modes preserved</h2>
+
+<table>
+  <thead><tr><th>Mode</th><th>Who holds provider authority</th><th>Residual control-plane risk</th></tr></thead>
+  <tbody>
+    <tr><td>Local / OSS</td><td>Operator runs the CLI with their own credentials</td><td>None (no hosted authority)</td></tr>
+    <tr class="hide"><td>Current hosted cross-account</td><td>Central CodeBuild assumes <code>TenkaCloud-CompetitorDeploy-Role</code> (<code>AdministratorAccess</code>)</td><td>Control-plane compromise ⇒ admin in connected accounts (documented)</td></tr>
+    <tr class="show"><td>Enterprise customer-execution (this ADR)</td><td>Customer-controlled execution plane, local authority only</td><td>Control-plane compromise alone cannot deploy arbitrary artifacts into customer accounts</td></tr>
+    <tr><td>Fully managed event</td><td>TenkaCloud operator owns the target accounts</td><td>Acceptable — accounts are not customer-owned</td></tr>
+  </tbody>
+</table>
+
+<h2>5. Threat model</h2>
+
+<table>
+  <thead><tr><th>Scenario</th><th>Central AssumeRole mode</th><th>Customer Execution Plane mode</th></tr></thead>
+  <tbody>
+    <tr><td>Control-plane API / worker compromise</td><td class="badge reject" style="display:table-cell">admin authority obtainable</td><td><span class="badge accept">eliminated</span> — no principal trusted by the target; local policy + allowlist still gate</td></tr>
+    <tr><td>SSM <code>ExternalId</code> disclosure</td><td>aids cross-account use</td><td><span class="badge accept">moved</span> — no ExternalId in this path</td></tr>
+    <tr><td>Forged / modified intent</td><td>n/a</td><td><span class="badge accept">rejected</span> — JWS signature</td></tr>
+    <tr><td>Replayed valid intent</td><td>n/a</td><td><span class="badge accept">rejected</span> — nonce + TTL + audience</td></tr>
+    <tr><td>Compromised signing key</td><td>n/a</td><td><span class="badge warn">reduced</span> — local allowlist/policy/artifact still gate; key rotation + KMS asymmetric</td></tr>
+    <tr><td>Compromised artifact store</td><td>malicious template deployable</td><td><span class="badge accept">rejected</span> — digest is signature-covered</td></tr>
+    <tr><td>Approved-but-malicious artifact</td><td><span class="badge warn">residual</span></td><td><span class="badge warn">residual</span> — mitigated by template review + ArtifactInspector</td></tr>
+    <tr><td>Compromised execution component</td><td>n/a</td><td><span class="badge warn">moved</span> — confined to challenge accounts; agent-compromise ≠ control-plane compromise</td></tr>
+    <tr><td>DoS via many valid intents</td><td>n/a</td><td><span class="badge warn">reduced</span> — local concurrency/quota limits</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Risks eliminated:</strong> control-plane compromise → admin in customer accounts; artifact-store swap. <strong>Reduced:</strong> signing-key compromise, agent staleness, DoS. <strong>Merely moved:</strong> trust into the customer-operated execution component and its policy configuration. The remaining hard residuals are a compromised signing key, an approved malicious artifact, and a compromised execution component — none of which a single hosted-plane compromise can exploit by itself.</p>
+
+<h2>6. Proof of concept (shipped)</h2>
+
+<p>A minimal, offline, executable PoC ships with this ADR:</p>
+
+<ul>
+  <li><code>packages/trust-bridge/src/customer-execution-plane.ts</code> — the validation core (<code>CustomerExecutionPlane.authorize</code>, <code>PolicyEvaluator</code>, <code>ArtifactInspector</code>, <code>computeArtifactDigest</code>).</li>
+  <li><code>packages/trust-bridge/src/schema.ts</code> — the <code>audience</code> + <code>action.artifact</code> extension.</li>
+  <li><code>packages/trust-bridge/test/customer-execution-plane.test.ts</code> — accept + every rejection path.</li>
+  <li><code>packages/trust-bridge/poc/customer-execution-plane-demo.ts</code> — run with <code>bun run poc:cep</code>. The hosted side only signs (holds no AWS credential); the customer side validates against local policy and deploys through a LOCAL adapter (<code>MockCloudAdapter</code>, standing in for a same-account CFn service role / LocalStack). It asserts that an approved deploy succeeds and that wrong-audience, un-approved-account, un-approved-problem, over-budget, tampered-artifact, expired, and replayed intents are all rejected.</li>
+</ul>
+
+<p>The PoC demonstrates the core acceptance criterion: a perfectly signed intent for an account the customer did not approve is still rejected, because the hosted control plane has no principal trusted by the target deployment authority and local policy is decisive.</p>
+
+<h2>7. Coexistence &amp; migration</h2>
+
+<ol>
+  <li><strong>Now (this ADR):</strong> protocol extension + PoC + library. The central CodeBuild path is unchanged and remains the default.</li>
+  <li><strong>Next:</strong> a registered, authenticated customer execution component (outbound pull / EventBridge API Destinations) reporting results back into <code>Deployments</code>; per-tenant/per-account mode selection.</li>
+  <li><strong>Later:</strong> KMS asymmetric signing keys (per-tenant), DDB-backed nonce store (1/1 PROVISIONED), agent upgrade flow that cannot silently widen policy, and incremental child issues for the production agent.</li>
+</ol>
+
+<p>Delete operations must remain possible if the hosted control plane is unavailable: the execution plane can run a locally-initiated <code>destroy</code> against its own approved problems, so teardown never depends on the hosted plane being reachable.</p>
+
+<h2>8. Consequences</h2>
+
+<h4>Positive</h4>
+<ul>
+  <li>Enables the stronger security statement: <em>customer AWS authority never leaves the customer-controlled execution boundary.</em></li>
+  <li>Cryptographically binds approved bytes to the signed request.</li>
+  <li>Realizes ADR-017's <code>PolicyEvaluator</code> with a concrete, fail-closed consumer.</li>
+  <li>The hardening checklist now describes the bootstrap role accurately (<code>AdministratorAccess</code> + residual risk + resolution path).</li>
+</ul>
+
+<h4>Negative / costs</h4>
+<ul>
+  <li>Customers must operate an execution component and author local policy.</li>
+  <li>One more protocol surface to version and maintain (mitigated by extending the existing v1 schema).</li>
+  <li>The central path's residual control-plane risk remains for tenants who stay on it during migration.</li>
+</ul>
+
+<h2>9. Non-goals</h2>
+<ul>
+  <li>Deploying into production accounts.</li>
+  <li>Replacing ADR-017 with a second competing protocol.</li>
+  <li>Claiming <code>ExternalId</code> protects against control-plane compromise.</li>
+  <li>Claiming permission boundaries alone solve control-plane compromise.</li>
+  <li>Removing all broad permissions from every isolated challenge account in this ADR.</li>
+  <li>Deleting the central CodeBuild path before a migration strategy exists.</li>
+  <li>Building a full fleet-management / auto-update platform in the first PoC.</li>
+</ul>
+
+<h2>10. Alternatives considered</h2>
+<table>
+  <thead><tr><th>Alternative</th><th>Verdict</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr class="hide"><td>Keep central AssumeRole only; narrow the policy</td><td><span class="badge reject">rejected</span></td><td>Granular policy is IAM whack-a-mole and still leaves control-plane compromise = admin in customer accounts.</td></tr>
+    <tr class="hide"><td>A new, standalone signed-job runner protocol</td><td><span class="badge reject">rejected</span></td><td>Duplicates <code>CloudActionIntent</code>; the issue forbids a parallel protocol without explicit justification.</td></tr>
+    <tr class="hide"><td>Run a queue consumer in the customer account but still AssumeRole to a control-plane-trusted role</td><td><span class="badge reject">rejected</span></td><td>Moves the consumer, not the authority — control-plane compromise still wins.</td></tr>
+    <tr class="show"><td>Extend <code>CloudActionIntent</code> with audience + artifact digest; validate + deploy with local authority</td><td><span class="badge accept">adopted</span></td><td>Reuses ADR-017, binds artifacts cryptographically, and removes the primary residual blast radius.</td></tr>
+  </tbody>
+</table>
+
+<h2>11. References</h2>
+<ul>
+  <li><a href="adr-017-cloud-action-intent-trust-bridge.html">ADR-017</a> — Cloud Action Intent / Trust Bridge (extended here)</li>
+  <li><a href="adr-002-cross-account-federation.html">ADR-002</a> / <a href="adr-009-cross-account-federation.html">ADR-009</a> — cross-account federation (preserved)</li>
+  <li><a href="../security/HARDENING-CHECKLIST.html">Hardening checklist</a> — IAM-05 (corrected by this ADR)</li>
+  <li><code>infrastructure/templates/competitor-bootstrap.yaml</code> — the <code>AdministratorAccess</code> bootstrap role</li>
+  <li><code>packages/trust-bridge/</code> — protocol library + PoC</li>
+</ul>
+
+</body>
+</html>

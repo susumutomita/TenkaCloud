@@ -292,6 +292,25 @@
       "footer.privacy": "プライバシーポリシー",
       "footer.terms": "利用規約",
       "footer.tokushoho": "特定商取引法に基づく表記",
+
+      "makers.eyebrow": "作り手から",
+      "makers.h2": "クラウドエンジニアの天下一武道会を、開きたい。",
+      "makers.p1":
+        "AWS GameDay は、本当に楽しかった。 もう一度プレーしたいし、 いつかマルチクラウドで「世界一のクラウドエンジニア」を決める競技を見てみたい。",
+      "makers.p2":
+        "でも、 同じ熱量の場を自由に開催できる仕組みは見つからなかった。 だから自分たちで作って、 OSS にした。 問題を作ってもいいし、 追加しやすい仕組みの上で、 それぞれの人が自分の文脈からオリジナル問題を作れるようにしたい。",
+      "makers.p3":
+        "問題を作れる人はいるかもしれない。 でも、 熱量のある問題を作れる人は、 そうそういない。 だから、 熱量ごと持ち寄れる場にしたかった。",
+      "makers.who": "3 人とも GameDay が大好きで、 ただの素人ではないバックグラウンドがある。",
+      "makers.m1.role": "TenkaCloud / 主催",
+      "makers.m1.name": "冨田 進",
+      "makers.m1.cred": "JAWS DAYS 2024 AWS GameDay 優勝 / 2026 準優勝。",
+      "makers.m2.role": "JAWS-UG 名古屋",
+      "makers.m2.name": "チャーリー",
+      "makers.m2.cred": "JAWS-UG 名古屋 運営メンバー。 地域コミュニティを動かしてきた経験。",
+      "makers.m3.role": "AWS 全冠エンジニア",
+      "makers.m3.name": "きせのん",
+      "makers.m3.cred": "JAWS DAYS 2024 GameDay 優勝 / AWS 全冠 (All Certifications)。",
     },
     en: {
       "nav.product": "Product",
@@ -586,6 +605,25 @@
       "footer.privacy": "Privacy Policy",
       "footer.terms": "Terms of Service",
       "footer.tokushoho": "Business identification (Japan TokushoHo)",
+
+      "makers.eyebrow": "From the makers",
+      "makers.h2": "We want to host a Tenka-Ichi for cloud engineers.",
+      "makers.p1":
+        "AWS GameDay was genuinely fun. We want to play it again — and one day watch a multi-cloud competition that crowns the world's best cloud engineer.",
+      "makers.p2":
+        "But we couldn't find a way to freely host events with that same intensity. So we built one, and made it OSS. Anyone can write a problem; on a platform that makes adding them easy, everyone can craft an original problem from their own context.",
+      "makers.p3":
+        "Plenty of people can write a problem. Far fewer can write a problem with real heat behind it. We wanted a place where that heat is what people bring.",
+      "makers.who": "All three of us love GameDay — and none of us are amateurs.",
+      "makers.m1.role": "TenkaCloud / Host",
+      "makers.m1.name": "Susumu Tomita",
+      "makers.m1.cred": "Winner, AWS GameDay @ JAWS DAYS 2024 · Runner-up 2026.",
+      "makers.m2.role": "JAWS-UG Nagoya",
+      "makers.m2.name": "Charlie",
+      "makers.m2.cred": "JAWS-UG Nagoya organizer. Years of moving a regional community.",
+      "makers.m3.role": "AWS All-Certs Engineer",
+      "makers.m3.name": "Kisenon",
+      "makers.m3.cred": "Winner, GameDay @ JAWS DAYS 2024 · AWS All Certifications.",
     },
   };
 

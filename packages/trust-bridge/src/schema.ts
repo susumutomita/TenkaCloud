@@ -52,12 +52,30 @@ const TargetSchema = z
   })
   .strict();
 
+/**
+ * Issue #1727 / ADR-039: immutable artifact identity.
+ *
+ * Binds the exact bytes a Customer Execution Plane is allowed to deploy to the
+ * signed intent. The digest is signature-covered, so a hosted control-plane
+ * compromise cannot swap the approved template for arbitrary bytes without
+ * breaking the JWS signature. `sha256:<64 lowercase hex>` is the only accepted
+ * shape (no algorithm agility in v1 — one hash, verifiable offline).
+ */
+const ArtifactSchema = z
+  .object({
+    digest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+    mediaType: z.string().min(1).optional(),
+    sizeBytes: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+
 const ActionSchema = z
   .object({
     type: ActionTypeEnum,
     engine: EngineEnum,
     entry: z.string().min(1).optional(),
     requestedScopes: z.array(z.string().min(1)).readonly(),
+    artifact: ArtifactSchema.optional(),
   })
   .strict();
 
@@ -76,6 +94,11 @@ export const CloudActionIntentSchema = z
     version: z.literal(INTENT_VERSION),
     requestId: z.string().min(1),
     nonce: z.string().min(1),
+    // Issue #1727 / ADR-039: the recipient this intent is bound to (= the
+    // Customer Execution Plane identity, JWT `aud` style). Signature-covered, so
+    // a leaked token cannot be redirected to a different execution plane. Stays
+    // optional to keep the central CodeBuild path (no audience) on the same v1.
+    audience: z.string().min(1).optional(),
     source: SourceSchema,
     target: TargetSchema,
     action: ActionSchema,
