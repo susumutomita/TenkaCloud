@@ -229,13 +229,17 @@ export class CustomerExecutionPlane {
       // Fail closed: an evaluator that errors is treated as a denial.
       return { ok: false, rejection: reject("intent-authorization", "policy-error") };
     }
-    if (decision.decision === "deny") {
+    // Fail closed: only an explicit "allow" authorizes. A malformed or unknown
+    // verdict (undefined / missing / unexpected `decision`) is a denial, never a
+    // silent pass — a buggy or hostile evaluator must not become an allow.
+    const verdict = policyVerdict(decision);
+    if (verdict === "deny") {
       return {
         ok: false,
         rejection: reject("intent-authorization", "policy-denied", detailOf(decision.reason)),
       };
     }
-    if (decision.decision === "needs_approval") {
+    if (verdict === "needs_approval") {
       return {
         ok: false,
         rejection: reject(
@@ -244,6 +248,9 @@ export class CustomerExecutionPlane {
           detailOf(decision.reason),
         ),
       };
+    }
+    if (verdict === "invalid") {
+      return { ok: false, rejection: reject("intent-authorization", "policy-error") };
     }
     return { ok: true, decision };
   }
@@ -298,11 +305,40 @@ export class CustomerExecutionPlane {
     } catch {
       return reject("artifact-safety", "artifact-inspection-error");
     }
-    if (inspection.decision !== "allow") {
+    // Fail closed: only an explicit "allow" passes. An explicit "deny" rejects
+    // the bytes; anything malformed (undefined / unknown decision) is treated as
+    // an inspection error, never a pass.
+    const verdict = inspectionVerdict(inspection);
+    if (verdict === "deny") {
       return reject("artifact-safety", "artifact-rejected", detailOf(inspection.reason));
+    }
+    if (verdict === "invalid") {
+      return reject("artifact-safety", "artifact-inspection-error");
     }
     return null;
   }
+}
+
+/**
+ * Normalize an untrusted PolicyEvaluator return into a known verdict. The plugin
+ * boundary is untrusted at runtime, so a missing/unknown `decision` collapses to
+ * "invalid" (→ fail closed) rather than being treated as an allow.
+ */
+function policyVerdict(decision: PolicyDecision): "allow" | "deny" | "needs_approval" | "invalid" {
+  const value = (decision as { decision?: unknown } | undefined | null)?.decision;
+  if (value === "allow" || value === "deny" || value === "needs_approval") {
+    return value;
+  }
+  return "invalid";
+}
+
+/** Normalize an untrusted ArtifactInspector return; unknown shapes → "invalid". */
+function inspectionVerdict(inspection: ArtifactInspection): "allow" | "deny" | "invalid" {
+  const value = (inspection as { decision?: unknown } | undefined | null)?.decision;
+  if (value === "allow" || value === "deny") {
+    return value;
+  }
+  return "invalid";
 }
 
 /**

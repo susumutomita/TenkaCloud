@@ -317,6 +317,27 @@ describe("CustomerExecutionPlane.authorize (#1727 / ADR-039)", () => {
     });
   });
 
+  it("should fail closed when the PolicyEvaluator returns a malformed verdict (intent-authorization)", async () => {
+    // A buggy/hostile evaluator must never become a silent allow.
+    const undefinedDecision = { async evaluate() {} } as unknown as PolicyEvaluator;
+    const unknownDecision = {
+      async evaluate() {
+        return { decision: "maybe" };
+      },
+    } as unknown as PolicyEvaluator;
+    for (const evaluator of [undefinedDecision, unknownDecision]) {
+      const outcome = await plane({ policyEvaluator: evaluator }).authorize({
+        token: token(),
+        artifact: { bytes: APPROVED_BYTES },
+      });
+      expect(outcome).toMatchObject({
+        ok: false,
+        stage: "intent-authorization",
+        reason: "policy-error",
+      });
+    }
+  });
+
   it("should reject a deploy whose artifact bytes are not supplied (artifact-integrity)", async () => {
     const outcome = await plane().authorize({ token: token() });
     expect(outcome).toMatchObject({
@@ -410,6 +431,26 @@ describe("CustomerExecutionPlane.authorize (#1727 / ADR-039)", () => {
       stage: "artifact-safety",
       reason: "artifact-inspection-error",
     });
+  });
+
+  it("should fail closed when the artifact inspector returns a malformed verdict (artifact-safety)", async () => {
+    const undefinedDecision = { async inspect() {} } as unknown as ArtifactInspector;
+    const unknownDecision = {
+      async inspect() {
+        return { decision: "probably-fine" };
+      },
+    } as unknown as ArtifactInspector;
+    for (const inspector of [undefinedDecision, unknownDecision]) {
+      const outcome = await plane({ artifactInspector: inspector }).authorize({
+        token: token(),
+        artifact: { bytes: APPROVED_BYTES },
+      });
+      expect(outcome).toMatchObject({
+        ok: false,
+        stage: "artifact-safety",
+        reason: "artifact-inspection-error",
+      });
+    }
   });
 
   it("should authorize when the artifact inspector allows the bytes (artifact-safety)", async () => {
