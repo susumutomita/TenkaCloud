@@ -49,6 +49,15 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:`,
 
 See [CLAUDE.md](./CLAUDE.md) for project rules, architecture invariants, and prohibited patterns. The same rules apply whether the change is made by a human or by an AI agent.
 
+## Project provenance
+
+TenkaCloud is an independent open-source project. Before contributing, read
+[`docs/PROJECT_PROVENANCE.md`](./docs/PROJECT_PROVENANCE.md): it records the
+project's development boundaries and the influence-versus-copying distinction.
+Do not contribute an employer's source code, confidential documents, customer
+data, private competition content, or other proprietary assets — contribute
+only original or compatibly licensed work.
+
 ## Join the community
 
 TenkaCloud's moat is its problem catalog, and that catalog grows through community contribution. Pick one of six roles and ship one starter task — you do not need to be personally onboarded.
