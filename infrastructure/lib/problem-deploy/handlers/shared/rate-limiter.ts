@@ -3,11 +3,17 @@
  *
  * Free Tier 制約 (= DDB 1/1 PROVISIONED) で DDB 経由の sliding window を入れると
  * 1 request あたり 1 RCU + 1 WCU 消費し、 25 RCU/WCU quota を 25 RPS で食い切る。
- * Lambda の reservedConcurrency = 1 を前提に、 **同 Lambda instance 内の in-memory
- * token bucket** で代替する。 同時実行が増えた場合は warm Lambda instance ごとに
- * 別 bucket になるが、 「同 team が同 instance を連打した場合」の DoS を確実に塞ぐ
- * (= shared backend 劣化を防ぐ最低限の壁)。 厳密な distributed limit が必要に
- * なったら DDB token bucket に差し替える設計余地は残す。
+ * その代替として **同 Lambda instance 内の in-memory token bucket** を使う。
+ *
+ * 重要 (security 上の限界): これは **best-effort の per-instance 壁** であり、
+ * **cross-instance のハード保証ではない**。 participant Lambda は公開 Function URL
+ * (`authType: NONE`) で `reservedConcurrentExecutions` を pin していないため、 burst で
+ * warm instance が N 個に scale すると各 instance が満タンの bucket を持ち、 同一
+ * `(team, route)` の実効上限は **約 N 倍** になる (= concurrency で bypass 可能)。
+ * `reservedConcurrency = 1` は本質的な修正ではない (全 team を 1 instance に直列化し
+ * 自滅 DoS になる)。 したがって本 limiter は「単一 instance 連打の DoS を緩める soft wall」
+ * と位置づけ、 brute-force に対する実防御は **巨大な flag 鍵空間 + 競技 gate (start/end/lock)**
+ * に依存する。 ハードな分散制限が要るなら DDB / atomic counter ベースに差し替える。
  */
 
 export interface RateLimitConfig {

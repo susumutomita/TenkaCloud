@@ -393,9 +393,9 @@
     <tr>
       <td><span class="item-id">PRT-02</span></td>
       <td>Flag submission rate-limited (defends against brute-force / hint anti-skip)</td>
-      <td class="evidence"><code>WRITE_VERY_LOW</code> (3 burst / 6 RPM &asymp; 1 attempt per 10s sustained) on submit-flag route. Token bucket — <code>infrastructure/lib/problem-deploy/handlers/shared/rate-limiter.ts</code>. Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/870">#870</a> brought this from 17,000 attempts/day down to 8,640. Related to i18n hint anti-skip (<a href="https://github.com/susumutomita/TenkaCloud/issues/1108">#1108</a>).</td>
+      <td class="evidence"><code>WRITE_VERY_LOW</code> (3 burst / 6 RPM &asymp; 1 attempt per 10s sustained) on submit-flag route. Token bucket — <code>infrastructure/lib/problem-deploy/handlers/shared/rate-limiter.ts</code>. Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/870">#870</a> brought this from 17,000 attempts/day down to 8,640. <strong>Limitation:</strong> the bucket is <em>per Lambda instance</em> (in-memory) and the participant Function URL pins no <code>reservedConcurrency</code>, so a burst that scales to N warm instances multiplies the effective per-team limit by &asymp;N (best-effort soft wall, not a hard cross-instance guarantee). Real brute-force resistance comes from the 32-char random flag keyspace + the competition gate; a DDB/atomic limiter is the path to a hard distributed cap. Related to i18n hint anti-skip (<a href="https://github.com/susumutomita/TenkaCloud/issues/1108">#1108</a>).</td>
       <td>Agent</td>
-      <td><span class="badge ok">Implemented</span></td>
+      <td><span class="badge gap">Soft</span></td>
     </tr>
     <tr>
       <td><span class="item-id">PRT-03</span></td>
@@ -407,7 +407,7 @@
     <tr>
       <td><span class="item-id">PRT-04</span></td>
       <td>Bearer token has short lifetime + replay defense</td>
-      <td class="evidence">Token issued by <code>participant-handler</code> with a server-side expiry. Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/767">#767</a> traces the in-memory rate limiter design that makes warm-instance DoS infeasible.</td>
+      <td class="evidence">Token issued by <code>participant-handler</code> with a server-side expiry. Issue <a href="https://github.com/susumutomita/TenkaCloud/issues/767">#767</a> traces the in-memory rate limiter design. Note: that limiter is per-instance and bypassable under Lambda concurrency (see PRT-02) — it is a soft wall, not a warm-instance DoS guarantee.</td>
       <td>Agent</td>
       <td><span class="badge ok">Implemented</span></td>
     </tr>
