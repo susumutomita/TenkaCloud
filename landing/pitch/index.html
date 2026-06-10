@@ -3,642 +3,880 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>StackStack on TenkaCloud — バイブコーディングしたアプリケーションを安全に公開できるスキルが身につく</title>
-<meta name="description" content="StackStack / TenkaCloud の 10 分ピッチデッキ。" />
+<title>StackStack on TenkaCloud — クラウドエンジニアの天下一武道会</title>
+<meta name="description" content="StackStack / TenkaCloud の 10 分ピッチデッキ（全 9 ページ、self-contained HTML）。" />
 <style>
-  :root {
-    --navy:#07111f;
-    --ink:#263241;
-    --muted:#5d6877;
-    --blue:#0969da;
-    --blue-2:#6aa3e0;
-    --green:#008a55;
-    --amber:#b54708;
-    --red:#d91515;
-    --line:#d9dee8;
-    --line-strong:#c6ceda;
-    --paper:#fff;
-    --sans:"Inter","Noto Sans JP","Hiragino Sans","Yu Gothic UI",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
-    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
-  }
+@import url("https://fonts.googleapis.com/css2?family=Reggae+One&family=Noto+Sans+JP:wght@700;900&display=swap");
 
-  * { box-sizing:border-box; }
-  html { scroll-behavior:smooth; }
-  body {
-    margin:0;
-    background:#f5f7fb;
-    color:var(--ink);
-    font-family:var(--sans);
-    -webkit-font-smoothing:antialiased;
-    text-rendering:optimizeLegibility;
-  }
-  h1,h2,h3,p { margin:0; }
+/* ════════════════════════════════════════════════════════════════════
+   TenkaCloud Design System
+   画像デッキ (page1-9) の視覚言語をトークン + コンポーネントに落とし込んだもの。
+   1. tokens     — 色 / 書体 / 線 / 角丸
+   2. primitives — .brush-gold / .display / .kicker / .num-dot / .glyph
+   3. components — .panel / .gold-band / .sec-no / .wordmark / .qr-item /
+                   .arena-bg (楼門 + 垂れ幕 + 稲妻 + 観客席の SVG 背景) / .avatar
+   4. deck       — スライド機構 (scroll-snap + 1280x720 ステージ + fit スケール)
+   5. slides     — 各スライド固有の組版
+   ════════════════════════════════════════════════════════════════════ */
 
-  .deck {
-    height:100vh;
-    overflow-y:scroll;
-    scroll-snap-type:y mandatory;
-  }
+/* ── 1. tokens ─────────────────────────────────────────────────────── */
+:root {
+  /* surface */
+  --navy-950:#04070d;
+  --navy-900:#070e1b;
+  --navy-850:#0a1322;
+  --navy-800:#0c1828;
+  --navy-750:#0f1d31;
+  /* ink */
+  --ink-0:#ffffff;
+  --ink-1:#eaf0f8;
+  --ink-2:#c3cddc;
+  --ink-3:#8a96a8;
+  /* accent */
+  --blue-500:#2f6fd6;
+  --blue-400:#5aa2ff;
+  --blue-300:#83bcff;
+  --gold-200:#fff3cf;
+  --gold-300:#ffeeb0;
+  --gold-400:#f6ca46;
+  --gold-500:#e0a637;
+  --gold-700:#b97e22;
+  --gold-soft:#f4ecd4;
+  --red-400:#ff5f54;
+  --green-400:#3ad592;
+  /* line */
+  --line-1:rgba(255,255,255,.12);
+  --line-2:rgba(255,255,255,.22);
+  --line-blue:rgba(90,162,255,.4);
+  --line-gold:rgba(246,202,70,.5);
+  /* fill */
+  --card-bg:rgba(13,24,43,.78);
+  --card-bg-2:rgba(16,28,48,.86);
+  /* type */
+  --sans:"Noto Sans JP","Inter","Hiragino Sans","Yu Gothic UI",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --brush:"Reggae One","Hiragino Mincho ProN","Yu Mincho",YuMincho,serif;
+  /* shape */
+  --r-1:8px;
+  --r-2:11px;
+  --cut:14px; /* panel corner cut */
+}
 
-  .slide {
-    min-height:100vh;
-    display:grid;
-    place-items:center;
-    padding:0;
-    overflow:hidden;
-    scroll-snap-align:start;
-  }
+* { box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body {
+  margin:0;
+  background:var(--navy-950);
+  color:var(--ink-1);
+  font-family:var(--sans);
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+h1,h2,h3,p { margin:0; }
 
-  .canvas {
-    position:relative;
-    width:1280px;
-    height:720px;
-    transform:scale(var(--fit,1));
-    transform-origin:center center;
-    overflow:hidden;
-    padding:34px 42px 32px;
-    background:
-      linear-gradient(180deg,rgba(255,255,255,.98),rgba(248,251,255,.98)),
-      linear-gradient(90deg,rgba(9,105,218,.04) 1px,transparent 1px),
-      linear-gradient(0deg,rgba(9,105,218,.04) 1px,transparent 1px);
-    background-size:auto,56px 56px,56px 56px;
-    border:1px solid #d9dee8;
-    box-shadow:0 22px 64px rgba(7,17,31,.14);
-  }
+/* ── 2. primitives ─────────────────────────────────────────────────── */
 
-  .canvas::before {
-    content:"";
-    position:absolute;
-    inset:0;
-    pointer-events:none;
-    background:
-      linear-gradient(90deg,rgba(255,255,255,.92) 0 42%,rgba(255,255,255,.64) 72%,rgba(255,255,255,.35)),
-      linear-gradient(180deg,rgba(255,255,255,.42),rgba(255,255,255,0));
-  }
-  .canvas > * { position:relative; z-index:1; }
+/* 金の筆文字 (画像の brush-gold 見出し) */
+.brush-gold {
+  font-family:var(--brush);
+  font-weight:400;
+  background:linear-gradient(178deg,var(--gold-200) 4%,var(--gold-400) 42%,var(--gold-500) 72%,var(--gold-700) 100%);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+  filter:drop-shadow(0 3px 22px rgba(246,202,70,.45));
+  letter-spacing:.03em;
+}
 
-  .progress {
-    position:fixed;
-    top:0;
-    left:0;
-    z-index:20;
-    width:0;
-    height:4px;
-    background:linear-gradient(90deg,var(--blue),var(--green));
-    transition:width .18s ease;
-  }
+/* 白の太見出し */
+.display {
+  color:var(--ink-0);
+  font-weight:900;
+  line-height:1.2;
+  text-shadow:0 2px 24px rgba(0,0,0,.45);
+}
 
-  .counter {
-    position:fixed;
-    right:16px;
-    bottom:14px;
-    z-index:20;
-    padding:4px 11px;
-    border:1px solid var(--line);
-    border-radius:999px;
-    background:rgba(255,255,255,.9);
-    color:#617188;
-    font-family:var(--mono);
-    font-size:12px;
-    backdrop-filter:blur(5px);
-  }
+/* 青の小見出し (HOW A MATCH RUNS 等) */
+.kicker {
+  color:var(--blue-300);
+  font-family:var(--mono);
+  font-size:13px;
+  font-weight:900;
+  letter-spacing:.22em;
+}
 
-  .topbar {
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:18px;
-    min-height:34px;
-  }
+/* 青丸数字 */
+.num-dot {
+  display:grid;
+  place-items:center;
+  width:30px;
+  height:30px;
+  border-radius:50%;
+  background:radial-gradient(circle at 32% 28%,#7fbcff,var(--blue-500));
+  color:#fff;
+  font-family:var(--mono);
+  font-size:14px;
+  font-weight:900;
+  box-shadow:0 0 16px rgba(90,162,255,.55), inset 0 1px 1px rgba(255,255,255,.5);
+}
 
-  .section-label {
-    display:flex;
-    align-items:center;
-    gap:12px;
-    color:var(--blue);
-    font-size:15px;
-    font-weight:850;
-  }
+/* 青い送りシェブロン */
+.chev { color:var(--blue-400); font-size:22px; font-weight:900; display:grid; place-items:center; text-shadow:0 0 12px rgba(90,162,255,.6); }
 
-  .badge {
-    display:grid;
-    place-items:center;
-    width:42px;
-    height:28px;
-    border-radius:6px;
-    background:#0969da;
-    color:#fff;
-    font-family:var(--mono);
-    font-size:15px;
-    font-weight:900;
-    line-height:1;
-  }
+/* 線画アイコン */
+.glyph { width:30px; height:30px; stroke:var(--blue-400); fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; filter:drop-shadow(0 0 8px rgba(90,162,255,.45)); }
+.glyph.gold { stroke:var(--gold-400); filter:drop-shadow(0 0 8px rgba(246,202,70,.45)); }
 
-  .wordmark {
-    display:flex;
-    align-items:center;
-    gap:9px;
-    color:var(--navy);
-    font-size:20px;
-    font-weight:900;
-    white-space:nowrap;
-  }
+/* ── 3. components ─────────────────────────────────────────────────── */
 
-  .wordmark img {
-    width:28px;
-    height:28px;
-    display:block;
-  }
+/* 角落としパネル (画像の青枠フレーム) */
+.panel {
+  position:relative;
+  background:linear-gradient(180deg,var(--card-bg),rgba(9,17,31,.9));
+  border:1px solid var(--line-blue);
+  border-radius:6px;
+  clip-path:polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  box-shadow:inset 0 0 36px rgba(90,162,255,.05);
+}
+.panel.gold-frame { border-color:var(--line-gold); box-shadow:inset 0 0 36px rgba(246,202,70,.05); }
 
-  h1 {
-    color:var(--navy);
-    font-size:50px;
-    line-height:1.14;
-    letter-spacing:0;
-    font-weight:920;
-  }
+/* セクション番号 + ラベル (左上) */
+.sec-no { display:flex; align-items:baseline; gap:14px; }
+.sec-no b {
+  color:var(--blue-400);
+  font-family:var(--mono);
+  font-size:24px;
+  font-weight:900;
+  border-bottom:3px solid var(--blue-500);
+  padding-bottom:3px;
+}
+.sec-no span { color:var(--ink-1); font-size:16px; font-weight:800; }
 
-  h2 {
-    color:var(--navy);
-    font-size:35px;
-    line-height:1.23;
-    letter-spacing:0;
-    font-weight:900;
-  }
+/* TenkaCloud ワードマーク (右上) */
+.wordmark { display:flex; align-items:center; gap:9px; color:#fff; font-size:19px; font-weight:900; white-space:nowrap; }
+.wordmark .tc-mark { width:30px; height:30px; display:block; filter:drop-shadow(0 2px 9px rgba(246,202,70,.35)); }
 
-  h3 {
-    color:var(--navy);
-    font-size:18px;
-    line-height:1.34;
-    font-weight:850;
-  }
+.topbar { display:flex; align-items:center; justify-content:space-between; gap:18px; min-height:34px; }
 
-  p {
-    color:var(--ink);
-    font-size:16px;
-    line-height:1.48;
-  }
+/* 下段の金帯 (トロフィー + 決め台詞) */
+.gold-band {
+  position:relative;
+  display:flex;
+  align-items:center;
+  gap:16px;
+  padding:13px 22px;
+  border:1px solid var(--line-gold);
+  border-radius:4px;
+  background:
+    linear-gradient(90deg,rgba(246,202,70,.2),rgba(246,202,70,.04) 22% 78%,rgba(246,202,70,.2)),
+    rgba(8,14,26,.7);
+  box-shadow:0 0 40px -14px rgba(246,202,70,.45), inset 0 0 0 1px rgba(246,202,70,.12);
+  color:var(--gold-soft);
+  font-size:19px;
+  font-weight:800;
+  overflow:hidden;
+}
+.gold-band::before, .gold-band::after {
+  content:"";
+  position:absolute;
+  top:-30%;
+  width:120px;
+  height:160%;
+  background:linear-gradient(100deg,transparent,rgba(246,202,70,.35) 35%,rgba(224,166,55,.2) 60%,transparent);
+  transform:skewX(-18deg);
+  pointer-events:none;
+}
+.gold-band::before { left:-34px; }
+.gold-band::after { right:-34px; transform:skewX(18deg); }
+.gold-band .trophy { font-size:30px; line-height:1; filter:drop-shadow(0 2px 10px rgba(246,202,70,.6)); }
+.gold-band strong { color:#fff; font-weight:900; }
+.gold-band em { font-style:normal; color:var(--gold-400); font-weight:900; }
+.gold-band .brush-gold { font-size:1.22em; }
 
-  .lead {
-    color:var(--navy);
-    font-size:20px;
-    line-height:1.48;
-    font-weight:760;
-  }
-  .lead strong { color:var(--blue); font-weight:900; }
+/* QR (レイアウト内に組み込み — オーバーレイしない) */
+.qr-item { display:grid; gap:6px; justify-items:center; text-align:center; }
+.qr-item img {
+  width:100%;
+  max-width:118px;
+  display:block;
+  background:#fff;
+  padding:5px;
+  border:1px solid var(--line-gold);
+  border-radius:8px;
+  image-rendering:pixelated;
+}
+.qr-item span { font-family:var(--mono); font-size:11px; font-weight:700; color:var(--ink-3); }
+.qr-item.sm img { max-width:72px; }
+.qr-item.sm span { font-size:10px; }
 
-  .mono { font-family:var(--mono); }
-  .card {
-    background:rgba(255,255,255,.9);
-    border:1px solid var(--line);
-    border-radius:8px;
-    box-shadow:0 1px 0 rgba(255,255,255,.8) inset;
-  }
+/* 赤の事故タグ (slide 03) */
+.incident-tag {
+  display:inline-block;
+  padding:3px 9px;
+  border:1px solid rgba(255,95,84,.65);
+  border-radius:3px;
+  background:rgba(120,18,12,.4);
+  color:#ffb4ae;
+  font-family:var(--mono);
+  font-size:10.5px;
+  font-weight:800;
+  clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+}
 
-  .story-slide {
-    height:100%;
-    display:grid;
-    grid-template-rows:auto auto 1fr auto;
-    gap:14px;
-  }
-  .origin-story {
-    grid-template-rows:auto auto auto auto;
-    align-content:start;
-    gap:12px;
-  }
-  .origin-story h2 { line-height:1.18; }
+/* 六角エンブレム (slide 05) */
+.emblem {
+  display:grid;
+  place-items:center;
+  width:58px;
+  height:58px;
+  clip-path:polygon(50% 0,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%);
+  background:linear-gradient(160deg,var(--gold-300),var(--gold-500) 55%,var(--gold-700));
+  box-shadow:0 0 24px rgba(246,202,70,.4);
+}
+.emblem .glyph { stroke:#231804; filter:none; width:28px; height:28px; }
 
-  .hero {
-    height:100%;
-    display:grid;
-    grid-template-rows:auto 1fr auto;
-    gap:18px;
-  }
-  .hero-grid {
-    display:grid;
-    grid-template-columns:1fr .96fr;
-    gap:28px;
-    align-items:center;
-  }
-  .hero-copy { display:grid; gap:16px; }
-  .hero-kicker {
-    width:max-content;
-    padding:5px 10px;
-    border:1px solid #b8d0e8;
-    border-radius:999px;
-    background:#f5fbff;
-    color:var(--blue);
-    font-family:var(--mono);
-    font-size:13px;
-    font-weight:900;
-  }
-  .cloud-line { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-  .cloud-chip.soon { color:var(--muted); background:transparent; border-style:dashed; border-color:#c2d2e3; font-weight:800; }
-  .cloud-soon-label { font-family:var(--mono); font-size:11px; font-weight:800; color:var(--muted); }
-  .cloud-chip {
-    padding:6px 9px;
-    border:1px solid #c8d9e9;
-    border-radius:7px;
-    background:#fff;
-    color:var(--navy);
-    font-family:var(--mono);
-    font-size:12px;
-    font-weight:900;
-  }
-  .hero-steps { padding:16px; display:grid; gap:9px; }
-  .hero-steps-title,
-  .kind {
-    color:var(--blue);
-    font-family:var(--mono);
-    font-size:13px;
-    font-weight:900;
-  }
-  .step-row {
-    display:grid;
-    grid-template-columns:44px 1fr;
-    gap:14px;
-    align-items:start;
-    padding:12px 14px;
-    border-bottom:1px solid #e8eef6;
-  }
-  .step-row:last-child { border-bottom:0; }
-  .step-no {
-    display:grid;
-    place-items:center;
-    width:36px;
-    height:36px;
-    border-radius:50%;
-    background:#eef6ff;
-    border:1px solid #b9d2ec;
-    color:var(--blue);
-    font-family:var(--mono);
-    font-size:14px;
-    font-weight:900;
-  }
-  .step-row p { margin-top:2px; color:var(--muted); font-size:14px; font-weight:700; }
+/* 丸アバター (slide 07 — 金環 + シルエット SVG) */
+.avatar { width:76px; height:76px; display:block; filter:drop-shadow(0 0 18px rgba(246,202,70,.3)); }
 
-  .bottom-line {
-    padding:12px 16px;
-    border:1px solid var(--line-strong);
-    border-left:8px solid var(--blue-2);
-    border-radius:8px;
-    background:rgba(247,251,255,.92);
-    color:var(--navy);
-    font-size:19px;
-    font-weight:850;
-  }
-  .bottom-line strong { color:var(--blue); font-weight:900; }
-  .bottom-line .gloss { display:block; margin-top:8px; padding-top:8px; border-top:1px solid var(--line-strong); font-size:11px; line-height:1.45; color:var(--muted); font-weight:600; }
+/* アリーナ背景 (楼門 + 天下一の垂れ幕 + 稲妻 + 観客席) — 全スライド右上 */
+.arena-bg {
+  position:absolute;
+  top:-8px;
+  right:-16px;
+  width:46%;
+  height:auto;
+  z-index:0;
+  opacity:.85;
+  pointer-events:none;
+  -webkit-mask-image:radial-gradient(125% 125% at 72% 8%, #000 52%, transparent 82%);
+  mask-image:radial-gradient(125% 125% at 72% 8%, #000 52%, transparent 82%);
+}
+.arena-bg.center {
+  right:auto;
+  left:50%;
+  top:-6px;
+  transform:translateX(-50%);
+  width:70%;
+  opacity:1;
+  -webkit-mask-image:radial-gradient(100% 110% at 50% 16%, #000 46%, transparent 80%);
+  mask-image:radial-gradient(100% 110% at 50% 16%, #000 46%, transparent 80%);
+}
+@keyframes boltFlicker { 0%,72%,100% { opacity:0; } 74%,78% { opacity:.95; } 76%,82% { opacity:.25; } 80% { opacity:.8; } 84% { opacity:0; } }
+.arena-bg .bolt1 { animation:boltFlicker 9s linear infinite; }
+.arena-bg .bolt2 { animation:boltFlicker 13s linear 4s infinite; }
 
-  .three-grid {
-    display:grid;
-    grid-template-columns:repeat(3,minmax(0,1fr));
-    gap:14px;
-  }
-  .info-card {
-    min-height:154px;
-    padding:17px;
-    display:grid;
-    gap:10px;
-    align-content:start;
-  }
-  .info-card p { font-size:14px; font-weight:700; }
+/* ── 4. deck (機構) ────────────────────────────────────────────────── */
+.deck { height:100vh; overflow-y:scroll; scroll-snap-type:y mandatory; }
+.slide { min-height:100vh; display:grid; place-items:center; overflow:hidden; scroll-snap-align:start; }
 
-  /* ── catalog cards (slide 05) ── */
-  .cat-card { position:relative; }
-  .cat-card .kind.battle { color:#b8261d; }
-  .cat-card .kind.migrate { color:var(--amber); }
-  .cat-card .kind.challenge { color:var(--green); }
-  .cat-card .demo-flag {
-    position:absolute; top:14px; right:14px;
-    font-family:var(--mono); font-size:10px; font-weight:900;
-    color:var(--green); border:1px solid #bfe3cf; background:#f1faf4;
-    padding:3px 7px; border-radius:999px;
-  }
+/* 16:9 ステージ。--fit でウィンドウにスケール (JS)。760px 以下は縦積みに解除 */
+.stage {
+  position:relative;
+  width:1280px;
+  height:720px;
+  transform:scale(var(--fit,1));
+  transform-origin:center center;
+  overflow:hidden;
+  padding:34px 42px 30px;
+  background:
+    radial-gradient(132% 92% at 50% -16%, rgba(126,160,214,.3), rgba(11,20,36,0) 52%),
+    radial-gradient(80% 56% at 78% 6%, rgba(246,202,70,.13), rgba(11,20,36,0) 56%),
+    radial-gradient(120% 80% at 50% 118%, rgba(3,7,14,.94), rgba(8,15,28,0) 60%),
+    linear-gradient(180deg,#0a1322 0%,#0c1828 46%,#070e1b 100%);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:4px;
+  box-shadow:0 30px 80px rgba(0,0,0,.6);
+}
+.stage::before {
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  z-index:0;
+  background:
+    linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px),
+    linear-gradient(0deg,rgba(255,255,255,.03) 1px,transparent 1px);
+  background-size:58px 58px,58px 58px;
+  -webkit-mask-image:radial-gradient(125% 100% at 50% 0%,#000 28%,transparent 80%);
+  mask-image:radial-gradient(125% 100% at 50% 0%,#000 28%,transparent 80%);
+}
+.stage::after {
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  z-index:0;
+  box-shadow:inset 0 0 170px rgba(0,0,0,.72);
+}
+.stage > * { position:relative; z-index:1; }
+.stage > .arena-bg { position:absolute; z-index:0; }
 
-  /* ── timeline / game design (slide 03) ── */
-  .timeline { display:grid; grid-template-columns:repeat(4,1fr); align-self:center; }
-  .tl-phase { position:relative; padding:22px 18px 0 0; border-top:2px solid var(--line-strong); }
-  .tl-phase::before {
-    content:""; position:absolute; top:-8px; left:0;
-    width:14px; height:14px; border-radius:50%;
-    background:var(--blue); border:2px solid #fff; box-shadow:0 0 0 1px var(--blue);
-  }
-  .timeline .tl-phase:nth-child(3)::before { background:var(--amber); box-shadow:0 0 0 1px var(--amber); }
-  .timeline .tl-phase:nth-child(4)::before { background:var(--red); box-shadow:0 0 0 1px var(--red); }
-  .tl-phase .tl-t { font-family:var(--mono); font-size:13px; font-weight:900; color:var(--blue); }
-  .timeline .tl-phase:nth-child(3) .tl-t { color:var(--amber); }
-  .timeline .tl-phase:nth-child(4) .tl-t { color:var(--red); }
-  .tl-phase h3 { font-size:23px; margin:7px 0 8px; }
-  .tl-phase p { font-size:13px; color:var(--muted); font-weight:720; line-height:1.42; padding-right:14px; }
+.progress {
+  position:fixed;
+  top:0; left:0;
+  z-index:20;
+  width:0;
+  height:4px;
+  background:linear-gradient(90deg,var(--gold-400),var(--blue-400));
+  box-shadow:0 0 14px rgba(246,202,70,.5);
+  transition:width .18s ease;
+}
+.counter {
+  position:fixed;
+  right:16px; bottom:14px;
+  z-index:20;
+  padding:4px 11px;
+  border:1px solid var(--line-1);
+  border-radius:999px;
+  background:rgba(10,18,32,.72);
+  color:var(--ink-2);
+  font-family:var(--mono);
+  font-size:12px;
+  backdrop-filter:blur(6px);
+}
 
-  /* ── battle mechanism loop (slide 04) ── */
-  .battle-slide { height:100%; display:grid; grid-template-rows:auto auto auto 1fr auto; gap:11px; }
-  .battle-loop { display:flex; align-items:stretch; gap:8px; }
-  .bl-step {
-    flex:1; padding:10px 13px;
-    border:1px solid var(--line); border-radius:8px; background:#fff;
-    display:grid; gap:2px; align-content:center;
-  }
-  .bl-step b { font-family:var(--mono); font-size:13px; color:var(--blue); }
-  .bl-step span { font-size:12px; color:var(--ink); font-weight:720; line-height:1.32; }
-  .bl-arr { display:grid; place-items:center; color:var(--blue-2); font-weight:900; font-size:17px; transition:color .25s ease, transform .25s ease; }
-  .bl-step { transition:border-color .25s ease, background .25s ease, box-shadow .25s ease; }
-  .bl-step.active { border-color:var(--blue); background:#eef5fd; box-shadow:0 0 0 2px rgba(9,105,218,.22); }
-  .bl-arr.on { color:var(--blue); transform:translateX(2px); }
+/* ── 5. slides ─────────────────────────────────────────────────────── */
 
-  /* ── live portal (slide 04): real TenkaCloud UI = AWS Cloudscape ── */
-  .tc-portal {
-    min-height:0;
-    border-radius:10px;
-    overflow:hidden;
-    border:1px solid #c6cdd2;
-    box-shadow:0 16px 40px -20px rgba(0,7,22,.35);
-  }
-  .cs-app {
-    height:100%;
-    display:flex; flex-direction:column;
-    background:#f2f3f3;
-    color:#16191f;
-    font-family:"Open Sans","Helvetica Neue",Roboto,Arial,var(--sans);
-    overflow:hidden;
-  }
-  .cs-topnav {
-    display:flex; align-items:center; justify-content:space-between;
-    height:44px; padding:0 16px;
-    background:#fff; border-bottom:1px solid #e9ebed;
-    flex:0 0 auto;
-  }
-  .cs-ident { display:flex; align-items:center; gap:9px; font-size:16px; font-weight:700; color:#000716; }
-  .cs-logo { width:20px; height:20px; border-radius:4px; background:#0972d3; }
-  .cs-utils { display:flex; align-items:center; gap:18px; font-size:13px; color:#0f1419; }
-  .cs-util { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
-  .cs-util b { font-weight:700; }
-  .cs-ok { color:#037f0c; font-weight:900; }
-  .cs-caret { color:#5f6b7a; }
-  .cs-body { flex:1; display:grid; grid-template-columns:204px 1fr; min-height:0; }
-  .cs-sidenav { background:#fff; border-right:1px solid #e9ebed; padding:14px 8px; }
-  .cs-sec { font-size:13px; font-weight:700; color:#000716; padding:10px 12px 5px; }
-  .cs-sec:first-child { padding-top:0; }
-  .cs-link {
-    display:flex; align-items:center; gap:8px;
-    padding:6px 12px; font-size:13px; color:#0f1419;
-    border-left:2px solid transparent;
-  }
-  .cs-link.on { color:#0972d3; font-weight:700; border-left-color:#0972d3; background:#f0fbff; }
-  .cs-badge {
-    margin-left:auto; min-width:18px; height:18px; padding:0 5px;
-    display:inline-grid; place-items:center;
-    background:#0972d3; color:#fff; border-radius:999px; font-size:11px; font-weight:700;
-  }
-  .cs-content { background:#f2f3f3; padding:14px 16px; min-height:0; overflow:hidden; }
-  .cs-countdown { font-size:13px; color:#5f6b7a; margin-bottom:10px; font-weight:600; }
-  .cs-countdown b { color:#16191f; font-weight:700; font-variant-numeric:tabular-nums; }
-  .cs-incident { margin-left:12px; font-family:var(--mono); font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; opacity:0; transition:opacity .3s ease; }
-  .cs-incident.show { opacity:1; }
-  .cs-incident.fire { color:#b8261d; background:#fdeceb; border:1px solid #f3c4c0; }
-  .cs-incident.ok { color:#1d7a44; background:#eafaf0; border:1px solid #cde9d7; }
-  .cs-badge.flash { animation:tcbadge .6s ease; }
-  @keyframes tcbadge { 0% { transform:scale(1.5); } 100% { transform:scale(1); } }
-  .cs-container { background:#fff; border:1px solid #e9ebed; border-radius:8px; overflow:hidden; }
-  .cs-ch {
-    display:flex; align-items:baseline; gap:10px;
-    padding:13px 18px; border-bottom:1px solid #e9ebed;
-    font-size:18px; font-weight:700; color:#000716;
-  }
-  .cs-ch-cnt { font-size:13px; font-weight:400; color:#5f6b7a; }
-  .cs-table { font-size:13px; }
-  .cs-thead, .cs-row { display:grid; grid-template-columns:62px 1fr 112px 80px; align-items:center; }
-  .cs-thead { padding:9px 18px; border-bottom:1px solid #e9ebed; color:#000716; font-weight:700; background:#fbfbfb; }
-  .cs-row { padding:11px 18px; border-bottom:1px solid #eff0f0; }
-  .cs-row:last-child { border-bottom:none; }
-  .cs-row.mine { background:#f0fbff; }
-  .cs-row.flash { animation:csflash .8s ease; }
-  @keyframes csflash { 0%{ background:#eafaf0; } 100%{ background:transparent; } }
-  .cs-row.mine.flash { animation:csflashmine .8s ease; }
-  @keyframes csflashmine { 0%{ background:#eafaf0; } 100%{ background:#f0fbff; } }
-  .cs-rk { font-weight:700; color:#0f1419; }
-  .cs-rk.me { color:#037f0c; }
-  .cs-tm { color:#0f1419; }
-  .cs-tm.me { font-weight:700; }
-  .cs-you { color:#0972d3; font-size:11px; }
-  .cs-sc { font-weight:700; color:#037f0c; }
-  .cs-pg { color:#5f6b7a; }
+.col { height:100%; display:grid; grid-template-rows:auto 1fr auto; gap:14px; }
 
-  .scenario { height:100%; display:grid; grid-template-rows:auto 1fr auto; gap:20px; }
-  .scenario-grid { display:grid; grid-template-columns:1fr 1fr; gap:22px; align-items:center; }
-  .scenario-copy { display:grid; gap:18px; }
-  .deadline {
-    width:max-content; padding:9px 12px;
-    border:1px solid #a9c7e7; border-radius:8px; background:#f7fbff;
-    color:var(--blue); font-family:var(--mono); font-size:18px; font-weight:900;
-  }
-  .slot-table { padding:14px; display:grid; gap:8px; }
-  .slot-row {
-    display:grid; grid-template-columns:78px 1fr auto; gap:10px; align-items:center;
-    padding:10px 12px; border-bottom:1px solid #e6edf5;
-  }
-  .slot-row:last-child { border-bottom:0; }
-  .slot-row b { color:var(--blue); font-family:var(--mono); font-size:13px; }
-  .slot-row span { color:var(--ink); font-size:14px; font-weight:720; }
-  .slot-row strong { color:var(--green); font-family:var(--mono); font-size:13px; }
+/* 01 hero */
+.s1-grid { display:grid; grid-template-columns:1.06fr .94fr; gap:28px; align-items:end; min-height:0; }
+.s1-copy { display:grid; gap:13px; align-content:center; }
+.s1-name { display:flex; align-items:center; gap:14px; color:#fff; font-size:62px; font-weight:900; letter-spacing:-.01em; }
+.s1-name .tc-mark { width:62px; height:62px; filter:drop-shadow(0 4px 18px rgba(246,202,70,.4)); }
+.s1-oss { width:max-content; padding:5px 13px; border:1px solid var(--line-gold); border-radius:999px; background:rgba(246,202,70,.08); color:var(--gold-400); font-family:var(--mono); font-size:13px; font-weight:900; }
+.s1-oss b { color:var(--blue-300); }
+.s1-sub { color:var(--ink-1); font-size:26px; font-weight:800; }
+.s1-tenka { font-size:84px; line-height:1.08; }
+.s1-clouds { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.cloud-chip { padding:6px 12px; border:1px solid var(--line-gold); border-radius:7px; background:rgba(246,202,70,.1); color:var(--gold-400); font-family:var(--mono); font-size:13px; font-weight:900; }
+.cloud-chip.soon { color:var(--ink-3); background:transparent; border:1px dashed var(--line-2); font-weight:800; }
+.s1-arrow { color:var(--ink-3); font-family:var(--mono); font-size:12px; font-weight:800; }
+.s1-steps { display:grid; gap:11px; align-content:end; }
+.s1-steps .kicker { text-align:center; }
+.s1-step-row { display:grid; grid-template-columns:1fr auto 1fr auto 1fr; gap:7px; align-items:stretch; }
+.s1-step { padding:14px 10px 13px; display:grid; gap:8px; justify-items:center; text-align:center; align-content:start; }
+.s1-step h3 { color:var(--ink-0); font-size:14.5px; font-weight:850; white-space:nowrap; }
+.s1-step p { color:var(--ink-3); font-size:11.5px; line-height:1.45; font-weight:600; }
 
-  .risk-board { display:grid; grid-template-columns:1.08fr .92fr; gap:18px; align-items:stretch; }
-  .quote-card { padding:22px; display:grid; align-content:center; gap:18px; border-left:8px solid var(--blue); }
-  .quote-card p { color:var(--navy); font-size:25px; line-height:1.38; font-weight:850; }
-  .origin-story .quote-card p { font-size:24px; }
-  .small-note { color:var(--muted); font-family:var(--mono); font-size:13px; font-weight:700; }
-  .risk-list { display:grid; gap:8px; }
-  .risk-item {
-    display:grid; grid-template-columns:96px 1fr; gap:12px; align-items:center;
-    padding:10px 12px; background:#fff; border:1px solid var(--line); border-radius:8px;
-  }
-  .risk-item b { color:var(--blue); font-family:var(--mono); font-size:13px; }
-  .risk-item span { color:var(--ink); font-size:14px; font-weight:740; line-height:1.32; }
-  .origin-story .risk-item { padding:9px 12px; }
-  .origin-story .bottom-line { font-size:18px; padding:11px 16px; }
+/* 02 StackStack */
+.s2-top { display:grid; grid-template-columns:1.02fr .98fr; gap:24px; align-items:center; }
+.s2-head { font-size:36px; line-height:1.32; }
+.s2-head .brush-gold { display:block; font-size:50px; margin-top:6px; }
+.s2-problem { padding:18px 20px; display:grid; gap:9px; }
+.s2-problem .ttl { display:flex; align-items:baseline; gap:10px; border-bottom:1px solid var(--line-1); padding-bottom:9px; }
+.s2-problem .ttl b { color:var(--ink-0); font-size:19px; font-weight:900; }
+.s2-problem .ttl .mono { color:var(--blue-300); font-family:var(--mono); font-size:13px; font-weight:800; }
+.s2-problem .ttl em { font-style:normal; color:var(--gold-400); font-family:var(--mono); font-size:19px; font-weight:900; margin-left:auto; }
+.s2-problem p { color:var(--ink-2); font-size:14.5px; line-height:1.55; font-weight:600; }
+.s2-problem p em { font-style:normal; color:var(--gold-400); font-weight:900; }
+.s2-gaps { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; align-content:center; }
+.gap-card { padding:13px 12px 12px; display:grid; gap:9px; justify-items:center; text-align:center; align-content:start; }
+.gap-card .hd { display:flex; align-items:center; gap:7px; }
+.gap-card .hd b { color:var(--blue-300); font-family:var(--mono); font-size:14px; font-weight:900; }
+.gap-flow { display:grid; gap:3px; justify-items:center; }
+.gap-flow .from { color:var(--ink-3); font-size:12.5px; font-weight:700; }
+.gap-flow .arr { color:var(--blue-400); font-size:14px; font-weight:900; }
+.gap-flow .to { color:var(--gold-400); font-family:var(--mono); font-size:15px; font-weight:900; }
 
-  /* ── closing ask (slide 08) ── */
-  .ask-grid .info-card { min-height:172px; }
-  .ask-grid .info-card h3 { font-size:21px; }
+/* 03 game design */
+.s3-head { font-size:34px; line-height:1.3; }
+.s3-head .brush-gold { font-size:42px; }
+.s3-grid { display:grid; grid-template-columns:1fr auto 1fr auto 1fr auto 1fr; gap:8px; align-items:center; align-content:center; min-height:0; }
+.s3-card { padding:18px 14px; min-height:280px; display:grid; gap:9px; align-content:start; justify-items:center; text-align:center; }
+.s3-card .hd { display:flex; align-items:center; gap:8px; }
+.s3-card h3 { color:var(--ink-0); font-size:16.5px; font-weight:850; line-height:1.3; }
+.s3-card p { color:var(--ink-3); font-size:12.5px; line-height:1.5; font-weight:600; }
+.s3-tags { display:flex; flex-wrap:wrap; gap:5px; justify-content:center; }
 
-  .team-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; align-items:stretch; }
-  .member-card { min-height:200px; padding:19px; display:grid; gap:10px; align-content:start; }
-  .member-mark {
-    display:grid; place-items:center; width:52px; height:52px; border-radius:12px;
-    background:linear-gradient(135deg,var(--blue),var(--green)); color:#fff; font-size:24px; font-weight:900; line-height:1;
-  }
-  .member-card p { font-size:14px; font-weight:720; }
-  .member-card .qr-row { display:flex; gap:12px; margin-top:8px; }
-  .member-card .qr { text-align:center; }
-  .member-card .qr span { display:block; font-family:var(--mono); font-size:10px; color:var(--muted); margin-bottom:3px; }
-  .member-card .qr img { width:60px; height:60px; display:block; border:1px solid var(--line); border-radius:6px; background:#fff; }
-  .thanks { height:100%; display:grid; grid-template-rows:auto 1fr; gap:18px; }
-  .thanks-mid { display:grid; place-items:center; align-content:center; gap:22px; text-align:center; }
-  .thanks-mid h1 { font-size:64px; }
-  .thanks-qr { display:flex; gap:34px; justify-content:center; flex-wrap:wrap; }
-  .thanks-qr .qr-item { text-align:center; }
-  .thanks-qr .qr-item span { display:block; font-family:var(--mono); font-size:13px; color:var(--muted); margin-bottom:6px; }
-  .thanks-qr .qr-item img { width:118px; height:118px; display:block; border:1px solid var(--line); border-radius:8px; background:#fff; }
+/* 04 battle (live portal) */
+.battle-slide { height:100%; display:grid; grid-template-rows:auto auto auto 1fr auto; gap:11px; }
+.battle-loop { display:flex; align-items:stretch; gap:8px; }
+.bl-step { flex:1; padding:10px 13px; display:grid; gap:2px; align-content:center; transition:border-color .25s ease, background .25s ease, box-shadow .25s ease; }
+.bl-step b { font-family:var(--mono); font-size:13px; color:var(--blue-300); }
+.bl-step span { font-size:12px; color:var(--ink-2); font-weight:600; line-height:1.32; }
+.bl-arr { display:grid; place-items:center; color:var(--blue-400); font-weight:900; font-size:17px; transition:color .25s ease, transform .25s ease; }
+.bl-step.active { border-color:var(--gold-400); background:rgba(246,202,70,.12); box-shadow:0 0 0 1px rgba(246,202,70,.4), 0 0 22px rgba(246,202,70,.25); }
+.bl-arr.on { color:var(--gold-400); transform:translateX(2px); }
+.s4-head { font-size:38px; }
 
-  @media (max-width:1040px) {
-    .canvas { padding:30px 34px 28px; }
-    h1 { font-size:42px; }
-    h2 { font-size:31px; }
-    .lead { font-size:18px; }
-    .quote-card p { font-size:22px; }
-  }
+/* live portal: 本物のプロダクト画面 = AWS Cloudscape 風 (ライト基調のまま) */
+.tc-portal { min-height:0; border-radius:10px; overflow:hidden; border:1px solid rgba(255,255,255,.18); box-shadow:0 20px 50px -20px rgba(0,0,0,.8); }
+.cs-app { height:100%; display:flex; flex-direction:column; background:#f2f3f3; color:#16191f; font-family:"Open Sans","Helvetica Neue",Roboto,Arial,var(--sans); overflow:hidden; }
+.cs-topnav { display:flex; align-items:center; justify-content:space-between; height:44px; padding:0 16px; background:#fff; border-bottom:1px solid #e9ebed; flex:0 0 auto; }
+.cs-ident { display:flex; align-items:center; gap:9px; font-size:16px; font-weight:700; color:#000716; }
+.cs-logo { width:20px; height:20px; border-radius:4px; background:#0972d3; }
+.cs-utils { display:flex; align-items:center; gap:18px; font-size:13px; color:#0f1419; }
+.cs-util { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+.cs-util b { font-weight:700; }
+.cs-ok { color:#037f0c; font-weight:900; }
+.cs-caret { color:#5f6b7a; }
+.cs-body { flex:1; display:grid; grid-template-columns:204px 1fr; min-height:0; }
+.cs-sidenav { background:#fff; border-right:1px solid #e9ebed; padding:14px 8px; }
+.cs-sec { font-size:13px; font-weight:700; color:#000716; padding:10px 12px 5px; }
+.cs-sec:first-child { padding-top:0; }
+.cs-link { display:flex; align-items:center; gap:8px; padding:6px 12px; font-size:13px; color:#0f1419; border-left:2px solid transparent; }
+.cs-link.on { color:#0972d3; font-weight:700; border-left-color:#0972d3; background:#f0fbff; }
+.cs-badge { margin-left:auto; min-width:18px; height:18px; padding:0 5px; display:inline-grid; place-items:center; background:#0972d3; color:#fff; border-radius:999px; font-size:11px; font-weight:700; }
+.cs-content { background:#f2f3f3; padding:14px 16px; min-height:0; overflow:hidden; }
+.cs-countdown { font-size:13px; color:#5f6b7a; margin-bottom:10px; font-weight:600; }
+.cs-countdown b { color:#16191f; font-weight:700; font-variant-numeric:tabular-nums; }
+.cs-incident { margin-left:12px; font-family:var(--mono); font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; opacity:0; transition:opacity .3s ease; }
+.cs-incident.show { opacity:1; }
+.cs-incident.fire { color:#b8261d; background:#fdeceb; border:1px solid #f3c4c0; }
+.cs-incident.ok { color:#1d7a44; background:#eafaf0; border:1px solid #cde9d7; }
+.cs-badge.flash { animation:tcbadge .6s ease; }
+@keyframes tcbadge { 0% { transform:scale(1.5); } 100% { transform:scale(1); } }
+.cs-container { background:#fff; border:1px solid #e9ebed; border-radius:8px; overflow:hidden; }
+.cs-ch { display:flex; align-items:baseline; gap:10px; padding:13px 18px; border-bottom:1px solid #e9ebed; font-size:18px; font-weight:700; color:#000716; }
+.cs-ch-cnt { font-size:13px; font-weight:400; color:#5f6b7a; }
+.cs-table { font-size:13px; }
+.cs-thead, .cs-row { display:grid; grid-template-columns:62px 1fr 112px 80px; align-items:center; }
+.cs-thead { padding:9px 18px; border-bottom:1px solid #e9ebed; color:#000716; font-weight:700; background:#fbfbfb; }
+.cs-row { padding:11px 18px; border-bottom:1px solid #eff0f0; }
+.cs-row:last-child { border-bottom:none; }
+.cs-row.mine { background:#f0fbff; }
+.cs-row.flash { animation:csflash .8s ease; }
+@keyframes csflash { 0%{ background:#eafaf0; } 100%{ background:transparent; } }
+.cs-row.mine.flash { animation:csflashmine .8s ease; }
+@keyframes csflashmine { 0%{ background:#eafaf0; } 100%{ background:#f0fbff; } }
+.cs-rk { font-weight:700; color:#0f1419; }
+.cs-rk.me { color:#037f0c; }
+.cs-tm { color:#0f1419; }
+.cs-tm.me { font-weight:700; }
+.cs-you { color:#0972d3; font-size:11px; }
+.cs-sc { font-weight:700; color:#037f0c; }
+.cs-pg { color:#5f6b7a; }
 
-  @media (max-width:760px) {
-    .slide { padding:10px; overflow:visible; }
-    .canvas {
-      width:calc(100vw - 20px);
-      min-height:calc(100vh - 20px);
-      height:auto;
-      transform:none;
-      overflow:visible;
-      padding:18px;
-    }
-    h1 { font-size:32px; }
-    h2 { font-size:25px; }
-    p,.lead { font-size:15px; }
-    .hero-grid,
-    .risk-board,
-    .three-grid,
-    .scenario-grid,
-    .timeline,
-    .battle-loop,
-    .team-grid { grid-template-columns:1fr; }
-    .battle-loop { flex-direction:column; }
-    .bl-arr { transform:rotate(90deg); }
-    .cs-body { grid-template-columns:1fr; }
-    .cs-sidenav { display:none; }
-    .story-slide, .hero, .scenario, .battle-slide { height:auto; }
-  }
+/* 05 platform */
+.s5-head { display:grid; gap:6px; }
+.s5-head .nm { display:flex; align-items:center; gap:12px; color:#fff; font-size:38px; font-weight:900; }
+.s5-head .nm .tc-mark { width:40px; height:40px; }
+.s5-head .sub { color:var(--ink-1); font-size:22px; font-weight:800; }
+.s5-head .brush-gold { font-size:52px; line-height:1.14; }
+.s5-lead { color:var(--ink-2); font-size:16.5px; font-weight:600; line-height:1.55; }
+.s5-lead em { font-style:normal; color:var(--blue-300); font-weight:900; }
+.s5-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; align-content:center; }
+.s5-card { padding:18px; display:grid; grid-template-columns:auto 1fr; gap:8px 14px; align-items:center; }
+.s5-card .tag { grid-column:1 / -1; color:var(--blue-300); font-family:var(--mono); font-size:11.5px; font-weight:900; letter-spacing:.16em; }
+.s5-card h3 { color:var(--ink-0); font-size:19px; font-weight:850; line-height:1.25; }
+.s5-card p { grid-column:1 / -1; color:var(--ink-3); font-size:13.5px; font-weight:600; line-height:1.5; }
 
-  @media print {
-    body { background:#fff; }
-    .deck { height:auto; overflow:visible; }
-    .slide { height:100vh; min-height:auto; padding:0; page-break-after:always; break-after:page; }
-    .canvas { width:100vw; height:100vh; transform:none; border:0; box-shadow:none; }
-    .progress,.counter { display:none; }
-  }
+/* 06 use cases */
+.s6-head { font-size:36px; line-height:1.32; }
+.s6-head .brush-gold { font-size:46px; }
+.s6-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; align-content:center; align-items:center; }
+.s6-card { padding:20px 18px; min-height:250px; display:grid; gap:11px; justify-items:center; text-align:center; align-content:start; }
+.s6-card .hd { display:flex; align-items:center; gap:9px; }
+.s6-card .hd b { color:var(--blue-300); font-family:var(--mono); font-size:13px; font-weight:900; letter-spacing:.14em; }
+.s6-card .glyph { width:38px; height:38px; }
+.s6-card h3 { color:var(--gold-400); font-size:19px; font-weight:850; padding-top:9px; border-top:1px solid var(--line-gold); width:100%; }
+.s6-card p { color:var(--ink-2); font-size:14px; font-weight:600; line-height:1.55; }
+
+/* 07 team */
+.s7-head { font-size:34px; line-height:1.32; }
+.s7-head .brush-gold { font-size:44px; }
+.s7-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; align-content:center; align-items:center; }
+.s7-card { padding:17px; min-height:280px; display:grid; gap:10px; align-content:start; }
+.s7-id { display:flex; align-items:center; gap:13px; }
+.s7-id .who { display:grid; gap:2px; }
+.s7-id .role { color:var(--gold-400); font-family:var(--mono); font-size:11px; font-weight:900; letter-spacing:.14em; }
+.s7-id .role.blue { color:var(--blue-300); }
+.s7-id h3 { color:var(--ink-0); font-size:21px; font-weight:900; line-height:1.15; }
+.s7-id small { color:var(--ink-3); font-size:12px; font-weight:600; }
+.s7-card .sep { height:1px; background:linear-gradient(90deg,transparent,var(--line-gold),transparent); }
+.s7-card p { color:var(--ink-2); font-size:13.5px; font-weight:600; line-height:1.55; }
+.s7-card p em { font-style:normal; color:var(--gold-400); font-weight:900; }
+.s7-qrs { display:flex; gap:12px; justify-content:center; padding-top:2px; }
+
+/* 08 ask */
+.s8-head { font-size:32px; line-height:1.34; }
+.s8-head .brush-gold { font-size:40px; }
+.s8-lead { color:var(--ink-2); font-size:15.5px; font-weight:600; line-height:1.6; }
+.s8-lead em { font-style:normal; color:var(--blue-300); font-weight:900; }
+.s8-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; align-content:center; align-items:center; }
+.s8-card { padding:17px; min-height:215px; display:grid; gap:9px; align-content:start; }
+.s8-card .hd { display:flex; align-items:center; gap:9px; }
+.s8-card .hd span { color:var(--blue-300); font-size:13px; font-weight:800; }
+.s8-card h3 { color:var(--ink-0); font-size:18px; font-weight:850; line-height:1.3; }
+.s8-card p { color:var(--ink-2); font-size:13.5px; font-weight:600; line-height:1.55; }
+.s8-qa { display:grid; gap:8px; }
+.s8-qa .q { display:grid; grid-template-columns:auto 1fr; gap:8px; color:var(--ink-2); font-size:12.5px; font-weight:600; line-height:1.5; }
+.s8-qa .q b { color:var(--blue-300); font-family:var(--mono); }
+
+/* 09 thanks */
+.s9 { position:relative; height:100%; display:grid; grid-template-rows:auto 1fr auto; gap:14px; }
+.s9-mid { display:grid; place-items:center; align-content:center; gap:16px; text-align:center; }
+.s9-mid h1 { font-size:72px; line-height:1.14; }
+.s9-mid .sub { color:var(--ink-1); font-size:20px; font-weight:700; text-shadow:0 2px 14px rgba(0,0,0,.8); }
+.s9-mid .sub em { font-style:normal; color:var(--blue-300); font-weight:900; }
+.s9-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; width:min(880px,100%); }
+.s9-card { padding:15px 14px; display:grid; gap:8px; justify-items:center; text-align:center; align-content:start; background:linear-gradient(180deg,rgba(13,24,43,.92),rgba(9,17,31,.94)); }
+.s9-card h3 { color:var(--gold-400); font-size:17px; font-weight:850; }
+.s9-card .qr-item span { font-size:9.5px; }
+.s9-card p { color:var(--ink-3); font-size:12px; font-weight:600; line-height:1.45; }
+
+/* ── responsive (760px 以下: ステージ解除して縦積み) ──────────────── */
+@media (max-width:1040px) {
+  .stage { padding:30px 34px 28px; }
+}
+@media (max-width:760px) {
+  .slide { padding:10px; overflow:visible; }
+  .stage { width:calc(100vw - 20px); min-height:calc(100vh - 20px); height:auto; transform:none; overflow:visible; padding:18px; }
+  .col { height:auto; }
+  .arena-bg { width:88%; opacity:.5; }
+  .s1-grid, .s1-step-row, .s2-top, .s2-gaps, .s3-grid, .s5-grid, .s6-grid, .s7-grid, .s8-grid, .s9-grid { grid-template-columns:1fr; }
+  .chev { transform:rotate(90deg); }
+  .s1-name { font-size:40px; }
+  .s1-name .tc-mark { width:40px; height:40px; }
+  .s1-tenka { font-size:48px; }
+  .s2-head { font-size:26px; }
+  .s2-head .brush-gold { font-size:34px; }
+  .s9-mid h1 { font-size:38px; }
+  .battle-loop { flex-direction:column; }
+  .bl-arr { transform:rotate(90deg); }
+  .cs-body { grid-template-columns:1fr; }
+  .cs-sidenav { display:none; }
+  .battle-slide { height:auto; }
+  .s9 { height:auto; }
+  .gold-band { font-size:15px; }
+}
+
+/* ── print (make pdf: 1 スライド = 1 ページ) ───────────────────────── */
+@media print {
+  body { background:#05090f; }
+  .deck { height:auto; overflow:visible; }
+  .slide { height:100vh; min-height:auto; padding:0; page-break-after:always; break-after:page; }
+  .stage { width:100vw; height:100vh; transform:none; border:0; box-shadow:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .progress,.counter { display:none; }
+  .arena-bg .bolt1, .arena-bg .bolt2 { animation:none; opacity:.55; }
+}
 </style>
 </head>
 <body>
+<!-- ── shared SVG assets: TenkaCloud アイコン / 線画 glyph / アリーナ背景 / アバター ── -->
+<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0" aria-hidden="true">
+  <defs>
+    <linearGradient id="tcIconBg" x1="8" y1="6" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#16294b"/><stop offset="1" stop-color="#070d1a"/>
+    </linearGradient>
+    <linearGradient id="tcIconGold" x1="22" y1="14" x2="44" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffeeb0"/><stop offset=".48" stop-color="#f6ca46"/><stop offset="1" stop-color="#bd8224"/>
+    </linearGradient>
+    <linearGradient id="tcIconRim" x1="2" y1="2" x2="62" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f6ca46"/><stop offset="1" stop-color="#7d5a1c"/>
+    </linearGradient>
+    <linearGradient id="agGold" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#ffeeb0"/><stop offset=".5" stop-color="#f6ca46"/><stop offset="1" stop-color="#a87420"/>
+    </linearGradient>
+    <radialGradient id="avSky" cx=".42" cy=".3" r=".95">
+      <stop stop-color="#f3d88f"/><stop offset=".55" stop-color="#cda14c"/><stop offset="1" stop-color="#6e5120"/>
+    </radialGradient>
+    <filter id="agBlur" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="9"/></filter>
+    <filter id="agGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="2.2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <symbol id="tc-icon" viewBox="0 0 64 64">
+    <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#tcIconBg)" stroke="url(#tcIconRim)" stroke-width="2.5"/>
+    <path d="M13 33.5c0-5.1 4.1-9.2 9.2-9.2h1.1A13 13 0 0 1 48.4 28a8.8 8.8 0 0 1-.9 17.5H22.2C15.4 45.5 13 40.1 13 33.5Z" fill="#eef4ff" opacity=".96"/>
+    <path d="M36.5 13 23 36.5h7.5L25.5 53 45 29h-8.5L42 13Z" fill="url(#tcIconGold)" stroke="#241803" stroke-width="1" stroke-linejoin="round"/>
+  </symbol>
+
+  <symbol id="g-cloud-up" viewBox="0 0 24 24"><path d="M7 17a4.2 4.2 0 0 1-.3-8.4 5.6 5.6 0 0 1 10.9 1.3A3.6 3.6 0 0 1 17.2 17"/><path d="M12 19v-6.5M9.6 14.9 12 12.5l2.4 2.4"/></symbol>
+  <symbol id="g-shield" viewBox="0 0 24 24"><path d="M12 3l7 2.8v5.2c0 4.4-2.9 7.3-7 9-4.1-1.7-7-4.6-7-9V5.8Z"/><path d="M9 11.6l2.1 2.1 4-4.4"/></symbol>
+  <symbol id="g-chart" viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M7 20v-5M12 20v-9M17 20V7"/></symbol>
+  <symbol id="g-wall" viewBox="0 0 24 24"><path d="M4 20V9l8-5 8 5v11"/><path d="M4 14h16M9 9h6M4 20h16"/></symbol>
+  <symbol id="g-swords" viewBox="0 0 24 24"><path d="M4 4l11 11M20 4 9 15"/><path d="M13.5 17.5 17 14M6.5 17.5 3 14m3.5 3.5L4 20m13-2.5L20 20"/></symbol>
+  <symbol id="g-trophy" viewBox="0 0 24 24"><path d="M8 4h8v4.5a4 4 0 0 1-8 0Z"/><path d="M8 5H4.8A3.2 3.2 0 0 0 8 9.4M16 5h3.2A3.2 3.2 0 0 1 16 9.4"/><path d="M12 12.5V16M8.5 19.5h7M10 16h4v3.5h-4Z"/></symbol>
+  <symbol id="g-flag" viewBox="0 0 24 24"><path d="M6 21V4"/><path d="M6 5h11l-2.5 3.5L17 12H6"/></symbol>
+  <symbol id="g-book" viewBox="0 0 24 24"><path d="M4 6a3 3 0 0 1 3-3h13v15H7a3 3 0 0 0-3 3Z"/><path d="M7 3v15"/></symbol>
+  <symbol id="g-clip" viewBox="0 0 24 24"><path d="M9 4h6v3H9Z"/><path d="M15 5h3v16H6V5h3"/><path d="M9 12l2 2 4-4.5"/></symbol>
+  <symbol id="g-stack" viewBox="0 0 24 24"><path d="M12 3l8 4-8 4-8-4Z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/></symbol>
+  <symbol id="g-lock" viewBox="0 0 24 24"><path d="M6 11h12v9H6Z"/><path d="M9 11V8a3 3 0 0 1 6 0v3"/></symbol>
+  <symbol id="g-cycle" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 3v4h-4"/></symbol>
+  <symbol id="g-users" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9.5" r="2.4"/><path d="M15.5 19a4.6 4.6 0 0 1 5-4.4"/></symbol>
+  <symbol id="g-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9.5L4 20Z"/><path d="M8 9h8M8 12h5"/></symbol>
+
+  <!-- アリーナ背景: 観客席 + 楼門 + 「天下一」垂れ幕 + 稲妻 -->
+  <symbol id="tc-arena" viewBox="0 0 900 620">
+    <!-- sky glow -->
+    <ellipse cx="450" cy="120" rx="330" ry="190" fill="#3c63a8" opacity=".22" filter="url(#agBlur)"/>
+    <ellipse cx="450" cy="60" rx="120" ry="80" fill="#9fc1ff" opacity=".3" filter="url(#agBlur)"/>
+    <!-- clouds -->
+    <g fill="#22365f" opacity=".75" filter="url(#agBlur)">
+      <ellipse cx="120" cy="150" rx="120" ry="46"/>
+      <ellipse cx="220" cy="90" rx="90" ry="34"/>
+      <ellipse cx="760" cy="120" rx="130" ry="48"/>
+      <ellipse cx="680" cy="200" rx="100" ry="36"/>
+      <ellipse cx="180" cy="260" rx="110" ry="38"/>
+    </g>
+    <g fill="#31497e" opacity=".5" filter="url(#agBlur)">
+      <ellipse cx="90" cy="110" rx="80" ry="30"/>
+      <ellipse cx="800" cy="70" rx="90" ry="32"/>
+    </g>
+    <!-- lightning -->
+    <g class="bolt1" stroke="#d6e7ff" stroke-width="2.6" fill="none" filter="url(#agGlow)" opacity="0">
+      <path d="M300 30l24 70-16 8 30 84-12 6 22 60"/>
+      <path d="M324 100l-30 36"/>
+    </g>
+    <g class="bolt2" stroke="#cfe2ff" stroke-width="2.2" fill="none" filter="url(#agGlow)" opacity="0">
+      <path d="M640 24l-18 64 14 6-24 78 10 6-16 52"/>
+      <path d="M622 88l26 30"/>
+    </g>
+    <!-- arena bowl -->
+    <g>
+      <path d="M-40 560 Q450 420 940 560 L940 620 -40 620 Z" fill="#0a1426"/>
+      <path d="M-40 560 Q450 420 940 560" stroke="#1b2c4e" stroke-width="3" fill="none"/>
+      <path d="M-20 520 Q450 392 920 520" stroke="#16243f" stroke-width="26" fill="none" opacity=".85"/>
+      <path d="M0 480 Q450 366 900 480" stroke="#121e36" stroke-width="22" fill="none" opacity=".8"/>
+      <g fill="#7fb2ff" filter="url(#agGlow)">
+        <circle cx="60" cy="497" r="2.4"/><circle cx="130" cy="478" r="2"/><circle cx="205" cy="462" r="2.4"/>
+        <circle cx="280" cy="449" r="2"/><circle cx="355" cy="441" r="2.4"/><circle cx="545" cy="441" r="2.2"/>
+        <circle cx="620" cy="449" r="2.4"/><circle cx="695" cy="461" r="2"/><circle cx="770" cy="477" r="2.4"/>
+        <circle cx="840" cy="496" r="2"/><circle cx="95" cy="536" r="2.6"/><circle cx="180" cy="516" r="2.2"/>
+        <circle cx="265" cy="500" r="2.6"/><circle cx="350" cy="490" r="2.2"/><circle cx="550" cy="490" r="2.6"/>
+        <circle cx="635" cy="500" r="2.2"/><circle cx="720" cy="515" r="2.6"/><circle cx="805" cy="535" r="2.2"/>
+      </g>
+    </g>
+    <!-- gate (楼門) silhouette -->
+    <g fill="#0b1729" stroke="#27406e" stroke-width="1.6">
+      <!-- central body -->
+      <rect x="372" y="56" width="156" height="224"/>
+      <!-- top roof -->
+      <path d="M450 38 451 38 458 60 Q520 64 560 84 L536 104 Q450 86 364 104 L340 84 Q380 64 442 60 Z"/>
+      <rect x="444" y="22" width="4" height="22" />
+      <path d="M446 8l4 0 2 16h-8Z"/>
+      <!-- upper box -->
+      <rect x="380" y="100" width="140" height="38" rx="3"/>
+      <!-- mid roof -->
+      <path d="M560 142 Q610 150 640 170 L614 192 Q450 158 286 192 L260 170 Q290 150 340 142 Z"/>
+      <!-- mid box -->
+      <rect x="350" y="188" width="200" height="34" rx="3"/>
+      <!-- lower roof wings -->
+      <path d="M620 226 Q660 234 686 252 L662 272 Q450 240 238 272 L214 252 Q240 234 280 226 Z"/>
+      <!-- pillars -->
+      <rect x="318" y="268" width="40" height="290"/>
+      <rect x="542" y="268" width="40" height="290"/>
+      <rect x="300" y="552" width="76" height="16" rx="2"/>
+      <rect x="524" y="552" width="76" height="16" rx="2"/>
+      <!-- beam -->
+      <rect x="318" y="268" width="264" height="18"/>
+    </g>
+    <!-- banner (垂れ幕) -->
+    <g>
+      <path d="M398 270h104v258l-13 14-13-10-13 12-13-9-13 11-13-8-13 12-13-13Z" fill="#0e1a3c" stroke="url(#agGold)" stroke-width="3"/>
+      <path d="M398 270h104v10H398Z" fill="url(#agGold)" opacity=".8"/>
+      <text x="450" y="352" text-anchor="middle" font-size="66" fill="url(#agGold)" style="font-family:var(--brush)" filter="url(#agGlow)">天</text>
+      <text x="450" y="430" text-anchor="middle" font-size="66" fill="url(#agGold)" style="font-family:var(--brush)" filter="url(#agGlow)">下</text>
+      <text x="450" y="508" text-anchor="middle" font-size="66" fill="url(#agGold)" style="font-family:var(--brush)" filter="url(#agGlow)">一</text>
+    </g>
+  </symbol>
+
+  <!-- アバター (金環 + シルエット) -->
+  <symbol id="av-samurai" viewBox="0 0 64 64">
+    <circle cx="32" cy="32" r="29" fill="url(#avSky)" stroke="url(#agGold)" stroke-width="2.6"/>
+    <path d="M12 50c4-4 10-4 14-1-4-3-2-6 2-6-3-2-1-5 3-4" fill="none" stroke="#9c7730" stroke-width="2.4" opacity=".7"/>
+    <path d="M40 14c6-2 10 1 11 5-4-1-8 0-10 2l-3-2Z" fill="#0d1830"/>
+    <path d="M22 47c-1-10 2-18 9-20l-2-8 7 5 8-2-3 6c5 3 8 9 8 14v5H22Z" fill="#0d1830"/>
+    <path d="M28 26c4-3 10-3 14 0" stroke="#27406e" stroke-width="1.4" fill="none"/>
+  </symbol>
+  <symbol id="av-ninja" viewBox="0 0 64 64">
+    <circle cx="32" cy="32" r="29" fill="url(#avSky)" stroke="url(#agGold)" stroke-width="2.6"/>
+    <path d="M13 50c4-4 9-4 13-2-3-3-1-6 3-5" fill="none" stroke="#9c7730" stroke-width="2.4" opacity=".7"/>
+    <circle cx="32" cy="25" r="10" fill="#0d1830"/>
+    <path d="M21 22h22v5H21Z" fill="#10203c"/>
+    <path d="M43 23l10-5-7 10Z" fill="#0d1830"/>
+    <path d="M26 24.5h9" stroke="#d9b65a" stroke-width="1.6"/>
+    <path d="M20 48c1-8 5-13 12-14 7 1 11 6 12 14Z" fill="#0d1830"/>
+  </symbol>
+  <symbol id="av-kunoichi" viewBox="0 0 64 64">
+    <circle cx="32" cy="32" r="29" fill="url(#avSky)" stroke="url(#agGold)" stroke-width="2.6"/>
+    <path d="M14 49c4-4 9-4 13-2-3-3-1-6 3-5" fill="none" stroke="#9c7730" stroke-width="2.4" opacity=".7"/>
+    <path d="M16 46 44 18l3 3L19 49Z" fill="#0d1830"/>
+    <path d="M44 18l5-3-2 5Z" fill="#caa54b"/>
+    <circle cx="36" cy="14" r="4.4" fill="#0d1830"/>
+    <circle cx="33" cy="26" r="9" fill="#0d1830"/>
+    <path d="M21 48c1-8 5-13 12-13 7 0 11 5 12 13Z" fill="#0d1830"/>
+  </symbol>
+</svg>
+
 <div class="progress" id="progress"></div>
 <div class="counter" id="counter">1 / 9</div>
 
 <main class="deck" id="deck">
-  <!-- 01 ── Hero -->
+
+  <!-- 01 ─ TenkaCloud とは -->
   <section class="slide">
-    <div class="canvas">
-      <div class="hero">
+    <div class="stage">
+      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <div class="col">
         <div class="topbar">
-          <div class="section-label"><span class="badge">01</span><span>TenkaCloud とは</span></div>
-          <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
+          <div class="sec-no"><b>01</b><span>TenkaCloud とは</span></div>
+          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
         </div>
-        <div class="hero-grid">
-          <div class="hero-copy">
-            <span class="hero-kicker">OSS · 本物のクラウドで開く競技プラットフォーム</span>
-            <h1>クラウドエンジニアの<br>天下一武道会</h1>
-            <p class="lead">本物のクラウド上で、<strong>障害対応や攻略クエスト</strong>に挑む。しかも問題は <strong>OSS で誰でも作れる</strong> ── クラウドエンジニアの競技プラットフォーム。</p>
-            <div class="cloud-line">
+        <div class="s1-grid">
+          <div class="s1-copy">
+            <h1 class="s1-name">TenkaCloud<svg class="tc-mark"><use href="#tc-icon"/></svg></h1>
+            <div class="s1-oss"><b>OSS</b> ・ 本物のクラウドで開く競技プラットフォーム</div>
+            <div class="s1-sub display">クラウドエンジニアの</div>
+            <div class="s1-tenka brush-gold">天下一武道会</div>
+            <div class="s1-clouds">
               <span class="cloud-chip">AWS</span>
-              <span class="cloud-soon-label">対応予定 →</span>
+              <span class="s1-arrow">対応予定 →</span>
               <span class="cloud-chip soon">Google Cloud</span>
               <span class="cloud-chip soon">Azure</span>
               <span class="cloud-chip soon">さくら</span>
             </div>
           </div>
-          <div class="card hero-steps">
-            <span class="hero-steps-title">HOW A MATCH RUNS</span>
-            <div class="step-row"><span class="step-no">1</span><div><h3>クラウドにデプロイ</h3><p>ローカルで動くだけのアプリを、本物のクラウドへ上げられるか。</p></div></div>
-            <div class="step-row"><span class="step-no">2</span><div><h3>本番品質に作り込む</h3><p>認証・公開範囲・監査・可用性を、出せる状態にできるか。</p></div></div>
-            <div class="step-row"><span class="step-no">3</span><div><h3>毎分、自動採点</h3><p>実際の状態だけで採点。順位がリアルタイムに動く。</p></div></div>
+          <div class="s1-steps">
+            <div class="kicker">HOW A MATCH RUNS</div>
+            <div class="s1-step-row">
+              <div class="panel s1-step">
+                <span class="num-dot">1</span>
+                <svg class="glyph"><use href="#g-cloud-up"/></svg>
+                <h3>クラウドにデプロイ</h3>
+                <p>ローカルで動くだけのアプリを、本物のクラウドへ上げられるか。</p>
+              </div>
+              <div class="chev">▶</div>
+              <div class="panel s1-step">
+                <span class="num-dot">2</span>
+                <svg class="glyph"><use href="#g-shield"/></svg>
+                <h3>本番品質に作り込む</h3>
+                <p>認証・公開範囲・監査・可用性を、出せる状態にできるか。</p>
+              </div>
+              <div class="chev">▶</div>
+              <div class="panel s1-step">
+                <span class="num-dot">3</span>
+                <svg class="glyph"><use href="#g-chart"/></svg>
+                <h3>毎分、自動採点</h3>
+                <p>実際の状態だけで採点。順位がリアルタイムに動く。</p>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="bottom-line">本日の一番は、第一試合「<strong>StackStack</strong>」。お題はシンプルです ──「AI で作って "動く" アプリ、あなたは本番に出せますか？」<span class="gloss">用語 — AWS / Azure / Google Cloud：サーバーを借りられる大手クラウド。さくら：国産クラウド（さくらインターネット）。</span></div>
+        <div class="gold-band"><span class="trophy">🏆</span><span>本日の一番は、第一試合『<strong>StackStack</strong>』。お題はシンプルです ──『<em>AI</em> で作って“動く”アプリ、あなたは <em>本番に出せますか？</em>』</span></div>
       </div>
     </div>
   </section>
 
-  <!-- 02 ── The StackStack problem -->
+  <!-- 02 ─ 本日の一番 StackStack -->
   <section class="slide">
-    <div class="canvas">
-      <div class="scenario">
+    <div class="stage">
+      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <div class="col">
         <div class="topbar">
-          <div class="section-label"><span class="badge">02</span><span>本日の一番 — StackStack</span></div>
-          <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
+          <div class="sec-no"><b>02</b><span>本日の一番 ── StackStack</span></div>
+          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
         </div>
-        <div class="scenario-grid">
-          <div class="scenario-copy">
-            <h2>AI が作った 1 つのアプリ。ローカルでは動く。でも、公開できない。</h2>
-            <p class="lead">AI が作り置きしたクラウド設定は穴だらけ。認証はなし、S3 は公開、ログは残らない、サーバは 1 台。<strong>90 分で、本物のクラウドで安全に動かせ。</strong></p>
-            <span class="deadline">problem: StackStack / 90 min</span>
+        <div style="display:grid; gap:16px; align-content:center; min-height:0;">
+          <div class="s2-top">
+            <h2 class="s2-head display">AI が作った 1 つのアプリ。<br />ローカルでは動く。<span class="brush-gold">でも、公開できない。</span></h2>
+            <div class="panel gold-frame s2-problem">
+              <div class="ttl"><span class="mono">problem:</span><b>StackStack</b><em>90 min</em></div>
+              <p>AI が作り置きしたクラウド設定は穴だらけ。<br />認証はなし、S3 は公開、ログは残らない、サーバは 1 台。<br /><em>90 分</em>で、本物のクラウドで安全に動かせ。</p>
+            </div>
           </div>
-          <div class="card slot-table">
-            <div class="slot-row"><b>auth</b><span>Basic 認証</span><strong>→ SSO</strong></div>
-            <div class="slot-row"><b>network</b><span>公開 S3 / 広い IAM</span><strong>→ OAC</strong></div>
-            <div class="slot-row"><b>rate</b><span>無制限 API</span><strong>→ throttle</strong></div>
-            <div class="slot-row"><b>audit</b><span>標準出力だけ</span><strong>→ WORM</strong></div>
-            <div class="slot-row"><b>uptime</b><span>EC2 1 台</span><strong>→ Multi-AZ</strong></div>
+          <div class="s2-gaps">
+            <div class="panel gap-card">
+              <div class="hd"><span class="num-dot">1</span><b>auth</b></div>
+              <svg class="glyph"><use href="#g-lock"/></svg>
+              <div class="gap-flow"><span class="from">Basic 認証</span><span class="arr">→</span><span class="to">SSO</span></div>
+            </div>
+            <div class="panel gap-card">
+              <div class="hd"><span class="num-dot">2</span><b>network</b></div>
+              <svg class="glyph"><use href="#g-cloud-up"/></svg>
+              <div class="gap-flow"><span class="from">公開 S3 / 広い IAM</span><span class="arr">→</span><span class="to">OAC</span></div>
+            </div>
+            <div class="panel gap-card">
+              <div class="hd"><span class="num-dot">3</span><b>rate</b></div>
+              <svg class="glyph"><use href="#g-cycle"/></svg>
+              <div class="gap-flow"><span class="from">無制限 API</span><span class="arr">→</span><span class="to">throttle</span></div>
+            </div>
+            <div class="panel gap-card">
+              <div class="hd"><span class="num-dot">4</span><b>audit</b></div>
+              <svg class="glyph"><use href="#g-clip"/></svg>
+              <div class="gap-flow"><span class="from">標準出力だけ</span><span class="arr">→</span><span class="to">WORM</span></div>
+            </div>
+            <div class="panel gap-card">
+              <div class="hd"><span class="num-dot">5</span><b>uptime</b></div>
+              <svg class="glyph"><use href="#g-stack"/></svg>
+              <div class="gap-flow"><span class="from">EC2 1 台</span><span class="arr">→</span><span class="to">Multi-AZ</span></div>
+            </div>
           </div>
         </div>
-        <div class="bottom-line">"動く" から "出していい" までの距離 ── 認証・公開範囲・監査・可用性が、そのまま採点項目になる。<span class="gloss">用語 — SSO：共通ログイン／S3：AWS のファイル保管／IAM：アクセス権限／WAF：不正通信の遮断／Multi-AZ：複数拠点で冗長化。</span></div>
+        <div class="gold-band"><span class="trophy">🏆</span><span>“動く” から “出していい” までの距離 ── <em>認証・公開範囲・監査・可用性</em> が、そのまま <strong>採点項目</strong>になる。</span></div>
       </div>
     </div>
   </section>
 
-  <!-- 03 ── Game design : how a match progresses -->
+  <!-- 03 ─ ゲームデザイン -->
   <section class="slide">
-    <div class="canvas">
-      <div class="story-slide">
+    <div class="stage">
+      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <div class="col">
         <div class="topbar">
-          <div class="section-label"><span class="badge">03</span><span>ゲームデザイン</span></div>
-          <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
+          <div class="sec-no"><b>03</b><span>ゲームデザイン</span></div>
+          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
         </div>
-        <h2>クラウドに上げて、穴を塞ぎ、襲ってくる事故を捌く。</h2>
-        <div class="timeline">
-          <div class="tl-phase">
-            <h3>クラウドで起動</h3>
-            <p>ローカルでしか動かない AI 製アプリを、まず本物のクラウドで動かす。</p>
-          </div>
-          <div class="tl-phase">
-            <h3>穴を塞ぐ</h3>
-            <p>AI が作り置きしたリソース設定には穴がある。公開範囲・権限・認証を直す。</p>
-          </div>
-          <div class="tl-phase">
-            <h3>インシデント対応</h3>
-            <p>本番 DB の誤削除、サイト改ざん、サプライチェーン攻撃によるバックドア… 次々に発生。止めずに捌く。</p>
-          </div>
-          <div class="tl-phase">
-            <h3>サイトを稼働させ続けると得点を獲得</h3>
-            <p>稼働を守り切れたか、対応はどれだけ速かったか。順位が確定する。</p>
+        <div style="display:grid; grid-template-rows:auto 1fr; gap:18px; min-height:0;">
+          <h2 class="s3-head display">クラウドに上げて、穴を塞ぎ、<span class="brush-gold">襲ってくる事故を捌く。</span></h2>
+          <div class="s3-grid">
+            <div class="panel s3-card">
+              <div class="hd"><span class="num-dot">1</span><svg class="glyph"><use href="#g-cloud-up"/></svg></div>
+              <h3>クラウドで起動</h3>
+              <p>ローカルでしか動かない AI 製アプリを、まず本物のクラウドで動かす。</p>
+            </div>
+            <div class="chev">▶</div>
+            <div class="panel s3-card">
+              <div class="hd"><span class="num-dot">2</span><svg class="glyph"><use href="#g-wall"/></svg></div>
+              <h3>穴を塞ぐ</h3>
+              <p>AI が作り置きしたリソース設定には穴がある。公開範囲・権限・認証を直す。</p>
+            </div>
+            <div class="chev">▶</div>
+            <div class="panel s3-card">
+              <div class="hd"><span class="num-dot">3</span><svg class="glyph"><use href="#g-swords"/></svg></div>
+              <h3>インシデント対応</h3>
+              <p>本番 DB の誤削除、サイト改ざん、サプライチェーン攻撃によるバックドア… 次々に発生。止めずに捌く。</p>
+              <div class="s3-tags">
+                <span class="incident-tag">DB誤削除</span>
+                <span class="incident-tag">サイト改ざん</span>
+                <span class="incident-tag">サプライチェーン攻撃 (バックドア)</span>
+              </div>
+            </div>
+            <div class="chev">▶</div>
+            <div class="panel s3-card gold-frame">
+              <div class="hd"><span class="num-dot">4</span><svg class="glyph gold"><use href="#g-trophy"/></svg></div>
+              <h3>サイトを稼働させ続けると得点を獲得</h3>
+              <p>稼働を守り切れたか、対応はどれだけ速かったか。順位が確定する。</p>
+            </div>
           </div>
         </div>
-        <div class="bottom-line">勝つのは、何が起きても <strong>サイトを稼働させ続けた</strong> チーム。<span class="gloss">用語 — サプライチェーン攻撃：使っている部品（ライブラリ等）経由で仕込まれる攻撃。バックドア：こっそり作られる侵入用の裏口。</span></div>
+        <div class="gold-band"><span class="trophy">🏆</span><span>勝つのは、何が起きても <span class="brush-gold">サイトを稼働させ続けた</span> チーム。</span></div>
       </div>
     </div>
   </section>
 
-  <!-- 04 ── Battle mechanism + live portal (real Cloudscape UI) -->
+  <!-- 04 ─ Battle の仕組み (本物のプロダクト画面をライブ描画) -->
   <section class="slide">
-    <div class="canvas">
+    <div class="stage">
+      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
       <div class="battle-slide">
         <div class="topbar">
-          <div class="section-label"><span class="badge">04</span><span>Battle の仕組み</span></div>
-          <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
+          <div class="sec-no"><b>04</b><span>Battle の仕組み</span></div>
+          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
         </div>
-        <h2>競技の進み方</h2>
+        <h2 class="s4-head display">競技の進み方</h2>
         <div class="battle-loop">
-          <div class="bl-step"><b>1 · deploy</b><span>問題を本物のクラウドへ展開（AssumeRole + ExternalId）</span></div>
+          <div class="panel bl-step"><b>1 · deploy</b><span>問題を本物のクラウドへ展開（AssumeRole + ExternalId）</span></div>
           <div class="bl-arr">→</div>
-          <div class="bl-step"><b>2 · inject</b><span>シナリオが障害・攻撃プローブを自動で撃ち込む</span></div>
+          <div class="panel bl-step"><b>2 · inject</b><span>シナリオが障害・攻撃プローブを自動で撃ち込む</span></div>
           <div class="bl-arr">→</div>
-          <div class="bl-step"><b>3 · score</b><span>60 秒ごとに実状態を採点（守れば加点 / 破られれば減点）</span></div>
+          <div class="panel bl-step"><b>3 · score</b><span>60 秒ごとに実状態を採点（守れば加点 / 破られれば減点）</span></div>
           <div class="bl-arr">→</div>
-          <div class="bl-step"><b>4 · rank</b><span>スコアを集計し、順位をライブ更新</span></div>
+          <div class="panel bl-step"><b>4 · rank</b><span>スコアを集計し、順位をライブ更新</span></div>
         </div>
         <div class="tc-portal">
           <div class="cs-app">
@@ -673,146 +911,225 @@
             </div>
           </div>
         </div>
-        <div class="bottom-line">同じ仕組みで開ける競技は、<strong>StackStack だけじゃない</strong>。</div>
+        <div class="gold-band"><span class="trophy">🏆</span><span>同じ仕組みで開ける競技は、<em>StackStack</em> <strong>だけじゃない</strong>。</span></div>
       </div>
     </div>
   </section>
 
-  <!-- 05 ── Platformized : problem catalog -->
+  <!-- 05 ─ プラットフォーム化 -->
   <section class="slide">
-    <div class="canvas">
-      <div class="story-slide">
+    <div class="stage">
+      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <div class="col">
         <div class="topbar">
-          <div class="section-label"><span class="badge">05</span><span>プラットフォーム化</span></div>
-          <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
+          <div class="sec-no"><b>05</b><span>プラットフォーム化</span></div>
+          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
         </div>
-        <h2>TenkaCloud ── 天下一武道会を開くためのプラットフォーム。</h2>
-        <div style="display:grid;gap:16px;align-content:center;">
-          <p class="lead">StackStack はその <strong>"第一試合"</strong>。いまカタログには <strong>6 問</strong>（Battle 4 / Challenge 2）。問題は <strong>OSS で誰でも作れて</strong>、同じ土台で競技をいくつでも開ける。</p>
-          <div class="three-grid">
-            <div class="card info-card cat-card">
-              <span class="demo-flag">今日のデモ</span>
-              <span class="kind battle">BATTLE</span>
+        <div style="display:grid; gap:15px; align-content:center; min-height:0;">
+          <div class="s5-head">
+            <div class="nm">TenkaCloud<svg class="tc-mark"><use href="#tc-icon"/></svg></div>
+            <div class="sub display">天下一武道会を開くための</div>
+            <div class="brush-gold">プラットフォーム。</div>
+          </div>
+          <p class="s5-lead"><em>StackStack</em> はその “第一試合”。問題は <em>OSS</em> で誰でも作れて、同じ土台で競技をいくつでも開ける。</p>
+          <div class="s5-grid">
+            <div class="panel s5-card">
+              <span class="tag">BATTLE</span>
+              <span class="emblem"><svg class="glyph"><use href="#g-stack"/></svg></span>
               <h3>StackStack</h3>
               <p>AI で作ったアプリを、安全な本番品質へ。</p>
             </div>
-            <div class="card info-card cat-card">
-              <span class="kind battle">BATTLE</span>
+            <div class="panel s5-card">
+              <span class="tag">BATTLE</span>
+              <span class="emblem"><svg class="glyph"><use href="#g-lock"/></svg></span>
               <h3>Security Battle Royale</h3>
               <p>攻撃と障害から、サービスを守り抜く。</p>
             </div>
-            <div class="card info-card cat-card">
-              <span class="kind battle">BATTLE</span>
+            <div class="panel s5-card">
+              <span class="tag">BATTLE</span>
+              <span class="emblem"><svg class="glyph"><use href="#g-cycle"/></svg></span>
               <h3>Microservice Migration</h3>
               <p>モノリスを、止めずに移行しきる。</p>
             </div>
           </div>
         </div>
-        <div class="bottom-line">採点エンジンは <strong>4 種の kind が稼働</strong>（flag / uptime-flat / uptime-multi / phased-polling）、Battle 4 問が障害注入を宣言。いまは <strong>AWS</strong> 対応で、他クラウドは構想（ADR-026 / 027）。OSS だから、問題は誰でも増やせる。</div>
+        <div class="gold-band"><span class="trophy">🏆</span><span>今は <em>AWS</em> 対応（他クラウドは順次）。<em>OSS</em> だから、問題は<strong>誰でも増やせる</strong>。</span></div>
       </div>
     </div>
   </section>
 
-  <!-- 06 ── Use cases -->
+  <!-- 06 ─ 想定ユースケース -->
   <section class="slide">
-    <div class="canvas">
-      <div class="story-slide">
+    <div class="stage">
+      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <div class="col">
         <div class="topbar">
-          <div class="section-label"><span class="badge">06</span><span>想定ユースケース</span></div>
-          <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
+          <div class="sec-no"><b>06</b><span>想定ユースケース</span></div>
+          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
         </div>
-        <h2>祭りだけじゃない。研修にも、採用にも。</h2>
-        <div class="three-grid">
-          <div class="card info-card"><span class="kind">COMMUNITY</span><h3>コミュニティイベント</h3><p>勉強会やコミュニティで、本物のクラウド競技を開催して盛り上げる。</p></div>
-          <div class="card info-card"><span class="kind">EDUCATION</span><h3>定期的なセキュリティ教育</h3><p>チーム・組織で、安全な公開と運用力を継続的に鍛える。</p></div>
-          <div class="card info-card"><span class="kind">ASSESSMENT</span><h3>スキルチェック</h3><p>実状態で自動採点。採用評価や実力測定に使える客観指標になる。</p></div>
-        </div>
-        <div class="bottom-line">同じ仕組みが、<strong>イベント・研修・採用評価</strong>まで回す。</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- 07 ── Team -->
-  <section class="slide">
-    <div class="canvas">
-      <div class="story-slide">
-        <div class="topbar">
-          <div class="section-label"><span class="badge">07</span><span>Team</span></div>
-          <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
-        </div>
-        <h2>クラウド競技が大好きなメンバーが作っています。</h2>
-        <div class="team-grid">
-          <div class="card member-card">
-            <span class="kind">FOUNDER</span>
-            <h3>amedama (Susumu Tomita)</h3>
-            <p>JAWS DAYS 2024 AWS Game Day 優勝。2026 準優勝。</p>
-            <div class="qr-row">
-              <div class="qr"><span>Portfolio</span><img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https%3A%2F%2Fsusumutomita.netlify.app%2F" alt="Portfolio QR" /></div>
-              <div class="qr"><span>LinkedIn</span><img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https%3A%2F%2Fwww.linkedin.com%2Fin%2Fsusumutomita%2F" alt="LinkedIn QR" /></div>
-              <div class="qr"><span>GitHub</span><img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https%3A%2F%2Fgithub.com%2Fsusumutomita" alt="GitHub QR" /></div>
+        <div style="display:grid; grid-template-rows:auto 1fr; gap:18px; min-height:0;">
+          <h2 class="s6-head display">祭りだけじゃない。<span class="brush-gold">研修にも、採用にも。</span></h2>
+          <div class="s6-grid">
+            <div class="panel s6-card">
+              <div class="hd"><span class="num-dot">1</span><b>COMMUNITY</b></div>
+              <svg class="glyph"><use href="#g-flag"/></svg>
+              <h3>コミュニティイベント</h3>
+              <p>勉強会やコミュニティで、本物のクラウド競技を開催して盛り上げる。</p>
+            </div>
+            <div class="panel s6-card">
+              <div class="hd"><span class="num-dot">2</span><b>EDUCATION</b></div>
+              <svg class="glyph"><use href="#g-book"/></svg>
+              <h3>定期的なセキュリティ教育</h3>
+              <p>チーム・組織で、安全な公開と運用力を継続的に鍛える。</p>
+            </div>
+            <div class="panel s6-card">
+              <div class="hd"><span class="num-dot">3</span><b>ASSESSMENT</b></div>
+              <svg class="glyph"><use href="#g-clip"/></svg>
+              <h3>スキルチェック</h3>
+              <p>実状態で自動採点。採用評価や実力測定に使える客観指標になる。</p>
             </div>
           </div>
-          <div class="card member-card">
-            <span class="kind">TEAM</span>
-            <h3>チャーリー</h3>
-            <p>JAWS 名古屋運営メンバー。Game Day の熱量を広げたい人。</p>
-          </div>
-          <div class="card member-card">
-            <span class="kind">TEAM</span>
-            <h3>きせのん</h3>
-            <p>JAWS DAYS 2024 Game Day 優勝。AWS 全認定保有。</p>
-          </div>
         </div>
-        <div class="bottom-line">作れる人はいるかもしれない。でも、熱量ある問題を作れる人はそうそういない。</div>
+        <div class="gold-band"><span class="trophy">🏆</span><span>同じ仕組みが、<em>イベント・研修・採用評価</em> まで<strong>回す</strong>。</span></div>
       </div>
     </div>
   </section>
 
-  <!-- 08 ── Who we're looking for -->
+  <!-- 07 ─ Team -->
   <section class="slide">
-    <div class="canvas">
-      <div class="story-slide">
+    <div class="stage">
+      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <div class="col">
         <div class="topbar">
-          <div class="section-label"><span class="badge">08</span><span>探しています</span></div>
-          <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
+          <div class="sec-no"><b>07</b><span>Team</span></div>
+          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
         </div>
-        <h2>一緒に作る仲間と、壁打ち相手を探しています。</h2>
-        <div style="display:grid;gap:14px;align-content:center;">
-          <p class="lead">エフェクチュエーションの <strong>"クレイジーキルト"</strong> ── 手を動かして TenkaCloud を一緒に育てる人を探しています。</p>
-          <div class="three-grid ask-grid">
-            <div class="card info-card"><span class="kind">共同開発</span><h3>競技が好きな仲間</h3><p>AWS GameDay 等の競技が好きで、プラットフォームや問題を一緒に作れる人。</p></div>
-            <div class="card info-card"><span class="kind">クラウド推進</span><h3>CCoE・教育の推進者</h3><p>企業でクラウドの利活用やセキュリティ教育を進めている人。</p></div>
-            <div class="card info-card"><span class="kind">壁打ち</span><h3>壁打ちしたい2つの問い</h3><p>① ライセンス：いまは Apache 2.0。<strong>AGPL にすべき？</strong>　② 課金：実クラウドを誰でも使えると費用が読めない。<strong>どう値付けする？</strong></p></div>
+        <div style="display:grid; grid-template-rows:auto 1fr; gap:16px; min-height:0;">
+          <h2 class="s7-head display">クラウド競技が <span class="brush-gold">大好き</span> なメンバーが作っています。</h2>
+          <div class="s7-grid">
+            <div class="panel gold-frame s7-card">
+              <div class="s7-id">
+                <svg class="avatar"><use href="#av-samurai"/></svg>
+                <span class="who">
+                  <span class="role">FOUNDER</span>
+                  <h3>amedama</h3>
+                  <small>(Susumu Tomita)</small>
+                </span>
+              </div>
+              <div class="sep"></div>
+              <p>JAWS DAYS 2024 AWS Game Day <em>優勝</em>。2026 <em>準優勝</em>。</p>
+              <div class="s7-qrs">
+                <div class="qr-item sm"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAB5UlEQVRoge2aMZKDMAxFldkiZY7AUTgaHI2j5AiUKZhorS/ZZotkZtmIbb6aEPxo+NGXZEeEcSw0Yi2XM+6Mutndx2W3ROwoFmvrl+o86LO/+EtbIpaPDUUPXJtCItNy20yxIlZfInYSBrEeps7Nvt+F2D9g5Xq6X6tRvdGU2K+w5kgFExSD7a1xEUvAIhy7Pt2RdBleFHFiGdjPKCkz9xLxMoh9GHM9ilFZQCzoNuLyDt2IpWNeM1CS27zgT9RsgXERO4b5q/cZbD8IuCM1MyKWi81SsPKD/zJx6iDgCTBZoY6UIZaKqTVGnicxCJQnXKHiSKpNU2J5mCkC49r6vOC61ZQJfyOWiO03iLTNC5EyO02JHcNgQ9HhoAWFIIK0GFZpjkQsEbO1p7hCKBHTAkcybO9IxDIxSxFrjHqnWiW8uDn1rQliedg8tBuCTnVcm1h+V4jlY7YhpwuSI9bgVj4fN38j9hdM48RRfCiOydj7oJVYNtbCDlysOu90K7mhxM7AVLssodta64KfyyCI5WIzPlCCMY5hL9pOx8Q7VWKnYFBk7Ocy0G4ZmoQLsc9gEdaNlvk4BoFaPoidg8Ve9Ki9OkM3IZaPQaDAeqeK8WB3OkYsFYtoM5hnz9j/8yPE0jHGkfgG/lER6zFPO4IAAAAASUVORK5CYII=" alt="Portfolio QR" /><span>Portfolio</span></div>
+                <div class="qr-item sm"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAB30lEQVRoge2aPZLCMAyFlUlByRF8lD1acjQfJUegpGDQWj/+CbMUm0XZ5r0CPPYHRd5YsuQQQcfErlsZrkRT+bjqxH0aloAdxVZ9yl+3mXlN/KRFVojSfWpLwOKxJNMyFoeIlnx9lLVNfGtLwE7C1CzZJ5lmFpOA/QNWxst24TFwAfsA1iJSwVoEMhd+DFzAAjCXYZenRSTO6U0SBxaB7XXR7Cx5QVLEWwH7MGZ+lGmRBC6X+rapb8DOwjRnrDJRtkz/heyWIXAB+y0mR36Bb5aoWyHQ84ILWDyW/WBEEow0IvFuLwA7AbNybG0pWcox0dV8AxaM2VoZzGzJgLxekECWenwDFolJoHpKEnlQrRdYT6rCbd1TYMcw0olsE+0I6v8gOyQDC8csJe9aE9L50Yi0bGNEAhaImTLRy42ASkrlsTUBLAgbzWrL4k9J1Js3RIHFY9qE0M0hw4V7+tgFLmCHMXv0ixcCRRWbuV4+AgvEmqwLWm8EslrYHAMWi7HLbwRaOdbvZVTAYrFVv3ZnJKq96NTsBBaMqSN6BWwNaDWr7pYhvgH7I2YGkL/n4IUAsLMxO42qTf3uJb/uBWABmBpU3zah2ppIyvZrL2ChmEuys7el2XrRNVETsHAMOqJv8Lbuh+gBiPoAAAAASUVORK5CYII=" alt="LinkedIn QR" /><span>LinkedIn</span></div>
+                <div class="qr-item sm"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAABkklEQVRoge2ZMY6EMAxFjSgoOQJH4WjD0TgKR6CcApG1YztkhXZWmgZH+r8BOS/VJ8aOiaDvlFwnUS9PmvhtSMtYVnZgUbBNTRtPmi3UydrCAbMTWBxMnRyzp4sEurQOGZt44Q2sZWw+6GUnVr8FYHEx8XS8kiqwgFidVPkA5sV/ci+w2JhLz+l+JdWyAiwKVqv3qmalTwL2FGa+kVroTr7Z3U7y7TIkYK1holn+htxMHJxbU7aezyk/NpJfJrAwmFU1VnhyUpWqhvd5Kzh4ww7seYymI3u2ayotnoo2tRNYY5hYz1FJqqt9BEk2vPhbmLQpBBYG41Saj6XKPKX7jxJYO9j2y3BtK6Sq0dgtRQN7FCP3VHtAbyukGLV8CywMZjdmHrXblSzeZ2cTWENYpTkveYmqG5YbBew5rPhXBnzVlXVd1QALgG1qWpnclYZdPS3lCrCGsGvAV88XsrL1wKJiV7+QTt+wAwuIablSzRf6PybswIJjGrnO6XVlnXIAWBzMpZ7qMEg8/TS0BRYag77RDwWt53/szPNlAAAAAElFTkSuQmCC" alt="GitHub QR" /><span>GitHub</span></div>
+              </div>
+            </div>
+            <div class="panel s7-card">
+              <div class="s7-id">
+                <svg class="avatar"><use href="#av-ninja"/></svg>
+                <span class="who">
+                  <span class="role blue">TEAM</span>
+                  <h3>チャーリー</h3>
+                </span>
+              </div>
+              <div class="sep"></div>
+              <p>JAWS 名古屋運営メンバー。Game Day の<em>熱量</em>を広げたい人。</p>
+            </div>
+            <div class="panel s7-card">
+              <div class="s7-id">
+                <svg class="avatar"><use href="#av-kunoichi"/></svg>
+                <span class="who">
+                  <span class="role blue">TEAM</span>
+                  <h3>きせのん</h3>
+                </span>
+              </div>
+              <div class="sep"></div>
+              <p>JAWS DAYS 2024 Game Day <em>優勝</em>。AWS <em>全認定</em>保有。</p>
+            </div>
           </div>
         </div>
-        <div class="bottom-line">ピンと来たら、ぜひ声をかけてください。<span class="gloss">用語 — CCoE：社内のクラウド推進チーム。Apache 2.0 / AGPL：OSS ライセンスの種類（AGPL はより強い公開義務）。</span></div>
+        <div class="gold-band"><span class="trophy">🏆</span><span>作れる人はいるかもしれない。でも、<span class="brush-gold">熱量ある問題を作れる人</span> はそうそういない。</span></div>
       </div>
     </div>
   </section>
 
-  <!-- 09 ── Thank you -->
+  <!-- 08 ─ 探しています -->
   <section class="slide">
-    <div class="canvas">
-      <div class="thanks">
+    <div class="stage">
+      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <div class="col">
         <div class="topbar">
-          <div class="section-label"><span class="badge">09</span><span>Thank you</span></div>
-          <div class="wordmark"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgcm9sZT0iaW1nIiBhcmlhLWxhYmVsbGVkYnk9InRpdGxlIGRlc2MiPgogIDx0aXRsZSBpZD0idGl0bGUiPlRlbmthQ2xvdWQgaWNvbjwvdGl0bGU+CiAgPGRlc2MgaWQ9ImRlc2MiPkEgY2xvdWQgdG91cm5hbWVudCBtYXJrIHdpdGggYSB0cm9waHkgaW5zaWRlIGEgYmx1ZSBhbmQgZ3JlZW4gcm91bmRlZCBzcXVhcmUuPC9kZXNjPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjEwIiB5MT0iOCIgeDI9IjU0IiB5Mj0iNTgiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iIzE3NTlBOCIvPgogICAgICA8c3RvcCBvZmZzZXQ9Ii41NCIgc3RvcC1jb2xvcj0iIzIzN0NDMSIvPgogICAgICA8c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxRjhBNUIiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgICA8bGluZWFyR3JhZGllbnQgaWQ9InNoaW5lIiB4MT0iMTgiIHkxPSIxMCIgeDI9IjUwIiB5Mj0iNDYiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIuMzIiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIiBzdG9wLW9wYWNpdHk9IjAiLz4KICAgIDwvbGluZWFyR3JhZGllbnQ+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSI2NCIgaGVpZ2h0PSI2NCIgcng9IjE0IiBmaWxsPSJ1cmwoI2JnKSIvPgogIDxwYXRoIGQ9Ik0xMyAzNi41YzAtNS4xIDQuMS05LjIgOS4yLTkuMmgxLjFBMTMgMTMgMCAwIDEgNDguNCAzMWE4LjggOC44IDAgMCAxLS45IDE3LjVIMjIuMkMxNS40IDQ4LjUgMTMgNDMuMSAxMyAzNi41WiIgZmlsbD0iI2ZmZiIgb3BhY2l0eT0iLjk0Ii8+CiAgPHBhdGggZD0iTTQxLjggMjcuOEE5LjcgOS43IDAgMCAwIDI1IDI1LjYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0U3RjJGRiIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8cGF0aCBkPSJNMjQuNSAzNC4yaDE3djQuMWMwIDQuMi0zLjIgNy43LTcuMiA4LjF2My4zaDUuMnYzLjhoLTE0di0zLjhoNS4ydi0zLjNjLTQtLjUtNy4yLTMuOS03LjItOC4xdi00LjFaIiBmaWxsPSIjMTc1OUE4Ii8+CiAgPHBhdGggZD0iTTI0LjggMzUuM2gtNC4yYy4yIDQgMi41IDYuNyA1LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTQxLjIgMzUuM2g0LjJjLS4yIDQtMi41IDYuNy01LjYgNy43IiBmaWxsPSJub25lIiBzdHJva2U9IiMxNzU5QTgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTMwLjMgMjcuMyAzMyAyMWwyLjcgNi4zIDYuOC41LTUuMiA0LjQgMS42IDYuNi01LjktMy41LTUuOSAzLjUgMS42LTYuNi01LjItNC40IDYuOC0uNVoiIGZpbGw9IiMxRjhBNUIiLz4KICA8cGF0aCBkPSJNMTIgMTJjMTAuNCAyLjQgMjMuNCAxLjYgNDAgMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ1cmwoI3NoaW5lKSIgc3Ryb2tlLXdpZHRoPSIxMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjwvc3ZnPgo=" alt="" />TenkaCloud</div>
+          <div class="sec-no"><b>08</b><span>探しています</span></div>
+          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
         </div>
-        <div class="thanks-mid">
-          <h1>Thank you.</h1>
-          <p class="lead">触ってみてください。問題も、コードも、すべて OSS。</p>
-          <div class="thanks-qr">
-            <div class="qr-item"><span>Repository</span><img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fgithub.com%2Fsusumutomita%2FTenkaCloud" alt="Repository QR" /></div>
-            <div class="qr-item"><span>問題 (Problems)</span><img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fgithub.com%2Fsusumutomita%2FTenkaCloudChallenge" alt="Problems QR" /></div>
-            <div class="qr-item"><span>Landing</span><img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fsusumutomita.github.io%2FTenkaCloud%2F%3Flang%3Dja" alt="Landing QR" /></div>
+        <div style="display:grid; grid-template-rows:auto auto 1fr; gap:14px; min-height:0;">
+          <h2 class="s8-head display">一緒に作る<span class="brush-gold">仲間</span>と、<span class="brush-gold">壁打ち相手</span>を探しています。</h2>
+          <p class="s8-lead">エフェクチュエーションの “クレイジーキルト” ── 手を動かして <em>TenkaCloud</em> を一緒に育てる人を探しています。</p>
+          <div class="s8-grid">
+            <div class="panel s8-card">
+              <div class="hd"><span class="num-dot">1</span><span>共同開発</span></div>
+              <h3><svg class="glyph" style="vertical-align:-7px"><use href="#g-users"/></svg> 競技が好きな仲間</h3>
+              <p>AWS GameDay 等の競技が好きで、プラットフォームや問題を一緒に作れる人。</p>
+            </div>
+            <div class="panel s8-card">
+              <div class="hd"><span class="num-dot">2</span><span>クラウド推進</span></div>
+              <h3><svg class="glyph" style="vertical-align:-7px"><use href="#g-shield"/></svg> CCoE・教育の推進者</h3>
+              <p>企業でクラウドの利活用やセキュリティ教育を進めている人。</p>
+            </div>
+            <div class="panel s8-card">
+              <div class="hd"><span class="num-dot">3</span><span>壁打ち</span></div>
+              <h3><svg class="glyph" style="vertical-align:-7px"><use href="#g-chat"/></svg> 壁打ちしたい 2 つの問い</h3>
+              <div class="s8-qa">
+                <div class="q"><b>①</b><span>ライセンス：いまは Apache 2.0。AGPL にすべき？</span></div>
+                <div class="q"><b>②</b><span>課金：実クラウドを誰でも使えると費用が読めない。どう値付けする？</span></div>
+              </div>
+            </div>
           </div>
         </div>
+        <div class="gold-band"><span class="trophy">🤝</span><span>ピンと来たら、ぜひ <span class="brush-gold">声をかけてください。</span></span></div>
       </div>
     </div>
   </section>
+
+  <!-- 09 ─ Thank you -->
+  <section class="slide">
+    <div class="stage">
+      <svg class="arena-bg center" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <div class="s9">
+        <div class="topbar">
+          <div class="sec-no"><b>09</b><span>Thank you</span></div>
+          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
+        </div>
+        <div class="s9-mid">
+          <h1 class="brush-gold">ありがとうございました。</h1>
+          <p class="sub">触ってみてください。問題も、コードも、すべて <em>OSS</em>。</p>
+          <div class="s9-grid">
+            <div class="panel s9-card">
+              <h3>Repository</h3>
+              <div class="qr-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAB7ElEQVRoge2aMdLCQAiFcSwsPUKOkqPFo+UoOUJKC0d+eJDN+s/YZCTVoxHdz8YnsEBEaMdM01bzp+X2tpf7S2TU56U/InYQe+BXHterGgZXDZPBsO2IWD02mB7hi5hY04yzRS79EbFzsKu9LIGZbiEWsbOxFj1yR7oi9hsMR1ABHz8iLL4nLmIFWFrUBcSCVWedhy9FnFgF1pl98pTAXCz5YsR+j4UedjFSDxlXKOuCmm4LdCNWjskEDgpZyBjb9wseLZHIiB3C/Kd336VAI2Bfa7EwtGRErBSLf72JZRgagWjHxgVneywQq8Ts9i+owy93b+6t0QgAw5eJVWMeIu8mnHfCmbhgH/mNWBm2NQUuFvqFvJl6IIm/T02JHcTC904YJWKKsGgqZEYiVozZbSiKwdQG0FYXbriCdmIRK8UglvhoAlPQAPcS0c+RiFVhXgxyDeAGLAZEWaiFWD2WN9W4I73baEI1Ksue34gdwVKFFgCYOcR7xQJgJVaNNbvqthFwd46mOFhi1ZhqJ4v3BBNGE+O+l4ERq8VCIS/B26wIPZhuA6I9sogVYlAkHofQwGIW3SQk9iPM68JjWwG7OHCJnYxJrgG0s1mI1WOZkeJpE1/Ex0bg33aMWCmWtn40xfHkVd+OEavEaEfsD4sRioJ6DHi7AAAAAElFTkSuQmCC" alt="Repository QR" /><span>github.com/susumutomita/TenkaCloud</span></div>
+              <p>ソースコード・サンプルはこちらから。</p>
+            </div>
+            <div class="panel s9-card">
+              <h3>問題（Problems）</h3>
+              <div class="qr-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAB6klEQVRoge2aPZKDMAyFlUlBmSNwFI4GR+MoHIEyRSZa+ck2ZtktwkRUT0Vw8EfDi34dEdo502yrLaf+mW49XiKDPm/NFrGz2IS3PKx3u7FgqYZJb1jZIhaP9baPtV1NrHHG3iK3ZovYRZiJNUn3Tthds1jErsYEfpI+HwhXxL6D1Ygk49KZFOWJ/wIXsQAsW8aSL1h21rn/J4kTi8B21iMvPF5SvOdvI/ZtzPWwwqhazgtqui3QjdhFGNapX0jRqukXkre0gYvYh1g2lKBTWo2q1Rf638GIWAymqIZ0RmG04ImEDVhK6wvEArFcjibKGoF0Wb0RAGZbQiwcMxexG4qUPGoTuGBb4CIWiVU/gct0ZQ/ZWaCja0rsHOa+sP3qx5QXVKsKu4hELAgzewvCkD8Bs7zQoQTdNCUWiaE8RfWvPgV1cKkposyRiMVikOwleQoKscRHE0jUQuwCTEvgGhfZRhOq3j8c4xuxjzB734eZQ/6Ow7CVWDRWrUQkX87eFDtLLBorEtUj4BGjiWE7l4ERi8UmXDAg0lQYeTYetA6I9sc3xGIwKNIcAefRRJVwFmLfwHz8UI+A8/KgArFQzKv/yd1is4OmxAKwHJFQ8nsj4JXq/tiLWCiWrYlWEC/986ptx4hFYrQz9gOxc+0of0Kz7AAAAABJRU5ErkJggg==" alt="Problems QR" /><span>github.com/susumutomita/TenkaCloudChallenge</span></div>
+              <p>本日出題した問題にチャレンジできます。</p>
+            </div>
+            <div class="panel s9-card">
+              <h3>Landing</h3>
+              <div class="qr-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAB8klEQVRoge2aPZLDMAiFyaRImSP4KD6afTQfxUdwmSITFh6SrP2dWW/INo8ika3PTV4AARahHTMttuHq8hAZ48bt1G8RO4jN2B+3s8q0yknnUe+iy2BY3SKWjw2mR6wh1gRxRher2yL2GuxsX+sFLmK6mRH7BwxL+Mn1/qOmxH6FtYhkS/iCRaSiwpeBi1gCVizygmPLteaFukUsG+vMbz3a8ibfGLHnY6FHHE8RqHQR022Ebit0I5aPIVqFTRrpw+GSqGWPb8SOYCi8xE//UQhgr0akFoyIZWMWhuIPH4otzQEm1d5liGViN//cqm4RkeKJ1bwnlsRSMTffc4UsL5QzUtQLXeAilowNVayiUK0XPohF7AgWPz3CTrhFwfxhGZAiiKVjXoPV/sPUdX4c6zUllomVLpB4MpiiBvPgVCYC/kTfRyKWhiFw+WlI1+hFn9VPqhLLJhaxXMzqBXRIQ6yYy7ThQItvxA5hUstfhc2j7oYBwEYsG2vmvWhMBIAtkZ1Vib0C62RxuDSg+7kMjFguNuNrhMvsE4HoReOkWj2LWCYGRcrrEBcfkaE1MVQJ97KC2J8w3Ts/JojUQmDciL0QsyskapxGd/ukKbEErESkePOq9KK9KDbd3o29iCVixfA6xBDiYPgo3yVxYs/HaEfsDVhQ7PCswbcOAAAAAElFTkSuQmCC" alt="Landing QR" /><span>susumutomita.github.io/TenkaCloud</span></div>
+              <p>TenkaCloud の詳細・最新情報はこちら。</p>
+            </div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="trophy">🏆</span><span>ともに、クラウドで<span class="brush-gold">天下をつかみましょう。</span></span></div>
+      </div>
+    </div>
+  </section>
+
 </main>
 
 <script>
+  /* deck mechanics: scroll-snap + keys + progress + 16:9 fit */
   (function () {
     var deck = document.getElementById("deck");
     var slides = Array.prototype.slice.call(deck.querySelectorAll(".slide"));
@@ -833,6 +1150,10 @@
       else if (["ArrowUp","ArrowLeft","PageUp"].indexOf(event.key) > -1) { event.preventDefault(); go(current() - 1); }
       else if (event.key === "Home") { event.preventDefault(); go(0); }
       else if (event.key === "End") { event.preventDefault(); go(slides.length - 1); }
+      else if (event.key === "f" || event.key === "F") {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else document.documentElement.requestFullscreen();
+      }
     });
     function fit(){
       var s = Math.min(window.innerWidth / 1280, window.innerHeight / 720) * 0.99;
@@ -843,7 +1164,7 @@
     paint();
   })();
 
-  /* ── live StackStack leaderboard (slide 04) — Cloudscape-style table ── */
+  /* live StackStack leaderboard (slide 04) — Cloudscape-style table */
   (function () {
     var board = document.getElementById("tcBoard");
     if (!board) return;
@@ -897,7 +1218,6 @@
       render(teams[i].n);
     }, 1500);
 
-    /* countdown HH:MM:SS (matches real CountdownTimer "残り 00:00:00") */
     var clock = document.getElementById("tcClock");
     var left = 11 * 60 + 58;
     if (clock) {
@@ -914,9 +1234,9 @@
     var ix = 0, notifN = 2;
     function fireIncident() {
       var name = incidents[ix % incidents.length]; ix++;
-      if (inc) { inc.className = "cs-incident fire show"; inc.textContent = "\u26a0 " + name + " 発生"; }
+      if (inc) { inc.className = "cs-incident fire show"; inc.textContent = "⚠ " + name + " 発生"; }
       if (notif) { notifN++; notif.textContent = notifN; notif.classList.remove("flash"); void notif.offsetWidth; notif.classList.add("flash"); }
-      setTimeout(function () { if (inc) { inc.className = "cs-incident ok show"; inc.textContent = "\u2713 " + name + " 復旧"; } }, 2600);
+      setTimeout(function () { if (inc) { inc.className = "cs-incident ok show"; inc.textContent = "✓ " + name + " 復旧"; } }, 2600);
       setTimeout(function () { if (inc) { inc.classList.remove("show"); } }, 3900);
     }
     setTimeout(fireIncident, 1200);
