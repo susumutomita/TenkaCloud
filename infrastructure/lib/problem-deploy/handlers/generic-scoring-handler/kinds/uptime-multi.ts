@@ -15,6 +15,103 @@ import {
 } from "../shared.js";
 import { scoreCounterDelta } from "./attack-counter.js";
 
+type SlotResolver = (slotName: string) => string | undefined;
+type ProbeResult = { key: string; ok: boolean; resolved: boolean };
+type ScoreEvent = NonNullable<KindResult["scoreEvents"]>[number];
+
+/** AND-probe every declared slot; an unresolvable slot is a resolved:false fail (not a noop). */
+async function probeAllSlots(
+  probedSlots: UptimeMultiScoringMetadata["probedSlots"],
+  resolve: SlotResolver,
+): Promise<ProbeResult[]> {
+  return Promise.all(
+    probedSlots.map(async (ps) => {
+      const baseUrl = resolve(ps.slot);
+      if (!baseUrl) return { key: ps.slot, ok: false, resolved: false };
+      const probe = await probeUrl(joinUrl(baseUrl, ps.path), { expectStatus: ps.expectStatus });
+      return { key: ps.slot, ok: probe.ok, resolved: true };
+    }),
+  );
+}
+
+/** Build the per-slot health map (ok + checkedAt + first-seen-ok `since`). */
+function buildNewHealth(
+  probes: readonly ProbeResult[],
+  prevHealth: Record<string, EndpointHealth>,
+  nowIso: string,
+): Record<string, EndpointHealth> {
+  const newHealth: Record<string, EndpointHealth> = {};
+  for (const { key, ok } of probes) {
+    const since = computeSince(ok, prevHealth[key], nowIso);
+    newHealth[key] = { ok, checkedAt: nowIso, ...(since ? { since } : {}) };
+  }
+  return newHealth;
+}
+
+/**
+ * [ADR-034 / #1666] optional attack-blocked bonus: live-probe the app's counter endpoint, read the
+ * block count from the body, and award the delta since last cycle. Probe failure / bad body = 0.
+ */
+async function computeAttackBlockedBonus(
+  attackBlocked: UptimeMultiScoringMetadata["attackBlocked"],
+  resolve: SlotResolver,
+  prevAttackCount: number | undefined,
+): Promise<{ bonusPoints: number; bonusState?: { attackCount: number } }> {
+  if (!attackBlocked) return { bonusPoints: 0 };
+  const base = resolve(attackBlocked.slot);
+  if (!base) return { bonusPoints: 0 };
+  const probe = await probeUrl(joinUrl(base, attackBlocked.path), { readBody: true });
+  if (!probe.ok) return { bonusPoints: 0 };
+  const scored = scoreCounterDelta(probe.body, prevAttackCount, attackBlocked.pointsPerBlock);
+  if (!scored) return { bonusPoints: 0 };
+  return { bonusPoints: scored.points, bonusState: { attackCount: scored.newCount } };
+}
+
+/**
+ * [ADR-034 / #1666] optional attack-probes: send each attack payload and sum the penalty for every
+ * probe whose response status lands in `vulnerableStatus` (= the defense was breached). Unresolved /
+ * unreachable slots are not penalized (availability is judged by probedSlots, separately).
+ */
+async function computeAttackPenalty(
+  attackProbes: UptimeMultiScoringMetadata["attackProbes"],
+  resolve: SlotResolver,
+): Promise<number> {
+  if (!attackProbes || attackProbes.length === 0) return 0;
+  const vulnerable = await Promise.all(
+    attackProbes.map(async (ap) => {
+      const base = resolve(ap.slot);
+      if (!base) return false;
+      const probe = await probeUrl(joinUrl(base, ap.path), {
+        ...(ap.method ? { method: ap.method } : {}),
+        ...(ap.body !== undefined ? { body: ap.body } : {}),
+      });
+      return probe.status !== undefined && ap.vulnerableStatus.includes(probe.status);
+    }),
+  );
+  return attackProbes.reduce((sum, ap, i) => (vulnerable[i] ? sum + ap.penalty : sum), 0);
+}
+
+/** Build the score-event ledger entries for this cycle. */
+function buildScoreEvents(
+  baseDelta: number,
+  attackDetected: boolean,
+  bonusPoints: number,
+  attackPenalty: number,
+  nowIso: string,
+): ScoreEvent[] {
+  const events: ScoreEvent[] = [];
+  if (baseDelta !== 0) {
+    events.push({ source: "uptime", points: baseDelta, occurredAt: nowIso });
+  } else if (attackDetected) {
+    events.push({ source: "attack-detected", points: 0, occurredAt: nowIso });
+  }
+  if (bonusPoints > 0) events.push({ source: "uptime", points: bonusPoints, occurredAt: nowIso });
+  if (attackPenalty > 0) {
+    events.push({ source: "attack-detected", points: -attackPenalty, occurredAt: nowIso });
+  }
+  return events;
+}
+
 /**
  * `uptime-multi` kind (ADR-012 Phase 3.B、 security-battle-royale 想定)。
  *
@@ -49,14 +146,7 @@ export async function runUptimeMultiKind(
     return outputValue ? resolveDefaultUrl(outputValue, slot.default.appendPath) : undefined;
   };
 
-  const probes = await Promise.all(
-    scoring.probedSlots.map(async (ps) => {
-      const baseUrl = resolveSlotBaseUrl(ps.slot);
-      if (!baseUrl) return { key: ps.slot, ok: false, resolved: false };
-      const probe = await probeUrl(joinUrl(baseUrl, ps.path), { expectStatus: ps.expectStatus });
-      return { key: ps.slot, ok: probe.ok, resolved: true };
-    }),
-  );
+  const probes = await probeAllSlots(scoring.probedSlots, resolveSlotBaseUrl);
 
   // 1 つも解決できない場合 (= deploy 未完了) は採点を保留 (= noop)。
   // 一部のみ解決できないケースは fail 扱い (= 防御側が未配備 = ペナルティ正当)。
@@ -65,70 +155,27 @@ export async function runUptimeMultiKind(
 
   const allOk = probes.every((p) => p.ok);
   const prevHealth = parseEndpointsHealth(deployment.endpointsHealth);
-  const newHealth: Record<string, EndpointHealth> = {};
-  for (const { key, ok } of probes) {
-    const since = computeSince(ok, prevHealth[key], nowIso);
-    newHealth[key] = { ok, checkedAt: nowIso, ...(since ? { since } : {}) };
-  }
+  const newHealth = buildNewHealth(probes, prevHealth, nowIso);
 
   const baseDelta = allOk ? scoring.pointsAllOk : (scoring.failurePenalty ?? 0);
   const attackDetected = !allOk && deployment.lastResult === "ok";
 
-  // [ADR-034 / #1666] optional attack-blocked bonus (= 防御テストの加点を可用性採点に重ねる)。 宣言時のみ:
-  // アプリの counter endpoint を **live probe** し (静的 CFn output でなく走行中の値)、 応答 body を
-  // ブロック回数として読み、 前回からの増分で加点 + baseline を追従。 probe 失敗 / 不正 body は加点 0。
-  let bonusPoints = 0;
-  let bonusState: { attackCount: number } | undefined;
-  if (scoring.attackBlocked) {
-    const base = resolveSlotBaseUrl(scoring.attackBlocked.slot);
-    if (base) {
-      const probe = await probeUrl(joinUrl(base, scoring.attackBlocked.path), { readBody: true });
-      const scored = probe.ok
-        ? scoreCounterDelta(probe.body, prevState.attackCount, scoring.attackBlocked.pointsPerBlock)
-        : undefined;
-      if (scored) {
-        bonusPoints = scored.points;
-        bonusState = { attackCount: scored.newCount };
-      }
-    }
-  }
+  const { bonusPoints, bonusState } = await computeAttackBlockedBonus(
+    scoring.attackBlocked,
+    resolveSlotBaseUrl,
+    prevState.attackCount,
+  );
 
-  // [ADR-034 / #1666] optional attack-probes (= 防御テスト)。 scorer が各 probe へ攻撃 payload を送り、
-  // 応答ステータスが vulnerableStatus に含まれれば (= 防御が破れた) penalty を減点する。 防御できていれば 0。
-  // 未解決 slot / unreachable は減点しない (= 可用性は probedSlots が見る、 攻撃成否と分離)。
-  let attackPenalty = 0;
-  if (scoring.attackProbes && scoring.attackProbes.length > 0) {
-    const vulnerable = await Promise.all(
-      scoring.attackProbes.map(async (ap) => {
-        const base = resolveSlotBaseUrl(ap.slot);
-        if (!base) return false;
-        const probe = await probeUrl(joinUrl(base, ap.path), {
-          ...(ap.method ? { method: ap.method } : {}),
-          ...(ap.body !== undefined ? { body: ap.body } : {}),
-        });
-        return probe.status !== undefined && ap.vulnerableStatus.includes(probe.status);
-      }),
-    );
-    attackPenalty = scoring.attackProbes.reduce(
-      (sum, ap, i) => (vulnerable[i] ? sum + ap.penalty : sum),
-      0,
-    );
-  }
+  const attackPenalty = await computeAttackPenalty(scoring.attackProbes, resolveSlotBaseUrl);
 
   const scoreDelta = baseDelta + bonusPoints - attackPenalty;
-  const scoreEvents = [
-    ...(baseDelta !== 0
-      ? [{ source: "uptime" as const, points: baseDelta, occurredAt: nowIso }]
-      : attackDetected
-        ? [{ source: "attack-detected" as const, points: 0, occurredAt: nowIso }]
-        : []),
-    ...(bonusPoints > 0
-      ? [{ source: "uptime" as const, points: bonusPoints, occurredAt: nowIso }]
-      : []),
-    ...(attackPenalty > 0
-      ? [{ source: "attack-detected" as const, points: -attackPenalty, occurredAt: nowIso }]
-      : []),
-  ];
+  const scoreEvents = buildScoreEvents(
+    baseDelta,
+    attackDetected,
+    bonusPoints,
+    attackPenalty,
+    nowIso,
+  );
   return {
     scoreDelta,
     scoreEvents,

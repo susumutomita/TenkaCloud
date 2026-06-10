@@ -74,44 +74,60 @@ export function formatCodePoint(cp: number): string {
   return `U+${cp.toString(16).toUpperCase().padStart(4, "0")}`;
 }
 
+/** Extract the `Resources` map from a parsed template, or undefined when malformed. */
+function getTemplateResources(template: unknown): Record<string, unknown> | undefined {
+  if (!template || typeof template !== "object") return undefined;
+  const resources = (template as Record<string, unknown>).Resources;
+  if (!resources || typeof resources !== "object") return undefined;
+  return resources as Record<string, unknown>;
+}
+
+/** Read the IAM Role / ManagedPolicy `Description` of one resource, or undefined when N/A. */
+function getIamDescription(raw: unknown): { type: string; description: unknown } | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const resource = raw as Record<string, unknown>;
+  const type = resource.Type;
+  if (typeof type !== "string" || !IAM_DESCRIPTION_RESOURCE_TYPES.includes(type as never)) {
+    return undefined;
+  }
+  const props = resource.Properties;
+  const description =
+    props && typeof props === "object" ? (props as Record<string, unknown>).Description : undefined;
+  if (description === undefined || description === null) return undefined;
+  return { type, description };
+}
+
+/** First disallowed-char finding for one resource, or undefined when its description is clean. */
+function scanResource(logicalId: string, raw: unknown): IamDescriptionFinding | undefined {
+  const iam = getIamDescription(raw);
+  if (!iam) return undefined;
+  for (const fragment of collectStrings(iam.description)) {
+    const bad = firstDisallowedChar(fragment);
+    if (bad) {
+      return {
+        logicalId,
+        resourceType: iam.type,
+        fragment,
+        char: bad.char,
+        codePoint: bad.codePoint,
+      };
+    }
+  }
+  return undefined;
+}
+
 /**
  * Scan one parsed CloudFormation template for IAM Role / ManagedPolicy descriptions containing a
  * character outside the IAM Latin-1 range. Returns one finding per offending resource.
  */
 export function scanTemplateForIamDescriptions(template: unknown): IamDescriptionFinding[] {
-  const resources =
-    template && typeof template === "object"
-      ? (template as Record<string, unknown>).Resources
-      : undefined;
-  if (!resources || typeof resources !== "object") return [];
+  const resources = getTemplateResources(template);
+  if (!resources) return [];
 
   const findings: IamDescriptionFinding[] = [];
-  for (const [logicalId, raw] of Object.entries(resources as Record<string, unknown>)) {
-    if (!raw || typeof raw !== "object") continue;
-    const resource = raw as Record<string, unknown>;
-    const type = resource.Type;
-    if (typeof type !== "string" || !IAM_DESCRIPTION_RESOURCE_TYPES.includes(type as never)) {
-      continue;
-    }
-    const props = resource.Properties;
-    const description =
-      props && typeof props === "object"
-        ? (props as Record<string, unknown>).Description
-        : undefined;
-    if (description === undefined || description === null) continue;
-    for (const fragment of collectStrings(description)) {
-      const bad = firstDisallowedChar(fragment);
-      if (bad) {
-        findings.push({
-          logicalId,
-          resourceType: type,
-          fragment,
-          char: bad.char,
-          codePoint: bad.codePoint,
-        });
-        break; // one finding per resource is enough to fail + locate it
-      }
-    }
+  for (const [logicalId, raw] of Object.entries(resources)) {
+    const finding = scanResource(logicalId, raw);
+    if (finding) findings.push(finding);
   }
   return findings;
 }

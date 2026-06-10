@@ -104,27 +104,28 @@ describe("resolveLocalAttackProbes (#1666)", () => {
 
 describe("evaluateProbeOutcome + summarizeVerification (#1666)", () => {
   const [resolved] = resolveLocalAttackProbes([SQLI_PROBE], { api: "http://localhost:18080" });
+  if (!resolved) throw new Error("fixture: resolveLocalAttackProbes returned no probe");
 
   it("should mark the probe fired when the live status is in vulnerableStatus", () => {
-    const outcome = evaluateProbeOutcome(resolved!, 200);
+    const outcome = evaluateProbeOutcome(resolved, 200);
     expect(outcome.fired).toBe(true);
     expect(outcome.actual).toBe(200);
   });
 
   it("should mark the probe NOT fired when the app rejected the attack (defended)", () => {
-    expect(evaluateProbeOutcome(resolved!, 403).fired).toBe(false);
+    expect(evaluateProbeOutcome(resolved, 403).fired).toBe(false);
   });
 
   it("should conclude allFired only when every probe landed", () => {
     const allHit = summarizeVerification([
-      evaluateProbeOutcome(resolved!, 200),
-      evaluateProbeOutcome(resolved!, 200),
+      evaluateProbeOutcome(resolved, 200),
+      evaluateProbeOutcome(resolved, 200),
     ]);
     expect(allHit).toEqual({ total: 2, firedCount: 2, allFired: true });
 
     const oneMissed = summarizeVerification([
-      evaluateProbeOutcome(resolved!, 200),
-      evaluateProbeOutcome(resolved!, 403),
+      evaluateProbeOutcome(resolved, 200),
+      evaluateProbeOutcome(resolved, 403),
     ]);
     expect(oneMissed).toEqual({ total: 2, firedCount: 1, allFired: false });
   });
