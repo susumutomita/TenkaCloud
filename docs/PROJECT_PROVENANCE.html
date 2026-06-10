@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Project provenance and independence</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>Project provenance and independence</h1>
+<p>This document records the development provenance of TenkaCloud and the
+boundaries that keep it an independent open-source project. It is written in
+factual, neutral language. It is a good-faith attestation by the author about
+how the project was built — not a legal opinion, an audit certificate, or an
+absolute guarantee.</p>
+<h2>Independent implementation</h2>
+<ul>
+<li>TenkaCloud was implemented independently in this repository. The Git history
+is incremental and public: it began from an empty project skeleton and grew
+through publicly documented reference architectures and repeated redesigns.</li>
+<li>The project is released under the <a href="../LICENSE">Apache License 2.0</a>.</li>
+<li>It builds on public AWS reference material, which is acknowledged in the
+codebase and documentation:<ul>
+<li>the AWS SaaS Builder Toolkit, <a href="https://github.com/awslabs/sbt-aws"><code>@cdklabs/sbt-aws</code></a>;</li>
+<li>the AWS <a href="https://github.com/aws-samples/aws-saas-factory-ref-solution-serverless-saas">SaaS Factory Serverless SaaS reference architecture</a>;</li>
+<li>general AWS service documentation and public sample patterns.</li>
+</ul>
+</li>
+</ul>
+<h2>Relationship to prior professional experience</h2>
+<p>The author previously worked in a role where cloud-competition events were run.
+The following boundary applies:</p>
+<ul>
+<li>An early product hypothesis explored compatibility with an existing
+cloud-competition problem format. After the author left that role and no
+longer had access to that code or its non-public formats, the compatibility
+approach was dropped.</li>
+<li>The current problem model and problem content were rebuilt from scratch.</li>
+<li>Scenarios such as <code>Microservice Migration</code> and <code>Security Battle Royale</code>
+recreate high-level learning themes and general scenario structures (for
+example, AWS GameDay-style incident response), not any specific proprietary
+content.</li>
+</ul>
+<h2>Influence versus copying</h2>
+<p>This project distinguishes two categories that are easy to conflate:</p>
+<ul>
+<li><strong>Influence (used):</strong> ideas, learning goals, general scenario patterns, and
+the author&#39;s own general professional experience and skills. These inform the
+design and are not owned by any single employer.</li>
+<li><strong>Copying (not intentionally included):</strong> verbatim text, source code, design
+assets, scoring logic, or non-public specifications belonging to a third party
+or a former employer. No employer source code, confidential documents, private
+challenge content, customer data, or proprietary assets are intentionally
+included in this repository.</li>
+</ul>
+<p>If anyone identifies material they believe crosses from the first category into
+the second, please open an issue so it can be reviewed and corrected.</p>
+<h2>No affiliation or endorsement</h2>
+<ul>
+<li>TenkaCloud is not sponsored by, affiliated with, or endorsed by the author&#39;s
+employer (current or former).</li>
+<li>It is not affiliated with, endorsed by, or officially compatible with any
+specific cloud-competition event or company. Names of such events or companies,
+where they appear, are used only to describe general learning themes or for
+factual comparison.</li>
+<li>Third-party product names and trademarks (for example, AWS and AWS service
+names) remain the property of their respective owners and are used only for
+identification.</li>
+</ul>
+<h2>Contributor expectation</h2>
+<p>Contributors must not add an employer&#39;s source code, confidential documents,
+customer data, private competition content, or other proprietary assets.
+Contribute only original work or material under a compatible license, and
+attribute public references where practical. See
+<a href="../CONTRIBUTING.md">CONTRIBUTING.md</a> for the contribution workflow.</p>
+<h2>Scope of this document</h2>
+<ul>
+<li>It does not rewrite or squash existing Git history.</li>
+<li>It does not provide a legal opinion or make an absolute legal conclusion.</li>
+<li>It does not describe any confidential employment policy or internal project.</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/PROJECT_PROVENANCE.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/PROJECT_PROVENANCE.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>
