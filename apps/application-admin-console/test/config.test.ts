@@ -20,7 +20,7 @@ describe("loadConfig", () => {
                 cognitoDomain: "https://prod-tenant.auth.ap-northeast-1.amazoncognito.com",
                 userClientId: "prod-client-id",
                 tenantId: "tenant-prod-1",
-                tenantName: "DENSO 第一事業部",
+                tenantName: "Acme Manufacturing Division",
                 apiUrl: "https://prod-api.example.com/prod",
               }),
               { status: 200 },
@@ -46,7 +46,7 @@ describe("loadConfig", () => {
     });
 
     it("should take tenantName from runtime-config", async () => {
-      expect((await loadWithFullRuntime()).tenantName).toBe("DENSO 第一事業部");
+      expect((await loadWithFullRuntime()).tenantName).toBe("Acme Manufacturing Division");
     });
 
     it("should take apiBaseUrl from runtime-config.apiUrl (different key)", async () => {

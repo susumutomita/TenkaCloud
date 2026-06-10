@@ -134,7 +134,7 @@ describe("ApplicationAdminConsoleHosting", () => {
         cognitoDomain: "https://example.auth.ap-northeast-1.amazoncognito.com",
         cognitoClientId: "test-client",
         tenantId: "tenant-1",
-        tenantName: "DENSO 第一事業部",
+        tenantName: "Acme Manufacturing Division",
         apiUrl: "https://abc.execute-api.ap-northeast-1.amazonaws.com/prod/",
       });
       return { template: Template.fromStack(stack), stack };
