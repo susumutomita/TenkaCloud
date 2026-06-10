@@ -137,6 +137,22 @@ describe("check-template-security helpers (#869 + #1124)", () => {
       expect(findings).toEqual([]);
     });
 
+    it('should allow ec2 ENI / route-table describes and route53 zone list / GetChange on Resource: "*" (net-evo viewer role)', () => {
+      const findings = findIamResourceWildcardFindings(
+        PATH,
+        "loc",
+        ["*"],
+        [
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DescribeRouteTables",
+          "route53:ListHostedZones",
+          "route53:ListHostedZonesByName",
+          "route53:GetChange",
+        ],
+      );
+      expect(findings).toEqual([]);
+    });
+
     it('should return 0 findings when Resource: "*" is absent (scoped ARNs are OK)', () => {
       expect(
         findIamResourceWildcardFindings(

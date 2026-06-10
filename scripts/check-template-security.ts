@@ -56,6 +56,13 @@ const RESOURCE_STAR_OK_ACTIONS = new Set([
   "ec2:DescribeAvailabilityZones",
   "ec2:DescribeAccountAttributes",
   "ec2:DescribeNetworkAcls",
+  "ec2:DescribeNetworkInterfaces",
+  "ec2:DescribeRouteTables",
+  // Route 53 read — zone listing has no resource-level permissions, and GetChange
+  // targets ephemeral change IDs that cannot be known when the template is authored.
+  "route53:ListHostedZones",
+  "route53:ListHostedZonesByName",
+  "route53:GetChange",
   // IAM read (= self-reflection)
   "iam:GetRole",
   "iam:GetPolicy",
