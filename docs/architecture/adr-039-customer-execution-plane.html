@@ -62,7 +62,7 @@
   <h1>ADR-039: Customer Execution Plane — keep privileged deploy authority inside the customer boundary</h1>
   <p><em>The hosted control plane sends a signed, digest-bound <code>CloudActionIntent</code>; a customer-controlled execution plane validates it against local policy and deploys with authority the hosted plane can never obtain. A signed signature is authenticity, not authorization.</em></p>
   <div class="meta">
-    <div><b>Status:</b><span class="badge accept">Accepted</span> 2026-06-09 — design + library + PoC shipped; production agent phased</div>
+    <div><b>Status:</b><span class="badge accept">Accepted</span> 2026-06-09 — design + library + production parts (DDB nonce store, local CFn executor, policy/inspector, orchestrator, SQS Lambda CDK) shipped; control-plane integration phased</div>
     <div><b>Extends:</b> <a href="adr-017-cloud-action-intent-trust-bridge.html">ADR-017</a></div>
     <div><b>Builds on:</b> <a href="adr-002-cross-account-federation.html">ADR-002</a>, <a href="adr-009-cross-account-federation.html">ADR-009</a></div>
     <div><b>Issue:</b> #1727</div>
@@ -245,9 +245,10 @@ action.artifact?: {
 <h2>7. Coexistence &amp; migration</h2>
 
 <ol>
-  <li><strong>Now (this ADR):</strong> protocol extension + PoC + library. The central CodeBuild path is unchanged and remains the default.</li>
-  <li><strong>Next:</strong> a registered, authenticated customer execution component (outbound pull / EventBridge API Destinations) reporting results back into <code>Deployments</code>; per-tenant/per-account mode selection.</li>
-  <li><strong>Later:</strong> KMS asymmetric signing keys (per-tenant), DDB-backed nonce store (1/1 PROVISIONED), agent upgrade flow that cannot silently widen policy, and incremental child issues for the production agent.</li>
+  <li><strong>Done — protocol + library + PoC:</strong> the <code>CloudActionIntent</code> extension, the <code>CustomerExecutionPlane</code> validation core, and the offline PoC.</li>
+  <li><strong>Done — production parts (shipped):</strong> a DDB-backed nonce store (<code>DdbNonceStore</code>, conditional <code>PutItem</code> + TTL on a 1/1 PROVISIONED table), a local CloudFormation executor (<code>CloudFormationExecutor</code>, create-or-update / delete via a same-account CFn service role — no AssumeRole back to the control plane), reusable <code>PolicyEvaluator</code> / <code>ArtifactInspector</code> implementations (<code>local-policy.ts</code>), and an end-to-end orchestrator (<code>CustomerExecutionAgent</code>) that audits every decision. A <code>CustomerExecutionPlaneStack</code> CDK construct wires an SQS-driven Lambda in the customer account; its IAM has no <code>sts:AssumeRole</code> into any control-plane role (asserted in the stack test). All library parts hold 100% coverage.</li>
+  <li><strong>Next:</strong> register/authenticate the customer execution component end-to-end, report results back into the <code>Deployments</code> state model, and per-tenant / per-account mode selection from the control plane.</li>
+  <li><strong>Later:</strong> KMS asymmetric signing keys (per-tenant) replacing the HS256 shared secret, a signed plugin/artifact manifest, an artifact store for templates above the inline CFn limit, and an agent upgrade flow that cannot silently widen policy.</li>
 </ol>
 
 <p>Delete operations must remain possible if the hosted control plane is unavailable: the execution plane can run a locally-initiated <code>destroy</code> against its own approved problems, so teardown never depends on the hosted plane being reachable.</p>

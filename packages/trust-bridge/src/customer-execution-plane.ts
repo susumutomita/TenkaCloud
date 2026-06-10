@@ -129,6 +129,13 @@ export interface CustomerExecutionRejected {
   readonly stage: CustomerExecutionStage;
   readonly reason: CustomerExecutionRejectionReason | IntentVerifyFailureReason;
   readonly details?: readonly string[];
+  /**
+   * Issue #1727 / ADR-039: 認証 (signature/schema/TTL/replay) を通過した後の
+   * 拒否 (authorization / artifact) には検証済み intent を添える。 監査ログに
+   * tenant / problem / deployment の文脈を残すため。 authenticity 失敗時は intent が
+   * 無いので undefined。
+   */
+  readonly intent?: VerifiedCloudActionIntent;
 }
 
 export type CustomerExecutionOutcome = CustomerExecutionAuthorized | CustomerExecutionRejected;
@@ -199,13 +206,13 @@ export class CustomerExecutionPlane {
     // Stage 2 — authorization: a valid signature is NOT authorization.
     const authorization = await this.authorizeIntent(intent);
     if (!authorization.ok) {
-      return authorization.rejection;
+      return { ...authorization.rejection, intent };
     }
 
     // Stages 3 + 4 — artifact integrity then safety.
     const artifactRejection = await this.checkArtifact(intent, input);
     if (artifactRejection) {
-      return artifactRejection;
+      return { ...artifactRejection, intent };
     }
 
     return { ok: true, intent, policyDecision: authorization.decision };
