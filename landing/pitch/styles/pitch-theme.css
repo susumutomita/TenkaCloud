@@ -355,6 +355,70 @@ a { color: inherit; text-decoration: none; }
   font-size: 1.2em;
 }
 
+.brush-img {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+  filter:
+    drop-shadow(0 3px 0 rgba(49, 25, 0, .58))
+    drop-shadow(0 0 16px rgba(241, 205, 114, .22));
+}
+
+.brush-hero {
+  display: block;
+  width: 590px;
+  margin: 2px 0 0 -10px;
+}
+
+.brush-problem {
+  display: block;
+  width: 570px;
+  margin-left: -5px;
+}
+
+.brush-incidents {
+  display: block;
+  width: 665px;
+  margin: 2px 0 0 -4px;
+}
+
+.brush-platform {
+  display: block;
+  width: 630px;
+  margin: 0 0 0 -5px;
+}
+
+.brush-training {
+  display: block;
+  width: 720px;
+  margin: 0 0 0 -4px;
+}
+
+.brush-daisuki {
+  width: 210px;
+  margin: 0 9px 0 -4px;
+  vertical-align: -27px;
+}
+
+.brush-nakama {
+  width: 178px;
+  margin: 0 8px;
+  vertical-align: -29px;
+}
+
+.brush-wall {
+  width: 430px;
+  margin: 0 6px 0 -4px;
+  vertical-align: -31px;
+}
+
+.brush-thanks {
+  display: block;
+  width: 980px;
+  margin: 0 auto;
+}
+
 .brand-title {
   color: var(--tc-white);
   font-size: 74px;
