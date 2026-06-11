@@ -41,6 +41,7 @@
     "typescript": "~6.0.3",
     "ulid": "^2.4.0",
     "vitest": "^4.1.8",
+    "yaml": "^1.10.3",
     "zod": "^3.25.76"
   },
   "dependencies": {

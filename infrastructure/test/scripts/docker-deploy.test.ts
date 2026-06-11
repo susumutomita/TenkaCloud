@@ -1,0 +1,164 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
+
+/**
+ * One-Docker deploy wrapper (host needs only Docker — no bun / node / aws-cli).
+ *
+ * The deliverable is `make deploy-docker`: a host with nothing but Docker installed can
+ * still run the normal deploy. The wrapper is declarative (docker-compose.yml +
+ * docker/Dockerfile) plus thin Makefile targets, so the test pins the *contract* those
+ * files must satisfy rather than executing Docker (which is unavailable in CI):
+ *
+ *   - the toolchain image carries the exact versions the deploy path needs
+ *   - the container can see the repo and authenticate to AWS
+ *   - host node_modules (possibly built for another OS) never leak into the Linux container
+ *   - the Makefile targets are pure `docker compose` so they run on a bun-less host
+ */
+
+const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
+const read = (rel: string): string => readFileSync(join(REPO_ROOT, rel), "utf8");
+
+interface ComposeFile {
+  services: Record<
+    string,
+    {
+      build?: { dockerfile?: string };
+      volumes?: string[];
+      environment?: string[];
+    }
+  >;
+  volumes?: Record<string, unknown>;
+}
+
+describe("one-Docker deploy wrapper", () => {
+  describe("docker-compose.yml", () => {
+    const compose = parseYaml(read("docker-compose.yml")) as ComposeFile;
+    const service = compose.services?.tenkacloud;
+
+    it("should define a 'tenkacloud' service built from docker/Dockerfile", () => {
+      expect(service).toBeDefined();
+      expect(service.build?.dockerfile).toBe("docker/Dockerfile");
+    });
+
+    it("should bind-mount the repo at /workspace so local changes deploy as-is", () => {
+      expect(service.volumes).toContain(".:/workspace");
+    });
+
+    it("should mount AWS credentials read-only at the runtime HOME so the deploy can authenticate", () => {
+      // Mounted at the non-root user's HOME (not /root) so ~/.aws resolves after the
+      // entrypoint drops privileges to the host uid.
+      const awsMount = service.volumes?.find((v) => v.endsWith(":/home/tenkacloud/.aws:ro"));
+      expect(awsMount).toBeDefined();
+    });
+
+    it("should shadow host node_modules with named volumes (no foreign-platform binaries leak in)", () => {
+      for (const target of ["/workspace/node_modules", "/workspace/infrastructure/node_modules"]) {
+        const shadowed = service.volumes?.some((v) => v.endsWith(`:${target}`));
+        expect(shadowed, `expected a named volume mounted at ${target}`).toBe(true);
+      }
+    });
+
+    it("should declare the named node_modules volumes at the top level", () => {
+      const declared = Object.keys(compose.volumes ?? {});
+      expect(declared).toContain("tenkacloud-node-modules");
+      expect(declared).toContain("tenkacloud-infra-node-modules");
+    });
+
+    it("should pass host AWS auth and the target ENV through to the container", () => {
+      for (const key of [
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "ENV",
+      ]) {
+        expect(service.environment).toContain(key);
+      }
+    });
+
+    it("should not require AWS_PROFILE (a local `aws login` default profile is used automatically)", () => {
+      expect(service.environment).not.toContain("AWS_PROFILE");
+    });
+
+    it("should pass the host uid/gid through so the container can drop root", () => {
+      for (const key of ["TENKACLOUD_UID", "TENKACLOUD_GID"]) {
+        expect(service.environment).toContain(key);
+      }
+    });
+  });
+
+  describe("docker/entrypoint.sh", () => {
+    const entrypoint = read("docker/entrypoint.sh");
+
+    it("should drop empty or partial static AWS keys so the mounted ~/.aws login is used", () => {
+      // An empty/partial AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY forwarded from the host
+      // would otherwise shadow the mounted profile and make the AWS SDK fail rather than
+      // fall back. The entrypoint must unset them unless a complete key pair is present.
+      expect(entrypoint).toMatch(/unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN/);
+    });
+
+    it("should drop root to the host uid via gosu so repo writes stay host-owned", () => {
+      // chown the volume-backed node_modules, then hand off to the host uid. Without this,
+      // running non-root would fail to write cdk.out into the bind-mounted host repo.
+      expect(entrypoint).toMatch(/gosu /);
+      expect(entrypoint).toContain("TENKACLOUD_UID");
+    });
+  });
+
+  describe("docker/Dockerfile", () => {
+    const dockerfile = read("docker/Dockerfile");
+
+    it("should base on Node 24 (the CDK CLI shebang and esbuild need a real Node runtime)", () => {
+      expect(dockerfile).toMatch(/FROM node:24/);
+    });
+
+    it("should pin Bun to the package.json packageManager version", () => {
+      const pkg = JSON.parse(read("package.json")) as { packageManager: string };
+      const bunVersion = pkg.packageManager.replace("bun@", "");
+      expect(dockerfile).toContain(bunVersion);
+    });
+
+    it("should install the AWS CLI (deploy scripts shell out to `aws`)", () => {
+      expect(dockerfile).toMatch(/awscli/);
+    });
+
+    it("should install gosu so the entrypoint can drop to the host user", () => {
+      expect(dockerfile).toMatch(/gosu/);
+    });
+  });
+
+  describe("Makefile docker targets", () => {
+    const makefile = read("Makefile");
+    const recipeFor = (target: string): string =>
+      makefile.split("\n").find((line) => line.startsWith(`${target}:`)) ?? "";
+
+    it("should expose deploy-docker and destroy-docker targets", () => {
+      expect(recipeFor("deploy-docker")).not.toBe("");
+      expect(recipeFor("destroy-docker")).not.toBe("");
+    });
+
+    it("should drive deploy-docker through docker compose, never bun (host has no bun)", () => {
+      const recipe = recipeFor("deploy-docker");
+      expect(recipe).toContain("$(DOCKER_COMPOSE)");
+      expect(recipe).not.toContain("bun");
+    });
+
+    it("should run docker targets as the host user (non-root) via the host uid/gid", () => {
+      expect(makefile).toContain("id -u");
+      expect(recipeFor("deploy-docker")).toContain("$(DOCKER_USER)");
+    });
+
+    it("should declare the docker targets as .PHONY", () => {
+      const phony = makefile
+        .split("\n")
+        .filter((line) => line.includes(".PHONY") || line.trimStart().startsWith("deploy-docker"))
+        .join(" ");
+      expect(phony).toContain("deploy-docker");
+      expect(phony).toContain("destroy-docker");
+    });
+  });
+});

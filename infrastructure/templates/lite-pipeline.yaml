@@ -157,6 +157,10 @@ Resources:
           version: 0.2
           phases:
             install:
+              # Node 22 is the newest version the managed CodeBuild standard image ships;
+              # node 24 is not yet a managed runtime (aws/aws-codebuild-docker-images#795).
+              # bun drives the toolchain and Node only backs the CDK CLI shebang + esbuild,
+              # which run on 22. Bump to 24 once CodeBuild offers it as a managed runtime.
               runtime-versions:
                 nodejs: 22
               commands:
@@ -166,7 +170,12 @@ Resources:
                 # Frozen + ignore-scripts matches the repo supply-chain policy (make install_ci).
                 - bun install --frozen-lockfile --ignore-scripts
                 # The problem catalog lives in a git submodule; pull it so `make deploy` ships it.
-                - git submodule update --init --recursive || echo "no submodules or already initialized"
+                # Only run when submodules are configured, but let a real checkout failure
+                # (auth/network) fail the build instead of masking it.
+                - |
+                  if [ -f .gitmodules ]; then
+                    git submodule update --init --recursive
+                  fi
             pre_build:
               commands:
                 - export AWS_REGION="${AWS_DEFAULT_REGION}"

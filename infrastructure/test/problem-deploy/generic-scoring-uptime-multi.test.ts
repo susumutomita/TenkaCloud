@@ -284,4 +284,80 @@ describe("uptime-multi kind", () => {
     const result = await runUptimeMultiKind(withAttackProbe());
     expect(result.scoreDelta).toBe(100);
   });
+
+  it("should award no bonus when the attackBlocked slot cannot be resolved", async () => {
+    // counter slot が outputs にも overrides にも無い → probe 自体を打たず bonus 0 / state なし。
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const base = withAttackBonus(2);
+    const input = {
+      ...base,
+      scoring: {
+        ...base.scoring,
+        attackBlocked: { slot: "missing", path: "/attack-stats", pointsPerBlock: 25 },
+      },
+    };
+    const result = await runUptimeMultiKind(input);
+    expect(result.scoreDelta).toBe(100);
+    expect(result.newState).toBeUndefined();
+    expect(
+      fetchMock.mock.calls.every((c: unknown[]) => !String(c[0]).includes("/attack-stats")),
+    ).toBe(true);
+  });
+
+  it("should award no bonus when the counter body is not a number", async () => {
+    // 競技者 stack が壊れた body を返したら baseline を汚さず加点もしない。
+    mockProbesWithCounter("not-a-number");
+    const result = await runUptimeMultiKind(withAttackBonus(2));
+    expect(result.scoreDelta).toBe(100);
+    expect(result.newState).toBeUndefined();
+  });
+
+  it("should not penalize when the attack-probe slot cannot be resolved", async () => {
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const base = withAttackProbe();
+    const input = {
+      ...base,
+      scoring: {
+        ...base.scoring,
+        attackProbes: [
+          { slot: "missing", path: "/api/v1/auth", vulnerableStatus: [200], penalty: 60 },
+        ],
+      },
+    };
+    const result = await runUptimeMultiKind(input);
+    expect(result.scoreDelta).toBe(100);
+    expect(result.attackDetected).toBeUndefined();
+  });
+
+  it("should send a default GET attack-probe when method and body are omitted", async () => {
+    // method/body 省略時は素の GET probe になる (= fetch options に method/body を渡さない)。
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const base = withAttackProbe();
+    const input = {
+      ...base,
+      scoring: {
+        ...base.scoring,
+        attackProbes: [
+          { slot: "api", path: "/api/v1/debug", vulnerableStatus: [200], penalty: 30 },
+        ],
+      },
+    };
+    const result = await runUptimeMultiKind(input);
+    expect(result.scoreDelta).toBe(70); // 100 availability − 30 (debug endpoint exposed = 200)
+    const debugCall = fetchMock.mock.calls.find(
+      (c: unknown[]) => typeof c[0] === "string" && (c[0] as string).includes("/api/v1/debug"),
+    );
+    const options = debugCall?.[1] as { method?: string; body?: string } | undefined;
+    expect(options?.method).toBe("GET"); // probeUrl の既定 method にフォールバック
+    expect(options?.body).toBeUndefined();
+  });
+
+  it("should not penalize when attackProbes is an empty array", async () => {
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const base = withAttackProbe();
+    const input = { ...base, scoring: { ...base.scoring, attackProbes: [] } };
+    const result = await runUptimeMultiKind(input);
+    expect(result.scoreDelta).toBe(100);
+    expect(result.attackDetected).toBeUndefined();
+  });
 });

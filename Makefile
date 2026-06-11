@@ -16,6 +16,7 @@ export JSII_DEPRECATED := quiet
         check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-cli-access \
         env-check env-check-lite env-init env-init-test synth check-synth diff bootstrap \
         deploy deploy-saas deploy-control-plane deploy-bootstrap destroy destroy-saas \
+        deploy-docker destroy-docker docker-shell docker-build \
         deploy-battles destroy-battles \
         lite-up lite-down lite-status lite-portal-url lite-console-url \
         ops-health
@@ -212,6 +213,26 @@ deploy-control-plane: env-check build ; $(CDK) deploy tenkacloud-control-plane $
 deploy-bootstrap:     env-check build ; $(CDK) deploy tenkacloud-bootstrap $(APPROVAL)
 destroy:              env-check-lite  ; bun run scripts/tenkacloud-lite.ts down
 destroy-saas:         env-check       ; bash scripts/cleanup.sh
+
+# ===== One-Docker deploy (host needs only Docker — no bun / node / aws-cli) =====
+# exe.dev / fresh machines often lack bun. These targets run the normal deploy inside a
+# toolchain container (Bun 1.3.11 + Node 24 + AWS CLI v2) defined by docker-compose.yml.
+# They are pure `docker compose` (no bun on the host) so they work on a bun-less host.
+# The repo is bind-mounted; ~/.aws is mounted read-only; env-var credentials also work.
+#   make deploy-docker                 # Lite deploy in the container (ENV=development)
+#   make deploy-docker ENV=production  # pick the target environment
+#   make destroy-docker                # tear it down
+#   make docker-shell                  # interactive shell in the toolchain image
+#   make docker-build                  # rebuild the image after editing docker/Dockerfile
+# Override DOCKER_COMPOSE=docker-compose for legacy Compose v1.
+# DOCKER_USER passes the host uid/gid so the container drops root and repo writes (cdk.out)
+# stay owned by the host user (see docker/entrypoint.sh).
+DOCKER_COMPOSE ?= docker compose
+DOCKER_USER = TENKACLOUD_UID=$(shell id -u) TENKACLOUD_GID=$(shell id -g)
+deploy-docker:    ; $(DOCKER_USER) $(DOCKER_COMPOSE) run --rm tenkacloud make deploy ENV=$(ENV)
+destroy-docker:   ; $(DOCKER_USER) $(DOCKER_COMPOSE) run --rm tenkacloud make destroy ENV=$(ENV)
+docker-shell:     ; $(DOCKER_USER) $(DOCKER_COMPOSE) run --rm tenkacloud bash
+docker-build:     ; $(DOCKER_COMPOSE) build tenkacloud
 
 # ===== Problem deploy smoke test (MVP-0, ADR-001 PR-1.5) =====
 # 引数に問題フォルダを取り、順次 CFn deploy する開発者向け smoke test ツール。

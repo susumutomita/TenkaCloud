@@ -187,6 +187,12 @@ deploy_one() {
   echo "=========================================="
   trace_log "deploy.cfn.deploy.start" stackName "${name_prefix}" region "${AWS_REGION}" teamSlug "${TEAM_SLUG}" problemDir "${problem_dir}"
 
+  # A previous attempt that failed during CREATE leaves the stack in
+  # ROLLBACK_COMPLETE / CREATE_FAILED, which `aws cloudformation deploy` cannot
+  # update — the retry would abort before issuing any CFn operation. Delete the
+  # un-updatable stack first so this run re-creates it cleanly.
+  delete_unrecoverable_stack_if_present "${name_prefix}" "${AWS_REGION}"
+
   # `aws cloudformation deploy` は CreateStack / UpdateStack を冪等に扱う:
   #   - stack が無ければ Create
   #   - stack があれば Update (差分が無ければ "No changes" で 0 終了)

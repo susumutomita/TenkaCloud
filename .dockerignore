@@ -1,0 +1,12 @@
+# The deploy image bakes only the toolchain (it does not COPY the repo — source comes in
+# via the docker-compose bind mount). Keep the build context tiny by excluding everything
+# heavy; only docker/entrypoint.sh is actually COPYed.
+node_modules
+**/node_modules
+**/dist
+infrastructure/cdk.out
+infrastructure/cdk.out.test
+.git
+**/*.log
+**/.env
+**/coverage
