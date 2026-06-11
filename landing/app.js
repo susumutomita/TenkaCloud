@@ -4,7 +4,6 @@
       "nav.product": "プロダクト",
       "nav.problems": "問題",
       "nav.extend": "問題を作る",
-      "nav.community": "コミュニティ",
       "nav.docs": "ドキュメント",
       "nav.offerings": "商用プラン",
       "nav.pricing": "料金",
@@ -163,22 +162,6 @@
       "extend.cta1": "問題カタログを見る",
       "extend.cta2": "new-problem skill",
 
-      "community.eyebrow": "コミュニティに参加",
-      "community.h2": "5 つの役割から、ひとつ選んで始める。",
-      "community.lead":
-        "TenkaCloud の堀は、 deploy ランタイムだけでなく <strong>コミュニティ問題カタログ</strong>。 メンテナに個別 onboard してもらわなくても、 役割を 1 つ選んで 30 分の初回 task を済ませれば、 公式コントリビュータになれます。",
-      "community.tester.role": "Tester",
-      "community.tester.h": "問題を遊んで、 papercut を報告する。",
-      "community.tester.p":
-        "30 分の playtest プロトコルに沿って 1 問解き、 構造化テンプレで feedback を出す。 CDK / TypeScript は不要。",
-      "community.tester.cta": "Playtest checklist",
-      "community.author.role": "Problem Author",
-      "community.author.h": "新しい問題を作る。",
-      "community.author.p":
-        "metadata.json + template.yaml の 2 ファイルで 1 問。 Claude Code の <code>/new-problem</code> skill で 30 分 onboarding。",
-      "community.author.cta": "Authoring guide",
-      "community.more":
-        "全 5 役割を見る (Tester / Problem Author / Event Facilitator / Platform Contributor / Sponsor-Requester)",
       "offerings.eyebrow": "商用プラン",
       "offerings.h2": "プロダクト化された 3 つの提供形態。",
       "offerings.lead":
@@ -186,12 +169,12 @@
       "offerings.a.role": "Hosted Event",
       "offerings.a.h": "単発イベントを、 丸ごと運営代行。",
       "offerings.a.p":
-        "1〜3 日のクラウド演習を、 公開 OSS 問題カタログから選定して 弊社が end-to-end で運営。 設計 / お客様 AWS への deploy / 事前 dry-run / 当日の live 進行 / 事後レポート。 <strong>1 回 fixed price</strong>。",
+        "1 日のクラウド演習を、 公開 OSS 問題カタログから選定して 弊社が end-to-end で運営。 設計 / お客様 AWS への deploy / 事前 dry-run / 当日の live 進行 / 事後レポート。 <strong>1 回 fixed price</strong>。",
       "offerings.a.more": "スコープと成果物を見る",
       "offerings.b.role": "Annual Arena",
-      "offerings.b.h": "年間プログラム + KPI ダッシュボード。",
+      "offerings.b.h": "年間プログラム。",
       "offerings.b.p":
-        "1 組織で <strong>年 4 回</strong> の運営代行イベントを年間契約で。 公開問題カタログから 入門 → 中級 → 上級 の learning path 設計と、 HR / L&amp;D 向け KPI ダッシュボードで定着を可視化。 ※ オリジナル問題の制作は本パックには含みません。",
+        "1 組織で <strong>年 4 回</strong> の運営代行イベントを年間契約で。 公開問題カタログから 入門 → 中級 → 上級 の learning path を設計。 ※ オリジナル問題の制作は本パックには含みません。",
       "offerings.b.more": "スコープと成果物を見る",
       "offerings.d.role": "CCoE Enablement (add-on)",
       "offerings.d.h": "アドバイザリ、 別契約。",
@@ -294,7 +277,6 @@
       "nav.product": "Product",
       "nav.problems": "Problems",
       "nav.extend": "Author problems",
-      "nav.community": "Community",
       "nav.docs": "Docs",
       "nav.offerings": "Commercial",
       "nav.pricing": "Pricing",
@@ -452,22 +434,6 @@
       "extend.cta1": "Browse the catalog",
       "extend.cta2": "new-problem skill",
 
-      "community.eyebrow": "Join the community",
-      "community.h2": "Pick one of five roles. Ship one starter task.",
-      "community.lead":
-        "TenkaCloud's moat is the <strong>community problem catalog</strong>, not only the deploy runtime. You do not need to be personally onboarded by the maintainer — choose a role, follow its 30-minute first task, and you are a recognized contributor.",
-      "community.tester.role": "Tester",
-      "community.tester.h": "Play the problems. File the papercuts.",
-      "community.tester.p":
-        "Follow a 30-minute playtest protocol on one problem, then file a structured feedback issue. No CDK / TypeScript needed.",
-      "community.tester.cta": "Playtest checklist",
-      "community.author.role": "Problem Author",
-      "community.author.h": "Ship a new problem.",
-      "community.author.p":
-        "Two files (metadata.json + template.yaml) and you have a problem. The <code>/new-problem</code> Claude Code skill onboards you in 30 minutes.",
-      "community.author.cta": "Authoring guide",
-      "community.more":
-        "See all 5 roles (Tester / Problem Author / Event Facilitator / Platform Contributor / Sponsor-Requester)",
       "offerings.eyebrow": "Commercial offerings",
       "offerings.h2": "Three productized offerings — formally documented.",
       "offerings.lead":
@@ -475,12 +441,12 @@
       "offerings.a.role": "Hosted Event",
       "offerings.a.h": "One operated drill, end to end.",
       "offerings.a.p":
-        "A 1-3 day cloud drill on the public OSS catalog, run by us. Event design, deploy into your AWS account, dry run, live facilitation, post-event report. <strong>Per-event fixed price</strong>.",
+        "A 1-day cloud drill on the public OSS catalog, run by us. Event design, deploy into your AWS account, dry run, live facilitation, post-event report. <strong>Per-event fixed price</strong>.",
       "offerings.a.more": "Scope &amp; deliverables",
       "offerings.b.role": "Annual Arena",
-      "offerings.b.h": "A 12-month program with KPIs.",
+      "offerings.b.h": "A 12-month program.",
       "offerings.b.p":
-        "An annual contract of <strong>4 operated events</strong> per year for one org: learning paths curated from the public problem catalog (beginner → advanced) and a KPI dashboard for HR / L&amp;D. Original problem development is not included in this package.",
+        "An annual contract of <strong>4 operated events</strong> per year for one org: learning paths curated from the public problem catalog (beginner → advanced). Original problem development is not included in this package.",
       "offerings.b.more": "Scope &amp; deliverables",
       "offerings.d.role": "CCoE Enablement (add-on)",
       "offerings.d.h": "Advisory, sold separately.",
