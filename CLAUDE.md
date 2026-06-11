@@ -61,7 +61,7 @@ We don't use a single-table DynamoDB design. Each stack owns its own tables (Ten
 | `make synth`            | `cdk synth` (defaults to `ENV=development`)                              |
 | `make diff`             | `cdk diff --all`                                                         |
 | `make bootstrap`        | `cdk bootstrap`                                                          |
-| `make deploy`           | **Lite mode** (single-tenant) deploy. Stands up AppPlaneCore + Participant Portal via `bin/tenkacloud-lite.ts` (#955) |
+| `make deploy`           | **Lite mode** (single-tenant) deploy. Stands up AppPlaneCore + Participant Portal via `infrastructure/bin/tenkacloud-lite.ts` (#955) |
 | `make deploy-saas`      | **SaaS mode** (multi-tenant) deploy. Runs `scripts/install.sh` (3-phase deploy, stands up SBT ControlPlane) |
 | `make destroy`          | Tear down Lite mode (`make lite-down`)                                   |
 | `make destroy-saas`     | Tear down SaaS mode (`scripts/cleanup.sh` idempotently removes every stack + S3) |
@@ -218,7 +218,7 @@ Add packages to `trustedDependencies` in a stand-alone PR. Manually verify the s
 
 ### Lite mode (default, `make deploy`)
 
-Issue #955 switched the default for `make deploy` to single-tenant Lite mode. It skips the SBT ControlPlane / tenant pipeline / SystemAdmin invitation entirely and deploys just two stacks via `bin/tenkacloud-lite.ts`: AppPlaneCore (`tenantId="local"`) + ProblemDeployBackend (Participant Portal). It is the shortest path for "one organizer running one event" (about 10 minutes). Teardown is `make destroy` (`make lite-down`).
+Issue #955 switched the default for `make deploy` to single-tenant Lite mode. It skips the SBT ControlPlane / tenant pipeline / SystemAdmin invitation entirely and deploys just two stacks via `infrastructure/bin/tenkacloud-lite.ts`: AppPlaneCore (`tenantId="local"`) + ProblemDeployBackend (Participant Portal). It is the shortest path for "one organizer running one event" (about 10 minutes). Teardown is `make destroy` (`make lite-down`).
 
 ### SaaS mode (opt-in, `make deploy-saas`)
 

@@ -12,7 +12,7 @@ problem directories; others are deliberately scoped as starter ideas.
 | --- | --- | --- | --- | --- |
 | [Hello World](../problems/challenges/hello-world/) | 1 | Challenge | `flag` | First deploy, scoring sanity check, author onboarding |
 | [Hello World Battle](../problems/battles/hello-world-battle/) | 1 | Battle | uptime | First uptime battle, AWS Systems Manager practice |
-| [Security Battle Royale](../problems/battles/security-battle-royale/) | 3 | Battle | `uptime-multi` | Web security hardening and attacker/defender exercises |
+| [Security Battle Royale](../problems/battles/security-battle-royale/) | 4 | Battle | `uptime-multi` | Web security hardening and attacker/defender exercises |
 | [Microservice Migration Battle](../problems/battles/microservice-migration-battle/) | 4 | Battle | `phased-polling` | Platform modernization and migration planning |
 | [StackStack](../problems/battles/stackstack/) | 4 | Battle | `phased-polling` | Platform-team operations for AI-generated internal apps |
 
@@ -42,7 +42,7 @@ problem directories; others are deliberately scoped as starter ideas.
 ### Security Battle Royale
 
 - **Concept**: attack and defend a deliberately vulnerable web application.
-- **Difficulty**: 3 / 5.
+- **Difficulty**: 4 / 5.
 - **Category**: Battle.
 - **Learning goals**: SQL injection, remote code execution, SSRF, IMDS exposure,
   and safe remediation.

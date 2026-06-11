@@ -477,4 +477,74 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
       }
     });
   });
+
+  // The shared CDK app (bin/tenkacloud-lite.ts -> resolveAppConfig ->
+  // requireSystemAdminEmail) requires CDK_PARAM_SYSTEM_ADMIN_EMAIL. Lite mode must
+  // derive it from the tenant admin email so `make deploy` works with only
+  // TENANT_ADMIN_EMAIL set; otherwise cdk deploy throws "Please provide system
+  // admin email" (the CodeBuild Lite-pipeline failure).
+  describe("up should wire CDK_PARAM_SYSTEM_ADMIN_EMAIL for cdk deploy", () => {
+    const original = {
+      tenant: process.env.TENANT_ADMIN_EMAIL,
+      system: process.env.SYSTEM_ADMIN_EMAIL,
+      cdkSystem: process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL,
+    };
+
+    function restore(): void {
+      const entries: ReadonlyArray<readonly [string, string | undefined]> = [
+        ["TENANT_ADMIN_EMAIL", original.tenant],
+        ["SYSTEM_ADMIN_EMAIL", original.system],
+        ["CDK_PARAM_SYSTEM_ADMIN_EMAIL", original.cdkSystem],
+      ];
+      for (const [key, value] of entries) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+
+    function captureSystemEmailAtCdkSpawn(): {
+      readonly io: CliIO;
+      seen: () => string | undefined;
+    } {
+      let seenAtCdk: string | undefined;
+      const { io } = buildIO({
+        inheritExitCode: 0,
+        capture: tenantAdminUpCapture({ adminGetUserCode: 0 }),
+      });
+      const wrapped: CliIO = {
+        ...io,
+        spawnInherit: async (cmd, args) => {
+          if (cmd.includes("cdk")) seenAtCdk = process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL;
+          return io.spawnInherit(cmd, args);
+        },
+      };
+      return { io: wrapped, seen: () => seenAtCdk };
+    }
+
+    it("should derive it from TENANT_ADMIN_EMAIL when unset", async () => {
+      process.env.TENANT_ADMIN_EMAIL = "organizer@example.com";
+      delete process.env.SYSTEM_ADMIN_EMAIL;
+      delete process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL;
+      try {
+        const { io, seen } = captureSystemEmailAtCdkSpawn();
+        const code = await main(["up"], io);
+        expect(code).toBe(0);
+        expect(seen()).toBe("organizer@example.com");
+      } finally {
+        restore();
+      }
+    });
+
+    it("should not override an explicit CDK_PARAM_SYSTEM_ADMIN_EMAIL (SaaS-shared env)", async () => {
+      process.env.TENANT_ADMIN_EMAIL = "organizer@example.com";
+      process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL = "sysadmin@example.com";
+      try {
+        const { io, seen } = captureSystemEmailAtCdkSpawn();
+        await main(["up"], io);
+        expect(seen()).toBe("sysadmin@example.com");
+      } finally {
+        restore();
+      }
+    });
+  });
 });

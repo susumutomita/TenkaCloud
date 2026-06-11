@@ -138,8 +138,16 @@ export
 
 # synth/diff を Makefile 単体で通す時の placeholder (install.sh は deploy 時に上書きする)。
 CDK_PARAM_SYSTEM_ADMIN_EMAIL ?= $(SYSTEM_ADMIN_EMAIL)
-# fromBucketName は DNS 検証される (3-63 chars, lowercase) ので短い "NA" 等だと synth が落ちる。
-CDK_PARAM_S3_BUCKET_NAME ?= serverless-saas-placeholder
+# Deploy uses a globally-unique, account-scoped source bucket — a fixed name
+# collides across accounts (S3 bucket names are global). Compute it only when
+# BOTH the account and a region are known, resolving the region as
+# AWS_REGION -> AWS_DEFAULT_REGION to match prepare-source-bundle.sh's env order
+# (so the name the script uploads to and the name cdk reads always agree — we
+# never guess a region). Otherwise keep a DNS-valid placeholder for `make synth`
+# without creds (fromBucketName validates 3-63 lowercase chars); the script then
+# resolves the region itself (incl. `aws configure`) and computes the name.
+TC_SOURCE_REGION := $(or $(strip $(AWS_REGION)),$(strip $(AWS_DEFAULT_REGION)))
+CDK_PARAM_S3_BUCKET_NAME ?= $(if $(and $(strip $(AWS_ACCOUNT_ID)),$(TC_SOURCE_REGION)),tenkacloud-source-$(strip $(AWS_ACCOUNT_ID))-$(TC_SOURCE_REGION),serverless-saas-placeholder)
 CDK_SOURCE_NAME ?= source.zip
 CDK_PARAM_COMMIT_ID ?= placeholder
 

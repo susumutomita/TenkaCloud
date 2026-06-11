@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   collectGetAttResources,
   collectRefs,
+  collectSubMapKeys,
   collectSubRefs,
   parseSections,
 } from "../../../scripts/check-template-cfn-refs";
@@ -20,26 +21,45 @@ import {
  *
  * test 戦略:
  *   - 一時ディレクトリに problems/<category>/<id>/template.yaml を仕込んで script を回す
- *   - script は `problems/` 直下を絶対 path で見るため、 PROBLEMS_DIR を env で上書き...は本実装には
- *     無いので、 「 既存 problem template (= main repo の 5 個) を抜けるかどうか」 だけ smoke test
+ *   - PROBLEMS_DIR で fixture catalog を明示し、 live submodule / catalog の problem 数には依存しない
  */
 
 const REPO_ROOT = new URL("../../../", import.meta.url).pathname;
 
 describe("check-template-cfn-refs script (#951 sub-2)", () => {
-  // Smoke test against the live problems/ catalog. The count grows with each
-  // new problem added; bump this assertion when adding a new template (so the
-  // test remains a regression boundary instead of a moving target).
-  // Current count: 112 (= the 7-template starter catalog plus the 105 AWS
-  // certification Challenges added in TenkaCloudChallenge #46).
-  it("all existing problem templates should pass (smoke test)", () => {
+  it("should scan only the configured problems directory", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "tc-cfn-refs-cli-"));
+    const problemsDir = join(fixtureRoot, "problems");
+    const problemDir = join(problemsDir, "challenges/test-problem");
+    mkdirSync(problemDir, { recursive: true });
+    writeFileSync(
+      join(problemDir, "template.yaml"),
+      `AWSTemplateFormatVersion: "2010-09-09"
+Parameters:
+  NamePrefix:
+    Type: String
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "\${NamePrefix}-participant-viewer"
+Outputs:
+  ParticipantViewerRoleArn:
+    Value: !GetAtt ParticipantViewerRole.Arn
+`,
+    );
     const result = spawnSync("bun", ["run", "scripts/check-template-cfn-refs.ts"], {
       cwd: REPO_ROOT,
       encoding: "utf-8",
+      env: { ...process.env, PROBLEMS_DIR: problemsDir },
     });
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("OK:");
-    expect(result.stdout).toContain("112 template(s)");
+    try {
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("OK:");
+      expect(result.stdout).toContain("1 template(s)");
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
   });
 });
 
@@ -178,5 +198,37 @@ Esc: !Sub "literal \${!NotAVariable}"
     expect(out.getAtts).toEqual(["Role"]);
     expect(out.refs).not.toContain("NotAVariable");
     expect(out.getAtts).not.toContain("NotAVariable");
+  });
+
+  it("collectSubRefs: should skip shell expansions that are not valid CFn Sub variable names", () => {
+    // Plain `Fn::Base64: |` UserData ships shell scripts whose ${...} は CFn 参照ではない。
+    // CFn の Sub 変数文法 (英数 logical name / AWS:: pseudo / Dotted.Attr) に合わない式は捨てる。
+    const yaml = `Script: |
+  APP_IP="\${1:-}"
+  NAME="\${EXPECTED_NAME}"
+  WITH_DEFAULT="\${FOO:-bar}"
+  ALL="\${ARR[@]}"
+  CFN: !Sub "\${NamePrefix}"
+`;
+    const out = collectSubRefs(yaml);
+    expect(out.refs).toEqual(["NamePrefix"]);
+    expect(out.getAtts).toEqual([]);
+  });
+
+  it("collectSubMapKeys: should collect list-form Fn::Sub variable-map keys as declared names", () => {
+    // UserData:
+    //   Fn::Base64: !Sub
+    //     - |
+    //       ORIGIN="http://\${NatPublicIp}/"
+    //     - NatPublicIp: !GetAtt NatInstance.PublicIp
+    const yaml = `UserData:
+  Fn::Base64: !Sub
+    - |
+      ORIGIN="http://\${NatPublicIp}/"
+    - NatPublicIp: !GetAtt NatInstance.PublicIp
+`;
+    expect(collectSubMapKeys(yaml)).toEqual(["NatPublicIp"]);
+    const out = collectSubRefs(yaml);
+    expect(out.refs).toContain("NatPublicIp");
   });
 });

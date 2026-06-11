@@ -30,7 +30,6 @@ export type {
   StsAssumeRoleClient,
 } from "./aws-assume-role.js";
 export { AwsAssumeRoleExchange } from "./aws-assume-role.js";
-
 export type {
   AzureAdapterOptions,
   AzureCredential,
@@ -40,7 +39,44 @@ export type {
   AzureTokenExchangeOutput,
 } from "./azure-federated-credential.js";
 export { AzureFederatedCredentialExchange } from "./azure-federated-credential.js";
-
+export type {
+  CfnDeployClient,
+  CfnExecutionAction,
+  CfnExecutionResult,
+  CfnStackMutationInput,
+  CloudFormationExecutorOptions,
+} from "./cloudformation-executor.js";
+export { CloudFormationExecutor, deriveStackName } from "./cloudformation-executor.js";
+export type {
+  AgentExecuted,
+  AgentRejected,
+  AgentRunInput,
+  AgentRunOutcome,
+  AuditWriter,
+  CustomerExecutionAgentOptions,
+} from "./customer-execution-agent.js";
+export { CustomerExecutionAgent } from "./customer-execution-agent.js";
+export type {
+  ArtifactInspection,
+  ArtifactInspector,
+  ClaimInput,
+  CustomerExecutionAuthorized,
+  CustomerExecutionOutcome,
+  CustomerExecutionPlaneOptions,
+  CustomerExecutionPolicy,
+  CustomerExecutionRejected,
+  CustomerExecutionRejectionReason,
+  CustomerExecutionStage,
+  PolicyDecision,
+  PolicyEvaluator,
+} from "./customer-execution-plane.js";
+export { CustomerExecutionPlane, computeArtifactDigest } from "./customer-execution-plane.js";
+export type {
+  DdbConditionalPutClient,
+  DdbConditionalPutInput,
+  DdbNonceStoreOptions,
+} from "./ddb-nonce-store.js";
+export { DdbNonceStore } from "./ddb-nonce-store.js";
 export type {
   GcpAdapterOptions,
   GcpCredential,
@@ -60,6 +96,17 @@ export type {
   VerifyOutcome,
 } from "./jws.js";
 export { signIntent, verifySignature } from "./jws.js";
+export type {
+  BudgetPolicyEvaluatorOptions,
+  CfnTemplateInspectorOptions,
+  ForbiddenTemplatePattern,
+} from "./local-policy.js";
+export {
+  combinePolicyEvaluators,
+  createBudgetPolicyEvaluator,
+  createCfnTemplateInspector,
+  DEFAULT_FORBIDDEN_TEMPLATE_PATTERNS,
+} from "./local-policy.js";
 export type {
   LocalStackCloudAdapterOptions,
   LocalStackCredential,

@@ -8,8 +8,12 @@ Contributions to TenkaCloud are welcome.
 git clone --recurse-submodules https://github.com/<your-username>/TenkaCloud.git
 cd TenkaCloud
 make install
-make start
+make build   # verify the toolchain compiles
 ```
+
+To run a single SPA locally, start its dev server from the app directory, e.g.
+`cd apps/application-admin-console && make dev`. To deploy into AWS, follow the
+[Quickstart](./README.md#quickstart).
 
 ## Where to start (under 15 minutes)
 
@@ -44,6 +48,15 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:`,
 ## Rules and constraints
 
 See [CLAUDE.md](./CLAUDE.md) for project rules, architecture invariants, and prohibited patterns. The same rules apply whether the change is made by a human or by an AI agent.
+
+## Project provenance
+
+TenkaCloud is an independent open-source project. Before contributing, read
+[`docs/PROJECT_PROVENANCE.md`](./docs/PROJECT_PROVENANCE.md): it records the
+project's development boundaries and the influence-versus-copying distinction.
+Do not contribute an employer's source code, confidential documents, customer
+data, private competition content, or other proprietary assets — contribute
+only original or compatibly licensed work.
 
 ## Join the community
 

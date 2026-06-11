@@ -21,16 +21,41 @@
 #   - `<bucket>/source.zip` を upload
 set -euo pipefail
 
-REGION=${REGION:-$(aws configure get region)}
-ACCOUNT_ID=${ACCOUNT_ID:-$(aws sts get-caller-identity --query Account --output text)}
+# Region resolution order: explicit REGION override → the standard AWS SDK env vars
+# (CodeBuild / Lambda / ECS all inject AWS_REGION + AWS_DEFAULT_REGION) → the local
+# `aws configure` profile. `aws configure get region` exits non-zero when there is no
+# config file (= the case in CodeBuild), so it must be guarded with `|| true`; left
+# bare it aborts this `set -e` script before the explicit error check below — which is
+# exactly how Lite mode `make deploy` failed in the CodeBuild pipeline.
+REGION="${REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-}}}"
+if [ -z "${REGION}" ]; then
+  REGION="$(aws configure get region || true)"
+fi
+ACCOUNT_ID="${ACCOUNT_ID:-$(aws sts get-caller-identity --query Account --output text || true)}"
 
 if [ -z "${REGION}" ] || [ -z "${ACCOUNT_ID}" ]; then
-  echo "ERROR: REGION / ACCOUNT_ID を解決できません。 AWS CLI が configure 済か、 env 変数を export してください。"
+  echo "ERROR: REGION / ACCOUNT_ID を解決できません。 AWS_REGION / AWS_DEFAULT_REGION を export するか、 aws CLI を configure してください。"
   exit 1
 fi
 
-export CDK_PARAM_S3_BUCKET_NAME="${CDK_PARAM_S3_BUCKET_NAME:-tenkacloud-source-${ACCOUNT_ID}-${REGION}}"
+# Resolve a globally-unique, account-scoped source bucket. A fixed name collides
+# across AWS accounts (S3 bucket names are global), so treat both an unset value
+# and the Makefile's synth-only `serverless-saas-placeholder` as "compute an
+# account-scoped name". This keeps the upload bucket consistent with what the CDK
+# app reads, and lets a brand-new account deploy without a name collision.
+if [ -z "${CDK_PARAM_S3_BUCKET_NAME:-}" ] || [ "${CDK_PARAM_S3_BUCKET_NAME}" = "serverless-saas-placeholder" ]; then
+  CDK_PARAM_S3_BUCKET_NAME="tenkacloud-source-${ACCOUNT_ID}-${REGION}"
+fi
+export CDK_PARAM_S3_BUCKET_NAME
 export CDK_SOURCE_NAME="${CDK_SOURCE_NAME:-source.zip}"
+
+# Resolve-only seam: stop after env resolution so the resolution contract can be
+# unit-tested without any AWS mutation (= infrastructure/test/scripts/prepare-source-bundle.test.ts).
+if [ -n "${PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY:-}" ]; then
+  printf 'REGION=%s\nACCOUNT_ID=%s\nCDK_PARAM_S3_BUCKET_NAME=%s\nCDK_SOURCE_NAME=%s\n' \
+    "${REGION}" "${ACCOUNT_ID}" "${CDK_PARAM_S3_BUCKET_NAME}" "${CDK_SOURCE_NAME}"
+  exit 0
+fi
 
 # repo root を決定 (= 本 script は repo の scripts/ 配下)。 bucket lifecycle JSON を参照するため、
 # bucket 作成 block より前に解決しておく。

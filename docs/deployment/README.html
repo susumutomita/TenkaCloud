@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>TenkaCloud deployment guide</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<!-- markdownlint-disable MD013 -->
+<h1>TenkaCloud deployment guide</h1>
+<p>This guide walks you through deploying <strong>Lite mode</strong> — the single-tenant runtime for
+&quot;one organizer running one event&quot; — end to end. There are two supported paths:</p>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Use it when</th>
+<th>Where the deploy runs</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="#a-local-terminal-make-deploy">A. Local terminal (<code>make deploy</code>)</a></td>
+<td>You can install the repo toolchain on your machine</td>
+<td>Your shell</td>
+</tr>
+<tr>
+<td><a href="#b-aws-console-pipeline-no-local-install">B. AWS Console pipeline</a></td>
+<td>You do not want to install Bun / CDK locally</td>
+<td>CloudFormation → CodePipeline → CodeBuild</td>
+</tr>
+</tbody></table>
+<p>Both paths deploy the <strong>same</strong> two stacks into your AWS account and produce the same
+result, so pick whichever fits your environment:</p>
+<ul>
+<li><code>tenkacloud-lite</code> — Application Admin Console (organizer UI) + AppPlaneCore (<code>tenantId=&quot;local&quot;</code>)</li>
+<li><code>tenkacloud-lite-problem-deploy</code> — problem deploy backend + Participant Portal</li>
+</ul>
+<p>A successful deploy emails a <strong>Cognito invitation</strong> (temporary password) to your
+organizer address and prints the <strong>Application Admin Console</strong> and <strong>Participant
+Portal</strong> URLs.</p>
+<p>For full multi-tenant SaaS mode (pooled / silo tiers + SBT Control Plane), see
+<a href="#saas-mode">SaaS mode</a> at the end.</p>
+<hr>
+<h2>Prerequisites (both paths)</h2>
+<ul>
+<li>An <strong>AWS account</strong> and credentials that can run CloudFormation / CDK (create IAM
+roles, S3, Lambda, Cognito, DynamoDB, CodeBuild, EventBridge, Step Functions).</li>
+<li>A <strong>region</strong> — the examples use <code>ap-northeast-1</code>. Use the same region everywhere.</li>
+<li>An <strong>organizer email</strong> that can receive mail (it gets the Cognito invite and
+becomes the Application Admin Console&#39;s first user).</li>
+<li>Roughly <strong>15 minutes</strong> of wall-clock time for the first deploy (CDK creates the
+stacks from scratch).</li>
+</ul>
+<p>Path A additionally needs a local toolchain (installed by <code>make install</code>). Path B
+additionally needs a one-time <strong>GitHub connection</strong> in AWS.</p>
+<hr>
+<h2>A. Local terminal (<code>make deploy</code>)</h2>
+<h3>A-1. Clone the repo (with the problem catalog submodule)</h3>
+<pre><code class="language-bash">git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+</code></pre>
+<p>If you already cloned without <code>--recurse-submodules</code>, run
+<code>git submodule update --init --recursive</code> so <code>problems/</code> is populated.</p>
+<h3>A-2. Install the toolchain</h3>
+<pre><code class="language-bash">make install
+</code></pre>
+<p>This installs every workspace&#39;s dependencies with Bun (lifecycle scripts disabled,
+per the supply-chain policy) and bootstraps the Git hooks.</p>
+<h3>A-3. Configure the environment</h3>
+<pre><code class="language-bash">make env-init
+</code></pre>
+<p><code>make env-init</code> creates <code>infrastructure/environments/development/.env</code> and prompts for
+the Lite-mode values. Prefer manual setup? Copy the example and edit it:</p>
+<pre><code class="language-bash">cp infrastructure/environments/development/.env.example \
+   infrastructure/environments/development/.env
+# set AWS_ACCOUNT_ID, AWS_REGION, and TENANT_ADMIN_EMAIL
+</code></pre>
+<p>In Lite mode <code>TENANT_ADMIN_EMAIL</code> is the only required address — <code>SYSTEM_ADMIN_EMAIL</code>
+is a SaaS-only field and is not needed here.</p>
+<h3>A-4. Bootstrap CDK (first time only, per account/region)</h3>
+<pre><code class="language-bash">make bootstrap
+</code></pre>
+<p><code>cdk bootstrap</code> is idempotent; skip it on later deploys into the same account/region.</p>
+<h3>A-5. Deploy</h3>
+<pre><code class="language-bash">make deploy
+</code></pre>
+<p><code>make deploy</code> runs three phases (it streams CDK output directly):</p>
+<ol>
+<li><strong>Prepare source bundle</strong> — packages <code>source.zip</code> and uploads it to a per-account S3 bucket (<code>tenkacloud-source-&lt;account&gt;-&lt;region&gt;</code>), created automatically on the first deploy. No bucket setup is needed, and the name is unique per account so a brand-new account works.</li>
+<li><strong>Deploy 2 stacks</strong> — <code>cdk deploy</code> of <code>tenkacloud-lite</code> + <code>tenkacloud-lite-problem-deploy</code> (~10 minutes the first time).</li>
+<li><strong>Resolve URLs + create the Tenant Admin</strong> — sends the Cognito invite email and prints the access URLs.</li>
+</ol>
+<h3>A-6. Get the URLs and sign in</h3>
+<pre><code class="language-bash">make lite-status        # CFn status of both stacks
+make lite-console-url   # Application Admin Console URL
+make lite-portal-url    # Participant Portal URL
+</code></pre>
+<p>Open the <strong>Application Admin Console</strong> URL and sign in with the email +
+<strong>temporary password</strong> from the Cognito invitation; you will be asked to set a new
+password on first sign-in.</p>
+<h3>A-7. Tear down</h3>
+<pre><code class="language-bash">make destroy
+</code></pre>
+<p>Removes both Lite stacks (RemovalPolicy=DESTROY tears down S3 / DynamoDB with them).</p>
+<hr>
+<h2>B. AWS Console pipeline (no local install)</h2>
+<p>This path provisions a CloudFormation stack that builds a CodePipeline + CodeBuild
+project; CodeBuild then runs <code>make deploy</code> for you inside AWS. You only use the AWS
+Console.</p>
+<h3>B-1. Create a GitHub connection (one time)</h3>
+<p>AWS Console → <strong>Developer Tools</strong> → <strong>Connections</strong> → <strong>Create connection</strong> →
+<strong>GitHub</strong> → finish the OAuth flow → <strong>copy the connection ARN</strong>
+(<code>arn:aws:codeconnections:&lt;region&gt;:&lt;account&gt;:connection/&lt;id&gt;</code>).</p>
+<blockquote>
+<p>CloudFormation cannot create the GitHub authorization for you, so this is a manual
+prerequisite.</p>
+</blockquote>
+<h3>B-2. Download the pipeline template</h3>
+<p>Download
+<a href="../../infrastructure/templates/lite-pipeline.yaml"><code>infrastructure/templates/lite-pipeline.yaml</code></a>
+from this repo (the quick-create button needs the file hosted in S3, so uploading it
+in the console is the reliable no-local path).</p>
+<h3>B-3. Create the CloudFormation stack</h3>
+<ol>
+<li><p>Open the <a href="https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template">CloudFormation create-stack page</a> in your region.</p>
+</li>
+<li><p>Choose <strong>Upload a template file</strong>, upload <code>lite-pipeline.yaml</code>.</p>
+</li>
+<li><p>Stack name: <code>tenkacloud-lite-pipeline</code>.</p>
+</li>
+<li><p>Fill in the parameters:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>TenantAdminEmail</code></td>
+<td><strong>Yes</strong></td>
+<td>Organizer email — receives the Cognito invite</td>
+</tr>
+<tr>
+<td><code>GitHubConnectionArn</code></td>
+<td><strong>Yes</strong></td>
+<td>The ARN from step B-1</td>
+</tr>
+<tr>
+<td><code>Environment</code></td>
+<td>No</td>
+<td><code>development</code> (controls resource names, e.g. the pipeline <code>tenkacloud-lite-development</code>)</td>
+</tr>
+<tr>
+<td><code>GitHubRepositoryId</code></td>
+<td>No</td>
+<td><code>susumutomita/TenkaCloud</code>, or your fork as <code>owner/repo</code></td>
+</tr>
+<tr>
+<td><code>SourceBranchName</code></td>
+<td>No</td>
+<td>Branch to deploy; default <code>main</code></td>
+</tr>
+<tr>
+<td><code>EnableManualApproval</code></td>
+<td>No</td>
+<td>Keep <code>true</code> to gate the deploy behind a one-click approval</td>
+</tr>
+<tr>
+<td><code>DeployExternalId</code></td>
+<td>No</td>
+<td>Only set when you are ready to deploy into competitor accounts</td>
+</tr>
+<tr>
+<td><code>BunVersion</code></td>
+<td>No</td>
+<td><code>1.3.11</code> (matches the repo toolchain)</td>
+</tr>
+</tbody></table>
+</li>
+<li><p>Acknowledge the IAM capabilities and <strong>create the stack</strong>. The pipeline
+(<code>tenkacloud-lite-development</code>) is created in ~2-3 minutes and starts a run
+automatically.</p>
+</li>
+</ol>
+<h3>B-4. Approve the manual gate ⚠️ (don&#39;t skip this)</h3>
+<p>With <code>EnableManualApproval=true</code> (the default), the pipeline <strong>pauses at an &quot;Approve&quot;
+stage and will not deploy until you approve it</strong>. This is the single most common
+&quot;nothing is happening&quot; surprise.</p>
+<ul>
+<li><p>Console: <strong>CodePipeline</strong> → <code>tenkacloud-lite-development</code> → the <strong>Approve</strong> stage →
+<strong>Review</strong> → <strong>Approve</strong>.</p>
+</li>
+<li><p>Or via CLI:</p>
+<pre><code class="language-bash">aws codepipeline put-approval-result \
+  --pipeline-name tenkacloud-lite-development \
+  --stage-name Approve --action-name ManualApproval \
+  --region ap-northeast-1 --status Approved \
+  --result summary=&quot;approve lite deploy&quot; \
+  --token &quot;$(aws codepipeline get-pipeline-state --name tenkacloud-lite-development \
+    --region ap-northeast-1 \
+    --query &#39;stageStates[?stageName==`Approve`].actionStates[0].latestExecution.token&#39; \
+    --output text)&quot;
+</code></pre>
+</li>
+</ul>
+<p>(Set <code>EnableManualApproval=false</code> if you want the pipeline to deploy without a gate.)</p>
+<h3>B-5. Watch the build</h3>
+<p>After approval, the <strong>Deploy</strong> stage runs CodeBuild (<code>make deploy</code>, ~13 minutes the
+first time). Watch it in <strong>CodePipeline → Deploy → details</strong>, or in the CodeBuild
+project <code>tenkacloud-lite-development</code>. The build runs the same three phases as the
+local path (prepare bundle → cdk deploy → URLs + Tenant Admin invite).</p>
+<h3>B-6. Get the URLs</h3>
+<p>When the build succeeds, the tail of the build log prints:</p>
+<pre><code class="language-text">Access URLs:
+  - Application Admin Console: https://&lt;id&gt;.cloudfront.net
+  - Participant Portal:        https://&lt;id&gt;.lambda-url.&lt;region&gt;.on.aws/
+</code></pre>
+<p>and a <strong>Cognito invitation email</strong> is sent to <code>TenantAdminEmail</code>. Sign in to the
+Application Admin Console with that email + temporary password.</p>
+<h3>B-7. Re-run after a change</h3>
+<p>The pipeline does not auto-trigger on every push. To run it again:</p>
+<ul>
+<li>Console: <strong>CodePipeline → Release change</strong>, or</li>
+<li>CLI: <code>aws codepipeline start-pipeline-execution --name tenkacloud-lite-development --region ap-northeast-1</code></li>
+</ul>
+<p>Each run pauses at the <strong>Approve</strong> gate again (B-4) before deploying.</p>
+<h3>B-8. Tear down</h3>
+<ol>
+<li>Delete the two app stacks in <strong>CloudFormation</strong>: <code>tenkacloud-lite</code> and
+<code>tenkacloud-lite-problem-deploy</code>.</li>
+<li>Delete the pipeline stack <code>tenkacloud-lite-pipeline</code>.</li>
+<li>The pipeline&#39;s artifact bucket (<code>tenkacloud-lite-development-pipeline-artifacts-&lt;account&gt;</code>)
+and the source bucket may need to be emptied before they delete.</li>
+</ol>
+<hr>
+<h2>After deploy (both paths)</h2>
+<ol>
+<li>Sign in to the <strong>Application Admin Console</strong> (Cognito temp password → set a new one).</li>
+<li>Create an event, register teams, and select problems from the catalog.</li>
+<li>Start a problem deploy and watch progress.</li>
+<li>Share the <strong>Participant Portal</strong> URL with teams (each team&#39;s login key is issued
+when you create the event).</li>
+</ol>
+<p>See the <a href="../runbooks/README.md">runbooks</a> for event-day operations (pre-event
+checklist, live monitoring, teardown).</p>
+<hr>
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause / fix</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Pipeline &quot;isn&#39;t doing anything&quot;</td>
+<td>It is waiting at the <strong>Approve</strong> gate — approve it (B-4).</td>
+</tr>
+<tr>
+<td><code>Your session has expired</code> (local)</td>
+<td>Refresh your AWS credentials (<code>aws sso login</code> / your login flow).</td>
+</tr>
+<tr>
+<td><code>cdk bootstrap</code> / &quot;bootstrap&quot; errors</td>
+<td>Run <code>make bootstrap</code> once for the account/region.</td>
+</tr>
+<tr>
+<td>Region mismatch</td>
+<td><code>AWS_REGION</code> in <code>.env</code> must match the region you are deploying to.</td>
+</tr>
+<tr>
+<td>Submodule / <code>problems/</code> empty</td>
+<td><code>git submodule update --init --recursive</code>.</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>SaaS mode</h2>
+<p>For full multi-tenant operation — pooled tiers (BASIC / STANDARD / PREMIUM), the
+silo tier (PLATINUM), SystemAdmin invitations, and the SBT Control Plane — use SaaS
+mode instead:</p>
+<pre><code class="language-bash">cp infrastructure/environments/development/.env.example \
+   infrastructure/environments/development/.env
+# set SYSTEM_ADMIN_EMAIL, AWS_ACCOUNT_ID, and AWS_REGION
+
+make deploy-saas     # 3-phase deploy (scripts/install.sh)
+make destroy-saas    # idempotent teardown
+</code></pre>
+<p>SaaS mode runs three phases (Control Plane + bootstrap + pooled tenant + pipeline →
+admin console hosting → callback/CORS update). See
+<a href="../../CLAUDE.md"><code>../../CLAUDE.md</code></a> (&quot;Deploy flow&quot;) for the phase details.</p>
+
+<div class="doc-source">Source: <code>docs/deployment/README.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/deployment/README.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>

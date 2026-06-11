@@ -1,0 +1,148 @@
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+
+const PREPARE_SCRIPT = resolve(__dirname, "..", "..", "..", "scripts", "prepare-source-bundle.sh");
+
+const tempDirs: string[] = [];
+
+/**
+ * Drop a fake `aws` on PATH so the resolution logic runs with no real credentials.
+ * It mimics CodeBuild: `aws configure get region` exits non-zero (no config file)
+ * unless FAKE_AWS_CONFIGURE_REGION is provided; `aws sts get-caller-identity`
+ * returns FAKE_AWS_ACCOUNT_ID.
+ */
+function fakeAwsBinDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), "tenkacloud-fake-aws-"));
+  tempDirs.push(dir);
+  const aws = join(dir, "aws");
+  // Brace-less $VAR refs (not ${VAR}) keep this bash readable to biome's
+  // noTemplateCurlyInString rule while behaving identically for an unset var.
+  writeFileSync(
+    aws,
+    [
+      "#!/usr/bin/env bash",
+      'if [ "$1" = "configure" ] && [ "$2" = "get" ] && [ "$3" = "region" ]; then',
+      '  if [ -n "$FAKE_AWS_CONFIGURE_REGION" ]; then',
+      '    echo "$FAKE_AWS_CONFIGURE_REGION"; exit 0',
+      "  fi",
+      "  exit 1", // CodeBuild: no config file -> empty + non-zero
+      "fi",
+      'if [ "$1" = "sts" ] && [ "$2" = "get-caller-identity" ]; then',
+      '  if [ -n "$FAKE_AWS_ACCOUNT_ID" ]; then echo "$FAKE_AWS_ACCOUNT_ID"; exit 0; fi',
+      "  exit 1",
+      "fi",
+      'echo "unexpected aws call: $*" >&2',
+      "exit 99",
+      "",
+    ].join("\n"),
+  );
+  chmodSync(aws, 0o755);
+  return dir;
+}
+
+function resolveBundleEnv(env: Record<string, string>): ReturnType<typeof spawnSync> {
+  const binDir = fakeAwsBinDir();
+  return spawnSync("bash", [PREPARE_SCRIPT], {
+    encoding: "utf8",
+    env: {
+      PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY: "1",
+      // Treat empty as unset (the script uses ${VAR:-...}); each test sets what it needs.
+      REGION: "",
+      AWS_REGION: "",
+      AWS_DEFAULT_REGION: "",
+      FAKE_AWS_ACCOUNT_ID: "111122223333",
+      ...env,
+    },
+  });
+}
+
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) {
+    rmSync(dir, { force: true, recursive: true });
+  }
+});
+
+describe("scripts/prepare-source-bundle.sh region resolution", () => {
+  it("should resolve region from AWS_REGION when no aws config profile exists", () => {
+    // Reproduces the CodeBuild Lite-deploy failure: AWS_REGION is injected by the
+    // build environment but `aws configure get region` has no config file.
+    const result = resolveBundleEnv({ AWS_REGION: "ap-northeast-1" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("REGION=ap-northeast-1");
+    expect(result.stdout).toContain("ACCOUNT_ID=111122223333");
+    expect(result.stdout).toContain(
+      "CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-111122223333-ap-northeast-1",
+    );
+  });
+
+  it("should fall back to AWS_DEFAULT_REGION when AWS_REGION is unset", () => {
+    const result = resolveBundleEnv({ AWS_DEFAULT_REGION: "us-east-1" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("REGION=us-east-1");
+  });
+
+  it("should prefer an explicit REGION override over the AWS env vars", () => {
+    const result = resolveBundleEnv({
+      REGION: "eu-west-1",
+      AWS_REGION: "ap-northeast-1",
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("REGION=eu-west-1");
+  });
+
+  it("should still honor the local aws configure profile when no env region is set", () => {
+    const result = resolveBundleEnv({ FAKE_AWS_CONFIGURE_REGION: "ap-southeast-2" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("REGION=ap-southeast-2");
+  });
+
+  it("should fail with a clear error when region cannot be resolved at all", () => {
+    const result = resolveBundleEnv({});
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain("REGION / ACCOUNT_ID を解決できません");
+  });
+});
+
+describe("scripts/prepare-source-bundle.sh bucket resolution (fresh-account #1749)", () => {
+  it("should compute an account-scoped bucket when the name is unset", () => {
+    const result = resolveBundleEnv({ AWS_REGION: "ap-northeast-1" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain(
+      "CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-111122223333-ap-northeast-1",
+    );
+  });
+
+  it("should override the non-unique synth placeholder with an account-scoped name", () => {
+    // The Makefile's synth-only `serverless-saas-placeholder` is globally non-unique,
+    // so a fresh account cannot create it; the deploy path must replace it.
+    const result = resolveBundleEnv({
+      AWS_REGION: "ap-northeast-1",
+      CDK_PARAM_S3_BUCKET_NAME: "serverless-saas-placeholder",
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain(
+      "CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-111122223333-ap-northeast-1",
+    );
+  });
+
+  it("should honor an explicit, non-placeholder bucket override", () => {
+    const result = resolveBundleEnv({
+      AWS_REGION: "ap-northeast-1",
+      CDK_PARAM_S3_BUCKET_NAME: "my-own-source-bucket",
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("CDK_PARAM_S3_BUCKET_NAME=my-own-source-bucket");
+  });
+});

@@ -42,13 +42,17 @@ Two problem styles share the same runtime:
 
 | Style | Use it for | Scoring model |
 | --- | --- | --- |
-| **Challenge** | Self-paced AWS tasks and certification-style labs | Flag / answer submission |
+| **Challenge** | Self-paced AWS tasks and service-specific labs | Flag / answer submission |
 | **Battle** | Real-time operations drills | Health probes, phased polling, attack detection, or other catalog-declared scoring |
 
 ## Quickstart
 
 Most organizers should start with **Lite mode**. It deploys one local tenant and one
 event runtime into your AWS account, skipping the full SBT control plane.
+
+> 📖 **Step-by-step walkthrough:** [`docs/deployment/README.md`](./docs/deployment/README.md)
+> covers both paths below in full detail — prerequisites, the pipeline's manual-approval
+> gate, signing in, re-running, and teardown. The summary below is the quick version.
 
 | Path | Best for | What runs |
 | --- | --- | --- |
@@ -188,18 +192,22 @@ Problems live in the separate catalog repo
 This platform repo mounts it as the `problems/` git submodule; `make deploy` ships the
 catalog version pinned by that submodule.
 
-The current pinned catalog contains **112 public problems**:
+The pinned catalog is a small, deliberately curated starter set — **6 problems plus
+one event bundle**. It is trimmed to high-quality, hand-reviewed scenarios rather than
+padded with low-value labs:
 
 | Category | Count | Notes |
 | --- | ---: | --- |
-| Challenge | 108 | AWS certification-style and service-specific tasks, all scored with catalog-declared flags / answers |
-| Battle | 4 | Real-time operations drills for uptime, migration, attack response, and production hardening |
-| Bundles | 1 | `starter-event`, a first-event bundle for new organizers |
+| Battle | 4 | Real-time operations drills: uptime, microservice migration, security defense, and platform operations |
+| Challenge | 2 | Self-paced AWS tasks scored with catalog-declared flags / answers (1 ready, 1 draft) |
+| Bundles | 1 | `starter-event`, a 60–90 minute first-event bundle (1 Challenge + 2 Battles) |
+
+`problems/CATALOG.md` in the catalog submodule is the always-current source of truth;
+the counts above track the submodule pin recorded in this repo.
 
 Useful catalog entry points:
 
 - [`problems/CATALOG.md`](./problems/CATALOG.md) — source of truth for the full catalog.
-- [`problems/CERTIFICATION-INDEX.md`](./problems/CERTIFICATION-INDEX.md) — maps labs to AWS certification domains.
 - [`docs/gallery.md`](./docs/gallery.md) — platform-side gallery and walkthrough notes.
 - [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — 30-minute authoring guide.
 
@@ -229,13 +237,14 @@ catalog PR merges.
 
 ## Architecture
 
-TenkaCloud has three planes:
+TenkaCloud has four planes that talk through an EventBridge bus:
 
 | Plane | What it owns |
 | --- | --- |
 | **Control Plane** | SaaS tenant onboarding, pooled / silo tenant routing, and SBT integration |
-| **Application Plane** | Tenant Admin Console, Participant Portal, Cognito, runtime config, and per-tenant app data |
+| **Application Plane** | Tenant Admin Console, Cognito, runtime config, and per-tenant app data |
 | **Problem Deploy Backend** | Cross-account problem deploy jobs, state machines, worker Lambdas, audit, and EventBridge reconciliation |
+| **Participant Portal** | Per-team UI: problem endpoints, hints, submissions, scores, and AWS Console federation |
 
 ![TenkaCloud Lite demo flow](./docs/assets/tenkacloud-lite-demo.svg)
 

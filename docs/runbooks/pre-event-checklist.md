@@ -20,7 +20,7 @@ The checklist is split into three sessions because some items (budget alarm prov
 - [ ] AWS account chosen for the event has at least one IAM admin user available to the operator on call.
 - [ ] `infrastructure/environments/<env>/.env` exists and `make env-check-lite` (Lite mode) or `make env-check` (SaaS mode) returns no error.
 - [ ] Billing alarm is configured for the event AWS account with a threshold appropriate for the planned problem catalog (a single Lite-mode event typically stays under the AWS Free Tier 25 RCU/WCU window enforced by the `DynamoDbLowCapacity` aspect, but per-team CFn stacks add cost).
-- [ ] Source bundle bucket exists (run `make prepare-source-bundle` once if not).
+- [ ] Source bundle bucket exists (`make deploy` creates it automatically; to pre-create it, run `bash scripts/prepare-source-bundle.sh`).
 
 ### Deploy mode decision
 
