@@ -27,6 +27,37 @@ resolve_aws_region() {
   echo "${region}"
 }
 
+# A stack left in a create-never-succeeded state (e.g. ROLLBACK_COMPLETE after a
+# CREATE_FAILED) cannot be updated by `aws cloudformation deploy`; a retry would
+# die before issuing any new CFn operation (= the "deploy accepted but
+# CloudFormation never gets a request" symptom on 失敗分を再実行). Delete such a
+# stack first so the retry re-creates it cleanly. Only states where the create
+# never produced usable resources are auto-deleted; a healthy CREATE_COMPLETE /
+# UPDATE_COMPLETE stack falls through to a normal update, and an absent stack is a
+# plain create.
+delete_unrecoverable_stack_if_present() {
+  local stack_name="$1"
+  local region="$2"
+  local status
+  status="$(aws cloudformation describe-stacks \
+    --region "${region}" \
+    --stack-name "${stack_name}" \
+    --query 'Stacks[0].StackStatus' \
+    --output text 2>/dev/null || true)"
+  case "${status}" in
+    ROLLBACK_COMPLETE | ROLLBACK_FAILED | CREATE_FAILED | DELETE_FAILED | REVIEW_IN_PROGRESS)
+      echo "[cfn] stack ${stack_name} is in ${status} (un-updatable); deleting before redeploy..." >&2
+      trace_log "deploy.cfn.delete_unrecoverable.start" stackName "${stack_name}" status "${status}"
+      aws cloudformation delete-stack --region "${region}" --stack-name "${stack_name}"
+      aws cloudformation wait stack-delete-complete --region "${region}" --stack-name "${stack_name}"
+      trace_log "deploy.cfn.delete_unrecoverable.done" stackName "${stack_name}" status "${status}"
+      ;;
+    *)
+      : # absent (empty status) or an updatable state: nothing to clean up.
+      ;;
+  esac
+}
+
 json_escape() {
   local value="$1"
   value="${value//\\/\\\\}"
