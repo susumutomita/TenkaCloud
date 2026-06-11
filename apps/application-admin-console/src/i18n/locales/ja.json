@@ -719,5 +719,22 @@
     "after_minutes_error": "1〜1440 の整数を入力してください。",
     "fired_flash": "「{name}」 を {count} チームに発火しました。",
     "scheduled_flash": "「{name}」 を {minutes} 分後に発火するよう予約しました。"
+  },
+  "setup_guide": {
+    "header": "初回セットアップガイド",
+    "description": "イベント開催までの 4 ステップ。完了状況はテナント内の既存データから自動判定され、すべて完了するとこのガイドは表示されなくなります。",
+    "dismiss": "非表示にする",
+    "progress_label": "セットアップ進捗",
+    "progress_info": "{completed} / {total} ステップ完了",
+    "status_complete": "完了",
+    "status_incomplete": "未完了",
+    "step_create_event_title": "イベント作成",
+    "step_create_event_link": "新規 Event を作成する",
+    "step_select_problems_title": "問題選択",
+    "step_select_problems_link": "問題カタログから問題を選ぶ",
+    "step_register_teams_title": "チーム登録",
+    "step_register_teams_link": "Event 作成ウィザードでチームを登録する",
+    "step_deploy_title": "デプロイ",
+    "step_deploy_link": "Event 詳細からデプロイを実行する"
   }
 }
