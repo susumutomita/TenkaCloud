@@ -169,12 +169,12 @@
       "offerings.a.role": "Hosted Event",
       "offerings.a.h": "単発イベントを、 丸ごと運営代行。",
       "offerings.a.p":
-        "1〜3 日のクラウド演習を、 公開 OSS 問題カタログから選定して 弊社が end-to-end で運営。 設計 / お客様 AWS への deploy / 事前 dry-run / 当日の live 進行 / 事後レポート。 <strong>1 回 fixed price</strong>。",
+        "1 日のクラウド演習を、 公開 OSS 問題カタログから選定して 弊社が end-to-end で運営。 設計 / お客様 AWS への deploy / 事前 dry-run / 当日の live 進行 / 事後レポート。 <strong>1 回 fixed price</strong>。",
       "offerings.a.more": "スコープと成果物を見る",
       "offerings.b.role": "Annual Arena",
-      "offerings.b.h": "年間プログラム + KPI ダッシュボード。",
+      "offerings.b.h": "年間プログラム。",
       "offerings.b.p":
-        "1 組織で <strong>年 4 回</strong> の運営代行イベントを年間契約で。 公開問題カタログから 入門 → 中級 → 上級 の learning path 設計と、 HR / L&amp;D 向け KPI ダッシュボードで定着を可視化。 ※ オリジナル問題の制作は本パックには含みません。",
+        "1 組織で <strong>年 4 回</strong> の運営代行イベントを年間契約で。 公開問題カタログから 入門 → 中級 → 上級 の learning path を設計。 ※ オリジナル問題の制作は本パックには含みません。",
       "offerings.b.more": "スコープと成果物を見る",
       "offerings.d.role": "CCoE Enablement (add-on)",
       "offerings.d.h": "アドバイザリ、 別契約。",
@@ -441,12 +441,12 @@
       "offerings.a.role": "Hosted Event",
       "offerings.a.h": "One operated drill, end to end.",
       "offerings.a.p":
-        "A 1-3 day cloud drill on the public OSS catalog, run by us. Event design, deploy into your AWS account, dry run, live facilitation, post-event report. <strong>Per-event fixed price</strong>.",
+        "A 1-day cloud drill on the public OSS catalog, run by us. Event design, deploy into your AWS account, dry run, live facilitation, post-event report. <strong>Per-event fixed price</strong>.",
       "offerings.a.more": "Scope &amp; deliverables",
       "offerings.b.role": "Annual Arena",
-      "offerings.b.h": "A 12-month program with KPIs.",
+      "offerings.b.h": "A 12-month program.",
       "offerings.b.p":
-        "An annual contract of <strong>4 operated events</strong> per year for one org: learning paths curated from the public problem catalog (beginner → advanced) and a KPI dashboard for HR / L&amp;D. Original problem development is not included in this package.",
+        "An annual contract of <strong>4 operated events</strong> per year for one org: learning paths curated from the public problem catalog (beginner → advanced). Original problem development is not included in this package.",
       "offerings.b.more": "Scope &amp; deliverables",
       "offerings.d.role": "CCoE Enablement (add-on)",
       "offerings.d.h": "Advisory, sold separately.",
