@@ -8,8 +8,8 @@
 
 ただし、参照画像をそのまま背景として貼るのではなく、以下のハイブリッド方針で実装する。
 
-- 背景・筆文字・金色装飾・エンブレムなど、HTML/CSSで再現しにくい要素は画像素材として扱う
-- 見出し・本文・カード・スコアボード・アニメーションなど、修正可能性が重要な要素はHTML/CSS/JSで実装する
+- 背景・筆文字・金色装飾・エンブレムなど、HTML/CSS で再現しにくい要素は画像素材として扱う
+- 見出し・本文・カード・スコアボード・アニメーションなど、修正可能性が重要な要素は HTML/CSS/JS で実装する
 - slide 04 の既存アニメーションは維持し、新デザインに載せ替える
 - 実装後は必ずブラウザで表示確認し、参照画像との再現性とスライドデザイン品質の両方を満たすまで修正する
 
@@ -98,7 +98,7 @@ landing/pitch/
       └─ kisenon.png
 ```
 
-最初から全素材を用意しきる必要はない。まずは `references` とCSS/HTMLだけで近づけ、必要に応じて `bg` / `brush` / `ornaments` / `emblems` を追加する。
+最初から全素材を用意しきる必要はない。まずは `references` と CSS/HTML だけで近づけ、ブラウザ確認で背景・筆文字・装飾・エンブレムの再現不足が残る場合に `bg` / `brush` / `ornaments` / `emblems` を追加する。
 
 ---
 
@@ -106,7 +106,7 @@ landing/pitch/
 
 ### 1. 参照画像を“答え”として扱う
 
-各スライドのHTML実装は、対応する参照画像を目標とする。
+各スライドの HTML 実装は、対応する参照画像を目標とする。
 
 | スライド | 参照画像 |
 |---|---|
@@ -122,16 +122,16 @@ landing/pitch/
 
 ### 2. 共通背景を用意してブレを抑える
 
-参照画像では、右上の夜の城・「天下一」垂れ幕背景がスライドごとに微妙に異なる。HTML版では共通背景素材として統一する。
+参照画像では、右上の夜の城・「天下一」垂れ幕背景がスライドごとに微妙に異なる。HTML 版では共通背景素材として統一する。
 
-推奨:
+推奨構成。
 
 - `assets/bg/tenka-arena-right.webp`
-  - slide 02〜08向け。右上に城、左側に本文。
+  - slide 02〜08 向け。右上に城、左側に本文。
 - `assets/bg/tenka-arena-wide.webp`
-  - slide 01向け。背景を広く使う。
+  - slide 01 向け。背景を広く使う。
 - `assets/bg/tenka-arena-center.webp`
-  - slide 09向け。中央に城。
+  - slide 09 向け。中央に城。
 
 背景は `body` ではなく各 `.canvas` または `.slide-shell` に適用する。
 
@@ -157,9 +157,9 @@ landing/pitch/
 - カード本文
 - スコアボード
 - チーム名
-- CTA文
+- CTA 文
 
-理由:
+理由。
 
 - 文言修正しやすい
 - 差分管理しやすい
@@ -184,7 +184,7 @@ landing/pitch/
 - バトルエンブレム
 - チームアバター
 
-ただし、画像を使う場合もHTML上に意味が残るように `alt` または隠しテキストを入れる。
+ただし、画像を使う場合も HTML 上に意味が残るように `alt` または隠しテキストを入れる。
 
 ```html
 <h1 class="hero-title">
@@ -265,30 +265,30 @@ landing/pitch/
 
 参照: `slide-01-tenkacloud-hero.png`
 
-目的: TenkaCloudの世界観を最も強く見せる。
+目的: TenkaCloud の世界観を最も強く見せる。
 
-構成:
+構成。
 
 - 左上: `01 TenkaCloud とは`
 - 左: `TenkaCloud` 大タイトル
 - 左: `OSS・本物のクラウドで開く競技プラットフォーム`
 - 左中央: `クラウドエンジニアの` + 筆文字 `天下一武道会`
 - 左下: AWS / 対応予定クラウド
-- 右: `HOW A MATCH RUNS` 3ステップカード
-- 下: StackStack導入コールアウト
+- 右: `HOW A MATCH RUNS` 3 ステップカード
+- 下: StackStack 導入コールアウト
 
 ### slide 02
 
 参照: `slide-02-stackstack-problem.png`
 
-目的: StackStackの問題設定を強く見せる。
+目的: StackStack の問題設定を強く見せる。
 
-構成:
+構成。
 
 - 左: `AI が作った 1 つのアプリ。ローカルでは動く。`
 - 金筆文字: `でも、公開できない。`
 - 右: `problem: StackStack / 90 min`
-- 中央下: 5つの改善カード
+- 中央下: 5 つの改善カード
   - auth
   - network
   - rate
@@ -302,10 +302,10 @@ landing/pitch/
 
 目的: ゲームデザインの流れを視覚化する。
 
-構成:
+構成。
 
 - 大見出し: `クラウドに上げて、穴を塞ぎ、襲ってくる事故を捌く。`
-- 4ステップカード
+- 4 ステップカード
   - クラウドで起動
   - 穴を塞ぐ
   - インシデント対応
@@ -318,9 +318,9 @@ landing/pitch/
 
 目的: 競技の進み方とライブ感を表現する。
 
-重要: 既存JSのアニメーションを維持する。
+重要: 既存 JS のアニメーションを維持する。
 
-維持する挙動:
+維持する挙動。
 
 - deploy → inject → score → rank の active 切替
 - スコア更新
@@ -328,9 +328,9 @@ landing/pitch/
 - インシデント発生/復旧表示
 - カウントダウン
 
-新デザインで追加/調整すること:
+新デザインで追加/調整すること。
 
-- 上部4ステップをネオンカード化
+- 上部 4 ステップをネオンカード化
 - スコア表示を中央で大きく見せる
 - チームステータスを左、順位表を右に配置
 - 更新時に該当行が光る
@@ -340,18 +340,18 @@ landing/pitch/
 
 参照: `slide-05-platformization.png`
 
-目的: StackStackが第一試合であり、TenkaCloudは競技プラットフォームであることを示す。
+目的: StackStack が第一試合であり、TenkaCloud は競技プラットフォームであることを示す。
 
-構成:
+構成。
 
 - 大見出し: `TenkaCloud`
 - 筆文字: `プラットフォーム。`
-- 説明: StackStackは第一試合、問題はOSSで増やせる
-- 3つのBATTLEカード
+- 説明: StackStack は第一試合、問題は OSS で増やせる
+- 3 つの BATTLE カード
   - StackStack
   - Security Battle Royale
   - Microservice Migration
-- 下: AWS対応 / OSS
+- 下: AWS 対応 / OSS
 
 ### slide 06
 
@@ -359,10 +359,10 @@ landing/pitch/
 
 目的: 用途の広がりを示す。
 
-構成:
+構成。
 
 - 大見出し: `祭りだけじゃない。研修にも、採用にも。`
-- 3カラム
+- 3 カラム
   - COMMUNITY
   - EDUCATION
   - ASSESSMENT
@@ -374,10 +374,12 @@ landing/pitch/
 
 目的: 熱量あるチームであることを示す。
 
-構成:
+構成。
 
+<!-- textlint-disable ja-technical-writing/no-mix-dearu-desumasu -->
 - 大見出し: `クラウド競技が大好きなメンバーが作っています。`
-- 3プロフィールカード
+<!-- textlint-enable ja-technical-writing/no-mix-dearu-desumasu -->
+- 3 プロフィールカード
   - amedama
   - チャーリー
   - きせのん
@@ -389,11 +391,13 @@ landing/pitch/
 
 目的: 一緒に作る仲間と壁打ち相手を募集する。
 
-構成:
+構成。
 
+<!-- textlint-disable ja-technical-writing/no-mix-dearu-desumasu -->
 - 大見出し: `一緒に作る仲間と、壁打ち相手を探しています。`
+<!-- textlint-enable ja-technical-writing/no-mix-dearu-desumasu -->
 - 説明: クレイジーキルト
-- 3カード
+- 3 カード
   - 共同開発
   - クラウド推進
   - 壁打ち
@@ -405,15 +409,15 @@ landing/pitch/
 
 目的: 印象的に締める。
 
-構成:
+構成。
 
 - 大きな筆文字または通常文字: `ありがとうございました。` または `Thank you.`
 - 説明: `触ってみてください。問題も、コードも、すべて OSS。`
-- 3 CTAカード
+- 3 CTA カード
   - Repository
   - 問題 (Problems)
   - Landing
-- 必要ならQRコードを残す
+- 必要なら QR コードを残す
 
 ---
 
@@ -423,14 +427,14 @@ landing/pitch/
 
 `image_gen` の透明背景は、透明チェッカー柄を画像内に描いてしまうことがあるため信用しすぎない。
 
-推奨手順:
+推奨手順。
 
 1. 背景色を単色のグリーン `#00ff00` または白 `#ffffff` で生成
-2. Pythonで背景色をアルファ化する
+2. Python で背景色をアルファ化する
 3. 境界を少しフェザーする
-4. PNGとして保存
+4. PNG として保存
 
-推奨スクリプト名:
+推奨スクリプト名。
 
 ```text
 landing/pitch/scripts/remove_bg.py
@@ -438,19 +442,19 @@ landing/pitch/scripts/remove_bg.py
 
 ### 画像生成プロンプトの注意
 
-背景素材:
+背景素材。
 
 ```text
 No text, no logos, no labels, except the vertical banner may contain 「天下一」.
 ```
 
-アイコン素材:
+アイコン素材。
 
 ```text
 Single centered icon, no text, no shadow, solid #00ff00 background for chroma key.
 ```
 
-筆文字素材:
+筆文字素材。
 
 ```text
 Japanese gold brush calligraphy, exact text only, solid #00ff00 background, no extra letters, no decorative UI.
@@ -462,7 +466,7 @@ Japanese gold brush calligraphy, exact text only, solid #00ff00 background, no e
 
 実装時は必ずブラウザで確認すること。
 
-想定コマンド例:
+想定コマンド例。
 
 ```bash
 python3 -m http.server 8000
@@ -470,7 +474,7 @@ python3 -m http.server 8000
 
 またはリポジトリの既存手順があればそれに従う。
 
-確認対象URL例:
+確認対象 URL 例。
 
 ```text
 http://localhost:8000/landing/pitch/
@@ -494,7 +498,7 @@ http://localhost:8000/landing/pitch/
 
 ### B. スライドデザイン品質チェック
 
-- 16:9画面内にすべて収まっているか
+- 16:9 画面内にすべて収まっているか
 - 文字がカードや枠からはみ出していないか
 - 行間が詰まりすぎていないか
 - 無駄な余白が多すぎないか
@@ -508,7 +512,7 @@ http://localhost:8000/landing/pitch/
 
 ### C. 完成扱いしてはいけない状態
 
-以下が1つでもある場合は完成扱いしない。
+以下が 1 つでもある場合は完成扱いしない。
 
 - テキストが枠からはみ出している
 - スライド下部が切れている
@@ -516,9 +520,9 @@ http://localhost:8000/landing/pitch/
 - 大見出しが小さく、迫力がない
 - 背景だけ派手で、本文が読みづらい
 - 余白が不自然に大きい
-- 3カラム/4カラムの高さが揃っていない
+- 3 カラム/4 カラムの高さが揃っていない
 - slide 04 のアニメーションが消えている
-- スマホ用CSSが原因でPC表示の16:9が崩れている
+- スマホ用 CSS が原因で PC 表示の 16:9 が崩れている
 - 「できた」と言っているが、ブラウザで確認していない
 
 ---
@@ -528,8 +532,8 @@ http://localhost:8000/landing/pitch/
 ### Step 1: ファイル整理
 
 - 現行 `index.html` の内容とスライド構成を維持する
-- CSSを `styles/pitch-theme.css` に分離する
-- JSを `scripts/pitch.js` に分離する
+- CSS を `styles/pitch-theme.css` に分離する
+- JS を `scripts/pitch.js` に分離する
 - 表示が壊れていないことを確認する
 
 ### Step 2: 共通デザインシステム作成
@@ -541,8 +545,7 @@ http://localhost:8000/landing/pitch/
 - `.tc-section-label`
 - `.tc-brush`
 - `.tc-grid-*`
-- `.tc-scoreboard`
-を作る
+- `.tc-scoreboard` を作る。
 
 ### Step 3: slide 01 再現
 
@@ -552,29 +555,29 @@ http://localhost:8000/landing/pitch/
 
 ### Step 4: slide 02〜03 再現
 
-- slide 02 の5改善カードを実装
-- slide 03 の4ステップカードを実装
-- 文字はHTMLで保持
+- slide 02 の 5 改善カードを実装
+- slide 03 の 4 ステップカードを実装
+- 文字は HTML で保持
 
 ### Step 5: slide 04 再現
 
-- JSアニメーションは維持
-- UIを参照画像に近づける
+- JS アニメーションは維持
+- UI を参照画像に近づける
 - ブラウザで実際に動かして確認する
 
 ### Step 6: slide 05〜09 再現
 
 - 共通コンポーネントを使って順に作る
-- QRコードやリンクカードは必要に応じて調整
+- QR コードやリンクカードは、参照画像との比較でサイズ・余白・情報量の差分が残る場合に調整
 
 ### Step 7: 最終調整
 
-- 16:9で全スライド確認
+- 16:9 で全スライド確認
 - 文字はみ出し確認
 - 余白確認
 - コントラスト確認
 - slide 04 アニメーション確認
-- GitHub Pages相対パス確認
+- GitHub Pages 相対パス確認
 
 ---
 
@@ -582,11 +585,11 @@ http://localhost:8000/landing/pitch/
 
 以下を満たして初めて完了とする。
 
-1. `landing/pitch/index.html` をブラウザで開き、9枚すべて確認済み
+1. `landing/pitch/index.html` をブラウザで開き、9 枚すべて確認済み
 2. 各スライドが対応する参照画像に十分近い
 3. スライドデザインとして破綻していない
 4. 文字がはみ出していない
-5. 16:9で全要素が収まっている
+5. 16:9 で全要素が収まっている
 6. slide 04 の既存アニメーションが維持されている
-7. コードがGitHub Pagesで動く相対パスになっている
-8. 参照画像・素材・CSS・JSが整理されたディレクトリに保存されている
+7. コードが GitHub Pages で動く相対パスになっている
+8. 参照画像・素材・CSS・JS が整理されたディレクトリに保存されている
