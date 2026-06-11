@@ -4,7 +4,6 @@
       "nav.product": "プロダクト",
       "nav.problems": "問題",
       "nav.extend": "問題を作る",
-      "nav.community": "コミュニティ",
       "nav.docs": "ドキュメント",
       "nav.offerings": "商用プラン",
       "nav.pricing": "料金",
@@ -163,20 +162,6 @@
       "extend.cta1": "問題カタログを見る",
       "extend.cta2": "new-problem skill",
 
-      "community.eyebrow": "コミュニティに参加",
-      "community.h2": "2 つの役割から、ひとつ選んで始める。",
-      "community.lead":
-        "TenkaCloud の堀は、 deploy ランタイムだけでなく <strong>コミュニティ問題カタログ</strong>。 メンテナに個別 onboard してもらわなくても、 役割を 1 つ選んで 30 分の初回 task を済ませれば、 公式コントリビュータになれます。",
-      "community.tester.role": "Tester",
-      "community.tester.h": "問題を遊んで、 papercut を報告する。",
-      "community.tester.p":
-        "30 分の playtest プロトコルに沿って 1 問解き、 構造化テンプレで feedback を出す。 CDK / TypeScript は不要。",
-      "community.tester.cta": "Playtest checklist",
-      "community.author.role": "Problem Author",
-      "community.author.h": "新しい問題を作る。",
-      "community.author.p":
-        "metadata.json + template.yaml の 2 ファイルで 1 問。 Claude Code の <code>/new-problem</code> skill で 30 分 onboarding。",
-      "community.author.cta": "Authoring guide",
       "offerings.eyebrow": "商用プラン",
       "offerings.h2": "プロダクト化された 3 つの提供形態。",
       "offerings.lead":
@@ -292,7 +277,6 @@
       "nav.product": "Product",
       "nav.problems": "Problems",
       "nav.extend": "Author problems",
-      "nav.community": "Community",
       "nav.docs": "Docs",
       "nav.offerings": "Commercial",
       "nav.pricing": "Pricing",
@@ -450,20 +434,6 @@
       "extend.cta1": "Browse the catalog",
       "extend.cta2": "new-problem skill",
 
-      "community.eyebrow": "Join the community",
-      "community.h2": "Pick one of two roles. Ship one starter task.",
-      "community.lead":
-        "TenkaCloud's moat is the <strong>community problem catalog</strong>, not only the deploy runtime. You do not need to be personally onboarded by the maintainer — choose a role, follow its 30-minute first task, and you are a recognized contributor.",
-      "community.tester.role": "Tester",
-      "community.tester.h": "Play the problems. File the papercuts.",
-      "community.tester.p":
-        "Follow a 30-minute playtest protocol on one problem, then file a structured feedback issue. No CDK / TypeScript needed.",
-      "community.tester.cta": "Playtest checklist",
-      "community.author.role": "Problem Author",
-      "community.author.h": "Ship a new problem.",
-      "community.author.p":
-        "Two files (metadata.json + template.yaml) and you have a problem. The <code>/new-problem</code> Claude Code skill onboards you in 30 minutes.",
-      "community.author.cta": "Authoring guide",
       "offerings.eyebrow": "Commercial offerings",
       "offerings.h2": "Three productized offerings — formally documented.",
       "offerings.lead":
