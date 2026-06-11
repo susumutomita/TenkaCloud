@@ -3,6 +3,7 @@ import {
   type CliIO,
   LITE_STACK_NAMES,
   main,
+  parseResolvedBucketName,
   type SpawnCaptureResult,
 } from "../../../scripts/tenkacloud-lite";
 
@@ -141,6 +142,66 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(deployCall.args).toContain(LITE_STACK_NAMES.problemDeploy);
     expect(deployCall.args).toContain("--require-approval");
     expect(deployCall.args).toContain("never");
+  });
+
+  // Issue #1789: source bucket 取り違え修正。 cmdUp は prepare-source-bundle.sh の
+  // RESOLVE_ONLY 出力から account-scoped bucket を解決し、 bundle upload + cdk deploy より
+  // 前に CDK_PARAM_S3_BUCKET_NAME へ固定して upload 先 / read 先を一致させる。
+  it("up should pin CDK_PARAM_S3_BUCKET_NAME from RESOLVE_ONLY before cdk deploy (#1789)", async () => {
+    const bucket = "tenkacloud-source-111122223333-ap-northeast-1";
+    const prevBucket = process.env.CDK_PARAM_S3_BUCKET_NAME;
+    const prevToggle = process.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY;
+    delete process.env.CDK_PARAM_S3_BUCKET_NAME;
+    delete process.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY;
+
+    let toggleDuringResolve: string | undefined;
+    const { io } = buildIO({
+      inheritExitCode: 0,
+      capture: (cmd, args) => {
+        if (cmd === "bash" && args.includes("scripts/prepare-source-bundle.sh")) {
+          // RESOLVE_ONLY toggle はこの capture 実行中だけ立っているはず。
+          toggleDuringResolve = process.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY;
+          return {
+            code: 0,
+            stdout:
+              `REGION=ap-northeast-1\nACCOUNT_ID=111122223333\n` +
+              `CDK_PARAM_S3_BUCKET_NAME=${bucket}\nCDK_SOURCE_NAME=source.zip\n`,
+            stderr: "",
+          };
+        }
+        return { code: 0, stdout: "https://example.cloudfront.net", stderr: "" };
+      },
+    });
+
+    try {
+      const code = await main(["up"], io);
+      expect(code).toBe(0);
+      expect(toggleDuringResolve).toBe("1");
+      // 本番 prepare + cdk deploy が読む env が account-scoped bucket に固定される。
+      expect(process.env.CDK_PARAM_S3_BUCKET_NAME).toBe(bucket);
+      // RESOLVE_ONLY toggle は後始末されて漏れない。
+      expect(process.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY).toBeUndefined();
+    } finally {
+      if (prevBucket === undefined) delete process.env.CDK_PARAM_S3_BUCKET_NAME;
+      else process.env.CDK_PARAM_S3_BUCKET_NAME = prevBucket;
+      if (prevToggle === undefined) delete process.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY;
+      else process.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY = prevToggle;
+    }
+  });
+
+  describe("parseResolvedBucketName (#1789)", () => {
+    it("extracts CDK_PARAM_S3_BUCKET_NAME from RESOLVE_ONLY output", () => {
+      const out =
+        "REGION=ap-northeast-1\nACCOUNT_ID=111122223333\n" +
+        "CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-111122223333-ap-northeast-1\nCDK_SOURCE_NAME=source.zip\n";
+      expect(parseResolvedBucketName(out)).toBe("tenkacloud-source-111122223333-ap-northeast-1");
+    });
+
+    it("returns undefined when the key is absent or empty", () => {
+      expect(parseResolvedBucketName("REGION=ap-northeast-1\nACCOUNT_ID=1\n")).toBeUndefined();
+      expect(parseResolvedBucketName("CDK_PARAM_S3_BUCKET_NAME=\n")).toBeUndefined();
+      expect(parseResolvedBucketName("")).toBeUndefined();
+    });
   });
 
   it("up should early-return without calling cdk deploy when prepare-source-bundle.sh exits non-zero", async () => {
