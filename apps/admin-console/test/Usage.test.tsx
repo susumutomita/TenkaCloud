@@ -215,6 +215,20 @@ describe("UsagePage loud-fail", () => {
     expect(within(err).getByText("insight down")).toBeInTheDocument();
   });
 
+  it("should retry the insight fetch from the insight error state", async () => {
+    h.mockFetchInsight.mockRejectedValueOnce(new Error("insight down"));
+    render(<UsagePage config={cfg()} />);
+    await screen.findByText("Alpha Org");
+    const err = await screen.findByTestId("error");
+    const callsBeforeRetry = h.mockFetchInsight.mock.calls.length;
+    fireEvent.click(within(err).getByText("usage.retry"));
+    // retry が insight fetch を再実行し、 成功後はエラー表示が消える。
+    await waitFor(() =>
+      expect(h.mockFetchInsight.mock.calls.length).toBeGreaterThan(callsBeforeRetry),
+    );
+    await waitFor(() => expect(screen.queryByTestId("error")).not.toBeInTheDocument());
+  });
+
   it("should show an explicit unavailable notice when the insight API returns null (403 / not wired)", async () => {
     h.mockFetchInsight.mockResolvedValue(null);
     render(<UsagePage config={cfg()} />);

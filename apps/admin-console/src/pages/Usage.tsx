@@ -212,7 +212,10 @@ export function UsagePage({ config }: { config: AppConfig }) {
         sortingDescending={sort.descending}
         onSortingChange={({ detail }) =>
           setSort({
+            // sortingField 付き列しか sortable にしていないので ?? の右辺は型ガード (不到達)。
+            /* v8 ignore next */
             field: (detail.sortingColumn.sortingField ?? "tenantName") as UsageSortField,
+            /* v8 ignore next */
             descending: detail.isDescending ?? false,
           })
         }
