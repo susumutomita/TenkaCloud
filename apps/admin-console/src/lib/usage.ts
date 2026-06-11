@@ -1,0 +1,138 @@
+import type { TenantInsightSummary } from "../api/insight";
+import type { Tenant } from "../api/tenants";
+
+/**
+ * Issue #1767: Usage dashboard の集計ロジック。既存 API (Control Plane の tenant 一覧 +
+ * AdminInsight の per-tenant deploy 集計) のみから導出する pure function 群で、 UI
+ * (pages/Usage.tsx) から独立して unit test できるようにする。
+ *
+ * `insight` 引数の規約 (= TenantList の insightByTenantId と同じ):
+ *   - `Record<tenantId, TenantInsightSummary>` = 取得済み。 map に居ない tenant は 0 件扱い
+ *   - `null` = 未取得 (API 未配線 / 403 / fetch 失敗)。 deploy 系の値は null (= UI は "—" 表示)
+ */
+
+/** 集計カード 4 枚分の値。 deploy 合計は insight 未取得時 null。 */
+export interface UsageTotals {
+  readonly totalTenants: number;
+  readonly activeTenants: number;
+  readonly totalActiveDeploys: number | null;
+  readonly totalFailedDeploys: number | null;
+}
+
+/** tier 1 つ分の分布。 percentage は全 tenant に対する整数 % (四捨五入)。 */
+export interface TierCount {
+  readonly tier: string;
+  readonly count: number;
+  readonly percentage: number;
+}
+
+/** per-tenant table の 1 行。 deploy 数は insight 未取得時 null (= "—" 表示)。 */
+export interface UsageRow {
+  readonly tenantId: string;
+  readonly tenantName: string;
+  readonly tier: string;
+  readonly tenantStatus: string;
+  readonly activeDeploys: number | null;
+  readonly failedDeploys: number | null;
+}
+
+/** table の sort 対象 field (UsageRow の column keys)。 */
+export type UsageSortField =
+  | "tenantName"
+  | "tier"
+  | "tenantStatus"
+  | "activeDeploys"
+  | "failedDeploys";
+
+/**
+ * deprovision 済み tenant の判定 (TenantList page の表示規約と同一):
+ *   - tenantStatus が "Deleted" / "Deprovisioned" (case-insensitive)
+ *   - または isActive === false (SBT v0.3.9 の DELETE /tenants は isActive=false にする)
+ */
+export function isDeprovisionedTenant(t: Pick<Tenant, "tenantStatus" | "isActive">): boolean {
+  const status = (t.tenantStatus ?? "").toLowerCase();
+  if (status === "deleted" || status === "deprovisioned") return true;
+  return t.isActive === false;
+}
+
+/** 集計カード: 全 tenant 数 / active tenant 数 / active・failed deploy 合計。 */
+export function computeUsageTotals(
+  tenants: readonly Tenant[],
+  insight: Readonly<Record<string, TenantInsightSummary>> | null,
+): UsageTotals {
+  const activeTenants = tenants.filter((t) => !isDeprovisionedTenant(t)).length;
+  if (insight === null && tenants.length > 0) {
+    return {
+      totalTenants: tenants.length,
+      activeTenants,
+      totalActiveDeploys: null,
+      totalFailedDeploys: null,
+    };
+  }
+  let totalActiveDeploys = 0;
+  let totalFailedDeploys = 0;
+  for (const tenant of tenants) {
+    const summary = insight?.[tenant.tenantId];
+    totalActiveDeploys += summary?.activeDeploys ?? 0;
+    totalFailedDeploys += summary?.failedDeploys ?? 0;
+  }
+  return { totalTenants: tenants.length, activeTenants, totalActiveDeploys, totalFailedDeploys };
+}
+
+/**
+ * tier 分布。 tier 文字列は経路によって case が揺れる ("PLATINUM" / "platinum") ので
+ * 小文字へ正規化して group し、 未設定は "unknown" に寄せる。 count 降順 → tier 名昇順。
+ */
+export function computeTierDistribution(tenants: readonly Tenant[]): readonly TierCount[] {
+  const counts = new Map<string, number>();
+  for (const tenant of tenants) {
+    const tier = (tenant.tier ?? "").toLowerCase() || "unknown";
+    counts.set(tier, (counts.get(tier) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([tier, count]) => ({
+      tier,
+      count,
+      percentage: Math.round((count / tenants.length) * 100),
+    }))
+    .sort((a, b) => b.count - a.count || a.tier.localeCompare(b.tier));
+}
+
+/** tenant 一覧と insight 集計を tenantId で join して table 行を作る。 */
+export function buildUsageRows(
+  tenants: readonly Tenant[],
+  insight: Readonly<Record<string, TenantInsightSummary>> | null,
+): readonly UsageRow[] {
+  return tenants.map((tenant) => {
+    const summary = insight?.[tenant.tenantId];
+    return {
+      tenantId: tenant.tenantId,
+      tenantName: tenant.tenantName,
+      tier: tenant.tier,
+      tenantStatus: tenant.tenantStatus,
+      activeDeploys: insight === null ? null : (summary?.activeDeploys ?? 0),
+      failedDeploys: insight === null ? null : (summary?.failedDeploys ?? 0),
+    };
+  });
+}
+
+/**
+ * table の sort。 数値 field は null (= insight 未取得) を 0 として扱い、 文字列 field は
+ * localeCompare。 入力配列は破壊しない (= React state をそのまま渡せる)。
+ */
+export function sortUsageRows(
+  rows: readonly UsageRow[],
+  field: UsageSortField,
+  descending: boolean,
+): readonly UsageRow[] {
+  const direction = descending ? -1 : 1;
+  return [...rows].sort((a, b) => {
+    const left = a[field];
+    const right = b[field];
+    const cmp =
+      typeof left === "string" && typeof right === "string"
+        ? left.localeCompare(right)
+        : Number(left ?? 0) - Number(right ?? 0);
+    return cmp * direction;
+  });
+}
