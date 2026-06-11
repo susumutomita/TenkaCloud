@@ -14,7 +14,7 @@
    1. tokens     — 色 / 書体 / 線 / 角丸
    2. primitives — .brush-gold / .display / .kicker / .num-dot / .glyph
    3. components — .panel / .gold-band / .sec-no / .wordmark / .qr-item /
-                   .arena-bg (楼門 + 垂れ幕 + 稲妻 + 観客席の SVG 背景) / .avatar
+                   .ink-bg (墨流し canvas 背景 — 藍と金の流体シミュレーション) / .avatar
    4. deck       — スライド機構 (scroll-snap + 1280x720 ステージ + fit スケール)
    5. slides     — 各スライド固有の組版
    ════════════════════════════════════════════════════════════════════ */
@@ -238,32 +238,19 @@ h1,h2,h3,p { margin:0; }
 /* 丸アバター (slide 07 — 金環 + シルエット SVG) */
 .avatar { width:76px; height:76px; display:block; filter:drop-shadow(0 0 18px rgba(246,202,70,.3)); }
 
-/* アリーナ背景 (楼門 + 天下一の垂れ幕 + 稲妻 + 観客席) — 全スライド右上 */
-.arena-bg {
+/* 墨流し背景 (canvas) — 全スライドのステージ最背面。
+   ポインタでなぞると藍・金の墨が水面を流れ、混ざり、時間とともに薄れて消える */
+.ink-bg {
   position:absolute;
-  top:-8px;
-  right:-16px;
-  width:46%;
-  height:auto;
+  inset:0;
+  width:100%;
+  height:100%;
   z-index:0;
-  opacity:.85;
+  opacity:.9;
   pointer-events:none;
-  -webkit-mask-image:radial-gradient(125% 125% at 72% 8%, #000 52%, transparent 82%);
-  mask-image:radial-gradient(125% 125% at 72% 8%, #000 52%, transparent 82%);
+  -webkit-mask-image:radial-gradient(135% 125% at 50% 12%, #000 46%, rgba(0,0,0,.3) 100%);
+  mask-image:radial-gradient(135% 125% at 50% 12%, #000 46%, rgba(0,0,0,.3) 100%);
 }
-.arena-bg.center {
-  right:auto;
-  left:50%;
-  top:-6px;
-  transform:translateX(-50%);
-  width:70%;
-  opacity:1;
-  -webkit-mask-image:radial-gradient(100% 110% at 50% 16%, #000 46%, transparent 80%);
-  mask-image:radial-gradient(100% 110% at 50% 16%, #000 46%, transparent 80%);
-}
-@keyframes boltFlicker { 0%,72%,100% { opacity:0; } 74%,78% { opacity:.95; } 76%,82% { opacity:.25; } 80% { opacity:.8; } 84% { opacity:0; } }
-.arena-bg .bolt1 { animation:boltFlicker 9s linear infinite; }
-.arena-bg .bolt2 { animation:boltFlicker 13s linear 4s infinite; }
 
 /* ── 4. deck (機構) ────────────────────────────────────────────────── */
 .deck { height:100vh; overflow-y:scroll; scroll-snap-type:y mandatory; }
@@ -309,7 +296,7 @@ h1,h2,h3,p { margin:0; }
   box-shadow:inset 0 0 170px rgba(0,0,0,.72);
 }
 .stage > * { position:relative; z-index:1; }
-.stage > .arena-bg { position:absolute; z-index:0; }
+.stage > .ink-bg { position:absolute; z-index:0; }
 
 .progress {
   position:fixed;
@@ -524,7 +511,7 @@ h1,h2,h3,p { margin:0; }
   .slide { padding:10px; overflow:visible; }
   .stage { width:calc(100vw - 20px); min-height:calc(100vh - 20px); height:auto; transform:none; overflow:visible; padding:18px; }
   .col { height:auto; }
-  .arena-bg { width:88%; opacity:.5; }
+  .ink-bg { opacity:.5; }
   .s1-grid, .s1-step-row, .s2-top, .s2-gaps, .s3-grid, .s5-grid, .s6-grid, .s7-grid, .s8-grid, .s9-grid { grid-template-columns:1fr; }
   .chev { transform:rotate(90deg); }
   .s1-name { font-size:40px; }
@@ -549,12 +536,12 @@ h1,h2,h3,p { margin:0; }
   .slide { height:100vh; min-height:auto; padding:0; page-break-after:always; break-after:page; }
   .stage { width:100vw; height:100vh; transform:none; border:0; box-shadow:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .progress,.counter { display:none; }
-  .arena-bg .bolt1, .arena-bg .bolt2 { animation:none; opacity:.55; }
+  .ink-bg { display:none; }
 }
 </style>
 </head>
 <body>
-<!-- ── shared SVG assets: TenkaCloud アイコン / 線画 glyph / アリーナ背景 / アバター ── -->
+<!-- ── shared SVG assets: TenkaCloud アイコン / 線画 glyph / アバター ── -->
 <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0" aria-hidden="true">
   <defs>
     <linearGradient id="tcIconBg" x1="8" y1="6" x2="56" y2="60" gradientUnits="userSpaceOnUse">
@@ -572,11 +559,6 @@ h1,h2,h3,p { margin:0; }
     <radialGradient id="avSky" cx=".42" cy=".3" r=".95">
       <stop stop-color="#f3d88f"/><stop offset=".55" stop-color="#cda14c"/><stop offset="1" stop-color="#6e5120"/>
     </radialGradient>
-    <filter id="agBlur" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="9"/></filter>
-    <filter id="agGlow" x="-80%" y="-80%" width="260%" height="260%">
-      <feGaussianBlur stdDeviation="2.2" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
   </defs>
 
   <symbol id="tc-icon" viewBox="0 0 64 64">
@@ -599,81 +581,6 @@ h1,h2,h3,p { margin:0; }
   <symbol id="g-cycle" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 3v4h-4"/></symbol>
   <symbol id="g-users" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9.5" r="2.4"/><path d="M15.5 19a4.6 4.6 0 0 1 5-4.4"/></symbol>
   <symbol id="g-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9.5L4 20Z"/><path d="M8 9h8M8 12h5"/></symbol>
-
-  <!-- アリーナ背景: 観客席 + 楼門 + 「天下一」垂れ幕 + 稲妻 -->
-  <symbol id="tc-arena" viewBox="0 0 900 620">
-    <!-- sky glow -->
-    <ellipse cx="450" cy="120" rx="330" ry="190" fill="#3c63a8" opacity=".22" filter="url(#agBlur)"/>
-    <ellipse cx="450" cy="60" rx="120" ry="80" fill="#9fc1ff" opacity=".3" filter="url(#agBlur)"/>
-    <!-- clouds -->
-    <g fill="#22365f" opacity=".75" filter="url(#agBlur)">
-      <ellipse cx="120" cy="150" rx="120" ry="46"/>
-      <ellipse cx="220" cy="90" rx="90" ry="34"/>
-      <ellipse cx="760" cy="120" rx="130" ry="48"/>
-      <ellipse cx="680" cy="200" rx="100" ry="36"/>
-      <ellipse cx="180" cy="260" rx="110" ry="38"/>
-    </g>
-    <g fill="#31497e" opacity=".5" filter="url(#agBlur)">
-      <ellipse cx="90" cy="110" rx="80" ry="30"/>
-      <ellipse cx="800" cy="70" rx="90" ry="32"/>
-    </g>
-    <!-- lightning -->
-    <g class="bolt1" stroke="#d6e7ff" stroke-width="2.6" fill="none" filter="url(#agGlow)" opacity="0">
-      <path d="M300 30l24 70-16 8 30 84-12 6 22 60"/>
-      <path d="M324 100l-30 36"/>
-    </g>
-    <g class="bolt2" stroke="#cfe2ff" stroke-width="2.2" fill="none" filter="url(#agGlow)" opacity="0">
-      <path d="M640 24l-18 64 14 6-24 78 10 6-16 52"/>
-      <path d="M622 88l26 30"/>
-    </g>
-    <!-- arena bowl -->
-    <g>
-      <path d="M-40 560 Q450 420 940 560 L940 620 -40 620 Z" fill="#0a1426"/>
-      <path d="M-40 560 Q450 420 940 560" stroke="#1b2c4e" stroke-width="3" fill="none"/>
-      <path d="M-20 520 Q450 392 920 520" stroke="#16243f" stroke-width="26" fill="none" opacity=".85"/>
-      <path d="M0 480 Q450 366 900 480" stroke="#121e36" stroke-width="22" fill="none" opacity=".8"/>
-      <g fill="#7fb2ff" filter="url(#agGlow)">
-        <circle cx="60" cy="497" r="2.4"/><circle cx="130" cy="478" r="2"/><circle cx="205" cy="462" r="2.4"/>
-        <circle cx="280" cy="449" r="2"/><circle cx="355" cy="441" r="2.4"/><circle cx="545" cy="441" r="2.2"/>
-        <circle cx="620" cy="449" r="2.4"/><circle cx="695" cy="461" r="2"/><circle cx="770" cy="477" r="2.4"/>
-        <circle cx="840" cy="496" r="2"/><circle cx="95" cy="536" r="2.6"/><circle cx="180" cy="516" r="2.2"/>
-        <circle cx="265" cy="500" r="2.6"/><circle cx="350" cy="490" r="2.2"/><circle cx="550" cy="490" r="2.6"/>
-        <circle cx="635" cy="500" r="2.2"/><circle cx="720" cy="515" r="2.6"/><circle cx="805" cy="535" r="2.2"/>
-      </g>
-    </g>
-    <!-- gate (楼門) silhouette -->
-    <g fill="#0b1729" stroke="#27406e" stroke-width="1.6">
-      <!-- central body -->
-      <rect x="372" y="56" width="156" height="224"/>
-      <!-- top roof -->
-      <path d="M450 38 451 38 458 60 Q520 64 560 84 L536 104 Q450 86 364 104 L340 84 Q380 64 442 60 Z"/>
-      <rect x="444" y="22" width="4" height="22" />
-      <path d="M446 8l4 0 2 16h-8Z"/>
-      <!-- upper box -->
-      <rect x="380" y="100" width="140" height="38" rx="3"/>
-      <!-- mid roof -->
-      <path d="M560 142 Q610 150 640 170 L614 192 Q450 158 286 192 L260 170 Q290 150 340 142 Z"/>
-      <!-- mid box -->
-      <rect x="350" y="188" width="200" height="34" rx="3"/>
-      <!-- lower roof wings -->
-      <path d="M620 226 Q660 234 686 252 L662 272 Q450 240 238 272 L214 252 Q240 234 280 226 Z"/>
-      <!-- pillars -->
-      <rect x="318" y="268" width="40" height="290"/>
-      <rect x="542" y="268" width="40" height="290"/>
-      <rect x="300" y="552" width="76" height="16" rx="2"/>
-      <rect x="524" y="552" width="76" height="16" rx="2"/>
-      <!-- beam -->
-      <rect x="318" y="268" width="264" height="18"/>
-    </g>
-    <!-- banner (垂れ幕) -->
-    <g>
-      <path d="M398 270h104v258l-13 14-13-10-13 12-13-9-13 11-13-8-13 12-13-13Z" fill="#0e1a3c" stroke="url(#agGold)" stroke-width="3"/>
-      <path d="M398 270h104v10H398Z" fill="url(#agGold)" opacity=".8"/>
-      <text x="450" y="352" text-anchor="middle" font-size="66" fill="url(#agGold)" style="font-family:var(--brush)" filter="url(#agGlow)">天</text>
-      <text x="450" y="430" text-anchor="middle" font-size="66" fill="url(#agGold)" style="font-family:var(--brush)" filter="url(#agGlow)">下</text>
-      <text x="450" y="508" text-anchor="middle" font-size="66" fill="url(#agGold)" style="font-family:var(--brush)" filter="url(#agGlow)">一</text>
-    </g>
-  </symbol>
 
   <!-- アバター (金環 + シルエット) -->
   <symbol id="av-samurai" viewBox="0 0 64 64">
@@ -711,7 +618,7 @@ h1,h2,h3,p { margin:0; }
   <!-- 01 ─ TenkaCloud とは -->
   <section class="slide">
     <div class="stage">
-      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
       <div class="col">
         <div class="topbar">
           <div class="sec-no"><b>01</b><span>TenkaCloud とは</span></div>
@@ -765,7 +672,7 @@ h1,h2,h3,p { margin:0; }
   <!-- 02 ─ 本日の一番 StackStack -->
   <section class="slide">
     <div class="stage">
-      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
       <div class="col">
         <div class="topbar">
           <div class="sec-no"><b>02</b><span>本日の一番 ── StackStack</span></div>
@@ -815,7 +722,7 @@ h1,h2,h3,p { margin:0; }
   <!-- 03 ─ ゲームデザイン -->
   <section class="slide">
     <div class="stage">
-      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
       <div class="col">
         <div class="topbar">
           <div class="sec-no"><b>03</b><span>ゲームデザイン</span></div>
@@ -862,7 +769,7 @@ h1,h2,h3,p { margin:0; }
   <!-- 04 ─ Battle の仕組み (本物のプロダクト画面をライブ描画) -->
   <section class="slide">
     <div class="stage">
-      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
       <div class="battle-slide">
         <div class="topbar">
           <div class="sec-no"><b>04</b><span>Battle の仕組み</span></div>
@@ -919,7 +826,7 @@ h1,h2,h3,p { margin:0; }
   <!-- 05 ─ プラットフォーム化 -->
   <section class="slide">
     <div class="stage">
-      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
       <div class="col">
         <div class="topbar">
           <div class="sec-no"><b>05</b><span>プラットフォーム化</span></div>
@@ -961,7 +868,7 @@ h1,h2,h3,p { margin:0; }
   <!-- 06 ─ 想定ユースケース -->
   <section class="slide">
     <div class="stage">
-      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
       <div class="col">
         <div class="topbar">
           <div class="sec-no"><b>06</b><span>想定ユースケース</span></div>
@@ -998,7 +905,7 @@ h1,h2,h3,p { margin:0; }
   <!-- 07 ─ Team -->
   <section class="slide">
     <div class="stage">
-      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
       <div class="col">
         <div class="topbar">
           <div class="sec-no"><b>07</b><span>Team</span></div>
@@ -1056,7 +963,7 @@ h1,h2,h3,p { margin:0; }
   <!-- 08 ─ 探しています -->
   <section class="slide">
     <div class="stage">
-      <svg class="arena-bg" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
       <div class="col">
         <div class="topbar">
           <div class="sec-no"><b>08</b><span>探しています</span></div>
@@ -1094,7 +1001,7 @@ h1,h2,h3,p { margin:0; }
   <!-- 09 ─ Thank you -->
   <section class="slide">
     <div class="stage">
-      <svg class="arena-bg center" viewBox="0 0 900 620" aria-hidden="true"><use href="#tc-arena"/></svg>
+      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
       <div class="s9">
         <div class="topbar">
           <div class="sec-no"><b>09</b><span>Thank you</span></div>
@@ -1129,6 +1036,220 @@ h1,h2,h3,p { margin:0; }
 </main>
 
 <script>
+  /* 墨流し背景 — Stam の stable fluids を 1 インスタンス回し、表示中スライドの
+     .ink-bg canvas にだけ blit する。ポインタ移動で藍・金の墨を注入し、墨は流体的に
+     混ざりながら毎フレーム減衰して消える。墨が無くなるとループは眠り、約 7 秒ごとの
+     微小な自動滴下で再起床する（タブ非表示中は停止、prefers-reduced-motion は静的描画のみ） */
+  (function () {
+    var canvases = Array.prototype.slice.call(document.querySelectorAll(".ink-bg"));
+    if (!canvases.length || !canvases[0].getContext) return;
+    var deckEl = document.getElementById("deck");
+    var slideEls = Array.prototype.slice.call(deckEl.querySelectorAll(".slide"));
+
+    var N = 96, SIZE = (N + 2) * (N + 2);
+    function IX(i, j) { return i + (N + 2) * j; }
+    var u = new Float32Array(SIZE), v = new Float32Array(SIZE);
+    var uF = new Float32Array(SIZE), vF = new Float32Array(SIZE);
+    var tA = new Float32Array(SIZE), tB = new Float32Array(SIZE);
+    // 3 顔料チャネル: 藍 / 金 / 月白 — 加算発光で混色する
+    var INKS = [
+      { a: new Float32Array(SIZE), s: new Float32Array(SIZE), c: [90, 162, 255] },
+      { a: new Float32Array(SIZE), s: new Float32Array(SIZE), c: [246, 202, 70] },
+      { a: new Float32Array(SIZE), s: new Float32Array(SIZE), c: [214, 231, 255] }
+    ];
+    var DT = 0.18, VISC = 0.00003, ITER = 8, DISS = 0.992;
+
+    function setBnd(b, x) {
+      for (var i = 1; i <= N; i++) {
+        x[IX(0, i)] = b === 1 ? -x[IX(1, i)] : x[IX(1, i)];
+        x[IX(N + 1, i)] = b === 1 ? -x[IX(N, i)] : x[IX(N, i)];
+        x[IX(i, 0)] = b === 2 ? -x[IX(i, 1)] : x[IX(i, 1)];
+        x[IX(i, N + 1)] = b === 2 ? -x[IX(i, N)] : x[IX(i, N)];
+      }
+      x[IX(0, 0)] = 0.5 * (x[IX(1, 0)] + x[IX(0, 1)]);
+      x[IX(0, N + 1)] = 0.5 * (x[IX(1, N + 1)] + x[IX(0, N)]);
+      x[IX(N + 1, 0)] = 0.5 * (x[IX(N, 0)] + x[IX(N + 1, 1)]);
+      x[IX(N + 1, N + 1)] = 0.5 * (x[IX(N, N + 1)] + x[IX(N + 1, N)]);
+    }
+    function linSolve(b, x, x0, a, c) {
+      var cR = 1 / c;
+      for (var k = 0; k < ITER; k++) {
+        for (var j = 1; j <= N; j++) for (var i = 1; i <= N; i++) {
+          x[IX(i, j)] = (x0[IX(i, j)] + a * (x[IX(i - 1, j)] + x[IX(i + 1, j)] + x[IX(i, j - 1)] + x[IX(i, j + 1)])) * cR;
+        }
+        setBnd(b, x);
+      }
+    }
+    function advect(b, d, d0, uu, vv) {
+      var dt0 = DT * N;
+      for (var j = 1; j <= N; j++) for (var i = 1; i <= N; i++) {
+        var x = i - dt0 * uu[IX(i, j)], y = j - dt0 * vv[IX(i, j)];
+        if (x < 0.5) x = 0.5; if (x > N + 0.5) x = N + 0.5;
+        if (y < 0.5) y = 0.5; if (y > N + 0.5) y = N + 0.5;
+        var i0 = x | 0, j0 = y | 0, s1 = x - i0, t1 = y - j0, s0 = 1 - s1, t0 = 1 - t1;
+        d[IX(i, j)] = s0 * (t0 * d0[IX(i0, j0)] + t1 * d0[IX(i0, j0 + 1)]) +
+                      s1 * (t0 * d0[IX(i0 + 1, j0)] + t1 * d0[IX(i0 + 1, j0 + 1)]);
+      }
+      setBnd(b, d);
+    }
+    function project() {
+      for (var j = 1; j <= N; j++) for (var i = 1; i <= N; i++) {
+        tB[IX(i, j)] = -0.5 * (u[IX(i + 1, j)] - u[IX(i - 1, j)] + v[IX(i, j + 1)] - v[IX(i, j - 1)]) / N;
+        tA[IX(i, j)] = 0;
+      }
+      setBnd(0, tB); setBnd(0, tA);
+      linSolve(0, tA, tB, 1, 4);
+      for (var jj = 1; jj <= N; jj++) for (var ii = 1; ii <= N; ii++) {
+        u[IX(ii, jj)] -= 0.5 * N * (tA[IX(ii + 1, jj)] - tA[IX(ii - 1, jj)]);
+        v[IX(ii, jj)] -= 0.5 * N * (tA[IX(ii, jj + 1)] - tA[IX(ii, jj - 1)]);
+      }
+      setBnd(1, u); setBnd(2, v);
+    }
+    var mass = 0;
+    function step() {
+      var i;
+      for (i = 0; i < SIZE; i++) { u[i] += DT * uF[i]; v[i] += DT * vF[i]; }
+      uF.fill(0); vF.fill(0);
+      tA.set(u); linSolve(1, u, tA, DT * VISC * N * N, 1 + 4 * DT * VISC * N * N);
+      tB.set(v); linSolve(2, v, tB, DT * VISC * N * N, 1 + 4 * DT * VISC * N * N);
+      project();
+      tA.set(u); tB.set(v);
+      advect(1, u, tA, tA, tB);
+      advect(2, v, tB, tA, tB);
+      project();
+      mass = 0;
+      for (var k = 0; k < INKS.length; k++) {
+        var ink = INKS[k];
+        for (i = 0; i < SIZE; i++) ink.a[i] += DT * ink.s[i];
+        ink.s.fill(0);
+        tA.set(ink.a);
+        advect(0, ink.a, tA, u, v);
+        for (i = 0; i < SIZE; i++) {
+          var av = ink.a[i] * DISS;
+          if (av > 4) av = 4;
+          ink.a[i] = av; mass += av;
+        }
+      }
+    }
+
+    var off = document.createElement("canvas");
+    off.width = N; off.height = N;
+    var octx = off.getContext("2d");
+    var img = octx.createImageData(N, N);
+    function paintOffscreen() {
+      var d = img.data, p = 0;
+      for (var j = 1; j <= N; j++) for (var i = 1; i <= N; i++) {
+        var idx = IX(i, j);
+        var a0 = INKS[0].a[idx], a1 = INKS[1].a[idx], a2 = INKS[2].a[idx];
+        var t = a0 + a1 + a2;
+        if (t > 0.001) {
+          var inv = 1 / t;
+          d[p] = (a0 * INKS[0].c[0] + a1 * INKS[1].c[0] + a2 * INKS[2].c[0]) * inv;
+          d[p + 1] = (a0 * INKS[0].c[1] + a1 * INKS[1].c[1] + a2 * INKS[2].c[1]) * inv;
+          d[p + 2] = (a0 * INKS[0].c[2] + a1 * INKS[1].c[2] + a2 * INKS[2].c[2]) * inv;
+          var al = t * 0.55; if (al > 0.62) al = 0.62;
+          d[p + 3] = al * 255;
+        } else { d[p + 3] = 0; }
+        p += 4;
+      }
+      octx.putImageData(img, 0, 0);
+    }
+    function activeCanvas() {
+      var i = Math.max(0, Math.min(slideEls.length - 1, Math.round(deckEl.scrollTop / deckEl.clientHeight)));
+      return slideEls[i].querySelector(".ink-bg");
+    }
+    function blit(target) {
+      var ctx = target.getContext("2d");
+      ctx.clearRect(0, 0, target.width, target.height);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(off, 0, 0, N, N, 0, 0, target.width, target.height);
+    }
+
+    var inkRotation = 0;
+    function inject(gx, gy, dgx, dgy, amount, r) {
+      // 金は差し色 — 3 回に 1 回だけ。残りは藍と月白を交互に
+      var ink = INKS[inkRotation % 3 === 2 ? 1 : (inkRotation % 2)];
+      inkRotation++;
+      var cx = (gx | 0) + 1, cy = (gy | 0) + 1, r2 = r * r;
+      for (var jj = -r; jj <= r; jj++) for (var ii = -r; ii <= r; ii++) {
+        var x = cx + ii, y = cy + jj;
+        if (x < 1 || x > N || y < 1 || y > N) continue;
+        var d2 = ii * ii + jj * jj;
+        if (d2 > r2) continue;
+        var f = Math.exp(-d2 / (r2 + 0.001)), idx = IX(x, y);
+        uF[idx] += dgx * 14 * f; vF[idx] += dgy * 14 * f;
+        ink.s[idx] += amount * f;
+      }
+    }
+
+    var running = false, idleFrames = 0;
+    function frame() {
+      step();
+      paintOffscreen();
+      var target = activeCanvas();
+      if (target) blit(target);
+      if (mass < 14 && ++idleFrames > 90) { running = false; return; }
+      requestAnimationFrame(frame);
+    }
+    function wake() {
+      idleFrames = 0;
+      if (!running) { running = true; requestAnimationFrame(frame); }
+    }
+
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function seed(strength) {
+      for (var i = 0; i < 5; i++) {
+        inject(8 + Math.random() * (N - 16), 8 + Math.random() * (N - 16),
+          (Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.6, strength, 5);
+      }
+    }
+    if (reduce) {
+      // 静的な一枚絵: 数滴落として少しだけ攪拌し、全 canvas に一度だけ描く
+      seed(2.2);
+      for (var s = 0; s < 50; s++) step();
+      paintOffscreen();
+      canvases.forEach(blit);
+      return;
+    }
+
+    seed(2.6);
+    wake();
+
+    setInterval(function () {
+      if (document.visibilityState !== "visible") return;
+      inject(8 + Math.random() * (N - 16), 8 + Math.random() * (N - 16),
+        (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 1.2, 1.5, 4);
+      wake();
+    }, 7000);
+
+    var lx = null, ly = null;
+    window.addEventListener("pointermove", function (e) {
+      var target = activeCanvas();
+      if (!target) return;
+      var rect = target.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      var gx = (e.clientX - rect.left) / rect.width * N;
+      var gy = (e.clientY - rect.top) / rect.height * N;
+      if (gx < 0 || gx > N || gy < 0 || gy > N) { lx = null; return; }
+      var dgx = 0, dgy = 0;
+      if (lx !== null) {
+        dgx = (e.clientX - lx) / rect.width * N;
+        dgy = (e.clientY - ly) / rect.height * N;
+        if (dgx * dgx + dgy * dgy < 0.04) return;
+      }
+      lx = e.clientX; ly = e.clientY;
+      inject(gx, gy, dgx, dgy, 0.9, 3);
+      wake();
+    }, { passive: true });
+    deckEl.addEventListener("scroll", function () {
+      var target = activeCanvas();
+      if (target && !running) blit(target);
+    }, { passive: true });
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState === "visible" && mass >= 14) wake();
+    });
+  })();
+
   /* deck mechanics: scroll-snap + keys + progress + 16:9 fit */
   (function () {
     var deck = document.getElementById("deck");
