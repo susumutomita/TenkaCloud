@@ -4,14 +4,18 @@ import ExpandableSection from "@cloudscape-design/components/expandable-section"
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
 import type { EventDetail } from "../../api/events-client";
+import { buildInviteLink } from "../../lib/invite-link";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
 export function EventTeamsPanel({
   detail,
+  participantPortalUrl,
   t,
 }: {
   readonly detail: EventDetail;
+  /** 設定されているときだけ各 team 行に招待リンクコピーを出す (#1772)。 */
+  readonly participantPortalUrl?: string;
   readonly t: Translate;
 }) {
   return (
@@ -73,6 +77,22 @@ export function EventTeamsPanel({
                     /* v8 ignore next */
                     onClick={() => void navigator.clipboard?.writeText(tr.teamLoginKey ?? "")}
                   />
+                  {participantPortalUrl && (
+                    <Button
+                      iconName="share"
+                      variant="inline-icon"
+                      ariaLabel={t("event_detail.teams_col_invite_link_aria", {
+                        slug: tr.internalSlug,
+                      })}
+                      onClick={() =>
+                        void navigator.clipboard?.writeText(
+                          // teamLoginKey truthy の row だけ render されるので ?? "" 右辺は不到達。
+                          /* v8 ignore next */
+                          buildInviteLink(participantPortalUrl, tr.teamLoginKey ?? ""),
+                        )
+                      }
+                    />
+                  )}
                 </SpaceBetween>
               ) : (
                 <Box variant="small" color="text-status-inactive">

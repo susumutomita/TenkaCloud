@@ -89,7 +89,7 @@ export function TeamsTab({ config, detail, t }: EventTabContentProps) {
   return (
     <>
       <EventParticipantsPanel config={config} detail={detail} t={t} />
-      <EventTeamsPanel detail={detail} t={t} />
+      <EventTeamsPanel detail={detail} participantPortalUrl={config.participantPortalUrl} t={t} />
     </>
   );
 }

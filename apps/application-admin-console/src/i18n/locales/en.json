@@ -282,6 +282,7 @@
     "teams_col_account_legacy": "(legacy Event: uses problem default)",
     "teams_col_login_key": "teamLoginKey",
     "teams_col_login_key_aria": "Copy teamLoginKey for {slug}",
+    "teams_col_invite_link_aria": "Copy invite link for {slug}",
     "teams_col_login_key_legacy": "(view in detail)",
     "teams_empty": "No teams",
     "loading_spinner": "Loading…",
