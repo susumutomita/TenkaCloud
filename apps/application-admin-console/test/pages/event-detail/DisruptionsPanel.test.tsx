@@ -66,6 +66,40 @@ describe("DisruptionsPanel", () => {
     expect(mockCatalog).toHaveBeenCalledWith(fakeApi, "EVT1");
   });
 
+  it("[#1775] should show '手動のみ' when a disruption declares no triggers", async () => {
+    renderPanel();
+    await screen.findByText("Availability flood");
+    expect(screen.getByText("disruptions.trigger_manual_only")).toBeInTheDocument();
+  });
+
+  it("[#1775] should list every declared auto-fire condition (OR-combined)", async () => {
+    mockCatalog.mockResolvedValue({
+      entries: [
+        {
+          ...catalogEntry,
+          disruption: {
+            ...catalogEntry.disruption,
+            triggers: [
+              { kind: "after-deploy", afterMinutes: 30 },
+              { kind: "team-score-above", threshold: 5000 },
+              { kind: "phase-entered", phaseName: "hardening" },
+            ],
+          },
+        },
+      ],
+    });
+    renderPanel();
+    await screen.findByText("Availability flood");
+    expect(screen.getByText('disruptions.trigger_after_deploy:{"minutes":30}')).toBeInTheDocument();
+    expect(
+      screen.getByText('disruptions.trigger_score_above:{"threshold":5000}'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('disruptions.trigger_phase_entered:{"phase":"hardening"}'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("disruptions.trigger_manual_only")).not.toBeInTheDocument();
+  });
+
   it("should not fetch when there is no api client", () => {
     renderPanel(null);
     expect(mockCatalog).not.toHaveBeenCalled();

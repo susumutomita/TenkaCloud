@@ -17,6 +17,16 @@ export type DisruptionScope = "all" | "team" | "random-n";
 /** [ADR-037] When the injection runs: immediately, or scheduled `afterMinutes` from now. */
 export type DisruptionTiming = "immediate" | "scheduled";
 
+/**
+ * [ADR-013 Phase 2] A condition that auto-fires the disruption from the scoring tick.
+ * Declared in the problem's metadata.json (`disruptions[].triggers[]`, OR-combined);
+ * the catalog surfaces them read-only — the metadata stays the source of truth.
+ */
+export type DisruptionTrigger =
+  | { readonly kind: "after-deploy"; readonly afterMinutes: number }
+  | { readonly kind: "team-score-above"; readonly threshold: number }
+  | { readonly kind: "phase-entered"; readonly phaseName: string };
+
 /** One declared disruption as surfaced by the catalog (a problem's metadata.json declaration). */
 export interface DisruptionCatalogItem {
   readonly id: string;
@@ -31,6 +41,8 @@ export interface DisruptionCatalogItem {
   readonly publicHint?: boolean;
   /** [ADR-037] Declared default delay (minutes) used to pre-fill the schedule input. */
   readonly defaultAfterMinutes?: number;
+  /** [ADR-013 Phase 2] Auto-fire conditions (absent = manual fire only). */
+  readonly triggers?: readonly DisruptionTrigger[];
 }
 
 export interface DisruptionCatalogEntry {
