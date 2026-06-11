@@ -12,8 +12,9 @@
 
   function paint() {
     var i = current();
-    if (counter) counter.textContent = (i + 1) + " / " + slides.length;
-    if (progress) progress.style.width = (slides.length > 1 ? (i / (slides.length - 1)) * 100 : 100) + "%";
+    if (counter) counter.textContent = i + 1 + " / " + slides.length;
+    if (progress)
+      progress.style.width = (slides.length > 1 ? (i / (slides.length - 1)) * 100 : 100) + "%";
   }
 
   function go(i) {
@@ -43,6 +44,15 @@
     }
   });
 
+  document.querySelectorAll(".slide-shell").forEach(function (shell) {
+    ["cloud-far", "cloud-near"].forEach(function (kind) {
+      var layer = document.createElement("div");
+      layer.className = "cloud-layer " + kind;
+      layer.setAttribute("aria-hidden", "true");
+      shell.insertBefore(layer, shell.firstChild);
+    });
+  });
+
   fit();
   paint();
 })();
@@ -56,7 +66,7 @@
     { n: "team-honnoji", s: 8662, done: 3 },
     { n: "team-shogun", s: 8420, done: 3, me: true },
     { n: "team-sekigahara", s: 8215, done: 3 },
-    { n: "team-osaka", s: 7640, done: 2 }
+    { n: "team-osaka", s: 7640, done: 2 },
   ];
 
   var rowByName = {};
@@ -77,11 +87,14 @@
   var scoreTile = document.querySelector(".score-tile");
 
   function render(hit) {
-    var sorted = teams.slice().sort(function (a, b) { return b.s - a.s; });
+    var sorted = teams.slice().sort(function (a, b) {
+      return b.s - a.s;
+    });
     sorted.forEach(function (team, index) {
       var row = rowByName[team.n];
       var rank = index + 1;
-      row.querySelector(".rk").innerHTML = rank <= 3 ? '<span class="rank-medal">' + rank + "</span>" : String(rank);
+      row.querySelector(".rk").innerHTML =
+        rank <= 3 ? '<span class="rank-medal">' + rank + "</span>" : String(rank);
       row.querySelector(".tm").textContent = team.n + (team.me ? " (You)" : "");
       row.querySelector(".sc").textContent = team.s.toLocaleString() + " pt";
       row.querySelector(".pg").textContent = team.done + "/" + TOTAL;
@@ -110,9 +123,12 @@
   var tick = 0;
   setInterval(function () {
     tick++;
-    var index = tick % 3 === 0
-      ? teams.findIndex(function (team) { return team.me; })
-      : Math.floor(Math.random() * teams.length);
+    var index =
+      tick % 3 === 0
+        ? teams.findIndex(function (team) {
+            return team.me;
+          })
+        : Math.floor(Math.random() * teams.length);
     teams[index].s += 40 + Math.floor(Math.random() * 220);
     if (Math.random() < 0.25 && teams[index].done < TOTAL) teams[index].done++;
     render(teams[index].n);
@@ -127,9 +143,7 @@
       var m = Math.floor((left % 3600) / 60);
       var s = left % 60;
       clock.textContent =
-        (h < 10 ? "0" : "") + h + ":" +
-        (m < 10 ? "0" : "") + m + ":" +
-        (s < 10 ? "0" : "") + s;
+        (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
     }, 1000);
   }
 
@@ -138,7 +152,7 @@
     "ai-wipes-database",
     "site-defaced",
     "supply-chain-backdoor",
-    "vibe-app-stopped"
+    "vibe-app-stopped",
   ];
   var incident = document.getElementById("tcIncident");
   var incidentIndex = 0;
@@ -164,8 +178,8 @@
 
   var loopSteps = document.querySelectorAll(".battle-loop .bl-step");
   var loopArrs = document.querySelectorAll(".battle-loop .bl-arr");
+  var loopIndex = 0;
   if (loopSteps.length) {
-    var loopIndex = 0;
     setInterval(function () {
       loopSteps.forEach(function (el, index) {
         el.classList.toggle("active", index === loopIndex);
