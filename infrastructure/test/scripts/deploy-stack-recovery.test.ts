@@ -33,13 +33,16 @@ function runRecovery(status: string): { stderr: string; awsCalls: string } {
   const binDir = join(dir, "bin");
   mkdirSync(binDir, { recursive: true });
   const callLog = join(dir, "aws-calls.log");
-  // Fake aws: `describe-stacks` prints the configured status (empty status => exit 1,
-  // i.e. stack absent); delete-stack / wait are recorded so the test can assert them.
+  // Fake aws + driver are CONSTANT scripts: the absolute paths and the status flow
+  // only through the child env (read as "$VAR"), so no untrusted value is spliced
+  // into a shell command string (keeps CodeQL's shell-injection scan happy).
+  // `describe-stacks` prints FAKE_STACK_STATUS (empty => exit non-zero = stack
+  // absent); delete-stack / wait are appended to AWS_CALL_LOG for assertions.
   const fakeAws = `#!/usr/bin/env bash
-echo "$@" >> "${callLog}"
+echo "$@" >> "$AWS_CALL_LOG"
 if [ "$1" = "cloudformation" ] && [ "$2" = "describe-stacks" ]; then
-  if [ -z "${status}" ]; then exit 254; fi
-  echo "${status}"
+  if [ -z "$FAKE_STACK_STATUS" ]; then exit 254; fi
+  echo "$FAKE_STACK_STATUS"
   exit 0
 fi
 exit 0
@@ -47,13 +50,19 @@ exit 0
   writeFileSync(join(binDir, "aws"), fakeAws, { mode: 0o755 });
   chmodSync(join(binDir, "aws"), 0o755);
 
-  const script = `set -euo pipefail
-source "${COMMON_SCRIPT}"
+  const driver = `set -euo pipefail
+source "$BATTLES_COMMON"
 delete_unrecoverable_stack_if_present "tc-demo-team" "us-east-1"
 `;
-  const result = spawnSync("bash", ["-c", script], {
+  const result = spawnSync("bash", ["-c", driver], {
     encoding: "utf8",
-    env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ""}` },
+    env: {
+      ...process.env,
+      PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      BATTLES_COMMON: COMMON_SCRIPT,
+      AWS_CALL_LOG: callLog,
+      FAKE_STACK_STATUS: status,
+    },
   });
   expect(result.status, result.stderr).toBe(0);
   return {
