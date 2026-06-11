@@ -87,4 +87,33 @@ describe("LoginPage", () => {
       unmount();
     }
   });
+
+  it("should prefill the key from an invite link fragment and scrub it from the URL (#1772)", async () => {
+    mockIsMock.mockReturnValue(true);
+    mockAuth.mockReturnValue({ ready: true, session: null, login: mockLogin });
+    window.history.replaceState(null, "", "/login#invite=KEY%20A");
+    try {
+      renderLogin();
+      expect(screen.getByRole("textbox")).toHaveValue("KEY A");
+      // fragment は読み取り後に履歴から除去される (= key をアドレスバーに残さない)。
+      await waitFor(() => expect(window.location.hash).toBe(""));
+      // prefill は auto-submit しない: ログインは competitor のクリック待ち。
+      expect(mockLogin).not.toHaveBeenCalled();
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("should start with an empty field when the hash is not an invite link", () => {
+    mockIsMock.mockReturnValue(true);
+    mockAuth.mockReturnValue({ ready: true, session: null, login: mockLogin });
+    window.history.replaceState(null, "", "/login#section");
+    try {
+      renderLogin();
+      expect(screen.getByRole("textbox")).toHaveValue("");
+      expect(window.location.hash).toBe("#section");
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
 });

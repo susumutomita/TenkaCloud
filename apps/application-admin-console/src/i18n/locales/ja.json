@@ -282,6 +282,7 @@
     "teams_col_account_legacy": "(旧 Event: problem 既定値を使用)",
     "teams_col_login_key": "teamLoginKey",
     "teams_col_login_key_aria": "{slug} の teamLoginKey をコピー",
+    "teams_col_invite_link_aria": "{slug} の招待リンクをコピー",
     "teams_col_login_key_legacy": "(詳細で再表示可)",
     "teams_empty": "チームがありません",
     "loading_spinner": "読み込み中…",
