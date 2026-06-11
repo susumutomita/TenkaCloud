@@ -21,7 +21,6 @@ import { EventCreateDeployPromptModal } from "./event-create/EventCreateDeployPr
 import { EventCreateProblemsetSection } from "./event-create/EventCreateProblemsetSection";
 import { EventCreateTeamsSection } from "./event-create/EventCreateTeamsSection";
 import {
-  buildProblemOptions,
   buildVerifiedAccountOption,
   INITIAL_TEAM_COUNT,
   NAME_MAX,
@@ -67,13 +66,9 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   const navigate = useNavigate();
   const t = useT();
 
+  // 問題 option 化 (#1414 の disabled 出し分け) と検索 / filter (#1776) は
+  // EventCreateProblemsetSection 側の責務。 ここは catalog 全件を渡すだけ。
   const allProblems = useMemo(() => listProblemSummaries(), []);
-  // #1414: 予約済み runtime (sakura/azure/gcp) の問題は deploy 不可なので picker で
-  // disabled + 「近日対応」 にし、 event に組み込めないようにする。
-  const problemOptions: MultiselectProps.Option[] = useMemo(
-    () => buildProblemOptions(allProblems, t("event_create.problem_reserved_tag")),
-    [allProblems, t],
-  );
 
   // Phase 2.2 (Issue #459): verified=true な CompetitorAccounts のみを Select の選択肢にする。
   // fetch + window focus 再取得は hook に切り出し済 (Issue #1241)。
@@ -278,7 +273,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
           />
 
           <EventCreateProblemsetSection
-            problemOptions={problemOptions}
+            problems={allProblems}
             selectedProblems={selectedProblems}
             problemRows={problemRows}
             onProblemsChange={onProblemsChange}

@@ -82,13 +82,16 @@ const problem = (over: Partial<ProblemSummary> = {}): ProblemSummary =>
 const config = {} as AppConfig;
 const renderPage = () => render(<EventCreatePage config={config} />);
 const w = (c: HTMLElement) => createWrapper(c);
+// #1776: 問題選択 Multiselect の前に filter 用 Multiselect (difficulty / scoring kind / tags)
+// が並ぶため、 data-testid で特定する。
+const problemSelect = (c: HTMLElement) => w(c).findMultiselect('[data-testid="problem-select"]');
 
 /** name 入力 + teamCount=1 + 問題 p1 選択 + account 選択 を行い、 submit 可能状態にする。 */
 function fillValidForm(container: HTMLElement) {
   // findAllInputs: [name, teamCount, slug...]。 まず teamCount を 1 に。
   w(container).findAllInputs()[1]?.setInputValue("1");
   w(container).findAllInputs()[0]?.setInputValue("My Event");
-  const ms = w(container).findMultiselect();
+  const ms = problemSelect(container);
   ms?.openDropdown();
   ms?.selectOptionByValue("p1");
   const accountSelect = w(container).findAllSelects()[0]; // TeamsSection の account Select
@@ -186,15 +189,16 @@ describe("EventCreatePage flow", () => {
 
   it("should reuse existing rows when adding a problem and update one region among many", () => {
     const { container } = renderPage();
-    w(container).findAllInputs()[1]?.setInputValue("1"); // 1 team → selects: [account, region-p1, region-p2]
-    const ms = w(container).findMultiselect();
+    // 1 team → selects: [account, category-filter, region-p1, region-p2]
+    w(container).findAllInputs()[1]?.setInputValue("1");
+    const ms = problemSelect(container);
     ms?.openDropdown();
     ms?.selectOptionByValue("p1"); // [p1]
     ms?.selectOptionByValue("p2"); // [p1, p2] → onProblemsChange の prev に p1 → existing 再利用経路
     expect(screen.getByText("Problem 1")).toBeInTheDocument();
     expect(screen.getByText("Problem 2")).toBeInTheDocument();
     // p1 の region Select だけ変更 → updateProblemRow の map で p1=match / p2=非match 両分岐。
-    const regionP1 = w(container).findAllSelects()[1];
+    const regionP1 = w(container).findAllSelects()[2];
     regionP1?.openDropdown();
     regionP1?.selectOptionByValue("ap-northeast-1", { expandToViewport: true });
     expect(screen.getByText("Problem 1")).toBeInTheDocument();
@@ -202,7 +206,7 @@ describe("EventCreatePage flow", () => {
 
   it("should fall back to the default region for a problem without metadata region", () => {
     const { container } = renderPage();
-    const ms = w(container).findMultiselect();
+    const ms = problemSelect(container);
     ms?.openDropdown();
     ms?.selectOptionByValue("p2"); // defaultRegion / supportedRegions 未宣言 → fallback 分岐
     expect(screen.getByText("Problem 2")).toBeInTheDocument();
@@ -265,7 +269,7 @@ describe("EventCreatePage flow", () => {
     const { container } = renderPage();
     w(container).findAllInputs()[1]?.setInputValue("1");
     w(container).findAllInputs()[0]?.setInputValue("My Event");
-    const ms = w(container).findMultiselect();
+    const ms = problemSelect(container);
     ms?.openDropdown();
     ms?.selectOptionByValue("p1");
     // account 未選択 → awsAccountId "" → allAccountsValid false → disabled
@@ -284,7 +288,7 @@ describe("EventCreatePage flow", () => {
     const { container } = renderPage();
     w(container).findAllInputs()[1]?.setInputValue("2"); // 2 teams
     w(container).findAllInputs()[0]?.setInputValue("My Event");
-    const ms = w(container).findMultiselect();
+    const ms = problemSelect(container);
     ms?.openDropdown();
     ms?.selectOptionByValue("p1");
     // 両 team に valid account を割り当て (allAccountsValid true にして hasDuplicateSlug まで到達)。

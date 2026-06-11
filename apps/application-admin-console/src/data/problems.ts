@@ -37,6 +37,12 @@ export interface ProblemSummary {
   supportedRegions?: readonly string[];
   /** ADR-026 / ADR-027: 問題が deploy される cloud (provider) と engine。 未宣言は aws/cloudformation。 */
   runtime: { readonly provider: string; readonly engine: string };
+  /**
+   * Issue #1776: `metadata.json` の `scoring.kind` (ADR-012 の 5 builtin kind:
+   * flag / uptime-flat / uptime-multi / phased-polling / attack-detection)。
+   * scoring 未宣言 (= deploy のみで競技要素なし) は undefined。 カタログ絞り込みの facet に使う。
+   */
+  scoringKind?: string;
 }
 
 export interface ProblemDetail extends ProblemSummary {
@@ -70,6 +76,11 @@ export interface ProblemMetadata {
   cfnParameters?: Record<string, string>;
   /** ADR-026 / ADR-027: 問題の実行環境 (provider/engine)。 未宣言は aws/cloudformation 既定。 */
   runtime?: { provider?: string; engine?: string; entry?: string };
+  /**
+   * ADR-012: scoring 宣言。 UI が使うのは `kind` のみ (kind は schema 上 scoring 内で必須)。
+   * 配点詳細 (points / flagOutputKey 等) は backend の責務なので型として持たない。
+   */
+  scoring?: { kind: string };
   /** Issue #1201: 問題作成者宣言の推奨 region。 wizard が初期値に使う。 */
   defaultRegion?: string;
   /** Issue #1201 Phase 2: 動作確認済 region 集合。 wizard が picker の選択肢を絞る。 */
@@ -106,6 +117,8 @@ export function metadataToDetail(metadata: ProblemMetadata): ProblemDetail {
     ...(metadata.supportedRegions && metadata.supportedRegions.length > 0
       ? { supportedRegions: metadata.supportedRegions }
       : {}),
+    // Issue #1776: scoring.kind をカタログ facet 用に投影。 scoring 未宣言は omit。
+    ...(metadata.scoring ? { scoringKind: metadata.scoring.kind } : {}),
   };
 }
 
@@ -129,12 +142,13 @@ export function listProblemSummaries(): readonly ProblemSummary[] {
     estimatedDuration: p.estimatedDuration,
     tags: p.tags,
     runtime: p.runtime,
-    // region 系は ProblemSummary でも optional。 現状 catalog の全 problem が region を宣言
-    // するため omit 分岐 (= region 無し problem) は実データで到達しない (= 将来 problem 用に保持)。
-    // mapping 本体の分岐網羅は metadataToDetail のユニットテストで担保済。
+    // region / scoring 系は ProblemSummary でも optional。 現状 catalog の全 problem が
+    // region と scoring を宣言するため omit 分岐 (= 未宣言 problem) は実データで到達しない
+    // (= 将来 problem 用に保持)。 mapping 本体の分岐網羅は metadataToDetail のユニットテストで担保済。
     /* v8 ignore start */
     ...(p.defaultRegion ? { defaultRegion: p.defaultRegion } : {}),
     ...(p.supportedRegions ? { supportedRegions: p.supportedRegions } : {}),
+    ...(p.scoringKind ? { scoringKind: p.scoringKind } : {}),
     /* v8 ignore stop */
   }));
 }

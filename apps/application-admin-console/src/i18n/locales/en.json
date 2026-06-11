@@ -133,6 +133,19 @@
     "empty_filtered": "No problems match the filters.",
     "empty": "No problems registered yet."
   },
+  "problem_search": {
+    "filter_label": "Filter the problem catalog",
+    "filter_description": "Use search and filters to narrow the options in \"Problems to use\" below.",
+    "search_placeholder": "Search by name / ID / description / tags",
+    "all_categories": "All categories",
+    "difficulty_placeholder": "Difficulty",
+    "scoring_kind_placeholder": "Scoring kind",
+    "tag_placeholder": "Tags (match any)",
+    "facet_count": "{count} problems",
+    "match_count": "{filtered} of {total} problems match",
+    "clear_filters": "Clear filters",
+    "empty_filtered": "No problems match the filters."
+  },
   "event_create": {
     "title": "Create new Event",
     "description": "Specify team count and problem set to create an Event. teamLoginKey can be viewed any time on EventDetail.",
