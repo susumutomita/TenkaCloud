@@ -164,7 +164,7 @@
       "extend.cta2": "new-problem skill",
 
       "community.eyebrow": "コミュニティに参加",
-      "community.h2": "5 つの役割から、ひとつ選んで始める。",
+      "community.h2": "2 つの役割から、ひとつ選んで始める。",
       "community.lead":
         "TenkaCloud の堀は、 deploy ランタイムだけでなく <strong>コミュニティ問題カタログ</strong>。 メンテナに個別 onboard してもらわなくても、 役割を 1 つ選んで 30 分の初回 task を済ませれば、 公式コントリビュータになれます。",
       "community.tester.role": "Tester",
@@ -177,8 +177,6 @@
       "community.author.p":
         "metadata.json + template.yaml の 2 ファイルで 1 問。 Claude Code の <code>/new-problem</code> skill で 30 分 onboarding。",
       "community.author.cta": "Authoring guide",
-      "community.more":
-        "全 5 役割を見る (Tester / Problem Author / Event Facilitator / Platform Contributor / Sponsor-Requester)",
       "offerings.eyebrow": "商用プラン",
       "offerings.h2": "プロダクト化された 3 つの提供形態。",
       "offerings.lead":
@@ -453,7 +451,7 @@
       "extend.cta2": "new-problem skill",
 
       "community.eyebrow": "Join the community",
-      "community.h2": "Pick one of five roles. Ship one starter task.",
+      "community.h2": "Pick one of two roles. Ship one starter task.",
       "community.lead":
         "TenkaCloud's moat is the <strong>community problem catalog</strong>, not only the deploy runtime. You do not need to be personally onboarded by the maintainer — choose a role, follow its 30-minute first task, and you are a recognized contributor.",
       "community.tester.role": "Tester",
@@ -466,8 +464,6 @@
       "community.author.p":
         "Two files (metadata.json + template.yaml) and you have a problem. The <code>/new-problem</code> Claude Code skill onboards you in 30 minutes.",
       "community.author.cta": "Authoring guide",
-      "community.more":
-        "See all 5 roles (Tester / Problem Author / Event Facilitator / Platform Contributor / Sponsor-Requester)",
       "offerings.eyebrow": "Commercial offerings",
       "offerings.h2": "Three productized offerings — formally documented.",
       "offerings.lead":
