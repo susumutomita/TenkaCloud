@@ -133,6 +133,19 @@
     "empty_filtered": "条件に一致する問題はありません。",
     "empty": "問題がまだ登録されていません。"
   },
+  "problem_search": {
+    "filter_label": "問題カタログを絞り込む",
+    "filter_description": "検索とフィルタで下の「使用する問題」の選択肢を絞り込めます。",
+    "search_placeholder": "問題名 / ID / 説明 / タグから検索",
+    "all_categories": "全カテゴリ",
+    "difficulty_placeholder": "難易度",
+    "scoring_kind_placeholder": "Scoring kind",
+    "tag_placeholder": "タグ (いずれか含む)",
+    "facet_count": "{count} 問",
+    "match_count": "{filtered} / {total} 問が一致",
+    "clear_filters": "絞り込み解除",
+    "empty_filtered": "条件に一致する問題はありません。"
+  },
   "event_create": {
     "title": "新規 Event 作成",
     "description": "チーム数と問題セットを指定して Event を作成します。 teamLoginKey は EventDetail でいつでも確認できます。",

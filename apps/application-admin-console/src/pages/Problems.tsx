@@ -16,6 +16,7 @@ import { listProblemSummaries, PROVIDER_LABEL, type ProblemSummary } from "../da
 import { interpolate, useT } from "../i18n";
 import {
   collectTagFacets,
+  DIFFICULTY_LEVELS,
   type DifficultyLevel,
   EMPTY_FILTER_CRITERIA,
   filterProblems,
@@ -23,8 +24,6 @@ import {
   type ProblemFilterCriteria,
   toggleTagFilter,
 } from "../lib/problem-filter";
-
-const DIFFICULTY_LEVELS: DifficultyLevel[] = [1, 2, 3, 4, 5];
 
 /**
  * 問題一覧ページ。Cloudscape Cards で 1 件ずつカード表示する。
