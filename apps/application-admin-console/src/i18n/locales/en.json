@@ -724,5 +724,22 @@
     "after_minutes_error": "Enter a whole number between 1 and 1440.",
     "fired_flash": "Fired \"{name}\" at {count} team(s).",
     "scheduled_flash": "Scheduled \"{name}\" to fire in {minutes} minute(s)."
+  },
+  "setup_guide": {
+    "header": "First-run setup guide",
+    "description": "Four steps to run your first event. Completion is derived from your tenant's existing data, and the guide disappears once every step is done.",
+    "dismiss": "Hide this guide",
+    "progress_label": "Setup progress",
+    "progress_info": "{completed} of {total} steps complete",
+    "status_complete": "Done",
+    "status_incomplete": "Not yet",
+    "step_create_event_title": "Create an event",
+    "step_create_event_link": "Create a new event",
+    "step_select_problems_title": "Select problems",
+    "step_select_problems_link": "Browse the problem catalog",
+    "step_register_teams_title": "Register teams",
+    "step_register_teams_link": "Register teams in the event wizard",
+    "step_deploy_title": "Deploy",
+    "step_deploy_link": "Deploy from the event detail page"
   }
 }
