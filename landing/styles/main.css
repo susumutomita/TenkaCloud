@@ -95,12 +95,31 @@ p { margin: 0; }
 }
 
 /* ============== HERO ============== */
-.hero { padding: 72px 0 26px; }
+.hero { padding: 72px 0 26px; position: relative; overflow: hidden; }
+/* 墨流し (suminagashi) interactive canvas — sits behind the hero copy, faint, and
+   feathered at the edges so it blends into the page. Pointer-driven (see ink-bg.js);
+   purely decorative. */
+.hero .ink-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.85;
+  -webkit-mask-image: radial-gradient(125% 120% at 50% 38%, #000 55%, transparent 100%);
+  mask-image: radial-gradient(125% 120% at 50% 38%, #000 55%, transparent 100%);
+}
 .hero-grid {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: 420px 1fr;
   gap: 70px;
   align-items: center;
+}
+@media print {
+  .hero .ink-bg { display: none; }
 }
 .hero-copy { padding-top: 12px; }
 .hero h1 {
