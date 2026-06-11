@@ -28,6 +28,12 @@ import {
   checkDisruptionActions,
   checkDisruptionEffects,
 } from "./lib/disruption-action-check";
+import {
+  checkDisruptionTriggerRefs,
+  checkFlagSemantics,
+  checkPhaseTimeline,
+  checkUptimeMultiSemantics,
+} from "./lib/semantic-check";
 
 const REPO_ROOT = new URL("..", import.meta.url).pathname;
 const PROBLEMS_DIR = join(REPO_ROOT, "problems");
@@ -113,6 +119,11 @@ export function checkCrossRefs(metaPath: string, meta: Metadata): ValidationErro
     ...checkDisruptionActions(meta),
     ...checkDisruptionEffects(meta),
     ...checkRegionConsistency(meta),
+    // [Issue #1777] schema 通過後の field 間整合性 (semantic rules)。
+    ...checkUptimeMultiSemantics(meta),
+    ...checkPhaseTimeline(meta),
+    ...checkDisruptionTriggerRefs(meta),
+    ...checkFlagSemantics(meta),
   ];
 
   // CFn Outputs 構文 (`Key:`) を前提にした cross-ref は executable な aws/cloudformation
