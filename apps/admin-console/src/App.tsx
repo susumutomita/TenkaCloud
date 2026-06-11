@@ -12,6 +12,7 @@ import { OperationsPage } from "./pages/Operations";
 import { TenantCreatePage } from "./pages/TenantCreate";
 import { TenantDetailPage } from "./pages/TenantDetail";
 import { TenantListPage } from "./pages/TenantList";
+import { UsagePage } from "./pages/Usage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
@@ -54,6 +55,17 @@ export function App({ config }: { config: AppConfig }) {
             <RequireAuth>
               <ShellLayout samlSsoEnabled={config.features?.samlSso}>
                 <TenantDetailPage config={config} />
+              </ShellLayout>
+            </RequireAuth>
+          }
+        />
+        {/* Issue #1767: tenant usage dashboard (既存 AdminInsight データの可視化) */}
+        <Route
+          path="/usage"
+          element={
+            <RequireAuth>
+              <ShellLayout samlSsoEnabled={config.features?.samlSso}>
+                <UsagePage config={config} />
               </ShellLayout>
             </RequireAuth>
           }
