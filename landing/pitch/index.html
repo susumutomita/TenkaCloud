@@ -110,8 +110,19 @@
 
   @media (max-width:720px){ .g2,.g3{grid-template-columns:1fr;} .slide{padding:7vh 8vw;} }
 
+  /* 墨流し (suminagashi) interactive background — fixed canvas behind every slide.
+     Slides are already transparent, so the marble shows through; cards/tables keep
+     their own light fills for text contrast. Kept faint + static-between-gestures so
+     it never competes with the content. */
+  #ink { position:fixed; inset:0; z-index:0; display:block; pointer-events:none; }
+  .deck { position:relative; z-index:1; }
+  .title { background:
+      radial-gradient(circle at 18% 12%, rgba(9,105,218,.10), rgba(255,255,255,0) 46%),
+      radial-gradient(circle at 86% 88%, rgba(0,138,85,.10), rgba(255,255,255,0) 46%); }
+
   /* print → 1 slide per page (Cmd-P で配布用 PDF) */
   @media print {
+    #ink { display:none !important; }
     .deck{height:auto;overflow:visible;}
     .slide{min-height:auto;page-break-after:always;border:none;padding:7mm 12mm;}
     .progress,.counter,.hint{display:none;}
@@ -120,6 +131,7 @@
 </style>
 </head>
 <body>
+<canvas id="ink" aria-hidden="true"></canvas>
 <div class="progress" id="progress"></div>
 <div class="counter" id="counter">1</div>
 <div class="hint">↓ / → / Space</div>
@@ -325,6 +337,94 @@
 </div>
 
 <script>
+  // 墨流し (suminagashi) — subtle, interactive ink-marbling background.
+  // Pointer movement / taps drop ink that displaces the existing marble (the
+  // classic "mathematical marbling" radial push). It is static between gestures
+  // (no idle animation loop) so it never competes with the slide text and costs
+  // nothing when untouched. Honors prefers-reduced-motion + hides itself on print.
+  (function () {
+    var canvas = document.getElementById("ink");
+    if (!canvas || !canvas.getContext) return;
+    var ctx = canvas.getContext("2d");
+    var PAPER = "#fbfcfe";
+    var PALETTE = [
+      "rgba(7,17,31,0.08)",    // ink
+      "rgba(9,105,218,0.09)",  // blue
+      "rgba(0,138,85,0.09)",   // green
+    ];
+    var drops = [];          // { pts:[{x,y}...], stroke }
+    var MAX_DROPS = 48, POINTS = 72;
+    var W = 0, H = 0, ci = 0;
+
+    function resize() {
+      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      W = window.innerWidth; H = window.innerHeight;
+      canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+      canvas.style.width = W + "px"; canvas.style.height = H + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      render();
+    }
+    function nextColor() { ci = (ci + 1) % PALETTE.length; return PALETTE[ci]; }
+
+    // A new ink drop of radius r at (cx,cy) pushes every existing point P radially
+    // outward by sqrt(1 + r^2 / |P-c|^2) — that is what marbles old ink into rings.
+    function addDrop(cx, cy, r, stroke) {
+      var r2 = r * r;
+      for (var i = 0; i < drops.length; i++) {
+        var pts = drops[i].pts;
+        for (var j = 0; j < pts.length; j++) {
+          var dx = pts[j].x - cx, dy = pts[j].y - cy;
+          var d2 = dx * dx + dy * dy || 0.0001;
+          var f = Math.sqrt(1 + r2 / d2);
+          pts[j].x = cx + dx * f; pts[j].y = cy + dy * f;
+        }
+      }
+      var ring = [];
+      for (var k = 0; k < POINTS; k++) {
+        var a = (k / POINTS) * Math.PI * 2;
+        ring.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
+      }
+      drops.push({ pts: ring, stroke: stroke });
+      if (drops.length > MAX_DROPS) drops.shift();
+    }
+    function render() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+      ctx.lineWidth = 1; ctx.lineJoin = "round";
+      for (var i = 0; i < drops.length; i++) {
+        var pts = drops[i].pts;
+        ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+        for (var j = 1; j < pts.length; j++) ctx.lineTo(pts[j].x, pts[j].y);
+        ctx.closePath(); ctx.strokeStyle = drops[i].stroke; ctx.stroke();
+      }
+    }
+    function seed() {
+      for (var i = 0; i < 7; i++) {
+        addDrop(W * (0.15 + 0.7 * Math.random()), H * (0.15 + 0.7 * Math.random()),
+          36 + Math.random() * 80, nextColor());
+      }
+      render();
+    }
+
+    resize();
+    seed();
+    window.addEventListener("resize", resize);
+
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!reduce) {
+      // Throttle by travel distance so a sweep lays a trail of ink rings.
+      var lx = null, ly = null;
+      window.addEventListener("pointermove", function (e) {
+        if (lx !== null) { var dx = e.clientX - lx, dy = e.clientY - ly; if (dx * dx + dy * dy < 1444) return; }
+        lx = e.clientX; ly = e.clientY;
+        addDrop(e.clientX, e.clientY, 18 + Math.random() * 26, nextColor()); render();
+      }, { passive: true });
+      window.addEventListener("pointerdown", function (e) {
+        addDrop(e.clientX, e.clientY, 30 + Math.random() * 40, nextColor()); render();
+      }, { passive: true });
+    }
+  })();
+
   // 進捗バー + スライド番号。キーボードで次/前へスクロール（登壇操作）。
   (function () {
     var deck = document.getElementById("deck");
