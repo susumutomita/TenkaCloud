@@ -54,7 +54,7 @@ Both must be green. If something fails, fix the code; do not edit `biome.json` /
 
 **Read**:
 
-- [`docs/community/ONBOARDING.html`](./docs/community/ONBOARDING.html) — Scenario Reviewer role expectations.
+- [`docs/community/ONBOARDING.html`](./docs/community/ONBOARDING.html) — community roles and recognition paths.
 - [`docs/community/PROBLEM-REVIEW-CHECKLIST.html`](./docs/community/PROBLEM-REVIEW-CHECKLIST.html) — 6-section rubric (scoring fairness / hint progression / no-skip-by-luck / time-to-solve / scenario realism / template security).
 - [ADR-012](./docs/architecture/adr-012-problem-plugin-architecture.html) — the plugin contract; useful when you read `metadata.json`.
 

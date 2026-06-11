@@ -73,9 +73,9 @@
 <body>
 <header>
   <h1>TenkaCloud Community Onboarding</h1>
-  <p><em>Pick one of six roles. Each role has a 15-30 minute first task and a clear recognition path. You do not need to be personally onboarded by the maintainer.</em></p>
+  <p><em>Pick one of five roles. Each role has a 15-30 minute first task and a clear recognition path. You do not need to be personally onboarded by the maintainer.</em></p>
   <div class="meta">
-    <div><b>For:</b> CCoE practitioners, AWS / JAWS-UG members, cloud security &amp; SRE engineers, training facilitators, problem authors, testers, reviewers</div>
+    <div><b>For:</b> CCoE practitioners, AWS / JAWS-UG members, cloud security &amp; SRE engineers, training facilitators, problem authors, testers</div>
     <div><b>Coordination:</b> <a href="https://github.com/susumutomita/TenkaCloud/discussions">GitHub Discussions</a> (source of truth) + Discord (live coordination, optional)</div>
     <div><b>Related:</b> <a href="../architecture/adr-024-community-voting-and-problem-registry.html">ADR-024</a> (community voting), <a href="../../CONTRIBUTOR_MAP.md">CONTRIBUTOR_MAP.md</a> (task recipes)</div>
   </div>
@@ -85,7 +85,7 @@
 <h2>Contents</h2>
 <ul class="toc">
   <li><a href="#how-this-works">1. How this works</a></li>
-  <li><a href="#role-chooser">2. Role chooser (6 roles)</a></li>
+  <li><a href="#role-chooser">2. Role chooser (5 roles)</a></li>
   <li><a href="#first-pr">3. Role-specific first PR / contribution</a></li>
   <li><a href="#recognition">4. How contribution gets recognized</a></li>
   <li><a href="#communication">5. Where to communicate (GitHub vs Discord)</a></li>
@@ -151,25 +151,8 @@
     </dl>
   </div>
 
-  <div class="role-card reviewer">
-    <div class="role-title">Role 3</div>
-    <h3>Scenario Reviewer <span class="badge warn">judgement</span></h3>
-    <dl>
-      <dt>Expected contribution</dt>
-      <dd>Review whether a problem reflects real cloud practice. Check learning goals, hint progression, scoring fairness, scenario realism.</dd>
-      <dt>Required skill level</dt>
-      <dd>Production AWS experience (cloud security, SRE, platform). You have seen the real version of the incident a problem simulates.</dd>
-      <dt>First task</dt>
-      <dd>Review one open Challenge / Battle PR using <a href="./PROBLEM-REVIEW-CHECKLIST.html">PROBLEM-REVIEW-CHECKLIST.html</a>.</dd>
-      <dt>Where to communicate</dt>
-      <dd>GitHub PR review comments (durable). Discord <code>#reviewer-squad</code> for design discussion before review.</dd>
-      <dt>Time commitment</dt>
-      <dd>30-90 minutes per review. 1-2 reviews per month is enough.</dd>
-    </dl>
-  </div>
-
   <div class="role-card facilitator">
-    <div class="role-title">Role 4</div>
+    <div class="role-title">Role 3</div>
     <h3>Event Facilitator <span class="badge link">operational</span></h3>
     <dl>
       <dt>Expected contribution</dt>
@@ -186,7 +169,7 @@
   </div>
 
   <div class="role-card platform">
-    <div class="role-title">Role 5</div>
+    <div class="role-title">Role 4</div>
     <h3>Platform Contributor <span class="badge muted">deep</span></h3>
     <dl>
       <dt>Expected contribution</dt>
@@ -203,7 +186,7 @@
   </div>
 
   <div class="role-card sponsor">
-    <div class="role-title">Role 6</div>
+    <div class="role-title">Role 5</div>
     <h3>Sponsor / Requester <span class="badge reject">demand</span></h3>
     <dl>
       <dt>Expected contribution</dt>
@@ -246,16 +229,6 @@
   <li>Scaffold: <code>bun run scripts/tenkacloud-problem.ts create &lt;id&gt; --kind &lt;kind&gt;</code> (or use the <code>/new-problem</code> Claude Code skill).</li>
   <li>Fill <code>metadata.json</code> and <code>template.yaml</code>. Validate locally: <code>bun run scripts/tenkacloud-problem.ts validate &lt;id&gt;</code>.</li>
   <li>Open a PR in the <a href="https://github.com/susumutomita/TenkaCloudChallenge">TenkaCloudChallenge</a> catalog repo.</li>
-</ol>
-</div>
-
-<div class="recipe">
-<h4>Scenario Reviewer — Review one problem PR</h4>
-<ol>
-  <li>Pick an open problem PR in <a href="https://github.com/susumutomita/TenkaCloudChallenge/pulls">TenkaCloudChallenge/pulls</a>.</li>
-  <li>Walk through <a href="./PROBLEM-REVIEW-CHECKLIST.html">PROBLEM-REVIEW-CHECKLIST.html</a> (scoring fairness, hint progression, no-skip-by-luck, time-to-solve estimate, scenario realism, template security).</li>
-  <li>Leave PR review comments referencing checklist items. An "Approve" is fine if every item passes; a "Request changes" review is fine when items fail.</li>
-  <li>For deeper template security concerns, cross-reference the <a href="https://github.com/susumutomita/TenkaCloud/issues/1353">#1353 hardening checklist</a>.</li>
 </ol>
 </div>
 
@@ -308,11 +281,6 @@
     <td>Problem Author</td>
     <td>Your handle is the <code>author</code> field in <code>metadata.json</code>. The catalog UI shows the byline on every problem card.</td>
     <td><code>problems/&lt;id&gt;/metadata.json</code> <code>author</code> field + catalog UI + <code>CONTRIBUTORS.md</code> "Problem authors"</td>
-  </tr>
-  <tr>
-    <td>Scenario Reviewer</td>
-    <td>Your GitHub review approval is preserved in the PR. Active reviewers get the "Reviewer squad" Discord role and a section in <code>CONTRIBUTORS.md</code>.</td>
-    <td>GitHub PR review log + <code>CONTRIBUTORS.md</code> "Reviewers"</td>
   </tr>
   <tr>
     <td>Event Facilitator</td>
@@ -370,11 +338,6 @@
     <td>Final review (use PR)</td>
   </tr>
   <tr>
-    <td>Discord <code>#reviewer-squad</code></td>
-    <td>Discussing review heuristics, rubric calibration</td>
-    <td>Per-PR review (use GitHub PR review)</td>
-  </tr>
-  <tr>
     <td>Discord <code>#facilitators</code></td>
     <td>Scheduling dry-runs, debriefing in real time</td>
     <td>Permanent runbook updates (open a docs PR)</td>
@@ -425,7 +388,7 @@
 
 <details>
 <summary>What if my role does not appear in this list?</summary>
-<p>Open a <a href="https://github.com/susumutomita/TenkaCloud/discussions">Discussion</a>. The 6-role split was designed to cover the typical OSS contributor surface; new roles are welcome if they fill a real gap.</p>
+<p>Open a <a href="https://github.com/susumutomita/TenkaCloud/discussions">Discussion</a>. The 5-role split was designed to cover the typical OSS contributor surface; new roles are welcome if they fill a real gap.</p>
 </details>
 
 </section>
