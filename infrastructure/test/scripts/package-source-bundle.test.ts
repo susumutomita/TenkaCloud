@@ -94,6 +94,24 @@ describe("scripts/package-source-bundle.sh (#1552)", () => {
     expect(JSON.parse(packageJson.stdout).workspaces).toEqual(["cdk", "packages/*"]);
   });
 
+  it("should fail loudly when the problems catalog submodule is not checked out", () => {
+    const { root, workDir } = makeFixture();
+    // Simulate an uninitialised `problems` submodule: the mount point exists but
+    // is empty. Without a guard this ships an empty catalog and every per-team
+    // deploy later aborts at deploy-battles.sh's "template not found" check
+    // BEFORE any CloudFormation request (the "deploy never reaches CFn" regression).
+    rmSync(join(root, "problems"), { force: true, recursive: true });
+    mkdirSync(join(root, "problems"), { recursive: true });
+
+    const result = packageFixture(root, workDir);
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain(
+      "problem catalog submodule is not checked out",
+    );
+    expect(existsSync(join(workDir, "source.zip"))).toBe(false);
+  });
+
   it("should fail before archiving when staged files exceed the configured limit", () => {
     const { root, workDir } = makeFixture();
     writeFileSync(join(root, "infrastructure", "lib", "large.bin"), Buffer.alloc(2 * 1024 * 1024));
