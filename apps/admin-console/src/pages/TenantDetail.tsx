@@ -40,10 +40,11 @@ type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => 
  */
 const POLL_INTERVAL_MS = 60_000;
 
+// 製品の正準 tier (tenants.ts の Tier 型 = basic/advanced/platinum)。小文字で保存された
+// tier も同じ表示に正規化する。未知の値は raw 表示に fallback (下の `?? tenant.tier`)。
 const TIER_LABEL: Record<string, string> = {
   BASIC: "BASIC",
-  STANDARD: "STANDARD",
-  PREMIUM: "PREMIUM",
+  ADVANCED: "ADVANCED",
   PLATINUM: "PLATINUM",
 };
 
@@ -164,7 +165,7 @@ function OverviewTab({
             label: t("tenant_detail.label_tier"),
             value: (
               <Badge color={tierBadgeColor(tenant.tier)}>
-                {TIER_LABEL[tenant.tier] ?? tenant.tier}
+                {TIER_LABEL[tenant.tier.toUpperCase()] ?? tenant.tier}
               </Badge>
             ),
           },

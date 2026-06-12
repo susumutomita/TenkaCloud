@@ -233,19 +233,24 @@ export function defaultMakeCognitoDeps(
   };
 }
 
-// #1385: pooled tier (BASIC / STANDARD / PREMIUM) は UserPool + UserPoolClient を全 pooled tenant で
-// 共有する (ADR-018)。 そこで SAML config を mutate (= UserPoolClient の SupportedIdentityProviders /
+// #1385: pooled tier は UserPool + UserPoolClient を全 pooled tenant で共有する (ADR-018)。
+// そこで SAML config を mutate (= UserPoolClient の SupportedIdentityProviders /
 // ExplicitAuthFlows 書き換え) すると他 pooled tenant のログインを巻き込む (cross-tenant DoS /
 // 認証ハイジャック)。 専有 UserPool を持つ silo (PLATINUM) / Lite mode のみ mutation を許可する。
 // `custom:tenantTier` は provision 時に server-set され、 API GW JWT authorizer が署名検証するため
 // 詐称不能。 claim 不在 (= silo / Lite / admin 経路) は許可側に倒す (pooled は必ず tier claim を持つ)。
-const POOLED_TIERS: ReadonlySet<string> = new Set(["BASIC", "STANDARD", "PREMIUM"]);
+//
+// fail-closed: 旧実装の pooled deny-list ({BASIC, STANDARD, PREMIUM}) は tier リネーム
+// (#55 premium→platinum、 製品 tier は basic/advanced/platinum) で ADVANCED を取りこぼし、
+// pooled tenant が共有 UserPool を mutate できた。 「claim があり SILO_TIER 以外は全て block」
+// に反転し、 将来の tier 追加 / リネームでもガードが開かないようにする。
+const SILO_TIER = "PLATINUM";
 
 export function pooledTierSamlBlock(c: Context): SamlRouteResult | undefined {
   const claims = extractClaims(c) as JwtClaims | undefined;
   const raw = claims?.["custom:tenantTier"];
   const tier = typeof raw === "string" ? raw.trim().toUpperCase() : undefined;
-  if (tier && POOLED_TIERS.has(tier)) {
+  if (tier && tier !== SILO_TIER) {
     return {
       status: StatusCodes.SERVICE_UNAVAILABLE,
       body: {
