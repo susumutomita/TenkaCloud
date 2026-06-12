@@ -10,7 +10,7 @@ Sorted alphabetically. Acronyms are spelled out on first reference.
 
 The per-tenant runtime that hosts a tenant's own Cognito UserPool, API Gateway HTTP API, and `application-admin-console` SPA. Two tier shapes:
 
-- **Pooled** — BASIC / STANDARD / PREMIUM tiers share a single CDK stack (`serverless-saas-ref-arch-tenant-template-pooled`). One Cognito UserPool, one API, one SPA serve all pooled tenants.
+- **Pooled** — BASIC / ADVANCED tiers share a single CDK stack (`serverless-saas-ref-arch-tenant-template-pooled`). One Cognito UserPool, one API, one SPA serve all pooled tenants.
 - **Silo** — PLATINUM tier gets its own stack (`serverless-saas-ref-arch-tenant-template-<tenantId>`) deployed via the per-tenant `ServerlessSaaSPipeline`.
 
 Distinct from Control Plane (= tenant manager). The Application Plane runs *tenant business logic*; it doesn't manage tenants. Defined by invariant [`INVARIANT_CONTROL_PLANE_DOES_NOT_HOST_TENANT_RUNTIME`](./harness.md).
@@ -171,7 +171,7 @@ Three-asset model (+ optional fourth): `metadata.json` (required) + `template.ya
 
 The two SaaS tenant isolation models, both supported in SaaS mode.
 
-- **Pooled** — BASIC / STANDARD / PREMIUM tenants share one CDK stack. Cheaper, faster onboarding.
+- **Pooled** — BASIC / ADVANCED tenants share one CDK stack. Cheaper, faster onboarding.
 - **Silo** — PLATINUM tenants each get their own stack via `ServerlessSaaSPipeline`. Stronger isolation, higher cost.
 
 Lite mode is implicitly pooled (= one tenant, one stack). See [ADR-018](./adr-018-pooled-userpool-saml-isolation.html).
@@ -226,7 +226,7 @@ The catalog repo: <https://github.com/susumutomita/TenkaCloudChallenge>. Mounted
 
 ## Tier
 
-The pricing tier a tenant belongs to: BASIC / STANDARD / PREMIUM / PLATINUM. The first three are pooled; PLATINUM is silo. Determined at tenant-create time and stored on `TenantDetails`. The pipeline decides pooled vs silo based on tier.
+The pricing tier a tenant belongs to: BASIC / ADVANCED / PLATINUM (the old PREMIUM name was renamed to PLATINUM in PR-56). BASIC / ADVANCED are pooled; PLATINUM is silo. Determined at tenant-create time and stored on `TenantDetails`. The pipeline decides pooled vs silo based on tier. (SBT's internal per-tier API-key SSM parameters still use SBT's own basic/standard/premium/platinum names — those are SBT-internal and distinct from the product tiers.)
 
 ---
 
