@@ -70,6 +70,9 @@ export class DeployDeleteStateMachine extends Construct {
         OPERATION: { value: "delete" },
         DELETE_STACK_NAME: { value: JsonPath.stringAt("$.detail.stackName") },
         DELETE_REGION: { value: JsonPath.stringAt("$.detail.region") },
+        // #1797: stack が実在する account を script に渡し、credentials の account と
+        // 突き合わせる。mismatch のまま delete-stack すると no-op 成功で stack が残存する。
+        DELETE_EXPECTED_AWS_ACCOUNT_ID: { value: JsonPath.stringAt("$.detail.awsAccountId") },
         PROBLEM_EXTERNAL_ID: { value: JsonPath.stringAt("$.detail.jobId") },
         TENKACLOUD_CORRELATION_ID: { value: JsonPath.stringAt("$.detail.jobId") },
       },
@@ -86,6 +89,8 @@ export class DeployDeleteStateMachine extends Construct {
           OPERATION: { value: "delete" },
           DELETE_STACK_NAME: { value: JsonPath.stringAt("$.detail.stackName") },
           DELETE_REGION: { value: JsonPath.stringAt("$.detail.region") },
+          // #1797: AssumeRole 先が stack の account と一致するかを script 側で検証する。
+          DELETE_EXPECTED_AWS_ACCOUNT_ID: { value: JsonPath.stringAt("$.detail.awsAccountId") },
           PROBLEM_EXTERNAL_ID: { value: JsonPath.stringAt("$.detail.jobId") },
           TENKACLOUD_CORRELATION_ID: { value: JsonPath.stringAt("$.detail.jobId") },
           COMPETITOR_ROLE_ARN: {

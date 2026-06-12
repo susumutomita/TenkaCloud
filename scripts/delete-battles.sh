@@ -32,6 +32,20 @@ export DEPLOY_REGION="${REGION}"
 assume_competitor_role_if_configured
 trace_log "deploy.codebuild.start" operation "delete" region "${REGION}" stackName "${STACK_NAME}"
 
+# #1797: credentials が「stack の実在する account」を指しているかを delete-stack の前に検証。
+# 別 account を指したまま進むと delete-stack は no-op 成功 / wait も成功扱いになり、
+# DB は DELETED なのに実 stack が CREATE_COMPLETE で残存する silent leak になる。
+# DELETE_EXPECTED_AWS_ACCOUNT_ID 未設定 (在来 event) は従来挙動のまま skip。
+if [[ -n "${DELETE_EXPECTED_AWS_ACCOUNT_ID:-}" ]]; then
+  ACTUAL_AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+  if [[ "${ACTUAL_AWS_ACCOUNT_ID}" != "${DELETE_EXPECTED_AWS_ACCOUNT_ID}" ]]; then
+    trace_log "deploy.cfn.delete.account_mismatch" stackName "${STACK_NAME}" region "${REGION}" \
+      expectedAccount "${DELETE_EXPECTED_AWS_ACCOUNT_ID}" actualAccount "${ACTUAL_AWS_ACCOUNT_ID}"
+    echo "error: credentials are for account ${ACTUAL_AWS_ACCOUNT_ID} but stack ${STACK_NAME} lives in ${DELETE_EXPECTED_AWS_ACCOUNT_ID}; aborting before delete-stack (the stack would silently survive)" >&2
+    exit 1
+  fi
+fi
+
 echo "=========================================="
 echo "Deleting stack"
 echo "  StackName : ${STACK_NAME}"
