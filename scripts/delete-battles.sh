@@ -35,9 +35,15 @@ trace_log "deploy.codebuild.start" operation "delete" region "${REGION}" stackNa
 # #1797: credentials が「stack の実在する account」を指しているかを delete-stack の前に検証。
 # 別 account を指したまま進むと delete-stack は no-op 成功 / wait も成功扱いになり、
 # DB は DELETED なのに実 stack が CREATE_COMPLETE で残存する silent leak になる。
-# DELETE_EXPECTED_AWS_ACCOUNT_ID 未設定 (在来 event) は従来挙動のまま skip。
+# State Machine 経由は常に DELETE_EXPECTED_AWS_ACCOUNT_ID が入る (欠損 event は SFN 側の
+# isPresent ガードで markFailed)。未設定で skip するのは手動実行 (運営 recovery) のみ。
 if [[ -n "${DELETE_EXPECTED_AWS_ACCOUNT_ID:-}" ]]; then
-  ACTUAL_AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+  # set -e 下で command substitution が黙って死なないよう、STS 失敗は明示的に trace する。
+  if ! ACTUAL_AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text 2>&1)"; then
+    trace_log "deploy.cfn.delete.failed" stackName "${STACK_NAME}" region "${REGION}"
+    echo "error: sts get-caller-identity failed (credential / STS availability): ${ACTUAL_AWS_ACCOUNT_ID}" >&2
+    exit 1
+  fi
   if [[ "${ACTUAL_AWS_ACCOUNT_ID}" != "${DELETE_EXPECTED_AWS_ACCOUNT_ID}" ]]; then
     trace_log "deploy.cfn.delete.account_mismatch" stackName "${STACK_NAME}" region "${REGION}" \
       expectedAccount "${DELETE_EXPECTED_AWS_ACCOUNT_ID}" actualAccount "${ACTUAL_AWS_ACCOUNT_ID}"

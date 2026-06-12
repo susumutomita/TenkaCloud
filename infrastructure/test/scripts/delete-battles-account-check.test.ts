@@ -42,12 +42,14 @@ function runDelete(env: Record<string, string>): {
   const fakeAws = `#!/usr/bin/env bash
 echo "$@" >> "$AWS_CALL_LOG"
 if [ "$1" = "sts" ] && [ "$2" = "get-caller-identity" ]; then
+  if [ -z "$FAKE_CALLER_ACCOUNT" ]; then echo "fake sts failure" >&2; exit 254; fi
   echo "$FAKE_CALLER_ACCOUNT"
   exit 0
 fi
 exit 0
 `;
-  writeFileSync(join(binDir, "aws"), fakeAws, { mode: 0o755 });
+  // writeFileSync の mode は umask で削られ得るので chmodSync で 0o755 を保証する。
+  writeFileSync(join(binDir, "aws"), fakeAws);
   chmodSync(join(binDir, "aws"), 0o755);
 
   const result = spawnSync("bash", [DELETE_SCRIPT, "tc-demo-team", "ap-northeast-1"], {
@@ -75,7 +77,9 @@ afterEach(() => {
   }
 });
 
-describe("delete-battles.sh expected-account verification (#1797)", () => {
+// bash + fake aws を spawn する実 I/O テスト。全 suite 並列時は fork 飽和で default 5s を
+// 超え flake するため、明示 timeout を持つ (test/scripts の spawn 系と同型)。
+describe("delete-battles.sh expected-account verification (#1797)", { timeout: 30_000 }, () => {
   it("should abort before delete-stack when credentials point at a different account", () => {
     const { status, stderr, awsCalls } = runDelete({
       DELETE_EXPECTED_AWS_ACCOUNT_ID: "999999999999",
@@ -98,7 +102,17 @@ describe("delete-battles.sh expected-account verification (#1797)", () => {
     expect(awsCalls).toContain("cloudformation wait stack-delete-complete");
   });
 
-  it("should skip the check for legacy invocations without DELETE_EXPECTED_AWS_ACCOUNT_ID", () => {
+  it("should fail loudly with a clear error when sts get-caller-identity itself fails", () => {
+    const { status, stderr, awsCalls } = runDelete({
+      DELETE_EXPECTED_AWS_ACCOUNT_ID: "999999999999",
+      FAKE_CALLER_ACCOUNT: "",
+    });
+    expect(status).toBe(1);
+    expect(stderr).toContain("get-caller-identity failed");
+    expect(awsCalls).not.toContain("cloudformation delete-stack");
+  });
+
+  it("should skip the check for manual invocations without DELETE_EXPECTED_AWS_ACCOUNT_ID", () => {
     const { status, stderr, awsCalls } = runDelete({
       DELETE_EXPECTED_AWS_ACCOUNT_ID: "",
       FAKE_CALLER_ACCOUNT: "111111111111",

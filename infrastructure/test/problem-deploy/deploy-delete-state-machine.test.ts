@@ -76,4 +76,16 @@ describe("DeployDeleteStateMachine expected-account wiring (#1797)", () => {
     expect(asl).toContain('"Variable":"$.detail.externalIdParameterName"');
     expect(asl).toContain("InvalidAssumeRoleMetadata");
   });
+
+  it("should route events missing awsAccountId to markFailed instead of an uncatchable States.Runtime", () => {
+    const { template } = buildTestStack();
+    const asl = extractDefinition(template);
+
+    // 両 CodeBuild state が $.detail.awsAccountId を JsonPath 参照するため、欠損 event を
+    // CodeBuild state に流すと States.Runtime (= addCatch 捕捉不能) で execution が死に、
+    // 行が DELETING のまま stuck する。両 when 条件の isPresent ガードを pin する。
+    const guardCount = asl.split('"Variable":"$.detail.awsAccountId"').length - 1;
+    expect(guardCount).toBe(2);
+    expect(asl).toContain("detail must include awsAccountId");
+  });
 });
