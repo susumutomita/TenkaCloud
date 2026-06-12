@@ -77,7 +77,9 @@ afterEach(() => {
   }
 });
 
-describe("delete_unrecoverable_stack_if_present", () => {
+// bash + fake aws を spawn する実 I/O テスト。全 suite 並列時は fork 飽和で default 5s を
+// 超え flake するため、明示 timeout を持つ (package-source-bundle と同型)。
+describe("delete_unrecoverable_stack_if_present", { timeout: 30_000 }, () => {
   for (const status of [
     "ROLLBACK_COMPLETE",
     "ROLLBACK_FAILED",

@@ -5,10 +5,12 @@ import { ParticipantPortalLambda } from "../lib/problem-deploy/participant-porta
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack";
 
 // synth は 5 個の NodejsFunction (= esbuild bundling) を含むため CI 上で ~7s かかる。
-// vitest の default 5s timeout を 30s に拡張する (= 既存 #538 test と同じ pattern)。
+// vitest の default 5s timeout を拡張する (= 既存 #538 test と同じ pattern)。
 // Issue #1249: 旧 problem-deploy-backend-stack.test.ts (781 行) を resource type 別 6 ファイル
 // + helper に分割した際の共有 timeout (各 file が自前で synth するため timeout が必要)。
-export const SYNTH_TIMEOUT_MS = 30_000;
+// 全 suite 並列時は fork 飽和で 36MB asset の esbuild bundling 単体が 25s+ かかり 30s を
+// 超えることがあるため 120s (= 分離実行 ~7s に対する安全マージン、hang 検出は維持)。
+export const SYNTH_TIMEOUT_MS = 120_000;
 
 // 全 it() で同じ Template を使い回す。stack 構造は default props で固定なので、
 // describe ブロック単位で 1 度 synth すれば再利用できる。
