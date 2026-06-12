@@ -148,7 +148,7 @@
 </tr>
 <tr>
 <td><code>deploy.codebuild.succeeded</code></td>
-<td><code>deploy-battles.sh:234</code> / <code>delete-battles.sh:81</code></td>
+<td><code>deploy-battles.sh:234</code> / <code>delete-battles.sh:103</code></td>
 <td>info</td>
 <td><code>operation</code>, <code>region</code>, <code>problemCount</code></td>
 </tr>
@@ -178,27 +178,33 @@
 </tr>
 <tr>
 <td><code>deploy.cfn.delete.start</code></td>
-<td><code>delete-battles.sh:40</code></td>
+<td><code>delete-battles.sh:54</code></td>
 <td>info</td>
 <td><code>stackName</code>, <code>region</code></td>
 </tr>
 <tr>
 <td><code>deploy.cfn.delete.succeeded</code></td>
-<td><code>delete-battles.sh:80</code></td>
+<td><code>delete-battles.sh:102</code></td>
 <td>info</td>
 <td>同上</td>
 </tr>
 <tr>
 <td><code>deploy.cfn.delete.failed</code></td>
-<td><code>delete-battles.sh:56</code> / <code>:74</code></td>
+<td><code>delete-battles.sh:78</code> / <code>:96</code></td>
 <td>info</td>
 <td>同上</td>
 </tr>
 <tr>
 <td><code>deploy.cfn.delete.already_deleted</code></td>
-<td><code>delete-battles.sh:52</code> / <code>:70</code></td>
+<td><code>delete-battles.sh:74</code> / <code>:92</code></td>
 <td>info</td>
 <td>同上 (= 冪等 no-op、 stuck 復旧時に便利)</td>
+</tr>
+<tr>
+<td><code>deploy.cfn.delete.account_mismatch</code></td>
+<td><code>delete-battles.sh:42</code></td>
+<td>info</td>
+<td><code>stackName</code>, <code>region</code>, <code>expectedAccount</code>, <code>actualAccount</code> (= #1797 credentials が stack の account と不一致。 delete-stack 発行前に loud fail し silent leak を防ぐ)</td>
 </tr>
 </tbody></table>
 <p>Shell 経路の <code>correlationId</code> / <code>jobId</code> field は <code>TENKACLOUD_CORRELATION_ID</code> (現状 <code>PROBLEM_EXTERNAL_ID</code> と同値) を State Machine から伝搬する。 fallback として両 env のどちらか空でない方を採用する。</p>
