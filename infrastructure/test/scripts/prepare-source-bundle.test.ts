@@ -66,7 +66,9 @@ afterEach(() => {
   }
 });
 
-describe("scripts/prepare-source-bundle.sh region resolution", () => {
+// bash + aws CLI shim を spawn する実 I/O テスト。全 suite 並列時は fork 飽和で
+// default 5s を超え flake するため、明示 timeout を持つ (package-source-bundle と同型)。
+describe("scripts/prepare-source-bundle.sh region resolution", { timeout: 30_000 }, () => {
   it("should resolve region from AWS_REGION when no aws config profile exists", () => {
     // Reproduces the CodeBuild Lite-deploy failure: AWS_REGION is injected by the
     // build environment but `aws configure get region` has no config file.
@@ -112,7 +114,9 @@ describe("scripts/prepare-source-bundle.sh region resolution", () => {
   });
 });
 
-describe("scripts/prepare-source-bundle.sh bucket resolution (fresh-account #1749)", () => {
+describe("scripts/prepare-source-bundle.sh bucket resolution (fresh-account #1749)", {
+  timeout: 30_000,
+}, () => {
   it("should compute an account-scoped bucket when the name is unset", () => {
     const result = resolveBundleEnv({ AWS_REGION: "ap-northeast-1" });
 

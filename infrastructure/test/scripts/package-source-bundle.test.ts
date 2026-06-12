@@ -65,7 +65,9 @@ afterEach(() => {
 });
 
 describe("scripts/package-source-bundle.sh (#1552)", () => {
-  it("should package allowlisted source roots without AWS credentials", () => {
+  // bash + zip を spawn する実 I/O テスト。単体では ~2s だが全 suite 並列時は
+  // fork 飽和で default 5s を超え flake するため、明示 timeout を持つ。
+  it("should package allowlisted source roots without AWS credentials", { timeout: 30_000 }, () => {
     const { root, workDir } = makeFixture();
 
     const result = packageFixture(root, workDir, {
