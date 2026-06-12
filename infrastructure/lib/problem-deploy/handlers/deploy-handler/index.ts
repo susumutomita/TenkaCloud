@@ -23,6 +23,7 @@ import {
   UnknownProblemError,
   UnverifiedCompetitorAccountError,
 } from "./deploy.js";
+import { DeployQuotaExceededError, enforceDeployQuota, resolveQuotaTier } from "./deploy-quota.js";
 import { getDeployment, listDeployments } from "./list.js";
 import { InvalidRetryRequestError, retryDeployments, validateRetryRequest } from "./retry.js";
 import {
@@ -163,9 +164,28 @@ app.post("/problems/:problemId/deploy", async (c) => {
   const ctx = buildContext(shared, resolveTenantId(c));
 
   try {
+    // #1766: tier 別の同時デプロイクォータ。cloud mutation (DDB Put / EventBridge) の前に弾く。
+    const tier = resolveQuotaTier(c);
+    await enforceDeployQuota(
+      { ddb: shared.ddb, tableName: shared.tableName, quota: shared.deployQuota },
+      ctx.tenantId,
+      tier,
+    );
     const response = await startDeployment(ctx, { ...parsed.data, problemId });
     return c.json(response, StatusCodes.ACCEPTED);
   } catch (err) {
+    if (err instanceof DeployQuotaExceededError) {
+      return c.json(
+        {
+          error: "deploy_quota_exceeded",
+          tier: err.tier,
+          limit: err.limit,
+          active: err.active,
+          message: `同時デプロイ上限 (${err.tier}: ${err.limit}) に達しています。不要な deployment を削除するか、上位 tier を検討してください。`,
+        },
+        StatusCodes.TOO_MANY_REQUESTS,
+      );
+    }
     if (err instanceof UnknownProblemError) {
       return c.json({ error: "unknown_problem", problemId }, StatusCodes.NOT_FOUND);
     }

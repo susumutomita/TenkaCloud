@@ -44,6 +44,8 @@ export function synthWithDeployConcurrentBuildLimit(): Template {
     problemsScoring: {},
     problemsEndpoints: {},
     deployConcurrentBuildLimit: 200,
+    // #1766: tier 別同時デプロイ上限の env 配線検証用。
+    deployQuotaByTier: { basic: 2, advanced: 5, platinum: 10 },
     environmentName: "development",
   });
   return Template.fromStack(stack);

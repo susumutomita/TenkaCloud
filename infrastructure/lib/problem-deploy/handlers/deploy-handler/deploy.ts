@@ -22,6 +22,7 @@ import {
   resolveChallengePayloadBucket,
 } from "../shared/visibility.js";
 import { type AdapterDependencyConfig, buildAdapterDependencies } from "./adapter-dependencies.js";
+import { type DeployQuotaConfig, parseDeployQuota } from "./deploy-quota.js";
 import { buildStackPrefix, slugify } from "./naming.js";
 import { generateChallengePayloadUrl } from "./presigned-url.js";
 import { generateTeamLoginKey } from "./team-key.js";
@@ -329,6 +330,8 @@ export interface DeploySharedResources {
   readonly ssm: SSMClient;
   /** [ADR-026 / #1412] AppRun REST base URL の override (env)。 未設定なら本番 AppRun 共用型。 */
   readonly sakuraAppRunBaseUrl: string | undefined;
+  /** #1766: tier 別同時デプロイ上限 (env JSON)。 未設定 = クォータ無効 (在来 stack / Lite)。 */
+  readonly deployQuota: DeployQuotaConfig | undefined;
 }
 
 export function buildSharedResources(): DeploySharedResources {
@@ -347,6 +350,7 @@ export function buildSharedResources(): DeploySharedResources {
     s3: new S3Client({}),
     ssm: new SSMClient({}),
     sakuraAppRunBaseUrl: process.env.SAKURA_APPRUN_BASE_URL || undefined,
+    deployQuota: parseDeployQuota(process.env.DEPLOY_QUOTA_BY_TIER),
   };
 }
 

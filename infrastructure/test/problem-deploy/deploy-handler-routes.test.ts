@@ -49,6 +49,16 @@ vi.mock("../../lib/problem-deploy/handlers/deploy-handler/delete", () => ({
   requestTeardown: mocks.requestTeardown,
 }));
 
+// #1766: enforceDeployQuota だけ差し替え、 error class / resolveQuotaTier は実物を使う
+// (= instanceof 判定の class identity を production と一致させる)。
+const quotaMocks = vi.hoisted(() => ({ enforceDeployQuota: vi.fn() }));
+vi.mock("../../lib/problem-deploy/handlers/deploy-handler/deploy-quota", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../lib/problem-deploy/handlers/deploy-handler/deploy-quota")
+  >("../../lib/problem-deploy/handlers/deploy-handler/deploy-quota");
+  return { ...actual, enforceDeployQuota: quotaMocks.enforceDeployQuota };
+});
+
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/stack-progress", () => ({
   getStackProgress: mocks.getStackProgress,
   defaultCfnClient: vi.fn(),
@@ -74,6 +84,26 @@ const VALID_DEPLOY_BODY = {
 
 describe("POST /problems/:problemId/deploy", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("#1766: should return 429 + quota info when the tier deploy quota is exceeded", async () => {
+    const { DeployQuotaExceededError } = await import(
+      "../../lib/problem-deploy/handlers/deploy-handler/deploy-quota"
+    );
+    quotaMocks.enforceDeployQuota.mockRejectedValueOnce(
+      new DeployQuotaExceededError("basic", 2, 2),
+    );
+    const res = await app.request("/problems/security-battle-royale/deploy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(VALID_DEPLOY_BODY),
+    });
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toBe("deploy_quota_exceeded");
+    expect(body).toMatchObject({ tier: "basic", limit: 2, active: 2 });
+    // クォータ超過時は cloud mutation (startDeployment) に到達しない。
+    expect(mocks.startDeployment).not.toHaveBeenCalled();
+  });
 
   it("Phase 2.2: should return 422 + awsAccountId on UnverifiedCompetitorAccountError", async () => {
     mocks.startDeployment.mockRejectedValueOnce(
