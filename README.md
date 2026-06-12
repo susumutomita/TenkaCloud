@@ -156,7 +156,7 @@ See [`docker-compose.yml`](./docker-compose.yml) and [`docker/Dockerfile`](./doc
 ### D. SaaS mode (optional)
 
 Use SaaS mode only when you need tenant onboarding, pooled tiers
-(BASIC / STANDARD / PREMIUM), silo tenants (PLATINUM), and the SBT control plane.
+(BASIC / ADVANCED), silo tenants (PLATINUM), and the SBT control plane.
 
 ```bash
 cp infrastructure/environments/development/.env.example \

@@ -55,7 +55,7 @@
 <h2>AppPlane / Application Plane</h2>
 <p>The per-tenant runtime that hosts a tenant&#39;s own Cognito UserPool, API Gateway HTTP API, and <code>application-admin-console</code> SPA. Two tier shapes:</p>
 <ul>
-<li><strong>Pooled</strong> — BASIC / STANDARD / PREMIUM tiers share a single CDK stack (<code>serverless-saas-ref-arch-tenant-template-pooled</code>). One Cognito UserPool, one API, one SPA serve all pooled tenants.</li>
+<li><strong>Pooled</strong> — BASIC / ADVANCED tiers share a single CDK stack (<code>serverless-saas-ref-arch-tenant-template-pooled</code>). One Cognito UserPool, one API, one SPA serve all pooled tenants.</li>
 <li><strong>Silo</strong> — PLATINUM tier gets its own stack (<code>serverless-saas-ref-arch-tenant-template-&lt;tenantId&gt;</code>) deployed via the per-tenant <code>ServerlessSaaSPipeline</code>.</li>
 </ul>
 <p>Distinct from Control Plane (= tenant manager). The Application Plane runs <em>tenant business logic</em>; it doesn&#39;t manage tenants. Defined by invariant <a href="./harness.md"><code>INVARIANT_CONTROL_PLANE_DOES_NOT_HOST_TENANT_RUNTIME</code></a>.</p>
@@ -203,7 +203,7 @@
 <h2>Pooled vs Silo</h2>
 <p>The two SaaS tenant isolation models, both supported in SaaS mode.</p>
 <ul>
-<li><strong>Pooled</strong> — BASIC / STANDARD / PREMIUM tenants share one CDK stack. Cheaper, faster onboarding.</li>
+<li><strong>Pooled</strong> — BASIC / ADVANCED tenants share one CDK stack. Cheaper, faster onboarding.</li>
 <li><strong>Silo</strong> — PLATINUM tenants each get their own stack via <code>ServerlessSaaSPipeline</code>. Stronger isolation, higher cost.</li>
 </ul>
 <p>Lite mode is implicitly pooled (= one tenant, one stack). See <a href="./adr-018-pooled-userpool-saml-isolation.html">ADR-018</a>.</p>
@@ -232,7 +232,7 @@
 <p>The catalog repo: <a href="https://github.com/susumutomita/TenkaCloudChallenge">https://github.com/susumutomita/TenkaCloudChallenge</a>. Mounted as a Git submodule at <code>problems/</code> in this repo. Holds the actual problem content (battles + challenges) while the platform repo holds the host that deploys/scores them. The split is the physical manifestation of <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> + <a href="./adr-008-problem-payload-separation.html">ADR-008</a>.</p>
 <hr>
 <h2>Tier</h2>
-<p>The pricing tier a tenant belongs to: BASIC / STANDARD / PREMIUM / PLATINUM. The first three are pooled; PLATINUM is silo. Determined at tenant-create time and stored on <code>TenantDetails</code>. The pipeline decides pooled vs silo based on tier.</p>
+<p>The pricing tier a tenant belongs to: BASIC / ADVANCED / PLATINUM (the old PREMIUM name was renamed to PLATINUM in PR-56). BASIC / ADVANCED are pooled; PLATINUM is silo. Determined at tenant-create time and stored on <code>TenantDetails</code>. The pipeline decides pooled vs silo based on tier. (SBT&#39;s internal per-tier API-key SSM parameters still use SBT&#39;s own basic/standard/premium/platinum names — those are SBT-internal and distinct from the product tiers.)</p>
 <hr>
 <h2>TrustBridge</h2>
 <p>The audit-and-eventually-approval layer for risky cross-account actions. See &quot;CloudActionIntent&quot; above for the implementation handle and <a href="./adr-017-cloud-action-intent-trust-bridge.html">ADR-017</a> for the full design. The name comes from the role it plays: a logged bridge between the platform&#39;s identity and the competitor&#39;s account, where every crossing is recorded and (in future phases) gated.</p>
