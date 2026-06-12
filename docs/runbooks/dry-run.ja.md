@@ -45,7 +45,7 @@ End-to-end で通せない問題は「未準備」とみなし、 本番カタ�
 
 ### Step 2: 各問題を deploy (20 分)
 
-- [ ] 本番で出す各問題について `DeployRequested` event を発行する (= Application Admin Console UI が正規入口)。
+- [ ] 本番で出す各問題について `DeployCreateRequested` event を発行する (= Application Admin Console UI が正規入口)。
 - [ ] [`docs/operations/deploy-trace.md`](../operations/deploy-trace.md) で deploy chain trace を観測。 想定 window 内に `deploy.cfn.deploy.succeeded` が出ることを確認。
 - [ ] リハーサルチームの AWS アカウントで stack 名 / region / リソース一覧がテンプレート意図と一致することを確認。
 

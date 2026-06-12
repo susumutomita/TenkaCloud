@@ -79,7 +79,7 @@ make deploy
 
 **操作**。 デモ用のチームを選択 (または placeholder チームを作成) して、 **Deploy to all teams** をクリック。
 
-**何が起きたか**。 Application Plane が `DeployRequested` イベントを EventBridge bus に発火。 `ProblemDeployBackend` Worker Lambda がそれを拾い、 テナントの `ExternalId` で competitor アカウントへ AssumeRole し (`CLAUDE.md` の通り必須)、 `problems/challenges/hello-world/template.yaml` を CFn `CreateStack`。 デプロイテーブルが `IN_PROGRESS` → `READY` と推移します。
+**何が起きたか**。 Application Plane が `DeployCreateRequested` イベントを EventBridge bus に発火。 `ProblemDeployBackend` Worker Lambda がそれを拾い、 テナントの `ExternalId` で competitor アカウントへ AssumeRole し (`CLAUDE.md` の通り必須)、 `problems/challenges/hello-world/template.yaml` を CFn `CreateStack`。 デプロイテーブルが `IN_PROGRESS` → `COMPLETE` と推移します。
 
 **フォールバック**。 stack 生成中は `problems/challenges/hello-world/template.yaml` を画面で見せながら歩きます。 1 ページの CFn — それがデモの本体です。
 

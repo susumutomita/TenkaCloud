@@ -99,7 +99,7 @@ services used by the two Lite stacks. The minimum required service set:<ul>
 <li><code>s3:*Bucket*</code>, <code>s3:PutObject</code>, <code>s3:GetObject</code>, <code>s3:DeleteObject</code></li>
 <li><code>cloudfront:*Distribution*</code>, <code>cloudfront:*OriginAccessIdentity*</code></li>
 <li><code>codebuild:*Project*</code> (the deploy worker builds CFn artifacts)</li>
-<li><code>events:*Rule*</code>, <code>events:*Bus*</code> (EventBridge for DeployRequested / DeployCompleted)</li>
+<li><code>events:*Rule*</code>, <code>events:*Bus*</code> (EventBridge for DeployCreateRequested / DeployDeleteRequested)</li>
 <li><code>states:*StateMachine*</code> (Step Functions orchestrator)</li>
 <li><code>ssm:GetParameter</code>, <code>ssm:PutParameter</code> (runtime config)</li>
 <li><code>cloudformation:*</code> (CDK uses CFn underneath)</li>

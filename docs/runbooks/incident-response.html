@@ -258,7 +258,7 @@
 <p>If you decide to redeploy (single-team only, after the triage in <a href="./live-monitoring.md">live monitoring</a>):</p>
 <ol>
 <li>Initiate teardown of the failed stack first (<code>scripts/delete-battles.sh</code> or the Application Admin Console teardown action). Confirm <code>DELETE_COMPLETE</code> before re-creating.</li>
-<li>Re-issue <code>DeployRequested</code> from the operator UI.</li>
+<li>Re-issue <code>DeployCreateRequested</code> from the operator UI.</li>
 <li>Watch the deploy trace for the new <code>jobId</code>. Do not declare success until <code>deploy.cfn.deploy.succeeded</code> appears.</li>
 </ol>
 <h3>Escalation — CFn stack ROLLBACK</h3>

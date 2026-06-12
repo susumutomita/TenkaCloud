@@ -100,7 +100,7 @@
 </ul>
 <p><strong>トークポイント</strong>。</p>
 <ul>
-<li>Worker Lambda は EventBridge bus の <code>DeployRequested</code> イベントを subscribe。 発火するとテナントの <code>ExternalId</code> (必須 / opt out 不可) で competitor アカウントへ AssumeRole し、 問題の <code>template.yaml</code> で CFn <code>CreateStack</code> を実行。</li>
+<li>Worker Lambda は EventBridge bus の <code>DeployCreateRequested</code> イベントを subscribe。 発火するとテナントの <code>ExternalId</code> (必須 / opt out 不可) で competitor アカウントへ AssumeRole し、 問題の <code>template.yaml</code> で CFn <code>CreateStack</code> を実行。</li>
 <li>採点は 1 本の Lambda に集約し、 <code>kind</code> で dispatch。 5 種は <code>flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code>。 <strong>プラットフォーム側に問題固有コードは置かない</strong> — <code>ADR-012</code>。</li>
 <li>Reconciliation は EventBridge 駆動 (<code>ADR-014</code>)。 フロントエンドは polling (SSE は使わない — <code>AGENTS.md</code>)、 EventBridge は polling を補強するので long-lived socket は不要。</li>
 <li>Worker Lambda は Step Functions が前段に立ち、 retry / delete のオーケストレーションを担う。 idempotency は state を <code>(tenantId, eventId, teamId, problemId)</code> で key 化して保つ。</li>

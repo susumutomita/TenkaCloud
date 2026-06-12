@@ -45,7 +45,7 @@ If a problem cannot be exercised end-to-end during the dry run, treat the proble
 
 ### Step 2: deploy each selected problem (20 min)
 
-- [ ] For each problem you plan to run, file a `DeployRequested` event (Application Admin Console UI is the supported entry point).
+- [ ] For each problem you plan to run, file a `DeployCreateRequested` event (Application Admin Console UI is the supported entry point).
 - [ ] Observe the deploy chain trace using [`docs/operations/deploy-trace.md`](../operations/deploy-trace.md). Confirm `deploy.cfn.deploy.succeeded` appears within the expected window.
 - [ ] Verify the resulting stack name, region, and resource list in the rehearsal team's AWS account match what the template intended.
 

@@ -148,7 +148,7 @@ The next `make deploy` picks up your new problem automatically.
 **Gates**:
 
 - Per-app `vitest`. CI runs them via `make test-coverage`.
-- Visual smoke: `make start` boots all SPAs on ports 5173/5174/5175.
+- Visual smoke: run each SPA's dev server with `cd apps/<app> && make dev` (ports 5173/5174/5175).
 
 ---
 

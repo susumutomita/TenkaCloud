@@ -258,7 +258,7 @@
 <p><a href="./live-monitoring.ja.md">live monitoring</a> の triage を経て、 単独チーム再 deploy と決めた場合に限り、 次の順序で実施する。</p>
 <ol>
 <li>先に失敗スタックの teardown を発行 (<code>scripts/delete-battles.sh</code> または Application Admin Console の teardown action)。 <code>DELETE_COMPLETE</code> を確認してから再作成。</li>
-<li>オペレータ UI から <code>DeployRequested</code> を再発行。</li>
+<li>オペレータ UI から <code>DeployCreateRequested</code> を再発行。</li>
 <li>新しい <code>jobId</code> で deploy trace を観察。 <code>deploy.cfn.deploy.succeeded</code> が出るまで完了宣言しない。</li>
 </ol>
 <h3>エスカレーション — CFn スタック ROLLBACK</h3>
