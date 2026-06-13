@@ -33,15 +33,16 @@
 | event | 出所 | level | 主な field |
 |---|---|---|---|
 | `deploy.codebuild.start` | `deploy-battles.sh:73` / `delete-battles.sh:33` | info | `operation` (= `create` / `delete`), `region`, `teamSlug` |
-| `deploy.codebuild.succeeded` | `deploy-battles.sh:234` / `delete-battles.sh:81` | info | `operation`, `region`, `problemCount` |
+| `deploy.codebuild.succeeded` | `deploy-battles.sh:234` / `delete-battles.sh:109` | info | `operation`, `region`, `problemCount` |
 | `deploy.codebuild.failed` | `deploy-battles.sh:238` | info | `operation`, `region`, `failureCount` |
 | `deploy.cfn.deploy.start` | `deploy-battles.sh:188` | info | `stackName`, `region`, `teamSlug`, `problemDir` |
 | `deploy.cfn.deploy.succeeded` | `deploy-battles.sh:210` | info | 同上 |
 | `deploy.cfn.deploy.failed` | `deploy-battles.sh:206` | info | 同上 |
-| `deploy.cfn.delete.start` | `delete-battles.sh:40` | info | `stackName`, `region` |
-| `deploy.cfn.delete.succeeded` | `delete-battles.sh:80` | info | 同上 |
-| `deploy.cfn.delete.failed` | `delete-battles.sh:56` / `:74` | info | 同上 |
-| `deploy.cfn.delete.already_deleted` | `delete-battles.sh:52` / `:70` | info | 同上 (= 冪等 no-op、 stuck 復旧時に便利) |
+| `deploy.cfn.delete.start` | `delete-battles.sh:60` | info | `stackName`, `region` |
+| `deploy.cfn.delete.succeeded` | `delete-battles.sh:108` | info | 同上 |
+| `deploy.cfn.delete.failed` | `delete-battles.sh:43` / `:84` / `:102` | info | 同上 (`:43` は STS 失敗 = 検証前の credential 異常) |
+| `deploy.cfn.delete.already_deleted` | `delete-battles.sh:80` / `:98` | info | 同上 (= 冪等 no-op、 stuck 復旧時に便利) |
+| `deploy.cfn.delete.account_mismatch` | `delete-battles.sh:48` | info | `stackName`, `region`, `expectedAccount`, `actualAccount` (= #1797 credentials が stack の account と不一致。 delete-stack 発行前に loud fail し silent leak を防ぐ) |
 
 Shell 経路の `correlationId` / `jobId` field は `TENKACLOUD_CORRELATION_ID` (現状 `PROBLEM_EXTERNAL_ID` と同値) を State Machine から伝搬する。 fallback として両 env のどちらか空でない方を採用する。
 
