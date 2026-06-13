@@ -120,7 +120,7 @@ make install
 <p><strong>フォールバック</strong>。 カタログ一覧が空ならサブモジュールが展開されていません。 <code>git submodule update --init --recursive problems</code> を再実行してリフレッシュ。</p>
 <h2>ステップ 5 — bulk deploy をチームに撃つ (トーク 1 分、 背後 2 分)</h2>
 <p><strong>操作</strong>。 デモ用のチームを選択 (または placeholder チームを作成) して、 <strong>Deploy to all teams</strong> をクリック。</p>
-<p><strong>何が起きたか</strong>。 Application Plane が <code>DeployRequested</code> イベントを EventBridge bus に発火。 <code>ProblemDeployBackend</code> Worker Lambda がそれを拾い、 テナントの <code>ExternalId</code> で competitor アカウントへ AssumeRole し (<code>CLAUDE.md</code> の通り必須)、 <code>problems/challenges/hello-world/template.yaml</code> を CFn <code>CreateStack</code>。 デプロイテーブルが <code>IN_PROGRESS</code> → <code>READY</code> と推移します。</p>
+<p><strong>何が起きたか</strong>。 Application Plane が <code>DeployCreateRequested</code> イベントを EventBridge bus に発火。 <code>ProblemDeployBackend</code> Worker Lambda がそれを拾い、 テナントの <code>ExternalId</code> で competitor アカウントへ AssumeRole し (<code>CLAUDE.md</code> の通り必須)、 <code>problems/challenges/hello-world/template.yaml</code> を CFn <code>CreateStack</code>。 デプロイテーブルが <code>IN_PROGRESS</code> → <code>COMPLETE</code> と推移します。</p>
 <p><strong>フォールバック</strong>。 stack 生成中は <code>problems/challenges/hello-world/template.yaml</code> を画面で見せながら歩きます。 1 ページの CFn — それがデモの本体です。</p>
 <h2>ステップ 6 — Participant Portal を開き、 flag を提出してスコアが動くのを見る (約 1 分)</h2>
 <p><strong>操作</strong>。 <code>make deploy</code> が出力した participant portal URL を開き、 チームでログイン。</p>

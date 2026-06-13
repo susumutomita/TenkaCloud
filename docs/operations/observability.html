@@ -184,7 +184,7 @@ Sibling docs: <a href="./deploy-trace.md"><code>deploy-trace.md</code></a> (= pe
 </ul>
 <h2>4. Failure diagnosis runbook</h2>
 <p>The three event-day failure modes that overlap with this issue (full step-by-step playbook lives under the runbooks directory tracked by #1351):</p>
-<h3>4.1. DeployRequested event disappeared (= &quot;I clicked deploy and nothing happened&quot;)</h3>
+<h3>4.1. DeployCreateRequested event disappeared (= &quot;I clicked deploy and nothing happened&quot;)</h3>
 <ol>
 <li><strong>EventBridge bus</strong> — Open the <code>default</code> (or <code>tenkacloud-*</code> custom) bus in the CloudWatch metrics console; check the <code>MatchedEvents</code> metric for the rule routing to the Deploy Worker. Zero matches = rule disabled or filter pattern mismatch.</li>
 <li><strong>DLQ</strong> — Check the <code>ProblemDeployDeadLetterQueue</code> SQS metric <code>ApproximateNumberOfMessagesVisible</code>. Non-zero means the worker rejected the event; pull one message to inspect the failure reason.</li>

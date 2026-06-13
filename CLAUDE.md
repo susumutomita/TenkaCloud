@@ -32,9 +32,9 @@ TenkaCloud/
 ### Plane layout
 
 - **Control Plane** (`ControlPlaneStack`) — SBT-bundled Cognito UserPool + System Admin + Tenant CRUD API + EventBridge bus. `admin-console` is the front end.
-- **Application Plane (pooled)** — One `serverless-saas-ref-arch-tenant-template-pooled` instance stands up during Phase 1. BASIC / ADVANCED tenants share a single `application-admin-console` URL behind CloudFront.
-- **Application Plane (silo)** — On PLATINUM tier tenant creation, `ServerlessSaaSPipeline` kicks off CodeBuild and deploys a dedicated `serverless-saas-ref-arch-tenant-template-<tenantId>` for that tenant.
-- **Problem deploy backend** (`ProblemDeployBackendStack`) — Deployments DDB + Cognito JWT-authenticated HTTP API + Worker Lambda. EventBridge `DeployRequested` is picked up, the worker AssumeRoles into the competitor account using the tenant's ExternalId, then CFn CreateStack runs there.
+- **Application Plane (pooled)** — One `tenkacloud-tenant-template-pooled` instance stands up during Phase 1. BASIC / ADVANCED tenants share a single `application-admin-console` URL behind CloudFront.
+- **Application Plane (silo)** — On PLATINUM tier tenant creation, `ServerlessSaaSPipeline` kicks off CodeBuild and deploys a dedicated `tenkacloud-tenant-template-<tenantId>` for that tenant.
+- **Problem deploy backend** (`ProblemDeployBackendStack`) — Deployments DDB + Cognito JWT-authenticated HTTP API + Worker Lambda. EventBridge `DeployCreateRequested` is picked up, the worker AssumeRoles into the competitor account using the tenant's ExternalId, then CFn CreateStack runs there.
 - **Participant Portal** — App where each competitor sees their team's problem endpoints and scores. Hosted on S3 + CloudFront from `ProblemDeployBackendStack` (enable via `CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true`).
 
 ### Cross-plane communication
@@ -208,7 +208,7 @@ Add packages to `trustedDependencies` in a stand-alone PR. Manually verify the s
 | IaC              | AWS CDK 2 + `@cdklabs/sbt-aws` 0.3.9, cdk-nag                         |
 | Auth             | AWS Cognito (Hosted UI + OAuth Code + PKCE)                           |
 | Data             | DynamoDB (forced PROVISIONED 1/1)                                     |
-| Events           | EventBridge (cross-plane: tenant creation / DeployRequested / DeployCompleted) |
+| Events           | EventBridge (cross-plane: tenant creation / DeployCreateRequested / DeployDeleteRequested) |
 | Tests            | Vitest                                                                |
 | Lint / Format    | Biome (TS), markdownlint-cli2 + textlint (Markdown)                   |
 | Package manager  | Bun 1.3.11 (workspaces: `infrastructure` + `apps/*`)                  |
@@ -224,7 +224,7 @@ Issue #955 switched the default for `make deploy` to single-tenant Lite mode. It
 
 For full multi-tenant operation — pooled tiers (BASIC / ADVANCED), silo tier (PLATINUM), and SystemAdmin invitations — use SaaS mode. `make deploy-saas` (`scripts/install.sh`) runs three phases.
 
-1. **Phase 1**: Deploy `ControlPlaneStack` + `serverless-saas-ref-arch-bootstrap-stack` + `serverless-saas-ref-arch-tenant-template-pooled` + `ServerlessSaaSPipeline`. CORS/callback is localhost only at this point.
+1. **Phase 1**: Deploy `ControlPlaneStack` + `tenkacloud-bootstrap` + `tenkacloud-tenant-template-pooled` + `ServerlessSaaSPipeline`. CORS/callback is localhost only at this point.
 2. **Phase 2**: Feed Phase 1 outputs into runtime-config env, host-build `apps/admin-console`, then deploy `AdminConsoleHostingStack` (S3 + CloudFront).
 3. **Phase 3**: Put the CloudFront URL into `CDK_PARAM_ADMIN_CONSOLE_ORIGIN` and redeploy `ControlPlaneStack` to update callback / CORS.
 

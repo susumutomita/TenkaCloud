@@ -109,7 +109,7 @@ Cross-reference with `deploy-trace.md` Query B (= shell-side `deploy.cfn.deploy.
 
 The three event-day failure modes that overlap with this issue (full step-by-step playbook lives under the runbooks directory tracked by #1351):
 
-### 4.1. DeployRequested event disappeared (= "I clicked deploy and nothing happened")
+### 4.1. DeployCreateRequested event disappeared (= "I clicked deploy and nothing happened")
 
 1. **EventBridge bus** — Open the `default` (or `tenkacloud-*` custom) bus in the CloudWatch metrics console; check the `MatchedEvents` metric for the rule routing to the Deploy Worker. Zero matches = rule disabled or filter pattern mismatch.
 2. **DLQ** — Check the `ProblemDeployDeadLetterQueue` SQS metric `ApproximateNumberOfMessagesVisible`. Non-zero means the worker rejected the event; pull one message to inspect the failure reason.

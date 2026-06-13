@@ -10,8 +10,8 @@ Sorted alphabetically. Acronyms are spelled out on first reference.
 
 The per-tenant runtime that hosts a tenant's own Cognito UserPool, API Gateway HTTP API, and `application-admin-console` SPA. Two tier shapes:
 
-- **Pooled** — BASIC / ADVANCED tiers share a single CDK stack (`serverless-saas-ref-arch-tenant-template-pooled`). One Cognito UserPool, one API, one SPA serve all pooled tenants.
-- **Silo** — PLATINUM tier gets its own stack (`serverless-saas-ref-arch-tenant-template-<tenantId>`) deployed via the per-tenant `ServerlessSaaSPipeline`.
+- **Pooled** — BASIC / ADVANCED tiers share a single CDK stack (`tenkacloud-tenant-template-pooled`). One Cognito UserPool, one API, one SPA serve all pooled tenants.
+- **Silo** — PLATINUM tier gets its own stack (`tenkacloud-tenant-template-<tenantId>`) deployed via the per-tenant `ServerlessSaaSPipeline`.
 
 Distinct from Control Plane (= tenant manager). The Application Plane runs *tenant business logic*; it doesn't manage tenants. Defined by invariant [`INVARIANT_CONTROL_PLANE_DOES_NOT_HOST_TENANT_RUNTIME`](./harness.md).
 
@@ -78,7 +78,7 @@ The end-to-end sequence that starts when an operator clicks "Deploy" in `applica
 
 ```
 HTTP POST → deploy-handler (DDB Put + EventBridge Publish)
-         → EventBridge DeployRequested
+         → EventBridge DeployCreateRequested
          → Step Functions DeployCreateStateMachine
          → CodeBuild (scripts/deploy-battles.sh) → aws cloudformation deploy
          → CFn (in competitor account) → CREATE_COMPLETE
@@ -104,10 +104,13 @@ The single cross-plane communication channel, owned by the Control Plane stack. 
 | Detail Type            | Producer                       | Consumer                                          |
 | ---------------------- | ------------------------------ | ------------------------------------------------- |
 | `onboardingRequest`    | SBT ControlPlane (tenant create) | `ServerlessSaaSPipeline` (PLATINUM silo deploy)  |
-| `DeployRequested`      | `deploy-handler`               | `event-handler` (= triggers CodeBuild via Step Functions) |
-| `DeployCompleted`      | `event-handler`                | `generic-scoring-handler` (starts polling)        |
-| `ScoreUpdated`         | `generic-scoring-handler`      | `participant-portal-lambda` (live score push)     |
-| `DisruptionFire`       | EventBridge scheduled rule     | `event-handler/disruption-fire`                   |
+| `DeployCreateRequested` | `deploy-handler` / `event-handler` (bulk fan-out) | EventBridge Rule → DeployCreate state machine (CodeBuild) |
+| `DeployDeleteRequested` | `deploy-handler` / `event-handler` (bulk delete) | EventBridge Rule → DeployDelete state machine (CodeBuild delete) |
+| `BulkDeployCreateRequested` | `event-handler` (Distributed Map 経路, #910) | EventBridge Rule → BulkDeployCreate state machine |
+
+Deploy completion and scoring are NOT bus events: completion is reconciled from CloudFormation
+status into the Deployments table (describe-stack polling + state-machine writeback), and the
+generic scoring Lambda runs on a 1-minute scheduled tick.
 
 No SSE / WebSocket. Frontend uses polling (= matches Lambda operational model). [ADR-014](./adr-014-eventbridge-driven-state-reconciliation.html) supplements polling with EventBridge-driven reconciliation.
 
