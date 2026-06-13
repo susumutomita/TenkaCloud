@@ -176,7 +176,7 @@ problems/<category>/<id>/          # metadata.json + template.yaml are the sourc
 
 - **EventBridge bus** is provisioned by `ControlPlaneStack`; `bin/infrastructure.ts` hands the ARN to every other stack. New stacks must use the same bus.
 - **Tenant creation event** (`onboardingRequest`) is picked up by `ServerlessSaaSPipeline`, which deploys the per-tenant stack. BASIC / ADVANCED share the pooled stack; only PLATINUM gets a silo stack.
-- **DeployRequested event** is picked up by the `ProblemDeployBackendStack` Worker Lambda, which AssumeRoles into the competitor account using the tenant's ExternalId and runs CFn CreateStack. **`ExternalId` is always required** (no omission allowed).
+- **DeployCreateRequested event** is picked up by the `ProblemDeployBackendStack` Worker Lambda, which AssumeRoles into the competitor account using the tenant's ExternalId and runs CFn CreateStack. **`ExternalId` is always required** (no omission allowed).
 - **Frontend URLs** are injected through `runtime-config.json` (served under CloudFront). `apps/*/src/config.ts` has a `loadConfig()`. When you add a new URL, update both the hosting stack env and the `config.ts` interface.
 
 ## Problem authoring (ADR-012)

@@ -167,7 +167,7 @@
     "tab_provisioning": "Provisioning",
     "tab_deprovisioning": "Deprovisioning",
     "deprovisioning_phase1_header": "Deprovisioning Jobs API が未配線です",
-    "deprovisioning_phase1_body": "本環境では admin-insight Lambda に deprovisioning state machine ARN が渡されていません。最新の 'make deploy' を実行してください (= Issue #814 Phase 2)。",
+    "deprovisioning_phase1_body": "本環境では admin-insight Lambda に deprovisioning state machine ARN が渡されていません。最新の 'make deploy' を実行してください。",
     "deprovisioning_open_console": "AWS Console で Step Functions を開く",
     "deprovisioning_open_console_aria": "AWS Step Functions コンソール (ステートマシン一覧) を新しいタブで開く",
     "empty_deprovisioning": "Deprovisioning の実行履歴はまだありません。 テナント削除を実行すると ここに記録されます。"

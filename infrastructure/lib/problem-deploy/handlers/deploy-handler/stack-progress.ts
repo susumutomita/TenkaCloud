@@ -218,7 +218,10 @@ export async function getStackProgress(
   const consoleUrl = buildCfnConsoleUrl(region, stackName, item.stackId);
   // CFn は StackName / StackId のどちらでも引ける。stackId が確定済ならそれを使う
   // (= 万一 stack を delete → 同名再作成した場合に旧 stack の events に混入しない)。
-  const stackRef = item.stackId ?? stackName;
+  // #1810 sibling: FAILED deployment は stack ARN 記録前に終わると stackId="" (空文字) になる。
+  // `??` は空文字を fallback しないので `||` で namePrefix (= stackName) に倒す (空 StackName で
+  // CFn を引くと DescribeStackEvents が失敗し、失敗 deploy の進捗が一切引けなくなるのを防ぐ)。
+  const stackRef = item.stackId || stackName;
   // Phase 2.2 (Issue #459): verified=true 行が CompetitorAccounts table にあれば
   // AssumeRole 経由で cross-account client を組む。無ければ同 account 経路 (= dev /
   // 旧 deployment 行 / 未 verify) で従来通り。

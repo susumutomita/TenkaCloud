@@ -90,14 +90,12 @@ export async function createEvent(
     expiresAt,
   };
 
-  // TransactWrite は 100 items が AWS の上限。teams.max(100) + event 1 = 最大 101 で
-  // 上限を超えるが、検証で teams を <= 99 に絞るより、teams を <= 100 にして event を
-  // 別 PutCommand で先に書く方針は採らない (atomicity を優先)。
-  // → Schema で teams.max(100) としているが、実際は 99 がワーカブル上限。安全側に寄せて
-  //   teams.max(99) にする方針もあるが、Phase 1 はまず TransactWrite 上限ギリギリで動かし、
-  //   Phase 2 (Distributed Map) で chunk 化する。
+  // TransactWrite は 100 items が AWS の上限。event 1 行 + teams を 1 つの atomic write で書くため
+  // teams は最大 99 (= 100 - event 1 行)。 schema (CreateEventRequestSchema) を teams.max(99) に
+  // 揃えたので、 検証を通った request はここに到達した時点で必ず teams <= 99。 100+ teams への対応は
+  // atomicity を犠牲にしないため Phase 2 (Distributed Map で chunk 化) に回す。
+  // 下記は schema を迂回した呼び出しに対する defense-in-depth (validated path では発火しない)。
   if (teams.length + 1 > 100) {
-    // 上限の早期チェック (TransactWrite が ValidationException を返すのを待たず明示的に)
     throw new Error(`TransactWrite items > 100 (teams=${teams.length} + event=1)`);
   }
 

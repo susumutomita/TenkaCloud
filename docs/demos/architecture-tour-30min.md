@@ -60,7 +60,7 @@ Set the frame: TenkaCloud is built on `@cdklabs/sbt-aws` 0.3.9 and obeys four pl
 
 **Talking points.**
 
-- The Worker Lambda subscribes to `DeployRequested` events on the EventBridge bus. When one fires, it AssumeRoles into the competitor account using the tenant's `ExternalId` (always required — there is no opt-out) and runs CFn `CreateStack` with the problem's `template.yaml`.
+- The Worker Lambda subscribes to `DeployCreateRequested` events on the EventBridge bus. When one fires, it AssumeRoles into the competitor account using the tenant's `ExternalId` (always required — there is no opt-out) and runs CFn `CreateStack` with the problem's `template.yaml`.
 - Scoring is centralized in one Lambda that dispatches by `kind`. The five kinds are `flag`, `uptime-flat`, `uptime-multi`, `phased-polling`, `attack-detection`. **No problem-specific code lives in the platform** — that is `ADR-012`.
 - Reconciliation is EventBridge-driven (`ADR-014`). The frontend polls (no SSE — see `AGENTS.md`) and EventBridge supplements the polling so we do not need long-lived sockets.
 - The Worker Lambda is fronted by Step Functions for retry / delete orchestration. Idempotency is preserved by keying state on `(tenantId, eventId, teamId, problemId)`.

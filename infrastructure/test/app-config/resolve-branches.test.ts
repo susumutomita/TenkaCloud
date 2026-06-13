@@ -110,6 +110,23 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
     ).toBeUndefined();
   });
 
+  it("should parse a valid deploy quota by tier (#1766)", () => {
+    expect(
+      resolve(baseEnv({ CDK_PARAM_DEPLOY_QUOTA_BY_TIER: '{"basic":2,"advanced":5,"platinum":10}' }))
+        .deployQuotaByTier,
+    ).toEqual({ basic: 2, advanced: 5, platinum: 10 });
+  });
+
+  it("should leave the deploy quota undefined when unset (quota disabled, #1766)", () => {
+    expect(resolve(baseEnv()).deployQuotaByTier).toBeUndefined();
+  });
+
+  it("should throw loudly on a broken deploy quota value instead of silently disabling (#1766)", () => {
+    expect(() => resolve(baseEnv({ CDK_PARAM_DEPLOY_QUOTA_BY_TIER: '{"basic":2}' }))).toThrow(
+      /DEPLOY_QUOTA_BY_TIER/,
+    );
+  });
+
   it("should throw on a non-integer concurrent build limit", () => {
     expect(() => resolve(baseEnv({ CDK_PARAM_DEPLOY_CONCURRENT_BUILD_LIMIT: "4.5" }))).toThrow(
       /整数/,

@@ -39,7 +39,7 @@ The IAM principal that runs `make deploy` needs:
   - `s3:*Bucket*`, `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`
   - `cloudfront:*Distribution*`, `cloudfront:*OriginAccessIdentity*`
   - `codebuild:*Project*` (the deploy worker builds CFn artifacts)
-  - `events:*Rule*`, `events:*Bus*` (EventBridge for DeployRequested / DeployCompleted)
+  - `events:*Rule*`, `events:*Bus*` (EventBridge for DeployCreateRequested / DeployDeleteRequested)
   - `states:*StateMachine*` (Step Functions orchestrator)
   - `ssm:GetParameter`, `ssm:PutParameter` (runtime config)
   - `cloudformation:*` (CDK uses CFn underneath)
