@@ -169,4 +169,22 @@ describe("resolveDeployment (ADR-031 #1419)", () => {
     const send = vi.fn().mockResolvedValue({});
     expect(await resolveDeployment(makeResources(send), detail)).toBeUndefined();
   });
+
+  it("#1815-sibling: should drain LastEvaluatedKey so a target paged past 1MB is still found", async () => {
+    // GSI1PK=TENANT#<id> パーティションが 1MB を超えると 1 回の Query は LastEvaluatedKey を
+    // 返し、 FilterExpression にマッチする行が後続ページに居ると単発 Query では取りこぼす。
+    // 旧実装は page 1 だけを見て undefined を返し、 disruption が silently no-op していた。
+    const send = vi
+      .fn()
+      // page 1: filter で全部弾かれた (= 別 event の行で 1MB 埋まった) → Items 空 + 続きあり
+      .mockResolvedValueOnce({ Items: [], LastEvaluatedKey: { PK: "p1" } })
+      // page 2: 目的の COMPLETE 行はここに居る → 続きなし
+      .mockResolvedValueOnce({ Items: [completeRow] });
+    const target = await resolveDeployment(makeResources(send), detail);
+    expect(target?.jobId).toBe("job-1");
+    // page 1 は ExclusiveStartKey 無し、 page 2 は前ページの LastEvaluatedKey を渡す。
+    expect(send.mock.calls[0][0].input.ExclusiveStartKey).toBeUndefined();
+    expect(send.mock.calls[1][0].input.ExclusiveStartKey).toEqual({ PK: "p1" });
+    expect(send).toHaveBeenCalledTimes(2);
+  });
 });

@@ -194,4 +194,39 @@ describe("getLeaderboard (integration)", () => {
     const out = await getLeaderboard(shared, "KEY1");
     expect(out).toEqual({ kind: "no_event" });
   });
+
+  it("#1815-sibling: should drain GSI1 pages so rivals paged past 1MB still appear", async () => {
+    // GSI1PK=TENANT#<id> パーティションが 1MB を超えると Query は LastEvaluatedKey を返す。
+    // 単発 Query だと後続ページの team が leaderboard から落ち、 「ライバルのスコアが見えない」
+    // (= #1793 症状) になる。 全ページ drain して初めて全 team が集計される。
+    const { shared, ddbSend } = buildShared();
+    // 1st: GSI2 query (自 team)
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ teamId: "T1", eventId: "EV1", tenantId: "tenant-acme" })],
+    });
+    // 2nd: GSI1 page 1 (自 team のみ) + 続きあり
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ teamId: "T1", problemId: "p1", score: 100, status: "COMPLETE" })],
+      LastEvaluatedKey: { PK: "page1" },
+    });
+    // 3rd: GSI1 page 2 (ライバル T2) + 続きなし
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ teamId: "T2", problemId: "p1", score: 200, status: "COMPLETE" })],
+    });
+    // 4th 以降 (getEventGate) は未 mock → undefined (= gate 無し、 freeze なし)
+
+    const out = await getLeaderboard(shared, "KEY1");
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok") {
+      // 単発 Query なら T1 だけ。 drain して初めて T2 (ライバル) が現れる。
+      expect(out.response.entries).toHaveLength(2);
+      expect(out.response.entries.map((e) => e.teamId).sort()).toEqual(["T1", "T2"]);
+    }
+    // GSI1 page 2 は page 1 の LastEvaluatedKey を ExclusiveStartKey として渡す。
+    const page1 = ddbSend.mock.calls[1]?.[0] as QueryCommand;
+    const page2 = ddbSend.mock.calls[2]?.[0] as QueryCommand;
+    expect(page1.input.ExclusiveStartKey).toBeUndefined();
+    expect(page2.input.ExclusiveStartKey).toEqual({ PK: "page1" });
+    expect(page2.input.IndexName).toBe("GSI1");
+  });
 });

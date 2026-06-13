@@ -90,19 +90,28 @@ export async function getLeaderboard(
 
   // tenant の全 deployment を引いて event 内のものだけ。FilterExpression は post-read
   // なので RCU は変わらないが network / Lambda 内処理量を節約。
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.tableName,
-      IndexName: "GSI1",
-      KeyConditionExpression: "GSI1PK = :pk",
-      FilterExpression: "eventId = :ev",
-      ExpressionAttributeValues: {
-        ":pk": `TENANT#${tenantId}`,
-        ":ev": eventId,
-      },
-    }),
-  );
-  const eventDeployments = (out.Items ?? []) as Partial<DeploymentItem>[];
+  // #1815 兄弟: GSI1PK=TENANT#<id> パーティションが 1MB を超えると Query は LastEvaluatedKey を
+  // 返す。 単発 Query だと後続ページの team が leaderboard から落ち「ライバルのスコアが見えない」
+  // (#1793 症状) になるため、 全ページ drain して全 team を集計する。
+  const eventDeployments: Partial<DeploymentItem>[] = [];
+  let exclusiveStartKey: Record<string, unknown> | undefined;
+  do {
+    const out = await shared.ddb.send(
+      new QueryCommand({
+        TableName: shared.tableName,
+        IndexName: "GSI1",
+        KeyConditionExpression: "GSI1PK = :pk",
+        FilterExpression: "eventId = :ev",
+        ExpressionAttributeValues: {
+          ":pk": `TENANT#${tenantId}`,
+          ":ev": eventId,
+        },
+        ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
+      }),
+    );
+    eventDeployments.push(...((out.Items ?? []) as Partial<DeploymentItem>[]));
+    exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (exclusiveStartKey);
 
   // Issue #1038 P1 #9: scoreboard freeze 判定。 event gate を引いて endsAt を取得し、
   // 終了 N 分前から終了時刻までは順位を隠す (= 競技公平性、 終盤の駆け込み防止)。

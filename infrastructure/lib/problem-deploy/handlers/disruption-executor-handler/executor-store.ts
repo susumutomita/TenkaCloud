@@ -85,21 +85,30 @@ export async function resolveDeployment(
   resources: ExecutorResources,
   detail: DisruptionFiredDetail,
 ): Promise<DeploymentTarget | undefined> {
-  const out = await resources.ddb.send(
-    new QueryCommand({
-      TableName: resources.deploymentsTableName,
-      IndexName: "GSI1",
-      KeyConditionExpression: "GSI1PK = :pk",
-      FilterExpression: "eventId = :ev AND teamId = :tid AND problemId = :pid",
-      ExpressionAttributeValues: {
-        ":pk": `TENANT#${detail.tenantId}`,
-        ":ev": detail.eventId,
-        ":tid": detail.teamId,
-        ":pid": detail.problemId,
-      },
-    }),
-  );
-  const items = (out.Items ?? []) as Partial<DeploymentItem>[];
+  // #1815 兄弟: GSI1PK=TENANT#<id> パーティションが 1MB を超えると Query は LastEvaluatedKey を
+  // 返す。 FilterExpression は post-read なので目的の行が後続ページに居ると単発 Query では取りこぼし、
+  // resolveDeployment が undefined を返して disruption が silently no-op する。 全ページ drain する。
+  const items: Partial<DeploymentItem>[] = [];
+  let exclusiveStartKey: Record<string, unknown> | undefined;
+  do {
+    const out = await resources.ddb.send(
+      new QueryCommand({
+        TableName: resources.deploymentsTableName,
+        IndexName: "GSI1",
+        KeyConditionExpression: "GSI1PK = :pk",
+        FilterExpression: "eventId = :ev AND teamId = :tid AND problemId = :pid",
+        ExpressionAttributeValues: {
+          ":pk": `TENANT#${detail.tenantId}`,
+          ":ev": detail.eventId,
+          ":tid": detail.teamId,
+          ":pid": detail.problemId,
+        },
+        ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
+      }),
+    );
+    items.push(...((out.Items ?? []) as Partial<DeploymentItem>[]));
+    exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (exclusiveStartKey);
   // #1710: cross-account 情報 (competitorRoleArn / externalIdParameterName) は要求しない。
   // 同一アカウント (Lite) deploy では両者とも欠落するのが正常。
   const ready = items.find(
