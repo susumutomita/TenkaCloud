@@ -144,6 +144,23 @@ describe("MultiFlagSubmissionPanel", () => {
     expect(await screen.findByText("Wrong (-10 pt) — total 40 pt")).toBeInTheDocument();
   });
 
+  it("should show a plain wrong warning when the flag carries no penalty", async () => {
+    const user = userEvent.setup();
+    apiMocks.submitFlag.mockResolvedValue({
+      kind: "wrong",
+      scoreDelta: 0,
+      totalScore: 50,
+      wrongCount: 1,
+    });
+    renderPanel();
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "bad");
+    const buttons = screen.getAllByRole("button", { name: /^Submit/ });
+    await user.click(buttons[0]);
+    expect(await screen.findByText("Wrong")).toBeInTheDocument();
+    expect(screen.getByText("Check the value and try again.")).toBeInTheDocument();
+  });
+
   it("should show the already-scored info when a flag was scored elsewhere", async () => {
     const user = userEvent.setup();
     apiMocks.submitFlag.mockResolvedValue({ kind: "already_scored", totalScore: 300 });

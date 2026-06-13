@@ -457,6 +457,15 @@ describe("ProblemPanel render branches", () => {
     expect(screen.queryByTestId("flag-panel")).not.toBeInTheDocument();
   });
 
+  it("should render the multi-flag panel even when flags is omitted", () => {
+    // scoring.flags 不在でも panel は出す (= `flags ?? []` の fallback 分岐を pin)。
+    renderPanel({
+      status: "COMPLETE",
+      scoring: { kind: "multi-flag", points: 0 },
+    });
+    expect(screen.getByTestId("multi-flag-panel")).toBeInTheDocument();
+  });
+
   it("should render stack outputs as a link for URLs and plain code otherwise", () => {
     renderPanel({
       status: "COMPLETE",
