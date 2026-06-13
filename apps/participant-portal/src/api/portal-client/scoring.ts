@@ -36,17 +36,21 @@ export async function revealHint(
 
 /**
  * Phase 2c: Flag 提出は `problemId` 必須に。`POST /portal/me/submit-flag { problemId, flag }`。
+ *
+ * Issue #1796: multi-flag kind では `flagId` でどの sub-flag への提出かを渡す。 単一 flag kind は
+ * flagId を省略する (= 後方互換、 backend も flagId を無視する)。
  */
 export async function submitFlag(
   apiBaseUrl: string,
   teamLoginKey: string,
   problemId: string,
   flag: string,
+  flagId?: string,
   signal?: AbortSignal,
 ): Promise<SubmitFlagOutcome> {
   return (await portalFetch<SubmitFlagOutcome>(apiBaseUrl, "portal/me/submit-flag", teamLoginKey, {
     method: "POST",
-    body: { problemId, flag },
+    body: flagId === undefined ? { problemId, flag } : { problemId, flag, flagId },
     throwOn400: true,
     // Issue #1006: 409 scoring_not_started / scoring_ended / scoring_locked を
     // PortalScoringGateError として throw (= UI が startsAt 文言を出せる)。

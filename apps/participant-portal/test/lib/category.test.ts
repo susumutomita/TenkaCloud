@@ -17,6 +17,11 @@ describe("categoryOf", () => {
     expect(categoryOf(scoring)).toBe("challenge");
   });
 
+  it("should return challenge for kind=multi-flag (Issue #1796 — submission axis)", () => {
+    const scoring: ParticipantScoringInfo = { kind: "multi-flag", points: 500, flags: [] };
+    expect(categoryOf(scoring)).toBe("challenge");
+  });
+
   it("should return battle for kind=phased-polling (#688 regression — phased-polling is on the battle axis)", () => {
     const scoring: ParticipantScoringInfo = { kind: "phased-polling" };
     expect(categoryOf(scoring)).toBe("battle");

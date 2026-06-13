@@ -145,6 +145,138 @@ describe("parseScoringMetadata", () => {
     });
   });
 
+  describe("multi-flag 形式 (Issue #1796)", () => {
+    const validFlags = [
+      { id: "ep01", label: "Ep01: Reachability", flagOutputKey: "AnswerFlagEp01", points: 300 },
+      {
+        id: "ep02",
+        label: "Ep02: TCP/IP",
+        flagOutputKey: "AnswerFlagEp02",
+        points: 200,
+        wrongAnswerPenalty: 10,
+      },
+    ];
+
+    it("should narrow when flags is a non-empty array of valid entries", () => {
+      expect(parseScoringMetadata({ kind: "multi-flag", flags: validFlags })).toEqual({
+        kind: "multi-flag",
+        flags: [
+          {
+            id: "ep01",
+            label: "Ep01: Reachability",
+            flagOutputKey: "AnswerFlagEp01",
+            points: 300,
+            wrongAnswerPenalty: undefined,
+          },
+          {
+            id: "ep02",
+            label: "Ep02: TCP/IP",
+            flagOutputKey: "AnswerFlagEp02",
+            points: 200,
+            wrongAnswerPenalty: 10,
+          },
+        ],
+      });
+    });
+
+    it("should normalize per-flag hints to ProgressiveHint[]", () => {
+      const result = parseScoringMetadata({
+        kind: "multi-flag",
+        flags: [
+          {
+            id: "ep01",
+            label: "Ep01",
+            flagOutputKey: "AnswerFlagEp01",
+            points: 100,
+            hints: ["look at the VPC", { id: "h2", content: "read the SG", penalty: 5 }],
+          },
+        ],
+      });
+      expect(result?.kind).toBe("multi-flag");
+      if (result?.kind !== "multi-flag") return;
+      expect(result.flags[0]?.hints).toEqual([
+        { id: "hint-1", content: "look at the VPC", penalty: 0 },
+        { id: "h2", content: "read the SG", penalty: 5 },
+      ]);
+    });
+
+    it("should clamp an invalid per-flag wrongAnswerPenalty to undefined like the flag kind", () => {
+      const result = parseScoringMetadata({
+        kind: "multi-flag",
+        flags: [
+          { id: "ep01", label: "A", flagOutputKey: "K1", points: 100, wrongAnswerPenalty: -5 },
+          { id: "ep02", label: "B", flagOutputKey: "K2", points: 100, wrongAnswerPenalty: 7.5 },
+          { id: "ep03", label: "C", flagOutputKey: "K3", points: 100, wrongAnswerPenalty: 20 },
+        ],
+      });
+      expect(result?.kind).toBe("multi-flag");
+      if (result?.kind !== "multi-flag") return;
+      expect(result.flags.map((f) => f.wrongAnswerPenalty)).toEqual([undefined, undefined, 20]);
+    });
+
+    it("should return undefined when flags is missing / not an array / empty", () => {
+      expect(parseScoringMetadata({ kind: "multi-flag" })).toBeUndefined();
+      expect(parseScoringMetadata({ kind: "multi-flag", flags: "x" })).toBeUndefined();
+      expect(parseScoringMetadata({ kind: "multi-flag", flags: [] })).toBeUndefined();
+    });
+
+    it("should return undefined for the WHOLE object when any entry is invalid (no partial-drop)", () => {
+      // points 0 以下 → 全体 reject (= 部分点が無言で変わるのを防ぐ)
+      expect(
+        parseScoringMetadata({
+          kind: "multi-flag",
+          flags: [
+            { id: "ep01", label: "A", flagOutputKey: "K1", points: 100 },
+            { id: "ep02", label: "B", flagOutputKey: "K2", points: 0 },
+          ],
+        }),
+      ).toBeUndefined();
+      // id / label / flagOutputKey が空文字 / 非 string → 全体 reject
+      expect(
+        parseScoringMetadata({
+          kind: "multi-flag",
+          flags: [{ id: "", label: "A", flagOutputKey: "K1", points: 100 }],
+        }),
+      ).toBeUndefined();
+      expect(
+        parseScoringMetadata({
+          kind: "multi-flag",
+          flags: [{ id: "ep01", label: 123, flagOutputKey: "K1", points: 100 }],
+        }),
+      ).toBeUndefined();
+      expect(
+        parseScoringMetadata({
+          kind: "multi-flag",
+          flags: [{ id: "ep01", label: "A", points: 100 }],
+        }),
+      ).toBeUndefined();
+    });
+
+    it("should return undefined when two entries share an id", () => {
+      expect(
+        parseScoringMetadata({
+          kind: "multi-flag",
+          flags: [
+            { id: "dup", label: "A", flagOutputKey: "K1", points: 100 },
+            { id: "dup", label: "B", flagOutputKey: "K2", points: 100 },
+          ],
+        }),
+      ).toBeUndefined();
+    });
+
+    it("should return undefined when two entries share a flagOutputKey", () => {
+      expect(
+        parseScoringMetadata({
+          kind: "multi-flag",
+          flags: [
+            { id: "ep01", label: "A", flagOutputKey: "DUP", points: 100 },
+            { id: "ep02", label: "B", flagOutputKey: "DUP", points: 100 },
+          ],
+        }),
+      ).toBeUndefined();
+    });
+  });
+
   describe("[#742 Phase 5] hints は全 5 kind に共通拡張", () => {
     it("uptime-flat kind should accept hints and normalize them to ProgressiveHint[]", () => {
       const result = parseScoringMetadata({

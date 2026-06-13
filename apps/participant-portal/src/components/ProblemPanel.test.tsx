@@ -13,6 +13,7 @@ import {
   describeProblemKind,
   formatTerminalTime,
   getCompleteFlagScoring,
+  getCompleteMultiFlagScoring,
   isStaleProblem,
   isUptimeScoring,
   mergeLiveDeployLog,
@@ -36,6 +37,10 @@ vi.mock("../api/portal-client", async (importOriginal) => {
 // FlagSubmissionPanel は #1480 で別途 100% 済。 ここでは ProblemPanel の flag 分岐だけ pin。
 vi.mock("./ProblemPanelFlagSubmission", () => ({
   FlagSubmissionPanel: () => <div data-testid="flag-panel" />,
+}));
+// MultiFlagSubmissionPanel は別 test (#1796) で網羅。 ここでは ProblemPanel の分岐だけ pin。
+vi.mock("./MultiFlagSubmissionPanel", () => ({
+  MultiFlagSubmissionPanel: () => <div data-testid="multi-flag-panel" />,
 }));
 
 function withI18n(node: React.ReactNode) {
@@ -287,6 +292,9 @@ describe("ProblemPanel pure helpers", () => {
   it("should describe each scoring kind", () => {
     expect(describeProblemKind(echoT, undefined)).toBe("problem_panel.kind_unknown");
     expect(describeProblemKind(echoT, { kind: "flag" })).toBe("problem_panel.kind_flag");
+    expect(describeProblemKind(echoT, { kind: "multi-flag" })).toBe(
+      "problem_panel.kind_multi_flag",
+    );
     expect(describeProblemKind(echoT, { kind: "uptime-flat" })).toBe("problem_panel.kind_uptime");
     expect(describeProblemKind(echoT, { kind: "phased-polling" })).toBe(
       "problem_panel.kind_phased",
@@ -302,6 +310,8 @@ describe("ProblemPanel pure helpers", () => {
   it("should classify uptime vs flag scoring", () => {
     expect(isUptimeScoring(undefined)).toBe(false);
     expect(isUptimeScoring({ kind: "flag" })).toBe(false);
+    // multi-flag も Challenge 軸 (= 提出型) なので uptime とは扱わない。
+    expect(isUptimeScoring({ kind: "multi-flag" })).toBe(false);
     expect(isUptimeScoring({ kind: "uptime" })).toBe(true);
   });
 
@@ -337,6 +347,19 @@ describe("ProblemPanel pure helpers", () => {
     ).toBeUndefined();
     expect(
       getCompleteFlagScoring(p({ status: "COMPLETE", scoring: { kind: "uptime" } })),
+    ).toBeUndefined();
+  });
+
+  it("should resolve a complete multi-flag scoring only when COMPLETE + multi-flag", () => {
+    const p = (over: Partial<ParticipantProblemView>) => ({ ...baseProblem, ...over });
+    expect(
+      getCompleteMultiFlagScoring(p({ status: "COMPLETE", scoring: { kind: "multi-flag" } })),
+    ).toBeDefined();
+    expect(
+      getCompleteMultiFlagScoring(p({ status: "IN_PROGRESS", scoring: { kind: "multi-flag" } })),
+    ).toBeUndefined();
+    expect(
+      getCompleteMultiFlagScoring(p({ status: "COMPLETE", scoring: { kind: "flag" } })),
     ).toBeUndefined();
   });
 
@@ -416,6 +439,31 @@ describe("ProblemPanel render branches", () => {
       scoring: { kind: "flag", flagSubmitted: false, points: 100 },
     });
     expect(screen.getByTestId("flag-panel")).toBeInTheDocument();
+  });
+
+  it("should render the multi-flag submission panel for a COMPLETE multi-flag problem", () => {
+    renderPanel({
+      status: "COMPLETE",
+      scoring: {
+        kind: "multi-flag",
+        points: 500,
+        flags: [
+          { id: "ep01", label: "Ep01", points: 300, solved: false },
+          { id: "ep02", label: "Ep02", points: 200, solved: false },
+        ],
+      },
+    });
+    expect(screen.getByTestId("multi-flag-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("flag-panel")).not.toBeInTheDocument();
+  });
+
+  it("should render the multi-flag panel even when flags is omitted", () => {
+    // scoring.flags 不在でも panel は出す (= `flags ?? []` の fallback 分岐を pin)。
+    renderPanel({
+      status: "COMPLETE",
+      scoring: { kind: "multi-flag", points: 0 },
+    });
+    expect(screen.getByTestId("multi-flag-panel")).toBeInTheDocument();
   });
 
   it("should render stack outputs as a link for URLs and plain code otherwise", () => {

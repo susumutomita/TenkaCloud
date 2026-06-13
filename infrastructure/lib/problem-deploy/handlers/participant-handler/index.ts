@@ -300,6 +300,7 @@ async function handleSubmitFlag(c: Context, token: string): Promise<Response> {
     token,
     parsed.data.problemId,
     parsed.data.flag,
+    parsed.data.flagId,
   );
   return respondSubmitFlagOutcome(c, outcome);
 }
@@ -330,6 +331,8 @@ function respondSubmitFlagOutcome(
   if (
     outcome.kind === "unauthorized" ||
     outcome.kind === "not_flag_problem" ||
+    // Issue #1796: multi-flag で flagId 不正 / 未指定。 unknown_hint と同じ NOT_FOUND family。
+    outcome.kind === "unknown_flag" ||
     outcome.kind === "no_outputs" ||
     outcome.kind === "scoring_locked"
   ) {

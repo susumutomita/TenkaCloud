@@ -255,6 +255,68 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(view?.problems[0]?.scoring?.points).toBe(100);
   });
 
+  describe("multi-flag scoring view (Issue #1796)", () => {
+    const multiScoring = {
+      "security-battle-royale": {
+        kind: "multi-flag" as const,
+        flags: [
+          { id: "ep01", label: "Ep01", flagOutputKey: "AnswerFlagEp01", points: 300 },
+          { id: "ep02", label: "Ep02", flagOutputKey: "AnswerFlagEp02", points: 200 },
+        ],
+      },
+    };
+
+    it("should strip every sub-flag flagOutputKey from stackOutputs (prevent answer leak)", async () => {
+      const { shared, ddbSend } = buildShared(multiScoring);
+      ddbSend.mockResolvedValueOnce({
+        Items: [
+          sampleRow({
+            stackOutputs: JSON.stringify({
+              FrontendUrl: "https://x.example.com",
+              AnswerFlagEp01: "secret-1",
+              AnswerFlagEp02: "secret-2",
+            }),
+          }),
+        ],
+      });
+
+      const view = await lookupTeamByLoginKey(shared, "KEY1");
+      expect(view?.problems[0]?.stackOutputs).toEqual({ FrontendUrl: "https://x.example.com" });
+      const json = JSON.stringify(view);
+      expect(json).not.toContain("secret-1");
+      expect(json).not.toContain("secret-2");
+    });
+
+    it("should report the summed points and per-flag solved state from a String Set", async () => {
+      const { shared, ddbSend } = buildShared(multiScoring);
+      ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ solvedFlagIds: new Set(["ep01"]) })] });
+
+      const scoring = (await lookupTeamByLoginKey(shared, "KEY1"))?.problems[0]?.scoring;
+      expect(scoring?.kind).toBe("multi-flag");
+      expect(scoring?.points).toBe(500); // 300 + 200
+      expect(scoring?.flags).toEqual([
+        { id: "ep01", label: "Ep01", points: 300, solved: true },
+        { id: "ep02", label: "Ep02", points: 200, solved: false },
+      ]);
+    });
+
+    it("should derive solved state from a plain string array too (row drift)", async () => {
+      const { shared, ddbSend } = buildShared(multiScoring);
+      ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ solvedFlagIds: ["ep02"] })] });
+
+      const scoring = (await lookupTeamByLoginKey(shared, "KEY1"))?.problems[0]?.scoring;
+      expect(scoring?.flags?.map((f) => f.solved)).toEqual([false, true]);
+    });
+
+    it("should mark all flags unsolved when solvedFlagIds is absent", async () => {
+      const { shared, ddbSend } = buildShared(multiScoring);
+      ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+
+      const scoring = (await lookupTeamByLoginKey(shared, "KEY1"))?.problems[0]?.scoring;
+      expect(scoring?.flags?.every((f) => !f.solved)).toBe(true);
+    });
+  });
+
   it("should include score / lastScoredAt / lastResult / scoring in the problem view", async () => {
     const scoring = {
       "security-battle-royale": { kind: "uptime" as const, pointsPerSuccess: 50 },
