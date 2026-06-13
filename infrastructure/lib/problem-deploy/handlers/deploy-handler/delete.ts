@@ -67,7 +67,10 @@ export async function requestTeardown(
   // CFn StackName は namePrefix で十分 (StackId は不要、State Machine 側で region 指定して
   // delete-stack するときも namePrefix で identify できる)。stackId が無い場合 (PENDING で
   // 削除した場合) でも namePrefix は deploy 時に必ず確定している。
-  const stackName = String(item.stackId ?? item.namePrefix ?? "");
+  // #1810: FAILED deployment は stack ARN 記録前に終わると stackId="" (空文字) になる。
+  // `??` は空文字を fallback しないので `||` で namePrefix に倒す (= 失敗 deployment の
+  // teardown が missing_required_fields で弾かれて手動削除すら不能になるのを防ぐ)。
+  const stackName = String(item.stackId || item.namePrefix || "");
 
   const missing = missingTeardownFields({ region, awsAccountId, stackName });
   if (missing.length > 0) {
