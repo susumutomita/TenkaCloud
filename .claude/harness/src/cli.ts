@@ -1,13 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { type BaselineFile, isBaselined, loadBaseline } from "./baseline.ts";
-import { adrMustBeHtml } from "./rules/adr-must-be-html.ts";
-import { adrSelfContained } from "./rules/adr-self-contained.ts";
-import { fileTooLarge } from "./rules/file-too-large.ts";
-import { handlerNoDirectSdkImport } from "./rules/handler-no-direct-sdk-import.ts";
-import { handlerTenantIsolation } from "./rules/handler-tenant-isolation.ts";
-import { iamWildcardNeedsJustify } from "./rules/iam-wildcard-needs-justify.ts";
-import { lambdaEnvSize } from "./rules/lambda-env-size.ts";
+import { architectureRules } from "./rules/index.ts";
 import type { Finding, Rule, Severity } from "./types.ts";
 import { listAllTrackedFiles, listStagedFiles } from "./utils/staged-files.ts";
 
@@ -22,18 +16,11 @@ export interface RunResult {
   readonly exitCode: number;
 }
 
-const ALL_RULES: readonly Rule[] = [
-  adrMustBeHtml,
-  adrSelfContained,
-  iamWildcardNeedsJustify,
-  // Issue #986 / SOLID 規律強制
-  fileTooLarge,
-  handlerNoDirectSdkImport,
-  // Issue #997 / tenant 分離 audit
-  handlerTenantIsolation,
-  // Issue #1309 / Lambda env 4KB hard limit 再発防止 (= #1308 root cause)
-  lambdaEnvSize,
-];
+// ルールの正本は rules/index.ts の architectureRules のみ (= 単一レジストリ)。
+// 旧実装は cli.ts が独自の ALL_RULES を複製しており、rules/index.ts に登録しただけの
+// ルール (no-conflict-markers / no-aws-trademark-fictions を含む) が CLI で実行されない
+// 「死んだルール」drift を生んでいた。レジストリを 1 つにして構造的に再発を防ぐ。
+const ALL_RULES: readonly Rule[] = architectureRules;
 
 const SEVERITY_RANK: Record<Severity, number> = {
   info: 0,

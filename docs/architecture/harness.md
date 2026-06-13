@@ -83,6 +83,24 @@ Invariants に加えて、実装レベルの原則を機械検査するルール
 
   両方とも記憶[[feedback_pull_main_before_task]]に紐づく仕掛け。
 
+- `file-too-large`
+  単一ファイルが 500 行超で warning、800 行超で error (Issue #986 / SRP)。既存違反は `.claude/harness/baselines/file-too-large.json` に baseline 化し、新規だけ捕まえる ratchet。
+
+- `handler-no-direct-sdk-import`
+  Lambda handler の routing 層 (`handlers/<name>/index.ts`) からの `@aws-sdk/client-*` / `@aws-sdk/lib-*` 直接 import を warning (Issue #986 / DIP)。SDK 呼び出しは service / repository module へ。baseline 有り。
+
+- `handler-tenant-isolation`
+  handler の DDB read/write に JWT 由来の tenantId 注入が無い経路を検出 (Issue #997)。pooled 構成で cross-tenant 漏洩を防ぐ第一線。
+
+- `iam-wildcard-needs-justify`
+  `infrastructure/lib/**` の `resources: ["*"]` に、直前 5 行以内の `justify:` comment が無ければ error (Issue #857)。広域権限は理由の明文化を強制する。baseline 有り。
+
+- `lambda-env-size`
+  synth 時の Lambda env 合計が AWS の 4KB hard limit に近づくと検出 (Issue #1309、#1308 の CREATE_FAILED 再発防止)。baseline 有り。
+
+- `no-aws-trademark-fictions`
+  AWS 公式競技の fictional branding の流用を検出 (IP リスク)。TenkaCloud 自前のシナリオ名を使う。検出対象の具体名はルール実装 (`.claude/harness/src/rules/no-aws-trademark-fictions.ts`) を参照。
+
 ## Enforcement
 
 - `make harness` (= `bun run .claude/harness/bin/architecture.ts --staged --fail-on=error`)

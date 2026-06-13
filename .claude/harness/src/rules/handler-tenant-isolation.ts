@@ -3,7 +3,7 @@ import type { Finding, Rule, RuleContext } from "../types.ts";
 /**
  * Issue #997: tenant 分離 audit。
  *
- * pooled tier (BASIC / STANDARD / PREMIUM) で application-admin-console が共有 stack で動く
+ * pooled tier (BASIC / ADVANCED) で application-admin-console が共有 stack で動く
  * 構成上、 全 handler は **request の tenantId を JWT から取り、 DDB read/write に必ず注入する**
  * 必要がある。 1 handler でも tenantId を見ずに query すれば 「TenantA admin が TenantB のデータを
  * 取得」 という公平性破壊バグになる。
