@@ -149,16 +149,15 @@ function getBulkTeardownTarget(item: Partial<DeploymentItem>):
       readonly stackName: string;
     }
   | undefined {
-  const jobId = String(item.jobId ?? "");
-  const region = String(item.region ?? "");
-  const awsAccountId = String(item.awsAccountId ?? "");
-  // #1810: FAILED deployment は stack ARN 記録前に終わると stackId="" (空文字) になる。
-  // `??` は空文字を fallback しないので `||` を使い namePrefix に倒す (空 stackName で
-  // skip され失敗 stack が orphan 化するのを防ぐ)。delete.ts と同じく各 field を独立 const に
-  // 展開する (object literal 内に値を書くと v8 が literal 先頭行へ statement を集約し、 変更行に
-  // 行単位の DA record が立たず codecov patch が miss 扱いするため)。
-  const stackName = String(item.stackId || item.namePrefix || "");
-  const target = { jobId, region, awsAccountId, stackName };
+  const target = {
+    jobId: String(item.jobId ?? ""),
+    region: String(item.region ?? ""),
+    awsAccountId: String(item.awsAccountId ?? ""),
+    // #1810: FAILED deployment は stack ARN 記録前に終わると stackId="" (空文字) になる。
+    // `??` は空文字を fallback しないので `||` を使い namePrefix に倒す (空 stackName で
+    // skip され失敗 stack が orphan 化するのを防ぐ)。
+    stackName: String(item.stackId || item.namePrefix || ""),
+  };
   return Object.values(target).every(Boolean) ? target : undefined;
 }
 
