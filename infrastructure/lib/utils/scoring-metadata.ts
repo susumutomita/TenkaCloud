@@ -47,6 +47,36 @@ export interface FlagScoringMetadata {
   readonly hints?: readonly ProgressiveHint[];
 }
 
+/**
+ * Issue #1796: multi-flag kind の sub-flag 1 件。 1 問題に N 個の独立 flag を持たせ、
+ * 競技者が各 flag を別々に提出して個別加点される (= ストーリー連作 Challenge を 1 問に統合)。
+ *
+ *   - id: 問題内で unique な stable identifier (= 解済 flag id 集合 `solvedFlagIds` の key、
+ *         submit-flag request の flagId と一致させる。 metadata 順序変更で記録が drift しない)
+ *   - label: portal UI に出す表示名 (= 「Ep01: Reachability」 等)
+ *   - flagOutputKey: 正解値を引く CFn Output key (= 単一 flag kind の flagOutputKey と同義)
+ *   - points: 正解時の加点
+ *   - wrongAnswerPenalty: 不正解 1 回ごとの減点 (= flag ごとに独立、 単一 flag kind と同契約)
+ *   - hints: per-flag progressive hint (= 型は確保するが reveal 経路は本 Phase 未対応)
+ */
+export interface MultiFlagEntry {
+  readonly id: string;
+  readonly label: string;
+  readonly flagOutputKey: string;
+  readonly points: number;
+  readonly wrongAnswerPenalty?: number;
+  readonly hints?: readonly ProgressiveHint[];
+}
+
+/**
+ * Issue #1796: multi-flag kind。 N 個の独立 flag を 1 問題に持たせる。 各 flag の合計が
+ * 問題の満点になる (= 部分点)。 単一 flag kind は不変で温存し、 multi-flag は新規 opt-in。
+ */
+export interface MultiFlagScoringMetadata {
+  readonly kind: "multi-flag";
+  readonly flags: readonly MultiFlagEntry[];
+}
+
 export interface UptimeFlatEndpoint {
   /** metadata.endpoints[].slot を参照する場合の slot 名。 */
   readonly slot?: string;
@@ -172,6 +202,7 @@ export interface AttackDetectionScoringMetadata {
 
 export type ProblemScoringMetadata =
   | FlagScoringMetadata
+  | MultiFlagScoringMetadata
   | UptimeFlatScoringMetadata
   | UptimeMultiScoringMetadata
   | PhasedPollingScoringMetadata
@@ -188,6 +219,7 @@ export function parseScoringMetadata(value: unknown): ProblemScoringMetadata | u
   if (!value || typeof value !== "object") return undefined;
   const v = value as { kind?: unknown };
   if (v.kind === "flag") return parseFlag(value);
+  if (v.kind === "multi-flag") return parseMultiFlag(value);
   if (v.kind === "uptime" || v.kind === "uptime-flat") return parseUptimeFlat(value, v.kind);
   if (v.kind === "uptime-multi") return parseUptimeMulti(value);
   if (v.kind === "phased-polling") return parsePhasedPolling(value);
@@ -204,22 +236,79 @@ function parseFlag(value: unknown): FlagScoringMetadata | undefined {
   };
   if (typeof f.flagOutputKey !== "string") return undefined;
   if (typeof f.points !== "number" || !Number.isFinite(f.points) || f.points <= 0) return undefined;
-  // Issue #817: wrongAnswerPenalty は optional。 不正な値 (= 負 / 非整数 / 非数値) は undefined に
-  // clamp して fallback (= "no penalty" として安全側に倒す、 metadata typo で減点暴走を防ぐ)。
-  const penaltyRaw = f.wrongAnswerPenalty;
-  const wrongAnswerPenalty =
-    typeof penaltyRaw === "number" &&
-    Number.isFinite(penaltyRaw) &&
-    penaltyRaw >= 0 &&
-    Number.isInteger(penaltyRaw)
-      ? penaltyRaw
-      : undefined;
   return {
     kind: "flag",
     flagOutputKey: f.flagOutputKey,
     points: f.points,
-    wrongAnswerPenalty,
+    wrongAnswerPenalty: clampWrongAnswerPenalty(f.wrongAnswerPenalty),
     hints: parseHints(f.hints),
+  };
+}
+
+/**
+ * Issue #817: wrongAnswerPenalty は optional。 不正な値 (= 負 / 非整数 / 非数値) は undefined に
+ * clamp して fallback (= "no penalty" として安全側に倒す、 metadata typo で減点暴走を防ぐ)。
+ * Issue #1796: multi-flag の per-flag penalty も同契約を共有するため helper に切り出す。
+ */
+function clampWrongAnswerPenalty(value: unknown): number | undefined {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    Number.isInteger(value)
+    ? value
+    : undefined;
+}
+
+/**
+ * Issue #1796: multi-flag kind を narrow する。
+ *
+ * **partial-drop しない (= 1 つでも entry が不正なら object 全体を undefined に倒す)**。
+ * hints (parseHints) や uptime-flat の endpoints は不正要素を filter で落としても全体配点は
+ * 変わらないが、 multi-flag の flags[] は 1 件 = 問題の満点の一部 (= 部分点)。 不正 entry を
+ * 黙って drop すると問題の総得点が無言で変わり (= 競技者ごとに満点が違う事故)、 採点の公平性が
+ * 崩れる。 同様に id / flagOutputKey の重複も総得点や採点照合を壊すので reject する (= fail loud)。
+ */
+function parseMultiFlag(value: unknown): MultiFlagScoringMetadata | undefined {
+  const m = value as { flags?: unknown };
+  if (!Array.isArray(m.flags) || m.flags.length === 0) return undefined;
+
+  const flags: MultiFlagEntry[] = [];
+  const seenIds = new Set<string>();
+  const seenOutputKeys = new Set<string>();
+  for (const raw of m.flags) {
+    const entry = parseMultiFlagEntry(raw);
+    if (!entry) return undefined; // 1 件でも不正なら全体 reject (= 部分点が無言で変わるのを防ぐ)
+    if (seenIds.has(entry.id) || seenOutputKeys.has(entry.flagOutputKey)) return undefined;
+    seenIds.add(entry.id);
+    seenOutputKeys.add(entry.flagOutputKey);
+    flags.push(entry);
+  }
+  return { kind: "multi-flag", flags };
+}
+
+function parseMultiFlagEntry(value: unknown): MultiFlagEntry | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const e = value as {
+    id?: unknown;
+    label?: unknown;
+    flagOutputKey?: unknown;
+    points?: unknown;
+    wrongAnswerPenalty?: unknown;
+    hints?: unknown;
+  };
+  const id = optionalNonEmptyString(e.id);
+  const label = optionalNonEmptyString(e.label);
+  const flagOutputKey = optionalNonEmptyString(e.flagOutputKey);
+  if (!id || !label || !flagOutputKey) return undefined;
+  if (typeof e.points !== "number" || !Number.isFinite(e.points) || e.points <= 0) return undefined;
+  const hints = parseHints(e.hints);
+  return {
+    id,
+    label,
+    flagOutputKey,
+    points: e.points,
+    wrongAnswerPenalty: clampWrongAnswerPenalty(e.wrongAnswerPenalty),
+    ...(hints ? { hints } : {}),
   };
 }
 
