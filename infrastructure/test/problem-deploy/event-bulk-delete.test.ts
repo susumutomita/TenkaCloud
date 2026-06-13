@@ -69,7 +69,7 @@ describe("bulkTeardownEvent", () => {
     const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
     expect(out).toEqual({
       kind: "ok",
-      result: { eventId: "EV1", enqueued: 2, skipped: 0 },
+      result: { eventId: "EV1", enqueued: 2, skipped: 0, failed: 0 },
     });
 
     // Query が FilterExpression で eventId 一致を要求し、cross-event 漏洩を防ぐ
@@ -178,7 +178,10 @@ describe("bulkTeardownEvent", () => {
     ddbSend.mockResolvedValueOnce({ Items: [] });
 
     const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
-    expect(out).toEqual({ kind: "ok", result: { eventId: "EV1", enqueued: 0, skipped: 0 } });
+    expect(out).toEqual({
+      kind: "ok",
+      result: { eventId: "EV1", enqueued: 0, skipped: 0, failed: 0 },
+    });
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
@@ -199,8 +202,63 @@ describe("bulkTeardownEvent", () => {
     });
 
     const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
-    expect(out).toEqual({ kind: "ok", result: { eventId: "EV1", enqueued: 0, skipped: 1 } });
+    expect(out).toEqual({
+      kind: "ok",
+      result: { eventId: "EV1", enqueued: 0, skipped: 1, failed: 0 },
+    });
     expect(eventsSend).not.toHaveBeenCalled();
+  });
+
+  it("#1797: should compensate (DELETING -> FAILED) and count rows whose PutEvents entry failed (FailedEntryCount > 0)", async () => {
+    // EventBridge PutEvents は HTTP 200 でも個別 entry が落ちる (FailedEntryCount > 0)。 旧コードは
+    // これを無視し teardown event を silent drop → stack orphan。 publish できなかった行は
+    // DELETING のままだと再 DELETE でも skip され永久に消えない。 FAILED に巻き戻して retry 可能化する。
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // Get(Event)
+    ddbSend.mockResolvedValueOnce({ Items: [dep({ jobId: "01A" }), dep({ jobId: "01B" })] }); // Query
+    ddbSend.mockResolvedValue({}); // DELETING transitions + Event TEARDOWN + compensation
+    // 200 だが 2 件目 (01B) の entry が失敗。 response.Entries は入力 Entries と同順。
+    eventsSend.mockResolvedValue({
+      FailedEntryCount: 1,
+      Entries: [{ EventId: "ok" }, { ErrorCode: "ThrottlingException", ErrorMessage: "rate" }],
+    });
+
+    const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    expect(out).toEqual({
+      kind: "ok",
+      result: { eventId: "EV1", enqueued: 1, skipped: 0, failed: 1 },
+    });
+
+    const compensations = ddbSend.mock.calls
+      .map((c) => c[0])
+      .filter((c): c is UpdateCommand => c instanceof UpdateCommand)
+      .filter((c) => c.input.ExpressionAttributeValues?.[":failed"] === "FAILED");
+    expect(compensations).toHaveLength(1);
+    expect(compensations[0]?.input.Key?.PK).toBe("DEPLOYMENT#01B");
+    // DELETING の行だけを FAILED に倒す (= 他経路で既に終端化した行は踏まない)。
+    expect(compensations[0]?.input.ConditionExpression).toContain(":deleting");
+  });
+
+  it("#1797: should compensate every row in a chunk that PutEvents rejected entirely", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: [dep({ jobId: "01A" }), dep({ jobId: "01B" })] });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockRejectedValue(new Error("EventBridge unavailable")); // chunk 全体が reject
+
+    const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    expect(out).toEqual({
+      kind: "ok",
+      result: { eventId: "EV1", enqueued: 0, skipped: 0, failed: 2 },
+    });
+
+    const compensated = ddbSend.mock.calls
+      .map((c) => c[0])
+      .filter((c): c is UpdateCommand => c instanceof UpdateCommand)
+      .filter((c) => c.input.ExpressionAttributeValues?.[":failed"] === "FAILED")
+      .map((c) => c.input.Key?.PK)
+      .sort();
+    expect(compensated).toEqual(["DEPLOYMENT#01A", "DEPLOYMENT#01B"]);
   });
 
   it("should still complete deployment delete without propagating exceptions even if Event status update hits CCF (e.g. ARCHIVED) (#557)", async () => {
