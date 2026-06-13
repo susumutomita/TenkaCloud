@@ -123,6 +123,23 @@ describe("requestTeardown", () => {
     );
   });
 
+  it("#1810: should fall back to namePrefix for stackName when stackId is an empty string (FAILED deploy)", async () => {
+    // 失敗 deployment は stack ARN 記録前に終わると stackId="" (空文字)。旧コードの
+    // `stackId ?? namePrefix` は空文字を fallback できず stackName="" → missing_required_fields
+    // で失敗 deployment の手動削除すら不能だった。namePrefix で teardown できること。
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleRow({ status: "FAILED", stackId: "" }) });
+    ddbSend.mockResolvedValueOnce({});
+    eventsSend.mockResolvedValueOnce({});
+
+    const out = await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
+    expect(out.kind).toBe("accepted");
+    const detail = JSON.parse(
+      (eventsSend.mock.calls[0]?.[0] as PutEventsCommand).input.Entries?.[0]?.Detail ?? "{}",
+    );
+    expect(detail.stackName).toBe("tc-p-t"); // = sampleRow namePrefix
+  });
+
   it("should return not_found without calling Update / PutEvents when the row is missing", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: undefined });

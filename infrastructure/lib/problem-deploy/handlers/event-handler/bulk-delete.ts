@@ -153,7 +153,10 @@ function getBulkTeardownTarget(item: Partial<DeploymentItem>):
     jobId: String(item.jobId ?? ""),
     region: String(item.region ?? ""),
     awsAccountId: String(item.awsAccountId ?? ""),
-    stackName: String(item.stackId ?? item.namePrefix ?? ""),
+    // #1810: FAILED deployment は stack ARN 記録前に終わると stackId="" (空文字) になる。
+    // `??` は空文字を fallback しないので `||` を使い namePrefix に倒す (空 stackName で
+    // skip され失敗 stack が orphan 化するのを防ぐ)。
+    stackName: String(item.stackId || item.namePrefix || ""),
   };
   return Object.values(target).every(Boolean) ? target : undefined;
 }
