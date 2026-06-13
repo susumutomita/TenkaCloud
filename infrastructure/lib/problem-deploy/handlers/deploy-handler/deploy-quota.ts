@@ -57,6 +57,11 @@ export function parseDeployQuota(raw: string | undefined): DeployQuotaConfig | u
   } catch {
     throw new Error(`DEPLOY_QUOTA_BY_TIER is not valid JSON: ${raw}`);
   }
+  // JSON.parse("null") / 配列 / 文字列等は後続の index アクセスで生 TypeError になり
+  // 意図した設定エラーメッセージを迂回するため、object 以外をここで明示拒否する。
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`DEPLOY_QUOTA_BY_TIER must be a JSON object, got: ${raw}`);
+  }
   const obj = parsed as Partial<Record<QuotaTier, unknown>>;
   for (const tier of ["basic", "advanced", "platinum"] as const) {
     const v = obj[tier];

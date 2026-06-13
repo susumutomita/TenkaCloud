@@ -44,6 +44,9 @@ describe("parseDeployQuota (#1766)", () => {
   });
 
   it.each([
+    ["null", "null"],
+    ["array", "[1,2,3]"],
+    ["string", '"basic"'],
     ["not json", "{basic:2}"],
     ["missing tier", '{"basic":2,"advanced":5}'],
     ["negative", '{"basic":-1,"advanced":5,"platinum":10}'],

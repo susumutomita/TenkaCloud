@@ -23,7 +23,7 @@ import {
   UnknownProblemError,
   UnverifiedCompetitorAccountError,
 } from "./deploy.js";
-import { DeployQuotaExceededError, enforceDeployQuota, resolveQuotaTier } from "./deploy-quota.js";
+import { DeployQuotaExceededError, resolveQuotaTier } from "./deploy-quota.js";
 import { getDeployment, listDeployments } from "./list.js";
 import { InvalidRetryRequestError, retryDeployments, validateRetryRequest } from "./retry.js";
 import {
@@ -164,14 +164,13 @@ app.post("/problems/:problemId/deploy", async (c) => {
   const ctx = buildContext(shared, resolveTenantId(c));
 
   try {
-    // #1766: tier 別の同時デプロイクォータ。cloud mutation (DDB Put / EventBridge) の前に弾く。
-    const tier = resolveQuotaTier(c);
-    await enforceDeployQuota(
-      { ddb: shared.ddb, tableName: shared.tableName, quota: shared.deployQuota },
-      ctx.tenantId,
-      tier,
-    );
-    const response = await startDeployment(ctx, { ...parsed.data, problemId });
+    // #1766: quota tier は JWT claim から route で解決し、enforcement 自体は
+    // startDeployment 内 (検証通過後・mutation 直前) で行う (PR-1803 review)。
+    const response = await startDeployment(ctx, {
+      ...parsed.data,
+      problemId,
+      quotaTier: resolveQuotaTier(c),
+    });
     return c.json(response, StatusCodes.ACCEPTED);
   } catch (err) {
     if (err instanceof DeployQuotaExceededError) {
