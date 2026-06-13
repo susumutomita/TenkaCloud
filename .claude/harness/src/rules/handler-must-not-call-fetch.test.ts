@@ -40,6 +40,30 @@ describe("handler-must-not-call-fetch", () => {
     expect(findings).toHaveLength(0);
   });
 
+  it("`*` で始まらない block comment 継続行の fetch( 言及も通すべき (レビュー指摘)", () => {
+    const code = [
+      "/*",
+      "  fetch(url) をここで呼んではいけない理由のメモ",
+      "*/",
+      "const x = 1;",
+    ].join("\n");
+    const findings = handlerMustNotCallFetch.check({
+      files: ["infrastructure/lib/problem-deploy/handlers/foo/service.ts"],
+      readFile: () => code,
+    });
+    expect(findings).toHaveLength(0);
+  });
+
+  it("block comment が閉じた後の実コード fetch( は検知すべき", () => {
+    const code = ["/*", "  doc", "*/", "const res = await fetch(url);"].join("\n");
+    const findings = handlerMustNotCallFetch.check({
+      files: ["infrastructure/lib/problem-deploy/handlers/foo/service.ts"],
+      readFile: () => code,
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.line).toBe(4);
+  });
+
   it("テストファイルは対象外にすべき", () => {
     const code = "const res = await fetch(url);";
     const findings = handlerMustNotCallFetch.check({

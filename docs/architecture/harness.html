@@ -144,7 +144,7 @@ handler の DDB read/write に JWT 由来の tenantId 注入が無い経路を�
 synth 時の Lambda env 合計が AWS の 4KB hard limit に近づくと検出 (Issue #1309、#1308 の CREATE_FAILED 再発防止)。baseline 有り。</p>
 </li>
 <li><p><code>no-aws-trademark-fictions</code>
-AWS 公式競技の fictional branding (Unicorn.Rentals 等) の流用を検出 (IP リスク)。TenkaCloud 自前のシナリオ名を使う。</p>
+AWS 公式競技の fictional branding の流用を検出 (IP リスク)。TenkaCloud 自前のシナリオ名を使う。検出対象の具体名はルール実装 (<code>.claude/harness/src/rules/no-aws-trademark-fictions.ts</code>) を参照。</p>
 </li>
 </ul>
 <h2>Enforcement</h2>

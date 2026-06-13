@@ -99,7 +99,7 @@ Invariants に加えて、実装レベルの原則を機械検査するルール
   synth 時の Lambda env 合計が AWS の 4KB hard limit に近づくと検出 (Issue #1309、#1308 の CREATE_FAILED 再発防止)。baseline 有り。
 
 - `no-aws-trademark-fictions`
-  AWS 公式競技の fictional branding (Unicorn.Rentals 等) の流用を検出 (IP リスク)。TenkaCloud 自前のシナリオ名を使う。
+  AWS 公式競技の fictional branding の流用を検出 (IP リスク)。TenkaCloud 自前のシナリオ名を使う。検出対象の具体名はルール実装 (`.claude/harness/src/rules/no-aws-trademark-fictions.ts`) を参照。
 
 ## Enforcement
 

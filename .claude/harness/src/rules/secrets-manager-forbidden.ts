@@ -12,8 +12,10 @@ import type { Finding, Rule, RuleContext } from "../types.ts";
  * construct import の両方を error にする。
  */
 
+// `import ... from "x"` / side-effect `import "x"` / dynamic `import("x")` / `require("x")`
+// のすべての取り込み形式を捕まえる (= `from` 限定だと side-effect import がすり抜ける)。
 const SECRETS_MANAGER_IMPORT_RE =
-  /from\s+["'](@aws-sdk\/client-secrets-manager|aws-cdk-lib\/aws-secretsmanager)["']/;
+  /(?:from\s+|import\s*\(?\s*|require\s*\(\s*)["'](@aws-sdk\/client-secrets-manager|aws-cdk-lib\/aws-secretsmanager)["']/;
 
 function shouldInspect(path: string): boolean {
   if (!path.endsWith(".ts") && !path.endsWith(".tsx")) return false;

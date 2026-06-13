@@ -33,6 +33,24 @@ describe("secrets-manager-forbidden", () => {
     expect(findings).toHaveLength(0);
   });
 
+  it('side-effect import (`import "..."`) もすり抜けさせない (レビュー指摘)', () => {
+    const code = 'import "@aws-sdk/client-secrets-manager";';
+    const findings = secretsManagerForbidden.check({
+      files: ["infrastructure/lib/foo.ts"],
+      readFile: () => code,
+    });
+    expect(findings).toHaveLength(1);
+  });
+
+  it("require() 形式もすり抜けさせない", () => {
+    const code = 'const sm = require("@aws-sdk/client-secrets-manager");';
+    const findings = secretsManagerForbidden.check({
+      files: ["scripts/foo.ts"],
+      readFile: () => code,
+    });
+    expect(findings).toHaveLength(1);
+  });
+
   it("harness 自身のファイルは対象外にすべき (= 本ルールの定義が自己検知しない)", () => {
     const code = "const re = /from\\s+[\"']@aws-sdk\\/client-secrets-manager[\"']/;";
     const findings = secretsManagerForbidden.check({

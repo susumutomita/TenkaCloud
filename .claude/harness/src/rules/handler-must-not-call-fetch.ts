@@ -19,6 +19,8 @@ import type { Finding, Rule, RuleContext } from "../types.ts";
 
 const FETCH_CALL_RE = /\bfetch\s*\(/;
 const LINE_COMMENT_RE = /^\s*(\/\/|\*|\/\*)/;
+const BLOCK_COMMENT_OPEN_RE = /\/\*/;
+const BLOCK_COMMENT_CLOSE_RE = /\*\//;
 
 function shouldInspect(path: string): boolean {
   if (!path.startsWith("infrastructure/lib/")) return false;
@@ -31,9 +33,20 @@ function shouldInspect(path: string): boolean {
 function scanFile(path: string, content: string): Finding[] {
   const findings: Finding[] = [];
   const lines = content.split("\n");
+  // `/* ... */` の内側 (継続行が `*` で始まらない自由記述スタイルを含む) を除外する簡易
+  // state machine。文字列リテラル内の `/*` までは追わない (= レビュー指摘の false positive
+  // 解消が目的で、完全な TS パースは過剰)。
+  let inBlockComment = false;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!line) continue;
+    if (inBlockComment) {
+      if (BLOCK_COMMENT_CLOSE_RE.test(line)) inBlockComment = false;
+      continue;
+    }
+    if (BLOCK_COMMENT_OPEN_RE.test(line) && !BLOCK_COMMENT_CLOSE_RE.test(line)) {
+      inBlockComment = true;
+    }
     if (LINE_COMMENT_RE.test(line)) continue;
     if (!FETCH_CALL_RE.test(line)) continue;
     findings.push({

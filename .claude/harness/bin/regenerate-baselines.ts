@@ -22,6 +22,7 @@ import { handlerMustNotCallFetch } from "../src/rules/handler-must-not-call-fetc
 import { handlerNoDirectSdkImport } from "../src/rules/handler-no-direct-sdk-import.ts";
 import { iamWildcardNeedsJustify } from "../src/rules/iam-wildcard-needs-justify.ts";
 import { lambdaEnvSize } from "../src/rules/lambda-env-size.ts";
+import { secretsManagerForbidden } from "../src/rules/secrets-manager-forbidden.ts";
 import { listAllTrackedFiles } from "../src/utils/staged-files.ts";
 
 const RULES = {
@@ -32,6 +33,7 @@ const RULES = {
   "adr-self-contained": adrSelfContained,
   "iam-wildcard-needs-justify": iamWildcardNeedsJustify,
   "lambda-env-size": lambdaEnvSize,
+  "secrets-manager-forbidden": secretsManagerForbidden,
 } as const;
 
 const args = process.argv.slice(2);
