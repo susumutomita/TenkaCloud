@@ -75,6 +75,28 @@ const VALID_DEPLOY_BODY = {
 describe("POST /problems/:problemId/deploy", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("#1766: should return 429 + quota info when startDeployment hits the tier quota", async () => {
+    const { DeployQuotaExceededError } = await import(
+      "../../lib/problem-deploy/handlers/deploy-handler/deploy-quota"
+    );
+    mocks.startDeployment.mockRejectedValueOnce(new DeployQuotaExceededError("basic", 2, 2));
+    const res = await app.request("/problems/security-battle-royale/deploy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(VALID_DEPLOY_BODY),
+    });
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toBe("deploy_quota_exceeded");
+    expect(body).toMatchObject({ tier: "basic", limit: 2, active: 2 });
+    // route は JWT claim 由来の quotaTier を invocation に詰めて渡す (enforcement は
+    // startDeployment 内、PR-1803 review)。claim 不在の test 環境では basic に倒れる。
+    expect(mocks.startDeployment).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ quotaTier: "basic" }),
+    );
+  });
+
   it("Phase 2.2: should return 422 + awsAccountId on UnverifiedCompetitorAccountError", async () => {
     mocks.startDeployment.mockRejectedValueOnce(
       new UnverifiedCompetitorAccountError("123456789012"),

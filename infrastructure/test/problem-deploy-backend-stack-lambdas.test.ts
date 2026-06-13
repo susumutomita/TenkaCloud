@@ -1,6 +1,9 @@
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
-import { synthDefault } from "./problem-deploy-backend-stack.test-helpers";
+import {
+  synthDefault,
+  synthWithDeployConcurrentBuildLimit,
+} from "./problem-deploy-backend-stack.test-helpers";
 
 describe("ProblemDeployBackendStack (MVP-1) — Deploy API Lambda (invoked from tenant API)", () => {
   const tpl = synthDefault();
@@ -25,6 +28,39 @@ describe("ProblemDeployBackendStack (MVP-1) — Deploy API Lambda (invoked from 
     expect(props.Properties?.Architectures).toEqual(["arm64"]);
     const vars = props.Properties?.Environment?.Variables ?? {};
     expect(vars.BATTLE_PROBLEMS_CATALOG).toBeUndefined();
+  });
+
+  it("DeployApi env DEPLOY_QUOTA_BY_TIER should default to empty (quota disabled, #1766)", () => {
+    const functions = tpl.findResources("AWS::Lambda::Function");
+    const deployApi = Object.entries(functions).find(
+      ([name]) => name.includes("DeployApi") && name.includes("Function"),
+    );
+    const vars =
+      (
+        deployApi?.[1] as {
+          Properties?: { Environment?: { Variables?: Record<string, unknown> } };
+        }
+      )?.Properties?.Environment?.Variables ?? {};
+    expect(vars.DEPLOY_QUOTA_BY_TIER).toBe("");
+  });
+
+  it("DeployApi env DEPLOY_QUOTA_BY_TIER should carry the configured tier limits as JSON (#1766)", () => {
+    const tplWithQuota = synthWithDeployConcurrentBuildLimit();
+    const functions = tplWithQuota.findResources("AWS::Lambda::Function");
+    const deployApi = Object.entries(functions).find(
+      ([name]) => name.includes("DeployApi") && name.includes("Function"),
+    );
+    const vars =
+      (
+        deployApi?.[1] as {
+          Properties?: { Environment?: { Variables?: Record<string, unknown> } };
+        }
+      )?.Properties?.Environment?.Variables ?? {};
+    expect(JSON.parse(String(vars.DEPLOY_QUOTA_BY_TIER))).toEqual({
+      basic: 2,
+      advanced: 5,
+      platinum: 10,
+    });
   });
 
   it("EventApi Lambda env should not include BATTLE_PROBLEMS_CATALOG / BATTLE_PROBLEMS_DISRUPTIONS (#1308)", () => {

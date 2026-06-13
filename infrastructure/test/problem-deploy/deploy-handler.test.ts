@@ -1,10 +1,11 @@
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import { GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type DeployContext,
   type DeployInvocation,
   startDeployment,
+  UnknownProblemError,
   UnverifiedCompetitorAccountError,
 } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
 
@@ -25,7 +26,7 @@ vi.mock("../../lib/problem-deploy/handlers/deploy-handler/presigned-url", () => 
  */
 function buildContext(
   overrides: Partial<DeployContext> = {},
-  options: { unverified?: boolean } = {},
+  options: { unverified?: boolean; quotaActiveCount?: number } = {},
 ): {
   ctx: DeployContext;
   putSend: ReturnType<typeof vi.fn>;
@@ -37,6 +38,10 @@ function buildContext(
   // それ以外 (PutCommand 等) は putSend に流す。test 側 assertion は putSend の最後の
   // call を見るのが基本。
   const ddbSend = vi.fn(async (cmd: unknown) => {
+    // #1766: quota の active-count Query (Select: COUNT)。
+    if (cmd instanceof QueryCommand && cmd.input.Select === "COUNT") {
+      return { Count: options.quotaActiveCount ?? 0 };
+    }
     if (cmd instanceof GetCommand && cmd.input.TableName === "TestCompetitorAccounts") {
       if (options.unverified) return { Item: undefined };
       const sk = String(cmd.input.Key?.SK ?? "");
@@ -275,6 +280,52 @@ describe("startDeployment", () => {
         s3: undefined,
       });
       await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow(/S3 client/);
+    });
+  });
+});
+
+/**
+ * #1766 + PR-1803 review: クォータは「より具体的な検証の後・mutation の直前」に enforce する。
+ * 上限到達中でも unknown problem / unverified account はそれぞれ本来のエラーで返り、
+ * 429 がそれらを隠さないことを pin する。
+ */
+describe("startDeployment quota ordering (#1766)", () => {
+  const QUOTA = { basic: 1, advanced: 5, platinum: 10 };
+
+  it("should throw UnknownProblemError (not quota) for an unknown problem even at capacity", async () => {
+    const { ctx } = buildContext({ deployQuota: QUOTA }, { quotaActiveCount: 99 });
+    await expect(
+      startDeployment(ctx, sampleRequest({ problemId: "nope", quotaTier: "basic" })),
+    ).rejects.toBeInstanceOf(UnknownProblemError);
+  });
+
+  it("should throw UnverifiedCompetitorAccountError (not quota) even at capacity", async () => {
+    const { ctx } = buildContext(
+      { deployQuota: QUOTA },
+      { unverified: true, quotaActiveCount: 99 },
+    );
+    await expect(
+      startDeployment(ctx, sampleRequest({ quotaTier: "basic" })),
+    ).rejects.toBeInstanceOf(UnverifiedCompetitorAccountError);
+  });
+
+  it("should throw DeployQuotaExceededError before any DDB Put when at capacity", async () => {
+    const { ctx, putSend } = buildContext({ deployQuota: QUOTA }, { quotaActiveCount: 1 });
+    await expect(startDeployment(ctx, sampleRequest({ quotaTier: "basic" }))).rejects.toMatchObject(
+      { name: "DeployQuotaExceededError", tier: "basic", limit: 1 },
+    );
+    // Put / publish (= cloud mutation) に到達しない。
+    expect(putSend).not.toHaveBeenCalled();
+  });
+
+  it("should proceed normally under the limit and when quota is disabled", async () => {
+    const under = buildContext({ deployQuota: QUOTA }, { quotaActiveCount: 0 });
+    await expect(
+      startDeployment(under.ctx, sampleRequest({ quotaTier: "basic" })),
+    ).resolves.toMatchObject({ status: "PENDING" });
+    const disabled = buildContext({}, { quotaActiveCount: 99 });
+    await expect(startDeployment(disabled.ctx, sampleRequest())).resolves.toMatchObject({
+      status: "PENDING",
     });
   });
 });

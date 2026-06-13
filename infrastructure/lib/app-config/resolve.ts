@@ -5,6 +5,7 @@ import * as dotenv from "dotenv";
 import { parseAdminAllowlist } from "../control-plane/saml-admin-allowlist.js";
 import { parseSamlIdpConfig } from "../control-plane/saml-identity-providers.js";
 import { getEnv } from "../helper-functions.js";
+import { parseDeployQuota } from "../problem-deploy/handlers/deploy-handler/deploy-quota.js";
 import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting.js";
 import { parseTenantAdminAllowlist } from "../tenant-template/saml-admin-allowlist.js";
 import { parseTenantSamlIdpConfig } from "../tenant-template/saml-identity-providers.js";
@@ -69,6 +70,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   const challengePayloadBucketName = env.CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET || undefined;
   const challengePayload = resolveChallengePayload(env, config, environment);
   const deployConcurrentBuildLimit = resolveDeployConcurrentBuildLimit(env);
+  const deployQuotaByTier = resolveDeployQuotaByTier(env);
 
   // Issue #1031: 旧 `CDK_PARAM_ADMIN_CONSOLE_ORIGIN` env 直読みは廃止。 admin-console-hosting
   // が先に立ち、 cross-stack ref で control-plane / admin-console-insight に流れる。
@@ -118,6 +120,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     // Issue #1695: config.json の customDomains を AppConfig にそのまま透過 (opt-in TLS 1.2)。
     customDomains: config?.customDomains,
     deployConcurrentBuildLimit,
+    deployQuotaByTier,
     controlPlaneSamlIdps,
     controlPlaneSamlAdminAllowlist,
     tenantSamlIdps,
@@ -326,6 +329,15 @@ function resolveDeployConcurrentBuildLimit(env: NodeJS.ProcessEnv): number | und
     );
   }
   return limit;
+}
+
+/**
+ * #1766: tier 別の同時デプロイ上限。`CDK_PARAM_DEPLOY_QUOTA_BY_TIER` (JSON) を synth 時に
+ * 検証する (= 壊れた値を Lambda runtime まで持ち越さない)。format の正本は handler 側の
+ * `parseDeployQuota` と共有する。未設定はクォータ無効 (undefined)。
+ */
+function resolveDeployQuotaByTier(env: NodeJS.ProcessEnv) {
+  return parseDeployQuota(env.CDK_PARAM_DEPLOY_QUOTA_BY_TIER);
 }
 
 function resolveBudgetConfig(
