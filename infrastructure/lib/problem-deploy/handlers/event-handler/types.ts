@@ -147,7 +147,11 @@ export const CreateEventRequestSchema = z.object({
       }),
     )
     .min(1)
-    .max(100, "1 event あたり 100 teams が DDB TransactWrite 上限"),
+    // create.ts は event 1 行 + teams を 1 つの atomic TransactWrite で書く。 TransactWrite は
+    // 100 item 上限なので teams は最大 99 (= 100 - event 1 行)。 以前 max(100) だったが、 event
+    // 行の +1 を数え落とした off-by-one で、 schema 上は通る 100-team request が runtime で
+    // `TransactWrite items > 100` を投げて 500 になっていた。 schema を実上限に揃える。
+    .max(99, "1 event あたり最大 99 teams (event 1 行 + teams で DDB TransactWrite 100-item 上限)"),
   problems: z.array(EventProblemTargetSchema).min(1).max(50),
 });
 export type CreateEventRequest = z.infer<typeof CreateEventRequestSchema>;
