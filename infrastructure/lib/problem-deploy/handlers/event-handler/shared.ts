@@ -102,25 +102,38 @@ export async function queryDeploymentsByEvent(
   // / UpdateExpression 全てで alias 必須。 caller が `#s` を含む projection を渡すケース
   // (= bulk-deploy.ts が `jobId, teamId, problemId, #s` で呼ぶ) を黙ってサポートするため、
   // alias を本 helper 側で定義する。 caller が `#s` を使わなくても extra alias は ignored。
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.deploymentsTableName,
-      IndexName: "GSI1",
-      KeyConditionExpression: "GSI1PK = :pk",
-      FilterExpression: "eventId = :ev",
-      ExpressionAttributeValues: {
-        ":pk": `TENANT#${tenantId}`,
-        ":ev": eventId,
-      },
-      ...(projectionExpression
-        ? {
-            ProjectionExpression: projectionExpression,
-            ...(projectionExpression.includes("#s")
-              ? { ExpressionAttributeNames: { "#s": "status" } }
-              : {}),
-          }
-        : {}),
-    }),
-  );
-  return (out.Items ?? []) as Partial<DeploymentItem>[];
+  //
+  // #1797: GSI1PK=TENANT#<id> パーティションが 1MB を超えると Query は LastEvaluatedKey を
+  // 返してページ分割する。1 ページ目だけ読むと後続ページの deployment を取りこぼし、teardown
+  // (bulk-delete) / end-event / schedule 伝播 / bulk-deploy の既存検知が黙って漏れる
+  // (= 対象 stack が enqueue されず orphan 化)。FilterExpression(eventId) は各ページ内で
+  // 適用されるので、目的 event の行が後続ページに居ると完全に missed。全ページを drain する。
+  const items: Partial<DeploymentItem>[] = [];
+  let exclusiveStartKey: Record<string, unknown> | undefined;
+  do {
+    const out = await shared.ddb.send(
+      new QueryCommand({
+        TableName: shared.deploymentsTableName,
+        IndexName: "GSI1",
+        KeyConditionExpression: "GSI1PK = :pk",
+        FilterExpression: "eventId = :ev",
+        ExpressionAttributeValues: {
+          ":pk": `TENANT#${tenantId}`,
+          ":ev": eventId,
+        },
+        ...(projectionExpression
+          ? {
+              ProjectionExpression: projectionExpression,
+              ...(projectionExpression.includes("#s")
+                ? { ExpressionAttributeNames: { "#s": "status" } }
+                : {}),
+            }
+          : {}),
+        ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
+      }),
+    );
+    items.push(...((out.Items ?? []) as Partial<DeploymentItem>[]));
+    exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (exclusiveStartKey);
+  return items;
 }
