@@ -95,12 +95,18 @@ export function evaluateGate(gate: EventGate | undefined, nowMs: number): GateBl
   }
   if (!gate.startsAt) return { kind: "scoring_not_started" };
   const startMs = Date.parse(gate.startsAt);
-  if (Number.isFinite(startMs) && nowMs < startMs) {
+  // fail-closed: 解析不能な startsAt (schema は z.string() しか掛けないので非 ISO が
+  // 保存されうる) は「開始を検証できない」= scoring_not_started に倒す。旧コードは
+  // `Number.isFinite(NaN) && ...` が false になり block を素通りして採点を許していた
+  // (= 競技開始前 / 不正設定でも flag 加点が通る fail-open、本モジュールの fail-closed 契約違反)。
+  if (!Number.isFinite(startMs) || nowMs < startMs) {
     return { kind: "scoring_not_started", startsAt: gate.startsAt };
   }
   if (gate.endsAt) {
     const endMs = Date.parse(gate.endsAt);
-    if (Number.isFinite(endMs) && nowMs > endMs) {
+    // fail-closed: 解析不能な endsAt は「終了前であることを検証できない」= scoring_ended に倒す
+    // (= 検証不能な window で採点を受け付けない)。
+    if (!Number.isFinite(endMs) || nowMs > endMs) {
       return { kind: "scoring_ended", endsAt: gate.endsAt };
     }
   }
