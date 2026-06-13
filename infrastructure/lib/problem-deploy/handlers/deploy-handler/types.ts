@@ -140,6 +140,13 @@ export interface DeploymentItem {
    */
   flagSubmitted?: boolean;
   /**
+   * Issue #1796: multi-flag kind で正解済みの sub-flag id の集合。 DynamoDB の String Set (SS)
+   * として保持し、 lib-dynamodb が JS `Set<string>` ↔ SS を marshal する。 旧 row / 手書き行は
+   * 持たない (= 「未解答」 と等価) ので、 単一 `flagSubmitted` boolean を集合へ拡張した形。
+   * flag ごとに 1 回だけ ADD し、 `ConditionExpression` で 2 重加算を防ぐ。
+   */
+  solvedFlagIds?: ReadonlySet<string>;
+  /**
    * Issue #817: Challenge (flag) で不正解 submit を受けた累計回数。 0 default。
    * `wrongAnswerPenalty > 0` の問題で 1 不正解ごとに ADD 1 + score 減算する経路で使う。
    */

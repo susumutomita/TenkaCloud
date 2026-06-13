@@ -1,6 +1,7 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type {
   FlagScoringMetadata,
+  MultiFlagEntry,
   ProblemScoringMetadata,
 } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
@@ -11,7 +12,11 @@ import { evaluateGate, getEventGate } from "./event-gate.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 export type SubmitFlagOutcome =
-  | { kind: "ok"; scoreDelta: number; totalScore: number }
+  /**
+   * Issue #1796: multi-flag では `flagId` を含めて返し (= どの sub-flag が解けたか)、
+   * 単一 flag kind では flagId 無し (= 互換)。
+   */
+  | { kind: "ok"; scoreDelta: number; totalScore: number; flagId?: string }
   | { kind: "already_scored"; totalScore: number }
   /**
    * Issue #817: 不正解。 wrongAnswerPenalty が問題 metadata で正の整数で設定されていれば
@@ -20,6 +25,11 @@ export type SubmitFlagOutcome =
    */
   | { kind: "wrong"; scoreDelta: number; totalScore: number; wrongCount: number }
   | { kind: "not_flag_problem" }
+  /**
+   * Issue #1796: multi-flag で flagId が指定されていない / metadata の flags[] に存在しない id。
+   * 単一 flag kind は flagId を無視するのでこの outcome は返さない。
+   */
+  | { kind: "unknown_flag" }
   | { kind: "no_outputs" }
   | { kind: "scoring_locked" }
   /**
@@ -40,9 +50,13 @@ export type SubmitFlagOutcome =
  * - team scope に該当行が無い (key 不正) は `unauthorized`
  * - team に該当 problemId が無い (= 違う event の問題を指定) は `unauthorized`
  *   (= problem の存在を漏らさない)
- * - kind=flag 以外の問題は `not_flag_problem`
+ * - kind=flag / multi-flag 以外の問題は `not_flag_problem`
  * - stackOutputs に flagOutputKey が無い (= deploy 未完了等) は `no_outputs`
  * - 既に flagSubmitted=true なら `already_scored` (= 重複加算しない)
+ *
+ * Issue #1796: multi-flag では `flagId` でどの sub-flag への提出かを受け取り、その flag の
+ * flagOutputKey と照合する (= 単一 flag kind は flagId を無視して従来挙動を保つ)。 解済 flag は
+ * `solvedFlagIds` (String Set) に蓄積し、 flag ごとに 1 回だけ加点する (= 冪等)。
  */
 export async function submitFlag(
   shared: ParticipantSharedResources,
@@ -50,6 +64,7 @@ export async function submitFlag(
   teamLoginKey: string,
   problemId: string,
   submittedFlag: string,
+  flagId?: string,
 ): Promise<SubmitFlagOutcome> {
   const items = await queryTeamItems(shared, teamLoginKey);
   if (items.length === 0) return { kind: "unauthorized" };
@@ -65,6 +80,10 @@ export async function submitFlag(
   if (blocked) return blocked;
 
   const scoring = scoringMap[item.problemId];
+  // Issue #1796: multi-flag は gate を通過した後の照合経路だけが分岐する (= gate / 認可は共通)。
+  if (scoring?.kind === "multi-flag") {
+    return submitMultiFlag(shared, item, scoring.flags, submittedFlag, flagId);
+  }
   if (scoring?.kind !== "flag") return { kind: "not_flag_problem" };
 
   if (item.flagSubmitted === true) {
@@ -80,6 +99,161 @@ export async function submitFlag(
   }
 
   return scoreCorrectFlag(shared, item, scoring);
+}
+
+/**
+ * Issue #1796: solvedFlagIds attribute を寛容に `ReadonlySet<string>` へ正規化する。
+ *
+ * lib-dynamodb は JS `Set<string>` ↔ DynamoDB String Set (SS) を marshal するので通常は Set で
+ * 戻るが、 旧 SDK / 手書き row 由来の string[] や、 未設定 (undefined) も握れるようにする
+ * (= DB row drift / 移行期の防御層、 ADR-008 と整合)。 lookup.ts も同 helper を再利用する。
+ */
+export function getSolvedFlagIds(item: Partial<DeploymentItem>): ReadonlySet<string> {
+  const raw = (item as { solvedFlagIds?: unknown }).solvedFlagIds;
+  if (raw instanceof Set) {
+    return new Set(Array.from(raw, String));
+  }
+  if (Array.isArray(raw)) {
+    return new Set(raw.filter((v): v is string => typeof v === "string"));
+  }
+  return new Set<string>();
+}
+
+/**
+ * Issue #1796: multi-flag の照合 + 加点経路。 flagId で対象 sub-flag を引き、 その flagOutputKey の
+ * stack output 値と `flagMatches` (= 定数時間比較を再利用) で照合する。 解済 flag は
+ * `solvedFlagIds` (String Set) に蓄積し、 flag ごとに 1 回だけ加点する (= 冪等、 ConditionExpression で race を防ぐ)。
+ */
+async function submitMultiFlag(
+  shared: ParticipantSharedResources,
+  item: Partial<DeploymentItem> & { PK: string; problemId: string },
+  flags: readonly MultiFlagEntry[],
+  submittedFlag: string,
+  flagId: string | undefined,
+): Promise<SubmitFlagOutcome> {
+  const entry = flagId ? flags.find((f) => f.id === flagId) : undefined;
+  // flagId 未指定 / metadata の flags[] に無い id は unknown_flag (= 単一 flag kind の挙動とは別)。
+  if (!entry || flagId === undefined) return { kind: "unknown_flag" };
+
+  // 既に解済の flag は重複加算しない (= per-flag 冪等)。 totalScore は header の累計を返す。
+  if (getSolvedFlagIds(item).has(entry.id)) {
+    return { kind: "already_scored", totalScore: Number(item.score ?? 0) };
+  }
+
+  const outputs = parseStackOutputs(item.stackOutputs);
+  const expected = outputs[entry.flagOutputKey];
+  if (typeof expected !== "string") return { kind: "no_outputs" };
+
+  if (!flagMatches(submittedFlag, expected)) {
+    return scoreWrongMultiFlag(shared, item, entry);
+  }
+  return scoreCorrectMultiFlag(shared, item, entry);
+}
+
+async function scoreCorrectMultiFlag(
+  shared: ParticipantSharedResources,
+  item: Partial<DeploymentItem> & { PK: string; problemId: string },
+  entry: MultiFlagEntry,
+): Promise<SubmitFlagOutcome> {
+  // solvedFlagIds に entry.id が未収録のときだけ ADD する (= 2 重加算をレースから守る)。
+  const now = new Date().toISOString();
+  try {
+    const updated = await shared.ddb.send(
+      new UpdateCommand({
+        TableName: shared.tableName,
+        Key: { PK: item.PK, SK: "META" },
+        UpdateExpression:
+          "ADD score :pts, solvedFlagIds :flagIdSet SET lastScoredAt = :now, updatedAt = :now",
+        ConditionExpression:
+          "attribute_not_exists(solvedFlagIds) OR NOT contains(solvedFlagIds, :flagId)",
+        ExpressionAttributeValues: {
+          ":pts": entry.points,
+          ":flagIdSet": new Set([entry.id]),
+          ":flagId": entry.id,
+          ":now": now,
+        },
+        ReturnValues: "ALL_NEW",
+      }),
+    );
+    const totalScore = Number(
+      (updated.Attributes as { score?: unknown })?.score ?? Number(item.score ?? 0) + entry.points,
+    );
+    // 加点成功時のみ score event 行を append (= 単一 flag kind と同じ「flag」source を踏襲)。
+    if (item.jobId) await writeMultiFlagScoreEvent(shared, item, "flag", entry.points, now);
+    return { kind: "ok", scoreDelta: entry.points, totalScore, flagId: entry.id };
+  } catch (err) {
+    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") {
+      return { kind: "already_scored", totalScore: Number(item.score ?? 0) + entry.points };
+    }
+    throw err;
+  }
+}
+
+async function scoreWrongMultiFlag(
+  shared: ParticipantSharedResources,
+  item: Partial<DeploymentItem> & { PK: string; problemId: string },
+  entry: MultiFlagEntry,
+): Promise<SubmitFlagOutcome> {
+  const penalty = entry.wrongAnswerPenalty ?? 0;
+  // penalty 無し (= 0 / 未設定) は単一 flag kind と同じ legacy wrong shape (= 加点経路を打たない)。
+  if (penalty === 0) return legacyWrongFlagOutcome(item);
+  const now = new Date().toISOString();
+  try {
+    // 既に解済の flag は減点しない (= correct 経路と同じ not-already-solved condition)。
+    const updated = await shared.ddb.send(
+      new UpdateCommand({
+        TableName: shared.tableName,
+        Key: { PK: item.PK, SK: "META" },
+        UpdateExpression: "ADD wrongAnswerCount :one, score :neg SET updatedAt = :now",
+        ConditionExpression:
+          "attribute_not_exists(solvedFlagIds) OR NOT contains(solvedFlagIds, :flagId)",
+        ExpressionAttributeValues: {
+          ":one": 1,
+          ":neg": -penalty,
+          ":flagId": entry.id,
+          ":now": now,
+        },
+        ReturnValues: "ALL_NEW",
+      }),
+    );
+    const attrs = updated.Attributes as { score?: unknown; wrongAnswerCount?: unknown } | undefined;
+    const rawScore = Number(attrs?.score ?? 0);
+    if (item.jobId) await writeMultiFlagScoreEvent(shared, item, "flag-wrong", -penalty, now);
+    return {
+      kind: "wrong",
+      scoreDelta: -penalty,
+      totalScore: rawScore < 0 ? 0 : rawScore,
+      wrongCount: Number(attrs?.wrongAnswerCount ?? 1),
+    };
+  } catch (err) {
+    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") {
+      return { kind: "already_scored", totalScore: Number(item.score ?? 0) };
+    }
+    throw err;
+  }
+}
+
+function writeMultiFlagScoreEvent(
+  shared: ParticipantSharedResources,
+  item: Partial<DeploymentItem> & { problemId: string; jobId?: string },
+  source: "flag" | "flag-wrong",
+  points: number,
+  occurredAt: string,
+): Promise<void> {
+  return writeScoreEvent(
+    shared.ddb,
+    shared.tableName,
+    {
+      jobId: String(item.jobId ?? ""),
+      problemId: item.problemId,
+      teamId: item.teamId,
+      eventId: item.eventId,
+      expiresAt: item.expiresAt ?? 0,
+    },
+    source,
+    points,
+    occurredAt,
+  );
 }
 
 function isSubmitFlagItem(

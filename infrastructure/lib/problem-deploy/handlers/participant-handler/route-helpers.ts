@@ -28,6 +28,9 @@ const ERROR_STATUS = {
   not_flag_problem: StatusCodes.BAD_REQUEST,
   invalid_hint_id: StatusCodes.BAD_REQUEST,
   unknown_hint: StatusCodes.NOT_FOUND,
+  // Issue #1796: multi-flag で flagId が未指定 / metadata の flags[] に無い id。 unknown_hint と
+  // 同じ NOT_FOUND family (= 指定された sub-flag が存在しない)。
+  unknown_flag: StatusCodes.NOT_FOUND,
   // Issue #1315: progressive hint の順序違反 (= Hint 1 未 reveal で Hint 2 を request)。
   // 409 (= 状態的に受け付けない、 scoring_locked と同じ conflict 系) + body に missingHintId。
   hint_out_of_order: StatusCodes.CONFLICT,
