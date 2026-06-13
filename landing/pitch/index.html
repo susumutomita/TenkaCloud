@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>TenkaCloud Pitch Deck</title>
 <meta name="description" content="TenkaCloud / StackStack のピッチデッキ。" />
-<link rel="stylesheet" href="styles/pitch-theme.css" />
+<link rel="stylesheet" href="styles/pitch-theme.css?v=20260613-slide07-team-divider-1" />
 <script defer src="scripts/pitch.js"></script>
 </head>
 <body>
@@ -129,39 +129,43 @@
 
       <div class="quest-grid">
         <article class="tc-panel cut-panel quest-card">
-          <span class="number-dot --gold">1</span>
+          <span class="number-dot">1</span>
           <div class="quest-art cloud-art"></div>
-          <h3>クラウドで起動</h3>
+          <h3><img class="quest-title-icon" src="assets/generated/slide03/icon-cloud-start.png" alt="" aria-hidden="true">クラウドで起動</h3>
           <p>ローカルでしか動かない AI 製アプリを、まず本物のクラウドで動かす。</p>
         </article>
         <span class="quest-arr" aria-hidden="true"></span>
         <article class="tc-panel cut-panel quest-card">
-          <span class="number-dot --gold">2</span>
+          <span class="number-dot">2</span>
           <div class="quest-art wall-art"></div>
-          <h3>穴を塞ぐ</h3>
+          <h3><img class="quest-title-icon" src="assets/generated/slide03/icon-fix-holes.png" alt="" aria-hidden="true">穴を塞ぐ</h3>
           <p>公開範囲・権限・認証を直し、本番品質の守りを作る。</p>
         </article>
         <span class="quest-arr" aria-hidden="true"></span>
         <article class="tc-panel cut-panel quest-card incident-card">
-          <span class="number-dot --gold">3</span>
+          <span class="number-dot">3</span>
           <div class="quest-art battle-art">
-            <div class="incident-tags"><span>DB 誤削除</span><span>サイト改ざん</span><span>バックドア</span></div>
+            <div class="incident-tags">
+              <img class="incident-tag-img" src="assets/generated/slide03/incident-db-delete.png" alt="DB誤削除">
+              <img class="incident-tag-img" src="assets/generated/slide03/incident-deface.png" alt="サイト改ざん">
+              <img class="incident-tag-img wide" src="assets/generated/slide03/incident-supply-chain.png" alt="サプライチェーン攻撃（バックドア）">
+            </div>
           </div>
-          <h3>インシデント対応</h3>
+          <h3><img class="quest-title-icon" src="assets/generated/slide03/icon-incident-response.png" alt="" aria-hidden="true">インシデント対応</h3>
           <p>本番 DB の誤削除、サイト改ざん、攻撃を止めずに捌く。</p>
         </article>
         <span class="quest-arr" aria-hidden="true"></span>
         <article class="tc-panel cut-panel quest-card">
-          <span class="number-dot --gold">4</span>
+          <span class="number-dot">4</span>
           <div class="quest-art win-art"></div>
-          <h3>サイトを稼働させ続けると得点を獲得</h3>
+          <h3><img class="quest-title-icon" src="assets/generated/slide03/icon-score-rank.png" alt="" aria-hidden="true">サイトを稼働させ続けると得点を獲得</h3>
           <p>稼働を守り切れたか、対応はどれだけ速かったか。順位が確定する。</p>
         </article>
       </div>
 
       <footer class="tc-callout">
         <img class="trophy-icon" src="assets/icons/gold/trophy-gold.webp" alt="" aria-hidden="true">
-        <p>勝つのは、何が起きても <strong class="brush-inline keep-site">サイトを稼働させ続けた</strong> チーム。</p>
+        <p>勝つのは、何が起きても <img class="keep-site-brush-img" src="assets/generated/slide03/keep-site-brush.png" alt="サイトを稼働させ続けた"> チーム。</p>
       </footer>
     </div>
   </section>
@@ -177,22 +181,22 @@
 
       <div class="battle-loop" aria-label="competition loop">
         <article class="tc-panel cut-panel bl-step">
-          <span class="number-dot --gold">1</span><img class="line-icon" src="assets/icons/blue/cloud-upload.webp" alt="" aria-hidden="true"><h3>deploy</h3>
-          <p>問題を本物のクラウドへ展開<br><small>(AssumeRole + ExternalId)</small></p>
+          <span class="number-dot">1</span><img class="line-icon" src="assets/icons/blue/cloud-upload.webp" alt="" aria-hidden="true"><h3>deploy</h3>
+          <p>問題を本物の<br>クラウドへ展開<br><small>(AssumeRole + ExternalId)</small></p>
         </article>
         <span class="bl-arr" aria-hidden="true"></span>
         <article class="tc-panel cut-panel bl-step">
-          <span class="number-dot --gold">2</span><img class="line-icon" src="assets/icons/blue/crossed-swords.webp" alt="" aria-hidden="true"><h3>inject</h3>
-          <p>シナリオが障害・攻撃プローブを<br>自動で撃ち込む</p>
+          <span class="number-dot">2</span><img class="line-icon" src="assets/icons/blue/crossed-swords.webp" alt="" aria-hidden="true"><h3>inject</h3>
+          <p>シナリオが<br>障害・攻撃プローブを<br>自動で撃ち込む</p>
         </article>
         <span class="bl-arr" aria-hidden="true"></span>
         <article class="tc-panel cut-panel bl-step">
-          <span class="number-dot --gold">3</span><img class="line-icon" src="assets/icons/blue/target.webp" alt="" aria-hidden="true"><h3>score</h3>
+          <span class="number-dot">3</span><img class="line-icon" src="assets/icons/blue/target.webp" alt="" aria-hidden="true"><h3>score</h3>
           <p>60 秒ごとに実状態を採点<br><small>(守れば加点 / 破られれば減点)</small></p>
         </article>
         <span class="bl-arr" aria-hidden="true"></span>
         <article class="tc-panel cut-panel bl-step">
-          <span class="number-dot --gold">4</span><img class="line-icon" src="assets/icons/blue/rank-chart.webp" alt="" aria-hidden="true"><h3>rank</h3>
+          <span class="number-dot">4</span><img class="line-icon" src="assets/icons/blue/rank-chart.webp" alt="" aria-hidden="true"><h3>rank</h3>
           <p>スコアを集計し、<br>順位をライブ更新</p>
         </article>
       </div>
@@ -239,15 +243,15 @@
 
       <div class="battle-cards">
         <article class="tc-panel cut-panel battle-card">
-          <span class="kind">BATTLE</span><img class="emblem" src="assets/icons/gold/stack-emblem.webp" alt="" aria-hidden="true">
-          <div><h3>StackStack</h3><p>AI で作ったアプリを、安全な本番品質へ。</p></div>
+          <span class="kind">BATTLE</span><img class="emblem" src="assets/generated/slide05/stack-emblem.png" alt="" aria-hidden="true">
+          <div><h3>StackStack</h3><p>AI で作ったアプリを、<br>安全な本番品質へ。</p></div>
         </article>
         <article class="tc-panel cut-panel battle-card">
-          <span class="kind">BATTLE</span><img class="emblem" src="assets/icons/gold/security-emblem.webp" alt="" aria-hidden="true">
-          <div><h3>Security<br>Battle Royale</h3><p>攻撃と障害から、サービスを守り抜く。</p></div>
+          <span class="kind">BATTLE</span><img class="emblem" src="assets/generated/slide05/security-emblem.png" alt="" aria-hidden="true">
+          <div><h3>Security<br>Battle Royale</h3><p>攻撃と障害から、<br>サービスを守り抜く。</p></div>
         </article>
         <article class="tc-panel cut-panel battle-card">
-          <span class="kind">BATTLE</span><img class="emblem" src="assets/icons/gold/migration-emblem.webp" alt="" aria-hidden="true">
+          <span class="kind">BATTLE</span><img class="emblem" src="assets/generated/slide05/migration-emblem.png" alt="" aria-hidden="true">
           <div><h3>Microservice<br>Migration</h3><p>モノリスを、止めずに移行しきる。</p></div>
         </article>
       </div>
@@ -272,23 +276,23 @@
         <article class="tc-panel cut-panel use-card">
           <span class="hex-no">1</span><h3>COMMUNITY</h3><img class="line-icon" src="assets/icons/blue/users.webp" alt="" aria-hidden="true">
           <h4>コミュニティイベント</h4>
-          <p>勉強会やコミュニティで、本物のクラウド競技を開催して盛り上げる。</p>
+          <p>勉強会やコミュニティで、<br>本物のクラウド競技を開催して<br>盛り上げる。</p>
         </article>
         <article class="tc-panel cut-panel use-card">
           <span class="hex-no">2</span><h3>EDUCATION</h3><img class="line-icon" src="assets/icons/blue/book-shield.webp" alt="" aria-hidden="true">
           <h4>定期的なセキュリティ教育</h4>
-          <p>チーム・組織で、安全な公開と運用力を継続的に鍛える。</p>
+          <p>チーム・組織で、<br>安全な公開と運用力を<br>継続的に鍛える。</p>
         </article>
         <article class="tc-panel cut-panel use-card">
           <span class="hex-no">3</span><h3>ASSESSMENT</h3><img class="line-icon" src="assets/icons/blue/clipboard-chart.webp" alt="" aria-hidden="true">
           <h4>スキルチェック</h4>
-          <p>実状態で自動採点。採用評価や実力測定に使える客観指標になる。</p>
+          <p>実状態で自動採点。<br>採用評価や実力測定に使える<br>客観指標になる。</p>
         </article>
       </div>
 
       <footer class="tc-callout">
         <img class="trophy-icon" src="assets/icons/gold/trophy-gold.webp" alt="" aria-hidden="true">
-        <p>同じ仕組みが、<strong class="brush-inline">イベント・研修・採用評価</strong> まで回す。</p>
+        <p>同じ仕組みが、<img class="use-callout-brush-img" src="assets/generated/slide06/event-training-assessment-brush.png" alt="イベント・研修・採用評価"> まで回す。</p>
       </footer>
     </div>
   </section>
@@ -309,16 +313,26 @@
             <span class="role gold">FOUNDER</span>
             <h3>amedama</h3>
             <p class="sub-name">(Susumu Tomita)</p>
+            <span class="member-divider gold" aria-hidden="true"></span>
             <p>JAWS DAYS 2024<br>AWS Game Day <strong>優勝。</strong><br>2026 <strong>準優勝。</strong></p>
-            <div class="member-links"><span><img src="assets/icons/brand/link.svg" alt="" aria-hidden="true">Portfolio</span><span><img src="assets/icons/brand/linkedin.svg" alt="" aria-hidden="true">LinkedIn</span><span><img src="assets/icons/brand/github.svg" alt="" aria-hidden="true">GitHub</span></div>
+            <div class="member-links qr-links">
+              <a href="https://susumutomita.netlify.app/" target="_blank" rel="noopener noreferrer"><img class="qr-img" src="assets/generated/slide07/amedama-qr-portfolio.png" alt="" aria-hidden="true"><span>Portfolio</span></a>
+              <a href="https://www.linkedin.com/in/susumutomita/" target="_blank" rel="noopener noreferrer"><img class="qr-img" src="assets/generated/slide07/amedama-qr-linkedin.png" alt="" aria-hidden="true"><span>LinkedIn</span></a>
+              <a href="https://github.com/susumutomita" target="_blank" rel="noopener noreferrer"><img class="qr-img" src="assets/generated/slide07/amedama-qr-github.png" alt="" aria-hidden="true"><span>GitHub</span></a>
+            </div>
           </div>
         </article>
         <article class="tc-panel cut-panel member-card">
           <img class="portrait" src="assets/icons/gold/ninja-avatar.webp" alt="" aria-hidden="true">
           <div class="member-body">
             <span class="role">TEAM</span>
-            <h3>チャーリー</h3>
-            <p>JAWS 名古屋運営メンバー。<br>Game Day の <strong>熱量</strong> を広げたい人。</p>
+            <h3>ちゃーりー</h3>
+            <span class="member-divider" aria-hidden="true"></span>
+            <p>JAWS-UG名古屋<br>AWSGameDay 2024 <strong>準優勝。</strong></p>
+            <div class="member-links qr-links">
+              <a href="https://www.linkedin.com/in/yusuke-hirono/" target="_blank" rel="noopener noreferrer"><img class="qr-img" src="assets/generated/slide07/charlie-qr-linkedin.jpg" alt="" aria-hidden="true"><span>LinkedIn</span></a>
+              <a href="https://github.com/usk0513" target="_blank" rel="noopener noreferrer"><img class="qr-img" src="assets/generated/slide07/charlie-qr-github.jpg" alt="" aria-hidden="true"><span>GitHub</span></a>
+            </div>
           </div>
         </article>
         <article class="tc-panel cut-panel member-card">
@@ -326,13 +340,17 @@
           <div class="member-body">
             <span class="role">TEAM</span>
             <h3>きせのん</h3>
-            <p>JAWS DAYS 2024<br>Game Day <strong>優勝。</strong><br>AWS <strong>全認定</strong> 保有。</p>
+            <span class="member-divider" aria-hidden="true"></span>
+            <p>JAWS DAYS 2024<br>Game Day <strong>優勝。</strong><br>AWS <strong>全認定</strong> 保有。<br>CCoEはじめました。</p>
           </div>
         </article>
       </div>
 
       <footer class="tc-callout centered">
-        <p>作れる人はいるかもしれない。<br>でも、<strong class="brush-inline hot-makers">熱量ある問題を作れる人</strong> はそうそういない。</p>
+        <p class="hot-makers-copy">
+          <span class="hot-makers-lead">作れる人はいるかもしれない。</span>
+          <span class="hot-makers-line"><span>でも、</span><img class="hot-makers-brush-img" src="assets/generated/slide07/hot-makers-brush.png?v=20260613-gold-brush-tone2" alt="熱量ある問題を作れる人"><span>はそうそういない。</span></span>
+        </p>
       </footer>
     </div>
   </section>
@@ -345,23 +363,23 @@
       </header>
 
       <h2 id="slide-08-title" class="mega-heading ask-heading">一緒に作る <img class="brush-img brush-nakama" src="assets/brush/nakama.webp" alt="仲間"> と、<br><img class="brush-img brush-wall" src="assets/brush/wall-partner.webp" alt="壁打ち相手"> を探しています。</h2>
-      <p class="ask-lead">エフェクチュエーションの “クレイジーキルト” -<br>手を動かして <strong>TenkaCloud</strong> を一緒に育てる人を探しています。</p>
+      <p class="ask-lead"><span class="ask-lead-primary">エフェクチュエーションの “クレイジーキルト” <span class="ask-lead-rule" aria-hidden="true"></span></span><br><span>手を動かして <strong>TenkaCloud</strong> を一緒に育てる人を探しています。</span></p>
 
       <div class="ask-grid">
         <article class="tc-panel cut-panel ask-card">
-          <span class="number-dot --gold">1</span><img class="line-icon" src="assets/icons/blue/users.webp" alt="" aria-hidden="true">
+          <span class="number-dot">1</span><img class="line-icon" src="assets/icons/blue/users.webp" alt="" aria-hidden="true">
           <h3>共同開発</h3><h4>競技が好きな仲間</h4>
           <p>AWS GameDay 等の競技が好きで、プラットフォームや問題を一緒に作れる人。</p>
         </article>
         <article class="tc-panel cut-panel ask-card">
-          <span class="number-dot --gold">2</span><img class="line-icon" src="assets/icons/blue/shield-check.webp" alt="" aria-hidden="true">
+          <span class="number-dot">2</span><img class="line-icon" src="assets/icons/blue/shield-check.webp" alt="" aria-hidden="true">
           <h3>クラウド推進</h3><h4>CCoE・教育の推進者</h4>
           <p>企業でクラウドの利活用やセキュリティ教育を進めている人。</p>
         </article>
         <article class="tc-panel cut-panel ask-card">
-          <span class="number-dot --gold">3</span><img class="line-icon" src="assets/icons/blue/chat-bubbles.webp" alt="" aria-hidden="true">
+          <span class="number-dot">3</span><img class="line-icon" src="assets/icons/blue/chat-bubbles.webp" alt="" aria-hidden="true">
           <h3>壁打ち</h3><h4>壁打ちしたい 2 つの問い</h4>
-          <p><b>1</b> <strong>ライセンス:</strong> いまは Apache 2.0。AGPL にすべき？<br><b>2</b> <strong>課金:</strong> 実クラウドを誰でも使えると費用が読めない。どう値付けする？</p>
+          <p><b>1</b> <strong>ライセンス:</strong> いまは Apache 2.0。<br>AGPL にすべき？<br><b>2</b> <strong>課金:</strong> 実クラウドを誰でも使えると費用が読めない。どう値付けする？</p>
         </article>
       </div>
 
@@ -384,16 +402,16 @@
         <p class="thanks-lead">触ってみてください。問題も、コードも、すべて <strong>OSS</strong>。</p>
         <div class="cta-grid">
           <a class="tc-panel cut-panel cta-card" href="https://github.com/susumutomita/TenkaCloud">
-            <span class="cta-badge"><img class="cta-icon" src="assets/icons/blue/repository-branch.webp" alt="" aria-hidden="true"></span><h3>Repository</h3><p>ソースコード・サンプルはこちらから。</p>
+            <span class="cta-badge"><img class="cta-icon" src="assets/icons/brand/github.svg" alt="" aria-hidden="true"></span><h3>Repository</h3><p>ソースコード・サンプルは<br>こちらから。</p>
           </a>
           <a class="tc-panel cut-panel cta-card" href="https://github.com/susumutomita/TenkaCloudChallenge">
-            <span class="cta-badge"><img class="cta-icon" src="assets/icons/blue/problem-question.webp" alt="" aria-hidden="true"></span><h3>問題 (Problems)</h3><p>本日出題した問題にチャレンジできます。</p>
+            <span class="cta-badge"><img class="cta-icon" src="assets/icons/blue/problem-question.webp" alt="" aria-hidden="true"></span><h3>問題 <span>(Problems)</span></h3><p>本日出題した問題に<br>チャレンジできます。</p>
           </a>
           <a class="tc-panel cut-panel cta-card" href="https://susumutomita.github.io/TenkaCloud/?lang=ja">
-            <span class="cta-badge"><img class="cta-icon" src="assets/icons/blue/globe.webp" alt="" aria-hidden="true"></span><h3>Landing</h3><p>TenkaCloud の詳細・最新情報はこちら。</p>
+            <span class="cta-badge"><img class="cta-icon" src="assets/icons/blue/globe.webp" alt="" aria-hidden="true"></span><h3>Landing</h3><p>TenkaCloud の詳細・<br>最新情報はこちら。</p>
           </a>
         </div>
-        <p class="closing-line"><span></span>ともに、クラウドで天下をつかみましょう。<span></span></p>
+        <p class="closing-line"><img class="closing-brush-line" src="assets/generated/slide09/closing-brush-line-tight.png" alt="" aria-hidden="true">ともに、クラウドで天下をつかみましょう。<img class="closing-brush-line right" src="assets/generated/slide09/closing-brush-line-tight.png" alt="" aria-hidden="true"></p>
       </div>
     </div>
   </section>
