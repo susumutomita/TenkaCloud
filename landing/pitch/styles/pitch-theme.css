@@ -1760,7 +1760,7 @@ section.slide:nth-of-type(5) .tc-callout {
   left: 36px;
   right: 36px;
   top: 292px;
-  grid-template-columns: 1.16fr 1fr 1.08fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .member-card {
