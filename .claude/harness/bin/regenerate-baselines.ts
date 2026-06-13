@@ -18,6 +18,7 @@ import { resolve } from "node:path";
 import { adrMustBeHtml } from "../src/rules/adr-must-be-html.ts";
 import { adrSelfContained } from "../src/rules/adr-self-contained.ts";
 import { fileTooLarge } from "../src/rules/file-too-large.ts";
+import { handlerMustNotCallFetch } from "../src/rules/handler-must-not-call-fetch.ts";
 import { handlerNoDirectSdkImport } from "../src/rules/handler-no-direct-sdk-import.ts";
 import { iamWildcardNeedsJustify } from "../src/rules/iam-wildcard-needs-justify.ts";
 import { lambdaEnvSize } from "../src/rules/lambda-env-size.ts";
@@ -25,6 +26,7 @@ import { listAllTrackedFiles } from "../src/utils/staged-files.ts";
 
 const RULES = {
   "file-too-large": fileTooLarge,
+  "handler-must-not-call-fetch": handlerMustNotCallFetch,
   "handler-no-direct-sdk-import": handlerNoDirectSdkImport,
   "adr-must-be-html": adrMustBeHtml,
   "adr-self-contained": adrSelfContained,
