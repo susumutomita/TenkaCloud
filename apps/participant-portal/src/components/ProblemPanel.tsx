@@ -21,6 +21,7 @@ import {
 } from "../api/portal-client";
 import { useT } from "../i18n";
 import { describeAgo } from "../lib/format";
+import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
 import type { ProblemPanelT } from "./ProblemPanel.helpers";
 import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
 
@@ -37,6 +38,7 @@ const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
 
 const SCORING_KIND_KEY: Record<string, string> = {
   flag: "problem_panel.kind_flag",
+  "multi-flag": "problem_panel.kind_multi_flag",
   uptime: "problem_panel.kind_uptime",
   "uptime-flat": "problem_panel.kind_uptime",
   "uptime-multi": "problem_panel.kind_uptime",
@@ -155,7 +157,9 @@ export function describeProblemKind(
 }
 
 export function isUptimeScoring(scoring: ParticipantProblemView["scoring"]): boolean {
-  return scoring ? scoring.kind !== "flag" : false;
+  // flag / multi-flag は Challenge (= 提出型)。 それ以外 (uptime 系 / phased / attack) は Battle 軸の
+  // 「古い lastScoredAt = stale」 UX を適用する (= polling 採点だから停滞が意味を持つ)。
+  return scoring ? scoring.kind !== "flag" && scoring.kind !== "multi-flag" : false;
 }
 
 export function isStaleProblem(problem: ParticipantProblemView, now: number): boolean {
@@ -173,6 +177,19 @@ export function getCompleteFlagScoring(
 ): FlagScoringInfo | undefined {
   const scoring = problem.scoring;
   if (problem.status !== "COMPLETE" || scoring?.kind !== "flag") return undefined;
+  return scoring;
+}
+
+/**
+ * Issue #1796: deploy COMPLETE かつ multi-flag kind のときだけ MultiFlagSubmissionPanel を出す
+ * (= 単一 flag kind の getCompleteFlagScoring と同方針。 deploy 未完だと flagOutputKey の値が無く
+ * 提出しても no_outputs になるため)。
+ */
+export function getCompleteMultiFlagScoring(
+  problem: ParticipantProblemView,
+): FlagScoringInfo | undefined {
+  const scoring = problem.scoring;
+  if (problem.status !== "COMPLETE" || scoring?.kind !== "multi-flag") return undefined;
   return scoring;
 }
 
@@ -239,6 +256,7 @@ export function ProblemPanel({
   const isStale = isStaleProblem(problem, now);
   const displayedDeployLog = selectDisplayedDeployLog(liveDeployLog, problem.deployLog);
   const flagScoring = getCompleteFlagScoring(problem);
+  const multiFlagScoring = getCompleteMultiFlagScoring(problem);
 
   return (
     <Container
@@ -313,6 +331,15 @@ export function ProblemPanel({
             flagSubmitted={flagScoring.flagSubmitted ?? false}
             points={flagScoring.points ?? 0}
             hints={flagScoring.hints ?? []}
+            onScored={onScored}
+          />
+        )}
+        {multiFlagScoring && (
+          <MultiFlagSubmissionPanel
+            apiBaseUrl={apiBaseUrl}
+            sessionToken={sessionToken}
+            problemId={problem.problemId}
+            flags={multiFlagScoring.flags ?? []}
             onScored={onScored}
           />
         )}

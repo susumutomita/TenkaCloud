@@ -349,6 +349,33 @@ describe("submitFlag", () => {
       PortalScoringGateError,
     );
   });
+
+  it("should omit flagId from the body for the single flag kind", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ kind: "ok", scoreDelta: 100, totalScore: 100 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await submitFlag("https://x", KEY, "hello-world", "FLAG{demo}");
+    const body = JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string);
+    expect(body).toEqual({ problemId: "hello-world", flag: "FLAG{demo}" });
+  });
+
+  it("should include flagId in the body for multi-flag submissions (Issue #1796)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ kind: "ok", scoreDelta: 300, totalScore: 300, flagId: "ep01" }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const out = await submitFlag("https://x", KEY, "net-evo", "answer", "ep01");
+    expect(out).toEqual({ kind: "ok", scoreDelta: 300, totalScore: 300, flagId: "ep01" });
+    const body = JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string);
+    expect(body).toEqual({ problemId: "net-evo", flag: "answer", flagId: "ep01" });
+  });
 });
 
 describe("deleteProblemEndpointOverride", () => {
