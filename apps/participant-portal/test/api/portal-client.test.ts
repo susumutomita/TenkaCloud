@@ -364,12 +364,14 @@ describe("submitFlag", () => {
   });
 
   it("should include flagId in the body for multi-flag submissions (Issue #1796)", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ kind: "ok", scoreDelta: 300, totalScore: 300, flagId: "ep01" }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ kind: "ok", scoreDelta: 300, totalScore: 300, flagId: "ep01" }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
     vi.stubGlobal("fetch", fetchMock);
     const out = await submitFlag("https://x", KEY, "net-evo", "answer", "ep01");
     expect(out).toEqual({ kind: "ok", scoreDelta: 300, totalScore: 300, flagId: "ep01" });

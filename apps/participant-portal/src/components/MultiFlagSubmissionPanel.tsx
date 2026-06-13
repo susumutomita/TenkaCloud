@@ -1,16 +1,11 @@
 import Alert from "@cloudscape-design/components/alert";
-import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Form from "@cloudscape-design/components/form";
 import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useState } from "react";
-import {
-  type MultiFlagEntryView,
-  type SubmitFlagOutcome,
-  submitFlag,
-} from "../api/portal-client";
+import { type MultiFlagEntryView, type SubmitFlagOutcome, submitFlag } from "../api/portal-client";
 import { useIsMock } from "../config-context";
 import { evaluateMockFlag } from "../dev-mock/flag-submit";
 import { useT } from "../i18n";

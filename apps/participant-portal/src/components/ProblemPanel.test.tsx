@@ -292,7 +292,9 @@ describe("ProblemPanel pure helpers", () => {
   it("should describe each scoring kind", () => {
     expect(describeProblemKind(echoT, undefined)).toBe("problem_panel.kind_unknown");
     expect(describeProblemKind(echoT, { kind: "flag" })).toBe("problem_panel.kind_flag");
-    expect(describeProblemKind(echoT, { kind: "multi-flag" })).toBe("problem_panel.kind_multi_flag");
+    expect(describeProblemKind(echoT, { kind: "multi-flag" })).toBe(
+      "problem_panel.kind_multi_flag",
+    );
     expect(describeProblemKind(echoT, { kind: "uptime-flat" })).toBe("problem_panel.kind_uptime");
     expect(describeProblemKind(echoT, { kind: "phased-polling" })).toBe(
       "problem_panel.kind_phased",

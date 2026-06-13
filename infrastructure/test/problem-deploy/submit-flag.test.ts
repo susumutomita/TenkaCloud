@@ -402,7 +402,9 @@ describe("submitFlag", () => {
       expect(ddbSend).toHaveBeenCalledTimes(3); // Query + UpdateItem + score event Put
       const updateCmd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
       expect(updateCmd).toBeInstanceOf(UpdateCommand);
-      expect(updateCmd.input.UpdateExpression).toContain("ADD score :pts, solvedFlagIds :flagIdSet");
+      expect(updateCmd.input.UpdateExpression).toContain(
+        "ADD score :pts, solvedFlagIds :flagIdSet",
+      );
       expect(updateCmd.input.ConditionExpression).toContain("NOT contains(solvedFlagIds, :flagId)");
       expect(updateCmd.input.ExpressionAttributeValues?.[":pts"]).toBe(300);
       expect(updateCmd.input.ExpressionAttributeValues?.[":flagId"]).toBe("ep01");
@@ -522,7 +524,10 @@ describe("submitFlag", () => {
 
 describe("getSolvedFlagIds", () => {
   it("should normalize a DynamoDB String Set into a string set", () => {
-    expect([...getSolvedFlagIds({ solvedFlagIds: new Set(["a", "b"]) })].sort()).toEqual(["a", "b"]);
+    expect([...getSolvedFlagIds({ solvedFlagIds: new Set(["a", "b"]) })].sort()).toEqual([
+      "a",
+      "b",
+    ]);
   });
 
   it("should tolerate a plain string array (SDK / row drift)", () => {

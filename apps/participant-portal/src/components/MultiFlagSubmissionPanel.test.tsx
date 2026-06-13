@@ -74,10 +74,7 @@ describe("MultiFlagSubmissionPanel", () => {
 
   it("should show a solved alert and no input for an already-solved flag", () => {
     renderPanel({
-      flags: [
-        { ...FLAGS[0], solved: true },
-        FLAGS[1],
-      ],
+      flags: [{ ...FLAGS[0], solved: true }, FLAGS[1]],
     });
     // solved な ep01 は提出欄を出さず success Alert を表示、 未 solved な ep02 だけ input 1 個。
     expect(screen.getAllByRole("textbox")).toHaveLength(1);
@@ -89,7 +86,9 @@ describe("MultiFlagSubmissionPanel", () => {
       flags: FLAGS.map((f) => ({ ...f, solved: true })),
     });
     expect(screen.getByText("Flags solved: 2 / 2")).toBeInTheDocument();
-    expect(screen.getByText("All flags solved. This problem is fully cleared!")).toBeInTheDocument();
+    expect(
+      screen.getByText("All flags solved. This problem is fully cleared!"),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 

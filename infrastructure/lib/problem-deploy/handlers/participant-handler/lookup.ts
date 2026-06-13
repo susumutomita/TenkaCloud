@@ -176,6 +176,26 @@ export interface ParticipantTeamView {
  * 情報だけ (= flagOutputKey の値は出さない、kind / points / hints のみ) を含める。
  * stackOutputs からも flagOutputKey フィールドは strip し、答えが見えないようにする。
  */
+/**
+ * stackOutputs から「答え」になる flagOutputKey を strip する (= 競技者に出さない)。
+ *   - flag       : 単一 flagOutputKey を削除
+ *   - multi-flag : 全 sub-flag の flagOutputKey を削除 (Issue #1796。 1 つでも露出させない)
+ *   - その他     : 何もしない (= uptime 系等は flagOutputKey を持たない)
+ */
+function stripAnswerOutputs(
+  stackOutputs: Record<string, string>,
+  scoring: ProblemScoringMetadata | undefined,
+): Record<string, string> {
+  if (scoring?.kind === "flag") {
+    delete stackOutputs[scoring.flagOutputKey];
+  } else if (scoring?.kind === "multi-flag") {
+    for (const f of scoring.flags) {
+      delete stackOutputs[f.flagOutputKey];
+    }
+  }
+  return stackOutputs;
+}
+
 export function toProblemView(
   item: Partial<DeploymentItem>,
   scoringMap: Record<string, ProblemScoringMetadata> = {},
@@ -183,17 +203,8 @@ export function toProblemView(
   const status = (item.status ?? "PENDING") as DeploymentStatus;
   if (DELETED_LIKE_STATUSES.has(status)) return undefined;
 
-  const stackOutputs = parseStackOutputs(item.stackOutputs);
   const scoring = item.problemId ? scoringMap[item.problemId] : undefined;
-  if (scoring?.kind === "flag") {
-    delete stackOutputs[scoring.flagOutputKey];
-  } else if (scoring?.kind === "multi-flag") {
-    // Issue #1796: 全 sub-flag の flagOutputKey を strip する (= どれも当てる対象なので
-    // 1 つでも露出させない)。
-    for (const f of scoring.flags) {
-      delete stackOutputs[f.flagOutputKey];
-    }
-  }
+  const stackOutputs = stripAnswerOutputs(parseStackOutputs(item.stackOutputs), scoring);
 
   return {
     jobId: String(item.jobId ?? ""),
