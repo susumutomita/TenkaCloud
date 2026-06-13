@@ -38,8 +38,8 @@ Once the platform is up, runtime traffic flows across four planes that talk thro
 ┌──────────────────────────────────────┐    ┌──────────────────────────────────┐
 │  Control Plane                       │    │  Application Plane               │
 │  • SBT ControlPlane construct        │    │  • per-tenant Cognito + API + UI │
-│  • Cognito UserPool (SystemAdmin)    │    │  • pooled (BASIC/STANDARD/       │
-│  • Tenant CRUD HTTP API              │    │    PREMIUM tiers) or silo        │
+│  • Cognito UserPool (SystemAdmin)    │    │  • pooled (BASIC/ADVANCED        │
+│  • Tenant CRUD HTTP API              │    │    tiers) or silo                │
 │  • admin-console UI                  │    │    (PLATINUM tier)               │
 │  • EventBridge bus owner             │    │  • application-admin-console UI  │
 └────────────────┬─────────────────────┘    └────────────────┬─────────────────┘

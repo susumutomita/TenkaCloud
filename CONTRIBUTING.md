@@ -49,13 +49,22 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:`,
 
 See [CLAUDE.md](./CLAUDE.md) for project rules, architecture invariants, and prohibited patterns. The same rules apply whether the change is made by a human or by an AI agent.
 
+## Project provenance
+
+TenkaCloud is an independent open-source project. Before contributing, read
+[`docs/PROJECT_PROVENANCE.md`](./docs/PROJECT_PROVENANCE.md): it records the
+project's development boundaries and the influence-versus-copying distinction.
+Do not contribute an employer's source code, confidential documents, customer
+data, private competition content, or other proprietary assets — contribute
+only original or compatibly licensed work.
+
 ## Join the community
 
-TenkaCloud's moat is its problem catalog, and that catalog grows through community contribution. Pick one of six roles and ship one starter task — you do not need to be personally onboarded.
+TenkaCloud's moat is its problem catalog, and that catalog grows through community contribution. Pick one of five roles and ship one starter task — you do not need to be personally onboarded.
 
-- **[docs/community/ONBOARDING.html](./docs/community/ONBOARDING.html)** — role chooser (Tester / Problem Author / Scenario Reviewer / Event Facilitator / Platform Contributor / Sponsor-Requester), with the expected contribution, required skill level, first task, communication channel, time commitment, and recognition path for each role.
+- **[docs/community/ONBOARDING.html](./docs/community/ONBOARDING.html)** — role chooser (Tester / Problem Author / Event Facilitator / Platform Contributor / Sponsor-Requester), with the expected contribution, required skill level, first task, communication channel, time commitment, and recognition path for each role.
 - **[docs/community/PLAYTEST-CHECKLIST.html](./docs/community/PLAYTEST-CHECKLIST.html)** — 30-minute playtest protocol for the Tester role: pick a problem, run `make deploy` in Lite mode, register a team, solve, score, and file a `problem-feedback` issue with a structured template.
-- **[docs/community/PROBLEM-REVIEW-CHECKLIST.html](./docs/community/PROBLEM-REVIEW-CHECKLIST.html)** — rubric for the Scenario Reviewer role: scoring fairness, hint progression, no-skip-by-luck, time-to-solve estimate, scenario realism, template security (cross-references [#1353](https://github.com/susumutomita/TenkaCloud/issues/1353) for security hardening).
+- **[docs/community/PROBLEM-REVIEW-CHECKLIST.html](./docs/community/PROBLEM-REVIEW-CHECKLIST.html)** — rubric for reviewing a problem PR: scoring fairness, hint progression, no-skip-by-luck, time-to-solve estimate, scenario realism, template security (cross-references [#1353](https://github.com/susumutomita/TenkaCloud/issues/1353) for security hardening).
 
 Coordination model: **GitHub is the durable source of truth**; Discord (when available) is for live coordination only — every decision and bug must end up as a GitHub issue or PR comment. GitHub-only contributors are first-class.
 

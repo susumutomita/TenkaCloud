@@ -68,6 +68,8 @@ export function ShellLayout({
             items={[
               { type: "link", href: "/tenants", text: t("nav.tenants") },
               { type: "link", href: "/tenants/new", text: t("nav.tenants_new") },
+              // Issue #1767: tenant usage dashboard (AdminInsight 集計の横断ビュー)
+              { type: "link", href: "/usage", text: t("nav.usage") },
               { type: "link", href: "/jobs", text: t("nav.jobs") },
               { type: "link", href: "/audit-log", text: t("nav.audit_log") },
               // SAML SSO is feature-flagged off until verified (ADR-035) — hide the nav item.

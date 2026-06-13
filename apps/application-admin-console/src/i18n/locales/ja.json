@@ -133,6 +133,19 @@
     "empty_filtered": "条件に一致する問題はありません。",
     "empty": "問題がまだ登録されていません。"
   },
+  "problem_search": {
+    "filter_label": "問題カタログを絞り込む",
+    "filter_description": "検索とフィルタで下の「使用する問題」の選択肢を絞り込めます。",
+    "search_placeholder": "問題名 / ID / 説明 / タグから検索",
+    "all_categories": "全カテゴリ",
+    "difficulty_placeholder": "難易度",
+    "scoring_kind_placeholder": "Scoring kind",
+    "tag_placeholder": "タグ (いずれか含む)",
+    "facet_count": "{count} 問",
+    "match_count": "{filtered} / {total} 問が一致",
+    "clear_filters": "絞り込み解除",
+    "empty_filtered": "条件に一致する問題はありません。"
+  },
   "event_create": {
     "title": "新規 Event 作成",
     "description": "チーム数と問題セットを指定して Event を作成します。 teamLoginKey は EventDetail でいつでも確認できます。",
@@ -282,6 +295,7 @@
     "teams_col_account_legacy": "(旧 Event: problem 既定値を使用)",
     "teams_col_login_key": "teamLoginKey",
     "teams_col_login_key_aria": "{slug} の teamLoginKey をコピー",
+    "teams_col_invite_link_aria": "{slug} の招待リンクをコピー",
     "teams_col_login_key_legacy": "(詳細で再表示可)",
     "teams_empty": "チームがありません",
     "loading_spinner": "読み込み中…",
@@ -688,6 +702,11 @@
     "col_name": "障害",
     "col_problem": "問題",
     "col_description": "説明",
+    "col_auto_fire": "自動発火条件",
+    "trigger_manual_only": "手動のみ",
+    "trigger_after_deploy": "deploy {minutes} 分後",
+    "trigger_score_above": "チームスコア > {threshold}",
+    "trigger_phase_entered": "phase「{phase}」進入時",
     "col_scope": "対象範囲",
     "col_affected": "対象チーム数",
     "col_scheduled_for": "注入予定時刻",
@@ -718,5 +737,22 @@
     "after_minutes_error": "1〜1440 の整数を入力してください。",
     "fired_flash": "「{name}」 を {count} チームに発火しました。",
     "scheduled_flash": "「{name}」 を {minutes} 分後に発火するよう予約しました。"
+  },
+  "setup_guide": {
+    "header": "初回セットアップガイド",
+    "description": "イベント開催までの 4 ステップ。完了状況はテナント内の既存データから自動判定され、すべて完了するとこのガイドは表示されなくなります。",
+    "dismiss": "非表示にする",
+    "progress_label": "セットアップ進捗",
+    "progress_info": "{completed} / {total} ステップ完了",
+    "status_complete": "完了",
+    "status_incomplete": "未完了",
+    "step_create_event_title": "イベント作成",
+    "step_create_event_link": "新規 Event を作成する",
+    "step_select_problems_title": "問題選択",
+    "step_select_problems_link": "問題カタログから問題を選ぶ",
+    "step_register_teams_title": "チーム登録",
+    "step_register_teams_link": "Event 作成ウィザードでチームを登録する",
+    "step_deploy_title": "デプロイ",
+    "step_deploy_link": "Event 詳細からデプロイを実行する"
   }
 }

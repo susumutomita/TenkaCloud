@@ -64,7 +64,8 @@ describe("checkCrossRefs runtime awareness", () => {
       "azure-problem",
       {
         runtime: { provider: "azure", engine: "bicep", entry: "main.bicep" },
-        scoring: { kind: "flag", flagOutputKey: "FlagValue" },
+        // points は SCHEMA 必須 field。 #1777 semantic check (flag) も正値を要求する。
+        scoring: { kind: "flag", flagOutputKey: "FlagValue", points: 100 },
         endpoints: [{ slot: "web", default: { from: "cfn-output", key: "ServiceUrl" } }],
       },
       { name: "main.bicep", body: "// bicep template, no CFn Outputs here\n" },
@@ -77,7 +78,7 @@ describe("checkCrossRefs runtime awareness", () => {
       "aws-problem",
       {
         runtime: { provider: "aws", engine: "cloudformation", entry: "template.yaml" },
-        scoring: { kind: "flag", flagOutputKey: "FlagValue" },
+        scoring: { kind: "flag", flagOutputKey: "FlagValue", points: 100 },
       },
       { name: "template.yaml", body: "Outputs:\n  SomethingElse:\n    Value: x\n" },
     );
@@ -119,7 +120,7 @@ describe("checkCrossRefs runtime awareness", () => {
   it("should default to template.yaml for a legacy problem with no runtime declared", () => {
     const { metaPath, meta } = writeProblem(
       "legacy-problem",
-      { scoring: { kind: "flag", flagOutputKey: "FlagValue" } },
+      { scoring: { kind: "flag", flagOutputKey: "FlagValue", points: 100 } },
       { name: "template.yaml", body: "Outputs:\n  FlagValue:\n    Value: x\n" },
     );
     // legacy = aws/cloudformation 既定 → CFn check が走り、 FlagValue は Outputs にあるので OK。

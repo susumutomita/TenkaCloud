@@ -133,6 +133,19 @@
     "empty_filtered": "No problems match the filters.",
     "empty": "No problems registered yet."
   },
+  "problem_search": {
+    "filter_label": "Filter the problem catalog",
+    "filter_description": "Use search and filters to narrow the options in \"Problems to use\" below.",
+    "search_placeholder": "Search by name / ID / description / tags",
+    "all_categories": "All categories",
+    "difficulty_placeholder": "Difficulty",
+    "scoring_kind_placeholder": "Scoring kind",
+    "tag_placeholder": "Tags (match any)",
+    "facet_count": "{count} problems",
+    "match_count": "{filtered} of {total} problems match",
+    "clear_filters": "Clear filters",
+    "empty_filtered": "No problems match the filters."
+  },
   "event_create": {
     "title": "Create new Event",
     "description": "Specify team count and problem set to create an Event. teamLoginKey can be viewed any time on EventDetail.",
@@ -282,6 +295,7 @@
     "teams_col_account_legacy": "(legacy Event: uses problem default)",
     "teams_col_login_key": "teamLoginKey",
     "teams_col_login_key_aria": "Copy teamLoginKey for {slug}",
+    "teams_col_invite_link_aria": "Copy invite link for {slug}",
     "teams_col_login_key_legacy": "(view in detail)",
     "teams_empty": "No teams",
     "loading_spinner": "Loading…",
@@ -688,6 +702,11 @@
     "col_name": "Disruption",
     "col_problem": "Problem",
     "col_description": "Description",
+    "col_auto_fire": "Auto-fire conditions",
+    "trigger_manual_only": "Manual only",
+    "trigger_after_deploy": "{minutes} min after deploy",
+    "trigger_score_above": "Team score > {threshold}",
+    "trigger_phase_entered": "On entering phase “{phase}”",
     "col_scope": "Scope",
     "col_affected": "Teams hit",
     "col_scheduled_for": "Scheduled for",
@@ -718,5 +737,22 @@
     "after_minutes_error": "Enter a whole number between 1 and 1440.",
     "fired_flash": "Fired \"{name}\" at {count} team(s).",
     "scheduled_flash": "Scheduled \"{name}\" to fire in {minutes} minute(s)."
+  },
+  "setup_guide": {
+    "header": "First-run setup guide",
+    "description": "Four steps to run your first event. Completion is derived from your tenant's existing data, and the guide disappears once every step is done.",
+    "dismiss": "Hide this guide",
+    "progress_label": "Setup progress",
+    "progress_info": "{completed} of {total} steps complete",
+    "status_complete": "Done",
+    "status_incomplete": "Not yet",
+    "step_create_event_title": "Create an event",
+    "step_create_event_link": "Create a new event",
+    "step_select_problems_title": "Select problems",
+    "step_select_problems_link": "Browse the problem catalog",
+    "step_register_teams_title": "Register teams",
+    "step_register_teams_link": "Register teams in the event wizard",
+    "step_deploy_title": "Deploy",
+    "step_deploy_link": "Deploy from the event detail page"
   }
 }

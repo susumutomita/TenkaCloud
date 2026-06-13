@@ -30,11 +30,24 @@ export const TERMINAL_STATUSES: ReadonlySet<DeploymentStatus> = new Set([
  */
 export type ScoringKind =
   | "flag"
+  | "multi-flag"
   | "uptime"
   | "uptime-flat"
   | "uptime-multi"
   | "phased-polling"
   | "attack-detection";
+
+/**
+ * Issue #1796: multi-flag の 1 sub-flag の view (= backend `ParticipantScoringInfo.flags[]` と
+ * 同じ shape)。 正解値 (flagOutputKey の値) は含めない (= 答えを漏らさない)。 `solved` は team の
+ * 解済 flag id 集合に含まれるかで判定済み。
+ */
+export interface MultiFlagEntryView {
+  readonly id: string;
+  readonly label: string;
+  readonly points: number;
+  readonly solved: boolean;
+}
 
 /**
  * Issue #742 Phase 4: progressive hint view shape (= backend
@@ -55,6 +68,8 @@ export interface ParticipantScoringInfo {
   readonly pointsPerSuccess?: number;
   readonly hints?: readonly ParticipantHintView[];
   readonly flagSubmitted?: boolean;
+  /** Issue #1796: multi-flag の sub-flag 一覧 (= N 個の提出欄を出すための view)。 */
+  readonly flags?: readonly MultiFlagEntryView[];
 }
 
 /**
@@ -150,7 +165,8 @@ export interface ParticipantTeamView {
 }
 
 export type SubmitFlagOutcome =
-  | { kind: "ok"; scoreDelta: number; totalScore: number }
+  /** Issue #1796: multi-flag のとき、 どの sub-flag が解けたかを示す `flagId` を含む。 */
+  | { kind: "ok"; scoreDelta: number; totalScore: number; flagId?: string }
   | { kind: "already_scored"; totalScore: number }
   /**
    * Issue #817: 不正解。 問題 metadata に `wrongAnswerPenalty` が設定されていれば

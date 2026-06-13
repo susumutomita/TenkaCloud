@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ProblemSummary } from "../data/problems";
 import {
+  collectScoringKindFacets,
   collectTagFacets,
+  DIFFICULTY_LEVELS,
   EMPTY_FILTER_CRITERIA,
   filterProblems,
   isFilterActive,
@@ -105,6 +107,44 @@ describe("filterProblems (Issue #834)", () => {
     const res = filterProblems(problems, { ...EMPTY_FILTER_CRITERIA, search: "nonexistent" });
     expect(res).toEqual([]);
   });
+
+  it("should match the problem id via free-text search (Issue #1776)", () => {
+    const res = filterProblems(problems, { ...EMPTY_FILTER_CRITERIA, search: "p2" });
+    expect(res.map((p) => p.id)).toEqual(["p2"]);
+  });
+});
+
+describe("filterProblems scoring kind (Issue #1776)", () => {
+  const problems: readonly ProblemSummary[] = [
+    sample({ id: "p1", scoringKind: "flag" }),
+    sample({ id: "p2", scoringKind: "uptime-flat" }),
+    sample({ id: "p3" }), // scoring 未宣言 (= deploy のみ) の問題
+  ];
+
+  it("should keep only problems whose scoring kind is selected", () => {
+    const res = filterProblems(problems, { ...EMPTY_FILTER_CRITERIA, scoringKinds: ["flag"] });
+    expect(res.map((p) => p.id)).toEqual(["p1"]);
+  });
+
+  it("should OR multiple selected scoring kinds", () => {
+    const res = filterProblems(problems, {
+      ...EMPTY_FILTER_CRITERIA,
+      scoringKinds: ["flag", "uptime-flat"],
+    });
+    expect(res.map((p) => p.id)).toEqual(["p1", "p2"]);
+  });
+
+  it("should drop problems without a scoring declaration when the kind filter is active", () => {
+    const res = filterProblems(problems, {
+      ...EMPTY_FILTER_CRITERIA,
+      scoringKinds: ["flag", "uptime-flat", "uptime-multi"],
+    });
+    expect(res.map((p) => p.id)).toEqual(["p1", "p2"]);
+  });
+
+  it("should keep problems without a scoring declaration when no kind filter is active", () => {
+    expect(filterProblems(problems, EMPTY_FILTER_CRITERIA)).toHaveLength(3);
+  });
 });
 
 describe("isFilterActive", () => {
@@ -120,6 +160,7 @@ describe("isFilterActive", () => {
     expect(isFilterActive({ ...EMPTY_FILTER_CRITERIA, categories: ["Battle"] })).toBe(true);
     expect(isFilterActive({ ...EMPTY_FILTER_CRITERIA, tags: ["sample"] })).toBe(true);
     expect(isFilterActive({ ...EMPTY_FILTER_CRITERIA, difficulties: [1] })).toBe(true);
+    expect(isFilterActive({ ...EMPTY_FILTER_CRITERIA, scoringKinds: ["flag"] })).toBe(true);
   });
 
   it("should return active=false for whitespace-only search (= trim comparison)", () => {
@@ -144,6 +185,37 @@ describe("collectTagFacets", () => {
 
   it("should return empty facets for an empty array", () => {
     expect(collectTagFacets([])).toEqual([]);
+  });
+});
+
+describe("collectScoringKindFacets (Issue #1776)", () => {
+  it("should count kinds and sort by frequency desc with alphabetical tiebreaker", () => {
+    const problems = [
+      sample({ id: "p1", scoringKind: "flag" }),
+      sample({ id: "p2", scoringKind: "flag" }),
+      sample({ id: "p3", scoringKind: "uptime-flat" }),
+      sample({ id: "p4", scoringKind: "attack-detection" }),
+    ];
+    expect(collectScoringKindFacets(problems)).toEqual([
+      { kind: "flag", count: 2 },
+      { kind: "attack-detection", count: 1 },
+      { kind: "uptime-flat", count: 1 },
+    ]);
+  });
+
+  it("should skip problems without a scoring declaration", () => {
+    const problems = [sample({ id: "p1" }), sample({ id: "p2", scoringKind: "flag" })];
+    expect(collectScoringKindFacets(problems)).toEqual([{ kind: "flag", count: 1 }]);
+  });
+
+  it("should return empty facets for an empty catalog", () => {
+    expect(collectScoringKindFacets([])).toEqual([]);
+  });
+});
+
+describe("DIFFICULTY_LEVELS", () => {
+  it("should enumerate the five catalog difficulty levels in ascending order", () => {
+    expect(DIFFICULTY_LEVELS).toEqual([1, 2, 3, 4, 5]);
   });
 });
 

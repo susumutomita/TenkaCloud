@@ -26,6 +26,7 @@ import {
   newFireRequestId,
 } from "../../api/disruptions-client";
 import type { TeamSummary } from "../../api/events-client";
+import { describeTriggers } from "../../lib/disruption-triggers";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -300,6 +301,32 @@ export function DisruptionsPanel({
               header: t("disruptions.col_description"),
               cell: (e: DisruptionCatalogEntry) => e.disruption.description,
               maxWidth: 560,
+            },
+            {
+              // [#1775 / ADR-013 Phase 2] metadata 宣言の自動発火条件 (OR 結合) を読み取り表示。
+              // 条件の source of truth は problem の metadata.json なのでここでは編集しない。
+              id: "autoFire",
+              header: t("disruptions.col_auto_fire"),
+              cell: (e: DisruptionCatalogEntry) => {
+                const labels = describeTriggers(e.disruption.triggers, t);
+                if (labels.length === 0) {
+                  return (
+                    <Box variant="small" color="text-status-inactive">
+                      {t("disruptions.trigger_manual_only")}
+                    </Box>
+                  );
+                }
+                return (
+                  <SpaceBetween size="xxs">
+                    {labels.map((label) => (
+                      <Box key={label} variant="small">
+                        {label}
+                      </Box>
+                    ))}
+                  </SpaceBetween>
+                );
+              },
+              width: 220,
             },
             {
               id: "fire",

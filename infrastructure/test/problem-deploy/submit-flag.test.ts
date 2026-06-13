@@ -1,7 +1,10 @@
 import { QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
-import { submitFlag } from "../../lib/problem-deploy/handlers/participant-handler/submit-flag";
+import {
+  getSolvedFlagIds,
+  submitFlag,
+} from "../../lib/problem-deploy/handlers/participant-handler/submit-flag";
 import type { ProblemScoringMetadata } from "../../lib/utils/scoring-metadata";
 
 function buildShared(): {
@@ -356,5 +359,182 @@ describe("submitFlag", () => {
       );
       expect(out.kind).toBe("ok");
     });
+  });
+
+  // ---- Issue #1796 / multi-flag kind ----
+  // 1 問題に N 個の独立 flag。 flagId でどの sub-flag への提出かを受け取り、 flag ごとに 1 回だけ
+  // 加点する (= 冪等)。 wrongAnswerPenalty は flag ごとに独立、 0 未満 clamp を維持。
+  describe("multi-flag kind (Issue #1796)", () => {
+    const multiRow = (over: Record<string, unknown> = {}) =>
+      sampleRow({
+        problemId: "net-evo",
+        stackOutputs: JSON.stringify([
+          { OutputKey: "AnswerFlagEp01", OutputValue: "answer-ep01" },
+          { OutputKey: "AnswerFlagEp02", OutputValue: "answer-ep02" },
+        ]),
+        ...over,
+      });
+
+    const multiScoring: Record<string, ProblemScoringMetadata> = {
+      "net-evo": {
+        kind: "multi-flag",
+        flags: [
+          { id: "ep01", label: "Ep01", flagOutputKey: "AnswerFlagEp01", points: 300 },
+          {
+            id: "ep02",
+            label: "Ep02",
+            flagOutputKey: "AnswerFlagEp02",
+            points: 200,
+            wrongAnswerPenalty: 10,
+          },
+        ],
+      },
+    };
+
+    it("should award points and return flagId on a correct sub-flag", async () => {
+      ddbSend.mockResolvedValueOnce({ Items: [multiRow({ score: 0 })] });
+      ddbSend.mockResolvedValueOnce({ Attributes: { score: 300 } });
+      ddbSend.mockResolvedValueOnce({}); // score event PutItem
+
+      const out = await submitFlag(shared, multiScoring, "KEY", "net-evo", "answer-ep01", "ep01");
+
+      expect(out).toEqual({ kind: "ok", scoreDelta: 300, totalScore: 300, flagId: "ep01" });
+      expect(ddbSend).toHaveBeenCalledTimes(3); // Query + UpdateItem + score event Put
+      const updateCmd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
+      expect(updateCmd).toBeInstanceOf(UpdateCommand);
+      expect(updateCmd.input.UpdateExpression).toContain(
+        "ADD score :pts, solvedFlagIds :flagIdSet",
+      );
+      expect(updateCmd.input.ConditionExpression).toContain("NOT contains(solvedFlagIds, :flagId)");
+      expect(updateCmd.input.ExpressionAttributeValues?.[":pts"]).toBe(300);
+      expect(updateCmd.input.ExpressionAttributeValues?.[":flagId"]).toBe("ep01");
+      expect(updateCmd.input.ExpressionAttributeValues?.[":flagIdSet"]).toEqual(new Set(["ep01"]));
+    });
+
+    it("should write a score event with source 'flag' and the sub-flag points", async () => {
+      ddbSend.mockResolvedValueOnce({ Items: [multiRow({ score: 0, jobId: "JOB1" })] });
+      ddbSend.mockResolvedValueOnce({ Attributes: { score: 200 } });
+      ddbSend.mockResolvedValueOnce({});
+
+      await submitFlag(shared, multiScoring, "KEY", "net-evo", "answer-ep02", "ep02");
+
+      const putCmd = ddbSend.mock.calls[2]?.[0] as { input: { Item: Record<string, unknown> } };
+      expect(putCmd.input.Item.source).toBe("flag");
+      expect(putCmd.input.Item.points).toBe(200);
+    });
+
+    it("should return already_scored when the sub-flag id is in solvedFlagIds (Set)", async () => {
+      ddbSend.mockResolvedValueOnce({
+        Items: [multiRow({ score: 300, solvedFlagIds: new Set(["ep01"]) })],
+      });
+      const out = await submitFlag(shared, multiScoring, "KEY", "net-evo", "answer-ep01", "ep01");
+      expect(out).toEqual({ kind: "already_scored", totalScore: 300 });
+      expect(ddbSend).toHaveBeenCalledTimes(1); // Query のみ、 加点経路を打たない
+    });
+
+    it("should tolerate solvedFlagIds stored as a string array (drift) for already_scored", async () => {
+      ddbSend.mockResolvedValueOnce({
+        Items: [multiRow({ score: 300, solvedFlagIds: ["ep01"] })],
+      });
+      const out = await submitFlag(shared, multiScoring, "KEY", "net-evo", "answer-ep01", "ep01");
+      expect(out).toEqual({ kind: "already_scored", totalScore: 300 });
+    });
+
+    it("should fall to already_scored on a ConditionalCheckFailed race for a correct sub-flag", async () => {
+      ddbSend.mockResolvedValueOnce({ Items: [multiRow({ score: 0 })] });
+      ddbSend.mockImplementationOnce(async () => {
+        const err: Error & { name?: string } = new Error("conditional check failed");
+        err.name = "ConditionalCheckFailedException";
+        throw err;
+      });
+      const out = await submitFlag(shared, multiScoring, "KEY", "net-evo", "answer-ep01", "ep01");
+      expect(out).toEqual({ kind: "already_scored", totalScore: 300 });
+    });
+
+    it("should return unknown_flag when flagId is missing", async () => {
+      ddbSend.mockResolvedValueOnce({ Items: [multiRow()] });
+      const out = await submitFlag(shared, multiScoring, "KEY", "net-evo", "answer-ep01");
+      expect(out).toEqual({ kind: "unknown_flag" });
+      expect(ddbSend).toHaveBeenCalledTimes(1);
+    });
+
+    it("should return unknown_flag when flagId is not among the entries", async () => {
+      ddbSend.mockResolvedValueOnce({ Items: [multiRow()] });
+      const out = await submitFlag(shared, multiScoring, "KEY", "net-evo", "answer-ep01", "ep99");
+      expect(out).toEqual({ kind: "unknown_flag" });
+    });
+
+    it("should return no_outputs when the sub-flag flagOutputKey is absent from stackOutputs", async () => {
+      ddbSend.mockResolvedValueOnce({ Items: [multiRow({ stackOutputs: undefined })] });
+      const out = await submitFlag(shared, multiScoring, "KEY", "net-evo", "answer-ep01", "ep01");
+      expect(out).toEqual({ kind: "no_outputs" });
+    });
+
+    it("should deduct the per-flag penalty, write a flag-wrong event, and clamp totalScore at 0", async () => {
+      ddbSend.mockResolvedValueOnce({ Items: [multiRow({ score: 5, wrongAnswerCount: 0 })] });
+      ddbSend.mockResolvedValueOnce({ Attributes: { score: -5, wrongAnswerCount: 1 } });
+      ddbSend.mockResolvedValueOnce({});
+
+      const out = await submitFlag(shared, multiScoring, "KEY", "net-evo", "nope", "ep02");
+
+      expect(out).toEqual({ kind: "wrong", scoreDelta: -10, totalScore: 0, wrongCount: 1 });
+      const updateCmd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
+      expect(updateCmd.input.UpdateExpression).toContain("ADD wrongAnswerCount :one, score :neg");
+      expect(updateCmd.input.ConditionExpression).toContain("NOT contains(solvedFlagIds, :flagId)");
+      const putCmd = ddbSend.mock.calls[2]?.[0] as { input: { Item: Record<string, unknown> } };
+      expect(putCmd.input.Item.source).toBe("flag-wrong");
+      expect(putCmd.input.Item.points).toBe(-10);
+    });
+
+    it("should return the legacy wrong shape (scoreDelta 0, no UpdateItem) when the sub-flag has no penalty", async () => {
+      ddbSend.mockResolvedValueOnce({ Items: [multiRow({ score: 25, wrongAnswerCount: 2 })] });
+      const out = await submitFlag(shared, multiScoring, "KEY", "net-evo", "nope", "ep01");
+      expect(out).toEqual({ kind: "wrong", scoreDelta: 0, totalScore: 25, wrongCount: 2 });
+      expect(ddbSend).toHaveBeenCalledTimes(1); // Query のみ (= penalty 無しは WCU を使わない)
+    });
+
+    it("should fall to already_scored on a ConditionalCheckFailed race for a wrong-with-penalty sub-flag", async () => {
+      ddbSend.mockResolvedValueOnce({ Items: [multiRow({ score: 200 })] });
+      ddbSend.mockImplementationOnce(async () => {
+        const err: Error & { name?: string } = new Error("conditional check failed");
+        err.name = "ConditionalCheckFailedException";
+        throw err;
+      });
+      const out = await submitFlag(shared, multiScoring, "KEY", "net-evo", "nope", "ep02");
+      expect(out).toEqual({ kind: "already_scored", totalScore: 200 });
+    });
+
+    it("should keep the single flag kind byte-identical when a flagId is supplied (flagId ignored)", async () => {
+      ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+      ddbSend.mockResolvedValueOnce({ Attributes: { score: 100 } });
+      ddbSend.mockResolvedValueOnce({});
+      const out = await submitFlag(
+        shared,
+        flagScoring,
+        "KEY",
+        "hello-world",
+        "Hello from tc-hello-world-alpha",
+        "ignored-id",
+      );
+      // 単一 flag kind は flagId を無視し、 従来どおり flagId 無しの ok を返す。
+      expect(out).toEqual({ kind: "ok", scoreDelta: 100, totalScore: 100 });
+    });
+  });
+});
+
+describe("getSolvedFlagIds", () => {
+  it("should normalize a DynamoDB String Set into a string set", () => {
+    expect([...getSolvedFlagIds({ solvedFlagIds: new Set(["a", "b"]) })].sort()).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
+  it("should tolerate a plain string array (SDK / row drift)", () => {
+    expect([...getSolvedFlagIds({ solvedFlagIds: ["x"] })]).toEqual(["x"]);
+  });
+
+  it("should return an empty set when the attribute is absent", () => {
+    expect(getSolvedFlagIds({}).size).toBe(0);
   });
 });

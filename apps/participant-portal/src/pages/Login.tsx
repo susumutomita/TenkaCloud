@@ -7,12 +7,13 @@ import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
+import { clearInviteHash, readInviteKeyFromHash } from "../lib/invite";
 
 /**
  * 競技者ログイン画面。チーム単位で発行されたログインキーを入力すると、
@@ -27,9 +28,18 @@ export function LoginPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
   const navigate = useNavigate();
   const t = useT();
-  const [teamLoginKey, setTeamLoginKey] = useState("");
+  // #1772: 招待リンク (`/login#invite=<key>`) で開いたときは key を prefill する。
+  // auto-submit はしない (= #496 の「黙って team が切り替わる」事故防止と同じ思想で、
+  // ログインは必ず competitor の 1 クリックを挟む)。
+  const [teamLoginKey, setTeamLoginKey] = useState(
+    () => readInviteKeyFromHash(window.location.hash) ?? "",
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 読み取り後は fragment を落とし、 login key をアドレスバー / 履歴に残さない。
+  useEffect(() => {
+    clearInviteHash();
+  }, []);
   // LP 「モックで試す」 動線では backend が存在せず login key 文字列 が任意 (= 競技
   // 主催者が発行する短命キーは無い)。 ユーザーに 「何を入れればいいか分からない」 と
   // 思わせないために info banner / placeholder / description を dev-mock 用に出し分ける。

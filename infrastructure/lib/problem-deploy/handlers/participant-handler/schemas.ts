@@ -79,12 +79,16 @@ export const PatchMeBodySchema = z.object({
 export type PatchMeBody = z.infer<typeof PatchMeBodySchema>;
 
 /**
- * POST /portal/me/submit-flag — { problemId, flag }。 旧 index.ts は service に渡す前に
+ * POST /portal/me/submit-flag — { problemId, flag, flagId? }。 旧 index.ts は service に渡す前に
  * regex / length check を index.ts で並べていた。 schema layer に集約。
+ *
+ * Issue #1796: multi-flag kind で「どの sub-flag への提出か」 を表す optional `flagId`。 単一 flag
+ * kind は無視する (= 後方互換)。 cap は hint id と同じ 1-64 文字。
  */
 export const SubmitFlagBodySchema = z.object({
   problemId: ProblemIdSchema,
   flag: z.string().min(1).max(200),
+  flagId: z.string().min(1).max(64).optional(),
 });
 export type SubmitFlagBody = z.infer<typeof SubmitFlagBodySchema>;
 

@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,10 +21,34 @@ import type { PluginImporter } from "../participant-handler/coordination-plugin-
 export interface S3PluginImporterDeps {
   readonly s3: Pick<S3Client, "send">;
   readonly bucket: string;
+  /**
+   * 整合性 seam (ADR-039 の artifact-digest 方針を plugin load に流用)。 `import()` する前に
+   * download した bundle bytes の digest を期待値と照合する。
+   *   - `sha256:<hex>` を返す → 検証する。 不一致なら throw (= loader が plugin_unavailable に
+   *     fail-closed)。 plugin bucket / publish 経路が改ざんされても任意コード実行を遮断する。
+   *   - `undefined` を返す → 当該 module は未 pin として検証を skip (= resolver が per-module 判断)。
+   *   - hook 自体を渡さない → 検証なし (後方互換: 既存挙動を変えない)。
+   * 期待 digest の供給元 (= 署名付き manifest) の配線は publish パイプライン側の follow-up。
+   */
+  readonly resolveExpectedDigest?: (
+    moduleRef: string,
+  ) => string | undefined | Promise<string | undefined>;
 }
 
 export function coordinationPluginS3Key(moduleRef: string): string {
   return `coordination/${moduleRef}.mjs`;
+}
+
+/** bundle bytes の `sha256:<hex>` digest。 ADR-039 の artifact digest と同形式。 */
+export function pluginBundleDigest(body: string): string {
+  return `sha256:${createHash("sha256").update(body, "utf8").digest("hex")}`;
+}
+
+function digestsEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
 }
 
 /** 本番用 factory: 既定 S3Client を構築して importer を返す (= handler から SDK を直接触らせない seam)。 */
@@ -50,9 +75,31 @@ async function loadFromS3(deps: S3PluginImporterDeps, moduleRef: string): Promis
   );
   const body = await out.Body?.transformToString();
   if (!body) throw new Error(`coordination plugin not found or empty: ${moduleRef}`);
+  // import() する前に整合性を検証する (= 改ざんされた bytes を実行しない fail-closed gate)。
+  await verifyDigestIfConfigured(deps, moduleRef, body);
   // /tmp に書き出して file URL で dynamic import (ESM)。 unique dir で他 ref と衝突させない。
   const dir = await mkdtemp(join(tmpdir(), "coord-plugin-"));
   const file = join(dir, `${moduleRef}.mjs`);
   await writeFile(file, body, "utf8");
   return import(pathToFileURL(file).href);
+}
+
+/**
+ * resolver が設定されていれば、 download した bytes の digest を期待値と照合する。
+ * 不一致は throw (= import 前に止める)。 resolver 未設定 / undefined 返却は検証 skip。
+ */
+async function verifyDigestIfConfigured(
+  deps: S3PluginImporterDeps,
+  moduleRef: string,
+  body: string,
+): Promise<void> {
+  if (!deps.resolveExpectedDigest) return;
+  const expected = await deps.resolveExpectedDigest(moduleRef);
+  if (expected === undefined) return;
+  const actual = pluginBundleDigest(body);
+  if (!digestsEqual(actual, expected)) {
+    throw new Error(
+      `coordination plugin digest mismatch for ${moduleRef}: expected ${expected}, got ${actual}`,
+    );
+  }
 }

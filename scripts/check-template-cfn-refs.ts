@@ -163,11 +163,16 @@ function collectSubRefs(yaml: string): { refs: string[]; getAtts: string[] } {
   // しやすいよう、 `${...}` を yaml 全体から拾い、 `!Sub` line context は問わない (= false-positive
   // のリスクはあるが、 problem template の安全側 default として ${...} が出現したら必ず Ref / GetAtt
   // と扱う方が漏れにくい)。
+  // CFn の Sub 変数文法: 英数 logical name / `AWS::Xyz` pseudo / `Resource.Attr` dotted。
+  // これに合わない式 (例: shell の `${1:-}` / `${FOO:-bar}` / `${APP_IP}` / `${ARR[@]}`) は
+  // plain `|` UserData 内の shell script なので reference として扱わない。
+  const CFN_SUB_VAR = /^(AWS::[A-Za-z0-9]+|[A-Za-z][A-Za-z0-9]*(\.[A-Za-z0-9]+)*)$/;
   const re = /\$\{([^}]+)\}/g;
   for (const m of yaml.matchAll(re)) {
     const expr = m[1];
     if (!expr) continue;
     if (expr.startsWith("!")) continue; // ${!Literal} は escape、 reference でない
+    if (!CFN_SUB_VAR.test(expr)) continue;
     if (expr.includes(".")) {
       const head = expr.split(".")[0];
       if (head) getAtts.push(head);
@@ -176,6 +181,30 @@ function collectSubRefs(yaml: string): { refs: string[]; getAtts: string[] } {
     }
   }
   return { refs, getAtts };
+}
+
+/**
+ * `Fn::Sub` リスト形式の変数マップ key を集める。
+ *
+ *   UserData:
+ *     Fn::Base64: !Sub
+ *       - |
+ *         ORIGIN="http://${NatPublicIp}/"
+ *       - NatPublicIp: !GetAtt NatInstance.PublicIp
+ *
+ * `${NatPublicIp}` は Resources / Parameters でなくマップ key で解決されるため、
+ * unresolved 扱いから除外する。 行ベース簡易 parse のため、 値が intrinsic
+ * (!GetAtt / !Ref / !Sub / !ImportValue / !Select / !Join) の list item key のみを拾う
+ * (= Tags の `- Key: Name` のような plain 値は対象外で、 過剰宣言を防ぐ)。
+ */
+function collectSubMapKeys(yaml: string): string[] {
+  const keys: string[] = [];
+  const re = /^\s*-\s+([A-Za-z][A-Za-z0-9]*):\s+!(GetAtt|Ref|Sub|ImportValue|Select|Join)\b/gm;
+  for (const m of yaml.matchAll(re)) {
+    const key = m[1];
+    if (key) keys.push(key);
+  }
+  return keys;
 }
 
 function checkRequiredDeclarations(
@@ -242,17 +271,25 @@ function checkUnresolvedGetAttResources(
 }
 
 export type { Finding };
-export { collectGetAttResources, collectRefs, collectSubRefs, findTemplates, parseSections };
+export {
+  collectGetAttResources,
+  collectRefs,
+  collectSubMapKeys,
+  collectSubRefs,
+  findTemplates,
+  parseSections,
+};
 
 export function checkTemplate(templatePath: string): Finding[] {
   const yaml = readFileSync(templatePath, "utf8");
   const { resources, parameters, outputs } = parseSections(yaml);
   const subRefs = collectSubRefs(yaml);
+  const subMapKeys = new Set(collectSubMapKeys(yaml));
   return [
     ...checkRequiredDeclarations(templatePath, resources, outputs),
     ...checkUnresolvedRefs(
       templatePath,
-      [...collectRefs(yaml), ...subRefs.refs],
+      [...collectRefs(yaml), ...subRefs.refs.filter((r) => !subMapKeys.has(r))],
       resources,
       parameters,
     ),

@@ -70,6 +70,15 @@ describe("metadataToDetail", () => {
     });
     expect(detail.runtime).toEqual({ provider: "gcp", engine: "infra-manager" });
   });
+
+  it("should project scoring.kind to scoringKind (Issue #1776)", () => {
+    const detail = metadataToDetail({ ...BASE_METADATA, scoring: { kind: "flag" } });
+    expect(detail.scoringKind).toBe("flag");
+  });
+
+  it("should omit scoringKind when scoring is not declared (= deploy-only problem)", () => {
+    expect(metadataToDetail(BASE_METADATA).scoringKind).toBeUndefined();
+  });
 });
 
 describe("isExecutableProblemRuntime (ADR-023 D4)", () => {
@@ -117,5 +126,11 @@ describe("listProblemSummaries", () => {
     const ids = listProblemSummaries().map((s) => s.id);
     const sorted = [...ids].sort((a, b) => a.localeCompare(b));
     expect(ids).toEqual(sorted);
+  });
+
+  it("should carry the catalog entry's scoringKind through to the summary (Issue #1776)", () => {
+    for (const s of listProblemSummaries()) {
+      expect(s.scoringKind).toBe(findProblem(s.id)?.scoringKind);
+    }
   });
 });

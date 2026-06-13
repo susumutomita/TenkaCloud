@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   collectGetAttResources,
   collectRefs,
+  collectSubMapKeys,
   collectSubRefs,
   parseSections,
 } from "../../../scripts/check-template-cfn-refs";
@@ -197,5 +198,37 @@ Esc: !Sub "literal \${!NotAVariable}"
     expect(out.getAtts).toEqual(["Role"]);
     expect(out.refs).not.toContain("NotAVariable");
     expect(out.getAtts).not.toContain("NotAVariable");
+  });
+
+  it("collectSubRefs: should skip shell expansions that are not valid CFn Sub variable names", () => {
+    // Plain `Fn::Base64: |` UserData ships shell scripts whose ${...} は CFn 参照ではない。
+    // CFn の Sub 変数文法 (英数 logical name / AWS:: pseudo / Dotted.Attr) に合わない式は捨てる。
+    const yaml = `Script: |
+  APP_IP="\${1:-}"
+  NAME="\${EXPECTED_NAME}"
+  WITH_DEFAULT="\${FOO:-bar}"
+  ALL="\${ARR[@]}"
+  CFN: !Sub "\${NamePrefix}"
+`;
+    const out = collectSubRefs(yaml);
+    expect(out.refs).toEqual(["NamePrefix"]);
+    expect(out.getAtts).toEqual([]);
+  });
+
+  it("collectSubMapKeys: should collect list-form Fn::Sub variable-map keys as declared names", () => {
+    // UserData:
+    //   Fn::Base64: !Sub
+    //     - |
+    //       ORIGIN="http://\${NatPublicIp}/"
+    //     - NatPublicIp: !GetAtt NatInstance.PublicIp
+    const yaml = `UserData:
+  Fn::Base64: !Sub
+    - |
+      ORIGIN="http://\${NatPublicIp}/"
+    - NatPublicIp: !GetAtt NatInstance.PublicIp
+`;
+    expect(collectSubMapKeys(yaml)).toEqual(["NatPublicIp"]);
+    const out = collectSubRefs(yaml);
+    expect(out.refs).toContain("NatPublicIp");
   });
 });

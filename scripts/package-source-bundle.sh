@@ -84,6 +84,23 @@ copy_tree() {
     "${SOURCE_BUNDLE_ROOT}/${source_dir}/" "${SOURCE_BUNDLE_STAGING_DIR}/${target_dir}/"
 }
 
+# The problem catalog ships from the `problems` git submodule. An uninitialised
+# submodule leaves problems/ as an empty mount point, so copy_tree's existence
+# check passes but the bundle would carry zero problems. Every per-team deploy
+# would then abort at deploy-battles.sh's "template not found" guard BEFORE any
+# CloudFormation request is made (the failure an operator sees as a deploy that
+# "never reaches CloudFormation"). Fail loudly here instead of shipping an empty
+# catalog. metadata.json presence is the signal: every problem dir ships one.
+require_problem_catalog() {
+  local catalog_dir="${SOURCE_BUNDLE_ROOT}/problems"
+  local found
+  found="$(set +o pipefail; find "${catalog_dir}" -name metadata.json -type f 2>/dev/null | head -n 1)"
+  if [ -z "${found}" ]; then
+    echo "[package-source-bundle] ERROR: ${catalog_dir} contains no metadata.json — the problem catalog submodule is not checked out. Run 'git submodule update --init --recursive' before packaging." >&2
+    exit 1
+  fi
+}
+
 copy_dist() {
   local app="$1"
   local dist="${SOURCE_BUNDLE_ROOT}/apps/${app}/dist"
@@ -104,6 +121,7 @@ mkdir -p "${SOURCE_BUNDLE_STAGING_DIR}"
 copy_tree "infrastructure" "cdk"
 copy_tree "scripts" "scripts"
 copy_tree "problems" "problems"
+require_problem_catalog
 copy_tree "packages" "packages"
 cp "${SOURCE_BUNDLE_ROOT}/.nvmrc" "${SOURCE_BUNDLE_STAGING_DIR}/.nvmrc"
 cp "${SOURCE_BUNDLE_ROOT}/package.json" "${SOURCE_BUNDLE_STAGING_DIR}/package.json"

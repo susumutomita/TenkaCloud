@@ -4,17 +4,16 @@
       "nav.product": "プロダクト",
       "nav.problems": "問題",
       "nav.extend": "問題を作る",
-      "nav.community": "コミュニティ",
       "nav.docs": "ドキュメント",
       "nav.offerings": "商用プラン",
       "nav.pricing": "料金",
       "nav.contact": "お問い合わせ",
       "nav.github": "GitHub",
 
-      "hero.h1a": "OSS の問題パックで、",
-      "hero.h1b": "本物のクラウド演習を回す。",
+      "hero.h1a": "クラウドエンジニアの、",
+      "hero.h1b": "天下一武道会。",
       "hero.sub":
-        "TenkaCloud は本物のクラウド演習を回すための OSS プラットフォーム。 チームは <strong>隔離された AWS 環境</strong> でハンズオン問題を解き、 主催者は イベント / 採点 / 再利用可能な問題カタログ を 1 つの管理画面で運営できます。",
+        "本物の AWS で競う、OSS の競技プラットフォーム。 「ローカルでは動く」アプリを本番品質へ ── <strong>認証・公開範囲・監査・可用性</strong>の仕上がりを毎分自動採点し、 順位がリアルタイムに動く。 主催者はイベント・採点・再利用できる問題カタログを 1 画面で運営。",
       "hero.cta1": "Hosted Event の見積もり",
       "hero.cta2": "OSS で試す",
       "hero.demo_link": "5 分のデモを見る",
@@ -163,50 +162,24 @@
       "extend.cta1": "問題カタログを見る",
       "extend.cta2": "new-problem skill",
 
-      "community.eyebrow": "コミュニティに参加",
-      "community.h2": "6 つの役割から、ひとつ選んで始める。",
-      "community.lead":
-        "TenkaCloud の堀は、 deploy ランタイムだけでなく <strong>コミュニティ問題カタログ</strong>。 メンテナに個別 onboard してもらわなくても、 役割を 1 つ選んで 30 分の初回 task を済ませれば、 公式コントリビュータになれます。",
-      "community.tester.role": "Tester",
-      "community.tester.h": "問題を遊んで、 papercut を報告する。",
-      "community.tester.p":
-        "30 分の playtest プロトコルに沿って 1 問解き、 構造化テンプレで feedback を出す。 CDK / TypeScript は不要。",
-      "community.tester.cta": "Playtest checklist",
-      "community.author.role": "Problem Author",
-      "community.author.h": "新しい問題を作る。",
-      "community.author.p":
-        "metadata.json + template.yaml の 2 ファイルで 1 問。 Claude Code の <code>/new-problem</code> skill で 30 分 onboarding。",
-      "community.author.cta": "Authoring guide",
-      "community.reviewer.role": "Scenario Reviewer",
-      "community.reviewer.h": "ルーブリックで PR を見る。",
-      "community.reviewer.p":
-        "採点公平性 / hint 段階 / 運否 skip / 推定所要時間 / シナリオ現実性 / template セキュリティの 6 項目。",
-      "community.reviewer.cta": "Review checklist",
-      "community.more":
-        "全 6 役割を見る (Tester / Problem Author / Scenario Reviewer / Event Facilitator / Platform Contributor / Sponsor-Requester)",
       "offerings.eyebrow": "商用プラン",
-      "offerings.h2": "プロダクト化された 4 つの提供形態。",
+      "offerings.h2": "プロダクト化された 3 つの提供形態。",
       "offerings.lead":
-        'OSS プラットフォーム本体は Apache 2.0 で 無料 のまま。 構築 / 当日運営 / 年間プログラム / 独自問題開発を任せたい組織向けに、 形 (スコープ / 成果物 / 除外 / 提供モデル) を明文化した 4 つのプロダクト化された提供形態 を用意しています。 詳細は <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/commercial/PACKAGES.html" target="_blank" rel="noopener noreferrer">PACKAGES.html</a> を参照してください。',
+        'OSS プラットフォーム本体は Apache 2.0 で 無料 のまま。 構築 / 当日運営 / 年間プログラム を任せたい組織向けに、 形 (スコープ / 成果物 / 除外 / 提供モデル) を明文化した 3 つのプロダクト化された提供形態 を用意しています。 詳細は <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/commercial/PACKAGES.html" target="_blank" rel="noopener noreferrer">PACKAGES.html</a> を参照してください。',
       "offerings.a.role": "Hosted Event",
       "offerings.a.h": "単発イベントを、 丸ごと運営代行。",
       "offerings.a.p":
-        "1〜3 日のクラウド演習を、 公開 OSS 問題カタログから選定して 弊社が end-to-end で運営。 設計 / お客様 AWS への deploy / 事前 dry-run / 当日の live 進行 / 事後レポート。 <strong>1 回 fixed price</strong>。",
+        "1 日のクラウド演習を、 公開 OSS 問題カタログから選定して 弊社が end-to-end で運営。 設計 / お客様 AWS への deploy / 事前 dry-run / 当日の live 進行 / 事後レポート。 <strong>1 回 fixed price</strong>。",
       "offerings.a.more": "スコープと成果物を見る",
       "offerings.b.role": "Annual Arena",
-      "offerings.b.h": "年間プログラム + KPI ダッシュボード。",
+      "offerings.b.h": "年間プログラム。",
       "offerings.b.p":
-        "1 組織で年 4〜6 回の運営代行イベント、 御社固有 問題カタログ (= IP は御社所有) の継続成長、 HR / L&amp;D 向け KPI ダッシュボード。 <strong>年間 base + 1 イベントごとの変動費</strong>。",
+        "1 組織で <strong>年 4 回</strong> の運営代行イベントを年間契約で。 公開問題カタログから 入門 → 中級 → 上級 の learning path を設計。 ※ オリジナル問題の制作は本パックには含みません。",
       "offerings.b.more": "スコープと成果物を見る",
-      "offerings.c.role": "Custom Problem",
-      "offerings.c.h": "御社スタックに合わせた、 独自演習を 1 問。",
-      "offerings.c.p":
-        "御社の実スタック / 過去インシデントに合わせて 1 問を新規作成。 シナリオ設計 / 実装 / dry-run / facilitator notes 一式。 <strong>サニタイズされたシナリオのみ — 本番アクセスは行いません。 1 問 fixed price</strong>。",
-      "offerings.c.more": "スコープと成果物を見る",
       "offerings.d.role": "CCoE Enablement (add-on)",
       "offerings.d.h": "アドバイザリ、 別契約。",
       "offerings.d.p":
-        "CCoE 運用モデル / 研修ロードマップ / カタログロードマップ / 内部展開戦略 の月次リテイナー。 上記 3 つの productized 提供には <strong>絶対に bundle しません</strong>。 両方ご希望なら 2 つの契約に分けます。",
+        "CCoE 運用モデル / 研修ロードマップ / カタログロードマップ / 内部展開戦略 の月次リテイナー。 上記 2 つの productized 提供には <strong>絶対に bundle しません</strong>。 両方ご希望なら 2 つの契約に分けます。",
       "offerings.d.more": "スコープと成果物を見る",
 
       "pricing.eyebrow": "料金",
@@ -293,40 +266,27 @@
       "footer.terms": "利用規約",
       "footer.tokushoho": "特定商取引法に基づく表記",
 
-      "makers.eyebrow": "作り手から",
+      "makers.eyebrow": "なぜ作ったのか",
       "makers.h2": "クラウドエンジニアの天下一武道会を、開きたい。",
       "makers.p1":
-        "AWS GameDay は、本当に楽しかった。 もう一度プレーしたいし、 いつかマルチクラウドで「世界一のクラウドエンジニア」を決める競技を見てみたい。",
+        "クラウド競技は、本当に楽しかった。 もう一度挑みたいし、 いつかマルチクラウドで「世界一のクラウドエンジニア」を決める競技を見てみたい。",
       "makers.p2":
-        "でも、 同じ熱量の場を自由に開催できる仕組みは見つからなかった。 だから自分たちで作って、 OSS にした。 問題を作ってもいいし、 追加しやすい仕組みの上で、 それぞれの人が自分の文脈からオリジナル問題を作れるようにしたい。",
-      "makers.p3":
-        "問題を作れる人はいるかもしれない。 でも、 熱量のある問題を作れる人は、 そうそういない。 だから、 熱量ごと持ち寄れる場にしたかった。",
-      "makers.who": "3 人とも GameDay が大好きで、 ただの素人ではないバックグラウンドがある。",
-      "makers.m1.role": "TenkaCloud / 主催",
-      "makers.m1.name": "冨田 進",
-      "makers.m1.cred": "JAWS DAYS 2024 AWS GameDay 優勝 / 2026 準優勝。",
-      "makers.m2.role": "JAWS-UG 名古屋",
-      "makers.m2.name": "チャーリー",
-      "makers.m2.cred": "JAWS-UG 名古屋 運営メンバー。 地域コミュニティを動かしてきた経験。",
-      "makers.m3.role": "AWS 全冠エンジニア",
-      "makers.m3.name": "きせのん",
-      "makers.m3.cred": "JAWS DAYS 2024 GameDay 優勝 / AWS 全冠 (All Certifications)。",
+        "でも、 同じ熱量の場を自由に開催できる仕組みは見つからなかった。 だから自分たちで作って、 OSS にした。 問題を作ってもいいし、 追加しやすい仕組みの上で、 それぞれの人が自分の文脈からオリジナル問題を作れるようにしました。",
     },
     en: {
       "nav.product": "Product",
       "nav.problems": "Problems",
       "nav.extend": "Author problems",
-      "nav.community": "Community",
       "nav.docs": "Docs",
       "nav.offerings": "Commercial",
       "nav.pricing": "Pricing",
       "nav.contact": "Contact",
       "nav.github": "GitHub",
 
-      "hero.h1a": "Run real cloud drills",
-      "hero.h1b": "with OSS problem packs.",
+      "hero.h1a": "The cloud engineer's",
+      "hero.h1b": "Tenka-Ichi.",
       "hero.sub":
-        "TenkaCloud is an OSS platform for running real cloud drills: teams solve hands-on cloud problems in <strong>isolated AWS environments</strong>, while organizers manage events, scoring, and reusable problem catalogs from a single console.",
+        'An OSS competition platform on real AWS. Take an app that "only works locally" and make it production-grade — <strong>auth, exposure, audit, and availability</strong> are auto-scored every minute, and the leaderboard moves in real time. Organizers run events, scoring, and a reusable problem catalog from one console.',
       "hero.cta1": "Get a Hosted Event quote",
       "hero.cta2": "Try the OSS",
       "hero.demo_link": "Watch the 5-minute demo",
@@ -474,50 +434,24 @@
       "extend.cta1": "Browse the catalog",
       "extend.cta2": "new-problem skill",
 
-      "community.eyebrow": "Join the community",
-      "community.h2": "Pick one of six roles. Ship one starter task.",
-      "community.lead":
-        "TenkaCloud's moat is the <strong>community problem catalog</strong>, not only the deploy runtime. You do not need to be personally onboarded by the maintainer — choose a role, follow its 30-minute first task, and you are a recognized contributor.",
-      "community.tester.role": "Tester",
-      "community.tester.h": "Play the problems. File the papercuts.",
-      "community.tester.p":
-        "Follow a 30-minute playtest protocol on one problem, then file a structured feedback issue. No CDK / TypeScript needed.",
-      "community.tester.cta": "Playtest checklist",
-      "community.author.role": "Problem Author",
-      "community.author.h": "Ship a new problem.",
-      "community.author.p":
-        "Two files (metadata.json + template.yaml) and you have a problem. The <code>/new-problem</code> Claude Code skill onboards you in 30 minutes.",
-      "community.author.cta": "Authoring guide",
-      "community.reviewer.role": "Scenario Reviewer",
-      "community.reviewer.h": "Score PRs against a rubric.",
-      "community.reviewer.p":
-        "Six checks: scoring fairness, hint progression, no skip-by-luck, time-to-solve estimate, scenario realism, template security.",
-      "community.reviewer.cta": "Review checklist",
-      "community.more":
-        "See all 6 roles (Tester / Problem Author / Scenario Reviewer / Event Facilitator / Platform Contributor / Sponsor-Requester)",
       "offerings.eyebrow": "Commercial offerings",
-      "offerings.h2": "Four productized offerings — formally documented.",
+      "offerings.h2": "Three productized offerings — formally documented.",
       "offerings.lead":
-        'The OSS platform stays free under Apache 2.0. For organizations that want setup, live operations, or a program run for them, we offer four productized packages. Each has a fixed shape — scope, deliverables, exclusions, delivery model — written up in <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/commercial/PACKAGES.html" target="_blank" rel="noopener noreferrer">PACKAGES.html</a>.',
+        'The OSS platform stays free under Apache 2.0. For organizations that want setup, live operations, or a program run for them, we offer three productized packages. Each has a fixed shape — scope, deliverables, exclusions, delivery model — written up in <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/commercial/PACKAGES.html" target="_blank" rel="noopener noreferrer">PACKAGES.html</a>.',
       "offerings.a.role": "Hosted Event",
       "offerings.a.h": "One operated drill, end to end.",
       "offerings.a.p":
-        "A 1-3 day cloud drill on the public OSS catalog, run by us. Event design, deploy into your AWS account, dry run, live facilitation, post-event report. <strong>Per-event fixed price</strong>.",
+        "A 1-day cloud drill on the public OSS catalog, run by us. Event design, deploy into your AWS account, dry run, live facilitation, post-event report. <strong>Per-event fixed price</strong>.",
       "offerings.a.more": "Scope &amp; deliverables",
       "offerings.b.role": "Annual Arena",
-      "offerings.b.h": "A 12-month program with KPIs.",
+      "offerings.b.h": "A 12-month program.",
       "offerings.b.p":
-        "4-6 operated events per year for one org, a growing private problem catalog (you own the IP), and a KPI dashboard for HR / L&amp;D. <strong>Annual base + per-event variable</strong>.",
+        "An annual contract of <strong>4 operated events</strong> per year for one org: learning paths curated from the public problem catalog (beginner → advanced). Original problem development is not included in this package.",
       "offerings.b.more": "Scope &amp; deliverables",
-      "offerings.c.role": "Custom Problem",
-      "offerings.c.h": "A drill that matches your stack.",
-      "offerings.c.p":
-        "One problem authored to your scenario — past incident or capability gap. Scenario interview, build, dry-run, facilitator notes. <strong>Sanitized scenario only — never production access. Per-problem fixed price.</strong>",
-      "offerings.c.more": "Scope &amp; deliverables",
       "offerings.d.role": "CCoE Enablement (add-on)",
       "offerings.d.h": "Advisory, sold separately.",
       "offerings.d.p":
-        "A monthly retainer for operating-model / training-roadmap work. <strong>Never bundled</strong> into the three offerings above, so events stay productized. If you want both, that is two line items.",
+        "A monthly retainer for operating-model / training-roadmap work. <strong>Never bundled</strong> into the two offerings above, so events stay productized. If you want both, that is two line items.",
       "offerings.d.more": "Scope &amp; deliverables",
 
       "pricing.eyebrow": "Pricing",
@@ -606,24 +540,12 @@
       "footer.terms": "Terms of Service",
       "footer.tokushoho": "Business identification (Japan TokushoHo)",
 
-      "makers.eyebrow": "From the makers",
+      "makers.eyebrow": "Why we built it",
       "makers.h2": "We want to host a Tenka-Ichi for cloud engineers.",
       "makers.p1":
-        "AWS GameDay was genuinely fun. We want to play it again — and one day watch a multi-cloud competition that crowns the world's best cloud engineer.",
+        "Cloud competitions are genuinely fun. We want to compete again — and one day watch a multi-cloud competition that crowns the world's best cloud engineer.",
       "makers.p2":
         "But we couldn't find a way to freely host events with that same intensity. So we built one, and made it OSS. Anyone can write a problem; on a platform that makes adding them easy, everyone can craft an original problem from their own context.",
-      "makers.p3":
-        "Plenty of people can write a problem. Far fewer can write a problem with real heat behind it. We wanted a place where that heat is what people bring.",
-      "makers.who": "All three of us love GameDay — and none of us are amateurs.",
-      "makers.m1.role": "TenkaCloud / Host",
-      "makers.m1.name": "Susumu Tomita",
-      "makers.m1.cred": "Winner, AWS GameDay @ JAWS DAYS 2024 · Runner-up 2026.",
-      "makers.m2.role": "JAWS-UG Nagoya",
-      "makers.m2.name": "Charlie",
-      "makers.m2.cred": "JAWS-UG Nagoya organizer. Years of moving a regional community.",
-      "makers.m3.role": "AWS All-Certs Engineer",
-      "makers.m3.name": "Kisenon",
-      "makers.m3.cred": "Winner, GameDay @ JAWS DAYS 2024 · AWS All Certifications.",
     },
   };
 

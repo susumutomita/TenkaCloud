@@ -6,6 +6,7 @@ import { parseEndpointsHealth } from "../shared/endpoints-health.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
 import { evaluateGate, type GateBlock, getEventGate } from "./event-gate.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
+import { getSolvedFlagIds } from "./submit-flag.js";
 
 /**
  * 1 teamLoginKey = 1 team (= N deployments) として view を構成する。
@@ -41,6 +42,7 @@ export interface ParticipantHintView {
 export interface ParticipantScoringInfo {
   readonly kind:
     | "flag"
+    | "multi-flag"
     | "uptime"
     | "uptime-flat"
     | "uptime-multi"
@@ -50,6 +52,17 @@ export interface ParticipantScoringInfo {
   readonly pointsPerSuccess?: number;
   readonly pointsAllOk?: number;
   readonly pointsPerAttack?: number;
+  /**
+   * Issue #1796: multi-flag の sub-flag 一覧 (= portal が N 個の提出欄を出すための view)。
+   * `solved` は team の `solvedFlagIds` に id が入っているかで判定する。 正解値 (flagOutputKey の
+   * 値) は出さない (= 単一 flag kind の flagOutputKey strip と同方針)。
+   */
+  readonly flags?: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly points: number;
+    readonly solved: boolean;
+  }[];
   /**
    * Issue #742 Phase 4: progressive hint。 revealed=false な hint は content を持たず、
    * frontend は locked 表示 + reveal button を出す。 revealed=true は content を含み
@@ -163,6 +176,26 @@ export interface ParticipantTeamView {
  * 情報だけ (= flagOutputKey の値は出さない、kind / points / hints のみ) を含める。
  * stackOutputs からも flagOutputKey フィールドは strip し、答えが見えないようにする。
  */
+/**
+ * stackOutputs から「答え」になる flagOutputKey を strip する (= 競技者に出さない)。
+ *   - flag       : 単一 flagOutputKey を削除
+ *   - multi-flag : 全 sub-flag の flagOutputKey を削除 (Issue #1796。 1 つでも露出させない)
+ *   - その他     : 何もしない (= uptime 系等は flagOutputKey を持たない)
+ */
+function stripAnswerOutputs(
+  stackOutputs: Record<string, string>,
+  scoring: ProblemScoringMetadata | undefined,
+): Record<string, string> {
+  if (scoring?.kind === "flag") {
+    delete stackOutputs[scoring.flagOutputKey];
+  } else if (scoring?.kind === "multi-flag") {
+    for (const f of scoring.flags) {
+      delete stackOutputs[f.flagOutputKey];
+    }
+  }
+  return stackOutputs;
+}
+
 export function toProblemView(
   item: Partial<DeploymentItem>,
   scoringMap: Record<string, ProblemScoringMetadata> = {},
@@ -170,11 +203,8 @@ export function toProblemView(
   const status = (item.status ?? "PENDING") as DeploymentStatus;
   if (DELETED_LIKE_STATUSES.has(status)) return undefined;
 
-  const stackOutputs = parseStackOutputs(item.stackOutputs);
   const scoring = item.problemId ? scoringMap[item.problemId] : undefined;
-  if (scoring?.kind === "flag") {
-    delete stackOutputs[scoring.flagOutputKey];
-  }
+  const stackOutputs = stripAnswerOutputs(parseStackOutputs(item.stackOutputs), scoring);
 
   return {
     jobId: String(item.jobId ?? ""),
@@ -315,6 +345,24 @@ function toScoringInfo(
       points: scoring.points,
       ...(hintViews ? { hints: hintViews } : {}),
       flagSubmitted: item.flagSubmitted === true,
+    };
+  }
+  if (scoring.kind === "multi-flag") {
+    // Issue #1796: 各 sub-flag を { id, label, points, solved } で出す。 solved は team の
+    // solvedFlagIds (= String Set) に id が含まれるかで判定。 points は全 sub-flag の合計を
+    // 問題の満点として返す (= 部分点の母数)。
+    // per-flag hints は本 Phase では portal に露出しない (= 後続課題。 reveal-hint も multi-flag を
+    // not_flag_problem として reject し続ける)。
+    const solved = getSolvedFlagIds(item);
+    return {
+      kind: "multi-flag",
+      points: scoring.flags.reduce((sum, f) => sum + f.points, 0),
+      flags: scoring.flags.map((f) => ({
+        id: f.id,
+        label: f.label,
+        points: f.points,
+        solved: solved.has(f.id),
+      })),
     };
   }
   if (scoring.kind === "uptime" || scoring.kind === "uptime-flat") {

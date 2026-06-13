@@ -127,6 +127,42 @@ function printHelp(io: CliIO): void {
   );
 }
 
+/**
+ * Issue #1789: prepare-source-bundle.sh の RESOLVE_ONLY seam を使い、 source.zip の
+ * upload 先となる account-scoped bucket 名 (= tenkacloud-source-<account>-<region>) を
+ * 解決する。 これは cdk deploy が CodeBuild の source bucket に焼く CDK_PARAM_S3_BUCKET_NAME と
+ * 一致させるための単一 source of truth。 creds 不在等で解決できなければ undefined を返し、
+ * 後段の本番 prepare 実行に通常のエラー表示を委ねる (= ここでは fail-fast しない)。
+ */
+async function resolveSourceBucketName(io: CliIO): Promise<string | undefined> {
+  const previous = process.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY;
+  process.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY = "1";
+  try {
+    const result = await io.spawnCapture("bash", ["scripts/prepare-source-bundle.sh"]);
+    if (result.code !== 0) return undefined;
+    return parseResolvedBucketName(result.stdout);
+  } finally {
+    // RESOLVE_ONLY toggle は後始末する (= 本番 prepare 実行が resolve-and-exit しないよう)。
+    if (previous === undefined) delete process.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY;
+    else process.env.PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY = previous;
+  }
+}
+
+/**
+ * RESOLVE_ONLY 出力 (= `KEY=value` 行の列挙) から CDK_PARAM_S3_BUCKET_NAME を取り出す。
+ * 取れなければ undefined。 unit test から直接 pin するため export している。
+ */
+export function parseResolvedBucketName(stdout: string): string | undefined {
+  for (const line of stdout.split("\n")) {
+    const match = /^CDK_PARAM_S3_BUCKET_NAME=(.*)$/.exec(line.trim());
+    if (match) {
+      const value = match[1].trim();
+      return value.length > 0 ? value : undefined;
+    }
+  }
+  return undefined;
+}
+
 async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
   // Issue #955 follow-up: Lite mode は SBT ControlPlane と provision-tenant.sh を持たないため、
   // tenant admin user を別経路で作る必要がある。 deploy 後に Cognito UserPool ID を
@@ -158,6 +194,23 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
   // Issue #1345: 30-min first-run UX — 各 phase を「[i/N] ...」 で示す。
   const totalSteps = 3;
   io.stdout(`\n[lite] [1/${totalSteps}] preparing source bundle (= S3 bucket + source.zip)...\n`);
+
+  // Issue #1789: source bucket 取り違えで「直したはずの problem template が deploy に
+  // 反映されない」事故の修正。 prepare-source-bundle.sh は account-scoped bucket
+  // (= tenkacloud-source-<account>-<region>) を自前で解決して source.zip を upload するが、
+  // subshell 実行なので resolved bucket 名はこの process に伝わらない。 後段の cdk deploy が
+  // CDK_PARAM_S3_BUCKET_NAME を未設定のまま読むと Makefile 既定値 (= creds 不在時に
+  // serverless-saas-placeholder へフォールバック) が CodeBuild の source bucket に焼かれ、
+  // upload 先と read 先が食い違う。 CodeBuild source は version 無指定の Source.s3 で「最新」を
+  // 引くため、 placeholder bucket の古い source.zip がそのまま deploy され続ける。 同じ
+  // resolution (= 単一 source of truth) を RESOLVE_ONLY で先に解決し process.env に固定して、
+  // bundle upload と cdk deploy を必ず同じ bucket に揃える。
+  const sourceBucket = await resolveSourceBucketName(io);
+  if (sourceBucket) {
+    process.env.CDK_PARAM_S3_BUCKET_NAME = sourceBucket;
+    io.stdout(`[lite]       source bucket = ${sourceBucket}\n`);
+  }
+
   const prepCode = await io.spawnInherit("bash", ["scripts/prepare-source-bundle.sh"]);
   if (prepCode !== 0) {
     io.stderr(`[lite] prepare-source-bundle.sh failed with exit code ${prepCode}\n`);
