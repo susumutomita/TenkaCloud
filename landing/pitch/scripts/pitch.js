@@ -1,4 +1,4 @@
-(function () {
+(() => {
   var deck = document.getElementById("deck");
   if (!deck) return;
 
@@ -12,9 +12,9 @@
 
   function paint() {
     var i = current();
-    if (counter) counter.textContent = i + 1 + " / " + slides.length;
+    if (counter) counter.textContent = `${i + 1} / ${slides.length}`;
     if (progress)
-      progress.style.width = (slides.length > 1 ? (i / (slides.length - 1)) * 100 : 100) + "%";
+      progress.style.width = `${slides.length > 1 ? (i / (slides.length - 1)) * 100 : 100}%`;
   }
 
   function go(i) {
@@ -28,7 +28,16 @@
 
   deck.addEventListener("scroll", paint, { passive: true });
   window.addEventListener("resize", fit, { passive: true });
-  window.addEventListener("keydown", function (event) {
+  window.addEventListener("keydown", (event) => {
+    var target = event.target;
+    var tagName = target?.tagName;
+    var isInteractive =
+      target &&
+      (target.isContentEditable ||
+        ["INPUT", "TEXTAREA", "SELECT", "BUTTON", "A"].indexOf(tagName) > -1);
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || isInteractive)
+      return;
+
     if (["ArrowDown", "ArrowRight", "PageDown", " "].indexOf(event.key) > -1) {
       event.preventDefault();
       go(current() + 1);
@@ -44,10 +53,10 @@
     }
   });
 
-  document.querySelectorAll(".slide-shell").forEach(function (shell) {
-    ["cloud-far", "cloud-near"].forEach(function (kind) {
+  document.querySelectorAll(".slide-shell").forEach((shell) => {
+    ["cloud-far", "cloud-near"].forEach((kind) => {
       var layer = document.createElement("div");
-      layer.className = "cloud-layer " + kind;
+      layer.className = `cloud-layer ${kind}`;
       layer.setAttribute("aria-hidden", "true");
       shell.insertBefore(layer, shell.firstChild);
     });
@@ -57,7 +66,7 @@
   paint();
 })();
 
-(function () {
+(() => {
   var board = document.getElementById("tcBoard");
   if (!board) return;
 
@@ -70,12 +79,16 @@
   ];
 
   var rowByName = {};
-  teams.forEach(function (team) {
+  teams.forEach((team) => {
     var row = document.createElement("div");
-    row.className = "cs-row" + (team.me ? " mine" : "");
+    row.className = `cs-row${team.me ? " mine" : ""}`;
     row.innerHTML =
-      '<span class="cs-rk' + (team.me ? " me" : "") + '"></span>' +
-      '<span class="cs-tm' + (team.me ? " me" : "") + '"></span>' +
+      '<span class="cs-rk' +
+      (team.me ? " me" : "") +
+      '"></span>' +
+      '<span class="cs-tm' +
+      (team.me ? " me" : "") +
+      '"></span>' +
       '<span class="cs-sc"></span>' +
       '<span class="cs-pg"></span>';
     board.appendChild(row);
@@ -87,47 +100,49 @@
   var scoreBadge = document.querySelector(".cs-util");
   var notif = document.getElementById("tcNotif");
 
+  function flashElement(element) {
+    if (!element) return;
+    element.classList.remove("flash");
+    void element.offsetWidth;
+    element.classList.add("flash");
+  }
+
+  function updateOwnStats(team, rank, hit) {
+    if (!team.me) return;
+    if (elScore) elScore.textContent = team.s.toLocaleString();
+    if (elRank) elRank.textContent = `${rank}/${teams.length}`;
+    if (team.n === hit) flashElement(scoreBadge);
+  }
+
+  function renderTeamRow(team, index, hit) {
+    var row = rowByName[team.n];
+    var rank = index + 1;
+    row.querySelector(".cs-rk").textContent = `#${rank}`;
+    row.querySelector(".cs-tm").innerHTML =
+      `${team.n}${team.me ? ' <span class="cs-you">(You)</span>' : ""}`;
+    row.querySelector(".cs-sc").textContent = `${team.s.toLocaleString()} pt`;
+    row.querySelector(".cs-pg").textContent = `${team.done} / ${TOTAL}`;
+    board.appendChild(row);
+
+    if (team.n === hit) flashElement(row);
+    updateOwnStats(team, rank, hit);
+  }
+
   function render(hit) {
-    var sorted = teams.slice().sort(function (a, b) {
-      return b.s - a.s;
-    });
-    sorted.forEach(function (team, index) {
-      var row = rowByName[team.n];
-      var rank = index + 1;
-      row.querySelector(".cs-rk").textContent = "#" + rank;
-      row.querySelector(".cs-tm").innerHTML = team.n + (team.me ? ' <span class="cs-you">(You)</span>' : "");
-      row.querySelector(".cs-sc").textContent = team.s.toLocaleString() + " pt";
-      row.querySelector(".cs-pg").textContent = team.done + " / " + TOTAL;
-      board.appendChild(row);
-
-      if (team.n === hit) {
-        row.classList.remove("flash");
-        void row.offsetWidth;
-        row.classList.add("flash");
-      }
-
-      if (team.me) {
-        if (elScore) elScore.textContent = team.s.toLocaleString();
-        if (elRank) elRank.textContent = rank + "/" + teams.length;
-        if (scoreBadge && team.n === hit) {
-          scoreBadge.classList.remove("flash");
-          void scoreBadge.offsetWidth;
-          scoreBadge.classList.add("flash");
-        }
-      }
+    var sorted = teams.slice().sort((a, b) => b.s - a.s);
+    sorted.forEach((team, index) => {
+      renderTeamRow(team, index, hit);
     });
   }
 
   render(null);
 
   var tick = 0;
-  setInterval(function () {
+  setInterval(() => {
     tick++;
     var index =
       tick % 3 === 0
-        ? teams.findIndex(function (team) {
-            return team.me;
-          })
+        ? teams.findIndex((team) => team.me)
         : Math.floor(Math.random() * teams.length);
     teams[index].s += 20 + Math.floor(Math.random() * 90);
     if (Math.random() < 0.12 && teams[index].done < TOTAL) teams[index].done++;
@@ -143,13 +158,12 @@
   var clock = document.getElementById("tcClock");
   var left = 11 * 60 + 58;
   if (clock) {
-    setInterval(function () {
+    setInterval(() => {
       if (left > 0) left--;
       var h = Math.floor(left / 3600);
       var m = Math.floor((left % 3600) / 60);
       var s = left % 60;
-      clock.textContent =
-        (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+      clock.textContent = `${(h < 10 ? "0" : "") + h}:${m < 10 ? "0" : ""}${m}:${s < 10 ? "0" : ""}${s}`;
     }, 1000);
   }
 
@@ -169,12 +183,12 @@
     if (!incident) return;
 
     incident.className = "cs-incident show fire";
-    incident.textContent = name + " 発生";
-    setTimeout(function () {
+    incident.textContent = `${name} 発生`;
+    setTimeout(() => {
       incident.className = "cs-incident show ok";
-      incident.textContent = "復旧 " + name;
+      incident.textContent = `復旧 ${name}`;
     }, 2600);
-    setTimeout(function () {
+    setTimeout(() => {
       incident.classList.remove("show");
     }, 3900);
   }
@@ -186,11 +200,11 @@
   var loopArrs = document.querySelectorAll(".battle-loop .bl-arr");
   var loopIndex = 0;
   if (loopSteps.length) {
-    setInterval(function () {
-      loopSteps.forEach(function (el, index) {
+    setInterval(() => {
+      loopSteps.forEach((el, index) => {
         el.classList.toggle("active", index === loopIndex);
       });
-      loopArrs.forEach(function (el, index) {
+      loopArrs.forEach((el, index) => {
         el.classList.toggle("on", index === loopIndex);
       });
       loopIndex = (loopIndex + 1) % loopSteps.length;

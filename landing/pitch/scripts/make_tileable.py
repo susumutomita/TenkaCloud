@@ -110,6 +110,7 @@ def make_tileable(input_path: Path, output_path: Path, blend_pct: float = 0.08) 
     out_rows = []
     for row in rows:
         new_row = [list(p) for p in row]
+        orig_left = [list(new_row[i]) for i in range(blend_w)]
 
         for i in range(blend_w):
             # Weight: 0.0 at the outer edge, 1.0 at blend_w boundary
@@ -129,7 +130,7 @@ def make_tileable(input_path: Path, output_path: Path, blend_pct: float = 0.08) 
             t = i / blend_w  # i=0 is start of right blend zone (inner), i=blend_w-1 is rightmost
 
             right_i = width - blend_w + i
-            left_px = new_row[i]
+            left_px = orig_left[i]
             right_px = new_row[right_i]
 
             # Crossfade RGB: right edge blends in left-edge pixels for continuity
@@ -152,7 +153,9 @@ def main() -> None:
     parser.add_argument("--output", required=True, help="Output RGBA PNG path")
     parser.add_argument("--blend-pct", type=float, default=0.08, help="Blend width as fraction of image width (default: 0.08)")
     args = parser.parse_args()
-    make_tileable(Path(args.input), Path(args.output), args.blend_pct)
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    make_tileable(Path(args.input), output_path, args.blend_pct)
 
 
 if __name__ == "__main__":
