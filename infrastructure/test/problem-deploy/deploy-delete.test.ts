@@ -123,6 +123,23 @@ describe("requestTeardown", () => {
     );
   });
 
+  it("#1810: should fall back to namePrefix for stackName when stackId is an empty string (FAILED deploy)", async () => {
+    // 失敗 deployment は stack ARN 記録前に終わると stackId="" (空文字)。旧コードの
+    // `stackId ?? namePrefix` は空文字を fallback できず stackName="" → missing_required_fields
+    // で失敗 deployment の手動削除すら不能だった。namePrefix で teardown できること。
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleRow({ status: "FAILED", stackId: "" }) });
+    ddbSend.mockResolvedValueOnce({});
+    eventsSend.mockResolvedValueOnce({});
+
+    const out = await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
+    expect(out.kind).toBe("accepted");
+    const detail = JSON.parse(
+      (eventsSend.mock.calls[0]?.[0] as PutEventsCommand).input.Entries?.[0]?.Detail ?? "{}",
+    );
+    expect(detail.stackName).toBe("tc-p-t"); // = sampleRow namePrefix
+  });
+
   it("should return not_found without calling Update / PutEvents when the row is missing", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: undefined });
@@ -230,6 +247,70 @@ describe("requestTeardown", () => {
     const getCmd = ddbSend.mock.calls[0]?.[0] as GetCommand;
     expect(getCmd).toBeInstanceOf(GetCommand);
     expect(getCmd.input.Key).toEqual({ PK: "DEPLOYMENT#JOB42", SK: "META" });
+  });
+});
+
+/**
+ * [#1410-1412 regression guard] #1659 が非 AWS teardown を adapter.destroy に分岐させた際、
+ * **AWS/CFn 行 (= runtimeProvider/Engine/Entry が無い行、 bulk-deploy が永続化する shape)** が
+ * 誤って adapter 経路へ落ちると `AwsCloudFormationRuntimeAdapter.destroy` が
+ * `AdapterMethodNotWiredError` を投げ、 CFn DeleteStack event が publish されず stack が
+ * CREATE_COMPLETE のまま orphan 化する。 Lite mode (same-account, stacks `tc-*-team-N`) の
+ * event teardown はこの行 shape に乗るため、 「runtime field の無い AWS 行は必ず EventBridge CFn 経路」
+ * を invariant として固定する。
+ */
+describe("requestTeardown (AWS/CFn row stays on the DeleteStack EventBridge path)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("should publish a CFn DeployDeleteRequested (DeleteStack) for an AWS row without runtime fields, not adapter.destroy", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    // bulk-deploy が永続化する AWS 行 shape: runtimeProvider/Engine/Entry は **存在しない**。
+    const item = sampleRow({
+      problemId: "hello-world-battle",
+      namePrefix: "tc-hello-world-battle-team-1",
+      stackId:
+        "arn:aws:cloudformation:ap-northeast-1:999999999999:stack/tc-hello-world-battle-team-1/abc",
+    });
+    expect(item).not.toHaveProperty("runtimeProvider");
+    ddbSend.mockResolvedValueOnce({ Item: item }); // Get
+    ddbSend.mockResolvedValueOnce({}); // transition → DELETING
+    eventsSend.mockResolvedValueOnce({}); // PutEvents (DeployDeleteRequested)
+
+    const out = await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
+    // adapter.destroy 経路なら AdapterMethodNotWiredError で reject していたはず。
+    expect(out).toEqual({ kind: "accepted", previousStatus: "COMPLETE" });
+
+    // EventBridge に CFn DeleteStack 要求 (= State Machine → delete-battles.sh) が出る。
+    const putCmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
+    expect(putCmd).toBeInstanceOf(PutEventsCommand);
+    expect(putCmd.input.Entries?.[0]?.DetailType).toBe("DeployDeleteRequested");
+    const detail = JSON.parse(putCmd.input.Entries?.[0]?.Detail ?? "{}");
+    expect(detail.stackName).toBe(
+      "arn:aws:cloudformation:ap-northeast-1:999999999999:stack/tc-hello-world-battle-team-1/abc",
+    );
+  });
+
+  it("should keep an explicit aws/cloudformation row (runtime fields present) on the CFn DeleteStack path", async () => {
+    // 明示 runtime: aws/cloudformation を宣言した問題行も EXECUTABLE_PROVIDER/ENGINE 一致なので
+    // CFn 経路を維持する (= adapter.destroy の AdapterMethodNotWiredError を踏まない)。
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Item: sampleRow({
+        runtimeProvider: "aws",
+        runtimeEngine: "cloudformation",
+        runtimeEntry: "template.yaml",
+      }),
+    });
+    ddbSend.mockResolvedValueOnce({});
+    eventsSend.mockResolvedValueOnce({});
+
+    const out = await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
+    expect(out).toEqual({ kind: "accepted", previousStatus: "COMPLETE" });
+    expect(eventsSend).toHaveBeenCalledOnce();
+    const detail = JSON.parse(
+      (eventsSend.mock.calls[0]?.[0] as PutEventsCommand).input.Entries?.[0]?.Detail ?? "{}",
+    );
+    expect(detail.stackName).toBe("tc-p-t");
   });
 });
 

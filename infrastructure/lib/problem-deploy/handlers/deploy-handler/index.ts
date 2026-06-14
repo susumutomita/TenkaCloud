@@ -23,6 +23,7 @@ import {
   UnknownProblemError,
   UnverifiedCompetitorAccountError,
 } from "./deploy.js";
+import { DeployQuotaExceededError, resolveQuotaTier } from "./deploy-quota.js";
 import { getDeployment, listDeployments } from "./list.js";
 import { InvalidRetryRequestError, retryDeployments, validateRetryRequest } from "./retry.js";
 import {
@@ -163,9 +164,27 @@ app.post("/problems/:problemId/deploy", async (c) => {
   const ctx = buildContext(shared, resolveTenantId(c));
 
   try {
-    const response = await startDeployment(ctx, { ...parsed.data, problemId });
+    // #1766: quota tier は JWT claim から route で解決し、enforcement 自体は
+    // startDeployment 内 (検証通過後・mutation 直前) で行う (PR-1803 review)。
+    const response = await startDeployment(ctx, {
+      ...parsed.data,
+      problemId,
+      quotaTier: resolveQuotaTier(c),
+    });
     return c.json(response, StatusCodes.ACCEPTED);
   } catch (err) {
+    if (err instanceof DeployQuotaExceededError) {
+      return c.json(
+        {
+          error: "deploy_quota_exceeded",
+          tier: err.tier,
+          limit: err.limit,
+          active: err.active,
+          message: `同時デプロイ上限 (${err.tier}: ${err.limit}) に達しています。不要な deployment を削除するか、上位 tier を検討してください。`,
+        },
+        StatusCodes.TOO_MANY_REQUESTS,
+      );
+    }
     if (err instanceof UnknownProblemError) {
       return c.json({ error: "unknown_problem", problemId }, StatusCodes.NOT_FOUND);
     }

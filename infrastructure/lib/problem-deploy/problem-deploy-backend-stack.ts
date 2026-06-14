@@ -144,6 +144,16 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * 詳細は `DeployCodeBuildProjectProps.concurrentBuildLimit` の docs を参照。
    */
   readonly deployConcurrentBuildLimit?: number;
+
+  /**
+   * #1766: tier 別の同時デプロイ上限。DeployApi Lambda の `DEPLOY_QUOTA_BY_TIER` env (JSON)
+   * に渡す。未設定ならクォータ無効 (= 在来挙動 / Lite mode)。
+   */
+  readonly deployQuotaByTier?: {
+    readonly basic: number;
+    readonly advanced: number;
+    readonly platinum: number;
+  };
   /**
    * SSM SecureString path 構築用の environment 名 (Issue #459 / ADR-002 Phase 2.1)。
    * `/{environmentName}/tenants/{tenantId}/external-id` の prefix として使う。
@@ -310,6 +320,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       environmentName: props.environmentName,
       // Issue #950 (ADR-020 Phase D): admin audit log を write
       adminAuditLogTable: adminAuditLog.table,
+      // #1766: tier 別の同時デプロイ上限 (env JSON)。
+      deployQuotaByTier: props.deployQuotaByTier,
     });
     this.deployApiLambda = deployApi.fn;
 

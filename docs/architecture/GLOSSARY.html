@@ -55,8 +55,8 @@
 <h2>AppPlane / Application Plane</h2>
 <p>The per-tenant runtime that hosts a tenant&#39;s own Cognito UserPool, API Gateway HTTP API, and <code>application-admin-console</code> SPA. Two tier shapes:</p>
 <ul>
-<li><strong>Pooled</strong> — BASIC / ADVANCED tiers share a single CDK stack (<code>serverless-saas-ref-arch-tenant-template-pooled</code>). One Cognito UserPool, one API, one SPA serve all pooled tenants.</li>
-<li><strong>Silo</strong> — PLATINUM tier gets its own stack (<code>serverless-saas-ref-arch-tenant-template-&lt;tenantId&gt;</code>) deployed via the per-tenant <code>ServerlessSaaSPipeline</code>.</li>
+<li><strong>Pooled</strong> — BASIC / ADVANCED tiers share a single CDK stack (<code>tenkacloud-tenant-template-pooled</code>). One Cognito UserPool, one API, one SPA serve all pooled tenants.</li>
+<li><strong>Silo</strong> — PLATINUM tier gets its own stack (<code>tenkacloud-tenant-template-&lt;tenantId&gt;</code>) deployed via the per-tenant <code>ServerlessSaaSPipeline</code>.</li>
 </ul>
 <p>Distinct from Control Plane (= tenant manager). The Application Plane runs <em>tenant business logic</em>; it doesn&#39;t manage tenants. Defined by invariant <a href="./harness.md"><code>INVARIANT_CONTROL_PLANE_DOES_NOT_HOST_TENANT_RUNTIME</code></a>.</p>
 <p><strong>Code</strong>: <code>infrastructure/lib/tenant-template/</code>, <code>apps/application-admin-console/</code>.</p>
@@ -93,7 +93,7 @@
 <h2>deploy chain</h2>
 <p>The end-to-end sequence that starts when an operator clicks &quot;Deploy&quot; in <code>application-admin-console</code> and ends when CFn finishes inside the competitor account.</p>
 <pre><code>HTTP POST → deploy-handler (DDB Put + EventBridge Publish)
-         → EventBridge DeployRequested
+         → EventBridge DeployCreateRequested
          → Step Functions DeployCreateStateMachine
          → CodeBuild (scripts/deploy-battles.sh) → aws cloudformation deploy
          → CFn (in competitor account) → CREATE_COMPLETE
@@ -121,26 +121,24 @@
 <td><code>ServerlessSaaSPipeline</code> (PLATINUM silo deploy)</td>
 </tr>
 <tr>
-<td><code>DeployRequested</code></td>
-<td><code>deploy-handler</code></td>
-<td><code>event-handler</code> (= triggers CodeBuild via Step Functions)</td>
+<td><code>DeployCreateRequested</code></td>
+<td><code>deploy-handler</code> / <code>event-handler</code> (bulk fan-out)</td>
+<td>EventBridge Rule → DeployCreate state machine (CodeBuild)</td>
 </tr>
 <tr>
-<td><code>DeployCompleted</code></td>
-<td><code>event-handler</code></td>
-<td><code>generic-scoring-handler</code> (starts polling)</td>
+<td><code>DeployDeleteRequested</code></td>
+<td><code>deploy-handler</code> / <code>event-handler</code> (bulk delete)</td>
+<td>EventBridge Rule → DeployDelete state machine (CodeBuild delete)</td>
 </tr>
 <tr>
-<td><code>ScoreUpdated</code></td>
-<td><code>generic-scoring-handler</code></td>
-<td><code>participant-portal-lambda</code> (live score push)</td>
-</tr>
-<tr>
-<td><code>DisruptionFire</code></td>
-<td>EventBridge scheduled rule</td>
-<td><code>event-handler/disruption-fire</code></td>
+<td><code>BulkDeployCreateRequested</code></td>
+<td><code>event-handler</code> (Distributed Map 経路, #910)</td>
+<td>EventBridge Rule → BulkDeployCreate state machine</td>
 </tr>
 </tbody></table>
+<p>Deploy completion and scoring are NOT bus events: completion is reconciled from CloudFormation
+status into the Deployments table (describe-stack polling + state-machine writeback), and the
+generic scoring Lambda runs on a 1-minute scheduled tick.</p>
 <p>No SSE / WebSocket. Frontend uses polling (= matches Lambda operational model). <a href="./adr-014-eventbridge-driven-state-reconciliation.html">ADR-014</a> supplements polling with EventBridge-driven reconciliation.</p>
 <hr>
 <h2>ExternalId</h2>

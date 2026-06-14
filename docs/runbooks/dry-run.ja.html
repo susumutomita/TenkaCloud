@@ -131,7 +131,7 @@
 <p><strong>うまくいかなかったら</strong>: スタック失敗は本番でもっとも高くつく発見。 ここで失敗したら根本原因をデバッグし、 Step 0 から dry run をやり直す。「本番の deploy には存在しない手作業 fix」でごまかさない。</p>
 <h3>Step 2: 各問題を deploy (20 分)</h3>
 <ul>
-<li><input disabled="" type="checkbox"> 本番で出す各問題について <code>DeployRequested</code> event を発行する (= Application Admin Console UI が正規入口)。</li>
+<li><input disabled="" type="checkbox"> 本番で出す各問題について <code>DeployCreateRequested</code> event を発行する (= Application Admin Console UI が正規入口)。</li>
 <li><input disabled="" type="checkbox"> <a href="../operations/deploy-trace.md"><code>docs/operations/deploy-trace.md</code></a> で deploy chain trace を観測。 想定 window 内に <code>deploy.cfn.deploy.succeeded</code> が出ることを確認。</li>
 <li><input disabled="" type="checkbox"> リハーサルチームの AWS アカウントで stack 名 / region / リソース一覧がテンプレート意図と一致することを確認。</li>
 </ul>

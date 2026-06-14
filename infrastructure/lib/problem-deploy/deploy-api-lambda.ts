@@ -58,6 +58,15 @@ export interface DeployApiLambdaProps {
    * 未指定なら writeAuditEvent は env 不在で no-op を選ぶ (= 旧 stack 互換、 audit 行 0 件)。
    */
   readonly adminAuditLogTable?: Table;
+  /**
+   * #1766: tier 別の同時デプロイ上限。指定時は `DEPLOY_QUOTA_BY_TIER` env (JSON) を注入し、
+   * handler が deploy 受付時に enforce する (超過 = 429)。未指定はクォータ無効 (空文字 env)。
+   */
+  readonly deployQuotaByTier?: {
+    readonly basic: number;
+    readonly advanced: number;
+    readonly platinum: number;
+  };
 }
 
 /**
@@ -96,6 +105,10 @@ export class DeployApiLambda extends Construct {
         CHALLENGE_PAYLOAD_BUCKET: props.challengePayloadBucketName ?? "",
         // Issue #950: audit log table 名 (未配線なら空文字、 handler の writeAuditEvent が no-op)
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
+        // #1766: tier 別同時デプロイ上限 (未配線なら空文字 = クォータ無効)
+        DEPLOY_QUOTA_BY_TIER: props.deployQuotaByTier
+          ? JSON.stringify(props.deployQuotaByTier)
+          : "",
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {

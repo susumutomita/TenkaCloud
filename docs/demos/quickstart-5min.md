@@ -79,7 +79,7 @@ Keep talking while it runs. Lite mode (introduced in #955) stands up exactly two
 
 **Action.** Pick the demo team (or create a placeholder team), then click **Deploy to all teams**.
 
-**What just happened.** The Application Plane emitted a `DeployRequested` event onto the EventBridge bus. The `ProblemDeployBackend` Worker Lambda picked it up, AssumeRoled into the competitor account using the tenant's `ExternalId` (always required — see `CLAUDE.md`), and ran CFn `CreateStack` with `problems/challenges/hello-world/template.yaml`. The deployments table now shows the stack as `IN_PROGRESS`, then `READY`.
+**What just happened.** The Application Plane emitted a `DeployCreateRequested` event onto the EventBridge bus. The `ProblemDeployBackend` Worker Lambda picked it up, AssumeRoled into the competitor account using the tenant's `ExternalId` (always required — see `CLAUDE.md`), and ran CFn `CreateStack` with `problems/challenges/hello-world/template.yaml`. The deployments table now shows the stack as `IN_PROGRESS`, then `COMPLETE`.
 
 **Fallback.** While the stack is creating, walk the audience through `problems/challenges/hello-world/template.yaml`. It is one page of CFn — that **is** the demo.
 

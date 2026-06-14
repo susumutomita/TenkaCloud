@@ -23,7 +23,11 @@ export interface BulkDeployResult {
 
 export type BulkDeployOutcome = { kind: "ok"; result: BulkDeployResult } | { kind: "not_found" };
 
-/** DDB TransactWrite 1 transaction = 25 items の上限。 retry/forceRedeploy 時は 2 ops/entry。 */
+/**
+ * DDB TransactWriteItems の上限は 1 transaction = 100 actions (2022 以前は 25)。 ここでは
+ * 保守的に 25 で chunk する (= 上限の引き上げに伴う batch size 拡大は別途 capacity 判断)。
+ * retry/forceRedeploy 時は 1 entry = Put + Delete の 2 ops なので、 entry 数はこの半分が上限。
+ */
 export const TRANSACT_WRITE_BATCH = 25;
 /** EventBridge PutEvents 1 call = 10 entries の上限。 */
 export const PUT_EVENTS_BATCH = 10;

@@ -1,0 +1,16 @@
+{
+  "entries": [
+    {
+      "ruleId": "handler-must-not-call-fetch",
+      "filePath": "infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/shared.ts",
+      "line": 212,
+      "match": "fetch("
+    },
+    {
+      "ruleId": "handler-must-not-call-fetch",
+      "filePath": "infrastructure/lib/problem-deploy/handlers/participant-handler/sso.ts",
+      "line": 386,
+      "match": "fetch("
+    }
+  ]
+}

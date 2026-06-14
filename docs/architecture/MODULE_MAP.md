@@ -46,8 +46,8 @@ CDK stacks and Lambda handlers. **This directory is the user's responsibility** 
 | `admin-console-hosting.ts`                                            | `tenkacloud-admin-console-hosting`    | admin-console SPA on S3 + CloudFront                                                     |
 | `admin-console-runtime-config-stack.ts`                               | `tenkacloud-admin-console-runtime-config` | Writes `runtime-config.json` into the SPA bucket post-deploy                           |
 | `admin-insight/admin-console-insight-stack.ts`                        | `tenkacloud-admin-insight`            | System Admin observability + audit log API                                               |
-| `bootstrap-template/bootstrap-template-stack.ts`                      | `serverless-saas-ref-arch-bootstrap`  | TenantMappingTable + deprovisioning Step Functions                                       |
-| `tenant-template/tenant-template-stack.ts`                            | `serverless-saas-ref-arch-tenant-template-*` | Per-tenant API + Cognito + application-admin-console hosting                       |
+| `bootstrap-template/bootstrap-template-stack.ts`                      | `tenkacloud-bootstrap`                | TenantMappingTable + deprovisioning Step Functions                                       |
+| `tenant-template/tenant-template-stack.ts`                            | `tenkacloud-tenant-template-*`        | Per-tenant API + Cognito + application-admin-console hosting                       |
 | `tenant-pipeline/serverless-saas-pipeline.ts`                         | `ServerlessSaaSPipeline`              | PLATINUM-tier silo deploy via CodePipeline                                               |
 | `problem-deploy/problem-deploy-backend-stack.ts`                      | `tenkacloud-problem-deploy`           | Deployments DDB + Worker Lambda + Participant Portal hosting + CodeBuild deploy executor |
 | `challenge-payload/challenge-payload-stack.ts`                        | `tenkacloud-challenge-payload`        | S3 bucket + GitHub OIDC IAM Role (= dormant; for future "additional problems" repo)      |
@@ -60,8 +60,8 @@ All Lambdas use Hono on Lambda + Cognito JWT auth. Validation with Zod at the bo
 
 | Path                                  | Lambda role                                                                                      |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `handlers/deploy-handler/`            | `POST /deployments` etc. Emits `DeployRequested` event after DDB Put.                            |
-| `handlers/event-handler/`             | EventBridge consumer for `DeployRequested` / disruption fires / bulk-delete / schedule           |
+| `handlers/deploy-handler/`            | `POST /deployments` etc. Emits `DeployCreateRequested` event after DDB Put.                      |
+| `handlers/event-handler/`             | Events/Teams CRUD + bulk deploy/delete fan-out (`DeployCreateRequested` / `DeployDeleteRequested`) |
 | `handlers/generic-scoring-handler/`   | Dispatches by `metadata.scoring.kind` to one of 5 builtin handlers (`kinds/*.ts`)                |
 | `handlers/participant-handler/`       | Competitor-facing API: list deployments, submit flag, request Console SSO URL (`sso.ts`)        |
 | `handlers/competitor-accounts-handler/` | Verify-and-store competitor's AWS account + region + ExternalId                                |

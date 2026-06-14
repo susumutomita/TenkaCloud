@@ -191,6 +191,36 @@ describe("getStackProgress", () => {
     expect(out.progress.consoleUrl).toContain("#/stacks/stackinfo");
   });
 
+  it("#1810 sibling: should query CFn with namePrefix when stackId is an empty string (FAILED deploy)", async () => {
+    // FAILED deployment は stack ARN 記録前に終わると stackId="" (空文字、null ではない)。
+    // `item.stackId ?? namePrefix` は空文字を fallback しないので StackName="" で CFn を引き、
+    // DescribeStackEvents が失敗する → 失敗 deploy の進捗を一切引けなくなる。`||` で namePrefix
+    // に倒し、stackId が空でも実 stack 名で events/resources を引けることを固定する。
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleRow({ status: "FAILED", stackId: "" }) });
+
+    const seenStackNames: Array<string | undefined> = [];
+    const cfn = {
+      send: vi.fn(
+        async (cmd: { constructor: { name: string }; input?: { StackName?: string } }) => {
+          seenStackNames.push(cmd.input?.StackName);
+          const name = cmd.constructor.name;
+          if (name === "DescribeStackEventsCommand") return { StackEvents: [] };
+          if (name === "DescribeStackResourcesCommand") return { StackResources: [] };
+          throw new Error(`unexpected CFn command: ${name}`);
+        },
+      ),
+    };
+
+    const out = await getStackProgress(shared, { cfnClient: () => cfn as never }, TENANT, JOB_ID);
+
+    expect(out.kind).toBe("ok");
+    // 空文字 stackId は namePrefix に倒れ、CFn は実 stack 名で引かれる ("" では引かない)。
+    expect(seenStackNames.length).toBeGreaterThan(0);
+    expect(seenStackNames).not.toContain("");
+    expect(seenStackNames.every((n) => n === STACK_NAME)).toBe(true);
+  });
+
   it("should return stuck cause and recovery hint when IN_PROGRESS is frozen past the threshold", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({

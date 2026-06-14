@@ -56,4 +56,26 @@ describe("queryDeploymentsByEvent (Issue #670)", () => {
     expect(cmd.input.ProjectionExpression).toBeUndefined();
     expect(cmd.input.ExpressionAttributeNames).toBeUndefined();
   });
+
+  it("#1797: should drain every page (DynamoDB 1MB limit) so no deployment is missed", async () => {
+    // GSI1PK=TENANT#<id> パーティションが 1MB を超えると Query は LastEvaluatedKey を返して
+    // ページ分割する。旧コードは 1 ページ目しか読まず、後続ページの deployment を取りこぼした
+    // → teardown で対象 stack が enqueue されず orphan 化 / end-event / schedule 伝播も漏れる。
+    // FilterExpression(eventId) は各ページ内で適用されるので、目的 event の行が後続ページに
+    // 居ると完全に missed。全ページを drain する。
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce({ Items: [{ jobId: "a" }], LastEvaluatedKey: { PK: "p1" } })
+      .mockResolvedValueOnce({ Items: [{ jobId: "b" }], LastEvaluatedKey: { PK: "p2" } })
+      .mockResolvedValueOnce({ Items: [{ jobId: "c" }] });
+
+    const result = await queryDeploymentsByEvent(buildShared(send), "tenant-acme", "evt-1");
+
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(result.map((r) => r.jobId)).toEqual(["a", "b", "c"]);
+    // 1 ページ目は ExclusiveStartKey 無し、2 ページ目以降は前ページの LastEvaluatedKey を渡す。
+    expect((send.mock.calls[0]?.[0] as QueryCommand).input.ExclusiveStartKey).toBeUndefined();
+    expect((send.mock.calls[1]?.[0] as QueryCommand).input.ExclusiveStartKey).toEqual({ PK: "p1" });
+    expect((send.mock.calls[2]?.[0] as QueryCommand).input.ExclusiveStartKey).toEqual({ PK: "p2" });
+  });
 });
