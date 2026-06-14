@@ -196,7 +196,7 @@ problems/<category>/<id>/
 └── portal/          # Optional (.tsx files declared in dashboard.slots)
 ```
 
-Scoring uses one of five built-in kinds (`flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`) — one per problem. The platform's generic scoring Lambda (ADR-012 Phase 3) dispatches them. Don't put problem-specific scoring code into the platform.
+Scoring uses one of six built-in kinds (`flag` / `multi-flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`) — one per problem. The platform's generic scoring Lambda (ADR-012 Phase 3) dispatches them. Don't put problem-specific scoring code into the platform.
 
 A scaffolding CLI is available:
 
@@ -206,7 +206,7 @@ bun run scripts/tenkacloud-problem.ts validate <id>
 bun run scripts/tenkacloud-problem.ts list-kinds
 ```
 
-Scaffold templates live under `.claude/templates/problems/<kind>/` — one per kind (`flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`).
+Scaffold templates live under `.claude/templates/problems/<kind>/` — one per kind (`flag` / `multi-flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`).
 
 ## References
 

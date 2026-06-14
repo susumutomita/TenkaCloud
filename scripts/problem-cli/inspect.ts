@@ -67,6 +67,7 @@ function appendScoring(lines: string[], kind: string, scoring: Record<string, un
 
 function appendKindScoring(lines: string[], kind: string, scoring: Record<string, unknown>): void {
   if (kind === "flag") appendFlagScoring(lines, scoring);
+  else if (kind === "multi-flag") appendMultiFlagScoring(lines, scoring);
   else if (kind === "uptime-flat" || kind === "uptime") appendUptimeFlatScoring(lines, scoring);
   else if (kind === "uptime-multi") appendUptimeMultiScoring(lines, scoring);
   else if (kind === "phased-polling") appendPhasedPollingScoring(lines, scoring);
@@ -78,6 +79,21 @@ function appendFlagScoring(lines: string[], scoring: Record<string, unknown>): v
   lines.push(`points:           ${String(scoring.points ?? "(missing)")}`);
   if (scoring.wrongAnswerPenalty)
     lines.push(`wrongAnswerPenalty: ${String(scoring.wrongAnswerPenalty)}`);
+}
+
+function appendMultiFlagScoring(lines: string[], scoring: Record<string, unknown>): void {
+  const flags = Array.isArray(scoring.flags) ? scoring.flags : [];
+  const total = (flags as Array<Record<string, unknown>>).reduce(
+    (sum, f) => sum + (typeof f.points === "number" ? f.points : 0),
+    0,
+  );
+  lines.push(`flags:            ${flags.length} (= 各 flag 個別提出 / 部分点 合計 ${total})`);
+  for (const f of flags as Array<Record<string, unknown>>) {
+    const penalty = f.wrongAnswerPenalty ? ` penalty=${String(f.wrongAnswerPenalty)}` : "";
+    lines.push(
+      `                  - id=${String(f.id ?? "?")} key=${String(f.flagOutputKey ?? "?")} points=${String(f.points ?? "?")}${penalty}`,
+    );
+  }
 }
 
 function appendUptimeFlatScoring(lines: string[], scoring: Record<string, unknown>): void {
@@ -255,9 +271,29 @@ function appendScoringCrossRefIssues(
     const k = String(scoring.flagOutputKey ?? "");
     if (k && !outputNames.includes(k)) issues.push(`flagOutputKey="${k}" not in Outputs`);
   }
+  if (kind === "multi-flag") {
+    appendMultiFlagCrossRefIssues(issues, scoring, outputNames);
+  }
   if (kind === "attack-detection") {
     const k = String(scoring.statsOutputKey ?? "");
     if (k && !outputNames.includes(k)) issues.push(`statsOutputKey="${k}" not in Outputs`);
+  }
+}
+
+/**
+ * multi-flag (#1796): flags[] の各 flagOutputKey が Outputs に居るかを個別検査する。
+ */
+function appendMultiFlagCrossRefIssues(
+  issues: string[],
+  scoring: Record<string, unknown>,
+  outputNames: readonly string[],
+): void {
+  const flags = Array.isArray(scoring.flags) ? scoring.flags : [];
+  for (const f of flags as Array<Record<string, unknown>>) {
+    const k = String(f.flagOutputKey ?? "");
+    if (k && !outputNames.includes(k)) {
+      issues.push(`flags[id=${String(f.id)}].flagOutputKey="${k}" not in Outputs`);
+    }
   }
 }
 

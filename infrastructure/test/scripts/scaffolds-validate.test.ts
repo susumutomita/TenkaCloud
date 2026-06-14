@@ -5,7 +5,7 @@ import addFormats from "ajv-formats";
 import { describe, expect, it } from "vitest";
 
 /**
- * Issue #951 sub #1: `.claude/templates/problems/<kind>/metadata.json` の 5 種 scaffold が
+ * Issue #951 sub #1: `.claude/templates/problems/<kind>/metadata.json` の 6 種 scaffold が
  * `__PROBLEM_ID__` / `__PROBLEM_NAME__` を CLI が置換した後、 `problems/SCHEMA.json` に
  * 通ることを保証する。
  *
@@ -46,8 +46,15 @@ describe("Problem scaffold templates", () => {
 
   const kinds = listKinds();
 
-  it("should have scaffold directories for all 5 builtin kinds", () => {
-    const expected = ["attack-detection", "flag", "phased-polling", "uptime-flat", "uptime-multi"];
+  it("should have scaffold directories for all 6 builtin kinds", () => {
+    const expected = [
+      "attack-detection",
+      "flag",
+      "multi-flag",
+      "phased-polling",
+      "uptime-flat",
+      "uptime-multi",
+    ];
     expect(kinds).toEqual(expected);
   });
 

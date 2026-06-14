@@ -1,6 +1,6 @@
 ---
 name: create-problem
-description: TenkaCloud の問題ディレクトリ (problems/<category>/<id>/) を ADR-012 thick metadata DSL (5 scoring kinds + endpoints + phases + disruptions + dashboard.slots) で生成する。Battle (リアルタイム対戦) または Challenge (個別演習) の雛形を作る。
+description: TenkaCloud の問題ディレクトリ (problems/<category>/<id>/) を ADR-012 thick metadata DSL (6 scoring kinds + endpoints + phases + disruptions + dashboard.slots) で生成する。Battle (リアルタイム対戦) または Challenge (個別演習) の雛形を作る。
 allowed-tools: Bash(make validate-problems:*), Bash(bun run scripts/tenkacloud-problem.ts:*), Read, Write, Edit, Glob
 ---
 
@@ -15,12 +15,13 @@ scaffold 生成の前に次を順番に聞き出す (= 答えが揃わないま�
 1. **問題タイトル + 1 行 description** — UI に出る name と shortDescription の素材。
 2. **学習目標 (= learning goals)** — 「ユーザーが何を理解する?」 を bullet で 2〜3 つ。
 3. **想定 difficulty + duration** — difficulty 1〜5、 duration は free string (`60〜90 分` 等)。
-4. **scoring kind** — 下の決定木 / Step 0 を見て 5 種から 1 つに絞る。 迷っているうちは scaffold しない。
+4. **scoring kind** — 下の決定木 / Step 0 を見て 6 種から 1 つに絞る。 迷っているうちは scaffold しない。
 5. **scaffold + 編集ガイド** — `bun run scripts/tenkacloud-problem.ts create <id> --kind <kind>` で雛形を生成し、 残った `__PLACEHOLDER__` を上の回答で埋める。
 
 決定木 (= scoring kind):
 
 - 1 つの値 (= flag) を提出して終わる → `flag` (Challenge)
+- 1 問で複数の独立 flag を個別提出して部分点採点する → `multi-flag` (Challenge)
 - endpoint が 1 つ、 常時 200 で加点 → `uptime-flat` (Battle)
 - 複数 endpoint、 全部同時 200 で加点 → `uptime-multi` (Battle)
 - 時間経過で rule が変わる (= 移行 deadline 等) → `phased-polling` (Battle)
@@ -46,17 +47,18 @@ problems/<category>/<id>/
 
 ## Step 0 — kind を決める (= ADR-012 Phase 3 の核)
 
-scoring engine は **問題の `metadata.scoring.kind` で 5 種** の評価ロジックを切り替える。 1 問題 1 kind。 最初に「この問題はどう採点するか」 を決める。
+scoring engine は **問題の `metadata.scoring.kind` で 6 種** の評価ロジックを切り替える。 1 問題 1 kind。 最初に「この問題はどう採点するか」 を決める。
 
 | kind                | カテゴリ        | 用途 / 採点ルール                                                                                                                                       |
 | ------------------- | ---------------| ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `flag`              | Challenge      | 1 deploy で 1 回 flag 提出。 `CFn Outputs.flagOutputKey` の値と submitted flag を一致比較して `points` 加算。                                              |
+| `multi-flag`        | Challenge      | 1 問題に N 個の独立 flag を持ち、 各 flag を個別提出して部分点を与える。 `flags[].points` の合計が満点。 単一 flag で足りるなら `flag` を使う。              |
 | `uptime-flat`       | Battle (旧 `uptime`) | endpoint 群を 1 分毎に probe。 全 ok で `pointsPerSuccess` 加算、 fail で no-op or penalty。                                                              |
 | `uptime-multi`      | Battle         | N slot probe。 **全 slot 同時 ok** で `pointsAllOk` 加算、 1 つでも fail で `failurePenalty`。 復旧優先度を持たせるゲーム性。                                |
 | `phased-polling`    | Battle         | 時間経過 (`phases[].afterMinutes`) で score rule が変わる。 platform 自己申告 (`/meta`) を読んで EC2 / Lambda / ECS / App Runner 等に分類。 microservice 移行系。 |
 | `attack-detection`  | Battle         | CFn Output 内 attack counter の差分で加点 (= `current - prev` × `pointsPerAttack`)。 SOC 想定。                                                            |
 
-迷ったら次の質問: 「1 回提出で終わるか?」 → `flag`。 「endpoint が常に生きていることをスコアにするか?」 → `uptime-flat` or `uptime-multi`。 「途中で rule が変わるか?」 → `phased-polling`。 「攻撃検知数で勝敗が決まるか?」 → `attack-detection`。
+迷ったら次の質問: 「1 回提出で終わるか?」 → `flag`。 「1 問で複数の独立 flag を部分点採点するか?」 → `multi-flag`。 「endpoint が常に生きていることをスコアにするか?」 → `uptime-flat` or `uptime-multi`。 「途中で rule が変わるか?」 → `phased-polling`。 「攻撃検知数で勝敗が決まるか?」 → `attack-detection`。
 
 ## Step 1 — CLI で雛形生成 (推奨)
 
@@ -100,7 +102,7 @@ CLI を使わず手書きする場合は `.claude/templates/problems/<kind>/` �
 
 `problems/SCHEMA.json` に従う。 IDE 補完のため `$schema` を相対 path で先頭に置く。
 
-各 kind の具体例は `.claude/templates/problems/<kind>/metadata.json` を直接参照。 5 kind 分すべて揃えてある。
+各 kind の具体例は `.claude/templates/problems/<kind>/metadata.json` を直接参照。 6 kind 分すべて揃えてある。
 
 ### endpoints[] (= ADR-012 Phase 2 thick DSL)
 
@@ -230,7 +232,7 @@ aws cloudformation deploy \
 
 - [ ] `metadata.json` の `id` が dir 名と完全一致
 - [ ] `category` が `Battle` / `Challenge` (大文字始まり)
-- [ ] `scoring.kind` が 5 種のいずれか
+- [ ] `scoring.kind` が 6 種のいずれか
 - [ ] `cfnTemplate` で参照する `template.yaml` が同 dir にある
 - [ ] template.yaml の Parameters に `NamePrefix` を含む
 - [ ] 全リソース名 / タグに `${NamePrefix}` が冠されている
@@ -242,7 +244,7 @@ aws cloudformation deploy \
 
 ## 参考
 
-- 雛形 templates: [`.claude/templates/problems/<kind>/`](../../templates/problems/) — 5 kind 分の skeleton
+- 雛形 templates: [`.claude/templates/problems/<kind>/`](../../templates/problems/) — 6 kind 分の skeleton
 - 外部 contributor quickstart: [`docs/problems/CONTRIBUTING.md`](../../../docs/problems/CONTRIBUTING.md) — 30 分 quickstart + decision tree + lifecycle + validation error 表
 - 30 分 onboarding (= field reference): [`docs/problems/AUTHORING.html`](../../../docs/problems/AUTHORING.html)
 - 既存 5 問題の design 振り返り: [`docs/problems/EXAMPLES.md`](../../../docs/problems/EXAMPLES.md)

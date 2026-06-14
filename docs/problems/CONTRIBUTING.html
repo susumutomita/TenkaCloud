@@ -72,10 +72,15 @@ make install
 </code></pre>
 <h2>30-minute quickstart (= scaffold → edit → validate → PR)</h2>
 <h3>1. Pick the scoring kind (= the most important decision)</h3>
-<p>A TenkaCloud problem ships exactly one of five built-in scoring kinds. The platform&#39;s generic scoring Lambda dispatches on this value; problem-specific scoring code is forbidden by <a href="../architecture/adr-012-problem-plugin-architecture.html">ADR-012</a>.</p>
+<p>A TenkaCloud problem ships exactly one of six built-in scoring kinds. The platform&#39;s generic scoring Lambda dispatches on this value; problem-specific scoring code is forbidden by <a href="../architecture/adr-012-problem-plugin-architecture.html">ADR-012</a>.</p>
 <p>Use this decision tree:</p>
 <pre><code class="language-text">Does the competitor submit a single value (a &quot;flag&quot;) to win?
-├── Yes → kind = &quot;flag&quot;               (Challenge, e.g. read an SSM Parameter, find an S3 object)
+├── Yes
+│   │
+│   Is it one flag, or several independent flags scored separately (partial credit)?
+│   ├── One flag → kind = &quot;flag&quot;      (Challenge, e.g. read an SSM Parameter, find an S3 object)
+│   └── N independent flags → kind = &quot;multi-flag&quot;
+│       (Challenge, one problem poses several sub-challenges; sum of flags[].points is the max score)
 └── No
     │
     Does the competitor have to keep something running?
@@ -215,7 +220,7 @@ gh pr create --repo susumutomita/TenkaCloudChallenge \
 <tbody><tr>
 <td><code>scoring.kind=&quot;...&quot; is not a recognized kind</code></td>
 <td>Typo in <code>scoring.kind</code></td>
-<td>Set it to exactly one of <code>flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code>.</td>
+<td>Set it to exactly one of <code>flag</code> / <code>multi-flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code>.</td>
 </tr>
 <tr>
 <td><code>scoring.flagOutputKey=&quot;X&quot; not found in template.yaml Outputs</code></td>
@@ -285,7 +290,7 @@ gh pr create --repo susumutomita/TenkaCloudChallenge \
 <li><input disabled="" type="checkbox"> <code>metadata.id</code> matches the directory name.</li>
 <li><input disabled="" type="checkbox"> <code>category</code> is <code>&quot;Battle&quot;</code> or <code>&quot;Challenge&quot;</code> (capitalized).</li>
 <li><input disabled="" type="checkbox"> <code>status</code> is <code>&quot;draft&quot;</code> for a first submission.</li>
-<li><input disabled="" type="checkbox"> <code>scoring.kind</code> is one of the five built-ins.</li>
+<li><input disabled="" type="checkbox"> <code>scoring.kind</code> is one of the six built-ins.</li>
 <li><input disabled="" type="checkbox"> Every <code>__PLACEHOLDER__</code> in <code>metadata.json</code> has been replaced.</li>
 <li><input disabled="" type="checkbox"> Every endpoint / scoring key referenced from <code>metadata.json</code> exists as a key in <code>template.yaml</code> <code>Outputs:</code>.</li>
 <li><input disabled="" type="checkbox"> Every resource name in <code>template.yaml</code> is prefixed with <code>${NamePrefix}</code>.</li>
