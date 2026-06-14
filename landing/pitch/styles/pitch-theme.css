@@ -2237,15 +2237,15 @@ section.slide:nth-of-type(5) .tc-callout {
 }
 
 .cta-grid {
-  margin: 96px auto 0;
+  margin: 30px auto 0;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   max-width: 1126px;
   gap: 44px;
 }
 
 .cta-card {
-  height: 220px;
-  padding: 23px 30px 26px;
+  height: 310px;
+  padding: 15px 24px 16px;
   text-align: center;
   font-family: var(--font-body-ja);
   display: flex;
@@ -2254,10 +2254,10 @@ section.slide:nth-of-type(5) .tc-callout {
 }
 
 .cta-card h3 {
-  margin-top: 10px;
+  margin-top: 6px;
   color: var(--tc-gold-2);
   font-family: system-ui, sans-serif;
-  font-size: 38px;
+  font-size: 34px;
   line-height: 1.1;
   font-weight: 900;
   text-shadow:
@@ -2274,7 +2274,7 @@ section.slide:nth-of-type(5) .tc-callout {
   display: block;
   width: 84px;
   height: 6px;
-  margin: 9px auto 0;
+  margin: 6px auto 0;
   background:
     radial-gradient(circle at 50% 50%, var(--tc-gold-2) 0 3px, transparent 3.5px),
     linear-gradient(90deg, transparent 0 5%, rgba(241, 205, 114, .9) 42%, rgba(241, 205, 114, .9) 58%, transparent 95%);
@@ -2282,10 +2282,10 @@ section.slide:nth-of-type(5) .tc-callout {
 }
 
 .cta-card p {
-  margin-top: 10px;
+  margin-top: 5px;
   color: #fff;
-  font-size: 22px;
-  line-height: 1.3;
+  font-size: 17px;
+  line-height: 1.22;
   font-weight: 760;
   text-shadow: 0 2px 12px rgba(0, 0, 0, .68);
 }
@@ -2293,8 +2293,8 @@ section.slide:nth-of-type(5) .tc-callout {
 .cta-badge {
   display: grid;
   place-items: center;
-  width: 68px;
-  height: 68px;
+  width: 52px;
+  height: 52px;
   margin: 0 auto;
   border-radius: 50%;
   background: radial-gradient(circle at 32% 28%, #7fc3ff, #1678ff 72%);
@@ -2317,8 +2317,8 @@ section.slide:nth-of-type(5) .tc-callout {
 }
 
 .cta-icon {
-  width: 46px;
-  height: 46px;
+  width: 38px;
+  height: 38px;
   margin: 0 auto;
   border-radius: 0;
   object-fit: contain;
@@ -2326,31 +2326,62 @@ section.slide:nth-of-type(5) .tc-callout {
 }
 
 .cta-card:nth-child(1) .cta-icon {
-  width: 50px;
-  height: 50px;
+  width: 42px;
+  height: 42px;
   filter:
     brightness(0) invert(1)
     drop-shadow(0 0 8px rgba(255, 255, 255, .28));
 }
 
 .cta-card:nth-child(2) .cta-icon {
-  width: 50px;
-  height: 50px;
+  width: 42px;
+  height: 42px;
   filter:
     drop-shadow(0 0 9px rgba(38, 136, 255, .74))
     drop-shadow(0 0 18px rgba(38, 136, 255, .32));
 }
 
 .cta-card:nth-child(3) .cta-icon {
-  width: 50px;
-  height: 50px;
+  width: 42px;
+  height: 42px;
   filter:
     drop-shadow(0 0 9px rgba(38, 136, 255, .74))
     drop-shadow(0 0 18px rgba(38, 136, 255, .32));
 }
 
+.cta-access {
+  width: 100%;
+  margin-top: 5px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.cta-qr-img {
+  display: block;
+  width: 112px;
+  height: 112px;
+  object-fit: contain;
+  image-rendering: crisp-edges;
+}
+
+.cta-url {
+  max-width: 100%;
+  color: #dff2ff;
+  font-family: var(--tc-mono);
+  font-size: 9.5px;
+  line-height: 1.1;
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-color: rgba(136, 207, 255, .86);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .72);
+}
+
 .closing-line {
-  margin-top: 19px;
+  margin-top: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
