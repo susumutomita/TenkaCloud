@@ -63,28 +63,29 @@
 
   var TOTAL = 5;
   var teams = [
-    { n: "team-honnoji", s: 8662, done: 3 },
-    { n: "team-shogun", s: 8420, done: 3, me: true },
-    { n: "team-sekigahara", s: 8215, done: 3 },
-    { n: "team-osaka", s: 7640, done: 2 },
+    { n: "team-honnoji", s: 4120, done: 5 },
+    { n: "team-shogun", s: 3980, done: 5, me: true },
+    { n: "team-osaka", s: 3860, done: 5 },
+    { n: "team-sekigahara", s: 3720, done: 5 },
   ];
 
   var rowByName = {};
   teams.forEach(function (team) {
     var row = document.createElement("div");
-    row.className = "rank-row" + (team.me ? " mine" : "");
+    row.className = "cs-row" + (team.me ? " mine" : "");
     row.innerHTML =
-      '<span class="rk"></span>' +
-      '<span class="tm"></span>' +
-      '<span class="sc"></span>' +
-      '<span class="pg"></span>';
+      '<span class="cs-rk' + (team.me ? " me" : "") + '"></span>' +
+      '<span class="cs-tm' + (team.me ? " me" : "") + '"></span>' +
+      '<span class="cs-sc"></span>' +
+      '<span class="cs-pg"></span>';
     board.appendChild(row);
     rowByName[team.n] = row;
   });
 
   var elScore = document.getElementById("csScore");
   var elRank = document.getElementById("csRank");
-  var scoreTile = document.querySelector(".score-tile");
+  var scoreBadge = document.querySelector(".cs-util");
+  var notif = document.getElementById("tcNotif");
 
   function render(hit) {
     var sorted = teams.slice().sort(function (a, b) {
@@ -93,11 +94,10 @@
     sorted.forEach(function (team, index) {
       var row = rowByName[team.n];
       var rank = index + 1;
-      row.querySelector(".rk").innerHTML =
-        rank <= 3 ? '<span class="rank-medal">' + rank + "</span>" : String(rank);
-      row.querySelector(".tm").textContent = team.n + (team.me ? " (You)" : "");
-      row.querySelector(".sc").textContent = team.s.toLocaleString() + " pt";
-      row.querySelector(".pg").textContent = team.done + "/" + TOTAL;
+      row.querySelector(".cs-rk").textContent = "#" + rank;
+      row.querySelector(".cs-tm").innerHTML = team.n + (team.me ? ' <span class="cs-you">(You)</span>' : "");
+      row.querySelector(".cs-sc").textContent = team.s.toLocaleString() + " pt";
+      row.querySelector(".cs-pg").textContent = team.done + " / " + TOTAL;
       board.appendChild(row);
 
       if (team.n === hit) {
@@ -109,10 +109,10 @@
       if (team.me) {
         if (elScore) elScore.textContent = team.s.toLocaleString();
         if (elRank) elRank.textContent = rank + "/" + teams.length;
-        if (scoreTile && team.n === hit) {
-          scoreTile.classList.remove("flash");
-          void scoreTile.offsetWidth;
-          scoreTile.classList.add("flash");
+        if (scoreBadge && team.n === hit) {
+          scoreBadge.classList.remove("flash");
+          void scoreBadge.offsetWidth;
+          scoreBadge.classList.add("flash");
         }
       }
     });
@@ -129,9 +129,15 @@
             return team.me;
           })
         : Math.floor(Math.random() * teams.length);
-    teams[index].s += 40 + Math.floor(Math.random() * 220);
-    if (Math.random() < 0.25 && teams[index].done < TOTAL) teams[index].done++;
+    teams[index].s += 20 + Math.floor(Math.random() * 90);
+    if (Math.random() < 0.12 && teams[index].done < TOTAL) teams[index].done++;
     render(teams[index].n);
+    if (notif && tick % 4 === 0) {
+      notif.textContent = String(Number(notif.textContent || "10") + 1);
+      notif.classList.remove("flash");
+      void notif.offsetWidth;
+      notif.classList.add("flash");
+    }
   }, 1500);
 
   var clock = document.getElementById("tcClock");
@@ -162,10 +168,10 @@
     incidentIndex++;
     if (!incident) return;
 
-    incident.className = "incident-line show";
-    incident.textContent = "⚡ " + name + " 発生";
+    incident.className = "cs-incident show fire";
+    incident.textContent = name + " 発生";
     setTimeout(function () {
-      incident.className = "incident-line show ok";
+      incident.className = "cs-incident show ok";
       incident.textContent = "復旧 " + name;
     }, 2600);
     setTimeout(function () {

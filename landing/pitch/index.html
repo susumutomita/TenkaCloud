@@ -202,23 +202,39 @@
       </div>
 
       <div class="live-grid">
-        <article class="tc-panel cut-panel team-status">
-          <img class="samurai-avatar" src="assets/icons/gold/kabuto-emblem.png" alt="" aria-hidden="true">
-          <div>
-            <h3>team-shogun</h3>
-            <p class="clock-line"><svg class="clock-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7v5l3.5 2.2"></path></svg>残り <b id="tcClock">00:11:58</b></p>
-            <p id="tcIncident" class="incident-line"></p>
+        <div class="scoreboard-mock" aria-label="TenkaCloud scoreboard mock">
+          <div class="cs-app">
+            <div class="cs-topnav">
+              <div class="cs-ident"><span class="cs-logo"></span>TenkaCloud</div>
+              <div class="cs-utils">
+                <span class="cs-util"><span class="cs-ok">✔</span>Score: <b id="csScore">3,980</b> pt / Rank: <b id="csRank">2/4</b></span>
+                <span class="cs-util">team-shogun <span class="cs-caret">▾</span></span>
+              </div>
+            </div>
+            <div class="cs-body">
+              <aside class="cs-sidenav">
+                <div class="cs-sec">Event</div>
+                <div class="cs-link">Home</div>
+                <div class="cs-link on">Scoreboard</div>
+                <div class="cs-link">Notifications <span class="cs-badge" id="tcNotif">10</span></div>
+                <div class="cs-sec">Quests</div>
+                <div class="cs-link">StackStack</div>
+                <div class="cs-sec">Tools</div>
+                <div class="cs-link">CLI Credentials</div>
+              </aside>
+              <main class="cs-content">
+                <div class="cs-countdown">残り <b id="tcClock">00:11:58</b><span id="tcIncident" class="cs-incident"></span></div>
+                <section class="cs-container" aria-label="Scoreboard">
+                  <div class="cs-ch">スコアボード <span class="cs-ch-cnt">4 チーム · 60 秒ごとに自動採点</span></div>
+                  <div class="cs-table">
+                    <div class="cs-thead"><span>Rank</span><span>チーム</span><span>スコア</span><span>進捗</span></div>
+                    <div id="tcBoard"></div>
+                  </div>
+                </section>
+              </main>
+            </div>
           </div>
-        </article>
-        <article class="score-tile" aria-live="polite">
-          <span>Score</span>
-          <strong><b id="csScore">8,420</b> <small>pt</small></strong>
-          <div><span>Rank</span><b id="csRank">2/4</b></div>
-        </article>
-        <article class="tc-panel cut-panel rank-panel">
-          <div class="rank-head"><span>RANK</span><span>TEAM</span><span>SCORE</span><span>SCENARIOS</span></div>
-          <div id="tcBoard" class="rank-board"></div>
-        </article>
+        </div>
       </div>
 
       <footer class="tc-callout">
