@@ -111,7 +111,12 @@ describe("problem template ParticipantViewerRole (#744)", () => {
       expect(template).toContain("TenkaCloudAccountId:");
       expect(template).toContain("ExternalId:");
       expect(role).toContain("Type: AWS::IAM::Role");
-      expect(role).toContain(`RoleName: !Sub "\${NamePrefix}-participant-viewer"`);
+      // TenkaCloudChallenge #77 dropped the explicit `RoleName: !Sub "${NamePrefix}-participant-viewer"`:
+      // `${NamePrefix}` (= tc-{problemSlug}-{teamSlug}) overflowed IAM's 64-char RoleName limit for long
+      // slugs, blocking deploys. CloudFormation now auto-names the role. This is safe (so RoleName is no
+      // longer asserted): the role is consumed by its GetAtt ARN via the `ParticipantViewerRoleArn`
+      // Output (asserted below), the cross-account AssumeRole caller (CompetitorDeployRole) holds
+      // AdministratorAccess, and the trust is account-id + ExternalId based — all name-independent.
       expect(role).toContain(`AWS: !Sub "arn:aws:iam::\${TenkaCloudAccountId}:root"`);
       expect(role).toContain("sts:ExternalId: !Ref ExternalId");
       expect(role).toContain("PolicyName: ProblemSpecific");
