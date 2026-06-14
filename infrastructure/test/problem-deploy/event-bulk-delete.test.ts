@@ -300,7 +300,10 @@ describe("bulkTeardownEvent", () => {
     eventsSend.mockResolvedValue({});
 
     const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
-    expect(out).toEqual({ kind: "ok", result: { eventId: "EV1", enqueued: 1, skipped: 0 } });
+    expect(out).toEqual({
+      kind: "ok",
+      result: { eventId: "EV1", enqueued: 1, skipped: 0, failed: 0 },
+    });
     const putCmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
     const detail = JSON.parse(String(putCmd.input.Entries?.[0]?.Detail)) as { stackName?: string };
     expect(detail.stackName).toBe("tc-p-team-9");
