@@ -18,7 +18,7 @@ import {
  * 呼び出し側は `ExclusiveStartKey` を渡してはいけない (本 helper が管理する)。
  */
 export async function queryAllItems(
-  ddb: DynamoDBDocumentClient,
+  ddb: Pick<DynamoDBDocumentClient, "send">,
   input: QueryCommandInput,
 ): Promise<Record<string, unknown>[]> {
   const items: Record<string, unknown>[] = [];
