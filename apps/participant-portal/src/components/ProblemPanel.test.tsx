@@ -19,7 +19,6 @@ import {
   mergeLiveDeployLog,
   ProblemPanel,
   selectDisplayedDeployLog,
-  shouldShowAutoRefreshNote,
 } from "./ProblemPanel";
 import {
   formatProblemPanelActionError,
@@ -392,11 +391,6 @@ describe("ProblemPanel pure helpers", () => {
     expect(selectDisplayedDeployLog(null, deployLog)).toBe(deployLog);
     expect(selectDisplayedDeployLog({ cursor: "l", entries: [] }, deployLog)).toBe(deployLog);
   });
-
-  it("should show the auto-refresh note only for non-terminal statuses", () => {
-    expect(shouldShowAutoRefreshNote("IN_PROGRESS")).toBe(true);
-    expect(shouldShowAutoRefreshNote("COMPLETE")).toBe(false);
-  });
 });
 
 describe("ProblemPanel render branches", () => {
@@ -476,12 +470,9 @@ describe("ProblemPanel render branches", () => {
     expect(screen.getByText("arn:aws:iam::1:role/x")).toBeInTheDocument();
   });
 
-  it("should show the auto-refresh note while non-terminal and hide it when terminal", () => {
-    const a = renderPanel({ status: "IN_PROGRESS" });
-    expect(a.getByText(/auto_refresh_note|自動|Auto-refresh/i)).toBeInTheDocument();
-    a.unmount();
-    const b = renderPanel({ status: "COMPLETE", stackOutputs: {} });
-    expect(b.queryByText(/Auto-refresh every/i)).not.toBeInTheDocument();
+  it("should not render the old auto-refresh note while non-terminal", () => {
+    renderPanel({ status: "IN_PROGRESS" });
+    expect(screen.queryByText(/auto_refresh_note|自動更新|Auto-refresh/i)).not.toBeInTheDocument();
   });
 
   it("should pass ?? defaults to the flag panel when optional fields are absent", () => {

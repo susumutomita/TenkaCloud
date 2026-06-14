@@ -1,9 +1,12 @@
 import Box from "@cloudscape-design/components/box";
+import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import LineChart from "@cloudscape-design/components/line-chart";
+import SpaceBetween from "@cloudscape-design/components/space-between";
+import Toggle from "@cloudscape-design/components/toggle";
 import { toErrorMessage } from "@tenkacloud/web-kit";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getLeaderboardScoreEvents,
   type LeaderboardScoreEventsResponse,
@@ -18,8 +21,8 @@ import { useI18n, useT } from "../i18n";
  * との指摘を受け、 同 event の全 team を multi-series で render する。 自チームは強調
  * 色 + 太線、 rival は控えめなパレットで visually 区別する。
  *
- * `/portal/leaderboard/score-events` を 30 秒間隔で polling (= flag 提出 / uptime probe が
- * 5 秒間隔では反映されないので polling 周期を 30s にしたまま、 1 request で全 team を取得)。
+ * `/portal/leaderboard/score-events` は重い endpoint なので初回 1 回だけ取得する。
+ * 30 秒 polling は明示的に auto refresh を有効化した場合だけ使う。
  */
 const POLL_INTERVAL_MS = 30_000;
 
@@ -76,7 +79,7 @@ export function toScoreTimelineLoadError(err: unknown): ScoreTimelineLoadResult 
 async function fetchScoreTimelineData(
   apiBaseUrl: string,
   sessionToken: string,
-  signal: AbortSignal,
+  signal?: AbortSignal,
 ): Promise<ScoreTimelineLoadResult> {
   if (!sessionToken) return { kind: "skip" };
   try {
@@ -99,31 +102,51 @@ export function ScoreTimelineChart({
   const { locale } = useI18n();
   const [data, setData] = useState<LeaderboardScoreEventsResponse | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const fetchInFlightRef = useRef<Promise<void> | null>(null);
 
-  // この polling は usePolling に寄せない: cleanup で in-flight fetch を `AbortController.abort()` で
-  // 中断する必要があり (= unmount 時の stale request 抑止)、 usePolling の cleanup (timer 停止のみ) では
-  // 表現できないため。
+  const fetchOnce = useCallback(
+    async (signal?: AbortSignal) => {
+      if (fetchInFlightRef.current) return fetchInFlightRef.current;
+      const run = (async () => {
+        setIsRefreshing(true);
+        try {
+          const result = await fetchScoreTimelineData(apiBaseUrl, sessionToken, signal);
+          if (signal?.aborted) return;
+          if (result.kind === "skip") return;
+          if (result.kind === "error") {
+            setError(result.message);
+            return;
+          }
+          setData(result.data);
+          setError(null);
+        } finally {
+          fetchInFlightRef.current = null;
+          if (!signal?.aborted) setIsRefreshing(false);
+        }
+      })();
+      fetchInFlightRef.current = run;
+      return run;
+    },
+    [apiBaseUrl, sessionToken],
+  );
+
+  // 初回 fetch は 1 回だけ。全 team × deployment の score-event query は重いので、30s
+  // polling は user opt-in にする。
   useEffect(() => {
-    let mounted = true;
     const controller = new AbortController();
-    const fetchOnce = async () => {
-      const result = await fetchScoreTimelineData(apiBaseUrl, sessionToken, controller.signal);
-      if (!mounted || result.kind === "skip") return;
-      if (result.kind === "error") {
-        setError(result.message);
-        return;
-      }
-      setData(result.data);
-      setError(null);
-    };
-    void fetchOnce();
-    const interval = setInterval(fetchOnce, POLL_INTERVAL_MS);
+    void fetchOnce(controller.signal);
     return () => {
-      mounted = false;
       controller.abort();
-      clearInterval(interval);
     };
-  }, [apiBaseUrl, sessionToken]);
+  }, [fetchOnce]);
+
+  useEffect(() => {
+    if (!autoRefresh || !sessionToken) return;
+    const interval = setInterval(() => void fetchOnce(), POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [autoRefresh, sessionToken, fetchOnce]);
 
   const seriesView = useMemo(() => {
     if (!data) return null;
@@ -158,9 +181,26 @@ export function ScoreTimelineChart({
     return { built, minX, maxX, minY, maxY };
   }, [data, t]);
 
+  const controls = sessionToken ? (
+    <SpaceBetween direction="horizontal" size="s">
+      <Toggle checked={autoRefresh} onChange={({ detail }) => setAutoRefresh(detail.checked)}>
+        {t("score_timeline.auto_refresh_label")}
+      </Toggle>
+      <Button iconName="refresh" loading={isRefreshing} onClick={() => void fetchOnce()}>
+        {t("score_timeline.refresh_latest")}
+      </Button>
+    </SpaceBetween>
+  ) : undefined;
+
+  const header = (description?: string) => (
+    <Header variant="h2" description={description} actions={controls}>
+      {t("score_timeline.header")}
+    </Header>
+  );
+
   if (error) {
     return (
-      <Container header={<Header variant="h2">{t("score_timeline.header")}</Header>}>
+      <Container header={header()}>
         <Box color="text-status-error">{t("score_timeline.fetch_failed", { error })}</Box>
       </Container>
     );
@@ -168,7 +208,7 @@ export function ScoreTimelineChart({
 
   if (!data) {
     return (
-      <Container header={<Header variant="h2">{t("score_timeline.header")}</Header>}>
+      <Container header={header()}>
         <Box color="text-status-inactive">{t("score_timeline.loading")}</Box>
       </Container>
     );
@@ -177,7 +217,7 @@ export function ScoreTimelineChart({
   const totalEvents = data.teams.reduce((s, te) => s + te.events.length, 0);
   if (totalEvents === 0) {
     return (
-      <Container header={<Header variant="h2">{t("score_timeline.header")}</Header>}>
+      <Container header={header()}>
         <Box color="text-status-inactive">{t("score_timeline.empty_body")}</Box>
       </Container>
     );
@@ -191,14 +231,7 @@ export function ScoreTimelineChart({
 
   return (
     <Container
-      header={
-        <Header
-          variant="h2"
-          description={t("score_timeline.header_description", { count: data.teams.length })}
-        >
-          {t("score_timeline.header")}
-        </Header>
-      }
+      header={header(t("score_timeline.header_description", { count: data.teams.length }))}
     >
       <LineChart
         series={seriesView.built}

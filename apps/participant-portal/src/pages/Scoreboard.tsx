@@ -12,7 +12,7 @@ import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
 
 /**
- * Event scope の team ランキング。`TeamViewProvider` 経由の共有 leaderboard polling を
+ * Event scope の team ランキング。`TeamViewProvider` 経由の共有 leaderboard state を
  * そのまま表示するので、本 page は専用の polling を持たない (= TopNav / Home と同 source)。
  *
  * 自チームは `isMyTeam=true` のセル背景を強調 (= AWS JAM 風)。
