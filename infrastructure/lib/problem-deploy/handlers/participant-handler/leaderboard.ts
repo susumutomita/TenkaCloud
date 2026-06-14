@@ -1,6 +1,6 @@
-import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
+import { queryAllItems } from "../shared/ddb-paginate.js";
 import { getEventGate } from "./event-gate.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
@@ -90,19 +90,18 @@ export async function getLeaderboard(
 
   // tenant の全 deployment を引いて event 内のものだけ。FilterExpression は post-read
   // なので RCU は変わらないが network / Lambda 内処理量を節約。
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.tableName,
-      IndexName: "GSI1",
-      KeyConditionExpression: "GSI1PK = :pk",
-      FilterExpression: "eventId = :ev",
-      ExpressionAttributeValues: {
-        ":pk": `TENANT#${tenantId}`,
-        ":ev": eventId,
-      },
-    }),
-  );
-  const eventDeployments = (out.Items ?? []) as Partial<DeploymentItem>[];
+  // #1815: 全ページ drain しないと TENANT# パーティションが 1MB 超のとき後続ページの team が
+  // leaderboard から欠落する (= 順位表に出ない / scores 欠落の公平性 bug)。
+  const eventDeployments = (await queryAllItems(shared.ddb, {
+    TableName: shared.tableName,
+    IndexName: "GSI1",
+    KeyConditionExpression: "GSI1PK = :pk",
+    FilterExpression: "eventId = :ev",
+    ExpressionAttributeValues: {
+      ":pk": `TENANT#${tenantId}`,
+      ":ev": eventId,
+    },
+  })) as Partial<DeploymentItem>[];
 
   // Issue #1038 P1 #9: scoreboard freeze 判定。 event gate を引いて endsAt を取得し、
   // 終了 N 分前から終了時刻までは順位を隠す (= 競技公平性、 終盤の駆け込み防止)。

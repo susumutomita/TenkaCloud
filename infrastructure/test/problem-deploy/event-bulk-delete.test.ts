@@ -287,6 +287,28 @@ describe("bulkTeardownEvent", () => {
     expect(out.kind).toBe("ok");
   });
 
+  it("#1810: should tear down a FAILED deployment whose stackId is empty (fallback to namePrefix)", async () => {
+    // 失敗 deployment は stack ARN 記録前に終わると stackId="" (空文字、null ではない)。
+    // 旧コードは `stackId ?? namePrefix` で空文字を fallback できず stackName="" → skip し、
+    // 失敗 stack を orphan 化していた。namePrefix で delete-stack できるよう enqueue されること。
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // Get(Event)
+    ddbSend.mockResolvedValueOnce({
+      Items: [dep({ jobId: "01FAIL", status: "FAILED", stackId: "", namePrefix: "tc-p-team-9" })],
+    });
+    ddbSend.mockResolvedValue({}); // transition + Event status
+    eventsSend.mockResolvedValue({});
+
+    const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    expect(out).toEqual({
+      kind: "ok",
+      result: { eventId: "EV1", enqueued: 1, skipped: 0, failed: 0 },
+    });
+    const putCmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
+    const detail = JSON.parse(String(putCmd.input.Entries?.[0]?.Detail)) as { stackName?: string };
+    expect(detail.stackName).toBe("tc-p-team-9");
+  });
+
   it("Deployments query should hit GSI1 (TENANT) and filter eventId in-memory", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
