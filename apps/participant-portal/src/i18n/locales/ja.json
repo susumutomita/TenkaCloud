@@ -161,7 +161,7 @@
   },
   "scoreboard": {
     "title": "Scoreboard",
-    "description": "{eventTitle} のリアルタイム順位 (5 秒ごと自動更新)",
+    "description": "{eventTitle} の順位。手動更新するか、上部バーから自動更新を ON にしてください。",
     "no_event_header": "このチームはイベントに紐づいていません",
     "no_event_body": "イベント外の単体デプロイのため、他チームの順位は表示されません。他チームとスコアを競うには、運営者が作成したイベントに参加し、イベント経由でデプロイしてください。",
     "frozen_header": "🔒 順位は終了 30 分前から凍結中",

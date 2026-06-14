@@ -161,7 +161,7 @@
   },
   "scoreboard": {
     "title": "Scoreboard",
-    "description": "Real-time ranking for {eventTitle} (auto-refresh every 5 s)",
+    "description": "Ranking for {eventTitle}. Refresh manually or turn on auto refresh from the top bar.",
     "no_event_header": "This team is not linked to an event",
     "no_event_body": "This is a standalone deployment outside an event, so other teams' rankings are not shown. To compete with other teams, join an event created by the operator and deploy through it.",
     "frozen_header": "🔒 Ranking frozen 30 min before end",
