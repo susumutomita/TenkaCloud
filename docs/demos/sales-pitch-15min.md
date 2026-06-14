@@ -61,7 +61,7 @@ This is the 15-minute version of the quickstart, intended for facilitators runni
 
 **Action.** Same as quickstart Step 6. After the score increments, switch back to the admin console scoreboard.
 
-**Talking point.** "Scoring is one of five built-in kinds — `flag`, `uptime-flat`, `uptime-multi`, `phased-polling`, `attack-detection`. Each problem picks one. The platform has a single generic scoring Lambda that dispatches to the right kind — no problem-specific code in the platform. That keeps the operational surface small."
+**Talking point.** "Scoring is one of six built-in kinds — `flag`, `multi-flag`, `uptime-flat`, `uptime-multi`, `phased-polling`, `attack-detection`. Each problem picks one. The platform has a single generic scoring Lambda that dispatches to the right kind — no problem-specific code in the platform. That keeps the operational surface small."
 
 **Pricing hint.** Real-time scoreboard refresh, multi-team dashboards, and disruption-phase visibility ship at Hosted Event tier and above. Starter has the same scoring path with simpler dashboards.
 
@@ -69,7 +69,7 @@ This is the 15-minute version of the quickstart, intended for facilitators runni
 
 Cover three points:
 
-1. **Reality check.** What we ship today: cross-account isolated deploy, five scoring kinds, EventBridge state reconciliation (`ADR-014`), polling-based UI (no SSE — see `AGENTS.md`). What we are working toward: voting-based community catalog (`ADR-024`), provider-specific runtimes for non-AWS (`ADR-023`). We do not claim "production-grade multi-cloud" or "full SOC2" today.
+1. **Reality check.** What we ship today: cross-account isolated deploy, six scoring kinds, EventBridge state reconciliation (`ADR-014`), polling-based UI (no SSE — see `AGENTS.md`). What we are working toward: voting-based community catalog (`ADR-024`), provider-specific runtimes for non-AWS (`ADR-023`). We do not claim "production-grade multi-cloud" or "full SOC2" today.
 2. **Operating model.** Lite mode = `make deploy`, 1 organizer / 1 event, 10-minute setup. SaaS mode = `make deploy-saas`, multi-tenant, pooled + silo tier mix, 15 to 20 minutes to bring up the control plane.
 3. **CTA.** Pick a starter problem (`hello-world`, `s3-public-bucket`, `lambda-cold-start`). Run one dry-run with your own SRE team. The longest commitment is one `make deploy` run.
 
@@ -79,7 +79,7 @@ Cover three points:
 | ------------------------------------------- | ------------------------------------------------------------------------------------ |
 | "Our training is slides; nothing sticks."   | Hands-on real-AWS problems with deterministic scoring path.                          |
 | "Sandbox accounts blow up our blast RADIUS."| Per-team isolated account + `ExternalId` AssumeRole + scoped `ParticipantViewerRole`. |
-| "Each event needs custom scoring."          | Five scoring kinds (`flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`). |
+| "Each event needs custom scoring."          | Six scoring kinds (`flag` / `multi-flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`). |
 | "We need event-day operations to be calm."  | EventBridge-driven reconciliation (ADR-014), polling-based UI, idempotent teardown.  |
 | "We want our SRE team to author problems."  | Three files per problem. `ADR-012` problem-plugin architecture. No platform fork.    |
 | "We may want to leave AWS in the future."   | `ADR-023` provider-specific runtime roadmap. Today: AWS only; honest about scope.    |

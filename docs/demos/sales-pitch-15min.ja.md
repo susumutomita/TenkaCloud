@@ -61,7 +61,7 @@
 
 **操作**。 quickstart ステップ 6 と同じ。 スコアが加算されたら admin console のスコアボードに戻ります。
 
-**トークポイント**。「採点はビルトインの 5 種 — `flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection` のいずれか。 各問題が 1 つを選びます。 プラットフォームには共通の generic 採点 Lambda が 1 本あり、 問題種別に応じて dispatch します — プラットフォーム側に問題固有コードはゼロ。 これで運用面の表面積を小さく保てます」
+**トークポイント**。「採点はビルトインの 6 種 — `flag` / `multi-flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection` のいずれか。 各問題が 1 つを選びます。 プラットフォームには共通の generic 採点 Lambda が 1 本あり、 問題種別に応じて dispatch します — プラットフォーム側に問題固有コードはゼロ。 これで運用面の表面積を小さく保てます」
 
 **料金ヒント**。 リアルタイムスコアボードリフレッシュ / マルチチームダッシュボード / disruption phase 可視化は Hosted Event tier 以上に含まれます。 Starter tier も同じ採点経路ですが、 ダッシュボードはシンプル版です。
 
@@ -69,7 +69,7 @@
 
 3 点を伝えます。
 
-1. **現実の話**。 今日出荷しているもの : クロスアカウント分離 deploy、 5 種の採点、 EventBridge 駆動 state 再同期 (`ADR-014`)、 polling UI (SSE は使わない — `AGENTS.md` 参照)。 取り組み中 : 投票方式のコミュニティカタログ (`ADR-024`)、 AWS 以外向け provider-specific runtime (`ADR-023`)。「production-grade なマルチクラウド」や「フル SOC2」は今日は名乗らない。
+1. **現実の話**。 今日出荷しているもの : クロスアカウント分離 deploy、 6 種の採点、 EventBridge 駆動 state 再同期 (`ADR-014`)、 polling UI (SSE は使わない — `AGENTS.md` 参照)。 取り組み中 : 投票方式のコミュニティカタログ (`ADR-024`)、 AWS 以外向け provider-specific runtime (`ADR-023`)。「production-grade なマルチクラウド」や「フル SOC2」は今日は名乗らない。
 2. **運用モデル**。 Lite mode = `make deploy`、 1 主催者 / 1 イベント、 10 分でセットアップ。 SaaS mode = `make deploy-saas`、 マルチテナント、 pooled + silo の組み合わせ、 control plane 起動に 15 〜 20 分。
 3. **CTA**。 starter 問題 (`hello-world`、 `s3-public-bucket`、 `lambda-cold-start`) を選んで御社の SRE チームでドライランを 1 回。 最も長いコミットメントは `make deploy` 1 回分。
 
@@ -79,7 +79,7 @@
 | --------------------------------------------- | --------------------------------------------------------------------------------------- |
 | 「研修がスライドのみで身につかない」          | 実 AWS のハンズオン問題、 決定論的な採点経路                                            |
 | 「サンドボックスアカウントの爆発半径が広い」  | チーム別の隔離アカウント + `ExternalId` 付き AssumeRole + scope 制限 `ParticipantViewerRole` |
-| 「イベントごとに採点ロジックが必要」          | 5 種の採点 (`flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`) |
+| 「イベントごとに採点ロジックが必要」          | 6 種の採点 (`flag` / `multi-flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`) |
 | 「イベント当日の運用を穏やかにしたい」        | EventBridge 駆動の reconciliation (ADR-014)、 polling UI、 冪等な teardown              |
 | 「自社 SRE が問題を書きたい」                 | 1 問 3 ファイル、 `ADR-012` 問題プラグインアーキテクチャ、 プラットフォーム fork 不要   |
 | 「将来 AWS から離れる可能性がある」           | `ADR-023` provider-specific runtime ロードマップ。 今日は AWS のみ、 範囲は正直に伝える |
