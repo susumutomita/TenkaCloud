@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@cloudscape-design/components": "^3.0.1308",
-    "@cloudscape-design/global-styles": "^1.0.59",
+    "@cloudscape-design/global-styles": "^1.0.60",
     "@tenkacloud/format": "workspace:*",
     "@tenkacloud/web-kit": "workspace:*",
     "@tenkacloud/portal-plugin-sdk": "workspace:*",
