@@ -175,6 +175,18 @@ describe("ScoreTimelineChart", () => {
     expect(mockGet).not.toHaveBeenCalled();
   });
 
+  it("should not issue an interval refresh while the initial timeline fetch is in flight", async () => {
+    mockGet.mockReturnValue(new Promise(() => undefined));
+    renderChart();
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText("score_timeline.auto_refresh_label"));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(30_000)));
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
   it("should refresh manually and poll only after auto refresh is enabled", async () => {
     mockGet.mockResolvedValue(response([team({ isMyTeam: true, events: [] })]));
     renderChart();
@@ -202,6 +214,21 @@ describe("ScoreTimelineChart", () => {
     expect(mockGet).toHaveBeenCalledTimes(1);
     resolveFetch(response([team({ isMyTeam: true, events: [] })]));
     expect(await screen.findByText("score_timeline.empty_body")).toBeInTheDocument();
+  });
+
+  it("should ignore an aborted initial timeline fetch after unmount", async () => {
+    let resolveFetch: (value: LeaderboardScoreEventsResponse) => void = () => undefined;
+    mockGet.mockReturnValue(new Promise((resolve) => (resolveFetch = resolve)));
+    const { unmount } = renderChart();
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+
+    unmount();
+    await act(async () => {
+      resolveFetch(response([team({ isMyTeam: true, events: [event()] })]));
+      await Promise.resolve();
+    });
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
   });
 
   it("should render with the ja locale tick formatter", async () => {

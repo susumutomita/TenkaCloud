@@ -261,6 +261,18 @@ afterEach(() => {
 });
 
 describe("TeamViewProvider polling", () => {
+  it("should expose safe no-op defaults outside the provider", async () => {
+    const { result } = renderHook(() => useTeamView());
+    await act(async () => {
+      await result.current.refresh();
+      result.current.setAutoRefreshEnabled(true);
+      result.current.markNotificationsSeen("2026-05-20T00:00:00Z");
+    });
+
+    expect(result.current.autoRefreshEnabled).toBe(false);
+    expect(result.current.isRefreshing).toBe(false);
+  });
+
   it("should seed dev-mock fixtures without hitting the backend in mock mode", async () => {
     mockIsMock.mockReturnValue(true);
     const { result } = renderHook(() => useTeamView(), { wrapper });

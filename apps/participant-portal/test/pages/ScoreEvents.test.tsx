@@ -186,6 +186,18 @@ describe("ScoreEventsPage", () => {
     expect(mockGet).not.toHaveBeenCalled();
   });
 
+  it("should not issue an interval refresh while the initial score-events fetch is in flight", async () => {
+    mockGet.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText(/score_events\.auto_refresh_label/));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(30_000)));
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
   it("should refresh on demand and only poll after auto refresh is enabled", async () => {
     mockGet.mockResolvedValue({ entries: [] });
     renderPage();
