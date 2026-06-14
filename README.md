@@ -199,7 +199,7 @@ padded with low-value labs:
 | Category | Count | Notes |
 | --- | ---: | --- |
 | Battle | 4 | Real-time operations drills: uptime, microservice migration, security defense, and platform operations |
-| Challenge | 2 | Self-paced AWS tasks scored with catalog-declared flags / answers (1 ready, 1 draft) |
+| Challenge | 6 | Self-paced AWS tasks scored with catalog-declared flags / answers (all ready) |
 | Bundles | 1 | `starter-event`, a 60–90 minute first-event bundle (1 Challenge + 2 Battles) |
 
 `problems/CATALOG.md` in the catalog submodule is the always-current source of truth;

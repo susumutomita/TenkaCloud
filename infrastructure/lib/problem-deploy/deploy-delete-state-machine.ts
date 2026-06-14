@@ -70,6 +70,9 @@ export class DeployDeleteStateMachine extends Construct {
         OPERATION: { value: "delete" },
         DELETE_STACK_NAME: { value: JsonPath.stringAt("$.detail.stackName") },
         DELETE_REGION: { value: JsonPath.stringAt("$.detail.region") },
+        // #1797: stack が実在する account を script に渡し、credentials の account と
+        // 突き合わせる。mismatch のまま delete-stack すると no-op 成功で stack が残存する。
+        DELETE_EXPECTED_AWS_ACCOUNT_ID: { value: JsonPath.stringAt("$.detail.awsAccountId") },
         PROBLEM_EXTERNAL_ID: { value: JsonPath.stringAt("$.detail.jobId") },
         TENKACLOUD_CORRELATION_ID: { value: JsonPath.stringAt("$.detail.jobId") },
       },
@@ -86,6 +89,8 @@ export class DeployDeleteStateMachine extends Construct {
           OPERATION: { value: "delete" },
           DELETE_STACK_NAME: { value: JsonPath.stringAt("$.detail.stackName") },
           DELETE_REGION: { value: JsonPath.stringAt("$.detail.region") },
+          // #1797: AssumeRole 先が stack の account と一致するかを script 側で検証する。
+          DELETE_EXPECTED_AWS_ACCOUNT_ID: { value: JsonPath.stringAt("$.detail.awsAccountId") },
           PROBLEM_EXTERNAL_ID: { value: JsonPath.stringAt("$.detail.jobId") },
           TENKACLOUD_CORRELATION_ID: { value: JsonPath.stringAt("$.detail.jobId") },
           COMPETITOR_ROLE_ARN: {
@@ -102,14 +107,20 @@ export class DeployDeleteStateMachine extends Construct {
     const invalidAssumeRoleMetadata = new Pass(this, "InvalidAssumeRoleMetadata", {
       result: Result.fromObject({
         Cause:
-          "competitorRoleArn and externalIdParameterName must be provided together for cross-account delete",
+          "detail must include awsAccountId, and competitorRoleArn / externalIdParameterName must be provided together",
       }),
       resultPath: "$.error",
     });
 
+    // #1797: 両 CodeBuild state が $.detail.awsAccountId を JsonPath 参照するため、
+    // 欠損 event をそのまま流すと States.Runtime (= addCatch で捕捉不能) で execution が
+    // 死に、行が DELETING のまま stuck する。isPresent ガードで markFailed 経路 (捕捉可能な
+    // loud fail) に倒す。Lambda producer は常に詰めるので、ここに来るのは replay / 手動
+    // put-events 等の壊れた event のみ。
     const routeDeleteInput = new Choice(this, "RouteDeleteInput")
       .when(
         Condition.and(
+          Condition.isPresent("$.detail.awsAccountId"),
           Condition.isPresent("$.detail.competitorRoleArn"),
           Condition.isPresent("$.detail.externalIdParameterName"),
         ),
@@ -117,6 +128,7 @@ export class DeployDeleteStateMachine extends Construct {
       )
       .when(
         Condition.and(
+          Condition.isPresent("$.detail.awsAccountId"),
           Condition.not(Condition.isPresent("$.detail.competitorRoleArn")),
           Condition.not(Condition.isPresent("$.detail.externalIdParameterName")),
         ),

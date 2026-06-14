@@ -64,6 +64,7 @@ export interface DeployCodeBuildProjectProps {
  *   - `TEAM_SLUG`: 例 `demo-team` (create 時のみ)
  *   - `DELETE_STACK_NAME`: CFn StackName / StackId (delete 時のみ)
  *   - `DELETE_REGION`: delete 対象 region (delete 時のみ)
+ *   - `DELETE_EXPECTED_AWS_ACCOUNT_ID`: stack が実在する account (delete 時のみ、#1797)
  *   - `TENKACLOUD_CORRELATION_ID`: operator trace 用。現状は deploy jobId と同値。
  *
  * 同一 AWS account 内 deploy のみ (MVP-1 制約)。Phase 2 で cross-account になったら
@@ -147,6 +148,12 @@ export class DeployCodeBuildProject extends Construct {
         DELETE_REGION: {
           type: BuildEnvironmentVariableType.PLAINTEXT,
           value: "<unset-overridden-by-step-functions>",
+        },
+        // #1797: delete 時に credentials の account と stack の account の一致を検証する。
+        // 空文字 default = 検証 skip (在来 event との後方互換)。
+        DELETE_EXPECTED_AWS_ACCOUNT_ID: {
+          type: BuildEnvironmentVariableType.PLAINTEXT,
+          value: "",
         },
         // Phase 2.2 (Issue #459): cross-account AssumeRole metadata。State Machine が
         // event detail から override する。空文字 default = same-account fallback。

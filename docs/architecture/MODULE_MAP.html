@@ -147,12 +147,12 @@
 </tr>
 <tr>
 <td><code>bootstrap-template/bootstrap-template-stack.ts</code></td>
-<td><code>serverless-saas-ref-arch-bootstrap</code></td>
+<td><code>tenkacloud-bootstrap</code></td>
 <td>TenantMappingTable + deprovisioning Step Functions</td>
 </tr>
 <tr>
 <td><code>tenant-template/tenant-template-stack.ts</code></td>
-<td><code>serverless-saas-ref-arch-tenant-template-*</code></td>
+<td><code>tenkacloud-tenant-template-*</code></td>
 <td>Per-tenant API + Cognito + application-admin-console hosting</td>
 </tr>
 <tr>
@@ -192,11 +192,11 @@
 </thead>
 <tbody><tr>
 <td><code>handlers/deploy-handler/</code></td>
-<td><code>POST /deployments</code> etc. Emits <code>DeployRequested</code> event after DDB Put.</td>
+<td><code>POST /deployments</code> etc. Emits <code>DeployCreateRequested</code> event after DDB Put.</td>
 </tr>
 <tr>
 <td><code>handlers/event-handler/</code></td>
-<td>EventBridge consumer for <code>DeployRequested</code> / disruption fires / bulk-delete / schedule</td>
+<td>Events/Teams CRUD + bulk deploy/delete fan-out (<code>DeployCreateRequested</code> / <code>DeployDeleteRequested</code>)</td>
 </tr>
 <tr>
 <td><code>handlers/generic-scoring-handler/</code></td>

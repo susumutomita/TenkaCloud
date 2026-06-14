@@ -131,7 +131,7 @@ This runbook covers the four most common incident classes during a hosted event.
 If you decide to redeploy (single-team only, after the triage in [live monitoring](./live-monitoring.md)):
 
 1. Initiate teardown of the failed stack first (`scripts/delete-battles.sh` or the Application Admin Console teardown action). Confirm `DELETE_COMPLETE` before re-creating.
-2. Re-issue `DeployRequested` from the operator UI.
+2. Re-issue `DeployCreateRequested` from the operator UI.
 3. Watch the deploy trace for the new `jobId`. Do not declare success until `deploy.cfn.deploy.succeeded` appears.
 
 ### Escalation — CFn stack ROLLBACK

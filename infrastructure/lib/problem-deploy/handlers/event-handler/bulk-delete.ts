@@ -14,6 +14,13 @@ export interface BulkTeardownResult {
   readonly eventId: string;
   readonly enqueued: number;
   readonly skipped: number;
+  /**
+   * #1797: status=DELETING には倒せたが DeployDeleteRequested の publish に失敗した件数。
+   * EventBridge PutEvents は HTTP 200 でも `FailedEntryCount > 0` で個別 entry が落ちうるため、
+   * 失敗分は DELETING → FAILED に巻き戻して (= retry 可能にして) この数に計上する。
+   * 0 でない場合、 operator は再度 DELETE を叩けば FAILED 行が再 teardown される。
+   */
+  readonly failed: number;
 }
 
 export type BulkTeardownOutcome =
@@ -22,7 +29,7 @@ export type BulkTeardownOutcome =
 
 const PUT_EVENTS_BATCH = 10;
 
-type UpdateOutcome = { entry: PutEventsRequestEntry } | { skip: true };
+type UpdateOutcome = { entry: PutEventsRequestEntry; jobId: string } | { skip: true };
 
 /**
  * `DELETE /events/{eventId}` の実体。
@@ -35,9 +42,11 @@ type UpdateOutcome = { entry: PutEventsRequestEntry } | { skip: true };
  * 既に DELETING / DELETED な行 / 並行更新 race / 必須フィールド欠損は skipped に計上
  * (= 操作者の再実行に対して idempotent)。
  *
- * 失敗 semantics: publish chunk が失敗すると未 publish 分は status=DELETING のまま
- * orphan 化する。caller が再呼び出ししても DELETING 行は skip されるため、Phase 3 で
- * compensation pattern (FAILED 巻き戻し) を別途検討する。
+ * 失敗 semantics (#1797): EventBridge PutEvents は HTTP 200 でも `FailedEntryCount > 0` で
+ * 個別 entry が落ちうる / chunk 全体が reject しうる。 publish に失敗した行は
+ * DELETING → FAILED に巻き戻して `result.failed` に計上する (= 単一 delete の
+ * `compensateFailedTeardownPublish` と対称)。 FAILED 行は再 DELETE で retry されるため、
+ * DELETING のまま skip され永久に orphan 化する旧挙動を解消する。
  */
 export async function bulkTeardownEvent(
   shared: EventSharedResources,
@@ -56,7 +65,7 @@ export async function bulkTeardownEvent(
 
   const targets = await queryDeploymentsByEvent(shared, tenantId, eventId);
   if (targets.length === 0) {
-    return { kind: "ok", result: { eventId, enqueued: 0, skipped: 0 } };
+    return { kind: "ok", result: { eventId, enqueued: 0, skipped: 0, failed: 0 } };
   }
 
   const updatedAt = new Date(nowMs).toISOString();
@@ -67,18 +76,38 @@ export async function bulkTeardownEvent(
     targets.map((item) => prepareBulkTeardownEntry(shared, tenantId, updatedAt, item)),
   );
 
-  const entries: PutEventsRequestEntry[] = [];
+  const pending: Array<{ entry: PutEventsRequestEntry; jobId: string }> = [];
   let skipped = 0;
   for (const o of outcomes) {
     if ("skip" in o) skipped++;
-    else entries.push(o.entry);
+    else pending.push(o);
   }
 
   // EventBridge PutEvents の chunk を Promise.all で並列発火。
-  const putChunks: Promise<unknown>[] = [];
-  for (let i = 0; i < entries.length; i += PUT_EVENTS_BATCH) {
-    const chunk = entries.slice(i, i + PUT_EVENTS_BATCH);
-    putChunks.push(shared.events.send(new PutEventsCommand({ Entries: chunk })));
+  // #1797: PutEvents は HTTP 200 でも `FailedEntryCount > 0` で個別 entry が落ちうる
+  // (throttling 等)。 旧コードは送りっぱなしで FailedEntryCount を見ず、 落ちた teardown event を
+  // silent に握り潰して stack を orphan 化させていた (= 他の PutEvents 経路は全て検査済なのに
+  // ここだけ未検査だった)。 各 chunk の結果を検査し、 publish できなかった jobId を集める。
+  const publishChunk = async (
+    chunk: Array<{ entry: PutEventsRequestEntry; jobId: string }>,
+  ): Promise<string[]> => {
+    try {
+      const out = await shared.events.send(
+        new PutEventsCommand({ Entries: chunk.map((c) => c.entry) }),
+      );
+      if ((out.FailedEntryCount ?? 0) === 0) return [];
+      // PutEvents response.Entries は入力 Entries と同順。 ErrorCode 付きが失敗 entry。
+      return (out.Entries ?? [])
+        .map((e, i) => (e.ErrorCode ? chunk[i]?.jobId : undefined))
+        .filter((j): j is string => j !== undefined);
+    } catch {
+      // chunk 全体が reject → その chunk の jobId は全て publish 失敗扱い。
+      return chunk.map((c) => c.jobId);
+    }
+  };
+  const putChunks: Promise<string[]>[] = [];
+  for (let i = 0; i < pending.length; i += PUT_EVENTS_BATCH) {
+    putChunks.push(publishChunk(pending.slice(i, i + PUT_EVENTS_BATCH)));
   }
 
   // #557: Event status を TEARDOWN に倒す。bulk-deploy が DRAFT → DEPLOYING にする
@@ -107,9 +136,61 @@ export async function bulkTeardownEvent(
         throw err;
       }
     });
-  await Promise.all([...putChunks, updateStatus]);
+  const [failedPerChunk] = await Promise.all([Promise.all(putChunks), updateStatus]);
+  const failedJobIds = failedPerChunk.flat();
 
-  return { kind: "ok", result: { eventId, enqueued: entries.length, skipped } };
+  // #1797: publish に失敗した行は DELETING のまま放置すると、 次回 DELETE 呼び出しで
+  // 「既に DELETING」 として skip され永久に teardown されない (= silent orphan)。 単一 delete
+  // (delete.ts の compensateFailedTeardownPublish) と対称に DELETING → FAILED へ巻き戻し、
+  // operator の再 DELETE で retry できるようにする。
+  await Promise.all(
+    failedJobIds.map((jobId) => compensateBulkTeardownPublish(shared, tenantId, jobId, updatedAt)),
+  );
+
+  return {
+    kind: "ok",
+    result: {
+      eventId,
+      enqueued: pending.length - failedJobIds.length,
+      skipped,
+      failed: failedJobIds.length,
+    },
+  };
+}
+
+/**
+ * #1797: publish に失敗した teardown 行を DELETING → FAILED に巻き戻す (= retry 可能化)。
+ * ConditionExpression で DELETING の行だけを対象にし、 既に他経路で FAILED/DELETED になった行は
+ * 触らない (CCF は無視 = best-effort、 元の publish 失敗が主シグナル)。
+ */
+async function compensateBulkTeardownPublish(
+  shared: EventSharedResources,
+  tenantId: string,
+  jobId: string,
+  updatedAt: string,
+): Promise<void> {
+  try {
+    await shared.ddb.send(
+      new UpdateCommand({
+        TableName: shared.deploymentsTableName,
+        Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
+        UpdateExpression: "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason",
+        ConditionExpression: "tenantId = :tenantId AND #s = :deleting",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":failed": "FAILED",
+          ":deleting": "DELETING",
+          ":updatedAt": updatedAt,
+          ":reason": "Failed to publish DeployDeleteRequested event (bulk teardown)",
+          ":tenantId": tenantId,
+        },
+      }),
+    );
+  } catch {
+    // best-effort: CCF (行が既に DELETING でない) も他の DDB error も握る。 巻き戻し失敗が
+    // 元の publish 失敗 (= result.failed に計上済) を覆い隠さないようにする。 delete.ts の
+    // compensateFailedTeardownPublish と同じ best-effort セマンティクス。
+  }
 }
 
 async function prepareBulkTeardownEntry(
@@ -131,6 +212,7 @@ async function prepareBulkTeardownEntry(
   if (!transitioned) return { skip: true };
   const detail = await buildBulkTeardownDetail(shared, tenantId, item, target);
   return {
+    jobId: target.jobId,
     entry: {
       EventBusName: shared.eventBusName,
       Source: EVENT_SOURCE,
@@ -153,7 +235,10 @@ function getBulkTeardownTarget(item: Partial<DeploymentItem>):
     jobId: String(item.jobId ?? ""),
     region: String(item.region ?? ""),
     awsAccountId: String(item.awsAccountId ?? ""),
-    stackName: String(item.stackId ?? item.namePrefix ?? ""),
+    // #1810: FAILED deployment は stack ARN 記録前に終わると stackId="" (空文字) になる。
+    // `??` は空文字を fallback しないので `||` を使い namePrefix に倒す (空 stackName で
+    // skip され失敗 stack が orphan 化するのを防ぐ)。
+    stackName: String(item.stackId || item.namePrefix || ""),
   };
   return Object.values(target).every(Boolean) ? target : undefined;
 }

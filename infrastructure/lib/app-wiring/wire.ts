@@ -135,6 +135,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
         | { runtimeConfig: ParticipantPortalRuntimeConfig | "default-dev-mock" }
         | undefined,
       deployConcurrentBuildLimit: config.deployConcurrentBuildLimit,
+      // #1766: tier 別の同時デプロイ上限 (未設定ならクォータ無効)。
+      deployQuotaByTier: config.deployQuotaByTier,
       environmentName: config.environment,
     },
   );

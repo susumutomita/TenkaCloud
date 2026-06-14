@@ -22,6 +22,12 @@ import {
   resolveChallengePayloadBucket,
 } from "../shared/visibility.js";
 import { type AdapterDependencyConfig, buildAdapterDependencies } from "./adapter-dependencies.js";
+import {
+  type DeployQuotaConfig,
+  enforceDeployQuota,
+  parseDeployQuota,
+  type QuotaTier,
+} from "./deploy-quota.js";
 import { buildStackPrefix, slugify } from "./naming.js";
 import { generateChallengePayloadUrl } from "./presigned-url.js";
 import { generateTeamLoginKey } from "./team-key.js";
@@ -68,10 +74,14 @@ export interface DeployContext extends AdapterDependencyConfig {
    * `RuntimeNotSupportedError` BEFORE any DDB Put / EventBridge publish runs.
    */
   readonly resolveProblemRuntime?: (problemId: string) => ProblemRuntime | undefined;
+  /** #1766: tier 別同時デプロイ上限。未設定 = クォータ無効 (在来 stack / Lite)。 */
+  readonly deployQuota?: DeployQuotaConfig;
 }
 
 export type DeployInvocation = DeployRequest & {
   readonly problemId: string;
+  /** #1766: JWT claim から解決済みの quota tier。未指定は最も厳しい basic に倒す。 */
+  readonly quotaTier?: QuotaTier;
 };
 
 const DEFAULT_TTL_MS = 8 * 60 * 60 * 1000;
@@ -154,6 +164,15 @@ export async function startDeployment(
     request.awsAccountId,
   );
   if (!verified) throw new UnverifiedCompetitorAccountError(request.awsAccountId);
+
+  // #1766 (+PR-1803 review): クォータはより具体的な検証 (unknown problem / runtime 不一致 /
+  // unverified account) の後、cloud mutation (DDB Put / EventBridge publish) の直前に
+  // enforce する。先頭で弾くと、本来 404/422 を返すべきリクエストまで 429 で隠れる。
+  await enforceDeployQuota(
+    { ddb: ctx.ddb, tableName: ctx.tableName, quota: ctx.deployQuota },
+    ctx.tenantId,
+    request.quotaTier ?? "basic",
+  );
 
   const jobId = ulid();
   const teamLoginKey = generateTeamLoginKey();
@@ -329,6 +348,8 @@ export interface DeploySharedResources {
   readonly ssm: SSMClient;
   /** [ADR-026 / #1412] AppRun REST base URL の override (env)。 未設定なら本番 AppRun 共用型。 */
   readonly sakuraAppRunBaseUrl: string | undefined;
+  /** #1766: tier 別同時デプロイ上限 (env JSON)。 未設定 = クォータ無効 (在来 stack / Lite)。 */
+  readonly deployQuota: DeployQuotaConfig | undefined;
 }
 
 export function buildSharedResources(): DeploySharedResources {
@@ -347,6 +368,7 @@ export function buildSharedResources(): DeploySharedResources {
     s3: new S3Client({}),
     ssm: new SSMClient({}),
     sakuraAppRunBaseUrl: process.env.SAKURA_APPRUN_BASE_URL || undefined,
+    deployQuota: parseDeployQuota(process.env.DEPLOY_QUOTA_BY_TIER),
   };
 }
 

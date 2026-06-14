@@ -131,7 +131,7 @@
 <p><strong>If it goes wrong:</strong> A failed stack is the most expensive thing to discover on event day. If a stack fails here, debug the root cause and re-run the dry run from Step 0. Do not work around it with manual fixes that the production deploy will not have.</p>
 <h3>Step 2: deploy each selected problem (20 min)</h3>
 <ul>
-<li><input disabled="" type="checkbox"> For each problem you plan to run, file a <code>DeployRequested</code> event (Application Admin Console UI is the supported entry point).</li>
+<li><input disabled="" type="checkbox"> For each problem you plan to run, file a <code>DeployCreateRequested</code> event (Application Admin Console UI is the supported entry point).</li>
 <li><input disabled="" type="checkbox"> Observe the deploy chain trace using <a href="../operations/deploy-trace.md"><code>docs/operations/deploy-trace.md</code></a>. Confirm <code>deploy.cfn.deploy.succeeded</code> appears within the expected window.</li>
 <li><input disabled="" type="checkbox"> Verify the resulting stack name, region, and resource list in the rehearsal team&#39;s AWS account match what the template intended.</li>
 </ul>

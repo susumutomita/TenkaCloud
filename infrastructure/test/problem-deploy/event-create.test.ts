@@ -6,9 +6,34 @@ import {
   DuplicateProblemIdError,
 } from "../../lib/problem-deploy/handlers/event-handler/create";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
-import type { CreateEventRequest } from "../../lib/problem-deploy/handlers/event-handler/types";
+import {
+  type CreateEventRequest,
+  CreateEventRequestSchema,
+} from "../../lib/problem-deploy/handlers/event-handler/types";
 
 const NOW_MS = 1_700_000_000_000;
+
+const teamsOf = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({
+    internalSlug: `team-${i}`,
+    awsAccountId: String(100_000_000_000 + i),
+  }));
+
+describe("CreateEventRequestSchema teams cap (event 1 row + teams must fit one 100-item TransactWrite)", () => {
+  const base = { name: "E", problems: [{ problemId: "p", defaultRegion: "ap-northeast-1" }] };
+
+  it("should accept 99 teams (event 1 + 99 = 100 items = the atomic TransactWrite max)", () => {
+    expect(CreateEventRequestSchema.safeParse({ ...base, teams: teamsOf(99) }).success).toBe(true);
+  });
+
+  it("should reject 100 teams (event 1 + 100 = 101 > 100; was a schema/runtime off-by-one -> 500)", () => {
+    // 旧 schema は max(100) で 100-team request を通し、 create.ts が runtime で
+    // `TransactWrite items > 100` を投げて 500 になっていた。 schema を実上限 99 に揃えて 400 で弾く。
+    expect(CreateEventRequestSchema.safeParse({ ...base, teams: teamsOf(100) }).success).toBe(
+      false,
+    );
+  });
+});
 
 function buildShared(): {
   shared: EventSharedResources;

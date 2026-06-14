@@ -101,6 +101,14 @@ export interface AppConfig {
   /** Bulk Deploy の CodeBuild 並列度 (未設定なら AWS account-level quota に任せる)。 */
   readonly deployConcurrentBuildLimit: number | undefined;
 
+  /**
+   * #1766: tier 別の同時デプロイ上限 (`CDK_PARAM_DEPLOY_QUOTA_BY_TIER`、JSON
+   * `{"basic":N,"advanced":N,"platinum":N}`)。未設定ならクォータ無効 (= 在来挙動 / Lite mode)。
+   */
+  readonly deployQuotaByTier:
+    | { readonly basic: number; readonly advanced: number; readonly platinum: number }
+    | undefined;
+
   // Issue #1031: 旧 `adminConsoleOriginForCors` (= `CDK_PARAM_ADMIN_CONSOLE_ORIGIN`) は廃止。
   // admin-console-hosting が先に立ち、 cross-stack ref で control-plane / admin-console-insight
   // に流れる (= Phase 3 env-var dance が不要になる)。

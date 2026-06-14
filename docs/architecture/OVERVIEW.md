@@ -46,8 +46,8 @@ Once the platform is up, runtime traffic flows across four planes that talk thro
                  │                                            │
                  │              EventBridge bus               │
                  │ ◄────────────────────────────────────────► │
-                 │     (onboardingRequest, DeployRequested,   │
-                 │      DeployCompleted, ScoreUpdated, …)     │
+                 │  (onboardingRequest, DeployCreateReq.,     │
+                 │   DeployDeleteReq., BulkDeployCreateReq.)  │
                  │                                            │
 ┌────────────────┴─────────────────────┐    ┌────────────────┴─────────────────┐
 │  Problem Deploy Backend              │    │  Participant Portal              │
