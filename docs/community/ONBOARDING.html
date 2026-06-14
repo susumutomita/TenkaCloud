@@ -225,7 +225,7 @@
 <h4>Problem Author — Ship a small Challenge</h4>
 <ol>
   <li>Read <a href="../problems/AUTHORING.html">docs/problems/AUTHORING.html</a> (30 min onboarding).</li>
-  <li>Decide which of the 5 scoring kinds your problem uses (<code>flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code>).</li>
+  <li>Decide which of the 6 scoring kinds your problem uses (<code>flag</code> / <code>multi-flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code>).</li>
   <li>Scaffold: <code>bun run scripts/tenkacloud-problem.ts create &lt;id&gt; --kind &lt;kind&gt;</code> (or use the <code>/new-problem</code> Claude Code skill).</li>
   <li>Fill <code>metadata.json</code> and <code>template.yaml</code>. Validate locally: <code>bun run scripts/tenkacloud-problem.ts validate &lt;id&gt;</code>.</li>
   <li>Open a PR in the <a href="https://github.com/susumutomita/TenkaCloudChallenge">TenkaCloudChallenge</a> catalog repo.</li>
