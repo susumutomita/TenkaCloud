@@ -96,9 +96,10 @@ p { margin: 0; }
 
 /* ============== HERO ============== */
 .hero { padding: 72px 0 26px; position: relative; overflow: hidden; }
-/* 墨流し (suminagashi) interactive canvas — sits behind the hero copy, faint, and
-   feathered at the edges so it blends into the page. Pointer-driven (see ink-bg.js);
-   purely decorative. */
+/* 墨流し (suminagashi) canvas — anchored behind the hero headline (left column),
+   faint and feathered so it blends into the page. The mask centre (22% 44%) matches
+   the deterministic ink seed in ink-bg.js and fades out before the right column so the
+   ink never bleeds into the empty gap. Purely decorative. */
 .hero .ink-bg {
   position: absolute;
   inset: 0;
@@ -107,8 +108,8 @@ p { margin: 0; }
   z-index: 0;
   pointer-events: none;
   opacity: 0.85;
-  -webkit-mask-image: radial-gradient(125% 120% at 50% 38%, #000 55%, transparent 100%);
-  mask-image: radial-gradient(125% 120% at 50% 38%, #000 55%, transparent 100%);
+  -webkit-mask-image: radial-gradient(30% 44% at 22% 44%, #000 28%, transparent 100%);
+  mask-image: radial-gradient(30% 44% at 22% 44%, #000 28%, transparent 100%);
 }
 .hero-grid {
   position: relative;
