@@ -44,6 +44,7 @@ export function tenantStatusBadgeColor(tenantStatus: string | undefined): Status
     case "in progress":
       return "blue";
     case "failed":
+    case "suspended":
       return "red";
     case "deleted":
     case "deprovisioned":
@@ -80,6 +81,7 @@ export interface Tenant {
   tier: Tier;
   tenantStatus: TenantStatus;
   isActive?: boolean;
+  isSuspended?: boolean;
   /**
    * provision-tenant.sh が cdk deploy 後に CFn output を JSON で詰めて DynamoDB に
    * 書き戻す文字列。SBT が tenant detail に保管する。
@@ -89,6 +91,10 @@ export interface Tenant {
   tenantPhone?: string;
   tenantAddress?: string;
   createdAt?: string;
+}
+
+export function isTenantSuspended(tenant: Pick<Tenant, "isSuspended">): boolean {
+  return tenant.isSuspended === true;
 }
 
 /**

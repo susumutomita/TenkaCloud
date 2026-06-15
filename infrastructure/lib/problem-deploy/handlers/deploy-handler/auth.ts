@@ -135,6 +135,12 @@ export function extractUserRoleFromClaims(claims: JwtClaims | undefined): string
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+export function extractTenantSuspendedFromClaims(claims: JwtClaims | undefined): boolean {
+  if (!claims) return false;
+  const raw = claims["custom:isSuspended"];
+  return typeof raw === "string" && raw.trim().toLowerCase() === "true";
+}
+
 /**
  * `custom:userRole` claim を取り出す。 JWT 不在経路 (= test) では env fallback。
  */
@@ -143,6 +149,32 @@ export function resolveUserRole(c: Context): string | undefined {
   if (fromJwt) return fromJwt;
   const fromEnv = process.env.DEFAULT_USER_ROLE;
   return fromEnv && fromEnv.length > 0 ? fromEnv : undefined;
+}
+
+export class TenantSuspendedError extends Error {
+  constructor() {
+    super("この tenant は一時停止中のため、新規イベント作成・問題デプロイは実行できません");
+    this.name = "TenantSuspendedError";
+  }
+}
+
+function hasTenantSuspensionClaim(claims: JwtClaims | undefined): boolean {
+  return claims ? Object.hasOwn(claims, "custom:isSuspended") : false;
+}
+
+/**
+ * Issue #1768: control-plane が tenant suspension を Cognito claim に投影した後に
+ * App Plane mutating routes が参照する guard。DEFAULT_TENANT_SUSPENDED は unit test /
+ * local fallback 用で、JWT claim がある場合は claim を優先する。
+ */
+export function isTenantSuspended(c: Context): boolean {
+  const claims = extractClaims(c);
+  if (hasTenantSuspensionClaim(claims)) return extractTenantSuspendedFromClaims(claims);
+  return (process.env.DEFAULT_TENANT_SUSPENDED ?? "").trim().toLowerCase() === "true";
+}
+
+export function requireTenantNotSuspended(c: Context): void {
+  if (isTenantSuspended(c)) throw new TenantSuspendedError();
 }
 
 /**

@@ -41,10 +41,12 @@ app.get("/__throw_generic__", () => {
 beforeEach(() => {
   process.env.DEFAULT_TENANT_ID = "tenant-test";
   process.env.DEFAULT_USER_ROLE = "TenantAdmin";
+  delete process.env.DEFAULT_TENANT_SUSPENDED;
 });
 afterEach(() => {
   process.env.DEFAULT_TENANT_ID = "tenant-test";
   process.env.DEFAULT_USER_ROLE = "TenantAdmin";
+  delete process.env.DEFAULT_TENANT_SUSPENDED;
 });
 
 describe("event-handler app wiring", () => {
@@ -74,5 +76,27 @@ describe("event-handler app wiring", () => {
     const res = await app.request(`/events/${EVENT_ID}`);
     expect(res.status).toBe(StatusCodes.FORBIDDEN);
     expect((await res.json()).error).toBe("forbidden_role");
+  });
+
+  it("should 403 tenant_suspended before creating a new event", async () => {
+    process.env.DEFAULT_TENANT_SUSPENDED = "true";
+    const res = await app.request("/events", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Spring Cup",
+        teams: [{ internalSlug: "team-a", awsAccountId: "123456789012" }],
+        problems: [{ problemId: "p-1", defaultRegion: "ap-northeast-1" }],
+      }),
+    });
+    expect(res.status).toBe(StatusCodes.FORBIDDEN);
+    expect((await res.json()).error).toBe("tenant_suspended");
+  });
+
+  it("should 403 tenant_suspended before bulk-deploying an event", async () => {
+    process.env.DEFAULT_TENANT_SUSPENDED = "true";
+    const res = await app.request(`/events/${EVENT_ID}/deploy`, { method: "POST" });
+    expect(res.status).toBe(StatusCodes.FORBIDDEN);
+    expect((await res.json()).error).toBe("tenant_suspended");
   });
 });

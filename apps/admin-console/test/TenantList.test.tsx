@@ -33,6 +33,7 @@ vi.mock("../src/api/tenants", () => ({
   deleteTenant: h.mockDeleteTenant,
   parseTenantConfig: (cfg: string | undefined) => (cfg ? JSON.parse(cfg) : {}),
   buildCodeBuildBuildUrl: (a: { buildId?: string }) => (a.buildId ? `https://cb/${a.buildId}` : ""),
+  isTenantSuspended: (tenant: { isSuspended?: boolean }) => tenant.isSuspended === true,
   tierBadgeColor: () => "blue",
   tenantStatusBadgeColor: () => "green",
 }));
@@ -157,6 +158,14 @@ describe("TenantListPage list + cells", () => {
     expect(screen.getByText("tenant_list.open_console")).toBeInTheDocument(); // silo console
     expect(screen.getByText("tenant_list.logs_codebuild")).toBeInTheDocument(); // codebuild logs
     expect(screen.getByText("tenant_list.deprovision_action")).toBeInTheDocument();
+  });
+
+  it("should keep suspended tenants visible and mark the status", async () => {
+    h.mockListTenants.mockResolvedValue([{ ...activeSilo, isSuspended: true }]);
+    render(<TenantListPage config={cfg()} />);
+    expect(await screen.findByText("Silo Co")).toBeInTheDocument();
+    expect(screen.getByText("tenant_list.suspended_badge")).toBeInTheDocument();
+    expect(screen.getByText("tenant_list.open_console")).toBeInTheDocument();
   });
 
   it("should navigate to detail when the tenant name link is followed", async () => {
