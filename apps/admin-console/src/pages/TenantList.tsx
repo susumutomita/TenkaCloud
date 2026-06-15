@@ -20,6 +20,7 @@ import {
 import {
   buildCodeBuildBuildUrl,
   deleteTenant,
+  isTenantSuspended,
   listTenants,
   parseTenantConfig,
   type Tenant,
@@ -30,6 +31,8 @@ import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
 import { interpolate, useT } from "../i18n";
 import { computeTenantProgress, isInProgress } from "../lib/tenant-progress";
+
+type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
 /**
  * ADR-011 #590 Phase 1.A: 60s polling 周期。SSE / WebSocket は禁止 (Lambda 運用と整合せず)。
@@ -58,6 +61,45 @@ function inactiveCell(label: string) {
     <Box color="text-status-inactive" variant="small">
       {label}
     </Box>
+  );
+}
+
+function tenantStatusCell(row: Tenant, nowMs: number, t: TFn) {
+  const badge = <Badge color={tenantStatusBadgeColor(row.tenantStatus)}>{row.tenantStatus}</Badge>;
+  if (isTenantSuspended(row)) {
+    return (
+      <SpaceBetween direction="vertical" size="xxs">
+        {badge}
+        <Badge color="red">{t("tenant_list.suspended_badge")}</Badge>
+      </SpaceBetween>
+    );
+  }
+  if (!isInProgress(row.tenantStatus)) return badge;
+  const progress = computeTenantProgress({ createdAt: row.createdAt, nowMs });
+  // createdAt 未取得 (= SBT が field を返さない、 fresh tenant の race) のとき
+  // `progress.label === "—"` が出る。 細い em dash が badge 下に "_" のように
+  // 見えて誤解を生むので、 そのときは badge のみ表示する。
+  if (progress.label === "—") return badge;
+  const progressColor =
+    progress.severity === "danger"
+      ? "text-status-error"
+      : progress.severity === "warning"
+        ? "text-status-warning"
+        : "text-status-info";
+  const suffix =
+    progress.severity === "danger"
+      ? ` · ${t("tenant_list.progress_danger_suffix")}`
+      : progress.severity === "warning"
+        ? ` · ${t("tenant_list.progress_warning_suffix")}`
+        : "";
+  return (
+    <SpaceBetween direction="vertical" size="xxs">
+      {badge}
+      <Box variant="small" color={progressColor}>
+        {progress.label}
+        {suffix}
+      </Box>
+    </SpaceBetween>
   );
 }
 
@@ -238,38 +280,7 @@ export function TenantListPage({ config }: { config: AppConfig }) {
           {
             id: "status",
             header: t("tenant_list.col_status"),
-            cell: (row) => {
-              const badge = (
-                <Badge color={tenantStatusBadgeColor(row.tenantStatus)}>{row.tenantStatus}</Badge>
-              );
-              if (!isInProgress(row.tenantStatus)) return badge;
-              const progress = computeTenantProgress({ createdAt: row.createdAt, nowMs });
-              // createdAt 未取得 (= SBT が field を返さない、 fresh tenant の race) のとき
-              // \`progress.label === \"—\"\` が出る。 細い em dash が badge 下に \"_\" のように
-              // 見えて誤解を生むので、 そのときは badge のみ表示する。
-              if (progress.label === "—") return badge;
-              const progressColor =
-                progress.severity === "danger"
-                  ? "text-status-error"
-                  : progress.severity === "warning"
-                    ? "text-status-warning"
-                    : "text-status-info";
-              const suffix =
-                progress.severity === "danger"
-                  ? ` · ${t("tenant_list.progress_danger_suffix")}`
-                  : progress.severity === "warning"
-                    ? ` · ${t("tenant_list.progress_warning_suffix")}`
-                    : "";
-              return (
-                <SpaceBetween direction="vertical" size="xxs">
-                  {badge}
-                  <Box variant="small" color={progressColor}>
-                    {progress.label}
-                    {suffix}
-                  </Box>
-                </SpaceBetween>
-              );
-            },
+            cell: (row) => tenantStatusCell(row, nowMs, t),
           },
           // Issue #898: 旧 2 column (activeDeploys / failedDeploys) を 1 column に統合。
           // 旧実装は header が長すぎて画面に収まらず、 \"問題 deploy\" が何を指すか

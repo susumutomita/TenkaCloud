@@ -8,6 +8,7 @@ import {
   MissingTenantClaimError,
   requireRole,
   TENANT_ROLES,
+  TenantSuspendedError,
 } from "../deploy-handler/auth.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
 import { registerAuditLogRoutes } from "./routes/audit-log.js";
@@ -90,6 +91,16 @@ app.onError((err, c) => {
       {
         error: "forbidden_role",
         message: "あなたの tenant role ではこの操作を実行できません",
+      },
+      StatusCodes.FORBIDDEN,
+    );
+  }
+  if (err instanceof TenantSuspendedError) {
+    console.warn("[events] tenant suspended", { path: c.req.path, method: c.req.method });
+    return c.json(
+      {
+        error: "tenant_suspended",
+        message: err.message,
       },
       StatusCodes.FORBIDDEN,
     );

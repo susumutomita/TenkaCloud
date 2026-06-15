@@ -10,10 +10,12 @@ import {
   ForbiddenRoleError,
   MissingTenantClaimError,
   requireRole,
+  requireTenantNotSuspended,
   resolveTenantId,
   TENANT_ADMIN_ROLE,
   TENANT_OPERATOR_ROLE,
   TENANT_ROLES,
+  TenantSuspendedError,
 } from "./auth.js";
 import { requestTeardown } from "./delete.js";
 import {
@@ -118,6 +120,16 @@ app.onError((err, c) => {
       StatusCodes.FORBIDDEN,
     );
   }
+  if (err instanceof TenantSuspendedError) {
+    console.warn("[deploy] tenant suspended", { path: c.req.path, method: c.req.method });
+    return c.json(
+      {
+        error: "tenant_suspended",
+        message: err.message,
+      },
+      StatusCodes.FORBIDDEN,
+    );
+  }
   const message = err instanceof Error ? err.message : "unknown error";
   console.error("[deploy] uncaught handler error", { path: c.req.path, message });
   return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
@@ -145,6 +157,7 @@ app.post("/problems/:problemId/deploy", async (c) => {
   if (!problemId || !PROBLEM_ID_RE.test(problemId)) {
     return c.json({ error: "invalid_problem_id" }, StatusCodes.BAD_REQUEST);
   }
+  requireTenantNotSuspended(c);
 
   let body: unknown;
   try {
@@ -337,6 +350,7 @@ app.get("/deployments/:jobId/stack-progress", async (c) => {
  */
 app.post("/deployments/retry", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
+  requireTenantNotSuspended(c);
   let body: unknown;
   try {
     body = await c.req.json();

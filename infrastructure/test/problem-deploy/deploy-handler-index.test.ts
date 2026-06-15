@@ -78,11 +78,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.DEFAULT_TENANT_ID = "tenant-test";
   process.env.DEFAULT_USER_ROLE = "TenantAdmin";
+  delete process.env.DEFAULT_TENANT_SUSPENDED;
   mocks.validateRetryRequest.mockReturnValue({ failedJobIds: [JOB_ID] });
 });
 afterEach(() => {
   process.env.DEFAULT_TENANT_ID = "tenant-test";
   process.env.DEFAULT_USER_ROLE = "TenantAdmin";
+  delete process.env.DEFAULT_TENANT_SUSPENDED;
   vi.clearAllMocks();
 });
 
@@ -137,6 +139,13 @@ describe("POST /problems/:problemId/deploy", () => {
     mocks.startDeployment.mockResolvedValueOnce({ jobId: JOB_ID });
     const res = await json("POST", `/problems/${PROBLEM_ID}/deploy`, validDeploy);
     expect(res.status).toBe(StatusCodes.ACCEPTED);
+  });
+  it("should 403 tenant_suspended before starting a deploy", async () => {
+    process.env.DEFAULT_TENANT_SUSPENDED = "true";
+    const res = await json("POST", `/problems/${PROBLEM_ID}/deploy`, validDeploy);
+    expect(res.status).toBe(StatusCodes.FORBIDDEN);
+    expect((await res.json()).error).toBe("tenant_suspended");
+    expect(mocks.startDeployment).not.toHaveBeenCalled();
   });
   it("should 404 on UnknownProblemError", async () => {
     mocks.startDeployment.mockRejectedValueOnce(new UnknownProblemError(PROBLEM_ID));
@@ -321,6 +330,13 @@ describe("POST /deployments/retry", () => {
     expect((await json("POST", "/deployments/retry", { failedJobIds: [JOB_ID] })).status).toBe(
       StatusCodes.OK,
     );
+  });
+  it("should 403 tenant_suspended before retrying deployments", async () => {
+    process.env.DEFAULT_TENANT_SUSPENDED = "true";
+    const res = await json("POST", "/deployments/retry", { failedJobIds: [JOB_ID] });
+    expect(res.status).toBe(StatusCodes.FORBIDDEN);
+    expect((await res.json()).error).toBe("tenant_suspended");
+    expect(mocks.retryDeployments).not.toHaveBeenCalled();
   });
   it("should 500 on a retryDeployments error", async () => {
     mocks.retryDeployments.mockRejectedValueOnce(new Error("ddb"));

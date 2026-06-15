@@ -52,7 +52,7 @@ export function registerEventRoutes(app: Hono, shared: EventSharedResources): vo
           return handleRouteError(c, "[events] createEvent failed", {}, err);
         }
       },
-      { roles: [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE] },
+      { roles: [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE], rejectSuspendedTenant: true },
     ),
   );
 
