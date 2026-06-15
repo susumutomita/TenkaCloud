@@ -4,6 +4,7 @@ import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { StatusCodes } from "http-status-codes";
 import { secureApiHeaders } from "../../../problem-deploy/handlers/shared/secure-headers.js";
+import { listUsageFacts } from "../../../problem-deploy/handlers/usage-metering-handler/repository.js";
 import { exportAuditEntriesCsv, listAuditEntries } from "./audit.js";
 import { isSystemAdmin, resolveCognitoSub } from "./auth.js";
 import { defaultBudgetsClient, getCostSummary } from "./cost.js";
@@ -21,6 +22,7 @@ import { summarizeTenants } from "./summary.js";
  *   GET /admin/insight/pipeline-executions                    — tenkacloud-saas-pipeline 実行履歴
  *   GET /admin/insight/state-machine-executions               — SBT deprovisioning SFN 実行履歴
  *   GET /admin/insight/audit                                  — admin 操作 audit log
+ *   GET /admin/insight/usage                                  — tenant usage facts (aggregate only)
  *
  * 廃止済 (= 2026-05-18 plane 分離方針、 [[feedback-no-cross-plane-data-leak]]):
  *   - `/admin/insight/tenants/:tenantId/events*`                  — App Plane data 覗き込み
@@ -45,6 +47,7 @@ import { summarizeTenants } from "./summary.js";
 const shared = buildSharedResources();
 
 const TENANT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_TENANT_IDS = 100;
 const LIST_LIMIT_MAX = 200;
 
@@ -100,6 +103,40 @@ function parseLimit(value: string | undefined): { ok: true; limit: number | unde
   return { ok: true, limit };
 }
 
+function isValidDay(value: string): boolean {
+  if (!DAY_RE.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function parseTenantIds(
+  raw: string,
+):
+  | { ok: true; tenantIds: string[] }
+  | { ok: false; status: typeof StatusCodes.BAD_REQUEST; body: Record<string, unknown> } {
+  if (raw.trim() === "") return { ok: true, tenantIds: [] };
+  const tenantIds = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const invalid = tenantIds.find((id) => !TENANT_ID_RE.test(id));
+  if (invalid !== undefined) {
+    return {
+      ok: false,
+      status: StatusCodes.BAD_REQUEST,
+      body: { error: "invalid_tenant_id", value: invalid },
+    };
+  }
+  if (tenantIds.length > MAX_TENANT_IDS) {
+    return {
+      ok: false,
+      status: StatusCodes.BAD_REQUEST,
+      body: { error: "too_many_tenant_ids", max: MAX_TENANT_IDS },
+    };
+  }
+  return { ok: true, tenantIds };
+}
+
 app.get("/admin/insight/tenants/summary", async (c) => {
   // ADR-011 D2: 2 段目の SystemAdmin claim check。1 段目は API GW JWT Authorizer。
   if (!isSystemAdmin(c)) {
@@ -143,6 +180,46 @@ app.get("/admin/insight/tenants/summary", async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[admin-insight] summarizeTenants failed", { message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+app.get("/admin/insight/usage", async (c) => {
+  const forbidden = auditAndAuthorize(c, "/admin/insight/usage");
+  if (forbidden) return forbidden;
+
+  const parsedTenants = parseTenantIds(c.req.query("tenantIds") ?? "");
+  if (!parsedTenants.ok) {
+    return c.json(parsedTenants.body as never, parsedTenants.status);
+  }
+  if (parsedTenants.tenantIds.length === 0) {
+    return c.json({ items: [] }, StatusCodes.OK);
+  }
+  if (!shared.usageTableName || shared.usageTableName.length === 0) {
+    return c.json(
+      {
+        error: "usage_facts_unconfigured",
+        message: "USAGE_FACTS_TABLE_NAME env が未設定です (= stack 配線漏れ)",
+      },
+      StatusCodes.SERVICE_UNAVAILABLE,
+    );
+  }
+
+  const from = c.req.query("from") ?? "1970-01-01";
+  const to = c.req.query("to") ?? "9999-12-31";
+  if (!isValidDay(from) || !isValidDay(to) || from > to) {
+    return c.json({ error: "invalid_day_range" }, StatusCodes.BAD_REQUEST);
+  }
+
+  try {
+    const response = await listUsageFacts(
+      { ddb: shared.ddb, tableName: shared.usageTableName },
+      { tenantIds: parsedTenants.tenantIds, from, to },
+    );
+    return c.json(response, StatusCodes.OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[admin-insight] listUsageFacts failed", { message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });
