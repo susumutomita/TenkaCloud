@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   sharedObj: {
     ddb: { send: () => Promise.resolve({}) },
     auditTableName: "Audit",
+    usageTableName: "UsageFacts",
     environmentName: "dev",
   },
   isSystemAdmin: vi.fn(),
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   listAuditEntries: vi.fn(),
   exportAuditEntriesCsv: vi.fn(),
   getCostSummary: vi.fn(),
+  listUsageFacts: vi.fn(),
 }));
 const P = "../../lib/admin-insight/handlers/admin-insight-handler";
 vi.mock("../../lib/admin-insight/handlers/admin-insight-handler/shared", () => ({
@@ -53,6 +55,9 @@ vi.mock("../../lib/admin-insight/handlers/admin-insight-handler/cost", () => ({
   defaultBudgetsClient: () => ({}),
   getCostSummary: mocks.getCostSummary,
 }));
+vi.mock("../../lib/problem-deploy/handlers/usage-metering-handler/repository", () => ({
+  listUsageFacts: mocks.listUsageFacts,
+}));
 
 const { app } = await import(`${P}/index`);
 
@@ -64,6 +69,7 @@ app.get("/__throw__", () => {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.sharedObj.auditTableName = "Audit";
+  mocks.sharedObj.usageTableName = "UsageFacts";
   mocks.isSystemAdmin.mockReturnValue(true);
   mocks.resolveCognitoSub.mockReturnValue("sub-1");
 });
@@ -177,6 +183,64 @@ describe("GET /admin/insight/state-machine-executions", () => {
   it("should 500 when the service throws", async () => {
     mocks.listStateMachineExecutions.mockRejectedValueOnce(new Error("sfn"));
     expect((await app.request("/admin/insight/state-machine-executions")).status).toBe(
+      StatusCodes.INTERNAL_SERVER_ERROR,
+    );
+  });
+});
+
+describe("GET /admin/insight/usage", () => {
+  it("should 403 a non-SystemAdmin", async () => {
+    mocks.isSystemAdmin.mockReturnValue(false);
+    expect((await app.request("/admin/insight/usage?tenantIds=t1")).status).toBe(
+      StatusCodes.FORBIDDEN,
+    );
+  });
+
+  it("should 503 when the usage facts table is unconfigured", async () => {
+    mocks.sharedObj.usageTableName = "";
+    expect((await app.request("/admin/insight/usage?tenantIds=t1")).status).toBe(
+      StatusCodes.SERVICE_UNAVAILABLE,
+    );
+  });
+
+  it("should 400 on an invalid tenant id", async () => {
+    expect((await app.request("/admin/insight/usage?tenantIds=ok,bad@id")).status).toBe(
+      StatusCodes.BAD_REQUEST,
+    );
+  });
+
+  it("should 400 on an invalid date range", async () => {
+    expect((await app.request("/admin/insight/usage?tenantIds=t1&from=2026-99-99")).status).toBe(
+      StatusCodes.BAD_REQUEST,
+    );
+    expect(
+      (await app.request("/admin/insight/usage?tenantIds=t1&from=2026-06-15&to=2026-06-14")).status,
+    ).toBe(StatusCodes.BAD_REQUEST);
+  });
+
+  it("should 200 with [] when tenantIds is absent", async () => {
+    const res = await app.request("/admin/insight/usage");
+    expect(res.status).toBe(StatusCodes.OK);
+    expect(await res.json()).toEqual({ items: [] });
+    expect(mocks.listUsageFacts).not.toHaveBeenCalled();
+  });
+
+  it("should return usage facts for requested tenants", async () => {
+    mocks.listUsageFacts.mockResolvedValueOnce({ items: [{ tenantId: "t1", days: [] }] });
+    const res = await app.request(
+      "/admin/insight/usage?tenantIds=t1,t2&from=2026-06-01&to=2026-06-15",
+    );
+    expect(res.status).toBe(StatusCodes.OK);
+    expect(await res.json()).toEqual({ items: [{ tenantId: "t1", days: [] }] });
+    expect(mocks.listUsageFacts).toHaveBeenCalledWith(
+      expect.objectContaining({ tableName: "UsageFacts" }),
+      { tenantIds: ["t1", "t2"], from: "2026-06-01", to: "2026-06-15" },
+    );
+  });
+
+  it("should 500 when usage fact lookup throws", async () => {
+    mocks.listUsageFacts.mockRejectedValueOnce(new Error("ddb"));
+    expect((await app.request("/admin/insight/usage?tenantIds=t1")).status).toBe(
       StatusCodes.INTERNAL_SERVER_ERROR,
     );
   });
