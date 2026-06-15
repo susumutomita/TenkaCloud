@@ -29,6 +29,7 @@ vi.mock("../src/api/client", () => ({ useApiClient: h.mockUseApiClient }));
 vi.mock("../src/api/tenants", () => ({
   listTenants: h.mockListTenants,
   parseTenantConfig: h.mockParseTenantConfig,
+  isTenantSuspended: (tenant: { isSuspended?: boolean }) => tenant.isSuspended === true,
   tierBadgeColor: () => "blue",
   tenantStatusBadgeColor: () => "green",
 }));
@@ -107,6 +108,12 @@ describe("TenantDetailPage", () => {
     expect(await screen.findByText("GOLD")).toBeInTheDocument(); // tier not in TIER_LABEL → raw
     expect(screen.getByText("tenant_detail.active_no")).toBeInTheDocument();
     expect(screen.getByText("tenant_detail.app_console_url_pending")).toBeInTheDocument();
+  });
+
+  it("should show when the tenant is suspended", async () => {
+    h.mockListTenants.mockResolvedValue([{ ...fullTenant, isSuspended: true }]);
+    render(<TenantDetailPage config={{} as AppConfig} />);
+    expect(await screen.findByText("tenant_detail.suspended_yes")).toBeInTheDocument();
   });
 
   it("should show a not-found error when the tenant is absent from the list", async () => {

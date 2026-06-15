@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   LeaderboardScoreEventsResponse,
@@ -73,7 +73,10 @@ beforeEach(() => {
   mockLocale.value = "en";
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.clearAllMocks();
+});
 
 describe("pure helpers", () => {
   it("should accumulate points and skip unparseable timestamps", () => {
@@ -158,6 +161,74 @@ describe("ScoreTimelineChart", () => {
     expect(await screen.findByText(/score_timeline\.header_description/)).toBeInTheDocument();
     // 自チームは you_suffix、 rival は素の teamName。
     expect(screen.getByText(/score_timeline\.you_suffix/)).toBeInTheDocument();
+  });
+
+  it("should not poll the heavy score-events endpoint every 30s by default", async () => {
+    mockGet.mockResolvedValue(response([team({ isMyTeam: true, events: [] })]));
+    renderChart();
+    expect(await screen.findByText("score_timeline.empty_body")).toBeInTheDocument();
+    mockGet.mockClear();
+
+    vi.useFakeTimers();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(30_000)));
+
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  it("should not issue an interval refresh while the initial timeline fetch is in flight", async () => {
+    mockGet.mockReturnValue(new Promise(() => undefined));
+    renderChart();
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText("score_timeline.auto_refresh_label"));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(30_000)));
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
+  it("should refresh manually and poll only after auto refresh is enabled", async () => {
+    mockGet.mockResolvedValue(response([team({ isMyTeam: true, events: [] })]));
+    renderChart();
+    expect(await screen.findByText("score_timeline.empty_body")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "score_timeline.refresh_latest" }));
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText("score_timeline.auto_refresh_label"));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(30_000)));
+
+    expect(mockGet).toHaveBeenCalledTimes(3);
+  });
+
+  it("should share an in-flight refresh instead of issuing duplicate timeline reads", async () => {
+    let resolveFetch: (value: LeaderboardScoreEventsResponse) => void = () => undefined;
+    mockGet.mockReturnValue(new Promise((resolve) => (resolveFetch = resolve)));
+    renderChart();
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "score_timeline.refresh_latest" }));
+    fireEvent.click(screen.getByRole("button", { name: "score_timeline.refresh_latest" }));
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    resolveFetch(response([team({ isMyTeam: true, events: [] })]));
+    expect(await screen.findByText("score_timeline.empty_body")).toBeInTheDocument();
+  });
+
+  it("should ignore an aborted initial timeline fetch after unmount", async () => {
+    let resolveFetch: (value: LeaderboardScoreEventsResponse) => void = () => undefined;
+    mockGet.mockReturnValue(new Promise((resolve) => (resolveFetch = resolve)));
+    const { unmount } = renderChart();
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+
+    unmount();
+    await act(async () => {
+      resolveFetch(response([team({ isMyTeam: true, events: [event()] })]));
+      await Promise.resolve();
+    });
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
   });
 
   it("should render with the ja locale tick formatter", async () => {

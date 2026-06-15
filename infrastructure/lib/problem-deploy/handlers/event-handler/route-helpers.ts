@@ -1,7 +1,7 @@
 import type { Context, Handler } from "hono";
 import { StatusCodes } from "http-status-codes";
 import type { z } from "zod";
-import { requireRole } from "../deploy-handler/auth.js";
+import { requireRole, requireTenantNotSuspended } from "../deploy-handler/auth.js";
 import { ULID_RE as EVENT_ID_RE } from "../shared/constants.js";
 import { isEventOwnedByTenant } from "./disruption-fire.js";
 import type { EventSharedResources } from "./shared.js";
@@ -38,6 +38,7 @@ interface JsonRouteContext<TBody> extends RouteContext {
 
 interface RouteOptions {
   readonly roles?: readonly string[];
+  readonly rejectSuspendedTenant?: boolean;
 }
 
 type ParseResult<TBody> =
@@ -49,7 +50,7 @@ export function withEventId(
   options: RouteOptions = {},
 ): Handler {
   return (c) => {
-    applyRouteRole(c, options);
+    applyRouteGuards(c, options);
     const parsed = parseEventId(c);
     if (!parsed.ok) return parsed.response;
     return handler({ c, eventId: parsed.data });
@@ -62,7 +63,7 @@ export function withJsonBody<TSchema extends z.ZodType>(
   options: RouteOptions = {},
 ): Handler {
   return async (c) => {
-    applyRouteRole(c, options);
+    applyRouteGuards(c, options);
     const parsed = await parseJsonBody(c, schema);
     if (!parsed.ok) return parsed.response;
     return handler({ c, body: parsed.data });
@@ -120,8 +121,9 @@ export async function requireEventOwnership(args: {
   return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
 }
 
-function applyRouteRole(c: Context, options: RouteOptions): void {
+function applyRouteGuards(c: Context, options: RouteOptions): void {
   if (options.roles) requireRole(c, options.roles);
+  if (options.rejectSuspendedTenant) requireTenantNotSuspended(c);
 }
 
 function parseEventId(c: Context): ParseResult<string> {

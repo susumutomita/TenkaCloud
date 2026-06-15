@@ -16,6 +16,7 @@ const props = (
   over: Partial<EventCreateDeployPromptModalProps> = {},
 ): EventCreateDeployPromptModalProps => ({
   visible: true,
+  canMutateTenant: true,
   deployStarting: false,
   onDeployNow: vi.fn(),
   onDeployLater: vi.fn(),
@@ -50,5 +51,11 @@ describe("EventCreateDeployPromptModal", () => {
       document.querySelector('button[class*="dismiss-control"]') as HTMLButtonElement,
     );
     expect(p.onDeployLater).not.toHaveBeenCalled();
+  });
+
+  it("should disable deploy-now for a read-only viewer", () => {
+    const p = props({ canMutateTenant: false });
+    render(<EventCreateDeployPromptModal {...p} />);
+    expect(screen.getByTestId("deploy-prompt-now")).toBeDisabled();
   });
 });

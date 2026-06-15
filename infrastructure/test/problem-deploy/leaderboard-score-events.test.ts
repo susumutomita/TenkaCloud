@@ -230,6 +230,54 @@ describe("getLeaderboardScoreEvents", () => {
     expect(teamIds).not.toContain("TEAM_DEAD");
   });
 
+  it("should skip EVENT# queries for deployments with no score activity", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [meta()] });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        meta(),
+        meta({
+          teamId: "TEAM_IDLE",
+          PK: "DEPLOYMENT#IDLE",
+          jobId: "IDLE",
+          score: 0,
+          lastScoredAt: undefined,
+          hintsRevealed: undefined,
+          flagSubmitted: false,
+        }),
+      ],
+    });
+    ddbSend.mockResolvedValueOnce({ Items: [event()] });
+
+    const out = await getLeaderboardScoreEvents(shared, "KEY1");
+
+    if (out.kind !== "ok") throw new Error("expected ok");
+    expect(out.response.teams.map((t) => t.teamId)).not.toContain("TEAM_IDLE");
+    expect(ddbSend).toHaveBeenCalledTimes(3); // GSI2 + GSI1 + scored deployment EVENT# only
+  });
+
+  it("should keep zero-score deployments that have solved multi-flag activity", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [meta()] });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        meta({
+          score: 0,
+          lastScoredAt: undefined,
+          flagSubmitted: false,
+          solvedFlagIds: new Set(["part-a"]),
+        }),
+      ],
+    });
+    ddbSend.mockResolvedValueOnce({ Items: [event({ points: 0 })] });
+
+    const out = await getLeaderboardScoreEvents(shared, "KEY1");
+
+    if (out.kind !== "ok") throw new Error("expected ok");
+    expect(out.response.teams[0]?.teamId).toBe("TEAM_ME");
+    expect(ddbSend).toHaveBeenCalledTimes(3);
+  });
+
   it("should not include operator-internal info (teamLoginKey / tenantId / awsAccountId / expiresAt) in output", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [meta()] });

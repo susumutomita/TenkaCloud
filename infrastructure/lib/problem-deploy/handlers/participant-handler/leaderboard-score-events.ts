@@ -65,7 +65,8 @@ const MAX_PAGES_PER_DEPLOYMENT = 3;
  *   5. team 単位で events を occurredAt 昇順 sort + cap、 累計 score 降順で team 並べ替え
  *
  * 計算量: N teams × M deployments per team × 1〜3 page Query。 MVP 規模 (= teams ~10、
- * deployments per team ~5) で 1 request 約 50〜150 query。 polling 周期 30s 想定で許容範囲。
+ * deployments per team ~5) で 1 request 約 50〜150 query。30s polling は frontend 側で
+ * default off にし、ここでも score activity が無い deployment の EVENT# query を省く。
  */
 export async function getLeaderboardScoreEvents(
   shared: ParticipantSharedResources,
@@ -150,6 +151,7 @@ function addItemToTeamMeta(teamMeta: Map<string, TeamMetaEntry>, item: Partial<D
   if (typeof item.PK !== "string") return;
   const status = (item.status ?? "PENDING") as DeploymentStatus;
   if (DELETED_LIKE_STATUSES.has(status)) return;
+  if (!hasScoreTimelineActivity(item)) return;
   const display = typeof item.displayTeamName === "string" ? item.displayTeamName : undefined;
   const slug = typeof item.teamName === "string" ? item.teamName : "";
   const teamName = display ?? slug;
@@ -161,6 +163,21 @@ function addItemToTeamMeta(teamMeta: Map<string, TeamMetaEntry>, item: Partial<D
     m.teamName = display;
   }
   m.deploymentPKs.push(item.PK);
+}
+
+/**
+ * Deployment の META 行だけで EVENT# rows の存在可能性を判定し、明らかな idle row は
+ * 読まない。旧 row は score が未設定のことがあるため activity ありとして扱い、履歴欠落を避ける。
+ */
+function hasScoreTimelineActivity(item: Partial<DeploymentItem>): boolean {
+  if (typeof item.score !== "number" || !Number.isFinite(item.score)) return true;
+  if (item.score !== 0) return true;
+  if (typeof item.lastScoredAt === "string" && item.lastScoredAt.length > 0) return true;
+  if (item.flagSubmitted === true) return true;
+  if (item.solvedFlagIds instanceof Set && item.solvedFlagIds.size > 0) return true;
+  if (Array.isArray(item.hintsRevealed) && item.hintsRevealed.length > 0) return true;
+  if (typeof item.wrongAnswerCount === "number" && item.wrongAnswerCount > 0) return true;
+  return false;
 }
 
 /** 1 team の全 deployment PK について EVENT# rows を回収。 page 上限まで読む。 */

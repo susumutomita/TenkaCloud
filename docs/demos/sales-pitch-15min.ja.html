@@ -84,12 +84,12 @@
 <p><strong>料金ヒント</strong>。 クロスアカウント <code>AssumeRole</code> は全 tier に含まれます。 競技者側の 1 回きりブートストラップは <code>infrastructure/templates/competitor-bootstrap.yaml</code>、 <code>ExternalId</code> 付きで role を作る 1 ファイルの CFn です。</p>
 <h2>ステップ 6 — 解いてスコア反映 (約 3 分)</h2>
 <p><strong>操作</strong>。 quickstart ステップ 6 と同じ。 スコアが加算されたら admin console のスコアボードに戻ります。</p>
-<p><strong>トークポイント</strong>。「採点はビルトインの 5 種 — <code>flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code> のいずれか。 各問題が 1 つを選びます。 プラットフォームには共通の generic 採点 Lambda が 1 本あり、 問題種別に応じて dispatch します — プラットフォーム側に問題固有コードはゼロ。 これで運用面の表面積を小さく保てます」</p>
+<p><strong>トークポイント</strong>。「採点はビルトインの 6 種 — <code>flag</code> / <code>multi-flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code> のいずれか。 各問題が 1 つを選びます。 プラットフォームには共通の generic 採点 Lambda が 1 本あり、 問題種別に応じて dispatch します — プラットフォーム側に問題固有コードはゼロ。 これで運用面の表面積を小さく保てます」</p>
 <p><strong>料金ヒント</strong>。 リアルタイムスコアボードリフレッシュ / マルチチームダッシュボード / disruption phase 可視化は Hosted Event tier 以上に含まれます。 Starter tier も同じ採点経路ですが、 ダッシュボードはシンプル版です。</p>
 <h2>クロージング (約 2 分)</h2>
 <p>3 点を伝えます。</p>
 <ol>
-<li><strong>現実の話</strong>。 今日出荷しているもの : クロスアカウント分離 deploy、 5 種の採点、 EventBridge 駆動 state 再同期 (<code>ADR-014</code>)、 polling UI (SSE は使わない — <code>AGENTS.md</code> 参照)。 取り組み中 : 投票方式のコミュニティカタログ (<code>ADR-024</code>)、 AWS 以外向け provider-specific runtime (<code>ADR-023</code>)。「production-grade なマルチクラウド」や「フル SOC2」は今日は名乗らない。</li>
+<li><strong>現実の話</strong>。 今日出荷しているもの : クロスアカウント分離 deploy、 6 種の採点、 EventBridge 駆動 state 再同期 (<code>ADR-014</code>)、 polling UI (SSE は使わない — <code>AGENTS.md</code> 参照)。 取り組み中 : 投票方式のコミュニティカタログ (<code>ADR-024</code>)、 AWS 以外向け provider-specific runtime (<code>ADR-023</code>)。「production-grade なマルチクラウド」や「フル SOC2」は今日は名乗らない。</li>
 <li><strong>運用モデル</strong>。 Lite mode = <code>make deploy</code>、 1 主催者 / 1 イベント、 10 分でセットアップ。 SaaS mode = <code>make deploy-saas</code>、 マルチテナント、 pooled + silo の組み合わせ、 control plane 起動に 15 〜 20 分。</li>
 <li><strong>CTA</strong>。 starter 問題 (<code>hello-world</code>、 <code>s3-public-bucket</code>、 <code>lambda-cold-start</code>) を選んで御社の SRE チームでドライランを 1 回。 最も長いコミットメントは <code>make deploy</code> 1 回分。</li>
 </ol>
@@ -111,7 +111,7 @@
 </tr>
 <tr>
 <td>「イベントごとに採点ロジックが必要」</td>
-<td>5 種の採点 (<code>flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code>)</td>
+<td>6 種の採点 (<code>flag</code> / <code>multi-flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code>)</td>
 </tr>
 <tr>
 <td>「イベント当日の運用を穏やかにしたい」</td>

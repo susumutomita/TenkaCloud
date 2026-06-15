@@ -40,12 +40,14 @@ export function formatNotificationSubmitError(err: unknown): string {
  * Operator → competitor notification modal (ADR-006 D6).
  */
 export function SendNotificationModal({
+  canMutateTenant,
   config,
   visible,
   eventId,
   onDismiss,
   onSuccess,
 }: {
+  canMutateTenant: boolean;
   config: AppConfig;
   visible: boolean;
   eventId: string;
@@ -85,10 +87,10 @@ export function SendNotificationModal({
   };
 
   const handleSubmit = async () => {
-    // submit button は disabled (= !apiClient / 無効 draft / inFlight) なので、 ここに来る時点で
-    // apiClient あり & draft 有効。 = この guard の return は UI 経路では不到達 (防御)。
+    // submit button は disabled (= !apiClient / read-only / 無効 draft / inFlight) なので、 ここに
+    // 来る時点で apiClient あり & draft 有効。 = この guard の return は UI 経路では不到達 (防御)。
     /* v8 ignore next */
-    if (!apiClient || !isNotificationDraftValid({ title, body })) return;
+    if (!apiClient || !canMutateTenant || !isNotificationDraftValid({ title, body })) return;
     setInFlight(true);
     setError(null);
     try {
@@ -104,7 +106,8 @@ export function SendNotificationModal({
 
   const titleInvalid = title.length > TITLE_MAX;
   const bodyInvalid = body.length > BODY_MAX;
-  const submitDisabled = !apiClient || inFlight || !isNotificationDraftValid({ title, body });
+  const submitDisabled =
+    !apiClient || !canMutateTenant || inFlight || !isNotificationDraftValid({ title, body });
 
   return (
     <Modal

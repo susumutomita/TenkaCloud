@@ -9,10 +9,12 @@ import type { EventDetail } from "../../api/events-client";
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
 export function EventNotificationsPanel({
+  canMutateTenant,
   detail,
   onOpen,
   t,
 }: {
+  readonly canMutateTenant: boolean;
   readonly detail: EventDetail;
   readonly onOpen: () => void;
   readonly t: Translate;
@@ -30,7 +32,8 @@ export function EventNotificationsPanel({
               disabled={
                 detail.status === "DRAFT" ||
                 detail.status === "TEARDOWN" ||
-                detail.status === "ARCHIVED"
+                detail.status === "ARCHIVED" ||
+                !canMutateTenant
               }
               onClick={onOpen}
             >

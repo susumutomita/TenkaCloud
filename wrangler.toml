@@ -1,0 +1,19 @@
+# Cloudflare Pages build configuration.
+#
+# The published site is the static `landing/` directory. The `build:pages`
+# script (see package.json) builds the participant-portal demo and stages it
+# under `landing/portal-demo/` so the landing page can embed a live mock.
+#
+# `name` is the Cloudflare Pages project name. Cloudflare's Pages config
+# validation requires it at the top level and it cannot be supplied via an
+# environment variable, so a fork or other deployment replaces this single
+# line with its own project name.
+#
+# `pages_build_output_dir` is the repo-relative publish directory — identical
+# for every environment — and its presence unlocks the dashboard's
+# "build output directory" field.
+#
+# `compatibility_date` is intentionally omitted: it is only needed for Pages
+# Functions, which this static site does not use.
+name = "tenkacloud-www"
+pages_build_output_dir = "landing"

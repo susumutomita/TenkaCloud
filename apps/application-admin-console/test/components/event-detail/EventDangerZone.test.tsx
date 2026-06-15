@@ -29,6 +29,7 @@ vi.mock("../../../src/components/SendNotificationModal", () => ({
 type Props = Parameters<typeof EventDangerZone>[0];
 const props = (over: Partial<Props> = {}): Props =>
   ({
+    canMutateTenant: true,
     config: {} as AppConfig,
     confirmEnd: false,
     confirmForceArchive: false,
@@ -139,6 +140,26 @@ describe("EventDangerZone", () => {
     render(<EventDangerZone {...props({ confirmTeardown: true, detail: null })} />);
     // detail?.teams.length ?? 0 / detail?.problems.length ?? 0 の null 経路。
     expect(screen.getByText("event_detail.modal_teardown_blast_radius_body")).toBeInTheDocument();
+  });
+
+  it("should disable modal confirmations for a read-only viewer", () => {
+    render(
+      <EventDangerZone
+        {...props({
+          canMutateTenant: false,
+          confirmEnd: true,
+          confirmForceArchive: true,
+          confirmTeardown: true,
+        })}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "event_detail.modal_end_event_confirm" }),
+    ).toBeDisabled();
+    expect(screen.getByTestId("force-archive-confirm")).toBeDisabled();
+    const input = screen.getByTestId("modal-teardown-confirm-input").querySelector("input");
+    fireEvent.change(input as HTMLInputElement, { target: { value: "DELETE" } });
+    expect(screen.getByTestId("modal-teardown-confirm")).toBeDisabled();
   });
 
   it("should wire the notification modal and dismiss the just-sent success alert", () => {

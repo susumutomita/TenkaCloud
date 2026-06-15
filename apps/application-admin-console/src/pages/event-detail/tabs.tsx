@@ -60,10 +60,18 @@ export function readTabFromHash(hash: string): EventTabId {
   return isEventTabId(candidate) ? candidate : "overview";
 }
 
-export function ScheduleTab({ apiClient, detail, operations, t, wizard }: EventTabContentProps) {
+export function ScheduleTab({
+  apiClient,
+  canMutateTenant,
+  detail,
+  operations,
+  t,
+  wizard,
+}: EventTabContentProps) {
   return (
     <EventSchedulePanel
       apiClient={apiClient}
+      canMutateTenant={canMutateTenant}
       detail={detail}
       endsAtInFlight={operations.endsAtInFlight}
       freezeMinutesInFlight={operations.freezeMinutesInFlight}
@@ -103,9 +111,10 @@ export function ScoreboardTab({ detail }: EventTabContentProps) {
   );
 }
 
-export function NotificationsTab({ detail, operations, t }: EventTabContentProps) {
+export function NotificationsTab({ canMutateTenant, detail, operations, t }: EventTabContentProps) {
   return (
     <EventNotificationsPanel
+      canMutateTenant={canMutateTenant}
       detail={detail}
       onOpen={() => operations.setNotifyModalOpen(true)}
       t={t}
@@ -113,8 +122,14 @@ export function NotificationsTab({ detail, operations, t }: EventTabContentProps
   );
 }
 
-export function DisruptionsTab({ apiClient, detail, t }: EventTabContentProps) {
+export function DisruptionsTab({ apiClient, canMutateTenant, detail, t }: EventTabContentProps) {
   return (
-    <DisruptionsPanel apiClient={apiClient} eventId={detail.eventId} teams={detail.teams} t={t} />
+    <DisruptionsPanel
+      apiClient={apiClient}
+      canMutateTenant={canMutateTenant}
+      eventId={detail.eventId}
+      teams={detail.teams}
+      t={t}
+    />
   );
 }

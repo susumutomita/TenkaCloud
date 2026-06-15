@@ -1,7 +1,9 @@
 import { toErrorMessage, usePolling } from "@tenkacloud/web-kit";
 import {
   createContext,
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
   useCallback,
   useContext,
   useEffect,
@@ -28,8 +30,7 @@ import {
   DEV_MOCK_TEAM_VIEW,
 } from "./dev-mock-fixtures";
 
-// Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒は 12 req/min/team で過多、 競技中に
-// N 競技者 = N team × 12 = N×12 req/min で participant-portal Lambda + DDB を圧迫していた)。
+// opt-in status refresh の間隔。旧 5 秒 polling は 12 req/min/team で過多だったため使わない。
 const POLL_INTERVAL_MS = 30_000;
 /**
  * Notifications だけは 60 秒間隔で polling する (ADR-006 D3 + codex review)。
@@ -59,6 +60,11 @@ interface TeamViewState {
   readonly unreadNotificationCount: number;
   /** Home の flag 提出後に呼ばれて即時再フェッチする経路。 */
   readonly refresh: () => Promise<void>;
+  /** 手動更新中 / 初回更新中なら true。重複 refresh は同じ in-flight promise を共有する。 */
+  readonly isRefreshing: boolean;
+  /** 30 秒 status polling。コスト抑制のため default false。 */
+  readonly autoRefreshEnabled: boolean;
+  readonly setAutoRefreshEnabled: Dispatch<SetStateAction<boolean>>;
   /**
    * `/notifications` page を開いたときに呼ぶ。`occurredAt` を localStorage と Context
    * 両方に書き込み、TopNav 未読 badge を **次の polling tick を待たず即時 0 化** する
@@ -78,6 +84,11 @@ const Ctx = createContext<TeamViewState>({
   notificationsNoEvent: false,
   unreadNotificationCount: 0,
   refresh: async () => {
+    /* default no-op */
+  },
+  isRefreshing: false,
+  autoRefreshEnabled: false,
+  setAutoRefreshEnabled: () => {
     /* default no-op */
   },
   markNotificationsSeen: () => {
@@ -210,16 +221,17 @@ export function toLeaderboardRefreshDecision(
 }
 
 /**
- * Authenticated 領域 (`ShellLayout`) の中で 1 度だけ動く polling を提供する Context。
+ * Authenticated 領域 (`ShellLayout`) の共有 team view state を提供する Context。
  *
- * Polling は **2 系統** で動かす:
- *   - 5 秒 tick: `/portal/me` + `/portal/leaderboard` (= score / rank の即時感重視)
- *   - 60 秒 tick: `/portal/me/notifications` (= ADR-006 D3、Events table 1 RCU 保護)
+ * Polling は cost guardrail 優先で制御する:
+ *   - mount 時に `/portal/me` + `/portal/leaderboard` を 1 回だけ読む
+ *   - 30 秒 status polling は opt-in (`autoRefreshEnabled`)。default false。
+ *   - notifications は 60 秒 tick のまま低頻度で分離 (= unread badge 用)
  *
  * `mode === "dev-mock"` のときは backend を叩かない。session が無いときも polling
  * 起動しない (= /login や /setup の guarded 外で何もしない)。
  *
- * 全 problem が FAILED / DELETED に到達したら 5s tick の polling を停止する
+ * 全 problem が FAILED / DELETED に到達したら opt-in status refresh を停止する
  * (`stopPollingRef`)。Notifications 側は event 終了後も配信され得るため止めない。
  */
 export function TeamViewProvider({ config, children }: { config: AppConfig; children: ReactNode }) {
@@ -238,7 +250,10 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [notificationsNoEvent, setNotificationsNoEvent] = useState(false);
   const [lastSeenAt, setLastSeenAt] = useState<string | null>(() => loadLastSeenAt(eventIdForKey));
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(false);
   const stopPollingRef = useRef(false);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
 
   const applyPortalMeDecision = useCallback(
     (decision: PortalMeRefreshDecision): boolean => {
@@ -277,16 +292,27 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
     setLeaderboardError(null);
   }, []);
 
-  /** 5 秒 tick: `/portal/me` + `/portal/leaderboard`。Notifications は別系統。 */
+  /** `/portal/me` + `/portal/leaderboard`。Notifications は別系統。 */
   const refresh = useCallback(async () => {
     if (isMock || !sessionToken) return;
-    const [meResult, leaderboardResult] = await Promise.allSettled([
-      getPortalMe(config.apiBaseUrl, sessionToken),
-      getLeaderboard(config.apiBaseUrl, sessionToken),
-    ]);
+    if (refreshInFlightRef.current) return refreshInFlightRef.current;
+    const run = (async () => {
+      setIsRefreshing(true);
+      try {
+        const [meResult, leaderboardResult] = await Promise.allSettled([
+          getPortalMe(config.apiBaseUrl, sessionToken),
+          getLeaderboard(config.apiBaseUrl, sessionToken),
+        ]);
 
-    if (!applyPortalMeDecision(toPortalMeRefreshDecision(meResult))) return;
-    applyLeaderboardDecision(toLeaderboardRefreshDecision(leaderboardResult));
+        if (!applyPortalMeDecision(toPortalMeRefreshDecision(meResult))) return;
+        applyLeaderboardDecision(toLeaderboardRefreshDecision(leaderboardResult));
+      } finally {
+        refreshInFlightRef.current = null;
+        setIsRefreshing(false);
+      }
+    })();
+    refreshInFlightRef.current = run;
+    return run;
   }, [isMock, sessionToken, config.apiBaseUrl, applyPortalMeDecision, applyLeaderboardDecision]);
 
   /** 60 秒 tick: `/portal/me/notifications` 専用。Events table の RCU を守る。 */
@@ -329,22 +355,26 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
     setNotifications(DEV_MOCK_NOTIFICATIONS);
   }, [isMock, sessionToken, view]);
 
-  // me + leaderboard polling は usePolling に寄せず手書きのまま残す: 全 problem が terminal に
-  // 達したら次 tick を skip する `stopPollingRef` gate (= timer 制御ではなく業務的な停止条件) を
-  // 持ち、 enabled gate だけでは表現できないため (= usePolling の責務範囲外)。
+  // status は mount 時に 1 回だけ取得する。30s 継続 polling は DynamoDB 負荷を増やすため
+  // opt-in に分離する。
   useEffect(() => {
     if (isMock || !sessionToken) return;
     stopPollingRef.current = false;
-    // 全 problem が terminal に達したら polling を止める。 旧 `cancelled` flag は await の
-    // 前で評価され不到達だった (= clearInterval が teardown を担う) ので撤去。
+    void refresh();
+  }, [isMock, sessionToken, refresh]);
+
+  // me + leaderboard auto refresh は手書きのまま残す: 全 problem が terminal に
+  // 達したら次 tick を skip する `stopPollingRef` gate (= timer 制御ではなく業務的な停止条件) を
+  // 持ち、 enabled gate だけでは表現できないため (= usePolling の責務範囲外)。
+  useEffect(() => {
+    if (!autoRefreshEnabled || isMock || !sessionToken) return;
     const tick = async () => {
       if (stopPollingRef.current) return;
       await refresh();
     };
-    void tick();
     const interval = setInterval(tick, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [isMock, sessionToken, refresh]);
+  }, [autoRefreshEnabled, isMock, sessionToken, refresh]);
 
   // notifications は単純な「即時 + interval + cleanup」 なので usePolling (web-kit) に集約 (#1418 DRY)。
   // enabled gate により refreshNotifications 冒頭の同条件 guard は不到達のまま (= v8 ignore 維持)。
@@ -378,6 +408,9 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
         notificationsNoEvent,
         unreadNotificationCount,
         refresh,
+        isRefreshing,
+        autoRefreshEnabled,
+        setAutoRefreshEnabled,
         markNotificationsSeen,
       }}
     >

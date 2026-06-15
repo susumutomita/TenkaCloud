@@ -1,5 +1,4 @@
 import Alert from "@cloudscape-design/components/alert";
-import Box from "@cloudscape-design/components/box";
 import Container from "@cloudscape-design/components/container";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Header from "@cloudscape-design/components/header";
@@ -51,8 +50,6 @@ type FlagScoringInfo = NonNullable<ParticipantProblemView["scoring"]>;
 /** uptime kind で `lastScoredAt` がこの閾値より古ければ「停滞」表示。 */
 const STALE_THRESHOLD_MS = 2 * 60 * 1000;
 
-// Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒は 12 req/min/user で過多)。
-const POLL_INTERVAL_MS = 30_000;
 const LIVE_DEPLOY_LOG_POLL_INTERVAL_MS = 5_000;
 const COUNTDOWN_REFRESH_MS = 30_000;
 const AUTO_DELETE_SOON_THRESHOLD_MS = 15 * 60 * 1000;
@@ -191,10 +188,6 @@ export function getCompleteMultiFlagScoring(
   const scoring = problem.scoring;
   if (problem.status !== "COMPLETE" || scoring?.kind !== "multi-flag") return undefined;
   return scoring;
-}
-
-export function shouldShowAutoRefreshNote(status: DeploymentStatus): boolean {
-  return !TERMINAL_STATUSES.has(status);
 }
 
 function ProblemPanelAlerts({
@@ -342,11 +335,6 @@ export function ProblemPanel({
             flags={multiFlagScoring.flags ?? []}
             onScored={onScored}
           />
-        )}
-        {shouldShowAutoRefreshNote(problem.status) && (
-          <Box variant="small" color="text-status-info">
-            {t("problem_panel.auto_refresh_note", { seconds: POLL_INTERVAL_MS / 1000 })}
-          </Box>
         )}
       </SpaceBetween>
     </Container>

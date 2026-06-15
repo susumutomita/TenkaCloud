@@ -18,6 +18,7 @@ import { IdentityProvidersPage } from "./pages/IdentityProviders";
 import { LoginPage } from "./pages/Login";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
 import { ProblemsPage } from "./pages/Problems";
+import { TenantUsersPage } from "./pages/TenantUsers";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const auth = useAuth();
@@ -76,6 +77,7 @@ export function App({ config }: { config: AppConfig }) {
         />
         {/* Issue #1292: Tenant Admin 向け audit log view (= 自テナント scope only) */}
         <Route path="/audit-log" element={guarded(<AuditLogPage config={config} />, config)} />
+        <Route path="/users" element={guarded(<TenantUsersPage config={config} />, config)} />
         {/* Issue #1294: Tenant SAML SSO IdP CRUD (silo tier only) */}
         <Route
           path="/identity-providers"

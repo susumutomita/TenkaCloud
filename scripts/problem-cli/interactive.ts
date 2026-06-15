@@ -4,13 +4,14 @@ import { type CreateResult, runCreate } from "./create";
 import { findProblemDir } from "./problem-loader";
 
 /**
- * Issue #954: 5 kind の対話用ラベル + 1 行の使い分け説明。 issue 本文の onboarding flow と
+ * Issue #954: 6 kind の対話用ラベル + 1 行の使い分け説明。 issue 本文の onboarding flow と
  * 揃える (= 「Flag Challenge / Uptime Battle / Multi-service Battle / Attack Detection /
  * Migration Battle」)。 「Migration Battle」 は phased-polling kind に対応する (= 段階的に
  * 移行する system を polling して各 phase の状態を採点する典型 use case)。
  */
 const KIND_INTERACTIVE_LABELS: Record<Kind, string> = {
   flag: "Flag Challenge       — SSM Parameter / CFn output を flag として提出",
+  "multi-flag": "Multi-flag Challenge — 1 問に N 個の独立 flag、 個別提出で部分点採点",
   "uptime-flat": "Uptime Flat Battle   — 1 endpoint × N cycles の SLA 測定",
   "uptime-multi": "Multi-service Battle — N endpoints × N cycles、 全 OK で加点",
   "phased-polling":
@@ -61,10 +62,11 @@ async function promptKind({ ask, print }: InteractivePrompts): Promise<Kind> {
   print("");
   print("決定木 (= 迷ったら):");
   print("  競技者が 1 つの値 (flag) を提出して終わる        → 1 (flag)");
-  print("  endpoint が 1 つ、 常時 200 で加点               → 2 (uptime-flat)");
-  print("  endpoint が複数、 全部同時 200 で加点             → 3 (uptime-multi)");
-  print("  時間経過で rule が変わる (= 移行 deadline 等)     → 4 (phased-polling)");
-  print("  攻撃検知数で勝敗が決まる                          → 5 (attack-detection)");
+  print("  1 問に独立した複数 flag、 個別提出で部分点         → 2 (multi-flag)");
+  print("  endpoint が 1 つ、 常時 200 で加点               → 3 (uptime-flat)");
+  print("  endpoint が複数、 全部同時 200 で加点             → 4 (uptime-multi)");
+  print("  時間経過で rule が変わる (= 移行 deadline 等)     → 5 (phased-polling)");
+  print("  攻撃検知数で勝敗が決まる                          → 6 (attack-detection)");
   print("");
   print("(詳細: docs/problems/CONTRIBUTING.md 'Pick the scoring kind')");
   print("");
@@ -74,7 +76,7 @@ async function promptKind({ ask, print }: InteractivePrompts): Promise<Kind> {
   }
   let kind: Kind | undefined;
   while (!kind) {
-    const raw = (await ask("> 番号 (1-5) または kind 名: ")).trim();
+    const raw = (await ask("> 番号 (1-6) または kind 名: ")).trim();
     if (raw.length === 0) continue;
     const idx = Number.parseInt(raw, 10);
     if (Number.isFinite(idx) && idx >= 1 && idx <= orderedKinds.length) {
@@ -86,7 +88,7 @@ async function promptKind({ ask, print }: InteractivePrompts): Promise<Kind> {
       break;
     }
     print(
-      `  ✗ "${raw}" は無効です。 1-5 の番号か kind 名 (${KINDS.join(" / ")}) を入力してください。`,
+      `  ✗ "${raw}" は無効です。 1-6 の番号か kind 名 (${KINDS.join(" / ")}) を入力してください。`,
     );
   }
   print(`  → kind: ${kind}`);
@@ -200,5 +202,12 @@ function printCreatedFiles(
 }
 
 function getOrderedKinds(): readonly Kind[] {
-  return ["flag", "uptime-flat", "uptime-multi", "phased-polling", "attack-detection"];
+  return [
+    "flag",
+    "multi-flag",
+    "uptime-flat",
+    "uptime-multi",
+    "phased-polling",
+    "attack-detection",
+  ];
 }

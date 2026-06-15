@@ -4,12 +4,14 @@
  * Shares the visual language of the pitch deck (landing/pitch): a single Jos Stam
  * "stable fluids" simulation whose velocity field advects three subtractive-ink
  * pigment channels (藍 indigo / 縹 blue / 緑青 green — the LP palette), so inks flow,
- * mix, and fade. Pointer movement over the hero injects ink; it is faint enough to
- * sit behind the headline without hurting readability.
+ * mix, and fade. The marble is anchored behind the hero headline via a fixed,
+ * deterministic seed at the headline's grid position (re-topped every 7s) — never
+ * seeded at random positions — and is faint enough to sit behind the copy without
+ * hurting readability.
  *
  * Cheap by construction: a coarse 96×96 grid blitted (bilinear-upscaled) onto the
  * hero canvas, paused whenever the hero scrolls out of view or the tab is hidden,
- * and asleep between gestures once the surface clears. Honors prefers-reduced-motion
+ * and asleep between top-ups once the surface clears. Honors prefers-reduced-motion
  * (renders one static marble) and is purely decorative (aria-hidden).
  */
 (() => {
@@ -235,17 +237,23 @@
     }
   }
 
+  // Anchor the marble behind the hero headline (matches the CSS mask centre at 22%/42%),
+  // so the ink consistently sits behind the copy instead of seeding random points across
+  // the whole hero — which surfaced as a stray smudge in empty space. No Math.random: the
+  // position is deterministic and never wanders.
+  const HX = N * 0.22;
+  const HY = N * 0.42;
   function seed(strength) {
-    for (let i = 0; i < 5; i++) {
-      inject(
-        8 + Math.random() * (N - 16),
-        8 + Math.random() * (N - 16),
-        (Math.random() - 0.5) * 1.6,
-        (Math.random() - 0.5) * 1.6,
-        strength,
-        5,
-      );
-    }
+    // Symmetric, low-velocity injections (net drift ≈ 0) so the marble swirls in place
+    // around the anchor instead of advecting out of the headline mask window.
+    const pts = [
+      [HX - 6, HY - 4, 0.35, 0.25],
+      [HX + 6, HY - 4, -0.35, 0.25],
+      [HX - 6, HY + 4, 0.35, -0.25],
+      [HX + 6, HY + 4, -0.35, -0.25],
+      [HX, HY, 0, 0],
+    ];
+    for (const [x, y, dx, dy] of pts) inject(x, y, dx, dy, strength, 6);
   }
 
   resize();
@@ -274,44 +282,10 @@
 
   setInterval(() => {
     if (document.visibilityState !== "visible" || !visible) return;
-    inject(
-      8 + Math.random() * (N - 16),
-      8 + Math.random() * (N - 16),
-      (Math.random() - 0.5) * 1.2,
-      (Math.random() - 0.5) * 1.2,
-      1.5,
-      4,
-    );
+    seed(1.1); // deterministic top-up at the same headline anchor (no random position)
     wake();
   }, 7000);
 
-  let lx = null;
-  let ly = null;
-  window.addEventListener(
-    "pointermove",
-    (e) => {
-      const rect = canvas.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;
-      const gx = ((e.clientX - rect.left) / rect.width) * N;
-      const gy = ((e.clientY - rect.top) / rect.height) * N;
-      if (gx < 0 || gx > N || gy < 0 || gy > N) {
-        lx = null;
-        return;
-      }
-      let dgx = 0;
-      let dgy = 0;
-      if (lx !== null) {
-        dgx = ((e.clientX - lx) / rect.width) * N;
-        dgy = ((e.clientY - ly) / rect.height) * N;
-        if (dgx * dgx + dgy * dgy < 0.04) return;
-      }
-      lx = e.clientX;
-      ly = e.clientY;
-      inject(gx, gy, dgx, dgy, 0.9, 3);
-      wake();
-    },
-    { passive: true },
-  );
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && mass >= 12) wake();
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeIdToken } from "../src/auth/claims";
+import { decodeIdToken, resolveTenantConsoleAccess } from "../src/auth/claims";
 
 /**
  * Cognito id_token payload デコード util。 署名検証は API GW authorizer 側なので
@@ -39,6 +39,14 @@ describe("decodeIdToken", () => {
     expect(claims?.["custom:tenantName"]).toBe("天下クラウド株式会社");
   });
 
+  it("should decode Cognito groups when the claim is an array", () => {
+    const token = makeJwt({
+      sub: "user-1",
+      "cognito:groups": ["viewer"],
+    });
+    expect(decodeIdToken(token)?.["cognito:groups"]).toEqual(["viewer"]);
+  });
+
   it("should return null when the token is not a 3-part JWT", () => {
     expect(decodeIdToken("only.two")).toBeNull();
     expect(decodeIdToken("a.b.c.d")).toBeNull();
@@ -53,5 +61,31 @@ describe("decodeIdToken", () => {
   it("should return null when the decoded payload is not JSON", () => {
     // 有効な base64 だが中身は素のテキスト → JSON.parse が throw → null。
     expect(decodeIdToken(`header.${b64url("not-json-payload")}.signature`)).toBeNull();
+  });
+});
+
+describe("resolveTenantConsoleAccess", () => {
+  it("should allow mutation for TenantAdmin, TenantOperator, and editor-style groups", () => {
+    expect(resolveTenantConsoleAccess({ "custom:userRole": "TenantAdmin" }).canMutateTenant).toBe(
+      true,
+    );
+    expect(
+      resolveTenantConsoleAccess({ "custom:userRole": "TenantOperator" }).canMutateTenant,
+    ).toBe(true);
+    expect(resolveTenantConsoleAccess({ "cognito:groups": ["editor"] }).canMutateTenant).toBe(true);
+    expect(resolveTenantConsoleAccess({ "cognito:groups": "viewer editor" }).role).toBe("editor");
+  });
+
+  it("should deny mutation for TenantViewer, viewer groups, missing, or unknown roles", () => {
+    expect(resolveTenantConsoleAccess({ "custom:userRole": "TenantViewer" }).canMutateTenant).toBe(
+      false,
+    );
+    expect(resolveTenantConsoleAccess({ "cognito:groups": ["viewer"] }).canMutateTenant).toBe(
+      false,
+    );
+    expect(resolveTenantConsoleAccess({ "custom:userRole": "mystery" }).canMutateTenant).toBe(
+      false,
+    );
+    expect(resolveTenantConsoleAccess(null).canMutateTenant).toBe(false);
   });
 });

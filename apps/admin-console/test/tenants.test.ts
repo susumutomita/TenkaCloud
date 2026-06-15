@@ -4,6 +4,7 @@ import {
   buildCodeBuildBuildUrl,
   createTenant,
   deleteTenant,
+  isTenantSuspended,
   listTenants,
   parseTenantConfig,
   tenantStatusBadgeColor,
@@ -322,6 +323,10 @@ describe("tenantStatusBadgeColor", () => {
     it("should map 'Deleted' to grey (= deprovisioned tenant)", () => {
       expect(tenantStatusBadgeColor("Deleted")).toBe("grey");
     });
+
+    it("should map 'Suspended' to red (= operations blocked)", () => {
+      expect(tenantStatusBadgeColor("Suspended")).toBe("red");
+    });
   });
 
   describe("when absorbing upper/lower case variants", () => {
@@ -358,6 +363,14 @@ describe("tenantStatusBadgeColor", () => {
     it('should return grey for an undefined argument (= `?? ""` fallback)', () => {
       expect(tenantStatusBadgeColor(undefined)).toBe("grey");
     });
+  });
+});
+
+describe("isTenantSuspended", () => {
+  it("should return true only for explicit isSuspended=true", () => {
+    expect(isTenantSuspended({ isSuspended: true })).toBe(true);
+    expect(isTenantSuspended({ isSuspended: false })).toBe(false);
+    expect(isTenantSuspended({})).toBe(false);
   });
 });
 

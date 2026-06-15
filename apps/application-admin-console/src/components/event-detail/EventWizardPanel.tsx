@@ -61,11 +61,13 @@ export function EventWizardPanel({
  * として切り出した。 status が TEARDOWN のときだけ Alert を表示する (= 非該当 status では null)。
  */
 export function EventRescuePanel({
+  canMutateTenant,
   detail,
   forceArchiveInFlight,
   onForceArchive,
   t,
 }: {
+  readonly canMutateTenant: boolean;
   readonly detail: EventDetail;
   readonly forceArchiveInFlight: boolean;
   readonly onForceArchive: () => void;
@@ -79,6 +81,7 @@ export function EventRescuePanel({
       action={
         <Button
           loading={forceArchiveInFlight}
+          disabled={!canMutateTenant}
           onClick={onForceArchive}
           data-testid="force-archive-button"
         >

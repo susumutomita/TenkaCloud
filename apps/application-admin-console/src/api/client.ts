@@ -1,6 +1,11 @@
 import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useMemo } from "react";
 import { useAuth } from "../auth/AuthProvider";
+import {
+  decodeIdToken,
+  resolveTenantConsoleAccess,
+  type TenantConsoleAccess,
+} from "../auth/claims";
 import type { AppConfig } from "../config";
 
 /**
@@ -9,6 +14,7 @@ import type { AppConfig } from "../config";
  */
 
 export interface ApiClient {
+  readonly tenantAccess?: TenantConsoleAccess;
   get<T>(path: string): Promise<T>;
   post<T>(path: string, body: unknown): Promise<T>;
   put<T>(path: string, body: unknown): Promise<T>;
@@ -20,6 +26,7 @@ export interface ApiClient {
 
 export function createApiClient(baseUrl: string, idToken: string): ApiClient {
   const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  const tenantAccess = resolveTenantConsoleAccess(decodeIdToken(idToken));
 
   const request = async (path: string, init: RequestInit = {}): Promise<Response> => {
     const url = new URL(path.replace(/^\//, ""), base);
@@ -53,6 +60,7 @@ export function createApiClient(baseUrl: string, idToken: string): ApiClient {
   };
 
   return {
+    tenantAccess,
     async get<T>(path: string): Promise<T> {
       return (await request(path)).json() as Promise<T>;
     },
@@ -78,6 +86,11 @@ export function createApiClient(baseUrl: string, idToken: string): ApiClient {
       return (await request(path, { method: "DELETE" })).json() as Promise<T>;
     },
   };
+}
+
+export function canMutateTenant(apiClient: ApiClient | null): boolean {
+  if (!apiClient) return false;
+  return apiClient.tenantAccess?.canMutateTenant ?? true;
 }
 
 export function useApiClient(config: AppConfig): ApiClient | null {

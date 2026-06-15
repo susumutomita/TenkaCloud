@@ -32,7 +32,10 @@ const {
   fetchAccounts: vi.fn(),
 }));
 
-vi.mock("../../src/api/client", () => ({ useApiClient: mockApiClient }));
+vi.mock("../../src/api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/api/client")>();
+  return { ...actual, useApiClient: mockApiClient };
+});
 vi.mock("react-router", () => ({ useNavigate: () => mockNav }));
 vi.mock("../../src/api/events-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/api/events-client")>();
@@ -240,6 +243,18 @@ describe("EventCreatePage flow", () => {
     mockApiClient.mockReturnValue(null);
     renderPage();
     expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
+  });
+
+  it("should disable submit for a read-only viewer even when the form is valid", () => {
+    mockApiClient.mockReturnValue({
+      post: vi.fn(),
+      tenantAccess: { role: "viewer", canMutateTenant: false },
+    });
+    const { container } = renderPage();
+    fillValidForm(container);
+    expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    expect(mockCreate).not.toHaveBeenCalled();
   });
 
   it("should disable submit when the team count is zero", () => {

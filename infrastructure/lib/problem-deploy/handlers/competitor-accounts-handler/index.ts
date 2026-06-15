@@ -31,6 +31,12 @@ import {
 } from "./team-credentials-routes.js";
 import { CreateCompetitorAccountRequestSchema } from "./types.js";
 import {
+  routeChangeUserRole,
+  routeCreateUser,
+  routeDeleteUser,
+  routeListUsers,
+} from "./users-routes.js";
+import {
   AssumeRoleSanityCheckFailedError,
   ExternalIdMissingError,
   verifyCompetitorAccount,
@@ -66,7 +72,7 @@ app.use(
   cors({
     origin: "*",
     allowHeaders: ["Authorization", "Content-Type"],
-    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "DELETE", "PATCH", "OPTIONS"],
     maxAge: 600,
   }),
 );
@@ -168,6 +174,30 @@ app.delete("/admin/tenant-saml-config", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE]);
   const result = await routeDelete({ shared }, c);
   return c.json(result.body as never, result.status as 200 | 422);
+});
+
+app.get("/admin/users", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
+  const result = await routeListUsers({ shared }, c);
+  return c.json(result.body as never, result.status as 200 | 422);
+});
+
+app.post("/admin/users", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
+  const result = await routeCreateUser({ shared }, c);
+  return c.json(result.body as never, result.status as 201 | 400 | 409 | 422 | 500);
+});
+
+app.delete("/admin/users/:username", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
+  const result = await routeDeleteUser({ shared }, c);
+  return c.json(result.body as never, result.status as 200 | 400 | 404 | 409 | 422 | 500);
+});
+
+app.patch("/admin/users/:username", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
+  const result = await routeChangeUserRole({ shared }, c);
+  return c.json(result.body as never, result.status as 200 | 400 | 404 | 409 | 422 | 500);
 });
 
 app.post("/admin/competitor-accounts", async (c) => {

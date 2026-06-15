@@ -127,4 +127,14 @@ describe("AddAccountModal", () => {
     fireEvent.change(accountInput(), { target: { value: "123456789012" } });
     expect(submitBtn()).toBeDisabled();
   });
+
+  it("should keep submit disabled for a read-only viewer", () => {
+    mockUseApiClient.mockReturnValue({
+      fetch: vi.fn(),
+      tenantAccess: { role: "viewer", canMutateTenant: false },
+    });
+    render(<AddAccountModal {...props()} />);
+    fireEvent.change(accountInput(), { target: { value: "123456789012" } });
+    expect(submitBtn()).toBeDisabled();
+  });
 });

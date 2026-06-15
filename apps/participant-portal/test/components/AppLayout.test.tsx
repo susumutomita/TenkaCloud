@@ -48,6 +48,8 @@ const {
   formatTopNavScore,
   handleProfileMenuClick,
   buildScoreRankUtility,
+  buildAutoRefreshUtility,
+  buildRefreshLatestUtility,
   buildProfileUtility,
   handleSideNavFollow,
   ShellLayout,
@@ -169,6 +171,27 @@ describe("utility builders", () => {
     expect(navigate).toHaveBeenCalledWith("/scoreboard");
   });
 
+  it("should build a refresh-latest button that runs the shared refresh", () => {
+    const refresh = vi.fn();
+    const u = buildRefreshLatestUtility(refresh, (k) => k) as ButtonUtil;
+    expect(u.text).toBe("nav.refresh_latest");
+    u.onClick?.({} as never);
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("should build an auto-refresh toggle button with off as the default label", () => {
+    const setAuto = vi.fn();
+    const off = buildAutoRefreshUtility(false, setAuto, (k) => k) as ButtonUtil;
+    expect(off.text).toBe("nav.auto_refresh_off");
+    off.onClick?.({} as never);
+    expect(setAuto).toHaveBeenCalledWith(true);
+
+    const on = buildAutoRefreshUtility(true, setAuto, (k) => k) as ButtonUtil;
+    expect(on.text).toBe("nav.auto_refresh_on");
+    on.onClick?.({} as never);
+    expect(setAuto).toHaveBeenCalledWith(false);
+  });
+
   it("should build a profile dropdown that dispatches menu clicks", () => {
     const logout = vi.fn();
     const navigate = vi.fn();
@@ -203,6 +226,9 @@ const tv = (over: Record<string, unknown> = {}) => ({
   leaderboard: null,
   leaderboardNoEvent: false,
   unreadNotificationCount: 0,
+  refresh: vi.fn(),
+  autoRefreshEnabled: false,
+  setAutoRefreshEnabled: vi.fn(),
   ...over,
 });
 
@@ -305,5 +331,28 @@ describe("ShellLayout", () => {
     mockTeamView.mockReturnValue(tv({ view: teamView([10]), unreadNotificationCount: 0 }));
     renderShell();
     expect(screen.queryByText("99+")).not.toBeInTheDocument();
+  });
+
+  it("should render refresh controls for signed-in sessions and call their handlers", () => {
+    const refresh = vi.fn();
+    const setAutoRefreshEnabled = vi.fn();
+    mockTeamView.mockReturnValue(
+      tv({ view: teamView([10]), refresh, autoRefreshEnabled: false, setAutoRefreshEnabled }),
+    );
+    renderShell();
+
+    const refreshButton = screen
+      .getAllByText("nav.refresh_latest")
+      .find((el) => el.closest('[aria-hidden="true"]') === null);
+    expect(refreshButton).toBeDefined();
+    fireEvent.click(refreshButton as HTMLElement);
+    expect(refresh).toHaveBeenCalledOnce();
+
+    const autoRefreshButton = screen
+      .getAllByText("nav.auto_refresh_off")
+      .find((el) => el.closest('[aria-hidden="true"]') === null);
+    expect(autoRefreshButton).toBeDefined();
+    fireEvent.click(autoRefreshButton as HTMLElement);
+    expect(setAutoRefreshEnabled).toHaveBeenCalledWith(true);
   });
 });

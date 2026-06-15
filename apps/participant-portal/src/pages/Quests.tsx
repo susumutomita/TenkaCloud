@@ -106,7 +106,7 @@ function isCleared(problem: ParticipantProblemView): boolean {
  * compact な navigation focus 版で、各問題の status / score / アクセス先 URL を
  * カード表示する。
  *
- * データ source は `useTeamView()` (= ShellLayout 内の `/portal/me` polling 結果を共有)。
+ * データ source は `useTeamView()` (= ShellLayout 内の `/portal/me` 取得結果を共有)。
  * 専用 polling は持たない (Home / TopNav と同じ context を使う)。
  *
  * Issue #1000: 旧 SegmentedControl (= 全て / 未解決 / クリア) は撤去、 未解決 と 解決済み を

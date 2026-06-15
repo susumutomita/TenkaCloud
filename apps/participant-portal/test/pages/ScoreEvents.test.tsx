@@ -1,6 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { PortalAuthError, type ScoreEventView } from "../../src/api/portal-client";
+import {
+  PortalAuthError,
+  type ScoreEventsResponse,
+  type ScoreEventView,
+} from "../../src/api/portal-client";
 import type { AppConfig } from "../../src/config";
 
 /**
@@ -60,7 +64,10 @@ beforeEach(() => {
   mockGet.mockReset();
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.clearAllMocks();
+});
 
 describe("ScoreEventsPage", () => {
   it("should show the loading spinner before the first tick resolves", () => {
@@ -165,6 +172,59 @@ describe("ScoreEventsPage", () => {
     renderPage();
     expect(await screen.findByText("score_events.empty_header")).toBeInTheDocument();
     expect(screen.queryByText("score_events.cumulative_header")).not.toBeInTheDocument();
+  });
+
+  it("should not refresh every 30s by default", async () => {
+    mockGet.mockResolvedValue({ entries: [] });
+    renderPage();
+    expect(await screen.findByText("score_events.empty_header")).toBeInTheDocument();
+    mockGet.mockClear();
+
+    vi.useFakeTimers();
+    await act(async () => void (await vi.advanceTimersByTimeAsync(30_000)));
+
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  it("should not issue an interval refresh while the initial score-events fetch is in flight", async () => {
+    mockGet.mockReturnValue(new Promise(() => undefined));
+    renderPage();
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText(/score_events\.auto_refresh_label/));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(30_000)));
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
+  it("should refresh on demand and only poll after auto refresh is enabled", async () => {
+    mockGet.mockResolvedValue({ entries: [] });
+    renderPage();
+    expect(await screen.findByText("score_events.empty_header")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "score_events.refresh_latest" }));
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText(/score_events\.auto_refresh_label/));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(30_000)));
+
+    expect(mockGet).toHaveBeenCalledTimes(3);
+  });
+
+  it("should share an in-flight refresh instead of issuing duplicate reads", async () => {
+    let resolveFetch: (value: ScoreEventsResponse) => void = () => undefined;
+    mockGet.mockReturnValue(new Promise((resolve) => (resolveFetch = resolve)));
+    renderPage();
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "score_events.refresh_latest" }));
+    fireEvent.click(screen.getByRole("button", { name: "score_events.refresh_latest" }));
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    resolveFetch({ entries: [] });
+    expect(await screen.findByText("score_events.empty_header")).toBeInTheDocument();
   });
 
   it("should seed dev-mock fixtures without calling the backend in mock mode", async () => {

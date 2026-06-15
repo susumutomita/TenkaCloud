@@ -42,7 +42,7 @@ export function registerBulkDeployRoutes(app: Hono, shared: EventSharedResources
           return handleRouteError(c, "[events] bulkDeployEvent failed", { eventId }, err);
         }
       },
-      { roles: [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE] },
+      { roles: [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE], rejectSuspendedTenant: true },
     ),
   );
 }

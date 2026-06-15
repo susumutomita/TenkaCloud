@@ -39,13 +39,18 @@ git submodule update --init --recursive problems
 
 ### 1. Pick the scoring kind (= the most important decision)
 
-A TenkaCloud problem ships exactly one of five built-in scoring kinds. The platform's generic scoring Lambda dispatches on this value; problem-specific scoring code is forbidden by [ADR-012](../architecture/adr-012-problem-plugin-architecture.html).
+A TenkaCloud problem ships exactly one of six built-in scoring kinds. The platform's generic scoring Lambda dispatches on this value; problem-specific scoring code is forbidden by [ADR-012](../architecture/adr-012-problem-plugin-architecture.html).
 
 Use this decision tree:
 
 ```text
 Does the competitor submit a single value (a "flag") to win?
-├── Yes → kind = "flag"               (Challenge, e.g. read an SSM Parameter, find an S3 object)
+├── Yes
+│   │
+│   Is it one flag, or several independent flags scored separately (partial credit)?
+│   ├── One flag → kind = "flag"      (Challenge, e.g. read an SSM Parameter, find an S3 object)
+│   └── N independent flags → kind = "multi-flag"
+│       (Challenge, one problem poses several sub-challenges; sum of flags[].points is the max score)
 └── No
     │
     Does the competitor have to keep something running?
@@ -175,7 +180,7 @@ The CLI validator (`scripts/tenkacloud-problem.ts validate`) and `make validate-
 
 | Symptom (substring of the error)                                            | Likely cause                                                                       | Fix                                                                                                                                  |
 | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `scoring.kind="..." is not a recognized kind`                               | Typo in `scoring.kind`                                                             | Set it to exactly one of `flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`.                            |
+| `scoring.kind="..." is not a recognized kind`                               | Typo in `scoring.kind`                                                             | Set it to exactly one of `flag` / `multi-flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`.             |
 | `scoring.flagOutputKey="X" not found in template.yaml Outputs`              | `metadata.scoring.flagOutputKey` references a CFn `Output` key that doesn't exist  | Open `template.yaml`, add an `Outputs.X:` entry, or fix the metadata key. Both sides must match exactly.                             |
 | `scoring.statsOutputKey="X" not found in template.yaml Outputs`             | Same as above for `attack-detection`                                               | Add an `Outputs.X:` entry whose `Value` is the integer attack count.                                                                 |
 | `endpoints[slot=N].default.key="X" not found in template.yaml Outputs`      | `endpoints[].default.key` points at a missing Output                               | Add the `Outputs.X:` entry (typically the public URL of the endpoint slot).                                                          |
@@ -208,7 +213,7 @@ Claude Code ships with a `/create-problem` skill that runs the same scaffold + e
 - [ ] `metadata.id` matches the directory name.
 - [ ] `category` is `"Battle"` or `"Challenge"` (capitalized).
 - [ ] `status` is `"draft"` for a first submission.
-- [ ] `scoring.kind` is one of the five built-ins.
+- [ ] `scoring.kind` is one of the six built-ins.
 - [ ] Every `__PLACEHOLDER__` in `metadata.json` has been replaced.
 - [ ] Every endpoint / scoring key referenced from `metadata.json` exists as a key in `template.yaml` `Outputs:`.
 - [ ] Every resource name in `template.yaml` is prefixed with `${NamePrefix}`.

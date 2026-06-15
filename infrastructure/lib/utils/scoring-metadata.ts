@@ -7,12 +7,16 @@ import { decodeLargeEnvValue } from "./env-encoding.js";
  * (Portal `submit-flag`、Generic scoring dispatcher、`lookup.toView`) の両方で参照する
  * ため、ここに 1 箇所に集約する。SCHEMA.json と整合させる。
  *
- * ADR-012 Phase 3.B で 5 種の builtin kind をサポートする:
- *   - `flag`              — 1 回提出型 (Challenge)
+ * ADR-012 Phase 3.B の 5 種 + #1796 拡張の multi-flag = 6 種の builtin kind をサポートする:
+ *   - `flag`              — 1 回提出型 (Challenge、提出採点)
+ *   - `multi-flag`        — 1 問に N 個の独立 flag、各個別提出で部分点 (#1796、提出採点)
  *   - `uptime-flat`       — 固定 endpoint 群を独立 probe、全 OK で配点 (legacy alias `uptime`)
  *   - `uptime-multi`      — N slot を AND probe、全 OK で配点 / 1 つでも fail で penalty
  *   - `phased-polling`    — 時刻で score rule が変わる、platform 分類 + bonus 対応
  *   - `attack-detection`  — stack output 内の counter 増分検知で配点
+ *
+ * `flag` / `multi-flag` は提出採点 (participant-handler の submit-flag)、 残り 4 種は generic
+ * scoring Lambda の polling 採点。
  */
 
 /**

@@ -41,7 +41,7 @@ The skill walks through:
 1. **Title and 1-line description.** What is the problem called and what does the contestant do in one sentence?
 2. **Learning goals.** Two or three bullets describing what the contestant should walk away understanding.
 3. **Difficulty and duration.** 1 = entry, 5 = expert. Duration is a free-form string like `60〜90 分`.
-4. **Scoring kind.** The skill walks you through the decision tree from `CONTRIBUTING.md`. Pick exactly one of the five built-ins.
+4. **Scoring kind.** The skill walks you through the decision tree from `CONTRIBUTING.md`. Pick exactly one of the six built-ins.
 5. **Scaffold generation.** The skill invokes `bun run scripts/tenkacloud-problem.ts create <id> --kind <kind>` and shows the resulting files.
 6. **Edit guidance.** The skill enumerates every `__PLACEHOLDER__` left in the scaffold and prompts for replacement values.
 
@@ -103,7 +103,7 @@ Draft a new TenkaCloud problem with these properties:
 - learning goals: <bullets>
 - difficulty: <1-5>
 - duration: "<free text>"
-- scoring kind: <one of flag / uptime-flat / uptime-multi / phased-polling / attack-detection>
+- scoring kind: <one of flag / multi-flag / uptime-flat / uptime-multi / phased-polling / attack-detection>
 
 Use the CLI:
   bun run scripts/tenkacloud-problem.ts create <id> --kind <kind>
