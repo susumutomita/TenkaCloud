@@ -13,7 +13,7 @@ import { EmptyState, toErrorMessage } from "@tenkacloud/web-kit";
 import { StatusCodes } from "http-status-codes";
 import { useCallback, useMemo, useState } from "react";
 import { type NavigateFunction, useNavigate } from "react-router";
-import { type ApiClient, ApiError, useApiClient } from "../api/client";
+import { type ApiClient, ApiError, canMutateTenant, useApiClient } from "../api/client";
 import {
   archiveEvent,
   type EventStatus,
@@ -46,6 +46,7 @@ interface ColumnContext {
   navigate: NavigateFunction;
   onArchiveClick: (item: EventSummary) => void;
   archivingId: string | null;
+  canMutateTenant: boolean;
   t: (key: string) => string;
 }
 
@@ -94,7 +95,7 @@ function buildColumns(ctx: ColumnContext): TableProps.ColumnDefinition<EventSumm
         <Button
           variant="link"
           loading={ctx.archivingId === item.eventId}
-          disabled={!ARCHIVABLE_STATUSES.has(item.status)}
+          disabled={!ctx.canMutateTenant || !ARCHIVABLE_STATUSES.has(item.status)}
           onClick={() => ctx.onArchiveClick(item)}
           ariaLabel={interpolate(ctx.t("event_list.archive_aria"), { name: item.name })}
         >
@@ -125,6 +126,7 @@ export function describeArchiveError(err: unknown, name: string, t: TFn): string
 
 export function EventListPage({ config }: { config: AppConfig }) {
   const apiClient = useApiClient(config);
+  const canMutate = canMutateTenant(apiClient);
   const navigate = useNavigate();
   const t = useT();
   const [showArchived, setShowArchived] = useState(false);
@@ -168,7 +170,7 @@ export function EventListPage({ config }: { config: AppConfig }) {
     // items 取得成功後にしか main render へ到達しないので、 この guard は両条件とも UI 経路では
     // 不到達の防御 (= 型 narrowing も兼ねる)。
     /* v8 ignore next */
-    if (!apiClient || !archiveTarget) return;
+    if (!apiClient || !canMutate || !archiveTarget) return;
     const target = archiveTarget;
     setArchivingId(target.eventId);
     setArchiveTarget(null);
@@ -184,8 +186,8 @@ export function EventListPage({ config }: { config: AppConfig }) {
   };
 
   const columns = useMemo(
-    () => buildColumns({ navigate, onArchiveClick, archivingId, t }),
-    [navigate, onArchiveClick, archivingId, t],
+    () => buildColumns({ navigate, onArchiveClick, archivingId, canMutateTenant: canMutate, t }),
+    [navigate, onArchiveClick, archivingId, canMutate, t],
   );
 
   if (!items && !error) {
@@ -202,7 +204,7 @@ export function EventListPage({ config }: { config: AppConfig }) {
         variant="h1"
         description={t("event_list.description")}
         actions={
-          <Button variant="primary" onClick={() => navigate("/events/new")}>
+          <Button variant="primary" disabled={!canMutate} onClick={() => navigate("/events/new")}>
             {t("event_list.create_button")}
           </Button>
         }
@@ -243,10 +245,14 @@ export function EventListPage({ config }: { config: AppConfig }) {
             // 真に 0 件: ここから直接 event を作れる primary action を出す。
             <EmptyState
               headline={t("event_list.empty_no_event")}
-              primaryAction={{
-                label: t("event_list.create_button"),
-                onClick: () => navigate("/events/new"),
-              }}
+              primaryAction={
+                canMutate
+                  ? {
+                      label: t("event_list.create_button"),
+                      onClick: () => navigate("/events/new"),
+                    }
+                  : undefined
+              }
             />
           ) : (
             // 全件 archived で filter されている場合は作成導線を出さない (= 件数は存在する)。
@@ -265,7 +271,7 @@ export function EventListPage({ config }: { config: AppConfig }) {
               <Button onClick={() => setArchiveTarget(null)}>
                 {t("event_list.archive_modal_cancel")}
               </Button>
-              <Button variant="primary" onClick={handleArchiveConfirm}>
+              <Button variant="primary" disabled={!canMutate} onClick={handleArchiveConfirm}>
                 {t("event_list.archive_modal_confirm")}
               </Button>
             </SpaceBetween>

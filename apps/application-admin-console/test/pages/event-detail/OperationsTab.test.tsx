@@ -45,6 +45,7 @@ const detail = (status: EventStatus, problems = 1, teams = 1): EventDetail =>
 const props = (over: Partial<EventTabContentProps> = {}): EventTabContentProps =>
   ({
     apiClient: {} as never,
+    canMutateTenant: true,
     config: {} as never,
     counts: {
       allDoneCount: 0,
@@ -109,6 +110,12 @@ describe("OperationsTab", () => {
   it("should disable bulk deploy while a bulk op is in flight", () => {
     renderTab({ operations: operations({ bulkInFlight: "deploy" }) });
     expect(bulkDeployBtn()).toBeDisabled();
+  });
+
+  it("should disable write controls for a read-only viewer", () => {
+    renderTab({ canMutateTenant: false });
+    expect(bulkDeployBtn()).toBeDisabled();
+    expect(screen.getByTestId("operations-delete-button")).toBeDisabled();
   });
 
   it("should not render a teardown button in the bulk section (teardown lives only in the danger zone)", () => {

@@ -26,6 +26,7 @@ import type { EventTabContentProps } from "./tab-content-props";
  *     残る (= 再 deploy で復旧可能、 永続的な Event 削除ではない)。
  */
 export function OperationsTab({
+  canMutateTenant,
   counts,
   detail,
   manualRefresh,
@@ -42,6 +43,7 @@ export function OperationsTab({
       </Alert>
 
       <EventRescuePanel
+        canMutateTenant={canMutateTenant}
         detail={detail}
         forceArchiveInFlight={operations.forceArchiveInFlight}
         onForceArchive={() => operations.setConfirmForceArchive(true)}
@@ -63,6 +65,7 @@ export function OperationsTab({
             disabled={
               detail.problems.length === 0 ||
               detail.teams.length === 0 ||
+              !canMutateTenant ||
               bulkDisabled ||
               operations.bulkInFlight !== null
             }
@@ -102,6 +105,7 @@ export function OperationsTab({
                 variant="primary"
                 data-testid="operations-delete-button"
                 loading={operations.bulkInFlight === "teardown"}
+                disabled={!canMutateTenant}
                 onClick={() => operations.setConfirmTeardown(true)}
               >
                 {t("event_detail.operations_delete_button")}

@@ -30,6 +30,7 @@ function setup(over: Partial<Parameters<typeof useEventOperations>[0]> = {}) {
   const { result } = renderHook(() =>
     useEventOperations({
       apiClient: CLIENT,
+      canMutateTenant: true,
       detail: null,
       eventId: "evt-1",
       refresh,
@@ -446,6 +447,31 @@ describe("useEventOperations — remaining validation + both error-type sides", 
 describe("useEventOperations — guards", () => {
   it("should no-op every mutation when no API client is present", async () => {
     const { result } = setup({ apiClient: null });
+    await act(async () => {
+      await result.current.handleBulkDeploy();
+      await result.current.handleBulkTeardown();
+      await result.current.handleStartNow();
+      await result.current.handleScheduledStart();
+      await result.current.handleScheduleEnd();
+      await result.current.handleEndNowSchedule();
+      await result.current.handleSaveFreezeMinutes();
+      await result.current.handleLockScoring();
+      await result.current.handleUnlockScoring();
+      await result.current.handleForceArchive();
+      await result.current.handleEndEvent();
+    });
+    for (const fn of Object.values(ops)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("should no-op every mutation for a read-only viewer", async () => {
+    const { result } = setup({ canMutateTenant: false });
+    act(() => {
+      result.current.setScheduleDate("2999-01-01");
+      result.current.setScheduleTime("10:00");
+      result.current.setEndsAtDate("2999-01-01");
+      result.current.setEndsAtTime("10:00");
+      result.current.setFreezeMinutesInput("10");
+    });
     await act(async () => {
       await result.current.handleBulkDeploy();
       await result.current.handleBulkTeardown();

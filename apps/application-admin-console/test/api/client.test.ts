@@ -17,6 +17,18 @@ const config: AppConfig = {
   samlIdpDirectory: {},
 };
 
+function b64url(value: object): string {
+  const json = JSON.stringify(value);
+  const bytes = new TextEncoder().encode(json);
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function makeJwt(payload: object): string {
+  return `${b64url({ alg: "RS256", typ: "JWT" })}.${b64url(payload)}.signature`;
+}
+
 describe("createApiClient", () => {
   afterEach(() => vi.restoreAllMocks());
 
@@ -33,6 +45,14 @@ describe("createApiClient", () => {
       const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
       expect(url.toString()).toBe("https://api.example.com/prod/apps");
       expect((init.headers as Record<string, string>).authorization).toBe("Bearer TOKEN");
+    });
+  });
+
+  describe("tenant access metadata", () => {
+    it("should expose canMutateTenant=false for TenantViewer tokens", () => {
+      const token = makeJwt({ "custom:userRole": "TenantViewer" });
+      const api = createApiClient(config.apiBaseUrl, token);
+      expect(api.tenantAccess).toEqual({ role: "viewer", canMutateTenant: false });
     });
   });
 

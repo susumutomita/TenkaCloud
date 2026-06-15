@@ -69,6 +69,7 @@ function buildFireRequest(
  */
 function FireModal({
   apiClient,
+  canMutateTenant,
   eventId,
   target,
   teamOptions,
@@ -77,6 +78,7 @@ function FireModal({
   onFired,
 }: {
   readonly apiClient: ApiClient;
+  readonly canMutateTenant: boolean;
   readonly eventId: string;
   readonly target: FireTarget;
   readonly teamOptions: readonly TeamOption[];
@@ -97,9 +99,13 @@ function FireModal({
     timing === "scheduled" &&
     (!Number.isInteger(afterMinutes) || afterMinutes < 1 || afterMinutes > MAX_AFTER_MINUTES);
   const fireDisabled =
-    firing || (scope === "team" && selectedTeamIds.length === 0) || scheduleInvalid;
+    !canMutateTenant ||
+    firing ||
+    (scope === "team" && selectedTeamIds.length === 0) ||
+    scheduleInvalid;
 
   const confirmFire = async () => {
+    if (!canMutateTenant || fireDisabled) return;
     setFiring(true);
     setFireError(null);
     try {
@@ -214,11 +220,13 @@ function FireModal({
  */
 export function DisruptionsPanel({
   apiClient,
+  canMutateTenant,
   eventId,
   teams,
   t,
 }: {
   readonly apiClient: ApiClient | null;
+  readonly canMutateTenant: boolean;
   readonly eventId: string;
   readonly teams: readonly TeamSummary[];
   readonly t: Translate;
@@ -335,6 +343,7 @@ export function DisruptionsPanel({
               cell: (e: DisruptionCatalogEntry) => (
                 <Button
                   variant="inline-link"
+                  disabled={!canMutateTenant}
                   onClick={() => setFireTarget({ problemId: e.problemId, item: e.disruption })}
                 >
                   {t("disruptions.fire_button")}
@@ -388,6 +397,7 @@ export function DisruptionsPanel({
         <FireModal
           key={`${fireTarget.problemId}:${fireTarget.item.id}`}
           apiClient={apiClient}
+          canMutateTenant={canMutateTenant}
           eventId={eventId}
           target={fireTarget}
           teamOptions={teamOptions}

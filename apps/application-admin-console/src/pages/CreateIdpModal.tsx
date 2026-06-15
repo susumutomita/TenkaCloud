@@ -181,7 +181,7 @@ export function CreateIdpModal({
             <Button onClick={onClose} disabled={busy}>
               {t("create_idp.cancel")}
             </Button>
-            <Button variant="primary" onClick={onSubmit} loading={busy}>
+            <Button variant="primary" onClick={onSubmit} loading={busy} disabled={!client}>
               {t("create_idp.register")}
             </Button>
           </SpaceBetween>

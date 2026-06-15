@@ -8,7 +8,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { useApiClient } from "../api/client";
+import { canMutateTenant, useApiClient } from "../api/client";
 import { bulkDeployEvent, createEvent } from "../api/events-client";
 import type { AppConfig } from "../config";
 import { DEFAULT_AWS_REGION } from "../data/aws-regions";
@@ -63,6 +63,7 @@ export {
  */
 export function EventCreatePage({ config }: { config: AppConfig }) {
   const apiClient = useApiClient(config);
+  const canMutate = canMutateTenant(apiClient);
   const navigate = useNavigate();
   const t = useT();
 
@@ -158,6 +159,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   const nameInvalid = name.length === 0 || name.length > NAME_MAX;
   const canSubmit =
     !!apiClient &&
+    canMutate &&
     !submitting &&
     !nameInvalid &&
     !teamCountInvalid &&
@@ -204,7 +206,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     // modal は deployPromptTarget!==null のときだけ表示され、 そのとき apiClient も非 null。
     // = この guard の return は不到達 (防御)。
     /* v8 ignore next */
-    if (!deployPromptTarget || !apiClient) return;
+    if (!deployPromptTarget || !apiClient || !canMutate) return;
     setDeployStarting(true);
     try {
       // 全 team × 全 problem を bulk deploy (= 既存 Issue #910 経路)。
@@ -298,6 +300,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
 
       <EventCreateDeployPromptModal
         visible={deployPromptTarget !== null}
+        canMutateTenant={canMutate}
         deployStarting={deployStarting}
         onDeployNow={() => void handleDeployNow()}
         onDeployLater={handleDeployLater}

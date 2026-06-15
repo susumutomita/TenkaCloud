@@ -5,7 +5,7 @@ import Tabs from "@cloudscape-design/components/tabs";
 import { ErrorState, LoadingState } from "@tenkacloud/web-kit";
 import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
-import { type ApiClient, useApiClient } from "../api/client";
+import { type ApiClient, canMutateTenant, useApiClient } from "../api/client";
 import { EVENT_ID_RE, type EventDetail } from "../api/events-client";
 import { EventDangerZone } from "../components/event-detail/EventDangerZone";
 import { EventHeaderActions } from "../components/event-detail/EventHeaderActions";
@@ -112,6 +112,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   const navigate = useNavigate();
   const t = useT();
   const apiClient = useApiClient(config);
+  const canMutate = canMutateTenant(apiClient);
   const eventIdValid = !!eventId && EVENT_ID_RE.test(eventId);
   const eventIdForOperations = eventId ?? "";
 
@@ -124,6 +125,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   );
   const operations = useEventOperations({
     apiClient,
+    canMutateTenant: canMutate,
     detail,
     eventId: eventIdForOperations,
     refresh,
@@ -145,6 +147,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
     return (
       <EventDetailErrorOnly
         apiClient={apiClient}
+        canMutateTenant={canMutate}
         error={error}
         eventId={eventId}
         navigateBack={() => navigate("/events")}
@@ -159,6 +162,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
   return (
     <EventDetailLoaded
       apiClient={apiClient}
+      canMutateTenant={canMutate}
       config={config}
       detail={detail}
       error={error}
@@ -175,6 +179,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
 
 function EventDetailErrorOnly({
   apiClient,
+  canMutateTenant,
   error,
   eventId,
   navigateBack,
@@ -182,6 +187,7 @@ function EventDetailErrorOnly({
   t,
 }: {
   readonly apiClient: ApiClient | null;
+  readonly canMutateTenant: boolean;
   // error は呼び出し元 (EventDetailPage) で truthy に narrow 済み (loading 経路は分岐済み)。
   readonly error: string;
   readonly eventId: string;
@@ -198,6 +204,7 @@ function EventDetailErrorOnly({
           <EventHeaderActions
             apiClient={apiClient}
             bulkInFlight={operations.bulkInFlight}
+            canMutateTenant={canMutateTenant}
             completeCount={0}
             detail={null}
             endInFlight={operations.endInFlight}
@@ -229,6 +236,7 @@ function EventDetailErrorOnly({
  */
 function renderTabs({
   apiClient,
+  canMutateTenant,
   config,
   counts,
   detail,
@@ -239,6 +247,7 @@ function renderTabs({
   wizard,
 }: {
   readonly apiClient: ApiClient | null;
+  readonly canMutateTenant: boolean;
   readonly config: AppConfig;
   readonly counts: DeploymentCounts;
   readonly detail: EventDetail;
@@ -250,6 +259,7 @@ function renderTabs({
 }) {
   const props = {
     apiClient,
+    canMutateTenant,
     config,
     counts,
     detail,
@@ -283,6 +293,7 @@ function renderTabs({
 
 function EventDetailLoaded({
   apiClient,
+  canMutateTenant,
   config,
   detail,
   error,
@@ -295,6 +306,7 @@ function EventDetailLoaded({
   wizard,
 }: {
   readonly apiClient: ApiClient | null;
+  readonly canMutateTenant: boolean;
   readonly config: AppConfig;
   readonly detail: EventDetail;
   readonly error: string | null;
@@ -326,6 +338,7 @@ function EventDetailLoaded({
           <EventHeaderActions
             apiClient={apiClient}
             bulkInFlight={operations.bulkInFlight}
+            canMutateTenant={canMutateTenant}
             completeCount={counts.completeCount}
             detail={detail}
             endInFlight={operations.endInFlight}
@@ -374,6 +387,7 @@ function EventDetailLoaded({
         }}
         tabs={renderTabs({
           apiClient,
+          canMutateTenant,
           config,
           counts,
           detail,
@@ -386,6 +400,7 @@ function EventDetailLoaded({
       />
 
       <EventDangerZone
+        canMutateTenant={canMutateTenant}
         config={config}
         confirmEnd={operations.confirmEnd}
         confirmForceArchive={operations.confirmForceArchive}

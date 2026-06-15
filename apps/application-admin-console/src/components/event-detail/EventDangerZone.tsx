@@ -41,6 +41,7 @@ function useTeardownConfirmInput(modalOpen: boolean): {
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
 export function EventDangerZone({
+  canMutateTenant,
   config,
   confirmEnd,
   confirmForceArchive,
@@ -80,6 +81,7 @@ export function EventDangerZone({
   setScheduleTime,
   t,
 }: {
+  readonly canMutateTenant: boolean;
   readonly config: AppConfig;
   readonly confirmEnd: boolean;
   readonly confirmForceArchive: boolean;
@@ -130,7 +132,7 @@ export function EventDangerZone({
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
               <Button onClick={onDismissEnd}>{t("event_detail.modal_cancel")}</Button>
-              <Button variant="primary" onClick={onEndEvent}>
+              <Button variant="primary" disabled={!canMutateTenant} onClick={onEndEvent}>
                 {t("event_detail.modal_end_event_confirm")}
               </Button>
             </SpaceBetween>
@@ -156,6 +158,7 @@ export function EventDangerZone({
               <Button
                 variant="primary"
                 loading={forceArchiveInFlight}
+                disabled={!canMutateTenant}
                 onClick={onForceArchive}
                 data-testid="force-archive-confirm"
               >
@@ -183,7 +186,7 @@ export function EventDangerZone({
               <Button onClick={onDismissTeardown}>{t("event_detail.modal_cancel")}</Button>
               <Button
                 variant="primary"
-                disabled={!teardownConfirm.canSubmit}
+                disabled={!canMutateTenant || !teardownConfirm.canSubmit}
                 data-testid="modal-teardown-confirm"
                 onClick={onBulkTeardown}
               >
@@ -230,6 +233,7 @@ export function EventDangerZone({
               <Button
                 variant="primary"
                 loading={scheduleInFlight === "scheduled"}
+                disabled={!canMutateTenant}
                 onClick={onScheduledStart}
               >
                 {t("event_detail.modal_schedule_confirm_label")}
@@ -270,7 +274,7 @@ export function EventDangerZone({
               <Button
                 variant="primary"
                 loading={endsAtInFlight}
-                disabled={!endsAtValidation.canSubmit || endsAtInFlight}
+                disabled={!canMutateTenant || !endsAtValidation.canSubmit || endsAtInFlight}
                 onClick={onScheduleEnd}
               >
                 {t("event_detail.modal_schedule_confirm_label")}
@@ -308,6 +312,7 @@ export function EventDangerZone({
 
       <SendNotificationModal
         config={config}
+        canMutateTenant={canMutateTenant}
         visible={notifyModalOpen}
         eventId={eventId}
         onDismiss={onDismissNotification}

@@ -8,6 +8,7 @@ import { useT } from "../../i18n";
 interface CompetitorAccountDeleteModalProps {
   target: CompetitorAccountSummary | null;
   inFlight: boolean;
+  canMutateTenant: boolean;
   onDismiss: () => void;
   onConfirm: () => void;
 }
@@ -15,6 +16,7 @@ interface CompetitorAccountDeleteModalProps {
 export function CompetitorAccountDeleteModal({
   target,
   inFlight,
+  canMutateTenant,
   onDismiss,
   onConfirm,
 }: CompetitorAccountDeleteModalProps) {
@@ -30,7 +32,12 @@ export function CompetitorAccountDeleteModal({
             <Button onClick={onDismiss} disabled={inFlight}>
               {t("competitor_accounts.delete_modal_cancel")}
             </Button>
-            <Button variant="primary" loading={inFlight} onClick={onConfirm}>
+            <Button
+              variant="primary"
+              loading={inFlight}
+              disabled={!canMutateTenant}
+              onClick={onConfirm}
+            >
               {t("competitor_accounts.delete_modal_confirm")}
             </Button>
           </SpaceBetween>
