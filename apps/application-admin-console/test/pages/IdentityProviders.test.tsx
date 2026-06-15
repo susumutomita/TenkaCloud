@@ -64,6 +64,27 @@ vi.mock("../../src/pages/CreateIdpModal", () => ({
 
 const { IdentityProvidersPage } = await import("../../src/pages/IdentityProviders");
 
+function b64url(value: object): string {
+  const json = JSON.stringify(value);
+  const bytes = new TextEncoder().encode(json);
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function makeJwt(payload: object): string {
+  return `${b64url({ alg: "RS256", typ: "JWT" })}.${b64url(payload)}.signature`;
+}
+
+const adminToken = makeJwt({
+  iss: "https://cognito-idp.ap-northeast-1.amazonaws.com/ap-northeast-1_example",
+  "custom:userRole": "TenantAdmin",
+});
+const viewerToken = makeJwt({
+  iss: "https://cognito-idp.ap-northeast-1.amazonaws.com/ap-northeast-1_example",
+  "custom:userRole": "TenantViewer",
+});
+
 const config = (over: Partial<AppConfig> = {}): AppConfig =>
   ({
     cognitoDomain: "auth.example.com",
@@ -89,7 +110,7 @@ const idp = (over: Partial<TenantIdpSummary> = {}): TenantIdpSummary =>
 const renderPage = (cfg = config()) => render(<IdentityProvidersPage config={cfg} />);
 
 beforeEach(() => {
-  mockUseAuth.mockReturnValue({ tokens: { idToken: "tok" } });
+  mockUseAuth.mockReturnValue({ tokens: { idToken: adminToken } });
   mockCreateClient.mockReturnValue(fakeClient);
   mockDescribeErr.mockImplementation((e: unknown) => (e instanceof Error ? e.message : String(e)));
   fakeClient.list.mockReset().mockResolvedValue([]);
@@ -169,6 +190,15 @@ describe("IdentityProvidersPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add SAML IdP" }));
     fireEvent.click(screen.getByText("stub-close"));
     expect(screen.queryByTestId("create-modal")).not.toBeInTheDocument();
+  });
+
+  it("should disable SAML mutation controls for a read-only viewer", async () => {
+    mockUseAuth.mockReturnValue({ tokens: { idToken: viewerToken } });
+    fakeClient.list.mockResolvedValue([idp({ idpId: "idp1" })]);
+    renderPage();
+    expect(await screen.findByText("Okta")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add SAML IdP" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeDisabled();
   });
 
   it("should delete an IdP after confirmation and refresh", async () => {

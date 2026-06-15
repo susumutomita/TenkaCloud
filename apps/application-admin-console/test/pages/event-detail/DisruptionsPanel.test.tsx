@@ -45,7 +45,15 @@ const catalogEntry = {
 
 const fakeApi = {} as ApiClient;
 const renderPanel = (apiClient: ApiClient | null = fakeApi) =>
-  render(<DisruptionsPanel apiClient={apiClient} eventId="EVT1" teams={teams} t={t} />);
+  render(
+    <DisruptionsPanel
+      apiClient={apiClient}
+      canMutateTenant={true}
+      eventId="EVT1"
+      teams={teams}
+      t={t}
+    />,
+  );
 
 const modal = () => createWrapper(document.body).findModal();
 const fireModalScopeSelect = () => modal()?.findContent().findSelect();
@@ -110,6 +118,19 @@ describe("DisruptionsPanel", () => {
     mockCatalog.mockRejectedValue(new Error("catalog boom"));
     renderPanel();
     expect(await screen.findByText("catalog boom")).toBeInTheDocument();
+  });
+
+  it("should disable fire controls for a read-only viewer", async () => {
+    render(
+      <DisruptionsPanel
+        apiClient={fakeApi}
+        canMutateTenant={false}
+        eventId="EVT1"
+        teams={teams}
+        t={t}
+      />,
+    );
+    expect(await screen.findByRole("button", { name: "disruptions.fire_button" })).toBeDisabled();
   });
 
   it("should show the empty state when no disruptions are declared", async () => {
@@ -293,6 +314,7 @@ describe("DisruptionsPanel", () => {
   it("DisruptionsTab should wire the panel with the event's id + teams", async () => {
     const props = {
       apiClient: fakeApi,
+      canMutateTenant: true,
       detail: { eventId: "EVT1", teams },
       t,
     } as unknown as EventTabContentProps;

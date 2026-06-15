@@ -22,14 +22,14 @@ import { useCompetitorAccounts } from "./competitor-accounts/useCompetitorAccoun
 
 export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
   const t = useT();
-  const { items, error, verifyInFlight, deleteInFlight, reload, verify, remove } =
+  const { items, error, verifyInFlight, deleteInFlight, canMutateTenant, reload, verify, remove } =
     useCompetitorAccounts(config);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CompetitorAccountSummary | null>(null);
   const [showSecret, setShowSecret] = useState<CreateCompetitorAccountResponse | null>(null);
 
   const handleConfirmDelete = async () => {
-    if (!deleteTarget) return;
+    if (!canMutateTenant || !deleteTarget) return;
     const target = deleteTarget;
     await remove(target.awsAccountId);
     setDeleteTarget(null);
@@ -49,7 +49,11 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         variant="h1"
         description={t("competitor_accounts.description")}
         actions={
-          <Button variant="primary" onClick={() => setAddModalVisible(true)}>
+          <Button
+            variant="primary"
+            disabled={!canMutateTenant}
+            onClick={() => setAddModalVisible(true)}
+          >
             {t("competitor_accounts.add_button")}
           </Button>
         }
@@ -68,6 +72,7 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
       <CompetitorAccountsTable
         items={items ?? []}
         verifyInFlight={verifyInFlight}
+        canMutateTenant={canMutateTenant}
         onVerify={(awsAccountId) => void verify(awsAccountId)}
         onRequestDelete={setDeleteTarget}
         onAdd={() => setAddModalVisible(true)}
@@ -97,6 +102,7 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
       <CompetitorAccountDeleteModal
         target={deleteTarget}
         inFlight={deleteInFlight}
+        canMutateTenant={canMutateTenant}
         onDismiss={() => setDeleteTarget(null)}
         onConfirm={() => void handleConfirmDelete()}
       />

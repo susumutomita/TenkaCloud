@@ -80,13 +80,14 @@ function formatEndEventError(err: unknown, t: Translate): string {
 
 export function useEventOperations(args: {
   readonly apiClient: ApiClient | null;
+  readonly canMutateTenant: boolean;
   readonly detail: EventDetail | null;
   readonly eventId: string;
   readonly refresh: () => Promise<void>;
   readonly setError: (error: string | null) => void;
   readonly t: Translate;
 }) {
-  const { apiClient, detail, eventId, refresh, setError, t } = args;
+  const { apiClient, canMutateTenant, detail, eventId, refresh, setError, t } = args;
   const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
   // #555/#756: deploy 系操作は同じ POST /deploy 経路。in-flight 状態だけ分けて表示する。
   const [bulkInFlight, setBulkInFlight] = useState<
@@ -116,7 +117,7 @@ export function useEventOperations(args: {
   const [scoringLockInFlight, setScoringLockInFlight] = useState<"lock" | "unlock" | null>(null);
 
   const handleBulkDeploy = async (body: BulkDeployBody = {}) => {
-    if (!apiClient || bulkInFlight) return;
+    if (!apiClient || !canMutateTenant || bulkInFlight) return;
     setBulkInFlight(
       body.retryFailedOnly ? "retry-failed" : body.forceRedeploy ? "redeploy" : "deploy",
     );
@@ -133,7 +134,7 @@ export function useEventOperations(args: {
   };
 
   const handleBulkTeardown = async () => {
-    if (!apiClient || bulkInFlight) return;
+    if (!apiClient || !canMutateTenant || bulkInFlight) return;
     setBulkInFlight("teardown");
     setConfirmTeardown(false);
     setError(null);
@@ -149,7 +150,7 @@ export function useEventOperations(args: {
   };
 
   const handleStartNow = async () => {
-    if (!apiClient || scheduleInFlight) return;
+    if (!apiClient || !canMutateTenant || scheduleInFlight) return;
     setScheduleInFlight("now");
     setError(null);
     try {
@@ -163,7 +164,7 @@ export function useEventOperations(args: {
   };
 
   const handleScheduledStart = async () => {
-    if (!apiClient || scheduleInFlight) return;
+    if (!apiClient || !canMutateTenant || scheduleInFlight) return;
     const resolved = resolveScheduledStartInput(scheduleDate, scheduleTime, Date.now(), t);
     if (!resolved.ok) {
       setError(resolved.error);
@@ -185,7 +186,7 @@ export function useEventOperations(args: {
   };
 
   const handleScheduleEnd = async () => {
-    if (!apiClient || endsAtInFlight) return;
+    if (!apiClient || !canMutateTenant || endsAtInFlight) return;
     const validation = validateEndsAtInput(endsAtDate, endsAtTime, detail?.startsAt, Date.now());
     if (!validation.canSubmit || !validation.value) {
       setError(
@@ -209,7 +210,7 @@ export function useEventOperations(args: {
   };
 
   const handleEndNowSchedule = async () => {
-    if (!apiClient || endsAtInFlight) return;
+    if (!apiClient || !canMutateTenant || endsAtInFlight) return;
     setEndsAtInFlight(true);
     setError(null);
     try {
@@ -223,7 +224,7 @@ export function useEventOperations(args: {
   };
 
   const handleSaveFreezeMinutes = async () => {
-    if (!apiClient || freezeMinutesInFlight) return;
+    if (!apiClient || !canMutateTenant || freezeMinutesInFlight) return;
     const trimmed = freezeMinutesInput.trim();
     if (trimmed === "") {
       setError(t("event_detail.error_freeze_required"));
@@ -247,7 +248,7 @@ export function useEventOperations(args: {
   };
 
   const handleLockScoring = async () => {
-    if (!apiClient || scoringLockInFlight) return;
+    if (!apiClient || !canMutateTenant || scoringLockInFlight) return;
     setScoringLockInFlight("lock");
     setError(null);
     try {
@@ -265,7 +266,7 @@ export function useEventOperations(args: {
   };
 
   const handleUnlockScoring = async () => {
-    if (!apiClient || scoringLockInFlight) return;
+    if (!apiClient || !canMutateTenant || scoringLockInFlight) return;
     setScoringLockInFlight("unlock");
     setError(null);
     try {
@@ -283,7 +284,7 @@ export function useEventOperations(args: {
   };
 
   const handleForceArchive = async () => {
-    if (!apiClient || forceArchiveInFlight) return;
+    if (!apiClient || !canMutateTenant || forceArchiveInFlight) return;
     setForceArchiveInFlight(true);
     setConfirmForceArchive(false);
     setError(null);
@@ -298,7 +299,7 @@ export function useEventOperations(args: {
   };
 
   const handleEndEvent = async () => {
-    if (!apiClient || endInFlight) return;
+    if (!apiClient || !canMutateTenant || endInFlight) return;
     setEndInFlight(true);
     setConfirmEnd(false);
     setError(null);

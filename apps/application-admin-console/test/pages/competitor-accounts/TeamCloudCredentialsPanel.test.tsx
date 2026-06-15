@@ -35,6 +35,12 @@ const { TeamCloudCredentialsPanel } = await import(
 
 const config = { apiBaseUrl: "https://api.test", tenantId: "t1" } as AppConfig;
 const FAKE_CLIENT = { put: vi.fn(), del: vi.fn(), get: vi.fn() };
+const READ_ONLY_CLIENT = {
+  put: vi.fn(),
+  del: vi.fn(),
+  get: vi.fn(),
+  tenantAccess: { role: "viewer", canMutateTenant: false },
+};
 
 function renderPanel() {
   const { container } = render(<TeamCloudCredentialsPanel config={config} />);
@@ -141,6 +147,16 @@ describe("TeamCloudCredentialsPanel (#1413)", () => {
     mocks.useApiClient.mockReturnValue(null);
     renderPanel();
     expect(btn("team_cloud_credentials.status_button")).toBeDisabled();
+  });
+
+  it("should disable credential actions for a read-only viewer", () => {
+    mocks.useApiClient.mockReturnValue(READ_ONLY_CLIENT);
+    const w = renderPanel();
+    setTeamSlug(w, "team-a");
+    setCredential(w, "{}");
+    expect(btn("team_cloud_credentials.register_button")).toBeDisabled();
+    expect(btn("team_cloud_credentials.status_button")).toBeDisabled();
+    expect(btn("team_cloud_credentials.revoke_button")).toBeDisabled();
   });
 
   it("should dismiss the success notice", async () => {

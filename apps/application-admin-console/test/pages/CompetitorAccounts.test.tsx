@@ -86,6 +86,7 @@ const hookState = (over: Record<string, unknown> = {}) => ({
   error: null,
   verifyInFlight: null,
   deleteInFlight: false,
+  canMutateTenant: true,
   reload,
   verify,
   remove,
@@ -123,6 +124,12 @@ describe("CompetitorAccountsPage", () => {
   it("should hide the non-AWS team cloud credentials panel by default (feature off)", () => {
     renderPage();
     expect(screen.queryByTestId("team-cloud-credentials")).not.toBeInTheDocument();
+  });
+
+  it("should disable the add button for a read-only viewer", () => {
+    mockHook.mockReturnValue(hookState({ canMutateTenant: false }));
+    renderPage();
+    expect(screen.getByRole("button", { name: "competitor_accounts.add_button" })).toBeDisabled();
   });
 
   it("should show the non-AWS team cloud credentials panel when featureNonAwsRuntime is on", () => {

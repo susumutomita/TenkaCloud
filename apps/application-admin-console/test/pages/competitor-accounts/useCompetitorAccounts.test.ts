@@ -28,6 +28,12 @@ vi.mock("../../../src/api/competitor-accounts-client", () => ({
 
 const config = {} as AppConfig;
 const FAKE_CLIENT = { get: vi.fn(), post: vi.fn(), del: vi.fn() };
+const READ_ONLY_CLIENT = {
+  get: vi.fn(),
+  post: vi.fn(),
+  del: vi.fn(),
+  tenantAccess: { role: "viewer", canMutateTenant: false },
+};
 const ITEMS = [{ awsAccountId: "111122223333", status: "verified" }];
 
 afterEach(() => vi.clearAllMocks());
@@ -64,6 +70,22 @@ describe("useCompetitorAccounts", () => {
     });
     expect(result.current.items).toBeNull();
     expect(mockList).not.toHaveBeenCalled();
+    expect(mockVerify).not.toHaveBeenCalled();
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
+
+  it("should load but no-op mutating calls for a read-only viewer", async () => {
+    mockUseApiClient.mockReturnValue(READ_ONLY_CLIENT);
+    mockList.mockResolvedValue({ items: ITEMS });
+
+    const { result } = renderHook(() => useCompetitorAccounts(config));
+    await waitFor(() => expect(result.current.items).not.toBeNull());
+    expect(result.current.canMutateTenant).toBe(false);
+
+    await act(async () => {
+      await result.current.verify("111122223333");
+      await result.current.remove("111122223333");
+    });
     expect(mockVerify).not.toHaveBeenCalled();
     expect(mockDelete).not.toHaveBeenCalled();
   });

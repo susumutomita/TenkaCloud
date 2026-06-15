@@ -14,6 +14,7 @@ import { useT } from "../../i18n";
  */
 export interface EventCreateDeployPromptModalProps {
   visible: boolean;
+  canMutateTenant: boolean;
   deployStarting: boolean;
   onDeployNow: () => void;
   onDeployLater: () => void;
@@ -21,6 +22,7 @@ export interface EventCreateDeployPromptModalProps {
 
 export function EventCreateDeployPromptModal({
   visible,
+  canMutateTenant,
   deployStarting,
   onDeployNow,
   onDeployLater,
@@ -40,6 +42,7 @@ export function EventCreateDeployPromptModal({
             <Button
               variant="primary"
               loading={deployStarting}
+              disabled={!canMutateTenant}
               onClick={onDeployNow}
               data-testid="deploy-prompt-now"
             >

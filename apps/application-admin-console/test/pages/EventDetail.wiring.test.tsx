@@ -34,7 +34,10 @@ vi.mock("react-router", () => ({
     <div data-testid="navigate" data-to={to} data-replace={String(replace)} />
   ),
 }));
-vi.mock("../../src/api/client", () => ({ useApiClient: () => ({}) }));
+vi.mock("../../src/api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/api/client")>();
+  return { ...actual, useApiClient: () => ({}) };
+});
 vi.mock("../../src/hooks/useEventDetail", () => ({ useEventDetail: h.useEventDetail }));
 vi.mock("../../src/hooks/useEventOperations", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/hooks/useEventOperations")>();
