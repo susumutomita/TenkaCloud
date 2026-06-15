@@ -142,11 +142,33 @@ function validateScoringOutputKey(
       );
     }
   }
+  if (kind === "multi-flag") {
+    validateMultiFlagOutputKeys(scoring, yaml, errors);
+  }
   if (kind === "attack-detection") {
     const statsKey = scoring.statsOutputKey;
     if (typeof statsKey === "string" && !yaml.includes(`${statsKey}:`)) {
       errors.push(
         `scoring.statsOutputKey="${statsKey}" not found in template.yaml Outputs — add an "Outputs.${statsKey}:" entry whose Value is the integer attack count`,
+      );
+    }
+  }
+}
+
+/**
+ * multi-flag (#1796): flags[] の各 flagOutputKey が template.yaml Outputs に居るかを個別検査。
+ */
+function validateMultiFlagOutputKeys(
+  scoring: Record<string, unknown>,
+  yaml: string,
+  errors: string[],
+): void {
+  const flags = Array.isArray(scoring.flags) ? scoring.flags : [];
+  for (const f of flags as Array<Record<string, unknown>>) {
+    const flagKey = f.flagOutputKey;
+    if (typeof flagKey === "string" && !yaml.includes(`${flagKey}:`)) {
+      errors.push(
+        `scoring.flags[id=${String(f.id)}].flagOutputKey="${flagKey}" not found in template.yaml Outputs (= scoring engine が読めない) — add an "Outputs.${flagKey}:" entry to template.yaml or fix the metadata key`,
       );
     }
   }

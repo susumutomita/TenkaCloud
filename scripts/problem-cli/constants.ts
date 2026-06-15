@@ -10,6 +10,7 @@ export const PROBLEMS_ROOT = join(REPO_ROOT, "problems");
 
 export const KINDS = [
   "flag",
+  "multi-flag",
   "uptime-flat",
   "uptime-multi",
   "phased-polling",
@@ -24,6 +25,7 @@ export type Kind = (typeof KINDS)[number];
  */
 export const KIND_TO_DEFAULT_CATEGORY: Record<Kind, "Battle" | "Challenge"> = {
   flag: "Challenge",
+  "multi-flag": "Challenge",
   "uptime-flat": "Battle",
   "uptime-multi": "Battle",
   "phased-polling": "Battle",

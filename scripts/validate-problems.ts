@@ -219,10 +219,38 @@ function checkScoringOutputRefs(
     }
   }
 
+  if (kind === "multi-flag") {
+    errors.push(...checkMultiFlagOutputRefs(scoring, yaml, cfnTemplate));
+  }
+
   if (kind === "attack-detection") {
     const statsKey = scoring?.statsOutputKey;
     if (typeof statsKey === "string" && !yaml.includes(`${statsKey}:`)) {
       errors.push(`scoring.statsOutputKey="${statsKey}" not found in ${cfnTemplate} Outputs`);
+    }
+  }
+  return errors;
+}
+
+/**
+ * multi-flag (#1796): 1 問に N 個の独立 flag。 各 flags[].flagOutputKey が template.yaml の
+ * Outputs に存在するかを個別に検査する (= scoring engine が flag ごとに値を読めること)。
+ */
+function checkMultiFlagOutputRefs(
+  scoring: Record<string, unknown> | undefined,
+  yaml: string,
+  cfnTemplate: string,
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const flags = (Array.isArray(scoring?.flags) ? scoring?.flags : []) as Array<
+    Record<string, unknown>
+  >;
+  for (const f of flags) {
+    const flagKey = f.flagOutputKey;
+    if (typeof flagKey === "string" && !yaml.includes(`${flagKey}:`)) {
+      errors.push(
+        `scoring.flags[id=${String(f.id)}].flagOutputKey="${flagKey}" not found in ${cfnTemplate} Outputs (= scoring engine が読めない)`,
+      );
     }
   }
   return errors;

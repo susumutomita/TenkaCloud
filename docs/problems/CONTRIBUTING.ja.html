@@ -72,10 +72,15 @@ make install
 </code></pre>
 <h2>30 分 quickstart (= scaffold → edit → validate → PR)</h2>
 <h3>1. 採点 kind を選ぶ (= 最重要)</h3>
-<p>TenkaCloud の 1 問題は 5 種の built-in scoring kind のいずれか 1 つで採点する。 platform 側の generic scoring Lambda がこの値で dispatch する。 問題固有の scoring code は <a href="../architecture/adr-012-problem-plugin-architecture.html">ADR-012</a> で禁止。</p>
+<p>TenkaCloud の 1 問題は 6 種の built-in scoring kind のいずれか 1 つで採点する。 platform 側の generic scoring Lambda がこの値で dispatch する。 問題固有の scoring code は <a href="../architecture/adr-012-problem-plugin-architecture.html">ADR-012</a> で禁止。</p>
 <p>決定木は次のとおりです。</p>
-<pre><code class="language-text">競技者が 1 つの値 (= &quot;flag&quot;) を提出して終わるか?
-├── Yes → kind = &quot;flag&quot;               (Challenge / SSM Parameter を読む、 S3 object を見つける等)
+<pre><code class="language-text">競技者が値 (= &quot;flag&quot;) を提出して終わるか?
+├── Yes
+│   │
+│   flag は 1 個か、 独立した複数 flag を個別採点 (= 部分点) するか?
+│   ├── 1 個 → kind = &quot;flag&quot;          (Challenge / SSM Parameter を読む、 S3 object を見つける等)
+│   └── N 個の独立 flag → kind = &quot;multi-flag&quot;
+│       (Challenge / 1 問に複数 sub-challenge。 flags[].points の合計が満点)
 └── No
     │
     競技者が何かを稼働させ続ける必要があるか?
@@ -215,7 +220,7 @@ gh pr create --repo susumutomita/TenkaCloudChallenge \
 <tbody><tr>
 <td><code>scoring.kind=&quot;...&quot; is not a recognized kind</code></td>
 <td><code>scoring.kind</code> の typo</td>
-<td>値を <code>flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code> のどれかに修正する。</td>
+<td>値を <code>flag</code> / <code>multi-flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code> のどれかに修正する。</td>
 </tr>
 <tr>
 <td><code>scoring.flagOutputKey=&quot;X&quot; not found in template.yaml Outputs</code></td>
@@ -285,7 +290,7 @@ gh pr create --repo susumutomita/TenkaCloudChallenge \
 <li><input disabled="" type="checkbox"> <code>metadata.id</code> と dir 名が完全一致。</li>
 <li><input disabled="" type="checkbox"> <code>category</code> は <code>&quot;Battle&quot;</code> または <code>&quot;Challenge&quot;</code> (= 大文字始まり)。</li>
 <li><input disabled="" type="checkbox"> <code>status</code> は <code>&quot;draft&quot;</code> (= 初回 submission)。</li>
-<li><input disabled="" type="checkbox"> <code>scoring.kind</code> は 5 種のいずれか。</li>
+<li><input disabled="" type="checkbox"> <code>scoring.kind</code> は 6 種のいずれか。</li>
 <li><input disabled="" type="checkbox"> <code>metadata.json</code> 内の <code>__PLACEHOLDER__</code> を全部置換済。</li>
 <li><input disabled="" type="checkbox"> <code>metadata.json</code> が参照する endpoint / scoring key が <code>template.yaml</code> <code>Outputs:</code> に存在する。</li>
 <li><input disabled="" type="checkbox"> <code>template.yaml</code> の全リソース名に <code>${NamePrefix}</code> が冠されている。</li>

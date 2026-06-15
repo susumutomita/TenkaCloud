@@ -101,7 +101,7 @@
 <p><strong>Talking points.</strong></p>
 <ul>
 <li>The Worker Lambda subscribes to <code>DeployCreateRequested</code> events on the EventBridge bus. When one fires, it AssumeRoles into the competitor account using the tenant&#39;s <code>ExternalId</code> (always required — there is no opt-out) and runs CFn <code>CreateStack</code> with the problem&#39;s <code>template.yaml</code>.</li>
-<li>Scoring is centralized in one Lambda that dispatches by <code>kind</code>. The five kinds are <code>flag</code>, <code>uptime-flat</code>, <code>uptime-multi</code>, <code>phased-polling</code>, <code>attack-detection</code>. <strong>No problem-specific code lives in the platform</strong> — that is <code>ADR-012</code>.</li>
+<li>Scoring is centralized in one Lambda that dispatches by <code>kind</code>. The six kinds are <code>flag</code>, <code>multi-flag</code>, <code>uptime-flat</code>, <code>uptime-multi</code>, <code>phased-polling</code>, <code>attack-detection</code>. <strong>No problem-specific code lives in the platform</strong> — that is <code>ADR-012</code>.</li>
 <li>Reconciliation is EventBridge-driven (<code>ADR-014</code>). The frontend polls (no SSE — see <code>AGENTS.md</code>) and EventBridge supplements the polling so we do not need long-lived sockets.</li>
 <li>The Worker Lambda is fronted by Step Functions for retry / delete orchestration. Idempotency is preserved by keying state on <code>(tenantId, eventId, teamId, problemId)</code>.</li>
 </ul>

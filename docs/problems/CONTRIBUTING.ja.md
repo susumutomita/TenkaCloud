@@ -39,13 +39,18 @@ git submodule update --init --recursive problems
 
 ### 1. 採点 kind を選ぶ (= 最重要)
 
-TenkaCloud の 1 問題は 5 種の built-in scoring kind のいずれか 1 つで採点する。 platform 側の generic scoring Lambda がこの値で dispatch する。 問題固有の scoring code は [ADR-012](../architecture/adr-012-problem-plugin-architecture.html) で禁止。
+TenkaCloud の 1 問題は 6 種の built-in scoring kind のいずれか 1 つで採点する。 platform 側の generic scoring Lambda がこの値で dispatch する。 問題固有の scoring code は [ADR-012](../architecture/adr-012-problem-plugin-architecture.html) で禁止。
 
 決定木は次のとおりです。
 
 ```text
-競技者が 1 つの値 (= "flag") を提出して終わるか?
-├── Yes → kind = "flag"               (Challenge / SSM Parameter を読む、 S3 object を見つける等)
+競技者が値 (= "flag") を提出して終わるか?
+├── Yes
+│   │
+│   flag は 1 個か、 独立した複数 flag を個別採点 (= 部分点) するか?
+│   ├── 1 個 → kind = "flag"          (Challenge / SSM Parameter を読む、 S3 object を見つける等)
+│   └── N 個の独立 flag → kind = "multi-flag"
+│       (Challenge / 1 問に複数 sub-challenge。 flags[].points の合計が満点)
 └── No
     │
     競技者が何かを稼働させ続ける必要があるか?
@@ -175,7 +180,7 @@ CLI validator (`scripts/tenkacloud-problem.ts validate`) と `make validate-prob
 
 | エラー (= 部分一致)                                                       | 原因                                                                              | Fix                                                                                                                       |
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `scoring.kind="..." is not a recognized kind`                            | `scoring.kind` の typo                                                            | 値を `flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection` のどれかに修正する。                  |
+| `scoring.kind="..." is not a recognized kind`                            | `scoring.kind` の typo                                                            | 値を `flag` / `multi-flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection` のどれかに修正する。   |
 | `scoring.flagOutputKey="X" not found in template.yaml Outputs`           | `metadata.scoring.flagOutputKey` の値が CFn `Output` key に存在しない              | `template.yaml` に `Outputs.X:` を追加するか、 metadata 側の key を template の実際の Output key に揃える。               |
 | `scoring.statsOutputKey="X" not found in template.yaml Outputs`          | `attack-detection` で同上                                                          | `Outputs.X:` を追加。 `Value` は攻撃検知数 (= 整数 string)。                                                              |
 | `endpoints[slot=N].default.key="X" not found in template.yaml Outputs`   | `endpoints[].default.key` が存在しない Output を指す                              | `Outputs.X:` を追加 (= typically 公開 endpoint URL)。                                                                     |
@@ -208,7 +213,7 @@ Claude Code には `/create-problem` skill が同梱されており、 同じ sc
 - [ ] `metadata.id` と dir 名が完全一致。
 - [ ] `category` は `"Battle"` または `"Challenge"` (= 大文字始まり)。
 - [ ] `status` は `"draft"` (= 初回 submission)。
-- [ ] `scoring.kind` は 5 種のいずれか。
+- [ ] `scoring.kind` は 6 種のいずれか。
 - [ ] `metadata.json` 内の `__PLACEHOLDER__` を全部置換済。
 - [ ] `metadata.json` が参照する endpoint / scoring key が `template.yaml` `Outputs:` に存在する。
 - [ ] `template.yaml` の全リソース名に `${NamePrefix}` が冠されている。
