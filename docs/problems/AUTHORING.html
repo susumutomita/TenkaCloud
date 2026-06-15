@@ -119,7 +119,7 @@
 <section id="decide-kind">
 <h2>2. Step 0 — 採点 kind を決める</h2>
 
-<p>scoring engine (= ADR-012 Phase 3 の generic scoring Lambda) は <strong>5 種の builtin kind</strong> をサポートする。 1 問題 1 kind。 最初に「この問題はどう採点するか」 を決めると後の選択肢が全部決まる。</p>
+<p>scoring engine (= ADR-012 Phase 3 の generic scoring Lambda) は <strong>6 種の builtin kind</strong> をサポートする。 1 問題 1 kind。 最初に「この問題はどう採点するか」 を決めると後の選択肢が全部決まる。</p>
 
 <table>
 <thead>
@@ -131,6 +131,12 @@
     <td>Challenge</td>
     <td>1 deploy で 1 回 flag 提出。 CFn Output 値と submitted flag が一致したら <code>points</code> 加算</td>
     <td>CTF 風 (= AWS Console で値を発見する Challenge)</td>
+  </tr>
+  <tr>
+    <td><code>multi-flag</code></td>
+    <td>Challenge</td>
+    <td>1 問題に N 個の独立 flag を持ち、 各 flag を個別提出して部分点を与える。 <code>flags[].points</code> の合計が満点</td>
+    <td>ストーリー連作 Challenge を 1 問に統合 (= 単一 flag で足りるなら <code>flag</code> を使う)</td>
   </tr>
   <tr>
     <td><code>uptime-flat</code> (旧 <code>uptime</code>)</td>
@@ -163,6 +169,7 @@
 <strong>決定木:</strong>
 <ul>
   <li>1 回提出で終わるか? → <code>flag</code></li>
+  <li>1 問で複数の独立 flag を部分点採点するか? → <code>multi-flag</code></li>
   <li>endpoint が常に生きていることが採点軸か? → 1 endpoint なら <code>uptime-flat</code>、 N endpoint で「全部生きている」 を求めるなら <code>uptime-multi</code></li>
   <li>途中で rule が変わるか? → <code>phased-polling</code></li>
   <li>攻撃検知数で勝敗が決まるか? → <code>attack-detection</code></li>
@@ -404,7 +411,7 @@ aws cloudformation deploy \
 <ul>
   <li>☐ <code>metadata.json</code> の <code>id</code> が dir 名と完全一致</li>
   <li>☐ <code>category</code> が <code>Battle</code> / <code>Challenge</code> (大文字始まり)</li>
-  <li>☐ <code>scoring.kind</code> が 5 種のいずれか</li>
+  <li>☐ <code>scoring.kind</code> が 6 種のいずれか</li>
   <li>☐ <code>cfnTemplate</code> で参照する <code>template.yaml</code> が同 dir にある</li>
   <li>☐ template.yaml の Parameters に <code>NamePrefix</code> を含む</li>
   <li>☐ 全リソース名 / タグに <code>${NamePrefix}</code> が冠されている</li>

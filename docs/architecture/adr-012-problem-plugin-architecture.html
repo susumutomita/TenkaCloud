@@ -138,6 +138,8 @@
 
 <p>5 種で表現できない問題が出た時は本 ADR の拡張で kind を増やす。 「問題ごとに Lambda を立てる」 ことはしない。</p>
 
+<p><strong>拡張: <code>multi-flag</code> (6 種目、 #1796)</strong> — 上記 5 種に加え、 1 問題に N 個の独立 flag を持たせ、 競技者が各 flag を個別に提出して部分点を得る <code>multi-flag</code> kind を本 ADR の拡張として追加した。 採点は <code>flag</code> と同じく提出時 (participant-handler の <code>submit-flag</code>) に走るため、 1 分間隔の generic scoring Lambda の polling dispatch (= 上記 5 種) には乗らない。 したがって scoring kind は author が選べる 6 種 (うち提出採点 = <code>flag</code> / <code>multi-flag</code>、 polling 採点 = <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code>) となる。</p>
+
 <h3>Endpoint model: default + override の slot</h3>
 
 <p>各 endpoint は <code>metadata.endpoints[]</code> で slot として宣言する。</p>

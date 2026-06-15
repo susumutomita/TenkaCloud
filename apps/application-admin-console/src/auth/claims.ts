@@ -13,10 +13,63 @@ export interface IdTokenClaims {
   email?: string;
   /** `https://cognito-idp.<region>.amazonaws.com/<userPoolId>` — used to derive the SP Entity ID. */
   iss?: string;
+  "cognito:groups"?: string | string[];
   "custom:tenantId"?: string;
   "custom:tenantName"?: string;
   "custom:userRole"?: string;
   "custom:tenantTier"?: string;
+}
+
+export type TenantConsoleRole = "editor" | "viewer";
+
+export interface TenantConsoleAccess {
+  readonly role: TenantConsoleRole;
+  readonly canMutateTenant: boolean;
+}
+
+const EDITOR_ROLE_ALIASES = new Set([
+  "admin",
+  "editor",
+  "operator",
+  "tenantadmin",
+  "tenanteditor",
+  "tenantoperator",
+]);
+const VIEWER_ROLE_ALIASES = new Set(["readonly", "tenantviewer", "viewer"]);
+
+function normalizeRoleToken(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+}
+
+function normalizeTenantConsoleRole(value: string): TenantConsoleRole | null {
+  const normalized = normalizeRoleToken(value);
+  if (EDITOR_ROLE_ALIASES.has(normalized)) return "editor";
+  if (VIEWER_ROLE_ALIASES.has(normalized)) return "viewer";
+  return null;
+}
+
+function roleClaimValues(claims: IdTokenClaims | null): readonly string[] {
+  if (!claims) return [];
+  const values: string[] = [];
+  const customRole = claims["custom:userRole"];
+  if (typeof customRole === "string") values.push(customRole);
+  const groups = claims["cognito:groups"];
+  if (Array.isArray(groups)) {
+    values.push(...groups.filter((group) => typeof group === "string"));
+  } else if (typeof groups === "string") {
+    values.push(...groups.split(/[,\s]+/).filter((group) => group.length > 0));
+  }
+  return values;
+}
+
+export function resolveTenantConsoleAccess(claims: IdTokenClaims | null): TenantConsoleAccess {
+  const roles = roleClaimValues(claims)
+    .map((value) => normalizeTenantConsoleRole(value))
+    .filter((role): role is TenantConsoleRole => role !== null);
+  if (roles.includes("editor")) {
+    return { role: "editor", canMutateTenant: true };
+  }
+  return { role: "viewer", canMutateTenant: false };
 }
 
 export function decodeIdToken(idToken: string): IdTokenClaims | null {

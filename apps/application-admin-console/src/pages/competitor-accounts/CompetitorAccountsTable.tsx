@@ -11,6 +11,7 @@ import { useT } from "../../i18n";
 interface CompetitorAccountsTableProps {
   items: readonly CompetitorAccountSummary[];
   verifyInFlight: string | null;
+  canMutateTenant: boolean;
   onVerify: (awsAccountId: string) => void;
   onRequestDelete: (item: CompetitorAccountSummary) => void;
   /** Empty-state primary action — opens the add-account modal (same as the header button). */
@@ -20,6 +21,7 @@ interface CompetitorAccountsTableProps {
 export function CompetitorAccountsTable({
   items,
   verifyInFlight,
+  canMutateTenant,
   onVerify,
   onRequestDelete,
   onAdd,
@@ -72,21 +74,25 @@ export function CompetitorAccountsTable({
             <Button
               variant="normal"
               loading={verifyInFlight === item.awsAccountId}
-              disabled={verifyInFlight !== null}
+              disabled={!canMutateTenant || verifyInFlight !== null}
               onClick={() => onVerify(item.awsAccountId)}
             >
               {item.verified
                 ? t("competitor_accounts.verify_again")
                 : t("competitor_accounts.verify")}
             </Button>
-            <Button variant="link" onClick={() => onRequestDelete(item)}>
+            <Button
+              variant="link"
+              disabled={!canMutateTenant}
+              onClick={() => onRequestDelete(item)}
+            >
               {t("competitor_accounts.delete")}
             </Button>
           </SpaceBetween>
         ),
       },
     ],
-    [onRequestDelete, onVerify, verifyInFlight, t],
+    [onRequestDelete, onVerify, verifyInFlight, canMutateTenant, t],
   );
 
   return (
@@ -98,7 +104,11 @@ export function CompetitorAccountsTable({
       empty={
         <EmptyState
           headline={t("competitor_accounts.table_empty")}
-          primaryAction={{ label: t("competitor_accounts.add_button"), onClick: onAdd }}
+          primaryAction={
+            canMutateTenant
+              ? { label: t("competitor_accounts.add_button"), onClick: onAdd }
+              : undefined
+          }
         />
       }
     />

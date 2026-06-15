@@ -30,6 +30,7 @@ describe("CompetitorAccountsTable", () => {
       <CompetitorAccountsTable
         items={items}
         verifyInFlight={null}
+        canMutateTenant={true}
         onVerify={onVerify}
         onRequestDelete={onRequestDelete}
         onAdd={vi.fn()}
@@ -54,6 +55,7 @@ describe("CompetitorAccountsTable", () => {
       <CompetitorAccountsTable
         items={items}
         verifyInFlight="acct-1"
+        canMutateTenant={true}
         onVerify={vi.fn()}
         onRequestDelete={vi.fn()}
         onAdd={vi.fn()}
@@ -69,6 +71,7 @@ describe("CompetitorAccountsTable", () => {
       <CompetitorAccountsTable
         items={[]}
         verifyInFlight={null}
+        canMutateTenant={true}
         onVerify={vi.fn()}
         onRequestDelete={vi.fn()}
         onAdd={onAdd}
@@ -78,5 +81,20 @@ describe("CompetitorAccountsTable", () => {
     // the empty state has a real, clickable add button (not a decorative "+")
     fireEvent.click(screen.getByRole("button", { name: "competitor_accounts.add_button" }));
     expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it("should disable mutation actions for a read-only viewer", () => {
+    render(
+      <CompetitorAccountsTable
+        items={items}
+        verifyInFlight={null}
+        canMutateTenant={false}
+        onVerify={vi.fn()}
+        onRequestDelete={vi.fn()}
+        onAdd={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "competitor_accounts.verify_again" })).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: "competitor_accounts.delete" })[0]).toBeDisabled();
   });
 });

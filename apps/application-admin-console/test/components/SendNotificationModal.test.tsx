@@ -61,6 +61,7 @@ describe("SendNotificationModal", () => {
     render(
       withI18n(
         <SendNotificationModal
+          canMutateTenant={true}
           config={config}
           visible={true}
           eventId={EVENT_ID}
@@ -78,6 +79,7 @@ describe("SendNotificationModal", () => {
     render(
       withI18n(
         <SendNotificationModal
+          canMutateTenant={true}
           config={config}
           visible={true}
           eventId={EVENT_ID}
@@ -102,6 +104,7 @@ describe("SendNotificationModal", () => {
     render(
       withI18n(
         <SendNotificationModal
+          canMutateTenant={true}
           config={config}
           visible={true}
           eventId={EVENT_ID}
@@ -130,6 +133,7 @@ describe("SendNotificationModal", () => {
     render(
       withI18n(
         <SendNotificationModal
+          canMutateTenant={true}
           config={config}
           visible={true}
           eventId={EVENT_ID}
@@ -150,6 +154,7 @@ describe("SendNotificationModal", () => {
     render(
       withI18n(
         <SendNotificationModal
+          canMutateTenant={true}
           config={config}
           visible={true}
           eventId={EVENT_ID}
@@ -170,6 +175,7 @@ describe("SendNotificationModal", () => {
     render(
       withI18n(
         <SendNotificationModal
+          canMutateTenant={true}
           config={config}
           visible={true}
           eventId={EVENT_ID}
@@ -188,6 +194,7 @@ describe("SendNotificationModal", () => {
     render(
       withI18n(
         <SendNotificationModal
+          canMutateTenant={true}
           config={config}
           visible={true}
           eventId={EVENT_ID}
@@ -217,6 +224,7 @@ describe("SendNotificationModal", () => {
     render(
       withI18n(
         <SendNotificationModal
+          canMutateTenant={true}
           config={config}
           visible={true}
           eventId={EVENT_ID}
@@ -228,10 +236,29 @@ describe("SendNotificationModal", () => {
     expect(screen.getByRole("button", { name: "送信" })).toBeDisabled();
   });
 
+  it("should disable submit for a read-only viewer even when the draft is valid", () => {
+    render(
+      withI18n(
+        <SendNotificationModal
+          canMutateTenant={false}
+          config={config}
+          visible={true}
+          eventId={EVENT_ID}
+          onDismiss={vi.fn()}
+          onSuccess={vi.fn()}
+        />,
+      ),
+    );
+    fireEvent.change(screen.getByLabelText("タイトル"), { target: { value: "T" } });
+    fireEvent.change(screen.getByLabelText("本文"), { target: { value: "B" } });
+    expect(screen.getByRole("button", { name: "送信" })).toBeDisabled();
+  });
+
   it("should show the body errorText and disable submit when body exceeds the limit", () => {
     render(
       withI18n(
         <SendNotificationModal
+          canMutateTenant={true}
           config={config}
           visible={true}
           eventId={EVENT_ID}

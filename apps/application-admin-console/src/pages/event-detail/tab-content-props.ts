@@ -15,6 +15,7 @@ export type EventOperations = ReturnType<typeof useEventOperations>;
 
 export interface EventTabContentProps {
   readonly apiClient: ApiClient | null;
+  readonly canMutateTenant: boolean;
   readonly config: AppConfig;
   readonly counts: {
     readonly allDoneCount: number;

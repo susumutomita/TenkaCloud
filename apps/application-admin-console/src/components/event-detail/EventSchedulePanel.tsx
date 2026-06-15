@@ -14,6 +14,7 @@ type Translate = (key: string, params?: Readonly<Record<string, string | number>
 
 export function EventSchedulePanel({
   apiClient,
+  canMutateTenant,
   detail,
   endsAtInFlight,
   freezeMinutesInFlight,
@@ -29,6 +30,7 @@ export function EventSchedulePanel({
   wizard,
 }: {
   readonly apiClient: ApiClient | null;
+  readonly canMutateTenant: boolean;
   readonly detail: EventDetail;
   readonly endsAtInFlight: boolean;
   readonly freezeMinutesInFlight: boolean;
@@ -64,14 +66,14 @@ export function EventSchedulePanel({
             <SpaceBetween direction="horizontal" size="xs">
               <Button
                 onClick={onOpenScheduleModal}
-                disabled={!apiClient || scheduleInFlight !== null}
+                disabled={!apiClient || !canMutateTenant || scheduleInFlight !== null}
               >
                 {t("event_detail.starts_at_pick")}
               </Button>
               <Button
                 variant={wizard?.primary === "start" ? "primary" : "normal"}
                 loading={scheduleInFlight === "now"}
-                disabled={!apiClient || scheduleInFlight === "scheduled"}
+                disabled={!apiClient || !canMutateTenant || scheduleInFlight === "scheduled"}
                 onClick={onStartNow}
               >
                 {t("event_detail.starts_at_now")}
@@ -89,10 +91,17 @@ export function EventSchedulePanel({
               </Box>
             )}
             <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={onOpenEndsAtModal} disabled={!apiClient || endsAtInFlight}>
+              <Button
+                onClick={onOpenEndsAtModal}
+                disabled={!apiClient || !canMutateTenant || endsAtInFlight}
+              >
                 {t("event_detail.ends_at_pick")}
               </Button>
-              <Button loading={endsAtInFlight} disabled={!apiClient} onClick={onEndNowSchedule}>
+              <Button
+                loading={endsAtInFlight}
+                disabled={!apiClient || !canMutateTenant}
+                onClick={onEndNowSchedule}
+              >
                 {t("event_detail.ends_at_now")}
               </Button>
             </SpaceBetween>
@@ -118,11 +127,11 @@ export function EventSchedulePanel({
               placeholder={t("event_detail.freeze_placeholder")}
               value={freezeMinutesInput}
               onChange={({ detail: d }) => onUpdateFreezeMinutes(d.value)}
-              disabled={freezeMinutesInFlight}
+              disabled={!canMutateTenant || freezeMinutesInFlight}
             />
             <Button
               loading={freezeMinutesInFlight}
-              disabled={!apiClient || freezeMinutesInput.trim() === ""}
+              disabled={!apiClient || !canMutateTenant || freezeMinutesInput.trim() === ""}
               onClick={onSaveFreezeMinutes}
             >
               {t("event_detail.freeze_save")}

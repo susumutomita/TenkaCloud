@@ -14,6 +14,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useApiClient } from "../api/client";
 import {
+  isTenantSuspended,
   listTenants,
   parseTenantConfig,
   type Tenant,
@@ -183,6 +184,14 @@ function OverviewTab({
               tenant.isActive === false
                 ? t("tenant_detail.active_no")
                 : t("tenant_detail.active_yes"),
+          },
+          {
+            label: t("tenant_detail.label_suspended"),
+            value: isTenantSuspended(tenant) ? (
+              <Badge color="red">{t("tenant_detail.suspended_yes")}</Badge>
+            ) : (
+              t("tenant_detail.suspended_no")
+            ),
           },
           {
             label: t("tenant_detail.label_created_at"),

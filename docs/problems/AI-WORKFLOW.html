@@ -79,7 +79,7 @@ Prerequisite: read <a href="./CONTRIBUTING.md"><code>CONTRIBUTING.md</code></a> 
 <li><strong>Title and 1-line description.</strong> What is the problem called and what does the contestant do in one sentence?</li>
 <li><strong>Learning goals.</strong> Two or three bullets describing what the contestant should walk away understanding.</li>
 <li><strong>Difficulty and duration.</strong> 1 = entry, 5 = expert. Duration is a free-form string like <code>60〜90 分</code>.</li>
-<li><strong>Scoring kind.</strong> The skill walks you through the decision tree from <code>CONTRIBUTING.md</code>. Pick exactly one of the five built-ins.</li>
+<li><strong>Scoring kind.</strong> The skill walks you through the decision tree from <code>CONTRIBUTING.md</code>. Pick exactly one of the six built-ins.</li>
 <li><strong>Scaffold generation.</strong> The skill invokes <code>bun run scripts/tenkacloud-problem.ts create &lt;id&gt; --kind &lt;kind&gt;</code> and shows the resulting files.</li>
 <li><strong>Edit guidance.</strong> The skill enumerates every <code>__PLACEHOLDER__</code> left in the scaffold and prompts for replacement values.</li>
 </ol>
@@ -121,7 +121,7 @@ bun run scripts/tenkacloud-problem.ts inspect &lt;id&gt;
 - learning goals: &lt;bullets&gt;
 - difficulty: &lt;1-5&gt;
 - duration: &quot;&lt;free text&gt;&quot;
-- scoring kind: &lt;one of flag / uptime-flat / uptime-multi / phased-polling / attack-detection&gt;
+- scoring kind: &lt;one of flag / multi-flag / uptime-flat / uptime-multi / phased-polling / attack-detection&gt;
 
 Use the CLI:
   bun run scripts/tenkacloud-problem.ts create &lt;id&gt; --kind &lt;kind&gt;

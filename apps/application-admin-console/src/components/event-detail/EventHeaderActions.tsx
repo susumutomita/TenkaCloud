@@ -12,6 +12,7 @@ type Translate = (key: string, params?: Readonly<Record<string, string | number>
 export function EventHeaderActions({
   apiClient,
   bulkInFlight,
+  canMutateTenant,
   completeCount,
   detail,
   endInFlight,
@@ -27,6 +28,7 @@ export function EventHeaderActions({
 }: {
   readonly apiClient: ApiClient | null;
   readonly bulkInFlight: "deploy" | "teardown" | "retry-failed" | "redeploy" | null;
+  readonly canMutateTenant: boolean;
   readonly completeCount: number;
   readonly detail: EventDetail | null;
   readonly endInFlight: boolean;
@@ -49,6 +51,7 @@ export function EventHeaderActions({
         loading={bulkInFlight === "deploy"}
         disabled={
           !detail ||
+          !canMutateTenant ||
           detail.problems.length === 0 ||
           detail.teams.length === 0 ||
           isTerminalEventStatus(detail.status)
@@ -60,7 +63,12 @@ export function EventHeaderActions({
       {failedCount > 0 && (
         <Button
           loading={bulkInFlight === "retry-failed"}
-          disabled={!detail || isTerminalEventStatus(detail.status) || bulkInFlight !== null}
+          disabled={
+            !detail ||
+            !canMutateTenant ||
+            isTerminalEventStatus(detail.status) ||
+            bulkInFlight !== null
+          }
           iconName="refresh"
           onClick={() => onBulkDeploy({ retryFailedOnly: true })}
         >
@@ -70,20 +78,29 @@ export function EventHeaderActions({
       {completeCount > 0 && (
         <Button
           loading={bulkInFlight === "redeploy"}
-          disabled={!detail || isTerminalEventStatus(detail.status) || bulkInFlight !== null}
+          disabled={
+            !detail ||
+            !canMutateTenant ||
+            isTerminalEventStatus(detail.status) ||
+            bulkInFlight !== null
+          }
           iconName="refresh"
           onClick={() => onBulkDeploy({ forceRedeploy: true })}
         >
           {t("event_detail.redeploy", { count: completeCount })}
         </Button>
       )}
-      <Button loading={endInFlight} disabled={!detail || detail.status !== "READY"} onClick={onEnd}>
+      <Button
+        loading={endInFlight}
+        disabled={!detail || !canMutateTenant || detail.status !== "READY"}
+        onClick={onEnd}
+      >
         {t("event_detail.end_event")}
       </Button>
       {detail && (detail.status === "READY" || detail.status === "ENDED") && (
         <Button
           loading={scoringLockInFlight !== null}
-          disabled={!apiClient}
+          disabled={!apiClient || !canMutateTenant}
           onClick={detail.scoringLocked === true ? onUnlockScoring : onLockScoring}
         >
           {detail.scoringLocked === true

@@ -3,11 +3,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   extractClaims,
   extractTenantIdFromClaims,
+  extractTenantSuspendedFromClaims,
   extractUserRoleFromClaims,
   ForbiddenRoleError,
+  isTenantSuspended,
   MissingTenantClaimError,
   requireRole,
   requireTenantAdmin,
+  requireTenantNotSuspended,
   resolveCognitoSub,
   resolveTenantId,
   resolveUserRole,
@@ -15,6 +18,7 @@ import {
   TENANT_OPERATOR_ROLE,
   TENANT_ROLES,
   TENANT_VIEWER_ROLE,
+  TenantSuspendedError,
 } from "../../lib/problem-deploy/handlers/deploy-handler/auth";
 
 describe("extractTenantIdFromClaims", () => {
@@ -85,6 +89,40 @@ describe("resolveTenantId", () => {
     process.env.DEFAULT_TENANT_ID = "tenant-from-env";
     const c = { env: {} } as unknown as Context;
     expect(resolveTenantId(c)).toBe("tenant-from-env");
+  });
+});
+
+describe("tenant suspension claims (#1768)", () => {
+  const original = process.env.DEFAULT_TENANT_SUSPENDED;
+  afterEach(() => {
+    if (original === undefined) delete process.env.DEFAULT_TENANT_SUSPENDED;
+    else process.env.DEFAULT_TENANT_SUSPENDED = original;
+  });
+
+  it("should read custom:isSuspended=true from JWT claims", () => {
+    expect(extractTenantSuspendedFromClaims({ "custom:isSuspended": "true" })).toBe(true);
+    expect(extractTenantSuspendedFromClaims({ "custom:isSuspended": " TRUE " })).toBe(true);
+  });
+
+  it("should treat missing, false, and non-string values as not suspended", () => {
+    expect(extractTenantSuspendedFromClaims({})).toBe(false);
+    expect(extractTenantSuspendedFromClaims({ "custom:isSuspended": "false" })).toBe(false);
+    expect(extractTenantSuspendedFromClaims({ "custom:isSuspended": 1 })).toBe(false);
+  });
+
+  it("should let the JWT claim override the local test fallback", () => {
+    process.env.DEFAULT_TENANT_SUSPENDED = "true";
+    expect(isTenantSuspended(buildCtx({ "custom:isSuspended": "false" }))).toBe(false);
+  });
+
+  it("should fall back to DEFAULT_TENANT_SUSPENDED when the claim is absent", () => {
+    process.env.DEFAULT_TENANT_SUSPENDED = "true";
+    expect(isTenantSuspended(buildCtx())).toBe(true);
+  });
+
+  it("should throw TenantSuspendedError from requireTenantNotSuspended", () => {
+    process.env.DEFAULT_TENANT_SUSPENDED = "true";
+    expect(() => requireTenantNotSuspended(buildCtx())).toThrow(TenantSuspendedError);
   });
 });
 

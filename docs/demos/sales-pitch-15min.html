@@ -84,12 +84,12 @@
 <p><strong>Pricing hint.</strong> Cross-account <code>AssumeRole</code> is included at every tier. The one-time competitor-side bootstrap is <code>infrastructure/templates/competitor-bootstrap.yaml</code>, a single CFn that creates the role with <code>ExternalId</code>.</p>
 <h2>Step 6 — Solve and score (≈ 3 min)</h2>
 <p><strong>Action.</strong> Same as quickstart Step 6. After the score increments, switch back to the admin console scoreboard.</p>
-<p><strong>Talking point.</strong> &quot;Scoring is one of five built-in kinds — <code>flag</code>, <code>uptime-flat</code>, <code>uptime-multi</code>, <code>phased-polling</code>, <code>attack-detection</code>. Each problem picks one. The platform has a single generic scoring Lambda that dispatches to the right kind — no problem-specific code in the platform. That keeps the operational surface small.&quot;</p>
+<p><strong>Talking point.</strong> &quot;Scoring is one of six built-in kinds — <code>flag</code>, <code>multi-flag</code>, <code>uptime-flat</code>, <code>uptime-multi</code>, <code>phased-polling</code>, <code>attack-detection</code>. Each problem picks one. The platform has a single generic scoring Lambda that dispatches to the right kind — no problem-specific code in the platform. That keeps the operational surface small.&quot;</p>
 <p><strong>Pricing hint.</strong> Real-time scoreboard refresh, multi-team dashboards, and disruption-phase visibility ship at Hosted Event tier and above. Starter has the same scoring path with simpler dashboards.</p>
 <h2>Closing (≈ 2 min)</h2>
 <p>Cover three points:</p>
 <ol>
-<li><strong>Reality check.</strong> What we ship today: cross-account isolated deploy, five scoring kinds, EventBridge state reconciliation (<code>ADR-014</code>), polling-based UI (no SSE — see <code>AGENTS.md</code>). What we are working toward: voting-based community catalog (<code>ADR-024</code>), provider-specific runtimes for non-AWS (<code>ADR-023</code>). We do not claim &quot;production-grade multi-cloud&quot; or &quot;full SOC2&quot; today.</li>
+<li><strong>Reality check.</strong> What we ship today: cross-account isolated deploy, six scoring kinds, EventBridge state reconciliation (<code>ADR-014</code>), polling-based UI (no SSE — see <code>AGENTS.md</code>). What we are working toward: voting-based community catalog (<code>ADR-024</code>), provider-specific runtimes for non-AWS (<code>ADR-023</code>). We do not claim &quot;production-grade multi-cloud&quot; or &quot;full SOC2&quot; today.</li>
 <li><strong>Operating model.</strong> Lite mode = <code>make deploy</code>, 1 organizer / 1 event, 10-minute setup. SaaS mode = <code>make deploy-saas</code>, multi-tenant, pooled + silo tier mix, 15 to 20 minutes to bring up the control plane.</li>
 <li><strong>CTA.</strong> Pick a starter problem (<code>hello-world</code>, <code>s3-public-bucket</code>, <code>lambda-cold-start</code>). Run one dry-run with your own SRE team. The longest commitment is one <code>make deploy</code> run.</li>
 </ol>
@@ -111,7 +111,7 @@
 </tr>
 <tr>
 <td>&quot;Each event needs custom scoring.&quot;</td>
-<td>Five scoring kinds (<code>flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code>).</td>
+<td>Six scoring kinds (<code>flag</code> / <code>multi-flag</code> / <code>uptime-flat</code> / <code>uptime-multi</code> / <code>phased-polling</code> / <code>attack-detection</code>).</td>
 </tr>
 <tr>
 <td>&quot;We need event-day operations to be calm.&quot;</td>

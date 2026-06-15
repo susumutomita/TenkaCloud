@@ -13,7 +13,7 @@ export JSII_DEPRECATED := quiet
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
-        check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-cli-access \
+        check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-cli-access check-template-name-limits \
         env-check env-check-lite env-init env-init-test synth check-synth diff bootstrap \
         deploy deploy-saas deploy-control-plane deploy-bootstrap destroy destroy-saas \
         deploy-docker destroy-docker docker-shell docker-build \
@@ -70,6 +70,10 @@ check-template-cfn-refs: ; bun run scripts/check-template-cfn-refs.ts
 # 現状は既存 5 テンプレが未対応なので standalone target のみ。 TenkaCloudChallenge 側で
 # templates を更新してから before-commit / check に組み込む (follow-up PR で wire)。
 check-template-cli-access: ; bun run scripts/check-template-cli-access.ts
+# Issue #1812: IAM RoleName / Lambda FunctionName を ${NamePrefix} 込みで明示宣言すると
+# NamePrefix (最大 84 文字) が 64 文字上限を超え deploy が CREATE_FAILED する。 synth / lint は
+# 通るので merge 前にここで弾く (= em-dash #664 / UserData #76 と同じ deploy-only 制約 class)。
+check-template-name-limits: ; bun run scripts/check-template-name-limits.ts
 # feedback_pull_main_before_task: 現在のブランチが origin/main と clean に merge 可能かを
 # git merge-tree (= read-only dry-run) で検査。 conflict 発生時は exit 1 で fail。
 # CI / pre-push hook ともに、 「PR を出した瞬間に DIRTY になる」 のを未然に防ぐ。
@@ -79,8 +83,8 @@ audit-deps:    ; bun run audit:dependencies
 # ため、 本体 before-commit / check からは外す。 platform 側 build:problems-index を走らせると
 # catalog repo の biome JSON formatter (= 別 lock 版) と微妙な drift が出てしまうため、
 # index.json の正本性は catalog 側で担保する設計。
-check:         install lint test validate-problems check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs check-no-conflicts audit-deps check-synth
-before-commit: lint test validate-problems check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs check-no-conflicts audit-deps check-synth
+check:         install lint test validate-problems check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-name-limits check-no-conflicts audit-deps check-synth
+before-commit: lint test validate-problems check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-name-limits check-no-conflicts audit-deps check-synth
 
 # `cdk synth` が通ることを保証 (= ts-node / tsx の module resolution、 stack 構築の type error
 # 等を本番 deploy 前にキャッチ)。 Makefile placeholder env で全 stack を synth するので AWS 認証は不要。

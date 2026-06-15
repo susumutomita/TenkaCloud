@@ -19,6 +19,11 @@ export interface AdminInsightSharedResources {
    * handler の audit route が 503 を返す。
    */
   readonly auditTableName: string;
+  /**
+   * Issue #1765: tenant usage facts table. 未配線時は空文字、 handler の usage route が
+   * 503 を返す。
+   */
+  readonly usageTableName: string;
   /** Issue #950: 環境名 (= SYSTEM 操作の PK 構築に使う `SYSTEM#<env>`)。 */
   readonly environmentName: string;
 }
@@ -40,6 +45,7 @@ export function buildSharedResources(): AdminInsightSharedResources {
     ddb,
     // Issue #950: 未配線時は空文字。 caller (audit route) が 503 を返す。
     auditTableName: process.env.ADMIN_AUDIT_LOG_TABLE_NAME ?? "",
+    usageTableName: process.env.USAGE_FACTS_TABLE_NAME ?? "",
     environmentName: process.env.DEPLOY_ENVIRONMENT ?? "development",
   };
 }

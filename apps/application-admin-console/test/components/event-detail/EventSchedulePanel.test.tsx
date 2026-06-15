@@ -23,6 +23,7 @@ vi.mock("../../../src/components/event-detail/shared", () => ({
 type Props = Parameters<typeof EventSchedulePanel>[0];
 const props = (over: Partial<Props> = {}): Props => ({
   apiClient: {} as never,
+  canMutateTenant: true,
   detail: {
     startsAt: "2026-01-01T00:00:00Z",
     endsAt: "2026-01-02T00:00:00Z",
@@ -92,6 +93,16 @@ describe("EventSchedulePanel", () => {
     expect(btn("event_detail.starts_at_now")).toBeDisabled();
     expect(btn("event_detail.ends_at_pick")).toBeDisabled();
     expect(btn("event_detail.ends_at_now")).toBeDisabled();
+    expect(btn("event_detail.freeze_save")).toBeDisabled();
+  });
+
+  it("should disable every write action for a read-only viewer", () => {
+    renderPanel({ canMutateTenant: false });
+    expect(btn("event_detail.starts_at_pick")).toBeDisabled();
+    expect(btn("event_detail.starts_at_now")).toBeDisabled();
+    expect(btn("event_detail.ends_at_pick")).toBeDisabled();
+    expect(btn("event_detail.ends_at_now")).toBeDisabled();
+    expect(screen.getByRole("spinbutton")).toBeDisabled();
     expect(btn("event_detail.freeze_save")).toBeDisabled();
   });
 

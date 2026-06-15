@@ -14,7 +14,7 @@ import {
   type TenantIdpSummary,
 } from "../api/idp-client";
 import { useAuth } from "../auth/AuthProvider";
-import { decodeIdToken } from "../auth/claims";
+import { decodeIdToken, resolveTenantConsoleAccess } from "../auth/claims";
 import type { AppConfig } from "../config";
 import { useLang, useT } from "../i18n";
 import { cognitoOrigin, userPoolIdFromIssuer } from "../lib/cognito";
@@ -37,6 +37,11 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
   const t = useT();
   const lang = useLang();
+  const claims = useMemo(
+    () => (auth.tokens ? decodeIdToken(auth.tokens.idToken) : null),
+    [auth.tokens],
+  );
+  const canMutateTenant = resolveTenantConsoleAccess(claims).canMutateTenant;
   const client: TenantIdpClient | null = useMemo(
     () =>
       auth.tokens && config.features?.samlSso
@@ -47,10 +52,7 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
 
   // The SP Entity ID is `urn:amazon:cognito:sp:<userPoolId>`; the pool id lives in the signed-in
   // admin's own ID token (`iss`), so we can show the real value instead of a placeholder to paste.
-  const userPoolId = useMemo(
-    () => userPoolIdFromIssuer(auth.tokens ? decodeIdToken(auth.tokens.idToken)?.iss : undefined),
-    [auth.tokens],
-  );
+  const userPoolId = useMemo(() => userPoolIdFromIssuer(claims?.iss), [claims]);
 
   const [items, setItems] = useState<readonly TenantIdpSummary[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -152,7 +154,7 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
         variant="h1"
         description={t("identity_providers.description")}
         actions={
-          <Button variant="primary" onClick={() => setShowCreate(true)}>
+          <Button variant="primary" disabled={!canMutateTenant} onClick={() => setShowCreate(true)}>
             {t("identity_providers.add_button")}
           </Button>
         }
@@ -201,8 +203,10 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
                   </Button>
                   <Button
                     variant="inline-link"
+                    disabled={!canMutateTenant}
                     onClick={async () => {
-                      if (!client) return;
+                      /* v8 ignore next -- defensive: the Delete button is disabled={!canMutateTenant}, and a null client implies !canMutateTenant (null claims → viewer), so the !client side is unreachable here */
+                      if (!client || !canMutateTenant) return;
                       if (!confirm(t("identity_providers.delete_confirm", { idpId: i.idpId })))
                         return;
                       setBusy(true);
@@ -242,7 +246,8 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
       <Alert type="info">{t("identity_providers.info_alert")}</Alert>
       {showCreate ? (
         <CreateIdpModal
-          client={client}
+          /* v8 ignore next -- defensive: the Add button is disabled={!canMutateTenant}, so a viewer can never open this modal; the `: null` (viewer) branch is unreachable */
+          client={canMutateTenant ? client : null}
           cognitoDomain={config.cognitoDomain}
           userPoolId={userPoolId}
           onClose={() => setShowCreate(false)}

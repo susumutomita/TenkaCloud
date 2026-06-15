@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useApiClient } from "../../api/client";
+import { canMutateTenant, useApiClient } from "../../api/client";
 import {
   getTeamCredentialStatus,
   registerTeamCredential,
@@ -56,6 +56,7 @@ export interface UseTeamCloudCredentialsResult {
 
 export function useTeamCloudCredentials(config: AppConfig): UseTeamCloudCredentialsResult {
   const apiClient = useApiClient(config);
+  const canMutate = canMutateTenant(apiClient);
   const t = useT();
   const [provider, setProviderState] = useState<TeamCredentialProvider>("sakura");
   const [teamSlug, setTeamSlug] = useState("");
@@ -65,7 +66,7 @@ export function useTeamCloudCredentials(config: AppConfig): UseTeamCloudCredenti
   const [notice, setNotice] = useState<string | null>(null);
 
   const slugInvalid = teamSlug.length > 0 && !SLUG_RE.test(teamSlug);
-  const canSubmit = !!apiClient && !inFlight && teamSlug.length > 0 && !slugInvalid;
+  const canSubmit = !!apiClient && canMutate && !inFlight && teamSlug.length > 0 && !slugInvalid;
   const canRegister = canSubmit && credentialJson.length > 0;
   // provider は常に PROVIDER_OPTIONS の value のいずれか (= find は必ず一致する)。
   const providerOption = PROVIDER_OPTIONS.find((o) => o.value === provider) as ProviderOption;
@@ -92,7 +93,7 @@ export function useTeamCloudCredentials(config: AppConfig): UseTeamCloudCredenti
   const register = useCallback(async (): Promise<void> => {
     // button は disabled={!canRegister} (= !apiClient 含む) なので enabled 時のみ呼ばれる (= 防御的不到達)。
     /* v8 ignore next */
-    if (!apiClient) return;
+    if (!apiClient || !canMutate) return;
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(credentialJson) as Record<string, unknown>;
@@ -104,20 +105,20 @@ export function useTeamCloudCredentials(config: AppConfig): UseTeamCloudCredenti
       await registerTeamCredential(apiClient, provider, teamSlug, parsed);
       setNotice(t("team_cloud_credentials.registered"));
     });
-  }, [apiClient, credentialJson, provider, teamSlug, run, t]);
+  }, [apiClient, canMutate, credentialJson, provider, teamSlug, run, t]);
 
   const revoke = useCallback(async (): Promise<void> => {
     /* v8 ignore next */
-    if (!apiClient) return;
+    if (!apiClient || !canMutate) return;
     await run(async () => {
       await revokeTeamCredential(apiClient, provider, teamSlug);
       setNotice(t("team_cloud_credentials.revoked"));
     });
-  }, [apiClient, provider, teamSlug, run, t]);
+  }, [apiClient, canMutate, provider, teamSlug, run, t]);
 
   const checkStatus = useCallback(async (): Promise<void> => {
     /* v8 ignore next */
-    if (!apiClient) return;
+    if (!apiClient || !canMutate) return;
     await run(async () => {
       const status = await getTeamCredentialStatus(apiClient, provider, teamSlug);
       setNotice(
@@ -126,7 +127,7 @@ export function useTeamCloudCredentials(config: AppConfig): UseTeamCloudCredenti
           : t("team_cloud_credentials.status_unregistered"),
       );
     });
-  }, [apiClient, provider, teamSlug, run, t]);
+  }, [apiClient, canMutate, provider, teamSlug, run, t]);
 
   const dismissNotice = useCallback(() => setNotice(null), []);
 

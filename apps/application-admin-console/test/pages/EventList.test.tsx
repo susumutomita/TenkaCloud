@@ -128,6 +128,20 @@ describe("EventListPage", () => {
     expect(mockNav).toHaveBeenCalledWith("/events/new");
   });
 
+  it("should disable create and archive actions for a read-only viewer", async () => {
+    mockApiClient.mockReturnValue({
+      post: vi.fn(),
+      tenantAccess: { role: "viewer", canMutateTenant: false },
+    });
+    mockList.mockResolvedValue({
+      items: [ev({ eventId: "e1", name: "Draft Ev", status: "DRAFT" })],
+    });
+    renderPage();
+    await screen.findByText("Draft Ev");
+    expect(screen.getByRole("button", { name: "event_list.create_button" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "archive Draft Ev" })).toBeDisabled();
+  });
+
   it("should disable archive for non-archivable statuses and enable it for DRAFT", async () => {
     mockList.mockResolvedValue({
       items: [

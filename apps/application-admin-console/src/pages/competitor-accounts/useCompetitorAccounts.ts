@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useApiClient } from "../../api/client";
+import { canMutateTenant, useApiClient } from "../../api/client";
 import {
   type CompetitorAccountSummary,
   deleteCompetitorAccount,
@@ -14,6 +14,7 @@ export interface UseCompetitorAccountsResult {
   error: FriendlyError | null;
   verifyInFlight: string | null;
   deleteInFlight: boolean;
+  canMutateTenant: boolean;
   reload: () => Promise<void>;
   verify: (awsAccountId: string) => Promise<void>;
   remove: (awsAccountId: string) => Promise<void>;
@@ -21,6 +22,7 @@ export interface UseCompetitorAccountsResult {
 
 export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsResult {
   const apiClient = useApiClient(config);
+  const canMutate = canMutateTenant(apiClient);
   const [items, setItems] = useState<readonly CompetitorAccountSummary[] | null>(null);
   const [error, setError] = useState<FriendlyError | null>(null);
   const [verifyInFlight, setVerifyInFlight] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
 
   const verify = useCallback(
     async (awsAccountId: string) => {
-      if (!apiClient) return;
+      if (!apiClient || !canMutate) return;
       setVerifyInFlight(awsAccountId);
       try {
         await verifyCompetitorAccount(apiClient, awsAccountId);
@@ -54,12 +56,12 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
         setVerifyInFlight(null);
       }
     },
-    [apiClient, reload],
+    [apiClient, canMutate, reload],
   );
 
   const remove = useCallback(
     async (awsAccountId: string) => {
-      if (!apiClient) return;
+      if (!apiClient || !canMutate) return;
       setDeleteInFlight(true);
       try {
         await deleteCompetitorAccount(apiClient, awsAccountId);
@@ -70,8 +72,17 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
         setDeleteInFlight(false);
       }
     },
-    [apiClient, reload],
+    [apiClient, canMutate, reload],
   );
 
-  return { items, error, verifyInFlight, deleteInFlight, reload, verify, remove };
+  return {
+    items,
+    error,
+    verifyInFlight,
+    deleteInFlight,
+    canMutateTenant: canMutate,
+    reload,
+    verify,
+    remove,
+  };
 }

@@ -87,6 +87,7 @@ const operations = (over: Partial<EventOperations> = {}): EventOperations =>
 const props = (over: Partial<EventTabContentProps> = {}): EventTabContentProps =>
   ({
     apiClient: {} as never,
+    canMutateTenant: true,
     config: {} as never,
     counts: {} as never,
     detail: { eventId: "e1" } as unknown as EventDetail,

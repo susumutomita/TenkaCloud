@@ -124,6 +124,7 @@ export function CreateIdpModal({
   const spEntity = spEntityId(userPoolId);
 
   const onSubmit = useCallback(async () => {
+    /* v8 ignore next -- defensive: the Register button is disabled={!client}, so onSubmit cannot fire with a null client */
     if (!client) return;
     setBusy(true);
     setError(null);
@@ -181,7 +182,7 @@ export function CreateIdpModal({
             <Button onClick={onClose} disabled={busy}>
               {t("create_idp.cancel")}
             </Button>
-            <Button variant="primary" onClick={onSubmit} loading={busy}>
+            <Button variant="primary" onClick={onSubmit} loading={busy} disabled={!client}>
               {t("create_idp.register")}
             </Button>
           </SpaceBetween>

@@ -1,0 +1,58 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud problem — __PROBLEM_ID__ (multi-flag Challenge).
+  1 つの deploy に N 個の独立 flag を仕込み、 競技者が各 flag を個別に発見して portal に
+  提出する多段 Challenge の skeleton。 本 skeleton は flag ごとに 1 つの SSM Parameter を
+  置く最小構成 (3 flag = 3 Parameter / 3 Output)。 実問題では Secrets Manager / S3 /
+  Lambda Env 等に置き換え、 IAM scope を最小化してください。
+  flag を追加・削除するときは Resources の FlagNParameter と Outputs の FlagNValue を
+  metadata.scoring.flags[] と 1:1 で増減させること (= flagOutputKey と Output 名を一致させる)。
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    Description: "tc-{problemSlug}-{teamSlug} 形式の共通リソース prefix。"
+
+Resources:
+  # 各 flag を独立した SSM Parameter として置く。 metadata.scoring.flags[].flagOutputKey が
+  # 下の Outputs の論理名を指す (= scoring engine の比較対象)。
+  Flag1Parameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/flags/ep01"
+      Type: String
+      Value: "TC{__REPLACE_WITH_REAL_FLAG_1__}"
+      Description: "Ep01 の正解 flag (= metadata.scoring.flags[0].flagOutputKey が指す Output の元)。"
+
+  Flag2Parameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/flags/ep02"
+      Type: String
+      Value: "TC{__REPLACE_WITH_REAL_FLAG_2__}"
+      Description: "Ep02 の正解 flag。"
+
+  Flag3Parameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/flags/ep03"
+      Type: String
+      Value: "TC{__REPLACE_WITH_REAL_FLAG_3__}"
+      Description: "Ep03 の正解 flag。"
+
+Outputs:
+  Flag1Value:
+    Description: "Ep01 の正解値 (= metadata.scoring.flags[].flagOutputKey で参照)。"
+    Value: !GetAtt Flag1Parameter.Value
+  Flag2Value:
+    Description: "Ep02 の正解値。"
+    Value: !GetAtt Flag2Parameter.Value
+  Flag3Value:
+    Description: "Ep03 の正解値。"
+    Value: !GetAtt Flag3Parameter.Value
+  NamePrefix:
+    Description: "Deploy 時に渡された prefix (echo)。"
+    Value: !Ref NamePrefix

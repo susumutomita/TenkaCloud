@@ -19,6 +19,7 @@ describe("CompetitorAccountDeleteModal", () => {
       <CompetitorAccountDeleteModal
         target={null}
         inFlight={false}
+        canMutateTenant={true}
         onDismiss={vi.fn()}
         onConfirm={vi.fn()}
       />,
@@ -35,6 +36,7 @@ describe("CompetitorAccountDeleteModal", () => {
       <CompetitorAccountDeleteModal
         target={target}
         inFlight={false}
+        canMutateTenant={true}
         onDismiss={onDismiss}
         onConfirm={onConfirm}
       />,
@@ -57,12 +59,28 @@ describe("CompetitorAccountDeleteModal", () => {
       <CompetitorAccountDeleteModal
         target={target}
         inFlight
+        canMutateTenant={true}
         onDismiss={vi.fn()}
         onConfirm={vi.fn()}
       />,
     );
     expect(
       screen.getByRole("button", { name: "competitor_accounts.delete_modal_cancel" }),
+    ).toBeDisabled();
+  });
+
+  it("should disable confirm for a read-only viewer", () => {
+    render(
+      <CompetitorAccountDeleteModal
+        target={target}
+        inFlight={false}
+        canMutateTenant={false}
+        onDismiss={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "competitor_accounts.delete_modal_confirm" }),
     ).toBeDisabled();
   });
 });

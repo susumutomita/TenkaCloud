@@ -32,6 +32,7 @@ const detail = (over: Partial<EventDetail> = {}): EventDetail =>
 const props = (over: Partial<Props> = {}): Props => ({
   apiClient: {} as never,
   bulkInFlight: null,
+  canMutateTenant: true,
   completeCount: 0,
   detail: detail(),
   endInFlight: false,
@@ -135,6 +136,21 @@ describe("EventHeaderActions", () => {
   it("should not render a teardown/delete button in the header (moved to the advanced tab danger zone)", () => {
     renderActions({ detail: detail({ status: "READY" }) });
     expect(queryBtn("event_detail.delete_button")).not.toBeInTheDocument();
+  });
+
+  it("should disable write actions for a read-only viewer", () => {
+    renderActions({
+      canMutateTenant: false,
+      failedCount: 1,
+      completeCount: 1,
+      detail: detail({ status: "READY", scoringLocked: false }),
+    });
+    expect(btn("event_detail.back_to_list")).not.toBeDisabled();
+    expect(btn("event_detail.deploy_button")).toBeDisabled();
+    expect(btn("event_detail.retry_failed")).toBeDisabled();
+    expect(btn("event_detail.redeploy")).toBeDisabled();
+    expect(btn("event_detail.end_event")).toBeDisabled();
+    expect(btn("event_detail.scoring_lock")).toBeDisabled();
   });
 
   it("should disable retry/redeploy while another bulk op is in flight and disable scoring lock without an API client", () => {
