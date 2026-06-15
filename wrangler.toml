@@ -1,0 +1,12 @@
+# Cloudflare Pages configuration for the TenkaCloud public landing page.
+#
+# The published site is the static `landing/` directory. The `build:pages`
+# script (see package.json) builds the participant-portal demo and stages it
+# under `landing/portal-demo/` so the landing page can embed a live mock.
+#
+# `pages_build_output_dir` is the source of truth for the build output
+# directory; the Cloudflare dashboard reads it from here (the dashboard field
+# is locked when this file is present).
+name = "tenkacloud-www"
+pages_build_output_dir = "landing"
+compatibility_date = "2026-06-01"
