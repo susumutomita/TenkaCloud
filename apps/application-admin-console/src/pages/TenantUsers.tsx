@@ -89,6 +89,7 @@ export function TenantUsersPage({ config }: { config: AppConfig }) {
   };
 
   const handleInvite = async () => {
+    /* v8 ignore next -- defensive: the invite submit button is disabled={!apiClient || !canMutate || busy}, so this guard's true branch is unreachable from the UI */
     if (!apiClient || !canMutate) return;
     const parsed = InviteFormSchema.safeParse({
       email: inviteEmail.trim(),
@@ -114,6 +115,7 @@ export function TenantUsersPage({ config }: { config: AppConfig }) {
   };
 
   const handleDelete = async (user: TenantUserSummary) => {
+    /* v8 ignore next -- defensive: the delete button is disabled={!canMutate || rowBusy===...}, and a null apiClient implies !canMutate, so this guard's true branch is unreachable from the UI */
     if (!apiClient || !canMutate) return;
     const name = displayName(user);
     if (!window.confirm(t("tenant_users.delete_confirm", { username: name }))) return;
@@ -131,12 +133,14 @@ export function TenantUsersPage({ config }: { config: AppConfig }) {
 
   const handleRoleChange = async (user: TenantUserSummary, option: SelectProps.Option | null) => {
     const nextRole = roleFromOption(option);
+    /* v8 ignore next -- the role Select renders only when canMutate (which implies apiClient), so the !apiClient / !canMutate operands of this guard are unreachable */
     if (!apiClient || !canMutate || !nextRole || nextRole === user.role) return;
     setRowBusy(user.username);
     setMutationError(null);
     try {
       const res = await changeTenantUserRole(apiClient, user.username, nextRole);
       setItems(
+        /* v8 ignore next -- defensive: a successful role change implies the row (and items) exist, so prev is never null here; the `prev?.`/`?? prev` fallbacks are unreachable */
         (prev) => prev?.map((item) => (item.username === user.username ? res.item : item)) ?? prev,
       );
     } catch (err) {
@@ -299,11 +303,13 @@ export function TenantUsersPage({ config }: { config: AppConfig }) {
           <FormField label={t("tenant_users.invite_role_label")}>
             <Select
               selectedOption={
+                /* v8 ignore next -- defensive: inviteRole is always one of USER_ROLES and roleOptions is non-empty, so find() always matches and the `?? roleOptions[0] ?? null` fallbacks are unreachable */
                 roleOptions.find((option) => option.value === inviteRole) ?? roleOptions[0] ?? null
               }
               options={roleOptions}
               onChange={(event) => {
                 const next = roleFromOption(event.detail.selectedOption);
+                /* v8 ignore next -- defensive: the Select's options are all valid roles, so roleFromOption always returns a role; the `!next` branch is unreachable */
                 if (next) setInviteRole(next);
               }}
               disabled={busy}

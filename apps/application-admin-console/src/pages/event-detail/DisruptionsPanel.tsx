@@ -105,6 +105,7 @@ function FireModal({
     scheduleInvalid;
 
   const confirmFire = async () => {
+    /* v8 ignore next -- defensive: the Fire button is disabled={fireDisabled} and fireDisabled already includes !canMutateTenant, so the !canMutateTenant side is unreachable here */
     if (!canMutateTenant || fireDisabled) return;
     setFiring(true);
     setFireError(null);

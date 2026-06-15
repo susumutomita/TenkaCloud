@@ -205,6 +205,7 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
                     variant="inline-link"
                     disabled={!canMutateTenant}
                     onClick={async () => {
+                      /* v8 ignore next -- defensive: the Delete button is disabled={!canMutateTenant}, and a null client implies !canMutateTenant (null claims → viewer), so the !client side is unreachable here */
                       if (!client || !canMutateTenant) return;
                       if (!confirm(t("identity_providers.delete_confirm", { idpId: i.idpId })))
                         return;
@@ -245,6 +246,7 @@ export function IdentityProvidersPage({ config }: { config: AppConfig }) {
       <Alert type="info">{t("identity_providers.info_alert")}</Alert>
       {showCreate ? (
         <CreateIdpModal
+          /* v8 ignore next -- defensive: the Add button is disabled={!canMutateTenant}, so a viewer can never open this modal; the `: null` (viewer) branch is unreachable */
           client={canMutateTenant ? client : null}
           cognitoDomain={config.cognitoDomain}
           userPoolId={userPoolId}

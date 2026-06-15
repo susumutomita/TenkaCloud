@@ -124,6 +124,7 @@ export function CreateIdpModal({
   const spEntity = spEntityId(userPoolId);
 
   const onSubmit = useCallback(async () => {
+    /* v8 ignore next -- defensive: the Register button is disabled={!client}, so onSubmit cannot fire with a null client */
     if (!client) return;
     setBusy(true);
     setError(null);
