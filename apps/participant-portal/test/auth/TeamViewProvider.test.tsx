@@ -261,6 +261,18 @@ afterEach(() => {
 });
 
 describe("TeamViewProvider polling", () => {
+  it("should expose safe no-op defaults outside the provider", async () => {
+    const { result } = renderHook(() => useTeamView());
+    await act(async () => {
+      await result.current.refresh();
+      result.current.setAutoRefreshEnabled(true);
+      result.current.markNotificationsSeen("2026-05-20T00:00:00Z");
+    });
+
+    expect(result.current.autoRefreshEnabled).toBe(false);
+    expect(result.current.isRefreshing).toBe(false);
+  });
+
   it("should seed dev-mock fixtures without hitting the backend in mock mode", async () => {
     mockIsMock.mockReturnValue(true);
     const { result } = renderHook(() => useTeamView(), { wrapper });
@@ -285,6 +297,61 @@ describe("TeamViewProvider polling", () => {
     expect(result.current.leaderboard).toEqual(lb());
     expect(result.current.notifications).toEqual(notifs());
     expect(result.current.unreadNotificationCount).toBe(1); // no lastSeenAt yet
+  });
+
+  it("should not run the 30s status polling by default", async () => {
+    renderHook(() => useTeamView(), { wrapper });
+    await flush();
+    expect(mockGetMe).toHaveBeenCalledTimes(1);
+    expect(mockGetLeaderboard).toHaveBeenCalledTimes(1);
+
+    await flush(30_000);
+    expect(mockGetMe).toHaveBeenCalledTimes(1);
+    expect(mockGetLeaderboard).toHaveBeenCalledTimes(1);
+  });
+
+  it("should run the 30s status polling only after auto refresh is enabled", async () => {
+    const { result } = renderHook(() => useTeamView(), { wrapper });
+    await flush();
+
+    act(() => result.current.setAutoRefreshEnabled(true));
+    await flush(30_000);
+
+    expect(result.current.autoRefreshEnabled).toBe(true);
+    expect(mockGetMe).toHaveBeenCalledTimes(2);
+    expect(mockGetLeaderboard).toHaveBeenCalledTimes(2);
+  });
+
+  it("should share an in-flight status refresh instead of issuing duplicate reads", async () => {
+    let resolveMe: (value: ParticipantTeamView) => void = () => undefined;
+    let resolveLeaderboard: (value: LeaderboardResponse) => void = () => undefined;
+    mockGetMe.mockReturnValue(new Promise((resolve) => (resolveMe = resolve)));
+    mockGetLeaderboard.mockReturnValue(new Promise((resolve) => (resolveLeaderboard = resolve)));
+
+    const { result } = renderHook(() => useTeamView(), { wrapper });
+    await flush();
+
+    expect(result.current.isRefreshing).toBe(true);
+    expect(mockGetMe).toHaveBeenCalledTimes(1);
+    expect(mockGetLeaderboard).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      void result.current.refresh();
+      void result.current.refresh();
+    });
+
+    expect(mockGetMe).toHaveBeenCalledTimes(1);
+    expect(mockGetLeaderboard).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveMe(view());
+      resolveLeaderboard(lb());
+    });
+    await flush();
+
+    expect(result.current.isRefreshing).toBe(false);
+    expect(result.current.view).toEqual(view());
+    expect(result.current.leaderboard).toEqual(lb());
   });
 
   it("should keep the same references on an unchanged second tick", async () => {
@@ -365,8 +432,9 @@ describe("TeamViewProvider polling", () => {
 
   it("should stop the 30s polling once every problem is terminal", async () => {
     mockGetMe.mockResolvedValue(view({ problems: [prob({ status: "FAILED" })] }));
-    renderHook(() => useTeamView(), { wrapper });
+    const { result } = renderHook(() => useTeamView(), { wrapper });
     await flush();
+    act(() => result.current.setAutoRefreshEnabled(true));
     expect(mockGetMe).toHaveBeenCalledTimes(1);
     await flush(30_000); // next tick must be skipped (stopPollingRef)
     expect(mockGetMe).toHaveBeenCalledTimes(1);

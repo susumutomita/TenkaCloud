@@ -1,12 +1,14 @@
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
+import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import LineChart from "@cloudscape-design/components/line-chart";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
-import { toErrorMessage, usePolling } from "@tenkacloud/web-kit";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import Toggle from "@cloudscape-design/components/toggle";
+import { toErrorMessage } from "@tenkacloud/web-kit";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getScoreEvents,
   PortalAuthError,
@@ -51,28 +53,48 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
 
   const [data, setData] = useState<ScoreEventsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
 
   const tick = useCallback(async () => {
     // 呼び出し元の useEffect が同条件を gate 済み。 ここは getScoreEvents に渡す
     // sessionToken を string へ narrow するための型ガードで、 true 分岐は不到達。
     /* v8 ignore next */
     if (isMock || !sessionToken) return;
-    try {
-      const next = await getScoreEvents(config.apiBaseUrl, sessionToken);
-      setData(next);
-      setError(null);
-    } catch (err) {
-      if (err instanceof PortalAuthError) {
-        auth.logout();
-        return;
+    if (refreshInFlightRef.current) return refreshInFlightRef.current;
+    const run = (async () => {
+      setIsRefreshing(true);
+      try {
+        const next = await getScoreEvents(config.apiBaseUrl, sessionToken);
+        setData(next);
+        setError(null);
+      } catch (err) {
+        if (err instanceof PortalAuthError) {
+          auth.logout();
+          return;
+        }
+        setError(toErrorMessage(err));
+      } finally {
+        refreshInFlightRef.current = null;
+        setIsRefreshing(false);
       }
-      setError(toErrorMessage(err));
-    }
+    })();
+    refreshInFlightRef.current = run;
+    return run;
   }, [isMock, sessionToken, config.apiBaseUrl, auth]);
 
-  // 即時 fetch + interval + unmount cleanup は usePolling (web-kit) に集約 (#1418 DRY)。
-  // enabled gate (= backend mode かつ session 在り) で tick 内の同条件 guard は不到達のまま。
-  usePolling(tick, POLL_INTERVAL_MS, { enabled: !isMock && Boolean(sessionToken) });
+  // 初回 fetch は 1 回だけ。30s polling は DynamoDB read 抑制のため opt-in。
+  useEffect(() => {
+    if (isMock || !sessionToken) return;
+    void tick();
+  }, [isMock, sessionToken, tick]);
+
+  useEffect(() => {
+    if (!autoRefresh || isMock || !sessionToken) return;
+    const interval = setInterval(() => void tick(), POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [autoRefresh, isMock, sessionToken, tick]);
 
   // LP 「モックで試す」 動線: dev-mock mode では backend を叩かないので、 fixture を
   // 1 度だけ seed する (= 競技中のスコア推移 chart + 履歴 table をデモで見せる)。
@@ -97,6 +119,21 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
       <Header
         variant="h1"
         description={t("score_events.description", { intervalSec: POLL_INTERVAL_MS / 1000 })}
+        actions={
+          !isMock && sessionToken ? (
+            <SpaceBetween direction="horizontal" size="s">
+              <Toggle
+                checked={autoRefresh}
+                onChange={({ detail }) => setAutoRefresh(detail.checked)}
+              >
+                {t("score_events.auto_refresh_label", { intervalSec: POLL_INTERVAL_MS / 1000 })}
+              </Toggle>
+              <Button iconName="refresh" loading={isRefreshing} onClick={() => void tick()}>
+                {t("score_events.refresh_latest")}
+              </Button>
+            </SpaceBetween>
+          ) : undefined
+        }
       >
         {t("score_events.title")}
       </Header>

@@ -25,6 +25,9 @@
     "scoreboard": "Scoreboard",
     "score_events": "Score events",
     "sso_credentials": "SSO Credentials",
+    "refresh_latest": "Refresh latest",
+    "auto_refresh_off": "Auto refresh: Off",
+    "auto_refresh_on": "Auto refresh: On",
     "change_team_name": "Change team name",
     "sign_out": "Sign out"
   },
@@ -158,7 +161,7 @@
   },
   "scoreboard": {
     "title": "Scoreboard",
-    "description": "Real-time ranking for {eventTitle} (auto-refresh every 5 s)",
+    "description": "Ranking for {eventTitle}. Refresh manually or turn on auto refresh from the top bar.",
     "no_event_header": "This team is not linked to an event",
     "no_event_body": "This is a standalone deployment outside an event, so other teams' rankings are not shown. To compete with other teams, join an event created by the operator and deploy through it.",
     "frozen_header": "🔒 Ranking frozen 30 min before end",
@@ -174,7 +177,9 @@
   },
   "score_events": {
     "title": "Score events",
-    "description": "Your team's score history (auto-refresh every {intervalSec} s, newest first, up to 100)",
+    "description": "Your team's score history (newest first, up to 100)",
+    "refresh_latest": "Refresh latest",
+    "auto_refresh_label": "Auto refresh every {intervalSec} s",
     "cumulative_header": "Cumulative score trend",
     "cumulative_series_label": "Cumulative score",
     "chart_x_title": "Time",
@@ -289,7 +294,6 @@
     "last_scored_label": "Last scored",
     "deploy_log_header": "Deployment terminal",
     "outputs_header": "Access URLs",
-    "auto_refresh_note": "Auto-refreshing every {seconds} s.",
     "celebrate_header": "🏆 Cleared +{points} pt",
     "celebrate_body": "You've already solved this problem. Move on to the next!",
     "submit_button": "Submit flag (+{points} pt)",
@@ -344,6 +348,8 @@
   "score_timeline": {
     "header": "Score timeline",
     "header_description": "Showing all {count} teams in this event",
+    "refresh_latest": "Refresh timeline",
+    "auto_refresh_label": "Auto refresh every 30 s",
     "fetch_failed": "Fetch failed: {error}",
     "loading": "Loading…",
     "empty_body": "No score history yet. Flag submissions and Battle uptime points appear here.",

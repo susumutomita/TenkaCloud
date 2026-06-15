@@ -57,6 +57,35 @@ export function buildScoreRankUtility(
   };
 }
 
+export function buildRefreshLatestUtility(
+  refresh: () => Promise<void>,
+  t: Translate,
+): TopNavigationProps.Utility {
+  return {
+    type: "button",
+    text: t("nav.refresh_latest"),
+    iconName: "refresh",
+    onClick: () => {
+      void refresh();
+    },
+  };
+}
+
+export function buildAutoRefreshUtility(
+  enabled: boolean,
+  setEnabled: (next: boolean) => void,
+  t: Translate,
+): TopNavigationProps.Utility {
+  return {
+    type: "button",
+    text: enabled ? t("nav.auto_refresh_on") : t("nav.auto_refresh_off"),
+    iconName: enabled ? "status-positive" : "status-stopped",
+    onClick: () => {
+      setEnabled(!enabled);
+    },
+  };
+}
+
 /**
  * Issue #1191: profile dropdown のメニュー項目を再利用可能な pure function で組む
  * (= unit test で項目構成を pin)。 競技者は「チーム名を変更」「サインアウト」の 2 つを
@@ -144,9 +173,10 @@ export function handleSideNavFollow(
  * 3 セクション SideNavigation (Event / Quests / Tools) を組み立てる。
  *
  * Score / Rank はどちらも `TeamViewProvider` 経由で `/portal/me` + `/portal/leaderboard`
- * の polling 結果を共有 (Home の累計スコアパネル / Scoreboard と同 source)。Rank は
+ * の取得結果を共有 (Home の累計スコアパネル / Scoreboard と同 source)。Rank は
  * 自チーム (`isMyTeam`) の rank / total entries で表示。Phase 1 以前の旧 deployment
  * (eventId 無し) は leaderboard 不能なので "—" で fallback。
+ * 30s polling は DynamoDB cost guardrail のため default off。TopNavigation から opt-in する。
  */
 
 /**
@@ -213,6 +243,8 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
     const rank = formatTopNavRank(config.mode, teamView.leaderboard, teamView.leaderboardNoEvent);
     return [
       localeUtility,
+      buildRefreshLatestUtility(teamView.refresh, t),
+      buildAutoRefreshUtility(teamView.autoRefreshEnabled, teamView.setAutoRefreshEnabled, t),
       // #547: 旧 `menu-dropdown` + 空 items は chevron で展開できそうに見えて何も出ない
       // という UX bug。Score / Rank の click は scoreboard ページへの遷移が自然なので
       // `type: "button"` + onClick で /scoreboard に飛ばす (= dropdown の意図不明
@@ -224,6 +256,9 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
     auth.session,
     auth.logout,
     navigate,
+    teamView.refresh,
+    teamView.autoRefreshEnabled,
+    teamView.setAutoRefreshEnabled,
     teamView.view,
     teamView.leaderboard,
     teamView.leaderboardNoEvent,
