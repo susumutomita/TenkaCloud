@@ -77,12 +77,19 @@ describe("ShellLayout", () => {
 
   it("should navigate via a side navigation link", () => {
     const { container } = renderShell();
-    const link = must(
+    const problemsLink = must(
       must(createWrapper(container).findSideNavigation(), "side nav").findLinkByHref("/problems"),
       "problems link",
     );
-    link.click();
+    problemsLink.click();
     expect(mockNav).toHaveBeenCalledWith("/problems");
+    mockNav.mockClear();
+    const usersLink = must(
+      must(createWrapper(container).findSideNavigation(), "side nav").findLinkByHref("/users"),
+      "users link",
+    );
+    usersLink.click();
+    expect(mockNav).toHaveBeenCalledWith("/users");
   });
 
   it("should show the Identity providers nav link only when samlSsoEnabled is true", () => {
