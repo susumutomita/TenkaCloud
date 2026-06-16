@@ -3,1377 +3,1965 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>StackStack on TenkaCloud — クラウドエンジニアの天下一武道会</title>
-<meta name="description" content="StackStack / TenkaCloud の 10 分ピッチデッキ（全 9 ページ、self-contained HTML）。" />
+<title>TenkaCloud — pitch</title>
+<meta name="description" content="TenkaCloud / StackStack のピッチデッキ。単一ファイル・外部アセットなしの self-contained HTML。" />
 <style>
-@import url("https://fonts.googleapis.com/css2?family=Reggae+One&family=Noto+Sans+JP:wght@700;900&display=swap");
-
-/* ════════════════════════════════════════════════════════════════════
-   TenkaCloud Design System
-   画像デッキ (page1-9) の視覚言語をトークン + コンポーネントに落とし込んだもの。
-   1. tokens     — 色 / 書体 / 線 / 角丸
-   2. primitives — .brush-gold / .display / .kicker / .num-dot / .glyph
-   3. components — .panel / .gold-band / .sec-no / .wordmark / .qr-item /
-                   .ink-bg (墨流し canvas 背景 — 藍と金の流体シミュレーション) / .avatar
-   4. deck       — スライド機構 (scroll-snap + 1280x720 ステージ + fit スケール)
-   5. slides     — 各スライド固有の組版
+/* ══════════════════════════════════════════════════════════════════════
+   TenkaCloud Pitch Deck — single self-contained HTML (zero raster assets)
+   全ての CSS / SVG / JS をインライン化。会場オフライン前提で完全に動く。
+   ・ブラシ強調語   → Mincho serif の金グラデ + ink texture (画像なし)
+   ・ライン/金アイコン → inline SVG
+   ・墨流し背景      → CSS radial/linear gradient (canvas を使わない静的描画)
+   ・QR              → 装飾 SVG + 可視 URL (本物の href は維持)
    ════════════════════════════════════════════════════════════════════ */
 
-/* ── 1. tokens ─────────────────────────────────────────────────────── */
 :root {
-  /* surface */
-  --navy-950:#04070d;
-  --navy-900:#070e1b;
-  --navy-850:#0a1322;
-  --navy-800:#0c1828;
-  --navy-750:#0f1d31;
-  /* ink */
-  --ink-0:#ffffff;
-  --ink-1:#eaf0f8;
-  --ink-2:#c3cddc;
-  --ink-3:#8a96a8;
-  /* accent */
-  --blue-500:#2f6fd6;
-  --blue-400:#5aa2ff;
-  --blue-300:#83bcff;
-  --gold-200:#fff3cf;
-  --gold-300:#ffeeb0;
-  --gold-400:#f6ca46;
-  --gold-500:#e0a637;
-  --gold-700:#b97e22;
-  --gold-soft:#f4ecd4;
-  --red-400:#ff5f54;
-  --green-400:#3ad592;
-  /* line */
-  --line-1:rgba(255,255,255,.12);
-  --line-2:rgba(255,255,255,.22);
-  --line-blue:rgba(90,162,255,.4);
-  --line-gold:rgba(246,202,70,.5);
-  /* fill */
-  --card-bg:rgba(13,24,43,.78);
-  --card-bg-2:rgba(16,28,48,.86);
-  /* type */
-  --sans:"Noto Sans JP","Inter","Hiragino Sans","Yu Gothic UI",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
-  --brush:"Reggae One","Hiragino Mincho ProN","Yu Mincho",YuMincho,serif;
-  /* shape */
-  --r-1:8px;
-  --r-2:11px;
-  --cut:14px; /* panel corner cut */
+  --tc-bg: #020814;
+  --tc-bg-2: #06162d;
+  --tc-panel: rgba(3, 13, 31, .82);
+  --tc-panel-strong: rgba(2, 8, 20, .92);
+  --tc-blue: #2688ff;
+  --tc-blue-2: #58b7ff;
+  --tc-blue-deep: #0c4ea3;
+  --tc-gold: #d6a847;
+  --tc-gold-2: #f1cd72;
+  --tc-gold-3: #9f6f1d;
+  --tc-white: #f7fbff;
+  --tc-muted: #b8c7dc;
+  --tc-danger: #ff7a3c;
+  --tc-ok: #4ee49a;
+  --tc-line: rgba(49, 148, 255, .72);
+
+  --font-sans: "Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", system-ui, -apple-system, sans-serif;
+  --font-serif: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", serif;
+  --font-cond: "Hiragino Sans", "Yu Gothic UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-* { box-sizing:border-box; }
-html { scroll-behavior:smooth; }
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 body {
-  margin:0;
-  background:var(--navy-950);
-  color:var(--ink-1);
-  font-family:var(--sans);
-  -webkit-font-smoothing:antialiased;
-  text-rendering:optimizeLegibility;
+  margin: 0;
+  background: radial-gradient(circle at 50% 0, #0d2b52 0, #020814 48%, #000 100%);
+  color: var(--tc-white);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
-h1,h2,h3,p { margin:0; }
+h1, h2, h3, h4, p { margin: 0; }
+a { color: inherit; text-decoration: none; }
 
-/* ── 2. primitives ─────────────────────────────────────────────────── */
-
-/* 金の筆文字 (画像の brush-gold 見出し) */
-.brush-gold {
-  font-family:var(--brush);
-  font-weight:400;
-  background:linear-gradient(178deg,var(--gold-200) 4%,var(--gold-400) 42%,var(--gold-500) 72%,var(--gold-700) 100%);
-  -webkit-background-clip:text;
-  background-clip:text;
-  color:transparent;
-  filter:drop-shadow(0 3px 22px rgba(246,202,70,.45));
-  letter-spacing:.03em;
+/* ── deck mechanics ────────────────────────────────────────────────── */
+.deck {
+  height: 100vh;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
 }
+.deck::-webkit-scrollbar { width: 0; height: 0; }
 
-/* 白の太見出し */
-.display {
-  color:var(--ink-0);
-  font-weight:900;
-  line-height:1.2;
-  text-shadow:0 2px 24px rgba(0,0,0,.45);
+.slide {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  scroll-snap-align: start;
 }
 
-/* 青の小見出し (HOW A MATCH RUNS 等) */
-.kicker {
-  color:var(--blue-300);
-  font-family:var(--mono);
-  font-size:13px;
-  font-weight:900;
-  letter-spacing:.22em;
+.canvas {
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  transform: scale(var(--fit, 1));
+  transform-origin: center center;
+  overflow: hidden;
+  background-color: var(--tc-bg);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .45);
 }
 
-/* 青丸数字 */
-.num-dot {
-  display:grid;
-  place-items:center;
-  width:30px;
-  height:30px;
-  border-radius:50%;
-  background:radial-gradient(circle at 32% 28%,#7fbcff,var(--blue-500));
-  color:#fff;
-  font-family:var(--mono);
-  font-size:14px;
-  font-weight:900;
-  box-shadow:0 0 16px rgba(90,162,255,.55), inset 0 1px 1px rgba(255,255,255,.5);
-}
-
-/* 青い送りシェブロン */
-.chev { color:var(--blue-400); font-size:22px; font-weight:900; display:grid; place-items:center; text-shadow:0 0 12px rgba(90,162,255,.6); }
-
-/* 線画アイコン */
-.glyph { width:30px; height:30px; stroke:var(--blue-400); fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; filter:drop-shadow(0 0 8px rgba(90,162,255,.45)); }
-.glyph.gold { stroke:var(--gold-400); filter:drop-shadow(0 0 8px rgba(246,202,70,.45)); }
-
-/* ── 3. components ─────────────────────────────────────────────────── */
-
-/* 角落としパネル (画像の青枠フレーム) */
-.panel {
-  position:relative;
-  background:linear-gradient(180deg,var(--card-bg),rgba(9,17,31,.9));
-  border:1px solid var(--line-blue);
-  border-radius:6px;
-  clip-path:polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
-  box-shadow:inset 0 0 36px rgba(90,162,255,.05);
-}
-.panel.gold-frame { border-color:var(--line-gold); box-shadow:inset 0 0 36px rgba(246,202,70,.05); }
-
-/* セクション番号 + ラベル (左上) */
-.sec-no { display:flex; align-items:baseline; gap:14px; }
-.sec-no b {
-  color:var(--blue-400);
-  font-family:var(--mono);
-  font-size:24px;
-  font-weight:900;
-  border-bottom:3px solid var(--blue-500);
-  padding-bottom:3px;
-}
-.sec-no span { color:var(--ink-1); font-size:16px; font-weight:800; }
-
-/* TenkaCloud ワードマーク (右上) */
-.wordmark { display:flex; align-items:center; gap:9px; color:#fff; font-size:19px; font-weight:900; white-space:nowrap; }
-.wordmark .tc-mark { width:30px; height:30px; display:block; filter:drop-shadow(0 2px 9px rgba(246,202,70,.35)); }
-
-.topbar { display:flex; align-items:center; justify-content:space-between; gap:18px; min-height:34px; }
-
-/* 下段の金帯 (トロフィー + 決め台詞) */
-.gold-band {
-  position:relative;
-  display:flex;
-  align-items:center;
-  gap:16px;
-  padding:13px 22px;
-  border:1px solid var(--line-gold);
-  border-radius:4px;
+/* ── suminagashi / ink backgrounds (static CSS, no canvas, no images) ── */
+.slide-shell {
+  padding: 0;
   background:
-    linear-gradient(90deg,rgba(246,202,70,.2),rgba(246,202,70,.04) 22% 78%,rgba(246,202,70,.2)),
-    rgba(8,14,26,.7);
-  box-shadow:0 0 40px -14px rgba(246,202,70,.45), inset 0 0 0 1px rgba(246,202,70,.12);
-  color:var(--gold-soft);
-  font-size:19px;
-  font-weight:800;
-  overflow:hidden;
+    radial-gradient(circle at 78% 16%, rgba(39, 134, 255, .34), transparent 26%),
+    radial-gradient(ellipse 60% 50% at 88% 70%, rgba(20, 70, 150, .30), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 70% 92%, rgba(28, 40, 120, .26), transparent 62%),
+    linear-gradient(90deg, #020814 0%, #051124 44%, #08213f 100%);
 }
-.gold-band::before, .gold-band::after {
-  content:"";
-  position:absolute;
-  top:-30%;
-  width:120px;
-  height:160%;
-  background:linear-gradient(100deg,transparent,rgba(246,202,70,.35) 35%,rgba(224,166,55,.2) 60%,transparent);
-  transform:skewX(-18deg);
-  pointer-events:none;
-}
-.gold-band::before { left:-34px; }
-.gold-band::after { right:-34px; transform:skewX(18deg); }
-.gold-band .trophy { font-size:30px; line-height:1; filter:drop-shadow(0 2px 10px rgba(246,202,70,.6)); }
-.gold-band strong { color:#fff; font-weight:900; }
-.gold-band em { font-style:normal; color:var(--gold-400); font-weight:900; }
-.gold-band .brush-gold { font-size:1.22em; }
-
-/* QR (レイアウト内に組み込み — オーバーレイしない) */
-.qr-item { display:grid; gap:6px; justify-items:center; text-align:center; }
-.qr-item img {
-  width:100%;
-  max-width:118px;
-  display:block;
-  background:#fff;
-  padding:5px;
-  border:1px solid var(--line-gold);
-  border-radius:8px;
-  image-rendering:pixelated;
-}
-.qr-item span { font-family:var(--mono); font-size:11px; font-weight:700; color:var(--ink-3); }
-.qr-item.sm img { max-width:72px; }
-.qr-item.sm span { font-size:10px; }
-
-/* 赤の事故タグ (slide 03) */
-.incident-tag {
-  display:inline-block;
-  padding:3px 9px;
-  border:1px solid rgba(255,95,84,.65);
-  border-radius:3px;
-  background:rgba(120,18,12,.4);
-  color:#ffb4ae;
-  font-family:var(--mono);
-  font-size:10.5px;
-  font-weight:800;
-  clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
-}
-
-/* 六角エンブレム (slide 05) */
-.emblem {
-  display:grid;
-  place-items:center;
-  width:58px;
-  height:58px;
-  clip-path:polygon(50% 0,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%);
-  background:linear-gradient(160deg,var(--gold-300),var(--gold-500) 55%,var(--gold-700));
-  box-shadow:0 0 24px rgba(246,202,70,.4);
-}
-.emblem .glyph { stroke:#231804; filter:none; width:28px; height:28px; }
-
-/* 丸アバター (slide 07 — 金環 + シルエット SVG) */
-.avatar { width:76px; height:76px; display:block; filter:drop-shadow(0 0 18px rgba(246,202,70,.3)); }
-
-/* 墨流し背景 (canvas) — 全スライドのステージ最背面。
-   ポインタでなぞると藍・金の墨が水面を流れ、混ざり、時間とともに薄れて消える */
-.ink-bg {
-  position:absolute;
-  inset:0;
-  width:100%;
-  height:100%;
-  z-index:0;
-  opacity:.9;
-  pointer-events:none;
-  -webkit-mask-image:radial-gradient(135% 125% at 50% 12%, #000 46%, rgba(0,0,0,.3) 100%);
-  mask-image:radial-gradient(135% 125% at 50% 12%, #000 46%, rgba(0,0,0,.3) 100%);
-}
-
-/* ── 4. deck (機構) ────────────────────────────────────────────────── */
-.deck { height:100vh; overflow-y:scroll; scroll-snap-type:y mandatory; }
-.slide { min-height:100vh; display:grid; place-items:center; overflow:hidden; scroll-snap-align:start; }
-
-/* 16:9 ステージ。--fit でウィンドウにスケール (JS)。760px 以下は縦積みに解除 */
-.stage {
-  position:relative;
-  width:1280px;
-  height:720px;
-  transform:scale(var(--fit,1));
-  transform-origin:center center;
-  overflow:hidden;
-  padding:34px 42px 30px;
+.bg-wide {
   background:
-    radial-gradient(132% 92% at 50% -16%, rgba(126,160,214,.3), rgba(11,20,36,0) 52%),
-    radial-gradient(80% 56% at 78% 6%, rgba(246,202,70,.13), rgba(11,20,36,0) 56%),
-    radial-gradient(120% 80% at 50% 118%, rgba(3,7,14,.94), rgba(8,15,28,0) 60%),
-    linear-gradient(180deg,#0a1322 0%,#0c1828 46%,#070e1b 100%);
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:4px;
-  box-shadow:0 30px 80px rgba(0,0,0,.6);
+    radial-gradient(circle at 76% 20%, rgba(39, 134, 255, .32), transparent 26%),
+    radial-gradient(ellipse 70% 50% at 50% 8%, rgba(24, 86, 170, .26), transparent 60%),
+    radial-gradient(ellipse 55% 45% at 14% 96%, rgba(20, 36, 100, .28), transparent 64%),
+    linear-gradient(90deg, #04101f 0%, #061629 46%, #061c36 100%);
 }
-.stage::before {
-  content:"";
-  position:absolute;
-  inset:0;
-  pointer-events:none;
-  z-index:0;
+.bg-center {
   background:
-    linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px),
-    linear-gradient(0deg,rgba(255,255,255,.03) 1px,transparent 1px);
-  background-size:58px 58px,58px 58px;
-  -webkit-mask-image:radial-gradient(125% 100% at 50% 0%,#000 28%,transparent 80%);
-  mask-image:radial-gradient(125% 100% at 50% 0%,#000 28%,transparent 80%);
+    radial-gradient(circle at 50% 34%, rgba(39, 134, 255, .30), transparent 28%),
+    radial-gradient(ellipse 64% 46% at 50% 4%, rgba(28, 92, 176, .24), transparent 60%),
+    radial-gradient(ellipse 80% 40% at 50% 102%, rgba(18, 34, 96, .34), transparent 60%),
+    linear-gradient(180deg, #04101f 0%, #051528 50%, #03101f 100%);
 }
-.stage::after {
-  content:"";
-  position:absolute;
-  inset:0;
-  pointer-events:none;
-  z-index:0;
-  box-shadow:inset 0 0 170px rgba(0,0,0,.72);
-}
-.stage > * { position:relative; z-index:1; }
-.stage > .ink-bg { position:absolute; z-index:0; }
 
+.slide-shell::before,
+.slide-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* gold ink blooms in the corners + ambient darkening */
+.slide-shell::before {
+  background:
+    linear-gradient(180deg, rgba(2, 8, 20, .04), rgba(2, 8, 20, .25) 78%, rgba(2, 8, 20, .6)),
+    radial-gradient(circle at 30% 120%, rgba(214, 168, 71, .13), transparent 22%),
+    radial-gradient(circle at 98% 94%, rgba(214, 168, 71, .16), transparent 21%);
+}
+/* faint engineering grid, masked to the right */
+.slide-shell::after {
+  opacity: .45;
+  background-image:
+    linear-gradient(rgba(38, 136, 255, .07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(38, 136, 255, .07) 1px, transparent 1px);
+  background-size: 52px 52px;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 34%, #000 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 34%, #000 100%);
+}
+.canvas > * { position: relative; z-index: 1; }
+
+/* ── progress + counter ────────────────────────────────────────────── */
 .progress {
-  position:fixed;
-  top:0; left:0;
-  z-index:20;
-  width:0;
-  height:4px;
-  background:linear-gradient(90deg,var(--gold-400),var(--blue-400));
-  box-shadow:0 0 14px rgba(246,202,70,.5);
-  transition:width .18s ease;
+  position: fixed;
+  top: 0; left: 0;
+  z-index: 30;
+  width: 0; height: 4px;
+  background: linear-gradient(90deg, var(--tc-blue), var(--tc-gold-2));
+  box-shadow: 0 0 18px rgba(38, 136, 255, .75);
+  transition: width .18s ease;
 }
 .counter {
-  position:fixed;
-  right:16px; bottom:14px;
-  z-index:20;
-  padding:4px 11px;
-  border:1px solid var(--line-1);
-  border-radius:999px;
-  background:rgba(10,18,32,.72);
-  color:var(--ink-2);
-  font-family:var(--mono);
-  font-size:12px;
-  backdrop-filter:blur(6px);
+  position: fixed;
+  right: 16px; bottom: 14px;
+  z-index: 30;
+  padding: 5px 12px;
+  border: 1px solid rgba(88, 183, 255, .45);
+  background: rgba(2, 8, 20, .82);
+  color: var(--tc-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
 }
 
-/* ── 5. slides ─────────────────────────────────────────────────────── */
-
-.col { height:100%; display:grid; grid-template-rows:auto 1fr auto; gap:14px; }
-
-/* 01 hero */
-.s1-grid { display:grid; grid-template-columns:1.06fr .94fr; gap:28px; align-items:end; min-height:0; }
-.s1-copy { display:grid; gap:13px; align-content:center; }
-.s1-name { display:flex; align-items:center; gap:14px; color:#fff; font-size:62px; font-weight:900; letter-spacing:-.01em; }
-.s1-name .tc-mark { width:62px; height:62px; filter:drop-shadow(0 4px 18px rgba(246,202,70,.4)); }
-.s1-oss { width:max-content; padding:5px 13px; border:1px solid var(--line-gold); border-radius:999px; background:rgba(246,202,70,.08); color:var(--gold-400); font-family:var(--mono); font-size:13px; font-weight:900; }
-.s1-oss b { color:var(--blue-300); }
-.s1-sub { color:var(--ink-1); font-size:26px; font-weight:800; }
-.s1-tenka { font-size:84px; line-height:1.08; }
-.s1-clouds { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
-.cloud-chip { padding:6px 12px; border:1px solid var(--line-gold); border-radius:7px; background:rgba(246,202,70,.1); color:var(--gold-400); font-family:var(--mono); font-size:13px; font-weight:900; }
-.cloud-chip.soon { color:var(--ink-3); background:transparent; border:1px dashed var(--line-2); font-weight:800; }
-.s1-arrow { color:var(--ink-3); font-family:var(--mono); font-size:12px; font-weight:800; }
-.s1-steps { display:grid; gap:11px; align-content:end; }
-.s1-steps .kicker { text-align:center; }
-.s1-step-row { display:grid; grid-template-columns:1fr auto 1fr auto 1fr; gap:7px; align-items:stretch; }
-.s1-step { padding:14px 10px 13px; display:grid; gap:8px; justify-items:center; text-align:center; align-content:start; }
-.s1-step h3 { color:var(--ink-0); font-size:14.5px; font-weight:850; white-space:nowrap; }
-.s1-step p { color:var(--ink-3); font-size:11.5px; line-height:1.45; font-weight:600; }
-
-/* 02 StackStack */
-.s2-top { display:grid; grid-template-columns:1.02fr .98fr; gap:24px; align-items:center; }
-.s2-head { font-size:36px; line-height:1.32; }
-.s2-head .brush-gold { display:block; font-size:50px; margin-top:6px; }
-.s2-problem { padding:18px 20px; display:grid; gap:9px; }
-.s2-problem .ttl { display:flex; align-items:baseline; gap:10px; border-bottom:1px solid var(--line-1); padding-bottom:9px; }
-.s2-problem .ttl b { color:var(--ink-0); font-size:19px; font-weight:900; }
-.s2-problem .ttl .mono { color:var(--blue-300); font-family:var(--mono); font-size:13px; font-weight:800; }
-.s2-problem .ttl em { font-style:normal; color:var(--gold-400); font-family:var(--mono); font-size:19px; font-weight:900; margin-left:auto; }
-.s2-problem p { color:var(--ink-2); font-size:14.5px; line-height:1.55; font-weight:600; }
-.s2-problem p em { font-style:normal; color:var(--gold-400); font-weight:900; }
-.s2-gaps { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; align-content:center; }
-.gap-card { padding:13px 12px 12px; display:grid; gap:9px; justify-items:center; text-align:center; align-content:start; }
-.gap-card .hd { display:flex; align-items:center; gap:7px; }
-.gap-card .hd b { color:var(--blue-300); font-family:var(--mono); font-size:14px; font-weight:900; }
-.gap-flow { display:grid; gap:3px; justify-items:center; }
-.gap-flow .from { color:var(--ink-3); font-size:12.5px; font-weight:700; }
-.gap-flow .arr { color:var(--blue-400); font-size:14px; font-weight:900; }
-.gap-flow .to { color:var(--gold-400); font-family:var(--mono); font-size:15px; font-weight:900; }
-
-/* 03 game design */
-.s3-head { font-size:34px; line-height:1.3; }
-.s3-head .brush-gold { font-size:42px; }
-.s3-grid { display:grid; grid-template-columns:1fr auto 1fr auto 1fr auto 1fr; gap:8px; align-items:center; align-content:center; min-height:0; }
-.s3-card { padding:18px 14px; min-height:280px; display:grid; gap:9px; align-content:start; justify-items:center; text-align:center; }
-.s3-card .hd { display:flex; align-items:center; gap:8px; }
-.s3-card h3 { color:var(--ink-0); font-size:16.5px; font-weight:850; line-height:1.3; }
-.s3-card p { color:var(--ink-3); font-size:12.5px; line-height:1.5; font-weight:600; }
-.s3-tags { display:flex; flex-wrap:wrap; gap:5px; justify-content:center; }
-
-/* 04 battle (live portal) */
-.battle-slide { height:100%; display:grid; grid-template-rows:auto auto auto 1fr auto; gap:11px; }
-.battle-loop { display:flex; align-items:stretch; gap:8px; }
-.bl-step { flex:1; padding:10px 13px; display:grid; gap:2px; align-content:center; transition:border-color .25s ease, background .25s ease, box-shadow .25s ease; }
-.bl-step b { font-family:var(--mono); font-size:13px; color:var(--blue-300); }
-.bl-step span { font-size:12px; color:var(--ink-2); font-weight:600; line-height:1.32; }
-.bl-arr { display:grid; place-items:center; color:var(--blue-400); font-weight:900; font-size:17px; transition:color .25s ease, transform .25s ease; }
-.bl-step.active { border-color:var(--gold-400); background:rgba(246,202,70,.12); box-shadow:0 0 0 1px rgba(246,202,70,.4), 0 0 22px rgba(246,202,70,.25); }
-.bl-arr.on { color:var(--gold-400); transform:translateX(2px); }
-.s4-head { font-size:38px; }
-
-/* live portal: 本物のプロダクト画面 = AWS Cloudscape 風 (ライト基調のまま) */
-.tc-portal { min-height:0; border-radius:10px; overflow:hidden; border:1px solid rgba(255,255,255,.18); box-shadow:0 20px 50px -20px rgba(0,0,0,.8); }
-.cs-app { height:100%; display:flex; flex-direction:column; background:#f2f3f3; color:#16191f; font-family:"Open Sans","Helvetica Neue",Roboto,Arial,var(--sans); overflow:hidden; }
-.cs-topnav { display:flex; align-items:center; justify-content:space-between; height:44px; padding:0 16px; background:#fff; border-bottom:1px solid #e9ebed; flex:0 0 auto; }
-.cs-ident { display:flex; align-items:center; gap:9px; font-size:16px; font-weight:700; color:#000716; }
-.cs-logo { width:20px; height:20px; border-radius:4px; background:#0972d3; }
-.cs-utils { display:flex; align-items:center; gap:18px; font-size:13px; color:#0f1419; }
-.cs-util { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
-.cs-util b { font-weight:700; }
-.cs-ok { color:#037f0c; font-weight:900; }
-.cs-caret { color:#5f6b7a; }
-.cs-body { flex:1; display:grid; grid-template-columns:204px 1fr; min-height:0; }
-.cs-sidenav { background:#fff; border-right:1px solid #e9ebed; padding:14px 8px; }
-.cs-sec { font-size:13px; font-weight:700; color:#000716; padding:10px 12px 5px; }
-.cs-sec:first-child { padding-top:0; }
-.cs-link { display:flex; align-items:center; gap:8px; padding:6px 12px; font-size:13px; color:#0f1419; border-left:2px solid transparent; }
-.cs-link.on { color:#0972d3; font-weight:700; border-left-color:#0972d3; background:#f0fbff; }
-.cs-badge { margin-left:auto; min-width:18px; height:18px; padding:0 5px; display:inline-grid; place-items:center; background:#0972d3; color:#fff; border-radius:999px; font-size:11px; font-weight:700; }
-.cs-content { background:#f2f3f3; padding:14px 16px; min-height:0; overflow:hidden; }
-.cs-countdown { font-size:13px; color:#5f6b7a; margin-bottom:10px; font-weight:600; }
-.cs-countdown b { color:#16191f; font-weight:700; font-variant-numeric:tabular-nums; }
-.cs-incident { margin-left:12px; font-family:var(--mono); font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; opacity:0; transition:opacity .3s ease; }
-.cs-incident.show { opacity:1; }
-.cs-incident.fire { color:#b8261d; background:#fdeceb; border:1px solid #f3c4c0; }
-.cs-incident.ok { color:#1d7a44; background:#eafaf0; border:1px solid #cde9d7; }
-.cs-badge.flash { animation:tcbadge .6s ease; }
-@keyframes tcbadge { 0% { transform:scale(1.5); } 100% { transform:scale(1); } }
-.cs-container { background:#fff; border:1px solid #e9ebed; border-radius:8px; overflow:hidden; }
-.cs-ch { display:flex; align-items:baseline; gap:10px; padding:13px 18px; border-bottom:1px solid #e9ebed; font-size:18px; font-weight:700; color:#000716; }
-.cs-ch-cnt { font-size:13px; font-weight:400; color:#5f6b7a; }
-.cs-table { font-size:13px; }
-.cs-thead, .cs-row { display:grid; grid-template-columns:62px 1fr 112px 80px; align-items:center; }
-.cs-thead { padding:9px 18px; border-bottom:1px solid #e9ebed; color:#000716; font-weight:700; background:#fbfbfb; }
-.cs-row { padding:11px 18px; border-bottom:1px solid #eff0f0; }
-.cs-row:last-child { border-bottom:none; }
-.cs-row.mine { background:#f0fbff; }
-.cs-row.flash { animation:csflash .8s ease; }
-@keyframes csflash { 0%{ background:#eafaf0; } 100%{ background:transparent; } }
-.cs-row.mine.flash { animation:csflashmine .8s ease; }
-@keyframes csflashmine { 0%{ background:#eafaf0; } 100%{ background:#f0fbff; } }
-.cs-rk { font-weight:700; color:#0f1419; }
-.cs-rk.me { color:#037f0c; }
-.cs-tm { color:#0f1419; }
-.cs-tm.me { font-weight:700; }
-.cs-you { color:#0972d3; font-size:11px; }
-.cs-sc { font-weight:700; color:#037f0c; }
-.cs-pg { color:#5f6b7a; }
-
-/* 05 platform */
-.s5-head { display:grid; gap:6px; }
-.s5-head .nm { display:flex; align-items:center; gap:12px; color:#fff; font-size:38px; font-weight:900; }
-.s5-head .nm .tc-mark { width:40px; height:40px; }
-.s5-head .sub { color:var(--ink-1); font-size:22px; font-weight:800; }
-.s5-head .brush-gold { font-size:52px; line-height:1.14; }
-.s5-lead { color:var(--ink-2); font-size:16.5px; font-weight:600; line-height:1.55; }
-.s5-lead em { font-style:normal; color:var(--blue-300); font-weight:900; }
-.s5-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; align-content:center; }
-.s5-card { padding:18px; display:grid; grid-template-columns:auto 1fr; gap:8px 14px; align-items:center; }
-.s5-card .tag { grid-column:1 / -1; color:var(--blue-300); font-family:var(--mono); font-size:11.5px; font-weight:900; letter-spacing:.16em; }
-.s5-card h3 { color:var(--ink-0); font-size:19px; font-weight:850; line-height:1.25; }
-.s5-card p { grid-column:1 / -1; color:var(--ink-3); font-size:13.5px; font-weight:600; line-height:1.5; }
-
-/* 06 use cases */
-.s6-head { font-size:36px; line-height:1.32; }
-.s6-head .brush-gold { font-size:46px; }
-.s6-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; align-content:center; align-items:center; }
-.s6-card { padding:20px 18px; min-height:250px; display:grid; gap:11px; justify-items:center; text-align:center; align-content:start; }
-.s6-card .hd { display:flex; align-items:center; gap:9px; }
-.s6-card .hd b { color:var(--blue-300); font-family:var(--mono); font-size:13px; font-weight:900; letter-spacing:.14em; }
-.s6-card .glyph { width:38px; height:38px; }
-.s6-card h3 { color:var(--gold-400); font-size:19px; font-weight:850; padding-top:9px; border-top:1px solid var(--line-gold); width:100%; }
-.s6-card p { color:var(--ink-2); font-size:14px; font-weight:600; line-height:1.55; }
-
-/* 07 team */
-.s7-head { font-size:34px; line-height:1.32; }
-.s7-head .brush-gold { font-size:44px; }
-.s7-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; align-content:center; align-items:center; }
-.s7-card { padding:17px; min-height:280px; display:grid; gap:10px; align-content:start; }
-.s7-id { display:flex; align-items:center; gap:13px; }
-.s7-id .who { display:grid; gap:2px; }
-.s7-id .role { color:var(--gold-400); font-family:var(--mono); font-size:11px; font-weight:900; letter-spacing:.14em; }
-.s7-id .role.blue { color:var(--blue-300); }
-.s7-id h3 { color:var(--ink-0); font-size:21px; font-weight:900; line-height:1.15; }
-.s7-id small { color:var(--ink-3); font-size:12px; font-weight:600; }
-.s7-card .sep { height:1px; background:linear-gradient(90deg,transparent,var(--line-gold),transparent); }
-.s7-card p { color:var(--ink-2); font-size:13.5px; font-weight:600; line-height:1.55; }
-.s7-card p em { font-style:normal; color:var(--gold-400); font-weight:900; }
-.s7-qrs { display:flex; gap:12px; justify-content:center; padding-top:2px; }
-
-/* 08 ask */
-.s8-head { font-size:32px; line-height:1.34; }
-.s8-head .brush-gold { font-size:40px; }
-.s8-lead { color:var(--ink-2); font-size:15.5px; font-weight:600; line-height:1.6; }
-.s8-lead em { font-style:normal; color:var(--blue-300); font-weight:900; }
-.s8-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; align-content:center; align-items:center; }
-.s8-card { padding:17px; min-height:215px; display:grid; gap:9px; align-content:start; }
-.s8-card .hd { display:flex; align-items:center; gap:9px; }
-.s8-card .hd span { color:var(--blue-300); font-size:13px; font-weight:800; }
-.s8-card h3 { color:var(--ink-0); font-size:18px; font-weight:850; line-height:1.3; }
-.s8-card p { color:var(--ink-2); font-size:13.5px; font-weight:600; line-height:1.55; }
-.s8-qa { display:grid; gap:8px; }
-.s8-qa .q { display:grid; grid-template-columns:auto 1fr; gap:8px; color:var(--ink-2); font-size:12.5px; font-weight:600; line-height:1.5; }
-.s8-qa .q b { color:var(--blue-300); font-family:var(--mono); }
-
-/* 09 thanks */
-.s9 { position:relative; height:100%; display:grid; grid-template-rows:auto 1fr auto; gap:14px; }
-.s9-mid { display:grid; place-items:center; align-content:center; gap:16px; text-align:center; }
-.s9-mid h1 { font-size:72px; line-height:1.14; }
-.s9-mid .sub { color:var(--ink-1); font-size:20px; font-weight:700; text-shadow:0 2px 14px rgba(0,0,0,.8); }
-.s9-mid .sub em { font-style:normal; color:var(--blue-300); font-weight:900; }
-.s9-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; width:min(880px,100%); }
-.s9-card { padding:15px 14px; display:grid; gap:8px; justify-items:center; text-align:center; align-content:start; background:linear-gradient(180deg,rgba(13,24,43,.92),rgba(9,17,31,.94)); }
-.s9-card h3 { color:var(--gold-400); font-size:17px; font-weight:850; }
-.s9-card .qr-item span { font-size:9.5px; }
-.s9-card p { color:var(--ink-3); font-size:12px; font-weight:600; line-height:1.45; }
-
-/* ── responsive (760px 以下: ステージ解除して縦積み) ──────────────── */
-@media (max-width:1040px) {
-  .stage { padding:30px 34px 28px; }
+/* ── slide chrome (label + aws wordmark) ───────────────────────────── */
+.slide-top {
+  position: absolute;
+  top: 30px; left: 32px; right: 36px;
+  height: 62px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
 }
-@media (max-width:760px) {
-  .slide { padding:10px; overflow:visible; }
-  .stage { width:calc(100vw - 20px); min-height:calc(100vh - 20px); height:auto; transform:none; overflow:visible; padding:18px; }
-  .col { height:auto; }
-  .ink-bg { opacity:.5; }
-  .s1-grid, .s1-step-row, .s2-top, .s2-gaps, .s3-grid, .s5-grid, .s6-grid, .s7-grid, .s8-grid, .s9-grid { grid-template-columns:1fr; }
-  .chev { transform:rotate(90deg); }
-  .s1-name { font-size:40px; }
-  .s1-name .tc-mark { width:40px; height:40px; }
-  .s1-tenka { font-size:48px; }
-  .s2-head { font-size:26px; }
-  .s2-head .brush-gold { font-size:34px; }
-  .s9-mid h1 { font-size:38px; }
-  .battle-loop { flex-direction:column; }
-  .bl-arr { transform:rotate(90deg); }
-  .cs-body { grid-template-columns:1fr; }
-  .cs-sidenav { display:none; }
-  .battle-slide { height:auto; }
-  .s9 { height:auto; }
-  .gold-band { font-size:15px; }
+.slide-label {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  color: var(--tc-white);
+  font-family: var(--font-sans);
+  font-size: 27px;
+  font-weight: 900;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, .72);
+}
+.slide-no {
+  position: relative;
+  display: inline-block;
+  min-width: 49px;
+  padding-bottom: 19px;
+  margin-bottom: -19px;
+  color: var(--tc-blue);
+  font-family: var(--font-cond);
+  font-size: 43px;
+  line-height: .95;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+.slide-no::after {
+  content: "";
+  position: absolute;
+  left: 0; bottom: 0;
+  width: 49px; height: 3px;
+  background: var(--tc-blue);
+  box-shadow: 0 0 12px rgba(38, 136, 255, .8);
+}
+.aws-mark {
+  color: rgba(220, 235, 255, .58);
+  font-family: var(--font-cond);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  text-transform: lowercase;
+}
+.aws-mark span {
+  display: block;
+  width: 34px; height: 8px;
+  margin: -1px 0 0 auto;
+  border-bottom: 5px solid #ff9d00;
+  border-radius: 0 0 70% 70%;
+  transform: rotate(8deg);
+  opacity: .85;
 }
 
-/* ── print (make pdf: 1 スライド = 1 ページ) ───────────────────────── */
+/* ── panels ────────────────────────────────────────────────────────── */
+.tc-panel {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(5, 21, 48, .88), rgba(2, 8, 20, .93)),
+    radial-gradient(circle at 70% 0%, rgba(38, 136, 255, .16), transparent 52%);
+  border: 1px solid var(--tc-line);
+  box-shadow:
+    0 0 0 1px rgba(20, 120, 255, .16) inset,
+    0 0 24px rgba(0, 132, 255, .22),
+    0 18px 42px rgba(0, 0, 0, .35);
+}
+.cut-panel {
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+}
+
+/* ── gold callout band ─────────────────────────────────────────────── */
+.tc-callout {
+  position: absolute;
+  left: 34px; right: 34px; bottom: 14px;
+  height: 104px;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 12px 28px;
+  border: 1px solid rgba(214, 168, 71, .9);
+  background:
+    linear-gradient(90deg, rgba(3, 12, 30, .94), rgba(2, 8, 20, .82)),
+    radial-gradient(circle at 96% 50%, rgba(214, 168, 71, .16), transparent 20%);
+  box-shadow: 0 0 24px rgba(214, 168, 71, .17), 0 0 0 1px rgba(214, 168, 71, .16) inset;
+  color: var(--tc-white);
+  font-family: var(--font-sans);
+  font-weight: 900;
+}
+.tc-callout p {
+  color: var(--tc-white);
+  font-size: 24px;
+  line-height: 1.34;
+  font-weight: 900;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, .66);
+}
+.tc-callout strong,
+.tc-callout span { color: var(--tc-gold-2); }
+.tc-callout .product-name {
+  display: inline-block;
+  color: var(--tc-gold-2);
+  font-style: italic;
+  font-weight: 900;
+}
+.tc-callout.centered { justify-content: center; text-align: center; }
+.tc-callout.handshake { min-height: 78px; }
+.contact-callout {
+  display: inline-block;
+  font-size: 1.5em;
+  line-height: 1;
+  color: var(--tc-gold-2);
+  text-shadow: 0 0 18px rgba(241, 205, 114, .34);
+}
+
+/* trophy / handshake inline-SVG icons */
+.cal-icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 70px; height: 56px;
+  filter: drop-shadow(0 0 14px rgba(241, 205, 114, .38));
+}
+
+/* ── brush calligraphy (replaces all brush PNGs) ───────────────────── */
+.brush {
+  display: inline-block;
+  font-family: var(--font-serif);
+  font-weight: 900;
+  letter-spacing: .04em;
+  color: transparent;
+  background: linear-gradient(176deg, #fff2a3 0%, #f0c75d 36%, #b77921 70%, #f6d983 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  transform: skewX(-5deg);
+  text-shadow: 0 0 26px rgba(214, 168, 71, .28);
+  filter: drop-shadow(0 3px 0 rgba(60, 33, 3, .5)) drop-shadow(0 6px 14px rgba(0, 0, 0, .4));
+}
+/* faint ink-bleed underline to evoke a brush stroke base */
+.brush.stroke::after {
+  content: "";
+  display: block;
+  width: 86%;
+  height: 11px;
+  margin-top: 6px;
+  background: linear-gradient(90deg, transparent, rgba(241, 205, 114, .9) 18%, rgba(241, 205, 114, .92) 78%, transparent);
+  transform: skewX(-16deg);
+  opacity: .7;
+  border-radius: 40%;
+  filter: blur(.4px);
+}
+.brush.block { display: block; }
+
+/* ── brand title ───────────────────────────────────────────────────── */
+.brand-title {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--font-cond);
+  font-size: 84px;
+  font-weight: 900;
+  letter-spacing: -.01em;
+  line-height: 1.1;
+  white-space: nowrap;
+  background: linear-gradient(180deg, #ffffff 0%, #eef4ff 40%, #aeb8c8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  text-shadow: 0 10px 26px rgba(0, 0, 0, .5);
+}
+.cloud-logo {
+  width: 80px; height: 60px;
+  -webkit-text-fill-color: initial;
+  filter: drop-shadow(0 0 14px rgba(38, 136, 255, .85));
+}
+
+/* ── line / fix / icon svg base ────────────────────────────────────── */
+.line-icon {
+  display: block;
+  width: 64px; height: 56px;
+  margin: 0 auto 8px;
+  color: var(--tc-blue);
+  filter: drop-shadow(0 0 12px rgba(38, 136, 255, .74));
+}
+.line-icon svg, .cal-icon svg, .quest-ic svg, .cta-ic svg { width: 100%; height: 100%; display: block; }
+
+/* ════════════ SLIDE 01 — hero ════════════ */
+.hero-grid {
+  position: absolute;
+  left: 32px; right: 32px; top: 115px; bottom: 145px;
+  display: grid;
+  grid-template-columns: 1fr .95fr;
+  gap: 27px;
+}
+.hero-copy { display: grid; align-content: start; gap: 17px; }
+.hero-brand { font-size: 84px; }
+.hero-sub {
+  color: var(--tc-white);
+  font-size: 27px;
+  line-height: 1.28;
+  font-weight: 900;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .7);
+}
+.hero-sub .accent { color: var(--tc-blue); }
+.hero-lead {
+  font-family: var(--font-serif);
+  font-size: 50px;
+  font-weight: 600;
+  line-height: 1.08;
+  color: #f7fbff;
+  text-shadow: 0 3px 0 rgba(255, 255, 255, .08), 0 8px 22px rgba(0, 0, 0, .58);
+}
+.hero-lead .brush { font-size: 64px; }
+.cloud-support {
+  width: 600px; height: 96px;
+  display: grid;
+  grid-template-columns: 170px 1px 1fr;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 30px;
+}
+.aws-word {
+  color: #fff;
+  font-family: var(--font-cond);
+  font-size: 56px;
+  line-height: 1;
+  font-weight: 900;
+}
+.support-sep { height: 56px; background: rgba(184, 199, 220, .32); }
+.cloud-support span:last-child {
+  color: #fff;
+  font-size: 20px;
+  line-height: 1.28;
+  font-weight: 800;
+}
+.cloud-support b { color: var(--tc-blue); }
+
+.match-runs { align-self: end; margin-bottom: 6px; }
+.match-title {
+  width: fit-content;
+  margin: 0 auto 17px;
+  color: #dff0ff;
+  font-family: var(--font-cond);
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: .22em;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 0 14px rgba(88, 183, 255, .88), 0 0 26px rgba(38, 136, 255, .56);
+}
+.run-cards {
+  display: grid;
+  grid-template-columns: 1fr 22px 1fr 22px 1fr;
+  gap: 8px;
+  align-items: stretch;
+}
+.run-card {
+  min-height: 216px;
+  padding: 20px 10px 16px;
+  text-align: center;
+}
+.run-card h3 {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 900;
+  white-space: nowrap;
+  color: #fff;
+}
+.run-card p {
+  margin-top: 12px;
+  color: #e8eef7;
+  font-size: 14px;
+  line-height: 1.52;
+  font-weight: 700;
+}
+.number-dot {
+  display: grid;
+  place-items: center;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #7fc3ff, #1678ff 70%);
+  color: #fff;
+  font-family: var(--font-cond);
+  font-size: 21px;
+  font-weight: 800;
+  box-shadow: 0 0 16px rgba(38, 136, 255, .68);
+}
+.run-card .number-dot { margin: -13px auto 8px; }
+
+.arr-r {
+  align-self: center;
+  width: 0; height: 0;
+  border-top: 19px solid transparent;
+  border-bottom: 19px solid transparent;
+  border-left: 19px solid var(--tc-blue);
+  filter: drop-shadow(0 0 12px rgba(38, 136, 255, .9));
+  opacity: .94;
+}
+
+/* ════════════ SLIDE 02 — StackStack problem ════════════ */
+.problem-layout {
+  position: absolute;
+  left: 34px; right: 34px; top: 112px;
+  height: 245px;
+  display: grid;
+  grid-template-columns: 1.45fr .82fr;
+  gap: 28px;
+  align-items: end;
+}
+.problem-copy h2 {
+  color: #f7fbff;
+  font-family: var(--font-serif);
+  font-size: 56px;
+  line-height: 1.1;
+  font-weight: 600;
+  text-shadow: 0 3px 0 rgba(255, 255, 255, .08), 0 8px 22px rgba(0, 0, 0, .58);
+}
+.problem-brush { margin-top: 6px; font-size: 60px; }
+.problem-card { padding: 20px 26px; }
+.problem-card h3 {
+  color: #fff;
+  font-family: var(--font-cond);
+  font-size: 25px;
+  line-height: 1.2;
+  font-weight: 900;
+  letter-spacing: .04em;
+  border-bottom: 1px solid rgba(88, 183, 255, .48);
+  padding-bottom: 11px;
+  white-space: nowrap;
+}
+.problem-card h3 span,
+.problem-card h3 strong:not(.time-gold) { color: var(--tc-blue); }
+.problem-card .time-gold,
+.problem-card p b {
+  color: var(--tc-gold-2);
+  text-shadow: 0 0 14px rgba(241, 205, 114, .35);
+}
+.problem-card p {
+  margin-top: 13px;
+  color: #f4f8ff;
+  font-size: 17px;
+  line-height: 1.5;
+  font-weight: 700;
+}
+
+.fix-grid {
+  position: absolute;
+  left: 24px; right: 24px; bottom: 124px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+.fix-card {
+  height: 188px;
+  padding: 15px 12px 12px;
+  overflow: hidden;
+}
+.fix-card .number-dot { position: absolute; top: 13px; left: 16px; }
+.fix-card h3 {
+  padding: 0 34px;
+  color: #fff;
+  font-family: var(--font-cond);
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 800;
+  text-align: center;
+}
+/* before → after chips */
+.fix-chips {
+  margin-top: 26px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  justify-items: center;
+}
+.chip {
+  display: inline-grid;
+  place-items: center;
+  width: 100%;
+  min-height: 46px;
+  padding: 6px 4px;
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.12;
+  font-weight: 900;
+  text-align: center;
+}
+.chip.before {
+  color: #ffd2bf;
+  background: rgba(120, 32, 12, .42);
+  border: 1px solid rgba(255, 122, 60, .6);
+}
+.chip.after {
+  color: #06162d;
+  background: linear-gradient(180deg, #f6db8a, #e0b558);
+  border: 1px solid rgba(241, 205, 114, .9);
+  box-shadow: 0 0 14px rgba(241, 205, 114, .34);
+}
+.chip-arr {
+  width: 0; height: 0;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 12px solid var(--tc-gold-2);
+  filter: drop-shadow(0 0 6px rgba(241, 205, 114, .8));
+}
+
+/* ════════════ SLIDE 03 — game design ════════════ */
+.mega-heading {
+  position: absolute;
+  top: 105px; left: 34px; right: 34px;
+  color: #f7fbff;
+  font-family: var(--font-serif);
+  font-size: 52px;
+  line-height: 1.08;
+  font-weight: 600;
+  text-shadow: 0 3px 0 rgba(255, 255, 255, .08), 0 8px 22px rgba(0, 0, 0, .58);
+}
+.mega-heading .brush { font-size: 60px; }
+.quest-grid {
+  position: absolute;
+  left: 22px; right: 22px; bottom: 136px;
+  display: grid;
+  grid-template-columns: 1fr 22px 1fr 22px 1fr 22px 1fr;
+  gap: 10px;
+  align-items: stretch;
+}
+.quest-card {
+  height: 264px;
+  padding: 13px 13px 12px;
+}
+.quest-card .number-dot {
+  position: absolute; left: 17px; top: 11px;
+  z-index: 2;
+  width: 43px; height: 43px;
+  font-size: 27px;
+}
+.quest-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 19px;
+  line-height: 1.28;
+  font-weight: 900;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, .78);
+}
+.quest-ic {
+  width: 30px; height: 30px;
+  flex: 0 0 30px;
+  color: var(--tc-blue-2);
+  filter: drop-shadow(0 0 10px rgba(38, 136, 255, .62));
+}
+.quest-card p {
+  margin-top: 7px;
+  color: #f2f6ff;
+  font-size: 14px;
+  line-height: 1.36;
+  font-weight: 700;
+}
+.quest-art {
+  height: 100px;
+  margin: 8px -1px 12px;
+  border-bottom: 1px solid rgba(214, 168, 71, .54);
+  border-radius: 4px 4px 0 0;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 -26px 34px rgba(2, 8, 20, .45);
+}
+.cloud-art { background: radial-gradient(circle at 50% 36%, rgba(64, 150, 255, .42), transparent 60%), linear-gradient(180deg, #0a2347, #061629); }
+.wall-art  { background: linear-gradient(180deg, #0c2b34, #061d22); }
+.battle-art{ background: radial-gradient(circle at 50% 30%, rgba(255, 96, 50, .26), transparent 62%), linear-gradient(180deg, #3a1106, #1a0a05); }
+.win-art   { background: radial-gradient(circle at 50% 34%, rgba(241, 205, 114, .34), transparent 60%), linear-gradient(180deg, #2c2208, #0c1828); }
+.qa-svg { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .9; }
+.incident-tags {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  gap: 5px 6px;
+  padding: 0 8px;
+}
+.incident-tag {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(120, 24, 10, .62);
+  border: 1px solid rgba(255, 110, 70, .72);
+  color: #ffd9cb;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  transform: rotate(-7deg);
+  box-shadow: 0 0 7px rgba(244, 76, 36, .42);
+}
+.incident-tag:nth-child(2) { transform: rotate(8deg); }
+.incident-tag.wide { transform: rotate(-2deg); }
+
+/* ════════════ SLIDE 04 — battle loop + scoreboard ════════════ */
+.battle-title {
+  position: absolute;
+  top: 102px; left: 34px;
+  color: #f7fbff;
+  font-family: var(--font-serif);
+  font-size: 66px;
+  line-height: 1.12;
+  font-weight: 600;
+  text-shadow: 0 3px 0 rgba(255, 255, 255, .08), 0 8px 22px rgba(0, 0, 0, .58);
+}
+.battle-loop {
+  position: absolute;
+  left: 34px; right: 34px; top: 198px;
+  height: 104px;
+  display: grid;
+  grid-template-columns: 1fr 18px 1fr 18px 1fr 18px 1fr;
+  gap: 8px;
+  align-items: stretch;
+}
+.bl-step {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  grid-template-rows: auto 1fr;
+  column-gap: 10px;
+  align-items: center;
+  padding: 10px 14px 9px 50px;
+  text-align: left;
+  transition: border-color .25s ease, box-shadow .25s ease, transform .25s ease;
+}
+.bl-step .number-dot {
+  position: absolute; top: 11px; left: 13px;
+  width: 28px; height: 28px;
+  font-size: 17px;
+}
+.bl-step .line-icon {
+  grid-column: 1; grid-row: 1 / 3;
+  width: 42px; height: 42px;
+  margin: 0;
+  align-self: center; justify-self: center;
+}
+.bl-step h3 {
+  grid-column: 2; grid-row: 1;
+  color: #fff;
+  font-family: var(--font-cond);
+  font-size: 25px;
+  line-height: 1.12;
+  font-weight: 800;
+}
+.bl-step p {
+  grid-column: 2; grid-row: 2;
+  margin-top: 4px;
+  max-width: 190px;
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.22;
+  font-weight: 700;
+}
+.bl-step small { color: #fff; font-size: 10px; font-weight: 700; }
+.bl-step.active {
+  border-color: var(--tc-gold-2);
+  box-shadow: 0 0 0 1px rgba(241, 205, 114, .38) inset, 0 0 34px rgba(241, 205, 114, .28);
+  transform: translateY(-2px);
+}
+.bl-arr {
+  align-self: center;
+  width: 0; height: 0;
+  border-top: 15px solid transparent;
+  border-bottom: 15px solid transparent;
+  border-left: 18px solid var(--tc-blue);
+  filter: drop-shadow(0 0 10px rgba(38, 136, 255, .85));
+  opacity: .72;
+  transition: opacity .25s ease, transform .25s ease, border-left-color .25s ease;
+}
+.bl-arr.on { opacity: 1; transform: translateX(4px) scale(1.08); border-left-color: var(--tc-gold-2); }
+
+/* scoreboard mock (Cloudscape-ish light UI) */
+.live-grid { position: absolute; left: 34px; right: 34px; top: 316px; height: 312px; }
+.scoreboard-mock {
+  width: 100%; height: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f2f3f3;
+  border: 1px solid rgba(232, 237, 244, .92);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .34), 0 0 0 1px rgba(255, 255, 255, .12) inset;
+  color: #16191f;
+  font-family: var(--font-sans);
+}
+.cs-app { height: 100%; display: flex; flex-direction: column; }
+.cs-topnav {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  padding: 0 18px;
+  background: #fff;
+  border-bottom: 1px solid #e9ebed;
+}
+.cs-ident { display: flex; align-items: center; gap: 10px; color: #000716; font-size: 18px; font-weight: 800; }
+.cs-logo { width: 23px; height: 23px; border-radius: 5px; background: #0972d3; }
+.cs-utils { display: flex; align-items: center; gap: 18px; color: #0f1419; font-size: 14px; }
+.cs-util { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.cs-util b { font-weight: 800; }
+.cs-util.flash b { animation: csscoreflash .7s ease; }
+@keyframes csscoreflash {
+  0% { color: #037f0c; text-shadow: 0 0 12px rgba(3, 127, 12, .34); }
+  100% { color: #0f1419; text-shadow: none; }
+}
+.cs-ok { color: #037f0c; font-weight: 900; }
+.cs-caret { color: #5f6b7a; }
+.cs-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 220px 1fr; }
+.cs-sidenav { min-height: 0; padding: 12px 10px; background: #fff; border-right: 1px solid #e9ebed; }
+.cs-sec { padding: 7px 12px 4px; color: #000716; font-size: 14px; line-height: 1.1; font-weight: 800; }
+.cs-sec:first-child { padding-top: 0; }
+.cs-link {
+  display: flex; align-items: center; gap: 8px;
+  min-height: 22px;
+  padding: 3px 12px;
+  color: #0f1419;
+  border-left: 3px solid transparent;
+  font-size: 14px;
+  line-height: 1.1;
+  font-weight: 500;
+}
+.cs-link.on { color: #0972d3; background: #f0fbff; border-left-color: #0972d3; font-weight: 800; }
+.cs-badge {
+  margin-left: auto;
+  min-width: 25px; height: 20px;
+  padding: 0 6px;
+  display: inline-grid; place-items: center;
+  border-radius: 999px;
+  background: #0972d3;
+  color: #fff;
+  font-size: 11px; line-height: 1; font-weight: 800;
+}
+.cs-badge.flash { animation: tcbadge .6s ease; }
+@keyframes tcbadge { 0% { transform: scale(1.42); } 100% { transform: scale(1); } }
+.cs-content { min-width: 0; min-height: 0; padding: 11px 16px; overflow: hidden; background: #f2f3f3; }
+.cs-countdown {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 21px;
+  margin-bottom: 8px;
+  color: #5f6b7a;
+  font-size: 14px; line-height: 1; font-weight: 700;
+}
+.cs-countdown b { color: #16191f; font-weight: 800; font-variant-numeric: tabular-nums; }
+.cs-incident {
+  display: inline-flex; align-items: center;
+  min-height: 22px;
+  padding: 2px 9px;
+  border-radius: 7px;
+  opacity: 0;
+  font-family: var(--font-cond);
+  font-size: 13px; line-height: 1; font-weight: 900; letter-spacing: .02em;
+  transition: opacity .25s ease, color .25s ease, background .25s ease, border-color .25s ease;
+}
+.cs-incident.show { opacity: 1; }
+.cs-incident.fire { color: #b8261d; background: #fdeceb; border: 1px solid #f3c4c0; }
+.cs-incident.ok { color: #1d7a44; background: #eafaf0; border: 1px solid #cde9d7; }
+.cs-container { overflow: hidden; background: #fff; border: 1px solid #e9ebed; border-radius: 8px; }
+.cs-ch {
+  display: flex; align-items: baseline; gap: 11px;
+  padding: 10px 18px;
+  border-bottom: 1px solid #e9ebed;
+  color: #000716;
+  font-size: 22px; line-height: 1.1; font-weight: 850;
+}
+.cs-ch-cnt { color: #5f6b7a; font-size: 15px; font-weight: 700; }
+.cs-table { font-size: 15px; }
+.cs-thead, .cs-row { display: grid; grid-template-columns: 80px 1fr 150px 96px; align-items: center; }
+.cs-thead {
+  height: 34px;
+  padding: 0 24px;
+  border-bottom: 1px solid #e9ebed;
+  background: #fbfbfb;
+  color: #000716;
+  font-weight: 800;
+}
+.cs-row { min-height: 32px; padding: 0 24px; border-bottom: 1px solid #eff0f0; color: #0f1419; }
+.cs-row:last-child { border-bottom: 0; }
+.cs-row.mine { background: #f0fbff; }
+.cs-row.flash { animation: csflash .8s ease; }
+@keyframes csflash { 0% { background: #eafaf0; } 100% { background: transparent; } }
+.cs-row.mine.flash { animation: csflashmine .8s ease; }
+@keyframes csflashmine { 0% { background: #eafaf0; } 100% { background: #f0fbff; } }
+.cs-rk { color: #0f1419; font-weight: 850; }
+.cs-rk.me { color: #037f0c; }
+.cs-tm.me { font-weight: 850; }
+.cs-you { color: #0972d3; font-size: 12px; font-weight: 850; }
+.cs-sc { color: #037f0c; font-weight: 850; font-variant-numeric: tabular-nums; }
+.cs-pg { color: #5f6b7a; font-variant-numeric: tabular-nums; }
+
+section.slide:nth-of-type(4) .tc-callout { bottom: 14px; height: 64px; gap: 18px; padding: 8px 28px; }
+section.slide:nth-of-type(4) .tc-callout p { font-size: 21px; line-height: 1.18; }
+section.slide:nth-of-type(4) .tc-callout .cal-icon { width: 48px; height: 48px; }
+
+/* ════════════ SLIDE 05 — platform ════════════ */
+.platform-copy { position: absolute; top: 82px; left: 38px; width: 1180px; }
+.platform-copy .brand-title { font-size: 84px; }
+.platform-line {
+  margin-top: 6px;
+  color: #f7fbff;
+  font-family: var(--font-serif);
+  font-size: 30px;
+  line-height: 1.12;
+  font-weight: 600;
+  text-shadow: 0 3px 0 rgba(255, 255, 255, .08), 0 8px 22px rgba(0, 0, 0, .58);
+}
+.platform-line .brush { margin-top: 5px; font-size: 64px; }
+.platform-sub {
+  margin-top: 6px;
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 23px;
+  line-height: 1.32;
+  font-weight: 900;
+}
+.platform-sub .platform-product { color: var(--tc-blue); }
+.platform-sub .platform-oss { color: var(--tc-gold-2); text-shadow: 0 0 16px rgba(241, 205, 114, .36); }
+
+.battle-cards {
+  position: absolute;
+  left: 28px; right: 28px; bottom: 110px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.battle-card {
+  height: 156px;
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 16px;
+  padding: 20px 22px 18px;
+  align-items: center;
+}
+.battle-card .kind {
+  position: absolute; left: 37px; top: 18px;
+  color: var(--tc-blue);
+  font-family: var(--font-cond);
+  font-size: 24px; line-height: 1; font-weight: 800; letter-spacing: .11em;
+  text-shadow: 0 0 14px rgba(38, 136, 255, .52);
+}
+.emblem {
+  width: 116px; height: 102px;
+  margin-top: 22px;
+  color: var(--tc-gold-2);
+  filter: drop-shadow(0 0 14px rgba(38, 136, 255, .4)) drop-shadow(0 0 22px rgba(214, 168, 71, .38));
+}
+.emblem svg { width: 100%; height: 100%; display: block; }
+.battle-card > div { min-width: 0; }
+.battle-card h3 {
+  color: #fff;
+  font-family: var(--font-cond);
+  font-size: 26px;
+  line-height: 1.12;
+  font-weight: 900;
+  padding-bottom: 9px;
+  border-bottom: 1px solid rgba(88, 183, 255, .62);
+}
+.battle-card p {
+  margin-top: 10px;
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.34;
+  font-weight: 900;
+}
+section.slide:nth-of-type(5) .tc-callout { height: 88px; }
+
+/* ════════════ SLIDE 06 — use cases ════════════ */
+.use-heading { font-size: 52px; }
+.use-heading .brush { font-size: 60px; }
+.use-grid {
+  position: absolute;
+  left: 48px; right: 48px; top: 295px;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.use-card { height: 300px; padding: 22px 30px 20px; text-align: center; }
+.hex-no {
+  position: absolute; left: 18px; top: 20px;
+  display: grid; place-items: center;
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #7fc3ff, #1678ff 70%);
+  color: #fff;
+  font-family: var(--font-cond);
+  font-size: 25px; font-weight: 800;
+  box-shadow: 0 0 16px rgba(38, 136, 255, .68);
+}
+.use-card h3 {
+  color: var(--tc-blue);
+  font-family: var(--font-cond);
+  font-size: 28px;
+  line-height: 1.12;
+  font-weight: 900;
+  letter-spacing: .13em;
+  text-shadow: 0 0 14px rgba(38, 136, 255, .45);
+}
+.use-card .line-icon { width: 96px; height: 78px; margin: 14px auto 9px; }
+.use-card h4 {
+  color: var(--tc-gold-2);
+  font-family: var(--font-sans);
+  font-size: 24px;
+  line-height: 1.18;
+  font-weight: 900;
+  white-space: nowrap;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, .68);
+}
+.use-card p {
+  margin-top: 8px;
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 18px;
+  line-height: 1.4;
+  font-weight: 800;
+}
+
+/* ════════════ SLIDE 07 — team ════════════ */
+.team-heading { top: 112px; font-size: 50px; line-height: 1.22; }
+.team-heading .brush { font-size: 60px; margin: 0 6px; }
+.team-grid {
+  position: absolute;
+  left: 36px; right: 36px; top: 292px;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.member-card {
+  height: 286px;
+  display: grid;
+  grid-template-columns: 128px 1fr;
+  gap: 18px;
+  align-items: center;
+  padding: 22px 21px;
+}
+.portrait {
+  width: 116px; height: 116px;
+  padding: 6px;
+  border: 2px solid rgba(241, 205, 114, .86);
+  border-radius: 50%;
+  outline: 2px solid rgba(159, 111, 29, .88);
+  outline-offset: 6px;
+  background: radial-gradient(circle, rgba(241, 205, 114, .14), rgba(2, 8, 20, .2));
+  color: var(--tc-gold-2);
+}
+.portrait svg { width: 100%; height: 100%; display: block; }
+.member-body { min-width: 0; }
+.role { color: var(--tc-blue); font-family: var(--font-cond); font-size: 20px; font-weight: 800; letter-spacing: .06em; }
+.role.gold { color: var(--tc-gold-2); }
+.member-card h3 { margin-top: 5px; color: #fff; font-family: var(--font-sans); font-size: 30px; line-height: 1.2; font-weight: 900; }
+.member-card .sub-name { margin-top: 4px; color: #fff; font-size: 16px; font-weight: 700; }
+.member-divider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 19px;
+  margin: 6px 0;
+  color: rgba(88, 183, 255, .9);
+}
+.member-divider::before, .member-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(88, 183, 255, .74));
+}
+.member-divider::after { background: linear-gradient(90deg, rgba(88, 183, 255, .74), transparent); }
+.member-divider.gold { color: rgba(241, 205, 114, .92); }
+.member-divider.gold::before { background: linear-gradient(90deg, transparent, rgba(241, 205, 114, .86)); }
+.member-divider.gold::after { background: linear-gradient(90deg, rgba(241, 205, 114, .86), transparent); }
+.member-divider .star { width: 16px; height: 16px; flex: 0 0 16px; }
+.member-card p { margin-top: 4px; color: #fff; font-size: 16px; line-height: 1.28; font-weight: 700; }
+.member-card strong { color: var(--tc-gold-2); }
+.member-links { display: flex; gap: 10px; margin-top: 8px; align-items: flex-start; }
+.member-links a {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 64px;
+  color: #fff;
+}
+.member-links a > span:last-child {
+  color: #dff2ff;
+  font-size: 10px;
+  line-height: 1;
+  text-decoration: underline;
+  text-decoration-color: rgba(136, 207, 255, .86);
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+/* decorative inline-SVG QR-style glyph (not scannable; URL printed below) */
+.qr-glyph {
+  width: 54px; height: 54px;
+  border-radius: 4px;
+  background: #fff;
+  padding: 4px;
+  box-shadow: 0 0 14px rgba(38, 136, 255, .24);
+}
+.qr-glyph svg { width: 100%; height: 100%; display: block; }
+.hot-makers-copy { display: flex; flex-direction: column; align-items: center; gap: 8px; line-height: 1; }
+.hot-makers-copy > span { color: var(--tc-white); }
+.hot-makers-line { display: inline-flex; align-items: center; justify-content: center; gap: 10px; }
+.hot-makers-line .brush { font-size: 1.5em; }
+
+/* ════════════ SLIDE 08 — ask ════════════ */
+.ask-heading { top: 106px; font-size: 50px; line-height: 1.24; }
+.ask-heading .brush { font-size: 56px; margin: 0 6px; }
+.ask-lead {
+  position: absolute;
+  left: 36px; top: 326px;
+  color: #f5f8ff;
+  font-family: var(--font-sans);
+  font-size: 24px;
+  line-height: 1.24;
+  font-weight: 800;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, .7);
+}
+.ask-lead-primary { display: inline-flex; align-items: center; gap: 14px; color: #d7e5f6; }
+.ask-lead-rule {
+  display: inline-block;
+  width: 46px; height: 2px;
+  background: linear-gradient(90deg, rgba(215, 229, 246, .86), rgba(88, 183, 255, .18));
+}
+.ask-lead strong { color: var(--tc-blue); }
+.ask-grid {
+  position: absolute;
+  left: 28px; right: 28px; top: 392px;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.ask-card {
+  height: 196px;
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  grid-template-rows: 32px 35px minmax(0, 1fr);
+  column-gap: 20px;
+  padding: 20px 24px 15px;
+}
+.ask-card .number-dot { position: absolute; left: 18px; top: 16px; width: 28px; height: 28px; font-size: 17px; }
+.ask-card .line-icon { position: absolute; left: 60px; top: 30px; width: 50px; height: 46px; margin: 0; }
+.ask-card h3 {
+  grid-column: 2; grid-row: 1;
+  color: var(--tc-blue);
+  font-family: var(--font-sans);
+  font-size: 25px; line-height: 1.1; font-weight: 900;
+  text-shadow: 0 0 14px rgba(38, 136, 255, .42);
+}
+.ask-card h4 {
+  grid-column: 2; grid-row: 2;
+  margin-top: 4px;
+  color: var(--tc-gold-2);
+  font-family: var(--font-sans);
+  font-size: 26px; line-height: 1.08; font-weight: 900;
+  white-space: nowrap;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .5);
+}
+.ask-card p {
+  grid-column: 1 / -1; grid-row: 3;
+  margin-top: 8px;
+  color: #fff;
+  font-size: 20px; line-height: 1.18; font-weight: 800;
+}
+.ask-card:nth-child(3) p { font-size: 16.2px; line-height: 1.16; }
+.ask-card p b {
+  display: inline-grid; place-items: center;
+  width: 22px; height: 22px;
+  margin-right: 5px;
+  border: 2px solid var(--tc-blue);
+  border-radius: 50%;
+  color: var(--tc-blue);
+  font-family: var(--font-cond);
+  font-size: 13px;
+}
+.ask-card:nth-child(3) p b { width: 17px; height: 17px; margin-right: 4px; font-size: 10.5px; }
+.ask-card p strong { color: var(--tc-gold-2); font-weight: 900; }
+
+/* ════════════ SLIDE 09 — thanks ════════════ */
+.final-slide::before {
+  background:
+    linear-gradient(180deg, rgba(2, 8, 20, .72) 0%, rgba(2, 8, 20, .12) 44%, rgba(2, 8, 20, .82) 100%),
+    radial-gradient(circle at 50% 44%, rgba(38, 136, 255, .1), transparent 34%);
+}
+.thanks-layout { position: absolute; inset: 96px 70px 35px; text-align: center; }
+.thanks-title { display: block; font-size: 84px; line-height: 1.08; white-space: nowrap; }
+.thanks-lead {
+  margin-top: 18px;
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 31px;
+  line-height: 1.38;
+  font-weight: 900;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, .76);
+}
+.thanks-lead strong { color: var(--tc-blue); }
+.cta-grid {
+  margin: 30px auto 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 1126px;
+  gap: 44px;
+}
+.cta-card {
+  height: 310px;
+  padding: 15px 24px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.cta-badge {
+  display: grid; place-items: center;
+  width: 52px; height: 52px;
+  margin: 0 auto;
+}
+.cta-ic { width: 42px; height: 42px; color: #fff; filter: drop-shadow(0 0 8px rgba(255, 255, 255, .3)); }
+.cta-card:nth-child(2) .cta-ic, .cta-card:nth-child(3) .cta-ic {
+  color: var(--tc-blue-2);
+  filter: drop-shadow(0 0 9px rgba(38, 136, 255, .74)) drop-shadow(0 0 18px rgba(38, 136, 255, .32));
+}
+.cta-card h3 {
+  margin-top: 6px;
+  color: var(--tc-gold-2);
+  font-family: var(--font-cond);
+  font-size: 32px; line-height: 1.1; font-weight: 900;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, .65), 0 0 18px rgba(241, 205, 114, .22);
+}
+.cta-card h3 span { font-size: .76em; }
+.cta-card h3::after {
+  content: "";
+  display: block;
+  width: 84px; height: 6px;
+  margin: 6px auto 0;
+  background:
+    radial-gradient(circle at 50% 50%, var(--tc-gold-2) 0 3px, transparent 3.5px),
+    linear-gradient(90deg, transparent 0 5%, rgba(241, 205, 114, .9) 42%, rgba(241, 205, 114, .9) 58%, transparent 95%);
+  filter: drop-shadow(0 0 5px rgba(241, 205, 114, .32));
+}
+.cta-access { width: 100%; margin-top: 6px; display: grid; justify-items: center; gap: 5px; }
+.cta-qr { width: 104px; height: 104px; border-radius: 4px; background: #fff; padding: 6px; }
+.cta-qr svg { width: 100%; height: 100%; display: block; }
+.cta-url {
+  max-width: 100%;
+  color: #dff2ff;
+  font-family: var(--font-mono);
+  font-size: 9.5px; line-height: 1.1; font-weight: 800;
+  text-decoration: underline;
+  text-decoration-color: rgba(136, 207, 255, .86);
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .72);
+}
+.cta-card p {
+  margin-top: 6px;
+  color: #fff;
+  font-size: 17px; line-height: 1.22; font-weight: 700;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .68);
+}
+.closing-line {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  color: var(--tc-gold-2);
+  font-family: var(--font-sans);
+  font-size: 29px; line-height: 1.12; font-weight: 900;
+  text-shadow: 0 2px 13px rgba(0, 0, 0, .74), 0 0 18px rgba(241, 205, 114, .2);
+}
+.closing-rule {
+  display: inline-block;
+  width: 150px; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(241, 205, 114, .9), transparent);
+  opacity: .84;
+}
+
+/* ── responsive ────────────────────────────────────────────────────── */
+@media (max-width: 760px) {
+  .slide { min-height: auto; overflow: visible; }
+  .deck { height: auto; overflow: visible; scroll-snap-type: none; }
+  .canvas { width: 100vw; height: 56.25vw; min-height: 560px; transform: scale(var(--fit, 1)); }
+}
+
+/* ── print → clean PDF, one slide per page ─────────────────────────── */
 @media print {
-  body { background:#05090f; }
-  .deck { height:auto; overflow:visible; }
-  .slide { height:100vh; min-height:auto; padding:0; page-break-after:always; break-after:page; }
-  .stage { width:100vw; height:100vh; transform:none; border:0; box-shadow:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .progress,.counter { display:none; }
-  .ink-bg { display:none; }
+  body { background: #000; }
+  .deck { height: auto; overflow: visible; }
+  .slide { height: 100vh; min-height: auto; page-break-after: always; break-after: page; }
+  .canvas { width: 100vw; height: 100vh; transform: none; box-shadow: none; }
+  .progress, .counter { display: none; }
 }
 </style>
 </head>
 <body>
-<!-- ── shared SVG assets: TenkaCloud アイコン / 線画 glyph / アバター ── -->
-<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0" aria-hidden="true">
-  <defs>
-    <linearGradient id="tcIconBg" x1="8" y1="6" x2="56" y2="60" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#16294b"/><stop offset="1" stop-color="#070d1a"/>
-    </linearGradient>
-    <linearGradient id="tcIconGold" x1="22" y1="14" x2="44" y2="56" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#ffeeb0"/><stop offset=".48" stop-color="#f6ca46"/><stop offset="1" stop-color="#bd8224"/>
-    </linearGradient>
-    <linearGradient id="tcIconRim" x1="2" y1="2" x2="62" y2="62" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#f6ca46"/><stop offset="1" stop-color="#7d5a1c"/>
-    </linearGradient>
-    <linearGradient id="agGold" x1="0" y1="0" x2="0" y2="1">
-      <stop stop-color="#ffeeb0"/><stop offset=".5" stop-color="#f6ca46"/><stop offset="1" stop-color="#a87420"/>
-    </linearGradient>
-    <radialGradient id="avSky" cx=".42" cy=".3" r=".95">
-      <stop stop-color="#f3d88f"/><stop offset=".55" stop-color="#cda14c"/><stop offset="1" stop-color="#6e5120"/>
-    </radialGradient>
-  </defs>
-
-  <symbol id="tc-icon" viewBox="0 0 64 64">
-    <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#tcIconBg)" stroke="url(#tcIconRim)" stroke-width="2.5"/>
-    <path d="M13 33.5c0-5.1 4.1-9.2 9.2-9.2h1.1A13 13 0 0 1 48.4 28a8.8 8.8 0 0 1-.9 17.5H22.2C15.4 45.5 13 40.1 13 33.5Z" fill="#eef4ff" opacity=".96"/>
-    <path d="M36.5 13 23 36.5h7.5L25.5 53 45 29h-8.5L42 13Z" fill="url(#tcIconGold)" stroke="#241803" stroke-width="1" stroke-linejoin="round"/>
-  </symbol>
-
-  <symbol id="g-cloud-up" viewBox="0 0 24 24"><path d="M7 17a4.2 4.2 0 0 1-.3-8.4 5.6 5.6 0 0 1 10.9 1.3A3.6 3.6 0 0 1 17.2 17"/><path d="M12 19v-6.5M9.6 14.9 12 12.5l2.4 2.4"/></symbol>
-  <symbol id="g-shield" viewBox="0 0 24 24"><path d="M12 3l7 2.8v5.2c0 4.4-2.9 7.3-7 9-4.1-1.7-7-4.6-7-9V5.8Z"/><path d="M9 11.6l2.1 2.1 4-4.4"/></symbol>
-  <symbol id="g-chart" viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M7 20v-5M12 20v-9M17 20V7"/></symbol>
-  <symbol id="g-wall" viewBox="0 0 24 24"><path d="M4 20V9l8-5 8 5v11"/><path d="M4 14h16M9 9h6M4 20h16"/></symbol>
-  <symbol id="g-swords" viewBox="0 0 24 24"><path d="M4 4l11 11M20 4 9 15"/><path d="M13.5 17.5 17 14M6.5 17.5 3 14m3.5 3.5L4 20m13-2.5L20 20"/></symbol>
-  <symbol id="g-trophy" viewBox="0 0 24 24"><path d="M8 4h8v4.5a4 4 0 0 1-8 0Z"/><path d="M8 5H4.8A3.2 3.2 0 0 0 8 9.4M16 5h3.2A3.2 3.2 0 0 1 16 9.4"/><path d="M12 12.5V16M8.5 19.5h7M10 16h4v3.5h-4Z"/></symbol>
-  <symbol id="g-flag" viewBox="0 0 24 24"><path d="M6 21V4"/><path d="M6 5h11l-2.5 3.5L17 12H6"/></symbol>
-  <symbol id="g-book" viewBox="0 0 24 24"><path d="M4 6a3 3 0 0 1 3-3h13v15H7a3 3 0 0 0-3 3Z"/><path d="M7 3v15"/></symbol>
-  <symbol id="g-clip" viewBox="0 0 24 24"><path d="M9 4h6v3H9Z"/><path d="M15 5h3v16H6V5h3"/><path d="M9 12l2 2 4-4.5"/></symbol>
-  <symbol id="g-stack" viewBox="0 0 24 24"><path d="M12 3l8 4-8 4-8-4Z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/></symbol>
-  <symbol id="g-lock" viewBox="0 0 24 24"><path d="M6 11h12v9H6Z"/><path d="M9 11V8a3 3 0 0 1 6 0v3"/></symbol>
-  <symbol id="g-cycle" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 3v4h-4"/></symbol>
-  <symbol id="g-users" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="9.5" r="2.4"/><path d="M15.5 19a4.6 4.6 0 0 1 5-4.4"/></symbol>
-  <symbol id="g-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9.5L4 20Z"/><path d="M8 9h8M8 12h5"/></symbol>
-
-  <!-- アバター (金環 + シルエット) -->
-  <symbol id="av-samurai" viewBox="0 0 64 64">
-    <circle cx="32" cy="32" r="29" fill="url(#avSky)" stroke="url(#agGold)" stroke-width="2.6"/>
-    <path d="M12 50c4-4 10-4 14-1-4-3-2-6 2-6-3-2-1-5 3-4" fill="none" stroke="#9c7730" stroke-width="2.4" opacity=".7"/>
-    <path d="M40 14c6-2 10 1 11 5-4-1-8 0-10 2l-3-2Z" fill="#0d1830"/>
-    <path d="M22 47c-1-10 2-18 9-20l-2-8 7 5 8-2-3 6c5 3 8 9 8 14v5H22Z" fill="#0d1830"/>
-    <path d="M28 26c4-3 10-3 14 0" stroke="#27406e" stroke-width="1.4" fill="none"/>
-  </symbol>
-  <symbol id="av-ninja" viewBox="0 0 64 64">
-    <circle cx="32" cy="32" r="29" fill="url(#avSky)" stroke="url(#agGold)" stroke-width="2.6"/>
-    <path d="M13 50c4-4 9-4 13-2-3-3-1-6 3-5" fill="none" stroke="#9c7730" stroke-width="2.4" opacity=".7"/>
-    <circle cx="32" cy="25" r="10" fill="#0d1830"/>
-    <path d="M21 22h22v5H21Z" fill="#10203c"/>
-    <path d="M43 23l10-5-7 10Z" fill="#0d1830"/>
-    <path d="M26 24.5h9" stroke="#d9b65a" stroke-width="1.6"/>
-    <path d="M20 48c1-8 5-13 12-14 7 1 11 6 12 14Z" fill="#0d1830"/>
-  </symbol>
-  <symbol id="av-kunoichi" viewBox="0 0 64 64">
-    <circle cx="32" cy="32" r="29" fill="url(#avSky)" stroke="url(#agGold)" stroke-width="2.6"/>
-    <path d="M14 49c4-4 9-4 13-2-3-3-1-6 3-5" fill="none" stroke="#9c7730" stroke-width="2.4" opacity=".7"/>
-    <path d="M16 46 44 18l3 3L19 49Z" fill="#0d1830"/>
-    <path d="M44 18l5-3-2 5Z" fill="#caa54b"/>
-    <circle cx="36" cy="14" r="4.4" fill="#0d1830"/>
-    <circle cx="33" cy="26" r="9" fill="#0d1830"/>
-    <path d="M21 48c1-8 5-13 12-13 7 0 11 5 12 13Z" fill="#0d1830"/>
-  </symbol>
-</svg>
-
 <div class="progress" id="progress"></div>
 <div class="counter" id="counter">1 / 9</div>
 
-<main class="deck" id="deck">
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     reusable inline-SVG defs: line icons, emblems, avatars, glyphs.
+     Declared once; referenced via <use> so the file stays small.
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <defs>
+    <!-- line icons: 1.5px stroke, currentColor, 24-box -->
+    <g id="ic-cloud-upload" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6.5 17.5A4 4 0 0 1 6 9.6 5 5 0 0 1 16 9a3.5 3.5 0 0 1 1.5 6.7"/>
+      <path d="M12 21v-7m0 0-2.4 2.4M12 14l2.4 2.4"/>
+    </g>
+    <g id="ic-shield" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3 5 6v5c0 4.4 3 7.7 7 9 4-1.3 7-4.6 7-9V6Z"/>
+      <path d="m9 12 2 2 4-4"/>
+    </g>
+    <g id="ic-rank" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 20h18"/><rect x="5" y="11" width="4" height="6"/><rect x="10" y="7" width="4" height="10"/><rect x="15" y="4" width="4" height="13"/>
+    </g>
+    <g id="ic-swords" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14.5 4H20v5.5L9.5 20H4v-5.5Z"/><path d="m6.5 6.5 3 3"/><path d="M20 14.5 9.5 4H4v5.5L14.5 20H20Z"/><path d="m14.5 14.5 3 3"/>
+    </g>
+    <g id="ic-target" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.6"/>
+    </g>
+    <g id="ic-users" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.2a3 3 0 0 1 0 5.6"/><path d="M17.5 13.5A5.5 5.5 0 0 1 20.5 18.5"/>
+    </g>
+    <g id="ic-book" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 4.5h9a2 2 0 0 1 2 2V20a2 2 0 0 0-2-2H5Z"/><path d="m16 7 3-1v12.5l-3 1"/><path d="m9 9 2 1.5L13 8"/>
+    </g>
+    <g id="ic-clipboard" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V3.5h6V5"/><path d="M9 13l2 2 4-4"/>
+    </g>
+    <g id="ic-chat" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 5.5h12a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H9l-4 3v-3H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2Z"/>
+    </g>
+    <g id="ic-cloud-start" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6.5 16.5A3.5 3.5 0 0 1 6 9.8 4.6 4.6 0 0 1 15.4 9 3.2 3.2 0 0 1 17 15.5"/><path d="m10.5 13 2.5-2 2.5 2"/><path d="M13 11v8"/>
+    </g>
+    <g id="ic-wrench" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15.5 7a3.5 3.5 0 0 1-4.6 4.5L5 17.4 6.6 19l5.9-5.9A3.5 3.5 0 0 0 17 8.5 3.5 3.5 0 0 0 16.4 6Z"/>
+    </g>
+    <g id="ic-alert" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 4 3 19h18Z"/><path d="M12 10v4"/><circle cx="12" cy="16.6" r=".2"/>
+    </g>
+    <g id="ic-trophy-line" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 4h10v4a5 5 0 0 1-10 0Z"/><path d="M7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3"/><path d="M10 13.5h4M12 13.5V17M9 20h6"/>
+    </g>
+    <g id="ic-globe" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.6 2.4 2.6 14.6 0 17M12 3.5c-2.6 2.4-2.6 14.6 0 17"/>
+    </g>
+    <!-- gold trophy / handshake (callout) -->
+    <g id="ic-trophy-gold" fill="none" stroke="#f1cd72" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 4h10v4.5a5 5 0 0 1-10 0Z" fill="rgba(241,205,114,.16)"/>
+      <path d="M7 5.5H4V8a3.2 3.2 0 0 0 3 3.2M17 5.5h3V8a3.2 3.2 0 0 1-3 3.2"/>
+      <path d="M9.5 14h5M12 13.5V18M8.5 20.5h7"/>
+    </g>
+    <g id="ic-handshake" fill="none" stroke="#f1cd72" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m3 13 3-3 4 3.2a1.6 1.6 0 0 0 2.2-2.3L9 7.5l2.5-2 4.5 4 5 1"/>
+      <path d="M3 13v4M21 10.5v5M9 16l2 1.6a1.5 1.5 0 0 0 2.2-2M12.5 18.6a1.5 1.5 0 0 0 2.2-.4"/>
+    </g>
+    <!-- gold emblems -->
+    <g id="em-stack" fill="none" stroke="#f1cd72" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="11" stroke="rgba(241,205,114,.5)"/>
+      <path d="m12 5 7 3.6-7 3.6-7-3.6Z" fill="rgba(241,205,114,.12)"/>
+      <path d="m5 12 7 3.6 7-3.6M5 15.4 12 19l7-3.6"/>
+    </g>
+    <g id="em-security" fill="none" stroke="#f1cd72" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="11" stroke="rgba(241,205,114,.5)"/>
+      <path d="M12 5 6 7.5v4c0 3.7 2.5 6.3 6 7.5 3.5-1.2 6-3.8 6-7.5v-4Z" fill="rgba(241,205,114,.12)"/>
+      <path d="m9.3 12 1.9 1.9 3.5-3.7"/>
+    </g>
+    <g id="em-migration" fill="none" stroke="#f1cd72" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="11" stroke="rgba(241,205,114,.5)"/>
+      <rect x="5.5" y="8.5" width="5" height="7" rx="1" fill="rgba(241,205,114,.1)"/>
+      <rect x="13.5" y="8.5" width="5" height="7" rx="1" fill="rgba(241,205,114,.1)"/>
+      <path d="M10.5 12h3.5m0 0-1.4-1.4M14 12l-1.4 1.4"/>
+    </g>
+    <!-- avatars (founder / ninja / sword) -->
+    <g id="av-founder" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="9" r="3.4"/><path d="M5.5 19.5a6.5 6.5 0 0 1 13 0"/><path d="m9 4.5 3-2 3 2"/>
+    </g>
+    <g id="av-ninja" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4.5 11a7.5 7.5 0 0 1 15 0Z" fill="rgba(241,205,114,.12)"/><path d="M8 11h3.2M12.8 11H16"/><circle cx="9.6" cy="11" r=".2"/><circle cx="14.4" cy="11" r=".2"/>
+      <path d="M5.5 14.5a6.5 6.5 0 0 0 13 0"/>
+    </g>
+    <g id="av-sword" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17 4 9 12l-1 3 3-1 8-8Z" fill="rgba(241,205,114,.1)"/><path d="m7 17 2-2M6 14l-2 2 1 1 2-2"/>
+    </g>
+    <!-- github + question -->
+    <g id="ic-github" fill="currentColor">
+      <path d="M12 2.2A9.8 9.8 0 0 0 8.9 21.3c.5.1.66-.2.66-.46v-1.7c-2.7.6-3.3-1.16-3.3-1.16-.45-1.13-1.1-1.43-1.1-1.43-.9-.6.07-.6.07-.6 1 .07 1.5 1.02 1.5 1.02.88 1.5 2.3 1.07 2.86.82.1-.64.35-1.07.63-1.32-2.17-.25-4.45-1.08-4.45-4.8 0-1.07.38-1.94 1-2.62-.1-.25-.44-1.25.1-2.6 0 0 .82-.27 2.7 1a9.4 9.4 0 0 1 4.9 0c1.87-1.27 2.7-1 2.7-1 .54 1.35.2 2.35.1 2.6.63.68 1 1.55 1 2.62 0 3.74-2.28 4.55-4.46 4.79.36.3.67.9.67 1.82v2.7c0 .26.16.57.67.46A9.8 9.8 0 0 0 12 2.2Z"/>
+    </g>
+    <g id="ic-question" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.4a2.4 2.4 0 0 1 4.6.9c0 1.6-2.2 1.9-2.2 3.4"/><circle cx="12" cy="16.6" r=".2"/>
+    </g>
+    <!-- decorative QR-style glyph (NOT scannable; URL printed beside it) -->
+    <g id="qr-glyph" fill="#0a1322">
+      <rect x="2" y="2" width="6" height="6" fill="none" stroke="#0a1322" stroke-width="1.4"/><rect x="4" y="4" width="2" height="2"/>
+      <rect x="16" y="2" width="6" height="6" fill="none" stroke="#0a1322" stroke-width="1.4"/><rect x="18" y="4" width="2" height="2"/>
+      <rect x="2" y="16" width="6" height="6" fill="none" stroke="#0a1322" stroke-width="1.4"/><rect x="4" y="18" width="2" height="2"/>
+      <rect x="10" y="2" width="1.6" height="1.6"/><rect x="13" y="3" width="1.6" height="1.6"/><rect x="10" y="5" width="1.6" height="1.6"/>
+      <rect x="11" y="8" width="1.6" height="1.6"/><rect x="14" y="9" width="1.6" height="1.6"/><rect x="16" y="10" width="1.6" height="1.6"/>
+      <rect x="2" y="10" width="1.6" height="1.6"/><rect x="5" y="11" width="1.6" height="1.6"/><rect x="8" y="10" width="1.6" height="1.6"/>
+      <rect x="19" y="11" width="1.6" height="1.6"/><rect x="21" y="13" width="1.6" height="1.6"/><rect x="17" y="13" width="1.6" height="1.6"/>
+      <rect x="10" y="11" width="1.6" height="1.6"/><rect x="12" y="13" width="1.6" height="1.6"/><rect x="10" y="14" width="1.6" height="1.6"/>
+      <rect x="13" y="16" width="1.6" height="1.6"/><rect x="15" y="17" width="1.6" height="1.6"/><rect x="11" y="18" width="1.6" height="1.6"/>
+      <rect x="13" y="19" width="1.6" height="1.6"/><rect x="16" y="19" width="1.6" height="1.6"/><rect x="18" y="17" width="1.6" height="1.6"/>
+      <rect x="19" y="20" width="1.6" height="1.6"/><rect x="21" y="18" width="1.6" height="1.6"/>
+    </g>
+    <!-- 8-point star for the team dividers -->
+    <g id="star8" fill="currentColor"><path d="m12 3 2.3 5.6 6 .5-4.6 4 1.4 5.9L12 21.6 6.9 19l1.4-5.9-4.6-4 6-.5Z"/></g>
+  </defs>
+</svg>
 
-  <!-- 01 ─ TenkaCloud とは -->
-  <section class="slide">
-    <div class="stage">
-      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
-      <div class="col">
-        <div class="topbar">
-          <div class="sec-no"><b>01</b><span>TenkaCloud とは</span></div>
-          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
-        </div>
-        <div class="s1-grid">
-          <div class="s1-copy">
-            <h1 class="s1-name">TenkaCloud<svg class="tc-mark"><use href="#tc-icon"/></svg></h1>
-            <div class="s1-oss"><b>OSS</b> ・ 本物のクラウドで開く競技プラットフォーム</div>
-            <div class="s1-sub display">クラウドエンジニアの</div>
-            <div class="s1-tenka brush-gold">天下一武道会</div>
-            <div class="s1-clouds">
-              <span class="cloud-chip">AWS</span>
-              <span class="s1-arrow">対応予定 →</span>
-              <span class="cloud-chip soon">Google Cloud</span>
-              <span class="cloud-chip soon">Azure</span>
-              <span class="cloud-chip soon">さくら</span>
-            </div>
-          </div>
-          <div class="s1-steps">
-            <div class="kicker">HOW A MATCH RUNS</div>
-            <div class="s1-step-row">
-              <div class="panel s1-step">
-                <span class="num-dot">1</span>
-                <svg class="glyph"><use href="#g-cloud-up"/></svg>
-                <h3>クラウドにデプロイ</h3>
-                <p>ローカルで動くだけのアプリを、本物のクラウドへ上げられるか。</p>
-              </div>
-              <div class="chev">▶</div>
-              <div class="panel s1-step">
-                <span class="num-dot">2</span>
-                <svg class="glyph"><use href="#g-shield"/></svg>
-                <h3>本番品質に作り込む</h3>
-                <p>認証・公開範囲・監査・可用性を、出せる状態にできるか。</p>
-              </div>
-              <div class="chev">▶</div>
-              <div class="panel s1-step">
-                <span class="num-dot">3</span>
-                <svg class="glyph"><use href="#g-chart"/></svg>
-                <h3>毎分、自動採点</h3>
-                <p>実際の状態だけで採点。順位がリアルタイムに動く。</p>
-              </div>
-            </div>
+<main class="deck" id="deck" aria-label="TenkaCloud pitch deck">
+
+  <!-- ════════════ 01 ════════════ -->
+  <section class="slide" aria-labelledby="s1">
+    <div class="canvas slide-shell bg-wide hero-slide">
+      <header class="slide-top">
+        <div class="slide-label"><span class="slide-no">01</span><span>TenkaCloud とは</span></div>
+        <div class="aws-mark" aria-label="AWS">aws<span></span></div>
+      </header>
+
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <h1 id="s1" class="brand-title hero-brand">TenkaCloud
+            <svg class="cloud-logo" viewBox="0 0 64 48" fill="none" aria-hidden="true">
+              <path d="M16 40A11 11 0 0 1 14.6 18.3 14 14 0 0 1 42 16a9.5 9.5 0 0 1 4.4 18" stroke="#58b7ff" stroke-width="2.4" stroke-linejoin="round"/>
+              <path d="M30 24 24 34h6l-3 8 11-13h-7l4-9Z" fill="#f1cd72"/>
+            </svg>
+          </h1>
+          <p class="hero-sub"><span class="accent">OSS</span>・本物のクラウドで開く競技プラットフォーム</p>
+          <p class="hero-lead">クラウドエンジニアの<br><span class="brush stroke">天下一武道会</span></p>
+          <div class="cloud-support tc-panel cut-panel">
+            <strong class="aws-word">AWS</strong>
+            <span class="support-sep"></span>
+            <span><b>対応予定 →</b><br>Google Cloud / Azure / さくら</span>
           </div>
         </div>
-        <div class="gold-band"><span class="trophy">🏆</span><span>本日の一番は、第一試合『<strong>StackStack</strong>』。お題はシンプルです ──『<em>AI</em> で作って“動く”アプリ、あなたは <em>本番に出せますか？</em>』</span></div>
+
+        <aside class="match-runs" aria-label="How a match runs">
+          <h2 class="match-title">HOW A MATCH RUNS</h2>
+          <div class="run-cards">
+            <article class="tc-panel cut-panel run-card">
+              <span class="number-dot">1</span>
+              <span class="line-icon"><svg viewBox="0 0 24 24"><use href="#ic-cloud-upload"/></svg></span>
+              <h3>クラウドにデプロイ</h3>
+              <p>ローカルで動くだけのアプリを、本物のクラウドへ上げられるか。</p>
+            </article>
+            <span class="arr-r" aria-hidden="true"></span>
+            <article class="tc-panel cut-panel run-card">
+              <span class="number-dot">2</span>
+              <span class="line-icon"><svg viewBox="0 0 24 24"><use href="#ic-shield"/></svg></span>
+              <h3>本番品質に作り込む</h3>
+              <p>認証・公開範囲・監査・可用性を、出せる状態にできるか。</p>
+            </article>
+            <span class="arr-r" aria-hidden="true"></span>
+            <article class="tc-panel cut-panel run-card">
+              <span class="number-dot">3</span>
+              <span class="line-icon"><svg viewBox="0 0 24 24"><use href="#ic-rank"/></svg></span>
+              <h3>毎分、自動採点</h3>
+              <p>実際の状態だけで採点。順位がリアルタイムに動く。</p>
+            </article>
+          </div>
+        </aside>
       </div>
+
+      <footer class="tc-callout">
+        <span class="cal-icon"><svg viewBox="0 0 24 24"><use href="#ic-trophy-gold"/></svg></span>
+        <p>本日の一番は、第一試合 <strong class="product-name">「StackStack」</strong>。<br>お題はシンプルです - <span>「AIで作って“動く”アプリ、あなたは本番に出せますか？」</span></p>
+      </footer>
     </div>
   </section>
 
-  <!-- 02 ─ 本日の一番 StackStack -->
-  <section class="slide">
-    <div class="stage">
-      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
-      <div class="col">
-        <div class="topbar">
-          <div class="sec-no"><b>02</b><span>本日の一番 ── StackStack</span></div>
-          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
+  <!-- ════════════ 02 ════════════ -->
+  <section class="slide" aria-labelledby="s2">
+    <div class="canvas slide-shell bg-right">
+      <header class="slide-top">
+        <div class="slide-label"><span class="slide-no">02</span><span>本日の一番 - StackStack</span></div>
+        <div class="aws-mark" aria-label="AWS">aws<span></span></div>
+      </header>
+
+      <div class="problem-layout">
+        <div class="problem-copy">
+          <h2 id="s2">AI が作った 1 つのアプリ。<br>ローカルでは動く。</h2>
+          <p class="problem-brush"><span class="brush stroke">でも、公開できない。</span></p>
         </div>
-        <div style="display:grid; gap:16px; align-content:center; min-height:0;">
-          <div class="s2-top">
-            <h2 class="s2-head display">AI が作った 1 つのアプリ。<br />ローカルでは動く。<span class="brush-gold">でも、公開できない。</span></h2>
-            <div class="panel gold-frame s2-problem">
-              <div class="ttl"><span class="mono">problem:</span><b>StackStack</b><em>90 min</em></div>
-              <p>AI が作り置きしたクラウド設定は穴だらけ。<br />認証はなし、S3 は公開、ログは残らない、サーバは 1 台。<br /><em>90 分</em>で、本物のクラウドで安全に動かせ。</p>
-            </div>
-          </div>
-          <div class="s2-gaps">
-            <div class="panel gap-card">
-              <div class="hd"><span class="num-dot">1</span><b>auth</b></div>
-              <svg class="glyph"><use href="#g-lock"/></svg>
-              <div class="gap-flow"><span class="from">Basic 認証</span><span class="arr">→</span><span class="to">SSO</span></div>
-            </div>
-            <div class="panel gap-card">
-              <div class="hd"><span class="num-dot">2</span><b>network</b></div>
-              <svg class="glyph"><use href="#g-cloud-up"/></svg>
-              <div class="gap-flow"><span class="from">公開 S3 / 広い IAM</span><span class="arr">→</span><span class="to">OAC</span></div>
-            </div>
-            <div class="panel gap-card">
-              <div class="hd"><span class="num-dot">3</span><b>rate</b></div>
-              <svg class="glyph"><use href="#g-cycle"/></svg>
-              <div class="gap-flow"><span class="from">無制限 API</span><span class="arr">→</span><span class="to">throttle</span></div>
-            </div>
-            <div class="panel gap-card">
-              <div class="hd"><span class="num-dot">4</span><b>audit</b></div>
-              <svg class="glyph"><use href="#g-clip"/></svg>
-              <div class="gap-flow"><span class="from">標準出力だけ</span><span class="arr">→</span><span class="to">WORM</span></div>
-            </div>
-            <div class="panel gap-card">
-              <div class="hd"><span class="num-dot">5</span><b>uptime</b></div>
-              <svg class="glyph"><use href="#g-stack"/></svg>
-              <div class="gap-flow"><span class="from">EC2 1 台</span><span class="arr">→</span><span class="to">Multi-AZ</span></div>
-            </div>
-          </div>
-        </div>
-        <div class="gold-band"><span class="trophy">🏆</span><span>“動く” から “出していい” までの距離 ── <em>認証・公開範囲・監査・可用性</em> が、そのまま <strong>採点項目</strong>になる。</span></div>
+        <aside class="tc-panel cut-panel problem-card">
+          <h3><span>problem:</span> StackStack / <strong class="time-gold">90</strong> min</h3>
+          <p>AI が作り置きしたクラウド設定は穴だらけ。<br>認証はなし、S3 は公開、ログは残らない、サーバは 1 台。<br><b>90</b> 分で、本物のクラウドで安全に動かせ。</p>
+        </aside>
       </div>
+
+      <div class="fix-grid">
+        <article class="tc-panel cut-panel fix-card">
+          <span class="number-dot">1</span><h3>auth</h3>
+          <div class="fix-chips"><span class="chip before">Basic認証</span><span class="chip-arr" aria-hidden="true"></span><span class="chip after">SSO</span></div>
+        </article>
+        <article class="tc-panel cut-panel fix-card">
+          <span class="number-dot">2</span><h3>network</h3>
+          <div class="fix-chips"><span class="chip before">公開 S3 / 広い IAM</span><span class="chip-arr" aria-hidden="true"></span><span class="chip after">OAC</span></div>
+        </article>
+        <article class="tc-panel cut-panel fix-card">
+          <span class="number-dot">3</span><h3>rate</h3>
+          <div class="fix-chips"><span class="chip before">無制限 API</span><span class="chip-arr" aria-hidden="true"></span><span class="chip after">throttle</span></div>
+        </article>
+        <article class="tc-panel cut-panel fix-card">
+          <span class="number-dot">4</span><h3>audit</h3>
+          <div class="fix-chips"><span class="chip before">標準出力だけ</span><span class="chip-arr" aria-hidden="true"></span><span class="chip after">WORM</span></div>
+        </article>
+        <article class="tc-panel cut-panel fix-card">
+          <span class="number-dot">5</span><h3>uptime</h3>
+          <div class="fix-chips"><span class="chip before">EC2 1 台</span><span class="chip-arr" aria-hidden="true"></span><span class="chip after">Multi-AZ</span></div>
+        </article>
+      </div>
+
+      <footer class="tc-callout">
+        <span class="cal-icon"><svg viewBox="0 0 24 24"><use href="#ic-trophy-gold"/></svg></span>
+        <p>“動く” から <strong>“出していい”</strong> までの距離 -<br><span>認証・公開範囲・監査・可用性が、そのまま採点項目になる。</span></p>
+      </footer>
     </div>
   </section>
 
-  <!-- 03 ─ ゲームデザイン -->
-  <section class="slide">
-    <div class="stage">
-      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
-      <div class="col">
-        <div class="topbar">
-          <div class="sec-no"><b>03</b><span>ゲームデザイン</span></div>
-          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
-        </div>
-        <div style="display:grid; grid-template-rows:auto 1fr; gap:18px; min-height:0;">
-          <h2 class="s3-head display">クラウドに上げて、穴を塞ぎ、<span class="brush-gold">襲ってくる事故を捌く。</span></h2>
-          <div class="s3-grid">
-            <div class="panel s3-card">
-              <div class="hd"><span class="num-dot">1</span><svg class="glyph"><use href="#g-cloud-up"/></svg></div>
-              <h3>クラウドで起動</h3>
-              <p>ローカルでしか動かない AI 製アプリを、まず本物のクラウドで動かす。</p>
-            </div>
-            <div class="chev">▶</div>
-            <div class="panel s3-card">
-              <div class="hd"><span class="num-dot">2</span><svg class="glyph"><use href="#g-wall"/></svg></div>
-              <h3>穴を塞ぐ</h3>
-              <p>AI が作り置きしたリソース設定には穴がある。公開範囲・権限・認証を直す。</p>
-            </div>
-            <div class="chev">▶</div>
-            <div class="panel s3-card">
-              <div class="hd"><span class="num-dot">3</span><svg class="glyph"><use href="#g-swords"/></svg></div>
-              <h3>インシデント対応</h3>
-              <p>本番 DB の誤削除、サイト改ざん、サプライチェーン攻撃によるバックドア… 次々に発生。止めずに捌く。</p>
-              <div class="s3-tags">
-                <span class="incident-tag">DB誤削除</span>
-                <span class="incident-tag">サイト改ざん</span>
-                <span class="incident-tag">サプライチェーン攻撃 (バックドア)</span>
-              </div>
-            </div>
-            <div class="chev">▶</div>
-            <div class="panel s3-card gold-frame">
-              <div class="hd"><span class="num-dot">4</span><svg class="glyph gold"><use href="#g-trophy"/></svg></div>
-              <h3>サイトを稼働させ続けると得点を獲得</h3>
-              <p>稼働を守り切れたか、対応はどれだけ速かったか。順位が確定する。</p>
+  <!-- ════════════ 03 ════════════ -->
+  <section class="slide" aria-labelledby="s3">
+    <div class="canvas slide-shell bg-right">
+      <header class="slide-top">
+        <div class="slide-label"><span class="slide-no">03</span><span>ゲームデザイン</span></div>
+        <div class="aws-mark" aria-label="AWS">aws<span></span></div>
+      </header>
+
+      <h2 id="s3" class="mega-heading">クラウドに上げて、穴を塞ぎ、<br><span class="brush stroke">襲ってくる事故を捌く。</span></h2>
+
+      <div class="quest-grid">
+        <article class="tc-panel cut-panel quest-card">
+          <span class="number-dot">1</span>
+          <div class="quest-art cloud-art"></div>
+          <h3><span class="quest-ic"><svg viewBox="0 0 24 24"><use href="#ic-cloud-start"/></svg></span>クラウドで起動</h3>
+          <p>ローカルでしか動かない AI 製アプリを、まず本物のクラウドで動かす。</p>
+        </article>
+        <span class="arr-r" aria-hidden="true"></span>
+        <article class="tc-panel cut-panel quest-card">
+          <span class="number-dot">2</span>
+          <div class="quest-art wall-art"></div>
+          <h3><span class="quest-ic"><svg viewBox="0 0 24 24"><use href="#ic-wrench"/></svg></span>穴を塞ぐ</h3>
+          <p>公開範囲・権限・認証を直し、本番品質の守りを作る。</p>
+        </article>
+        <span class="arr-r" aria-hidden="true"></span>
+        <article class="tc-panel cut-panel quest-card">
+          <span class="number-dot">3</span>
+          <div class="quest-art battle-art">
+            <div class="incident-tags">
+              <span class="incident-tag">DB誤削除</span>
+              <span class="incident-tag">サイト改ざん</span>
+              <span class="incident-tag wide">サプライチェーン攻撃</span>
             </div>
           </div>
-        </div>
-        <div class="gold-band"><span class="trophy">🏆</span><span>勝つのは、何が起きても <span class="brush-gold">サイトを稼働させ続けた</span> チーム。</span></div>
+          <h3><span class="quest-ic"><svg viewBox="0 0 24 24"><use href="#ic-alert"/></svg></span>インシデント対応</h3>
+          <p>本番 DB の誤削除、サイト改ざん、攻撃を止めずに捌く。</p>
+        </article>
+        <span class="arr-r" aria-hidden="true"></span>
+        <article class="tc-panel cut-panel quest-card">
+          <span class="number-dot">4</span>
+          <div class="quest-art win-art"></div>
+          <h3><span class="quest-ic"><svg viewBox="0 0 24 24"><use href="#ic-trophy-line"/></svg></span>稼働を守り、得点</h3>
+          <p>稼働を守り切れたか、対応はどれだけ速かったか。順位が確定する。</p>
+        </article>
       </div>
+
+      <footer class="tc-callout">
+        <span class="cal-icon"><svg viewBox="0 0 24 24"><use href="#ic-trophy-gold"/></svg></span>
+        <p>勝つのは、何が起きても <span class="brush">サイトを稼働させ続けた</span> チーム。</p>
+      </footer>
     </div>
   </section>
 
-  <!-- 04 ─ Battle の仕組み (本物のプロダクト画面をライブ描画) -->
-  <section class="slide">
-    <div class="stage">
-      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
-      <div class="battle-slide">
-        <div class="topbar">
-          <div class="sec-no"><b>04</b><span>Battle の仕組み</span></div>
-          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
-        </div>
-        <h2 class="s4-head display">競技の進み方</h2>
-        <div class="battle-loop">
-          <div class="panel bl-step"><b>1 · deploy</b><span>問題を本物のクラウドへ展開（AssumeRole + ExternalId）</span></div>
-          <div class="bl-arr">→</div>
-          <div class="panel bl-step"><b>2 · inject</b><span>シナリオが障害・攻撃プローブを自動で撃ち込む</span></div>
-          <div class="bl-arr">→</div>
-          <div class="panel bl-step"><b>3 · score</b><span>60 秒ごとに実状態を採点（守れば加点 / 破られれば減点）</span></div>
-          <div class="bl-arr">→</div>
-          <div class="panel bl-step"><b>4 · rank</b><span>スコアを集計し、順位をライブ更新</span></div>
-        </div>
-        <div class="tc-portal">
+  <!-- ════════════ 04 ════════════ -->
+  <section class="slide" aria-labelledby="s4">
+    <div class="canvas slide-shell bg-right">
+      <header class="slide-top">
+        <div class="slide-label"><span class="slide-no">04</span><span>Battle の仕組み</span></div>
+        <div class="aws-mark" aria-label="AWS">aws<span></span></div>
+      </header>
+
+      <h2 id="s4" class="battle-title">競技の進み方</h2>
+
+      <div class="battle-loop" aria-label="competition loop">
+        <article class="tc-panel cut-panel bl-step">
+          <span class="number-dot">1</span><span class="line-icon"><svg viewBox="0 0 24 24"><use href="#ic-cloud-upload"/></svg></span><h3>deploy</h3>
+          <p>問題を本物の<br>クラウドへ展開<br><small>(AssumeRole + ExternalId)</small></p>
+        </article>
+        <span class="bl-arr" aria-hidden="true"></span>
+        <article class="tc-panel cut-panel bl-step">
+          <span class="number-dot">2</span><span class="line-icon"><svg viewBox="0 0 24 24"><use href="#ic-swords"/></svg></span><h3>inject</h3>
+          <p>シナリオが<br>障害・攻撃プローブを<br>自動で撃ち込む</p>
+        </article>
+        <span class="bl-arr" aria-hidden="true"></span>
+        <article class="tc-panel cut-panel bl-step">
+          <span class="number-dot">3</span><span class="line-icon"><svg viewBox="0 0 24 24"><use href="#ic-target"/></svg></span><h3>score</h3>
+          <p>60 秒ごとに実状態を採点<br><small>(守れば加点 / 破られれば減点)</small></p>
+        </article>
+        <span class="bl-arr" aria-hidden="true"></span>
+        <article class="tc-panel cut-panel bl-step">
+          <span class="number-dot">4</span><span class="line-icon"><svg viewBox="0 0 24 24"><use href="#ic-rank"/></svg></span><h3>rank</h3>
+          <p>スコアを集計し、<br>順位をライブ更新</p>
+        </article>
+      </div>
+
+      <div class="live-grid">
+        <div class="scoreboard-mock" aria-label="TenkaCloud scoreboard mock">
           <div class="cs-app">
             <div class="cs-topnav">
               <div class="cs-ident"><span class="cs-logo"></span>TenkaCloud</div>
               <div class="cs-utils">
-                <span class="cs-util"><span class="cs-ok">✔</span>Score: <b id="csScore">8,420</b> pt&nbsp;/&nbsp;Rank: <b id="csRank">1/4</b></span>
+                <span class="cs-util"><span class="cs-ok">✔</span>Score: <b id="csScore">3,980</b> pt / Rank: <b id="csRank">2/4</b></span>
                 <span class="cs-util">team-shogun <span class="cs-caret">▾</span></span>
               </div>
             </div>
             <div class="cs-body">
-              <div class="cs-sidenav">
+              <aside class="cs-sidenav">
                 <div class="cs-sec">Event</div>
                 <div class="cs-link">Home</div>
                 <div class="cs-link on">Scoreboard</div>
-                <div class="cs-link">Notifications <span class="cs-badge" id="tcNotif">2</span></div>
+                <div class="cs-link">Notifications <span class="cs-badge" id="tcNotif">10</span></div>
                 <div class="cs-sec">Quests</div>
                 <div class="cs-link">StackStack</div>
                 <div class="cs-sec">Tools</div>
                 <div class="cs-link">CLI Credentials</div>
-              </div>
-              <div class="cs-content">
+              </aside>
+              <main class="cs-content">
                 <div class="cs-countdown">残り <b id="tcClock">00:11:58</b><span id="tcIncident" class="cs-incident"></span></div>
-                <div class="cs-container">
+                <section class="cs-container" aria-label="Scoreboard">
                   <div class="cs-ch">スコアボード <span class="cs-ch-cnt">4 チーム · 60 秒ごとに自動採点</span></div>
                   <div class="cs-table">
                     <div class="cs-thead"><span>Rank</span><span>チーム</span><span>スコア</span><span>進捗</span></div>
                     <div id="tcBoard"></div>
                   </div>
-                </div>
-              </div>
+                </section>
+              </main>
             </div>
           </div>
         </div>
-        <div class="gold-band"><span class="trophy">🏆</span><span>同じ仕組みで開ける競技は、<em>StackStack</em> <strong>だけじゃない</strong>。</span></div>
       </div>
+
+      <footer class="tc-callout">
+        <span class="cal-icon"><svg viewBox="0 0 24 24"><use href="#ic-trophy-gold"/></svg></span>
+        <p>同じ仕組みで開ける競技は、<strong>StackStack</strong> だけじゃない。</p>
+      </footer>
     </div>
   </section>
 
-  <!-- 05 ─ プラットフォーム化 -->
-  <section class="slide">
-    <div class="stage">
-      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
-      <div class="col">
-        <div class="topbar">
-          <div class="sec-no"><b>05</b><span>プラットフォーム化</span></div>
-          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
-        </div>
-        <div style="display:grid; gap:15px; align-content:center; min-height:0;">
-          <div class="s5-head">
-            <div class="nm">TenkaCloud<svg class="tc-mark"><use href="#tc-icon"/></svg></div>
-            <div class="sub display">天下一武道会を開くための</div>
-            <div class="brush-gold">プラットフォーム。</div>
-          </div>
-          <p class="s5-lead"><em>StackStack</em> はその “第一試合”。問題は <em>OSS</em> で誰でも作れて、同じ土台で競技をいくつでも開ける。</p>
-          <div class="s5-grid">
-            <div class="panel s5-card">
-              <span class="tag">BATTLE</span>
-              <span class="emblem"><svg class="glyph"><use href="#g-stack"/></svg></span>
-              <h3>StackStack</h3>
-              <p>AI で作ったアプリを、安全な本番品質へ。</p>
-            </div>
-            <div class="panel s5-card">
-              <span class="tag">BATTLE</span>
-              <span class="emblem"><svg class="glyph"><use href="#g-lock"/></svg></span>
-              <h3>Security Battle Royale</h3>
-              <p>攻撃と障害から、サービスを守り抜く。</p>
-            </div>
-            <div class="panel s5-card">
-              <span class="tag">BATTLE</span>
-              <span class="emblem"><svg class="glyph"><use href="#g-cycle"/></svg></span>
-              <h3>Microservice Migration</h3>
-              <p>モノリスを、止めずに移行しきる。</p>
-            </div>
-          </div>
-        </div>
-        <div class="gold-band"><span class="trophy">🏆</span><span>今は <em>AWS</em> 対応（他クラウドは順次）。<em>OSS</em> だから、問題は<strong>誰でも増やせる</strong>。</span></div>
+  <!-- ════════════ 05 ════════════ -->
+  <section class="slide" aria-labelledby="s5">
+    <div class="canvas slide-shell bg-wide">
+      <header class="slide-top">
+        <div class="slide-label"><span class="slide-no">05</span><span>プラットフォーム化</span></div>
+        <div class="aws-mark" aria-label="AWS">aws<span></span></div>
+      </header>
+
+      <div class="platform-copy">
+        <h2 id="s5" class="brand-title">TenkaCloud
+          <svg class="cloud-logo" viewBox="0 0 64 48" fill="none" aria-hidden="true">
+            <path d="M16 40A11 11 0 0 1 14.6 18.3 14 14 0 0 1 42 16a9.5 9.5 0 0 1 4.4 18" stroke="#58b7ff" stroke-width="2.4" stroke-linejoin="round"/>
+            <path d="M30 24 24 34h6l-3 8 11-13h-7l4-9Z" fill="#f1cd72"/>
+          </svg>
+        </h2>
+        <p class="platform-line">天下一武道会を開くための<br><span class="brush stroke">プラットフォーム。</span></p>
+        <p class="platform-sub"><strong class="platform-product">StackStack</strong> はその “第一試合”。<br>問題は <strong class="platform-oss">OSS</strong> で誰でも作れて、同じ土台で競技をいくつでも開ける。</p>
       </div>
+
+      <div class="battle-cards">
+        <article class="tc-panel cut-panel battle-card">
+          <span class="kind">BATTLE</span><span class="emblem"><svg viewBox="0 0 24 24"><use href="#em-stack"/></svg></span>
+          <div><h3>StackStack</h3><p>AI で作ったアプリを、<br>安全な本番品質へ。</p></div>
+        </article>
+        <article class="tc-panel cut-panel battle-card">
+          <span class="kind">BATTLE</span><span class="emblem"><svg viewBox="0 0 24 24"><use href="#em-security"/></svg></span>
+          <div><h3>Security<br>Battle Royale</h3><p>攻撃と障害から、<br>サービスを守り抜く。</p></div>
+        </article>
+        <article class="tc-panel cut-panel battle-card">
+          <span class="kind">BATTLE</span><span class="emblem"><svg viewBox="0 0 24 24"><use href="#em-migration"/></svg></span>
+          <div><h3>Microservice<br>Migration</h3><p>モノリスを、止めずに移行しきる。</p></div>
+        </article>
+      </div>
+
+      <footer class="tc-callout">
+        <span class="cal-icon"><svg viewBox="0 0 24 24"><use href="#ic-trophy-gold"/></svg></span>
+        <p>今は <strong>AWS</strong> 対応（他クラウドは順次）。<strong>OSS</strong> だから、問題は誰でも増やせる。</p>
+      </footer>
     </div>
   </section>
 
-  <!-- 06 ─ 想定ユースケース -->
-  <section class="slide">
-    <div class="stage">
-      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
-      <div class="col">
-        <div class="topbar">
-          <div class="sec-no"><b>06</b><span>想定ユースケース</span></div>
-          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
-        </div>
-        <div style="display:grid; grid-template-rows:auto 1fr; gap:18px; min-height:0;">
-          <h2 class="s6-head display">祭りだけじゃない。<span class="brush-gold">研修にも、採用にも。</span></h2>
-          <div class="s6-grid">
-            <div class="panel s6-card">
-              <div class="hd"><span class="num-dot">1</span><b>COMMUNITY</b></div>
-              <svg class="glyph"><use href="#g-flag"/></svg>
-              <h3>コミュニティイベント</h3>
-              <p>勉強会やコミュニティで、本物のクラウド競技を開催して盛り上げる。</p>
-            </div>
-            <div class="panel s6-card">
-              <div class="hd"><span class="num-dot">2</span><b>EDUCATION</b></div>
-              <svg class="glyph"><use href="#g-book"/></svg>
-              <h3>定期的なセキュリティ教育</h3>
-              <p>チーム・組織で、安全な公開と運用力を継続的に鍛える。</p>
-            </div>
-            <div class="panel s6-card">
-              <div class="hd"><span class="num-dot">3</span><b>ASSESSMENT</b></div>
-              <svg class="glyph"><use href="#g-clip"/></svg>
-              <h3>スキルチェック</h3>
-              <p>実状態で自動採点。採用評価や実力測定に使える客観指標になる。</p>
-            </div>
-          </div>
-        </div>
-        <div class="gold-band"><span class="trophy">🏆</span><span>同じ仕組みが、<em>イベント・研修・採用評価</em> まで<strong>回す</strong>。</span></div>
+  <!-- ════════════ 06 ════════════ -->
+  <section class="slide" aria-labelledby="s6">
+    <div class="canvas slide-shell bg-right">
+      <header class="slide-top">
+        <div class="slide-label"><span class="slide-no">06</span><span>想定ユースケース</span></div>
+        <div class="aws-mark" aria-label="AWS">aws<span></span></div>
+      </header>
+
+      <h2 id="s6" class="mega-heading use-heading">祭りだけじゃない。<br><span class="brush stroke">研修にも、採用にも。</span></h2>
+
+      <div class="use-grid">
+        <article class="tc-panel cut-panel use-card">
+          <span class="hex-no">1</span><h3>COMMUNITY</h3><span class="line-icon"><svg viewBox="0 0 24 24"><use href="#ic-users"/></svg></span>
+          <h4>コミュニティイベント</h4>
+          <p>勉強会やコミュニティで、<br>本物のクラウド競技を開催して<br>盛り上げる。</p>
+        </article>
+        <article class="tc-panel cut-panel use-card">
+          <span class="hex-no">2</span><h3>EDUCATION</h3><span class="line-icon"><svg viewBox="0 0 24 24"><use href="#ic-book"/></svg></span>
+          <h4>定期的なセキュリティ教育</h4>
+          <p>チーム・組織で、<br>安全な公開と運用力を<br>継続的に鍛える。</p>
+        </article>
+        <article class="tc-panel cut-panel use-card">
+          <span class="hex-no">3</span><h3>ASSESSMENT</h3><span class="line-icon"><svg viewBox="0 0 24 24"><use href="#ic-clipboard"/></svg></span>
+          <h4>スキルチェック</h4>
+          <p>実状態で自動採点。<br>採用評価や実力測定に使える<br>客観指標になる。</p>
+        </article>
       </div>
+
+      <footer class="tc-callout">
+        <span class="cal-icon"><svg viewBox="0 0 24 24"><use href="#ic-trophy-gold"/></svg></span>
+        <p>同じ仕組みが、<span class="brush">イベント・研修・採用評価</span> まで回す。</p>
+      </footer>
     </div>
   </section>
 
-  <!-- 07 ─ Team -->
-  <section class="slide">
-    <div class="stage">
-      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
-      <div class="col">
-        <div class="topbar">
-          <div class="sec-no"><b>07</b><span>Team</span></div>
-          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
-        </div>
-        <div style="display:grid; grid-template-rows:auto 1fr; gap:16px; min-height:0;">
-          <h2 class="s7-head display">クラウド競技が <span class="brush-gold">大好き</span> なメンバーが作っています。</h2>
-          <div class="s7-grid">
-            <div class="panel gold-frame s7-card">
-              <div class="s7-id">
-                <svg class="avatar"><use href="#av-samurai"/></svg>
-                <span class="who">
-                  <span class="role">FOUNDER</span>
-                  <h3>amedama</h3>
-                  <small>(Susumu Tomita)</small>
-                </span>
-              </div>
-              <div class="sep"></div>
-              <p>JAWS DAYS 2024 AWS Game Day <em>優勝</em>。2026 <em>準優勝</em>。</p>
-              <div class="s7-qrs">
-                <div class="qr-item sm"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAB5UlEQVRoge2aMZKDMAxFldkiZY7AUTgaHI2j5AiUKZhorS/ZZotkZtmIbb6aEPxo+NGXZEeEcSw0Yi2XM+6Mutndx2W3ROwoFmvrl+o86LO/+EtbIpaPDUUPXJtCItNy20yxIlZfInYSBrEeps7Nvt+F2D9g5Xq6X6tRvdGU2K+w5kgFExSD7a1xEUvAIhy7Pt2RdBleFHFiGdjPKCkz9xLxMoh9GHM9ilFZQCzoNuLyDt2IpWNeM1CS27zgT9RsgXERO4b5q/cZbD8IuCM1MyKWi81SsPKD/zJx6iDgCTBZoY6UIZaKqTVGnicxCJQnXKHiSKpNU2J5mCkC49r6vOC61ZQJfyOWiO03iLTNC5EyO02JHcNgQ9HhoAWFIIK0GFZpjkQsEbO1p7hCKBHTAkcybO9IxDIxSxFrjHqnWiW8uDn1rQliedg8tBuCTnVcm1h+V4jlY7YhpwuSI9bgVj4fN38j9hdM48RRfCiOydj7oJVYNtbCDlysOu90K7mhxM7AVLssodta64KfyyCI5WIzPlCCMY5hL9pOx8Q7VWKnYFBk7Ocy0G4ZmoQLsc9gEdaNlvk4BoFaPoidg8Ve9Ki9OkM3IZaPQaDAeqeK8WB3OkYsFYtoM5hnz9j/8yPE0jHGkfgG/lER6zFPO4IAAAAASUVORK5CYII=" alt="Portfolio QR" /><span>Portfolio</span></div>
-                <div class="qr-item sm"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAB30lEQVRoge2aPZLCMAyFlUlByRF8lD1acjQfJUegpGDQWj/+CbMUm0XZ5r0CPPYHRd5YsuQQQcfErlsZrkRT+bjqxH0aloAdxVZ9yl+3mXlN/KRFVojSfWpLwOKxJNMyFoeIlnx9lLVNfGtLwE7C1CzZJ5lmFpOA/QNWxst24TFwAfsA1iJSwVoEMhd+DFzAAjCXYZenRSTO6U0SBxaB7XXR7Cx5QVLEWwH7MGZ+lGmRBC6X+rapb8DOwjRnrDJRtkz/heyWIXAB+y0mR36Bb5aoWyHQ84ILWDyW/WBEEow0IvFuLwA7AbNybG0pWcox0dV8AxaM2VoZzGzJgLxekECWenwDFolJoHpKEnlQrRdYT6rCbd1TYMcw0olsE+0I6v8gOyQDC8csJe9aE9L50Yi0bGNEAhaImTLRy42ASkrlsTUBLAgbzWrL4k9J1Js3RIHFY9qE0M0hw4V7+tgFLmCHMXv0ixcCRRWbuV4+AgvEmqwLWm8EslrYHAMWi7HLbwRaOdbvZVTAYrFVv3ZnJKq96NTsBBaMqSN6BWwNaDWr7pYhvgH7I2YGkL/n4IUAsLMxO42qTf3uJb/uBWABmBpU3zah2ppIyvZrL2ChmEuys7el2XrRNVETsHAMOqJv8Lbuh+gBiPoAAAAASUVORK5CYII=" alt="LinkedIn QR" /><span>LinkedIn</span></div>
-                <div class="qr-item sm"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAABkklEQVRoge2ZMY6EMAxFjSgoOQJH4WjD0TgKR6CcApG1YztkhXZWmgZH+r8BOS/VJ8aOiaDvlFwnUS9PmvhtSMtYVnZgUbBNTRtPmi3UydrCAbMTWBxMnRyzp4sEurQOGZt44Q2sZWw+6GUnVr8FYHEx8XS8kiqwgFidVPkA5sV/ci+w2JhLz+l+JdWyAiwKVqv3qmalTwL2FGa+kVroTr7Z3U7y7TIkYK1holn+htxMHJxbU7aezyk/NpJfJrAwmFU1VnhyUpWqhvd5Kzh4ww7seYymI3u2ayotnoo2tRNYY5hYz1FJqqt9BEk2vPhbmLQpBBYG41Saj6XKPKX7jxJYO9j2y3BtK6Sq0dgtRQN7FCP3VHtAbyukGLV8CywMZjdmHrXblSzeZ2cTWENYpTkveYmqG5YbBew5rPhXBnzVlXVd1QALgG1qWpnclYZdPS3lCrCGsGvAV88XsrL1wKJiV7+QTt+wAwuIablSzRf6PybswIJjGrnO6XVlnXIAWBzMpZ7qMEg8/TS0BRYag77RDwWt53/szPNlAAAAAElFTkSuQmCC" alt="GitHub QR" /><span>GitHub</span></div>
-              </div>
-            </div>
-            <div class="panel s7-card">
-              <div class="s7-id">
-                <svg class="avatar"><use href="#av-ninja"/></svg>
-                <span class="who">
-                  <span class="role blue">TEAM</span>
-                  <h3>チャーリー</h3>
-                </span>
-              </div>
-              <div class="sep"></div>
-              <p>JAWS 名古屋運営メンバー。Game Day の<em>熱量</em>を広げたい人。</p>
-            </div>
-            <div class="panel s7-card">
-              <div class="s7-id">
-                <svg class="avatar"><use href="#av-kunoichi"/></svg>
-                <span class="who">
-                  <span class="role blue">TEAM</span>
-                  <h3>きせのん</h3>
-                </span>
-              </div>
-              <div class="sep"></div>
-              <p>JAWS DAYS 2024 Game Day <em>優勝</em>。AWS 認定<em>全冠</em>。CCoE はじめました</p>
+  <!-- ════════════ 07 ════════════ -->
+  <section class="slide" aria-labelledby="s7">
+    <div class="canvas slide-shell bg-right">
+      <header class="slide-top">
+        <div class="slide-label"><span class="slide-no">07</span><span>Team</span></div>
+        <div class="aws-mark" aria-label="AWS">aws<span></span></div>
+      </header>
+
+      <h2 id="s7" class="mega-heading team-heading">クラウド競技が<br><span class="brush">大好き</span> なメンバーが作っています。</h2>
+
+      <div class="team-grid">
+        <article class="tc-panel cut-panel member-card">
+          <span class="portrait"><svg viewBox="0 0 24 24"><use href="#av-founder"/></svg></span>
+          <div class="member-body">
+            <span class="role gold">FOUNDER</span>
+            <h3>amedama</h3>
+            <p class="sub-name">(Susumu Tomita)</p>
+            <span class="member-divider gold" aria-hidden="true" style="color:#f1cd72"><svg class="star" viewBox="0 0 24 24"><use href="#star8"/></svg></span>
+            <p>JAWS DAYS 2024<br>AWS Game Day <strong>優勝。</strong><br>2026 <strong>準優勝。</strong></p>
+            <div class="member-links">
+              <a href="https://susumutomita.netlify.app/" target="_blank" rel="noopener noreferrer"><span class="qr-glyph"><svg viewBox="0 0 24 24"><use href="#qr-glyph"/></svg></span><span>Portfolio</span></a>
+              <a href="https://www.linkedin.com/in/susumutomita/" target="_blank" rel="noopener noreferrer"><span class="qr-glyph"><svg viewBox="0 0 24 24"><use href="#qr-glyph"/></svg></span><span>LinkedIn</span></a>
+              <a href="https://github.com/susumutomita" target="_blank" rel="noopener noreferrer"><span class="qr-glyph"><svg viewBox="0 0 24 24"><use href="#qr-glyph"/></svg></span><span>GitHub</span></a>
             </div>
           </div>
-        </div>
-        <div class="gold-band"><span class="trophy">🏆</span><span>作れる人はいるかもしれない。でも、<span class="brush-gold">熱量ある問題を作れる人</span> はそうそういない。</span></div>
+        </article>
+        <article class="tc-panel cut-panel member-card">
+          <span class="portrait" style="color:#7fc3ff"><svg viewBox="0 0 24 24"><use href="#av-ninja"/></svg></span>
+          <div class="member-body">
+            <span class="role">TEAM</span>
+            <h3>ちゃーりー</h3>
+            <span class="member-divider" aria-hidden="true" style="color:#58b7ff"><svg class="star" viewBox="0 0 24 24"><use href="#star8"/></svg></span>
+            <p>JAWS-UG名古屋<br>AWSGameDay 2024<br><strong>準優勝。</strong></p>
+            <div class="member-links">
+              <a href="https://www.linkedin.com/in/yusuke-hirono/" target="_blank" rel="noopener noreferrer"><span class="qr-glyph"><svg viewBox="0 0 24 24"><use href="#qr-glyph"/></svg></span><span>LinkedIn</span></a>
+              <a href="https://github.com/usk0513" target="_blank" rel="noopener noreferrer"><span class="qr-glyph"><svg viewBox="0 0 24 24"><use href="#qr-glyph"/></svg></span><span>GitHub</span></a>
+            </div>
+          </div>
+        </article>
+        <article class="tc-panel cut-panel member-card">
+          <span class="portrait" style="color:#7fc3ff"><svg viewBox="0 0 24 24"><use href="#av-sword"/></svg></span>
+          <div class="member-body">
+            <span class="role">TEAM</span>
+            <h3>きせのん</h3>
+            <span class="member-divider" aria-hidden="true" style="color:#58b7ff"><svg class="star" viewBox="0 0 24 24"><use href="#star8"/></svg></span>
+            <p>JAWS DAYS 2024<br>Game Day <strong>優勝。</strong><br>AWS <strong>認定全冠。</strong><br>CCoE はじめました</p>
+          </div>
+        </article>
       </div>
+
+      <footer class="tc-callout centered">
+        <p class="hot-makers-copy">
+          <span>作れる人はいるかもしれない。</span>
+          <span class="hot-makers-line"><span>でも、</span><span class="brush">熱量ある問題を作れる人</span><span>はそうそういない。</span></span>
+        </p>
+      </footer>
     </div>
   </section>
 
-  <!-- 08 ─ 探しています -->
-  <section class="slide">
-    <div class="stage">
-      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
-      <div class="col">
-        <div class="topbar">
-          <div class="sec-no"><b>08</b><span>探しています</span></div>
-          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
-        </div>
-        <div style="display:grid; grid-template-rows:auto auto 1fr; gap:14px; min-height:0;">
-          <h2 class="s8-head display">一緒に作る<span class="brush-gold">仲間</span>と、<span class="brush-gold">壁打ち相手</span>を探しています。</h2>
-          <p class="s8-lead">エフェクチュエーションの “クレイジーキルト” ── 手を動かして <em>TenkaCloud</em> を一緒に育てる人を探しています。</p>
-          <div class="s8-grid">
-            <div class="panel s8-card">
-              <div class="hd"><span class="num-dot">1</span><span>共同開発</span></div>
-              <h3><svg class="glyph" style="vertical-align:-7px"><use href="#g-users"/></svg> 競技が好きな仲間</h3>
-              <p>AWS GameDay 等の競技が好きで、プラットフォームや問題を一緒に作れる人。</p>
-            </div>
-            <div class="panel s8-card">
-              <div class="hd"><span class="num-dot">2</span><span>クラウド推進</span></div>
-              <h3><svg class="glyph" style="vertical-align:-7px"><use href="#g-shield"/></svg> CCoE・教育の推進者</h3>
-              <p>企業でクラウドの利活用やセキュリティ教育を進めている人。</p>
-            </div>
-            <div class="panel s8-card">
-              <div class="hd"><span class="num-dot">3</span><span>壁打ち</span></div>
-              <h3><svg class="glyph" style="vertical-align:-7px"><use href="#g-chat"/></svg> 壁打ちしたい 2 つの問い</h3>
-              <div class="s8-qa">
-                <div class="q"><b>①</b><span>ライセンス：いまは Apache 2.0。AGPL にすべき？</span></div>
-                <div class="q"><b>②</b><span>課金：実クラウドを誰でも使えると費用が読めない。どう値付けする？</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="gold-band"><span class="trophy">🤝</span><span>ピンと来たら、ぜひ <span class="brush-gold">声をかけてください。</span></span></div>
+  <!-- ════════════ 08 ════════════ -->
+  <section class="slide" aria-labelledby="s8">
+    <div class="canvas slide-shell bg-right">
+      <header class="slide-top">
+        <div class="slide-label"><span class="slide-no">08</span><span>探しています</span></div>
+        <div class="aws-mark" aria-label="AWS">aws<span></span></div>
+      </header>
+
+      <h2 id="s8" class="mega-heading ask-heading">一緒に作る <span class="brush">仲間</span> と、<br><span class="brush">壁打ち相手</span> を探しています。</h2>
+      <p class="ask-lead"><span class="ask-lead-primary">エフェクチュエーションの “クレイジーキルト” <span class="ask-lead-rule" aria-hidden="true"></span></span><br><span>手を動かして <strong>TenkaCloud</strong> を一緒に育てる人を探しています。</span></p>
+
+      <div class="ask-grid">
+        <article class="tc-panel cut-panel ask-card">
+          <span class="number-dot">1</span><span class="line-icon"><svg viewBox="0 0 24 24"><use href="#ic-users"/></svg></span>
+          <h3>共同開発</h3><h4>競技が好きな仲間</h4>
+          <p>AWS GameDay 等の競技が好きで、プラットフォームや問題を一緒に作れる人。</p>
+        </article>
+        <article class="tc-panel cut-panel ask-card">
+          <span class="number-dot">2</span><span class="line-icon"><svg viewBox="0 0 24 24"><use href="#ic-shield"/></svg></span>
+          <h3>クラウド推進</h3><h4>CCoE・教育の推進者</h4>
+          <p>企業でクラウドの利活用やセキュリティ教育を進めている人。</p>
+        </article>
+        <article class="tc-panel cut-panel ask-card">
+          <span class="number-dot">3</span><span class="line-icon"><svg viewBox="0 0 24 24"><use href="#ic-chat"/></svg></span>
+          <h3>壁打ち</h3><h4>壁打ちしたい 2 つの問い</h4>
+          <p><b>1</b> <strong>ライセンス:</strong> いまは Apache 2.0。<br>AGPL にすべき？<br><b>2</b> <strong>課金:</strong> 実クラウドを誰でも使えると費用が読めない。どう値付けする？</p>
+        </article>
       </div>
+
+      <footer class="tc-callout handshake">
+        <span class="cal-icon"><svg viewBox="0 0 24 24"><use href="#ic-handshake"/></svg></span>
+        <p>ピンと来たら、ぜひ <strong class="contact-callout">声をかけてください。</strong></p>
+      </footer>
     </div>
   </section>
 
-  <!-- 09 ─ Thank you -->
-  <section class="slide">
-    <div class="stage">
-      <canvas class="ink-bg" width="320" height="180" aria-hidden="true"></canvas>
-      <div class="s9">
-        <div class="topbar">
-          <div class="sec-no"><b>09</b><span>Thank you</span></div>
-          <div class="wordmark"><svg class="tc-mark"><use href="#tc-icon"/></svg>TenkaCloud</div>
+  <!-- ════════════ 09 ════════════ -->
+  <section class="slide" aria-labelledby="s9">
+    <div class="canvas slide-shell bg-center final-slide">
+      <header class="slide-top">
+        <div class="slide-label"><span class="slide-no">09</span><span>Thank you</span></div>
+        <div class="aws-mark" aria-label="AWS">aws<span></span></div>
+      </header>
+
+      <div class="thanks-layout">
+        <h2 id="s9" class="thanks-title"><span class="brush">ありがとうございました。</span></h2>
+        <p class="thanks-lead">触ってみてください。問題も、コードも、すべて <strong>OSS</strong>。</p>
+        <div class="cta-grid">
+          <a class="tc-panel cut-panel cta-card" href="https://github.com/susumutomita/TenkaCloud">
+            <span class="cta-badge"><span class="cta-ic"><svg viewBox="0 0 24 24"><use href="#ic-github"/></svg></span></span><h3>Repository</h3>
+            <span class="cta-access"><span class="cta-qr"><svg viewBox="0 0 24 24"><use href="#qr-glyph"/></svg></span><span class="cta-url">github.com/susumutomita/TenkaCloud</span></span>
+            <p>ソースコード・サンプルは<br>こちらから。</p>
+          </a>
+          <a class="tc-panel cut-panel cta-card" href="https://github.com/susumutomita/TenkaCloudChallenge">
+            <span class="cta-badge"><span class="cta-ic"><svg viewBox="0 0 24 24"><use href="#ic-question"/></svg></span></span><h3>問題 <span>(Problems)</span></h3>
+            <span class="cta-access"><span class="cta-qr"><svg viewBox="0 0 24 24"><use href="#qr-glyph"/></svg></span><span class="cta-url">github.com/susumutomita/TenkaCloudChallenge</span></span>
+            <p>本日出題した問題に<br>チャレンジできます。</p>
+          </a>
+          <a class="tc-panel cut-panel cta-card" href="https://susumutomita.github.io/TenkaCloud/?lang=ja">
+            <span class="cta-badge"><span class="cta-ic"><svg viewBox="0 0 24 24"><use href="#ic-globe"/></svg></span></span><h3>Landing</h3>
+            <span class="cta-access"><span class="cta-qr"><svg viewBox="0 0 24 24"><use href="#qr-glyph"/></svg></span><span class="cta-url">susumutomita.github.io/TenkaCloud</span></span>
+            <p>TenkaCloud の詳細・<br>最新情報はこちら。</p>
+          </a>
         </div>
-        <div class="s9-mid">
-          <h1 class="brush-gold">ありがとうございました。</h1>
-          <p class="sub">触ってみてください。問題も、コードも、すべて <em>OSS</em>。</p>
-          <div class="s9-grid">
-            <div class="panel s9-card">
-              <h3>Repository</h3>
-              <div class="qr-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAB7ElEQVRoge2aMdLCQAiFcSwsPUKOkqPFo+UoOUJKC0d+eJDN+s/YZCTVoxHdz8YnsEBEaMdM01bzp+X2tpf7S2TU56U/InYQe+BXHterGgZXDZPBsO2IWD02mB7hi5hY04yzRS79EbFzsKu9LIGZbiEWsbOxFj1yR7oi9hsMR1ABHz8iLL4nLmIFWFrUBcSCVWedhy9FnFgF1pl98pTAXCz5YsR+j4UedjFSDxlXKOuCmm4LdCNWjskEDgpZyBjb9wseLZHIiB3C/Kd336VAI2Bfa7EwtGRErBSLf72JZRgagWjHxgVneywQq8Ts9i+owy93b+6t0QgAw5eJVWMeIu8mnHfCmbhgH/mNWBm2NQUuFvqFvJl6IIm/T02JHcTC904YJWKKsGgqZEYiVozZbSiKwdQG0FYXbriCdmIRK8UglvhoAlPQAPcS0c+RiFVhXgxyDeAGLAZEWaiFWD2WN9W4I73baEI1Ksue34gdwVKFFgCYOcR7xQJgJVaNNbvqthFwd46mOFhi1ZhqJ4v3BBNGE+O+l4ERq8VCIS/B26wIPZhuA6I9sogVYlAkHofQwGIW3SQk9iPM68JjWwG7OHCJnYxJrgG0s1mI1WOZkeJpE1/Ex0bg33aMWCmWtn40xfHkVd+OEavEaEfsD4sRioJ6DHi7AAAAAElFTkSuQmCC" alt="Repository QR" /><span>github.com/susumutomita/TenkaCloud</span></div>
-              <p>ソースコード・サンプルはこちらから。</p>
-            </div>
-            <div class="panel s9-card">
-              <h3>問題（Problems）</h3>
-              <div class="qr-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAB6klEQVRoge2aPZKDMAyFlUlBmSNwFI4GR+MoHIEyRSZa+ck2ZtktwkRUT0Vw8EfDi34dEdo502yrLaf+mW49XiKDPm/NFrGz2IS3PKx3u7FgqYZJb1jZIhaP9baPtV1NrHHG3iK3ZovYRZiJNUn3Tthds1jErsYEfpI+HwhXxL6D1Ygk49KZFOWJ/wIXsQAsW8aSL1h21rn/J4kTi8B21iMvPF5SvOdvI/ZtzPWwwqhazgtqui3QjdhFGNapX0jRqukXkre0gYvYh1g2lKBTWo2q1Rf638GIWAymqIZ0RmG04ImEDVhK6wvEArFcjibKGoF0Wb0RAGZbQiwcMxexG4qUPGoTuGBb4CIWiVU/gct0ZQ/ZWaCja0rsHOa+sP3qx5QXVKsKu4hELAgzewvCkD8Bs7zQoQTdNCUWiaE8RfWvPgV1cKkposyRiMVikOwleQoKscRHE0jUQuwCTEvgGhfZRhOq3j8c4xuxjzB734eZQ/6Ow7CVWDRWrUQkX87eFDtLLBorEtUj4BGjiWE7l4ERi8UmXDAg0lQYeTYetA6I9sc3xGIwKNIcAefRRJVwFmLfwHz8UI+A8/KgArFQzKv/yd1is4OmxAKwHJFQ8nsj4JXq/tiLWCiWrYlWEC/986ptx4hFYrQz9gOxc+0of0Kz7AAAAABJRU5ErkJggg==" alt="Problems QR" /><span>github.com/susumutomita/TenkaCloudChallenge</span></div>
-              <p>本日出題した問題にチャレンジできます。</p>
-            </div>
-            <div class="panel s9-card">
-              <h3>Landing</h3>
-              <div class="qr-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAB8klEQVRoge2aPZLDMAiFyaRImSP4KD6afTQfxUdwmSITFh6SrP2dWW/INo8ika3PTV4AARahHTMttuHq8hAZ48bt1G8RO4jN2B+3s8q0yknnUe+iy2BY3SKWjw2mR6wh1gRxRher2yL2GuxsX+sFLmK6mRH7BwxL+Mn1/qOmxH6FtYhkS/iCRaSiwpeBi1gCVizygmPLteaFukUsG+vMbz3a8ibfGLHnY6FHHE8RqHQR022Ebit0I5aPIVqFTRrpw+GSqGWPb8SOYCi8xE//UQhgr0akFoyIZWMWhuIPH4otzQEm1d5liGViN//cqm4RkeKJ1bwnlsRSMTffc4UsL5QzUtQLXeAilowNVayiUK0XPohF7AgWPz3CTrhFwfxhGZAiiKVjXoPV/sPUdX4c6zUllomVLpB4MpiiBvPgVCYC/kTfRyKWhiFw+WlI1+hFn9VPqhLLJhaxXMzqBXRIQ6yYy7ThQItvxA5hUstfhc2j7oYBwEYsG2vmvWhMBIAtkZ1Vib0C62RxuDSg+7kMjFguNuNrhMvsE4HoReOkWj2LWCYGRcrrEBcfkaE1MVQJ97KC2J8w3Ts/JojUQmDciL0QsyskapxGd/ukKbEErESkePOq9KK9KDbd3o29iCVixfA6xBDiYPgo3yVxYs/HaEfsDVhQ7PCswbcOAAAAAElFTkSuQmCC" alt="Landing QR" /><span>susumutomita.github.io/TenkaCloud</span></div>
-              <p>TenkaCloud の詳細・最新情報はこちら。</p>
-            </div>
-          </div>
-        </div>
-        <div class="gold-band"><span class="trophy">🏆</span><span>ともに、クラウドで<span class="brush-gold">天下をつかみましょう。</span></span></div>
+        <p class="closing-line"><span class="closing-rule" aria-hidden="true"></span>ともに、クラウドで天下をつかみましょう。<span class="closing-rule" aria-hidden="true"></span></p>
       </div>
     </div>
   </section>
-
 </main>
 
 <script>
-  /* 墨流し背景 — Stam の stable fluids を 1 インスタンス回し、表示中スライドの
-     .ink-bg canvas にだけ blit する。ポインタ移動で藍・金の墨を注入し、墨は流体的に
-     混ざりながら毎フレーム減衰して消える。墨が無くなるとループは眠り、約 7 秒ごとの
-     微小な自動滴下で再起床する（タブ非表示中は停止、prefers-reduced-motion は静的描画のみ） */
-  (function () {
-    var canvases = Array.prototype.slice.call(document.querySelectorAll(".ink-bg"));
-    if (!canvases.length || !canvases[0].getContext) return;
-    var deckEl = document.getElementById("deck");
-    var slideEls = Array.prototype.slice.call(deckEl.querySelectorAll(".slide"));
+(function () {
+  "use strict";
 
-    var N = 96, SIZE = (N + 2) * (N + 2);
-    function IX(i, j) { return i + (N + 2) * j; }
-    var u = new Float32Array(SIZE), v = new Float32Array(SIZE);
-    var uF = new Float32Array(SIZE), vF = new Float32Array(SIZE);
-    var tA = new Float32Array(SIZE), tB = new Float32Array(SIZE);
-    // 3 顔料チャネル: 藍 / 金 / 月白 — 加算発光で混色する
-    var INKS = [
-      { a: new Float32Array(SIZE), s: new Float32Array(SIZE), c: [90, 162, 255] },
-      { a: new Float32Array(SIZE), s: new Float32Array(SIZE), c: [246, 202, 70] },
-      { a: new Float32Array(SIZE), s: new Float32Array(SIZE), c: [214, 231, 255] }
-    ];
-    var DT = 0.18, VISC = 0.00003, ITER = 8, DISS = 0.992;
+  /* ── deck navigation: keyboard + progress + counter ───────────────── */
+  var deck = document.getElementById("deck");
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  var progress = document.getElementById("progress");
+  var counter = document.getElementById("counter");
+  var total = slides.length;
 
-    function setBnd(b, x) {
-      for (var i = 1; i <= N; i++) {
-        x[IX(0, i)] = b === 1 ? -x[IX(1, i)] : x[IX(1, i)];
-        x[IX(N + 1, i)] = b === 1 ? -x[IX(N, i)] : x[IX(N, i)];
-        x[IX(i, 0)] = b === 2 ? -x[IX(i, 1)] : x[IX(i, 1)];
-        x[IX(i, N + 1)] = b === 2 ? -x[IX(i, N)] : x[IX(i, N)];
-      }
-      x[IX(0, 0)] = 0.5 * (x[IX(1, 0)] + x[IX(0, 1)]);
-      x[IX(0, N + 1)] = 0.5 * (x[IX(1, N + 1)] + x[IX(0, N)]);
-      x[IX(N + 1, 0)] = 0.5 * (x[IX(N, 0)] + x[IX(N + 1, 1)]);
-      x[IX(N + 1, N + 1)] = 0.5 * (x[IX(N, N + 1)] + x[IX(N + 1, N)]);
+  function current() {
+    var idx = 0, best = Infinity;
+    for (var i = 0; i < slides.length; i++) {
+      var d = Math.abs(slides[i].getBoundingClientRect().top);
+      if (d < best) { best = d; idx = i; }
     }
-    function linSolve(b, x, x0, a, c) {
-      var cR = 1 / c;
-      for (var k = 0; k < ITER; k++) {
-        for (var j = 1; j <= N; j++) for (var i = 1; i <= N; i++) {
-          x[IX(i, j)] = (x0[IX(i, j)] + a * (x[IX(i - 1, j)] + x[IX(i + 1, j)] + x[IX(i, j - 1)] + x[IX(i, j + 1)])) * cR;
-        }
-        setBnd(b, x);
-      }
-    }
-    function advect(b, d, d0, uu, vv) {
-      var dt0 = DT * N;
-      for (var j = 1; j <= N; j++) for (var i = 1; i <= N; i++) {
-        var x = i - dt0 * uu[IX(i, j)], y = j - dt0 * vv[IX(i, j)];
-        if (x < 0.5) x = 0.5; if (x > N + 0.5) x = N + 0.5;
-        if (y < 0.5) y = 0.5; if (y > N + 0.5) y = N + 0.5;
-        var i0 = x | 0, j0 = y | 0, s1 = x - i0, t1 = y - j0, s0 = 1 - s1, t0 = 1 - t1;
-        d[IX(i, j)] = s0 * (t0 * d0[IX(i0, j0)] + t1 * d0[IX(i0, j0 + 1)]) +
-                      s1 * (t0 * d0[IX(i0 + 1, j0)] + t1 * d0[IX(i0 + 1, j0 + 1)]);
-      }
-      setBnd(b, d);
-    }
-    function project() {
-      for (var j = 1; j <= N; j++) for (var i = 1; i <= N; i++) {
-        tB[IX(i, j)] = -0.5 * (u[IX(i + 1, j)] - u[IX(i - 1, j)] + v[IX(i, j + 1)] - v[IX(i, j - 1)]) / N;
-        tA[IX(i, j)] = 0;
-      }
-      setBnd(0, tB); setBnd(0, tA);
-      linSolve(0, tA, tB, 1, 4);
-      for (var jj = 1; jj <= N; jj++) for (var ii = 1; ii <= N; ii++) {
-        u[IX(ii, jj)] -= 0.5 * N * (tA[IX(ii + 1, jj)] - tA[IX(ii - 1, jj)]);
-        v[IX(ii, jj)] -= 0.5 * N * (tA[IX(ii, jj + 1)] - tA[IX(ii, jj - 1)]);
-      }
-      setBnd(1, u); setBnd(2, v);
-    }
-    var mass = 0;
-    function step() {
-      var i;
-      for (i = 0; i < SIZE; i++) { u[i] += DT * uF[i]; v[i] += DT * vF[i]; }
-      uF.fill(0); vF.fill(0);
-      tA.set(u); linSolve(1, u, tA, DT * VISC * N * N, 1 + 4 * DT * VISC * N * N);
-      tB.set(v); linSolve(2, v, tB, DT * VISC * N * N, 1 + 4 * DT * VISC * N * N);
-      project();
-      tA.set(u); tB.set(v);
-      advect(1, u, tA, tA, tB);
-      advect(2, v, tB, tA, tB);
-      project();
-      mass = 0;
-      for (var k = 0; k < INKS.length; k++) {
-        var ink = INKS[k];
-        for (i = 0; i < SIZE; i++) ink.a[i] += DT * ink.s[i];
-        ink.s.fill(0);
-        tA.set(ink.a);
-        advect(0, ink.a, tA, u, v);
-        for (i = 0; i < SIZE; i++) {
-          var av = ink.a[i] * DISS;
-          if (av > 4) av = 4;
-          ink.a[i] = av; mass += av;
-        }
-      }
-    }
+    return idx;
+  }
+  function update() {
+    var i = current();
+    counter.textContent = (i + 1) + " / " + total;
+    progress.style.width = (total > 1 ? (i / (total - 1)) * 100 : 100) + "%";
+  }
+  function go(i) {
+    i = Math.max(0, Math.min(total - 1, i));
+    slides[i].scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  deck.addEventListener("scroll", function () { window.requestAnimationFrame(update); }, { passive: true });
 
-    var off = document.createElement("canvas");
-    off.width = N; off.height = N;
-    var octx = off.getContext("2d");
-    var img = octx.createImageData(N, N);
-    function paintOffscreen() {
-      var d = img.data, p = 0;
-      for (var j = 1; j <= N; j++) for (var i = 1; i <= N; i++) {
-        var idx = IX(i, j);
-        var a0 = INKS[0].a[idx], a1 = INKS[1].a[idx], a2 = INKS[2].a[idx];
-        var t = a0 + a1 + a2;
-        if (t > 0.001) {
-          var inv = 1 / t;
-          d[p] = (a0 * INKS[0].c[0] + a1 * INKS[1].c[0] + a2 * INKS[2].c[0]) * inv;
-          d[p + 1] = (a0 * INKS[0].c[1] + a1 * INKS[1].c[1] + a2 * INKS[2].c[1]) * inv;
-          d[p + 2] = (a0 * INKS[0].c[2] + a1 * INKS[1].c[2] + a2 * INKS[2].c[2]) * inv;
-          var al = t * 0.55; if (al > 0.62) al = 0.62;
-          d[p + 3] = al * 255;
-        } else { d[p + 3] = 0; }
-        p += 4;
-      }
-      octx.putImageData(img, 0, 0);
+  document.addEventListener("keydown", function (e) {
+    var k = e.key;
+    if (k === "ArrowRight" || k === "ArrowDown" || k === "PageDown" || k === " " || k === "Spacebar") {
+      e.preventDefault(); go(current() + 1);
+    } else if (k === "ArrowLeft" || k === "ArrowUp" || k === "PageUp") {
+      e.preventDefault(); go(current() - 1);
+    } else if (k === "Home") {
+      e.preventDefault(); go(0);
+    } else if (k === "End") {
+      e.preventDefault(); go(total - 1);
     }
-    function activeCanvas() {
-      var i = Math.max(0, Math.min(slideEls.length - 1, Math.round(deckEl.scrollTop / deckEl.clientHeight)));
-      return slideEls[i].querySelector(".ink-bg");
-    }
-    function blit(target) {
-      var ctx = target.getContext("2d");
-      ctx.clearRect(0, 0, target.width, target.height);
-      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(off, 0, 0, N, N, 0, 0, target.width, target.height);
-    }
+  });
 
-    var inkRotation = 0;
-    function inject(gx, gy, dgx, dgy, amount, r) {
-      // 金は差し色 — 3 回に 1 回だけ。残りは藍と月白を交互に
-      var ink = INKS[inkRotation % 3 === 2 ? 1 : (inkRotation % 2)];
-      inkRotation++;
-      var cx = (gx | 0) + 1, cy = (gy | 0) + 1, r2 = r * r;
-      for (var jj = -r; jj <= r; jj++) for (var ii = -r; ii <= r; ii++) {
-        var x = cx + ii, y = cy + jj;
-        if (x < 1 || x > N || y < 1 || y > N) continue;
-        var d2 = ii * ii + jj * jj;
-        if (d2 > r2) continue;
-        var f = Math.exp(-d2 / (r2 + 0.001)), idx = IX(x, y);
-        uF[idx] += dgx * 14 * f; vF[idx] += dgy * 14 * f;
-        ink.s[idx] += amount * f;
-      }
-    }
-
-    var running = false, idleFrames = 0;
-    function frame() {
-      step();
-      paintOffscreen();
-      var target = activeCanvas();
-      if (target) blit(target);
-      if (mass < 14 && ++idleFrames > 90) { running = false; return; }
-      requestAnimationFrame(frame);
-    }
-    function wake() {
-      idleFrames = 0;
-      if (!running) { running = true; requestAnimationFrame(frame); }
-    }
-
-    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    function seed(strength) {
-      for (var i = 0; i < 5; i++) {
-        inject(8 + Math.random() * (N - 16), 8 + Math.random() * (N - 16),
-          (Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.6, strength, 5);
-      }
-    }
-    if (reduce) {
-      // 静的な一枚絵: 数滴落として少しだけ攪拌し、全 canvas に一度だけ描く
-      seed(2.2);
-      for (var s = 0; s < 50; s++) step();
-      paintOffscreen();
-      canvases.forEach(blit);
-      return;
-    }
-
-    seed(2.6);
-    wake();
-
-    setInterval(function () {
-      if (document.visibilityState !== "visible") return;
-      inject(8 + Math.random() * (N - 16), 8 + Math.random() * (N - 16),
-        (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 1.2, 1.5, 4);
-      wake();
-    }, 7000);
-
-    var lx = null, ly = null;
-    window.addEventListener("pointermove", function (e) {
-      var target = activeCanvas();
-      if (!target) return;
-      var rect = target.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;
-      var gx = (e.clientX - rect.left) / rect.width * N;
-      var gy = (e.clientY - rect.top) / rect.height * N;
-      if (gx < 0 || gx > N || gy < 0 || gy > N) { lx = null; return; }
-      var dgx = 0, dgy = 0;
-      if (lx !== null) {
-        dgx = (e.clientX - lx) / rect.width * N;
-        dgy = (e.clientY - ly) / rect.height * N;
-        if (dgx * dgx + dgy * dgy < 0.04) return;
-      }
-      lx = e.clientX; ly = e.clientY;
-      inject(gx, gy, dgx, dgy, 0.9, 3);
-      wake();
-    }, { passive: true });
-    deckEl.addEventListener("scroll", function () {
-      var target = activeCanvas();
-      if (target && !running) blit(target);
-    }, { passive: true });
-    document.addEventListener("visibilitychange", function () {
-      if (document.visibilityState === "visible" && mass >= 14) wake();
+  /* ── fit the 1280x720 stage into the viewport ─────────────────────── */
+  function fit() {
+    var sc = Math.min(window.innerWidth / 1280, window.innerHeight / 720, 1);
+    document.querySelectorAll(".canvas").forEach(function (c) {
+      c.style.setProperty("--fit", sc.toFixed(4));
     });
-  })();
+    update();
+  }
+  window.addEventListener("resize", fit);
+  fit();
 
-  /* deck mechanics: scroll-snap + keys + progress + 16:9 fit */
-  (function () {
-    var deck = document.getElementById("deck");
-    var slides = Array.prototype.slice.call(deck.querySelectorAll(".slide"));
-    var progress = document.getElementById("progress");
-    var counter = document.getElementById("counter");
-    function current() {
-      return Math.max(0, Math.min(slides.length - 1, Math.round(deck.scrollTop / deck.clientHeight)));
-    }
-    function paint() {
-      var i = current();
-      counter.textContent = (i + 1) + " / " + slides.length;
-      progress.style.width = (slides.length > 1 ? (i / (slides.length - 1)) * 100 : 100) + "%";
-    }
-    function go(i) { slides[Math.max(0, Math.min(slides.length - 1, i))].scrollIntoView({ behavior:"smooth" }); }
-    deck.addEventListener("scroll", paint, { passive:true });
-    window.addEventListener("keydown", function (event) {
-      if (["ArrowDown","ArrowRight","PageDown"," "].indexOf(event.key) > -1) { event.preventDefault(); go(current() + 1); }
-      else if (["ArrowUp","ArrowLeft","PageUp"].indexOf(event.key) > -1) { event.preventDefault(); go(current() - 1); }
-      else if (event.key === "Home") { event.preventDefault(); go(0); }
-      else if (event.key === "End") { event.preventDefault(); go(slides.length - 1); }
-      else if (event.key === "f" || event.key === "F") {
-        if (document.fullscreenElement) document.exitFullscreen();
-        else document.documentElement.requestFullscreen();
-      }
-    });
-    function fit(){
-      var s = Math.min(window.innerWidth / 1280, window.innerHeight / 720) * 0.99;
-      document.documentElement.style.setProperty("--fit", String(s));
-    }
-    window.addEventListener("resize", fit, { passive:true });
-    fit();
-    paint();
-  })();
-
-  /* live StackStack leaderboard (slide 04) — Cloudscape-style table */
-  (function () {
-    var board = document.getElementById("tcBoard");
-    if (!board) return;
-
-    var TOTAL = 5;
+  /* ── slide 04 live scoreboard (polling-style tick, no SSE) ────────── */
+  var board = document.getElementById("tcBoard");
+  if (board) {
     var teams = [
-      { n:"team-shogun",     s:8420, done:3, me:true },
-      { n:"team-honnoji",    s:8180, done:3 },
-      { n:"team-sekigahara", s:7960, done:2 },
-      { n:"team-osaka",      s:7640, done:2 }
+      { name: "team-ronin",  score: 4210, prog: "5/5", me: false },
+      { name: "team-shogun", score: 3980, prog: "4/5", me: true },
+      { name: "team-kaiju",  score: 3460, prog: "4/5", me: false },
+      { name: "team-tengu",  score: 2980, prog: "3/5", me: false }
+    ];
+    var clockEl = document.getElementById("tcClock");
+    var incEl = document.getElementById("tcIncident");
+    var scoreEl = document.getElementById("csScore");
+    var rankEl = document.getElementById("csRank");
+    var notifEl = document.getElementById("tcNotif");
+    var remaining = 718; // 11:58
+    var tick = 0;
+
+    var incidents = [
+      { at: 3, fire: "⚠ DB DELETE インシデント発生", ok: "✔ 復旧 +120pt" },
+      { at: 7, fire: "⚠ サイト改ざん検知", ok: "✔ 切り戻し +90pt" },
+      { at: 11, fire: "⚠ 攻撃プローブ流入", ok: "✔ 遮断 +110pt" }
     ];
 
-    var rowByName = {};
-    teams.forEach(function (t) {
-      var el = document.createElement("div");
-      el.className = "cs-row" + (t.me ? " mine" : "");
-      el.innerHTML =
-        '<span class="cs-rk' + (t.me ? " me" : "") + '"></span>' +
-        '<span class="cs-tm' + (t.me ? " me" : "") + '"></span>' +
-        '<span class="cs-sc"></span>' +
-        '<span class="cs-pg"></span>';
-      board.appendChild(el);
-      rowByName[t.n] = el;
-    });
-
-    var elScore = document.getElementById("csScore");
-    var elRank = document.getElementById("csRank");
-
-    function render(hit) {
-      var sorted = teams.slice().sort(function (a, b) { return b.s - a.s; });
-      sorted.forEach(function (t, i) {
-        var el = rowByName[t.n];
-        el.querySelector(".cs-rk").textContent = "#" + (i + 1);
-        el.querySelector(".cs-tm").innerHTML = t.n + (t.me ? ' <span class="cs-you">(You)</span>' : "");
-        el.querySelector(".cs-sc").textContent = t.s.toLocaleString() + " pt";
-        el.querySelector(".cs-pg").textContent = t.done + " / " + TOTAL;
-        board.appendChild(el);
-        if (t.n === hit) { el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    function fmt(s) {
+      return pad(Math.floor(s / 3600)) + ":" + pad(Math.floor((s % 3600) / 60)) + ":" + pad(s % 60);
+    }
+    function render(flashName) {
+      var sorted = teams.slice().sort(function (a, b) { return b.score - a.score; });
+      var html = "";
+      for (var i = 0; i < sorted.length; i++) {
+        var t = sorted[i];
+        var medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
+        var cls = "cs-row" + (t.me ? " mine" : "") + (t.name === flashName ? " flash" : "");
+        html += '<div class="' + cls + '">' +
+          '<span class="cs-rk' + (t.me ? " me" : "") + '">' + medal + '</span>' +
+          '<span class="cs-tm' + (t.me ? " me" : "") + '">' + t.name + (t.me ? ' <span class="cs-you">(YOU)</span>' : "") + '</span>' +
+          '<span class="cs-sc">' + t.score.toLocaleString("en-US") + ' pt</span>' +
+          '<span class="cs-pg">' + t.prog + '</span>' +
+          '</div>';
         if (t.me) {
-          if (elScore) elScore.textContent = t.s.toLocaleString();
-          if (elRank) elRank.textContent = (i + 1) + "/" + teams.length;
+          scoreEl.textContent = t.score.toLocaleString("en-US");
+          scoreEl.parentElement.classList.add("flash");
+          rankEl.textContent = (i + 1) + "/" + sorted.length;
+          window.setTimeout(function () { scoreEl.parentElement.classList.remove("flash"); }, 700);
         }
-      });
+      }
+      board.innerHTML = html;
     }
-
     render(null);
-    setInterval(function () {
-      var i = Math.floor(Math.random() * teams.length);
-      teams[i].s += 40 + Math.floor(Math.random() * 220);
-      if (Math.random() < 0.25 && teams[i].done < TOTAL) teams[i].done++;
-      render(teams[i].n);
-    }, 1500);
 
-    var clock = document.getElementById("tcClock");
-    var left = 11 * 60 + 58;
-    if (clock) {
-      setInterval(function () {
-        if (left > 0) left--;
-        var h = Math.floor(left / 3600), m = Math.floor((left % 3600) / 60), s = left % 60;
-        clock.textContent = (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
-      }, 1000);
-    }
+    window.setInterval(function () {
+      tick++;
+      remaining = Math.max(0, remaining - 60);
+      clockEl.textContent = fmt(remaining);
 
-    var incidents = ["ai-wipes-database", "auth-setting-removed", "vibe-app-stopped", "site-defaced", "supply-chain-backdoor"];
-    var inc = document.getElementById("tcIncident");
-    var notif = document.getElementById("tcNotif");
-    var ix = 0, notifN = 2;
-    function fireIncident() {
-      var name = incidents[ix % incidents.length]; ix++;
-      if (inc) { inc.className = "cs-incident fire show"; inc.textContent = "⚠ " + name + " 発生"; }
-      if (notif) { notifN++; notif.textContent = notifN; notif.classList.remove("flash"); void notif.offsetWidth; notif.classList.add("flash"); }
-      setTimeout(function () { if (inc) { inc.className = "cs-incident ok show"; inc.textContent = "✓ " + name + " 復旧"; } }, 2600);
-      setTimeout(function () { if (inc) { inc.classList.remove("show"); } }, 3900);
-    }
-    setTimeout(fireIncident, 1200);
-    setInterval(fireIncident, 5000);
+      var flashName = null;
+      for (var i = 0; i < teams.length; i++) {
+        var gain = 60 + Math.round(Math.random() * 90);
+        if (teams[i].me) { gain += 25; flashName = teams[i].name; }
+        teams[i].score += gain;
+      }
 
-    var loopSteps = document.querySelectorAll(".battle-loop .bl-step");
-    var loopArrs = document.querySelectorAll(".battle-loop .bl-arr");
-    if (loopSteps.length) {
-      var li = 0;
-      setInterval(function () {
-        loopSteps.forEach(function (el, idx) { el.classList.toggle("active", idx === li); });
-        loopArrs.forEach(function (el, idx) { el.classList.toggle("on", idx === li); });
-        li = (li + 1) % loopSteps.length;
-      }, 1500);
-    }
-  })();
+      var inc = null;
+      for (var j = 0; j < incidents.length; j++) {
+        if (incidents[j].at === tick) { inc = incidents[j]; break; }
+      }
+      if (inc) {
+        (function (cur) {
+          incEl.textContent = cur.fire;
+          incEl.className = "cs-incident show fire";
+          var notif = (parseInt(notifEl.textContent, 10) || 0) + 1;
+          notifEl.textContent = notif;
+          notifEl.classList.add("flash");
+          window.setTimeout(function () { notifEl.classList.remove("flash"); }, 600);
+          window.setTimeout(function () { incEl.textContent = cur.ok; incEl.className = "cs-incident show ok"; }, 1800);
+          window.setTimeout(function () { incEl.className = "cs-incident"; }, 4200);
+        })(inc);
+      }
+
+      render(flashName);
+    }, 2600);
+  }
+
+  update();
+})();
 </script>
 </body>
 </html>
