@@ -24,18 +24,47 @@ const REPO_ROOT = resolve(import.meta.dir, "..");
 /** 共通 HTML テンプレ。1 ファイル 1 ページ、自己完結 (= 外部 CSS / JS なし)。 */
 function template({
   title,
+  description,
+  lang,
+  canonicalUrl,
+  imageUrl,
   bodyHtml,
   sourcePath,
 }: {
   title: string;
+  description: string;
+  lang: "en" | "ja";
+  canonicalUrl: string;
+  imageUrl: string;
   bodyHtml: string;
   sourcePath: string;
 }): string {
   return `<!DOCTYPE html>
-<html lang="ja">
+<html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <title>${escapeHtml(title)}</title>
+<meta name="description" content="${escapeHtml(description)}">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="${escapeHtml(canonicalUrl)}">
+<meta property="og:title" content="${escapeHtml(title)}">
+<meta property="og:description" content="${escapeHtml(description)}">
+<meta property="og:type" content="article">
+<meta property="og:url" content="${escapeHtml(canonicalUrl)}">
+<meta property="og:site_name" content="TenkaCloud">
+<meta property="og:locale" content="${lang === "ja" ? "ja_JP" : "en_US"}">
+<meta property="og:image" content="${escapeHtml(imageUrl)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${escapeHtml(title)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escapeHtml(title)}">
+<meta name="twitter:description" content="${escapeHtml(description)}">
+<meta name="twitter:image" content="${escapeHtml(imageUrl)}">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="https://susumutomita.github.io/TenkaCloud/assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="https://susumutomita.github.io/TenkaCloud/assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="https://susumutomita.github.io/TenkaCloud/assets/apple-touch-icon.png">
 <style>
   :root {
     --c-text: #1f2328;
@@ -116,15 +145,92 @@ function extractTitle(md: string, fallback: string): string {
   return m?.[1] ?? fallback;
 }
 
+function detectLanguage(mdPath: string, md: string): "en" | "ja" {
+  if (mdPath.endsWith(".ja.md")) {
+    return "ja";
+  }
+  const sample = md.slice(0, 4000);
+  const jaChars = (sample.match(/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/gu) ?? [])
+    .length;
+  const latinChars = (sample.match(/[A-Za-z]/g) ?? []).length;
+  return jaChars >= 40 && jaChars / Math.max(jaChars + latinChars, 1) > 0.18 ? "ja" : "en";
+}
+
+function stripMarkdownInline(s: string): string {
+  return s
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/[*_~>#]/g, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractDescription(md: string, title: string): string {
+  let inFence = false;
+  const paragraphs: string[] = [];
+  let current: string[] = [];
+
+  for (const line of md.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence || trimmed.startsWith("#")) {
+      continue;
+    }
+    if (
+      trimmed === "" ||
+      trimmed.startsWith("|") ||
+      trimmed.startsWith(">") ||
+      trimmed.startsWith("- ") ||
+      /^\d+\.\s/.test(trimmed)
+    ) {
+      if (current.length > 0) {
+        paragraphs.push(current.join(" "));
+        current = [];
+      }
+      continue;
+    }
+    current.push(trimmed);
+  }
+  if (current.length > 0) {
+    paragraphs.push(current.join(" "));
+  }
+
+  const first = paragraphs.map(stripMarkdownInline).find((p) => p.length >= 40);
+  const description = first ?? `${title} — TenkaCloud documentation.`;
+  return description.length > 180 ? `${description.slice(0, 177).trimEnd()}...` : description;
+}
+
+function docsCanonicalUrl(htmlPath: string): string {
+  const htmlRel = relative(REPO_ROOT, htmlPath).replaceAll("\\", "/");
+  return `https://susumutomita.github.io/TenkaCloud/${htmlRel}`;
+}
+
 async function buildOne(mdPath: string): Promise<{ htmlPath: string; html: string }> {
   const md = readFileSync(mdPath, "utf8");
   const htmlPath = mdPath.replace(/\.md$/, ".html");
   const sourceRel = relative(REPO_ROOT, mdPath);
   const title = extractTitle(md, sourceRel);
+  const description = extractDescription(md, title);
+  const lang = detectLanguage(mdPath, md);
+  const canonicalUrl = docsCanonicalUrl(htmlPath);
+  const imageUrl = "https://susumutomita.github.io/TenkaCloud/assets/og-image.png";
   const bodyHtml = await marked.parse(md, { async: true });
   return {
     htmlPath,
-    html: template({ title, bodyHtml, sourcePath: sourceRel }),
+    html: template({
+      title,
+      description,
+      lang,
+      canonicalUrl,
+      imageUrl,
+      bodyHtml,
+      sourcePath: sourceRel,
+    }),
   };
 }
 

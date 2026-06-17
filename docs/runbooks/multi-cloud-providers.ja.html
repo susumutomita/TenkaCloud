@@ -3,6 +3,27 @@
 <head>
 <meta charset="utf-8">
 <title>マルチクラウド問題プロバイダ (Sakura / Azure / GCP)</title>
+<meta name="description" content="TenkaCloud の control plane は常に AWS 上で動く。個々の 問題 は aws/cloudformation 以外の runtime を宣言することで別クラウドを対象にできる。deploy worker はその provider 用の ProblemRuntimeAdapter を解決し、短命の認証情報を交換して、provid...">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://susumutomita.github.io/TenkaCloud/docs/runbooks/multi-cloud-providers.ja.html">
+<meta property="og:title" content="マルチクラウド問題プロバイダ (Sakura / Azure / GCP)">
+<meta property="og:description" content="TenkaCloud の control plane は常に AWS 上で動く。個々の 問題 は aws/cloudformation 以外の runtime を宣言することで別クラウドを対象にできる。deploy worker はその provider 用の ProblemRuntimeAdapter を解決し、短命の認証情報を交換して、provid...">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://susumutomita.github.io/TenkaCloud/docs/runbooks/multi-cloud-providers.ja.html">
+<meta property="og:site_name" content="TenkaCloud">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:image" content="https://susumutomita.github.io/TenkaCloud/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="マルチクラウド問題プロバイダ (Sakura / Azure / GCP)">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="マルチクラウド問題プロバイダ (Sakura / Azure / GCP)">
+<meta name="twitter:description" content="TenkaCloud の control plane は常に AWS 上で動く。個々の 問題 は aws/cloudformation 以外の runtime を宣言することで別クラウドを対象にできる。deploy worker はその provider 用の ProblemRuntimeAdapter を解決し、短命の認証情報を交換して、provid...">
+<meta name="twitter:image" content="https://susumutomita.github.io/TenkaCloud/assets/og-image.png">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="https://susumutomita.github.io/TenkaCloud/assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="https://susumutomita.github.io/TenkaCloud/assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="https://susumutomita.github.io/TenkaCloud/assets/apple-touch-icon.png">
 <style>
   :root {
     --c-text: #1f2328;
