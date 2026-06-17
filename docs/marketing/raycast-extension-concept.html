@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Raycast Extension Concept for TenkaCloud Event Operations</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>Raycast Extension Concept for TenkaCloud Event Operations</h1>
+<p>This concept keeps the first Raycast collaboration concrete without committing to implementation. The first version should help an event operator inspect TenkaCloud state quickly, then add write actions only after the read-only flow is proven useful.</p>
+<h2>User Story</h2>
+<p>As a TenkaCloud event operator, I want frequent event operations available from Raycast so I can run a GameDay or security exercise without switching constantly between the web console, CLI, Slack, and dashboards.</p>
+<h2>MVP Command List</h2>
+<p>Start with read-only and low-risk commands.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Phase</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>List active events</td>
+<td>MVP</td>
+<td>Show <code>READY</code>, <code>DEPLOYING</code>, and recent <code>DRAFT</code> events.</td>
+</tr>
+<tr>
+<td>Open event dashboard</td>
+<td>MVP</td>
+<td>Jump from Raycast to the application admin console event page.</td>
+</tr>
+<tr>
+<td>Show scoreboard</td>
+<td>MVP</td>
+<td>Show ranking and cumulative score trends from event detail data.</td>
+</tr>
+<tr>
+<td>List teams</td>
+<td>MVP</td>
+<td>Show team IDs, display names, and assigned AWS account IDs.</td>
+</tr>
+<tr>
+<td>Show team status</td>
+<td>MVP</td>
+<td>Show each team&#39;s deployment status by problem.</td>
+</tr>
+<tr>
+<td>Show recent audit logs</td>
+<td>MVP</td>
+<td>Show latest tenant audit rows for operator context.</td>
+</tr>
+<tr>
+<td>Show disruption catalog</td>
+<td>MVP</td>
+<td>Show available disruptions without firing them.</td>
+</tr>
+<tr>
+<td>Send announcement or hint</td>
+<td>Later action</td>
+<td>Use the existing event notification endpoint.</td>
+</tr>
+<tr>
+<td>Deploy challenge</td>
+<td>Later action</td>
+<td>Trigger event deploy for selected teams or problems.</td>
+</tr>
+<tr>
+<td>Inject failure or incident</td>
+<td>Later action</td>
+<td>Fire a declared disruption with explicit confirmation.</td>
+</tr>
+<tr>
+<td>Ask AI to summarize event state</td>
+<td>Later experiment</td>
+<td>Summarize read-only event, score, deployment, and audit data.</td>
+</tr>
+<tr>
+<td>Recommend next operator action</td>
+<td>Later experiment</td>
+<td>Suggest actions from status and audit signals.</td>
+</tr>
+</tbody></table>
+<h2>Endpoint Map</h2>
+<table>
+<thead>
+<tr>
+<th>Raycast command</th>
+<th>Existing TenkaCloud surface</th>
+<th>Permission</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>List active events</td>
+<td><code>GET /events</code></td>
+<td>Tenant Admin</td>
+<td>Client filters active statuses. No new endpoint needed.</td>
+</tr>
+<tr>
+<td>Open event dashboard</td>
+<td>Application admin URL <code>/events/:eventId</code></td>
+<td>Tenant Admin</td>
+<td>Requires runtime console base URL in Raycast settings.</td>
+</tr>
+<tr>
+<td>Show scoreboard</td>
+<td><code>GET /events/:eventId?withScoreEvents=true</code></td>
+<td>Tenant Admin</td>
+<td>Uses operator event detail. Participant <code>GET /portal/leaderboard</code> is not the right operator surface.</td>
+</tr>
+<tr>
+<td>List teams</td>
+<td><code>GET /events/:eventId</code></td>
+<td>Tenant Admin</td>
+<td><code>teams[]</code> already includes IDs, display names, and AWS account IDs.</td>
+</tr>
+<tr>
+<td>Show team status</td>
+<td><code>GET /events/:eventId</code> plus optional <code>GET /deployments/:jobId</code></td>
+<td>Tenant Admin</td>
+<td>Event detail has <code>deploymentsByProblem</code>; deployment detail adds stack outputs and failure reason.</td>
+</tr>
+<tr>
+<td>Show recent audit logs</td>
+<td><code>GET /admin/audit-log</code></td>
+<td>Tenant Admin</td>
+<td>Existing tenant-scoped audit reader. Add filters only after the MVP is useful.</td>
+</tr>
+<tr>
+<td>Show disruption catalog</td>
+<td><code>GET /events/:eventId/disruptions</code></td>
+<td>Tenant Admin</td>
+<td>Read-only catalog is safe for MVP.</td>
+</tr>
+<tr>
+<td>Send announcement or hint</td>
+<td><code>POST /events/:eventId/notifications</code></td>
+<td>Tenant Admin write</td>
+<td>Existing endpoint broadcasts event notification. Team-targeted hints are missing.</td>
+</tr>
+<tr>
+<td>Deploy challenge</td>
+<td><code>POST /events/:eventId/deploy</code></td>
+<td>Tenant Admin write</td>
+<td>Body already supports <code>teamIds</code>, <code>problemIds</code>, <code>retryFailedOnly</code>, and <code>forceRedeploy</code>.</td>
+</tr>
+<tr>
+<td>Inject failure or incident</td>
+<td><code>POST /events/:eventId/disruptions/fire</code></td>
+<td>Tenant Admin write</td>
+<td>Existing endpoint needs Raycast-side confirmation and idempotency key generation.</td>
+</tr>
+<tr>
+<td>Show disruption fire history</td>
+<td><code>GET /events/:eventId/disruptions/audit</code></td>
+<td>Tenant Admin</td>
+<td>Useful after the fire command exists.</td>
+</tr>
+<tr>
+<td>End or schedule event</td>
+<td><code>PATCH /events/:eventId/schedule</code>, <code>POST /events/:eventId/end</code></td>
+<td>Tenant Admin write</td>
+<td>Later action, not MVP.</td>
+</tr>
+<tr>
+<td>Lock or unlock scoring</td>
+<td><code>POST /events/:eventId/lock-scoring</code>, <code>DELETE /events/:eventId/lock-scoring</code></td>
+<td>Tenant Admin write</td>
+<td>Later action for award/finalization flow.</td>
+</tr>
+</tbody></table>
+<h2>Missing Endpoints</h2>
+<table>
+<thead>
+<tr>
+<th>Gap</th>
+<th>Why it matters</th>
+<th>Proposed follow-up</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Event templates</td>
+<td><code>POST /events</code> can create explicit events, but Raycast should not make operators type teams and problems from scratch.</td>
+<td>Add an event-template read API or keep template presets local in the extension MVP.</td>
+</tr>
+<tr>
+<td>Team-targeted hints</td>
+<td>Existing notification API broadcasts to the event. Some operations need one team or a subset.</td>
+<td>Add optional <code>targetTeamIds</code> to event notifications after UX review.</td>
+</tr>
+<tr>
+<td>Operator event summary</td>
+<td>AI summary has no current backend endpoint.</td>
+<td>Start extension-side using fetched read-only data; add a backend summary endpoint only if policy or data locality requires it.</td>
+</tr>
+<tr>
+<td>Next-action recommendation</td>
+<td>No current endpoint returns recommended actions.</td>
+<td>Start with rule-based extension recommendations, then evaluate AI summary.</td>
+</tr>
+<tr>
+<td>Raycast auth bootstrap</td>
+<td>Existing app uses Cognito Hosted UI in browser. Raycast needs a documented token flow.</td>
+<td>Define OAuth PKCE setup for Raycast or use a personal operator token only if a future security review approves it.</td>
+</tr>
+<tr>
+<td>Stable app deep links</td>
+<td>The extension needs the application admin console base URL.</td>
+<td>Store base URL in extension preferences or expose it through runtime config documentation.</td>
+</tr>
+</tbody></table>
+<h2>Permission Model</h2>
+<p>The MVP should use the same tenant-scoped Application Admin API as the application admin console. Read-only commands require a valid Tenant Admin token today. If subroles are added later, map read-only commands to <code>viewer</code> and write commands to <code>editor</code> or <code>operator</code>.</p>
+<p>System Admin permissions are not required for the MVP. Participant portal team login keys must not be used by the operator extension. Raycast should store only the minimum OAuth tokens needed for the operator account and should never store team login keys, AWS credentials, ExternalIds, or exported secrets.</p>
+<h2>Destructive Action Confirmation UX</h2>
+<p>Read-only commands can run immediately. Write actions must show a Raycast confirmation dialog before sending an API request.</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Confirmation requirement</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Send notification</td>
+<td>Preview title, body, severity, and target scope. Confirm once.</td>
+</tr>
+<tr>
+<td>Deploy or redeploy</td>
+<td>Show event name, selected teams, selected problems, and whether <code>forceRedeploy</code> is enabled. Require typed event name when force redeploy is enabled.</td>
+</tr>
+<tr>
+<td>Fire disruption</td>
+<td>Show disruption name, problem, scope, affected teams, timing, and parameters. Require typed event name for <code>all</code> or <code>random-n</code> scope.</td>
+</tr>
+<tr>
+<td>End event</td>
+<td>Show current status and end time. Require typed event name.</td>
+</tr>
+<tr>
+<td>Lock or unlock scoring</td>
+<td>Show whether scoring will stop or resume. Confirm once.</td>
+</tr>
+<tr>
+<td>Bulk teardown or archive</td>
+<td>Keep out of the MVP. If added later, require typed event name and a second irreversible-action confirmation.</td>
+</tr>
+</tbody></table>
+<p>Every write command should generate an idempotency key when the backend supports one, display the resulting audit ID when available, and offer a link back to the event dashboard.</p>
+<h2>AI Summary Decision</h2>
+<p>The MVP should not send event data to a third-party AI provider by default. If the Raycast extension experiments with AI summary, it should start as an explicit opt-in command that summarizes only data the operator has already fetched. A backend summary endpoint can come later if TenkaCloud needs centralized policy, auditability, or provider control.</p>
+<h2>Rough Raycast Extension README Draft</h2>
+<pre><code class="language-md"># TenkaCloud Operator
+
+Raycast commands for running TenkaCloud cloud and security exercises.
+
+## MVP Commands
+
+- List Active Events
+- Open Event Dashboard
+- Show Scoreboard
+- List Teams
+- Show Team Status
+- Show Recent Audit Logs
+- Show Disruption Catalog
+
+## Setup
+
+1. Set the Application Admin API base URL.
+2. Set the Application Admin Console base URL.
+3. Sign in with the TenkaCloud Tenant Admin account.
+4. Select a default event when running a command.
+
+## Safety
+
+The MVP is read-only. Write commands such as deploy, notification, and disruption fire are disabled until the operator action design is approved.
+
+## Later Commands
+
+- Send Announcement or Hint
+- Deploy Challenge
+- Fire Disruption
+- Summarize Event State with AI
+- Recommend Next Operator Action
+</code></pre>
+<h2>Follow-Up Issues To Create After Design Approval</h2>
+<p>These should be opened only after this design is accepted.</p>
+<table>
+<thead>
+<tr>
+<th>Issue title</th>
+<th>Scope</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>feat(raycast): scaffold TenkaCloud operator extension</code></td>
+<td>Create extension shell, preferences, auth placeholder, and read-only command structure.</td>
+</tr>
+<tr>
+<td><code>feat(raycast): add read-only event operations commands</code></td>
+<td>Implement list events, open dashboard, scoreboard, teams, team status, audit logs, and disruption catalog.</td>
+</tr>
+<tr>
+<td><code>feat(raycast): design operator write-action confirmations</code></td>
+<td>Implement reusable confirmation UX for notifications, deploy, and disruption fire without enabling hidden destructive shortcuts.</td>
+</tr>
+<tr>
+<td><code>feat(api): support team-targeted event notifications</code></td>
+<td>Extend event notifications only if the Raycast hint workflow needs team targeting.</td>
+</tr>
+<tr>
+<td><code>feat(raycast): add opt-in AI event summary</code></td>
+<td>Add explicit opt-in AI summary after privacy and provider policy are reviewed.</td>
+</tr>
+</tbody></table>
+
+<div class="doc-source">Source: <code>docs/marketing/raycast-extension-concept.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/marketing/raycast-extension-concept.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>
