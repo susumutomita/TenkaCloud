@@ -54,6 +54,12 @@ The checklist is split into three sessions because some items (budget alarm prov
 
 - [ ] [Dry run](./dry-run.md) date is fixed and on the calendar within the next 7 days, with a real test of the same problem catalog you will use at the event.
 
+### backup and restore posture
+
+- [ ] [backup and restore posture](./backup-restore.md) has been reviewed against the event type.
+- [ ] Paid events explicitly accept the current "retained DynamoDB tables, no PITR" posture, or are blocked on a user-owned infrastructure proposal before payment/sign-off.
+- [ ] Event run sheet records the Git commit, problem catalog SHA, deploy mode, region, tenant ID, event ID, team list, and fallback media location.
+
 ## T-1 day: final wiring
 
 ### Deploy verification
@@ -79,6 +85,7 @@ The checklist is split into three sessions because some items (budget alarm prov
 ### Sign-off
 
 - [ ] Facilitator signs off the T-1 checklist in the event run sheet. If a row is red, decide explicitly: fix it tonight or accept the risk in writing.
+- [ ] backup/restore sign-off is still accurate after final deploy. If the selected problems or team/account list changed, update the run sheet before kickoff.
 
 ## T-0 morning: event-day kickoff
 
@@ -120,5 +127,6 @@ Start 60 to 90 minutes before the announced event start.
 
 - Next: [dry run](./dry-run.md) — execute it within 7 days of the event.
 - During event: [live monitoring](./live-monitoring.md), [incident response](./incident-response.md).
+- Recovery posture: [backup and restore posture](./backup-restore.md).
 - After event: [teardown](./teardown.md).
 - Background: [ADR-006: Notifications](../architecture/adr-006-notifications.html), [ADR-014: EventBridge-driven state reconciliation](../architecture/adr-014-eventbridge-driven-state-reconciliation.html).

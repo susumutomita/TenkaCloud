@@ -6,6 +6,7 @@
 
 - [Commercial hosted event hardening checklist](./HARDENING-CHECKLIST.html) — the item-by-item posture statement covering identity & access, problem template safety, operator account hygiene, data & log handling, participant safety, teardown, and supply chain. Each item links to its evidence (file / harness rule / ADR / runbook) and is tagged **Implemented / Gap / Roadmap**.
 - [Data classification & handling policy](./DATA-CLASSIFICATION.html) — the inventory of every data item the platform collects, classified as PII / secret / operational, with its storage location, retention, and encryption. It is the source of truth the public privacy policy must stay consistent with.
+- [backup and restore posture](../runbooks/backup-restore.html) — operator-facing recovery boundary for DynamoDB state, S3 assets, runtime config, audit logs, environment configuration, and intentionally ephemeral data.
 
 This is the minimum credible security baseline for running **paid** TenkaCloud cloud-competition events. It is **not** a SOC2 certification. SOC2-oriented audit work is tracked separately under [#1335](https://github.com/susumutomita/TenkaCloud/issues/1335).
 
@@ -45,4 +46,5 @@ See [`SECURITY.md`](../../SECURITY.md). Do not file public GitHub issues for sen
 
 - Architecture invariants — [`docs/architecture/harness.md`](../architecture/harness.md)
 - Operations runbooks — [`docs/runbooks/`](../runbooks/)
+- backup and restore — [`docs/runbooks/backup-restore.md`](../runbooks/backup-restore.md)
 - Project rules (forbidden patterns + tech stack) — [`CLAUDE.md`](../../CLAUDE.md), [`AGENTS.md`](../../AGENTS.md)
