@@ -146,6 +146,7 @@ Until then, the platform should import reviewed problems, not generate them.
 
 - Epic: #1824
 - Follow-up safety workflow: #1830
+- Safety and human review reference: [`../../.claude/skills/create-problem/references/app-to-quest/safety-and-review.md`](../../.claude/skills/create-problem/references/app-to-quest/safety-and-review.md)
 - Existing authoring skill: `.claude/skills/create-problem/SKILL.md`
 - AI authoring workflow: [`AI-WORKFLOW.md`](./AI-WORKFLOW.md)
 - Problem authoring guide: [`AUTHORING.html`](./AUTHORING.html)
