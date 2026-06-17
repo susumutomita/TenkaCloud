@@ -17,6 +17,7 @@ Issue に分解し、アプリ / docs / scripts で完結するものから順�
 | 判定 | 意味 |
 |---|---|
 | OK | 現状の repo に実装、テスト、または運用ドキュメントの証跡がある。 |
+| Run required | 再現可能な確認 artifact は repo にある。外部公開 / paid-event gate のたびに実行し、pass/fail evidence を残す。 |
 | Accepted risk | 現状仕様として明示的に受け入れている。外部説明に残す必要がある。 |
 | Follow-up | 公開前に個別 Issue で対応する。 |
 | N/A | 現時点の TenkaCloud に該当機能がない。理由を明記する。 |
@@ -26,7 +27,7 @@ Issue に分解し、アプリ / docs / scripts で完結するものから順�
 | 優先 | Blocker | 対応 |
 |---|---|---|
 | P0 | 3 つの SPA entrypoint が config 読み込み失敗時に `root.innerHTML` へ `err.message` を埋め込む。通常フローではないが、公開前品質として raw HTML sink を残さない。 | [#1866](https://github.com/susumutomita/TenkaCloud/issues/1866) |
-| P0 | public-release の browser / responsive / keyboard / modal focus / long-name / basic performance smoke の証跡が 1 箇所に無い。Unit test は厚いが、外部デモ前の実機観点が残っていない。 | [#1868](https://github.com/susumutomita/TenkaCloud/issues/1868) |
+| P0 | public-release の browser / responsive / keyboard / modal focus / long-name / basic performance smoke は [public-release smoke matrix](./public-release-smoke-matrix.md) で実行・記録する。 | [#1868](https://github.com/susumutomita/TenkaCloud/issues/1868) |
 | P1 | landing は title / description / 一部 OGP を持つが、canonical / `og:url` / `og:image` / `twitter:card` / favicon / apple-touch-icon が未整備。docs 生成 HTML は `lang` と metadata が不足するページがある。 | [#1867](https://github.com/susumutomita/TenkaCloud/issues/1867) |
 | P1 | paid event / public demo の復旧姿勢として、DynamoDB / S3 / runtime-config / catalog / audit log の backup / restore 方針が 1 箇所にまとまっていない。 | [#1869](https://github.com/susumutomita/TenkaCloud/issues/1869) |
 
@@ -86,28 +87,28 @@ Issue に分解し、アプリ / docs / scripts で完結するものから順�
 
 | チェック | 判定 | 現状と証跡 | 対応 |
 |---|---|---|---|
-| icon-only button / link label | Partial | Cloudscape component を中心に構成され、一部 custom link は `aria-label` を持つ。全画面横断の evidence は無い。 | [#1868](https://github.com/susumutomita/TenkaCloud/issues/1868) |
-| 画像 alt | Partial | Markdown sanitizer は `alt` attribute を許可し、landing の hero chart は `role="img"` / `aria-label` を持つ箇所がある。全 public docs / landing asset の監査 evidence は無い。 | [#1868](https://github.com/susumutomita/TenkaCloud/issues/1868) |
-| keyboard / modal focus / toast | Partial | Cloudscape Modal / Alert を多用しているが、外部デモ前の keyboard-only smoke matrix が無い。 | [#1868](https://github.com/susumutomita/TenkaCloud/issues/1868) |
-| 色だけに依存しない状態表示 | Partial | StatusBadge / Alert / textual labels が多いが、長い event / team / problem 名と組み合わせた横断 smoke が無い。 | [#1868](https://github.com/susumutomita/TenkaCloud/issues/1868) |
+| icon-only button / link label | OK / Run required | Cloudscape component を中心に構成され、一部 custom link は `aria-label` を持つ。公開前の横断確認は [public-release smoke matrix](./public-release-smoke-matrix.md) の Accessibility smoke で記録する。 | 実行時に fail した画面は別 Issue 化する。 |
+| 画像 alt | OK / Run required | Markdown sanitizer は `alt` attribute を許可し、landing の hero chart は `role="img"` / `aria-label` を持つ箇所がある。公開前の landing / docs 確認は [public-release smoke matrix](./public-release-smoke-matrix.md) に記録する。 | 実行時に fail した asset は別 Issue 化する。 |
+| keyboard / modal focus / toast | OK / Run required | Cloudscape Modal / Alert を多用している。公開前の keyboard-only / modal focus smoke は [public-release smoke matrix](./public-release-smoke-matrix.md) の必須項目として記録する。 | 実行時に fail した modal / flow は別 Issue 化する。 |
+| 色だけに依存しない状態表示 | OK / Run required | StatusBadge / Alert / textual labels が多い。長い event / team / problem 名と組み合わせた横断 smoke は [public-release smoke matrix](./public-release-smoke-matrix.md) の long-name fixture で記録する。 | 実行時に fail した表示は別 Issue 化する。 |
 
 ## Performance
 
 | チェック | 判定 | 現状と証跡 | 対応 |
 |---|---|---|---|
-| bundle size / 巨大 JS | Partial | Build は Vite / Bun で実行される。EventReport は bundle size を抑えるため PDF library を避けるなど局所判断はある。横断的な public-release 観測値は無い。 | [#1868](https://github.com/susumutomita/TenkaCloud/issues/1868) |
+| bundle size / 巨大 JS | OK / Run required | Build は Vite / Bun で実行される。EventReport は bundle size を抑えるため PDF library を避けるなど局所判断はある。横断的な public-release 観測値は [public-release smoke matrix](./public-release-smoke-matrix.md) の Performance and bundle observations に記録する。 | fragile な hard budget は置かず、公開前の観測値と明確な劣化だけを fail にする。 |
 | CDN cache | OK | SPA / docs / landing は CloudFront / static HTML 配信前提。API は user-specific response を `no-store`。 | runtime-config / auth-only surface の cache policy は infra evidence と一緒に維持する。 |
-| Image / CLS | Partial | landing は SVG / canvas / embedded UI mock を使う。Lighthouse / visual smoke の evidence は無い。 | [#1868](https://github.com/susumutomita/TenkaCloud/issues/1868) |
+| Image / CLS | OK / Run required | landing は SVG / canvas / embedded UI mock を使う。画像・レイアウト崩れの公開前確認は [public-release smoke matrix](./public-release-smoke-matrix.md) に記録する。 | 実行時に fail した asset / layout は別 Issue 化する。 |
 | API / DB access pattern | OK / Roadmap | DynamoDB capacity / scan pressure は `docs/runbooks/capacity-pressure.md` と observability docs で扱う。主要 API は tenant / event / team scope の Query を基本にしている。 | 新しい heavy query は harness / tests / runbook で pin する。 |
 
 ## 複数環境 / ブラウザ
 
 | チェック | 判定 | 現状と証跡 | 対応 |
 |---|---|---|---|
-| mobile / tablet / desktop | Follow-up | 各 SPA は responsive component を使うが、公開前 smoke matrix が無い。 | [#1868](https://github.com/susumutomita/TenkaCloud/issues/1868) |
-| Chrome / Safari / Firefox | Follow-up | EventReport exporter などに Safari / Firefox 配慮の局所コメントはあるが、主要導線の横断 evidence は無い。 | [#1868](https://github.com/susumutomita/TenkaCloud/issues/1868) |
-| Mac / Windows scrollbar / font | Follow-up | Cloudscape / system font 前提。OS 横断確認の記録が無い。 | [#1868](https://github.com/susumutomita/TenkaCloud/issues/1868) |
-| 長い event / team / problem / user name | Follow-up | 一部 tests は長い tenant name を扱うが、主要画面の横断 visual smoke は無い。 | [#1868](https://github.com/susumutomita/TenkaCloud/issues/1868) |
+| mobile / tablet / desktop | OK / Run required | 各 SPA は responsive component を使う。公開前の mobile / tablet / desktop 確認は [public-release smoke matrix](./public-release-smoke-matrix.md) の Required browsers and viewports に記録する。 | 実行時に fail した viewport は別 Issue 化する。 |
+| Chrome / Safari / Firefox | OK / Run required | EventReport exporter などに Safari / Firefox 配慮の局所コメントはある。主要導線の横断 evidence は [public-release smoke matrix](./public-release-smoke-matrix.md) に記録する。 | Safari が使えない環境では gap を明記する。 |
+| Mac / Windows scrollbar / font | OK / Run required | Cloudscape / system font 前提。OS 横断の差分は [public-release smoke matrix](./public-release-smoke-matrix.md) の evidence 欄に記録する。 | 公開前に見つかった表示崩れは別 Issue 化する。 |
+| 長い event / team / problem / user name | OK / Run required | 一部 tests は長い tenant name を扱う。公開前の横断 visual smoke は [public-release smoke matrix](./public-release-smoke-matrix.md) の long-name fixture で記録する。 | 実行時に fail した表示は別 Issue 化する。 |
 
 ## 運用 / 監視
 
@@ -138,8 +139,8 @@ gh issue list --state open
 次の順で潰す。
 
 1. [#1866](https://github.com/susumutomita/TenkaCloud/issues/1866) で raw HTML fallback を消す。
-2. [#1868](https://github.com/susumutomita/TenkaCloud/issues/1868) で browser / accessibility /
-   responsive / performance smoke の再現可能な証跡を作る。
+2. [public-release smoke matrix](./public-release-smoke-matrix.md) で browser / accessibility /
+   responsive / performance smoke の再現可能な証跡を記録する。
 3. [#1867](https://github.com/susumutomita/TenkaCloud/issues/1867) で public metadata と static site
    policy を整える。
 4. [#1869](https://github.com/susumutomita/TenkaCloud/issues/1869) で backup / restore posture を

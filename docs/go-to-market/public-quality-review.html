@@ -91,6 +91,10 @@ Issue に分解し、アプリ / docs / scripts で完結するものから順�
 <td>現状の repo に実装、テスト、または運用ドキュメントの証跡がある。</td>
 </tr>
 <tr>
+<td>Run required</td>
+<td>再現可能な確認 artifact は repo にある。外部公開 / paid-event gate のたびに実行し、pass/fail evidence を残す。</td>
+</tr>
+<tr>
 <td>Accepted risk</td>
 <td>現状仕様として明示的に受け入れている。外部説明に残す必要がある。</td>
 </tr>
@@ -119,7 +123,7 @@ Issue に分解し、アプリ / docs / scripts で完結するものから順�
 </tr>
 <tr>
 <td>P0</td>
-<td>public-release の browser / responsive / keyboard / modal focus / long-name / basic performance smoke の証跡が 1 箇所に無い。Unit test は厚いが、外部デモ前の実機観点が残っていない。</td>
+<td>public-release の browser / responsive / keyboard / modal focus / long-name / basic performance smoke は <a href="./public-release-smoke-matrix.md">public-release smoke matrix</a> で実行・記録する。</td>
 <td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
 </tr>
 <tr>
@@ -357,27 +361,27 @@ Issue に分解し、アプリ / docs / scripts で完結するものから順�
 </thead>
 <tbody><tr>
 <td>icon-only button / link label</td>
-<td>Partial</td>
-<td>Cloudscape component を中心に構成され、一部 custom link は <code>aria-label</code> を持つ。全画面横断の evidence は無い。</td>
-<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+<td>OK / Run required</td>
+<td>Cloudscape component を中心に構成され、一部 custom link は <code>aria-label</code> を持つ。公開前の横断確認は <a href="./public-release-smoke-matrix.md">public-release smoke matrix</a> の Accessibility smoke で記録する。</td>
+<td>実行時に fail した画面は別 Issue 化する。</td>
 </tr>
 <tr>
 <td>画像 alt</td>
-<td>Partial</td>
-<td>Markdown sanitizer は <code>alt</code> attribute を許可し、landing の hero chart は <code>role=&quot;img&quot;</code> / <code>aria-label</code> を持つ箇所がある。全 public docs / landing asset の監査 evidence は無い。</td>
-<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+<td>OK / Run required</td>
+<td>Markdown sanitizer は <code>alt</code> attribute を許可し、landing の hero chart は <code>role=&quot;img&quot;</code> / <code>aria-label</code> を持つ箇所がある。公開前の landing / docs 確認は <a href="./public-release-smoke-matrix.md">public-release smoke matrix</a> に記録する。</td>
+<td>実行時に fail した asset は別 Issue 化する。</td>
 </tr>
 <tr>
 <td>keyboard / modal focus / toast</td>
-<td>Partial</td>
-<td>Cloudscape Modal / Alert を多用しているが、外部デモ前の keyboard-only smoke matrix が無い。</td>
-<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+<td>OK / Run required</td>
+<td>Cloudscape Modal / Alert を多用している。公開前の keyboard-only / modal focus smoke は <a href="./public-release-smoke-matrix.md">public-release smoke matrix</a> の必須項目として記録する。</td>
+<td>実行時に fail した modal / flow は別 Issue 化する。</td>
 </tr>
 <tr>
 <td>色だけに依存しない状態表示</td>
-<td>Partial</td>
-<td>StatusBadge / Alert / textual labels が多いが、長い event / team / problem 名と組み合わせた横断 smoke が無い。</td>
-<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+<td>OK / Run required</td>
+<td>StatusBadge / Alert / textual labels が多い。長い event / team / problem 名と組み合わせた横断 smoke は <a href="./public-release-smoke-matrix.md">public-release smoke matrix</a> の long-name fixture で記録する。</td>
+<td>実行時に fail した表示は別 Issue 化する。</td>
 </tr>
 </tbody></table>
 <h2>Performance</h2>
@@ -392,9 +396,9 @@ Issue に分解し、アプリ / docs / scripts で完結するものから順�
 </thead>
 <tbody><tr>
 <td>bundle size / 巨大 JS</td>
-<td>Partial</td>
-<td>Build は Vite / Bun で実行される。EventReport は bundle size を抑えるため PDF library を避けるなど局所判断はある。横断的な public-release 観測値は無い。</td>
-<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+<td>OK / Run required</td>
+<td>Build は Vite / Bun で実行される。EventReport は bundle size を抑えるため PDF library を避けるなど局所判断はある。横断的な public-release 観測値は <a href="./public-release-smoke-matrix.md">public-release smoke matrix</a> の Performance and bundle observations に記録する。</td>
+<td>fragile な hard budget は置かず、公開前の観測値と明確な劣化だけを fail にする。</td>
 </tr>
 <tr>
 <td>CDN cache</td>
@@ -404,9 +408,9 @@ Issue に分解し、アプリ / docs / scripts で完結するものから順�
 </tr>
 <tr>
 <td>Image / CLS</td>
-<td>Partial</td>
-<td>landing は SVG / canvas / embedded UI mock を使う。Lighthouse / visual smoke の evidence は無い。</td>
-<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+<td>OK / Run required</td>
+<td>landing は SVG / canvas / embedded UI mock を使う。画像・レイアウト崩れの公開前確認は <a href="./public-release-smoke-matrix.md">public-release smoke matrix</a> に記録する。</td>
+<td>実行時に fail した asset / layout は別 Issue 化する。</td>
 </tr>
 <tr>
 <td>API / DB access pattern</td>
@@ -427,27 +431,27 @@ Issue に分解し、アプリ / docs / scripts で完結するものから順�
 </thead>
 <tbody><tr>
 <td>mobile / tablet / desktop</td>
-<td>Follow-up</td>
-<td>各 SPA は responsive component を使うが、公開前 smoke matrix が無い。</td>
-<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+<td>OK / Run required</td>
+<td>各 SPA は responsive component を使う。公開前の mobile / tablet / desktop 確認は <a href="./public-release-smoke-matrix.md">public-release smoke matrix</a> の Required browsers and viewports に記録する。</td>
+<td>実行時に fail した viewport は別 Issue 化する。</td>
 </tr>
 <tr>
 <td>Chrome / Safari / Firefox</td>
-<td>Follow-up</td>
-<td>EventReport exporter などに Safari / Firefox 配慮の局所コメントはあるが、主要導線の横断 evidence は無い。</td>
-<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+<td>OK / Run required</td>
+<td>EventReport exporter などに Safari / Firefox 配慮の局所コメントはある。主要導線の横断 evidence は <a href="./public-release-smoke-matrix.md">public-release smoke matrix</a> に記録する。</td>
+<td>Safari が使えない環境では gap を明記する。</td>
 </tr>
 <tr>
 <td>Mac / Windows scrollbar / font</td>
-<td>Follow-up</td>
-<td>Cloudscape / system font 前提。OS 横断確認の記録が無い。</td>
-<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+<td>OK / Run required</td>
+<td>Cloudscape / system font 前提。OS 横断の差分は <a href="./public-release-smoke-matrix.md">public-release smoke matrix</a> の evidence 欄に記録する。</td>
+<td>公開前に見つかった表示崩れは別 Issue 化する。</td>
 </tr>
 <tr>
 <td>長い event / team / problem / user name</td>
-<td>Follow-up</td>
-<td>一部 tests は長い tenant name を扱うが、主要画面の横断 visual smoke は無い。</td>
-<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+<td>OK / Run required</td>
+<td>一部 tests は長い tenant name を扱う。公開前の横断 visual smoke は <a href="./public-release-smoke-matrix.md">public-release smoke matrix</a> の long-name fixture で記録する。</td>
+<td>実行時に fail した表示は別 Issue 化する。</td>
 </tr>
 </tbody></table>
 <h2>運用 / 監視</h2>
@@ -500,8 +504,8 @@ gh issue list --state open
 次の順で潰す。</p>
 <ol>
 <li><a href="https://github.com/susumutomita/TenkaCloud/issues/1866">#1866</a> で raw HTML fallback を消す。</li>
-<li><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a> で browser / accessibility /
-responsive / performance smoke の再現可能な証跡を作る。</li>
+<li><a href="./public-release-smoke-matrix.md">public-release smoke matrix</a> で browser / accessibility /
+responsive / performance smoke の再現可能な証跡を記録する。</li>
 <li><a href="https://github.com/susumutomita/TenkaCloud/issues/1867">#1867</a> で public metadata と static site
 policy を整える。</li>
 <li><a href="https://github.com/susumutomita/TenkaCloud/issues/1869">#1869</a> で backup / restore posture を
