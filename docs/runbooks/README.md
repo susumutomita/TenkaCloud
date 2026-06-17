@@ -18,6 +18,7 @@ The runbooks assume Lite mode (`make deploy`) as the default, because most paid 
 | 6 | [Teardown](./teardown.md) | Operator | Within 24 hours after the event ends | 60 min |
 | 7 | [Multi-cloud providers](./multi-cloud-providers.md) | Operator | Setup — only if a problem targets Sakura / Azure / GCP, before you deploy it | 20 min per team per provider |
 | 8 | [Disruption live-fire](./disruption-live-fire.md) | Operator | Once per release — validate the cross-account disruption path on real AWS | ~10 min |
+| 9 | [Backup and restore posture](./backup-restore.md) | Operator / facilitator | T-7 planning, paid-event sign-off, or suspected data loss | 20 min planning; 15 to 60 min restore decision |
 
 ## How the runbooks cross-link
 
@@ -25,6 +26,7 @@ The runbooks assume Lite mode (`make deploy`) as the default, because most paid 
 - [Live monitoring](./live-monitoring.md) links to [Incident response](./incident-response.md) at the triage decision point.
 - [Incident response](./incident-response.md) and [Teardown](./teardown.md) both cross-link back to [Live monitoring](./live-monitoring.md) for context on what was already observed.
 - [Multi-cloud providers](./multi-cloud-providers.md) is a setup runbook (not event-day): run it per team before deploying a non-AWS problem, and its per-provider `destroy` rolls up into [Teardown](./teardown.md).
+- [Backup and restore posture](./backup-restore.md) is the recovery boundary for platform data, S3 assets, runtime config, audit logs, and intentionally ephemeral state. Use it before promising paid-event RPO / RTO.
 - All runbooks cite the relevant ADRs as the source of truth for design decisions:
   - [ADR-006: Notifications](../architecture/adr-006-notifications.html) — operator-to-participant messaging contract.
   - [ADR-014: EventBridge-driven state reconciliation](../architecture/adr-014-eventbridge-driven-state-reconciliation.html) — how state converges without SSE / WebSocket.
@@ -38,5 +40,6 @@ The runbooks assume Lite mode (`make deploy`) as the default, because most paid 
 
 1. [Pre-event checklist](./pre-event-checklist.md) — read it once end-to-end, then schedule the T-7 / T-1 / T-0 reminders.
 2. [Dry run](./dry-run.md) — execute it at least once. The dry run is the gate, not the production event.
-3. Bookmark [Live monitoring](./live-monitoring.md) and [Incident response](./incident-response.md) side by side. They are the two tabs you keep open during the event.
-4. [Teardown](./teardown.md) — review the day before so you do not stall after the event ends.
+3. [Backup and restore posture](./backup-restore.md) — confirm the event's recovery expectations match what the current infrastructure actually provides.
+4. Bookmark [Live monitoring](./live-monitoring.md) and [Incident response](./incident-response.md) side by side. They are the two tabs you keep open during the event.
+5. [Teardown](./teardown.md) — review the day before so you do not stall after the event ends.

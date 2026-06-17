@@ -118,6 +118,12 @@
 <ul>
 <li><input disabled="" type="checkbox"> <a href="./dry-run.md">Dry run</a> date is fixed and on the calendar within the next 7 days, with a real test of the same problem catalog you will use at the event.</li>
 </ul>
+<h3>backup and restore posture</h3>
+<ul>
+<li><input disabled="" type="checkbox"> <a href="./backup-restore.md">backup and restore posture</a> has been reviewed against the event type.</li>
+<li><input disabled="" type="checkbox"> Paid events explicitly accept the current &quot;retained DynamoDB tables, no PITR&quot; posture, or are blocked on a user-owned infrastructure proposal before payment/sign-off.</li>
+<li><input disabled="" type="checkbox"> Event run sheet records the Git commit, problem catalog SHA, deploy mode, region, tenant ID, event ID, team list, and fallback media location.</li>
+</ul>
 <h2>T-1 day: final wiring</h2>
 <h3>Deploy verification</h3>
 <ul>
@@ -142,6 +148,7 @@
 <h3>Sign-off</h3>
 <ul>
 <li><input disabled="" type="checkbox"> Facilitator signs off the T-1 checklist in the event run sheet. If a row is red, decide explicitly: fix it tonight or accept the risk in writing.</li>
+<li><input disabled="" type="checkbox"> backup/restore sign-off is still accurate after final deploy. If the selected problems or team/account list changed, update the run sheet before kickoff.</li>
 </ul>
 <h2>T-0 morning: event-day kickoff</h2>
 <p>Start 60 to 90 minutes before the announced event start.</p>
@@ -202,6 +209,7 @@
 <ul>
 <li>Next: <a href="./dry-run.md">dry run</a> — execute it within 7 days of the event.</li>
 <li>During event: <a href="./live-monitoring.md">live monitoring</a>, <a href="./incident-response.md">incident response</a>.</li>
+<li>Recovery posture: <a href="./backup-restore.md">backup and restore posture</a>.</li>
 <li>After event: <a href="./teardown.md">teardown</a>.</li>
 <li>Background: <a href="../architecture/adr-006-notifications.html">ADR-006: Notifications</a>, <a href="../architecture/adr-014-eventbridge-driven-state-reconciliation.html">ADR-014: EventBridge-driven state reconciliation</a>.</li>
 </ul>
