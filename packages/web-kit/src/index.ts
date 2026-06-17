@@ -7,6 +7,7 @@
  *     視覚 token (= 色 / 余白 / icon) を全 SPA 一括で変更できる。
  */
 export { AuthProvider, type AuthState, useAuth } from "./auth";
+export { renderBootError } from "./boot-error";
 export { EmptyState, type EmptyStateAction, type EmptyStateProps } from "./EmptyState";
 export { ErrorState, type ErrorStateProps } from "./ErrorState";
 export { toErrorMessage } from "./error-message";
