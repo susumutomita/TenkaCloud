@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>公開品質レビュー</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>公開品質レビュー</h1>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Tracking issue</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1864">#1864</a></td>
+</tr>
+<tr>
+<td>レビュー日</td>
+<td>2026-06-17</td>
+</tr>
+<tr>
+<td>参照チェックリスト</td>
+<td><a href="https://zenn.dev/catnose99/articles/547cbf57e5ad28">Web サービス公開前のチェックリスト</a></td>
+</tr>
+<tr>
+<td>対象</td>
+<td>landing / docs / admin-console / application-admin-console / participant-portal / API / Cognito / CloudFront / S3 / Lambda / DynamoDB / 通知</td>
+</tr>
+<tr>
+<td>決済</td>
+<td>TenkaCloud 本体に決済導線が無いため対象外。将来の有料申込・請求は別レビュー対象。</td>
+</tr>
+</tbody></table>
+<p>このレビューは外部公開、コミュニティ配布、デモ利用の前に確認すべき公開品質を棚卸しする。
+インフラ実装の変更は AGENTS.md の役割分担に従い、この PR では行わない。必要な変更は
+Issue に分解し、アプリ / docs / scripts で完結するものから順に対応する。</p>
+<h2>判定</h2>
+<table>
+<thead>
+<tr>
+<th>判定</th>
+<th>意味</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>OK</td>
+<td>現状の repo に実装、テスト、または運用ドキュメントの証跡がある。</td>
+</tr>
+<tr>
+<td>Accepted risk</td>
+<td>現状仕様として明示的に受け入れている。外部説明に残す必要がある。</td>
+</tr>
+<tr>
+<td>Follow-up</td>
+<td>公開前に個別 Issue で対応する。</td>
+</tr>
+<tr>
+<td>N/A</td>
+<td>現時点の TenkaCloud に該当機能がない。理由を明記する。</td>
+</tr>
+</tbody></table>
+<h2>外部デモ / コミュニティ配布前の blocker</h2>
+<table>
+<thead>
+<tr>
+<th>優先</th>
+<th>Blocker</th>
+<th>対応</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>P0</td>
+<td>3 つの SPA entrypoint が config 読み込み失敗時に <code>root.innerHTML</code> へ <code>err.message</code> を埋め込む。通常フローではないが、公開前品質として raw HTML sink を残さない。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1866">#1866</a></td>
+</tr>
+<tr>
+<td>P0</td>
+<td>public-release の browser / responsive / keyboard / modal focus / long-name / basic performance smoke の証跡が 1 箇所に無い。Unit test は厚いが、外部デモ前の実機観点が残っていない。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+</tr>
+<tr>
+<td>P1</td>
+<td>landing は title / description / 一部 OGP を持つが、canonical / <code>og:url</code> / <code>og:image</code> / <code>twitter:card</code> / favicon / apple-touch-icon が未整備。docs 生成 HTML は <code>lang</code> と metadata が不足するページがある。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1867">#1867</a></td>
+</tr>
+<tr>
+<td>P1</td>
+<td>paid event / public demo の復旧姿勢として、DynamoDB / S3 / runtime-config / catalog / audit log の backup / restore 方針が 1 箇所にまとまっていない。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1869">#1869</a></td>
+</tr>
+</tbody></table>
+<h2>既存 Issue と重複させない項目</h2>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th align="right">既存 Issue</th>
+<th>今回の扱い</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>競技者へのメール招待、SES、招待メール導線</td>
+<td align="right"><a href="https://github.com/susumutomita/TenkaCloud/issues/1778">#1778</a> / <a href="https://github.com/susumutomita/TenkaCloud/issues/1769">#1769</a></td>
+<td>メール基盤は現時点で N/A。実装時に SPF / DKIM / DMARC、列挙防止、再送制御を同時に確認する。</td>
+</tr>
+<tr>
+<td>セルフサービスサインアップ</td>
+<td align="right"><a href="https://github.com/susumutomita/TenkaCloud/issues/1774">#1774</a></td>
+<td>現状は operator 管理前提。公開 signup を追加する時に本人確認と列挙防止を再レビューする。</td>
+</tr>
+<tr>
+<td>Application Admin Console の viewer / editor subrole</td>
+<td align="right"><a href="https://github.com/susumutomita/TenkaCloud/issues/1771">#1771</a></td>
+<td>現状の tenant / participant 境界は API 側で守る。細粒度 subrole は既存 Issue 側で扱う。</td>
+</tr>
+<tr>
+<td>Operations page</td>
+<td align="right"><a href="https://github.com/susumutomita/TenkaCloud/issues/1770">#1770</a></td>
+<td>CloudWatch / runbook はある。in-app の運用導線は既存 Issue 側で扱う。</td>
+</tr>
+</tbody></table>
+<h2>セキュリティ</h2>
+<table>
+<thead>
+<tr>
+<th>チェック</th>
+<th>判定</th>
+<th>現状と証跡</th>
+<th>対応</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>認証 Cookie / token 保存</td>
+<td>OK / Accepted risk</td>
+<td>admin / application-admin は Cognito Hosted UI + OAuth Code + PKCE。<code>packages/auth-client/src/cognito.ts</code> と <code>packages/web-kit/src/auth.tsx</code> は bearer token を storage に永続化せず React state に保持する。PKCE verifier / OAuth state のみ <code>sessionStorage</code>。participant は Cognito ではなく <code>teamLoginKey</code> を bearer とし、<code>apps/participant-portal/src/auth/storage.ts</code> が TTL 付きセッションを <code>localStorage</code> に保存する。競技 UX を優先した accepted risk。</td>
+<td>participant の key 配布と期限は pre-event runbook で運用確認する。</td>
+</tr>
+<tr>
+<td>app-owned Cookie 属性</td>
+<td>N/A</td>
+<td>TenkaCloud SPA は app-owned auth Cookie を発行しない。Cookie は Cognito Hosted UI 側の管理対象。</td>
+<td>BFF / HttpOnly Cookie 方式へ移行する場合は ADR-025 の後続として再レビューする。</td>
+</tr>
+<tr>
+<td>Server-side validation</td>
+<td>OK</td>
+<td>API README は Hono handler の Zod schema と OpenAPI 同期を要求する。handler tests でも validation / 404 / 401 / 422 を pin している。</td>
+<td>新 route 追加時は同じ pattern を維持する。</td>
+</tr>
+<tr>
+<td>URL protocol / Markdown HTML</td>
+<td>OK</td>
+<td><code>packages/web-kit/src/markdown.tsx</code> は DOMPurify allowlist と <code>ALLOWED_URI_REGEXP</code> で <code>javascript:</code> / <code>data:</code> / <code>vbscript:</code> / <code>file:</code> を拒否する。<code>dangerouslySetInnerHTML</code> は sanitized markdown component に閉じ込めている。</td>
+<td>raw HTML sink は <a href="https://github.com/susumutomita/TenkaCloud/issues/1866">#1866</a> で削除する。</td>
+</tr>
+<tr>
+<td>認可境界</td>
+<td>OK / Roadmap</td>
+<td><code>docs/api/README.md</code> は Control / Tenant / Participant の plane を分離し、tenant mismatch を 404 として扱う。participant API は <code>teamLoginKey</code> owner の team scope に閉じる。</td>
+<td>granular subrole は <a href="https://github.com/susumutomita/TenkaCloud/issues/1771">#1771</a>。</td>
+</tr>
+<tr>
+<td>Response headers</td>
+<td>OK</td>
+<td>CloudFront は <code>infrastructure/lib/security/cloudfront-headers.ts</code> で HSTS / CSP / <code>frame-ancestors &#39;none&#39;</code> / <code>X-Frame-Options</code> / <code>X-Content-Type-Options</code> / <code>Referrer-Policy</code> を定義。API は <code>secureApiHeaders</code> で <code>nosniff</code> / <code>DENY</code> / <code>strict-origin-when-cross-origin</code> / <code>no-store</code> を付与。</td>
+<td>インフラ変更はユーザー責務。現状は証跡のみ記録。</td>
+</tr>
+<tr>
+<td>Cache</td>
+<td>OK</td>
+<td>API security headers は route が明示しない限り <code>Cache-Control: no-store</code>。CloudFront SPA は static asset 配信、runtime-config は security docs で <code>no-store</code> / <code>nosniff</code> を要求している。</td>
+<td>共有 cache 可能な API を増やす場合は route 単位で opt-out を明記する。</td>
+</tr>
+<tr>
+<td>Error display</td>
+<td>Follow-up</td>
+<td>Backend は 5xx を <code>{ &quot;error&quot;: &quot;internal_error&quot; }</code> に落とし、stack trace を browser に出さない方針。SPA config-load fallback は <code>innerHTML</code> で <code>err.message</code> を出す。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1866">#1866</a></td>
+</tr>
+<tr>
+<td>File upload</td>
+<td>N/A</td>
+<td>競技者 / 管理者による任意ファイル upload 導線は現状ない。problem catalog は repo / template validation の管理対象。</td>
+<td>upload 機能を追加する時に MIME / size / AV / signed URL を別レビューする。</td>
+</tr>
+<tr>
+<td>SQL injection</td>
+<td>N/A</td>
+<td>SQL DB を使わない。主要永続化は DynamoDB と S3。</td>
+<td>SQL datastore を追加する時に再レビューする。</td>
+</tr>
+<tr>
+<td>バックアップ / restore</td>
+<td>Follow-up</td>
+<td>incident / teardown / dry-run runbook はあるが、platform data と object storage の backup / restore posture は 1 箇所にまとまっていない。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1869">#1869</a></td>
+</tr>
+</tbody></table>
+<h2>ログイン / アカウント管理</h2>
+<table>
+<thead>
+<tr>
+<th>チェック</th>
+<th>判定</th>
+<th>現状と証跡</th>
+<th>対応</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>メールアドレス本人確認</td>
+<td>OK / Roadmap</td>
+<td>admin 系は Cognito Hosted UI 前提。participant は per-team login key であり email identity ではない。</td>
+<td>email invite / signup を追加する <a href="https://github.com/susumutomita/TenkaCloud/issues/1778">#1778</a> / <a href="https://github.com/susumutomita/TenkaCloud/issues/1774">#1774</a> で再確認する。</td>
+</tr>
+<tr>
+<td>メールアドレス列挙</td>
+<td>N/A / Roadmap</td>
+<td>現状の participant login は email を使わない。admin local Cognito / SAML は Cognito / IdP 側の認証画面。</td>
+<td>invite / signup 実装時に列挙防止を acceptance criteria に含める。</td>
+</tr>
+<tr>
+<td>複数 IdP / SAML</td>
+<td>OK</td>
+<td><code>docs/operations/application-plane-saml-setup.md</code> と <code>docs/operations/control-plane-saml-setup.md</code> が IdP setup を分ける。Cognito Hosted UI の <code>identity_provider</code> 指定も shared client に実装済み。</td>
+<td>既存 setup docs を event runbook から参照する。</td>
+</tr>
+<tr>
+<td>招待リンクの期限 / 再利用</td>
+<td>OK / Roadmap</td>
+<td>participant <code>teamLoginKey</code> は deployment / event の <code>expiresAt</code> に従う。再利用はチーム scope 内の bearer として許可される accepted risk。</td>
+<td>email invite の one-time / expiry semantics は <a href="https://github.com/susumutomita/TenkaCloud/issues/1778">#1778</a>。</td>
+</tr>
+</tbody></table>
+<h2>メール / 通知</h2>
+<table>
+<thead>
+<tr>
+<th>チェック</th>
+<th>判定</th>
+<th>現状と証跡</th>
+<th>対応</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>SPF / DKIM / DMARC</td>
+<td>N/A</td>
+<td>現状は外部 email 送信基盤を持たない。participant 通知は portal polling。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1778">#1778</a> で SES を入れる時に設定方針を必須化する。</td>
+</tr>
+<tr>
+<td>重複送信 / at-least-once</td>
+<td>OK / Roadmap</td>
+<td><code>docs/operations/notifications.md</code> は in-portal 通知を pull 型、編集 / 削除なし、DDB TTL で保持と定義する。メール再送は未実装。</td>
+<td>email / EventBridge 配信を増やす場合は idempotency key を acceptance criteria にする。</td>
+</tr>
+<tr>
+<td>ユーザー入力の通知本文</td>
+<td>OK</td>
+<td>通知本文は React / Cloudscape で text として表示される。HTML notification は提供しない。</td>
+<td>将来 rich text 通知を入れる場合は Markdown sanitizer を共有する。</td>
+</tr>
+<tr>
+<td>unsubscribe / List-Unsubscribe</td>
+<td>N/A</td>
+<td>キャンペーン email が無い。</td>
+<td>marketing email を実装する時に別レビュー。</td>
+</tr>
+</tbody></table>
+<h2>SEO / OGP / LP</h2>
+<table>
+<thead>
+<tr>
+<th>チェック</th>
+<th>判定</th>
+<th>現状と証跡</th>
+<th>対応</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>LP title / description</td>
+<td>OK</td>
+<td><code>landing/index.html</code> は title / description / partial OGP を持つ。</td>
+<td>追加 metadata は <a href="https://github.com/susumutomita/TenkaCloud/issues/1867">#1867</a>。</td>
+</tr>
+<tr>
+<td>canonical / OGP / Twitter / favicon</td>
+<td>Follow-up</td>
+<td><code>landing/index.html</code> に canonical / <code>og:url</code> / <code>og:image</code> / <code>twitter:card</code> / icon が無い。<code>rg</code> でも favicon / apple-touch-icon asset は見つからない。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1867">#1867</a></td>
+</tr>
+<tr>
+<td>docs metadata / lang</td>
+<td>Follow-up</td>
+<td><code>scripts/build-docs.ts</code> は markdown 生成 HTML を一律 <code>&lt;html lang=&quot;ja&quot;&gt;</code> にする。英語 docs でも <code>lang=&quot;ja&quot;</code> になるものがある。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1867">#1867</a></td>
+</tr>
+<tr>
+<td>noindex</td>
+<td>OK / Follow-up</td>
+<td><code>rg &quot;noindex&quot;</code> では公開面に残存 noindex は見つからない。auth-only SPA shell の index policy は未明記。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1867">#1867</a></td>
+</tr>
+</tbody></table>
+<h2>Accessibility</h2>
+<table>
+<thead>
+<tr>
+<th>チェック</th>
+<th>判定</th>
+<th>現状と証跡</th>
+<th>対応</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>icon-only button / link label</td>
+<td>Partial</td>
+<td>Cloudscape component を中心に構成され、一部 custom link は <code>aria-label</code> を持つ。全画面横断の evidence は無い。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+</tr>
+<tr>
+<td>画像 alt</td>
+<td>Partial</td>
+<td>Markdown sanitizer は <code>alt</code> attribute を許可し、landing の hero chart は <code>role=&quot;img&quot;</code> / <code>aria-label</code> を持つ箇所がある。全 public docs / landing asset の監査 evidence は無い。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+</tr>
+<tr>
+<td>keyboard / modal focus / toast</td>
+<td>Partial</td>
+<td>Cloudscape Modal / Alert を多用しているが、外部デモ前の keyboard-only smoke matrix が無い。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+</tr>
+<tr>
+<td>色だけに依存しない状態表示</td>
+<td>Partial</td>
+<td>StatusBadge / Alert / textual labels が多いが、長い event / team / problem 名と組み合わせた横断 smoke が無い。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+</tr>
+</tbody></table>
+<h2>Performance</h2>
+<table>
+<thead>
+<tr>
+<th>チェック</th>
+<th>判定</th>
+<th>現状と証跡</th>
+<th>対応</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>bundle size / 巨大 JS</td>
+<td>Partial</td>
+<td>Build は Vite / Bun で実行される。EventReport は bundle size を抑えるため PDF library を避けるなど局所判断はある。横断的な public-release 観測値は無い。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+</tr>
+<tr>
+<td>CDN cache</td>
+<td>OK</td>
+<td>SPA / docs / landing は CloudFront / static HTML 配信前提。API は user-specific response を <code>no-store</code>。</td>
+<td>runtime-config / auth-only surface の cache policy は infra evidence と一緒に維持する。</td>
+</tr>
+<tr>
+<td>Image / CLS</td>
+<td>Partial</td>
+<td>landing は SVG / canvas / embedded UI mock を使う。Lighthouse / visual smoke の evidence は無い。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+</tr>
+<tr>
+<td>API / DB access pattern</td>
+<td>OK / Roadmap</td>
+<td>DynamoDB capacity / scan pressure は <code>docs/runbooks/capacity-pressure.md</code> と observability docs で扱う。主要 API は tenant / event / team scope の Query を基本にしている。</td>
+<td>新しい heavy query は harness / tests / runbook で pin する。</td>
+</tr>
+</tbody></table>
+<h2>複数環境 / ブラウザ</h2>
+<table>
+<thead>
+<tr>
+<th>チェック</th>
+<th>判定</th>
+<th>現状と証跡</th>
+<th>対応</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>mobile / tablet / desktop</td>
+<td>Follow-up</td>
+<td>各 SPA は responsive component を使うが、公開前 smoke matrix が無い。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+</tr>
+<tr>
+<td>Chrome / Safari / Firefox</td>
+<td>Follow-up</td>
+<td>EventReport exporter などに Safari / Firefox 配慮の局所コメントはあるが、主要導線の横断 evidence は無い。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+</tr>
+<tr>
+<td>Mac / Windows scrollbar / font</td>
+<td>Follow-up</td>
+<td>Cloudscape / system font 前提。OS 横断確認の記録が無い。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+</tr>
+<tr>
+<td>長い event / team / problem / user name</td>
+<td>Follow-up</td>
+<td>一部 tests は長い tenant name を扱うが、主要画面の横断 visual smoke は無い。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+</tr>
+</tbody></table>
+<h2>運用 / 監視</h2>
+<table>
+<thead>
+<tr>
+<th>チェック</th>
+<th>判定</th>
+<th>現状と証跡</th>
+<th>対応</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>5xx / auth error / frontend error detection</td>
+<td>OK / Roadmap</td>
+<td><code>docs/operations/observability.md</code> は CloudWatch metrics / Logs Insights / suggested alarms を定義。<code>infrastructure/lib/observability/free-tier-alarms.ts</code> は Lambda Errors / API Gateway 5XX alarms を持つ。frontend error aggregation は未導入。</td>
+<td>in-app Operations UX は <a href="https://github.com/susumutomita/TenkaCloud/issues/1770">#1770</a>。frontend error collection を入れる場合は別 Issue。</td>
+</tr>
+<tr>
+<td>CloudWatch Logs / Metrics / Alarm</td>
+<td>OK</td>
+<td>observability docs、capacity-pressure runbook、incident-response runbook がある。</td>
+<td>paid event 前は pre-event checklist の T-0 で dashboard を開く。</td>
+</tr>
+<tr>
+<td>イベント中の異常把握導線</td>
+<td>OK / Roadmap</td>
+<td>pre-event / live-monitoring / incident-response / deploy-trace docs がある。admin-console 側の Operations page は既存 Issue。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1770">#1770</a></td>
+</tr>
+<tr>
+<td>404 / 50x pages</td>
+<td>Partial</td>
+<td>SPA CloudFront は 403 / 404 を <code>/index.html</code> に fallback する。API は machine-readable error を返す。static docs / landing の custom 404 / 50x UX は未整理。</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1867">#1867</a> で public metadata / static site policy と一緒に扱う。</td>
+</tr>
+</tbody></table>
+<h2>Evidence commands</h2>
+<p>レビューでは以下の観点を repo 上で確認した。</p>
+<pre><code class="language-bash">rg &quot;dangerouslySetInnerHTML|innerHTML|localStorage|sessionStorage&quot; apps packages infrastructure docs
+rg &quot;Strict-Transport-Security|Content-Security-Policy|X-Content-Type-Options|Referrer-Policy&quot; infrastructure docs
+rg &quot;meta name=\&quot;description\&quot;|property=\&quot;og:|twitter:card|canonical|favicon|apple-touch-icon|&lt;html lang&quot; apps docs landing
+rg &quot;aria-label|&lt;button|&lt;a |alt=|Modal|Alert&quot; apps packages
+rg &quot;backup|restore|CloudWatch|5xx|404|50x&quot; docs infrastructure
+gh issue list --state open
+</code></pre>
+<h2>Review result</h2>
+<p>公開前レビューとして、現状の TenkaCloud は private demo / controlled community validation へ進める
+だけの core architecture evidence を持っている。一方で、広い public launch や paid event の前には
+次の順で潰す。</p>
+<ol>
+<li><a href="https://github.com/susumutomita/TenkaCloud/issues/1866">#1866</a> で raw HTML fallback を消す。</li>
+<li><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a> で browser / accessibility /
+responsive / performance smoke の再現可能な証跡を作る。</li>
+<li><a href="https://github.com/susumutomita/TenkaCloud/issues/1867">#1867</a> で public metadata と static site
+policy を整える。</li>
+<li><a href="https://github.com/susumutomita/TenkaCloud/issues/1869">#1869</a> で backup / restore posture を
+paid event の判断材料として明文化する。</li>
+</ol>
+
+<div class="doc-source">Source: <code>docs/go-to-market/public-quality-review.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/go-to-market/public-quality-review.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>
