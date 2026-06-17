@@ -1,0 +1,318 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://tenkacloud.example/schemas/source-app-profile.json",
+  "title": "TenkaCloud App-to-Quest Source App Profile",
+  "description": "Stable intermediate representation for App-to-Quest authoring. It summarizes an owned or authorized source application before risk-to-quest mapping. The profile should preserve evidence, confidence, and unknowns instead of pretending static analysis is complete.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "appSlug",
+    "summary",
+    "techStack",
+    "actors",
+    "dataInventory",
+    "entrypoints",
+    "unknowns",
+    "confidence"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional IDE schema reference."
+    },
+    "appSlug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
+      "description": "Kebab-case app identifier used for draft paths and reports."
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Short human-readable description of what the application does."
+    },
+    "techStack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frameworks", "languages", "datastores", "externalServices"],
+      "properties": {
+        "frameworks": { "$ref": "#/$defs/stringList" },
+        "languages": { "$ref": "#/$defs/stringList" },
+        "datastores": { "$ref": "#/$defs/stringList" },
+        "externalServices": { "$ref": "#/$defs/stringList" },
+        "infrastructure": { "$ref": "#/$defs/stringList" },
+        "packageManagers": { "$ref": "#/$defs/stringList" },
+        "testTools": { "$ref": "#/$defs/stringList" }
+      },
+      "description": "Observed implementation technologies. Use empty arrays when a category is not present and unknowns[] when it cannot be determined."
+    },
+    "actors": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/actor" },
+      "description": "Human, machine, or external-service actors that interact with the app."
+    },
+    "dataInventory": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/dataItem" },
+      "description": "Data handled by the application, including personal, sensitive, secret, operational, and public data."
+    },
+    "entrypoints": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/entrypoint" },
+      "description": "Public, authenticated, admin, webhook, scheduled, or internal application surfaces."
+    },
+    "authentication": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "$ref": "#/$defs/knownOrString" },
+        "sessionModel": { "$ref": "#/$defs/knownOrString" },
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      },
+      "description": "Authentication model when it can be inferred."
+    },
+    "authorizationBoundaries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/authorizationBoundary" },
+      "description": "Expected access boundaries and implementation evidence."
+    },
+    "aiDataFlows": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/aiDataFlow" },
+      "description": "Data sent to AI providers or model-serving components."
+    },
+    "secretHandling": {
+      "$ref": "#/$defs/evidenceBlock",
+      "description": "How secrets and environment variables appear to be stored, named, or exposed. Never store secret values."
+    },
+    "storageLocations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/storageLocation" },
+      "description": "Databases, buckets, queues, caches, or files that persist or move data."
+    },
+    "loggingAndAuditability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "auditTrail": { "$ref": "#/$defs/knownOrString" },
+        "logDataClasses": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dataClassification" }
+        },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      },
+      "description": "Logging, audit, and traceability observations."
+    },
+    "deploymentModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hosting": { "$ref": "#/$defs/knownOrString" },
+        "region": { "$ref": "#/$defs/knownOrString" },
+        "infrastructureAsCode": { "$ref": "#/$defs/stringList" },
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      },
+      "description": "Hosting and deployment assumptions relevant to reliability, cost, and operations quests."
+    },
+    "backupDeletionRetention": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "backup": { "$ref": "#/$defs/knownOrString" },
+        "deletion": { "$ref": "#/$defs/knownOrString" },
+        "retention": { "$ref": "#/$defs/knownOrString" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      },
+      "description": "Lifecycle, recovery, deletion, and retention assumptions."
+    },
+    "costSensitivePaths": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/costSensitivePath" },
+      "description": "Operations that may drive provider spend, quota pressure, or throttling concerns."
+    },
+    "operationalSignals": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/operationalSignal" },
+      "description": "Health checks, metrics, alerts, logs, or traces available for reliability and operations quests."
+    },
+    "unknowns": {
+      "$ref": "#/$defs/stringList",
+      "description": "Questions that analysis could not answer. Keep unknowns explicit rather than filling them with guesses."
+    },
+    "confidence": {
+      "$ref": "#/$defs/confidence",
+      "description": "Overall confidence in the profile."
+    }
+  },
+  "$defs": {
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "trustLevel"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "trustLevel": {
+          "type": "string",
+          "enum": [
+            "anonymous",
+            "authenticated",
+            "admin",
+            "operator",
+            "service",
+            "external",
+            "unknown"
+          ]
+        },
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "aiDataFlow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "dataSent"],
+      "properties": {
+        "provider": { "$ref": "#/$defs/knownOrString" },
+        "dataSent": { "$ref": "#/$defs/stringList" },
+        "purpose": { "$ref": "#/$defs/knownOrString" },
+        "userConsent": { "$ref": "#/$defs/knownOrString" },
+        "retentionAssumption": { "$ref": "#/$defs/knownOrString" },
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "authorizationBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource", "expectedBoundary"],
+      "properties": {
+        "resource": { "type": "string", "minLength": 1 },
+        "expectedBoundary": { "type": "string", "minLength": 1 },
+        "implementationEvidence": { "$ref": "#/$defs/stringList" },
+        "riskHint": { "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low", "unknown"]
+    },
+    "costSensitivePath": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "evidence"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "provider": { "$ref": "#/$defs/knownOrString" },
+        "costDriver": { "$ref": "#/$defs/knownOrString" },
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "dataClassification": {
+      "type": "string",
+      "enum": ["public", "internal", "personal", "sensitive", "secret", "operational", "unknown"]
+    },
+    "dataItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "classification", "location", "evidence"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "classification": { "$ref": "#/$defs/dataClassification" },
+        "location": { "$ref": "#/$defs/knownOrString" },
+        "fields": { "$ref": "#/$defs/stringList" },
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "retention": { "$ref": "#/$defs/knownOrString" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "entrypoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "type", "authRequired", "evidence"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": ["page", "api", "webhook", "job", "worker", "admin", "static", "unknown"]
+        },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "ANY", "unknown"]
+        },
+        "authRequired": {
+          "type": "string",
+          "enum": ["yes", "no", "partial", "unknown"]
+        },
+        "actors": { "$ref": "#/$defs/stringList" },
+        "dataTouched": { "$ref": "#/$defs/stringList" },
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "evidenceBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence"],
+      "properties": {
+        "summary": { "type": "string" },
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "knownOrString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "operationalSignal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": ["health-check", "metric", "log", "trace", "audit", "alert", "unknown"]
+        },
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "storageLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "data"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": [
+            "database",
+            "object-storage",
+            "file",
+            "queue",
+            "cache",
+            "log",
+            "external-provider",
+            "unknown"
+          ]
+        },
+        "data": { "$ref": "#/$defs/stringList" },
+        "evidence": { "$ref": "#/$defs/stringList" },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "stringList": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}
