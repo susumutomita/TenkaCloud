@@ -1,0 +1,159 @@
+{
+  "appSlug": "sample-vibe-app",
+  "summary": "Synthetic order-management app used to test App-to-Quest generation.",
+  "techStack": {
+    "frameworks": ["Next.js-style App Router", "Prisma-style schema"],
+    "languages": ["TypeScript", "TSX", "Prisma schema"],
+    "datastores": ["PostgreSQL-style relational database"],
+    "externalServices": ["AI provider", "payment provider"]
+  },
+  "actors": [
+    {
+      "name": "customer",
+      "description": "Authenticated buyer who can view orders and request summaries.",
+      "trustLevel": "authenticated"
+    },
+    {
+      "name": "admin",
+      "description": "Privileged operator who can list users through admin tooling.",
+      "trustLevel": "admin"
+    },
+    {
+      "name": "ai-provider",
+      "description": "External processor receiving support summary prompts in the modeled flow.",
+      "trustLevel": "external"
+    },
+    {
+      "name": "payment-provider",
+      "description": "External paid provider modeled by the checkout session stub.",
+      "trustLevel": "external"
+    }
+  ],
+  "dataInventory": [
+    {
+      "name": "user profile",
+      "classification": "personal",
+      "location": "lib/db.ts, prisma/schema.prisma",
+      "evidence": ["email", "name", "lastLoginIp"]
+    },
+    {
+      "name": "order",
+      "classification": "personal",
+      "location": "lib/db.ts, prisma/schema.prisma",
+      "evidence": ["shippingAddress", "note", "itemsJson"]
+    },
+    {
+      "name": "AI prompt",
+      "classification": "personal",
+      "location": "lib/ai.ts",
+      "evidence": ["Customer email", "Shipping address", "Free-form user notes"]
+    },
+    {
+      "name": "provider API keys",
+      "classification": "secret",
+      "location": ".env.example",
+      "evidence": ["NEXT_PUBLIC_OPENAI_API_KEY", "PAYMENT_PROVIDER_API_KEY"]
+    }
+  ],
+  "entrypoints": [
+    {
+      "path": "/",
+      "type": "page",
+      "authRequired": "yes",
+      "evidence": ["app/page.tsx calls requireUser()"]
+    },
+    {
+      "path": "/admin",
+      "type": "page",
+      "authRequired": "yes",
+      "evidence": ["app/admin/page.tsx calls requireUser()"]
+    },
+    {
+      "path": "/api/orders/[id]",
+      "type": "api",
+      "authRequired": "yes",
+      "evidence": ["app/api/orders/[id]/route.ts calls requireUser()"]
+    },
+    {
+      "path": "/api/admin/users",
+      "type": "api",
+      "authRequired": "yes",
+      "evidence": ["app/api/admin/users/route.ts calls requireUser()"]
+    },
+    {
+      "path": "/api/ai/summarize",
+      "type": "api",
+      "authRequired": "yes",
+      "evidence": ["app/api/ai/summarize/route.ts calls requireUser()"]
+    },
+    {
+      "path": "/api/checkout",
+      "type": "api",
+      "authRequired": "yes",
+      "evidence": ["app/api/checkout/route.ts calls requireUser()"]
+    }
+  ],
+  "authorizationBoundaries": [
+    {
+      "resource": "orders",
+      "expectedBoundary": "A customer can access only orders whose userId matches the session user id.",
+      "implementationEvidence": [
+        "findOrderById(id) is returned without comparing order.userId to user.id"
+      ],
+      "confidence": "high"
+    },
+    {
+      "resource": "admin users API",
+      "expectedBoundary": "Only role=admin can list all users.",
+      "implementationEvidence": [
+        "The admin page hides controls with canSeeAdminNav(), but the API route only calls requireUser()"
+      ],
+      "confidence": "high"
+    }
+  ],
+  "aiDataFlows": [
+    {
+      "provider": "modeled AI provider",
+      "dataSent": ["email", "name", "shippingAddress", "order note", "free-form notes"],
+      "userConsent": "unknown",
+      "retentionAssumption": "unknown"
+    }
+  ],
+  "secretHandling": {
+    "evidence": [".env.example uses NEXT_PUBLIC_OPENAI_API_KEY with an empty placeholder"],
+    "confidence": "high"
+  },
+  "loggingAndAuditability": {
+    "evidence": ["logDebug writes complete context objects with console.log"],
+    "auditTrail": "unknown",
+    "confidence": "high"
+  },
+  "deploymentModel": {
+    "evidence": ["No deployment files are present in the fixture"],
+    "confidence": "low"
+  },
+  "backupDeletionRetention": {
+    "evidence": [
+      "README.md and prisma/schema.prisma do not define deletion, retention, backup, or restore flows"
+    ],
+    "confidence": "medium"
+  },
+  "costSensitivePaths": [
+    {
+      "path": "/api/ai/summarize",
+      "evidence": ["summarizeOrder(prompt) models a paid AI path without a rate limit"]
+    },
+    {
+      "path": "/api/checkout",
+      "evidence": ["createCheckoutSession() models a payment provider path without a rate limit"]
+    }
+  ],
+  "unknowns": [
+    "Production hosting model",
+    "Actual AI provider and data retention settings",
+    "Actual payment provider quota behavior",
+    "Backup schedule",
+    "Account deletion policy"
+  ],
+  "confidence": "medium"
+}
