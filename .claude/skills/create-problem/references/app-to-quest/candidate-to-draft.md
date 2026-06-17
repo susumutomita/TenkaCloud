@@ -13,7 +13,7 @@ Read:
 .claude/drafts/app-to-quest/<app-slug>/03-quest-candidates.json
 ```
 
-The author must select exactly one candidate from `03-quest-candidates.json` before this mapping runs.
+The author must select exactly one candidate from `03-quest-candidates.json` before this mapping runs. Generate a draft only for that selected candidate.
 
 Required context:
 
@@ -30,30 +30,31 @@ Required context:
 
 ## Output
 
-Write:
+Write one Markdown file for the selected candidate:
 
 ```text
-.claude/drafts/app-to-quest/<app-slug>/04-problem-draft.md
+.claude/drafts/app-to-quest/<app-slug>/problem-drafts/quest-###-<candidate-id>.md
 ```
 
-Use [`problem-draft-template.md`](./problem-draft-template.md) as the exact section skeleton. The draft must be detailed enough for a human author to turn it into a normal TenkaCloud problem, but it must remain separate from the catalog until reviewed.
+Use [`problem-draft.md`](./problem-draft.md) as the exact section skeleton. The draft must be detailed enough for a human author to turn it into a normal TenkaCloud problem, but it must remain separate from the catalog until reviewed.
 
 ## Required Sections
 
 The draft must include these sections in this order:
 
-1. `Problem Overview`
-2. `Participant Instructions`
-3. `Risk Scenario`
-4. `What Happens If Ignored`
+1. `Source App Context`
+2. `Why This Matters`
+3. `What Happens If Ignored`
+4. `Mission`
 5. `Initial Broken State`
 6. `Target Fixed State`
-7. `Scoring Plan`
-8. `Hints`
-9. `Remediation Guide`
-10. `Organizer Notes`
-11. `Safety Notes`
-12. `Catalog Conversion Checklist`
+7. `Success Criteria`
+8. `Scoring Design`
+9. `Safe Simulation Plan`
+10. `Hints`
+11. `Organizer Notes`
+12. `Safety Notes`
+13. `Catalog Conversion Checklist`
 
 Do not merge participant-facing instructions with organizer-only notes. Participants should receive the mission, constraints, hints, and success criteria. Organizers should receive source evidence, unknowns, scoring assumptions, fixture requirements, and safety review notes.
 
@@ -61,26 +62,26 @@ Do not merge participant-facing instructions with organizer-only notes. Particip
 
 | QuestCandidate field | Draft section | Rule |
 | --- | --- | --- |
-| `title` | H1 and `Problem Overview` | Keep human-readable. Avoid exploit-focused titles. |
-| `category` | `Problem Overview` and `Organizer Notes` | Explain the learning theme, not just the risk label. |
+| `title` | H1 and `Source App Context` | Keep human-readable. Avoid exploit-focused titles. |
+| `category` | `Source App Context` and `Organizer Notes` | Explain the learning theme, not just the risk label. |
 | `severity` | `Organizer Notes` | Use for author prioritization. Do not turn severity into scare copy for participants. |
 | `sourceEvidence` | `Organizer Notes` | Preserve file paths and route names. Do not include secret values, database rows, or API response bodies. |
-| `riskStatement` | `Risk Scenario` | Convert to a defensive scenario. Keep uncertainty explicit. |
-| `businessImpact` | `Problem Overview` | Explain why the scenario matters to operators and builders. |
+| `riskStatement` | `Source App Context` and `Initial Broken State` | Convert to a defensive scenario. Keep uncertainty explicit. |
+| `businessImpact` | `Why This Matters` | Explain why the scenario matters to operators and builders. |
 | `whatHappensIfIgnored` | `What Happens If Ignored` | Required verbatim or lightly edited for clarity. |
-| `learnerExperience` | `Participant Instructions` | Explain what the participant will do during the quest. |
-| `mission` | `Participant Instructions` and `Target Fixed State` | Convert to imperative instructions. |
-| `successCriteria` | `Scoring Plan` and `Target Fixed State` | Every criterion must be observable, reviewable, or scorable. |
-| `scoringSignals` | `Scoring Plan` | Convert to concrete probes, flags, counters, or manual review checks. |
-| `safeSimulationPlan` | `Initial Broken State`, `Scoring Plan`, and `Safety Notes` | Keep the simulation local, synthetic, bounded, and non-production. |
-| `remediationHints` | `Hints` and `Remediation Guide` | Hints are short nudges. Remediation guide is organizer-facing implementation guidance. |
-| `suggestedProblemType` | `Problem Overview` and `Catalog Conversion Checklist` | Map `challenge` to Challenge, `battle` to Battle, and keep `assessment` or `workshop` as authoring-only until converted. |
-| `suggestedScoringKind` | `Scoring Plan` and `Catalog Conversion Checklist` | `manual-review` must be converted before catalog publication. |
+| `learnerExperience` | `Mission` | Explain what the participant will do during the quest. |
+| `mission` | `Mission` and `Target Fixed State` | Convert to imperative instructions. |
+| `successCriteria` | `Success Criteria`, `Scoring Design`, and `Target Fixed State` | Every criterion must be observable, reviewable, or scorable. |
+| `scoringSignals` | `Scoring Design` | Convert to concrete probes, flags, counters, or manual review checks. |
+| `safeSimulationPlan` | `Initial Broken State`, `Safe Simulation Plan`, `Scoring Design`, and `Safety Notes` | Keep the simulation local, synthetic, bounded, and non-production. |
+| `remediationHints` | `Hints` and `Organizer Notes` | Hints are short nudges. Organizer notes can include implementation guidance. |
+| `suggestedProblemType` | `Source App Context` and `Catalog Conversion Checklist` | Map `challenge` to Challenge, `battle` to Battle, and keep `assessment` or `workshop` as authoring-only until converted. |
+| `suggestedScoringKind` | `Scoring Design` and `Catalog Conversion Checklist` | `manual-review` must be converted before catalog publication. |
 | `confidence` | `Organizer Notes` | Low confidence requires explicit review questions. |
 
-## Scoring Plan Requirements
+## Scoring Design Requirements
 
-The `Scoring Plan` section must be specific enough that a problem author can build the scoring assets.
+The `Scoring Design` section must be specific enough that a problem author can build the scoring assets.
 
 For each `suggestedScoringKind`:
 
@@ -116,7 +117,7 @@ Avoid criteria like:
 
 Do not require learners to attack a live service to see the broken state. Use local fixtures, generated TenkaCloud resources, synthetic users, synthetic events, static code inspection, or bounded probes.
 
-## Hints and Remediation
+## Hints
 
 Hints should help the participant progress without giving away the full answer. Use three levels:
 
@@ -124,7 +125,7 @@ Hints should help the participant progress without giving away the full answer. 
 2. implementation hint
 3. verification hint
 
-The remediation guide is for authors and organizers. It can be more direct, but it still should not include real-service exploitation steps or secret values.
+Organizer notes can include the intended fix path, common mistakes, and synthetic-fixture verification guidance. They still must not include real-service exploitation steps or secret values.
 
 ## Safety Rules
 
@@ -156,4 +157,4 @@ If `suggestedProblemType` is `workshop` or `assessment`, convert it to a Challen
 
 ## App-to-Quest Mode Integration
 
-The future `app-to-quest` mode should read this file after the author selects one candidate. It should write `04-problem-draft.md`, show the draft path, and stop for human review before writing catalog files.
+The `app-to-quest` mode should read this file after the author selects one candidate. It should write `problem-drafts/quest-###-<candidate-id>.md`, show the draft path, copy `review-checklist.md`, and stop for human review before writing catalog files.

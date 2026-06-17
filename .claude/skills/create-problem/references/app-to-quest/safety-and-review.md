@@ -38,8 +38,9 @@ App-to-Quest may generate these authoring artifacts:
 ├── 01-source-app-profile.json
 ├── 02-risk-inventory.md
 ├── 03-quest-candidates.json
-├── 04-problem-draft.md
-└── review-notes.md
+├── problem-drafts/
+│   └── quest-001-<candidate-id>.md
+└── review-checklist.md
 ```
 
 Allowed content:
@@ -89,13 +90,13 @@ Human review is mandatory before any generated draft enters the problem catalog.
 5. Generate `03-quest-candidates.json`.
 6. Review candidates for dangerous wording, attack framing, factual overreach, missing evidence, and unsafe simulation plans.
 7. Select exactly one candidate.
-8. Convert the selected candidate into `04-problem-draft.md`.
+8. Convert the selected candidate into `problem-drafts/quest-###-<candidate-id>.md`.
 9. Review participant instructions and organizer notes separately.
 10. Convert the draft into a safe fixture or sandbox problem.
 11. Scaffold catalog files with `bun run scripts/tenkacloud-problem.ts create <id> --kind <kind>`.
 12. Run normal problem validation and PR review before publication.
 
-At no point should the workflow bulk-publish multiple candidates or skip directly from analysis to `problems/`.
+At no point should the workflow bulk-publish candidates or skip directly from analysis to `problems/`.
 
 ## Review Checklist
 
