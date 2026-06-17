@@ -250,6 +250,7 @@ aws cloudformation deploy \
 - 既存 5 問題の design 振り返り: [`docs/problems/EXAMPLES.md`](../../../docs/problems/EXAMPLES.md)
 - AI agent flow (= Claude Code / Codex CLI): [`docs/problems/AI-WORKFLOW.md`](../../../docs/problems/AI-WORKFLOW.md)
 - App-to-Quest 参照仕様: [`references/app-to-quest/codewiki-adapter.md`](./references/app-to-quest/codewiki-adapter.md)
+- App-to-Quest risk mapping: [`references/app-to-quest/risk-to-quest.md`](./references/app-to-quest/risk-to-quest.md)
 - スキーマ正本: [`problems/SCHEMA.json`](../../../problems/SCHEMA.json)
 - 実例:
   - flag (Challenge): [`problems/challenges/hello-world/`](../../../problems/challenges/hello-world/)

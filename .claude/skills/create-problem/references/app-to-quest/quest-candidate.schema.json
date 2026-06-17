@@ -1,0 +1,170 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://tenkacloud.example/schemas/app-to-quest-quest-candidates.json",
+  "title": "TenkaCloud App-to-Quest Quest Candidates",
+  "description": "Draft QuestCandidate output produced by risk-to-quest mapping. Manual review is required before converting any candidate into a formal problem catalog entry.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["appSlug", "sourceProfile", "riskInventory", "humanReviewRequired", "candidates"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional IDE schema reference."
+    },
+    "appSlug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$"
+    },
+    "sourceProfile": {
+      "type": "string",
+      "const": "01-source-app-profile.json"
+    },
+    "riskInventory": {
+      "type": "string",
+      "const": "02-risk-inventory.md"
+    },
+    "humanReviewRequired": {
+      "type": "boolean",
+      "const": true
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/questCandidate" }
+    },
+    "unknowns": {
+      "$ref": "#/$defs/stringList",
+      "description": "Unresolved source-profile questions that affected ranking or confidence."
+    },
+    "rejectedIdeas": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/rejectedIdea" }
+    }
+  },
+  "$defs": {
+    "confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low"]
+    },
+    "questCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "category",
+        "severity",
+        "sourceEvidence",
+        "riskStatement",
+        "businessImpact",
+        "whatHappensIfIgnored",
+        "learnerExperience",
+        "mission",
+        "successCriteria",
+        "scoringSignals",
+        "safeSimulationPlan",
+        "remediationHints",
+        "suggestedProblemType",
+        "suggestedScoringKind",
+        "confidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{2,80}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "enum": ["security", "privacy", "reliability", "operations", "cost", "ai-safety"]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low"]
+        },
+        "sourceEvidence": {
+          "$ref": "#/$defs/nonEmptyStringList",
+          "description": "File paths, route names, schema names, or other evidence references. Do not store secret values, API responses, or database rows."
+        },
+        "riskStatement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "businessImpact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "whatHappensIfIgnored": {
+          "type": "string",
+          "minLength": 1
+        },
+        "learnerExperience": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mission": {
+          "type": "string",
+          "minLength": 1
+        },
+        "successCriteria": {
+          "$ref": "#/$defs/nonEmptyStringList"
+        },
+        "scoringSignals": {
+          "$ref": "#/$defs/nonEmptyStringList"
+        },
+        "safeSimulationPlan": {
+          "type": "string",
+          "minLength": 1
+        },
+        "remediationHints": {
+          "$ref": "#/$defs/nonEmptyStringList"
+        },
+        "suggestedProblemType": {
+          "type": "string",
+          "enum": ["assessment", "challenge", "battle", "workshop"]
+        },
+        "suggestedScoringKind": {
+          "type": "string",
+          "enum": [
+            "flag",
+            "uptime-flat",
+            "uptime-multi",
+            "phased-polling",
+            "attack-detection",
+            "manual-review"
+          ],
+          "description": "manual-review is valid only for draft candidates and must be converted before publication."
+        },
+        "confidence": {
+          "$ref": "#/$defs/confidence"
+        },
+        "unknowns": {
+          "$ref": "#/$defs/stringList"
+        }
+      }
+    },
+    "rejectedIdea": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["idea", "reason"],
+      "properties": {
+        "idea": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "stringList": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "nonEmptyStringList": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}
