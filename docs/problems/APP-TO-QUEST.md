@@ -114,6 +114,8 @@ problems/<category>/<id>/
 
 The draft may also include an author-only note such as `README.md` when the generated design needs assumptions, review notes, or local fixture instructions. Participant-facing instructions should remain in `metadata.json` and optional portal components.
 
+The source application analysis should first normalize into [`source-app-profile.schema.json`](./source-app-profile.schema.json). That schema preserves app summary, actors, data inventory, auth boundaries, public and admin entrypoints, external services, AI data flows, deployment assumptions, operational signals, cost-sensitive paths, evidence, confidence, and explicit unknowns.
+
 ## Platform Contract
 
 The platform runtime should stay simple:

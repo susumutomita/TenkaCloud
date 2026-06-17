@@ -156,6 +156,7 @@ and stop for human review before writing one selected problem draft.
 └── portal/
 </code></pre>
 <p>The draft may also include an author-only note such as <code>README.md</code> when the generated design needs assumptions, review notes, or local fixture instructions. Participant-facing instructions should remain in <code>metadata.json</code> and optional portal components.</p>
+<p>The source application analysis should first normalize into <a href="./source-app-profile.schema.json"><code>source-app-profile.schema.json</code></a>. That schema preserves app summary, actors, data inventory, auth boundaries, public and admin entrypoints, external services, AI data flows, deployment assumptions, operational signals, cost-sensitive paths, evidence, confidence, and explicit unknowns.</p>
 <h2>Platform Contract</h2>
 <p>The platform runtime should stay simple:</p>
 <ul>
