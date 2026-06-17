@@ -251,6 +251,7 @@ aws cloudformation deploy \
 - AI agent flow (= Claude Code / Codex CLI): [`docs/problems/AI-WORKFLOW.md`](../../../docs/problems/AI-WORKFLOW.md)
 - App-to-Quest 参照仕様: [`references/app-to-quest/codewiki-adapter.md`](./references/app-to-quest/codewiki-adapter.md)
 - App-to-Quest risk mapping: [`references/app-to-quest/risk-to-quest.md`](./references/app-to-quest/risk-to-quest.md)
+- App-to-Quest problem draft mapping: [`references/app-to-quest/candidate-to-draft.md`](./references/app-to-quest/candidate-to-draft.md)
 - スキーマ正本: [`problems/SCHEMA.json`](../../../problems/SCHEMA.json)
 - 実例:
   - flag (Challenge): [`problems/challenges/hello-world/`](../../../problems/challenges/hello-world/)

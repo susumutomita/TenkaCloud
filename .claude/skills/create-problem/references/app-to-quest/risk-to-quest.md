@@ -420,4 +420,4 @@ Carry unresolved questions into `02-risk-inventory.md`. Do not silently discard 
 
 ## App-to-Quest Mode Integration
 
-The future `app-to-quest` mode should read this file after producing `01-source-app-profile.json` and before prompting the author to select a draft. The mode should show the risk inventory and candidate list to the author, then stop for human review unless a later issue explicitly adds one-candidate scaffold generation.
+The future `app-to-quest` mode should read this file after producing `01-source-app-profile.json` and before prompting the author to select a draft. The mode should show the risk inventory and candidate list to the author. After the author selects exactly one candidate, continue with [`candidate-to-draft.md`](./candidate-to-draft.md) and stop for human review before writing catalog files.
