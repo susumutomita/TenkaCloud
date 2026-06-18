@@ -88,14 +88,14 @@ describe("brand logo data URIs", () => {
   it("should expose the mark as an inline image data URI carrying the ink color", () => {
     expect(tenkaCloudMarkDataUri.startsWith("data:image/svg+xml,")).toBe(true);
     expect(decodeURIComponent(tenkaCloudMarkDataUri)).toContain(brandColors.ink);
-    expect(decodeURIComponent(tenkaCloudMarkDataUri)).toContain("M26 90 L60 46 L94 90");
+    expect(decodeURIComponent(tenkaCloudMarkDataUri)).toContain("M26 90 L60 48 L94 90");
   });
 
   it("should expose a rounded app icon data URI (ink badge + summit ridge)", () => {
     const decoded = decodeURIComponent(tenkaCloudAppIconDataUri);
     expect(tenkaCloudAppIconDataUri.startsWith("data:image/svg+xml,")).toBe(true);
     expect(decoded).toContain('rx="26"');
-    expect(decoded).toContain("M26 90 L60 46 L94 90");
+    expect(decoded).toContain("M26 90 L60 48 L94 90");
   });
 });
 
