@@ -4,16 +4,20 @@ import {
   handler,
   LITE_TENANT_ADMIN_ROLE,
   LITE_TENANT_ID,
+  LITE_TENANT_NAME,
 } from "../../../lib/app-plane-core/handlers/pre-token-generation/index.js";
 
 /**
  * Issue #1327 / #1358: Pre-Token Generation V2 handler の契約 pin。
  *
- * Cognito の V2 trigger 仕様 (= 同期 / event mutate 経由で id_token / access_token の
- * 両方に claim を上書き) を input → output で固定する。 SaaS mode handler の
- * `requireRole(c, [TENANT_ADMIN_ROLE])` + `resolveTenantId(c)` が成立するために必要な 2 claim
- * (`custom:userRole` / `custom:tenantId`) が **id_token と access_token の双方** に必ず
- * 注入されることを保証する (#1358 の regression を pin)。
+ * Cognito の V2 trigger 仕様 (= 同期 / event mutate 経由で id_token / access_token の双方に
+ * claim を上書き) を input → output で固定する。 Application Plane handler の
+ * `requireRole(c, ...)` + `resolveTenantId(c)` が成立するための claim
+ * (`custom:userRole` / `custom:tenantId` / `custom:tenantName`) が **id_token と access_token の
+ * 双方** に注入されることを保証する。
+ *
+ * role は user の割り当て (`custom:userRole` attribute) を尊重し、 未設定時のみ TenantAdmin に
+ * fallback する (= 招待 Viewer/Operator の enforcement と bootstrap 主催者の救済の両立)。
  */
 
 function buildEvent(
@@ -46,16 +50,29 @@ function buildEvent(
   } as PreTokenGenerationV2TriggerEvent;
 }
 
+function idClaimsOf(result: PreTokenGenerationV2TriggerEvent): Record<string, string> {
+  return (result.response.claimsAndScopeOverrideDetails?.idTokenGeneration?.claimsToAddOrOverride ??
+    {}) as Record<string, string>;
+}
+
+function accessClaimsOf(result: PreTokenGenerationV2TriggerEvent): Record<string, string> {
+  return (result.response.claimsAndScopeOverrideDetails?.accessTokenGeneration
+    ?.claimsToAddOrOverride ?? {}) as Record<string, string>;
+}
+
 describe("Pre-Token Generation V2 handler (#1327 / #1358)", () => {
-  it("should inject custom:userRole=TenantAdmin and custom:tenantId=local into the ID token (#1358 root cause)", async () => {
+  it("should fall back to TenantAdmin + local + default tenant name when no custom attributes are set", async () => {
     const event = buildEvent();
-    const result = await handler(event, {} as never, () => undefined);
+    const result = (await handler(
+      event,
+      {} as never,
+      () => undefined,
+    )) as PreTokenGenerationV2TriggerEvent;
     expect(result).toBeDefined();
-    const idClaims =
-      (result as PreTokenGenerationV2TriggerEvent).response.claimsAndScopeOverrideDetails
-        ?.idTokenGeneration?.claimsToAddOrOverride ?? {};
+    const idClaims = idClaimsOf(result);
     expect(idClaims["custom:userRole"]).toBe("TenantAdmin");
     expect(idClaims["custom:tenantId"]).toBe("local");
+    expect(idClaims["custom:tenantName"]).toBe("TenkaCloud Lite");
   });
 
   it("should also inject claims into the access token so API Gateway / Lambda authorizers see them regardless of token type", async () => {
@@ -65,11 +82,59 @@ describe("Pre-Token Generation V2 handler (#1327 / #1358)", () => {
       {} as never,
       () => undefined,
     )) as PreTokenGenerationV2TriggerEvent;
-    const accessClaims =
-      result.response.claimsAndScopeOverrideDetails?.accessTokenGeneration?.claimsToAddOrOverride ??
-      {};
+    const accessClaims = accessClaimsOf(result);
     expect(accessClaims["custom:userRole"]).toBe("TenantAdmin");
     expect(accessClaims["custom:tenantId"]).toBe("local");
+    expect(accessClaims["custom:tenantName"]).toBe("TenkaCloud Lite");
+  });
+
+  it("should honor the user's assigned role so an invited TenantViewer is not escalated to admin", async () => {
+    // 招待時に AdminCreateUser が set した custom:userRole=TenantViewer を尊重する
+    // (= broken access control の修正: Viewer が Admin 操作を実行できない)。
+    const event = buildEvent();
+    event.request.userAttributes["custom:userRole"] = "TenantViewer";
+    const result = (await handler(
+      event,
+      {} as never,
+      () => undefined,
+    )) as PreTokenGenerationV2TriggerEvent;
+    expect(idClaimsOf(result)["custom:userRole"]).toBe("TenantViewer");
+    expect(accessClaimsOf(result)["custom:userRole"]).toBe("TenantViewer");
+    // tenantId は Lite 固定で常に local。
+    expect(idClaimsOf(result)["custom:tenantId"]).toBe("local");
+  });
+
+  it("should honor a TenantOperator assignment as well", async () => {
+    const event = buildEvent();
+    event.request.userAttributes["custom:userRole"] = "TenantOperator";
+    const result = (await handler(
+      event,
+      {} as never,
+      () => undefined,
+    )) as PreTokenGenerationV2TriggerEvent;
+    expect(idClaimsOf(result)["custom:userRole"]).toBe("TenantOperator");
+  });
+
+  it("should fall back to TenantAdmin when the role attribute is not a known tenant role", async () => {
+    const event = buildEvent();
+    event.request.userAttributes["custom:userRole"] = "BogusRole";
+    const result = (await handler(
+      event,
+      {} as never,
+      () => undefined,
+    )) as PreTokenGenerationV2TriggerEvent;
+    expect(idClaimsOf(result)["custom:userRole"]).toBe("TenantAdmin");
+  });
+
+  it("should honor an explicit custom:tenantName attribute over the default", async () => {
+    const event = buildEvent();
+    event.request.userAttributes["custom:tenantName"] = "Acme Drills";
+    const result = (await handler(
+      event,
+      {} as never,
+      () => undefined,
+    )) as PreTokenGenerationV2TriggerEvent;
+    expect(idClaimsOf(result)["custom:tenantName"]).toBe("Acme Drills");
   });
 
   it("should preserve the input event shape (Cognito trigger contract: handler returns the mutated event)", async () => {
@@ -79,38 +144,12 @@ describe("Pre-Token Generation V2 handler (#1327 / #1358)", () => {
       {} as never,
       () => undefined,
     )) as PreTokenGenerationV2TriggerEvent;
-    // Cognito requires the handler to return the event (sync invoke). Confirm identity is preserved.
     expect(result.userPoolId).toBe(event.userPoolId);
     expect(result.userName).toBe(event.userName);
     expect(result.triggerSource).toBe(event.triggerSource);
   });
 
-  it("should override existing custom:userRole / custom:tenantId if the user attribute is already set", async () => {
-    // Lite mode は 1 tenant 前提なので、 仮に user attribute に別 role/tenant が入っていても
-    // JWT 上は強制 TenantAdmin / local に倒す (= 運用契約)。
-    const event = buildEvent();
-    event.request.userAttributes["custom:userRole"] = "ReadOnly";
-    event.request.userAttributes["custom:tenantId"] = "some-other-tenant";
-    const result = (await handler(
-      event,
-      {} as never,
-      () => undefined,
-    )) as PreTokenGenerationV2TriggerEvent;
-    const idClaims =
-      result.response.claimsAndScopeOverrideDetails?.idTokenGeneration?.claimsToAddOrOverride ?? {};
-    const accessClaims =
-      result.response.claimsAndScopeOverrideDetails?.accessTokenGeneration?.claimsToAddOrOverride ??
-      {};
-    expect(idClaims["custom:userRole"]).toBe("TenantAdmin");
-    expect(idClaims["custom:tenantId"]).toBe("local");
-    expect(accessClaims["custom:userRole"]).toBe("TenantAdmin");
-    expect(accessClaims["custom:tenantId"]).toBe("local");
-  });
-
   it("should emit groupOverrideDetails as an empty object so existing UserPool groups are preserved", async () => {
-    // V2 contract: `groupOverrideDetails: {}` を明示的に空オブジェクトで返すことで
-    // 「未指定 = 既存 group を尊重」 が意図であることを pin する。 Lite mode は UserPool
-    // group 経路を使わないため、 ここで意図せず group を override しない保証になる。
     const event = buildEvent();
     const result = (await handler(
       event,
@@ -119,14 +158,12 @@ describe("Pre-Token Generation V2 handler (#1327 / #1358)", () => {
     )) as PreTokenGenerationV2TriggerEvent;
     const groupOverride = result.response.claimsAndScopeOverrideDetails?.groupOverrideDetails;
     expect(groupOverride).toBeDefined();
-    // 空オブジェクトであることを確認 (= groupsToOverride / iamRolesToOverride / preferredRole 未指定)。
     expect(Object.keys(groupOverride ?? {}).length).toBe(0);
   });
 
   it("should export constants matching the Application Plane handler expectations", () => {
-    // SaaS mode handler が require する `TENANT_ADMIN_ROLE` 値と一致していること。
     expect(LITE_TENANT_ADMIN_ROLE).toBe("TenantAdmin");
-    // Lite mode の固定 tenantId (= TenkaCloudLiteStack の LITE_TENANT_ID と一致)。
     expect(LITE_TENANT_ID).toBe("local");
+    expect(LITE_TENANT_NAME).toBe("TenkaCloud Lite");
   });
 });
