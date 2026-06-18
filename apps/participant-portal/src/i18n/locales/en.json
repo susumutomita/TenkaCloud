@@ -299,6 +299,7 @@
     "current_score_label": "Current score",
     "last_scored_label": "Last scored",
     "outputs_header": "Access URLs",
+    "stack_outputs_detail_header": "Stack Outputs (details)",
     "celebrate_header": "🏆 Cleared +{points} pt",
     "celebrate_body": "You've already solved this problem. Move on to the next!",
     "submit_button": "Submit flag (+{points} pt)",
