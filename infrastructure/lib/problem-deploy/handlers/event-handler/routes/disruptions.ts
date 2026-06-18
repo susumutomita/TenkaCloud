@@ -8,6 +8,7 @@ import {
 } from "../../deploy-handler/auth.js";
 import { auditEventAction } from "../audit.js";
 import { fireDisruption, listDisruptionAudit, listDisruptionCatalog } from "../disruption-fire.js";
+import { cancelRecurring, listActiveRecurring } from "../disruption-recurring.js";
 import type { DisruptionFireOutcome } from "../disruption-types.js";
 import {
   handleRouteError,
@@ -17,7 +18,7 @@ import {
   withEventId,
 } from "../route-helpers.js";
 import type { EventSharedResources } from "../shared.js";
-import { DisruptionFireRequestSchema } from "../types.js";
+import { type DisruptionFireRequest, DisruptionFireRequestSchema } from "../types.js";
 
 /**
  * Translate a `fireDisruption` outcome into an HTTP response. Kept as a flat
@@ -45,6 +46,123 @@ function disruptionFireOutcomeResponse(c: Context, outcome: DisruptionFireOutcom
     default:
       return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
+}
+
+/**
+ * [ADR-037 Slice 2] recurring 一覧。 ownership 検証 → 動作中 (未 cancel + endsAt 未到達) を返す。
+ * inline handler から切り出し、 registerDisruptionRoutes の cognitive complexity を抑える。
+ */
+async function handleRecurringList(
+  c: Context,
+  shared: EventSharedResources,
+  eventId: string,
+): Promise<Response> {
+  const tenantId = resolveTenantId(c);
+  const ownershipError = await requireEventOwnership({ c, shared, eventId, tenantId });
+  if (ownershipError) return ownershipError;
+  const out = await listActiveRecurring(shared, eventId, tenantId, Date.now());
+  return c.json(out, StatusCodes.OK);
+}
+
+/**
+ * [ADR-037 Slice 2] recurring の早期解除。 ownership 検証 → schedule 削除 → registry に cancelledAt。
+ * route の inline handler から切り出し、 registerDisruptionRoutes の cognitive complexity を抑える。
+ */
+async function handleRecurringCancel(
+  c: Context,
+  shared: EventSharedResources,
+  eventId: string,
+): Promise<Response> {
+  const requestId = c.req.param("requestId");
+  if (!requestId) return c.json({ error: "invalid_request_id" }, StatusCodes.BAD_REQUEST);
+  const tenantId = resolveTenantId(c);
+  const ownershipError = await requireEventOwnership({ c, shared, eventId, tenantId });
+  if (ownershipError) return ownershipError;
+  const outcome = await cancelRecurring(shared, eventId, tenantId, requestId, Date.now());
+  if (outcome === "not_found") return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+  auditEventAction(c, "cancel_recurring_disruption", eventId);
+  return c.json({ ok: true }, StatusCodes.OK);
+}
+
+/** [ADR-037] timing=recurring のときだけ recurrence を載せる (= schema が cross-field を保証済)。 */
+function recurrenceInput(req: DisruptionFireRequest): {
+  recurrence?: { intervalMinutes: number; maxFires: number };
+} {
+  if (
+    req.timing === "recurring" &&
+    req.intervalMinutes !== undefined &&
+    req.maxFires !== undefined
+  ) {
+    return { recurrence: { intervalMinutes: req.intervalMinutes, maxFires: req.maxFires } };
+  }
+  return {};
+}
+
+/**
+ * disruption fire の本体。 Zod parse → ownership 検証 → service。 inline handler から切り出し、
+ * registerDisruptionRoutes の cognitive complexity 予算を守る (= 既存ロジックは不変)。
+ */
+async function handleDisruptionFire(
+  c: Context,
+  shared: EventSharedResources,
+  eventId: string,
+): Promise<Response> {
+  // PR #889 review: 既存 route と整合する Zod parse に統一 (= cross-field 制約も含めて検証)
+  const parsed = await parseJsonBody(c, DisruptionFireRequestSchema);
+  if (!parsed.ok) return parsed.response;
+  const req = parsed.data;
+  const tenantId = resolveTenantId(c);
+  const ownershipError = await requireEventOwnership({ c, shared, eventId, tenantId });
+  if (ownershipError) return ownershipError;
+  const outcome = await fireDisruption(shared, {
+    tenantId,
+    eventId,
+    problemId: req.problemId,
+    disruptionId: req.disruptionId,
+    parameters: req.parameters ?? {},
+    scope: req.scope,
+    targetTeamIds: req.targetTeamIds ?? [],
+    ...(req.randomCount !== undefined ? { randomCount: req.randomCount } : {}),
+    // schema は afterMinutes を timing=scheduled の時のみ許す (= 存在 = scheduled)。
+    ...(req.afterMinutes !== undefined ? { afterMinutes: req.afterMinutes } : {}),
+    ...recurrenceInput(req),
+    requestId: req.requestId,
+    firedBy: resolveCognitoSub(c),
+    nowMs: Date.now(),
+  });
+  if (outcome.kind === "ok") auditEventAction(c, "fire_disruption", eventId);
+  return disruptionFireOutcomeResponse(c, outcome);
+}
+
+/**
+ * [ADR-037 Slice 2] recurring disruption の一覧 / 早期解除 route。 別関数に切り出すことで
+ * registerDisruptionRoutes の cognitive complexity 予算を超えないようにする (= 単なる構造分割)。
+ */
+function registerRecurringRoutes(app: Hono, shared: EventSharedResources): void {
+  app.get(
+    "/events/:eventId/disruptions/recurring",
+    withEventId(async ({ c, eventId }) => {
+      try {
+        return await handleRecurringList(c, shared, eventId);
+      } catch (err) {
+        return handleRouteError(c, "[disruptions] recurring list failed", { eventId }, err);
+      }
+    }),
+  );
+
+  app.post(
+    "/events/:eventId/disruptions/recurring/:requestId/cancel",
+    withEventId(
+      async ({ c, eventId }) => {
+        try {
+          return await handleRecurringCancel(c, shared, eventId);
+        } catch (err) {
+          return handleRouteError(c, "[disruptions] recurring cancel failed", { eventId }, err);
+        }
+      },
+      { roles: [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE] },
+    ),
+  );
 }
 
 /**
@@ -94,41 +212,14 @@ export function registerDisruptionRoutes(app: Hono, shared: EventSharedResources
     }),
   );
 
+  registerRecurringRoutes(app, shared);
+
   app.post(
     "/events/:eventId/disruptions/fire",
     withEventId(
       async ({ c, eventId }) => {
-        // PR #889 review: 既存 route と整合する Zod parse に統一 (= cross-field 制約も含めて検証)
-        const parsed = await parseJsonBody(c, DisruptionFireRequestSchema);
-        if (!parsed.ok) return parsed.response;
-        const req = parsed.data;
         try {
-          const tenantId = resolveTenantId(c);
-          const ownershipError = await requireEventOwnership({ c, shared, eventId, tenantId });
-          if (ownershipError) return ownershipError;
-          const outcome = await fireDisruption(shared, {
-            tenantId,
-            eventId,
-            problemId: req.problemId,
-            disruptionId: req.disruptionId,
-            parameters: req.parameters ?? {},
-            scope: req.scope,
-            targetTeamIds: req.targetTeamIds ?? [],
-            ...(req.randomCount !== undefined ? { randomCount: req.randomCount } : {}),
-            // schema は afterMinutes を timing=scheduled の時のみ許す (= 存在 = scheduled)。
-            ...(req.afterMinutes !== undefined ? { afterMinutes: req.afterMinutes } : {}),
-            // [ADR-037] schema は timing=recurring の時のみ intervalMinutes/maxFires を許す。
-            ...(req.timing === "recurring" &&
-            req.intervalMinutes !== undefined &&
-            req.maxFires !== undefined
-              ? { recurrence: { intervalMinutes: req.intervalMinutes, maxFires: req.maxFires } }
-              : {}),
-            requestId: req.requestId,
-            firedBy: resolveCognitoSub(c),
-            nowMs: Date.now(),
-          });
-          if (outcome.kind === "ok") auditEventAction(c, "fire_disruption", eventId);
-          return disruptionFireOutcomeResponse(c, outcome);
+          return await handleDisruptionFire(c, shared, eventId);
         } catch (err) {
           return handleRouteError(c, "[disruptions] fire failed", { eventId }, err);
         }

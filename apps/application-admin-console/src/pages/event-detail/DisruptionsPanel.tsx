@@ -27,6 +27,7 @@ import {
 } from "../../api/disruptions-client";
 import type { TeamSummary } from "../../api/events-client";
 import { describeTriggers } from "../../lib/disruption-triggers";
+import { RecurringPanel } from "./RecurringPanel";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -316,6 +317,8 @@ export function DisruptionsPanel({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [fireTarget, setFireTarget] = useState<FireTarget | null>(null);
   const [lastFired, setLastFired] = useState<string | null>(null);
+  // [ADR-037 Slice 2] bump 後に RecurringPanel が一覧を取り直す (= 定期 fire 直後に反映する) signal。
+  const [recurringRefresh, setRecurringRefresh] = useState(0);
 
   const reloadAudit = useCallback(async () => {
     // Only called after a successful fire (apiClient was present) — defensive, unreachable.
@@ -348,6 +351,8 @@ export function DisruptionsPanel({
     setLastFired(flash);
     setFireTarget(null);
     void reloadAudit();
+    // recurring fire なら 「実行中の定期障害」 一覧に新規行が出るよう取り直しを促す。
+    setRecurringRefresh((n) => n + 1);
   };
 
   return (
@@ -435,6 +440,14 @@ export function DisruptionsPanel({
           loading={catalog === null && !loadError}
           loadingText={t("disruptions.loading")}
           empty={<Box textAlign="center">{t("disruptions.catalog_empty")}</Box>}
+        />
+
+        <RecurringPanel
+          key={recurringRefresh}
+          apiClient={apiClient}
+          canMutateTenant={canMutateTenant}
+          eventId={eventId}
+          t={t}
         />
 
         <Header variant="h3">{t("disruptions.audit_header")}</Header>

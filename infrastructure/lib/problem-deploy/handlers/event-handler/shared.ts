@@ -1,6 +1,7 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { S3Client } from "@aws-sdk/client-s3";
+import { SchedulerClient } from "@aws-sdk/client-scheduler";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
 import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
@@ -32,6 +33,8 @@ export interface EventSharedResources {
   readonly ddb: DynamoDBDocumentClient;
   readonly events: EventBridgeClient;
   readonly s3: S3Client;
+  /** [ADR-037 Slice 2] recurring disruption の早期解除 (DeleteSchedule) 用 aws-scheduler client。 */
+  readonly scheduler: SchedulerClient;
   readonly problemsCatalog: Readonly<Record<string, string>>;
   /** Issue #888: problem metadata.json の `disruptions[]` 宣言 (problemId 毎)。 */
   readonly problemsDisruptions: Readonly<Record<string, readonly ProblemDisruptionEntry[]>>;
@@ -61,6 +64,7 @@ export function buildEventSharedResources(): EventSharedResources {
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     events: new EventBridgeClient({}),
     s3: new S3Client({}),
+    scheduler: new SchedulerClient({}),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
     problemsDisruptions: parseProblemsDisruptions(process.env.BATTLE_PROBLEMS_DISRUPTIONS),
     bulkDeployPayloadBucket: process.env.BULK_DEPLOY_PAYLOAD_BUCKET ?? "",

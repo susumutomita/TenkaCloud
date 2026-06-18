@@ -48,9 +48,18 @@ export function injectScheduleName(detail: DisruptionFiredDetail): string {
   return sanitizeScheduleName(`tc-inject-${detail.requestId}-${detail.teamId}`);
 }
 
+/**
+ * [ADR-037] recurring fire の rate schedule 名を `(requestId, teamId)` から直接組む。 executor 側の
+ * 作成と、 event-handler 側の cancel (DeleteSchedule) が **同一の名前** を導けるよう primitive を共有する
+ * (= cancel が確実に同じ schedule を消せる)。
+ */
+export function recurringScheduleNameOf(requestId: string, teamId: string): string {
+  return sanitizeScheduleName(`tc-recur-${requestId}-${teamId}`);
+}
+
 /** [ADR-037] recurring fire の rate schedule 名。 requestId/teamId と対の冪等キー (cancel/teardown 用)。 */
 export function recurringScheduleName(detail: DisruptionFiredDetail): string {
-  return sanitizeScheduleName(`tc-recur-${detail.requestId}-${detail.teamId}`);
+  return recurringScheduleNameOf(detail.requestId, detail.teamId);
 }
 
 /**

@@ -288,6 +288,15 @@ describe("ProblemDeployBackendStack — EventApi Lambda audit log read grant (#1
     expect(allActions.has("dynamodb:PutItem")).toBe(true);
     expect(allActions.has("dynamodb:UpdateItem")).toBe(true);
   });
+
+  it("[ADR-037 Slice 2] EventApi Role should grant scheduler:DeleteSchedule scoped to tc-recur-*", () => {
+    // recurring disruption の早期解除 (operator 一覧→Cancel) が executor の作った rate schedule を
+    // 消すための最小権限。 resource は tc-recur-* に scope する (= 任意 schedule は消せない)。
+    const policies = tpl.findResources("AWS::IAM::Policy");
+    const serialized = JSON.stringify(policies);
+    expect(serialized).toContain("scheduler:DeleteSchedule");
+    expect(serialized).toContain("schedule/default/tc-recur-*");
+  });
 });
 
 describe("ProblemDeployBackendStack (MVP-1) — Competitor Accounts API Lambda (Issue #459 / ADR-002 Phase 2.1)", () => {
