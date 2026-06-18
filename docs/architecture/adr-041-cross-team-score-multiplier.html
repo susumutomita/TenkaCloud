@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-041: Cross-team health score multiplier is not a generic platform primitive</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.accept { background: #dafbe1; color: var(--c-accept); }
+  .badge.reject { background: #ffe5e5; color: var(--c-reject); }
+  .badge.warn { background: #fff8c5; color: var(--c-warn); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  .decision { background: #fff8c5; border-left: 4px solid var(--c-warn); border-radius: 3px; padding: .8rem 1rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-041: Cross-team health score multiplier is not a generic platform primitive</h1>
+  <p><em>他チームの RegisteredUrl health を自チーム得点の倍率にする案の採否と境界</em></p>
+  <div class="meta">
+    <div><b>Status:</b> <span class="badge accept">Accepted</span> 2026-06-18</div>
+    <div><b>Decision:</b> <span class="badge reject">Reject as generic scoring primitive</span></div>
+    <div><b>Related:</b>
+      <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a>,
+      <a href="./adr-028-inter-team-coordination-plugin.html">ADR-028</a>,
+      <a href="./adr-033-scoring-side-disruption-effects.html">ADR-033</a>,
+      <a href="./adr-040-battle-event-engine.html">ADR-040</a>
+    </div>
+    <div><b>Tracking:</b> <a href="https://github.com/susumutomita/TenkaCloud/issues/1794">#1794</a></div>
+  </div>
+</header>
+
+<section>
+<h2>Context</h2>
+<p>
+Issue #1794 proposed a cooperative Battle mechanic: a team registers another team's service as a
+dependency, and if that other team's registered URL is healthy, the current team's per-minute
+uptime score is multiplied, for example from 500 points per minute to 1000 points per minute.
+The game-design intent is useful: contestants should care about adjacent teams, not only their own
+service.
+</p>
+<p>
+The proposed implementation crosses a platform boundary. ADR-012 deliberately makes each scoring
+kind evaluate one deployment row and its declared endpoint slots. ADR-028 puts inter-team
+coordination into problem-declared plugins rather than hardcoded platform primitives. ADR-033 lets
+disruptions affect scoring only through declared, bounded effects. A global cross-team multiplier
+would introduce an implicit trust channel between teams and would make generic scoring depend on
+another team's latest health state.
+</p>
+</section>
+
+<section>
+<h2>Decision</h2>
+<div class="decision">
+  <p>
+  TenkaCloud will not implement "register another team's raw URL and multiply my score when it is
+  healthy" as a generic platform feature. Generic scoring remains local to the current deployment,
+  event, team, problem, and declared endpoint slots.
+  </p>
+</div>
+<p>
+If a future Battle needs cooperative scoring, it must be expressed as a problem-specific,
+metadata-declared mechanic. The first acceptable shape is a team-id based dependency, not a raw URL:
+</p>
+<pre>{
+  "interTeamCoordination": {
+    "plugin": "coordination/cooperative-health.ts",
+    "name": "Cooperative health dependency",
+    "publicHint": true
+  },
+  "scoringExtensions": {
+    "kind": "declared-team-health-bonus",
+    "source": "coordination-plugin",
+    "targetSlots": ["main"],
+    "multiplier": 2,
+    "maxBonusPerTick": 500
+  }
+}</pre>
+<p>
+This example is illustrative. It is not an accepted schema. A future implementation would require a
+separate ADR, schema migration, handler tests, and a catalog problem that proves the mechanic is
+fair and safe.
+</p>
+</section>
+
+<section>
+<h2>Rationale</h2>
+<table>
+  <thead><tr><th>Concern</th><th>Why the generic multiplier is rejected</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Identity and spoofing</td>
+      <td>Raw URL registration lets a team claim an unrelated always-healthy endpoint, its own
+      endpoint, or a URL outside the event. Validating URL ownership is more complex than the game
+      mechanic warrants.</td>
+    </tr>
+    <tr>
+      <td>Scoring determinism</td>
+      <td>Current polling kinds can explain a tick from the current deployment, metadata, endpoint
+      overrides, and active effects. A cross-team multiplier makes score depend on another row's
+      timing, last probe result, and possible page-scan ordering.</td>
+    </tr>
+    <tr>
+      <td>Game balance</td>
+      <td>A multiplier amplifies score inflation and can reward or punish a team for another team's
+      outage. That can be fun in a specific Battle, but it should not become a platform default.</td>
+    </tr>
+    <tr>
+      <td>Operational blast radius</td>
+      <td>Generic scoring is a shared platform path. Adding cross-team reads, registration state, and
+      fallback rules there affects every Battle even when only one problem wants the mechanic.</td>
+    </tr>
+    <tr>
+      <td>Existing architecture</td>
+      <td>ADR-028 already provides the right extension point: a problem declares its inter-team
+      primitive and the platform dispatches it. The multiplier should be a declared problem behavior
+      if it is ever implemented.</td>
+    </tr>
+  </tbody>
+</table>
+</section>
+
+<section>
+<h2>Allowed Future Shape</h2>
+<p>
+The following constraints are mandatory for any future cooperative-health implementation:
+</p>
+<ul>
+  <li>Participants register a target <code>teamId</code> within the same event, never an arbitrary URL.</li>
+  <li>The registration API rejects the caller's own team, unknown teams, teams outside the event,
+  and problems that did not declare the mechanic.</li>
+  <li>URL resolution is performed by the platform from the target team's declared endpoint slot or
+  endpoint override. Participants cannot supply the target URL directly.</li>
+  <li>The effect is bounded per tick with an explicit maximum bonus. Penalties remain separate from
+  bonuses unless the problem metadata states otherwise.</li>
+  <li>Score events include enough source detail to explain whether the normal base score, the
+  cooperative bonus, or neither was applied.</li>
+  <li>If the target team's health is stale, missing, or unreadable, the bonus fails closed to
+  multiplier 1 with no extra penalty.</li>
+  <li>The behavior has unit tests for self-team rejection, event-scope rejection, stale-health
+  fallback, page-order independence, and unchanged existing scoring kinds.</li>
+</ul>
+</section>
+
+<section>
+<h2>Consequences</h2>
+<h3>Positive</h3>
+<ul>
+  <li>Generic scoring keeps its local, per-deployment invariant.</li>
+  <li>Raw URL spoofing and unrelated always-healthy endpoints are structurally excluded.</li>
+  <li>Problem authors still have a path for cooperative mechanics through ADR-028-style
+  coordination plugins and explicit metadata.</li>
+  <li>No new DynamoDB table, Lambda, IAM policy, scheduler, or polling load is introduced for this
+  proposal.</li>
+</ul>
+
+<h3>Negative</h3>
+<ul>
+  <li>The specific "health of another team doubles my score" idea is not available as a platform
+  toggle.</li>
+  <li>A future Battle that wants this behavior must do design work before implementation instead of
+  reusing a ready-made multiplier.</li>
+</ul>
+</section>
+
+<section>
+<h2>Implementation Status</h2>
+<p>
+No runtime implementation is required for this ADR. The issue is resolved by the decision:
+cross-team score multipliers are not a platform-global scoring primitive. Any future proposal must
+arrive as a new, explicit problem-scoped design rather than as a direct generic-scoring patch.
+</p>
+</section>
+
+<section>
+<h2>References</h2>
+<ul>
+  <li><a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> — problem plugin architecture and generic scoring dispatcher.</li>
+  <li><a href="./adr-028-inter-team-coordination-plugin.html">ADR-028</a> — problem-scoped inter-team coordination plugin contract.</li>
+  <li><a href="./adr-033-scoring-side-disruption-effects.html">ADR-033</a> — declared, bounded scoring-side effects.</li>
+  <li><a href="./adr-040-battle-event-engine.html">ADR-040</a> — managed Battle Event Engine boundary.</li>
+  <li><a href="https://github.com/susumutomita/TenkaCloud/issues/1794">Issue #1794</a> — proposal record closed by this decision.</li>
+</ul>
+</section>
+</body>
+</html>
