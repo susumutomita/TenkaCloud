@@ -776,7 +776,11 @@
     "recurring_error": "Interval must be 1–1440 and max fires 1–60 (whole numbers).",
     "fired_flash": "Fired \"{name}\" at {count} team(s).",
     "scheduled_flash": "Scheduled \"{name}\" to fire in {minutes} minute(s).",
-    "recurring_flash": "Set \"{name}\" to fire every {interval} min, up to {count} times."
+    "recurring_flash": "Set \"{name}\" to fire every {interval} min, up to {count} times.",
+    "recurring_active_header": "Active recurring disruptions ({count})",
+    "recurring_cadence": "Interval × fires",
+    "recurring_ends_at": "Auto-stops",
+    "recurring_cancel": "Cancel"
   },
   "setup_guide": {
     "header": "First-run setup guide",

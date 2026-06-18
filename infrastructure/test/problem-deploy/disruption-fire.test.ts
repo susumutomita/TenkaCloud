@@ -128,6 +128,35 @@ describe("fireDisruption (#888)", () => {
     expect(auditItem.scheduledFor).toBe(new Date(NOW_MS + 30 * 60_000).toISOString());
   });
 
+  it("[ADR-037 Slice 2] recurring fire: published detail に recurrence、 RECUR# registry を書く", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [{ teamId: "T1" }] }); // team list
+    ddbSend.mockResolvedValueOnce({}); // idempotency claim
+    eventsSend.mockResolvedValueOnce({ FailedEntryCount: 0, Entries: [{}] }); // PutEvents
+    ddbSend.mockResolvedValueOnce({}); // audit Put
+    ddbSend.mockResolvedValueOnce({}); // RECUR# registry Put
+
+    const out = await fireDisruption(
+      shared,
+      baseInput({ recurrence: { intervalMinutes: 5, maxFires: 6 } }),
+    );
+    expect(out.kind).toBe("ok");
+    // published detail carries recurrence so the executor creates the rate schedule
+    const evCmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
+    const detail = JSON.parse(evCmd.input.Entries?.[0]?.Detail ?? "{}");
+    expect(detail.recurrence).toEqual({ intervalMinutes: 5, maxFires: 6 });
+    // RECUR# registry row written with affectedTeamIds + endsAt (= interval×maxFires later)
+    const recurPut = ddbSend.mock.calls.find((c) =>
+      String((c[0] as { input?: { Item?: { SK?: string } } }).input?.Item?.SK).startsWith("RECUR#"),
+    );
+    expect(recurPut).toBeDefined();
+    const recurItem = (recurPut?.[0] as { input: { Item: Record<string, unknown> } }).input.Item;
+    expect(recurItem.affectedTeamIds).toEqual(["T1"]);
+    expect(recurItem.intervalMinutes).toBe(5);
+    expect(recurItem.maxFires).toBe(6);
+    expect(recurItem.endsAt).toBe(new Date(NOW_MS + 5 * 6 * 60_000).toISOString());
+  });
+
   it("scope=team で targetTeamIds dedupe + subset", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({

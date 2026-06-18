@@ -776,7 +776,11 @@
     "recurring_error": "間隔は 1〜1440、 最大回数は 1〜60 の整数で入力してください。",
     "fired_flash": "「{name}」 を {count} チームに発火しました。",
     "scheduled_flash": "「{name}」 を {minutes} 分後に発火するよう予約しました。",
-    "recurring_flash": "「{name}」 を {interval} 分ごとに最大 {count} 回、 定期実行するよう設定しました。"
+    "recurring_flash": "「{name}」 を {interval} 分ごとに最大 {count} 回、 定期実行するよう設定しました。",
+    "recurring_active_header": "実行中の定期障害 ({count})",
+    "recurring_cadence": "間隔 × 回数",
+    "recurring_ends_at": "自動停止",
+    "recurring_cancel": "解除"
   },
   "setup_guide": {
     "header": "初回セットアップガイド",

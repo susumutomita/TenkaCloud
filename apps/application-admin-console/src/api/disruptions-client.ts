@@ -134,3 +134,42 @@ export function fetchDisruptionAudit(
 export function newFireRequestId(): string {
   return `fire-${crypto.randomUUID()}`;
 }
+
+/** [ADR-037 Slice 2] One active recurring disruption (an aws-scheduler rate schedule still running). */
+export interface ActiveRecurringRow {
+  readonly requestId: string;
+  readonly problemId: string;
+  readonly disruptionId: string;
+  readonly firedBy: string;
+  readonly firedAt: string;
+  readonly scope: DisruptionScope;
+  readonly affectedTeamIds: readonly string[];
+  readonly intervalMinutes: number;
+  readonly maxFires: number;
+  /** When the schedule auto-stops (ISO8601). */
+  readonly endsAt: string;
+}
+
+export interface ListRecurringResponse {
+  readonly items: readonly ActiveRecurringRow[];
+}
+
+/** [ADR-037 Slice 2] List the event's still-running recurring disruptions (not cancelled, not past endsAt). */
+export function fetchActiveRecurring(
+  api: ApiClient,
+  eventId: string,
+): Promise<ListRecurringResponse> {
+  return api.get<ListRecurringResponse>(`events/${eventId}/disruptions/recurring`);
+}
+
+/** [ADR-037 Slice 2] Cancel one recurring disruption early (deletes its schedules; idempotent). */
+export function cancelRecurringDisruption(
+  api: ApiClient,
+  eventId: string,
+  requestId: string,
+): Promise<{ readonly ok: true }> {
+  return api.post<{ readonly ok: true }>(
+    `events/${eventId}/disruptions/recurring/${requestId}/cancel`,
+    {},
+  );
+}
