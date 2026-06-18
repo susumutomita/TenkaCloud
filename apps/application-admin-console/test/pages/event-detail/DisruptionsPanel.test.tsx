@@ -293,6 +293,46 @@ describe("DisruptionsPanel", () => {
     expect(screen.getByText("disruptions.confirm_fire").closest("button")).toBeDisabled();
   });
 
+  it("[ADR-037] should fire with timing=recurring + intervalMinutes + maxFires", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByText("disruptions.fire_button"));
+    // switch the timing segmented control to "recurring" (3rd segment)
+    modal()?.findContent().findSegmentedControl()?.findSegments()[2]?.click();
+    const [interval, maxFires] = screen.getAllByRole("spinbutton");
+    fireEvent.change(interval as HTMLElement, { target: { value: "10" } });
+    fireEvent.change(maxFires as HTMLElement, { target: { value: "3" } });
+    fireEvent.click(screen.getByText("disruptions.confirm_fire"));
+    await waitFor(() =>
+      expect(mockFire).toHaveBeenCalledWith(
+        fakeApi,
+        "EVT1",
+        expect.objectContaining({ timing: "recurring", intervalMinutes: 10, maxFires: 3 }),
+      ),
+    );
+    expect(await screen.findByText(/disruptions.recurring_flash/)).toBeInTheDocument();
+  });
+
+  it("[ADR-037] should disable confirm for out-of-range recurring interval / maxFires", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByText("disruptions.fire_button"));
+    modal()?.findContent().findSegmentedControl()?.findSegments()[2]?.click();
+    const confirm = () => screen.getByText("disruptions.confirm_fire").closest("button");
+    const [interval, maxFires] = screen.getAllByRole("spinbutton") as HTMLElement[];
+    // interval: non-integer / > 1440 / < 1 are all invalid
+    fireEvent.change(interval, { target: { value: "1.5" } });
+    expect(confirm()).toBeDisabled();
+    fireEvent.change(interval, { target: { value: "2000" } });
+    expect(confirm()).toBeDisabled();
+    fireEvent.change(interval, { target: { value: "0" } });
+    expect(confirm()).toBeDisabled();
+    // interval valid, then maxFires < 1 and > 60 are invalid
+    fireEvent.change(interval, { target: { value: "5" } });
+    fireEvent.change(maxFires, { target: { value: "0" } });
+    expect(confirm()).toBeDisabled();
+    fireEvent.change(maxFires, { target: { value: "999" } });
+    expect(confirm()).toBeDisabled();
+  });
+
   it("should fire a disruption that declares no parameters", async () => {
     mockCatalog.mockResolvedValue({
       entries: [

@@ -318,6 +318,8 @@ async function publishEntries(
       firedAt,
       // [ADR-037] scheduled fire: executor がこの分数だけ注入を遅延予約する。 即時は省略。
       ...(input.afterMinutes ? { afterMinutes: input.afterMinutes } : {}),
+      // [ADR-037] recurring fire: executor が rate(intervalMinutes) schedule を作る。 即時/予約では省略。
+      ...(input.recurrence ? { recurrence: input.recurrence } : {}),
     }),
   }));
   const BATCH = 10;

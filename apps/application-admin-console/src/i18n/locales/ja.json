@@ -762,14 +762,21 @@
     "random_label": "母集団のチームを選ぶ (ここからランダムな一部に当たります)",
     "random_description": "選択した数に応じて、 platform がランダムな一部に当てます。",
     "timing_label": "実行タイミング",
-    "timing_description": "即座に注入するか、 指定した分数後に予約するかを選びます。",
+    "timing_description": "即座に注入するか、 指定分後に予約するか、 一定間隔で定期実行するかを選びます。",
     "timing_immediate": "即座に実行",
     "timing_scheduled": "予約 (N 分後)",
+    "timing_recurring": "定期実行",
     "after_minutes_label": "何分後に実行するか",
     "after_minutes_description": "1〜1440 分。 この分数が経過した時点で注入が走ります。",
     "after_minutes_error": "1〜1440 の整数を入力してください。",
+    "recurring_label": "間隔 (分) と 最大回数",
+    "recurring_description": "左 = 何分ごとに注入するか (1〜1440)、 右 = 最大注入回数 (1〜60)。 回数到達で自動停止します (= 必ず終わる)。",
+    "recurring_interval_label": "間隔 (分)",
+    "recurring_maxfires_label": "最大回数",
+    "recurring_error": "間隔は 1〜1440、 最大回数は 1〜60 の整数で入力してください。",
     "fired_flash": "「{name}」 を {count} チームに発火しました。",
-    "scheduled_flash": "「{name}」 を {minutes} 分後に発火するよう予約しました。"
+    "scheduled_flash": "「{name}」 を {minutes} 分後に発火するよう予約しました。",
+    "recurring_flash": "「{name}」 を {interval} 分ごとに最大 {count} 回、 定期実行するよう設定しました。"
   },
   "setup_guide": {
     "header": "初回セットアップガイド",

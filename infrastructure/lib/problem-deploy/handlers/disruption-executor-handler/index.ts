@@ -25,7 +25,7 @@ import { logDeployTrace } from "../shared/trace-log.js";
 import type { DeploymentTarget, ExecutorDeps } from "./execute.js";
 import { claimExecution, type ExecutorResources, resolveDeployment } from "./executor-store.js";
 import { type RouteOutcome, routeDisruptionInvocation } from "./route.js";
-import { scheduleInject, scheduleRevert } from "./schedule-revert.js";
+import { scheduleInject, scheduleRecurring, scheduleRevert } from "./schedule-revert.js";
 import { type DispatchTarget, sendDispatch } from "./send-dispatch.js";
 
 const SESSION_NAME_PREFIX = "tc-disruption-";
@@ -100,6 +100,12 @@ const deps: ExecutorDeps = {
     }),
   scheduleInject: (detail, afterMinutes) =>
     scheduleInject(detail, afterMinutes, { scheduler, schedulerRoleArn, revertTargetArn }),
+  scheduleRecurring: (detail, intervalMinutes, maxFires) =>
+    scheduleRecurring(detail, intervalMinutes, maxFires, {
+      scheduler,
+      schedulerRoleArn,
+      revertTargetArn,
+    }),
 };
 
 /** Lambda handler。 inject / revert を route が判別し dispatch する。 outcome は observability の trace に出す。 */

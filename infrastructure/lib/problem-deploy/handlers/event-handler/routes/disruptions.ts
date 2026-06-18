@@ -117,6 +117,12 @@ export function registerDisruptionRoutes(app: Hono, shared: EventSharedResources
             ...(req.randomCount !== undefined ? { randomCount: req.randomCount } : {}),
             // schema は afterMinutes を timing=scheduled の時のみ許す (= 存在 = scheduled)。
             ...(req.afterMinutes !== undefined ? { afterMinutes: req.afterMinutes } : {}),
+            // [ADR-037] schema は timing=recurring の時のみ intervalMinutes/maxFires を許す。
+            ...(req.timing === "recurring" &&
+            req.intervalMinutes !== undefined &&
+            req.maxFires !== undefined
+              ? { recurrence: { intervalMinutes: req.intervalMinutes, maxFires: req.maxFires } }
+              : {}),
             requestId: req.requestId,
             firedBy: resolveCognitoSub(c),
             nowMs: Date.now(),
