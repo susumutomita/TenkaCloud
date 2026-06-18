@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import type * as React from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type ParticipantProblemView,
   PortalScoringGateError,
@@ -9,30 +9,18 @@ import {
 import { I18nProvider } from "../i18n";
 import {
   buildAutoDeleteNotice,
-  classifyCodeBuildLog,
   describeProblemKind,
-  formatTerminalTime,
   getCompleteFlagScoring,
   getCompleteMultiFlagScoring,
   isStaleProblem,
   isUptimeScoring,
-  mergeLiveDeployLog,
   ProblemPanel,
-  selectDisplayedDeployLog,
 } from "./ProblemPanel";
 import {
   formatProblemPanelActionError,
   shouldRefreshAfterFlagSubmit,
 } from "./ProblemPanel.helpers";
 
-const apiMocks = vi.hoisted(() => ({
-  getDeployLogs: vi.fn(),
-}));
-
-vi.mock("../api/portal-client", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../api/portal-client")>();
-  return { ...actual, getDeployLogs: apiMocks.getDeployLogs };
-});
 // FlagSubmissionPanel は #1480 で別途 100% 済。 ここでは ProblemPanel の flag 分岐だけ pin。
 vi.mock("./ProblemPanelFlagSubmission", () => ({
   FlagSubmissionPanel: () => <div data-testid="flag-panel" />,
@@ -83,13 +71,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("ProblemPanel deploy terminal", () => {
-  beforeEach(() => {
-    apiMocks.getDeployLogs.mockReset();
-    apiMocks.getDeployLogs.mockRejectedValue(new Error("not configured"));
-  });
-
-  it("should display deployLog terminal entries", () => {
+describe("ProblemPanel deploy log privacy", () => {
+  it("should hide deploy job log entries while keeping deployment status visible", () => {
     render(
       withI18n(
         <ProblemPanel
@@ -101,45 +84,12 @@ describe("ProblemPanel deploy terminal", () => {
       ),
     );
 
-    expect(screen.getByText(/Deployment terminal|デプロイ terminal/)).toBeInTheDocument();
-    expect(screen.getByText("Deployment job was queued.")).toBeInTheDocument();
-    expect(screen.getByText("CloudFormation stack creation is in progress.")).toBeInTheDocument();
-  });
-
-  it("should fetch CodeBuild live logs and display them in the terminal for non-terminal status", async () => {
-    apiMocks.getDeployLogs.mockResolvedValueOnce({
-      jobId: baseProblem.jobId,
-      buildStatus: "IN_PROGRESS",
-      complete: false,
-      nextToken: "next",
-      entries: [
-        {
-          id: "codebuild-1",
-          timestamp: "2026-05-20T10:00:00.000Z",
-          source: "codebuild",
-          message: "CodeBuild install phase complete",
-        },
-      ],
-    });
-
-    render(
-      withI18n(
-        <ProblemPanel
-          problem={baseProblem}
-          apiBaseUrl="https://api.example.com"
-          sessionToken="team-key"
-          onScored={async () => undefined}
-        />,
-      ),
-    );
-
-    expect(await screen.findByText("CodeBuild install phase complete")).toBeInTheDocument();
-    expect(apiMocks.getDeployLogs).toHaveBeenCalledWith(
-      "https://api.example.com",
-      "team-key",
-      baseProblem.jobId,
-      { nextToken: undefined, limit: 50 },
-    );
+    expect(screen.getByText(/Starting|起動中/)).toBeInTheDocument();
+    expect(screen.queryByText(/Deployment terminal|デプロイ terminal/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Deployment job was queued.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("CloudFormation stack creation is in progress."),
+    ).not.toBeInTheDocument();
   });
 
   it("should display the remaining time until auto-delete based on expiresAt", () => {
@@ -223,57 +173,6 @@ describe("ProblemPanel submit helpers", () => {
 });
 
 describe("ProblemPanel pure helpers", () => {
-  it("should classify CodeBuild log levels by keyword", () => {
-    expect(classifyCodeBuildLog("an error occurred")).toBe("error");
-    expect(classifyCodeBuildLog("build succeeded")).toBe("success");
-    expect(classifyCodeBuildLog("a warning here")).toBe("warning");
-    expect(classifyCodeBuildLog("informational line")).toBe("info");
-  });
-
-  it("should format terminal timestamps and fall back for invalid input", () => {
-    expect(formatTerminalTime("not-a-date")).toBe("--:--:--");
-    expect(formatTerminalTime("2026-05-20T10:30:45.000Z")).not.toBe("--:--:--");
-  });
-
-  it("should merge live deploy logs, dedup by id, classify, and cap at 200", () => {
-    const merged = mergeLiveDeployLog(
-      {
-        cursor: "c0",
-        entries: [{ id: "a", timestamp: "t", source: "codebuild", level: "info", message: "old" }],
-      },
-      {
-        jobId: "j",
-        buildStatus: "IN_PROGRESS",
-        complete: false,
-        nextToken: "c1",
-        // "a" は既出 → skip、 "b" は新規 (error 分類)。
-        entries: [
-          { id: "a", timestamp: "t", source: "codebuild", message: "dup" },
-          { id: "b", timestamp: "t", source: "codebuild", message: "fatal error" },
-        ],
-      },
-    );
-    expect(merged.entries.map((e) => e.id)).toEqual(["a", "b"]);
-    expect(merged.entries[1]?.level).toBe("error");
-    expect(merged.cursor).toBe("c1");
-    // nextToken 無し → prev.cursor に fall back。
-    expect(
-      mergeLiveDeployLog(
-        { cursor: "keep", entries: [] },
-        { jobId: "j", buildStatus: "IN_PROGRESS", complete: true, entries: [] },
-      ).cursor,
-    ).toBe("keep");
-    // nextToken も prev も無し → "" に fall back。
-    expect(
-      mergeLiveDeployLog(null, {
-        jobId: "j",
-        buildStatus: "IN_PROGRESS",
-        complete: true,
-        entries: [],
-      }).cursor,
-    ).toBe("");
-  });
-
   it("should build the auto-delete notice for expired / soon / far / invalid expiry", () => {
     const now = new Date("2026-05-20T00:00:00.000Z").getTime();
     const at = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
@@ -361,36 +260,6 @@ describe("ProblemPanel pure helpers", () => {
       getCompleteMultiFlagScoring(p({ status: "COMPLETE", scoring: { kind: "flag" } })),
     ).toBeUndefined();
   });
-
-  it("should prefer live logs only when they have entries", () => {
-    const deployLog = {
-      cursor: "d",
-      entries: [
-        {
-          id: "x",
-          timestamp: "t",
-          source: "deployment" as const,
-          level: "info" as const,
-          message: "m",
-        },
-      ],
-    };
-    const live = {
-      cursor: "l",
-      entries: [
-        {
-          id: "y",
-          timestamp: "t",
-          source: "codebuild" as const,
-          level: "info" as const,
-          message: "live",
-        },
-      ],
-    };
-    expect(selectDisplayedDeployLog(live, deployLog)).toBe(live);
-    expect(selectDisplayedDeployLog(null, deployLog)).toBe(deployLog);
-    expect(selectDisplayedDeployLog({ cursor: "l", entries: [] }, deployLog)).toBe(deployLog);
-  });
 });
 
 describe("ProblemPanel render branches", () => {
@@ -405,11 +274,6 @@ describe("ProblemPanel render branches", () => {
         />,
       ),
     );
-
-  beforeEach(() => {
-    apiMocks.getDeployLogs.mockReset();
-    apiMocks.getDeployLogs.mockRejectedValue(new Error("not configured"));
-  });
 
   it("should show the failure reason for FAILED deploys", () => {
     renderPanel({ status: "FAILED", failureReason: "stack rollback" });
@@ -481,7 +345,7 @@ describe("ProblemPanel render branches", () => {
   });
 });
 
-describe("ProblemPanel live-log + countdown polling", () => {
+describe("ProblemPanel countdown polling", () => {
   const renderPanel = (over: Partial<ParticipantProblemView>) =>
     render(
       withI18n(
@@ -493,50 +357,9 @@ describe("ProblemPanel live-log + countdown polling", () => {
         />,
       ),
     );
-  const logResponse = (over: Record<string, unknown>) => ({
-    jobId: "JOB1",
-    buildStatus: "IN_PROGRESS",
-    complete: false,
-    nextToken: "n",
-    entries: [
-      { id: "c1", timestamp: "2026-05-20T10:00:00.000Z", source: "codebuild", message: "phase" },
-    ],
-    ...over,
-  });
 
   afterEach(() => {
     vi.useRealTimers();
-    apiMocks.getDeployLogs.mockReset();
-  });
-
-  it("should stop polling once the deploy-log response is complete", async () => {
-    apiMocks.getDeployLogs.mockResolvedValue(logResponse({ complete: true }));
-    renderPanel({ status: "IN_PROGRESS" });
-    expect(await screen.findByText("phase")).toBeInTheDocument();
-  });
-
-  it("should keep polling on the interval while still incomplete", async () => {
-    vi.useFakeTimers();
-    apiMocks.getDeployLogs.mockResolvedValue(logResponse({ complete: false }));
-    renderPanel({ status: "IN_PROGRESS" });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000); // interval fires a second poll
-    });
-    expect(apiMocks.getDeployLogs.mock.calls.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("should not re-poll on the interval once the first response completes", async () => {
-    vi.useFakeTimers();
-    apiMocks.getDeployLogs.mockResolvedValue(logResponse({ complete: true }));
-    renderPanel({ status: "IN_PROGRESS" });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0); // mount poll → complete → cancelled
-    });
-    const callsAfterComplete = apiMocks.getDeployLogs.mock.calls.length;
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000); // interval sees cancelled → skip (if (!cancelled) false)
-    });
-    expect(apiMocks.getDeployLogs.mock.calls.length).toBe(callsAfterComplete);
   });
 
   it("should re-evaluate the countdown on the refresh interval", async () => {
@@ -547,22 +370,5 @@ describe("ProblemPanel live-log + countdown polling", () => {
       await vi.advanceTimersByTimeAsync(30_000); // useNowMs tick
     });
     expect(screen.getByText("hello-world")).toBeInTheDocument(); // still rendered, no crash
-  });
-
-  it("should ignore a deploy-log response that resolves after unmount", async () => {
-    let resolveLogs: (v: unknown) => void = () => undefined;
-    apiMocks.getDeployLogs.mockReturnValue(
-      new Promise((r) => {
-        resolveLogs = r;
-      }),
-    );
-    const { unmount } = renderPanel({ status: "IN_PROGRESS" });
-    expect(apiMocks.getDeployLogs).toHaveBeenCalled();
-    unmount(); // cleanup sets cancelled = true
-    await act(async () => {
-      resolveLogs(logResponse({ complete: false }));
-      await Promise.resolve();
-    });
-    // poll's post-await `if (cancelled) return` swallows the late response (no throw).
   });
 });
