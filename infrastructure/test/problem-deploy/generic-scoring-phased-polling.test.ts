@@ -96,6 +96,34 @@ describe("phased-polling kind", () => {
     expect(result.scoreDelta).toBe(100);
   });
 
+  it("should return posture and platform snapshots when posturePath is declared", async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        status: 200,
+        text: async () => JSON.stringify({ platform: "posture-3" }),
+      })
+      .mockResolvedValueOnce({ status: 200, text: async () => "" })
+      .mockResolvedValueOnce({
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            platform: "posture-3",
+            posture: { db_present: true, auth_enabled: false },
+          }),
+      });
+    const result = await runPhasedPollingKind(
+      buildInput({
+        scoring: { ...baseScoring, probe: { ...baseScoring.probe, posturePath: "/posture" } },
+      }),
+    );
+    expect(result.platform).toBe("posture-3");
+    expect(JSON.parse(result.postureJson ?? "{}")).toEqual({
+      db_present: true,
+      auth_enabled: false,
+    });
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("https://api.example.com/users/posture");
+  });
+
   it("should award degradedPoints (+10) for Phase 1 (degraded, after 60 minutes) + ec2 platform", async () => {
     fetchMock
       .mockResolvedValueOnce({ status: 200, text: async () => JSON.stringify({ platform: "ec2" }) })

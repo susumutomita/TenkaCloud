@@ -135,6 +135,10 @@ export interface DeploymentItem {
   lastScoredAt?: string;
   /** Battle (uptime) で最後の health check が成功したか。 */
   lastResult?: "ok" | "fail";
+  /** 最新の scoring probe が観測した participant-facing posture snapshot。 */
+  posture?: string;
+  /** 最新の scoring probe が分類した platform tier (例: posture-3 / production)。 */
+  platform?: string;
   /**
    * Challenge (flag) で 1 度でも正解 submit されたら true。再提出での重複加算を防ぐ。
    */

@@ -122,6 +122,8 @@ export type ParticipantProblemView = Pick<
   readonly score: number;
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
+  readonly posture?: Record<string, boolean>;
+  readonly platform?: string;
   readonly scoring?: ParticipantScoringInfo;
   readonly deployLog: DeploymentLogView;
   /** ADR-012 Phase 4 / Issue #607: deploy 開始時刻 (= DDB.createdAt の echo)。 portal の phase
@@ -218,6 +220,8 @@ export function toProblemView(
     score: Number(item.score ?? 0),
     lastScoredAt: typeof item.lastScoredAt === "string" ? item.lastScoredAt : undefined,
     lastResult: item.lastResult,
+    posture: parsePostureSnapshot(item.posture),
+    platform: typeof item.platform === "string" ? item.platform : undefined,
     scoring: scoring ? toScoringInfo(scoring, item) : undefined,
     deployLog: toDeploymentLog(item, status),
     // Issue #607: deploy 開始時刻 (DDB.createdAt) を echo。 portal の phase countdown が
@@ -228,6 +232,21 @@ export function toProblemView(
     // attack-detection / flag では undefined (= probe しない kind)。
     applicationStatus: isUptimeKind(scoring?.kind) ? toApplicationStatus(item) : undefined,
   };
+}
+
+function parsePostureSnapshot(value: unknown): Record<string, boolean> | undefined {
+  if (typeof value !== "string" || value.length === 0) return undefined;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!parsed || typeof parsed !== "object") return undefined;
+    const posture: Record<string, boolean> = {};
+    for (const [key, raw] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof raw === "boolean") posture[key] = raw;
+    }
+    return Object.keys(posture).length > 0 ? posture : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function toDeploymentLog(

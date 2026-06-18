@@ -122,6 +122,8 @@ export interface ParticipantProblemView {
   readonly score: number;
   readonly lastScoredAt?: string;
   readonly lastResult?: "ok" | "fail";
+  readonly posture?: Record<string, boolean>;
+  readonly platform?: string;
   readonly scoring?: ParticipantScoringInfo;
   readonly deployLog: DeploymentLogView;
   /** Issue #607: deploy 開始時刻 (DDB.createdAt の echo)。 portal の phase countdown が

@@ -421,7 +421,7 @@ describe("parseScoringMetadata", () => {
       const cfg = {
         kind: "phased-polling",
         intervalMinutes: 1,
-        probe: { metaPath: "/meta", scorePath: "/score" },
+        probe: { metaPath: "/meta", scorePath: "/score", posturePath: "/posture" },
         platformRules: { ec2: { points: 100, degradedPoints: 10 }, lambda: { points: 1000 } },
         failurePenalty: -100,
         responsePenalties: [{ if: "responseTimeMs > 1500", points: -10 }],

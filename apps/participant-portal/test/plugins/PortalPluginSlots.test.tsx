@@ -25,6 +25,7 @@ const props = {
   problemId: "p1",
   jobId: "job-1",
   score: 0,
+  locale: "ja" as const,
   team: { teamName: "Alpha" },
   stackOutputs: {},
 };

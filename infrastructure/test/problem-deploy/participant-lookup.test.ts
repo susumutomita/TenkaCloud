@@ -341,6 +341,25 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(p?.scoring?.pointsPerSuccess).toBe(50);
   });
 
+  it("should expose the latest measured posture and platform snapshot", async () => {
+    const scoring = {
+      "security-battle-royale": { kind: "uptime" as const, pointsPerSuccess: 50 },
+    };
+    const { shared, ddbSend } = buildShared(scoring);
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          posture: JSON.stringify({ db_present: true, auth_enabled: false }),
+          platform: "posture-1",
+        }),
+      ],
+    });
+
+    const p = (await lookupTeamByLoginKey(shared, "KEY1"))?.problems[0];
+    expect(p?.posture).toEqual({ db_present: true, auth_enabled: false });
+    expect(p?.platform).toBe("posture-1");
+  });
+
   it("should return 0 for rows without score (default)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
