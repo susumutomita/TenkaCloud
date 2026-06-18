@@ -202,6 +202,9 @@ export function TenantUsersPage({ config }: { config: AppConfig }) {
                     options={roleOptions}
                     onChange={(event) => void handleRoleChange(user, event.detail.selectedOption)}
                     disabled={rowBusy === user.username}
+                    // テーブル行内の Select は card の overflow に dropdown が切られて
+                    // 選択肢が見えないため、portal に出して clip を回避する。
+                    expandToViewport
                   />
                 ) : user.role ? (
                   t(`tenant_users.role_${user.role}`)
