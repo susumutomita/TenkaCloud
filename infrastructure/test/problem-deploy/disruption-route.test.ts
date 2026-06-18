@@ -52,9 +52,52 @@ function makeDeps(over: Partial<ExecutorDeps> = {}): ExecutorDeps {
     sendDispatch: vi.fn().mockResolvedValue(undefined),
     scheduleRevert: vi.fn().mockResolvedValue(undefined),
     scheduleInject: vi.fn().mockResolvedValue(undefined),
+    scheduleRecurring: vi.fn().mockResolvedValue(undefined),
     ...over,
   };
 }
+
+describe("recurring routing (ADR-037)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("should parse the recurrence block from the initial fired event", () => {
+    const parsed = parseDisruptionFiredDetail({
+      detail: { ...firedDetail, recurrence: { intervalMinutes: 5, maxFires: 6 } },
+    });
+    expect(parsed?.recurrence).toEqual({ intervalMinutes: 5, maxFires: 6 });
+  });
+
+  it("should drop a malformed recurrence (missing maxFires / non-positive)", () => {
+    expect(
+      parseDisruptionFiredDetail({ detail: { ...firedDetail, recurrence: { intervalMinutes: 5 } } })
+        ?.recurrence,
+    ).toBeUndefined();
+    expect(
+      parseDisruptionFiredDetail({
+        detail: { ...firedDetail, recurrence: { intervalMinutes: 0, maxFires: 6 } },
+      })?.recurrence,
+    ).toBeUndefined();
+  });
+
+  it("should route a {mode:'inject-recurring'} payload to the per-tick recurring inject", async () => {
+    const deps = makeDeps();
+    const outcome = await routeDisruptionInvocation(
+      { mode: "inject-recurring", detail: firedDetail },
+      deps,
+    );
+    expect(outcome).toEqual({ kind: "ok", jobId: "job-1" });
+    expect(deps.claimExecution).toHaveBeenCalledWith(expect.anything(), "recurring");
+    expect(deps.sendDispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("should reject an inject-recurring payload whose detail is invalid", async () => {
+    const outcome = await routeDisruptionInvocation(
+      { mode: "inject-recurring", detail: { ...firedDetail, teamId: "" } },
+      makeDeps(),
+    );
+    expect(outcome).toEqual({ kind: "invalid_event" });
+  });
+});
 
 describe("parseDisruptionFiredDetail", () => {
   it("should narrow a valid EventBridge envelope detail", () => {

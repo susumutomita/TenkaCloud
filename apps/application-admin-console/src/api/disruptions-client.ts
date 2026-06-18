@@ -14,8 +14,11 @@ import type { ApiClient } from "./client";
 
 export type DisruptionScope = "all" | "team" | "random-n";
 
-/** [ADR-037] When the injection runs: immediately, or scheduled `afterMinutes` from now. */
-export type DisruptionTiming = "immediate" | "scheduled";
+/**
+ * [ADR-037] When the injection runs: immediately, scheduled `afterMinutes` from now, or
+ * `recurring` every `intervalMinutes` for `maxFires` times (auto-stops; always ends).
+ */
+export type DisruptionTiming = "immediate" | "scheduled" | "recurring";
 
 /**
  * [ADR-013 Phase 2] A condition that auto-fires the disruption from the scoring tick.
@@ -63,10 +66,14 @@ export interface FireDisruptionRequest {
   readonly parameters?: Readonly<Record<string, unknown>>;
   /** Idempotency key (>= 8 chars); re-firing with the same id is a no-op on the platform. */
   readonly requestId: string;
-  /** [ADR-037] `immediate` (default) injects now; `scheduled` defers by `afterMinutes`. */
+  /** [ADR-037] `immediate` (default) injects now; `scheduled` defers; `recurring` repeats. */
   readonly timing?: DisruptionTiming;
   /** [ADR-037] Required when `timing === "scheduled"`; 1–1440 minutes. */
   readonly afterMinutes?: number;
+  /** [ADR-037] Required when `timing === "recurring"`; minutes between fires (1–1440). */
+  readonly intervalMinutes?: number;
+  /** [ADR-037] Required when `timing === "recurring"`; total fires before auto-stop (1–60). */
+  readonly maxFires?: number;
 }
 
 export interface FireDisruptionResult {

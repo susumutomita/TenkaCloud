@@ -36,6 +36,10 @@ const SCOPE_OPTIONS: readonly DisruptionScope[] = ["all", "team", "random-n"];
 const AUDIT_LIMIT = 20;
 const DEFAULT_AFTER_MINUTES = 30;
 const MAX_AFTER_MINUTES = 1440;
+// [ADR-037] recurring fire の既定/上限。 maxFires は always-ends の回数上限 (= schema と一致)。
+const DEFAULT_INTERVAL_MINUTES = 5;
+const DEFAULT_MAX_FIRES = 5;
+const MAX_MAX_FIRES = 60;
 
 interface FireTarget {
   readonly problemId: string;
@@ -49,6 +53,8 @@ function buildFireRequest(
   selectedTeamIds: readonly string[],
   timing: DisruptionTiming,
   afterMinutes: number,
+  intervalMinutes: number,
+  maxFires: number,
 ): FireDisruptionRequest {
   return {
     problemId: target.problemId,
@@ -58,8 +64,49 @@ function buildFireRequest(
     ...(scope === "random-n" ? { randomCount: Math.max(selectedTeamIds.length, 1) } : {}),
     ...(target.item.parameters ? { parameters: target.item.parameters } : {}),
     ...(timing === "scheduled" ? { timing: "scheduled" as const, afterMinutes } : {}),
+    ...(timing === "recurring" ? { timing: "recurring" as const, intervalMinutes, maxFires } : {}),
     requestId: newFireRequestId(),
   };
+}
+
+/** 1〜1440 分の整数でなければ true (= scheduled / recurring interval の共通バリデーション)。 */
+function isMinutesInvalid(minutes: number): boolean {
+  return !Number.isInteger(minutes) || minutes < 1 || minutes > MAX_AFTER_MINUTES;
+}
+
+/** recurring の interval (分) / maxFires のどちらかが範囲外なら true。 */
+function isRecurringInvalid(intervalMinutes: number, maxFires: number): boolean {
+  return (
+    isMinutesInvalid(intervalMinutes) ||
+    !Number.isInteger(maxFires) ||
+    maxFires < 1 ||
+    maxFires > MAX_MAX_FIRES
+  );
+}
+
+/** Fire 成功時の flash 文言を timing 別に組む (= 三項ネストを避けて branch を pin しやすく)。 */
+function firedFlash(
+  t: (key: string, params?: Record<string, string | number>) => string,
+  timing: DisruptionTiming,
+  name: string,
+  count: number,
+  nums: {
+    readonly afterMinutes: number;
+    readonly intervalMinutes: number;
+    readonly maxFires: number;
+  },
+): string {
+  if (timing === "scheduled") {
+    return t("disruptions.scheduled_flash", { name, minutes: nums.afterMinutes });
+  }
+  if (timing === "recurring") {
+    return t("disruptions.recurring_flash", {
+      name,
+      interval: nums.intervalMinutes,
+      count: nums.maxFires,
+    });
+  }
+  return t("disruptions.fired_flash", { name, count });
 }
 
 /**
@@ -92,17 +139,19 @@ function FireModal({
   const [afterMinutes, setAfterMinutes] = useState<number>(
     target.item.defaultAfterMinutes ?? DEFAULT_AFTER_MINUTES,
   );
+  const [intervalMinutes, setIntervalMinutes] = useState<number>(DEFAULT_INTERVAL_MINUTES);
+  const [maxFires, setMaxFires] = useState<number>(DEFAULT_MAX_FIRES);
   const [firing, setFiring] = useState(false);
   const [fireError, setFireError] = useState<string | null>(null);
 
-  const scheduleInvalid =
-    timing === "scheduled" &&
-    (!Number.isInteger(afterMinutes) || afterMinutes < 1 || afterMinutes > MAX_AFTER_MINUTES);
+  const scheduleInvalid = timing === "scheduled" && isMinutesInvalid(afterMinutes);
+  const recurringInvalid = timing === "recurring" && isRecurringInvalid(intervalMinutes, maxFires);
   const fireDisabled =
     !canMutateTenant ||
     firing ||
     (scope === "team" && selectedTeamIds.length === 0) ||
-    scheduleInvalid;
+    scheduleInvalid ||
+    recurringInvalid;
 
   const confirmFire = async () => {
     /* v8 ignore next -- defensive: the Fire button is disabled={fireDisabled} and fireDisabled already includes !canMutateTenant, so the !canMutateTenant side is unreachable here */
@@ -113,15 +162,22 @@ function FireModal({
       const result = await fireDisruption(
         apiClient,
         eventId,
-        buildFireRequest(target, scope, selectedTeamIds, timing, afterMinutes),
+        buildFireRequest(
+          target,
+          scope,
+          selectedTeamIds,
+          timing,
+          afterMinutes,
+          intervalMinutes,
+          maxFires,
+        ),
       );
       onFired(
-        timing === "scheduled"
-          ? t("disruptions.scheduled_flash", { name: target.item.name, minutes: afterMinutes })
-          : t("disruptions.fired_flash", {
-              name: target.item.name,
-              count: result.affectedTeamIds.length,
-            }),
+        firedFlash(t, timing, target.item.name, result.affectedTeamIds.length, {
+          afterMinutes,
+          intervalMinutes,
+          maxFires,
+        }),
       );
     } catch (err) {
       setFireError(toErrorMessage(err));
@@ -191,6 +247,7 @@ function FireModal({
             options={[
               { id: "immediate", text: t("disruptions.timing_immediate") },
               { id: "scheduled", text: t("disruptions.timing_scheduled") },
+              { id: "recurring", text: t("disruptions.timing_recurring") },
             ]}
           />
         </FormField>
@@ -205,6 +262,28 @@ function FireModal({
               value={String(afterMinutes)}
               onChange={(e) => setAfterMinutes(Number(e.detail.value))}
             />
+          </FormField>
+        ) : null}
+        {timing === "recurring" ? (
+          <FormField
+            label={t("disruptions.recurring_label")}
+            description={t("disruptions.recurring_description")}
+            errorText={recurringInvalid ? t("disruptions.recurring_error") : undefined}
+          >
+            <SpaceBetween size="xs" direction="horizontal">
+              <Input
+                type="number"
+                value={String(intervalMinutes)}
+                onChange={(e) => setIntervalMinutes(Number(e.detail.value))}
+                ariaLabel={t("disruptions.recurring_interval_label")}
+              />
+              <Input
+                type="number"
+                value={String(maxFires)}
+                onChange={(e) => setMaxFires(Number(e.detail.value))}
+                ariaLabel={t("disruptions.recurring_maxfires_label")}
+              />
+            </SpaceBetween>
           </FormField>
         ) : null}
       </SpaceBetween>

@@ -6,10 +6,12 @@ import type {
 } from "../../lib/problem-deploy/handlers/disruption-executor-handler/execute";
 import {
   injectScheduleName,
+  recurringScheduleName,
   revertAtExpression,
   revertScheduleName,
   type ScheduleRevertDeps,
   scheduleInject,
+  scheduleRecurring,
   scheduleRevert,
 } from "../../lib/problem-deploy/handlers/disruption-executor-handler/schedule-revert";
 
@@ -135,5 +137,31 @@ describe("scheduleInject (ADR-037 scheduled fire)", () => {
   it("should propagate scheduler errors (inject scheduling failure is loud)", async () => {
     const { deps } = makeDeps(vi.fn().mockRejectedValue(new Error("ConflictException")));
     await expect(scheduleInject(detail, 30, deps)).rejects.toThrow("ConflictException");
+  });
+});
+
+describe("scheduleRecurring (ADR-037)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("should register a rate() schedule with EndDate, auto-delete, and a scheduled-time tick payload", async () => {
+    const { deps, send } = makeDeps();
+    await scheduleRecurring(detail, 5, 6, deps);
+    const input = send.mock.calls[0][0].input;
+    expect(input.Name).toBe(recurringScheduleName(detail));
+    expect(input.ScheduleExpression).toBe("rate(5 minutes)");
+    expect(input.ActionAfterCompletion).toBe("DELETE");
+    // EndDate caps the run at interval×maxFires (= always-ends without a counter).
+    expect(input.EndDate).toBeInstanceOf(Date);
+    expect((input.EndDate as Date).toISOString()).toBe("2026-06-02T00:30:00.000Z");
+    const payload = JSON.parse(input.Target.Input);
+    expect(payload.mode).toBe("inject-recurring");
+    // firedAt is the scheduler template so each tick claims uniquely; recurrence isn't re-sent.
+    expect(payload.detail.firedAt).toBe("<aws.scheduler.scheduled-time>");
+    expect(payload.detail.recurrence).toBeUndefined();
+  });
+
+  it("should propagate scheduler errors (recurring scheduling failure is loud)", async () => {
+    const { deps } = makeDeps(vi.fn().mockRejectedValue(new Error("ConflictException")));
+    await expect(scheduleRecurring(detail, 5, 6, deps)).rejects.toThrow("ConflictException");
   });
 });

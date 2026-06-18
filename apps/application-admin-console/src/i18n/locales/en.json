@@ -762,14 +762,21 @@
     "random_label": "Pick the pool of teams (a random subset is hit)",
     "random_description": "The platform hits a random subset sized to your selection.",
     "timing_label": "Timing",
-    "timing_description": "Inject immediately, or schedule it to run after a number of minutes.",
+    "timing_description": "Inject immediately, schedule it after N minutes, or repeat it on an interval.",
     "timing_immediate": "Run now",
     "timing_scheduled": "Schedule (in N min)",
+    "timing_recurring": "Recurring",
     "after_minutes_label": "Run after (minutes)",
     "after_minutes_description": "1–1440 minutes. The injection runs once this many minutes have elapsed.",
     "after_minutes_error": "Enter a whole number between 1 and 1440.",
+    "recurring_label": "Interval (min) and max fires",
+    "recurring_description": "Left = minutes between injections (1–1440); right = max number of fires (1–60). Auto-stops once the cap is reached (always ends).",
+    "recurring_interval_label": "Interval (minutes)",
+    "recurring_maxfires_label": "Max fires",
+    "recurring_error": "Interval must be 1–1440 and max fires 1–60 (whole numbers).",
     "fired_flash": "Fired \"{name}\" at {count} team(s).",
-    "scheduled_flash": "Scheduled \"{name}\" to fire in {minutes} minute(s)."
+    "scheduled_flash": "Scheduled \"{name}\" to fire in {minutes} minute(s).",
+    "recurring_flash": "Set \"{name}\" to fire every {interval} min, up to {count} times."
   },
   "setup_guide": {
     "header": "First-run setup guide",

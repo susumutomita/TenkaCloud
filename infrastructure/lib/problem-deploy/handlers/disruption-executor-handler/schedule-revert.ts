@@ -48,6 +48,18 @@ export function injectScheduleName(detail: DisruptionFiredDetail): string {
   return sanitizeScheduleName(`tc-inject-${detail.requestId}-${detail.teamId}`);
 }
 
+/** [ADR-037] recurring fire の rate schedule 名。 requestId/teamId と対の冪等キー (cancel/teardown 用)。 */
+export function recurringScheduleName(detail: DisruptionFiredDetail): string {
+  return sanitizeScheduleName(`tc-recur-${detail.requestId}-${detail.teamId}`);
+}
+
+/**
+ * aws-scheduler が各 tick で実 ISO 時刻に置換する universal target template 変数。 recurring の
+ * tick payload の `firedAt` にこれを入れることで、 executor 側 per-tick claim
+ * (`EXEC#{requestId}#{teamId}#RECUR#{firedAt}`) が tick ごとに一意になり二重採点を防ぐ。
+ */
+const SCHEDULED_TIME_TEMPLATE = "<aws.scheduler.scheduled-time>";
+
 /** base 時刻 + afterSeconds の UTC を ISO と aws-scheduler の `at(...)` 式 (秒精度) で返す。 */
 function oneShotAt(baseIso: string, afterSeconds: number): { iso: string; expression: string } {
   const at = new Date(new Date(baseIso).getTime() + afterSeconds * 1000);
@@ -125,4 +137,40 @@ export async function scheduleInject(
     mode: "inject",
     detail: injectDetail,
   });
+}
+
+/**
+ * [ADR-037] recurring fire: `rate(intervalMinutes minutes)` schedule を 1 件登録し、 各 tick で
+ * executor を `{mode:"inject-recurring", detail}` で呼び戻す。 `EndDate = firedAt + interval*maxFires`
+ * + `ActionAfterCompletion: DELETE` で maxFires 回ぶん経過後に aws-scheduler が停止 + 自動削除する
+ * (= always-ends、 IAM 追加不要・DDB カウンタ不要)。 tick payload の `firedAt` は scheduled-time
+ * template に置換させ、 executor の per-tick claim (`...#RECUR#{firedAt}`) を tick ごとに一意化する。
+ */
+export async function scheduleRecurring(
+  detail: DisruptionFiredDetail,
+  intervalMinutes: number,
+  maxFires: number,
+  deps: ScheduleRevertDeps,
+): Promise<void> {
+  const start = new Date(detail.firedAt);
+  const end = new Date(start.getTime() + intervalMinutes * maxFires * 60_000);
+  const { recurrence: _r, afterMinutes: _a, ...rest } = detail;
+  const tickDetail: DisruptionFiredDetail = { ...rest, firedAt: SCHEDULED_TIME_TEMPLATE };
+  await deps.scheduler.send(
+    new CreateScheduleCommand({
+      Name: recurringScheduleName(detail),
+      ScheduleExpression: `rate(${intervalMinutes} minutes)`,
+      ScheduleExpressionTimezone: "UTC",
+      StartDate: start,
+      EndDate: end,
+      FlexibleTimeWindow: { Mode: FlexibleTimeWindowMode.OFF },
+      State: ScheduleState.ENABLED,
+      ActionAfterCompletion: ActionAfterCompletion.DELETE,
+      Target: {
+        Arn: deps.revertTargetArn,
+        RoleArn: deps.schedulerRoleArn,
+        Input: JSON.stringify({ mode: "inject-recurring", detail: tickDetail }),
+      },
+    }),
+  );
 }

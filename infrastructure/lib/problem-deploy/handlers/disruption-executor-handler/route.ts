@@ -22,6 +22,7 @@ import {
   type DisruptionFiredDetail,
   type ExecutorDeps,
   executeDisruptionAction,
+  executeRecurringInject,
   executeScheduledInject,
 } from "./execute.js";
 
@@ -33,6 +34,11 @@ interface RevertInvocation {
 
 interface InjectInvocation {
   readonly mode: "inject";
+  readonly detail: Record<string, unknown>;
+}
+
+interface InjectRecurringInvocation {
+  readonly mode: "inject-recurring";
   readonly detail: Record<string, unknown>;
 }
 
@@ -68,6 +74,8 @@ export function parseDisruptionFiredDetail(event: unknown): DisruptionFiredDetai
     typeof d.afterMinutes === "number" && Number.isFinite(d.afterMinutes) && d.afterMinutes > 0
       ? d.afterMinutes
       : undefined;
+  // [ADR-037] recurring fire の宣言 (initial fired event のみ持つ)。 両 field が正の有限数のときだけ採用。
+  const recurrence = parsePositivePair(d.recurrence, "intervalMinutes", "maxFires");
   return {
     disruptionId,
     eventId,
@@ -78,7 +86,22 @@ export function parseDisruptionFiredDetail(event: unknown): DisruptionFiredDetai
     firedAt,
     parameters: isObject(d.parameters) ? d.parameters : {},
     ...(afterMinutes !== undefined ? { afterMinutes } : {}),
+    ...(recurrence !== undefined ? { recurrence } : {}),
   };
+}
+
+/** `{[a]:number>0, [b]:number>0}` を narrow。 どちらか欠落/非正なら undefined (= recurring 扱いしない)。 */
+function parsePositivePair<A extends string, B extends string>(
+  value: unknown,
+  a: A,
+  b: B,
+): { readonly [K in A | B]: number } | undefined {
+  if (!isObject(value)) return undefined;
+  const va = value[a];
+  const vb = value[b];
+  if (typeof va !== "number" || !Number.isFinite(va) || va <= 0) return undefined;
+  if (typeof vb !== "number" || !Number.isFinite(vb) || vb <= 0) return undefined;
+  return { [a]: va, [b]: vb } as { readonly [K in A | B]: number };
 }
 
 function isRevertInvocation(event: unknown): event is RevertInvocation {
@@ -89,6 +112,10 @@ function isRevertInvocation(event: unknown): event is RevertInvocation {
 
 function isInjectInvocation(event: unknown): event is InjectInvocation {
   return isObject(event) && event.mode === "inject" && isObject(event.detail);
+}
+
+function isInjectRecurringInvocation(event: unknown): event is InjectRecurringInvocation {
+  return isObject(event) && event.mode === "inject-recurring" && isObject(event.detail);
 }
 
 /** executor Lambda の 1 invocation を inject / revert に振り分けて実行する。 */
@@ -108,6 +135,13 @@ export async function routeDisruptionInvocation(
     const detail = parseDisruptionFiredDetail(event);
     if (!detail) return { kind: "invalid_event" };
     return executeScheduledInject(detail, deps);
+  }
+  if (isInjectRecurringInvocation(event)) {
+    // [ADR-037] recurring fire の各 tick: rate schedule が積んだ {mode:"inject-recurring", detail}。
+    // detail.firedAt は aws-scheduler が tick 実時刻に置換済 → per-tick claim が一意になる。
+    const detail = parseDisruptionFiredDetail(event);
+    if (!detail) return { kind: "invalid_event" };
+    return executeRecurringInject(detail, deps);
   }
   const detail = parseDisruptionFiredDetail(event);
   if (!detail) return { kind: "invalid_event" };

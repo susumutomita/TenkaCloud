@@ -179,6 +179,33 @@ describe("POST /events/:eventId/disruptions/fire", () => {
     expect(mocks.fireDisruption.mock.calls[0][1].afterMinutes).toBeUndefined();
   });
 
+  it("[ADR-037] should 400 when timing=recurring but intervalMinutes/maxFires are missing", async () => {
+    const res = await fire({ ...validFireBody, timing: "recurring" });
+    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    expect(mocks.fireDisruption).not.toHaveBeenCalled();
+  });
+
+  it("[ADR-037] should 400 when intervalMinutes/maxFires are set without timing=recurring", async () => {
+    const res = await fire({ ...validFireBody, intervalMinutes: 5, maxFires: 6 });
+    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    expect(mocks.fireDisruption).not.toHaveBeenCalled();
+  });
+
+  it("[ADR-037] should pass the recurrence to the service when timing=recurring", async () => {
+    mocks.fireDisruption.mockResolvedValueOnce({ kind: "ok", result: { fired: 1 } });
+    const res = await fire({
+      ...validFireBody,
+      timing: "recurring",
+      intervalMinutes: 5,
+      maxFires: 6,
+    });
+    expect(res.status).toBe(StatusCodes.CREATED);
+    expect(mocks.fireDisruption.mock.calls[0][1].recurrence).toEqual({
+      intervalMinutes: 5,
+      maxFires: 6,
+    });
+  });
+
   it("should include randomCount when scope=random-n", async () => {
     mocks.fireDisruption.mockResolvedValueOnce({ kind: "unknown_problem" });
     await fire({ ...validFireBody, scope: "random-n", randomCount: 2 });

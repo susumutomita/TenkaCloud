@@ -4,6 +4,7 @@ import {
   type DisruptionFiredDetail,
   type ExecutorDeps,
   executeDisruptionAction,
+  executeRecurringInject,
   executeScheduledInject,
 } from "../../lib/problem-deploy/handlers/disruption-executor-handler/execute";
 import type { ProblemDisruptionEntry } from "../../lib/utils/discover-problems-catalog";
@@ -57,6 +58,7 @@ function makeDeps(over: Partial<ExecutorDeps> = {}): ExecutorDeps {
     sendDispatch: vi.fn().mockResolvedValue(undefined),
     scheduleRevert: vi.fn().mockResolvedValue(undefined),
     scheduleInject: vi.fn().mockResolvedValue(undefined),
+    scheduleRecurring: vi.fn().mockResolvedValue(undefined),
     ...over,
   };
 }
@@ -207,5 +209,51 @@ describe("executeScheduledInject (ADR-037 deferred inject)", () => {
     const deps = makeDeps({ resolveDeployment: vi.fn().mockResolvedValue(undefined) });
     expect(await executeScheduledInject(detail, deps)).toEqual({ kind: "no_deployment" });
     expect(deps.sendDispatch).not.toHaveBeenCalled();
+  });
+});
+
+describe("recurring fire (ADR-037)", () => {
+  beforeEach(() => vi.clearAllMocks());
+  const recurringDetail: DisruptionFiredDetail = {
+    ...detail,
+    recurrence: { intervalMinutes: 5, maxFires: 6 },
+  };
+
+  it("should create the recurring schedule (not inject yet) on the initial fired event", async () => {
+    const deps = makeDeps();
+    const outcome = await executeDisruptionAction(recurringDetail, deps);
+    expect(outcome).toEqual({ kind: "scheduled" });
+    expect(deps.scheduleRecurring).toHaveBeenCalledWith(recurringDetail, 5, 6);
+    // the initial fired event only schedules — injection happens on each tick.
+    expect(deps.sendDispatch).not.toHaveBeenCalled();
+    expect(deps.scheduleInject).not.toHaveBeenCalled();
+  });
+
+  it("should inject + schedule revert on each recurring tick, claiming with the recurring phase", async () => {
+    const deps = makeDeps();
+    const outcome = await executeRecurringInject(detail, deps);
+    expect(outcome).toEqual({ kind: "ok", jobId: "job-1" });
+    expect(deps.claimExecution).toHaveBeenCalledWith(detail, "recurring");
+    expect(deps.sendDispatch).toHaveBeenCalledTimes(1);
+    expect(deps.scheduleRevert).toHaveBeenCalledTimes(1);
+  });
+
+  it("should suppress a duplicate redelivery of the same recurring tick", async () => {
+    const deps = makeDeps({ claimExecution: vi.fn().mockResolvedValue("duplicate") });
+    expect(await executeRecurringInject(detail, deps)).toEqual({ kind: "duplicate" });
+    expect(deps.sendDispatch).not.toHaveBeenCalled();
+  });
+
+  it("should return no_action / unknown_disruption for an undeclared or unknown tick", async () => {
+    const noAction: ProblemDisruptionEntry = { ...withAction, action: undefined };
+    expect(
+      await executeRecurringInject(
+        detail,
+        makeDeps({ problemsDisruptions: { "microservice-migration-battle": [noAction] } }),
+      ),
+    ).toEqual({ kind: "no_action" });
+    expect(await executeRecurringInject(detail, makeDeps({ problemsDisruptions: {} }))).toEqual({
+      kind: "unknown_disruption",
+    });
   });
 });
