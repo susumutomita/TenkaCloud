@@ -25,6 +25,23 @@ const SOURCE_COLOR: Record<ScoreEventView["source"], "blue" | "green" | "grey" |
 };
 
 /**
+ * 加点 / 減点の「理由」 label key。 source だけでは uptime の +200 (稼働継続) と -25/-100
+ * (ダウン / 障害注入ペナルティ) を区別できないため、 source + points の符号から導く。
+ */
+const NON_UPTIME_REASON_KEY: Record<Exclude<ScoreEventView["source"], "uptime">, string> = {
+  flag: "score_events.reason_flag",
+  "flag-wrong": "score_events.reason_flag_wrong",
+  hint: "score_events.reason_hint",
+};
+
+function reasonKey(event: ScoreEventView): string {
+  if (event.source === "uptime") {
+    return event.points >= 0 ? "score_events.reason_uptime_up" : "score_events.reason_uptime_down";
+  }
+  return NON_UPTIME_REASON_KEY[event.source];
+}
+
+/**
  * Score 履歴テーブル。 `ScoreEventsPage` から切り出し、 Table / Badge / 時刻フォーマット依存を
  * この module に閉じ込めた (= ページの高結合を解消)。
  */
@@ -88,6 +105,15 @@ export function ScoreEventsTable({ entries }: { entries: readonly ScoreEventView
               </Box>
             ),
           width: 100,
+        },
+        {
+          id: "reason",
+          header: t("score_events.col_reason"),
+          cell: (e) => (
+            <Box variant="small" color="text-status-inactive">
+              {t(reasonKey(e))}
+            </Box>
+          ),
         },
       ]}
       empty={

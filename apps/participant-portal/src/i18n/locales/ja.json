@@ -199,7 +199,13 @@
     "source_uptime": "Battle (uptime)",
     "source_flag": "Challenge (flag)",
     "source_flag_wrong": "不正解 flag",
-    "source_hint": "ヒント開封"
+    "source_hint": "ヒント開封",
+    "col_reason": "理由",
+    "reason_uptime_up": "稼働継続で加点 (uptime probe 成功)",
+    "reason_uptime_down": "ダウン / 障害で減点 (uptime probe 失敗・障害注入)",
+    "reason_flag": "フラグ正解で加点",
+    "reason_flag_wrong": "フラグ誤答で減点",
+    "reason_hint": "ヒント開封のコストで減点"
   },
   "problem_detail": {
     "back_button": "問題一覧へ戻る",
