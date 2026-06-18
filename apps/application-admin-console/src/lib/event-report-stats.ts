@@ -7,11 +7,33 @@
  */
 
 import type {
+  EventDeploymentStatus,
   EventDeploymentSummary,
   EventDetail,
   TeamScoreEvents,
   TeamSummary,
 } from "../api/events-client";
+
+/**
+ * 「deploy が成功した」 とみなす status。`COMPLETE` は現役、 `AUTO_DELETED` / `DELETED` / `DELETING`
+ * は「一度 deploy に成功した後にクリーンアップされた / 中」 (= 自動失効 / 手動 teardown)。最終 report
+ * は「deploy できたか」 を測る指標なので、 競技終了後に teardown した成功 deploy も成功として数える
+ * (= 成功した問題を片付けた後に「成功 0」 と表示される不具合の修正)。
+ *
+ * 注: deployment 行は削除後に削除前 outcome を保持せず status のみを持つため、 仮に FAILED を
+ * teardown した行も `DELETED` として成功に数える可能性がある。 これは既存の `AUTO_DELETED`=成功 と
+ * 同じ近似で、 通常運用 (= 成功 deploy を終了時に片付ける) を正しく数えることを優先する。
+ */
+const SUCCESSFUL_DEPLOY_STATUSES: ReadonlySet<EventDeploymentStatus> = new Set([
+  "COMPLETE",
+  "AUTO_DELETED",
+  "DELETED",
+  "DELETING",
+]);
+
+function isSuccessfulDeploy(status: EventDeploymentStatus): boolean {
+  return SUCCESSFUL_DEPLOY_STATUSES.has(status);
+}
 
 export interface EventReportSummary {
   /** team 数 = `EventDetail.teams.length`。 */
@@ -26,7 +48,7 @@ export interface EventReportSummary {
   readonly problemCount: number;
   /** 全 problem × 全 team を bulk-deploy した結果の deployment 行総数。 */
   readonly totalDeployments: number;
-  /** `COMPLETE` または `AUTO_DELETED` の deployment 数 (= 正常終了)。 */
+  /** deploy に成功した deployment 数 (= `COMPLETE` / `AUTO_DELETED` / `DELETED` / `DELETING`)。 */
   readonly successfulDeployments: number;
   /** `FAILED` または `EXPIRED` の deployment 数。 */
   readonly failedDeployments: number;
@@ -47,9 +69,10 @@ export function summarizeEvent(detail: EventDetail): EventReportSummary {
   for (const list of Object.values(detail.deploymentsByProblem)) {
     for (const deployment of list) {
       totalDeployments += 1;
-      if (deployment.status === "COMPLETE" || deployment.status === "AUTO_DELETED") {
+      if (isSuccessfulDeploy(deployment.status)) {
         successfulDeployments += 1;
-      } else if (deployment.status === "FAILED" || deployment.status === "EXPIRED") {
+      }
+      if (deployment.status === "FAILED" || deployment.status === "EXPIRED") {
         failedDeployments += 1;
       }
     }
@@ -145,7 +168,7 @@ export interface ProblemBreakdownRow {
   readonly avgScore: number;
   /** この problem 配下の deployment 行数 (= 全 team 分の deploy attempt 数)。 */
   readonly deploymentsCount: number;
-  /** 成功 (COMPLETE / AUTO_DELETED) した deployment 数。 */
+  /** deploy に成功した deployment 数 (= COMPLETE / AUTO_DELETED / DELETED / DELETING)。 */
   readonly successfulCount: number;
 }
 
@@ -168,7 +191,7 @@ function aggregateTeamForProblem(team: TeamScoreEvents, problemId: string): PerT
 }
 
 function countSuccessful(deployments: readonly EventDeploymentSummary[]): number {
-  return deployments.filter((d) => d.status === "COMPLETE" || d.status === "AUTO_DELETED").length;
+  return deployments.filter((d) => isSuccessfulDeploy(d.status)).length;
 }
 
 export function buildProblemBreakdown(detail: EventDetail): readonly ProblemBreakdownRow[] {
