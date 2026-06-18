@@ -278,6 +278,29 @@ describe("evaluateDisruptionTriggers", () => {
     ]);
   });
 
+  it("[ADR-037 Slice 3] should carry recurrence into the fired result for a score-gated repeat", () => {
+    const d = baseDisruption({
+      triggers: [{ kind: "team-score-above", threshold: 50 }],
+      recurrence: { intervalMinutes: 5, maxFires: 6 },
+    });
+    const fired = evaluateDisruptionTriggers(
+      [d],
+      { scoreAfter: 100, elapsedMin: 5, phases },
+      new Set(),
+    );
+    expect(fired[0]?.recurrence).toEqual({ intervalMinutes: 5, maxFires: 6 });
+  });
+
+  it("[ADR-037 Slice 3] should omit recurrence for a one-shot triggered disruption", () => {
+    const d = baseDisruption({ triggers: [{ kind: "team-score-above", threshold: 50 }] });
+    const fired = evaluateDisruptionTriggers(
+      [d],
+      { scoreAfter: 100, elapsedMin: 5, phases },
+      new Set(),
+    );
+    expect(fired[0]).not.toHaveProperty("recurrence");
+  });
+
   it("should fire on phase-entered using the active phase", () => {
     const d = baseDisruption({ triggers: [{ kind: "phase-entered", phaseName: "degraded" }] });
     const fired = evaluateDisruptionTriggers(
