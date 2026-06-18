@@ -8,7 +8,7 @@ export JSII_DEPRECATED := quiet
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install_ci build typecheck test test-coverage coverage-gate clean-test-outdir check before-commit beforecommit \
+.PHONY: help install install_ci submodule-latest build typecheck test test-coverage coverage-gate clean-test-outdir check before-commit beforecommit \
         build-docs check-docs audit-deps build-problems-index check-problems-index \
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
@@ -34,6 +34,14 @@ install:
 	bun install --ignore-scripts
 	bun x husky
 install_ci:    ; bun install --frozen-lockfile --ignore-scripts
+# Manual on-demand bump of the problems/ submodule to its tracked branch tip (.gitmodules branch=main).
+# Leaves the bump *staged* for you to review + commit; the scheduled submodule-sync workflow does the
+# same automatically as its own PR. Pre-commit only *syncs* the worktree to the pin, it never bumps.
+submodule-latest:
+	git submodule update --remote --recursive problems
+	@git diff --quiet -- problems \
+		&& echo "problems already at the latest pin." \
+		|| { git add problems; echo "problems bumped + staged — review the submodule diff, then commit."; }
 build:         ; bun run build
 typecheck:     ; bun run typecheck
 test:          ; bun run test

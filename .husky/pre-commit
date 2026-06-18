@@ -1,4 +1,13 @@
 #!/usr/bin/env sh
 # 旧 architecture-harness / ai-improvement-loop は ProtoShip 移行で撤去。
 # 移行完了後に新しい harness を再導入する (Phase 2 以降)。
+
+# [submodule] problems/ の checkout を記録済 pin に揃える (= stale な checkout が commit に紛れない)。
+# pin の *bump* はここではやらない: catalog の更新を feature commit に混ぜると conflict の元なので、
+# bump は scheduled な submodule-sync workflow (= 単独 PR) に任せる (`make submodule-latest` で手動も可)。
+# problems/ が staged のとき (= 意図的な pin 変更) は触らない。 非致命的なので submodule が無くても commit は通す。
+if git diff --cached --quiet -- problems 2>/dev/null; then
+  git submodule update --init --recursive problems >/dev/null 2>&1 || true
+fi
+
 mise exec -- make before-commit
