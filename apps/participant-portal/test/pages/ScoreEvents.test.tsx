@@ -114,7 +114,8 @@ describe("ScoreEventsPage", () => {
         }),
         ev({ problemId: "p-hint", source: "hint", points: -5, occurredAt: "2026-05-22T14:00:00Z" }),
         // 無効 timestamp → buildCumulativeSeries の !Number.isFinite continue。
-        ev({ problemId: "p-bad", source: "uptime", points: 5, occurredAt: "not-a-date" }),
+        // points 負 = uptime ダウン/障害 → reason_uptime_down 経路も兼ねる。
+        ev({ problemId: "p-bad", source: "uptime", points: -25, occurredAt: "not-a-date" }),
       ],
     });
     renderPage();
@@ -131,6 +132,12 @@ describe("ScoreEventsPage", () => {
     // points 正負の両分岐
     expect(screen.getByText("+100 pt")).toBeInTheDocument();
     expect(screen.getByText("-10 pt")).toBeInTheDocument();
+    // 理由 column: source + 符号から導く (= なぜ加点/減点されたか)
+    expect(screen.getByText("score_events.reason_flag")).toBeInTheDocument();
+    expect(screen.getByText("score_events.reason_flag_wrong")).toBeInTheDocument();
+    expect(screen.getByText("score_events.reason_hint")).toBeInTheDocument();
+    expect(screen.getByText("score_events.reason_uptime_up")).toBeInTheDocument();
+    expect(screen.getByText("score_events.reason_uptime_down")).toBeInTheDocument();
   });
 
   it("should paginate the history table at 20 rows per page (#履歴多すぎ)", async () => {

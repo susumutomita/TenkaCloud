@@ -199,7 +199,13 @@
     "source_uptime": "Battle (uptime)",
     "source_flag": "Challenge (flag)",
     "source_flag_wrong": "Wrong flag",
-    "source_hint": "Hint reveal"
+    "source_hint": "Hint reveal",
+    "col_reason": "Reason",
+    "reason_uptime_up": "Uptime maintained (probe OK)",
+    "reason_uptime_down": "Downtime / disruption penalty (probe failed)",
+    "reason_flag": "Correct flag",
+    "reason_flag_wrong": "Wrong flag penalty",
+    "reason_hint": "Hint reveal cost"
   },
   "problem_detail": {
     "back_button": "Back to problems",
