@@ -204,7 +204,11 @@ bootstrap:            env-check build ; $(CDK) bootstrap
 # と Participant Portal を `tenantId="local"` 固定で立てる (ADR-016)。
 #   - Lite で deploy: tenkacloud-lite + tenkacloud-lite-problem-deploy
 #   - SaaS が必要なら `make deploy-saas` (= 旧 default、 3-phase orchestration)
-deploy:               env-check-lite  ; bun run scripts/tenkacloud-lite.ts up
+# `build` を必ず先に走らせる: 問題カタログは SPA build 時に `import.meta.glob` で
+# `problems/**/metadata.json` を取り込む (apps/*/src/data/problems.ts) ため、 submodule を
+# 最新化しても SPA を再 build しないと dist が古いカタログのまま deploy され、 新規問題が
+# 取り込まれない。 bootstrap / deploy-control-plane 等の他 deploy 系と同じく build を prereq 化する。
+deploy:               env-check-lite build ; bun run scripts/tenkacloud-lite.ts up
 # ref の install.sh 準拠の orchestration (= SaaS mode、 SBT ControlPlane を立てる):
 #   1. S3 source bucket (serverless-saas-${ACCOUNT_ID}-${REGION}) を作成
 #   2. infrastructure/ を source.zip にして S3 に upload
