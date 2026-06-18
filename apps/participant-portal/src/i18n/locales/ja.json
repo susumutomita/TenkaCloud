@@ -298,7 +298,6 @@
     "auto_delete_expired_body": "自動削除予定時刻を過ぎています ({expiresAt})。teardown が既に実行中または待機中の可能性があります。",
     "current_score_label": "現在の score",
     "last_scored_label": "最終加点",
-    "deploy_log_header": "デプロイ terminal",
     "outputs_header": "アクセス先 URL",
     "celebrate_header": "🏆 クリア済み +{points} pt",
     "celebrate_body": "この問題は正解済みです。 引き続き他の問題に挑戦してください！",

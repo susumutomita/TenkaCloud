@@ -298,7 +298,6 @@
     "auto_delete_expired_body": "The automatic deletion time has passed ({expiresAt}). Teardown may already be running or queued.",
     "current_score_label": "Current score",
     "last_scored_label": "Last scored",
-    "deploy_log_header": "Deployment terminal",
     "outputs_header": "Access URLs",
     "celebrate_header": "🏆 Cleared +{points} pt",
     "celebrate_body": "You've already solved this problem. Move on to the next!",
