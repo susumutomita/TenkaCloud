@@ -248,6 +248,30 @@ describe("discoverProblemsDisruptions triggers[] (#1422)", () => {
     expect(entries?.[0]?.effect).toEqual({ kind: "penalty", points: 40, durationSeconds: 300 });
     expect(entries?.[1]?.effect).toBeUndefined(); // fail-safe drop, entry still kept
   });
+
+  it("[ADR-037 Slice 3] should surface a valid recurrence and drop a malformed one", () => {
+    writeProblem("battles", "recur-battle", {
+      id: "recur-battle",
+      disruptions: [
+        {
+          id: "score-storm",
+          name: "Score storm",
+          eventDetailType: "X",
+          triggers: [{ kind: "team-score-above", threshold: 1000 }],
+          recurrence: { intervalMinutes: 5, maxFires: 6 },
+        },
+        {
+          id: "bad-recur",
+          name: "bad",
+          eventDetailType: "X",
+          recurrence: { intervalMinutes: 0, maxFires: 6 }, // <1 → dropped
+        },
+      ],
+    });
+    const entries = discoverProblemsDisruptions(workspace)["recur-battle"];
+    expect(entries?.[0]?.recurrence).toEqual({ intervalMinutes: 5, maxFires: 6 });
+    expect(entries?.[1]?.recurrence).toBeUndefined(); // fail-safe drop, entry still kept
+  });
 });
 
 describe("discoverProblemsCoordination (ADR-028/030 Phase 3 #1420)", () => {

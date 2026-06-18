@@ -31,6 +31,11 @@ export interface FiredDisruption {
   readonly eventDetailType: string;
   readonly parameters: Readonly<Record<string, unknown>>;
   readonly triggerKind: DisruptionTrigger["kind"];
+  /**
+   * [ADR-037 Slice 3] 宣言されていれば、 この条件発火を executor が `rate()` schedule で定期化する
+   * (= 「スコア一定以上で定期妨害」)。 省略 = 1 回だけ。 publish 時に Detail へ載せる。
+   */
+  readonly recurrence?: { readonly intervalMinutes: number; readonly maxFires: number };
 }
 
 /** 1 trigger が現在の観測値で成立しているか。 */
@@ -70,6 +75,7 @@ export function evaluateDisruptionTriggers(
       eventDetailType: d.eventDetailType,
       parameters: d.parameters ?? {},
       triggerKind: match.kind,
+      ...(d.recurrence ? { recurrence: d.recurrence } : {}),
     });
   }
   return fired;

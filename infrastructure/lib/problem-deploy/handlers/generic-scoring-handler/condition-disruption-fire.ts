@@ -108,6 +108,8 @@ async function publishConditionDisruptions(
       requestId: `${item.jobId}#${f.disruptionId}`,
       firedAt,
       triggeredBy: f.triggerKind,
+      // [ADR-037 Slice 3] 宣言されていれば executor が rate() schedule で定期化する (= score-gated 定期妨害)。
+      ...(f.recurrence ? { recurrence: f.recurrence } : {}),
     }),
   }));
   const resp = await shared.events.send(new PutEventsCommand({ Entries: entries }));

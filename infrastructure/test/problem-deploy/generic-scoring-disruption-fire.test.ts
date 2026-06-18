@@ -155,6 +155,37 @@ describe("condition-triggered disruption fire", () => {
     expect(state.firedDisruptions).toEqual(["latency"]);
   });
 
+  it("[ADR-037 Slice 3] should carry recurrence into the published Detail for a score-gated repeat", async () => {
+    process.env.BATTLE_PROBLEMS_SCORING = JSON.stringify({
+      "hello-world-battle": {
+        kind: "uptime",
+        endpoints: [{ outputKey: "FrontendUrl", path: "/", expectStatus: [200] }],
+        pointsPerSuccess: 100,
+      },
+    });
+    process.env.PROBLEM_ENDPOINTS = JSON.stringify({});
+    process.env.BATTLE_PROBLEMS_PHASES = JSON.stringify({});
+    process.env.BATTLE_PROBLEMS_DISRUPTIONS = JSON.stringify({
+      "hello-world-battle": [
+        {
+          id: "latency",
+          name: "EC2 latency",
+          eventDetailType: "DegradedDisruptionFired",
+          parameters: { delayMs: 200 },
+          triggers: [{ kind: "team-score-above", threshold: 50 }],
+          recurrence: { intervalMinutes: 5, maxFires: 6 },
+        },
+      ],
+    });
+    mockDdb();
+    await runHandler();
+    const entry = (ebSend.mock.calls[0][0] as { input: { Entries: Array<{ Detail: string }> } })
+      .input.Entries[0];
+    const detail = JSON.parse(entry.Detail);
+    // executor (Slice 1) はこの recurrence を見て rate() schedule を作る (= 定期妨害)。
+    expect(detail.recurrence).toEqual({ intervalMinutes: 5, maxFires: 6 });
+  });
+
   it("should not re-fire a disruption already recorded in firedDisruptions (idempotency)", async () => {
     configureScoringAndDisruptions();
     mockDdb({ scoringState: JSON.stringify({ firedDisruptions: ["latency"] }) });
