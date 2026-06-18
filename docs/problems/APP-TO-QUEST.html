@@ -178,6 +178,20 @@ and stop for human review before writing one selected problem draft.
 </code></pre>
 <p>The draft may also include an author-only note such as <code>README.md</code> when the generated design needs assumptions, review notes, or local fixture instructions. Participant-facing instructions should remain in <code>metadata.json</code> and optional portal components.</p>
 <p>The source application analysis should first normalize into <a href="./source-app-profile.schema.json"><code>source-app-profile.schema.json</code></a>. That schema preserves app summary, actors, data inventory, auth boundaries, public and admin entrypoints, external services, AI data flows, deployment assumptions, operational signals, cost-sensitive paths, evidence, confidence, and explicit unknowns.</p>
+<h2>Regression Fixture</h2>
+<p>The first golden fixture lives at <code>fixtures/app-to-quest/sample-vibe-app/</code>. Its
+expected outputs use the same reviewable artifact names as the authoring skill:</p>
+<ul>
+<li><code>expected/01-source-app-profile.json</code></li>
+<li><code>expected/02-risk-inventory.md</code></li>
+<li><code>expected/03-quest-candidates.json</code></li>
+<li><code>expected/problem-drafts/*.md</code></li>
+</ul>
+<p>Run this before changing the workflow contract:</p>
+<pre><code class="language-bash">bun run scripts/validate-app-to-quest.ts
+</code></pre>
+<p><code>bun run validate:problems</code> also runs this fixture gate so App-to-Quest drift is
+caught by the normal problem validation path.</p>
 <h2>Platform Contract</h2>
 <p>The platform runtime should stay simple:</p>
 <ul>

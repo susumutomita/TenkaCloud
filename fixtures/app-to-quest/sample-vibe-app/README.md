@@ -38,10 +38,10 @@ customer data, no real secret values, and no live external service integration.
 
 Golden outputs live under `expected/`:
 
-- `source-app-profile.json`
-- `risk-inventory.md`
-- `quest-candidates.json`
+- `01-source-app-profile.json`
+- `02-risk-inventory.md`
+- `03-quest-candidates.json`
 - `problem-drafts/*.md`
 
 These files are the manual verification target for the App-to-Quest mode tracked
-by issue `#1832`.
+by issue `#1824`.

@@ -1,0 +1,224 @@
+{
+  "$schema": "../../../../.claude/skills/create-problem/references/app-to-quest/quest-candidate.schema.json",
+  "appSlug": "sample-vibe-app",
+  "sourceProfile": "01-source-app-profile.json",
+  "riskInventory": "02-risk-inventory.md",
+  "humanReviewRequired": true,
+  "candidates": [
+    {
+      "id": "quest-001-order-owner-check",
+      "title": "Protect order details with owner checks",
+      "category": "privacy",
+      "severity": "critical",
+      "sourceEvidence": ["app/api/orders/[id]/route.ts"],
+      "riskStatement": "The order route returns an order by ID without comparing order.userId to the authenticated user id.",
+      "businessImpact": "Customer order details and addresses may be exposed across accounts.",
+      "whatHappensIfIgnored": "A customer may view another customer's order items, notes, and shipping address.",
+      "learnerExperience": "Add server-side ownership checks and choose a consistent forbidden or not-found response.",
+      "mission": "Make order lookup enforce per-user ownership.",
+      "successCriteria": [
+        "Own order returns StatusCodes.OK.",
+        "Another user's order returns StatusCodes.FORBIDDEN or StatusCodes.NOT_FOUND.",
+        "Missing orders still return StatusCodes.NOT_FOUND."
+      ],
+      "scoringSignals": [
+        "API response for own order",
+        "API response for cross-owner order",
+        "Regression for missing order"
+      ],
+      "safeSimulationPlan": "Use only seeded fixture orders and local route tests.",
+      "remediationHints": [
+        "Compare order.userId with user.id before returning the order.",
+        "Avoid leaking whether another user's order exists."
+      ],
+      "suggestedProblemType": "challenge",
+      "suggestedScoringKind": "multi-flag",
+      "confidence": "high"
+    },
+    {
+      "id": "quest-002-admin-api-authz",
+      "title": "Enforce admin role on the users API",
+      "category": "security",
+      "severity": "high",
+      "sourceEvidence": ["app/admin/page.tsx", "app/api/admin/users/route.ts"],
+      "riskStatement": "The UI hides admin controls, but the API route lists users for any authenticated user.",
+      "businessImpact": "User account metadata may be exposed to non-admin customers.",
+      "whatHappensIfIgnored": "A non-admin user may enumerate emails, roles, and last login IPs through the API.",
+      "learnerExperience": "Move the authorization boundary from UI-only logic into the server route.",
+      "mission": "Return a forbidden response for non-admin users and keep admin access working.",
+      "successCriteria": [
+        "Customer role receives StatusCodes.FORBIDDEN.",
+        "Admin role receives StatusCodes.OK with user records.",
+        "The UI remains a convenience layer, not the only control."
+      ],
+      "scoringSignals": [
+        "Customer request status",
+        "Admin request status",
+        "Presence of server-side role check"
+      ],
+      "safeSimulationPlan": "Use local fixture users with customer and admin roles.",
+      "remediationHints": [
+        "Check user.role in the API route.",
+        "Keep the UI guard, but do not depend on it for security."
+      ],
+      "suggestedProblemType": "challenge",
+      "suggestedScoringKind": "multi-flag",
+      "confidence": "high"
+    },
+    {
+      "id": "quest-003-pii-logging",
+      "title": "Stop logging personal order data",
+      "category": "privacy",
+      "severity": "high",
+      "sourceEvidence": [
+        "lib/logger.ts",
+        "app/api/orders/[id]/route.ts",
+        "app/api/ai/summarize/route.ts"
+      ],
+      "riskStatement": "Full objects containing email, address, notes, and prompts are sent to logs.",
+      "businessImpact": "Logs may become a secondary store of personal data with unclear retention and access controls.",
+      "whatHappensIfIgnored": "Email addresses, shipping addresses, order notes, and AI prompts may remain in operational logs.",
+      "learnerExperience": "Define log-safe event shapes and redact direct identifiers.",
+      "mission": "Replace raw object logging with allowlisted, non-personal fields.",
+      "successCriteria": [
+        "Order lookup logs include request identifiers but not email or shipping address.",
+        "AI summary logs do not contain prompt bodies.",
+        "Tests capture log payloads and verify redaction."
+      ],
+      "scoringSignals": [
+        "Captured log payload for order lookup",
+        "Captured log payload for AI summary",
+        "Redaction helper coverage"
+      ],
+      "safeSimulationPlan": "Run local unit tests with synthetic fixture data only.",
+      "remediationHints": [
+        "Introduce a log-safe DTO.",
+        "Log stable IDs only when they are needed for debugging."
+      ],
+      "suggestedProblemType": "challenge",
+      "suggestedScoringKind": "multi-flag",
+      "confidence": "high"
+    },
+    {
+      "id": "quest-004-ai-data-minimization",
+      "title": "Minimize data sent to the AI summary path",
+      "category": "ai-safety",
+      "severity": "high",
+      "sourceEvidence": ["lib/ai.ts", "app/api/ai/summarize/route.ts"],
+      "riskStatement": "The AI prompt builder includes direct identifiers, shipping address, and free-form notes.",
+      "businessImpact": "Personal data may be processed by an external provider without clear minimization or consent.",
+      "whatHappensIfIgnored": "Customer identity and address data may be shared with an AI processor unnecessarily.",
+      "learnerExperience": "Redesign prompts around task-needed fields and document user-facing expectations.",
+      "mission": "Build a summary prompt that excludes direct identifiers and sensitive free-form content.",
+      "successCriteria": [
+        "Generated prompts omit email, customer name, and shipping address.",
+        "Free-form notes are excluded or sanitized.",
+        "The route documents or links to the consent and retention policy."
+      ],
+      "scoringSignals": ["Prompt snapshot", "Policy reference", "Sanitization tests"],
+      "safeSimulationPlan": "Use deterministic prompt tests without calling an AI provider.",
+      "remediationHints": [
+        "Send item categories or support-safe summaries instead of direct identifiers.",
+        "Keep provider calls behind a reviewable adapter."
+      ],
+      "suggestedProblemType": "challenge",
+      "suggestedScoringKind": "multi-flag",
+      "confidence": "high"
+    },
+    {
+      "id": "quest-005-rate-limit-paid-api",
+      "title": "Rate-limit paid provider paths",
+      "category": "cost",
+      "severity": "medium",
+      "sourceEvidence": ["app/api/ai/summarize/route.ts", "app/api/checkout/route.ts"],
+      "riskStatement": "AI summary and checkout paths model paid provider calls without request throttling.",
+      "businessImpact": "Automated loops or abuse may increase provider spend and exhaust quotas.",
+      "whatHappensIfIgnored": "Unexpected request volume may create cost spikes and prevent legitimate users from completing work.",
+      "learnerExperience": "Add a simple quota guard and expose clear failure behavior.",
+      "mission": "Limit repeated paid-path requests by user or IP.",
+      "successCriteria": [
+        "Requests inside the quota return success.",
+        "Requests above the quota return StatusCodes.TOO_MANY_REQUESTS.",
+        "Limit failures emit a log-safe event."
+      ],
+      "scoringSignals": ["Quota success test", "Quota failure test", "Log-safe rate-limit event"],
+      "safeSimulationPlan": "Use a local in-memory limiter and synthetic users.",
+      "remediationHints": [
+        "Put the limiter before provider calls.",
+        "Prefer explicit quota errors over silent fallback."
+      ],
+      "suggestedProblemType": "challenge",
+      "suggestedScoringKind": "multi-flag",
+      "confidence": "medium"
+    },
+    {
+      "id": "quest-006-secret-management",
+      "title": "Keep provider secrets out of public config",
+      "category": "security",
+      "severity": "medium",
+      "sourceEvidence": [".env.example"],
+      "riskStatement": "The example config uses a public client-side environment variable name for an AI provider key.",
+      "businessImpact": "Developers may copy the pattern and expose a real provider key to browser clients.",
+      "whatHappensIfIgnored": "A secret API key may be bundled into client-side code and abused by anyone who can load the app.",
+      "learnerExperience": "Separate public configuration from server-only secrets.",
+      "mission": "Rename and document provider secrets as server-only values.",
+      "successCriteria": [
+        "No secret-like key uses a NEXT_PUBLIC_ prefix.",
+        "Example values are empty or obvious placeholders.",
+        "Documentation explains which variables are browser-visible."
+      ],
+      "scoringSignals": ["Environment example scan", "Documentation check"],
+      "safeSimulationPlan": "Scan only the fixture .env.example file.",
+      "remediationHints": [
+        "Use OPENAI_API_KEY for server-only access.",
+        "Keep client-exposed variables limited to non-secret identifiers."
+      ],
+      "suggestedProblemType": "challenge",
+      "suggestedScoringKind": "flag",
+      "confidence": "high"
+    },
+    {
+      "id": "quest-007-data-deletion-and-backup",
+      "title": "Define deletion, backup, restore, and audit behavior",
+      "category": "operations",
+      "severity": "medium",
+      "sourceEvidence": ["README.md", "prisma/schema.prisma"],
+      "riskStatement": "The fixture stores personal data but does not define lifecycle, recovery, or audit behavior.",
+      "businessImpact": "The team may be unable to honor deletion requests or recover order data after an incident.",
+      "whatHappensIfIgnored": "Personal data may remain after account closure, and order history may be unrecoverable after data loss.",
+      "learnerExperience": "Write operational controls that match the data model.",
+      "mission": "Add a reviewable deletion, backup, restore, and audit plan.",
+      "successCriteria": [
+        "A user deletion or anonymization flow is documented.",
+        "Backup and restore verification steps are documented.",
+        "Admin access creates audit events."
+      ],
+      "scoringSignals": [
+        "Deletion plan presence",
+        "Restore plan presence",
+        "Audit event plan presence"
+      ],
+      "safeSimulationPlan": "Produce documentation and local test hooks without connecting to production services.",
+      "remediationHints": [
+        "Treat personal fields as lifecycle-managed data.",
+        "Document restore tests before relying on backups."
+      ],
+      "suggestedProblemType": "challenge",
+      "suggestedScoringKind": "flag",
+      "confidence": "medium"
+    }
+  ],
+  "unknowns": [
+    "Production hosting model",
+    "Actual AI provider and data retention settings",
+    "Actual payment provider quota behavior",
+    "Backup schedule",
+    "Account deletion policy"
+  ],
+  "rejectedIdeas": [
+    {
+      "idea": "Probe a deployed production checkout or AI endpoint for abuse behavior.",
+      "reason": "App-to-Quest authoring must stay inside owned local fixtures or explicit analysis artifacts."
+    }
+  ]
+}

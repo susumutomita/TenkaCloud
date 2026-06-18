@@ -116,6 +116,25 @@ The draft may also include an author-only note such as `README.md` when the gene
 
 The source application analysis should first normalize into [`source-app-profile.schema.json`](./source-app-profile.schema.json). That schema preserves app summary, actors, data inventory, auth boundaries, public and admin entrypoints, external services, AI data flows, deployment assumptions, operational signals, cost-sensitive paths, evidence, confidence, and explicit unknowns.
 
+## Regression Fixture
+
+The first golden fixture lives at `fixtures/app-to-quest/sample-vibe-app/`. Its
+expected outputs use the same reviewable artifact names as the authoring skill:
+
+- `expected/01-source-app-profile.json`
+- `expected/02-risk-inventory.md`
+- `expected/03-quest-candidates.json`
+- `expected/problem-drafts/*.md`
+
+Run this before changing the workflow contract:
+
+```bash
+bun run scripts/validate-app-to-quest.ts
+```
+
+`bun run validate:problems` also runs this fixture gate so App-to-Quest drift is
+caught by the normal problem validation path.
+
 ## Platform Contract
 
 The platform runtime should stay simple:
