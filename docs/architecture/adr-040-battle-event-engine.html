@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ADR-040: Battle Event Engine - managed attack and scenario events</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  tr.reject td { background: #fff5f5; }
+  tr.accept td { background: #f0faf2; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.draft { background: #ddf4ff; color: var(--c-link); }
+  .badge.accept { background: #ddf4e0; color: var(--c-accept); }
+  .badge.reject { background: #ffe9e9; color: var(--c-reject); }
+  .badge.warn { background: #fff8c5; color: var(--c-warn); }
+  .decision {
+    border: 2px solid var(--c-accept); border-radius: 6px;
+    background: #f0faf2; padding: 1rem 1.2rem; margin: 1.2rem 0;
+  }
+  .decision h3 { margin-top: 0; color: var(--c-accept); }
+  .boundary {
+    border: 2px solid var(--c-reject); border-radius: 6px;
+    background: #fff5f5; padding: 1rem 1.2rem; margin: 1.2rem 0;
+  }
+  .boundary h3 { margin-top: 0; color: var(--c-reject); }
+  .flow { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; white-space: pre;
+          background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 6px; padding: 1rem; overflow-x: auto; }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  ul, ol { margin: 0.4rem 0; }
+  li { margin: 0.15rem 0; }
+  .small { color: var(--c-muted); font-size: 0.88rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-040: Battle Event Engine - managed attack and scenario events</h1>
+  <p><em>Participants choose constrained event cards; TenkaCloud validates target, phase, rate, intensity, and safety boundaries; providers run only inside managed event environments and report evidence back to scoring.</em></p>
+  <div class="meta">
+    <div><b>Status:</b> <span class="badge draft">Proposed</span> 2026-06-18</div>
+    <div><b>Tracking:</b> <a href="https://github.com/susumutomita/TenkaCloud/issues/1874">#1874</a></div>
+    <div><b>Related:</b>
+      <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> (problem plugin),
+      <a href="./adr-014-eventbridge-driven-state-reconciliation.html">ADR-014</a> (reconciliation),
+      <a href="./adr-028-inter-team-coordination-plugin.html">ADR-028</a> (inter-team coordination),
+      <a href="./adr-031-cross-account-disruption-dispatch.html">ADR-031</a> (cross-account dispatch),
+      <a href="./adr-034-real-attack-realization.html">ADR-034</a> (attack probes),
+      <a href="./adr-038-attack-resilience-game-always-ends.html">ADR-038</a> (resilience and termination)
+    </div>
+    <div><b>External input:</b>
+      <a href="https://github.com/ZANSIN-sec/ZANSIN">ZANSIN</a>,
+      <a href="https://engineers.ntt-west.co.jp/entry/2026/06/17/093000">NTT WEST Engineers' Blog on ZANSIN</a>
+    </div>
+  </div>
+</header>
+
+<section>
+<h2>Context</h2>
+
+<p>ZANSIN is a cybersecurity training tool that runs simulated attacks from a control server against a training server so learners can practice log analysis, recovery, and configuration hardening. Public material describes a two-machine control/training shape and stresses that training environments must be local or private, not aimed at unauthorized Internet targets.</p>
+
+<p>TenkaCloud already models Battle problems, disruption timing, cross-account dispatch, and attack resilience, but it does not yet have a first-class control plane for participant-triggered attack or scenario events. Without a control plane, an unsafe design would let participants choose arbitrary commands, arbitrary targets, or raw exploit code. That would break the product's safety model and make every Battle problem a bespoke security review.</p>
+
+<p>The missing abstraction is a <strong>Battle Event Engine</strong>: a platform-owned orchestrator that treats attacks, disruptions, crawls, detection probes, and scenario events as data-backed cards. Participants can request only pre-approved cards. TenkaCloud validates the request, dispatches to a provider inside the event boundary, records evidence, and emits scoring updates.</p>
+</section>
+
+<section>
+<h2>Decision</h2>
+
+<div class="decision">
+  <h3>Introduce Battle Event Engine as the only path for participant-triggered attack/scenario events</h3>
+  <p>Attack/Event Cards are declarative metadata. A participant may select a card and an allowed target team, but may not provide executable code, shell commands, raw IPs, arbitrary URLs, payload bodies, or provider-specific options. The engine validates every request against card metadata, event state, team membership, target allowlists, cooldowns, use limits, provider safety policy, and the global emergency stop before any provider runs.</p>
+</div>
+
+<table>
+  <thead><tr><th>Decision</th><th>Rule</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>D1. Cards are data, not code</td>
+      <td>Problem authors declare <code>battleEventCards[]</code> in problem metadata. Cards name a provider and bounded parameters; they do not embed attack code.</td>
+    </tr>
+    <tr>
+      <td>D2. Provider execution is mediated</td>
+      <td>The engine calls a provider adapter with a validated <code>BattleEventDispatch</code>. Providers cannot read participant input directly.</td>
+    </tr>
+    <tr>
+      <td>D3. Targets are platform-managed team environments</td>
+      <td>Targets resolve from TenkaCloud event/team/deployment state. A participant never supplies a host, IP, CIDR, or URL as the attack destination.</td>
+    </tr>
+    <tr>
+      <td>D4. Every event has bounds</td>
+      <td>Cards declare phase windows, severity, cooldown, max uses per team, max concurrent executions, timeout, and score policy. Runtime checks enforce them.</td>
+    </tr>
+    <tr>
+      <td>D5. Evidence precedes scoring</td>
+      <td>Providers report structured evidence and an outcome. The engine stores the evidence pointer and then emits score events. Scoring never trusts client claims.</td>
+    </tr>
+    <tr>
+      <td>D6. External tools are providers, not dependencies</td>
+      <td>ZANSIN is a candidate provider adapter. Its code is not vendored or bundled until license, containment, cleanup, and evidence extraction are proven.</td>
+    </tr>
+  </tbody>
+</table>
+</section>
+
+<section>
+<h2>Non-goals and prohibited behavior</h2>
+
+<div class="boundary">
+  <h3>Security boundary</h3>
+  <ul>
+    <li>Do not allow arbitrary participant commands, scripts, payload editing, IP entry, URL entry, or provider flags.</li>
+    <li>Do not distribute exploit code through the participant UI.</li>
+    <li>Do not send attack traffic outside TenkaCloud-managed event/team environments.</li>
+    <li>Do not let a provider run without target validation, phase validation, rate limits, and emergency-stop checks.</li>
+    <li>Do not import or vendor ZANSIN code until license review and containment are complete.</li>
+  </ul>
+</div>
+</section>
+
+<section>
+<h2>Card metadata schema</h2>
+
+<p>The first implementation should add this shape to <code>problems/SCHEMA.json</code> as <code>battleEventCards[]</code>. This ADR defines the contract; it does not implement the schema in this PR.</p>
+
+<pre>{
+  "battleEventCards": [
+    {
+      "id": "login-pressure-low",
+      "name": "Low-intensity login pressure",
+      "description": "Run a bounded training event against the target team's managed environment.",
+      "provider": "http-synthetic",
+      "severity": "low",
+      "allowedTargetKinds": ["team-environment"],
+      "allowedPhases": ["middle", "final"],
+      "cooldownSeconds": 300,
+      "maxUsesPerTeam": 3,
+      "maxConcurrentExecutions": 2,
+      "timeoutSeconds": 120,
+      "intensity": {
+        "level": "low",
+        "maxRequestsPerMinute": 30
+      },
+      "scoreRules": {
+        "attackSuccessPoints": 50,
+        "defenseSuccessPoints": 75,
+        "availabilityPenalty": 0
+      },
+      "evidence": {
+        "logRetentionDays": 30,
+        "redaction": "standard"
+      }
+    }
+  ]
+}</pre>
+
+<table>
+  <thead><tr><th>Field</th><th>Validation rule</th></tr></thead>
+  <tbody>
+    <tr><td><code>provider</code></td><td>Enum: <code>zansin</code>, <code>http-synthetic</code>, <code>aws-fault</code>, <code>custom-scenario</code>. Disabled providers cannot be selected.</td></tr>
+    <tr><td><code>severity</code></td><td>Enum: <code>low</code>, <code>medium</code>, <code>high</code>. Higher severities require stricter phase windows and lower concurrency caps.</td></tr>
+    <tr><td><code>allowedTargetKinds</code></td><td>Initial value is only <code>team-environment</code>. No free-form external targets.</td></tr>
+    <tr><td><code>allowedPhases</code></td><td>Must match the active Battle phase. Empty arrays are invalid.</td></tr>
+    <tr><td><code>cooldownSeconds</code></td><td>Positive integer. The engine stores last use per attacker/card and rejects early reuse.</td></tr>
+    <tr><td><code>maxUsesPerTeam</code></td><td>Positive integer. Counts attacker-team card uses per event.</td></tr>
+    <tr><td><code>maxConcurrentExecutions</code></td><td>Positive integer. Enforced per event/card/provider to avoid provider overload.</td></tr>
+    <tr><td><code>timeoutSeconds</code></td><td>Positive integer below the event policy maximum. Provider executions are terminated or marked timeout after this bound.</td></tr>
+    <tr><td><code>intensity</code></td><td>Provider-specific bounded object. Schema validation rejects unknown unbounded knobs.</td></tr>
+    <tr><td><code>scoreRules</code></td><td>Pure scoring metadata. Providers return outcomes; the generic scorer applies points.</td></tr>
+  </tbody>
+</table>
+</section>
+
+<section>
+<h2>Provider interface</h2>
+
+<p>Provider adapters implement a narrow interface. They receive a resolved target descriptor and bounded provider parameters, not raw participant input.</p>
+
+<pre>export type BattleEventProviderId =
+  | "zansin"
+  | "http-synthetic"
+  | "aws-fault"
+  | "custom-scenario";
+
+export type BattleEventSeverity = "low" | "medium" | "high";
+export type BattleEventStatus = "succeeded" | "failed" | "blocked" | "timeout";
+
+export interface BattleEventDefinition {
+  readonly id: string;
+  readonly provider: BattleEventProviderId;
+  readonly severity: BattleEventSeverity;
+  readonly allowedTargetKinds: readonly ["team-environment"];
+  readonly allowedPhases: readonly ("early" | "middle" | "final")[];
+  readonly cooldownSeconds: number;
+  readonly maxUsesPerTeam: number;
+  readonly maxConcurrentExecutions: number;
+  readonly timeoutSeconds: number;
+  readonly scoreRules: {
+    readonly attackSuccessPoints: number;
+    readonly defenseSuccessPoints: number;
+    readonly availabilityPenalty: number;
+  };
+}
+
+export interface BattleEventExecutionRequest {
+  readonly eventId: string;
+  readonly problemId: string;
+  readonly cardId: string;
+  readonly attackerTeamId: string;
+  readonly targetTeamId: string;
+  readonly idempotencyKey: string;
+}
+
+export interface BattleEventTarget {
+  readonly kind: "team-environment";
+  readonly eventId: string;
+  readonly teamId: string;
+  readonly deploymentId: string;
+  readonly providerAccountRef: string;
+  readonly networkBoundaryRef: string;
+}
+
+export interface BattleEventDispatch {
+  readonly definition: BattleEventDefinition;
+  readonly request: BattleEventExecutionRequest;
+  readonly target: BattleEventTarget;
+  readonly startedAt: string;
+}
+
+export interface BattleEventExecutionResult {
+  readonly status: BattleEventStatus;
+  readonly evidenceLogUri?: string;
+  readonly providerRunId?: string;
+  readonly scoreDelta: number;
+  readonly startedAt: string;
+  readonly finishedAt: string;
+}</pre>
+
+<p>The adapter contract is deliberately small:</p>
+
+<pre>export interface BattleEventProvider {
+  readonly id: BattleEventProviderId;
+  validate(definition: BattleEventDefinition): ProviderValidationResult;
+  dispatch(dispatch: BattleEventDispatch, signal: AbortSignal): Promise&lt;BattleEventExecutionResult&gt;;
+  stop(runId: string, reason: "emergency-stop" | "event-ended" | "timeout"): Promise&lt;void&gt;;
+}</pre>
+</section>
+
+<section>
+<h2>Execution flow</h2>
+
+<div class="flow">Participant Portal
+  -> POST /portal/me/battle-events
+       { cardId, targetTeamId, idempotencyKey }
+  -> Battle Event Engine
+       1. authenticate team token
+       2. load event/problem/card/team/deployment state
+       3. reject self-targeting if card forbids it
+       4. verify active phase and event window
+       5. check global emergency stop and provider enablement
+       6. enforce cooldown, max uses, concurrency, timeout
+       7. resolve target to managed team environment
+       8. create BattleEventExecution row
+       9. dispatch provider with bounded target descriptor
+      10. store evidence pointer and normalized outcome
+      11. emit BattleEventCompleted and ScoreUpdated events</div>
+
+<p>EventBridge remains the system integration layer. The engine emits <code>BattleEventRequested</code>, <code>BattleEventStarted</code>, <code>BattleEventCompleted</code>, <code>BattleEventBlocked</code>, and <code>BattleEventStopped</code>. ADR-014 reconciliation can repair missing terminal states by marking stale executions <code>timeout</code> and releasing concurrency counters.</p>
+</section>
+
+<section>
+<h2>State and audit records</h2>
+
+<table>
+  <thead><tr><th>Record</th><th>Purpose</th><th>Minimum fields</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>BattleEventExecution</code></td>
+      <td>One request/run lifecycle.</td>
+      <td><code>tenantId</code>, <code>eventId</code>, <code>problemId</code>, <code>cardId</code>, <code>attackerTeamId</code>, <code>targetTeamId</code>, <code>provider</code>, <code>status</code>, <code>idempotencyKey</code>, <code>startedAt</code>, <code>finishedAt</code>, <code>evidenceLogUri</code>.</td>
+    </tr>
+    <tr>
+      <td><code>BattleEventQuota</code></td>
+      <td>Cooldown and max-use enforcement.</td>
+      <td><code>eventId</code>, <code>cardId</code>, <code>attackerTeamId</code>, <code>usedCount</code>, <code>lastUsedAt</code>.</td>
+    </tr>
+    <tr>
+      <td><code>BattleEventProviderLease</code></td>
+      <td>Concurrency cap and timeout cleanup.</td>
+      <td><code>eventId</code>, <code>provider</code>, <code>cardId</code>, <code>executionId</code>, <code>expiresAt</code>.</td>
+    </tr>
+    <tr>
+      <td><code>AuditLog</code></td>
+      <td>Operator and forensic trace.</td>
+      <td>Actor, request, decision, provider, target descriptor hash, emergency-stop state, and evidence URI. Do not log raw provider secrets.</td>
+    </tr>
+  </tbody>
+</table>
+</section>
+
+<section>
+<h2>ZANSIN provider PoC boundary</h2>
+
+<p>ZANSIN is a useful reference because it separates a control role from a training environment and is explicitly framed as an education tool. TenkaCloud should treat it as an external provider candidate, not as a bundled dependency.</p>
+
+<table>
+  <thead><tr><th>PoC question</th><th>Required answer before enablement</th></tr></thead>
+  <tbody>
+    <tr><td>Can the control/training shape fit inside one team environment?</td><td>The control component must target only the team's managed training machine or network boundary. No Internet-wide target selection.</td></tr>
+    <tr><td>Can TenkaCloud extract outcome evidence?</td><td>Provider runs must emit normalized status, timestamps, event identifiers, and evidence logs to CloudWatch Logs or S3.</td></tr>
+    <tr><td>Can runs be bounded and stopped?</td><td>The adapter must honor <code>timeoutSeconds</code>, <code>AbortSignal</code>, provider leases, and emergency stop.</td></tr>
+    <tr><td>Can resources be cleaned up?</td><td>All provider-created resources must be tied to the event/team and removed on event teardown.</td></tr>
+    <tr><td>Can license and distribution be satisfied?</td><td>No vendoring or image distribution until license obligations are reviewed and documented.</td></tr>
+  </tbody>
+</table>
+</section>
+
+<section>
+<h2>Emergency stop</h2>
+
+<p>Operators need two stop levels:</p>
+
+<table>
+  <thead><tr><th>Stop level</th><th>Effect</th></tr></thead>
+  <tbody>
+    <tr><td>Event-wide stop</td><td>Reject new Battle Event requests for an event, call <code>stop()</code> on active provider runs, mark leases released, and preserve evidence logs.</td></tr>
+    <tr><td>Provider stop</td><td>Disable a provider across all events. Existing executions are stopped with reason <code>emergency-stop</code>; new requests with that provider are blocked.</td></tr>
+  </tbody>
+</table>
+
+<p>Emergency stop is fail-closed. If stop state cannot be read, the engine blocks dispatch.</p>
+</section>
+
+<section>
+<h2>Scoring contract</h2>
+
+<p>Providers do not write scores directly. They return a normalized outcome and evidence. The engine emits a scoring event containing <code>executionId</code>, <code>cardId</code>, <code>attackerTeamId</code>, <code>targetTeamId</code>, <code>status</code>, and <code>scoreRules</code>. The generic scorer applies points and writes the existing score event stream that participant and admin views already poll.</p>
+
+<table>
+  <thead><tr><th>Outcome</th><th>Scoring behavior</th></tr></thead>
+  <tbody>
+    <tr><td><code>succeeded</code></td><td>Apply attack success points to attacker and defense result rules to target based on the card policy.</td></tr>
+    <tr><td><code>failed</code></td><td>No attack success points. Optional defense success points if the card defines them.</td></tr>
+    <tr><td><code>blocked</code></td><td>No score change. Evidence records the block reason for audit.</td></tr>
+    <tr><td><code>timeout</code></td><td>No attack success points. Release leases and preserve partial evidence for operator review.</td></tr>
+  </tbody>
+</table>
+</section>
+
+<section>
+<h2>Alternatives considered</h2>
+
+<table>
+  <thead><tr><th>Alternative</th><th>Why rejected</th></tr></thead>
+  <tbody>
+    <tr class="reject">
+      <td>Let participants submit commands or scripts.</td>
+      <td>Unsafe by construction. It makes every request a new exploit review and violates the no-arbitrary-execution boundary.</td>
+    </tr>
+    <tr class="reject">
+      <td>Let participants enter target URLs.</td>
+      <td>Even with SSRF filtering, this creates ambiguity about external targets. The engine must resolve targets from event/team/deployment state only.</td>
+    </tr>
+    <tr class="reject">
+      <td>Bundle ZANSIN immediately.</td>
+      <td>Licensing, containment, cleanup, and evidence extraction need a PoC first. ZANSIN remains an external adapter candidate.</td>
+    </tr>
+    <tr class="reject">
+      <td>Reuse disruptions only.</td>
+      <td>Disruptions are operator/problem-driven. Battle Event Cards add participant choice while preserving platform validation and scoring contracts.</td>
+    </tr>
+  </tbody>
+</table>
+</section>
+
+<section>
+<h2>Implementation phases</h2>
+
+<ol>
+  <li><b>Schema and validation.</b> Add <code>battleEventCards[]</code> to <code>problems/SCHEMA.json</code> and the problem validator. Reject unbounded cards.</li>
+  <li><b>Provider interface package.</b> Add TypeScript types and pure validation helpers in app-owned code. No infrastructure resources required.</li>
+  <li><b>API and persistence.</b> Add request, execution, quota, and lease records. Status endpoints use polling; no SSE or WebSocket.</li>
+  <li><b>Provider MVP.</b> Start with <code>http-synthetic</code> or <code>custom-scenario</code> in a controlled event environment. Do not ship ZANSIN here.</li>
+  <li><b>ZANSIN PoC.</b> Run as an external adapter after license, isolation, logs, stop, and cleanup are proven.</li>
+  <li><b>Scoring and UI.</b> Surface cards in Participant Portal and outcomes in Admin Console only after backend controls are enforced.</li>
+</ol>
+
+<p class="small">Infrastructure-touching pieces such as new tables, queues, IAM, or provider runner isolation require maintainer-owned CDK changes per the repo role split. This ADR intentionally defines the contract first.</p>
+</section>
+
+<section>
+<h2>Consequences</h2>
+
+<ul>
+  <li>Participants get meaningful Battle choices without ever handling attack code.</li>
+  <li>Problem authors can add new event cards through metadata instead of platform-specific attack handlers.</li>
+  <li>Provider authors get a narrow adapter contract that can host ZANSIN-like tools later.</li>
+  <li>Operators gain hard stops, audit evidence, and score traceability for each event execution.</li>
+  <li>The design preserves the Lambda/polling operational model and aligns with ADR-038: every run is bounded, stoppable, and auditable.</li>
+</ul>
+</section>
+
+</body>
+</html>
