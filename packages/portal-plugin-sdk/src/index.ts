@@ -25,6 +25,8 @@ import type { ComponentType } from "react";
  *    共有された場合の分岐 key (実用上は 1 problem 1 portal/ dir 想定)。
  * - `jobId`: deployment ULID。1 team が同 problem を複数 deploy した時の dedupe key。
  * - `score`: 現在の累積 score。
+ * - `locale`: portal 本体の表示 locale。plugin 側の文言出し分けに使う。
+ * - `posture` / `platform`: scoring probe が最後に観測した live posture snapshot。
  * - `endpoints`: 自チームの (slot, defaultUrl, overrideUrl, effectiveUrl)。
  * - `phases`: metadata.phases[] (= operator 内部 field なし、 predict 用)。
  * - `disruptions`: metadata.disruptions[] (= 同上)。
@@ -39,6 +41,9 @@ export interface PortalSlotProps {
   readonly problemId: string;
   readonly jobId: string;
   readonly score: number;
+  readonly locale: PortalLocale;
+  readonly posture?: Readonly<Record<string, boolean>>;
+  readonly platform?: string;
   readonly endpoints: readonly PortalEndpoint[];
   readonly phases: readonly PortalPhaseEntry[];
   readonly disruptions: readonly PortalDisruptionEntry[];
@@ -56,6 +61,8 @@ export interface PortalSlotProps {
   readonly coordinationClient?: PortalCoordinationClient;
   readonly nowIso: string;
 }
+
+export type PortalLocale = "ja" | "en";
 
 /**
  * coordination op の結果 (= dispatcher の HTTP status を写した discriminated union)。 plugin は

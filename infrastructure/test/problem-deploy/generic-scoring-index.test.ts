@@ -67,6 +67,8 @@ const FULL_RESULT = {
   scoreEvents: [{ source: "uptime", points: 10, occurredAt: "2026-06-01T00:00:00Z" }],
   lastResult: "ok",
   endpointsHealthJson: "{}",
+  postureJson: JSON.stringify({ db_present: true, auth_enabled: false }),
+  platform: "posture-1",
   newState: { attackCount: 1 },
 };
 
@@ -316,7 +318,13 @@ describe("applyKindResult / buildKindResultUpdate / appendKindScoreEvents", () =
     expect(update.UpdateExpression).toContain("ADD score :pts");
     expect(update.UpdateExpression).toContain("lastResult = :lr");
     expect(update.UpdateExpression).toContain("endpointsHealth = :health");
+    expect(update.UpdateExpression).toContain("posture = :posture");
+    expect(update.UpdateExpression).toContain("platform = :platform");
     expect(update.UpdateExpression).toContain("scoringState = :state");
+    expect(update.ExpressionAttributeValues?.[":posture"]).toBe(
+      JSON.stringify({ db_present: true, auth_enabled: false }),
+    );
+    expect(update.ExpressionAttributeValues?.[":platform"]).toBe("posture-1");
     expect(mocks.writeScoreEvent).toHaveBeenCalledTimes(1);
   });
 

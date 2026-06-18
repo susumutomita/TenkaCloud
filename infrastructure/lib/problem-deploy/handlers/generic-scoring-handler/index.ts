@@ -345,6 +345,14 @@ function buildKindResultUpdate(
     setParts.push("endpointsHealth = :health");
     values[":health"] = result.endpointsHealthJson;
   }
+  if (result.postureJson !== undefined) {
+    setParts.push("posture = :posture");
+    values[":posture"] = result.postureJson;
+  }
+  if (result.platform !== undefined) {
+    setParts.push("platform = :platform");
+    values[":platform"] = result.platform;
+  }
   if (result.newState !== undefined) {
     setParts.push("scoringState = :state");
     values[":state"] = JSON.stringify(result.newState);

@@ -181,6 +181,9 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           problemId={problem.problemId}
           jobId={problem.jobId}
           score={problem.score}
+          locale={locale}
+          posture={problem.posture}
+          platform={problem.platform}
           team={view.team}
           stackOutputs={problem.stackOutputs}
           coordinationApiUrl={config.coordinationApiUrl}
