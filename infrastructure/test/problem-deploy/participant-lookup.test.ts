@@ -341,6 +341,79 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(p?.scoring?.pointsPerSuccess).toBe(50);
   });
 
+  it("should expose safe scoring views for flag hints and polling kinds", async () => {
+    const scoring = {
+      "flag-problem": {
+        kind: "flag" as const,
+        flagOutputKey: "FlagAnswer",
+        points: 100,
+        hints: [
+          { id: "h1", content: "revealed hint", penalty: 5 },
+          { id: "h2", content: "locked hint", penalty: 10 },
+        ],
+      },
+      "uptime-multi-problem": {
+        kind: "uptime-multi" as const,
+        probedSlots: [{ slot: "frontend", path: "/", expectStatus: [200] }],
+        pointsAllOk: 500,
+      },
+      "phased-problem": {
+        kind: "phased-polling" as const,
+        intervalMinutes: 1,
+        probe: { metaPath: "/meta", scorePath: "/score" },
+        platformRules: { ec2: { points: 100 }, lambda: { points: 1000 } },
+      },
+      "attack-problem": {
+        kind: "attack-detection" as const,
+        statsOutputKey: "AttackStats",
+        pointsPerAttack: 25,
+      },
+    };
+    const { shared, ddbSend } = buildShared(scoring);
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          jobId: "J1",
+          PK: "DEPLOYMENT#J1",
+          problemId: "flag-problem",
+          flagSubmitted: true,
+          hintsRevealed: [
+            { hintId: "h1", revealedAt: "2026-05-15T01:00:00.000Z", penaltyApplied: 5 },
+          ],
+          stackOutputs: JSON.stringify({
+            FrontendUrl: "https://x.example.com",
+            FlagAnswer: "flag-answer",
+          }),
+        }),
+        sampleRow({ jobId: "J2", PK: "DEPLOYMENT#J2", problemId: "uptime-multi-problem" }),
+        sampleRow({ jobId: "J3", PK: "DEPLOYMENT#J3", problemId: "phased-problem" }),
+        sampleRow({ jobId: "J4", PK: "DEPLOYMENT#J4", problemId: "attack-problem" }),
+      ],
+    });
+
+    const problems = (await lookupTeamByLoginKey(shared, "KEY1"))?.problems ?? [];
+    expect(problems[0]?.scoring).toEqual({
+      kind: "flag",
+      points: 100,
+      flagSubmitted: true,
+      hints: [
+        {
+          id: "h1",
+          penalty: 5,
+          revealed: true,
+          content: "revealed hint",
+          revealedAt: "2026-05-15T01:00:00.000Z",
+        },
+        { id: "h2", penalty: 10, revealed: false },
+      ],
+    });
+    expect(problems[0]?.stackOutputs).toEqual({ FrontendUrl: "https://x.example.com" });
+    expect(problems[1]?.scoring).toEqual({ kind: "uptime-multi", pointsAllOk: 500 });
+    expect(problems[2]?.scoring).toEqual({ kind: "phased-polling", pointsPerSuccess: 1000 });
+    expect(problems[3]?.scoring).toEqual({ kind: "attack-detection", pointsPerAttack: 25 });
+    expect(JSON.stringify(problems)).not.toContain("flag-answer");
+  });
+
   it("should expose the latest measured posture and platform snapshot", async () => {
     const scoring = {
       "security-battle-royale": { kind: "uptime" as const, pointsPerSuccess: 50 },
@@ -358,6 +431,39 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     const p = (await lookupTeamByLoginKey(shared, "KEY1"))?.problems[0];
     expect(p?.posture).toEqual({ db_present: true, auth_enabled: false });
     expect(p?.platform).toBe("posture-1");
+  });
+
+  it("should drop malformed posture snapshots from the participant view", async () => {
+    const scoring = {
+      "security-battle-royale": { kind: "uptime" as const, pointsPerSuccess: 50 },
+    };
+    const { shared, ddbSend } = buildShared(scoring);
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ posture: "{not-json", platform: "posture-1" })],
+    });
+
+    const p = (await lookupTeamByLoginKey(shared, "KEY1"))?.problems[0];
+    expect(p?.posture).toBeUndefined();
+    expect(p?.platform).toBe("posture-1");
+  });
+
+  it("should keep only boolean posture fields and drop non-string platform values", async () => {
+    const scoring = {
+      "security-battle-royale": { kind: "uptime" as const, pointsPerSuccess: 50 },
+    };
+    const { shared, ddbSend } = buildShared(scoring);
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          posture: JSON.stringify({ db_present: true, auth_enabled: "yes", retries: 2 }),
+          platform: 123,
+        }),
+      ],
+    });
+
+    const p = (await lookupTeamByLoginKey(shared, "KEY1"))?.problems[0];
+    expect(p?.posture).toEqual({ db_present: true });
+    expect(p?.platform).toBeUndefined();
   });
 
   it("should return 0 for rows without score (default)", async () => {

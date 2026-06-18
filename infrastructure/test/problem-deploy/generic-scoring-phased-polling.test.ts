@@ -124,6 +124,54 @@ describe("phased-polling kind", () => {
     expect(fetchMock.mock.calls[2]?.[0]).toBe("https://api.example.com/users/posture");
   });
 
+  it("should ignore malformed posture snapshots and omit mixed platform snapshots", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith("/users/meta")) {
+        return { status: 200, text: async () => JSON.stringify({ platform: "ec2" }) };
+      }
+      if (url.endsWith("/orders/meta")) {
+        return { status: 200, text: async () => JSON.stringify({ platform: "lambda" }) };
+      }
+      if (url.endsWith("/users/posture")) {
+        return { status: 200, text: async () => "{not-json" };
+      }
+      if (url.endsWith("/orders/posture")) {
+        return {
+          status: 200,
+          text: async () => JSON.stringify({ platform: "lambda", posture: { db_present: "yes" } }),
+        };
+      }
+      return { status: 200, text: async () => "" };
+    });
+    const result = await runPhasedPollingKind(
+      buildInput({
+        deployment: {
+          ...buildInput().deployment,
+          stackOutputs: JSON.stringify({
+            UsersUrl: "https://api.example.com/",
+            OrdersUrl: "https://orders.example.com/",
+          }),
+        },
+        scoring: { ...baseScoring, probe: { ...baseScoring.probe, posturePath: "/posture" } },
+        slots: [
+          {
+            slot: "users",
+            default: { from: "cfn-output", key: "UsersUrl", appendPath: "/users" },
+            overridable: true,
+          },
+          {
+            slot: "orders",
+            default: { from: "cfn-output", key: "OrdersUrl", appendPath: "/orders" },
+            overridable: true,
+          },
+        ],
+      }),
+    );
+    expect(result.postureJson).toBeUndefined();
+    expect(result.platform).toBeUndefined();
+    expect(result.scoreDelta).toBe(1100);
+  });
+
   it("should award degradedPoints (+10) for Phase 1 (degraded, after 60 minutes) + ec2 platform", async () => {
     fetchMock
       .mockResolvedValueOnce({ status: 200, text: async () => JSON.stringify({ platform: "ec2" }) })
@@ -173,6 +221,40 @@ describe("phased-polling kind", () => {
       .mockResolvedValueOnce({ status: 200, text: async () => "" });
     const result = await runPhasedPollingKind(buildInput());
     expect(result.scoreDelta).toBe(-100);
+  });
+
+  it("should accept text/plain platform metadata", async () => {
+    fetchMock
+      .mockResolvedValueOnce({ status: 200, text: async () => "ec2" })
+      .mockResolvedValueOnce({ status: 200, text: async () => "" });
+    const result = await runPhasedPollingKind(buildInput());
+    expect(result.scoreDelta).toBe(100);
+    expect(result.platform).toBe("ec2");
+  });
+
+  it("should reject oversized text/plain platform metadata", async () => {
+    fetchMock
+      .mockResolvedValueOnce({ status: 200, text: async () => "x".repeat(64) })
+      .mockResolvedValueOnce({ status: 200, text: async () => "" });
+    const result = await runPhasedPollingKind(buildInput());
+    expect(result.scoreDelta).toBe(-100);
+    expect(result.platform).toBeUndefined();
+  });
+
+  it("should ignore unknown bonus kinds", async () => {
+    fetchMock
+      .mockResolvedValueOnce({ status: 200, text: async () => JSON.stringify({ platform: "ec2" }) })
+      .mockResolvedValueOnce({ status: 200, text: async () => "" });
+    const result = await runPhasedPollingKind(
+      buildInput({
+        scoring: {
+          ...baseScoring,
+          bonuses: [{ kind: "custom-bonus", platforms: ["ec2"], points: 5000, once: true }],
+        },
+      }),
+    );
+    expect(result.scoreDelta).toBe(100);
+    expect(result.newState).toBeUndefined();
   });
 
   it("bonus all-slots-on-platforms: should add +5000 once if all slots are on lambda", async () => {

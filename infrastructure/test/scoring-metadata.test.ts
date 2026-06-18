@@ -403,6 +403,16 @@ describe("parseScoringMetadata", () => {
       expect(parseScoringMetadata(cfg)).toEqual(cfg);
     });
 
+    it("should accept an attackBlocked bonus when slot path and points are set", () => {
+      const cfg = {
+        kind: "uptime-multi",
+        probedSlots: [{ slot: "frontend", path: "/", expectStatus: [200] }],
+        pointsAllOk: 100,
+        attackBlocked: { slot: "frontend", path: "/blocked", pointsPerBlock: 25 },
+      };
+      expect(parseScoringMetadata(cfg)).toEqual(cfg);
+    });
+
     it("probedSlots が空 / pointsAllOk が無いと undefined", () => {
       expect(
         parseScoringMetadata({ kind: "uptime-multi", probedSlots: [], pointsAllOk: 100 }),
@@ -454,6 +464,14 @@ describe("parseScoringMetadata", () => {
           kind: "phased-polling",
           intervalMinutes: 1,
           probe: { metaPath: 123, scorePath: "/score" },
+          platformRules: { ec2: { points: 100 } },
+        }),
+      ).toBeUndefined();
+      expect(
+        parseScoringMetadata({
+          kind: "phased-polling",
+          intervalMinutes: 1,
+          probe: { metaPath: "/meta", scorePath: "/score", posturePath: 123 },
           platformRules: { ec2: { points: 100 } },
         }),
       ).toBeUndefined();
