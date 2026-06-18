@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import type * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -12,9 +12,11 @@ import {
   describeProblemKind,
   getCompleteFlagScoring,
   getCompleteMultiFlagScoring,
+  isHttpUrlOutput,
   isStaleProblem,
   isUptimeScoring,
   ProblemPanel,
+  splitStackOutputs,
 } from "./ProblemPanel";
 import {
   formatProblemPanelActionError,
@@ -173,6 +175,33 @@ describe("ProblemPanel submit helpers", () => {
 });
 
 describe("ProblemPanel pure helpers", () => {
+  it("should identify HTTP(S) output URLs only", () => {
+    expect(isHttpUrlOutput("https://app.example.com")).toBe(true);
+    expect(isHttpUrlOutput("http://app.example.com")).toBe(true);
+    expect(isHttpUrlOutput("arn:aws:iam::1:role/x")).toBe(false);
+    expect(isHttpUrlOutput("/tc/problem/config")).toBe(false);
+  });
+
+  it("should split stack outputs into access URLs and detail entries", () => {
+    expect(
+      splitStackOutputs({
+        SiteUrl: "https://app.example.com",
+        RoleArn: "arn:aws:iam::1:role/x",
+        NamePrefix: "tc-x402-paywall-team-1",
+      }),
+    ).toEqual({
+      accessUrlEntries: [["SiteUrl", "https://app.example.com"]],
+      detailEntries: [
+        ["RoleArn", "arn:aws:iam::1:role/x"],
+        ["NamePrefix", "tc-x402-paywall-team-1"],
+      ],
+    });
+    expect(splitStackOutputs({ NamePrefix: "tc-no-url" })).toEqual({
+      accessUrlEntries: [],
+      detailEntries: [["NamePrefix", "tc-no-url"]],
+    });
+  });
+
   it("should build the auto-delete notice for expired / soon / far / invalid expiry", () => {
     const now = new Date("2026-05-20T00:00:00.000Z").getTime();
     const at = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
@@ -324,14 +353,37 @@ describe("ProblemPanel render branches", () => {
     expect(screen.getByTestId("multi-flag-panel")).toBeInTheDocument();
   });
 
-  it("should render stack outputs as a link for URLs and plain code otherwise", () => {
+  it("should render URL outputs in the access panel and move internal outputs to details", () => {
     renderPanel({
       status: "COMPLETE",
-      stackOutputs: { SiteUrl: "https://app.example.com", RoleArn: "arn:aws:iam::1:role/x" },
+      stackOutputs: {
+        SiteUrl: "https://app.example.com",
+        RoleArn: "arn:aws:iam::1:role/x",
+        NamePrefix: "tc-x402-paywall-team-1",
+      },
     });
     const link = screen.getByRole("link", { name: "https://app.example.com" });
     expect(link).toHaveAttribute("href", "https://app.example.com");
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /Stack Outputs/ }));
     expect(screen.getByText("arn:aws:iam::1:role/x")).toBeInTheDocument();
+    expect(screen.getByText("tc-x402-paywall-team-1")).toBeInTheDocument();
+  });
+
+  it("should fall back to details only when stack outputs have no URLs", () => {
+    renderPanel({
+      status: "COMPLETE",
+      stackOutputs: {
+        NamePrefix: "tc-no-url",
+        EndpointParameterName: "/tc-no-url/endpoint",
+      },
+    });
+
+    expect(screen.queryByText(/Access URLs|アクセス先 URL/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Stack Outputs/ }));
+    expect(screen.getByText("tc-no-url")).toBeInTheDocument();
+    expect(screen.getByText("/tc-no-url/endpoint")).toBeInTheDocument();
   });
 
   it("should not render the old auto-refresh note while non-terminal", () => {

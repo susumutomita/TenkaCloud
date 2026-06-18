@@ -299,6 +299,7 @@
     "current_score_label": "現在の score",
     "last_scored_label": "最終加点",
     "outputs_header": "アクセス先 URL",
+    "stack_outputs_detail_header": "Stack Outputs (詳細)",
     "celebrate_header": "🏆 クリア済み +{points} pt",
     "celebrate_body": "この問題は正解済みです。 引き続き他の問題に挑戦してください！",
     "submit_button": "Flag 提出 (+{points} pt)",

@@ -1,5 +1,6 @@
 import Alert from "@cloudscape-design/components/alert";
 import Container from "@cloudscape-design/components/container";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import SpaceBetween from "@cloudscape-design/components/space-between";
@@ -36,12 +37,14 @@ const SCORING_KIND_KEY: Record<string, string> = {
 };
 
 type FlagScoringInfo = NonNullable<ParticipantProblemView["scoring"]>;
+type StackOutputEntry = [label: string, value: string];
 
 /** uptime kind で `lastScoredAt` がこの閾値より古ければ「停滞」表示。 */
 const STALE_THRESHOLD_MS = 2 * 60 * 1000;
 
 const COUNTDOWN_REFRESH_MS = 30_000;
 const AUTO_DELETE_SOON_THRESHOLD_MS = 15 * 60 * 1000;
+const HTTP_URL_OUTPUT_RE = /^https?:\/\//i;
 
 export function describeRemainingUntilAutoDelete(t: ProblemPanelT, diffMs: number): string {
   const totalMinutes = Math.max(1, Math.ceil(diffMs / 60_000));
@@ -71,6 +74,23 @@ export function buildAutoDeleteNotice(
     };
   }
   return undefined;
+}
+
+export function isHttpUrlOutput(value: string): boolean {
+  return HTTP_URL_OUTPUT_RE.test(value);
+}
+
+export function splitStackOutputs(stackOutputs: ParticipantProblemView["stackOutputs"]): {
+  readonly accessUrlEntries: StackOutputEntry[];
+  readonly detailEntries: StackOutputEntry[];
+} {
+  const entries = Object.entries(stackOutputs);
+  const accessUrlEntries = entries.filter(([, value]) => isHttpUrlOutput(value));
+  const nonUrlEntries = entries.filter(([, value]) => !isHttpUrlOutput(value));
+  return {
+    accessUrlEntries,
+    detailEntries: accessUrlEntries.length > 0 ? nonUrlEntries : entries,
+  };
 }
 
 export function describeProblemKind(
@@ -176,6 +196,7 @@ export function ProblemPanel({
   const isStale = isStaleProblem(problem, now);
   const flagScoring = getCompleteFlagScoring(problem);
   const multiFlagScoring = getCompleteMultiFlagScoring(problem);
+  const stackOutputs = splitStackOutputs(problem.stackOutputs);
 
   return (
     <Container
@@ -213,26 +234,32 @@ export function ProblemPanel({
           ]}
         />
 
-        {Object.keys(problem.stackOutputs).length > 0 && (
+        {stackOutputs.accessUrlEntries.length > 0 && (
           <Container header={<Header variant="h3">{t("problem_panel.outputs_header")}</Header>}>
             <KeyValuePairs
-              items={Object.entries(problem.stackOutputs).map(([label, value]) => ({
+              items={stackOutputs.accessUrlEntries.map(([label, value]) => ({
                 label,
-                // #1094: URL (= http(s)://) のときだけ click 可能リンクにする。 ARN / SSM
-                //   parameter name / NamePrefix 等の非 URL output を a href で wrap すると
-                //   broken link になるので plain code 表示に倒す。 「ParameterConsoleUrl」
-                //   のような deep link を問題 author が emit すれば click で AWS Console
-                //   直接遷移 (ssm:DescribeParameters 不要、 ADR-021 と整合)。
-                value: /^https?:\/\//i.test(value) ? (
+                value: (
                   <a href={value} target="_blank" rel="noreferrer noopener">
                     <code>{value}</code>
                   </a>
-                ) : (
-                  <code>{value}</code>
                 ),
               }))}
             />
           </Container>
+        )}
+        {stackOutputs.detailEntries.length > 0 && (
+          <ExpandableSection
+            headerText={t("problem_panel.stack_outputs_detail_header")}
+            defaultExpanded={false}
+          >
+            <KeyValuePairs
+              items={stackOutputs.detailEntries.map(([label, value]) => ({
+                label,
+                value: <code>{value}</code>,
+              }))}
+            />
+          </ExpandableSection>
         )}
         {flagScoring && (
           <FlagSubmissionPanel
