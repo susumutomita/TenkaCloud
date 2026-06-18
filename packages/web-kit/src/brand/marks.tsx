@@ -22,10 +22,14 @@ export const BRAND_MARK_VARIANTS = [
 
 export const BRAND_MARK_VIEWBOX = "0 0 120 120";
 
-/** summit — 「天」の上線 (横棒) */
-export const SUMMIT_BAR = { x: 34, y: 24, width: 52, height: 12, rx: 6 } as const;
-/** summit — 頂への稜線 */
-export const SUMMIT_RIDGE_PATH = "M26 90 L60 46 L94 90";
+/**
+ * summit — 黄金比 (φ ≈ 1.618) で作図。稜線 (ridge) の 底辺:高さ = 68:42 ≈ φ、「天」の上線 (横棒) は
+ * 稜線の底辺と同幅 (x26..94 = 68) で揃える。
+ */
+/** summit — 「天」の上線 (横棒)。稜線の底辺と同幅。 */
+export const SUMMIT_BAR = { x: 26, y: 24, width: 68, height: 12, rx: 6 } as const;
+/** summit — 頂への稜線。底辺 68 / 高さ 42 = φ。 */
+export const SUMMIT_RIDGE_PATH = "M26 90 L60 48 L94 90";
 export const SUMMIT_STROKE_WIDTH = 13;
 
 /** ascend — 上段 / 下段の山形 (下段は薄く重ねる) */

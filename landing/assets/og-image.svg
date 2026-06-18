@@ -6,8 +6,8 @@
   <g transform="translate(782 175)">
     <rect width="250" height="250" rx="56" fill="#2a2a2d"/>
     <g transform="translate(21 21) scale(1.7333)">
-      <rect x="34" y="24" width="52" height="12" rx="6" fill="#ffffff"/>
-      <path d="M26 90 L60 46 L94 90" fill="none" stroke="#ffffff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="26" y="24" width="68" height="12" rx="6" fill="#ffffff"/>
+      <path d="M26 90 L60 48 L94 90" fill="none" stroke="#ffffff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
     </g>
   </g>
   <text x="118" y="182" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="72" font-weight="800">TenkaCloud</text>

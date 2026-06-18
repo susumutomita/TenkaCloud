@@ -1,7 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 470 120" width="470" height="120">
-  <rect x="34" y="24" width="52" height="12" rx="6" fill="#1d1d1f"></rect>
-  <path d="M26 90 L60 46 L94 90" fill="none" stroke="#1d1d1f" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"></path>
-  <text x="148" y="80" font-family="Inter, system-ui, sans-serif" font-weight="600" font-size="62" letter-spacing="-2.4">
-    <tspan fill="#1d1d1f">Tenka</tspan><tspan fill="#6e6e73">Cloud</tspan>
-  </text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 120" width="480" height="120">
+  <rect x="26" y="26" width="68" height="12" rx="6" fill="#1d1d1f"></rect>
+  <path d="M26 92 L60 50 L94 92" fill="none" stroke="#1d1d1f" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"></path>
+  <text x="150" y="80" font-family="Inter, system-ui, sans-serif" font-weight="600" font-size="62" letter-spacing="-2.4"><tspan fill="#1d1d1f">Tenka</tspan><tspan fill="#6e6e73">Cloud</tspan></text>
 </svg>
