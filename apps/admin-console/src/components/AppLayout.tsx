@@ -3,6 +3,7 @@ import SideNavigation from "@cloudscape-design/components/side-navigation";
 import TopNavigation, {
   type TopNavigationProps,
 } from "@cloudscape-design/components/top-navigation";
+import { tenkaCloudAppIconDataUri } from "@tenkacloud/web-kit";
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
@@ -43,7 +44,11 @@ export function ShellLayout({
   return (
     <>
       <TopNavigation
-        identity={{ href: "/", title: t("app.title") }}
+        identity={{
+          href: "/",
+          title: t("app.title"),
+          logo: { src: tenkaCloudAppIconDataUri, alt: "TenkaCloud" },
+        }}
         utilities={
           auth.tokens
             ? [

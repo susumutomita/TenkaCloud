@@ -9,6 +9,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import TopNavigation, {
   type TopNavigationProps,
 } from "@cloudscape-design/components/top-navigation";
+import { tenkaCloudAppIconDataUri } from "@tenkacloud/web-kit";
 import { type ReactNode, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-client";
@@ -276,7 +277,11 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
   return (
     <>
       <TopNavigation
-        identity={{ href: "/", title: `TenkaCloud — ${config.eventTitle}` }}
+        identity={{
+          href: "/",
+          title: `TenkaCloud — ${config.eventTitle}`,
+          logo: { src: tenkaCloudAppIconDataUri, alt: "TenkaCloud" },
+        }}
         utilities={utilities}
       />
       <AppLayout
