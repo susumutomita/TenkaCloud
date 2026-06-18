@@ -3,6 +3,27 @@
 <head>
 <meta charset="utf-8">
 <title>公開品質レビュー</title>
+<meta name="description" content="このレビューは外部公開、コミュニティ配布、デモ利用の前に確認すべき公開品質を棚卸しする。 インフラ実装の変更は AGENTS.md の役割分担に従い、この PR では行わない。必要な変更は Issue に分解し、アプリ / docs / scripts で完結するものから順に対応する。">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://susumutomita.github.io/TenkaCloud/docs/go-to-market/public-quality-review.html">
+<meta property="og:title" content="公開品質レビュー">
+<meta property="og:description" content="このレビューは外部公開、コミュニティ配布、デモ利用の前に確認すべき公開品質を棚卸しする。 インフラ実装の変更は AGENTS.md の役割分担に従い、この PR では行わない。必要な変更は Issue に分解し、アプリ / docs / scripts で完結するものから順に対応する。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://susumutomita.github.io/TenkaCloud/docs/go-to-market/public-quality-review.html">
+<meta property="og:site_name" content="TenkaCloud">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:image" content="https://susumutomita.github.io/TenkaCloud/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="公開品質レビュー">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="公開品質レビュー">
+<meta name="twitter:description" content="このレビューは外部公開、コミュニティ配布、デモ利用の前に確認すべき公開品質を棚卸しする。 インフラ実装の変更は AGENTS.md の役割分担に従い、この PR では行わない。必要な変更は Issue に分解し、アプリ / docs / scripts で完結するものから順に対応する。">
+<meta name="twitter:image" content="https://susumutomita.github.io/TenkaCloud/assets/og-image.png">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="https://susumutomita.github.io/TenkaCloud/assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="https://susumutomita.github.io/TenkaCloud/assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="https://susumutomita.github.io/TenkaCloud/assets/apple-touch-icon.png">
 <style>
   :root {
     --c-text: #1f2328;
@@ -128,7 +149,7 @@ Issue に分解し、アプリ / docs / scripts で完結するものから順�
 </tr>
 <tr>
 <td>P1</td>
-<td>landing は title / description / 一部 OGP を持つが、canonical / <code>og:url</code> / <code>og:image</code> / <code>twitter:card</code> / favicon / apple-touch-icon が未整備。docs 生成 HTML は <code>lang</code> と metadata が不足するページがある。</td>
+<td>landing / docs / app shell の release metadata は <a href="https://github.com/susumutomita/TenkaCloud/issues/1867">#1867</a> で整備済み。landing は canonical / OGP / Twitter / icon を持ち、docs は <code>scripts/build-docs.ts</code> で metadata を生成する。</td>
 <td><a href="https://github.com/susumutomita/TenkaCloud/issues/1867">#1867</a></td>
 </tr>
 <tr>
@@ -327,26 +348,47 @@ Issue に分解し、アプリ / docs / scripts で完結するものから順�
 <tbody><tr>
 <td>LP title / description</td>
 <td>OK</td>
-<td><code>landing/index.html</code> は title / description / partial OGP を持つ。</td>
-<td>追加 metadata は <a href="https://github.com/susumutomita/TenkaCloud/issues/1867">#1867</a>。</td>
+<td><code>landing/index.html</code> は title / description を持つ。</td>
+<td>canonical / OGP / Twitter / icon metadata も同じ file に集約する。</td>
 </tr>
 <tr>
 <td>canonical / OGP / Twitter / favicon</td>
-<td>Follow-up</td>
-<td><code>landing/index.html</code> に canonical / <code>og:url</code> / <code>og:image</code> / <code>twitter:card</code> / icon が無い。<code>rg</code> でも favicon / apple-touch-icon asset は見つからない。</td>
-<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1867">#1867</a></td>
+<td>OK</td>
+<td><code>landing/index.html</code> has canonical, <code>og:url</code>, <code>og:image</code>, Twitter card, favicon, and apple-touch icon metadata. Shared image/icon assets live under <code>landing/assets/</code>.</td>
+<td>Keep public URLs aligned with the GitHub Pages root.</td>
 </tr>
 <tr>
 <td>docs metadata / lang</td>
-<td>Follow-up</td>
-<td><code>scripts/build-docs.ts</code> は markdown 生成 HTML を一律 <code>&lt;html lang=&quot;ja&quot;&gt;</code> にする。英語 docs でも <code>lang=&quot;ja&quot;</code> になるものがある。</td>
-<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1867">#1867</a></td>
+<td>OK</td>
+<td><code>scripts/build-docs.ts</code> detects English/Japanese Markdown, emits consistent <code>&lt;html lang&gt;</code>, and adds description/canonical/OGP/Twitter metadata to generated docs.</td>
+<td>Hand-authored HTML pages keep their own metadata policy.</td>
 </tr>
 <tr>
 <td>noindex</td>
-<td>OK / Follow-up</td>
-<td><code>rg &quot;noindex&quot;</code> では公開面に残存 noindex は見つからない。auth-only SPA shell の index policy は未明記。</td>
-<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1867">#1867</a></td>
+<td>OK</td>
+<td>Auth-only SPA shells under <code>apps/*/index.html</code> explicitly set <code>robots</code> to <code>noindex, nofollow</code>.</td>
+<td>Public landing/docs remain indexable.</td>
+</tr>
+</tbody></table>
+<h3>Release metadata policy</h3>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>URL / asset policy</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Landing page</td>
+<td>Canonical public root is <code>https://susumutomita.github.io/TenkaCloud/</code>. Favicon, apple-touch icon, and social preview images live under <code>landing/assets/</code> and are referenced from that root.</td>
+</tr>
+<tr>
+<td>Generated docs</td>
+<td><code>scripts/build-docs.ts</code> derives canonical URLs from the generated <code>docs/**/*.html</code> path and uses the shared TenkaCloud social preview image. Markdown language is detected from <code>.ja.md</code> suffix or document text.</td>
+</tr>
+<tr>
+<td>Auth-only SPA shells</td>
+<td><code>apps/*/index.html</code> files are app shells for authenticated consoles/portals, so they use <code>noindex, nofollow</code> and do not advertise public OGP/Twitter cards.</td>
 </tr>
 </tbody></table>
 <h2>Accessibility</h2>

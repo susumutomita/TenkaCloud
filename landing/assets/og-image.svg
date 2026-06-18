@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title>TenkaCloud social preview</title>
+  <desc>TenkaCloud: run real cloud drills and build reusable problem catalogs.</desc>
+  <rect width="1200" height="630" fill="#f8fafc"/>
+  <rect x="64" y="64" width="1072" height="502" rx="36" fill="#0f172a"/>
+  <g transform="translate(752 130)">
+    <rect width="340" height="340" rx="44" fill="#1e293b"/>
+    <path d="M48 205c0-29 21-53 49-58 9-48 50-83 101-83 44 0 82 27 96 66 39 7 68 40 68 80 0 45-36 81-81 81H116c-38 0-68-30-68-68v-18Z" fill="#f8fafc"/>
+    <path d="M96 193h156v38H96z" fill="#0f172a"/>
+    <path d="M154 115h38v146h-38z" fill="#0f172a"/>
+    <path d="M114 115h118v38H114z" fill="#0f172a"/>
+    <path d="M40 32h260v56H40z" fill="#38bdf8"/>
+    <path d="M40 32h72v56H40z" fill="#22c55e"/>
+    <path d="M228 32h72v56h-72z" fill="#f59e0b"/>
+  </g>
+  <text x="118" y="182" fill="#f8fafc" font-family="Inter, Arial, sans-serif" font-size="72" font-weight="800">TenkaCloud</text>
+  <text x="120" y="256" fill="#bae6fd" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="700">Run real cloud drills.</text>
+  <text x="120" y="310" fill="#e2e8f0" font-family="Inter, Arial, sans-serif" font-size="34">Build reusable problem catalogs.</text>
+  <text x="120" y="382" fill="#cbd5e1" font-family="Inter, Arial, sans-serif" font-size="26">Hands-on AWS competitions, scoring, and event ops.</text>
+  <text x="120" y="424" fill="#cbd5e1" font-family="Inter, Arial, sans-serif" font-size="26">Open problem catalogs for repeatable training.</text>
+  <rect x="120" y="448" width="286" height="54" rx="27" fill="#22c55e"/>
+  <text x="152" y="484" fill="#052e16" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="800">Apache 2.0 OSS</text>
+</svg>

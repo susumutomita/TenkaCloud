@@ -28,7 +28,7 @@ Issue に分解し、アプリ / docs / scripts で完結するものから順�
 |---|---|---|
 | P0 | 3 つの SPA entrypoint が config 読み込み失敗時に `root.innerHTML` へ `err.message` を埋め込む。通常フローではないが、公開前品質として raw HTML sink を残さない。 | [#1866](https://github.com/susumutomita/TenkaCloud/issues/1866) |
 | P0 | public-release の browser / responsive / keyboard / modal focus / long-name / basic performance smoke は [public-release smoke matrix](./public-release-smoke-matrix.md) で実行・記録する。 | [#1868](https://github.com/susumutomita/TenkaCloud/issues/1868) |
-| P1 | landing は title / description / 一部 OGP を持つが、canonical / `og:url` / `og:image` / `twitter:card` / favicon / apple-touch-icon が未整備。docs 生成 HTML は `lang` と metadata が不足するページがある。 | [#1867](https://github.com/susumutomita/TenkaCloud/issues/1867) |
+| P1 | landing / docs / app shell の release metadata は [#1867](https://github.com/susumutomita/TenkaCloud/issues/1867) で整備済み。landing は canonical / OGP / Twitter / icon を持ち、docs は `scripts/build-docs.ts` で metadata を生成する。 | [#1867](https://github.com/susumutomita/TenkaCloud/issues/1867) |
 | P1 | paid event / public demo の復旧姿勢として、DynamoDB / S3 / runtime-config / catalog / audit log の backup / restore 方針が 1 箇所にまとまっていない。 | [#1869](https://github.com/susumutomita/TenkaCloud/issues/1869) |
 
 ## 既存 Issue と重複させない項目
@@ -78,10 +78,18 @@ Issue に分解し、アプリ / docs / scripts で完結するものから順�
 
 | チェック | 判定 | 現状と証跡 | 対応 |
 |---|---|---|---|
-| LP title / description | OK | `landing/index.html` は title / description / partial OGP を持つ。 | 追加 metadata は [#1867](https://github.com/susumutomita/TenkaCloud/issues/1867)。 |
-| canonical / OGP / Twitter / favicon | Follow-up | `landing/index.html` に canonical / `og:url` / `og:image` / `twitter:card` / icon が無い。`rg` でも favicon / apple-touch-icon asset は見つからない。 | [#1867](https://github.com/susumutomita/TenkaCloud/issues/1867) |
-| docs metadata / lang | Follow-up | `scripts/build-docs.ts` は markdown 生成 HTML を一律 `<html lang="ja">` にする。英語 docs でも `lang="ja"` になるものがある。 | [#1867](https://github.com/susumutomita/TenkaCloud/issues/1867) |
-| noindex | OK / Follow-up | `rg "noindex"` では公開面に残存 noindex は見つからない。auth-only SPA shell の index policy は未明記。 | [#1867](https://github.com/susumutomita/TenkaCloud/issues/1867) |
+| LP title / description | OK | `landing/index.html` は title / description を持つ。 | canonical / OGP / Twitter / icon metadata も同じ file に集約する。 |
+| canonical / OGP / Twitter / favicon | OK | `landing/index.html` has canonical, `og:url`, `og:image`, Twitter card, favicon, and apple-touch icon metadata. Shared image/icon assets live under `landing/assets/`. | Keep public URLs aligned with the GitHub Pages root. |
+| docs metadata / lang | OK | `scripts/build-docs.ts` detects English/Japanese Markdown, emits consistent `<html lang>`, and adds description/canonical/OGP/Twitter metadata to generated docs. | Hand-authored HTML pages keep their own metadata policy. |
+| noindex | OK | Auth-only SPA shells under `apps/*/index.html` explicitly set `robots` to `noindex, nofollow`. | Public landing/docs remain indexable. |
+
+### Release metadata policy
+
+| Surface | URL / asset policy |
+|---|---|
+| Landing page | Canonical public root is `https://susumutomita.github.io/TenkaCloud/`. Favicon, apple-touch icon, and social preview images live under `landing/assets/` and are referenced from that root. |
+| Generated docs | `scripts/build-docs.ts` derives canonical URLs from the generated `docs/**/*.html` path and uses the shared TenkaCloud social preview image. Markdown language is detected from `.ja.md` suffix or document text. |
+| Auth-only SPA shells | `apps/*/index.html` files are app shells for authenticated consoles/portals, so they use `noindex, nofollow` and do not advertise public OGP/Twitter cards. |
 
 ## Accessibility
 
