@@ -1,11 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
   <title>TenkaCloud</title>
-  <rect width="512" height="512" rx="108" fill="#0f172a"/>
-  <path d="M96 310c0-35 25-65 59-71 10-58 61-103 122-103 53 0 99 34 116 82 48 7 85 48 85 97 0 54-44 98-98 98H178c-45 0-82-36-82-82v-21Z" fill="#f8fafc"/>
-  <path d="M157 297h198v42H157z" fill="#0f172a"/>
-  <path d="M235 198h42v160h-42z" fill="#0f172a"/>
-  <path d="M184 198h144v42H184z" fill="#0f172a"/>
-  <path d="M112 108h288v56H112z" fill="#38bdf8"/>
-  <path d="M112 108h72v56h-72z" fill="#22c55e"/>
-  <path d="M328 108h72v56h-72z" fill="#f59e0b"/>
+  <rect width="512" height="512" rx="114" fill="#1d1d1f"/>
+  <g transform="translate(96 96) scale(2.6667)">
+    <rect x="34" y="24" width="52" height="12" rx="6" fill="#ffffff"/>
+    <path d="M26 90 L60 46 L94 90" fill="none" stroke="#ffffff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 </svg>

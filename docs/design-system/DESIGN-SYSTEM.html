@@ -437,5 +437,42 @@
     public surface so a regression on the design system shows up in CI.</li>
 </ul>
 
+<h2 id="logo">13. Logo &amp; brand mark</h2>
+<p>
+  The TenkaCloud logo is the <strong>Summit</strong> mark — the top stroke of 天 (heaven) plus a
+  ridge rising to the peak (天下 = reaching the top). It is monochrome and geometric so it survives
+  down to 16&nbsp;px and reads as a trademark. Alternates <code>ascend</code> and <code>cloudpeak</code>
+  exist for motion/variant use. Full guidelines (lockups, clearspace, do/don't):
+  <a href="./logo.html">logo.html</a>.
+</p>
+<p>
+  Unlike the status colors above (which are Cloudscape's functional tokens), the brand layer is a
+  separate palette consumed wherever color is set outside Cloudscape (logo, favicon, landing). Its
+  source of truth is the <code>@tenkacloud/web-kit</code> brand kit; the same values are published as
+  <code>--tc-*</code> CSS custom properties in <code>packages/web-kit/src/brand/brand.css</code>.
+</p>
+<table>
+  <thead>
+    <tr><th>Surface</th><th>Import from <code>@tenkacloud/web-kit</code></th><th>Use</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Reusable icon (React)</td><td><code>&lt;BrandMark variant size title /&gt;</code></td>
+      <td>Inline SVG, follows <code>currentColor</code>. Decorative by default; pass <code>title</code> for <code>role="img"</code>.</td></tr>
+    <tr><td>Mark + wordmark</td><td><code>&lt;BrandLockup orientation wordmark /&gt;</code></td>
+      <td>Horizontal / vertical lockup; pass <code>wordmark="天下クラウド"</code> for the Japanese form.</td></tr>
+    <tr><td>TopNavigation logo</td><td><code>tenkaCloudAppIconDataUri</code></td>
+      <td>Rounded app-icon badge as a data URI for Cloudscape <code>identity.logo.src</code> (all 3 SPAs).</td></tr>
+    <tr><td>Color / font tokens</td><td><code>brandColors</code> / <code>brandFonts</code> / <code>--tc-*</code></td>
+      <td>Ink scale + Summit accent <code>#FF6A32</code>. Accent is never used inside the mark itself.</td></tr>
+    <tr><td>Raw assets</td><td><code>src/brand/assets/*.svg</code></td>
+      <td>Downloadable mark / mark-white / appicon / lockup SVGs.</td></tr>
+  </tbody>
+</table>
+<blockquote>
+  Rule: never re-draw the mark inline. Render <code>&lt;BrandMark&gt;</code> or use the exported data
+  URI / SVG asset so a brand change propagates from one source. The behavior is locked by
+  <code>packages/web-kit/test/brand.test.tsx</code>.
+</blockquote>
+
 </body>
 </html>
