@@ -125,7 +125,7 @@ type QuestCandidate = {
   safeSimulationPlan: string;
   remediationHints: string[];
   suggestedProblemType: "assessment" | "challenge" | "battle" | "workshop";
-  suggestedScoringKind: "flag" | "uptime-flat" | "uptime-multi" | "phased-polling" | "attack-detection" | "manual-review";
+  suggestedScoringKind: "flag" | "multi-flag" | "uptime-flat" | "uptime-multi" | "phased-polling" | "attack-detection" | "manual-review";
   confidence: "high" | "medium" | "low";
 };
 ```
@@ -383,6 +383,7 @@ Tie breakers:
 | Suggested scoring kind | Use when |
 | --- | --- |
 | `flag` | A fixture can prove the learner changed behavior, such as own resource allowed and other resource denied. |
+| `multi-flag` | The same quest has several independent proof points that should earn partial credit, such as allowed access, denied access, and missing-resource behavior. |
 | `uptime-flat` | The mission is a single health or availability invariant. |
 | `uptime-multi` | The mission has several independent endpoints or service levels. |
 | `phased-polling` | The mission has ordered stages, such as backup policy, restore drill, and recovery verification. |
