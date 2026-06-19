@@ -49,6 +49,7 @@ const {
   handleProfileMenuClick,
   buildScoreRankUtility,
   buildAutoRefreshUtility,
+  buildAwsConsoleUtility,
   buildRefreshLatestUtility,
   buildProfileUtility,
   handleSideNavFollow,
@@ -177,6 +178,14 @@ describe("utility builders", () => {
     expect(u.text).toBe("nav.refresh_latest");
     u.onClick?.({} as never);
     expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it("should build an AWS Console button that navigates to /tools/sso (#1919)", () => {
+    const navigate = vi.fn();
+    const u = buildAwsConsoleUtility(navigate, (k) => k) as ButtonUtil;
+    expect(u.text).toBe("nav.aws_console");
+    u.onClick?.({} as never);
+    expect(navigate).toHaveBeenCalledWith("/tools/sso");
   });
 
   it("should build an auto-refresh toggle button with off as the default label", () => {
