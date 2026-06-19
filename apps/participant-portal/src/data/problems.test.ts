@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildDiagramMap,
+  findProblemDiagramUrl,
   findProblemMetadata,
   metadataToEntry,
   type ProblemCatalogEntry,
@@ -302,5 +304,23 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
         /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u,
       );
     });
+  });
+});
+
+describe("problem architecture diagram (#1929 Phase 1c)", () => {
+  it("should key the diagram map by the problem directory name", () => {
+    const m = buildDiagramMap({
+      "../../../../problems/challenges/foo/diagram.svg": "/assets/foo.svg",
+      "../../../../problems/battles/bar/diagram.svg": "/assets/bar.svg",
+      // pathological key with no "/" exercises the empty-segment fallback branch.
+      "diagram.svg": "/assets/edge.svg",
+    });
+    expect(m.get("foo")).toBe("/assets/foo.svg");
+    expect(m.get("bar")).toBe("/assets/bar.svg");
+    expect(m.get("")).toBe("/assets/edge.svg");
+  });
+
+  it("should return undefined for a problem without a bundled diagram", () => {
+    expect(findProblemDiagramUrl("does-not-exist")).toBeUndefined();
   });
 });

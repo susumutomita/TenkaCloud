@@ -16,6 +16,7 @@ import { EndpointOverrideForm } from "../components/EndpointOverrideForm";
 import { ProblemPanel } from "../components/ProblemPanel";
 import type { AppConfig } from "../config";
 import {
+  findProblemDiagramUrl,
   findProblemMetadata,
   type ProblemCatalogEntry,
   resolveLocalizedNarrative,
@@ -266,6 +267,8 @@ function ProblemInfoSection({
 }) {
   // Audit table #1/#2: 想定プレイ時間 / 学習目的 / タグ は competition では出さない
   // (= timing 漏洩 + 出題意図メタの暴露)。 残すのは カテゴリ + 難易度 + 問題説明 のみ。
+  // Phase 1c (#1929): per-problem architecture diagram (bundled diagram.svg), if any.
+  const diagramUrl = findProblemDiagramUrl(metadata.id);
   return (
     <Container header={<Header variant="h2">{t("problem_detail.info_header")}</Header>}>
       <SpaceBetween size="m">
@@ -302,6 +305,17 @@ function ProblemInfoSection({
            *   を参照。 */}
           <Box variant="p">{narrative.shortDescription}</Box>
         </div>
+        {/* Phase 1c (#1929): per-problem architecture diagram (bundled diagram.svg). */}
+        {diagramUrl && (
+          <div>
+            <Box variant="awsui-key-label">{t("problem_detail.info_diagram_label")}</Box>
+            <img
+              src={diagramUrl}
+              alt={t("problem_detail.info_diagram_label")}
+              style={{ maxWidth: "100%", height: "auto" }}
+            />
+          </div>
+        )}
         {/* Issue #1929: player-facing getting-started guidance (Markdown, images allowed
          *   via the web-kit allowlist). Non-spoiler by contract -- scoring numbers /
          *   hardened state / surprise mechanics stay in description / hints. */}

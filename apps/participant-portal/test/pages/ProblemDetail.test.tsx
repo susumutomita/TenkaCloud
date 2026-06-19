@@ -9,16 +9,25 @@ import type { AppConfig } from "../../src/config";
  * helper (isProblemDetailLocked / canRenderProblemDetailBody / canRenderEndpointOverride) を pin
  * する。 hook・data helper・子 (ProblemPanel/EndpointOverrideForm/PortalPluginSlots) は mock/stub。
  */
-const { mockNav, mockParams, mockAuth, mockTeamView, mockLocale, mockFindMeta, mockNarrative } =
-  vi.hoisted(() => ({
-    mockNav: vi.fn(),
-    mockParams: vi.fn(),
-    mockAuth: vi.fn(),
-    mockTeamView: vi.fn(),
-    mockLocale: { value: "en" },
-    mockFindMeta: vi.fn(),
-    mockNarrative: vi.fn(),
-  }));
+const {
+  mockNav,
+  mockParams,
+  mockAuth,
+  mockTeamView,
+  mockLocale,
+  mockFindMeta,
+  mockNarrative,
+  mockFindDiagram,
+} = vi.hoisted(() => ({
+  mockNav: vi.fn(),
+  mockParams: vi.fn(),
+  mockAuth: vi.fn(),
+  mockTeamView: vi.fn(),
+  mockLocale: { value: "en" },
+  mockFindMeta: vi.fn(),
+  mockNarrative: vi.fn(),
+  mockFindDiagram: vi.fn(),
+}));
 
 vi.mock("react-router", () => ({
   useParams: mockParams,
@@ -35,6 +44,7 @@ vi.mock("../../src/i18n", () => ({
 vi.mock("../../src/data/problems", () => ({
   findProblemMetadata: mockFindMeta,
   resolveLocalizedNarrative: mockNarrative,
+  findProblemDiagramUrl: mockFindDiagram,
 }));
 vi.mock("../../src/components/ProblemPanel", () => ({
   ProblemPanel: () => <div data-testid="problem-panel" />,
@@ -97,6 +107,7 @@ beforeEach(() => {
   mockTeamView.mockReturnValue(teamView());
   mockLocale.value = "en";
   mockFindMeta.mockReturnValue(undefined);
+  mockFindDiagram.mockReturnValue(undefined);
   mockNarrative.mockReturnValue({ name: "Hello World", shortDescription: "Solve it" });
 });
 
@@ -204,6 +215,15 @@ describe("ProblemDetailPage", () => {
     renderPage();
     expect(screen.getByText("problem_detail.info_instructions_label")).toBeInTheDocument();
     expect(screen.getByText("First move: read the briefing")).toBeInTheDocument();
+  });
+
+  it("should render the architecture diagram when a diagram.svg exists (#1929 Phase 1c)", () => {
+    mockFindMeta.mockReturnValue(meta());
+    mockFindDiagram.mockReturnValue("/assets/diagram.svg");
+    mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
+    renderPage();
+    const img = screen.getByRole("img", { name: "problem_detail.info_diagram_label" });
+    expect(img).toHaveAttribute("src", "/assets/diagram.svg");
   });
 
   it("should render the body but skip metadata sections when there is no catalog entry", () => {

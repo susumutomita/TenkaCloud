@@ -240,6 +240,7 @@
     "info_private_badge": "答え非公開",
     "info_description_label": "問題説明",
     "info_instructions_label": "はじめに",
+    "info_diagram_label": "アーキテクチャ図",
     "difficulty_1": "入門",
     "difficulty_2": "初級",
     "difficulty_3": "中級",

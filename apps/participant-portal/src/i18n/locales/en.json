@@ -240,6 +240,7 @@
     "info_private_badge": "Answer hidden",
     "info_description_label": "Description",
     "info_instructions_label": "Getting started",
+    "info_diagram_label": "Architecture",
     "difficulty_1": "Beginner",
     "difficulty_2": "Easy",
     "difficulty_3": "Medium",
