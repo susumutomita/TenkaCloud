@@ -1,4 +1,7 @@
+import type { StatusIndicatorProps } from "@cloudscape-design/components/status-indicator";
 import {
+  type ApplicationStatus,
+  type ApplicationStatusOverall,
   PortalScoringGateError,
   PortalValidationError,
   type SubmitFlagOutcome,
@@ -8,6 +11,31 @@ export type ProblemPanelT = (
   key: string,
   params?: Readonly<Record<string, string | number>>,
 ) => string;
+
+/**
+ * Issue #1917: uptime kind の集約 health (ADR-005 D1) を StatusIndicator と人間可読ラベルに
+ * 変換する pure helper。 競技者は「なぜ減点されたか」を、 落ちている個別 endpoint URL を
+ * 知らずとも「サービスが degraded/down」という形で把握できる (per-endpoint は露出しない)。
+ */
+const APP_STATUS_INDICATOR: Record<ApplicationStatusOverall, StatusIndicatorProps.Type> = {
+  healthy: "success",
+  degraded: "warning",
+  down: "error",
+  unknown: "pending",
+};
+
+export function describeApplicationStatus(
+  status: ApplicationStatus,
+  t: ProblemPanelT,
+): { readonly type: StatusIndicatorProps.Type; readonly label: string } {
+  return {
+    type: APP_STATUS_INDICATOR[status.overall],
+    label: t(`problem_panel.health_${status.overall}`, {
+      healthy: status.healthyCount,
+      total: status.totalCount,
+    }),
+  };
+}
 
 type ProblemPanelValidationMessageKey =
   | "problem_panel.submit_error_prefix"
