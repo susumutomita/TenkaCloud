@@ -96,6 +96,7 @@ export interface ProblemCatalogEntry {
   readonly difficulty: 1 | 2 | 3 | 4 | 5;
   readonly estimatedDuration: string;
   readonly shortDescription: string;
+  readonly instructions?: string;
   readonly learningGoals: readonly string[];
   readonly tags: readonly string[];
   /** ADR-012 Phase 2: endpoint slot 宣言 (= portal plugin の default URL 組立に使う)。 */
@@ -127,6 +128,7 @@ interface ProblemMetadata {
   estimatedDuration: string;
   shortDescription: string;
   description: string;
+  instructions?: string;
   tags: string[];
   learningGoals: string[];
   exposedPorts?: { port: number; name: string }[];
@@ -183,6 +185,7 @@ interface ProblemMetadata {
 export interface ProblemI18nOverride {
   readonly name?: string;
   readonly shortDescription?: string;
+  readonly instructions?: string;
   readonly learningGoals?: readonly string[];
 }
 
@@ -227,6 +230,7 @@ export function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry 
     difficulty: metadata.difficulty,
     estimatedDuration: metadata.estimatedDuration,
     shortDescription: metadata.shortDescription,
+    instructions: metadata.instructions,
     learningGoals: metadata.learningGoals,
     tags: metadata.tags,
     endpoints:
@@ -296,6 +300,7 @@ function sanitizeI18n(raw: ProblemMetadata["i18n"]): ProblemCatalogEntry["i18n"]
     ? omitUndefined({
         name: raw.en.name,
         shortDescription: raw.en.shortDescription,
+        instructions: raw.en.instructions,
         learningGoals: raw.en.learningGoals,
       })
     : undefined;
@@ -332,12 +337,14 @@ export function resolveLocalizedNarrative(
 ): {
   readonly name: string;
   readonly shortDescription: string;
+  readonly instructions?: string;
   readonly learningGoals: readonly string[];
 } {
   if (locale === "ja" || !entry.i18n) {
     return {
       name: entry.name,
       shortDescription: entry.shortDescription,
+      instructions: entry.instructions,
       learningGoals: entry.learningGoals,
     };
   }
@@ -346,12 +353,14 @@ export function resolveLocalizedNarrative(
     return {
       name: entry.name,
       shortDescription: entry.shortDescription,
+      instructions: entry.instructions,
       learningGoals: entry.learningGoals,
     };
   }
   return {
     name: override.name ?? entry.name,
     shortDescription: override.shortDescription ?? entry.shortDescription,
+    instructions: override.instructions ?? entry.instructions,
     learningGoals: override.learningGoals ?? entry.learningGoals,
   };
 }

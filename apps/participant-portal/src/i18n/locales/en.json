@@ -239,6 +239,7 @@
     "info_runtime": "Runtime",
     "info_private_badge": "Answer hidden",
     "info_description_label": "Description",
+    "info_instructions_label": "Getting started",
     "difficulty_1": "Beginner",
     "difficulty_2": "Easy",
     "difficulty_3": "Medium",

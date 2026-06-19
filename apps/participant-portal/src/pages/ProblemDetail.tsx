@@ -6,6 +6,7 @@ import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import { Markdown } from "@tenkacloud/web-kit";
 import { useMemo } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import type { ParticipantProblemView, ParticipantTeamView } from "../api/portal-client";
@@ -260,7 +261,7 @@ function ProblemInfoSection({
   t,
 }: {
   metadata: ProblemCatalogEntry;
-  narrative: { readonly shortDescription: string };
+  narrative: { readonly shortDescription: string; readonly instructions?: string };
   t: (key: string, params?: Readonly<Record<string, string | number>>) => string;
 }) {
   // Audit table #1/#2: 想定プレイ時間 / 学習目的 / タグ は competition では出さない
@@ -301,6 +302,15 @@ function ProblemInfoSection({
            *   を参照。 */}
           <Box variant="p">{narrative.shortDescription}</Box>
         </div>
+        {/* Issue #1929: player-facing getting-started guidance (Markdown, images allowed
+         *   via the web-kit allowlist). Non-spoiler by contract -- scoring numbers /
+         *   hardened state / surprise mechanics stay in description / hints. */}
+        {narrative.instructions && (
+          <div>
+            <Box variant="awsui-key-label">{t("problem_detail.info_instructions_label")}</Box>
+            <Markdown source={narrative.instructions} />
+          </div>
+        )}
       </SpaceBetween>
     </Container>
   );
