@@ -189,8 +189,9 @@ function printCreatedFiles(
     `  1. ${created.outputDir}/metadata.json を編集 (name / description / tags / learningGoals)`,
   );
   print(`  2. ${created.outputDir}/template.yaml を編集 (実 AWS リソース)`);
-  print(`  3. bun run scripts/tenkacloud-problem.ts validate ${problemId}`);
-  print("  4. make validate-problems");
+  print(`  3. bun run scripts/tenkacloud-problem.ts cost ${problemId}`);
+  print(`  4. bun run scripts/tenkacloud-problem.ts validate ${problemId}`);
+  print("  5. make validate-problems");
   print("");
   print("参照:");
   print("  - docs/problems/CONTRIBUTING.md (= 外部 contributor 向け quickstart)");
