@@ -89,7 +89,7 @@ export function ShellLayout({
       <TopNavigation
         identity={{
           href: "/",
-          title: t("app.title"),
+          // タイトル文字は narrow 幅で truncate (…) するため出さず、 ブランドはアイコンに担わせる。
           logo: { src: tenkaCloudAppIconDataUri, alt: "TenkaCloud" },
         }}
         utilities={

@@ -29,12 +29,12 @@
   },
   "login": {
     "header": "Application Admin Console",
-    "description": "テナント開発者としてサインインしてください。Cognito の Hosted UI に遷移します。",
+    "description": "テナント開発者としてサインインしてください。サインイン画面に遷移します。",
     "submit": "サインイン",
     "title": "TenkaCloud Application Admin Console",
     "subtitle": "ご契約テナントの運営者アカウントでサインインしてください。",
     "sign_in_button": "サインイン",
-    "signing_in": "Cognito にリダイレクト中…",
+    "signing_in": "サインイン画面に移動しています…",
     "error_header": "サインインに失敗しました",
     "error_body": "サインイン中に問題が発生しました。",
     "support_contact": "support@tenkacloud.cloud にお問い合わせください。",
@@ -48,17 +48,15 @@
     "saml_back_to_email": "別のメールアドレスを使用する"
   },
   "home": {
-    "header_description": "TenkaCloud Battle / Challenge — テナント管理コンソール",
     "open_catalog": "問題カタログを開く",
     "welcome": "ようこそ、{displayName} さん",
     "welcome_fallback_name": "テナント",
     "tenant_name_missing_header": "テナント名が JWT に含まれていません",
-    "tenant_name_missing_body": "一度サインアウトして再ログインしてください。 解消しない場合は System Admin に連絡し、 テナント名を Cognito user の custom:tenantName 属性に設定してもらってください。",
+    "tenant_name_missing_body": "一度サインアウトして再ログインしてください。 解消しない場合は System Admin にテナント設定の確認を依頼してください。",
     "catalog_header": "問題カタログ",
     "stat_total": "登録数",
-    "stat_ready": "公開中 (ready)",
-    "stat_draft": "下書き (draft)",
     "stat_battle": "Battle",
+    "stat_challenge": "Challenge",
     "next_action_header": "次のアクション",
     "next_action_view_all": "すべての問題を見る",
     "next_action_close_aria": "次のアクション section を閉じる",
@@ -67,10 +65,6 @@
     "tenant_info_name": "テナント名",
     "tenant_info_id": "テナント ID",
     "tenant_info_tier": "プラン",
-    "export_data": "データをエクスポート",
-    "export_description": "自テナントのイベント・デプロイ・競技アカウントを 1 つの JSON にまとめてダウンロードします (監査ログは Audit Log ページの CSV を参照)。",
-    "export_error_header": "エクスポートに失敗しました",
-    "export_error_generic": "データのエクスポートに失敗しました。",
     "value_unset": "(未設定)",
     "value_unknown": "(unknown)"
   },
@@ -632,7 +626,7 @@
   },
   "tenant_users": {
     "title": "ユーザー",
-    "description": "このテナントの管理コンソールユーザーとロールです。 招待はこのテナントの Cognito UserPool に限定されます。",
+    "description": "このテナントの管理コンソールユーザーとロールです。 招待はこのテナント内に限定されます。",
     "invite_button": "ユーザーを招待",
     "readonly_header": "読み取り専用アクセス",
     "readonly_body": "ユーザー一覧は閲覧できますが、 招待・削除・ロール変更は TenantAdmin のみ実行できます。",
@@ -781,22 +775,5 @@
     "recurring_cadence": "間隔 × 回数",
     "recurring_ends_at": "自動停止",
     "recurring_cancel": "解除"
-  },
-  "setup_guide": {
-    "header": "初回セットアップガイド",
-    "description": "イベント開催までの 4 ステップ。完了状況はテナント内の既存データから自動判定され、すべて完了するとこのガイドは表示されなくなります。",
-    "dismiss": "非表示にする",
-    "progress_label": "セットアップ進捗",
-    "progress_info": "{completed} / {total} ステップ完了",
-    "status_complete": "完了",
-    "status_incomplete": "未完了",
-    "step_create_event_title": "イベント作成",
-    "step_create_event_link": "新規 Event を作成する",
-    "step_select_problems_title": "問題選択",
-    "step_select_problems_link": "問題カタログから問題を選ぶ",
-    "step_register_teams_title": "チーム登録",
-    "step_register_teams_link": "Event 作成ウィザードでチームを登録する",
-    "step_deploy_title": "デプロイ",
-    "step_deploy_link": "Event 詳細からデプロイを実行する"
   }
 }
