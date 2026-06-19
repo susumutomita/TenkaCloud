@@ -88,6 +88,20 @@ describe("metadataToEntry (fairness projection)", () => {
     const noEn = { ...FAIRNESS_FIXTURE, i18n: {} } as Parameters<typeof metadataToEntry>[0];
     expect(metadataToEntry(noEn).i18n).toBeUndefined();
   });
+
+  it("should carry player-facing instructions through the entry and locale resolution (#1929)", () => {
+    const withInstr = {
+      ...FAIRNESS_FIXTURE,
+      instructions: "▶ first move: read the briefing",
+      i18n: { en: { instructions: "▶ first move (EN)" } },
+    } as Parameters<typeof metadataToEntry>[0];
+    const entry = metadataToEntry(withInstr);
+    expect(entry.instructions).toBe("▶ first move: read the briefing");
+    expect(resolveLocalizedNarrative(entry, "ja").instructions).toBe(
+      "▶ first move: read the briefing",
+    );
+    expect(resolveLocalizedNarrative(entry, "en").instructions).toBe("▶ first move (EN)");
+  });
 });
 
 /**
