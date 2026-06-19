@@ -36,6 +36,21 @@ const problem = (over: Partial<ProblemSummary> & { id: string }): ProblemSummary
   runtime: { provider: "aws", engine: "cloudformation" },
   ...over,
 });
+const costEstimate: ProblemSummary["costEstimate"] = {
+  totalHourlyUsd: 0.065,
+  perSessionUsd: 0.0325,
+  perDayIfLeftRunningUsd: 1.56,
+  alwaysOnResources: [
+    {
+      logicalId: "Nat",
+      resourceType: "AWS::EC2::NatGateway",
+      roughHourlyUsd: 0.045,
+      riskLevel: "high",
+    },
+  ],
+  unpricedResourceTypes: [],
+  resourceTypes: ["AWS::EC2::NatGateway"],
+};
 
 const CATALOG: readonly ProblemSummary[] = [
   problem({
@@ -45,6 +60,7 @@ const CATALOG: readonly ProblemSummary[] = [
     difficulty: 4,
     scoringKind: "uptime-flat",
     tags: ["redis", "ec2"],
+    costEstimate,
   }),
   problem({
     id: "p2",
@@ -70,6 +86,7 @@ const row = (over: Partial<ProblemRow> = {}): ProblemRow => ({
   problemId: "p1",
   problemName: "Problem 1",
   defaultRegion: r0,
+  costEstimate,
   ...over,
 });
 
@@ -186,6 +203,10 @@ describe("EventCreateProblemsetSection", () => {
     const p = props({ problemRows: [row()] });
     const { container } = render(<EventCreateProblemsetSection {...p} />);
     expect(screen.getByText("Problem 1")).toBeInTheDocument();
+    expect(screen.getByText("event_create.col_estimated_cost")).toBeInTheDocument();
+    expect(screen.getByText("event_create.col_always_on_cost")).toBeInTheDocument();
+    expect(screen.getByText(/problem_cost.per_session/)).toBeInTheDocument();
+    expect(screen.getAllByText("problem_cost.always_on_resources").length).toBeGreaterThan(0);
     // region Select は table 内 (= category filter Select の後)。 testid 無しなので位置で特定。
     const select = createWrapper(container).findAllSelects()[1];
     // region Select は expandToViewport なので dropdown は portal に出る → flag が必要。

@@ -66,6 +66,24 @@ const account: CompetitorAccountSummary = {
   createdAt: "2026-05-01T00:00:00Z",
   updatedAt: "2026-05-01T00:00:00Z",
 };
+// #1910: 選択した問題に costEstimate があれば EventCreate が row へ引き継ぐ分岐 (truthy) を
+// 踏むための fixture。 これを持つ p1 と、 持たない p2 の両方を選択して両分岐を pin する。
+const costEstimate: ProblemSummary["costEstimate"] = {
+  totalHourlyUsd: 0.065,
+  perSessionUsd: 0.0325,
+  perDayIfLeftRunningUsd: 1.56,
+  alwaysOnResources: [
+    {
+      logicalId: "Nat",
+      resourceType: "AWS::EC2::NatGateway",
+      roughHourlyUsd: 0.045,
+      riskLevel: "high",
+    },
+  ],
+  unpricedResourceTypes: [],
+  resourceTypes: ["AWS::EC2::NatGateway"],
+};
+
 const problem = (over: Partial<ProblemSummary> = {}): ProblemSummary =>
   ({
     id: "p1",
@@ -108,8 +126,8 @@ beforeEach(() => {
   mockCreate.mockReset().mockResolvedValue({ eventId: "e1" });
   mockBulk.mockReset().mockResolvedValue({ ok: true });
   mockListProblems.mockReturnValue([
-    problem(),
-    problem({ id: "p2", name: "Problem 2", defaultRegion: undefined, supportedRegions: undefined }),
+    problem({ costEstimate }), // p1: costEstimate あり → 引き継ぎ分岐 (truthy)
+    problem({ id: "p2", name: "Problem 2", defaultRegion: undefined, supportedRegions: undefined }), // p2: なし (falsy)
   ]);
   mockLoader.mockReturnValue({
     competitorAccounts: [account],

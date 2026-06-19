@@ -387,7 +387,7 @@ export function analyzeProblemCost(
   templateYaml: string,
   estimatedDuration?: string,
 ): ProblemCostEstimate {
-  const parsed = parseYaml(templateYaml, { customTags: CFN_YAML_TAGS });
+  const parsed = parseYaml(templateYaml, { customTags: CFN_YAML_TAGS as never });
   const template = isPlainObject(parsed) ? parsed : {};
   const resources = isPlainObject(template.Resources) ? template.Resources : {};
   const costedResources = Object.entries(resources)
@@ -441,8 +441,8 @@ export function parseEstimatedDurationHours(input: string): number | undefined {
   const numbers = [...normalized.matchAll(/\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
   if (numbers.length === 0) return undefined;
   const average = sum(numbers) / numbers.length;
-  if (/\b(h|hr|hour|hours)\b/i.test(normalized) || normalized.includes("時間")) return average;
-  if (/\b(m|min|minute|minutes)\b/i.test(normalized) || normalized.includes("分")) {
+  if (/(h|hr|hour|hours)\b/i.test(normalized) || normalized.includes("時間")) return average;
+  if (/(m|min|minute|minutes)\b/i.test(normalized) || normalized.includes("分")) {
     return average / 60;
   }
   return undefined;

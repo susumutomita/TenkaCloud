@@ -5,6 +5,7 @@ import {
   listProblemSummaries,
   metadataToDetail,
   PROBLEM_CATALOG,
+  type ProblemCostEstimateSummary,
   type ProblemMetadata,
 } from "../../src/data/problems";
 
@@ -29,6 +30,13 @@ const BASE_METADATA: ProblemMetadata = {
   cfnTemplate: "AWSTemplateFormatVersion...",
   cfnParameters: { Foo: "Bar" },
 };
+
+const TEMPLATE_WITH_ALWAYS_ON_COST = `Resources:
+  Cache:
+    Type: AWS::ElastiCache::CacheCluster
+  QueueLog:
+    Type: AWS::Logs::LogGroup
+`;
 
 describe("metadataToDetail", () => {
   it("should include defaultRegion + non-empty supportedRegions and drop deploy internals", () => {
@@ -78,6 +86,17 @@ describe("metadataToDetail", () => {
 
   it("should omit scoringKind when scoring is not declared (= deploy-only problem)", () => {
     expect(metadataToDetail(BASE_METADATA).scoringKind).toBeUndefined();
+  });
+
+  it("should derive a cost estimate from the CloudFormation template when available", () => {
+    const detail = metadataToDetail(BASE_METADATA, TEMPLATE_WITH_ALWAYS_ON_COST);
+    expect(detail.costEstimate).toMatchObject({
+      totalHourlyUsd: 0.018,
+      perSessionUsd: 0.009,
+      resourceTypes: ["AWS::ElastiCache::CacheCluster", "AWS::Logs::LogGroup"],
+    } satisfies Partial<ProblemCostEstimateSummary>);
+    expect(detail.costEstimate?.perDayIfLeftRunningUsd).toBeCloseTo(0.432, 5);
+    expect(detail.costEstimate?.alwaysOnResources.map((r) => r.logicalId)).toEqual(["Cache"]);
   });
 });
 
@@ -131,6 +150,12 @@ describe("listProblemSummaries", () => {
   it("should carry the catalog entry's scoringKind through to the summary (Issue #1776)", () => {
     for (const s of listProblemSummaries()) {
       expect(s.scoringKind).toBe(findProblem(s.id)?.scoringKind);
+    }
+  });
+
+  it("should carry each catalog entry's derived cost estimate through to the summary", () => {
+    for (const s of listProblemSummaries()) {
+      expect(s.costEstimate).toBe(findProblem(s.id)?.costEstimate);
     }
   });
 });

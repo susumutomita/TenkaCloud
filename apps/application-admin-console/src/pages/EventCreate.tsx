@@ -136,6 +136,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
               // が ap-northeast-1 に集中するのを防ぐ)。 未宣言なら従来通り
               // DEFAULT_AWS_REGION にフォールバック。 operator は wizard で override 可能。
               defaultRegion: meta?.defaultRegion ?? DEFAULT_AWS_REGION.code,
+              ...(meta?.costEstimate ? { costEstimate: meta.costEstimate } : {}),
               ...(meta?.supportedRegions ? { supportedRegions: meta.supportedRegions } : {}),
             };
           });

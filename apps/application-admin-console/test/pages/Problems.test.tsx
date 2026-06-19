@@ -39,8 +39,30 @@ const summary = (over: Partial<ProblemSummary> = {}): ProblemSummary =>
     runtime: { provider: "aws", engine: "cloudformation" },
     ...over,
   }) as ProblemSummary;
+const costEstimate: ProblemSummary["costEstimate"] = {
+  totalHourlyUsd: 0.03,
+  perSessionUsd: 0.015,
+  perDayIfLeftRunningUsd: 0.72,
+  alwaysOnResources: [
+    {
+      logicalId: "Database",
+      resourceType: "AWS::RDS::DBInstance",
+      roughHourlyUsd: 0.02,
+      riskLevel: "high",
+    },
+  ],
+  unpricedResourceTypes: [],
+  resourceTypes: ["AWS::RDS::DBInstance"],
+};
 const CATALOG: ProblemSummary[] = [
-  summary({ id: "a", name: "Alpha", category: "Battle", difficulty: 1, tags: ["web", "sqli"] }),
+  summary({
+    id: "a",
+    name: "Alpha",
+    category: "Battle",
+    difficulty: 1,
+    tags: ["web", "sqli"],
+    costEstimate,
+  }),
   summary({
     id: "b",
     name: "Bravo",
@@ -77,6 +99,8 @@ describe("ProblemsPage", () => {
     renderPage();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
     expect(screen.getByText("Bravo")).toBeInTheDocument();
+    expect(screen.getByText(/problem_cost.per_session/)).toBeInTheDocument();
+    expect(screen.getByText(/problem_cost.resources/)).toBeInTheDocument();
     expect(screen.getByText("(2)")).toBeInTheDocument(); // counter no filter
     // category badge 両色: Alpha=Battle(red), Bravo=Challenge(blue)。
     expect(
