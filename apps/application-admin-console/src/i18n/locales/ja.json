@@ -774,6 +774,23 @@
     "recurring_active_header": "実行中の定期障害 ({count})",
     "recurring_cadence": "間隔 × 回数",
     "recurring_ends_at": "自動停止",
-    "recurring_cancel": "解除"
+    "recurring_cancel": "解除",
+    "team_status_header": "チーム状況",
+    "team_status_description": "各チームの現在地。 障害を撃ち込む timing の判断に使います。",
+    "team_status_col_rank": "順位",
+    "team_status_col_team": "チーム",
+    "team_status_col_score": "スコア",
+    "team_status_col_deploy": "デプロイ",
+    "team_status_col_latest": "直近の採点",
+    "team_status_col_fired": "撃ち込んだ障害",
+    "team_status_solved": "{count} 問クリア",
+    "team_status_deploy_up": "{complete}/{total} 稼働",
+    "team_status_deploy_failed": "{count} 失敗",
+    "team_status_deploy_progress": "{count} 起動中",
+    "team_status_deploy_none": "未デプロイ",
+    "team_status_latest_none": "採点なし",
+    "team_status_fired_none": "なし",
+    "team_status_fired_count": "{count} 回 · 最終 {time}",
+    "team_status_empty": "このイベントにチームがありません。"
   }
 }
