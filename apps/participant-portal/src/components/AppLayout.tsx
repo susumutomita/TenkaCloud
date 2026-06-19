@@ -88,6 +88,26 @@ export function buildAutoRefreshUtility(
 }
 
 /**
+ * Issue #1919: AWS Console one-click access as a top-right utility. The federated
+ * sign-in button itself lives on /tools/sso (it needs a per-deploy jobId); this
+ * just makes that page reachable in one click from the top nav instead of being
+ * buried in the side navigation, where playtesters could not find it.
+ */
+export function buildAwsConsoleUtility(
+  navigate: (href: string) => void,
+  t: Translate,
+): TopNavigationProps.Utility {
+  return {
+    type: "button",
+    text: t("nav.aws_console"),
+    iconName: "external",
+    onClick: () => {
+      navigate("/tools/sso");
+    },
+  };
+}
+
+/**
  * Issue #1191: profile dropdown のメニュー項目を再利用可能な pure function で組む
  * (= unit test で項目構成を pin)。 競技者は「チーム名を変更」「サインアウト」の 2 つを
  * 選べる。
@@ -246,6 +266,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
       localeUtility,
       buildRefreshLatestUtility(teamView.refresh, t),
       buildAutoRefreshUtility(teamView.autoRefreshEnabled, teamView.setAutoRefreshEnabled, t),
+      buildAwsConsoleUtility(navigate, t),
       // #547: 旧 `menu-dropdown` + 空 items は chevron で展開できそうに見えて何も出ない
       // という UX bug。Score / Rank の click は scoreboard ページへの遷移が自然なので
       // `type: "button"` + onClick で /scoreboard に飛ばす (= dropdown の意図不明
