@@ -5,42 +5,13 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { toErrorMessage } from "@tenkacloud/web-kit";
-import { useState } from "react";
-import {
-  getConsoleSigninUrl,
-  PortalAssumeRoleError,
-  PortalAuthError,
-  PortalValidationError,
-} from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { CliCredentialsPanel } from "../components/CliCredentialsPanel";
+import { useConsoleAccess } from "../components/useConsoleAccess";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
-
-type TranslateFn = (key: string, vars?: Record<string, string>) => string;
-
-/**
- * 「Console 開く」 ボタン押下時の error → 表示文字列 / 動作 への変換。
- * 戻り値が `"auth_logout"` のときは 「session 期限切れにつき logout する」 シグナル。
- * それ以外の文字列は Alert に出すメッセージ。
- */
-function describeOpenConsoleError(err: unknown, t: TranslateFn): string {
-  if (err instanceof PortalAuthError) return "auth_logout";
-  if (err instanceof PortalAssumeRoleError) {
-    // Issue #1197: stage を翻訳して 「どちらの段が落ちたか」 を表示する。
-    return t("sso_credentials.cli.assume_role_failed", {
-      stage: t(`sso_credentials.cli.stage_${err.stage}`),
-      reason: err.reason,
-    });
-  }
-  if (err instanceof PortalValidationError) {
-    return t("sso_credentials.validation_error", { errorCode: err.errorCode });
-  }
-  return toErrorMessage(err);
-}
 
 /**
  * AWS Console ワンクリック login。競技者は自前 AWS ログイン不要で、Portal の button
@@ -48,7 +19,8 @@ function describeOpenConsoleError(err: unknown, t: TranslateFn): string {
  * `signin.aws.amazon.com/federation?Action=login` URL を発行 → 新タブで開く。
  *
  * Lambda が assume するのは `ConsoleViewerRole` (= ReadOnlyAccess managed policy)。
- * 競技者は AWS Console で stack 状態を read-only で確認可能。
+ * 競技者は AWS Console で stack 状態を read-only で確認可能。開く処理は `useConsoleAccess`
+ * に集約し、TopNavigation の常設 Console 導線 (Issue #1919) と共有する。
  */
 export function SsoCredentialsPage({ config }: { config: AppConfig }) {
   const auth = useAuth();
@@ -56,35 +28,7 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
   const sessionToken = auth.session?.sessionToken ?? null;
   const { view, error } = useTeamView();
   const isMock = useIsMock();
-
-  const [pending, setPending] = useState<string | null>(null);
-  const [openError, setOpenError] = useState<string | null>(null);
-
-  const openConsole = async (jobId: string) => {
-    if (!sessionToken || pending) return;
-    // dev-mock mode: backend を呼ぶと localhost への fetch が "Failed to fetch" になるため、
-    // 試行せず info メッセージで「モックでは AWS Console を開けません」 を表示する (= LP demo
-    // 訪問者が clicked して赤い error alert に驚かないようにする)。
-    if (isMock) {
-      setOpenError(t("sso_credentials.mock_open_blocked"));
-      return;
-    }
-    setPending(jobId);
-    setOpenError(null);
-    try {
-      const loginUrl = await getConsoleSigninUrl(config.apiBaseUrl, sessionToken, jobId);
-      window.open(loginUrl, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      const message = describeOpenConsoleError(err, t);
-      if (message === "auth_logout") {
-        auth.logout();
-        return;
-      }
-      setOpenError(message);
-    } finally {
-      setPending(null);
-    }
-  };
+  const { openConsole, pending, error: openError, dismissError } = useConsoleAccess(config);
 
   return (
     <SpaceBetween size="l">
@@ -99,14 +43,16 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
       )}
       {openError && (
         <Alert
-          type={isMock ? "info" : "error"}
+          type={openError.isMock ? "info" : "error"}
           header={
-            isMock ? t("sso_credentials.mock_open_header") : t("sso_credentials.open_failed_header")
+            openError.isMock
+              ? t("sso_credentials.mock_open_header")
+              : t("sso_credentials.open_failed_header")
           }
           dismissible
-          onDismiss={() => setOpenError(null)}
+          onDismiss={dismissError}
         >
-          {openError}
+          {openError.message}
         </Alert>
       )}
 

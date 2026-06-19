@@ -11,13 +11,15 @@ import type { LocaleCode } from "../../src/i18n";
  * (session 有無 / cloudMode 別 offline alert / 未読 badge / sidenav navigate) を pin する。
  * 共有 hook と TeamViewProvider・CountdownTimer は mock。
  */
-const { mockAuth, mockTeamView, mockNav, mockLocale, mockSetLocale } = vi.hoisted(() => ({
-  mockAuth: vi.fn(),
-  mockTeamView: vi.fn(),
-  mockNav: vi.fn(),
-  mockLocale: { value: "en" as LocaleCode },
-  mockSetLocale: vi.fn(),
-}));
+const { mockAuth, mockTeamView, mockNav, mockLocale, mockSetLocale, mockConsoleAccess } =
+  vi.hoisted(() => ({
+    mockAuth: vi.fn(),
+    mockTeamView: vi.fn(),
+    mockNav: vi.fn(),
+    mockLocale: { value: "en" as LocaleCode },
+    mockSetLocale: vi.fn(),
+    mockConsoleAccess: vi.fn(),
+  }));
 
 vi.mock("react-router", () => ({
   useLocation: () => ({ pathname: "/" }),
@@ -28,6 +30,9 @@ vi.mock("../../src/auth/TeamViewProvider", () => ({
   TeamViewProvider: ({ children }: { children: React.ReactNode }) => children,
   useTeamView: mockTeamView,
 }));
+// useConsoleAccess (Issue #1919) の openConsole / error は SsoCredentials.test で hook 実体を
+// 検証済み。ここでは shell 配線 (常設 utility + open 失敗の Alert 表示) だけを見るため mock する。
+vi.mock("../../src/components/useConsoleAccess", () => ({ useConsoleAccess: mockConsoleAccess }));
 vi.mock("../../src/i18n", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/i18n")>();
   return {
@@ -50,6 +55,7 @@ const {
   buildScoreRankUtility,
   buildAutoRefreshUtility,
   buildRefreshLatestUtility,
+  buildConsoleUtility,
   buildProfileUtility,
   handleSideNavFollow,
   ShellLayout,
@@ -202,6 +208,57 @@ describe("utility builders", () => {
     expect(navigate).toHaveBeenCalledWith("/login");
   });
 
+  it("should build a console button that opens the only deployable problem (Issue #1919)", () => {
+    const openConsole = vi.fn();
+    const navigate = vi.fn();
+    const u = buildConsoleUtility(
+      [{ jobId: "job-1", problemId: "p-a", awsAccountId: "111122223333" }],
+      openConsole,
+      navigate,
+      (k) => k,
+    ) as ButtonUtil;
+    expect(u.text).toBe("nav.open_console");
+    u.onClick?.({} as never);
+    expect(openConsole).toHaveBeenCalledWith("job-1");
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("should route a console button to the SSO page when nothing is deployable", () => {
+    const openConsole = vi.fn();
+    const navigate = vi.fn();
+    const u = buildConsoleUtility(
+      [{ jobId: "job-1", problemId: "p-a", awsAccountId: undefined }],
+      openConsole,
+      navigate,
+      (k) => k,
+    ) as ButtonUtil;
+    u.onClick?.({} as never);
+    expect(navigate).toHaveBeenCalledWith("/tools/sso");
+    expect(openConsole).not.toHaveBeenCalled();
+  });
+
+  it("should build a console dropdown over deployable problems and open the picked one", () => {
+    const openConsole = vi.fn();
+    const navigate = vi.fn();
+    const u = buildConsoleUtility(
+      [
+        { jobId: "job-1", problemId: "p-a", awsAccountId: "111122223333" },
+        { jobId: "job-2", problemId: "p-b", awsAccountId: "444455556666" },
+        { jobId: "job-3", problemId: "p-c", awsAccountId: undefined },
+      ],
+      openConsole,
+      navigate,
+      (k) => k,
+    ) as MenuUtil;
+    expect(u.text).toBe("nav.open_console");
+    expect(u.items).toEqual([
+      { id: "job-1", text: "p-a" },
+      { id: "job-2", text: "p-b" },
+    ]);
+    u.onItemClick?.({ detail: { id: "job-2" } } as never);
+    expect(openConsole).toHaveBeenCalledWith("job-2");
+  });
+
   it("should navigate for internal links and defer to the browser for external ones", () => {
     const navigate = vi.fn();
     const preventDefault = vi.fn();
@@ -260,12 +317,21 @@ beforeAll(() => {
   );
 });
 
+const consoleAccess = (over: Record<string, unknown> = {}) => ({
+  openConsole: vi.fn(),
+  pending: null,
+  error: null,
+  dismissError: vi.fn(),
+  ...over,
+});
+
 beforeEach(() => {
   mockNav.mockClear();
   mockSetLocale.mockClear();
   mockLocale.value = "en";
   mockAuth.mockReturnValue({ session: { teamName: "Blue" }, logout: vi.fn() });
   mockTeamView.mockReturnValue(tv({ view: teamView([10, 15]) }));
+  mockConsoleAccess.mockReturnValue(consoleAccess());
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -285,6 +351,36 @@ describe("ShellLayout", () => {
     expect(screen.getByText("app.no_session")).toBeInTheDocument();
     expect(screen.getByText("child-content")).toBeInTheDocument();
     expect(screen.queryByText("Blue")).not.toBeInTheDocument();
+  });
+
+  it("should keep the AWS Console entry always present in the top nav when signed in (Issue #1919)", () => {
+    renderShell();
+    expect(screen.getAllByText("nav.open_console").length).toBeGreaterThan(0);
+  });
+
+  it("should not render the AWS Console entry when signed out", () => {
+    mockAuth.mockReturnValue({ session: null, logout: vi.fn() });
+    renderShell();
+    expect(screen.queryByText("nav.open_console")).not.toBeInTheDocument();
+  });
+
+  it("should surface a console open failure as a dismissible error alert", () => {
+    const dismissError = vi.fn();
+    mockConsoleAccess.mockReturnValue(
+      consoleAccess({ error: { message: "boom", isMock: false }, dismissError }),
+    );
+    renderShell();
+    expect(screen.getByText("sso_credentials.open_failed_header")).toBeInTheDocument();
+    expect(screen.getByText("boom")).toBeInTheDocument();
+  });
+
+  it("should surface a mock-mode console block as an info alert", () => {
+    mockConsoleAccess.mockReturnValue(
+      consoleAccess({ error: { message: "mock blocked", isMock: true } }),
+    );
+    renderShell();
+    expect(screen.getByText("sso_credentials.mock_open_header")).toBeInTheDocument();
+    expect(screen.getByText("mock blocked")).toBeInTheDocument();
   });
 
   it("should navigate via the side navigation onFollow handler", () => {

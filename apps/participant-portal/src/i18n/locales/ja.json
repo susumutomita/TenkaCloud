@@ -25,6 +25,7 @@
     "scoreboard": "スコアボード",
     "score_events": "スコアイベント",
     "sso_credentials": "SSO 資格情報",
+    "open_console": "AWS Console を開く",
     "refresh_latest": "最新の状態に更新",
     "auto_refresh_off": "自動更新: OFF",
     "auto_refresh_on": "自動更新: ON",
