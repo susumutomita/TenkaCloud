@@ -142,6 +142,28 @@ describe("tenant ApiGateway", () => {
     });
   });
 
+  it("[ADR-037 Slice 2] should wire /events/{eventId}/disruptions/recurring (GET) + .../{requestId}/cancel (POST)", () => {
+    // backend に Hono route + frontend RecurringPanel を merge しても、 この APIGW route を
+    // 追加し忘れると gateway が CORS 無しで 404/403 を返し frontend は「Failed to fetch」になる
+    // (= #553 通知 route と同じ「backend だけ merge、 CDK 後追い」 regression class)。
+    const recurringResourceId = Object.entries(
+      tpl.findResources("AWS::ApiGateway::Resource", { Properties: { PathPart: "recurring" } }),
+    )[0]?.[0];
+    expect(recurringResourceId).toBeDefined();
+    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+      HttpMethod: "GET",
+      ResourceId: { Ref: recurringResourceId },
+    });
+    const cancelResourceId = Object.entries(
+      tpl.findResources("AWS::ApiGateway::Resource", { Properties: { PathPart: "cancel" } }),
+    )[0]?.[0];
+    expect(cancelResourceId).toBeDefined();
+    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+      HttpMethod: "POST",
+      ResourceId: { Ref: cancelResourceId },
+    });
+  });
+
   it("should have /admin/competitor-accounts and /admin/competitor-accounts/{awsAccountId}/verify (Issue #459)", () => {
     // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + verify
     expect(findResource("admin")).toBeDefined();
