@@ -87,6 +87,8 @@ describe("ProblemPanel deploy log privacy", () => {
     );
 
     expect(screen.getByText(/Starting|起動中/)).toBeInTheDocument();
+    // 各問題の region を明示する (= 「Event region」 1 つだと多リージョン時に混乱する運用 FB)。
+    expect(screen.getByText("ap-northeast-1")).toBeInTheDocument();
     expect(screen.queryByText(/Deployment terminal|デプロイ terminal/)).not.toBeInTheDocument();
     expect(screen.queryByText("Deployment job was queued.")).not.toBeInTheDocument();
     expect(

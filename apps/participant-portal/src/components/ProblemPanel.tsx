@@ -222,10 +222,12 @@ export function ProblemPanel({
           now={now}
           t={t}
         />
-        {/* Audit #3: Job ID (= 内部 ULID) は競技者に見せない。 Region は AWS 多リージョン
-            の場合のみ意味があるが、 1 リージョン運用の現状では noise。 残すのは現在の score + 最終加点 */}
+        {/* Audit #3: Job ID (= 内部 ULID) は競技者に見せない。 Region は問題ごとに異なる
+            (operator が問題単位で deploy 先を選ぶ) ため、 どの region に建っているかを明示する
+            (= 「Event region」 1 つだけだと混乱する、 運用フィードバック)。 */}
         <KeyValuePairs
           items={[
+            { label: t("problem_panel.region_label"), value: <code>{problem.region}</code> },
             { label: t("problem_panel.current_score_label"), value: `${problem.score} pt` },
             {
               label: t("problem_panel.last_scored_label"),

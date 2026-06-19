@@ -296,6 +296,7 @@
     "auto_delete_remaining_minutes": "{minutes} min",
     "auto_delete_soon_body": "Automatic deletion is approaching: about {remaining} remaining ({expiresAt}). Save anything you still need before teardown starts.",
     "auto_delete_expired_body": "The automatic deletion time has passed ({expiresAt}). Teardown may already be running or queued.",
+    "region_label": "Region",
     "current_score_label": "Current score",
     "last_scored_label": "Last scored",
     "outputs_header": "Access URLs",
