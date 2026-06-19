@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-047: Scheduled event deploy window &amp; auto-cleanup</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.draft { background: #ddf4ff; color: var(--c-link); }
+  .badge.accept { background: #dafbe1; color: var(--c-accept); }
+  .badge.reject { background: #ffe5e5; color: var(--c-reject); }
+  .badge.warn { background: #fff8c5; color: var(--c-warn); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  .risk-high { color: var(--c-reject); font-weight: 600; }
+  .risk-med { color: var(--c-warn); font-weight: 600; }
+  .ok { color: var(--c-accept); font-weight: 600; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  .seq { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; white-space: pre; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-047: Scheduled event deploy window &amp; auto-cleanup</h1>
+  <p><em>競技リソースを「いつデプロイし、 いつ破棄するか」 を event ごとの時間窓として宣言し、 platform が
+  aws-scheduler で既存の bulk-deploy / bulk-teardown を疎結合に駆動する。 課金は窓の幅に必ず収束する。</em></p>
+  <div class="meta">
+    <div><b>Status:</b> <span class="badge draft">Proposed</span> 2026-06-19</div>
+    <div><b>Related:</b>
+      <a href="./adr-037-disruption-timing-recurrence.html">ADR-037</a> (aws-scheduler による予約・自動停止の機構),
+      <a href="./adr-029-attack-resilience-liveness.html">ADR-029</a> (always-ends / 永続させない原則),
+      <a href="./adr-042-participant-email-invitations.html">ADR-042</a> (participant 招待),
+      <a href="./adr-046-sbt-billing-provider-boundary.html">ADR-046</a> (課金境界)
+    </div>
+  </div>
+</header>
+
+<h2>Context</h2>
+
+<p>
+  competitor account へ問題スタックを展開する経路は、 operator が UI から起動する
+  <b>bulk-deploy</b> (<code>bulk-deploy-create-state-machine</code>) と、 撤去する
+  <b>bulk-teardown</b> (<code>deploy-delete-state-machine</code>) の 2 本の Step Functions である。
+  event は <code>startsAt</code> / <code>endsAt</code> を持つが、 これらは <b>採点ゲート</b> (HealthCheck が
+  <code>now &gt;= endsAt</code> でスコアを締める) にしか効かず、 <b>リソースの生成・破棄とは無関係</b>である。
+</p>
+
+<p>つまり「いつ deploy/teardown するか」 は完全に手動の判断であり、 運用上 2 つの形が混在する:</p>
+
+<table>
+  <thead><tr><th>運用形態</th><th>アクセスの時間分布</th><th>現状の痛み</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>定刻イベント (meetup / 社内 GameDay)</td>
+      <td>開始〜終了が決まっている</td>
+      <td>開始直前に手で bulk-deploy、 終了後に手で bulk-teardown。 撤去を忘れると課金が続く。</td>
+    </tr>
+    <tr>
+      <td>ベータテスター / 個別レビュー</td>
+      <td><b>バラバラ</b> (人によって触る時刻が違う)</td>
+      <td>「いつ deploy すれば全員が触れるか」 が決められない。 事前に常時 deploy しておくと
+          <b>誰も触っていない時間も課金</b>される。 これが本 ADR の主たる動機。</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  TenkaCloud は AWS Free Tier 内に収める cost-zero を設計原則に置く (DDB を 1/1 PROVISIONED に矯正する等)。
+  「触られていない競技リソースに課金しない」 はその延長線上の要請であり、 撤去の責任を人間の記憶に委ねている
+  現状は原則に反する。
+</p>
+
+<h2>Decision</h2>
+
+<p>
+  event に <b>deploy window</b> を宣言できるようにする。 window は最大 2 つの時刻を持つ:
+</p>
+
+<table>
+  <thead><tr><th>field</th><th>意味</th><th>駆動</th></tr></thead>
+  <tbody>
+    <tr><td><code>deployAt</code> (任意)</td><td>この時刻に問題スタックを自動展開する</td><td>bulk-deploy state machine を起動</td></tr>
+    <tr><td><code>teardownAt</code> (任意)</td><td>この時刻に問題スタックを自動撤去する (= auto-cleanup)</td><td>deploy-delete state machine を起動</td></tr>
+  </tbody>
+</table>
+
+<p>
+  予約の機構は ADR-037 で導入済の <b>aws-scheduler one-shot schedule</b> を再利用する (新しい機構を増やさない)。
+  event の作成 / 更新時に、 <code>deployAt</code> / <code>teardownAt</code> それぞれに対し
+  <code>at(&lt;ISO&gt;)</code> の schedule を 1 つずつ登録し、 schedule の target は既存の bulk-deploy /
+  bulk-teardown を起動する control Lambda とする。 これにより platform は <b>「窓の宣言」 と
+  「窓の駆動」 を疎結合</b>に保つ — UI / API は時刻を書くだけ、 実際の展開・撤去は既存 state machine が担う。
+</p>
+
+<div class="seq">
+event 作成/更新 (deployAt=T1, teardownAt=T2)
+        │
+        ├─ aws-scheduler: at(T1) ─▶ deploy-window-control Lambda ─▶ StartExecution(bulk-deploy SM)
+        └─ aws-scheduler: at(T2) ─▶ deploy-window-control Lambda ─▶ StartExecution(deploy-delete SM)
+
+billing = [T1, T2] の幅だけ。 window 外は competitor account に何も存在しない。
+</div>
+
+<h3>Always-ends との結線 (ADR-029)</h3>
+<p>
+  ADR-029 は「いかなる障害も永続しない」 を不変条件に置く。 本 ADR はそれをリソース生成にも拡張する:
+  <b><code>deployAt</code> を宣言したら <code>teardownAt</code> は必須</b>とし (= 展開したら必ず撤去予約が伴う)、
+  さらに <code>teardownAt</code> は <code>endsAt</code> 以降でなければならない (= 採点が締まる前にリソースが消えない)。
+  この 2 つの制約を schema (refine) と control Lambda の両方で enforce し、 「撤去予約のない展開」 を
+  構造的に作れないようにする。
+</p>
+
+<h3>冪等性と安全性</h3>
+<ul>
+  <li><b>per-event 冪等</b>: schedule 名は <code>tc-deploy-&lt;eventId&gt;</code> /
+      <code>tc-teardown-&lt;eventId&gt;</code> で安定させ、 同 event の再 fire / 二重登録を弾く
+      (ADR-037 の revert schedule と同じ命名規約)。</li>
+  <li><b>窓は event の所有スタックのみ</b>に作用する。 teardown は当該 event の deployment 行から
+      解決した stack だけを対象にし、 他 event / 他 tenant のリソースには触れない。</li>
+  <li><b>deploy がまだ走っている最中の teardown</b> を避けるため、 control Lambda は
+      teardown 起動時に進行中の bulk-deploy execution があれば完了を待つ (= state machine の
+      終端を確認してから delete を起動)。</li>
+  <li>window を更新したら旧 schedule を delete してから新規登録する (= 時刻変更が確実に反映される)。</li>
+  <li>operator は UI から window を取り消せる (= schedule を削除し、 必要なら即時 deploy/teardown に切替)。</li>
+</ul>
+
+<h2>Alternatives considered</h2>
+
+<table>
+  <thead><tr><th>案</th><th>評価</th><th>却下理由</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>常時 pre-deploy (現状運用の一形態)</td>
+      <td><span class="risk-high">却下</span></td>
+      <td>誰も触らない時間も課金される。 cost-zero 原則に正面から反する (= 本 ADR の動機そのもの)。</td>
+    </tr>
+    <tr>
+      <td>手動 deploy/teardown のみ (現状)</td>
+      <td><span class="risk-high">却下</span></td>
+      <td>撤去忘れで課金が続く。 バラバラなアクセスに対し「いつ deploy するか」 を人間が決められない。</td>
+    </tr>
+    <tr>
+      <td>on-demand per-team (初回ログインで lazy deploy + idle TTL 撤去)</td>
+      <td><span class="risk-med">将来</span></td>
+      <td>アクセスが「数日に分散」 する場合の理想形だが、 lazy-deploy 経路 + idle 追跡 + 初回アクセスの
+          待ち時間 UX が要る。 まず窓で課金を有界化し、 必要が顕在化したら別 ADR で追加する。</td>
+    </tr>
+    <tr>
+      <td>app 内 polling で時刻判定 (scheduler を使わない)</td>
+      <td><span class="risk-med">却下</span></td>
+      <td>polling Lambda を別途常駐させる必要があり、 精度も粗い。 ADR-037 で実績のある
+          aws-scheduler の one-shot を使えば追加の常駐コストなしで分精度に予約できる。</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Consequences</h2>
+<ul>
+  <li class="ok">課金が必ず window の幅に収束する (= 撤去忘れが構造的に起きない)。 ベータ / 個別レビューでも
+      「窓を 1 つ宣言するだけ」 で安全に共有できる。</li>
+  <li class="ok">新しい機構を増やさない: 予約は ADR-037 の aws-scheduler、 展開・撤去は既存 2 本の state machine の再利用。</li>
+  <li class="ok">window 未宣言の event は従来どおり完全手動 (= 後方互換)。</li>
+  <li class="risk-med">teardown は破壊的操作。 <code>teardownAt &gt;= endsAt</code> 制約と進行中 execution の
+      待機で誤撤去を防ぐが、 operator への明示的な確認 UI と監査ログ (ADR-020 系) を併設する。</li>
+  <li class="risk-med">aws-scheduler の schedule 数・実行レートの quota を消費する (event 数 × 最大 2)。
+      one-shot は <code>ActionAfterCompletion: DELETE</code> で自動削除されるため累積はしない。</li>
+</ul>
+
+<h2>Migration</h2>
+<p>
+  追加 (additive) であり破壊的変更はない。
+</p>
+<ol>
+  <li>event schema に <code>deployAt</code> / <code>teardownAt</code> を任意で追加し、
+      <code>deployAt ⇒ teardownAt 必須</code> / <code>teardownAt &gt;= endsAt</code> を refine で enforce する。</li>
+  <li>deploy-window-control Lambda を追加し、 aws-scheduler から起動されて bulk-deploy /
+      deploy-delete state machine を StartExecution する。 IAM は対象 state machine への
+      <code>states:StartExecution</code> に scope する。</li>
+  <li>event 作成 / 更新時に window schedule を登録 / 差し替え / 削除するサービス層を加える。</li>
+  <li>application-admin-console の Event 編集に「deploy 窓」 (deploy 時刻 / 自動撤去時刻) と
+      取り消し操作を出す。 i18n は ja / en。</li>
+  <li>既存 event は window 未宣言 = 従来の手動運用のまま。 operator が必要な event にだけ窓を付ける。</li>
+</ol>
+
+</body>
+</html>
