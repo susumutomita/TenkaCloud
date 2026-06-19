@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-048: QR anonymous team join (login-key sharing without personal info)</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.draft { background: #ddf4ff; color: var(--c-link); }
+  .badge.accept { background: #dafbe1; color: var(--c-accept); }
+  .badge.reject { background: #ffe5e5; color: var(--c-reject); }
+  .badge.warn { background: #fff8c5; color: var(--c-warn); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  .risk-high { color: var(--c-reject); font-weight: 600; }
+  .risk-med { color: var(--c-warn); font-weight: 600; }
+  .ok { color: var(--c-accept); font-weight: 600; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+  .seq { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.82rem; white-space: pre; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-048: QR anonymous team join</h1>
+  <p><em>初対面・ミートアップの参加者に、 個人情報を一切もらわずチームの login key を渡す。 QR を
+  「これ読んで」 で配り、 スキャン → portal がキー入りで開く → ワンタップ参加。</em></p>
+  <div class="meta">
+    <div><b>Status:</b> <span class="badge draft">Proposed</span> 2026-06-19</div>
+    <div><b>Related:</b>
+      <a href="./adr-042-participant-email-invitations.html">ADR-042</a> (email 招待 = 既知の相手向け / revocable),
+      <a href="./adr-047-scheduled-event-deploy-window.html">ADR-047</a> (deploy 窓 = 触れる時間の有界化),
+      <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> (apps/* は共有 dist + runtime-config)
+    </div>
+  </div>
+</header>
+
+<h2>Context</h2>
+
+<p>
+  participant-portal のログインは <b>チーム単位の login key</b> で行う (team ごとに払い出される秘密鍵を
+  portal に入力 → セッション確立)。 鍵を相手に渡す手段は今のところ 2 つしかない:
+</p>
+
+<table>
+  <thead><tr><th>手段</th><th>前提</th><th>初見の人への適性</th></tr></thead>
+  <tbody>
+    <tr><td>メッセージ / チャットで鍵を送る</td><td>連絡先を既に知っている</td><td><span class="risk-high">不可</span> — 連絡先交換が要る</td></tr>
+    <tr><td>email 招待 (ADR-042)</td><td>相手の email を入力する</td><td><span class="risk-med">重い</span> — 個人情報 (email) をもらう必要がある</td></tr>
+  </tbody>
+</table>
+
+<p>
+  ミートアップや展示ブースで「その場で初見の人に触ってもらう」 とき、 上記はどちらも摩擦が大きい。
+  連絡先も email も取らずに、 <b>その場で見せて読ませるだけ</b>で参加させたい。 物理的に同席している
+  相手に短時間で渡す用途には QR が最適である。
+</p>
+
+<h2>Decision</h2>
+
+<p>
+  team ごとに <b>join URL を符号化した QR コード</b>を出す。 join URL は participant-portal の
+  起点 URL に login key を <b>fragment</b> で載せた形にする:
+</p>
+
+<pre>https://&lt;portal-origin&gt;/join#k=&lt;teamLoginKey&gt;</pre>
+
+<p>
+  スキャンした端末のブラウザが portal を開き、 portal は fragment の <code>k</code> を読んで
+  ログインフォームに自動投入 → ワンタップ (または自動) で参加する。 鍵を手入力させない。
+</p>
+
+<div class="seq">
+operator 画面 (team ごと)               初見の参加者
+  ┌─────────────┐
+  │  ▓▓ QR ▓▓   │   ── 「これ読んで」 ──▶  カメラでスキャン
+  │  Team Alpha │                         │
+  └─────────────┘                         ▼
+        ▲                       portal /join#k=… が開く
+        │                                 │
+  「投影」 表示モード                       ▼ fragment の鍵を自動投入
+  (ミートアップで大きく出す)              チーム参加 (個人情報の入力なし)
+</div>
+
+<h3>fragment を使う理由 (鍵をサーバに送らない)</h3>
+<p>
+  login key を query (<code>?k=</code>) ではなく <b>URL fragment (<code>#k=</code>)</b> に置く。
+  fragment は HTTP リクエストに含まれず、 サーバ・CloudFront・アクセスログ・Referer に <b>送信されない</b>。
+  鍵はスキャンした端末のブラウザ内だけに留まり、 portal の client JS が読んで使う。 これにより
+  「QR 経由の参加」 が中間ログに鍵を残さない。
+</p>
+
+<h3>QR の生成 (依存を増やさない)</h3>
+<p>
+  QR の符号化は <b>依存を追加せず</b>、 小さな自前エンコーダ (SVG 出力) を
+  <code>@tenkacloud/web-kit</code> に同梱して実現する。 これは本リポジトリの supply-chain 方針
+  (<code>trustedDependencies</code> を空に保ち、 lifecycle script を持つ新規 npm を増やさない) に沿う。
+  QR は client 側で SVG として描くため、 鍵がサーバや画像生成サービスに渡らない (= fragment 方針と一貫)。
+</p>
+
+<h3>セキュリティモデル</h3>
+<p>
+  join URL / QR は <b>bearer credential</b> である — 見えた人は誰でもそのチームに入れる。 これは
+  「その場で配って即参加」 という目的そのものであり、 email 招待 (1:1 / revocable, ADR-042) とは
+  <b>別レーン</b>として共存させる。 リスクは次で抑える:
+</p>
+<ul>
+  <li>鍵は fragment に置き、 中間ログ・Referer に残さない (上記)。</li>
+  <li>QR は <b>その場限り</b>の提示を前提とし、 公開ページや indexable な場所に貼らない (= 運用ガイドに明記)。</li>
+  <li>operator は team の login key を <b>rotate</b> できる (= QR を配った会が終わったら鍵を回し、 以後の参加を断つ)。
+      ADR-047 の deploy 窓と併用すれば、 そもそも触れる時間が有界化される。</li>
+  <li>scope は単一 team に閉じる (= 1 つの QR は 1 team にしか入れない。 tenant / 他 team を跨がない)。</li>
+  <li>QR は client 描画。 鍵を画像化するために外部サービスへ送らない。</li>
+</ul>
+
+<h2>Alternatives considered</h2>
+
+<table>
+  <thead><tr><th>案</th><th>評価</th><th>却下理由</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>email 招待のみ (ADR-042)</td>
+      <td><span class="risk-med">併存</span></td>
+      <td>既知の相手・revocable な配布には最適だが、 初見の人から email をもらう摩擦が大きい。 QR は
+          これを置き換えず、 anonymous-join レーンとして補完する。</td>
+    </tr>
+    <tr>
+      <td>QR に raw login key だけを符号化</td>
+      <td><span class="risk-med">却下</span></td>
+      <td>スキャン後に参加者が鍵を読み取って手入力する必要があり摩擦が残る。 join URL なら
+          スキャン → 自動で portal が開きキーが入る。</td>
+    </tr>
+    <tr>
+      <td>鍵を query (<code>?k=</code>) に載せる</td>
+      <td><span class="risk-high">却下</span></td>
+      <td>query はサーバ・CDN・アクセスログ・Referer に送信され、 鍵が中間に残る。 fragment なら残らない。</td>
+    </tr>
+    <tr>
+      <td>QR ライブラリを npm 追加</td>
+      <td><span class="risk-med">却下</span></td>
+      <td>lifecycle script を持つ新規依存は supply-chain 面を広げる。 QR は枯れた仕様で、 小さな自前
+          SVG エンコーダで十分。</td>
+    </tr>
+    <tr>
+      <td>ワンタイム / 短命トークンで参加</td>
+      <td><span class="risk-med">将来</span></td>
+      <td>より厳密だが token 発行・失効の基盤が要る。 まず鍵 rotate + deploy 窓 (ADR-047) で
+          実用的な失効性を確保し、 必要が顕在化したら別 ADR で追加する。</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Consequences</h2>
+<ul>
+  <li class="ok">初見の人に個人情報なしで「読ませるだけ」 で参加させられる (= ミートアップ / ブースの摩擦が消える)。</li>
+  <li class="ok">鍵が中間ログに残らない (fragment + client 描画)。</li>
+  <li class="ok">新規 npm 依存ゼロ (自前 QR エンコーダを web-kit に同梱)。</li>
+  <li class="ok">既存の鍵ログインは不変 (= 後方互換)。 email 招待 (ADR-042) と独立に共存。</li>
+  <li class="risk-med">join URL は bearer。 「その場限り提示」 「鍵 rotate」 「deploy 窓」 で運用的に抑える前提を
+      ガイドに明記する。</li>
+</ul>
+
+<h2>Migration</h2>
+<p>追加 (additive) であり破壊的変更はない。</p>
+<ol>
+  <li><code>@tenkacloud/web-kit</code> に no-dep の QR エンコーダ (SVG 出力) と、 join URL を組む helper を加える。</li>
+  <li>participant-portal に <code>/join</code> ルートを追加し、 fragment の <code>k</code> を読んで
+      ログインに自動投入する (鍵が無ければ通常のログイン画面)。</li>
+  <li>application-admin-console の team 一覧 / 詳細に「QR で共有」 を出す: team ごとの QR と、
+      ミートアップ用の<b>投影 (大画面) モード</b>。 鍵 rotate 操作も同画面に置く。</li>
+  <li>運用ガイド (community / facilitator docs) に bearer の注意と rotate 手順を追記。 i18n は ja / en。</li>
+  <li>既存 team は変更なし。 operator が QR を使いたい team でだけ表示する。</li>
+</ol>
+
+</body>
+</html>
