@@ -296,6 +296,7 @@
     "auto_delete_remaining_minutes": "{minutes} 分",
     "auto_delete_soon_body": "自動削除が近づいています。残り約 {remaining} です ({expiresAt})。teardown 開始前に必要な内容を退避してください。",
     "auto_delete_expired_body": "自動削除予定時刻を過ぎています ({expiresAt})。teardown が既に実行中または待機中の可能性があります。",
+    "region_label": "リージョン",
     "current_score_label": "現在の score",
     "last_scored_label": "最終加点",
     "outputs_header": "アクセス先 URL",
