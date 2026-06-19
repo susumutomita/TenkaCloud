@@ -192,7 +192,7 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
   }
 
   // Issue #1345: 30-min first-run UX — 各 phase を「[i/N] ...」 で示す。
-  const totalSteps = 3;
+  const totalSteps = 4;
   io.stdout(`\n[lite] [1/${totalSteps}] preparing source bundle (= S3 bucket + source.zip)...\n`);
 
   // Issue #1789: source bucket 取り違えで「直したはずの problem template が deploy に
@@ -218,7 +218,20 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
     return prepCode;
   }
 
-  io.stdout(`\n[lite] [2/${totalSteps}] deploying 2 stacks (= AppPlane + ProblemDeploy)...\n`);
+  io.stdout(
+    `\n[lite] [2/${totalSteps}] bootstrapping the AWS environment (= CDKToolkit; idempotent)...\n`,
+  );
+  // まっさらなアカウントでも `make deploy` がそのまま通るよう、 deploy 前に必ず cdk bootstrap を
+  // 実行する (= 冪等。 済んでいれば数秒の no-op)。 install.sh (SaaS) と lite-pipeline.yaml
+  // (Pipeline) は既に bootstrap 内蔵で、 ローカル Path B だけ抜けていたのを揃える。
+  const bootstrapCode = await io.spawnInherit(CDK_BIN, ["bootstrap"]);
+  if (bootstrapCode !== 0) {
+    io.stderr(`[lite] cdk bootstrap failed with exit code ${bootstrapCode}\n`);
+    printFailureGuide(io, "CDK bootstrap");
+    return bootstrapCode;
+  }
+
+  io.stdout(`\n[lite] [3/${totalSteps}] deploying 2 stacks (= AppPlane + ProblemDeploy)...\n`);
   io.stdout(
     "[lite]       初回 deploy は ~10 分かかります (= AWS の制約)。 cdk の出力を直接表示します。\n",
   );
@@ -236,7 +249,7 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
     return code;
   }
 
-  io.stdout(`\n[lite] [3/${totalSteps}] resolving access URLs + creating Tenant Admin...\n`);
+  io.stdout(`\n[lite] [4/${totalSteps}] resolving access URLs + creating Tenant Admin...\n`);
   const consoleUrl = await readStackOutput(LITE_STACK_NAMES.app, "ApplicationAdminConsoleUrl", io);
   const portalUrl = await readStackOutput(
     LITE_STACK_NAMES.problemDeploy,
