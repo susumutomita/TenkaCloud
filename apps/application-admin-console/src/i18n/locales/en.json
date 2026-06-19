@@ -774,6 +774,23 @@
     "recurring_active_header": "Active recurring disruptions ({count})",
     "recurring_cadence": "Interval × fires",
     "recurring_ends_at": "Auto-stops",
-    "recurring_cancel": "Cancel"
+    "recurring_cancel": "Cancel",
+    "team_status_header": "Team status",
+    "team_status_description": "Where each team stands right now — use it to time disruptions.",
+    "team_status_col_rank": "Rank",
+    "team_status_col_team": "Team",
+    "team_status_col_score": "Score",
+    "team_status_col_deploy": "Deploy",
+    "team_status_col_latest": "Latest scoring",
+    "team_status_col_fired": "Disruptions fired",
+    "team_status_solved": "{count} solved",
+    "team_status_deploy_up": "{complete}/{total} up",
+    "team_status_deploy_failed": "{count} failed",
+    "team_status_deploy_progress": "{count} deploying",
+    "team_status_deploy_none": "Not deployed",
+    "team_status_latest_none": "No scoring yet",
+    "team_status_fired_none": "None",
+    "team_status_fired_count": "{count}× · last {time}",
+    "team_status_empty": "No teams in this event."
   }
 }
