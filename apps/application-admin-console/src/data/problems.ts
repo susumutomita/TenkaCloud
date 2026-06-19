@@ -7,8 +7,30 @@
  * 静的 build-time discovery で 1 元化を保つ。
  */
 
+import {
+  analyzeProblemCost,
+  type CostRiskLevel,
+  type ProblemCostEstimate,
+} from "../../../../scripts/lib/problem-cost";
+
 export type ProblemCategory = "Battle" | "Challenge";
 export type ProblemStatus = "ready" | "draft" | "deprecated";
+
+export interface ProblemCostResourceSummary {
+  readonly logicalId: string;
+  readonly resourceType: string;
+  readonly roughHourlyUsd: number;
+  readonly riskLevel: CostRiskLevel;
+}
+
+export interface ProblemCostEstimateSummary {
+  readonly totalHourlyUsd: number;
+  readonly perSessionUsd: number | undefined;
+  readonly perDayIfLeftRunningUsd: number;
+  readonly alwaysOnResources: readonly ProblemCostResourceSummary[];
+  readonly unpricedResourceTypes: readonly string[];
+  readonly resourceTypes: readonly string[];
+}
 
 export interface ProblemSummary {
   id: string;
@@ -43,6 +65,8 @@ export interface ProblemSummary {
    * scoring 未宣言 (= deploy のみで競技要素なし) は undefined。 カタログ絞り込みの facet に使う。
    */
   scoringKind?: string;
+  /** Issue #1910: template.yaml から導出した offline cost-risk estimate。 */
+  costEstimate?: ProblemCostEstimateSummary;
 }
 
 export interface ProblemDetail extends ProblemSummary {
@@ -94,8 +118,16 @@ const metadataModules = import.meta.glob<{ default: ProblemMetadata }>(
   "../../../../problems/*/*/metadata.json",
   { eager: true },
 );
+const templateModules = import.meta.glob<string>("../../../../problems/*/*/*.yaml", {
+  eager: true,
+  import: "default",
+  query: "?raw",
+});
 
-export function metadataToDetail(metadata: ProblemMetadata): ProblemDetail {
+export function metadataToDetail(metadata: ProblemMetadata, templateYaml?: string): ProblemDetail {
+  const costEstimate = templateYaml
+    ? summarizeProblemCost(analyzeProblemCost(templateYaml, metadata.estimatedDuration))
+    : undefined;
   return {
     id: metadata.id,
     name: metadata.name,
@@ -119,12 +151,37 @@ export function metadataToDetail(metadata: ProblemMetadata): ProblemDetail {
       : {}),
     // Issue #1776: scoring.kind をカタログ facet 用に投影。 scoring 未宣言は omit。
     ...(metadata.scoring ? { scoringKind: metadata.scoring.kind } : {}),
+    ...(costEstimate ? { costEstimate } : {}),
   };
 }
 
+function summarizeProblemCost(estimate: ProblemCostEstimate): ProblemCostEstimateSummary {
+  return {
+    totalHourlyUsd: estimate.totalHourlyUsd,
+    perSessionUsd: estimate.perSessionUsd,
+    perDayIfLeftRunningUsd: estimate.perDayIfLeftRunningUsd,
+    alwaysOnResources: estimate.alwaysOnWarnings.map((resource) => ({
+      logicalId: resource.logicalId,
+      resourceType: resource.resourceType,
+      roughHourlyUsd: resource.roughHourlyUsd,
+      riskLevel: resource.riskLevel,
+    })),
+    unpricedResourceTypes: estimate.unpricedResourceTypes,
+    resourceTypes: [...new Set(estimate.resources.map((resource) => resource.resourceType))].sort(),
+  };
+}
+
+function findTemplateYaml(metadataPath: string, metadata: ProblemMetadata): string | undefined {
+  const templateName = metadata.runtime?.entry ?? metadata.cfnTemplate ?? "template.yaml";
+  const templatePath = metadataPath.replace(/metadata\.json$/, templateName);
+  return templateModules[templatePath];
+}
+
 // 表示順の安定化のため id で sort。category > id の 2 段 sort は Phase 2 で必要に応じて。
-export const PROBLEM_CATALOG: readonly ProblemDetail[] = Object.values(metadataModules)
-  .map((mod) => metadataToDetail(mod.default))
+export const PROBLEM_CATALOG: readonly ProblemDetail[] = Object.entries(metadataModules)
+  .map(([metadataPath, mod]) =>
+    metadataToDetail(mod.default, findTemplateYaml(metadataPath, mod.default)),
+  )
   .sort((a, b) => a.id.localeCompare(b.id));
 
 export function findProblem(id: string): ProblemDetail | undefined {
@@ -149,6 +206,7 @@ export function listProblemSummaries(): readonly ProblemSummary[] {
     ...(p.defaultRegion ? { defaultRegion: p.defaultRegion } : {}),
     ...(p.supportedRegions ? { supportedRegions: p.supportedRegions } : {}),
     ...(p.scoringKind ? { scoringKind: p.scoringKind } : {}),
+    ...(p.costEstimate ? { costEstimate: p.costEstimate } : {}),
     /* v8 ignore stop */
   }));
 }

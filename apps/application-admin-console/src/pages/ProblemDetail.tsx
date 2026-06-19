@@ -17,6 +17,7 @@ import {
   deploymentStatusCell,
   deploymentTeamCell,
 } from "../components/deployment-columns";
+import { ProblemCostSummary } from "../components/ProblemCostSummary";
 import type { AppConfig } from "../config";
 import { findProblem } from "../data/problems";
 import { usePollingList } from "../hooks/usePollingList";
@@ -80,6 +81,10 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
         {/* Issue #1700: description は markdown (見出し / コードブロック / 画像) を含むため、
             plain pre-wrap でなく web-kit の <Markdown> (marked + DOMPurify sanitize) で描画する。 */}
         <Markdown source={problem.description} />
+      </Container>
+
+      <Container header={<Header variant="h2">{t("problem_detail.section_cost")}</Header>}>
+        <ProblemCostSummary estimate={problem.costEstimate} t={t} />
       </Container>
 
       <Container

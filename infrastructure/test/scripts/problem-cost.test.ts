@@ -45,6 +45,7 @@ describe("problem cost model", () => {
 
   it("should parse common estimatedDuration strings", () => {
     expect(parseEstimatedDurationHours("30 分")).toBe(0.5);
+    expect(parseEstimatedDurationHours("30m")).toBe(0.5);
     expect(parseEstimatedDurationHours("60〜90 分")).toBe(1.25);
     expect(parseEstimatedDurationHours("1h 30m")).toBe(1.5);
     expect(parseEstimatedDurationHours("2 hours")).toBe(2);

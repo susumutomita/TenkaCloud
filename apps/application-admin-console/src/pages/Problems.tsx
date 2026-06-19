@@ -12,6 +12,7 @@ import SegmentedControl, {
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
+import { ProblemCostSummary } from "../components/ProblemCostSummary";
 import { listProblemSummaries, PROVIDER_LABEL, type ProblemSummary } from "../data/problems";
 import { interpolate, useT } from "../i18n";
 import {
@@ -219,6 +220,11 @@ export function ProblemsPage() {
             {
               id: "description",
               content: (item) => <Box variant="p">{item.shortDescription}</Box>,
+            },
+            {
+              id: "cost",
+              header: t("problem_cost.header"),
+              content: (item) => <ProblemCostSummary estimate={item.costEstimate} t={t} />,
             },
             {
               id: "tags",
