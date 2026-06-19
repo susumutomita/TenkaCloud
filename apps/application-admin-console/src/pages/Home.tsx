@@ -6,18 +6,12 @@ import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { useCallback, useState } from "react";
+import type React from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
-import { useApiClient } from "../api/client";
 import { useAuth } from "../auth/AuthProvider";
 import { decodeIdToken } from "../auth/claims";
-import type { AppConfig } from "../config";
 import { listProblemSummaries } from "../data/problems";
-import {
-  buildTenantExportFilename,
-  collectTenantDataExport,
-  downloadJson,
-} from "../data/tenant-data-export";
 import { useT } from "../i18n";
 import { resolveTenantDisplayName } from "../lib/tenant-display";
 
@@ -58,48 +52,21 @@ function writeOnboardingDismissed(value: boolean): void {
  * TenantAdmin のホーム画面。
  *
  *  - hero: ようこそ + テナント識別
- *  - クイックアクション: 「問題をデプロイする」「テナント設定」(後者は stub)
- *  - 問題カタログのプレビュー (件数 + ready 件数)
+ *  - 問題カタログのプレビュー (登録数 / Battle / Challenge)
  *  - テナント情報 (JWT claims)
  *
  * テナント名は JWT (custom:tenantName / custom:tenantId) から取り出す。
- * config.tenantName は pooled stack で "Shared Pooled Tenant" placeholder のため使わない。
+ * pooled stack の placeholder テナント名は使わない。
  */
-export function HomePage({ config }: { config: AppConfig }) {
+export function HomePage() {
   const navigate = useNavigate();
   const auth = useAuth();
   const t = useT();
-  const apiClient = useApiClient(config);
   const claims = auth.tokens ? decodeIdToken(auth.tokens.idToken) : null;
   const tenantName = claims?.["custom:tenantName"];
   const tenantId = claims?.["custom:tenantId"];
   const tenantTier = claims?.["custom:tenantTier"];
 
-  // Issue #1697 (audit 9): 自テナント配下の events / deployments / competitor accounts を
-  // 1 操作で JSON にまとめてダウンロードする (= データ主体の export 権)。 既存のテナント
-  // scope 済 API を再利用するため cross-tenant には触れない。
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
-  const onExportData = useCallback(async () => {
-    // button は apiClient 存在時のみ render するので null 分岐は防御 (= 不到達)。
-    /* v8 ignore next */
-    if (!apiClient) return;
-    setExporting(true);
-    setExportError(null);
-    try {
-      const exportedAt = new Date().toISOString();
-      const data = await collectTenantDataExport(apiClient, {
-        tenantId: tenantId ?? null,
-        tenantName: tenantName ?? null,
-        exportedAt,
-      });
-      downloadJson(buildTenantExportFilename(tenantId ?? null, exportedAt), data);
-    } catch (err) {
-      setExportError(err instanceof Error ? err.message : t("home.export_error_generic"));
-    } finally {
-      setExporting(false);
-    }
-  }, [apiClient, tenantId, tenantName, t]);
   // Issue #831: userEmail は TopNav 右上に移動済。 Home page で参照しない。
   // Issue #830: welcome 文に UUID を出さない。 tenantName が無いときは fallback (= "テナント")
   // を使い、 raw tenantId は 「テナント情報」 panel 側でのみ表示する。
@@ -109,9 +76,8 @@ export function HomePage({ config }: { config: AppConfig }) {
 
   const problems = listProblemSummaries();
   const totalCount = problems.length;
-  const readyCount = problems.filter((p) => p.status === "ready").length;
-  const draftCount = problems.filter((p) => p.status === "draft").length;
   const battleCount = problems.filter((p) => p.category === "Battle").length;
+  const challengeCount = problems.filter((p) => p.category === "Challenge").length;
 
   const [onboardingDismissed, setOnboardingDismissed] = useState(readOnboardingDismissed);
 
@@ -119,7 +85,6 @@ export function HomePage({ config }: { config: AppConfig }) {
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description={t("home.header_description")}
         actions={
           <Button variant="primary" onClick={() => navigate("/problems")}>
             {t("home.open_catalog")}
@@ -136,11 +101,10 @@ export function HomePage({ config }: { config: AppConfig }) {
       )}
 
       <Container header={<Header variant="h2">{t("home.catalog_header")}</Header>}>
-        <ColumnLayout columns={4} variant="text-grid">
+        <ColumnLayout columns={3} variant="text-grid">
           <Stat label={t("home.stat_total")} value={String(totalCount)} />
-          <Stat label={t("home.stat_ready")} value={String(readyCount)} />
-          <Stat label={t("home.stat_draft")} value={String(draftCount)} />
           <Stat label={t("home.stat_battle")} value={String(battleCount)} />
+          <Stat label={t("home.stat_challenge")} value={String(challengeCount)} />
         </ColumnLayout>
       </Container>
 
@@ -174,46 +138,20 @@ export function HomePage({ config }: { config: AppConfig }) {
         </Container>
       )}
 
-      <Container
-        header={
-          <Header
-            variant="h2"
-            description={t("home.export_description")}
-            actions={
-              apiClient ? (
-                <Button iconName="download" loading={exporting} onClick={onExportData}>
-                  {t("home.export_data")}
-                </Button>
-              ) : undefined
+      <Container header={<Header variant="h2">{t("home.tenant_info_header")}</Header>}>
+        <ColumnLayout columns={2} variant="text-grid">
+          <KeyValue
+            label={t("home.tenant_info_name")}
+            value={tenantName ?? t("home.value_unset")}
+          />
+          <KeyValue label={t("home.tenant_info_id")} value={tenantId ?? t("home.value_unknown")} />
+          <KeyValue
+            label={t("home.tenant_info_tier")}
+            valueNode={
+              tenantTier ? <Badge>{tenantTier}</Badge> : <span>{t("home.value_unknown")}</span>
             }
-          >
-            {t("home.tenant_info_header")}
-          </Header>
-        }
-      >
-        <SpaceBetween size="m">
-          {exportError && (
-            <Alert type="error" header={t("home.export_error_header")}>
-              {exportError}
-            </Alert>
-          )}
-          <ColumnLayout columns={2} variant="text-grid">
-            <KeyValue
-              label={t("home.tenant_info_name")}
-              value={tenantName ?? t("home.value_unset")}
-            />
-            <KeyValue
-              label={t("home.tenant_info_id")}
-              value={tenantId ?? t("home.value_unknown")}
-            />
-            <KeyValue
-              label={t("home.tenant_info_tier")}
-              valueNode={
-                tenantTier ? <Badge>{tenantTier}</Badge> : <span>{t("home.value_unknown")}</span>
-              }
-            />
-          </ColumnLayout>
-        </SpaceBetween>
+          />
+        </ColumnLayout>
       </Container>
     </SpaceBetween>
   );

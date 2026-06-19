@@ -151,13 +151,21 @@ export class ApiGateway extends Construct {
     lockScoring.addMethod("DELETE", eventIntegration, deployMethodOptions);
 
     // Issue #888 Phase A: Red Team Disruption Injection
-    //   /events/{eventId}/disruptions          GET  = catalog
-    //   /events/{eventId}/disruptions/audit    GET  = 発火履歴 (pagination)
-    //   /events/{eventId}/disruptions/fire     POST = disruption を fire
+    //   /events/{eventId}/disruptions                                  GET  = catalog
+    //   /events/{eventId}/disruptions/audit                            GET  = 発火履歴 (pagination)
+    //   /events/{eventId}/disruptions/fire                             POST = disruption を fire
+    //   [ADR-037 Slice 2] /events/{eventId}/disruptions/recurring      GET  = 実行中の定期障害 一覧
+    //   [ADR-037 Slice 2] /events/{eventId}/disruptions/recurring/{requestId}/cancel POST = 早期解除
     const disruptions = event.addResource("disruptions");
     disruptions.addMethod("GET", eventIntegration, deployMethodOptions);
     disruptions.addResource("audit").addMethod("GET", eventIntegration, deployMethodOptions);
     disruptions.addResource("fire").addMethod("POST", eventIntegration, deployMethodOptions);
+    const recurring = disruptions.addResource("recurring");
+    recurring.addMethod("GET", eventIntegration, deployMethodOptions);
+    recurring
+      .addResource("{requestId}")
+      .addResource("cancel")
+      .addMethod("POST", eventIntegration, deployMethodOptions);
 
     // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + verify
     //   /admin/competitor-accounts                                     POST=register, GET=list

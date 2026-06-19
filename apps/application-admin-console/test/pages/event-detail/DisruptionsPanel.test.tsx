@@ -2,7 +2,7 @@ import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApiClient } from "../../../src/api/client";
-import type { TeamSummary } from "../../../src/api/events-client";
+import type { EventDetail, TeamSummary } from "../../../src/api/events-client";
 import { DisruptionsPanel } from "../../../src/pages/event-detail/DisruptionsPanel";
 import type { EventTabContentProps } from "../../../src/pages/event-detail/tab-content-props";
 import { DisruptionsTab } from "../../../src/pages/event-detail/tabs";
@@ -61,13 +61,20 @@ const catalogEntry = {
 };
 
 const fakeApi = {} as ApiClient;
+const detail = (over: Partial<EventDetail> = {}): EventDetail =>
+  ({
+    eventId: "EVT1",
+    teams,
+    scoreEventsByTeam: [],
+    deploymentsByProblem: {},
+    ...over,
+  }) as unknown as EventDetail;
 const renderPanel = (apiClient: ApiClient | null = fakeApi, canMutateTenant = true) =>
   render(
     <DisruptionsPanel
       apiClient={apiClient}
       canMutateTenant={canMutateTenant}
-      eventId="EVT1"
-      teams={teams}
+      detail={detail()}
       t={t}
     />,
   );
@@ -141,13 +148,7 @@ describe("DisruptionsPanel", () => {
 
   it("should disable fire controls for a read-only viewer", async () => {
     render(
-      <DisruptionsPanel
-        apiClient={fakeApi}
-        canMutateTenant={false}
-        eventId="EVT1"
-        teams={teams}
-        t={t}
-      />,
+      <DisruptionsPanel apiClient={fakeApi} canMutateTenant={false} detail={detail()} t={t} />,
     );
     expect(await screen.findByRole("button", { name: "disruptions.fire_button" })).toBeDisabled();
   });
@@ -374,7 +375,7 @@ describe("DisruptionsPanel", () => {
     const props = {
       apiClient: fakeApi,
       canMutateTenant: true,
-      detail: { eventId: "EVT1", teams },
+      detail: detail(),
       t,
     } as unknown as EventTabContentProps;
     render(<DisruptionsTab {...props} />);

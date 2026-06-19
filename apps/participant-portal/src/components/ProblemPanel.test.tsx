@@ -87,6 +87,8 @@ describe("ProblemPanel deploy log privacy", () => {
     );
 
     expect(screen.getByText(/Starting|起動中/)).toBeInTheDocument();
+    // 各問題の region を明示する (= 「Event region」 1 つだと多リージョン時に混乱する運用 FB)。
+    expect(screen.getByText("ap-northeast-1")).toBeInTheDocument();
     expect(screen.queryByText(/Deployment terminal|デプロイ terminal/)).not.toBeInTheDocument();
     expect(screen.queryByText("Deployment job was queued.")).not.toBeInTheDocument();
     expect(
@@ -394,6 +396,23 @@ describe("ProblemPanel render branches", () => {
   it("should pass ?? defaults to the flag panel when optional fields are absent", () => {
     renderPanel({ status: "COMPLETE", scoring: { kind: "flag" } });
     expect(screen.getByTestId("flag-panel")).toBeInTheDocument();
+  });
+
+  it("should surface the aggregate service health for an uptime problem (#1917)", () => {
+    renderPanel({
+      status: "COMPLETE",
+      scoring: { kind: "uptime" },
+      applicationStatus: { overall: "down", healthyCount: 0, totalCount: 3 },
+    });
+    expect(screen.getByText(/Service health|サービス状態/)).toBeInTheDocument();
+    // 集約 health のみ (per-endpoint URL/名前は出さない); 「停止 (0/3)」 で減点理由が読める。
+    expect(screen.getByText(/Down|停止/)).toBeInTheDocument();
+    expect(screen.getByText(/0\/3/)).toBeInTheDocument();
+  });
+
+  it("should omit the service health row when no applicationStatus is present", () => {
+    renderPanel({ status: "COMPLETE", scoring: { kind: "flag" } });
+    expect(screen.queryByText(/Service health|サービス状態/)).not.toBeInTheDocument();
   });
 });
 

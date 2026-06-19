@@ -14,10 +14,11 @@ import {
   fetchDisruptionAudit,
   fetchDisruptionCatalog,
 } from "../../api/disruptions-client";
-import type { TeamSummary } from "../../api/events-client";
+import type { EventDetail } from "../../api/events-client";
 import { describeTriggers } from "../../lib/disruption-triggers";
 import { FireModal, type FireTarget, type TeamOption } from "./FireModal";
 import { RecurringPanel } from "./RecurringPanel";
+import { TeamStatusPanel } from "./TeamStatusPanel";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -33,16 +34,16 @@ const AUDIT_LIMIT = 20;
 export function DisruptionsPanel({
   apiClient,
   canMutateTenant,
-  eventId,
-  teams,
+  detail,
   t,
 }: {
   readonly apiClient: ApiClient | null;
   readonly canMutateTenant: boolean;
-  readonly eventId: string;
-  readonly teams: readonly TeamSummary[];
+  readonly detail: EventDetail;
   readonly t: Translate;
 }) {
+  // eventId / teams は EventDetail から取り出す (= status view と同じ source を共有)。
+  const { eventId, teams } = detail;
   const [catalog, setCatalog] = useState<readonly DisruptionCatalogEntry[] | null>(null);
   const [audit, setAudit] = useState<readonly DisruptionAuditRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -101,6 +102,10 @@ export function DisruptionsPanel({
             {lastFired}
           </Alert>
         ) : null}
+
+        {/* [#1916] 「いつ撃つか」 を判断するための per-team status を catalog の前に置く。
+         *  撃ち込み履歴は同じ audit を再利用 (= 二重 fetch しない)。 */}
+        <TeamStatusPanel detail={detail} audit={audit} t={t} />
 
         <Table
           variant="embedded"

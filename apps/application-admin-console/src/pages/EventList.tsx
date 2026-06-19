@@ -20,7 +20,6 @@ import {
   type EventSummary,
   listEvents,
 } from "../api/events-client";
-import { SetupGuide } from "../components/SetupGuide";
 import type { AppConfig } from "../config";
 import { usePollingList } from "../hooks/usePollingList";
 import { interpolate, useT } from "../i18n";
@@ -225,10 +224,6 @@ export function EventListPage({ config }: { config: AppConfig }) {
           {error}
         </Alert>
       )}
-
-      {/* Issue #1773: 初回セットアップガイド。 items 取得済のときだけ出す (= fetch 失敗時に
-          全 step を誤って「未完了」 表示しない)。 全 step 完了 / dismiss 済なら自動で消える。 */}
-      {items && <SetupGuide events={items} />}
 
       {archivedCount > 0 && (
         <Checkbox checked={showArchived} onChange={({ detail }) => setShowArchived(detail.checked)}>
