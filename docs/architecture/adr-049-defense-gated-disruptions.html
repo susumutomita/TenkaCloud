@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ADR-049: Defense-Gated Disruptions</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.6; max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; color: #24292f; }
+  h1, h2 { border-bottom: 1px solid #d0d7de; padding-bottom: .3rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid #d0d7de; padding: .45rem .6rem; vertical-align: top; }
+  th { background: #f6f8fa; text-align: left; }
+  code { background: #f6f8fa; padding: .1rem .3rem; border-radius: 3px; }
+  .meta { background: #f6f8fa; border-left: 4px solid #0969da; padding: .8rem 1rem; }
+  .warn { background: #fff8c5; border-left: 4px solid #9a6700; padding: .8rem 1rem; }
+  .good { background: #dafbe1; border-left: 4px solid #1a7f37; padding: .8rem 1rem; }
+  .flow { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 1rem; }
+</style>
+</head>
+<body>
+<h1>ADR-049: Defense-Gated Disruptions</h1>
+
+<div class="meta">
+  <p><strong>Status:</strong> Proposed</p>
+  <p><strong>Date:</strong> 2026-06-19</p>
+  <p><strong>Scope:</strong> Operator-fired disruptions, the cross-account injection effect, and scoring during Battle events.</p>
+  <p><strong>Relates:</strong> ADR-012 (problem = plugin), ADR-033 (disruption effect), ADR-034 (defense detection), ADR-037 (disruption timing), ADR-038 (resilience).</p>
+</div>
+
+<h2>Context</h2>
+
+<p>Battle events let an operator fire disruptions at competitor stacks (ADR-037). The injection and its scoring effect (ADR-033) are applied <em>unconditionally</em>: every targeted team is degraded and penalized the same amount, regardless of how well that team hardened its application. In live play this means a red-team attack lands 100% of the time, so building a well-defended site changes nothing. That removes the point of a defense game: a correctly-hardened team should be able to <strong>block</strong> the attack and ideally earn a reward, while only an under-defended team takes the hit.</p>
+
+<p>ADR-034 already defines how a team's defensive posture is observed: a problem exposes a posture/attack-probe signal (for example a <code>/posture</code> endpoint polled by the phased-polling scoring kind), and the result is recorded per deployment. Two realization patterns exist for attacks:</p>
+
+<table>
+  <thead>
+    <tr><th>Pattern</th><th>How the attack lands</th><th>Does defense change the outcome?</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>A — availability degrade</strong></td>
+      <td>The injected fault saturates or breaks the app; the uptime probe loses points.</td>
+      <td><strong>No.</strong> It degrades regardless of hardening. This is what makes today's attacks feel unstoppable.</td>
+    </tr>
+    <tr>
+      <td><strong>B — defense test</strong></td>
+      <td>The attack probes; the competitor app self-reports blocked/breached via an output counter, scored by the <code>attack-detection</code> kind.</td>
+      <td><strong>Yes</strong>, but only for problems that implement self-report and use that kind.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>The platform-side gap is that the injection effect never consults posture. Even when a problem <em>does</em> expose a posture signal, the operator-fired disruption degrades and penalizes a hardened team identically to an open one.</p>
+
+<h2>Decision</h2>
+
+<p>Introduce <strong>defense-gated disruptions</strong>: a declared disruption MAY carry a <code>blockedWhen</code> defense condition expressed over the problem's own posture keys. When such a disruption fires at a team, the platform evaluates that team's current posture <em>before</em> injecting:</p>
+
+<div class="flow">
+  <strong>Fire &rarr; resolve target &rarr; read team posture &rarr;</strong><br>
+  &nbsp;&nbsp;• posture satisfies <code>blockedWhen</code> &rarr; <strong>skip injection</strong>, <strong>waive the penalty</strong>, <strong>award a defense bonus</strong>, record "attack blocked".<br>
+  &nbsp;&nbsp;• posture does not satisfy it &rarr; <strong>inject as today</strong>, apply the ADR-033 effect, record "breached".
+</div>
+
+<p>Posture evaluation stays problem-owned (ADR-012): the platform dispatches the check against keys the problem declares and reports, and never hardcodes a specific problem's gates. A disruption that declares no <code>blockedWhen</code> behaves exactly as it does today, so the change is fully backward compatible and opt-in per disruption.</p>
+
+<table>
+  <thead>
+    <tr><th>Concern</th><th>Owner</th><th>Decision</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Defense condition declaration</td>
+      <td>Problem (metadata)</td>
+      <td>A <code>blockedWhen</code> field on the disruption entry referencing the problem's own posture keys (for example <code>ssh_closed</code>, <code>rate_limited</code>). The keys are the problem's contract, not a platform enumeration.</td>
+    </tr>
+    <tr>
+      <td>Posture signal</td>
+      <td>Problem (runtime)</td>
+      <td>Reuse the ADR-034 posture probe already recorded per deployment. No new probe path.</td>
+    </tr>
+    <tr>
+      <td>Gate evaluation + injection skip</td>
+      <td>Platform (executor)</td>
+      <td>The disruption executor reads the recorded posture, evaluates <code>blockedWhen</code>, and short-circuits injection when satisfied.</td>
+    </tr>
+    <tr>
+      <td>Penalty waiver + defense bonus</td>
+      <td>Platform (scoring)</td>
+      <td>The scoring effect applies neither degradation nor penalty for a blocked attack and credits a bounded defense bonus instead.</td>
+    </tr>
+    <tr>
+      <td>Outcome explanation</td>
+      <td>Platform (score events)</td>
+      <td>Each disruption resolution emits a score event that reads "attack blocked — defense bonus" or "breached — penalty".</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Scoring model</h2>
+
+<p>A breach is not punished beyond the existing ADR-033 effect; defending is the scored property, so the asymmetry favors hardening:</p>
+
+<ul>
+  <li><strong>Blocked:</strong> no degradation, no penalty, plus a fixed defense bonus declared by the problem (bounded and per-fire, so repeated fires cannot farm unlimited points).</li>
+  <li><strong>Breached:</strong> the existing degrade/penalty effect, unchanged.</li>
+</ul>
+
+<p>The bonus is declared problem-side alongside the disruption so the platform stays generic. Because a defense bonus is credited only when a fire is actually blocked, the value of hardening scales with how often the operator attacks — which is the intended incentive.</p>
+
+<h2>Interaction with existing mechanics</h2>
+
+<table>
+  <thead>
+    <tr><th>Mechanic</th><th>Behavior under defense gating</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Recurring / scheduled fires (ADR-037)</strong></td>
+      <td>Posture is re-evaluated on every individual injection. A team that hardens mid-event starts blocking subsequent fires even if earlier ones breached.</td>
+    </tr>
+    <tr>
+      <td><strong>Competitive hiding (<code>publicHint</code>)</strong></td>
+      <td>A blocked fire still respects the disruption's hiding policy. Surfacing "attack blocked" to the defender is gated by the same policy that governs whether a fault is announced, so hidden attacks stay hidden.</td>
+    </tr>
+    <tr>
+      <td><strong>Scope (all / team / random-n)</strong></td>
+      <td>Gating is evaluated independently per targeted team, so one fire can block on a hardened team and breach on an open one.</td>
+    </tr>
+    <tr>
+      <td><strong>Auto-fire triggers (ADR-013)</strong></td>
+      <td>Trigger conditions decide <em>when</em> a disruption fires; <code>blockedWhen</code> decides whether that fire lands. They compose without overlap.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Alternatives considered</h2>
+
+<table>
+  <thead>
+    <tr><th>Option</th><th>Why not chosen alone</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Problem-side only (Pattern B everywhere)</strong></td>
+      <td>Requires every attack problem to implement self-report and adopt the <code>attack-detection</code> kind. It does not make existing availability-degrade attacks (Pattern A) defensible, and migrating all of them is slow.</td>
+    </tr>
+    <tr>
+      <td><strong>Platform-side only (hardcoded gates)</strong></td>
+      <td>Would force the host to know each problem's posture semantics, violating ADR-012. The host must dispatch a declared check, not encode gates.</td>
+    </tr>
+    <tr>
+      <td><strong>Hybrid: declared condition + platform dispatch (chosen)</strong></td>
+      <td>Makes even Pattern A attacks defensible without per-problem self-report, keeps gate semantics problem-owned, and stays opt-in and backward compatible.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Consequences</h2>
+
+<ul>
+  <li>Hardening becomes the scored property: a defended team blocks the attack and is rewarded; an under-defended team takes the hit. Attacks are no longer 100% successful.</li>
+  <li>Existing disruptions are unaffected until a problem opts in by declaring <code>blockedWhen</code> and a defense bonus.</li>
+  <li>The host remains generic — it evaluates declared posture keys and never references a specific problem's gates.</li>
+  <li>Score events explain each outcome, which directly supports participant and operator status visibility.</li>
+</ul>
+
+<div class="warn">
+  <strong>Risk:</strong> A defense gate is only as trustworthy as the posture signal it reads. If a problem's posture probe can be spoofed by the competitor, the gate can be gamed. Problems that adopt <code>blockedWhen</code> must source posture from a signal the competitor cannot trivially forge, consistent with ADR-034.
+</div>
+
+<h2>Implementation slices</h2>
+
+<p>The work is platform-side plus an opt-in problem-side recipe. Suggested ordering:</p>
+
+<table>
+  <thead>
+    <tr><th>Slice</th><th>Where</th><th>Change</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1. Schema</td>
+      <td><code>infrastructure/lib/utils/discover-problems-catalog.ts</code></td>
+      <td>Add an optional <code>blockedWhen</code> (posture predicate) and a defense-bonus value to the disruption entry, with validation at catalog discovery.</td>
+    </tr>
+    <tr>
+      <td>2. Gate</td>
+      <td><code>infrastructure/lib/problem-deploy/handlers/disruption-executor-handler/execute.ts</code></td>
+      <td>Read the recorded posture for the target, evaluate <code>blockedWhen</code>, and short-circuit injection (with a "blocked" outcome) when satisfied.</td>
+    </tr>
+    <tr>
+      <td>3. Scoring</td>
+      <td><code>infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/disruption-effects.ts</code></td>
+      <td>Waive the effect for a blocked fire and credit the bounded defense bonus; keep the existing effect for a breach.</td>
+    </tr>
+    <tr>
+      <td>4. Explanation</td>
+      <td>Score events</td>
+      <td>Emit a per-resolution event reading "attack blocked — defense bonus" or "breached — penalty".</td>
+    </tr>
+    <tr>
+      <td>5. Recipe</td>
+      <td><code>.claude/skills/create-problem</code>, <code>.claude/templates/problems</code></td>
+      <td>Document and scaffold a Pattern-B attack recipe so new attack problems reward defense by construction.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="good">
+  <strong>Migration:</strong> Disruptions without <code>blockedWhen</code> are injected exactly as today. Existing Battle problems continue to run unchanged; authors adopt defense gating incrementally, one disruption at a time.
+</div>
+</body>
+</html>
