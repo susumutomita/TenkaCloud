@@ -193,6 +193,19 @@ describe("ProblemDetailPage", () => {
     expect(mockNav).toHaveBeenCalledWith("/problems");
   });
 
+  it("should render the player-facing instructions as Markdown when provided (#1929)", () => {
+    mockFindMeta.mockReturnValue(meta());
+    mockNarrative.mockReturnValue({
+      name: "Hello World",
+      shortDescription: "Solve it",
+      instructions: "First move: read the briefing",
+    });
+    mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
+    renderPage();
+    expect(screen.getByText("problem_detail.info_instructions_label")).toBeInTheDocument();
+    expect(screen.getByText("First move: read the briefing")).toBeInTheDocument();
+  });
+
   it("should render the body but skip metadata sections when there is no catalog entry", () => {
     mockFindMeta.mockReturnValue(undefined);
     mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
