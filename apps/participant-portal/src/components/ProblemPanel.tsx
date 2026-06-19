@@ -12,7 +12,7 @@ import type { DeploymentStatus, ParticipantProblemView } from "../api/portal-cli
 import { useT } from "../i18n";
 import { describeAgo } from "../lib/format";
 import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
-import type { ProblemPanelT } from "./ProblemPanel.helpers";
+import { describeApplicationStatus, type ProblemPanelT } from "./ProblemPanel.helpers";
 import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
 
 const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
@@ -197,6 +197,11 @@ export function ProblemPanel({
   const flagScoring = getCompleteFlagScoring(problem);
   const multiFlagScoring = getCompleteMultiFlagScoring(problem);
   const stackOutputs = splitStackOutputs(problem.stackOutputs);
+  // Issue #1917: uptime kind のみ集約 health を返す。 採点が減点したとき「サービスが落ちている」
+  // と一目で分かるよう Score の隣に出す (= 減点理由の可視化)。
+  const health = problem.applicationStatus
+    ? describeApplicationStatus(problem.applicationStatus, t)
+    : null;
 
   return (
     <Container
@@ -229,6 +234,16 @@ export function ProblemPanel({
           items={[
             { label: t("problem_panel.region_label"), value: <code>{problem.region}</code> },
             { label: t("problem_panel.current_score_label"), value: `${problem.score} pt` },
+            // Issue #1917: uptime のみ。 「Score が下がった = サービスが degraded/down」 を
+            // 同じ行群で結びつけ、 減点理由を競技者が把握できるようにする (per-endpoint は非露出)。
+            ...(health
+              ? [
+                  {
+                    label: t("problem_panel.health_label"),
+                    value: <StatusIndicator type={health.type}>{health.label}</StatusIndicator>,
+                  },
+                ]
+              : []),
             {
               label: t("problem_panel.last_scored_label"),
               value: describeAgo(problem.lastScoredAt, now),

@@ -397,6 +397,23 @@ describe("ProblemPanel render branches", () => {
     renderPanel({ status: "COMPLETE", scoring: { kind: "flag" } });
     expect(screen.getByTestId("flag-panel")).toBeInTheDocument();
   });
+
+  it("should surface the aggregate service health for an uptime problem (#1917)", () => {
+    renderPanel({
+      status: "COMPLETE",
+      scoring: { kind: "uptime" },
+      applicationStatus: { overall: "down", healthyCount: 0, totalCount: 3 },
+    });
+    expect(screen.getByText(/Service health|サービス状態/)).toBeInTheDocument();
+    // 集約 health のみ (per-endpoint URL/名前は出さない); 「停止 (0/3)」 で減点理由が読める。
+    expect(screen.getByText(/Down|停止/)).toBeInTheDocument();
+    expect(screen.getByText(/0\/3/)).toBeInTheDocument();
+  });
+
+  it("should omit the service health row when no applicationStatus is present", () => {
+    renderPanel({ status: "COMPLETE", scoring: { kind: "flag" } });
+    expect(screen.queryByText(/Service health|サービス状態/)).not.toBeInTheDocument();
+  });
 });
 
 describe("ProblemPanel countdown polling", () => {
