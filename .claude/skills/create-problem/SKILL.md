@@ -45,6 +45,7 @@ scaffold 生成の前に次を順番に聞き出す (= 答えが揃わないま�
 3. **想定 difficulty + duration** — difficulty 1〜5、 duration は free string (`60〜90 分` 等)。
 4. **scoring kind** — 下の決定木 / Step 0 を見て 6 種から 1 つに絞る。 迷っているうちは scaffold しない。
 5. **scaffold + 編集ガイド** — `bun run scripts/tenkacloud-problem.ts create <id> --kind <kind>` で雛形を生成し、 残った `__PLACEHOLDER__` を上の回答で埋める。
+6. **cost-risk check** — `template.yaml` 編集後に `bun run scripts/tenkacloud-problem.ts cost <id>` を実行し、 per-hour / typical-session / left-running day cost と always-on warning を確認する。
 
 決定木 (= scoring kind):
 
@@ -92,6 +93,7 @@ scoring engine は **問題の `metadata.scoring.kind` で 6 種** の評価ロ�
 
 ```bash
 bun run scripts/tenkacloud-problem.ts create <id> --kind <kind> [--category Battle|Challenge]
+bun run scripts/tenkacloud-problem.ts cost <id>
 ```
 
 例:
@@ -239,12 +241,15 @@ export default function StatusPanel({ endpoints, phases, disruptions }: PortalSl
 
 `PortalSlotProps` 型 + 予約 slot 名は `@tenkacloud/portal-plugin-sdk` 参照。
 
-## Step 6 — 検証
+## Step 6 — Cost-risk check + 検証
 
 ```bash
+bun run scripts/tenkacloud-problem.ts cost <id>  # = offline CFn resource cost-risk estimate
 make validate-problems  # = bun run scripts/validate-problems.ts (JSON Schema 適合)
 bun run scripts/tenkacloud-problem.ts validate <id>  # = metadata + template.yaml の整合 (kind 別)
 ```
+
+`cost` は AWS credentials / network 不要。 `template.yaml` の `Resources` から rough hourly USD、 typical-session cost (`estimatedDuration` ベース)、 per-day-if-left-running、 always-on warning を出す。 NAT Gateway / RDS / Load Balancer / EC2 / EIP / WAF などが出たら、 問題設計上必要な理由と cleanup 前提を PR body に書く。
 
 実 deploy の動作確認は競技者 account で:
 
@@ -266,6 +271,7 @@ aws cloudformation deploy \
 - [ ] 全リソース名 / タグに `${NamePrefix}` が冠されている
 - [ ] Outputs に competitor 向け URL + `NamePrefix` echo + scoring 用 key (= flag / counter) がある
 - [ ] `endpoints[].default.key` が template.yaml の Outputs に存在する
+- [ ] `bun run scripts/tenkacloud-problem.ts cost <id>` を確認し、 always-on warning を PR body に記載
 - [ ] `make validate-problems` が通る
 - [ ] `bun run scripts/tenkacloud-problem.ts validate <id>` が通る
 - [ ] `status` は `draft` (= ready は別 PR で review 後)

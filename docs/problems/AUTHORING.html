@@ -193,7 +193,10 @@ bun run scripts/tenkacloud-problem.ts create my-flag-challenge --kind flag
 bun run scripts/tenkacloud-problem.ts create my-battle --kind uptime-multi
 
 # 利用可能 kind 一覧
-bun run scripts/tenkacloud-problem.ts list-kinds</pre>
+bun run scripts/tenkacloud-problem.ts list-kinds
+
+# template.yaml 編集後の cost-risk estimate
+bun run scripts/tenkacloud-problem.ts cost my-battle</pre>
 
 <p>出力先は <code>problems/&lt;category&gt;/&lt;id&gt;/</code>。 category は kind から自動決定 (<code>flag</code> → Challenge、 残りは Battle)、 <code>--category</code> で上書き可能。</p>
 
@@ -290,6 +293,10 @@ bun run scripts/tenkacloud-problem.ts list-kinds</pre>
 <h2>5. Step 3 — template.yaml を書く</h2>
 
 <p>CFn ペライチ。 deploy pipeline がこの 1 file を競技者 account の CFn にアップロードする。 同一 (Account, Region) に複数 team の stack が共存するため、 <strong>全リソース名 / タグ / Group 名は <code>${NamePrefix}</code> を冠する</strong>。</p>
+
+<div class="callout warn">
+<strong>Cost-risk check:</strong> <code>template.yaml</code> を編集したら <code>bun run scripts/tenkacloud-problem.ts cost &lt;id&gt;</code> を実行する。 CLI は template の <code>Resources</code> から resource type / rough hourly USD / typical-session cost / left-running day cost / always-on warning を offline に算出する。 NAT Gateway、 RDS、 Load Balancer、 EC2、 EIP、 WAF などは idle でも cost が残るため、 PR body で根拠を説明する。
+</div>
 
 <h3>必須 Parameters</h3>
 
@@ -388,7 +395,10 @@ make validate-problems
 #    flag.flagOutputKey が存在するか、 dashboard.slots の portal/<file>.tsx が物理 file としてあるか)
 bun run scripts/tenkacloud-problem.ts validate &lt;id&gt;
 
-# 3. ローカル CFn dry-run (= 競技者 account で aws cli)
+# 3. Offline cost-risk estimate (= AWS creds / network 不要)
+bun run scripts/tenkacloud-problem.ts cost &lt;id&gt;
+
+# 4. ローカル CFn dry-run (= 競技者 account で aws cli)
 aws cloudformation deploy \
   --template-file problems/&lt;category&gt;/&lt;id&gt;/template.yaml \
   --stack-name tc-&lt;id&gt;-test \
@@ -418,6 +428,7 @@ aws cloudformation deploy \
   <li>☐ Outputs に competitor 向け URL + <code>NamePrefix</code> echo + scoring 用 key (flag / counter) がある</li>
   <li>☐ <code>endpoints[].default.key</code> が template.yaml の Outputs に存在する</li>
   <li>☐ <code>dashboard.slots[name]</code> の portal tsx が物理 file としてある</li>
+  <li>☐ <code>bun run scripts/tenkacloud-problem.ts cost &lt;id&gt;</code> を確認し、 always-on warning を PR body に記載</li>
   <li>☐ <code>make validate-problems</code> 通過</li>
   <li>☐ <code>bun run scripts/tenkacloud-problem.ts validate &lt;id&gt;</code> 通過</li>
   <li>☐ <code>status</code> は <code>draft</code> (= ready は別 PR で review 後)</li>
