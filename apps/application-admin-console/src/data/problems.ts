@@ -172,7 +172,9 @@ function summarizeProblemCost(estimate: ProblemCostEstimate): ProblemCostEstimat
 }
 
 function findTemplateYaml(metadataPath: string, metadata: ProblemMetadata): string | undefined {
-  const templateName = metadata.runtime?.entry ?? metadata.cfnTemplate ?? "template.yaml";
+  // cfnTemplate は SCHEMA 必須 (= validate-problems が保証) なので `?? "template.yaml"` の
+  // 最終 fallback は不到達。 dead branch を残さない (coverage gate / simplify)。
+  const templateName = metadata.runtime?.entry ?? metadata.cfnTemplate;
   const templatePath = metadataPath.replace(/metadata\.json$/, templateName);
   return templateModules[templatePath];
 }
