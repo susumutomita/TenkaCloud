@@ -9,7 +9,7 @@ export JSII_DEPRECATED := quiet
 .DEFAULT_GOAL := help
 
 .PHONY: help install install_ci submodule-latest build typecheck test test-coverage coverage-gate clean-test-outdir check before-commit beforecommit \
-        build-docs check-docs audit-deps build-problems-index check-problems-index \
+        build-docs check-docs oss-notices check-oss-notices audit-deps build-problems-index check-problems-index \
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
@@ -64,6 +64,8 @@ build-problems-index: ; bun run build:problems-index
 check-problems-index: ; bun run check:problems-index
 build-docs:    ; bun run scripts/build-docs.ts
 check-docs:    ; bun run scripts/build-docs.ts --check
+oss-notices:   ; bun run oss-notices
+check-oss-notices: ; bun run oss-notices:check
 check-http-status: ; bun run scripts/check-http-magic-numbers.ts
 # IAM Description が CJK で CREATE_FAILED するのを merge 前に検出 (#664)
 check-template-ascii: ; bun run scripts/check-template-ascii.ts
@@ -91,8 +93,8 @@ audit-deps:    ; bun run audit:dependencies
 # ため、 本体 before-commit / check からは外す。 platform 側 build:problems-index を走らせると
 # catalog repo の biome JSON formatter (= 別 lock 版) と微妙な drift が出てしまうため、
 # index.json の正本性は catalog 側で担保する設計。
-check:         install lint test validate-problems check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-name-limits check-no-conflicts audit-deps check-synth
-before-commit: lint test validate-problems check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-name-limits check-no-conflicts audit-deps check-synth
+check:         install lint test validate-problems check-docs check-oss-notices check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-name-limits check-no-conflicts audit-deps check-synth
+before-commit: lint test validate-problems check-docs check-oss-notices check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-name-limits check-no-conflicts audit-deps check-synth
 
 # `cdk synth` が通ることを保証 (= ts-node / tsx の module resolution、 stack 構築の type error
 # 等を本番 deploy 前にキャッチ)。 Makefile placeholder env で全 stack を synth するので AWS 認証は不要。

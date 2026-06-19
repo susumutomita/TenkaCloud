@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "bun run --filter @TenkaCloud/infrastructure build && bun run --filter @TenkaCloud/admin-console build && bun run --filter @TenkaCloud/application-admin-console build && bun run --filter @TenkaCloud/participant-portal build",
+    "build": "bun run oss-notices && bun run --filter @TenkaCloud/infrastructure build && bun run --filter @TenkaCloud/admin-console build && bun run --filter @TenkaCloud/application-admin-console build && bun run --filter @TenkaCloud/participant-portal build",
     "build:pages": "bun run --filter @TenkaCloud/participant-portal build:pages && mkdir -p landing/portal-demo && cp -r apps/participant-portal/dist/. landing/portal-demo/",
     "typecheck": "bun run --filter @TenkaCloud/infrastructure typecheck && bun run --filter @TenkaCloud/admin-console typecheck && bun run --filter @TenkaCloud/application-admin-console typecheck && bun run --filter @TenkaCloud/participant-portal typecheck && bun run --filter @TenkaCloud/trust-bridge typecheck && bun run --filter @tenkacloud/auth-client typecheck && bun run --filter @tenkacloud/saml-utils typecheck && bun run --filter @tenkacloud/problem-runtime typecheck && bun run --filter @tenkacloud/format typecheck && bun run --filter @tenkacloud/coordination-plugin-sdk typecheck && bun run --filter @tenkacloud/web-kit typecheck && bun run --filter @TenkaCloud/cli typecheck",
     "synth": "bun run --filter @TenkaCloud/infrastructure synth",
@@ -20,6 +20,8 @@
     "build:problems-index": "bun run scripts/build-problem-index.ts",
     "check:problems-index": "bun run scripts/build-problem-index.ts --check",
     "audit:dependencies": "bun run scripts/audit-dependencies.ts",
+    "oss-notices": "bun run scripts/generate-oss-notices.ts",
+    "oss-notices:check": "bun run scripts/generate-oss-notices.ts --check",
     "lint:md": "markdownlint-cli2 '**/*.md' '#**/node_modules' '#references' '#client' '#src' '#infrastructure/cdk.out' '#**/dist' '#problems/**' '#.cache/**'",
     "lint:text": "textlint '**/*.md' '!problems/**'",
     "lint:format": "biome check",

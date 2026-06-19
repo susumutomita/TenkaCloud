@@ -297,3 +297,6 @@ Contributor path:
 ## License
 
 [Apache License 2.0](./LICENSE) — use commercially, modify, and distribute.
+
+Third-party OSS redistributed in the bundled applications is listed in
+[`THIRD_PARTY_NOTICES.txt`](./THIRD_PARTY_NOTICES.txt).
