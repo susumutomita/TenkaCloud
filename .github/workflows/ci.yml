@@ -56,6 +56,15 @@ jobs:
         run: |
           make audit-deps
 
+      # Submodule pin guard: reject PRs that roll the problems/ gitlink backward or
+      # sideways (the ping-pong where an old-pin branch reverts a newer pin, e.g. #1927).
+      # Shallow checkout has no origin/main / submodule history, so fetch both first.
+      - name: Submodule pin guard (problems must not roll back)
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git -C problems fetch --no-tags --unshallow origin 2>/dev/null || git -C problems fetch --no-tags origin || true
+          make check-submodule-not-behind
+
       - name: Run textlint
         run: |
           make lint_text
