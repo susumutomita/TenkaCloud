@@ -93,13 +93,7 @@
   "auth": {
     "sign_out": "Sign out"
   },
-  "errors": {
-    "generic": "An error occurred"
-  },
   "login": {
-    "header": "TenkaCloud Admin Console",
-    "description": "Sign in as a system administrator. You will be redirected to the Cognito Hosted UI.",
-    "submit": "Sign in",
     "title": "TenkaCloud System Admin Console",
     "subtitle": "Sign in with your platform administrator account.",
     "sign_in_button": "Sign in",
@@ -131,8 +125,6 @@
     "col_status": "Status",
     "progress_danger_suffix": "may have failed",
     "progress_warning_suffix": "taking longer than expected",
-    "col_active_deploys": "In-progress problem deploys",
-    "col_failed_deploys": "Failed problem deploys",
     "col_problem_deploys": "Problem deploys",
     "col_problem_deploys_short": "Deploys",
     "col_problem_deploys_explain": "Per-tenant aggregate of problem CFn stacks on competitor AWS accounts. Blue = in-progress, red = failed (CFn CREATE/UPDATE/DELETE error). Click a tenant to drill into individual deployments.",
@@ -228,21 +220,13 @@
     "copy_success": "Copied"
   },
   "audit_log": {
-    "title": "Audit log",
-    "description": "Trail of SystemAdmin / TenantAdmin operations. Newest first, polled every 60s.",
-    "scope_all": "All tenants",
-    "scope_tenant": "Specific tenant",
-    "tenant_id_label": "Tenant ID",
     "fetch_failed": "Failed to load",
-    "fetch_more": "Load more",
-    "loading": "Loading…",
     "col_occurred_at": "Time",
     "col_actor": "Actor",
     "col_action": "Action",
     "col_result": "Result",
     "col_target": "Target",
     "empty_header": "No audit log entries",
-    "empty_hint": "Operations (tenant create / delete / IAM changes etc.) appear here when executed.",
     "page_title": "Admin Audit Log",
     "load_button": "Load",
     "load_more": "Load more",
