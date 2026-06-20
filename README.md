@@ -10,7 +10,7 @@ competitions. Organizers manage events, teams, deploys, scoring, hints, and per-
 AWS Console federation from one application; participants solve real AWS scenarios in
 isolated accounts.
 
-[Landing page](https://susumutomita.github.io/TenkaCloud/) · [Demo portal](https://susumutomita.github.io/TenkaCloud/portal-demo/?demo=1) · [Quickstart](#quickstart) · [Problem catalog](#problem-catalog) · [Architecture](#architecture)
+[Landing page](https://tenkacloud.com) · [Demo portal](https://tenkacloud.com/portal-demo/?demo=1) · [Quickstart](#quickstart) · [Problem catalog](#problem-catalog) · [Architecture](#architecture)
 
 [![CI](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
@@ -25,6 +25,16 @@ isolated accounts.
 > trademarks of Amazon.com, Inc. or its affiliates.
 
 ---
+
+## ▶ Try it — no AWS account, no install
+
+| Time | What you do | Link |
+| --- | --- | --- |
+| **30 sec** | Click through a live demo in your browser — simulated data, no backend, no AWS | **[Open the demo →](https://tenkacloud.com/portal-demo/?demo=1)** |
+| **5 min**  | Watch a full event walkthrough | [Gallery / demo video →](./docs/gallery.md) |
+| **30 min** | Deploy Lite mode into your own AWS account | [Quickstart ↓](#quickstart) |
+
+**New here?** Start at the top rung — see TenkaCloud working before installing anything.
 
 ## What TenkaCloud gives you
 
