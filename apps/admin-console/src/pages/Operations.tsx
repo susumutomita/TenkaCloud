@@ -30,6 +30,7 @@ import { listTenants, type Tenant } from "../api/tenants";
 import { useAuth } from "../auth/AuthProvider";
 import { BudgetConsumptionPanel } from "../components/BudgetConsumptionPanel";
 import type { AppConfig } from "../config";
+import { ADMIN_POLL_INTERVAL_MS } from "../constants/polling";
 import { useT } from "../i18n";
 import { computeUsageTotals } from "../lib/usage";
 
@@ -45,7 +46,6 @@ import { computeUsageTotals } from "../lib/usage";
  * CloudWatch Metrics API 連携は後続 issue に分割する。 SSE/WebSocket は使わず
  * `usePolling` の 60 秒 polling に統一する。
  */
-const OPERATIONS_POLL_INTERVAL_MS = 60_000;
 const RECENT_FAILURE_FETCH_LIMIT = 20;
 const RECENT_FAILURE_DISPLAY_LIMIT = 10;
 
@@ -196,7 +196,7 @@ export function OperationsPage({ config }: { config: AppConfig }) {
     [api, config, idToken],
   );
 
-  usePolling(refreshOperations, OPERATIONS_POLL_INTERVAL_MS, { enabled: Boolean(api && idToken) });
+  usePolling(refreshOperations, ADMIN_POLL_INTERVAL_MS, { enabled: Boolean(api && idToken) });
 
   const totals = useMemo(
     () => computeUsageTotals(snapshot?.tenants ?? [], snapshot?.insight ?? null),

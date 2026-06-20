@@ -22,6 +22,7 @@ import {
   tierBadgeColor,
 } from "../api/tenants";
 import type { AppConfig } from "../config";
+import { ADMIN_POLL_INTERVAL_MS } from "../constants/polling";
 import { useT } from "../i18n";
 
 type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
@@ -39,7 +40,6 @@ type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => 
  * 別途 admin-insight に GET /tenants/:id を追加する選択肢もあるが、 Phase 1 は既存 RCU を
  * 共有する design (= 余計な endpoint を増やさない)。
  */
-const POLL_INTERVAL_MS = 60_000;
 
 // 製品の正準 tier (tenants.ts の Tier 型 = basic/advanced/platinum)。小文字で保存された
 // tier も同じ表示に正規化する。未知の値は raw 表示に fallback (下の `?? tenant.tier`)。
@@ -79,7 +79,7 @@ export function TenantDetailPage({ config }: { config: AppConfig }) {
   }, [api, tenantId, t]);
 
   // 初回 fetch + 60s polling + unmount cleanup は usePolling (web-kit) に集約 (#1418 DRY)。
-  usePolling(refresh, POLL_INTERVAL_MS);
+  usePolling(refresh, ADMIN_POLL_INTERVAL_MS);
 
   const parsedConfig = useMemo(() => parseTenantConfig(tenant?.tenantConfig), [tenant]);
 

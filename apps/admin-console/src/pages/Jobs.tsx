@@ -20,6 +20,8 @@ import {
 } from "../api/admin-drill-down";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { JOBS_PAGE_SIZE } from "../constants/pagination";
+import { ADMIN_POLL_INTERVAL_MS } from "../constants/polling";
 import { interpolate, useT } from "../i18n";
 
 /**
@@ -31,9 +33,6 @@ import { interpolate, useT } from "../i18n";
  * Phase 1: 全 execution を flat 表示。 Phase 2 (= 別 PR) で status filter / tenant 紐付け /
  * Failed phase 詳細を追加予定。
  */
-
-const POLL_INTERVAL_MS = 60_000;
-const PAGE_SIZE = 50;
 
 const STATUS_COLOR: Record<string, "blue" | "green" | "grey" | "red"> = {
   InProgress: "blue",
@@ -78,7 +77,7 @@ export function JobsPage({ config }: { config: AppConfig }) {
   const fetchOnce = useCallback(async () => {
     if (!idToken) return;
     try {
-      const res = await fetchPipelineExecutions(config, idToken, { limit: PAGE_SIZE });
+      const res = await fetchPipelineExecutions(config, idToken, { limit: JOBS_PAGE_SIZE });
       if (res === null) {
         setNotConfigured(true);
         return;
@@ -97,7 +96,7 @@ export function JobsPage({ config }: { config: AppConfig }) {
 
   // 初回 fetch + 60s polling + unmount cleanup は usePolling (web-kit) に集約 (#1418 DRY)。
   // idToken 不在は fetchOnce 側が弾く (= JobsPage は effect レベルの gate を持たない既存挙動)。
-  usePolling(fetchOnce, POLL_INTERVAL_MS);
+  usePolling(fetchOnce, ADMIN_POLL_INTERVAL_MS);
 
   const columns = useMemo(
     () => [
@@ -242,7 +241,7 @@ export function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
     /* v8 ignore next */
     if (!idToken) return;
     try {
-      const res = await fetchStateMachineExecutions(config, idToken, { limit: PAGE_SIZE });
+      const res = await fetchStateMachineExecutions(config, idToken, { limit: JOBS_PAGE_SIZE });
       if (res === null) {
         setNotConfigured(true);
         setItems([]);
@@ -263,7 +262,7 @@ export function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
 
   // 初回 fetch + 60s polling + unmount cleanup は usePolling (web-kit) に集約 (#1418 DRY)。
   // idToken 解決前は enabled=false で timer を張らない (既存の effect gate を踏襲)。
-  usePolling(fetchOnce, POLL_INTERVAL_MS, { enabled: Boolean(idToken) });
+  usePolling(fetchOnce, ADMIN_POLL_INTERVAL_MS, { enabled: Boolean(idToken) });
 
   const sfnListUrl = useMemo(
     () => `https://${region}.console.aws.amazon.com/states/home?region=${region}#/statemachines`,
