@@ -1,4 +1,4 @@
-import { toErrorMessage } from "@tenkacloud/web-kit";
+import { toErrorMessage, usePolling } from "@tenkacloud/web-kit";
 import { StatusCodes } from "http-status-codes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, useApiClient } from "../../api/client";
@@ -11,11 +11,13 @@ import {
   TERMINAL_STATUSES,
 } from "../../api/deploy-client";
 import type { AppConfig } from "../../config";
+import { DEPLOYMENT_POLL_INTERVAL_MS } from "../../constants/polling";
 import type { StackProgressErrorState } from "./types";
 
+// deployment-cluster 共通の単一 source を再 export する (DeployLogSection が「次回更新まで N 秒」表示に使う)。
 // Lambda invocation コスト抑制のため 30 秒 (= 旧 5 秒 polling は 12 req/min/user で過多)。
 // deploy phase の進行は CloudFormation 側で数十秒〜数分単位なので、 30 秒粒度で十分。
-export const POLL_INTERVAL_MS = 30_000;
+export const POLL_INTERVAL_MS = DEPLOYMENT_POLL_INTERVAL_MS;
 
 export type UseDeploymentDetailResult = {
   readonly item: DeploymentSummary | null;
@@ -97,23 +99,28 @@ export function useDeploymentDetail(
     }
   }, [apiClient, jobId]);
 
-  useEffect(() => {
-    let cancelled = false;
-    stopPollingRef.current = false;
-    const tick = async () => {
-      if (cancelled || stopPollingRef.current) return;
+  const tick = useCallback(
+    async (isActive: () => boolean) => {
+      if (!isActive() || stopPollingRef.current) return;
       // 基本情報 + stack-progress を並列に fetch。stack-progress の error は基本情報を
       // 巻き込まない (= 別 state に閉じる)。Terminal 後も最終 stack 状態を 1 回 fetch するため
       // stopPollingRef は両 promise の after に評価する。
       await Promise.all([fetchOnce(), fetchStackProgress()]);
-    };
-    void tick();
-    const interval = setInterval(tick, POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [fetchOnce, fetchStackProgress]);
+    },
+    [fetchOnce, fetchStackProgress],
+  );
+
+  // polling を (再) 開始するたびに terminal 停止フラグをリセットする。tick の identity が変わる
+  // (= jobId / apiClient 変更で別 deployment を見始める) とき再 enable したい。usePolling の即時
+  // tick より前に走らせたいので usePolling より上に置く (effect は宣言順に setup される)。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick 変化での再 enable が目的 (body は tick を読まない)
+  useEffect(() => {
+    stopPollingRef.current = false;
+  }, [tick]);
+
+  // 即時 tick + interval polling + unmount cleanup (isActive guard) は web-kit の共有 primitive
+  // に委譲する (#1418: polling timer の boilerplate を usePolling 1 箇所へ集約)。
+  usePolling(tick, POLL_INTERVAL_MS);
 
   const reload = useCallback(() => {
     void fetchOnce({ showSpinner: true });
