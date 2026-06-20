@@ -3,19 +3,17 @@ import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
+import { buildAuthErrorHandler, createRoleCheckMiddleware } from "../shared/auth-wiring.js";
 import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
 import { RuntimeNotSupportedError } from "../shared/runtime/index.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
 import {
-  ForbiddenRoleError,
-  MissingTenantClaimError,
   requireRole,
   requireTenantNotSuspended,
   resolveTenantId,
   TENANT_ADMIN_ROLE,
   TENANT_OPERATOR_ROLE,
   TENANT_ROLES,
-  TenantSuspendedError,
 } from "./auth.js";
 import { requestTeardown } from "./delete.js";
 import {
@@ -81,59 +79,12 @@ app.use(
   }),
 );
 
-// #559 defensive layer: handler 内 try/catch を漏れた exception (= 例えば
-// `resolveTenantId(c)` の throw、middleware の throw、type 違い等) が API Gateway 層に
-// 抜けると 500 + no CORS headers で返ってしまい、browser は「Failed to fetch」とだけ
-// 表示して response body を読めない。onError で 500 を Hono response として返せば
-// CORS middleware を通って Access-Control-* headers が付き、browser は body の
-// `error` field を読めるようになる (= CloudWatch Logs に到達する前に UI で原因が見える)。
-//
-// `message` は **logs だけ** に残し response body には含めない (= 内部 IAM ARN / table 名 /
-// stack trace 等が browser に漏れない、PR-570 review 指摘)。operator は CloudWatch Logs
-// の `[deploy] uncaught handler error` 行で詳細を引く。
-app.onError((err, c) => {
-  // Issue #686: JWT に custom:tenantId が無い場合は 401 で fail-closed (= silent
-  // "unknown-tenant" 書き込みを防ぐ)。 caller (frontend) は FriendlyErrorAlert で
-  // 「再ログインしてください」 を表示する。
-  if (err instanceof MissingTenantClaimError) {
-    console.warn("[deploy] missing tenantId claim", { path: c.req.path });
-    return c.json(
-      { error: "missing_tenant_claim", message: err.message },
-      StatusCodes.UNAUTHORIZED,
-    );
-  }
-  // Issue #854 / ADR-020 Phase B.1 (#948): role 不一致は 403、 detail は body に出さず log のみ
-  // (= attacker に attack surface を教えない)。 frontend は error code "forbidden_role" を
-  // FriendlyErrorAlert にマップする。
-  if (err instanceof ForbiddenRoleError) {
-    console.warn("[deploy] forbidden role", {
-      path: c.req.path,
-      method: c.req.method,
-      actualRole: err.actualRole,
-      requiredRoles: err.requiredRoles,
-    });
-    return c.json(
-      {
-        error: "forbidden_role",
-        message: "あなたの tenant role ではこの操作を実行できません",
-      },
-      StatusCodes.FORBIDDEN,
-    );
-  }
-  if (err instanceof TenantSuspendedError) {
-    console.warn("[deploy] tenant suspended", { path: c.req.path, method: c.req.method });
-    return c.json(
-      {
-        error: "tenant_suspended",
-        message: err.message,
-      },
-      StatusCodes.FORBIDDEN,
-    );
-  }
-  const message = err instanceof Error ? err.message : "unknown error";
-  console.error("[deploy] uncaught handler error", { path: c.req.path, message });
-  return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-});
+// #559 defensive layer (詳細は shared/auth-wiring.ts の JSDoc を参照): handler 内 try/catch を
+// 漏れた exception を onError で Hono response として返し、CORS middleware を通して
+// Access-Control-* headers を付ける (= browser が「Failed to fetch」ではなく body の `error`
+// を読める)。`message` は logs だけに残し response body には含めない (PR-570 review)。operator
+// は CloudWatch Logs の `[deploy] uncaught handler error` 行で詳細を引く。
+app.onError(buildAuthErrorHandler({ logPrefix: "[deploy]" }));
 
 // ADR-020 Phase B.1 (#948): blanket middleware は **「tenant 内のいずれかの role を持つ
 // 認証済 user」** であることだけ要求する (= Admin / Operator / Viewer のいずれか)。 各 route の
@@ -141,13 +92,7 @@ app.onError((err, c) => {
 // Admin + Operator のように **route 単位で** 絞り込む (= Viewer も dropdown populate のため
 // GET には pass、 旧 broken-glass 規律で 403 になっていた regression を解消)。
 // healthz は authn / authz どちらも skip (= API GW 側で auth bypass 設定)。
-app.use("*", async (c, next) => {
-  if (c.req.path === "/healthz" || c.req.path.endsWith("/healthz")) {
-    return next();
-  }
-  requireRole(c, TENANT_ROLES);
-  return next();
-});
+app.use("*", createRoleCheckMiddleware({ healthzPath: "/healthz", roles: TENANT_ROLES }));
 
 app.get("/healthz", (c) => c.json({ ok: true }));
 
