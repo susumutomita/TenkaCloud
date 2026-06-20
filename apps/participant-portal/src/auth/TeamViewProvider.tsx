@@ -22,6 +22,7 @@ import {
 } from "../api/portal-client";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
+import { NOTIFICATIONS_POLL_INTERVAL_MS, POLL_INTERVAL_MS } from "../constants/polling";
 import { countUnread, loadLastSeenAt, saveLastSeenAt } from "../lib/notifications-storage";
 import { useAuth } from "./AuthProvider";
 import {
@@ -29,15 +30,6 @@ import {
   DEV_MOCK_NOTIFICATIONS,
   DEV_MOCK_TEAM_VIEW,
 } from "./dev-mock-fixtures";
-
-// opt-in status refresh の間隔。旧 5 秒 polling は 12 req/min/team で過多だったため使わない。
-const POLL_INTERVAL_MS = 30_000;
-/**
- * Notifications だけは 60 秒間隔で polling する (ADR-006 D3 + codex review)。
- * Events table は 1 RCU PROVISIONED なので、N 競技者 × 5 秒 polling で簡単に throttle
- * を引き起こす。Score / Leaderboard と同じ tick (5 秒) には乗せない。
- */
-const NOTIFICATIONS_POLL_INTERVAL_MS = 60_000;
 
 interface TeamViewState {
   readonly view: ParticipantTeamView | null;

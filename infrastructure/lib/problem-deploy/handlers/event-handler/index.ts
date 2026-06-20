@@ -2,14 +2,8 @@ import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
-import { StatusCodes } from "http-status-codes";
-import {
-  ForbiddenRoleError,
-  MissingTenantClaimError,
-  requireRole,
-  TENANT_ROLES,
-  TenantSuspendedError,
-} from "../deploy-handler/auth.js";
+import { TENANT_ROLES } from "../deploy-handler/auth.js";
+import { buildAuthErrorHandler, createRoleCheckMiddleware } from "../shared/auth-wiring.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
 import { registerAuditLogRoutes } from "./routes/audit-log.js";
 import { registerBulkDeployRoutes } from "./routes/bulk-deploy.js";
@@ -61,67 +55,19 @@ app.use(
   }),
 );
 
-// #559 defensive layer: handler 内 try/catch を漏れた exception (= 例えば
-// `resolveTenantId(c)` の throw、middleware の throw、type 違い等) が API Gateway 層に
-// 抜けると 500 + no CORS headers で返ってしまい、browser は「Failed to fetch」とだけ
-// 表示して response body を読めない。onError で 500 を Hono response として返せば
-// CORS middleware を通って Access-Control-* headers が付き、browser は body の
-// `error` field を読めるようになる (= CloudWatch Logs に到達する前に UI で原因が見える)。
-//
-// `message` は **logs だけ** に残し response body には含めない (= 内部 IAM ARN / table 名 /
-// stack trace 等が browser に漏れない、PR-570 review 指摘)。operator は CloudWatch Logs
-// の `[events] uncaught handler error` 行で詳細を引く。
-app.onError((err, c) => {
-  if (err instanceof MissingTenantClaimError) {
-    console.warn("[events] missing tenantId claim", { path: c.req.path });
-    return c.json(
-      { error: "missing_tenant_claim", message: err.message },
-      StatusCodes.UNAUTHORIZED,
-    );
-  }
-  // Issue #854 / ADR-020 Phase B.1 (#948): role 不一致は 403、 detail は body に出さず log のみ。
-  if (err instanceof ForbiddenRoleError) {
-    console.warn("[events] forbidden role", {
-      path: c.req.path,
-      method: c.req.method,
-      actualRole: err.actualRole,
-      requiredRoles: err.requiredRoles,
-    });
-    return c.json(
-      {
-        error: "forbidden_role",
-        message: "あなたの tenant role ではこの操作を実行できません",
-      },
-      StatusCodes.FORBIDDEN,
-    );
-  }
-  if (err instanceof TenantSuspendedError) {
-    console.warn("[events] tenant suspended", { path: c.req.path, method: c.req.method });
-    return c.json(
-      {
-        error: "tenant_suspended",
-        message: err.message,
-      },
-      StatusCodes.FORBIDDEN,
-    );
-  }
-  const message = err instanceof Error ? err.message : "unknown error";
-  console.error("[events] uncaught handler error", { path: c.req.path, message });
-  return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-});
+// #559 defensive layer (詳細は shared/auth-wiring.ts の JSDoc を参照): handler 内 try/catch を
+// 漏れた exception を onError で Hono response として返し、CORS middleware を通して
+// Access-Control-* headers を付ける (= browser が「Failed to fetch」ではなく body の `error`
+// を読める)。`message` は logs だけに残し response body には含めない (PR-570 review)。operator
+// は CloudWatch Logs の `[events] uncaught handler error` 行で詳細を引く。
+app.onError(buildAuthErrorHandler({ logPrefix: "[events]" }));
 
 // ADR-020 Phase B.1 (#948): /events/* は 「tenant 内の認証済 user」 (= Admin / Operator /
 // Viewer のいずれか) を要求し、 destructive / mutate 操作は各 route の 1 行目で `requireRole(c,
 // [...])` を呼んで absolute に絞る。 GET 系 (= list / detail / disruption catalog / audit) は
 // 3 role 全部 OK (= Viewer も event 観覧可)。
 // healthz は skip。
-app.use("/events/*", async (c, next) => {
-  if (c.req.path.endsWith("/healthz")) {
-    return next();
-  }
-  requireRole(c, TENANT_ROLES);
-  return next();
-});
+app.use("/events/*", createRoleCheckMiddleware({ healthzPath: "/healthz", roles: TENANT_ROLES }));
 
 app.get("/events/healthz", (c) => c.json({ ok: true }));
 

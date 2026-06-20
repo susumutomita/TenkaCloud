@@ -21,7 +21,7 @@
  *   - Problem deploy: tc-{problemSlug}-{teamSlug}
  */
 
-import { spawn } from "node:child_process";
+import { type SpawnResult, spawnCapture } from "./lib/spawn-utils";
 
 const HELP_TEXT = `tenkacloud ops — TenkaCloud platform observation CLI (read-only)
 
@@ -41,13 +41,10 @@ See also:
   make lite-status   (= Lite mode 専用の status、 scripts/tenkacloud-lite.ts)
 `;
 
-export interface SpawnCaptureResult {
-  readonly code: number;
-  readonly stdout: string;
-  readonly stderr: string;
-}
+/** Re-exported for backwards-compatible imports; the canonical type is `SpawnResult`. */
+export type SpawnCaptureResult = SpawnResult;
 
-export type SpawnCapture = (cmd: string, args: readonly string[]) => Promise<SpawnCaptureResult>;
+export type SpawnCapture = (cmd: string, args: readonly string[]) => Promise<SpawnResult>;
 
 export interface CliIO {
   readonly stdout: (text: string) => void;
@@ -195,32 +192,11 @@ export async function runHealth(io: CliIO, region?: string): Promise<number> {
   return computeHealthExitCode(buckets);
 }
 
-function defaultSpawnCapture(): SpawnCapture {
-  return (cmd: string, args: readonly string[]) =>
-    new Promise<SpawnCaptureResult>((resolveSpawn) => {
-      const child = spawn(cmd, args as string[], { stdio: ["ignore", "pipe", "pipe"] });
-      let stdout = "";
-      let stderr = "";
-      child.stdout.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString();
-      });
-      child.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString();
-      });
-      child.on("close", (code: number | null) => {
-        resolveSpawn({ code: code ?? 0, stdout, stderr });
-      });
-      child.on("error", (err: Error) => {
-        resolveSpawn({ code: 127, stdout: "", stderr: err.message });
-      });
-    });
-}
-
 export async function main(argv: readonly string[], ioOverride?: Partial<CliIO>): Promise<number> {
   const io: CliIO = {
     stdout: (t) => process.stdout.write(t),
     stderr: (t) => process.stderr.write(t),
-    spawnCapture: defaultSpawnCapture(),
+    spawnCapture,
     ...ioOverride,
   };
 

@@ -18,6 +18,11 @@ import { marked } from "marked";
  * `ALLOWED_URI_REGEXP` で href / src の URL scheme を制限 — `http://` / `https://` /
  * `mailto:` / 相対パス (`/`, `#`, `?`) のみ。 `javascript:` / `data:` / `vbscript:`
  * は reject される。
+ *
+ * さらに privacy hardening として DOMPurify hook を 2 本登録する (詳細は後段)。 問題作者
+ * (community contribution = 非信頼) の埋め込み外部リソースから、 閲覧した競技者の IP /
+ * Referer が第三者ホストへ漏れるのを塞ぐ — 外部 `<img>` を除去し、 `<a>` には
+ * `rel="noreferrer noopener"` を付与する。
  */
 const ALLOWED_TAGS = [
   "h1",
@@ -76,6 +81,40 @@ const FORBID_ATTR = [
  * `javascript:` / `data:` / `vbscript:` / `file:` を弾く。
  */
 const ALLOWED_URI_REGEXP = /^(?:https?:|mailto:|#|\/|\.{1,2}\/|\?)/i;
+
+/**
+ * 外部リソース URL の判定 — scheme 付き (`https:` 等) または protocol-relative (`//host`)。
+ * 相対パス (`/diagram.svg`, `./a.png`) と fragment は同一オリジン扱いで false を返す。
+ */
+const EXTERNAL_RESOURCE_URL = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
+export function isExternalResourceUrl(src: string | null): boolean {
+  return src !== null && EXTERNAL_RESOURCE_URL.test(src.trim());
+}
+
+/**
+ * Privacy hardening hooks (catnose99「Web サービス公開前チェックリスト」の入力検証 /
+ * プライバシー項目)。 DOMPurify singleton に module load 時 1 度だけ登録する。
+ *
+ *   1. 外部 `<img>` を除去 — 競技者ブラウザが作者管理ホストへ beacon (IP / Referer 漏洩 /
+ *      tracking pixel) しないようにする。 同一オリジン / 相対パス (= repo に commit した
+ *      diagram) のみ残す。
+ *   2. `<a>` に `rel="noreferrer noopener"` を付与 — リンク遷移時の Referer 漏洩と
+ *      reverse tabnabbing を防ぐ (app 全体の既存方針と一致)。
+ *
+ * いずれも非信頼な markdown source を render する全 caller (participant-portal /
+ * application-admin-console) に効く single choke point。
+ */
+DOMPurify.addHook("uponSanitizeElement", (node, data) => {
+  const el = node as Element;
+  if (data.tagName === "img" && isExternalResourceUrl(el.getAttribute("src"))) {
+    el.remove();
+  }
+});
+DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node.tagName === "A" && node.hasAttribute("href")) {
+    node.setAttribute("rel", "noreferrer noopener");
+  }
+});
 
 /**
  * Issue #661 / #865 / #1700: metadata.json の `description` 等の markdown source を HTML に

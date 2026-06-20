@@ -20,18 +20,10 @@ import {
   type EventSummary,
   listEvents,
 } from "../api/events-client";
+import { STATUS_COLOR } from "../components/event-detail/shared";
 import type { AppConfig } from "../config";
 import { usePollingList } from "../hooks/usePollingList";
 import { interpolate, useT } from "../i18n";
-
-const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"> = {
-  DRAFT: "blue",
-  DEPLOYING: "blue",
-  READY: "green",
-  ENDED: "grey",
-  TEARDOWN: "red",
-  ARCHIVED: "grey",
-};
 
 /** Archive 操作が許可される Event status (backend の archive.ts と一致)。 */
 const ARCHIVABLE_STATUSES: ReadonlySet<EventStatus> = new Set(["DRAFT", "ENDED", "TEARDOWN"]);

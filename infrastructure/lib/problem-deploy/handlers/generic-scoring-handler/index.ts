@@ -2,12 +2,12 @@ import {
   BatchGetCommand,
   type DynamoDBDocumentClient,
   QueryCommand,
-  ScanCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { decodeLargeEnvValue } from "../../../utils/env-encoding.js";
 import { buildEndpointPK } from "../../problem-endpoints-table.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
+import { forEachScanPage } from "../shared/ddb-paginate.js";
 import { writeScoreEvent } from "../shared/score-event.js";
 import { maybeFireConditionDisruptions } from "./condition-disruption-fire.js";
 import {
@@ -93,44 +93,44 @@ export async function handler(): Promise<void> {
   const operatorEffects = new Map<string, ActiveDisruptionEffect[]>();
   const queriedEvents = new Set<string>();
 
-  let exclusiveStartKey: Record<string, unknown> | undefined;
-  do {
-    const out = await shared.ddb.send(
-      new ScanCommand({
-        TableName: shared.deploymentsTableName,
-        FilterExpression: "#status = :complete",
-        ExpressionAttributeNames: { "#status": "status" },
-        ExpressionAttributeValues: { ":complete": "COMPLETE" },
-        Limit: 200,
-        ExclusiveStartKey: exclusiveStartKey,
-      }),
-    );
-    const items = (out.Items ?? []) as Partial<DeploymentItem>[];
+  // `Limit: 200` は 1 ページあたりの件数上限 (全体上限ではない)。forEachScanPage が
+  // `LastEvaluatedKey` を追って全ページ drain するので per-page の BatchGet / 並列処理は従来どおり。
+  await forEachScanPage(
+    shared.ddb,
+    {
+      TableName: shared.deploymentsTableName,
+      FilterExpression: "#status = :complete",
+      ExpressionAttributeNames: { "#status": "status" },
+      ExpressionAttributeValues: { ":complete": "COMPLETE" },
+      Limit: 200,
+    },
+    async (page) => {
+      const items = page as Partial<DeploymentItem>[];
 
-    // #558: deployment が属する event の `scoringLocked` を per-invocation で BatchGet 取得。
-    const lockedMap = await fetchScoringLockedMap(shared, items);
-    await loadOperatorEffects(shared, items, queriedEvents, operatorEffects, nowMs);
+      // #558: deployment が属する event の `scoringLocked` を per-invocation で BatchGet 取得。
+      const lockedMap = await fetchScoringLockedMap(shared, items);
+      await loadOperatorEffects(shared, items, queriedEvents, operatorEffects, nowMs);
 
-    await Promise.all(
-      items.map(async (item) => {
-        const key = `${item.eventId ?? ""}#${item.teamId ?? ""}#${item.problemId ?? ""}`;
-        await processDeployment(
-          shared,
-          item,
-          lockedMap,
-          phasesByProblemId,
-          operatorEffects.get(key) ?? [],
-          nowMs,
-          nowIso,
-        ).catch((err) => {
-          console.warn(`[generic-scoring] processDeployment failed jobId=${item.jobId}`, {
-            message: err instanceof Error ? err.message : String(err),
+      await Promise.all(
+        items.map(async (item) => {
+          const key = `${item.eventId ?? ""}#${item.teamId ?? ""}#${item.problemId ?? ""}`;
+          await processDeployment(
+            shared,
+            item,
+            lockedMap,
+            phasesByProblemId,
+            operatorEffects.get(key) ?? [],
+            nowMs,
+            nowIso,
+          ).catch((err) => {
+            console.warn(`[generic-scoring] processDeployment failed jobId=${item.jobId}`, {
+              message: err instanceof Error ? err.message : String(err),
+            });
           });
-        });
-      }),
-    );
-    exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-  } while (exclusiveStartKey);
+        }),
+      );
+    },
+  );
 
   await Promise.all([reconcilePromise, runtimeReconcilePromise]);
 }

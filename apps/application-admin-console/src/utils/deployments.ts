@@ -1,10 +1,13 @@
 import type { DeploymentSummary } from "../api/deploy-client";
+import { DEPLOYMENT_PAGE_SIZE } from "../constants/pagination";
+import { DEPLOYMENT_POLL_INTERVAL_MS } from "../constants/polling";
 
 /**
  * Polling list pages の polling 間隔。`Deployments.tsx` / `ProblemDetail.tsx` 両方で共有。
+ * deployment-cluster 共通の単一 source ({@link DEPLOYMENT_POLL_INTERVAL_MS}) を再 export する。
  * Lambda invocation コスト抑制のため 30 秒 (= 過去 10 秒 = 6 req/min/user で過多)。
  */
-export const DEPLOYMENT_LIST_POLL_INTERVAL_MS = 30_000;
+export const DEPLOYMENT_LIST_POLL_INTERVAL_MS = DEPLOYMENT_POLL_INTERVAL_MS;
 
 /**
  * Polling 結果の安定 reference 用 frozen const。`items ?? EMPTY_DEPLOYMENT_ITEMS` で
@@ -12,8 +15,11 @@ export const DEPLOYMENT_LIST_POLL_INTERVAL_MS = 30_000;
  */
 export const EMPTY_DEPLOYMENT_ITEMS: readonly DeploymentSummary[] = Object.freeze([]);
 
-/** 1 ページの最大件数。MVP-1 規模 (~10 deployments) は 1 ページで収まる。 */
-export const DEPLOYMENT_LIST_PAGE_SIZE = 50;
+/**
+ * 1 ページの最大件数。MVP-1 規模 (~10 deployments) は 1 ページで収まる。
+ * deployment-cluster 共通の単一 source ({@link DEPLOYMENT_PAGE_SIZE}) を再 export する。
+ */
+export const DEPLOYMENT_LIST_PAGE_SIZE = DEPLOYMENT_PAGE_SIZE;
 
 /**
  * Polling で取得した `DeploymentSummary[]` の前回 / 今回が「意味的に同じ」なら true。

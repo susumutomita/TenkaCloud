@@ -93,13 +93,7 @@
   "auth": {
     "sign_out": "サインアウト"
   },
-  "errors": {
-    "generic": "エラーが発生しました"
-  },
   "login": {
-    "header": "TenkaCloud Admin Console",
-    "description": "システム管理者としてサインインしてください。Cognito の Hosted UI に遷移します。",
-    "submit": "サインイン",
     "title": "TenkaCloud System Admin Console",
     "subtitle": "プラットフォーム管理者アカウントでサインインしてください。",
     "sign_in_button": "サインイン",
@@ -131,8 +125,6 @@
     "col_status": "状態",
     "progress_danger_suffix": "失敗の可能性",
     "progress_warning_suffix": "想定より長い",
-    "col_active_deploys": "進行中の問題 deploy",
-    "col_failed_deploys": "失敗した問題 deploy",
     "col_problem_deploys": "問題 deploy",
     "col_problem_deploys_short": "Deploy",
     "col_problem_deploys_explain": "競技者 AWS account 上の問題 CFn stack の集計。 青 = 進行中 (CFn CREATE/UPDATE/DELETE 進行中)、 赤 = 失敗 (CFn error)。 tenant をクリックすると個別 deployment を確認できます。",
@@ -228,21 +220,13 @@
     "copy_success": "コピーしました"
   },
   "audit_log": {
-    "title": "監査ログ",
-    "description": "SystemAdmin / TenantAdmin 操作の証跡。 最新順、 polling 60 秒。",
-    "scope_all": "全 Tenant",
-    "scope_tenant": "特定 Tenant",
-    "tenant_id_label": "Tenant ID",
     "fetch_failed": "読み込みに失敗しました",
-    "fetch_more": "さらに読み込む",
-    "loading": "読み込み中…",
     "col_occurred_at": "発生時刻",
     "col_actor": "操作者",
     "col_action": "操作",
     "col_result": "結果",
     "col_target": "対象",
     "empty_header": "監査ログがありません",
-    "empty_hint": "操作 (テナント作成 / 削除 / IAM 変更 等) を実行すると、 ここに記録が現れます。",
     "page_title": "Admin Audit Log",
     "load_button": "読み込み",
     "load_more": "続きを読み込む",

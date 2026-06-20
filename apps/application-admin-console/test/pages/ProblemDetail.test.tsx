@@ -130,18 +130,19 @@ describe("ProblemDetailPage", () => {
     expect(mockNav).toHaveBeenCalledWith("/problems");
   });
 
-  it("should render the description as markdown (heading + code + image)", () => {
+  it("should render the description as markdown (heading + code + same-origin image)", () => {
     // Issue #1700: description は web-kit <Markdown> 経由で marked + DOMPurify 描画される。
+    // privacy hardening (#1929 follow-up): 外部画像は除去され、 同一オリジン/相対のみ残る。
     mockFind.mockReturnValue(
       problem({
-        description: "## 手順\n\n```\ncfn deploy\n```\n\n![diagram](https://example.com/d.png)",
+        description: "## 手順\n\n```\ncfn deploy\n```\n\n![diagram](/assets/d.png)",
       }),
     );
     const { container } = renderPage();
     // markdown 由来の見出し (Cloudscape section の <Header variant="h2"> と別物)
     expect(screen.getByText("手順").tagName).toBe("H2");
     expect(container.querySelector("pre code")?.textContent).toContain("cfn deploy");
-    expect(container.querySelector('img[src="https://example.com/d.png"]')).not.toBeNull();
+    expect(container.querySelector('img[src="/assets/d.png"]')).not.toBeNull();
   });
 
   it("should sanitize a malicious <script> in the description", () => {

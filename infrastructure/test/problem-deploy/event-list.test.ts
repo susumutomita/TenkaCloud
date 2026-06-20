@@ -69,6 +69,50 @@ describe("listEvents", () => {
     const decoded = JSON.parse(Buffer.from(out.nextCursor, "base64url").toString("utf8"));
     expect(decoded).toEqual({ PK: "EVENT#X", SK: "META" });
   });
+
+  it("should forward a valid cursor as ExclusiveStartKey", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
+    const startKey = { PK: "EVENT#Y", SK: "META" };
+    const cursor = Buffer.from(JSON.stringify(startKey), "utf8").toString("base64url");
+
+    await listEvents(shared, { tenantId: "tenant-acme", cursor });
+
+    const cmd = ddbSend.mock.calls[0]?.[0] as QueryCommand;
+    expect(cmd.input.ExclusiveStartKey).toEqual(startKey);
+  });
+
+  it("Issue #862: should ignore cursors with keys outside the allowlist (injection guard)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
+    const evil = { PK: "EVENT#X", SK: "META", evilAttribute: "exfil" };
+    const cursor = Buffer.from(JSON.stringify(evil), "utf8").toString("base64url");
+
+    await listEvents(shared, { tenantId: "tenant-acme", cursor });
+
+    const cmd = ddbSend.mock.calls[0]?.[0] as QueryCommand;
+    expect(cmd.input.ExclusiveStartKey).toBeUndefined();
+  });
+
+  it("Issue #862: should ignore overly long cursors (DoS guard)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
+
+    await listEvents(shared, { tenantId: "tenant-acme", cursor: "a".repeat(1024) });
+
+    const cmd = ddbSend.mock.calls[0]?.[0] as QueryCommand;
+    expect(cmd.input.ExclusiveStartKey).toBeUndefined();
+  });
+
+  it("should ignore malformed cursors and start from the beginning", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
+
+    await listEvents(shared, { tenantId: "tenant-acme", cursor: "!!!not-valid!!!" });
+
+    const cmd = ddbSend.mock.calls[0]?.[0] as QueryCommand;
+    expect(cmd.input.ExclusiveStartKey).toBeUndefined();
+  });
 });
 
 describe("getEventDetail", () => {
