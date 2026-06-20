@@ -38,15 +38,15 @@ describe("renderMarkdownToSafeHtml (Issue #661 / #1700)", () => {
     expect(html).toContain("<code>npm install</code>");
   });
 
-  it("should render images from ![](https://...) with src and alt", () => {
-    const html = renderMarkdownToSafeHtml("![diagram](https://example.com/a.png)");
-    expect(html).toMatch(/<img[^>]+src="https:\/\/example\.com\/a\.png"/);
-    expect(html).toMatch(/alt="diagram"/);
-  });
-
   it("should keep relative image paths", () => {
     const html = renderMarkdownToSafeHtml("![local](./assets/a.png)");
     expect(html).toMatch(/src="\.\/assets\/a\.png"/);
+  });
+
+  it("should keep same-origin absolute image paths", () => {
+    const html = renderMarkdownToSafeHtml("![diagram](/assets/diagram.svg)");
+    expect(html).toMatch(/<img[^>]+src="\/assets\/diagram\.svg"/);
+    expect(html).toMatch(/alt="diagram"/);
   });
 
   it("XSS: should strip <script>", () => {
@@ -120,6 +120,37 @@ describe("renderMarkdownToSafeHtml (Issue #661 / #1700)", () => {
       expect(html).toMatch(/href="mailto:a@example\.com"/);
     });
   });
+
+  describe("privacy hardening: external resource leak (#1929 follow-up)", () => {
+    it("should drop external https images (= no third-party IP/Referer beacon)", () => {
+      const html = renderMarkdownToSafeHtml("![diagram](https://cdn.example.com/a.png)");
+      expect(html).not.toContain("<img");
+      expect(html).not.toContain("cdn.example.com");
+    });
+
+    it("should drop protocol-relative images", () => {
+      const html = renderMarkdownToSafeHtml("![x](//evil.example.com/a.png)");
+      expect(html).not.toContain("<img");
+      expect(html).not.toContain("evil.example.com");
+    });
+
+    it("should keep a bare <img> without a src attribute", () => {
+      const html = renderMarkdownToSafeHtml("<img>");
+      expect(html).toContain("<img");
+    });
+
+    it("should add rel=noreferrer noopener to links (= no Referer leak / tabnabbing)", () => {
+      const html = renderMarkdownToSafeHtml("[docs](https://example.com/docs)");
+      expect(html).toMatch(/<a[^>]+rel="noreferrer noopener"/);
+      expect(html).toMatch(/href="https:\/\/example\.com\/docs"/);
+    });
+
+    it("should not add rel to an anchor without href", () => {
+      const html = renderMarkdownToSafeHtml("<a>bare</a>");
+      expect(html).toContain("<a>bare</a>");
+      expect(html).not.toContain("rel=");
+    });
+  });
 });
 
 /**
@@ -134,10 +165,15 @@ describe("Markdown component (Issue #1700)", () => {
     expect(heading?.textContent).toBe("Title");
   });
 
-  it("should render an image element from markdown", () => {
-    const { container } = render(<Markdown source={"![d](https://example.com/a.png)"} />);
+  it("should render a same-origin image element from markdown", () => {
+    const { container } = render(<Markdown source={"![d](/assets/a.png)"} />);
     const img = container.querySelector("img");
-    expect(img?.getAttribute("src")).toBe("https://example.com/a.png");
+    expect(img?.getAttribute("src")).toBe("/assets/a.png");
+  });
+
+  it("should not render an external image element (privacy)", () => {
+    const { container } = render(<Markdown source={"![d](https://example.com/a.png)"} />);
+    expect(container.querySelector("img")).toBeNull();
   });
 
   it("should apply the className to the wrapper div", () => {
