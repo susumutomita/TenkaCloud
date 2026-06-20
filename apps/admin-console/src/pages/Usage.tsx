@@ -17,6 +17,7 @@ import {
 import { listTenants, type Tenant, tenantStatusBadgeColor, tierBadgeColor } from "../api/tenants";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
+import { ADMIN_POLL_INTERVAL_MS } from "../constants/polling";
 import { interpolate, useT } from "../i18n";
 import {
   buildUsageRows,
@@ -37,7 +38,6 @@ import {
  * 失敗を隠さない。 AdminInsight が「未配線 / SystemAdmin でない」 (= fetch が null を返す)
  * ケースだけは error ではなく info Alert で明示する (= サイレントな空表示にしない)。
  */
-const USAGE_POLL_INTERVAL_MS = 60 * 1000;
 
 /** 集計カード 1 枚。 testId は page test の anchor (数値は page 内で重複しうるため)。 */
 function Stat({ label, value, testId }: { label: string; value: ReactNode; testId: string }) {
@@ -112,7 +112,7 @@ export function UsagePage({ config }: { config: AppConfig }) {
   }, [auth.tokens?.idToken, tenants, config]);
 
   // 初回 fetch + 60s polling + unmount cleanup は usePolling (web-kit) に集約 (#1418 DRY)。
-  usePolling(pollInsight, USAGE_POLL_INTERVAL_MS);
+  usePolling(pollInsight, ADMIN_POLL_INTERVAL_MS);
 
   const totals = useMemo(() => computeUsageTotals(tenants ?? [], insight), [tenants, insight]);
   const tierCounts = useMemo(() => computeTierDistribution(tenants ?? []), [tenants]);

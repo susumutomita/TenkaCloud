@@ -8,10 +8,9 @@ import { useCallback, useState } from "react";
 import { type CostSummaryAvailable, fetchCostSummary } from "../api/insight";
 import { useAuth } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
-import { useT } from "../i18n";
-
 // budget は AWS 側で日次更新されるため polling 圧は最小で十分 (= 5 分)。 DescribeBudget は無料。
-const COST_POLL_INTERVAL_MS = 300_000;
+import { COST_POLL_INTERVAL_MS } from "../constants/polling";
+import { useT } from "../i18n";
 
 type CostPanelView =
   | { readonly kind: "loading" }
