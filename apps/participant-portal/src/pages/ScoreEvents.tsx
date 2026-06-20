@@ -7,7 +7,7 @@ import LineChart from "@cloudscape-design/components/line-chart";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Toggle from "@cloudscape-design/components/toggle";
-import { toErrorMessage } from "@tenkacloud/web-kit";
+import { toErrorMessage, usePolling } from "@tenkacloud/web-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getScoreEvents,
@@ -19,10 +19,9 @@ import { useAuth } from "../auth/AuthProvider";
 import { DEV_MOCK_SCORE_EVENTS } from "../auth/dev-mock-fixtures";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
+import { POLL_INTERVAL_MS } from "../constants/polling";
 import { useT } from "../i18n";
 import { ScoreEventsTable } from "./ScoreEventsTable";
-
-const POLL_INTERVAL_MS = 30_000;
 
 interface ChartPoint {
   readonly x: Date;
@@ -90,11 +89,12 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
     void tick();
   }, [isMock, sessionToken, tick]);
 
-  useEffect(() => {
-    if (!autoRefresh || isMock || !sessionToken) return;
-    const interval = setInterval(() => void tick(), POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [autoRefresh, isMock, sessionToken, tick]);
+  // auto refresh は web-kit の usePolling に集約 (#1418 DRY)。 初回 fetch は上の effect が担うので
+  // immediate:false。 enabled gate が autoRefresh + mock/session 条件を制御する。
+  usePolling(tick, POLL_INTERVAL_MS, {
+    immediate: false,
+    enabled: autoRefresh && !isMock && Boolean(sessionToken),
+  });
 
   // LP 「モックで試す」 動線: dev-mock mode では backend を叩かないので、 fixture を
   // 1 度だけ seed する (= 競技中のスコア推移 chart + 履歴 table をデモで見せる)。

@@ -5,13 +5,14 @@ import Header from "@cloudscape-design/components/header";
 import LineChart from "@cloudscape-design/components/line-chart";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Toggle from "@cloudscape-design/components/toggle";
-import { toErrorMessage } from "@tenkacloud/web-kit";
+import { toErrorMessage, usePolling } from "@tenkacloud/web-kit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getLeaderboardScoreEvents,
   type LeaderboardScoreEventsResponse,
   type TeamScoreEvents,
 } from "../api/portal-client";
+import { POLL_INTERVAL_MS } from "../constants/polling";
 import { useI18n, useT } from "../i18n";
 
 /**
@@ -22,9 +23,8 @@ import { useI18n, useT } from "../i18n";
  * 色 + 太線、 rival は控えめなパレットで visually 区別する。
  *
  * `/portal/leaderboard/score-events` は重い endpoint なので初回 1 回だけ取得する。
- * 30 秒 polling は明示的に auto refresh を有効化した場合だけ使う。
+ * 30 秒 polling (POLL_INTERVAL_MS) は明示的に auto refresh を有効化した場合だけ使う。
  */
-const POLL_INTERVAL_MS = 30_000;
 
 /** Cloudscape の categorical palette 風。 my team は別 family (= status-success の green)。 */
 const RIVAL_COLORS = [
@@ -142,11 +142,13 @@ export function ScoreTimelineChart({
     };
   }, [fetchOnce]);
 
-  useEffect(() => {
-    if (!autoRefresh || !sessionToken) return;
-    const interval = setInterval(() => void fetchOnce(), POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [autoRefresh, sessionToken, fetchOnce]);
+  // auto refresh は web-kit の usePolling に集約 (#1418 DRY)。 immediate:false で初回即時実行は
+  // 別 effect (上) が担い、 polling は次 tick から。 enabled gate が autoRefresh + session を制御する。
+  const pollTick = useCallback(() => void fetchOnce(), [fetchOnce]);
+  usePolling(pollTick, POLL_INTERVAL_MS, {
+    immediate: false,
+    enabled: autoRefresh && Boolean(sessionToken),
+  });
 
   const seriesView = useMemo(() => {
     if (!data) return null;
