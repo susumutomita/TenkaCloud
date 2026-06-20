@@ -1,5 +1,6 @@
 import { type DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { csvEscapeField } from "../../../utils/csv.js";
+import { queryAllItemsBounded } from "../shared/ddb-paginate.js";
 
 /**
  * Issue #1292: Tenant Admin 向けに 「自テナントの audit log」 を read する handler module。
@@ -16,6 +17,8 @@ import { csvEscapeField } from "../../../utils/csv.js";
 
 const LIST_LIMIT_DEFAULT = 50;
 const LIST_LIMIT_MAX = 200;
+/** CSV export が 1 tenant partition で辿る最大ページ数。memory / round-trip の上限を bound する。 */
+const EXPORT_MAX_PAGES = 200;
 
 export interface TenantAuditDeps {
   readonly ddb: DynamoDBDocumentClient;
@@ -92,7 +95,11 @@ export async function listTenantAuditEntries(
 }
 
 /**
- * CSV export 用。 全 page を辿って 1 string に集約する。 上限 5000 行で truncate。
+ * CSV export 用。 page を drain して 1 string に集約する。 上限 5000 行で truncate。
+ *
+ * tenant scope の PK 固定 query を {@link queryAllItemsBounded} で最大 EXPORT_MAX_PAGES ページ
+ * まで drain し (= memory / round-trip を bound)、 {@link listTenantAuditEntries} と同じ
+ * map / filter を適用したうえで maxRows で truncate する。
  */
 export async function exportTenantAuditCsv(
   deps: TenantAuditDeps,
@@ -100,20 +107,23 @@ export async function exportTenantAuditCsv(
   options: { maxRows?: number } = {},
 ): Promise<string> {
   const maxRows = options.maxRows ?? 5000;
+  const rows = await queryAllItemsBounded(
+    deps.ddb,
+    {
+      TableName: deps.auditTableName,
+      KeyConditionExpression: "PK = :pk",
+      ExpressionAttributeValues: { ":pk": `TENANT#${input.tenantId}` },
+      Limit: LIST_LIMIT_MAX,
+      ScanIndexForward: false,
+    },
+    EXPORT_MAX_PAGES,
+  );
   const collected: TenantAuditItem[] = [];
-  let cursor: string | undefined;
-  for (let pageIdx = 0; pageIdx < 200; pageIdx++) {
-    const page = await listTenantAuditEntries(deps, {
-      ...input,
-      limit: LIST_LIMIT_MAX,
-      ...(cursor ? { cursor } : {}),
-    });
-    for (const item of page.items) {
-      collected.push(item);
-      if (collected.length >= maxRows) return formatCsv(collected);
-    }
-    if (!page.nextCursor) break;
-    cursor = page.nextCursor;
+  for (const row of rows) {
+    const item = toAuditItem(row, input.tenantId);
+    if (!passFilters(item, input)) continue;
+    collected.push(item);
+    if (collected.length >= maxRows) break;
   }
   return formatCsv(collected);
 }

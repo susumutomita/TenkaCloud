@@ -151,6 +151,42 @@ describe("collectTeamScoreEvents", () => {
     ]);
   });
 
+  it("should cap a single deployment at MAX_PAGES_PER_DEPLOYMENT (3) pages even if more remain", async () => {
+    const { shared, ddbSend } = buildShared();
+    // 4 ページ全てに LastEvaluatedKey を付けるが、 3 ページ目で打ち止め (= 1 deployment あたりの
+    // query 回数を bound)。 4 ページ目は引かれない。
+    ddbSend.mockResolvedValueOnce({
+      Items: [ev({ occurredAt: "2026-05-08T10:00:00.000Z" })],
+      LastEvaluatedKey: { PK: "DEPLOYMENT#J1", SK: "EVENT#k1" },
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [ev({ occurredAt: "2026-05-08T10:01:00.000Z" })],
+      LastEvaluatedKey: { PK: "DEPLOYMENT#J1", SK: "EVENT#k2" },
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [ev({ occurredAt: "2026-05-08T10:02:00.000Z" })],
+      LastEvaluatedKey: { PK: "DEPLOYMENT#J1", SK: "EVENT#k3" },
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [ev({ occurredAt: "2026-05-08T10:03:00.000Z" })],
+    });
+    const teams = await collectTeamScoreEvents(shared, {
+      deployments: [{ PK: "DEPLOYMENT#J1", teamId: "TEAM_A" }],
+      displayNameByTeamId: new Map(),
+    });
+    expect(ddbSend).toHaveBeenCalledTimes(3);
+    expect(teams[0]?.events.map((e) => e.occurredAt)).toEqual([
+      "2026-05-08T10:00:00.000Z",
+      "2026-05-08T10:01:00.000Z",
+      "2026-05-08T10:02:00.000Z",
+    ]);
+    // 2 / 3 ページ目の ExclusiveStartKey は直前ページの LastEvaluatedKey を引き継ぐ。
+    const second = ddbSend.mock.calls[1]?.[0] as QueryCommand;
+    expect(second.input.ExclusiveStartKey).toEqual({ PK: "DEPLOYMENT#J1", SK: "EVENT#k1" });
+    const third = ddbSend.mock.calls[2]?.[0] as QueryCommand;
+    expect(third.input.ExclusiveStartKey).toEqual({ PK: "DEPLOYMENT#J1", SK: "EVENT#k2" });
+  });
+
   it("should return empty teams when deployments are empty (no DDB call)", async () => {
     const { shared, ddbSend } = buildShared();
     const teams = await collectTeamScoreEvents(shared, {

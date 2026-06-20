@@ -1,6 +1,9 @@
 import type { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it, vi } from "vitest";
-import { queryAllItems } from "../../lib/problem-deploy/handlers/shared/ddb-paginate";
+import {
+  queryAllItems,
+  queryAllItemsBounded,
+} from "../../lib/problem-deploy/handlers/shared/ddb-paginate";
 
 const BASE = {
   TableName: "T",
@@ -50,5 +53,30 @@ describe("queryAllItems", () => {
     const send = vi.fn().mockResolvedValue({});
     const result = await queryAllItems({ send } as never, BASE);
     expect(result).toEqual([]);
+  });
+});
+
+describe("queryAllItemsBounded", () => {
+  it("should stop at maxPages even when LastEvaluatedKey still remains", async () => {
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce({ Items: [{ jobId: "a" }], LastEvaluatedKey: { PK: "p1" } })
+      .mockResolvedValueOnce({ Items: [{ jobId: "b" }], LastEvaluatedKey: { PK: "p2" } })
+      .mockResolvedValueOnce({ Items: [{ jobId: "c" }], LastEvaluatedKey: { PK: "p3" } });
+    const result = await queryAllItemsBounded({ send } as never, BASE, 2);
+    // 上限 2 ページで打ち止め (3 ページ目以降の LastEvaluatedKey は無視)。
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(result).toEqual([{ jobId: "a" }, { jobId: "b" }]);
+    expect((send.mock.calls[1]?.[0] as QueryCommand).input.ExclusiveStartKey).toEqual({ PK: "p1" });
+  });
+
+  it("should stop early when a page returns no LastEvaluatedKey before maxPages", async () => {
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce({ Items: [{ jobId: "a" }], LastEvaluatedKey: { PK: "p1" } })
+      .mockResolvedValueOnce({ Items: [{ jobId: "b" }] });
+    const result = await queryAllItemsBounded({ send } as never, BASE, 5);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(result).toEqual([{ jobId: "a" }, { jobId: "b" }]);
   });
 });

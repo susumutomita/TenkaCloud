@@ -1,4 +1,4 @@
-import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { queryAllItemsBounded } from "../shared/ddb-paginate.js";
 import type { ScoreEventItem } from "../shared/score-event.js";
 import type { EventSharedResources } from "./shared.js";
 import type { TeamScoreEvents, TeamScoreEventView } from "./types.js";
@@ -79,26 +79,22 @@ async function collectEventsForDeployments(
   const collected: TeamScoreEventView[] = [];
   await Promise.all(
     deploymentPKs.map(async (pk) => {
-      let exclusiveStart: Record<string, unknown> | undefined;
-      let pages = 0;
-      while (pages < MAX_PAGES_PER_DEPLOYMENT && collected.length < PER_TEAM_LIMIT) {
-        const out = await shared.ddb.send(
-          new QueryCommand({
-            TableName: shared.deploymentsTableName,
-            KeyConditionExpression: "PK = :pk AND begins_with(SK, :evpfx)",
-            ExpressionAttributeValues: { ":pk": pk, ":evpfx": "EVENT#" },
-            ScanIndexForward: false,
-            Limit: PER_TEAM_LIMIT,
-            ExclusiveStartKey: exclusiveStart,
-          }),
-        );
-        for (const it of (out.Items ?? []) as Partial<ScoreEventItem>[]) {
-          const v = toView(it);
-          if (v) collected.push(v);
-        }
-        exclusiveStart = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-        pages++;
-        if (!exclusiveStart) break;
+      // 1 deployment partition あたり最大 MAX_PAGES_PER_DEPLOYMENT ページまで drain (= 1 request
+      // あたりの query 回数を bound)。全 team 合算後に caller が PER_TEAM_LIMIT で truncate する。
+      const rows = await queryAllItemsBounded(
+        shared.ddb,
+        {
+          TableName: shared.deploymentsTableName,
+          KeyConditionExpression: "PK = :pk AND begins_with(SK, :evpfx)",
+          ExpressionAttributeValues: { ":pk": pk, ":evpfx": "EVENT#" },
+          ScanIndexForward: false,
+          Limit: PER_TEAM_LIMIT,
+        },
+        MAX_PAGES_PER_DEPLOYMENT,
+      );
+      for (const it of rows as Partial<ScoreEventItem>[]) {
+        const v = toView(it);
+        if (v) collected.push(v);
       }
     }),
   );
