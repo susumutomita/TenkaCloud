@@ -44,6 +44,7 @@ export {
 } from "./i18n";
 export { LoadingState, type LoadingStateProps } from "./LoadingState";
 export { Markdown, type MarkdownProps, renderMarkdownToSafeHtml } from "./markdown";
+export { ShellLayout, type ShellLayoutProps, type ShellUserMenu } from "./ShellLayout";
 export { StatusBadge, type StatusBadgeProps, type StatusTone, statusToTone } from "./StatusBadge";
 export { useNowMs } from "./useNowMs";
 export { type UsePollingOptions, usePolling } from "./usePolling";
