@@ -12,7 +12,6 @@
     "locale_switcher_aria": "言語切替 / Language",
     "home": "ホーム",
     "events": "Events",
-    "teams": "チーム",
     "problems": "Problems",
     "deployments": "Deployments",
     "competitor_accounts": "Competitor Accounts",
@@ -24,13 +23,7 @@
   "auth": {
     "sign_out": "サインアウト"
   },
-  "errors": {
-    "generic": "エラーが発生しました"
-  },
   "login": {
-    "header": "Application Admin Console",
-    "description": "テナント開発者としてサインインしてください。サインイン画面に遷移します。",
-    "submit": "サインイン",
     "title": "TenkaCloud Application Admin Console",
     "subtitle": "ご契約テナントの運営者アカウントでサインインしてください。",
     "sign_in_button": "サインイン",
@@ -218,7 +211,6 @@
     "end_event": "Event を終了",
     "scoring_lock": "採点を lock",
     "scoring_unlock": "採点 lock を解除",
-    "delete_button": "Delete",
     "print_report": "レポートを印刷",
     "loading_title": "(loading)",
     "phase_header": "現在のフェーズ",
@@ -324,7 +316,6 @@
     "modal_schedule_header": "競技開始日時を指定",
     "modal_schedule_confirm": "予約",
     "modal_endsat_header": "競技終了日時を指定 (予約)",
-    "modal_endsat_confirm": "予約",
     "modal_date_label": "日付 (YYYY-MM-DD)",
     "modal_time_label": "時刻 (HH:mm)",
     "error_endsat_format": "終了日時の形式が不正です",
@@ -367,7 +358,6 @@
     "operations_bulk_header": "一括操作",
     "operations_bulk_description": "Event 配下の全 problem を一括で再 deploy します (header の Deploy と同じ動作)。 破壊的な teardown は下の danger zone に集約しています。",
     "operations_bulk_deploy": "全 problem を再 deploy",
-    "operations_bulk_teardown": "全 problem を teardown",
     "operations_deploy_progress_header": "Deploy 進捗詳細",
     "operations_deploy_progress_empty": "まだ deploy が行われていません。 上の 「全 problem を再 deploy」 を押すと開始します。",
     "operations_delete_header": "全 problem を teardown (danger zone)",

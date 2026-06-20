@@ -12,7 +12,6 @@
     "locale_switcher_aria": "Language switcher",
     "home": "Home",
     "events": "Events",
-    "teams": "Teams",
     "problems": "Problems",
     "deployments": "Deployments",
     "competitor_accounts": "Competitor Accounts",
@@ -24,13 +23,7 @@
   "auth": {
     "sign_out": "Sign out"
   },
-  "errors": {
-    "generic": "An error occurred"
-  },
   "login": {
-    "header": "Application Admin Console",
-    "description": "Sign in as a tenant developer. You will be redirected to the sign-in page.",
-    "submit": "Sign in",
     "title": "TenkaCloud Application Admin Console",
     "subtitle": "Sign in with your tenant operator account.",
     "sign_in_button": "Sign in",
@@ -218,7 +211,6 @@
     "end_event": "End Event",
     "scoring_lock": "Lock scoring",
     "scoring_unlock": "Unlock scoring",
-    "delete_button": "Delete",
     "print_report": "Print Report",
     "loading_title": "(loading)",
     "phase_header": "Current phase",
@@ -324,7 +316,6 @@
     "modal_schedule_header": "Set start datetime",
     "modal_schedule_confirm": "Schedule",
     "modal_endsat_header": "Set end datetime (scheduled)",
-    "modal_endsat_confirm": "Schedule",
     "modal_date_label": "Date (YYYY-MM-DD)",
     "modal_time_label": "Time (HH:mm)",
     "error_endsat_format": "Invalid end datetime format",
@@ -367,7 +358,6 @@
     "operations_bulk_header": "Bulk operations",
     "operations_bulk_description": "Redeploy every problem in the Event at once (same as the header Deploy). Destructive teardown lives in the danger zone below.",
     "operations_bulk_deploy": "Redeploy all problems",
-    "operations_bulk_teardown": "Teardown all problems",
     "operations_deploy_progress_header": "Deploy progress (detail)",
     "operations_deploy_progress_empty": "No deploy has been kicked off yet. Press \"Redeploy all problems\" above to start.",
     "operations_delete_header": "Teardown all problems (danger zone)",
