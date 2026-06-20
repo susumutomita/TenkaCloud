@@ -25,7 +25,7 @@
     "scoreboard": "Scoreboard",
     "score_events": "Score events",
     "sso_credentials": "SSO Credentials",
-    "aws_console": "AWS Console",
+    "open_console": "Open AWS Console",
     "refresh_latest": "Refresh latest",
     "auto_refresh_off": "Auto refresh: Off",
     "auto_refresh_on": "Auto refresh: On",

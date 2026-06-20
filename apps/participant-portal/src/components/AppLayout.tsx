@@ -19,6 +19,7 @@ import type { AppConfig } from "../config";
 import { useI18n } from "../i18n";
 import { CountdownTimer } from "./CountdownTimer";
 import { buildLocaleUtility } from "./locale-switcher";
+import { useConsoleAccess } from "./useConsoleAccess";
 
 type Translate = (key: string) => string;
 
@@ -88,26 +89,6 @@ export function buildAutoRefreshUtility(
 }
 
 /**
- * Issue #1919: AWS Console one-click access as a top-right utility. The federated
- * sign-in button itself lives on /tools/sso (it needs a per-deploy jobId); this
- * just makes that page reachable in one click from the top nav instead of being
- * buried in the side navigation, where playtesters could not find it.
- */
-export function buildAwsConsoleUtility(
-  navigate: (href: string) => void,
-  t: Translate,
-): TopNavigationProps.Utility {
-  return {
-    type: "button",
-    text: t("nav.aws_console"),
-    iconName: "external",
-    onClick: () => {
-      navigate("/tools/sso");
-    },
-  };
-}
-
-/**
  * Issue #1191: profile dropdown のメニュー項目を再利用可能な pure function で組む
  * (= unit test で項目構成を pin)。 競技者は「チーム名を変更」「サインアウト」の 2 つを
  * 選べる。
@@ -137,6 +118,53 @@ export function handleProfileMenuClick(
     deps.logout();
     deps.navigate("/login");
   }
+}
+
+/**
+ * Issue #1919: AWS Console への入口を右上 TopNavigation に常設する (GameDay 風)。
+ * 旧来は左ナビ「ツール → SSO 資格情報」ページ内のボタンに埋もれて競技者が気づけなかった。
+ *
+ * - deploy 済み (awsAccountId 付き) 問題が 1 つ → button でその問題の Console を直接開く。
+ * - 複数 → menu-dropdown で問題を選ばせてから開く。
+ * - 0 (まだ deploy 前) → SSO 資格情報ページへ誘導し「常設の入口」を維持する。
+ *
+ * Console は `ConsoleViewerRole` (= ReadOnlyAccess) なので read は十分広い。
+ */
+export function buildConsoleUtility(
+  problems: readonly {
+    readonly jobId: string;
+    readonly problemId: string;
+    readonly awsAccountId?: string;
+  }[],
+  openConsole: (jobId: string) => void,
+  navigate: (href: string) => void,
+  t: Translate,
+): TopNavigationProps.Utility {
+  const consolable = problems.filter((p) => p.awsAccountId);
+  if (consolable.length === 0) {
+    return {
+      type: "button",
+      text: t("nav.open_console"),
+      iconName: "external",
+      onClick: () => navigate("/tools/sso"),
+    };
+  }
+  if (consolable.length === 1) {
+    const only = consolable[0];
+    return {
+      type: "button",
+      text: t("nav.open_console"),
+      iconName: "external",
+      onClick: () => openConsole(only.jobId),
+    };
+  }
+  return {
+    type: "menu-dropdown",
+    text: t("nav.open_console"),
+    iconName: "external",
+    items: consolable.map((p) => ({ id: p.jobId, text: p.problemId })),
+    onItemClick: ({ detail }) => openConsole(detail.id),
+  };
 }
 
 export function buildProfileUtility(
@@ -251,6 +279,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
   const teamView = useTeamView();
 
   const { locale, setLocale, t } = useI18n();
+  const consoleAccess = useConsoleAccess(config);
 
   const utilities = useMemo<TopNavigationProps.Utility[]>(() => {
     // Issue #583 Phase 1.A: locale switcher utility は session 有無に依存しない (= ログイン
@@ -264,9 +293,10 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
     const rank = formatTopNavRank(config.mode, teamView.leaderboard, teamView.leaderboardNoEvent);
     return [
       localeUtility,
+      // Issue #1919: AWS Console 導線を右上常設にして「入口が分からない」を解消する。
+      buildConsoleUtility(teamView.view?.problems ?? [], consoleAccess.openConsole, navigate, t),
       buildRefreshLatestUtility(teamView.refresh, t),
       buildAutoRefreshUtility(teamView.autoRefreshEnabled, teamView.setAutoRefreshEnabled, t),
-      buildAwsConsoleUtility(navigate, t),
       // #547: 旧 `menu-dropdown` + 空 items は chevron で展開できそうに見えて何も出ない
       // という UX bug。Score / Rank の click は scoreboard ページへの遷移が自然なので
       // `type: "button"` + onClick で /scoreboard に飛ばす (= dropdown の意図不明
@@ -278,6 +308,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
     auth.session,
     auth.logout,
     navigate,
+    consoleAccess.openConsole,
     teamView.refresh,
     teamView.autoRefreshEnabled,
     teamView.setAutoRefreshEnabled,
@@ -319,6 +350,22 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
         content={
           <SpaceBetween size="m">
             <OfflineCloudModeAlert config={config} />
+            {/* Issue #1919: 右上常設 Console 導線の open 失敗 / mock blocked を全画面共通で
+             *  表示する (TopNavigation の utility は Alert を出せないため content 側に置く)。 */}
+            {consoleAccess.error && (
+              <Alert
+                type={consoleAccess.error.isMock ? "info" : "error"}
+                header={
+                  consoleAccess.error.isMock
+                    ? t("sso_credentials.mock_open_header")
+                    : t("sso_credentials.open_failed_header")
+                }
+                dismissible
+                onDismiss={consoleAccess.dismissError}
+              >
+                {consoleAccess.error.message}
+              </Alert>
+            )}
             {/* Issue #1349: 全画面共通の event countdown を header 下に固定。 endsAt が
              *  legacy deployment で undefined のときは CountdownTimer 自身が null を返す。 */}
             <Box float="right">
