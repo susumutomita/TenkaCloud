@@ -105,11 +105,11 @@ describe("event-report-stats", () => {
       expect(summary.teamCount).toBe(3);
       expect(summary.problemCount).toBe(2);
       expect(summary.totalDeployments).toBe(6);
-      // COMPLETE × 2 + AUTO_DELETED × 1 = 3
-      expect(summary.successfulDeployments).toBe(3);
+      // COMPLETE × 2 + AUTO_DELETED × 1 + DELETED × 1 = 4 (cleaned-up deploys still count as success)
+      expect(summary.successfulDeployments).toBe(4);
       // FAILED × 1 + EXPIRED × 1 = 2
       expect(summary.failedDeployments).toBe(2);
-      expect(summary.successRate).toBeCloseTo(0.5);
+      expect(summary.successRate).toBeCloseTo(0.667);
     });
 
     it("should return successRate = 0 when there are zero deployments", () => {
@@ -167,7 +167,8 @@ describe("event-report-stats", () => {
       // challenge: 1 solved (Team A); avg = (100 + -10) / 3 = 30
       expect(challenge?.solvedCount).toBe(1);
       expect(challenge?.avgScore).toBeCloseTo(30);
-      expect(challenge?.successfulCount).toBe(1);
+      // AUTO_DELETED + DELETED both count as success (EXPIRED does not)
+      expect(challenge?.successfulCount).toBe(2);
     });
   });
 

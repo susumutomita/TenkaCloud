@@ -73,6 +73,8 @@ export async function runPhasedPollingKind(
     scoreEvents: [...slotScore.scoreEvents, ...bonusScore.scoreEvents],
     endpointsHealthJson: JSON.stringify(slotScore.health),
     lastResult: allOk ? "ok" : "fail",
+    ...resolvePostureSnapshot(slotResults),
+    ...resolvePlatformSnapshot(slotResults),
     ...(newState ? { newState } : {}),
   };
 }
@@ -81,6 +83,8 @@ interface SlotResult {
   readonly slotName: string;
   readonly baseUrl: string | undefined;
   readonly platform: string | undefined;
+  readonly posture?: Record<string, boolean>;
+  readonly posturePlatform?: string;
   readonly scoreOk: boolean;
   readonly responseTimeMs: number;
 }
@@ -119,14 +123,20 @@ async function probePhasedSlot(
       responseTimeMs: 0,
     };
   }
-  const [metaProbe, scoreProbe] = await Promise.all([
+  const [metaProbe, scoreProbe, postureProbe] = await Promise.all([
     probeUrl(joinUrl(baseUrl, scoring.probe.metaPath), { readBody: true }),
     probeUrl(joinUrl(baseUrl, scorePath)),
+    scoring.probe.posturePath
+      ? probeUrl(joinUrl(baseUrl, scoring.probe.posturePath), { readBody: true })
+      : Promise.resolve(undefined),
   ]);
+  const posture = parsePostureFromBody(postureProbe?.body);
   return {
     slotName: slot.slot,
     baseUrl,
     platform: parsePlatformFromMeta(metaProbe.body),
+    ...(posture?.posture ? { posture: posture.posture } : {}),
+    ...(posture?.platform ? { posturePlatform: posture.platform } : {}),
     scoreOk: scoreProbe.ok,
     responseTimeMs: scoreProbe.responseTimeMs,
   };
@@ -227,6 +237,54 @@ function parsePlatformFromMeta(body: string | undefined): string | undefined {
   const trimmed = body.trim();
   if (trimmed.length > 0 && trimmed.length < 64) return trimmed;
   return undefined;
+}
+
+function parsePostureFromBody(
+  body: string | undefined,
+): { readonly posture?: Record<string, boolean>; readonly platform?: string } | undefined {
+  if (!body) return undefined;
+  try {
+    const parsed = JSON.parse(body) as { posture?: unknown; platform?: unknown };
+    const posture = parsePostureMap(parsed.posture);
+    const platform = typeof parsed.platform === "string" ? parsed.platform : undefined;
+    if (!posture && !platform) return undefined;
+    return {
+      ...(posture ? { posture } : {}),
+      ...(platform ? { platform } : {}),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function parsePostureMap(value: unknown): Record<string, boolean> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const posture: Record<string, boolean> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw === "boolean") posture[key] = raw;
+  }
+  return Object.keys(posture).length > 0 ? posture : undefined;
+}
+
+function resolvePostureSnapshot(slotResults: readonly SlotResult[]): {
+  readonly postureJson?: string;
+} {
+  const merged: Record<string, boolean> = {};
+  for (const slot of slotResults) {
+    if (slot.posture) Object.assign(merged, slot.posture);
+  }
+  return Object.keys(merged).length > 0 ? { postureJson: JSON.stringify(merged) } : {};
+}
+
+function resolvePlatformSnapshot(slotResults: readonly SlotResult[]): {
+  readonly platform?: string;
+} {
+  const platforms = new Set(
+    slotResults.flatMap((slot) => slot.posturePlatform ?? slot.platform ?? []),
+  );
+  if (platforms.size !== 1) return {};
+  const [platform] = platforms;
+  return platform ? { platform } : {};
 }
 
 /**

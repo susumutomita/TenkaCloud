@@ -56,6 +56,25 @@ describe("claimExecution (ADR-031 #1419)", () => {
     expect(send.mock.calls[0][0].input.Item.PK).toBe("EXEC#req-1#team-1");
   });
 
+  it("[ADR-037] phase='recurring' keys per-tick on firedAt so each tick claims once", async () => {
+    const send = vi.fn().mockResolvedValue({});
+    // tick 1 (one firedAt)
+    await claimExecution(makeResources(send), detail, 1_000_000, "recurring");
+    expect(send.mock.calls[0][0].input.Item.PK).toBe(
+      "EXEC#req-1#team-1#RECUR#2026-06-02T00:00:00.000Z",
+    );
+    // tick 2 (a later firedAt = the next aws-scheduler scheduled-time) → distinct key
+    await claimExecution(
+      makeResources(send),
+      { ...detail, firedAt: "2026-06-02T00:05:00.000Z" },
+      1_000_000,
+      "recurring",
+    );
+    expect(send.mock.calls[1][0].input.Item.PK).toBe(
+      "EXEC#req-1#team-1#RECUR#2026-06-02T00:05:00.000Z",
+    );
+  });
+
   it("should return duplicate on ConditionalCheckFailed", async () => {
     const send = vi
       .fn()

@@ -36,9 +36,9 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
   it("should look up nested dictionary entries via dot-separated key in t()", () => {
     const { result } = renderHook(() => useI18n(), { wrapper });
     act(() => result.current.setLocale("ja"));
-    expect(result.current.t("app.title")).toBe("TenkaCloud アプリケーション管理コンソール");
+    expect(result.current.t("app.title")).toBe("アプリケーション管理コンソール");
     act(() => result.current.setLocale("en"));
-    expect(result.current.t("app.title")).toBe("TenkaCloud Application Admin Console");
+    expect(result.current.t("app.title")).toBe("Application Admin Console");
   });
 
   it("should fall back to en when the key is not defined in the locale, or return raw key when also absent in en", () => {

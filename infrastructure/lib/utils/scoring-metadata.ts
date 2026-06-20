@@ -181,6 +181,7 @@ export interface PhasedPollingScoringMetadata {
   readonly probe: {
     readonly metaPath: string;
     readonly scorePath: string;
+    readonly posturePath?: string;
   };
   readonly platformRules: Readonly<Record<string, PhasedPollingPlatformRule>>;
   readonly failurePenalty?: number;
@@ -507,7 +508,11 @@ function parsePhasedPolling(value: unknown): PhasedPollingScoringMetadata | unde
   return {
     kind: "phased-polling",
     intervalMinutes: p.intervalMinutes,
-    probe: { metaPath: probe.metaPath, scorePath: probe.scorePath },
+    probe: {
+      metaPath: probe.metaPath,
+      scorePath: probe.scorePath,
+      ...(probe.posturePath ? { posturePath: probe.posturePath } : {}),
+    },
     platformRules,
     ...(typeof p.failurePenalty === "number" ? { failurePenalty: p.failurePenalty } : {}),
     ...(responsePenalties.length > 0 ? { responsePenalties } : {}),
@@ -520,11 +525,18 @@ function parsePhasedPollingProbe(
   value: unknown,
 ): PhasedPollingScoringMetadata["probe"] | undefined {
   if (!value || typeof value !== "object") return undefined;
-  const probe = value as { metaPath?: unknown; scorePath?: unknown };
+  const probe = value as { metaPath?: unknown; scorePath?: unknown; posturePath?: unknown };
   if (typeof probe.metaPath !== "string" || typeof probe.scorePath !== "string") {
     return undefined;
   }
-  return { metaPath: probe.metaPath, scorePath: probe.scorePath };
+  if (probe.posturePath !== undefined && typeof probe.posturePath !== "string") {
+    return undefined;
+  }
+  return {
+    metaPath: probe.metaPath,
+    scorePath: probe.scorePath,
+    ...(probe.posturePath ? { posturePath: probe.posturePath } : {}),
+  };
 }
 
 function parsePlatformRules(value: unknown): Record<string, PhasedPollingPlatformRule> {

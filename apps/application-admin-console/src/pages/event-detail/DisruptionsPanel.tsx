@@ -2,13 +2,7 @@ import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
-import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
-import Input from "@cloudscape-design/components/input";
-import Modal from "@cloudscape-design/components/modal";
-import Multiselect from "@cloudscape-design/components/multiselect";
-import SegmentedControl from "@cloudscape-design/components/segmented-control";
-import Select from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
 import { toErrorMessage } from "@tenkacloud/web-kit";
@@ -17,200 +11,18 @@ import type { ApiClient } from "../../api/client";
 import {
   type DisruptionAuditRow,
   type DisruptionCatalogEntry,
-  type DisruptionScope,
-  type DisruptionTiming,
-  type FireDisruptionRequest,
   fetchDisruptionAudit,
   fetchDisruptionCatalog,
-  fireDisruption,
-  newFireRequestId,
 } from "../../api/disruptions-client";
-import type { TeamSummary } from "../../api/events-client";
+import type { EventDetail } from "../../api/events-client";
 import { describeTriggers } from "../../lib/disruption-triggers";
+import { FireModal, type FireTarget, type TeamOption } from "./FireModal";
+import { RecurringPanel } from "./RecurringPanel";
+import { TeamStatusPanel } from "./TeamStatusPanel";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
-type TeamOption = { readonly value: string; readonly label: string };
-
-const SCOPE_OPTIONS: readonly DisruptionScope[] = ["all", "team", "random-n"];
 const AUDIT_LIMIT = 20;
-const DEFAULT_AFTER_MINUTES = 30;
-const MAX_AFTER_MINUTES = 1440;
-
-interface FireTarget {
-  readonly problemId: string;
-  readonly item: DisruptionCatalogEntry["disruption"];
-}
-
-/** Build the fire request from the modal state (pure — keeps the modal flat). */
-function buildFireRequest(
-  target: FireTarget,
-  scope: DisruptionScope,
-  selectedTeamIds: readonly string[],
-  timing: DisruptionTiming,
-  afterMinutes: number,
-): FireDisruptionRequest {
-  return {
-    problemId: target.problemId,
-    disruptionId: target.item.id,
-    scope,
-    ...(scope === "team" ? { targetTeamIds: selectedTeamIds } : {}),
-    ...(scope === "random-n" ? { randomCount: Math.max(selectedTeamIds.length, 1) } : {}),
-    ...(target.item.parameters ? { parameters: target.item.parameters } : {}),
-    ...(timing === "scheduled" ? { timing: "scheduled" as const, afterMinutes } : {}),
-    requestId: newFireRequestId(),
-  };
-}
-
-/**
- * Fire modal — owns its own form state (scope / timing / minutes), fires once, and reports the
- * success flash back to the panel. Extracted so the panel stays a thin list + the form is a
- * cohesive unit ([ADR-037] adds the immediate/scheduled timing toggle here).
- */
-function FireModal({
-  apiClient,
-  canMutateTenant,
-  eventId,
-  target,
-  teamOptions,
-  t,
-  onClose,
-  onFired,
-}: {
-  readonly apiClient: ApiClient;
-  readonly canMutateTenant: boolean;
-  readonly eventId: string;
-  readonly target: FireTarget;
-  readonly teamOptions: readonly TeamOption[];
-  readonly t: Translate;
-  readonly onClose: () => void;
-  readonly onFired: (flash: string) => void;
-}) {
-  const [scope, setScope] = useState<DisruptionScope>("all");
-  const [selectedTeamIds, setSelectedTeamIds] = useState<readonly string[]>([]);
-  const [timing, setTiming] = useState<DisruptionTiming>("immediate");
-  const [afterMinutes, setAfterMinutes] = useState<number>(
-    target.item.defaultAfterMinutes ?? DEFAULT_AFTER_MINUTES,
-  );
-  const [firing, setFiring] = useState(false);
-  const [fireError, setFireError] = useState<string | null>(null);
-
-  const scheduleInvalid =
-    timing === "scheduled" &&
-    (!Number.isInteger(afterMinutes) || afterMinutes < 1 || afterMinutes > MAX_AFTER_MINUTES);
-  const fireDisabled =
-    !canMutateTenant ||
-    firing ||
-    (scope === "team" && selectedTeamIds.length === 0) ||
-    scheduleInvalid;
-
-  const confirmFire = async () => {
-    /* v8 ignore next -- defensive: the Fire button is disabled={fireDisabled} and fireDisabled already includes !canMutateTenant, so the !canMutateTenant side is unreachable here */
-    if (!canMutateTenant || fireDisabled) return;
-    setFiring(true);
-    setFireError(null);
-    try {
-      const result = await fireDisruption(
-        apiClient,
-        eventId,
-        buildFireRequest(target, scope, selectedTeamIds, timing, afterMinutes),
-      );
-      onFired(
-        timing === "scheduled"
-          ? t("disruptions.scheduled_flash", { name: target.item.name, minutes: afterMinutes })
-          : t("disruptions.fired_flash", {
-              name: target.item.name,
-              count: result.affectedTeamIds.length,
-            }),
-      );
-    } catch (err) {
-      setFireError(toErrorMessage(err));
-    } finally {
-      setFiring(false);
-    }
-  };
-
-  const teamPicker = (label: string, description?: string) => (
-    <FormField label={label} description={description}>
-      <Multiselect
-        selectedOptions={teamOptions.filter((o) => selectedTeamIds.includes(o.value))}
-        options={teamOptions}
-        onChange={(e) => setSelectedTeamIds(e.detail.selectedOptions.map((o) => o.value as string))}
-        placeholder={t("disruptions.teams_placeholder")}
-      />
-    </FormField>
-  );
-
-  return (
-    <Modal
-      visible
-      onDismiss={onClose}
-      header={t("disruptions.fire_modal_header", { name: target.item.name })}
-      footer={
-        <Box float="right">
-          <SpaceBetween direction="horizontal" size="xs">
-            <Button onClick={onClose} disabled={firing}>
-              {t("disruptions.cancel")}
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => void confirmFire()}
-              loading={firing}
-              disabled={fireDisabled}
-            >
-              {t("disruptions.confirm_fire")}
-            </Button>
-          </SpaceBetween>
-        </Box>
-      }
-    >
-      <SpaceBetween size="m">
-        {fireError ? <Alert type="error">{fireError}</Alert> : null}
-        <Box color="text-body-secondary">{target.item.description}</Box>
-        <FormField
-          label={t("disruptions.scope_label")}
-          description={t("disruptions.scope_description")}
-        >
-          <Select
-            selectedOption={{ value: scope, label: t(`disruptions.scope_${scope}`) }}
-            options={SCOPE_OPTIONS.map((s) => ({ value: s, label: t(`disruptions.scope_${s}`) }))}
-            onChange={(e) => setScope(e.detail.selectedOption.value as DisruptionScope)}
-          />
-        </FormField>
-        {scope === "team" ? teamPicker(t("disruptions.teams_label")) : null}
-        {scope === "random-n"
-          ? teamPicker(t("disruptions.random_label"), t("disruptions.random_description"))
-          : null}
-        <FormField
-          label={t("disruptions.timing_label")}
-          description={t("disruptions.timing_description")}
-        >
-          <SegmentedControl
-            selectedId={timing}
-            onChange={(e) => setTiming(e.detail.selectedId as DisruptionTiming)}
-            options={[
-              { id: "immediate", text: t("disruptions.timing_immediate") },
-              { id: "scheduled", text: t("disruptions.timing_scheduled") },
-            ]}
-          />
-        </FormField>
-        {timing === "scheduled" ? (
-          <FormField
-            label={t("disruptions.after_minutes_label")}
-            description={t("disruptions.after_minutes_description")}
-            errorText={scheduleInvalid ? t("disruptions.after_minutes_error") : undefined}
-          >
-            <Input
-              type="number"
-              value={String(afterMinutes)}
-              onChange={(e) => setAfterMinutes(Number(e.detail.value))}
-            />
-          </FormField>
-        ) : null}
-      </SpaceBetween>
-    </Modal>
-  );
-}
 
 /**
  * [#1417 / #1666] Operator red-team console. Lists the event's declared disruptions (catalog) and
@@ -222,21 +34,23 @@ function FireModal({
 export function DisruptionsPanel({
   apiClient,
   canMutateTenant,
-  eventId,
-  teams,
+  detail,
   t,
 }: {
   readonly apiClient: ApiClient | null;
   readonly canMutateTenant: boolean;
-  readonly eventId: string;
-  readonly teams: readonly TeamSummary[];
+  readonly detail: EventDetail;
   readonly t: Translate;
 }) {
+  // eventId / teams は EventDetail から取り出す (= status view と同じ source を共有)。
+  const { eventId, teams } = detail;
   const [catalog, setCatalog] = useState<readonly DisruptionCatalogEntry[] | null>(null);
   const [audit, setAudit] = useState<readonly DisruptionAuditRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [fireTarget, setFireTarget] = useState<FireTarget | null>(null);
   const [lastFired, setLastFired] = useState<string | null>(null);
+  // [ADR-037 Slice 2] bump 後に RecurringPanel が一覧を取り直す (= 定期 fire 直後に反映する) signal。
+  const [recurringRefresh, setRecurringRefresh] = useState(0);
 
   const reloadAudit = useCallback(async () => {
     // Only called after a successful fire (apiClient was present) — defensive, unreachable.
@@ -269,6 +83,8 @@ export function DisruptionsPanel({
     setLastFired(flash);
     setFireTarget(null);
     void reloadAudit();
+    // recurring fire なら 「実行中の定期障害」 一覧に新規行が出るよう取り直しを促す。
+    setRecurringRefresh((n) => n + 1);
   };
 
   return (
@@ -286,6 +102,10 @@ export function DisruptionsPanel({
             {lastFired}
           </Alert>
         ) : null}
+
+        {/* [#1916] 「いつ撃つか」 を判断するための per-team status を catalog の前に置く。
+         *  撃ち込み履歴は同じ audit を再利用 (= 二重 fetch しない)。 */}
+        <TeamStatusPanel detail={detail} audit={audit} t={t} />
 
         <Table
           variant="embedded"
@@ -356,6 +176,14 @@ export function DisruptionsPanel({
           loading={catalog === null && !loadError}
           loadingText={t("disruptions.loading")}
           empty={<Box textAlign="center">{t("disruptions.catalog_empty")}</Box>}
+        />
+
+        <RecurringPanel
+          key={recurringRefresh}
+          apiClient={apiClient}
+          canMutateTenant={canMutateTenant}
+          eventId={eventId}
+          t={t}
         />
 
         <Header variant="h3">{t("disruptions.audit_header")}</Header>

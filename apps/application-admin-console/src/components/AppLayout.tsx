@@ -3,6 +3,7 @@ import SideNavigation from "@cloudscape-design/components/side-navigation";
 import TopNavigation, {
   type TopNavigationProps,
 } from "@cloudscape-design/components/top-navigation";
+import { tenkaCloudAppIconDataUri } from "@tenkacloud/web-kit";
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
@@ -86,7 +87,11 @@ export function ShellLayout({
   return (
     <>
       <TopNavigation
-        identity={{ href: "/", title: t("app.title") }}
+        identity={{
+          href: "/",
+          // タイトル文字は narrow 幅で truncate (…) するため出さず、 ブランドはアイコンに担わせる。
+          logo: { src: tenkaCloudAppIconDataUri, alt: "TenkaCloud" },
+        }}
         utilities={
           // Issue #831: 右上 utility は (locale, user-menu) の順。 旧 \"サインアウト\" は
           // user-menu の中に格納し、 user email を表に出す。 未 sign-in 時は locale のみ。

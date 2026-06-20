@@ -179,5 +179,6 @@ The harness, validator, and `make before-commit` catch many bugs, but they canno
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md) — the human workflow (start here).
 - [`AUTHORING.html`](./AUTHORING.html) — 30-minute onboarding with the full field reference.
 - [`EXAMPLES.md`](./EXAMPLES.md) — five reference problems with design retrospectives.
+- [`APP-TO-QUEST.md`](./APP-TO-QUEST.md) — App-to-Quest placement, scope, and promotion criteria.
 - `.claude/skills/create-problem/SKILL.md` — the `/create-problem` skill source.
 - [`AGENTS.md`](../../AGENTS.md) — repository-level agent guide (loaded by both Claude Code and Codex CLI).

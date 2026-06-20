@@ -127,8 +127,7 @@ export function DisruptionsTab({ apiClient, canMutateTenant, detail, t }: EventT
     <DisruptionsPanel
       apiClient={apiClient}
       canMutateTenant={canMutateTenant}
-      eventId={detail.eventId}
-      teams={detail.teams}
+      detail={detail}
       t={t}
     />
   );

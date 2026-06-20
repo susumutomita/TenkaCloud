@@ -3,6 +3,27 @@
 <head>
 <meta charset="utf-8">
 <title>Disruption live-fire — クロスアカウントの実障害 + 自動復旧を観測する</title>
+<meta name="description" content="fire → inject → revert の chain は実装済みで、mock SDK でのユニットテストも通っている（operator fire → EventBridge → executor Lambda → ExternalId 付き AssumeRole で競技者アカウントへ → SSM RunCommand → 予約された rever...">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://susumutomita.github.io/TenkaCloud/docs/runbooks/disruption-live-fire.ja.html">
+<meta property="og:title" content="Disruption live-fire — クロスアカウントの実障害 + 自動復旧を観測する">
+<meta property="og:description" content="fire → inject → revert の chain は実装済みで、mock SDK でのユニットテストも通っている（operator fire → EventBridge → executor Lambda → ExternalId 付き AssumeRole で競技者アカウントへ → SSM RunCommand → 予約された rever...">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://susumutomita.github.io/TenkaCloud/docs/runbooks/disruption-live-fire.ja.html">
+<meta property="og:site_name" content="TenkaCloud">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:image" content="https://susumutomita.github.io/TenkaCloud/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Disruption live-fire — クロスアカウントの実障害 + 自動復旧を観測する">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Disruption live-fire — クロスアカウントの実障害 + 自動復旧を観測する">
+<meta name="twitter:description" content="fire → inject → revert の chain は実装済みで、mock SDK でのユニットテストも通っている（operator fire → EventBridge → executor Lambda → ExternalId 付き AssumeRole で競技者アカウントへ → SSM RunCommand → 予約された rever...">
+<meta name="twitter:image" content="https://susumutomita.github.io/TenkaCloud/assets/og-image.png">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="https://susumutomita.github.io/TenkaCloud/assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="https://susumutomita.github.io/TenkaCloud/assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="https://susumutomita.github.io/TenkaCloud/assets/apple-touch-icon.png">
 <style>
   :root {
     --c-text: #1f2328;

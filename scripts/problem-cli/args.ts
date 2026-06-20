@@ -1,7 +1,15 @@
 import { KINDS, type Kind } from "./constants";
 
 export interface CliArgs {
-  command: "create" | "validate" | "list-kinds" | "dry-run" | "inspect" | "help" | "interactive";
+  command:
+    | "create"
+    | "validate"
+    | "list-kinds"
+    | "dry-run"
+    | "inspect"
+    | "cost"
+    | "help"
+    | "interactive";
   problemId?: string;
   kind?: Kind;
   category?: "Battle" | "Challenge";
@@ -40,12 +48,13 @@ function parseCommand(command: string | undefined): CliArgs["command"] {
     command === "list-kinds" ||
     command === "dry-run" ||
     command === "inspect" ||
+    command === "cost" ||
     command === "interactive"
   ) {
     return command;
   }
   throw new Error(
-    `unknown command: ${command}. Try 'help', 'list-kinds', 'create', 'validate', 'dry-run', 'inspect', 'interactive'.`,
+    `unknown command: ${command}. Try 'help', 'list-kinds', 'create', 'validate', 'dry-run', 'inspect', 'cost', 'interactive'.`,
   );
 }
 

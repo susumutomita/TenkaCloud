@@ -17,6 +17,7 @@ import Box from "@cloudscape-design/components/box";
 import {
   PORTAL_SLOT_NAMES,
   type PortalCoordinationClient,
+  type PortalLocale,
   type PortalSlotProps,
 } from "@tenkacloud/portal-plugin-sdk";
 import { toErrorMessage } from "@tenkacloud/web-kit";
@@ -35,6 +36,9 @@ interface PortalPluginSlotsProps {
   readonly problemId: string;
   readonly jobId: string;
   readonly score: number;
+  readonly locale: PortalLocale;
+  readonly posture?: Record<string, boolean>;
+  readonly platform?: string;
   readonly team: {
     readonly teamName: string;
     readonly teamId?: string;
@@ -51,6 +55,9 @@ export function PortalPluginSlots({
   problemId,
   jobId,
   score,
+  locale,
+  posture,
+  platform,
   team,
   stackOutputs,
   coordinationApiUrl,
@@ -87,6 +94,9 @@ export function PortalPluginSlots({
       problemId,
       jobId,
       score,
+      locale,
+      ...(posture ? { posture } : {}),
+      ...(platform ? { platform } : {}),
       endpoints,
       phases,
       disruptions,
@@ -99,6 +109,9 @@ export function PortalPluginSlots({
       problemId,
       jobId,
       score,
+      locale,
+      posture,
+      platform,
       endpoints,
       phases,
       disruptions,

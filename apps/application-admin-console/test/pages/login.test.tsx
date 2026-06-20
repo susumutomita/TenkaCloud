@@ -100,7 +100,7 @@ describe("application-admin-console LoginPage (#1329)", () => {
   it("should show the signing-in state while auto-redirecting", async () => {
     beginLoginMock.mockImplementation(() => new Promise<void>(() => {}));
     renderLogin();
-    expect(await screen.findByText(/Cognito にリダイレクト中/)).toBeInTheDocument();
+    expect(await screen.findByText(/サインイン画面に移動しています/)).toBeInTheDocument();
   });
 
   it("should show the error fallback when beginLogin throws on auto-redirect", async () => {

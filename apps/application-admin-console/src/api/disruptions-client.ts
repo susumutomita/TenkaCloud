@@ -14,8 +14,11 @@ import type { ApiClient } from "./client";
 
 export type DisruptionScope = "all" | "team" | "random-n";
 
-/** [ADR-037] When the injection runs: immediately, or scheduled `afterMinutes` from now. */
-export type DisruptionTiming = "immediate" | "scheduled";
+/**
+ * [ADR-037] When the injection runs: immediately, scheduled `afterMinutes` from now, or
+ * `recurring` every `intervalMinutes` for `maxFires` times (auto-stops; always ends).
+ */
+export type DisruptionTiming = "immediate" | "scheduled" | "recurring";
 
 /**
  * [ADR-013 Phase 2] A condition that auto-fires the disruption from the scoring tick.
@@ -63,10 +66,14 @@ export interface FireDisruptionRequest {
   readonly parameters?: Readonly<Record<string, unknown>>;
   /** Idempotency key (>= 8 chars); re-firing with the same id is a no-op on the platform. */
   readonly requestId: string;
-  /** [ADR-037] `immediate` (default) injects now; `scheduled` defers by `afterMinutes`. */
+  /** [ADR-037] `immediate` (default) injects now; `scheduled` defers; `recurring` repeats. */
   readonly timing?: DisruptionTiming;
   /** [ADR-037] Required when `timing === "scheduled"`; 1–1440 minutes. */
   readonly afterMinutes?: number;
+  /** [ADR-037] Required when `timing === "recurring"`; minutes between fires (1–1440). */
+  readonly intervalMinutes?: number;
+  /** [ADR-037] Required when `timing === "recurring"`; total fires before auto-stop (1–60). */
+  readonly maxFires?: number;
 }
 
 export interface FireDisruptionResult {
@@ -126,4 +133,43 @@ export function fetchDisruptionAudit(
 /** A fresh idempotency key for a fire request (>= 8 chars). */
 export function newFireRequestId(): string {
   return `fire-${crypto.randomUUID()}`;
+}
+
+/** [ADR-037 Slice 2] One active recurring disruption (an aws-scheduler rate schedule still running). */
+export interface ActiveRecurringRow {
+  readonly requestId: string;
+  readonly problemId: string;
+  readonly disruptionId: string;
+  readonly firedBy: string;
+  readonly firedAt: string;
+  readonly scope: DisruptionScope;
+  readonly affectedTeamIds: readonly string[];
+  readonly intervalMinutes: number;
+  readonly maxFires: number;
+  /** When the schedule auto-stops (ISO8601). */
+  readonly endsAt: string;
+}
+
+export interface ListRecurringResponse {
+  readonly items: readonly ActiveRecurringRow[];
+}
+
+/** [ADR-037 Slice 2] List the event's still-running recurring disruptions (not cancelled, not past endsAt). */
+export function fetchActiveRecurring(
+  api: ApiClient,
+  eventId: string,
+): Promise<ListRecurringResponse> {
+  return api.get<ListRecurringResponse>(`events/${eventId}/disruptions/recurring`);
+}
+
+/** [ADR-037 Slice 2] Cancel one recurring disruption early (deletes its schedules; idempotent). */
+export function cancelRecurringDisruption(
+  api: ApiClient,
+  eventId: string,
+  requestId: string,
+): Promise<{ readonly ok: true }> {
+  return api.post<{ readonly ok: true }>(
+    `events/${eventId}/disruptions/recurring/${requestId}/cancel`,
+    {},
+  );
 }

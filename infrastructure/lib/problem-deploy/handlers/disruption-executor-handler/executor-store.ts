@@ -39,12 +39,16 @@ export async function claimExecution(
   resources: ExecutorResources,
   detail: DisruptionFiredDetail,
   nowMs: number,
-  phase: "event" | "inject" = "event",
+  phase: "event" | "inject" | "recurring" = "event",
 ): Promise<"claimed" | "duplicate"> {
+  // [ADR-037] recurring は tick ごとに firedAt (= aws-scheduler 置換済の実時刻) を key に含め、 tick 間は
+  // 別 claim として通しつつ同一 tick の再配送だけ弾く。 event / inject は従来どおり requestId/teamId 単位。
   const pk =
     phase === "inject"
       ? `EXEC#${detail.requestId}#${detail.teamId}#INJECT`
-      : `EXEC#${detail.requestId}#${detail.teamId}`;
+      : phase === "recurring"
+        ? `EXEC#${detail.requestId}#${detail.teamId}#RECUR#${detail.firedAt}`
+        : `EXEC#${detail.requestId}#${detail.teamId}`;
   try {
     await resources.ddb.send(
       new PutCommand({

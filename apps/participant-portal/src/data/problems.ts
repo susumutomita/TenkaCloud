@@ -96,6 +96,7 @@ export interface ProblemCatalogEntry {
   readonly difficulty: 1 | 2 | 3 | 4 | 5;
   readonly estimatedDuration: string;
   readonly shortDescription: string;
+  readonly instructions?: string;
   readonly learningGoals: readonly string[];
   readonly tags: readonly string[];
   /** ADR-012 Phase 2: endpoint slot 宣言 (= portal plugin の default URL 組立に使う)。 */
@@ -127,6 +128,7 @@ interface ProblemMetadata {
   estimatedDuration: string;
   shortDescription: string;
   description: string;
+  instructions?: string;
   tags: string[];
   learningGoals: string[];
   exposedPorts?: { port: number; name: string }[];
@@ -183,6 +185,7 @@ interface ProblemMetadata {
 export interface ProblemI18nOverride {
   readonly name?: string;
   readonly shortDescription?: string;
+  readonly instructions?: string;
   readonly learningGoals?: readonly string[];
 }
 
@@ -190,6 +193,15 @@ const metadataModules = import.meta.glob<{ default: ProblemMetadata }>(
   "../../../../problems/*/*/metadata.json",
   { eager: true },
 );
+
+// Phase 1c (#1929): per-problem architecture diagram. `problems/<category>/<id>/diagram.svg`
+// is bundled by Vite as a URL asset; the portal renders it on the problem page as the
+// architecture image (alongside `instructions`). Optional — absent for problems without one.
+const diagramModules = import.meta.glob<string>("../../../../problems/*/*/diagram.svg", {
+  eager: true,
+  query: "?url",
+  import: "default",
+});
 
 /**
  * `exactOptionalPropertyTypes` 下で `{ ...(x ? {x} : {}) }` の連鎖を避けるための一括 helper。
@@ -227,6 +239,7 @@ export function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry 
     difficulty: metadata.difficulty,
     estimatedDuration: metadata.estimatedDuration,
     shortDescription: metadata.shortDescription,
+    instructions: metadata.instructions,
     learningGoals: metadata.learningGoals,
     tags: metadata.tags,
     endpoints:
@@ -296,6 +309,7 @@ function sanitizeI18n(raw: ProblemMetadata["i18n"]): ProblemCatalogEntry["i18n"]
     ? omitUndefined({
         name: raw.en.name,
         shortDescription: raw.en.shortDescription,
+        instructions: raw.en.instructions,
         learningGoals: raw.en.learningGoals,
       })
     : undefined;
@@ -317,6 +331,27 @@ export function findProblemMetadata(problemId: string): ProblemCatalogEntry | un
   return PROBLEM_CATALOG_BY_ID.get(problemId);
 }
 
+// problemId (= dir name; validator が id === dirName を保証) → bundled diagram.svg URL。
+// Exported for unit testing: the real glob is empty until a problem ships a diagram.svg,
+// so the per-entry path→id mapping can only be exercised with a synthetic input.
+export function buildDiagramMap(
+  modules: Readonly<Record<string, string>>,
+): ReadonlyMap<string, string> {
+  return new Map(
+    Object.entries(modules).map(([path, url]) => {
+      // path: ../../../../problems/<category>/<id>/diagram.svg → key by <id>。
+      const parts = path.split("/");
+      return [parts[parts.length - 2] ?? "", url] as const;
+    }),
+  );
+}
+const DIAGRAM_URL_BY_ID = buildDiagramMap(diagramModules);
+
+/** `problemId` の architecture diagram (`diagram.svg`) URL。無ければ undefined。 */
+export function findProblemDiagramUrl(problemId: string): string | undefined {
+  return DIAGRAM_URL_BY_ID.get(problemId);
+}
+
 /**
  * Issue #583 Phase 5 / #1108: locale を適用した narrative view を返す。 fallback chain:
  *   1. 指定 locale (= en) の override
@@ -332,12 +367,14 @@ export function resolveLocalizedNarrative(
 ): {
   readonly name: string;
   readonly shortDescription: string;
+  readonly instructions?: string;
   readonly learningGoals: readonly string[];
 } {
   if (locale === "ja" || !entry.i18n) {
     return {
       name: entry.name,
       shortDescription: entry.shortDescription,
+      instructions: entry.instructions,
       learningGoals: entry.learningGoals,
     };
   }
@@ -346,12 +383,14 @@ export function resolveLocalizedNarrative(
     return {
       name: entry.name,
       shortDescription: entry.shortDescription,
+      instructions: entry.instructions,
       learningGoals: entry.learningGoals,
     };
   }
   return {
     name: override.name ?? entry.name,
     shortDescription: override.shortDescription ?? entry.shortDescription,
+    instructions: override.instructions ?? entry.instructions,
     learningGoals: override.learningGoals ?? entry.learningGoals,
   };
 }

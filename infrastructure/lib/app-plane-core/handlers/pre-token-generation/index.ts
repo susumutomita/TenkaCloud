@@ -8,54 +8,69 @@ import type {
  *
  * ## なぜ必要か
  * Lite mode (= `tenantId="local"` 1 tenant 専用) では SBT pipeline / `provision-tenant.sh`
- * を経由しないため、 sign-up 直後の Cognito user は `custom:userRole` / `custom:tenantId`
- * 属性が空 (= null) のままになる。 一方 Application Plane handler は SaaS mode と同じ
- * `requireRole(c, [TENANT_ADMIN_ROLE])` で `custom:userRole == "TenantAdmin"` 必須、
- * `resolveTenantId(c)` で `custom:tenantId` を読むため、 Lite mode で sign-in した user は
- * SAML IdP / 監査ログ ページが 403 で開けない (= bug #1327 の症状)。
+ * を経由しないため、 self sign-up 直後の Cognito user は `custom:tenantId` / `custom:tenantName`
+ * 属性が空のままになる。 一方 Application Plane handler は SaaS mode と同じ
+ * `requireRole(c, [TENANT_ADMIN_ROLE])` で `custom:userRole` を、 `resolveTenantId(c)` で
+ * `custom:tenantId` を ID token から読むため、 これらが無いと 403 / tenant 不明になる。
  *
  * ## V2 trigger を採用する理由 (#1358)
- * V1 trigger response (`response.claimsOverrideDetails.claimsToAddOrOverride`) は **access token**
- * 側にしか claim を inject しない。 一方 Application Plane の handler は Cognito JWT
- * authorizer 経由で **ID token** を読むため (= `requireRole` / `resolveTenantId` が claim を
- * 取り出す source が ID token)、 V1 形式だと claim が乗らず 403 が解消しない。
+ * V1 trigger は **access token** にしか claim を inject できない。 Application Plane handler は
+ * Cognito JWT authorizer 経由で **ID token** を読むため、 V2 trigger
+ * (`claimsAndScopeOverrideDetails.idTokenGeneration.claimsToAddOrOverride`) で ID token /
+ * access token の双方に inject する。
  *
- * V2 trigger response (`claimsAndScopeOverrideDetails.idTokenGeneration.claimsToAddOrOverride`)
- * は ID token と access token の双方に inject 可能。 両方に同値を入れることで API Gateway /
- * Lambda authorizer / SDK 側の token 種類選好に依らず一貫した claim を提供する。
+ * ## role は user の割り当てを尊重する (= 招待ロールの enforcement)
+ * 当初は 「Lite = 全員 TenantAdmin」 として `custom:userRole` を一律 TenantAdmin に上書き
+ * していたが、 Users ページ (`POST /admin/users`) で TenantOperator / TenantViewer を招待
+ * できるようになった以上、 token がロールを無視すると **Viewer が Admin 操作を実行できてしまう**
+ * (= broken access control)。 そこで:
  *
- * ## 解決
- * Cognito の Pre-Token Generation V2 trigger を Lite mode UserPool に attach し、 id_token /
- * access_token 発行のタイミングで `custom:userRole = "TenantAdmin"` + `custom:tenantId = "local"`
- * を必ず claim に上書きする。 Lite mode は 1 tenant 専用 (= ADR-016 Phase 3) なので、
- * 「全 user は暗黙に TenantAdmin」 という運用前提を JWT claim 層で具現化する。
+ *   - user attribute `custom:userRole` が有効な tenant role なら **その値をそのまま** claim にする
+ *     (= 招待時 / role 変更時に `AdminCreateUser` / `AdminUpdateUserAttributes` が set した値)。
+ *   - 属性が未設定の user (= self sign-up した最初の主催者) は `TenantAdmin` に fallback する。
+ *     こうすることで最初の運営者が締め出されず、 招待された Operator / Viewer は正しく制限される。
+ *
+ * `custom:tenantId` は Lite が 1 tenant 固定なので常に `local` を注入する。
+ * `custom:tenantName` も属性が無ければ `LITE_TENANT_NAME` を注入する (= Home の
+ * 「テナント名が JWT に含まれていません」 警告を解消する)。
  *
  * ## SaaS mode との分離
- * SaaS mode の UserPool には本 Lambda を attach しない (= `IdentityProvider` のオプトイン flag
- * `liteAdminClaimsInjection: true` 経由でのみ追加される)。 SaaS の role 割り当ては
- * `provision-tenant.sh` の `admin-create-user` + SBT pipeline 経由なので、 本 Lambda が
- * 暗黙の TenantAdmin 昇格を引き起こすことは無い。
- *
- * ## なぜ event を mutate するだけで済むか
- * Cognito Pre-Token Generation は handler が `event.response.claimsAndScopeOverrideDetails`
- * を返すと、 JWT 発行直前にその key / value を id_token / access_token の claim に注入する
- * (= AWS doc: Customizing user pool workflows with Lambda triggers / Pre token generation
- * Lambda trigger / V2 trigger event)。 IAM / 外部 API call は不要。
- *
- * ## 注意 (= overwrite ではなく override)
- * `claimsToAddOrOverride` は既存 claim を **上書き** する仕様 (= 既存 user attribute に
- * `custom:userRole` が別値で設定されていても本 Lambda の値で上書きされる)。 Lite mode は
- * 全員 TenantAdmin / tenantId=local 前提なので intentional な挙動。
+ * SaaS mode の UserPool には本 Lambda を attach しない (= `liteAdminClaimsInjection: true`
+ * opt-in flag 経由でのみ追加)。 SaaS の role 割り当ては `provision-tenant.sh` + SBT pipeline
+ * 経由なので、 本 Lambda が暗黙の昇格を引き起こすことは無い。
  */
 export const LITE_TENANT_ADMIN_ROLE = "TenantAdmin" as const;
 export const LITE_TENANT_ID = "local" as const;
+export const LITE_TENANT_NAME = "TenkaCloud Lite" as const;
+
+/** `custom:userRole` claim に入る有効値 (= deploy-handler/auth.ts の TENANT_ROLES と一致)。 */
+const LITE_TENANT_ROLES = ["TenantAdmin", "TenantOperator", "TenantViewer"] as const;
+
+/**
+ * user attribute の `custom:userRole` が有効な tenant role ならそれを、 無ければ
+ * `TenantAdmin` (= bootstrap 主催者の締め出し防止) を返す。
+ */
+function resolveUserRole(attrs: Readonly<Record<string, string>>): string {
+  const raw = attrs["custom:userRole"];
+  return typeof raw === "string" && (LITE_TENANT_ROLES as readonly string[]).includes(raw)
+    ? raw
+    : LITE_TENANT_ADMIN_ROLE;
+}
+
+/** user attribute の `custom:tenantName` があればそれを、 無ければ既定の Lite tenant 名を返す。 */
+function resolveTenantName(attrs: Readonly<Record<string, string>>): string {
+  const raw = attrs["custom:tenantName"];
+  return typeof raw === "string" && raw.trim().length > 0 ? raw : LITE_TENANT_NAME;
+}
 
 export const handler: PreTokenGenerationV2TriggerHandler = async (
   event: PreTokenGenerationV2TriggerEvent,
 ) => {
+  const attrs = event.request.userAttributes ?? {};
   const claimsToAddOrOverride = {
-    "custom:userRole": LITE_TENANT_ADMIN_ROLE,
+    "custom:userRole": resolveUserRole(attrs),
     "custom:tenantId": LITE_TENANT_ID,
+    "custom:tenantName": resolveTenantName(attrs),
   } as const;
 
   event.response = {

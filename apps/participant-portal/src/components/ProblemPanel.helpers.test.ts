@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  type ApplicationStatus,
   PortalScoringGateError,
   PortalValidationError,
   type SubmitFlagOutcome,
 } from "../api/portal-client";
 import {
+  describeApplicationStatus,
   formatProblemPanelActionError,
   shouldRefreshAfterFlagSubmit,
 } from "./ProblemPanel.helpers";
@@ -78,5 +80,31 @@ describe("shouldRefreshAfterFlagSubmit", () => {
       true,
     );
     expect(shouldRefreshAfterFlagSubmit({ kind: "wrong" } as SubmitFlagOutcome)).toBe(false);
+  });
+});
+
+describe("describeApplicationStatus (#1917)", () => {
+  const status = (over: Partial<ApplicationStatus>): ApplicationStatus => ({
+    overall: "healthy",
+    healthyCount: 1,
+    totalCount: 1,
+    ...over,
+  });
+
+  it("should map each overall to its StatusIndicator type", () => {
+    expect(describeApplicationStatus(status({ overall: "healthy" }), t).type).toBe("success");
+    expect(describeApplicationStatus(status({ overall: "degraded" }), t).type).toBe("warning");
+    expect(describeApplicationStatus(status({ overall: "down" }), t).type).toBe("error");
+    expect(describeApplicationStatus(status({ overall: "unknown" }), t).type).toBe("pending");
+  });
+
+  it("should label the health with the passing/total counts", () => {
+    const out = describeApplicationStatus(
+      status({ overall: "degraded", healthyCount: 2, totalCount: 5 }),
+      t,
+    );
+    expect(out.label).toContain("problem_panel.health_degraded");
+    expect(out.label).toContain('"healthy":2');
+    expect(out.label).toContain('"total":5');
   });
 });

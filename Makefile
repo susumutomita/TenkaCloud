@@ -8,12 +8,13 @@ export JSII_DEPRECATED := quiet
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install_ci build typecheck test test-coverage coverage-gate clean-test-outdir check before-commit beforecommit \
-        build-docs check-docs audit-deps build-problems-index check-problems-index \
+.PHONY: help install install_ci submodule-latest build typecheck test test-coverage coverage-gate clean-test-outdir check before-commit beforecommit \
+        build-docs check-docs oss-notices check-oss-notices audit-deps build-problems-index check-problems-index \
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
         check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-cli-access check-template-name-limits \
+        check-no-conflicts check-submodule-not-behind \
         env-check env-check-lite env-init env-init-test synth check-synth diff bootstrap \
         deploy deploy-saas deploy-control-plane deploy-bootstrap destroy destroy-saas \
         deploy-docker destroy-docker docker-shell docker-build \
@@ -34,6 +35,14 @@ install:
 	bun install --ignore-scripts
 	bun x husky
 install_ci:    ; bun install --frozen-lockfile --ignore-scripts
+# Manual on-demand bump of the problems/ submodule to its tracked branch tip (.gitmodules branch=main).
+# Leaves the bump *staged* for you to review + commit; the scheduled submodule-sync workflow does the
+# same automatically as its own PR. Pre-commit only *syncs* the worktree to the pin, it never bumps.
+submodule-latest:
+	git submodule update --remote --recursive problems
+	@git diff --quiet -- problems \
+		&& echo "problems already at the latest pin." \
+		|| { git add problems; echo "problems bumped + staged — review the submodule diff, then commit."; }
 build:         ; bun run build
 typecheck:     ; bun run typecheck
 test:          ; bun run test
@@ -56,6 +65,8 @@ build-problems-index: ; bun run build:problems-index
 check-problems-index: ; bun run check:problems-index
 build-docs:    ; bun run scripts/build-docs.ts
 check-docs:    ; bun run scripts/build-docs.ts --check
+oss-notices:   ; bun run oss-notices
+check-oss-notices: ; bun run oss-notices:check
 check-http-status: ; bun run scripts/check-http-magic-numbers.ts
 # IAM Description が CJK で CREATE_FAILED するのを merge 前に検出 (#664)
 check-template-ascii: ; bun run scripts/check-template-ascii.ts
@@ -78,13 +89,17 @@ check-template-name-limits: ; bun run scripts/check-template-name-limits.ts
 # git merge-tree (= read-only dry-run) で検査。 conflict 発生時は exit 1 で fail。
 # CI / pre-push hook ともに、 「PR を出した瞬間に DIRTY になる」 のを未然に防ぐ。
 check-no-conflicts: ; bun run scripts/check-no-conflicts.ts
+# Submodule pin 後退ガード (gitlink ping-pong 対策)。 PR の problems pin が origin/main より
+# 後退/分岐していたら fail。 origin/main + submodule history を要するので CI 専用 (before-commit
+# には入れない = offline 前提を壊さない)。 手動実行用に target だけ用意する。
+check-submodule-not-behind: ; bun run scripts/check-submodule-not-behind.ts
 audit-deps:    ; bun run audit:dependencies
 # `check-problems-index` は submodule (= TenkaCloudChallenge) 側 catalog CI に責任を移譲した
 # ため、 本体 before-commit / check からは外す。 platform 側 build:problems-index を走らせると
 # catalog repo の biome JSON formatter (= 別 lock 版) と微妙な drift が出てしまうため、
 # index.json の正本性は catalog 側で担保する設計。
-check:         install lint test validate-problems check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-name-limits check-no-conflicts audit-deps check-synth
-before-commit: lint test validate-problems check-docs check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-name-limits check-no-conflicts audit-deps check-synth
+check:         install lint test validate-problems check-docs check-oss-notices check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-name-limits check-no-conflicts audit-deps check-synth
+before-commit: lint test validate-problems check-docs check-oss-notices check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-name-limits check-no-conflicts audit-deps check-synth
 
 # `cdk synth` が通ることを保証 (= ts-node / tsx の module resolution、 stack 構築の type error
 # 等を本番 deploy 前にキャッチ)。 Makefile placeholder env で全 stack を synth するので AWS 認証は不要。
@@ -204,7 +219,11 @@ bootstrap:            env-check build ; $(CDK) bootstrap
 # と Participant Portal を `tenantId="local"` 固定で立てる (ADR-016)。
 #   - Lite で deploy: tenkacloud-lite + tenkacloud-lite-problem-deploy
 #   - SaaS が必要なら `make deploy-saas` (= 旧 default、 3-phase orchestration)
-deploy:               env-check-lite  ; bun run scripts/tenkacloud-lite.ts up
+# `build` を必ず先に走らせる: 問題カタログは SPA build 時に `import.meta.glob` で
+# `problems/**/metadata.json` を取り込む (apps/*/src/data/problems.ts) ため、 submodule を
+# 最新化しても SPA を再 build しないと dist が古いカタログのまま deploy され、 新規問題が
+# 取り込まれない。 bootstrap / deploy-control-plane 等の他 deploy 系と同じく build を prereq 化する。
+deploy:               env-check-lite build ; bun run scripts/tenkacloud-lite.ts up
 # ref の install.sh 準拠の orchestration (= SaaS mode、 SBT ControlPlane を立てる):
 #   1. S3 source bucket (serverless-saas-${ACCOUNT_ID}-${REGION}) を作成
 #   2. infrastructure/ を source.zip にして S3 に upload

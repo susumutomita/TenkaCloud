@@ -12,7 +12,7 @@
 import type { MultiselectProps, SelectProps } from "@cloudscape-design/components";
 import type { CompetitorAccountSummary } from "../../api/competitor-accounts-client";
 import { AWS_REGIONS } from "../../data/aws-regions";
-import { isExecutableProblemRuntime } from "../../data/problems";
+import { isExecutableProblemRuntime, type ProblemCostEstimateSummary } from "../../data/problems";
 import type { useT } from "../../i18n";
 
 export const NAME_MAX = 120;
@@ -43,6 +43,8 @@ export interface ProblemRow {
   problemId: string;
   problemName: string;
   defaultRegion: string;
+  /** Issue #1910: operator-facing cost-risk estimate derived from template.yaml. */
+  costEstimate?: ProblemCostEstimateSummary;
   /** Issue #1201 Phase 2: 問題が動作確認済 region 集合。 wizard picker の選択肢を絞る。 */
   supportedRegions?: readonly string[];
 }

@@ -331,6 +331,7 @@ export function joinUrl(base: string, relPath: string): string {
  * - `scoreEvents`: 別途 Deployments table の `EVENT#` 行として writeScoreEvent で書く marker 群。
  * - `endpointsHealthJson`: uptime 系で更新する health JSON (= participant aggregate 用)。
  *   省略時は更新しない。
+ * - `postureJson` / `platform`: phased-polling 系が最後に観測した live posture snapshot。
  * - `newState`: 次 tick で read する scoring state (= bonusAwarded / attackCount)。
  * - `attackDetected`: legacy `attack-detected` source 用 marker (= uptime-flat で ok→fail
  *   遷移を検知したとき、source="attack-detected" / points=0 の event 行を別途書く)。
@@ -339,6 +340,8 @@ export interface KindResult {
   readonly scoreDelta: number;
   readonly scoreEvents: readonly KindScoreEvent[];
   readonly endpointsHealthJson?: string;
+  readonly postureJson?: string;
+  readonly platform?: string;
   readonly newState?: DeploymentScoringState;
   readonly attackDetected?: boolean;
   readonly lastResult?: "ok" | "fail";

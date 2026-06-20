@@ -9,6 +9,7 @@ import Select, { type SelectProps } from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
 import { useMemo, useState } from "react";
+import { ProblemAlwaysOnSummary, ProblemCostSummary } from "../../components/ProblemCostSummary";
 import type { ProblemCategory, ProblemSummary } from "../../data/problems";
 import { interpolate, useT } from "../../i18n";
 import {
@@ -262,6 +263,18 @@ export function EventCreateProblemsetSection({
                     />
                   );
                 },
+              },
+              {
+                id: "estimatedCost",
+                header: t("event_create.col_estimated_cost"),
+                cell: (r) => (
+                  <ProblemCostSummary estimate={r.costEstimate} showResourceTypes={false} t={t} />
+                ),
+              },
+              {
+                id: "alwaysOnCost",
+                header: t("event_create.col_always_on_cost"),
+                cell: (r) => <ProblemAlwaysOnSummary estimate={r.costEstimate} t={t} />,
               },
             ]}
           />

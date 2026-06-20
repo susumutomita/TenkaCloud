@@ -1,3 +1,4 @@
+import { renderBootError } from "@tenkacloud/web-kit";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
@@ -28,6 +29,6 @@ loadConfig()
       </StrictMode>,
     );
   })
-  .catch((err: Error) => {
-    root.innerHTML = `<pre style="padding: 2rem; color: #a00; font-family: monospace;">Config load failed: ${err.message}</pre>`;
+  .catch((err: unknown) => {
+    renderBootError(root, err);
   });

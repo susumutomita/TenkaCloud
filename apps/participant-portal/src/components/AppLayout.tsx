@@ -9,6 +9,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import TopNavigation, {
   type TopNavigationProps,
 } from "@cloudscape-design/components/top-navigation";
+import { tenkaCloudAppIconDataUri } from "@tenkacloud/web-kit";
 import { type ReactNode, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-client";
@@ -82,6 +83,26 @@ export function buildAutoRefreshUtility(
     iconName: enabled ? "status-positive" : "status-stopped",
     onClick: () => {
       setEnabled(!enabled);
+    },
+  };
+}
+
+/**
+ * Issue #1919: AWS Console one-click access as a top-right utility. The federated
+ * sign-in button itself lives on /tools/sso (it needs a per-deploy jobId); this
+ * just makes that page reachable in one click from the top nav instead of being
+ * buried in the side navigation, where playtesters could not find it.
+ */
+export function buildAwsConsoleUtility(
+  navigate: (href: string) => void,
+  t: Translate,
+): TopNavigationProps.Utility {
+  return {
+    type: "button",
+    text: t("nav.aws_console"),
+    iconName: "external",
+    onClick: () => {
+      navigate("/tools/sso");
     },
   };
 }
@@ -245,6 +266,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
       localeUtility,
       buildRefreshLatestUtility(teamView.refresh, t),
       buildAutoRefreshUtility(teamView.autoRefreshEnabled, teamView.setAutoRefreshEnabled, t),
+      buildAwsConsoleUtility(navigate, t),
       // #547: 旧 `menu-dropdown` + 空 items は chevron で展開できそうに見えて何も出ない
       // という UX bug。Score / Rank の click は scoreboard ページへの遷移が自然なので
       // `type: "button"` + onClick で /scoreboard に飛ばす (= dropdown の意図不明
@@ -276,7 +298,13 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
   return (
     <>
       <TopNavigation
-        identity={{ href: "/", title: `TenkaCloud — ${config.eventTitle}` }}
+        identity={{
+          href: "/",
+          // ロゴが "TenkaCloud" ブランドを担うので title は event 名のみ。冗長な接頭辞を外し、
+          // TopNavigation の title 省略 (…) を避けてイベント名を出し切る。
+          title: config.eventTitle,
+          logo: { src: tenkaCloudAppIconDataUri, alt: "TenkaCloud" },
+        }}
         utilities={utilities}
       />
       <AppLayout

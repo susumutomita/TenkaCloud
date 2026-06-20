@@ -115,7 +115,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(stdout.join("")).toContain("使い方:");
   });
 
-  it("up should invoke prepare-source-bundle.sh and cdk deploy in order via inherit", async () => {
+  it("up should invoke prepare-source-bundle.sh, cdk bootstrap, then cdk deploy in order via inherit", async () => {
     const { io, calls } = buildIO({
       inheritExitCode: 0,
       capture: () => ({ code: 0, stdout: "https://example.cloudfront.net", stderr: "" }),
@@ -123,14 +123,20 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     const code = await main(["up"], io);
     expect(code).toBe(0);
     const inheritCalls = calls.filter((c) => c.mode === "inherit");
-    // prepare-source-bundle.sh (= source.zip prep) → cdk deploy の 2 call
-    expect(inheritCalls).toHaveLength(2);
+    // prepare-source-bundle.sh (= source.zip prep) → cdk bootstrap (= まっさらアカウント
+    // 対応、 冪等) → cdk deploy の 3 call
+    expect(inheritCalls).toHaveLength(3);
 
     const prepCall = inheritCalls[0];
     expect(prepCall.cmd).toBe("bash");
     expect(prepCall.args).toContain("scripts/prepare-source-bundle.sh");
 
-    const deployCall = inheritCalls[1];
+    // deploy 前に必ず cdk bootstrap (冪等) を回し、 fresh account でも make deploy が通るようにする。
+    const bootstrapCall = inheritCalls[1];
+    expect(bootstrapCall.cmd).toBe("./node_modules/aws-cdk/bin/cdk");
+    expect(bootstrapCall.args).toContain("bootstrap");
+
+    const deployCall = inheritCalls[2];
     // 2026-05-18 user feedback「bunx 禁止」 + 「Script not found 'cdk'」 regression
     // (= PR-#1030 で bunx → bun に置換した結果、 repo root に "cdk" script が無く Bun
     // が fail) 対策: cdk binary を repo root の hoist 先から直接 spawn する。
@@ -303,13 +309,14 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
       expect(out).toContain("Teardown");
     });
 
-    it("up should number each phase as [i/3] progress markers", async () => {
+    it("up should number each phase as [i/4] progress markers", async () => {
       const { io, stdout } = buildPostDeployIO();
       await main(["up"], io);
       const out = stdout.join("");
-      expect(out).toContain("[1/3]");
-      expect(out).toContain("[2/3]");
-      expect(out).toContain("[3/3]");
+      expect(out).toContain("[1/4]");
+      expect(out).toContain("[2/4]");
+      expect(out).toContain("[3/4]");
+      expect(out).toContain("[4/4]");
     });
   });
 

@@ -1,7 +1,8 @@
 import * as path from "node:path";
-import { Duration } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IEventBus } from "aws-cdk-lib/aws-events";
+import { PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
@@ -166,5 +167,16 @@ export class EventApiLambda extends Construct {
     if (props.bulkDeployPayloadBucket) {
       props.bulkDeployPayloadBucket.grantPut(this.fn);
     }
+    // [ADR-037 Slice 2] recurring disruption の早期解除 (operator の一覧→Cancel) は、 executor が作った
+    // `tc-recur-*` rate schedule を同一アカウントから消す。 DeleteSchedule を tc-recur-* に scope して付与
+    // (= 最小権限。 作成は executor、 削除は本 Lambda)。 EndDate 到達分は aws-scheduler が自動削除する。
+    this.fn.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["scheduler:DeleteSchedule"],
+        resources: [
+          `arn:aws:scheduler:${Stack.of(this).region}:${Stack.of(this).account}:schedule/default/tc-recur-*`,
+        ],
+      }),
+    );
   }
 }

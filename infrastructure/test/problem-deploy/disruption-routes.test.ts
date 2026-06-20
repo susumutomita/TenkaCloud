@@ -16,12 +16,18 @@ const mocks = vi.hoisted(() => ({
   listDisruptionAudit: vi.fn(),
   listDisruptionCatalog: vi.fn(),
   isEventOwnedByTenant: vi.fn(),
+  listActiveRecurring: vi.fn(),
+  cancelRecurring: vi.fn(),
 }));
 vi.mock("../../lib/problem-deploy/handlers/event-handler/disruption-fire", () => ({
   fireDisruption: mocks.fireDisruption,
   listDisruptionAudit: mocks.listDisruptionAudit,
   listDisruptionCatalog: mocks.listDisruptionCatalog,
   isEventOwnedByTenant: mocks.isEventOwnedByTenant,
+}));
+vi.mock("../../lib/problem-deploy/handlers/event-handler/disruption-recurring", () => ({
+  listActiveRecurring: mocks.listActiveRecurring,
+  cancelRecurring: mocks.cancelRecurring,
 }));
 
 const { registerDisruptionRoutes } = await import(
@@ -179,6 +185,33 @@ describe("POST /events/:eventId/disruptions/fire", () => {
     expect(mocks.fireDisruption.mock.calls[0][1].afterMinutes).toBeUndefined();
   });
 
+  it("[ADR-037] should 400 when timing=recurring but intervalMinutes/maxFires are missing", async () => {
+    const res = await fire({ ...validFireBody, timing: "recurring" });
+    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    expect(mocks.fireDisruption).not.toHaveBeenCalled();
+  });
+
+  it("[ADR-037] should 400 when intervalMinutes/maxFires are set without timing=recurring", async () => {
+    const res = await fire({ ...validFireBody, intervalMinutes: 5, maxFires: 6 });
+    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    expect(mocks.fireDisruption).not.toHaveBeenCalled();
+  });
+
+  it("[ADR-037] should pass the recurrence to the service when timing=recurring", async () => {
+    mocks.fireDisruption.mockResolvedValueOnce({ kind: "ok", result: { fired: 1 } });
+    const res = await fire({
+      ...validFireBody,
+      timing: "recurring",
+      intervalMinutes: 5,
+      maxFires: 6,
+    });
+    expect(res.status).toBe(StatusCodes.CREATED);
+    expect(mocks.fireDisruption.mock.calls[0][1].recurrence).toEqual({
+      intervalMinutes: 5,
+      maxFires: 6,
+    });
+  });
+
   it("should include randomCount when scope=random-n", async () => {
     mocks.fireDisruption.mockResolvedValueOnce({ kind: "unknown_problem" });
     await fire({ ...validFireBody, scope: "random-n", randomCount: 2 });
@@ -217,5 +250,62 @@ describe("POST /events/:eventId/disruptions/fire", () => {
   it("should surface a fire error (5xx)", async () => {
     mocks.fireDisruption.mockRejectedValueOnce(new Error("boom"));
     expect((await fire(validFireBody)).status).toBeGreaterThanOrEqual(500);
+  });
+});
+
+const getRecurring = () => buildApp().request(`/events/${EVENT_ID}/disruptions/recurring`);
+const cancelRecurringReq = (requestId: string) =>
+  buildApp().request(`/events/${EVENT_ID}/disruptions/recurring/${requestId}/cancel`, {
+    method: "POST",
+  });
+
+describe("[ADR-037 Slice 2] GET /events/:eventId/disruptions/recurring", () => {
+  it("should 404 when the event is not owned by the tenant", async () => {
+    mocks.isEventOwnedByTenant.mockResolvedValueOnce(false);
+    expect((await getRecurring()).status).toBe(StatusCodes.NOT_FOUND);
+    expect(mocks.listActiveRecurring).not.toHaveBeenCalled();
+  });
+
+  it("should 200 with the active recurring list when owned", async () => {
+    mocks.listActiveRecurring.mockResolvedValueOnce({ items: [{ requestId: "r1" }] });
+    const res = await getRecurring();
+    expect(res.status).toBe(StatusCodes.OK);
+    expect((await res.json()).items).toHaveLength(1);
+  });
+
+  it("should surface a list error (5xx)", async () => {
+    mocks.listActiveRecurring.mockRejectedValueOnce(new Error("boom"));
+    expect((await getRecurring()).status).toBeGreaterThanOrEqual(500);
+  });
+});
+
+describe("[ADR-037 Slice 2] POST /events/:eventId/disruptions/recurring/:requestId/cancel", () => {
+  it("should 404 when the event is not owned by the tenant", async () => {
+    mocks.isEventOwnedByTenant.mockResolvedValueOnce(false);
+    expect((await cancelRecurringReq("r1")).status).toBe(StatusCodes.NOT_FOUND);
+    expect(mocks.cancelRecurring).not.toHaveBeenCalled();
+  });
+
+  it("should 200 when the recurring is cancelled", async () => {
+    mocks.cancelRecurring.mockResolvedValueOnce("cancelled");
+    const res = await cancelRecurringReq("r1");
+    expect(res.status).toBe(StatusCodes.OK);
+    expect(mocks.cancelRecurring).toHaveBeenCalledWith(
+      shared,
+      EVENT_ID,
+      "tenant-test",
+      "r1",
+      expect.any(Number),
+    );
+  });
+
+  it("should 404 when the recurring registry row is absent", async () => {
+    mocks.cancelRecurring.mockResolvedValueOnce("not_found");
+    expect((await cancelRecurringReq("missing")).status).toBe(StatusCodes.NOT_FOUND);
+  });
+
+  it("should surface a cancel error (5xx)", async () => {
+    mocks.cancelRecurring.mockRejectedValueOnce(new Error("boom"));
+    expect((await cancelRecurringReq("r1")).status).toBeGreaterThanOrEqual(500);
   });
 });

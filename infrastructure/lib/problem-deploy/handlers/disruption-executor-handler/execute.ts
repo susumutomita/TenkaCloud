@@ -42,6 +42,12 @@ export interface DisruptionFiredDetail {
    * `afterMinutes` 分後に注入を遅延予約する (= mode:"inject" で自分を呼び戻す)。
    */
   readonly afterMinutes?: number;
+  /**
+   * [ADR-037] recurring fire。 宣言されると executor は `rate(intervalMinutes)` schedule を 1 件作り、
+   * `maxFires` 回ぶん (= EndDate) 経過後に aws-scheduler が自動停止する。 tick payload には乗せない
+   * (= 各 tick は単発 inject)。
+   */
+  readonly recurrence?: { readonly intervalMinutes: number; readonly maxFires: number };
 }
 
 /** 注入対象 team deployment の解決結果。 */
@@ -68,7 +74,7 @@ export interface ExecutorDeps {
    */
   readonly claimExecution: (
     detail: DisruptionFiredDetail,
-    phase?: "event" | "inject",
+    phase?: "event" | "inject" | "recurring",
   ) => Promise<"claimed" | "duplicate">;
   /** team+problem deployment を解決。 未 deploy / 未完了 / stackOutputs 無しは undefined。 */
   readonly resolveDeployment: (
@@ -92,6 +98,15 @@ export interface ExecutorDeps {
    * 具体実装側 (= scheduleRevert と同じ aws-scheduler one-shot を転用、 payload は mode:"inject")。
    */
   readonly scheduleInject: (detail: DisruptionFiredDetail, afterMinutes: number) => Promise<void>;
+  /**
+   * [ADR-037] recurring fire: `rate(intervalMinutes)` schedule を 1 件作り、 maxFires 回ぶん (= EndDate)
+   * 経過後に aws-scheduler が自動停止 + 自動削除する。 各 tick は mode:"inject-recurring" で自身を呼び戻す。
+   */
+  readonly scheduleRecurring: (
+    detail: DisruptionFiredDetail,
+    intervalMinutes: number,
+    maxFires: number,
+  ) => Promise<void>;
 }
 
 export type DisruptionExecuteOutcome =
@@ -156,6 +171,17 @@ export async function executeDisruptionAction(
   // EventBridge at-least-once の再配送を per-team 冪等で弾く。 claim は注入 / 遅延予約の前に取る。
   if ((await deps.claimExecution(detail)) === "duplicate") return { kind: "duplicate" };
 
+  // [ADR-037] recurring fire: rate schedule を 1 件作って return (= 各 tick は executeRecurringInject)。
+  // afterMinutes より先に判定する (= 両者は schema で排他なので順序は安全側の防御)。
+  if (detail.recurrence) {
+    await deps.scheduleRecurring(
+      detail,
+      detail.recurrence.intervalMinutes,
+      detail.recurrence.maxFires,
+    );
+    return { kind: "scheduled" };
+  }
+
   // afterMinutes は route で 1..1440 に validate 済 (= 未指定 / 0 は即時)。 正値なら遅延予約。
   if (detail.afterMinutes) {
     await deps.scheduleInject(detail, detail.afterMinutes);
@@ -179,5 +205,23 @@ export async function executeScheduledInject(
   if (action === "unknown") return { kind: "unknown_disruption" };
   if (!action) return { kind: "no_action" };
   if ((await deps.claimExecution(detail, "inject")) === "duplicate") return { kind: "duplicate" };
+  return injectAndScheduleRevert(detail, action, deps);
+}
+
+/**
+ * [ADR-037] recurring fire の各 tick の注入。 rate schedule が積んだ `{mode:"inject-recurring", detail}`
+ * で起動される。 `detail.firedAt` は aws-scheduler が tick ごとに実時刻へ置換するので、 per-tick claim
+ * (phase="recurring", key に firedAt を含む) が tick ごとに一意になり、 同一 tick の再配送のみ弾く
+ * (= tick 間は別注入として通す)。 各 tick は単発 fire と同じく inject + revert 予約を行う。
+ */
+export async function executeRecurringInject(
+  detail: DisruptionFiredDetail,
+  deps: ExecutorDeps,
+): Promise<DisruptionExecuteOutcome> {
+  const action = resolveAction(deps.problemsDisruptions, detail.problemId, detail.disruptionId);
+  if (action === "unknown") return { kind: "unknown_disruption" };
+  if (!action) return { kind: "no_action" };
+  if ((await deps.claimExecution(detail, "recurring")) === "duplicate")
+    return { kind: "duplicate" };
   return injectAndScheduleRevert(detail, action, deps);
 }

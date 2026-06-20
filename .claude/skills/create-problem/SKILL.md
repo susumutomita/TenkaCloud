@@ -1,12 +1,40 @@
 ---
 name: create-problem
-description: TenkaCloud の問題ディレクトリ (problems/<category>/<id>/) を ADR-012 thick metadata DSL (6 scoring kinds + endpoints + phases + disruptions + dashboard.slots) で生成する。Battle (リアルタイム対戦) または Challenge (個別演習) の雛形を作る。
+description: TenkaCloud の問題ディレクトリを ADR-012 thick metadata DSL (6 scoring kinds + endpoints + phases + disruptions + dashboard.slots) で生成する。Battle (リアルタイム対戦) または Challenge (個別演習) の雛形を作る。App-to-Quest mode では CodeWiki 解析結果から reviewable draft を生成する。
 allowed-tools: Bash(make validate-problems:*), Bash(bun run scripts/tenkacloud-problem.ts:*), Read, Write, Edit, Glob
 ---
 
 # create-problem (ADR-012 Phase 6 拡張版)
 
 TenkaCloud に新しい問題を追加する skill。**正本は [`problems/SCHEMA.json`](../../../problems/SCHEMA.json) と [`docs/problems/AUTHORING.html`](../../../docs/problems/AUTHORING.html)**。 外部 contributor 向け quickstart は [`docs/problems/CONTRIBUTING.md`](../../../docs/problems/CONTRIBUTING.md)、 AI agent flow は [`docs/problems/AI-WORKFLOW.md`](../../../docs/problems/AI-WORKFLOW.md)。 1 dir = 1 問題、`metadata.json` + `template.yaml` の 2 file が必須、 portal plugin (= `portal/<Slot>.tsx`) は任意。
+
+## App-to-Quest mode
+
+ユーザーが「app-to-quest」「CodeWiki 解析結果から Quest 化」「任意アプリを問題 draft にしたい」と言った場合は、通常の問題タイトルヒアリング flow に入らない。先に [`references/app-to-quest/README.md`](./references/app-to-quest/README.md) と [`references/app-to-quest/safety-boundary.md`](./references/app-to-quest/safety-boundary.md) を読む。
+
+App-to-Quest mode は **正式 problem を作らない authoring workflow**。出力先は必ず `.claude/drafts/app-to-quest/<app-slug>/` で、`problems/` へ直接書かない。
+
+最初に確認する:
+
+1. 解析入力の場所 (`.codewiki/app-to-quest/analysis.json` 推奨。暫定入力は `.codewiki/index.html` / `codewiki-output.md` / `README.md + package.json + docs/*`)
+2. 対象アプリを本人または組織が解析する許可を持つこと
+3. 出力先 `<app-slug>`
+4. 目的 (`assessment` / `workshop` / `battle` / `challenge`)
+5. 想定参加者 (`non-security developer` / `junior engineer` / `SRE` / `security engineer`)
+
+許可・入力範囲・安全な fixture 境界が曖昧なら停止する。外部 repo を勝手に clone しない。本番 URL を probe しない。secret 値、cookie、API response、DB row、raw PII を draft に保存しない。
+
+実行順:
+
+1. CodeWiki export を読む場合は [`codewiki-adapter.md`](./references/app-to-quest/codewiki-adapter.md) に従い、`01-source-app-profile.json` を作る。
+2. `01-source-app-profile.json` は [`source-app-profile.schema.json`](./references/app-to-quest/source-app-profile.schema.json) に従う。不明点は `unknowns` と低 confidence に残す。
+3. [`risk-to-quest.md`](./references/app-to-quest/risk-to-quest.md) に従い、`02-risk-inventory.md` と `03-quest-candidates.json` を作る。候補は 5〜10 個を目安にし、最大 10 個。
+4. `03-quest-candidates.json` は [`quest-candidate.schema.json`](./references/app-to-quest/quest-candidate.schema.json) に従う。
+5. 人間に候補レビューと選択を求める。選択なしで problem draft を生成しない。
+6. 選択済み candidate だけを [`candidate-to-draft.md`](./references/app-to-quest/candidate-to-draft.md) と [`problem-draft.md`](./references/app-to-quest/problem-draft.md) に従い、`problem-drafts/quest-###-<candidate-id>.md` へ変換する。
+7. [`review-checklist.md`](./references/app-to-quest/review-checklist.md) を draft 領域へ写し、未確認項目を残したまま通常の catalog 変換に進まない。
+
+正式 problem 化は人間レビュー後に別ステップで行う。既存 CLI `bun run scripts/tenkacloud-problem.ts create <id> --kind <kind>` を使い、`status` は review 完了まで `draft` のままにする。
 
 ## 対話 flow (= ユーザーに順に訊く)
 
@@ -17,6 +45,7 @@ scaffold 生成の前に次を順番に聞き出す (= 答えが揃わないま�
 3. **想定 difficulty + duration** — difficulty 1〜5、 duration は free string (`60〜90 分` 等)。
 4. **scoring kind** — 下の決定木 / Step 0 を見て 6 種から 1 つに絞る。 迷っているうちは scaffold しない。
 5. **scaffold + 編集ガイド** — `bun run scripts/tenkacloud-problem.ts create <id> --kind <kind>` で雛形を生成し、 残った `__PLACEHOLDER__` を上の回答で埋める。
+6. **cost-risk check** — `template.yaml` 編集後に `bun run scripts/tenkacloud-problem.ts cost <id>` を実行し、 per-hour / typical-session / left-running day cost と always-on warning を確認する。
 
 決定木 (= scoring kind):
 
@@ -64,6 +93,7 @@ scoring engine は **問題の `metadata.scoring.kind` で 6 種** の評価ロ�
 
 ```bash
 bun run scripts/tenkacloud-problem.ts create <id> --kind <kind> [--category Battle|Challenge]
+bun run scripts/tenkacloud-problem.ts cost <id>
 ```
 
 例:
@@ -211,12 +241,15 @@ export default function StatusPanel({ endpoints, phases, disruptions }: PortalSl
 
 `PortalSlotProps` 型 + 予約 slot 名は `@tenkacloud/portal-plugin-sdk` 参照。
 
-## Step 6 — 検証
+## Step 6 — Cost-risk check + 検証
 
 ```bash
+bun run scripts/tenkacloud-problem.ts cost <id>  # = offline CFn resource cost-risk estimate
 make validate-problems  # = bun run scripts/validate-problems.ts (JSON Schema 適合)
 bun run scripts/tenkacloud-problem.ts validate <id>  # = metadata + template.yaml の整合 (kind 別)
 ```
+
+`cost` は AWS credentials / network 不要。 `template.yaml` の `Resources` から rough hourly USD、 typical-session cost (`estimatedDuration` ベース)、 per-day-if-left-running、 always-on warning を出す。 NAT Gateway / RDS / Load Balancer / EC2 / EIP / WAF などが出たら、 問題設計上必要な理由と cleanup 前提を PR body に書く。
 
 実 deploy の動作確認は競技者 account で:
 
@@ -238,6 +271,7 @@ aws cloudformation deploy \
 - [ ] 全リソース名 / タグに `${NamePrefix}` が冠されている
 - [ ] Outputs に competitor 向け URL + `NamePrefix` echo + scoring 用 key (= flag / counter) がある
 - [ ] `endpoints[].default.key` が template.yaml の Outputs に存在する
+- [ ] `bun run scripts/tenkacloud-problem.ts cost <id>` を確認し、 always-on warning を PR body に記載
 - [ ] `make validate-problems` が通る
 - [ ] `bun run scripts/tenkacloud-problem.ts validate <id>` が通る
 - [ ] `status` は `draft` (= ready は別 PR で review 後)
@@ -249,6 +283,13 @@ aws cloudformation deploy \
 - 30 分 onboarding (= field reference): [`docs/problems/AUTHORING.html`](../../../docs/problems/AUTHORING.html)
 - 既存 5 問題の design 振り返り: [`docs/problems/EXAMPLES.md`](../../../docs/problems/EXAMPLES.md)
 - AI agent flow (= Claude Code / Codex CLI): [`docs/problems/AI-WORKFLOW.md`](../../../docs/problems/AI-WORKFLOW.md)
+- App-to-Quest mode: [`references/app-to-quest/README.md`](./references/app-to-quest/README.md)
+- App-to-Quest 参照仕様: [`references/app-to-quest/codewiki-adapter.md`](./references/app-to-quest/codewiki-adapter.md)
+- App-to-Quest safety boundary: [`references/app-to-quest/safety-boundary.md`](./references/app-to-quest/safety-boundary.md)
+- App-to-Quest safety + review: [`references/app-to-quest/safety-and-review.md`](./references/app-to-quest/safety-and-review.md)
+- App-to-Quest risk mapping: [`references/app-to-quest/risk-to-quest.md`](./references/app-to-quest/risk-to-quest.md)
+- App-to-Quest problem draft mapping: [`references/app-to-quest/candidate-to-draft.md`](./references/app-to-quest/candidate-to-draft.md)
+- App-to-Quest review checklist: [`references/app-to-quest/review-checklist.md`](./references/app-to-quest/review-checklist.md)
 - スキーマ正本: [`problems/SCHEMA.json`](../../../problems/SCHEMA.json)
 - 実例:
   - flag (Challenge): [`problems/challenges/hello-world/`](../../../problems/challenges/hello-world/)

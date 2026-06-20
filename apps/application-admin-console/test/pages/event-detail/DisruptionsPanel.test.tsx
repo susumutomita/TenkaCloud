@@ -2,15 +2,17 @@ import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApiClient } from "../../../src/api/client";
-import type { TeamSummary } from "../../../src/api/events-client";
+import type { EventDetail, TeamSummary } from "../../../src/api/events-client";
 import { DisruptionsPanel } from "../../../src/pages/event-detail/DisruptionsPanel";
 import type { EventTabContentProps } from "../../../src/pages/event-detail/tab-content-props";
 import { DisruptionsTab } from "../../../src/pages/event-detail/tabs";
 
-const { mockCatalog, mockAudit, mockFire } = vi.hoisted(() => ({
+const { mockCatalog, mockAudit, mockFire, mockRecurring, mockCancelRecurring } = vi.hoisted(() => ({
   mockCatalog: vi.fn(),
   mockAudit: vi.fn(),
   mockFire: vi.fn(),
+  mockRecurring: vi.fn(),
+  mockCancelRecurring: vi.fn(),
 }));
 
 vi.mock("../../../src/api/disruptions-client", async (importOriginal) => {
@@ -20,9 +22,24 @@ vi.mock("../../../src/api/disruptions-client", async (importOriginal) => {
     fetchDisruptionCatalog: mockCatalog,
     fetchDisruptionAudit: mockAudit,
     fireDisruption: mockFire,
+    fetchActiveRecurring: mockRecurring,
+    cancelRecurringDisruption: mockCancelRecurring,
     newFireRequestId: () => "fire-test-00000001",
   };
 });
+
+const recurRow = {
+  requestId: "r1",
+  problemId: "security-battle-royale",
+  disruptionId: "availability-flood",
+  firedBy: "op",
+  firedAt: "2026-06-18T00:00:00Z",
+  scope: "all",
+  affectedTeamIds: ["t1"],
+  intervalMinutes: 5,
+  maxFires: 6,
+  endsAt: "2026-06-18T01:00:00Z",
+};
 
 const t = (key: string, params?: Record<string, string | number>) =>
   params ? `${key}:${JSON.stringify(params)}` : key;
@@ -44,13 +61,20 @@ const catalogEntry = {
 };
 
 const fakeApi = {} as ApiClient;
-const renderPanel = (apiClient: ApiClient | null = fakeApi) =>
+const detail = (over: Partial<EventDetail> = {}): EventDetail =>
+  ({
+    eventId: "EVT1",
+    teams,
+    scoreEventsByTeam: [],
+    deploymentsByProblem: {},
+    ...over,
+  }) as unknown as EventDetail;
+const renderPanel = (apiClient: ApiClient | null = fakeApi, canMutateTenant = true) =>
   render(
     <DisruptionsPanel
       apiClient={apiClient}
-      canMutateTenant={true}
-      eventId="EVT1"
-      teams={teams}
+      canMutateTenant={canMutateTenant}
+      detail={detail()}
       t={t}
     />,
   );
@@ -64,6 +88,8 @@ beforeEach(() => {
   mockFire
     .mockReset()
     .mockResolvedValue({ auditId: "a1", firedAt: "2026-06-03T00:00:00Z", affectedTeamIds: ["t1"] });
+  mockRecurring.mockReset().mockResolvedValue({ items: [] });
+  mockCancelRecurring.mockReset().mockResolvedValue({ ok: true });
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -122,13 +148,7 @@ describe("DisruptionsPanel", () => {
 
   it("should disable fire controls for a read-only viewer", async () => {
     render(
-      <DisruptionsPanel
-        apiClient={fakeApi}
-        canMutateTenant={false}
-        eventId="EVT1"
-        teams={teams}
-        t={t}
-      />,
+      <DisruptionsPanel apiClient={fakeApi} canMutateTenant={false} detail={detail()} t={t} />,
     );
     expect(await screen.findByRole("button", { name: "disruptions.fire_button" })).toBeDisabled();
   });
@@ -293,6 +313,46 @@ describe("DisruptionsPanel", () => {
     expect(screen.getByText("disruptions.confirm_fire").closest("button")).toBeDisabled();
   });
 
+  it("[ADR-037] should fire with timing=recurring + intervalMinutes + maxFires", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByText("disruptions.fire_button"));
+    // switch the timing segmented control to "recurring" (3rd segment)
+    modal()?.findContent().findSegmentedControl()?.findSegments()[2]?.click();
+    const [interval, maxFires] = screen.getAllByRole("spinbutton");
+    fireEvent.change(interval as HTMLElement, { target: { value: "10" } });
+    fireEvent.change(maxFires as HTMLElement, { target: { value: "3" } });
+    fireEvent.click(screen.getByText("disruptions.confirm_fire"));
+    await waitFor(() =>
+      expect(mockFire).toHaveBeenCalledWith(
+        fakeApi,
+        "EVT1",
+        expect.objectContaining({ timing: "recurring", intervalMinutes: 10, maxFires: 3 }),
+      ),
+    );
+    expect(await screen.findByText(/disruptions.recurring_flash/)).toBeInTheDocument();
+  });
+
+  it("[ADR-037] should disable confirm for out-of-range recurring interval / maxFires", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByText("disruptions.fire_button"));
+    modal()?.findContent().findSegmentedControl()?.findSegments()[2]?.click();
+    const confirm = () => screen.getByText("disruptions.confirm_fire").closest("button");
+    const [interval, maxFires] = screen.getAllByRole("spinbutton") as HTMLElement[];
+    // interval: non-integer / > 1440 / < 1 are all invalid
+    fireEvent.change(interval, { target: { value: "1.5" } });
+    expect(confirm()).toBeDisabled();
+    fireEvent.change(interval, { target: { value: "2000" } });
+    expect(confirm()).toBeDisabled();
+    fireEvent.change(interval, { target: { value: "0" } });
+    expect(confirm()).toBeDisabled();
+    // interval valid, then maxFires < 1 and > 60 are invalid
+    fireEvent.change(interval, { target: { value: "5" } });
+    fireEvent.change(maxFires, { target: { value: "0" } });
+    expect(confirm()).toBeDisabled();
+    fireEvent.change(maxFires, { target: { value: "999" } });
+    expect(confirm()).toBeDisabled();
+  });
+
   it("should fire a disruption that declares no parameters", async () => {
     mockCatalog.mockResolvedValue({
       entries: [
@@ -315,7 +375,7 @@ describe("DisruptionsPanel", () => {
     const props = {
       apiClient: fakeApi,
       canMutateTenant: true,
-      detail: { eventId: "EVT1", teams },
+      detail: detail(),
       t,
     } as unknown as EventTabContentProps;
     render(<DisruptionsTab {...props} />);
@@ -356,5 +416,54 @@ describe("DisruptionsPanel", () => {
     // [ADR-037] scheduled row shows its injection time; immediate row shows "-"
     expect(await screen.findByText("2026-06-03T00:35:00Z")).toBeInTheDocument();
     expect(screen.getByText("disruptions.col_scheduled_for")).toBeInTheDocument();
+  });
+
+  it("[ADR-037 Slice 2] should list active recurring disruptions and cancel one", async () => {
+    mockRecurring.mockResolvedValue({ items: [recurRow] });
+    renderPanel();
+    expect(
+      await screen.findByText('disruptions.recurring_active_header:{"count":1}'),
+    ).toBeInTheDocument();
+    expect(screen.getByText("5m × 6")).toBeInTheDocument(); // interval × maxFires cadence
+    fireEvent.click(screen.getByText("disruptions.recurring_cancel"));
+    await waitFor(() => expect(mockCancelRecurring).toHaveBeenCalledWith(fakeApi, "EVT1", "r1"));
+  });
+
+  it("[ADR-037 Slice 2] should hide the recurring section when none are active", async () => {
+    // default mockRecurring → { items: [] }
+    renderPanel();
+    await screen.findByText("Availability flood"); // catalog loaded
+    expect(screen.queryByText(/disruptions.recurring_active_header/)).not.toBeInTheDocument();
+  });
+
+  it("[ADR-037 Slice 2] should surface an error when listing recurring fails", async () => {
+    mockRecurring.mockRejectedValue(new Error("recur list boom"));
+    renderPanel();
+    expect(await screen.findByText("recur list boom")).toBeInTheDocument();
+  });
+
+  it("[ADR-037 Slice 2] should surface an error when cancelling fails", async () => {
+    mockRecurring.mockResolvedValue({ items: [recurRow] });
+    mockCancelRecurring.mockRejectedValue(new Error("cancel boom"));
+    renderPanel();
+    fireEvent.click(await screen.findByText("disruptions.recurring_cancel"));
+    expect(await screen.findByText("cancel boom")).toBeInTheDocument();
+  });
+
+  it("[ADR-037 Slice 2] should show the cancel button as loading while a cancel is in flight", async () => {
+    mockRecurring.mockResolvedValue({ items: [recurRow] });
+    mockCancelRecurring.mockReturnValue(new Promise(() => undefined)); // never resolves
+    renderPanel();
+    const cancelBtn = await screen.findByText("disruptions.recurring_cancel");
+    fireEvent.click(cancelBtn);
+    // cancelling === requestId → button disabled (loading) while in flight
+    await waitFor(() => expect(cancelBtn.closest("button")).toBeDisabled());
+  });
+
+  it("[ADR-037 Slice 2] should disable cancel for a read-only (canMutateTenant=false) operator", async () => {
+    mockRecurring.mockResolvedValue({ items: [recurRow] });
+    renderPanel(fakeApi, false);
+    const cancelBtn = await screen.findByText("disruptions.recurring_cancel");
+    expect(cancelBtn.closest("button")).toBeDisabled();
   });
 });

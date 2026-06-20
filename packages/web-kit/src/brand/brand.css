@@ -1,0 +1,22 @@
+/*
+ * TenkaCloud brand tokens — Claude Design "Logo system" v1。
+ *
+ * Cloudscape の外 (landing / docs / 生 CSS) で使うブランド色・フォントを `--tc-*` で公開する。
+ * 値は packages/web-kit/src/brand/tokens.ts の `brandColors` / `brandFonts` と一致させること。
+ * 取り込み側: `@import "@tenkacloud/web-kit/src/brand/brand.css";`
+ */
+:root {
+  --tc-ink: #1d1d1f;
+  --tc-ink-2: #424245;
+  --tc-ink-3: #6e6e73;
+  --tc-ink-4: #86868b;
+  --tc-line: #d2d2d7;
+  --tc-line-soft: #e8e8ed;
+  --tc-paper: #ffffff;
+  --tc-paper-2: #fbfbfd;
+  --tc-paper-3: #f5f5f7;
+  /* Summit accent — 商標の自由度のためロゴ本体には常用しない差し色 */
+  --tc-accent: #ff6a32;
+  --tc-font-sans: "Inter", "Noto Sans JP", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --tc-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}

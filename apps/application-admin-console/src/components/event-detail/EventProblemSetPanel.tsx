@@ -4,6 +4,8 @@ import Header from "@cloudscape-design/components/header";
 import Table from "@cloudscape-design/components/table";
 import { useNavigate } from "react-router";
 import type { EventDetail } from "../../api/events-client";
+import { ProblemAlwaysOnSummary, ProblemCostSummary } from "../../components/ProblemCostSummary";
+import { findProblem } from "../../data/problems";
 import { renderProblemDeployStatus, renderProblemJobLinks } from "./shared";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
@@ -42,6 +44,24 @@ export function EventProblemSetPanel({
             id: "region",
             header: t("event_detail.problemset_col_region"),
             cell: (p) => p.defaultRegion,
+          },
+          {
+            id: "estimatedCost",
+            header: t("event_detail.problemset_col_estimated_cost"),
+            cell: (p) => (
+              <ProblemCostSummary
+                estimate={findProblem(p.problemId)?.costEstimate}
+                showResourceTypes={false}
+                t={t}
+              />
+            ),
+          },
+          {
+            id: "alwaysOnCost",
+            header: t("event_detail.problemset_col_always_on_cost"),
+            cell: (p) => (
+              <ProblemAlwaysOnSummary estimate={findProblem(p.problemId)?.costEstimate} t={t} />
+            ),
           },
           {
             id: "status",

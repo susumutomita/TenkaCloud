@@ -8,6 +8,7 @@ Usage:
   bun run scripts/tenkacloud-problem.ts create               # interactive (= 初心者向け、 引数なしで起動)
   bun run scripts/tenkacloud-problem.ts interactive          # 上と同じ (= 明示形)
   bun run scripts/tenkacloud-problem.ts validate <id>
+  bun run scripts/tenkacloud-problem.ts cost <id>      # offline CFn cost-risk estimate
   bun run scripts/tenkacloud-problem.ts dry-run <id> [--submitted <flag>] [--reveal-hints N]
                                                     [--cycles N] [--pattern <s|f sequence>]
   bun run scripts/tenkacloud-problem.ts inspect <id>  # metadata + template の全体 dump (= author debug)
@@ -20,6 +21,7 @@ Examples:
   bun run scripts/tenkacloud-problem.ts create hello-flag --kind flag
   bun run scripts/tenkacloud-problem.ts create        # 対話形式で kind / id / category を選ぶ
   bun run scripts/tenkacloud-problem.ts validate microservice-migration-battle
+  bun run scripts/tenkacloud-problem.ts cost stackstack
   bun run scripts/tenkacloud-problem.ts dry-run hello-world --submitted "actual-flag-value"
   bun run scripts/tenkacloud-problem.ts dry-run hello-world-battle --cycles 60 --pattern "ssssffssssss"
   bun run scripts/tenkacloud-problem.ts inspect hello-world

@@ -8,20 +8,11 @@ import StatusIndicator, {
   type StatusIndicatorProps,
 } from "@cloudscape-design/components/status-indicator";
 import { useNowMs } from "@tenkacloud/web-kit";
-import { useEffect, useState } from "react";
-import {
-  type DeployLogsResponse,
-  type DeploymentLogEntry,
-  type DeploymentLogView,
-  type DeploymentStatus,
-  getDeployLogs,
-  type ParticipantProblemView,
-  TERMINAL_STATUSES,
-} from "../api/portal-client";
+import type { DeploymentStatus, ParticipantProblemView } from "../api/portal-client";
 import { useT } from "../i18n";
 import { describeAgo } from "../lib/format";
 import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
-import type { ProblemPanelT } from "./ProblemPanel.helpers";
+import { describeApplicationStatus, type ProblemPanelT } from "./ProblemPanel.helpers";
 import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
 
 const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
@@ -46,20 +37,14 @@ const SCORING_KIND_KEY: Record<string, string> = {
 };
 
 type FlagScoringInfo = NonNullable<ParticipantProblemView["scoring"]>;
+type StackOutputEntry = [label: string, value: string];
 
 /** uptime kind で `lastScoredAt` がこの閾値より古ければ「停滞」表示。 */
 const STALE_THRESHOLD_MS = 2 * 60 * 1000;
 
-const LIVE_DEPLOY_LOG_POLL_INTERVAL_MS = 5_000;
 const COUNTDOWN_REFRESH_MS = 30_000;
 const AUTO_DELETE_SOON_THRESHOLD_MS = 15 * 60 * 1000;
-
-const DEPLOY_LOG_LEVEL_COLOR: Record<DeploymentLogEntry["level"], string> = {
-  info: "#9bd3ff",
-  success: "#9dffb0",
-  warning: "#ffd27d",
-  error: "#ff9b9b",
-};
+const HTTP_URL_OUTPUT_RE = /^https?:\/\//i;
 
 export function describeRemainingUntilAutoDelete(t: ProblemPanelT, diffMs: number): string {
   const totalMinutes = Math.max(1, Math.ceil(diffMs / 60_000));
@@ -91,58 +76,21 @@ export function buildAutoDeleteNotice(
   return undefined;
 }
 
-function useLiveDeployLog({
-  apiBaseUrl,
-  sessionToken,
-  problem,
-}: {
-  apiBaseUrl: string;
-  sessionToken: string;
-  problem: ParticipantProblemView;
-}): DeploymentLogView | null {
-  const [liveDeployLog, setLiveDeployLog] = useState<DeploymentLogView | null>(null);
-
-  // この polling は usePolling に寄せない: tick 間で `nextToken` を引き継ぐ paging と、
-  // `response.complete` で自走停止する業務ロジックを持ち、 単純な timer 制御 (usePolling の責務) を超える。
-  useEffect(() => {
-    setLiveDeployLog(null);
-    if (TERMINAL_STATUSES.has(problem.status)) return;
-
-    let cancelled = false;
-    let nextToken: string | undefined;
-    const poll = async () => {
-      try {
-        const response = await getDeployLogs(apiBaseUrl, sessionToken, problem.jobId, {
-          nextToken,
-          limit: 50,
-        });
-        if (cancelled) return;
-        nextToken = response.nextToken;
-        setLiveDeployLog((prev) => mergeLiveDeployLog(prev, response));
-        if (response.complete) cancelled = true;
-      } catch {
-        // Live logs are best-effort; keep the synthetic deployment log visible if polling fails.
-      }
-    };
-
-    void poll();
-    const interval = setInterval(() => {
-      if (!cancelled) void poll();
-    }, LIVE_DEPLOY_LOG_POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [apiBaseUrl, sessionToken, problem.jobId, problem.status]);
-
-  return liveDeployLog;
+export function isHttpUrlOutput(value: string): boolean {
+  return HTTP_URL_OUTPUT_RE.test(value);
 }
 
-export function selectDisplayedDeployLog(
-  liveDeployLog: DeploymentLogView | null,
-  deployLog: DeploymentLogView,
-): DeploymentLogView {
-  return liveDeployLog && liveDeployLog.entries.length > 0 ? liveDeployLog : deployLog;
+export function splitStackOutputs(stackOutputs: ParticipantProblemView["stackOutputs"]): {
+  readonly accessUrlEntries: StackOutputEntry[];
+  readonly detailEntries: StackOutputEntry[];
+} {
+  const entries = Object.entries(stackOutputs);
+  const accessUrlEntries = entries.filter(([, value]) => isHttpUrlOutput(value));
+  const nonUrlEntries = entries.filter(([, value]) => !isHttpUrlOutput(value));
+  return {
+    accessUrlEntries,
+    detailEntries: accessUrlEntries.length > 0 ? nonUrlEntries : entries,
+  };
 }
 
 export function describeProblemKind(
@@ -241,15 +189,19 @@ export function ProblemPanel({
 }) {
   const t = useT();
   const now = useNowMs(COUNTDOWN_REFRESH_MS);
-  const liveDeployLog = useLiveDeployLog({ apiBaseUrl, sessionToken, problem });
   const kindLabel = describeProblemKind(t, problem.scoring);
   const autoDeleteNotice = buildAutoDeleteNotice(t, problem.expiresAt, now);
   // #688: phased-polling / uptime-flat / uptime-multi / attack-detection も Battle 軸
   // (= uptime と同じ "古い lastScoredAt = stale" UX を適用)。 flag だけ非 Battle。
   const isStale = isStaleProblem(problem, now);
-  const displayedDeployLog = selectDisplayedDeployLog(liveDeployLog, problem.deployLog);
   const flagScoring = getCompleteFlagScoring(problem);
   const multiFlagScoring = getCompleteMultiFlagScoring(problem);
+  const stackOutputs = splitStackOutputs(problem.stackOutputs);
+  // Issue #1917: uptime kind のみ集約 health を返す。 採点が減点したとき「サービスが落ちている」
+  // と一目で分かるよう Score の隣に出す (= 減点理由の可視化)。
+  const health = problem.applicationStatus
+    ? describeApplicationStatus(problem.applicationStatus, t)
+    : null;
 
   return (
     <Container
@@ -275,11 +227,23 @@ export function ProblemPanel({
           now={now}
           t={t}
         />
-        {/* Audit #3: Job ID (= 内部 ULID) は競技者に見せない。 Region は AWS 多リージョン
-            の場合のみ意味があるが、 1 リージョン運用の現状では noise。 残すのは現在の score + 最終加点 */}
+        {/* Audit #3: Job ID (= 内部 ULID) は競技者に見せない。 Region は問題ごとに異なる
+            (operator が問題単位で deploy 先を選ぶ) ため、 どの region に建っているかを明示する
+            (= 「Event region」 1 つだけだと混乱する、 運用フィードバック)。 */}
         <KeyValuePairs
           items={[
+            { label: t("problem_panel.region_label"), value: <code>{problem.region}</code> },
             { label: t("problem_panel.current_score_label"), value: `${problem.score} pt` },
+            // Issue #1917: uptime のみ。 「Score が下がった = サービスが degraded/down」 を
+            // 同じ行群で結びつけ、 減点理由を競技者が把握できるようにする (per-endpoint は非露出)。
+            ...(health
+              ? [
+                  {
+                    label: t("problem_panel.health_label"),
+                    value: <StatusIndicator type={health.type}>{health.label}</StatusIndicator>,
+                  },
+                ]
+              : []),
             {
               label: t("problem_panel.last_scored_label"),
               value: describeAgo(problem.lastScoredAt, now),
@@ -287,34 +251,32 @@ export function ProblemPanel({
           ]}
         />
 
-        {displayedDeployLog?.entries.length > 0 && (
-          <DeployTerminal
-            entries={displayedDeployLog.entries}
-            title={t("problem_panel.deploy_log_header")}
-            defaultExpanded={!TERMINAL_STATUSES.has(problem.status)}
-          />
-        )}
-
-        {Object.keys(problem.stackOutputs).length > 0 && (
+        {stackOutputs.accessUrlEntries.length > 0 && (
           <Container header={<Header variant="h3">{t("problem_panel.outputs_header")}</Header>}>
             <KeyValuePairs
-              items={Object.entries(problem.stackOutputs).map(([label, value]) => ({
+              items={stackOutputs.accessUrlEntries.map(([label, value]) => ({
                 label,
-                // #1094: URL (= http(s)://) のときだけ click 可能リンクにする。 ARN / SSM
-                //   parameter name / NamePrefix 等の非 URL output を a href で wrap すると
-                //   broken link になるので plain code 表示に倒す。 「ParameterConsoleUrl」
-                //   のような deep link を問題 author が emit すれば click で AWS Console
-                //   直接遷移 (ssm:DescribeParameters 不要、 ADR-021 と整合)。
-                value: /^https?:\/\//i.test(value) ? (
+                value: (
                   <a href={value} target="_blank" rel="noreferrer noopener">
                     <code>{value}</code>
                   </a>
-                ) : (
-                  <code>{value}</code>
                 ),
               }))}
             />
           </Container>
+        )}
+        {stackOutputs.detailEntries.length > 0 && (
+          <ExpandableSection
+            headerText={t("problem_panel.stack_outputs_detail_header")}
+            defaultExpanded={false}
+          >
+            <KeyValuePairs
+              items={stackOutputs.detailEntries.map(([label, value]) => ({
+                label,
+                value: <code>{value}</code>,
+              }))}
+            />
+          </ExpandableSection>
         )}
         {flagScoring && (
           <FlagSubmissionPanel
@@ -339,73 +301,4 @@ export function ProblemPanel({
       </SpaceBetween>
     </Container>
   );
-}
-
-export function mergeLiveDeployLog(
-  prev: DeploymentLogView | null,
-  response: DeployLogsResponse,
-): DeploymentLogView {
-  const existing = prev?.entries ?? [];
-  const seen = new Set(existing.map((entry) => entry.id));
-  const next = response.entries
-    .filter((entry) => !seen.has(entry.id))
-    .map((entry): DeploymentLogEntry => ({ ...entry, level: classifyCodeBuildLog(entry.message) }));
-  return {
-    cursor: response.nextToken ?? prev?.cursor ?? "",
-    entries: [...existing, ...next].slice(-200),
-  };
-}
-
-export function classifyCodeBuildLog(message: string): DeploymentLogEntry["level"] {
-  if (/\b(error|failed|failure|timed out|fault)\b/i.test(message)) return "error";
-  if (/\b(succeeded|complete|completed)\b/i.test(message)) return "success";
-  if (/\b(warn|warning)\b/i.test(message)) return "warning";
-  return "info";
-}
-
-function DeployTerminal({
-  entries,
-  title,
-  defaultExpanded,
-}: {
-  entries: readonly DeploymentLogEntry[];
-  title: string;
-  defaultExpanded: boolean;
-}) {
-  return (
-    <ExpandableSection headerText={title} defaultExpanded={defaultExpanded}>
-      <div
-        style={{
-          maxHeight: 240,
-          overflowY: "auto",
-          borderRadius: 6,
-          background: "#0f1419",
-          color: "#d5dde5",
-          padding: "12px 14px",
-          fontFamily:
-            "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
-          fontSize: 13,
-          lineHeight: 1.55,
-        }}
-      >
-        {entries.map((entry) => (
-          <div key={entry.id} style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-            <span style={{ color: "#8796a5" }}>{formatTerminalTime(entry.timestamp)}</span>{" "}
-            <span style={{ color: DEPLOY_LOG_LEVEL_COLOR[entry.level] }}>[{entry.level}]</span>{" "}
-            <span>{entry.message}</span>
-          </div>
-        ))}
-      </div>
-    </ExpandableSection>
-  );
-}
-
-export function formatTerminalTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "--:--:--";
-  return date.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
 }

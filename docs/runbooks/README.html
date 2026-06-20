@@ -1,8 +1,29 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <title>Event-day operations runbooks</title>
+<meta name="description" content="This directory is the operator-facing playbook for running a small TenkaCloud event end-to-end without relying on maintainer memory. Each runbook is self-contained and lists Aud...">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://susumutomita.github.io/TenkaCloud/docs/runbooks/README.html">
+<meta property="og:title" content="Event-day operations runbooks">
+<meta property="og:description" content="This directory is the operator-facing playbook for running a small TenkaCloud event end-to-end without relying on maintainer memory. Each runbook is self-contained and lists Aud...">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://susumutomita.github.io/TenkaCloud/docs/runbooks/README.html">
+<meta property="og:site_name" content="TenkaCloud">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://susumutomita.github.io/TenkaCloud/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Event-day operations runbooks">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Event-day operations runbooks">
+<meta name="twitter:description" content="This directory is the operator-facing playbook for running a small TenkaCloud event end-to-end without relying on maintainer memory. Each runbook is self-contained and lists Aud...">
+<meta name="twitter:image" content="https://susumutomita.github.io/TenkaCloud/assets/og-image.png">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="https://susumutomita.github.io/TenkaCloud/assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="https://susumutomita.github.io/TenkaCloud/assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="https://susumutomita.github.io/TenkaCloud/assets/apple-touch-icon.png">
 <style>
   :root {
     --c-text: #1f2328;
@@ -119,6 +140,13 @@
 <td>Once per release — validate the cross-account disruption path on real AWS</td>
 <td>~10 min</td>
 </tr>
+<tr>
+<td>9</td>
+<td><a href="./backup-restore.md">Backup and restore posture</a></td>
+<td>Operator / facilitator</td>
+<td>T-7 planning, paid-event sign-off, or suspected data loss</td>
+<td>20 min planning; 15 to 60 min restore decision</td>
+</tr>
 </tbody></table>
 <h2>How the runbooks cross-link</h2>
 <ul>
@@ -126,6 +154,7 @@
 <li><a href="./live-monitoring.md">Live monitoring</a> links to <a href="./incident-response.md">Incident response</a> at the triage decision point.</li>
 <li><a href="./incident-response.md">Incident response</a> and <a href="./teardown.md">Teardown</a> both cross-link back to <a href="./live-monitoring.md">Live monitoring</a> for context on what was already observed.</li>
 <li><a href="./multi-cloud-providers.md">Multi-cloud providers</a> is a setup runbook (not event-day): run it per team before deploying a non-AWS problem, and its per-provider <code>destroy</code> rolls up into <a href="./teardown.md">Teardown</a>.</li>
+<li><a href="./backup-restore.md">Backup and restore posture</a> is the recovery boundary for platform data, S3 assets, runtime config, audit logs, and intentionally ephemeral state. Use it before promising paid-event RPO / RTO.</li>
 <li>All runbooks cite the relevant ADRs as the source of truth for design decisions:<ul>
 <li><a href="../architecture/adr-006-notifications.html">ADR-006: Notifications</a> — operator-to-participant messaging contract.</li>
 <li><a href="../architecture/adr-014-eventbridge-driven-state-reconciliation.html">ADR-014: EventBridge-driven state reconciliation</a> — how state converges without SSE / WebSocket.</li>
@@ -141,6 +170,7 @@
 <ol>
 <li><a href="./pre-event-checklist.md">Pre-event checklist</a> — read it once end-to-end, then schedule the T-7 / T-1 / T-0 reminders.</li>
 <li><a href="./dry-run.md">Dry run</a> — execute it at least once. The dry run is the gate, not the production event.</li>
+<li><a href="./backup-restore.md">Backup and restore posture</a> — confirm the event&#39;s recovery expectations match what the current infrastructure actually provides.</li>
 <li>Bookmark <a href="./live-monitoring.md">Live monitoring</a> and <a href="./incident-response.md">Incident response</a> side by side. They are the two tabs you keep open during the event.</li>
 <li><a href="./teardown.md">Teardown</a> — review the day before so you do not stall after the event ends.</li>
 </ol>

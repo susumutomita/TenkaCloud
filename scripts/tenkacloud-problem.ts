@@ -9,6 +9,7 @@
 import { createInterface } from "node:readline/promises";
 
 import { type CliArgs, parseArgs } from "./problem-cli/args";
+import { runCost } from "./problem-cli/cost";
 import { runCreate } from "./problem-cli/create";
 import { runDryRun } from "./problem-cli/dry-run";
 import { listKinds, printHelp } from "./problem-cli/help";
@@ -18,6 +19,7 @@ import { runValidate } from "./problem-cli/validate";
 
 export { type CliArgs, parseArgs } from "./problem-cli/args";
 export { KIND_TO_DEFAULT_CATEGORY, KINDS, type Kind } from "./problem-cli/constants";
+export { type CostResult, runCost } from "./problem-cli/cost";
 export { applyPlaceholders, type CreateResult, runCreate } from "./problem-cli/create";
 export { type DryRunArgs, type DryRunResult, runDryRun } from "./problem-cli/dry-run";
 export { listKinds, printHelp } from "./problem-cli/help";
@@ -50,6 +52,10 @@ async function main(): Promise<void> {
     }
     case "validate": {
       handleValidate(args);
+      return;
+    }
+    case "cost": {
+      handleCost(args);
       return;
     }
     case "dry-run": {
@@ -90,7 +96,7 @@ function handleCreate(args: CliArgs): void {
     ...(args.category ? { category: args.category } : {}),
   });
   console.log(
-    `Created ${r.outputDir}\n  category: ${r.category}\n  kind:     ${r.kind}\n\nNext steps:\n  1. Edit ${r.outputDir}/metadata.json (name / description / tags / learningGoals)\n  2. Edit ${r.outputDir}/template.yaml (実 AWS リソース)\n  3. bun run scripts/tenkacloud-problem.ts validate ${args.problemId}\n  4. make validate-problems`,
+    `Created ${r.outputDir}\n  category: ${r.category}\n  kind:     ${r.kind}\n\nNext steps:\n  1. Edit ${r.outputDir}/metadata.json (name / description / tags / learningGoals)\n  2. Edit ${r.outputDir}/template.yaml (実 AWS リソース)\n  3. bun run scripts/tenkacloud-problem.ts cost ${args.problemId}\n  4. bun run scripts/tenkacloud-problem.ts validate ${args.problemId}\n  5. make validate-problems`,
   );
 }
 
@@ -103,6 +109,16 @@ function handleValidate(args: CliArgs): void {
     for (const e of r.errors) console.error(`  - ${e}`);
     process.exit(1);
   }
+}
+
+function handleCost(args: CliArgs): void {
+  const r = runCost({ problemId: args.problemId ?? "" });
+  if (!r.ok) {
+    console.error(`NG ${r.summary}`);
+    process.exit(1);
+  }
+  for (const line of r.lines) console.log(line);
+  console.log(`\nsummary: ${r.summary}`);
 }
 
 function handleDryRun(args: CliArgs): void {

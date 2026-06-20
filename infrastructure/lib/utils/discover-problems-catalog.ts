@@ -253,6 +253,12 @@ export interface ProblemDisruptionEntry {
   readonly action?: DisruptionAction;
   /** [ADR-033 / #1665] 採点上の効果 (省略 = 効果なし = 後方互換)。 */
   readonly effect?: DisruptionEffect;
+  /**
+   * [ADR-037 Slice 3] 条件発火 (triggers) 時に「定期実行」させる宣言。 宣言されると trigger 成立時に
+   * recurrence を載せて発火し、 executor が `rate(intervalMinutes)` schedule を作って maxFires 回くり返す
+   * (= 「スコア一定以上で定期妨害」)。 省略 = 1 回だけ発火 (= 後方互換)。
+   */
+  readonly recurrence?: { readonly intervalMinutes: number; readonly maxFires: number };
 }
 
 /**
@@ -386,6 +392,35 @@ export function parseDisruptionsCatalogEnv(
   }
 }
 
+/**
+ * SCHEMA `disruptions[].recurrence` を fail-safe に取り出す。 両 field 正の有限整数のみ採用 (それ以外は
+ * undefined = 1 回だけ発火)。 上限は手動 fire の schema と揃え intervalMinutes ≤ 1440 / maxFires ≤ 60。
+ */
+export function parseDisruptionRecurrence(
+  value: unknown,
+): { intervalMinutes: number; maxFires: number } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const v = value as { intervalMinutes?: unknown; maxFires?: unknown };
+  const { intervalMinutes, maxFires } = v;
+  if (
+    typeof intervalMinutes !== "number" ||
+    !Number.isInteger(intervalMinutes) ||
+    intervalMinutes < 1 ||
+    intervalMinutes > 1440
+  ) {
+    return undefined;
+  }
+  if (
+    typeof maxFires !== "number" ||
+    !Number.isInteger(maxFires) ||
+    maxFires < 1 ||
+    maxFires > 60
+  ) {
+    return undefined;
+  }
+  return { intervalMinutes, maxFires };
+}
+
 function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefined {
   if (!value || typeof value !== "object") return undefined;
   const v = value as {
@@ -400,6 +435,7 @@ function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefine
     triggers?: unknown;
     action?: unknown;
     effect?: unknown;
+    recurrence?: unknown;
   };
   if (
     typeof v.id !== "string" ||
@@ -411,6 +447,7 @@ function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefine
   const triggers = parseDisruptionTriggers(v.triggers);
   const action = parseDisruptionAction(v.action);
   const effect = parseDisruptionEffect(v.effect);
+  const recurrence = parseDisruptionRecurrence(v.recurrence);
   return {
     id: v.id,
     name: v.name,
@@ -432,6 +469,7 @@ function parseDisruptionEntry(value: unknown): ProblemDisruptionEntry | undefine
     ...(triggers ? { triggers } : {}),
     ...(action ? { action } : {}),
     ...(effect ? { effect } : {}),
+    ...(recurrence ? { recurrence } : {}),
   };
 }
 

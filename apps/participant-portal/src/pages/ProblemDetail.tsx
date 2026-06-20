@@ -6,6 +6,7 @@ import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import { Markdown } from "@tenkacloud/web-kit";
 import { useMemo } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import type { ParticipantProblemView, ParticipantTeamView } from "../api/portal-client";
@@ -15,6 +16,7 @@ import { EndpointOverrideForm } from "../components/EndpointOverrideForm";
 import { ProblemPanel } from "../components/ProblemPanel";
 import type { AppConfig } from "../config";
 import {
+  findProblemDiagramUrl,
   findProblemMetadata,
   type ProblemCatalogEntry,
   resolveLocalizedNarrative,
@@ -181,6 +183,9 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           problemId={problem.problemId}
           jobId={problem.jobId}
           score={problem.score}
+          locale={locale}
+          posture={problem.posture}
+          platform={problem.platform}
           team={view.team}
           stackOutputs={problem.stackOutputs}
           coordinationApiUrl={config.coordinationApiUrl}
@@ -257,11 +262,13 @@ function ProblemInfoSection({
   t,
 }: {
   metadata: ProblemCatalogEntry;
-  narrative: { readonly shortDescription: string };
+  narrative: { readonly shortDescription: string; readonly instructions?: string };
   t: (key: string, params?: Readonly<Record<string, string | number>>) => string;
 }) {
   // Audit table #1/#2: 想定プレイ時間 / 学習目的 / タグ は competition では出さない
   // (= timing 漏洩 + 出題意図メタの暴露)。 残すのは カテゴリ + 難易度 + 問題説明 のみ。
+  // Phase 1c (#1929): per-problem architecture diagram (bundled diagram.svg), if any.
+  const diagramUrl = findProblemDiagramUrl(metadata.id);
   return (
     <Container header={<Header variant="h2">{t("problem_detail.info_header")}</Header>}>
       <SpaceBetween size="m">
@@ -298,6 +305,26 @@ function ProblemInfoSection({
            *   を参照。 */}
           <Box variant="p">{narrative.shortDescription}</Box>
         </div>
+        {/* Phase 1c (#1929): per-problem architecture diagram (bundled diagram.svg). */}
+        {diagramUrl && (
+          <div>
+            <Box variant="awsui-key-label">{t("problem_detail.info_diagram_label")}</Box>
+            <img
+              src={diagramUrl}
+              alt={t("problem_detail.info_diagram_label")}
+              style={{ maxWidth: "100%", height: "auto" }}
+            />
+          </div>
+        )}
+        {/* Issue #1929: player-facing getting-started guidance (Markdown, images allowed
+         *   via the web-kit allowlist). Non-spoiler by contract -- scoring numbers /
+         *   hardened state / surprise mechanics stay in description / hints. */}
+        {narrative.instructions && (
+          <div>
+            <Box variant="awsui-key-label">{t("problem_detail.info_instructions_label")}</Box>
+            <Markdown source={narrative.instructions} />
+          </div>
+        )}
       </SpaceBetween>
     </Container>
   );

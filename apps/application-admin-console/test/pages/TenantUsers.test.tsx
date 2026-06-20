@@ -126,8 +126,9 @@ describe("TenantUsersPage", () => {
     const { container } = renderPage();
     await screen.findByText("alice@example.test");
     const select = createWrapper(container).findSelect();
+    // 行内 Select は expandToViewport なので dropdown は portal に出る → flag が必要。
     select?.openDropdown();
-    select?.selectOptionByValue("TenantOperator");
+    select?.selectOptionByValue("TenantOperator", { expandToViewport: true });
 
     await waitFor(() =>
       expect(mockChangeRole).toHaveBeenCalledWith(adminApi, "alice@example.test", "TenantOperator"),
@@ -252,8 +253,9 @@ describe("TenantUsersPage", () => {
     await screen.findByText("alice@example.test");
 
     const select = createWrapper(container).findSelect();
+    // 行内 Select は expandToViewport なので dropdown は portal に出る → flag が必要。
     select?.openDropdown();
-    select?.selectOptionByValue("TenantOperator");
+    select?.selectOptionByValue("TenantOperator", { expandToViewport: true });
 
     expect(await screen.findByText("tenant_users.mutation_error_header")).toBeInTheDocument();
     expect(screen.getByText("role change denied")).toBeInTheDocument();

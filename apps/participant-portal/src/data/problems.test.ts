@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildDiagramMap,
+  findProblemDiagramUrl,
   findProblemMetadata,
   metadataToEntry,
   type ProblemCatalogEntry,
@@ -87,6 +89,20 @@ describe("metadataToEntry (fairness projection)", () => {
     // i18n present but with no `en` key at all → also collapses to no i18n.
     const noEn = { ...FAIRNESS_FIXTURE, i18n: {} } as Parameters<typeof metadataToEntry>[0];
     expect(metadataToEntry(noEn).i18n).toBeUndefined();
+  });
+
+  it("should carry player-facing instructions through the entry and locale resolution (#1929)", () => {
+    const withInstr = {
+      ...FAIRNESS_FIXTURE,
+      instructions: "▶ first move: read the briefing",
+      i18n: { en: { instructions: "▶ first move (EN)" } },
+    } as Parameters<typeof metadataToEntry>[0];
+    const entry = metadataToEntry(withInstr);
+    expect(entry.instructions).toBe("▶ first move: read the briefing");
+    expect(resolveLocalizedNarrative(entry, "ja").instructions).toBe(
+      "▶ first move: read the briefing",
+    );
+    expect(resolveLocalizedNarrative(entry, "en").instructions).toBe("▶ first move (EN)");
   });
 });
 
@@ -288,5 +304,23 @@ describe("findProblemMetadata (Portal build-time catalog #550)", () => {
         /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u,
       );
     });
+  });
+});
+
+describe("problem architecture diagram (#1929 Phase 1c)", () => {
+  it("should key the diagram map by the problem directory name", () => {
+    const m = buildDiagramMap({
+      "../../../../problems/challenges/foo/diagram.svg": "/assets/foo.svg",
+      "../../../../problems/battles/bar/diagram.svg": "/assets/bar.svg",
+      // pathological key with no "/" exercises the empty-segment fallback branch.
+      "diagram.svg": "/assets/edge.svg",
+    });
+    expect(m.get("foo")).toBe("/assets/foo.svg");
+    expect(m.get("bar")).toBe("/assets/bar.svg");
+    expect(m.get("")).toBe("/assets/edge.svg");
+  });
+
+  it("should return undefined for a problem without a bundled diagram", () => {
+    expect(findProblemDiagramUrl("does-not-exist")).toBeUndefined();
   });
 });

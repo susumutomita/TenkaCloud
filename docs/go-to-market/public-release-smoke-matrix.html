@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Public-release smoke matrix</title>
+<meta name="description" content="This matrix is the repeatable browser, responsive, accessibility, and performance smoke artifact for TenkaCloud's public surfaces. It does not replace unit tests or make before-...">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://susumutomita.github.io/TenkaCloud/docs/go-to-market/public-release-smoke-matrix.html">
+<meta property="og:title" content="Public-release smoke matrix">
+<meta property="og:description" content="This matrix is the repeatable browser, responsive, accessibility, and performance smoke artifact for TenkaCloud's public surfaces. It does not replace unit tests or make before-...">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://susumutomita.github.io/TenkaCloud/docs/go-to-market/public-release-smoke-matrix.html">
+<meta property="og:site_name" content="TenkaCloud">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://susumutomita.github.io/TenkaCloud/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Public-release smoke matrix">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Public-release smoke matrix">
+<meta name="twitter:description" content="This matrix is the repeatable browser, responsive, accessibility, and performance smoke artifact for TenkaCloud's public surfaces. It does not replace unit tests or make before-...">
+<meta name="twitter:image" content="https://susumutomita.github.io/TenkaCloud/assets/og-image.png">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="https://susumutomita.github.io/TenkaCloud/assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="https://susumutomita.github.io/TenkaCloud/assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="https://susumutomita.github.io/TenkaCloud/assets/apple-touch-icon.png">
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-info: #0969da;
+    --c-warn: #9a6700;
+    --c-danger: #cf222e;
+    --c-ok: #1a7f37;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  h4 { font-size: 0.95rem; margin-top: 1.2rem; color: var(--c-muted); }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--c-bg-soft); border: 1px solid var(--c-border); border-radius: 4px;
+        padding: .8rem 1rem; overflow-x: auto; font-size: 0.88rem; line-height: 1.45; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--c-info); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  ul, ol { margin: 0.4rem 0; padding-left: 1.6rem; }
+  li { margin: 0.15rem 0; }
+  blockquote { border-left: 4px solid var(--c-border); margin: .6rem 0; padding: .2rem 1rem;
+               color: var(--c-muted); background: var(--c-bg-soft); }
+  hr { border: 0; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+  .doc-source {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--c-border);
+    font-size: 0.82rem; color: var(--c-muted);
+  }
+  .doc-source code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+<h1>Public-release smoke matrix</h1>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Tracking issue</td>
+<td><a href="https://github.com/susumutomita/TenkaCloud/issues/1868">#1868</a></td>
+</tr>
+<tr>
+<td>Owner</td>
+<td>Release facilitator or the person signing the public demo gate</td>
+</tr>
+<tr>
+<td>When to run</td>
+<td>Before an external community demo, public release announcement, or paid-event dry run</td>
+</tr>
+<tr>
+<td>Output</td>
+<td>A completed pass/fail record with evidence links and follow-up issues for every failure</td>
+</tr>
+</tbody></table>
+<p>This matrix is the repeatable browser, responsive, accessibility, and performance smoke artifact for TenkaCloud&#39;s public surfaces. It does not replace unit tests or <code>make before-commit</code>; it records the human-observable checks that matter before the project is shown outside a controlled maintainer environment.</p>
+<p>Do not silently fix failures inside the smoke run. If a product defect is found, create a separate issue, link it in the &quot;Defect issue&quot; column, and decide whether it blocks the release gate.</p>
+<h2>Run record template</h2>
+<p>Create one run record per release gate. The record can live in a PR comment, GitHub issue comment, or event run sheet. Do not commit customer screenshots, login keys, tenant secrets, or AWS account identifiers.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Date / operator</td>
+<td></td>
+</tr>
+<tr>
+<td>Git commit</td>
+<td></td>
+</tr>
+<tr>
+<td>Environment</td>
+<td>Local / Lite / SaaS / deployed preview</td>
+</tr>
+<tr>
+<td>URLs tested</td>
+<td>Landing, docs, admin-console, application-admin-console, participant-portal</td>
+</tr>
+<tr>
+<td>Browsers tested</td>
+<td>Chrome, Firefox, Safari</td>
+</tr>
+<tr>
+<td>Viewports tested</td>
+<td>Mobile, tablet, desktop</td>
+</tr>
+<tr>
+<td>Long-name fixture used</td>
+<td>Event / team / problem names copied from the fixture below</td>
+</tr>
+<tr>
+<td>Result</td>
+<td>Pass / conditional pass / fail</td>
+</tr>
+<tr>
+<td>Follow-up issues</td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>Required browsers and viewports</h2>
+<table>
+<thead>
+<tr>
+<th>Browser / device</th>
+<th>Minimum version policy</th>
+<th align="right">Mobile 390×844</th>
+<th align="right">Tablet 768×1024</th>
+<th align="right">Desktop 1440×900</th>
+<th>Result</th>
+<th>Evidence</th>
+<th>Defect issue</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Chrome stable</td>
+<td>Current stable on the operator machine</td>
+<td align="right">Required</td>
+<td align="right">Required</td>
+<td align="right">Required</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Firefox stable</td>
+<td>Current stable on the operator machine</td>
+<td align="right">Optional if no mobile device; desktop required</td>
+<td align="right">Optional</td>
+<td align="right">Required</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Safari</td>
+<td>Current Safari on macOS and iOS when available</td>
+<td align="right">Required on iOS for public launch; otherwise record N/A</td>
+<td align="right">Optional</td>
+<td align="right">Required on macOS for paid-event sign-off</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<p>If Safari is unavailable in the operator environment, record the gap explicitly. A public release can accept that risk; a paid event with customer devices that include Safari should not.</p>
+<h2>Long-name fixture</h2>
+<p>Use these values in at least one event, team, and problem flow. If the deployed environment cannot safely create test data, use a mocked/local environment and record that boundary.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Fixture value</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Event name</td>
+<td><code>Public Release Smoke - Long Event Name With 80 Characters 2026 External Demo</code></td>
+</tr>
+<tr>
+<td>Team name</td>
+<td><code>Team Long Name - Tokyo Cloud Migration Workshop Participants Alpha</code></td>
+</tr>
+<tr>
+<td>Problem name</td>
+<td><code>Microservice Migration Battle - Cross-Team Registered URL Health Check</code></td>
+</tr>
+<tr>
+<td>Operator display name</td>
+<td><code>Release Facilitator With Long Display Name</code></td>
+</tr>
+</tbody></table>
+<h2>Surface matrix</h2>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Flow</th>
+<th>Required checks</th>
+<th>Result</th>
+<th>Evidence</th>
+<th>Defect issue</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Landing / docs site</td>
+<td>Home page, global navigation, gallery, docs links, community/commercial links</td>
+<td>Loads with no console errors; keyboard tab order reaches primary links; current page has a meaningful title; mobile width does not crop content; long link text wraps; external links open expected targets</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Landing / docs site</td>
+<td>Search-by-reading smoke</td>
+<td>A first-time visitor can reach quickstart, problem gallery, runbooks, security posture, and public-quality review within 3 clicks from the landing page or docs index</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Admin Console</td>
+<td>Unauthenticated login surface</td>
+<td>Cognito Hosted UI redirect or configured login entry is visible; keyboard focus lands on the first actionable control; auth errors do not expose stack traces or raw HTML</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Admin Console</td>
+<td>Tenant list and tenant detail</td>
+<td>Long tenant/event names wrap without overlapping controls; table sorting/filtering remains keyboard reachable; icon-only controls have accessible names</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Admin Console</td>
+<td>Operations / jobs / audit views</td>
+<td>Empty, loading, error, and populated states are distinguishable without relying only on color; modal or drill-down focus returns to the opener</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Application Admin Console</td>
+<td>Login and event list</td>
+<td>Login flow is reachable; expired/unauthorized state is understandable; mobile/tablet layout keeps primary event actions visible</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Application Admin Console</td>
+<td>Event create and event detail</td>
+<td>Event creation works or a documented mock/API fixture is used; long event/team names remain readable; primary actions are keyboard reachable</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Application Admin Console</td>
+<td>Problem catalog and deploy detail</td>
+<td>Problem detail opens; deploy request path is visible; deployment status and errors include text labels; copy buttons and external links have accessible names</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Application Admin Console</td>
+<td>Competitor account and secret modal</td>
+<td>Modal traps focus; Escape/close works; focus returns to the opener; secret fields are not copied into screenshots or public evidence</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Application Admin Console</td>
+<td>Notifications</td>
+<td>Create/send flow or mock equivalent is checked; success/error feedback is visible in text; repeated sends do not duplicate UI rows unexpectedly</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Participant Portal</td>
+<td>Team login</td>
+<td>Login key entry is reachable by keyboard; invalid key shows a text error; local storage expiry path is understandable; mobile layout does not hide the submit action</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Participant Portal</td>
+<td>Setup / AWS console handoff</td>
+<td>Setup instructions fit mobile and tablet widths; external console links are labeled; unavailable federation paths fail with a user-readable message</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Participant Portal</td>
+<td>Problem list and problem detail</td>
+<td>Long problem names wrap; markdown content is readable; hints/phases/disruptions only show public information; submission controls are keyboard reachable</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Participant Portal</td>
+<td>Scoreboard</td>
+<td>Team names and scores remain readable at mobile/tablet/desktop widths; current team is identifiable without relying only on color</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Participant Portal</td>
+<td>Notifications</td>
+<td>Info/warning notifications render within one polling interval in a real environment or via mock fixture locally; screen-reader-visible text exists for severity and time</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>Accessibility smoke</h2>
+<p>Run these checks on each application surface at desktop width, then repeat the keyboard-only path on mobile width for the participant portal and landing/docs.</p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>How to verify</th>
+<th>Result</th>
+<th>Evidence</th>
+<th>Defect issue</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Keyboard-only primary flow</td>
+<td>Use Tab / Shift+Tab / Enter / Space. Mouse must not be required for login, navigation, event detail, deploy/problem detail, participant problem detail, scoreboard, or notifications.</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Modal focus behavior</td>
+<td>Open each modal in the matrix, confirm focus moves into the modal, cannot escape behind it with Tab, closes with the documented close control, and returns to the opener.</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Icon-only labels</td>
+<td>Inspect buttons/links without visible text. Each has visible tooltip text, <code>aria-label</code>, or component-provided accessible name.</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Error and status text</td>
+<td>Loading, success, warning, error, and disabled states are expressed with text, not color alone.</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Page title and heading</td>
+<td>Browser title and primary heading describe the current surface. This can be a document title for static docs and an app heading for SPA screens.</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Screen reader quick pass</td>
+<td>Use the browser accessibility tree or a screen reader spot check on at least landing/docs, event detail, deploy/problem detail, participant problem detail, and scoreboard.</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>Performance and bundle observations</h2>
+<p>Record observations; do not add a hard budget here unless the repo already enforces one. A &quot;fail&quot; means the operator believes the release would visibly degrade a public demo.</p>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Observation</th>
+<th>Result</th>
+<th>Evidence</th>
+<th>Defect issue</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Landing / docs</td>
+<td>Initial load has no broken images, severe layout shift, or console errors; large media is intentional and visible.</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Admin Console</td>
+<td>Initial app shell renders without a blank screen after config load; built asset sizes are recorded from the build output or browser network panel.</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Application Admin Console</td>
+<td>Event/detail/deploy screens do not lock the browser while loading mock or real API data; built asset sizes are recorded.</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Participant Portal</td>
+<td>Team login, problem detail, scoreboard, and notifications remain responsive on mobile width; built asset sizes are recorded.</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>API-backed flows</td>
+<td>Slow or failed API calls show a bounded loading/error state and do not create duplicate mutations when retried from the UI.</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>Release decision</h2>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Every required row passes</td>
+<td>The public-release smoke gate can be marked pass for this commit.</td>
+</tr>
+<tr>
+<td>A row fails but has a non-blocking issue</td>
+<td>Mark conditional pass, link the issue, and record why the defect does not block this release.</td>
+</tr>
+<tr>
+<td>Login, deploy/problem detail, participant problem detail, scoreboard, modal focus, or secret handling fails</td>
+<td>Mark fail. Do not proceed to public release or paid-event dry run until the blocking issue is fixed.</td>
+</tr>
+<tr>
+<td>Evidence cannot be shared publicly because it contains customer data</td>
+<td>Store it in the private event run sheet and link only the sanitized summary in public issues.</td>
+</tr>
+</tbody></table>
+<h2>Links</h2>
+<ul>
+<li>Public-quality review: <a href="./public-quality-review.md">public-quality-review.md</a>.</li>
+<li>Launch readiness: <a href="./launch-readiness.html">launch-readiness.html</a>.</li>
+<li>Event runbook gate: <a href="../runbooks/pre-event-checklist.md">pre-event checklist</a>.</li>
+<li>Browser/runtime checks still required before merge: <code>make harness</code> and <code>make before-commit</code>.</li>
+</ul>
+
+<div class="doc-source">Source: <code>docs/go-to-market/public-release-smoke-matrix.md</code> — このファイルは
+<code>scripts/build-docs.ts</code> が markdown から自動生成したものです。直接編集せず
+<code>docs/go-to-market/public-release-smoke-matrix.md</code> 側を直して <code>make build-docs</code> を実行してください。</div>
+</body>
+</html>

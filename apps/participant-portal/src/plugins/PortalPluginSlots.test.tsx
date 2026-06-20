@@ -50,6 +50,7 @@ const baseProps = {
   problemId: "fake-problem",
   jobId: "job-1",
   score: 0,
+  locale: "ja" as const,
   team: { teamName: "team-x" },
   stackOutputs: {},
 };
@@ -89,6 +90,34 @@ describe("PortalPluginSlots (ADR-012 Phase 5)", () => {
     );
     render(<PortalPluginSlots {...baseProps} />);
     await waitFor(() => expect(screen.getByTestId("coord")).toHaveTextContent("Router"));
+  });
+
+  it("should pass locale and live posture snapshot to plugin slot props (#1895/#1896)", async () => {
+    function RuntimePropsPanel(props: {
+      locale: string;
+      posture?: Record<string, boolean>;
+      platform?: string;
+    }) {
+      return (
+        <div data-testid="runtime-props">
+          {props.locale}:{props.platform}:{props.posture?.db_present ? "done" : "missing"}
+        </div>
+      );
+    }
+    mockLoadPluginSlot.mockImplementation((_problemId, slotName) =>
+      slotName === "StatusPanel" ? RuntimePropsPanel : undefined,
+    );
+    render(
+      <PortalPluginSlots
+        {...baseProps}
+        locale="en"
+        posture={{ db_present: true, auth_enabled: false }}
+        platform="posture-1"
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("runtime-props")).toHaveTextContent("en:posture-1:done"),
+    );
   });
 
   it("should bind a live coordination client when coordinationApiUrl + sessionToken are present and route op/projection through it (#1420)", async () => {

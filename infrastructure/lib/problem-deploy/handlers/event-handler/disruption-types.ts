@@ -31,6 +31,11 @@ export interface DisruptionFireInput {
    * executor が `afterMinutes` 分後に注入を予約する (= published Detail に乗せて executor へ渡す)。
    */
   readonly afterMinutes?: number;
+  /**
+   * [ADR-037] recurring fire。 宣言されると executor が `rate(intervalMinutes)` schedule を作り、
+   * maxFires 回ぶん経過後に aws-scheduler が自動停止する。 `afterMinutes` とは排他 (= schema で検証)。
+   */
+  readonly recurrence?: { readonly intervalMinutes: number; readonly maxFires: number };
 }
 
 export interface DisruptionFireResult {

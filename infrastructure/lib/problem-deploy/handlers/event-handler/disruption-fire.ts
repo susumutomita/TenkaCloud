@@ -28,6 +28,7 @@ import { PutEventsCommand, type PutEventsRequestEntry } from "@aws-sdk/client-ev
 import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { logDeployTrace } from "../shared/trace-log.js";
+import { writeRecurringRegistry } from "./disruption-recurring.js";
 import type {
   DisruptionAuditRow,
   DisruptionFireInput,
@@ -264,6 +265,10 @@ export async function fireDisruption(
     }),
   );
 
+  // 6b. [ADR-037 Slice 2] recurring fire は RECUR# registry row も書く (= operator が一覧 / 早期解除する
+  // ための索引)。 詳細は disruption-recurring.writeRecurringRegistry (非 recurring は no-op)。
+  await writeRecurringRegistry(shared, input, affected, firedAt, expiresAt);
+
   logDeployTrace("disruption.fire", {
     auditId,
     eventId: input.eventId,
@@ -318,6 +323,8 @@ async function publishEntries(
       firedAt,
       // [ADR-037] scheduled fire: executor がこの分数だけ注入を遅延予約する。 即時は省略。
       ...(input.afterMinutes ? { afterMinutes: input.afterMinutes } : {}),
+      // [ADR-037] recurring fire: executor が rate(intervalMinutes) schedule を作る。 即時/予約では省略。
+      ...(input.recurrence ? { recurrence: input.recurrence } : {}),
     }),
   }));
   const BATCH = 10;
