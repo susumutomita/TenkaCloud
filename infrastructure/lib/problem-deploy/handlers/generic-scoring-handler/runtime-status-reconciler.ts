@@ -1,13 +1,14 @@
 import type { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import type { SSMClient } from "@aws-sdk/client-ssm";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import {
   type AdapterDependencyConfig,
   buildAdapterDependencies,
 } from "../deploy-handler/adapter-dependencies.js";
 import { slugify } from "../deploy-handler/naming.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
+import { forEachScanPage } from "../shared/ddb-paginate.js";
 import {
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
@@ -188,35 +189,35 @@ export async function reconcileRuntimeStatuses(
   deps: RuntimeReconcileDeps,
   nowIso: string,
 ): Promise<void> {
-  let exclusiveStartKey: Record<string, unknown> | undefined;
-  do {
-    const out = await deps.ddb.send(
-      new ScanCommand({
-        TableName: deps.deploymentsTableName,
-        FilterExpression: "attribute_exists(runtimeProvider) AND #s IN (:p, :i, :c, :d)",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":p": RECONCILABLE_STATUSES[0],
-          ":i": RECONCILABLE_STATUSES[1],
-          ":c": RECONCILABLE_STATUSES[2],
-          ":d": RECONCILABLE_STATUSES[3],
-        },
-        Limit: 200,
-        ExclusiveStartKey: exclusiveStartKey,
-      }),
-    );
-    const items = (out.Items ?? []) as Partial<DeploymentItem>[];
-    await Promise.all(
-      items.map((item) =>
-        reconcileRuntimeDeployment(deps, item, nowIso).catch((err) => {
-          console.warn("[runtime-reconciler] reconcile failed", {
-            jobId: item.jobId,
-            provider: item.runtimeProvider,
-            message: err instanceof Error ? err.message : String(err),
-          });
-        }),
-      ),
-    );
-    exclusiveStartKey = out.LastEvaluatedKey;
-  } while (exclusiveStartKey);
+  // `Limit: 200` は 1 ページあたりの件数上限。forEachScanPage が `LastEvaluatedKey` を追って
+  // 全ページ drain するので、page ごとに `Promise.all` で 1 件ずつ reconcile する従来の挙動は不変。
+  await forEachScanPage(
+    deps.ddb,
+    {
+      TableName: deps.deploymentsTableName,
+      FilterExpression: "attribute_exists(runtimeProvider) AND #s IN (:p, :i, :c, :d)",
+      ExpressionAttributeNames: { "#s": "status" },
+      ExpressionAttributeValues: {
+        ":p": RECONCILABLE_STATUSES[0],
+        ":i": RECONCILABLE_STATUSES[1],
+        ":c": RECONCILABLE_STATUSES[2],
+        ":d": RECONCILABLE_STATUSES[3],
+      },
+      Limit: 200,
+    },
+    async (page) => {
+      const items = page as Partial<DeploymentItem>[];
+      await Promise.all(
+        items.map((item) =>
+          reconcileRuntimeDeployment(deps, item, nowIso).catch((err) => {
+            console.warn("[runtime-reconciler] reconcile failed", {
+              jobId: item.jobId,
+              provider: item.runtimeProvider,
+              message: err instanceof Error ? err.message : String(err),
+            });
+          }),
+        ),
+      );
+    },
+  );
 }
