@@ -14,6 +14,7 @@ export JSII_DEPRECATED := quiet
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
         check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-cli-access check-template-name-limits \
+        check-no-conflicts check-submodule-not-behind \
         env-check env-check-lite env-init env-init-test synth check-synth diff bootstrap \
         deploy deploy-saas deploy-control-plane deploy-bootstrap destroy destroy-saas \
         deploy-docker destroy-docker docker-shell docker-build \
@@ -88,6 +89,10 @@ check-template-name-limits: ; bun run scripts/check-template-name-limits.ts
 # git merge-tree (= read-only dry-run) で検査。 conflict 発生時は exit 1 で fail。
 # CI / pre-push hook ともに、 「PR を出した瞬間に DIRTY になる」 のを未然に防ぐ。
 check-no-conflicts: ; bun run scripts/check-no-conflicts.ts
+# Submodule pin 後退ガード (gitlink ping-pong 対策)。 PR の problems pin が origin/main より
+# 後退/分岐していたら fail。 origin/main + submodule history を要するので CI 専用 (before-commit
+# には入れない = offline 前提を壊さない)。 手動実行用に target だけ用意する。
+check-submodule-not-behind: ; bun run scripts/check-submodule-not-behind.ts
 audit-deps:    ; bun run audit:dependencies
 # `check-problems-index` は submodule (= TenkaCloudChallenge) 側 catalog CI に責任を移譲した
 # ため、 本体 before-commit / check からは外す。 platform 側 build:problems-index を走らせると
