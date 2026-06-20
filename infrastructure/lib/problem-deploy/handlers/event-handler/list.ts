@@ -1,4 +1,5 @@
 import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { createCursorCodec } from "../shared/cursor-codec.js";
 import type { EventSharedResources } from "./shared.js";
 import { collectTeamScoreEvents, type DeploymentRefForScoreEvents } from "./team-score-events.js";
 import type {
@@ -43,22 +44,13 @@ export interface ListEventsResponse {
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
-function encodeCursor(key: Record<string, unknown>): string {
-  return Buffer.from(JSON.stringify(key), "utf8").toString("base64url");
-}
-
-function decodeCursor(cursor: string): Record<string, unknown> | undefined {
-  try {
-    const json = Buffer.from(cursor, "base64url").toString("utf8");
-    const parsed = JSON.parse(json);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // 不正な cursor は無視して最初から
-  }
-  return undefined;
-}
+/**
+ * Issue #862: cursor は DDB ExclusiveStartKey にそのまま渡るので、 EventsTable の
+ * 有効キー (base table の PK/SK + GSI1 query の GSI1PK/GSI1SK) に絞った allowlist で
+ * shape を pin する。 共通の validated codec (`shared/cursor-codec.ts`) を使い、 不正な
+ * cursor は最初から page し直す。
+ */
+const cursorCodec = createCursorCodec(new Set(["PK", "SK", "GSI1PK", "GSI1SK"]));
 
 function toSummary(item: Partial<EventItem>): EventSummary {
   return {
@@ -87,7 +79,7 @@ export async function listEvents(
   req: ListEventsRequest,
 ): Promise<ListEventsResponse> {
   const limit = Math.min(Math.max(req.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
-  const exclusiveStartKey = req.cursor ? decodeCursor(req.cursor) : undefined;
+  const exclusiveStartKey = req.cursor ? cursorCodec.decode(req.cursor) : undefined;
 
   const out = await shared.ddb.send(
     new QueryCommand({
@@ -103,7 +95,7 @@ export async function listEvents(
 
   const items = (out.Items ?? []).map((i) => toSummary(i as Partial<EventItem>));
   const nextCursor = out.LastEvaluatedKey
-    ? encodeCursor(out.LastEvaluatedKey as Record<string, unknown>)
+    ? cursorCodec.encode(out.LastEvaluatedKey as Record<string, unknown>)
     : undefined;
   return { items, nextCursor };
 }
