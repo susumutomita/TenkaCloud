@@ -1,74 +1,94 @@
 /**
- * Issue #1329: 商用 grade のログイン画面 shell。
+ * System Admin (Control Plane) sign-in shell — design import "Control Plane Login.html".
  *
- * LP (`landing/`) と同じ branding を SPA のログイン画面にも適用する。 admin-console
- * (System Admin) / application-admin-console (Tenant Admin) は構造が同一なので、
- * 各 app に同名の component を置き、 props (= title / subtitle) で差し替える。
- *
- * 設計判断:
- *   - Cloudscape の Container / Header / Button だけで組み立てる (= 新 dep 0)
- *   - LP の Inter / Noto Sans JP は OS font fallback に任せる (= preconnect しない)
- *   - Footer の legal リンクは LP の本物 URL (https://tenkacloud.cloud/) を指す
- *   - i18n switch UI を内蔵 (Cognito redirect 前なので AppLayout の switcher が無い)
+ * Presentation only: renders the shared `ConsoleAuthShell` (ink operator stage + form
+ * panel + JA/EN toggle, web-kit) with `plane="system"`. The auth logic (Cognito Hosted
+ * UI redirect, SAML routing) stays in `Login.tsx`; this shell only renders the step area
+ * passed by it via these props.
  */
 
-import Alert from "@cloudscape-design/components/alert";
-import Box from "@cloudscape-design/components/box";
-import Button from "@cloudscape-design/components/button";
-import Container from "@cloudscape-design/components/container";
-import SpaceBetween from "@cloudscape-design/components/space-between";
-import Spinner from "@cloudscape-design/components/spinner";
-import { type LocaleCode, SUPPORTED_LOCALES, useI18n, useT } from "../i18n";
-
-/**
- * LP の <nav class="brand">TenkaCloud</nav> と意匠を揃えた wordmark。
- * 円形マーク + ワードマークの 2 column。 svg viewBox を 40 高に固定。
- */
-function TenkaCloudWordmark() {
-  return (
-    <div
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 12,
-        color: "#07111f",
-      }}
-    >
-      <svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true" focusable="false">
-        <title>TenkaCloud logo</title>
-        <defs>
-          <linearGradient id="tc-mark-grad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#0969da" />
-            <stop offset="100%" stopColor="#08111f" />
-          </linearGradient>
-        </defs>
-        <circle cx="20" cy="20" r="18" fill="url(#tc-mark-grad)" />
-        <path
-          d="M12 18 L20 12 L28 18 L28 28 L22 28 L22 22 L18 22 L18 28 L12 28 Z"
-          fill="#ffffff"
-          opacity="0.95"
-        />
-      </svg>
-      <span
-        style={{
-          fontFamily:
-            "Inter, 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-          fontSize: 22,
-          fontWeight: 800,
-          letterSpacing: "-0.02em",
-        }}
-      >
-        TenkaCloud
-      </span>
-    </div>
-  );
-}
+import { type ConsoleAuthCopy, ConsoleAuthShell } from "@tenkacloud/web-kit";
+import { type LocaleCode, useI18n, useT } from "../i18n";
 
 const LEGAL_LINKS = {
   privacy: "https://tenkacloud.cloud/privacy.html",
   terms: "https://tenkacloud.cloud/terms.html",
   tokushoho: "https://tenkacloud.cloud/legal.html",
 } as const;
+
+type Translate = (key: string) => string;
+
+/** external-link glyph for the SSO button. */
+export function ExtIcon() {
+  return (
+    <svg className="ext" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M14 5h5v5M19 5l-9 9M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** right-arrow glyph for the email / IdP-continue buttons. */
+export function ArrowIcon() {
+  return (
+    <svg
+      className="arrow"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M9 6l6 6-6 6"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Shared System-plane copy for the ConsoleAuthShell (title/subtitle come from props). */
+export function systemConsoleCopy(t: Translate, title: string, subtitle: string): ConsoleAuthCopy {
+  return {
+    planeLabel: t("login.plane_label"),
+    eyebrow: t("login.stage_eyebrow"),
+    headlineLead: t("login.stage_h1_lead"),
+    headlineEm: t("login.stage_h1_em"),
+    lede: t("login.stage_lede"),
+    kicker: t("login.kicker"),
+    title,
+    subtitle,
+    footEvent: t("login.foot_event"),
+  };
+}
+
+/** Operator + legal footer, shared by both step views. */
+export function ConsoleLegalFoot({ t }: { t: Translate }) {
+  return (
+    <>
+      <span>{t("login.footer_operator")}</span>
+      <span className="links">
+        <a href={LEGAL_LINKS.privacy} target="_blank" rel="noreferrer">
+          {t("login.footer_privacy")}
+        </a>
+        <a href={LEGAL_LINKS.terms} target="_blank" rel="noreferrer">
+          {t("login.footer_terms")}
+        </a>
+        <a href={LEGAL_LINKS.tokushoho} target="_blank" rel="noreferrer">
+          {t("login.footer_tokushoho")}
+        </a>
+      </span>
+    </>
+  );
+}
 
 export interface ProductLoginShellProps {
   /** ページ見出し。 e.g. "TenkaCloud System Admin Console" */
@@ -92,159 +112,39 @@ export function ProductLoginShell(props: ProductLoginShellProps) {
   const { locale, setLocale } = useI18n();
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "radial-gradient(circle at 20% 10%, #eef5ff 0%, #f6f7fb 45%, #ffffff 100%)",
-        display: "flex",
-        flexDirection: "column",
-      }}
+    <ConsoleAuthShell
+      plane="system"
+      copy={systemConsoleCopy(t, props.title, props.subtitle)}
+      locale={locale}
+      onLocale={(code) => setLocale(code as LocaleCode)}
+      foot={<ConsoleLegalFoot t={t} />}
     >
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "20px 24px",
-        }}
-      >
-        <TenkaCloudWordmark />
-        <fieldset
-          aria-label={t("login.language_switcher_aria")}
-          style={{
-            display: "flex",
-            gap: 4,
-            border: "none",
-            padding: 0,
-            margin: 0,
-          }}
-        >
-          {SUPPORTED_LOCALES.map((code) => (
-            <button
-              key={code}
-              type="button"
-              onClick={() => setLocale(code as LocaleCode)}
-              aria-pressed={locale === code}
-              style={{
-                background: locale === code ? "#0969da" : "transparent",
-                color: locale === code ? "#ffffff" : "#5d6877",
-                border: locale === code ? "1px solid #0969da" : "1px solid #c8d0db",
-                borderRadius: 999,
-                padding: "6px 14px",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              {code === "ja" ? "日本語" : "English"}
-            </button>
-          ))}
-        </fieldset>
-      </header>
-
-      <main
-        style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "24px 16px",
-        }}
-      >
-        <div style={{ width: "100%", maxWidth: 480 }}>
-          <Container>
-            <SpaceBetween size="l">
-              <div>
-                <h1
-                  style={{
-                    margin: 0,
-                    fontSize: 24,
-                    fontWeight: 800,
-                    letterSpacing: "-0.02em",
-                    color: "#07111f",
-                  }}
-                >
-                  {props.title}
-                </h1>
-                <Box variant="p" margin={{ top: "s" }} color="text-body-secondary">
-                  {props.subtitle}
-                </Box>
-              </div>
-
-              {props.errorMessage ? (
-                <Alert type="error" header={t("login.error_header")}>
-                  {props.errorMessage}{" "}
-                  <a href="mailto:support@tenkacloud.cloud">support@tenkacloud.cloud</a>
-                </Alert>
-              ) : null}
-
-              {props.signingIn ? (
-                <Box textAlign="center" padding="s">
-                  <SpaceBetween direction="horizontal" size="s" alignItems="center">
-                    <Spinner />
-                    <span>{props.signingInLabel}</span>
-                  </SpaceBetween>
-                </Box>
-              ) : (
-                <Button
-                  variant="primary"
-                  iconAlign="right"
-                  iconName="external"
-                  onClick={() => {
-                    void props.onSignIn();
-                  }}
-                  fullWidth
-                >
-                  {props.signInLabel}
-                </Button>
-              )}
-            </SpaceBetween>
-          </Container>
+      {props.errorMessage ? (
+        <div className="error-line">
+          <span className="x">!</span>
+          {props.errorMessage}{" "}
+          <a href="mailto:support@tenkacloud.cloud">support@tenkacloud.cloud</a>
         </div>
-      </main>
-
-      <footer
-        style={{
-          padding: "20px 24px",
-          borderTop: "1px solid #e4e7ec",
-          background: "rgba(255, 255, 255, 0.65)",
-          color: "#5d6877",
-          fontSize: 13,
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 16,
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <span>{t("login.footer_operator")}</span>
-        <span style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-          <a
-            href={LEGAL_LINKS.privacy}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "#0969da", textDecoration: "none" }}
-          >
-            {t("login.footer_privacy")}
-          </a>
-          <a
-            href={LEGAL_LINKS.terms}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "#0969da", textDecoration: "none" }}
-          >
-            {t("login.footer_terms")}
-          </a>
-          <a
-            href={LEGAL_LINKS.tokushoho}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "#0969da", textDecoration: "none" }}
-          >
-            {t("login.footer_tokushoho")}
-          </a>
-        </span>
-      </footer>
-    </div>
+      ) : null}
+      {props.signingIn ? (
+        <div className="redirecting">
+          <span className="spinner" />
+          <span>{props.signingInLabel}</span>
+        </div>
+      ) : (
+        <>
+          <button type="button" className="sso" onClick={() => void props.onSignIn()}>
+            {props.signInLabel}
+            <ExtIcon />
+          </button>
+          <div className="note">
+            <span className="ic">i</span>
+            <p>
+              <b>{t("login.note_lead")}</b> {t("login.note_body")}
+            </p>
+          </div>
+        </>
+      )}
+    </ConsoleAuthShell>
   );
 }

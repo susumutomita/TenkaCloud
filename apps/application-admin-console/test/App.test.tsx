@@ -5,6 +5,15 @@ import { App } from "../src/App";
 import type { AppConfig } from "../src/config";
 import { I18nProvider } from "../src/i18n";
 
+// The /login routes auto-redirect to Cognito via beginLogin (#1360). With the real
+// beginLogin jsdom raises "Not implemented: navigation", and under the full suite that
+// stray error can land on an unrelated test. Stub it to a no-op resolve — these tests
+// only assert routing (that /login renders the LoginPage), not the actual redirect.
+vi.mock("@tenkacloud/auth-client", async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return { ...actual, beginLogin: vi.fn().mockResolvedValue(undefined) };
+});
+
 const config: AppConfig = {
   cognitoDomain: "https://example.auth.ap-northeast-1.amazoncognito.com",
   cognitoClientId: "abc",
@@ -81,7 +90,7 @@ describe("App", () => {
       renderApp("/login");
       expect(
         await screen.findByRole("heading", {
-          level: 1,
+          level: 2,
           name: /TenkaCloud Application Admin Console/,
         }),
       ).toBeInTheDocument();
@@ -94,7 +103,7 @@ describe("App", () => {
       renderApp("/");
       expect(
         await screen.findByRole("heading", {
-          level: 1,
+          level: 2,
           name: /TenkaCloud Application Admin Console/,
         }),
       ).toBeInTheDocument();
@@ -103,7 +112,7 @@ describe("App", () => {
     it("should remember a deep link before redirecting through the login page", async () => {
       renderApp("/deployments/job-1?view=logs#latest");
       await screen.findByRole("heading", {
-        level: 1,
+        level: 2,
         name: /TenkaCloud Application Admin Console/,
       });
       expect(sessionStorage.getItem("TenkaCloud.application_admin.login_return_path")).toBe(

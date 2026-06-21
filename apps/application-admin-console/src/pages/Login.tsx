@@ -21,19 +21,19 @@
  *                 (= button を再表示し再 sign-in 試行を許可)
  */
 
-import Alert from "@cloudscape-design/components/alert";
-import Box from "@cloudscape-design/components/box";
-import Button from "@cloudscape-design/components/button";
-import FormField from "@cloudscape-design/components/form-field";
-import Input from "@cloudscape-design/components/input";
-import SpaceBetween from "@cloudscape-design/components/space-between";
+import { ConsoleAuthShell } from "@tenkacloud/web-kit";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { distinctProviders, type IdpResolution, resolveIdp } from "../auth/idp-resolution";
 import { rememberLoginReturnPath } from "../auth/login-return-path";
-import { ProductLoginShell } from "../components/ProductLoginShell";
+import {
+  ArrowIcon,
+  applicationConsoleCopy,
+  ConsoleLegalFoot,
+  ProductLoginShell,
+} from "../components/ProductLoginShell";
 import type { AppConfig } from "../config";
-import { useT } from "../i18n";
+import { type LocaleCode, useI18n, useT } from "../i18n";
 
 export function LoginPage({ config, returnPath }: { config: AppConfig; returnPath?: string }) {
   const auth = useAuth();
@@ -153,90 +153,71 @@ function ProductLoginShellSaml(props: {
   readonly onCancelPicker: () => void;
 }) {
   const t = useT();
+  const { locale, setLocale } = useI18n();
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "radial-gradient(circle at 20% 10%, #eef5ff 0%, #f6f7fb 45%, #ffffff 100%)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px 16px",
-      }}
+    <ConsoleAuthShell
+      plane="app"
+      copy={applicationConsoleCopy(t, props.title, props.subtitle)}
+      locale={locale}
+      onLocale={(code) => setLocale(code as LocaleCode)}
+      foot={<ConsoleLegalFoot t={t} />}
     >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 480,
-          background: "#ffffff",
-          padding: 32,
-          borderRadius: 12,
-          boxShadow: "0 4px 24px rgba(0,0,0,0.06)",
-        }}
-      >
-        <SpaceBetween size="l">
-          <div>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: 24,
-                fontWeight: 800,
-                letterSpacing: "-0.02em",
-                color: "#07111f",
-              }}
-            >
-              {props.title}
-            </h1>
-            <Box variant="p" margin={{ top: "s" }} color="text-body-secondary">
-              {props.subtitle}
-            </Box>
+      {props.errorMessage ? (
+        <div className="error-line">
+          <span className="x">!</span>
+          {props.errorMessage}{" "}
+          <a href="mailto:support@tenkacloud.cloud">support@tenkacloud.cloud</a>
+        </div>
+      ) : null}
+      {props.pickerProviders ? (
+        <div>
+          <p className="subtitle">{t("login.saml_pick_idp")}</p>
+          <div className="idp-list">
+            {props.pickerProviders.map((p) => (
+              <button
+                type="button"
+                className="idp"
+                key={p}
+                disabled={props.signingIn}
+                onClick={() => props.onPick(p)}
+              >
+                <span className="logo">{p.slice(0, 1).toUpperCase()}</span>
+                <span className="meta">
+                  <span className="n">{p}</span>
+                </span>
+                <ArrowIcon />
+              </button>
+            ))}
           </div>
-          {props.errorMessage ? (
-            <Alert type="error" header={t("login.error_header")}>
-              {props.errorMessage}{" "}
-              <a href="mailto:support@tenkacloud.cloud">support@tenkacloud.cloud</a>
-            </Alert>
-          ) : null}
-          {props.pickerProviders ? (
-            <SpaceBetween size="m">
-              <Box variant="p">{t("login.saml_pick_idp")}</Box>
-              {props.pickerProviders.map((p) => (
-                <Button
-                  key={p}
-                  variant="primary"
-                  fullWidth
-                  loading={props.signingIn}
-                  onClick={() => props.onPick(p)}
-                >
-                  {p}
-                </Button>
-              ))}
-              <Button variant="link" onClick={props.onCancelPicker}>
-                {t("login.saml_back_to_email")}
-              </Button>
-            </SpaceBetween>
-          ) : (
-            <form onSubmit={props.onSubmitEmail}>
-              <SpaceBetween size="m">
-                <FormField label={t("login.saml_email_label")}>
-                  <Input
-                    type="email"
-                    value={props.email}
-                    onChange={(e) => props.onEmailChange(e.detail.value)}
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                    disabled={props.signingIn}
-                  />
-                </FormField>
-                <Button variant="primary" loading={props.signingIn} fullWidth>
-                  {t("login.sign_in_button")}
-                </Button>
-              </SpaceBetween>
-            </form>
-          )}
-        </SpaceBetween>
-      </div>
-    </div>
+          <button type="button" className="back" onClick={props.onCancelPicker}>
+            ← {t("login.saml_back_to_email")}
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={props.onSubmitEmail} noValidate>
+          <div className="field">
+            <label className="label" htmlFor="console-saml-email">
+              {t("login.saml_email_label")}
+            </label>
+            <div className="input">
+              <input
+                id="console-saml-email"
+                type="email"
+                value={props.email}
+                autoComplete="email"
+                spellCheck={false}
+                placeholder={t("login.email_placeholder")}
+                disabled={props.signingIn}
+                onChange={(e) => props.onEmailChange(e.target.value)}
+              />
+            </div>
+          </div>
+          <button type="submit" className="sso" disabled={props.signingIn}>
+            {t("login.continue_label")}
+            <ArrowIcon />
+          </button>
+        </form>
+      )}
+    </ConsoleAuthShell>
   );
 }

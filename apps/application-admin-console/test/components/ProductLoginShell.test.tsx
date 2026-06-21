@@ -3,10 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProductLoginShell } from "../../src/components/ProductLoginShell";
 
 /**
- * Issue #1329: ProductLoginShell (Cognito redirect 前のログイン shell)。 idle (sign-in button) vs
- * signing-in (spinner) / error alert 有無 / locale switcher (ja active・en inactive + click で
- * setLocale) / sign-in button の onSignIn を pin する。 useI18n / useT を mock、 SUPPORTED_LOCALES
- * は実物。
+ * ProductLoginShell (Application Plane sign-in, ConsoleAuthShell-based). idle (SSO button)
+ * vs signing-in (redirect spinner) / error-line 有無 / JA-EN トグル (ja active・click で
+ * setLocale) / SSO button の onSignIn を pin する。 useI18n / useT を mock。
  */
 const { mockSetLocale } = vi.hoisted(() => ({ mockSetLocale: vi.fn() }));
 vi.mock("../../src/i18n", async (importOriginal) => {
@@ -32,25 +31,24 @@ const props = (over: Partial<Parameters<typeof ProductLoginShell>[0]> = {}) => (
 afterEach(() => vi.clearAllMocks());
 
 describe("ProductLoginShell", () => {
-  it("should render the sign-in button (idle), fire onSignIn, and switch locale", () => {
+  it("should render the SSO button (idle), the error line, fire onSignIn, and switch locale", () => {
     const p = props({ errorMessage: "boom" });
     render(<ProductLoginShell {...p} />);
     expect(screen.getByText("Login Title")).toBeInTheDocument();
-    expect(screen.getByText("boom")).toBeInTheDocument(); // error alert
-    // locale switcher: ja active / en inactive。
-    expect(screen.getByRole("button", { name: "日本語" })).toHaveAttribute("aria-pressed", "true");
-    const en = screen.getByRole("button", { name: "English" });
-    expect(en).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByText("boom")).toBeInTheDocument(); // error line
+    expect(screen.getByRole("button", { name: "JA" })).toHaveClass("on");
+    const en = screen.getByRole("button", { name: "EN" });
+    expect(en).not.toHaveClass("on");
     fireEvent.click(en);
     expect(mockSetLocale).toHaveBeenCalledWith("en");
-    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    fireEvent.click(screen.getByRole("button", { name: /Sign in/ }));
     expect(p.onSignIn).toHaveBeenCalled();
   });
 
-  it("should show the spinner (no sign-in button / no error) while signing in", () => {
+  it("should show the redirect spinner (no SSO button / no error) while signing in", () => {
     render(<ProductLoginShell {...props({ signingIn: true })} />);
     expect(screen.getByText("Redirecting…")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Sign in" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Sign in/ })).not.toBeInTheDocument();
     expect(screen.queryByText("login.error_header")).not.toBeInTheDocument();
   });
 });
