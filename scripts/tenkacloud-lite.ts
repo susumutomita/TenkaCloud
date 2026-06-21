@@ -224,7 +224,12 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
   // まっさらなアカウントでも `make deploy` がそのまま通るよう、 deploy 前に必ず cdk bootstrap を
   // 実行する (= 冪等。 済んでいれば数秒の no-op)。 install.sh (SaaS) と lite-pipeline.yaml
   // (Pipeline) は既に bootstrap 内蔵で、 ローカル Path B だけ抜けていたのを揃える。
-  const bootstrapCode = await io.spawnInherit(CDK_BIN, ["bootstrap"]);
+  //
+  // CDK_OPTS (= --app) を必ず渡す。 これが無いと bare `cdk bootstrap` は repo root に cdk.json が
+  // 無いため "Specify an environment name like 'aws://account/region', or run in a directory with
+  // 'cdk.json'" で失敗する (= deploy と同じ --app context から環境を解決させる)。 deploy 呼び出しと
+  // 同形にすることで Path A (Pipeline) / Path B (local) のどちらでも環境が解決できる。
+  const bootstrapCode = await io.spawnInherit(CDK_BIN, [...CDK_OPTS, "bootstrap"]);
   if (bootstrapCode !== 0) {
     io.stderr(`[lite] cdk bootstrap failed with exit code ${bootstrapCode}\n`);
     printFailureGuide(io, "CDK bootstrap");
