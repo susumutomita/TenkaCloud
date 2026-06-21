@@ -41,7 +41,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
     "@textlint-ja/textlint-rule-preset-ai-writing": "^1.7.0",
-    "@vitest/coverage-v8": "^4.1.6",
+    "@vitest/coverage-v8": "^4.1.9",
     "husky": "^9.1.7",
     "markdownlint-cli2": "^0.22.1",
     "marked": "^18.0.3",
