@@ -24,6 +24,12 @@ export {
   tenkaCloudMarkDataUri,
   tenkaCloudMarkSvg,
 } from "./brand";
+export {
+  type ConsoleAuthCopy,
+  type ConsoleAuthPlane,
+  ConsoleAuthShell,
+  type ConsoleAuthShellProps,
+} from "./ConsoleAuthShell";
 export { EmptyState, type EmptyStateAction, type EmptyStateProps } from "./EmptyState";
 export { ErrorState, type ErrorStateProps } from "./ErrorState";
 export { toErrorMessage } from "./error-message";

@@ -108,7 +108,21 @@
     "language_switcher_aria": "Language switcher",
     "saml_email_label": "Work email",
     "saml_pick_idp": "Multiple identity providers are connected for this domain. Pick one to continue.",
-    "saml_back_to_email": "Use a different email"
+    "saml_back_to_email": "Use a different email",
+    "plane_label": "Control Plane",
+    "stage_eyebrow": "SYSTEM ADMIN · CONTROL PLANE",
+    "stage_h1_lead": "Operate the platform, ",
+    "stage_h1_em": "from one console.",
+    "stage_lede": "Tenants, events, and problem deploys — govern the whole control plane from a single screen.",
+    "kicker": "System admin · Control plane",
+    "foot_event": "ap-northeast-1 · control-plane",
+    "sso_hint": "Single sign-on",
+    "email_sso": "Continue with work email",
+    "note_lead": "Authenticated with single sign-on.",
+    "note_body": "No password is stored. Auth is delegated to Cognito / your SAML IdP.",
+    "email_placeholder": "you@company.com",
+    "continue_label": "Continue",
+    "err_email": "Enter a valid email address."
   },
   "tenant_list": {
     "header": "Tenants",

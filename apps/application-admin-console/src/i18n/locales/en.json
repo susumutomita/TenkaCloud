@@ -42,7 +42,21 @@
     "language_switcher_aria": "Language switcher",
     "saml_email_label": "Work email",
     "saml_pick_idp": "Multiple identity providers are connected for this domain. Pick one to continue.",
-    "saml_back_to_email": "Use a different email"
+    "saml_back_to_email": "Use a different email",
+    "plane_label": "Application Plane",
+    "stage_eyebrow": "APPLICATION ADMIN · APPLICATION PLANE",
+    "stage_h1_lead": "Run your GameDay, ",
+    "stage_h1_em": "end to end.",
+    "stage_lede": "Create events, distribute problems, and manage teams for your tenant — all from this console.",
+    "kicker": "Application admin · Tenant",
+    "foot_event": "Open Arena · Season 01",
+    "sso_hint": "Single sign-on",
+    "email_sso": "Continue with work email",
+    "note_lead": "Authenticated with single sign-on.",
+    "note_body": "No password is stored. Auth is delegated to Cognito / your SAML IdP.",
+    "email_placeholder": "you@company.com",
+    "continue_label": "Continue",
+    "err_email": "Enter a valid email address."
   },
   "home": {
     "open_catalog": "Open problem catalog",

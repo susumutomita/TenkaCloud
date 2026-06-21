@@ -108,7 +108,21 @@
     "language_switcher_aria": "言語切替 / Language",
     "saml_email_label": "会社のメールアドレス",
     "saml_pick_idp": "このドメインには複数の ID プロバイダが接続されています。サインインする IdP を選択してください。",
-    "saml_back_to_email": "別のメールアドレスを使用する"
+    "saml_back_to_email": "別のメールアドレスを使用する",
+    "plane_label": "Control Plane",
+    "stage_eyebrow": "SYSTEM ADMIN · CONTROL PLANE",
+    "stage_h1_lead": "天下を、",
+    "stage_h1_em": "一つの画面で治める。",
+    "stage_lede": "テナント・イベント・問題のデプロイを、ひとつのコントロールプレーンから統治します。",
+    "kicker": "システム管理 · コントロールプレーン",
+    "foot_event": "ap-northeast-1 · control-plane",
+    "sso_hint": "シングルサインオン",
+    "email_sso": "会社のメールアドレスで続ける",
+    "note_lead": "シングルサインオンで認証します。",
+    "note_body": "パスワードは保存されません。認証は Cognito / SAML IdP に委譲されます。",
+    "email_placeholder": "you@company.com",
+    "continue_label": "続ける",
+    "err_email": "有効なメールアドレスを入力してください。"
   },
   "tenant_list": {
     "header": "テナント一覧",
