@@ -135,6 +135,13 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     const bootstrapCall = inheritCalls[1];
     expect(bootstrapCall.cmd).toBe("./node_modules/aws-cdk/bin/cdk");
     expect(bootstrapCall.args).toContain("bootstrap");
+    // bootstrap も deploy と同じ --app context を渡す。 これが無いと repo root に cdk.json が無く
+    // "Specify an environment name ... or run in a directory with cdk.json" で失敗する
+    // (= fresh-account Pipeline deploy を壊した regression の回帰防止)。
+    expect(bootstrapCall.args).toContain("--app");
+    expect(bootstrapCall.args.indexOf("--app")).toBeLessThan(
+      bootstrapCall.args.indexOf("bootstrap"),
+    );
 
     const deployCall = inheritCalls[2];
     // 2026-05-18 user feedback「bunx 禁止」 + 「Script not found 'cdk'」 regression
