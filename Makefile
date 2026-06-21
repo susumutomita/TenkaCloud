@@ -10,6 +10,7 @@ export JSII_DEPRECATED := quiet
 
 .PHONY: help install install_ci submodule-latest build typecheck test test-coverage coverage-gate clean-test-outdir check before-commit beforecommit \
         build-docs check-docs oss-notices check-oss-notices audit-deps build-problems-index check-problems-index \
+        cost-catalog check-cost-catalog \
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
@@ -65,6 +66,10 @@ build-problems-index: ; bun run build:problems-index
 check-problems-index: ; bun run check:problems-index
 build-docs:    ; bun run scripts/build-docs.ts
 check-docs:    ; bun run scripts/build-docs.ts --check
+# Issue #1910 Slice 5: 問題ごとの使用 AWS リソース + 概算コストを GitHub 上に出すカタログ。
+# submodule bump 由来の drift で CI を落とさないよう check は default gate に載せずオンデマンド再生成。
+cost-catalog:       ; bun run scripts/build-cost-catalog.ts
+check-cost-catalog: ; bun run scripts/build-cost-catalog.ts --check
 oss-notices:   ; bun run oss-notices
 check-oss-notices: ; bun run oss-notices:check
 check-http-status: ; bun run scripts/check-http-magic-numbers.ts
