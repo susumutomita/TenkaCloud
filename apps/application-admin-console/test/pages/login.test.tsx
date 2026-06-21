@@ -224,4 +224,10 @@ describe("application-admin-console LoginPage (Application Plane redesign)", () 
     submitEmail(await emailField(), "alice@acme.example");
     expect(await screen.findByText(ERROR_TEXT)).toBeInTheDocument();
   });
+
+  it("should switch locale from the SAML email view", () => {
+    renderSaml({ "acme.example": ["tenant-entra"] });
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    expect(screen.getByRole("button", { name: "EN" })).toHaveClass("on");
+  });
 });
