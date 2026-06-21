@@ -1,0 +1,595 @@
+/* TenkaCloud — Participant Portal sign-in (design import: "Login Screen.html").
+   Apple-minimal system, shared vocabulary with the landing page.
+   Ink primary · neutral grays · one quiet live accent · mono for keys.
+
+   Scoped under `.tc-login` so it never leaks into the Cloudscape-driven app shell.
+   The design's external Google-Fonts @import is intentionally dropped — a sign-in
+   page should not make a third-party request; we fall back to the bundled/system
+   font stack. */
+
+.tc-login {
+  --ink: #1d1d1f;
+  --ink-2: #424245;
+  --ink-3: #6e6e73;
+  --ink-4: #86868b;
+  --line: #d2d2d7;
+  --line-soft: #e8e8ed;
+  --paper: #ffffff;
+  --paper-2: #fbfbfd;
+  --paper-3: #f5f5f7;
+  --battle: #ff453a;
+  --ok: #30b766;
+
+  --font-sans: "Inter", "Noto Sans JP", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  line-height: 1.5;
+}
+.tc-login * {
+  box-sizing: border-box;
+}
+.tc-login button,
+.tc-login input {
+  font-family: inherit;
+}
+
+/* ============== SHELL ============== */
+.tc-login .auth {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+}
+
+/* ---------- left: brand stage (ink) ---------- */
+.tc-login .stage {
+  position: relative;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 44px 48px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tc-login .stage::before {
+  content: "";
+  position: absolute;
+  right: -120px;
+  bottom: -160px;
+  width: 620px;
+  height: 620px;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.05), transparent 70%);
+  pointer-events: none;
+}
+.tc-login .stage .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--paper);
+}
+.tc-login .stage .brand .sub {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.tc-login .stage .center {
+  margin-top: auto;
+  margin-bottom: auto;
+  max-width: 440px;
+}
+.tc-login .stage .eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 22px;
+}
+.tc-login .stage h1 {
+  font-size: clamp(34px, 3.6vw, 46px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 0 0 18px;
+  text-wrap: balance;
+}
+.tc-login .stage h1 em {
+  font-style: normal;
+  color: rgba(255, 255, 255, 0.5);
+}
+.tc-login .stage .lede {
+  font-size: 16px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.66);
+  max-width: 400px;
+  margin: 0;
+}
+
+/* ambient live leaderboard (decorative brand chrome — not the team's real event) */
+.tc-login .live-card {
+  margin-top: 38px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  overflow: hidden;
+  max-width: 400px;
+}
+.tc-login .live-card .head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.55);
+}
+.tc-login .live-card .head .live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #ff6a5e;
+}
+.tc-login .live-card .head .live .d {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--battle);
+  animation: tc-login-ping 1.6s infinite;
+}
+@keyframes tc-login-ping {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.tc-login .live-card .row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
+  font-size: 13px;
+}
+.tc-login .live-card .row:first-child {
+  border-top: none;
+}
+.tc-login .live-card .row .rank {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+.tc-login .live-card .row.lead .rank {
+  color: var(--paper);
+  font-weight: 700;
+}
+.tc-login .live-card .row .name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.62);
+}
+.tc-login .live-card .row.lead .name {
+  color: var(--paper);
+  font-weight: 500;
+}
+.tc-login .live-card .row .pts {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+  font-variant-numeric: tabular-nums;
+}
+
+.tc-login .stage .stage-foot {
+  margin-top: 34px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.34);
+  display: flex;
+  gap: 18px;
+}
+.tc-login .stage .stage-foot span {
+  white-space: nowrap;
+}
+
+/* ---------- right: form ---------- */
+.tc-login .panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 44px 48px;
+}
+.tc-login .panel .topbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+.tc-login .lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 6px;
+}
+.tc-login .lang button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ink-3);
+  padding: 3px 10px;
+  border-radius: 999px;
+  line-height: 1;
+}
+.tc-login .lang button.on {
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 500;
+}
+
+.tc-login .form-wrap {
+  margin: auto;
+  width: 100%;
+  max-width: 392px;
+  padding: 24px 0 48px;
+}
+
+.tc-login .kicker {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 12px;
+}
+.tc-login .form-wrap h2 {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  margin: 0 0 8px;
+}
+.tc-login .form-wrap .event {
+  font-size: 14px;
+  color: var(--ink-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 28px;
+}
+.tc-login .form-wrap .event .pin {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+/* info note */
+.tc-login .note {
+  display: flex;
+  gap: 11px;
+  background: var(--paper-3);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 14px 15px;
+  margin-bottom: 24px;
+}
+.tc-login .note .ic {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink-3);
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+}
+.tc-login .note p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.tc-login .note p b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* field */
+.tc-login .field {
+  margin-bottom: 18px;
+}
+.tc-login .field .label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.tc-login .field .label .name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.tc-login .field .label .reveal {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.tc-login .field .label .reveal:hover {
+  color: var(--ink);
+}
+
+.tc-login .input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 52px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.tc-login .input:focus-within {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 4px rgba(29, 29, 31, 0.07);
+}
+.tc-login .input.err {
+  border-color: var(--battle);
+  box-shadow: 0 0 0 4px rgba(255, 69, 58, 0.08);
+}
+.tc-login .input input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: none;
+  height: 100%;
+  padding: 0 16px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+.tc-login .input input::placeholder {
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+}
+.tc-login .field .desc {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+
+/* error line */
+.tc-login .error-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #c2261d;
+  margin: -2px 0 16px;
+}
+.tc-login .error-line .x {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--battle);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+/* submit */
+.tc-login .submit {
+  width: 100%;
+  height: 52px;
+  border: none;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  transition: opacity 0.15s, transform 0.05s;
+}
+.tc-login .submit:hover:not(:disabled) {
+  opacity: 0.88;
+}
+.tc-login .submit:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.tc-login .submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.tc-login .submit .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: tc-login-spin 0.7s linear infinite;
+}
+@keyframes tc-login-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tc-login .helper {
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--ink-3);
+  text-align: center;
+  line-height: 1.6;
+}
+.tc-login .helper a,
+.tc-login .helper .helper-link {
+  color: var(--ink);
+  text-decoration: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  padding: 0 0 1px;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.tc-login .helper a:hover,
+.tc-login .helper .helper-link:hover {
+  border-color: var(--ink);
+}
+
+.tc-login .panel .legal {
+  text-align: center;
+  font-size: 11px;
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+}
+
+/* ---------- success state ---------- */
+.tc-login .done {
+  margin: auto;
+  text-align: center;
+  max-width: 360px;
+  padding: 24px 0 48px;
+  animation: tc-login-rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.tc-login .done .check {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  margin: 0 auto 22px;
+  display: grid;
+  place-items: center;
+}
+.tc-login .done .check svg {
+  width: 30px;
+  height: 30px;
+}
+.tc-login .done h2 {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+}
+.tc-login .done p {
+  font-size: 14px;
+  color: var(--ink-3);
+  margin: 0 0 24px;
+}
+.tc-login .done .team {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-2);
+  background: var(--paper-3);
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 7px 16px;
+  display: inline-block;
+  margin-bottom: 24px;
+}
+.tc-login .done .again {
+  border: 1px solid var(--line);
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 9px 18px;
+}
+.tc-login .done .again:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+/* entrance — translate-only so a stalled animation never hides content. */
+@keyframes tc-login-rise {
+  from {
+    transform: translateY(12px);
+  }
+  to {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tc-login .form-wrap,
+  .tc-login .stage .center,
+  .tc-login .live-card {
+    animation: tc-login-rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  .tc-login .stage .center {
+    animation-delay: 0.04s;
+  }
+  .tc-login .live-card {
+    animation-delay: 0.12s;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-login *,
+  .tc-login *::before,
+  .tc-login *::after {
+    animation: none !important;
+  }
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 880px) {
+  .tc-login .auth {
+    grid-template-columns: 1fr;
+  }
+  .tc-login .stage {
+    padding: 32px 28px 40px;
+  }
+  .tc-login .stage .center {
+    margin: 28px 0 0;
+  }
+  .tc-login .stage h1 {
+    font-size: clamp(28px, 7vw, 38px);
+  }
+  .tc-login .stage .lede {
+    font-size: 15px;
+  }
+  .tc-login .stage .stage-foot {
+    display: none;
+  }
+  .tc-login .live-card {
+    margin-top: 28px;
+    max-width: none;
+  }
+  .tc-login .panel {
+    padding: 28px 24px 36px;
+  }
+  .tc-login .form-wrap {
+    padding-top: 12px;
+  }
+}
