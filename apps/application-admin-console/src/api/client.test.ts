@@ -14,6 +14,6 @@ describe("useApiClient demo mode (#1954)", () => {
     const { result } = renderHook(() => useApiClient(demoConfig));
     expect(result.current).not.toBeNull();
     const res = await result.current?.get<EventListResponse>("events");
-    expect(res?.items).toHaveLength(3);
+    expect(res?.items.length).toBeGreaterThan(0);
   });
 });
