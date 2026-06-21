@@ -99,6 +99,29 @@ describe("collectTeamScoreEvents", () => {
     expect(total).toBe(65); // 5 + 100 - 30 - 10
   });
 
+  it("should drop rows that fail any field validation and keep only well-formed events", async () => {
+    const { shared, ddbSend } = buildShared();
+    // Each row violates exactly one toView guard (earlier fields stay valid); only the
+    // last, fully-formed row should survive.
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        ev({ jobId: 123 }), // non-string jobId
+        ev({ problemId: 123 }), // non-string problemId
+        ev({ source: 123 }), // non-string source
+        ev({ source: "bogus" }), // source not in the allowed set
+        ev({ result: 123 }), // non-string result
+        ev({ result: "bogus" }), // result not in the allowed set
+        ev({ occurredAt: 123 }), // non-string occurredAt
+        ev(), // well-formed → kept
+      ],
+    });
+    const teams = await collectTeamScoreEvents(shared, {
+      deployments: [{ PK: "DEPLOYMENT#J1", teamId: "TEAM_A" }],
+      displayNameByTeamId: new Map(),
+    });
+    expect(teams[0]?.events).toHaveLength(1);
+  });
+
   it("should fall back to teamId when displayName / teamName are absent", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [ev()] });

@@ -77,6 +77,24 @@ describe("listTenantAuditEntries (#1292)", () => {
     const out = await listTenantAuditEntries({ ddb, auditTableName: "T" }, { tenantId: "t-1" });
     expect(out.nextCursor).toBe(Buffer.from(JSON.stringify(lastKey)).toString("base64"));
   });
+
+  it("should decode a base64 cursor into ExclusiveStartKey for the next page", async () => {
+    const startKey = { PK: "TENANT#t-1", SK: "AUDIT#01HX" };
+    const cursor = Buffer.from(JSON.stringify(startKey)).toString("base64");
+    const { ddb, send } = buildMock([]);
+    await listTenantAuditEntries({ ddb, auditTableName: "T" }, { tenantId: "t-1", cursor });
+    const cmd = send.mock.calls[0]?.[0] as { input?: Record<string, unknown> };
+    expect(cmd.input?.ExclusiveStartKey).toEqual(startKey);
+  });
+
+  it("should ignore a malformed cursor and query from the start", async () => {
+    // valid base64 but the decoded bytes are not JSON → decode falls back to undefined.
+    const cursor = Buffer.from("not json at all", "utf-8").toString("base64");
+    const { ddb, send } = buildMock([]);
+    await listTenantAuditEntries({ ddb, auditTableName: "T" }, { tenantId: "t-1", cursor });
+    const cmd = send.mock.calls[0]?.[0] as { input?: Record<string, unknown> };
+    expect(cmd.input?.ExclusiveStartKey).toBeUndefined();
+  });
 });
 
 describe("exportTenantAuditCsv (#1292)", () => {
