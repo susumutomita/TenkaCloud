@@ -38,9 +38,12 @@ export function alwaysOnTypesUsed(estimate: ProblemCostEstimate): readonly strin
   );
 }
 
-/** markdown table cell 内で意味を持つ `|` をエスケープする。 */
+/**
+ * markdown table cell 内で意味を持つ文字をエスケープする。 `\` を先に `\\` へ逃がしてから
+ * `|` を `\|` にする (= backslash を先に処理しないと escaping が不完全になる)。
+ */
 function escapeCell(text: string): string {
-  return text.replace(/\|/g, "\\|");
+  return text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 }
 
 function listOrDash(values: readonly string[]): string {

@@ -71,6 +71,12 @@ describe("cost catalog renderer (#1910 Slice 5)", () => {
     expect(md).toContain("a \\| b");
   });
 
+  it("should escape backslashes before pipes (complete escaping)", () => {
+    const md = renderCostCatalog([entry({ name: "a\\b|c" })]);
+    // backslash -> \\ first, then | -> \| : "a\\b\|c"
+    expect(md).toContain("a\\\\b\\|c");
+  });
+
   it("should render unknown when the session duration cannot be parsed", () => {
     const md = renderCostCatalog([
       entry({ estimatedDuration: "workshop", estimate: analyzeProblemCost(TEMPLATE, "workshop") }),
