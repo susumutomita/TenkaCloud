@@ -38,13 +38,24 @@ if [ -z "${REGION}" ] || [ -z "${ACCOUNT_ID}" ]; then
   exit 1
 fi
 
-# Resolve a globally-unique, account-scoped source bucket. A fixed name collides
-# across AWS accounts (S3 bucket names are global), so treat both an unset value
-# and the Makefile's synth-only `serverless-saas-placeholder` as "compute an
-# account-scoped name". This keeps the upload bucket consistent with what the CDK
-# app reads, and lets a brand-new account deploy without a name collision.
-if [ -z "${CDK_PARAM_S3_BUCKET_NAME:-}" ] || [ "${CDK_PARAM_S3_BUCKET_NAME}" = "serverless-saas-placeholder" ]; then
-  CDK_PARAM_S3_BUCKET_NAME="tenkacloud-source-${ACCOUNT_ID}-${REGION}"
+# Resolve a globally-unique, per-environment source bucket. A name of only
+# account+region collides when a SECOND environment is deployed into the same
+# account+region (S3 bucket names are global), so append a short hash of
+# account+env. A hash (rather than the raw env name) keeps the bucket within the
+# 63-char S3 limit for any environment name. The IAM grant in
+# bootstrap-template/job-runner-permissions.ts matches the
+# `tenkacloud-source-<account>-<region>*` prefix so every per-env bucket stays readable.
+#
+# We (re)compute when the name is unset, the Makefile's synth-only placeholder, OR
+# the legacy non-hashed `tenkacloud-source-<account>-<region>` value (which the
+# Makefile default still emits) — i.e. this script is authoritative and upgrades the
+# legacy form to the per-env form. An explicit custom bucket name is left untouched.
+LEGACY_BUCKET="tenkacloud-source-${ACCOUNT_ID}-${REGION}"
+if [ -z "${CDK_PARAM_S3_BUCKET_NAME:-}" ] \
+  || [ "${CDK_PARAM_S3_BUCKET_NAME}" = "tenkacloud-source-placeholder" ] \
+  || [ "${CDK_PARAM_S3_BUCKET_NAME}" = "${LEGACY_BUCKET}" ]; then
+  ENV_HASH="$(printf '%s' "${ACCOUNT_ID}-${ENV:-development}" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -c1-8)"
+  CDK_PARAM_S3_BUCKET_NAME="${LEGACY_BUCKET}-${ENV_HASH}"
 fi
 export CDK_PARAM_S3_BUCKET_NAME
 export CDK_SOURCE_NAME="${CDK_SOURCE_NAME:-source.zip}"

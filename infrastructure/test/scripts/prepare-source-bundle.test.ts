@@ -77,8 +77,11 @@ describe("scripts/prepare-source-bundle.sh region resolution", { timeout: 30_000
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("REGION=ap-northeast-1");
     expect(result.stdout).toContain("ACCOUNT_ID=111122223333");
-    expect(result.stdout).toContain(
-      "CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-111122223333-ap-northeast-1",
+    // Per-environment bucket: account+region prefix + an 8-hex env hash (so a second
+    // environment in the same account+region does not collide). Hash value is left
+    // unpinned (depends on the ambient ENV) — only the format is asserted.
+    expect(result.stdout).toMatch(
+      /CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-111122223333-ap-northeast-1-[0-9a-f]{8}\b/,
     );
   });
 
@@ -117,26 +120,41 @@ describe("scripts/prepare-source-bundle.sh region resolution", { timeout: 30_000
 describe("scripts/prepare-source-bundle.sh bucket resolution (fresh-account #1749)", {
   timeout: 30_000,
 }, () => {
-  it("should compute an account-scoped bucket when the name is unset", () => {
+  it("should compute a per-environment bucket when the name is unset", () => {
     const result = resolveBundleEnv({ AWS_REGION: "ap-northeast-1" });
 
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain(
-      "CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-111122223333-ap-northeast-1",
+    expect(result.stdout).toMatch(
+      /CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-111122223333-ap-northeast-1-[0-9a-f]{8}\b/,
     );
   });
 
-  it("should override the non-unique synth placeholder with an account-scoped name", () => {
-    // The Makefile's synth-only `serverless-saas-placeholder` is globally non-unique,
+  it("should override the non-unique synth placeholder with a per-environment name", () => {
+    // The Makefile's synth-only `tenkacloud-source-placeholder` is globally non-unique,
     // so a fresh account cannot create it; the deploy path must replace it.
     const result = resolveBundleEnv({
       AWS_REGION: "ap-northeast-1",
-      CDK_PARAM_S3_BUCKET_NAME: "serverless-saas-placeholder",
+      CDK_PARAM_S3_BUCKET_NAME: "tenkacloud-source-placeholder",
     });
 
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain(
-      "CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-111122223333-ap-northeast-1",
+    expect(result.stdout).toMatch(
+      /CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-111122223333-ap-northeast-1-[0-9a-f]{8}\b/,
+    );
+  });
+
+  it("should upgrade the legacy non-hashed account-region bucket name to per-environment", () => {
+    // The Makefile default still emits `tenkacloud-source-<account>-<region>` (no hash);
+    // the script is authoritative and upgrades it so two environments in the same
+    // account+region get distinct buckets.
+    const result = resolveBundleEnv({
+      AWS_REGION: "ap-northeast-1",
+      CDK_PARAM_S3_BUCKET_NAME: "tenkacloud-source-111122223333-ap-northeast-1",
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toMatch(
+      /CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-111122223333-ap-northeast-1-[0-9a-f]{8}\b/,
     );
   });
 

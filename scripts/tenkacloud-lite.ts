@@ -200,7 +200,7 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
   // (= tenkacloud-source-<account>-<region>) を自前で解決して source.zip を upload するが、
   // subshell 実行なので resolved bucket 名はこの process に伝わらない。 後段の cdk deploy が
   // CDK_PARAM_S3_BUCKET_NAME を未設定のまま読むと Makefile 既定値 (= creds 不在時に
-  // serverless-saas-placeholder へフォールバック) が CodeBuild の source bucket に焼かれ、
+  // tenkacloud-source-placeholder へフォールバック) が CodeBuild の source bucket に焼かれ、
   // upload 先と read 先が食い違う。 CodeBuild source は version 無指定の Source.s3 で「最新」を
   // 引くため、 placeholder bucket の古い source.zip がそのまま deploy され続ける。 同じ
   // resolution (= 単一 source of truth) を RESOLVE_ONLY で先に解決し process.env に固定して、

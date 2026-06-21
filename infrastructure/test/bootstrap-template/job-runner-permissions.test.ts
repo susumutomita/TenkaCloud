@@ -47,7 +47,9 @@ describe("buildTenantJobRunnerPermissions (#1382)", () => {
       "arn:aws:cloudformation:ap-northeast-1:123456789012:stack/tenkacloud-tenant-template-*/*",
     );
     expect(resources).toContain("arn:aws:cognito-idp:ap-northeast-1:123456789012:userpool/*");
-    expect(resources).toContain("arn:aws:s3:::tenkacloud-source-123456789012-ap-northeast-1");
+    // Per-environment source buckets (tenkacloud-source-<account>-<region>-<envHash>) are
+    // covered by the account+region prefix wildcard.
+    expect(resources).toContain("arn:aws:s3:::tenkacloud-source-123456789012-ap-northeast-1*");
     expect(resources).toContain(
       "arn:aws:ssm:ap-northeast-1:123456789012:parameter/cdk-bootstrap/*",
     );

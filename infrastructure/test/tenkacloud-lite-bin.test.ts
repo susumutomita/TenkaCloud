@@ -42,7 +42,7 @@ function buildLiteApp(): cdk.App {
     "tenkacloud-lite-problem-deploy",
     {
       ...stackEnv,
-      sourceBucketName: "serverless-saas-placeholder",
+      sourceBucketName: "tenkacloud-source-placeholder",
       sourceObjectKey: "source.zip",
       problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
       problemsScoring: {},
