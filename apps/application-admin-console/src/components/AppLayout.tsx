@@ -1,3 +1,5 @@
+import Alert from "@cloudscape-design/components/alert";
+import SpaceBetween from "@cloudscape-design/components/space-between";
 import { type ShellUserMenu, ShellLayout as WebKitShellLayout } from "@tenkacloud/web-kit";
 import type { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
@@ -25,10 +27,13 @@ const LOCALE_NAME: Record<LocaleCode, string> = {
 export function ShellLayout({
   children,
   samlSsoEnabled = false,
+  demoMode = false,
 }: {
   children: ReactNode;
   /** Feature-flagged: show the Identity providers (SAML SSO) nav item only when enabled. */
   samlSsoEnabled?: boolean;
+  /** Issue #1954: no-AWS demo mode の常時バナーを出す。 */
+  demoMode?: boolean;
 }) {
   const auth = useAuth();
   const location = useLocation();
@@ -96,7 +101,16 @@ export function ShellLayout({
       localeNames={LOCALE_NAME}
       localeSwitcherAriaLabel={t("nav.locale_switcher_aria")}
     >
-      {children}
+      {demoMode ? (
+        <SpaceBetween size="m">
+          <Alert type="info" header={t("demo.banner_header")}>
+            {t("demo.banner_body")}
+          </Alert>
+          {children}
+        </SpaceBetween>
+      ) : (
+        children
+      )}
     </WebKitShellLayout>
   );
 }

@@ -7,6 +7,8 @@ import {
   type TenantConsoleAccess,
 } from "../auth/claims";
 import type { AppConfig } from "../config";
+// Issue #1954: demo mode の fixture client。 call-time のみ参照する循環 import (load-time は不使用)。
+import { createDemoApiClient } from "./demo-client";
 
 /**
  * apps/admin-console/src/api/client.ts と同実装 (tenant API 呼び出し用の最小 HTTP client)。
@@ -95,10 +97,11 @@ export function canMutateTenant(apiClient: ApiClient | null): boolean {
 
 export function useApiClient(config: AppConfig): ApiClient | null {
   const auth = useAuth();
-  return useMemo(
-    () => (auth.tokens ? createApiClient(config.apiBaseUrl, auth.tokens.idToken) : null),
-    [auth.tokens, config.apiBaseUrl],
-  );
+  return useMemo(() => {
+    // Issue #1954: demo mode は fixture client に差し替え (実 AWS / backend を叩かない)。
+    if (config.mode === "demo") return createDemoApiClient();
+    return auth.tokens ? createApiClient(config.apiBaseUrl, auth.tokens.idToken) : null;
+  }, [auth.tokens, config.apiBaseUrl, config.mode]);
 }
 
 export class ApiError extends Error {

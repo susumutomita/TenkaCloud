@@ -52,6 +52,12 @@ export interface AppConfig {
    * optional only so test fixtures can omit it (absent → every flag reads OFF, fail-safe).
    */
   readonly features?: AppFeatures;
+  /**
+   * Issue #1954: `"demo"` は no-AWS demo mode (`?demo=1` / `VITE_DEMO_MODE=1` で有効化)。
+   * このとき useApiClient は fixture client に切り替わり、 AuthProvider は mock session を
+   * 注入する (= 実 AWS / Cognito を一切叩かない)。 未設定 (undefined) は通常運用。
+   */
+  readonly mode?: "demo";
 }
 
 interface RuntimeConfig {
@@ -130,11 +136,45 @@ const DEV_FALLBACK_TENANT_ID = "dev-local";
 const DEV_FALLBACK_TENANT_NAME = "Local Dev Tenant";
 const DEV_FALLBACK_API_BASE_URL = "http://localhost:3999";
 
+/**
+ * Issue #1954: demo mode は build-time flag (`VITE_DEMO_MODE=1`、`/demo/` ホスティング用) か
+ * URL の `?demo=1` (LP からの「触ってみる」導線) で有効化する。
+ */
+export function isDemoMode(env: Record<string, string | undefined>): boolean {
+  if (env.VITE_DEMO_MODE === "1") return true;
+  // loadConfig already assumes a browser (window.location.origin below); no SSR guard needed.
+  return new URLSearchParams(window.location.search).get("demo") === "1";
+}
+
+/**
+ * Issue #1954: demo 用の AppConfig。 実 Cognito / API を持たないので runtime-config / env を
+ * 読まず固定値を返す (apiBaseUrl は到達不能なダミー = 誤って実呼び出ししても外部に出ない)。
+ */
+function buildDemoConfig(redirectUri: string, scope: string): AppConfig {
+  return {
+    cognitoDomain: "demo.auth.tenkacloud.example",
+    cognitoClientId: "demo-client",
+    tenantId: "demo-tenant",
+    tenantName: "Demo Tenant",
+    apiBaseUrl: "https://demo.invalid",
+    isolation: "pooled",
+    samlIdpDirectory: {},
+    features: resolveFeatureFlags(FEATURE_REGISTRY, undefined),
+    redirectUri,
+    scope,
+    mode: "demo",
+  };
+}
+
 export async function loadConfig(
   env: Record<string, string | undefined> = import.meta.env,
 ): Promise<AppConfig> {
   const redirectUri = `${window.location.origin}/callback`;
   const scope = env.VITE_COGNITO_SCOPE ?? "openid email profile";
+
+  if (isDemoMode(env)) {
+    return buildDemoConfig(redirectUri, scope);
+  }
 
   const runtime = await fetchRuntimeConfig();
   if (runtime) {

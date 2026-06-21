@@ -2,6 +2,10 @@
   "locale": {
     "name": "English"
   },
+  "demo": {
+    "banner_header": "Demo mode — simulated, no real AWS",
+    "banner_body": "This is a no-AWS demo: data is simulated client-side, nothing is deployed, and no AWS resources are created or billed."
+  },
   "app": {
     "title": "Application Admin Console",
     "loading": "Loading…"
