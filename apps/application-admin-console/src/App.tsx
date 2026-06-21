@@ -1,6 +1,7 @@
 import "@cloudscape-design/global-styles/index.css";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
+import { DemoSessionBootstrap } from "./auth/demo-session";
 import { buildLoginReturnPath, readLoginReturnPathState } from "./auth/login-return-path";
 import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
@@ -33,7 +34,9 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 function guarded(element: React.ReactNode, config: AppConfig) {
   return (
     <RequireAuth>
-      <ShellLayout samlSsoEnabled={config.features?.samlSso}>{element}</ShellLayout>
+      <ShellLayout samlSsoEnabled={config.features?.samlSso} demoMode={config.mode === "demo"}>
+        {element}
+      </ShellLayout>
     </RequireAuth>
   );
 }
@@ -46,6 +49,8 @@ function LoginRoute({ config }: { config: AppConfig }) {
 export function App({ config }: { config: AppConfig }) {
   return (
     <AuthProvider config={config}>
+      {/* Issue #1954: demo mode は Cognito をスキップして mock session を注入する。 */}
+      <DemoSessionBootstrap config={config} />
       <Routes>
         <Route path="/login" element={<LoginRoute config={config} />} />
         <Route path="/callback" element={<CallbackPage config={config} />} />
