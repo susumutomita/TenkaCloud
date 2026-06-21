@@ -9,6 +9,7 @@ import type {
   EventDetail,
   EventListResponse,
   EventProblemTarget,
+  EventStatus,
   EventSummary,
   TeamSummary,
 } from "./events-client";
@@ -31,6 +32,22 @@ interface DemoEventRecord {
   teams: TeamSummary[];
   problems: EventProblemTarget[];
   deploymentsByProblem: Record<string, readonly EventDeploymentSummary[]>;
+  /**
+   * Issue #1954 slice 3: bulk deploy を撃った時刻 (ms)。 設定されているとデプロイ状態と
+   * event status を**経過時間から導出**する (= ポーリングのたびに queued→deploying→ready が
+   * 進む擬似デプロイ)。 未設定なら静的な `deploymentsByProblem` / `summary.status` を使う。
+   */
+  deployStartedAtMs?: number;
+}
+
+/** 疑似デプロイの所要モデル: queued (0〜) → deploying (2s〜) → ready (6s〜)。 */
+const DEPLOY_PENDING_MS = 2000;
+const DEPLOY_COMPLETE_MS = 6000;
+
+function elapsedDeployStatus(elapsedMs: number): EventDeploymentStatus {
+  if (elapsedMs < DEPLOY_PENDING_MS) return "PENDING";
+  if (elapsedMs < DEPLOY_COMPLETE_MS) return "IN_PROGRESS";
+  return "COMPLETE";
 }
 
 /** 一覧カード用のサマリ (時刻は決定的: テストを安定させる)。 */
@@ -141,17 +158,34 @@ function findEvent(eventId: string): DemoEventRecord {
   return rec;
 }
 
+/** deploy timer があれば status / deployments を経過時間から導出し、 無ければ静的値を返す。 */
+function effectiveView(rec: DemoEventRecord): {
+  status: EventStatus;
+  deploymentsByProblem: Record<string, readonly EventDeploymentSummary[]>;
+} {
+  if (rec.deployStartedAtMs === undefined) {
+    return { status: rec.summary.status, deploymentsByProblem: rec.deploymentsByProblem };
+  }
+  const depStatus = elapsedDeployStatus(Date.now() - rec.deployStartedAtMs);
+  return {
+    status: depStatus === "COMPLETE" ? "READY" : "DEPLOYING",
+    deploymentsByProblem: buildDeployments(rec.summary.eventId, rec.teams, rec.problems, depStatus),
+  };
+}
+
 function listEventsOp(): EventListResponse {
-  return { items: events.map((e) => e.summary) };
+  return { items: events.map((e) => ({ ...e.summary, status: effectiveView(e).status })) };
 }
 
 function getEventDetailOp(eventId: string): EventDetail {
   const rec = findEvent(eventId);
+  const view = effectiveView(rec);
   return {
     ...rec.summary,
+    status: view.status,
     teams: rec.teams,
     problems: rec.problems,
-    deploymentsByProblem: rec.deploymentsByProblem,
+    deploymentsByProblem: view.deploymentsByProblem,
   };
 }
 
@@ -195,8 +229,10 @@ function createEventOp(body: CreateEventRequest): CreateEventResponse {
 
 function bulkDeployOp(eventId: string): BulkResult {
   const rec = findEvent(eventId);
-  rec.deploymentsByProblem = buildDeployments(eventId, rec.teams, rec.problems, "COMPLETE");
-  rec.summary = { ...rec.summary, status: "READY" };
+  // 静的に COMPLETE にせず、 撃った時刻だけ記録する。 以降の GET で経過時間から
+  // queued → deploying → ready が導出され、 ポーリングで進捗が見える。
+  rec.deployStartedAtMs = Date.now();
+  rec.summary = { ...rec.summary, status: "DEPLOYING" };
   return { eventId, enqueued: rec.teams.length * rec.problems.length, skipped: 0 };
 }
 

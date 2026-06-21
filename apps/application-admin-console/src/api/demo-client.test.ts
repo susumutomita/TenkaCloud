@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./client";
 import { createDemoApiClient, demoRouteKey, resetDemoStore } from "./demo-client";
 import type {
@@ -11,6 +11,7 @@ import type {
 const client = createDemoApiClient();
 
 beforeEach(() => resetDemoStore());
+afterEach(() => vi.useRealTimers());
 
 describe("demoRouteKey", () => {
   it("should strip a leading slash and the query string", () => {
@@ -72,19 +73,31 @@ describe("demo client — create + bulk deploy", () => {
     expect(detail.deploymentsByProblem).toEqual({});
   });
 
-  it("should bulk-deploy: mark deployments COMPLETE and flip status to READY", async () => {
+  it("should progress a bulk deploy queued → deploying → ready over time", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
     const created = await client.post<CreateEventResponse>("events", {
       name: "Deploy Me",
       teams: [{ internalSlug: "t1" }],
       problems: [{ problemId: "p1", defaultRegion: "ap-northeast-1" }],
     });
     const result = await client.post<BulkResult>(`events/${created.eventId}/deploy`, {});
-    expect(result.enqueued).toBe(1);
+    expect(result.enqueued).toBe(1); // 1 team × 1 problem
     expect(result.skipped).toBe(0);
 
-    const detail = await client.get<EventDetail>(`events/${created.eventId}`);
-    expect(detail.status).toBe("READY");
-    expect(detail.deploymentsByProblem.p1?.[0]?.status).toBe("COMPLETE");
+    const statusAt = async (ms: number) => {
+      vi.setSystemTime(ms);
+      const d = await client.get<EventDetail>(`events/${created.eventId}`);
+      return { event: d.status, deploy: d.deploymentsByProblem.p1?.[0]?.status };
+    };
+
+    expect(await statusAt(0)).toEqual({ event: "DEPLOYING", deploy: "PENDING" });
+    expect(await statusAt(3000)).toEqual({ event: "DEPLOYING", deploy: "IN_PROGRESS" });
+    expect(await statusAt(7000)).toEqual({ event: "READY", deploy: "COMPLETE" });
+
+    // the list reflects the same derived status (EventList polling sees progress too).
+    const list = await client.get<EventListResponse>("events");
+    expect(list.items.find((e) => e.eventId === created.eventId)?.status).toBe("READY");
   });
 
   it("should 404 when deploying an unknown event", async () => {
