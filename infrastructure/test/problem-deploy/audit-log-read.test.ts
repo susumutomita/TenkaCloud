@@ -124,6 +124,46 @@ describe("exportTenantAuditCsv (#1292)", () => {
     expect(send).toHaveBeenCalledTimes(2);
   });
 
+  it("should drain every page following LastEvaluatedKey with PK fixed + ScanIndexForward=false", async () => {
+    const row = (sk: string) => ({
+      PK: "TENANT#t-1",
+      SK: `AUDIT#${sk}`,
+      actor: "u",
+      action: "x",
+      outcome: "success",
+      occurredAt: `2026-05-20T12:00:00.00${sk}Z`,
+    });
+    const send = vi
+      .fn()
+      .mockResolvedValueOnce({
+        Items: [row("A")],
+        LastEvaluatedKey: { PK: "TENANT#t-1", SK: "k1" },
+      })
+      .mockResolvedValueOnce({
+        Items: [row("B")],
+        LastEvaluatedKey: { PK: "TENANT#t-1", SK: "k2" },
+      })
+      .mockResolvedValueOnce({ Items: [row("C")] });
+    const csv = await exportTenantAuditCsv(
+      { ddb: { send } as never, auditTableName: "T" },
+      { tenantId: "t-1" },
+    );
+    // 3 ページ全て drain。
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(csv.trim().split("\n").length).toBe(4); // header + 3 rows
+    const first = send.mock.calls[0]?.[0] as { input?: Record<string, unknown> };
+    expect((first.input?.ExpressionAttributeValues as Record<string, unknown>)?.[":pk"]).toBe(
+      "TENANT#t-1",
+    );
+    expect(first.input?.ScanIndexForward).toBe(false);
+    expect(first.input?.ExclusiveStartKey).toBeUndefined();
+    // 2 / 3 ページ目の ExclusiveStartKey は直前ページの LastEvaluatedKey を引き継ぐ。
+    const second = send.mock.calls[1]?.[0] as { input?: Record<string, unknown> };
+    expect(second.input?.ExclusiveStartKey).toEqual({ PK: "TENANT#t-1", SK: "k1" });
+    const third = send.mock.calls[2]?.[0] as { input?: Record<string, unknown> };
+    expect(third.input?.ExclusiveStartKey).toEqual({ PK: "TENANT#t-1", SK: "k2" });
+  });
+
   it("#1388: should neutralize a formula-injection payload from the userAgent header", async () => {
     const send = vi.fn().mockResolvedValueOnce({
       Items: [

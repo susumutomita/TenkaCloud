@@ -23,9 +23,27 @@ export async function queryAllItems(
   ddb: Pick<DynamoDBDocumentClient, "send">,
   input: QueryCommandInput,
 ): Promise<Record<string, unknown>[]> {
+  return queryAllItemsBounded(ddb, input, Number.POSITIVE_INFINITY);
+}
+
+/**
+ * {@link queryAllItems} の上限付き版。最大 `maxPages` ページまで辿る。
+ *
+ * 全件 drain せず「1 partition あたり最大 N ページ」で打ち止めたい呼び出し側 (= 1 request
+ * あたりの query 回数を bound したい score-event timeline 等) のために提供する。`maxPages` に
+ * 達したら `LastEvaluatedKey` が残っていても停止する。`maxPages` は 1 以上であること。
+ *
+ * 呼び出し側は `ExclusiveStartKey` を渡してはいけない (本 helper が管理する)。
+ */
+export async function queryAllItemsBounded(
+  ddb: Pick<DynamoDBDocumentClient, "send">,
+  input: QueryCommandInput,
+  maxPages: number,
+): Promise<Record<string, unknown>[]> {
   const items: Record<string, unknown>[] = [];
   let exclusiveStartKey: Record<string, unknown> | undefined;
-  do {
+  let pages = 0;
+  while (pages < maxPages) {
     const out = await ddb.send(
       new QueryCommand({
         ...input,
@@ -34,7 +52,9 @@ export async function queryAllItems(
     );
     if (out.Items) items.push(...out.Items);
     exclusiveStartKey = out.LastEvaluatedKey;
-  } while (exclusiveStartKey);
+    pages++;
+    if (!exclusiveStartKey) break;
+  }
   return items;
 }
 
