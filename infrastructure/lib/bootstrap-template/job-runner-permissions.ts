@@ -46,13 +46,17 @@ export function buildTenantJobRunnerPermissions(account: string, region: string)
         actions: ["ssm:GetParameter", "ssm:GetParameters"],
         resources: [`arn:aws:ssm:${region}:${account}:parameter/cdk-bootstrap/*`],
       }),
-      // source bundle (`tenkacloud-source-<account>-<region>`, uploaded by install.sh) read.
+      // source bundle read. The bucket is per-environment
+      // (`tenkacloud-source-<account>-<region>-<envHash>`, see scripts/prepare-source-bundle.sh),
+      // so grant the `tenkacloud-source-<account>-<region>*` prefix: stays scoped to this
+      // account+region's source buckets while covering every environment's bucket (and the
+      // legacy non-hashed name). Widening only — never removes access from the prior grant.
       new PolicyStatement({
         effect: Effect.ALLOW,
         actions: ["s3:GetObject", "s3:GetObjectVersion", "s3:ListBucket", "s3:ListBucketVersions"],
         resources: [
-          `arn:aws:s3:::tenkacloud-source-${account}-${region}`,
-          `arn:aws:s3:::tenkacloud-source-${account}-${region}/*`,
+          `arn:aws:s3:::tenkacloud-source-${account}-${region}*`,
+          `arn:aws:s3:::tenkacloud-source-${account}-${region}*/*`,
         ],
       }),
       // tenant-template stack output read.
