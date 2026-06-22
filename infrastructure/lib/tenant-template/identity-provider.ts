@@ -1,6 +1,18 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { aws_cognito, Duration, Stack } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import type { IdentityDetails } from "../interfaces/identity-details.js";
+
+// design import "Cognito Hosted UI.html": classic Hosted UI を *-customizable クラスで
+// ブランディングする CSS (ink 背景 / Summit ロゴ banner / paper card / ink submit)。
+// 同ディレクトリの .css を単一の source of truth として synth 時に読み込む (cdk app は
+// bun で TS を直接実行するため import.meta.url は本ソースの場所を指す)。
+const HOSTED_UI_CSS = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "cognito-hosted-ui.css"),
+  "utf8",
+);
 
 // Cognito InviteMessageTemplate の placeholder。{username} は admin-create-user 時に
 // 指定したユーザー名、{####} は Cognito 自動生成の一時パスワードに置換される。
@@ -294,6 +306,21 @@ export class IdentityProvider extends Construct {
     // L2 `UserPoolClient.node.defaultChild` は L1 `CfnUserPoolClient` を返す (CDK 仕様)。
     this.cfnTenantUserPoolClient = this.tenantUserPoolClient.node
       .defaultChild as aws_cognito.CfnUserPoolClient;
+
+    // design import "Cognito Hosted UI.html": テナント Hosted UI をブランド CSS で上書きする。
+    // UI customization は UserPoolDomain が先に存在している必要があるため明示的に依存を張る
+    // (attachment は userPoolId / clientId しか参照せず、 CFn が domain との順序を推論できない)。
+    // 注: Summit ロゴ画像 (ImageFile) は CFn では設定できないので Cognito console で別途アップロード。
+    const hostedUiBranding = new aws_cognito.CfnUserPoolUICustomizationAttachment(
+      this,
+      "tenantHostedUiBranding",
+      {
+        userPoolId: this.tenantUserPool.userPoolId,
+        clientId: this.tenantUserPoolClient.userPoolClientId,
+        css: HOSTED_UI_CSS,
+      },
+    );
+    hostedUiBranding.node.addDependency(this.tenantUserPoolDomain);
 
     this.identityDetails = {
       name: "Cognito",

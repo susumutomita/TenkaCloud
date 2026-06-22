@@ -1,0 +1,138 @@
+/* ============================================================================
+   TenkaCloud — Amazon Cognito Hosted UI (classic) branding
+   ----------------------------------------------------------------------------
+   Upload this file in: Cognito ▸ User pool ▸ App integration ▸
+     Hosted UI customization ▸ "CSS customization (optional)".
+   Also upload the Summit logo PNG in the "Logo" slot on the same screen.
+
+   Cognito's classic Hosted UI only lets you style a fixed set of
+   *-customizable classes — you cannot change the DOM, add a side panel,
+   or reorder fields. These rules brand the screen as far as that allows:
+   ink background, Summit logo banner, paper card, ink submit button.
+
+   NOTE: Hosted UI's CSP can block @font-face / Google Fonts, so we rely on
+   the system stack (San Francisco / Segoe / Noto) rather than importing
+   Inter. The result is visually consistent with the rest of TenkaCloud.
+   For full color/typography control consider the newer "Managed login"
+   branding designer instead of classic Hosted UI.
+   ========================================================================== */
+
+/* page background — ink, matching the admin console stage */
+.background-customizable {
+  background-color: #1d1d1f;
+  background-image:
+    radial-gradient(60% 70% at 50% 0%, rgba(0,100,90,0.18), transparent 60%);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", system-ui, sans-serif;
+}
+
+/* logo banner — sits at the top of the card */
+.banner-customizable {
+  padding: 30px 0 26px;
+  background-color: #1d1d1f;
+}
+.logo-customizable {
+  max-width: 56px;
+  max-height: 56px;
+}
+
+/* card body text / heading */
+.textDescription-customizable {
+  padding-top: 26px;
+  color: #1d1d1f;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.idpDescription-customizable {
+  color: #6e6e73;
+  font-size: 13px;
+}
+
+/* field labels */
+.label-customizable {
+  color: #1d1d1f;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+/* text / password inputs */
+.inputField-customizable {
+  height: 50px;
+  border: 1px solid #d2d2d7;
+  border-radius: 12px;
+  padding: 0 15px;
+  font-size: 15px;
+  color: #1d1d1f;
+  transition: border-color .15s, box-shadow .15s;
+}
+.inputField-customizable:focus {
+  border-color: #1d1d1f;
+  box-shadow: 0 0 0 4px rgba(29,29,31,0.07);
+  outline: none;
+}
+
+/* "Forgot your password?" + redirect links */
+.redirect-customizable {
+  color: #00645a;
+  text-decoration: none;
+  font-size: 13px;
+}
+.redirect-customizable:hover {
+  text-decoration: underline;
+}
+
+/* primary submit button — ink, pill-ish, matches the portal */
+.submitButton-customizable {
+  height: 52px;
+  background-color: #1d1d1f;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  margin-top: 18px;
+  transition: background-color .15s, opacity .15s;
+}
+.submitButton-customizable:hover {
+  background-color: #000000;
+}
+
+/* federated / SSO IdP buttons (Entra ID, Okta, Google…) */
+.idpButton-customizable {
+  height: 50px;
+  background-color: #ffffff;
+  border: 1px solid #d2d2d7;
+  border-radius: 12px;
+  color: #1d1d1f;
+  font-weight: 500;
+  font-size: 14px;
+  transition: border-color .15s, background-color .15s;
+}
+.idpButton-customizable:hover {
+  background-color: #fbfbfd;
+  border-color: #1d1d1f;
+  color: #1d1d1f;
+}
+.socialButton-customizable {
+  height: 50px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+/* error + password-policy feedback */
+.errorMessage-customizable {
+  background: #fff5f4;
+  border: 1px solid #f3c7c2;
+  border-radius: 10px;
+  padding: 11px 13px;
+  color: #c2261d;
+  font-size: 13px;
+}
+.passwordCheck-notValid-customizable { color: #d8483a; }
+.passwordCheck-valid-customizable    { color: #2f9e63; }
+
+/* legal / fine print */
+.legalText-customizable {
+  color: #86868b;
+  font-size: 11px;
+}
