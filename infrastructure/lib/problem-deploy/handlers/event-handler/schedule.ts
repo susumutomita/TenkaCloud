@@ -12,6 +12,8 @@ export interface SetEventScheduleParams {
   readonly startsAt?: string;
   /** 競技終了予約時刻 (ISO8601 Z、#536)。未指定なら既存値を保持 */
   readonly endsAt?: string;
+  /** [ADR-047] 自動撤去予定時刻 (ISO8601 Z)。未指定なら既存値を保持。teardownAt >= 実効 endsAt 必須 */
+  readonly teardownAt?: string;
   /**
    * Issue #1038 P1 #9 follow-up: scoreboard freeze window 分数 (= 終了 N 分前から順位を隠す)。
    * 未指定なら既存値を保持、 0 で freeze 無効化、 1〜180 が有効範囲。
@@ -27,19 +29,24 @@ export interface SetEventScheduleParams {
  * - `past_starts_at`: 指定 startsAt が `now - SLACK_MS` 以前 → 400 相当 (#537)
  * - `past_ends_at`: 指定 endsAt が `now - SLACK_MS` 以前 → 400 相当 (#536)
  * - `ends_before_starts`: 指定 endsAt <= startsAt → 400 相当 (#536)
+ * - `past_teardown_at`: 指定 teardownAt が `now - SLACK_MS` 以前 → 400 相当 (ADR-047)
+ * - `teardown_before_ends`: 実効 teardownAt < 実効 endsAt → 400 相当 (ADR-047 always-ends)
  * - `no_op`: 何も指定なし (= zod 通過後ありえない、defense-in-depth)
- * - `ok`: 更新後の startsAt / endsAt + 影響を受けた deployment 数
+ * - `ok`: 更新後の startsAt / endsAt / teardownAt + 影響を受けた deployment 数
  */
 export type SetEventScheduleOutcome =
   | { kind: "not_found" }
   | { kind: "past_starts_at"; startsAt: string; nowMs: number }
   | { kind: "past_ends_at"; endsAt: string; nowMs: number }
   | { kind: "ends_before_starts"; startsAt: string; endsAt: string }
+  | { kind: "past_teardown_at"; teardownAt: string; nowMs: number }
+  | { kind: "teardown_before_ends"; teardownAt: string; endsAt: string }
   | { kind: "no_op" }
   | {
       kind: "ok";
       startsAt?: string;
       endsAt?: string;
+      teardownAt?: string;
       scoreboardFreezeMinutes?: number;
       updatedDeployments: number;
     };
@@ -73,7 +80,7 @@ export async function setEventSchedule(
   eventId: string,
   params: SetEventScheduleParams,
 ): Promise<SetEventScheduleOutcome> {
-  const { startsAt, endsAt, scoreboardFreezeMinutes } = params;
+  const { startsAt, endsAt, teardownAt, scoreboardFreezeMinutes } = params;
   const validation = validateScheduleParams(params);
   if (validation) return validation;
 
@@ -84,17 +91,23 @@ export async function setEventSchedule(
   const effectiveEndsAt = endsAt ?? currentEvent.endsAt;
   const effectiveOrder = validateScheduleOrder(effectiveStartsAt, effectiveEndsAt);
   if (effectiveOrder) return effectiveOrder;
+  // [ADR-047] teardownAt >= 実効 endsAt (採点 gate を閉じてから撤去する always-ends 不変条件)。
+  const effectiveTeardownAt = teardownAt ?? currentEvent.teardownAt;
+  const teardownOrder = validateTeardownOrder(effectiveTeardownAt, effectiveEndsAt);
+  if (teardownOrder) return teardownOrder;
   const update = buildScheduleUpdate(tenantId, params);
   const updatedEvent = await updateEventSchedule(shared, eventId, update);
   if (!updatedEvent) return { kind: "not_found" };
 
   // 紐づく deployment 行を全部引いて eventStartsAt / eventEndsAt を伝播。
+  // teardownAt は event-level のみ (reconciler が event 行から読む) なので denormalize しない。
   const updatedDeployments = await propagateSchedule(shared, tenantId, eventId, update);
 
   return {
     kind: "ok",
     startsAt,
     endsAt,
+    ...(teardownAt !== undefined ? { teardownAt } : {}),
     ...(scoreboardFreezeMinutes !== undefined ? { scoreboardFreezeMinutes } : {}),
     updatedDeployments,
   };
@@ -103,13 +116,41 @@ export async function setEventSchedule(
 function validateScheduleParams(
   params: SetEventScheduleParams,
 ): SetEventScheduleOutcome | undefined {
-  const { startsAt, endsAt, scoreboardFreezeMinutes, nowMs } = params;
-  if (startsAt === undefined && endsAt === undefined && scoreboardFreezeMinutes === undefined) {
+  const { startsAt, endsAt, teardownAt, scoreboardFreezeMinutes, nowMs } = params;
+  if (
+    startsAt === undefined &&
+    endsAt === undefined &&
+    teardownAt === undefined &&
+    scoreboardFreezeMinutes === undefined
+  ) {
     return { kind: "no_op" };
   }
   if (isPastScheduleTime(startsAt, nowMs)) return { kind: "past_starts_at", startsAt, nowMs };
   if (isPastScheduleTime(endsAt, nowMs)) return { kind: "past_ends_at", endsAt, nowMs };
-  return validateScheduleOrder(startsAt, endsAt);
+  if (isPastScheduleTime(teardownAt, nowMs)) return { kind: "past_teardown_at", teardownAt, nowMs };
+  const order = validateScheduleOrder(startsAt, endsAt);
+  if (order) return order;
+  // teardownAt + endsAt が同一 request にあり teardownAt < endsAt なら pre-fetch で reject
+  // (= ends_before_starts と同じく DDB 不触)。 teardownAt 単独 vs 既存 endsAt は post-fetch で判定。
+  return validateTeardownOrder(teardownAt, endsAt);
+}
+
+/**
+ * [ADR-047] 実効 teardownAt が 実効 endsAt より前なら `teardown_before_ends`。
+ * どちらかが未設定なら制約なし (= undefined)。 endsAt 未設定の event は無期限なので
+ * teardownAt 単独設定も許容する (= 「いつか撤去」 を予約できる)。
+ */
+function validateTeardownOrder(
+  teardownAt: string | undefined,
+  endsAt: string | undefined,
+): Extract<SetEventScheduleOutcome, { kind: "teardown_before_ends" }> | undefined {
+  if (teardownAt === undefined || endsAt === undefined) return undefined;
+  const teardownAtMs = new Date(teardownAt).getTime();
+  const endsAtMs = new Date(endsAt).getTime();
+  if (!Number.isFinite(teardownAtMs) || !Number.isFinite(endsAtMs) || teardownAtMs >= endsAtMs) {
+    return undefined;
+  }
+  return { kind: "teardown_before_ends", teardownAt, endsAt };
 }
 
 function isPastScheduleTime(value: string | undefined, nowMs: number): value is string {
@@ -134,15 +175,17 @@ function validateScheduleOrder(
 async function getCurrentSchedule(
   shared: EventSharedResources,
   eventId: string,
-): Promise<Pick<EventItem, "tenantId" | "startsAt" | "endsAt"> | undefined> {
+): Promise<Pick<EventItem, "tenantId" | "startsAt" | "endsAt" | "teardownAt"> | undefined> {
   const currentOut = await shared.ddb.send(
     new GetCommand({
       TableName: shared.eventsTableName,
       Key: { PK: `EVENT#${eventId}`, SK: "META" },
-      ProjectionExpression: "tenantId, startsAt, endsAt",
+      ProjectionExpression: "tenantId, startsAt, endsAt, teardownAt",
     }),
   );
-  return currentOut.Item as Pick<EventItem, "tenantId" | "startsAt" | "endsAt"> | undefined;
+  return currentOut.Item as
+    | Pick<EventItem, "tenantId" | "startsAt" | "endsAt" | "teardownAt">
+    | undefined;
 }
 
 interface ScheduleUpdate {
@@ -169,6 +212,11 @@ function buildScheduleUpdate(tenantId: string, params: SetEventScheduleParams): 
     deploymentParts.push("eventEndsAt = :e");
     eventValues[":endsAt"] = params.endsAt;
     deploymentValues[":e"] = params.endsAt;
+  }
+  if (params.teardownAt !== undefined) {
+    // [ADR-047] teardownAt は event 行のみ (reconciler が event から読む) — deployment 非伝播。
+    eventParts.push("teardownAt = :teardownAt");
+    eventValues[":teardownAt"] = params.teardownAt;
   }
   if (params.scoreboardFreezeMinutes !== undefined) {
     eventParts.push("scoreboardFreezeMinutes = :fz");

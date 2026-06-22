@@ -75,10 +75,18 @@ export function EventDangerZone({
   scheduleInFlight,
   scheduleModalOpen,
   scheduleTime,
+  onDismissTeardownSchedule,
+  onScheduleTeardown,
   setEndsAtDate,
   setEndsAtTime,
   setScheduleDate,
   setScheduleTime,
+  setTeardownDate,
+  setTeardownTime,
+  teardownDate,
+  teardownInFlight,
+  teardownModalOpen,
+  teardownTime,
   t,
 }: {
   readonly canMutateTenant: boolean;
@@ -115,10 +123,18 @@ export function EventDangerZone({
   readonly scheduleInFlight: "now" | "scheduled" | null;
   readonly scheduleModalOpen: boolean;
   readonly scheduleTime: string;
+  readonly onDismissTeardownSchedule: () => void;
+  readonly onScheduleTeardown: () => void;
   readonly setEndsAtDate: (value: string) => void;
   readonly setEndsAtTime: (value: string) => void;
   readonly setScheduleDate: (value: string) => void;
   readonly setScheduleTime: (value: string) => void;
+  readonly setTeardownDate: (value: string) => void;
+  readonly setTeardownTime: (value: string) => void;
+  readonly teardownDate: string;
+  readonly teardownInFlight: boolean;
+  readonly teardownModalOpen: boolean;
+  readonly teardownTime: string;
   readonly t: Translate;
 }) {
   const teardownConfirm = useTeardownConfirmInput(confirmTeardown);
@@ -305,6 +321,52 @@ export function EventDangerZone({
               placeholder="hh:mm"
               onChange={(e) => setEndsAtTime(e.detail.value)}
               invalid={endsAtInvalid}
+            />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+
+      <Modal
+        visible={teardownModalOpen}
+        onDismiss={onDismissTeardownSchedule}
+        header={t("event_detail.modal_teardown_schedule_header")}
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button onClick={onDismissTeardownSchedule}>{t("event_detail.modal_cancel")}</Button>
+              <Button
+                variant="primary"
+                loading={teardownInFlight}
+                disabled={!canMutateTenant || teardownInFlight}
+                onClick={onScheduleTeardown}
+              >
+                {t("event_detail.modal_teardown_schedule_confirm")}
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="s">
+          <Box>{t("event_detail.modal_teardown_schedule_body")}</Box>
+          {detail?.endsAt && (
+            <Box variant="small" color="text-status-inactive">
+              {t("event_detail.modal_teardown_ends_at_hint")}: <code>{detail.endsAt}</code>
+            </Box>
+          )}
+          <FormField label={t("event_detail.modal_date_label")}>
+            <DatePicker
+              value={teardownDate}
+              onChange={(e) => setTeardownDate(e.detail.value)}
+              placeholder="YYYY/MM/DD"
+            />
+          </FormField>
+          <FormField label={t("event_detail.modal_time_label")}>
+            <TimeInput
+              value={teardownTime}
+              format="hh:mm"
+              placeholder="hh:mm"
+              onChange={(e) => setTeardownTime(e.detail.value)}
             />
           </FormField>
         </SpaceBetween>

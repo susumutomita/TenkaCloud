@@ -34,6 +34,18 @@ export interface EventItem {
    */
   endsAt?: string;
   /**
+   * [ADR-047] 自動撤去予定時刻 (ISO8601, UTC)。毎分 reconciler が `now >= teardownAt` を
+   * 検知すると bulk teardown を自動発火し、撤去し忘れによる課金リークを防ぐ (#1910 の主動機)。
+   * 不変条件: 設定する場合 `teardownAt >= endsAt` (採点 gate を閉じてから撤去する)。
+   * 未設定なら自動撤去なし (= operator が手動で「Event を終了」/ teardown する従来挙動)。
+   */
+  teardownAt?: string;
+  /**
+   * [ADR-047] reconciler が teardownAt に基づき自動 teardown を発火した時刻 (ISO8601, UTC)。
+   * status 遷移 (→ TEARDOWN) が一次の冪等ガードだが、監査 + 二重発火防止の補助として記録する。
+   */
+  teardownFiredAt?: string;
+  /**
    * Archive 操作で `status=ARCHIVED` に遷移した時刻 (ISO 8601, UTC)。Issue #493。
    * EventList が ARCHIVED を default view から外すときの sort key としても使える。
    */
@@ -189,6 +201,8 @@ export const EventSummarySchema = z.object({
   /** 競技終了時刻 (#536)。HealthCheck が `now >= endsAt` で gate 閉。
    *  「Event を終了」 button = now を書く / 「日時を指定して終了」 = 未来時刻を書く。 */
   endsAt: z.string().optional(),
+  /** [ADR-047] 自動撤去予定時刻。reconciler が `now >= teardownAt` で bulk teardown を自動発火。 */
+  teardownAt: z.string().optional(),
   /** 採点 lock flag (#558)。true なら加点経路全停止、read のみ可。 */
   scoringLocked: z.boolean().optional(),
   /** scoringLocked を true にした時刻 (#558)。 */
@@ -233,6 +247,16 @@ export const ScheduleEventRequestSchema = z
       .transform((s) => new Date(s).toISOString())
       .optional(),
     /**
+     * [ADR-047] 自動撤去予定時刻。non-Z offset 入力も canonical UTC Z に transform して persist
+     * (startsAt / endsAt と同じ理由 = 辞書順比較の安定化、Issue #497)。teardownAt >= 実効 endsAt の
+     * cross-field 不変条件は handler 側 (setEventSchedule) で検証する (= 既存 / 新規 endsAt を要するため)。
+     */
+    teardownAt: z
+      .string()
+      .datetime({ offset: true })
+      .transform((s) => new Date(s).toISOString())
+      .optional(),
+    /**
      * Issue #1038 P1 #9 follow-up: scoreboard freeze window 分数 (= 終了 N 分前から順位を隠す)。
      * 0 で freeze 無効化、 1〜180 分の範囲を受け付ける。 未指定なら既存値を保持。
      */
@@ -243,9 +267,11 @@ export const ScheduleEventRequestSchema = z
       v.startsAt !== undefined ||
       v.startNow === true ||
       v.endsAt !== undefined ||
+      v.teardownAt !== undefined ||
       v.scoreboardFreezeMinutes !== undefined,
     {
-      message: "startsAt / startNow / endsAt / scoreboardFreezeMinutes のいずれかは必須",
+      message:
+        "startsAt / startNow / endsAt / teardownAt / scoreboardFreezeMinutes のいずれかは必須",
     },
   )
   .refine((v) => !(v.startsAt !== undefined && v.startNow === true), {

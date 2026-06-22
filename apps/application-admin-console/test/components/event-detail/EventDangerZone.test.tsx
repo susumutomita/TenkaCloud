@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EventDetail } from "../../../src/api/events-client";
 import { EventDangerZone } from "../../../src/components/event-detail/EventDangerZone";
@@ -62,7 +62,9 @@ const props = (over: Partial<Props> = {}): Props =>
     onForceArchive: vi.fn(),
     onNotificationSuccess: vi.fn(),
     onScheduleEnd: vi.fn(),
+    onScheduleTeardown: vi.fn(),
     onScheduledStart: vi.fn(),
+    onDismissTeardownSchedule: vi.fn(),
     scheduleDate: "",
     scheduleInFlight: null,
     scheduleModalOpen: false,
@@ -71,6 +73,12 @@ const props = (over: Partial<Props> = {}): Props =>
     setEndsAtTime: vi.fn(),
     setScheduleDate: vi.fn(),
     setScheduleTime: vi.fn(),
+    setTeardownDate: vi.fn(),
+    setTeardownTime: vi.fn(),
+    teardownDate: "",
+    teardownInFlight: false,
+    teardownModalOpen: false,
+    teardownTime: "",
     t: (k: string) => k,
     ...over,
   }) as Props;
@@ -160,6 +168,48 @@ describe("EventDangerZone", () => {
     const input = screen.getByTestId("modal-teardown-confirm-input").querySelector("input");
     fireEvent.change(input as HTMLInputElement, { target: { value: "DELETE" } });
     expect(screen.getByTestId("modal-teardown-confirm")).toBeDisabled();
+  });
+
+  it("should drive the teardown-schedule modal inputs and confirm/cancel (ADR-047)", () => {
+    const p = props({
+      teardownModalOpen: true,
+      detail: {
+        teams: [{}],
+        problems: [{}],
+        endsAt: "2026-06-02T00:00:00Z",
+      } as unknown as EventDetail,
+    });
+    render(<EventDangerZone {...p} />);
+    // Cloudscape は他 modal も DOM に描画するため、 teardown dialog に scope する。
+    const modal = within(
+      screen.getByRole("dialog", { name: "event_detail.modal_teardown_schedule_header" }),
+    );
+    expect(modal.getByText("event_detail.modal_teardown_schedule_body")).toBeInTheDocument();
+    // endsAt hint (truthy 経路)。
+    expect(modal.getByText(/event_detail\.modal_teardown_ends_at_hint/)).toBeInTheDocument();
+
+    fireEvent.change(modal.getByPlaceholderText("YYYY/MM/DD"), { target: { value: "2026/06/03" } });
+    expect(p.setTeardownDate).toHaveBeenCalled();
+    fireEvent.change(modal.getByPlaceholderText("hh:mm"), { target: { value: "10:00" } });
+    expect(p.setTeardownTime).toHaveBeenCalled();
+
+    fireEvent.click(
+      modal.getByRole("button", { name: "event_detail.modal_teardown_schedule_confirm" }),
+    );
+    expect(p.onScheduleTeardown).toHaveBeenCalled();
+    fireEvent.click(modal.getByRole("button", { name: "event_detail.modal_cancel" }));
+    expect(p.onDismissTeardownSchedule).toHaveBeenCalled();
+  });
+
+  it("should hide the teardown ends-at hint without an end time and disable confirm in-flight / read-only", () => {
+    // endsAt 不在 → hint 非表示 (falsy 経路)。
+    const { rerender } = render(<EventDangerZone {...props({ teardownModalOpen: true })} />);
+    expect(screen.queryByText(/event_detail\.modal_teardown_ends_at_hint/)).toBeNull();
+    const confirmName = { name: "event_detail.modal_teardown_schedule_confirm" };
+    rerender(<EventDangerZone {...props({ teardownModalOpen: true, teardownInFlight: true })} />);
+    expect(screen.getByRole("button", confirmName)).toBeDisabled();
+    rerender(<EventDangerZone {...props({ teardownModalOpen: true, canMutateTenant: false })} />);
+    expect(screen.getByRole("button", confirmName)).toBeDisabled();
   });
 
   it("should wire the notification modal and dismiss the just-sent success alert", () => {

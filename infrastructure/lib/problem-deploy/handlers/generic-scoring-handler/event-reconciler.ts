@@ -1,5 +1,7 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { QueryCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { bulkTeardownEvent } from "../event-handler/bulk-delete.js";
+import type { EventSharedResources } from "../event-handler/shared.js";
 
 /**
  * #557 / #539: Event status の auto-transition reconciler (= 1-min tick で deployment 集約
@@ -61,6 +63,38 @@ export interface ReconcileEventStatusesContext {
   readonly ddb: DynamoDBDocumentClient;
   readonly eventsTableName: string;
   readonly deploymentsTableName: string;
+  /**
+   * [ADR-047] scheduled auto-teardown を発火するための resources (`bulkTeardownEvent` 用)。
+   * `buildScheduledTeardownResources()` が返す。 未配線 (= CompetitorAccounts env 無し) なら
+   * `undefined` で、 reconciler は scheduled teardown を skip する (= 後方互換・tick を壊さない)。
+   */
+  readonly teardownDeps?: EventSharedResources;
+}
+
+/**
+ * [ADR-047] pure: event が「自動撤去すべき」状態か判定する。
+ *
+ * 条件: `teardownAt` 設定済 かつ `now >= teardownAt` かつ status が撤去可能 (= `READY` / `ENDED`、
+ * すなわち deploy 済で採点が走る/終わった状態) かつ未発火 (`teardownFiredAt` 無し)。
+ *
+ * `DEPLOYING` (deploy 進行中) は撤去しない (= 次 tick で READY 化後に拾う、 mid-deploy 破壊回避)。
+ * `DRAFT` (未 deploy) / `TEARDOWN` / `ARCHIVED` も対象外。 status 遷移 (→ TEARDOWN) が一次の
+ * 冪等ガードで、 `teardownFiredAt` は二重発火防止の補助。
+ */
+export function resolveScheduledTeardownDue(
+  event: {
+    readonly status?: string;
+    readonly teardownAt?: string;
+    readonly teardownFiredAt?: string;
+  },
+  nowMs: number,
+): boolean {
+  if (event.teardownFiredAt) return false;
+  if (event.status !== "READY" && event.status !== "ENDED") return false;
+  if (!event.teardownAt) return false;
+  const teardownAtMs = Date.parse(event.teardownAt);
+  if (!Number.isFinite(teardownAtMs) || !Number.isFinite(nowMs)) return false;
+  return nowMs >= teardownAtMs;
 }
 
 /**
@@ -240,13 +274,16 @@ export async function reconcileEventStatuses(
     const out = await ctx.ddb.send(
       new ScanCommand({
         TableName: ctx.eventsTableName,
-        ProjectionExpression: "PK, tenantId, eventId, #status, endsAt",
+        // [ADR-047] ENDED も拾う (= teardownAt 経過の自動撤去対象)。 teardownAt / teardownFiredAt を投影。
+        ProjectionExpression: "PK, tenantId, eventId, #status, endsAt, teardownAt, teardownFiredAt",
         ExpressionAttributeNames: { "#status": "status" },
-        FilterExpression: "#status = :deploying OR #status = :ready OR #status = :teardown",
+        FilterExpression:
+          "#status = :deploying OR #status = :ready OR #status = :teardown OR #status = :ended",
         ExpressionAttributeValues: {
           ":deploying": "DEPLOYING",
           ":ready": "READY",
           ":teardown": "TEARDOWN",
+          ":ended": "ENDED",
         },
         Limit: 100,
         ExclusiveStartKey: exclusiveStartKey,
@@ -258,6 +295,8 @@ export async function reconcileEventStatuses(
       eventId?: string;
       status?: string;
       endsAt?: string;
+      teardownAt?: string;
+      teardownFiredAt?: string;
     }>;
 
     const nowMs = Date.parse(nowIso);
@@ -275,12 +314,28 @@ async function reconcileSingleEvent(
     readonly eventId?: string;
     readonly status?: string;
     readonly endsAt?: string;
+    readonly teardownAt?: string;
+    readonly teardownFiredAt?: string;
   },
   nowIso: string,
   nowMs: number,
 ): Promise<void> {
   if (!event.tenantId || !event.eventId || !event.status || !event.PK) return;
   const eventStatus: string = event.status;
+
+  // [ADR-047] scheduled auto-teardown: teardownAt 経過の READY/ENDED を自動撤去 (課金リーク防止)。
+  // teardownDeps 未配線 (= CompetitorAccounts env 無し) なら skip (= dormant、 後方互換)。
+  // bulkTeardownEvent が status を TEARDOWN に倒すので、 通常遷移より先に発火し early return する。
+  if (resolveScheduledTeardownDue(event, nowMs) && ctx.teardownDeps) {
+    await fireScheduledTeardown(ctx, ctx.teardownDeps, {
+      PK: event.PK,
+      tenantId: event.tenantId,
+      eventId: event.eventId,
+      nowMs,
+      nowIso,
+    });
+    return;
+  }
 
   // Issue #1038 P0 #3: READY → ENDED は deployment row を見る必要が無い (= endsAt のみで判定)。
   // 子 deployment を query しないことで RCU / Lambda 時間を節約。
@@ -364,6 +419,67 @@ async function applyEventStatusTransition(
     const code = (err as { name?: string })?.name ?? "";
     if (code === "ConditionalCheckFailedException") return;
     console.warn("[generic-scoring] Event status update failed", {
+      eventId: args.eventId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * [ADR-047] scheduled teardown を発火する。 既存 `bulkTeardownEvent` を再利用 (= 手動「Event を削除」
+ * と同一経路: Deployments を DELETING に倒し DeployDeleteRequested を publish、 Event を TEARDOWN に)。
+ * 直後に teardownFiredAt を記録 (= 二重発火防止の補助 + 監査)。 失敗は warn で握り潰す
+ * (= 次 tick で再評価。 status guard が一次冪等なので毎分 tick / 採点を巻き込まない)。
+ */
+async function fireScheduledTeardown(
+  ctx: ReconcileEventStatusesContext,
+  deps: EventSharedResources,
+  args: {
+    readonly PK: string;
+    readonly tenantId: string;
+    readonly eventId: string;
+    readonly nowMs: number;
+    readonly nowIso: string;
+  },
+): Promise<void> {
+  try {
+    const outcome = await bulkTeardownEvent(deps, args.tenantId, args.eventId, args.nowMs);
+    console.log("[generic-scoring] scheduled auto-teardown fired (ADR-047)", {
+      eventId: args.eventId,
+      outcome: outcome.kind,
+      enqueued: outcome.kind === "ok" ? outcome.result.enqueued : undefined,
+    });
+    await recordTeardownFired(ctx, args);
+  } catch (err) {
+    console.warn("[generic-scoring] scheduled auto-teardown failed", {
+      eventId: args.eventId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+async function recordTeardownFired(
+  ctx: ReconcileEventStatusesContext,
+  args: {
+    readonly PK: string;
+    readonly tenantId: string;
+    readonly eventId: string;
+    readonly nowIso: string;
+  },
+): Promise<void> {
+  try {
+    await ctx.ddb.send(
+      new UpdateCommand({
+        TableName: ctx.eventsTableName,
+        Key: { PK: args.PK, SK: "META" },
+        UpdateExpression: "SET teardownFiredAt = :now",
+        ConditionExpression: "tenantId = :tenant AND attribute_not_exists(teardownFiredAt)",
+        ExpressionAttributeValues: { ":tenant": args.tenantId, ":now": args.nowIso },
+      }),
+    );
+  } catch (err) {
+    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return;
+    console.warn("[generic-scoring] recordTeardownFired failed", {
       eventId: args.eventId,
       message: err instanceof Error ? err.message : String(err),
     });

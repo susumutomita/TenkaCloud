@@ -73,6 +73,51 @@ export function buildEventSharedResources(): EventSharedResources {
   };
 }
 
+/**
+ * [ADR-047] 毎分 reconciler (generic-scoring Lambda) から `bulkTeardownEvent` を呼ぶための
+ * 最小 `EventSharedResources`。 teardown は Events / Deployments / CompetitorAccounts table と
+ * deploy event bus だけを使う (= Teams / problem catalog / S3 は不要)。 未使用 field は安全な
+ * placeholder で埋める。
+ *
+ * **防御設計**: `COMPETITOR_ACCOUNTS_TABLE_NAME` env が未配線なら `undefined` を返す。 これにより
+ * オーナーが generic-scoring Lambda に CompetitorAccounts read grant + env を足す前は scheduled
+ * teardown が dormant になり、 毎分 tick / 採点を一切壊さない。
+ */
+export function buildScheduledTeardownResources(): EventSharedResources | undefined {
+  const competitorAccountsTableName = process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
+  const eventsTableName = process.env.EVENTS_TABLE_NAME;
+  const deploymentsTableName = process.env.DEPLOYMENTS_TABLE_NAME;
+  const eventBusName = process.env.DEPLOY_EVENT_BUS_NAME;
+  const env = process.env.DEPLOY_ENVIRONMENT;
+  if (
+    !competitorAccountsTableName ||
+    !eventsTableName ||
+    !deploymentsTableName ||
+    !eventBusName ||
+    !env
+  ) {
+    return undefined;
+  }
+  return {
+    eventsTableName,
+    deploymentsTableName,
+    competitorAccountsTableName,
+    eventBusName,
+    env,
+    ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
+    events: new EventBridgeClient({}),
+    // teardown 未使用 field の placeholder (bulkTeardownEvent は参照しない)。
+    teamsTableName: "",
+    disruptionsTableName: process.env.DISRUPTIONS_TABLE_NAME ?? "",
+    s3: new S3Client({}),
+    scheduler: new SchedulerClient({}),
+    problemsCatalog: {},
+    problemsDisruptions: {},
+    bulkDeployPayloadBucket: "",
+    useBulkDistributedMap: false,
+  };
+}
+
 function parseProblemsDisruptions(
   raw: string | undefined,
 ): Readonly<Record<string, readonly ProblemDisruptionEntry[]>> {

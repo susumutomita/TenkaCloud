@@ -64,6 +64,7 @@ function toSummary(item: Partial<EventItem>): EventSummary {
     expiresAt: Number(item.expiresAt ?? 0),
     startsAt: typeof item.startsAt === "string" ? item.startsAt : undefined,
     endsAt: typeof item.endsAt === "string" ? item.endsAt : undefined,
+    teardownAt: typeof item.teardownAt === "string" ? item.teardownAt : undefined,
     scoringLocked: item.scoringLocked === true ? true : undefined,
     scoringLockedAt: typeof item.scoringLockedAt === "string" ? item.scoringLockedAt : undefined,
     scoreboardFreezeMinutes:
