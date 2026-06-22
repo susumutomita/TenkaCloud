@@ -35,8 +35,13 @@ vi.mock("../../src/api/portal-client", async (importOriginal) => {
   return { ...actual, updateTeamName: mockUpdate };
 });
 
-const { TeamSetupPage, describeTeamNameDraft, canSubmitTeamName, formatTeamSetupSubmitError } =
-  await import("../../src/pages/TeamSetup");
+const {
+  TeamSetupPage,
+  describeTeamNameDraft,
+  canSubmitTeamName,
+  formatTeamSetupSubmitError,
+  teamNameErrorKey,
+} = await import("../../src/pages/TeamSetup");
 
 const config = { apiBaseUrl: "https://api.example.com", eventTitle: "Test event" } as AppConfig;
 const updateSession = vi.fn();
@@ -108,6 +113,13 @@ describe("pure helpers", () => {
     expect(formatTeamSetupSubmitError(new Error("boom"), "x")).toBe("boom");
     expect(formatTeamSetupSubmitError("plain", "x")).toBe("plain");
   });
+
+  it("should pick the inline error key by failure kind", () => {
+    expect(teamNameErrorKey("   ")).toBe("err_empty");
+    expect(teamNameErrorKey("a".repeat(41))).toBe("err_long");
+    expect(teamNameErrorKey("@@@")).toBe("err_char");
+    expect(teamNameErrorKey("Valid Name")).toBeNull();
+  });
 });
 
 describe("TeamSetupPage", () => {
@@ -135,11 +147,39 @@ describe("TeamSetupPage", () => {
     expect(screen.getByRole("textbox")).toHaveValue("");
   });
 
-  it("should show a format error and disable submit for an invalid name", () => {
+  it("should show a charset error and disable submit for an invalid name", () => {
     renderPage();
     typeName("@@@");
-    expect(screen.getByText("team_setup.field_invalid_format")).toBeInTheDocument();
+    expect(screen.getByText("team_setup.err_char")).toBeInTheDocument();
     expect(submitButton()).toBeDisabled();
+  });
+
+  it("should show a length error (and warn the counter) for an over-long name", () => {
+    renderPage();
+    typeName("a".repeat(41));
+    expect(screen.getByText("team_setup.err_long")).toBeInTheDocument();
+    expect(screen.getByText("41/40")).toHaveClass("warn");
+    expect(submitButton()).toBeDisabled();
+  });
+
+  it("should fall back to a default event label when none is configured", () => {
+    render(<TeamSetupPage config={{ apiBaseUrl: "https://api.example.com" } as AppConfig} />);
+    expect(screen.getByText("TenkaCloud Battle")).toBeInTheDocument();
+  });
+
+  it("should switch the locale from the top bar toggle", () => {
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "JA" }));
+    expect(mockSetLocale).toHaveBeenCalledWith("ja");
+  });
+
+  it("should mark the field touched on blur and surface the empty error", () => {
+    renderPage();
+    fireEvent.blur(screen.getByRole("textbox"));
+    expect(screen.getByText("team_setup.err_empty")).toBeInTheDocument();
+    // typing while already touched exercises the !touched=false path
+    typeName("ok");
+    expect(screen.queryByText("team_setup.err_empty")).not.toBeInTheDocument();
   });
 
   it("should submit to the backend and update the session", async () => {

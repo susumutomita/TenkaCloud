@@ -96,7 +96,18 @@
     "edit_submit_button": "Save",
     "cancel_button": "Cancel",
     "submit_failed_header": "Failed to save team name",
-    "validation_failed": "Invalid team name format. Use 1–40 chars: alphanumeric, space, _, -, or Japanese characters only."
+    "validation_failed": "Invalid team name format. Use 1–40 chars: alphanumeric, space, _, -, or Japanese characters only.",
+    "eyebrow": "PARTICIPANT SETUP",
+    "step_signin": "Sign in",
+    "step_name": "Team name",
+    "step_start": "Start",
+    "preview_title": "How it appears on the scoreboard",
+    "you": "You",
+    "placeholder_name": "(not set yet)",
+    "changelater": "You can change your team name anytime from settings during the event.",
+    "err_empty": "Enter a team name to continue.",
+    "err_long": "Use 40 characters or fewer.",
+    "err_char": "Contains unsupported characters. Only letters, digits, space, _ , - and Japanese are allowed."
   },
   "quests": {
     "header": "Problems (Quests)",
