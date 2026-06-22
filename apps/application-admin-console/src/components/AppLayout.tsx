@@ -1,4 +1,5 @@
 import Alert from "@cloudscape-design/components/alert";
+import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { type ShellUserMenu, ShellLayout as WebKitShellLayout } from "@tenkacloud/web-kit";
 import type { ReactNode } from "react";
@@ -28,12 +29,15 @@ export function ShellLayout({
   children,
   samlSsoEnabled = false,
   demoMode = false,
+  demoParticipantUrl,
 }: {
   children: ReactNode;
   /** Feature-flagged: show the Identity providers (SAML SSO) nav item only when enabled. */
   samlSsoEnabled?: boolean;
   /** Issue #1954: no-AWS demo mode の常時バナーを出す。 */
   demoMode?: boolean;
+  /** Issue #1954: 参加者 demo (participant-portal) への hand-off 先 base URL。 */
+  demoParticipantUrl?: string;
 }) {
   const auth = useAuth();
   const location = useLocation();
@@ -104,7 +108,14 @@ export function ShellLayout({
       {demoMode ? (
         <SpaceBetween size="m">
           <Alert type="info" header={t("demo.banner_header")}>
-            {t("demo.banner_body")}
+            <SpaceBetween size="xs">
+              <span>{t("demo.banner_body")}</span>
+              {demoParticipantUrl && (
+                <Link href={`${demoParticipantUrl}/?demo=1`} external>
+                  {t("demo.view_as_participant")}
+                </Link>
+              )}
+            </SpaceBetween>
           </Alert>
           {children}
         </SpaceBetween>

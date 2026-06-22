@@ -9,11 +9,13 @@ vi.mock("../auth/AuthProvider", () => ({ useAuth: () => ({ tokens: null, logout:
 // Locale resolves from navigator.language in the test env, so match either locale's header.
 const BANNER_HEADER = /Demo mode|デモモード/;
 
-function renderShell(demoMode: boolean) {
+const PARTICIPANT_LINK = /participant|参加者/i;
+
+function renderShell(demoMode: boolean, demoParticipantUrl?: string) {
   return render(
     <I18nProvider>
       <MemoryRouter>
-        <ShellLayout demoMode={demoMode}>
+        <ShellLayout demoMode={demoMode} demoParticipantUrl={demoParticipantUrl}>
           <div>page content</div>
         </ShellLayout>
       </MemoryRouter>
@@ -32,5 +34,16 @@ describe("ShellLayout demo banner (#1954)", () => {
     renderShell(false);
     expect(screen.queryByText(BANNER_HEADER)).not.toBeInTheDocument();
     expect(screen.getByText("page content")).toBeInTheDocument();
+  });
+
+  it("should offer a participant-demo hand-off link (?demo=1) when given a URL", () => {
+    renderShell(true, "/portal-demo");
+    const link = screen.getByRole("link", { name: PARTICIPANT_LINK });
+    expect(link).toHaveAttribute("href", "/portal-demo/?demo=1");
+  });
+
+  it("should omit the participant link when no hand-off URL is provided", () => {
+    renderShell(true);
+    expect(screen.queryByRole("link", { name: PARTICIPANT_LINK })).not.toBeInTheDocument();
   });
 });

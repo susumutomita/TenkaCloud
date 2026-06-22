@@ -4,7 +4,8 @@
   },
   "demo": {
     "banner_header": "Demo mode — simulated, no real AWS",
-    "banner_body": "This is a no-AWS demo: data is simulated client-side, nothing is deployed, and no AWS resources are created or billed."
+    "banner_body": "This is a no-AWS demo: data is simulated client-side, nothing is deployed, and no AWS resources are created or billed.",
+    "view_as_participant": "Open the participant portal (demo) →"
   },
   "app": {
     "title": "Application Admin Console",
