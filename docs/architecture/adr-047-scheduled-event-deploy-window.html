@@ -53,7 +53,7 @@
   <p><em>競技リソースを「いつデプロイし、 いつ破棄するか」 を event ごとの時間窓として宣言し、 platform が
   aws-scheduler で既存の bulk-deploy / bulk-teardown を疎結合に駆動する。 課金は窓の幅に必ず収束する。</em></p>
   <div class="meta">
-    <div><b>Status:</b> <span class="badge draft">Proposed</span> 2026-06-19</div>
+    <div><b>Status:</b> <span class="badge accept">Accepted</span> 2026-06-22</div>
     <div><b>Related:</b>
       <a href="./adr-037-disruption-timing-recurrence.html">ADR-037</a> (aws-scheduler による予約・自動停止の機構),
       <a href="./adr-029-attack-resilience-liveness.html">ADR-029</a> (always-ends / 永続させない原則),
@@ -102,6 +102,23 @@
 
 <p>
   event に <b>deploy window</b> を宣言できるようにする。 window は最大 2 つの時刻を持つ:
+</p>
+
+<p style="background:#dafbe1;border-left:4px solid var(--c-accept);padding:8px 12px">
+  <b>採択した実装機構 (reconciliation 方式)。</b>
+  当初は専用の <code>aws-scheduler</code> + <code>deploy-window-control</code> Lambda で駆動する案
+  (下図) を提案したが、 採択した実装は <b>既存の毎分 reconciler</b>
+  (<code>generic-scoring</code> Lambda、 ADR-014 の 1-min tick) に相乗りさせ、
+  <code>now &gt;= teardownAt</code> / <code>now &gt;= deployAt</code> を検知して既存の
+  <code>bulkTeardownEvent</code> / <code>bulkDeployEvent</code> を呼ぶ方式である。 新規の
+  Scheduler / Lambda を増やさず ADR-014 の polling/reconciliation 原則と一致する (精度 ±1 分は許容)。
+  status 遷移 (READY/ENDED → TEARDOWN) が一次の冪等ガード。 専用 Scheduler 案 (下図) は
+  検討した代替として残す。
+  <br>
+  <b>段階:</b> PR1 = <code>teardownAt</code> による <b>auto-teardown</b> (課金リーク防止の主動機)。
+  <code>deployAt</code> による auto-deploy は follow-on。
+  <b>オーナー所有の配線 (infra):</b> 毎分 Lambda に CompetitorAccounts (teardown) / Teams (deploy) の
+  read grant + env を追加するまで scheduled teardown は dormant (= 防御的に skip、 tick を壊さない)。
 </p>
 
 <table>

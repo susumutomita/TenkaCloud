@@ -288,6 +288,97 @@ describe("setEventSchedule endsAt (#536 scheduled endsAt)", () => {
   });
 });
 
+describe("setEventSchedule teardownAt (ADR-047 自動撤去)", () => {
+  beforeEach(() => vi.clearAllMocks());
+  const TEARDOWN_AT = "2026-05-08T14:00:00.000Z"; // ENDS_AT (12:00) 以降
+
+  it("teardownAt のみ → Event の teardownAt を更新、deployments には伝播しない", async () => {
+    const { shared, ddbSend } = buildShared();
+    mockCurrentEvent(ddbSend, { tenantId: "tenant-acme", endsAt: ENDS_AT });
+    ddbSend.mockResolvedValueOnce({
+      Attributes: { eventId: "EV1", tenantId: "tenant-acme", teardownAt: TEARDOWN_AT },
+    });
+    ddbSend.mockResolvedValueOnce({ Items: [{ PK: "DEPLOYMENT#J1", eventId: "EV1" }] });
+    ddbSend.mockResolvedValue({});
+
+    const out = await setEventSchedule(shared, "tenant-acme", "EV1", {
+      teardownAt: TEARDOWN_AT,
+      nowMs: NOW_MS,
+    });
+    expect(out.kind).toBe("ok");
+    if (out.kind === "ok") expect(out.teardownAt).toBe(TEARDOWN_AT);
+
+    const eventUpd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
+    expect(eventUpd.input.ExpressionAttributeValues?.[":teardownAt"]).toBe(TEARDOWN_AT);
+    const deployUpd = ddbSend.mock.calls[3]?.[0] as UpdateCommand;
+    // teardownAt は event-level のみ (= deployment へ非伝播)
+    expect(deployUpd.input.ExpressionAttributeValues?.[":teardownAt"]).toBeUndefined();
+  });
+
+  it("teardownAt が now - 60s より過去なら past_teardown_at で DDB 不触", async () => {
+    const { shared, ddbSend } = buildShared();
+    const past = new Date(NOW_MS - 5 * 60_000).toISOString();
+    const out = await setEventSchedule(shared, "tenant-acme", "EV1", {
+      teardownAt: past,
+      nowMs: NOW_MS,
+    });
+    expect(out).toEqual({ kind: "past_teardown_at", teardownAt: past, nowMs: NOW_MS });
+    expect(ddbSend).not.toHaveBeenCalled();
+  });
+
+  it("teardownAt < endsAt (同 request) は teardown_before_ends で DDB 不触", async () => {
+    const { shared, ddbSend } = buildShared();
+    const earlier = "2026-05-08T11:00:00.000Z"; // ENDS_AT (12:00) より前
+    const out = await setEventSchedule(shared, "tenant-acme", "EV1", {
+      endsAt: ENDS_AT,
+      teardownAt: earlier,
+      nowMs: NOW_MS,
+    });
+    expect(out).toEqual({ kind: "teardown_before_ends", teardownAt: earlier, endsAt: ENDS_AT });
+    expect(ddbSend).not.toHaveBeenCalled();
+  });
+
+  it("teardownAt 単独 < 既存 endsAt は teardown_before_ends (GetCommand 1 回、post-fetch)", async () => {
+    const { shared, ddbSend } = buildShared();
+    mockCurrentEvent(ddbSend, { tenantId: "tenant-acme", endsAt: ENDS_AT });
+    const earlier = "2026-05-08T11:00:00.000Z";
+    const out = await setEventSchedule(shared, "tenant-acme", "EV1", {
+      teardownAt: earlier,
+      nowMs: NOW_MS,
+    });
+    expect(out).toEqual({ kind: "teardown_before_ends", teardownAt: earlier, endsAt: ENDS_AT });
+    expect(ddbSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("teardownAt === endsAt は許容 (>= 不変条件)", async () => {
+    const { shared, ddbSend } = buildShared();
+    mockCurrentEvent(ddbSend, { tenantId: "tenant-acme", endsAt: ENDS_AT });
+    ddbSend.mockResolvedValueOnce({
+      Attributes: { eventId: "EV1", tenantId: "tenant-acme", teardownAt: ENDS_AT },
+    });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    const out = await setEventSchedule(shared, "tenant-acme", "EV1", {
+      teardownAt: ENDS_AT,
+      nowMs: NOW_MS,
+    });
+    expect(out.kind).toBe("ok");
+  });
+
+  it("endsAt 不在の event でも teardownAt 単独設定は許容 (= 「いつか撤去」予約)", async () => {
+    const { shared, ddbSend } = buildShared();
+    mockCurrentEvent(ddbSend, { tenantId: "tenant-acme" });
+    ddbSend.mockResolvedValueOnce({
+      Attributes: { eventId: "EV1", tenantId: "tenant-acme", teardownAt: TEARDOWN_AT },
+    });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    const out = await setEventSchedule(shared, "tenant-acme", "EV1", {
+      teardownAt: TEARDOWN_AT,
+      nowMs: NOW_MS,
+    });
+    expect(out.kind).toBe("ok");
+  });
+});
+
 /**
  * Issue #497 + #536: ScheduleEventRequestSchema の shape を pin。
  * - `+09:00` 等の non-Z オフセットは UTC Z に transform される (= 辞書順比較の安全性)
@@ -307,6 +398,16 @@ describe("ScheduleEventRequestSchema", () => {
   it("endsAt should likewise transform its offset to Z (#536)", () => {
     const out = ScheduleEventRequestSchema.parse({ endsAt: "2026-05-08T21:00:00+09:00" });
     expect(out.endsAt).toBe("2026-05-08T12:00:00.000Z");
+  });
+
+  it("teardownAt should also transform its offset to Z (ADR-047)", () => {
+    const out = ScheduleEventRequestSchema.parse({ teardownAt: "2026-05-08T23:00:00+09:00" });
+    expect(out.teardownAt).toBe("2026-05-08T14:00:00.000Z");
+  });
+
+  it("`{ teardownAt }` のみで refine を通る (ADR-047)", () => {
+    const out = ScheduleEventRequestSchema.parse({ teardownAt: "2026-05-08T14:00:00.000Z" });
+    expect(out.teardownAt).toBe("2026-05-08T14:00:00.000Z");
   });
 
   it("オフセット無し (naive) は reject", () => {

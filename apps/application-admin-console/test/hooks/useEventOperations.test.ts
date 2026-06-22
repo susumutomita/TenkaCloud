@@ -1,7 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type ApiClient, ApiError } from "../../src/api/client";
-import { useEventOperations, validateEndsAtInput } from "../../src/hooks/useEventOperations";
+import {
+  useEventOperations,
+  validateEndsAtInput,
+  validateTeardownAtInput,
+} from "../../src/hooks/useEventOperations";
 
 /**
  * Event operations hook (#536/#555/#558/#708/#1038…)。 events-client の各 mutation を mock し、
@@ -63,6 +67,27 @@ describe("validateEndsAtInput", () => {
       validateEndsAtInput("2999-01-01", "10:00", "2999-12-31T23:59:59.000Z", NOW).errorKey,
     ).toBe("event_detail.error_endsat_before_start");
     expect(validateEndsAtInput("2999-01-01", "10:00", undefined, NOW).canSubmit).toBe(true);
+  });
+});
+
+describe("validateTeardownAtInput (ADR-047)", () => {
+  const NOW = new Date("2026-05-05T10:00:00.000Z").getTime();
+  it("should reject empty / invalid / past / before-ends and accept a valid future teardown", () => {
+    expect(validateTeardownAtInput("", "", undefined, NOW)).toEqual({ canSubmit: false });
+    expect(validateTeardownAtInput("2026-13-40", "99:99", undefined, NOW).errorKey).toBe(
+      "event_detail.error_teardown_format",
+    );
+    expect(validateTeardownAtInput("2020-01-01", "00:00", undefined, NOW).errorKey).toBe(
+      "event_detail.error_teardown_past",
+    );
+    // 未来だが endsAt より前 → before_ends。
+    expect(
+      validateTeardownAtInput("2999-01-01", "10:00", "2999-12-31T23:59:59.000Z", NOW).errorKey,
+    ).toBe("event_detail.error_teardown_before_ends");
+    // endsAt 不在なら下限制約なし → 通る。
+    expect(validateTeardownAtInput("2999-01-01", "10:00", undefined, NOW).canSubmit).toBe(true);
+    // endsAt が unparseable なら before-ends チェックを skip → 通る。
+    expect(validateTeardownAtInput("2999-01-01", "10:00", "garbage", NOW).canSubmit).toBe(true);
   });
 });
 
@@ -200,6 +225,64 @@ describe("useEventOperations — scheduling", () => {
       await result.current.handleEndNowSchedule();
     });
     expect(setError).toHaveBeenCalledWith("end-now");
+  });
+
+  it("should validate the teardown input (required + errorKey) before scheduling (ADR-047)", async () => {
+    const { result, setError } = setup();
+    // 空入力 → required key。
+    await act(async () => {
+      await result.current.handleScheduleTeardown();
+    });
+    expect(setError).toHaveBeenCalledWith("event_detail.error_teardown_required");
+    // 不正 ISO → errorKey 付き。
+    act(() => {
+      result.current.setTeardownDate("2026-13-40");
+      result.current.setTeardownTime("99:99");
+    });
+    await act(async () => {
+      await result.current.handleScheduleTeardown();
+    });
+    expect(setError).toHaveBeenCalledWith("event_detail.error_teardown_format");
+    expect(ops.setEventSchedule).not.toHaveBeenCalled();
+  });
+
+  it("should schedule a valid teardown and clear its modal on success (ADR-047)", async () => {
+    ops.setEventSchedule.mockResolvedValue(undefined);
+    const { result } = setup();
+    act(() => {
+      result.current.setTeardownDate("2999-01-01");
+      result.current.setTeardownTime("10:00");
+      result.current.setTeardownModalOpen(true);
+    });
+    await act(async () => {
+      await result.current.handleScheduleTeardown();
+    });
+    expect(ops.setEventSchedule).toHaveBeenCalledWith(CLIENT, "evt-1", {
+      teardownAt: expect.any(String),
+    });
+    expect(result.current.teardownModalOpen).toBe(false);
+  });
+
+  it("should surface teardown schedule errors (Error + non-Error) (ADR-047)", async () => {
+    const { result, setError } = setup();
+    act(() => {
+      result.current.setTeardownDate("2999-01-01");
+      result.current.setTeardownTime("10:00");
+    });
+    ops.setEventSchedule.mockRejectedValueOnce(new Error("teardown-sched boom"));
+    await act(async () => {
+      await result.current.handleScheduleTeardown();
+    });
+    expect(setError).toHaveBeenCalledWith("teardown-sched boom");
+    act(() => {
+      result.current.setTeardownDate("2999-01-01");
+      result.current.setTeardownTime("10:00");
+    });
+    ops.setEventSchedule.mockRejectedValueOnce("teardown-sched-str");
+    await act(async () => {
+      await result.current.handleScheduleTeardown();
+    });
+    expect(setError).toHaveBeenCalledWith("teardown-sched-str");
   });
 });
 
@@ -453,6 +536,7 @@ describe("useEventOperations — guards", () => {
       await result.current.handleStartNow();
       await result.current.handleScheduledStart();
       await result.current.handleScheduleEnd();
+      await result.current.handleScheduleTeardown();
       await result.current.handleEndNowSchedule();
       await result.current.handleSaveFreezeMinutes();
       await result.current.handleLockScoring();
@@ -478,6 +562,7 @@ describe("useEventOperations — guards", () => {
       await result.current.handleStartNow();
       await result.current.handleScheduledStart();
       await result.current.handleScheduleEnd();
+      await result.current.handleScheduleTeardown();
       await result.current.handleEndNowSchedule();
       await result.current.handleSaveFreezeMinutes();
       await result.current.handleLockScoring();

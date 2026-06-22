@@ -47,6 +47,33 @@ export function validateEndsAtInput(
   return { canSubmit: true, value };
 }
 
+/**
+ * [ADR-047] 自動撤去予定時刻の入力検証。 過去不可 (now-60s 以前) かつ endsAt 以降 (= 採点 gate を
+ * 閉じてから撤去する always-ends 不変条件)。 endsAt 未設定なら下限制約なし。
+ */
+export function validateTeardownAtInput(
+  date: string,
+  time: string,
+  endsAt: string | undefined,
+  nowMs: number,
+): EndsAtValidation {
+  if (!date || !time) return { canSubmit: false };
+  const value = new Date(`${date}T${time}:00`);
+  if (Number.isNaN(value.getTime())) {
+    return { canSubmit: false, errorKey: "event_detail.error_teardown_format" };
+  }
+  if (value.getTime() < nowMs - 60_000) {
+    return { canSubmit: false, errorKey: "event_detail.error_teardown_past" };
+  }
+  if (endsAt) {
+    const endsAtMs = new Date(endsAt).getTime();
+    if (Number.isFinite(endsAtMs) && value.getTime() < endsAtMs) {
+      return { canSubmit: false, errorKey: "event_detail.error_teardown_before_ends" };
+    }
+  }
+  return { canSubmit: true, value };
+}
+
 function resolveScheduledStartInput(
   date: string,
   time: string,
@@ -103,6 +130,11 @@ export function useEventOperations(args: {
   const [endsAtDate, setEndsAtDate] = useState("");
   const [endsAtTime, setEndsAtTime] = useState("");
   const [endsAtInFlight, setEndsAtInFlight] = useState(false);
+  // [ADR-047] 自動撤去予定 modal の state (= endsAt modal と独立)
+  const [teardownModalOpen, setTeardownModalOpen] = useState(false);
+  const [teardownDate, setTeardownDate] = useState("");
+  const [teardownTime, setTeardownTime] = useState("");
+  const [teardownInFlight, setTeardownInFlight] = useState(false);
   const [endInFlight, setEndInFlight] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   // Issue #1038 P1 #9 follow-up: scoreboard freeze 分数の operator 編集 state
@@ -223,6 +255,35 @@ export function useEventOperations(args: {
     }
   };
 
+  const handleScheduleTeardown = async () => {
+    if (!apiClient || !canMutateTenant || teardownInFlight) return;
+    const validation = validateTeardownAtInput(
+      teardownDate,
+      teardownTime,
+      detail?.endsAt,
+      Date.now(),
+    );
+    if (!validation.canSubmit || !validation.value) {
+      setError(
+        validation.errorKey ? t(validation.errorKey) : t("event_detail.error_teardown_required"),
+      );
+      return;
+    }
+    setTeardownInFlight(true);
+    setError(null);
+    try {
+      await setEventSchedule(apiClient, eventId, { teardownAt: validation.value.toISOString() });
+      setTeardownModalOpen(false);
+      setTeardownDate("");
+      setTeardownTime("");
+      await refresh();
+    } catch (err) {
+      setError(toErrorMessage(err));
+    } finally {
+      setTeardownInFlight(false);
+    }
+  };
+
   const handleSaveFreezeMinutes = async () => {
     if (!apiClient || !canMutateTenant || freezeMinutesInFlight) return;
     const trimmed = freezeMinutesInput.trim();
@@ -335,6 +396,7 @@ export function useEventOperations(args: {
     handleLockScoring,
     handleSaveFreezeMinutes,
     handleScheduleEnd,
+    handleScheduleTeardown,
     handleScheduledStart,
     handleStartNow,
     handleUnlockScoring,
@@ -358,5 +420,12 @@ export function useEventOperations(args: {
     setScheduleDate,
     setScheduleModalOpen,
     setScheduleTime,
+    setTeardownDate,
+    setTeardownModalOpen,
+    setTeardownTime,
+    teardownDate,
+    teardownInFlight,
+    teardownModalOpen,
+    teardownTime,
   };
 }

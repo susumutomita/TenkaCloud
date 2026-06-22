@@ -26,6 +26,8 @@ export interface EventSummary {
   /** 競技終了時刻 (ISO8601, UTC、#536)。HealthCheck は `now >= endsAt` で採点 gate 閉。
    *  「Event を終了」 button (= 即時終了) と「日時を指定して終了」 (= 予約) の両方が書き込む。 */
   endsAt?: string;
+  /** [ADR-047] 自動撤去予定時刻 (ISO8601, UTC)。reconciler が `now >= teardownAt` で bulk teardown を自動発火。 */
+  teardownAt?: string;
   /** #558: 採点 lock flag。true なら加点経路全停止 (= 表彰フェーズ)、leaderboard read は許可。 */
   scoringLocked?: boolean;
   /** #558: scoringLocked=true にした時刻 (ISO 8601, UTC)。 */
@@ -192,6 +194,8 @@ export interface SetScheduleResult {
   startsAt?: string;
   /** #536: endsAt も同様 */
   endsAt?: string;
+  /** [ADR-047] teardownAt も指定された場合のみ返る */
+  teardownAt?: string;
   updatedDeployments: number;
 }
 
@@ -206,6 +210,8 @@ export interface SetEventScheduleBody {
   startsAt?: string;
   startNow?: true;
   endsAt?: string;
+  /** [ADR-047] 自動撤去予定時刻 (ISO8601)。teardownAt >= endsAt 必須 (backend が検証)。 */
+  teardownAt?: string;
   /** Issue #1038 P1 #9 follow-up: 0=freeze 無効 / 1〜180=N 分前から freeze */
   scoreboardFreezeMinutes?: number;
 }

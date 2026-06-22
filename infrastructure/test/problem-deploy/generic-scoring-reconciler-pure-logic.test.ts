@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolveEventStatusTransition } from "../../lib/problem-deploy/handlers/generic-scoring-handler/event-reconciler";
+import {
+  resolveEventStatusTransition,
+  resolveScheduledTeardownDue,
+} from "../../lib/problem-deploy/handlers/generic-scoring-handler/event-reconciler";
 
 /**
  * #557 / #539: pure-function transition resolver for the event reconciler.
@@ -7,6 +10,69 @@ import { resolveEventStatusTransition } from "../../lib/problem-deploy/handlers/
  * Covers `resolveEventStatusTransition` only — no DDB / mocks involved.
  * Split out from `generic-scoring-reconciler.test.ts` per #1255.
  */
+
+const TEARDOWN_NOW_MS = Date.parse("2026-05-08T12:00:00.000Z");
+const TEARDOWN_PAST = "2026-05-08T11:00:00.000Z"; // now より前
+const TEARDOWN_FUTURE = "2026-05-08T13:00:00.000Z"; // now より後
+
+describe("resolveScheduledTeardownDue (ADR-047 pure logic)", () => {
+  it("should be due when READY + teardownAt has passed", () => {
+    expect(
+      resolveScheduledTeardownDue({ status: "READY", teardownAt: TEARDOWN_PAST }, TEARDOWN_NOW_MS),
+    ).toBe(true);
+  });
+
+  it("should be due when ENDED + teardownAt has passed", () => {
+    expect(
+      resolveScheduledTeardownDue({ status: "ENDED", teardownAt: TEARDOWN_PAST }, TEARDOWN_NOW_MS),
+    ).toBe(true);
+  });
+
+  it("should NOT be due while DEPLOYING (avoid mid-deploy teardown)", () => {
+    expect(
+      resolveScheduledTeardownDue(
+        { status: "DEPLOYING", teardownAt: TEARDOWN_PAST },
+        TEARDOWN_NOW_MS,
+      ),
+    ).toBe(false);
+  });
+
+  it("should NOT be due for DRAFT / TEARDOWN / ARCHIVED", () => {
+    for (const status of ["DRAFT", "TEARDOWN", "ARCHIVED"]) {
+      expect(
+        resolveScheduledTeardownDue({ status, teardownAt: TEARDOWN_PAST }, TEARDOWN_NOW_MS),
+      ).toBe(false);
+    }
+  });
+
+  it("should NOT be due when teardownAt is still in the future", () => {
+    expect(
+      resolveScheduledTeardownDue(
+        { status: "READY", teardownAt: TEARDOWN_FUTURE },
+        TEARDOWN_NOW_MS,
+      ),
+    ).toBe(false);
+  });
+
+  it("should NOT be due when teardownAt is unset", () => {
+    expect(resolveScheduledTeardownDue({ status: "READY" }, TEARDOWN_NOW_MS)).toBe(false);
+  });
+
+  it("should NOT re-fire once teardownFiredAt is recorded", () => {
+    expect(
+      resolveScheduledTeardownDue(
+        { status: "READY", teardownAt: TEARDOWN_PAST, teardownFiredAt: TEARDOWN_PAST },
+        TEARDOWN_NOW_MS,
+      ),
+    ).toBe(false);
+  });
+
+  it("should NOT be due when teardownAt is unparseable", () => {
+    expect(
+      resolveScheduledTeardownDue({ status: "READY", teardownAt: "not-a-date" }, TEARDOWN_NOW_MS),
+    ).toBe(false);
+  });
+});
 
 describe("resolveEventStatusTransition (#557 #539 pure logic)", () => {
   it("should transition to READY when DEPLOYING + all COMPLETE", () => {

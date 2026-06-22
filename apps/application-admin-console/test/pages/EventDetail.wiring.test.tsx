@@ -83,7 +83,9 @@ const DZ_CALLBACKS = [
   "onForceArchive",
   "onNotificationSuccess",
   "onScheduleEnd",
+  "onScheduleTeardown",
   "onScheduledStart",
+  "onDismissTeardownSchedule",
 ] as const;
 vi.mock("../../src/components/event-detail/EventDangerZone", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: stub props。
@@ -194,6 +196,7 @@ const makeOperations = () => ({
   handleLockScoring: vi.fn(),
   handleSaveFreezeMinutes: vi.fn(),
   handleScheduleEnd: vi.fn(),
+  handleScheduleTeardown: vi.fn(),
   handleScheduledStart: vi.fn(),
   handleStartNow: vi.fn(),
   handleUnlockScoring: vi.fn(),
@@ -217,6 +220,13 @@ const makeOperations = () => ({
   setScheduleDate: vi.fn(),
   setScheduleModalOpen: vi.fn(),
   setScheduleTime: vi.fn(),
+  setTeardownDate: vi.fn(),
+  setTeardownModalOpen: vi.fn(),
+  setTeardownTime: vi.fn(),
+  teardownDate: "",
+  teardownInFlight: false,
+  teardownModalOpen: false,
+  teardownTime: "",
 });
 type Ops = ReturnType<typeof makeOperations>;
 let ops: Ops;
@@ -334,6 +344,10 @@ describe("EventDetailPage wiring", () => {
     expect(ops.handleForceArchive).toHaveBeenCalled();
     fireEvent.click(screen.getByTestId("dz-onScheduleEnd"));
     expect(ops.handleScheduleEnd).toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("dz-onScheduleTeardown"));
+    expect(ops.handleScheduleTeardown).toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("dz-onDismissTeardownSchedule"));
+    expect(ops.setTeardownModalOpen).toHaveBeenCalledWith(false);
     fireEvent.click(screen.getByTestId("dz-onScheduledStart"));
     expect(ops.handleScheduledStart).toHaveBeenCalled();
     // onNotificationSuccess は modal を閉じて just-sent を立てる (2 setter)。

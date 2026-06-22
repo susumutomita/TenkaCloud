@@ -22,10 +22,12 @@ export function EventSchedulePanel({
   onEndNowSchedule,
   onOpenEndsAtModal,
   onOpenScheduleModal,
+  onOpenTeardownModal,
   onSaveFreezeMinutes,
   onStartNow,
   onUpdateFreezeMinutes,
   scheduleInFlight,
+  teardownInFlight,
   t,
   wizard,
 }: {
@@ -38,10 +40,12 @@ export function EventSchedulePanel({
   readonly onEndNowSchedule: () => void;
   readonly onOpenEndsAtModal: () => void;
   readonly onOpenScheduleModal: () => void;
+  readonly onOpenTeardownModal: () => void;
   readonly onSaveFreezeMinutes: () => void;
   readonly onStartNow: () => void;
   readonly onUpdateFreezeMinutes: (value: string) => void;
   readonly scheduleInFlight: "now" | "scheduled" | null;
+  readonly teardownInFlight: boolean;
   readonly t: Translate;
   readonly wizard: WizardState | null;
 }) {
@@ -135,6 +139,28 @@ export function EventSchedulePanel({
               onClick={onSaveFreezeMinutes}
             >
               {t("event_detail.freeze_save")}
+            </Button>
+          </SpaceBetween>
+        </Field>
+      </Box>
+      <Box margin={{ top: "m" }}>
+        {/* [ADR-047] 自動撤去予定時刻。 設定すると reconciler が時刻到来で bulk teardown を発火し、
+            撤去し忘れによる課金リークを防ぐ。 即時撤去は別途「Event を削除」を使う。 */}
+        <Field label={t("event_detail.teardown_at_label")}>
+          <SpaceBetween size="xs">
+            {detail.teardownAt ? (
+              <code>{detail.teardownAt}</code>
+            ) : (
+              <Box variant="small" color="text-status-inactive">
+                {t("event_detail.teardown_at_unset")}
+              </Box>
+            )}
+            <Button
+              onClick={onOpenTeardownModal}
+              loading={teardownInFlight}
+              disabled={!apiClient || !canMutateTenant || teardownInFlight}
+            >
+              {t("event_detail.teardown_at_pick")}
             </Button>
           </SpaceBetween>
         </Field>

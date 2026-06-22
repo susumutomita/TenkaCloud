@@ -106,7 +106,7 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     expect(ddbSend).toHaveBeenCalledTimes(5);
   });
 
-  it("Event filter should target DEPLOYING / READY / TEARDOWN (don't touch ENDED / ARCHIVED)", async () => {
+  it("Event filter should target DEPLOYING / READY / TEARDOWN + ENDED (ADR-047 teardown) and project teardownAt", async () => {
     ddbSend.mockResolvedValueOnce({ Items: [] });
     await reconcileEventStatuses(ctx, NOW_ISO);
     const scanCmd = ddbSend.mock.calls[0]?.[0] as {
@@ -116,14 +116,18 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
         ExpressionAttributeValues: Record<string, string>;
       };
     };
+    // ADR-047: ENDED も拾う (teardownAt 経過の自動撤去対象)。 ARCHIVED は対象外のまま。
     expect(scanCmd.input.FilterExpression).toBe(
-      "#status = :deploying OR #status = :ready OR #status = :teardown",
+      "#status = :deploying OR #status = :ready OR #status = :teardown OR #status = :ended",
     );
     expect(scanCmd.input.ExpressionAttributeValues[":deploying"]).toBe("DEPLOYING");
     expect(scanCmd.input.ExpressionAttributeValues[":ready"]).toBe("READY");
     expect(scanCmd.input.ExpressionAttributeValues[":teardown"]).toBe("TEARDOWN");
+    expect(scanCmd.input.ExpressionAttributeValues[":ended"]).toBe("ENDED");
     // Issue #1038 P0 #3: READY → ENDED 判定に endsAt が要るので projection に含める
     expect(scanCmd.input.ProjectionExpression).toContain("endsAt");
+    // ADR-047: 自動撤去判定に teardownAt / teardownFiredAt を projection に含める
+    expect(scanCmd.input.ProjectionExpression).toContain("teardownAt");
   });
 
   // Issue #1038 P0 #3: READY + endsAt 経過で自動 ENDED 遷移

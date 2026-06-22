@@ -433,7 +433,9 @@ function EventDetailLoaded({
           operations.setNotifyModalOpen(false);
           operations.setNotifyJustSent(true);
         }}
+        onDismissTeardownSchedule={() => operations.setTeardownModalOpen(false)}
         onScheduleEnd={() => void operations.handleScheduleEnd()}
+        onScheduleTeardown={() => void operations.handleScheduleTeardown()}
         onScheduledStart={() => void operations.handleScheduledStart()}
         scheduleDate={operations.scheduleDate}
         scheduleInFlight={operations.scheduleInFlight}
@@ -443,6 +445,12 @@ function EventDetailLoaded({
         setEndsAtTime={operations.setEndsAtTime}
         setScheduleDate={operations.setScheduleDate}
         setScheduleTime={operations.setScheduleTime}
+        setTeardownDate={operations.setTeardownDate}
+        setTeardownTime={operations.setTeardownTime}
+        teardownDate={operations.teardownDate}
+        teardownInFlight={operations.teardownInFlight}
+        teardownModalOpen={operations.teardownModalOpen}
+        teardownTime={operations.teardownTime}
         t={t}
       />
     </SpaceBetween>
