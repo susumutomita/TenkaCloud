@@ -1,0 +1,27 @@
+{
+  "name": "@tenkacloud/endpoint-eval",
+  "version": "0.1.0",
+  "description": "Issue #1973: target-agnostic external-endpoint evaluation engine (SSRF-guarded probes + staged scoring + signed one-time clear codes). Runtime-agnostic Hono app runs locally (Bun.serve) and on Lambda (hono/aws-lambda) unchanged; storage swaps via RunRepository (in-memory local / DDB cloud).",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='dist/**' --coverage.exclude='**/*.test.ts' --coverage.exclude='src/server.ts'"
+  },
+  "dependencies": {
+    "hono": "^4.12.22",
+    "http-status-codes": "^2.3.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

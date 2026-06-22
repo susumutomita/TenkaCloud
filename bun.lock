@@ -195,6 +195,20 @@
         "vitest": "^4.1.8",
       },
     },
+    "packages/endpoint-eval": {
+      "name": "@tenkacloud/endpoint-eval",
+      "version": "0.1.0",
+      "dependencies": {
+        "hono": "^4.12.22",
+        "http-status-codes": "^2.3.0",
+        "zod": "^3.25.76",
+      },
+      "devDependencies": {
+        "@types/node": "^24.12.4",
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.8",
+      },
+    },
     "packages/format": {
       "name": "@tenkacloud/format",
       "version": "0.1.0",
@@ -689,6 +703,8 @@
     "@tenkacloud/auth-client": ["@tenkacloud/auth-client@workspace:packages/auth-client"],
 
     "@tenkacloud/coordination-plugin-sdk": ["@tenkacloud/coordination-plugin-sdk@workspace:packages/coordination-plugin-sdk"],
+
+    "@tenkacloud/endpoint-eval": ["@tenkacloud/endpoint-eval@workspace:packages/endpoint-eval"],
 
     "@tenkacloud/format": ["@tenkacloud/format@workspace:packages/format"],
 

@@ -1,0 +1,7 @@
+name = "tenkacloud-api-security-001"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+# 無料体験向け: Cloudflare Temporary Account へ `bunx wrangler deploy --temporary` で
+# デプロイすると、 アカウント登録なしで `https://{subdomain}.workers.dev` が払い出される
+# (未 claim なら 60 分で自動削除)。 参考: https://blog.cloudflare.com/temporary-accounts/

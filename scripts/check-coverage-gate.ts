@@ -33,6 +33,7 @@ export const GATED_WORKSPACES = [
   "packages/format",
   "packages/coordination-plugin-sdk",
   "packages/web-kit",
+  "packages/endpoint-eval",
 ] as const;
 
 /** gate しないが現在値を表示する workspace (owner lane、 100% への道筋表示用)。 */
