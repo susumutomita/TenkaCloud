@@ -42,3 +42,7 @@ problems/**
 # を当てると原典の意図がずれる。
 # - CODE_OF_CONDUCT.md: Contributor Covenant 2.1 (https://www.contributor-covenant.org)
 CODE_OF_CONDUCT.md
+# 英語を正本とする bilingual な商標 / 法務ポリシー。 textlint の日本語 style rule
+# (である/ですます・句点) を当てると法務的な言い回しがずれるため、 README /
+# CONTRIBUTING / CODE_OF_CONDUCT と同じ扱いで除外する (markdownlint は通常どおり適用)。
+TRADEMARK_POLICY.md
