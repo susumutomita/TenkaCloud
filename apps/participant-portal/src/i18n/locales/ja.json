@@ -96,7 +96,18 @@
     "edit_submit_button": "保存",
     "cancel_button": "キャンセル",
     "submit_failed_header": "チーム名を保存できませんでした",
-    "validation_failed": "チーム名の形式が無効です。 1〜40 文字、 英数字 / 半角スペース / _ / - / 日本語のみ。"
+    "validation_failed": "チーム名の形式が無効です。 1〜40 文字、 英数字 / 半角スペース / _ / - / 日本語のみ。",
+    "eyebrow": "PARTICIPANT SETUP",
+    "step_signin": "ログイン",
+    "step_name": "チーム名",
+    "step_start": "開始",
+    "preview_title": "スコアボードでの見え方",
+    "you": "あなた",
+    "placeholder_name": "（まだ未設定）",
+    "changelater": "イベント中いつでも、 設定からチーム名を変更できます。",
+    "err_empty": "チーム名を入力してください。",
+    "err_long": "40 文字以内で入力してください。",
+    "err_char": "使えない文字が含まれています。 英数字 / 半角スペース / _ / - / 日本語のみ使用できます。"
   },
   "quests": {
     "header": "問題一覧 (Quests)",

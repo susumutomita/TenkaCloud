@@ -1,0 +1,469 @@
+/* TenkaCloud — Participant onboarding: name your team (design import: "Team Name Setup.html").
+   Same Ink / Summit family as the sign-in screen (Login.css).
+
+   Scoped under `.tc-team-setup` so it never leaks into the Cloudscape-driven app shell.
+   The design's external Google-Fonts @import is intentionally dropped — an onboarding
+   page should not make a third-party request; we fall back to the bundled/system stack.
+   Keyframes are prefixed (ts-*) to avoid colliding with Login.css. */
+
+.tc-team-setup {
+  --ink: #1d1d1f;
+  --ink-2: #424245;
+  --ink-3: #6e6e73;
+  --ink-4: #86868b;
+  --line: #d2d2d7;
+  --line-soft: #e8e8ed;
+  --paper: #ffffff;
+  --paper-2: #fbfbfd;
+  --paper-3: #f5f5f7;
+  --battle: #ff453a;
+  --ok: #30b766;
+  --font-sans: "Inter", "Noto Sans JP", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background: var(--paper-3);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  line-height: 1.5;
+}
+.tc-team-setup * {
+  box-sizing: border-box;
+}
+.tc-team-setup button,
+.tc-team-setup input {
+  font-family: inherit;
+}
+
+/* ---------- top bar ---------- */
+.tc-team-setup .topbar {
+  height: 60px;
+  background: var(--ink);
+  color: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+}
+.tc-team-setup .topbar .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.tc-team-setup .topbar .brand .sep {
+  color: rgba(255, 255, 255, 0.32);
+  margin: 0 2px;
+}
+.tc-team-setup .topbar .brand .event {
+  color: rgba(255, 255, 255, 0.62);
+  font-weight: 400;
+}
+.tc-team-setup .lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  padding: 4px 5px;
+}
+.tc-team-setup .lang button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 4px 11px;
+  border-radius: 999px;
+  line-height: 1;
+}
+.tc-team-setup .lang button.on {
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* ---------- progress rail ---------- */
+.tc-team-setup .rail {
+  background: var(--paper);
+  border-bottom: 1px solid var(--line-soft);
+}
+.tc-team-setup .rail .inner {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 18px 28px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.tc-team-setup .rail .step {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  color: var(--ink-4);
+}
+.tc-team-setup .rail .step .dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-4);
+}
+.tc-team-setup .rail .step.active {
+  color: var(--ink);
+  font-weight: 500;
+}
+.tc-team-setup .rail .step.active .dot {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.tc-team-setup .rail .step.done .dot {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+}
+.tc-team-setup .rail .line {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+  max-width: 48px;
+}
+
+/* ---------- stage ---------- */
+.tc-team-setup .stage {
+  display: flex;
+  justify-content: center;
+  padding: 56px 28px 72px;
+}
+.tc-team-setup .card {
+  width: 100%;
+  max-width: 560px;
+  background: var(--paper);
+  border: 1px solid var(--line-soft);
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 16px 40px -28px rgba(0, 0, 0, 0.28);
+  padding: 44px 44px 40px;
+  animation: ts-rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes ts-rise {
+  from {
+    transform: translateY(12px);
+  }
+  to {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-team-setup *,
+  .tc-team-setup *::before,
+  .tc-team-setup *::after {
+    animation: none !important;
+  }
+}
+
+.tc-team-setup .eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.tc-team-setup .eyebrow .mk {
+  color: var(--ink);
+  display: inline-flex;
+}
+.tc-team-setup .card h1 {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  margin: 0 0 8px;
+}
+.tc-team-setup .card .sub {
+  font-size: 15px;
+  color: var(--ink-3);
+  margin: 0 0 30px;
+  line-height: 1.6;
+}
+
+/* field */
+.tc-team-setup .field .label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 6px;
+  display: block;
+}
+.tc-team-setup .field .desc {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  margin: 0 0 10px;
+  line-height: 1.55;
+}
+.tc-team-setup .input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 56px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--paper);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.tc-team-setup .input:focus-within {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 4px rgba(29, 29, 31, 0.07);
+}
+.tc-team-setup .input.err {
+  border-color: var(--battle);
+  box-shadow: 0 0 0 4px rgba(255, 69, 58, 0.08);
+}
+.tc-team-setup .input.ok {
+  border-color: var(--ok);
+  box-shadow: 0 0 0 4px rgba(48, 183, 102, 0.1);
+}
+.tc-team-setup .input input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: none;
+  height: 100%;
+  padding: 0 16px;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.tc-team-setup .input input::placeholder {
+  color: var(--ink-4);
+  font-weight: 400;
+}
+.tc-team-setup .input .count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-4);
+  padding-right: 16px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tc-team-setup .input .count.warn {
+  color: var(--battle);
+}
+
+.tc-team-setup .meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 10px;
+  min-height: 18px;
+}
+.tc-team-setup .rules {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-4);
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+}
+.tc-team-setup .error-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: #c2261d;
+}
+.tc-team-setup .error-line .x {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--battle);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+/* live scoreboard preview */
+.tc-team-setup .preview {
+  margin: 26px 0 30px;
+}
+.tc-team-setup .preview .ttl {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tc-team-setup .preview .ttl .d {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+.tc-team-setup .board {
+  background: #161618;
+  border-radius: 13px;
+  overflow: hidden;
+}
+.tc-team-setup .board .row {
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.tc-team-setup .board .row:first-child {
+  border-top: none;
+}
+.tc-team-setup .board .row .rank {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+.tc-team-setup .board .row .nm {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+.tc-team-setup .board .row .pt {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.78);
+  font-variant-numeric: tabular-nums;
+}
+.tc-team-setup .board .row.you {
+  background: rgba(255, 255, 255, 0.06);
+}
+.tc-team-setup .board .row.you .rank {
+  color: #fff;
+}
+.tc-team-setup .board .row.you .nm {
+  color: #fff;
+  font-weight: 500;
+}
+.tc-team-setup .board .row.you .nm .tag {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #161618;
+  background: #fff;
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-left: 9px;
+  vertical-align: middle;
+}
+.tc-team-setup .board .row.you .nm .ph {
+  color: rgba(255, 255, 255, 0.34);
+  font-style: italic;
+}
+
+/* actions */
+.tc-team-setup .actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.tc-team-setup .submit {
+  flex: none;
+  height: 52px;
+  padding: 0 26px;
+  border: none;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  transition: opacity 0.15s, transform 0.05s;
+}
+.tc-team-setup .submit:hover:not(:disabled) {
+  opacity: 0.88;
+}
+.tc-team-setup .submit:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.tc-team-setup .submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.tc-team-setup .submit .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: ts-spin 0.7s linear infinite;
+}
+@keyframes ts-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.tc-team-setup .skip {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.tc-team-setup .skip:hover {
+  color: var(--ink);
+}
+
+.tc-team-setup .changelater {
+  margin-top: 22px;
+  font-size: 12px;
+  color: var(--ink-4);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.tc-team-setup .changelater svg {
+  flex: none;
+}
+
+/* responsive */
+@media (max-width: 620px) {
+  .tc-team-setup .card {
+    padding: 32px 24px 30px;
+    border-radius: 14px;
+  }
+  .tc-team-setup .card h1 {
+    font-size: 25px;
+  }
+  .tc-team-setup .rail .step span.t {
+    display: none;
+  }
+  .tc-team-setup .actions {
+    flex-wrap: wrap;
+  }
+  .tc-team-setup .submit {
+    flex: 1;
+  }
+}
