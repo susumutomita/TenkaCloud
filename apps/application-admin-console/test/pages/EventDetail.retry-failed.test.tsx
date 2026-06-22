@@ -149,24 +149,10 @@ describe("EventDetailPage #555 retry-failed button", () => {
   });
 });
 
-describe("EventDetailPage #756 re-deploy button", () => {
-  it("should NOT show button when there are zero COMPLETE deployments", async () => {
-    mocks.getEvent.mockResolvedValueOnce({
-      ...baseDetail,
-      deploymentsByProblem: {
-        "hello-world": [
-          { jobId: "J1", teamId: "t1", status: "PENDING" },
-          { jobId: "J2", teamId: "t2", status: "FAILED" },
-        ],
-      },
-    });
-    renderPage();
-    await waitFor(() => expect(screen.getAllByText(/Test Event/).length).toBeGreaterThan(0));
-    expect(screen.queryByText(/再デプロイ/)).not.toBeInTheDocument();
-  });
-
-  it("should show button with count when COMPLETE deployments exist", async () => {
-    mocks.getEvent.mockResolvedValueOnce({
+describe("EventDetailPage #756 re-deploy (consolidated into the Deploy button)", () => {
+  it("should force-redeploy via Deploy + confirm when every pair is already deployed", async () => {
+    // 2 teams x 1 problem = 2 expected; both COMPLETE → all deployed → Deploy means re-deploy.
+    mocks.getEvent.mockResolvedValue({
       ...baseDetail,
       deploymentsByProblem: {
         "hello-world": [
@@ -176,10 +162,17 @@ describe("EventDetailPage #756 re-deploy button", () => {
       },
     });
     renderPage();
-    expect(await screen.findByText(/再デプロイ \(2 件\)/)).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Deploy" }));
+    // 全デプロイ済みなので破壊的な再デプロイ扱い → confirm modal を経由する
+    await userEvent.click(await screen.findByRole("button", { name: "再デプロイする" }));
+    await waitFor(() => expect(mocks.bulkDeployEvent).toHaveBeenCalled());
+    expect(mocks.bulkDeployEvent).toHaveBeenCalledWith(expect.anything(), EVENT_ID, {
+      forceRedeploy: true,
+    });
   });
 
-  it("should call bulkDeployEvent with forceRedeploy=true when button is pressed", async () => {
+  it("should deploy immediately (no confirm) when some pairs are not yet deployed", async () => {
+    // 2 expected, only 1 deployed → undeployed remains → plain deploy, no confirm modal.
     mocks.getEvent.mockResolvedValue({
       ...baseDetail,
       deploymentsByProblem: {
@@ -187,13 +180,10 @@ describe("EventDetailPage #756 re-deploy button", () => {
       },
     });
     renderPage();
-    const button = await screen.findByText(/再デプロイ \(1 件\)/);
-    await userEvent.click(button);
-    // 再デプロイは破壊的なので confirm modal を経由する
-    await userEvent.click(await screen.findByRole("button", { name: "再デプロイする" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Deploy" }));
     await waitFor(() => expect(mocks.bulkDeployEvent).toHaveBeenCalled());
-    expect(mocks.bulkDeployEvent).toHaveBeenCalledWith(expect.anything(), EVENT_ID, {
-      forceRedeploy: true,
-    });
+    // 通常デプロイは confirm modal を出さず、 forceRedeploy も付けない。
+    expect(screen.queryByRole("button", { name: "再デプロイする" })).not.toBeInTheDocument();
+    expect(mocks.bulkDeployEvent.mock.calls[0][2]?.forceRedeploy).toBeFalsy();
   });
 });

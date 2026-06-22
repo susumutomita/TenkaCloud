@@ -226,7 +226,6 @@
     "back_to_list": "一覧へ戻る",
     "deploy_button": "Deploy",
     "retry_failed": "失敗分を再実行 ({count} 件)",
-    "redeploy": "再デプロイ ({count} 件)",
     "modal_redeploy_header": "再デプロイの確認",
     "modal_redeploy_body": "既にデプロイ済みの {count} 件を強制的に再デプロイします。 各チームのスタックが再作成され、 進行中の解答状況に影響する場合があります。 続行しますか?",
     "modal_redeploy_confirm": "再デプロイする",

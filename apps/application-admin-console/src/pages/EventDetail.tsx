@@ -216,6 +216,7 @@ function EventDetailErrorOnly({
             onUnlockScoring={() => void operations.handleUnlockScoring()}
             scoringLockInFlight={operations.scoringLockInFlight}
             t={t}
+            totalDeployCount={0}
             wizard={null}
           />
         }
@@ -350,6 +351,7 @@ function EventDetailLoaded({
             onUnlockScoring={() => void operations.handleUnlockScoring()}
             scoringLockInFlight={operations.scoringLockInFlight}
             t={t}
+            totalDeployCount={counts.totalDeployCount}
             wizard={wizard}
           />
         }
