@@ -63,7 +63,7 @@ function LiveBoard() {
   );
 }
 
-function BrandStage({ t, eventLabel }: { t: Translate; eventLabel: string }) {
+function BrandStage({ t }: { t: Translate }) {
   return (
     <aside className="stage">
       <div className="brand">
@@ -91,7 +91,7 @@ function BrandStage({ t, eventLabel }: { t: Translate; eventLabel: string }) {
         </div>
       </div>
       <div className="stage-foot">
-        <span>{eventLabel}</span>
+        <span>TenkaCloud</span>
       </div>
     </aside>
   );
@@ -199,13 +199,6 @@ function SignInForm(props: SignInFormProps) {
       <button className="submit" type="submit" disabled={!canSubmit}>
         {submitting ? <span className="spinner" /> : t("login.submit")}
       </button>
-
-      <p className="helper">
-        {t("login.helper_lead")}{" "}
-        <button type="button" className="helper-link">
-          {t("login.helper_link")}
-        </button>
-      </p>
     </form>
   );
 }
@@ -278,7 +271,7 @@ export function LoginPage({ config }: { config: AppConfig }) {
   return (
     <div className="tc-login">
       <div className="auth">
-        <BrandStage t={t} eventLabel={eventLabel} />
+        <BrandStage t={t} />
         <main className="panel">
           <div className="topbar">
             <div className="lang">
