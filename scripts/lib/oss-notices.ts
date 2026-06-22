@@ -15,6 +15,22 @@ const MISSING_LICENSE_NOTE = "NOTE: package did not ship a LICENSE / LICENCE / C
 
 const COPYLEFT_LICENSE_PATTERN = /\b(AGPL|GPL|LGPL|MPL|EPL|CDDL|CPL|OSL|SSPL|EUPL|CeCILL)\b/i;
 
+// permissive な SPDX トークン。 dual license (`A OR B`) の electable 判定に使う。
+const PERMISSIVE_LICENSE_PATTERN =
+  /\b(MIT|Apache|BSD|ISC|0BSD|Unlicense|Zlib|BlueOak|CC0|Python|WTFPL)\b/i;
+
+/**
+ * 「copyleft の義務が実際に生じる」ライセンスかを判定する。 SPDX の dual license (`A OR B`) は
+ * licensee が選べるので、 permissive な選択肢があれば概念上 copyleft ではない (例:
+ * `(MIT OR GPL-3.0-or-later)` は MIT を、 `(MPL-2.0 OR Apache-2.0)` は Apache-2.0 を選択できる)。
+ * よって `OR` に permissive を含む式は flag せず、 単独 copyleft や `AND` 結合のみ flag する。
+ */
+export function isCopyleftLicense(license: string): boolean {
+  if (!COPYLEFT_LICENSE_PATTERN.test(license)) return false;
+  const electablePermissive = /\bOR\b/i.test(license) && PERMISSIVE_LICENSE_PATTERN.test(license);
+  return !electablePermissive;
+}
+
 type DependencyMap = Record<string, string>;
 
 interface PackageJson {
@@ -245,7 +261,7 @@ function toNoticeEntry(packageDir: string, pkg: PackageJson, fallbackName: strin
     packageDir,
     licenseFile,
     licenseText: licenseFile ? normalizeLicenseText(readFileSync(licenseFile, "utf8")) : undefined,
-    copyleft: COPYLEFT_LICENSE_PATTERN.test(license),
+    copyleft: isCopyleftLicense(license),
   };
 }
 
