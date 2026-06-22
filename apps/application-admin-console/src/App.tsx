@@ -34,7 +34,13 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 function guarded(element: React.ReactNode, config: AppConfig) {
   return (
     <RequireAuth>
-      <ShellLayout samlSsoEnabled={config.features?.samlSso} demoMode={config.mode === "demo"}>
+      <ShellLayout
+        samlSsoEnabled={config.features?.samlSso}
+        demoMode={config.mode === "demo"}
+        // The banner only renders the link when demoMode is true, so passing the URL
+        // unconditionally is safe (and avoids an untested non-demo ternary branch).
+        demoParticipantUrl={config.participantPortalUrl}
+      >
         {element}
       </ShellLayout>
     </RequireAuth>

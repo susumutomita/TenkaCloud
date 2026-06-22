@@ -29,5 +29,15 @@ describe("loadConfig demo mode (#1954)", () => {
     expect(cfg.apiBaseUrl).toBe("https://demo.invalid");
     expect(cfg.samlIdpDirectory).toEqual({});
     expect(cfg.features).toBeDefined();
+    // default participant-demo hand-off target
+    expect(cfg.participantPortalUrl).toBe("/portal-demo");
+  });
+
+  it("should let VITE_DEMO_PARTICIPANT_URL override the participant hand-off target", async () => {
+    const cfg = await loadConfig({
+      VITE_DEMO_MODE: "1",
+      VITE_DEMO_PARTICIPANT_URL: "/demo/portal",
+    });
+    expect(cfg.participantPortalUrl).toBe("/demo/portal");
   });
 });

@@ -150,7 +150,11 @@ export function isDemoMode(env: Record<string, string | undefined>): boolean {
  * Issue #1954: demo 用の AppConfig。 実 Cognito / API を持たないので runtime-config / env を
  * 読まず固定値を返す (apiBaseUrl は到達不能なダミー = 誤って実呼び出ししても外部に出ない)。
  */
-function buildDemoConfig(redirectUri: string, scope: string): AppConfig {
+function buildDemoConfig(
+  redirectUri: string,
+  scope: string,
+  env: Record<string, string | undefined>,
+): AppConfig {
   return {
     cognitoDomain: "demo.auth.tenkacloud.example",
     cognitoClientId: "demo-client",
@@ -163,6 +167,10 @@ function buildDemoConfig(redirectUri: string, scope: string): AppConfig {
     redirectUri,
     scope,
     mode: "demo",
+    // 参加者 demo (participant-portal) への hand-off 先。 per-team の招待リンク
+    // (EventTeamsPanel) とバナーの「参加者として見る」導線が使う。 ホスティング時は
+    // VITE_DEMO_PARTICIPANT_URL で上書き、 既定は participant-portal の `/portal-demo/`。
+    participantPortalUrl: env.VITE_DEMO_PARTICIPANT_URL ?? "/portal-demo",
   };
 }
 
@@ -173,7 +181,7 @@ export async function loadConfig(
   const scope = env.VITE_COGNITO_SCOPE ?? "openid email profile";
 
   if (isDemoMode(env)) {
-    return buildDemoConfig(redirectUri, scope);
+    return buildDemoConfig(redirectUri, scope, env);
   }
 
   const runtime = await fetchRuntimeConfig();
