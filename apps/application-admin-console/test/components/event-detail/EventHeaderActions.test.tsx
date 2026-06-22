@@ -84,6 +84,9 @@ describe("EventHeaderActions", () => {
     fireEvent.click(btn("event_detail.retry_failed"));
     expect(p.onBulkDeploy).toHaveBeenCalledWith({ retryFailedOnly: true });
     fireEvent.click(btn("event_detail.redeploy"));
+    // redeploy is destructive → it opens a confirm modal instead of firing immediately
+    expect(p.onBulkDeploy).not.toHaveBeenCalledWith({ forceRedeploy: true });
+    fireEvent.click(btn("event_detail.modal_redeploy_confirm"));
     expect(p.onBulkDeploy).toHaveBeenCalledWith({ forceRedeploy: true });
     fireEvent.click(btn("event_detail.end_event"));
     expect(p.onEnd).toHaveBeenCalled();
@@ -91,6 +94,14 @@ describe("EventHeaderActions", () => {
     expect(p.onLockScoring).toHaveBeenCalled();
     fireEvent.click(btn("event_detail.print_report"));
     expect(mockNav).toHaveBeenCalledWith("/events/e1/report");
+  });
+
+  it("should cancel the redeploy confirm modal without deploying", () => {
+    const p = props({ detail: detail({ status: "READY" }), completeCount: 2 });
+    render(<EventHeaderActions {...p} />);
+    fireEvent.click(btn("event_detail.redeploy"));
+    fireEvent.click(btn("event_detail.modal_cancel"));
+    expect(p.onBulkDeploy).not.toHaveBeenCalled();
   });
 
   it("should show unlock when scoring is locked and route to onUnlockScoring", () => {

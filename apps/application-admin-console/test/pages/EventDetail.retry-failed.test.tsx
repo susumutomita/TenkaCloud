@@ -189,6 +189,8 @@ describe("EventDetailPage #756 re-deploy button", () => {
     renderPage();
     const button = await screen.findByText(/再デプロイ \(1 件\)/);
     await userEvent.click(button);
+    // 再デプロイは破壊的なので confirm modal を経由する
+    await userEvent.click(await screen.findByRole("button", { name: "再デプロイする" }));
     await waitFor(() => expect(mocks.bulkDeployEvent).toHaveBeenCalled());
     expect(mocks.bulkDeployEvent).toHaveBeenCalledWith(expect.anything(), EVENT_ID, {
       forceRedeploy: true,
