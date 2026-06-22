@@ -32,6 +32,19 @@ describe("IdentityProvider", () => {
       template.resourceCountIs("AWS::Cognito::UserPoolDomain", 1);
     });
 
+    it("should attach the branded Hosted UI CSS (design import: Cognito Hosted UI.html)", () => {
+      // テナント Hosted UI を cognito-hosted-ui.css でブランディングする (ink 背景 / Summit
+      // ロゴ banner / paper card / ink submit)。 ロゴ画像は CFn では設定できないため別途アップロード。
+      const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
+      template.resourceCountIs("AWS::Cognito::UserPoolUICustomizationAttachment", 1);
+      template.hasResourceProperties(
+        "AWS::Cognito::UserPoolUICustomizationAttachment",
+        Match.objectLike({
+          CSS: Match.stringLikeRegexp("background-customizable"),
+        }),
+      );
+    });
+
     it("ADR-020 Phase E: should configure tenant UserPool with MFA REQUIRED + TOTP-only", () => {
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       // MFA を REQUIRED にし、 SMS を無効化、 TOTP (SOFTWARE_TOKEN_MFA) のみ許可。
