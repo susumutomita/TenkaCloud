@@ -226,7 +226,6 @@
     "back_to_list": "Back to list",
     "deploy_button": "Deploy",
     "retry_failed": "Retry failed ({count})",
-    "redeploy": "Redeploy ({count})",
     "modal_redeploy_header": "Confirm re-deploy",
     "modal_redeploy_body": "This force-redeploys the {count} already-deployed problem(s). Each team's stack is recreated, which may affect work in progress. Continue?",
     "modal_redeploy_confirm": "Re-deploy",

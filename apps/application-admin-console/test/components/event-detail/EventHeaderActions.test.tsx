@@ -44,6 +44,7 @@ const props = (over: Partial<Props> = {}): Props => ({
   onUnlockScoring: vi.fn(),
   scoringLockInFlight: null,
   t: (k: string) => k,
+  totalDeployCount: 0,
   wizard: null,
   ...over,
 });
@@ -79,15 +80,11 @@ describe("EventHeaderActions", () => {
     render(<EventHeaderActions {...p} />);
     fireEvent.click(btn("event_detail.back_to_list"));
     expect(p.onBack).toHaveBeenCalled();
+    // totalDeployCount=0 (default) → not everything deployed → Deploy fires immediately.
     fireEvent.click(btn("event_detail.deploy_button"));
     expect(p.onBulkDeploy).toHaveBeenCalledWith();
     fireEvent.click(btn("event_detail.retry_failed"));
     expect(p.onBulkDeploy).toHaveBeenCalledWith({ retryFailedOnly: true });
-    fireEvent.click(btn("event_detail.redeploy"));
-    // redeploy is destructive → it opens a confirm modal instead of firing immediately
-    expect(p.onBulkDeploy).not.toHaveBeenCalledWith({ forceRedeploy: true });
-    fireEvent.click(btn("event_detail.modal_redeploy_confirm"));
-    expect(p.onBulkDeploy).toHaveBeenCalledWith({ forceRedeploy: true });
     fireEvent.click(btn("event_detail.end_event"));
     expect(p.onEnd).toHaveBeenCalled();
     fireEvent.click(btn("event_detail.scoring_lock"));
@@ -96,10 +93,21 @@ describe("EventHeaderActions", () => {
     expect(mockNav).toHaveBeenCalledWith("/events/e1/report");
   });
 
-  it("should cancel the redeploy confirm modal without deploying", () => {
-    const p = props({ detail: detail({ status: "READY" }), completeCount: 2 });
+  it("should confirm before force-redeploying when everything is already deployed", () => {
+    // detail() has 1 team x 1 problem → expected=1. totalDeployCount=1 → all deployed.
+    const p = props({ detail: detail({ status: "READY" }), completeCount: 1, totalDeployCount: 1 });
     render(<EventHeaderActions {...p} />);
-    fireEvent.click(btn("event_detail.redeploy"));
+    // Deploy now means "re-deploy" → opens a confirm modal instead of firing immediately.
+    fireEvent.click(btn("event_detail.deploy_button"));
+    expect(p.onBulkDeploy).not.toHaveBeenCalled();
+    fireEvent.click(btn("event_detail.modal_redeploy_confirm"));
+    expect(p.onBulkDeploy).toHaveBeenCalledWith({ forceRedeploy: true });
+  });
+
+  it("should cancel the redeploy confirm modal without deploying", () => {
+    const p = props({ detail: detail({ status: "READY" }), completeCount: 1, totalDeployCount: 1 });
+    render(<EventHeaderActions {...p} />);
+    fireEvent.click(btn("event_detail.deploy_button"));
     fireEvent.click(btn("event_detail.modal_cancel"));
     expect(p.onBulkDeploy).not.toHaveBeenCalled();
   });
@@ -122,12 +130,12 @@ describe("EventHeaderActions", () => {
     renderActions({ detail: detail({ status }), failedCount: 1, completeCount: 1 });
     expect(btn("event_detail.deploy_button")).toBeDisabled();
     expect(btn("event_detail.retry_failed")).toBeDisabled();
-    expect(btn("event_detail.redeploy")).toBeDisabled();
   });
 
   it("should hide conditional buttons when there is nothing to act on", () => {
     renderActions({ detail: detail({ status: "DRAFT" }), failedCount: 0, completeCount: 0 });
     expect(queryBtn("event_detail.retry_failed")).not.toBeInTheDocument();
+    // 再デプロイは独立 button ではなく Deploy に統合された (#deploy-consolidation)。
     expect(queryBtn("event_detail.redeploy")).not.toBeInTheDocument();
     expect(queryBtn("event_detail.scoring_lock")).not.toBeInTheDocument(); // DRAFT は scoring 非表示
     expect(queryBtn("event_detail.print_report")).not.toBeInTheDocument(); // isReportReady=false
@@ -159,12 +167,11 @@ describe("EventHeaderActions", () => {
     expect(btn("event_detail.back_to_list")).not.toBeDisabled();
     expect(btn("event_detail.deploy_button")).toBeDisabled();
     expect(btn("event_detail.retry_failed")).toBeDisabled();
-    expect(btn("event_detail.redeploy")).toBeDisabled();
     expect(btn("event_detail.end_event")).toBeDisabled();
     expect(btn("event_detail.scoring_lock")).toBeDisabled();
   });
 
-  it("should disable retry/redeploy while another bulk op is in flight and disable scoring lock without an API client", () => {
+  it("should disable retry while another bulk op is in flight and disable scoring lock without an API client", () => {
     renderActions({
       detail: detail({ status: "READY" }),
       failedCount: 1,
@@ -173,7 +180,6 @@ describe("EventHeaderActions", () => {
       apiClient: null,
     });
     expect(btn("event_detail.retry_failed")).toBeDisabled();
-    expect(btn("event_detail.redeploy")).toBeDisabled();
     expect(btn("event_detail.scoring_lock")).toBeDisabled(); // !apiClient
   });
 });

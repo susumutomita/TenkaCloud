@@ -27,6 +27,7 @@ export function EventHeaderActions({
   onUnlockScoring,
   scoringLockInFlight,
   t,
+  totalDeployCount,
   wizard,
 }: {
   readonly apiClient: ApiClient | null;
@@ -43,20 +44,25 @@ export function EventHeaderActions({
   readonly onUnlockScoring: () => void;
   readonly scoringLockInFlight: "lock" | "unlock" | null;
   readonly t: Translate;
+  /** これまでに作成された deployment 行の総数 (全 team × problem ペアが揃ったかの判定用)。 */
+  readonly totalDeployCount: number;
   readonly wizard: WizardState | null;
 }) {
   const navigate = useNavigate();
-  // 再デプロイは既デプロイ済みの stack を強制再作成する破壊的操作なので、 誤クリック防止に
-  // confirm modal を挟む (Deploy / retry-failed は非破壊なので即実行のまま)。
+  // Deploy ボタンは 1 つに統合。 未デプロイのペアが残っていれば通常デプロイ (非破壊・確認なし)。
+  // 全 (team × problem) ペアがデプロイ済みなら通常デプロイは skip しかしないため、 押下を
+  // 「強制再デプロイ」(既存 stack を再作成する破壊的操作) とみなし confirm modal を挟む。
   const [confirmRedeploy, setConfirmRedeploy] = useState(false);
   const closeRedeploy = () => setConfirmRedeploy(false);
+  const expectedDeployCount = detail ? detail.teams.length * detail.problems.length : 0;
+  const allDeployed = expectedDeployCount > 0 && totalDeployCount >= expectedDeployCount;
   return (
     <>
       <SpaceBetween direction="horizontal" size="xs">
         <Button onClick={onBack}>{t("event_detail.back_to_list")}</Button>
         <Button
           variant={wizard?.primary === "deploy" ? "primary" : "normal"}
-          loading={bulkInFlight === "deploy"}
+          loading={bulkInFlight === "deploy" || bulkInFlight === "redeploy"}
           disabled={
             !detail ||
             !canMutateTenant ||
@@ -64,7 +70,7 @@ export function EventHeaderActions({
             detail.teams.length === 0 ||
             isTerminalEventStatus(detail.status)
           }
-          onClick={() => onBulkDeploy()}
+          onClick={() => (allDeployed ? setConfirmRedeploy(true) : onBulkDeploy())}
         >
           {t("event_detail.deploy_button")}
         </Button>
@@ -81,21 +87,6 @@ export function EventHeaderActions({
             onClick={() => onBulkDeploy({ retryFailedOnly: true })}
           >
             {t("event_detail.retry_failed", { count: failedCount })}
-          </Button>
-        )}
-        {completeCount > 0 && (
-          <Button
-            loading={bulkInFlight === "redeploy"}
-            disabled={
-              !detail ||
-              !canMutateTenant ||
-              isTerminalEventStatus(detail.status) ||
-              bulkInFlight !== null
-            }
-            iconName="refresh"
-            onClick={() => setConfirmRedeploy(true)}
-          >
-            {t("event_detail.redeploy", { count: completeCount })}
           </Button>
         )}
         <Button
