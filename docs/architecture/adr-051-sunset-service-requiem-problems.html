@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ADR-051: Sunset-service requiem problems (discontinued AWS services as migration battles)</title>
+<style>
+  :root {
+    --c-text: #1f2328;
+    --c-muted: #59636e;
+    --c-border: #d1d9e0;
+    --c-bg: #ffffff;
+    --c-bg-soft: #f6f8fa;
+    --c-accept: #1a7f37;
+    --c-reject: #cf222e;
+    --c-warn: #9a6700;
+    --c-link: #0969da;
+    --c-code-bg: #eff1f3;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    color: var(--c-text); background: var(--c-bg);
+    max-width: 980px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.6;
+  }
+  h1 { font-size: 1.6rem; border-bottom: 2px solid var(--c-border); padding-bottom: .4rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.2rem; border-bottom: 1px solid var(--c-border); padding-bottom: .3rem; }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  code { background: var(--c-code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em; }
+  a { color: var(--c-link); }
+  table { border-collapse: collapse; margin: 0.6rem 0; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--c-border); padding: 6px 10px; vertical-align: top; }
+  th { background: var(--c-bg-soft); text-align: left; font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.2rem; padding: .8rem 1rem; background: var(--c-bg-soft);
+          border-left: 4px solid var(--c-link); border-radius: 3px; font-size: 0.92rem; margin-bottom: 1.5rem; }
+  .meta b { color: var(--c-muted); margin-right: .3rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem;
+           font-weight: 600; line-height: 1.4; }
+  .badge.draft { background: #ddf4ff; color: var(--c-link); }
+  .badge.accept { background: #dafbe1; color: var(--c-accept); }
+  .badge.reject { background: #ffe5e5; color: var(--c-reject); }
+  .badge.warn { background: #fff8c5; color: var(--c-warn); }
+  pre { background: var(--c-code-bg); padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.85rem; line-height: 1.45; }
+  .risk-high { color: var(--c-reject); font-weight: 600; }
+  .risk-med { color: var(--c-warn); font-weight: 600; }
+  .ok { color: var(--c-accept); font-weight: 600; }
+  details { background: var(--c-bg-soft); padding: .6rem 1rem; margin: .6rem 0; border-radius: 4px; border: 1px solid var(--c-border); }
+  details > summary { cursor: pointer; font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ADR-051: Sunset-service requiem problems</h1>
+  <p><em>サービス終了 (サ終) した AWS サービスは新規作成できない。 そのサービスは
+  「動かして偲ぶ」 ことができないため、 振る舞い (= ルール / API の契約) を生きている後継
+  サービスで再現させる移行問題として供養する。</em></p>
+  <div class="meta">
+    <div><b>Status:</b> <span class="badge accept">Accepted</span> 2026-06-22</div>
+    <div><b>Related:</b>
+      <a href="./adr-012-problem-plugin-architecture.html">ADR-012</a> (問題 = plugin / 6 builtin scoring kind),
+      <a href="./adr-034-real-attack-realization.html">ADR-034</a> (実攻撃の実現 / attack-blocked スコア統合)
+    </div>
+    <div><b>Pilot:</b> <code>battles/waf-classic-kuyo</code> (WAF Classic &rarr; WAF v2)</div>
+  </div>
+</header>
+
+<h2>Context</h2>
+<p>
+  AWS は毎年いくつかのサービスを終了する (例: WAF Classic = 2025-09-30、 Elastic
+  Transcoder = 2025-11-13、 Kinesis Data Analytics for SQL = 2025-10-15、 QLDB =
+  2025-07-31)。 サ終したサービスは <strong>CloudFormation で新規作成できない</strong>ため、
+  TenkaCloud の標準的な「競技者アカウントへ stack を deploy して実リソースを触る」型の
+  問題には使えない。
+</p>
+<p>
+  一方で、 サ終サービスからの<strong>移行</strong>は実務上の頻出課題であり、 GameDay /
+  Battle の題材として価値が高い。 「去りゆくサービスを問題として残す」ことは、 カタログ
+  (TenkaCloud の中核資産) を感情に訴える供給源で広げる動線にもなる。
+</p>
+<p>
+  採点エンジン側に制約がある。 <code>generic-scoring-handler</code> の
+  <code>attack-detection</code> kind は CFn Output 内の生 counter を差分加点するが、
+  <code>runtime-status-reconciler</code> は <code>stackOutputs</code> を runtimeStatus が
+  <code>ready</code> になった時点で<strong>一度だけ凍結</strong>する (採点 tick ごとの
+  競技者アカウント再読込・assume-role・CloudWatch/SSM 読みは行わない)。 したがって
+  attack-detection で「WAF の BlockedRequests など live なメトリクス」を採点することは
+  現行アーキテクチャでは成立しない (Output が更新されず常に同値 = 0 点)。
+</p>
+
+<h2>Decision</h2>
+<p>サ終サービスを題材にした問題は、 次の 3 点を満たす「供養 (requiem)」型として作る。</p>
+<ol>
+  <li><strong>死んだサービスは一切 deploy しない。</strong> 問題テンプレートが宣言する
+    <code>Type: AWS::*</code> はすべて生きているサービスに限る。</li>
+  <li><strong>旧サービスの契約を「遺品」として配布する。</strong> 旧設定のエクスポート
+    (ACL / Rule / API スキーマ等) を SSM Parameter と問題リポジトリ (<code>legacy/*.json</code>)
+    の両方で competitor に渡し、 <em>同じ契約を生きている後継で再現する</em>ことを課題にする。</li>
+  <li><strong>採点は実 probe 型 <code>uptime-multi</code> + <code>attackProbes</code> を使う。</strong>
+    採点 tick が公開エンドポイントへ HTTP probe する (クロスアカウント不要)。 正常系が
+    期待ステータスを返す間は <code>pointsAllOk</code>、 攻撃 probe が <code>vulnerableStatus</code>
+    を返したら <code>penalty</code>。 「防御が効くと攻撃が素通りしない = 減点されない」形で
+    防御の成否をスコアに写す。</li>
+</ol>
+
+<h3>Pilot: waf-classic-kuyo (WAF Classic &rarr; WAF v2)</h3>
+<p>
+  丸腰のプロフィール API (Lambda + API Gateway REST, regional) を deploy し、 旧 WAF Classic の
+  WebACL ダンプ (遺品) を渡す。 competitor は同じ 3 ルールを WAF v2 で再現し、 REST ステージへ
+  <code>WebACLAssociation</code> する。 採点は <code>GET /</code> の uptime (= 過剰ブロック防止) と
+  SQLi probe のブロック有無で行う。
+</p>
+<table>
+  <thead><tr><th>旧 (WAF Classic, サ終)</th><th>再現先 (WAF v2)</th><th>採点での扱い</th></tr></thead>
+  <tbody>
+    <tr><td>IPSet ブロックリスト</td><td><code>IPSetReferenceStatement</code></td><td>移行課題 (単発 probe では非採点)</td></tr>
+    <tr><td>SqlInjectionMatchSet (BODY + QUERY_STRING)</td><td><code>SqliMatchStatement</code> / <code>AWSManagedRulesSQLiRuleSet</code></td><td><span class="ok">attackProbe で採点</span></td></tr>
+    <tr><td>RateBasedRule (IP, 2000)</td><td><code>RateBasedStatement</code></td><td>移行課題 (volume を要するため単発 probe では非採点)</td></tr>
+  </tbody>
+</table>
+
+<h2>Alternatives considered</h2>
+<table>
+  <thead><tr><th>案</th><th>判定</th><th>理由</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>attack-detection</code> kind で WAF の BlockedRequests を採点</td>
+      <td><span class="badge reject">Rejected</span></td>
+      <td><code>stackOutputs</code> が ready 時に凍結され live メトリクスを反映できない。
+        per-tick の競技者アカウント metric 読み (assume-role + CloudWatch) は cross-account /
+        IAM を伴う platform 拡張であり、 別 ADR で扱う範囲。</td>
+    </tr>
+    <tr>
+      <td>サ終サービスのエミュレータを deploy</td>
+      <td><span class="badge reject">Rejected</span></td>
+      <td>大半のサ終サービスにエミュレータは存在しない。 維持コストも高い。</td>
+    </tr>
+    <tr>
+      <td>後継のエクスポート設定を渡すだけのドキュメント型問題</td>
+      <td><span class="badge reject">Rejected</span></td>
+      <td>deploy と実採点が無いと「触って直す」競技体験にならない。</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Consequences</h2>
+<ul>
+  <li><span class="ok">+</span> サ終サービス 1 つ = 問題 1 つで量産でき、 カタログの幅が広がる。</li>
+  <li><span class="ok">+</span> 採点は公開エンドポイントへの HTTP probe のみで cross-account 不要、
+    運営コストが最小 (競技者の後継リソースは競技者アカウントで完結)。</li>
+  <li><span class="ok">+</span> 死んだサービスを deploy しないため、 サ終で壊れる心配がない
+    (遺品はリポジトリと SSM の静的データ)。</li>
+  <li><span class="risk-med">−</span> 単発 probe で検証できない旧ルール (IP ブロックリスト /
+    レート制限など) は直接採点されず、 移行課題として残る (運営レビュー、 または将来の
+    採点拡張に委ねる)。</li>
+  <li><span class="risk-med">−</span> 後継サービスと再現可能な振る舞い契約が明確なサ終サービスに
+    限られる (明確な後継のないサービスは供養しづらい)。</li>
+</ul>
+
+<h2>Migration</h2>
+<p>
+  パイロット (<code>waf-classic-kuyo</code>) は <code>uptime-multi</code> / status=ready で
+  カタログに載せ済み。 続く供養候補は「明確な後継 + 再現できる振る舞い契約」を基準に選ぶ。
+</p>
+<table>
+  <thead><tr><th>サ終サービス</th><th>終了日</th><th>後継 (移行先)</th></tr></thead>
+  <tbody>
+    <tr><td>WAF Classic</td><td>2025-09-30</td><td>AWS WAF v2</td></tr>
+    <tr><td>Elastic Transcoder</td><td>2025-11-13</td><td>MediaConvert</td></tr>
+    <tr><td>Kinesis Data Analytics for SQL</td><td>2025-10-15</td><td>Managed Service for Apache Flink</td></tr>
+    <tr><td>Lex V1</td><td>2025-09-15</td><td>Lex V2</td></tr>
+    <tr><td>QLDB</td><td>2025-07-31</td><td>Aurora PostgreSQL (ledger 拡張)</td></tr>
+  </tbody>
+</table>
+<p>
+  attack-detection を真に live 採点にしたい場合は、 <code>runtime-status-reconciler</code> に
+  per-tick の競技者アカウント metric 読み (assume-role + CloudWatch <code>GetMetricData</code>)
+  を足す platform 拡張が前提となる。 これは cross-account の IAM 設計を伴うため、 本 ADR の
+  範囲外とし、 必要になった時点で別 ADR で決める。 各供養問題は本番イベント投入前に、 実
+  アカウントへの deploy &rarr; 後継再現 &rarr; probe 採点の E2E を最終ゲートとする。
+</p>
+</body>
+</html>
