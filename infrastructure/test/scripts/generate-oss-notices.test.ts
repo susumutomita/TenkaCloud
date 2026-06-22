@@ -83,6 +83,35 @@ describe("oss notices generator", () => {
     expect(text).toContain("NOTE: package did not ship a LICENSE / LICENCE / COPYING file.");
   });
 
+  it("should not flag dual licenses that offer a permissive option", () => {
+    // case@1.6.3 / dompurify@3.4.4 style: `A OR B` where one side is permissive — the
+    // licensee elects the permissive license, so no copyleft obligation applies.
+    writeInstalledPackage("dual-mit-gpl", {
+      version: "1.6.3",
+      license: "(MIT OR GPL-3.0-or-later)",
+    });
+    writeInstalledPackage("dual-mpl-apache", {
+      version: "3.4.4",
+      license: "(MPL-2.0 OR Apache-2.0)",
+    });
+    writeInstalledPackage("pure-gpl", { version: "2.0.0", license: "GPL-3.0-only" });
+
+    const result = collectThirdPartyNotices({
+      repoRoot: tmpRoot,
+      workspaces: [
+        workspace({
+          "dual-mit-gpl": "^1.6.0",
+          "dual-mpl-apache": "^3.4.0",
+          "pure-gpl": "^2.0.0",
+        }),
+      ],
+      workspacePackageNames: new Set(["@tenkacloud/test-app"]),
+    });
+
+    // Only the single-license copyleft package is flagged; both dual-licensed ones are clear.
+    expect(result.copyleftEntries.map((e) => e.name)).toEqual(["pure-gpl"]);
+  });
+
   it("should traverse through workspace dependencies without adding first-party packages", () => {
     writeInstalledPackage("@tenkacloud/internal", {
       version: "0.0.0",
