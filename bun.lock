@@ -167,7 +167,7 @@
         "@types/aws-lambda": "^8.10.161",
         "@types/node": "^24.12.4",
         "aws-cdk": "2.1122.0",
-        "cdk-nag": "^2.38.2",
+        "cdk-nag": "^3.0.1",
         "hono": "^4.12.22",
         "ts-node": "^10.9.2",
         "tsx": "^4.22.4",
@@ -888,7 +888,7 @@
 
     "ccount": ["ccount@1.1.0", "", {}, "sha512-vlNK021QdI7PNeiUh/lKkC/mNHHfV0m/Ad5JoI0TYtlBnJAslM/JIkm/tGC88bkLIwO6OQ5uV6ztS6kVAtCDlg=="],
 
-    "cdk-nag": ["cdk-nag@2.38.2", "", { "peerDependencies": { "aws-cdk-lib": "^2.176.0", "constructs": "^10.5.1" } }, "sha512-Ddim1r8IwAPQn95KB2owbHoU4YHveHg4PfM+k7TdcANqfVmoHem6cTFMpcIuoDM16BkQQ+xshxYxZgcAoeVKGw=="],
+    "cdk-nag": ["cdk-nag@3.0.1", "", { "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.5.1" } }, "sha512-Ppa8oDRduUJl9CAzuJzXszg5GmltfQL95BvkTXXdtpOpi801n8ik4gKDjvrJahFikjTBgnJjRsS/2AG3AGVfDg=="],
 
     "chai": ["chai@6.2.2", "", {}, "sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg=="],
 
@@ -2247,6 +2247,8 @@
     "@babel/code-frame/js-tokens": ["js-tokens@4.0.0", "", {}, "sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ=="],
 
     "@cdklabs/sbt-aws/@aws-cdk/aws-lambda-python-alpha": ["@aws-cdk/aws-lambda-python-alpha@2.114.1-alpha.0", "", { "peerDependencies": { "aws-cdk-lib": "^2.114.1", "constructs": "^10.0.0" } }, "sha512-ozpcGNBrNjfrEOkTC8gpTJu9g1PCKV62NNGV3kE3hOkqjphss9ytwKjIfUIvS+yjqy8D8/BHM0btJKrNur0RoQ=="],
+
+    "@cdklabs/sbt-aws/cdk-nag": ["cdk-nag@2.38.2", "", { "peerDependencies": { "aws-cdk-lib": "^2.176.0", "constructs": "^10.5.1" } }, "sha512-Ddim1r8IwAPQn95KB2owbHoU4YHveHg4PfM+k7TdcANqfVmoHem6cTFMpcIuoDM16BkQQ+xshxYxZgcAoeVKGw=="],
 
     "@cloudscape-design/component-toolkit/weekstart": ["weekstart@2.0.0", "", {}, "sha512-HjYc14IQUwDcnGICuc8tVtqAd6EFpoAQMqgrqcNtWWZB+F1b7iTq44GzwM1qvnH4upFgbhJsaNHuK93NOFheSg=="],
 
