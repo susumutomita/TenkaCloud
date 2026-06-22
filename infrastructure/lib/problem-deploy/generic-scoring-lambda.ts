@@ -56,6 +56,13 @@ export interface GenericScoringLambdaProps {
    */
   readonly disruptionsTable: ITable;
   /**
+   * [ADR-047] scheduled auto-teardown が `bulkTeardownEvent` 経由で cross-account teardown の
+   * competitorRoleArn / externalId を解決するための CompetitorAccounts table (read-only)。
+   * これを配線すると `buildScheduledTeardownResources()` が有効化され、 reconciler が
+   * teardownAt 経過の event を自動撤去する (未配線なら dormant)。
+   */
+  readonly competitorAccountsTable: ITable;
+  /**
    * [#1422] condition-triggered disruption の publish 先 event bus (= 手動 fire と同じ deploy bus)。
    * scoring Lambda に `events:PutEvents` を least-privilege で付与する。
    */
@@ -118,6 +125,9 @@ export class GenericScoringLambda extends Construct {
         DEPLOY_ENVIRONMENT: props.environmentName,
         // [ADR-033 / #1665] operator-fired disruption の active 採点効果を解決するための audit table。
         DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName,
+        // [ADR-047] scheduled auto-teardown 用。 buildScheduledTeardownResources がこの env を見て
+        // 有効化する (未設定なら scheduled teardown は dormant)。
+        COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName,
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -157,6 +167,9 @@ export class GenericScoringLambda extends Construct {
     // [ADR-033 / #1665] disruptions audit table: operator-fired disruption の active 採点効果を
     // event ごとに Query する (= read-only、 scoring-side effect の解決)。
     props.disruptionsTable.grantReadData(this.fn);
+    // [ADR-047] scheduled auto-teardown: bulkTeardownEvent が CompetitorAccounts から cross-account
+    // role / externalId を解決する (= read-only)。 これで scheduled teardown が有効化される。
+    props.competitorAccountsTable.grantReadData(this.fn);
     // #1422: condition-triggered disruption を event bus に publish する (= events:PutEvents、
     // 当該 bus に scope された least-privilege)。
     props.eventBus.grantPutEventsTo(this.fn);
