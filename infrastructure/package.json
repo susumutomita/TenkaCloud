@@ -60,6 +60,7 @@
     "@smithy/signature-v4": "^5.4.3",
     "@smithy/types": "^4.14.2",
     "@tenkacloud/coordination-plugin-sdk": "workspace:*",
+    "@tenkacloud/endpoint-eval": "workspace:*",
     "@tenkacloud/problem-runtime": "workspace:*",
     "@tenkacloud/saml-utils": "workspace:*",
     "ajv": "8.18.0",

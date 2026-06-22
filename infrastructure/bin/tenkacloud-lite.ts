@@ -4,6 +4,7 @@ import { resolveAppConfig } from "../lib/app-config/index.js";
 import { CodeBuildUseAwsManagedKms } from "../lib/cdk-aspect/codebuild-use-aws-managed-kms.js";
 import { DynamoDbLowCapacity } from "../lib/cdk-aspect/dynamodb-low-capacity.js";
 import { KmsKeyShortPendingWindow } from "../lib/cdk-aspect/kms-key-short-pending-window.js";
+import { EndpointEvalStack } from "../lib/endpoint-eval/endpoint-eval-stack.js";
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack.js";
 import { TenkaCloudLiteStack } from "../lib/tenkacloud-lite/index.js";
 
@@ -105,3 +106,14 @@ cdk.Aspects.of(liteStack).add(
   new DynamoDbLowCapacity(config.dynamoReadCapacity, config.dynamoWriteCapacity),
 );
 liteStack.addDependency(problemDeployBackend);
+
+// Issue #1973: endpoint-eval バックエンド (無 AWS アカウントの参加者が外部に公開したアプリを
+// 評価する)。 既存スタックには触れない additive な単独スタック。 署名鍵は SSM SecureString を
+// operator が事前作成する (= 値は CFn に埋めない)。
+const endpointEval = new EndpointEvalStack(app, stackId("tenkacloud-endpoint-eval"), {
+  ...config.stackEnv,
+  signingSecretParamName: `/tenkacloud/${config.environment}/endpoint-eval/signing-secret`,
+});
+cdk.Aspects.of(endpointEval).add(
+  new DynamoDbLowCapacity(config.dynamoReadCapacity, config.dynamoWriteCapacity),
+);
