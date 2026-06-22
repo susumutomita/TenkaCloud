@@ -75,8 +75,6 @@
     "reveal": "表示",
     "hide": "非表示",
     "err_empty": "ログインキーを入力してください。",
-    "helper_lead": "キーが届いていない?",
-    "helper_link": "運営に連絡",
     "legal": "© 2026 TenkaCloud · Apache License 2.0",
     "done_h": "サインインしました",
     "done_p": "問題環境を読み込んでいます…",

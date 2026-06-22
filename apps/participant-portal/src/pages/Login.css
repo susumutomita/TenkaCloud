@@ -443,28 +443,6 @@
   }
 }
 
-.tc-login .helper {
-  margin-top: 20px;
-  font-size: 13px;
-  color: var(--ink-3);
-  text-align: center;
-  line-height: 1.6;
-}
-.tc-login .helper a,
-.tc-login .helper .helper-link {
-  color: var(--ink);
-  text-decoration: none;
-  border: none;
-  border-bottom: 1px solid var(--line);
-  padding: 0 0 1px;
-  background: none;
-  font: inherit;
-  cursor: pointer;
-}
-.tc-login .helper a:hover,
-.tc-login .helper .helper-link:hover {
-  border-color: var(--ink);
-}
 
 .tc-login .panel .legal {
   text-align: center;

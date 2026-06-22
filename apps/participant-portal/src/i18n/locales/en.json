@@ -75,8 +75,6 @@
     "reveal": "Show",
     "hide": "Hide",
     "err_empty": "Enter your login key to continue.",
-    "helper_lead": "No key yet?",
-    "helper_link": "Contact your organizer",
     "legal": "© 2026 TenkaCloud · Apache License 2.0",
     "done_h": "Signed in",
     "done_p": "Loading your problem environments…",
