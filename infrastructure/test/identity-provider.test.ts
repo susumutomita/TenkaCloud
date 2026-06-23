@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
@@ -5,6 +7,31 @@ import {
   buildAllowedRedirectUrls,
   IdentityProvider,
 } from "../lib/tenant-template/identity-provider";
+
+// Cognito classic Hosted UI が受け付ける *-customizable セレクタの allowlist (擬似クラス含む)。
+// これ以外を CSS に書くと deploy 時に HTTP 400 (= 実際に #1987 後の deploy が
+// `.redirect-customizable:hover` で落ちた)。 doc:
+// https://docs.aws.amazon.com/cognito/latest/developerguide/hosted-ui-classic-branding.html
+const COGNITO_ALLOWED_SELECTORS = new Set([
+  "background-customizable",
+  "banner-customizable",
+  "errorMessage-customizable",
+  "idpButton-customizable",
+  "idpButton-customizable:hover",
+  "idpDescription-customizable",
+  "inputField-customizable",
+  "inputField-customizable:focus",
+  "label-customizable",
+  "legalText-customizable",
+  "logo-customizable",
+  "passwordCheck-valid-customizable",
+  "passwordCheck-notValid-customizable",
+  "redirect-customizable",
+  "socialButton-customizable",
+  "submitButton-customizable",
+  "submitButton-customizable:hover",
+  "textDescription-customizable",
+]);
 
 function synth(
   tenantId: string,
@@ -43,6 +70,25 @@ describe("IdentityProvider", () => {
           CSS: Match.stringLikeRegexp("background-customizable"),
         }),
       );
+    });
+
+    it("Hosted UI CSS should only use Cognito's allowlisted *-customizable selectors", () => {
+      // Cognito classic はクラス名を厳格に検証し、 許可外セレクタは deploy 時に HTTP 400 で落とす。
+      // 設計由来の派手な CSS (border-radius / gradient 等) や `.redirect-customizable:hover` の
+      // 再混入を synth より手前 (unit test) で検出する。
+      const css = readFileSync(
+        fileURLToPath(new URL("../lib/tenant-template/cognito-hosted-ui.css", import.meta.url)),
+        "utf8",
+      );
+      // コメント内の例 (`.redirect-customizable:hover` を説明として書いている) は実セレクタでは
+      // ないので除去してから抽出する。
+      const cssWithoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+      const selectors = [
+        ...cssWithoutComments.matchAll(/\.([A-Za-z]+-customizable(?::[a-z]+)?)/g),
+      ].map((m) => m[1]);
+      expect(selectors.length).toBeGreaterThan(0);
+      const disallowed = [...new Set(selectors)].filter((s) => !COGNITO_ALLOWED_SELECTORS.has(s));
+      expect(disallowed).toEqual([]);
     });
 
     it("ADR-020 Phase E: should configure tenant UserPool with MFA REQUIRED + TOTP-only", () => {
