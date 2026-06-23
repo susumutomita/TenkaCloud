@@ -81,6 +81,22 @@ describe("IdentityProvider", () => {
       );
     });
 
+    it("FORM_LOGO asset must omit ResourceId (Cognito rejects it -> deploy UPDATE_FAILED)", () => {
+      // 実 deploy で "Resource Id is not supported for asset category 'FORM_LOGO'" (400) になった
+      // 回帰ガード。 resourceId は icon 系カテゴリ専用で FORM_LOGO では付けてはいけない。
+      const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
+      const brandings = template.findResources("AWS::Cognito::ManagedLoginBranding");
+      const assets =
+        (
+          Object.values(brandings)[0]?.Properties as {
+            Assets?: { Category?: string; ResourceId?: string }[];
+          }
+        )?.Assets ?? [];
+      const formLogo = assets.find((a) => a.Category === "FORM_LOGO");
+      expect(formLogo).toBeDefined();
+      expect(formLogo?.ResourceId).toBeUndefined();
+    });
+
     it("Issue #1991: Managed login branding should not set UseCognitoProvidedValues (mutually exclusive with settings/assets)", () => {
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       const brandings = template.findResources("AWS::Cognito::ManagedLoginBranding");
