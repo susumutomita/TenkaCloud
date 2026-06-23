@@ -39,6 +39,12 @@ vi.mock("../../../src/components/event-detail/EventSchedulePanel", () => ({
       <button type="button" onClick={p.onOpenDeployModal}>
         open-deploy
       </button>
+      <button type="button" onClick={() => p.onBulkDeploy()}>
+        bulk-deploy
+      </button>
+      <button type="button" onClick={p.onConfirmTeardown}>
+        confirm-teardown
+      </button>
       <button type="button" onClick={p.onSaveFreezeMinutes}>
         save-freeze
       </button>
@@ -77,12 +83,16 @@ vi.mock("../../../src/components/event-detail/EventNotificationsPanel", () => ({
 
 const operations = (over: Partial<EventOperations> = {}): EventOperations =>
   ({
+    bulkInFlight: null,
     endsAtInFlight: false,
     freezeMinutesInFlight: false,
     freezeMinutesInput: "",
     scheduleInFlight: null,
     deployScheduleInFlight: false,
+    teardownInFlight: false,
+    handleBulkDeploy: vi.fn(),
     handleEndNowSchedule: vi.fn(),
+    setConfirmTeardown: vi.fn(),
     setEndsAtModalOpen: vi.fn(),
     setScheduleModalOpen: vi.fn(),
     setTeardownModalOpen: vi.fn(),
@@ -98,7 +108,7 @@ const props = (over: Partial<EventTabContentProps> = {}): EventTabContentProps =
     apiClient: {} as never,
     canMutateTenant: true,
     config: {} as never,
-    counts: {} as never,
+    counts: { completeCount: 0, totalDeployCount: 0 } as never,
     detail: { eventId: "e1" } as unknown as EventDetail,
     manualRefresh: vi.fn(),
     manualRefreshInFlight: false,
@@ -145,6 +155,10 @@ describe("tab wrappers", () => {
     expect(ops.setTeardownModalOpen).toHaveBeenCalledWith(true);
     fireEvent.click(screen.getByText("open-deploy"));
     expect(ops.setDeployScheduleModalOpen).toHaveBeenCalledWith(true);
+    fireEvent.click(screen.getByText("bulk-deploy"));
+    expect(ops.handleBulkDeploy).toHaveBeenCalled();
+    fireEvent.click(screen.getByText("confirm-teardown"));
+    expect(ops.setConfirmTeardown).toHaveBeenCalledWith(true);
     fireEvent.click(screen.getByText("save-freeze"));
     expect(ops.handleSaveFreezeMinutes).toHaveBeenCalled();
     fireEvent.click(screen.getByText("start-now"));

@@ -2,14 +2,12 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EventDetail, EventStatus } from "../../../src/api/events-client";
 import { EventHeaderActions } from "../../../src/components/event-detail/EventHeaderActions";
-import type { WizardState } from "../../../src/lib/event-wizard";
 
 /**
- * EventHeaderActions: Event Detail header の操作 button 群。 back / deploy / retry-failed /
- * redeploy / end / scoring lock-unlock / print-report の表示条件・callback・disabled
- * (detail 不在 / 問題0 / team0 / 終了系 status / bulkInFlight / status!==READY / apiClient 不在) /
- * scoringLocked による lock-unlock 切替 / wizard primary による variant を pin する。
- * 破壊的な teardown は header に置かず「高度操作」tab の danger zone に集約したので header には無い。
+ * EventHeaderActions: Event Detail header の操作 button 群。 back / retry-failed / end /
+ * scoring lock-unlock / print-report の表示条件・callback・disabled (detail 不在 / 終了系 status /
+ * bulkInFlight / status!==READY / apiClient 不在) / scoringLocked による lock-unlock 切替を pin する。
+ * deploy / teardown のライフサイクル操作は「スケジュール」tab に集約したので header には無い。
  * useNavigate / isReportReady を mock。
  */
 const { mockNav, mockIsReportReady } = vi.hoisted(() => ({
@@ -33,7 +31,6 @@ const props = (over: Partial<Props> = {}): Props => ({
   apiClient: {} as never,
   bulkInFlight: null,
   canMutateTenant: true,
-  completeCount: 0,
   detail: detail(),
   endInFlight: false,
   failedCount: 0,
@@ -44,8 +41,6 @@ const props = (over: Partial<Props> = {}): Props => ({
   onUnlockScoring: vi.fn(),
   scoringLockInFlight: null,
   t: (k: string) => k,
-  totalDeployCount: 0,
-  wizard: null,
   ...over,
 });
 const renderActions = (over: Partial<Props> = {}) =>
@@ -62,27 +57,23 @@ describe("EventHeaderActions", () => {
   it("should render only the base buttons (disabled) when detail is null", () => {
     renderActions({ detail: null });
     fireEvent.click(btn("event_detail.back_to_list"));
-    expect(btn("event_detail.deploy_button")).toBeDisabled();
     expect(btn("event_detail.end_event")).toBeDisabled();
-    // teardown は header から撤去 (= 高度操作 tab の danger zone のみ)。
+    // deploy / teardown は header から撤去 (= 「スケジュール」tab に集約)。
+    expect(queryBtn("event_detail.deploy_button")).not.toBeInTheDocument();
+    expect(queryBtn("event_detail.deploy_at_now")).not.toBeInTheDocument();
     expect(queryBtn("event_detail.delete_button")).not.toBeInTheDocument();
     expect(queryBtn("event_detail.scoring_lock")).not.toBeInTheDocument();
   });
 
-  it("should fire every action on a fully-actionable READY event with failed + complete deploys", () => {
+  it("should fire every action on a fully-actionable READY event with failed deploys", () => {
     mockIsReportReady.mockReturnValue(true);
     const p = props({
       detail: detail({ status: "READY", scoringLocked: false }),
       failedCount: 2,
-      completeCount: 3,
-      wizard: { primary: "deploy" } as unknown as WizardState,
     });
     render(<EventHeaderActions {...p} />);
     fireEvent.click(btn("event_detail.back_to_list"));
     expect(p.onBack).toHaveBeenCalled();
-    // totalDeployCount=0 (default) → not everything deployed → Deploy fires immediately.
-    fireEvent.click(btn("event_detail.deploy_button"));
-    expect(p.onBulkDeploy).toHaveBeenCalledWith();
     fireEvent.click(btn("event_detail.retry_failed"));
     expect(p.onBulkDeploy).toHaveBeenCalledWith({ retryFailedOnly: true });
     fireEvent.click(btn("event_detail.end_event"));
@@ -93,32 +84,12 @@ describe("EventHeaderActions", () => {
     expect(mockNav).toHaveBeenCalledWith("/events/e1/report");
   });
 
-  it("should confirm before force-redeploying when everything is already deployed", () => {
-    // detail() has 1 team x 1 problem → expected=1. totalDeployCount=1 → all deployed.
-    const p = props({ detail: detail({ status: "READY" }), completeCount: 1, totalDeployCount: 1 });
-    render(<EventHeaderActions {...p} />);
-    // Deploy now means "re-deploy" → opens a confirm modal instead of firing immediately.
-    fireEvent.click(btn("event_detail.deploy_button"));
-    expect(p.onBulkDeploy).not.toHaveBeenCalled();
-    fireEvent.click(btn("event_detail.modal_redeploy_confirm"));
-    expect(p.onBulkDeploy).toHaveBeenCalledWith({ forceRedeploy: true });
-  });
-
-  it("should cancel the redeploy confirm modal without deploying", () => {
-    const p = props({ detail: detail({ status: "READY" }), completeCount: 1, totalDeployCount: 1 });
-    render(<EventHeaderActions {...p} />);
-    fireEvent.click(btn("event_detail.deploy_button"));
-    fireEvent.click(btn("event_detail.modal_cancel"));
-    expect(p.onBulkDeploy).not.toHaveBeenCalled();
-  });
-
   it("should show unlock when scoring is locked and route to onUnlockScoring", () => {
     const p = props({ detail: detail({ status: "ENDED", scoringLocked: true }) });
     render(<EventHeaderActions {...p} />);
     fireEvent.click(btn("event_detail.scoring_unlock"));
     expect(p.onUnlockScoring).toHaveBeenCalled();
-    // ENDED → deploy / end disabled。
-    expect(btn("event_detail.deploy_button")).toBeDisabled();
+    // ENDED → end disabled。
     expect(btn("event_detail.end_event")).toBeDisabled();
   });
 
@@ -126,46 +97,36 @@ describe("EventHeaderActions", () => {
     "ENDED",
     "TEARDOWN",
     "ARCHIVED",
-  ])("should disable bulk actions for terminal status %s", (status) => {
-    renderActions({ detail: detail({ status }), failedCount: 1, completeCount: 1 });
-    expect(btn("event_detail.deploy_button")).toBeDisabled();
+  ])("should disable the retry-failed action for terminal status %s", (status) => {
+    renderActions({ detail: detail({ status }), failedCount: 1 });
     expect(btn("event_detail.retry_failed")).toBeDisabled();
   });
 
   it("should hide conditional buttons when there is nothing to act on", () => {
-    renderActions({ detail: detail({ status: "DRAFT" }), failedCount: 0, completeCount: 0 });
+    renderActions({ detail: detail({ status: "DRAFT" }), failedCount: 0 });
     expect(queryBtn("event_detail.retry_failed")).not.toBeInTheDocument();
-    // 再デプロイは独立 button ではなく Deploy に統合された (#deploy-consolidation)。
+    // deploy / 再デプロイ は header に無い (= 「スケジュール」tab に集約)。
+    expect(queryBtn("event_detail.deploy_button")).not.toBeInTheDocument();
     expect(queryBtn("event_detail.redeploy")).not.toBeInTheDocument();
     expect(queryBtn("event_detail.scoring_lock")).not.toBeInTheDocument(); // DRAFT は scoring 非表示
     expect(queryBtn("event_detail.print_report")).not.toBeInTheDocument(); // isReportReady=false
   });
 
-  it("should disable deploy when the event has no problems or no teams", () => {
-    renderActions({ detail: detail({ problems: [] }) });
-    expect(btn("event_detail.deploy_button")).toBeDisabled();
-    renderActions({ detail: detail({ teams: [] }) });
-    expect(
-      screen
-        .getAllByRole("button", { name: "event_detail.deploy_button" })
-        .some((b) => (b as HTMLButtonElement).disabled),
-    ).toBe(true);
-  });
-
-  it("should not render a teardown/delete button in the header (moved to the advanced tab danger zone)", () => {
+  it("should not render deploy / teardown buttons in the header (moved to the Schedule tab)", () => {
     renderActions({ detail: detail({ status: "READY" }) });
+    expect(queryBtn("event_detail.deploy_button")).not.toBeInTheDocument();
+    expect(queryBtn("event_detail.deploy_at_now")).not.toBeInTheDocument();
     expect(queryBtn("event_detail.delete_button")).not.toBeInTheDocument();
+    expect(queryBtn("event_detail.teardown_at_now")).not.toBeInTheDocument();
   });
 
   it("should disable write actions for a read-only viewer", () => {
     renderActions({
       canMutateTenant: false,
       failedCount: 1,
-      completeCount: 1,
       detail: detail({ status: "READY", scoringLocked: false }),
     });
     expect(btn("event_detail.back_to_list")).not.toBeDisabled();
-    expect(btn("event_detail.deploy_button")).toBeDisabled();
     expect(btn("event_detail.retry_failed")).toBeDisabled();
     expect(btn("event_detail.end_event")).toBeDisabled();
     expect(btn("event_detail.scoring_lock")).toBeDisabled();
@@ -175,7 +136,6 @@ describe("EventHeaderActions", () => {
     renderActions({
       detail: detail({ status: "READY" }),
       failedCount: 1,
-      completeCount: 1,
       bulkInFlight: "deploy",
       apiClient: null,
     });

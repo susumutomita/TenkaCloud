@@ -39,7 +39,6 @@ const INK = "1d1d1fff"; // brandColors.ink #1d1d1f
 const INK_HOVER = "424245ff"; // brandColors.ink2 #424245 (button hover / active の僅かな差)
 const PAPER = "ffffffff"; // brandColors.paper #ffffff (white card / button text)
 const LINE = "d2d2d7ff"; // brandColors.line #d2d2d7 (card border)
-const PAPER_TEXT = "f5f5f7ff"; // brandColors.paper3 #f5f5f7 (ink 背景上の本文を読めるよう light に)
 const INK3 = "6e6e73ff"; // brandColors.ink3 #6e6e73 (white card 上の説明テキスト)
 
 /**
@@ -85,21 +84,17 @@ export function buildInkManagedLoginSettings(): Record<string, unknown> {
       },
     },
     components: {
-      // ページ背景を ink アクセントに。
+      // ページ背景を ink 単色に。 image.enabled=false で Cognito 既定の装飾グラデーション画像
+      // (紫/ラベンダーの三角) を消す。 これを切らないと color 指定が画像に覆われて出ない。
       pageBackground: {
+        image: { enabled: false },
         lightMode: {
           color: INK,
         },
       },
-      // ink 背景上の見出し / 本文 / 説明を読めるよう light 寄りに。
-      pageText: {
-        lightMode: {
-          bodyColor: PAPER_TEXT,
-          descriptionColor: PAPER_TEXT,
-          headingColor: PAPER,
-        },
-      },
       // 認証フォームは white カード + brand line のボーダー。 ロゴをカード上部中央に出す。
+      // (見出し / 本文は white カード内に描画されるので pageText は Cognito 既定の dark のまま。
+      //  light に上書きすると white-on-white で「Sign in to your account」が不可視になる。)
       form: {
         lightMode: {
           backgroundColor: PAPER,

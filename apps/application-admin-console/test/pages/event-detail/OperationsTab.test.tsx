@@ -8,11 +8,11 @@ import type {
 } from "../../../src/pages/event-detail/tab-content-props";
 
 /**
- * Issue #1318/#1328: Operations (= 高度操作) tab。 status 不問で常時 4 section (rescue / 一括操作 /
- * deploy 進捗 / teardown danger-zone) を出す。 bulk deploy の disabled 条件 (問題0 / team0 /
- * 終了系 status / 実行中) / danger-zone teardown の confirm 起動 / deploy 進捗 panel vs empty /
- * loading 状態を pin する。 破壊的な teardown は danger-zone に 1 箇所だけ (header / 一括操作 と
- * 重複させない)。 子 panel は stub、 props は fixture。
+ * Operations (= 高度操作) tab。 deploy / teardown のライフサイクル操作は「スケジュール」tab に集約
+ * したので、 ここに残るのは復旧 (rescue) と deploy 進捗の確認だけ。 status を問わず内容を持つこと
+ * (issue #1328 の「非 TEARDOWN で空 tab」回帰防止)、 force-archive の confirm 起動、 deploy 進捗
+ * panel vs empty hint を pin する。 deploy / teardown の button はこの tab に存在しないことも確認。
+ * 子 panel は stub、 props は fixture。
  */
 vi.mock("../../../src/components/event-detail/DeployProgressPanel", () => ({
   DeployProgressPanel: () => <div data-testid="deploy-progress-panel" />,
@@ -65,70 +65,23 @@ const props = (over: Partial<EventTabContentProps> = {}): EventTabContentProps =
 
 const renderTab = (over: Partial<EventTabContentProps> = {}) =>
   render(<OperationsTab {...props(over)} />);
-const bulkDeployBtn = () => screen.getByTestId("operations-bulk-deploy");
 
 afterEach(() => vi.clearAllMocks());
 
 describe("OperationsTab", () => {
-  it("should render all four sections with the empty deploy-progress hint by default", () => {
+  it("should render the rescue + deploy-progress sections with the empty hint by default", () => {
     renderTab();
     expect(screen.getByTestId("operations-tab-intro")).toBeInTheDocument();
     expect(screen.getByTestId("rescue-force-archive")).toBeInTheDocument();
-    expect(screen.getByTestId("operations-bulk-section")).toBeInTheDocument();
     expect(screen.getByText("event_detail.operations_deploy_progress_empty")).toBeInTheDocument();
-    expect(screen.getByTestId("operations-delete-section")).toBeInTheDocument();
   });
 
-  it("should enable bulk deploy and trigger it on a READY event with problems and teams", () => {
-    const ops = operations();
-    renderTab({ operations: ops });
-    expect(bulkDeployBtn()).not.toBeDisabled();
-    fireEvent.click(bulkDeployBtn());
-    expect(ops.handleBulkDeploy).toHaveBeenCalled();
-  });
-
-  it("should disable bulk deploy when there are no problems or no teams", () => {
-    renderTab({ detail: detail("READY", 0, 1) });
-    expect(bulkDeployBtn()).toBeDisabled();
-    renderTab({ detail: detail("READY", 1, 0) });
-    expect(
-      screen
-        .getAllByTestId("operations-bulk-deploy")
-        .every((b) => (b as HTMLButtonElement).disabled),
-    ).toBe(true);
-  });
-
-  it.each<EventStatus>([
-    "ENDED",
-    "TEARDOWN",
-    "ARCHIVED",
-  ])("should disable bulk deploy for terminal status %s", (status) => {
-    renderTab({ detail: detail(status) });
-    expect(bulkDeployBtn()).toBeDisabled();
-  });
-
-  it("should disable bulk deploy while a bulk op is in flight", () => {
-    renderTab({ operations: operations({ bulkInFlight: "deploy" }) });
-    expect(bulkDeployBtn()).toBeDisabled();
-  });
-
-  it("should disable write controls for a read-only viewer", () => {
-    renderTab({ canMutateTenant: false });
-    expect(bulkDeployBtn()).toBeDisabled();
-    expect(screen.getByTestId("operations-delete-button")).toBeDisabled();
-  });
-
-  it("should not render a teardown button in the bulk section (teardown lives only in the danger zone)", () => {
+  it("should not render deploy / teardown buttons (moved to the Schedule tab)", () => {
     renderTab();
-    expect(screen.queryByTestId("operations-bulk-teardown")).not.toBeInTheDocument();
-  });
-
-  it("should open the teardown confirmation from the single danger-zone button", () => {
-    const ops = operations();
-    renderTab({ operations: ops });
-    fireEvent.click(screen.getByTestId("operations-delete-button"));
-    expect(ops.setConfirmTeardown).toHaveBeenCalledTimes(1);
-    expect(ops.setConfirmTeardown).toHaveBeenCalledWith(true);
+    expect(screen.queryByTestId("operations-bulk-section")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("operations-bulk-deploy")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("operations-delete-section")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("operations-delete-button")).not.toBeInTheDocument();
   });
 
   it("should open the force-archive confirmation from the rescue panel", () => {
