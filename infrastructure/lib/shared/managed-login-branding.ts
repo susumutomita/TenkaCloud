@@ -147,11 +147,13 @@ export function buildInkManagedLoginSettings(): Record<string, unknown> {
 export function buildInkManagedLoginAssets(): CfnManagedLoginBranding.AssetTypeProperty[] {
   return [
     {
+      // Cognito は FORM_LOGO カテゴリでは resourceId を受け付けない
+      // ("Resource Id is not supported for asset category 'FORM_LOGO'" で deploy が
+      // UPDATE_FAILED になる)。 resourceId は icon 系カテゴリ専用なので FORM_LOGO では省く。
       category: "FORM_LOGO",
       colorMode: "LIGHT",
       extension: "SVG",
       bytes: SUMMIT_MARK_INK_SVG_BASE64,
-      resourceId: "tenkacloud-summit-form-logo",
     },
   ];
 }
