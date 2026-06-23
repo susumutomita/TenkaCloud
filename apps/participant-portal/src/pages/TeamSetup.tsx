@@ -20,7 +20,12 @@ import "./TeamSetup.css";
  * 専用の chrome (eyebrow / rail / skip) を出さず、 edit 用の見出し + Cancel に切り替える。
  * dev-mock モードは AuthProvider が初期 session に `teamNameSetByCompetitor=true` を入れるため
  * 通常ここへは来ないが、 来た場合は backend を呼ばず session を直接更新する。
+ *
+ * TeamSetupPage は orchestrator に徹し、 submit (async) は `useTeamNameSubmit` hook、 表示部品は
+ * LangSwitcher / StepRail / TeamNameField / LeaderboardPreview に分割する (= 単一責務 + 低複雑度)。
  */
+
+type Translate = (key: string) => string;
 
 const MAX = 40;
 // letters, digits, half-width space, _ , - , Japanese (kana + CJK)。 sign-in と同じ語彙。
@@ -70,48 +75,39 @@ const PREVIEW_ROWS = [
 ];
 const PREVIEW_YOU_PT = "8,420";
 
-export function TeamSetupPage({ config }: { config: AppConfig }) {
-  const auth = useAuth();
-  const navigate = useNavigate();
-  const { locale, setLocale, t } = useI18n();
-  const isMock = useIsMock();
-  const isEditMode = auth.session?.teamNameSetByCompetitor === true;
-
-  const [name, setName] = useState(isEditMode ? (auth.session?.teamName ?? "") : "");
-  const [touched, setTouched] = useState(false);
+/**
+ * team name 提出 (async) を component から切り出した hook。 mock / 実 API / PortalAuthError の
+ * 分岐を抱えるため、 ここに隔離して TeamSetupPage の認知的複雑度を下げる。 `submit(trimmed)` は
+ * 呼び出し側が canSubmit を確認してから呼ぶ (= session 非 null を保証)。
+ */
+function useTeamNameSubmit(args: {
+  readonly config: AppConfig;
+  readonly auth: ReturnType<typeof useAuth>;
+  readonly isMock: boolean;
+  readonly navigate: ReturnType<typeof useNavigate>;
+  readonly t: Translate;
+}): {
+  readonly submitting: boolean;
+  readonly error: string | null;
+  readonly submit: (trimmed: string) => Promise<void>;
+} {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const draft = describeTeamNameDraft(name);
-  const canSubmit = canSubmitTeamName({
-    ...draft,
-    sessionToken: auth.session?.sessionToken,
-    submitting,
-  });
-  const errKey = touched ? teamNameErrorKey(name) : null;
-  const inputClass = errKey ? "err" : touched && canSubmit ? "ok" : "";
-  const near = name.length > MAX - 8;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setTouched(true);
-    // submit は disabled={!canSubmit} なので canSubmit=false では呼ばれない。 canSubmit は
-    // sessionToken を要求するので auth.session も非 null。 = 防御的な不到達分岐。
+  const submit = async (trimmed: string): Promise<void> => {
+    const { config, auth, isMock, navigate, t } = args;
+    // canSubmit が sessionToken を要求するので呼び出し側で session 非 null を保証済。 防御的不到達。
     /* v8 ignore next */
-    if (!canSubmit || !auth.session) return;
+    if (!auth.session) return;
     setSubmitting(true);
     setError(null);
     try {
       if (isMock) {
-        auth.updateSession({ teamName: draft.trimmed, teamNameSetByCompetitor: true });
+        auth.updateSession({ teamName: trimmed, teamNameSetByCompetitor: true });
         navigate("/");
         return;
       }
-      const view = await updateTeamName(
-        config.apiBaseUrl,
-        auth.session.sessionToken,
-        draft.trimmed,
-      );
+      const view = await updateTeamName(config.apiBaseUrl, auth.session.sessionToken, trimmed);
       auth.updateSession({
         teamName: view.team.teamName,
         teamNameSetByCompetitor: view.team.teamNameSetByCompetitor,
@@ -129,7 +125,208 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
     }
   };
 
+  return { submitting, error, submit };
+}
+
+function LangSwitcher({
+  locale,
+  setLocale,
+}: {
+  readonly locale: LocaleCode;
+  readonly setLocale: (code: LocaleCode) => void;
+}) {
+  return (
+    <div className="lang">
+      {(["ja", "en"] as const).map((code: LocaleCode) => (
+        <button
+          type="button"
+          key={code}
+          className={locale === code ? "on" : ""}
+          onClick={() => setLocale(code)}
+        >
+          {code.toUpperCase()}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** onboarding の 3 ステップ rail (edit mode では出さない)。 */
+function StepRail({ t }: { readonly t: Translate }) {
+  return (
+    <div className="rail">
+      <div className="inner">
+        <span className="step done">
+          <span className="dot">✓</span>
+          <span className="t">{t("team_setup.step_signin")}</span>
+        </span>
+        <span className="line" />
+        <span className="step active">
+          <span className="dot">2</span>
+          <span className="t">{t("team_setup.step_name")}</span>
+        </span>
+        <span className="line" />
+        <span className="step">
+          <span className="dot">3</span>
+          <span className="t">{t("team_setup.step_start")}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** team name 入力欄。 inline error / 文字数 / 残量警告は touched + canSubmit から内部で導出する。 */
+function TeamNameField({
+  name,
+  touched,
+  canSubmit,
+  submitting,
+  onChange,
+  onBlur,
+  t,
+}: {
+  readonly name: string;
+  readonly touched: boolean;
+  readonly canSubmit: boolean;
+  readonly submitting: boolean;
+  readonly onChange: (value: string) => void;
+  readonly onBlur: () => void;
+  readonly t: Translate;
+}) {
+  const errKey = touched ? teamNameErrorKey(name) : null;
+  const inputClass = errKey ? "err" : touched && canSubmit ? "ok" : "";
+  const near = name.length > MAX - 8;
+  return (
+    <div className="field">
+      <span className="label">{t("team_setup.field_label")}</span>
+      <p className="desc">{t("team_setup.field_description")}</p>
+      <div className={`input ${inputClass}`}>
+        <input
+          type="text"
+          value={name}
+          // biome-ignore lint/a11y/noAutofocus: onboarding step で唯一の入力欄なので focus を当てる
+          autoFocus
+          maxLength={80}
+          spellCheck={false}
+          placeholder={t("team_setup.field_placeholder")}
+          disabled={submitting}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
+        />
+        <span className={`count ${near ? "warn" : ""}`}>
+          {name.length}/{MAX}
+        </span>
+      </div>
+      <div className="meta">
+        {errKey ? (
+          <div className="error-line">
+            <span className="x">!</span>
+            {t(`team_setup.${errKey}`)}
+          </div>
+        ) : (
+          <div className="rules">{t("team_setup.field_constraint")}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** 演出用スコアボード preview。 入力中の名前を 1 位行に反映する。 */
+function LeaderboardPreview({ trimmed, t }: { readonly trimmed: string; readonly t: Translate }) {
+  return (
+    <div className="preview">
+      <div className="ttl">
+        <span className="d" />
+        {t("team_setup.preview_title")}
+      </div>
+      <div className="board">
+        <div className="row you">
+          <span className="rank">1</span>
+          <span className="nm">
+            {trimmed ? (
+              <>
+                {trimmed}
+                <span className="tag">{t("team_setup.you")}</span>
+              </>
+            ) : (
+              <span className="ph">{t("team_setup.placeholder_name")}</span>
+            )}
+          </span>
+          <span className="pt">{PREVIEW_YOU_PT}</span>
+        </div>
+        {PREVIEW_ROWS.map((r) => (
+          <div className="row" key={r.nm}>
+            <span className="rank">{r.rank}</span>
+            <span className="nm">{r.nm}</span>
+            <span className="pt">{r.pt.toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** submit / cancel ボタン。 edit mode では Cancel を併置する。 */
+function SubmitActions({
+  isEditMode,
+  submitting,
+  canSubmit,
+  onCancel,
+  t,
+}: {
+  readonly isEditMode: boolean;
+  readonly submitting: boolean;
+  readonly canSubmit: boolean;
+  readonly onCancel: () => void;
+  readonly t: Translate;
+}) {
+  const label = isEditMode ? "team_setup.edit_submit_button" : "team_setup.submit_button";
+  return (
+    <div className="actions">
+      <button className="submit" type="submit" disabled={!canSubmit}>
+        {submitting ? <span className="spinner" /> : t(label)}
+      </button>
+      {isEditMode && (
+        <button className="skip" type="button" disabled={submitting} onClick={onCancel}>
+          {t("team_setup.cancel_button")}
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function TeamSetupPage({ config }: { config: AppConfig }) {
+  const auth = useAuth();
+  const navigate = useNavigate();
+  const { locale, setLocale, t } = useI18n();
+  const isMock = useIsMock();
+  const isEditMode = auth.session?.teamNameSetByCompetitor === true;
+
+  const [name, setName] = useState(isEditMode ? (auth.session?.teamName ?? "") : "");
+  const [touched, setTouched] = useState(false);
+  const { submitting, error, submit } = useTeamNameSubmit({ config, auth, isMock, navigate, t });
+
+  const draft = describeTeamNameDraft(name);
+  const canSubmit = canSubmitTeamName({
+    ...draft,
+    sessionToken: auth.session?.sessionToken,
+    submitting,
+  });
   const eventLabel = config.eventTitle ?? "TenkaCloud Battle";
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setTouched(true);
+    // submit ボタンは disabled={!canSubmit} なので canSubmit=false では到達しない (防御的不到達)。
+    /* v8 ignore next */
+    if (!canSubmit) return;
+    void submit(draft.trimmed);
+  };
+
+  const handleNameChange = (value: string) => {
+    setName(value);
+    if (!touched) setTouched(true);
+  };
 
   return (
     <div className="tc-team-setup">
@@ -140,40 +337,10 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
           <span className="sep">—</span>
           <span className="event">{eventLabel}</span>
         </div>
-        <div className="lang">
-          {(["ja", "en"] as const).map((code: LocaleCode) => (
-            <button
-              type="button"
-              key={code}
-              className={locale === code ? "on" : ""}
-              onClick={() => setLocale(code)}
-            >
-              {code.toUpperCase()}
-            </button>
-          ))}
-        </div>
+        <LangSwitcher locale={locale} setLocale={setLocale} />
       </header>
 
-      {!isEditMode && (
-        <div className="rail">
-          <div className="inner">
-            <span className="step done">
-              <span className="dot">✓</span>
-              <span className="t">{t("team_setup.step_signin")}</span>
-            </span>
-            <span className="line" />
-            <span className="step active">
-              <span className="dot">2</span>
-              <span className="t">{t("team_setup.step_name")}</span>
-            </span>
-            <span className="line" />
-            <span className="step">
-              <span className="dot">3</span>
-              <span className="t">{t("team_setup.step_start")}</span>
-            </span>
-          </div>
-        </div>
-      )}
+      {!isEditMode && <StepRail t={t} />}
 
       <div className="stage">
         <form className="card" onSubmit={handleSubmit} noValidate>
@@ -197,89 +364,25 @@ export function TeamSetupPage({ config }: { config: AppConfig }) {
             </div>
           )}
 
-          <div className="field">
-            <span className="label">{t("team_setup.field_label")}</span>
-            <p className="desc">{t("team_setup.field_description")}</p>
-            <div className={`input ${inputClass}`}>
-              <input
-                type="text"
-                value={name}
-                // biome-ignore lint/a11y/noAutofocus: onboarding step で唯一の入力欄なので focus を当てる
-                autoFocus
-                maxLength={80}
-                spellCheck={false}
-                placeholder={t("team_setup.field_placeholder")}
-                disabled={submitting}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (!touched) setTouched(true);
-                }}
-                onBlur={() => setTouched(true)}
-              />
-              <span className={`count ${near ? "warn" : ""}`}>
-                {name.length}/{MAX}
-              </span>
-            </div>
-            <div className="meta">
-              {errKey ? (
-                <div className="error-line">
-                  <span className="x">!</span>
-                  {t(`team_setup.${errKey}`)}
-                </div>
-              ) : (
-                <div className="rules">{t("team_setup.field_constraint")}</div>
-              )}
-            </div>
-          </div>
+          <TeamNameField
+            name={name}
+            touched={touched}
+            canSubmit={canSubmit}
+            submitting={submitting}
+            onChange={handleNameChange}
+            onBlur={() => setTouched(true)}
+            t={t}
+          />
 
-          <div className="preview">
-            <div className="ttl">
-              <span className="d" />
-              {t("team_setup.preview_title")}
-            </div>
-            <div className="board">
-              <div className="row you">
-                <span className="rank">1</span>
-                <span className="nm">
-                  {draft.trimmed ? (
-                    <>
-                      {draft.trimmed}
-                      <span className="tag">{t("team_setup.you")}</span>
-                    </>
-                  ) : (
-                    <span className="ph">{t("team_setup.placeholder_name")}</span>
-                  )}
-                </span>
-                <span className="pt">{PREVIEW_YOU_PT}</span>
-              </div>
-              {PREVIEW_ROWS.map((r) => (
-                <div className="row" key={r.nm}>
-                  <span className="rank">{r.rank}</span>
-                  <span className="nm">{r.nm}</span>
-                  <span className="pt">{r.pt.toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <LeaderboardPreview trimmed={draft.trimmed} t={t} />
 
-          <div className="actions">
-            <button className="submit" type="submit" disabled={!canSubmit}>
-              {submitting ? <span className="spinner" /> : null}
-              {submitting
-                ? ""
-                : t(isEditMode ? "team_setup.edit_submit_button" : "team_setup.submit_button")}
-            </button>
-            {isEditMode && (
-              <button
-                className="skip"
-                type="button"
-                disabled={submitting}
-                onClick={() => navigate("/")}
-              >
-                {t("team_setup.cancel_button")}
-              </button>
-            )}
-          </div>
+          <SubmitActions
+            isEditMode={isEditMode}
+            submitting={submitting}
+            canSubmit={canSubmit}
+            onCancel={() => navigate("/")}
+            t={t}
+          />
 
           <div className="changelater">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
