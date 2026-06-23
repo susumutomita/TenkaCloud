@@ -9,10 +9,14 @@ import type { IdentityDetails } from "../interfaces/identity-details.js";
 // ブランディングする CSS (ink 背景 / Summit ロゴ banner / paper card / ink submit)。
 // 同ディレクトリの .css を単一の source of truth として synth 時に読み込む (cdk app は
 // bun で TS を直接実行するため import.meta.url は本ソースの場所を指す)。
+// コメントは除去してからアップロードする: classic の validator が許可外クラス名を
+// (コメント内であっても) 走査して HTTP 400 を返す可能性を避け、 payload も縮める。
 const HOSTED_UI_CSS = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "cognito-hosted-ui.css"),
   "utf8",
-);
+)
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .trim();
 
 // Cognito InviteMessageTemplate の placeholder。{username} は admin-create-user 時に
 // 指定したユーザー名、{####} は Cognito 自動生成の一時パスワードに置換される。
