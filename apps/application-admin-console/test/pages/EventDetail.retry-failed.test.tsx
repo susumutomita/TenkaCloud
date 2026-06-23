@@ -149,9 +149,9 @@ describe("EventDetailPage #555 retry-failed button", () => {
   });
 });
 
-describe("EventDetailPage #756 re-deploy (consolidated into the Deploy button)", () => {
-  it("should force-redeploy via Deploy + confirm when every pair is already deployed", async () => {
-    // 2 teams x 1 problem = 2 expected; both COMPLETE → all deployed → Deploy means re-deploy.
+describe("EventDetailPage #756 re-deploy (即座にデプロイ on the Schedule tab)", () => {
+  it("should force-redeploy via 即座にデプロイ + confirm when every pair is already deployed", async () => {
+    // 2 teams x 1 problem = 2 expected; both COMPLETE → all deployed → 即座にデプロイ means re-deploy.
     mocks.getEvent.mockResolvedValue({
       ...baseDetail,
       deploymentsByProblem: {
@@ -162,7 +162,9 @@ describe("EventDetailPage #756 re-deploy (consolidated into the Deploy button)",
       },
     });
     renderPage();
-    await userEvent.click(await screen.findByRole("button", { name: "Deploy" }));
+    // deploy は「スケジュール」tab の「即座にデプロイ」に集約 (header の Deploy は撤去済み)。
+    await userEvent.click(await screen.findByRole("tab", { name: /Schedule|スケジュール/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "即座にデプロイ" }));
     // 全デプロイ済みなので破壊的な再デプロイ扱い → confirm modal を経由する
     await userEvent.click(await screen.findByRole("button", { name: "再デプロイする" }));
     await waitFor(() => expect(mocks.bulkDeployEvent).toHaveBeenCalled());
@@ -180,7 +182,8 @@ describe("EventDetailPage #756 re-deploy (consolidated into the Deploy button)",
       },
     });
     renderPage();
-    await userEvent.click(await screen.findByRole("button", { name: "Deploy" }));
+    await userEvent.click(await screen.findByRole("tab", { name: /Schedule|スケジュール/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "即座にデプロイ" }));
     await waitFor(() => expect(mocks.bulkDeployEvent).toHaveBeenCalled());
     // 通常デプロイは confirm modal を出さず、 forceRedeploy も付けない。
     expect(screen.queryByRole("button", { name: "再デプロイする" })).not.toBeInTheDocument();

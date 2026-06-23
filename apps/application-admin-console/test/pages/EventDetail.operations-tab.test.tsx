@@ -6,15 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Issue #1328: Event Detail の 「運用」 tab が status が TEARDOWN 以外のときに完全空だった bug。
  *
- * 元仕様 (#1318) は 「普段使わない高度操作」 を 運用 tab に集約するという方針だったが、
- * PR #1324 ではその中身を Force ARCHIVED rescue Alert (= TEARDOWN 専用 conditional) のみ
- * 配置してしまい、 非 TEARDOWN 時の 運用 tab が空 panel になっていた。
+ * deploy / teardown のライフサイクル操作は「スケジュール」tab に集約したので、 運用 tab に残るのは
+ * rescue (force-archive) と deploy 進捗の確認だけ。 それでも status を問わず内容を持つことを保証する
+ * (= #1328 の「非 TEARDOWN で空 tab」回帰を防ぐ):
  *
- * 本テストは 「status を問わず内容を持つ運用 tab」 を保証する:
- *
- * - DRAFT でも 高度操作 tab に 4 section が見える
+ * - DRAFT でも 高度操作 tab に intro + deploy 進捗 section が見える
  * - EventRescuePanel は引き続き TEARDOWN 時のみ表示 (conditional rescue は維持)
- * - Bulk 再 deploy / teardown danger-zone section は status を問わず表示 (teardown は danger-zone のみ)
+ * - deploy / teardown の button はこの tab に無い (= 「スケジュール」tab に移設済み)
  */
 
 const mocks = vi.hoisted(() => ({
@@ -103,9 +101,12 @@ describe("EventDetailPage #1328 Operations tab", () => {
     await openOperationsTab();
     // 運用 tab の説明 Alert (= 高度操作 intro) が見える
     expect(await screen.findByTestId("operations-tab-intro")).toBeInTheDocument();
-    // bulk operations / delete container header が見える
-    expect(screen.getByTestId("operations-bulk-section")).toBeInTheDocument();
-    expect(screen.getByTestId("operations-delete-section")).toBeInTheDocument();
+    // deploy 進捗 (まだ deploy していない → empty hint) が見える
+    expect(
+      screen.getByText(
+        "まだ deploy が行われていません。 「スケジュール」 tab の 「即座にデプロイ」 を押すと開始します。",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("should show EventRescuePanel only when status is TEARDOWN", async () => {
@@ -120,25 +121,17 @@ describe("EventDetailPage #1328 Operations tab", () => {
     expect(screen.getByTestId("operations-tab-intro")).toBeInTheDocument();
   });
 
-  it("should show the bulk redeploy button regardless of status", async () => {
+  it("should not render deploy / teardown buttons in the Operations tab (moved to Schedule)", async () => {
     mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "DRAFT" });
     renderPage();
     await waitFor(() =>
       expect(screen.getAllByText(/Operations Tab Test Event/).length).toBeGreaterThan(0),
     );
     await openOperationsTab();
-    // 一括再 deploy のみ (teardown は danger-zone に集約したので本 section には無い)。
-    expect(screen.getByTestId("operations-bulk-deploy")).toBeInTheDocument();
-    expect(screen.queryByTestId("operations-bulk-teardown")).not.toBeInTheDocument();
-  });
-
-  it("should show the teardown danger-zone section regardless of status", async () => {
-    mocks.getEvent.mockResolvedValueOnce({ ...baseDetail, status: "ENDED" });
-    renderPage();
-    await waitFor(() =>
-      expect(screen.getAllByText(/Operations Tab Test Event/).length).toBeGreaterThan(0),
-    );
-    await openOperationsTab();
-    expect(screen.getByTestId("operations-delete-button")).toBeInTheDocument();
+    // deploy / teardown は「スケジュール」tab に集約したので運用 tab には無い。
+    expect(screen.queryByTestId("operations-bulk-section")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("operations-bulk-deploy")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("operations-delete-section")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("operations-delete-button")).not.toBeInTheDocument();
   });
 });

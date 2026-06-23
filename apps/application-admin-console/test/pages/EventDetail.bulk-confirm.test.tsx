@@ -102,9 +102,9 @@ describe("EventDetail bulk teardown confirm dialog #1350", () => {
       expect(screen.getAllByText(/Bulk Confirm Test Event/).length).toBeGreaterThan(0),
     );
     const user = userEvent.setup();
-    // teardown は「高度操作」tab の danger zone から開く (header の Delete は撤去済み)。
-    await user.click(await screen.findByRole("tab", { name: /Advanced|高度操作/ }));
-    await user.click(await screen.findByTestId("operations-delete-button"));
+    // teardown は「スケジュール」tab の「即座に撤去」から開く (header / 高度操作 から撤去済み)。
+    await user.click(await screen.findByRole("tab", { name: /Schedule|スケジュール/ }));
+    await user.click(await screen.findByRole("button", { name: "即座に撤去" }));
     // blast radius (= 2 team × 1 problem) の文字列を含む
     await waitFor(() => {
       expect(screen.getByText(/影響範囲/)).toBeInTheDocument();
@@ -119,9 +119,9 @@ describe("EventDetail bulk teardown confirm dialog #1350", () => {
       expect(screen.getAllByText(/Bulk Confirm Test Event/).length).toBeGreaterThan(0),
     );
     const user = userEvent.setup();
-    // teardown は「高度操作」tab の danger zone から開く (header の Delete は撤去済み)。
-    await user.click(await screen.findByRole("tab", { name: /Advanced|高度操作/ }));
-    await user.click(await screen.findByTestId("operations-delete-button"));
+    // teardown は「スケジュール」tab の「即座に撤去」から開く (header / 高度操作 から撤去済み)。
+    await user.click(await screen.findByRole("tab", { name: /Schedule|スケジュール/ }));
+    await user.click(await screen.findByRole("button", { name: "即座に撤去" }));
     const confirm = await screen.findByTestId("modal-teardown-confirm");
     expect(confirm).toBeDisabled();
     // Cloudscape Input は data-testid を wrapper に付ける。 実 <input> は placeholder で探す。
@@ -140,9 +140,9 @@ describe("EventDetail bulk teardown confirm dialog #1350", () => {
       expect(screen.getAllByText(/Bulk Confirm Test Event/).length).toBeGreaterThan(0),
     );
     const user = userEvent.setup();
-    // teardown は「高度操作」tab の danger zone から開く (header の Delete は撤去済み)。
-    await user.click(await screen.findByRole("tab", { name: /Advanced|高度操作/ }));
-    await user.click(await screen.findByTestId("operations-delete-button"));
+    // teardown は「スケジュール」tab の「即座に撤去」から開く (header / 高度操作 から撤去済み)。
+    await user.click(await screen.findByRole("tab", { name: /Schedule|スケジュール/ }));
+    await user.click(await screen.findByRole("button", { name: "即座に撤去" }));
     const input = await screen.findByPlaceholderText("DELETE");
     fireEvent.change(input, { target: { value: "DELETE" } });
     const confirm = screen.getByTestId("modal-teardown-confirm");

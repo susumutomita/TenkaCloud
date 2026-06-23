@@ -205,7 +205,6 @@ function EventDetailErrorOnly({
             apiClient={apiClient}
             bulkInFlight={operations.bulkInFlight}
             canMutateTenant={canMutateTenant}
-            completeCount={0}
             detail={null}
             endInFlight={operations.endInFlight}
             failedCount={0}
@@ -216,8 +215,6 @@ function EventDetailErrorOnly({
             onUnlockScoring={() => void operations.handleUnlockScoring()}
             scoringLockInFlight={operations.scoringLockInFlight}
             t={t}
-            totalDeployCount={0}
-            wizard={null}
           />
         }
       >
@@ -340,7 +337,6 @@ function EventDetailLoaded({
             apiClient={apiClient}
             bulkInFlight={operations.bulkInFlight}
             canMutateTenant={canMutateTenant}
-            completeCount={counts.completeCount}
             detail={detail}
             endInFlight={operations.endInFlight}
             failedCount={counts.failedCount}
@@ -351,8 +347,6 @@ function EventDetailLoaded({
             onUnlockScoring={() => void operations.handleUnlockScoring()}
             scoringLockInFlight={operations.scoringLockInFlight}
             t={t}
-            totalDeployCount={counts.totalDeployCount}
-            wizard={wizard}
           />
         }
       >

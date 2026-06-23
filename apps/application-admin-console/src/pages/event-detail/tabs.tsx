@@ -63,6 +63,7 @@ export function readTabFromHash(hash: string): EventTabId {
 export function ScheduleTab({
   apiClient,
   canMutateTenant,
+  counts,
   detail,
   operations,
   t,
@@ -71,12 +72,16 @@ export function ScheduleTab({
   return (
     <EventSchedulePanel
       apiClient={apiClient}
+      bulkInFlight={operations.bulkInFlight}
       canMutateTenant={canMutateTenant}
+      completeCount={counts.completeCount}
       deployScheduleInFlight={operations.deployScheduleInFlight}
       detail={detail}
       endsAtInFlight={operations.endsAtInFlight}
       freezeMinutesInFlight={operations.freezeMinutesInFlight}
       freezeMinutesInput={operations.freezeMinutesInput}
+      onBulkDeploy={(b) => void operations.handleBulkDeploy(b)}
+      onConfirmTeardown={() => operations.setConfirmTeardown(true)}
       onEndNowSchedule={() => void operations.handleEndNowSchedule()}
       onOpenDeployModal={() => operations.setDeployScheduleModalOpen(true)}
       onOpenEndsAtModal={() => operations.setEndsAtModalOpen(true)}
@@ -87,6 +92,7 @@ export function ScheduleTab({
       onUpdateFreezeMinutes={operations.setFreezeMinutesInput}
       scheduleInFlight={operations.scheduleInFlight}
       teardownInFlight={operations.teardownInFlight}
+      totalDeployCount={counts.totalDeployCount}
       t={t}
       wizard={wizard}
     />

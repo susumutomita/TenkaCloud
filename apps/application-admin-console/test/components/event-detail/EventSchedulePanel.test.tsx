@@ -5,10 +5,13 @@ import { EventSchedulePanel } from "../../../src/components/event-detail/EventSc
 import type { WizardState } from "../../../src/lib/event-wizard";
 
 /**
- * EventSchedulePanel: starts/ends at + scoring 状態 + freeze 分の編集 panel。 set/unset の
- * code vs プレースホルダ表示、 freeze の現在値 vs default、 各 button の callback と
- * disabled/loading 条件 (apiClient 不在 / scheduleInFlight now・scheduled / endsAtInFlight /
- * freezeMinutesInFlight / freeze 入力空) を pin する。 shared (Field/scoringBadge) は stub。
+ * EventSchedulePanel: starts/ends at + scoring 状態 + freeze 分 + 予約/即座の deploy・teardown を
+ * 集約したライフサイクル panel。 set/unset の code vs プレースホルダ表示、 freeze の現在値 vs
+ * default、 各 button の callback と disabled/loading 条件 (apiClient 不在 / scheduleInFlight
+ * now・scheduled / endsAtInFlight / freezeMinutesInFlight / freeze 入力空 / bulkInFlight) を
+ * pin する。 即座にデプロイ は未デプロイなら直接 onBulkDeploy、 全デプロイ済みなら force-redeploy の
+ * confirm modal を挟む。 即座に撤去 は danger-zone の confirm を開く onConfirmTeardown を叩く。
+ * shared (Field/scoringBadge) は stub。
  */
 vi.mock("../../../src/components/event-detail/shared", () => ({
   Field: ({ label, children }: { label: string; children: React.ReactNode }) => (
@@ -23,7 +26,9 @@ vi.mock("../../../src/components/event-detail/shared", () => ({
 type Props = Parameters<typeof EventSchedulePanel>[0];
 const props = (over: Partial<Props> = {}): Props => ({
   apiClient: {} as never,
+  bulkInFlight: null,
   canMutateTenant: true,
+  completeCount: 0,
   deployScheduleInFlight: false,
   detail: {
     startsAt: "2026-01-01T00:00:00Z",
@@ -31,10 +36,15 @@ const props = (over: Partial<Props> = {}): Props => ({
     teardownAt: "2026-01-03T00:00:00Z",
     deployAt: "2025-12-31T00:00:00Z",
     scoreboardFreezeMinutes: 5,
+    status: "READY",
+    teams: [{ internalSlug: "t" }],
+    problems: [{ problemId: "p" }],
   } as unknown as EventDetail,
   endsAtInFlight: false,
   freezeMinutesInFlight: false,
   freezeMinutesInput: "30",
+  onBulkDeploy: vi.fn(),
+  onConfirmTeardown: vi.fn(),
   onEndNowSchedule: vi.fn(),
   onOpenDeployModal: vi.fn(),
   onOpenEndsAtModal: vi.fn(),
@@ -45,6 +55,7 @@ const props = (over: Partial<Props> = {}): Props => ({
   onUpdateFreezeMinutes: vi.fn(),
   scheduleInFlight: null,
   teardownInFlight: false,
+  totalDeployCount: 0,
   t: (k: string) => k,
   wizard: { primary: "start" } as unknown as WizardState,
   ...over,
@@ -76,10 +87,46 @@ describe("EventSchedulePanel", () => {
     expect(p.onOpenTeardownModal).toHaveBeenCalled();
     fireEvent.click(btn("event_detail.deploy_at_pick"));
     expect(p.onOpenDeployModal).toHaveBeenCalled();
+    // totalDeployCount=0 (default) → 未デプロイ → 即座にデプロイ は直接 onBulkDeploy() を叩く。
+    fireEvent.click(btn("event_detail.deploy_at_now"));
+    expect(p.onBulkDeploy).toHaveBeenCalledWith();
+    // 即座に撤去 は danger-zone の confirm を開く onConfirmTeardown を叩く。
+    fireEvent.click(btn("event_detail.teardown_at_now"));
+    expect(p.onConfirmTeardown).toHaveBeenCalled();
     fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "45" } });
     expect(p.onUpdateFreezeMinutes).toHaveBeenCalledWith("45");
     fireEvent.click(btn("event_detail.freeze_save"));
     expect(p.onSaveFreezeMinutes).toHaveBeenCalled();
+  });
+
+  it("should confirm before force-redeploying when everything is already deployed", () => {
+    // detail() has 1 team x 1 problem → expected=1. totalDeployCount=1 → all deployed.
+    const p = props({ totalDeployCount: 1, completeCount: 1 });
+    render(<EventSchedulePanel {...p} />);
+    // 即座にデプロイ = 全デプロイ済み → 直接発火せず confirm modal を開く。
+    fireEvent.click(btn("event_detail.deploy_at_now"));
+    expect(p.onBulkDeploy).not.toHaveBeenCalled();
+    // modal の body は completeCount を埋め込む key を出す。
+    expect(screen.getByText("event_detail.modal_redeploy_body")).toBeInTheDocument();
+    fireEvent.click(btn("event_detail.modal_redeploy_confirm"));
+    expect(p.onBulkDeploy).toHaveBeenCalledWith({ forceRedeploy: true });
+  });
+
+  it("should cancel the force-redeploy confirm modal without deploying", () => {
+    const p = props({ totalDeployCount: 1, completeCount: 1 });
+    render(<EventSchedulePanel {...p} />);
+    fireEvent.click(btn("event_detail.deploy_at_now"));
+    fireEvent.click(btn("event_detail.modal_cancel"));
+    expect(p.onBulkDeploy).not.toHaveBeenCalled();
+    // dismiss 後は modal が閉じる (confirm button が DOM から消える)。
+    expect(screen.queryByText("event_detail.modal_redeploy_confirm")).not.toBeInTheDocument();
+  });
+
+  it("should promote the deploy-now button to primary when the wizard points at deploy", () => {
+    // wizard.primary === "deploy" → 即座にデプロイ が primary variant (= 推奨アクション強調) を取る分岐。
+    renderPanel({ wizard: { primary: "deploy" } as unknown as WizardState });
+    // primary でも click でき onBulkDeploy を叩く (= 推奨アクションがそのまま実行できる)。
+    fireEvent.click(btn("event_detail.deploy_at_now"));
   });
 
   it("should show placeholders and defaults when schedule + freeze are unset (wizard null)", () => {
@@ -90,6 +137,9 @@ describe("EventSchedulePanel", () => {
         teardownAt: undefined,
         deployAt: undefined,
         scoreboardFreezeMinutes: undefined,
+        status: "DRAFT",
+        teams: [],
+        problems: [],
       } as unknown as EventDetail,
       wizard: null,
       freezeMinutesInput: "",
@@ -101,6 +151,8 @@ describe("EventSchedulePanel", () => {
     expect(screen.getByText("event_detail.freeze_current_default")).toBeInTheDocument();
     // freeze 入力が空 → save 無効。
     expect(btn("event_detail.freeze_save")).toBeDisabled();
+    // team / problem が 0 件 → 即座にデプロイ は無効。
+    expect(btn("event_detail.deploy_at_now")).toBeDisabled();
   });
 
   it("should disable every action when the API client is unavailable", () => {
@@ -110,7 +162,9 @@ describe("EventSchedulePanel", () => {
     expect(btn("event_detail.ends_at_pick")).toBeDisabled();
     expect(btn("event_detail.ends_at_now")).toBeDisabled();
     expect(btn("event_detail.teardown_at_pick")).toBeDisabled();
+    expect(btn("event_detail.teardown_at_now")).toBeDisabled();
     expect(btn("event_detail.deploy_at_pick")).toBeDisabled();
+    expect(btn("event_detail.deploy_at_now")).toBeDisabled();
     expect(btn("event_detail.freeze_save")).toBeDisabled();
   });
 
@@ -121,9 +175,32 @@ describe("EventSchedulePanel", () => {
     expect(btn("event_detail.ends_at_pick")).toBeDisabled();
     expect(btn("event_detail.ends_at_now")).toBeDisabled();
     expect(btn("event_detail.teardown_at_pick")).toBeDisabled();
+    expect(btn("event_detail.teardown_at_now")).toBeDisabled();
     expect(btn("event_detail.deploy_at_pick")).toBeDisabled();
+    expect(btn("event_detail.deploy_at_now")).toBeDisabled();
     expect(screen.getByRole("spinbutton")).toBeDisabled();
     expect(btn("event_detail.freeze_save")).toBeDisabled();
+  });
+
+  it("should disable the deploy-now / teardown-now buttons for a terminal status", () => {
+    renderPanel({
+      detail: {
+        status: "ENDED",
+        teams: [{ internalSlug: "t" }],
+        problems: [{ problemId: "p" }],
+      } as unknown as EventDetail,
+    });
+    // 終端 status → 即座にデプロイ は無効 (撤去は status を見ないので有効のまま)。
+    expect(btn("event_detail.deploy_at_now")).toBeDisabled();
+  });
+
+  it("should reflect bulk in-flight states on the deploy-now and teardown-now buttons", () => {
+    const { rerender } = renderPanel({ bulkInFlight: "deploy" });
+    // bulkInFlight が立つと両 button とも無効 (= 同じ POST 経路を奪い合わない)。
+    expect(btn("event_detail.deploy_at_now")).toBeDisabled();
+    expect(btn("event_detail.teardown_at_now")).toBeDisabled();
+    rerender(<EventSchedulePanel {...props({ bulkInFlight: "teardown" })} />);
+    expect(btn("event_detail.teardown_at_now")).toBeDisabled();
   });
 
   it("should reflect in-flight schedule states (now loading / scheduled disabling pick)", () => {

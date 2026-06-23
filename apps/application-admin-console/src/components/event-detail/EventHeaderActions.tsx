@@ -1,14 +1,10 @@
-import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
-import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { useState } from "react";
 import { useNavigate } from "react-router";
 import type { ApiClient } from "../../api/client";
 import type { BulkDeployBody, EventDetail } from "../../api/events-client";
 import { isTerminalEventStatus } from "../../lib/effective-event-status";
 import { isReportReady } from "../../lib/event-report-stats";
-import type { WizardState } from "../../lib/event-wizard";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -16,7 +12,6 @@ export function EventHeaderActions({
   apiClient,
   bulkInFlight,
   canMutateTenant,
-  completeCount,
   detail,
   endInFlight,
   failedCount,
@@ -27,13 +22,10 @@ export function EventHeaderActions({
   onUnlockScoring,
   scoringLockInFlight,
   t,
-  totalDeployCount,
-  wizard,
 }: {
   readonly apiClient: ApiClient | null;
   readonly bulkInFlight: "deploy" | "teardown" | "retry-failed" | "redeploy" | null;
   readonly canMutateTenant: boolean;
-  readonly completeCount: number;
   readonly detail: EventDetail | null;
   readonly endInFlight: boolean;
   readonly failedCount: number;
@@ -44,105 +36,53 @@ export function EventHeaderActions({
   readonly onUnlockScoring: () => void;
   readonly scoringLockInFlight: "lock" | "unlock" | null;
   readonly t: Translate;
-  /** これまでに作成された deployment 行の総数 (全 team × problem ペアが揃ったかの判定用)。 */
-  readonly totalDeployCount: number;
-  readonly wizard: WizardState | null;
 }) {
   const navigate = useNavigate();
-  // Deploy ボタンは 1 つに統合。 未デプロイのペアが残っていれば通常デプロイ (非破壊・確認なし)。
-  // 全 (team × problem) ペアがデプロイ済みなら通常デプロイは skip しかしないため、 押下を
-  // 「強制再デプロイ」(既存 stack を再作成する破壊的操作) とみなし confirm modal を挟む。
-  const [confirmRedeploy, setConfirmRedeploy] = useState(false);
-  const closeRedeploy = () => setConfirmRedeploy(false);
-  const expectedDeployCount = detail ? detail.teams.length * detail.problems.length : 0;
-  const allDeployed = expectedDeployCount > 0 && totalDeployCount >= expectedDeployCount;
+  // Deploy / teardown のライフサイクル操作は「スケジュール」tab に集約 (= header から重複を撤去)。
+  // header に残すのは back / 失敗分の再実行 / 終了 / 採点ロック / レポートの軽量な操作のみ。
   return (
-    <>
-      <SpaceBetween direction="horizontal" size="xs">
-        <Button onClick={onBack}>{t("event_detail.back_to_list")}</Button>
+    <SpaceBetween direction="horizontal" size="xs">
+      <Button onClick={onBack}>{t("event_detail.back_to_list")}</Button>
+      {failedCount > 0 && (
         <Button
-          variant={wizard?.primary === "deploy" ? "primary" : "normal"}
-          loading={bulkInFlight === "deploy" || bulkInFlight === "redeploy"}
+          loading={bulkInFlight === "retry-failed"}
           disabled={
             !detail ||
             !canMutateTenant ||
-            detail.problems.length === 0 ||
-            detail.teams.length === 0 ||
-            isTerminalEventStatus(detail.status)
+            isTerminalEventStatus(detail.status) ||
+            bulkInFlight !== null
           }
-          onClick={() => (allDeployed ? setConfirmRedeploy(true) : onBulkDeploy())}
+          iconName="refresh"
+          onClick={() => onBulkDeploy({ retryFailedOnly: true })}
         >
-          {t("event_detail.deploy_button")}
+          {t("event_detail.retry_failed", { count: failedCount })}
         </Button>
-        {failedCount > 0 && (
-          <Button
-            loading={bulkInFlight === "retry-failed"}
-            disabled={
-              !detail ||
-              !canMutateTenant ||
-              isTerminalEventStatus(detail.status) ||
-              bulkInFlight !== null
-            }
-            iconName="refresh"
-            onClick={() => onBulkDeploy({ retryFailedOnly: true })}
-          >
-            {t("event_detail.retry_failed", { count: failedCount })}
-          </Button>
-        )}
-        <Button
-          loading={endInFlight}
-          disabled={!detail || !canMutateTenant || detail.status !== "READY"}
-          onClick={onEnd}
-        >
-          {t("event_detail.end_event")}
-        </Button>
-        {detail && (detail.status === "READY" || detail.status === "ENDED") && (
-          <Button
-            loading={scoringLockInFlight !== null}
-            disabled={!apiClient || !canMutateTenant}
-            onClick={detail.scoringLocked === true ? onUnlockScoring : onLockScoring}
-          >
-            {detail.scoringLocked === true
-              ? t("event_detail.scoring_unlock")
-              : t("event_detail.scoring_lock")}
-          </Button>
-        )}
-        {/* Issue: header の "Delete" (実体は teardown) は削除。 破壊的な teardown は
-          「高度操作」 tab の danger zone に 1 箇所だけ置く (= header とタブで重複させない)。 */}
-        {isReportReady(detail) && detail && (
-          <Button iconName="file" onClick={() => navigate(`/events/${detail.eventId}/report`)}>
-            {t("event_detail.print_report")}
-          </Button>
-        )}
-      </SpaceBetween>
-
-      {confirmRedeploy && (
-        <Modal
-          visible
-          header={t("event_detail.modal_redeploy_header")}
-          onDismiss={closeRedeploy}
-          footer={
-            <Box float="right">
-              <SpaceBetween direction="horizontal" size="xs">
-                <Button onClick={closeRedeploy}>{t("event_detail.modal_cancel")}</Button>
-                <Button
-                  variant="primary"
-                  loading={bulkInFlight === "redeploy"}
-                  disabled={!canMutateTenant}
-                  onClick={() => {
-                    onBulkDeploy({ forceRedeploy: true });
-                    closeRedeploy();
-                  }}
-                >
-                  {t("event_detail.modal_redeploy_confirm")}
-                </Button>
-              </SpaceBetween>
-            </Box>
-          }
-        >
-          {t("event_detail.modal_redeploy_body", { count: completeCount })}
-        </Modal>
       )}
-    </>
+      <Button
+        loading={endInFlight}
+        disabled={!detail || !canMutateTenant || detail.status !== "READY"}
+        onClick={onEnd}
+      >
+        {t("event_detail.end_event")}
+      </Button>
+      {detail && (detail.status === "READY" || detail.status === "ENDED") && (
+        <Button
+          loading={scoringLockInFlight !== null}
+          disabled={!apiClient || !canMutateTenant}
+          onClick={detail.scoringLocked === true ? onUnlockScoring : onLockScoring}
+        >
+          {detail.scoringLocked === true
+            ? t("event_detail.scoring_unlock")
+            : t("event_detail.scoring_lock")}
+        </Button>
+      )}
+      {/* Issue: header の "Delete" (実体は teardown) は削除。 破壊的な teardown は
+        「スケジュール」 tab の「即座に撤去」に 1 箇所だけ置く (= header とタブで重複させない)。 */}
+      {isReportReady(detail) && detail && (
+        <Button iconName="file" onClick={() => navigate(`/events/${detail.eventId}/report`)}>
+          {t("event_detail.print_report")}
+        </Button>
+      )}
+    </SpaceBetween>
   );
 }
