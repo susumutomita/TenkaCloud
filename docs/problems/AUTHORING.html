@@ -211,10 +211,10 @@ bun run scripts/tenkacloud-problem.ts cost my-battle</pre>
 <p>CLI が出力した metadata.json には placeholder (<code>__PROBLEM_NAME__</code> / <code>__TAG__</code> / <code>__LEARNING_GOAL_1__</code>) が残っている。 これを正しい値に書き換える。</p>
 
 <p style="border-left:4px solid #00645a;background:#f3f8f7;padding:10px 14px;border-radius:6px;">
-<strong>言い回し (voice) は <code>.claude/skills/create-problem/references/writing-style.md</code> に従う。</strong>
-競技者が読む <code>name</code> / <code>shortDescription</code> / <code>instructions</code> / <code>hints</code> は、 天下クラウド株式会社の cold-open シナリオ + 二人称 + 命令形 (= 本家 AWS GameDay と同型)。
+<strong>言い回し (voice) の正本は問題リポジトリ側の skill</strong> ── <code>problems/.claude/skills/new-problem/SKILL.md</code> の "Voice" 規約に従う。
+要点: 競技者が読む <code>name</code> / <code>shortDescription</code> / <code>instructions</code> / <code>hints</code> は、 天下クラウド株式会社の cold-open シナリオ + 二人称 + 命令形。
 <strong>個人名 (苗字) は使わず役職・役割 (CTO / 運営 / 前任の SRE) で書き、 実在の誰かを想起させない・前任者を無能扱いしない。</strong>
-「本問題では〜を学びます」 等の AI 臭い前置きや空虚な形容 (堅牢 / 包括的 / シームレス / 活用 …) は禁止。 採点の数字・正解は <code>shortDescription</code> でなく <code>description</code> へ。
+(重複メンテを避けるため詳細ルールは問題リポジトリ側に集約。)
 </p>
 
 <table>
