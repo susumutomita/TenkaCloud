@@ -507,7 +507,7 @@ async function fireScheduledTeardown(
       outcome: outcome.kind,
       enqueued: outcome.kind === "ok" ? outcome.result.enqueued : undefined,
     });
-    await recordTeardownFired(ctx, args);
+    await recordFired(ctx, args, "teardownFiredAt");
   } catch (err) {
     console.warn("[generic-scoring] scheduled auto-teardown failed", {
       eventId: args.eventId,
@@ -516,7 +516,12 @@ async function fireScheduledTeardown(
   }
 }
 
-async function recordTeardownFired(
+/**
+ * scheduled action の発火記録 (teardownFiredAt / deployFiredAt)。 二重発火防止の補助 + 監査。
+ * `attribute_not_exists` で冪等化し、 ConditionalCheckFailedException (= 既発火) は握り潰す。
+ * `firedAttr` は固定の literal union なので UpdateExpression への injection はない。
+ */
+async function recordFired(
   ctx: ReconcileEventStatusesContext,
   args: {
     readonly PK: string;
@@ -524,20 +529,21 @@ async function recordTeardownFired(
     readonly eventId: string;
     readonly nowIso: string;
   },
+  firedAttr: "teardownFiredAt" | "deployFiredAt",
 ): Promise<void> {
   try {
     await ctx.ddb.send(
       new UpdateCommand({
         TableName: ctx.eventsTableName,
         Key: { PK: args.PK, SK: "META" },
-        UpdateExpression: "SET teardownFiredAt = :now",
-        ConditionExpression: "tenantId = :tenant AND attribute_not_exists(teardownFiredAt)",
+        UpdateExpression: `SET ${firedAttr} = :now`,
+        ConditionExpression: `tenantId = :tenant AND attribute_not_exists(${firedAttr})`,
         ExpressionAttributeValues: { ":tenant": args.tenantId, ":now": args.nowIso },
       }),
     );
   } catch (err) {
     if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return;
-    console.warn("[generic-scoring] recordTeardownFired failed", {
+    console.warn(`[generic-scoring] recordFired(${firedAttr}) failed`, {
       eventId: args.eventId,
       message: err instanceof Error ? err.message : String(err),
     });
@@ -569,37 +575,9 @@ async function fireScheduledDeploy(
       outcome: outcome.kind,
       enqueued: outcome.kind === "ok" ? outcome.result.enqueued : undefined,
     });
-    await recordDeployFired(ctx, args);
+    await recordFired(ctx, args, "deployFiredAt");
   } catch (err) {
     console.warn("[generic-scoring] scheduled auto-deploy failed", {
-      eventId: args.eventId,
-      message: err instanceof Error ? err.message : String(err),
-    });
-  }
-}
-
-async function recordDeployFired(
-  ctx: ReconcileEventStatusesContext,
-  args: {
-    readonly PK: string;
-    readonly tenantId: string;
-    readonly eventId: string;
-    readonly nowIso: string;
-  },
-): Promise<void> {
-  try {
-    await ctx.ddb.send(
-      new UpdateCommand({
-        TableName: ctx.eventsTableName,
-        Key: { PK: args.PK, SK: "META" },
-        UpdateExpression: "SET deployFiredAt = :now",
-        ConditionExpression: "tenantId = :tenant AND attribute_not_exists(deployFiredAt)",
-        ExpressionAttributeValues: { ":tenant": args.tenantId, ":now": args.nowIso },
-      }),
-    );
-  } catch (err) {
-    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return;
-    console.warn("[generic-scoring] recordDeployFired failed", {
       eventId: args.eventId,
       message: err instanceof Error ? err.message : String(err),
     });
