@@ -12,6 +12,7 @@ import { EventBus, Rule } from "aws-cdk-lib/aws-events";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
 import { buildInviteEmailBody, INVITE_EMAIL_SUBJECT } from "./control-plane/invite-message.js";
+import { applyControlPlaneManagedLogin } from "./control-plane/managed-login.js";
 import {
   SYSTEM_ADMIN_ENABLED_MFAS,
   SYSTEM_ADMIN_MFA_CONFIGURATION,
@@ -227,5 +228,14 @@ export class ControlPlaneStack extends cdk.Stack {
     // が runtime-config.json の `cognitoDomain` field に焼き込む。
     const userPoolDomain = cognitoAuth.node.findChild("UserPoolDomain") as UserPoolDomain;
     this.cognitoDomain = userPoolDomain.baseUrl();
+
+    // Issue #1992 (Phase 2 of #1990): System Admin ログインを classic Hosted UI から
+    // Managed login (v2) へ移行する。 Application Plane (#1991) と同方針。 SBT 内蔵の
+    // UserPool / UserPoolDomain / client を attach module へ渡して branding を適用する。
+    applyControlPlaneManagedLogin(this, {
+      userPool: cognitoAuth.userPool,
+      userPoolDomain,
+      clientId: cognitoAuth.userClientId,
+    });
   }
 }
