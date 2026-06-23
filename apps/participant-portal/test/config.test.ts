@@ -133,6 +133,110 @@ describe("loadConfig", () => {
     expect(cfg.mode).toBe("dev-mock");
   });
 
+  // Issue #1975: local self-paced mode は backend を loopback http で立てる。 loopback だけは
+  // 同一マシン内で外部に出ず bearer 漏洩経路にならないため、 backend mode でも例外的に許容する。
+  it("Issue #1975: should allow http://127.0.0.1 loopback apiBaseUrl in backend mode", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        apiBaseUrl: "http://127.0.0.1:3199",
+        eventTitle: "Local Self-Paced",
+        eventRegion: "ap-northeast-1",
+        mode: "backend",
+      }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.apiBaseUrl).toBe("http://127.0.0.1:3199");
+    expect(cfg.mode).toBe("backend");
+    expect(cfg.cloudMode).toBe("real");
+  });
+
+  it("Issue #1975: should allow http://localhost loopback apiBaseUrl in backend mode", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        apiBaseUrl: "http://localhost:5175",
+        mode: "backend",
+      }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.apiBaseUrl).toBe("http://localhost:5175");
+    expect(cfg.mode).toBe("backend");
+  });
+
+  it("Issue #1975: should allow http://[::1] loopback apiBaseUrl in backend mode", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        apiBaseUrl: "http://[::1]:3199",
+        mode: "backend",
+      }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.apiBaseUrl).toBe("http://[::1]:3199");
+    expect(cfg.mode).toBe("backend");
+  });
+
+  it("Issue #1975: should still reject non-loopback http apiBaseUrl in backend mode", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        // http かつ非 loopback (= hostname が loopback いずれにも一致しない) → 依然 fallback。
+        apiBaseUrl: "http://evil.example.com",
+        mode: "backend",
+      }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.apiBaseUrl).toContain("dev-mock");
+    expect(cfg.mode).toBe("dev-mock");
+  });
+
+  it("Issue #1975: should allow an HTTPS apiBaseUrl in backend mode (loopback gate not reached)", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        apiBaseUrl: "https://real.example.com",
+        mode: "backend",
+      }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.apiBaseUrl).toBe("https://real.example.com");
+    expect(cfg.mode).toBe("backend");
+  });
+
+  it("Issue #1975: should reject a non-http loopback scheme in backend mode (protocol guard)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        // 解析可能だが http: でも https: でもない (= ftp:) loopback。 isHttpsUrl が false の後
+        // isLoopbackHttpUrl の `protocol !== "http:"` 早期 return (= false) を踏ませて fallback。
+        apiBaseUrl: "ftp://localhost:3199",
+        mode: "backend",
+      }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.apiBaseUrl).toContain("dev-mock");
+    expect(cfg.mode).toBe("dev-mock");
+  });
+
+  it("Issue #1975: should fall back when apiBaseUrl is unparseable in backend mode (loopback catch)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        // isHttpsUrl が false の後 isLoopbackHttpUrl が呼ばれ、 `new URL()` が throw して
+        // try/catch が false を返す → fallback に倒す (= fail closed)。
+        apiBaseUrl: "ht!tp://%%%",
+        mode: "backend",
+      }),
+    });
+    const cfg = await loadConfig();
+    expect(cfg.apiBaseUrl).toContain("dev-mock");
+    expect(cfg.mode).toBe("dev-mock");
+  });
+
   it("should drop an unparseable localstackEndpoint (= new URL throws) to undefined", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,

@@ -60,6 +60,22 @@ function isHttpsUrl(value: string): boolean {
   }
 }
 
+/**
+ * Issue #1975: local self-paced mode は backend を `http://127.0.0.1:<port>` (loopback) で
+ * 立てる。 #871 の HTTPS 強制は teamLoginKey を attacker URL に漏らさないためだが、 loopback
+ * は同一マシン内で外部に出ないため bearer 漏洩経路にならない。 よって backend mode でも
+ * loopback http だけは例外的に許容する (localhost / 127.0.0.1 / [::1])。
+ */
+function isLoopbackHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:") return false;
+    return url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
 function isCloudMode(value: unknown): value is CloudMode {
   return value === "real" || value === "mock" || value === "localstack";
 }
@@ -109,8 +125,15 @@ export async function loadConfig(): Promise<AppConfig> {
     const mode = runtime.mode ?? DEV_FALLBACK.mode;
     const cloudMode = isCloudMode(runtime.cloudMode) ? runtime.cloudMode : defaultCloudMode(mode);
     const apiBaseUrl = runtime.apiBaseUrl ?? DEV_FALLBACK.apiBaseUrl;
-    // Issue #871: backend mode は HTTPS 必須 (= teamLoginKey を attacker に漏らさない)
-    if (mode === "backend" && apiBaseUrl && !isHttpsUrl(apiBaseUrl)) {
+    // Issue #871: backend mode は HTTPS 必須 (= teamLoginKey を attacker に漏らさない)。
+    // Issue #1975: ただし loopback http (= local self-paced mode の `http://127.0.0.1:<port>`) は
+    // 同一マシン内で外部に出ず bearer 漏洩経路にならないため例外的に許容する。
+    if (
+      mode === "backend" &&
+      apiBaseUrl &&
+      !isHttpsUrl(apiBaseUrl) &&
+      !isLoopbackHttpUrl(apiBaseUrl)
+    ) {
       console.error("[config] runtime-config.json apiBaseUrl is not HTTPS in backend mode", {
         apiBaseUrl,
       });
