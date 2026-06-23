@@ -69,6 +69,8 @@ describe("listEvents", () => {
         expiresAt: 99,
         startsAt: "2026-06-01T00:00:00Z",
         endsAt: "2026-06-02T00:00:00Z",
+        deployAt: "2026-05-31T00:00:00Z",
+        teardownAt: "2026-06-03T00:00:00Z",
         scoringLocked: true,
         scoringLockedAt: "2026-06-01T12:00:00Z",
         scoreboardFreezeMinutes: 10,
@@ -81,6 +83,9 @@ describe("listEvents", () => {
       problemCount: 2,
       scoringLocked: true,
       scoreboardFreezeMinutes: 10,
+      // ADR-047: 自動デプロイ/撤去の予定時刻を summary が落とすと UI が常に「未設定」になる回帰ガード。
+      deployAt: "2026-05-31T00:00:00Z",
+      teardownAt: "2026-06-03T00:00:00Z",
     });
     expect(res.nextCursor).toBeTypeOf("string");
   });
@@ -241,6 +246,17 @@ describe("getEventDetail", () => {
     cfg.eventItem = { ...eventBase, problems: "not-an-array" };
     const detail = await getEventDetail(shared, "t1", "e1");
     expect(detail?.problems).toEqual([]);
+  });
+
+  it("should project schedule fields (deployAt/teardownAt) onto the detail", async () => {
+    cfg.eventItem = {
+      ...eventBase,
+      deployAt: "2026-05-31T00:00:00Z",
+      teardownAt: "2026-06-03T00:00:00Z",
+    };
+    const detail = await getEventDetail(shared, "t1", "e1");
+    expect(detail?.deployAt).toBe("2026-05-31T00:00:00Z");
+    expect(detail?.teardownAt).toBe("2026-06-03T00:00:00Z");
   });
 
   it("should default teams/deployments to [] when those queries return no Items", async () => {

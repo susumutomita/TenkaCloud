@@ -65,6 +65,9 @@ function toSummary(item: Partial<EventItem>): EventSummary {
     startsAt: typeof item.startsAt === "string" ? item.startsAt : undefined,
     endsAt: typeof item.endsAt === "string" ? item.endsAt : undefined,
     teardownAt: typeof item.teardownAt === "string" ? item.teardownAt : undefined,
+    // [ADR-047 follow-up] deployAt も summary に載せる。 backend は schedule で永続化するが、
+    // ここに無いと GET /events(/:id) が返さず UI が常に「未設定」になる (teardownAt の取りこぼし対)。
+    deployAt: typeof item.deployAt === "string" ? item.deployAt : undefined,
     scoringLocked: item.scoringLocked === true ? true : undefined,
     scoringLockedAt: typeof item.scoringLockedAt === "string" ? item.scoringLockedAt : undefined,
     scoreboardFreezeMinutes:
