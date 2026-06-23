@@ -34,6 +34,10 @@ const props = (over: Partial<Props> = {}): Props =>
     confirmEnd: false,
     confirmForceArchive: false,
     confirmTeardown: false,
+    deployDate: "",
+    deployScheduleInFlight: false,
+    deployScheduleModalOpen: false,
+    deployTime: "",
     detail: {
       teams: [{}],
       problems: [{}],
@@ -58,9 +62,11 @@ const props = (over: Partial<Props> = {}): Props =>
     onDismissNotificationSuccess: vi.fn(),
     onDismissSchedule: vi.fn(),
     onDismissTeardown: vi.fn(),
+    onDismissDeploySchedule: vi.fn(),
     onEndEvent: vi.fn(),
     onForceArchive: vi.fn(),
     onNotificationSuccess: vi.fn(),
+    onScheduleDeploy: vi.fn(),
     onScheduleEnd: vi.fn(),
     onScheduleTeardown: vi.fn(),
     onScheduledStart: vi.fn(),
@@ -69,6 +75,8 @@ const props = (over: Partial<Props> = {}): Props =>
     scheduleInFlight: null,
     scheduleModalOpen: false,
     scheduleTime: "",
+    setDeployDate: vi.fn(),
+    setDeployTime: vi.fn(),
     setEndsAtDate: vi.fn(),
     setEndsAtTime: vi.fn(),
     setScheduleDate: vi.fn(),
@@ -209,6 +217,54 @@ describe("EventDangerZone", () => {
     rerender(<EventDangerZone {...props({ teardownModalOpen: true, teardownInFlight: true })} />);
     expect(screen.getByRole("button", confirmName)).toBeDisabled();
     rerender(<EventDangerZone {...props({ teardownModalOpen: true, canMutateTenant: false })} />);
+    expect(screen.getByRole("button", confirmName)).toBeDisabled();
+  });
+
+  it("should drive the deploy-schedule modal inputs and confirm/cancel (ADR-047 follow-up)", () => {
+    const p = props({
+      deployScheduleModalOpen: true,
+      detail: {
+        teams: [{}],
+        problems: [{}],
+        endsAt: "2026-06-02T00:00:00Z",
+      } as unknown as EventDetail,
+    });
+    render(<EventDangerZone {...p} />);
+    // Cloudscape は他 modal も DOM に描画するため、 deploy dialog に scope する。
+    const modal = within(
+      screen.getByRole("dialog", { name: "event_detail.modal_deploy_schedule_header" }),
+    );
+    expect(modal.getByText("event_detail.modal_deploy_schedule_body")).toBeInTheDocument();
+    // endsAt hint (truthy 経路)。
+    expect(modal.getByText(/event_detail\.modal_deploy_ends_at_hint/)).toBeInTheDocument();
+
+    fireEvent.change(modal.getByPlaceholderText("YYYY/MM/DD"), { target: { value: "2026/06/01" } });
+    expect(p.setDeployDate).toHaveBeenCalled();
+    fireEvent.change(modal.getByPlaceholderText("hh:mm"), { target: { value: "09:00" } });
+    expect(p.setDeployTime).toHaveBeenCalled();
+
+    fireEvent.click(
+      modal.getByRole("button", { name: "event_detail.modal_deploy_schedule_confirm" }),
+    );
+    expect(p.onScheduleDeploy).toHaveBeenCalled();
+    fireEvent.click(modal.getByRole("button", { name: "event_detail.modal_cancel" }));
+    expect(p.onDismissDeploySchedule).toHaveBeenCalled();
+  });
+
+  it("should hide the deploy ends-at hint without an end time and disable confirm in-flight / read-only", () => {
+    // endsAt 不在 → hint 非表示 (falsy 経路)。
+    const { rerender } = render(<EventDangerZone {...props({ deployScheduleModalOpen: true })} />);
+    expect(screen.queryByText(/event_detail\.modal_deploy_ends_at_hint/)).toBeNull();
+    const confirmName = { name: "event_detail.modal_deploy_schedule_confirm" };
+    rerender(
+      <EventDangerZone
+        {...props({ deployScheduleModalOpen: true, deployScheduleInFlight: true })}
+      />,
+    );
+    expect(screen.getByRole("button", confirmName)).toBeDisabled();
+    rerender(
+      <EventDangerZone {...props({ deployScheduleModalOpen: true, canMutateTenant: false })} />,
+    );
     expect(screen.getByRole("button", confirmName)).toBeDisabled();
   });
 

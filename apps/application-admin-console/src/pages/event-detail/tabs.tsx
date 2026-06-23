@@ -72,11 +72,13 @@ export function ScheduleTab({
     <EventSchedulePanel
       apiClient={apiClient}
       canMutateTenant={canMutateTenant}
+      deployScheduleInFlight={operations.deployScheduleInFlight}
       detail={detail}
       endsAtInFlight={operations.endsAtInFlight}
       freezeMinutesInFlight={operations.freezeMinutesInFlight}
       freezeMinutesInput={operations.freezeMinutesInput}
       onEndNowSchedule={() => void operations.handleEndNowSchedule()}
+      onOpenDeployModal={() => operations.setDeployScheduleModalOpen(true)}
       onOpenEndsAtModal={() => operations.setEndsAtModalOpen(true)}
       onOpenScheduleModal={() => operations.setScheduleModalOpen(true)}
       onOpenTeardownModal={() => operations.setTeardownModalOpen(true)}

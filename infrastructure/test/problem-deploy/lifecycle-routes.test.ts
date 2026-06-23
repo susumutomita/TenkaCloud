@@ -92,6 +92,38 @@ describe("PATCH /events/:eventId/schedule", () => {
       StatusCodes.BAD_REQUEST,
       "ends_before_starts",
     ],
+    [
+      "past_teardown_at",
+      { kind: "past_teardown_at", teardownAt: "2000-01-01T00:00:00Z", nowMs: 0 },
+      StatusCodes.BAD_REQUEST,
+      "past_teardown_at",
+    ],
+    [
+      "teardown_before_ends",
+      {
+        kind: "teardown_before_ends",
+        teardownAt: "2099-01-01T00:00:00Z",
+        endsAt: "2099-01-02T00:00:00Z",
+      },
+      StatusCodes.BAD_REQUEST,
+      "teardown_before_ends",
+    ],
+    [
+      "past_deploy_at",
+      { kind: "past_deploy_at", deployAt: "2000-01-01T00:00:00Z", nowMs: 0 },
+      StatusCodes.BAD_REQUEST,
+      "past_deploy_at",
+    ],
+    [
+      "deploy_after_ends",
+      {
+        kind: "deploy_after_ends",
+        deployAt: "2099-01-02T00:00:00Z",
+        endsAt: "2099-01-01T00:00:00Z",
+      },
+      StatusCodes.BAD_REQUEST,
+      "deploy_after_ends",
+    ],
     ["no_op", { kind: "no_op" }, StatusCodes.BAD_REQUEST, "no_op"],
   ])("should map the %s outcome to its HTTP response", async (_name, outcome, status, err) => {
     mocks.setEventSchedule.mockResolvedValueOnce(outcome);

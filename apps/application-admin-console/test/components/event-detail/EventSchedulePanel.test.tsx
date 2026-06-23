@@ -24,16 +24,19 @@ type Props = Parameters<typeof EventSchedulePanel>[0];
 const props = (over: Partial<Props> = {}): Props => ({
   apiClient: {} as never,
   canMutateTenant: true,
+  deployScheduleInFlight: false,
   detail: {
     startsAt: "2026-01-01T00:00:00Z",
     endsAt: "2026-01-02T00:00:00Z",
     teardownAt: "2026-01-03T00:00:00Z",
+    deployAt: "2025-12-31T00:00:00Z",
     scoreboardFreezeMinutes: 5,
   } as unknown as EventDetail,
   endsAtInFlight: false,
   freezeMinutesInFlight: false,
   freezeMinutesInput: "30",
   onEndNowSchedule: vi.fn(),
+  onOpenDeployModal: vi.fn(),
   onOpenEndsAtModal: vi.fn(),
   onOpenScheduleModal: vi.fn(),
   onOpenTeardownModal: vi.fn(),
@@ -58,6 +61,7 @@ describe("EventSchedulePanel", () => {
     expect(screen.getByText("2026-01-01T00:00:00Z")).toBeInTheDocument();
     expect(screen.getByText("2026-01-02T00:00:00Z")).toBeInTheDocument();
     expect(screen.getByText("2026-01-03T00:00:00Z")).toBeInTheDocument(); // teardownAt
+    expect(screen.getByText("2025-12-31T00:00:00Z")).toBeInTheDocument(); // deployAt
     expect(screen.getByText("event_detail.freeze_current_minutes")).toBeInTheDocument();
 
     fireEvent.click(btn("event_detail.starts_at_pick"));
@@ -70,6 +74,8 @@ describe("EventSchedulePanel", () => {
     expect(p.onEndNowSchedule).toHaveBeenCalled();
     fireEvent.click(btn("event_detail.teardown_at_pick"));
     expect(p.onOpenTeardownModal).toHaveBeenCalled();
+    fireEvent.click(btn("event_detail.deploy_at_pick"));
+    expect(p.onOpenDeployModal).toHaveBeenCalled();
     fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "45" } });
     expect(p.onUpdateFreezeMinutes).toHaveBeenCalledWith("45");
     fireEvent.click(btn("event_detail.freeze_save"));
@@ -82,6 +88,7 @@ describe("EventSchedulePanel", () => {
         startsAt: undefined,
         endsAt: undefined,
         teardownAt: undefined,
+        deployAt: undefined,
         scoreboardFreezeMinutes: undefined,
       } as unknown as EventDetail,
       wizard: null,
@@ -90,6 +97,7 @@ describe("EventSchedulePanel", () => {
     expect(screen.getByText("event_detail.starts_at_unset")).toBeInTheDocument();
     expect(screen.getByText("event_detail.ends_at_unset")).toBeInTheDocument();
     expect(screen.getByText("event_detail.teardown_at_unset")).toBeInTheDocument();
+    expect(screen.getByText("event_detail.deploy_at_unset")).toBeInTheDocument();
     expect(screen.getByText("event_detail.freeze_current_default")).toBeInTheDocument();
     // freeze 入力が空 → save 無効。
     expect(btn("event_detail.freeze_save")).toBeDisabled();
@@ -102,6 +110,7 @@ describe("EventSchedulePanel", () => {
     expect(btn("event_detail.ends_at_pick")).toBeDisabled();
     expect(btn("event_detail.ends_at_now")).toBeDisabled();
     expect(btn("event_detail.teardown_at_pick")).toBeDisabled();
+    expect(btn("event_detail.deploy_at_pick")).toBeDisabled();
     expect(btn("event_detail.freeze_save")).toBeDisabled();
   });
 
@@ -112,6 +121,7 @@ describe("EventSchedulePanel", () => {
     expect(btn("event_detail.ends_at_pick")).toBeDisabled();
     expect(btn("event_detail.ends_at_now")).toBeDisabled();
     expect(btn("event_detail.teardown_at_pick")).toBeDisabled();
+    expect(btn("event_detail.deploy_at_pick")).toBeDisabled();
     expect(screen.getByRole("spinbutton")).toBeDisabled();
     expect(btn("event_detail.freeze_save")).toBeDisabled();
   });
@@ -132,5 +142,10 @@ describe("EventSchedulePanel", () => {
   it("should disable the teardown pick button while a teardown schedule is in flight", () => {
     renderPanel({ teardownInFlight: true });
     expect(btn("event_detail.teardown_at_pick")).toBeDisabled();
+  });
+
+  it("should disable the deploy pick button while a deploy schedule is in flight", () => {
+    renderPanel({ deployScheduleInFlight: true });
+    expect(btn("event_detail.deploy_at_pick")).toBeDisabled();
   });
 });
