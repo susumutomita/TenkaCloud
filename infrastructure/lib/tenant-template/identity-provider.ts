@@ -1,22 +1,6 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { aws_cognito, Duration, Stack } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import type { IdentityDetails } from "../interfaces/identity-details.js";
-
-// design import "Cognito Hosted UI.html": classic Hosted UI を *-customizable クラスで
-// ブランディングする CSS (ink 背景 / Summit ロゴ banner / paper card / ink submit)。
-// 同ディレクトリの .css を単一の source of truth として synth 時に読み込む (cdk app は
-// bun で TS を直接実行するため import.meta.url は本ソースの場所を指す)。
-// コメントは除去してからアップロードする: classic の validator が許可外クラス名を
-// (コメント内であっても) 走査して HTTP 400 を返す可能性を避け、 payload も縮める。
-const HOSTED_UI_CSS = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "cognito-hosted-ui.css"),
-  "utf8",
-)
-  .replace(/\/\*[\s\S]*?\*\//g, "")
-  .trim();
 
 // Cognito InviteMessageTemplate の placeholder。{username} は admin-create-user 時に
 // 指定したユーザー名、{####} は Cognito 自動生成の一時パスワードに置換される。
@@ -213,6 +197,12 @@ export class IdentityProvider extends Construct {
     const domainPrefix = buildCognitoDomainPrefix(props.environment, props.tenantId, stack.account);
     this.tenantUserPoolDomain = this.tenantUserPool.addDomain("tenantUserPoolDomain", {
       cognitoDomain: { domainPrefix },
+      // Issue #1991: テナントログインを classic Hosted UI から Managed login (v2) へ移行する。
+      // classic は *-customizable allowlist の制約 (固定クラス名 + 固定プロパティのみ) で
+      // design import「Cognito Hosted UI.html」を再現できず、 deploy 後に画面が崩れた
+      // (#1987 / #1989 で実証)。 Managed login はブランディングデザイナー世代の UI で、
+      // rounded corner / gradient / custom font / ロゴ画像をコード指定できる。
+      managedLoginVersion: aws_cognito.ManagedLoginVersion.NEWER_MANAGED_LOGIN,
     });
     this.cognitoDomainUrl = `https://${domainPrefix}.auth.${stack.region}.amazoncognito.com`;
 
@@ -311,20 +301,29 @@ export class IdentityProvider extends Construct {
     this.cfnTenantUserPoolClient = this.tenantUserPoolClient.node
       .defaultChild as aws_cognito.CfnUserPoolClient;
 
-    // design import "Cognito Hosted UI.html": テナント Hosted UI をブランド CSS で上書きする。
-    // UI customization は UserPoolDomain が先に存在している必要があるため明示的に依存を張る
-    // (attachment は userPoolId / clientId しか参照せず、 CFn が domain との順序を推論できない)。
-    // 注: Summit ロゴ画像 (ImageFile) は CFn では設定できないので Cognito console で別途アップロード。
-    const hostedUiBranding = new aws_cognito.CfnUserPoolUICustomizationAttachment(
+    // Issue #1991: テナントログインを Managed login (v2) でブランディングする。 classic の
+    // CfnUserPoolUICustomizationAttachment + cognito-hosted-ui.css (#1987 / #1989) を置換する。
+    // Managed login branding は userPoolId + clientId に紐づく。
+    //
+    // ink 色トークン / Summit ロゴの厳密な `settings` / `assets` は巨大 JSON Document であり、
+    // AWS の定石が live `DescribeManagedLoginBrandingByClient`(ReturnMergedResources=true) を
+    // 起点に編集 → 投入する deploy 反復前提のため (#1990 epic の cross-cutting constraint)、
+    // 本 Phase では `useCognitoProvidedValues` で Cognito 既定値の valid な managed login を
+    // 立ち上げる (= 崩れていた classic からの確実な改善)。 ink / ロゴの pixel 一致は後続フェーズで
+    // settings/assets を投入する。
+    //
+    // managed login の表示には domain (managedLoginVersion=2) が先に存在している必要があるため
+    // 明示的に依存を張る (branding は userPoolId / clientId しか参照せず CFn が順序を推論できない)。
+    const managedLoginBranding = new aws_cognito.CfnManagedLoginBranding(
       this,
-      "tenantHostedUiBranding",
+      "tenantManagedLoginBranding",
       {
         userPoolId: this.tenantUserPool.userPoolId,
         clientId: this.tenantUserPoolClient.userPoolClientId,
-        css: HOSTED_UI_CSS,
+        useCognitoProvidedValues: true,
       },
     );
-    hostedUiBranding.node.addDependency(this.tenantUserPoolDomain);
+    managedLoginBranding.node.addDependency(this.tenantUserPoolDomain);
 
     this.identityDetails = {
       name: "Cognito",
