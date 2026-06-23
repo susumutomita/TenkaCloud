@@ -16,6 +16,9 @@ on:
       # portal demo の fixtures / UI 変更が landing 経由でしか反映されない (= PR #1217
       # で score events fixture / mock info UX が live に反映されなかった原因)。
       - 'apps/participant-portal/**'
+      # Issue #1954: 運営フロー demo (application-admin-console) も /admin-demo/ で配信するため、
+      # その変更でも Pages を再 deploy する。
+      - 'apps/application-admin-console/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -66,6 +69,21 @@ jobs:
         run: |
           mkdir -p landing/portal-demo
           cp -r apps/participant-portal/dist/. landing/portal-demo/
+      # Issue #1954: 運営フロー demo (application-admin-console) を no-AWS demo mode で static
+      # build し landing/admin-demo/ に配置する。 VITE_DEMO_MODE=1 で mock auth + demo-client、
+      # base=/TenkaCloud/admin-demo/ で routing + asset path を解決、 参加者 demo への hand-off
+      # 先 (participantPortalUrl) は deploy 済 portal-demo の Pages path に向ける。
+      - name: Build application-admin-console demo
+        working-directory: apps/application-admin-console
+        env:
+          VITE_DEMO_MODE: "1"
+          VITE_DEMO_PARTICIPANT_URL: /TenkaCloud/portal-demo/
+        run: |
+          bun x vite build --base=/TenkaCloud/admin-demo/
+      - name: Stage application-admin-console demo under landing/admin-demo/
+        run: |
+          mkdir -p landing/admin-demo
+          cp -r apps/application-admin-console/dist/. landing/admin-demo/
       # 全 third-party action は **commit SHA で pin** する (tag は移動可能なため supply-chain
       # 攻撃面になる)。version comment は更新の参考、書き換えは Renovate に任せる。
       # actions/configure-pages v5.0.0
