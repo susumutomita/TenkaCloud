@@ -7,6 +7,7 @@
     "dev": "vite",
     "start": "vite preview",
     "build": "tsc --noEmit && vite build",
+    "build:pages": "VITE_DEMO_MODE=1 vite build --base ${ADMIN_DEMO_BASE:-/admin-demo/}",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "test": "vitest run",
