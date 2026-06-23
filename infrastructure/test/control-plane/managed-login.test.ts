@@ -31,17 +31,53 @@ describe("applyControlPlaneManagedLogin (#1992)", () => {
     );
   });
 
-  it("should attach a Managed login branding using Cognito-provided defaults", () => {
-    // 厳密な ink/ロゴ settings は live Describe 反復前提のため、 まず Cognito 既定値
-    // (UseCognitoProvidedValues) で valid な managed login を立ち上げる (Phase 2a)。
+  it("should attach a Managed login branding with the custom ink settings (not Cognito defaults)", () => {
+    // ink テーマの partial settings + Summit ロゴを投入する。 settings/assets を渡すので
+    // UseCognitoProvidedValues は排他で省略される (= 既定値 fallback を使わない)。
     const { stack, userPool, userPoolDomain, clientId } = makeStack();
     applyControlPlaneManagedLogin(stack, { userPool, userPoolDomain, clientId });
     const tpl = Template.fromStack(stack);
     tpl.resourceCountIs("AWS::Cognito::ManagedLoginBranding", 1);
     tpl.hasResourceProperties(
       "AWS::Cognito::ManagedLoginBranding",
-      Match.objectLike({ UseCognitoProvidedValues: true }),
+      Match.objectLike({
+        // primary "Sign in" button が ink 背景 + white text (ink テーマの核)。
+        Settings: Match.objectLike({
+          components: Match.objectLike({
+            primaryButton: Match.objectLike({
+              lightMode: Match.objectLike({
+                defaults: { backgroundColor: "1d1d1fff", textColor: "ffffffff" },
+              }),
+            }),
+            // page background が ink アクセント。
+            pageBackground: Match.objectLike({
+              lightMode: { color: "1d1d1fff" },
+            }),
+            // form は white カード。
+            form: Match.objectLike({
+              lightMode: Match.objectLike({ backgroundColor: "ffffffff" }),
+            }),
+          }),
+        }),
+        // Summit ロゴが FORM_LOGO として attach されている。
+        Assets: Match.arrayWith([
+          Match.objectLike({
+            Category: "FORM_LOGO",
+            ColorMode: "LIGHT",
+            Extension: "SVG",
+          }),
+        ]),
+      }),
     );
+  });
+
+  it("should not set UseCognitoProvidedValues (custom settings/assets are mutually exclusive)", () => {
+    const { stack, userPool, userPoolDomain, clientId } = makeStack();
+    applyControlPlaneManagedLogin(stack, { userPool, userPoolDomain, clientId });
+    const tpl = Template.fromStack(stack);
+    const brandings = tpl.findResources("AWS::Cognito::ManagedLoginBranding");
+    const props = Object.values(brandings)[0]?.Properties ?? {};
+    expect(props.UseCognitoProvidedValues).toBeUndefined();
   });
 
   it("should return the created branding resource", () => {

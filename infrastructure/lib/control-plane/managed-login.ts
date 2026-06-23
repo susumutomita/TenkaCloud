@@ -5,6 +5,10 @@ import {
   type UserPoolDomain,
 } from "aws-cdk-lib/aws-cognito";
 import type { Construct } from "constructs";
+import {
+  buildInkManagedLoginAssets,
+  buildInkManagedLoginSettings,
+} from "../shared/managed-login-branding.js";
 
 /**
  * Issue #1992 (Phase 2 of #1990 epic): Control Plane (SBT) の System Admin ログインを
@@ -21,11 +25,11 @@ import type { Construct } from "constructs";
  * を attach する。 Control Plane 側は classic の `UserPoolUICustomizationAttachment` を
  * 持たないため撤去は不要 (= 純粋に additive)。
  *
- * ink 色トークン / Summit ロゴの厳密な `settings` / `assets` は巨大 JSON Document であり、
- * AWS の定石が live `DescribeManagedLoginBrandingByClient`(ReturnMergedResources=true) を
- * 起点に編集 → 投入する deploy 反復前提 (#1990 cross-cutting constraint)。 本 Phase は
- * `useCognitoProvidedValues` で Cognito 既定値の valid な managed login を立ち上げる
- * (= 崩れていた classic からの確実な改善)。 brand トークン投入は後続フェーズで扱う。
+ * ブランディングは ink テーマ + Summit ロゴ。 厳密な settings は巨大 JSON Document だが、
+ * Cognito は **指定しなかったトークンを既定値のまま保持する** (= partial settings は valid)
+ * ため、 ink ブランドトークンだけを上書きする最小 settings を `shared/managed-login-branding.ts`
+ * から取得して投入する (両 plane で共有)。 `settings`/`assets` を渡す場合 `useCognitoProvidedValues`
+ * は **排他** なので省略する。 pixel 一致は Cognito console の branding editor で微調整する前提。
  *
  * SBT の構築ツリーに依存せずユニットテストできるよう pure な attach 関数として切り出す
  * (= SAML attach module `saml-identity-providers.ts` と同じ設計)。
@@ -47,12 +51,14 @@ export function applyControlPlaneManagedLogin(
   const cfnDomain = refs.userPoolDomain.node.defaultChild as CfnUserPoolDomain;
   cfnDomain.addPropertyOverride("ManagedLoginVersion", 2);
 
-  // (2) Managed login branding を attach。 厳密な settings/assets は live 反復前提のため
-  // Cognito 既定値で valid な managed login を立てる。
+  // (2) Managed login branding を attach。 ink テーマの partial settings + Summit ロゴを
+  // 投入する (Cognito 既定値に merge される)。 settings/assets を渡すので
+  // useCognitoProvidedValues は省略する (排他)。
   const branding = new CfnManagedLoginBranding(scope, "ControlPlaneManagedLoginBranding", {
     userPoolId: refs.userPool.userPoolId,
     clientId: refs.clientId,
-    useCognitoProvidedValues: true,
+    settings: buildInkManagedLoginSettings(),
+    assets: buildInkManagedLoginAssets(),
   });
   // managed login の表示には domain (managedLoginVersion=2) が先に存在している必要があるため
   // 明示的に依存を張る (branding は userPoolId / clientId しか参照せず CFn が順序を推論できない)。
