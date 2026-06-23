@@ -25,4 +25,17 @@ describe("managed-login-branding — Cognito schema guards", () => {
     expect(formLogo).toBeDefined();
     expect((formLogo as { resourceId?: string }).resourceId).toBeUndefined();
   });
+
+  it("should disable the default decorative page-background image (solid ink bg, no triangles)", () => {
+    const settings = buildInkManagedLoginSettings() as {
+      components?: {
+        pageBackground?: { image?: { enabled?: boolean }; lightMode?: { color?: string } };
+        pageText?: unknown;
+      };
+    };
+    expect(settings.components?.pageBackground?.image?.enabled).toBe(false);
+    expect(settings.components?.pageBackground?.lightMode?.color).toBe("1d1d1fff");
+    // 見出し/本文は white カード内に出る → pageText は上書きしない (light にすると不可視)。
+    expect(settings.components?.pageText).toBeUndefined();
+  });
 });
