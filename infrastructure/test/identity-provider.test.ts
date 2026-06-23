@@ -393,3 +393,50 @@ describe("OAuth flow hardening (Issue #861)", () => {
     expect(logouts).toEqual(["https://app.example.com/", "https://app.example.com/login"]);
   });
 });
+
+describe("IdentityProvider login custom domain (#1993/#1994)", () => {
+  function synthWithDomain(loginCustomDomain?: {
+    domainName: string;
+    certificateArn: string;
+  }): Template {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "TestStack", {
+      env: { account: "123456789012", region: "ap-northeast-1" },
+    });
+    new IdentityProvider(stack, "Identity", {
+      tenantId: "tenant-1",
+      environment: "development",
+      applicationAdminConsoleUrl: "https://d123abc.cloudfront.net",
+      ...(loginCustomDomain ? { loginCustomDomain } : {}),
+    });
+    return Template.fromStack(stack);
+  }
+
+  it("should keep only the cognito-prefix domain when no custom domain is configured (NO-OP)", () => {
+    const template = synthWithDomain();
+    template.resourceCountIs("AWS::Cognito::UserPoolDomain", 1);
+    // cognito-prefix domain には CustomDomainConfig は無い。
+    const domains = template.findResources("AWS::Cognito::UserPoolDomain");
+    const hasCustom = Object.values(domains).some((d) => d.Properties?.CustomDomainConfig);
+    expect(hasCustom).toBe(false);
+  });
+
+  it("should add a managed-login custom domain alongside the cognito-prefix domain when configured", () => {
+    const template = synthWithDomain({
+      domainName: "app-login.example.com",
+      certificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/xyz",
+    });
+    // cognito-prefix domain + custom domain の 2 つ。
+    template.resourceCountIs("AWS::Cognito::UserPoolDomain", 2);
+    template.hasResourceProperties(
+      "AWS::Cognito::UserPoolDomain",
+      Match.objectLike({
+        Domain: "app-login.example.com",
+        ManagedLoginVersion: 2,
+        CustomDomainConfig: {
+          CertificateArn: "arn:aws:acm:us-east-1:123456789012:certificate/xyz",
+        },
+      }),
+    );
+  });
+});

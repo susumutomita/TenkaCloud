@@ -24,11 +24,18 @@ export interface CustomDomainConfig {
   readonly certificateArn: string;
 }
 
-/** 3 SPA それぞれのカスタムドメイン設定 (任意)。 未指定の hosting は default 証明書のまま。 */
+/**
+ * 3 SPA の CloudFront カスタムドメイン + 2 プレーンの Cognito ログイン カスタムドメイン
+ * (任意)。 未指定の hosting / login は default 証明書・cognito-prefix domain のまま。
+ */
 export interface CustomDomainsConfig {
   readonly adminConsole?: CustomDomainConfig;
   readonly applicationAdminConsole?: CustomDomainConfig;
   readonly participantPortal?: CustomDomainConfig;
+  /** Issue #1993: Control Plane (System Admin) の Cognito ログイン カスタムドメイン。 */
+  readonly controlPlaneLogin?: CustomDomainConfig;
+  /** Issue #1993 / #1994: Application Plane (tenant、 pooled / silo) のログイン カスタムドメイン。 */
+  readonly applicationLogin?: CustomDomainConfig;
 }
 
 export interface CustomDomainDistributionProps {

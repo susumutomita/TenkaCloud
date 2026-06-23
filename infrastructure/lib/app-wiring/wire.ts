@@ -84,6 +84,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       ...config.stackEnv,
       systemAdminEmail: config.systemAdminEmail,
       adminConsoleOrigin,
+      // Issue #1993: System Admin ログインの Cognito カスタムドメイン (未設定なら NO-OP)。
+      loginCustomDomain: config.customDomains?.controlPlaneLogin,
       // Issue #1335 Phase 1: opt-in SAML SSO (= 未設定なら空配列で no-op)。
       samlIdps: config.controlPlaneSamlIdps,
       samlAdminAllowlist: config.controlPlaneSamlAdminAllowlist,
@@ -181,6 +183,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       tenantId: config.tenantId,
       tenantName: config.tenantName,
       environment: config.environment,
+      // Issue #1993 / #1994: tenant (pooled / silo) ログインの Cognito カスタムドメイン (未設定で NO-OP)。
+      loginCustomDomain: config.customDomains?.applicationLogin,
       stageName: config.stageName,
       lambdaReserveConcurrency: config.lambdaReserveConcurrency,
       lambdaCanaryDeploymentPreference: config.lambdaCanaryDeploymentPreference,

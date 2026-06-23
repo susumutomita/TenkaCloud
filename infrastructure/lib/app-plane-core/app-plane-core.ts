@@ -3,6 +3,7 @@ import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
 import { SamlIdpLambda } from "../problem-deploy/saml-idp-lambda.js";
+import type { CustomDomainConfig } from "../security/cloudfront-custom-domain.js";
 import { ApiGateway } from "../tenant-template/api-gateway.js";
 import { ApplicationAdminConsoleHosting } from "../tenant-template/application-admin-console-hosting.js";
 import { IdentityProvider } from "../tenant-template/identity-provider.js";
@@ -54,6 +55,8 @@ export interface AppPlaneCoreProps {
   readonly tenantName: string;
   readonly environment: string;
   readonly isPooledDeploy: boolean;
+  /** Issue #1993 / #1994: tenant ログイン用 Cognito カスタムドメイン (任意、 未設定で NO-OP)。 */
+  readonly loginCustomDomain?: CustomDomainConfig;
   readonly deployApiLambda: IFunction;
   readonly eventApiLambda: IFunction;
   readonly competitorAccountsApiLambda: IFunction;
@@ -151,6 +154,7 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
     tenantId: props.tenantId,
     environment: props.environment,
     applicationAdminConsoleUrl: applicationAdminConsoleHosting.distributionUrl,
+    loginCustomDomain: props.loginCustomDomain,
   });
 
   // Issue #1312: samlIdpsTable が渡されていれば SAML IdP CRUD Lambda を同 stack で立てる

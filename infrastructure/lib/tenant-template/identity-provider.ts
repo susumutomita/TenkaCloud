@@ -1,6 +1,8 @@
 import { aws_cognito, Duration, Stack } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import type { IdentityDetails } from "../interfaces/identity-details.js";
+import type { CustomDomainConfig } from "../security/cloudfront-custom-domain.js";
+import { attachCognitoCustomLoginDomain } from "../security/cognito-custom-domain.js";
 
 // Cognito InviteMessageTemplate の placeholder。{username} は admin-create-user 時に
 // 指定したユーザー名、{####} は Cognito 自動生成の一時パスワードに置換される。
@@ -51,6 +53,12 @@ interface IdentityProviderProps {
    * 末尾スラッシュは付けないこと。
    */
   readonly applicationAdminConsoleUrl: string;
+  /**
+   * Issue #1993 / #1994: tenant ログイン用 Cognito カスタムドメイン (任意)。 未設定なら従来の
+   * cognito-prefix domain のまま (NO-OP)。 pooled なら共有ドメイン、 silo (#1994) なら per-tenant
+   * deploy が各自のサブドメインを渡す。 cert は us-east-1 必須、 DNS は operator 用意。
+   */
+  readonly loginCustomDomain?: CustomDomainConfig;
   // Issue #1066: SAML IdP 設定は廃止 (= MFA 必須化 #1035 で代替)。
 }
 
@@ -324,6 +332,13 @@ export class IdentityProvider extends Construct {
       },
     );
     managedLoginBranding.node.addDependency(this.tenantUserPoolDomain);
+
+    // Issue #1993 / #1994: tenant ログインの Cognito カスタムドメイン (param-gated)。 未設定なら
+    // NO-OP。 設定時は managed login v2 の custom domain を足す (pooled = #1993、 silo = #1994)。
+    attachCognitoCustomLoginDomain(this, "tenantLoginCustomDomain", {
+      userPoolId: this.tenantUserPool.userPoolId,
+      config: props.loginCustomDomain,
+    });
 
     this.identityDetails = {
       name: "Cognito",
