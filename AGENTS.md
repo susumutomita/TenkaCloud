@@ -4,8 +4,11 @@ Guide for AI agents (Claude Code, Codex CLI, etc.). The source of truth for the 
 
 ## Role split
 
-- **Infrastructure (CDK / SBT / IAM / `infrastructure/templates/`) is the user's responsibility.** CDK stacks, IAM policies, and CFn templates are the user's call. Proposals are fine; do not edit them on your own initiative.
-- **Application code (`apps/*`, `scripts/*` orchestration, `problems/*`) is the agent's responsibility.** Write tests, get `make before-commit` green, and follow it through to a PR end-to-end.
+The infrastructure foundation (SBT Control Plane, Application Plane, problem-deploy backend, the CDK aspects) is established, so **infrastructure is no longer owner-only — the agent may change it too**.
+
+- **All layers are the agent's to change end-to-end**: `apps/*`, `scripts/*`, `problems/*`, **and `infrastructure/*` (CDK / SBT / IAM / `infrastructure/templates/`)**. Write tests, get the gates green, and follow it through to a PR.
+- **Infra changes carry extra care** (not extra approval): keep IAM **least-privilege**; verify with `make check-synth` (cdk synth + IAM ASCII) and CDK `Template.fromStack` assertions; and when behavior can't be checked offline (a live deploy, a cross-account AssumeRole path, SBT-provisioned resources) **flag it for a one-time live AWS verification in the PR body** — CI does not deploy. The `## Physical impact` PR section must label the CFn diff (CREATE / UPDATE / REPLACE / DELETE / NO-OP).
+- **Still confirm first** for the genuinely irreversible / outward actions in *Run end-to-end* below (production deploys, `make destroy`, force-push, secrets) — those gates are unchanged.
 - When something is unclear, read the repo first (`git log`, `git diff main...HEAD`, related stack tests). Only ask the user when even that is not enough.
 
 ## Run end-to-end
@@ -62,7 +65,7 @@ OpenAI's Codex CLI can also load this repo through this AGENTS.md file. The typi
 Before launching Codex CLI, check the following:
 
 1. `make harness` passes (don't hand it a branch with invariant violations)
-2. The work scope respects this file's role split and prohibitions (no CDK edits, no `rm`, etc.)
+2. The work scope respects this file's role split and prohibitions (no `rm`, no committed secrets, etc.). Infra/CDK edits are allowed (see *Role split*); just keep the two agents off the same files to avoid conflicts.
 3. Codex's PR body must also include the `## Regression analysis` / `## Physical impact` sections
 
 We do not maintain Codex CLI-specific skills or config — AGENTS.md alone guides both agents. The `.claude/skills/*` slash commands on the Claude Code side are invisible from Codex, so give Codex plain natural-language tasks that don't require `/<skill>` invocations.
