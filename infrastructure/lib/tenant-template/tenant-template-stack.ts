@@ -10,6 +10,7 @@ import {
 import type { Construct } from "constructs";
 import { buildAppPlaneCore } from "../app-plane-core/index.js";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
+import type { CustomDomainConfig } from "../security/cloudfront-custom-domain.js";
 import type { SamlIdpConfig } from "./saml-identity-providers.js";
 
 interface TenantTemplateStackProps extends StackProps {
@@ -30,6 +31,8 @@ interface TenantTemplateStackProps extends StackProps {
    * tenantId / accountId と組み合わせて使う。
    */
   environment: string;
+  /** Issue #1993 / #1994: tenant ログイン用 Cognito カスタムドメイン (任意、 未設定で NO-OP)。 */
+  loginCustomDomain?: CustomDomainConfig;
   tenantMappingTable: Table;
   commitId: string;
   waveNumber?: string;
@@ -141,6 +144,7 @@ export class TenantTemplateStack extends Stack {
       tenantName: props.tenantName,
       environment: props.environment,
       isPooledDeploy: props.isPooledDeploy,
+      loginCustomDomain: props.loginCustomDomain,
       deployApiLambda: props.deployApiLambda,
       eventApiLambda: props.eventApiLambda,
       competitorAccountsApiLambda: props.competitorAccountsApiLambda,

@@ -24,6 +24,8 @@ import {
   type IdpDirectory,
   type SamlIdpConfig,
 } from "./control-plane/saml-identity-providers.js";
+import type { CustomDomainConfig } from "./security/cloudfront-custom-domain.js";
+import { attachCognitoCustomLoginDomain } from "./security/cognito-custom-domain.js";
 
 interface ControlPlaneStackProps extends cdk.StackProps {
   systemAdminEmail: string;
@@ -33,6 +35,11 @@ interface ControlPlaneStackProps extends cdk.StackProps {
    * 未指定 (= optional) は test や hosting stack 不在ケースで許容。
    */
   adminConsoleOrigin?: string;
+  /**
+   * Issue #1993: System Admin ログイン用 Cognito カスタムドメイン (任意)。 未設定なら
+   * 従来の cognito-prefix domain のまま (NO-OP)。 cert は us-east-1 必須、 DNS は operator 用意。
+   */
+  loginCustomDomain?: CustomDomainConfig;
   /**
    * Issue #1335 Phase 1: opt-in で attach する SAML IdP 群。 未指定 / 空配列なら従来通り
    * Cognito local auth のみ (= MFA 強制)。 設定時のみ allowlist + sign-in audit が動く。
@@ -236,6 +243,13 @@ export class ControlPlaneStack extends cdk.Stack {
       userPool: cognitoAuth.userPool,
       userPoolDomain,
       clientId: cognitoAuth.userClientId,
+    });
+
+    // Issue #1993: System Admin ログインの Cognito カスタムドメイン (param-gated)。 未設定なら
+    // NO-OP (= cognito-prefix domain のまま)。 設定時は managed login v2 の custom domain を足す。
+    attachCognitoCustomLoginDomain(this, "ControlPlaneLoginCustomDomain", {
+      userPoolId: cognitoAuth.userPool.userPoolId,
+      config: props.loginCustomDomain,
     });
   }
 }
