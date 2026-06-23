@@ -91,4 +91,93 @@ describe("runDeploy", () => {
       "https://deploy.example.com/deployments/d1/logs",
     );
   });
+
+  it("should require <eventId> for bulk", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify([]), { status: 200 }));
+    await expect(
+      runDeploy(["bulk"], {
+        auth: { hostedUiDomain: "https://auth", fetchImpl: fetchImpl as never },
+        env: ENV,
+        out,
+      }),
+    ).rejects.toThrow(/<eventId>/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("should require <deploymentId> for status", async () => {
+    const fetchImpl = vi.fn();
+    await expect(
+      runDeploy(["status"], {
+        auth: { hostedUiDomain: "https://auth", fetchImpl: fetchImpl as never },
+        env: ENV,
+        out,
+      }),
+    ).rejects.toThrow(/<deploymentId>/);
+  });
+
+  it("should require <deploymentId> for logs", async () => {
+    const fetchImpl = vi.fn();
+    await expect(
+      runDeploy(["logs"], {
+        auth: { hostedUiDomain: "https://auth", fetchImpl: fetchImpl as never },
+        env: ENV,
+        out,
+      }),
+    ).rejects.toThrow(/<deploymentId>/);
+  });
+
+  it("should require <teamId> when only eventId is given", async () => {
+    const fetchImpl = vi.fn();
+    await expect(
+      runDeploy(["evt-1"], {
+        auth: { hostedUiDomain: "https://auth", fetchImpl: fetchImpl as never },
+        env: ENV,
+        out,
+      }),
+    ).rejects.toThrow(/<teamId>/);
+  });
+});
+
+describe("runDeploy help", () => {
+  it.each(["help", "--help", "-h"])("should print usage and return 0 for '%s'", async (token) => {
+    const fetchImpl = vi.fn();
+    const code = await runDeploy([token], {
+      auth: { hostedUiDomain: "https://auth", fetchImpl: fetchImpl as never },
+      env: ENV,
+      out,
+    });
+    expect(code).toBe(0);
+    expect(captured.join("\n")).toContain("Usage: tenkacloud deploy");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("should print usage and return 0 when called with no args", async () => {
+    const fetchImpl = vi.fn();
+    const code = await runDeploy([], {
+      auth: { hostedUiDomain: "https://auth", fetchImpl: fetchImpl as never },
+      env: ENV,
+      out,
+    });
+    expect(code).toBe(0);
+  });
+
+  it("should fall back to console.log + process.env when out/env omitted", async () => {
+    const fetchImpl = vi.fn(
+      async () => new Response(JSON.stringify({ deploymentId: "d9" }), { status: 200 }),
+    );
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    process.env.TENKACLOUD_API_BASE_DEPLOY = "https://deploy.fallback.com";
+    try {
+      const code = await runDeploy(["evt-9", "team-9", "prob-9", "--json"], {
+        auth: { hostedUiDomain: "https://auth", fetchImpl: fetchImpl as never },
+      });
+      expect(code).toBe(0);
+      expect(String(fetchImpl.mock.calls[0]?.[0])).toBe("https://deploy.fallback.com/deployments");
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      expect(String(logSpy.mock.calls[0]?.[0])).toContain("d9");
+    } finally {
+      logSpy.mockRestore();
+      delete process.env.TENKACLOUD_API_BASE_DEPLOY;
+    }
+  });
 });

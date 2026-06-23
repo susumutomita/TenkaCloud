@@ -74,13 +74,14 @@ export function formatPretty(data: unknown, options: FormatOptions = {}): string
   if (records.length === 0) return options.message ?? "(no results)";
   const columns = options.columns ?? collectColumns(records);
   const rows = records.map((r) => columns.map((c) => stringify(r[c])));
-  const widths = columns.map((c, i) =>
-    Math.max(c.length, ...rows.map((row) => (row[i] ?? "").length)),
-  );
+  // rows / widths は columns.map で作るので columns.length 個の要素が必ず揃う
+  // (= row[i] / widths[i] は範囲内で常に定義済み)。 noUncheckedIndexedAccess は無効なので
+  // 型上も string / number で、 防御的な nullish 合体は実行時到達不能な dead branch になる。
+  const widths = columns.map((c, i) => Math.max(c.length, ...rows.map((row) => row[i].length)));
   const pad = (s: string, w: number) => s + " ".repeat(Math.max(0, w - s.length));
   const sep = `+${widths.map((w) => "-".repeat(w + 2)).join("+")}+`;
   const fmt = (cells: readonly string[]) =>
-    `| ${cells.map((c, i) => pad(c, widths[i] ?? 0)).join(" | ")} |`;
+    `| ${cells.map((c, i) => pad(c, widths[i])).join(" | ")} |`;
   return [sep, fmt(columns), sep, ...rows.map(fmt), sep].join("\n");
 }
 
