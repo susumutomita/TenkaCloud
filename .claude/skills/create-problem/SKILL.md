@@ -134,6 +134,11 @@ CLI を使わず手書きする場合は `.claude/templates/problems/<kind>/` �
 
 各 kind の具体例は `.claude/templates/problems/<kind>/metadata.json` を直接参照。 6 kind 分すべて揃えてある。
 
+> **言い回し (voice) は `references/writing-style.md` に従う (必読)。**
+> 競技者が読む `name` / `shortDescription` / `instructions` / `hints` は、 天下クラウド株式会社の cold-open シナリオ、 二人称、 命令形で書く (= 本家 AWS GameDay と同型)。
+> **個人名 (苗字) は使わず役職・役割で書く** (CTO / 運営 / 前任の SRE)。 実在の誰かを想起させない、 前任者を無能扱いしない (drama はシステム・状況から)。
+> 「本問題では〜を学びます」 等の AI 臭い前置き・空虚な形容 (堅牢 / 包括的 / シームレス / 活用 …) は禁止。 採点の数字・正解は `shortDescription` でなく `description` へ。
+
 ### endpoints[] (= ADR-012 Phase 2 thick DSL)
 
 Battle で endpoint を持つ問題は宣言する。 1 endpoint しか無くても slot 名を付ける (= 後で多 slot 拡張しやすい)。
