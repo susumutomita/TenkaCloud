@@ -34,6 +34,13 @@ export interface ScheduleRevertDeps {
 
 const MAX_SCHEDULE_NAME = 64;
 
+/** 秒 → ミリ秒 の換算係数 (schedule 時刻計算用)。 */
+const MS_PER_SECOND = 1000;
+/** 分 → 秒 の換算係数 (schedule 時刻計算用)。 */
+const SECONDS_PER_MINUTE = 60;
+/** 分 → ミリ秒 の換算係数 (= 60000ms。 schedule 時刻計算用)。 */
+const MS_PER_MINUTE = SECONDS_PER_MINUTE * MS_PER_SECOND;
+
 function sanitizeScheduleName(raw: string): string {
   return raw.replace(/[^0-9A-Za-z\-_.]/g, "-").slice(0, MAX_SCHEDULE_NAME);
 }
@@ -71,7 +78,7 @@ const SCHEDULED_TIME_TEMPLATE = "<aws.scheduler.scheduled-time>";
 
 /** base 時刻 + afterSeconds の UTC を ISO と aws-scheduler の `at(...)` 式 (秒精度) で返す。 */
 function oneShotAt(baseIso: string, afterSeconds: number): { iso: string; expression: string } {
-  const at = new Date(new Date(baseIso).getTime() + afterSeconds * 1000);
+  const at = new Date(new Date(baseIso).getTime() + afterSeconds * MS_PER_SECOND);
   const iso = at.toISOString();
   return { iso, expression: `at(${iso.slice(0, 19)})` };
 }
@@ -139,7 +146,7 @@ export async function scheduleInject(
   afterMinutes: number,
   deps: ScheduleRevertDeps,
 ): Promise<void> {
-  const { iso, expression } = oneShotAt(detail.firedAt, afterMinutes * 60);
+  const { iso, expression } = oneShotAt(detail.firedAt, afterMinutes * SECONDS_PER_MINUTE);
   const { afterMinutes: _drop, ...rest } = detail;
   const injectDetail: DisruptionFiredDetail = { ...rest, firedAt: iso };
   await sendOneShot(deps, injectScheduleName(detail), expression, {
@@ -162,7 +169,7 @@ export async function scheduleRecurring(
   deps: ScheduleRevertDeps,
 ): Promise<void> {
   const start = new Date(detail.firedAt);
-  const end = new Date(start.getTime() + intervalMinutes * maxFires * 60_000);
+  const end = new Date(start.getTime() + intervalMinutes * maxFires * MS_PER_MINUTE);
   const { recurrence: _r, afterMinutes: _a, ...rest } = detail;
   const tickDetail: DisruptionFiredDetail = { ...rest, firedAt: SCHEDULED_TIME_TEMPLATE };
   await deps.scheduler.send(
