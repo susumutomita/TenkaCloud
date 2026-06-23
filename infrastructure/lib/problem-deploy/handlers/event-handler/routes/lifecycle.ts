@@ -81,6 +81,29 @@ function scheduleOutcomeResponse(c: Context, outcome: SetEventScheduleOutcome): 
         },
         StatusCodes.BAD_REQUEST,
       );
+    case "past_deploy_at":
+      // ADR-047 follow-up: 過去 deployAt を弾く (即時 deploy は別の「Deploy」button を使う)。
+      return c.json(
+        {
+          error: "past_deploy_at",
+          message:
+            "deployAt が過去の時刻です。未来の時刻を指定するか、即時 deploy は「Deploy」を使ってください。",
+          deployAt: outcome.deployAt,
+          serverNow: new Date(outcome.nowMs).toISOString(),
+        },
+        StatusCodes.BAD_REQUEST,
+      );
+    case "deploy_after_ends":
+      // ADR-047 follow-up: deploy → 採点 → 終了 の時系列を保つ (= deploy は終了より後ろに置けない)。
+      return c.json(
+        {
+          error: "deploy_after_ends",
+          message: "deployAt は endsAt 以前の時刻を指定してください。",
+          deployAt: outcome.deployAt,
+          endsAt: outcome.endsAt,
+        },
+        StatusCodes.BAD_REQUEST,
+      );
     case "no_op":
       return c.json(
         { error: "no_op", message: "更新対象が指定されていません" },
@@ -92,6 +115,7 @@ function scheduleOutcomeResponse(c: Context, outcome: SetEventScheduleOutcome): 
           startsAt: outcome.startsAt,
           endsAt: outcome.endsAt,
           teardownAt: outcome.teardownAt,
+          deployAt: outcome.deployAt,
           updatedDeployments: outcome.updatedDeployments,
         },
         StatusCodes.OK,
@@ -124,6 +148,7 @@ export function registerLifecycleRoutes(app: Hono, shared: EventSharedResources)
             startsAt: resolvedStartsAt,
             endsAt: resolvedEndsAt,
             teardownAt: parsed.data.teardownAt,
+            deployAt: parsed.data.deployAt,
             scoreboardFreezeMinutes: parsed.data.scoreboardFreezeMinutes,
             nowMs,
           });

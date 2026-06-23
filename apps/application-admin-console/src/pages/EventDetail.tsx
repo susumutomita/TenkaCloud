@@ -407,6 +407,10 @@ function EventDetailLoaded({
         confirmEnd={operations.confirmEnd}
         confirmForceArchive={operations.confirmForceArchive}
         confirmTeardown={operations.confirmTeardown}
+        deployDate={operations.deployDate}
+        deployScheduleInFlight={operations.deployScheduleInFlight}
+        deployScheduleModalOpen={operations.deployScheduleModalOpen}
+        deployTime={operations.deployTime}
         detail={detail}
         endsAtDate={operations.endsAtDate}
         endsAtErrorText={endsAtErrorText}
@@ -420,6 +424,7 @@ function EventDetailLoaded({
         notifyJustSent={operations.notifyJustSent}
         notifyModalOpen={operations.notifyModalOpen}
         onBulkTeardown={() => void operations.handleBulkTeardown()}
+        onDismissDeploySchedule={() => operations.setDeployScheduleModalOpen(false)}
         onDismissEnd={() => operations.setConfirmEnd(false)}
         onDismissEndsAt={() => operations.setEndsAtModalOpen(false)}
         onDismissForceArchive={() => operations.setConfirmForceArchive(false)}
@@ -434,6 +439,7 @@ function EventDetailLoaded({
           operations.setNotifyJustSent(true);
         }}
         onDismissTeardownSchedule={() => operations.setTeardownModalOpen(false)}
+        onScheduleDeploy={() => void operations.handleScheduleDeploy()}
         onScheduleEnd={() => void operations.handleScheduleEnd()}
         onScheduleTeardown={() => void operations.handleScheduleTeardown()}
         onScheduledStart={() => void operations.handleScheduledStart()}
@@ -441,6 +447,8 @@ function EventDetailLoaded({
         scheduleInFlight={operations.scheduleInFlight}
         scheduleModalOpen={operations.scheduleModalOpen}
         scheduleTime={operations.scheduleTime}
+        setDeployDate={operations.setDeployDate}
+        setDeployTime={operations.setDeployTime}
         setEndsAtDate={operations.setEndsAtDate}
         setEndsAtTime={operations.setEndsAtTime}
         setScheduleDate={operations.setScheduleDate}

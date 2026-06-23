@@ -7,7 +7,10 @@ import {
 import { decodeLargeEnvValue } from "../../../utils/env-encoding.js";
 import { buildEndpointPK } from "../../problem-endpoints-table.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
-import { buildScheduledTeardownResources } from "../event-handler/shared.js";
+import {
+  buildScheduledDeployResources,
+  buildScheduledTeardownResources,
+} from "../event-handler/shared.js";
 import { forEachScanPage } from "../shared/ddb-paginate.js";
 import { writeScoreEvent } from "../shared/score-event.js";
 import { maybeFireConditionDisruptions } from "./condition-disruption-fire.js";
@@ -65,12 +68,15 @@ export async function handler(): Promise<void> {
   // Event status reconcile (#557 #539) を採点と並列実行。1 tick の失敗は次 tick で再評価。
   // [ADR-047] teardownDeps を渡すと teardownAt 経過の event を自動撤去する。 CompetitorAccounts env が
   // 未配線なら buildScheduledTeardownResources が undefined を返し、 scheduled teardown は dormant。
+  // [ADR-047 follow-up] deployDeps を渡すと deployAt 経過の DRAFT event を自動 deploy する。 Teams /
+  // catalog env が未配線なら buildScheduledDeployResources が undefined を返し、 scheduled deploy は dormant。
   const reconcilePromise = reconcileEventStatuses(
     {
       ddb: shared.ddb,
       eventsTableName: shared.eventsTableName,
       deploymentsTableName: shared.deploymentsTableName,
       teardownDeps: buildScheduledTeardownResources(),
+      deployDeps: buildScheduledDeployResources(),
     },
     nowIso,
   ).catch((err) => {

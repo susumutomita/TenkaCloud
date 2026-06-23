@@ -24,6 +24,19 @@ export interface GenericScoringLambdaProps {
    */
   readonly eventsTable: ITable;
   /**
+   * [ADR-047 follow-up] Teams table (read-only)。 scheduled auto-deploy が `bulkDeployEvent` 経由で
+   * event の teams を Query して teams × problems の deployment 行を一括生成するため。 これを配線すると
+   * `buildScheduledDeployResources()` が有効化され、 reconciler が deployAt 経過の DRAFT event を
+   * 自動 deploy する (未配線なら dormant、 teardownAt の鏡像)。
+   */
+  readonly teamsTable: ITable;
+  /**
+   * [ADR-047 follow-up] `{ [problemId]: problemDir }` の catalog。 scheduled auto-deploy が
+   * problemId → problemDir を解決して DeployCreateRequested を組み立てるため。 EventApiLambda の
+   * `BATTLE_PROBLEMS_CATALOG` と同じ source (= props.problemsCatalog)。
+   */
+  readonly problemsCatalog: Readonly<Record<string, string>>;
+  /**
    * ADR-012 Phase 3.A: Endpoint registry table (= ProblemEndpoints)。 dispatcher は
    * per (tenant, team, problem) で override 行を Query で引き、 effective URL (= override ?? default)
    * を probe する。
@@ -128,6 +141,9 @@ export class GenericScoringLambda extends Construct {
         // [ADR-047] scheduled auto-teardown 用。 buildScheduledTeardownResources がこの env を見て
         // 有効化する (未設定なら scheduled teardown は dormant)。
         COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName,
+        // [ADR-047 follow-up] scheduled auto-deploy 用。 buildScheduledDeployResources がこの env +
+        // BATTLE_PROBLEMS_CATALOG (下の define) を見て有効化する (未設定なら scheduled deploy は dormant)。
+        TEAMS_TABLE_NAME: props.teamsTable.tableName,
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {
@@ -152,6 +168,11 @@ export class GenericScoringLambda extends Construct {
           "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
             JSON.stringify(props.problemsDisruptions),
           ),
+          // [ADR-047 follow-up] scheduled auto-deploy が problemId→problemDir を解決するための catalog。
+          // EventApiLambda と同じく build 時 literal 置換し env 4KB 上限を回避 (#1308 と同パターン)。
+          "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
+            JSON.stringify(props.problemsCatalog),
+          ),
         },
       },
     });
@@ -170,6 +191,10 @@ export class GenericScoringLambda extends Construct {
     // [ADR-047] scheduled auto-teardown: bulkTeardownEvent が CompetitorAccounts から cross-account
     // role / externalId を解決する (= read-only)。 これで scheduled teardown が有効化される。
     props.competitorAccountsTable.grantReadData(this.fn);
+    // [ADR-047 follow-up] scheduled auto-deploy: bulkDeployEvent が event の teams を Query する
+    // (= read-only)。 Deployments への TransactWrite / event bus publish は既存 grant を再利用する
+    // (deployments.grantReadWriteData + eventBus.grantPutEventsTo)。 これで scheduled deploy が有効化される。
+    props.teamsTable.grantReadData(this.fn);
     // #1422: condition-triggered disruption を event bus に publish する (= events:PutEvents、
     // 当該 bus に scope された least-privilege)。
     props.eventBus.grantPutEventsTo(this.fn);

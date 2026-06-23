@@ -1,6 +1,7 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { QueryCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { bulkTeardownEvent } from "../event-handler/bulk-delete.js";
+import { bulkDeployEvent } from "../event-handler/bulk-deploy.js";
 import type { EventSharedResources } from "../event-handler/shared.js";
 
 /**
@@ -69,6 +70,12 @@ export interface ReconcileEventStatusesContext {
    * `undefined` で、 reconciler は scheduled teardown を skip する (= 後方互換・tick を壊さない)。
    */
   readonly teardownDeps?: EventSharedResources;
+  /**
+   * [ADR-047 follow-up] scheduled auto-deploy を発火するための resources (`bulkDeployEvent` 用)。
+   * `buildScheduledDeployResources()` が返す。 未配線 (= Teams / catalog env 無し) なら `undefined`
+   * で、 reconciler は scheduled deploy を skip する (= 後方互換・tick を壊さない、 teardownDeps の鏡像)。
+   */
+  readonly deployDeps?: EventSharedResources;
 }
 
 /**
@@ -95,6 +102,32 @@ export function resolveScheduledTeardownDue(
   const teardownAtMs = Date.parse(event.teardownAt);
   if (!Number.isFinite(teardownAtMs) || !Number.isFinite(nowMs)) return false;
   return nowMs >= teardownAtMs;
+}
+
+/**
+ * [ADR-047 follow-up] pure: event が「自動デプロイすべき」状態か判定する (teardown の鏡像)。
+ *
+ * 条件: `deployAt` 設定済 かつ `now >= deployAt` かつ status が `DRAFT` (= 未 deploy) かつ
+ * 未発火 (`deployFiredAt` 無し)。
+ *
+ * `DRAFT` 限定にする理由: 一度でも deploy 済 (`DEPLOYING` 以降) の event を自動再 deploy すると
+ * 進行中の競技 stack を再作成しかねないため。 status 遷移 (DRAFT → DEPLOYING、 bulkDeployEvent が
+ * 倒す) が一次の冪等ガードで、 `deployFiredAt` は二重発火防止の補助 (teardownFiredAt と対称)。
+ */
+export function resolveScheduledDeployDue(
+  event: {
+    readonly status?: string;
+    readonly deployAt?: string;
+    readonly deployFiredAt?: string;
+  },
+  nowMs: number,
+): boolean {
+  if (event.deployFiredAt) return false;
+  if (event.status !== "DRAFT") return false;
+  if (!event.deployAt) return false;
+  const deployAtMs = Date.parse(event.deployAt);
+  if (!Number.isFinite(deployAtMs) || !Number.isFinite(nowMs)) return false;
+  return nowMs >= deployAtMs;
 }
 
 /**
@@ -275,15 +308,18 @@ export async function reconcileEventStatuses(
       new ScanCommand({
         TableName: ctx.eventsTableName,
         // [ADR-047] ENDED も拾う (= teardownAt 経過の自動撤去対象)。 teardownAt / teardownFiredAt を投影。
-        ProjectionExpression: "PK, tenantId, eventId, #status, endsAt, teardownAt, teardownFiredAt",
+        // [ADR-047 follow-up] DRAFT も拾う (= deployAt 経過の自動デプロイ対象)。 deployAt / deployFiredAt を投影。
+        ProjectionExpression:
+          "PK, tenantId, eventId, #status, endsAt, teardownAt, teardownFiredAt, deployAt, deployFiredAt",
         ExpressionAttributeNames: { "#status": "status" },
         FilterExpression:
-          "#status = :deploying OR #status = :ready OR #status = :teardown OR #status = :ended",
+          "#status = :deploying OR #status = :ready OR #status = :teardown OR #status = :ended OR #status = :draft",
         ExpressionAttributeValues: {
           ":deploying": "DEPLOYING",
           ":ready": "READY",
           ":teardown": "TEARDOWN",
           ":ended": "ENDED",
+          ":draft": "DRAFT",
         },
         Limit: 100,
         ExclusiveStartKey: exclusiveStartKey,
@@ -297,6 +333,8 @@ export async function reconcileEventStatuses(
       endsAt?: string;
       teardownAt?: string;
       teardownFiredAt?: string;
+      deployAt?: string;
+      deployFiredAt?: string;
     }>;
 
     const nowMs = Date.parse(nowIso);
@@ -316,12 +354,32 @@ async function reconcileSingleEvent(
     readonly endsAt?: string;
     readonly teardownAt?: string;
     readonly teardownFiredAt?: string;
+    readonly deployAt?: string;
+    readonly deployFiredAt?: string;
   },
   nowIso: string,
   nowMs: number,
 ): Promise<void> {
   if (!event.tenantId || !event.eventId || !event.status || !event.PK) return;
   const eventStatus: string = event.status;
+
+  // [ADR-047 follow-up] scheduled auto-deploy: deployAt 経過の DRAFT を自動 deploy。
+  // deployDeps 未配線 (= Teams / catalog env 無し) なら skip (= dormant、 後方互換)。
+  // bulkDeployEvent が status を DRAFT → DEPLOYING に倒すので、 通常遷移より先に発火し early return。
+  if (resolveScheduledDeployDue(event, nowMs) && ctx.deployDeps) {
+    await fireScheduledDeploy(ctx, ctx.deployDeps, {
+      PK: event.PK,
+      tenantId: event.tenantId,
+      eventId: event.eventId,
+      nowMs,
+      nowIso,
+    });
+    return;
+  }
+  // DRAFT は通常の status 遷移対象外 (resolveEventStatusTransition は DRAFT で undefined)。
+  // 自動 deploy が due でない / dormant な DRAFT は子 deployment query 無しで早期 return
+  // (= 未 deploy なので query しても 0 件、 RCU / Lambda 時間の無駄を避ける)。
+  if (eventStatus === "DRAFT") return;
 
   // [ADR-047] scheduled auto-teardown: teardownAt 経過の READY/ENDED を自動撤去 (課金リーク防止)。
   // teardownDeps 未配線 (= CompetitorAccounts env 無し) なら skip (= dormant、 後方互換)。
@@ -480,6 +538,68 @@ async function recordTeardownFired(
   } catch (err) {
     if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return;
     console.warn("[generic-scoring] recordTeardownFired failed", {
+      eventId: args.eventId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * [ADR-047 follow-up] scheduled deploy を発火する (fireScheduledTeardown の鏡像)。 既存
+ * `bulkDeployEvent` を再利用 (= 手動「Deploy」と同一経路: teams × problems の deployment 行を
+ * 一括 PUT し DeployCreateRequested を publish、 Event を DRAFT → DEPLOYING に倒す)。 直後に
+ * deployFiredAt を記録 (= 二重発火防止の補助 + 監査)。 失敗は warn で握り潰す (= 次 tick で再評価。
+ * status guard が一次冪等なので毎分 tick / 採点を巻き込まない)。
+ */
+async function fireScheduledDeploy(
+  ctx: ReconcileEventStatusesContext,
+  deps: EventSharedResources,
+  args: {
+    readonly PK: string;
+    readonly tenantId: string;
+    readonly eventId: string;
+    readonly nowMs: number;
+    readonly nowIso: string;
+  },
+): Promise<void> {
+  try {
+    const outcome = await bulkDeployEvent(deps, args.tenantId, args.eventId, args.nowMs);
+    console.log("[generic-scoring] scheduled auto-deploy fired (ADR-047 follow-up)", {
+      eventId: args.eventId,
+      outcome: outcome.kind,
+      enqueued: outcome.kind === "ok" ? outcome.result.enqueued : undefined,
+    });
+    await recordDeployFired(ctx, args);
+  } catch (err) {
+    console.warn("[generic-scoring] scheduled auto-deploy failed", {
+      eventId: args.eventId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+async function recordDeployFired(
+  ctx: ReconcileEventStatusesContext,
+  args: {
+    readonly PK: string;
+    readonly tenantId: string;
+    readonly eventId: string;
+    readonly nowIso: string;
+  },
+): Promise<void> {
+  try {
+    await ctx.ddb.send(
+      new UpdateCommand({
+        TableName: ctx.eventsTableName,
+        Key: { PK: args.PK, SK: "META" },
+        UpdateExpression: "SET deployFiredAt = :now",
+        ConditionExpression: "tenantId = :tenant AND attribute_not_exists(deployFiredAt)",
+        ExpressionAttributeValues: { ":tenant": args.tenantId, ":now": args.nowIso },
+      }),
+    );
+  } catch (err) {
+    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return;
+    console.warn("[generic-scoring] recordDeployFired failed", {
       eventId: args.eventId,
       message: err instanceof Error ? err.message : String(err),
     });

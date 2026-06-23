@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   resolveEventStatusTransition,
+  resolveScheduledDeployDue,
   resolveScheduledTeardownDue,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/event-reconciler";
 
@@ -70,6 +71,59 @@ describe("resolveScheduledTeardownDue (ADR-047 pure logic)", () => {
   it("should NOT be due when teardownAt is unparseable", () => {
     expect(
       resolveScheduledTeardownDue({ status: "READY", teardownAt: "not-a-date" }, TEARDOWN_NOW_MS),
+    ).toBe(false);
+  });
+});
+
+describe("resolveScheduledDeployDue (ADR-047 follow-up pure logic)", () => {
+  // teardown と同じ now/past/future fixtures を再利用 (= deployAt 経過 / 未到来 / 不在 を表す)。
+  it("should be due when DRAFT + deployAt has passed", () => {
+    expect(
+      resolveScheduledDeployDue({ status: "DRAFT", deployAt: TEARDOWN_PAST }, TEARDOWN_NOW_MS),
+    ).toBe(true);
+  });
+
+  it("should be due when DRAFT + deployAt equals now (boundary inclusive)", () => {
+    const at = "2026-05-08T12:00:00.000Z";
+    expect(resolveScheduledDeployDue({ status: "DRAFT", deployAt: at }, Date.parse(at))).toBe(true);
+  });
+
+  it("should NOT be due once already deployed (DEPLOYING / READY / ENDED / TEARDOWN / ARCHIVED)", () => {
+    for (const status of ["DEPLOYING", "READY", "ENDED", "TEARDOWN", "ARCHIVED"]) {
+      expect(resolveScheduledDeployDue({ status, deployAt: TEARDOWN_PAST }, TEARDOWN_NOW_MS)).toBe(
+        false,
+      );
+    }
+  });
+
+  it("should NOT be due when deployAt is still in the future", () => {
+    expect(
+      resolveScheduledDeployDue({ status: "DRAFT", deployAt: TEARDOWN_FUTURE }, TEARDOWN_NOW_MS),
+    ).toBe(false);
+  });
+
+  it("should NOT be due when deployAt is unset", () => {
+    expect(resolveScheduledDeployDue({ status: "DRAFT" }, TEARDOWN_NOW_MS)).toBe(false);
+  });
+
+  it("should NOT re-fire once deployFiredAt is recorded", () => {
+    expect(
+      resolveScheduledDeployDue(
+        { status: "DRAFT", deployAt: TEARDOWN_PAST, deployFiredAt: TEARDOWN_PAST },
+        TEARDOWN_NOW_MS,
+      ),
+    ).toBe(false);
+  });
+
+  it("should NOT be due when deployAt is unparseable", () => {
+    expect(
+      resolveScheduledDeployDue({ status: "DRAFT", deployAt: "not-a-date" }, TEARDOWN_NOW_MS),
+    ).toBe(false);
+  });
+
+  it("should NOT be due when nowMs is not finite (defense in depth)", () => {
+    expect(
+      resolveScheduledDeployDue({ status: "DRAFT", deployAt: TEARDOWN_PAST }, Number.NaN),
     ).toBe(false);
   });
 });

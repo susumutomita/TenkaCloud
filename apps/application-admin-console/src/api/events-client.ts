@@ -28,6 +28,8 @@ export interface EventSummary {
   endsAt?: string;
   /** [ADR-047] 自動撤去予定時刻 (ISO8601, UTC)。reconciler が `now >= teardownAt` で bulk teardown を自動発火。 */
   teardownAt?: string;
+  /** [ADR-047 follow-up] 自動デプロイ予定時刻 (ISO8601, UTC)。reconciler が `now >= deployAt` で DRAFT event を bulk deploy。 */
+  deployAt?: string;
   /** #558: 採点 lock flag。true なら加点経路全停止 (= 表彰フェーズ)、leaderboard read は許可。 */
   scoringLocked?: boolean;
   /** #558: scoringLocked=true にした時刻 (ISO 8601, UTC)。 */
@@ -196,6 +198,8 @@ export interface SetScheduleResult {
   endsAt?: string;
   /** [ADR-047] teardownAt も指定された場合のみ返る */
   teardownAt?: string;
+  /** [ADR-047 follow-up] deployAt も指定された場合のみ返る */
+  deployAt?: string;
   updatedDeployments: number;
 }
 
@@ -212,6 +216,8 @@ export interface SetEventScheduleBody {
   endsAt?: string;
   /** [ADR-047] 自動撤去予定時刻 (ISO8601)。teardownAt >= endsAt 必須 (backend が検証)。 */
   teardownAt?: string;
+  /** [ADR-047 follow-up] 自動デプロイ予定時刻 (ISO8601)。deployAt <= endsAt 必須 (backend が検証)。 */
+  deployAt?: string;
   /** Issue #1038 P1 #9 follow-up: 0=freeze 無効 / 1〜180=N 分前から freeze */
   scoreboardFreezeMinutes?: number;
 }

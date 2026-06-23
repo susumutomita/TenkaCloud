@@ -118,6 +118,58 @@ export function buildScheduledTeardownResources(): EventSharedResources | undefi
   };
 }
 
+/**
+ * [ADR-047 follow-up] 毎分 reconciler (generic-scoring Lambda) から `bulkDeployEvent` を呼ぶための
+ * `EventSharedResources` (teardown の鏡像)。 bulk deploy は Events / Deployments / Teams /
+ * CompetitorAccounts table と deploy event bus + problem catalog を使う (= teardown より広い)。
+ *
+ * **防御設計**: deploy に必須な env (`TEAMS_TABLE_NAME` + `BATTLE_PROBLEMS_CATALOG` を含む) が
+ * 1 つでも欠けると `undefined` を返す。 これにより generic-scoring Lambda に Teams read grant +
+ * catalog 配線が無い間は scheduled deploy が dormant になり、 毎分 tick / 採点を一切壊さない
+ * (= teardown 配線 (#1910) と同じ段階的有効化モデル)。 `bulkDeployEvent` は teams を Query し
+ * problemsCatalog で problemId→problemDir を解決するため、 teardown の placeholder では不足する。
+ */
+export function buildScheduledDeployResources(): EventSharedResources | undefined {
+  const competitorAccountsTableName = process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
+  const eventsTableName = process.env.EVENTS_TABLE_NAME;
+  const deploymentsTableName = process.env.DEPLOYMENTS_TABLE_NAME;
+  const teamsTableName = process.env.TEAMS_TABLE_NAME;
+  const eventBusName = process.env.DEPLOY_EVENT_BUS_NAME;
+  const env = process.env.DEPLOY_ENVIRONMENT;
+  const problemsCatalog = parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG);
+  if (
+    !competitorAccountsTableName ||
+    !eventsTableName ||
+    !deploymentsTableName ||
+    !teamsTableName ||
+    !eventBusName ||
+    !env ||
+    Object.keys(problemsCatalog).length === 0
+  ) {
+    return undefined;
+  }
+  return {
+    eventsTableName,
+    deploymentsTableName,
+    teamsTableName,
+    competitorAccountsTableName,
+    eventBusName,
+    env,
+    problemsCatalog,
+    ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
+    events: new EventBridgeClient({}),
+    s3: new S3Client({}),
+    scheduler: new SchedulerClient({}),
+    // deploy 未使用 field の placeholder (bulkDeployEvent fan-out 経路は参照しない)。
+    disruptionsTableName: process.env.DISRUPTIONS_TABLE_NAME ?? "",
+    problemsDisruptions: {},
+    // Distributed Map 経路は EventApiLambda 専用 (= S3 bucket env)。 reconciler は旧 fan-out
+    // 経路 (N×M DeployCreateRequested publish) を使うので bucket 不要 / flag は false 固定。
+    bulkDeployPayloadBucket: "",
+    useBulkDistributedMap: false,
+  };
+}
+
 function parseProblemsDisruptions(
   raw: string | undefined,
 ): Readonly<Record<string, readonly ProblemDisruptionEntry[]>> {

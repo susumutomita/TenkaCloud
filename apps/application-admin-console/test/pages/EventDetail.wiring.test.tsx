@@ -72,6 +72,7 @@ vi.mock("../../src/components/event-detail/EventHeaderActions", () => ({
 // EventDangerZone stub: 全 callback prop を 1 button ずつ。
 const DZ_CALLBACKS = [
   "onBulkTeardown",
+  "onDismissDeploySchedule",
   "onDismissEnd",
   "onDismissEndsAt",
   "onDismissForceArchive",
@@ -82,6 +83,7 @@ const DZ_CALLBACKS = [
   "onEndEvent",
   "onForceArchive",
   "onNotificationSuccess",
+  "onScheduleDeploy",
   "onScheduleEnd",
   "onScheduleTeardown",
   "onScheduledStart",
@@ -180,6 +182,10 @@ const makeOperations = () => ({
   confirmEnd: false,
   confirmForceArchive: false,
   confirmTeardown: false,
+  deployDate: "",
+  deployScheduleInFlight: false,
+  deployScheduleModalOpen: false,
+  deployTime: "",
   endInFlight: false,
   endsAtDate: "",
   endsAtInFlight: false,
@@ -195,6 +201,7 @@ const makeOperations = () => ({
   handleForceArchive: vi.fn(),
   handleLockScoring: vi.fn(),
   handleSaveFreezeMinutes: vi.fn(),
+  handleScheduleDeploy: vi.fn(),
   handleScheduleEnd: vi.fn(),
   handleScheduleTeardown: vi.fn(),
   handleScheduledStart: vi.fn(),
@@ -211,6 +218,9 @@ const makeOperations = () => ({
   setConfirmEnd: vi.fn(),
   setConfirmForceArchive: vi.fn(),
   setConfirmTeardown: vi.fn(),
+  setDeployDate: vi.fn(),
+  setDeployScheduleModalOpen: vi.fn(),
+  setDeployTime: vi.fn(),
   setEndsAtDate: vi.fn(),
   setEndsAtModalOpen: vi.fn(),
   setEndsAtTime: vi.fn(),
@@ -348,6 +358,10 @@ describe("EventDetailPage wiring", () => {
     expect(ops.handleScheduleTeardown).toHaveBeenCalled();
     fireEvent.click(screen.getByTestId("dz-onDismissTeardownSchedule"));
     expect(ops.setTeardownModalOpen).toHaveBeenCalledWith(false);
+    fireEvent.click(screen.getByTestId("dz-onScheduleDeploy"));
+    expect(ops.handleScheduleDeploy).toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("dz-onDismissDeploySchedule"));
+    expect(ops.setDeployScheduleModalOpen).toHaveBeenCalledWith(false);
     fireEvent.click(screen.getByTestId("dz-onScheduledStart"));
     expect(ops.handleScheduledStart).toHaveBeenCalled();
     // onNotificationSuccess は modal を閉じて just-sent を立てる (2 setter)。

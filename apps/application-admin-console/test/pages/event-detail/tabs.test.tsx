@@ -36,6 +36,9 @@ vi.mock("../../../src/components/event-detail/EventSchedulePanel", () => ({
       <button type="button" onClick={p.onOpenTeardownModal}>
         open-teardown
       </button>
+      <button type="button" onClick={p.onOpenDeployModal}>
+        open-deploy
+      </button>
       <button type="button" onClick={p.onSaveFreezeMinutes}>
         save-freeze
       </button>
@@ -78,10 +81,12 @@ const operations = (over: Partial<EventOperations> = {}): EventOperations =>
     freezeMinutesInFlight: false,
     freezeMinutesInput: "",
     scheduleInFlight: null,
+    deployScheduleInFlight: false,
     handleEndNowSchedule: vi.fn(),
     setEndsAtModalOpen: vi.fn(),
     setScheduleModalOpen: vi.fn(),
     setTeardownModalOpen: vi.fn(),
+    setDeployScheduleModalOpen: vi.fn(),
     handleSaveFreezeMinutes: vi.fn(),
     handleStartNow: vi.fn(),
     setFreezeMinutesInput: vi.fn(),
@@ -138,6 +143,8 @@ describe("tab wrappers", () => {
     expect(ops.setScheduleModalOpen).toHaveBeenCalledWith(true);
     fireEvent.click(screen.getByText("open-teardown"));
     expect(ops.setTeardownModalOpen).toHaveBeenCalledWith(true);
+    fireEvent.click(screen.getByText("open-deploy"));
+    expect(ops.setDeployScheduleModalOpen).toHaveBeenCalledWith(true);
     fireEvent.click(screen.getByText("save-freeze"));
     expect(ops.handleSaveFreezeMinutes).toHaveBeenCalled();
     fireEvent.click(screen.getByText("start-now"));

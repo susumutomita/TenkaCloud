@@ -74,6 +74,34 @@ export function validateTeardownAtInput(
   return { canSubmit: true, value };
 }
 
+/**
+ * [ADR-047 follow-up] 自動デプロイ予定時刻の入力検証 (validateTeardownAtInput の鏡像)。 過去不可
+ * (now-60s 以前) かつ endsAt 以前 (= deploy → 採点 → 終了 の時系列を保つ)。 endsAt 未設定なら
+ * 上限制約なし。
+ */
+export function validateDeployAtInput(
+  date: string,
+  time: string,
+  endsAt: string | undefined,
+  nowMs: number,
+): EndsAtValidation {
+  if (!date || !time) return { canSubmit: false };
+  const value = new Date(`${date}T${time}:00`);
+  if (Number.isNaN(value.getTime())) {
+    return { canSubmit: false, errorKey: "event_detail.error_deploy_format" };
+  }
+  if (value.getTime() < nowMs - 60_000) {
+    return { canSubmit: false, errorKey: "event_detail.error_deploy_past" };
+  }
+  if (endsAt) {
+    const endsAtMs = new Date(endsAt).getTime();
+    if (Number.isFinite(endsAtMs) && value.getTime() > endsAtMs) {
+      return { canSubmit: false, errorKey: "event_detail.error_deploy_after_ends" };
+    }
+  }
+  return { canSubmit: true, value };
+}
+
 function resolveScheduledStartInput(
   date: string,
   time: string,
@@ -135,6 +163,11 @@ export function useEventOperations(args: {
   const [teardownDate, setTeardownDate] = useState("");
   const [teardownTime, setTeardownTime] = useState("");
   const [teardownInFlight, setTeardownInFlight] = useState(false);
+  // [ADR-047 follow-up] 自動デプロイ予定 modal の state (= teardown modal の鏡像、独立)
+  const [deployScheduleModalOpen, setDeployScheduleModalOpen] = useState(false);
+  const [deployDate, setDeployDate] = useState("");
+  const [deployTime, setDeployTime] = useState("");
+  const [deployScheduleInFlight, setDeployScheduleInFlight] = useState(false);
   const [endInFlight, setEndInFlight] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   // Issue #1038 P1 #9 follow-up: scoreboard freeze 分数の operator 編集 state
@@ -284,6 +317,30 @@ export function useEventOperations(args: {
     }
   };
 
+  const handleScheduleDeploy = async () => {
+    if (!apiClient || !canMutateTenant || deployScheduleInFlight) return;
+    const validation = validateDeployAtInput(deployDate, deployTime, detail?.endsAt, Date.now());
+    if (!validation.canSubmit || !validation.value) {
+      setError(
+        validation.errorKey ? t(validation.errorKey) : t("event_detail.error_deploy_required"),
+      );
+      return;
+    }
+    setDeployScheduleInFlight(true);
+    setError(null);
+    try {
+      await setEventSchedule(apiClient, eventId, { deployAt: validation.value.toISOString() });
+      setDeployScheduleModalOpen(false);
+      setDeployDate("");
+      setDeployTime("");
+      await refresh();
+    } catch (err) {
+      setError(toErrorMessage(err));
+    } finally {
+      setDeployScheduleInFlight(false);
+    }
+  };
+
   const handleSaveFreezeMinutes = async () => {
     if (!apiClient || !canMutateTenant || freezeMinutesInFlight) return;
     const trimmed = freezeMinutesInput.trim();
@@ -380,6 +437,10 @@ export function useEventOperations(args: {
     confirmEnd,
     confirmForceArchive,
     confirmTeardown,
+    deployDate,
+    deployScheduleInFlight,
+    deployScheduleModalOpen,
+    deployTime,
     endInFlight,
     endsAtDate,
     endsAtInFlight,
@@ -395,6 +456,7 @@ export function useEventOperations(args: {
     handleForceArchive,
     handleLockScoring,
     handleSaveFreezeMinutes,
+    handleScheduleDeploy,
     handleScheduleEnd,
     handleScheduleTeardown,
     handleScheduledStart,
@@ -411,6 +473,9 @@ export function useEventOperations(args: {
     setConfirmEnd,
     setConfirmForceArchive,
     setConfirmTeardown,
+    setDeployDate,
+    setDeployScheduleModalOpen,
+    setDeployTime,
     setEndsAtDate,
     setEndsAtModalOpen,
     setEndsAtTime,

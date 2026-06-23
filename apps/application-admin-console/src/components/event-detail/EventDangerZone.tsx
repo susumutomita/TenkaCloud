@@ -46,6 +46,10 @@ export function EventDangerZone({
   confirmEnd,
   confirmForceArchive,
   confirmTeardown,
+  deployDate,
+  deployScheduleInFlight,
+  deployScheduleModalOpen,
+  deployTime,
   detail,
   endsAtDate,
   endsAtErrorText,
@@ -62,6 +66,7 @@ export function EventDangerZone({
   onDismissEnd,
   onDismissEndsAt,
   onDismissForceArchive,
+  onDismissDeploySchedule,
   onDismissNotification,
   onDismissNotificationSuccess,
   onDismissSchedule,
@@ -69,6 +74,7 @@ export function EventDangerZone({
   onEndEvent,
   onForceArchive,
   onNotificationSuccess,
+  onScheduleDeploy,
   onScheduleEnd,
   onScheduledStart,
   scheduleDate,
@@ -77,6 +83,8 @@ export function EventDangerZone({
   scheduleTime,
   onDismissTeardownSchedule,
   onScheduleTeardown,
+  setDeployDate,
+  setDeployTime,
   setEndsAtDate,
   setEndsAtTime,
   setScheduleDate,
@@ -94,6 +102,10 @@ export function EventDangerZone({
   readonly confirmEnd: boolean;
   readonly confirmForceArchive: boolean;
   readonly confirmTeardown: boolean;
+  readonly deployDate: string;
+  readonly deployScheduleInFlight: boolean;
+  readonly deployScheduleModalOpen: boolean;
+  readonly deployTime: string;
   readonly detail: EventDetail | null;
   readonly endsAtDate: string;
   readonly endsAtErrorText: string | undefined;
@@ -107,6 +119,7 @@ export function EventDangerZone({
   readonly notifyJustSent: boolean;
   readonly notifyModalOpen: boolean;
   readonly onBulkTeardown: () => void;
+  readonly onDismissDeploySchedule: () => void;
   readonly onDismissEnd: () => void;
   readonly onDismissEndsAt: () => void;
   readonly onDismissForceArchive: () => void;
@@ -117,6 +130,7 @@ export function EventDangerZone({
   readonly onEndEvent: () => void;
   readonly onForceArchive: () => void;
   readonly onNotificationSuccess: () => void;
+  readonly onScheduleDeploy: () => void;
   readonly onScheduleEnd: () => void;
   readonly onScheduledStart: () => void;
   readonly scheduleDate: string;
@@ -125,6 +139,8 @@ export function EventDangerZone({
   readonly scheduleTime: string;
   readonly onDismissTeardownSchedule: () => void;
   readonly onScheduleTeardown: () => void;
+  readonly setDeployDate: (value: string) => void;
+  readonly setDeployTime: (value: string) => void;
   readonly setEndsAtDate: (value: string) => void;
   readonly setEndsAtTime: (value: string) => void;
   readonly setScheduleDate: (value: string) => void;
@@ -367,6 +383,52 @@ export function EventDangerZone({
               format="hh:mm"
               placeholder="hh:mm"
               onChange={(e) => setTeardownTime(e.detail.value)}
+            />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+
+      <Modal
+        visible={deployScheduleModalOpen}
+        onDismiss={onDismissDeploySchedule}
+        header={t("event_detail.modal_deploy_schedule_header")}
+        size="medium"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button onClick={onDismissDeploySchedule}>{t("event_detail.modal_cancel")}</Button>
+              <Button
+                variant="primary"
+                loading={deployScheduleInFlight}
+                disabled={!canMutateTenant || deployScheduleInFlight}
+                onClick={onScheduleDeploy}
+              >
+                {t("event_detail.modal_deploy_schedule_confirm")}
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="s">
+          <Box>{t("event_detail.modal_deploy_schedule_body")}</Box>
+          {detail?.endsAt && (
+            <Box variant="small" color="text-status-inactive">
+              {t("event_detail.modal_deploy_ends_at_hint")}: <code>{detail.endsAt}</code>
+            </Box>
+          )}
+          <FormField label={t("event_detail.modal_date_label")}>
+            <DatePicker
+              value={deployDate}
+              onChange={(e) => setDeployDate(e.detail.value)}
+              placeholder="YYYY/MM/DD"
+            />
+          </FormField>
+          <FormField label={t("event_detail.modal_time_label")}>
+            <TimeInput
+              value={deployTime}
+              format="hh:mm"
+              placeholder="hh:mm"
+              onChange={(e) => setDeployTime(e.detail.value)}
             />
           </FormField>
         </SpaceBetween>

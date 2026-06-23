@@ -172,9 +172,30 @@ describe("ProblemDeployBackendStack (MVP-1) — GenericScoring Lambda", () => {
     expect(vars.DISRUPTIONS_TABLE_NAME).toBeDefined();
     // [ADR-047] scheduled auto-teardown を有効化する CompetitorAccounts table 名 env。
     expect(vars.COMPETITOR_ACCOUNTS_TABLE_NAME).toBeDefined();
+    // [ADR-047 follow-up] scheduled auto-deploy を有効化する Teams table 名 env。
+    expect(vars.TEAMS_TABLE_NAME).toBeDefined();
     expect(vars.BATTLE_PROBLEMS_SCORING).toBeUndefined();
     expect(vars.PROBLEM_ENDPOINTS).toBeUndefined();
     expect(vars.BATTLE_PROBLEMS_PHASES).toBeUndefined();
+    // [ADR-047 follow-up] catalog は esbuild define で build 時 literal 化するので env からは除く。
+    expect(vars.BATTLE_PROBLEMS_CATALOG).toBeUndefined();
+  });
+
+  it("GenericScoring Lambda role should be granted read on the Teams table (#ADR-047 follow-up scheduled deploy)", () => {
+    // scheduled auto-deploy が bulkDeployEvent で event の teams を Query する (= read-only)。
+    // grantReadData が dynamodb:Query / GetItem を出すことを pin。
+    const policies = tpl.findResources("AWS::IAM::Policy");
+    const hasTeamsRead = Object.values(policies).some((p) => {
+      const statements =
+        (p as { Properties?: { PolicyDocument?: { Statement?: unknown[] } } }).Properties
+          ?.PolicyDocument?.Statement ?? [];
+      return statements.some((s) => {
+        const action = (s as { Action?: string | string[] }).Action;
+        const actions = Array.isArray(action) ? action : [action];
+        return actions.includes("dynamodb:Query") || actions.includes("dynamodb:GetItem");
+      });
+    });
+    expect(hasTeamsRead).toBe(true);
   });
 
   it("GenericScoring Lambda should receive the deploy event bus name for condition-triggered disruptions (#1422)", () => {

@@ -15,11 +15,13 @@ type Translate = (key: string, params?: Readonly<Record<string, string | number>
 export function EventSchedulePanel({
   apiClient,
   canMutateTenant,
+  deployScheduleInFlight,
   detail,
   endsAtInFlight,
   freezeMinutesInFlight,
   freezeMinutesInput,
   onEndNowSchedule,
+  onOpenDeployModal,
   onOpenEndsAtModal,
   onOpenScheduleModal,
   onOpenTeardownModal,
@@ -33,11 +35,13 @@ export function EventSchedulePanel({
 }: {
   readonly apiClient: ApiClient | null;
   readonly canMutateTenant: boolean;
+  readonly deployScheduleInFlight: boolean;
   readonly detail: EventDetail;
   readonly endsAtInFlight: boolean;
   readonly freezeMinutesInFlight: boolean;
   readonly freezeMinutesInput: string;
   readonly onEndNowSchedule: () => void;
+  readonly onOpenDeployModal: () => void;
   readonly onOpenEndsAtModal: () => void;
   readonly onOpenScheduleModal: () => void;
   readonly onOpenTeardownModal: () => void;
@@ -139,6 +143,28 @@ export function EventSchedulePanel({
               onClick={onSaveFreezeMinutes}
             >
               {t("event_detail.freeze_save")}
+            </Button>
+          </SpaceBetween>
+        </Field>
+      </Box>
+      <Box margin={{ top: "m" }}>
+        {/* [ADR-047 follow-up] 自動デプロイ予定時刻。 設定すると reconciler が時刻到来で DRAFT event を
+            bulk deploy し、 開始直前の手動 deploy 操作を不要にする。 即時 deploy は別途「Deploy」を使う。 */}
+        <Field label={t("event_detail.deploy_at_label")}>
+          <SpaceBetween size="xs">
+            {detail.deployAt ? (
+              <code>{detail.deployAt}</code>
+            ) : (
+              <Box variant="small" color="text-status-inactive">
+                {t("event_detail.deploy_at_unset")}
+              </Box>
+            )}
+            <Button
+              onClick={onOpenDeployModal}
+              loading={deployScheduleInFlight}
+              disabled={!apiClient || !canMutateTenant || deployScheduleInFlight}
+            >
+              {t("event_detail.deploy_at_pick")}
             </Button>
           </SpaceBetween>
         </Field>

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { type ApiClient, ApiError } from "../../src/api/client";
 import {
   useEventOperations,
+  validateDeployAtInput,
   validateEndsAtInput,
   validateTeardownAtInput,
 } from "../../src/hooks/useEventOperations";
@@ -88,6 +89,31 @@ describe("validateTeardownAtInput (ADR-047)", () => {
     expect(validateTeardownAtInput("2999-01-01", "10:00", undefined, NOW).canSubmit).toBe(true);
     // endsAt が unparseable なら before-ends チェックを skip → 通る。
     expect(validateTeardownAtInput("2999-01-01", "10:00", "garbage", NOW).canSubmit).toBe(true);
+  });
+});
+
+describe("validateDeployAtInput (ADR-047 follow-up)", () => {
+  const NOW = new Date("2026-05-05T10:00:00.000Z").getTime();
+  it("should reject empty / invalid / past / after-ends and accept a valid future deploy", () => {
+    expect(validateDeployAtInput("", "", undefined, NOW)).toEqual({ canSubmit: false });
+    expect(validateDeployAtInput("2026-13-40", "99:99", undefined, NOW).errorKey).toBe(
+      "event_detail.error_deploy_format",
+    );
+    expect(validateDeployAtInput("2020-01-01", "00:00", undefined, NOW).errorKey).toBe(
+      "event_detail.error_deploy_past",
+    );
+    // 未来だが endsAt より後 → after_ends (deploy は終了より前)。
+    expect(
+      validateDeployAtInput("2999-12-31", "23:59", "2999-01-01T00:00:00.000Z", NOW).errorKey,
+    ).toBe("event_detail.error_deploy_after_ends");
+    // endsAt 不在なら上限制約なし → 通る。
+    expect(validateDeployAtInput("2999-01-01", "10:00", undefined, NOW).canSubmit).toBe(true);
+    // endsAt が unparseable なら after-ends チェックを skip → 通る。
+    expect(validateDeployAtInput("2999-01-01", "10:00", "garbage", NOW).canSubmit).toBe(true);
+    // 未来かつ endsAt 以前 → 通る。
+    expect(
+      validateDeployAtInput("2999-01-01", "10:00", "2999-12-31T23:59:59.000Z", NOW).canSubmit,
+    ).toBe(true);
   });
 });
 
@@ -283,6 +309,64 @@ describe("useEventOperations — scheduling", () => {
       await result.current.handleScheduleTeardown();
     });
     expect(setError).toHaveBeenCalledWith("teardown-sched-str");
+  });
+
+  it("should validate the deploy input (required + errorKey) before scheduling (ADR-047 follow-up)", async () => {
+    const { result, setError } = setup();
+    // 空入力 → required key。
+    await act(async () => {
+      await result.current.handleScheduleDeploy();
+    });
+    expect(setError).toHaveBeenCalledWith("event_detail.error_deploy_required");
+    // 不正 ISO → errorKey 付き。
+    act(() => {
+      result.current.setDeployDate("2026-13-40");
+      result.current.setDeployTime("99:99");
+    });
+    await act(async () => {
+      await result.current.handleScheduleDeploy();
+    });
+    expect(setError).toHaveBeenCalledWith("event_detail.error_deploy_format");
+    expect(ops.setEventSchedule).not.toHaveBeenCalled();
+  });
+
+  it("should schedule a valid deploy and clear its modal on success (ADR-047 follow-up)", async () => {
+    ops.setEventSchedule.mockResolvedValue(undefined);
+    const { result } = setup();
+    act(() => {
+      result.current.setDeployDate("2999-01-01");
+      result.current.setDeployTime("10:00");
+      result.current.setDeployScheduleModalOpen(true);
+    });
+    await act(async () => {
+      await result.current.handleScheduleDeploy();
+    });
+    expect(ops.setEventSchedule).toHaveBeenCalledWith(CLIENT, "evt-1", {
+      deployAt: expect.any(String),
+    });
+    expect(result.current.deployScheduleModalOpen).toBe(false);
+  });
+
+  it("should surface deploy schedule errors (Error + non-Error) (ADR-047 follow-up)", async () => {
+    const { result, setError } = setup();
+    act(() => {
+      result.current.setDeployDate("2999-01-01");
+      result.current.setDeployTime("10:00");
+    });
+    ops.setEventSchedule.mockRejectedValueOnce(new Error("deploy-sched boom"));
+    await act(async () => {
+      await result.current.handleScheduleDeploy();
+    });
+    expect(setError).toHaveBeenCalledWith("deploy-sched boom");
+    act(() => {
+      result.current.setDeployDate("2999-01-01");
+      result.current.setDeployTime("10:00");
+    });
+    ops.setEventSchedule.mockRejectedValueOnce("deploy-sched-str");
+    await act(async () => {
+      await result.current.handleScheduleDeploy();
+    });
+    expect(setError).toHaveBeenCalledWith("deploy-sched-str");
   });
 });
 
@@ -537,6 +621,7 @@ describe("useEventOperations — guards", () => {
       await result.current.handleScheduledStart();
       await result.current.handleScheduleEnd();
       await result.current.handleScheduleTeardown();
+      await result.current.handleScheduleDeploy();
       await result.current.handleEndNowSchedule();
       await result.current.handleSaveFreezeMinutes();
       await result.current.handleLockScoring();
@@ -554,6 +639,8 @@ describe("useEventOperations — guards", () => {
       result.current.setScheduleTime("10:00");
       result.current.setEndsAtDate("2999-01-01");
       result.current.setEndsAtTime("10:00");
+      result.current.setDeployDate("2999-01-01");
+      result.current.setDeployTime("10:00");
       result.current.setFreezeMinutesInput("10");
     });
     await act(async () => {
@@ -563,6 +650,7 @@ describe("useEventOperations — guards", () => {
       await result.current.handleScheduledStart();
       await result.current.handleScheduleEnd();
       await result.current.handleScheduleTeardown();
+      await result.current.handleScheduleDeploy();
       await result.current.handleEndNowSchedule();
       await result.current.handleSaveFreezeMinutes();
       await result.current.handleLockScoring();
