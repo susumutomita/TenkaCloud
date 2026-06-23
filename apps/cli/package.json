@@ -9,6 +9,7 @@
   },
   "scripts": {
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.include='src/**' --coverage.exclude='**/*.test.ts*'",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

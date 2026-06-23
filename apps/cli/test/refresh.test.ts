@@ -85,6 +85,115 @@ describe("refreshTokens", () => {
     ).rejects.toBeInstanceOf(RefreshError);
   });
 
+  it("should throw RefreshError without calling fetch when refresh_token is empty", async () => {
+    const fetchImpl = vi.fn();
+    await expect(
+      refreshTokens(makeTokens({ refreshToken: "" }), {
+        hostedUiDomain: "https://auth.example.com",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      }),
+    ).rejects.toMatchObject({
+      name: "RefreshError",
+      message: expect.stringContaining("refresh_token"),
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("should wrap a network error into a RefreshError carrying the cause", async () => {
+    const netErr = new Error("ECONNREFUSED");
+    const fetchImpl = vi.fn(async () => {
+      throw netErr;
+    });
+    let captured: RefreshError | undefined;
+    try {
+      await refreshTokens(makeTokens(), {
+        hostedUiDomain: "https://auth.example.com",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      });
+    } catch (err) {
+      captured = err as RefreshError;
+    }
+    expect(captured).toBeInstanceOf(RefreshError);
+    expect(captured?.message).toContain("network error");
+    expect(captured?.cause).toBe(netErr);
+  });
+
+  it("should throw RefreshError when the response omits required fields", async () => {
+    // ok response but missing access_token / id_token / expires_in.
+    const fetchImpl = vi.fn(
+      async () => new Response(JSON.stringify({ token_type: "Bearer" }), { status: 200 }),
+    );
+    await expect(
+      refreshTokens(makeTokens(), {
+        hostedUiDomain: "https://auth.example.com",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      }),
+    ).rejects.toMatchObject({
+      name: "RefreshError",
+      message: expect.stringContaining("不正"),
+    });
+  });
+
+  it("should throw RefreshError when the response body is not JSON", async () => {
+    // res.json() rejects → caught into {} → missing-field guard throws.
+    const fetchImpl = vi.fn(async () => new Response("not-json", { status: 200 }));
+    await expect(
+      refreshTokens(makeTokens(), {
+        hostedUiDomain: "https://auth.example.com",
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      }),
+    ).rejects.toBeInstanceOf(RefreshError);
+  });
+
+  it("should fall back to the global fetch when fetchImpl is not provided", async () => {
+    const globalFetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            access_token: "g-access",
+            id_token: "g-id",
+            refresh_token: "g-rt",
+            expires_in: 3600,
+          }),
+          { status: 200 },
+        ),
+    );
+    vi.stubGlobal("fetch", globalFetch);
+    try {
+      const refreshed = await refreshTokens(makeTokens(), {
+        hostedUiDomain: "https://auth.example.com",
+        nowSec: () => 500,
+      });
+      expect(refreshed.accessToken).toBe("g-access");
+      expect(refreshed.expiresAt).toBe(500 + 3600);
+      expect(globalFetch).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("should compute expiresAt from wall-clock now when nowSec is not provided", async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            access_token: "a",
+            id_token: "b",
+            expires_in: 100,
+          }),
+          { status: 200 },
+        ),
+    );
+    const before = Math.floor(Date.now() / 1000);
+    const refreshed = await refreshTokens(makeTokens(), {
+      hostedUiDomain: "https://auth.example.com",
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const after = Math.floor(Date.now() / 1000);
+    expect(refreshed.expiresAt).toBeGreaterThanOrEqual(before + 100);
+    expect(refreshed.expiresAt).toBeLessThanOrEqual(after + 100);
+  });
+
   it("should keep prior refresh_token if response omits it (Cognito non-rotation)", async () => {
     const fetchImpl = vi.fn(
       async () =>

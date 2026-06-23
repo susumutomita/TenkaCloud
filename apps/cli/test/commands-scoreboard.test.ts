@@ -62,6 +62,40 @@ describe("runScoreboard", () => {
     });
     expect(captured[0]).toContain("rank,teamId");
   });
+
+  it("should throw when <eventId> positional is missing", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify([]), { status: 200 }));
+    await expect(
+      runScoreboard([], {
+        auth: { hostedUiDomain: "https://auth", fetchImpl: fetchImpl as never },
+        env: ENV,
+        out,
+      }),
+    ).rejects.toThrow(/<eventId>/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("should fall back to console.log + process.env when out/env omitted", async () => {
+    const fetchImpl = vi.fn(
+      async () => new Response(JSON.stringify([{ teamId: "t9", score: 5 }]), { status: 200 }),
+    );
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    process.env.TENKACLOUD_API_BASE_EVENT = "https://event.fallback.com";
+    try {
+      const code = await runScoreboard(["e2"], {
+        auth: { hostedUiDomain: "https://auth", fetchImpl: fetchImpl as never },
+      });
+      expect(code).toBe(0);
+      expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+        "https://event.fallback.com/events/e2/scoreboard",
+      );
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      expect(String(logSpy.mock.calls[0]?.[0])).toContain("t9");
+    } finally {
+      logSpy.mockRestore();
+      delete process.env.TENKACLOUD_API_BASE_EVENT;
+    }
+  });
 });
 
 describe("runScoreEvents", () => {
@@ -77,5 +111,49 @@ describe("runScoreEvents", () => {
     expect(url).toContain("team=t1");
     expect(url).toContain("from=2026-01-01");
     expect(url).toContain("to=2026-01-02");
+  });
+
+  it("should GET score-events without query string when no filters given", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify([]), { status: 200 }));
+    const code = await runScoreEvents(["e1"], {
+      auth: { hostedUiDomain: "https://auth", fetchImpl: fetchImpl as never },
+      env: ENV,
+      out,
+    });
+    expect(code).toBe(0);
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      "https://event.example.com/events/e1/score-events",
+    );
+  });
+
+  it("should throw when <eventId> positional is missing", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify([]), { status: 200 }));
+    await expect(
+      runScoreEvents([], {
+        auth: { hostedUiDomain: "https://auth", fetchImpl: fetchImpl as never },
+        env: ENV,
+        out,
+      }),
+    ).rejects.toThrow(/<eventId>/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("should fall back to console.log + process.env when out/env omitted", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify([]), { status: 200 }));
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    process.env.TENKACLOUD_API_BASE_EVENT = "https://event.fallback.com";
+    try {
+      const code = await runScoreEvents(["e3"], {
+        auth: { hostedUiDomain: "https://auth", fetchImpl: fetchImpl as never },
+      });
+      expect(code).toBe(0);
+      expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+        "https://event.fallback.com/events/e3/score-events",
+      );
+      expect(logSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      logSpy.mockRestore();
+      delete process.env.TENKACLOUD_API_BASE_EVENT;
+    }
   });
 });
