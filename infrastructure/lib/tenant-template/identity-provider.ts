@@ -3,6 +3,10 @@ import { Construct } from "constructs";
 import type { IdentityDetails } from "../interfaces/identity-details.js";
 import type { CustomDomainConfig } from "../security/cloudfront-custom-domain.js";
 import { attachCognitoCustomLoginDomain } from "../security/cognito-custom-domain.js";
+import {
+  buildInkManagedLoginAssets,
+  buildInkManagedLoginSettings,
+} from "../shared/managed-login-branding.js";
 
 // Cognito InviteMessageTemplate の placeholder。{username} は admin-create-user 時に
 // 指定したユーザー名、{####} は Cognito 自動生成の一時パスワードに置換される。
@@ -313,12 +317,12 @@ export class IdentityProvider extends Construct {
     // CfnUserPoolUICustomizationAttachment + cognito-hosted-ui.css (#1987 / #1989) を置換する。
     // Managed login branding は userPoolId + clientId に紐づく。
     //
-    // ink 色トークン / Summit ロゴの厳密な `settings` / `assets` は巨大 JSON Document であり、
-    // AWS の定石が live `DescribeManagedLoginBrandingByClient`(ReturnMergedResources=true) を
-    // 起点に編集 → 投入する deploy 反復前提のため (#1990 epic の cross-cutting constraint)、
-    // 本 Phase では `useCognitoProvidedValues` で Cognito 既定値の valid な managed login を
-    // 立ち上げる (= 崩れていた classic からの確実な改善)。 ink / ロゴの pixel 一致は後続フェーズで
-    // settings/assets を投入する。
+    // ブランディングは ink テーマ + Summit ロゴ。 厳密な settings は巨大 JSON Document だが、
+    // Cognito は **指定しなかったトークンを既定値のまま保持する** (= partial settings は valid)
+    // ため、 ink ブランドトークンだけを上書きする最小 settings を `shared/managed-login-branding.ts`
+    // から取得して投入する (Control Plane #1992 と共有)。 `settings`/`assets` を渡す場合
+    // `useCognitoProvidedValues` は **排他** なので省略する。 pixel 一致は Cognito console の
+    // branding editor で微調整する前提。
     //
     // managed login の表示には domain (managedLoginVersion=2) が先に存在している必要があるため
     // 明示的に依存を張る (branding は userPoolId / clientId しか参照せず CFn が順序を推論できない)。
@@ -328,7 +332,8 @@ export class IdentityProvider extends Construct {
       {
         userPoolId: this.tenantUserPool.userPoolId,
         clientId: this.tenantUserPoolClient.userPoolClientId,
-        useCognitoProvidedValues: true,
+        settings: buildInkManagedLoginSettings(),
+        assets: buildInkManagedLoginAssets(),
       },
     );
     managedLoginBranding.node.addDependency(this.tenantUserPoolDomain);

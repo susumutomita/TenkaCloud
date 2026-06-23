@@ -45,17 +45,47 @@ describe("IdentityProvider", () => {
     });
 
     it("Issue #1991: should brand tenant login via Managed login branding (replacing classic UICustomization)", () => {
-      // Managed login branding は userPoolId + clientId に紐づく。 厳密な ink/ロゴ settings は
-      // live Describe 反復前提のため、 まず Cognito 既定値 (UseCognitoProvidedValues) で
-      // valid な managed login を立ち上げる (Phase 1a)。
+      // Managed login branding は userPoolId + clientId に紐づく。 ink テーマの partial settings
+      // + Summit ロゴを投入する (Cognito 既定値に merge される)。 settings/assets を渡すので
+      // UseCognitoProvidedValues は排他で省略される。
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       template.resourceCountIs("AWS::Cognito::ManagedLoginBranding", 1);
       template.hasResourceProperties(
         "AWS::Cognito::ManagedLoginBranding",
         Match.objectLike({
-          UseCognitoProvidedValues: true,
+          // primary "Sign in" button が ink 背景 + white text (ink テーマの核)。
+          Settings: Match.objectLike({
+            components: Match.objectLike({
+              primaryButton: Match.objectLike({
+                lightMode: Match.objectLike({
+                  defaults: { backgroundColor: "1d1d1fff", textColor: "ffffffff" },
+                }),
+              }),
+              pageBackground: Match.objectLike({
+                lightMode: { color: "1d1d1fff" },
+              }),
+              form: Match.objectLike({
+                lightMode: Match.objectLike({ backgroundColor: "ffffffff" }),
+              }),
+            }),
+          }),
+          // Summit ロゴが FORM_LOGO として attach されている。
+          Assets: Match.arrayWith([
+            Match.objectLike({
+              Category: "FORM_LOGO",
+              ColorMode: "LIGHT",
+              Extension: "SVG",
+            }),
+          ]),
         }),
       );
+    });
+
+    it("Issue #1991: Managed login branding should not set UseCognitoProvidedValues (mutually exclusive with settings/assets)", () => {
+      const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
+      const brandings = template.findResources("AWS::Cognito::ManagedLoginBranding");
+      const props = Object.values(brandings)[0]?.Properties ?? {};
+      expect(props.UseCognitoProvidedValues).toBeUndefined();
     });
 
     it("Issue #1991: classic Hosted UI CSS customization should be removed", () => {

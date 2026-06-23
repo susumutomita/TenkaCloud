@@ -8,9 +8,10 @@ export JSII_DEPRECATED := quiet
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install_ci submodule-latest build typecheck test test-coverage coverage-gate clean-test-outdir check before-commit beforecommit \
+.PHONY: help install install_ci submodule-latest build typecheck test test-coverage coverage-gate clean-test-outdir check before-commit \
         build-docs check-docs oss-notices check-oss-notices audit-deps build-problems-index check-problems-index \
         cost-catalog check-cost-catalog \
+        validate-problems verify-attacks \
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
@@ -21,6 +22,7 @@ export JSII_DEPRECATED := quiet
         deploy-docker destroy-docker docker-shell docker-build \
         deploy-battles destroy-battles \
         lite-up lite-down lite-status lite-portal-url lite-console-url \
+        local-up local-serve local-open local-status local-evaluate local-down local dev dev-admin dev-app-admin dev-portal \
         ops-health
 
 help:
@@ -103,8 +105,11 @@ audit-deps:    ; bun run audit:dependencies
 # ため、 本体 before-commit / check からは外す。 platform 側 build:problems-index を走らせると
 # catalog repo の biome JSON formatter (= 別 lock 版) と微妙な drift が出てしまうため、
 # index.json の正本性は catalog 側で担保する設計。
-check:         install lint test validate-problems check-docs check-oss-notices check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-name-limits check-no-conflicts audit-deps check-synth
-before-commit: lint test validate-problems check-docs check-oss-notices check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-name-limits check-no-conflicts audit-deps check-synth
+# Shared pre-PR gate list. `check` prepends `install`; `before-commit` assumes deps are present.
+# Keep this single list authoritative so the two gates can never drift apart.
+GATE_CHECKS := lint test validate-problems check-docs check-oss-notices check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-name-limits check-no-conflicts audit-deps check-synth
+check:         install $(GATE_CHECKS)
+before-commit: $(GATE_CHECKS)
 
 # `cdk synth` が通ることを保証 (= ts-node / tsx の module resolution、 stack 構築の type error
 # 等を本番 deploy 前にキャッチ)。 Makefile placeholder env で全 stack を synth するので AWS 認証は不要。
@@ -299,6 +304,27 @@ lite-down:         ; bun run scripts/tenkacloud-lite.ts down
 lite-status:       ; bun run scripts/tenkacloud-lite.ts status
 lite-portal-url:   ; bun run scripts/tenkacloud-lite.ts portal-url
 lite-console-url:  ; bun run scripts/tenkacloud-lite.ts console-url
+
+# ===== Local development (no AWS) =====
+# Issue #1975: `tenkacloud local` runs only the Participant Portal against a local node:http
+# backend (no AWS / Cognito / SBT). Distinct from lite-* (AWS deploy).
+LOCAL_CLI = bun run apps/cli/bin/tenkacloud.ts local
+
+local-up:       ; $(LOCAL_CLI) up $(PROBLEM)
+local-serve:    ; $(LOCAL_CLI) serve
+local-open:     ; $(LOCAL_CLI) open
+local-status:   ; $(LOCAL_CLI) status
+local-evaluate: ; $(LOCAL_CLI) evaluate $(PROBLEM) $(FLAG)
+local-down:     ; $(LOCAL_CLI) down
+# Combined: start the local API, then the participant-portal dev server (foreground).
+local: local-up
+	cd apps/participant-portal && bun run dev
+# Start all 3 SPA dev servers in parallel (admin :5173 / app-admin :5174 / portal :5175).
+dev:
+	$(MAKE) -j3 dev-admin dev-app-admin dev-portal
+dev-admin:     ; cd apps/admin-console && bun run dev
+dev-app-admin: ; cd apps/application-admin-console && bun run dev
+dev-portal:    ; cd apps/participant-portal && bun run dev
 
 # ===== Ops observation (read-only CLI for AI / operator) =====
 # Issue #952: AI 無人運用の足場。 全 TenkaCloud stack の状態を 1 コマンドで観察する
