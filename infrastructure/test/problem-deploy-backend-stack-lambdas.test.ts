@@ -183,19 +183,32 @@ describe("ProblemDeployBackendStack (MVP-1) — GenericScoring Lambda", () => {
 
   it("GenericScoring Lambda role should be granted read on the Teams table (#ADR-047 follow-up scheduled deploy)", () => {
     // scheduled auto-deploy が bulkDeployEvent で event の teams を Query する (= read-only)。
-    // grantReadData が dynamodb:Query / GetItem を出すことを pin。
+    // CodeRabbit #2010: 「どこかの policy に dynamodb:Query があれば pass」では Teams grant の
+    // 回帰を捕まえられないので、 (a) GenericScoring role の policy に限定し、 (b) Resource が
+    // Teams table の Arn を指す statement に scope して pin する。
+    const teamsTableId = Object.keys(tpl.findResources("AWS::DynamoDB::Table")).find((id) =>
+      id.startsWith("Teams"),
+    );
+    expect(teamsTableId).toBeDefined();
+
     const policies = tpl.findResources("AWS::IAM::Policy");
-    const hasTeamsRead = Object.values(policies).some((p) => {
+    const grantsTeamsRead = Object.entries(policies).some(([name, p]) => {
+      if (!name.includes("GenericScoring")) return false;
       const statements =
         (p as { Properties?: { PolicyDocument?: { Statement?: unknown[] } } }).Properties
           ?.PolicyDocument?.Statement ?? [];
       return statements.some((s) => {
         const action = (s as { Action?: string | string[] }).Action;
         const actions = Array.isArray(action) ? action : [action];
-        return actions.includes("dynamodb:Query") || actions.includes("dynamodb:GetItem");
+        if (!actions.includes("dynamodb:Query")) return false;
+        const resource = (s as { Resource?: unknown }).Resource;
+        const resources = Array.isArray(resource) ? resource : [resource];
+        return resources.some(
+          (r) => (r as { "Fn::GetAtt"?: unknown[] })?.["Fn::GetAtt"]?.[0] === teamsTableId,
+        );
       });
     });
-    expect(hasTeamsRead).toBe(true);
+    expect(grantsTeamsRead).toBe(true);
   });
 
   it("GenericScoring Lambda should receive the deploy event bus name for condition-triggered disruptions (#1422)", () => {
