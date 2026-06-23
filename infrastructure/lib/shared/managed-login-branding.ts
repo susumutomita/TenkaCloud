@@ -76,6 +76,13 @@ export function buildInkManagedLoginSettings(): Record<string, unknown> {
       buttons: {
         borderRadius: 8.0,
       },
+      // white カード上の入力欄サブテキストを ink3 に。 inputDescription は componentClasses 配下が正
+      // (components 配下に置くと UnknownProperty で managed login の deploy が UPDATE_FAILED になる)。
+      inputDescription: {
+        lightMode: {
+          textColor: INK3,
+        },
+      },
     },
     components: {
       // ページ背景を ink アクセントに。
@@ -128,12 +135,6 @@ export function buildInkManagedLoginSettings(): Record<string, unknown> {
           background: {
             color: INK,
           },
-        },
-      },
-      // white カード上のサブテキスト系を ink3 に揃える (links は Cognito 既定のまま)。
-      inputDescription: {
-        lightMode: {
-          textColor: INK3,
         },
       },
     },
