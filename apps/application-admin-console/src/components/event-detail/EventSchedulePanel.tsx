@@ -62,6 +62,10 @@ function DeployTeardownFields({
   const closeRedeploy = () => setConfirmRedeploy(false);
   const expectedDeployCount = detail.teams.length * detail.problems.length;
   const allDeployed = expectedDeployCount > 0 && totalDeployCount >= expectedDeployCount;
+  // 予約デプロイ (deployAt) は reconciler が DRAFT (未デプロイ) でしか発火しない (deploy 済 event の
+  // 自動再 deploy = 進行中 stack 再作成を防ぐため)。 deploy 後に予約時刻を設定させると永久に発火しない
+  // 「死に設定」になり、 endsAt 比較の 400 まで誘発して混乱するので、 予約 UI は DRAFT 限定にする。
+  const isDraft = detail.status === "DRAFT";
   const deployNowDisabled =
     !apiClient ||
     !canMutateTenant ||
@@ -76,21 +80,29 @@ function DeployTeardownFields({
             bulk deploy し、 開始直前の手動 deploy 操作を不要にする。 即時 deploy は「即座にデプロイ」を使う。 */}
         <Field label={t("event_detail.deploy_at_label")}>
           <SpaceBetween size="xs">
-            {detail.deployAt ? (
-              <code>{detail.deployAt}</code>
+            {isDraft ? (
+              detail.deployAt ? (
+                <code>{detail.deployAt}</code>
+              ) : (
+                <Box variant="small" color="text-status-inactive">
+                  {t("event_detail.deploy_at_unset")}
+                </Box>
+              )
             ) : (
               <Box variant="small" color="text-status-inactive">
-                {t("event_detail.deploy_at_unset")}
+                {t("event_detail.deploy_at_after_deploy_hint")}
               </Box>
             )}
             <SpaceBetween direction="horizontal" size="xs">
-              <Button
-                onClick={onOpenDeployModal}
-                loading={deployScheduleInFlight}
-                disabled={!apiClient || !canMutateTenant || deployScheduleInFlight}
-              >
-                {t("event_detail.deploy_at_pick")}
-              </Button>
+              {isDraft && (
+                <Button
+                  onClick={onOpenDeployModal}
+                  loading={deployScheduleInFlight}
+                  disabled={!apiClient || !canMutateTenant || deployScheduleInFlight}
+                >
+                  {t("event_detail.deploy_at_pick")}
+                </Button>
+              )}
               <Button
                 variant={wizard?.primary === "deploy" ? "primary" : "normal"}
                 loading={bulkInFlight === "deploy" || bulkInFlight === "redeploy"}

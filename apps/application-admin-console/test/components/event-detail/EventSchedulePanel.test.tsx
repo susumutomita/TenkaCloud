@@ -36,7 +36,8 @@ const props = (over: Partial<Props> = {}): Props => ({
     teardownAt: "2026-01-03T00:00:00Z",
     deployAt: "2025-12-31T00:00:00Z",
     scoreboardFreezeMinutes: 5,
-    status: "READY",
+    // DRAFT (未デプロイ) を基準に: 予約デプロイ UI は DRAFT でのみ出る (deploy 済では死に設定になる)。
+    status: "DRAFT",
     teams: [{ internalSlug: "t" }],
     problems: [{ problemId: "p" }],
   } as unknown as EventDetail,
@@ -153,6 +154,28 @@ describe("EventSchedulePanel", () => {
     expect(btn("event_detail.freeze_save")).toBeDisabled();
     // team / problem が 0 件 → 即座にデプロイ は無効。
     expect(btn("event_detail.deploy_at_now")).toBeDisabled();
+  });
+
+  it("should hide scheduled-deploy once deployed (non-DRAFT) and show the after-deploy hint", () => {
+    // 予約デプロイは reconciler が DRAFT でしか発火しないので、 deploy 済 (READY 等) では予約 UI を
+    // 出さず hint に切り替える (= 死に設定 + endsAt 比較 400 を作らせない)。 即座にデプロイは残す。
+    renderPanel({
+      detail: {
+        deployAt: "2025-12-31T00:00:00Z",
+        teardownAt: undefined,
+        status: "READY",
+        teams: [{ internalSlug: "t" }],
+        problems: [{ problemId: "p" }],
+      } as unknown as EventDetail,
+    });
+    expect(screen.getByText("event_detail.deploy_at_after_deploy_hint")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "event_detail.deploy_at_pick" }),
+    ).not.toBeInTheDocument();
+    // 死に設定を見せないため deployAt の生時刻も出さない。
+    expect(screen.queryByText("2025-12-31T00:00:00Z")).not.toBeInTheDocument();
+    // 即座にデプロイ (= 手動 deploy / redeploy) は残る。
+    expect(btn("event_detail.deploy_at_now")).toBeInTheDocument();
   });
 
   it("should disable every action when the API client is unavailable", () => {
