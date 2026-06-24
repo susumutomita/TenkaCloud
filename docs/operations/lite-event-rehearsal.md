@@ -69,15 +69,16 @@ Lite mode で「1 運営者が 6〜10 チームのイベントを最短で安全
 
 | メトリクス | 取得方法 | 自動/手動 |
 |---|---|---|
-| 初回 deploy 完了までの時間 | bulk deploy 発火 〜 全 `COMPLETE` の経過。Console Jobs の タイムスタンプ / deploy log | 半自動（タイムスタンプ から計算、現状は手動集計） |
-| チーム単位の deploy 成功率 | 成功 deployment 数 / 全 deployment 数 | 半自動（Console / Deployments） |
+| 初回 deploy 完了までの時間 | `make ops-metrics TABLE=<DeploymentsTable>` の `first-deploy wall-clock`（= 最初の `createdAt` → 最後の `COMPLETE` の `updatedAt`） | **自動** |
+| 1 deploy あたりの所要時間 | 同上 `per-deploy duration`（COMPLETE 各行の `createdAt`→`updatedAt` の min/median/max） | **自動** |
+| チーム単位の deploy 成功率 | 同上 `deploy success rate`（COMPLETE / (COMPLETE+FAILED)）+ status 内訳 | **自動** |
 | 失敗からの復旧時間 | `FAILED` 検知 〜 再試行 `COMPLETE` の経過 | 手動 |
 | 運営者の介入回数・理由 | リハーサル中の手動操作（再試行 / 設定修正 等）を都度記録 | 手動 |
 | 参加者が開始までに要した時間 | ログインキー配布 〜 最初の有効アクション（ヒント/提出）まで | 手動（必要なら score-events の最初の occurredAt） |
 | 概算 AWS コスト | AWS Cost Explorer の `user:Project$TenkaCloud` tag filter（全リソースに付与済み） | 半自動（Billing console、反映に最大 24h） |
 | teardown 後の残存コスト | teardown 翌日の同 tag filter | 半自動 |
 
-> 自動集計の補助: `make ops-health`（healthy=0 / in_progress=1 / failed=2）で全体健全性を 1 コマンド判定。`make lite-status` で stack 状態。Console の Jobs / Deployments / Scoreboard / ScoreEvents が timestamp・成功率・スコア反映を可視化する。現状これらから**手で集計**し、自動エクスポートは将来拡張（本 runbook の実施で必要性を洗い出す）。
+> **自動集計**: `make ops-metrics TABLE=<DeploymentsTableName>`（`make lite-status` / CFn outputs で table 名を確認）が Deployments table を scan し、**status 内訳 / deploy 成功率 / per-deploy 所要時間 / 初回 deploy wall-clock** を 1 コマンドで出力する（read-only）。`make ops-health` は全体健全性（healthy=0 / in_progress=1 / failed=2）、`make lite-status` は stack 状態。上表の「自動」3 行はこれで埋まり、残りの手動メトリクスは下のテンプレートに記録する。
 
 ## 記録テンプレート（1 回の実施ごとにコピーして埋める）
 

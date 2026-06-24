@@ -23,7 +23,7 @@ export JSII_DEPRECATED := quiet
         deploy-battles destroy-battles \
         lite-up lite-down lite-status lite-portal-url lite-console-url \
         local-up local-serve local-open local-status local-evaluate local-down local dev dev-admin dev-app-admin dev-portal \
-        ops-health
+        ops-health ops-metrics
 
 help:
 	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
@@ -337,3 +337,8 @@ dev-portal:    ; cd apps/participant-portal && bun run dev
 # read-only CLI。 exit code は 0=全 healthy / 1=in_progress あり / 2=failed あり。
 # 外部 cron / AI agent が spawn して platform 状態を判断する経路。
 ops-health:        ; bun run scripts/tenkacloud-ops.ts health
+
+# Issue #2018: Lite イベント・リハーサルのメトリクス自動集計 (read-only)。 Deployments table を
+# scan し status 内訳 / deploy 成功率 / deploy 所要時間 / 初回 deploy wall-clock を出す。
+# TABLE は必須 (= Deployments table 名、 make lite-status / CFn outputs から確認)。
+ops-metrics:       ; bun run scripts/tenkacloud-ops.ts metrics --table $(TABLE)$(if $(REGION), --region $(REGION),)

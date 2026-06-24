@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   buildListStacksArgs,
+  buildScanDeploymentsArgs,
   type CfnStackSummary,
   type CliIO,
   classifyStacks,
   computeHealthExitCode,
+  computeRehearsalMetrics,
+  type DeploymentRecord,
   filterTenkaCloudStacks,
+  formatRehearsalMetrics,
   main,
+  parseDeploymentsScanJson,
   parseStackSummariesJson,
   runHealth,
+  runMetrics,
   type SpawnCaptureResult,
 } from "../../../scripts/tenkacloud-ops";
 
@@ -243,5 +249,210 @@ describe("runHealth helpers", () => {
         failed: [{ StackName: "b", StackStatus: "CREATE_FAILED" }],
       }),
     ).toBe(2);
+  });
+});
+
+/**
+ * Issue #2018: rehearsal メトリクスの自動集計。 Deployments table の scan から status 内訳 /
+ * deploy 成功率 / deploy 所要時間 / 初回 deploy wall-clock を導出できることを pin する
+ * (= runbook の手動記録のうち、 既存データから算出可能なものを CLI で自動化)。
+ */
+const C0 = "2026-06-24T00:00:00.000Z";
+/** Helper: build a low-level DynamoDB scan JSON (every value as a string attribute). */
+function ddbScan(items: Array<Record<string, string>>): string {
+  return JSON.stringify({
+    Items: items.map((it) => Object.fromEntries(Object.entries(it).map(([k, v]) => [k, { S: v }]))),
+  });
+}
+const completed = (createdAt: string, updatedAt: string): Record<string, string> => ({
+  status: "COMPLETE",
+  createdAt,
+  updatedAt,
+});
+
+describe("rehearsal metrics (#2018)", () => {
+  it("buildScanDeploymentsArgs: should scan the named table as json and omit --region by default", () => {
+    const args = buildScanDeploymentsArgs("Deployments");
+    expect(args).toEqual(["dynamodb", "scan", "--table-name", "Deployments", "--output", "json"]);
+  });
+
+  it("buildScanDeploymentsArgs: should append --region <r> when specified", () => {
+    const args = buildScanDeploymentsArgs("Deployments", "ap-northeast-1");
+    expect(args[args.length - 2]).toBe("--region");
+    expect(args[args.length - 1]).toBe("ap-northeast-1");
+  });
+
+  it("parseDeploymentsScanJson: should project status/createdAt/updatedAt/problemId from DDB attrs", () => {
+    const out = parseDeploymentsScanJson(
+      ddbScan([{ status: "COMPLETE", createdAt: C0, updatedAt: C0, problemId: "p1" }]),
+    );
+    expect(out).toEqual({
+      ok: true,
+      records: [{ status: "COMPLETE", createdAt: C0, updatedAt: C0, problemId: "p1" }],
+    });
+  });
+
+  it("parseDeploymentsScanJson: should default a missing status to UNKNOWN and leave optional fields undefined", () => {
+    const out = parseDeploymentsScanJson(JSON.stringify({ Items: [{}] }));
+    expect(out).toEqual({
+      ok: true,
+      records: [
+        { status: "UNKNOWN", createdAt: undefined, updatedAt: undefined, problemId: undefined },
+      ],
+    });
+  });
+
+  it("parseDeploymentsScanJson: should treat an absent Items array as empty", () => {
+    expect(parseDeploymentsScanJson("{}")).toEqual({ ok: true, records: [] });
+  });
+
+  it("parseDeploymentsScanJson: should return an error on broken JSON", () => {
+    const out = parseDeploymentsScanJson("not json");
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.error).toMatch(/.+/);
+  });
+
+  it("computeRehearsalMetrics: should break down by status and compute success rate over terminal deploys", () => {
+    const records: DeploymentRecord[] = [
+      { status: "COMPLETE" },
+      { status: "COMPLETE" },
+      { status: "COMPLETE" },
+      { status: "FAILED" },
+      { status: "PENDING" },
+      { status: "APPROVAL_PENDING" },
+    ];
+    const m = computeRehearsalMetrics(records);
+    expect(m.total).toBe(6);
+    expect(m.byStatus).toEqual({ COMPLETE: 3, FAILED: 1, PENDING: 1, APPROVAL_PENDING: 1 });
+    expect(m.complete).toBe(3);
+    expect(m.failed).toBe(1);
+    expect(m.successRatePct).toBe(75); // 3 / (3 + 1)
+  });
+
+  it("computeRehearsalMetrics: should report success rate null when there are no terminal deploys", () => {
+    const m = computeRehearsalMetrics([{ status: "PENDING" }, { status: "IN_PROGRESS" }]);
+    expect(m.successRatePct).toBeNull();
+  });
+
+  it("computeRehearsalMetrics: should compute min/median/max duration for an odd number of COMPLETE rows", () => {
+    const m = computeRehearsalMetrics([
+      completed(C0, "2026-06-24T00:01:00.000Z"), // 60s
+      completed(C0, "2026-06-24T00:03:00.000Z"), // 180s
+      completed(C0, "2026-06-24T00:02:00.000Z"), // 120s
+    ]);
+    expect(m.durationsSec).toEqual({ count: 3, minSec: 60, medianSec: 120, maxSec: 180 });
+    expect(m.wallClockSpanSec).toBe(180); // min(created)=C0 → max(complete updated)=00:03
+  });
+
+  it("computeRehearsalMetrics: should average the two middle values for an even number of durations", () => {
+    const m = computeRehearsalMetrics([
+      completed(C0, "2026-06-24T00:01:00.000Z"), // 60s
+      completed(C0, "2026-06-24T00:02:00.000Z"), // 120s
+      completed(C0, "2026-06-24T00:03:00.000Z"), // 180s
+      completed(C0, "2026-06-24T00:04:00.000Z"), // 240s
+    ]);
+    expect(m.durationsSec?.medianSec).toBe(150); // round((120 + 180) / 2)
+  });
+
+  it("computeRehearsalMetrics: should ignore COMPLETE rows with missing/invalid/negative timestamps", () => {
+    const m = computeRehearsalMetrics([
+      { status: "COMPLETE", createdAt: C0 }, // no updatedAt
+      { status: "COMPLETE", createdAt: "bad", updatedAt: C0 }, // unparsable
+      completed("2026-06-24T00:05:00.000Z", C0), // negative (end < start)
+      completed(C0, "2026-06-24T00:01:00.000Z"), // 60s, the only valid one
+    ]);
+    expect(m.durationsSec).toEqual({ count: 1, minSec: 60, medianSec: 60, maxSec: 60 });
+  });
+
+  it("computeRehearsalMetrics: should report null durations and span when no COMPLETE row has timestamps", () => {
+    const m = computeRehearsalMetrics([{ status: "FAILED", createdAt: C0, updatedAt: C0 }]);
+    expect(m.durationsSec).toBeNull();
+    expect(m.wallClockSpanSec).toBeNull();
+  });
+
+  it("formatRehearsalMetrics: should render totals, success rate and durations", () => {
+    const text = formatRehearsalMetrics(
+      computeRehearsalMetrics([completed(C0, "2026-06-24T00:01:00.000Z"), { status: "FAILED" }]),
+      "Deployments",
+      "ap-northeast-1",
+    );
+    expect(text).toContain("table=Deployments (region=ap-northeast-1)");
+    expect(text).toContain("deployments (total):     2");
+    expect(text).toContain("deploy success rate:     50% (1/2)");
+    expect(text).toContain("per-deploy duration:     min 1m0s");
+  });
+
+  it("formatRehearsalMetrics: should render n/a placeholders when no data is available", () => {
+    const text = formatRehearsalMetrics(computeRehearsalMetrics([]), "Deployments", undefined);
+    expect(text).toContain("region=default");
+    expect(text).toContain("no terminal deploys");
+    expect(text).toContain("per-deploy duration:     n/a");
+    expect(text).toContain("first-deploy wall-clock: n/a");
+  });
+
+  it("runMetrics: should scan, compute and print on success (exit 0)", async () => {
+    const { io, stdout } = makeIO([
+      { code: 0, stdout: ddbScan([completed(C0, "2026-06-24T00:01:00.000Z")]), stderr: "" },
+    ]);
+    const code = await runMetrics(io, "Deployments");
+    expect(code).toBe(0);
+    expect(stdout.join("")).toContain("deploy success rate:     100% (1/1)");
+  });
+
+  it("runMetrics: should pass --table and --region through to the aws CLI", async () => {
+    let captured: readonly string[] | null = null;
+    const io: CliIO = {
+      stdout: () => {},
+      stderr: () => {},
+      spawnCapture: async (_cmd, args) => {
+        captured = args;
+        return { code: 0, stdout: ddbScan([]), stderr: "" };
+      },
+    };
+    await runMetrics(io, "MyTable", "us-east-1");
+    const s = (captured ?? []).join(" ");
+    expect(s).toContain("--table-name MyTable");
+    expect(s).toContain("--region us-east-1");
+  });
+
+  it("runMetrics: should surface a non-zero exit and stderr when the aws CLI fails", async () => {
+    const { io, stderr } = makeIO([{ code: 254, stdout: "", stderr: "AccessDenied" }]);
+    const code = await runMetrics(io, "Deployments");
+    expect(code).toBe(254);
+    expect(stderr.join("")).toContain("AccessDenied");
+  });
+
+  it("runMetrics: should exit 1 with a parse error on broken aws output", async () => {
+    const { io, stderr } = makeIO([{ code: 0, stdout: "not json", stderr: "" }]);
+    const code = await runMetrics(io, "Deployments");
+    expect(code).toBe(1);
+    expect(stderr.join("")).toContain("failed to parse");
+  });
+
+  it("main metrics: should require --table", async () => {
+    const { io, stderr } = makeIO([]);
+    const code = await main(["metrics"], io);
+    expect(code).toBe(1);
+    expect(stderr.join("")).toContain("requires --table");
+  });
+
+  it("main metrics: should dispatch to runMetrics when --table is given", async () => {
+    const { io, stdout } = makeIO([{ code: 0, stdout: ddbScan([]), stderr: "" }]);
+    const code = await main(["metrics", "--table", "Deployments"], io);
+    expect(code).toBe(0);
+    expect(stdout.join("")).toContain("Rehearsal metrics");
+  });
+
+  it("main metrics: should reject an unknown flag", async () => {
+    const { io, stderr } = makeIO([]);
+    const code = await main(["metrics", "--bogus"], io);
+    expect(code).toBe(1);
+    expect(stderr.join("")).toContain("unknown flag");
+  });
+
+  it("main help: should advertise the metrics subcommand", async () => {
+    const { io, stdout } = makeIO([]);
+    await main(["help"], io);
+    expect(stdout.join("")).toContain("metrics");
   });
 });
