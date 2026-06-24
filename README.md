@@ -28,11 +28,11 @@ isolated accounts.
 
 ## ▶ Try it — no AWS account, no install
 
-| Time | What you do | Link |
-| --- | --- | --- |
-| **30 sec** | Click through a live demo in your browser — simulated data, no backend, no AWS | **[Open the demo →](https://tenkacloud.com/portal-demo/?demo=1)** |
-| **5 min**  | Watch a full event walkthrough | [Gallery / demo video →](./docs/gallery.md) |
-| **30 min** | Deploy Lite mode into your own AWS account | [Quickstart ↓](#quickstart) |
+| What you do | Link |
+| --- | --- |
+| Click through a live demo in your browser — simulated data, no backend, no AWS | **[Open the demo →](https://tenkacloud.com/portal-demo/?demo=1)** |
+| Watch a full event walkthrough | [Gallery / demo video →](./docs/gallery.md) |
+| Deploy Lite mode into your own AWS account | [Quickstart ↓](#quickstart) |
 
 **New here?** Start at the top rung — see TenkaCloud working before installing anything.
 
@@ -205,24 +205,17 @@ Problems live in the separate catalog repo
 This platform repo mounts it as the `problems/` git submodule; `make deploy` ships the
 catalog version pinned by that submodule.
 
-The pinned catalog is a small, deliberately curated starter set — **6 problems plus
-one event bundle**. It is trimmed to high-quality, hand-reviewed scenarios rather than
-padded with low-value labs:
-
-| Category | Count | Notes |
-| --- | ---: | --- |
-| Battle | 4 | Real-time operations drills: uptime, microservice migration, security defense, and platform operations |
-| Challenge | 6 | Self-paced AWS tasks scored with catalog-declared flags / answers (all ready) |
-| Bundles | 1 | `starter-event`, a 60–90 minute first-event bundle (1 Challenge + 2 Battles) |
-
-`problems/CATALOG.md` in the catalog submodule is the always-current source of truth;
-the counts above track the submodule pin recorded in this repo.
+The pinned catalog is a deliberately curated starter set — trimmed to high-quality,
+hand-reviewed Battle and Challenge scenarios rather than padded with low-value labs.
+Because the catalog lives in its own repo and advances independently of this platform
+repo, the always-current contents (categories, scenarios, and bundles) are listed in
+`problems/CATALOG.md` inside the submodule — check there for what is in the pinned set.
 
 Useful catalog entry points:
 
 - [`problems/CATALOG.md`](./problems/CATALOG.md) — source of truth for the full catalog.
 - [`docs/gallery.md`](./docs/gallery.md) — platform-side gallery and walkthrough notes.
-- [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — 30-minute authoring guide.
+- [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — problem authoring guide.
 
 ## Create or update a problem
 
