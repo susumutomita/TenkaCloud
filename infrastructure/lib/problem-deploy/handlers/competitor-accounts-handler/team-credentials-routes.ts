@@ -65,10 +65,40 @@ export interface TeamCredentialDeps {
   readonly shared: SecureJsonStoreDeps;
 }
 
-export interface TeamCredentialRouteResult {
-  readonly status: number;
-  readonly body: unknown;
-}
+/**
+ * Team credential route の結果型。 `status` を discriminant にした union で、 caller (index.ts) が
+ * `c.json(result.body, result.status)` を cast 無しで型検査できるようにする。 secret は body に
+ * 含めない (= register は `{registered:true}`、 status は `{registered:boolean}` のみ)。
+ */
+export type TeamCredentialRouteResult =
+  | {
+      readonly status: StatusCodes.CREATED;
+      readonly body: {
+        readonly registered: true;
+        readonly provider: TeamCredentialProvider;
+        readonly teamSlug: string;
+      };
+    }
+  | {
+      readonly status: StatusCodes.OK;
+      readonly body: {
+        readonly deleted: true;
+        readonly provider: TeamCredentialProvider;
+        readonly teamSlug: string;
+      };
+    }
+  | {
+      readonly status: StatusCodes.OK;
+      readonly body: {
+        readonly provider: TeamCredentialProvider;
+        readonly teamSlug: string;
+        readonly registered: boolean;
+      };
+    }
+  | {
+      readonly status: StatusCodes.BAD_REQUEST;
+      readonly body: { readonly error: "validation_failed"; readonly issues: unknown };
+    };
 
 /**
  * provider の credential を登録 / 上書き (= register + rotation)。 secret は response に含めない。

@@ -157,47 +157,47 @@ app.get("/admin/competitor-accounts/healthz", (c) => c.json({ ok: true }));
 app.get("/admin/tenant-saml-config", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE]);
   const result = await routeGet({ shared }, c);
-  return c.json(result.body as never, result.status as 200);
+  return c.json(result.body, result.status);
 });
 // 互換のため PATCH + PUT 両方受ける (= frontend は PATCH、 curl 直叩き / OpenAPI は PUT で書く)。
 app.patch("/admin/tenant-saml-config", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE]);
   const result = await routePut({ shared }, c);
-  return c.json(result.body as never, result.status as 200 | 400 | 422);
+  return c.json(result.body, result.status);
 });
 app.put("/admin/tenant-saml-config", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE]);
   const result = await routePut({ shared }, c);
-  return c.json(result.body as never, result.status as 200 | 400 | 422);
+  return c.json(result.body, result.status);
 });
 app.delete("/admin/tenant-saml-config", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE]);
   const result = await routeDelete({ shared }, c);
-  return c.json(result.body as never, result.status as 200 | 422);
+  return c.json(result.body, result.status);
 });
 
 app.get("/admin/users", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE]);
   const result = await routeListUsers({ shared }, c);
-  return c.json(result.body as never, result.status as 200 | 422);
+  return c.json(result.body, result.status);
 });
 
 app.post("/admin/users", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE]);
   const result = await routeCreateUser({ shared }, c);
-  return c.json(result.body as never, result.status as 201 | 400 | 409 | 422 | 500);
+  return c.json(result.body, result.status);
 });
 
 app.delete("/admin/users/:username", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE]);
   const result = await routeDeleteUser({ shared }, c);
-  return c.json(result.body as never, result.status as 200 | 400 | 404 | 409 | 422 | 500);
+  return c.json(result.body, result.status);
 });
 
 app.patch("/admin/users/:username", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE]);
   const result = await routeChangeUserRole({ shared }, c);
-  return c.json(result.body as never, result.status as 200 | 400 | 404 | 409 | 422 | 500);
+  return c.json(result.body, result.status);
 });
 
 app.post("/admin/competitor-accounts", async (c) => {
@@ -393,7 +393,7 @@ app.put("/admin/team-cloud-credentials/:provider/:teamSlug", async (c) => {
       userAgent: audit.userAgent,
       occurredAtMs: Date.now(),
     });
-    return c.json(result.body as never, result.status as 201 | 400);
+    return c.json(result.body, result.status);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[team-credentials] register failed", {
@@ -428,7 +428,7 @@ app.delete("/admin/team-cloud-credentials/:provider/:teamSlug", async (c) => {
       userAgent: audit.userAgent,
       occurredAtMs: Date.now(),
     });
-    return c.json(result.body as never, result.status as 200);
+    return c.json(result.body, result.status);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[team-credentials] revoke failed", { provider: params.provider, message });
@@ -447,7 +447,7 @@ app.get("/admin/team-cloud-credentials/:provider/:teamSlug", async (c) => {
       resolveTenantId(c),
       params.teamSlug,
     );
-    return c.json(result.body as never, result.status as 200);
+    return c.json(result.body, result.status);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[team-credentials] status failed", { provider: params.provider, message });

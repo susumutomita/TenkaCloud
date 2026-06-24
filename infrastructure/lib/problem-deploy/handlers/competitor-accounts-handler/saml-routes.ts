@@ -40,12 +40,31 @@ import type { CompetitorAccountsSharedResources } from "./shared.js";
  *    に COGNITO を足す。 これは security ops doc に残す前提。
  */
 
-export interface SamlRouteResult {
-  /** HTTP status を caller (Hono) が読む。 */
-  readonly status: number;
-  /** body を caller が `c.json` する。 */
-  readonly body: unknown;
+/** Zod の validation issue を body に出す共通 error shape。 */
+interface ValidationFailedBody {
+  readonly error: "validation_failed";
+  readonly issues: unknown;
 }
+
+/**
+ * SAML route の結果型。 `status` を discriminant にした union にすることで、 caller (index.ts)
+ * が `c.json(result.body, result.status)` を unsafe cast 無しで型検査できる (= body 形と status の
+ * 対応が型で固定される)。 各 status の body 形は実 runtime レスポンスと 1:1 で一致させる
+ * (= behavior-preserving)。
+ */
+export type SamlRouteResult =
+  | { readonly status: StatusCodes.OK; readonly body: TenantSamlConfigView }
+  | { readonly status: StatusCodes.OK; readonly body: { readonly deleted: true } }
+  | { readonly status: StatusCodes.BAD_REQUEST; readonly body: ValidationFailedBody }
+  | { readonly status: StatusCodes.BAD_REQUEST; readonly body: { readonly error: "invalid_body" } }
+  | {
+      readonly status: StatusCodes.UNPROCESSABLE_ENTITY;
+      readonly body: { readonly error: "missing_cognito_claims"; readonly message: string };
+    }
+  | {
+      readonly status: StatusCodes.SERVICE_UNAVAILABLE;
+      readonly body: { readonly error: "tenant_tier_not_silo"; readonly message: string };
+    };
 
 interface JwtClaims {
   readonly iss?: string;
