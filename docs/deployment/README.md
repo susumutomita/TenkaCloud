@@ -15,6 +15,10 @@ result, so pick whichever fits your environment:
 - `tenkacloud-lite` — Application Admin Console (organizer UI) + AppPlaneCore (`tenantId="local"`)
 - `tenkacloud-lite-problem-deploy` — problem deploy backend + Participant Portal
 
+> 🧪 **Before running a real event**, walk the end-to-end (normal + failure) lifecycle with
+> the [Lite event rehearsal runbook](../operations/lite-event-rehearsal.md) — it defines a
+> repeatable, third-party-evaluable readiness check plus a metrics recording template.
+
 A successful deploy emails a **Cognito invitation** (temporary password) to your
 organizer address and prints the **Application Admin Console** and **Participant
 Portal** URLs.
