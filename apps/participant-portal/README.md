@@ -44,7 +44,4 @@ make test     # vitest
 
 ## See also
 
-- [`docs/architecture/adr-005-battle-portal-ui.html`](../../docs/architecture/adr-005-battle-portal-ui.html) — choice of Cloudscape for the portal UI
-- [`docs/architecture/adr-012-problem-plugin-architecture.html`](../../docs/architecture/adr-012-problem-plugin-architecture.html) — problem plugin `dashboard.slots`
-- [`docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html`](../../docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html) — AppPlaneCore for Lite mode
 - [`/problems/`](../../problems/) — problem catalog

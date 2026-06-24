@@ -15,8 +15,11 @@ const REPO_ROOT = new URL("..", import.meta.url).pathname;
 const FIXTURES_DIR = join(REPO_ROOT, "fixtures", "app-to-quest");
 const SOURCE_PROFILE_SCHEMA_PATH = join(
   REPO_ROOT,
-  "docs",
-  "problems",
+  ".claude",
+  "skills",
+  "create-problem",
+  "references",
+  "app-to-quest",
   "source-app-profile.schema.json",
 );
 const QUEST_CANDIDATE_SCHEMA_PATH = join(

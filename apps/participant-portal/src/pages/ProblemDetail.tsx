@@ -301,8 +301,7 @@ function ProblemInfoSection({
           {/* fairness contract (#1124 follow-up): metadata.description は採点ルール /
            *   hardened state / 段階詳細 などのネタバレを含むので portal には embed しない。
            *   競技者向けの 1 行サマリ (= shortDescription) のみ表示する。 admin / authoring
-           *   view 用の長文は apps/application-admin-console / docs/problems/AUTHORING.html
-           *   を参照。 */}
+           *   view 用の長文は apps/application-admin-console を参照。 */}
           <Box variant="p">{narrative.shortDescription}</Box>
         </div>
         {/* Phase 1c (#1929): per-problem architecture diagram (bundled diagram.svg). */}

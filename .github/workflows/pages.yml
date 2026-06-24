@@ -1,9 +1,8 @@
 # GitHub Pages: landing/ ディレクトリだけを配信する。
 #
-# 設計判断: ADR / 運用 doc などの中間情報 (= docs/) は **ホストしない**。
-# 公開 landing は OSS としての product description / 入り口だけに絞り、
-# 設計詳細は repo 内 docs/ で完結させて core 開発者だけが読む形にする。
-# (= public landing と core dev docs を IA で分離)
+# 設計判断: 公開 landing は OSS としての product description / 入り口だけに絞る。
+# 設計詳細 (アーキテクチャ不変条件 / ルール) は repo 内 (CLAUDE.md / .claude/) に置き、
+# 公開サイトには出さない (= public landing と core dev docs を分離)。
 name: Pages
 
 on:

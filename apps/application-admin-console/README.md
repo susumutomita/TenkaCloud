@@ -41,7 +41,5 @@ bun run --filter @TenkaCloud/application-admin-console test
 
 ## See also
 
-- [`docs/architecture/adr-012-problem-plugin-architecture.html`](../../docs/architecture/adr-012-problem-plugin-architecture.html) — problems as plugins, platform as host
-- [`docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html`](../../docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html) — AppPlaneCore extracted for Lite mode
-- [`docs/operations/deploy-trace.html`](../../docs/operations/deploy-trace.html) — Deploy progress tracing
-- [`docs/operations/notifications.html`](../../docs/operations/notifications.html) — Operator → competitor notification operations
+- [`/problems/`](../../problems/) — problem catalog
+- [`CLAUDE.md`](../../CLAUDE.md) / [`AGENTS.md`](../../AGENTS.md) — architecture and project rules

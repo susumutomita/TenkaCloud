@@ -45,8 +45,6 @@ platform itself.
 
 ## Hardening and posture
 
-- [`docs/security/README.md`](./docs/security/README.md) — security baseline for paid events.
-- [`docs/security/HARDENING-CHECKLIST.html`](./docs/security/HARDENING-CHECKLIST.html) — hardening checklist.
 - Cross-account `AssumeRole` into competitor accounts always requires `ExternalId`,
   and the competitor IAM role is least-privilege. Auth is Cognito JWT throughout
   (no bypasses). See [CLAUDE.md](./CLAUDE.md) ("Security") for the full list.

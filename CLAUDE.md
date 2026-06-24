@@ -72,7 +72,7 @@ We don't use a single-table DynamoDB design. Each stack owns its own tables (Ten
 | `make deploy-saas`      | **SaaS mode** (multi-tenant) deploy. Runs `scripts/install.sh` (3-phase deploy, stands up SBT ControlPlane) |
 | `make destroy`          | Tear down Lite mode (`make lite-down`)                                   |
 | `make destroy-saas`     | Tear down SaaS mode (`scripts/cleanup.sh` idempotently removes every stack + S3) |
-| `make harness`          | Architecture invariant check (`docs/architecture/harness.md`)            |
+| `make harness`          | Architecture invariant check (`.claude/harness/`)                       |
 | `make harness-test`     | Unit tests for the harness itself (`.claude/harness/`)                   |
 | `make tech-debt`        | Tech-debt scan (test smell / coupling / responsibility gaps)             |
 | `make help`             | List every Makefile target                                               |
@@ -81,7 +81,7 @@ Switch environments with `make deploy ENV=production` and similar. It loads `inf
 
 ## Architecture invariants
 
-Codified in `docs/architecture/harness.md`. `make harness` runs `.claude/harness/bin/architecture.ts` against staged files and reports deviations as errors.
+Codified as one-rule-per-file under `.claude/harness/src/rules/` (summarized in the table below). `make harness` runs `.claude/harness/bin/architecture.ts` against staged files and reports deviations as errors.
 
 | ID                                                    | Summary                                                                            |
 | ----------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -243,7 +243,7 @@ Teardown is `make destroy-saas` (`scripts/cleanup.sh`). It is written to be idem
 
 ## Pointers
 
-- **Architecture source of truth**: [`docs/architecture/harness.md`](./docs/architecture/harness.md) — invariants + PR Discipline
+- **Architecture invariants**: [`.claude/harness/`](./.claude/harness/) — invariant rules + PR Discipline checks (summarized in the table above)
 - **Design system**: [Cloudscape](https://cloudscape.design/components/) — pick UI components from here as a default
 - **Problem authoring**: [`problems/README.md`](./problems/README.md) (metadata.json schema + template.yaml conventions) — scaffold with `/create-problem`
 - **Competitor-side setup**: [`infrastructure/templates/README.md`](./infrastructure/templates/README.md)

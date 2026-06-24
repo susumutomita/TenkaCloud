@@ -42,7 +42,7 @@ function throttleSummary(base: Omit<CapacityInputs, "teams">): string {
   const axis = limit.limiting === "read" ? "reads (RCU)" : "writes (WCU)";
   return (
     `  → 1/1 provisioned holds up to ${limit.maxTeams} team(s); beyond that the Deployments ` +
-    `table throttles on ${axis}. Raise capacity for the event window (see docs/runbooks/capacity-pressure.md).`
+    `table throttles on ${axis}. Raise capacity for the event window.`
   );
 }
 

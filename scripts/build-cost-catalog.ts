@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Issue #1910 Slice 5: `docs/problems/COST-CATALOG.md` を生成する。
+ * Issue #1910 Slice 5: 問題コストカタログの markdown をオンデマンドで生成する。
  *
  * 各問題の `template.yaml` を offline cost model (`scripts/lib/problem-cost.ts`) に通し、
  * 「使用 AWS リソース + 概算コスト (時間 / セッション / 放置 1 日) + always-on フラグ」を
@@ -16,7 +16,6 @@
  *     側にあるため本体 repo の生成物。 ただし submodule bump 由来の drift で CI を落とさない
  *     よう `make check-cost-catalog` は default の CI / before-commit には載せず、 オンデマンド
  *     再生成とする (index.json と同じ哲学)。
- *   - HTML は `make build-docs` が markdown から生成する。
  */
 
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";

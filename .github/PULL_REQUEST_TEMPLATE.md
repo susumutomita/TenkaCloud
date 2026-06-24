@@ -1,5 +1,5 @@
 <!--
-This template is intended to satisfy the PR Discipline invariants in docs/architecture/harness.md by enforcing a consistent structure.
+This template is intended to satisfy the PR Discipline invariants enforced by .claude/harness by enforcing a consistent structure.
 If a section cannot be completed, reconsider the PR scope or keep the PR in DRAFT.
 
 Reference: https://zenn.dev/nttdata_tech/articles/8a010aff542625

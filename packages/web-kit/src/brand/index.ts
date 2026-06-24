@@ -1,6 +1,5 @@
 /**
  * TenkaCloud brand kit — ロゴ / マーク / ブランドトークンの再利用可能な正本。
- * 詳細なガイドラインは docs/design-system/logo.html を参照。
  */
 export { BrandLockup, type BrandLockupOrientation, type BrandLockupProps } from "./BrandLockup";
 export { BrandMark, type BrandMarkProps } from "./BrandMark";

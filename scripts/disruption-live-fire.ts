@@ -4,8 +4,7 @@
  *
  * Fires one operator disruption against a real deployed event and captures the evidence #1419/#1666
  * need: an observable fault in the target stack that auto-reverts within its window. Run it on the
- * AWS account that hosts the platform + a team that has the problem deployed (see the runbook,
- * docs/runbooks/disruption-live-fire.md).
+ * AWS account that hosts the platform + a team that has the problem deployed.
  *
  *   # 1. Inspect the exact request first — no network call, no AWS needed:
  *   bun run scripts/disruption-live-fire.ts --dry-run \

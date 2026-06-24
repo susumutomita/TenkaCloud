@@ -31,7 +31,6 @@ isolated accounts.
 | What you do | Link |
 | --- | --- |
 | Click through a live demo in your browser — simulated data, no backend, no AWS | **[Open the demo →](https://tenkacloud.com/portal-demo/?demo=1)** |
-| Watch a full event walkthrough | [Gallery / demo video →](./docs/gallery.md) |
 | Deploy Lite mode into your own AWS account | [Quickstart ↓](#quickstart) |
 
 **New here?** Start at the top rung — see TenkaCloud working before installing anything.
@@ -59,13 +58,6 @@ Two problem styles share the same runtime:
 
 Most organizers should start with **Lite mode**. It deploys one local tenant and one
 event runtime into your AWS account, skipping the full SBT control plane.
-
-> 📖 **Step-by-step walkthrough:** [`docs/deployment/README.md`](./docs/deployment/README.md)
-> covers both paths below in full detail — prerequisites, the pipeline's manual-approval
-> gate, signing in, re-running, and teardown. The summary below is the quick version.
->
-> 🧪 **Running a real event?** Rehearse it first with the
-> [Lite event rehearsal runbook](./docs/operations/lite-event-rehearsal.md).
 
 | Path | Best for | What runs |
 | --- | --- | --- |
@@ -214,8 +206,7 @@ repo, the always-current contents (categories, scenarios, and bundles) are liste
 Useful catalog entry points:
 
 - [`problems/CATALOG.md`](./problems/CATALOG.md) — source of truth for the full catalog.
-- [`docs/gallery.md`](./docs/gallery.md) — platform-side gallery and walkthrough notes.
-- [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — problem authoring guide.
+- Authoring lives in the catalog repo [susumutomita/TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge); scaffold with `/create-problem`.
 
 ## Create or update a problem
 
@@ -252,20 +243,9 @@ TenkaCloud has four planes that talk through an EventBridge bus:
 | **Problem Deploy Backend** | Cross-account problem deploy jobs, state machines, worker Lambdas, audit, and EventBridge reconciliation |
 | **Participant Portal** | Per-team UI: problem endpoints, hints, submissions, scores, and AWS Console federation |
 
-![TenkaCloud Lite demo flow](./docs/assets/tenkacloud-lite-demo.svg)
-
-Start with these docs:
-
-- [`docs/architecture/OVERVIEW.md`](./docs/architecture/OVERVIEW.md) — end-to-end architecture narrative.
-- [`docs/architecture/MODULE_MAP.md`](./docs/architecture/MODULE_MAP.md) — directory and module map.
-- [`docs/architecture/GLOSSARY.md`](./docs/architecture/GLOSSARY.md) — terms with ADR back-links.
-- [`CONTRIBUTOR_MAP.md`](./CONTRIBUTOR_MAP.md) — "I want to do X" navigation.
-
-Key ADRs:
-
-- [ADR-012: Problem plugin architecture](./docs/architecture/adr-012-problem-plugin-architecture.html)
-- [ADR-016: TenkaCloud Lite mode](./docs/architecture/adr-016-tenkacloud-lite-app-plane-core.html)
-- [ADR-017: Cloud Action Intent / Trust Bridge](./docs/architecture/adr-017-cloud-action-intent-trust-bridge.html)
+The directory map and architecture invariants live in [`CLAUDE.md`](./CLAUDE.md) and
+[`AGENTS.md`](./AGENTS.md); the invariant checks are implemented under
+[`.claude/harness/`](./.claude/harness/).
 
 ## Development commands
 
@@ -283,22 +263,17 @@ Toolchain source of truth is `mise.toml` and `package.json`: Bun 1.3.11,
 Node.js 24, AWS CDK 2, React 19, Vite 7, Hono on Lambda, DynamoDB, EventBridge,
 Step Functions, CloudFront, Cognito, Vitest, Biome, markdownlint, and textlint.
 
-## Self-hosting and operated options
+## Self-hosting
 
-The platform is Apache-2.0 and can be self-hosted in your own AWS account. Optional
-commercial support is documented separately:
-
-- [`docs/commercial/PACKAGES.html`](./docs/commercial/PACKAGES.html) — packaged offerings.
-- [`docs/commercial/SALES-PLAYBOOK.html`](./docs/commercial/SALES-PLAYBOOK.html) — positioning, qualifying questions, and objections.
+The platform is Apache-2.0 and can be self-hosted in your own AWS account.
 
 ## Contributing
 
 Contributor path:
 
 1. Read [CONTRIBUTING.md](./CONTRIBUTING.md) and [AGENTS.md](./AGENTS.md).
-2. Use [CONTRIBUTOR_MAP.md](./CONTRIBUTOR_MAP.md) to find the right code area.
-3. Keep infrastructure / template changes separate from application-code changes.
-4. Run `make harness` and `make before-commit` before opening a PR.
+2. Keep infrastructure / template changes separate from application-code changes.
+3. Run `make harness` and `make before-commit` before opening a PR.
 
 ## License
 

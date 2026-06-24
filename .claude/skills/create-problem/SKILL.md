@@ -6,7 +6,7 @@ allowed-tools: Bash(make validate-problems:*), Bash(bun run scripts/tenkacloud-p
 
 # create-problem (ADR-012 Phase 6 拡張版)
 
-TenkaCloud に新しい問題を追加する skill。**正本は [`problems/SCHEMA.json`](../../../problems/SCHEMA.json) と [`docs/problems/AUTHORING.html`](../../../docs/problems/AUTHORING.html)**。 外部 contributor 向け quickstart は [`docs/problems/CONTRIBUTING.md`](../../../docs/problems/CONTRIBUTING.md)、 AI agent flow は [`docs/problems/AI-WORKFLOW.md`](../../../docs/problems/AI-WORKFLOW.md)。 1 dir = 1 問題、`metadata.json` + `template.yaml` の 2 file が必須、 portal plugin (= `portal/<Slot>.tsx`) は任意。
+TenkaCloud に新しい問題を追加する skill。**正本は [`problems/SCHEMA.json`](../../../problems/SCHEMA.json)**(問題の authoring ガイドは catalog repo [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) 側にある)。 1 dir = 1 問題、`metadata.json` + `template.yaml` の 2 file が必須、 portal plugin (= `portal/<Slot>.tsx`) は任意。
 
 ## App-to-Quest mode
 
@@ -281,10 +281,7 @@ aws cloudformation deploy \
 ## 参考
 
 - 雛形 templates: [`.claude/templates/problems/<kind>/`](../../templates/problems/) — 6 kind 分の skeleton
-- 外部 contributor quickstart: [`docs/problems/CONTRIBUTING.md`](../../../docs/problems/CONTRIBUTING.md) — 30 分 quickstart + decision tree + lifecycle + validation error 表
-- 30 分 onboarding (= field reference): [`docs/problems/AUTHORING.html`](../../../docs/problems/AUTHORING.html)
-- 既存 5 問題の design 振り返り: [`docs/problems/EXAMPLES.md`](../../../docs/problems/EXAMPLES.md)
-- AI agent flow (= Claude Code / Codex CLI): [`docs/problems/AI-WORKFLOW.md`](../../../docs/problems/AI-WORKFLOW.md)
+- 問題 authoring ガイド: catalog repo [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) 側にある
 - App-to-Quest mode: [`references/app-to-quest/README.md`](./references/app-to-quest/README.md)
 - App-to-Quest 参照仕様: [`references/app-to-quest/codewiki-adapter.md`](./references/app-to-quest/codewiki-adapter.md)
 - App-to-Quest safety boundary: [`references/app-to-quest/safety-boundary.md`](./references/app-to-quest/safety-boundary.md)
@@ -298,5 +295,5 @@ aws cloudformation deploy \
   - uptime-flat (Battle): [`problems/battles/hello-world-battle/`](../../../problems/battles/hello-world-battle/)
   - uptime-multi (Battle): [`problems/battles/security-battle-royale/`](../../../problems/battles/security-battle-royale/)
   - phased-polling + disruptions + portal plugin: [`problems/battles/microservice-migration-battle/`](../../../problems/battles/microservice-migration-battle/)
-- ADR-012: [`docs/architecture/adr-012-problem-plugin-architecture.html`](../../../docs/architecture/adr-012-problem-plugin-architecture.html)
+- ADR-012: 問題 = plugin、platform = host の設計
 - 競技者 account セットアップ: [`infrastructure/templates/README.md`](../../../infrastructure/templates/README.md)

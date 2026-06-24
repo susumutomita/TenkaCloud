@@ -17,13 +17,10 @@ To run a single SPA locally, start its dev server from the app directory, e.g.
 
 ## Where to start (under 15 minutes)
 
-For first-time contributors, read in this order:
+For first-time contributors:
 
-1. [`docs/architecture/OVERVIEW.md`](./docs/architecture/OVERVIEW.md) — what TenkaCloud is, the 4 planes, why Lite vs SaaS exists
-2. [`CONTRIBUTOR_MAP.md`](./CONTRIBUTOR_MAP.md) — pick the recipe matching your goal (new problem / Lambda bug / admin UI / etc)
-3. [`docs/architecture/GLOSSARY.md`](./docs/architecture/GLOSSARY.md) — definitions for AppPlane / ControlPlane / TrustBridge / ParticipantViewerRole / etc
-
-For directory-level "where is X" lookups, [`docs/architecture/MODULE_MAP.md`](./docs/architecture/MODULE_MAP.md) is the index.
+1. Read the [Quickstart](./README.md#quickstart) and run Lite mode once.
+2. Skim [CLAUDE.md](./CLAUDE.md) and [AGENTS.md](./AGENTS.md) for the architecture (the four planes), the directory map, and the project rules.
 
 ## Development flow
 
@@ -37,8 +34,7 @@ For directory-level "where is X" lookups, [`docs/architecture/MODULE_MAP.md`](./
 ## Roadmap and starter tasks
 
 - [ROADMAP.md](./ROADMAP.md) shows the current product direction.
-- [Competition Gallery](./docs/gallery.md) lists available examples and new
-  problem ideas.
+- [`problems/CATALOG.md`](./problems/CATALOG.md) lists the available problems and bundles.
 - Starter tasks should stay small enough for one focused PR.
 
 ## Commit messages
@@ -51,20 +47,13 @@ See [CLAUDE.md](./CLAUDE.md) for project rules, architecture invariants, and pro
 
 ## Project provenance
 
-TenkaCloud is an independent open-source project. Before contributing, read
-[`docs/PROJECT_PROVENANCE.md`](./docs/PROJECT_PROVENANCE.md): it records the
-project's development boundaries and the influence-versus-copying distinction.
-Do not contribute an employer's source code, confidential documents, customer
-data, private competition content, or other proprietary assets — contribute
-only original or compatibly licensed work.
+TenkaCloud is an independent open-source project. Do not contribute an employer's
+source code, confidential documents, customer data, private competition content, or
+other proprietary assets — contribute only original or compatibly licensed work.
 
 ## Join the community
 
-TenkaCloud's moat is its problem catalog, and that catalog grows through community contribution. Pick one of five roles and ship one starter task — you do not need to be personally onboarded.
-
-- **[docs/community/ONBOARDING.html](./docs/community/ONBOARDING.html)** — role chooser (Tester / Problem Author / Event Facilitator / Platform Contributor / Sponsor-Requester), with the expected contribution, required skill level, first task, communication channel, time commitment, and recognition path for each role.
-- **[docs/community/PLAYTEST-CHECKLIST.html](./docs/community/PLAYTEST-CHECKLIST.html)** — 30-minute playtest protocol for the Tester role: pick a problem, run `make deploy` in Lite mode, register a team, solve, score, and file a `problem-feedback` issue with a structured template.
-- **[docs/community/PROBLEM-REVIEW-CHECKLIST.html](./docs/community/PROBLEM-REVIEW-CHECKLIST.html)** — rubric for reviewing a problem PR: scoring fairness, hint progression, no-skip-by-luck, time-to-solve estimate, scenario realism, template security (cross-references [#1353](https://github.com/susumutomita/TenkaCloud/issues/1353) for security hardening).
+TenkaCloud's moat is its problem catalog, and that catalog grows through community contribution. The simplest first contribution is to play-test a problem (run `make deploy` in Lite mode, register a team, solve and score it) and file a `problem-feedback` issue, or to author a new problem with `/create-problem`.
 
 Coordination model: **GitHub is the durable source of truth**; Discord (when available) is for live coordination only — every decision and bug must end up as a GitHub issue or PR comment. GitHub-only contributors are first-class.
 

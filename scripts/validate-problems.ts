@@ -434,7 +434,7 @@ function printSchemaErrors(
     console.error(`     id (${data.id}) はディレクトリ名 (${expectedId}) と一致させてください`);
   }
   console.error(
-    `     詳細: docs/problems/CONTRIBUTING.md "Validation errors and how to read them" 参照`,
+    `     詳細: problems/SCHEMA.json で metadata.json のフィールド定義を確認してください`,
   );
 }
 

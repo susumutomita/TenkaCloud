@@ -181,8 +181,6 @@ function printOutro(opts: EnvInitOptions, envPath: string): void {
   opts.print("  1. make deploy       — Lite mode deploy (= ~10 min)");
   opts.print("  2. make lite-console-url   — Application Admin Console URL を表示");
   opts.print("  3. make lite-portal-url    — Participant Portal URL を表示");
-  opts.print("");
-  opts.print("詳細: docs/lite-mode-prereqs.md");
 }
 
 /**
