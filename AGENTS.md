@@ -198,7 +198,7 @@ problems/<category>/<id>/          # metadata.json + template.yaml are the sourc
 The three sources of truth when adding a problem are:
 
 - **Schema source of truth**: [`problems/SCHEMA.json`](./problems/SCHEMA.json) — JSON Schema for `metadata.json`
-- **30-minute onboarding guide**: [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — step-by-step + 5-kind decision tree + 4 worked examples
+- **Onboarding guide**: [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — step-by-step + 5-kind decision tree + 4 worked examples
 - **Claude Code skill**: `.claude/skills/create-problem/SKILL.md` — invoked as `/create-problem`; walks through requirements gathering → scaffold generation → metadata editing
 
 Problems use the **3-asset model** (ADR-012):
@@ -227,7 +227,7 @@ Scaffold templates live under `.claude/templates/problems/<kind>/` — one per k
 - @CLAUDE.md — full product overview, architecture, command list
 - [`docs/architecture/harness.md`](./docs/architecture/harness.md) — source of truth for invariants + PR Discipline
 - [`docs/architecture/adr-012-problem-plugin-architecture.html`](./docs/architecture/adr-012-problem-plugin-architecture.html) — problem = plugin, platform = host design
-- [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — 30-minute problem authoring onboarding
+- [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — problem authoring onboarding
 - [`infrastructure/templates/README.md`](./infrastructure/templates/README.md) — competitor-side setup
 - [`problems/README.md`](./problems/README.md) — problem authoring steps + schema
 - `apps/<app>/README.md` — local development steps per SPA
