@@ -8,6 +8,7 @@ import { CodeBuildUseAwsManagedKms } from "../cdk-aspect/codebuild-use-aws-manag
 import { DestroyPolicySetter } from "../cdk-aspect/destroy-policy-setter.js";
 import { DynamoDbLowCapacity } from "../cdk-aspect/dynamodb-low-capacity.js";
 import { KmsKeyShortPendingWindow } from "../cdk-aspect/kms-key-short-pending-window.js";
+import { LogGroupRetention } from "../cdk-aspect/log-group-retention.js";
 import { ChallengePayloadStack } from "../challenge-payload/challenge-payload-stack.js";
 import { ControlPlaneStack } from "../control-plane-stack.js";
 import { ObservabilityStack } from "../observability/cloudwatch-dashboard-stack.js";
@@ -60,6 +61,10 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   // SBT BashJobRunner が CodeBuild project artifact 暗号化用に作る customer-managed
   // KMS Key を AWS-managed alias `alias/aws/s3` (無料) に置き換える Aspect (cost cleanup)。
   cdk.Aspects.of(app).add(new CodeBuildUseAwsManagedKms());
+
+  // 全 stack の LogGroup retention を `CDK_PARAM_LOG_RETENTION_DAYS` (既定 1 日) に揃え、
+  // "Never expire" log group を一掃する Aspect (= 上の KMS / CodeBuild cost aspect と同列、 詳細は構築物の JSDoc)。
+  cdk.Aspects.of(app).add(new LogGroupRetention());
 
   // Issue #1031: admin-console-hosting を最初に立てる (= 依存なし、 wildcard CSP)。
   // 後続 control-plane / admin-console-insight が `distributionDomainName` を cross-stack ref で

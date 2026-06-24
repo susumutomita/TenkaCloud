@@ -4,6 +4,7 @@ import { resolveAppConfig } from "../lib/app-config/index.js";
 import { CodeBuildUseAwsManagedKms } from "../lib/cdk-aspect/codebuild-use-aws-managed-kms.js";
 import { DynamoDbLowCapacity } from "../lib/cdk-aspect/dynamodb-low-capacity.js";
 import { KmsKeyShortPendingWindow } from "../lib/cdk-aspect/kms-key-short-pending-window.js";
+import { LogGroupRetention } from "../lib/cdk-aspect/log-group-retention.js";
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack.js";
 import { TenkaCloudLiteStack } from "../lib/tenkacloud-lite/index.js";
 
@@ -49,6 +50,9 @@ cdk.Tags.of(app).add("Environment", config.environment);
 
 cdk.Aspects.of(app).add(new KmsKeyShortPendingWindow(config.kmsPendingWindowInDays));
 cdk.Aspects.of(app).add(new CodeBuildUseAwsManagedKms());
+// 全 LogGroup の retention を `CDK_PARAM_LOG_RETENTION_DAYS` (既定 1 日) に揃える。 KMS /
+// CodeBuild の App scope cost aspect と同じ位置に並べ、 Lite の両 stack の log group を一掃する。
+cdk.Aspects.of(app).add(new LogGroupRetention());
 
 // Issue #778 ADR-016 Phase 2 / PR-#791: eventBusArn 省略で local bus 自動作成。
 const problemDeployBackend = new ProblemDeployBackendStack(

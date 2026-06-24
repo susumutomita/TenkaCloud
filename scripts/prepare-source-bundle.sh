@@ -92,11 +92,21 @@ else
     aws s3api create-bucket --bucket "${CDK_PARAM_S3_BUCKET_NAME}" --region "${REGION}" \
       --create-bucket-configuration LocationConstraint="${REGION}"
   fi
-  aws s3api put-bucket-versioning --bucket "${CDK_PARAM_S3_BUCKET_NAME}" \
-    --versioning-configuration Status=Enabled
   aws s3api put-public-access-block --bucket "${CDK_PARAM_S3_BUCKET_NAME}" \
     --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 fi
+
+# versioning は create-only ではなく **毎回** 適用する idempotent toggle (= 既存 bucket も flip する)。
+# 既定は Suspended: 同 key に source.zip を PUT し続ける bucket で旧 version が無限蓄積し容量が
+# 際限なく増えるのを防ぐ (cost-zero 原則)。 CDK_PARAM_SOURCE_BUCKET_VERSIONING を true / enabled / 1
+# (大文字小文字無視) にしたときだけ Enabled に倒す。
+case "$(printf '%s' "${CDK_PARAM_SOURCE_BUCKET_VERSIONING:-}" | tr '[:upper:]' '[:lower:]')" in
+  true | enabled | 1) VERSIONING_STATUS="Enabled" ;;
+  *) VERSIONING_STATUS="Suspended" ;;
+esac
+echo "[prepare-source-bundle] setting bucket versioning: ${VERSIONING_STATUS}"
+aws s3api put-bucket-versioning --bucket "${CDK_PARAM_S3_BUCKET_NAME}" \
+  --versioning-configuration "Status=${VERSIONING_STATUS}"
 
 # Issue #1056: lifecycle policy を idempotent に PUT する (= 過去 bucket で未設定でも是正)。
 # 設定値は `infrastructure/environments/<env>/config.json` の `sourceBundleConfig` を

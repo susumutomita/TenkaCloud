@@ -1,11 +1,12 @@
 import * as path from "node:path";
-import { ArnFormat, Duration, Stack } from "aws-cdk-lib";
+import { ArnFormat, Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { type IEventBus, Rule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { LogGroup } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 import {
   LAMBDA_NODEJS_BUNDLING_TARGET,
@@ -82,6 +83,13 @@ export class DisruptionExecutorLambda extends Construct {
 
     this.fn = new NodejsFunction(this, "Function", {
       functionName,
+      // functionName は self-invoke ARN 構築のため固定だが、 log group 名は AUTO にする。
+      // `/aws/lambda/<functionName>` を明示すると、 既に deploy 済の環境で Lambda が auto 作成した
+      // 同名 log group と "already exists" 衝突を起こし deploy が失敗する。 Lambda は LoggingConfig
+      // 経由でこの明示 group に書くので機能は不変、 旧 auto group は孤立するだけ (retention は Aspect)。
+      logGroup: new LogGroup(this, "FunctionLogGroup", {
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
       entry: path.resolve(import.meta.dirname, "handlers/disruption-executor-handler/index.ts"),
