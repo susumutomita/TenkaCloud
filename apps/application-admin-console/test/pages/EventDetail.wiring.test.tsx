@@ -69,37 +69,65 @@ vi.mock("../../src/components/event-detail/EventHeaderActions", () => ({
   ),
 }));
 
-// EventDangerZone stub: 全 callback prop を 1 button ずつ。
-const DZ_CALLBACKS = [
-  "onBulkTeardown",
-  "onDismissDeploySchedule",
-  "onDismissEnd",
-  "onDismissEndsAt",
-  "onDismissForceArchive",
-  "onDismissNotification",
-  "onDismissNotificationSuccess",
-  "onDismissSchedule",
-  "onDismissTeardown",
-  "onEndEvent",
-  "onForceArchive",
-  "onNotificationSuccess",
-  "onScheduleDeploy",
-  "onScheduleEnd",
-  "onScheduleTeardown",
-  "onScheduledStart",
-  "onDismissTeardownSchedule",
+// EventDangerZone stub: #2020 で props は単一の grouped controller になったので、 各 operation
+// model の action callback (`controller.<op>.<action>`) を 1 button ずつ叩けるようにする。
+// `dz-<op>-<action>` の testid で、 page → controller builder → operations.* の配線を pin する。
+const DZ_ACTIONS = [
+  "endEvent.dismiss",
+  "endEvent.execute",
+  "forceArchive.dismiss",
+  "forceArchive.execute",
+  "teardown.dismiss",
+  "teardown.execute",
+  "schedule.dismiss",
+  "schedule.submit",
+  "endsAt.dismiss",
+  "endsAt.submit",
+  "teardownSchedule.dismiss",
+  "teardownSchedule.submit",
+  "deploySchedule.dismiss",
+  "deploySchedule.submit",
+  "notification.dismissModal",
+  "notification.dismissSuccess",
+  "notification.onSuccess",
 ] as const;
 vi.mock("../../src/components/event-detail/EventDangerZone", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: stub props。
-  EventDangerZone: (p: any) => (
-    <div data-testid="danger-zone">
-      {DZ_CALLBACKS.map((cb) => (
-        <button key={cb} type="button" data-testid={`dz-${cb}`} onClick={p[cb]}>
-          {cb}
-        </button>
-      ))}
-    </div>
-  ),
+  EventDangerZone: (p: any) => {
+    // 旧実装が個別 input state を配線していたのと違い、 page は controller 1 つだけを渡す。
+    // 個別の input setter / date-time prop が surface に漏れていないことをここで確認する。
+    const leakedInputProps = [
+      "scheduleDate",
+      "setScheduleDate",
+      "endsAtDate",
+      "setEndsAtDate",
+      "teardownDate",
+      "setTeardownDate",
+      "deployDate",
+      "setDeployDate",
+    ].filter((k) => k in p);
+    return (
+      <div
+        data-testid="danger-zone"
+        data-leaked-input-props={leakedInputProps.join(",")}
+        data-ctx-event-id={p.controller.eventContext.eventId}
+      >
+        {DZ_ACTIONS.map((path) => {
+          const [op, action] = path.split(".") as [string, string];
+          return (
+            <button
+              key={path}
+              type="button"
+              data-testid={`dz-${path}`}
+              onClick={() => p.controller[op][action]()}
+            >
+              {path}
+            </button>
+          );
+        })}
+      </div>
+    );
+  },
 }));
 
 // tab component は stub (本テストは orchestrator 対象)。 EVENT_TAB_IDS / readTabFromHash は実物。
@@ -331,41 +359,45 @@ describe("EventDetailPage wiring", () => {
     fireEvent.click(document.querySelector('button[class*="dismiss-button"]') as HTMLButtonElement);
     expect(ops.setBulkResult).toHaveBeenCalledWith(null);
 
-    // danger-zone の全 callback。
-    fireEvent.click(screen.getByTestId("dz-onBulkTeardown"));
+    // #2020: page は controller 1 つだけを渡す。 個別 input prop が surface に漏れていない。
+    expect(screen.getByTestId("danger-zone")).toHaveAttribute("data-leaked-input-props", "");
+    expect(screen.getByTestId("danger-zone")).toHaveAttribute("data-ctx-event-id", VALID_ID);
+
+    // danger-zone の各 operation model action → operations.* / setter の配線。
+    fireEvent.click(screen.getByTestId("dz-teardown.execute"));
     expect(ops.handleBulkTeardown).toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId("dz-onDismissEnd"));
+    fireEvent.click(screen.getByTestId("dz-endEvent.dismiss"));
     expect(ops.setConfirmEnd).toHaveBeenCalledWith(false);
-    fireEvent.click(screen.getByTestId("dz-onDismissEndsAt"));
+    fireEvent.click(screen.getByTestId("dz-endsAt.dismiss"));
     expect(ops.setEndsAtModalOpen).toHaveBeenCalledWith(false);
-    fireEvent.click(screen.getByTestId("dz-onDismissForceArchive"));
+    fireEvent.click(screen.getByTestId("dz-forceArchive.dismiss"));
     expect(ops.setConfirmForceArchive).toHaveBeenCalledWith(false);
-    fireEvent.click(screen.getByTestId("dz-onDismissNotification"));
+    fireEvent.click(screen.getByTestId("dz-notification.dismissModal"));
     expect(ops.setNotifyModalOpen).toHaveBeenCalledWith(false);
-    fireEvent.click(screen.getByTestId("dz-onDismissNotificationSuccess"));
+    fireEvent.click(screen.getByTestId("dz-notification.dismissSuccess"));
     expect(ops.setNotifyJustSent).toHaveBeenCalledWith(false);
-    fireEvent.click(screen.getByTestId("dz-onDismissSchedule"));
+    fireEvent.click(screen.getByTestId("dz-schedule.dismiss"));
     expect(ops.setScheduleModalOpen).toHaveBeenCalledWith(false);
-    fireEvent.click(screen.getByTestId("dz-onDismissTeardown"));
+    fireEvent.click(screen.getByTestId("dz-teardown.dismiss"));
     expect(ops.setConfirmTeardown).toHaveBeenCalledWith(false);
-    fireEvent.click(screen.getByTestId("dz-onEndEvent"));
+    fireEvent.click(screen.getByTestId("dz-endEvent.execute"));
     expect(ops.handleEndEvent).toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId("dz-onForceArchive"));
+    fireEvent.click(screen.getByTestId("dz-forceArchive.execute"));
     expect(ops.handleForceArchive).toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId("dz-onScheduleEnd"));
+    fireEvent.click(screen.getByTestId("dz-endsAt.submit"));
     expect(ops.handleScheduleEnd).toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId("dz-onScheduleTeardown"));
+    fireEvent.click(screen.getByTestId("dz-teardownSchedule.submit"));
     expect(ops.handleScheduleTeardown).toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId("dz-onDismissTeardownSchedule"));
+    fireEvent.click(screen.getByTestId("dz-teardownSchedule.dismiss"));
     expect(ops.setTeardownModalOpen).toHaveBeenCalledWith(false);
-    fireEvent.click(screen.getByTestId("dz-onScheduleDeploy"));
+    fireEvent.click(screen.getByTestId("dz-deploySchedule.submit"));
     expect(ops.handleScheduleDeploy).toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId("dz-onDismissDeploySchedule"));
+    fireEvent.click(screen.getByTestId("dz-deploySchedule.dismiss"));
     expect(ops.setDeployScheduleModalOpen).toHaveBeenCalledWith(false);
-    fireEvent.click(screen.getByTestId("dz-onScheduledStart"));
+    fireEvent.click(screen.getByTestId("dz-schedule.submit"));
     expect(ops.handleScheduledStart).toHaveBeenCalled();
-    // onNotificationSuccess は modal を閉じて just-sent を立てる (2 setter)。
-    fireEvent.click(screen.getByTestId("dz-onNotificationSuccess"));
+    // notification.onSuccess は modal を閉じて just-sent を立てる (2 setter)。
+    fireEvent.click(screen.getByTestId("dz-notification.onSuccess"));
     expect(ops.setNotifyModalOpen).toHaveBeenCalledWith(false);
     expect(ops.setNotifyJustSent).toHaveBeenCalledWith(true);
 
