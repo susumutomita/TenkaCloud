@@ -63,6 +63,9 @@ event runtime into your AWS account, skipping the full SBT control plane.
 > 📖 **Step-by-step walkthrough:** [`docs/deployment/README.md`](./docs/deployment/README.md)
 > covers both paths below in full detail — prerequisites, the pipeline's manual-approval
 > gate, signing in, re-running, and teardown. The summary below is the quick version.
+>
+> 🧪 **Running a real event?** Rehearse it first with the
+> [Lite event rehearsal runbook](./docs/operations/lite-event-rehearsal.md).
 
 | Path | Best for | What runs |
 | --- | --- | --- |
