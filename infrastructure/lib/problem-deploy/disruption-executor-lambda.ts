@@ -83,10 +83,11 @@ export class DisruptionExecutorLambda extends Construct {
 
     this.fn = new NodejsFunction(this, "Function", {
       functionName,
-      // functionName を固定しているため、 auto-created `/aws/lambda/<functionName>` log group と
-      // 衝突しないよう明示 LogGroup も同名で作る (= retention は LogGroupRetention Aspect が一括設定)。
+      // functionName は self-invoke ARN 構築のため固定だが、 log group 名は AUTO にする。
+      // `/aws/lambda/<functionName>` を明示すると、 既に deploy 済の環境で Lambda が auto 作成した
+      // 同名 log group と "already exists" 衝突を起こし deploy が失敗する。 Lambda は LoggingConfig
+      // 経由でこの明示 group に書くので機能は不変、 旧 auto group は孤立するだけ (retention は Aspect)。
       logGroup: new LogGroup(this, "FunctionLogGroup", {
-        logGroupName: `/aws/lambda/${functionName}`,
         removalPolicy: RemovalPolicy.DESTROY,
       }),
       runtime: LAMBDA_NODEJS_RUNTIME,
