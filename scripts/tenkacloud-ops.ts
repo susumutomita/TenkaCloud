@@ -27,18 +27,23 @@ const HELP_TEXT = `tenkacloud ops — TenkaCloud platform observation CLI (read-
 
 Usage:
   bun run scripts/tenkacloud-ops.ts health [--region <r>]
+  bun run scripts/tenkacloud-ops.ts metrics --table <DeploymentsTableName> [--region <r>]
   bun run scripts/tenkacloud-ops.ts help
 
 Subcommands:
   health   全 TenkaCloud stack の CFn StackStatus を 1 行ずつ表示
+  metrics  Deployments table を scan し rehearsal メトリクス (status 内訳 / deploy 成功率 /
+           deploy 所要時間 / 初回 deploy wall-clock) を自動集計 (Issue #2018)
   help     このヘルプ
 
 Examples:
   bun run scripts/tenkacloud-ops.ts health
   bun run scripts/tenkacloud-ops.ts health --region us-east-1
+  bun run scripts/tenkacloud-ops.ts metrics --table tenkacloud-lite-problem-deploy-Deployments
 
 See also:
   make lite-status   (= Lite mode 専用の status、 scripts/tenkacloud-lite.ts)
+  docs/operations/lite-event-rehearsal.md  (= リハーサル runbook + 記録テンプレート)
 `;
 
 /** Re-exported for backwards-compatible imports; the canonical type is `SpawnResult`. */
@@ -144,6 +149,177 @@ export function computeHealthExitCode(buckets: StackHealthBuckets): 0 | 1 | 2 {
   return 0;
 }
 
+// ---- metrics subcommand (Issue #2018: rehearsal メトリクス自動集計) ----
+
+/**
+ * Deployments DDB table の 1 行を rehearsal メトリクス計算に必要な field だけへ射影したもの。
+ * `aws dynamodb scan --output json` の low-level attribute 形式 (`{ "S": "..." }`) から取り出す。
+ */
+export interface DeploymentRecord {
+  readonly status: string;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  readonly problemId?: string;
+}
+
+export interface RehearsalMetrics {
+  readonly total: number;
+  readonly byStatus: Readonly<Record<string, number>>;
+  readonly complete: number;
+  readonly failed: number;
+  /** complete / (complete + failed) の百分率。terminal な結果が無ければ null。 */
+  readonly successRatePct: number | null;
+  /** COMPLETE 各行の createdAt→updatedAt 所要秒の統計。データ無しなら null。 */
+  readonly durationsSec: {
+    readonly count: number;
+    readonly minSec: number;
+    readonly medianSec: number;
+    readonly maxSec: number;
+  } | null;
+  /** batch 全体の wall-clock: min(createdAt) → max(COMPLETE updatedAt) の経過秒。算出不能なら null。 */
+  readonly wallClockSpanSec: number | null;
+}
+
+export function buildScanDeploymentsArgs(table: string, region?: string): readonly string[] {
+  const args: string[] = ["dynamodb", "scan", "--table-name", table, "--output", "json"];
+  if (region) args.push("--region", region);
+  return args;
+}
+
+export function parseDeploymentsScanJson(
+  stdout: string,
+): { ok: true; records: readonly DeploymentRecord[] } | { ok: false; error: string } {
+  try {
+    const parsed = JSON.parse(stdout) as { Items?: Array<Record<string, { S?: string }>> };
+    const records: DeploymentRecord[] = (parsed.Items ?? []).map((item) => ({
+      status: item.status?.S ?? "UNKNOWN",
+      createdAt: item.createdAt?.S,
+      updatedAt: item.updatedAt?.S,
+      problemId: item.problemId?.S,
+    }));
+    return { ok: true, records };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+function medianOf(sorted: readonly number[]): number {
+  const n = sorted.length;
+  const mid = Math.floor(n / 2);
+  return n % 2 === 1 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+/** COMPLETE 行の createdAt→updatedAt 所要秒 (昇順)。範囲外・パース不能・負値は除外。 */
+function completeDurationsSec(records: readonly DeploymentRecord[]): number[] {
+  const out: number[] = [];
+  for (const r of records) {
+    if (r.status !== "COMPLETE" || !r.createdAt || !r.updatedAt) continue;
+    const start = Date.parse(r.createdAt);
+    const end = Date.parse(r.updatedAt);
+    if (Number.isNaN(start) || Number.isNaN(end) || end < start) continue;
+    out.push(Math.round((end - start) / 1000));
+  }
+  return out.sort((a, b) => a - b);
+}
+
+export function computeRehearsalMetrics(records: readonly DeploymentRecord[]): RehearsalMetrics {
+  const byStatus: Record<string, number> = {};
+  for (const r of records) byStatus[r.status] = (byStatus[r.status] ?? 0) + 1;
+  const complete = byStatus.COMPLETE ?? 0;
+  const failed = byStatus.FAILED ?? 0;
+  const terminal = complete + failed;
+  const successRatePct = terminal > 0 ? Math.round((complete / terminal) * 100) : null;
+
+  const durations = completeDurationsSec(records);
+  const durationsSec =
+    durations.length > 0
+      ? {
+          count: durations.length,
+          minSec: durations[0],
+          medianSec: medianOf(durations),
+          maxSec: durations[durations.length - 1],
+        }
+      : null;
+
+  const createdTimes = records
+    .map((r) => (r.createdAt ? Date.parse(r.createdAt) : Number.NaN))
+    .filter((t) => !Number.isNaN(t));
+  const completeUpdated = records
+    .filter(
+      (r): r is DeploymentRecord & { updatedAt: string } =>
+        r.status === "COMPLETE" && !!r.updatedAt,
+    )
+    .map((r) => Date.parse(r.updatedAt))
+    .filter((t) => !Number.isNaN(t));
+  let wallClockSpanSec: number | null = null;
+  if (createdTimes.length > 0 && completeUpdated.length > 0) {
+    const span = Math.max(...completeUpdated) - Math.min(...createdTimes);
+    wallClockSpanSec = span >= 0 ? Math.round(span / 1000) : null;
+  }
+
+  return {
+    total: records.length,
+    byStatus,
+    complete,
+    failed,
+    successRatePct,
+    durationsSec,
+    wallClockSpanSec,
+  };
+}
+
+function fmtDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m > 0 ? `${m}m${s}s` : `${s}s`;
+}
+
+export function formatRehearsalMetrics(
+  metrics: RehearsalMetrics,
+  table: string,
+  region: string | undefined,
+): string {
+  const lines: string[] = [`Rehearsal metrics — table=${table} (region=${region ?? "default"})\n`];
+  lines.push(`  deployments (total):     ${metrics.total}`);
+  for (const s of Object.keys(metrics.byStatus).sort()) {
+    lines.push(`    ${s.padEnd(18)} ${metrics.byStatus[s]}`);
+  }
+  lines.push(
+    `  deploy success rate:     ${
+      metrics.successRatePct === null
+        ? "n/a (no terminal deploys)"
+        : `${metrics.successRatePct}% (${metrics.complete}/${metrics.complete + metrics.failed})`
+    }`,
+  );
+  lines.push(
+    metrics.durationsSec
+      ? `  per-deploy duration:     min ${fmtDuration(metrics.durationsSec.minSec)} / median ${fmtDuration(metrics.durationsSec.medianSec)} / max ${fmtDuration(metrics.durationsSec.maxSec)} (n=${metrics.durationsSec.count})`
+      : "  per-deploy duration:     n/a (no COMPLETE deploys with timestamps)",
+  );
+  lines.push(
+    `  first-deploy wall-clock: ${metrics.wallClockSpanSec === null ? "n/a" : fmtDuration(metrics.wallClockSpanSec)}`,
+  );
+  lines.push(
+    "\n  (manual metrics — see docs/operations/lite-event-rehearsal.md: 失敗復旧時間 / 運営者介入 / 参加者開始 / AWS コスト)\n",
+  );
+  return lines.join("\n");
+}
+
+export async function runMetrics(io: CliIO, table: string, region?: string): Promise<number> {
+  const result = await io.spawnCapture("aws", buildScanDeploymentsArgs(table, region));
+  if (result.code !== 0) {
+    io.stderr(`aws dynamodb scan failed (exit ${result.code}):\n${result.stderr}`);
+    return result.code === 0 ? 1 : result.code;
+  }
+  const parsed = parseDeploymentsScanJson(result.stdout);
+  if (!parsed.ok) {
+    io.stderr(`failed to parse aws output: ${parsed.error}`);
+    return 1;
+  }
+  io.stdout(formatRehearsalMetrics(computeRehearsalMetrics(parsed.records), table, region));
+  return 0;
+}
+
 function printHealthSummary(
   io: CliIO,
   ours: readonly CfnStackSummary[],
@@ -206,20 +382,32 @@ export async function main(argv: readonly string[], ioOverride?: Partial<CliIO>)
   }
 
   const command = argv[0];
-  if (command !== "health") {
-    io.stderr(`unknown command: ${command}. Try 'help' or 'health'.\n`);
+  if (command !== "health" && command !== "metrics") {
+    io.stderr(`unknown command: ${command}. Try 'help', 'health', or 'metrics'.\n`);
     return 1;
   }
 
   let region: string | undefined;
+  let table: string | undefined;
   for (let i = 1; i < argv.length; i += 1) {
     if (argv[i] === "--region") {
       region = argv[i + 1];
+      i += 1;
+    } else if (argv[i] === "--table") {
+      table = argv[i + 1];
       i += 1;
     } else {
       io.stderr(`unknown flag: ${argv[i]}\n`);
       return 1;
     }
+  }
+
+  if (command === "metrics") {
+    if (!table) {
+      io.stderr("metrics requires --table <DeploymentsTableName>\n");
+      return 1;
+    }
+    return await runMetrics(io, table, region);
   }
 
   return await runHealth(io, region);

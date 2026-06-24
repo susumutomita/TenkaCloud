@@ -160,13 +160,18 @@
 </thead>
 <tbody><tr>
 <td>初回 deploy 完了までの時間</td>
-<td>bulk deploy 発火 〜 全 <code>COMPLETE</code> の経過。Console Jobs の タイムスタンプ / deploy log</td>
-<td>半自動（タイムスタンプ から計算、現状は手動集計）</td>
+<td><code>make ops-metrics TABLE=&lt;DeploymentsTable&gt;</code> の <code>first-deploy wall-clock</code>（= 最初の <code>createdAt</code> → 最後の <code>COMPLETE</code> の <code>updatedAt</code>）</td>
+<td><strong>自動</strong></td>
+</tr>
+<tr>
+<td>1 deploy あたりの所要時間</td>
+<td>同上 <code>per-deploy duration</code>（COMPLETE 各行の <code>createdAt</code>→<code>updatedAt</code> の min/median/max）</td>
+<td><strong>自動</strong></td>
 </tr>
 <tr>
 <td>チーム単位の deploy 成功率</td>
-<td>成功 deployment 数 / 全 deployment 数</td>
-<td>半自動（Console / Deployments）</td>
+<td>同上 <code>deploy success rate</code>（COMPLETE / (COMPLETE+FAILED)）+ status 内訳</td>
+<td><strong>自動</strong></td>
 </tr>
 <tr>
 <td>失敗からの復旧時間</td>
@@ -195,7 +200,7 @@
 </tr>
 </tbody></table>
 <blockquote>
-<p>自動集計の補助: <code>make ops-health</code>（healthy=0 / in_progress=1 / failed=2）で全体健全性を 1 コマンド判定。<code>make lite-status</code> で stack 状態。Console の Jobs / Deployments / Scoreboard / ScoreEvents が timestamp・成功率・スコア反映を可視化する。現状これらから<strong>手で集計</strong>し、自動エクスポートは将来拡張（本 runbook の実施で必要性を洗い出す）。</p>
+<p><strong>自動集計</strong>: <code>make ops-metrics TABLE=&lt;DeploymentsTableName&gt;</code>（<code>make lite-status</code> / CFn outputs で table 名を確認）が Deployments table を scan し、<strong>status 内訳 / deploy 成功率 / per-deploy 所要時間 / 初回 deploy wall-clock</strong> を 1 コマンドで出力する（read-only）。<code>make ops-health</code> は全体健全性（healthy=0 / in_progress=1 / failed=2）、<code>make lite-status</code> は stack 状態。上表の「自動」3 行はこれで埋まり、残りの手動メトリクスは下のテンプレートに記録する。</p>
 </blockquote>
 <h2>記録テンプレート（1 回の実施ごとにコピーして埋める）</h2>
 <pre><code class="language-markdown">## リハーサル記録 — &lt;YYYY-MM-DD&gt; / 実施者 &lt;name&gt; / env &lt;account-id&gt;
