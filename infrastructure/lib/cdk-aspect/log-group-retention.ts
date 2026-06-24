@@ -1,7 +1,7 @@
 import type { IAspect } from "aws-cdk-lib";
 import { CfnLogGroup } from "aws-cdk-lib/aws-logs";
 import type { IConstruct } from "constructs";
-import { LAMBDA_LOG_RETENTION_DAYS } from "../utils/lambda-runtime.js";
+import { LAMBDA_LOG_RETENTION } from "../utils/lambda-runtime.js";
 
 /**
  * 全ての CloudWatch `LogGroup` の retention を `CDK_PARAM_LOG_RETENTION_DAYS` (既定 1 日) に
@@ -16,9 +16,11 @@ import { LAMBDA_LOG_RETENTION_DAYS } from "../utils/lambda-runtime.js";
  *   - 全 `AWS::Logs::LogGroup` (Lambda 用 / state machine 用 / SBT 等 third-party 製も含む)
  *   - retention が既に設定済みでも **上書き** する (= param が常に勝つ)
  *
- * 設計: 値は `lambda-runtime.ts` の `LAMBDA_LOG_RETENTION_DAYS` (env 由来) を直接参照する。
- * `DynamoDbLowCapacity` のように caller から渡す形にしないのは、 retention は環境横断で 1 つの
- * param に閉じており (= per-stack で変える要件が無い)、 import で source of truth を 1 ヶ所に
+ * 設計: 値は `lambda-runtime.ts` の `LAMBDA_LOG_RETENTION` (= `resolveLogRetention` で検証済の
+ * `RetentionDays` enum、 値は日数そのもの) を直接参照する。 検証済 enum を使うことで、 サポート外の
+ * `CDK_PARAM_LOG_RETENTION_DAYS` は module load (= synth) 時に例外で停止する (fail loudly、 deploy
+ * まで持ち越さない)。 `DynamoDbLowCapacity` のように caller から渡さないのは、 retention は環境横断で
+ * 1 つの param に閉じており (= per-stack で変える要件が無い) import で source of truth を 1 ヶ所に
  * 保てるため。
  *
  * memory: コスト 0 原則。 training / demo 用途のログは短期保持で十分。
@@ -26,6 +28,6 @@ import { LAMBDA_LOG_RETENTION_DAYS } from "../utils/lambda-runtime.js";
 export class LogGroupRetention implements IAspect {
   public visit(node: IConstruct): void {
     if (!(node instanceof CfnLogGroup)) return;
-    node.retentionInDays = LAMBDA_LOG_RETENTION_DAYS;
+    node.retentionInDays = LAMBDA_LOG_RETENTION;
   }
 }

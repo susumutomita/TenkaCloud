@@ -14,7 +14,7 @@ import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { LogGroup } from "aws-cdk-lib/aws-logs";
 import { Queue } from "aws-cdk-lib/aws-sqs";
 import type { Construct } from "constructs";
-import { LAMBDA_NODEJS_RUNTIME } from "../utils/lambda-runtime.js";
+import { LAMBDA_LOG_RETENTION, LAMBDA_NODEJS_RUNTIME } from "../utils/lambda-runtime.js";
 
 /**
  * Issue #1727 / ADR-039 §7: customer-execution mode の CDK 配線。
@@ -81,8 +81,11 @@ export class CustomerExecutionPlaneStack extends Stack {
     });
 
     const fn = new NodejsFunction(this, "Function", {
+      // このスタックはどの App にも未配線で App-scope の LogGroupRetention Aspect が届かないため、
+      // retention を inline で設定する (= 配線され次第そのまま 1 日保持で synth される)。
       logGroup: new LogGroup(this, "FunctionLogGroup", {
         removalPolicy: RemovalPolicy.DESTROY,
+        retention: LAMBDA_LOG_RETENTION,
       }),
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
