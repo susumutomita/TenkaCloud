@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { Duration, Stack } from "aws-cdk-lib";
+import { Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import {
   ManagedPolicy,
@@ -15,6 +15,7 @@ import {
   HttpMethod,
 } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { LogGroup } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 import {
   LAMBDA_NODEJS_BUNDLING_TARGET,
@@ -160,6 +161,9 @@ export class ParticipantPortalLambda extends Construct {
     });
 
     this.fn = new NodejsFunction(this, "Function", {
+      logGroup: new LogGroup(this, "FunctionLogGroup", {
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
       entry: path.resolve(import.meta.dirname, "handlers/participant-handler/index.ts"),

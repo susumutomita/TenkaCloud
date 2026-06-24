@@ -11,6 +11,7 @@ import {
 import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { SqsEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { LogGroup } from "aws-cdk-lib/aws-logs";
 import { Queue } from "aws-cdk-lib/aws-sqs";
 import type { Construct } from "constructs";
 import { LAMBDA_NODEJS_RUNTIME } from "../utils/lambda-runtime.js";
@@ -80,6 +81,9 @@ export class CustomerExecutionPlaneStack extends Stack {
     });
 
     const fn = new NodejsFunction(this, "Function", {
+      logGroup: new LogGroup(this, "FunctionLogGroup", {
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
       entry: path.resolve(import.meta.dirname, "handler/index.ts"),

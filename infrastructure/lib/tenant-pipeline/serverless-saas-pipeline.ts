@@ -79,6 +79,9 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
     // リポジトリルート src/ にあったが #76 で整理した。
     const handlersPath = path.join(import.meta.dirname, "handlers");
     const lambdaFunctionPrep = new lambda.Function(this, "prep-deploy", {
+      logGroup: new logs.LogGroup(this, "PrepDeployLogGroup", {
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      }),
       handler: "lambda-prepare-deploy.lambda_handler",
       runtime: TENANT_PIPELINE_LAMBDA_RUNTIME,
       code: new lambda.AssetCode(handlersPath),
@@ -224,6 +227,9 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
 
     // Create Lambda iterator to cycle through waved deployments.
     const lambdaFunctionIterator = new lambda.Function(this, "WaveIterator", {
+      logGroup: new logs.LogGroup(this, "WaveIteratorLogGroup", {
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      }),
       handler: "iterator.lambda_handler",
       runtime: TENANT_PIPELINE_LAMBDA_RUNTIME,
       code: lambda.Code.fromAsset(handlersPath, { exclude: ["*.json"] }),

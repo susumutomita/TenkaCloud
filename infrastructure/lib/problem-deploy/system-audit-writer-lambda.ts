@@ -1,10 +1,11 @@
 import * as path from "node:path";
-import { Duration } from "aws-cdk-lib";
+import { Duration, RemovalPolicy } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { type IEventBus, Rule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { LogGroup } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 import {
   LAMBDA_NODEJS_BUNDLING_TARGET,
@@ -48,6 +49,9 @@ export class SystemAuditWriterLambda extends Construct {
     super(scope, id);
 
     this.fn = new NodejsFunction(this, "Function", {
+      logGroup: new LogGroup(this, "FunctionLogGroup", {
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
       entry: path.resolve(import.meta.dirname, "handlers/system-audit-writer/index.ts"),

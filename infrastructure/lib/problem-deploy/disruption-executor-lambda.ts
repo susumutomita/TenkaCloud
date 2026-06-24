@@ -1,11 +1,12 @@
 import * as path from "node:path";
-import { ArnFormat, Duration, Stack } from "aws-cdk-lib";
+import { ArnFormat, Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { type IEventBus, Rule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import * as iam from "aws-cdk-lib/aws-iam";
 import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { LogGroup } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 import {
   LAMBDA_NODEJS_BUNDLING_TARGET,
@@ -82,6 +83,12 @@ export class DisruptionExecutorLambda extends Construct {
 
     this.fn = new NodejsFunction(this, "Function", {
       functionName,
+      // functionName を固定しているため、 auto-created `/aws/lambda/<functionName>` log group と
+      // 衝突しないよう明示 LogGroup も同名で作る (= retention は LogGroupRetention Aspect が一括設定)。
+      logGroup: new LogGroup(this, "FunctionLogGroup", {
+        logGroupName: `/aws/lambda/${functionName}`,
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
       runtime: LAMBDA_NODEJS_RUNTIME,
       architecture: Architecture.ARM_64,
       entry: path.resolve(import.meta.dirname, "handlers/disruption-executor-handler/index.ts"),

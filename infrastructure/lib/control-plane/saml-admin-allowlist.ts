@@ -1,6 +1,7 @@
-import { Duration } from "aws-cdk-lib";
+import { Duration, RemovalPolicy } from "aws-cdk-lib";
 import { type UserPool, UserPoolOperation } from "aws-cdk-lib/aws-cognito";
 import { Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
+import { LogGroup } from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
 
 /**
@@ -139,6 +140,9 @@ export function attachFederatedAdminAllowlist(
   allowlist: readonly string[],
 ): void {
   const guard = new LambdaFunction(scope, "FederatedAdminAllowlistGuard", {
+    logGroup: new LogGroup(scope, "FederatedAdminAllowlistGuardLogGroup", {
+      removalPolicy: RemovalPolicy.DESTROY,
+    }),
     runtime: Runtime.NODEJS_20_X,
     handler: "index.handler",
     timeout: Duration.seconds(5),

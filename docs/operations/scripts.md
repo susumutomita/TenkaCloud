@@ -87,6 +87,15 @@ lifecycle configuration, frontend builds, archive upload, and cleanup.
 `scripts/package-source-bundle.sh` owns deterministic local packaging and does
 not call AWS APIs.
 
+Source-bucket versioning is driven by `CDK_PARAM_SOURCE_BUCKET_VERSIONING`
+(default: disabled). The script treats `true` / `enabled` / `1` (case-insensitive)
+as `Status=Enabled` and anything else — including unset — as `Status=Suspended`.
+The `put-bucket-versioning` call runs on every invocation (not only at bucket
+creation), so it is an idempotent toggle that also flips an already-existing
+bucket. Suspended is the default because the source bucket is PUT under a single
+key (`source.zip`) on every deploy, and versioning would otherwise accumulate
+noncurrent versions without bound.
+
 The local packager copies only the root allowlist: `infrastructure/` as `cdk/`,
 `scripts/`, `problems/`, `packages/`, the root `.nvmrc`, the root
 `package.json`, and the two required frontend `dist/` directories. Generated
