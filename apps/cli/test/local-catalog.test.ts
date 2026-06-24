@@ -161,6 +161,8 @@ describe("loadLocalCatalog metadata normalization", () => {
   }
 
   it("should map a fully populated metadata document", () => {
+    // kind=flag: local catalog は flag kind だけを残すので、 normalization の全 field を
+    // 1 件として観測するには解ける kind を使う (= 非 flag は filter テストで別途網羅)。
     const problem = loadSingle({
       id: "full",
       name: "Full Problem",
@@ -168,7 +170,7 @@ describe("loadLocalCatalog metadata normalization", () => {
       description: "A description",
       instructions: "Do the thing",
       scoring: {
-        kind: "uptime-flat",
+        kind: "flag",
         points: 250,
         hints: [{ id: "h1", penalty: 10, content: "hint text" }],
       },
@@ -188,7 +190,7 @@ describe("loadLocalCatalog metadata normalization", () => {
       category: "Battle",
       description: "A description",
       instructions: "Do the thing",
-      scoringKind: "uptime-flat",
+      scoringKind: "flag",
       points: 250,
       hints: [{ id: "h1", penalty: 10, content: "hint text" }],
       endpoints: [
@@ -361,6 +363,86 @@ describe("loadLocalCatalog sorting", () => {
       },
     });
     expect(loadLocalCatalog(ROOT, fs).map((p) => p.problemId)).toEqual(["alpha", "mike", "zeta"]);
+  });
+});
+
+describe("loadLocalCatalog local-solvable filter", () => {
+  // flag kind = 解ける / それ以外 = AWS deploy が要るので非表示、 を 1 つの fs で混在させる。
+  function mixedFs(): CatalogFs {
+    return makeFs({
+      dirs: {
+        [`${ROOT}/challenges`]: ["flag-c", "uptime-c", "no-kind-c"],
+        [`${ROOT}/battles`]: ["multi-b", "phased-b"],
+      },
+      files: {
+        // flag → kept
+        [`${ROOT}/challenges/flag-c/metadata.json`]: JSON.stringify({
+          id: "flag-c",
+          scoring: { kind: "flag", points: 100 },
+        }),
+        // uptime-flat → filtered
+        [`${ROOT}/challenges/uptime-c/metadata.json`]: JSON.stringify({
+          id: "uptime-c",
+          scoring: { kind: "uptime-flat", points: 200 },
+        }),
+        // no scoring.kind → defaults to flag → kept
+        [`${ROOT}/challenges/no-kind-c/metadata.json`]: JSON.stringify({ id: "no-kind-c" }),
+        // multi-flag → filtered (local does not score multiple flags)
+        [`${ROOT}/battles/multi-b/metadata.json`]: JSON.stringify({
+          id: "multi-b",
+          scoring: { kind: "multi-flag", points: 500 },
+        }),
+        // phased-polling → filtered
+        [`${ROOT}/battles/phased-b/metadata.json`]: JSON.stringify({
+          id: "phased-b",
+          scoring: { kind: "phased-polling", points: 300 },
+        }),
+      },
+    });
+  }
+
+  it("should keep only flag-kind problems (incl. metadata with no kind)", () => {
+    const kept = loadLocalCatalog(ROOT, mixedFs()).map((p) => p.problemId);
+    expect(kept).toEqual(["flag-c", "no-kind-c"]);
+  });
+
+  it("should drop uptime/multi-flag/phased problems that need live AWS", () => {
+    const kept = loadLocalCatalog(ROOT, mixedFs()).map((p) => p.problemId);
+    expect(kept).not.toContain("uptime-c");
+    expect(kept).not.toContain("multi-b");
+    expect(kept).not.toContain("phased-b");
+  });
+
+  it("should log the hidden count and ids when a log callback is provided", () => {
+    const lines: string[] = [];
+    loadLocalCatalog(ROOT, mixedFs(), (line) => lines.push(line));
+    expect(lines).toHaveLength(1);
+    // honest, not silent: 3 hidden, sorted ids surfaced for the operator.
+    expect(lines[0]).toBe(
+      "3 problems hidden in local mode (need AWS deploy: multi-b, phased-b, uptime-c)",
+    );
+  });
+
+  it("should not log when no problems are hidden", () => {
+    const fs = makeFs({
+      dirs: { [`${ROOT}/challenges`]: ["flag-only"] },
+      files: {
+        [`${ROOT}/challenges/flag-only/metadata.json`]: JSON.stringify({
+          id: "flag-only",
+          scoring: { kind: "flag" },
+        }),
+      },
+    });
+    const lines: string[] = [];
+    const kept = loadLocalCatalog(ROOT, fs, (line) => lines.push(line));
+    expect(kept.map((p) => p.problemId)).toEqual(["flag-only"]);
+    expect(lines).toEqual([]);
+  });
+
+  it("should filter silently when no log callback is provided", () => {
+    // log 省略時 (= 純カタログ取得) は警告を出さず filter のみ。
+    const kept = loadLocalCatalog(ROOT, mixedFs());
+    expect(kept.map((p) => p.problemId)).toEqual(["flag-c", "no-kind-c"]);
   });
 });
 

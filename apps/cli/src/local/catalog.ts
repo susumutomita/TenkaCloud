@@ -119,8 +119,16 @@ function toProblem(problemId: string, meta: RawMetadata): LocalCatalogProblem {
   };
 }
 
-/** challenges/ + battles/ を走査して全 problem を読み込む。 */
-export function loadLocalCatalog(problemsDir: string, fs: CatalogFs): LocalCatalogProblem[] {
+/**
+ * local mode で実際に「解ける」 scoring kind。 local の submit-flag は単一 flag
+ * (`flag === localPracticeFlag(problemId)`) しか採点しないため、 flag kind だけが本当に解ける。
+ * uptime-flat / uptime-multi / phased-polling / attack-detection は live な endpoint health を、
+ * multi-flag は複数 flag 採点を要し、 いずれも AWS deploy 無しの local では成立しない。
+ */
+const LOCAL_SOLVABLE_KIND = "flag";
+
+/** challenges/ + battles/ を走査して全 problem を読み込む (= filter 前の生カタログ)。 */
+function readAllProblems(problemsDir: string, fs: CatalogFs): LocalCatalogProblem[] {
   const groups = ["challenges", "battles"];
   const problems: LocalCatalogProblem[] = [];
   for (const group of groups) {
@@ -142,6 +150,28 @@ export function loadLocalCatalog(problemsDir: string, fs: CatalogFs): LocalCatal
   }
   problems.sort((a, b) => a.problemId.localeCompare(b.problemId));
   return problems;
+}
+
+/**
+ * challenges/ + battles/ を走査し、 local で本当に解ける flag kind の problem だけを返す。
+ *
+ * 非 flag kind を黙って落とすと「カタログに無い」 ように見えてしまうので、 隠した件数と id を
+ * `log` (= caller の出力機構) で明示する (= 正直に「N 問は AWS deploy が必要なので非表示」)。
+ * `log` 省略時 (= 純粋なカタログ取得) は警告を出さず filter だけ行う。
+ */
+export function loadLocalCatalog(
+  problemsDir: string,
+  fs: CatalogFs,
+  log?: (line: string) => void,
+): LocalCatalogProblem[] {
+  const all = readAllProblems(problemsDir, fs);
+  const solvable = all.filter((p) => p.scoringKind === LOCAL_SOLVABLE_KIND);
+  const hidden = all.filter((p) => p.scoringKind !== LOCAL_SOLVABLE_KIND);
+  if (log && hidden.length > 0) {
+    const ids = hidden.map((p) => p.problemId).join(", ");
+    log(`${hidden.length} problems hidden in local mode (need AWS deploy: ${ids})`);
+  }
+  return solvable;
 }
 
 /** 1 problem を id で解決する。 `local up <challenge>` の絞り込みに使う。 */

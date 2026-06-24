@@ -294,6 +294,27 @@ describe("runLocal up", () => {
     expect(state.problemId).toBe("c1");
   });
 
+  it("should warn about hidden non-flag problems while still starting (flag kept)", async () => {
+    // #1975: flag c1 は残し、 uptime b1 は AWS deploy 必須なので隠す。 隠した旨を out で明示。
+    const { fs } = makeFs({
+      dirs: { [`${PROBLEMS_DIR}/challenges`]: ["c1"], [`${PROBLEMS_DIR}/battles`]: ["b1"] },
+      files: {
+        [`${PROBLEMS_DIR}/challenges/c1/metadata.json`]: JSON.stringify({
+          id: "c1",
+          scoring: { kind: "flag", points: 100 },
+        }),
+        [`${PROBLEMS_DIR}/battles/b1/metadata.json`]: JSON.stringify({
+          id: "b1",
+          scoring: { kind: "uptime-flat", points: 200 },
+        }),
+      },
+    });
+    const code = await runLocal(["up"], { out, env: baseEnv(), fs, spawnDetached: vi.fn(() => 5) });
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toContain("1 problems hidden in local mode (need AWS deploy: b1)");
+    expect(lines.join("\n")).toContain("Local API starting");
+  });
+
   it("should honor a valid --port argument", async () => {
     const { fs, files } = makeFs({ dirs: catalogDirs(), files: catalogFiles() });
     const spawnDetached = vi.fn(() => 1);

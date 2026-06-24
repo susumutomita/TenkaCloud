@@ -12,10 +12,12 @@ import {
   describeProblemKind,
   getCompleteFlagScoring,
   getCompleteMultiFlagScoring,
+  hasProblemStatement,
   isHttpUrlOutput,
   isStaleProblem,
   isUptimeScoring,
   ProblemPanel,
+  resolveProblemTitle,
   splitStackOutputs,
 } from "./ProblemPanel";
 import {
@@ -291,6 +293,23 @@ describe("ProblemPanel pure helpers", () => {
       getCompleteMultiFlagScoring(p({ status: "COMPLETE", scoring: { kind: "flag" } })),
     ).toBeUndefined();
   });
+
+  it("should use name as the title when present and fall back to problemId otherwise", () => {
+    const p = (over: Partial<ParticipantProblemView>) => ({ ...baseProblem, ...over });
+    expect(resolveProblemTitle(p({ name: "Hello World" }))).toBe("Hello World");
+    // problemId fallback: undefined name and blank/whitespace name.
+    expect(resolveProblemTitle(p({ name: undefined }))).toBe("hello-world");
+    expect(resolveProblemTitle(p({ name: "   " }))).toBe("hello-world");
+  });
+
+  it("should detect a problem statement only when description or instructions is non-empty", () => {
+    const p = (over: Partial<ParticipantProblemView>) => ({ ...baseProblem, ...over });
+    expect(hasProblemStatement(p({}))).toBe(false);
+    expect(hasProblemStatement(p({ description: "", instructions: "" }))).toBe(false);
+    expect(hasProblemStatement(p({ description: "  " }))).toBe(false);
+    expect(hasProblemStatement(p({ description: "Solve it" }))).toBe(true);
+    expect(hasProblemStatement(p({ instructions: "Do A then B" }))).toBe(true);
+  });
 });
 
 describe("ProblemPanel render branches", () => {
@@ -413,6 +432,44 @@ describe("ProblemPanel render branches", () => {
   it("should omit the service health row when no applicationStatus is present", () => {
     renderPanel({ status: "COMPLETE", scoring: { kind: "flag" } });
     expect(screen.queryByText(/Service health|サービス状態/)).not.toBeInTheDocument();
+  });
+
+  it("should render the name as the panel title when present (#1975)", () => {
+    renderPanel({ name: "Reachability Check", problemId: "net-evo-01" });
+    expect(screen.getByText("Reachability Check")).toBeInTheDocument();
+    expect(screen.queryByText("net-evo-01")).not.toBeInTheDocument();
+  });
+
+  it("should render the problem statement heading + description + instructions (#1975)", () => {
+    renderPanel({
+      name: "Reachability Check",
+      description: "Make the endpoint reachable.",
+      instructions: "Step 1\nStep 2",
+    });
+    expect(screen.getByText(/^Problem$|^問題内容$/)).toBeInTheDocument();
+    expect(screen.getByText("Make the endpoint reachable.")).toBeInTheDocument();
+    // 改行を尊重したテキスト (pre-wrap) として instructions が出る。
+    expect(screen.getByText(/Step 1/)).toBeInTheDocument();
+  });
+
+  it("should render only the description when instructions is absent (#1975)", () => {
+    renderPanel({ description: "Only a description here." });
+    expect(screen.getByText(/^Problem$|^問題内容$/)).toBeInTheDocument();
+    expect(screen.getByText("Only a description here.")).toBeInTheDocument();
+  });
+
+  it("should render only the instructions when description is absent (#1975)", () => {
+    renderPanel({ instructions: "Only instructions here." });
+    expect(screen.getByText(/^Problem$|^問題内容$/)).toBeInTheDocument();
+    expect(screen.getByText("Only instructions here.")).toBeInTheDocument();
+  });
+
+  it("should omit the problem statement section entirely in AWS mode (no statement)", () => {
+    // AWS mode: name / description / instructions 未配信 → section も heading も出ない (= 既存挙動)。
+    renderPanel({ status: "COMPLETE", scoring: { kind: "flag" } });
+    expect(screen.queryByText(/^Problem$|^問題内容$/)).not.toBeInTheDocument();
+    // title は problemId に fall back。
+    expect(screen.getByText("hello-world")).toBeInTheDocument();
   });
 });
 

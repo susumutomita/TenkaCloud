@@ -112,6 +112,14 @@ export interface DeployLogsResponse {
 export interface ParticipantProblemView {
   readonly jobId: string;
   readonly problemId: string;
+  /**
+   * #1975: 問題文 (metadata.json 由来)。 local mode の Participant API は同梱して返すので、
+   * portal は「何の問題か / 何をすべきか」 を表示できる。 AWS mode の participant-handler は
+   * まだ返さない (= 別 follow-up) ため optional。 不在時は problemId を title に fall back する。
+   */
+  readonly name?: string;
+  readonly description?: string;
+  readonly instructions?: string;
   readonly region: string;
   /** 競技アカウント ID。SSO Credentials の AWS Console federation で使う。 */
   readonly awsAccountId: string;

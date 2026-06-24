@@ -1,4 +1,5 @@
 import Alert from "@cloudscape-design/components/alert";
+import Box from "@cloudscape-design/components/box";
 import Container from "@cloudscape-design/components/container";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Header from "@cloudscape-design/components/header";
@@ -138,6 +139,54 @@ export function getCompleteMultiFlagScoring(
   return scoring;
 }
 
+/**
+ * #1975: パネル title は人間可読な name を優先し、 不在時 (= AWS mode で問題文未配信) は
+ * problemId に fall back する。
+ */
+export function resolveProblemTitle(problem: ParticipantProblemView): string {
+  return problem.name?.trim() ? problem.name : problem.problemId;
+}
+
+/** description / instructions のいずれかが非空なら問題文セクションを描画する。 */
+export function hasProblemStatement(problem: ParticipantProblemView): boolean {
+  return Boolean(problem.description?.trim() || problem.instructions?.trim());
+}
+
+/**
+ * #1975: 問題文 (description + instructions) を読みやすい preformatted text で描画する。
+ *
+ * instructions は markdown 風のプレーンテキストになりうるが、 改行を尊重しつつ
+ * innerHTML / dangerouslySetInnerHTML は使わない (= XSS 面を作らない)。 不在の field は出さない
+ * ので、 AWS mode (問題文未配信) では section 全体が描画されず、 既存挙動のまま。
+ */
+function ProblemStatement({ problem, t }: { problem: ParticipantProblemView; t: ProblemPanelT }) {
+  if (!hasProblemStatement(problem)) return null;
+  return (
+    <Container header={<Header variant="h3">{t("problem_panel.statement_heading")}</Header>}>
+      <SpaceBetween size="xs">
+        {problem.description?.trim() && (
+          <Box variant="p">
+            <pre style={PROBLEM_TEXT_STYLE}>{problem.description}</pre>
+          </Box>
+        )}
+        {problem.instructions?.trim() && (
+          <Box variant="p">
+            <pre style={PROBLEM_TEXT_STYLE}>{problem.instructions}</pre>
+          </Box>
+        )}
+      </SpaceBetween>
+    </Container>
+  );
+}
+
+/** 改行尊重 + フォントは本文継承 (= autoLink / innerHTML を避けた安全なプレーンテキスト)。 */
+const PROBLEM_TEXT_STYLE = {
+  margin: 0,
+  whiteSpace: "pre-wrap",
+  fontFamily: "inherit",
+  fontSize: "inherit",
+} as const;
+
 function ProblemPanelAlerts({
   problem,
   isStale,
@@ -215,7 +264,7 @@ export function ProblemPanel({
             </StatusIndicator>
           }
         >
-          {problem.problemId}
+          {resolveProblemTitle(problem)}
         </Header>
       }
     >
@@ -227,6 +276,9 @@ export function ProblemPanel({
           now={now}
           t={t}
         />
+        {/* #1975: 問題文 (name / description / instructions)。 local mode は同梱して返すので
+            「何の問題か / 何をすべきか」 を表示できる。 AWS mode は未配信なので不在時は何も出さない。 */}
+        <ProblemStatement problem={problem} t={t} />
         {/* Audit #3: Job ID (= 内部 ULID) は競技者に見せない。 Region は問題ごとに異なる
             (operator が問題単位で deploy 先を選ぶ) ため、 どの region に建っているかを明示する
             (= 「Event region」 1 つだけだと混乱する、 運用フィードバック)。 */}

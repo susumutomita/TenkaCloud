@@ -86,6 +86,12 @@ function problemView(problem: LocalCatalogProblem, ctx: LocalApiContext, iso: st
   return {
     jobId: jobIdOf(problem.problemId),
     problemId: problem.problemId,
+    // #1975: 問題文 (name / description / instructions) を view に同梱する。 これが無いと
+    // participant-portal は「kind / 点数 + flag 欄」 しか出せず、 何の問題か / 何をすべきかが
+    // 競技者に伝わらない (= ハリボテ)。 catalog は metadata.json から既に読んでいるので素通しせず渡す。
+    name: problem.name,
+    description: problem.description,
+    instructions: problem.instructions,
     region: "local",
     awsAccountId: "000000000000",
     status: "COMPLETE",

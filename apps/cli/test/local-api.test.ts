@@ -115,6 +115,10 @@ describe("handleLocalRequest GET /portal/me", () => {
     const p = body.problems[0];
     expect(p.jobId).toBe("local-p1");
     expect(p.problemId).toBe("p1");
+    // #1975: 問題文 (name / description / instructions) を view に同梱する (= ハリボテ修正)。
+    expect(p.name).toBe("Problem One");
+    expect(p.description).toBe("desc");
+    expect(p.instructions).toBe("do the thing");
     expect(p.region).toBe("local");
     expect(p.awsAccountId).toBe("000000000000");
     expect(p.status).toBe("COMPLETE");
