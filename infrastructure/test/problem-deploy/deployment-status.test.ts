@@ -12,4 +12,12 @@ describe("DeploymentStatusSchema", () => {
     expect(DELETED_LIKE_STATUSES.has("EXPIRED")).toBe(true);
     expect(DELETED_LIKE_STATUSES.has("AUTO_DELETED")).toBe(true);
   });
+
+  it("should allow the Issue #2019 APPROVAL_PENDING hold status", () => {
+    expect(DeploymentStatusSchema.parse("APPROVAL_PENDING")).toBe("APPROVAL_PENDING");
+  });
+
+  it("should NOT treat APPROVAL_PENDING as deleted (it is held in-flight)", () => {
+    expect(DELETED_LIKE_STATUSES.has("APPROVAL_PENDING")).toBe(false);
+  });
 });

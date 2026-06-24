@@ -1,3 +1,4 @@
+import type { CloudActionEnforcementMode } from "@TenkaCloud/trust-bridge";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { S3Client } from "@aws-sdk/client-s3";
@@ -22,6 +23,7 @@ import {
   resolveChallengePayloadBucket,
 } from "../shared/visibility.js";
 import { type AdapterDependencyConfig, buildAdapterDependencies } from "./adapter-dependencies.js";
+import { maybeHoldDeploy, parseEnforcementMode } from "./cloud-action-enforcement.js";
 import {
   type DeployQuotaConfig,
   enforceDeployQuota,
@@ -76,6 +78,13 @@ export interface DeployContext extends AdapterDependencyConfig {
   readonly resolveProblemRuntime?: (problemId: string) => ProblemRuntime | undefined;
   /** #1766: tier 別同時デプロイ上限。未設定 = クォータ無効 (在来 stack / Lite)。 */
   readonly deployQuota?: DeployQuotaConfig;
+  /**
+   * Issue #2019 / ADR-017: TrustBridge high-risk enforcement mode. `"shadow"`
+   * (default / unset) = no behavior change, every deploy proceeds. `"enforce"`
+   * = opt-in; a high-risk deploy (replacing a live stack) is held as
+   * `APPROVAL_PENDING` instead of dispatching the adapter.
+   */
+  readonly cloudActionEnforcementMode?: CloudActionEnforcementMode;
 }
 
 export type DeployInvocation = DeployRequest & {
@@ -103,6 +112,32 @@ function runtimeItemFields(
     runtimeEngine: runtime.engine,
     runtimeEntry: runtime.entry,
   };
+}
+
+/**
+ * ADR-008 Phase 3: private 問題なら 15min TTL の presigned URL を返す。 public 問題 /
+ * bucket 未配線なら undefined (= local-path 経路)。 private なのに S3 client が無ければ
+ * 設定不整合として loud throw する (= silent fallback 禁止)。
+ */
+async function resolveChallengePayloadUrl(
+  ctx: DeployContext,
+  problemId: string,
+): Promise<string | undefined> {
+  const privateBucket = resolveChallengePayloadBucket({
+    problemId,
+    visibility: ctx.problemsVisibility,
+    bucketName: ctx.challengePayloadBucket,
+  });
+  if (!privateBucket) {
+    return undefined;
+  }
+  if (!ctx.s3) {
+    throw new Error(
+      "deploy-handler: private problem requires S3 client but ctx.s3 is undefined. " +
+        "Check CDK wiring for CHALLENGE_PAYLOAD_BUCKET + S3Client.",
+    );
+  }
+  return generateChallengePayloadUrl({ s3: ctx.s3, bucketName: privateBucket, problemId });
 }
 
 export class UnknownProblemError extends Error {
@@ -218,25 +253,7 @@ export async function startDeployment(
 
   // ADR-008 Phase 3: private 問題 + bucket bind 済なら S3 から 15min TTL presigned URL を
   // 発行。 CodeBuild の deploy-battles.sh が CHALLENGE_PAYLOAD_URL を fetch して zip 展開する。
-  const privateBucket = resolveChallengePayloadBucket({
-    problemId: request.problemId,
-    visibility: ctx.problemsVisibility,
-    bucketName: ctx.challengePayloadBucket,
-  });
-  let challengePayloadUrl: string | undefined;
-  if (privateBucket) {
-    if (!ctx.s3) {
-      throw new Error(
-        "deploy-handler: private problem requires S3 client but ctx.s3 is undefined. " +
-          "Check CDK wiring for CHALLENGE_PAYLOAD_BUCKET + S3Client.",
-      );
-    }
-    challengePayloadUrl = await generateChallengePayloadUrl({
-      s3: ctx.s3,
-      bucketName: privateBucket,
-      problemId: request.problemId,
-    });
-  }
+  const challengePayloadUrl = await resolveChallengePayloadUrl(ctx, request.problemId);
 
   // Issue #795 ADR-017 Phase 3 (shadow integration): 既存 deploy flow を変更せず、
   // CloudActionIntent を構築 + audit log を CloudWatch に emit する。 失敗系も
@@ -259,6 +276,31 @@ export async function startDeployment(
       "cloudformation:DescribeStackEvents",
     ],
   });
+
+  // Issue #2019 / ADR-017: staged enforcement gate. In the default `shadow` mode
+  // this is a single env compare that returns `null` (proceed) with zero extra
+  // I/O — the legacy path below is byte-for-byte unchanged. Only when the operator
+  // opts in (`CLOUD_ACTION_ENFORCEMENT_MODE=enforce`) and this deploy matches the
+  // gated high-risk rule (replacing a live stack) does it HOLD: it flips the row
+  // PENDING → APPROVAL_PENDING and returns the held response WITHOUT dispatching
+  // the adapter, so **no AssumeRole / CloudFormation runs**.
+  const held = await maybeHoldDeploy({
+    mode: ctx.cloudActionEnforcementMode ?? "shadow",
+    ddb: ctx.ddb,
+    tableName: ctx.tableName,
+    jobId,
+    tenantId: item.tenantId,
+    problemId: item.problemId,
+    teamSlug,
+    namePrefix: item.namePrefix,
+    teamLoginKey,
+    expiresAt: item.expiresAt,
+    nowIso: new Date(ctx.now()).toISOString(),
+  });
+  if (held) {
+    return held;
+  }
+
   try {
     // [ADR-023 / Issue #1268] dispatch via runtime adapter. For AWS / CFn (=
     // the only registered adapter today) this is byte-for-byte the same
@@ -350,6 +392,11 @@ export interface DeploySharedResources {
   readonly sakuraAppRunBaseUrl: string | undefined;
   /** #1766: tier 別同時デプロイ上限 (env JSON)。 未設定 = クォータ無効 (在来 stack / Lite)。 */
   readonly deployQuota: DeployQuotaConfig | undefined;
+  /**
+   * Issue #2019 / ADR-017: TrustBridge high-risk enforcement mode (env). Default
+   * `"shadow"` (= unset / anything but `"enforce"`) keeps the legacy path.
+   */
+  readonly cloudActionEnforcementMode: CloudActionEnforcementMode;
 }
 
 export function buildSharedResources(): DeploySharedResources {
@@ -369,6 +416,7 @@ export function buildSharedResources(): DeploySharedResources {
     ssm: new SSMClient({}),
     sakuraAppRunBaseUrl: process.env.SAKURA_APPRUN_BASE_URL || undefined,
     deployQuota: parseDeployQuota(process.env.DEPLOY_QUOTA_BY_TIER),
+    cloudActionEnforcementMode: parseEnforcementMode(process.env.CLOUD_ACTION_ENFORCEMENT_MODE),
   };
 }
 

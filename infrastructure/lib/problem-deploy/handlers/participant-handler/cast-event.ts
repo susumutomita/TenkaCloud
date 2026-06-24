@@ -68,7 +68,11 @@ interface CastEventInput {
 function isActiveDeployment(item: Partial<DeploymentItem>): boolean {
   const status = (item.status ?? "PENDING") as DeploymentStatus;
   if (DELETED_LIKE_STATUSES.has(status)) return false;
-  if (status === "PENDING" || status === "IN_PROGRESS") return false;
+  // Issue #2019: APPROVAL_PENDING is held in-flight (no stack exists yet), so it
+  // is not active — treat it like PENDING / IN_PROGRESS.
+  if (status === "PENDING" || status === "APPROVAL_PENDING" || status === "IN_PROGRESS") {
+    return false;
+  }
   return true;
 }
 

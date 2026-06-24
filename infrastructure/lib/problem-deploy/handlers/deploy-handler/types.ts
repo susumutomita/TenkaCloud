@@ -9,6 +9,16 @@ export {
 
 export const DeploymentStatusSchema = z.enum([
   "PENDING",
+  /**
+   * Issue #2019 / ADR-017: a high-risk deploy that TrustBridge enforcement held
+   * pending operator approval. The deployment row exists, but **no AssumeRole /
+   * CloudFormation has run** — the worker was never invoked. Lives between
+   * `PENDING` (created) and `IN_PROGRESS` (worker running), and is treated like
+   * `PENDING` for retention / scoring / event auto-transition (= held in-flight,
+   * not terminal). Only reached when `CLOUD_ACTION_ENFORCEMENT_MODE=enforce` and
+   * a matching high-risk rule fires; the default (`shadow`) never produces it.
+   */
+  "APPROVAL_PENDING",
   "IN_PROGRESS",
   "COMPLETE",
   "FAILED",

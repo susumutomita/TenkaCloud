@@ -155,6 +155,14 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
     readonly platinum: number;
   };
   /**
+   * Issue #2019 / ADR-017: TrustBridge high-risk enforcement mode for the deploy
+   * Lambda (`CLOUD_ACTION_ENFORCEMENT_MODE` env)。 default `"shadow"` (= 既存挙動、
+   * 全 deploy が従来経路で CFn diff も無し)。 `"enforce"` で opt-in: 高リスク deploy
+   * (= 既存ライブスタックを置換する deploy) を `APPROVAL_PENDING` で保留し、 AssumeRole /
+   * CloudFormation を走らせない。
+   */
+  readonly cloudActionEnforcementMode?: "shadow" | "enforce";
+  /**
    * SSM SecureString path 構築用の environment 名 (Issue #459 / ADR-002 Phase 2.1)。
    * `/{environmentName}/tenants/{tenantId}/external-id` の prefix として使う。
    * 例: `development` / `staging` / `production`。
@@ -322,6 +330,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       adminAuditLogTable: adminAuditLog.table,
       // #1766: tier 別の同時デプロイ上限 (env JSON)。
       deployQuotaByTier: props.deployQuotaByTier,
+      // Issue #2019 / ADR-017: TrustBridge enforcement mode (undefined → lambda
+      // defaults to shadow = no-op)。
+      cloudActionEnforcementMode: props.cloudActionEnforcementMode,
     });
     this.deployApiLambda = deployApi.fn;
 

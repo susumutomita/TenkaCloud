@@ -86,6 +86,21 @@ describe("enforceDeployQuota (#1766)", () => {
     expect(cmd.input.Select).toBe("COUNT");
   });
 
+  it("should count APPROVAL_PENDING (held) deploys against the quota (Issue #2019)", async () => {
+    const { deps, send } = depsWithActiveCount(1);
+    await enforceDeployQuota(deps, "tenant-a", "basic");
+    const cmd = send.mock.calls[0]?.[0] as QueryCommand;
+    // The active-status IN-list must include APPROVAL_PENDING so held deploys
+    // cannot be mass-produced to bypass the concurrent-deploy quota.
+    const values = cmd.input.ExpressionAttributeValues ?? {};
+    expect(Object.values(values)).toContain("APPROVAL_PENDING");
+    // The FilterExpression placeholder count must match the supplied values.
+    const placeholders = (cmd.input.FilterExpression ?? "").match(/:s\d+/g) ?? [];
+    for (const ph of placeholders) {
+      expect(values).toHaveProperty(ph);
+    }
+  });
+
   it("should throw DeployQuotaExceededError when active deployments reach the limit", async () => {
     const { deps } = depsWithActiveCount(2);
     await expect(enforceDeployQuota(deps, "tenant-a", "basic")).rejects.toMatchObject({

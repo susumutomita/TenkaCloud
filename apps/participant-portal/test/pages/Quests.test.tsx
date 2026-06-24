@@ -73,6 +73,13 @@ describe("renderSubmissionState scoring badge", () => {
     );
   });
 
+  it("Issue #2019: should show in-progress (not solvable) for a held APPROVAL_PENDING deploy", () => {
+    const s = renderSubmissionState(problem({ status: "APPROVAL_PENDING" }), pseudoT);
+    // Held deploy has no stack — never present it as solvable; reuse the PENDING label.
+    expect(s.type).toBe("in-progress");
+    expect(s.label).toBe("[quests.status_label.PENDING]");
+  });
+
   it("should show pending type (= 未着手) when flag is not yet submitted", () => {
     const s = renderSubmissionState(
       problem({ status: "COMPLETE", scoring: { kind: "flag", flagSubmitted: false } }),

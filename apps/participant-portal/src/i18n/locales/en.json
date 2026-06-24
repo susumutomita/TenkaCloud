@@ -123,6 +123,7 @@
     "empty_cleared": "No solved problems yet",
     "status_label": {
       "PENDING": "Preparing",
+      "APPROVAL_PENDING": "Awaiting approval",
       "IN_PROGRESS": "Starting…",
       "COMPLETE": "Running",
       "FAILED": "Failed to start",

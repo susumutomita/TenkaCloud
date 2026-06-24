@@ -40,6 +40,14 @@ export type {
 } from "./azure-federated-credential.js";
 export { AzureFederatedCredentialExchange } from "./azure-federated-credential.js";
 export type {
+  CloudActionEnforcementMode,
+  CloudActionPolicy,
+  CloudActionRiskContext,
+  CloudActionVerdict,
+  RequireApprovalRule,
+} from "./cloud-action-policy.js";
+export { evaluateCloudActionRisk } from "./cloud-action-policy.js";
+export type {
   CfnDeployClient,
   CfnExecutionAction,
   CfnExecutionResult,
