@@ -114,8 +114,8 @@ roles, S3, Lambda, Cognito, DynamoDB, CodeBuild, EventBridge, Step Functions).</
 <li>A <strong>region</strong> — the examples use <code>ap-northeast-1</code>. Use the same region everywhere.</li>
 <li>An <strong>organizer email</strong> that can receive mail (it gets the Cognito invite and
 becomes the Application Admin Console&#39;s first user).</li>
-<li>Roughly <strong>15 minutes</strong> of wall-clock time for the first deploy (CDK creates the
-stacks from scratch).</li>
+<li>Wall-clock time for the first deploy is dominated by CloudFormation provisioning
+the 2 stacks from scratch.</li>
 </ul>
 <p>Path A additionally needs a local toolchain (installed by <code>make install</code>). Path B
 additionally needs a one-time <strong>GitHub connection</strong> in AWS.</p>
@@ -153,7 +153,7 @@ is a SaaS-only field and is not needed here.</p>
 <p><code>make deploy</code> runs three phases (it streams CDK output directly):</p>
 <ol>
 <li><strong>Prepare source bundle</strong> — packages <code>source.zip</code> and uploads it to a per-account S3 bucket (<code>tenkacloud-source-&lt;account&gt;-&lt;region&gt;</code>), created automatically on the first deploy. No bucket setup is needed, and the name is unique per account so a brand-new account works.</li>
-<li><strong>Deploy 2 stacks</strong> — <code>cdk deploy</code> of <code>tenkacloud-lite</code> + <code>tenkacloud-lite-problem-deploy</code> (~10 minutes the first time).</li>
+<li><strong>Deploy 2 stacks</strong> — <code>cdk deploy</code> of <code>tenkacloud-lite</code> + <code>tenkacloud-lite-problem-deploy</code> (until CREATE_COMPLETE the first time).</li>
 <li><strong>Resolve URLs + create the Tenant Admin</strong> — sends the Cognito invite email and prints the access URLs.</li>
 </ol>
 <h3>A-6. Get the URLs and sign in</h3>
@@ -246,8 +246,7 @@ in the console is the reliable no-local path).</p>
 </tbody></table>
 </li>
 <li><p>Acknowledge the IAM capabilities and <strong>create the stack</strong>. The pipeline
-(<code>tenkacloud-lite-development</code>) is created in ~2-3 minutes and starts a run
-automatically.</p>
+(<code>tenkacloud-lite-development</code>) is created and starts a run automatically.</p>
 </li>
 </ol>
 <h3>B-4. Approve the manual gate ⚠️ (don&#39;t skip this)</h3>
@@ -273,8 +272,8 @@ stage and will not deploy until you approve it</strong>. This is the single most
 </ul>
 <p>(Set <code>EnableManualApproval=false</code> if you want the pipeline to deploy without a gate.)</p>
 <h3>B-5. Watch the build</h3>
-<p>After approval, the <strong>Deploy</strong> stage runs CodeBuild (<code>make deploy</code>, ~13 minutes the
-first time). Watch it in <strong>CodePipeline → Deploy → details</strong>, or in the CodeBuild
+<p>After approval, the <strong>Deploy</strong> stage runs CodeBuild (<code>make deploy</code>). Watch it in
+<strong>CodePipeline → Deploy → details</strong>, or in the CodeBuild
 project <code>tenkacloud-lite-development</code>. The build runs the same three phases as the
 local path (prepare bundle → cdk deploy → URLs + Tenant Admin invite).</p>
 <h3>B-6. Get the URLs</h3>

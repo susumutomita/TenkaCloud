@@ -35,8 +35,8 @@ For full multi-tenant SaaS mode (pooled / silo tiers + SBT Control Plane), see
 - A **region** — the examples use `ap-northeast-1`. Use the same region everywhere.
 - An **organizer email** that can receive mail (it gets the Cognito invite and
   becomes the Application Admin Console's first user).
-- Roughly **15 minutes** of wall-clock time for the first deploy (CDK creates the
-  stacks from scratch).
+- Wall-clock time for the first deploy is dominated by CloudFormation provisioning
+  the 2 stacks from scratch.
 
 Path A additionally needs a local toolchain (installed by `make install`). Path B
 additionally needs a one-time **GitHub connection** in AWS.
@@ -99,7 +99,7 @@ make deploy
 `make deploy` runs three phases (it streams CDK output directly):
 
 1. **Prepare source bundle** — packages `source.zip` and uploads it to a per-account S3 bucket (`tenkacloud-source-<account>-<region>`), created automatically on the first deploy. No bucket setup is needed, and the name is unique per account so a brand-new account works.
-2. **Deploy 2 stacks** — `cdk deploy` of `tenkacloud-lite` + `tenkacloud-lite-problem-deploy` (~10 minutes the first time).
+2. **Deploy 2 stacks** — `cdk deploy` of `tenkacloud-lite` + `tenkacloud-lite-problem-deploy` (until CREATE_COMPLETE the first time).
 3. **Resolve URLs + create the Tenant Admin** — sends the Cognito invite email and prints the access URLs.
 
 ### A-6. Get the URLs and sign in
@@ -165,8 +165,7 @@ in the console is the reliable no-local path).
    | `BunVersion` | No | `1.3.11` (matches the repo toolchain) |
 
 5. Acknowledge the IAM capabilities and **create the stack**. The pipeline
-   (`tenkacloud-lite-development`) is created in ~2-3 minutes and starts a run
-   automatically.
+   (`tenkacloud-lite-development`) is created and starts a run automatically.
 
 ### B-4. Approve the manual gate ⚠️ (don't skip this)
 
@@ -194,8 +193,8 @@ stage and will not deploy until you approve it**. This is the single most common
 
 ### B-5. Watch the build
 
-After approval, the **Deploy** stage runs CodeBuild (`make deploy`, ~13 minutes the
-first time). Watch it in **CodePipeline → Deploy → details**, or in the CodeBuild
+After approval, the **Deploy** stage runs CodeBuild (`make deploy`). Watch it in
+**CodePipeline → Deploy → details**, or in the CodeBuild
 project `tenkacloud-lite-development`. The build runs the same three phases as the
 local path (prepare bundle → cdk deploy → URLs + Tenant Admin invite).
 
