@@ -46,10 +46,49 @@ export interface TenantUserView {
   readonly updatedAt?: string;
 }
 
-export interface UsersRouteResult {
-  readonly status: number;
-  readonly body: unknown;
-}
+/**
+ * Tenant user route の結果型。 `status` を discriminant にした union で、 caller (index.ts) が
+ * `c.json(result.body, result.status)` を cast 無しで型検査できるようにする。 各 status の body
+ * 形は実 runtime レスポンスと 1:1 (= behavior-preserving)。
+ */
+export type UsersRouteResult =
+  | {
+      readonly status: StatusCodes.OK;
+      readonly body: { readonly items: readonly TenantUserView[] };
+    }
+  | { readonly status: StatusCodes.OK; readonly body: { readonly item: TenantUserView } }
+  | { readonly status: StatusCodes.OK; readonly body: { readonly deleted: true } }
+  | { readonly status: StatusCodes.CREATED; readonly body: { readonly item: TenantUserView } }
+  | { readonly status: StatusCodes.BAD_REQUEST; readonly body: { readonly error: "invalid_body" } }
+  | {
+      readonly status: StatusCodes.BAD_REQUEST;
+      readonly body: { readonly error: "invalid_username" };
+    }
+  | {
+      readonly status: StatusCodes.BAD_REQUEST;
+      readonly body: { readonly error: "validation_failed"; readonly issues: unknown };
+    }
+  | { readonly status: StatusCodes.NOT_FOUND; readonly body: { readonly error: "not_found" } }
+  | {
+      readonly status: StatusCodes.CONFLICT;
+      readonly body: { readonly error: "duplicate_user"; readonly email: string };
+    }
+  | {
+      readonly status: StatusCodes.CONFLICT;
+      readonly body: { readonly error: "cannot_delete_self" };
+    }
+  | {
+      readonly status: StatusCodes.CONFLICT;
+      readonly body: { readonly error: "cannot_change_own_role" };
+    }
+  | {
+      readonly status: StatusCodes.UNPROCESSABLE_ENTITY;
+      readonly body: { readonly error: "missing_cognito_claims"; readonly message: string };
+    }
+  | {
+      readonly status: StatusCodes.INTERNAL_SERVER_ERROR;
+      readonly body: { readonly error: "internal_error" };
+    };
 
 export interface UsersOrchestratorDeps {
   readonly shared: CompetitorAccountsSharedResources;
