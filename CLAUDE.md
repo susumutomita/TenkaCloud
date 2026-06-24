@@ -229,7 +229,7 @@ Add packages to `trustedDependencies` in a stand-alone PR. Manually verify the s
 
 ### Lite mode (default, `make deploy`)
 
-Issue #955 switched the default for `make deploy` to single-tenant Lite mode. It skips the SBT ControlPlane / tenant pipeline / SystemAdmin invitation entirely and deploys just two stacks via `infrastructure/bin/tenkacloud-lite.ts`: AppPlaneCore (`tenantId="local"`) + ProblemDeployBackend (Participant Portal). It is the shortest path for "one organizer running one event" (about 10 minutes). Teardown is `make destroy` (`make lite-down`).
+Issue #955 switched the default for `make deploy` to single-tenant Lite mode. It skips the SBT ControlPlane / tenant pipeline / SystemAdmin invitation entirely and deploys just two stacks via `infrastructure/bin/tenkacloud-lite.ts`: AppPlaneCore (`tenantId="local"`) + ProblemDeployBackend (Participant Portal). It is the single-tenant path for one organizer running one event. Teardown is `make destroy` (`make lite-down`).
 
 ### SaaS mode (opt-in, `make deploy-saas`)
 
