@@ -431,6 +431,8 @@ export function useEventOperations(args: {
     }
   };
 
+  // Issue #2020: this flat return is each operation's display + input state + action; the danger
+  // zone groups it into per-operation models via `buildEventDangerZoneController` at the seam.
   return {
     bulkInFlight,
     bulkResult,

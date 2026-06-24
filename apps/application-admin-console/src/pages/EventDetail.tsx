@@ -9,6 +9,7 @@ import { type ApiClient, canMutateTenant, useApiClient } from "../api/client";
 import { EVENT_ID_RE, type EventDetail } from "../api/events-client";
 import { EventDangerZone } from "../components/event-detail/EventDangerZone";
 import { EventHeaderActions } from "../components/event-detail/EventHeaderActions";
+import { buildEventDangerZoneController } from "../components/event-detail/event-danger-zone-models";
 import type { AppConfig } from "../config";
 import { useEventDetail } from "../hooks/useEventDetail";
 import { useEventOperations, validateEndsAtInput } from "../hooks/useEventOperations";
@@ -317,6 +318,8 @@ function EventDetailLoaded({
   readonly wizard: WizardState;
 }) {
   const counts = summarizeDeployments(detail);
+  // The scheduled-end reservation needs validation resolved against the current input + detail,
+  // so it is computed here and handed to the danger-zone controller (Issue #2020).
   const endsAtValidation = validateEndsAtInput(
     operations.endsAtDate,
     operations.endsAtTime,
@@ -324,7 +327,12 @@ function EventDetailLoaded({
     Date.now(),
   );
   const endsAtErrorText = endsAtValidation.errorKey ? t(endsAtValidation.errorKey) : undefined;
-  const endsAtInvalid = endsAtErrorText !== undefined;
+  // Issue #2020: group every danger operation's display state + input updates + actions into one
+  // controller. The page no longer wires each individual input setter into EventDangerZone.
+  const dangerZoneController = buildEventDangerZoneController(operations, {
+    eventContext: { canMutateTenant, config, detail, eventId },
+    endsAt: { validation: endsAtValidation, errorText: endsAtErrorText },
+  });
   const [activeTab, setActiveTab] = useTabFragmentSync();
 
   return (
@@ -395,66 +403,7 @@ function EventDetailLoaded({
         })}
       />
 
-      <EventDangerZone
-        canMutateTenant={canMutateTenant}
-        config={config}
-        confirmEnd={operations.confirmEnd}
-        confirmForceArchive={operations.confirmForceArchive}
-        confirmTeardown={operations.confirmTeardown}
-        deployDate={operations.deployDate}
-        deployScheduleInFlight={operations.deployScheduleInFlight}
-        deployScheduleModalOpen={operations.deployScheduleModalOpen}
-        deployTime={operations.deployTime}
-        detail={detail}
-        endsAtDate={operations.endsAtDate}
-        endsAtErrorText={endsAtErrorText}
-        endsAtInFlight={operations.endsAtInFlight}
-        endsAtInvalid={endsAtInvalid}
-        endsAtModalOpen={operations.endsAtModalOpen}
-        endsAtTime={operations.endsAtTime}
-        endsAtValidation={endsAtValidation}
-        eventId={eventId}
-        forceArchiveInFlight={operations.forceArchiveInFlight}
-        notifyJustSent={operations.notifyJustSent}
-        notifyModalOpen={operations.notifyModalOpen}
-        onBulkTeardown={() => void operations.handleBulkTeardown()}
-        onDismissDeploySchedule={() => operations.setDeployScheduleModalOpen(false)}
-        onDismissEnd={() => operations.setConfirmEnd(false)}
-        onDismissEndsAt={() => operations.setEndsAtModalOpen(false)}
-        onDismissForceArchive={() => operations.setConfirmForceArchive(false)}
-        onDismissNotification={() => operations.setNotifyModalOpen(false)}
-        onDismissNotificationSuccess={() => operations.setNotifyJustSent(false)}
-        onDismissSchedule={() => operations.setScheduleModalOpen(false)}
-        onDismissTeardown={() => operations.setConfirmTeardown(false)}
-        onEndEvent={() => void operations.handleEndEvent()}
-        onForceArchive={() => void operations.handleForceArchive()}
-        onNotificationSuccess={() => {
-          operations.setNotifyModalOpen(false);
-          operations.setNotifyJustSent(true);
-        }}
-        onDismissTeardownSchedule={() => operations.setTeardownModalOpen(false)}
-        onScheduleDeploy={() => void operations.handleScheduleDeploy()}
-        onScheduleEnd={() => void operations.handleScheduleEnd()}
-        onScheduleTeardown={() => void operations.handleScheduleTeardown()}
-        onScheduledStart={() => void operations.handleScheduledStart()}
-        scheduleDate={operations.scheduleDate}
-        scheduleInFlight={operations.scheduleInFlight}
-        scheduleModalOpen={operations.scheduleModalOpen}
-        scheduleTime={operations.scheduleTime}
-        setDeployDate={operations.setDeployDate}
-        setDeployTime={operations.setDeployTime}
-        setEndsAtDate={operations.setEndsAtDate}
-        setEndsAtTime={operations.setEndsAtTime}
-        setScheduleDate={operations.setScheduleDate}
-        setScheduleTime={operations.setScheduleTime}
-        setTeardownDate={operations.setTeardownDate}
-        setTeardownTime={operations.setTeardownTime}
-        teardownDate={operations.teardownDate}
-        teardownInFlight={operations.teardownInFlight}
-        teardownModalOpen={operations.teardownModalOpen}
-        teardownTime={operations.teardownTime}
-        t={t}
-      />
+      <EventDangerZone controller={dangerZoneController} t={t} />
     </SpaceBetween>
   );
 }

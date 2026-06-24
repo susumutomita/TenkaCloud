@@ -2,14 +2,20 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EventDetail } from "../../../src/api/events-client";
 import { EventDangerZone } from "../../../src/components/event-detail/EventDangerZone";
+import type {
+  EventDangerZoneController,
+  ScheduleOperationModel,
+} from "../../../src/components/event-detail/event-danger-zone-models";
 import type { AppConfig } from "../../../src/config";
 import type { EndsAtValidation } from "../../../src/hooks/useEventOperations";
 
 /**
- * Issue #1350: EventDangerZone (end / force-archive / teardown / schedule-start / ends-at /
- * notification の確認 modal 群)。 各 modal の confirm/cancel callback、 teardown 確認入力
- * (DELETE で活性化)、 schedule・ends-at の DatePicker/TimeInput onChange、 notification success
- * alert を pin する。 子 SendNotificationModal は stub、 props は fixture、 t は echo。
+ * Issue #1350 / #2020: EventDangerZone (end / force-archive / teardown / schedule-start / ends-at /
+ * teardown-schedule / deploy-schedule / notification の確認 modal 群)。 各 modal の confirm/cancel
+ * callback、 teardown 確認入力 (DELETE で活性化)、 schedule・ends-at の DatePicker/TimeInput
+ * onChange、 notification success alert を pin する。 #2020 で props は単一の grouped controller
+ * に再編されたので、 fixture も per-operation model を組み立てる。 子 SendNotificationModal は
+ * stub、 t は echo。
  */
 vi.mock("../../../src/components/SendNotificationModal", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: stub props。
@@ -26,84 +32,103 @@ vi.mock("../../../src/components/SendNotificationModal", () => ({
     ) : null,
 }));
 
-type Props = Parameters<typeof EventDangerZone>[0];
-const props = (over: Partial<Props> = {}): Props =>
-  ({
-    canMutateTenant: true,
-    config: {} as AppConfig,
-    confirmEnd: false,
-    confirmForceArchive: false,
-    confirmTeardown: false,
-    deployDate: "",
-    deployScheduleInFlight: false,
-    deployScheduleModalOpen: false,
-    deployTime: "",
-    detail: {
-      teams: [{}],
-      problems: [{}],
-      startsAt: "2026-06-01T00:00:00Z",
-    } as unknown as EventDetail,
-    endsAtDate: "",
-    endsAtErrorText: undefined,
-    endsAtInFlight: false,
-    endsAtInvalid: false,
-    endsAtModalOpen: false,
-    endsAtTime: "",
-    endsAtValidation: { canSubmit: true } as EndsAtValidation,
-    eventId: "e1",
-    forceArchiveInFlight: false,
-    notifyJustSent: false,
-    notifyModalOpen: false,
-    onBulkTeardown: vi.fn(),
-    onDismissEnd: vi.fn(),
-    onDismissEndsAt: vi.fn(),
-    onDismissForceArchive: vi.fn(),
-    onDismissNotification: vi.fn(),
-    onDismissNotificationSuccess: vi.fn(),
-    onDismissSchedule: vi.fn(),
-    onDismissTeardown: vi.fn(),
-    onDismissDeploySchedule: vi.fn(),
-    onEndEvent: vi.fn(),
-    onForceArchive: vi.fn(),
-    onNotificationSuccess: vi.fn(),
-    onScheduleDeploy: vi.fn(),
-    onScheduleEnd: vi.fn(),
-    onScheduleTeardown: vi.fn(),
-    onScheduledStart: vi.fn(),
-    onDismissTeardownSchedule: vi.fn(),
-    scheduleDate: "",
-    scheduleInFlight: null,
-    scheduleModalOpen: false,
-    scheduleTime: "",
-    setDeployDate: vi.fn(),
-    setDeployTime: vi.fn(),
-    setEndsAtDate: vi.fn(),
-    setEndsAtTime: vi.fn(),
-    setScheduleDate: vi.fn(),
-    setScheduleTime: vi.fn(),
-    setTeardownDate: vi.fn(),
-    setTeardownTime: vi.fn(),
-    teardownDate: "",
-    teardownInFlight: false,
-    teardownModalOpen: false,
-    teardownTime: "",
-    t: (k: string) => k,
+const DEFAULT_DETAIL = {
+  teams: [{}],
+  problems: [{}],
+  startsAt: "2026-06-01T00:00:00Z",
+} as unknown as EventDetail;
+
+function scheduleModel(over: Partial<ScheduleOperationModel> = {}): ScheduleOperationModel {
+  return {
+    open: false,
+    inFlight: false,
+    date: "",
+    time: "",
+    setDate: vi.fn(),
+    setTime: vi.fn(),
+    submit: vi.fn(),
+    dismiss: vi.fn(),
     ...over,
-  }) as Props;
+  };
+}
+
+/** Build a fully-spied controller; pass `detail` / `canMutateTenant` / model overrides per test. */
+function controller(
+  over: {
+    canMutateTenant?: boolean;
+    detail?: EventDetail | null;
+    endEvent?: Partial<EventDangerZoneController["endEvent"]>;
+    forceArchive?: Partial<EventDangerZoneController["forceArchive"]>;
+    teardown?: Partial<EventDangerZoneController["teardown"]>;
+    schedule?: Partial<ScheduleOperationModel>;
+    endsAt?: Partial<EventDangerZoneController["endsAt"]>;
+    teardownSchedule?: Partial<ScheduleOperationModel>;
+    deploySchedule?: Partial<ScheduleOperationModel>;
+    notification?: Partial<EventDangerZoneController["notification"]>;
+  } = {},
+): EventDangerZoneController {
+  return {
+    eventContext: {
+      canMutateTenant: over.canMutateTenant ?? true,
+      config: {} as AppConfig,
+      detail: over.detail === undefined ? DEFAULT_DETAIL : over.detail,
+      eventId: "e1",
+    },
+    endEvent: {
+      open: false,
+      inFlight: false,
+      dismiss: vi.fn(),
+      execute: vi.fn(),
+      ...over.endEvent,
+    },
+    forceArchive: {
+      open: false,
+      inFlight: false,
+      dismiss: vi.fn(),
+      execute: vi.fn(),
+      ...over.forceArchive,
+    },
+    teardown: { open: false, dismiss: vi.fn(), execute: vi.fn(), ...over.teardown },
+    schedule: scheduleModel(over.schedule),
+    endsAt: {
+      ...scheduleModel(),
+      validation: { canSubmit: true } as EndsAtValidation,
+      errorText: undefined,
+      invalid: false,
+      ...over.endsAt,
+    },
+    teardownSchedule: scheduleModel(over.teardownSchedule),
+    deploySchedule: scheduleModel(over.deploySchedule),
+    notification: {
+      modalOpen: false,
+      justSent: false,
+      dismissModal: vi.fn(),
+      dismissSuccess: vi.fn(),
+      onSuccess: vi.fn(),
+      ...over.notification,
+    },
+  };
+}
+
+const t = (k: string) => k;
 
 afterEach(() => vi.clearAllMocks());
 
 describe("EventDangerZone", () => {
   it("should confirm end / force-archive / teardown (DELETE-gated) and cancel each", () => {
-    const p = props({ confirmEnd: true, confirmForceArchive: true, confirmTeardown: true });
-    render(<EventDangerZone {...p} />);
+    const c = controller({
+      endEvent: { open: true },
+      forceArchive: { open: true },
+      teardown: { open: true },
+    });
+    render(<EventDangerZone controller={c} t={t} />);
     // teardown blast-radius は teams/problems 件数を出す。
     expect(screen.getByText("event_detail.modal_teardown_blast_radius_body")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "event_detail.modal_end_event_confirm" }));
-    expect(p.onEndEvent).toHaveBeenCalled();
+    expect(c.endEvent.execute).toHaveBeenCalled();
     fireEvent.click(screen.getByTestId("force-archive-confirm"));
-    expect(p.onForceArchive).toHaveBeenCalled();
+    expect(c.forceArchive.execute).toHaveBeenCalled();
 
     // teardown confirm は DELETE 入力まで disabled。
     const teardownBtn = screen.getByTestId("modal-teardown-confirm");
@@ -112,48 +137,69 @@ describe("EventDangerZone", () => {
     fireEvent.change(input as HTMLInputElement, { target: { value: "DELETE" } });
     expect(screen.getByTestId("modal-teardown-confirm")).not.toBeDisabled();
     fireEvent.click(screen.getByTestId("modal-teardown-confirm"));
-    expect(p.onBulkTeardown).toHaveBeenCalled();
+    expect(c.teardown.execute).toHaveBeenCalled();
 
     // 各 modal の cancel (modal_cancel) → end / force-archive / teardown の順。
     const cancels = screen.getAllByRole("button", { name: "event_detail.modal_cancel" });
     fireEvent.click(cancels[0] as HTMLElement);
     fireEvent.click(cancels[1] as HTMLElement);
     fireEvent.click(cancels[2] as HTMLElement);
-    expect(p.onDismissEnd).toHaveBeenCalled();
-    expect(p.onDismissForceArchive).toHaveBeenCalled();
-    expect(p.onDismissTeardown).toHaveBeenCalled();
+    expect(c.endEvent.dismiss).toHaveBeenCalled();
+    expect(c.forceArchive.dismiss).toHaveBeenCalled();
+    expect(c.teardown.dismiss).toHaveBeenCalled();
   });
 
   it("should drive the schedule-start and ends-at date/time inputs and confirms", () => {
-    const p = props({ scheduleModalOpen: true, endsAtModalOpen: true });
-    render(<EventDangerZone {...p} />);
+    const c = controller({ schedule: { open: true }, endsAt: { open: true } });
+    render(<EventDangerZone controller={c} t={t} />);
     expect(screen.getByText(/event_detail\.modal_endsat_starts_at_hint/)).toBeInTheDocument(); // detail.startsAt hint
 
     // Cloudscape DatePicker/TimeInput は入力値を正規化するので、 onChange が発火したことだけ pin。
     const dates = screen.getAllByPlaceholderText("YYYY/MM/DD"); // [0]=schedule, [1]=ends-at
     fireEvent.change(dates[0] as HTMLElement, { target: { value: "2026/06/01" } });
-    expect(p.setScheduleDate).toHaveBeenCalled();
+    expect(c.schedule.setDate).toHaveBeenCalled();
     fireEvent.change(dates[1] as HTMLElement, { target: { value: "2026/06/02" } });
-    expect(p.setEndsAtDate).toHaveBeenCalled();
+    expect(c.endsAt.setDate).toHaveBeenCalled();
 
     const times = screen.getAllByPlaceholderText("hh:mm");
     fireEvent.change(times[0] as HTMLElement, { target: { value: "10:00" } });
-    expect(p.setScheduleTime).toHaveBeenCalled();
+    expect(c.schedule.setTime).toHaveBeenCalled();
     fireEvent.change(times[1] as HTMLElement, { target: { value: "18:00" } });
-    expect(p.setEndsAtTime).toHaveBeenCalled();
+    expect(c.endsAt.setTime).toHaveBeenCalled();
 
     // 両 modal の confirm (modal_schedule_confirm_label) → schedule-start / ends-at の順。
     const confirms = screen.getAllByRole("button", {
       name: "event_detail.modal_schedule_confirm_label",
     });
     fireEvent.click(confirms[0] as HTMLElement);
-    expect(p.onScheduledStart).toHaveBeenCalled();
+    expect(c.schedule.submit).toHaveBeenCalled();
     fireEvent.click(confirms[1] as HTMLElement);
-    expect(p.onScheduleEnd).toHaveBeenCalled();
+    expect(c.endsAt.submit).toHaveBeenCalled();
+  });
+
+  it("should surface the ends-at validation error text and invalid state on the inputs", () => {
+    // errorText 付き → FormField の errorText / DatePicker・TimeInput の invalid 経路。
+    const c = controller({
+      endsAt: {
+        open: true,
+        errorText: "event_detail.error_endsat_past",
+        invalid: true,
+        validation: { canSubmit: false } as EndsAtValidation,
+      },
+    });
+    render(<EventDangerZone controller={c} t={t} />);
+    const dialog = within(screen.getByRole("dialog", { name: "event_detail.modal_endsat_header" }));
+    expect(dialog.getAllByText("event_detail.error_endsat_past").length).toBeGreaterThan(0);
+    // canSubmit:false → confirm disabled。
+    expect(
+      dialog.getByRole("button", { name: "event_detail.modal_schedule_confirm_label" }),
+    ).toBeDisabled();
   });
 
   it("should render the teardown blast-radius with zero counts when detail is null", () => {
-    render(<EventDangerZone {...props({ confirmTeardown: true, detail: null })} />);
+    render(
+      <EventDangerZone controller={controller({ teardown: { open: true }, detail: null })} t={t} />,
+    );
     // detail?.teams.length ?? 0 / detail?.problems.length ?? 0 の null 経路。
     expect(screen.getByText("event_detail.modal_teardown_blast_radius_body")).toBeInTheDocument();
   });
@@ -161,12 +207,13 @@ describe("EventDangerZone", () => {
   it("should disable modal confirmations for a read-only viewer", () => {
     render(
       <EventDangerZone
-        {...props({
+        controller={controller({
           canMutateTenant: false,
-          confirmEnd: true,
-          confirmForceArchive: true,
-          confirmTeardown: true,
+          endEvent: { open: true },
+          forceArchive: { open: true },
+          teardown: { open: true },
         })}
+        t={t}
       />,
     );
     expect(
@@ -179,15 +226,15 @@ describe("EventDangerZone", () => {
   });
 
   it("should drive the teardown-schedule modal inputs and confirm/cancel (ADR-047)", () => {
-    const p = props({
-      teardownModalOpen: true,
+    const c = controller({
+      teardownSchedule: { open: true },
       detail: {
         teams: [{}],
         problems: [{}],
         endsAt: "2026-06-02T00:00:00Z",
       } as unknown as EventDetail,
     });
-    render(<EventDangerZone {...p} />);
+    render(<EventDangerZone controller={c} t={t} />);
     // Cloudscape は他 modal も DOM に描画するため、 teardown dialog に scope する。
     const modal = within(
       screen.getByRole("dialog", { name: "event_detail.modal_teardown_schedule_header" }),
@@ -197,39 +244,51 @@ describe("EventDangerZone", () => {
     expect(modal.getByText(/event_detail\.modal_teardown_ends_at_hint/)).toBeInTheDocument();
 
     fireEvent.change(modal.getByPlaceholderText("YYYY/MM/DD"), { target: { value: "2026/06/03" } });
-    expect(p.setTeardownDate).toHaveBeenCalled();
+    expect(c.teardownSchedule.setDate).toHaveBeenCalled();
     fireEvent.change(modal.getByPlaceholderText("hh:mm"), { target: { value: "10:00" } });
-    expect(p.setTeardownTime).toHaveBeenCalled();
+    expect(c.teardownSchedule.setTime).toHaveBeenCalled();
 
     fireEvent.click(
       modal.getByRole("button", { name: "event_detail.modal_teardown_schedule_confirm" }),
     );
-    expect(p.onScheduleTeardown).toHaveBeenCalled();
+    expect(c.teardownSchedule.submit).toHaveBeenCalled();
     fireEvent.click(modal.getByRole("button", { name: "event_detail.modal_cancel" }));
-    expect(p.onDismissTeardownSchedule).toHaveBeenCalled();
+    expect(c.teardownSchedule.dismiss).toHaveBeenCalled();
   });
 
   it("should hide the teardown ends-at hint without an end time and disable confirm in-flight / read-only", () => {
     // endsAt 不在 → hint 非表示 (falsy 経路)。
-    const { rerender } = render(<EventDangerZone {...props({ teardownModalOpen: true })} />);
+    const { rerender } = render(
+      <EventDangerZone controller={controller({ teardownSchedule: { open: true } })} t={t} />,
+    );
     expect(screen.queryByText(/event_detail\.modal_teardown_ends_at_hint/)).toBeNull();
     const confirmName = { name: "event_detail.modal_teardown_schedule_confirm" };
-    rerender(<EventDangerZone {...props({ teardownModalOpen: true, teardownInFlight: true })} />);
+    rerender(
+      <EventDangerZone
+        controller={controller({ teardownSchedule: { open: true, inFlight: true } })}
+        t={t}
+      />,
+    );
     expect(screen.getByRole("button", confirmName)).toBeDisabled();
-    rerender(<EventDangerZone {...props({ teardownModalOpen: true, canMutateTenant: false })} />);
+    rerender(
+      <EventDangerZone
+        controller={controller({ canMutateTenant: false, teardownSchedule: { open: true } })}
+        t={t}
+      />,
+    );
     expect(screen.getByRole("button", confirmName)).toBeDisabled();
   });
 
   it("should drive the deploy-schedule modal inputs and confirm/cancel (ADR-047 follow-up)", () => {
-    const p = props({
-      deployScheduleModalOpen: true,
+    const c = controller({
+      deploySchedule: { open: true },
       detail: {
         teams: [{}],
         problems: [{}],
         endsAt: "2026-06-02T00:00:00Z",
       } as unknown as EventDetail,
     });
-    render(<EventDangerZone {...p} />);
+    render(<EventDangerZone controller={c} t={t} />);
     // Cloudscape は他 modal も DOM に描画するため、 deploy dialog に scope する。
     const modal = within(
       screen.getByRole("dialog", { name: "event_detail.modal_deploy_schedule_header" }),
@@ -239,45 +298,51 @@ describe("EventDangerZone", () => {
     expect(modal.getByText(/event_detail\.modal_deploy_ends_at_hint/)).toBeInTheDocument();
 
     fireEvent.change(modal.getByPlaceholderText("YYYY/MM/DD"), { target: { value: "2026/06/01" } });
-    expect(p.setDeployDate).toHaveBeenCalled();
+    expect(c.deploySchedule.setDate).toHaveBeenCalled();
     fireEvent.change(modal.getByPlaceholderText("hh:mm"), { target: { value: "09:00" } });
-    expect(p.setDeployTime).toHaveBeenCalled();
+    expect(c.deploySchedule.setTime).toHaveBeenCalled();
 
     fireEvent.click(
       modal.getByRole("button", { name: "event_detail.modal_deploy_schedule_confirm" }),
     );
-    expect(p.onScheduleDeploy).toHaveBeenCalled();
+    expect(c.deploySchedule.submit).toHaveBeenCalled();
     fireEvent.click(modal.getByRole("button", { name: "event_detail.modal_cancel" }));
-    expect(p.onDismissDeploySchedule).toHaveBeenCalled();
+    expect(c.deploySchedule.dismiss).toHaveBeenCalled();
   });
 
   it("should hide the deploy ends-at hint without an end time and disable confirm in-flight / read-only", () => {
     // endsAt 不在 → hint 非表示 (falsy 経路)。
-    const { rerender } = render(<EventDangerZone {...props({ deployScheduleModalOpen: true })} />);
+    const { rerender } = render(
+      <EventDangerZone controller={controller({ deploySchedule: { open: true } })} t={t} />,
+    );
     expect(screen.queryByText(/event_detail\.modal_deploy_ends_at_hint/)).toBeNull();
     const confirmName = { name: "event_detail.modal_deploy_schedule_confirm" };
     rerender(
       <EventDangerZone
-        {...props({ deployScheduleModalOpen: true, deployScheduleInFlight: true })}
+        controller={controller({ deploySchedule: { open: true, inFlight: true } })}
+        t={t}
       />,
     );
     expect(screen.getByRole("button", confirmName)).toBeDisabled();
     rerender(
-      <EventDangerZone {...props({ deployScheduleModalOpen: true, canMutateTenant: false })} />,
+      <EventDangerZone
+        controller={controller({ canMutateTenant: false, deploySchedule: { open: true } })}
+        t={t}
+      />,
     );
     expect(screen.getByRole("button", confirmName)).toBeDisabled();
   });
 
   it("should wire the notification modal and dismiss the just-sent success alert", () => {
-    const p = props({ notifyModalOpen: true, notifyJustSent: true });
-    render(<EventDangerZone {...p} />);
+    const c = controller({ notification: { modalOpen: true, justSent: true } });
+    render(<EventDangerZone controller={c} t={t} />);
     fireEvent.click(screen.getByText("stub-notify-success"));
-    expect(p.onNotificationSuccess).toHaveBeenCalled();
+    expect(c.notification.onSuccess).toHaveBeenCalled();
     fireEvent.click(screen.getByText("stub-notify-dismiss"));
-    expect(p.onDismissNotification).toHaveBeenCalled();
-    // notifyJustSent → success alert + dismiss。
+    expect(c.notification.dismissModal).toHaveBeenCalled();
+    // justSent → success alert + dismiss。
     expect(screen.getByText("event_detail.notification_sent_body")).toBeInTheDocument();
     fireEvent.click(document.querySelector('button[class*="dismiss-button"]') as HTMLButtonElement);
-    expect(p.onDismissNotificationSuccess).toHaveBeenCalled();
+    expect(c.notification.dismissSuccess).toHaveBeenCalled();
   });
 });

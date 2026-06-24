@@ -8,10 +8,15 @@ import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import TimeInput from "@cloudscape-design/components/time-input";
 import { useEffect, useState } from "react";
-import type { EventDetail } from "../../api/events-client";
-import type { AppConfig } from "../../config";
-import type { EndsAtValidation } from "../../hooks/useEventOperations";
 import { SendNotificationModal } from "../SendNotificationModal";
+import type {
+  ConfirmOperationModel,
+  EndsAtOperationModel,
+  EventDangerZoneController,
+  NotificationOperationModel,
+  ScheduleOperationModel,
+  TeardownOperationModel,
+} from "./event-danger-zone-models";
 
 /**
  * Issue #1350: Bulk teardown は 「DELETE」 と入力させない限り confirm button を活性化しない。
@@ -40,418 +45,442 @@ function useTeardownConfirmInput(modalOpen: boolean): {
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
-export function EventDangerZone({
+/**
+ * Issue #2020: each danger operation is rendered from its own grouped model (see
+ * `event-danger-zone-models.ts`). Modal subcomponents below read exactly one model, so the
+ * page-level wiring is one `controller` prop rather than ~50 loose props.
+ */
+
+/** End-event confirmation modal: confirm-and-end-now (no input). */
+function EndEventModal({
   canMutateTenant,
-  config,
-  confirmEnd,
-  confirmForceArchive,
-  confirmTeardown,
-  deployDate,
-  deployScheduleInFlight,
-  deployScheduleModalOpen,
-  deployTime,
-  detail,
-  endsAtDate,
-  endsAtErrorText,
-  endsAtInFlight,
-  endsAtInvalid,
-  endsAtModalOpen,
-  endsAtTime,
-  endsAtValidation,
-  eventId,
-  forceArchiveInFlight,
-  notifyJustSent,
-  notifyModalOpen,
-  onBulkTeardown,
-  onDismissEnd,
-  onDismissEndsAt,
-  onDismissForceArchive,
-  onDismissDeploySchedule,
-  onDismissNotification,
-  onDismissNotificationSuccess,
-  onDismissSchedule,
-  onDismissTeardown,
-  onEndEvent,
-  onForceArchive,
-  onNotificationSuccess,
-  onScheduleDeploy,
-  onScheduleEnd,
-  onScheduledStart,
-  scheduleDate,
-  scheduleInFlight,
-  scheduleModalOpen,
-  scheduleTime,
-  onDismissTeardownSchedule,
-  onScheduleTeardown,
-  setDeployDate,
-  setDeployTime,
-  setEndsAtDate,
-  setEndsAtTime,
-  setScheduleDate,
-  setScheduleTime,
-  setTeardownDate,
-  setTeardownTime,
-  teardownDate,
-  teardownInFlight,
-  teardownModalOpen,
-  teardownTime,
+  model,
   t,
 }: {
   readonly canMutateTenant: boolean;
-  readonly config: AppConfig;
-  readonly confirmEnd: boolean;
-  readonly confirmForceArchive: boolean;
-  readonly confirmTeardown: boolean;
-  readonly deployDate: string;
-  readonly deployScheduleInFlight: boolean;
-  readonly deployScheduleModalOpen: boolean;
-  readonly deployTime: string;
-  readonly detail: EventDetail | null;
-  readonly endsAtDate: string;
-  readonly endsAtErrorText: string | undefined;
-  readonly endsAtInFlight: boolean;
-  readonly endsAtInvalid: boolean;
-  readonly endsAtModalOpen: boolean;
-  readonly endsAtTime: string;
-  readonly endsAtValidation: EndsAtValidation;
-  readonly eventId: string;
-  readonly forceArchiveInFlight: boolean;
-  readonly notifyJustSent: boolean;
-  readonly notifyModalOpen: boolean;
-  readonly onBulkTeardown: () => void;
-  readonly onDismissDeploySchedule: () => void;
-  readonly onDismissEnd: () => void;
-  readonly onDismissEndsAt: () => void;
-  readonly onDismissForceArchive: () => void;
-  readonly onDismissNotification: () => void;
-  readonly onDismissNotificationSuccess: () => void;
-  readonly onDismissSchedule: () => void;
-  readonly onDismissTeardown: () => void;
-  readonly onEndEvent: () => void;
-  readonly onForceArchive: () => void;
-  readonly onNotificationSuccess: () => void;
-  readonly onScheduleDeploy: () => void;
-  readonly onScheduleEnd: () => void;
-  readonly onScheduledStart: () => void;
-  readonly scheduleDate: string;
-  readonly scheduleInFlight: "now" | "scheduled" | null;
-  readonly scheduleModalOpen: boolean;
-  readonly scheduleTime: string;
-  readonly onDismissTeardownSchedule: () => void;
-  readonly onScheduleTeardown: () => void;
-  readonly setDeployDate: (value: string) => void;
-  readonly setDeployTime: (value: string) => void;
-  readonly setEndsAtDate: (value: string) => void;
-  readonly setEndsAtTime: (value: string) => void;
-  readonly setScheduleDate: (value: string) => void;
-  readonly setScheduleTime: (value: string) => void;
-  readonly setTeardownDate: (value: string) => void;
-  readonly setTeardownTime: (value: string) => void;
-  readonly teardownDate: string;
-  readonly teardownInFlight: boolean;
-  readonly teardownModalOpen: boolean;
-  readonly teardownTime: string;
+  readonly model: ConfirmOperationModel;
   readonly t: Translate;
 }) {
-  const teardownConfirm = useTeardownConfirmInput(confirmTeardown);
+  return (
+    <Modal
+      visible={model.open}
+      header={t("event_detail.modal_end_event_header")}
+      onDismiss={model.dismiss}
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={model.dismiss}>{t("event_detail.modal_cancel")}</Button>
+            <Button variant="primary" disabled={!canMutateTenant} onClick={model.execute}>
+              {t("event_detail.modal_end_event_confirm")}
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <SpaceBetween size="s">
+        <Box>{t("event_detail.modal_end_event_body")}</Box>
+        <Box variant="small" color="text-status-warning">
+          {t("event_detail.modal_end_event_extra")}
+        </Box>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+/** Force-archive rescue modal for a stack stuck in ROLLBACK_COMPLETE (#708). */
+function ForceArchiveModal({
+  canMutateTenant,
+  model,
+  t,
+}: {
+  readonly canMutateTenant: boolean;
+  readonly model: ConfirmOperationModel;
+  readonly t: Translate;
+}) {
+  return (
+    <Modal
+      visible={model.open}
+      header={t("event_detail.modal_force_archive_header")}
+      onDismiss={model.dismiss}
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={model.dismiss}>{t("event_detail.modal_cancel")}</Button>
+            <Button
+              variant="primary"
+              loading={model.inFlight}
+              disabled={!canMutateTenant}
+              onClick={model.execute}
+              data-testid="force-archive-confirm"
+            >
+              {t("event_detail.modal_force_archive_confirm_label")}
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <SpaceBetween size="s">
+        <Box>{t("event_detail.modal_force_archive_body")}</Box>
+        <Alert type="warning" header={t("event_detail.modal_force_archive_alert_header")}>
+          {t("event_detail.modal_force_archive_alert_body")}
+        </Alert>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+/** Bulk-teardown confirmation modal (DELETE-gated; blast radius shown from counts). */
+function TeardownModal({
+  canMutateTenant,
+  model,
+  problemCount,
+  teamCount,
+  t,
+}: {
+  readonly canMutateTenant: boolean;
+  readonly model: TeardownOperationModel;
+  readonly problemCount: number;
+  readonly teamCount: number;
+  readonly t: Translate;
+}) {
+  const teardownConfirm = useTeardownConfirmInput(model.open);
+  return (
+    <Modal
+      visible={model.open}
+      header={t("event_detail.modal_teardown_header")}
+      onDismiss={model.dismiss}
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={model.dismiss}>{t("event_detail.modal_cancel")}</Button>
+            <Button
+              variant="primary"
+              disabled={!canMutateTenant || !teardownConfirm.canSubmit}
+              data-testid="modal-teardown-confirm"
+              onClick={model.execute}
+            >
+              {t("event_detail.modal_teardown_confirm")}
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <SpaceBetween size="s">
+        <Alert type="warning" header={t("event_detail.modal_teardown_blast_radius_header")}>
+          {t("event_detail.modal_teardown_blast_radius_body", { teamCount, problemCount })}
+        </Alert>
+        <Box>{t("event_detail.modal_teardown_body")}</Box>
+        <Box variant="small" color="text-status-warning">
+          {t("event_detail.modal_teardown_extra")}
+        </Box>
+        <FormField
+          label={t("event_detail.modal_teardown_confirm_input_label")}
+          description={t("event_detail.modal_teardown_confirm_input_description")}
+        >
+          <Input
+            value={teardownConfirm.input}
+            onChange={(e) => teardownConfirm.setInput(e.detail.value)}
+            placeholder={TEARDOWN_CONFIRM_TEXT}
+            data-testid="modal-teardown-confirm-input"
+          />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+/** Scheduled-start reservation modal (date + time). */
+function ScheduleStartModal({
+  canMutateTenant,
+  model,
+  t,
+}: {
+  readonly canMutateTenant: boolean;
+  readonly model: ScheduleOperationModel;
+  readonly t: Translate;
+}) {
+  return (
+    <Modal
+      visible={model.open}
+      onDismiss={model.dismiss}
+      header={t("event_detail.modal_schedule_header")}
+      size="medium"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={model.dismiss}>{t("event_detail.modal_cancel")}</Button>
+            <Button
+              variant="primary"
+              loading={model.inFlight}
+              disabled={!canMutateTenant}
+              onClick={model.submit}
+            >
+              {t("event_detail.modal_schedule_confirm_label")}
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <SpaceBetween size="s">
+        <Box>{t("event_detail.modal_schedule_body")}</Box>
+        <FormField label={t("event_detail.modal_date_label")}>
+          <DatePicker
+            value={model.date}
+            onChange={(e) => model.setDate(e.detail.value)}
+            placeholder="YYYY/MM/DD"
+          />
+        </FormField>
+        <FormField label={t("event_detail.modal_time_label")}>
+          <TimeInput
+            value={model.time}
+            format="hh:mm"
+            placeholder="hh:mm"
+            onChange={(e) => model.setTime(e.detail.value)}
+          />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+/** Scheduled-end reservation modal (date + time + validation error text). */
+function EndsAtModal({
+  canMutateTenant,
+  model,
+  startsAt,
+  t,
+}: {
+  readonly canMutateTenant: boolean;
+  readonly model: EndsAtOperationModel;
+  readonly startsAt: string | undefined;
+  readonly t: Translate;
+}) {
+  return (
+    <Modal
+      visible={model.open}
+      onDismiss={model.dismiss}
+      header={t("event_detail.modal_endsat_header")}
+      size="medium"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={model.dismiss}>{t("event_detail.modal_cancel")}</Button>
+            <Button
+              variant="primary"
+              loading={model.inFlight}
+              disabled={!canMutateTenant || !model.validation.canSubmit || model.inFlight}
+              onClick={model.submit}
+            >
+              {t("event_detail.modal_schedule_confirm_label")}
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <SpaceBetween size="s">
+        <Box>{t("event_detail.modal_endsat_body")}</Box>
+        {startsAt && (
+          <Box variant="small" color="text-status-inactive">
+            {t("event_detail.modal_endsat_starts_at_hint")}: <code>{startsAt}</code>
+          </Box>
+        )}
+        <FormField label={t("event_detail.modal_date_label")} errorText={model.errorText}>
+          <DatePicker
+            value={model.date}
+            onChange={(e) => model.setDate(e.detail.value)}
+            placeholder="YYYY/MM/DD"
+            invalid={model.invalid}
+          />
+        </FormField>
+        <FormField label={t("event_detail.modal_time_label")} errorText={model.errorText}>
+          <TimeInput
+            value={model.time}
+            format="hh:mm"
+            placeholder="hh:mm"
+            onChange={(e) => model.setTime(e.detail.value)}
+            invalid={model.invalid}
+          />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+/**
+ * Scheduled automatic teardown (ADR-047) / deploy (ADR-047 follow-up) modal. The two operations are
+ * structurally identical (date + time, an endsAt ordering hint), so they share one component
+ * parameterised by the i18n keys; only the model and the labels differ.
+ */
+function ScheduleWithEndsAtHintModal({
+  canMutateTenant,
+  endsAt,
+  i18n,
+  model,
+  t,
+}: {
+  readonly canMutateTenant: boolean;
+  readonly endsAt: string | undefined;
+  readonly i18n: {
+    readonly header: string;
+    readonly body: string;
+    readonly endsAtHint: string;
+    readonly confirm: string;
+  };
+  readonly model: ScheduleOperationModel;
+  readonly t: Translate;
+}) {
+  return (
+    <Modal
+      visible={model.open}
+      onDismiss={model.dismiss}
+      header={t(i18n.header)}
+      size="medium"
+      footer={
+        <Box float="right">
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button onClick={model.dismiss}>{t("event_detail.modal_cancel")}</Button>
+            <Button
+              variant="primary"
+              loading={model.inFlight}
+              disabled={!canMutateTenant || model.inFlight}
+              onClick={model.submit}
+            >
+              {t(i18n.confirm)}
+            </Button>
+          </SpaceBetween>
+        </Box>
+      }
+    >
+      <SpaceBetween size="s">
+        <Box>{t(i18n.body)}</Box>
+        {endsAt && (
+          <Box variant="small" color="text-status-inactive">
+            {t(i18n.endsAtHint)}: <code>{endsAt}</code>
+          </Box>
+        )}
+        <FormField label={t("event_detail.modal_date_label")}>
+          <DatePicker
+            value={model.date}
+            onChange={(e) => model.setDate(e.detail.value)}
+            placeholder="YYYY/MM/DD"
+          />
+        </FormField>
+        <FormField label={t("event_detail.modal_time_label")}>
+          <TimeInput
+            value={model.time}
+            format="hh:mm"
+            placeholder="hh:mm"
+            onChange={(e) => model.setTime(e.detail.value)}
+          />
+        </FormField>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
+/** Send-notification modal + post-send success alert. */
+function NotificationSection({
+  config,
+  canMutateTenant,
+  eventId,
+  model,
+  t,
+}: {
+  readonly config: EventDangerZoneController["eventContext"]["config"];
+  readonly canMutateTenant: boolean;
+  readonly eventId: string;
+  readonly model: NotificationOperationModel;
+  readonly t: Translate;
+}) {
   return (
     <>
-      <Modal
-        visible={confirmEnd}
-        header={t("event_detail.modal_end_event_header")}
-        onDismiss={onDismissEnd}
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={onDismissEnd}>{t("event_detail.modal_cancel")}</Button>
-              <Button variant="primary" disabled={!canMutateTenant} onClick={onEndEvent}>
-                {t("event_detail.modal_end_event_confirm")}
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="s">
-          <Box>{t("event_detail.modal_end_event_body")}</Box>
-          <Box variant="small" color="text-status-warning">
-            {t("event_detail.modal_end_event_extra")}
-          </Box>
-        </SpaceBetween>
-      </Modal>
-
-      <Modal
-        visible={confirmForceArchive}
-        header={t("event_detail.modal_force_archive_header")}
-        onDismiss={onDismissForceArchive}
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={onDismissForceArchive}>{t("event_detail.modal_cancel")}</Button>
-              <Button
-                variant="primary"
-                loading={forceArchiveInFlight}
-                disabled={!canMutateTenant}
-                onClick={onForceArchive}
-                data-testid="force-archive-confirm"
-              >
-                {t("event_detail.modal_force_archive_confirm_label")}
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="s">
-          <Box>{t("event_detail.modal_force_archive_body")}</Box>
-          <Alert type="warning" header={t("event_detail.modal_force_archive_alert_header")}>
-            {t("event_detail.modal_force_archive_alert_body")}
-          </Alert>
-        </SpaceBetween>
-      </Modal>
-
-      <Modal
-        visible={confirmTeardown}
-        header={t("event_detail.modal_teardown_header")}
-        onDismiss={onDismissTeardown}
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={onDismissTeardown}>{t("event_detail.modal_cancel")}</Button>
-              <Button
-                variant="primary"
-                disabled={!canMutateTenant || !teardownConfirm.canSubmit}
-                data-testid="modal-teardown-confirm"
-                onClick={onBulkTeardown}
-              >
-                {t("event_detail.modal_teardown_confirm")}
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="s">
-          <Alert type="warning" header={t("event_detail.modal_teardown_blast_radius_header")}>
-            {t("event_detail.modal_teardown_blast_radius_body", {
-              teamCount: detail?.teams.length ?? 0,
-              problemCount: detail?.problems.length ?? 0,
-            })}
-          </Alert>
-          <Box>{t("event_detail.modal_teardown_body")}</Box>
-          <Box variant="small" color="text-status-warning">
-            {t("event_detail.modal_teardown_extra")}
-          </Box>
-          <FormField
-            label={t("event_detail.modal_teardown_confirm_input_label")}
-            description={t("event_detail.modal_teardown_confirm_input_description")}
-          >
-            <Input
-              value={teardownConfirm.input}
-              onChange={(e) => teardownConfirm.setInput(e.detail.value)}
-              placeholder={TEARDOWN_CONFIRM_TEXT}
-              data-testid="modal-teardown-confirm-input"
-            />
-          </FormField>
-        </SpaceBetween>
-      </Modal>
-
-      <Modal
-        visible={scheduleModalOpen}
-        onDismiss={onDismissSchedule}
-        header={t("event_detail.modal_schedule_header")}
-        size="medium"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={onDismissSchedule}>{t("event_detail.modal_cancel")}</Button>
-              <Button
-                variant="primary"
-                loading={scheduleInFlight === "scheduled"}
-                disabled={!canMutateTenant}
-                onClick={onScheduledStart}
-              >
-                {t("event_detail.modal_schedule_confirm_label")}
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="s">
-          <Box>{t("event_detail.modal_schedule_body")}</Box>
-          <FormField label={t("event_detail.modal_date_label")}>
-            <DatePicker
-              value={scheduleDate}
-              onChange={(e) => setScheduleDate(e.detail.value)}
-              placeholder="YYYY/MM/DD"
-            />
-          </FormField>
-          <FormField label={t("event_detail.modal_time_label")}>
-            <TimeInput
-              value={scheduleTime}
-              format="hh:mm"
-              placeholder="hh:mm"
-              onChange={(e) => setScheduleTime(e.detail.value)}
-            />
-          </FormField>
-        </SpaceBetween>
-      </Modal>
-
-      <Modal
-        visible={endsAtModalOpen}
-        onDismiss={onDismissEndsAt}
-        header={t("event_detail.modal_endsat_header")}
-        size="medium"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={onDismissEndsAt}>{t("event_detail.modal_cancel")}</Button>
-              <Button
-                variant="primary"
-                loading={endsAtInFlight}
-                disabled={!canMutateTenant || !endsAtValidation.canSubmit || endsAtInFlight}
-                onClick={onScheduleEnd}
-              >
-                {t("event_detail.modal_schedule_confirm_label")}
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="s">
-          <Box>{t("event_detail.modal_endsat_body")}</Box>
-          {detail?.startsAt && (
-            <Box variant="small" color="text-status-inactive">
-              {t("event_detail.modal_endsat_starts_at_hint")}: <code>{detail.startsAt}</code>
-            </Box>
-          )}
-          <FormField label={t("event_detail.modal_date_label")} errorText={endsAtErrorText}>
-            <DatePicker
-              value={endsAtDate}
-              onChange={(e) => setEndsAtDate(e.detail.value)}
-              placeholder="YYYY/MM/DD"
-              invalid={endsAtInvalid}
-            />
-          </FormField>
-          <FormField label={t("event_detail.modal_time_label")} errorText={endsAtErrorText}>
-            <TimeInput
-              value={endsAtTime}
-              format="hh:mm"
-              placeholder="hh:mm"
-              onChange={(e) => setEndsAtTime(e.detail.value)}
-              invalid={endsAtInvalid}
-            />
-          </FormField>
-        </SpaceBetween>
-      </Modal>
-
-      <Modal
-        visible={teardownModalOpen}
-        onDismiss={onDismissTeardownSchedule}
-        header={t("event_detail.modal_teardown_schedule_header")}
-        size="medium"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={onDismissTeardownSchedule}>{t("event_detail.modal_cancel")}</Button>
-              <Button
-                variant="primary"
-                loading={teardownInFlight}
-                disabled={!canMutateTenant || teardownInFlight}
-                onClick={onScheduleTeardown}
-              >
-                {t("event_detail.modal_teardown_schedule_confirm")}
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="s">
-          <Box>{t("event_detail.modal_teardown_schedule_body")}</Box>
-          {detail?.endsAt && (
-            <Box variant="small" color="text-status-inactive">
-              {t("event_detail.modal_teardown_ends_at_hint")}: <code>{detail.endsAt}</code>
-            </Box>
-          )}
-          <FormField label={t("event_detail.modal_date_label")}>
-            <DatePicker
-              value={teardownDate}
-              onChange={(e) => setTeardownDate(e.detail.value)}
-              placeholder="YYYY/MM/DD"
-            />
-          </FormField>
-          <FormField label={t("event_detail.modal_time_label")}>
-            <TimeInput
-              value={teardownTime}
-              format="hh:mm"
-              placeholder="hh:mm"
-              onChange={(e) => setTeardownTime(e.detail.value)}
-            />
-          </FormField>
-        </SpaceBetween>
-      </Modal>
-
-      <Modal
-        visible={deployScheduleModalOpen}
-        onDismiss={onDismissDeploySchedule}
-        header={t("event_detail.modal_deploy_schedule_header")}
-        size="medium"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={onDismissDeploySchedule}>{t("event_detail.modal_cancel")}</Button>
-              <Button
-                variant="primary"
-                loading={deployScheduleInFlight}
-                disabled={!canMutateTenant || deployScheduleInFlight}
-                onClick={onScheduleDeploy}
-              >
-                {t("event_detail.modal_deploy_schedule_confirm")}
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="s">
-          <Box>{t("event_detail.modal_deploy_schedule_body")}</Box>
-          {detail?.endsAt && (
-            <Box variant="small" color="text-status-inactive">
-              {t("event_detail.modal_deploy_ends_at_hint")}: <code>{detail.endsAt}</code>
-            </Box>
-          )}
-          <FormField label={t("event_detail.modal_date_label")}>
-            <DatePicker
-              value={deployDate}
-              onChange={(e) => setDeployDate(e.detail.value)}
-              placeholder="YYYY/MM/DD"
-            />
-          </FormField>
-          <FormField label={t("event_detail.modal_time_label")}>
-            <TimeInput
-              value={deployTime}
-              format="hh:mm"
-              placeholder="hh:mm"
-              onChange={(e) => setDeployTime(e.detail.value)}
-            />
-          </FormField>
-        </SpaceBetween>
-      </Modal>
-
       <SendNotificationModal
         config={config}
         canMutateTenant={canMutateTenant}
-        visible={notifyModalOpen}
+        visible={model.modalOpen}
         eventId={eventId}
-        onDismiss={onDismissNotification}
-        onSuccess={onNotificationSuccess}
+        onDismiss={model.dismissModal}
+        onSuccess={model.onSuccess}
       />
-      {notifyJustSent && (
+      {model.justSent && (
         <Alert
           type="success"
           dismissible
-          onDismiss={onDismissNotificationSuccess}
+          onDismiss={model.dismissSuccess}
           header={t("event_detail.notification_sent_header")}
         >
           {t("event_detail.notification_sent_body")}
         </Alert>
       )}
+    </>
+  );
+}
+
+/**
+ * The Event Detail danger zone: every confirm / schedule / notification modal for an event.
+ *
+ * Issue #2020 reshaped the prop surface from ~50 loose props into a single `controller`
+ * (see `event-danger-zone-models.ts`). Each modal subcomponent reads exactly one operation model,
+ * which keeps the page → danger-zone seam narrow as new operational features are added.
+ */
+export function EventDangerZone({
+  controller,
+  t,
+}: {
+  readonly controller: EventDangerZoneController;
+  readonly t: Translate;
+}) {
+  const { eventContext } = controller;
+  const { canMutateTenant, config, detail, eventId } = eventContext;
+  return (
+    <>
+      <EndEventModal canMutateTenant={canMutateTenant} model={controller.endEvent} t={t} />
+      <ForceArchiveModal canMutateTenant={canMutateTenant} model={controller.forceArchive} t={t} />
+      <TeardownModal
+        canMutateTenant={canMutateTenant}
+        model={controller.teardown}
+        problemCount={detail?.problems.length ?? 0}
+        teamCount={detail?.teams.length ?? 0}
+        t={t}
+      />
+      <ScheduleStartModal canMutateTenant={canMutateTenant} model={controller.schedule} t={t} />
+      <EndsAtModal
+        canMutateTenant={canMutateTenant}
+        model={controller.endsAt}
+        startsAt={detail?.startsAt}
+        t={t}
+      />
+      <ScheduleWithEndsAtHintModal
+        canMutateTenant={canMutateTenant}
+        endsAt={detail?.endsAt}
+        i18n={{
+          header: "event_detail.modal_teardown_schedule_header",
+          body: "event_detail.modal_teardown_schedule_body",
+          endsAtHint: "event_detail.modal_teardown_ends_at_hint",
+          confirm: "event_detail.modal_teardown_schedule_confirm",
+        }}
+        model={controller.teardownSchedule}
+        t={t}
+      />
+      <ScheduleWithEndsAtHintModal
+        canMutateTenant={canMutateTenant}
+        endsAt={detail?.endsAt}
+        i18n={{
+          header: "event_detail.modal_deploy_schedule_header",
+          body: "event_detail.modal_deploy_schedule_body",
+          endsAtHint: "event_detail.modal_deploy_ends_at_hint",
+          confirm: "event_detail.modal_deploy_schedule_confirm",
+        }}
+        model={controller.deploySchedule}
+        t={t}
+      />
+      <NotificationSection
+        config={config}
+        canMutateTenant={canMutateTenant}
+        eventId={eventId}
+        model={controller.notification}
+        t={t}
+      />
     </>
   );
 }
