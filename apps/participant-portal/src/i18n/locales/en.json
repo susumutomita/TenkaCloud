@@ -287,6 +287,7 @@
     "kind_phased": "Battle (time-phased scoring)",
     "kind_attack": "Battle (attack detection)",
     "kind_unknown": "(unknown)",
+    "statement_heading": "Problem",
     "failure_reason_header": "Failure reason",
     "stale_header": "Score is not increasing",
     "stale_body": "{ago} since last scoring. Something in your service may not be responding as expected.",

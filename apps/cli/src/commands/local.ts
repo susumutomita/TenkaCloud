@@ -118,7 +118,8 @@ function catalogFs(deps: LocalDeps) {
 async function cmdUp(args: readonly string[], ctx: Resolved, deps: LocalDeps): Promise<number> {
   const port = parsePort(args, ctx.env);
   const problemId = firstPositional(args);
-  const catalog = loadLocalCatalog(ctx.problemsDir, catalogFs(deps));
+  // #1975: 非 flag kind は local では解けないので filter する。 隠した件数/id は ctx.out で明示。
+  const catalog = loadLocalCatalog(ctx.problemsDir, catalogFs(deps), ctx.out);
   if (catalog.length === 0) {
     ctx.out(`No problems found under ${ctx.problemsDir} (set TENKACLOUD_PROBLEMS_DIR).`);
     return 1;
@@ -153,7 +154,8 @@ async function cmdUp(args: readonly string[], ctx: Resolved, deps: LocalDeps): P
 
 async function cmdServe(args: readonly string[], ctx: Resolved, deps: LocalDeps): Promise<number> {
   const port = parsePort(args, ctx.env);
-  const catalog = loadLocalCatalog(ctx.problemsDir, catalogFs(deps));
+  // #1975: 非 flag kind は local では解けないので filter する。 隠した件数/id は ctx.out で明示。
+  const catalog = loadLocalCatalog(ctx.problemsDir, catalogFs(deps), ctx.out);
   const start = deps.startApi ?? startLocalApi;
   const handle = await start(port, catalog, "Local Player");
   ctx.out(

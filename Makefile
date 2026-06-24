@@ -273,7 +273,7 @@ destroy-docker:   ; $(DOCKER_USER) $(DOCKER_COMPOSE) run --rm tenkacloud make de
 docker-shell:     ; $(DOCKER_USER) $(DOCKER_COMPOSE) run --rm tenkacloud bash
 docker-build:     ; $(DOCKER_COMPOSE) build tenkacloud
 
-# ===== Problem deploy smoke test (MVP-0, ADR-001 PR-1.5) =====
+# ===== Problem deploy smoke test =====
 # 引数に問題フォルダを取り、順次 CFn deploy する開発者向け smoke test ツール。
 # SaaS 配線 (Step Functions / EventBridge / tenant API / Cognito) を持ち込まず、
 # CFn template と AWS 権限の正しさだけを確認する。
@@ -300,7 +300,7 @@ destroy-battles:
 	fi
 	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/destroy-battles.sh $(BATTLES)
 
-# ===== TenkaCloud Lite mode (Issue #778 ADR-016 Phase 4) =====
+# ===== TenkaCloud Lite mode (AWS, single tenant) =====
 # 「OSS / Product Hunt 向けに 1 コマンドで TenkaCloud を試す」体験を提供する CLI wrapper。
 # Lite stack は tenantId=local 固定で SBT / Pipeline / 動的 tenant 作成を持ち込まない (= ADR-016)。
 # 実 deploy 経路は Phase 5 で追加する `infrastructure/bin/tenkacloud-lite.ts` (= 専用 bin entry)
