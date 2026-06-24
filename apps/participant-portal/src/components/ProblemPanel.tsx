@@ -18,6 +18,8 @@ import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
 
 const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   PENDING: "pending",
+  // Issue #2019: held for operator approval — show as pending (in-flight).
+  APPROVAL_PENDING: "pending",
   IN_PROGRESS: "in-progress",
   COMPLETE: "success",
   FAILED: "error",

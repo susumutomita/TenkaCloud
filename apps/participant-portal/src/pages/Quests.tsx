@@ -54,6 +54,11 @@ export function renderSubmissionState(
   ) {
     return { type: "in-progress", label: t(`quests.status_label.${problem.status}`) };
   }
+  // Issue #2019: a held (APPROVAL_PENDING) deploy has no stack yet — present it as
+  // in-progress (reusing the PENDING label) so it is never shown as solvable.
+  if (problem.status === "APPROVAL_PENDING") {
+    return { type: "in-progress", label: t("quests.status_label.PENDING") };
+  }
   if (problem.scoring?.kind === "flag") {
     if (problem.scoring.flagSubmitted) {
       const points = problem.scoring.points;

@@ -217,13 +217,18 @@ function buildTeardownUpdate(
     // (= teardown が成功して DELETED に最終遷移するまでに competition session TTL (8h) が
     // 切れて DDB から消える事故を防ぐ。 DELETING 中の audit trail を保護する)。
     UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt, expiresAt = :expiresAt",
-    ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :i, :c, :f)",
+    // Issue #2019: APPROVAL_PENDING (:ap) is a held, deletable state — an operator
+    // rejecting a held deploy must be able to tear it down. Its CFn stack was never
+    // created, so the DeleteStack the worker issues is a no-op (delete of a
+    // nonexistent stack succeeds), transitioning the row cleanly to DELETED.
+    ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :ap, :i, :c, :f)",
     ExpressionAttributeNames: { "#s": "status" },
     ExpressionAttributeValues: {
       ":deleting": "DELETING",
       ":updatedAt": updatedAt,
       ":tenantId": tenantId,
       ":p": "PENDING",
+      ":ap": "APPROVAL_PENDING",
       ":i": "IN_PROGRESS",
       ":c": "COMPLETE",
       ":f": "FAILED",

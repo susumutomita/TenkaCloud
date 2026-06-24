@@ -54,6 +54,9 @@ function stackOutputMapToRecord(entries: Record<string, unknown>): Record<string
 
 export type DeploymentStatus =
   | "PENDING"
+  // Issue #2019 / ADR-017: held by TrustBridge enforcement pending operator
+  // approval. In-flight (no stack yet), not terminal.
+  | "APPROVAL_PENDING"
   | "IN_PROGRESS"
   | "COMPLETE"
   | "FAILED"
@@ -75,6 +78,8 @@ export const DEPLOYMENT_STATUS_INDICATOR: Record<
   "pending" | "in-progress" | "success" | "error" | "stopped" | "warning"
 > = {
   PENDING: "pending",
+  // Issue #2019: held for approval — show as pending (in-flight, no stack yet).
+  APPROVAL_PENDING: "pending",
   IN_PROGRESS: "in-progress",
   COMPLETE: "success",
   FAILED: "error",

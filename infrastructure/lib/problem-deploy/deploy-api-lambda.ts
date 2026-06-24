@@ -68,6 +68,14 @@ export interface DeployApiLambdaProps {
     readonly advanced: number;
     readonly platinum: number;
   };
+  /**
+   * Issue #2019 / ADR-017: TrustBridge high-risk enforcement mode, injected as the
+   * `CLOUD_ACTION_ENFORCEMENT_MODE` env. `"shadow"` (default / unset) keeps every
+   * deploy on the legacy path (no behavior change). `"enforce"` opts in: a
+   * high-risk deploy (replacing a live stack) is held as `APPROVAL_PENDING`
+   * instead of running AssumeRole / CloudFormation.
+   */
+  readonly cloudActionEnforcementMode?: "shadow" | "enforce";
 }
 
 /**
@@ -113,6 +121,9 @@ export class DeployApiLambda extends Construct {
         DEPLOY_QUOTA_BY_TIER: props.deployQuotaByTier
           ? JSON.stringify(props.deployQuotaByTier)
           : "",
+        // Issue #2019 / ADR-017: TrustBridge high-risk enforcement mode。 default
+        // "shadow" (= 既存挙動、 全 deploy が従来経路)。 "enforce" で opt-in。
+        CLOUD_ACTION_ENFORCEMENT_MODE: props.cloudActionEnforcementMode ?? "shadow",
         NODE_OPTIONS: "--enable-source-maps",
       },
       bundling: {

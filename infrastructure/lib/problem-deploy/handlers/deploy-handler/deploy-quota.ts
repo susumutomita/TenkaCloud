@@ -28,8 +28,18 @@ export interface DeployQuotaConfig {
 
 export type QuotaTier = keyof DeployQuotaConfig;
 
-/** 同時デプロイ数にカウントするアクティブ status。終端 (FAILED/DELETED/EXPIRED 系) は対象外。 */
-const ACTIVE_STATUSES = ["PENDING", "IN_PROGRESS", "COMPLETE", "DELETING"] as const;
+/**
+ * 同時デプロイ数にカウントするアクティブ status。終端 (FAILED/DELETED/EXPIRED 系) は対象外。
+ * Issue #2019: APPROVAL_PENDING (= enforcement で保留中) も枠を予約済とみなし計上する
+ * (= 保留行を量産して quota を迂回されるのを防ぐ)。
+ */
+const ACTIVE_STATUSES = [
+  "PENDING",
+  "APPROVAL_PENDING",
+  "IN_PROGRESS",
+  "COMPLETE",
+  "DELETING",
+] as const;
 
 export class DeployQuotaExceededError extends Error {
   constructor(
@@ -101,6 +111,10 @@ export async function enforceDeployQuota(
 ): Promise<void> {
   if (!deps.quota) return;
   const limit = deps.quota[tier];
+  // Derive the IN-list placeholders from ACTIVE_STATUSES so the two never drift
+  // (adding a status to the const automatically extends the filter).
+  const statusPlaceholders = ACTIVE_STATUSES.map((_, i) => `:s${i}`);
+  const statusValues = Object.fromEntries(ACTIVE_STATUSES.map((s, i) => [`:s${i}`, s] as const));
   let active = 0;
   let lastEvaluatedKey: Record<string, unknown> | undefined;
   do {
@@ -109,14 +123,11 @@ export async function enforceDeployQuota(
         TableName: deps.tableName,
         IndexName: "GSI1",
         KeyConditionExpression: "GSI1PK = :pk",
-        FilterExpression: "#s IN (:s0, :s1, :s2, :s3)",
+        FilterExpression: `#s IN (${statusPlaceholders.join(", ")})`,
         ExpressionAttributeNames: { "#s": "status" },
         ExpressionAttributeValues: {
           ":pk": `TENANT#${tenantId}`,
-          ":s0": ACTIVE_STATUSES[0],
-          ":s1": ACTIVE_STATUSES[1],
-          ":s2": ACTIVE_STATUSES[2],
-          ":s3": ACTIVE_STATUSES[3],
+          ...statusValues,
         },
         Select: "COUNT",
         ExclusiveStartKey: lastEvaluatedKey,

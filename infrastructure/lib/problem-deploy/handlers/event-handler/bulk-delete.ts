@@ -255,13 +255,16 @@ async function transitionBulkTargetToDeleting(
         TableName: shared.deploymentsTableName,
         Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
         UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt",
-        ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :i, :c, :f)",
+        // Issue #2019: include APPROVAL_PENDING (:ap) so a held deploy is not
+        // orphaned by bulk teardown (it has no live stack; DeleteStack is a no-op).
+        ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :ap, :i, :c, :f)",
         ExpressionAttributeNames: { "#s": "status" },
         ExpressionAttributeValues: {
           ":deleting": "DELETING",
           ":updatedAt": updatedAt,
           ":tenantId": tenantId,
           ":p": "PENDING",
+          ":ap": "APPROVAL_PENDING",
           ":i": "IN_PROGRESS",
           ":c": "COMPLETE",
           ":f": "FAILED",

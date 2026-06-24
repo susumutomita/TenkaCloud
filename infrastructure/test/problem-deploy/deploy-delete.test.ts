@@ -140,6 +140,24 @@ describe("requestTeardown", () => {
     expect(detail.stackName).toBe("tc-p-t"); // = sampleRow namePrefix
   });
 
+  it("Issue #2019: should tear down an APPROVAL_PENDING (held) deploy instead of returning a conflict", async () => {
+    // A held deploy has no live stack, but the operator must still be able to
+    // reject/clean it up. The teardown condition must accept APPROVAL_PENDING.
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Item: sampleRow({ status: "APPROVAL_PENDING", stackId: "" }),
+    });
+    ddbSend.mockResolvedValueOnce({});
+    eventsSend.mockResolvedValueOnce({});
+
+    const out = await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
+    expect(out).toEqual({ kind: "accepted", previousStatus: "APPROVAL_PENDING" });
+
+    const updateCmd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
+    expect(updateCmd.input.ExpressionAttributeValues?.[":ap"]).toBe("APPROVAL_PENDING");
+    expect(updateCmd.input.ConditionExpression).toContain(":ap");
+  });
+
   it("should return not_found without calling Update / PutEvents when the row is missing", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: undefined });

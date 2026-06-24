@@ -6,6 +6,10 @@
 
 export type DeploymentStatus =
   | "PENDING"
+  // Issue #2019 / ADR-017: held by TrustBridge enforcement pending operator
+  // approval (no stack created yet). In-flight, not terminal — treated like
+  // PENDING in the portal.
+  | "APPROVAL_PENDING"
   | "IN_PROGRESS"
   | "COMPLETE"
   | "FAILED"

@@ -123,6 +123,7 @@
     "empty_cleared": "クリアした問題はまだありません",
     "status_label": {
       "PENDING": "起動準備中",
+      "APPROVAL_PENDING": "承認待ち",
       "IN_PROGRESS": "起動中…",
       "COMPLETE": "起動中",
       "FAILED": "起動失敗",
