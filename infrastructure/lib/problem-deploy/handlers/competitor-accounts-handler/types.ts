@@ -87,13 +87,3 @@ export interface VerifyCompetitorAccountResponse extends CompetitorAccountSummar
   /** STS AssumeRole が成功した時点の ISO 8601 (= `verifiedAt`)。 */
   verifiedAt: string;
 }
-
-/**
- * Rotate response (Issue #596 / ADR-002 Phase 3.1)。
- * Create と同じく `externalId` を 1 度だけ露出する。`rotatedAt` には rotate 時刻が入る。
- */
-export interface RotateExternalIdResponse extends CompetitorAccountSummary {
-  externalId: string;
-  tenkaCloudAccountId: string;
-  rotatedAt: string;
-}

@@ -9,7 +9,6 @@ import {
   isTenantSuspended,
   MissingTenantClaimError,
   requireRole,
-  requireTenantAdmin,
   requireTenantNotSuspended,
   resolveCognitoSub,
   resolveTenantId,
@@ -166,51 +165,6 @@ describe("resolveUserRole (Issue #854)", () => {
   });
 });
 
-describe("requireTenantAdmin (Issue #854)", () => {
-  const original = process.env.DEFAULT_USER_ROLE;
-  afterEach(() => {
-    if (original === undefined) delete process.env.DEFAULT_USER_ROLE;
-    else process.env.DEFAULT_USER_ROLE = original;
-  });
-
-  it("TenantAdmin role なら throw せずに pass", () => {
-    delete process.env.DEFAULT_USER_ROLE;
-    const c = buildCtx({ "custom:userRole": "TenantAdmin" });
-    expect(() => requireTenantAdmin(c)).not.toThrow();
-  });
-
-  it("他 role (= TenantUser / Auditor 等) なら ForbiddenRoleError を throw", () => {
-    delete process.env.DEFAULT_USER_ROLE;
-    const c = buildCtx({ "custom:userRole": "TenantUser" });
-    expect(() => requireTenantAdmin(c)).toThrow(ForbiddenRoleError);
-  });
-
-  it("role claim 不在 / env も無いなら ForbiddenRoleError を throw (= fail-closed)", () => {
-    delete process.env.DEFAULT_USER_ROLE;
-    const c = buildCtx();
-    expect(() => requireTenantAdmin(c)).toThrow(ForbiddenRoleError);
-  });
-
-  it("DEFAULT_USER_ROLE=TenantAdmin env で JWT 不在経路 (= test bypass) は pass", () => {
-    process.env.DEFAULT_USER_ROLE = "TenantAdmin";
-    expect(() => requireTenantAdmin(buildCtx())).not.toThrow();
-  });
-
-  it("ForbiddenRoleError は actualRole / requiredRoles を保持する (= audit log 用)", () => {
-    delete process.env.DEFAULT_USER_ROLE;
-    const c = buildCtx({ "custom:userRole": "TenantUser" });
-    try {
-      requireTenantAdmin(c);
-      expect.fail("should have thrown");
-    } catch (err) {
-      expect(err).toBeInstanceOf(ForbiddenRoleError);
-      const forbidden = err as ForbiddenRoleError;
-      expect(forbidden.actualRole).toBe("TenantUser");
-      expect(forbidden.requiredRoles).toEqual(["TenantAdmin"]);
-    }
-  });
-});
-
 /* ---- REST API + CognitoUserPoolsAuthorizer の claim path ---- */
 // tenant API は `RestApi` + `CognitoUserPoolsAuthorizer`、 admin-insight 等は HTTP API +
 // JWT Authorizer。 REST API は `event.requestContext.authorizer.claims` (= .jwt. wrap 無し)、
@@ -301,26 +255,6 @@ describe("requireRole (ADR-020 / #926 Phase B)", () => {
   });
 });
 
-describe("requireTenantAdmin alias (= requireRole(c, [TENANT_ADMIN_ROLE]))", () => {
-  const original = process.env.DEFAULT_USER_ROLE;
-  afterEach(() => {
-    if (original === undefined) delete process.env.DEFAULT_USER_ROLE;
-    else process.env.DEFAULT_USER_ROLE = original;
-  });
-
-  it("TenantOperator should be rejected by requireTenantAdmin (Phase B alias does not degrade)", () => {
-    delete process.env.DEFAULT_USER_ROLE;
-    const c = buildCtx({ "custom:userRole": "TenantOperator" });
-    expect(() => requireTenantAdmin(c)).toThrow(ForbiddenRoleError);
-  });
-
-  it("TenantViewer も同様に reject", () => {
-    delete process.env.DEFAULT_USER_ROLE;
-    const c = buildCtx({ "custom:userRole": "TenantViewer" });
-    expect(() => requireTenantAdmin(c)).toThrow(ForbiddenRoleError);
-  });
-});
-
 describe("resolveTenantId / resolveUserRole / resolveCognitoSub (REST API path)", () => {
   const originalTenant = process.env.DEFAULT_TENANT_ID;
   const originalRole = process.env.DEFAULT_USER_ROLE;
@@ -341,7 +275,6 @@ describe("resolveTenantId / resolveUserRole / resolveCognitoSub (REST API path)"
     delete process.env.DEFAULT_USER_ROLE;
     const c = buildRestCtx({ "custom:userRole": "TenantAdmin" });
     expect(resolveUserRole(c)).toBe("TenantAdmin");
-    expect(() => requireTenantAdmin(c)).not.toThrow();
   });
 
   it("should resolve Cognito sub from the REST API claim path", () => {

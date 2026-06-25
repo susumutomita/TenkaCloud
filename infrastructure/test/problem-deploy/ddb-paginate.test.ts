@@ -1,10 +1,9 @@
-import { type QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import type { QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it, vi } from "vitest";
 import {
   forEachScanPage,
   queryAllItems,
   queryAllItemsBounded,
-  scanAllItems,
 } from "../../lib/problem-deploy/handlers/shared/ddb-paginate";
 
 const BASE = {
@@ -62,50 +61,6 @@ describe("queryAllItems", () => {
   it("should treat a missing Items array as no items (not a crash)", async () => {
     const send = vi.fn().mockResolvedValue({});
     const result = await queryAllItems({ send } as never, BASE);
-    expect(result).toEqual([]);
-  });
-});
-
-describe("scanAllItems", () => {
-  it("should return the single page when there is no LastEvaluatedKey", async () => {
-    const send = vi.fn().mockResolvedValue({ Items: [{ jobId: "a" }] });
-    const result = await scanAllItems({ send } as never, SCAN_BASE);
-    expect(send).toHaveBeenCalledOnce();
-    expect(send.mock.calls[0]?.[0]).toBeInstanceOf(ScanCommand);
-    expect(result).toEqual([{ jobId: "a" }]);
-    // 1 ページ目は ExclusiveStartKey を付けない。
-    expect((send.mock.calls[0]?.[0] as ScanCommand).input.ExclusiveStartKey).toBeUndefined();
-  });
-
-  it("should drain every page and follow LastEvaluatedKey, concatenating in order", async () => {
-    const send = vi
-      .fn()
-      .mockResolvedValueOnce({ Items: [{ jobId: "a" }], LastEvaluatedKey: { PK: "p1" } })
-      .mockResolvedValueOnce({ Items: [{ jobId: "b" }], LastEvaluatedKey: { PK: "p2" } })
-      .mockResolvedValueOnce({ Items: [{ jobId: "c" }] });
-    const result = await scanAllItems({ send } as never, SCAN_BASE);
-    expect(send).toHaveBeenCalledTimes(3);
-    expect(result).toEqual([{ jobId: "a" }, { jobId: "b" }, { jobId: "c" }]);
-    expect((send.mock.calls[1]?.[0] as ScanCommand).input.ExclusiveStartKey).toEqual({ PK: "p1" });
-    expect((send.mock.calls[2]?.[0] as ScanCommand).input.ExclusiveStartKey).toEqual({ PK: "p2" });
-  });
-
-  it("should preserve the caller's scan input (filter/limit) on every page", async () => {
-    const send = vi
-      .fn()
-      .mockResolvedValueOnce({ Items: [], LastEvaluatedKey: { PK: "p1" } })
-      .mockResolvedValueOnce({ Items: [] });
-    await scanAllItems({ send } as never, SCAN_BASE);
-    for (const call of send.mock.calls) {
-      const cmd = call[0] as ScanCommand;
-      expect(cmd.input.FilterExpression).toBe("#status = :complete");
-      expect(cmd.input.Limit).toBe(200);
-    }
-  });
-
-  it("should treat a missing Items array as no items (not a crash)", async () => {
-    const send = vi.fn().mockResolvedValue({});
-    const result = await scanAllItems({ send } as never, SCAN_BASE);
     expect(result).toEqual([]);
   });
 });

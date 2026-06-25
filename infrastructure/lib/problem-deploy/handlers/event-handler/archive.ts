@@ -14,12 +14,6 @@ export type ArchiveEventOutcome =
   | { kind: "ok"; archivedAt: string };
 
 /**
- * 許可: DRAFT (一度も deploy していない) / ENDED (採点停止済) / TEARDOWN (一括削除済)。
- * 拒否: DEPLOYING (deploy 中で展開中) / READY (現役 event) / ARCHIVED (二重操作)。
- */
-const ARCHIVABLE_STATUSES = new Set(["DRAFT", "ENDED", "TEARDOWN"]);
-
-/**
  * Event を `ARCHIVED` 状態に遷移させ、EventList のデフォルト view から外す soft delete。
  *
  * Issue #493: 完了 event を一覧から消す手段が無い問題への対応。Team 行 / Deployments の

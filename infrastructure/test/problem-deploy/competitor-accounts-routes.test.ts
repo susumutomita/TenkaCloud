@@ -15,7 +15,6 @@ const mocks = vi.hoisted(() => ({
   listCompetitorAccounts: vi.fn(),
   deleteCompetitorAccount: vi.fn(),
   verifyCompetitorAccount: vi.fn(),
-  rotateExternalIdForAccount: vi.fn(),
   DuplicateCompetitorAccountError: class extends Error {
     constructor(public readonly awsAccountId: string) {
       super("dup");
@@ -26,12 +25,6 @@ const mocks = vi.hoisted(() => ({
     constructor(public readonly awsAccountId: string) {
       super("404");
       this.name = "CompetitorAccountNotFoundError";
-    }
-  },
-  ExternalIdMissingForRotationError: class extends Error {
-    constructor(public readonly tenantId: string) {
-      super("missing");
-      this.name = "ExternalIdMissingForRotationError";
     }
   },
   CompetitorAccountNotVerifiedError: class extends Error {
@@ -73,11 +66,9 @@ vi.mock("../../lib/problem-deploy/handlers/competitor-accounts-handler/store", (
   createCompetitorAccount: mocks.createCompetitorAccount,
   listCompetitorAccounts: mocks.listCompetitorAccounts,
   deleteCompetitorAccount: mocks.deleteCompetitorAccount,
-  rotateExternalIdForAccount: mocks.rotateExternalIdForAccount,
   DuplicateCompetitorAccountError: mocks.DuplicateCompetitorAccountError,
   CompetitorAccountNotFoundError: mocks.CompetitorAccountNotFoundError,
   CompetitorAccountNotVerifiedError: mocks.CompetitorAccountNotVerifiedError,
-  ExternalIdMissingForRotationError: mocks.ExternalIdMissingForRotationError,
 }));
 
 vi.mock("../../lib/problem-deploy/handlers/competitor-accounts-handler/verify", () => ({
