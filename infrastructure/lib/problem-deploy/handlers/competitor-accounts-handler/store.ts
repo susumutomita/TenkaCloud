@@ -6,10 +6,7 @@ import {
   QueryCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
-import {
-  deleteExternalId,
-  ensureExternalId,
-} from "../shared/external-id-store.js";
+import { deleteExternalId, ensureExternalId } from "../shared/external-id-store.js";
 import type { CompetitorAccountsSharedResources } from "./shared.js";
 import type {
   CompetitorAccountItem,
