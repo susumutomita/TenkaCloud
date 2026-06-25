@@ -163,6 +163,25 @@ export function parseResolvedBucketName(stdout: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Lite mode has no SBT Control Plane / system admin, but the shared CDK app
+ * (bin/tenkacloud-lite.ts -> resolveAppConfig -> requireSystemAdminEmail) still
+ * requires CDK_PARAM_SYSTEM_ADMIN_EMAIL to **synth** -- which both `up` (cdk deploy)
+ * and `down` (cdk destroy) do. Derive it from the Lite tenant admin email so
+ * `make deploy` / `make destroy` work with only TENANT_ADMIN_EMAIL set (the Lite .env /
+ * pipeline case). Never override an explicit value (SaaS-shared env).
+ */
+export function ensureSystemAdminEmailForSynth(): void {
+  const tenantAdminEmail = (
+    process.env.TENANT_ADMIN_EMAIL ??
+    process.env.SYSTEM_ADMIN_EMAIL ??
+    ""
+  ).trim();
+  if (tenantAdminEmail && !process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL) {
+    process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL = tenantAdminEmail;
+  }
+}
+
 async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
   // Issue #955 follow-up: Lite mode は SBT ControlPlane と provision-tenant.sh を持たないため、
   // tenant admin user を別経路で作る必要がある。 deploy 後に Cognito UserPool ID を
@@ -182,14 +201,8 @@ async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
     );
   }
 
-  // Lite mode has no SBT Control Plane / system admin, but the shared CDK app
-  // (bin/tenkacloud-lite.ts → resolveAppConfig → requireSystemAdminEmail) still
-  // requires CDK_PARAM_SYSTEM_ADMIN_EMAIL. Derive it from the Lite tenant admin
-  // email so `make deploy` works with only TENANT_ADMIN_EMAIL set (the pipeline /
-  // Lite .env case). Never override an explicit value (SaaS-shared env).
-  if (tenantAdminEmail && !process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL) {
-    process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL = tenantAdminEmail;
-  }
+  // Deploy synth needs CDK_PARAM_SYSTEM_ADMIN_EMAIL; derive it from the tenant admin email.
+  ensureSystemAdminEmailForSynth();
 
   // Issue #1345: 30-min first-run UX — 各 phase を「[i/N] ...」 で示す。
   const totalSteps = 4;
@@ -458,6 +471,11 @@ async function cmdDown(args: readonly string[], io: CliIO): Promise<number> {
       return 0;
     }
   }
+  // `cdk destroy` synths the app the same way `cdk deploy` does, so the shared CDK app
+  // still requires CDK_PARAM_SYSTEM_ADMIN_EMAIL. Derive it from the tenant admin email so
+  // `make destroy` works with only TENANT_ADMIN_EMAIL set (the Lite .env the CodeBuild
+  // launcher writes); without this, destroy throws "Please provide system admin email".
+  ensureSystemAdminEmailForSynth();
   io.stdout("[lite] destroying 2 stacks...\n");
   // app stack を先に destroy (= cross-stack 参照 (DeployApi Lambda 等) の依存方向に合わせる)。
   const code1 = await io.spawnInherit(CDK_BIN, [
