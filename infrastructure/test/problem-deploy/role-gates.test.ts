@@ -159,7 +159,6 @@ const competitorMocks = vi.hoisted(() => ({
   listCompetitorAccounts: vi.fn(),
   createCompetitorAccount: vi.fn(),
   deleteCompetitorAccount: vi.fn(),
-  rotateExternalIdForAccount: vi.fn(),
   verifyCompetitorAccount: vi.fn(),
   routeGet: vi.fn(),
   routePut: vi.fn(),
@@ -191,11 +190,9 @@ vi.mock("../../lib/problem-deploy/handlers/competitor-accounts-handler/store", a
     listCompetitorAccounts: competitorMocks.listCompetitorAccounts,
     createCompetitorAccount: competitorMocks.createCompetitorAccount,
     deleteCompetitorAccount: competitorMocks.deleteCompetitorAccount,
-    rotateExternalIdForAccount: competitorMocks.rotateExternalIdForAccount,
     DuplicateCompetitorAccountError: actual.DuplicateCompetitorAccountError,
     CompetitorAccountNotFoundError: actual.CompetitorAccountNotFoundError,
     CompetitorAccountNotVerifiedError: actual.CompetitorAccountNotVerifiedError,
-    ExternalIdMissingForRotationError: actual.ExternalIdMissingForRotationError,
   };
 });
 
@@ -267,10 +264,6 @@ beforeEach(() => {
   competitorMocks.listCompetitorAccounts.mockResolvedValue([]);
   competitorMocks.createCompetitorAccount.mockResolvedValue({ awsAccountId: "123456789012" });
   competitorMocks.deleteCompetitorAccount.mockResolvedValue(undefined);
-  competitorMocks.rotateExternalIdForAccount.mockResolvedValue({
-    awsAccountId: "123456789012",
-    rotatedAt: "2026-01-01T00:00:00.000Z",
-  });
   competitorMocks.verifyCompetitorAccount.mockResolvedValue({ awsAccountId: "123456789012" });
   competitorMocks.routeGet.mockResolvedValue({ status: 200, body: {} });
   competitorMocks.routePut.mockResolvedValue({ status: 200, body: {} });

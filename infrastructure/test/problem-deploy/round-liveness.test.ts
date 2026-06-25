@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  isDisruptionWindowOpen,
   isRoundTerminated,
   MAX_ROUND_DURATION_MINUTES,
   resolveRoundTerminalAt,
@@ -9,7 +8,7 @@ import {
 /**
  * #1421 (ADR-029): attack-resilience liveness invariants の純関数を pin する。
  * - "every round reaches a terminal state": resolveRoundTerminalAt は常に有限終端を返す
- * - "no disruption is permanent": isDisruptionWindowOpen は round 開始〜終端に限定される
+ * - "no disruption is permanent": isRoundTerminated が round 開始〜終端を区切る
  */
 
 describe("resolveRoundTerminalAt", () => {
@@ -67,34 +66,5 @@ describe("isRoundTerminated", () => {
   });
   it("should be false when the round has no resolvable terminal (not started)", () => {
     expect(isRoundTerminated({}, "2026-05-08T10:00:00.000Z")).toBe(false);
-  });
-});
-
-describe("isDisruptionWindowOpen", () => {
-  const round = {
-    eventStartsAt: "2026-05-08T09:00:00.000Z",
-    eventEndsAt: "2026-05-08T11:00:00.000Z",
-  };
-  it("should be open only between start and terminal", () => {
-    expect(isDisruptionWindowOpen(round, "2026-05-08T08:00:00.000Z")).toBe(false); // before start
-    expect(isDisruptionWindowOpen(round, "2026-05-08T10:00:00.000Z")).toBe(true); // mid-round
-    expect(isDisruptionWindowOpen(round, "2026-05-08T11:00:00.000Z")).toBe(false); // at terminal
-  });
-  it("should be closed for an unstarted round", () => {
-    expect(isDisruptionWindowOpen({}, "2026-05-08T10:00:00.000Z")).toBe(false);
-  });
-  it("should close once a no-endsAt round passes the cap (no permanent injection window)", () => {
-    expect(
-      isDisruptionWindowOpen(
-        { eventStartsAt: "2026-05-08T09:00:00.000Z" },
-        "2026-05-09T00:00:00.000Z",
-      ),
-    ).toBe(true);
-    expect(
-      isDisruptionWindowOpen(
-        { eventStartsAt: "2026-05-08T09:00:00.000Z" },
-        "2026-07-01T00:00:00.000Z",
-      ),
-    ).toBe(false);
   });
 });

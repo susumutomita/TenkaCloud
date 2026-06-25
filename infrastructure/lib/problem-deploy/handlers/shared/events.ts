@@ -70,13 +70,6 @@ export function defaultCompetitorRoleName(opts: { tenantId: string; namespace?: 
 }
 
 /**
- * @deprecated Issue #1314: 固定 Role 名は 同 AWS account が複数 Plane に並列参加するとき
- * 衝突する。 新規 caller は `defaultCompetitorRoleName({ tenantId })` を使うこと。
- * 既存配備 (DDB に固定名で保存済) は そのまま動作 (DDB が source of truth)。
- */
-export const COMPETITOR_ROLE_NAME_DEFAULT = "TenkaCloud-CompetitorDeploy-Role" as const;
-
-/**
  * `DeployCreateRequested` event の `detail` schema。tenant API Lambda が publish 時に
  * validate し、Step Functions State Machine の `CodeBuildStartBuild` task が
  * `$.detail.problemDir` / `$.detail.teamSlug` を environmentVariablesOverride で

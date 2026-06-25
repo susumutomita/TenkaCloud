@@ -1,18 +1,7 @@
 import * as fs from "node:fs";
-import { createRequire } from "node:module";
 import * as path from "node:path";
-import { Ajv } from "ajv";
-import type { FormatsPlugin } from "ajv-formats";
 import type { Logger } from "winston";
 import type { Config } from "../config/config-interface.js";
-
-// ajv-formats 3 は CJS `export default formatsPlugin` で publish。 ESM
-// (= `"type": "module"`) では tsc が default import の値を namespace 扱いするため
-// callable として呼べない。 `createRequire(import.meta.url)` で CJS resolver から
-// runtime 関数を取り出し、型は named export の `FormatsPlugin` interface を当てる
-// (= `Plugin<Opts>` を継承する callable interface)。
-const require = createRequire(import.meta.url);
-const addFormats = require("ajv-formats").default as FormatsPlugin;
 
 export interface ExpandOptions {
   /**
@@ -107,7 +96,7 @@ export function parseConfig(configContent: string, logger: Logger): Config {
  *
  *   - config.json が無ければ `undefined` (e.g., staging が未設定の場合)
  *   - placeholder は env で展開、未設定 + default 無しは tolerant=true なら literal `${VAR}` のまま残る
- *   - JSON parse して `Config` interface に揃える (validateConfig は呼ばない)
+ *   - JSON parse して `Config` interface に揃える (JSON Schema validation はしない)
  *
  * tolerant が default なのは、bin 側の段階導入を許すため: 現状 `dynamoDbConfig` /
  * `kmsConfig` 以外の field (controlPlaneConfig 等) は bin が直接 process.env を読んで
@@ -129,33 +118,4 @@ export function loadConfig(envName: string, baseDir: string): Config | undefined
   } as unknown as Logger;
   const content = processConfigFile(configPath, process.env, noopLogger, { tolerant: true });
   return parseConfig(content, noopLogger);
-}
-
-/**
- * Validate a Config object against the JSON Schema.
- */
-export function validateConfig(config: Config, logger: Logger): void {
-  const schemaPath = path.resolve(import.meta.dirname, "../config/config-schema.json");
-  let schemaContent: string;
-  try {
-    schemaContent = fs.readFileSync(schemaPath, "utf-8");
-  } catch {
-    throw new Error(`JSON schema file not found: ${schemaPath}`);
-  }
-
-  const schema = JSON.parse(schemaContent);
-  logger.info("Loaded JSON schema for validation");
-
-  const ajv = new Ajv();
-  addFormats(ajv);
-  const validate = ajv.compile(schema);
-  const valid = validate(config);
-
-  if (!valid) {
-    logger.error("Config validation errors:");
-    logger.error(JSON.stringify(validate.errors, null, 2));
-    throw new Error("Invalid configuration file");
-  }
-
-  logger.info("Config validation passed");
 }

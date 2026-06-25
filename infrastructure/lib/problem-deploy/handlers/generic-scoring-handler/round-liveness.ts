@@ -58,18 +58,3 @@ export function isRoundTerminated(
   if (!terminal) return false;
   return nowIso >= terminal;
 }
-
-/**
- * disruption injection が許される window か (= round 開始済み かつ 未終端)。
- * 終端後は新規発火を拒否することで invariant "no disruption is permanent" を支える
- * (= round は必ず終端に達し、 そこで teardown / revert される)。
- */
-export function isDisruptionWindowOpen(
-  round: RoundWindow,
-  nowIso: string,
-  capMinutes?: number,
-): boolean {
-  if (typeof round.eventStartsAt !== "string") return false;
-  if (nowIso < round.eventStartsAt) return false;
-  return !isRoundTerminated(round, nowIso, capMinutes);
-}

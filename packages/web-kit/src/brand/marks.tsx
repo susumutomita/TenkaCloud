@@ -14,12 +14,6 @@ import type { ReactElement } from "react";
  */
 export type BrandMarkVariant = "summit" | "ascend" | "cloudpeak";
 
-export const BRAND_MARK_VARIANTS = [
-  "summit",
-  "ascend",
-  "cloudpeak",
-] as const satisfies readonly BrandMarkVariant[];
-
 export const BRAND_MARK_VIEWBOX = "0 0 120 120";
 
 /**

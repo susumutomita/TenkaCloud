@@ -180,24 +180,11 @@ export function requireTenantNotSuspended(c: Context): void {
 /**
  * ADR-020 / Issue #926 Phase B: 任意の \`allowedRoles\` array で role gate する helper。
  * 一致なら return、 不一致 / 不在 / allowedRoles 空配列なら \`ForbiddenRoleError\` を throw。
- *
- * 既存 \`requireTenantAdmin(c)\` は \`requireRole(c, [TENANT_ADMIN_ROLE])\` の alias として
- * 残し、 caller 互換を保つ。 Phase B.1 で各 handler の middleware を granular に置換する。
+ * caller (handler) は route の middleware で \`requireRole(c, [TENANT_ADMIN_ROLE])\` のように呼ぶ。
  */
 export function requireRole(c: Context, allowedRoles: readonly string[]): void {
   const role = resolveUserRole(c);
   if (allowedRoles.length === 0 || role === undefined || !allowedRoles.includes(role)) {
     throw new ForbiddenRoleError(role, allowedRoles);
   }
-}
-
-/**
- * \`custom:userRole === "TenantAdmin"\` を要求する。 不一致 / 不在なら \`ForbiddenRoleError\`
- * を throw。 handler 側 onError で 403 にマップする。
- *
- * caller (handler) は \`/admin/*\` route と destructive event route の 1 行目で呼ぶ。
- * ADR-020 Phase B: \`requireRole(c, [TENANT_ADMIN_ROLE])\` の alias。 既存 caller 互換のため残す。
- */
-export function requireTenantAdmin(c: Context): void {
-  requireRole(c, [TENANT_ADMIN_ROLE]);
 }

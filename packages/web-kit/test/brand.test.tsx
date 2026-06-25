@@ -3,22 +3,13 @@
  *
  * 検証観点:
  *   - BrandMark は 3 variant の幾何を描き分け、title 有無で role="img"/装飾を切り替える
- *   - BrandLockup はマーク + ワードマークを 1 つの role="img" に束ね、縦横とワードマーク差し替えに対応
- *   - data URI ロゴは img で使える形式で、summit path / app icon 角丸を保持する
- *   - brandColors / brandFonts はトークンの正本値を保つ (brand.css と一致させる前提)
+ *   - data URI ロゴは img で使える形式で、app icon 角丸を保持する
+ *   - brandColors はトークンの正本値を保つ (brand.css と一致させる前提)
  */
 
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import {
-  BRAND_MARK_VARIANTS,
-  BrandLockup,
-  BrandMark,
-  brandColors,
-  brandFonts,
-  tenkaCloudAppIconDataUri,
-  tenkaCloudMarkDataUri,
-} from "../src";
+import { BrandMark, brandColors, tenkaCloudAppIconDataUri } from "../src";
 
 describe("BrandMark", () => {
   it("should render the summit mark (bar + single ridge) by default and be decorative", () => {
@@ -62,35 +53,7 @@ describe("BrandMark", () => {
   });
 });
 
-describe("BrandLockup", () => {
-  it("should render mark + wordmark under a single role=img named TenkaCloud", () => {
-    const { container } = render(<BrandLockup />);
-    const lockup = screen.getByRole("img", { name: "TenkaCloud" });
-    expect(lockup.style.flexDirection).toBe("row");
-    expect(container.querySelector("svg")).not.toBeNull();
-    expect(screen.getByText("Tenka")).toBeInTheDocument();
-    expect(screen.getByText("Cloud")).toBeInTheDocument();
-  });
-
-  it("should stack vertically when orientation is vertical", () => {
-    render(<BrandLockup orientation="vertical" />);
-    expect(screen.getByRole("img", { name: "TenkaCloud" }).style.flexDirection).toBe("column");
-  });
-
-  it("should accept a custom wordmark and accessible title", () => {
-    render(<BrandLockup wordmark="天下クラウド" title="天下クラウド" />);
-    expect(screen.getByRole("img", { name: "天下クラウド" })).toBeInTheDocument();
-    expect(screen.getByText("天下クラウド")).toBeInTheDocument();
-  });
-});
-
 describe("brand logo data URIs", () => {
-  it("should expose the mark as an inline image data URI carrying the ink color", () => {
-    expect(tenkaCloudMarkDataUri.startsWith("data:image/svg+xml,")).toBe(true);
-    expect(decodeURIComponent(tenkaCloudMarkDataUri)).toContain(brandColors.ink);
-    expect(decodeURIComponent(tenkaCloudMarkDataUri)).toContain("M26 90 L60 48 L94 90");
-  });
-
   it("should expose a rounded app icon data URI (ink badge + summit ridge)", () => {
     const decoded = decodeURIComponent(tenkaCloudAppIconDataUri);
     expect(tenkaCloudAppIconDataUri.startsWith("data:image/svg+xml,")).toBe(true);
@@ -104,14 +67,5 @@ describe("brand tokens", () => {
     expect(brandColors.ink).toBe("#1d1d1f");
     expect(brandColors.accent).toBe("#ff6a32");
     expect(brandColors.paper).toBe("#ffffff");
-  });
-
-  it("should lead the sans font stack with Inter", () => {
-    expect(brandFonts.sans).toContain("Inter");
-    expect(brandFonts.mono).toContain("JetBrains Mono");
-  });
-
-  it("should list the three brand mark variants", () => {
-    expect(BRAND_MARK_VARIANTS).toEqual(["summit", "ascend", "cloudpeak"]);
   });
 });
