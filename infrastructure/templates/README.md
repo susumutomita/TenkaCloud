@@ -121,7 +121,7 @@ CodePipeline も使いません。問題カタログは Git submodule ではな�
 
 ### デプロイ手順
 
-1. README の [AWS Console (no local install)](../../README.md#a-aws-console-no-local-install) から `lite-pipeline.yaml` を download する
+1. README の [Quickstart](../../README.md#quickstart) から `lite-pipeline.yaml` を download する
 2. Console の CloudFormation で **Upload a template file** を選び、この yaml を upload する
 3. 下表のパラメータを入力する
 4. 「IAM 権限変更を承認」にチェックしてスタックを作成する
