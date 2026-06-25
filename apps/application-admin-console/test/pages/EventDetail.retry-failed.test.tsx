@@ -162,9 +162,10 @@ describe("EventDetailPage #756 re-deploy (即座にデプロイ on the Schedule 
       },
     });
     renderPage();
-    // deploy は「スケジュール」tab の「即座にデプロイ」に集約 (header の Deploy は撤去済み)。
+    // deploy は「スケジュール」tab に集約 (header の Deploy は撤去済み)。 全デプロイ済みなので
+    // ボタンは「強制再デプロイ」ラベルになり、 破壊的な再デプロイ扱いで confirm modal を経由する。
     await userEvent.click(await screen.findByRole("tab", { name: /Schedule|スケジュール/ }));
-    await userEvent.click(await screen.findByRole("button", { name: "即座にデプロイ" }));
+    await userEvent.click(await screen.findByRole("button", { name: "強制再デプロイ" }));
     // 全デプロイ済みなので破壊的な再デプロイ扱い → confirm modal を経由する
     await userEvent.click(await screen.findByRole("button", { name: "再デプロイする" }));
     await waitFor(() => expect(mocks.bulkDeployEvent).toHaveBeenCalled());

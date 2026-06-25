@@ -104,12 +104,14 @@ function DeployTeardownFields({
                 </Button>
               )}
               <Button
-                variant={wizard?.primary === "deploy" ? "primary" : "normal"}
+                // 全デプロイ済みでの押下は破壊的 force-redeploy。 推奨アクション (primary) として
+                // 強調せず、 ラベルも「強制再デプロイ」にして無害な初回デプロイに見えないようにする。
+                variant={wizard?.primary === "deploy" && !allDeployed ? "primary" : "normal"}
                 loading={bulkInFlight === "deploy" || bulkInFlight === "redeploy"}
                 disabled={deployNowDisabled}
                 onClick={() => (allDeployed ? setConfirmRedeploy(true) : onBulkDeploy())}
               >
-                {t("event_detail.deploy_at_now")}
+                {t(allDeployed ? "event_detail.deploy_at_redeploy" : "event_detail.deploy_at_now")}
               </Button>
             </SpaceBetween>
           </SpaceBetween>
