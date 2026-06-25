@@ -747,33 +747,9 @@ section .lead {
   display: inline-flex; align-items: center; gap: 6px;
 }
 
-/* ============== CONTACT FORM ============== */
-.contact-form {
-  max-width: 680px; margin: 32px auto 0; display: flex; flex-direction: column; gap: 18px;
-  text-align: left; color: var(--paper);
-}
-.contact-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.contact-field { display: flex; flex-direction: column; gap: 6px; }
-.contact-label { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.78); }
-.contact-label em { color: #ff8b6b; font-style: normal; }
-.contact-field input,
-.contact-field select,
-.contact-field textarea {
-  background: rgba(255,255,255,0.06); color: var(--paper);
-  border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;
-  padding: 10px 12px; font: inherit; font-size: 14px; line-height: 1.5;
-  width: 100%;
-}
-.contact-field input:focus,
-.contact-field select:focus,
-.contact-field textarea:focus {
-  outline: 2px solid rgba(255,255,255,0.4); outline-offset: 1px;
-}
+/* ============== CONTACT ============== */
 .contact-fineprint { font-size: 11px; color: rgba(255,255,255,0.58); margin: 0; line-height: 1.6; }
 .contact-fineprint a { color: rgba(255,255,255,0.86); text-decoration: underline; }
-.contact-feedback { margin: 4px 0 0; padding: 10px 14px; border-radius: 8px; font-size: 13px; }
-.contact-feedback.success { background: rgba(76,175,80,0.18); color: #c6f3cb; }
-.contact-feedback.error { background: rgba(252,77,117,0.18); color: #ffd3dd; }
 
 /* ============== FOOTER ============== */
 footer { padding: 28px 0 24px; background: var(--paper-3); color: var(--ink-3); }
@@ -845,11 +821,6 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
   footer .legal { flex-direction: column; align-items: flex-start; gap: 4px; }
   /* section の縦 padding を mobile で詰める */
   section { padding: 36px 0; }
-  /* Contact form 2col → 1col stack */
-  .contact-row { grid-template-columns: 1fr; gap: 12px; }
-  .contact-form { gap: 14px; }
-  .contact-field input, .contact-field select, .contact-field textarea { font-size: 16px; }
-  /* iOS Safari の input zoom 防止に 16px を維持 */
   /* ent-cta inner padding を mobile で詰める */
   .ent-cta { padding: 28px 22px; }
   .ent-cta h2 { font-size: clamp(22px, 6vw, 30px); }

@@ -227,21 +227,9 @@
         "クラウド人材育成プログラム、 内製化推進、 継続的な AWS 演習 — 規模 / 期間 / 参加者像を聞いた上で、 適切なプランを一緒に決めます。",
       "ent.cta1": "お問い合わせ",
       "ent.cta2": "GitHub を見る",
-      "contact.field_name": "お名前 *",
-      "contact.field_company": "所属組織",
-      "contact.field_email": "メールアドレス *",
-      "contact.field_plan": "興味のあるプラン",
-      "contact.plan_unknown": "未定 / 相談したい",
-      "contact.plan_custom_problem": "独自問題の追加開発",
-      "contact.plan_oss": "OSS 自己ホストの相談",
-      "contact.plan_other": "その他 / カスタム",
-      "contact.field_scale": "想定規模 / 開催時期",
-      "contact.field_message": "メッセージ",
-      "contact.field_message_placeholder":
-        "解決したい課題、 参加者の技術レベル、 過去の研修の振り返り 等、 何でもお書きください。",
+      "contact.cta": "お問い合わせフォーム",
       "contact.fineprint":
-        '送信先: 合同会社BULL (TenkaCloud 運営)。 ご記入いただいた情報は、 お問い合わせ対応と見積もり提示のみに利用します (= <a href="./privacy.html">プライバシーポリシー</a>)。',
-      "contact.submit": "送信する",
+        'フォームの回答は Google フォーム (= Google が管理) に保存され、 お問い合わせ対応と見積もり提示のみに利用します (= <a href="./privacy.html">プライバシーポリシー</a>)。',
 
       "footer.tag": "AWS を題材にしたクラウド実戦演習を開催するための OSS ツール。 Apache 2.0。",
       "footer.disclaimer":
@@ -496,20 +484,9 @@
         "Cloud enablement programs, internal onboarding, recurring AWS drills — share your scale, cadence, and audience, and we'll figure out the right setup together.",
       "ent.cta1": "Get in touch",
       "ent.cta2": "View on GitHub",
-      "contact.field_name": "Name *",
-      "contact.field_company": "Organization",
-      "contact.field_email": "Email *",
-      "contact.field_plan": "Plan you're interested in",
-      "contact.plan_unknown": "Not sure / let's talk",
-      "contact.plan_oss": "OSS self-host help",
-      "contact.plan_other": "Other / custom",
-      "contact.field_scale": "Expected scale / timing",
-      "contact.field_message": "Message",
-      "contact.field_message_placeholder":
-        "Tell us the problem you're trying to solve, your participants' technical level, lessons from past trainings — anything that helps.",
+      "contact.cta": "Open the contact form",
       "contact.fineprint":
-        'Sent to: BULL LLC (operator of TenkaCloud). Your input is used only for replying and quoting (see <a href="./privacy.en.html">Privacy Policy</a>).',
-      "contact.submit": "Send",
+        'Responses are stored in a Google Form (managed by Google) and used only for replying and quoting (see <a href="./privacy.en.html">Privacy Policy</a>).',
 
       "footer.tag":
         "An open-source tool for hosting hands-on cloud drills on real AWS. Apache 2.0.",
@@ -671,79 +648,6 @@
   applyLang(initialLang);
   reflectLangInUrl(initialLang);
 
-  // Contact form submission. backend が無いので 入力内容を mailto: URL に組み立てて
-  // ユーザーの mail client を開く (= GitHub Pages の static site にできる最小実装)。
-  // 将来 backend (= Lambda Function URL) を立てたら fetch に差し替え。
-  function readContactInputs(form) {
-    var data = new FormData(form);
-    var pick = (k) => String(data.get(k) || "").trim();
-    return {
-      name: pick("name"),
-      email: pick("email"),
-      company: pick("company"),
-      plan: pick("plan"),
-      scale: pick("scale"),
-      message: pick("message"),
-    };
-  }
-
-  function buildMailLines(input) {
-    return [
-      "TenkaCloud お問い合わせ",
-      "",
-      `お名前: ${input.name}`,
-      `所属組織: ${input.company || "(未記入)"}`,
-      `メールアドレス: ${input.email}`,
-      `興味のあるプラン: ${input.plan || "(未指定)"}`,
-      `想定規模 / 開催時期: ${input.scale || "(未記入)"}`,
-      "",
-      "メッセージ:",
-      input.message || "(なし)",
-      "",
-      "---",
-      `送信元: ${window.location.href}`,
-    ];
-  }
-
-  function buildMailUrls(input) {
-    var body = encodeURIComponent(buildMailLines(input).join("\n"));
-    var subject = encodeURIComponent(
-      `[TenkaCloud] ${input.plan || "お問い合わせ"} — ${input.name}`,
-    );
-    return {
-      primary: `mailto:oyster880+tenkacloud@gmail.com?subject=${subject}&body=${body}`,
-      discussionUrl: `https://github.com/susumutomita/TenkaCloud/discussions/new?category=general&body=${body}`,
-    };
-  }
-
-  function renderContactSuccess(feedback, discussionUrl) {
-    feedback.hidden = false;
-    feedback.className = "contact-feedback success";
-    feedback.innerHTML =
-      "メーラーを起動しました。 もし開かない場合は、 こちらの " +
-      '<a href="' +
-      discussionUrl +
-      '" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline">' +
-      "GitHub Discussions から送信</a> もご利用いただけます。 ご連絡お待ちしています。";
-  }
-
-  window.submitContactForm = (event) => {
-    event.preventDefault();
-    var input = readContactInputs(event.target);
-    var feedback = document.getElementById("contact-feedback");
-    if (!input.name || !input.email) {
-      feedback.hidden = false;
-      feedback.className = "contact-feedback error";
-      feedback.textContent = "お名前とメールアドレスは必須です。";
-      return false;
-    }
-    var urls = buildMailUrls(input);
-    var opened = window.open(urls.primary, "_self");
-    renderContactSuccess(feedback, urls.discussionUrl);
-    if (!opened) {
-      // mailto: opener が拒否された (= popup blocker)。 location.href fallback。
-      window.location.href = urls.primary;
-    }
-    return false;
-  };
+  // Contact is a Google Form (linked from #contact in index.html). No backend, no
+  // mailto -- responses live in Google, so the static landing holds no PII.
 })();

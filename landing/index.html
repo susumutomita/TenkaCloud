@@ -498,50 +498,11 @@
       <div class="eyebrow" data-i18n="ent.eyebrow">どのプランがよいか分からない</div>
       <h2 data-i18n="ent.h2">まずは話してみませんか。</h2>
       <p data-i18n="ent.p">クラウド人材育成プログラム、 内製化推進、 継続的な AWS 演習 — 規模 / 期間 / 参加者像を聞いた上で、 適切なプランを一緒に決めます。</p>
-      <form id="contact-form" class="contact-form" onsubmit="return submitContactForm(event);">
-      <div class="contact-row">
-        <label class="contact-field">
-          <span class="contact-label" data-i18n="contact.field_name">お名前 <em>*</em></span>
-          <input type="text" name="name" required maxlength="80" autocomplete="name" />
-        </label>
-        <label class="contact-field">
-          <span class="contact-label" data-i18n="contact.field_company">所属組織</span>
-          <input type="text" name="company" maxlength="120" autocomplete="organization" />
-        </label>
+      <div class="btns" style="margin-top:1.6rem">
+        <a class="btn-primary" href="https://forms.gle/djVprYmq3hFgJA7P9" target="_blank" rel="noopener noreferrer"><span data-i18n="contact.cta">お問い合わせフォーム</span> →</a>
+        <a class="btn-ghost" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer">GitHub Discussions →</a>
       </div>
-      <div class="contact-row">
-        <label class="contact-field">
-          <span class="contact-label" data-i18n="contact.field_email">メールアドレス <em>*</em></span>
-          <input type="email" name="email" required maxlength="120" autocomplete="email" />
-        </label>
-        <label class="contact-field">
-          <span class="contact-label" data-i18n="contact.field_plan">興味のあるプラン</span>
-          <select name="plan">
-            <option value="" data-i18n="contact.plan_unknown">未定 / 相談したい</option>
-            <option value="starter">Starter (50万円 / 回)</option>
-            <option value="hosted">Hosted Event (150万円 / 回)</option>
-            <option value="annual">Annual Arena (600万円 / 年)</option>
-            <option value="custom-problem" data-i18n="contact.plan_custom_problem">独自問題の追加開発</option>
-            <option value="oss" data-i18n="contact.plan_oss">OSS 自己ホストの相談</option>
-            <option value="other" data-i18n="contact.plan_other">その他 / カスタム</option>
-          </select>
-        </label>
-      </div>
-      <label class="contact-field">
-        <span class="contact-label" data-i18n="contact.field_scale">想定規模 / 開催時期</span>
-        <input type="text" name="scale" maxlength="120" placeholder="例: 20 人 / 2026 年 Q3" />
-      </label>
-      <label class="contact-field">
-        <span class="contact-label" data-i18n="contact.field_message">メッセージ</span>
-        <textarea name="message" rows="4" maxlength="2000" data-i18n-attr-placeholder="contact.field_message_placeholder" placeholder="解決したい課題、 参加者の技術レベル、 過去の研修の振り返り 等、 何でもお書きください。"></textarea>
-      </label>
-      <p class="contact-fineprint" data-i18n="contact.fineprint">送信先: TenkaCloud 運営。 ご記入いただいた情報は、 お問い合わせ対応と見積もり提示のみに利用します (= <a href="./privacy.html">プライバシーポリシー</a>)。</p>
-      <div class="btns">
-        <button class="btn-primary" type="submit"><span data-i18n="contact.submit">送信する</span> →</button>
-        <a class="btn-ghost" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><span data-i18n="ent.cta2">GitHub を見る</span> →</a>
-      </div>
-      <p id="contact-feedback" class="contact-feedback" hidden></p>
-      </form>
+      <p class="contact-fineprint" data-i18n="contact.fineprint">フォームの回答は Google フォーム (= Google が管理) に保存され、 お問い合わせ対応と見積もり提示のみに利用します (= <a href="./privacy.html">プライバシーポリシー</a>)。</p>
     </div>
   </div>
 </section>
