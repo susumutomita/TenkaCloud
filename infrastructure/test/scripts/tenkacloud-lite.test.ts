@@ -388,6 +388,52 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(calls.filter((c) => c.args.includes("destroy"))).toHaveLength(1);
   });
 
+  // Regression: `cdk destroy` synths the shared CDK app (bin/tenkacloud-lite.ts ->
+  // requireSystemAdminEmail), so teardown needs CDK_PARAM_SYSTEM_ADMIN_EMAIL just like
+  // deploy. With only TENANT_ADMIN_EMAIL set (the .env the CodeBuild launcher writes),
+  // `down` must derive it; otherwise destroy throws "Please provide system admin email".
+  it("down should derive CDK_PARAM_SYSTEM_ADMIN_EMAIL from TENANT_ADMIN_EMAIL so destroy can synth", async () => {
+    const prev = {
+      cdk: process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL,
+      sys: process.env.SYSTEM_ADMIN_EMAIL,
+      tenant: process.env.TENANT_ADMIN_EMAIL,
+    };
+    delete process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL;
+    delete process.env.SYSTEM_ADMIN_EMAIL;
+    process.env.TENANT_ADMIN_EMAIL = "organizer@example.com";
+    try {
+      const { io } = buildIO({ inheritExitCode: 0 });
+      await main(["down"], io);
+      expect(process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL).toBe("organizer@example.com");
+    } finally {
+      if (prev.cdk === undefined) delete process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL;
+      else process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL = prev.cdk;
+      if (prev.sys === undefined) delete process.env.SYSTEM_ADMIN_EMAIL;
+      else process.env.SYSTEM_ADMIN_EMAIL = prev.sys;
+      if (prev.tenant === undefined) delete process.env.TENANT_ADMIN_EMAIL;
+      else process.env.TENANT_ADMIN_EMAIL = prev.tenant;
+    }
+  });
+
+  it("down should not override an explicit CDK_PARAM_SYSTEM_ADMIN_EMAIL (SaaS-shared env)", async () => {
+    const prev = {
+      cdk: process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL,
+      tenant: process.env.TENANT_ADMIN_EMAIL,
+    };
+    process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL = "admin@example.com";
+    process.env.TENANT_ADMIN_EMAIL = "organizer@example.com";
+    try {
+      const { io } = buildIO({ inheritExitCode: 0 });
+      await main(["down"], io);
+      expect(process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL).toBe("admin@example.com");
+    } finally {
+      if (prev.cdk === undefined) delete process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL;
+      else process.env.CDK_PARAM_SYSTEM_ADMIN_EMAIL = prev.cdk;
+      if (prev.tenant === undefined) delete process.env.TENANT_ADMIN_EMAIL;
+      else process.env.TENANT_ADMIN_EMAIL = prev.tenant;
+    }
+  });
+
   it("portal-url should query the problem-deploy stack's ParticipantPortalApiUrl output via describe-stacks", async () => {
     const { io, calls, stdout } = buildIO({
       capture: () => ({ code: 0, stdout: "https://portal.example.com\n", stderr: "" }),
