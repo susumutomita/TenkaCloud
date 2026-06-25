@@ -100,12 +100,28 @@ describe("EventSchedulePanel", () => {
     expect(p.onSaveFreezeMinutes).toHaveBeenCalled();
   });
 
+  it("should relabel the deploy button as force-redeploy once everything is deployed", () => {
+    // 未デプロイ (default) は「即座にデプロイ」、 全デプロイ済みは「強制再デプロイ」を出し、
+    // 既に deploy 済みなのに無害な初回デプロイに見える混乱を防ぐ (= 押下は破壊的 redeploy)。
+    renderPanel();
+    expect(btn("event_detail.deploy_at_now")).toBeInTheDocument();
+    expect(screen.queryByText("event_detail.deploy_at_redeploy")).not.toBeInTheDocument();
+
+    // 全デプロイ済み + wizard が deploy を指していても force-redeploy は primary 強調しない。
+    renderPanel({
+      totalDeployCount: 1,
+      completeCount: 1,
+      wizard: { primary: "deploy" } as unknown as WizardState,
+    });
+    expect(btn("event_detail.deploy_at_redeploy")).toBeInTheDocument();
+  });
+
   it("should confirm before force-redeploying when everything is already deployed", () => {
     // detail() has 1 team x 1 problem → expected=1. totalDeployCount=1 → all deployed.
     const p = props({ totalDeployCount: 1, completeCount: 1 });
     render(<EventSchedulePanel {...p} />);
-    // 即座にデプロイ = 全デプロイ済み → 直接発火せず confirm modal を開く。
-    fireEvent.click(btn("event_detail.deploy_at_now"));
+    // 全デプロイ済み → ラベルは「強制再デプロイ」、 直接発火せず confirm modal を開く。
+    fireEvent.click(btn("event_detail.deploy_at_redeploy"));
     expect(p.onBulkDeploy).not.toHaveBeenCalled();
     // modal の body は completeCount を埋め込む key を出す。
     expect(screen.getByText("event_detail.modal_redeploy_body")).toBeInTheDocument();
@@ -116,7 +132,7 @@ describe("EventSchedulePanel", () => {
   it("should cancel the force-redeploy confirm modal without deploying", () => {
     const p = props({ totalDeployCount: 1, completeCount: 1 });
     render(<EventSchedulePanel {...p} />);
-    fireEvent.click(btn("event_detail.deploy_at_now"));
+    fireEvent.click(btn("event_detail.deploy_at_redeploy"));
     fireEvent.click(btn("event_detail.modal_cancel"));
     expect(p.onBulkDeploy).not.toHaveBeenCalled();
     // dismiss 後は modal が閉じる (confirm button が DOM から消える)。

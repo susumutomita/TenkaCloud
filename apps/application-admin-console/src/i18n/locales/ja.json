@@ -288,6 +288,7 @@
     "deploy_at_unset": "未設定 (自動デプロイなし — 「即座にデプロイ」で手動デプロイ)",
     "deploy_at_pick": "デプロイ日時を指定 (UTC)",
     "deploy_at_now": "即座にデプロイ",
+    "deploy_at_redeploy": "強制再デプロイ",
     "deploy_at_after_deploy_hint": "デプロイ済み (予約デプロイは未デプロイのときだけ設定できます)",
     "modal_deploy_schedule_header": "自動デプロイを予約",
     "modal_deploy_schedule_body": "指定時刻を過ぎると、DRAFT のイベントのスタックが全 team × 全問題で自動的にデプロイされます。終了時刻以前を指定してください。入力したローカル時刻は UTC に変換されます (分精度)。",
