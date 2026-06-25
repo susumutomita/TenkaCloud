@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { type SpawnResult, spawnCapture, spawnInherit } from "../../../scripts/lib/spawn-utils";
 
 /**
- * Shared spawn helpers extracted from the TenkaCloud orchestration CLIs
- * (tenkacloud-ops / tenkacloud-lite). These are the **default** implementations
- * injected into each CLI's `CliIO`, so we pin their real process behavior here:
+ * Shared spawn helpers extracted from the TenkaCloud orchestration CLI
+ * (tenkacloud-lite). These are the **default** implementations
+ * injected into the CLI's `CliIO`, so we pin their real process behavior here:
  * exit codes, stdout / stderr capture, and the spawn-error → code 127 fallback.
  *
  * `process.execPath` (= the running node binary) is used as a portable target so

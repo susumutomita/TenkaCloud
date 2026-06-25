@@ -512,18 +512,6 @@
     },
     {
       "ruleId": "assertion-roulette",
-      "filePath": "infrastructure/test/scripts/tenkacloud-ops.test.ts",
-      "line": 153,
-      "match": "ge-6-expects"
-    },
-    {
-      "ruleId": "assertion-roulette",
-      "filePath": "infrastructure/test/scripts/tenkacloud-problem-interactive.test.ts",
-      "line": 58,
-      "match": "ge-6-expects"
-    },
-    {
-      "ruleId": "assertion-roulette",
       "filePath": "infrastructure/test/security/cloudfront-headers.test.ts",
       "line": 15,
       "match": "ge-11-expects"

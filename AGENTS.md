@@ -57,7 +57,7 @@ Invoke as `/<skill>`. Implementations live in `.claude/skills/<skill>/SKILL.md`.
 | ------------------ | -------------------------------------------------------------------------------------- |
 | `/harness`         | Run `make harness` to detect invariant violations                                       |
 | `/tech-debt`       | Run `make tech-debt` to generate the tech-debt backlog                                  |
-| `/create-problem`  | Scaffold `problems/<category>/<id>/` with the `metadata.json` + `template.yaml` convention |
+| `/quality-gates`   | Run the off-body quality-gate checks (HTTP magic / template / coverage / merge / submodule) |
 | `/spec`            | Write a technical specification in the Open Web Docs (MDN) style                       |
 
 In addition, the common skills (`/review`, `/security-review`, `/simplify`, `/init`, etc.) that ship with Claude Code itself are also available; they are not TenkaCloud-specific.
@@ -192,10 +192,7 @@ problems/<category>/<id>/          # metadata.json + template.yaml are the sourc
 
 ## Problem authoring (ADR-012)
 
-The sources of truth when adding a problem are:
-
-- **Schema source of truth**: [`problems/SCHEMA.json`](./problems/SCHEMA.json) — JSON Schema for `metadata.json`
-- **Claude Code skill**: `.claude/skills/create-problem/SKILL.md` — invoked as `/create-problem`; walks through requirements gathering → scaffold generation → metadata editing
+Problem authoring (scaffolding, the create CLI, kind templates) lives in the catalog repo [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge). The schema source of truth is [`problems/SCHEMA.json`](./problems/SCHEMA.json).
 
 Problems use the **3-asset model** (ADR-012):
 
@@ -208,16 +205,6 @@ problems/<category>/<id>/
 
 Scoring uses one of six built-in kinds (`flag` / `multi-flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`) — one per problem. The platform's generic scoring Lambda (ADR-012 Phase 3) dispatches them. Don't put problem-specific scoring code into the platform.
 
-A scaffolding CLI is available:
-
-```bash
-bun run scripts/tenkacloud-problem.ts create <id> --kind <kind>
-bun run scripts/tenkacloud-problem.ts validate <id>
-bun run scripts/tenkacloud-problem.ts list-kinds
-```
-
-Scaffold templates live under `.claude/templates/problems/<kind>/` — one per kind (`flag` / `multi-flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`).
-
 ## References
 
 - @CLAUDE.md — full product overview, architecture, command list
@@ -225,5 +212,4 @@ Scaffold templates live under `.claude/templates/problems/<kind>/` — one per k
 - [`infrastructure/templates/README.md`](./infrastructure/templates/README.md) — competitor-side setup
 - [`problems/README.md`](./problems/README.md) — problem authoring steps + schema
 - `apps/<app>/README.md` — local development steps per SPA
-- [`apps/cli/README.md`](./apps/cli/README.md) — the `tenkacloud` CLI (auth + API operation subcommands)
 - [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) — what CI runs

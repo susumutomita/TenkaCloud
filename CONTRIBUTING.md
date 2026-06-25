@@ -53,7 +53,7 @@ other proprietary assets — contribute only original or compatibly licensed wor
 
 ## Join the community
 
-TenkaCloud's moat is its problem catalog, and that catalog grows through community contribution. The simplest first contribution is to play-test a problem (run `make deploy` in Lite mode, register a team, solve and score it) and file a `problem-feedback` issue, or to author a new problem with `/create-problem`.
+TenkaCloud's moat is its problem catalog, and that catalog grows through community contribution. The simplest first contribution is to play-test a problem (run `make deploy` in Lite mode, register a team, solve and score it) and file a `problem-feedback` issue, or to author a new problem in the [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) catalog repo.
 
 Coordination model: **GitHub is the durable source of truth**; Discord (when available) is for live coordination only — every decision and bug must end up as a GitHub issue or PR comment. GitHub-only contributors are first-class.
 
