@@ -10,6 +10,8 @@ on:
     branches: [main]
     paths:
       - 'landing/**'
+      - 'scripts/generate-landing-locales.ts'
+      - 'package.json'
       # 「モックで試す」 動線で配信する participant-portal が rebuild 対象なので、
       # apps/participant-portal/** の変更でも Pages を再 deploy する。 さもないと
       # portal demo の fixtures / UI 変更が landing 経由でしか反映されない (= PR #1217
@@ -56,6 +58,8 @@ jobs:
           bun-version: 1.3.11
       - name: Install dependencies (ignore lifecycle scripts)
         run: bun install --frozen-lockfile --ignore-scripts
+      - name: Generate localized landing pages
+        run: bun run scripts/generate-landing-locales.ts
       - name: Build participant-portal demo
         # `bun run --filter <pkg>` 経由だと workspace 解決のタイミングで "No packages
         # matched the filter" を返すことがあるため、 workspace ディレクトリへ cd して
