@@ -20,20 +20,10 @@
  */
 
 import { spawn } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
 import { runAudit } from "../src/commands/audit.ts";
 import { runDeploy } from "../src/commands/deploy.ts";
 import { runEvents } from "../src/commands/events.ts";
 import { runIdp } from "../src/commands/idp.ts";
-import { runLocal } from "../src/commands/local.ts";
 import { runScoreboard, runScoreEvents } from "../src/commands/scoreboard.ts";
 import { runTenants } from "../src/commands/tenants.ts";
 import { MissingApiBaseError } from "../src/config/api-urls.ts";
@@ -202,13 +192,6 @@ Audit:
   tenkacloud audit query [--from --to --principal --action]
   tenkacloud audit export --from --to --out <path>
 
-Local (self-paced — no AWS/Cognito):
-  tenkacloud local up [problemId] [--port N]   local API 起動 + portal runtime-config 生成
-  tenkacloud local open [url]                   participant portal をブラウザで開く
-  tenkacloud local status                       local API の稼働状況
-  tenkacloud local evaluate <problemId> <flag>  flag をローカル採点
-  tenkacloud local down                         local API を停止
-
 Output flags (どの subcommand でも):
   --json  raw JSON 出力 (= jq 用)
   --csv   CSV 出力 (= Excel 用)
@@ -297,38 +280,6 @@ async function main(): Promise<void> {
     case "audit":
       code = await runWithErrorHandling(() =>
         runAudit(restArgs, { auth: { hostedUiDomain: readHostedUiDomain() } }),
-      );
-      break;
-    case "local":
-      code = await runWithErrorHandling(() =>
-        runLocal(restArgs, {
-          fs: {
-            existsSync,
-            readFileSync: (p, enc) => readFileSync(p, enc),
-            writeFileSync: (p, data) => writeFileSync(p, data),
-            mkdirSync: (p, opts) => {
-              mkdirSync(p, opts);
-            },
-            rmSync: (p, opts) => rmSync(p, opts),
-            statIsDirectory: (p) => statSync(p).isDirectory(),
-            readdirSync: (p) => readdirSync(p),
-          },
-          spawnDetached: (command, spawnArgs) => {
-            const child = spawn(command, [...spawnArgs], { detached: true, stdio: "ignore" });
-            child.unref();
-            return child.pid ?? -1;
-          },
-          openBrowser: (url) => {
-            const opener =
-              process.platform === "darwin"
-                ? "open"
-                : process.platform === "win32"
-                  ? "explorer"
-                  : "xdg-open";
-            const child = spawn(opener, [url], { detached: true, stdio: "ignore" });
-            child.unref();
-          },
-        }),
       );
       break;
     case "-h":

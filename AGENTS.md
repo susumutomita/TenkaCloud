@@ -23,16 +23,13 @@ The exceptions are:
 
 For those, ask first.
 
-## Run locally (no AWS)
+## SPA dev servers (no AWS)
 
-For iterating on the participant flow without an AWS account, use the no-AWS local-run path (#1975) — it wraps the `tenkacloud local` CLI and needs no AWS / Cognito / SBT / CloudFormation.
+For frontend iteration without an AWS account:
 
-- `make local` — run locally: start the Local Participant API then the participant-portal dev server (Participant Portal only).
-- `make local-up` / `make local-down` / `make local-status` — manage the local-mode lifecycle (start / stop / health-check the Local Participant API).
-- `make local-open` — open the portal (sign in with any team key); `make local-evaluate` — submit a flag from the terminal.
 - `make dev` — start all 3 SPA dev servers in parallel (admin-console :5173 / application-admin-console :5174 / participant-portal :5175).
 
-This is distinct from `make deploy` (Lite mode, single-tenant **on AWS**) and `make deploy-saas` (multi-tenant on AWS). Use `make local` when no AWS is involved.
+For a real run use `make deploy` (Lite mode, single-tenant **on AWS**) or `make deploy-saas` (multi-tenant on AWS).
 
 ## Quality gates
 
@@ -228,5 +225,5 @@ Scaffold templates live under `.claude/templates/problems/<kind>/` — one per k
 - [`infrastructure/templates/README.md`](./infrastructure/templates/README.md) — competitor-side setup
 - [`problems/README.md`](./problems/README.md) — problem authoring steps + schema
 - `apps/<app>/README.md` — local development steps per SPA
-- [`apps/cli/README.md`](./apps/cli/README.md) — `tenkacloud local` no-AWS run mode (the `make local*` targets wrap it)
+- [`apps/cli/README.md`](./apps/cli/README.md) — the `tenkacloud` CLI (auth + API operation subcommands)
 - [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) — what CI runs

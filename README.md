@@ -63,8 +63,7 @@ event runtime into your AWS account, skipping the full SBT control plane.
 | --- | --- | --- |
 | [A. AWS Console pipeline](#a-aws-console-pipeline-no-local-install) | You do not want to install Bun / CDK locally | CloudFormation creates CodePipeline + CodeBuild; CodeBuild runs `make deploy` |
 | [B. Local terminal](#b-local-terminal) | You are comfortable running commands locally | Your shell runs `make deploy` |
-| [C. Docker](#c-docker-only-docker-on-the-host) | You have only Docker on the host (no Bun / Node) | A toolchain container runs `make deploy` |
-| [D. SaaS mode](#d-saas-mode-optional) | Multi-tenant SaaS / pooled and silo tenants | Your shell runs `make deploy-saas` |
+| [C. SaaS mode](#c-saas-mode-optional) | Multi-tenant SaaS / pooled and silo tenants | Your shell runs `make deploy-saas` |
 
 ### A. AWS Console pipeline (no local install)
 
@@ -135,30 +134,7 @@ Teardown is:
 make destroy
 ```
 
-### C. Docker (only Docker on the host)
-
-Use this path on a machine that has only Docker — no Bun, Node, or AWS CLI. The
-toolchain rides in a container; the repo and your AWS credentials are mounted in.
-
-```bash
-git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
-cd TenkaCloud
-
-cp infrastructure/environments/development/.env.example \
-   infrastructure/environments/development/.env
-# edit AWS_ACCOUNT_ID, AWS_REGION, and TENANT_ADMIN_EMAIL
-
-make deploy-docker     # builds the image (first run), installs deps, runs `make deploy`
-```
-
-AWS auth is automatic: run `aws sso login` (or `aws configure`) on the host first, then
-`make deploy-docker` reads your `~/.aws` (mounted read-only) — no `AWS_PROFILE` to set.
-Static or temporary keys in your shell (`AWS_ACCESS_KEY_ID` etc.) are inherited too.
-Pick the environment with `make deploy-docker ENV=production`. Teardown is
-`make destroy-docker`, and `make docker-shell` opens a shell in the toolchain container.
-See [`docker-compose.yml`](./docker-compose.yml) and [`docker/Dockerfile`](./docker/Dockerfile).
-
-### D. SaaS mode (optional)
+### C. SaaS mode (optional)
 
 Use SaaS mode only when you need tenant onboarding, pooled tiers
 (BASIC / ADVANCED), silo tenants (PLATINUM), and the SBT control plane.

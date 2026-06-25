@@ -17,10 +17,9 @@ export JSII_DEPRECATED := quiet
         harness harness-test tech-debt \
         env-check env-check-lite env-init env-init-test synth check-synth diff bootstrap \
         deploy deploy-saas deploy-control-plane deploy-bootstrap destroy destroy-saas \
-        deploy-docker destroy-docker docker-shell docker-build \
         deploy-battles destroy-battles \
         lite-up lite-down lite-status lite-portal-url lite-console-url \
-        local-up local-serve local-open local-status local-evaluate local-down local dev dev-admin dev-app-admin dev-portal \
+        dev dev-admin dev-app-admin dev-portal \
         ops-health ops-metrics
 
 help:
@@ -219,26 +218,6 @@ deploy-bootstrap:     env-check build ; $(CDK) deploy tenkacloud-bootstrap $(APP
 destroy:              env-check-lite  ; bun run scripts/tenkacloud-lite.ts down
 destroy-saas:         env-check       ; bash scripts/cleanup.sh
 
-# ===== One-Docker deploy (host needs only Docker — no bun / node / aws-cli) =====
-# exe.dev / fresh machines often lack bun. These targets run the normal deploy inside a
-# toolchain container (Bun 1.3.11 + Node 24 + AWS CLI v2) defined by docker-compose.yml.
-# They are pure `docker compose` (no bun on the host) so they work on a bun-less host.
-# The repo is bind-mounted; ~/.aws is mounted read-only; env-var credentials also work.
-#   make deploy-docker                 # Lite deploy in the container (ENV=development)
-#   make deploy-docker ENV=production  # pick the target environment
-#   make destroy-docker                # tear it down
-#   make docker-shell                  # interactive shell in the toolchain image
-#   make docker-build                  # rebuild the image after editing docker/Dockerfile
-# Override DOCKER_COMPOSE=docker-compose for legacy Compose v1.
-# DOCKER_USER passes the host uid/gid so the container drops root and repo writes (cdk.out)
-# stay owned by the host user (see docker/entrypoint.sh).
-DOCKER_COMPOSE ?= docker compose
-DOCKER_USER = TENKACLOUD_UID=$(shell id -u) TENKACLOUD_GID=$(shell id -g)
-deploy-docker:    ; $(DOCKER_USER) $(DOCKER_COMPOSE) run --rm tenkacloud make deploy ENV=$(ENV)
-destroy-docker:   ; $(DOCKER_USER) $(DOCKER_COMPOSE) run --rm tenkacloud make destroy ENV=$(ENV)
-docker-shell:     ; $(DOCKER_USER) $(DOCKER_COMPOSE) run --rm tenkacloud bash
-docker-build:     ; $(DOCKER_COMPOSE) build tenkacloud
-
 # ===== Problem deploy smoke test =====
 # 引数に問題フォルダを取り、順次 CFn deploy する開発者向け smoke test ツール。
 # SaaS 配線 (Step Functions / EventBridge / tenant API / Cognito) を持ち込まず、
@@ -277,20 +256,7 @@ lite-status:       ; bun run scripts/tenkacloud-lite.ts status
 lite-portal-url:   ; bun run scripts/tenkacloud-lite.ts portal-url
 lite-console-url:  ; bun run scripts/tenkacloud-lite.ts console-url
 
-# ===== Local development (no AWS) =====
-# Issue #1975: `tenkacloud local` runs only the Participant Portal against a local node:http
-# backend (no AWS / Cognito / SBT). Distinct from lite-* (AWS deploy).
-LOCAL_CLI = bun run apps/cli/bin/tenkacloud.ts local
-
-local-up:       ; $(LOCAL_CLI) up $(PROBLEM)
-local-serve:    ; $(LOCAL_CLI) serve
-local-open:     ; $(LOCAL_CLI) open
-local-status:   ; $(LOCAL_CLI) status
-local-evaluate: ; $(LOCAL_CLI) evaluate $(PROBLEM) $(FLAG)
-local-down:     ; $(LOCAL_CLI) down
-# Combined: start the local API, then the participant-portal dev server (foreground).
-local: local-up
-	cd apps/participant-portal && bun run dev
+# ===== SPA dev servers (frontend, no AWS) =====
 # Start all 3 SPA dev servers in parallel (admin :5173 / app-admin :5174 / portal :5175).
 dev:
 	$(MAKE) -j3 dev-admin dev-app-admin dev-portal
