@@ -58,10 +58,10 @@ describe("ParticipantPortalHosting", () => {
     });
   });
 
-  // 競技者全員が "Failed to fetch" になった live 障害の回帰防止。 原因は `make local` が書く dev 用
-  // `public/runtime-config.json` (apiBaseUrl=http://127.0.0.1:3199 の mock) が Vite build で dist に
-  // 混入し、 SPA 配信 (SiteDeployment) が deployRuntimeConfig の実 Function URL を上書きしていたこと。
-  // SiteDeployment は runtime-config.json を asset から exclude し、 絶対に出荷しないことを pin する。
+  // 競技者全員が "Failed to fetch" になった live 障害の回帰防止。 原因は dev で `public/runtime-config.json`
+  // に置いた mock (apiBaseUrl=http://127.0.0.1:3199) が Vite build で dist に混入し、 SPA 配信
+  // (SiteDeployment) が deployRuntimeConfig の実 Function URL を上書きしていたこと。 SiteDeployment は
+  // runtime-config.json を asset から exclude し、 絶対に出荷しないことを pin する。
   describe("runtime-config.json must never ship via the SPA deployment", () => {
     const strayRuntimeConfig = path.join(distDir, "runtime-config.json");
     let planted = false;

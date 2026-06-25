@@ -116,44 +116,6 @@ the CLI requires one base URL per scope (no defaults — missing env fails loud)
 
 There are no silent fallbacks; every error exits non-zero with a printed cause.
 
-## Phase 3 — local self-paced mode (Issue #1975)
-
-A free, single-player mode: run **only** the Participant Portal against a local
-backend, with no AWS / Cognito / SBT / CloudFormation. The fixed local context is
-`tenantId = eventId = teamId = participantId = "local"`.
-
-```
-tenkacloud local up [problemId] [--port N]   # start the local API + write portal runtime-config
-tenkacloud local serve [--port N]            # foreground worker the `up` command spawns
-tenkacloud local open [url]                   # open the portal (login with any key)
-tenkacloud local status                       # is the local API running?
-tenkacloud local evaluate <problemId> <flag>  # submit a flag from the terminal
-tenkacloud local down                         # stop the local API
-```
-
-`local up` reads the problem catalog from `problems/` (override with
-`TENKACLOUD_PROBLEMS_DIR`), spawns a detached Local Participant API (a `node:http`
-server serving the `/portal/*` contract from the catalog), and writes a portal
-`runtime-config.json` (`mode: "backend"`, `apiBaseUrl: http://127.0.0.1:<port>`).
-Start the portal with `cd apps/participant-portal && bun run dev`, then sign in
-with any team key. The portal allows a loopback-http backend (the bearer never
-leaves the machine), so no HTTPS / certificate is needed.
-
-Local scoring is for practice (anti-cheat is a non-goal here): the accepted flag
-is the deterministic `TC{local-<problemId>}` and hints reveal their content
-immediately. Delegating each problem's real runtime to Docker Compose and the
-full per-kind scoring engine are tracked follow-ups.
-
-### Local mode env vars
-
-| Variable                          | Default                                              |
-| --------------------------------- | --------------------------------------------------- |
-| `TENKACLOUD_PROBLEMS_DIR`         | `<cwd>/problems`                                     |
-| `TENKACLOUD_LOCAL_DIR`            | `~/.tenkacloud/local` (state file)                  |
-| `TENKACLOUD_LOCAL_PORT`           | `3199`                                               |
-| `TENKACLOUD_PORTAL_RUNTIME_CONFIG`| `apps/participant-portal/public/runtime-config.json`|
-| `TENKACLOUD_PORTAL_URL`           | `http://localhost:5175` (for `local open`)          |
-
 ## Running locally
 
 ```

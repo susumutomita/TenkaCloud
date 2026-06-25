@@ -61,12 +61,6 @@ We don't use a single-table DynamoDB design. Each stack owns its own tables (Ten
 | `make synth`            | `cdk synth` (defaults to `ENV=development`)                              |
 | `make diff`             | `cdk diff --all`                                                         |
 | `make bootstrap`        | `cdk bootstrap`                                                          |
-| `make local`            | **Local mode** (no AWS) run. Starts the local Participant API then the participant-portal dev server (no Cognito / SBT, #1975) |
-| `make local-up`         | Start local mode in the background (wraps `tenkacloud local up`)         |
-| `make local-down`       | Stop local mode (wraps `tenkacloud local down`)                         |
-| `make local-status`     | Show local-mode status (wraps `tenkacloud local status`)               |
-| `make local-open`       | Open the local Participant Portal in a browser (wraps `tenkacloud local open`) |
-| `make local-evaluate`   | Run scoring against the local Participant API (wraps `tenkacloud local evaluate`) |
 | `make dev`              | Start all 3 SPA dev servers in parallel (admin :5173 / application-admin :5174 / participant-portal :5175) |
 | `make deploy`           | **Lite mode** (single-tenant) deploy. Stands up AppPlaneCore + Participant Portal via `infrastructure/bin/tenkacloud-lite.ts` (#955) |
 | `make deploy-saas`      | **SaaS mode** (multi-tenant) deploy. Runs `scripts/install.sh` (3-phase deploy, stands up SBT ControlPlane) |
@@ -222,10 +216,6 @@ Add packages to `trustedDependencies` in a stand-alone PR. Manually verify the s
 | CI               | GitHub Actions (`.github/workflows/ci.yml`)                           |
 
 ## Deploy flow
-
-### Local mode (no AWS, `make local`)
-
-`make local` is the fully-local, no-AWS path (#1975): it starts the local Participant API then the participant-portal dev server, with **no AWS / Cognito / SBT** in the loop. Only the Participant Portal is served — there is no Control Plane, no tenant pipeline, and nothing is deployed into an AWS account. Use it to develop or demo on a laptop with zero cloud cost. The lifecycle wrappers (`make local-up` / `make local-down` / `make local-status` / `make local-open` / `make local-evaluate`) drive `tenkacloud local <sub>`. This is distinct from Lite mode below: Local mode touches no AWS, whereas `make deploy` (Lite mode) provisions a single-tenant stack in a real AWS account.
 
 ### Lite mode (default, `make deploy`)
 
