@@ -37,7 +37,7 @@ Run the following **in this order** before opening a PR.
 
 ```bash
 make harness         # architecture invariant check (.claude/harness/)
-make before-commit   # lint (markdownlint + textlint + biome) / typecheck / test / validate-problems
+make before-commit   # lint (markdownlint + textlint + biome) / test
 /review              # code review
 /security-review     # security review
 /simplify            # final pass for duplication, complexity, and efficiency

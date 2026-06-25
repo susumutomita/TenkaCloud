@@ -41,8 +41,8 @@ maintainer wants to reserve one for a contributor.
 - **Why it helps**: IAM repair is a common GameDay scenario and fits a small
   Challenge.
 - **Files**: `problems/challenges/iam-disaster-recovery/metadata.json`,
-  `template.yaml`, and optional README.
-- **Validation**: `make validate-problems`.
+  `template.yaml`, and optional README (in the [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) catalog repo).
+- **Validation**: the catalog repo's authoring tooling.
 
 ### UI Polish: Empty State For No Deployments
 
@@ -50,13 +50,6 @@ maintainer wants to reserve one for a contributor.
   deploy exists.
 - **Files**: Participant Portal or Application Admin Console page components.
 - **Validation**: focused Vitest coverage plus the relevant app test command.
-
-### Authoring DX: Improve Metadata Error Messages
-
-- **Why it helps**: schema failures should point authors to the exact field and
-  fix.
-- **Files**: `scripts/validate-problems.ts` and focused tests.
-- **Validation**: `bun run validate:problems` and script tests if added.
 
 ## Contribution Flow
 
