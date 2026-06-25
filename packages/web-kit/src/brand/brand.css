@@ -2,7 +2,7 @@
  * TenkaCloud brand tokens — Claude Design "Logo system" v1。
  *
  * Cloudscape の外 (landing / docs / 生 CSS) で使うブランド色・フォントを `--tc-*` で公開する。
- * 値は packages/web-kit/src/brand/tokens.ts の `brandColors` / `brandFonts` と一致させること。
+ * 色は packages/web-kit/src/brand/tokens.ts の `brandColors` と一致させること。
  * 取り込み側: `@import "@tenkacloud/web-kit/src/brand/brand.css";`
  */
 :root {

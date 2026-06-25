@@ -19,10 +19,3 @@ export const brandColors = {
   paper3: "#f5f5f7",
   accent: "#ff6a32",
 } as const;
-
-export type BrandColorToken = keyof typeof brandColors;
-
-export const brandFonts = {
-  sans: '"Inter", "Noto Sans JP", -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
-  mono: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
-} as const;

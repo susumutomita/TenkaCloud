@@ -9,20 +9,10 @@
 export { AuthProvider, type AuthState, useAuth } from "./auth";
 export { renderBootError } from "./boot-error";
 export {
-  BRAND_MARK_VARIANTS,
-  type BrandColorToken,
-  BrandLockup,
-  type BrandLockupOrientation,
-  type BrandLockupProps,
   BrandMark,
   type BrandMarkProps,
-  type BrandMarkVariant,
   brandColors,
-  brandFonts,
   tenkaCloudAppIconDataUri,
-  tenkaCloudAppIconSvg,
-  tenkaCloudMarkDataUri,
-  tenkaCloudMarkSvg,
 } from "./brand";
 export {
   type ConsoleAuthCopy,

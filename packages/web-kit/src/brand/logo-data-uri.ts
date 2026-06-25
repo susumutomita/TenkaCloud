@@ -20,18 +20,12 @@ function toDataUri(svg: string): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-/** 透過背景 + ink の summit マーク。明るい面に置く単色ロゴ用。 */
-export const tenkaCloudMarkSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">${summitInner(
-  brandColors.ink,
-)}</svg>`;
-
 /**
  * 角丸 (iOS 流の ~22%) の app icon: ink 背景 + white summit。背景を持つので、明暗どちらの
  * ヘッダー上でも安定して読める。SPA の TopNavigation ロゴはこれを使う。
  */
-export const tenkaCloudAppIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" rx="26" fill="${
+const tenkaCloudAppIconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" rx="26" fill="${
   brandColors.ink
 }"/>${summitInner(brandColors.paper)}</svg>`;
 
-export const tenkaCloudMarkDataUri = toDataUri(tenkaCloudMarkSvg);
 export const tenkaCloudAppIconDataUri = toDataUri(tenkaCloudAppIconSvg);
