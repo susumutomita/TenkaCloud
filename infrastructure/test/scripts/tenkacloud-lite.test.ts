@@ -30,11 +30,13 @@ function buildIO(opts: {
   readonly stderr: string[];
   readonly calls: SpawnCall[];
   readonly confirms: string[];
+  readonly ensuredDirs: string[];
 } {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const calls: SpawnCall[] = [];
   const confirms: string[] = [];
+  const ensuredDirs: string[] = [];
   const io: CliIO = {
     stdout: (text) => {
       stdout.push(text);
@@ -56,8 +58,11 @@ function buildIO(opts: {
       // confirmAnswer を明示指定したケースだけ override。
       return opts.confirmAnswer ?? true;
     },
+    ensureDir: (dir) => {
+      ensuredDirs.push(dir);
+    },
   };
-  return { io, stdout, stderr, calls, confirms };
+  return { io, stdout, stderr, calls, confirms, ensuredDirs };
 }
 
 function tenantAdminUpCapture(opts: {
@@ -432,6 +437,16 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
       if (prev.tenant === undefined) delete process.env.TENANT_ADMIN_EMAIL;
       else process.env.TENANT_ADMIN_EMAIL = prev.tenant;
     }
+  });
+
+  // Regression: cdk destroy synths the app, which stages apps/participant-portal/dist and
+  // apps/application-admin-console/dist as BucketDeployment assets. Teardown never builds
+  // the SPAs, so `down` must create the placeholder dirs or synth throws CannotFindAsset.
+  it("down should ensure the SPA dist dirs exist before destroying (CannotFindAsset)", async () => {
+    const { io, ensuredDirs } = buildIO({ inheritExitCode: 0 });
+    await main(["down"], io);
+    expect(ensuredDirs.some((d) => d.endsWith("apps/participant-portal/dist"))).toBe(true);
+    expect(ensuredDirs.some((d) => d.endsWith("apps/application-admin-console/dist"))).toBe(true);
   });
 
   it("portal-url should query the problem-deploy stack's ParticipantPortalApiUrl output via describe-stacks", async () => {
