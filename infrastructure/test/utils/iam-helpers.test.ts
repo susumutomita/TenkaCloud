@@ -2,24 +2,12 @@ import { App, Stack } from "aws-cdk-lib";
 import type { PolicyStatement } from "aws-cdk-lib/aws-iam";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { describe, expect, it, vi } from "vitest";
-import { buildMultiPolicy, grantChallengePayloadRead } from "../../lib/utils/iam-helpers";
+import { grantChallengePayloadRead } from "../../lib/utils/iam-helpers";
 
 /**
- * Issue #1418: lib/utils/iam-helpers.ts は 50% branch だった。 buildMultiPolicy の statement
- * 組立と grantChallengePayloadRead の bucket-present / absent 両枝を pin する。
+ * Issue #1418: lib/utils/iam-helpers.ts は 50% branch だった。
+ * grantChallengePayloadRead の bucket-present / absent 両枝を pin する。
  */
-describe("buildMultiPolicy", () => {
-  it("should build a PolicyDocument with one ALLOW statement per input", () => {
-    const doc = buildMultiPolicy(
-      { actions: ["s3:GetObject"], resources: ["arn:aws:s3:::b/*"] },
-      { actions: ["dynamodb:GetItem"], resources: ["*"] },
-    );
-    const json = doc.toJSON() as { Statement: Array<{ Effect: string; Action: string }> };
-    expect(json.Statement).toHaveLength(2);
-    expect(json.Statement[0]).toMatchObject({ Effect: "Allow", Action: "s3:GetObject" });
-  });
-});
-
 describe("grantChallengePayloadRead", () => {
   it("should add an s3:GetObject statement when a bucket name is given", () => {
     const stack = new Stack(new App(), "T");
