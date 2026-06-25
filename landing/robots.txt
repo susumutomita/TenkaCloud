@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+Disallow: /admin-demo/
+Disallow: /portal-demo/
+Content-Signal: search=yes,ai-input=yes,ai-train=no
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /admin-demo/
+Disallow: /portal-demo/
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /admin-demo/
+Disallow: /portal-demo/
+
+User-agent: GPTBot
+Disallow: /
+
+Sitemap: https://tenkacloud.com/sitemap.xml

@@ -74,6 +74,7 @@ body {
   padding: 4px 9px;
   font: inherit;
   font-weight: 800;
+  text-decoration: none;
 }
 .nav-right .lang.on {
   color: var(--ink);
@@ -262,7 +263,7 @@ section .lead {
 .twoup { display: grid; grid-template-columns: 1fr 1fr; gap: 52px; max-width: 980px; margin: 0 auto; }
 .tile {
   background: transparent; border-radius: 0; padding: 0;
-  min-height: 0; display: flex; flex-direction: column;
+  min-width: 0; min-height: 0; display: flex; flex-direction: column;
 }
 /* `.kicker` was a div; now `<h3>` for a11y. Reset h3 default margins to keep visual identical. */
 .tile h3.kicker {
@@ -803,6 +804,12 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
   .hero .cta-row { gap: 18px; flex-wrap: wrap; }
   .metric-grid { grid-template-columns: 1fr 1fr; }
   .dashboard { padding: 12px; }
+  .portal-preview { padding: 14px; }
+  .portal-container { padding: 12px; }
+  .portal-tabs { max-width: 100%; overflow-x: auto; }
+  .quest-card { flex-wrap: wrap; padding: 8px 10px; }
+  .quest-card code { flex: 1 0 100%; width: 100%; }
+  .quest-card .status-text { margin-left: auto; }
   /* 4 stat → 2x2 grid (= 横並びだと narrow で潰れる) */
   .stats { grid-template-columns: repeat(2, 1fr); gap: 20px 8px; padding: 18px 0; }
   .stat { padding: 0 12px; }
