@@ -16,7 +16,7 @@
  *   - AwsAssumeRoleExchange (= 既存 ExternalId flow を本 abstraction に migrate)
  *   - Deploy API への internal integration
  *   - GCP / Azure adapter prototype
- *   - protocol 文書 (= docs/architecture/cloud-action-intent.html)
+ *   - protocol 文書
  */
 
 export type { AuditInput, CloudActionAuditRecord } from "./audit.js";

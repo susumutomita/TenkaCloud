@@ -8,7 +8,7 @@ allowed-tools: Bash(bun run scripts/tenkacloud-problem.ts:*), Bash(make validate
 
 参加者が **自分のアプリを外部に公開して URL を出し**、問題側の **検証 API がその URL を採点する** 型の問題を作る skill。AWS リソースを participant に作らせず、「URL を 1 本出すだけ」で成功体験を作りたいときに使う (Issue #1973)。
 
-**正本**: [`problems/SCHEMA.json`](../../../problems/SCHEMA.json) (`scoring.kind:"flag"`) と [`docs/problems/AUTHORING.html`](../../../docs/problems/AUTHORING.html)。
+**正本**: [`problems/SCHEMA.json`](../../../problems/SCHEMA.json) (`scoring.kind:"flag"`)。問題 authoring ガイドは catalog repo [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) 側にある。
 **正典の実例 (必ず読む)**: `problems/challenges/x402-paywall/`。これは「問題が gate Lambda を deploy → 参加者が叩く → 合格で flag → platform が flag 検証」の完成例。本 skill はこれを「**外部 URL を verify する**」形に一般化したもの。
 
 ## 設計の鉄則 (ここを外すと作り直しになる)

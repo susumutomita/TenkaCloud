@@ -8,15 +8,13 @@ export JSII_DEPRECATED := quiet
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install_ci submodule-latest build typecheck test test-coverage coverage-gate clean-test-outdir check before-commit \
-        build-docs check-docs oss-notices check-oss-notices audit-deps build-problems-index check-problems-index \
+.PHONY: help install install_ci submodule-latest build typecheck test test-coverage clean-test-outdir check before-commit \
+        oss-notices check-oss-notices audit-deps build-problems-index check-problems-index \
         cost-catalog check-cost-catalog \
         validate-problems verify-attacks \
         lint lint-md lint-text lint-format lint_md lint_text format_check \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
-        check-http-status check-template-ascii check-template-security check-template-cfn-refs check-template-cli-access check-template-name-limits \
-        check-no-conflicts check-submodule-not-behind \
         env-check env-check-lite env-init env-init-test synth check-synth diff bootstrap \
         deploy deploy-saas deploy-control-plane deploy-bootstrap destroy destroy-saas \
         deploy-docker destroy-docker docker-shell docker-build \
@@ -50,11 +48,6 @@ build:         ; bun run build
 typecheck:     ; bun run typecheck
 test:          ; bun run test
 test-coverage: ; bun run test:coverage
-# Issue #1424: agent-owned workspace (3 SPA + 共有 package) が 100% coverage を維持しているか
-# を lcov から検証する gate。 `make test-coverage` で各 workspace の coverage/lcov.info を
-# 生成してから実行する (CI は test-coverage の直後に走らせる)。 infrastructure は owner lane
-# のため gate 対象外 (現在値のみ表示)。
-coverage-gate: ; bun run scripts/check-coverage-gate.ts
 # Issues #1295 / #1551: vitest setup pins CDK_OUTDIR to the repo-local
 # infrastructure/cdk.out.test/<worker>. The package test wrapper purges it
 # before and after normal runs; this target remains for interrupted processes.
@@ -66,54 +59,28 @@ validate-problems: ; bun run validate:problems
 verify-attacks: ; bun run verify:attacks-local $(PROBLEM)
 build-problems-index: ; bun run build:problems-index
 check-problems-index: ; bun run check:problems-index
-build-docs:    ; bun run scripts/build-docs.ts
-check-docs:    ; bun run scripts/build-docs.ts --check
 # Issue #1910 Slice 5: 問題ごとの使用 AWS リソース + 概算コストを GitHub 上に出すカタログ。
 # submodule bump 由来の drift で CI を落とさないよう check は default gate に載せずオンデマンド再生成。
 cost-catalog:       ; bun run scripts/build-cost-catalog.ts
 check-cost-catalog: ; bun run scripts/build-cost-catalog.ts --check
 oss-notices:   ; bun run oss-notices
 check-oss-notices: ; bun run oss-notices:check
-check-http-status: ; bun run scripts/check-http-magic-numbers.ts
-# IAM Description が CJK で CREATE_FAILED するのを merge 前に検出 (#664)
-check-template-ascii: ; bun run scripts/check-template-ascii.ts
-# Issue #869: 問題 template.yaml の pre-deploy security scan (= IAM wildcard / SG open / S3 public / KMS rotation)
-check-template-security: ; bun run scripts/check-template-security.ts
-# Issue #951 sub-2: 問題 template.yaml の構造的整合性 (= !Ref / !GetAtt が declared resource を指す)
-check-template-cfn-refs: ; bun run scripts/check-template-cfn-refs.ts
-# ParticipantViewerRole に Console federation 後の CLI / CloudShell access に必要な
-# AWS managed policy (AWSSignInLocalDevelopmentAccess + AWSCloudShellFullAccess) が
-# attach されているか検証。 未 attach だと Console login は成功するのに CLI / CloudShell が
-# 静かに失敗するため、 問題作成者が同じ落とし穴を踏まないよう merge 前に弾く。
-# 現状は既存 5 テンプレが未対応なので standalone target のみ。 TenkaCloudChallenge 側で
-# templates を更新してから before-commit / check に組み込む (follow-up PR で wire)。
-check-template-cli-access: ; bun run scripts/check-template-cli-access.ts
-# Issue #1812: IAM RoleName / Lambda FunctionName を ${NamePrefix} 込みで明示宣言すると
-# NamePrefix (最大 84 文字) が 64 文字上限を超え deploy が CREATE_FAILED する。 synth / lint は
-# 通るので merge 前にここで弾く (= em-dash #664 / UserData #76 と同じ deploy-only 制約 class)。
-check-template-name-limits: ; bun run scripts/check-template-name-limits.ts
-# feedback_pull_main_before_task: 現在のブランチが origin/main と clean に merge 可能かを
-# git merge-tree (= read-only dry-run) で検査。 conflict 発生時は exit 1 で fail。
-# CI / pre-push hook ともに、 「PR を出した瞬間に DIRTY になる」 のを未然に防ぐ。
-check-no-conflicts: ; bun run scripts/check-no-conflicts.ts
-# Submodule pin 後退ガード (gitlink ping-pong 対策)。 PR の problems pin が origin/main より
-# 後退/分岐していたら fail。 origin/main + submodule history を要するので CI 専用 (before-commit
-# には入れない = offline 前提を壊さない)。 手動実行用に target だけ用意する。
-check-submodule-not-behind: ; bun run scripts/check-submodule-not-behind.ts
+# 品質ゲート (HTTP magic number / template ASCII・security・cfn-refs・命名上限・CLI access /
+# coverage 100% / synth IAM ASCII / merge 整合 / submodule pin) は本体と混ぜないため
+# .claude/skills/quality-gates へ移設した。pre-commit フックと CI が runner を直接呼ぶ:
+#   bun run .claude/skills/quality-gates/scripts/run.ts [--ci|--all|<name>...]
+# AI 判断つきで走らせるときは /quality-gates スキルを使う。
 audit-deps:    ; bun run audit:dependencies
 # `check-problems-index` は submodule (= TenkaCloudChallenge) 側 catalog CI に責任を移譲した
 # ため、 本体 before-commit / check からは外す。 platform 側 build:problems-index を走らせると
 # catalog repo の biome JSON formatter (= 別 lock 版) と微妙な drift が出てしまうため、
 # index.json の正本性は catalog 側で担保する設計。
-# Shared pre-PR gate list. `check` prepends `install`; `before-commit` assumes deps are present.
-# Keep this single list authoritative so the two gates can never drift apart.
-# NOTE: check-template-security scans ONLY problems/ (competitor problem templates). Problems are
-# authored in the TenkaCloudChallenge repo, which owns their template gates (cf. the ASCII gate,
-# challenge #111). Keeping it in the platform gate over-flagged legitimate problem IAM (e.g. a
-# WAF-migration problem's participant role needs wafv2:CreateWebACL/List* on "*", since the WebACL
-# ARN is unknowable before creation). So it is dropped from the auto gate here; `make
-# check-template-security` stays runnable, and the scan belongs in the problem repo.
-GATE_CHECKS := lint test validate-problems check-docs check-oss-notices check-http-status check-template-ascii check-template-cfn-refs check-template-name-limits check-no-conflicts audit-deps check-synth
+# Shared pre-PR gate list for the product BODY only. `check` prepends `install`;
+# `before-commit` assumes deps are present. Keep this single list authoritative so the two
+# gates can never drift apart. 品質ゲート (HTTP magic number / template / coverage / IAM ASCII /
+# merge / submodule) は本体と混ぜないため .claude/skills/quality-gates へ分離した。pre-commit
+# フックが before-commit とは別呼び出しで runner を走らせ、CI は --ci グループを走らせる。
+GATE_CHECKS := lint test validate-problems check-oss-notices audit-deps check-synth
 check:         install $(GATE_CHECKS)
 before-commit: $(GATE_CHECKS)
 
@@ -131,7 +98,6 @@ before-commit: $(GATE_CHECKS)
 check-synth:
 	@CDK_SKIP_BUNDLING=1 $(MAKE) synth >/dev/null 2>&1 || { echo "ERROR: cdk synth failed (= make deploy も失敗します)。 CDK_SKIP_BUNDLING=1 make synth で詳細を確認してください。"; exit 1; }
 	@echo "OK  cdk synth (module 解決 / 型 / construct を検証、 Docker バンドルは skip — 実バンドルは make synth)"
-	@bun run scripts/check-synth-iam-ascii.ts
 
 # ===== Lint / Fix =====
 lint:   lint-md lint-text lint-format

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 /**
  * Issue #1366: 共有 status badge wrapper。
  *
- * `docs/design-system/DESIGN-SYSTEM.html` の "5. Status badge system" で固定された 5 tone
+ * デザインシステムで固定された 5 tone
  * (success / warning / error / info / pending) を Cloudscape `<Badge>` の color に lock する。
  *
  * - 直接 `<Badge color="green">` を書かない。 意味 (= tone) を経由することで、 後から

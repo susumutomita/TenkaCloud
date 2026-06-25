@@ -43,7 +43,6 @@ Examples:
 
 See also:
   make lite-status   (= Lite mode 専用の status、 scripts/tenkacloud-lite.ts)
-  docs/operations/lite-event-rehearsal.md  (= リハーサル runbook + 記録テンプレート)
 `;
 
 /** Re-exported for backwards-compatible imports; the canonical type is `SpawnResult`. */
@@ -299,9 +298,7 @@ export function formatRehearsalMetrics(
   lines.push(
     `  first-deploy wall-clock: ${metrics.wallClockSpanSec === null ? "n/a" : fmtDuration(metrics.wallClockSpanSec)}`,
   );
-  lines.push(
-    "\n  (manual metrics — see docs/operations/lite-event-rehearsal.md: 失敗復旧時間 / 運営者介入 / 参加者開始 / AWS コスト)\n",
-  );
+  lines.push("\n  (manual metrics: 失敗復旧時間 / 運営者介入 / 参加者開始 / AWS コスト)\n");
   return lines.join("\n");
 }
 

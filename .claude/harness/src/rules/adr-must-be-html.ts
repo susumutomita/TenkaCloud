@@ -14,8 +14,8 @@ export const adrMustBeHtml: Rule = {
         severity: "error",
         filePath: path,
         message:
-          "ADR は HTML で書く運用 (memory: feedback_design_docs_html)。md ソースを置くと表現力 (row span / color / SVG / collapsible) が失われ、build-docs が上書き対象に取り込んでしまう。",
-        recommendation: `${path} を ${path.replace(/\.md$/, ".html")} に書き直して、 ${path} は git rm で削除してください。 既存の手書き HTML ADR (例: docs/architecture/adr-012-problem-plugin-architecture.html) をテンプレに参考にできます。`,
+          "ADR は HTML で書く運用 (memory: feedback_design_docs_html)。md ソースを置くと表現力 (row span / color / SVG / collapsible) が失われる。",
+        recommendation: `${path} を ${path.replace(/\.md$/, ".html")} に書き直して、 ${path} は git rm で削除してください。 ADR は HTML の手書きで、表現力 (row span / color / SVG / collapsible) を活かして書きます。`,
       });
     }
     return findings;

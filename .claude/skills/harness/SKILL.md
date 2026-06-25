@@ -1,12 +1,12 @@
 ---
 name: harness
-description: TenkaCloud architecture harness を実行し、docs/architecture/harness.md の invariant 違反を検出する。コミット前のアーキテクチャ整合チェック、リファクタ後の確認、不変条件・PR Discipline について訊かれたときに使う。
+description: TenkaCloud architecture harness を実行し、.claude/harness の invariant / enforcement rule 違反を検出する。コミット前のアーキテクチャ整合チェック、リファクタ後の確認、不変条件・PR Discipline について訊かれたときに使う。
 allowed-tools: Bash(make harness:*), Bash(make harness-test:*), Bash(bun run .claude/harness/bin/architecture.ts:*)
 ---
 
 # TenkaCloud Architecture Harness
 
-[`docs/architecture/harness.md`](../../../docs/architecture/harness.md) に固定した不変条件 (`INVARIANT_*`) と PR Discipline、Enforcement Rules との逸脱を機械的に検出するツール。実装は [`.claude/harness/`](../../../.claude/harness/)。
+アーキテクチャ不変条件 (`INVARIANT_*`) と PR Discipline、Enforcement Rules との逸脱を機械的に検出するツール。不変条件のまとめは [`CLAUDE.md`](../../../CLAUDE.md) の「Architecture invariants」表、ルール実装は一ルール一ファイルで [`.claude/harness/src/rules/`](../../../.claude/harness/src/rules/) にある。
 
 ## 実行方法
 
@@ -28,11 +28,11 @@ bun run .claude/harness/bin/architecture.ts --fail-on=error
 make harness-test
 ```
 
-`--fail-on=error` 指定時、error が 1 件でもあれば exit 2 で終了する。`make before-commit` の前段で必ず通すこと。
+`--fail-on=error` 指定時、error が 1 件でもあれば exit 2 で終了する。`make before-commit` の前段で必ず通すこと。なお品質ゲート (HTTP magic number / template / coverage 等) は別系統で、[`/quality-gates`](../quality-gates/SKILL.md) が担当する。
 
 ## 検査内容
 
-### Invariants (`docs/architecture/harness.md`)
+### Invariants (CLAUDE.md「Architecture invariants」)
 
 - `INVARIANT_CONTROL_PLANE_USES_SBT` — Control Plane は `@cdklabs/sbt-aws` の ControlPlane construct に乗せる
 - `INVARIANT_CONTROL_PLANE_DOES_NOT_HOST_TENANT_RUNTIME` — Control Plane は tenant manager。runtime を持ち込まない
@@ -42,21 +42,29 @@ make harness-test
 - `INVARIANT_PR_REGRESSION_ANALYSIS_DOCUMENTED` — PR body の `## Regression 分析` で壊しうる挙動を列挙
 - `INVARIANT_PR_PHYSICAL_IMPACT_DOCUMENTED` — PR body の `## 物理影響` で CFn / 成果物の差分を列挙
 
-### Enforcement Rules
+### Enforcement Rules (`.claude/harness/src/rules/`)
 
 - `secrets-manager-forbidden` — `@aws-sdk/client-secrets-manager` の import を error。SSM Parameter Store SecureString (Standard tier = 無料) を使うこと
 - `handler-must-not-call-fetch` — `lib/handlers/` 配下で `fetch(` 直接呼び出しを error。Service / Repository に閉じ込める
-- `authoritative-docs-present` — `docs/architecture/harness.md` に必須 invariant ID が並んでいるか
-- `agent-guides-run-harness` — `AGENTS.md` / `CLAUDE.md` から harness 実行が参照されているか
+- `handler-no-direct-sdk-import` — handler から AWS SDK を直接 import しない
+- `handler-tenant-isolation` — handler に tenant ロジックを持ち込まない (分離はインフラ層)
+- `iam-wildcard-needs-justify` — IAM wildcard には justification を要求
+- `lambda-env-size` — Lambda env サイズ上限
+- `no-aws-trademark-fictions` — AWS 商標まわりの架空表現を禁止
+- `no-conflict-markers` — `<<<<<<<` 等の conflict marker 混入を error
+- `adr-must-be-html` — ADR は `docs/architecture/adr-*.html` (HTML)。Markdown ADR は禁止
+- `adr-self-contained` — ADR に chat 文脈 / rolling-update メタを残さない
+- `file-too-large` — 巨大ファイルの新規追加を抑止
 
 ## 落ちたときの対処
 
 1. 出力に `## Findings` で列挙される `ruleId` / `filePath` / `line` を確認
 2. `recommendation` 欄に修正方針が書いてある — それに従ってコードを直す
-3. invariant ID が `docs/architecture/harness.md` から欠落していると言われたら、harness.md に該当 ID の節を追加する (削るのではなく、原則として記述する)
+3. 不明なときは `.claude/harness/src/rules/<ruleId>.ts` の実装と同名 `.test.ts` を読むと期待挙動が分かる
 
 ## 関連
 
+- `/quality-gates` — 本体と分離した品質ゲート (HTTP magic number / template / coverage / IAM ASCII / merge / submodule)
 - `/tech-debt` (= `make tech-debt`) — 技術的負債スキャン (test smell / 結合 / fallback 検出)
-- [`docs/architecture/harness.md`](../../../docs/architecture/harness.md) — 不変条件の正本
-- [`.claude/harness/src/architecture.ts`](../../../.claude/harness/src/architecture.ts) — ルール実装
+- [`.claude/harness/bin/architecture.ts`](../../../.claude/harness/bin/architecture.ts) — エントリポイント
+- [`.claude/harness/src/rules/`](../../../.claude/harness/src/rules/) — ルール実装 (一ルール一ファイル)

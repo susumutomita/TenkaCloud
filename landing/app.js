@@ -16,7 +16,6 @@
         "本物の AWS で競う、OSS の競技プラットフォーム。 「ローカルでは動く」アプリを本番品質へ ── <strong>認証・公開範囲・監査・可用性</strong>の仕上がりを毎分自動採点し、 順位がリアルタイムに動く。 主催者はイベント・採点・再利用できる問題カタログを 1 画面で運営。",
       "hero.cta1": "Hosted Event の見積もり",
       "hero.cta2": "OSS で試す",
-      "hero.demo_link": "5 分のデモを見る",
       "hero.trust": "合同会社 BULL 運営 · Apache 2.0 · clone から初回起動まで 30 分",
       "app.lang": "◉ 日本語 ▼",
       "app.profile": "♙ ゲスト ▼",
@@ -165,22 +164,19 @@
       "offerings.eyebrow": "商用プラン",
       "offerings.h2": "プロダクト化された 3 つの提供形態。",
       "offerings.lead":
-        'OSS プラットフォーム本体は Apache 2.0 で 無料 のまま。 構築 / 当日運営 / 年間プログラム を任せたい組織向けに、 形 (スコープ / 成果物 / 除外 / 提供モデル) を明文化した 3 つのプロダクト化された提供形態 を用意しています。 詳細は <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/commercial/PACKAGES.html" target="_blank" rel="noopener noreferrer">PACKAGES.html</a> を参照してください。',
+        "OSS プラットフォーム本体は Apache 2.0 で 無料 のまま。 構築 / 当日運営 / 年間プログラム を任せたい組織向けに、 形 (スコープ / 成果物 / 除外 / 提供モデル) を明文化した 3 つのプロダクト化された提供形態 を用意しています。",
       "offerings.a.role": "Hosted Event",
       "offerings.a.h": "単発イベントを、 丸ごと運営代行。",
       "offerings.a.p":
         "1 日のクラウド演習を、 公開 OSS 問題カタログから選定して 弊社が end-to-end で運営。 設計 / お客様 AWS への deploy / 事前 dry-run / 当日の live 進行 / 事後レポート。 <strong>1 回 fixed price</strong>。",
-      "offerings.a.more": "スコープと成果物を見る",
       "offerings.b.role": "Annual Arena",
       "offerings.b.h": "年間プログラム。",
       "offerings.b.p":
         "1 組織で <strong>年 4 回</strong> の運営代行イベントを年間契約で。 公開問題カタログから 入門 → 中級 → 上級 の learning path を設計。 ※ オリジナル問題の制作は本パックには含みません。",
-      "offerings.b.more": "スコープと成果物を見る",
       "offerings.d.role": "CCoE Enablement (add-on)",
       "offerings.d.h": "アドバイザリ、 別契約。",
       "offerings.d.p":
         "CCoE 運用モデル / 研修ロードマップ / カタログロードマップ / 内部展開戦略 の月次リテイナー。 上記 2 つの productized 提供には <strong>絶対に bundle しません</strong>。 両方ご希望なら 2 つの契約に分けます。",
-      "offerings.d.more": "スコープと成果物を見る",
 
       "pricing.eyebrow": "料金",
       "pricing.h2": "単発イベントから、 年間プログラムへ。",
@@ -259,7 +255,6 @@
       "footer.u1": "ドキュメント",
       "footer.u2": "運用ガイド",
       "footer.r0": "ドキュメント",
-      "footer.r1": "アーキテクチャ",
       "footer.r2": "Changelog",
       "footer.legal": "© 2026 合同会社BULL · TenkaCloud · Apache License 2.0",
       "footer.privacy": "プライバシーポリシー",
@@ -289,7 +284,6 @@
         'An OSS competition platform on real AWS. Take an app that "only works locally" and make it production-grade — <strong>auth, exposure, audit, and availability</strong> are auto-scored every minute, and the leaderboard moves in real time. Organizers run events, scoring, and a reusable problem catalog from one console.',
       "hero.cta1": "Get a Hosted Event quote",
       "hero.cta2": "Try the OSS",
-      "hero.demo_link": "Watch the 5-minute demo",
       "hero.trust": "Operated by BULL LLC · Apache 2.0 · 30 minutes from clone to first run",
       "app.lang": "◉ English ▼",
       "app.profile": "♙ Guest ▼",
@@ -437,22 +431,19 @@
       "offerings.eyebrow": "Commercial offerings",
       "offerings.h2": "Three productized offerings — formally documented.",
       "offerings.lead":
-        'The OSS platform stays free under Apache 2.0. For organizations that want setup, live operations, or a program run for them, we offer three productized packages. Each has a fixed shape — scope, deliverables, exclusions, delivery model — written up in <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/commercial/PACKAGES.html" target="_blank" rel="noopener noreferrer">PACKAGES.html</a>.',
+        "The OSS platform stays free under Apache 2.0. For organizations that want setup, live operations, or a program run for them, we offer three productized packages. Each has a fixed shape — scope, deliverables, exclusions, delivery model.",
       "offerings.a.role": "Hosted Event",
       "offerings.a.h": "One operated drill, end to end.",
       "offerings.a.p":
         "A 1-day cloud drill on the public OSS catalog, run by us. Event design, deploy into your AWS account, dry run, live facilitation, post-event report. <strong>Per-event fixed price</strong>.",
-      "offerings.a.more": "Scope &amp; deliverables",
       "offerings.b.role": "Annual Arena",
       "offerings.b.h": "A 12-month program.",
       "offerings.b.p":
         "An annual contract of <strong>4 operated events</strong> per year for one org: learning paths curated from the public problem catalog (beginner → advanced). Original problem development is not included in this package.",
-      "offerings.b.more": "Scope &amp; deliverables",
       "offerings.d.role": "CCoE Enablement (add-on)",
       "offerings.d.h": "Advisory, sold separately.",
       "offerings.d.p":
         "A monthly retainer for operating-model / training-roadmap work. <strong>Never bundled</strong> into the two offerings above, so events stay productized. If you want both, that is two line items.",
-      "offerings.d.more": "Scope &amp; deliverables",
 
       "pricing.eyebrow": "Pricing",
       "pricing.h2": "Start small. Move to a yearly program.",
@@ -533,7 +524,6 @@
       "footer.u1": "Docs",
       "footer.u2": "Operations guide",
       "footer.r0": "Docs",
-      "footer.r1": "Architecture",
       "footer.r2": "Changelog",
       "footer.legal": "© 2026 BULL LLC (合同会社BULL) · TenkaCloud · Apache License 2.0",
       "footer.privacy": "Privacy Policy",

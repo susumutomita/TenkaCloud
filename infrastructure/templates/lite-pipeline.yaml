@@ -18,7 +18,7 @@ Description: >-
 #
 # IAM Role / Policy "Description" fields only accept ASCII (0x20-0x7E) + Latin-1
 # (0xA1-0xFF); CJK characters cause CREATE_FAILED. All comments in this file are
-# ASCII so `make check-template-ascii` (which walks infrastructure/templates/) passes.
+# ASCII so the quality-gates template-ascii check (walks infrastructure/templates/) passes.
 
 Parameters:
   Environment:

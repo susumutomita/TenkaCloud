@@ -9,29 +9,15 @@ This file follows the [llms.txt](https://llmstxt.org/) convention. Links point t
 ## Start here
 
 - [README](https://github.com/susumutomita/TenkaCloud/blob/main/README.md): project overview, quick start, and command reference
-- [Architecture overview](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/OVERVIEW.md): what TenkaCloud is, the 4 planes, and why Lite vs SaaS exists
-- [Glossary](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/GLOSSARY.md): AppPlane / ControlPlane / TrustBridge / ParticipantViewerRole and other terms
-- [5-minute quickstart](https://github.com/susumutomita/TenkaCloud/blob/main/docs/demos/quickstart-5min.md): fastest path to a running event
-
-## Architecture & design
-
-- [Module map](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/MODULE_MAP.md): directory-level "where is X" index
-- [Architecture invariants (harness)](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/harness.md): the machine-checked rules every change must satisfy
-- [Architecture Decision Records](https://github.com/susumutomita/TenkaCloud/tree/main/docs/architecture): 37+ ADRs (authored as self-contained HTML)
-- [ADR-012 — Problem = plugin, platform = host](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/adr-012-problem-plugin-architecture.html): the core plugin/host design
-- [ADR-031 — Cross-account disruption dispatch](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/adr-031-cross-account-disruption-dispatch.html): how faults are injected into a competitor account
-- [ADR-037 — Disruption timing & recurrence](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/adr-037-disruption-timing-recurrence.html): immediate / scheduled / recurring / adaptive red-team faults
 
 ## Contributing & extending
 
 - [CONTRIBUTING](https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md): setup, development flow, gates, and community roles
-- [Contributor map](https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTOR_MAP.md): pick the recipe matching your goal (new problem / Lambda bug / admin UI)
 - [Roadmap](https://github.com/susumutomita/TenkaCloud/blob/main/ROADMAP.md): product direction and starter tasks
 - [Competitor-side setup](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md): the least-privilege IAM role to roll out in a competitor account
 
 ## Authoring problems
 
-- [Problem authoring guide](https://github.com/susumutomita/TenkaCloud/blob/main/docs/problems/AUTHORING.html): 30-minute onboarding — 3-asset model, 5 scoring kinds, worked examples
 - [Problem catalog repo (TenkaCloudChallenge)](https://github.com/susumutomita/TenkaCloudChallenge#readme): where competition problems live and are contributed
 - [Problem schema + conventions](https://github.com/susumutomita/TenkaCloud/blob/main/problems/README.md): `metadata.json` schema and `template.yaml` conventions
 

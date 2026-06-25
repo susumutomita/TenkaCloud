@@ -68,8 +68,6 @@ async function promptKind({ ask, print }: InteractivePrompts): Promise<Kind> {
   print("  時間経過で rule が変わる (= 移行 deadline 等)     → 5 (phased-polling)");
   print("  攻撃検知数で勝敗が決まる                          → 6 (attack-detection)");
   print("");
-  print("(詳細: docs/problems/CONTRIBUTING.md 'Pick the scoring kind')");
-  print("");
   const orderedKinds: readonly Kind[] = getOrderedKinds();
   for (const [i, k] of orderedKinds.entries()) {
     print(`  ${i + 1}) ${KIND_INTERACTIVE_LABELS[k]}`);
@@ -194,10 +192,6 @@ function printCreatedFiles(
   print("  5. make validate-problems");
   print("");
   print("参照:");
-  print("  - docs/problems/CONTRIBUTING.md (= 外部 contributor 向け quickstart)");
-  print("  - docs/problems/AUTHORING.html  (= 30 分 onboarding guide / 全 field 一覧)");
-  print("  - docs/problems/EXAMPLES.md     (= 既存 5 問題の design 振り返り)");
-  print("  - docs/problems/AI-WORKFLOW.md  (= Claude Code / Codex CLI flow)");
   print("  - problems/SCHEMA.json          (= metadata.json schema 正本)");
   print("  - /create-problem               (= Claude Code skill、 同等の対話を AI で進める)");
 }

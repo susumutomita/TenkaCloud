@@ -59,11 +59,12 @@ jobs:
       # Submodule pin guard: reject PRs that roll the problems/ gitlink backward or
       # sideways (the ping-pong where an old-pin branch reverts a newer pin, e.g. #1927).
       # Shallow checkout has no origin/main / submodule history, so fetch both first.
+      # 品質ゲートは本体と分離し .claude/skills/quality-gates へ移設済み (runner を直接呼ぶ)。
       - name: Submodule pin guard (problems must not roll back)
         run: |
           git fetch --no-tags origin main:refs/remotes/origin/main
           git -C problems fetch --no-tags --unshallow origin 2>/dev/null || git -C problems fetch --no-tags origin || true
-          make check-submodule-not-behind
+          bun run .claude/skills/quality-gates/scripts/run.ts submodule-not-behind
 
       - name: Run textlint
         run: |
@@ -87,9 +88,10 @@ jobs:
 
       # Issue #1424: agent-owned workspace (3 SPA + 共有 package) の 100% coverage を enforce。
       # test-coverage が生成した lcov.info を読み 100% 未満なら CI を落とす (= 回帰検知)。
+      # 品質ゲートは本体と分離し .claude/skills/quality-gates へ移設済み (runner を直接呼ぶ)。
       - name: Coverage gate (100% for agent-owned workspaces)
         run: |
-          make coverage-gate
+          bun run .claude/skills/quality-gates/scripts/run.ts coverage-gate
 
       - name: Build
         run: |

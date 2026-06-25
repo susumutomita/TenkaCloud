@@ -39,7 +39,7 @@ This is distinct from `make deploy` (Lite mode, single-tenant **on AWS**) and `m
 Run the following **in this order** before opening a PR.
 
 ```bash
-make harness         # architecture invariant check (docs/architecture/harness.md)
+make harness         # architecture invariant check (.claude/harness/)
 make before-commit   # lint (markdownlint + textlint + biome) / typecheck / test / validate-problems
 /review              # code review
 /security-review     # security review
@@ -48,7 +48,7 @@ make before-commit   # lint (markdownlint + textlint + biome) / typecheck / test
 
 If something fails, fix the code. Don't paper over it by editing config files (`biome.json`, `vitest.config.ts`, `tsconfig.json`).
 
-If `make harness` fails, cross-reference the invariant ID with `docs/architecture/harness.md`. The harness's own unit tests are `make harness-test`; the entry points are `.claude/harness/bin/architecture.ts` / `bin/tech-debt.ts`, and the rule logic lives one-rule-per-file under `.claude/harness/src/rules/` and `.claude/harness/src/tech-debt/`.
+If `make harness` fails, cross-reference the invariant ID with the matching rule under `.claude/harness/src/rules/`. The harness's own unit tests are `make harness-test`; the entry points are `.claude/harness/bin/architecture.ts` / `bin/tech-debt.ts`, and the rule logic lives one-rule-per-file under `.claude/harness/src/rules/` and `.claude/harness/src/tech-debt/`.
 
 CI (`.github/workflows/ci.yml`) runs `make install_ci` → textlint → format check → typecheck → test → build. If `make before-commit` passes locally, CI passes — that's the contract.
 
@@ -114,7 +114,7 @@ We do not maintain Codex CLI-specific skills or config — AGENTS.md alone guide
 - Direct edits to config files (`biome.json`, `vitest.config.*`, `tsconfig.json`)
 - On-demand (`PAY_PER_REQUEST`) DynamoDB — the `DynamoDbLowCapacity` Aspect enforces 1/1 PROVISIONED
 - Introducing SSE / WebSocket — write **polling** so it aligns with the Lambda operational model
-  - To reduce polling pressure, supplement with EventBridge-driven reconciliation per [ADR-014](./docs/architecture/adr-014-eventbridge-driven-state-reconciliation.html). The frontend polling policy stays.
+  - To reduce polling pressure, supplement with EventBridge-driven reconciliation (ADR-014). The frontend polling policy stays.
 - Committing secrets (`infrastructure/environments/<env>/.env`, AWS credentials)
 - Adding packages to `package.json` `trustedDependencies` on your own — that's a supply chain attack vector
 
@@ -195,10 +195,9 @@ problems/<category>/<id>/          # metadata.json + template.yaml are the sourc
 
 ## Problem authoring (ADR-012)
 
-The three sources of truth when adding a problem are:
+The sources of truth when adding a problem are:
 
 - **Schema source of truth**: [`problems/SCHEMA.json`](./problems/SCHEMA.json) — JSON Schema for `metadata.json`
-- **Onboarding guide**: [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — step-by-step + 5-kind decision tree + 4 worked examples
 - **Claude Code skill**: `.claude/skills/create-problem/SKILL.md` — invoked as `/create-problem`; walks through requirements gathering → scaffold generation → metadata editing
 
 Problems use the **3-asset model** (ADR-012):
@@ -225,9 +224,7 @@ Scaffold templates live under `.claude/templates/problems/<kind>/` — one per k
 ## References
 
 - @CLAUDE.md — full product overview, architecture, command list
-- [`docs/architecture/harness.md`](./docs/architecture/harness.md) — source of truth for invariants + PR Discipline
-- [`docs/architecture/adr-012-problem-plugin-architecture.html`](./docs/architecture/adr-012-problem-plugin-architecture.html) — problem = plugin, platform = host design
-- [`docs/problems/AUTHORING.html`](./docs/problems/AUTHORING.html) — problem authoring onboarding
+- [`.claude/harness/`](./.claude/harness/) — architecture invariant rules + PR Discipline checks
 - [`infrastructure/templates/README.md`](./infrastructure/templates/README.md) — competitor-side setup
 - [`problems/README.md`](./problems/README.md) — problem authoring steps + schema
 - `apps/<app>/README.md` — local development steps per SPA

@@ -9,8 +9,6 @@ coverage
 .cache/**
 plans.md
 Plan.md
-docs/plans/
-docs/plans/**
 reference/
 reference/**
 .claude/

@@ -36,13 +36,6 @@ These areas are active and ready for contributors.
 These are repo-local starter tasks. They can become GitHub issues when a
 maintainer wants to reserve one for a contributor.
 
-### Docs Fix: Add A Screenshot To A Problem README
-
-- **Why it helps**: new users understand a problem faster when they can see the
-  portal state.
-- **Files**: one problem `README.md` and a matching image under `docs/assets/`.
-- **Validation**: `bun run lint:md` and `bun run lint:text`.
-
 ### Example Problem: IAM Disaster Recovery
 
 - **Why it helps**: IAM repair is a common GameDay scenario and fits a small
@@ -65,12 +58,6 @@ maintainer wants to reserve one for a contributor.
   fix.
 - **Files**: `scripts/validate-problems.ts` and focused tests.
 - **Validation**: `bun run validate:problems` and script tests if added.
-
-### Gallery Entry: Add A New Competition Concept
-
-- **Why it helps**: examples expand what new users imagine building.
-- **Files**: `docs/gallery.md`, and optionally a problem scaffold.
-- **Validation**: `bun run lint:md` and `bun run lint:text`.
 
 ## Contribution Flow
 

@@ -45,7 +45,7 @@ The adapter writes draft artifacts under:
 └── unknowns.md
 ```
 
-`01-source-app-profile.json` must conform to [`source-app-profile.schema.json`](./source-app-profile.schema.json), whose canonical schema lives at [`../../../../../docs/problems/source-app-profile.schema.json`](../../../../../docs/problems/source-app-profile.schema.json).
+`01-source-app-profile.json` must conform to [`source-app-profile.schema.json`](./source-app-profile.schema.json).
 
 ## Mapping
 
