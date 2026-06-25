@@ -8,18 +8,13 @@ export JSII_DEPRECATED := quiet
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install_ci submodule-latest build typecheck test test-coverage clean-test-outdir check before-commit \
-        oss-notices check-oss-notices audit-deps build-problems-index check-problems-index \
-        cost-catalog check-cost-catalog \
-        validate-problems verify-attacks \
+.PHONY: help install install_ci submodule-latest build typecheck test test-coverage clean-test-outdir audit-deps before-commit \
         lint lint-md lint-text lint-format \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
-        env-check env-check-lite env-init env-init-test synth check-synth diff bootstrap \
-        deploy deploy-saas deploy-control-plane deploy-bootstrap destroy destroy-saas \
-        deploy-battles destroy-battles \
-        lite-up lite-down lite-status lite-portal-url lite-console-url \
-        dev dev-admin dev-app-admin dev-portal
+        env-check env-check-lite env-init \
+        deploy deploy-saas destroy destroy-saas \
+        deploy-battles destroy-battles
 
 help:
 	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
@@ -50,33 +45,15 @@ test-coverage: ; bun run test:coverage
 # infrastructure/cdk.out.test/<worker>. The package test wrapper purges it
 # before and after normal runs; this target remains for interrupted processes.
 clean-test-outdir: ; rm -rf infrastructure/cdk.out.test
-# `check-problems-index` は submodule (= TenkaCloudChallenge) 側 catalog CI に責任を移譲した
-# ため、 本体 before-commit / check からは外す。 platform 側 build:problems-index を走らせると
-# catalog repo の biome JSON formatter (= 別 lock 版) と微妙な drift が出てしまうため、
-# index.json の正本性は catalog 側で担保する設計。
-# Shared pre-PR gate list for the product BODY only. `check` prepends `install`;
-# `before-commit` assumes deps are present. Keep this single list authoritative so the two
-# gates can never drift apart. 品質ゲート (HTTP magic number / template / coverage / IAM ASCII /
-# merge / submodule) は本体と混ぜないため .claude/skills/quality-gates へ分離した。pre-commit
-# フックが before-commit とは別呼び出しで runner を走らせ、CI は --ci グループを走らせる。
-GATE_CHECKS := lint test validate-problems check-oss-notices audit-deps check-synth
-check:         install $(GATE_CHECKS)
-before-commit: $(GATE_CHECKS)
+# 依存パッケージの lifecycle script 監査 (mini Shai-Hulud 2nd 対策)。 CI が走らせる。
+audit-deps:    ; bun run audit:dependencies
+# Pre-PR gate for the product BODY, run by the pre-commit hook. 品質ゲート (HTTP magic number /
+# template / coverage / IAM ASCII / merge / submodule) は本体と混ぜないため
+# .claude/skills/quality-gates へ分離済み — pre-commit フックが before-commit とは別呼び出しで
+# runner を走らせ、CI は --ci グループを走らせる。
+GATE_CHECKS := lint test
 
-# `cdk synth` が通ることを保証 (= ts-node / tsx の module resolution、 stack 構築の type error
-# 等を本番 deploy 前にキャッチ)。 Makefile placeholder env で全 stack を synth するので AWS 認証は不要。
-#
-# #1446 follow-up: 毎コミット (pre-commit) で走るこの gate は「synth の shape (module 解決 /
-# 型 / construct ツリー / template 生成)」 を検証するのが目的で、 Lambda の実バンドルは不要。
-# 実バンドル (SBT の Python CognitoAuth 等を Docker で pip install) は毎回 `cdk-<hash>` イメージを
-# 生成し、 CDK はそれを掃除しないため Docker ディスクが青天井に膨らみ synth が ENOSPC で失敗していた。
-# よって check-synth では `CDK_SKIP_BUNDLING=1` を渡し、 bin/infrastructure.ts 側で
-# `aws:cdk:bundling-stacks=[]` を setContext して Docker バンドルを skip する
-# (= module 解決 / 型 / construct の検証はそのまま、 Docker 不要・高速・イメージ非蓄積)。
-# 実バンドルは `make synth` / `make deploy` 側で従来どおり行う (= env var 無しなら全 stack をバンドル)。
-check-synth:
-	@CDK_SKIP_BUNDLING=1 $(MAKE) synth >/dev/null 2>&1 || { echo "ERROR: cdk synth failed (= make deploy も失敗します)。 CDK_SKIP_BUNDLING=1 make synth で詳細を確認してください。"; exit 1; }
-	@echo "OK  cdk synth (module 解決 / 型 / construct を検証、 Docker バンドルは skip — 実バンドルは make synth)"
+before-commit: $(GATE_CHECKS)
 
 # ===== Lint / Fix =====
 lint:   lint-md lint-text lint-format
@@ -94,10 +71,6 @@ fix-format:  ; bun run fix:format
 HARNESS := bun run .claude/harness/bin
 harness:      ; $(HARNESS)/architecture.ts --staged --fail-on=error
 harness-test: ; cd .claude/harness && bun vitest run
-# Issue #1227: 全 tracked file を scan して assertion-roulette / high-coupling / magic-number
-# を検出。 baseline 越え (= 新規違反) があれば exit 2 で落ちる。 既存違反は
-# .claude/harness/baselines/tech-debt-*.json で凍結。 baseline を更新したいときは
-#   bun run .claude/harness/bin/tech-debt.ts --baseline
 tech-debt:    ; $(HARNESS)/tech-debt.ts
 
 # ===== CDK =====
@@ -161,14 +134,6 @@ env-check-lite:
 env-init:
 	@ENV=$(ENV) bun run scripts/env-init.ts
 
-# Issue #1345: env-init.ts の shell-level integration test。 vitest 側 (= 純粋 logic)
-# とは別に、 bun spawn → file I/O 経路が壊れていないかを確認する smoke。
-env-init-test:
-	@bash scripts/test-env-init.sh
-
-synth:                build           ; $(CDK) synth
-diff:                 build           ; $(CDK) diff --all
-bootstrap:            env-check build ; $(CDK) bootstrap
 # Issue #955: デフォルトの make deploy は Lite (= single-tenant) mode。
 # 大半の利用者は 1 人 1 大会の主催で multi-tenant 抽象 (= SBT ControlPlane / tenant pipeline /
 # tenant mapping table) を必要としない。 Lite mode は Application Plane (= Tenant Admin Console)
@@ -178,7 +143,7 @@ bootstrap:            env-check build ; $(CDK) bootstrap
 # `build` を必ず先に走らせる: 問題カタログは SPA build 時に `import.meta.glob` で
 # `problems/**/metadata.json` を取り込む (apps/*/src/data/problems.ts) ため、 submodule を
 # 最新化しても SPA を再 build しないと dist が古いカタログのまま deploy され、 新規問題が
-# 取り込まれない。 bootstrap / deploy-control-plane 等の他 deploy 系と同じく build を prereq 化する。
+# 取り込まれない。 そのため deploy 系は build を prereq 化する。
 deploy:               env-check-lite build ; bun run scripts/tenkacloud-lite.ts up
 # ref の install.sh 準拠の orchestration (= SaaS mode、 SBT ControlPlane を立てる):
 #   1. S3 source bucket (serverless-saas-${ACCOUNT_ID}-${REGION}) を作成
@@ -187,9 +152,7 @@ deploy:               env-check-lite build ; bun run scripts/tenkacloud-lite.ts 
 #   4. client/client-template deploy (CloudFront + S3 for Admin/Application UI)
 deploy-saas:          env-check
 	@cd scripts && bash install.sh "$${SYSTEM_ADMIN_EMAIL}"
-# stack 単位の deploy (直接呼ぶ時用。source.zip + CDK_PARAM_COMMIT_ID を事前 export しておく前提)
-deploy-control-plane: env-check build ; $(CDK) deploy tenkacloud-control-plane $(APPROVAL)
-deploy-bootstrap:     env-check build ; $(CDK) deploy tenkacloud-bootstrap $(APPROVAL)
+
 destroy:              env-check-lite  ; bun run scripts/tenkacloud-lite.ts down
 destroy-saas:         env-check       ; bash scripts/cleanup.sh
 

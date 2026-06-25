@@ -120,14 +120,6 @@ cp infrastructure/environments/development/.env.example \
 # edit AWS_ACCOUNT_ID, AWS_REGION, and TENANT_ADMIN_EMAIL
 ```
 
-After deploy, use these helpers:
-
-```bash
-make lite-status
-make lite-console-url
-make lite-portal-url
-```
-
 Teardown is:
 
 ```bash
@@ -223,7 +215,6 @@ The directory map and architecture invariants live in [`CLAUDE.md`](./CLAUDE.md)
 | `make build` | Build infrastructure, SPAs, and shared packages |
 | `make typecheck` | Run TypeScript type checks across workspaces |
 | `make test` | Run Vitest across workspaces |
-| `make validate-problems` | Validate the pinned catalog submodule |
 | `make harness` | Run architecture invariant checks |
 | `make before-commit` | Full local quality gate used before opening a PR |
 
@@ -246,6 +237,3 @@ Contributor path:
 ## License
 
 [Apache License 2.0](./LICENSE) — use commercially, modify, and distribute.
-
-Third-party OSS redistributed in the bundled applications is listed in
-[`THIRD_PARTY_NOTICES.txt`](./THIRD_PARTY_NOTICES.txt).

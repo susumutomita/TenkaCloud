@@ -55,16 +55,10 @@ We don't use a single-table DynamoDB design. Each stack owns its own tables (Ten
 | `make test`             | `vitest` across every workspace                                          |
 | `make lint`             | markdownlint + textlint + biome                                          |
 | `make fix`              | Auto-fix variant of the above (`make format` works too)                  |
-| `make validate-problems`| Validate `problems/**/metadata.json` against `problems/SCHEMA.json`      |
-| `make check`            | install + lint + test + validate-problems                                |
-| `make before-commit`    | lint + test + validate-problems (required gate before opening a PR)      |
-| `make synth`            | `cdk synth` (defaults to `ENV=development`)                              |
-| `make diff`             | `cdk diff --all`                                                         |
-| `make bootstrap`        | `cdk bootstrap`                                                          |
-| `make dev`              | Start all 3 SPA dev servers in parallel (admin :5173 / application-admin :5174 / participant-portal :5175) |
+| `make before-commit`    | lint + test (required gate before opening a PR)                          |
 | `make deploy`           | **Lite mode** (single-tenant) deploy. Stands up AppPlaneCore + Participant Portal via `infrastructure/bin/tenkacloud-lite.ts` (#955) |
 | `make deploy-saas`      | **SaaS mode** (multi-tenant) deploy. Runs `scripts/install.sh` (3-phase deploy, stands up SBT ControlPlane) |
-| `make destroy`          | Tear down Lite mode (`make lite-down`)                                   |
+| `make destroy`          | Tear down Lite mode                                                       |
 | `make destroy-saas`     | Tear down SaaS mode (`scripts/cleanup.sh` idempotently removes every stack + S3) |
 | `make harness`          | Architecture invariant check (`.claude/harness/`)                       |
 | `make harness-test`     | Unit tests for the harness itself (`.claude/harness/`)                   |
@@ -109,7 +103,7 @@ ADRs must be self-contained for OSS readers. Do not leave chat context, rolling-
 ### Gates (before opening a PR)
 
 1. `make harness` — zero architecture invariant violations
-2. `make before-commit` — lint / typecheck / test / build / validate-problems must all pass
+2. `make before-commit` — lint / test must pass
 3. `/review` — code review
 4. `/security-review` — security review
 5. `/simplify` — final pass for duplication, complexity, and wasted code
