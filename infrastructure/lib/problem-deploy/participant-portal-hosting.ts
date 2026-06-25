@@ -117,7 +117,12 @@ export class ParticipantPortalHosting extends Construct {
       "dist",
     );
     new BucketDeployment(this, "SiteDeployment", {
-      sources: [Source.asset(distDir)],
+      // runtime-config.json は deployRuntimeConfig() が単独で所有する (= 実 backend Function URL を
+      // 焼き、 no-cache で配る)。 dev 用の `apps/participant-portal/public/runtime-config.json`
+      // (= `make local` が書く mock) が Vite build で dist に混入しても、 SPA 配信では絶対に出荷しない。
+      // これを出荷すると RuntimeConfigDeployment の実 URL を上書きし、 portal が localhost を叩いて
+      // participant 全員が "Failed to fetch" になる (= mock の apiBaseUrl http://127.0.0.1:3199)。
+      sources: [Source.asset(distDir, { exclude: ["runtime-config.json"] })],
       destinationBucket: this.bucket,
       distribution: this.distribution,
       distributionPaths: ["/*"],
