@@ -52,7 +52,7 @@ connection**.
 1. Download [`infrastructure/templates/lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml).
 2. Open the [CloudFormation create-stack page](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template)
    in `ap-northeast-1` → **Upload a template file** → upload it → stack name
-   **`tenkacloud-lite`**.
+   **`tenkacloud-lite-launcher`**.
 3. Set **`TenantAdminEmail`** to your Admin Console login email. That is the only
    required parameter. _(To ship your own problems, also set `ProblemsRepoUrl` — see
    [Add your own problems](#add-your-own-problems).)_
@@ -60,8 +60,14 @@ connection**.
 5. Open the CodeBuild project from the stack's **`StartBuildConsoleUrl`** output and
    press **Start build**.
 
-After ~15-30 minutes the build finishes, and the **Admin Console** and **Participant
-Portal** URLs appear in the stack **Outputs**. That is your deployment.
+After ~15-30 minutes the build finishes. The **Admin Console** and **Participant Portal**
+URLs are in the **Outputs** of the `tenkacloud-lite` and `tenkacloud-lite-problem-deploy`
+stacks that the build creates. That is your deployment.
+
+**Tear down:** in the same CodeBuild project, choose **Start build with overrides**, set
+the environment variable `ACTION` to `destroy`, and start it — that deletes the two app
+stacks in the right order. Then delete the `tenkacloud-lite-launcher` stack to remove the
+CodeBuild project itself.
 
 <sub>Prefer a local terminal, or need multi-tenant SaaS? See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md).</sub>
 

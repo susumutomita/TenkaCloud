@@ -5,18 +5,19 @@ Description: >-
   `make deploy` (Lite mode) to stand up TenkaCloud in this AWS account. It does NOT
   create the TenkaCloud stacks itself; the build step does.
 
-# Single-file ("perapeti") template meant to be launched from the README "Launch Stack"
-# button. Because TenkaCloud is a PUBLIC OSS repo, CodeBuild git-clones it directly --
-# there is NO GitHub CodeStar/CodeConnections connection to set up, and no CodePipeline.
-# After the stack is created, press "Start build" on the CodeBuild project (Outputs link).
+# Single-file ("perapeti") template launched from the console. Because TenkaCloud is a
+# PUBLIC OSS repo, CodeBuild git-clones it directly -- there is NO GitHub
+# CodeStar/CodeConnections connection to set up, and no CodePipeline. After the stack is
+# created, press "Start build" on the CodeBuild project (see the Outputs link) to deploy.
 #
 # The problem catalog is chosen by parameter (ProblemsRepoUrl), not bonded as a git
 # submodule -- so a third party can deploy with their OWN catalog (fork TenkaCloudChallenge,
 # author with its scripts/new-problem.ts, then pass ProblemsRepoUrl=<their fork>).
 #
-# Cost note: this is just a CodeBuild project (per-build-minute). A handful of Lite deploys
-# per month costs well under a dollar; delete this stack to stop charges. The deploy itself
-# creates the platform (Lambda + Cognito + DynamoDB + S3 + CloudFront + ...).
+# Teardown: "Start build with overrides" + ACTION=destroy runs `make destroy` (which deletes
+# the two app stacks in the correct cross-stack order), then delete the launcher stack created
+# from this template. The deploy itself creates the platform (Lambda + Cognito + DynamoDB +
+# S3 + CloudFront + ...); a handful of Lite deploys cost under a dollar.
 #
 # IAM Role / Policy "Description" fields only accept ASCII (0x20-0x7E) + Latin-1 (0xA1-0xFF);
 # CJK causes CREATE_FAILED. All comments in this file are ASCII so the quality-gates
@@ -33,6 +34,17 @@ Parameters:
     Description: >-
       Target environment. Selects infrastructure/environments/{env}/config.json
       and writes infrastructure/environments/{env}/.env during the build.
+
+  Action:
+    Type: String
+    Default: deploy
+    AllowedValues:
+      - deploy
+      - destroy
+    Description: >-
+      What this build does. `deploy` stands up the Lite stacks; `destroy` tears them
+      down in the correct cross-stack order. To tear down from the console, open the
+      CodeBuild project and use "Start build with overrides" with ACTION=destroy.
 
   TenantAdminEmail:
     Type: String
@@ -112,6 +124,9 @@ Resources:
           - Name: ENVIRONMENT
             Value: !Ref Environment
             Type: PLAINTEXT
+          - Name: ACTION
+            Value: !Ref Action
+            Type: PLAINTEXT
           - Name: TENANT_ADMIN_EMAIL
             Value: !Ref TenantAdminEmail
             Type: PLAINTEXT
@@ -179,17 +194,33 @@ Resources:
                     fi
                   } > "${ENV_DIR}/.env"
                 - echo "Wrote ${ENV_DIR}/.env (TENANT_ADMIN_EMAIL / AWS_ACCOUNT_ID / AWS_REGION)"
-                # CDK bootstrap is idempotent; safe to run on every build.
-                - ./node_modules/aws-cdk/bin/cdk bootstrap "aws://${AWS_ACCOUNT_ID}/${AWS_REGION}"
+                # Bootstrap is only needed to deploy (idempotent); skip it when destroying.
+                - |
+                  if [ "${ACTION}" != "destroy" ]; then
+                    ./node_modules/aws-cdk/bin/cdk bootstrap "aws://${AWS_ACCOUNT_ID}/${AWS_REGION}"
+                  fi
             build:
               commands:
                 - cd "${CODEBUILD_SRC_DIR}/repo"
-                # `make deploy` builds the SPAs (ships the cloned catalog) then runs the Lite deploy.
-                - make deploy ENV="${ENVIRONMENT}"
+                - |
+                  if [ "${ACTION}" = "destroy" ]; then
+                    echo "ACTION=destroy -> tearing down the Lite stacks in the correct order"
+                    # TENKACLOUD_LITE_DOWN_YES bypasses the interactive confirm in this non-TTY build.
+                    TENKACLOUD_LITE_DOWN_YES=1 make destroy ENV="${ENVIRONMENT}"
+                  else
+                    # `make deploy` builds the SPAs (ships the cloned catalog) then runs the Lite deploy.
+                    make deploy ENV="${ENVIRONMENT}"
+                  fi
             post_build:
               commands:
-                - echo "Lite deploy finished. The Admin Console + Participant Portal URLs are in"
-                - echo "the CloudFormation Outputs of the tenkacloud-lite / tenkacloud-lite-problem-deploy stacks."
+                - |
+                  if [ "${ACTION}" = "destroy" ]; then
+                    echo "Teardown finished. Finally, delete the launcher stack you created from this"
+                    echo "template to remove the CodeBuild project + its role."
+                  else
+                    echo "Deploy finished. The Admin Console + Participant Portal URLs are in the"
+                    echo "CloudFormation Outputs of the tenkacloud-lite / tenkacloud-lite-problem-deploy stacks."
+                  fi
       LogsConfig:
         CloudWatchLogs:
           Status: ENABLED
@@ -279,5 +310,7 @@ Outputs:
     Value: !Ref CodeBuildProject
 
   StartBuildConsoleUrl:
-    Description: Open the CodeBuild project and press "Start build" to deploy TenkaCloud Lite.
+    Description: >-
+      Open the CodeBuild project: "Start build" deploys; "Start build with overrides" with
+      ACTION=destroy tears down.
     Value: !Sub https://${AWS::Region}.console.aws.amazon.com/codesuite/codebuild/projects/tenkacloud-lite-${Environment}?region=${AWS::Region}

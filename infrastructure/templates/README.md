@@ -122,7 +122,7 @@ CodePipeline も使いません。問題カタログは Git submodule ではな�
 ### デプロイ手順
 
 1. README の [Quickstart](../../README.md#quickstart) から `lite-pipeline.yaml` を download する
-2. Console の CloudFormation で **Upload a template file** を選び、この yaml を upload する
+2. Console の CloudFormation で **Upload a template file** を選び、この yaml を upload する（スタック名は `tenkacloud-lite-launcher` ＝ ビルドが作る `tenkacloud-lite` スタックと衝突させない）
 3. 下表のパラメータを入力する
 4. 「IAM 権限変更を承認」にチェックしてスタックを作成する
 5. スタックの `StartBuildConsoleUrl` 出力から CodeBuild プロジェクトを開き、**Start build** を押す（デプロイは 15-30 分程度）
@@ -130,6 +130,7 @@ CodePipeline も使いません。問題カタログは Git submodule ではな�
 | パラメータ | 必須 | 説明 |
 | --- | --- | --- |
 | `Environment` | 任意 | `development` / `staging` / `production`。対応する config.json / .env を使う |
+| `Action` | 任意 | `deploy`（デフォルト）/ `destroy`。撤去は後述（Start build with overrides で `ACTION=destroy`）|
 | `TenantAdminEmail` | 必須 | Application Admin Console の初期ユーザー宛先 |
 | `ProblemsRepoUrl` | 任意 | 載せる問題カタログ repo。デフォルトは公式 TenkaCloudChallenge。自分の fork を指定すれば自分の問題で deploy できる |
 | `ProblemsRepoRef` | 任意 | カタログの branch / tag。デフォルト `main` |
@@ -139,19 +140,34 @@ CodePipeline も使いません。問題カタログは Git submodule ではな�
 | `CodeBuildTimeoutMinutes` | 任意 | CodeBuild timeout。デフォルトは 90 分 |
 
 完了後、Application Admin Console / Participant Portal の URL は `tenkacloud-lite` /
-`tenkacloud-lite-problem-deploy` スタックの CloudFormation **Outputs** に出ます。CodeBuild
-プロジェクトは CloudFormation スタックを削除すれば消える（TenkaCloud 本体は `make destroy`
-で別途撤去する）。
+`tenkacloud-lite-problem-deploy` スタック（= ビルドが作る本体）の CloudFormation **Outputs**
+に出ます。
 
 > **自分の問題で deploy する場合:** [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge)
 > を fork し（`scripts/new-problem.ts`・schema・validation が同梱）、そこで作問してから
 > `ProblemsRepoUrl` に自分の fork を指定する。本体の fork は不要。
 
+### 撤去 (teardown)
+
+このデプロイは **3 つの独立したスタック**を作る: `tenkacloud-lite-launcher`（このテンプレ ＝
+CodeBuild プロジェクト）と、ビルドが作る `tenkacloud-lite` / `tenkacloud-lite-problem-deploy`
+（本体）。launcher を消しても本体は残るので順番に撤去する。
+
+**推奨（CodeBuild から）:** CodeBuild プロジェクトで **Start build with overrides** を選び、
+環境変数 `ACTION` に `destroy` を入れて実行する。`make destroy` が本体 2 スタックを正しい順序
+（cross-stack 参照の都合で `tenkacloud-lite` → `tenkacloud-lite-problem-deploy`）で削除する。
+その後 `tenkacloud-lite-launcher` スタックを削除すれば CodeBuild プロジェクトも消える。
+
+**手動（Console から）:** CloudFormation で **`tenkacloud-lite` を先に削除** → DELETE_COMPLETE
+を待って **`tenkacloud-lite-problem-deploy`** を削除 → 最後に `tenkacloud-lite-launcher`。逆順
+だと `Export ... cannot be deleted as it is in use` で止まる。S3 / DynamoDB は
+`RemovalPolicy=DESTROY` ＋ auto-delete が効くのでスタック削除で中身ごと消える。
+
 ### コストの注意
 
 問題テンプレート (`problems/**/template.yaml`) は AWS 無料枠 0 円に収めているが、この
 デプロイは CodeBuild (build-minute 課金) を使うため厳密な 0 円ではない（月数回のデプロイで
-1 ドル未満）。使い終えたらスタックを削除すれば課金は止まる。
+1 ドル未満）。使い終えたら上記 teardown でスタックを削除すれば課金は止まる。
 
 ## 関連
 
