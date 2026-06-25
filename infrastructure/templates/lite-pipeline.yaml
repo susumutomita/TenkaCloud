@@ -1,24 +1,26 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  TenkaCloud Lite mode one-click deployment pipeline. Stands up a self-contained
-  CodePipeline (Source GitHub -> optional Manual Approval -> Build on CodeBuild)
-  that runs `make deploy` (Lite mode) to deploy TenkaCloud into this AWS account.
-  This template is independent from the CDK app: it provisions only the pipeline,
-  not the TenkaCloud stacks themselves (those are created by the build step).
+  TenkaCloud Lite mode one-click deployment. Provisions a single CodeBuild project
+  that git-clones the (public) TenkaCloud repo + a problem-catalog repo and runs
+  `make deploy` (Lite mode) to stand up TenkaCloud in this AWS account. It does NOT
+  create the TenkaCloud stacks itself; the build step does.
 
-# This is a single-file ("perapeti") template meant to be launched from the README
-# "Launch Stack" button. The only manual prerequisite is a GitHub CodeStar
-# Connection (AWS Console -> Developer Tools -> Connections), because OAuth handshake
-# to GitHub cannot be automated inside CloudFormation.
+# Single-file ("perapeti") template meant to be launched from the README "Launch Stack"
+# button. Because TenkaCloud is a PUBLIC OSS repo, CodeBuild git-clones it directly --
+# there is NO GitHub CodeStar/CodeConnections connection to set up, and no CodePipeline.
+# After the stack is created, press "Start build" on the CodeBuild project (Outputs link).
 #
-# Cost note: unlike the problem templates (which are forced to the AWS Free Tier),
-# this pipeline uses CodePipeline V2 (per-action-execution pricing) + CodeBuild
-# (per-build-minute) + a small versioned S3 artifact bucket. A handful of Lite
-# deploys per month costs well under a dollar; delete this stack to stop all charges.
+# The problem catalog is chosen by parameter (ProblemsRepoUrl), not bonded as a git
+# submodule -- so a third party can deploy with their OWN catalog (fork TenkaCloudChallenge,
+# author with its scripts/new-problem.ts, then pass ProblemsRepoUrl=<their fork>).
 #
-# IAM Role / Policy "Description" fields only accept ASCII (0x20-0x7E) + Latin-1
-# (0xA1-0xFF); CJK characters cause CREATE_FAILED. All comments in this file are
-# ASCII so the quality-gates template-ascii check (walks infrastructure/templates/) passes.
+# Cost note: this is just a CodeBuild project (per-build-minute). A handful of Lite deploys
+# per month costs well under a dollar; delete this stack to stop charges. The deploy itself
+# creates the platform (Lambda + Cognito + DynamoDB + S3 + CloudFront + ...).
+#
+# IAM Role / Policy "Description" fields only accept ASCII (0x20-0x7E) + Latin-1 (0xA1-0xFF);
+# CJK causes CREATE_FAILED. All comments in this file are ASCII so the quality-gates
+# template-ascii check (walks infrastructure/templates/) passes.
 
 Parameters:
   Environment:
@@ -40,22 +42,29 @@ Parameters:
     AllowedPattern: ^[^\s@]+@[^\s@]+\.[^\s@]+$
     ConstraintDescription: Must be a valid email address.
 
-  GitHubConnectionArn:
+  RepoUrl:
     Type: String
-    AllowedPattern: ^arn:aws:codestar-connections:.*|^arn:aws:codeconnections:.*
+    Default: https://github.com/susumutomita/TenkaCloud.git
     Description: >-
-      ARN of a GitHub CodeStar/CodeConnections connection in AVAILABLE status.
-      Create one in AWS Console -> Developer Tools -> Connections before launching.
+      Public git URL of the TenkaCloud platform repo to deploy. Override only when
+      deploying a fork.
 
-  GitHubRepositoryId:
-    Type: String
-    Default: susumutomita/TenkaCloud
-    Description: GitHub repository id in owner/repository format.
-
-  SourceBranchName:
+  RepoRef:
     Type: String
     Default: main
-    Description: Branch to deploy from.
+    Description: Branch or tag of the platform repo to deploy.
+
+  ProblemsRepoUrl:
+    Type: String
+    Default: https://github.com/susumutomita/TenkaCloudChallenge.git
+    Description: >-
+      Public git URL of the problem-catalog repo to ship (cloned into problems/).
+      Point this at your own fork to deploy your own internal problems.
+
+  ProblemsRepoRef:
+    Type: String
+    Default: main
+    Description: Branch or tag of the problem-catalog repo to ship.
 
   DeployExternalId:
     Type: String
@@ -64,16 +73,6 @@ Parameters:
     Description: >-
       Optional CDK_PARAM_DEPLOY_EXTERNAL_ID for AssumeRole into competitor accounts
       (problem deploy backend). Leave empty for a local-only Lite trial.
-
-  EnableManualApproval:
-    Type: String
-    Default: "true"
-    AllowedValues:
-      - "true"
-      - "false"
-    Description: >-
-      If true, the pipeline pauses for a manual approval before deploying. Set to
-      false for a fully automatic one-click deploy.
 
   BunVersion:
     Type: String
@@ -88,38 +87,12 @@ Parameters:
     Description: CodeBuild timeout in minutes (a Lite deploy usually finishes in 15-30).
 
 Conditions:
-  IncludeManualApproval: !Equals [!Ref EnableManualApproval, "true"]
   HasExternalId: !Not [!Equals [!Ref DeployExternalId, ""]]
 
 Resources:
   # =====================================
-  # S3 artifact store (pipeline working area)
-  # =====================================
-  ArtifactStoreBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub tenkacloud-lite-${Environment}-pipeline-artifacts-${AWS::AccountId}
-      VersioningConfiguration:
-        Status: Enabled
-      LifecycleConfiguration:
-        Rules:
-          - Id: DeleteOldArtifacts
-            Status: Enabled
-            ExpirationInDays: 30
-            NoncurrentVersionExpiration:
-              NoncurrentDays: 7
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-
-  # =====================================
-  # CodeBuild project: installs bun, builds the SPAs, bootstraps CDK, runs `make deploy`
+  # CodeBuild project: clones the repos, installs bun, builds the SPAs, bootstraps CDK,
+  # runs `make deploy`. NO_SOURCE -> the buildspec fetches its own source via git clone.
   # =====================================
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
@@ -127,7 +100,7 @@ Resources:
       Name: !Sub tenkacloud-lite-${Environment}
       ServiceRole: !GetAtt CodeBuildRole.Arn
       Artifacts:
-        Type: CODEPIPELINE
+        Type: NO_ARTIFACTS
       Environment:
         Type: LINUX_CONTAINER
         Image: aws/codebuild/amazonlinux-x86_64-standard:5.0
@@ -142,6 +115,18 @@ Resources:
           - Name: TENANT_ADMIN_EMAIL
             Value: !Ref TenantAdminEmail
             Type: PLAINTEXT
+          - Name: REPO_URL
+            Value: !Ref RepoUrl
+            Type: PLAINTEXT
+          - Name: REPO_REF
+            Value: !Ref RepoRef
+            Type: PLAINTEXT
+          - Name: PROBLEMS_REPO_URL
+            Value: !Ref ProblemsRepoUrl
+            Type: PLAINTEXT
+          - Name: PROBLEMS_REPO_REF
+            Value: !Ref ProblemsRepoRef
+            Type: PLAINTEXT
           - Name: DEPLOY_EXTERNAL_ID
             Value: !If [HasExternalId, !Ref DeployExternalId, ""]
             Type: PLAINTEXT
@@ -152,32 +137,34 @@ Resources:
             Value: quiet
             Type: PLAINTEXT
       Source:
-        Type: CODEPIPELINE
+        Type: NO_SOURCE
         BuildSpec: |
           version: 0.2
           phases:
             install:
               # Node 22 is the newest version the managed CodeBuild standard image ships;
               # node 24 is not yet a managed runtime (aws/aws-codebuild-docker-images#795).
-              # bun drives the toolchain and Node only backs the CDK CLI shebang + esbuild,
-              # which run on 22. Bump to 24 once CodeBuild offers it as a managed runtime.
+              # bun drives the toolchain and Node only backs the CDK CLI shebang + esbuild.
               runtime-versions:
                 nodejs: 22
               commands:
+                # Public OSS repo -> plain git clone, no auth / no GitHub connection.
+                - echo "Cloning ${REPO_URL} @ ${REPO_REF}"
+                - git clone --depth 1 --branch "${REPO_REF}" "${REPO_URL}" repo
+                # Problem catalog: clone the chosen catalog into problems/ (replaces the
+                # git submodule, so any catalog repo can be shipped by parameter).
+                - echo "Cloning catalog ${PROBLEMS_REPO_URL} @ ${PROBLEMS_REPO_REF} into problems/"
+                - rm -rf repo/problems
+                - git clone --depth 1 --branch "${PROBLEMS_REPO_REF}" "${PROBLEMS_REPO_URL}" repo/problems
+                - cd repo
                 - echo "Installing bun ${BUN_VERSION}"
                 - npm install -g "bun@${BUN_VERSION}"
                 - bun --version
                 # Frozen + ignore-scripts matches the repo supply-chain policy (make install_ci).
                 - bun install --frozen-lockfile --ignore-scripts
-                # The problem catalog lives in a git submodule; pull it so `make deploy` ships it.
-                # Only run when submodules are configured, but let a real checkout failure
-                # (auth/network) fail the build instead of masking it.
-                - |
-                  if [ -f .gitmodules ]; then
-                    git submodule update --init --recursive
-                  fi
             pre_build:
               commands:
+                - cd "${CODEBUILD_SRC_DIR}/repo"
                 - export AWS_REGION="${AWS_DEFAULT_REGION}"
                 - export AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
                 - ENV_DIR="infrastructure/environments/${ENVIRONMENT}"
@@ -196,13 +183,13 @@ Resources:
                 - ./node_modules/aws-cdk/bin/cdk bootstrap "aws://${AWS_ACCOUNT_ID}/${AWS_REGION}"
             build:
               commands:
-                - make build
+                - cd "${CODEBUILD_SRC_DIR}/repo"
+                # `make deploy` builds the SPAs (ships the cloned catalog) then runs the Lite deploy.
                 - make deploy ENV="${ENVIRONMENT}"
             post_build:
               commands:
-                - echo "Lite deploy finished. Console / Portal URLs:"
-                - make lite-console-url ENV="${ENVIRONMENT}" || true
-                - make lite-portal-url ENV="${ENVIRONMENT}" || true
+                - echo "Lite deploy finished. The Admin Console + Participant Portal URLs are in"
+                - echo "the CloudFormation Outputs of the tenkacloud-lite / tenkacloud-lite-problem-deploy stacks."
       LogsConfig:
         CloudWatchLogs:
           Status: ENABLED
@@ -210,74 +197,13 @@ Resources:
       TimeoutInMinutes: !Ref CodeBuildTimeoutMinutes
 
   # =====================================
-  # CodePipeline: Source -> (Manual Approval) -> Build
+  # IAM role for the deploy build
   # =====================================
-  Pipeline:
-    Type: AWS::CodePipeline::Pipeline
-    Properties:
-      Name: !Sub tenkacloud-lite-${Environment}
-      RoleArn: !GetAtt CodePipelineRole.Arn
-      PipelineType: V2
-      ExecutionMode: QUEUED
-      ArtifactStore:
-        Type: S3
-        Location: !Ref ArtifactStoreBucket
-      Stages:
-        - Name: Source
-          Actions:
-            - Name: Source
-              ActionTypeId:
-                Category: Source
-                Owner: AWS
-                Provider: CodeStarSourceConnection
-                Version: "1"
-              Configuration:
-                ConnectionArn: !Ref GitHubConnectionArn
-                FullRepositoryId: !Ref GitHubRepositoryId
-                BranchName: !Ref SourceBranchName
-                DetectChanges: "false"
-                OutputArtifactFormat: CODEBUILD_CLONE_REF
-              OutputArtifacts:
-                - Name: SourceArtifact
-              RunOrder: 1
-        - !If
-          - IncludeManualApproval
-          - Name: Approve
-            Actions:
-              - Name: ManualApproval
-                ActionTypeId:
-                  Category: Approval
-                  Owner: AWS
-                  Provider: Manual
-                  Version: "1"
-                Configuration:
-                  CustomData: !Sub Approve to deploy TenkaCloud Lite (${Environment}) into account ${AWS::AccountId}.
-                RunOrder: 1
-          - !Ref AWS::NoValue
-        - Name: Deploy
-          Actions:
-            - Name: Build
-              ActionTypeId:
-                Category: Build
-                Owner: AWS
-                Provider: CodeBuild
-                Version: "1"
-              Configuration:
-                ProjectName: !Ref CodeBuildProject
-              InputArtifacts:
-                - Name: SourceArtifact
-              OutputArtifacts:
-                - Name: BuildArtifact
-              RunOrder: 1
-
-  # =====================================
-  # IAM roles
-  # =====================================
-  # CodeBuild role: `make deploy` (Lite) drives `cdk deploy`, which stands up the whole
-  # platform (Lambda + Cognito + DynamoDB + S3 + CloudFront + API Gateway + Step Functions
-  # + EventBridge + the in-app CodeBuild for problem deploy + SSM). cdk also bootstraps and
-  # assumes the cdk-* execution roles, so the role needs broad service access. This role is
-  # the deploy operator, distinct from competitor-bootstrap.yaml which stays least-privilege.
+  # `make deploy` (Lite) drives `cdk deploy`, which stands up the whole platform (Lambda +
+  # Cognito + DynamoDB + S3 + CloudFront + API Gateway + Step Functions + EventBridge + the
+  # in-app CodeBuild for problem deploy + SSM). cdk also bootstraps and assumes the cdk-*
+  # execution roles, so the role needs broad service access. This is the deploy operator,
+  # distinct from competitor-bootstrap.yaml which stays least-privilege.
   CodeBuildRole:
     Type: AWS::IAM::Role
     Properties:
@@ -294,29 +220,6 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              - Sid: OwnLogs
-                Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource:
-                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/tenkacloud-lite-${Environment}
-                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/tenkacloud-lite-${Environment}:*
-              - Sid: ArtifactStore
-                Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:GetObjectVersion
-                  - s3:PutObject
-                Resource:
-                  - !Sub ${ArtifactStoreBucket.Arn}/*
-              - Sid: UseGitHubConnection
-                Effect: Allow
-                Action:
-                  - codestar-connections:UseConnection
-                  - codeconnections:UseConnection
-                Resource: !Ref GitHubConnectionArn
               # Services that `cdk deploy` (Lite) and `cdk bootstrap` create/manage.
               - Sid: DeployServices
                 Effect: Allow
@@ -370,104 +273,11 @@ Resources:
                   - sts:GetCallerIdentity
                 Resource: "*"
 
-  CodePipelineRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub tenkacloud-lite-${Environment}-pipeline-role
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: codepipeline.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: CodePipelinePolicy
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:GetObjectVersion
-                  - s3:PutObject
-                  - s3:GetBucketVersioning
-                Resource:
-                  - !GetAtt ArtifactStoreBucket.Arn
-                  - !Sub ${ArtifactStoreBucket.Arn}/*
-              - Effect: Allow
-                Action:
-                  - codebuild:BatchGetBuilds
-                  - codebuild:StartBuild
-                Resource:
-                  - !GetAtt CodeBuildProject.Arn
-              - Effect: Allow
-                Action:
-                  - codestar-connections:UseConnection
-                  - codeconnections:UseConnection
-                Resource: !Ref GitHubConnectionArn
-
-  # =====================================
-  # SNS notifications (subscribe an email after deploy to watch pipeline state)
-  # =====================================
-  PipelineNotificationTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      TopicName: !Sub tenkacloud-lite-${Environment}-pipeline-notification
-      DisplayName: !Sub TenkaCloud Lite ${Environment} Pipeline
-
-  PipelineNotificationTopicPolicy:
-    Type: AWS::SNS::TopicPolicy
-    Properties:
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Sid: AllowCodeStarNotifications
-            Effect: Allow
-            Principal:
-              Service: codestar-notifications.amazonaws.com
-            Action: sns:Publish
-            Resource: !Ref PipelineNotificationTopic
-      Topics:
-        - !Ref PipelineNotificationTopic
-
-  PipelineNotificationRule:
-    Type: AWS::CodeStarNotifications::NotificationRule
-    DependsOn:
-      - Pipeline
-      - PipelineNotificationTopicPolicy
-    Properties:
-      Name: !Sub tenkacloud-lite-${Environment}-pipeline-events
-      DetailType: FULL
-      Resource: !Sub arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${Pipeline}
-      EventTypeIds:
-        - codepipeline-pipeline-pipeline-execution-started
-        - codepipeline-pipeline-pipeline-execution-succeeded
-        - codepipeline-pipeline-pipeline-execution-failed
-        - codepipeline-pipeline-manual-approval-needed
-        - codepipeline-pipeline-manual-approval-succeeded
-      Targets:
-        - TargetType: SNS
-          TargetAddress: !Ref PipelineNotificationTopic
-      Status: ENABLED
-
 Outputs:
-  PipelineName:
-    Description: CodePipeline name
-    Value: !Ref Pipeline
-
-  PipelineConsoleUrl:
-    Description: Open the pipeline in the AWS console (approve / re-run here)
-    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/codesuite/codepipeline/pipelines/${Pipeline}/view?region=${AWS::Region}
-
   CodeBuildProjectName:
-    Description: CodeBuild project name
+    Description: CodeBuild project name. Press "Start build" to deploy.
     Value: !Ref CodeBuildProject
 
-  ArtifactBucketName:
-    Description: S3 bucket for pipeline artifacts
-    Value: !Ref ArtifactStoreBucket
-
-  NotificationTopicArn:
-    Description: SNS topic ARN for pipeline notifications (subscribe an email manually)
-    Value: !Ref PipelineNotificationTopic
+  StartBuildConsoleUrl:
+    Description: Open the CodeBuild project and press "Start build" to deploy TenkaCloud Lite.
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/codesuite/codebuild/projects/tenkacloud-lite-${Environment}?region=${AWS::Region}
