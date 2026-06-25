@@ -123,16 +123,3 @@ function parseStackOutputMap(parsed: object): Record<string, string> {
   }
   return out;
 }
-
-export function extractStackContext(stack: Stack | undefined): {
-  cfnStatus: string | undefined;
-  stackStatusReason: string | undefined;
-  outputs: Output[] | undefined;
-} {
-  if (!stack) return { cfnStatus: undefined, stackStatusReason: undefined, outputs: undefined };
-  return {
-    cfnStatus: stack.StackStatus,
-    stackStatusReason: stack.StackStatusReason,
-    outputs: stack.Outputs,
-  };
-}

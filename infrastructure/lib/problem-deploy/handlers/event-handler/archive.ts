@@ -75,5 +75,3 @@ export async function archiveEvent(
     throw err;
   }
 }
-
-export const ARCHIVABLE_STATUSES_SET: ReadonlySet<string> = ARCHIVABLE_STATUSES;
