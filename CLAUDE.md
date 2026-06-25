@@ -124,7 +124,7 @@ Live under `.claude/skills/` and are invoked as `/<skill-name>`.
 | ------------------ | -------------------------------------------------------------------------------------- |
 | `/harness`         | Run `make harness` to detect architecture invariant violations                          |
 | `/tech-debt`       | Run `make tech-debt` to generate the tech-debt backlog (assertion roulette / coupling / fallback detection) |
-| `/create-problem`  | Scaffold `problems/<category>/<id>/` with the `metadata.json` + `template.yaml` convention |
+| `/quality-gates`   | Run the off-body quality-gate checks (HTTP magic numbers / template / coverage / IAM ASCII / merge / submodule) |
 | `/spec`            | Write a technical specification in the Open Web Docs (MDN) style                       |
 
 ### TDD
@@ -235,7 +235,7 @@ Teardown is `make destroy-saas` (`scripts/cleanup.sh`). It is written to be idem
 
 - **Architecture invariants**: [`.claude/harness/`](./.claude/harness/) — invariant rules + PR Discipline checks (summarized in the table above)
 - **Design system**: [Cloudscape](https://cloudscape.design/components/) — pick UI components from here as a default
-- **Problem authoring**: [`problems/README.md`](./problems/README.md) (metadata.json schema + template.yaml conventions) — scaffold with `/create-problem`
+- **Problem authoring**: catalog repo [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) — schema, scaffolding, and the authoring CLI live there
 - **Competitor-side setup**: [`infrastructure/templates/README.md`](./infrastructure/templates/README.md)
 - **Agent guide**: @AGENTS.md
 - **Contributing**: @CONTRIBUTING.md

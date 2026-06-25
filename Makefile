@@ -12,15 +12,14 @@ export JSII_DEPRECATED := quiet
         oss-notices check-oss-notices audit-deps build-problems-index check-problems-index \
         cost-catalog check-cost-catalog \
         validate-problems verify-attacks \
-        lint lint-md lint-text lint-format lint_md lint_text format_check \
+        lint lint-md lint-text lint-format \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
         env-check env-check-lite env-init env-init-test synth check-synth diff bootstrap \
         deploy deploy-saas deploy-control-plane deploy-bootstrap destroy destroy-saas \
         deploy-battles destroy-battles \
         lite-up lite-down lite-status lite-portal-url lite-console-url \
-        dev dev-admin dev-app-admin dev-portal \
-        ops-health ops-metrics
+        dev dev-admin dev-app-admin dev-portal
 
 help:
 	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
@@ -51,25 +50,6 @@ test-coverage: ; bun run test:coverage
 # infrastructure/cdk.out.test/<worker>. The package test wrapper purges it
 # before and after normal runs; this target remains for interrupted processes.
 clean-test-outdir: ; rm -rf infrastructure/cdk.out.test
-validate-problems: ; bun run validate:problems
-# Issue #1666: fire a problem's declared scoring.attackProbes at its local docker stack and
-# assert each lands on the vulnerable baseline (red-team proof, no cloud account). On-demand
-# (needs Docker, pulls images) — deliberately NOT in before-commit/check.
-verify-attacks: ; bun run verify:attacks-local $(PROBLEM)
-build-problems-index: ; bun run build:problems-index
-check-problems-index: ; bun run check:problems-index
-# Issue #1910 Slice 5: 問題ごとの使用 AWS リソース + 概算コストを GitHub 上に出すカタログ。
-# submodule bump 由来の drift で CI を落とさないよう check は default gate に載せずオンデマンド再生成。
-cost-catalog:       ; bun run scripts/build-cost-catalog.ts
-check-cost-catalog: ; bun run scripts/build-cost-catalog.ts --check
-oss-notices:   ; bun run oss-notices
-check-oss-notices: ; bun run oss-notices:check
-# 品質ゲート (HTTP magic number / template ASCII・security・cfn-refs・命名上限・CLI access /
-# coverage 100% / synth IAM ASCII / merge 整合 / submodule pin) は本体と混ぜないため
-# .claude/skills/quality-gates へ移設した。pre-commit フックと CI が runner を直接呼ぶ:
-#   bun run .claude/skills/quality-gates/scripts/run.ts [--ci|--all|<name>...]
-# AI 判断つきで走らせるときは /quality-gates スキルを使う。
-audit-deps:    ; bun run audit:dependencies
 # `check-problems-index` は submodule (= TenkaCloudChallenge) 側 catalog CI に責任を移譲した
 # ため、 本体 before-commit / check からは外す。 platform 側 build:problems-index を走らせると
 # catalog repo の biome JSON formatter (= 別 lock 版) と微妙な drift が出てしまうため、
@@ -109,11 +89,6 @@ lint-format: ; bun run lint:format
 fix-md:      ; bun run fix:md
 fix-text:    ; bun run fix:text
 fix-format:  ; bun run fix:format
-
-# CI が参照するアンダースコア別名
-lint_md:      lint-md
-lint_text:    lint-text
-format_check: lint-format
 
 # ===== Harness =====
 HARNESS := bun run .claude/harness/bin
@@ -244,33 +219,3 @@ destroy-battles:
 	  exit 1; \
 	fi
 	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/destroy-battles.sh $(BATTLES)
-
-# ===== TenkaCloud Lite mode (AWS, single tenant) =====
-# 「OSS / Product Hunt 向けに 1 コマンドで TenkaCloud を試す」体験を提供する CLI wrapper。
-# Lite stack は tenantId=local 固定で SBT / Pipeline / 動的 tenant 作成を持ち込まない (= ADR-016)。
-# 実 deploy 経路は Phase 5 で追加する `infrastructure/bin/tenkacloud-lite.ts` (= 専用 bin entry)
-# と組み合わせて完成する。 本ターゲットは CLI runner を委譲するのみ。
-lite-up:           ; bun run scripts/tenkacloud-lite.ts up
-lite-down:         ; bun run scripts/tenkacloud-lite.ts down
-lite-status:       ; bun run scripts/tenkacloud-lite.ts status
-lite-portal-url:   ; bun run scripts/tenkacloud-lite.ts portal-url
-lite-console-url:  ; bun run scripts/tenkacloud-lite.ts console-url
-
-# ===== SPA dev servers (frontend, no AWS) =====
-# Start all 3 SPA dev servers in parallel (admin :5173 / app-admin :5174 / portal :5175).
-dev:
-	$(MAKE) -j3 dev-admin dev-app-admin dev-portal
-dev-admin:     ; cd apps/admin-console && bun run dev
-dev-app-admin: ; cd apps/application-admin-console && bun run dev
-dev-portal:    ; cd apps/participant-portal && bun run dev
-
-# ===== Ops observation (read-only CLI for AI / operator) =====
-# Issue #952: AI 無人運用の足場。 全 TenkaCloud stack の状態を 1 コマンドで観察する
-# read-only CLI。 exit code は 0=全 healthy / 1=in_progress あり / 2=failed あり。
-# 外部 cron / AI agent が spawn して platform 状態を判断する経路。
-ops-health:        ; bun run scripts/tenkacloud-ops.ts health
-
-# Issue #2018: Lite イベント・リハーサルのメトリクス自動集計 (read-only)。 Deployments table を
-# scan し status 内訳 / deploy 成功率 / deploy 所要時間 / 初回 deploy wall-clock を出す。
-# TABLE は必須 (= Deployments table 名、 make lite-status / CFn outputs から確認)。
-ops-metrics:       ; bun run scripts/tenkacloud-ops.ts metrics --table $(TABLE)$(if $(REGION), --region $(REGION),)

@@ -1,8 +1,8 @@
 /**
- * Shared child-process spawn helpers for the TenkaCloud orchestration CLIs
- * (`scripts/tenkacloud-ops.ts`, `scripts/tenkacloud-lite.ts`).
+ * Shared child-process spawn helpers for the TenkaCloud orchestration CLI
+ * (`scripts/tenkacloud-lite.ts`).
  *
- * 両 CLI が個別に同形の spawn 抽象を持っていたのを 1 箇所に集約したもの。 mutate 系
+ * CLI が同形の spawn 抽象を持っていたのを 1 箇所に集約したもの。 mutate 系
  * (deploy / destroy / bootstrap) は出力を逐次見せたいので `spawnInherit` で stdio を継承し、
  * read 系 (aws CLI の JSON / text 取得) は出力を文字列に貯める `spawnCapture` を使う。
  *

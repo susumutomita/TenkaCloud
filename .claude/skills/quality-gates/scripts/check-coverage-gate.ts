@@ -27,7 +27,6 @@ export const GATED_WORKSPACES = [
   "apps/admin-console",
   "apps/application-admin-console",
   "apps/participant-portal",
-  "apps/cli",
   "packages/auth-client",
   "packages/problem-runtime",
   "packages/saml-utils",

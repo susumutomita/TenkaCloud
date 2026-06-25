@@ -182,7 +182,7 @@ repo, the always-current contents (categories, scenarios, and bundles) are liste
 Useful catalog entry points:
 
 - [`problems/CATALOG.md`](./problems/CATALOG.md) — source of truth for the full catalog.
-- Authoring lives in the catalog repo [susumutomita/TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge); scaffold with `/create-problem`.
+- Authoring lives in the catalog repo [susumutomita/TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge).
 
 ## Create or update a problem
 
@@ -195,17 +195,9 @@ portal/          # optional React components for the Participant Portal
 services/        # optional in-stack code or payloads
 ```
 
-The platform repo still owns the scaffolding CLI because it depends on shared
-TypeScript packages:
-
-```bash
-bun run scripts/tenkacloud-problem.ts create my-first-challenge --kind flag
-bun run scripts/tenkacloud-problem.ts validate my-first-challenge
-```
-
-Move the generated problem into your local clone of
-[susumutomita/TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge),
-open a catalog PR, and then bump this repo's `problems/` submodule pointer after the
+Scaffolding, the schema, and the authoring CLI live in that catalog repo
+([susumutomita/TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge)).
+Open a catalog PR there, then bump this repo's `problems/` submodule pointer after the
 catalog PR merges.
 
 ## Architecture

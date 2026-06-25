@@ -75,21 +75,6 @@
         "vitest": "^4.1.9",
       },
     },
-    "apps/cli": {
-      "name": "@TenkaCloud/cli",
-      "version": "0.1.0",
-      "bin": {
-        "tenkacloud": "./bin/tenkacloud.ts",
-      },
-      "dependencies": {
-        "http-status-codes": "^2.3.0",
-      },
-      "devDependencies": {
-        "@types/node": "^24.12.4",
-        "typescript": "~6.0.3",
-        "vitest": "^4.1.9",
-      },
-    },
     "apps/participant-portal": {
       "name": "@TenkaCloud/participant-portal",
       "version": "0.1.0",
@@ -279,8 +264,6 @@
     "@TenkaCloud/admin-console": ["@TenkaCloud/admin-console@workspace:apps/admin-console"],
 
     "@TenkaCloud/application-admin-console": ["@TenkaCloud/application-admin-console@workspace:apps/application-admin-console"],
-
-    "@TenkaCloud/cli": ["@TenkaCloud/cli@workspace:apps/cli"],
 
     "@TenkaCloud/infrastructure": ["@TenkaCloud/infrastructure@workspace:infrastructure"],
 

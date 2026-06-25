@@ -42,8 +42,7 @@ maintainer wants to reserve one for a contributor.
   Challenge.
 - **Files**: `problems/challenges/iam-disaster-recovery/metadata.json`,
   `template.yaml`, and optional README.
-- **Validation**: `bun run scripts/tenkacloud-problem.ts validate iam-disaster-recovery`
-  and `make validate-problems`.
+- **Validation**: `make validate-problems`.
 
 ### UI Polish: Empty State For No Deployments
 

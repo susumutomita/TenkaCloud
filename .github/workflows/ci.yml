@@ -68,11 +68,11 @@ jobs:
 
       - name: Run textlint
         run: |
-          make lint_text
+          make lint-text
 
       - name: Format check
         run: |
-          make format_check
+          make lint-format
 
       - name: Type check
         run: |

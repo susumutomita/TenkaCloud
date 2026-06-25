@@ -2,10 +2,9 @@
  * @tenkacloud/problem-runtime — single source of truth for problem runtime
  * classification (ADR-023 / ADR-026 / ADR-027).
  *
- * Previously this logic was hand-duplicated, in lock-step, between:
- *   - the deploy worker Lambda (`infrastructure/lib/problem-deploy/handlers/shared/runtime/normalize.ts`)
- *   - the problem CLI (`scripts/problem-cli/problem-loader.ts`)
- * The two bundles cannot share a relative module (separate workspaces / bundling
+ * Previously this logic was hand-duplicated in the deploy worker Lambda
+ * (`infrastructure/lib/problem-deploy/handlers/shared/runtime/normalize.ts`) and other
+ * consumers that cannot share a relative module (separate workspaces / bundling
  * targets), so the rules drifted by hand. This package is the one place the
  * rules live; both sides import it (#1423).
  *

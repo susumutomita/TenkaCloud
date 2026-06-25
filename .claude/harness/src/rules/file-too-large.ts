@@ -23,7 +23,7 @@ import type { Finding, Rule, RuleContext } from "../types.ts";
  *   - 800 行超: error (= 必ず分割)
  *
  * 既存実態:
- *   - tenkacloud-problem.ts 1154 行、 EventDetail.tsx 1150 行、 DeploymentDetail.tsx 830 行 等
+ *   - EventDetail.tsx 1150 行、 DeploymentDetail.tsx 830 行 等
  *   - これらは baseline で許容しつつ、 issue #986 Phase C / D で順次分割する
  */
 
