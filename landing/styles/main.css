@@ -130,7 +130,7 @@ p { margin: 0; }
   margin: 0 0 26px;
   text-wrap: balance;
 }
-.hero h1 em { font-style: normal; font-weight: 800; color: var(--ink-3); }
+.hero h1 em { font-style: normal; font-weight: 800; }
 .hero .sub {
   font-size: 17px;
   line-height: 1.85;
