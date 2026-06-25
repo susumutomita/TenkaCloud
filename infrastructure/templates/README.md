@@ -104,59 +104,54 @@ trust を即時撤回できます。 削除後はあらためて生成した Ext
 
 ### 概要
 
-`lite-pipeline.yaml` は、手元に Bun / CDK を入れずに Lite mode を deploy するための
-単一 CloudFormation テンプレートです。テンプレート自体が TenkaCloud 本体を作るのではなく、
-まず **デプロイ用パイプライン** を作ります。その後、CodeBuild がこの repo を checkout して
-`make deploy` を実行し、TenkaCloud 本体の Lite mode stack を作ります。
+`lite-pipeline.yaml` は、手元に Bun / CDK を入れずに Lite mode を deploy するための単一
+CloudFormation テンプレートです。テンプレート自体は TenkaCloud 本体を作らず、**CodeBuild
+プロジェクトを 1 つ**作ります。スタック作成後に「Start build」を押すと、CodeBuild が public
+な TenkaCloud repo と問題カタログ repo を `git clone` し、`make deploy` で Lite mode stack を
+作ります。`infrastructure/environments/<env>/.env` はビルド中に `TenantAdminEmail` から
+自動生成されます。
 
-構成は `Source (GitHub) → Manual Approval (任意) → Build (CodeBuild で make deploy)` です。
-CodeBuild は repo を clone → `bun install` → `make build` → `cdk bootstrap` → Lite mode の
-`make deploy` を流します。`infrastructure/environments/<env>/.env` はビルド中に
-`TenantAdminEmail` パラメータから自動生成されます。
+TenkaCloud は public OSS なので **GitHub connection は不要**（CodeBuild が直接 clone する）。
+CodePipeline も使いません。問題カタログは Git submodule ではなく `ProblemsRepoUrl`
+パラメータで選ぶので、第三者は自分のカタログ repo を指定して deploy できます。
 
-> CloudFormation quick-create の `templateURL` は Amazon S3 URL のみ対応です。
-> GitHub raw URL (`raw.githubusercontent.com/.../lite-pipeline.yaml`) を直接渡す
-> Launch Stack ボタンは Console で `TemplateURL must be a supported URL` になり、
-> テンプレートを読み込めません。そのため README では **Upload a template file** 手順を
-> 正式手順にしています。
-
-### 事前準備 (1 回だけ)
-
-GitHub への OAuth ハンドシェイクだけは CloudFormation で自動化できないため、
-**CodeStar Connection** を先に手動で作る。
-
-1. AWS Console → Developer Tools → Connections →「Create connection」→ GitHub を選択
-2. 認可フローを完了し、ステータスが **Available** になった接続の ARN を控える
+> CloudFormation の `templateURL` は Amazon S3 URL のみ対応です。GitHub raw URL を直接渡す
+> Launch Stack ボタンは `TemplateURL must be a supported URL` になるため、README では
+> **Upload a template file** 手順を正式手順にしています。
 
 ### デプロイ手順
 
-1. 事前準備で作った GitHub connection ARN を手元に置く
-2. README の [AWS Console pipeline](../../README.md#a-aws-console-pipeline-no-local-install) 手順から `lite-pipeline.yaml` を download する
-3. Console の CloudFormation で **Upload a template file** を選び、この yaml を upload する
-4. 下表のパラメータを入力する
-5. 「IAM 権限変更を承認」にチェックして作成する。スタック作成時にパイプラインが 1 回自動実行されるので、承認ステージで承認すれば Lite デプロイが走る
+1. README の [AWS Console (no local install)](../../README.md#a-aws-console-no-local-install) から `lite-pipeline.yaml` を download する
+2. Console の CloudFormation で **Upload a template file** を選び、この yaml を upload する
+3. 下表のパラメータを入力する
+4. 「IAM 権限変更を承認」にチェックしてスタックを作成する
+5. スタックの `StartBuildConsoleUrl` 出力から CodeBuild プロジェクトを開き、**Start build** を押す（デプロイは 15-30 分程度）
 
 | パラメータ | 必須 | 説明 |
 | --- | --- | --- |
-| `Environment` | 任意 | `development` / `staging` / `production`。対応する `infrastructure/environments/<env>/config.json` と `.env` を使う |
+| `Environment` | 任意 | `development` / `staging` / `production`。対応する config.json / .env を使う |
 | `TenantAdminEmail` | 必須 | Application Admin Console の初期ユーザー宛先 |
-| `GitHubConnectionArn` | 必須 | 上で控えた CodeStar / CodeConnections connection ARN |
-| `GitHubRepositoryId` | 任意 | デフォルト `susumutomita/TenkaCloud`。fork したなら自分の `owner/repo` |
-| `SourceBranchName` | 任意 | deploy する branch。デフォルトは `main` |
+| `ProblemsRepoUrl` | 任意 | 載せる問題カタログ repo。デフォルトは公式 TenkaCloudChallenge。自分の fork を指定すれば自分の問題で deploy できる |
+| `ProblemsRepoRef` | 任意 | カタログの branch / tag。デフォルト `main` |
+| `RepoUrl` / `RepoRef` | 任意 | 本体 repo と branch / tag（デフォルトは公式 repo の `main`）。fork のときだけ上書き |
 | `DeployExternalId` | 任意 | 競技者アカウントへ AssumeRole する場合のみ |
-| `EnableManualApproval` | 任意 | `false` にすると承認なしの完全自動デプロイ |
 | `BunVersion` | 任意 | CodeBuild に install する Bun。デフォルトは repo toolchain と同じ `1.3.11` |
 | `CodeBuildTimeoutMinutes` | 任意 | CodeBuild timeout。デフォルトは 90 分 |
 
-完了後、CodeBuild ログ末尾に Application Admin Console / Participant Portal の URL が出る。
-パイプライン自体は CloudFormation スタックを削除すれば消える (TenkaCloud 本体は
-`make destroy` で別途撤去する)。
+完了後、Application Admin Console / Participant Portal の URL は `tenkacloud-lite` /
+`tenkacloud-lite-problem-deploy` スタックの CloudFormation **Outputs** に出ます。CodeBuild
+プロジェクトは CloudFormation スタックを削除すれば消える（TenkaCloud 本体は `make destroy`
+で別途撤去する）。
+
+> **自分の問題で deploy する場合:** [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge)
+> を fork し（`scripts/new-problem.ts`・schema・validation が同梱）、そこで作問してから
+> `ProblemsRepoUrl` に自分の fork を指定する。本体の fork は不要。
 
 ### コストの注意
 
-問題テンプレート (`problems/**/template.yaml`) は AWS 無料枠 0 円に収めているが、
-このパイプラインは CodePipeline V2 + CodeBuild + 小さな S3 を使うため厳密な 0 円ではない
-(月数回のデプロイで 1 ドル未満)。使い終えたらスタックを削除すれば課金は止まる。
+問題テンプレート (`problems/**/template.yaml`) は AWS 無料枠 0 円に収めているが、この
+デプロイは CodeBuild (build-minute 課金) を使うため厳密な 0 円ではない（月数回のデプロイで
+1 ドル未満）。使い終えたらスタックを削除すれば課金は止まる。
 
 ## 関連
 

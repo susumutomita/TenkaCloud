@@ -61,42 +61,44 @@ event runtime into your AWS account, skipping the full SBT control plane.
 
 | Path | Best for | What runs |
 | --- | --- | --- |
-| [A. AWS Console pipeline](#a-aws-console-pipeline-no-local-install) | You do not want to install Bun / CDK locally | CloudFormation creates CodePipeline + CodeBuild; CodeBuild runs `make deploy` |
+| [A. AWS Console (no local install)](#a-aws-console-no-local-install) | You do not want to install Bun / CDK locally | CloudFormation creates a CodeBuild project; you press **Start build** and it git-clones the repo + catalog and runs `make deploy` |
 | [B. Local terminal](#b-local-terminal) | You are comfortable running commands locally | Your shell runs `make deploy` |
 | [C. SaaS mode](#c-saas-mode-optional) | Multi-tenant SaaS / pooled and silo tenants | Your shell runs `make deploy-saas` |
 
-### A. AWS Console pipeline (no local install)
+### A. AWS Console (no local install)
 
-CloudFormation quick-create buttons require the template file to be hosted in Amazon
-S3. This repository stores the template in GitHub, so the reliable no-local path is
-to download the template and upload it in the CloudFormation console.
+Because TenkaCloud is a public OSS repo, this path needs **no GitHub connection** — a
+CodeBuild project git-clones the repo directly. CloudFormation needs the template hosted
+in S3, so the no-local path is to upload it in the console.
 
-1. Create a GitHub connection first:
-   AWS Console → **Developer Tools** → **Connections** → **Create connection** →
-   GitHub → finish the OAuth flow → copy the connection ARN.
-2. Download [`infrastructure/templates/lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml).
-3. Open the [CloudFormation create-stack page](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template)
+1. Download [`infrastructure/templates/lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml).
+2. Open the [CloudFormation create-stack page](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template)
    in `ap-northeast-1`.
-4. Choose **Upload a template file**, upload `lite-pipeline.yaml`, and use
-   `tenkacloud-lite-pipeline` as the stack name.
-5. Fill in the parameters:
+3. Choose **Upload a template file**, upload `lite-pipeline.yaml`, and use
+   `tenkacloud-lite` as the stack name.
+4. Fill in the parameters:
 
    | Parameter | Required | Value |
    | --- | --- | --- |
    | `TenantAdminEmail` | Yes | Initial Application Admin Console user email |
-   | `GitHubConnectionArn` | Yes | Connection ARN from step 1 |
-   | `GitHubRepositoryId` | No | Keep `susumutomita/TenkaCloud`, or set your fork as `owner/repo` |
-   | `SourceBranchName` | No | Branch to deploy; default is `main` |
-   | `EnableManualApproval` | No | Keep `true` to approve the pipeline run before deploy |
+   | `ProblemsRepoUrl` | No | Problem catalog to ship. Default is the official TenkaCloudChallenge; set your own fork to deploy your own problems |
+   | `RepoUrl` / `RepoRef` | No | Platform repo + branch/tag (default: this repo's `main`); override for a fork |
+   | `ProblemsRepoRef` | No | Catalog branch/tag (default `main`) |
    | `DeployExternalId` | No | Set only when you are ready to deploy into competitor accounts |
 
-6. Acknowledge IAM changes and create the stack. The pipeline starts immediately;
-   approve the manual approval action if you left it enabled.
-7. When CodeBuild finishes, the build log prints the Application Admin Console and
-   Participant Portal URLs.
+5. Acknowledge IAM changes and create the stack.
+6. Open the **CodeBuild project** (the stack's `StartBuildConsoleUrl` output) and press
+   **Start build**. The deploy takes about 15-30 minutes.
+7. When the build finishes, the Application Admin Console and Participant Portal URLs are
+   in the CloudFormation **Outputs** of the `tenkacloud-lite` stacks.
 
-Full pipeline notes live in
-[`infrastructure/templates/README.md`](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline).
+> **Deploy your own problems:** fork
+> [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) (it ships the
+> authoring tooling — `scripts/new-problem.ts`, the schema, and validation), author your
+> problems there, then set `ProblemsRepoUrl` to your fork. No platform fork needed.
+
+Full notes live in
+[`infrastructure/templates/README.md`](./infrastructure/templates/README.md).
 
 ### B. Local terminal
 
