@@ -286,13 +286,6 @@ export const RESOURCE_COST_HEURISTICS: Readonly<Record<string, ResourceCostHeuri
   },
 };
 
-export const ALWAYS_ON_RESOURCE_TYPES = Object.freeze(
-  Object.entries(RESOURCE_COST_HEURISTICS)
-    .filter(([, heuristic]) => heuristic.alwaysOn)
-    .map(([resourceType]) => resourceType)
-    .sort(),
-);
-
 const INSTANCE_TYPE_HOURLY_USD: Readonly<Record<string, number>> = {
   "t3.nano": 0.0052,
   "t3.micro": 0.0104,
@@ -451,9 +444,4 @@ export function parseEstimatedDurationHours(input: string): number | undefined {
 export function formatUsd(value: number | undefined): string {
   if (value === undefined) return "unknown";
   return `$${value.toFixed(value >= 1 ? 2 : 4)}`;
-}
-
-export function formatHours(value: number | undefined): string {
-  if (value === undefined) return "unknown";
-  return `${value.toFixed(value >= 1 ? 2 : 3)}h`;
 }
