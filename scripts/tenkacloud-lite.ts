@@ -28,6 +28,8 @@
  */
 
 import { spawn } from "node:child_process";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
 
 export const LITE_STACK_NAMES = {
   app: "tenkacloud-lite",
@@ -65,6 +67,13 @@ export interface CliIO {
    * scripted answer を返す stub に差し替える。
    */
   readonly confirm: (question: string) => Promise<boolean>;
+  /**
+   * `cdk destroy` synths the app, which stages the SPA dist dirs as BucketDeployment
+   * assets even though teardown never builds the SPAs. Ensure each dir exists (empty is
+   * fine -- content is irrelevant for delete) so synth does not throw CannotFindAsset.
+   * unit test では stub に差し替える (= 実 fs を触らない)。
+   */
+  readonly ensureDir: (dir: string) => void;
 }
 
 interface CommandSpec {
@@ -162,6 +171,15 @@ export function parseResolvedBucketName(stdout: string): string | undefined {
   }
   return undefined;
 }
+
+/**
+ * SPA dist dirs the Lite CDK app stages as BucketDeployment assets at synth time
+ * (participant-portal-hosting.ts + application-admin-console-hosting.ts). `cdk destroy`
+ * synths too, so these must exist even though teardown never builds the SPAs.
+ */
+const SYNTH_ASSET_DIRS = ["participant-portal", "application-admin-console"].map((appName) =>
+  path.join(import.meta.dirname, "..", "apps", appName, "dist"),
+);
 
 /**
  * Lite mode has no SBT Control Plane / system admin, but the shared CDK app
@@ -476,6 +494,10 @@ async function cmdDown(args: readonly string[], io: CliIO): Promise<number> {
   // `make destroy` works with only TENANT_ADMIN_EMAIL set (the Lite .env the CodeBuild
   // launcher writes); without this, destroy throws "Please provide system admin email".
   ensureSystemAdminEmailForSynth();
+  // cdk destroy synths the app; the SPA dist dirs are staged as assets even though teardown
+  // never builds them. Create empty placeholders so synth does not throw CannotFindAsset
+  // (content is irrelevant -- destroy deletes, it never uploads).
+  for (const dir of SYNTH_ASSET_DIRS) io.ensureDir(dir);
   io.stdout("[lite] destroying 2 stacks...\n");
   // app stack を先に destroy (= cross-stack 参照 (DeployApi Lambda 等) の依存方向に合わせる)。
   const code1 = await io.spawnInherit(CDK_BIN, [
@@ -575,6 +597,9 @@ export function defaultIO(): CliIO {
         proc.on("close", (code) => resolveFn({ code: code ?? 0, stdout, stderr }));
         proc.on("error", () => resolveFn({ code: 127, stdout, stderr }));
       }),
+    ensureDir: (dir) => {
+      mkdirSync(dir, { recursive: true });
+    },
     confirm: async (question) => {
       // 非 TTY (= CI / pipe) では false を返して safety net とする。
       // bypass したい場合は呼び出し側で --yes / TENKACLOUD_LITE_DOWN_YES=1 を渡す。
