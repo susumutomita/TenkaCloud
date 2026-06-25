@@ -10,10 +10,10 @@
  *                 these so quality checks still run before every commit.
  *   - ci        : need build artifacts or network (lcov / cdk.out / origin/main).
  *                 CI runs them after producing the artifacts.
- *   - ondemand  : valuable but false-positive prone (intentionally-vulnerable
- *                 problem templates, legacy templates). Run via `/quality-gates`
- *                 where Claude reviews the output (AI + script combo) rather than
- *                 hard-failing a commit.
+ *   - ondemand  : reserved for checks that are valuable but false-positive prone
+ *                 and need human/AI review rather than a hard commit-fail. None at
+ *                 present — problem-template validation lives in the catalog repo
+ *                 (TenkaCloudChallenge / problems/scripts), not the platform.
  *
  * Usage (from repo root):
  *   bun run .claude/skills/quality-gates/scripts/run.ts            # precommit group
@@ -35,8 +35,6 @@ const CHECKS: Check[] = [
   { name: "http-magic-numbers", script: "check-http-magic-numbers.ts", group: "precommit" },
   { name: "no-conflicts", script: "check-no-conflicts.ts", group: "precommit" },
   { name: "template-ascii", script: "check-template-ascii.ts", group: "precommit" },
-  { name: "template-cfn-refs", script: "check-template-cfn-refs.ts", group: "precommit" },
-  { name: "template-name-limits", script: "check-template-name-limits.ts", group: "precommit" },
   // synth-iam-ascii runs after `make before-commit` (check-synth) has populated infrastructure/cdk.out.
   {
     name: "synth-iam-ascii",
@@ -56,8 +54,6 @@ const CHECKS: Check[] = [
     group: "ci",
     needs: "origin/main + submodule history",
   },
-  { name: "template-security", script: "check-template-security.ts", group: "ondemand" },
-  { name: "template-cli-access", script: "check-template-cli-access.ts", group: "ondemand" },
 ];
 
 function select(argv: string[]): Check[] {

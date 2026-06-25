@@ -16,16 +16,17 @@ import { extname, join } from "node:path";
 import { isAllowedCharCode } from "./lib/iam-description-ascii";
 
 /**
- * Issue #691: 問題側 yaml (= problems/<category>/<id>/template.yaml) も同じ
- * IAM Description regex に当たるため scan 対象に含める。 既存の
- * infrastructure/templates/ と並列に walk する。
+ * プラットフォームが gate するのは自前の infrastructure/templates/ のみ。
+ * 問題テンプレート (problems/<category>/<id>/template.yaml) は別リポ
+ * TenkaCloudChallenge (problems/ submodule) が正本で、 ASCII / IAM Description
+ * 検証もカタログ側 (problems/scripts/) が持つ。 プラットフォームは問題を host する
+ * だけで、 プラグインである問題テンプレの検証責務は負わない (= problems/** は除外)。
  */
-const TEMPLATES_DIRS = ["infrastructure/templates", "problems"];
+const TEMPLATES_DIRS = ["infrastructure/templates"];
 
 function isCfnTemplate(filename: string): boolean {
   // CFn template は `*.yaml` のみ (= ASCII restriction が IAM Description 経由で効く)。
-  // docker-compose.yml 等の `.yml` infra-adjacent ファイルは CFn 経由で deploy されないので
-  // 対象外。 問題側は `template.yaml` 命名規約 (= ADR-012 / problems/SCHEMA.json) で固定。
+  // docker-compose.yml 等の `.yml` infra-adjacent ファイルは CFn 経由で deploy されないので対象外。
   return extname(filename) === ".yaml";
 }
 
