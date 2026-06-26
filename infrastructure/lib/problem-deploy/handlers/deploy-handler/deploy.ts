@@ -12,6 +12,7 @@ import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
+  makeProblemRuntimeResolver,
   type ProblemRuntime,
   selectAdapter,
 } from "../shared/runtime/index.js";
@@ -384,6 +385,13 @@ export interface DeploySharedResources {
   readonly events: EventBridgeClient;
   readonly problemsCatalog: Readonly<Record<string, string>>;
   readonly problemsVisibility: Readonly<Record<string, PrivateVisibility>>;
+  /**
+   * [ADR-023 / #2054] Per-problemId runtime resolver, baked from non-aws
+   * `metadata.runtime` at synth. Returns undefined for CFn problems (→ aws
+   * default); returns e.g. `docker/compose` for a container problem so the
+   * deploy is rejected pre-mutation instead of half-creating an AWS artifact.
+   */
+  readonly resolveProblemRuntime?: (problemId: string) => ProblemRuntime | undefined;
   readonly challengePayloadBucket: string | undefined;
   readonly s3: S3Client;
   /** [ADR-026 / #1412] per-team Sakura API key store の読取 client。 */
@@ -411,6 +419,7 @@ export function buildSharedResources(): DeploySharedResources {
     events: new EventBridgeClient({}),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
     problemsVisibility: parseProblemsVisibility(process.env.BATTLE_PROBLEMS_VISIBILITY),
+    resolveProblemRuntime: makeProblemRuntimeResolver(process.env.BATTLE_PROBLEMS_RUNTIMES),
     challengePayloadBucket,
     s3: new S3Client({}),
     ssm: new SSMClient({}),

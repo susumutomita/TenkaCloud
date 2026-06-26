@@ -8,9 +8,8 @@
     "no_session": "セッションがありません。再ログインしてください。",
     "mock_cloud_header": "Mock cloud mode",
     "mock_cloud_body": "このイベントは local mock cloud adapter で動作しています。実 AWS リソースは作成されません。",
-    "localstack_cloud_header": "LocalStack cloud mode",
-    "localstack_cloud_body": "このイベントは LocalStack ({endpoint}) 向けに設定されています。実 AWS リソースは使われません。",
-    "localstack_endpoint_missing": "endpoint 未設定",
+    "local_cloud_header": "Local cloud mode",
+    "local_cloud_body": "このイベントはローカルの Docker 問題コンテナで動作しています。実 AWS リソースは使われません。",
     "fetch_status_failed": "状態の取得に失敗しました"
   },
   "nav": {

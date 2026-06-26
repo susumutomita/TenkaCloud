@@ -392,7 +392,7 @@ describe("ShellLayout", () => {
   it("should not render an offline alert in real cloud mode", () => {
     renderShell({ cloudMode: "real" });
     expect(screen.queryByText("app.mock_cloud_header")).not.toBeInTheDocument();
-    expect(screen.queryByText("app.localstack_cloud_header")).not.toBeInTheDocument();
+    expect(screen.queryByText("app.local_cloud_header")).not.toBeInTheDocument();
   });
 
   it("should render the mock cloud info alert", () => {
@@ -400,15 +400,10 @@ describe("ShellLayout", () => {
     expect(screen.getByText("app.mock_cloud_header")).toBeInTheDocument();
   });
 
-  it("should render the localstack warning with the configured endpoint", () => {
-    renderShell({ cloudMode: "localstack", localstackEndpoint: "http://localstack:4566" });
-    expect(screen.getByText("app.localstack_cloud_header")).toBeInTheDocument();
-    expect(screen.getByText(/localstack:4566/)).toBeInTheDocument();
-  });
-
-  it("should fall back to the endpoint-missing label when localstack endpoint is unset", () => {
-    renderShell({ cloudMode: "localstack" });
-    expect(screen.getByText(/app\.localstack_endpoint_missing/)).toBeInTheDocument();
+  it("should render the local cloud warning for the Docker container mode", () => {
+    renderShell({ cloudMode: "local" });
+    expect(screen.getByText("app.local_cloud_header")).toBeInTheDocument();
+    expect(screen.getByText("app.local_cloud_body")).toBeInTheDocument();
   });
 
   it("should show the unread notification count badge", () => {

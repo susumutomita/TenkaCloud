@@ -68,6 +68,8 @@ const problemDeployBackend = new ProblemDeployBackendStack(
     problemsEndpoints: config.problems.endpoints as Readonly<Record<string, unknown>>,
     problemsPhases: (config.problems.phases ?? {}) as Readonly<Record<string, unknown>>,
     problemsVisibility: (config.problems.visibility ?? {}) as Readonly<Record<string, "private">>,
+    // [ADR-023 / #2054] Lite mode でも非 AWS runtime catalog を deploy guard へ渡す。
+    problemRuntimes: (config.problems.runtimes ?? {}) as Readonly<Record<string, unknown>>,
     // Issue #888: Lite mode でも problemsDisruptions を Lambda env に渡す。
     problemsDisruptions: (config.problems.disruptions ?? {}) as Readonly<Record<string, unknown>>,
     // #1420 ADR-030 Phase 3: Lite mode でも coordination plugin path を dispatcher へ渡す。

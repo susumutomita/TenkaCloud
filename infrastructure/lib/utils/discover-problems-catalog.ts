@@ -1,5 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import {
+  isExecutableRuntime,
+  normalizeRuntime,
+  type RuntimeDescriptor,
+} from "@tenkacloud/problem-runtime";
 import { type ProblemEndpointSlot, parseEndpointSlot } from "./endpoints-metadata.js";
 import {
   DISRUPTION_ACTION_KINDS,
@@ -141,6 +146,27 @@ export function discoverProblemsVisibility(problemsRoot: string): Record<string,
 }
 
 /**
+ * [ADR-023 / #2054] `metadata.runtime` を normalize し、**非 aws/cloudformation の
+ * runtime を宣言した問題 id のみ** を map で返す (= container 配信の docker/compose 等)。
+ * aws 問題は省略する (= env を最小化、 deploy worker の default fallback がそのまま処理)。
+ *
+ * Lambda env (`BATTLE_PROBLEMS_RUNTIMES`) として deploy-handler に渡し
+ * `resolveProblemRuntime` に配線する。これにより非 AWS 問題は cloud mutation
+ * (DDB Put / EventBridge / CFn) より前に `RuntimeNotSupportedError` (= 4xx) で
+ * loud に拒否され、 ローカル専用問題のクラウド誤デプロイを防ぐ。
+ */
+export function discoverProblemsRuntime(problemsRoot: string): Record<string, RuntimeDescriptor> {
+  const result: Record<string, RuntimeDescriptor> = {};
+  for (const meta of iterateProblemsMetadata(problemsRoot)) {
+    const runtime = normalizeRuntime({ runtime: meta.runtime, cfnTemplate: meta.cfnTemplate });
+    if (runtime && !isExecutableRuntime(runtime)) {
+      result[meta.id] = runtime;
+    }
+  }
+  return result;
+}
+
+/**
  * [ADR-028 / ADR-030 Phase 3 / #1420] `{ [problemId]: { plugin } }` を返す。 problem が
  * `interTeamCoordination.plugin` (= coordination plugin の module path) を宣言していれば収集する。
  * CoordinationDispatcher Lambda の `PROBLEM_COORDINATION` env へ JSON 化して渡し、 scope resolver が
@@ -196,6 +222,8 @@ interface ProblemMetadataEntry {
   visibility: unknown;
   disruptions: unknown;
   interTeamCoordination: unknown;
+  runtime: unknown;
+  cfnTemplate: unknown;
 }
 
 function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetadataEntry> {
@@ -233,6 +261,8 @@ function readProblemMetadata(
       visibility?: unknown;
       disruptions?: unknown;
       interTeamCoordination?: unknown;
+      runtime?: unknown;
+      cfnTemplate?: unknown;
     };
     if (typeof meta.id !== "string" || meta.id.length === 0) {
       console.warn(`[discoverProblemsCatalog] ${metadataPath}: missing or invalid 'id' field`);
@@ -248,6 +278,8 @@ function readProblemMetadata(
       visibility: meta.visibility,
       disruptions: meta.disruptions,
       interTeamCoordination: meta.interTeamCoordination,
+      runtime: meta.runtime,
+      cfnTemplate: meta.cfnTemplate,
     };
   } catch (err) {
     console.warn(

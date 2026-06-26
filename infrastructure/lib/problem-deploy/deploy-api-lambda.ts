@@ -44,6 +44,13 @@ export interface DeployApiLambdaProps {
    */
   readonly problemsVisibility: Readonly<Record<string, "private">>;
   /**
+   * [ADR-023 / #2054] 非 aws/cloudformation の runtime を宣言した問題のみ
+   * (= `{problemId: {provider,engine,entry}}`)。`discoverProblemsRuntime` の戻り値。
+   * deploy handler が `resolveProblemRuntime` に配線し、 非 AWS 問題を cloud mutation
+   * 前に 4xx で拒否する (= ローカル専用問題のクラウド誤デプロイ防止)。空 map なら全 AWS 扱い。
+   */
+  readonly problemRuntimes?: Readonly<Record<string, unknown>>;
+  /**
    * ADR-008 Phase 3 (Issue #642): private 問題 payload を格納する S3 bucket 名。
    * 未指定 / 空文字列なら presigned URL を発行しない (= local-path 経路で動作)。
    * ChallengePayloadStack (Phase 2 infra) が deploy 後にここを指定して活性化する。
@@ -114,6 +121,7 @@ export class DeployApiLambda extends Construct {
         ...(props.defaultTenantId ? { DEFAULT_TENANT_ID: props.defaultTenantId } : {}),
         // ADR-008 Phase 3 (Issue #642): visibility + bucket env、 default は dormant
         BATTLE_PROBLEMS_VISIBILITY: JSON.stringify(props.problemsVisibility),
+        BATTLE_PROBLEMS_RUNTIMES: JSON.stringify(props.problemRuntimes ?? {}),
         CHALLENGE_PAYLOAD_BUCKET: props.challengePayloadBucketName ?? "",
         // Issue #950: audit log table 名 (未配線なら空文字、 handler の writeAuditEvent が no-op)
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",

@@ -185,12 +185,10 @@ export function buildProfileUtility(
 function OfflineCloudModeAlert({ config }: { config: AppConfig }) {
   const { t } = useI18n();
   if (config.cloudMode === "real") return null;
-  if (config.cloudMode === "localstack") {
+  if (config.cloudMode === "local") {
     return (
-      <Alert type="warning" header={t("app.localstack_cloud_header")}>
-        {t("app.localstack_cloud_body", {
-          endpoint: config.localstackEndpoint ?? t("app.localstack_endpoint_missing"),
-        })}
+      <Alert type="warning" header={t("app.local_cloud_header")}>
+        {t("app.local_cloud_body")}
       </Alert>
     );
   }

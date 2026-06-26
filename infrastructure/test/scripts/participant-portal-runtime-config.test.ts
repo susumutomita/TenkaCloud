@@ -48,33 +48,44 @@ describe("participant-portal-runtime-config (#1122)", () => {
     expect(json.localstackEndpoint).toBeUndefined();
   });
 
-  it("localstack mode should normalize and output the localhost endpoint", () => {
+  it("local mode should accept a loopback HTTP apiBaseUrl in backend mode", () => {
     const result = runConfig([
       "--cloud-mode",
-      "localstack",
-      "--localstack-endpoint",
-      "http://localhost:4566/",
+      "local",
+      "--portal-mode",
+      "backend",
+      "--api-base-url",
+      "http://127.0.0.1:3199/",
       "--print",
     ]);
-    expect(result.status).toBe(0);
-    const json = JSON.parse(result.stdout);
 
-    expect(json.mode).toBe("dev-mock");
-    expect(json.cloudMode).toBe("localstack");
-    expect(json.localstackEndpoint).toBe("http://localhost:4566");
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      apiBaseUrl: "http://127.0.0.1:3199",
+      mode: "backend",
+      cloudMode: "local",
+    });
   });
 
-  it("localstack mode should reject endpoints other than localhost", () => {
+  it("local mode should still reject a non-loopback HTTP apiBaseUrl", () => {
     const result = runConfig([
       "--cloud-mode",
-      "localstack",
-      "--localstack-endpoint",
-      "https://localstack.example.com",
+      "local",
+      "--portal-mode",
+      "backend",
+      "--api-base-url",
+      "http://api.example.com/portal",
       "--print",
     ]);
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("LocalStack endpoint must be http(s) localhost");
+    expect(result.stderr).toContain("--api-base-url must be HTTPS");
+  });
+
+  it("should reject an unknown cloud mode", () => {
+    const result = runConfig(["--cloud-mode", "localstack", "--print"]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Invalid --cloud-mode: localstack");
   });
 
   it("backend mode should accept only HTTPS apiBaseUrl", () => {

@@ -17,6 +17,7 @@ import {
   discoverProblemsDisruptions,
   discoverProblemsEndpoints,
   discoverProblemsPhases,
+  discoverProblemsRuntime,
   discoverProblemsScoring,
   discoverProblemsVisibility,
 } from "../utils/discover-problems-catalog.js";
@@ -286,6 +287,7 @@ function discoverAppProblems(input: ResolveAppConfigInput): ProblemsCatalogBundl
     endpoints: discoverProblemsEndpoints(problemsRoot),
     phases: discoverProblemsPhases(problemsRoot),
     visibility: discoverProblemsVisibility(problemsRoot),
+    runtimes: discoverProblemsRuntime(problemsRoot),
     disruptions: discoverProblemsDisruptions(problemsRoot),
     coordination: discoverProblemsCoordination(problemsRoot),
     // ADR-030 Phase 3b: synth 時に coordination plugin を self-contained .mjs へ bundle (esbuild)。

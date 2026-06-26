@@ -105,6 +105,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       problemsEndpoints: config.problems.endpoints as ProblemDeployBackendEndpoints,
       problemsPhases: config.problems.phases as ProblemDeployBackendPhases,
       problemsVisibility: config.problems.visibility as ProblemDeployBackendVisibility,
+      // [ADR-023 / #2054] 非 AWS runtime catalog を deploy-handler の guard へ injection
+      problemRuntimes: config.problems.runtimes as Readonly<Record<string, unknown>>,
       // Issue #888: per-problem `disruptions[]` を Lambda env に injection
       problemsDisruptions: config.problems.disruptions as Readonly<Record<string, unknown>>,
       // #1420 ADR-030 Phase 3: per-problem coordination plugin path を dispatcher へ injection

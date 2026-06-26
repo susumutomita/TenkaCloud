@@ -38,37 +38,35 @@ describe("loadConfig", () => {
     expect(cfg.cloudMode).toBe("mock");
   });
 
-  it("should load runtime-config with cloudMode=localstack", async () => {
+  it("should load runtime-config with cloudMode=local over a loopback HTTP apiBaseUrl", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => ({
-        apiBaseUrl: "https://api.example.com",
-        eventTitle: "Offline Event",
-        eventRegion: "ap-northeast-1",
+        apiBaseUrl: "http://127.0.0.1:3199",
+        eventTitle: "TenkaCloud Local",
+        eventRegion: "local",
         mode: "backend",
-        cloudMode: "localstack",
-        localstackEndpoint: "http://localhost:4566/",
+        cloudMode: "local",
       }),
     });
     const cfg = await loadConfig();
     expect(cfg.mode).toBe("backend");
-    expect(cfg.cloudMode).toBe("localstack");
-    expect(cfg.localstackEndpoint).toBe("http://localhost:4566");
+    expect(cfg.cloudMode).toBe("local");
+    expect(cfg.apiBaseUrl).toBe("http://127.0.0.1:3199");
   });
 
-  it("should not adopt localstackEndpoint as display endpoint when it is not localhost", async () => {
+  it("should fall back when cloudMode=local but apiBaseUrl is non-loopback HTTP", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: async () => ({
-        apiBaseUrl: "https://api.example.com",
+        apiBaseUrl: "http://api.example.com",
         mode: "backend",
-        cloudMode: "localstack",
-        localstackEndpoint: "https://example.com:4566",
+        cloudMode: "local",
       }),
     });
     const cfg = await loadConfig();
-    expect(cfg.cloudMode).toBe("localstack");
-    expect(cfg.localstackEndpoint).toBeUndefined();
+    // #871 guard: non-loopback HTTP in backend mode collapses to the dev fallback.
+    expect(cfg.mode).toBe("dev-mock");
   });
 
   it("should fill missing keys with fallbacks", async () => {
@@ -235,37 +233,6 @@ describe("loadConfig", () => {
     const cfg = await loadConfig();
     expect(cfg.apiBaseUrl).toContain("dev-mock");
     expect(cfg.mode).toBe("dev-mock");
-  });
-
-  it("should drop an unparseable localstackEndpoint (= new URL throws) to undefined", async () => {
-    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        apiBaseUrl: "https://api.example.com",
-        mode: "backend",
-        cloudMode: "localstack",
-        // host 検査以前に `new URL()` が throw する不正値 → undefined に倒す (= fail closed)。
-        localstackEndpoint: "http://",
-      }),
-    });
-    const cfg = await loadConfig();
-    expect(cfg.cloudMode).toBe("localstack");
-    expect(cfg.localstackEndpoint).toBeUndefined();
-  });
-
-  it("should leave localstackEndpoint undefined when cloudMode=localstack but the key is omitted", async () => {
-    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        apiBaseUrl: "https://api.example.com",
-        mode: "backend",
-        cloudMode: "localstack",
-        // localstackEndpoint 未指定 (= 非 string) → normalizeLocalstackEndpoint 早期 return。
-      }),
-    });
-    const cfg = await loadConfig();
-    expect(cfg.cloudMode).toBe("localstack");
-    expect(cfg.localstackEndpoint).toBeUndefined();
   });
 
   it("should fall back apiBaseUrl to the dev default when the key is omitted (dev-mock mode)", async () => {

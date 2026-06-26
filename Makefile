@@ -14,7 +14,8 @@ export JSII_DEPRECATED := quiet
         harness harness-test tech-debt \
         env-check env-check-lite env-init \
         deploy deploy-saas destroy destroy-saas \
-        deploy-battles destroy-battles
+        deploy-battles destroy-battles \
+        local local-up local-down local-status local-evaluate
 
 help:
 	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
@@ -155,6 +156,36 @@ deploy-saas:          env-check
 
 destroy:              env-check-lite  ; bun run scripts/tenkacloud-lite.ts down
 destroy-saas:         env-check       ; bash scripts/cleanup.sh
+
+# ===== Local play (Docker, no AWS) =====
+# Issue #2054: AWS 非依存の CTF コンテナ。 問題コンテナが `/verify` と採点条件を持ち、
+# TenkaCloud は採点 (participant API / portal / leaderboard / hint) だけを担う。 Kumo は撤去。
+#   make local PROBLEM=sqli-demo   問題コンテナ + 採点 API を起動し Participant Portal を立ち上げる
+#   make local-down                コンテナ停止 + runtime-config 復元
+#   make local-evaluate FLAG=...   採点 API 経由でフラグを提出 (= 問題コンテナ /verify に委譲)
+PROBLEM ?= sqli-demo
+
+local:
+	@set -e; \
+	$(MAKE) local-up PROBLEM="$(PROBLEM)" LOCAL_API_PORT="$(LOCAL_API_PORT)"; \
+	trap '$(MAKE) local-down' EXIT INT TERM; \
+	cd apps/participant-portal && bun run dev --host 127.0.0.1
+
+local-up:
+	@PROBLEM="$(PROBLEM)" LOCAL_API_PORT="$(LOCAL_API_PORT)" bun run scripts/tenkacloud-local.ts up "$(PROBLEM)"
+
+local-down:
+	@bun run scripts/tenkacloud-local.ts down
+
+local-status:
+	@bun run scripts/tenkacloud-local.ts status
+
+local-evaluate:
+	@if [ -z "$(FLAG)" ]; then \
+	  echo "error: FLAG is required. Example: make local-evaluate FLAG='TC{...}'" >&2; \
+	  exit 1; \
+	fi
+	@bun run scripts/tenkacloud-local.ts evaluate "$(FLAG)"
 
 # ===== Problem deploy smoke test =====
 # 引数に問題フォルダを取り、順次 CFn deploy する開発者向け smoke test ツール。
