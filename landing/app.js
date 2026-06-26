@@ -1,4 +1,129 @@
 (() => {
+  var SEO_METADATA = {
+    ja: {
+      title: "TenkaCloud | AWSクラウド実戦演習・競技プラットフォーム",
+      description:
+        "TenkaCloudは、本物のAWS環境でBattleとChallengeを開催できるOSSのクラウド実戦演習・競技プラットフォームです。チーム別環境、毎分採点、ランキング、問題カタログ、運営画面を提供します。",
+      socialDescription:
+        "本物のAWSでBattleとChallengeを開催。チーム別環境、毎分採点、ランキング、再利用できる問題カタログを備えたApache 2.0のOSSです。",
+      canonical: "https://tenkacloud.com/?lang=ja",
+      locale: "ja_JP",
+      alternateLocale: "en_US",
+      imageAlt: "TenkaCloud — AWSクラウド実戦演習・競技プラットフォーム",
+      softwareDescription:
+        "本物のAWS環境でBattleとChallengeを開催できる、Apache 2.0のクラウド実戦演習・競技プラットフォーム。",
+    },
+    en: {
+      title: "TenkaCloud | Open-source AWS cloud competition platform",
+      description:
+        "TenkaCloud is an open-source platform for hands-on AWS cloud drills and competitions. Run isolated team environments, automated scoring, live leaderboards, and reusable Battle and Challenge catalogs.",
+      socialDescription:
+        "Run hands-on AWS Battles and self-paced Challenges with isolated team environments, automated scoring, live leaderboards, and reusable problem catalogs.",
+      canonical: "https://tenkacloud.com/index.en.html",
+      locale: "en_US",
+      alternateLocale: "ja_JP",
+      imageAlt: "TenkaCloud — Open-source AWS cloud competition platform",
+      softwareDescription:
+        "An Apache 2.0 platform for running hands-on AWS cloud drills as real-time Battles and self-paced Challenges.",
+    },
+  };
+
+  function setMetaContent(name, content) {
+    var meta = document.querySelector(`meta[name="${name}"]`);
+    if (meta) meta.setAttribute("content", content);
+  }
+
+  function setPropertyContent(property, content) {
+    var meta = document.querySelector(`meta[property="${property}"]`);
+    if (meta) meta.setAttribute("content", content);
+  }
+
+  function setLinkHref(rel, href) {
+    var link = document.querySelector(`link[rel="${rel}"]`);
+    if (link) link.setAttribute("href", href);
+  }
+
+  function buildStructuredData(lang, metadata) {
+    return {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://tenkacloud.com/#organization",
+          name: "BULL LLC",
+          alternateName: "合同会社BULL",
+          url: "https://tenkacloud.com/",
+          logo: {
+            "@type": "ImageObject",
+            url: "https://tenkacloud.com/assets/apple-touch-icon.png",
+          },
+          sameAs: ["https://github.com/susumutomita/TenkaCloud"],
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://tenkacloud.com/#website",
+          name: "TenkaCloud",
+          url: "https://tenkacloud.com/",
+          inLanguage: ["ja", "en"],
+          publisher: {
+            "@id": "https://tenkacloud.com/#organization",
+          },
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://tenkacloud.com/#software",
+          name: "TenkaCloud",
+          url: metadata.canonical,
+          description: metadata.softwareDescription,
+          applicationCategory: "EducationalApplication",
+          applicationSubCategory: "Cloud training and competition platform",
+          operatingSystem: "Web",
+          isAccessibleForFree: true,
+          license: "https://www.apache.org/licenses/LICENSE-2.0",
+          codeRepository: "https://github.com/susumutomita/TenkaCloud",
+          inLanguage: lang,
+          publisher: {
+            "@id": "https://tenkacloud.com/#organization",
+          },
+        },
+        {
+          "@type": "WebPage",
+          "@id": `${metadata.canonical}#webpage`,
+          url: metadata.canonical,
+          name: metadata.title,
+          description: metadata.description,
+          inLanguage: lang,
+          isPartOf: {
+            "@id": "https://tenkacloud.com/#website",
+          },
+          about: {
+            "@id": "https://tenkacloud.com/#software",
+          },
+        },
+      ],
+    };
+  }
+
+  function applySeoMetadata(lang) {
+    var metadata = SEO_METADATA[lang];
+    document.title = metadata.title;
+    setMetaContent("description", metadata.description);
+    setLinkHref("canonical", metadata.canonical);
+    setPropertyContent("og:title", metadata.title);
+    setPropertyContent("og:description", metadata.socialDescription);
+    setPropertyContent("og:url", metadata.canonical);
+    setPropertyContent("og:locale", metadata.locale);
+    setPropertyContent("og:locale:alternate", metadata.alternateLocale);
+    setPropertyContent("og:image:alt", metadata.imageAlt);
+    setMetaContent("twitter:title", metadata.title);
+    setMetaContent("twitter:description", metadata.socialDescription);
+    setMetaContent("twitter:image:alt", metadata.imageAlt);
+    var structuredData = document.getElementById("seo-structured-data");
+    if (structuredData) {
+      structuredData.textContent = JSON.stringify(buildStructuredData(lang, metadata));
+    }
+  }
+
   var I18N = {
     ja: {
       "nav.product": "プロダクト",
@@ -253,7 +378,7 @@
       "nav.contact": "Contact",
       "nav.github": "GitHub",
 
-      "hero.h1a": "The cloud engineer's",
+      "hero.h1a": "The cloud engineer's ",
       "hero.h1b": "Tenka-Ichi.",
       "hero.sub":
         'An OSS competition platform on real AWS. Take an app that "only works locally" and make it production-grade — <strong>auth, exposure, audit, and availability</strong> are auto-scored every minute, and the leaderboard moves in real time. Organizers run events, scoring, and a reusable problem catalog from one console.',
@@ -520,6 +645,7 @@
 
   function applyLang(lang) {
     document.documentElement.lang = lang;
+    applySeoMetadata(lang);
     var dict = I18N[lang];
     document.querySelectorAll("[data-i18n]").forEach((el) => {
       var key = el.getAttribute("data-i18n");
@@ -532,7 +658,11 @@
     document.querySelectorAll(".nav-right .lang").forEach((btn) => {
       var isActive = btn.getAttribute("data-lang") === lang;
       btn.classList.toggle("on", isActive);
-      btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+      if (isActive) {
+        btn.setAttribute("aria-current", "page");
+      } else {
+        btn.removeAttribute("aria-current");
+      }
     });
     renderTrustBullets(lang);
     renderStats(lang);
@@ -565,14 +695,17 @@
   /**
    * Resolve the initial language with this priority:
    *   1. `?lang=ja|en` URL query (= shareable links)
-   *   2. localStorage `tenkacloud.lang` (= sticky user choice)
-   *   3. navigator.language starts with `ja` (= visitor's browser preference)
-   *   4. default `en` (= 英語を 1st citizen に置く OSS / 海外への露出を想定)
+   *   2. static page language (= index.en.html is crawlable without JavaScript)
+   *   3. localStorage `tenkacloud.lang` (= sticky user choice)
+   *   4. navigator.language starts with `ja` (= visitor's browser preference)
+   *   5. default `en` (= 英語を 1st citizen に置く OSS / 海外への露出を想定)
    */
   function detectInitialLang() {
     var params = new URLSearchParams(window.location.search || "");
     var fromQuery = params.get("lang");
     if (fromQuery === "ja" || fromQuery === "en") return fromQuery;
+    var staticLang = document.documentElement.getAttribute("data-static-lang");
+    if (staticLang === "ja" || staticLang === "en") return staticLang;
     var stored = null;
     try {
       stored = window.localStorage.getItem("tenkacloud.lang");
@@ -594,6 +727,7 @@
   }
 
   function reflectLangInUrl(lang) {
+    if (document.documentElement.getAttribute("data-static-lang") === lang) return;
     var url;
     try {
       url = new URL(window.location.href);
@@ -612,9 +746,7 @@
   document.querySelectorAll(".nav-right .lang").forEach((btn) => {
     btn.addEventListener("click", () => {
       var lang = btn.getAttribute("data-lang");
-      applyLang(lang);
       persistLang(lang);
-      reflectLangInUrl(lang);
     });
   });
 
