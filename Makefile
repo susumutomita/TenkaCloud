@@ -12,6 +12,7 @@ export JSII_DEPRECATED := quiet
         lint lint-md lint-text lint-format \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
+        local local-up local-down local-status local-evaluate \
         env-check env-check-lite env-init \
         deploy deploy-saas destroy destroy-saas \
         deploy-battles destroy-battles
@@ -72,6 +73,34 @@ HARNESS := bun run .claude/harness/bin
 harness:      ; $(HARNESS)/architecture.ts --staged --fail-on=error
 harness-test: ; cd .claude/harness && bun vitest run
 tech-debt:    ; $(HARNESS)/tech-debt.ts
+
+# ===== Local play (Kumo, no AWS) =====
+PROBLEM ?= hello-world
+KUMO_PORT ?= 4566
+LOCAL_API_PORT ?= 3199
+
+local:
+	@set -e; \
+	$(MAKE) local-up PROBLEM="$(PROBLEM)" KUMO_PORT="$(KUMO_PORT)" LOCAL_API_PORT="$(LOCAL_API_PORT)"; \
+	trap '$(MAKE) local-down KUMO_PORT="$(KUMO_PORT)"' EXIT INT TERM; \
+	cd apps/participant-portal && bun run dev --host 127.0.0.1
+
+local-up:
+	@PROBLEM="$(PROBLEM)" KUMO_PORT="$(KUMO_PORT)" LOCAL_API_PORT="$(LOCAL_API_PORT)" \
+		bun run scripts/tenkacloud-local.ts up "$(PROBLEM)"
+
+local-down:
+	@KUMO_PORT="$(KUMO_PORT)" bun run scripts/tenkacloud-local.ts down
+
+local-status:
+	@bun run scripts/tenkacloud-local.ts status
+
+local-evaluate:
+	@if [ -z "$(FLAG)" ]; then \
+		echo "error: FLAG is required. Example: make local-evaluate FLAG='TC{...}'" >&2; \
+		exit 1; \
+	fi
+	@bun run scripts/tenkacloud-local.ts evaluate "$(FLAG)"
 
 # ===== CDK =====
 # 環境切替。make deploy ENV=production 等で上書き可能。デフォルトは development。

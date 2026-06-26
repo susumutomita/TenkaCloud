@@ -1,10 +1,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-type AppMode = "dev-mock" | "backend";
-type CloudMode = "real" | "mock" | "localstack";
+export type AppMode = "dev-mock" | "backend";
+export type CloudMode = "real" | "mock" | "localstack";
 
-interface RuntimeConfig {
+export interface RuntimeConfig {
   readonly apiBaseUrl: string;
   readonly eventTitle: string;
   readonly eventRegion: string;
@@ -13,7 +13,7 @@ interface RuntimeConfig {
   readonly localstackEndpoint?: string;
 }
 
-interface Options {
+export interface RuntimeConfigOptions {
   readonly cloudMode: CloudMode;
   readonly portalMode?: AppMode;
   readonly apiBaseUrl?: string;
@@ -94,7 +94,7 @@ const VALUE_HANDLERS: Record<string, (state: MutableOptions, value: string) => v
   },
 };
 
-function parseArgs(argv: readonly string[]): Options {
+function parseArgs(argv: readonly string[]): RuntimeConfigOptions {
   const state: MutableOptions = {
     eventTitle: "TenkaCloud Battle (offline)",
     eventRegion: "ap-northeast-1",
@@ -154,27 +154,30 @@ function normalizeLocalstackEndpoint(value: string): string {
   return url.toString().replace(/\/$/, "");
 }
 
-function normalizeApiBaseUrl(value: string): string {
+function normalizeApiBaseUrl(value: string, cloudMode: CloudMode): string {
   let url: URL;
   try {
     url = new URL(value);
   } catch (err) {
     throw new Error(`Invalid --api-base-url: ${value}`, { cause: err });
   }
-  if (url.protocol !== "https:") {
+  const loopbackHttp =
+    url.protocol === "http:" &&
+    (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]");
+  if (url.protocol !== "https:" && !(cloudMode === "localstack" && loopbackHttp)) {
     throw new Error("--api-base-url must be HTTPS when participant portal runs in backend mode");
   }
   return url.toString().replace(/\/$/, "");
 }
 
-function buildRuntimeConfig(options: Options): RuntimeConfig {
+export function buildRuntimeConfig(options: RuntimeConfigOptions): RuntimeConfig {
   const mode = options.portalMode ?? defaultPortalMode(options.cloudMode);
   if (mode === "backend" && (!options.apiBaseUrl || options.apiBaseUrl.trim().length === 0)) {
     throw new Error("--api-base-url is required when participant portal runs in backend mode");
   }
   const apiBaseUrl =
     mode === "backend"
-      ? normalizeApiBaseUrl(options.apiBaseUrl ?? "")
+      ? normalizeApiBaseUrl(options.apiBaseUrl ?? "", options.cloudMode)
       : (options.apiBaseUrl ?? "http://localhost:3199/dev-mock");
   return {
     apiBaseUrl,
@@ -211,4 +214,4 @@ function main(): void {
   }
 }
 
-main();
+if (import.meta.main) main();

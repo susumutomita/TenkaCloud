@@ -1,0 +1,14 @@
+services:
+  kumo:
+    image: "${KUMO_IMAGE:-ghcr.io/sivchari/kumo@sha256:7ea090ae0b6d1d34615e8b7bd04a2f1cd864ec640a6826a91e90f40e975e196b}"
+    environment:
+      KUMO_HOST: 0.0.0.0
+      KUMO_LOG_LEVEL: "${KUMO_LOG_LEVEL:-warn}"
+      KUMO_PORT: 4566
+    ports:
+      - "127.0.0.1:${KUMO_PORT:-4566}:4566"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:4566/health"]
+      interval: 1s
+      timeout: 2s
+      retries: 30

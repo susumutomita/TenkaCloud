@@ -103,6 +103,28 @@ describe("participant-portal-runtime-config (#1122)", () => {
     expect(ng.stderr).toContain("--api-base-url must be HTTPS");
   });
 
+  it("localstack backend mode should accept a loopback HTTP apiBaseUrl", () => {
+    const result = runConfig([
+      "--cloud-mode",
+      "localstack",
+      "--portal-mode",
+      "backend",
+      "--api-base-url",
+      "http://127.0.0.1:3199/",
+      "--localstack-endpoint",
+      "http://127.0.0.1:4566/",
+      "--print",
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      apiBaseUrl: "http://127.0.0.1:3199",
+      mode: "backend",
+      cloudMode: "localstack",
+      localstackEndpoint: "http://127.0.0.1:4566",
+    });
+  });
+
   it("should write runtime-config.json when --out is specified", () => {
     const dir = mkdtempSync(join(tmpdir(), "tc-runtime-config-"));
     tempDirs.push(dir);

@@ -171,3 +171,4 @@ tmp
 # working tree に残る node_modules/dist/lambda.zip は git 管理外 (本ディレクトリ自体を ignore)。
 backend/
 sampleimages/
+.tenkacloud/
