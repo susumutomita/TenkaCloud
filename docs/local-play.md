@@ -1,0 +1,123 @@
+# Local play (Docker, no AWS)
+
+Local play lets a participant solve a problem entirely on their machine — no AWS
+account, no cloud resources. Each problem ships as a **Docker container** that
+owns both the challenge surface and its own scoring (`/verify`). TenkaCloud
+contributes only the scoring half: the participant API, portal, leaderboard,
+hints, and progress. (Issue #2054 — supersedes the earlier Kumo / AWS-emulator
+approach.)
+
+## How it works
+
+```
+make local PROBLEM=<id>
+  ├─ docker compose up    the problem container (loopback only)
+  │     • per-deploy random secret (FLAG_SEED, …) injected as env
+  │     • the container serves the challenge surface AND POST /verify
+  ├─ local scoring API    scripts/local-play (reuses the portal contract)
+  │     • a flag submission is forwarded to the container's /verify
+  │     • the verdict is recorded (score / leaderboard / hints / score events)
+  └─ participant portal    wired via runtime-config (cloudMode:"local")
+make local-down → docker compose down + restore runtime-config
+```
+
+| Layer                       | Owns     | Responsibility                                                        |
+| --------------------------- | -------- | -------------------------------------------------------------------- |
+| Problem container (catalog) | problem  | The challenge itself **and `/verify`** (answer, hidden tests, scoring conditions live only here) |
+| TenkaCloud platform         | platform | Scoring, portal, leaderboard, hints, orchestration (**no evaluation logic**) |
+
+The platform never holds the answer. It delegates each submission to the
+container and trusts the container's `correct` verdict. This is the local
+counterpart of the cloud self-deploy model (a problem deploys its own verify
+Lambda) — one `/verify` contract, two runtimes.
+
+## Run it
+
+```bash
+make local PROBLEM=sqli-demo      # start the container + scoring API + portal
+make local-status                 # is local play running?
+make local-evaluate FLAG='TC{…}'  # submit a flag from the CLI
+make local-down                   # stop everything and restore runtime-config
+```
+
+`make local` starts the problem container and the loopback scoring API, then
+runs the Participant Portal dev server. Log in with any non-empty team key. The
+challenge endpoints are shown on the problem page; attack them, recover the
+flag, and submit it.
+
+> Requires Docker with the compose plugin. The scoring API port defaults to
+> `3199` and can be overridden with `LOCAL_API_PORT`. If it is already taken,
+> `make local` fails loudly rather than adopting a foreign server.
+
+## The `/verify` contract
+
+The problem container exposes `POST /verify` on a loopback admin port:
+
+```jsonc
+// request
+{ "submission": "<string>", "context": { "teamId": "local", "problemId": "<id>" } }
+// response
+{ "correct": true, "points": 200, "message": "Flag accepted." }
+```
+
+- `points` is optional; the platform falls back to the manifest's `scoring.points`.
+- `message` must be safe — it must **not** leak the answer or any hidden test on
+  a wrong submission.
+
+The platform's `POST /portal/me/submit-flag` forwards the submission verbatim and
+reflects `correct` into the score. If `/verify` is unreachable or returns an
+invalid verdict, the submission fails loudly (HTTP 502) — it is never silently
+marked right or wrong.
+
+## Authoring a container problem
+
+One directory = one problem. Problems live **only** in the
+[TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge)
+catalog (the `problems/` submodule) — never in this platform repo (ADR-008 /
+ADR-012). The platform is problem-agnostic: `make local PROBLEM=<id>` resolves
+`<id>` under `problems/challenges` or `problems/battles`. The reference
+container problem is `sqli-demo` in the catalog.
+
+```
+<problem>/
+├── metadata.json            # the local manifest + scoring
+└── local/
+    ├── docker-compose.yml   # bind every port to 127.0.0.1 only
+    ├── Dockerfile
+    └── app/…                # challenge surface + /verify; answer lives only here
+```
+
+The manifest's `runtime` (container delivery, ADR-023) + `scoring` sections wire
+the harness (no answer, no scoring conditions):
+
+```jsonc
+{
+  "scoring": { "kind": "verify", "points": 200, "wrongAnswerPenalty": 10, "hints": [ … ] },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": { "Web": "http://127.0.0.1:18080" },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": ["FLAG_SEED"]
+  }
+}
+```
+
+- `scoring.kind` must be `"verify"` (the platform delegates instead of comparing)
+  and `runtime.engine` must be `"compose"`.
+- Every URL must be loopback (`localhost` / `127.0.0.1` / `[::1]`); the loader
+  refuses anything else.
+- Each name in `secretEnv` is filled with a fresh 256-bit secret per deploy and
+  injected into the container as an env var. Derive the flag and any privileged
+  credential from it so each run is unique and nothing secret is committed.
+
+## Security
+
+- Containers are loopback-only. Bind ports as `127.0.0.1:<host>:<container>` —
+  `/verify` included.
+- A container that fetches an external URL (cloud-style self-deploy) must apply
+  SSRF defenses itself: a protocol and host allowlist, no redirect following, a
+  timeout, and a response body cap.
+- The portal stays HTTPS-only in backend mode; loopback HTTP is the one
+  exception, because it never leaves the machine (#871 / #1975).

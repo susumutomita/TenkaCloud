@@ -8,9 +8,8 @@
     "no_session": "No active session. Please sign in again.",
     "mock_cloud_header": "Mock cloud mode",
     "mock_cloud_body": "This event is using a local mock cloud adapter. No real AWS resources are created.",
-    "localstack_cloud_header": "LocalStack cloud mode",
-    "localstack_cloud_body": "This event is configured for LocalStack at {endpoint}. Real AWS resources are not used.",
-    "localstack_endpoint_missing": "endpoint not configured",
+    "local_cloud_header": "Local cloud mode",
+    "local_cloud_body": "This event runs a local Docker problem container. No real AWS resources are used.",
     "fetch_status_failed": "Failed to fetch status"
   },
   "nav": {

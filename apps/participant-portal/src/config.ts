@@ -10,10 +10,10 @@
  *   `"backend"` は本物の backend API を呼ぶ。runtime-config の値が優先、なければ
  *   fallback で `"dev-mock"` 扱い。
  * `cloudMode` は実際に問題環境を作る provider execution mode。frontend はこれを見て
- * offline/mock/localstack の警告 UI を出すが、認証 skip には使わない。
+ * offline/mock/local の警告 UI を出すが、認証 skip には使わない。
  */
 export type AppMode = "dev-mock" | "backend";
-export type CloudMode = "real" | "mock" | "localstack";
+export type CloudMode = "real" | "mock" | "local";
 
 export interface AppConfig {
   readonly apiBaseUrl: string;
@@ -21,7 +21,6 @@ export interface AppConfig {
   readonly eventRegion: string;
   readonly mode: AppMode;
   readonly cloudMode: CloudMode;
-  readonly localstackEndpoint?: string;
   /**
    * ADR-028/030 (#1420): 参加者間 coordination dispatcher (専用 Lambda) の Function URL。
    * 未配線 (= coordination 無効 / 旧 deploy) なら undefined。 portal slot が coordination-client で叩く。
@@ -35,7 +34,6 @@ interface RuntimeConfig {
   readonly eventRegion?: string;
   readonly mode?: AppMode;
   readonly cloudMode?: CloudMode;
-  readonly localstackEndpoint?: string;
   readonly coordinationApiUrl?: string;
 }
 
@@ -77,25 +75,11 @@ function isLoopbackHttpUrl(value: string): boolean {
 }
 
 function isCloudMode(value: unknown): value is CloudMode {
-  return value === "real" || value === "mock" || value === "localstack";
+  return value === "real" || value === "mock" || value === "local";
 }
 
 function defaultCloudMode(mode: AppMode): CloudMode {
   return mode === "backend" ? "real" : "mock";
-}
-
-function normalizeLocalstackEndpoint(value: unknown): string | undefined {
-  if (typeof value !== "string" || value.trim().length === 0) return undefined;
-  try {
-    const url = new URL(value);
-    const allowedHost =
-      url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
-    const allowedProtocol = url.protocol === "http:" || url.protocol === "https:";
-    if (!allowedHost || !allowedProtocol) return undefined;
-    return url.toString().replace(/\/$/, "");
-  } catch {
-    return undefined;
-  }
 }
 
 export async function loadConfig(): Promise<AppConfig> {
@@ -151,10 +135,6 @@ export async function loadConfig(): Promise<AppConfig> {
       eventRegion: runtime.eventRegion ?? DEV_FALLBACK.eventRegion,
       mode,
       cloudMode,
-      localstackEndpoint:
-        cloudMode === "localstack"
-          ? normalizeLocalstackEndpoint(runtime.localstackEndpoint)
-          : undefined,
       ...(coordinationApiUrl ? { coordinationApiUrl } : {}),
     };
   } catch {
