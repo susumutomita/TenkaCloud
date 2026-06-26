@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createLocalPlayState,
   handleLocalPlayRequest,
+  isLocalApiHealthy,
   type LocalPlayRequest,
 } from "../../../scripts/local-play/api";
 import type { LocalPlayDeployment } from "../../../scripts/local-play/kumo";
@@ -150,5 +151,28 @@ describe("local-play API", () => {
     expect(events.body).toMatchObject({
       entries: [{ source: "flag", points: 100, result: "ok" }],
     });
+  });
+});
+
+describe("isLocalApiHealthy", () => {
+  const healthy = { status: "ok", mode: "localstack", problemId: "hello-world" };
+
+  it("should accept this instance's own healthz payload for the expected problem", () => {
+    expect(isLocalApiHealthy(healthy, "hello-world")).toBe(true);
+  });
+
+  it("should reject a foreign server serving a different problem on the same port", () => {
+    expect(isLocalApiHealthy({ status: "ok", mode: "local" }, "hello-world")).toBe(false);
+    expect(isLocalApiHealthy({ ...healthy, problemId: "clickfix-incident" }, "hello-world")).toBe(
+      false,
+    );
+    expect(isLocalApiHealthy({ ...healthy, mode: "real" }, "hello-world")).toBe(false);
+  });
+
+  it("should reject non-object or empty payloads", () => {
+    expect(isLocalApiHealthy(null, "hello-world")).toBe(false);
+    expect(isLocalApiHealthy(undefined, "hello-world")).toBe(false);
+    expect(isLocalApiHealthy("ok", "hello-world")).toBe(false);
+    expect(isLocalApiHealthy({}, "hello-world")).toBe(false);
   });
 });

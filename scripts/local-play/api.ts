@@ -54,6 +54,23 @@ export function createLocalPlayState(
   };
 }
 
+/**
+ * Identity check for the `/healthz` payload. `up()` and `status` use this to
+ * confirm the server answering the API port is *this* local-play instance for
+ * the expected problem -- not a stale or foreign server squatting on the port.
+ * Without it, a port collision is silently masked (the foreign server answers
+ * `/healthz` with 200) and the portal is wired to the wrong backend.
+ */
+export function isLocalApiHealthy(body: unknown, expectedProblemId: string): boolean {
+  if (typeof body !== "object" || body === null) return false;
+  const candidate = body as { status?: unknown; mode?: unknown; problemId?: unknown };
+  return (
+    candidate.status === "ok" &&
+    candidate.mode === "localstack" &&
+    candidate.problemId === expectedProblemId
+  );
+}
+
 function hintViews(state: LocalPlayState) {
   return state.deployment.problem.scoring.hints.map((hint) => {
     const revealedAt = state.revealedHints.get(hint.id);

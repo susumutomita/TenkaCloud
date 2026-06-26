@@ -14,6 +14,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadLocalFlagProblem } from "./local-play/catalog";
 import { deployProblemToKumo, type LocalPlayDeployment } from "./local-play/kumo";
+import { assertPortFree, waitForLocalApi } from "./local-play/readiness";
 import { startLocalPlayServer } from "./local-play/server";
 import { buildRuntimeConfig } from "./participant-portal-runtime-config";
 
@@ -145,6 +146,10 @@ async function up(problemId: string): Promise<void> {
     runtimeConfigBackedUp = true;
   }
 
+  // Fail loudly *before* touching Docker if the API port is taken, so we never
+  // silently adopt a stale/foreign server squatting on it.
+  await assertPortFree(apiPort, "local Participant API");
+
   try {
     runCompose(["up", "-d", "--wait"]);
     await waitForUrl(`${kumoEndpoint}/health`, "Kumo");
@@ -154,7 +159,7 @@ async function up(problemId: string): Promise<void> {
     writePrivateJson(localPaths.deploymentPath, deployment);
 
     apiPid = startApi(localPaths.deploymentPath, apiPort, localPaths.logPath);
-    await waitForUrl(`${apiBaseUrl}/healthz`, "local Participant API");
+    await waitForLocalApi(apiBaseUrl, problemId, apiPid, localPaths.logPath);
 
     const runtimeConfig = buildRuntimeConfig({
       cloudMode: "localstack",
