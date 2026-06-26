@@ -6,6 +6,7 @@ import {
   discoverProblemsDisruptions,
   discoverProblemsEndpoints,
   discoverProblemsPhases,
+  discoverProblemsRuntime,
   discoverProblemsScoring,
   discoverProblemsVisibility,
 } from "../lib/utils/discover-problems-catalog";
@@ -150,5 +151,41 @@ describe("discoverProblemsDisruptions", () => {
     expect(d3).not.toHaveProperty("parameters");
     expect(out["bare-prob"]).toBeUndefined();
     expect(out["empty-prob"]).toBeUndefined(); // all disruptions invalid → empty → excluded
+  });
+});
+
+describe("discoverProblemsRuntime (#2054 / ADR-023)", () => {
+  it("should collect only non-aws runtimes so container problems are caught by the deploy guard", () => {
+    writeProblem("challenges", "container-prob", {
+      id: "container-prob",
+      runtime: {
+        provider: "docker",
+        engine: "compose",
+        entry: "local/docker-compose.yml",
+        challengeEndpoints: { Web: "http://127.0.0.1:18080" },
+      },
+      scoring: { kind: "verify", points: 200 },
+    });
+    writeProblem("challenges", "aws-explicit", {
+      id: "aws-explicit",
+      runtime: { provider: "aws", engine: "cloudformation", entry: "template.yaml" },
+    });
+    writeProblem("challenges", "aws-legacy", { id: "aws-legacy", cfnTemplate: "template.yaml" });
+    writeProblem("challenges", "malformed-runtime", {
+      id: "malformed-runtime",
+      runtime: { provider: "docker", engine: "compose" }, // no entry → normalizeRuntime undefined
+    });
+
+    const out = discoverProblemsRuntime(root);
+    expect(out["container-prob"]).toEqual({
+      provider: "docker",
+      engine: "compose",
+      entry: "local/docker-compose.yml",
+    });
+    // aws (explicit + legacy) → executable → omitted so the deploy worker uses its default path.
+    expect(out["aws-explicit"]).toBeUndefined();
+    expect(out["aws-legacy"]).toBeUndefined();
+    // malformed runtime (no entry) → normalizeRuntime returns undefined → omitted.
+    expect(out["malformed-runtime"]).toBeUndefined();
   });
 });

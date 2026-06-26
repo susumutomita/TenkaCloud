@@ -58,6 +58,7 @@ export {
   mapGcpDeploymentState,
 } from "./gcp-infra-manager-adapter.js";
 export { type AdapterDependencies, selectAdapter } from "./registry.js";
+export { makeProblemRuntimeResolver, parseProblemRuntimes } from "./runtime-catalog-env.js";
 export {
   mapSakuraStatus,
   SAKURA_ENGINE,

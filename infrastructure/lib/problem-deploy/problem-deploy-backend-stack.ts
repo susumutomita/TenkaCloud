@@ -120,6 +120,12 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    */
   readonly problemsVisibility?: Readonly<Record<string, "private">>;
   /**
+   * [ADR-023 / #2054] `problemId → {provider,engine,entry}` (非 aws のみ)。
+   * `discoverProblemsRuntime` の戻り値。deploy-handler が非 AWS 問題を cloud mutation
+   * 前に拒否するための runtime catalog。 空 map なら全 AWS 扱い。
+   */
+  readonly problemRuntimes?: Readonly<Record<string, unknown>>;
+  /**
    * ADR-008 Phase 3 (Issue #642): private 問題 payload の S3 bucket 名 (= `tc-challenges-${env}`)。
    * 未指定なら deploy-handler / event-api Lambda は CHALLENGE_PAYLOAD_BUCKET 空で起動し、
    * presigned URL を発行しない (= dormant)。 ChallengePayloadStack 配備後にここを bind する。
@@ -322,6 +328,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       problemsCatalog: props.problemsCatalog,
       // ADR-008 Phase 3 (Issue #642): visibility + bucket、 unset で dormant default。
       problemsVisibility: props.problemsVisibility ?? {},
+      // [ADR-023 / #2054] 非 AWS 問題を cloud mutation 前に拒否する runtime catalog
+      // (= DeployApiLambda の optional prop。 undefined は env 側 `?? {}` で空 map に正規化)。
+      problemRuntimes: props.problemRuntimes,
       ...(props.challengePayloadBucketName
         ? { challengePayloadBucketName: props.challengePayloadBucketName }
         : {}),

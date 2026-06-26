@@ -167,6 +167,8 @@ export interface ProblemsCatalogBundle {
   readonly endpoints: unknown;
   readonly phases: unknown;
   readonly visibility: unknown;
+  /** [ADR-023 / #2054] 非 aws/cloudformation runtime を宣言した問題のみ (= `{problemId: {provider,engine,entry}}`)。 */
+  readonly runtimes: unknown;
   /** Issue #888: per-problem `disruptions[]` 宣言。 未宣言の問題はキー無し。 */
   readonly disruptions: unknown;
   /** ADR-028/030 #1420: per-problem `interTeamCoordination.plugin` (= `{ [problemId]: { plugin } }`)。 未宣言はキー無し。 */
