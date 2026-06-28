@@ -25,7 +25,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@cloudscape-design/components": "^3.0.1308",
-        "@cloudscape-design/global-styles": "^1.0.60",
+        "@cloudscape-design/global-styles": "^1.0.61",
         "@tenkacloud/auth-client": "workspace:*",
         "@tenkacloud/format": "workspace:*",
         "@tenkacloud/web-kit": "workspace:*",
@@ -52,7 +52,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@cloudscape-design/components": "^3.0.1308",
-        "@cloudscape-design/global-styles": "^1.0.60",
+        "@cloudscape-design/global-styles": "^1.0.61",
         "@tenkacloud/auth-client": "workspace:*",
         "@tenkacloud/format": "workspace:*",
         "@tenkacloud/web-kit": "workspace:*",
@@ -80,7 +80,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@cloudscape-design/components": "^3.0.1308",
-        "@cloudscape-design/global-styles": "^1.0.60",
+        "@cloudscape-design/global-styles": "^1.0.61",
         "@tenkacloud/format": "workspace:*",
         "@tenkacloud/portal-plugin-sdk": "workspace:*",
         "@tenkacloud/web-kit": "workspace:*",
@@ -433,7 +433,7 @@
 
     "@cloudscape-design/components": ["@cloudscape-design/components@3.0.1308", "", { "dependencies": { "@cloudscape-design/collection-hooks": "^1.0.0", "@cloudscape-design/component-toolkit": "^1.0.0-beta", "@cloudscape-design/test-utils-core": "^1.0.0", "@cloudscape-design/theming-runtime": "^1.0.0", "@dnd-kit/core": "^6.0.8", "@dnd-kit/sortable": "^7.0.2", "@dnd-kit/utilities": "^3.2.1", "ace-builds": "^1.34.0", "clsx": "^1.1.0", "d3-shape": "^1.3.7", "date-fns": "^2.25.0", "intl-messageformat": "^10.3.1", "mnth": "^2.0.0", "react-is": "^18.2.0", "react-transition-group": "^4.4.2", "tslib": "^2.4.0", "weekstart": "^1.1.0" }, "peerDependencies": { "react": ">=16.8.0" } }, "sha512-iyVokihHUzg/EGzPheNBODQ7ewmRcqEok1Zleu2nvECd1d4bcUbsaDpERSgtYDXoQDx4eEpndcxMLqJQPb7xqQ=="],
 
-    "@cloudscape-design/global-styles": ["@cloudscape-design/global-styles@1.0.60", "", {}, "sha512-GIAjVl726yUIj8EXYeSjMQYg6toJ55i8dq3U4SqHAz03cgdUO0QUICHSLHrGAHKRiu/KgyrSomuhXwT40D09wg=="],
+    "@cloudscape-design/global-styles": ["@cloudscape-design/global-styles@1.0.61", "", {}, "sha512-wH+3geRJnN2CjqUWnQsjW4DuC0zXNbMzF3VQl/a/+WlMlvUr+/cL9y0grUQQ6kFd/Q++VKZ/0r5Qv40nL+hSiQ=="],
 
     "@cloudscape-design/test-utils-core": ["@cloudscape-design/test-utils-core@1.0.80", "", { "dependencies": { "css-selector-tokenizer": "^0.8.0", "css.escape": "^1.5.1" } }, "sha512-BKlMvuJc4q/5glG+a1smdp73B46Q9eOcuZ/nRWWPwILKkgL6RbrjpKHVPcwUmLLPsVMEwJl4tLVNGJsCnmmedg=="],
 
