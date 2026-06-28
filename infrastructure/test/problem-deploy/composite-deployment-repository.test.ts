@@ -12,6 +12,7 @@ import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it, vi } from "vitest";
 import {
   type CompositeDeploymentRepositoryDeps,
+  CompositeParentConflictError,
   CompositeTargetConflictError,
   type CreateCompositeTargetInput,
   createCompositeParent,
@@ -325,5 +326,82 @@ describe("composite deployment repository (#2061)", () => {
     const parent = await getCompositeParent(fake.deps, "parent-1");
     expect(parent?.status).toBe("PENDING");
     expect(parent?.targetCount).toBe(2);
+  });
+
+  it("rejects a targetCount outside 2..8", async () => {
+    const fake = makeFakeDdb();
+    await expect(
+      createCompositeParent(fake.deps, parentInput({ targetCount: 1 })),
+    ).rejects.toBeInstanceOf(RangeError);
+    await expect(
+      createCompositeParent(fake.deps, parentInput({ targetCount: 9 })),
+    ).rejects.toBeInstanceOf(RangeError);
+  });
+
+  it("retries an identical parent write idempotently", async () => {
+    const fake = makeFakeDdb();
+    const first = await createCompositeParent(fake.deps, parentInput());
+    const retry = await createCompositeParent(fake.deps, parentInput());
+    expect(retry).toEqual(first);
+  });
+
+  it("rejects a parent retry with a different immutable field", async () => {
+    const fake = makeFakeDdb();
+    await createCompositeParent(fake.deps, parentInput());
+    await expect(
+      createCompositeParent(fake.deps, parentInput({ problemId: "other-problem" })),
+    ).rejects.toBeInstanceOf(CompositeParentConflictError);
+  });
+
+  it("rejects a negative targetOrdinal", async () => {
+    const fake = makeFakeDdb();
+    await createCompositeParent(fake.deps, parentInput());
+    await expect(
+      createCompositeTarget(fake.deps, targetInput({ targetOrdinal: -1 })),
+    ).rejects.toBeInstanceOf(RangeError);
+  });
+
+  it("rejects a target whose id already holds a non-composite-target row", async () => {
+    // A composite parent row sits at "parent-1"; trying to write a target at the
+    // same deploymentId must conflict rather than silently overwrite the parent.
+    const fake = makeFakeDdb();
+    await createCompositeParent(fake.deps, parentInput());
+    await expect(
+      createCompositeTarget(fake.deps, targetInput({ targetDeploymentId: "parent-1" })),
+    ).rejects.toBeInstanceOf(CompositeTargetConflictError);
+  });
+
+  it("rejects a target lost to a concurrent writer at the same id", async () => {
+    // Get + GSI3 query both see no row, but the conditional Put loses the race.
+    const send = vi.fn(async (cmd: unknown) => {
+      if (cmd instanceof GetCommand) return { Item: undefined };
+      if (cmd instanceof QueryCommand) return { Items: [] };
+      if (cmd instanceof PutCommand) {
+        throw conditionalCheckFailed();
+      }
+      throw new Error("unexpected");
+    });
+    const deps = { ddb: { send }, tableName: "TestDeployments" };
+    await expect(createCompositeTarget(deps, targetInput())).rejects.toBeInstanceOf(
+      CompositeTargetConflictError,
+    );
+  });
+
+  it("returns undefined when getCompositeParent hits a non-parent row", async () => {
+    const fake = makeFakeDdb();
+    await createCompositeParent(fake.deps, parentInput());
+    await createCompositeTarget(fake.deps, targetInput());
+    // "target-aws" is a target, not a parent → undefined.
+    expect(await getCompositeParent(fake.deps, "target-aws")).toBeUndefined();
+    // absent id → undefined.
+    expect(await getCompositeParent(fake.deps, "missing")).toBeUndefined();
+  });
+
+  it("returns undefined when getCompositeTarget hits a non-target row", async () => {
+    const fake = makeFakeDdb();
+    await createCompositeParent(fake.deps, parentInput());
+    // "parent-1" is a parent, not a target → undefined.
+    expect(await getCompositeTarget(fake.deps, "parent-1")).toBeUndefined();
+    expect(await getCompositeTarget(fake.deps, "missing")).toBeUndefined();
   });
 });
