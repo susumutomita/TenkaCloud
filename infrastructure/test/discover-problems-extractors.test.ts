@@ -225,4 +225,23 @@ describe("discoverProblemsRuntime (#2054 / ADR-023)", () => {
       ],
     });
   });
+
+  it("should surface the problemId in catalog composite validation errors", () => {
+    // #2060 acceptance: validation errors must carry the problemId (+ JSON path).
+    // Discovery must thread the metadata `id` into normalizeRuntime so a malformed
+    // composite in the catalog points the author at the offending problem, not
+    // `<unknown>`.
+    writeProblem("challenges", "bad-composite", {
+      id: "bad-composite",
+      runtime: {
+        kind: "composite",
+        targets: [
+          { id: "dup", provider: "aws", engine: "cloudformation", entry: "a.yaml" },
+          { id: "dup", provider: "gcp", engine: "infra-manager", entry: "b" },
+        ],
+      },
+    });
+
+    expect(() => discoverProblemsRuntime(root)).toThrow(/bad-composite:runtime\.targets\[1\]\.id/);
+  });
 });

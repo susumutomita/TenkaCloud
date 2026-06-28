@@ -160,7 +160,11 @@ export function discoverProblemsRuntime(
 ): Record<string, ProblemRuntimeDescriptor> {
   const result: Record<string, ProblemRuntimeDescriptor> = {};
   for (const meta of iterateProblemsMetadata(problemsRoot)) {
-    const runtime = normalizeRuntime({ runtime: meta.runtime, cfnTemplate: meta.cfnTemplate });
+    const runtime = normalizeRuntime({
+      id: meta.id,
+      runtime: meta.runtime,
+      cfnTemplate: meta.cfnTemplate,
+    });
     if (runtime && !isExecutableRuntime(runtime)) {
       result[meta.id] = runtime;
     }
