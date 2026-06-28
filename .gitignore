@@ -167,6 +167,11 @@ tmp
 .DS_Store
 .codewiki/
 
+# `make local` (local-play) runtime state: pid / deployment / runtime-config backup
+# / api.log. Generated per run, never committed (and not linted — biome honors
+# this file via vcs.useIgnoreFile).
+.tenkacloud/
+
 # Vestige of pre-PR-#398 layout. ソースは server/microservices/ に移行済み。
 # working tree に残る node_modules/dist/lambda.zip は git 管理外 (本ディレクトリ自体を ignore)。
 backend/

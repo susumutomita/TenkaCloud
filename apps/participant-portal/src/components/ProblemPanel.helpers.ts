@@ -2,10 +2,13 @@ import type { StatusIndicatorProps } from "@cloudscape-design/components/status-
 import {
   type ApplicationStatus,
   type ApplicationStatusOverall,
+  type ParticipantHintView,
+  type ParticipantProblemView,
   PortalScoringGateError,
   PortalValidationError,
   type SubmitFlagOutcome,
 } from "../api/portal-client";
+import type { LocaleCode } from "../i18n";
 
 export type ProblemPanelT = (
   key: string,
@@ -93,4 +96,39 @@ export function formatProblemPanelActionError(
 
 export function shouldRefreshAfterFlagSubmit(result: SubmitFlagOutcome): boolean {
   return result.kind === "ok" || result.kind === "already_scored";
+}
+
+/**
+ * #2054 i18n: resolve a revealed hint's content for the current locale. The en
+ * override lives in `i18n.en.content` (present only once revealed, mirroring
+ * `content`); ja is the canonical `content`. Empty/missing → canonical.
+ */
+function localizeHint(hint: ParticipantHintView): ParticipantHintView {
+  const enContent = hint.i18n?.en?.content;
+  return enContent?.trim() ? { ...hint, content: enContent } : hint;
+}
+
+/**
+ * #2054 i18n: resolve the displayed problem text for the current locale so the
+ * portal's locale switcher localizes the live API view (name / description /
+ * instructions + revealed hint content). ja is the top-level canonical and is
+ * returned unchanged; en overlays each field from `i18n.en`, falling back to the
+ * canonical value when an override is missing or empty.
+ */
+export function localizeProblem(
+  problem: ParticipantProblemView,
+  lang: LocaleCode,
+): ParticipantProblemView {
+  if (lang !== "en") return problem;
+  const en = problem.i18n?.en;
+  const hints = problem.scoring?.hints;
+  return {
+    ...problem,
+    ...(en?.name?.trim() ? { name: en.name } : {}),
+    ...(en?.description?.trim() ? { description: en.description } : {}),
+    ...(en?.instructions?.trim() ? { instructions: en.instructions } : {}),
+    ...(problem.scoring && hints
+      ? { scoring: { ...problem.scoring, hints: hints.map(localizeHint) } }
+      : {}),
+  };
 }

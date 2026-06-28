@@ -64,6 +64,11 @@ export interface ParticipantHintView {
   readonly revealed: boolean;
   readonly content?: string;
   readonly revealedAt?: string;
+  /**
+   * #2054 i18n: locale override of `content` (en only; ja is the canonical
+   * `content`). Present only once the hint is revealed, mirroring `content`.
+   */
+  readonly i18n?: { readonly en?: { readonly content?: string } };
 }
 
 export interface ParticipantScoringInfo {
@@ -111,6 +116,16 @@ export interface DeployLogsResponse {
 }
 
 /**
+ * #2054 i18n: competitor-facing problem text translated into a non-default
+ * locale (en). The default language (ja) lives in the top-level fields.
+ */
+export interface ProblemTextI18n {
+  readonly name?: string;
+  readonly description?: string;
+  readonly instructions?: string;
+}
+
+/**
  * Phase 2c: 1 problem 単位の view (= team の N 問題のうち 1 つ)。
  */
 export interface ParticipantProblemView {
@@ -124,6 +139,12 @@ export interface ParticipantProblemView {
   readonly name?: string;
   readonly description?: string;
   readonly instructions?: string;
+  /**
+   * #2054 i18n: locale override of name/description/instructions (en only; ja is
+   * the canonical top-level value). The portal's locale switcher resolves the
+   * displayed text via `localizeProblem`. Absent when no translation is shipped.
+   */
+  readonly i18n?: { readonly en?: ProblemTextI18n };
   readonly region: string;
   /** 競技アカウント ID。SSO Credentials の AWS Console federation で使う。 */
   readonly awsAccountId: string;

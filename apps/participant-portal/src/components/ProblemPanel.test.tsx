@@ -500,3 +500,59 @@ describe("ProblemPanel countdown polling", () => {
     expect(screen.getByText("hello-world")).toBeInTheDocument(); // still rendered, no crash
   });
 });
+
+describe("ProblemPanel i18n (#2054)", () => {
+  afterEach(() => {
+    window.localStorage.removeItem("tenkacloud.portal.locale");
+  });
+
+  const localized: ParticipantProblemView = {
+    ...baseProblem,
+    status: "COMPLETE",
+    name: "SQL インジェクション",
+    description: "脆弱なログイン (JA)。",
+    instructions: "ログインを突破 (JA)。",
+    i18n: {
+      en: {
+        name: "SQL Injection — Login Bypass",
+        description: "A deliberately vulnerable login (EN).",
+        instructions: "Bypass the login (EN).",
+      },
+    },
+  };
+
+  it("should render the English problem statement when the locale is en", () => {
+    window.localStorage.setItem("tenkacloud.portal.locale", "en");
+    render(
+      withI18n(
+        <ProblemPanel
+          problem={localized}
+          apiBaseUrl="https://api.example.com"
+          sessionToken="team-key"
+          onScored={async () => undefined}
+        />,
+      ),
+    );
+    expect(screen.getByText("SQL Injection — Login Bypass")).toBeInTheDocument();
+    expect(screen.getByText("A deliberately vulnerable login (EN).")).toBeInTheDocument();
+    expect(screen.getByText("Bypass the login (EN).")).toBeInTheDocument();
+    expect(screen.queryByText("脆弱なログイン (JA)。")).not.toBeInTheDocument();
+  });
+
+  it("should render the Japanese (canonical) statement when the locale is ja", () => {
+    window.localStorage.setItem("tenkacloud.portal.locale", "ja");
+    render(
+      withI18n(
+        <ProblemPanel
+          problem={localized}
+          apiBaseUrl="https://api.example.com"
+          sessionToken="team-key"
+          onScored={async () => undefined}
+        />,
+      ),
+    );
+    expect(screen.getByText("SQL インジェクション")).toBeInTheDocument();
+    expect(screen.getByText("脆弱なログイン (JA)。")).toBeInTheDocument();
+    expect(screen.queryByText("SQL Injection — Login Bypass")).not.toBeInTheDocument();
+  });
+});

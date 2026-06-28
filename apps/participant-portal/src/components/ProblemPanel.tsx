@@ -10,10 +10,14 @@ import StatusIndicator, {
 } from "@cloudscape-design/components/status-indicator";
 import { useNowMs } from "@tenkacloud/web-kit";
 import type { DeploymentStatus, ParticipantProblemView } from "../api/portal-client";
-import { useT } from "../i18n";
+import { useLang, useT } from "../i18n";
 import { describeAgo } from "../lib/format";
 import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
-import { describeApplicationStatus, type ProblemPanelT } from "./ProblemPanel.helpers";
+import {
+  describeApplicationStatus,
+  localizeProblem,
+  type ProblemPanelT,
+} from "./ProblemPanel.helpers";
 import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
 
 const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
@@ -228,7 +232,7 @@ function ProblemPanelAlerts({
  * (= 1 problem 専用ページ) の両方から使う共通 component。
  */
 export function ProblemPanel({
-  problem,
+  problem: rawProblem,
   apiBaseUrl,
   sessionToken,
   onScored,
@@ -239,6 +243,11 @@ export function ProblemPanel({
   onScored: () => Promise<void>;
 }) {
   const t = useT();
+  // #2054 i18n: resolve the live API problem text (name / description /
+  // instructions + revealed hint content) for the current locale so the portal's
+  // locale switcher localizes the Home + ProblemDetail panels. ja is canonical.
+  const lang = useLang();
+  const problem = localizeProblem(rawProblem, lang);
   const now = useNowMs(COUNTDOWN_REFRESH_MS);
   const kindLabel = describeProblemKind(t, problem.scoring);
   const autoDeleteNotice = buildAutoDeleteNotice(t, problem.expiresAt, now);
