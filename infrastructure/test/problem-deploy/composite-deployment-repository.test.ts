@@ -404,4 +404,65 @@ describe("composite deployment repository (#2061)", () => {
     expect(await getCompositeTarget(fake.deps, "parent-1")).toBeUndefined();
     expect(await getCompositeTarget(fake.deps, "missing")).toBeUndefined();
   });
+
+  it("returns an empty target list when the GSI3 query yields no Items field", async () => {
+    const send = vi.fn(async () => ({}) as { Items?: undefined });
+    const targets = await listCompositeTargets(
+      { ddb: { send }, tableName: "TestDeployments" },
+      "parent-1",
+    );
+    expect(targets).toEqual([]);
+  });
+
+  it("rethrows a non-conditional DDB error from the parent write", async () => {
+    const send = vi.fn(async (cmd: unknown) => {
+      if (cmd instanceof PutCommand) throw new Error("throughput exceeded");
+      return { Item: undefined };
+    });
+    await expect(
+      createCompositeParent({ ddb: { send }, tableName: "TestDeployments" }, parentInput()),
+    ).rejects.toThrow(/throughput exceeded/);
+  });
+
+  it("rethrows a non-conditional DDB error from the target write", async () => {
+    const send = vi.fn(async (cmd: unknown) => {
+      if (cmd instanceof GetCommand) return { Item: undefined };
+      if (cmd instanceof QueryCommand) return { Items: [] };
+      if (cmd instanceof PutCommand) throw new Error("throughput exceeded");
+      throw new Error("unexpected");
+    });
+    await expect(
+      createCompositeTarget({ ddb: { send }, tableName: "TestDeployments" }, targetInput()),
+    ).rejects.toThrow(/throughput exceeded/);
+  });
+
+  it("persists explicit status / updatedAt and optional cross-account fields on a target", async () => {
+    const fake = makeFakeDdb();
+    await createCompositeParent(
+      fake.deps,
+      parentInput({ status: "IN_PROGRESS", updatedAt: "2026-06-28T01:00:00.000Z" }),
+    );
+    const created = await createCompositeTarget(
+      fake.deps,
+      targetInput({
+        status: "IN_PROGRESS",
+        updatedAt: "2026-06-28T02:00:00.000Z",
+        competitorRoleArn: "arn:aws:iam::123456789012:role/TenkaCloud-CompetitorDeploy-Role",
+        externalIdParameterName: "/development/tenants/tenant-acme/external-id",
+        displayTeamName: "Team Alpha",
+      }),
+    );
+
+    expect(created).toMatchObject({
+      status: "IN_PROGRESS",
+      updatedAt: "2026-06-28T02:00:00.000Z",
+      competitorRoleArn: "arn:aws:iam::123456789012:role/TenkaCloud-CompetitorDeploy-Role",
+      externalIdParameterName: "/development/tenants/tenant-acme/external-id",
+      displayTeamName: "Team Alpha",
+    });
+
+    const parent = await getCompositeParent(fake.deps, "parent-1");
+    expect(parent?.status).toBe("IN_PROGRESS");
+    expect(parent?.updatedAt).toBe("2026-06-28T01:00:00.000Z");
+  });
 });
