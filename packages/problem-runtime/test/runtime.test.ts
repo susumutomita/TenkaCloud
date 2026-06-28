@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  type CompositeRuntimeDescriptor,
   classifyRuntimeSupport,
   DEFAULT_ENTRY,
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
+  isCompositeRuntime,
   isExecutableRuntime,
   isReservedRuntime,
+  isSingleRuntime,
   normalizeRuntime,
+  type ProblemRuntimeDescriptor,
   RESERVED_RUNTIMES,
   type RuntimeDescriptor,
+  RuntimeValidationError,
 } from "../src/index.js";
 
 const AWS: RuntimeDescriptor = {
@@ -70,6 +75,221 @@ describe("normalizeRuntime", () => {
 
   it("should treat runtime:null as absent (fall through to default, never throw)", () => {
     expect(normalizeRuntime({ runtime: null })).toEqual(AWS);
+  });
+});
+
+describe("composite runtime normalization", () => {
+  it("should accept a valid composite runtime with two targets", () => {
+    expect(
+      normalizeRuntime({
+        id: "cross-cloud",
+        runtime: {
+          kind: "composite",
+          targets: [
+            {
+              id: "aws-api",
+              provider: "aws",
+              engine: "cloudformation",
+              entry: "aws/template.yaml",
+            },
+            { id: "gcp-worker", provider: "gcp", engine: "infra-manager", entry: "gcp/terraform" },
+          ],
+        },
+      }),
+    ).toEqual({
+      kind: "composite",
+      targets: [
+        { id: "aws-api", provider: "aws", engine: "cloudformation", entry: "aws/template.yaml" },
+        { id: "gcp-worker", provider: "gcp", engine: "infra-manager", entry: "gcp/terraform" },
+      ],
+    });
+  });
+
+  it("should reject composite runtime with fewer than two targets", () => {
+    expect(() =>
+      normalizeRuntime({
+        id: "too-small",
+        runtime: {
+          kind: "composite",
+          targets: [
+            {
+              id: "aws-api",
+              provider: "aws",
+              engine: "cloudformation",
+              entry: "aws/template.yaml",
+            },
+          ],
+        },
+      }),
+    ).toThrow(RuntimeValidationError);
+  });
+
+  it("should reject composite runtime with more than eight targets", () => {
+    expect(() =>
+      normalizeRuntime({
+        id: "too-large",
+        runtime: {
+          kind: "composite",
+          targets: Array.from({ length: 9 }, (_, index) => ({
+            id: `target-${index}`,
+            provider: "aws",
+            engine: "cloudformation",
+            entry: "template.yaml",
+          })),
+        },
+      }),
+    ).toThrow(/too-large:runtime.targets/);
+  });
+
+  it("should reject duplicate target ids", () => {
+    expect(() =>
+      normalizeRuntime({
+        id: "dupe",
+        runtime: {
+          kind: "composite",
+          targets: [
+            { id: "same", provider: "aws", engine: "cloudformation", entry: "a.yaml" },
+            { id: "same", provider: "gcp", engine: "infra-manager", entry: "b" },
+          ],
+        },
+      }),
+    ).toThrow(/dupe:runtime.targets\[1\].id/);
+  });
+
+  it("should reject invalid target id", () => {
+    expect(() =>
+      normalizeRuntime({
+        id: "bad-id",
+        runtime: {
+          kind: "composite",
+          targets: [
+            { id: "Aws", provider: "aws", engine: "cloudformation", entry: "a.yaml" },
+            { id: "gcp-worker", provider: "gcp", engine: "infra-manager", entry: "b" },
+          ],
+        },
+      }),
+    ).toThrow(/bad-id:runtime.targets\[0\].id/);
+  });
+
+  it("should reject nested composite target", () => {
+    expect(() =>
+      normalizeRuntime({
+        id: "nested",
+        runtime: {
+          kind: "composite",
+          targets: [
+            {
+              id: "aws-api",
+              provider: "aws",
+              engine: "cloudformation",
+              entry: "a.yaml",
+              kind: "composite",
+            },
+            { id: "gcp-worker", provider: "gcp", engine: "infra-manager", entry: "b", targets: [] },
+          ],
+        },
+      }),
+    ).toThrow(/nested:runtime.targets\[0\].kind/);
+  });
+
+  it("should keep explicit single runtime normalization unchanged", () => {
+    expect(
+      normalizeRuntime({ runtime: { provider: "aws", engine: "cloudformation", entry: "x.yaml" } }),
+    ).toEqual({
+      provider: "aws",
+      engine: "cloudformation",
+      entry: "x.yaml",
+    });
+  });
+
+  it("should reject composite runtime whose targets is not an array", () => {
+    expect(() =>
+      normalizeRuntime({
+        id: "no-targets",
+        runtime: { kind: "composite", targets: "nope" },
+      }),
+    ).toThrow(/no-targets:runtime\.targets: composite runtime requires targets/);
+  });
+
+  it("should reject a target that is not an object", () => {
+    expect(() =>
+      normalizeRuntime({
+        id: "bad-target",
+        runtime: {
+          kind: "composite",
+          targets: [
+            { id: "aws-api", provider: "aws", engine: "cloudformation", entry: "a.yaml" },
+            "not-an-object",
+          ],
+        },
+      }),
+    ).toThrow(/bad-target:runtime\.targets\[1\]: target must be an object/);
+  });
+
+  it("should reject a target with an empty-string provider/engine/entry", () => {
+    expect(() =>
+      normalizeRuntime({
+        id: "empty-fields",
+        runtime: {
+          kind: "composite",
+          targets: [
+            { id: "aws-api", provider: "", engine: "cloudformation", entry: "a.yaml" },
+            { id: "gcp-worker", provider: "gcp", engine: "infra-manager", entry: "b" },
+          ],
+        },
+      }),
+    ).toThrow(/empty-fields:runtime\.targets\[0\]\.provider: provider must be a non-empty string/);
+  });
+
+  it("should default the problemId to <unknown> when metadata has no id", () => {
+    expect(() =>
+      normalizeRuntime({
+        runtime: {
+          kind: "composite",
+          targets: [{ id: "only", provider: "aws", engine: "cloudformation", entry: "a.yaml" }],
+        },
+      }),
+    ).toThrow(/<unknown>:runtime\.targets/);
+  });
+
+  it("should return undefined for a truthy non-object runtime", () => {
+    // A non-null, non-undefined runtime that is not a record (string / number /
+    // array) is malformed → undefined, never throws.
+    expect(normalizeRuntime({ runtime: "not-an-object" })).toBeUndefined();
+    expect(normalizeRuntime({ runtime: ["aws"] })).toBeUndefined();
+  });
+});
+
+describe("composite runtime type guards / classification", () => {
+  const COMPOSITE: CompositeRuntimeDescriptor = {
+    kind: "composite",
+    targets: [
+      { id: "aws-api", provider: "aws", engine: "cloudformation", entry: "a.yaml" },
+      { id: "gcp-worker", provider: "gcp", engine: "infra-manager", entry: "b" },
+    ],
+  };
+
+  it("should identify a composite descriptor and reject single / mislabeled kinds", () => {
+    expect(isCompositeRuntime(COMPOSITE)).toBe(true);
+    expect(isCompositeRuntime(AWS)).toBe(false);
+    // "kind" present but not "composite" → not a composite (right side of the &&).
+    expect(isCompositeRuntime({ kind: "bundle" } as unknown as ProblemRuntimeDescriptor)).toBe(
+      false,
+    );
+  });
+
+  it("should treat single descriptors as single and composite as not single", () => {
+    expect(isSingleRuntime(AWS)).toBe(true);
+    expect(isSingleRuntime(COMPOSITE)).toBe(false);
+  });
+
+  it("should classify a composite descriptor as composite", () => {
+    expect(classifyRuntimeSupport(COMPOSITE)).toBe("composite");
+  });
+
+  it("should not treat a composite descriptor as executable or reserved", () => {
+    expect(isExecutableRuntime(COMPOSITE)).toBe(false);
+    expect(isReservedRuntime(COMPOSITE)).toBe(false);
   });
 });
 

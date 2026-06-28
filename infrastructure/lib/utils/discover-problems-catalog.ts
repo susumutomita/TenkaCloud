@@ -3,7 +3,7 @@ import * as path from "node:path";
 import {
   isExecutableRuntime,
   normalizeRuntime,
-  type RuntimeDescriptor,
+  type ProblemRuntimeDescriptor,
 } from "@tenkacloud/problem-runtime";
 import { type ProblemEndpointSlot, parseEndpointSlot } from "./endpoints-metadata.js";
 import {
@@ -155,10 +155,16 @@ export function discoverProblemsVisibility(problemsRoot: string): Record<string,
  * (DDB Put / EventBridge / CFn) より前に `RuntimeNotSupportedError` (= 4xx) で
  * loud に拒否され、 ローカル専用問題のクラウド誤デプロイを防ぐ。
  */
-export function discoverProblemsRuntime(problemsRoot: string): Record<string, RuntimeDescriptor> {
-  const result: Record<string, RuntimeDescriptor> = {};
+export function discoverProblemsRuntime(
+  problemsRoot: string,
+): Record<string, ProblemRuntimeDescriptor> {
+  const result: Record<string, ProblemRuntimeDescriptor> = {};
   for (const meta of iterateProblemsMetadata(problemsRoot)) {
-    const runtime = normalizeRuntime({ runtime: meta.runtime, cfnTemplate: meta.cfnTemplate });
+    const runtime = normalizeRuntime({
+      id: meta.id,
+      runtime: meta.runtime,
+      cfnTemplate: meta.cfnTemplate,
+    });
     if (runtime && !isExecutableRuntime(runtime)) {
       result[meta.id] = runtime;
     }

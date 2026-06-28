@@ -188,4 +188,60 @@ describe("discoverProblemsRuntime (#2054 / ADR-023)", () => {
     // malformed runtime (no entry) → normalizeRuntime returns undefined → omitted.
     expect(out["malformed-runtime"]).toBeUndefined();
   });
+
+  it("should preserve composite target order in catalog discovery", () => {
+    writeProblem("challenges", "composite-prob", {
+      id: "composite-prob",
+      runtime: {
+        kind: "composite",
+        targets: [
+          { id: "aws-api", provider: "aws", engine: "cloudformation", entry: "aws/template.yaml" },
+          { id: "gcp-worker", provider: "gcp", engine: "infra-manager", entry: "gcp/terraform" },
+          { id: "azure-edge", provider: "azure", engine: "bicep", entry: "azure/main.bicep" },
+          {
+            id: "sakura-service",
+            provider: "sakura",
+            engine: "apprun",
+            entry: "sakura/service.json",
+          },
+        ],
+      },
+    });
+
+    const out = discoverProblemsRuntime(root);
+
+    expect(out["composite-prob"]).toEqual({
+      kind: "composite",
+      targets: [
+        { id: "aws-api", provider: "aws", engine: "cloudformation", entry: "aws/template.yaml" },
+        { id: "gcp-worker", provider: "gcp", engine: "infra-manager", entry: "gcp/terraform" },
+        { id: "azure-edge", provider: "azure", engine: "bicep", entry: "azure/main.bicep" },
+        {
+          id: "sakura-service",
+          provider: "sakura",
+          engine: "apprun",
+          entry: "sakura/service.json",
+        },
+      ],
+    });
+  });
+
+  it("should surface the problemId in catalog composite validation errors", () => {
+    // #2060 acceptance: validation errors must carry the problemId (+ JSON path).
+    // Discovery must thread the metadata `id` into normalizeRuntime so a malformed
+    // composite in the catalog points the author at the offending problem, not
+    // `<unknown>`.
+    writeProblem("challenges", "bad-composite", {
+      id: "bad-composite",
+      runtime: {
+        kind: "composite",
+        targets: [
+          { id: "dup", provider: "aws", engine: "cloudformation", entry: "a.yaml" },
+          { id: "dup", provider: "gcp", engine: "infra-manager", entry: "b" },
+        ],
+      },
+    });
+
+    expect(() => discoverProblemsRuntime(root)).toThrow(/bad-composite:runtime\.targets\[1\]\.id/);
+  });
 });
