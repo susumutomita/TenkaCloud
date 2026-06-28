@@ -23,6 +23,12 @@ import { Construct } from "constructs";
  *   SK: createdAt (ISO8601)
  *   GSI2PK 属性が無い行 (= teamLoginKey が無効化された行) はインデックスから自動的に外れる
  *
+ * GSI3 (sparse, Composite Runtime #2061 — 親 deployment から target 行を引く):
+ *   PK: PARENT_DEPLOYMENT#<parentDeploymentId>
+ *   SK: ORDINAL#<zero-padded ordinal>#TARGET#<targetId> (target 宣言順で並ぶ)
+ *   target 行だけが GSI3PK / GSI3SK を持つ。 legacy 行と composite parent 行は持たない
+ *   ため、 既存の tenant 一覧 (GSI1) / participant 一覧 (GSI2) には現れない
+ *
  * memory: provisioned 1/1 (DynamoDbLowCapacity Aspect で更に均す)。training / 競技
  * イベント中の用途で QPS 極小、コスト 0 原則を優先する。
  *
@@ -57,6 +63,17 @@ export class DeploymentsTable extends Construct {
       indexName: "GSI2",
       partitionKey: { name: "GSI2PK", type: AttributeType.STRING },
       sortKey: { name: "GSI2SK", type: AttributeType.STRING },
+      readCapacity: 1,
+      writeCapacity: 1,
+    });
+
+    // [Composite Runtime #2061] Parent → target lookup. Sparse: only composite
+    // target rows set GSI3PK / GSI3SK, so legacy + composite parent rows stay
+    // out of this index. Same provisioned 1/1 budget as GSI1 / GSI2.
+    this.table.addGlobalSecondaryIndex({
+      indexName: "GSI3",
+      partitionKey: { name: "GSI3PK", type: AttributeType.STRING },
+      sortKey: { name: "GSI3SK", type: AttributeType.STRING },
       readCapacity: 1,
       writeCapacity: 1,
     });
