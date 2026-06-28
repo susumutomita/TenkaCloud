@@ -19,7 +19,7 @@
     "_synth-app": "tsx bin/infrastructure.ts"
   },
   "devDependencies": {
-    "@aws-sdk/client-cloudformation": "^3.1048.0",
+    "@aws-sdk/client-cloudformation": "^3.1075.0",
     "@aws-sdk/client-cloudwatch": "^3.1048.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.1048.0",
     "@aws-sdk/client-dynamodb": "^3.1053.0",
