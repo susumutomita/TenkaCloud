@@ -12,10 +12,25 @@ import { parseLoopbackUrl } from "./loopback";
  * on the problem side, the platform only scores".
  */
 
+/**
+ * Competitor-facing text translated into a non-default locale. The default
+ * language (Japanese) lives in the top-level fields; this overlay carries the
+ * `metadata.i18n.en` override so the portal's locale switcher can render the
+ * problem in English (locale fallback chain: en → ja top-level). Only `en` is
+ * supported (ja+en, #1108).
+ */
+export interface LocalizedProblemText {
+  readonly name?: string;
+  readonly description?: string;
+  readonly instructions?: string;
+}
+
 export interface ContainerHint {
   readonly id: string;
   readonly content: string;
   readonly penalty: number;
+  /** `metadata.i18n.<locale>.hints[]` translation of `content`, matched by id. */
+  readonly i18n?: { readonly en?: { readonly content: string } };
 }
 
 export interface ContainerScoring {
@@ -29,6 +44,8 @@ export interface ContainerProblem {
   readonly name: string;
   readonly description: string;
   readonly instructions: string;
+  /** `metadata.i18n` overlay (currently `en` only). Absent when no translation. */
+  readonly i18n?: { readonly en?: LocalizedProblemText };
   /** Absolute path to the problem directory (the metadata.json lives here). */
   readonly problemDir: string;
   /** Absolute path to the docker compose file that brings up the container. */
@@ -73,6 +90,14 @@ interface RawMetadata {
     readonly wrongAnswerPenalty?: unknown;
     readonly hints?: unknown;
   };
+  readonly i18n?: {
+    readonly en?: {
+      readonly name?: unknown;
+      readonly description?: unknown;
+      readonly instructions?: unknown;
+      readonly hints?: unknown;
+    };
+  };
 }
 
 function requiredString(value: unknown, field: string): string {
@@ -115,7 +140,10 @@ function normalizeSecretEnv(value: unknown): readonly string[] {
   return value.map((raw, index) => requiredString(raw, `runtime.secretEnv[${index}]`));
 }
 
-function normalizeHints(value: unknown): readonly ContainerHint[] {
+function normalizeHints(
+  value: unknown,
+  enHintById: ReadonlyMap<string, string>,
+): readonly ContainerHint[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new Error("scoring.hints must be an array");
   return value.map((raw, index) => {
@@ -123,12 +151,65 @@ function normalizeHints(value: unknown): readonly ContainerHint[] {
       throw new Error(`scoring.hints[${index}] must be an object`);
     }
     const hint = raw as { id?: unknown; content?: unknown; penalty?: unknown };
+    const id = requiredString(hint.id, `scoring.hints[${index}].id`);
+    const enContent = enHintById.get(id);
     return {
-      id: requiredString(hint.id, `scoring.hints[${index}].id`),
+      id,
       content: requiredString(hint.content, `scoring.hints[${index}].content`),
       penalty: nonNegativeNumber(hint.penalty, `scoring.hints[${index}].penalty`, 0),
+      ...(enContent !== undefined ? { i18n: { en: { content: enContent } } } : {}),
     };
   });
+}
+
+/** Optional non-empty string from an `i18n.en` field; undefined otherwise. */
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+type EnglishBlock = NonNullable<NonNullable<RawMetadata["i18n"]>["en"]>;
+
+/** name/description/instructions overrides; undefined when none are usable. */
+function parseEnglishText(en: EnglishBlock): LocalizedProblemText | undefined {
+  const name = optionalString(en.name);
+  const description = optionalString(en.description);
+  const instructions = optionalString(en.instructions);
+  const text: LocalizedProblemText = {
+    ...(name !== undefined ? { name } : {}),
+    ...(description !== undefined ? { description } : {}),
+    ...(instructions !== undefined ? { instructions } : {}),
+  };
+  return Object.keys(text).length > 0 ? text : undefined;
+}
+
+/** Map `hint id → translated content`; malformed entries are skipped. */
+function parseEnglishHintMap(hints: unknown): ReadonlyMap<string, string> {
+  const hintById = new Map<string, string>();
+  if (!Array.isArray(hints)) return hintById;
+  for (const raw of hints) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const entry = raw as { id?: unknown; content?: unknown };
+    const id = optionalString(entry.id);
+    const content = optionalString(entry.content);
+    if (id !== undefined && content !== undefined) hintById.set(id, content);
+  }
+  return hintById;
+}
+
+/**
+ * Build the `metadata.i18n.en` overlay (name/description/instructions) and a
+ * map of `id → translated hint content`. The locale data is competitor-facing
+ * text only; the platform still never learns the answer. Returns an empty
+ * overlay (and empty map) when no translation is present.
+ */
+function parseEnglishOverlay(i18n: RawMetadata["i18n"]): {
+  readonly text?: LocalizedProblemText;
+  readonly hintById: ReadonlyMap<string, string>;
+} {
+  const en = i18n?.en;
+  if (!en) return { hintById: new Map() };
+  const text = parseEnglishText(en);
+  return { ...(text ? { text } : {}), hintById: parseEnglishHintMap(en.hints) };
 }
 
 /**
@@ -194,6 +275,8 @@ export function loadContainerProblem(
   const points = nonNegativeNumber(scoring?.points, "scoring.points");
   if (points <= 0) throw new Error("scoring.points must be greater than zero");
 
+  const overlay = parseEnglishOverlay(metadata.i18n);
+
   return {
     problemId,
     name:
@@ -202,6 +285,7 @@ export function loadContainerProblem(
         : problemId,
     description: typeof metadata.description === "string" ? metadata.description : "",
     instructions: typeof metadata.instructions === "string" ? metadata.instructions : "",
+    ...(overlay.text ? { i18n: { en: overlay.text } } : {}),
     problemDir,
     composePath,
     composeProjectName: `tc-local-${problemId}`,
@@ -215,7 +299,7 @@ export function loadContainerProblem(
         "scoring.wrongAnswerPenalty",
         0,
       ),
-      hints: normalizeHints(scoring?.hints),
+      hints: normalizeHints(scoring?.hints, overlay.hintById),
     },
   };
 }

@@ -190,6 +190,107 @@ describe("loadContainerProblem", () => {
     });
     expect(() => loadContainerProblem(DIR, fs)).toThrow(/failed to parse metadata/);
   });
+
+  it("should omit the i18n overlay when no translation is present", () => {
+    const problem = loadContainerProblem(DIR, fixture());
+    expect(problem.i18n).toBeUndefined();
+    expect(problem.scoring.hints[0]).not.toHaveProperty("i18n");
+  });
+
+  it("should extract the i18n.en overlay and map hint translations by id", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      fixture({
+        scoring: {
+          kind: "verify",
+          points: 200,
+          wrongAnswerPenalty: 10,
+          hints: [
+            { id: "hint-1", content: "クオートを試す。", penalty: 0 },
+            { id: "hint-2", content: "admin' -- を使う。", penalty: 50 },
+          ],
+        },
+        i18n: {
+          en: {
+            name: "SQL Injection — Login Bypass",
+            description: "A deliberately vulnerable login.",
+            instructions: "Bypass the login.",
+            hints: [
+              { id: "hint-1", content: "Try a single quote." },
+              { id: "hint-2", content: "Use admin' --." },
+            ],
+          },
+        },
+      }),
+    );
+    expect(problem.i18n).toEqual({
+      en: {
+        name: "SQL Injection — Login Bypass",
+        description: "A deliberately vulnerable login.",
+        instructions: "Bypass the login.",
+      },
+    });
+    expect(problem.scoring.hints).toEqual([
+      {
+        id: "hint-1",
+        content: "クオートを試す。",
+        penalty: 0,
+        i18n: { en: { content: "Try a single quote." } },
+      },
+      {
+        id: "hint-2",
+        content: "admin' -- を使う。",
+        penalty: 50,
+        i18n: { en: { content: "Use admin' --." } },
+      },
+    ]);
+  });
+
+  it("should attach hint translations only for matching ids and skip malformed entries", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      fixture({
+        scoring: {
+          kind: "verify",
+          points: 200,
+          hints: [
+            { id: "hint-1", content: "JA one", penalty: 0 },
+            { id: "hint-2", content: "JA two", penalty: 0 },
+          ],
+        },
+        i18n: {
+          en: {
+            // not an object / missing id / missing content / unknown id → all ignored
+            hints: [
+              "garbage",
+              { content: "no id" },
+              { id: "hint-2" },
+              { id: "hint-99", content: "orphan" },
+              { id: "hint-1", content: "EN one" },
+            ],
+          },
+        },
+      }),
+    );
+    // only hint-1 has a usable translation; hint-2 falls back to JA (no i18n key)
+    expect(problem.scoring.hints[0].i18n).toEqual({ en: { content: "EN one" } });
+    expect(problem.scoring.hints[1]).not.toHaveProperty("i18n");
+    // an en block with only hints (no text overrides) yields no problem-level overlay
+    expect(problem.i18n).toBeUndefined();
+  });
+
+  it("should ignore blank/whitespace en text fields and a non-array hints field", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      fixture({
+        i18n: {
+          en: { name: "   ", description: 42, instructions: "Real EN instructions", hints: "nope" },
+        },
+      }),
+    );
+    expect(problem.i18n).toEqual({ en: { instructions: "Real EN instructions" } });
+    expect(problem.scoring.hints[0]).not.toHaveProperty("i18n");
+  });
 });
 
 describe("manifest loader against the real filesystem", () => {
