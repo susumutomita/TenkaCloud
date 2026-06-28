@@ -188,4 +188,41 @@ describe("discoverProblemsRuntime (#2054 / ADR-023)", () => {
     // malformed runtime (no entry) → normalizeRuntime returns undefined → omitted.
     expect(out["malformed-runtime"]).toBeUndefined();
   });
+
+  it("should preserve composite target order in catalog discovery", () => {
+    writeProblem("challenges", "composite-prob", {
+      id: "composite-prob",
+      runtime: {
+        kind: "composite",
+        targets: [
+          { id: "aws-api", provider: "aws", engine: "cloudformation", entry: "aws/template.yaml" },
+          { id: "gcp-worker", provider: "gcp", engine: "infra-manager", entry: "gcp/terraform" },
+          { id: "azure-edge", provider: "azure", engine: "bicep", entry: "azure/main.bicep" },
+          {
+            id: "sakura-service",
+            provider: "sakura",
+            engine: "apprun",
+            entry: "sakura/service.json",
+          },
+        ],
+      },
+    });
+
+    const out = discoverProblemsRuntime(root);
+
+    expect(out["composite-prob"]).toEqual({
+      kind: "composite",
+      targets: [
+        { id: "aws-api", provider: "aws", engine: "cloudformation", entry: "aws/template.yaml" },
+        { id: "gcp-worker", provider: "gcp", engine: "infra-manager", entry: "gcp/terraform" },
+        { id: "azure-edge", provider: "azure", engine: "bicep", entry: "azure/main.bicep" },
+        {
+          id: "sakura-service",
+          provider: "sakura",
+          engine: "apprun",
+          entry: "sakura/service.json",
+        },
+      ],
+    });
+  });
 });

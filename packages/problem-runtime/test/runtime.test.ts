@@ -9,6 +9,7 @@ import {
   normalizeRuntime,
   RESERVED_RUNTIMES,
   type RuntimeDescriptor,
+  RuntimeValidationError,
 } from "../src/index.js";
 
 const AWS: RuntimeDescriptor = {
@@ -70,6 +71,131 @@ describe("normalizeRuntime", () => {
 
   it("should treat runtime:null as absent (fall through to default, never throw)", () => {
     expect(normalizeRuntime({ runtime: null })).toEqual(AWS);
+  });
+});
+
+describe("composite runtime normalization", () => {
+  it("should accept a valid composite runtime with two targets", () => {
+    expect(
+      normalizeRuntime({
+        id: "cross-cloud",
+        runtime: {
+          kind: "composite",
+          targets: [
+            {
+              id: "aws-api",
+              provider: "aws",
+              engine: "cloudformation",
+              entry: "aws/template.yaml",
+            },
+            { id: "gcp-worker", provider: "gcp", engine: "infra-manager", entry: "gcp/terraform" },
+          ],
+        },
+      }),
+    ).toEqual({
+      kind: "composite",
+      targets: [
+        { id: "aws-api", provider: "aws", engine: "cloudformation", entry: "aws/template.yaml" },
+        { id: "gcp-worker", provider: "gcp", engine: "infra-manager", entry: "gcp/terraform" },
+      ],
+    });
+  });
+
+  it("should reject composite runtime with fewer than two targets", () => {
+    expect(() =>
+      normalizeRuntime({
+        id: "too-small",
+        runtime: {
+          kind: "composite",
+          targets: [
+            {
+              id: "aws-api",
+              provider: "aws",
+              engine: "cloudformation",
+              entry: "aws/template.yaml",
+            },
+          ],
+        },
+      }),
+    ).toThrow(RuntimeValidationError);
+  });
+
+  it("should reject composite runtime with more than eight targets", () => {
+    expect(() =>
+      normalizeRuntime({
+        id: "too-large",
+        runtime: {
+          kind: "composite",
+          targets: Array.from({ length: 9 }, (_, index) => ({
+            id: `target-${index}`,
+            provider: "aws",
+            engine: "cloudformation",
+            entry: "template.yaml",
+          })),
+        },
+      }),
+    ).toThrow(/too-large:runtime.targets/);
+  });
+
+  it("should reject duplicate target ids", () => {
+    expect(() =>
+      normalizeRuntime({
+        id: "dupe",
+        runtime: {
+          kind: "composite",
+          targets: [
+            { id: "same", provider: "aws", engine: "cloudformation", entry: "a.yaml" },
+            { id: "same", provider: "gcp", engine: "infra-manager", entry: "b" },
+          ],
+        },
+      }),
+    ).toThrow(/dupe:runtime.targets\[1\].id/);
+  });
+
+  it("should reject invalid target id", () => {
+    expect(() =>
+      normalizeRuntime({
+        id: "bad-id",
+        runtime: {
+          kind: "composite",
+          targets: [
+            { id: "Aws", provider: "aws", engine: "cloudformation", entry: "a.yaml" },
+            { id: "gcp-worker", provider: "gcp", engine: "infra-manager", entry: "b" },
+          ],
+        },
+      }),
+    ).toThrow(/bad-id:runtime.targets\[0\].id/);
+  });
+
+  it("should reject nested composite target", () => {
+    expect(() =>
+      normalizeRuntime({
+        id: "nested",
+        runtime: {
+          kind: "composite",
+          targets: [
+            {
+              id: "aws-api",
+              provider: "aws",
+              engine: "cloudformation",
+              entry: "a.yaml",
+              kind: "composite",
+            },
+            { id: "gcp-worker", provider: "gcp", engine: "infra-manager", entry: "b", targets: [] },
+          ],
+        },
+      }),
+    ).toThrow(/nested:runtime.targets\[0\].kind/);
+  });
+
+  it("should keep explicit single runtime normalization unchanged", () => {
+    expect(
+      normalizeRuntime({ runtime: { provider: "aws", engine: "cloudformation", entry: "x.yaml" } }),
+    ).toEqual({
+      provider: "aws",
+      engine: "cloudformation",
+      entry: "x.yaml",
+    });
   });
 });
 
