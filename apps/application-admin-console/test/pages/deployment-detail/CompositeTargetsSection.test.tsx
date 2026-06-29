@@ -46,6 +46,18 @@ const composite: CompositeDetail = {
       status: "PENDING",
       updatedAt: "2026-06-29T00:00:06.000Z",
     },
+    {
+      // Recovered after a retry: still carries the prior reason, but is no
+      // longer FAILED, so the cell must show the placeholder, not the reason.
+      targetId: "recovered",
+      targetDeploymentId: "01HTARGETrecovered",
+      ordinal: 4,
+      provider: "aws",
+      engine: "cloudformation",
+      status: "COMPLETE",
+      updatedAt: "2026-06-29T00:00:07.000Z",
+      failureReason: "transient throttling",
+    },
   ],
 };
 
@@ -81,6 +93,13 @@ describe("CompositeTargetsSection", () => {
     // A non-failed target shows the placeholder, never another target's reason.
     const complete = within(targetRow("edge"));
     expect(complete.queryByText("quota exceeded")).toBeNull();
+
+    // A recovered target that still carries a stale reason must not surface it.
+    const recovered = within(targetRow("recovered"));
+    expect(recovered.queryByText("transient throttling")).toBeNull();
+    expect(
+      recovered.getByText("deployment_detail.composite_failure_reason_none"),
+    ).toBeInTheDocument();
   });
 
   it("should render an empty-state message when a composite parent has no targets", () => {

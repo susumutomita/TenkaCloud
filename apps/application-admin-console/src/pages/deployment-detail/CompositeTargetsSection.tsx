@@ -74,7 +74,9 @@ export function CompositeTargetsSection({
             id: "failureReason",
             header: t("deployment_detail.composite_col_failure_reason"),
             cell: (item) =>
-              item.failureReason ?? t("deployment_detail.composite_failure_reason_none"),
+              item.status === "FAILED" && item.failureReason
+                ? item.failureReason
+                : t("deployment_detail.composite_failure_reason_none"),
           },
         ]}
         ariaLabels={{
