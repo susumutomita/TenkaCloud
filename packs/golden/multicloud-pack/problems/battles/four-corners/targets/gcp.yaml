@@ -1,0 +1,6 @@
+# Golden composite GCP (Infrastructure Manager) target placeholder.
+# Reserved runtime: declared and validated, never deployed in CI.
+# The deploy body would emit a GcpUrl output for the composite-probe scorer.
+resources: []
+outputs:
+  GcpUrl: https://gcp.example.invalid

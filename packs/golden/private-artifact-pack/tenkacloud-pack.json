@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "com.tenkacloud.golden.private-artifact",
+  "version": "1.0.0",
+  "core": "^1.0.0",
+  "title": "Golden private artifact pack",
+  "description": "Golden reference for the declared private payload / provenance contract: the problem references a private payload by digest and records provenance, without embedding any secret, key, or credential in the pack.",
+  "license": "Apache-2.0",
+  "problemsRoot": "problems",
+  "requiredRuntimes": [
+    {
+      "provider": "aws",
+      "engine": "cloudformation"
+    }
+  ]
+}
