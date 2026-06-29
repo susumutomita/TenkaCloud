@@ -84,6 +84,12 @@ export interface CreateCompositeParentInput {
   readonly updatedAt?: string;
   readonly expiresAt: number;
   readonly status?: DeploymentStatus;
+  /** [#2063] Team identity shared across the parent + every target row. */
+  readonly teamName?: string;
+  readonly teamLoginKey?: string;
+  /** Existing deploy-request grouping fields, shared across parent + targets. */
+  readonly accountGroupId?: string;
+  readonly problemSetId?: string;
 }
 
 export interface CreateCompositeTargetInput {
@@ -109,6 +115,8 @@ export interface CreateCompositeTargetInput {
   readonly competitorRoleArn?: string;
   readonly externalIdParameterName?: string;
   readonly displayTeamName?: string;
+  readonly accountGroupId?: string;
+  readonly problemSetId?: string;
 }
 
 function isConditionalCheckFailed(err: unknown): boolean {
@@ -117,8 +125,9 @@ function isConditionalCheckFailed(err: unknown): boolean {
 
 /**
  * Create the composite parent coordination row. Idempotent: re-creating with the
- * same immutable identity (tenant / problem / targetCount) returns the existing
- * row; a divergent re-create fails with {@link CompositeParentConflictError}.
+ * same immutable identity (tenant / problem / targetCount / shared team and
+ * grouping fields) returns the existing row; a divergent re-create fails with
+ * {@link CompositeParentConflictError}.
  */
 export async function createCompositeParent(
   deps: CompositeDeploymentRepositoryDeps,
@@ -147,6 +156,10 @@ export async function createCompositeParent(
     createdAt: input.createdAt,
     updatedAt: input.updatedAt ?? input.createdAt,
     expiresAt: input.expiresAt,
+    ...(input.teamName ? { teamName: input.teamName } : {}),
+    ...(input.teamLoginKey ? { teamLoginKey: input.teamLoginKey } : {}),
+    ...(input.accountGroupId ? { accountGroupId: input.accountGroupId } : {}),
+    ...(input.problemSetId ? { problemSetId: input.problemSetId } : {}),
   };
 
   try {
@@ -165,7 +178,11 @@ export async function createCompositeParent(
       existing &&
       existing.tenantId === item.tenantId &&
       existing.problemId === item.problemId &&
-      existing.targetCount === item.targetCount
+      existing.targetCount === item.targetCount &&
+      existing.teamName === item.teamName &&
+      existing.teamLoginKey === item.teamLoginKey &&
+      existing.accountGroupId === item.accountGroupId &&
+      existing.problemSetId === item.problemSetId
     ) {
       return existing;
     }
@@ -326,6 +343,8 @@ function buildCompositeTargetItem(
       ? { externalIdParameterName: input.externalIdParameterName }
       : {}),
     ...(input.displayTeamName ? { displayTeamName: input.displayTeamName } : {}),
+    ...(input.accountGroupId ? { accountGroupId: input.accountGroupId } : {}),
+    ...(input.problemSetId ? { problemSetId: input.problemSetId } : {}),
   };
 }
 
