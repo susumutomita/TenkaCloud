@@ -43,7 +43,9 @@ function collectImportSpecifiers(file: string): string[] {
   const importRe = /(?:import|export)[^'"]*?from\s*['"]([^'"]+)['"]/g;
   const dynamicRe = /import\(\s*['"]([^'"]+)['"]\s*\)/g;
   const requireRe = /require\(\s*['"]([^'"]+)['"]\s*\)/g;
-  for (const re of [importRe, dynamicRe, requireRe]) {
+  // Bare side-effect import, e.g. `import "@aws-sdk/client-s3";` — no `from`.
+  const sideEffectRe = /^\s*import\s+['"]([^'"]+)['"]/gm;
+  for (const re of [importRe, dynamicRe, requireRe, sideEffectRe]) {
     let match: RegExpExecArray | null = re.exec(source);
     while (match !== null) {
       specifiers.push(match[1]);
@@ -66,10 +68,14 @@ describe("@tenkacloud/problem-sdk dependency isolation", () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf-8")) as {
       dependencies?: Record<string, string>;
       peerDependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      optionalDependencies?: Record<string, string>;
     };
     const declared = [
       ...Object.keys(pkg.dependencies ?? {}),
       ...Object.keys(pkg.peerDependencies ?? {}),
+      ...Object.keys(pkg.devDependencies ?? {}),
+      ...Object.keys(pkg.optionalDependencies ?? {}),
     ];
     for (const name of declared) {
       for (const forbidden of FORBIDDEN_PACKAGES) {

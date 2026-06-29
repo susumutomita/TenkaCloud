@@ -33,7 +33,7 @@ import {
 import type { PackDiagnostic } from "./diagnostics.js";
 import { type PackManifest, parsePackManifest } from "./manifest.js";
 import { validateMetadataSections } from "./metadata-sections.js";
-import { isExistingDirectory, isInside, readDirNames, resolveInside } from "./safe-path.js";
+import { isExistingDirectory, readDirNames, resolveInside } from "./safe-path.js";
 
 export type { PackDiagnostic, PackDiagnosticCode } from "./diagnostics.js";
 
@@ -174,8 +174,10 @@ function discoverProblems(
 ): DiscoveredProblem[] {
   const problems: DiscoveredProblem[] = [];
   for (const category of readDirNames(problemsRootAbs)) {
-    const categoryAbs = path.join(problemsRootAbs, category);
-    if (!isInside(packRoot, categoryAbs) || !isExistingDirectory(categoryAbs)) continue;
+    // Resolve through realpath (not lexical join) so a symlinked category dir
+    // that escapes the pack root is rejected rather than traversed.
+    const categoryAbs = resolveInside(problemsRootAbs, category, packRoot);
+    if (!categoryAbs || !isExistingDirectory(categoryAbs)) continue;
     for (const problemDir of readDirNames(categoryAbs)) {
       const discovered = discoverOneProblem(
         packRoot,
@@ -198,10 +200,12 @@ function discoverOneProblem(
   problemDir: string,
   diagnostics: PackDiagnostic[],
 ): DiscoveredProblem | undefined {
-  const problemAbs = path.join(categoryAbs, problemDir);
-  if (!isInside(packRoot, problemAbs) || !isExistingDirectory(problemAbs)) return undefined;
-  const metadataAbs = path.join(problemAbs, "metadata.json");
-  if (!fs.existsSync(metadataAbs)) return undefined;
+  // Each path segment is realpath-checked against the pack root, so a symlinked
+  // problem dir or metadata.json that points outside the pack is skipped.
+  const problemAbs = resolveInside(categoryAbs, problemDir, packRoot);
+  if (!problemAbs || !isExistingDirectory(problemAbs)) return undefined;
+  const metadataAbs = resolveInside(problemAbs, "metadata.json", packRoot);
+  if (!metadataAbs || !fs.existsSync(metadataAbs)) return undefined;
   const metadataFile = path.join(relDir, "metadata.json");
   return readProblemMetadata(metadataAbs, relDir, metadataFile, diagnostics);
 }
@@ -371,13 +375,23 @@ function checkArtifact(
     });
     return;
   }
-  if (!fs.existsSync(resolved)) {
+  // The artifact must be a real file — a directory (or anything non-file) at the
+  // entry path is treated as missing, so a deploy never points at a directory.
+  if (!isExistingFile(resolved)) {
     diagnostics.push({
       code: "ARTIFACT_MISSING",
       file: problem.metadataFile,
       path: fieldPath,
       message: `Referenced artifact '${entry}' was not found at ${path.relative(packRoot, resolved)}.`,
     });
+  }
+}
+
+function isExistingFile(target: string): boolean {
+  try {
+    return fs.statSync(target).isFile();
+  } catch {
+    return false;
   }
 }
 

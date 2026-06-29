@@ -146,6 +146,37 @@ describe("validatePackDirectory: failure branches", () => {
     writeProblem(root, "bad", { runtime: { provider: 1, engine: "x", entry: "y" } });
     expect(codes(root)).toContain("METADATA_INVALID");
   });
+
+  it("should treat a directory at the artifact path as a missing artifact", () => {
+    const root = mkTemp();
+    writeManifest(root);
+    const dir = writeProblem(root, "dir-artifact", {});
+    // Create a DIRECTORY named template.yaml instead of a file.
+    fs.mkdirSync(path.join(dir, "template.yaml"));
+    expect(codes(root)).toContain("ARTIFACT_MISSING");
+  });
+
+  it("should not traverse a symlinked category directory that escapes the pack root", () => {
+    const root = mkTemp();
+    const outside = mkTemp();
+    writeManifest(root);
+    // A real problem lives OUTSIDE the pack; a symlinked category points at it.
+    const outsideProblem = path.join(outside, "smuggled");
+    fs.mkdirSync(outsideProblem, { recursive: true });
+    fs.writeFileSync(
+      path.join(outsideProblem, "metadata.json"),
+      JSON.stringify({ id: "smuggled" }),
+    );
+    fs.mkdirSync(path.join(root, "problems"), { recursive: true });
+    try {
+      fs.symlinkSync(outside, path.join(root, "problems", "challenge"), "dir");
+    } catch {
+      return; // symlinks unsupported here — skip
+    }
+    const result = validatePackDirectory(root);
+    // The smuggled (outside) problem must not be discovered.
+    expect(result.problemIds).not.toContain("smuggled");
+  });
 });
 
 describe("safe-path", () => {

@@ -68,6 +68,23 @@ describe("validateProblemMetadata diagnostics", () => {
     }
   });
 
+  it("should not advertise unreachable diagnostic codes", () => {
+    // The three codes removed in review must never surface — they had no internal
+    // source. (A type-level union cannot be asserted at runtime, so we assert the
+    // emitted codes instead.)
+    const unreachable = ["RUNTIME_INVALID", "RUNTIME_UNKNOWN_CAPABILITY", "SCORING_INVALID"];
+    const emitted = [
+      ...validateProblemMetadata(INVALID_METADATA_NO_ID),
+      ...validateProblemMetadata(INVALID_METADATA_BAD_SCORING),
+      ...validateProblemMetadata(INVALID_METADATA_UNKNOWN_CAPABILITY),
+      ...validateProblemMetadata(INVALID_METADATA_BAD_RUNTIME),
+      ...validatePackManifest(INVALID_MANIFEST),
+    ].map((d) => d.code);
+    for (const code of unreachable) {
+      expect(emitted).not.toContain(code);
+    }
+  });
+
   it("should reject unknown runtime capability", () => {
     const diagnostics = validateProblemMetadata(INVALID_METADATA_UNKNOWN_CAPABILITY);
     expect(diagnostics.some((d) => d.code === "RUNTIME_MISMATCH")).toBe(true);
@@ -85,9 +102,13 @@ describe("validateProblemMetadata diagnostics", () => {
 describe("determinism", () => {
   it("should not read process env or clock (same input → same output)", () => {
     const a = validateProblemMetadata(INVALID_METADATA_BAD_SCORING);
-    process.env.TENKACLOUD_SDK_TEST_FLAG = "mutated";
-    const b = validateProblemMetadata(INVALID_METADATA_BAD_SCORING);
-    delete process.env.TENKACLOUD_SDK_TEST_FLAG;
+    let b: ReturnType<typeof validateProblemMetadata>;
+    try {
+      process.env.TENKACLOUD_SDK_TEST_FLAG = "mutated";
+      b = validateProblemMetadata(INVALID_METADATA_BAD_SCORING);
+    } finally {
+      delete process.env.TENKACLOUD_SDK_TEST_FLAG;
+    }
     expect(b).toEqual(a);
 
     const m1 = validatePackManifest(INVALID_MANIFEST);

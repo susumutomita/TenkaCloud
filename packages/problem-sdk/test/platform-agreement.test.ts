@@ -11,6 +11,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { StatusCodes } from "http-status-codes";
 import { afterEach, describe, expect, it } from "vitest";
 import { validatePackDirectory, validateProblemMetadata } from "../src/index.js";
 import {
@@ -85,7 +86,7 @@ describe("SDK and platform pack validation agree", () => {
       scoring: {
         kind: "uptime",
         pointsPerSuccess: 10,
-        endpoints: [{ slot: "web", path: "/health", expectStatus: [200] }],
+        endpoints: [{ slot: "web", path: "/health", expectStatus: [StatusCodes.OK] }],
       },
     };
     expect(validateProblemMetadata(legacy)).toEqual([]);

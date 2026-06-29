@@ -66,3 +66,40 @@ describe("manifest version / range validation", () => {
     );
   });
 });
+
+describe("satisfiesCoreRange: pre-release precedence (semver.org §11)", () => {
+  it("should rank a pre-release lower than its release", () => {
+    // 1.0.0-rc.1 < 1.0.0, so it does NOT satisfy >=1.0.0.
+    expect(satisfiesCoreRange("1.0.0-rc.1", ">=1.0.0")).toBe(false);
+    expect(satisfiesCoreRange("1.0.0", ">=1.0.0")).toBe(true);
+    // ...but it does satisfy >=1.0.0-rc.1.
+    expect(satisfiesCoreRange("1.0.0-rc.1", ">=1.0.0-rc.1")).toBe(true);
+  });
+
+  it("should order pre-release identifiers field by field", () => {
+    // numeric < numeric, numeric < alphanumeric, longer set outranks a prefix.
+    expect(satisfiesCoreRange("1.0.0-alpha.1", ">1.0.0-alpha")).toBe(true);
+    expect(satisfiesCoreRange("1.0.0-alpha", ">1.0.0-alpha.1")).toBe(false);
+    expect(satisfiesCoreRange("1.0.0-beta", ">1.0.0-alpha")).toBe(true);
+    expect(satisfiesCoreRange("1.0.0-1", "<1.0.0-alpha")).toBe(true);
+  });
+
+  it("should ignore build metadata in precedence", () => {
+    expect(satisfiesCoreRange("1.0.0+build.7", "=1.0.0")).toBe(true);
+  });
+});
+
+describe("satisfiesCoreRange / isValidSemverRange: hyphen-range bounds", () => {
+  it("should reject a comparator-prefixed hyphen-range bound at validation time", () => {
+    // `>=1.2.3 - <2.0.0` would make tokenBounds produce NaN — reject it outright.
+    expect(
+      validatePackManifest({ ...VALID_MANIFEST, core: ">=1.2.3 - <2.0.0" }).length,
+    ).toBeGreaterThan(0);
+    expect(satisfiesCoreRange("1.5.0", ">=1.2.3 - <2.0.0")).toBe(false);
+  });
+
+  it("should still accept a plain-version hyphen range", () => {
+    expect(validatePackManifest({ ...VALID_MANIFEST, core: "1.0.0 - 2.0.0" })).toEqual([]);
+    expect(satisfiesCoreRange("1.5.0", "1.0.0 - 2.0.0")).toBe(true);
+  });
+});

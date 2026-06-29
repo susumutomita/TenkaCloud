@@ -31,8 +31,12 @@ export function resolveInside(
   const joined = path.resolve(base, relative);
   if (!isInside(boundary, joined)) return undefined;
   // Resolve symlinks on the longest existing prefix and re-check containment.
+  // Fail closed: if either realpath cannot be resolved, reject rather than fall
+  // back to the unresolved path (a symlink whose real prefix escapes the pack
+  // root must never be accepted).
   const real = realpathOfExistingPrefix(joined);
   const realBoundary = realpathOfExistingPrefix(boundary);
+  if (real === undefined || realBoundary === undefined) return undefined;
   if (!isInside(realBoundary, real)) return undefined;
   return joined;
 }
@@ -41,14 +45,17 @@ export function resolveInside(
  * `fs.realpathSync` requires the path to exist. For a possibly-missing artifact
  * we resolve symlinks on the longest existing ancestor, then re-append the
  * not-yet-created tail. This catches a symlinked directory that escapes root.
+ *
+ * Returns `undefined` (fail closed) when no ancestor exists or `realpathSync`
+ * throws, so the caller rejects rather than trusting an unresolved path.
  */
-function realpathOfExistingPrefix(target: string): string {
+function realpathOfExistingPrefix(target: string): string | undefined {
   let current = target;
   const tail: string[] = [];
   // Walk up until we hit a path that exists.
   while (!fs.existsSync(current)) {
     const parent = path.dirname(current);
-    if (parent === current) return target; // reached filesystem root without existing
+    if (parent === current) return undefined; // reached filesystem root without existing
     tail.unshift(path.basename(current));
     current = parent;
   }
@@ -56,7 +63,7 @@ function realpathOfExistingPrefix(target: string): string {
     const real = fs.realpathSync(current);
     return tail.length > 0 ? path.join(real, ...tail) : real;
   } catch {
-    return target;
+    return undefined;
   }
 }
 

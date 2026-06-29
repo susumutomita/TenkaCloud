@@ -30,6 +30,15 @@ const SEMVER_PATTERN =
 const COMPARATOR_PATTERN =
   /^(>=|<=|>|<|=|\^|~)?(0|[1-9]\d*|[xX*])(?:\.(0|[1-9]\d*|[xX*]))?(?:\.(0|[1-9]\d*|[xX*]))?(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$/;
 
+/**
+ * A PLAIN (possibly wildcard / partial) version with NO operator prefix — the
+ * only shape valid as a hyphen-range bound (`A - B`). `tokenBounds` turns an
+ * operator-prefixed token into NaN, so we reject `>=1.2.3 - <2.0.0` at validation
+ * time rather than silently matching nothing.
+ */
+const PLAIN_VERSION_PATTERN =
+  /^(0|[1-9]\d*|[xX*])(?:\.(0|[1-9]\d*|[xX*]))?(?:\.(0|[1-9]\d*|[xX*]))?(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$/;
+
 /** The current pack manifest schema version. Authors pin `schemaVersion` to this. */
 export const PACK_SCHEMA_VERSION = 1 as const;
 
@@ -76,7 +85,8 @@ function isValidRangeClause(clause: string): boolean {
   if (normalized.length === 0) return false;
   const hyphen = normalized.split(" - ");
   if (hyphen.length === 2) {
-    return hyphen.every((bound) => COMPARATOR_PATTERN.test(bound));
+    // Hyphen-range bounds must be PLAIN versions — a comparator prefix is invalid.
+    return hyphen.every((bound) => PLAIN_VERSION_PATTERN.test(bound));
   }
   return normalized.split(" ").every((token) => COMPARATOR_PATTERN.test(token));
 }
@@ -92,24 +102,68 @@ export interface ProviderEngineCapability {
   readonly engine: string;
 }
 
-/** A parsed exact SemVer split into its three numeric core components. */
+/**
+ * A parsed exact SemVer: the three numeric core components plus the optional
+ * dot-separated pre-release identifiers (build metadata is ignored per semver.org).
+ */
 interface SemverParts {
   readonly major: number;
   readonly minor: number;
   readonly patch: number;
+  /** Pre-release identifiers (`1.0.0-rc.1` → `["rc", "1"]`); empty for a release. */
+  readonly prerelease: readonly string[];
 }
 
-/** Parse an exact `major.minor.patch` SemVer, ignoring pre-release / build. */
+/** Parse an exact `major.minor.patch[-prerelease][+build]` SemVer. Build is dropped. */
 function parseExactSemver(value: string): SemverParts | undefined {
   if (!isExactSemver(value)) return undefined;
-  const core = value.split("+")[0].split("-")[0];
+  const withoutBuild = value.split("+")[0];
+  const dash = withoutBuild.indexOf("-");
+  const core = dash === -1 ? withoutBuild : withoutBuild.slice(0, dash);
+  const prereleaseRaw = dash === -1 ? "" : withoutBuild.slice(dash + 1);
   const [major, minor, patch] = core.split(".").map((n) => Number.parseInt(n, 10));
-  return { major, minor, patch };
+  const prerelease = prereleaseRaw.length > 0 ? prereleaseRaw.split(".") : [];
+  return { major, minor, patch, prerelease };
 }
 
-/** Numeric comparison of two parsed SemVers: -1 / 0 / 1. Ignores pre-release. */
+/**
+ * Compare two parsed SemVers per semver.org §11: numeric core first, then
+ * pre-release precedence. A version with a pre-release has LOWER precedence than
+ * the same version without one. Pre-release identifiers compare field-by-field:
+ * numeric identifiers numerically, alphanumeric lexically, numeric < alphanumeric,
+ * and a longer set of identifiers outranks a shorter prefix. Returns <0 / 0 / >0.
+ */
 function compareSemver(a: SemverParts, b: SemverParts): number {
-  return a.major - b.major || a.minor - b.minor || a.patch - b.patch;
+  const core = a.major - b.major || a.minor - b.minor || a.patch - b.patch;
+  if (core !== 0) return core;
+  return comparePrerelease(a.prerelease, b.prerelease);
+}
+
+function comparePrerelease(a: readonly string[], b: readonly string[]): number {
+  // No pre-release outranks any pre-release; otherwise both have one.
+  if (a.length === 0 && b.length === 0) return 0;
+  if (a.length === 0) return 1;
+  if (b.length === 0) return -1;
+  const len = Math.min(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const cmp = comparePrereleaseIdentifier(a[i], b[i]);
+    if (cmp !== 0) return cmp;
+  }
+  return a.length - b.length;
+}
+
+function comparePrereleaseIdentifier(a: string, b: string): number {
+  const aNumeric = /^\d+$/.test(a);
+  const bNumeric = /^\d+$/.test(b);
+  if (aNumeric && bNumeric) return Number.parseInt(a, 10) - Number.parseInt(b, 10);
+  if (aNumeric) return -1; // numeric identifiers have lower precedence than alphanumeric
+  if (bNumeric) return 1;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** Construct a comparison boundary (range bounds never carry a pre-release tag). */
+function bound(major: number, minor: number, patch: number): SemverParts {
+  return { major, minor, patch, prerelease: [] };
 }
 
 /** Turn a (possibly wildcard / partial) version token into its bounds. */
@@ -120,33 +174,67 @@ function tokenBounds(token: string): { readonly lower: SemverParts; readonly upp
   const major = isWildcard(parts[0]) ? undefined : Number.parseInt(parts[0], 10);
   const minor = isWildcard(parts[1]) ? undefined : Number.parseInt(parts[1], 10);
   const patch = isWildcard(parts[2]) ? undefined : Number.parseInt(parts[2], 10);
-  const lower: SemverParts = { major: major ?? 0, minor: minor ?? 0, patch: patch ?? 0 };
+  const lower = bound(major ?? 0, minor ?? 0, patch ?? 0);
   if (major === undefined) {
     // `*` / `x` — any version.
-    return { lower, upper: { major: Number.POSITIVE_INFINITY, minor: 0, patch: 0 } };
+    return { lower, upper: bound(Number.POSITIVE_INFINITY, 0, 0) };
   }
   if (minor === undefined) {
-    return { lower, upper: { major: major + 1, minor: 0, patch: 0 } };
+    return { lower, upper: bound(major + 1, 0, 0) };
   }
   if (patch === undefined) {
-    return { lower, upper: { major, minor: minor + 1, patch: 0 } };
+    return { lower, upper: bound(major, minor + 1, 0) };
   }
-  return { lower, upper: { major, minor, patch: patch + 1 } };
+  return { lower, upper: bound(major, minor, patch + 1) };
 }
 
 /** Caret range upper bound: keep the leftmost non-zero component fixed. */
 function caretUpper(v: SemverParts): SemverParts {
-  if (v.major > 0) return { major: v.major + 1, minor: 0, patch: 0 };
-  if (v.minor > 0) return { major: 0, minor: v.minor + 1, patch: 0 };
-  return { major: 0, minor: 0, patch: v.patch + 1 };
+  if (v.major > 0) return bound(v.major + 1, 0, 0);
+  if (v.minor > 0) return bound(0, v.minor + 1, 0);
+  return bound(0, 0, v.patch + 1);
 }
 
 /** Tilde range upper bound: allow patch-level (or minor when no minor given). */
 function tildeUpper(token: string, v: SemverParts): SemverParts {
   // `~1.2` and `~1.2.3` both bound at the next minor; `~1` bounds at next major.
   const segments = token.split(".").length;
-  if (segments === 1) return { major: v.major + 1, minor: 0, patch: 0 };
-  return { major: v.major, minor: v.minor + 1, patch: 0 };
+  if (segments === 1) return bound(v.major + 1, 0, 0);
+  return bound(v.major, v.minor + 1, 0);
+}
+
+/** Caret / tilde comparator: `[base, caretUpper|tildeUpper)`. */
+function caretTildeSatisfied(op: "^" | "~", token: string, version: SemverParts): boolean {
+  const base = tokenBounds(token).lower;
+  const upper = op === "^" ? caretUpper(base) : tildeUpper(token, base);
+  return compareSemver(version, base) >= 0 && compareSemver(version, upper) < 0;
+}
+
+/**
+ * Inequality / equality comparator (`>` `>=` `<` `<=` `=` / bare). When the token
+ * is a full exact version (with optional pre-release) compare against it directly
+ * so pre-release precedence is honored; a wildcard / partial token (`1.x`, `1`)
+ * has no exact form and falls back to its `[lower, upper)` interval.
+ */
+function inequalitySatisfied(op: string, token: string, version: SemverParts): boolean {
+  const exact = parseExactSemver(token);
+  const { lower, upper } = tokenBounds(token);
+  switch (op) {
+    case ">":
+      return exact ? compareSemver(version, exact) > 0 : compareSemver(version, upper) >= 0;
+    case ">=":
+      return exact ? compareSemver(version, exact) >= 0 : compareSemver(version, lower) >= 0;
+    case "<":
+      return exact ? compareSemver(version, exact) < 0 : compareSemver(version, lower) < 0;
+    case "<=":
+      return exact ? compareSemver(version, exact) <= 0 : compareSemver(version, upper) < 0;
+    default:
+      // `=` or bare token: exact match compares equal; a wildcard / partial token
+      // matches anything inside [lower, upper).
+      return exact
+        ? compareSemver(version, exact) === 0
+        : compareSemver(version, lower) >= 0 && compareSemver(version, upper) < 0;
+  }
 }
 
 /** Test one whitespace-separated comparator against a concrete version. */
@@ -155,28 +243,8 @@ function comparatorSatisfied(comparator: string, version: SemverParts): boolean 
   if (!match) return false;
   const op = match[1] ?? "";
   const token = match[2];
-  if (op === "^") {
-    const base = tokenBounds(token).lower;
-    return compareSemver(version, base) >= 0 && compareSemver(version, caretUpper(base)) < 0;
-  }
-  if (op === "~") {
-    const base = tokenBounds(token).lower;
-    return compareSemver(version, base) >= 0 && compareSemver(version, tildeUpper(token, base)) < 0;
-  }
-  const { lower, upper } = tokenBounds(token);
-  switch (op) {
-    case ">":
-      return compareSemver(version, upper) >= 0;
-    case ">=":
-      return compareSemver(version, lower) >= 0;
-    case "<":
-      return compareSemver(version, lower) < 0;
-    case "<=":
-      return compareSemver(version, upper) < 0;
-    default:
-      // `=` or bare token: an exact / wildcard match falls within [lower, upper).
-      return compareSemver(version, lower) >= 0 && compareSemver(version, upper) < 0;
-  }
+  if (op === "^" || op === "~") return caretTildeSatisfied(op, token, version);
+  return inequalitySatisfied(op, token, version);
 }
 
 /** Test a single AND-clause (a hyphen range or whitespace-joined comparators). */

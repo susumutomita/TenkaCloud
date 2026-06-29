@@ -169,6 +169,13 @@ export interface CompositeProbeScoringMetadata {
   readonly hints?: readonly ProgressiveHint[];
 }
 
+/**
+ * The validated `metadata.json:scoring` section: a discriminated union over the
+ * built-in scoring kinds (`flag` / `multi-flag` / `uptime-flat` (+ legacy
+ * `uptime`) / `uptime-multi` / `phased-polling` / `attack-detection` /
+ * `composite-probe`), keyed by `kind`. Serializable — it is exactly the shape an
+ * author writes and the scoring engine reads.
+ */
 export type ProblemScoringMetadata =
   | FlagScoringMetadata
   | MultiFlagScoringMetadata

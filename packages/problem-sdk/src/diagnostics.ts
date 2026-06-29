@@ -45,8 +45,11 @@ export interface PackDiagnostic {
 }
 
 /**
- * Public, stable, namespaced diagnostic codes (#2106). Additive in minor versions;
- * removing or repurposing a code is a major version change.
+ * Public, stable, namespaced diagnostic codes (#2106). Every code listed here is
+ * actually emitted by {@link toValidationDiagnostic} (each maps from an internal
+ * {@link PackDiagnosticCode} in {@link PACK_CODE_TO_PUBLIC}), so the union never
+ * advertises an unreachable code. Additive in minor versions; removing or
+ * repurposing a code is a major version change.
  */
 export type ValidationDiagnosticCode =
   | "PACK_DIR_MISSING"
@@ -59,10 +62,7 @@ export type ValidationDiagnosticCode =
   | "PACK_ARTIFACT_TRAVERSAL"
   | "PACK_ARTIFACT_MISSING"
   | "PROBLEM_METADATA_INVALID"
-  | "RUNTIME_MISMATCH"
-  | "RUNTIME_INVALID"
-  | "RUNTIME_UNKNOWN_CAPABILITY"
-  | "SCORING_INVALID";
+  | "RUNTIME_MISMATCH";
 
 /**
  * One public author-facing diagnostic. The `code` is the stable contract; `path`
