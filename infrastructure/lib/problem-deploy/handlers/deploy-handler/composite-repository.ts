@@ -84,6 +84,9 @@ export interface CreateCompositeParentInput {
   readonly updatedAt?: string;
   readonly expiresAt: number;
   readonly status?: DeploymentStatus;
+  /** [#2063] Team identity shared across the parent + every target row. */
+  readonly teamName?: string;
+  readonly teamLoginKey?: string;
 }
 
 export interface CreateCompositeTargetInput {
@@ -147,6 +150,8 @@ export async function createCompositeParent(
     createdAt: input.createdAt,
     updatedAt: input.updatedAt ?? input.createdAt,
     expiresAt: input.expiresAt,
+    ...(input.teamName ? { teamName: input.teamName } : {}),
+    ...(input.teamLoginKey ? { teamLoginKey: input.teamLoginKey } : {}),
   };
 
   try {

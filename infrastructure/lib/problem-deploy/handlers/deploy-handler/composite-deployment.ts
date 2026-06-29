@@ -49,6 +49,14 @@ export interface CompositeParentDeploymentItem {
   createdAt: string;
   updatedAt: string;
   expiresAt: number;
+  /**
+   * [#2063] Team identity shared with every target row. The parent carries them
+   * so a reader can confirm the whole composite belongs to one team without
+   * fanning out to the targets. Not GSI2-indexed (the parent stays out of the
+   * participant teamLoginKey query until a later issue adds an intentional view).
+   */
+  teamName?: string;
+  teamLoginKey?: string;
 }
 
 /**

@@ -130,9 +130,22 @@ describe("composite deployment repository (#2061)", () => {
       targetCount: 2,
       status: "PENDING",
     });
+    // [#2063] No team identity unless supplied — keeps the legacy parent shape.
+    expect(created).not.toHaveProperty("teamLoginKey");
+    expect(created).not.toHaveProperty("teamName");
 
     const fetched = await getCompositeParent(fake.deps, "parent-1");
     expect(fetched).toEqual(created);
+  });
+
+  it("[#2063] stores team identity on the parent when supplied", async () => {
+    const fake = makeFakeDdb();
+    const created = await createCompositeParent(
+      fake.deps,
+      parentInput({ teamName: "Alpha", teamLoginKey: "KEY1" }),
+    );
+    expect(created.teamName).toBe("Alpha");
+    expect(created.teamLoginKey).toBe("KEY1");
   });
 
   it("stores AWS GCP Azure and Sakura targets as independent META rows", async () => {
