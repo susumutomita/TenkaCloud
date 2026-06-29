@@ -4,7 +4,11 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { type PackManifest, parsePackManifest } from "../../lib/problem-pack/manifest";
+import {
+  type PackManifest,
+  parsePackManifest,
+  satisfiesCoreRange,
+} from "../../lib/problem-pack/manifest";
 
 /** A minimal, fully-valid manifest. Tests clone + mutate this. */
 function validManifest(): Record<string, unknown> {
@@ -134,5 +138,57 @@ describe("parsePackManifest (#2087)", () => {
     if (a.ok || b.ok) throw new Error("expected both to fail");
     const paths = a.issues.map((issue) => issue.path);
     expect([...paths].sort((x, y) => x.localeCompare(y))).toEqual(paths);
+  });
+});
+
+// satisfiesCoreRange: the dependency-free SemVer-range matcher the #2091
+// effective-catalog composer uses to gate a pack's manifest `core` range.
+describe("satisfiesCoreRange", () => {
+  it("should accept a caret range only within its locked-leftmost-component window", () => {
+    expect(satisfiesCoreRange("1.4.0", "^1.0.0")).toBe(true);
+    expect(satisfiesCoreRange("1.0.0", "^1.0.0")).toBe(true);
+    expect(satisfiesCoreRange("2.0.0", "^1.0.0")).toBe(false);
+    expect(satisfiesCoreRange("0.9.0", "^1.0.0")).toBe(false);
+  });
+
+  it("should treat caret on a 0.x version as locking the minor", () => {
+    expect(satisfiesCoreRange("0.2.5", "^0.2.0")).toBe(true);
+    expect(satisfiesCoreRange("0.3.0", "^0.2.0")).toBe(false);
+  });
+
+  it("should accept a tilde range up to the next minor", () => {
+    expect(satisfiesCoreRange("1.2.9", "~1.2.0")).toBe(true);
+    expect(satisfiesCoreRange("1.3.0", "~1.2.0")).toBe(false);
+    expect(satisfiesCoreRange("1.9.0", "~1")).toBe(true);
+    expect(satisfiesCoreRange("2.0.0", "~1")).toBe(false);
+  });
+
+  it("should evaluate comparator operators against a concrete version", () => {
+    expect(satisfiesCoreRange("1.5.0", ">=1.0.0")).toBe(true);
+    expect(satisfiesCoreRange("0.9.0", ">=1.0.0")).toBe(false);
+    expect(satisfiesCoreRange("1.0.0", "<2.0.0")).toBe(true);
+    expect(satisfiesCoreRange("2.0.0", "<2.0.0")).toBe(false);
+    expect(satisfiesCoreRange("1.4.0", ">=1.0.0 <2.0.0")).toBe(true);
+    expect(satisfiesCoreRange("2.1.0", ">=1.0.0 <2.0.0")).toBe(false);
+  });
+
+  it("should evaluate hyphen ranges inclusively on the lower bound", () => {
+    expect(satisfiesCoreRange("1.5.0", "1.0.0 - 2.0.0")).toBe(true);
+    expect(satisfiesCoreRange("1.0.0", "1.0.0 - 2.0.0")).toBe(true);
+    expect(satisfiesCoreRange("2.5.0", "1.0.0 - 2.0.0")).toBe(false);
+  });
+
+  it("should accept any clause of an OR-alternation and wildcard tokens", () => {
+    expect(satisfiesCoreRange("3.1.0", "^1.0.0 || ^3.0.0")).toBe(true);
+    expect(satisfiesCoreRange("2.0.0", "^1.0.0 || ^3.0.0")).toBe(false);
+    expect(satisfiesCoreRange("9.9.9", "*")).toBe(true);
+    expect(satisfiesCoreRange("1.7.3", "1.x")).toBe(true);
+    expect(satisfiesCoreRange("2.0.0", "1.x")).toBe(false);
+  });
+
+  it("should return false for an invalid version or range instead of throwing", () => {
+    expect(satisfiesCoreRange("not-a-version", "^1.0.0")).toBe(false);
+    expect(satisfiesCoreRange("1.0.0", "nope")).toBe(false);
+    expect(satisfiesCoreRange("1", "^1.0.0")).toBe(false);
   });
 });
