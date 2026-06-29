@@ -567,7 +567,16 @@
     "failure_guidance_step_verify_link": "Competitor Accounts page",
     "failure_guidance_step_verify_post": "で該当 account の接続確認をやり直してください (ExternalId・IAM Role が変更された可能性があります)。",
     "failure_guidance_step_contact_pre": "Verify が通っても deploy が失敗する場合、 問題 template 側の不具合です。",
-    "failure_guidance_step_contact_link": "問題リポジトリに issue を起票する"
+    "failure_guidance_step_contact_link": "問題リポジトリに issue を起票する",
+    "composite_targets_header": "マルチクラウド target",
+    "composite_targets_description": "この composite 問題の target ごとの deploy 状況です。",
+    "composite_targets_empty": "この composite deployment にはまだ target がありません。",
+    "composite_col_target": "Target",
+    "composite_col_provider": "Provider",
+    "composite_col_engine": "Engine",
+    "composite_col_status": "Status",
+    "composite_col_failure_reason": "失敗理由",
+    "composite_failure_reason_none": "—"
   },
   "problem_detail": {
     "not_found_header": "問題が見つかりません",

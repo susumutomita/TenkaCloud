@@ -567,7 +567,16 @@
     "failure_guidance_step_verify_link": "Competitor Accounts page",
     "failure_guidance_step_verify_post": "— the ExternalId or IAM role may have rotated.",
     "failure_guidance_step_contact_pre": "If verification passes but deploy still fails, the issue is likely in the problem template itself.",
-    "failure_guidance_step_contact_link": "Open an issue on the problem repository"
+    "failure_guidance_step_contact_link": "Open an issue on the problem repository",
+    "composite_targets_header": "Multi-cloud targets",
+    "composite_targets_description": "Per-target deployment status for this composite problem.",
+    "composite_targets_empty": "This composite deployment has no targets yet.",
+    "composite_col_target": "Target",
+    "composite_col_provider": "Provider",
+    "composite_col_engine": "Engine",
+    "composite_col_status": "Status",
+    "composite_col_failure_reason": "Failure reason",
+    "composite_failure_reason_none": "—"
   },
   "problem_detail": {
     "not_found_header": "Problem not found",
