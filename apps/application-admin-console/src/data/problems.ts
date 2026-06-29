@@ -7,11 +7,17 @@
  * 静的 build-time discovery で 1 元化を保つ。
  */
 
+import type { CostRiskLevel } from "../../../../scripts/lib/problem-cost";
 import {
-  analyzeProblemCost,
-  type CostRiskLevel,
-  type ProblemCostEstimate,
-} from "../../../../scripts/lib/problem-cost";
+  buildEffectiveCatalog,
+  type CoreCatalogInput,
+  type PackCatalogProblemInput,
+} from "./effective-catalog";
+
+// `metadataToDetail` / `isExecutableProblemRuntime` live in `problem-mapping.ts`
+// to avoid a runtime import cycle with `effective-catalog.ts` (see that file).
+// Re-exported here so existing `from "./problems"` consumers are unaffected.
+export { isExecutableProblemRuntime, metadataToDetail } from "./problem-mapping";
 
 export type ProblemCategory = "Battle" | "Challenge";
 export type ProblemStatus = "ready" | "draft" | "deprecated";
@@ -67,6 +73,19 @@ export interface ProblemSummary {
   scoringKind?: string;
   /** Issue #1910: template.yaml から導出した offline cost-risk estimate。 */
   costEstimate?: ProblemCostEstimateSummary;
+  /**
+   * Issue #2093: EFFECTIVE catalog provenance — display-only metadata, populated
+   * ONLY when a problem comes from an installed pack snapshot. Core problems leave
+   * these undefined so the legacy core-only UI is byte-identical (no pack labels).
+   * Provenance is NEVER an authorization input; the console only renders it.
+   */
+  source?: "core" | "pack";
+  /** Reverse-DNS pack id of the contributing pack (pack problems only). */
+  packId?: string;
+  /** Stamped SemVer of the contributing pack (pack problems only). */
+  packVersion?: string;
+  /** SPDX-ish license string declared by the contributing pack (pack problems only). */
+  license?: string;
 }
 
 export interface ProblemDetail extends ProblemSummary {
@@ -124,70 +143,125 @@ const templateModules = import.meta.glob<string>("../../../../problems/*/*/*.yam
   query: "?raw",
 });
 
-export function metadataToDetail(metadata: ProblemMetadata, templateYaml?: string): ProblemDetail {
-  const costEstimate = templateYaml
-    ? summarizeProblemCost(analyzeProblemCost(templateYaml, metadata.estimatedDuration))
-    : undefined;
-  return {
-    id: metadata.id,
-    name: metadata.name,
-    category: metadata.category,
-    status: metadata.status,
-    shortDescription: metadata.shortDescription,
-    difficulty: metadata.difficulty,
-    estimatedDuration: metadata.estimatedDuration,
-    tags: metadata.tags,
-    description: metadata.description,
-    exposedPorts: metadata.exposedPorts,
-    learningGoals: metadata.learningGoals,
-    // ADR-026 / ADR-027: 実行環境。 未宣言の legacy 問題は aws/cloudformation 既定。
-    runtime: {
-      provider: metadata.runtime?.provider ?? "aws",
-      engine: metadata.runtime?.engine ?? "cloudformation",
-    },
-    ...(metadata.defaultRegion ? { defaultRegion: metadata.defaultRegion } : {}),
-    ...(metadata.supportedRegions && metadata.supportedRegions.length > 0
-      ? { supportedRegions: metadata.supportedRegions }
-      : {}),
-    // Issue #1776: scoring.kind をカタログ facet 用に投影。 scoring 未宣言は omit。
-    ...(metadata.scoring ? { scoringKind: metadata.scoring.kind } : {}),
-    ...(costEstimate ? { costEstimate } : {}),
-  };
-}
-
-function summarizeProblemCost(estimate: ProblemCostEstimate): ProblemCostEstimateSummary {
-  return {
-    totalHourlyUsd: estimate.totalHourlyUsd,
-    perSessionUsd: estimate.perSessionUsd,
-    perDayIfLeftRunningUsd: estimate.perDayIfLeftRunningUsd,
-    alwaysOnResources: estimate.alwaysOnWarnings.map((resource) => ({
-      logicalId: resource.logicalId,
-      resourceType: resource.resourceType,
-      roughHourlyUsd: resource.roughHourlyUsd,
-      riskLevel: resource.riskLevel,
-    })),
-    unpricedResourceTypes: estimate.unpricedResourceTypes,
-    resourceTypes: [...new Set(estimate.resources.map((resource) => resource.resourceType))].sort(),
-  };
-}
-
-function findTemplateYaml(metadataPath: string, metadata: ProblemMetadata): string | undefined {
+function findTemplateYaml(
+  modules: Record<string, string>,
+  metadataPath: string,
+  metadata: ProblemMetadata,
+): string | undefined {
   // cfnTemplate は SCHEMA 必須 (= validate-problems が保証) なので `?? "template.yaml"` の
   // 最終 fallback は不到達。 dead branch を残さない (coverage gate / simplify)。
   const templateName = metadata.runtime?.entry ?? metadata.cfnTemplate;
   const templatePath = metadataPath.replace(/metadata\.json$/, templateName);
-  return templateModules[templatePath];
+  return modules[templatePath];
 }
 
-// 表示順の安定化のため id で sort。category > id の 2 段 sort は Phase 2 で必要に応じて。
-export const PROBLEM_CATALOG: readonly ProblemDetail[] = Object.entries(metadataModules)
-  .map(([metadataPath, mod]) =>
-    metadataToDetail(mod.default, findTemplateYaml(metadataPath, mod.default)),
-  )
-  .sort((a, b) => a.id.localeCompare(b.id));
+/**
+ * Issue #2093: installed pack snapshots live under the local pack-store
+ * (`.tenkacloud/pack-store/snapshots/<pack>/<rev>/<problemsRoot>/<category>/<id>/`).
+ * They are globbed at BUILD time exactly like core — never fetched client-side —
+ * so a core-only checkout (no installed snapshots) matches NOTHING and the catalog
+ * stays byte-identical to the legacy core-only projection. Each snapshot also
+ * carries a `tenkacloud-pack.json` manifest from which the pack identity / license
+ * provenance is read.
+ */
+const packMetadataModules = import.meta.glob<{ default: ProblemMetadata }>(
+  "../../../../.tenkacloud/pack-store/snapshots/**/metadata.json",
+  { eager: true },
+);
+const packTemplateModules = import.meta.glob<string>(
+  "../../../../.tenkacloud/pack-store/snapshots/**/*.yaml",
+  { eager: true, import: "default", query: "?raw" },
+);
+const packManifestModules = import.meta.glob<{ default: PackManifestShape }>(
+  "../../../../.tenkacloud/pack-store/snapshots/**/tenkacloud-pack.json",
+  { eager: true },
+);
+
+/** The subset of `tenkacloud-pack.json` the console reads for display provenance. */
+export interface PackManifestShape {
+  id: string;
+  version: string;
+  license: string;
+}
+
+/**
+ * Resolve the nearest `tenkacloud-pack.json` for a pack problem's metadata path.
+ * Takes the manifest module map explicitly so it is unit-testable with fakes —
+ * the build-time pack glob is empty in a core-only checkout, so the production
+ * call below never exercises this branch on its own.
+ */
+export function findPackManifest(
+  manifestModules: Record<string, { default: PackManifestShape }>,
+  metadataPath: string,
+): PackManifestShape | undefined {
+  for (const [manifestPath, mod] of Object.entries(manifestModules)) {
+    const root = manifestPath.replace(/tenkacloud-pack\.json$/, "");
+    if (metadataPath.startsWith(root)) return mod.default;
+  }
+  return undefined;
+}
+
+/** Project the core glob maps into catalog inputs (pure; testable with fakes). */
+export function buildCoreInputs(
+  metadata: Record<string, { default: ProblemMetadata }>,
+  templates: Record<string, string>,
+): readonly CoreCatalogInput[] {
+  return Object.entries(metadata).map(([metadataPath, mod]) => ({
+    metadata: mod.default,
+    templateYaml: findTemplateYaml(templates, metadataPath, mod.default),
+  }));
+}
+
+/**
+ * Project the pack-snapshot glob maps into catalog inputs (pure; testable with
+ * fakes). Only snapshots that carry a readable manifest become pack problems; a
+ * snapshot missing its manifest is skipped rather than mislabeled as core.
+ */
+export function buildPackInputs(
+  metadata: Record<string, { default: ProblemMetadata }>,
+  templates: Record<string, string>,
+  manifests: Record<string, { default: PackManifestShape }>,
+): readonly PackCatalogProblemInput[] {
+  return Object.entries(metadata).flatMap(([metadataPath, mod]) => {
+    const manifest = findPackManifest(manifests, metadataPath);
+    if (!manifest) return [];
+    return [
+      {
+        metadata: mod.default,
+        templateYaml: findTemplateYaml(templates, metadataPath, mod.default),
+        packId: manifest.id,
+        packVersion: manifest.version,
+        license: manifest.license,
+      },
+    ];
+  });
+}
+
+const coreInputs = buildCoreInputs(metadataModules, templateModules);
+const packInputs = buildPackInputs(packMetadataModules, packTemplateModules, packManifestModules);
+
+// 表示順の安定化のため id で sort (buildEffectiveCatalog が担保)。EFFECTIVE catalog は
+// core (上記 glob) と installed pack snapshots を #2091 の composer 経由で merge する。
+export const PROBLEM_CATALOG: readonly ProblemDetail[] = buildEffectiveCatalog({
+  core: coreInputs,
+  packs: packInputs,
+});
 
 export function findProblem(id: string): ProblemDetail | undefined {
   return PROBLEM_CATALOG.find((p) => p.id === id);
+}
+
+/**
+ * Issue #2093: pack provenance is sparse — present ONLY for pack problems, so a
+ * core-only summary list stays byte-identical to the legacy projection (no pack
+ * fields). `ProblemDetail` extends `ProblemSummary`, so the same optional fields
+ * carry through unchanged. Extracted to keep {@link listProblemSummaries} simple.
+ */
+export function packProvenanceFields(
+  p: ProblemDetail,
+): Partial<Pick<ProblemSummary, "source" | "packId" | "packVersion" | "license">> {
+  if (p.source !== "pack") return {};
+  return { source: p.source, packId: p.packId, packVersion: p.packVersion, license: p.license };
 }
 
 export function listProblemSummaries(): readonly ProblemSummary[] {
@@ -210,6 +284,7 @@ export function listProblemSummaries(): readonly ProblemSummary[] {
     ...(p.scoringKind ? { scoringKind: p.scoringKind } : {}),
     ...(p.costEstimate ? { costEstimate: p.costEstimate } : {}),
     /* v8 ignore stop */
+    ...packProvenanceFields(p),
   }));
 }
 
@@ -223,14 +298,3 @@ export const PROVIDER_LABEL: Record<string, string> = {
   azure: "Azure",
   gcp: "Google Cloud",
 };
-
-/**
- * ADR-023 D4: 今 deploy 可能なのは aws/cloudformation だけ。 予約済み (sakura/azure/gcp) は
- * engine 未実装なので deploy 不可。 catalog / picker はこれで「近日対応」を出し分ける。
- */
-export function isExecutableProblemRuntime(runtime: {
-  readonly provider: string;
-  readonly engine: string;
-}): boolean {
-  return runtime.provider === "aws" && runtime.engine === "cloudformation";
-}

@@ -159,6 +159,37 @@ describe("ProblemDetailPage", () => {
     expect(screen.getByText("draft")).toBeInTheDocument(); // blue branch
   });
 
+  it("should show pack provenance rows only for a pack-sourced problem", () => {
+    // Issue #2093: a pack problem surfaces its pack id@version + license labels.
+    mockFind.mockReturnValue(
+      problem({
+        source: "pack",
+        packId: "com.example.pack",
+        packVersion: "1.2.0",
+        license: "Apache-2.0",
+      }),
+    );
+    renderPage();
+    expect(screen.getByText("problem_detail.label_pack")).toBeInTheDocument();
+    expect(screen.getByText("com.example.pack@1.2.0")).toBeInTheDocument();
+    expect(screen.getByText("problem_detail.label_pack_license")).toBeInTheDocument();
+    expect(screen.getByText("Apache-2.0")).toBeInTheDocument();
+  });
+
+  it("should show the bare pack id when a pack problem declares no version", () => {
+    // The `packId@version` label falls back to just the id when version is absent.
+    mockFind.mockReturnValue(problem({ source: "pack", packId: "com.example.pack" }));
+    renderPage();
+    expect(screen.getByText("com.example.pack")).toBeInTheDocument();
+  });
+
+  it("should NOT show pack provenance rows for a core problem", () => {
+    // Compatibility: the legacy core-only detail view is unchanged (no pack labels).
+    renderPage();
+    expect(screen.queryByText("problem_detail.label_pack")).not.toBeInTheDocument();
+    expect(screen.queryByText("problem_detail.label_pack_license")).not.toBeInTheDocument();
+  });
+
   it("should show the deployments table loading state when the API client is unavailable", () => {
     renderPage();
     expect(screen.getByText("problem_detail.deployments_loading_text")).toBeInTheDocument();

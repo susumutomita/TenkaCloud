@@ -138,7 +138,8 @@
     "tag_active_aria": "Remove tag {tag} from filter",
     "tag_inactive_aria": "Filter by tag {tag}",
     "empty_filtered": "No problems match the filters.",
-    "empty": "No problems registered yet."
+    "empty": "No problems registered yet.",
+    "badge_pack": "Pack: {packId}"
   },
   "problem_search": {
     "filter_label": "Filter the problem catalog",
@@ -594,6 +595,8 @@
     "label_difficulty": "Difficulty",
     "label_estimated_duration": "Estimated duration",
     "label_status": "Status",
+    "label_pack": "Pack",
+    "label_pack_license": "Pack license",
     "difficulty_1": "Intro",
     "difficulty_2": "Beginner",
     "difficulty_3": "Intermediate",

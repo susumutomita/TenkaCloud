@@ -138,7 +138,8 @@
     "tag_active_aria": "タグ {tag} の絞り込みを解除",
     "tag_inactive_aria": "タグ {tag} で絞り込む",
     "empty_filtered": "条件に一致する問題はありません。",
-    "empty": "問題がまだ登録されていません。"
+    "empty": "問題がまだ登録されていません。",
+    "badge_pack": "パック: {packId}"
   },
   "problem_search": {
     "filter_label": "問題カタログを絞り込む",
@@ -594,6 +595,8 @@
     "label_difficulty": "難易度",
     "label_estimated_duration": "想定プレイ時間",
     "label_status": "ステータス",
+    "label_pack": "パック",
+    "label_pack_license": "パックライセンス",
     "difficulty_1": "入門",
     "difficulty_2": "初級",
     "difficulty_3": "中級",

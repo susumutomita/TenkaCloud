@@ -214,6 +214,13 @@ export function ProblemsPage() {
                       duration: item.estimatedDuration,
                     })}
                   </Badge>
+                  {/* Issue #2093: pack provenance badge — rendered ONLY for problems that
+                      come from an installed pack. Core-only catalogs show no pack label. */}
+                  {item.source === "pack" && item.packId && (
+                    <Badge color="green">
+                      {interpolate(t("problems.badge_pack"), { packId: item.packId })}
+                    </Badge>
+                  )}
                 </SpaceBetween>
               ),
             },

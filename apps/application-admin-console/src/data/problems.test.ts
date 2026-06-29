@@ -12,10 +12,16 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  buildCoreInputs,
+  buildPackInputs,
+  findPackManifest,
   isExecutableProblemRuntime,
   metadataToDetail,
+  type PackManifestShape,
   PROVIDER_LABEL,
+  type ProblemDetail,
   type ProblemMetadata,
+  packProvenanceFields,
 } from "./problems";
 
 function metadata(over: Partial<ProblemMetadata> = {}): ProblemMetadata {
@@ -118,5 +124,94 @@ describe("PROVIDER_LABEL (#2086)", () => {
 
   it("should leave an unknown provider unlabeled (caller falls back to the raw value)", () => {
     expect(PROVIDER_LABEL.oracle).toBeUndefined();
+  });
+});
+
+describe("buildCoreInputs (#2093 core glob projection)", () => {
+  it("should pair each core metadata module with its sibling template body", () => {
+    const inputs = buildCoreInputs(
+      { "../../../../problems/challenges/a/metadata.json": { default: metadata({ id: "a" }) } },
+      { "../../../../problems/challenges/a/template.yaml": "Resources: {}" },
+    );
+    expect(inputs).toEqual([{ metadata: metadata({ id: "a" }), templateYaml: "Resources: {}" }]);
+  });
+});
+
+describe("findPackManifest (#2093 snapshot provenance lookup)", () => {
+  const manifests = {
+    "../../../../.tenkacloud/pack-store/snapshots/p/r/tenkacloud-pack.json": {
+      default: { id: "com.example.pack", version: "1.2.3", license: "MIT" },
+    },
+  };
+
+  it("should return the manifest whose directory prefixes the metadata path", () => {
+    const found = findPackManifest(
+      manifests,
+      "../../../../.tenkacloud/pack-store/snapshots/p/r/challenges/x/metadata.json",
+    );
+    expect(found).toEqual({ id: "com.example.pack", version: "1.2.3", license: "MIT" });
+  });
+
+  it("should return undefined when no manifest directory prefixes the path", () => {
+    expect(
+      findPackManifest(manifests, "../../../../problems/challenges/core/metadata.json"),
+    ).toBeUndefined();
+  });
+});
+
+describe("buildPackInputs (#2093 pack-snapshot glob projection)", () => {
+  const base = "../../../../.tenkacloud/pack-store/snapshots/com.example.pack/abc";
+  const manifest: PackManifestShape = {
+    id: "com.example.pack",
+    version: "2.0.0",
+    license: "Apache-2.0",
+  };
+
+  it("should attach pack provenance and template to a snapshot that has a manifest", () => {
+    const inputs = buildPackInputs(
+      { [`${base}/challenges/x/metadata.json`]: { default: metadata({ id: "x" }) } },
+      { [`${base}/challenges/x/template.yaml`]: "Resources: {}" },
+      { [`${base}/tenkacloud-pack.json`]: { default: manifest } },
+    );
+    expect(inputs).toEqual([
+      {
+        metadata: metadata({ id: "x" }),
+        templateYaml: "Resources: {}",
+        packId: "com.example.pack",
+        packVersion: "2.0.0",
+        license: "Apache-2.0",
+      },
+    ]);
+  });
+
+  it("should skip a snapshot whose manifest is missing rather than mislabel it as core", () => {
+    const inputs = buildPackInputs(
+      { [`${base}/challenges/x/metadata.json`]: { default: metadata({ id: "x" }) } },
+      {},
+      {},
+    );
+    expect(inputs).toEqual([]);
+  });
+});
+
+describe("packProvenanceFields (#2093 sparse provenance projection)", () => {
+  function detail(over: Partial<ProblemDetail> = {}): ProblemDetail {
+    return { ...metadataToDetail(metadata()), ...over };
+  }
+
+  it("should return the provenance fields for a pack-sourced problem", () => {
+    const fields = packProvenanceFields(
+      detail({ source: "pack", packId: "com.example.pack", packVersion: "1.0.0", license: "MIT" }),
+    );
+    expect(fields).toEqual({
+      source: "pack",
+      packId: "com.example.pack",
+      packVersion: "1.0.0",
+      license: "MIT",
+    });
+  });
+
+  it("should return no fields for a core problem", () => {
+    expect(packProvenanceFields(detail())).toEqual({});
   });
 });
