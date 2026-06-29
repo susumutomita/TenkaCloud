@@ -30,6 +30,7 @@ import {
 } from "../deploy-handler/composite-status.js";
 import type { DeploymentStatus } from "../deploy-handler/types.js";
 import { forEachScanPage } from "../shared/ddb-paginate.js";
+import { reconcileCompositeParentTeardowns } from "./composite-teardown-reconciler.js";
 
 /** Parents in a non-terminal deploy-phase status are worth re-deriving. */
 const PARENT_RECONCILABLE_STATUSES = ["PENDING", "IN_PROGRESS"] as const;
@@ -176,10 +177,18 @@ export async function reconcileCompositeParents(
 }
 
 /**
- * Run the scheduled deploy-status maintenance: the existing per-target non-AWS
- * reconciliation FIRST, then the composite parent reconciliation — so a parent is
- * aggregated from already-refreshed target statuses. Injecting the per-target
- * step keeps the ordering testable.
+ * Run the scheduled status maintenance in dependency order:
+ *   1. the existing per-target non-AWS reconciliation (injected, so the ordering
+ *      is testable),
+ *   2. the composite parent DEPLOY-status reconciliation (#2068) — a parent is
+ *      aggregated from already-refreshed target statuses, then
+ *   3. the composite parent TEARDOWN completion reconciliation (#2072) — a
+ *      DELETING parent is finalized to DELETED once every target is deleted-like.
+ *
+ * Teardown runs after the deploy reconciliation: the two operate on disjoint
+ * parent statuses (PENDING/IN_PROGRESS vs DELETING), so order is not a
+ * correctness constraint between them — but both must run AFTER the per-target
+ * step so they see refreshed target states.
  */
 export async function reconcileDeployStatusMaintenance(
   deps: CompositeParentReconcileDeps,
@@ -188,4 +197,5 @@ export async function reconcileDeployStatusMaintenance(
 ): Promise<void> {
   await reconcilePerTarget();
   await reconcileCompositeParents(deps, nowIso);
+  await reconcileCompositeParentTeardowns(deps, nowIso);
 }

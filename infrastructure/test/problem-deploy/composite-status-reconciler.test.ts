@@ -325,6 +325,8 @@ describe("reconcileDeployStatusMaintenance ordering (#2068)", () => {
       order.push("per-target");
     });
 
-    expect(order).toEqual(["per-target", "composite-scan"]);
+    // Per-target runs first, then the deploy-status scan (#2068) and the teardown
+    // completion scan (#2072) — both composite scans run after the per-target step.
+    expect(order).toEqual(["per-target", "composite-scan", "composite-scan"]);
   });
 });
