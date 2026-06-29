@@ -1,6 +1,6 @@
 # Golden portal UI pack
 
-Golden reference pack. The participant portal extension contract: an endpoints[] slot, an optional portal/ dashboard component, and uptime-flat scoring.
+Golden reference pack. The participant portal extension contract: an endpoints[]slot, an optional portal/ dashboard component, and uptime-flat scoring.
 
 It is a canonical, executable example: scaffoldable, validatable, testable, and
 composable through the same public contracts as any external contributor pack.
@@ -8,7 +8,7 @@ It lives outside the core `problems/` catalog and imports no platform internals.
 
 ## Capability covered
 
-The participant portal extension contract: an endpoints[] slot, an optional portal/ dashboard component, and uptime-flat scoring.
+The participant portal extension contract: an endpoints[]slot, an optional portal/ dashboard component, and uptime-flat scoring.
 
 ## Validate
 

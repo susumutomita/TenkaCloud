@@ -67,7 +67,7 @@ const GOLDEN_PACKS: readonly GoldenPack[] = [
     version: "1.0.0",
     capability: "participant portal extension + endpoints + uptime-flat scoring",
     problemIds: ["golden-portal-keep-it-up"],
-    contentDigest: "e48c1efdefcdc7c5c05a687671f2c23b50d72be80a64473ac825742660c033fc",
+    contentDigest: "24195b829f18760397c6db7648ac6b83f3db387a76aa5bbddb42770dd25ae8c3",
   },
   {
     dir: "multicloud-pack",
