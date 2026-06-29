@@ -255,6 +255,36 @@ main {
   opacity: 0.92;
 }
 
+.btn--secondary {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.hero__hint {
+  font-size: 15px;
+  margin: 28px auto 8px;
+}
+
+.hero__code {
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: left;
+  background: var(--bg-subtle, #1116);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-size: 14px;
+}
+
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

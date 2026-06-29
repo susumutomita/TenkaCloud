@@ -27,10 +27,17 @@ export const PRIMARY_NAV: readonly NavLink[] = [
   { label: "Changelog", href: "/developers/changelog/" },
 ];
 
-// The developer-hub call-to-action surfaced from the landing page. "First Pack"
-// is the acceptance-criteria destination a visitor must reach from the landing
-// page without leaving the app shell.
-export const FIRST_PACK_HREF = "/developers/docs/getting-started/";
+// The author-focused call-to-action surfaced from the landing page. The
+// first-pack tutorial is the acceptance-criteria destination (#2104): a visitor
+// reaches a working "build a problem pack" walkthrough in one click, never a bare
+// repository root.
+export const FIRST_PACK_HREF = "/developers/docs/tutorials/first-pack/";
+
+// The operator-focused secondary call-to-action. Getting started is the
+// install-and-run path: deploy a pack and watch it score through the participant
+// portal. Distinct from FIRST_PACK_HREF so the landing page can offer the author
+// journey and the operator journey side by side.
+export const RUN_PACKS_HREF = "/developers/docs/getting-started/";
 
 // Footer is grouped; it reuses the same hrefs so there is one link graph.
 export const FOOTER_SECTIONS: readonly NavSection[] = [
