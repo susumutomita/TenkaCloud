@@ -12,8 +12,8 @@ you want to verify the real `git`-backed transport end to end.
 
 ## Prerequisites
 
-- A separate public Git repository that contains a valid problem pack (a
-  `tenkacloud-pack.json` manifest at the pack root, or under a subdir). It MUST
+- A separate public Git repository that contains a valid problem pack — a
+  `tenkacloud-pack.json` manifest at the pack root, or under a subdir. It MUST
   NOT live under this repo's core `problems/` tree.
 - `git` available on PATH (the real fetcher shells out to `git` plumbing with
   hooks disabled and lifecycle scripts never run).
