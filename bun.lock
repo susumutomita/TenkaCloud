@@ -83,6 +83,8 @@
         "@mdx-js/react": "^3.1.0",
         "@next/mdx": "16.2.9",
         "@scalar/api-reference-react": "0.9.49",
+        "@tenkacloud/problem-runtime": "workspace:*",
+        "@tenkacloud/problem-sdk": "workspace:*",
         "@types/mdx": "^2.0.13",
         "gray-matter": "^4.0.3",
         "next": "16.2.9",
@@ -242,6 +244,9 @@
     "packages/problem-sdk": {
       "name": "@tenkacloud/problem-sdk",
       "version": "0.2.0",
+      "bin": {
+        "tenkacloud-pack-report": "bin/pack-report.ts",
+      },
       "dependencies": {
         "@tenkacloud/problem-runtime": "workspace:*",
         "zod": "^3.25.76",

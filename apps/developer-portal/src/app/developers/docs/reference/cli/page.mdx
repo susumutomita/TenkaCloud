@@ -1,0 +1,39 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+import { CliCommandTable } from "@/components/ReferenceTables";
+
+export const metadata = { title: "CLI reference" };
+
+# CLI reference <MaturityBadge level="stable" />
+
+The `tenkacloud pack` CLI is the offline pack tool. Every command runs locally with
+no cloud or remote calls. The command table below is **normative reference** parsed
+from the CLI's own usage strings, so the documented command names and options
+always match the code.
+
+## Commands
+
+<CliCommandTable />
+
+## Exit codes
+
+The exit-code contract is shared by every subcommand:
+
+- `0` — success (valid pack / scaffolded / installed / listed / inspected / removed)
+- `1` — refusal (validation failure / digest or compose conflict / not installed /
+  pinned removal)
+- `2` — tool failure (missing dir / missing manifest / bad usage / unsafe init
+  target / unsupported runtime / missing flag value)
+
+There is deliberately no `update` command: a new version is a separate `install`.
+
+## Example
+
+The example below is illustrative, not normative.
+
+```bash
+tenkacloud pack init ./my-pack --runtime aws/cloudformation
+tenkacloud pack validate ./my-pack --json
+tenkacloud pack install ./my-pack
+```
+
+Related: [validation error reference](/developers/docs/reference/validation-errors/).
