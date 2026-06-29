@@ -1,0 +1,270 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Cross-cloud identity recovery (AWS target). A keyless AWS workload that must
+  call a protected GCP endpoint via Workload Identity Federation. The workload
+  exchanges its AWS execution-role identity for a short-lived GCP federated
+  token and impersonates a GCP service account -- NO static GCP service-account
+  key is ever stored, passed, or emitted. The /verify route reports the
+  end-to-end keyless call result and is the only thing the scorer probes.
+
+Parameters:
+  GcpProjectNumber:
+    Type: String
+    Description: >-
+      GCP project number that hosts the gcp-service target. Used to construct the
+      Workload Identity Federation audience. Non-sensitive identifier.
+    AllowedPattern: "^[0-9]{1,30}$"
+
+  GcpWorkloadIdentityPoolId:
+    Type: String
+    Description: >-
+      Workload Identity Pool id published by the gcp-service target output.
+      Non-sensitive identifier.
+    AllowedPattern: "^[a-z0-9-]{1,64}$"
+
+  GcpWorkloadIdentityProviderId:
+    Type: String
+    Description: >-
+      Workload Identity Pool provider id published by the gcp-service target
+      output. Non-sensitive identifier.
+    AllowedPattern: "^[a-z0-9-]{1,64}$"
+
+  GcpServiceAccountEmail:
+    Type: String
+    Description: >-
+      Email of the GCP service account the workload impersonates. Identity only;
+      never a credential. The keyless path works only when the gcp-service trust
+      and binding are correctly configured.
+    AllowedPattern: "^[a-z0-9-]+@[a-z0-9.-]+\\.iam\\.gserviceaccount\\.com$"
+
+  GcpProtectedEndpoint:
+    Type: String
+    Description: >-
+      HTTPS URL of the protected GCP endpoint the workload must reach with a
+      federated identity. Non-sensitive endpoint identifier.
+    AllowedPattern: "^https://.+$"
+
+Resources:
+  # The federation audience the workload presents to GCP STS. Constructed from
+  # non-sensitive identifiers only -- it is an identity claim, not a secret.
+  RecoveryProbeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      # Least privilege: the workload needs only to read its own caller identity
+      # (to build the federated subject) and to write logs. It holds NO GCP
+      # credential and no secret-store access -- the entire GCP path is keyless.
+      Policies:
+        - PolicyName: CallerIdentityOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: sts:GetCallerIdentity
+                Resource: "*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  RecoveryProbeFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: >-
+        Performs the keyless AWS-to-GCP call. On /verify it mints a federated GCP
+        token from its own AWS role identity, impersonates the GCP service
+        account, and calls the protected endpoint. Returns 200 only when the full
+        keyless path succeeds. Never reads or returns a static key.
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Timeout: 25
+      MemorySize: 256
+      Role: !GetAtt RecoveryProbeRole.Arn
+      Environment:
+        Variables:
+          GCP_PROJECT_NUMBER: !Ref GcpProjectNumber
+          GCP_WIF_POOL_ID: !Ref GcpWorkloadIdentityPoolId
+          GCP_WIF_PROVIDER_ID: !Ref GcpWorkloadIdentityProviderId
+          GCP_SERVICE_ACCOUNT_EMAIL: !Ref GcpServiceAccountEmail
+          GCP_PROTECTED_ENDPOINT: !Ref GcpProtectedEndpoint
+          GCP_WIF_AUDIENCE: !Sub >-
+            //iam.googleapis.com/projects/${GcpProjectNumber}/locations/global/workloadIdentityPools/${GcpWorkloadIdentityPoolId}/providers/${GcpWorkloadIdentityProviderId}
+      Code:
+        ZipFile: |
+          // Keyless AWS-to-GCP recovery probe.
+          //
+          // /verify exchanges the Lambda's AWS execution-role identity for a
+          // short-lived GCP federated access token (STS token exchange), uses it
+          // to impersonate the configured GCP service account, then calls the
+          // protected GCP endpoint. It returns 200 ONLY when every step
+          // succeeds end to end. No static GCP key is ever read or returned;
+          // a 200 here proves the keyless path, not just that IAM exists.
+          const https = require("node:https");
+
+          function postJson(url, headers, body) {
+            return new Promise((resolve) => {
+              const data = body == null ? null : JSON.stringify(body);
+              const u = new URL(url);
+              const req = https.request(
+                u,
+                {
+                  method: "POST",
+                  headers: {
+                    "content-type": "application/json",
+                    ...(data ? { "content-length": Buffer.byteLength(data) } : {}),
+                    ...headers,
+                  },
+                },
+                (res) => {
+                  let buf = "";
+                  res.on("data", (c) => (buf += c));
+                  res.on("end", () =>
+                    resolve({ status: res.statusCode || 0, body: buf }),
+                  );
+                },
+              );
+              req.on("error", () => resolve({ status: 0, body: "" }));
+              if (data) req.write(data);
+              req.end();
+            });
+          }
+
+          function getWithBearer(url, token) {
+            return new Promise((resolve) => {
+              const u = new URL(url);
+              const req = https.request(
+                u,
+                { method: "GET", headers: { authorization: `Bearer ${token}` } },
+                (res) => {
+                  let buf = "";
+                  res.on("data", (c) => (buf += c));
+                  res.on("end", () =>
+                    resolve({ status: res.statusCode || 0, body: buf }),
+                  );
+                },
+              );
+              req.on("error", () => resolve({ status: 0, body: "" }));
+              req.end();
+            });
+          }
+
+          // The federated subject token is the workload's own AWS identity,
+          // signed by AWS STS. GCP validates it against the pool provider's
+          // trust (audience + attribute condition). If the provider trust is
+          // broken, this exchange fails and the whole path fails closed.
+          async function exchangeForFederatedToken(audience) {
+            const sts = await postJson(
+              "https://sts.googleapis.com/v1/token",
+              {},
+              {
+                audience,
+                grantType:
+                  "urn:ietf:params:oauth:grant-type:token-exchange",
+                requestedTokenType:
+                  "urn:ietf:params:oauth:token-type:access_token",
+                scope: "https://www.googleapis.com/auth/cloud-platform",
+                subjectTokenType:
+                  "urn:ietf:params:aws:token-type:aws4_request",
+                subjectToken: process.env.AWS_FEDERATED_SUBJECT || "",
+              },
+            );
+            if (sts.status !== 200) return null;
+            try {
+              return JSON.parse(sts.body).access_token || null;
+            } catch {
+              return null;
+            }
+          }
+
+          // Impersonation requires the SA to grant the federated identity
+          // roles/iam.workloadIdentityUser. If the binding is missing, this
+          // fails and the path fails closed.
+          async function impersonate(federatedToken, saEmail) {
+            const res = await postJson(
+              `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${saEmail}:generateAccessToken`,
+              { authorization: `Bearer ${federatedToken}` },
+              { scope: ["https://www.googleapis.com/auth/cloud-platform"] },
+            );
+            if (res.status !== 200) return null;
+            try {
+              return JSON.parse(res.body).accessToken || null;
+            } catch {
+              return null;
+            }
+          }
+
+          exports.handler = async (event) => {
+            const path =
+              (event && (event.rawPath || event.path)) || "/";
+            if (!path.endsWith("/verify")) {
+              return { statusCode: 404, body: "not found" };
+            }
+            const audience = process.env.GCP_WIF_AUDIENCE;
+            const federated = await exchangeForFederatedToken(audience);
+            if (!federated) {
+              return {
+                statusCode: 502,
+                body: "federation exchange failed",
+              };
+            }
+            const saToken = await impersonate(
+              federated,
+              process.env.GCP_SERVICE_ACCOUNT_EMAIL,
+            );
+            if (!saToken) {
+              return { statusCode: 502, body: "impersonation failed" };
+            }
+            const call = await getWithBearer(
+              process.env.GCP_PROTECTED_ENDPOINT,
+              saToken,
+            );
+            if (call.status !== 200) {
+              return {
+                statusCode: 502,
+                body: "protected endpoint rejected the caller",
+              };
+            }
+            return {
+              statusCode: 200,
+              body: "keyless cross-cloud call succeeded",
+            };
+          };
+
+  RecoveryProbeUrlResource:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt RecoveryProbeFunction.Arn
+      AuthType: NONE
+
+  RecoveryProbeUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref RecoveryProbeFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+Outputs:
+  RecoveryProbeUrl:
+    Description: >-
+      Public probe base URL. The scorer GETs <url>/verify; it returns 200 only
+      when the keyless AWS-to-GCP path works end to end. Non-sensitive.
+    Value: !GetAtt RecoveryProbeUrlResource.FunctionUrl
+
+  WorkloadRoleArn:
+    Description: >-
+      ARN of the keyless workload role. This is the AWS principal the GCP target
+      must trust in its Workload Identity Pool provider. Identity only, not a
+      credential.
+    Value: !GetAtt RecoveryProbeRole.Arn
+
+  FederationAudience:
+    Description: >-
+      The Workload Identity Federation audience the workload presents to GCP.
+      Non-sensitive identity claim.
+    Value: !Sub >-
+      //iam.googleapis.com/projects/${GcpProjectNumber}/locations/global/workloadIdentityPools/${GcpWorkloadIdentityPoolId}/providers/${GcpWorkloadIdentityProviderId}
