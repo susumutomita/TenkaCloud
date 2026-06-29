@@ -12,6 +12,11 @@ import { secureApiHeaders } from "../shared/secure-headers.js";
 import { BATTLE_ATTACKS_SINCE_MIN_DEFAULT, listBattleAttacks } from "./battle-attacks.js";
 import { castEvent, INBOX_SINCE_MS_MAX, readInbox } from "./cast-event.js";
 import {
+  bridgeCompositeCliCredentials,
+  bridgeCompositeConsoleSignin,
+  type CompositeAwsAccessBridgeDeps,
+} from "./composite-aws-access-bridge.js";
+import {
   defaultDeployLogDeps,
   getParticipantDeployLogs,
   parseDeployLogLimit,
@@ -31,6 +36,7 @@ import {
 import {
   BattleAttacksQuerySchema,
   CastEventBodySchema,
+  CompositeTargetAccessParamSchema,
   DeployLogsQuerySchema,
   EventInboxQuerySchema,
   NotificationsQuerySchema,
@@ -58,6 +64,10 @@ import { setDisplayTeamName } from "./update.js";
  *                                         → { team, problems[] }
  *   GET   /portal/me/console-signin-url — AWS Console federation login URL 発行
  *   GET   /portal/me/cli-credentials    — Issue #1197: CLI / SDK 用一時資格情報を発行 (= 同 AssumeRole chain、 federation endpoint 不要)
+ *   GET   /portal/me/composite/:parentDeploymentId/targets/:targetDeploymentId/console-signin-url
+ *                                       — Issue #2077: composite AWS target の Console 発行 (= 既存 SSO へ委譲)
+ *   GET   /portal/me/composite/:parentDeploymentId/targets/:targetDeploymentId/cli-credentials
+ *                                       — Issue #2077: composite AWS target の CLI 資格情報 (= 既存 CLI へ委譲)
  *   PATCH /portal/me                    — body: { teamName: string }
  *   POST  /portal/me/submit-flag        — body: { problemId: string, flag: string }
  *
@@ -67,6 +77,14 @@ import { setDisplayTeamName } from "./update.js";
  * `participant-handler/schemas.ts` の zod schema 経由で全 route 統一 validate する。
  */
 const shared = buildParticipantSharedResources();
+
+// [Composite Runtime / Issue #2077] Repository deps for the composite-target AWS
+// access bridge. The participant Lambda already holds the Deployments table
+// client; the bridge reuses it to resolve a team-scoped target via GSI3 and then
+// delegates to the existing AWS Console / CLI functions (no new IAM grant).
+const compositeAwsAccessDeps: CompositeAwsAccessBridgeDeps = {
+  repo: { ddb: shared.ddb, tableName: shared.tableName },
+};
 
 // ADR-030 Phase 2 (#1420): inter-team coordination の op/projection route は専用の最小 IAM
 // CoordinationDispatcherLambda (coordination-dispatcher-handler) へ分離した。 participant-portal
@@ -136,6 +154,79 @@ app.get("/portal/me/cli-credentials", (c) =>
     },
     RATE_LIMITS.WRITE_LOW,
   ),
+);
+
+/**
+ * [Composite Runtime / Issue #2077] Composite-target AWS access bridge routes.
+ *
+ *   GET /portal/me/composite/:parentDeploymentId/targets/:targetDeploymentId/console-signin-url
+ *   GET /portal/me/composite/:parentDeploymentId/targets/:targetDeploymentId/cli-credentials
+ *
+ * A READY AWS target inside a Composite parent reuses the EXISTING participant
+ * Console federation + CLI credential issuance. The path ids are consumed ONLY as
+ * a lookup key: the bridge resolves the team-scoped target server-side (GSI3 +
+ * the #2076 capability contract), verifies it is a COMPLETE AWS target, and then
+ * delegates to the same functions the legacy single-provider routes use. A non-
+ * AWS target is rejected as `capability_mismatch` (409) and STS is never called;
+ * a cross-team / missing target is `not_found` (404); a not-COMPLETE target is
+ * `not_ready` (400). No role ARN / account id is ever accepted from the client.
+ *
+ * Rate limit mirrors the legacy `cli-credentials` route (WRITE_LOW) — credential
+ * / sign-in issuance is a rare per-session operation and a brute-force target.
+ */
+app.get(
+  "/portal/me/composite/:parentDeploymentId/targets/:targetDeploymentId/console-signin-url",
+  (c) =>
+    withBearerAuth(
+      c,
+      "composite-console-signin",
+      async (token) => {
+        const params = parseParams(c, CompositeTargetAccessParamSchema);
+        if (!params.ok) return params.response;
+        const outcome = await bridgeCompositeConsoleSignin(shared, compositeAwsAccessDeps, {
+          teamLoginKey: token,
+          parentDeploymentId: params.data.parentDeploymentId,
+          targetDeploymentId: params.data.targetDeploymentId,
+        });
+        if (outcome.kind === "ok") return c.json({ loginUrl: outcome.loginUrl }, StatusCodes.OK);
+        if (outcome.kind === "assume_role_failed") {
+          return respondError(c, outcome.kind, { stage: outcome.stage, reason: outcome.reason });
+        }
+        if (outcome.kind === "capability_mismatch") {
+          return respondError(c, outcome.kind, { provider: outcome.provider });
+        }
+        return respondError(c, outcome.kind);
+      },
+      RATE_LIMITS.WRITE_LOW,
+    ),
+);
+
+app.get(
+  "/portal/me/composite/:parentDeploymentId/targets/:targetDeploymentId/cli-credentials",
+  (c) =>
+    withBearerAuth(
+      c,
+      "composite-cli-credentials",
+      async (token) => {
+        const params = parseParams(c, CompositeTargetAccessParamSchema);
+        if (!params.ok) return params.response;
+        const outcome = await bridgeCompositeCliCredentials(shared, compositeAwsAccessDeps, {
+          teamLoginKey: token,
+          parentDeploymentId: params.data.parentDeploymentId,
+          targetDeploymentId: params.data.targetDeploymentId,
+        });
+        if (outcome.kind === "ok")
+          return c.json({ credentials: outcome.credentials }, StatusCodes.OK);
+        if (outcome.kind === "assume_role_failed") {
+          return respondError(c, outcome.kind, { stage: outcome.stage, reason: outcome.reason });
+        }
+        if (outcome.kind === "capability_mismatch") {
+          return respondError(c, outcome.kind, { provider: outcome.provider });
+        }
+        return respondError(c, outcome.kind);
+      },
+      RATE_LIMITS.WRITE_LOW,
+    ),
 );
 
 // Issue #767: notifications は frontend polling が 5s 間隔 → READ_HIGH (= 2 RPS sustained / 60 burst)。

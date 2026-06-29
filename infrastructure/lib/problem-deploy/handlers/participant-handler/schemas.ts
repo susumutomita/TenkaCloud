@@ -135,6 +135,18 @@ export const SsoQuerySchema = z.object({
 });
 export type SsoQuery = z.infer<typeof SsoQuerySchema>;
 
+/**
+ * [Composite Runtime / Issue #2077] Path params for the composite-target AWS
+ * access bridge routes. Both ids are ULIDs and are consumed ONLY as a lookup key
+ * — never as an authority. The server resolves the role ARN / account id / role
+ * chain from the team-scoped target row, so no such field appears here.
+ */
+export const CompositeTargetAccessParamSchema = z.object({
+  parentDeploymentId: JobIdSchema,
+  targetDeploymentId: JobIdSchema,
+});
+export type CompositeTargetAccessParam = z.infer<typeof CompositeTargetAccessParamSchema>;
+
 export const NotificationsQuerySchema = z.object({
   /** undefined は handler 側で default (NOTIFICATIONS_DEFAULT_LIMIT) を適用する。 */
   limit: OptionalIntFromQuery,

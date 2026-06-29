@@ -85,6 +85,28 @@ export function buildConsoleDestination(args: { readonly region: string }): stri
 
 const sts = new STSClient({});
 
+/**
+ * Issue #2077: how `getConsoleSigninUrl` / `getCliCredentials` obtain the
+ * deployment row for a `(teamLoginKey, jobId)` pair. Defaults to the existing
+ * team-scoped GSI2 query ({@link loadSsoDeployment}); the composite AWS access
+ * bridge injects a loader that returns a server-resolved composite target row
+ * (which is intentionally absent from GSI2, see {@link CompositeTargetDeploymentItem}).
+ *
+ * This is purely an additive seam: the default keeps the legacy AWS SSO / CLI
+ * behavior byte-for-byte (the row is still resolved by the team's GSI2 list and
+ * matched on `jobId`). No STS / federation / validation logic is changed.
+ */
+export type SsoDeploymentLoader = (
+  shared: ParticipantSharedResources,
+  teamLoginKey: string,
+  jobId: string,
+) => Promise<Partial<DeploymentItem> | undefined>;
+
+export interface SsoDeploymentDeps {
+  /** Override how the deployment row is resolved. Defaults to the GSI2 team query. */
+  readonly loadDeployment?: SsoDeploymentLoader;
+}
+
 type StsCredentialShape = {
   AccessKeyId?: string;
   SecretAccessKey?: string;
@@ -132,9 +154,11 @@ export async function getConsoleSigninUrl(
   shared: ParticipantSharedResources,
   teamLoginKey: string,
   jobId: string,
+  deps: SsoDeploymentDeps = {},
 ): Promise<SsoOutcome> {
   if (!ULID_RE.test(jobId)) return { kind: "invalid_jobid" };
-  const deployment = await loadSsoDeployment(shared, teamLoginKey, jobId);
+  const loadDeployment = deps.loadDeployment ?? loadSsoDeployment;
+  const deployment = await loadDeployment(shared, teamLoginKey, jobId);
   if (!deployment) return { kind: "unauthorized" };
   const ready = validateSsoDeployment(jobId, deployment);
   if ("kind" in ready) return ready;
@@ -423,9 +447,11 @@ export async function getCliCredentials(
   shared: ParticipantSharedResources,
   teamLoginKey: string,
   jobId: string,
+  deps: SsoDeploymentDeps = {},
 ): Promise<CliCredentialsOutcome> {
   if (!ULID_RE.test(jobId)) return { kind: "invalid_jobid" };
-  const deployment = await loadSsoDeployment(shared, teamLoginKey, jobId);
+  const loadDeployment = deps.loadDeployment ?? loadSsoDeployment;
+  const deployment = await loadDeployment(shared, teamLoginKey, jobId);
   if (!deployment) return { kind: "unauthorized" };
   const ready = validateSsoDeployment(jobId, deployment);
   if ("kind" in ready) {
