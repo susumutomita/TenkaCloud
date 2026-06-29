@@ -227,7 +227,12 @@ export function readLock(storeDir: string): PackLockFile {
   return { schemaVersion: 1, packs: parsed.packs ?? [] };
 }
 
-function writeLock(storeDir: string, lock: PackLockFile): void {
+/**
+ * Write the lock file in canonical, byte-deterministic form (entries sorted by
+ * packId then version). Exported so the lifecycle engine (#2094) reuses the same
+ * writer for rollback / removal instead of re-deriving the on-disk format.
+ */
+export function writeLock(storeDir: string, lock: PackLockFile): void {
   const resolved = path.resolve(storeDir);
   fs.mkdirSync(resolved, { recursive: true });
   // Stable order: by packId then version, so the lock is byte-deterministic.
