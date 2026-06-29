@@ -50,6 +50,23 @@ import {
 } from "./snapshot.js";
 import { validatePackDirectory } from "./validate-pack.js";
 
+/**
+ * Git source install (#2097). Re-exported from {@link ./git-source.js} so the CLI
+ * reaches every install path through this lifecycle module, exactly as it does
+ * for the local {@link installPack}. The implementation lives in `git-source.ts`
+ * because it owns the network transport boundary and its injectable fetcher.
+ */
+export {
+  type GitArchiveFetcher,
+  type GitArchiveRequest,
+  type GitSource,
+  type InstallGitPackFailureReason,
+  type InstallGitPackOptions,
+  type InstallGitPackResult,
+  installGitPack,
+  parseGitSource,
+} from "./git-source.js";
+
 /** Options for {@link installPack}. */
 export interface InstallPackOptions {
   /** Directory containing the pack to install (must hold `tenkacloud-pack.json`). */

@@ -228,3 +228,64 @@ describe("installLocalPack (#2090)", () => {
     expect(readLock(storeDir).packs).toEqual([]);
   });
 });
+
+describe("readLock legacy compatibility (#2097)", () => {
+  it("should backfill sourceKind to 'local' for a legacy lock entry without it", () => {
+    // A lock written before #2097 added `sourceKind`.
+    fs.mkdirSync(storeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(storeDir, LOCK_FILENAME),
+      JSON.stringify({
+        schemaVersion: 1,
+        packs: [
+          {
+            packId: "com.example.legacy",
+            version: "1.0.0",
+            sourceRef: "/some/old/path",
+            contentDigest: "a".repeat(64),
+            installedAt: INSTALLED_AT,
+            coreVersion: CORE_VERSION,
+            snapshotPath: "snapshots/com.example.legacy/1.0.0",
+          },
+        ],
+      }),
+    );
+
+    const lock = readLock(storeDir);
+
+    expect(lock.packs).toHaveLength(1);
+    expect(lock.packs[0].sourceKind).toBe("local");
+  });
+
+  it("should preserve an explicit sourceKind (an explicit value wins over the default)", () => {
+    fs.mkdirSync(storeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(storeDir, LOCK_FILENAME),
+      JSON.stringify({
+        schemaVersion: 1,
+        packs: [
+          {
+            packId: "com.example.git-pack",
+            version: "2.0.0",
+            sourceKind: "git",
+            sourceRef: `https://github.com/example/x.git@${"0".repeat(40)}`,
+            contentDigest: "b".repeat(64),
+            installedAt: INSTALLED_AT,
+            coreVersion: CORE_VERSION,
+            snapshotPath: "snapshots/com.example.git-pack/2.0.0",
+            git: {
+              repositoryUrl: "https://github.com/example/x.git",
+              commit: "0".repeat(40),
+              subdir: "",
+            },
+          },
+        ],
+      }),
+    );
+
+    const lock = readLock(storeDir);
+
+    expect(lock.packs[0].sourceKind).toBe("git");
+    expect(lock.packs[0].git?.commit).toBe("0".repeat(40));
+  });
+});
