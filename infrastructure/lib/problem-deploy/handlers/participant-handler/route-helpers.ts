@@ -53,6 +53,11 @@ const ERROR_STATUS = {
   slot_not_overridable: StatusCodes.CONFLICT,
   invalid_url: StatusCodes.BAD_REQUEST,
   invalid_slot: StatusCodes.BAD_REQUEST,
+  // [Composite Runtime / Issue #2077] AWS access bridge: the resolved composite
+  // target is not an AWS target (gcp / azure / sakura / unsupported), so the
+  // existing AWS Console / CLI path does not apply. 409 — a state-based mismatch,
+  // not a malformed request — and STS was never invoked.
+  capability_mismatch: StatusCodes.CONFLICT,
   // Inter-team event dispatch primitive (cast-event.ts)
   invalid_kind: StatusCodes.BAD_REQUEST,
   invalid_payload: StatusCodes.BAD_REQUEST,

@@ -9,7 +9,7 @@
     {
       "ruleId": "handler-must-not-call-fetch",
       "filePath": "infrastructure/lib/problem-deploy/handlers/participant-handler/sso.ts",
-      "line": 386,
+      "line": 410,
       "match": "fetch("
     }
   ]
