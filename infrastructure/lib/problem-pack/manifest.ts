@@ -53,6 +53,137 @@ function isValidRangeClause(clause: string): boolean {
   return clause.split(/\s+/).every((token) => COMPARATOR_PATTERN.test(token));
 }
 
+/**
+ * A `(provider, engine)` capability the platform can satisfy or a pack requires.
+ * Mirrors {@link ProviderEngineSchema} so the effective-catalog composer (#2091)
+ * can compare a manifest's `requiredRuntimes` against the platform without
+ * re-deriving the shape.
+ */
+export interface ProviderEngineCapability {
+  readonly provider: string;
+  readonly engine: string;
+}
+
+/** A parsed exact SemVer split into its three numeric core components. */
+interface SemverParts {
+  readonly major: number;
+  readonly minor: number;
+  readonly patch: number;
+}
+
+/** Parse an exact `major.minor.patch` SemVer, ignoring pre-release / build. */
+function parseExactSemver(value: string): SemverParts | undefined {
+  if (!isExactSemver(value)) return undefined;
+  const core = value.split("+")[0].split("-")[0];
+  const [major, minor, patch] = core.split(".").map((n) => Number.parseInt(n, 10));
+  return { major, minor, patch };
+}
+
+/** Numeric comparison of two parsed SemVers: -1 / 0 / 1. Ignores pre-release. */
+function compareSemver(a: SemverParts, b: SemverParts): number {
+  return a.major - b.major || a.minor - b.minor || a.patch - b.patch;
+}
+
+/** Turn a (possibly wildcard / partial) version token into its bounds. */
+function tokenBounds(token: string): { readonly lower: SemverParts; readonly upper: SemverParts } {
+  const parts = token.split(".");
+  const isWildcard = (s: string | undefined) =>
+    s === undefined || s === "x" || s === "X" || s === "*";
+  const major = isWildcard(parts[0]) ? undefined : Number.parseInt(parts[0], 10);
+  const minor = isWildcard(parts[1]) ? undefined : Number.parseInt(parts[1], 10);
+  const patch = isWildcard(parts[2]) ? undefined : Number.parseInt(parts[2], 10);
+  const lower: SemverParts = { major: major ?? 0, minor: minor ?? 0, patch: patch ?? 0 };
+  if (major === undefined) {
+    // `*` / `x` — any version.
+    return { lower, upper: { major: Number.POSITIVE_INFINITY, minor: 0, patch: 0 } };
+  }
+  if (minor === undefined) {
+    return { lower, upper: { major: major + 1, minor: 0, patch: 0 } };
+  }
+  if (patch === undefined) {
+    return { lower, upper: { major, minor: minor + 1, patch: 0 } };
+  }
+  return { lower, upper: { major, minor, patch: patch + 1 } };
+}
+
+/** Caret range upper bound: keep the leftmost non-zero component fixed. */
+function caretUpper(v: SemverParts): SemverParts {
+  if (v.major > 0) return { major: v.major + 1, minor: 0, patch: 0 };
+  if (v.minor > 0) return { major: 0, minor: v.minor + 1, patch: 0 };
+  return { major: 0, minor: 0, patch: v.patch + 1 };
+}
+
+/** Tilde range upper bound: allow patch-level (or minor when no minor given). */
+function tildeUpper(token: string, v: SemverParts): SemverParts {
+  // `~1.2` and `~1.2.3` both bound at the next minor; `~1` bounds at next major.
+  const segments = token.split(".").length;
+  if (segments === 1) return { major: v.major + 1, minor: 0, patch: 0 };
+  return { major: v.major, minor: v.minor + 1, patch: 0 };
+}
+
+/** Test one whitespace-separated comparator against a concrete version. */
+function comparatorSatisfied(comparator: string, version: SemverParts): boolean {
+  const match = comparator.match(/^(>=|<=|>|<|=|\^|~)?(.+)$/);
+  if (!match) return false;
+  const op = match[1] ?? "";
+  const token = match[2];
+  if (op === "^") {
+    const base = tokenBounds(token).lower;
+    return compareSemver(version, base) >= 0 && compareSemver(version, caretUpper(base)) < 0;
+  }
+  if (op === "~") {
+    const base = tokenBounds(token).lower;
+    return compareSemver(version, base) >= 0 && compareSemver(version, tildeUpper(token, base)) < 0;
+  }
+  const { lower, upper } = tokenBounds(token);
+  switch (op) {
+    case ">":
+      return compareSemver(version, upper) >= 0;
+    case ">=":
+      return compareSemver(version, lower) >= 0;
+    case "<":
+      return compareSemver(version, lower) < 0;
+    case "<=":
+      return compareSemver(version, upper) < 0;
+    default:
+      // `=` or bare token: an exact / wildcard match falls within [lower, upper).
+      return compareSemver(version, lower) >= 0 && compareSemver(version, upper) < 0;
+  }
+}
+
+/** Test a single AND-clause (a hyphen range or whitespace-joined comparators). */
+function clauseSatisfied(clause: string, version: SemverParts): boolean {
+  const hyphen = clause.split(/\s+-\s+/);
+  if (hyphen.length === 2) {
+    const lower = tokenBounds(hyphen[0].trim()).lower;
+    const upper = tokenBounds(hyphen[1].trim()).upper;
+    return compareSemver(version, lower) >= 0 && compareSemver(version, upper) < 0;
+  }
+  return clause
+    .trim()
+    .split(/\s+/)
+    .every((comparator) => comparatorSatisfied(comparator, version));
+}
+
+/**
+ * Test whether an exact SemVer satisfies a (manifest-validated) SemVer range.
+ *
+ * Pure and dependency-free (no `semver` package — see {@link isValidSemverRange}
+ * for the same pragmatic grammar). The range is the `||`-OR of clauses; each
+ * clause is the whitespace-AND of comparators (`^`, `~`, `>=`, `<=`, `>`, `<`,
+ * `=`, bare / wildcard) or a `A - B` hyphen range. An invalid version or range
+ * returns false rather than throwing, so the composer (#2091) can fail closed.
+ */
+export function satisfiesCoreRange(version: string, range: string): boolean {
+  const parsed = parseExactSemver(version);
+  if (!parsed) return false;
+  if (!isValidSemverRange(range)) return false;
+  return range
+    .trim()
+    .split("||")
+    .some((clause) => clauseSatisfied(clause.trim(), parsed));
+}
+
 /** True when a path string is absolute or escapes its root via `..`. */
 function isUnsafeRelativePath(value: string): boolean {
   if (value.length === 0) return true;
