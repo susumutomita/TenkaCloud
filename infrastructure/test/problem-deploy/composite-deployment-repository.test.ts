@@ -393,10 +393,7 @@ describe("composite deployment repository (#2061)", () => {
       parentInput({ teamName: "Alpha", teamLoginKey: "KEY1" }),
     );
     await expect(
-      createCompositeParent(
-        fake.deps,
-        parentInput({ teamName: "Beta", teamLoginKey: "KEY2" }),
-      ),
+      createCompositeParent(fake.deps, parentInput({ teamName: "Beta", teamLoginKey: "KEY2" })),
     ).rejects.toBeInstanceOf(CompositeParentConflictError);
   });
 
