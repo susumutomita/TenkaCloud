@@ -32,6 +32,7 @@ import {
   type QuotaTier,
 } from "./deploy-quota.js";
 import { buildStackPrefix, slugify } from "./naming.js";
+import { dispatchPreparedDeployment } from "./prepared-dispatch.js";
 import { generateChallengePayloadUrl } from "./presigned-url.js";
 import { generateTeamLoginKey } from "./team-key.js";
 import type { DeploymentItem, DeployRequest, DeployResponse } from "./types.js";
@@ -303,13 +304,15 @@ export async function startDeployment(
   }
 
   try {
-    // [ADR-023 / Issue #1268] dispatch via runtime adapter. For AWS / CFn (=
-    // the only registered adapter today) this is byte-for-byte the same
-    // `publishProblemEvent` the legacy inline code did — see
+    // [ADR-023 / Issue #1268 / #2064] dispatch via the prepared-dispatch seam.
+    // For AWS / CFn (= the only registered adapter today) this is byte-for-byte
+    // the same `publishProblemEvent` the legacy inline code did — see
     // `AwsCloudFormationRuntimeAdapter.deploy`. No new IAM, no new SDK calls.
-    await adapter.deploy({
+    // The adapter was already selected above (the pre-mutation runtime gate);
+    // dispatchPreparedDeployment owns only the deploy invocation + rethrow.
+    await dispatchPreparedDeployment({
+      adapter,
       jobId,
-      correlationId: jobId,
       tenantId: item.tenantId,
       problemId: item.problemId,
       problemDir,
