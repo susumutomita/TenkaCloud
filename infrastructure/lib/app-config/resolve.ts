@@ -7,20 +7,10 @@ import { parseSamlIdpConfig } from "../control-plane/saml-identity-providers.js"
 import { getEnv } from "../helper-functions.js";
 import { parseDeployQuota } from "../problem-deploy/handlers/deploy-handler/deploy-quota.js";
 import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting.js";
+import { type CatalogSource, LocalCatalogSource } from "../problem-pack/catalog-source.js";
 import { parseTenantAdminAllowlist } from "../tenant-template/saml-admin-allowlist.js";
 import { parseTenantSamlIdpConfig } from "../tenant-template/saml-identity-providers.js";
-import { bundleCoordinationPlugins } from "../utils/bundle-coordination-plugins.js";
 import { loadConfig } from "../utils/config-loader.js";
-import {
-  discoverProblemsCatalog,
-  discoverProblemsCoordination,
-  discoverProblemsDisruptions,
-  discoverProblemsEndpoints,
-  discoverProblemsPhases,
-  discoverProblemsRuntime,
-  discoverProblemsScoring,
-  discoverProblemsVisibility,
-} from "../utils/discover-problems-catalog.js";
 import type { ApiKeySSMParameterNames, AppConfig, ProblemsCatalogBundle } from "./types.js";
 
 /**
@@ -46,6 +36,12 @@ export interface ResolveAppConfigInput {
   readonly dotenvConfig?: (opts: { path: string }) => void;
   /** テストから problems discovery を差し替える hook。 既定では実 discover*。 */
   readonly discoverProblems?: (problemsRoot: string) => ProblemsCatalogBundle;
+  /**
+   * [#2092] catalog の取得元 (= source abstraction)。 既定は {@link LocalCatalogSource}
+   * (= local `problems/` tree、 従来挙動と byte-identical)。 snapshot adapter は dormant
+   * のまま追加されており、 ここに差し替えても remote fetch は発生しない。
+   */
+  readonly catalogSource?: CatalogSource;
 }
 
 export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
@@ -281,18 +277,12 @@ function resolveParticipantPortal(
 function discoverAppProblems(input: ResolveAppConfigInput): ProblemsCatalogBundle {
   const problemsRoot = path.resolve(input.binDir, "..", "..", "problems");
   if (input.discoverProblems) return input.discoverProblems(problemsRoot);
-  return {
-    catalog: discoverProblemsCatalog(problemsRoot),
-    scoring: discoverProblemsScoring(problemsRoot),
-    endpoints: discoverProblemsEndpoints(problemsRoot),
-    phases: discoverProblemsPhases(problemsRoot),
-    visibility: discoverProblemsVisibility(problemsRoot),
-    runtimes: discoverProblemsRuntime(problemsRoot),
-    disruptions: discoverProblemsDisruptions(problemsRoot),
-    coordination: discoverProblemsCoordination(problemsRoot),
-    // ADR-030 Phase 3b: synth 時に coordination plugin を self-contained .mjs へ bundle (esbuild)。
-    coordinationBundles: bundleCoordinationPlugins(problemsRoot),
-  };
+  // [#2092] Backend deploy paths consume ONE effective catalog through the source
+  // abstraction. The default {@link LocalCatalogSource} preserves the exact current
+  // synth-time behavior (byte-identical), so this is a CFn NO-OP. The snapshot
+  // adapter exists but is dormant — it is not wired here.
+  const source = input.catalogSource ?? new LocalCatalogSource();
+  return source.loadBundle(problemsRoot);
 }
 
 function resolveChallengePayload(
