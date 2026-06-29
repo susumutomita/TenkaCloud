@@ -35,6 +35,12 @@ export { PACK_SCHEMA_VERSION } from "./manifest.js";
 export type { PackProblem, ProblemMetadata } from "./problem-metadata.js";
 export { validateProblemMetadata } from "./problem-metadata.js";
 export { formatDiagnostics, validatePackManifest } from "./public-validators.js";
+export type {
+  BuildPackReportOptions,
+  PackReport,
+  PackReportResult,
+} from "./report.js";
+export { buildPackReport, computeContentDigest, serializePackReport } from "./report.js";
 export type { RuntimeCapability } from "./runtime-capability.js";
 export { SUPPORTED_RUNTIME_CAPABILITIES } from "./runtime-capability.js";
 export type { ProblemScoringMetadata } from "./scoring-metadata.js";

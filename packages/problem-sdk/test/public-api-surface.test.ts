@@ -13,7 +13,10 @@ import * as sdk from "../src/index.js";
 const EXPECTED_VALUE_EXPORTS = [
   "PACK_SCHEMA_VERSION",
   "SUPPORTED_RUNTIME_CAPABILITIES",
+  "buildPackReport",
+  "computeContentDigest",
   "formatDiagnostics",
+  "serializePackReport",
   "validatePackDirectory",
   "validatePackManifest",
   "validateProblemMetadata",
@@ -28,6 +31,9 @@ describe("@tenkacloud/problem-sdk public API surface", () => {
   it("should export the documented value kinds", () => {
     expect(typeof sdk.PACK_SCHEMA_VERSION).toBe("number");
     expect(Array.isArray(sdk.SUPPORTED_RUNTIME_CAPABILITIES)).toBe(true);
+    expect(typeof sdk.buildPackReport).toBe("function");
+    expect(typeof sdk.computeContentDigest).toBe("function");
+    expect(typeof sdk.serializePackReport).toBe("function");
     expect(typeof sdk.formatDiagnostics).toBe("function");
     expect(typeof sdk.validatePackDirectory).toBe("function");
     expect(typeof sdk.validatePackManifest).toBe("function");
