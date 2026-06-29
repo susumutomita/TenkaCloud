@@ -7,16 +7,17 @@
  * 静的 build-time discovery で 1 元化を保つ。
  */
 
-import {
-  analyzeProblemCost,
-  type CostRiskLevel,
-  type ProblemCostEstimate,
-} from "../../../../scripts/lib/problem-cost";
+import type { CostRiskLevel } from "../../../../scripts/lib/problem-cost";
 import {
   buildEffectiveCatalog,
   type CoreCatalogInput,
   type PackCatalogProblemInput,
 } from "./effective-catalog";
+
+// `metadataToDetail` / `isExecutableProblemRuntime` live in `problem-mapping.ts`
+// to avoid a runtime import cycle with `effective-catalog.ts` (see that file).
+// Re-exported here so existing `from "./problems"` consumers are unaffected.
+export { isExecutableProblemRuntime, metadataToDetail } from "./problem-mapping";
 
 export type ProblemCategory = "Battle" | "Challenge";
 export type ProblemStatus = "ready" | "draft" | "deprecated";
@@ -141,53 +142,6 @@ const templateModules = import.meta.glob<string>("../../../../problems/*/*/*.yam
   import: "default",
   query: "?raw",
 });
-
-export function metadataToDetail(metadata: ProblemMetadata, templateYaml?: string): ProblemDetail {
-  const costEstimate = templateYaml
-    ? summarizeProblemCost(analyzeProblemCost(templateYaml, metadata.estimatedDuration))
-    : undefined;
-  return {
-    id: metadata.id,
-    name: metadata.name,
-    category: metadata.category,
-    status: metadata.status,
-    shortDescription: metadata.shortDescription,
-    difficulty: metadata.difficulty,
-    estimatedDuration: metadata.estimatedDuration,
-    tags: metadata.tags,
-    description: metadata.description,
-    exposedPorts: metadata.exposedPorts,
-    learningGoals: metadata.learningGoals,
-    // ADR-026 / ADR-027: 実行環境。 未宣言の legacy 問題は aws/cloudformation 既定。
-    runtime: {
-      provider: metadata.runtime?.provider ?? "aws",
-      engine: metadata.runtime?.engine ?? "cloudformation",
-    },
-    ...(metadata.defaultRegion ? { defaultRegion: metadata.defaultRegion } : {}),
-    ...(metadata.supportedRegions && metadata.supportedRegions.length > 0
-      ? { supportedRegions: metadata.supportedRegions }
-      : {}),
-    // Issue #1776: scoring.kind をカタログ facet 用に投影。 scoring 未宣言は omit。
-    ...(metadata.scoring ? { scoringKind: metadata.scoring.kind } : {}),
-    ...(costEstimate ? { costEstimate } : {}),
-  };
-}
-
-function summarizeProblemCost(estimate: ProblemCostEstimate): ProblemCostEstimateSummary {
-  return {
-    totalHourlyUsd: estimate.totalHourlyUsd,
-    perSessionUsd: estimate.perSessionUsd,
-    perDayIfLeftRunningUsd: estimate.perDayIfLeftRunningUsd,
-    alwaysOnResources: estimate.alwaysOnWarnings.map((resource) => ({
-      logicalId: resource.logicalId,
-      resourceType: resource.resourceType,
-      roughHourlyUsd: resource.roughHourlyUsd,
-      riskLevel: resource.riskLevel,
-    })),
-    unpricedResourceTypes: estimate.unpricedResourceTypes,
-    resourceTypes: [...new Set(estimate.resources.map((resource) => resource.resourceType))].sort(),
-  };
-}
 
 function findTemplateYaml(
   modules: Record<string, string>,
@@ -322,14 +276,3 @@ export const PROVIDER_LABEL: Record<string, string> = {
   azure: "Azure",
   gcp: "Google Cloud",
 };
-
-/**
- * ADR-023 D4: 今 deploy 可能なのは aws/cloudformation だけ。 予約済み (sakura/azure/gcp) は
- * engine 未実装なので deploy 不可。 catalog / picker はこれで「近日対応」を出し分ける。
- */
-export function isExecutableProblemRuntime(runtime: {
-  readonly provider: string;
-  readonly engine: string;
-}): boolean {
-  return runtime.provider === "aws" && runtime.engine === "cloudformation";
-}

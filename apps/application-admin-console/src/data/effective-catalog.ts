@@ -33,12 +33,8 @@
  *     template would otherwise be mis-parsed as CloudFormation.
  */
 
-import {
-  isExecutableProblemRuntime,
-  metadataToDetail,
-  type ProblemDetail,
-  type ProblemMetadata,
-} from "./problems";
+import { isExecutableProblemRuntime, metadataToDetail } from "./problem-mapping";
+import type { ProblemDetail, ProblemMetadata } from "./problems";
 
 /**
  * One already-loaded core problem: its raw `metadata.json` plus the optional
