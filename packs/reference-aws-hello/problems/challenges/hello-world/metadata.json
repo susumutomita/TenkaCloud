@@ -1,0 +1,11 @@
+{
+  "id": "hello-world",
+  "title": "Hello World",
+  "category": "challenges",
+  "description": "A minimal reference challenge. Deploys an empty CloudFormation stack and serves as a worked example of the pack layout.",
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  }
+}

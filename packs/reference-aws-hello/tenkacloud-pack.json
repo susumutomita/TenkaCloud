@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "com.tenkacloud.reference-aws-hello",
+  "version": "0.1.0",
+  "core": "^1.0.0",
+  "title": "Reference AWS Hello pack",
+  "description": "Minimal reference TenkaCloud problem pack used to exercise the pack manifest and validator contracts.",
+  "license": "Apache-2.0",
+  "problemsRoot": "problems",
+  "requiredRuntimes": [
+    {
+      "provider": "aws",
+      "engine": "cloudformation"
+    }
+  ]
+}
