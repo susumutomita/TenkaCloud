@@ -163,7 +163,8 @@ interface InstallSummary {
   readonly entry: {
     readonly packId: string;
     readonly version: string;
-    readonly sourceKind: string;
+    /** Always set for new installs; optional here to guard a legacy/hand-edited lock. */
+    readonly sourceKind?: string;
     readonly contentDigest: string;
   };
   readonly problemCount: number;
@@ -173,7 +174,12 @@ interface InstallSummary {
 function reportInstalled(result: InstallSummary, write: LineWriter): void {
   const verb = result.alreadyInstalled ? "already installed" : "installed";
   write(`Pack ${verb}: ${result.entry.packId}@${result.entry.version}`);
-  write(`  source: ${result.entry.sourceKind}`);
+  // `sourceKind` is set on every fresh install (and backfilled to "local" when
+  // reading legacy locks); render the line only when present so a malformed entry
+  // never prints "source: undefined".
+  if (result.entry.sourceKind) {
+    write(`  source: ${result.entry.sourceKind}`);
+  }
   write(`  digest: ${result.entry.contentDigest}`);
   write(`  problems: ${result.problemCount}`);
 }

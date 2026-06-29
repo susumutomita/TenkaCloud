@@ -92,8 +92,31 @@ export interface PackLockFile {
   readonly packs: readonly PackLockEntry[];
 }
 
+/**
+ * On-disk lock entry as it may appear in a LEGACY lock (written before #2097
+ * introduced `sourceKind`). `sourceKind` is optional here; {@link readLock}
+ * backfills it to `"local"` so the in-memory {@link PackLockEntry} always has it.
+ */
+type LegacyLockEntry = Omit<PackLockEntry, "sourceKind"> & {
+  readonly sourceKind?: PackSourceKind;
+};
+
 /** Options for {@link installLocalPack}. */
 export interface InstallLocalPackOptions {
+  /** Directory containing the validated pack (must hold `tenkacloud-pack.json`). */
+  readonly sourceDir: string;
+  /** Root of the snapshot store (lock file + snapshots/ live under here). */
+  readonly storeDir: string;
+  /** Reference recorded as `sourceRef`. Defaults to the resolved `sourceDir`. */
+  readonly sourceRef?: string;
+  /** Caller-injected install timestamp (ISO-8601). Keeps the core deterministic. */
+  readonly installedAt: string;
+  /** Caller-injected core (platform) version. */
+  readonly coreVersion: string;
+}
+
+/** Fields common to every {@link InstallSnapshotOptions} variant. */
+interface InstallSnapshotBase {
   /** Directory containing the validated pack (must hold `tenkacloud-pack.json`). */
   readonly sourceDir: string;
   /** Root of the snapshot store (lock file + snapshots/ live under here). */
@@ -110,25 +133,16 @@ export interface InstallLocalPackOptions {
  * Options for {@link installSnapshotFromDirectory} — the source-kind-agnostic
  * snapshot core shared by the local (#2090) and Git (#2097) install paths. The
  * caller has already materialized the pack into `sourceDir` (a real directory on
- * disk; for Git that is the extracted temporary tree), and supplies the
- * provenance to record (`sourceKind`, `sourceRef`, and optional `git`).
+ * disk; for Git that is the extracted temporary tree).
+ *
+ * A DISCRIMINATED UNION on `sourceKind` makes provenance type-safe: a `"git"`
+ * install REQUIRES `git` provenance, and a `"local"` install FORBIDS it (`never`),
+ * so a malformed entry (git without provenance, or local with stray provenance)
+ * cannot be constructed.
  */
-export interface InstallSnapshotOptions {
-  /** Directory containing the validated pack (must hold `tenkacloud-pack.json`). */
-  readonly sourceDir: string;
-  /** Root of the snapshot store (lock file + snapshots/ live under here). */
-  readonly storeDir: string;
-  /** Where the pack came from. */
-  readonly sourceKind: PackSourceKind;
-  /** Reference recorded as `sourceRef`. Defaults to the resolved `sourceDir`. */
-  readonly sourceRef?: string;
-  /** Caller-injected install timestamp (ISO-8601). Keeps the core deterministic. */
-  readonly installedAt: string;
-  /** Caller-injected core (platform) version. */
-  readonly coreVersion: string;
-  /** Git provenance recorded on the lock entry. Required iff `sourceKind === "git"`. */
-  readonly git?: GitProvenance;
-}
+export type InstallSnapshotOptions =
+  | (InstallSnapshotBase & { readonly sourceKind: "local"; readonly git?: never })
+  | (InstallSnapshotBase & { readonly sourceKind: "git"; readonly git: GitProvenance });
 
 /** Discriminated result of {@link installLocalPack}. Never throws on a known failure. */
 export type InstallLocalPackResult =
@@ -281,7 +295,10 @@ export function installSnapshotFromDirectory(
     installedAt: options.installedAt,
     coreVersion: options.coreVersion,
     snapshotPath,
-    ...(options.git ? { git: options.git } : {}),
+    // Key provenance off `sourceKind`: only a Git install carries `git` (the
+    // discriminated union guarantees it is present there and absent for local),
+    // so a malformed `git` field can never be written.
+    ...(options.sourceKind === "git" ? { git: options.git } : {}),
   };
   writeLock(storeDir, { schemaVersion: 1, packs: [...lock.packs, entry] });
   return { ok: true, entry, alreadyInstalled: false };
@@ -293,8 +310,17 @@ export function readLock(storeDir: string): PackLockFile {
   if (!fs.existsSync(lockPath)) {
     return { schemaVersion: 1, packs: [] };
   }
-  const parsed = JSON.parse(fs.readFileSync(lockPath, "utf-8")) as PackLockFile;
-  return { schemaVersion: 1, packs: parsed.packs ?? [] };
+  // Legacy lock entries (written before #2097 added `sourceKind`) may omit it, so
+  // parse with a relaxed entry type and backfill on read.
+  const parsed = JSON.parse(fs.readFileSync(lockPath, "utf-8")) as {
+    packs?: readonly LegacyLockEntry[];
+  };
+  // Default-then-spread so an explicit value (e.g. "git") always wins over "local".
+  const packs: PackLockEntry[] = (parsed.packs ?? []).map((entry) => ({
+    sourceKind: "local" as const,
+    ...entry,
+  }));
+  return { schemaVersion: 1, packs };
 }
 
 /**

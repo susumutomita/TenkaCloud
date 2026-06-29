@@ -183,6 +183,18 @@ describe("parseGitSource (#2097)", () => {
     );
   });
 
+  it("should reject a URL carrying a query string (e.g. ?token=...)", () => {
+    expect(
+      parseGitSource({ url: "https://github.com/x/y.git?token=secret", commit: FULL_SHA }).ok,
+    ).toBe(false);
+  });
+
+  it("should reject a URL carrying a fragment", () => {
+    expect(parseGitSource({ url: "https://github.com/x/y.git#frag", commit: FULL_SHA }).ok).toBe(
+      false,
+    );
+  });
+
   it("should reject a subdir that escapes the repository root", () => {
     expect(parseGitSource({ url: HTTPS_URL, commit: FULL_SHA, subdir: "../etc" }).ok).toBe(false);
     expect(parseGitSource({ url: HTTPS_URL, commit: FULL_SHA, subdir: "/abs" }).ok).toBe(false);
@@ -310,6 +322,15 @@ describe("installGitPack rejections before fetch (#2097)", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("should reject a URL with a query string and never call the fetcher", () => {
+    const fetcher = vi.fn<GitArchiveFetcher>();
+    const result = installGit({ url: "https://github.com/x/y.git?token=secret" }, fetcher);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("INVALID_SOURCE");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("should not create a lock when the source is rejected before fetch", () => {
     const fetcher = vi.fn<GitArchiveFetcher>();
     installGit({ commit: "main" }, fetcher);
@@ -396,16 +417,92 @@ describe("installGitPack digest + cleanup (#2097)", () => {
     expect(fs.existsSync(destinations[0])).toBe(false);
   });
 
-  it("should snapshot only the subdir tree when a subdir is given", () => {
-    // The fetcher writes the pack INTO the destination it is handed; the install
-    // is responsible for pointing the fetcher at the subdir. We assert the
-    // installed snapshot has the expected problem regardless of subdir nesting.
-    const fetcher = fixtureFetcher();
+  it("should forward the subdir to the fetcher, whose job is to promote that subtree", () => {
+    // Contract (matches realGitArchiveFetcher): the install forwards `subdir` to
+    // the fetcher, and the fetcher extracts ONLY <repo>/<subdir> into the
+    // destination (promoting it to the top level). This stub honors the contract
+    // only for the expected subdir and writes a NON-pack layout otherwise, so the
+    // test fails if subdir forwarding regresses (instead of passing vacuously).
+    const expectedSubdir = "nested/pack";
+    const subdirAwareFetcher: GitArchiveFetcher = (request) => {
+      if (request.subdir === expectedSubdir) {
+        // The fetcher promoted <repo>/nested/pack to the destination root.
+        writeValidPack(request.destinationDir);
+      } else {
+        // Wrong (or missing) subdir → the pack root is NOT at the destination top
+        // level, so validation must fail. Model that with a stray file.
+        fs.writeFileSync(path.join(request.destinationDir, "stray.txt"), "wrong subdir\n");
+      }
+    };
 
-    const result = installGit({ subdir: "nested/pack" }, fetcher);
+    const result = installGit({ subdir: expectedSubdir }, subdirAwareFetcher);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.problemCount).toBe(1);
+    expect(result.entry.git?.subdir).toBe(expectedSubdir);
+  });
+
+  it("should fail to install when the fetcher is given the wrong subdir", () => {
+    // Same stub, but a subdir the stub does not recognize → no pack at the top
+    // level → INVALID_PACK. Proves the previous test is not passing vacuously.
+    const subdirAwareFetcher: GitArchiveFetcher = (request) => {
+      if (request.subdir === "nested/pack") {
+        writeValidPack(request.destinationDir);
+      } else {
+        fs.writeFileSync(path.join(request.destinationDir, "stray.txt"), "wrong subdir\n");
+      }
+    };
+
+    const result = installGit({ subdir: "some/other/path" }, subdirAwareFetcher);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("INVALID_PACK");
+  });
+});
+
+describe("installGitPack rollback + conflicts (#2097)", () => {
+  it("should roll back the lock when a second git pack duplicates a problem id", () => {
+    // First git pack installs the problem id "shared".
+    const first = installGit({}, fixtureFetcher({ packOptions: { problemId: "shared" } }));
+    expect(first.ok).toBe(true);
+    const lockBefore = JSON.stringify(readLock(storeDir));
+
+    // Second git pack (different pack id/version) re-declares "shared" → clash.
+    const second = installGitPack({
+      url: "https://github.com/example/other-pack.git",
+      commit: "ffffffffffffffffffffffffffffffffffffffff",
+      storeDir,
+      installedAt: INSTALLED_AT,
+      coreVersion: CORE_VERSION,
+      availableRuntimes: AVAILABLE_RUNTIMES,
+      fetcher: fixtureFetcher({
+        packOptions: {
+          manifestOverrides: { id: "com.example.other-pack", version: "1.0.0" },
+          problemId: "shared",
+        },
+      }),
+    });
+
+    expect(second.ok).toBe(false);
+    if (second.ok) return;
+    expect(second.reason).toBe("COMPOSE_CONFLICT");
+    // Atomic rollback: the lock is byte-identical and the second snapshot is gone.
+    expect(JSON.stringify(readLock(storeDir))).toBe(lockBefore);
+    expect(fs.existsSync(path.join(storeDir, "snapshots", "com.example.other-pack"))).toBe(false);
+  });
+
+  it("should be idempotent when the identical git revision content is installed twice", () => {
+    const first = installGit({}, fixtureFetcher());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.alreadyInstalled).toBe(false);
+
+    const second = installGit({}, fixtureFetcher());
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.alreadyInstalled).toBe(true);
+    expect(readLock(storeDir).packs).toHaveLength(1);
   });
 });

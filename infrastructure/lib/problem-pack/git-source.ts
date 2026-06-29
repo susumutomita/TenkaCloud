@@ -25,7 +25,6 @@
  * and never runs package-manager lifecycle scripts.
  */
 
-import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -36,6 +35,7 @@ import {
   type PackProblemInput,
   type PackSnapshotInput,
 } from "./effective-catalog.js";
+import { realGitArchiveFetcher } from "./git-fetcher.js";
 import type { ProviderEngineCapability } from "./manifest.js";
 import {
   computeContentDigest,
@@ -88,6 +88,10 @@ const GitSourceInputSchema = z
       .refine((value) => !hasEmbeddedCredentials(value), {
         message:
           "Repository URL must not embed credentials. Remove the 'user:pass@' / 'token@' userinfo from the URL.",
+      })
+      .refine((value) => !hasQueryOrFragment(value), {
+        message:
+          "Repository URL must not contain a query string or fragment (e.g. '?token=...' / '#frag'). Pass a clean https://host/path repository URL.",
       }),
     commit: z.string().regex(FULL_COMMIT_PATTERN, {
       message:
@@ -152,6 +156,22 @@ function hasEmbeddedCredentials(value: string): boolean {
   } catch {
     // A URL we cannot parse is rejected by the HTTPS check anyway; treat the
     // credential check as "no opinion" here so the HTTPS message wins.
+    return false;
+  }
+}
+
+/**
+ * True when the URL carries a query string or fragment. A `?token=...` query is
+ * another way to smuggle a credential into a repository URL, and a fragment has
+ * no meaning for a Git remote — both are rejected so the source ref stays a clean
+ * `https://host/path` URL.
+ */
+function hasQueryOrFragment(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.search.length > 0 || url.hash.length > 0;
+  } catch {
+    // Unparseable URLs are caught by the HTTPS check; no opinion here.
     return false;
   }
 }
@@ -276,7 +296,13 @@ export function installGitPack(options: InstallGitPackOptions): InstallGitPackRe
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tenkacloud-git-pack-"));
   try {
-    fetchOrThrow(fetcher, source, tempDir);
+    // ONLY the fetch maps to FETCH_FAILED. A later digest / snapshot failure must
+    // surface with its own reason (DIGEST_MISMATCH / INVALID_PACK / ...), not be
+    // mislabeled as a transport error.
+    const fetched = fetchOrThrow(fetcher, source, tempDir);
+    if (!fetched.ok) {
+      return { ok: false, reason: "FETCH_FAILED", message: fetched.message };
+    }
 
     if (options.expectedDigest !== undefined) {
       const actual = computeContentDigest(tempDir);
@@ -290,22 +316,33 @@ export function installGitPack(options: InstallGitPackOptions): InstallGitPackRe
     }
 
     return snapshotFetched(tempDir, source, storeDir, options);
-  } catch (err) {
-    return { ok: false, reason: "FETCH_FAILED", message: (err as Error).message };
   } finally {
     // ALWAYS remove the temporary tree — on success and on every failure path.
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
-/** Run the injected fetcher, surfacing any throw as a FETCH_FAILED outcome. */
-function fetchOrThrow(fetcher: GitArchiveFetcher, source: GitSource, destinationDir: string): void {
-  fetcher({
-    repositoryUrl: source.repositoryUrl,
-    commit: source.commit,
-    subdir: source.subdir,
-    destinationDir,
-  });
+/**
+ * Run the injected fetcher, converting any throw into a discriminated failure so
+ * the caller can map ONLY a transport error to FETCH_FAILED (digest / snapshot
+ * errors are handled separately).
+ */
+function fetchOrThrow(
+  fetcher: GitArchiveFetcher,
+  source: GitSource,
+  destinationDir: string,
+): { ok: true } | { ok: false; message: string } {
+  try {
+    fetcher({
+      repositoryUrl: source.repositoryUrl,
+      commit: source.commit,
+      subdir: source.subdir,
+      destinationDir,
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: (err as Error).message };
+  }
 }
 
 /**
@@ -420,54 +457,5 @@ function pruneEmptyDir(dir: string): void {
   if (!fs.existsSync(dir)) return;
   if (fs.readdirSync(dir).length === 0) {
     fs.rmdirSync(dir);
-  }
-}
-
-/**
- * The real Git transport. It performs a SHALLOW, hooks-disabled fetch of exactly
- * the pinned commit, checks it out into a scratch worktree, and copies the pack
- * root (optionally the subdir) into `destinationDir`. No Git hooks run
- * (`core.hooksPath=/dev/null`), and no package-manager lifecycle script is ever
- * invoked — we only move files. Injected in production; tests substitute an
- * offline fetcher so this never spawns a process in the unit suite.
- */
-export const realGitArchiveFetcher: GitArchiveFetcher = (request) => {
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), "tenkacloud-git-clone-"));
-  try {
-    const git = (args: readonly string[]): void => {
-      execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...args], {
-        cwd: work,
-        stdio: ["ignore", "ignore", "pipe"],
-      });
-    };
-    // Initialize an empty repo, fetch ONLY the pinned commit, and check it out.
-    // This never resolves a branch / tag — the commit is the only ref fetched.
-    git(["init", "--quiet"]);
-    git(["remote", "add", "origin", request.repositoryUrl]);
-    git(["fetch", "--depth", "1", "--no-tags", "origin", request.commit]);
-    git(["checkout", "--quiet", "FETCH_HEAD"]);
-
-    const packRoot =
-      request.subdir.length > 0 ? path.join(work, ...request.subdir.split("/")) : work;
-    copyPackRoot(packRoot, request.destinationDir);
-  } finally {
-    fs.rmSync(work, { recursive: true, force: true });
-  }
-};
-
-/**
- * Copy a checked-out pack root into `destinationDir`, excluding `.git` and other
- * VCS/build noise. Only regular files and directories are copied; symlinks are
- * skipped (they are excluded from snapshots and the digest anyway).
- */
-function copyPackRoot(packRoot: string, destinationDir: string): void {
-  if (!fs.existsSync(packRoot) || !fs.statSync(packRoot).isDirectory()) {
-    throw new Error(`Pack root '${packRoot}' was not found in the fetched repository.`);
-  }
-  for (const entry of fs.readdirSync(packRoot, { withFileTypes: true })) {
-    if (entry.name === ".git" || entry.isSymbolicLink()) continue;
-    const from = path.join(packRoot, entry.name);
-    const to = path.join(destinationDir, entry.name);
-    fs.cpSync(from, to, { recursive: true });
   }
 }
