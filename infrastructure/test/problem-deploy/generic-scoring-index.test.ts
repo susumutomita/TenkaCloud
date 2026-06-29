@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   buildSharedResources: vi.fn(),
   reconcileEventStatuses: vi.fn(),
   reconcileRuntimeStatuses: vi.fn(),
+  reconcileDeployStatusMaintenance: vi.fn(),
   isScoringActive: vi.fn(),
   runUptimeFlatKind: vi.fn(),
   runUptimeMultiKind: vi.fn(),
@@ -36,6 +37,12 @@ vi.mock(
   "../../lib/problem-deploy/handlers/generic-scoring-handler/runtime-status-reconciler",
   () => ({
     reconcileRuntimeStatuses: mocks.reconcileRuntimeStatuses,
+  }),
+);
+vi.mock(
+  "../../lib/problem-deploy/handlers/generic-scoring-handler/composite-status-reconciler",
+  () => ({
+    reconcileDeployStatusMaintenance: mocks.reconcileDeployStatusMaintenance,
   }),
 );
 vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/scoring-active", () => ({
@@ -131,6 +138,13 @@ beforeEach(() => {
   mocks.isScoringActive.mockReturnValue(true);
   mocks.reconcileEventStatuses.mockResolvedValue(undefined);
   mocks.reconcileRuntimeStatuses.mockResolvedValue(undefined);
+  // [#2068] run the injected per-target reconciler (so reconcileRuntimeStatuses is
+  // still exercised) but skip the real composite parent scan in this index test.
+  mocks.reconcileDeployStatusMaintenance.mockImplementation(
+    async (_deps: unknown, _nowIso: unknown, perTarget: () => Promise<void>) => {
+      await perTarget();
+    },
+  );
   mocks.runUptimeFlatKind.mockResolvedValue(EMPTY_RESULT);
   mocks.runUptimeMultiKind.mockResolvedValue(EMPTY_RESULT);
   mocks.runPhasedPollingKind.mockResolvedValue(EMPTY_RESULT);
