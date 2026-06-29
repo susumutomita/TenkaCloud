@@ -82,9 +82,12 @@ export function selectAdapter(
   if (runtime.provider === GCP_PROVIDER && runtime.engine === GCP_ENGINE && deps.gcp) {
     return new GcpInfraManagerRuntimeAdapter(deps.gcp, runtime);
   }
-  // Planned providers (ADR-026/027) get a roadmap-aware message; everything else
-  // is treated as a likely typo. Both still throw — no adapter, no cloud mutation.
+  // Planned providers (ADR-026/027) get a roadmap-aware message, local container
+  // problems (ADR-023) get a "run make local" message, everything else is a likely
+  // typo. All still throw — no adapter, no cloud mutation.
+  const support = classifyRuntimeSupport(runtime);
   throw new RuntimeNotSupportedError(runtime, {
-    reserved: classifyRuntimeSupport(runtime) === "reserved",
+    reserved: support === "reserved",
+    container: support === "container",
   });
 }

@@ -146,22 +146,36 @@ export interface ProblemRuntimeAdapter {
  */
 export class RuntimeNotSupportedError extends Error {
   /**
-   * `reserved` (default false) distinguishes a **planned** provider/engine
-   * (ADR-026/ADR-027, tracker #1408 — known roadmap, no adapter registered yet)
-   * from an **unknown** runtime (likely a typo in `metadata.runtime`). Both are
-   * rejected before any cloud mutation; only the operator-facing message differs.
+   * The runtime classification distinguishes the rejection reason (the failure is
+   * always loud — no adapter, no cloud mutation — only the operator-facing message
+   * differs):
+   *   - `reserved`: a **planned** provider/engine (ADR-026/ADR-027, tracker #1408 —
+   *     known roadmap, no adapter registered yet).
+   *   - `container`: a **local-only** container problem (ADR-023 `docker/compose`) —
+   *     deliberately not cloud-deployable; run it with `make local`.
+   *   - otherwise: an **unknown** runtime (likely a typo in `metadata.runtime`).
    * Classification is supplied by the caller (`registry.selectAdapter`) so this
    * module stays free of a circular import back into `normalize`.
    */
   constructor(
     public readonly runtime: ProblemRuntime,
-    opts: { readonly reserved?: boolean } = {},
+    opts: { readonly reserved?: boolean; readonly container?: boolean } = {},
   ) {
-    super(
-      opts.reserved
-        ? `Runtime ${runtime.provider}/${runtime.engine} is a planned provider/engine (ADR-026/ADR-027, tracker #1408) but is not yet executable in this platform version — no adapter is registered.`
-        : `Runtime ${runtime.provider}/${runtime.engine} is not a recognized executable runtime (check metadata.runtime for typos). Only aws/cloudformation is supported today (ADR-023 D4).`,
-    );
+    super(RuntimeNotSupportedError.messageFor(runtime, opts));
     this.name = "RuntimeNotSupportedError";
+  }
+
+  private static messageFor(
+    runtime: ProblemRuntime,
+    opts: { readonly reserved?: boolean; readonly container?: boolean },
+  ): string {
+    const pair = `${runtime.provider}/${runtime.engine}`;
+    if (opts.reserved) {
+      return `Runtime ${pair} is a planned provider/engine (ADR-026/ADR-027, tracker #1408) but is not yet executable in this platform version — no adapter is registered.`;
+    }
+    if (opts.container) {
+      return `Runtime ${pair} is a local-only container problem (ADR-023) — run it with \`make local\`; it is not cloud-deployable.`;
+    }
+    return `Runtime ${pair} is not a recognized executable runtime (check metadata.runtime for typos). Only aws/cloudformation is supported today (ADR-023 D4).`;
   }
 }

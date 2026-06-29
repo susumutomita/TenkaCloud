@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  CONTAINER_RUNTIMES,
   type CompositeRuntimeDescriptor,
   classifyRuntimeSupport,
   DEFAULT_ENTRY,
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
   isCompositeRuntime,
+  isContainerRuntime,
   isExecutableRuntime,
   isReservedRuntime,
   isSingleRuntime,
@@ -22,6 +24,12 @@ const AWS: RuntimeDescriptor = {
   entry: "template.yaml",
 };
 
+const CONTAINER: RuntimeDescriptor = {
+  provider: "docker",
+  engine: "compose",
+  entry: "local/docker-compose.yml",
+};
+
 describe("constants", () => {
   it("should pin the single executable provider/engine and default entry", () => {
     expect(EXECUTABLE_PROVIDER).toBe("aws");
@@ -35,6 +43,10 @@ describe("constants", () => {
       { provider: "azure", engine: "bicep" },
       { provider: "gcp", engine: "infra-manager" },
     ]);
+  });
+
+  it("should recognize the local container runtime (ADR-023 docker/compose)", () => {
+    expect(CONTAINER_RUNTIMES).toEqual([{ provider: "docker", engine: "compose" }]);
   });
 });
 
@@ -322,6 +334,22 @@ describe("isReservedRuntime", () => {
   });
 });
 
+describe("isContainerRuntime", () => {
+  it("should be true for the local container pair docker/compose", () => {
+    expect(isContainerRuntime(CONTAINER)).toBe(true);
+  });
+
+  it("should be false for executable, reserved, and unknown runtimes", () => {
+    expect(isContainerRuntime(AWS)).toBe(false);
+    expect(isContainerRuntime({ provider: "azure", engine: "bicep", entry: "x" })).toBe(false);
+    expect(isContainerRuntime({ provider: "kubernetes", engine: "helm", entry: "x" })).toBe(false);
+  });
+
+  it("should be false for docker paired with a different engine", () => {
+    expect(isContainerRuntime({ provider: "docker", engine: "swarm", entry: "x" })).toBe(false);
+  });
+});
+
 describe("classifyRuntimeSupport", () => {
   it("should classify aws/cloudformation as executable", () => {
     expect(classifyRuntimeSupport(AWS)).toBe("executable");
@@ -332,6 +360,10 @@ describe("classifyRuntimeSupport", () => {
       expect(classifyRuntimeSupport({ provider, engine, entry: "x" })).toBe("reserved");
     });
   }
+
+  it("should classify the local container runtime docker/compose as container", () => {
+    expect(classifyRuntimeSupport(CONTAINER)).toBe("container");
+  });
 
   it("should classify an unrecognized runtime as unknown", () => {
     expect(classifyRuntimeSupport({ provider: "kubernetes", engine: "helm", entry: "x" })).toBe(
