@@ -7,12 +7,18 @@
  */
 
 export {
+  buildCompositeDeploymentPlan,
+  COMPOSITE_PROVIDERS,
+  type CompositeDeploymentPlan,
+  type CompositeRuntimeDescriptor,
   classifyRuntimeSupport,
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
+  isCompositeRuntime,
   isExecutableRuntime,
   isReservedRuntime,
   normalizeRuntime,
+  type ProblemRuntimeDescriptor,
   RESERVED_RUNTIMES,
   type RuntimeMetadataInput,
   type RuntimeSupport,
@@ -58,7 +64,13 @@ export {
   mapGcpDeploymentState,
 } from "./gcp-infra-manager-adapter.js";
 export { type AdapterDependencies, selectAdapter } from "./registry.js";
-export { makeProblemRuntimeResolver, parseProblemRuntimes } from "./runtime-catalog-env.js";
+export {
+  asCompositeDescriptor,
+  makeProblemRuntimeDescriptorResolver,
+  makeProblemRuntimeResolver,
+  parseProblemRuntimeDescriptors,
+  parseProblemRuntimes,
+} from "./runtime-catalog-env.js";
 export {
   mapSakuraStatus,
   SAKURA_ENGINE,

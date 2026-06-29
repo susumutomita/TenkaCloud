@@ -34,18 +34,39 @@ export type DeploymentStatus = z.infer<typeof DeploymentStatusSchema>;
  * 一致させる。`accountGroupId` / `problemSetId` は bulk deploy 用の予約フィールドで、
  * 現状は受け取って DDB に保存するのみ (worker 側では未使用)。
  */
+const AWS_REGION_RE = /^[a-z]{2}-[a-z]+-\d+$/;
+const AWS_ACCOUNT_ID_RE = /^\d{12}$/;
+const TEAM_NAME_RE = /^[A-Za-z0-9 _-]+$/;
+
+const teamNameSchema = z
+  .string()
+  .min(1)
+  .max(40)
+  .regex(TEAM_NAME_RE, "Team Name は英数字 / スペース / _ / - のみ、40 文字以内");
+
 export const DeployRequestSchema = z.object({
-  region: z.string().regex(/^[a-z]{2}-[a-z]+-\d+$/, "AWS region 形式が不正です"),
-  awsAccountId: z.string().regex(/^\d{12}$/, "AWS Account ID は 12 桁の数字"),
-  teamName: z
-    .string()
-    .min(1)
-    .max(40)
-    .regex(/^[A-Za-z0-9 _-]+$/, "Team Name は英数字 / スペース / _ / - のみ、40 文字以内"),
+  region: z.string().regex(AWS_REGION_RE, "AWS region 形式が不正です"),
+  awsAccountId: z.string().regex(AWS_ACCOUNT_ID_RE, "AWS Account ID は 12 桁の数字"),
+  teamName: teamNameSchema,
   accountGroupId: z.string().optional(),
   problemSetId: z.string().optional(),
 });
 export type DeployRequest = z.infer<typeof DeployRequestSchema>;
+
+/**
+ * [Composite Runtime / Issue #2075] Request body for a `runtime.kind=composite`
+ * deploy. DERIVED from {@link DeployRequestSchema} so the two never drift — only
+ * `awsAccountId` / `region` are relaxed to optional (a composite plan requires
+ * them only when it has an AWS target; the deploy handler enforces that after
+ * resolving the plan). Every other field — including the strict region / account
+ * regexes when those fields ARE supplied — is inherited unchanged. It carries NO
+ * provider credential / secret field; those never cross the HTTP boundary.
+ */
+export const CompositeDeployRequestSchema = DeployRequestSchema.partial({
+  region: true,
+  awsAccountId: true,
+});
+export type CompositeDeployRequest = z.infer<typeof CompositeDeployRequestSchema>;
 
 /**
  * Deployments テーブルの行 (DocumentClient shape)。
