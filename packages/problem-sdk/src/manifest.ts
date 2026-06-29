@@ -36,6 +36,15 @@ export const PACK_SCHEMA_VERSION = 1 as const;
 /** The providers a pack may declare a required runtime for (ADR-026 / ADR-027). */
 export const PACK_PROVIDERS = ["aws", "gcp", "azure", "sakura"] as const;
 
+/**
+ * Defense-in-depth bound on author-supplied version / range strings. A real
+ * SemVer (or even a generous `||`-OR of comparators) is far shorter than this, so
+ * the cap only ever rejects pathological input — and Zod applies `.max()` before
+ * the `.refine()` validators, so over-long untrusted input is dropped before it
+ * reaches any parsing at all.
+ */
+const MAX_VERSION_LENGTH = 256;
+
 function isExactSemver(value: string): boolean {
   return SEMVER_PATTERN.test(value);
 }
@@ -51,13 +60,25 @@ function isValidSemverRange(value: string): boolean {
   return trimmed.split("||").every((clause) => isValidRangeClause(clause.trim()));
 }
 
+/**
+ * Collapse runs of whitespace to a single space and trim. ReDoS-safe: a single
+ * global `\s+` replace is linear, so callers can then split on a literal `" - "`
+ * / `" "` instead of the polynomial `\s+-\s+` / `\s+` split patterns (which retry
+ * their adjacent unbounded quantifiers at every position on attacker-supplied
+ * input). Semantics are preserved — `\s` still covers spaces, tabs, and newlines.
+ */
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function isValidRangeClause(clause: string): boolean {
-  if (clause.length === 0) return false;
-  const hyphen = clause.split(/\s+-\s+/);
+  const normalized = normalizeWhitespace(clause);
+  if (normalized.length === 0) return false;
+  const hyphen = normalized.split(" - ");
   if (hyphen.length === 2) {
-    return hyphen.every((bound) => COMPARATOR_PATTERN.test(bound.trim()));
+    return hyphen.every((bound) => COMPARATOR_PATTERN.test(bound));
   }
-  return clause.split(/\s+/).every((token) => COMPARATOR_PATTERN.test(token));
+  return normalized.split(" ").every((token) => COMPARATOR_PATTERN.test(token));
 }
 
 /**
@@ -160,16 +181,14 @@ function comparatorSatisfied(comparator: string, version: SemverParts): boolean 
 
 /** Test a single AND-clause (a hyphen range or whitespace-joined comparators). */
 function clauseSatisfied(clause: string, version: SemverParts): boolean {
-  const hyphen = clause.split(/\s+-\s+/);
+  const normalized = normalizeWhitespace(clause);
+  const hyphen = normalized.split(" - ");
   if (hyphen.length === 2) {
-    const lower = tokenBounds(hyphen[0].trim()).lower;
-    const upper = tokenBounds(hyphen[1].trim()).upper;
+    const lower = tokenBounds(hyphen[0]).lower;
+    const upper = tokenBounds(hyphen[1]).upper;
     return compareSemver(version, lower) >= 0 && compareSemver(version, upper) < 0;
   }
-  return clause
-    .trim()
-    .split(/\s+/)
-    .every((comparator) => comparatorSatisfied(comparator, version));
+  return normalized.split(" ").every((comparator) => comparatorSatisfied(comparator, version));
 }
 
 /**
@@ -209,7 +228,10 @@ const ProviderEngineSchema = z
 const DependencySchema = z
   .object({
     id: z.string().regex(PACK_ID_PATTERN, "dependency id must be reverse-DNS style, lowercase"),
-    range: z.string().refine(isValidSemverRange, "dependency range must be a valid SemVer range"),
+    range: z
+      .string()
+      .max(MAX_VERSION_LENGTH, "dependency range is too long")
+      .refine(isValidSemverRange, "dependency range must be a valid SemVer range"),
   })
   .strict();
 
@@ -218,8 +240,14 @@ export const PackManifestSchema = z
   .object({
     schemaVersion: z.literal(PACK_SCHEMA_VERSION),
     id: z.string().regex(PACK_ID_PATTERN, "id must be reverse-DNS style, lowercase"),
-    version: z.string().refine(isExactSemver, "version must be a valid SemVer"),
-    core: z.string().refine(isValidSemverRange, "core must be a valid SemVer range"),
+    version: z
+      .string()
+      .max(MAX_VERSION_LENGTH, "version is too long")
+      .refine(isExactSemver, "version must be a valid SemVer"),
+    core: z
+      .string()
+      .max(MAX_VERSION_LENGTH, "core is too long")
+      .refine(isValidSemverRange, "core must be a valid SemVer range"),
     title: z.string().min(1, "title must be a non-empty string"),
     description: z.string().min(1, "description must be a non-empty string"),
     license: z.string().min(1, "license must be a non-empty string"),
