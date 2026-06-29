@@ -147,13 +147,40 @@ describe("validatePackDirectory: failure branches", () => {
     expect(codes(root)).toContain("METADATA_INVALID");
   });
 
-  it("should treat a directory at the artifact path as a missing artifact", () => {
+  it("should treat an EMPTY directory at the artifact path as a missing artifact", () => {
     const root = mkTemp();
     writeManifest(root);
     const dir = writeProblem(root, "dir-artifact", {});
-    // Create a DIRECTORY named template.yaml instead of a file.
+    // Create an EMPTY DIRECTORY named template.yaml instead of a file.
     fs.mkdirSync(path.join(dir, "template.yaml"));
     expect(codes(root)).toContain("ARTIFACT_MISSING");
+  });
+
+  it("should accept a non-empty module directory as a composite target artifact", () => {
+    const root = mkTemp();
+    // Composite target whose engine deploys a directory module (e.g. Terraform /
+    // Infrastructure Manager). The entry points at a directory, not a single file.
+    writeManifest(root, {
+      requiredRuntimes: [
+        { provider: "aws", engine: "cloudformation" },
+        { provider: "gcp", engine: "infra-manager" },
+      ],
+    });
+    const dir = writeProblem(root, "composite-dir", {
+      runtime: {
+        kind: "composite",
+        targets: [
+          { id: "aws", provider: "aws", engine: "cloudformation", entry: "template.yaml" },
+          { id: "gcp", provider: "gcp", engine: "infra-manager", entry: "tf" },
+        ],
+      },
+    });
+    fs.writeFileSync(path.join(dir, "template.yaml"), "Resources: {}\n");
+    fs.mkdirSync(path.join(dir, "tf"));
+    fs.writeFileSync(path.join(dir, "tf", "main.tf"), "# module\n");
+    const result = validatePackDirectory(root);
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics).toEqual([]);
   });
 
   it("should not traverse a symlinked category directory that escapes the pack root", () => {

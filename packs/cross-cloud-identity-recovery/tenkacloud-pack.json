@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "com.tenkacloud.cross-cloud-identity-recovery",
+  "version": "0.1.0",
+  "core": "^1.0.0",
+  "title": "Cross-cloud identity recovery pack",
+  "description": "A production-grade Composite challenge: an AWS workload must recover keyless access to a protected GCP endpoint through a deliberately misconfigured Workload Identity Federation boundary. No static service-account keys are permitted at any layer.",
+  "license": "Apache-2.0",
+  "problemsRoot": "problems",
+  "requiredRuntimes": [
+    {
+      "provider": "aws",
+      "engine": "cloudformation"
+    },
+    {
+      "provider": "gcp",
+      "engine": "infra-manager"
+    }
+  ]
+}

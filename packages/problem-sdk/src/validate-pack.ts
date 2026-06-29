@@ -375,24 +375,51 @@ function checkArtifact(
     });
     return;
   }
-  // The artifact must be a real file — a directory (or anything non-file) at the
-  // entry path is treated as missing, so a deploy never points at a directory.
-  if (!isExistingFile(resolved)) {
+  // The artifact must be a deployable body: either a real file (a single-page
+  // CFn template), or a NON-EMPTY directory module (a Terraform / Infrastructure
+  // Manager / Bicep module a composite target points at). An empty directory or
+  // anything else at the entry path is treated as missing, so a deploy never
+  // points at nothing.
+  if (!isDeployableArtifact(resolved)) {
     diagnostics.push({
       code: "ARTIFACT_MISSING",
       file: problem.metadataFile,
       path: fieldPath,
-      message: `Referenced artifact '${entry}' was not found at ${path.relative(packRoot, resolved)}.`,
+      message: `Referenced artifact '${entry}' was not found at ${path.relative(packRoot, resolved)} (expected a file or a non-empty module directory).`,
     });
   }
 }
 
-function isExistingFile(target: string): boolean {
+/**
+ * A deployable artifact is a regular file (a single-page template) or a non-empty
+ * directory module (the directory a Terraform / Infrastructure Manager / Bicep
+ * composite target deploys). An empty directory is NOT deployable and is treated
+ * as missing.
+ */
+function isDeployableArtifact(target: string): boolean {
   try {
-    return fs.statSync(target).isFile();
+    const stat = fs.statSync(target);
+    if (stat.isFile()) return true;
+    if (stat.isDirectory()) return directoryContainsFile(target);
+    return false;
   } catch {
     return false;
   }
+}
+
+/** True when the directory tree contains at least one regular file. */
+function directoryContainsFile(dir: string): boolean {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    if (entry.isFile()) return true;
+    if (entry.isDirectory() && directoryContainsFile(path.join(dir, entry.name))) return true;
+  }
+  return false;
 }
 
 /** The manifest's `requiredRuntimes` must cover every (provider, engine) a problem uses. */
