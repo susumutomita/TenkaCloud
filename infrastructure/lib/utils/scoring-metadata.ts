@@ -205,13 +205,61 @@ export interface AttackDetectionScoringMetadata {
   readonly hints?: readonly ProgressiveHint[];
 }
 
+/**
+ * Issue #2070: one declared scoring target of a Composite problem.
+ *
+ *   - targetId: the composite target whose runtime outputs this probe reads. Must
+ *     match a target declared on the parent (= the #2069 `collectCompositeOutputs`
+ *     view key). Unique within `targets[]`.
+ *   - probe: the probe machinery to run against the target. Only `https` is
+ *     supported (= reuse the existing HTTPS probe in the generic scoring Lambda);
+ *     unknown probe kinds reject the whole metadata (fail loud).
+ *   - outputKey: the CFn / runtime Output key the probe needs. The scorer reads
+ *     **exactly** this key from the target's namespaced output view — it never
+ *     infers a URL field name.
+ *   - path: optional relative path appended to the resolved base URL before
+ *     probing (= same `joinUrl` semantics as uptime-flat).
+ *   - expectStatus: optional accepted HTTP statuses (default 2xx, same as the
+ *     existing probe contract).
+ */
+export interface CompositeProbeTarget {
+  readonly targetId: string;
+  readonly probe: "https";
+  readonly outputKey: string;
+  readonly path?: string;
+  readonly expectStatus?: readonly number[];
+}
+
+/**
+ * Issue #2070: opt-in `composite-probe` scoring kind for Composite problems.
+ *
+ * Runs one probe per declared `targets[]` entry against the matching composite
+ * target's runtime output (named explicitly by `outputKey`). `success: "all"` is
+ * the only supported rule — the composite is success ONLY when every declared
+ * probe succeeds. `any` / quorum / weighted / cross-target expressions are out of
+ * scope; an unknown `success` value rejects the whole metadata.
+ *
+ * This is a brand-new kind: existing single-provider scoring kinds and their
+ * input are untouched.
+ */
+export interface CompositeProbeScoringMetadata {
+  readonly kind: "composite-probe";
+  readonly targets: readonly CompositeProbeTarget[];
+  readonly success: "all";
+  /** Awarded once when every declared probe succeeds. */
+  readonly pointsAllOk: number;
+  /** Issue #742 Phase 5: hints 共通 field。 */
+  readonly hints?: readonly ProgressiveHint[];
+}
+
 export type ProblemScoringMetadata =
   | FlagScoringMetadata
   | MultiFlagScoringMetadata
   | UptimeFlatScoringMetadata
   | UptimeMultiScoringMetadata
   | PhasedPollingScoringMetadata
-  | AttackDetectionScoringMetadata;
+  | AttackDetectionScoringMetadata
+  | CompositeProbeScoringMetadata;
 
 /**
  * 1 件の `scoring` value を ProblemScoringMetadata に narrow する。不正なら undefined。
@@ -229,7 +277,76 @@ export function parseScoringMetadata(value: unknown): ProblemScoringMetadata | u
   if (v.kind === "uptime-multi") return parseUptimeMulti(value);
   if (v.kind === "phased-polling") return parsePhasedPolling(value);
   if (v.kind === "attack-detection") return parseAttackDetection(value);
+  if (v.kind === "composite-probe") return parseCompositeProbe(value);
   return undefined;
+}
+
+/**
+ * Issue #2070: narrow the opt-in `composite-probe` kind.
+ *
+ * Fail-loud (whole-object reject, mirroring multi-flag), because a silently
+ * dropped scoring target would change which targets gate the award:
+ *   - `targets[]` must be a non-empty array; every entry must parse.
+ *   - duplicate `targetId`s reject (= the scorer keys probes by targetId).
+ *   - `success` must be exactly `"all"` (any / quorum / weighted are out of scope).
+ *   - `pointsAllOk` must be a positive finite number.
+ */
+function parseCompositeProbe(value: unknown): CompositeProbeScoringMetadata | undefined {
+  const c = value as {
+    targets?: unknown;
+    success?: unknown;
+    pointsAllOk?: unknown;
+    hints?: unknown;
+  };
+  if (c.success !== "all") return undefined;
+  if (typeof c.pointsAllOk !== "number" || !Number.isFinite(c.pointsAllOk) || c.pointsAllOk <= 0) {
+    return undefined;
+  }
+  if (!Array.isArray(c.targets) || c.targets.length === 0) return undefined;
+
+  const targets: CompositeProbeTarget[] = [];
+  const seenTargetIds = new Set<string>();
+  for (const raw of c.targets) {
+    const target = parseCompositeProbeTarget(raw);
+    if (!target) return undefined; // 1 件でも不正なら全体 reject (= gate 対象が無言で変わるのを防ぐ)
+    if (seenTargetIds.has(target.targetId)) return undefined; // duplicate targetId reject
+    seenTargetIds.add(target.targetId);
+    targets.push(target);
+  }
+
+  const hints = parseHints(c.hints);
+  return {
+    kind: "composite-probe",
+    targets,
+    success: "all",
+    pointsAllOk: c.pointsAllOk,
+    ...(hints ? { hints } : {}),
+  };
+}
+
+function parseCompositeProbeTarget(value: unknown): CompositeProbeTarget | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const t = value as {
+    targetId?: unknown;
+    probe?: unknown;
+    outputKey?: unknown;
+    path?: unknown;
+    expectStatus?: unknown;
+  };
+  const targetId = optionalNonEmptyString(t.targetId);
+  // The scorer must NOT infer a URL field name — the output key is required and explicit.
+  const outputKey = optionalNonEmptyString(t.outputKey);
+  if (!targetId || !outputKey) return undefined;
+  if (t.probe !== "https") return undefined; // only the https probe is supported
+  const path = optionalNonEmptyString(t.path);
+  const expectStatus = parseExpectedStatuses(t.expectStatus);
+  return {
+    targetId,
+    probe: "https",
+    outputKey,
+    ...(path ? { path } : {}),
+    ...(expectStatus ? { expectStatus } : {}),
+  };
 }
 
 function parseFlag(value: unknown): FlagScoringMetadata | undefined {
