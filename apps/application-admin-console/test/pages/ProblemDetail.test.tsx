@@ -176,6 +176,13 @@ describe("ProblemDetailPage", () => {
     expect(screen.getByText("Apache-2.0")).toBeInTheDocument();
   });
 
+  it("should show the bare pack id when a pack problem declares no version", () => {
+    // The `packId@version` label falls back to just the id when version is absent.
+    mockFind.mockReturnValue(problem({ source: "pack", packId: "com.example.pack" }));
+    renderPage();
+    expect(screen.getByText("com.example.pack")).toBeInTheDocument();
+  });
+
   it("should NOT show pack provenance rows for a core problem", () => {
     // Compatibility: the legacy core-only detail view is unchanged (no pack labels).
     renderPage();

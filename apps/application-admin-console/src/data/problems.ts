@@ -178,45 +178,67 @@ const packManifestModules = import.meta.glob<{ default: PackManifestShape }>(
 );
 
 /** The subset of `tenkacloud-pack.json` the console reads for display provenance. */
-interface PackManifestShape {
+export interface PackManifestShape {
   id: string;
   version: string;
   license: string;
 }
 
-/** Resolve the nearest `tenkacloud-pack.json` for a pack problem's metadata path. */
-function findPackManifest(metadataPath: string): PackManifestShape | undefined {
-  for (const [manifestPath, mod] of Object.entries(packManifestModules)) {
+/**
+ * Resolve the nearest `tenkacloud-pack.json` for a pack problem's metadata path.
+ * Takes the manifest module map explicitly so it is unit-testable with fakes —
+ * the build-time pack glob is empty in a core-only checkout, so the production
+ * call below never exercises this branch on its own.
+ */
+export function findPackManifest(
+  manifestModules: Record<string, { default: PackManifestShape }>,
+  metadataPath: string,
+): PackManifestShape | undefined {
+  for (const [manifestPath, mod] of Object.entries(manifestModules)) {
     const root = manifestPath.replace(/tenkacloud-pack\.json$/, "");
     if (metadataPath.startsWith(root)) return mod.default;
   }
   return undefined;
 }
 
-const coreInputs: readonly CoreCatalogInput[] = Object.entries(metadataModules).map(
-  ([metadataPath, mod]) => ({
+/** Project the core glob maps into catalog inputs (pure; testable with fakes). */
+export function buildCoreInputs(
+  metadata: Record<string, { default: ProblemMetadata }>,
+  templates: Record<string, string>,
+): readonly CoreCatalogInput[] {
+  return Object.entries(metadata).map(([metadataPath, mod]) => ({
     metadata: mod.default,
-    templateYaml: findTemplateYaml(templateModules, metadataPath, mod.default),
-  }),
-);
+    templateYaml: findTemplateYaml(templates, metadataPath, mod.default),
+  }));
+}
 
-// Only snapshots that carry a readable manifest become pack problems; a snapshot
-// missing its manifest is skipped rather than mislabeled as a core problem.
-const packInputs: readonly PackCatalogProblemInput[] = Object.entries(packMetadataModules).flatMap(
-  ([metadataPath, mod]) => {
-    const manifest = findPackManifest(metadataPath);
+/**
+ * Project the pack-snapshot glob maps into catalog inputs (pure; testable with
+ * fakes). Only snapshots that carry a readable manifest become pack problems; a
+ * snapshot missing its manifest is skipped rather than mislabeled as core.
+ */
+export function buildPackInputs(
+  metadata: Record<string, { default: ProblemMetadata }>,
+  templates: Record<string, string>,
+  manifests: Record<string, { default: PackManifestShape }>,
+): readonly PackCatalogProblemInput[] {
+  return Object.entries(metadata).flatMap(([metadataPath, mod]) => {
+    const manifest = findPackManifest(manifests, metadataPath);
     if (!manifest) return [];
     return [
       {
         metadata: mod.default,
-        templateYaml: findTemplateYaml(packTemplateModules, metadataPath, mod.default),
+        templateYaml: findTemplateYaml(templates, metadataPath, mod.default),
         packId: manifest.id,
         packVersion: manifest.version,
         license: manifest.license,
       },
     ];
-  },
-);
+  });
+}
+
+const coreInputs = buildCoreInputs(metadataModules, templateModules);
+const packInputs = buildPackInputs(packMetadataModules, packTemplateModules, packManifestModules);
 
 // 表示順の安定化のため id で sort (buildEffectiveCatalog が担保)。EFFECTIVE catalog は
 // core (上記 glob) と installed pack snapshots を #2091 の composer 経由で merge する。
@@ -235,7 +257,7 @@ export function findProblem(id: string): ProblemDetail | undefined {
  * fields). `ProblemDetail` extends `ProblemSummary`, so the same optional fields
  * carry through unchanged. Extracted to keep {@link listProblemSummaries} simple.
  */
-function packProvenanceFields(
+export function packProvenanceFields(
   p: ProblemDetail,
 ): Partial<Pick<ProblemSummary, "source" | "packId" | "packVersion" | "license">> {
   if (p.source !== "pack") return {};
