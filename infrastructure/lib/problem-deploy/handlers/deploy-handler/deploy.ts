@@ -12,8 +12,10 @@ import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
+  makeProblemRuntimeDescriptorResolver,
   makeProblemRuntimeResolver,
   type ProblemRuntime,
+  type ProblemRuntimeDescriptor,
   selectAdapter,
 } from "../shared/runtime/index.js";
 import { logDeployTrace } from "../shared/trace-log.js";
@@ -78,6 +80,16 @@ export interface DeployContext extends AdapterDependencyConfig {
    * `RuntimeNotSupportedError` BEFORE any DDB Put / EventBridge publish runs.
    */
   readonly resolveProblemRuntime?: (problemId: string) => ProblemRuntime | undefined;
+  /**
+   * [Composite Runtime / Issue #2075] Per-problemId runtime DESCRIPTOR resolver
+   * (single OR composite). The route uses this to detect a composite problem and
+   * fork to the composite path; legacy / single-provider problems return a single
+   * descriptor (or undefined) and stay on `startDeployment` unchanged. Undefined
+   * here keeps every problem on the legacy single-provider path.
+   */
+  readonly resolveProblemRuntimeDescriptor?: (
+    problemId: string,
+  ) => ProblemRuntimeDescriptor | undefined;
   /** #1766: tier 別同時デプロイ上限。未設定 = クォータ無効 (在来 stack / Lite)。 */
   readonly deployQuota?: DeployQuotaConfig;
   /**
@@ -395,6 +407,14 @@ export interface DeploySharedResources {
    * deploy is rejected pre-mutation instead of half-creating an AWS artifact.
    */
   readonly resolveProblemRuntime?: (problemId: string) => ProblemRuntime | undefined;
+  /**
+   * [Composite Runtime / Issue #2075] Descriptor resolver (single OR composite),
+   * baked from the same `BATTLE_PROBLEMS_RUNTIMES` env. Lets the route detect a
+   * composite problem; absent for every single-provider problem.
+   */
+  readonly resolveProblemRuntimeDescriptor?: (
+    problemId: string,
+  ) => ProblemRuntimeDescriptor | undefined;
   readonly challengePayloadBucket: string | undefined;
   readonly s3: S3Client;
   /** [ADR-026 / #1412] per-team Sakura API key store の読取 client。 */
@@ -423,6 +443,9 @@ export function buildSharedResources(): DeploySharedResources {
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
     problemsVisibility: parseProblemsVisibility(process.env.BATTLE_PROBLEMS_VISIBILITY),
     resolveProblemRuntime: makeProblemRuntimeResolver(process.env.BATTLE_PROBLEMS_RUNTIMES),
+    resolveProblemRuntimeDescriptor: makeProblemRuntimeDescriptorResolver(
+      process.env.BATTLE_PROBLEMS_RUNTIMES,
+    ),
     challengePayloadBucket,
     s3: new S3Client({}),
     ssm: new SSMClient({}),

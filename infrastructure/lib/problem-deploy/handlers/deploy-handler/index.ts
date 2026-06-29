@@ -1,11 +1,15 @@
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
 import { buildAuthErrorHandler, createRoleCheckMiddleware } from "../shared/auth-wiring.js";
 import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
-import { RuntimeNotSupportedError } from "../shared/runtime/index.js";
+import {
+  asCompositeDescriptor,
+  type CompositeRuntimeDescriptor,
+  RuntimeNotSupportedError,
+} from "../shared/runtime/index.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
 import {
   requireRole,
@@ -15,15 +19,18 @@ import {
   TENANT_OPERATOR_ROLE,
   TENANT_ROLES,
 } from "./auth.js";
+import { CompositeAwsInputRequiredError, startCompositeDeployment } from "./composite-deploy.js";
+import { buildCompositeDeployDeps } from "./composite-deploy-wiring.js";
 import { requestTeardown } from "./delete.js";
 import {
   buildContext,
   buildSharedResources,
+  type DeployContext,
   startDeployment,
   UnknownProblemError,
   UnverifiedCompetitorAccountError,
 } from "./deploy.js";
-import { DeployQuotaExceededError, resolveQuotaTier } from "./deploy-quota.js";
+import { DeployQuotaExceededError, type QuotaTier, resolveQuotaTier } from "./deploy-quota.js";
 import { getDeployment, listDeployments } from "./list.js";
 import { InvalidRetryRequestError, retryDeployments, validateRetryRequest } from "./retry.js";
 import {
@@ -31,7 +38,7 @@ import {
   defaultCfnClientForCompetitor,
   getStackProgress,
 } from "./stack-progress.js";
-import { DeployRequestSchema } from "./types.js";
+import { CompositeDeployRequestSchema, DeployRequestSchema } from "./types.js";
 
 /**
  * Deploy API Lambda の Hono app。routes:
@@ -96,6 +103,101 @@ app.use("*", createRoleCheckMiddleware({ healthzPath: "/healthz", roles: TENANT_
 
 app.get("/healthz", (c) => c.json({ ok: true }));
 
+/**
+ * Map a deploy error to its HTTP response. Shared by the legacy single-provider
+ * path and the composite path so both surface the same status codes for the
+ * quota / unknown-problem / unverified-account / runtime-not-supported cases.
+ * The composite path adds `CompositeAwsInputRequiredError` (a 400 validation).
+ */
+function mapDeployError(c: Context, problemId: string, err: unknown): Response {
+  if (err instanceof DeployQuotaExceededError) {
+    return c.json(
+      {
+        error: "deploy_quota_exceeded",
+        tier: err.tier,
+        limit: err.limit,
+        active: err.active,
+        message: `同時デプロイ上限 (${err.tier}: ${err.limit}) に達しています。不要な deployment を削除するか、上位 tier を検討してください。`,
+      },
+      StatusCodes.TOO_MANY_REQUESTS,
+    );
+  }
+  if (err instanceof UnknownProblemError) {
+    return c.json({ error: "unknown_problem", problemId }, StatusCodes.NOT_FOUND);
+  }
+  // Phase 2.2 (Issue #459): verified=true 行が無い account への deploy は 422 (semantically
+  // 適切: request 自体は well-formed だが、business invariant が満たされない)。operator は
+  // CompetitorAccounts ページで verify を済ませてから retry する。
+  if (err instanceof UnverifiedCompetitorAccountError) {
+    return c.json(
+      {
+        error: "unverified_competitor_account",
+        awsAccountId: err.awsAccountId,
+        message:
+          "AWS Account ID が CompetitorAccounts table で verified=true 状態でないため deploy できません。",
+      },
+      StatusCodes.UNPROCESSABLE_ENTITY,
+    );
+  }
+  // [ADR-023 / Issue #1268] Problem metadata declared a runtime we cannot
+  // execute today (e.g. azure/bicep). 422: request is well-formed, but the
+  // business invariant "platform has an adapter for this provider/engine" is
+  // not satisfied. No cloud mutation happens on this path.
+  if (err instanceof RuntimeNotSupportedError) {
+    return c.json(
+      {
+        error: "runtime_not_supported",
+        provider: err.runtime.provider,
+        engine: err.runtime.engine,
+        message: err.message,
+      },
+      StatusCodes.UNPROCESSABLE_ENTITY,
+    );
+  }
+  // [Composite Runtime / Issue #2075] The composite plan has an AWS target but
+  // the request omitted awsAccountId/region → 400 (a request-validation gap).
+  if (err instanceof CompositeAwsInputRequiredError) {
+    return c.json({ error: "aws_input_required", message: err.message }, StatusCodes.BAD_REQUEST);
+  }
+  const message = err instanceof Error ? err.message : "unknown error";
+  console.error("[deploy] startDeployment failed", { problemId, message });
+  return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+}
+
+/**
+ * [Composite Runtime / Issue #2075] Composite deploy branch. The body is parsed
+ * with the composite schema (awsAccountId/region optional — the plan decides if
+ * AWS is needed). Tenant authorization (role + not-suspended) already ran at the
+ * route entry; the deploy quota is enforced ONCE for the whole parent inside
+ * `startCompositeDeployment` (never once per target). The response reuses the
+ * existing single-provider shape with the parent deployment id as jobId.
+ */
+async function handleCompositeDeploy(
+  c: Context,
+  ctx: DeployContext,
+  problemId: string,
+  descriptor: CompositeRuntimeDescriptor,
+  quotaTier: QuotaTier,
+  body: unknown,
+): Promise<Response> {
+  const parsed = CompositeDeployRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: "validation_failed", issues: parsed.error.issues },
+      StatusCodes.BAD_REQUEST,
+    );
+  }
+  try {
+    const response = await startCompositeDeployment(
+      buildCompositeDeployDeps(ctx, parsed.data.teamName),
+      { ...parsed.data, problemId, descriptor, quotaTier },
+    );
+    return c.json(response, StatusCodes.ACCEPTED);
+  } catch (err) {
+    return mapDeployError(c, problemId, err);
+  }
+}
+
 app.post("/problems/:problemId/deploy", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
   const problemId = c.req.param("problemId");
@@ -111,6 +213,21 @@ app.post("/problems/:problemId/deploy", async (c) => {
     return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
   }
 
+  const ctx = buildContext(shared, resolveTenantId(c));
+  // #1766: quota tier は JWT claim から route で解決し、enforcement 自体は
+  // startDeployment / startCompositeDeployment 内で行う (PR-1803 review)。
+  const quotaTier = resolveQuotaTier(c);
+
+  // [Composite Runtime / Issue #2075] Detect a composite problem from catalog
+  // runtime metadata BEFORE any write. Only a `runtime.kind=composite` problem
+  // forks here; every legacy / single-provider problem (descriptor undefined or
+  // single) falls through to the byte-identical `startDeployment` path below.
+  const descriptor = ctx.resolveProblemRuntimeDescriptor?.(problemId);
+  const composite = asCompositeDescriptor(descriptor);
+  if (composite) {
+    return handleCompositeDeploy(c, ctx, problemId, composite, quotaTier, body);
+  }
+
   const parsed = DeployRequestSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
@@ -119,65 +236,15 @@ app.post("/problems/:problemId/deploy", async (c) => {
     );
   }
 
-  const ctx = buildContext(shared, resolveTenantId(c));
-
   try {
-    // #1766: quota tier は JWT claim から route で解決し、enforcement 自体は
-    // startDeployment 内 (検証通過後・mutation 直前) で行う (PR-1803 review)。
     const response = await startDeployment(ctx, {
       ...parsed.data,
       problemId,
-      quotaTier: resolveQuotaTier(c),
+      quotaTier,
     });
     return c.json(response, StatusCodes.ACCEPTED);
   } catch (err) {
-    if (err instanceof DeployQuotaExceededError) {
-      return c.json(
-        {
-          error: "deploy_quota_exceeded",
-          tier: err.tier,
-          limit: err.limit,
-          active: err.active,
-          message: `同時デプロイ上限 (${err.tier}: ${err.limit}) に達しています。不要な deployment を削除するか、上位 tier を検討してください。`,
-        },
-        StatusCodes.TOO_MANY_REQUESTS,
-      );
-    }
-    if (err instanceof UnknownProblemError) {
-      return c.json({ error: "unknown_problem", problemId }, StatusCodes.NOT_FOUND);
-    }
-    // Phase 2.2 (Issue #459): verified=true 行が無い account への deploy は 422 (semantically
-    // 適切: request 自体は well-formed だが、business invariant が満たされない)。operator は
-    // CompetitorAccounts ページで verify を済ませてから retry する。
-    if (err instanceof UnverifiedCompetitorAccountError) {
-      return c.json(
-        {
-          error: "unverified_competitor_account",
-          awsAccountId: err.awsAccountId,
-          message:
-            "AWS Account ID が CompetitorAccounts table で verified=true 状態でないため deploy できません。",
-        },
-        StatusCodes.UNPROCESSABLE_ENTITY,
-      );
-    }
-    // [ADR-023 / Issue #1268] Problem metadata declared a runtime we cannot
-    // execute today (e.g. azure/bicep). 422: request is well-formed, but the
-    // business invariant "platform has an adapter for this provider/engine" is
-    // not satisfied. No cloud mutation happens on this path.
-    if (err instanceof RuntimeNotSupportedError) {
-      return c.json(
-        {
-          error: "runtime_not_supported",
-          provider: err.runtime.provider,
-          engine: err.runtime.engine,
-          message: err.message,
-        },
-        StatusCodes.UNPROCESSABLE_ENTITY,
-      );
-    }
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[deploy] startDeployment failed", { problemId, message });
-    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+    return mapDeployError(c, problemId, err);
   }
 });
 
