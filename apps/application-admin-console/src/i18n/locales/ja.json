@@ -576,7 +576,13 @@
     "composite_col_engine": "Engine",
     "composite_col_status": "Status",
     "composite_col_failure_reason": "失敗理由",
-    "composite_failure_reason_none": "—"
+    "composite_failure_reason_none": "—",
+    "provenance_header": "問題パックの出所",
+    "provenance_description": "この問題はインストール済みの問題パックから提供され、 イベントのカタログスナップショットに固定されています。",
+    "label_pack_id": "パック ID",
+    "label_pack_version": "パックバージョン",
+    "label_content_digest": "コンテンツダイジェスト",
+    "label_catalog_snapshot_id": "カタログスナップショット ID"
   },
   "problem_detail": {
     "not_found_header": "問題が見つかりません",

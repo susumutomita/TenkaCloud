@@ -3,6 +3,10 @@ import { buildStackPrefix, slugify } from "../../deploy-handler/naming.js";
 import type { DeploymentItem } from "../../deploy-handler/types.js";
 import type { VerifiedCompetitorAccount } from "../../shared/competitor-account-lookup.js";
 import {
+  provenanceItemFields,
+  toDeploymentProvenance,
+} from "../../shared/deployment-provenance.js";
+import {
   type DeployCreateRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   EVENT_SOURCE,
@@ -185,7 +189,22 @@ function createDeploymentItem(
     teamId: team.teamId,
     eventStartsAt: typeof args.event.startsAt === "string" ? args.event.startsAt : undefined,
     eventEndsAt: typeof args.event.endsAt === "string" ? args.event.endsAt : undefined,
+    // [#2096] Pack-sourced deployments only: copy immutable provenance from the
+    // event-pinned snapshot (#2095). Core problems / no resolver → no attribute,
+    // keeping the row byte-identical.
+    ...provenanceItemFields(resolvePlanProvenance(args, problem.problemId)),
   };
+}
+
+/**
+ * [#2096] Resolve a problem's display/audit-safe provenance from the event-pinned
+ * snapshot via the injected resolver. Returns undefined for a core problem, when
+ * the problem is not pinned, or when no resolver is wired.
+ */
+function resolvePlanProvenance(args: BuildBulkDeployPlanArgs, problemId: string) {
+  const resolved = args.shared.resolveDeploymentProvenance?.(args.eventId, problemId);
+  if (!resolved) return undefined;
+  return toDeploymentProvenance(resolved.provenance, resolved.catalogSnapshotId);
 }
 
 function createDeployDetail(

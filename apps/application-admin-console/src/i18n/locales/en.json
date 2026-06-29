@@ -576,7 +576,13 @@
     "composite_col_engine": "Engine",
     "composite_col_status": "Status",
     "composite_col_failure_reason": "Failure reason",
-    "composite_failure_reason_none": "—"
+    "composite_failure_reason_none": "—",
+    "provenance_header": "Problem pack source",
+    "provenance_description": "This problem was delivered by an installed problem pack, pinned to the event's catalog snapshot.",
+    "label_pack_id": "Pack ID",
+    "label_pack_version": "Pack version",
+    "label_content_digest": "Content digest",
+    "label_catalog_snapshot_id": "Catalog snapshot ID"
   },
   "problem_detail": {
     "not_found_header": "Problem not found",

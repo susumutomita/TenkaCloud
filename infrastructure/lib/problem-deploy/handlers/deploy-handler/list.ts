@@ -3,7 +3,7 @@ import { createCursorCodec } from "../shared/cursor-codec.js";
 import { isCompositeParentItem } from "./composite-deployment.js";
 import { buildCompositeDetail, type CompositeDetail } from "./composite-detail.js";
 import type { DeploySharedResources } from "./deploy.js";
-import type { DeploymentItem, DeploymentStatus } from "./types.js";
+import type { DeploymentItem, DeploymentProvenance, DeploymentStatus } from "./types.js";
 
 export interface DeploymentSummary {
   readonly jobId: string;
@@ -42,6 +42,14 @@ export interface DeploymentSummary {
    * は含まない)。legacy single-provider 行には付かない (= byte 互換を保つ)。
    */
   readonly composite?: CompositeDetail;
+  /**
+   * [Problem Packs / Issue #2096] Pack provenance for a PACK-SOURCED deployment,
+   * resolved from the event-pinned catalog snapshot (#2095). Present on the
+   * detail (`getDeployment`) response only; the list summary never sets it and a
+   * core deployment never carries it (= existing shape unchanged). Carries no
+   * local path / source credential.
+   */
+  readonly provenance?: DeploymentProvenance;
 }
 
 export interface ListDeploymentsRequest {
@@ -94,6 +102,10 @@ export function toDetail(item: Partial<DeploymentItem>): DeploymentSummary {
   return {
     ...toSummary(item),
     teamLoginKey: typeof item.teamLoginKey === "string" ? item.teamLoginKey : undefined,
+    // [#2096] Pack-sourced deployments only: surface the immutable provenance
+    // resolved from the event-pinned snapshot. Core rows have no `provenance`
+    // attribute, so the field is omitted and the response shape is unchanged.
+    ...(item.provenance ? { provenance: item.provenance } : {}),
   };
 }
 
