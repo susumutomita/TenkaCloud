@@ -1,0 +1,5 @@
+/.next/
+/out/
+/coverage/
+*.tsbuildinfo
+next-env.d.ts
