@@ -13,6 +13,7 @@ import { useT } from "../i18n";
 import { buildTerminalLog, deploySummaryTitle, derivePhases } from "../lib/deploy-phases";
 import { BasicInfoSection } from "./deployment-detail/BasicInfoSection";
 import { CfnOutputsSection } from "./deployment-detail/CfnOutputsSection";
+import { CompositeTargetsSection } from "./deployment-detail/CompositeTargetsSection";
 import { DeployLogSection } from "./deployment-detail/DeployLogSection";
 import { DeploySummaryStyles } from "./deployment-detail/DeploySummaryStyles";
 import {
@@ -119,6 +120,11 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
         onMaximize={() => setLogModalOpen(true)}
         t={t}
       />
+
+      {/* #2074: composite (multi-cloud) parent のときだけ per-target 進捗を表示する。
+          legacy single-provider deployment は item.composite が undefined なので
+          この section ごと描画されず、旧 UI は byte 互換のまま。 */}
+      {item.composite && <CompositeTargetsSection composite={item.composite} t={t} />}
 
       <BasicInfoSection item={item} t={t} />
 
