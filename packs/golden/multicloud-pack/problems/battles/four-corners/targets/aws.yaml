@@ -1,0 +1,12 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Golden composite AWS target. Emits AwsUrl for the composite-probe scorer.
+Resources:
+  AwsUrlParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Value: https://aws.example.invalid
+Outputs:
+  AwsUrl:
+    Description: The AWS target URL probed by composite-probe.
+    Value: !GetAtt AwsUrlParameter.Value

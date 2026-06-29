@@ -1,0 +1,37 @@
+[
+  {
+    "name": "scores success when the attack-stats output is present",
+    "metadata": {
+      "id": "golden-private-sealed-payload",
+      "runtime": { "provider": "aws", "engine": "cloudformation", "entry": "template.yaml" },
+      "scoring": {
+        "kind": "attack-detection",
+        "statsOutputKey": "AttackStats",
+        "pointsPerAttack": 25
+      }
+    },
+    "runtime": { "provider": "aws", "engine": "cloudformation", "entry": "template.yaml" },
+    "deployment": "ready",
+    "outputs": { "AttackStats": "{\"sqli\":3,\"xss\":1}" },
+    "expected": { "valid": true, "score": "success" }
+  },
+  {
+    "name": "is not runnable when the deploy failed",
+    "metadata": {
+      "id": "golden-private-sealed-payload",
+      "runtime": { "provider": "aws", "engine": "cloudformation", "entry": "template.yaml" },
+      "scoring": {
+        "kind": "attack-detection",
+        "statsOutputKey": "AttackStats",
+        "pointsPerAttack": 25
+      }
+    },
+    "runtime": { "provider": "aws", "engine": "cloudformation", "entry": "template.yaml" },
+    "deployment": "failed",
+    "expected": {
+      "valid": true,
+      "score": "not-runnable",
+      "diagnostics": ["SCORING_DEPLOY_FAILED"]
+    }
+  }
+]

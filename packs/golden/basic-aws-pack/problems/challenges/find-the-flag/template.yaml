@@ -1,0 +1,12 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Golden flag-scored body. Emits the FlagValue output the flag scorer reads.
+Resources:
+  FlagParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Value: TENKA{golden-reference-flag}
+Outputs:
+  FlagValue:
+    Description: The flag the competitor submits.
+    Value: !GetAtt FlagParameter.Value

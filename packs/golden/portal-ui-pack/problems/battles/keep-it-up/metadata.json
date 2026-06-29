@@ -1,0 +1,45 @@
+{
+  "id": "golden-portal-keep-it-up",
+  "title": "Keep it up",
+  "category": "battles",
+  "description": "Uptime-scored golden problem with a participant portal extension. Declares an endpoint slot, an optional portal dashboard component, and uptime-flat scoring.",
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "endpoints": [
+    {
+      "slot": "service",
+      "default": {
+        "from": "cfn-output",
+        "key": "ServiceUrl",
+        "appendPath": "/health"
+      },
+      "overridable": true,
+      "label": "Service health endpoint",
+      "description": "The URL the portal probes and displays for this team."
+    }
+  ],
+  "dashboard": {
+    "slots": [
+      {
+        "id": "uptime-card",
+        "component": "portal/UptimeCard.tsx"
+      }
+    ]
+  },
+  "scoring": {
+    "kind": "uptime-flat",
+    "pointsPerSuccess": 10,
+    "failurePenalty": -5,
+    "endpoints": [
+      {
+        "slot": "service",
+        "outputKey": "ServiceUrl",
+        "path": "/health",
+        "expectStatus": [200]
+      }
+    ]
+  }
+}

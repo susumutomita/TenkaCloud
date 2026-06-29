@@ -1,0 +1,144 @@
+[
+  {
+    "name": "scores success when all four provider targets probe 200",
+    "metadata": {
+      "id": "golden-multicloud-four-corners",
+      "runtime": {
+        "kind": "composite",
+        "targets": [
+          {
+            "id": "aws",
+            "provider": "aws",
+            "engine": "cloudformation",
+            "entry": "targets/aws.yaml"
+          },
+          {
+            "id": "gcp",
+            "provider": "gcp",
+            "engine": "infra-manager",
+            "entry": "targets/gcp.yaml"
+          },
+          { "id": "azure", "provider": "azure", "engine": "bicep", "entry": "targets/azure.bicep" },
+          {
+            "id": "sakura",
+            "provider": "sakura",
+            "engine": "apprun",
+            "entry": "targets/sakura.yaml"
+          }
+        ]
+      },
+      "scoring": {
+        "kind": "composite-probe",
+        "success": "all",
+        "pointsAllOk": 40,
+        "targets": [
+          { "targetId": "aws", "probe": "https", "outputKey": "AwsUrl", "expectStatus": [200] },
+          { "targetId": "gcp", "probe": "https", "outputKey": "GcpUrl", "expectStatus": [200] },
+          { "targetId": "azure", "probe": "https", "outputKey": "AzureUrl", "expectStatus": [200] },
+          {
+            "targetId": "sakura",
+            "probe": "https",
+            "outputKey": "SakuraUrl",
+            "expectStatus": [200]
+          }
+        ]
+      }
+    },
+    "runtime": {
+      "kind": "composite",
+      "targets": [
+        { "id": "aws", "provider": "aws", "engine": "cloudformation", "entry": "targets/aws.yaml" },
+        { "id": "gcp", "provider": "gcp", "engine": "infra-manager", "entry": "targets/gcp.yaml" },
+        { "id": "azure", "provider": "azure", "engine": "bicep", "entry": "targets/azure.bicep" },
+        { "id": "sakura", "provider": "sakura", "engine": "apprun", "entry": "targets/sakura.yaml" }
+      ]
+    },
+    "deployment": "ready",
+    "outputs": {
+      "AwsUrl": "https://aws.example.invalid",
+      "GcpUrl": "https://gcp.example.invalid",
+      "AzureUrl": "https://azure.example.invalid",
+      "SakuraUrl": "https://sakura.example.invalid"
+    },
+    "probeResults": {
+      "https://aws.example.invalid": { "status": 200, "reachable": true },
+      "https://gcp.example.invalid": { "status": 200, "reachable": true },
+      "https://azure.example.invalid": { "status": 200, "reachable": true },
+      "https://sakura.example.invalid": { "status": 200, "reachable": true }
+    },
+    "expected": { "valid": true, "score": "success" }
+  },
+  {
+    "name": "scores failure when one provider target is down",
+    "metadata": {
+      "id": "golden-multicloud-four-corners",
+      "runtime": {
+        "kind": "composite",
+        "targets": [
+          {
+            "id": "aws",
+            "provider": "aws",
+            "engine": "cloudformation",
+            "entry": "targets/aws.yaml"
+          },
+          {
+            "id": "gcp",
+            "provider": "gcp",
+            "engine": "infra-manager",
+            "entry": "targets/gcp.yaml"
+          },
+          { "id": "azure", "provider": "azure", "engine": "bicep", "entry": "targets/azure.bicep" },
+          {
+            "id": "sakura",
+            "provider": "sakura",
+            "engine": "apprun",
+            "entry": "targets/sakura.yaml"
+          }
+        ]
+      },
+      "scoring": {
+        "kind": "composite-probe",
+        "success": "all",
+        "pointsAllOk": 40,
+        "targets": [
+          { "targetId": "aws", "probe": "https", "outputKey": "AwsUrl", "expectStatus": [200] },
+          { "targetId": "gcp", "probe": "https", "outputKey": "GcpUrl", "expectStatus": [200] },
+          { "targetId": "azure", "probe": "https", "outputKey": "AzureUrl", "expectStatus": [200] },
+          {
+            "targetId": "sakura",
+            "probe": "https",
+            "outputKey": "SakuraUrl",
+            "expectStatus": [200]
+          }
+        ]
+      }
+    },
+    "runtime": {
+      "kind": "composite",
+      "targets": [
+        { "id": "aws", "provider": "aws", "engine": "cloudformation", "entry": "targets/aws.yaml" },
+        { "id": "gcp", "provider": "gcp", "engine": "infra-manager", "entry": "targets/gcp.yaml" },
+        { "id": "azure", "provider": "azure", "engine": "bicep", "entry": "targets/azure.bicep" },
+        { "id": "sakura", "provider": "sakura", "engine": "apprun", "entry": "targets/sakura.yaml" }
+      ]
+    },
+    "deployment": "ready",
+    "outputs": {
+      "AwsUrl": "https://aws.example.invalid",
+      "GcpUrl": "https://gcp.example.invalid",
+      "AzureUrl": "https://azure.example.invalid",
+      "SakuraUrl": "https://sakura.example.invalid"
+    },
+    "probeResults": {
+      "https://aws.example.invalid": { "status": 200, "reachable": true },
+      "https://gcp.example.invalid": { "status": 200, "reachable": true },
+      "https://azure.example.invalid": { "status": 503, "reachable": true },
+      "https://sakura.example.invalid": { "status": 200, "reachable": true }
+    },
+    "expected": {
+      "valid": true,
+      "score": "failure",
+      "diagnostics": ["SCORING_PROBE_FAILED"]
+    }
+  }
+]

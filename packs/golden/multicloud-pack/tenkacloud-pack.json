@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "com.tenkacloud.golden.multicloud",
+  "version": "1.0.0",
+  "core": "^1.0.0",
+  "title": "Golden multicloud pack",
+  "description": "Golden Composite Runtime fixture: one problem whose composite runtime declares AWS, GCP, Azure, and Sakura targets, scored by composite-probe. Local harness fixtures only; no real cloud deployment runs in CI.",
+  "license": "Apache-2.0",
+  "problemsRoot": "problems",
+  "requiredRuntimes": [
+    { "provider": "aws", "engine": "cloudformation" },
+    { "provider": "gcp", "engine": "infra-manager" },
+    { "provider": "azure", "engine": "bicep" },
+    { "provider": "sakura", "engine": "apprun" }
+  ]
+}
