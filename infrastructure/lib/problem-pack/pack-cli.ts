@@ -12,6 +12,11 @@
  *   - `install <dir> [--store <dir>]` (#2094) → {@link installPack}: validate →
  *     snapshot → lock → dry-run compose (proves no duplicate-id conflict; does
  *     NOT activate). Atomic — an invalid install leaves no residue.
+ *   - `install git <https-url> --commit <full-sha> [--subdir <path>]` (#2097) →
+ *     {@link installGitPack}: fetch a PINNED, immutable commit over HTTPS into a
+ *     temp dir, then validate → snapshot → lock just like a local install. The
+ *     transport is injectable so the CLI runs offline; the lock records the repo
+ *     URL + commit + subdir + digest with `sourceKind: "git"`.
  *   - `list [--store <dir>] [--json]` (#2094) → {@link listInstalledPacks}: reads
  *     ONLY the local lock + snapshot metadata; never shows snapshot fs paths.
  *   - `inspect <id@version> [--store <dir>] [--json]` (#2094) →
@@ -41,15 +46,21 @@ import {
 import {
   type InstalledPackSummary,
   inspectPack,
-  installPack,
   listInstalledPacks,
   type PackInspection,
   type PinPredicate,
   removePack,
 } from "./lifecycle.js";
-import type { ProviderEngineCapability } from "./manifest.js";
+import {
+  INSTALL_USAGE,
+  type LineWriter,
+  type PackCliDeps,
+  runInstall,
+} from "./pack-cli-install.js";
 import type { PackLockEntry } from "./snapshot.js";
 import { type PackValidationResult, validatePackDirectory } from "./validate-pack.js";
+
+export type { LineWriter, PackCliDeps } from "./pack-cli-install.js";
 
 /** Diagnostic codes that mean "could not even start validating" → exit 2. */
 const TOOL_FAILURE_CODES = new Set(["PACK_DIR_MISSING", "MANIFEST_MISSING", "MANIFEST_UNREADABLE"]);
@@ -60,7 +71,6 @@ const EXIT_TOOL_FAILURE = 2;
 
 const VALIDATE_USAGE = "Usage: tenkacloud pack validate <dir> [--json]";
 const INIT_USAGE = "Usage: tenkacloud pack init <dir> [--runtime <provider/engine>]";
-const INSTALL_USAGE = "Usage: tenkacloud pack install <dir> [--store <dir>]";
 const LIST_USAGE = "Usage: tenkacloud pack list [--store <dir>] [--json]";
 const INSPECT_USAGE = "Usage: tenkacloud pack inspect <id@version> [--store <dir>] [--json]";
 const REMOVE_USAGE = "Usage: tenkacloud pack remove <id@version> [--store <dir>] [--pins <file>]";
@@ -80,19 +90,6 @@ const DEFAULT_INIT_PACK_ID = "com.example.starter";
 const DEFAULT_STORE_DIR = ".tenkacloud/pack-store";
 
 /**
- * Platform context the dry-run compose validates packs against. Kept as inert
- * defaults so the offline CLI never reaches out to a running platform; the values
- * satisfy the reference pack (`core ^1.0.0`, `aws/cloudformation`).
- */
-const PLATFORM_CORE_VERSION = "1.0.0";
-const PLATFORM_AVAILABLE_RUNTIMES: readonly ProviderEngineCapability[] = [
-  { provider: "aws", engine: "cloudformation" },
-  { provider: "gcp", engine: "infra-manager" },
-  { provider: "azure", engine: "bicep" },
-  { provider: "sakura", engine: "terraform" },
-];
-
-/**
  * The `--pins` file shape: a JSON array of `{ packId, version }` records that
  * model the event / deployment / activation references pinning a revision. Zod
  * validates the boundary so malformed input fails loudly rather than silently
@@ -107,14 +104,16 @@ const PinRecordsSchema = z.array(
     .strict(),
 );
 
-/** Sink for a single line of output (no trailing newline). */
-export type LineWriter = (line: string) => void;
-
 /**
  * Run the `pack` CLI over an argv tail (everything after `pack`). Returns the
  * process exit code; all output goes through `write` so callers control the sink.
+ * `deps` injects the Git transport so callers / tests stay offline.
  */
-export function runPackCli(args: readonly string[], write: LineWriter): number {
+export function runPackCli(
+  args: readonly string[],
+  write: LineWriter,
+  deps: PackCliDeps = {},
+): number {
   const [subcommand, ...rest] = args;
   switch (subcommand) {
     case "validate":
@@ -122,7 +121,7 @@ export function runPackCli(args: readonly string[], write: LineWriter): number {
     case "init":
       return runInit(rest, write);
     case "install":
-      return runInstall(rest, write);
+      return runInstall(rest, write, deps);
     case "list":
       return runList(rest, write);
     case "inspect":
@@ -162,37 +161,6 @@ function parsePackRef(ref: string | undefined): { id: string; version: string } 
   const at = ref.lastIndexOf("@");
   if (at <= 0 || at === ref.length - 1) return undefined;
   return { id: ref.slice(0, at), version: ref.slice(at + 1) };
-}
-
-function runInstall(rest: readonly string[], write: LineWriter): number {
-  const store = takeFlag(rest, "--store");
-  if (store.malformed) {
-    write(INSTALL_USAGE);
-    return EXIT_TOOL_FAILURE;
-  }
-  const dir = store.rest.filter((arg) => !arg.startsWith("--"))[0];
-  if (!dir) {
-    write(INSTALL_USAGE);
-    return EXIT_TOOL_FAILURE;
-  }
-
-  const result = installPack({
-    sourceDir: dir,
-    storeDir: store.value ?? DEFAULT_STORE_DIR,
-    installedAt: new Date().toISOString(),
-    coreVersion: PLATFORM_CORE_VERSION,
-    availableRuntimes: PLATFORM_AVAILABLE_RUNTIMES,
-  });
-  if (!result.ok) {
-    write(result.message);
-    return EXIT_VALIDATION_FAILURE;
-  }
-  const verb = result.alreadyInstalled ? "already installed" : "installed";
-  write(`Pack ${verb}: ${result.entry.packId}@${result.entry.version}`);
-  write(`  source: ${result.entry.sourceKind}`);
-  write(`  digest: ${result.entry.contentDigest}`);
-  write(`  problems: ${result.problemCount}`);
-  return EXIT_OK;
 }
 
 function runList(rest: readonly string[], write: LineWriter): number {

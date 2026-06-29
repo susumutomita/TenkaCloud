@@ -40,8 +40,29 @@ export const SNAPSHOTS_DIRNAME = "snapshots";
 /** Directory / file names excluded from snapshots and the content digest. */
 const EXCLUDED_DIR_NAMES = new Set([".git", "node_modules", "dist"]);
 
-/** The only source kind supported today. Network / Git sources arrive later. */
-export type PackSourceKind = "local";
+/**
+ * Where an installed pack came from. `"local"` is a directory on disk (#2090);
+ * `"git"` is a pinned, immutable Git revision fetched over HTTPS (#2097). No
+ * other source kinds exist — there is no mutable / floating reference path.
+ */
+export type PackSourceKind = "local" | "git";
+
+/**
+ * Provenance of a pack installed from a pinned Git revision (#2097). Recorded in
+ * the lock so an operator can reproduce exactly what was installed: the HTTPS
+ * repository URL, the resolved immutable 40-hex commit, and the optional subdir
+ * within the repository that held the pack. The content digest stays on the
+ * parent {@link PackLockEntry} (same field as a local install) so digest
+ * comparisons are source-kind-agnostic.
+ */
+export interface GitProvenance {
+  /** The HTTPS repository URL the pack was fetched from (credentials stripped). */
+  readonly repositoryUrl: string;
+  /** The resolved immutable commit (full 40-hex SHA-1). Never a floating ref. */
+  readonly commit: string;
+  /** Subdir within the repository that held the pack root (POSIX, "" for root). */
+  readonly subdir: string;
+}
 
 /** One immutable lock entry describing an installed pack snapshot. */
 export interface PackLockEntry {
@@ -49,7 +70,7 @@ export interface PackLockEntry {
   readonly packId: string;
   /** Exact SemVer of the pack, from the validated manifest. */
   readonly version: string;
-  /** Where the pack came from. Only `"local"` today. */
+  /** Where the pack came from (`"local"` or `"git"`). */
   readonly sourceKind: PackSourceKind;
   /** Caller-supplied reference to the source (e.g. the original directory path). */
   readonly sourceRef: string;
@@ -61,6 +82,8 @@ export interface PackLockEntry {
   readonly coreVersion: string;
   /** Store-root-relative path to the immutable snapshot tree. */
   readonly snapshotPath: string;
+  /** Git provenance — present iff `sourceKind === "git"`. Absent for local installs. */
+  readonly git?: GitProvenance;
 }
 
 /** The lock file shape: a stable-sorted list of entries plus a schema version. */
@@ -81,6 +104,30 @@ export interface InstallLocalPackOptions {
   readonly installedAt: string;
   /** Caller-injected core (platform) version. */
   readonly coreVersion: string;
+}
+
+/**
+ * Options for {@link installSnapshotFromDirectory} — the source-kind-agnostic
+ * snapshot core shared by the local (#2090) and Git (#2097) install paths. The
+ * caller has already materialized the pack into `sourceDir` (a real directory on
+ * disk; for Git that is the extracted temporary tree), and supplies the
+ * provenance to record (`sourceKind`, `sourceRef`, and optional `git`).
+ */
+export interface InstallSnapshotOptions {
+  /** Directory containing the validated pack (must hold `tenkacloud-pack.json`). */
+  readonly sourceDir: string;
+  /** Root of the snapshot store (lock file + snapshots/ live under here). */
+  readonly storeDir: string;
+  /** Where the pack came from. */
+  readonly sourceKind: PackSourceKind;
+  /** Reference recorded as `sourceRef`. Defaults to the resolved `sourceDir`. */
+  readonly sourceRef?: string;
+  /** Caller-injected install timestamp (ISO-8601). Keeps the core deterministic. */
+  readonly installedAt: string;
+  /** Caller-injected core (platform) version. */
+  readonly coreVersion: string;
+  /** Git provenance recorded on the lock entry. Required iff `sourceKind === "git"`. */
+  readonly git?: GitProvenance;
 }
 
 /** Discriminated result of {@link installLocalPack}. Never throws on a known failure. */
@@ -170,6 +217,28 @@ function toPosixRelative(root: string, abs: string): string {
  * snapshot tree → append the lock entry. Performs only local filesystem I/O.
  */
 export function installLocalPack(options: InstallLocalPackOptions): InstallLocalPackResult {
+  return installSnapshotFromDirectory({
+    sourceDir: options.sourceDir,
+    storeDir: options.storeDir,
+    sourceKind: "local",
+    sourceRef: options.sourceRef,
+    installedAt: options.installedAt,
+    coreVersion: options.coreVersion,
+  });
+}
+
+/**
+ * Source-kind-agnostic snapshot core shared by the local (#2090) and Git (#2097)
+ * install paths. The pack has already been materialized into `sourceDir`; this
+ * function validates → digests → reconciles against the lock (idempotent on an
+ * identical digest, fail-closed on a conflicting same id+version) → copies the
+ * included files into an immutable snapshot tree → appends the lock entry, with
+ * the caller-supplied provenance (`sourceKind` and optional `git`). Performs only
+ * local filesystem I/O; it never spawns a process and never fetches anything.
+ */
+export function installSnapshotFromDirectory(
+  options: InstallSnapshotOptions,
+): InstallLocalPackResult {
   const sourceDir = path.resolve(options.sourceDir);
   const storeDir = path.resolve(options.storeDir);
 
@@ -206,12 +275,13 @@ export function installLocalPack(options: InstallLocalPackOptions): InstallLocal
   const entry: PackLockEntry = {
     packId,
     version,
-    sourceKind: "local",
+    sourceKind: options.sourceKind,
     sourceRef: options.sourceRef ?? sourceDir,
     contentDigest,
     installedAt: options.installedAt,
     coreVersion: options.coreVersion,
     snapshotPath,
+    ...(options.git ? { git: options.git } : {}),
   };
   writeLock(storeDir, { schemaVersion: 1, packs: [...lock.packs, entry] });
   return { ok: true, entry, alreadyInstalled: false };
