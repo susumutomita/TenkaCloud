@@ -13,6 +13,7 @@ import {
 } from "../event-handler/shared.js";
 import { forEachScanPage } from "../shared/ddb-paginate.js";
 import { writeScoreEvent } from "../shared/score-event.js";
+import { reconcileDeployStatusMaintenance } from "./composite-status-reconciler.js";
 import { maybeFireConditionDisruptions } from "./condition-disruption-fire.js";
 import {
   applyDisruptionEffects,
@@ -87,8 +88,15 @@ export async function handler(): Promise<void> {
 
   // [ADR-026/027/032 / #1410-1412] 非 AWS runtime (sakura/azure/gcp) deployment の status / outputs を
   // adapter.getStatus / collectOutputs で reconcile (= State Machine が無いので tick が進める)。 採点と並列。
-  const runtimeReconcilePromise = reconcileRuntimeStatuses(shared, nowIso).catch((err) => {
-    console.warn("[generic-scoring] reconcileRuntimeStatuses failed", {
+  // [#2068] その後に Composite parent の status を target 群から集約 reconcile する (= per-target の後)。
+  const runtimeReconcilePromise = reconcileDeployStatusMaintenance(shared, nowIso, () =>
+    reconcileRuntimeStatuses(shared, nowIso).catch((err) => {
+      console.warn("[generic-scoring] reconcileRuntimeStatuses failed", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }),
+  ).catch((err) => {
+    console.warn("[generic-scoring] reconcileCompositeParents failed", {
       message: err instanceof Error ? err.message : String(err),
     });
   });
