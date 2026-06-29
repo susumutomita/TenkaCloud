@@ -15,7 +15,7 @@ export JSII_DEPRECATED := quiet
         env-check env-check-lite env-init \
         deploy deploy-saas destroy destroy-saas \
         deploy-battles destroy-battles \
-        local local-up local-down local-status local-evaluate
+        doctor local local-up local-down local-status local-evaluate
 
 help:
 	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
@@ -164,8 +164,27 @@ destroy-saas:         env-check       ; bash scripts/cleanup.sh
 #   make local-down                コンテナ停止 + runtime-config 復元
 #   make local-evaluate FLAG=...   採点 API 経由でフラグを提出 (= 問題コンテナ /verify に委譲)
 PROBLEM ?= sqli-demo
+# Issue #2119: `make local YES=1` pre-approves software installs (also for automation).
+ONBOARD_FLAGS := $(if $(YES),--yes,)
 
+# Issue #2119: report-only prerequisite diagnosis (mise trust / submodule / bun /
+# Docker CLI / Compose / daemon). Installs nothing.
+doctor:
+	@command -v bun >/dev/null 2>&1 || { \
+	  echo "Bun is required for diagnostics."; \
+	  echo "  Install: (macOS) brew install oven-sh/bun/bun   (Linux) curl -fsSL https://bun.sh/install | bash"; \
+	  exit 1; }
+	@bun run scripts/tenkacloud-onboard.ts doctor
+
+# Issue #2119: a fresh `git clone` → `make local` reaches a running portal.
+# Step 1 (pre-bun): trust mise + ensure bun is installed (consent-gated).
+# Step 2 (bun onboarder): initialize the problems/ submodule + diagnose Docker,
+#   installing only with consent (or YES=1); a non-interactive run without YES=1
+#   stops with the missing prerequisites instead of installing.
+# Step 3: start the problem container + scoring API, then the Participant Portal.
 local:
+	@sh scripts/onboard-bootstrap.sh $(ONBOARD_FLAGS)
+	@bun run scripts/tenkacloud-onboard.ts preflight $(ONBOARD_FLAGS)
 	@set -e; \
 	$(MAKE) local-up PROBLEM="$(PROBLEM)" LOCAL_API_PORT="$(LOCAL_API_PORT)"; \
 	trap '$(MAKE) local-down' EXIT INT TERM; \
