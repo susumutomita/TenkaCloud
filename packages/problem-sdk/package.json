@@ -1,11 +1,14 @@
 {
   "name": "@tenkacloud/problem-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The only supported public authoring contract for TenkaCloud problem packs (#2106): stable types, validators, constants, and namespaced diagnostic codes. Dependency-light, deterministic, and free of CDK / AWS SDK / Lambda / browser code.",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "bin": {
+    "tenkacloud-pack-report": "bin/pack-report.ts"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./internal": "./src/internal.ts"
@@ -13,6 +16,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "pack-report": "bun bin/pack-report.ts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='dist/**' --coverage.exclude='**/*.test.ts'"
   },

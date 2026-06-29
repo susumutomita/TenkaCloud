@@ -10,6 +10,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { buildPackReport } from "@tenkacloud/problem-sdk";
 import { describe, expect, it } from "vitest";
 import { validatePackDirectory } from "../../lib/problem-pack/validate-pack";
 
@@ -29,5 +30,18 @@ describe("reference pack (#2089)", () => {
     expect(result.diagnostics).toEqual([]);
     expect(result.ok).toBe(true);
     expect(result.problemIds.length).toBeGreaterThan(0);
+  });
+
+  it("should produce a passing report through the reusable-workflow CLI contract (#2108)", () => {
+    // The reusable external Pack CI workflow runs exactly buildPackReport over a
+    // pack directory; the shipped reference pack must pass through it cleanly so
+    // the public example never drifts from the workflow's report contract.
+    const report = buildPackReport(REFERENCE_PACK_DIR);
+
+    expect(report.result).toBe("passed");
+    expect(report.diagnostics).toEqual([]);
+    expect(report.packId).toBe("com.tenkacloud.reference-aws-hello");
+    expect(report.packVersion).toMatch(/^\d+\.\d+\.\d+/);
+    expect(report.contentDigest).toMatch(/^[0-9a-f]{64}$/);
   });
 });
