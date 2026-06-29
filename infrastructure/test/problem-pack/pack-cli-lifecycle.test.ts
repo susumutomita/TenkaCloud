@@ -303,13 +303,7 @@ describe("runPackCli remove (#2094)", () => {
     const badPins = path.join(base, "bad-pins.json");
     fs.writeFileSync(badPins, "{ not valid json");
 
-    const { code } = run([
-      "remove",
-      "com.example.cloud-pack@1.2.3",
-      ...STORE(),
-      "--pins",
-      badPins,
-    ]);
+    const { code } = run(["remove", "com.example.cloud-pack@1.2.3", ...STORE(), "--pins", badPins]);
 
     expect(code).toBe(2);
   });
