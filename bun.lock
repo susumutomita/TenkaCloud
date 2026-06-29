@@ -224,6 +224,22 @@
         "vitest": "^4.1.9",
       },
     },
+    "packages/problem-test-harness": {
+      "name": "@tenkacloud/problem-test",
+      "version": "0.1.0",
+      "bin": {
+        "tenkacloud-pack-test": "bin/pack-test.ts",
+      },
+      "dependencies": {
+        "@tenkacloud/problem-runtime": "workspace:*",
+        "@tenkacloud/problem-sdk": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^24.12.4",
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.9",
+      },
+    },
     "packages/saml-utils": {
       "name": "@tenkacloud/saml-utils",
       "version": "0.1.0",
@@ -707,6 +723,8 @@
     "@tenkacloud/problem-runtime": ["@tenkacloud/problem-runtime@workspace:packages/problem-runtime"],
 
     "@tenkacloud/problem-sdk": ["@tenkacloud/problem-sdk@workspace:packages/problem-sdk"],
+
+    "@tenkacloud/problem-test": ["@tenkacloud/problem-test@workspace:packages/problem-test-harness"],
 
     "@tenkacloud/saml-utils": ["@tenkacloud/saml-utils@workspace:packages/saml-utils"],
 
