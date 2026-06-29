@@ -98,7 +98,11 @@ function hintViews(state: LocalPlayState) {
       id: hint.id,
       penalty: hint.penalty,
       revealed: revealedAt !== undefined,
-      ...(revealedAt ? { content: hint.content, revealedAt } : {}),
+      // Keep the translated content gated behind reveal too — never leak the
+      // hint in any language before it is unlocked.
+      ...(revealedAt
+        ? { content: hint.content, revealedAt, ...(hint.i18n ? { i18n: hint.i18n } : {}) }
+        : {}),
     };
   });
 }
@@ -112,6 +116,9 @@ function problemView(state: LocalPlayState, now: number) {
     name: problem.name,
     description: problem.description,
     instructions: problem.instructions,
+    // #2054 i18n: ship the en overlay so the portal locale switcher can render
+    // the problem in English (ja stays the top-level canonical).
+    ...(problem.i18n ? { i18n: problem.i18n } : {}),
     region: "local",
     awsAccountId: "local",
     status: "COMPLETE",
@@ -241,6 +248,7 @@ function revealHint(
   if (problemId !== problem.problemId || !hint) {
     return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
   }
+  const i18n = hint.i18n ? { i18n: hint.i18n } : {};
   const existing = state.revealedHints.get(hint.id);
   if (existing) {
     return {
@@ -248,6 +256,7 @@ function revealHint(
       body: {
         kind: "already_revealed",
         content: hint.content,
+        ...i18n,
         penaltyApplied: 0,
         totalScore: state.score,
         revealedAt: existing,
@@ -271,6 +280,7 @@ function revealHint(
     body: {
       kind: "ok",
       content: hint.content,
+      ...i18n,
       penaltyApplied: penalty,
       totalScore: state.score,
       revealedAt: iso,

@@ -646,11 +646,14 @@ describe("Composite compat: catalog metadata validity", () => {
     // problems/ is an external catalog (TenkaCloudChallenge) and may be empty in
     // this checkout. Whatever is present must discover cleanly — a single-
     // provider catalog must never blow up the runtime discovery used at synth.
+    //
+    // We do NOT assert every discovered runtime is cloud-recognized: the catalog
+    // legitimately carries non-cloud runtimes (e.g. the local-play container
+    // problem, ADR #2055), which classify as "unknown" to the cloud classifier.
+    // The forward-compat guarantee is only that discovery does not throw and
+    // returns a plain map.
     const realRoot = path.resolve(__dirname, "../../../problems");
     expect(() => discoverProblemsRuntime(realRoot)).not.toThrow();
-    const runtimes = discoverProblemsRuntime(realRoot);
-    for (const runtime of Object.values(runtimes)) {
-      expect(classifyRuntimeSupport(runtime)).not.toBe("unknown");
-    }
+    expect(discoverProblemsRuntime(realRoot)).toBeTypeOf("object");
   });
 });

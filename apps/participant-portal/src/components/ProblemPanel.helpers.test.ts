@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   type ApplicationStatus,
+  type ParticipantProblemView,
   PortalScoringGateError,
   PortalValidationError,
   type SubmitFlagOutcome,
@@ -8,6 +9,7 @@ import {
 import {
   describeApplicationStatus,
   formatProblemPanelActionError,
+  localizeProblem,
   shouldRefreshAfterFlagSubmit,
 } from "./ProblemPanel.helpers";
 
@@ -106,5 +108,91 @@ describe("describeApplicationStatus (#1917)", () => {
     expect(out.label).toContain("problem_panel.health_degraded");
     expect(out.label).toContain('"healthy":2');
     expect(out.label).toContain('"total":5');
+  });
+});
+
+describe("localizeProblem", () => {
+  const base: ParticipantProblemView = {
+    jobId: "local-sqli-demo",
+    problemId: "sqli-demo",
+    name: "SQL インジェクション",
+    description: "脆弱なログイン。",
+    instructions: "ログインを突破。",
+    region: "local",
+    awsAccountId: "local",
+    status: "COMPLETE",
+    stackOutputs: {},
+    expiresAt: 0,
+    score: 0,
+    deployLog: { cursor: "", entries: [] },
+    i18n: { en: { name: "SQL Injection", description: "Vuln login.", instructions: "Bypass it." } },
+    scoring: {
+      kind: "flag",
+      points: 200,
+      hints: [
+        {
+          id: "hint-1",
+          penalty: 0,
+          revealed: true,
+          content: "クオート。",
+          i18n: { en: { content: "Try a quote." } },
+        },
+        { id: "hint-2", penalty: 25, revealed: false },
+      ],
+    },
+  };
+
+  it("should return the problem unchanged for the ja (canonical) locale", () => {
+    expect(localizeProblem(base, "ja")).toBe(base);
+  });
+
+  it("should overlay name/description/instructions and revealed hint content for en", () => {
+    const out = localizeProblem(base, "en");
+    expect(out.name).toBe("SQL Injection");
+    expect(out.description).toBe("Vuln login.");
+    expect(out.instructions).toBe("Bypass it.");
+    expect(out.scoring?.hints?.[0].content).toBe("Try a quote.");
+    // a hint without a translation keeps its canonical (here: absent) content
+    expect(out.scoring?.hints?.[1].content).toBeUndefined();
+  });
+
+  it("should fall back to canonical fields when the en overlay is missing or blank", () => {
+    const out = localizeProblem(
+      {
+        ...base,
+        i18n: { en: { name: "  ", description: "Only desc EN." } },
+        scoring: {
+          kind: "flag",
+          points: 200,
+          hints: [{ id: "hint-1", penalty: 0, revealed: true, content: "ja content" }],
+        },
+      },
+      "en",
+    );
+    expect(out.name).toBe("SQL インジェクション"); // blank en.name → canonical ja
+    expect(out.description).toBe("Only desc EN.");
+    expect(out.instructions).toBe("ログインを突破。"); // no en.instructions → canonical ja
+    expect(out.scoring?.hints?.[0].content).toBe("ja content"); // hint has no i18n → canonical
+  });
+
+  it("should handle a problem with no i18n and no scoring for en", () => {
+    const out = localizeProblem(
+      {
+        ...base,
+        i18n: undefined,
+        scoring: undefined,
+      },
+      "en",
+    );
+    expect(out.name).toBe("SQL インジェクション");
+    expect(out.scoring).toBeUndefined();
+  });
+
+  it("should keep scoring intact when it declares no hints", () => {
+    const out = localizeProblem(
+      { ...base, i18n: undefined, scoring: { kind: "uptime-flat" } },
+      "en",
+    );
+    expect(out.scoring).toEqual({ kind: "uptime-flat" });
   });
 });

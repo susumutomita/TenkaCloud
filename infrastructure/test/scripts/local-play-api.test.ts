@@ -230,6 +230,72 @@ describe("local-play API", () => {
     expect(res.body).toEqual({ error: "unknown_hint" });
   });
 
+  it("should surface the en overlay in the team view and gate hint translations behind reveal", async () => {
+    const problem: ContainerProblem = {
+      ...PROBLEM,
+      i18n: { en: { name: "SQLi", description: "Vuln login (EN).", instructions: "Bypass (EN)." } },
+      scoring: {
+        ...PROBLEM.scoring,
+        hints: [
+          {
+            id: "hint-1",
+            content: "クオート。",
+            penalty: 0,
+            i18n: { en: { content: "Try a quote (EN)." } },
+          },
+          { id: "hint-2", content: "OR 1=1。", penalty: 25 },
+        ],
+      },
+    };
+    const state = createLocalPlayState({ problem }, { verify: neverVerify });
+    const before = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const beforeProblem = (before.body as { problems: Array<Record<string, unknown>> }).problems[0];
+    expect(beforeProblem.i18n).toEqual({
+      en: { name: "SQLi", description: "Vuln login (EN).", instructions: "Bypass (EN)." },
+    });
+    // unrevealed hints leak neither ja content nor the en translation
+    const hintsBefore = (beforeProblem.scoring as { hints: Array<Record<string, unknown>> }).hints;
+    expect(hintsBefore[0]).not.toHaveProperty("content");
+    expect(hintsBefore[0]).not.toHaveProperty("i18n");
+
+    const reveal = await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/hints/hint-1/reveal", {}),
+      state,
+      NOW,
+    );
+    expect(reveal.body).toMatchObject({
+      content: "クオート。",
+      i18n: { en: { content: "Try a quote (EN)." } },
+    });
+
+    const after = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const afterHints = (
+      after.body as { problems: Array<{ scoring: { hints: Array<Record<string, unknown>> } }> }
+    ).problems[0].scoring.hints;
+    expect(afterHints[0]).toMatchObject({
+      content: "クオート。",
+      i18n: { en: { content: "Try a quote (EN)." } },
+    });
+    // a hint without a translation simply omits i18n once revealed
+    await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/hints/hint-2/reveal", {}),
+      state,
+      NOW,
+    );
+    const final = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const finalHints = (
+      final.body as { problems: Array<{ scoring: { hints: Array<Record<string, unknown>> } }> }
+    ).problems[0].scoring.hints;
+    expect(finalHints[1]).toMatchObject({ content: "OR 1=1。" });
+    expect(finalHints[1]).not.toHaveProperty("i18n");
+  });
+
+  it("should omit i18n from the team view when the problem ships no translation", async () => {
+    const res = await handleLocalPlayRequest(get("/portal/me"), stateWith(neverVerify), NOW);
+    const problem = (res.body as { problems: Array<Record<string, unknown>> }).problems[0];
+    expect(problem).not.toHaveProperty("i18n");
+  });
+
   it("should expose a single-team leaderboard reflecting the score", async () => {
     const state = stateWith(async () => ({ correct: true }));
     await handleLocalPlayRequest(
