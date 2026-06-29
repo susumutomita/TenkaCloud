@@ -126,6 +126,7 @@
         "@smithy/types": "^4.14.2",
         "@tenkacloud/coordination-plugin-sdk": "workspace:*",
         "@tenkacloud/problem-runtime": "workspace:*",
+        "@tenkacloud/problem-sdk": "workspace:*",
         "@tenkacloud/saml-utils": "workspace:*",
         "ajv": "8.18.0",
         "ajv-formats": "^3.0.1",
@@ -203,6 +204,19 @@
     "packages/problem-runtime": {
       "name": "@tenkacloud/problem-runtime",
       "version": "0.1.0",
+      "devDependencies": {
+        "@types/node": "^24.12.4",
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.9",
+      },
+    },
+    "packages/problem-sdk": {
+      "name": "@tenkacloud/problem-sdk",
+      "version": "0.1.0",
+      "dependencies": {
+        "@tenkacloud/problem-runtime": "workspace:*",
+        "zod": "^3.25.76",
+      },
       "devDependencies": {
         "@types/node": "^24.12.4",
         "typescript": "^6.0.3",
@@ -690,6 +704,8 @@
     "@tenkacloud/portal-plugin-sdk": ["@tenkacloud/portal-plugin-sdk@workspace:packages/portal-plugin-sdk"],
 
     "@tenkacloud/problem-runtime": ["@tenkacloud/problem-runtime@workspace:packages/problem-runtime"],
+
+    "@tenkacloud/problem-sdk": ["@tenkacloud/problem-sdk@workspace:packages/problem-sdk"],
 
     "@tenkacloud/saml-utils": ["@tenkacloud/saml-utils@workspace:packages/saml-utils"],
 
