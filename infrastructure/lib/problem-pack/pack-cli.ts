@@ -23,6 +23,13 @@
  *     {@link inspectPack}: manifest, digest, problem ids, runtimes, dep status.
  *   - `remove <id@version> [--store <dir>] [--pins <file>]` (#2094) →
  *     {@link removePack}: refused while a pin record references the revision.
+ *   - `activate <id@version> --tenant <t> [--store <dir>]` (#2095) →
+ *     {@link ActivationStore.activate}: activate an installed immutable revision
+ *     for ONE tenant; refuses on a duplicate problem id / unavailable runtime /
+ *     digest mismatch / not-installed.
+ *   - `deactivate <id@version> --tenant <t> [--store <dir>]` (#2095) →
+ *     {@link ActivationStore.deactivate}: deactivate a tenant's active revision;
+ *     events already pinned to that revision are untouched (immutable catalog).
  *
  * There is deliberately NO `update` command: a new version is a separate install.
  * Every command is local + offline — no cloud / remote calls.
@@ -51,6 +58,7 @@ import {
   type PinPredicate,
   removePack,
 } from "./lifecycle.js";
+import { ActivationStore } from "./pack-activation.js";
 import {
   INSTALL_USAGE,
   type LineWriter,
@@ -74,6 +82,9 @@ const INIT_USAGE = "Usage: tenkacloud pack init <dir> [--runtime <provider/engin
 const LIST_USAGE = "Usage: tenkacloud pack list [--store <dir>] [--json]";
 const INSPECT_USAGE = "Usage: tenkacloud pack inspect <id@version> [--store <dir>] [--json]";
 const REMOVE_USAGE = "Usage: tenkacloud pack remove <id@version> [--store <dir>] [--pins <file>]";
+const ACTIVATE_USAGE = "Usage: tenkacloud pack activate <id@version> --tenant <t> [--store <dir>]";
+const DEACTIVATE_USAGE =
+  "Usage: tenkacloud pack deactivate <id@version> --tenant <t> [--store <dir>]";
 const USAGE = [
   VALIDATE_USAGE,
   INIT_USAGE,
@@ -81,6 +92,8 @@ const USAGE = [
   LIST_USAGE,
   INSPECT_USAGE,
   REMOVE_USAGE,
+  ACTIVATE_USAGE,
+  DEACTIVATE_USAGE,
 ].join("\n");
 
 /** Default pack id used when `init` is run without an explicit id flag. */
@@ -128,6 +141,10 @@ export function runPackCli(
       return runInspect(rest, write);
     case "remove":
       return runRemove(rest, write);
+    case "activate":
+      return runActivate(rest, write);
+    case "deactivate":
+      return runDeactivate(rest, write);
     default:
       // No `update` command exists in v1: a new version is a separate install.
       write(USAGE);
@@ -238,6 +255,81 @@ function runRemove(rest: readonly string[], write: LineWriter): number {
   }
   write(`Removed ${result.removed.packId}@${result.removed.version}.`);
   return EXIT_OK;
+}
+
+/**
+ * `pack activate <id@version> --tenant <t> [--store <dir>]`: activate an installed
+ * immutable revision for ONE tenant. Refuses (exit 1) when the revision is not
+ * installed, the digest mismatches, or activating it would duplicate a problem id
+ * / require an unavailable runtime — the duplicate-id check runs BEFORE the record
+ * is written. Bad usage (missing ref / `--tenant`) is a tool failure (exit 2).
+ */
+function runActivate(rest: readonly string[], write: LineWriter): number {
+  const parsed = parseActivationArgs(rest);
+  if (!parsed) {
+    write(ACTIVATE_USAGE);
+    return EXIT_TOOL_FAILURE;
+  }
+  const store = new ActivationStore(parsed.store);
+  const result = store.activate({
+    tenantId: parsed.tenant,
+    packId: parsed.ref.id,
+    version: parsed.ref.version,
+  });
+  if (!result.ok) {
+    write(result.message);
+    return EXIT_VALIDATION_FAILURE;
+  }
+  const verb = result.alreadyActive ? "already active" : "activated";
+  write(
+    `Pack ${verb} for tenant '${parsed.tenant}': ${result.record.packId}@${result.record.version}`,
+  );
+  return EXIT_OK;
+}
+
+/**
+ * `pack deactivate <id@version> --tenant <t> [--store <dir>]`: deactivate ONE
+ * tenant's active revision. Refuses (exit 1) when it was not active for the
+ * tenant; an event already pinned to that revision is untouched (its catalog is
+ * immutable). Bad usage is a tool failure (exit 2).
+ */
+function runDeactivate(rest: readonly string[], write: LineWriter): number {
+  const parsed = parseActivationArgs(rest);
+  if (!parsed) {
+    write(DEACTIVATE_USAGE);
+    return EXIT_TOOL_FAILURE;
+  }
+  const store = new ActivationStore(parsed.store);
+  const result = store.deactivate({
+    tenantId: parsed.tenant,
+    packId: parsed.ref.id,
+    version: parsed.ref.version,
+  });
+  if (!result.ok) {
+    write(result.message);
+    return EXIT_VALIDATION_FAILURE;
+  }
+  write(
+    `Pack deactivated for tenant '${parsed.tenant}': ${result.record.packId}@${result.record.version}`,
+  );
+  return EXIT_OK;
+}
+
+/**
+ * Parse the shared `<id@version> --tenant <t> [--store <dir>]` argv tail for the
+ * activate / deactivate subcommands. Returns undefined on any malformed flag,
+ * missing tenant, or missing `id@version` so the caller surfaces a tool failure.
+ */
+function parseActivationArgs(
+  rest: readonly string[],
+): { ref: { id: string; version: string }; tenant: string; store: string } | undefined {
+  const store = takeFlag(rest, "--store");
+  if (store.malformed) return undefined;
+  const tenant = takeFlag(store.rest, "--tenant");
+  if (tenant.malformed || !tenant.value) return undefined;
+  const ref = parsePackRef(tenant.rest.filter((arg) => !arg.startsWith("--"))[0]);
+  if (!ref) return undefined;
+  return { ref, tenant: tenant.value, store: store.value ?? DEFAULT_STORE_DIR };
 }
 
 /**
