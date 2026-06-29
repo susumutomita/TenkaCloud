@@ -82,6 +82,18 @@ export const RESERVED_RUNTIMES: readonly { readonly provider: string; readonly e
     { provider: "gcp", engine: "infra-manager" }, // ADR-027
   ];
 
+/**
+ * [ADR-023 / #2054] Provider/engine pairs delivered as a **local container**
+ * (`make local`, the AWS-free local-play path), not deployed to a cloud account.
+ * They are a deliberate, recognized runtime — distinct from an "unknown" typo —
+ * but intentionally **not cloud-executable**, so the deploy worker still rejects
+ * a cloud deploy of them (loudly, before any mutation).
+ */
+export const CONTAINER_RUNTIMES: readonly { readonly provider: string; readonly engine: string }[] =
+  [
+    { provider: "docker", engine: "compose" }, // ADR-023 local-play
+  ];
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -250,12 +262,26 @@ export function isReservedRuntime(runtime: ProblemRuntimeDescriptor): boolean {
   );
 }
 
-export type RuntimeSupport = "executable" | "reserved" | "unknown" | "composite";
+/** True when the runtime is a recognized local container runtime (ADR-023 local-play). */
+export function isContainerRuntime(runtime: ProblemRuntimeDescriptor): boolean {
+  return (
+    isSingleRuntime(runtime) &&
+    CONTAINER_RUNTIMES.some((r) => r.provider === runtime.provider && r.engine === runtime.engine)
+  );
+}
 
-/** Classify a runtime as executable / reserved (planned) / unknown (likely a typo). */
+export type RuntimeSupport = "executable" | "reserved" | "container" | "unknown" | "composite";
+
+/**
+ * Classify a runtime: executable (aws/cloudformation) / reserved (planned
+ * roadmap provider) / container (local-play docker/compose) / composite /
+ * unknown (likely a typo). Only "executable" and "composite" are cloud-deployed;
+ * "reserved" and "container" are recognized-but-rejected, "unknown" is a typo.
+ */
 export function classifyRuntimeSupport(runtime: ProblemRuntimeDescriptor): RuntimeSupport {
   if (isCompositeRuntime(runtime)) return "composite";
   if (isExecutableRuntime(runtime)) return "executable";
   if (isReservedRuntime(runtime)) return "reserved";
+  if (isContainerRuntime(runtime)) return "container";
   return "unknown";
 }

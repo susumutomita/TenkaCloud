@@ -597,6 +597,10 @@ describe("Composite compat: catalog metadata validity", () => {
       id: "sakura-only",
       runtime: { provider: "sakura", engine: "apprun", entry: "registry/img:1" },
     });
+    writeProblem("challenges", "container-only", {
+      id: "container-only",
+      runtime: { provider: "docker", engine: "compose", entry: "local/docker-compose.yml" },
+    });
 
     // Every catalog entry normalizes and classifies as a recognized runtime
     // (executable or reserved) — never an "unknown" typo and never undefined.
@@ -606,6 +610,7 @@ describe("Composite compat: catalog metadata validity", () => {
     const catalog = discoverProblemsCatalog(workspace);
     expect(Object.keys(catalog).sort()).toEqual([
       "azure-only",
+      "container-only",
       "explicit-aws",
       "gcp-only",
       "legacy-cfn-template",
@@ -631,6 +636,14 @@ describe("Composite compat: catalog metadata validity", () => {
       engine: "apprun",
       entry: "registry/img:1",
     });
+    // [ADR-023] the local container runtime is recognized (classified "container",
+    // not "unknown") even though it is intentionally not cloud-executable.
+    expect(runtimes["container-only"]).toEqual({
+      provider: "docker",
+      engine: "compose",
+      entry: "local/docker-compose.yml",
+    });
+    expect(classifyRuntimeSupport(runtimes["container-only"])).toBe("container");
     // AWS entries are intentionally omitted from the runtime map (default path).
     expect(runtimes).not.toHaveProperty("legacy-no-runtime");
     expect(runtimes).not.toHaveProperty("legacy-cfn-template");
@@ -642,15 +655,16 @@ describe("Composite compat: catalog metadata validity", () => {
     }
   });
 
-  it("should discover the real problems/ root without throwing (forward-compat)", () => {
-    // problems/ is an external catalog (TenkaCloudChallenge) and may be empty in
-    // this checkout. Whatever is present must discover cleanly — a single-
-    // provider catalog must never blow up the runtime discovery used at synth.
+  it("should discover the real problems/ root without throwing (synth safety)", () => {
+    // problems/ is an external catalog (TenkaCloudChallenge, a git submodule) and
+    // may be empty in this checkout. The only thing the platform asserts about the
+    // real catalog is that runtime discovery — used at CDK synth — never throws on
+    // whatever is present. We deliberately do NOT assert classification over the
+    // real catalog: that would couple platform CI to catalog content (a new runtime
+    // type would break platform tests). Classification is verified above against
+    // synthetic fixtures, and "the catalog only uses supported runtimes" is the
+    // catalog repo's own concern (its validate-problems.ts), not the platform's.
     const realRoot = path.resolve(__dirname, "../../../problems");
     expect(() => discoverProblemsRuntime(realRoot)).not.toThrow();
-    const runtimes = discoverProblemsRuntime(realRoot);
-    for (const runtime of Object.values(runtimes)) {
-      expect(classifyRuntimeSupport(runtime)).not.toBe("unknown");
-    }
   });
 });
