@@ -45,6 +45,27 @@ TenkaCloud turns a problem catalog into a live cloud drill:
 
 ## Quickstart
 
+### Try it locally (no AWS)
+
+A fresh clone to a running portal. `make local` diagnoses what it needs (mise trust,
+the `problems/` submodule, Bun, the Docker CLI / Compose plugin / daemon) and, only
+with your consent, sets it up — then starts the Participant Portal.
+
+```bash
+git clone https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make local
+```
+
+- `make doctor` reports the prerequisites and changes nothing.
+- `make local YES=1` pre-approves software installs (also used by CI / automation).
+  In a non-interactive run without `YES=1`, nothing is installed — the missing
+  prerequisites are reported instead.
+- Needs a Docker runtime (Colima or Docker Desktop). If it is missing, `make local`
+  shows the exact install command and asks before running it.
+
+### Deploy on AWS
+
 Deploy from the AWS Console. A CloudFormation stack creates a CodeBuild project that
 git-clones this repo and runs the deploy for you — **no local install, no GitHub
 connection**.
