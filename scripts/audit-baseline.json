@@ -80,6 +80,7 @@
     "tinyexec": ["prepare"],
     "ts-api-utils": ["prepare"],
     "ts-node": ["prepare"],
+    "undici": ["prepare"],
     "whatwg-encoding": ["prepare"],
     "whatwg-url": ["prepare"],
     "y18n": ["prepare"],

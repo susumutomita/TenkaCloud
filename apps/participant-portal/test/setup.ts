@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom/vitest";
+import "../../../packages/web-kit/test/jsdom-computed-style";
 import { afterEach } from "vitest";
 
 function createMemoryStorage(): Storage {
