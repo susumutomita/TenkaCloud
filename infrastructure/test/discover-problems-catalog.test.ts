@@ -120,6 +120,43 @@ describe("discoverProblemsCatalog", () => {
   });
 });
 
+// Issue #2086: pin the catalog ordering contract before pack support is added.
+describe("discoverProblemsCatalog ordering (#2086)", () => {
+  it("should return entries in a repeatable, stable order across calls", () => {
+    writeProblem("challenges", "alpha", { id: "alpha" });
+    writeProblem("challenges", "bravo", { id: "bravo" });
+    writeProblem("battles", "charlie", { id: "charlie" });
+    writeProblem("battles", "delta", { id: "delta" });
+
+    const first = Object.keys(discoverProblemsCatalog(workspace));
+    const second = Object.keys(discoverProblemsCatalog(workspace));
+
+    expect(first).toHaveLength(4);
+    expect(second).toEqual(first); // deterministic: same order on every call
+  });
+
+  it("should follow filesystem traversal order without applying its own sort", () => {
+    // Names chosen so id-sorted order would differ from category-then-name walk.
+    writeProblem("zzz-category", "aaa", { id: "aaa" });
+    writeProblem("aaa-category", "zzz", { id: "zzz" });
+
+    // The expected order mirrors the implementation's two-level readdir walk
+    // (category dirs, then problem dirs within each), proving no independent
+    // alphabetical sort of ids is applied on top.
+    const expected: string[] = [];
+    for (const category of fs.readdirSync(workspace, { withFileTypes: true })) {
+      if (!category.isDirectory()) continue;
+      for (const problem of fs.readdirSync(path.join(workspace, category.name), {
+        withFileTypes: true,
+      })) {
+        if (problem.isDirectory()) expected.push(problem.name); // id === dir name here
+      }
+    }
+
+    expect(Object.keys(discoverProblemsCatalog(workspace))).toEqual(expected);
+  });
+});
+
 describe("discoverProblemsScoring", () => {
   it("should collect scoring of flag form", () => {
     writeProblem("challenges", "hello-world", {
