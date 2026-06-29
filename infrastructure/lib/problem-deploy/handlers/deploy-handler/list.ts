@@ -1,5 +1,7 @@
 import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { createCursorCodec } from "../shared/cursor-codec.js";
+import { isCompositeParentItem } from "./composite-deployment.js";
+import { buildCompositeDetail, type CompositeDetail } from "./composite-detail.js";
 import type { DeploySharedResources } from "./deploy.js";
 import type { DeploymentItem, DeploymentStatus } from "./types.js";
 
@@ -34,6 +36,12 @@ export interface DeploymentSummary {
    * UI が一覧画面でも誤露出しないよう、複数行スコープでは引かない)。
    */
   readonly teamLoginKey?: string;
+  /**
+   * [#2073] Composite parent 行のときだけ付く target-level status view。GSI3 を
+   * ordinal 順に引いた各 target の whitelisted summary (secret / role / credential
+   * は含まない)。legacy single-provider 行には付かない (= byte 互換を保つ)。
+   */
+  readonly composite?: CompositeDetail;
 }
 
 export interface ListDeploymentsRequest {
@@ -149,5 +157,13 @@ export async function getDeployment(
   const item = out.Item as Partial<DeploymentItem> | undefined;
   if (!item) return undefined;
   if (item.tenantId !== tenantId) return undefined;
-  return toDetail(item);
+  const detail = toDetail(item);
+  // [#2073] Composite parent 行のときだけ target-level status を付与する。
+  // legacy single-provider 行は `isCompositeParentItem` が false なので素の detail
+  // を返し、byte 互換を保つ。tenant 認可は上の `item.tenantId !== tenantId` で確定済。
+  if (isCompositeParentItem(item)) {
+    const composite = await buildCompositeDetail(shared, jobId);
+    return { ...detail, composite };
+  }
+  return detail;
 }
