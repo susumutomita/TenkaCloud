@@ -597,6 +597,10 @@ describe("Composite compat: catalog metadata validity", () => {
       id: "sakura-only",
       runtime: { provider: "sakura", engine: "apprun", entry: "registry/img:1" },
     });
+    writeProblem("challenges", "container-only", {
+      id: "container-only",
+      runtime: { provider: "docker", engine: "compose", entry: "local/docker-compose.yml" },
+    });
 
     // Every catalog entry normalizes and classifies as a recognized runtime
     // (executable or reserved) — never an "unknown" typo and never undefined.
@@ -606,6 +610,7 @@ describe("Composite compat: catalog metadata validity", () => {
     const catalog = discoverProblemsCatalog(workspace);
     expect(Object.keys(catalog).sort()).toEqual([
       "azure-only",
+      "container-only",
       "explicit-aws",
       "gcp-only",
       "legacy-cfn-template",
@@ -631,6 +636,14 @@ describe("Composite compat: catalog metadata validity", () => {
       engine: "apprun",
       entry: "registry/img:1",
     });
+    // [ADR-023] the local container runtime is recognized (classified "container",
+    // not "unknown") even though it is intentionally not cloud-executable.
+    expect(runtimes["container-only"]).toEqual({
+      provider: "docker",
+      engine: "compose",
+      entry: "local/docker-compose.yml",
+    });
+    expect(classifyRuntimeSupport(runtimes["container-only"])).toBe("container");
     // AWS entries are intentionally omitted from the runtime map (default path).
     expect(runtimes).not.toHaveProperty("legacy-no-runtime");
     expect(runtimes).not.toHaveProperty("legacy-cfn-template");
