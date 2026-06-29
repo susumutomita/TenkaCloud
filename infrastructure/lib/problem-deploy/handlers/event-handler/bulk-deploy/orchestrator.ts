@@ -3,6 +3,7 @@ import type { BulkDeployRequest } from "../types.js";
 import { indexExistingDeployments } from "./existing-index.js";
 import { markPublishFailuresFailed, writeBulkDeployPlan } from "./persistence.js";
 import { buildBulkDeployPlan } from "./plan-builder.js";
+import { writePackProvenanceAudit } from "./provenance-audit.js";
 import { publishBulkDeployPlan } from "./publish.js";
 import { buildResult, emptyBulkDeployResult } from "./result.js";
 import { loadBulkDeployTargets, selectBulkDeployTargets } from "./targets.js";
@@ -102,6 +103,11 @@ export async function bulkDeployEvent(
         .join("; ")}`,
     );
   }
+
+  // [#2096] Append-only audit of pack-sourced deployments. Best-effort (no-op
+  // when the audit table is unwired or no pack rows exist), so it never blocks
+  // the deploy and core-only events behave exactly as before.
+  await writePackProvenanceAudit({ tenantId, eventId, nowMs }, plan.entries);
 
   return {
     kind: "ok",

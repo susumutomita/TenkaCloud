@@ -21,6 +21,7 @@ import {
   shouldShowFailureGuidance,
 } from "./deployment-detail/FailureGuidanceSection";
 import { HandoffSection } from "./deployment-detail/HandoffSection";
+import { ProvenanceSummarySection } from "./deployment-detail/ProvenanceSummarySection";
 import { TerminalLogView } from "./deployment-detail/TerminalLogView";
 import { useDeploymentDetail } from "./deployment-detail/useDeploymentDetail";
 
@@ -131,6 +132,9 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
       {teamLoginKey && <HandoffSection teamLoginKey={teamLoginKey} t={t} />}
 
       {Object.keys(outputs).length > 0 && <CfnOutputsSection outputs={outputs} t={t} />}
+
+      {/* [#2096] Pack-sourced deployments only; hidden for core problems. */}
+      <ProvenanceSummarySection deployment={item} t={t} />
 
       {/* Maximize log: terminal-style 全 phase の log。Cloudscape の Modal size="max"。 */}
       <Modal

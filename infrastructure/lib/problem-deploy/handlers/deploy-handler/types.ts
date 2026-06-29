@@ -1,5 +1,7 @@
 import { z } from "zod";
+import type { DeploymentProvenance } from "../shared/deployment-provenance.js";
 
+export type { DeploymentProvenance } from "../shared/deployment-provenance.js";
 export {
   type DeployCreateRequestedDetail,
   DeployCreateRequestedDetailSchema,
@@ -144,6 +146,15 @@ export interface DeploymentItem {
    */
   eventId?: string;
   teamId?: string;
+
+  /**
+   * [Problem Packs / Issue #2096] Pack provenance for a PACK-SOURCED deployment,
+   * copied from the EVENT-pinned catalog snapshot (#2095) at deploy time — never
+   * from client input. Absent for core (non-pack) deployments, so legacy / core
+   * rows stay byte-identical. The detail API surfaces it only when present; the
+   * list summary never does. It carries no local path / source credential.
+   */
+  provenance?: DeploymentProvenance;
 
   /**
    * 競技開始時刻 (ISO8601) を Event から denormalize したコピー。HealthCheckLambda が
