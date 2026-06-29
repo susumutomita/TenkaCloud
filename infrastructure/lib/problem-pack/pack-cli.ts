@@ -254,7 +254,15 @@ function runRemove(rest: readonly string[], write: LineWriter): number {
     return EXIT_TOOL_FAILURE;
   }
 
-  const isPinned = pinPredicateFromFile(pins.value);
+  let isPinned: PinPredicate;
+  try {
+    isPinned = pinPredicateFromFile(pins.value);
+  } catch {
+    // A missing or malformed --pins file is a tool failure, not a validation
+    // failure — surface it as exit 2 instead of letting the throw escape.
+    write(REMOVE_USAGE);
+    return EXIT_TOOL_FAILURE;
+  }
   const result = removePack(store.value ?? DEFAULT_STORE_DIR, ref.id, ref.version, isPinned);
   if (!result.ok) {
     write(result.message);

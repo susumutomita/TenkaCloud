@@ -278,6 +278,42 @@ describe("runPackCli remove (#2094)", () => {
     expect(code).toBe(0);
   });
 
+  it("should exit 2 without throwing when the --pins file is missing", () => {
+    writeValidPack(packDir);
+    run(["install", packDir, ...STORE()]);
+    const missingPins = path.join(base, "no-such-pins.json");
+
+    const { code } = run([
+      "remove",
+      "com.example.cloud-pack@1.2.3",
+      ...STORE(),
+      "--pins",
+      missingPins,
+    ]);
+
+    expect(code).toBe(2);
+    // The revision must not have been removed on a tool-failure path.
+    const { out: listOut } = run(["list", ...STORE()]);
+    expect(listOut).toContain("com.example.cloud-pack");
+  });
+
+  it("should exit 2 without throwing when the --pins file is malformed JSON", () => {
+    writeValidPack(packDir);
+    run(["install", packDir, ...STORE()]);
+    const badPins = path.join(base, "bad-pins.json");
+    fs.writeFileSync(badPins, "{ not valid json");
+
+    const { code } = run([
+      "remove",
+      "com.example.cloud-pack@1.2.3",
+      ...STORE(),
+      "--pins",
+      badPins,
+    ]);
+
+    expect(code).toBe(2);
+  });
+
   it("should exit 1 when the revision is not installed", () => {
     const { code, out } = run(["remove", "com.example.cloud-pack@9.9.9", ...STORE()]);
 
