@@ -16,6 +16,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "cdk": "cdk",
+    "pack": "tsx bin/tenkacloud-pack.ts",
     "_synth-app": "tsx bin/infrastructure.ts"
   },
   "devDependencies": {
