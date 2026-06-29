@@ -1,0 +1,31 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+import { ProvenanceFactList } from "@/components/ReferenceTables";
+
+export const metadata = { title: "Security and provenance model" };
+
+# Security and provenance model <MaturityBadge level="stable" />
+
+A problem pack must be reproducible and tamper-evident. The facts below are
+**normative reference** derived from the pack manifest's inert-by-design schema and
+the immutable snapshot / lock model in the pack installer.
+
+## Guarantees
+
+<ProvenanceFactList />
+
+## How provenance is recorded
+
+Every installed revision is recorded in the lock with its content digest and source
+kind. A `git`-sourced pack additionally records the HTTPS repository URL (with
+credentials stripped), the resolved immutable 40-hex commit, and the subdir. The
+content digest is source-kind-agnostic, so the same bytes always produce the same
+digest regardless of how they were fetched.
+
+## What a pack cannot do
+
+A v1 manifest cannot declare scripts, lifecycle hooks, remote URLs, or credentials.
+Install performs no runtime code execution. The Git fetch is shallow,
+hooks-disabled, and resolves only the pinned commit — it never follows a floating
+branch or tag.
+
+Related: [pack manifest reference](/developers/docs/reference/pack-manifest/).

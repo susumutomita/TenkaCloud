@@ -1,0 +1,29 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+import { ValidationErrorTable } from "@/components/ReferenceTables";
+
+export const metadata = { title: "Validation error reference" };
+
+# Validation error reference <MaturityBadge level="stable" />
+
+The pack validator emits stable, namespaced diagnostic codes. The `code` is the
+contract — tooling switches on it, never on the message string. The table below is
+**normative reference** derived from the `ValidationDiagnosticCode` registry in
+`@tenkacloud/problem-sdk`. Every code has a user-facing explanation here, and the
+drift check fails the build if a code is added without one.
+
+## Codes
+
+<ValidationErrorTable />
+
+Codes are namespaced `PACK_*` / `PROBLEM_*` / `RUNTIME_*`. Adding a code is an
+additive (minor) change; removing or repurposing one is a major change.
+
+## Reading a diagnostic
+
+Each diagnostic carries the stable `code`, a `path` locating the offending value
+(`tenkacloud-pack.json:id` or `metadata.json:scoring`), and a remediation
+`message`. Run `tenkacloud pack validate <dir> --json` to get machine-readable
+output.
+
+Related: [CLI reference](/developers/docs/reference/cli/) and the
+[pack manifest reference](/developers/docs/reference/pack-manifest/).

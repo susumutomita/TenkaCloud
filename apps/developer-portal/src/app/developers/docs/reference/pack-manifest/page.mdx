@@ -1,0 +1,40 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+import { ManifestFieldTable } from "@/components/ReferenceTables";
+
+export const metadata = { title: "Pack manifest reference" };
+
+# Pack manifest reference <MaturityBadge level="stable" />
+
+The `tenkacloud-pack.json` manifest is the only entrypoint of a problem pack. The
+fields below are **normative reference** generated from the `PackManifestSchema`
+zod schema in `@tenkacloud/problem-sdk`. The schema is `.strict()`, so any unknown
+top-level field is rejected.
+
+## Fields
+
+<ManifestFieldTable />
+
+The manifest is intentionally inert: v1 carries no author credentials, remote
+URLs, scripts, or executable hooks. See the [security and provenance model](/developers/docs/reference/security-provenance/).
+
+## Example
+
+The example below is illustrative, not normative — the field rules above are the
+source of truth.
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "com.example.starter",
+  "version": "1.0.0",
+  "core": ">=1.0.0",
+  "title": "Starter pack",
+  "description": "A minimal validator-passing pack.",
+  "license": "Apache-2.0",
+  "problemsRoot": "problems",
+  "requiredRuntimes": [{ "provider": "aws", "engine": "cloudformation" }]
+}
+```
+
+Related: [problem metadata reference](/developers/docs/reference/problem-metadata/)
+and the [CLI reference](/developers/docs/reference/cli/).
