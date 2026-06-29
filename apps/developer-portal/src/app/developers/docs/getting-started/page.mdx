@@ -1,0 +1,30 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "Getting started" };
+
+# Getting started <MaturityBadge level="stable" />
+
+Deploy your **First Pack** and reach the participant portal in a single pass.
+
+## Prerequisites
+
+- [Bun](https://bun.sh) 1.3.11
+- An AWS account (for a real deploy; the SPA dev servers run without one)
+
+## Deploy your First Pack
+
+Run Lite mode, register a team, and watch scoring flow through the participant
+portal:
+
+```bash
+make deploy        # Lite mode: AppPlaneCore + Participant Portal
+```
+
+This single-tenant path is the fastest way to see a Challenge pack score
+end to end.
+
+## Next steps
+
+- Read about [problem packs](/developers/docs/concepts/problem-packs/).
+- Browse the [API reference](/developers/api/).
+- Copy a snippet from [examples](/developers/examples/).
