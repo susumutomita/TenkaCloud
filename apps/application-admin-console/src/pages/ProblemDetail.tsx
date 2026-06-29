@@ -74,6 +74,18 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           <Meta label={t("problem_detail.label_status")}>
             <Badge color={problem.status === "ready" ? "green" : "blue"}>{problem.status}</Badge>
           </Meta>
+          {/* Issue #2093: pack provenance is shown ONLY for pack problems. A core
+              problem leaves these undefined, so the legacy detail view is unchanged. */}
+          {problem.source === "pack" && problem.packId && (
+            <Meta label={t("problem_detail.label_pack")}>
+              <Badge color="green">
+                {problem.packVersion ? `${problem.packId}@${problem.packVersion}` : problem.packId}
+              </Badge>
+            </Meta>
+          )}
+          {problem.source === "pack" && problem.license && (
+            <Meta label={t("problem_detail.label_pack_license")}>{problem.license}</Meta>
+          )}
         </ColumnLayout>
       </Container>
 

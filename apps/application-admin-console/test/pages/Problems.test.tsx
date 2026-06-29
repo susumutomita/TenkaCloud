@@ -120,6 +120,24 @@ describe("ProblemsPage", () => {
     expect(screen.getByText("fly")).toBeInTheDocument(); // 未知 provider は raw id
   });
 
+  it("should render a pack badge only for problems that come from an installed pack", () => {
+    // Issue #2093: a core problem (no `source`) shows no pack badge; a pack problem does.
+    mockList.mockReturnValue([
+      summary({ id: "core-x", name: "CoreX" }),
+      summary({
+        id: "pack-y",
+        name: "PackY",
+        source: "pack",
+        packId: "com.example.pack",
+        packVersion: "1.2.0",
+        license: "Apache-2.0",
+      }),
+    ]);
+    renderPage();
+    // The pack badge appears exactly once (only on the pack-sourced card).
+    expect(screen.getAllByText("problems.badge_pack")).toHaveLength(1);
+  });
+
   it("should filter by search text and show a filtered counter + clear button", () => {
     renderPage();
     fireEvent.change(searchBox(), { target: { value: "bravo" } });

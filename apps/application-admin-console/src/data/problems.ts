@@ -12,6 +12,11 @@ import {
   type CostRiskLevel,
   type ProblemCostEstimate,
 } from "../../../../scripts/lib/problem-cost";
+import {
+  buildEffectiveCatalog,
+  type CoreCatalogInput,
+  type PackCatalogProblemInput,
+} from "./effective-catalog";
 
 export type ProblemCategory = "Battle" | "Challenge";
 export type ProblemStatus = "ready" | "draft" | "deprecated";
@@ -67,6 +72,19 @@ export interface ProblemSummary {
   scoringKind?: string;
   /** Issue #1910: template.yaml から導出した offline cost-risk estimate。 */
   costEstimate?: ProblemCostEstimateSummary;
+  /**
+   * Issue #2093: EFFECTIVE catalog provenance — display-only metadata, populated
+   * ONLY when a problem comes from an installed pack snapshot. Core problems leave
+   * these undefined so the legacy core-only UI is byte-identical (no pack labels).
+   * Provenance is NEVER an authorization input; the console only renders it.
+   */
+  source?: "core" | "pack";
+  /** Reverse-DNS pack id of the contributing pack (pack problems only). */
+  packId?: string;
+  /** Stamped SemVer of the contributing pack (pack problems only). */
+  packVersion?: string;
+  /** SPDX-ish license string declared by the contributing pack (pack problems only). */
+  license?: string;
 }
 
 export interface ProblemDetail extends ProblemSummary {
@@ -171,23 +189,103 @@ function summarizeProblemCost(estimate: ProblemCostEstimate): ProblemCostEstimat
   };
 }
 
-function findTemplateYaml(metadataPath: string, metadata: ProblemMetadata): string | undefined {
+function findTemplateYaml(
+  modules: Record<string, string>,
+  metadataPath: string,
+  metadata: ProblemMetadata,
+): string | undefined {
   // cfnTemplate は SCHEMA 必須 (= validate-problems が保証) なので `?? "template.yaml"` の
   // 最終 fallback は不到達。 dead branch を残さない (coverage gate / simplify)。
   const templateName = metadata.runtime?.entry ?? metadata.cfnTemplate;
   const templatePath = metadataPath.replace(/metadata\.json$/, templateName);
-  return templateModules[templatePath];
+  return modules[templatePath];
 }
 
-// 表示順の安定化のため id で sort。category > id の 2 段 sort は Phase 2 で必要に応じて。
-export const PROBLEM_CATALOG: readonly ProblemDetail[] = Object.entries(metadataModules)
-  .map(([metadataPath, mod]) =>
-    metadataToDetail(mod.default, findTemplateYaml(metadataPath, mod.default)),
-  )
-  .sort((a, b) => a.id.localeCompare(b.id));
+/**
+ * Issue #2093: installed pack snapshots live under the local pack-store
+ * (`.tenkacloud/pack-store/snapshots/<pack>/<rev>/<problemsRoot>/<category>/<id>/`).
+ * They are globbed at BUILD time exactly like core — never fetched client-side —
+ * so a core-only checkout (no installed snapshots) matches NOTHING and the catalog
+ * stays byte-identical to the legacy core-only projection. Each snapshot also
+ * carries a `tenkacloud-pack.json` manifest from which the pack identity / license
+ * provenance is read.
+ */
+const packMetadataModules = import.meta.glob<{ default: ProblemMetadata }>(
+  "../../../../.tenkacloud/pack-store/snapshots/**/metadata.json",
+  { eager: true },
+);
+const packTemplateModules = import.meta.glob<string>(
+  "../../../../.tenkacloud/pack-store/snapshots/**/*.yaml",
+  { eager: true, import: "default", query: "?raw" },
+);
+const packManifestModules = import.meta.glob<{ default: PackManifestShape }>(
+  "../../../../.tenkacloud/pack-store/snapshots/**/tenkacloud-pack.json",
+  { eager: true },
+);
+
+/** The subset of `tenkacloud-pack.json` the console reads for display provenance. */
+interface PackManifestShape {
+  id: string;
+  version: string;
+  license: string;
+}
+
+/** Resolve the nearest `tenkacloud-pack.json` for a pack problem's metadata path. */
+function findPackManifest(metadataPath: string): PackManifestShape | undefined {
+  for (const [manifestPath, mod] of Object.entries(packManifestModules)) {
+    const root = manifestPath.replace(/tenkacloud-pack\.json$/, "");
+    if (metadataPath.startsWith(root)) return mod.default;
+  }
+  return undefined;
+}
+
+const coreInputs: readonly CoreCatalogInput[] = Object.entries(metadataModules).map(
+  ([metadataPath, mod]) => ({
+    metadata: mod.default,
+    templateYaml: findTemplateYaml(templateModules, metadataPath, mod.default),
+  }),
+);
+
+// Only snapshots that carry a readable manifest become pack problems; a snapshot
+// missing its manifest is skipped rather than mislabeled as a core problem.
+const packInputs: readonly PackCatalogProblemInput[] = Object.entries(packMetadataModules).flatMap(
+  ([metadataPath, mod]) => {
+    const manifest = findPackManifest(metadataPath);
+    if (!manifest) return [];
+    return [
+      {
+        metadata: mod.default,
+        templateYaml: findTemplateYaml(packTemplateModules, metadataPath, mod.default),
+        packId: manifest.id,
+        packVersion: manifest.version,
+        license: manifest.license,
+      },
+    ];
+  },
+);
+
+// 表示順の安定化のため id で sort (buildEffectiveCatalog が担保)。EFFECTIVE catalog は
+// core (上記 glob) と installed pack snapshots を #2091 の composer 経由で merge する。
+export const PROBLEM_CATALOG: readonly ProblemDetail[] = buildEffectiveCatalog({
+  core: coreInputs,
+  packs: packInputs,
+});
 
 export function findProblem(id: string): ProblemDetail | undefined {
   return PROBLEM_CATALOG.find((p) => p.id === id);
+}
+
+/**
+ * Issue #2093: pack provenance is sparse — present ONLY for pack problems, so a
+ * core-only summary list stays byte-identical to the legacy projection (no pack
+ * fields). `ProblemDetail` extends `ProblemSummary`, so the same optional fields
+ * carry through unchanged. Extracted to keep {@link listProblemSummaries} simple.
+ */
+function packProvenanceFields(
+  p: ProblemDetail,
+): Partial<Pick<ProblemSummary, "source" | "packId" | "packVersion" | "license">> {
+  if (p.source !== "pack") return {};
+  return { source: p.source, packId: p.packId, packVersion: p.packVersion, license: p.license };
 }
 
 export function listProblemSummaries(): readonly ProblemSummary[] {
@@ -210,6 +308,7 @@ export function listProblemSummaries(): readonly ProblemSummary[] {
     ...(p.scoringKind ? { scoringKind: p.scoringKind } : {}),
     ...(p.costEstimate ? { costEstimate: p.costEstimate } : {}),
     /* v8 ignore stop */
+    ...packProvenanceFields(p),
   }));
 }
 
