@@ -67,6 +67,9 @@ export interface MaterializeCompositeDeploymentInput {
   /** Competitor AWS account + region from the deploy request (shared context). */
   readonly awsAccountId: string;
   readonly region: string;
+  /** Existing optional bulk-deploy grouping fields from the deploy request. */
+  readonly accountGroupId?: string;
+  readonly problemSetId?: string;
   /** Base stack-name prefix; each target gets `${namePrefix}-${targetId}`. */
   readonly namePrefix: string;
 }
@@ -120,6 +123,8 @@ export async function materializeCompositeDeployment(
     status: "PENDING",
     teamName: input.teamName,
     teamLoginKey,
+    accountGroupId: input.accountGroupId,
+    problemSetId: input.problemSetId,
   });
 
   // Targets in declared (ordinal) order. Partial state is preserved on failure.
@@ -145,6 +150,8 @@ export async function materializeCompositeDeployment(
         createdAt,
         expiresAt,
         status: "PENDING",
+        accountGroupId: input.accountGroupId,
+        problemSetId: input.problemSetId,
       });
     } catch (err) {
       throw new CompositeMaterializationError(parentDeploymentId, target.targetId, err);

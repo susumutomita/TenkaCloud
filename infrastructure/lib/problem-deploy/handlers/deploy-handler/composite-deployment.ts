@@ -57,6 +57,9 @@ export interface CompositeParentDeploymentItem {
    */
   teamName?: string;
   teamLoginKey?: string;
+  /** Reserved bulk-deploy grouping fields copied from the validated request. */
+  accountGroupId?: string;
+  problemSetId?: string;
 }
 
 /**

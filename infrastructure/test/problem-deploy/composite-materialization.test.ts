@@ -109,6 +109,25 @@ describe("materializeCompositeDeployment (#2063)", () => {
     }
   });
 
+  it("copies request grouping fields to the parent and all targets", async () => {
+    const { deps, createParent, createTarget } = makeDeps();
+    await materializeCompositeDeployment(
+      deps,
+      input({ accountGroupId: "accounts-a", problemSetId: "set-1" }),
+    );
+
+    expect(createParent.mock.calls[0]?.[0]).toMatchObject({
+      accountGroupId: "accounts-a",
+      problemSetId: "set-1",
+    });
+    for (const call of createTarget.mock.calls) {
+      expect(call[0]).toMatchObject({
+        accountGroupId: "accounts-a",
+        problemSetId: "set-1",
+      });
+    }
+  });
+
   it("preserves AWS GCP Azure Sakura target order and runtime fields", async () => {
     const { deps, createTarget } = makeDeps();
     await materializeCompositeDeployment(deps, input());
