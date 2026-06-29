@@ -65,8 +65,8 @@ export const EXECUTABLE_ENGINE = "cloudformation" as const;
 export const DEFAULT_ENTRY = "template.yaml" as const;
 
 const COMPOSITE_TARGET_ID_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
-const MIN_COMPOSITE_TARGETS = 2;
-const MAX_COMPOSITE_TARGETS = 8;
+export const MIN_COMPOSITE_TARGETS = 2;
+export const MAX_COMPOSITE_TARGETS = 8;
 
 /**
  * [ADR-026 / ADR-027] Provider/engine pairs the metadata layer recognizes as
@@ -259,3 +259,12 @@ export function classifyRuntimeSupport(runtime: ProblemRuntimeDescriptor): Runti
   if (isReservedRuntime(runtime)) return "reserved";
   return "unknown";
 }
+
+// [Composite Runtime / Issue #2062] Deterministic deployment planner.
+export {
+  buildCompositeDeploymentPlan,
+  COMPOSITE_PROVIDERS,
+  type CompositeDeploymentPlan,
+  type CompositeDeploymentPlanTarget,
+  type CompositeProvider,
+} from "./composite-plan.js";
