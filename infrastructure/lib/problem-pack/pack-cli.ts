@@ -78,6 +78,13 @@ function runValidate(rest: readonly string[], write: LineWriter): number {
 
 function runInit(rest: readonly string[], write: LineWriter): number {
   const flagIndex = rest.indexOf("--runtime");
+  // A bare `--runtime` with no value (it is the last token, or the next token is
+  // another flag) is malformed input: fail loudly instead of silently scaffolding
+  // the default runtime, which would generate the wrong pack.
+  if (flagIndex >= 0 && (flagIndex === rest.length - 1 || rest[flagIndex + 1]?.startsWith("--"))) {
+    write(INIT_USAGE);
+    return EXIT_TOOL_FAILURE;
+  }
   const runtimeArg = flagIndex >= 0 ? rest[flagIndex + 1] : undefined;
   // Drop the flag and its value by index so a positional dir equal to the
   // runtime string is not accidentally consumed.

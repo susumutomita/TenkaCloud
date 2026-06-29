@@ -77,6 +77,17 @@ describe("runPackCli init (#2089)", () => {
     expect(out.join("\n").toLowerCase()).toContain("unsupported runtime");
   });
 
+  it("should exit 2 when --runtime is given with no value instead of silently defaulting", () => {
+    const dir = path.join(targetRoot, "bare-runtime");
+    const out: string[] = [];
+
+    const code = runPackCli(["init", dir, "--runtime"], (line) => out.push(line));
+
+    expect(code).toBe(2);
+    // The malformed flag must not have scaffolded a (wrong, default-runtime) pack.
+    expect(fs.existsSync(dir)).toBe(false);
+  });
+
   it("should still dispatch validate (the shared dispatcher is unchanged)", () => {
     const dir = path.join(targetRoot, "round-trip");
     runPackCli(["init", dir], () => {});
