@@ -171,6 +171,27 @@ describe("selectAdapter", () => {
     }
   });
 
+  it("should reject a local container runtime with a make-local message, not a typo", () => {
+    // docker/compose is a deliberate local-only runtime (ADR-023), so the cloud
+    // deploy rejection must point at `make local` rather than calling it a typo.
+    const runtime: ProblemRuntime = {
+      provider: "docker",
+      engine: "compose",
+      entry: "local/docker-compose.yml",
+    };
+    try {
+      selectAdapter(runtime, deps);
+      throw new Error("expected selectAdapter to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(RuntimeNotSupportedError);
+      if (err instanceof RuntimeNotSupportedError) {
+        expect(err.message).toContain("docker/compose");
+        expect(err.message).toContain("make local");
+        expect(err.message).not.toContain("typo");
+      }
+    }
+  });
+
   it("should include the rejected runtime in the error and flag an unknown runtime as a typo", () => {
     const runtime: ProblemRuntime = {
       provider: "kubernetes",
