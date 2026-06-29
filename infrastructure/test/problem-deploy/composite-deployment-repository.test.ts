@@ -14,6 +14,7 @@ import {
   type CompositeDeploymentRepositoryDeps,
   CompositeParentConflictError,
   CompositeTargetConflictError,
+  type CreateCompositeParentInput,
   type CreateCompositeTargetInput,
   createCompositeParent,
   createCompositeTarget,
@@ -85,7 +86,9 @@ function makeFakeDdb(): FakeDdb {
   };
 }
 
-const parentInput = (over: Record<string, unknown> = {}) => ({
+const parentInput = (
+  over: Partial<CreateCompositeParentInput> = {},
+): CreateCompositeParentInput => ({
   parentDeploymentId: "parent-1",
   tenantId: "tenant-acme",
   problemId: "cross-cloud",
@@ -130,9 +133,39 @@ describe("composite deployment repository (#2061)", () => {
       targetCount: 2,
       status: "PENDING",
     });
+    // [#2063] No team identity unless supplied — keeps the legacy parent shape.
+    expect(created).not.toHaveProperty("teamLoginKey");
+    expect(created).not.toHaveProperty("teamName");
 
     const fetched = await getCompositeParent(fake.deps, "parent-1");
     expect(fetched).toEqual(created);
+  });
+
+  it("[#2063] stores team identity on the parent when supplied", async () => {
+    const fake = makeFakeDdb();
+    const created = await createCompositeParent(
+      fake.deps,
+      parentInput({ teamName: "Alpha", teamLoginKey: "KEY1" }),
+    );
+    expect(created.teamName).toBe("Alpha");
+    expect(created.teamLoginKey).toBe("KEY1");
+  });
+
+  it("[#2063] stores request grouping fields on the parent and target", async () => {
+    const fake = makeFakeDdb();
+    const parent = await createCompositeParent(
+      fake.deps,
+      parentInput({ accountGroupId: "accounts-a", problemSetId: "set-1" }),
+    );
+    const target = await createCompositeTarget(
+      fake.deps,
+      targetInput({ accountGroupId: "accounts-a", problemSetId: "set-1" }),
+    );
+
+    expect(parent.accountGroupId).toBe("accounts-a");
+    expect(parent.problemSetId).toBe("set-1");
+    expect(target.accountGroupId).toBe("accounts-a");
+    expect(target.problemSetId).toBe("set-1");
   });
 
   it("stores AWS GCP Azure and Sakura targets as independent META rows", async () => {
@@ -350,6 +383,17 @@ describe("composite deployment repository (#2061)", () => {
     await createCompositeParent(fake.deps, parentInput());
     await expect(
       createCompositeParent(fake.deps, parentInput({ problemId: "other-problem" })),
+    ).rejects.toBeInstanceOf(CompositeParentConflictError);
+  });
+
+  it("[#2063] rejects a parent retry with different shared team identity", async () => {
+    const fake = makeFakeDdb();
+    await createCompositeParent(
+      fake.deps,
+      parentInput({ teamName: "Alpha", teamLoginKey: "KEY1" }),
+    );
+    await expect(
+      createCompositeParent(fake.deps, parentInput({ teamName: "Beta", teamLoginKey: "KEY2" })),
     ).rejects.toBeInstanceOf(CompositeParentConflictError);
   });
 
