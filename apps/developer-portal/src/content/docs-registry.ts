@@ -144,6 +144,25 @@ export const DOC_PAGES: readonly DocPage[] = [
     ],
     body: "Security and provenance model. Inert manifests with no scripts or hooks, immutable content-addressed SHA-256 snapshots, pinned Git provenance recording the HTTPS repository URL and immutable 40-hex commit, and no remote or mutable sources. Install performs no runtime code execution.",
   },
+  {
+    slug: "tutorials/first-pack",
+    href: "/developers/docs/tutorials/first-pack/",
+    title: "First pack tutorial",
+    description:
+      "Create, validate, pin, install, activate, and pin to an event — one minimal pack end to end.",
+    maturity: "stable",
+    section: "Tutorials",
+    headings: [
+      { id: "scaffold", text: "Scaffold a pack" },
+      { id: "validate", text: "Validate a pack" },
+      { id: "pin", text: "Pin an immutable Git revision" },
+      { id: "install", text: "Install a pack" },
+      { id: "activate", text: "Activate for a tenant" },
+      { id: "common-failures", text: "Common failures and diagnostic codes" },
+      { id: "teardown", text: "Teardown and remove" },
+    ],
+    body: "First pack tutorial: from an empty directory, scaffold a problem pack with pack init, validate it offline with pack validate, pin an immutable full 40-hex Git commit revision, install it with pack install, activate it for a tenant with pack activate, create an event that pins the catalog snapshot, verify it in the organizer console, and tear it down with pack deactivate and pack remove. Uses one minimal pack com.example.starter with the hello-world problem. Common validator failures map to exact diagnostic codes such as PACK_DIR_MISSING, MANIFEST_MISSING, MANIFEST_INVALID, DUPLICATE_PROBLEM_ID, ARTIFACT_MISSING, and RUNTIME_MISMATCH. Every command runs fully offline with no cloud credentials until the final platform deploy step.",
+  },
 ];
 
 export const DOC_SECTIONS: readonly DocSection[] = buildSections(DOC_PAGES);
