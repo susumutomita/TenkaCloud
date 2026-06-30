@@ -1,0 +1,64 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "Platform architecture" };
+
+# Platform architecture <MaturityBadge level="stable" />
+
+TenkaCloud is a multi-tenant SaaS platform that deploys competition problems
+straight into each competitor's own cloud account. The system is split into four
+planes with hard responsibility boundaries, wired together by a single EventBridge
+bus and a per-deployment `runtime-config.json`.
+
+## The four planes
+
+- **Control plane** (`ControlPlaneStack`) — the tenant manager, built on the
+  `@cdklabs/sbt-aws` ControlPlane construct: a Cognito user pool, the System Admin
+  tenant CRUD API, and the EventBridge bus. The `admin-console` SPA is its front
+  end. It never hosts tenant runtime.
+- **Application plane (pooled)** — one shared `tenkacloud-tenant-template-pooled`
+  stack. BASIC and ADVANCED tenants share a single `application-admin-console` URL
+  behind CloudFront.
+- **Application plane (silo)** — a dedicated `tenkacloud-tenant-template-<tenantId>`
+  stack provisioned only for a PLATINUM tenant.
+- **Problem-deploy backend** (`ProblemDeployBackendStack`) — the Deployments table,
+  a Cognito-authenticated HTTP API, and the worker that assumes a role into the
+  competitor account and runs CloudFormation there. It also hosts the participant
+  portal.
+
+Tenant isolation lives entirely in the infrastructure layer — a `TenantId`
+partition key or stack separation — never in application code. The three SPAs ship
+one shared `dist/`; per-tenant differences flow only through `runtime-config.json`.
+
+## Cross-plane contracts
+
+Every plane talks over the **EventBridge bus** the control plane provisions;
+`bin/infrastructure.ts` hands its ARN to every other stack. The three contracts
+that must not break:
+
+- `onboardingRequest` — tenant creation. Picked up by the SBT job runner, which
+  provisions the tenant stack (pooled by default, a silo stack for PLATINUM).
+- `DeployCreateRequested` — a problem deploy. The backend worker assumes a role
+  into the competitor account using that tenant's **ExternalId** (always required)
+  and runs a CloudFormation `CreateStack`.
+- `DeployDeleteRequested` — teardown of a deployed problem.
+
+Frontend URLs and feature flags reach each SPA through `runtime-config.json`
+(served under CloudFront, read by `loadConfig()` in `apps/*/src/config.ts`). Adding
+a URL means updating both the hosting stack's environment and the `config.ts`
+interface — there is no build-time per-tenant branching.
+
+## Cost-zero principles
+
+The platform is engineered to fit inside the AWS Free Tier, and these rules are
+machine-checked by the architecture harness:
+
+- **Secrets** use SSM Parameter Store SecureString; `@aws-sdk/client-secrets-manager`
+  is forbidden.
+- **DynamoDB** tables are forced to PROVISIONED 1 RCU / 1 WCU by the
+  `DynamoDbLowCapacity` CDK aspect; on-demand (`PAY_PER_REQUEST`) is rejected.
+- **No SSE / WebSocket** — the frontend polls, which matches the Lambda operational
+  model. EventBridge-driven reconciliation reduces polling pressure without
+  changing the polling policy.
+
+Related: [run an event end to end](/developers/docs/operate/run-an-event/) and the
+[deploy modes and launch paths](/developers/docs/operate/deploy-paths/).

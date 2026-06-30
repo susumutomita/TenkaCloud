@@ -57,6 +57,51 @@ export const DOC_PAGES: readonly DocPage[] = [
     ],
     body: "A problem pack is the unit of competition content. Battle packs are real-time and head-to-head; Challenge packs are self-paced and evergreen. Each pack carries metadata, a CloudFormation template, and an optional portal plugin. Scoring uses one of six built-in kinds.",
   },
+  {
+    slug: "concepts/architecture",
+    href: "/developers/docs/concepts/architecture/",
+    title: "Platform architecture",
+    description: "The four planes, the cross-plane EventBridge contracts, and the cost-zero rules.",
+    maturity: "stable",
+    section: "Concepts",
+    headings: [
+      { id: "the-four-planes", text: "The four planes" },
+      { id: "cross-plane-contracts", text: "Cross-plane contracts" },
+      { id: "cost-zero-principles", text: "Cost-zero principles" },
+    ],
+    body: "Platform architecture. The four planes: control plane (SBT ControlPlane, the tenant manager) and admin-console; pooled application plane shared by BASIC and ADVANCED; silo application plane for PLATINUM; problem-deploy backend and participant portal. Tenant isolation lives in the infrastructure layer, never in app code; the SPAs share one dist and differ only through runtime-config.json. Cross-plane contracts on the EventBridge bus: onboardingRequest, DeployCreateRequested, DeployDeleteRequested, each requiring the tenant ExternalId for cross-account AssumeRole. Cost-zero principles: SSM SecureString instead of Secrets Manager, DynamoDB forced PROVISIONED 1/1, polling instead of SSE or WebSocket. アーキテクチャ概観。4 プレーン (Control / App pooled / App silo / Problem deploy + Participant Portal) と責務境界、クロスプレーン契約 (EventBridge と runtime-config.json 注入)、コストゼロ原則 (SSM SecureString / DynamoDB 1/1 / polling)。",
+  },
+  {
+    slug: "operate/deploy-paths",
+    href: "/developers/docs/operate/deploy-paths/",
+    title: "Deploy modes and launch paths",
+    description: "Lite vs SaaS, how tenants are provisioned, and what the CodePipeline is for.",
+    maturity: "preview",
+    section: "Operate",
+    headings: [
+      { id: "two-deploy-modes", text: "Two deploy modes" },
+      { id: "how-a-new-tenant-is-provisioned", text: "How a new tenant is provisioned" },
+      { id: "what-the-saas-pipeline-is-for", text: "What the SaaS pipeline is for" },
+      { id: "how-a-problem-deploys", text: "How a problem deploys" },
+    ],
+    body: "Deploy modes and launch paths. Lite mode (make deploy) deploys two stacks via tenkacloud-lite.ts with no CodePipeline; SaaS mode (make deploy-saas, three phases) stands up the SBT control plane. The platform is deployed by a manual CLI step; CI never deploys. A new tenant is provisioned by the SBT BashJobRunner running provision-tenant.sh on onboardingRequest (pooled by default, a silo stack for PLATINUM) — not by the pipeline. The tenkacloud-saas-pipeline CodePipeline rolls out tenant stacks across existing tenants from an S3 source.zip via a Step Functions WaveIterator and CodeBuild. A problem deploy goes console Deploy to Deploy API to EventBridge DeployCreateRequested to Step Functions CodeBuild to cross-account CloudFormation CreateStack with the ExternalId. デプロイモードと起動経路の地図。手動 CLI (Lite make deploy / SaaS make deploy-saas) と自動 (CodePipeline によるテナント rollout) を区別する。新規テナント払い出しは provision-tenant.sh、既存テナント rollout は tenkacloud-saas-pipeline、問題デプロイは DeployCreateRequested から CodeBuild とクロスアカウント CFn。",
+  },
+  {
+    slug: "operate/run-an-event",
+    href: "/developers/docs/operate/run-an-event/",
+    title: "Run an event end to end",
+    description:
+      "Create a tenant, connect competitor accounts, deploy problems, and enable multi-cloud.",
+    maturity: "preview",
+    section: "Operate",
+    headings: [
+      { id: "create-a-tenant", text: "Create a tenant" },
+      { id: "connect-a-competitor-account", text: "Connect a competitor account" },
+      { id: "deploy-a-problem", text: "Deploy a problem" },
+      { id: "enable-multi-cloud", text: "Enable multi-cloud" },
+    ],
+    body: "Run an event end to end, the operator walkthrough. Create a tenant from the admin-console (onboardingRequest; pooled or PLATINUM silo) and hand the application-admin-console URL to the tenant admin. Connect a competitor account by deploying competitor-bootstrap.yaml, a least-privilege IAM role pinned to the control-plane account id and the tenant ExternalId. Deploy a problem from the application-admin-console event create wizard: pick catalog problems, assign each team account and region, deploy via cross-account CloudFormation, poll status, and tear down. Enable multi-cloud by setting features.nonAwsRuntime in runtime-config.json, then register each team's Sakura, Azure, or GCP credentials in the Team Cloud Credentials panel, which writes them to SSM SecureString via the API so operators never touch SSM directly. イベントを通しで運営する手順。テナント作成、競技者アカウント接続 (competitor-bootstrap.yaml + ExternalId)、問題デプロイ (event 作成 → picker → デプロイ → status ポーリング → teardown)、マルチクラウド有効化 (nonAwsRuntime + Team Cloud Credentials パネル)。",
+  },
   // [Issue #2103] Reference pages. The normative tables on these pages render the
   // GENERATED reference-data module (src/content/reference-data.ts), which the
   // generator derives from the real pack/problem schemas, runtime capability
