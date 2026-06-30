@@ -1,0 +1,60 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "Deploy modes and launch paths" };
+
+# Deploy modes and launch paths <MaturityBadge level="preview" />
+
+Two questions trip up first-time operators: "how do I actually deploy the
+platform?" and "the CodePipeline is the default — so when does it run?" This page
+is the map. The platform itself is deployed by a **manual CLI** step; the
+CodePipeline is for **rolling out tenant stacks**, not for standing up the platform.
+
+## Two deploy modes
+
+- **Lite mode** — `make deploy`. A single organizer running one event. It skips the
+  SBT control plane, tenant pipeline, and System Admin invitation entirely and
+  deploys just two stacks via `infrastructure/bin/tenkacloud-lite.ts`:
+  AppPlaneCore (`tenantId="local"`) plus the problem-deploy backend / participant
+  portal. **There is no CodePipeline in Lite mode.** Teardown is `make destroy`.
+- **SaaS mode** — `make deploy-saas` (`scripts/install.sh`, three phases). Full
+  multi-tenant operation: pooled BASIC / ADVANCED tiers, the PLATINUM silo tier,
+  and System Admin invitations. Teardown is `make destroy-saas`.
+
+Both modes are run by an operator from a shell. CI never deploys.
+
+## How a new tenant is provisioned
+
+New-tenant provisioning and pipeline rollout are **different paths** — this is the
+distinction the old docs got wrong.
+
+- A tenant creation event (`onboardingRequest`) is picked up by the SBT
+  `BashJobRunner`, which runs `provision-tenant.sh`. By default the tenant is
+  **pooled** (it shares the pooled stack); only a `PLATINUM` tier tenant gets a
+  dedicated silo stack deployed directly (`bun cdk deploy tenkacloud-tenant-template-<id>`).
+
+So creating one tenant does not run the CodePipeline; it runs a provisioning job.
+
+## What the SaaS pipeline is for
+
+`tenkacloud-saas-pipeline` (CodePipeline) exists to **roll out tenant stacks across
+every existing tenant**, not to create one. Its source is an S3 object
+(`source.zip`, uploaded by `prepare-source-bundle.sh` during `make deploy-saas`)
+that the pipeline polls; on a change it walks the tenant list from DynamoDB and
+deploys / updates each tenant stack in waves (a Step Functions WaveIterator driving
+CodeBuild). New-tenant creation and existing-tenant rollout therefore travel
+different routes.
+
+## How a problem deploys
+
+When an organizer clicks **Deploy** in the console:
+
+1. The console calls the Deploy API, which validates the request, writes a row to
+   the Deployments table, and puts a `DeployCreateRequested` event on the bus.
+2. A Step Functions execution starts a CodeBuild job (`.sync`).
+3. The worker assumes a role into the competitor account using the tenant's
+   **ExternalId** (always required) and runs a CloudFormation `CreateStack` there.
+
+The console then polls deployment status until the stack reaches a terminal state.
+
+Related: [run an event end to end](/developers/docs/operate/run-an-event/) and the
+[platform architecture](/developers/docs/concepts/architecture/).

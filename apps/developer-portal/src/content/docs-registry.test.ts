@@ -39,3 +39,43 @@ describe("docs registry — first pack tutorial", () => {
     }
   });
 });
+
+describe("docs registry — operator + architecture pages (#2169)", () => {
+  const OPERATE_PAGES = [
+    "/developers/docs/operate/deploy-paths/",
+    "/developers/docs/operate/run-an-event/",
+  ];
+  const ARCHITECTURE_HREF = "/developers/docs/concepts/architecture/";
+
+  it("should register the architecture and both operate pages as known routes", () => {
+    const routes = allRoutes();
+    expect(routes).toContain(ARCHITECTURE_HREF);
+    for (const href of OPERATE_PAGES) expect(routes).toContain(href);
+  });
+
+  it("should group the operate pages under their own sidebar section", () => {
+    const section = DOC_SECTIONS.find((s) => s.title === "Operate");
+    expect(section).toBeDefined();
+    expect(section?.pages.map((p) => p.href).sort()).toEqual([...OPERATE_PAGES].sort());
+  });
+
+  it("should place the architecture page in the Concepts section", () => {
+    const section = DOC_SECTIONS.find((s) => s.title === "Concepts");
+    expect(section?.pages.some((p) => p.href === ARCHITECTURE_HREF)).toBe(true);
+  });
+
+  it("should find the deploy-paths page by a pipeline term in search", () => {
+    const results = searchIndex("CodePipeline tenant rollout");
+    expect(results.some((r) => r.href === "/developers/docs/operate/deploy-paths/")).toBe(true);
+  });
+
+  it("should find the run-an-event page by a competitor-onboarding term in search", () => {
+    const results = searchIndex("competitor account ExternalId");
+    expect(results.some((r) => r.href === "/developers/docs/operate/run-an-event/")).toBe(true);
+  });
+
+  it("should find the architecture page by a Japanese search term", () => {
+    const results = searchIndex("アーキテクチャ プレーン");
+    expect(results.some((r) => r.href === ARCHITECTURE_HREF)).toBe(true);
+  });
+});
