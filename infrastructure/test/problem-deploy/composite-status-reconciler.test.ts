@@ -25,6 +25,8 @@ import {
   CompositeParentNotReconcilableError,
   reconcileCompositeParentDeployStatus,
   reconcileCompositeParents,
+  reconcileCompositeParentTeardownStatus,
+  reconcileCompositeTeardowns,
   reconcileDeployStatusMaintenance,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/composite-status-reconciler";
 
@@ -91,14 +93,13 @@ function handleUpdate(
   if (failUpdate) throw conditionalCheckFailed();
   const row = store.get(rowKey(cmd.input.Key?.PK, cmd.input.Key?.SK));
   const vals = cmd.input.ExpressionAttributeValues ?? {};
-  if (
-    cmd.input.ConditionExpression?.includes(":prev") &&
-    (row?.status !== vals[":prev"] || row?.runtimeKind !== vals[":composite"])
-  ) {
+  // Deploy update guards on #s = :prev; teardown update guards on #s = :deleting.
+  const expectedStatus = vals[":prev"] ?? vals[":deleting"];
+  if (row?.status !== expectedStatus || row?.runtimeKind !== vals[":composite"]) {
     throw conditionalCheckFailed();
   }
   if (row) {
-    row.status = vals[":next"];
+    row.status = vals[":next"] ?? vals[":deleted"];
     row.updatedAt = vals[":now"];
   }
   return {};
@@ -106,11 +107,13 @@ function handleUpdate(
 
 function handleScan(cmd: ScanCommand, store: Map<string, Record<string, unknown>>) {
   const vals = cmd.input.ExpressionAttributeValues ?? {};
-  // Mirrors the reconciler filter: runtimeKind = :composite AND status IN (:p,:i).
-  const items = [...store.values()].filter(
-    (r) =>
-      r.runtimeKind === vals[":composite"] && (r.status === vals[":p"] || r.status === vals[":i"]),
-  );
+  // Deploy scan: runtimeKind = :composite AND status IN (:p,:i).
+  // Teardown scan: runtimeKind = :composite AND status = :deleting.
+  const items = [...store.values()].filter((r) => {
+    if (r.runtimeKind !== vals[":composite"]) return false;
+    if (vals[":deleting"] !== undefined) return r.status === vals[":deleting"];
+    return r.status === vals[":p"] || r.status === vals[":i"];
+  });
   return { Items: items.map((r) => ({ ...r })) };
 }
 
@@ -310,11 +313,170 @@ describe("reconcileCompositeParents scan (#2068)", () => {
   });
 });
 
-describe("reconcileDeployStatusMaintenance ordering (#2068)", () => {
-  it("runs per-target reconciliation before composite parent reconciliation", async () => {
+describe("reconcileCompositeParentTeardownStatus (#2072)", () => {
+  async function seedDeleting(fake: ReturnType<typeof makeFake>, statuses: Record<string, string>) {
+    await seed(fake);
+    fake.setStatus(PARENT, "DELETING");
+    for (const [id, status] of Object.entries(statuses)) fake.setStatus(id, status);
+  }
+
+  it("marks parent DELETED when all targets are DELETED", async () => {
+    const fake = makeFake();
+    await seedDeleting(fake, {
+      "t-aws": "DELETED",
+      "t-gcp": "DELETED",
+      "t-azure": "DELETED",
+      "t-sakura": "DELETED",
+    });
+    const r = await reconcileCompositeParentTeardownStatus(fake.deps, {
+      parentDeploymentId: PARENT,
+      nowIso: NEXT_ISO,
+    });
+    expect(r).toMatchObject({ previousStatus: "DELETING", nextStatus: "DELETED", changed: true });
+    expect(fake.status(PARENT)).toBe("DELETED");
+  });
+
+  it("marks parent DELETED when targets are mixed deleted-like states", async () => {
+    const fake = makeFake();
+    await seedDeleting(fake, {
+      "t-aws": "DELETED",
+      "t-gcp": "EXPIRED",
+      "t-azure": "AUTO_DELETED",
+      "t-sakura": "DELETED",
+    });
+    await reconcileCompositeParentTeardownStatus(fake.deps, {
+      parentDeploymentId: PARENT,
+      nowIso: NEXT_ISO,
+    });
+    expect(fake.status(PARENT)).toBe("DELETED");
+  });
+
+  it("keeps parent DELETING when any target is still DELETING", async () => {
+    const fake = makeFake();
+    await seedDeleting(fake, {
+      "t-aws": "DELETED",
+      "t-gcp": "DELETING",
+      "t-azure": "DELETED",
+      "t-sakura": "DELETED",
+    });
+    const r = await reconcileCompositeParentTeardownStatus(fake.deps, {
+      parentDeploymentId: PARENT,
+      nowIso: NEXT_ISO,
+    });
+    expect(r.changed).toBe(false);
+    expect(fake.status(PARENT)).toBe("DELETING");
+  });
+
+  it("keeps parent DELETING when any target is FAILED (operator inspection)", async () => {
+    const fake = makeFake();
+    await seedDeleting(fake, {
+      "t-aws": "DELETED",
+      "t-gcp": "FAILED",
+      "t-azure": "DELETED",
+      "t-sakura": "DELETED",
+    });
+    await reconcileCompositeParentTeardownStatus(fake.deps, {
+      parentDeploymentId: PARENT,
+      nowIso: NEXT_ISO,
+    });
+    expect(fake.status(PARENT)).toBe("DELETING");
+  });
+
+  it("does not mutate target rows", async () => {
+    const fake = makeFake();
+    await seedDeleting(fake, {
+      "t-aws": "DELETED",
+      "t-gcp": "DELETED",
+      "t-azure": "DELETED",
+      "t-sakura": "DELETED",
+    });
+    const before = PROVIDERS.map((p) => ({ ...fake.store.get(`DEPLOYMENT#${p.id}|META`) }));
+    await reconcileCompositeParentTeardownStatus(fake.deps, {
+      parentDeploymentId: PARENT,
+      nowIso: NEXT_ISO,
+    });
+    const after = PROVIDERS.map((p) => ({ ...fake.store.get(`DEPLOYMENT#${p.id}|META`) }));
+    expect(after).toEqual(before);
+  });
+
+  it("does not process a non-composite parent (target row)", async () => {
+    const fake = makeFake();
+    await seedDeleting(fake, {});
+    await expect(
+      reconcileCompositeParentTeardownStatus(fake.deps, {
+        parentDeploymentId: "t-aws",
+        nowIso: NEXT_ISO,
+      }),
+    ).rejects.toBeInstanceOf(CompositeParentNotReconcilableError);
+  });
+
+  it("treats a conditional update race as a no-op", async () => {
+    const fake = makeFake({ failUpdate: true });
+    await seedDeleting(fake, {
+      "t-aws": "DELETED",
+      "t-gcp": "DELETED",
+      "t-azure": "DELETED",
+      "t-sakura": "DELETED",
+    });
+    const r = await reconcileCompositeParentTeardownStatus(fake.deps, {
+      parentDeploymentId: PARENT,
+      nowIso: NEXT_ISO,
+    });
+    expect(r.changed).toBe(false);
+    expect(fake.status(PARENT)).toBe("DELETING"); // unchanged
+  });
+
+  it("skips a malformed empty target set", async () => {
+    const fake = makeFake();
+    // A composite parent in DELETING with no target rows.
+    fake.store.set(`DEPLOYMENT#${PARENT}|META`, {
+      PK: `DEPLOYMENT#${PARENT}`,
+      SK: "META",
+      jobId: PARENT,
+      runtimeKind: "composite",
+      status: "DELETING",
+    });
+    fake.commands.length = 0;
+    const r = await reconcileCompositeParentTeardownStatus(fake.deps, {
+      parentDeploymentId: PARENT,
+      nowIso: NEXT_ISO,
+    });
+    expect(r.changed).toBe(false);
+    expect(fake.commands).not.toContain("UpdateCommand");
+    expect(fake.status(PARENT)).toBe("DELETING");
+  });
+
+  it("ignores a parent that is not in DELETING", async () => {
+    const fake = makeFake();
+    await seed(fake); // parent PENDING
+    fake.commands.length = 0;
+    const r = await reconcileCompositeParentTeardownStatus(fake.deps, {
+      parentDeploymentId: PARENT,
+      nowIso: NEXT_ISO,
+    });
+    expect(r.changed).toBe(false);
+    expect(fake.commands).not.toContain("UpdateCommand");
+  });
+});
+
+describe("reconcileCompositeTeardowns scan (#2072)", () => {
+  it("finalizes only DELETING composite parents and ignores deploy-phase parents", async () => {
+    const fake = makeFake();
+    await seed(fake); // PENDING parent + targets
+    fake.setStatus(PARENT, "DELETING");
+    for (const p of PROVIDERS) fake.setStatus(p.id, "DELETED");
+
+    await reconcileCompositeTeardowns(fake.deps, NEXT_ISO);
+
+    expect(fake.status(PARENT)).toBe("DELETED");
+  });
+});
+
+describe("reconcileDeployStatusMaintenance ordering (#2068 / #2072)", () => {
+  it("runs per-target reconciliation before the composite deploy + teardown scans", async () => {
     const fake = makeFake();
     const order: string[] = [];
-    // Record when the composite scan starts.
+    // Record each composite scan (deploy scan, then teardown scan).
     const origSend = fake.deps.ddb.send as ReturnType<typeof vi.fn>;
     origSend.mockImplementation(async (cmd: unknown) => {
       if (cmd instanceof ScanCommand) order.push("composite-scan");
@@ -325,6 +487,7 @@ describe("reconcileDeployStatusMaintenance ordering (#2068)", () => {
       order.push("per-target");
     });
 
-    expect(order).toEqual(["per-target", "composite-scan"]);
+    // per-target first, then the deploy-parent scan, then the teardown scan.
+    expect(order).toEqual(["per-target", "composite-scan", "composite-scan"]);
   });
 });

@@ -176,10 +176,118 @@ export async function reconcileCompositeParents(
 }
 
 /**
+ * [#2072] Teardown-phase terminal statuses. A target is "deleted-like" when its
+ * teardown is confirmed complete. DELETING (in progress) and FAILED are NOT
+ * deleted-like — a failed target leaves the parent DELETING for operator review.
+ */
+const DELETED_LIKE_STATUSES: ReadonlySet<DeploymentStatus> = new Set([
+  "DELETED",
+  "EXPIRED",
+  "AUTO_DELETED",
+]);
+
+/**
+ * [#2072] Finalize a composite parent teardown: flip DELETING → DELETED only when
+ * EVERY target is deleted-like. Conservative — any non-deleted-like target (incl.
+ * a still-DELETING or FAILED one) leaves the parent DELETING. Never changes a
+ * target row; never turns the parent FAILED; an empty target set is malformed and
+ * leaves the parent unchanged; a conditional-write race is a no-op.
+ */
+export async function reconcileCompositeParentTeardownStatus(
+  deps: CompositeParentReconcileDeps,
+  input: { parentDeploymentId: string; nowIso: string },
+): Promise<CompositeParentReconcileResult> {
+  const repo = repoDeps(deps);
+  const parent = await getCompositeParent(repo, input.parentDeploymentId);
+  if (!parent) {
+    throw new CompositeParentNotReconcilableError(
+      input.parentDeploymentId,
+      "not found or not a composite parent",
+    );
+  }
+  const previousStatus = parent.status;
+  if (previousStatus !== "DELETING") {
+    return { previousStatus, nextStatus: previousStatus, changed: false };
+  }
+
+  const targets = await listCompositeTargets(repo, input.parentDeploymentId);
+  if (targets.length === 0) {
+    console.warn("[composite-reconciler] skip teardown: empty target set", {
+      parentDeploymentId: input.parentDeploymentId,
+    });
+    return { previousStatus, nextStatus: previousStatus, changed: false };
+  }
+  if (!targets.every((target) => DELETED_LIKE_STATUSES.has(target.status))) {
+    return { previousStatus, nextStatus: previousStatus, changed: false };
+  }
+
+  try {
+    await deps.ddb.send(
+      new UpdateCommand({
+        TableName: deps.deploymentsTableName,
+        Key: { PK: deploymentPk(input.parentDeploymentId), SK: "META" },
+        UpdateExpression: "SET #s = :deleted, updatedAt = :now",
+        ConditionExpression: "#s = :deleting AND runtimeKind = :composite",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":deleted": "DELETED",
+          ":deleting": "DELETING",
+          ":now": input.nowIso,
+          ":composite": "composite",
+        },
+      }),
+    );
+    return { previousStatus, nextStatus: "DELETED", changed: true };
+  } catch (err) {
+    if (isConditionalCheckFailed(err)) {
+      return { previousStatus, nextStatus: "DELETED", changed: false };
+    }
+    throw err;
+  }
+}
+
+/**
+ * [#2072] Scan composite parents currently in DELETING and finalize each. Legacy
+ * rows and target rows are excluded by the `runtimeKind = composite` filter.
+ */
+export async function reconcileCompositeTeardowns(
+  deps: CompositeParentReconcileDeps,
+  nowIso: string,
+): Promise<void> {
+  await forEachScanPage(
+    deps.ddb,
+    {
+      TableName: deps.deploymentsTableName,
+      FilterExpression: "runtimeKind = :composite AND #s = :deleting",
+      ExpressionAttributeNames: { "#s": "status" },
+      ExpressionAttributeValues: { ":composite": "composite", ":deleting": "DELETING" },
+      Limit: 200,
+    },
+    async (page) => {
+      await Promise.all(
+        page.map((item) => {
+          const parentDeploymentId = String((item as { jobId?: unknown }).jobId ?? "");
+          if (!parentDeploymentId) return Promise.resolve();
+          return reconcileCompositeParentTeardownStatus(deps, { parentDeploymentId, nowIso }).catch(
+            (err) => {
+              console.warn("[composite-reconciler] teardown reconcile failed", {
+                parentDeploymentId,
+                message: err instanceof Error ? err.message : String(err),
+              });
+            },
+          );
+        }),
+      );
+    },
+  );
+}
+
+/**
  * Run the scheduled deploy-status maintenance: the existing per-target non-AWS
- * reconciliation FIRST, then the composite parent reconciliation — so a parent is
- * aggregated from already-refreshed target statuses. Injecting the per-target
- * step keeps the ordering testable.
+ * reconciliation FIRST, then the composite parent deploy reconciliation, then the
+ * composite teardown finalization — so each parent is aggregated from
+ * already-refreshed target statuses. Injecting the per-target step keeps the
+ * ordering testable.
  */
 export async function reconcileDeployStatusMaintenance(
   deps: CompositeParentReconcileDeps,
@@ -188,4 +296,5 @@ export async function reconcileDeployStatusMaintenance(
 ): Promise<void> {
   await reconcilePerTarget();
   await reconcileCompositeParents(deps, nowIso);
+  await reconcileCompositeTeardowns(deps, nowIso);
 }
