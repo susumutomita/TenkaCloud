@@ -1,0 +1,27 @@
+{
+  "id": "sample-flag",
+  "title": "Sample: deploy & flag",
+  "category": "challenges",
+  "description": "A minimal, genuinely deployable AWS Challenge. Deploying stands up a single SSM Parameter holding a per-deploy random flag (TC{...}) plus a least-privilege role to read it. Read the parameter via Console / CLI and submit the TC{...} value to score. Zero-cost (SSM Standard tier).",
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "cfnParameters": {
+    "FlagSeed": "__RANDOM_PASSWORD__"
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "FlagValue",
+    "points": 100,
+    "wrongAnswerPenalty": 5,
+    "hints": [
+      {
+        "id": "hint-read",
+        "content": "Read the SSM Parameter /{NamePrefix}/flag (Console: open the ParameterName output; CLI: aws ssm get-parameter --name /{NamePrefix}/flag). Submit the TC{...} value verbatim.",
+        "penalty": 10
+      }
+    ]
+  }
+}

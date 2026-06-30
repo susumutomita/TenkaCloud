@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud sample problem (sample-flag). The smallest stack that deploys and
+  scores end-to-end: one SSM Parameter holding a per-deploy random flag, plus a
+  least-privilege ParticipantViewerRole so a competitor can read it. Zero-cost
+  (SSM Standard tier; no EC2 / VPC / public endpoint).
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    Description: >
+      `tc-{problemSlug}-{teamSlug}` prefix auto-injected by the deploy chain;
+      attached to every resource name to avoid collisions across teams.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by the deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for the ParticipantViewerRole trust (passed by the deploy chain).
+  FlagSeed:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9]+$"
+    Description: >
+      Per-deploy random secret (cfnParameters: FlagSeed = __RANDOM_PASSWORD__),
+      wrapped as TC{...} and stored as the SSM Parameter value, so the flag can
+      only be learned by reading the parameter (never derived from NamePrefix).
+
+Resources:
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      # `aws login` (2025-11) OAuth2 flow needs signin:* on its own public-client
+      # resources; SignInLocalDevelopmentAccess is the AWS-managed least-privilege set.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ReadOwnFlag
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadOwnSsmParameters
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub "arn:aws:ssm:*:*:parameter/${NamePrefix}/*"
+
+  FlagParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${NamePrefix}/flag"
+      Type: String
+      Value: !Sub "TC{${FlagSeed}}"
+      Description: !Sub "TenkaCloud sample flag parameter (${NamePrefix}). The value is the discovered flag."
+      Tier: Standard
+
+Outputs:
+  ParameterName:
+    Description: SSM Parameter name the competitor reads.
+    Value: !Ref FlagParameter
+  FlagValue:
+    Description: Canonical answer (scoring engine only). The competitor must read the SSM Parameter to learn it.
+    Value: !GetAtt FlagParameter.Value
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to read their own stack.
+    Value: !GetAtt ParticipantViewerRole.Arn

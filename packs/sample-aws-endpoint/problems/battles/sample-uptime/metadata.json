@@ -1,0 +1,37 @@
+{
+  "id": "sample-uptime",
+  "title": "Sample: keep the endpoint up",
+  "category": "battles",
+  "description": "A minimal, genuinely reachable AWS Battle. The deploy stands up a public Lambda Function URL that returns HTTP 200; the uptime-flat scorer probes it every tick and awards points while it stays up. Near-zero cost (Lambda free tier). The verified AWS anchor for a future cross-cloud composite.",
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "endpoints": [
+    {
+      "slot": "service",
+      "default": {
+        "from": "cfn-output",
+        "key": "ServiceUrl",
+        "appendPath": "/health"
+      },
+      "overridable": true,
+      "label": "Service health endpoint",
+      "description": "The public Lambda Function URL the scorer probes for this team."
+    }
+  ],
+  "scoring": {
+    "kind": "uptime-flat",
+    "pointsPerSuccess": 10,
+    "failurePenalty": -5,
+    "endpoints": [
+      {
+        "slot": "service",
+        "outputKey": "ServiceUrl",
+        "path": "/health",
+        "expectStatus": [200]
+      }
+    ]
+  }
+}

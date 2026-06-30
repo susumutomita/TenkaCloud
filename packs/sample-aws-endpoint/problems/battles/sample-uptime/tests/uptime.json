@@ -1,0 +1,44 @@
+[
+  {
+    "name": "scores success when the Function URL returns 200",
+    "metadata": {
+      "id": "sample-uptime",
+      "runtime": { "provider": "aws", "engine": "cloudformation", "entry": "template.yaml" },
+      "scoring": {
+        "kind": "uptime-flat",
+        "pointsPerSuccess": 10,
+        "endpoints": [
+          { "slot": "service", "outputKey": "ServiceUrl", "path": "/health", "expectStatus": [200] }
+        ]
+      }
+    },
+    "runtime": { "provider": "aws", "engine": "cloudformation", "entry": "template.yaml" },
+    "deployment": "ready",
+    "outputs": { "ServiceUrl": "https://team.example.invalid" },
+    "probeResults": { "https://team.example.invalid": { "status": 200, "reachable": true } },
+    "expected": { "valid": true, "score": "success" }
+  },
+  {
+    "name": "scores failure when the Function URL is unreachable",
+    "metadata": {
+      "id": "sample-uptime",
+      "runtime": { "provider": "aws", "engine": "cloudformation", "entry": "template.yaml" },
+      "scoring": {
+        "kind": "uptime-flat",
+        "pointsPerSuccess": 10,
+        "endpoints": [
+          { "slot": "service", "outputKey": "ServiceUrl", "path": "/health", "expectStatus": [200] }
+        ]
+      }
+    },
+    "runtime": { "provider": "aws", "engine": "cloudformation", "entry": "template.yaml" },
+    "deployment": "ready",
+    "outputs": { "ServiceUrl": "https://team.example.invalid" },
+    "probeResults": { "https://team.example.invalid": { "reachable": false } },
+    "expected": {
+      "valid": true,
+      "score": "failure",
+      "diagnostics": ["SCORING_PROBE_FAILED"]
+    }
+  }
+]
