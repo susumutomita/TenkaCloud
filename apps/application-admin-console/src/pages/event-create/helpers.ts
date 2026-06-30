@@ -12,7 +12,7 @@
 import type { MultiselectProps, SelectProps } from "@cloudscape-design/components";
 import type { CompetitorAccountSummary } from "../../api/competitor-accounts-client";
 import { AWS_REGIONS } from "../../data/aws-regions";
-import { isExecutableProblemRuntime, type ProblemCostEstimateSummary } from "../../data/problems";
+import { isProviderSelectable, type ProblemCostEstimateSummary } from "../../data/problems";
 import type { useT } from "../../i18n";
 
 export const NAME_MAX = 120;
@@ -62,10 +62,16 @@ export type TeamTableItem = TeamRow & { idx: number };
 export type ProblemOption = MultiselectProps.Option & { value: string };
 
 /**
- * ADR-026 / ADR-027 (#1414): event の problem picker option を組み立てる。 deploy 可能な
- * (aws/cloudformation) 問題は選択可、 予約済み (sakura/azure/gcp = engine 未実装) は
- * `disabled` + 「近日対応」 tag にして deploy 不可な問題を event に組み込めないようにする
- * (= deployable-but-failing entry を防ぐ)。
+ * ADR-026 / ADR-027 (#1414, #2167): event の problem picker option を組み立てる。 選択可否は
+ * {@link isProviderSelectable} に委ねる:
+ *   - aws/cloudformation は常に選択可。
+ *   - 予約 provider (sakura/azure/gcp) は `enabledProviders` に含まれるとき選択可
+ *     (= operator が `features.nonAwsRuntime` を ON にし team credentials を登録した状態)。
+ *   - それ以外 (まだ無効な provider / 未知 runtime) は `disabled` + 「近日対応」 tag。
+ *
+ * #2167 以前は aws/cloudformation 固定判定で、 multi-cloud を有効化しても非 AWS 問題が
+ * 永遠に disabled のままだった (= 「登録したのに使えない」)。 `enabledProviders` を受け取る
+ * ことで flag 連動にし、 「近日対応」は本当に未許可の provider にだけ付くようにする。
  */
 export function buildProblemOptions(
   problems: readonly {
@@ -74,10 +80,11 @@ export function buildProblemOptions(
     readonly runtime: { readonly provider: string; readonly engine: string };
   }[],
   reservedTag: string,
+  enabledProviders: ReadonlySet<string>,
 ): ProblemOption[] {
   return problems.map((p) => {
     const base = { value: p.id, label: `${p.name} (${p.id})` };
-    return isExecutableProblemRuntime(p.runtime)
+    return isProviderSelectable(p.runtime, enabledProviders)
       ? base
       : { ...base, disabled: true, labelTag: reservedTag };
   });

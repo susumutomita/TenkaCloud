@@ -78,10 +78,15 @@ const props = (
   problems: CATALOG,
   selectedProblems: [],
   problemRows: [],
+  nonAwsRuntimeEnabled: false,
   onProblemsChange: vi.fn(),
   onUpdateProblemRow: vi.fn(),
   ...over,
 });
+
+const RESERVED_CATALOG: readonly ProblemSummary[] = [
+  problem({ id: "sk", name: "Sakura P", runtime: { provider: "sakura", engine: "apprun" } }),
+];
 const row = (over: Partial<ProblemRow> = {}): ProblemRow => ({
   problemId: "p1",
   problemName: "Problem 1",
@@ -123,6 +128,28 @@ describe("EventCreateProblemsetSection", () => {
     ms?.openDropdown();
     ms?.selectOptionByValue("p1");
     expect(s.p.onProblemsChange).toHaveBeenCalled();
+  });
+
+  it("should not let a reserved-runtime problem be selected when multi-cloud is OFF (#2167)", () => {
+    const onProblemsChange = vi.fn();
+    const s = renderSection(
+      props({ problems: RESERVED_CATALOG, nonAwsRuntimeEnabled: false, onProblemsChange }),
+    );
+    const ms = s.problemSelect();
+    ms?.openDropdown();
+    ms?.selectOptionByValue("sk");
+    expect(onProblemsChange).not.toHaveBeenCalled();
+  });
+
+  it("should let a reserved-runtime problem be selected when multi-cloud is ON (#2167)", () => {
+    const onProblemsChange = vi.fn();
+    const s = renderSection(
+      props({ problems: RESERVED_CATALOG, nonAwsRuntimeEnabled: true, onProblemsChange }),
+    );
+    const ms = s.problemSelect();
+    ms?.openDropdown();
+    ms?.selectOptionByValue("sk");
+    expect(onProblemsChange).toHaveBeenCalled();
   });
 
   it("should list every catalog problem when no filter is active", () => {

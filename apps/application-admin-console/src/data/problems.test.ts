@@ -14,10 +14,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildCoreInputs,
   buildPackInputs,
+  enabledNonAwsProviders,
   findPackManifest,
   isExecutableProblemRuntime,
   isLocalOnlyProblemRuntime,
+  isProviderSelectable,
   metadataToDetail,
+  NON_AWS_SELECTABLE_PROVIDERS,
   type PackManifestShape,
   PROVIDER_LABEL,
   type ProblemDetail,
@@ -130,6 +133,43 @@ describe("isLocalOnlyProblemRuntime (#2168)", () => {
   it("should not treat an unknown (typo) runtime as local-only", () => {
     expect(isLocalOnlyProblemRuntime({ provider: "docker", engine: "swarm" })).toBe(false);
     expect(isLocalOnlyProblemRuntime({ provider: "podman", engine: "compose" })).toBe(false);
+  });
+});
+
+describe("NON_AWS_SELECTABLE_PROVIDERS / enabledNonAwsProviders (#2167)", () => {
+  it("should list the non-AWS providers that have a working adapter", () => {
+    expect([...NON_AWS_SELECTABLE_PROVIDERS].sort()).toEqual(["azure", "gcp", "sakura"]);
+  });
+
+  it("should enable every non-AWS provider when the flag is on", () => {
+    const enabled = enabledNonAwsProviders(true);
+    expect(enabled.has("sakura")).toBe(true);
+    expect(enabled.has("azure")).toBe(true);
+    expect(enabled.has("gcp")).toBe(true);
+  });
+
+  it("should enable no providers when the flag is off", () => {
+    expect(enabledNonAwsProviders(false).size).toBe(0);
+  });
+});
+
+describe("isProviderSelectable (#2167)", () => {
+  it("should always allow aws/cloudformation regardless of enabled set", () => {
+    expect(isProviderSelectable({ provider: "aws", engine: "cloudformation" }, new Set())).toBe(
+      true,
+    );
+  });
+
+  it("should allow a reserved runtime only when its provider is enabled", () => {
+    const runtime = { provider: "sakura", engine: "apprun" };
+    expect(isProviderSelectable(runtime, new Set())).toBe(false);
+    expect(isProviderSelectable(runtime, new Set(["sakura"]))).toBe(true);
+  });
+
+  it("should reject an unknown engine even when the provider is enabled", () => {
+    expect(isProviderSelectable({ provider: "gcp", engine: "cdktf" }, new Set(["gcp"]))).toBe(
+      false,
+    );
   });
 });
 

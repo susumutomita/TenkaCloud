@@ -18,9 +18,12 @@ import {
 // to avoid a runtime import cycle with `effective-catalog.ts` (see that file).
 // Re-exported here so existing `from "./problems"` consumers are unaffected.
 export {
+  enabledNonAwsProviders,
   isExecutableProblemRuntime,
   isLocalOnlyProblemRuntime,
+  isProviderSelectable,
   metadataToDetail,
+  NON_AWS_SELECTABLE_PROVIDERS,
 } from "./problem-mapping";
 
 export type ProblemCategory = "Battle" | "Challenge";
