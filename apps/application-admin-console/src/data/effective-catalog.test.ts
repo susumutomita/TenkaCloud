@@ -145,6 +145,44 @@ describe("buildEffectiveCatalog (#2093 console effective catalog)", () => {
     ).toThrow(/DUPLICATE_PROBLEM_ID/);
   });
 
+  it("should exclude a local-only (docker/compose) core problem from the cloud catalog", () => {
+    const catalog = buildEffectiveCatalog({
+      core: [
+        core({ id: "cloud-aws" }),
+        core({ id: "local-ctf", runtime: { provider: "docker", engine: "compose" } }),
+      ],
+      packs: [],
+    });
+    expect(catalog.map((p) => p.id)).toEqual(["cloud-aws"]);
+  });
+
+  it("should exclude a local-only pack problem while keeping its cloud siblings", () => {
+    const catalog = buildEffectiveCatalog({
+      core: [],
+      packs: [
+        pack({ id: "pack-cloud" }, { packId: "p", packVersion: "1.0.0", license: "MIT" }),
+        pack(
+          { id: "pack-local", runtime: { provider: "docker", engine: "compose" } },
+          { packId: "p", packVersion: "1.0.0", license: "MIT" },
+        ),
+      ],
+    });
+    expect(catalog.map((p) => p.id)).toEqual(["pack-cloud"]);
+  });
+
+  it("should keep reserved (planned-provider) problems in the catalog (not local-only)", () => {
+    const catalog = buildEffectiveCatalog({
+      core: [
+        core({ id: "aws-p" }),
+        core({ id: "sakura-p", runtime: { provider: "sakura", engine: "apprun" } }),
+        core({ id: "azure-p", runtime: { provider: "azure", engine: "bicep" } }),
+        core({ id: "gcp-p", runtime: { provider: "gcp", engine: "infra-manager" } }),
+      ],
+      packs: [],
+    });
+    expect(catalog.map((p) => p.id)).toEqual(["aws-p", "azure-p", "gcp-p", "sakura-p"]);
+  });
+
   it("should sort the effective catalog by id for a stable display order", () => {
     const catalog = buildEffectiveCatalog({
       core: [core({ id: "m" }), core({ id: "a" })],

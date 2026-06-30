@@ -13,6 +13,11 @@
  * broken. `problems.ts` re-exports these for its existing consumers.
  */
 
+import {
+  CONTAINER_RUNTIMES,
+  EXECUTABLE_ENGINE,
+  EXECUTABLE_PROVIDER,
+} from "@tenkacloud/problem-runtime";
 import { analyzeProblemCost, type ProblemCostEstimate } from "../../../../scripts/lib/problem-cost";
 import type { ProblemCostEstimateSummary, ProblemDetail, ProblemMetadata } from "./problems";
 
@@ -63,13 +68,34 @@ function summarizeProblemCost(estimate: ProblemCostEstimate): ProblemCostEstimat
   };
 }
 
-/**
- * ADR-023 D4: only an AWS CloudFormation runtime is deployed/cost-analyzed by the
- * console; every other provider/engine is display-only here.
- */
-export function isExecutableProblemRuntime(runtime: {
+/** Minimal runtime shape the console projects from `metadata.json`. */
+interface ConsoleRuntime {
   readonly provider: string;
   readonly engine: string;
-}): boolean {
-  return runtime.provider === "aws" && runtime.engine === "cloudformation";
+}
+
+/**
+ * ADR-023 D4: only an AWS CloudFormation runtime is deployed/cost-analyzed by the
+ * console; every other provider/engine is display-only here. Delegates to the
+ * `@tenkacloud/problem-runtime` constants so the console's notion of "executable"
+ * cannot drift from the deploy worker's.
+ */
+export function isExecutableProblemRuntime(runtime: ConsoleRuntime): boolean {
+  return runtime.provider === EXECUTABLE_PROVIDER && runtime.engine === EXECUTABLE_ENGINE;
+}
+
+/**
+ * [#2168] True for a problem delivered as a **local container** (`docker/compose`,
+ * the ADR-023 local-play path) rather than a cloud account. Membership is read from
+ * `CONTAINER_RUNTIMES` — the same source of truth the deploy worker uses to reject a
+ * cloud deploy of these (`classifyRuntimeSupport` → `"container"`) — so a local-only
+ * problem can never be silently treated as cloud-deployable here. Distinct from a
+ * RESERVED (planned-but-not-yet-shipped provider) runtime: a container runtime is
+ * intentionally never cloud-executable, whereas a reserved one becomes executable
+ * once its adapter ships.
+ */
+export function isLocalOnlyProblemRuntime(runtime: ConsoleRuntime): boolean {
+  return CONTAINER_RUNTIMES.some(
+    (r) => r.provider === runtime.provider && r.engine === runtime.engine,
+  );
 }

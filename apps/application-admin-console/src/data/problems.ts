@@ -17,7 +17,11 @@ import {
 // `metadataToDetail` / `isExecutableProblemRuntime` live in `problem-mapping.ts`
 // to avoid a runtime import cycle with `effective-catalog.ts` (see that file).
 // Re-exported here so existing `from "./problems"` consumers are unaffected.
-export { isExecutableProblemRuntime, metadataToDetail } from "./problem-mapping";
+export {
+  isExecutableProblemRuntime,
+  isLocalOnlyProblemRuntime,
+  metadataToDetail,
+} from "./problem-mapping";
 
 export type ProblemCategory = "Battle" | "Challenge";
 export type ProblemStatus = "ready" | "draft" | "deprecated";
