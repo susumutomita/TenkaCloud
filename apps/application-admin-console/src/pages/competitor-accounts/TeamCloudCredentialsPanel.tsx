@@ -2,6 +2,7 @@ import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
@@ -32,6 +33,19 @@ export function TeamCloudCredentialsPanel({ config }: { config: AppConfig }) {
     <Container header={<Header variant="h2">{t("team_cloud_credentials.title")}</Header>}>
       <SpaceBetween size="m">
         <Box color="text-body-secondary">{t("team_cloud_credentials.description")}</Box>
+        {/* #2167: 前提 (どの CLI で何を作り、どのフィールドを入れるか) の inline help。 */}
+        <ExpandableSection
+          variant="footer"
+          headerText={t("team_cloud_credentials.setup_help_title")}
+        >
+          <SpaceBetween size="xxs">
+            <Box variant="small">{t("team_cloud_credentials.setup_help_enable")}</Box>
+            <Box variant="small">{t("team_cloud_credentials.setup_help_sakura")}</Box>
+            <Box variant="small">{t("team_cloud_credentials.setup_help_azure")}</Box>
+            <Box variant="small">{t("team_cloud_credentials.setup_help_gcp")}</Box>
+            <Box variant="small">{t("team_cloud_credentials.setup_help_ssm_note")}</Box>
+          </SpaceBetween>
+        </ExpandableSection>
         {vm.error && <FriendlyErrorAlert error={vm.error} />}
         {vm.notice && (
           <Alert type="success" dismissible onDismiss={vm.dismissNotice}>

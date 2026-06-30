@@ -17,6 +17,7 @@ import {
   CONTAINER_RUNTIMES,
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
+  RESERVED_RUNTIMES,
 } from "@tenkacloud/problem-runtime";
 import { analyzeProblemCost, type ProblemCostEstimate } from "../../../../scripts/lib/problem-cost";
 import type { ProblemCostEstimateSummary, ProblemDetail, ProblemMetadata } from "./problems";
@@ -98,4 +99,48 @@ export function isLocalOnlyProblemRuntime(runtime: ConsoleRuntime): boolean {
   return CONTAINER_RUNTIMES.some(
     (r) => r.provider === runtime.provider && r.engine === runtime.engine,
   );
+}
+
+/**
+ * [#2167] The non-AWS providers that have a working deploy adapter and therefore
+ * become selectable in the event picker once the operator enables multi-cloud
+ * (`features.nonAwsRuntime`) and registers that team's cloud credentials. Derived
+ * from `RESERVED_RUNTIMES` (deduped by provider) so the set tracks the roadmap as
+ * engines ship — there is no second hand-maintained provider list to drift.
+ */
+export const NON_AWS_SELECTABLE_PROVIDERS: readonly string[] = [
+  ...new Set(RESERVED_RUNTIMES.map((r) => r.provider)),
+];
+
+/**
+ * [#2167] Picker selectability — distinct from {@link isExecutableProblemRuntime}
+ * (which governs cost analysis, AWS/CloudFormation only). A problem is selectable in
+ * the event picker when:
+ *   - it is the always-executable AWS/CloudFormation runtime, OR
+ *   - it is a recognized reserved `(provider, engine)` pair AND that provider is in
+ *     `enabledProviders` (today: the whole non-AWS set when `features.nonAwsRuntime`
+ *     is on; later, the set of providers with registered team credentials).
+ * A provider being enabled does NOT make an unrecognized `(provider, engine)` pair
+ * selectable — the engine must still be one the platform has an adapter for, so a
+ * typo'd runtime stays disabled rather than offered for a deploy that would fail.
+ */
+export function isProviderSelectable(
+  runtime: ConsoleRuntime,
+  enabledProviders: ReadonlySet<string>,
+): boolean {
+  if (isExecutableProblemRuntime(runtime)) return true;
+  const recognized = RESERVED_RUNTIMES.some(
+    (r) => r.provider === runtime.provider && r.engine === runtime.engine,
+  );
+  return recognized && enabledProviders.has(runtime.provider);
+}
+
+/**
+ * [#2167] Resolve the set of selectable non-AWS providers from the multi-cloud
+ * feature flag. ON → every provider with a working adapter; OFF → none (AWS stays
+ * selectable through {@link isProviderSelectable}). Kept pure so the picker and its
+ * tests share one source of truth for "what does the flag turn on".
+ */
+export function enabledNonAwsProviders(nonAwsRuntimeEnabled: boolean): ReadonlySet<string> {
+  return new Set(nonAwsRuntimeEnabled ? NON_AWS_SELECTABLE_PROVIDERS : []);
 }

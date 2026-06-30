@@ -169,6 +169,35 @@ CodeBuild プロジェクト）と、ビルドが作る `tenkacloud-lite` / `ten
 デプロイは CodeBuild (build-minute 課金) を使うため厳密な 0 円ではない（月数回のデプロイで
 1 ドル未満）。使い終えたら上記 teardown でスタックを削除すれば課金は止まる。
 
+## マルチクラウド（非 AWS）の team 認証情報セットアップ
+
+AWS 以外（Sakura / Azure / GCP）の問題を deploy するには、運営者が機能フラグを有効化し、team
+ごとのクラウド認証情報を登録します。問題 picker は登録済み provider と連動し、有効化していない
+provider の問題は「近日対応」のまま選べません（Issue 2167）。
+
+### 1. 機能フラグを ON にする
+
+`runtime-config.json` に `features: { "nonAwsRuntime": true }` を設定します（ADR-035、デフォルト OFF）。
+Application Admin Console の Competitor Accounts ページに Team Cloud Credentials パネルが現れます。
+
+### 2. provider 側で認証情報を作る
+
+運営者は SSM を直接触りません。下記で作った値をパネルに貼り、パネルが API 経由で暗号化保存
+（SSM SecureString）します。
+
+| provider | 作り方 | パネルに入れる JSON |
+| --- | --- | --- |
+| Sakura | コントロールパネルで API キーを発行する | `{accessToken, accessTokenSecret}` |
+| Azure | `az ad sp create-for-rbac` で Entra アプリと RBAC を作成する | `{azureTenantId, clientId, clientSecret, subscriptionId, resourceGroup}` |
+| GCP | `gcloud` で Workload Identity プールとサービスアカウントを作成する（keyless） | `{wifAudience, serviceAccountEmail, projectId, location}` |
+
+### 3. 登録して使う
+
+パネルで provider と team slug を選び、上記 JSON を貼って「登録 / 更新」します。登録後、event
+作成の問題 picker でその provider の問題が選択可能になります。鍵を更新するときは同じ team に
+登録し直すと上書きされ、不要になったら「失効」で削除できます。secret は登録時に送るだけで、
+一覧 / status には表示されません。
+
 ## 関連
 
 - [`/problems/README.md`](../../problems/README.md) — 問題カタログ規約
