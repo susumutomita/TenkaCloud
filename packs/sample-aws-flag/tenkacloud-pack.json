@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "com.tenkacloud.sample-aws-flag",
+  "version": "1.0.0",
+  "core": "^1.0.0",
+  "title": "Sample AWS flag pack",
+  "description": "A minimal, genuinely deployable sample: one AWS/CloudFormation Challenge that stands up a single SSM Parameter holding a per-deploy random flag (TC{...}) plus a least-privilege ParticipantViewerRole so a competitor can read it. Zero-cost (SSM Standard tier; no EC2 / VPC / public endpoint). The simplest end-to-end deploy -> flag -> score example.",
+  "license": "Apache-2.0",
+  "problemsRoot": "problems",
+  "requiredRuntimes": [{ "provider": "aws", "engine": "cloudformation" }]
+}

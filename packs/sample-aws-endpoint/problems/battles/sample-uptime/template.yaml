@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  TenkaCloud sample uptime problem (sample-uptime). A genuinely reachable AWS
+  endpoint: a public Lambda Function URL that returns HTTP 200, plus a
+  least-privilege ParticipantViewerRole. The uptime-flat scorer probes the
+  Function URL. Near-zero cost (Lambda free tier; no EC2 / VPC).
+
+Parameters:
+  NamePrefix:
+    Type: String
+    MinLength: 5
+    MaxLength: 80
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+    Description: tc-{problemSlug}-{teamSlug} prefix auto-injected by the deploy chain.
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: "^[0-9]{12}$"
+    Description: TenkaCloud operator AWS account ID (passed by the deploy chain).
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: ExternalId for the ParticipantViewerRole trust (passed by the deploy chain).
+
+Resources:
+  HelloFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  HelloFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-hello"
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt HelloFunctionRole.Arn
+      Timeout: 5
+      MemorySize: 128
+      Code:
+        ZipFile: |
+          exports.handler = async () => ({
+            statusCode: 200,
+            headers: { "content-type": "text/plain" },
+            body: "ok",
+          });
+
+  HelloFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt HelloFunction.Arn
+      AuthType: NONE
+
+  HelloFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref HelloFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ReadOwnFunction
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ReadOwnLambda
+                Effect: Allow
+                Action:
+                  - lambda:GetFunction
+                  - lambda:GetFunctionUrlConfig
+                Resource: !GetAtt HelloFunction.Arn
+
+Outputs:
+  ServiceUrl:
+    Description: Public Lambda Function URL the uptime scorer probes (returns 200).
+    Value: !GetAtt HelloFunctionUrl.FunctionUrl
+  ParticipantViewerRoleArn:
+    Description: Role ARN competitors AssumeRole to inspect their own function.
+    Value: !GetAtt ParticipantViewerRole.Arn
