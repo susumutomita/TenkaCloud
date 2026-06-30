@@ -16,6 +16,7 @@ import {
   buildPackInputs,
   findPackManifest,
   isExecutableProblemRuntime,
+  isLocalOnlyProblemRuntime,
   metadataToDetail,
   type PackManifestShape,
   PROVIDER_LABEL,
@@ -111,6 +112,24 @@ describe("isExecutableProblemRuntime (#2086)", () => {
     expect(isExecutableProblemRuntime({ provider: "azure", engine: "bicep" })).toBe(false);
     expect(isExecutableProblemRuntime({ provider: "sakura", engine: "apprun" })).toBe(false);
     expect(isExecutableProblemRuntime({ provider: "aws", engine: "cdk" })).toBe(false);
+  });
+});
+
+describe("isLocalOnlyProblemRuntime (#2168)", () => {
+  it("should treat a docker/compose runtime as local-only", () => {
+    expect(isLocalOnlyProblemRuntime({ provider: "docker", engine: "compose" })).toBe(true);
+  });
+
+  it("should not treat cloud (executable or reserved) runtimes as local-only", () => {
+    expect(isLocalOnlyProblemRuntime({ provider: "aws", engine: "cloudformation" })).toBe(false);
+    expect(isLocalOnlyProblemRuntime({ provider: "sakura", engine: "apprun" })).toBe(false);
+    expect(isLocalOnlyProblemRuntime({ provider: "azure", engine: "bicep" })).toBe(false);
+    expect(isLocalOnlyProblemRuntime({ provider: "gcp", engine: "infra-manager" })).toBe(false);
+  });
+
+  it("should not treat an unknown (typo) runtime as local-only", () => {
+    expect(isLocalOnlyProblemRuntime({ provider: "docker", engine: "swarm" })).toBe(false);
+    expect(isLocalOnlyProblemRuntime({ provider: "podman", engine: "compose" })).toBe(false);
   });
 });
 

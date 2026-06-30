@@ -33,7 +33,11 @@
  *     template would otherwise be mis-parsed as CloudFormation.
  */
 
-import { isExecutableProblemRuntime, metadataToDetail } from "./problem-mapping";
+import {
+  isExecutableProblemRuntime,
+  isLocalOnlyProblemRuntime,
+  metadataToDetail,
+} from "./problem-mapping";
 import type { ProblemDetail, ProblemMetadata } from "./problems";
 
 /**
@@ -68,15 +72,33 @@ export interface EffectiveCatalogInput {
  * every other runtime the template body is dropped before {@link metadataToDetail}
  * sees it, guaranteeing the cost analyzer is never invoked on a non-AWS artifact.
  */
+function runtimeOf(metadata: ProblemMetadata): { provider: string; engine: string } {
+  return {
+    provider: metadata.runtime?.provider ?? "aws",
+    engine: metadata.runtime?.engine ?? "cloudformation",
+  };
+}
+
 function templateForCost(
   metadata: ProblemMetadata,
   templateYaml: string | undefined,
 ): string | undefined {
-  const runtime = {
-    provider: metadata.runtime?.provider ?? "aws",
-    engine: metadata.runtime?.engine ?? "cloudformation",
-  };
-  return isExecutableProblemRuntime(runtime) ? templateYaml : undefined;
+  return isExecutableProblemRuntime(runtimeOf(metadata)) ? templateYaml : undefined;
+}
+
+/**
+ * [#2168] The organizer console is the CLOUD console: its catalog is the set of
+ * problems an operator can build a cloud event from. A local-only (`docker/compose`,
+ * ADR-023 local-play) problem is categorically not that — the deploy worker rejects a
+ * cloud deploy of it before any mutation — so listing it here only invites the operator
+ * to pick a problem they cannot deploy. We drop those entries from the effective catalog
+ * (browse + event picker alike); they remain reachable through the local-play path
+ * (`make local`), which is where a container runtime is actually run. Reserved
+ * (planned-provider) problems are NOT dropped: they stay visible so the picker can show
+ * them as coming-soon / selectable-when-enabled.
+ */
+function isCloudCatalogEntry(metadata: ProblemMetadata): boolean {
+  return !isLocalOnlyProblemRuntime(runtimeOf(metadata));
 }
 
 /** A core entry carries no pack provenance — the legacy projection, unchanged. */
@@ -126,8 +148,13 @@ export function buildEffectiveCatalog(input: EffectiveCatalogInput): readonly Pr
   };
 
   // Core first, preserving the given (discovery) order — packs cannot override it.
-  for (const entry of input.core) claim(coreDetail(entry));
-  for (const entry of input.packs) claim(packDetail(entry));
+  // Local-only (#2168) problems are excluded from this cloud console catalog.
+  for (const entry of input.core) {
+    if (isCloudCatalogEntry(entry.metadata)) claim(coreDetail(entry));
+  }
+  for (const entry of input.packs) {
+    if (isCloudCatalogEntry(entry.metadata)) claim(packDetail(entry));
+  }
 
   return [...owners.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
