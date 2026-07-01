@@ -39,7 +39,7 @@ interface RuntimeConfig {
 
 const DEV_FALLBACK: AppConfig = {
   apiBaseUrl: "http://localhost:3199/dev-mock",
-  eventTitle: "TenkaCloud Battle (dev mock)",
+  eventTitle: "TenkaCloud Battle Demo",
   eventRegion: "ap-northeast-1",
   mode: "dev-mock",
   cloudMode: "mock",

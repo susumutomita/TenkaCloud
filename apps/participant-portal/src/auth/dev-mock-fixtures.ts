@@ -6,94 +6,113 @@ import type {
 } from "../api/portal-client";
 
 /**
- * `mode === "dev-mock"` のとき backend が存在しないので、 portal の各画面が空 state
- * になってしまう (= LP の 「モックで試す」 動線で competitor が操作できなくなる)。
+ * `mode === "dev-mock"` のとき backend が存在しないので、 portal の各画面が空 state に
+ * なってしまう (= LP の「モックで試す」動線で competitor が操作できなくなる)。
  *
- * 本 module は dev-mock 起動時に各 page が seed する固定 fixture を提供する。
- * production (= backend mode) では参照されない (= caller 側で `if (isBackend) return`
- * ガードする想定)。
+ * 本 module は dev-mock 起動時に各 page が seed する fixture を提供する。
+ * production (= backend mode) では参照されない (= caller 側で `if (isBackend) return` ガード)。
  *
- * 内容は 「AWS ハンズオン演習」 として一目で分かる 2 問構成 (= 利用者方針):
- *   - 1 Challenge (= S3 静的 site でホスト + flag 提出)
- *   - 1 Battle   (= Lambda + API Gateway の uptime 維持)
+ * 方針 (= 公開デモ): AWS に依存しない、その場で解ける「クエスト」2 問にする。
+ *   - どちらも flag 提出型なので、 endpoint (= クリックで 404 する偽 URL) を持たない。
+ *   - 問題文 (name / description / instructions) を同梱し「何をするか」を明示する。
+ *   - 1 問は解答済み (celebration 済みの状態)、 もう 1 問は未解答 (訪問者が解ける)。
  *
- * 過剰に問題を増やすと 「何を見せたいか」 がブレるので、 demo は 2 問固定。
+ * タイムスタンプはすべて **モジュール読み込み時刻からの相対値**。固定日時にすると実時刻が
+ * 進んだとき「自動削除超過」「N 時間前に採点」の警告が出てデモが壊れて見えるため。
  */
 
-const NOW_ISO = "2026-05-22T13:42:00Z";
-const DEPLOY_EXPIRES_AT = Math.floor(Date.parse("2026-05-22T19:42:00Z") / 1000);
+const now = Date.now();
+const SEC = 1_000;
+const MIN = 60 * SEC;
+const HOUR = 60 * MIN;
+const iso = (offsetMs: number): string => new Date(now + offsetMs).toISOString();
+// 自動削除は常に「まだ先」に置く (= expired 警告を出さない)。
+const DEPLOY_EXPIRES_AT = Math.floor((now + 4 * HOUR) / SEC);
 
-const CHALLENGE_PROBLEM_ID = "s3-static-site-hosting";
-const BATTLE_PROBLEM_ID = "lambda-api-uptime";
+const CIPHER_PROBLEM_ID = "hidden-passphrase";
+const SEQUENCE_PROBLEM_ID = "number-sequence";
 
 export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
   team: {
     teamId: "team-demo-1",
     teamName: "Demo Team",
     teamNameSetByCompetitor: true,
-    eventId: "evt-demo-2026-05-22",
+    eventId: "evt-demo",
   },
   problems: [
     {
       jobId: "01HZX0K3M3K9ZQHB3MRQHBA1B2",
-      problemId: CHALLENGE_PROBLEM_ID,
+      problemId: CIPHER_PROBLEM_ID,
+      name: "隠された合言葉",
+      description:
+        "前任のエンジニアが、引き継ぎメモに ROT13 で暗号化した合言葉を残していった:\n\n    GP{jrypbzr_gb_grexnpybhq}\n\nROT13 はアルファベットを 13 文字ずらす暗号 (A↔N, B↔O, …)。数字や記号は変わらない。",
+      instructions:
+        "上の暗号を ROT13 で復号し、出てきた `TC{...}` をそのまま提出せよ。\n(ヒント: `T` は ROT13 で `G`。逆に `G` を戻すと `T`。)",
+      i18n: {
+        en: {
+          name: "The hidden passphrase",
+          description:
+            "Your predecessor left a passphrase in the handover notes, encrypted with ROT13:\n\n    GP{jrypbzr_gb_grexnpybhq}\n\nROT13 shifts each letter by 13 (A↔N, B↔O, …). Digits and symbols are unchanged.",
+          instructions:
+            "Decode it with ROT13 and submit the `TC{...}` you get, verbatim.\n(Hint: `T` becomes `G` under ROT13, so `G` decodes back to `T`.)",
+        },
+      },
       region: "ap-northeast-1",
       awsAccountId: "999999999999",
       status: "COMPLETE",
-      stackOutputs: {
-        WebsiteEndpoint: "https://demo-tenkacloud-static.s3-website-ap-northeast-1.amazonaws.com/",
-      },
+      stackOutputs: {},
       expiresAt: DEPLOY_EXPIRES_AT,
-      // 未提出状態でデモを始める (= LP visitor が submit ボタンを押すまでの体験を作る)。
-      // flag が正解になったあとの体験は FlagSubmissionPanel が local state で celebration を
-      // 出すので、 view 側の更新は必須ではない。
-      score: 0,
+      score: 300,
       scoring: {
         kind: "flag",
-        points: 800,
-        flagSubmitted: false,
+        points: 300,
+        flagSubmitted: true,
       },
       deployLog: { cursor: "", entries: [] },
-      createdAt: "2026-05-22T13:00:00Z",
+      createdAt: iso(-25 * MIN),
     },
     {
       jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
-      problemId: BATTLE_PROBLEM_ID,
+      problemId: SEQUENCE_PROBLEM_ID,
+      name: "欠けた数",
+      description:
+        "次の数列には空欄が 1 つある:\n\n    2, 3, 5, 8, 13, ?, 34\n\n各項は、直前の 2 項の和になっている。",
+      instructions: "`?` に入る数を求め、`TC{数字}` 形式で提出せよ (例: `TC{99}`)。",
+      i18n: {
+        en: {
+          name: "The missing number",
+          description:
+            "One number is missing from this sequence:\n\n    2, 3, 5, 8, 13, ?, 34\n\nEach term is the sum of the previous two.",
+          instructions: "Find the `?` and submit it as `TC{number}` (e.g. `TC{99}`).",
+        },
+      },
       region: "ap-northeast-1",
       awsAccountId: "999999999999",
       status: "COMPLETE",
-      stackOutputs: {
-        ApiEndpoint: "https://demo-api.execute-api.ap-northeast-1.amazonaws.com/prod/health",
-      },
+      stackOutputs: {},
       expiresAt: DEPLOY_EXPIRES_AT,
-      score: 420,
-      lastScoredAt: "2026-05-22T13:41:00Z",
-      lastResult: "ok",
+      // 未提出でデモを始める (= 訪問者が submit ボタンを押すまでの体験を作る)。
+      score: 0,
       scoring: {
-        kind: "uptime",
-        pointsPerSuccess: 60,
-      },
-      applicationStatus: {
-        overall: "healthy",
-        healthyCount: 1,
-        totalCount: 1,
-        checkedAt: "2026-05-22T13:41:00Z",
+        kind: "flag",
+        points: 300,
+        flagSubmitted: false,
       },
       deployLog: { cursor: "", entries: [] },
-      createdAt: "2026-05-22T13:00:00Z",
+      createdAt: iso(-25 * MIN),
     },
   ],
   eventGate: { kind: "ok" },
 };
 
 export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
-  eventId: "evt-demo-2026-05-22",
+  eventId: "evt-demo",
   entries: [
     {
       rank: 1,
       teamId: "team-alpha",
       teamName: "Alpha Squad",
-      score: 1620,
+      score: 600,
       completedProblems: 2,
       totalProblems: 2,
       isMyTeam: false,
@@ -102,7 +121,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       rank: 2,
       teamId: "team-bravo",
       teamName: "Bravo Crew",
-      score: 1480,
+      score: 450,
       completedProblems: 1,
       totalProblems: 2,
       isMyTeam: false,
@@ -111,7 +130,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       rank: 3,
       teamId: "team-demo-1",
       teamName: "Demo Team",
-      score: 1220,
+      score: 300,
       completedProblems: 1,
       totalProblems: 2,
       isMyTeam: true,
@@ -120,7 +139,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       rank: 4,
       teamId: "team-delta",
       teamName: "Delta Force",
-      score: 940,
+      score: 300,
       completedProblems: 1,
       totalProblems: 2,
       isMyTeam: false,
@@ -129,32 +148,32 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       rank: 5,
       teamId: "team-echo",
       teamName: "Echo Five",
-      score: 720,
+      score: 0,
       completedProblems: 0,
       totalProblems: 2,
       isMyTeam: false,
     },
   ],
   scoreboardFrozen: false,
-  endsAt: "2026-05-22T19:00:00Z",
+  endsAt: iso(4 * HOUR),
 };
 
 export const DEV_MOCK_NOTIFICATIONS: NotificationsResponse = {
-  eventId: "evt-demo-2026-05-22",
+  eventId: "evt-demo",
   items: [
     {
       notificationId: "notif-002",
       title: "ヒントが解放されました",
-      body: `${BATTLE_PROBLEM_ID} の Phase 2 ヒントが開放されました。 ペナルティを払って閲覧できます。`,
+      body: `「${SEQUENCE_PROBLEM_ID}」のヒントが開放されました。ペナルティを払って閲覧できます。`,
       severity: "info",
-      occurredAt: "2026-05-22T13:30:00Z",
+      occurredAt: iso(-8 * MIN),
     },
     {
       notificationId: "notif-001",
       title: "競技開始",
-      body: "TenkaCloud Battle (demo) を開始しました。 各チームに 2 問が deploy されています。 頑張ってください!",
+      body: "TenkaCloud のデモを開始しました。2 問のクエストが出題されています。解いて flag を提出しよう!",
       severity: "info",
-      occurredAt: NOW_ISO,
+      occurredAt: iso(-25 * MIN),
     },
   ],
 };
@@ -166,68 +185,28 @@ export const DEV_MOCK_NOTIFICATIONS: NotificationsResponse = {
 export const DEV_MOCK_SCORE_EVENTS: ScoreEventsResponse = {
   entries: [
     {
-      jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
-      problemId: BATTLE_PROBLEM_ID,
-      source: "uptime",
-      points: 60,
-      result: "ok",
-      occurredAt: "2026-05-22T13:41:00Z",
-    },
-    {
-      jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
-      problemId: BATTLE_PROBLEM_ID,
-      source: "uptime",
-      points: 60,
-      result: "ok",
-      occurredAt: "2026-05-22T13:40:00Z",
-    },
-    {
       jobId: "01HZX0K3M3K9ZQHB3MRQHBA1B2",
-      problemId: CHALLENGE_PROBLEM_ID,
+      problemId: CIPHER_PROBLEM_ID,
       source: "flag",
-      points: 800,
+      points: 300,
       result: "ok",
-      occurredAt: "2026-05-22T13:38:11Z",
-    },
-    {
-      jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
-      problemId: BATTLE_PROBLEM_ID,
-      source: "hint",
-      points: -50,
-      result: "ok",
-      occurredAt: "2026-05-22T13:35:00Z",
-    },
-    {
-      jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
-      problemId: BATTLE_PROBLEM_ID,
-      source: "uptime",
-      points: 60,
-      result: "ok",
-      occurredAt: "2026-05-22T13:31:00Z",
-    },
-    {
-      jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
-      problemId: BATTLE_PROBLEM_ID,
-      source: "uptime",
-      points: 60,
-      result: "ok",
-      occurredAt: "2026-05-22T13:21:00Z",
+      occurredAt: iso(-3 * MIN),
     },
     {
       jobId: "01HZX0K3M3K9ZQHB3MRQHBA1B2",
-      problemId: CHALLENGE_PROBLEM_ID,
+      problemId: CIPHER_PROBLEM_ID,
       source: "flag-wrong",
       points: -10,
       result: "wrong",
-      occurredAt: "2026-05-22T13:15:00Z",
+      occurredAt: iso(-6 * MIN),
     },
     {
       jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
-      problemId: BATTLE_PROBLEM_ID,
-      source: "uptime",
-      points: 60,
+      problemId: SEQUENCE_PROBLEM_ID,
+      source: "hint",
+      points: -50,
       result: "ok",
-      occurredAt: "2026-05-22T13:01:00Z",
+      occurredAt: iso(-8 * MIN),
     },
   ],
 };

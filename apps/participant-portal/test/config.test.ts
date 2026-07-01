@@ -77,7 +77,7 @@ describe("loadConfig", () => {
     const cfg = await loadConfig();
     expect(cfg.apiBaseUrl).toBe("https://x.example/api");
     // 他キーは fallback
-    expect(cfg.eventTitle).toContain("dev mock");
+    expect(cfg.eventTitle).toBe("TenkaCloud Battle Demo");
     expect(cfg.eventRegion).toBe("ap-northeast-1");
   });
 
