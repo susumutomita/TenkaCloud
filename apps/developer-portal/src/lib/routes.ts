@@ -12,6 +12,10 @@ export const STATIC_ROUTES: readonly string[] = [
   "/developers/api/",
   "/developers/examples/",
   "/developers/changelog/",
+  // Legal pages migrated from the static landing (ADR-0003).
+  "/privacy/",
+  "/terms/",
+  "/legal/",
 ];
 
 export function allRoutes(): readonly string[] {
