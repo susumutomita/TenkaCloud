@@ -19,6 +19,19 @@ describe("isDemoMode (#1954)", () => {
     window.history.pushState({}, "", "/events");
     expect(isDemoMode({})).toBe(false);
   });
+
+  it("should be true when served under an /admin-demo/ path (no flag / no ?demo=1)", () => {
+    // The static demo is hosted under /admin-demo/; a deep link like /admin-demo/login
+    // carries no ?demo=1, so path detection keeps it in demo mode instead of falling into
+    // the real-Cognito path with an empty cognitoDomain (which throws "Invalid URL").
+    window.history.pushState({}, "", "/admin-demo/login");
+    expect(isDemoMode({})).toBe(true);
+  });
+
+  it("should stay false for a production path that merely contains 'demo' elsewhere", () => {
+    window.history.pushState({}, "", "/events/demo-event");
+    expect(isDemoMode({})).toBe(false);
+  });
 });
 
 describe("loadConfig demo mode (#1954)", () => {

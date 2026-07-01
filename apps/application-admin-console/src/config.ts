@@ -137,13 +137,19 @@ const DEV_FALLBACK_TENANT_NAME = "Local Dev Tenant";
 const DEV_FALLBACK_API_BASE_URL = "http://localhost:3999";
 
 /**
- * Issue #1954: demo mode は build-time flag (`VITE_DEMO_MODE=1`、`/demo/` ホスティング用) か
- * URL の `?demo=1` (LP からの「触ってみる」導線) で有効化する。
+ * Issue #1954: demo mode は build-time flag (`VITE_DEMO_MODE=1`) / URL の `?demo=1`
+ * (LP の「触ってみる」導線) / `/admin-demo/` パス配信 のいずれかで有効化する。
+ *
+ * パス判定を足したのは、フラグ焼き忘れや `?demo=1` の無い deep link (例: `/admin-demo/login`)
+ * でも確実に demo に入れるため。無いと実 Cognito 経路に落ち、空 `cognitoDomain` で
+ * `new URL()` が "Invalid URL" を投げる。 本番はドメイン直下配信 (`/admin-demo/` を含まない)
+ * なので誤検知しない。
  */
 export function isDemoMode(env: Record<string, string | undefined>): boolean {
   if (env.VITE_DEMO_MODE === "1") return true;
   // loadConfig already assumes a browser (window.location.origin below); no SSR guard needed.
-  return new URLSearchParams(window.location.search).get("demo") === "1";
+  if (new URLSearchParams(window.location.search).get("demo") === "1") return true;
+  return window.location.pathname.includes("/admin-demo/");
 }
 
 /**
