@@ -1,0 +1,14 @@
+# SPA deep-link fallback for the static demos (Cloudflare Pages).
+#
+# The demos (participant-portal, application-admin-console) are client-routed SPAs
+# staged under /portal-demo/ and /admin-demo/. Reloading a client route such as
+# /portal-demo/quests/x has no matching file, so without these rules Cloudflare
+# falls through to the root landing index.html — whose asset paths are RELATIVE
+# (./styles/main.css), which then 404 under a deep path and render the page
+# unstyled. A 200 rewrite serves each SPA's own index.html (its assets are absolute,
+# /portal-demo/... , so they resolve) while keeping the URL for the router.
+#
+# Cloudflare serves existing files first, so real assets under these prefixes are
+# unaffected; only non-existent (client-route) paths hit the rewrite.
+/portal-demo/*  /portal-demo/index.html  200
+/admin-demo/*   /admin-demo/index.html   200
