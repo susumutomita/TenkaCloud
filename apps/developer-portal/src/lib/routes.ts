@@ -16,6 +16,10 @@ export const STATIC_ROUTES: readonly string[] = [
   "/privacy/",
   "/terms/",
   "/legal/",
+  // English reference versions (the JA pages above are the legally binding originals).
+  "/en/privacy/",
+  "/en/terms/",
+  "/en/legal/",
 ];
 
 export function allRoutes(): readonly string[] {

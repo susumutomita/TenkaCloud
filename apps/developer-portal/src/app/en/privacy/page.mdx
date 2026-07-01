@@ -1,0 +1,70 @@
+export const metadata = {
+  title: "Privacy Policy",
+  description:
+    "How personal information, analytics, cookies, and external services are handled on TenkaCloud.",
+};
+
+# Privacy Policy
+
+_[日本語](/privacy/) · [Home](/)_
+
+How personal information is handled when you use TenkaCloud (the "Service"). The Japanese version at [/privacy/](/privacy/) is the legally binding original; this English version is provided for reference.
+
+Last updated: 2026-05-23 · Operator: BULL LLC (合同会社BULL)
+
+## 1. Information we collect
+
+To provide the Service and respond to inquiries, we may collect the following.
+
+- **Inquiry information**: name, organization, contact email, and the body of your inquiry (collected via a Google Form).
+- **Operator account information**: the email address and username of operators who sign in to the Service (System Admin / Tenant Admin / Operator). Stored in Amazon Cognito, our identity provider.
+- **Operation audit logs**: a record of operator actions, including the actor identifier (Cognito sub) and username (= email), the action / target / outcome, the source IP address and User-Agent, and the timestamp. Kept for security auditing and unauthorized-access investigation.
+- **Event operation data**: participant data (= team name / display name), submission logs, and scoring history for events you run on the Service. Stored on the Service's SaaS infrastructure (= AWS) and automatically deleted 7 days after the event ends. Note that we do not create individual participant accounts (name / email); teams authenticate with a short-lived per-team key, so no information directly identifying an individual participant is collected.
+- **Access logs**: IP address, User-Agent, referrer, etc. for visitors to the landing page and the portal. Retained per the standard logging policies of GitHub Pages / Amazon CloudFront.
+
+## 2. Purpose of use
+
+- Replying to inquiries and providing quotes.
+- Operating the Service, responding to incidents, and security auditing.
+- Statistical analysis to improve the Service (= in a form that does not identify individuals).
+- Compliance with legal requirements (= legitimate requests from police, courts, etc.).
+
+## 3. Disclosure to third parties
+
+We do not disclose personal information to third parties without your consent, except as required by law. Data may, however, be stored on the following cloud providers (= used as infrastructure; not for content inspection):
+
+- Amazon Web Services, Inc. (= SaaS infrastructure provider)
+- GitHub, Inc. (= landing page delivery and OSS repository host)
+- Google LLC (= stores responses to the contact form (Google Form))
+
+## 4. Retention
+
+- **Inquiry information**: 2 years after the engagement ends.
+- **Operator account information**: until the account is removed.
+- **Operation audit logs**: 90 days by default; 365 days on hosted plans with SOC2-style requirements (configured via `AUDIT_RETENTION_DAYS`). Automatically deleted afterwards.
+- **Event participant data**: 7 days after the event ends. Automatically deleted afterwards.
+- **Access logs**: Standard retention of AWS / GitHub.
+
+## 5. Disclosure, correction, and deletion requests
+
+To request disclosure, correction, or deletion of your personal information, please contact us via the contact channel below. After identity verification, we will respond promptly in accordance with applicable laws.
+
+## 6. Cookies / tracking
+
+The landing page uses Google Analytics 4 (gtag.js) to measure traffic. It sets Google Analytics cookies (e.g. `_ga`) and sends usage data — pages viewed, approximate region, device/browser — to Google LLC, which processes it on our behalf, solely for aggregate traffic analysis (not to identify individuals). The participant portal (= portal-demo / production portal) uses localStorage for session management. You can opt out via your browser settings or Google's opt-out add-on (= as of 2026-06).
+
+## 7. Revisions
+
+This Policy may be revised in response to changes in law or in the Service. Material revisions will be notified by posting to this page.
+
+## 8. Contact
+
+For privacy-related inquiries, please contact us via:
+
+- **Operator**: BULL LLC (合同会社BULL), operator of TenkaCloud
+- **Channel**: GitHub Discussions or the contact form on the landing page
+- **Governing law**: Laws of Japan · **Jurisdiction**: The court having jurisdiction over the registered head office of BULL LLC.
+
+---
+
+[Terms of Service](/en/terms/) · [Business identification](/en/legal/) · [Home](/)
