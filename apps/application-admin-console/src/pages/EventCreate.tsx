@@ -279,6 +279,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             problems={allProblems}
             selectedProblems={selectedProblems}
             problemRows={problemRows}
+            nonAwsRuntimeEnabled={config.features?.nonAwsRuntime ?? false}
             onProblemsChange={onProblemsChange}
             onUpdateProblemRow={updateProblemRow}
           />

@@ -1,0 +1,15 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Golden deploy-only body. Competitors deploy an S3 bucket; no scoring is attached.
+Resources:
+  ChallengeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+Outputs:
+  BucketName:
+    Description: The deployed bucket name.
+    Value: !Ref ChallengeBucket

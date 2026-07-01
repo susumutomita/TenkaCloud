@@ -1,0 +1,12 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Golden private-artifact body. Emits AttackStats output for the attack-detection scorer. The private payload is fetched out-of-band by digest; nothing secret is in this template.
+Resources:
+  AttackStatsParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Value: '{}'
+Outputs:
+  AttackStats:
+    Description: Counter snapshot the attack-detection scorer reads.
+    Value: !GetAtt AttackStatsParameter.Value

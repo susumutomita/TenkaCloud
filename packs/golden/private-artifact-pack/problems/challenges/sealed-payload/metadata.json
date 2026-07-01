@@ -1,0 +1,31 @@
+{
+  "id": "golden-private-sealed-payload",
+  "title": "Sealed payload",
+  "category": "challenges",
+  "description": "Demonstrates the declared private-payload and provenance contract: the deploy payload lives outside the pack and is referenced only by source and SHA-256 digest. No secret, key, or credential is embedded in the pack.",
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "privatePayload": {
+    "source": "registry",
+    "ref": "com.tenkacloud.golden.private-artifact/sealed-payload",
+    "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "embedsSecret": false
+  },
+  "provenance": {
+    "builder": "tenkacloud-pack-ci",
+    "sourceRepository": "https://github.com/susumutomita/TenkaCloudChallenge",
+    "attestation": "in-toto-slsa-l3"
+  },
+  "scoring": {
+    "kind": "attack-detection",
+    "statsOutputKey": "AttackStats",
+    "pointsPerAttack": 25,
+    "categories": [
+      { "name": "sqli", "pointsPerAttack": 25 },
+      { "name": "xss", "pointsPerAttack": 15 }
+    ]
+  }
+}

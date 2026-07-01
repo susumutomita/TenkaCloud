@@ -1,0 +1,11 @@
+{
+  "id": "golden-basic-deploy-bucket",
+  "title": "Deploy a bucket",
+  "category": "challenges",
+  "description": "Deploy-only golden problem: an aws/cloudformation template with no scoring section. Demonstrates the simplest publishable problem shape.",
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  }
+}

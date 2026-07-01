@@ -1,0 +1,24 @@
+{
+  "id": "golden-basic-find-the-flag",
+  "title": "Find the flag",
+  "category": "challenges",
+  "description": "Flag-scored golden problem: deploy emits a CloudFormation output that holds the flag, scored by the built-in flag kind.",
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "FlagValue",
+    "points": 100,
+    "wrongAnswerPenalty": 5,
+    "hints": [
+      {
+        "id": "hint-output",
+        "content": "Inspect the stack Outputs for a value named FlagValue.",
+        "penalty": 10
+      }
+    ]
+  }
+}

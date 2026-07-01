@@ -1,0 +1,29 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+import { RuntimeMatrixTable } from "@/components/ReferenceTables";
+
+export const metadata = { title: "Runtime capability matrix" };
+
+# Runtime capability matrix <MaturityBadge level="preview" />
+
+A pack declares the `(provider, engine)` runtimes it requires. The matrix below is
+**normative reference** derived from the runtime capability declarations in
+`@tenkacloud/problem-runtime` (`EXECUTABLE_PROVIDER` / `EXECUTABLE_ENGINE`,
+`RESERVED_RUNTIMES`, and `CONTAINER_RUNTIMES`). When an engine ships it moves out
+of the reserved set and this table regenerates automatically.
+
+## Matrix
+
+<RuntimeMatrixTable />
+
+## Support classes
+
+- **executable** — cloud-deployable today. The deploy worker runs a CloudFormation
+  `CreateStack` in the competitor account.
+- **reserved** — a recognized roadmap provider/engine with no adapter yet. The
+  validator accepts it but the deploy worker rejects a cloud deploy loudly.
+- **container** — a local container runtime (`make local`). Recognized but never
+  cloud-deployed.
+
+AWS is `Stable`; GCP, Azure, and Sakura are `Planned` reserved roadmap targets.
+
+Related: [problem metadata reference](/developers/docs/reference/problem-metadata/).

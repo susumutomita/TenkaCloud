@@ -1,0 +1,38 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+import { MetadataFieldTable } from "@/components/ReferenceTables";
+
+export const metadata = { title: "Problem metadata reference" };
+
+# Problem metadata reference <MaturityBadge level="stable" />
+
+Each problem in a pack carries a `metadata.json`. The fields below are **normative
+reference** derived from the `ProblemMetadata` contract and the
+`validateProblemMetadata` validator in `@tenkacloud/problem-sdk`. The SDK owns the
+`id`, `runtime`, and `scoring` fields and is forward-compatible with extra
+catalog-display fields it does not interpret.
+
+## Fields
+
+<MetadataFieldTable />
+
+## Runtime declaration
+
+A problem's runtime is either a single `{ provider, engine, entry }` descriptor or
+a composite `{ kind: "composite", targets }`. A composite runtime requires between
+2 and 8 targets. The recognized provider/engine pairs are listed in the
+[runtime capability matrix](/developers/docs/reference/runtime-matrix/).
+
+## Example
+
+The example below is illustrative, not normative.
+
+```json
+{
+  "id": "com.example.starter.intro",
+  "runtime": { "provider": "aws", "engine": "cloudformation", "entry": "template.yaml" },
+  "scoring": { "kind": "flag", "flagOutputKey": "Flag", "points": 100 }
+}
+```
+
+Related: [pack manifest reference](/developers/docs/reference/pack-manifest/) and
+the [validation error reference](/developers/docs/reference/validation-errors/).

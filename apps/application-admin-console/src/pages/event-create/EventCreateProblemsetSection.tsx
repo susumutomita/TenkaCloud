@@ -10,7 +10,11 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
 import { useMemo, useState } from "react";
 import { ProblemAlwaysOnSummary, ProblemCostSummary } from "../../components/ProblemCostSummary";
-import type { ProblemCategory, ProblemSummary } from "../../data/problems";
+import {
+  enabledNonAwsProviders,
+  type ProblemCategory,
+  type ProblemSummary,
+} from "../../data/problems";
 import { interpolate, useT } from "../../i18n";
 import {
   collectScoringKindFacets,
@@ -52,6 +56,12 @@ export interface EventCreateProblemsetSectionProps {
   problems: readonly ProblemSummary[];
   selectedProblems: readonly MultiselectProps.Option[];
   problemRows: readonly ProblemRow[];
+  /**
+   * #2167: multi-cloud (`features.nonAwsRuntime`) ON のとき、 working adapter を持つ
+   * 非 AWS provider (sakura/azure/gcp) を picker で選択可能にする。 OFF (既定) では
+   * 従来通り非 AWS 問題は disabled + 「近日対応」。
+   */
+  nonAwsRuntimeEnabled: boolean;
   onProblemsChange: (next: readonly MultiselectProps.Option[]) => void;
   onUpdateProblemRow: (problemId: string, patch: Partial<ProblemRow>) => void;
 }
@@ -60,6 +70,7 @@ export function EventCreateProblemsetSection({
   problems,
   selectedProblems,
   problemRows,
+  nonAwsRuntimeEnabled,
   onProblemsChange,
   onUpdateProblemRow,
 }: EventCreateProblemsetSectionProps) {
@@ -67,10 +78,15 @@ export function EventCreateProblemsetSection({
   const [criteria, setCriteria] = useState<ProblemFilterCriteria>(EMPTY_FILTER_CRITERIA);
   const filtered = useMemo(() => filterProblems(problems, criteria), [problems, criteria]);
   const filterActive = isFilterActive(criteria);
-  // #1414: 予約済み runtime (engine 未実装) の問題は disabled + 「近日対応」 tag。
+  // #2167: flag が ON の間だけ非 AWS provider を選択可能集合に入れる。
+  const enabledProviders = useMemo(
+    () => enabledNonAwsProviders(nonAwsRuntimeEnabled),
+    [nonAwsRuntimeEnabled],
+  );
+  // #1414 / #2167: 選択不可 runtime の問題は disabled + 「近日対応」 tag。
   const problemOptions = useMemo(
-    () => buildProblemOptions(filtered, t("event_create.problem_reserved_tag")),
-    [filtered, t],
+    () => buildProblemOptions(filtered, t("event_create.problem_reserved_tag"), enabledProviders),
+    [filtered, t, enabledProviders],
   );
   const tagFacets = useMemo(() => collectTagFacets(problems), [problems]);
   const scoringKindFacets = useMemo(() => collectScoringKindFacets(problems), [problems]);

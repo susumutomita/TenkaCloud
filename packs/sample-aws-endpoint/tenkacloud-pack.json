@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "com.tenkacloud.sample-aws-endpoint",
+  "version": "1.0.0",
+  "core": "^1.0.0",
+  "title": "Sample AWS reachable-endpoint pack",
+  "description": "A genuinely deployable + reachable sample: one AWS/CloudFormation Battle that stands up a public Lambda Function URL returning HTTP 200, scored by uptime-flat (the scorer probes the URL). cfn-lint clean. This is the verified AWS leg / anchor for a future multi-cloud composite (GCP / Azure / Sakura targets added once their per-cloud deploy can be live-verified).",
+  "license": "Apache-2.0",
+  "problemsRoot": "problems",
+  "requiredRuntimes": [{ "provider": "aws", "engine": "cloudformation" }]
+}

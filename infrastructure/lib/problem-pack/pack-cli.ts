@@ -12,12 +12,24 @@
  *   - `install <dir> [--store <dir>]` (#2094) → {@link installPack}: validate →
  *     snapshot → lock → dry-run compose (proves no duplicate-id conflict; does
  *     NOT activate). Atomic — an invalid install leaves no residue.
+ *   - `install git <https-url> --commit <full-sha> [--subdir <path>]` (#2097) →
+ *     {@link installGitPack}: fetch a PINNED, immutable commit over HTTPS into a
+ *     temp dir, then validate → snapshot → lock just like a local install. The
+ *     transport is injectable so the CLI runs offline; the lock records the repo
+ *     URL + commit + subdir + digest with `sourceKind: "git"`.
  *   - `list [--store <dir>] [--json]` (#2094) → {@link listInstalledPacks}: reads
  *     ONLY the local lock + snapshot metadata; never shows snapshot fs paths.
  *   - `inspect <id@version> [--store <dir>] [--json]` (#2094) →
  *     {@link inspectPack}: manifest, digest, problem ids, runtimes, dep status.
  *   - `remove <id@version> [--store <dir>] [--pins <file>]` (#2094) →
  *     {@link removePack}: refused while a pin record references the revision.
+ *   - `activate <id@version> --tenant <t> [--store <dir>]` (#2095) →
+ *     {@link ActivationStore.activate}: activate an installed immutable revision
+ *     for ONE tenant; refuses on a duplicate problem id / unavailable runtime /
+ *     digest mismatch / not-installed.
+ *   - `deactivate <id@version> --tenant <t> [--store <dir>]` (#2095) →
+ *     {@link ActivationStore.deactivate}: deactivate a tenant's active revision;
+ *     events already pinned to that revision are untouched (immutable catalog).
  *
  * There is deliberately NO `update` command: a new version is a separate install.
  * Every command is local + offline — no cloud / remote calls.
@@ -41,15 +53,22 @@ import {
 import {
   type InstalledPackSummary,
   inspectPack,
-  installPack,
   listInstalledPacks,
   type PackInspection,
   type PinPredicate,
   removePack,
 } from "./lifecycle.js";
-import type { ProviderEngineCapability } from "./manifest.js";
+import { ActivationStore } from "./pack-activation.js";
+import {
+  INSTALL_USAGE,
+  type LineWriter,
+  type PackCliDeps,
+  runInstall,
+} from "./pack-cli-install.js";
 import type { PackLockEntry } from "./snapshot.js";
 import { type PackValidationResult, validatePackDirectory } from "./validate-pack.js";
+
+export type { LineWriter, PackCliDeps } from "./pack-cli-install.js";
 
 /** Diagnostic codes that mean "could not even start validating" → exit 2. */
 const TOOL_FAILURE_CODES = new Set(["PACK_DIR_MISSING", "MANIFEST_MISSING", "MANIFEST_UNREADABLE"]);
@@ -60,10 +79,12 @@ const EXIT_TOOL_FAILURE = 2;
 
 const VALIDATE_USAGE = "Usage: tenkacloud pack validate <dir> [--json]";
 const INIT_USAGE = "Usage: tenkacloud pack init <dir> [--runtime <provider/engine>]";
-const INSTALL_USAGE = "Usage: tenkacloud pack install <dir> [--store <dir>]";
 const LIST_USAGE = "Usage: tenkacloud pack list [--store <dir>] [--json]";
 const INSPECT_USAGE = "Usage: tenkacloud pack inspect <id@version> [--store <dir>] [--json]";
 const REMOVE_USAGE = "Usage: tenkacloud pack remove <id@version> [--store <dir>] [--pins <file>]";
+const ACTIVATE_USAGE = "Usage: tenkacloud pack activate <id@version> --tenant <t> [--store <dir>]";
+const DEACTIVATE_USAGE =
+  "Usage: tenkacloud pack deactivate <id@version> --tenant <t> [--store <dir>]";
 const USAGE = [
   VALIDATE_USAGE,
   INIT_USAGE,
@@ -71,6 +92,8 @@ const USAGE = [
   LIST_USAGE,
   INSPECT_USAGE,
   REMOVE_USAGE,
+  ACTIVATE_USAGE,
+  DEACTIVATE_USAGE,
 ].join("\n");
 
 /** Default pack id used when `init` is run without an explicit id flag. */
@@ -78,19 +101,6 @@ const DEFAULT_INIT_PACK_ID = "com.example.starter";
 
 /** Default snapshot store, relative to the CWD, for the lifecycle subcommands. */
 const DEFAULT_STORE_DIR = ".tenkacloud/pack-store";
-
-/**
- * Platform context the dry-run compose validates packs against. Kept as inert
- * defaults so the offline CLI never reaches out to a running platform; the values
- * satisfy the reference pack (`core ^1.0.0`, `aws/cloudformation`).
- */
-const PLATFORM_CORE_VERSION = "1.0.0";
-const PLATFORM_AVAILABLE_RUNTIMES: readonly ProviderEngineCapability[] = [
-  { provider: "aws", engine: "cloudformation" },
-  { provider: "gcp", engine: "infra-manager" },
-  { provider: "azure", engine: "bicep" },
-  { provider: "sakura", engine: "terraform" },
-];
 
 /**
  * The `--pins` file shape: a JSON array of `{ packId, version }` records that
@@ -107,14 +117,16 @@ const PinRecordsSchema = z.array(
     .strict(),
 );
 
-/** Sink for a single line of output (no trailing newline). */
-export type LineWriter = (line: string) => void;
-
 /**
  * Run the `pack` CLI over an argv tail (everything after `pack`). Returns the
  * process exit code; all output goes through `write` so callers control the sink.
+ * `deps` injects the Git transport so callers / tests stay offline.
  */
-export function runPackCli(args: readonly string[], write: LineWriter): number {
+export function runPackCli(
+  args: readonly string[],
+  write: LineWriter,
+  deps: PackCliDeps = {},
+): number {
   const [subcommand, ...rest] = args;
   switch (subcommand) {
     case "validate":
@@ -122,13 +134,17 @@ export function runPackCli(args: readonly string[], write: LineWriter): number {
     case "init":
       return runInit(rest, write);
     case "install":
-      return runInstall(rest, write);
+      return runInstall(rest, write, deps);
     case "list":
       return runList(rest, write);
     case "inspect":
       return runInspect(rest, write);
     case "remove":
       return runRemove(rest, write);
+    case "activate":
+      return runActivate(rest, write);
+    case "deactivate":
+      return runDeactivate(rest, write);
     default:
       // No `update` command exists in v1: a new version is a separate install.
       write(USAGE);
@@ -162,37 +178,6 @@ function parsePackRef(ref: string | undefined): { id: string; version: string } 
   const at = ref.lastIndexOf("@");
   if (at <= 0 || at === ref.length - 1) return undefined;
   return { id: ref.slice(0, at), version: ref.slice(at + 1) };
-}
-
-function runInstall(rest: readonly string[], write: LineWriter): number {
-  const store = takeFlag(rest, "--store");
-  if (store.malformed) {
-    write(INSTALL_USAGE);
-    return EXIT_TOOL_FAILURE;
-  }
-  const dir = store.rest.filter((arg) => !arg.startsWith("--"))[0];
-  if (!dir) {
-    write(INSTALL_USAGE);
-    return EXIT_TOOL_FAILURE;
-  }
-
-  const result = installPack({
-    sourceDir: dir,
-    storeDir: store.value ?? DEFAULT_STORE_DIR,
-    installedAt: new Date().toISOString(),
-    coreVersion: PLATFORM_CORE_VERSION,
-    availableRuntimes: PLATFORM_AVAILABLE_RUNTIMES,
-  });
-  if (!result.ok) {
-    write(result.message);
-    return EXIT_VALIDATION_FAILURE;
-  }
-  const verb = result.alreadyInstalled ? "already installed" : "installed";
-  write(`Pack ${verb}: ${result.entry.packId}@${result.entry.version}`);
-  write(`  source: ${result.entry.sourceKind}`);
-  write(`  digest: ${result.entry.contentDigest}`);
-  write(`  problems: ${result.problemCount}`);
-  return EXIT_OK;
 }
 
 function runList(rest: readonly string[], write: LineWriter): number {
@@ -270,6 +255,81 @@ function runRemove(rest: readonly string[], write: LineWriter): number {
   }
   write(`Removed ${result.removed.packId}@${result.removed.version}.`);
   return EXIT_OK;
+}
+
+/**
+ * `pack activate <id@version> --tenant <t> [--store <dir>]`: activate an installed
+ * immutable revision for ONE tenant. Refuses (exit 1) when the revision is not
+ * installed, the digest mismatches, or activating it would duplicate a problem id
+ * / require an unavailable runtime — the duplicate-id check runs BEFORE the record
+ * is written. Bad usage (missing ref / `--tenant`) is a tool failure (exit 2).
+ */
+function runActivate(rest: readonly string[], write: LineWriter): number {
+  const parsed = parseActivationArgs(rest);
+  if (!parsed) {
+    write(ACTIVATE_USAGE);
+    return EXIT_TOOL_FAILURE;
+  }
+  const store = new ActivationStore(parsed.store);
+  const result = store.activate({
+    tenantId: parsed.tenant,
+    packId: parsed.ref.id,
+    version: parsed.ref.version,
+  });
+  if (!result.ok) {
+    write(result.message);
+    return EXIT_VALIDATION_FAILURE;
+  }
+  const verb = result.alreadyActive ? "already active" : "activated";
+  write(
+    `Pack ${verb} for tenant '${parsed.tenant}': ${result.record.packId}@${result.record.version}`,
+  );
+  return EXIT_OK;
+}
+
+/**
+ * `pack deactivate <id@version> --tenant <t> [--store <dir>]`: deactivate ONE
+ * tenant's active revision. Refuses (exit 1) when it was not active for the
+ * tenant; an event already pinned to that revision is untouched (its catalog is
+ * immutable). Bad usage is a tool failure (exit 2).
+ */
+function runDeactivate(rest: readonly string[], write: LineWriter): number {
+  const parsed = parseActivationArgs(rest);
+  if (!parsed) {
+    write(DEACTIVATE_USAGE);
+    return EXIT_TOOL_FAILURE;
+  }
+  const store = new ActivationStore(parsed.store);
+  const result = store.deactivate({
+    tenantId: parsed.tenant,
+    packId: parsed.ref.id,
+    version: parsed.ref.version,
+  });
+  if (!result.ok) {
+    write(result.message);
+    return EXIT_VALIDATION_FAILURE;
+  }
+  write(
+    `Pack deactivated for tenant '${parsed.tenant}': ${result.record.packId}@${result.record.version}`,
+  );
+  return EXIT_OK;
+}
+
+/**
+ * Parse the shared `<id@version> --tenant <t> [--store <dir>]` argv tail for the
+ * activate / deactivate subcommands. Returns undefined on any malformed flag,
+ * missing tenant, or missing `id@version` so the caller surfaces a tool failure.
+ */
+function parseActivationArgs(
+  rest: readonly string[],
+): { ref: { id: string; version: string }; tenant: string; store: string } | undefined {
+  const store = takeFlag(rest, "--store");
+  if (store.malformed) return undefined;
+  const tenant = takeFlag(store.rest, "--tenant");
+  if (tenant.malformed || !tenant.value) return undefined;
+  const ref = parsePackRef(tenant.rest.filter((arg) => !arg.startsWith("--"))[0]);
+  if (!ref) return undefined;
+  return { ref, tenant: tenant.value, store: store.value ?? DEFAULT_STORE_DIR };
 }
 
 /**

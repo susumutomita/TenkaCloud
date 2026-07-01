@@ -27,6 +27,20 @@ bun --cwd infrastructure run pack validate packs/reference-aws-hello
 It must report zero diagnostics. A regression test (`reference-pack.test.ts`)
 asserts the same so the example never drifts from the contract.
 
+## Validate in CI
+
+An external pack repository validates in CI by calling the reusable workflow,
+without copying any platform internals (see
+[`docs/external-pack-ci.md`](../../docs/external-pack-ci.md)):
+
+```yaml
+jobs:
+  validate-pack:
+    uses: susumutomita/TenkaCloud/.github/workflows/problem-pack-ci.yml@v1
+    with:
+      pack-directory: .
+```
+
 ## Test
 
 This pack carries no author tests of its own; the validator above is the contract

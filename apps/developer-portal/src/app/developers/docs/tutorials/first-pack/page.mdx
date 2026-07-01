@@ -1,0 +1,325 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "First pack tutorial" };
+
+# First pack tutorial <MaturityBadge level="stable" />
+
+このチュートリアルは、空のディレクトリから問題パック (problem pack) を 1 つ作り、検証し、
+不変な Git リビジョンに固定して公開し、インストールし、テナントに対して有効化し、
+イベントに固定するまでの、開発者の主要な道筋を 1 本でたどります。最小の 1 パック
+(`com.example.starter`、問題 1 個の `hello-world`) だけを使います。
+
+パックの概念そのものは [problem packs](/developers/docs/concepts/problem-packs/) を、
+最初のデプロイ全体像は [getting started](/developers/docs/getting-started/) を参照してください。
+このページは契約 (スキーマや診断コードの一覧) を再掲せず、各リファレンスへリンクします。
+
+The Japanese walkthrough below is the complete source of truth — full manifest and
+metadata examples, exact expected output, the failure-to-diagnostic-code table, and
+the preview event/verification flow. An abridged English summary follows it for
+quick reference; for the full detail, follow the Japanese sections above it.
+
+## 前提条件 (prerequisites)
+
+このチュートリアルの「作成 → 検証 → インストール → 有効化」までは、クラウド資格情報なしの
+完全オフラインで完了します。プラットフォームへの実デプロイに到達する手順 (最後の節) でのみ
+AWS アカウントが必要です。
+
+- [Bun](https://bun.sh) 1.3.11
+- リポジトリのチェックアウト (`git clone` 済み)。`pack` CLI は `infrastructure` ワークスペースの
+  `tsx bin/tenkacloud-pack.ts` を `bun --cwd infrastructure run pack ...` から呼び出します。
+- `git` 2.x 以降 (固定リビジョンの SHA を取得する手順で使用)
+
+CLI は完全にオフラインです。ネットワーク・CDK synth・クラウド資格情報を一切使いません。
+
+## 1. パックを作成する (scaffold)
+
+空の作業ディレクトリから始めます。`pack init <dir>` は、検証を 0 件の診断で通過する
+パック (マニフェスト + 問題 1 個 + プロバイダー成果物のプレースホルダー + README) を生成します。
+
+```bash
+bun --cwd infrastructure run pack init ./my-first-pack
+```
+
+期待される出力:
+
+```text
+Pack scaffolded at ./my-first-pack (4 files). Run 'pack validate ./my-first-pack' to check it.
+```
+
+`--runtime <provider/engine>` を付けるとランタイムを選べます (既定は `aws/cloudformation`)。
+対応ランタイムは `aws/cloudformation` / `gcp/infra-manager` / `azure/bicep` / `sakura/apprun` です。
+
+### 生成されるマニフェスト (`tenkacloud-pack.json`)
+
+パックの唯一のエントリーポイントです。完全な最小例:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "com.example.starter",
+  "version": "0.1.0",
+  "core": "^1.0.0",
+  "title": "Starter pack",
+  "description": "A scaffolded TenkaCloud problem pack. Edit the metadata and artifact, then validate.",
+  "license": "Apache-2.0",
+  "problemsRoot": "problems",
+  "requiredRuntimes": [
+    {
+      "provider": "aws",
+      "engine": "cloudformation"
+    }
+  ]
+}
+```
+
+### 生成される問題メタデータ (`problems/challenges/hello-world/metadata.json`)
+
+完全な最小例:
+
+```json
+{
+  "id": "hello-world",
+  "title": "Hello World",
+  "category": "challenges",
+  "description": "A starter problem. Replace this with your own challenge.",
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  }
+}
+```
+
+マニフェストと metadata.json の各フィールドの意味は
+[problem packs](/developers/docs/concepts/problem-packs/) を参照してください。
+
+## 2. パックを検証する (validate)
+
+`pack validate <dir>` はオフライン検証器です。スキーマ・問題 ID の一意性・成果物の存在・
+ランタイム整合などを検査します。
+
+```bash
+bun --cwd infrastructure run pack validate ./my-first-pack
+```
+
+期待される出力:
+
+```text
+Pack is valid: 1 problem.
+  - hello-world
+```
+
+機械可読な出力が必要なときは `--json` を付けます。
+終了コードは 0 (成功) / 1 (検証失敗) / 2 (ツール失敗: ディレクトリ欠落・マニフェスト欠落・誤用) です。
+
+## 3. 不変な Git リビジョンに固定して公開する (pin)
+
+公開はパックを「不変な Git のコミット」に固定して共有することです。**ブランチ名・タグ・`HEAD`・
+短縮ハッシュは設計上拒否されます。**固定できるのは完全な 40 桁の SHA だけで、これにより
+同じパック内容が将来にわたって絶対に変わらないこと (immutability) を保証します。
+
+別の Git リポジトリ (このコアリポジトリの `problems/` ツリーの外) にパックをコミット・push し、
+固定したいリビジョンの完全な SHA を取得します:
+
+```bash
+git -C ./my-first-pack init
+git -C ./my-first-pack add .
+git -C ./my-first-pack commit -m "First pack"
+git -C ./my-first-pack rev-parse HEAD
+```
+
+期待される出力 (40 桁の 16 進数。値はコミットごとに異なります):
+
+```text
+3f1c226be0565fa2c90df44e9b1acd5a90e84be2
+```
+
+この SHA が公開単位です。リモートに push し、HTTPS URL と SHA を配布します。
+固定リビジョンの実運用手順は
+`infrastructure/lib/problem-pack/README-external-git-pack.md` のランバックに対応します。
+
+## 4. パックをインストールする (install)
+
+ローカルディレクトリからインストールできます。インストールは「検証 → スナップショット →
+ロック → dry-run compose」を原子的に行い、有効化はしません。失敗したインストールは残骸を残しません。
+
+```bash
+bun --cwd infrastructure run pack install ./my-first-pack --store ./.tenkacloud/pack-store
+```
+
+期待される出力 (`digest` はパック内容のハッシュで、ここでは生成物に対する一例):
+
+```text
+Pack installed: com.example.starter@0.1.0
+  source: local
+  digest: b1acd5a90e84be2a2e1ca78f77396ee6c447c9c3f1c226be0565fa2c90df44e9
+  problems: 1
+```
+
+固定した Git リビジョンからインストールするときは `install git` を使います。HTTPS URL と
+完全な 40 桁 SHA が必須です:
+
+```bash
+bun --cwd infrastructure run pack install git \
+  https://github.com/<you>/my-first-pack.git \
+  --commit <full-40-hex-sha> --store ./.tenkacloud/pack-store
+```
+
+ロック (`packs-lock.json`) には `sourceKind: "git"`・解決済みコミット・任意の subdir・
+コンテンツダイジェストが記録されます。インストール済みパックは `list` で確認できます:
+
+```bash
+bun --cwd infrastructure run pack list --store ./.tenkacloud/pack-store
+```
+
+期待される出力:
+
+```text
+Installed packs: 1
+  - com.example.starter@0.1.0 (local, 1 problem, b1acd5a90e84be2a2e1ca78f77396ee6c447c9c3f1c226be0565fa2c90df44e9)
+```
+
+## 5. テナントに対して有効化する (activate)
+
+インストール済みの不変リビジョンを、1 つのテナントに対して有効化します。重複する問題 ID・
+利用不可なランタイム・ダイジェスト不一致・未インストールは拒否されます (終了コード 1)。
+
+```bash
+bun --cwd infrastructure run pack activate com.example.starter@0.1.0 \
+  --tenant acme --store ./.tenkacloud/pack-store
+```
+
+期待される出力:
+
+```text
+Pack activated for tenant 'acme': com.example.starter@0.1.0
+```
+
+別テナントからは見えません (テナント分離)。元に戻すには `deactivate` を使います。
+
+## 6. イベントを作成する (create an event) <MaturityBadge level="preview" />
+
+イベント作成は、そのテナントの実効カタログ (core + 有効化済みパックリビジョン) を
+**作成時点で不変なスナップショットに固定**します。一度固定したイベントのカタログは、後から
+`deactivate` / `install` / `activate` をしても書き換わりません。
+
+イベントのスナップショット固定は CLI のサブコマンドではなく、ライブラリ
+(`infrastructure/lib/problem-pack/event-pin.ts` の `createEventSnapshot`) と、それを呼び出す
+オーガナイザーコンソールが担います。ここまでの CLI 手順 (作成 → 検証 → インストール → 有効化) は
+すべて実装済み (stable) ですが、ブラウザからのイベント作成 UI はプラットフォーム層であり、
+このページでは preview として扱います。
+
+## 7. オーガナイザーコンソールで検証する (verify) <MaturityBadge level="preview" />
+
+イベント作成後、オーガナイザーコンソールでイベントが固定スナップショットを参照していること、
+デプロイがそのイベントの固定パック provenance を解決していることを確認します。
+オフラインの等価チェックは `infrastructure/test/problem-pack/external-git-pack-e2e.test.ts` が
+注入したフェイク transport に対して同じ契約を検証します。
+
+## 8. 撤去する (teardown / remove)
+
+不要になったリビジョンは `remove` で取り除けます。**イベントや有効化がそのリビジョンを
+固定している間は拒否されます** (不変カタログの保護)。先に `deactivate` し、固定参照を外してから
+削除します。
+
+```bash
+bun --cwd infrastructure run pack deactivate com.example.starter@0.1.0 \
+  --tenant acme --store ./.tenkacloud/pack-store
+bun --cwd infrastructure run pack remove com.example.starter@0.1.0 \
+  --store ./.tenkacloud/pack-store
+```
+
+期待される出力:
+
+```text
+Pack deactivated for tenant 'acme': com.example.starter@0.1.0
+Removed com.example.starter@0.1.0.
+```
+
+`pack` CLI には `update` がありません。新しいバージョンは別のインストールとして扱います。
+
+## よくある失敗 → 診断コード (common failures)
+
+検証失敗のとき CLI は `[CODE] file:path` 形式で診断を表示します。コードが契約であり、
+メッセージ文字列は契約ではありません。診断コードの完全な一覧と公開名前空間付きコードへの対応は
+[problem packs](/developers/docs/concepts/problem-packs/) を参照してください。実際に観測できる例:
+
+| 症状 | コード | 意味 |
+| --- | --- | --- |
+| ディレクトリが存在しない | `PACK_DIR_MISSING` | 渡したパスにパックがない。`tenkacloud-pack.json` を含むディレクトリを渡す。 |
+| `tenkacloud-pack.json` がない | `MANIFEST_MISSING` | ルートにマニフェストがない。すべてのパックは 1 つ宣言する。 |
+| `version` が SemVer でない | `MANIFEST_INVALID` | 例: `version must be a valid SemVer`。`tenkacloud-pack.json:version` を直す。 |
+| 問題 ID が重複している | `DUPLICATE_PROBLEM_ID` | パック内で問題 ID が一意でない。 |
+| 成果物 (template など) が欠落 | `ARTIFACT_MISSING` | metadata の `runtime.entry` が指すファイルがない。 |
+| ランタイムがマニフェストと不一致 | `RUNTIME_MISMATCH` | 問題のランタイムが `requiredRuntimes` にない。 |
+
+例えば `version` を壊して検証すると次のように出ます:
+
+```text
+Pack validation failed: 1 diagnostic(s).
+  [MANIFEST_INVALID] tenkacloud-pack.json:version
+      version must be a valid SemVer
+```
+
+`PACK_DIR_MISSING` / `MANIFEST_MISSING` / `MANIFEST_UNREADABLE` は終了コード 2 (ツール失敗)、
+それ以外の検証診断は終了コード 1 (検証失敗) です。
+
+## プラットフォームへデプロイする (cloud) <MaturityBadge level="preview" />
+
+ここから先は AWS アカウントが必要です。固定パックをプラットフォームに載せ、参加者ポータルまで
+通すには [getting started](/developers/docs/getting-started/) の Lite モード (`make deploy`) に従います。
+
+---
+
+## English walkthrough
+
+An abridged English summary of the same developer journey. The complete manifest
+and metadata examples, exact expected output, the failure-to-diagnostic-code table,
+and the preview event/verification flow live in the Japanese sections above; this
+summary covers the command sequence. Run each command in order and compare the
+output.
+
+### Prerequisites
+
+Everything up to activation is fully offline; no cloud credentials are needed
+until the final cloud-deploy step.
+
+- [Bun](https://bun.sh) 1.3.11
+- A checkout of the repository (the `pack` CLI runs from the `infrastructure`
+  workspace via `bun --cwd infrastructure run pack ...`)
+- `git` 2.x or later (used to obtain the pinned commit SHA)
+
+### Create, validate, install, activate
+
+```bash
+bun --cwd infrastructure run pack init ./my-first-pack
+bun --cwd infrastructure run pack validate ./my-first-pack
+bun --cwd infrastructure run pack install ./my-first-pack --store ./.tenkacloud/pack-store
+bun --cwd infrastructure run pack activate com.example.starter@0.1.0 \
+  --tenant acme --store ./.tenkacloud/pack-store
+```
+
+Each command prints a one-line success message (see the Japanese sections above
+for the exact expected output). Pinning a pack means committing it to a separate
+Git repository and recording the full 40-hex commit SHA; a branch, tag, `HEAD`,
+or abbreviated hash is rejected by design, which is what makes a pinned revision
+immutable. Install a pinned revision with `pack install git <https-url> --commit
+<full-40-hex-sha>`.
+
+### Teardown
+
+```bash
+bun --cwd infrastructure run pack deactivate com.example.starter@0.1.0 \
+  --tenant acme --store ./.tenkacloud/pack-store
+bun --cwd infrastructure run pack remove com.example.starter@0.1.0 \
+  --store ./.tenkacloud/pack-store
+```
+
+`remove` is refused while an event or activation pins the revision, so deactivate
+first. There is no `update` command: a new version is a separate install.
+
+## Next steps
+
+- Read about [problem packs](/developers/docs/concepts/problem-packs/).
+- Start from [getting started](/developers/docs/getting-started/).
+- Browse the [API reference](/developers/api/).

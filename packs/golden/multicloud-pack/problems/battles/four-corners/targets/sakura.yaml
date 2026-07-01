@@ -1,0 +1,6 @@
+# Golden composite Sakura (AppRun) target placeholder.
+# Reserved runtime: declared and validated, never deployed in CI.
+# The deploy body would emit a SakuraUrl output for the composite-probe scorer.
+resources: []
+outputs:
+  SakuraUrl: https://sakura.example.invalid

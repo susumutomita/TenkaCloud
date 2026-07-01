@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Golden uptime body. Emits a ServiceUrl output the uptime scorer probes.
+Parameters:
+  ServiceEndpoint:
+    Type: String
+    Default: https://service.example.invalid
+    Description: Placeholder endpoint; a real problem wires this to a deployed service.
+Resources:
+  EndpointParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Value: !Ref ServiceEndpoint
+Outputs:
+  ServiceUrl:
+    Description: The service URL the portal and scorer probe.
+    Value: !GetAtt EndpointParameter.Value

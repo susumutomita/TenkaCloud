@@ -311,6 +311,56 @@ describe("DeploymentDetailPage (Netlify-style phase + log view)", () => {
     expect(await screen.findByText(/· team-alpha · Job/)).toBeInTheDocument();
   });
 
+  it("should render per-target rows for a composite (multi-cloud) deployment", async () => {
+    mocks.getDeployment.mockResolvedValue({
+      ...baseDeployment,
+      status: "IN_PROGRESS",
+      composite: {
+        version: 1,
+        targets: [
+          {
+            targetId: "edge",
+            targetDeploymentId: "01HTARGETaws",
+            ordinal: 0,
+            provider: "aws",
+            engine: "cloudformation",
+            status: "COMPLETE",
+            updatedAt: "2026-05-11T01:09:00.000Z",
+          },
+          {
+            targetId: "store",
+            targetDeploymentId: "01HTARGETazure",
+            ordinal: 1,
+            provider: "azure",
+            engine: "bicep",
+            status: "FAILED",
+            updatedAt: "2026-05-11T01:09:10.000Z",
+            failureReason: "quota exceeded",
+          },
+        ],
+      },
+    });
+    mocks.getStackProgress.mockResolvedValue(emptyProgress);
+    renderPage();
+    // composite_targets_header (ja) — マルチクラウド target.
+    expect(await screen.findByText("マルチクラウド target")).toBeInTheDocument();
+    expect(screen.getByText("edge")).toBeInTheDocument();
+    expect(screen.getByText("store")).toBeInTheDocument();
+    expect(screen.getByText("aws")).toBeInTheDocument();
+    expect(screen.getByText("azure")).toBeInTheDocument();
+    expect(screen.getByText("quota exceeded")).toBeInTheDocument();
+  });
+
+  it("should not render the composite section for a legacy single-provider deployment", async () => {
+    mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "COMPLETE" });
+    mocks.getStackProgress.mockResolvedValue(emptyProgress);
+    renderPage();
+    await waitFor(() => expect(mocks.getDeployment).toHaveBeenCalled());
+    await screen.findByTestId("phase-enqueued");
+    // Legacy detail keeps its exact shape: no composite section is ever mounted.
+    expect(screen.queryByText("マルチクラウド target")).toBeNull();
+  });
+
   it("should close the maximize-log modal on dismiss", async () => {
     mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "IN_PROGRESS" });
     mocks.getStackProgress.mockResolvedValue(emptyProgress);

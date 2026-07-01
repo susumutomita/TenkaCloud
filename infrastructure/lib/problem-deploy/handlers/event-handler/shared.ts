@@ -4,9 +4,25 @@ import { S3Client } from "@aws-sdk/client-s3";
 import { SchedulerClient } from "@aws-sdk/client-scheduler";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
+import type { EffectiveCatalogProvenance } from "../../../problem-pack/effective-catalog.js";
 import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
+
+/**
+ * [Problem Packs / Issue #2096] Resolves a problem's provenance from the EVENT's
+ * pinned catalog snapshot (#2095), keyed by the server-resolved (eventId,
+ * problemId) — never from client input. Returns the snapshot provenance plus the
+ * event's `catalogSnapshotId`, or `undefined` when the problem is not pinned to
+ * the event. Default-undefined on `EventSharedResources` keeps every deployment
+ * on the legacy (core, no-provenance) path byte-identically.
+ */
+export type DeploymentProvenanceResolver = (
+  eventId: string,
+  problemId: string,
+) =>
+  | { readonly provenance: EffectiveCatalogProvenance; readonly catalogSnapshotId: string }
+  | undefined;
 
 /**
  * Event handler Lambda module-scope で 1 度だけ build される shared resources。
@@ -50,6 +66,13 @@ export interface EventSharedResources {
    * publish) を維持する。 段階移行で rollback 可能にする。
    */
   readonly useBulkDistributedMap: boolean;
+  /**
+   * [Problem Packs / Issue #2096] Resolves pack provenance from the event-pinned
+   * catalog snapshot (#2095). Undefined (the default) keeps every deployment on
+   * the legacy core/no-provenance path byte-identically; when wired, a
+   * pack-sourced row records immutable provenance.
+   */
+  readonly resolveDeploymentProvenance?: DeploymentProvenanceResolver;
 }
 
 export function buildEventSharedResources(): EventSharedResources {

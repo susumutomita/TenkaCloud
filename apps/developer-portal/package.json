@@ -1,0 +1,45 @@
+{
+  "name": "@TenkaCloud/developer-portal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 5176",
+    "prebuild": "tsx scripts/generate-reference.ts --check && tsx scripts/check-internal-links.ts",
+    "build": "next build",
+    "start": "next start --port 5176",
+    "typecheck": "tsc --noEmit",
+    "check:links": "tsx scripts/check-internal-links.ts",
+    "generate:reference": "tsx scripts/generate-reference.ts",
+    "check:reference": "tsx scripts/generate-reference.ts --check",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage"
+  },
+  "dependencies": {
+    "@mdx-js/loader": "^3.1.0",
+    "@mdx-js/react": "^3.1.0",
+    "@next/mdx": "16.2.9",
+    "@scalar/api-reference-react": "0.9.49",
+    "@tenkacloud/problem-runtime": "workspace:*",
+    "@tenkacloud/problem-sdk": "workspace:*",
+    "@types/mdx": "^2.0.13",
+    "gray-matter": "^4.0.3",
+    "next": "16.2.9",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react-swc": "^4.3.1",
+    "jsdom": "^29.1.1",
+    "tsx": "^4.20.0",
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

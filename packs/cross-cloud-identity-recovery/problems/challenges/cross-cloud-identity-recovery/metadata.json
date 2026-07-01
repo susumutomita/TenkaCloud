@@ -1,0 +1,51 @@
+{
+  "id": "cross-cloud-identity-recovery",
+  "title": "Cross-cloud identity recovery",
+  "category": "challenges",
+  "description": "An AWS workload must recover keyless access to a protected GCP endpoint through a deliberately misconfigured Workload Identity Federation trust boundary. Restore the AWS-to-GCP path without ever introducing a static service-account key.",
+  "difficulty": "advanced",
+  "tags": ["multicloud", "identity-federation", "keyless", "composite", "iam"],
+  "runtime": {
+    "kind": "composite",
+    "targets": [
+      {
+        "id": "aws-workload",
+        "provider": "aws",
+        "engine": "cloudformation",
+        "entry": "aws/template.yaml"
+      },
+      {
+        "id": "gcp-service",
+        "provider": "gcp",
+        "engine": "infra-manager",
+        "entry": "gcp/terraform"
+      }
+    ]
+  },
+  "scoring": {
+    "kind": "composite-probe",
+    "success": "all",
+    "pointsAllOk": 100,
+    "targets": [
+      {
+        "targetId": "aws-workload",
+        "probe": "https",
+        "outputKey": "RecoveryProbeUrl",
+        "path": "/verify",
+        "expectStatus": [200]
+      }
+    ],
+    "hints": [
+      {
+        "id": "hint-trust",
+        "content": "The GCP Workload Identity Pool provider only trusts a specific audience and a specific AWS principal. Compare the provider's attribute condition and allowed audiences against the AWS role the workload actually assumes.",
+        "penalty": 10
+      },
+      {
+        "id": "hint-binding",
+        "content": "Even with a valid federated token, the service account must grant the federated identity roles/iam.workloadIdentityUser and the protected endpoint must be invokable by that service account. Check both the trust (who may impersonate) and the binding (what the impersonator may call).",
+        "penalty": 20
+      }
+    ]
+  }
+}

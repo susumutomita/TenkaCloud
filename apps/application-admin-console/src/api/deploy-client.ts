@@ -104,6 +104,52 @@ export interface DeployResponse {
   readonly expiresAt: number;
 }
 
+/**
+ * Composite (multi-cloud) targets a competitor account can run on. Mirrors the
+ * backend whitelist in
+ * `infrastructure/lib/problem-deploy/handlers/deploy-handler/composite-detail.ts`.
+ */
+export type CompositeTargetProvider = "aws" | "gcp" | "azure" | "sakura";
+
+/**
+ * One composite child target, as projected by the backend `buildCompositeDetail`
+ * (#2073). Display-only: the backend strips every credential / role / login-key
+ * field, so a target row is never an auth input on the frontend.
+ */
+export interface CompositeTargetSummary {
+  readonly targetId: string;
+  readonly targetDeploymentId: string;
+  readonly ordinal: number;
+  readonly provider: CompositeTargetProvider;
+  readonly engine: string;
+  readonly status: DeploymentStatus;
+  readonly updatedAt: string;
+  readonly failureReason?: string;
+  readonly outputs?: Readonly<Record<string, string>>;
+}
+
+/**
+ * The optional `composite` block a composite-parent deployment-detail response
+ * carries. Legacy single-provider deployments never include it (byte compat).
+ */
+export interface CompositeDetail {
+  readonly version: number;
+  readonly targets: readonly CompositeTargetSummary[];
+}
+
+/**
+ * [Problem Packs / Issue #2096] Pack provenance for a PACK-SOURCED deployment,
+ * resolved by the backend from the event-pinned catalog snapshot (#2095). The
+ * detail (`getDeployment`) response carries it only for pack deployments; core
+ * deployments omit it. It carries no local path / source credential.
+ */
+export interface DeploymentProvenance {
+  readonly packId: string;
+  readonly packVersion: string;
+  readonly contentDigest: string;
+  readonly catalogSnapshotId: string;
+}
+
 export interface DeploymentSummary {
   readonly jobId: string;
   readonly problemId: string;
@@ -124,6 +170,16 @@ export interface DeploymentSummary {
   readonly expiresAt: number;
   /** 単一行 Get でのみ返る。`listDeployments` の戻り値には含まれない (誤露出防止)。 */
   readonly teamLoginKey?: string;
+  /**
+   * Composite (multi-cloud) parent でのみ返る per-target status。legacy
+   * single-provider deployment では undefined (= 旧 UI を byte 互換に保つ)。
+   */
+  readonly composite?: CompositeDetail;
+  /**
+   * [#2096] Pack provenance. Present on the detail response only for a
+   * PACK-SOURCED deployment; absent for core problems (= existing shape).
+   */
+  readonly provenance?: DeploymentProvenance;
 }
 
 export interface ListDeploymentsResponse {

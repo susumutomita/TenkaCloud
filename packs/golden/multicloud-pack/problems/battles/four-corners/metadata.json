@@ -1,0 +1,26 @@
+{
+  "id": "golden-multicloud-four-corners",
+  "title": "Four corners",
+  "category": "battles",
+  "description": "Composite golden problem: one composite runtime spanning AWS, GCP, Azure, and Sakura targets, scored by composite-probe across all four declared targets.",
+  "runtime": {
+    "kind": "composite",
+    "targets": [
+      { "id": "aws", "provider": "aws", "engine": "cloudformation", "entry": "targets/aws.yaml" },
+      { "id": "gcp", "provider": "gcp", "engine": "infra-manager", "entry": "targets/gcp.yaml" },
+      { "id": "azure", "provider": "azure", "engine": "bicep", "entry": "targets/azure.bicep" },
+      { "id": "sakura", "provider": "sakura", "engine": "apprun", "entry": "targets/sakura.yaml" }
+    ]
+  },
+  "scoring": {
+    "kind": "composite-probe",
+    "success": "all",
+    "pointsAllOk": 40,
+    "targets": [
+      { "targetId": "aws", "probe": "https", "outputKey": "AwsUrl", "expectStatus": [200] },
+      { "targetId": "gcp", "probe": "https", "outputKey": "GcpUrl", "expectStatus": [200] },
+      { "targetId": "azure", "probe": "https", "outputKey": "AzureUrl", "expectStatus": [200] },
+      { "targetId": "sakura", "probe": "https", "outputKey": "SakuraUrl", "expectStatus": [200] }
+    ]
+  }
+}
