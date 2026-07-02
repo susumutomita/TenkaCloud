@@ -1,20 +1,10 @@
 import * as path from "node:path";
-import { RemovalPolicy, Stack } from "aws-cdk-lib";
-import {
-  Distribution,
-  HttpVersion,
-  OriginAccessIdentity,
-  PriceClass,
-  ViewerProtocolPolicy,
-} from "aws-cdk-lib/aws-cloudfront";
-import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
-import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
-import { BucketDeployment, CacheControl, Source } from "aws-cdk-lib/aws-s3-deployment";
+import { Stack } from "aws-cdk-lib";
+import type { Distribution } from "aws-cdk-lib/aws-cloudfront";
+import type { Bucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
-import {
-  buildCustomDomainDistributionProps,
-  type CustomDomainConfig,
-} from "../security/cloudfront-custom-domain.js";
+import { buildSpaHosting, deployRuntimeConfigJson } from "../hosting/spa-hosting.js";
+import type { CustomDomainConfig } from "../security/cloudfront-custom-domain.js";
 import { buildSecurityHeadersPolicy } from "../security/cloudfront-headers.js";
 
 export type ParticipantPortalMode = "dev-mock" | "backend";
@@ -48,8 +38,10 @@ const DEFAULT_DEV_MOCK_RUNTIME_CONFIG = (region: string): ParticipantPortalRunti
  * 競技者向け Participant Portal を S3 + CloudFront で配信する Construct。
  *
  * 構造は ApplicationAdminConsoleHosting と同等 (S3 private + OAI + CloudFront +
- * SPA fallback)。dist 供給は build pipeline (`bun run --cwd apps/participant-portal
- * build` が `apps/participant-portal/dist` に出力) が担当。
+ * SPA fallback)。共通スキャフォールドは `buildSpaHosting` (Issue #2207) に集約し、
+ * 本 Construct は portal 固有の CSP と runtime-config exclude だけを持つ。
+ * dist 供給は build pipeline (`bun run --cwd apps/participant-portal build` が
+ * `apps/participant-portal/dist` に出力) が担当。
  */
 export class ParticipantPortalHosting extends Construct {
   public readonly distributionDomainName: string;
@@ -59,17 +51,6 @@ export class ParticipantPortalHosting extends Construct {
 
   constructor(scope: Construct, id: string, customDomain?: CustomDomainConfig) {
     super(scope, id);
-
-    this.bucket = new Bucket(this, "SiteBucket", {
-      encryption: BucketEncryption.S3_MANAGED,
-      enforceSSL: true,
-      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
-      removalPolicy: RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-    });
-
-    const oai = new OriginAccessIdentity(this, "OAI");
-    this.bucket.grantRead(oai);
 
     // Issue #855 + #896: CloudFront に security headers を強制。 participant-portal は teamLoginKey
     // 経路 (= bearer token 専用) で外部 Cognito は使わないが、 backend API (= Lambda Function URL
@@ -87,26 +68,6 @@ export class ParticipantPortalHosting extends Construct {
       ],
     });
 
-    this.distribution = new Distribution(this, "Distribution", {
-      // Issue #1695: customDomain 設定時のみ TLS 1.2 強制 (= ACM 証明書必須)。 未設定は NO-OP。
-      ...buildCustomDomainDistributionProps(this, "ViewerCertificate", customDomain),
-      defaultBehavior: {
-        origin: S3BucketOrigin.withOriginAccessIdentity(this.bucket, { originAccessIdentity: oai }),
-        viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        responseHeadersPolicy: securityHeaders,
-      },
-      defaultRootObject: "index.html",
-      httpVersion: HttpVersion.HTTP2,
-      priceClass: PriceClass.PRICE_CLASS_100,
-      errorResponses: [
-        { httpStatus: 403, responseHttpStatus: 200, responsePagePath: "/index.html" },
-        { httpStatus: 404, responseHttpStatus: 200, responsePagePath: "/index.html" },
-      ],
-    });
-
-    this.distributionDomainName = this.distribution.distributionDomainName;
-    this.distributionUrl = `https://${this.distribution.distributionDomainName}`;
-
     const distDir = path.join(
       import.meta.dirname,
       "..",
@@ -116,41 +77,37 @@ export class ParticipantPortalHosting extends Construct {
       "participant-portal",
       "dist",
     );
-    new BucketDeployment(this, "SiteDeployment", {
+    const hosting = buildSpaHosting(this, {
+      distDir,
+      securityHeaders,
+      customDomain,
       // runtime-config.json は deployRuntimeConfig() が単独で所有する (= 実 backend Function URL を
       // 焼き、 no-cache で配る)。 dev で `apps/participant-portal/public/runtime-config.json` に置いた
       // mock が Vite build で dist に混入しても、 SPA 配信では絶対に出荷しない。 これを出荷すると
       // RuntimeConfigDeployment の実 URL を上書きし、 portal が localhost を叩いて participant 全員が
       // "Failed to fetch" になる (= 実際に起きた live 障害。 apiBaseUrl http://127.0.0.1:3199 の mock)。
-      sources: [Source.asset(distDir, { exclude: ["runtime-config.json"] })],
-      destinationBucket: this.bucket,
-      distribution: this.distribution,
+      sourceExclude: ["runtime-config.json"],
       distributionPaths: ["/*"],
-      prune: false,
     });
+    this.bucket = hosting.siteBucket;
+    this.distribution = hosting.distribution;
+
+    this.distributionDomainName = this.distribution.distributionDomainName;
+    this.distributionUrl = `https://${this.distribution.distributionDomainName}`;
   }
 
   deployRuntimeConfig(config: ParticipantPortalRuntimeConfig): void {
     // Issue #867: runtime-config.json は CloudFront / browser キャッシュさせない。
     // event 切替 / mode 切替時に古い設定が残ると participant 全員の画面が壊れる。
-    new BucketDeployment(this, "RuntimeConfigDeployment", {
-      sources: [
-        Source.jsonData("runtime-config.json", {
-          apiBaseUrl: (config.apiBaseUrl ?? "").replace(/\/$/, ""),
-          eventTitle: config.eventTitle,
-          eventRegion: config.eventRegion,
-          mode: config.mode,
-          // #1420: coordination dispatcher URL (= 専用 Lambda)。 未配線なら key を出さない。
-          ...(config.coordinationApiUrl
-            ? { coordinationApiUrl: config.coordinationApiUrl.replace(/\/$/, "") }
-            : {}),
-        }),
-      ],
-      destinationBucket: this.bucket,
-      distribution: this.distribution,
-      distributionPaths: ["/runtime-config.json"],
-      prune: false,
-      cacheControl: [CacheControl.noStore(), CacheControl.noCache(), CacheControl.mustRevalidate()],
+    deployRuntimeConfigJson(this, { siteBucket: this.bucket, distribution: this.distribution }, {
+      apiBaseUrl: (config.apiBaseUrl ?? "").replace(/\/$/, ""),
+      eventTitle: config.eventTitle,
+      eventRegion: config.eventRegion,
+      mode: config.mode,
+      // #1420: coordination dispatcher URL (= 専用 Lambda)。 未配線なら key を出さない。
+      ...(config.coordinationApiUrl
+        ? { coordinationApiUrl: config.coordinationApiUrl.replace(/\/$/, "") }
+        : {}),
     });
   }
 }
