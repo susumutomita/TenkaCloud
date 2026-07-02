@@ -15,7 +15,7 @@ export JSII_DEPRECATED := quiet
         env-check env-check-lite env-init \
         deploy deploy-saas destroy destroy-saas \
         deploy-battles destroy-battles \
-        doctor local local-up local-down local-status local-evaluate
+        doctor local local-up local-down local-status local-list local-evaluate
 
 help:
 	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
@@ -185,6 +185,7 @@ doctor:
 local:
 	@sh scripts/onboard-bootstrap.sh $(ONBOARD_FLAGS)
 	@bun run scripts/tenkacloud-onboard.ts preflight $(ONBOARD_FLAGS)
+	@echo "Playing PROBLEM=$(PROBLEM). Run 'make local-list' to see other local-play problems."
 	@set -e; \
 	$(MAKE) local-up PROBLEM="$(PROBLEM)" LOCAL_API_PORT="$(LOCAL_API_PORT)"; \
 	trap '$(MAKE) local-down' EXIT INT TERM; \
@@ -198,6 +199,11 @@ local-down:
 
 local-status:
 	@bun run scripts/tenkacloud-local.ts status
+
+# Issue #2188: list local-play problems (id / category / display name) so
+# players can pick one instead of already needing to know its id.
+local-list:
+	@bun run scripts/tenkacloud-local.ts list
 
 local-evaluate:
 	@if [ -z "$(FLAG)" ]; then \

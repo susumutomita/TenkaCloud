@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseLoopbackUrl } from "./loopback";
 
@@ -89,11 +89,19 @@ export interface ContainerProblem {
 export interface ManifestFs {
   readonly existsSync: (path: string) => boolean;
   readonly readFileSync: (path: string) => string;
+  /** Directory entry names under `path` (used only by {@link listLocalPlayProblems}). */
+  readonly readDirNames?: (path: string) => readonly string[];
 }
 
 const NODE_FS: ManifestFs = {
   existsSync,
   readFileSync: (path) => readFileSync(path, "utf8"),
+  readDirNames: (path) => {
+    if (!existsSync(path)) return [];
+    return readdirSync(path, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+  },
 };
 
 interface RawMetadata {
@@ -293,6 +301,47 @@ export function resolveProblemDir(
     throw new Error(`problem "${problemId}" is ambiguous: ${matches.join(", ")}`);
   }
   return matches[0];
+}
+
+export interface LocalPlayProblemSummary {
+  readonly problemId: string;
+  readonly name: string;
+  /** The search root's directory name (e.g. `challenges` / `battles`). */
+  readonly category: string;
+}
+
+/**
+ * Issue #2188: enumerate every problem under `roots` that is playable locally
+ * (= `loadContainerProblem` accepts it — `runtime.provider=docker`, a
+ * `local/docker-compose.yml`, container-judged scoring). Problems that fail to
+ * load as a container problem (AWS-only, malformed, no compose entry) are
+ * skipped rather than failing the whole listing — `make local list` shows
+ * "what you *can* play", not a validation report.
+ */
+export function listLocalPlayProblems(
+  roots: readonly string[],
+  fs: ManifestFs = NODE_FS,
+): readonly LocalPlayProblemSummary[] {
+  const readDirNames = fs.readDirNames ?? NODE_FS.readDirNames;
+  if (!readDirNames) throw new Error("listLocalPlayProblems requires fs.readDirNames");
+  const summaries: LocalPlayProblemSummary[] = [];
+  for (const root of roots) {
+    for (const problemId of readDirNames(root)) {
+      const problemDir = join(root, problemId);
+      if (!fs.existsSync(join(problemDir, "metadata.json"))) continue;
+      try {
+        const problem = loadContainerProblem(problemDir, fs);
+        summaries.push({
+          problemId: problem.problemId,
+          name: problem.name,
+          category: basename(root),
+        });
+      } catch {
+        // Not a local-play container problem (e.g. AWS-only or malformed) — skip.
+      }
+    }
+  }
+  return [...summaries].sort((a, b) => a.problemId.localeCompare(b.problemId));
 }
 
 export function loadContainerProblem(

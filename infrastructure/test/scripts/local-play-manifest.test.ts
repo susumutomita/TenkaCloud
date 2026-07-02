@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  listLocalPlayProblems,
   loadContainerProblem,
   type ManifestFs,
   resolveProblemDir,
@@ -14,6 +15,23 @@ function fsWith(files: Record<string, string>): ManifestFs {
     readFileSync: (path) => {
       if (!Object.hasOwn(files, path)) throw new Error(`ENOENT: ${path}`);
       return files[path];
+    },
+  };
+}
+
+/** Same as {@link fsWith} but also derives `readDirNames` from the file map's own keys. */
+function fsWithDirs(files: Record<string, string>): ManifestFs {
+  const base = fsWith(files);
+  return {
+    ...base,
+    readDirNames: (path) => {
+      const prefix = `${path}/`;
+      const names = new Set<string>();
+      for (const key of Object.keys(files)) {
+        if (!key.startsWith(prefix)) continue;
+        names.add(key.slice(prefix.length).split("/")[0]);
+      }
+      return [...names];
     },
   };
 }
@@ -480,5 +498,59 @@ describe("loadContainerProblem: multi-verify (issue #2252)", () => {
     expect(() =>
       loadContainerProblem(DIR, fixture({ scoring: { kind: "flag", points: 100 } })),
     ).toThrow(/expected "verify" or "multi-verify"/);
+  });
+});
+
+describe("listLocalPlayProblems (issue #2188: make local list)", () => {
+  const CHALLENGES = "/repo/problems/challenges";
+  const BATTLES = "/repo/problems/battles";
+
+  function metadataFor(name: string): string {
+    return JSON.stringify({ ...VALID_METADATA, name });
+  }
+
+  it("should list local-play problems across roots, sorted by id, with category = root dir name", () => {
+    const fs = fsWithDirs({
+      [`${CHALLENGES}/sqli-demo/metadata.json`]: metadataFor("SQL Injection Demo"),
+      [`${CHALLENGES}/sqli-demo/local/docker-compose.yml`]: "services: {}",
+      [`${BATTLES}/net-evo-01/metadata.json`]: metadataFor("Network Evolution 01"),
+      [`${BATTLES}/net-evo-01/local/docker-compose.yml`]: "services: {}",
+    });
+    expect(listLocalPlayProblems([CHALLENGES, BATTLES], fs)).toEqual([
+      { problemId: "net-evo-01", name: "Network Evolution 01", category: "battles" },
+      { problemId: "sqli-demo", name: "SQL Injection Demo", category: "challenges" },
+    ]);
+  });
+
+  it("should skip a problem directory that is not a local container problem", () => {
+    const fs = fsWithDirs({
+      [`${CHALLENGES}/sqli-demo/metadata.json`]: metadataFor("SQL Injection Demo"),
+      [`${CHALLENGES}/sqli-demo/local/docker-compose.yml`]: "services: {}",
+      // aws-only problem: no runtime.provider=docker container delivery
+      [`${CHALLENGES}/aws-only/metadata.json`]: JSON.stringify({
+        name: "AWS Only",
+        scoring: { kind: "flag", points: 100 },
+      }),
+    });
+    expect(listLocalPlayProblems([CHALLENGES], fs)).toEqual([
+      { problemId: "sqli-demo", name: "SQL Injection Demo", category: "challenges" },
+    ]);
+  });
+
+  it("should skip a directory entry with no metadata.json", () => {
+    const fs = fsWithDirs({
+      [`${CHALLENGES}/sqli-demo/metadata.json`]: metadataFor("SQL Injection Demo"),
+      [`${CHALLENGES}/sqli-demo/local/docker-compose.yml`]: "services: {}",
+      // a stray non-problem directory (e.g. .git) with no metadata.json at all
+      [`${CHALLENGES}/.git/HEAD`]: "ref: refs/heads/main",
+    });
+    expect(listLocalPlayProblems([CHALLENGES], fs)).toEqual([
+      { problemId: "sqli-demo", name: "SQL Injection Demo", category: "challenges" },
+    ]);
+  });
+
+  it("should return an empty list when no root has any problems", () => {
+    const fs = fsWithDirs({});
+    expect(listLocalPlayProblems([CHALLENGES, BATTLES], fs)).toEqual([]);
   });
 });
