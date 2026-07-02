@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { Duration, RemovalPolicy } from "aws-cdk-lib";
+import { Duration } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import {
   ManagedPolicy,
@@ -8,21 +8,11 @@ import {
   Role,
   ServicePrincipal,
 } from "aws-cdk-lib/aws-iam";
-import {
-  Architecture,
-  type FunctionUrl,
-  FunctionUrlAuthType,
-  HttpMethod,
-} from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import { type FunctionUrl, FunctionUrlAuthType, HttpMethod } from "aws-cdk-lib/aws-lambda";
+import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
-import {
-  LAMBDA_NODEJS_BUNDLING_TARGET,
-  LAMBDA_NODEJS_RUNTIME,
-  LAMBDA_SOURCE_MAP_ENABLED,
-} from "../utils/lambda-runtime.js";
+import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 
 export interface CoordinationDispatcherLambdaProps {
   /** team-login-key 認証 (GSI2 Query) + coordination state 行 (PK=COORD#...) の Get/Put 先。 */
@@ -95,14 +85,8 @@ export class CoordinationDispatcherLambda extends Construct {
       ],
     });
 
-    this.fn = new NodejsFunction(this, "Function", {
-      logGroup: new LogGroup(this, "FunctionLogGroup", {
-        removalPolicy: RemovalPolicy.DESTROY,
-      }),
-      runtime: LAMBDA_NODEJS_RUNTIME,
-      architecture: Architecture.ARM_64,
+    this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "handlers/coordination-dispatcher-handler/index.ts"),
-      handler: "handler",
       timeout: Duration.seconds(10),
       memorySize: 512,
       role,
@@ -117,18 +101,12 @@ export class CoordinationDispatcherLambda extends Construct {
           : {}),
         NODE_OPTIONS: "--enable-source-maps",
       },
-      bundling: {
-        minify: true,
-        target: LAMBDA_NODEJS_BUNDLING_TARGET,
-        sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
-        externalModules: [],
-        // ADR-030 Phase 3 config layer: coordination catalog を build 時 literal 置換 (env 4KB 回避、
-        // scoring/disruptions と同方式)。 未宣言なら `{}` → scope resolver は全 team で not_configured。
-        define: {
-          "process.env.PROBLEM_COORDINATION": JSON.stringify(
-            JSON.stringify(props.problemsCoordination ?? {}),
-          ),
-        },
+      // ADR-030 Phase 3 config layer: coordination catalog を build 時 literal 置換 (env 4KB 回避、
+      // scoring/disruptions と同方式)。 未宣言なら `{}` → scope resolver は全 team で not_configured。
+      bundlingDefine: {
+        "process.env.PROBLEM_COORDINATION": JSON.stringify(
+          JSON.stringify(props.problemsCoordination ?? {}),
+        ),
       },
     });
 
