@@ -73,7 +73,9 @@ marked right or wrong.
 
 A container Challenge can score several independent checkpoints with partial
 points. `metadata.json` declares them (points are the platform's single source
-of truth — the container's `points` override is ignored for multi-verify):
+of truth — the container's `points` override is ignored for multi-verify). The
+worked reference is [`wp-exposed-backup`](https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/wp-exposed-backup)
+(4 checkpoints); a minimal copy-pasteable shape:
 
 ```jsonc
 "scoring": {
@@ -81,13 +83,20 @@ of truth — the container's `points` override is ignored for multi-verify):
   "checks": [
     { "id": "public-backup", "label": "公開バックアップ", "points": 50,
       "wrongAnswerPenalty": 5,
-      "hints": [{ "id": "h-backup", "content": "公開パスを確認する", "penalty": 2 }] }
+      "hints": [{ "id": "h-backup", "content": "公開パスを確認する", "penalty": 2 }] },
+    { "id": "exposed-config", "label": "設定ファイルの控え", "points": 50,
+      "wrongAnswerPenalty": 5 }
   ]
 }
 ```
 
-- `checks[].id` matches `^[a-z0-9-]+$` and is unique; hint ids must be unique
-  across the whole problem (the portal reveal route is keyed on `hintId`).
+- `checks` has 2–8 entries (4–6 recommended). Each `checks[].id` matches
+  `^[a-z0-9][a-z0-9-]{0,63}$` and is unique; hint ids must be unique across the
+  whole problem (the portal reveal route is keyed on `hintId`).
+- `checks[].label` is ≤80 chars; `wrongAnswerPenalty` (if set) is ≤ that
+  check's `points`. Points are positive integers and their sum is the problem
+  total. These structural rules are enforced identically by the platform SDK
+  parser, the local-play manifest loader, and the catalog validator.
 - `checks[].label` / `hints` are competitor-facing: never spoil the
   vulnerability class in them. Translate them via `i18n.en.checks[]`
   (`id` + `label` + `hints` — never repeat points/ids in the overlay).
