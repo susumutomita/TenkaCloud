@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
-import { TENANT_ROLES } from "../deploy-handler/auth.js";
+import { TENANT_ADMIN_ROLE, TENANT_ROLES } from "../deploy-handler/auth.js";
 import { buildAuthErrorHandler, createRoleCheckMiddleware } from "../shared/auth-wiring.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
 import { registerAuditLogRoutes } from "./routes/audit-log.js";
@@ -68,6 +68,16 @@ app.onError(buildAuthErrorHandler({ logPrefix: "[events]" }));
 // 3 role 全部 OK (= Viewer も event 観覧可)。
 // healthz は skip。
 app.use("/events/*", createRoleCheckMiddleware({ healthzPath: "/healthz", roles: TENANT_ROLES }));
+
+// Issue #2200: 本 Lambda は /events/* に加えて /admin/* (= audit-log read) も配信する。
+// 各 handler 1 行目の `requireRole` (defense in depth として残す) に加えて blanket でも
+// TenantAdmin を要求し、 将来 /admin/* に route を足して requireRole を書き忘れても
+// fail-closed になるよう deploy-handler ("*") / competitor-accounts-handler ("/admin/*")
+// と構造を揃える。
+app.use(
+  "/admin/*",
+  createRoleCheckMiddleware({ healthzPath: "/healthz", roles: [TENANT_ADMIN_ROLE] }),
+);
 
 app.get("/events/healthz", (c) => c.json({ ok: true }));
 
