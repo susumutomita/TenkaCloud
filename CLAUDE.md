@@ -64,6 +64,9 @@ We don't use a single-table DynamoDB design. Each stack owns its own tables (Ten
 | `make lint`             | markdownlint + textlint + biome                                          |
 | `make fix`              | Auto-fix variant of the above (`make format` works too)                  |
 | `make before-commit`    | lint + test (required gate before opening a PR)                          |
+| `make dev`              | Start all 3 SPA dev servers in parallel (admin-console :5173 / application-admin-console :5174 / participant-portal :5175) |
+| `make synth`            | Full `cdk synth` (real Lambda bundling — matches what `deploy` runs)     |
+| `make check-synth`      | Fast synth-shape check (`CDK_SKIP_BUNDLING=1`) + IAM Description ASCII gate |
 | `make deploy`           | **Lite mode** (single-tenant) deploy. Stands up AppPlaneCore + Participant Portal via `infrastructure/bin/tenkacloud-lite.ts` (#955) |
 | `make deploy-saas`      | **SaaS mode** (multi-tenant) deploy. Runs `scripts/install.sh` (3-phase deploy, stands up SBT ControlPlane) |
 | `make destroy`          | Tear down Lite mode                                                       |
@@ -225,7 +228,7 @@ Add packages to `trustedDependencies` in a stand-alone PR. Manually verify the s
 
 ### Lite mode (default, `make deploy`)
 
-Issue #955 switched the default for `make deploy` to single-tenant Lite mode. It skips the SBT ControlPlane / tenant pipeline / SystemAdmin invitation entirely and deploys just two stacks via `infrastructure/bin/tenkacloud-lite.ts`: AppPlaneCore (`tenantId="local"`) + ProblemDeployBackend (Participant Portal). It is the single-tenant path for one organizer running one event. Teardown is `make destroy` (`make lite-down`).
+Issue #955 switched the default for `make deploy` to single-tenant Lite mode. It skips the SBT ControlPlane / tenant pipeline / SystemAdmin invitation entirely and deploys just two stacks via `infrastructure/bin/tenkacloud-lite.ts`: AppPlaneCore (`tenantId="local"`) + ProblemDeployBackend (Participant Portal). It is the single-tenant path for one organizer running one event. Teardown is `make destroy` (runs `scripts/tenkacloud-lite.ts down`).
 
 ### SaaS mode (opt-in, `make deploy-saas`)
 
