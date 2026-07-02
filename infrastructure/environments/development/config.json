@@ -3,32 +3,6 @@
   "accountId": "${AWS_ACCOUNT_ID}",
   "region": "${AWS_REGION:-ap-northeast-1}",
   "environment": "development",
-  "controlPlaneConfig": {
-    "systemAdminEmail": "${SYSTEM_ADMIN_EMAIL}",
-    "systemAdminRoleName": "${SYSTEM_ADMIN_ROLE_NAME:-SystemAdmin}",
-    "enableAdvancedSecurityMode": false,
-    "setAPIGWScopes": false,
-    "disableAPILogging": true,
-    "primaryCallbackUrl": "http://localhost:5173/callback",
-    "additionalCallbackUrls": [
-      "http://localhost:4180/callback",
-      "http://localhost:5173/callback",
-      "http://localhost:4173/callback"
-    ],
-    "additionalLogoutUrls": [
-      "http://localhost:4180/",
-      "http://localhost:5173/",
-      "http://localhost:4173/"
-    ],
-    "allowedCorsOrigins": [
-      "http://localhost:4180",
-      "http://localhost:5173",
-      "http://localhost:4173"
-    ]
-  },
-  "bootstrapConfig": {
-    "tenantCfnStackPrefix": "TenkaCloud-tenant"
-  },
   "dynamoDbConfig": {
     "billingMode": "${DYNAMODB_BILLING_MODE:-PROVISIONED}",
     "readCapacity": "${DYNAMODB_READ_CAPACITY:-1}",

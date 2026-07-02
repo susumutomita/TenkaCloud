@@ -12,6 +12,7 @@ import {
   LAMBDA_NODEJS_RUNTIME,
   LAMBDA_SOURCE_MAP_ENABLED,
 } from "../utils/lambda-runtime.js";
+import { SBT_ONBOARDING_DETAIL_TYPES } from "./handlers/system-audit-writer/sbt-detail-types.js";
 
 export interface SystemAuditWriterLambdaProps {
   /** SBT ControlPlane が払い出す共通 EventBus。 */
@@ -80,14 +81,9 @@ export class SystemAuditWriterLambda extends Construct {
       description:
         "Route SBT tenant onboarding/offboarding events to SystemAuditWriter Lambda (Issue #1034)",
       eventPattern: {
-        detailType: [
-          "onboardingRequest",
-          "onboardingSuccess",
-          "onboardingFailure",
-          "offboardingRequest",
-          "offboardingSuccess",
-          "offboardingFailure",
-        ],
+        // Issue #2201: handler の対応表 (SBT_DETAIL_TYPE_TO_ACTION) とキー集合を共有し、
+        // 「フィルタは通すが監査されない」/「フィルタで落ちる」の無音ドリフトを防ぐ。
+        detailType: [...SBT_ONBOARDING_DETAIL_TYPES],
       },
       targets: [new LambdaFunction(this.fn)],
     });
