@@ -20,6 +20,7 @@ import { IdentityProvidersPage } from "./pages/IdentityProviders";
 import { LoginPage } from "./pages/Login";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
 import { ProblemsPage } from "./pages/Problems";
+import { SettingsPage } from "./pages/Settings";
 import { TenantUsersPage } from "./pages/TenantUsers";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -106,6 +107,8 @@ function AppRoutes({ baseConfig }: { baseConfig: AppConfig }) {
       {/* Issue #1292: Tenant Admin 向け audit log view (= 自テナント scope only) */}
       <Route path="/audit-log" element={guarded(<AuditLogPage config={config} />, config)} />
       <Route path="/users" element={guarded(<TenantUsersPage config={config} />, config)} />
+      {/* Issue #2231: per-tenant runtime feature-flag toggle. */}
+      <Route path="/settings" element={guarded(<SettingsPage config={config} />, config)} />
       {/* Issue #1294: Tenant SAML SSO IdP CRUD (silo tier only) */}
       <Route
         path="/identity-providers"
