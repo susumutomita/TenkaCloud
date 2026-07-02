@@ -1,4 +1,5 @@
-import type { Finding, Rule, RuleContext } from "../types.ts";
+import { scanLinesByRegex } from "../scan-lines.ts";
+import type { Rule } from "../types.ts";
 
 /**
  * cost-zero principle (CLAUDE.md): AWS Secrets Manager は per-secret 課金が発生するため
@@ -28,38 +29,26 @@ function shouldInspect(path: string): boolean {
 export const secretsManagerForbidden: Rule = {
   id: "secrets-manager-forbidden",
   severity: "error",
-  check(ctx: RuleContext): readonly Finding[] {
-    const findings: Finding[] = [];
-    for (const path of ctx.files) {
-      if (!shouldInspect(path)) continue;
-      let content: string;
-      try {
-        content = ctx.readFile(path);
-      } catch {
-        continue;
-      }
-      const lines = content.split("\n");
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (!line) continue;
-        const m = line.match(SECRETS_MANAGER_IMPORT_RE);
-        if (!m) continue;
-        findings.push({
-          ruleId: "secrets-manager-forbidden",
-          severity: "error",
-          filePath: path,
-          line: i + 1,
-          match: m[1] ?? "secrets-manager",
-          message:
-            "AWS Secrets Manager is forbidden (per-secret cost). Import of " +
-            (m[1] ?? "secrets-manager") +
-            " detected.",
+  check(ctx) {
+    // NOTE: `stripComments` is intentionally left off here — this rule historically
+    // did NOT skip comment lines, so a commented-out import is (currently) still a
+    // hit. Aligning it with `handler-must-not-call-fetch`'s comment-stripping is a
+    // behaviour change tracked separately (#2218), not folded into this extraction.
+    return scanLinesByRegex(ctx, {
+      ruleId: "secrets-manager-forbidden",
+      severity: "error",
+      shouldInspect,
+      lineRegex: SECRETS_MANAGER_IMPORT_RE,
+      buildFinding: ({ line }) => {
+        const name = line.match(SECRETS_MANAGER_IMPORT_RE)?.[1] ?? "secrets-manager";
+        return {
+          match: name,
+          message: `AWS Secrets Manager is forbidden (per-secret cost). Import of ${name} detected.`,
           recommendation:
             "Store the secret in SSM Parameter Store as a SecureString (standard tier is free). " +
             "See CLAUDE.md cost-zero principle.",
-        });
-      }
-    }
-    return findings;
+        };
+      },
+    });
   },
 };
