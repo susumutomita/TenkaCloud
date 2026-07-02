@@ -69,6 +69,45 @@ reflects `correct` into the score. If `/verify` is unreachable or returns an
 invalid verdict, the submission fails loudly (HTTP 502) — it is never silently
 marked right or wrong.
 
+### Multi-checkpoint problems (`scoring.kind: multi-verify`, #2252)
+
+A container Challenge can score several independent checkpoints with partial
+points. `metadata.json` declares them (points are the platform's single source
+of truth — the container's `points` override is ignored for multi-verify):
+
+```jsonc
+"scoring": {
+  "kind": "multi-verify",
+  "checks": [
+    { "id": "public-backup", "label": "公開バックアップ", "points": 50,
+      "wrongAnswerPenalty": 5,
+      "hints": [{ "id": "h-backup", "content": "公開パスを確認する", "penalty": 2 }] }
+  ]
+}
+```
+
+- `checks[].id` matches `^[a-z0-9-]+$` and is unique; hint ids must be unique
+  across the whole problem (the portal reveal route is keyed on `hintId`).
+- `checks[].label` / `hints` are competitor-facing: never spoil the
+  vulnerability class in them. Translate them via `i18n.en.checks[]`
+  (`id` + `label` + `hints` — never repeat points/ids in the overlay).
+- The verify exchange adds `checkpointId`, and the container **must echo it**:
+
+```jsonc
+// request
+{ "checkpointId": "public-backup", "submission": "<string>", "context": { ... } }
+// response
+{ "checkpointId": "public-backup", "correct": true, "message": "..." }
+```
+
+A missing/mismatched echo, or a `checkpointId` that is not declared in
+`metadata.json`, fails closed — it is never forwarded, scored, or attributed to
+another checkpoint. Scoring is idempotent per `(problemId, checkpointId)`: a
+solved checkpoint is never re-awarded or re-penalized, and the problem counts
+as completed on the leaderboard only when every checkpoint is solved. The
+portal renders checkpoints through the existing multi-flag panel (one
+submission box per checkpoint, per-checkpoint hints).
+
 ## Authoring a container problem
 
 One directory = one problem. Problems live **only** in the
