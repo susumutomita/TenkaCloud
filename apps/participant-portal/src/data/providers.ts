@@ -23,3 +23,20 @@ export function providerLabel(provider: string): string {
 export function problemProvider(problem: { readonly provider?: string }): string {
   return typeof problem.provider === "string" && problem.provider !== "" ? problem.provider : "aws";
 }
+
+/**
+ * [#2235 / ADR-048 §5.1] external-portal capability の宛先。プラットフォーム所有の
+ * 定数マップ — problem metadata / 参加者入力からは供給しない (= redirect vector を
+ * 作らない)。公開コンソールのサインインページなので問題情報の漏えいも無い。
+ * aws はここに載せない (managed console 経路 = SSO federation を使う)。
+ */
+export const EXTERNAL_PORTAL_URL: Record<string, string> = {
+  gcp: "https://console.cloud.google.com/",
+  azure: "https://portal.azure.com/",
+  sakura: "https://secure.sakura.ad.jp/cloud/",
+};
+
+/** external-portal の宛先 URL。マップ外 (aws / 未知 provider) は undefined (prototype 連鎖は引かない)。 */
+export function externalPortalUrl(provider: string): string | undefined {
+  return Object.hasOwn(EXTERNAL_PORTAL_URL, provider) ? EXTERNAL_PORTAL_URL[provider] : undefined;
+}

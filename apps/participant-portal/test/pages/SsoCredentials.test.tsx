@@ -162,6 +162,86 @@ describe("SsoCredentialsPage render branches", () => {
     expect(screen.getByText("oraclecloud")).toBeInTheDocument();
   });
 
+  it("should link the external portal for a non-AWS problem with the capability", () => {
+    // [#2235] backend が external-portal capability を配信したら、プラットフォーム定数の
+    // プロバイダポータル URL への導線と手順を出す (宛先は participant 入力から供給しない)。
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [
+          problem({
+            jobId: "job-2",
+            problemId: "gcp-quest",
+            provider: "gcp",
+            accessCapabilities: ["external-portal"],
+          }),
+        ],
+      },
+      error: undefined,
+    });
+    renderPage();
+    const link = screen.getByRole("link", {
+      name: 'sso_credentials.external_portal_aria|{"problemId":"gcp-quest"}',
+    });
+    expect(link).toHaveAttribute("href", "https://console.cloud.google.com/");
+    expect(
+      screen.getByText('sso_credentials.external_portal_hint|{"provider":"Google Cloud"}'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('sso_credentials.non_aws_body|{"provider":"Google Cloud"}'),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should keep the host-guidance text when the capability is absent (older backend)", () => {
+    // 旧 backend 応答 (accessCapabilities 不在) では導線を追加しない — 従来の案内文のまま。
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [problem({ jobId: "job-2", problemId: "sakura-quest", provider: "sakura" })],
+      },
+      error: undefined,
+    });
+    renderPage();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(
+      screen.getByText('sso_credentials.non_aws_body|{"provider":"Sakura Cloud"}'),
+    ).toBeInTheDocument();
+  });
+
+  it("should not link a portal for an unsupported provider", () => {
+    // 未知 provider は capability=unsupported かつ定数マップ外 — 導線を出さない。
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [
+          problem({
+            jobId: "job-9",
+            problemId: "mystery",
+            provider: "oraclecloud",
+            accessCapabilities: ["unsupported"],
+          }),
+        ],
+      },
+      error: undefined,
+    });
+    renderPage();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(
+      screen.getByText('sso_credentials.non_aws_body|{"provider":"oraclecloud"}'),
+    ).toBeInTheDocument();
+  });
+
+  it("should keep the AWS problem flow unchanged when capabilities are present", () => {
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [
+          problem({ provider: "aws", accessCapabilities: ["console", "cli-credentials"] }),
+        ],
+      },
+      error: undefined,
+    });
+    renderPage();
+    expect(screen.getByText("sso_credentials.open_console_button")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
   it("should keep the page populated when the team has only non-AWS problems", () => {
     // 全問非 AWS でも空白ページにしない (以前は filter で全滅 → 空 state も出ない不具合形)。
     mockTeamView.mockReturnValue({
