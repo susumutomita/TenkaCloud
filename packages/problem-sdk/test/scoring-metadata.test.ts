@@ -306,3 +306,98 @@ describe("parseScoringMetadata: composite-probe", () => {
     ).toBeUndefined();
   });
 });
+
+describe("parseScoringMetadata: multi-verify (issue #2252)", () => {
+  const validCheck = (over: Record<string, unknown> = {}) => ({
+    id: "public-backup",
+    label: "公開バックアップ",
+    points: 50,
+    ...over,
+  });
+  const valid = (checks: unknown[] = [validCheck()]) => ({ kind: "multi-verify", checks });
+
+  it("should parse a minimal multi-verify with one check", () => {
+    expect(parseScoringMetadata(valid())).toEqual({
+      kind: "multi-verify",
+      checks: [
+        {
+          id: "public-backup",
+          label: "公開バックアップ",
+          points: 50,
+          wrongAnswerPenalty: undefined,
+        },
+      ],
+    });
+  });
+
+  it("should carry wrongAnswerPenalty and per-check hints", () => {
+    const parsed = parseScoringMetadata(
+      valid([
+        validCheck({
+          wrongAnswerPenalty: 5,
+          hints: [{ id: "location", content: "公開パスを確認する", penalty: 0 }],
+        }),
+      ]),
+    );
+    expect(parsed).toEqual({
+      kind: "multi-verify",
+      checks: [
+        {
+          id: "public-backup",
+          label: "公開バックアップ",
+          points: 50,
+          wrongAnswerPenalty: 5,
+          hints: [{ id: "location", content: "公開パスを確認する", penalty: 0 }],
+        },
+      ],
+    });
+  });
+
+  it("should reject empty / missing checks (fail-closed)", () => {
+    expect(parseScoringMetadata({ kind: "multi-verify", checks: [] })).toBeUndefined();
+    expect(parseScoringMetadata({ kind: "multi-verify" })).toBeUndefined();
+  });
+
+  it("should reject duplicate check ids (never partial-drop)", () => {
+    expect(
+      parseScoringMetadata(valid([validCheck(), validCheck({ label: "別ラベル" })])),
+    ).toBeUndefined();
+  });
+
+  it("should reject ids that do not match ^[a-z0-9-]+$", () => {
+    for (const id of ["Public-Backup", "public_backup", "check 1", ""]) {
+      expect(parseScoringMetadata(valid([validCheck({ id })]))).toBeUndefined();
+    }
+  });
+
+  it("should reject non-positive / non-integer points (whole object, not the check)", () => {
+    for (const points of [0, -10, 12.5, "50", Number.NaN]) {
+      expect(parseScoringMetadata(valid([validCheck({ points })]))).toBeUndefined();
+    }
+  });
+
+  it("should reject a missing / empty label", () => {
+    expect(parseScoringMetadata(valid([validCheck({ label: "" })]))).toBeUndefined();
+    expect(parseScoringMetadata(valid([validCheck({ label: undefined })]))).toBeUndefined();
+  });
+
+  it("should reject duplicate hint ids within one check (reveal records key on them)", () => {
+    const parsed = parseScoringMetadata(
+      valid([
+        validCheck({
+          hints: [
+            { id: "h1", content: "a", penalty: 0 },
+            { id: "h1", content: "b", penalty: 0 },
+          ],
+        }),
+      ]),
+    );
+    expect(parsed).toBeUndefined();
+  });
+
+  it("should reject one invalid check even when siblings are valid (total must not change)", () => {
+    expect(
+      parseScoringMetadata(valid([validCheck(), validCheck({ id: "second", points: 0 })])),
+    ).toBeUndefined();
+  });
+});
