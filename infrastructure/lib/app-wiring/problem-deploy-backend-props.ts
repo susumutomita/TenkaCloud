@@ -39,6 +39,8 @@ export function buildProblemDeployBackendBaseProps(config: AppConfig) {
       Record<string, string>
     >,
     deployConcurrentBuildLimit: config.deployConcurrentBuildLimit,
+    // Issue #2232: was permanently unreachable in production (no CDK_PARAM_* wired it true).
+    useBulkDistributedMap: config.useBulkDistributedMap,
     environmentName: config.environment,
   } as const;
 }
