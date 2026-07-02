@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  listLocalPlayProblems,
   loadContainerProblem,
   type ManifestFs,
   resolveProblemDir,
@@ -14,6 +15,23 @@ function fsWith(files: Record<string, string>): ManifestFs {
     readFileSync: (path) => {
       if (!Object.hasOwn(files, path)) throw new Error(`ENOENT: ${path}`);
       return files[path];
+    },
+  };
+}
+
+/** Same as {@link fsWith} but also derives `readDirNames` from the file map's own keys. */
+function fsWithDirs(files: Record<string, string>): ManifestFs {
+  const base = fsWith(files);
+  return {
+    ...base,
+    readDirNames: (path) => {
+      const prefix = `${path}/`;
+      const names = new Set<string>();
+      for (const key of Object.keys(files)) {
+        if (!key.startsWith(prefix)) continue;
+        names.add(key.slice(prefix.length).split("/")[0]);
+      }
+      return [...names];
     },
   };
 }
@@ -80,6 +98,7 @@ describe("loadContainerProblem", () => {
     expect(problem.verifyUrl).toBe("http://127.0.0.1:18081/verify");
     expect(problem.secretEnv).toEqual(["FLAG_SEED"]);
     expect(problem.scoring).toEqual({
+      kind: "verify",
       points: 200,
       wrongAnswerPenalty: 10,
       hints: [{ id: "hint-1", content: "Try a quote.", penalty: 0 }],
@@ -107,7 +126,12 @@ describe("loadContainerProblem", () => {
     expect(problem.description).toBe("");
     expect(problem.instructions).toBe("");
     expect(problem.secretEnv).toEqual([]);
-    expect(problem.scoring).toEqual({ points: 100, wrongAnswerPenalty: 0, hints: [] });
+    expect(problem.scoring).toEqual({
+      kind: "verify",
+      points: 100,
+      wrongAnswerPenalty: 0,
+      hints: [],
+    });
   });
 
   it("should reject a non-verify scoring kind", () => {
@@ -336,5 +360,197 @@ describe("manifest loader against the real filesystem", () => {
     expect(problem.problemId).toBe("fixture-problem");
     expect(problem.composeProjectName).toBe("tc-local-fixture-problem");
     expect(problem.scoring.points).toBe(150);
+  });
+});
+
+describe("loadContainerProblem: multi-verify (issue #2252)", () => {
+  const check = (over: Record<string, unknown> = {}) => ({
+    id: "public-backup",
+    label: "公開バックアップ",
+    points: 50,
+    ...over,
+  });
+  // A distinct, always-valid sibling so fixtures satisfy the 2-check minimum
+  // while a test exercises the first check.
+  const other = (over: Record<string, unknown> = {}) => ({
+    id: "exposed-config",
+    label: "設定ファイルの控え",
+    points: 50,
+    ...over,
+  });
+  const multiVerify = (checks: unknown[], i18nChecks?: unknown[]) =>
+    fixture({
+      scoring: { kind: "multi-verify", checks },
+      ...(i18nChecks ? { i18n: { en: { name: "WP Ops", checks: i18nChecks } } } : {}),
+    });
+
+  it("should parse checks with per-check penalty/hints and compute totalPoints", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      multiVerify([
+        check({
+          wrongAnswerPenalty: 5,
+          hints: [{ id: "h-backup", content: "公開パスを確認する", penalty: 2 }],
+        }),
+        check({ id: "weak-admin-pw", label: "弱い管理者パスワード", points: 70 }),
+      ]),
+    );
+    expect(problem.scoring).toEqual({
+      kind: "multi-verify",
+      totalPoints: 120,
+      checks: [
+        {
+          id: "public-backup",
+          label: "公開バックアップ",
+          points: 50,
+          wrongAnswerPenalty: 5,
+          hints: [{ id: "h-backup", content: "公開パスを確認する", penalty: 2 }],
+        },
+        {
+          id: "weak-admin-pw",
+          label: "弱い管理者パスワード",
+          points: 70,
+          wrongAnswerPenalty: 0,
+          hints: [],
+        },
+      ],
+    });
+  });
+
+  it("should overlay i18n.en.checks label + hint content by id (scoring stays top-level)", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      multiVerify(
+        [
+          check({ hints: [{ id: "h-backup", content: "公開パスを確認する", penalty: 0 }] }),
+          other(),
+        ],
+        [
+          {
+            id: "public-backup",
+            label: "Public backup",
+            hints: [{ id: "h-backup", content: "Check the public path" }],
+          },
+        ],
+      ),
+    );
+    expect(problem.scoring.kind).toBe("multi-verify");
+    if (problem.scoring.kind !== "multi-verify") throw new Error("unreachable");
+    expect(problem.scoring.checks[0].i18n).toEqual({ en: { label: "Public backup" } });
+    expect(problem.scoring.checks[0].hints[0].i18n).toEqual({
+      en: { content: "Check the public path" },
+    });
+  });
+
+  it("should enforce the 2–8 check count (fail-closed)", () => {
+    expect(() => loadContainerProblem(DIR, multiVerify([]))).toThrow(/2–8 entries/);
+    expect(() => loadContainerProblem(DIR, multiVerify([check()]))).toThrow(/2–8 entries/);
+    const nine = Array.from({ length: 9 }, (_, i) => check({ id: `c${i}` }));
+    expect(() => loadContainerProblem(DIR, multiVerify(nine))).toThrow(/2–8 entries/);
+  });
+
+  it("should fail loudly on duplicate ids / bad id / non-integer points", () => {
+    expect(() => loadContainerProblem(DIR, multiVerify([check(), check()]))).toThrow(
+      /is duplicated/,
+    );
+    expect(() =>
+      loadContainerProblem(DIR, multiVerify([check({ id: "Bad_ID" }), other()])),
+    ).toThrow(/must match/);
+    expect(() => loadContainerProblem(DIR, multiVerify([check({ id: "-lead" }), other()]))).toThrow(
+      /must match/,
+    );
+    expect(() =>
+      loadContainerProblem(DIR, multiVerify([check({ points: 12.5 }), other()])),
+    ).toThrow(/positive integer/);
+    expect(() => loadContainerProblem(DIR, multiVerify([check({ points: 0 }), other()]))).toThrow(
+      /positive integer/,
+    );
+  });
+
+  it("should reject a label longer than 80 chars and a penalty above the check points", () => {
+    expect(() =>
+      loadContainerProblem(DIR, multiVerify([check({ label: "あ".repeat(81) }), other()])),
+    ).toThrow(/80 characters or fewer/);
+    expect(() =>
+      loadContainerProblem(
+        DIR,
+        multiVerify([check({ points: 50, wrongAnswerPenalty: 51 }), other()]),
+      ),
+    ).toThrow(/must not exceed the check points/);
+  });
+
+  it("should fail loudly when hint ids collide across checks (reveal route is keyed on hintId)", () => {
+    expect(() =>
+      loadContainerProblem(
+        DIR,
+        multiVerify([
+          check({ hints: [{ id: "shared", content: "a", penalty: 0 }] }),
+          check({
+            id: "second",
+            hints: [{ id: "shared", content: "b", penalty: 0 }],
+          }),
+        ]),
+      ),
+    ).toThrow(/unique across the problem/);
+  });
+
+  it("should keep rejecting non-container scoring kinds", () => {
+    expect(() =>
+      loadContainerProblem(DIR, fixture({ scoring: { kind: "flag", points: 100 } })),
+    ).toThrow(/expected "verify" or "multi-verify"/);
+  });
+});
+
+describe("listLocalPlayProblems (issue #2188: make local list)", () => {
+  const CHALLENGES = "/repo/problems/challenges";
+  const BATTLES = "/repo/problems/battles";
+
+  function metadataFor(name: string): string {
+    return JSON.stringify({ ...VALID_METADATA, name });
+  }
+
+  it("should list local-play problems across roots, sorted by id, with category = root dir name", () => {
+    const fs = fsWithDirs({
+      [`${CHALLENGES}/sqli-demo/metadata.json`]: metadataFor("SQL Injection Demo"),
+      [`${CHALLENGES}/sqli-demo/local/docker-compose.yml`]: "services: {}",
+      [`${BATTLES}/net-evo-01/metadata.json`]: metadataFor("Network Evolution 01"),
+      [`${BATTLES}/net-evo-01/local/docker-compose.yml`]: "services: {}",
+    });
+    expect(listLocalPlayProblems([CHALLENGES, BATTLES], fs)).toEqual([
+      { problemId: "net-evo-01", name: "Network Evolution 01", category: "battles" },
+      { problemId: "sqli-demo", name: "SQL Injection Demo", category: "challenges" },
+    ]);
+  });
+
+  it("should skip a problem directory that is not a local container problem", () => {
+    const fs = fsWithDirs({
+      [`${CHALLENGES}/sqli-demo/metadata.json`]: metadataFor("SQL Injection Demo"),
+      [`${CHALLENGES}/sqli-demo/local/docker-compose.yml`]: "services: {}",
+      // aws-only problem: no runtime.provider=docker container delivery
+      [`${CHALLENGES}/aws-only/metadata.json`]: JSON.stringify({
+        name: "AWS Only",
+        scoring: { kind: "flag", points: 100 },
+      }),
+    });
+    expect(listLocalPlayProblems([CHALLENGES], fs)).toEqual([
+      { problemId: "sqli-demo", name: "SQL Injection Demo", category: "challenges" },
+    ]);
+  });
+
+  it("should skip a directory entry with no metadata.json", () => {
+    const fs = fsWithDirs({
+      [`${CHALLENGES}/sqli-demo/metadata.json`]: metadataFor("SQL Injection Demo"),
+      [`${CHALLENGES}/sqli-demo/local/docker-compose.yml`]: "services: {}",
+      // a stray non-problem directory (e.g. .git) with no metadata.json at all
+      [`${CHALLENGES}/.git/HEAD`]: "ref: refs/heads/main",
+    });
+    expect(listLocalPlayProblems([CHALLENGES], fs)).toEqual([
+      { problemId: "sqli-demo", name: "SQL Injection Demo", category: "challenges" },
+    ]);
+  });
+
+  it("should return an empty list when no root has any problems", () => {
+    const fs = fsWithDirs({});
+    expect(listLocalPlayProblems([CHALLENGES, BATTLES], fs)).toEqual([]);
   });
 });

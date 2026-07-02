@@ -761,6 +761,8 @@ footer .wrap {
 footer h5 { font-size: 11px; font-weight: 800; color: var(--ink); margin: 0 0 10px; }
 footer a { display: block; color: var(--ink-3); text-decoration: none; font-size: 11px; padding: 3px 0; }
 footer a:hover { color: var(--ink); text-decoration: underline; }
+footer a.social-link { display: inline-flex; align-items: center; gap: 6px; }
+footer a.social-link svg { flex: none; }
 footer .brand { font-size: 14px; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 12px; }
 footer .tag { font-size: 10px; color: var(--ink-3); line-height: 1.6; max-width: 280px; }
 footer .disclaimer {

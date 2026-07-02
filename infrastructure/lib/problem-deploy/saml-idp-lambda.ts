@@ -1,17 +1,11 @@
 import * as path from "node:path";
-import { Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import type { IUserPool } from "aws-cdk-lib/aws-cognito";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import * as iam from "aws-cdk-lib/aws-iam";
-import { Architecture } from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
-import {
-  LAMBDA_NODEJS_BUNDLING_TARGET,
-  LAMBDA_NODEJS_RUNTIME,
-  LAMBDA_SOURCE_MAP_ENABLED,
-} from "../utils/lambda-runtime.js";
+import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 
 export interface SamlIdpLambdaProps {
   /**
@@ -54,14 +48,8 @@ export class SamlIdpLambda extends Construct {
     super(scope, id);
     const stack = Stack.of(this);
 
-    this.fn = new NodejsFunction(this, "Function", {
-      logGroup: new LogGroup(this, "FunctionLogGroup", {
-        removalPolicy: RemovalPolicy.DESTROY,
-      }),
-      runtime: LAMBDA_NODEJS_RUNTIME,
-      architecture: Architecture.ARM_64,
+    this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "../tenant-template/handlers/idp-handler/index.ts"),
-      handler: "handler",
       timeout: Duration.seconds(30),
       memorySize: 512,
       environment: {
@@ -69,12 +57,6 @@ export class SamlIdpLambda extends Construct {
         TENANT_USER_POOL_ID: props.userPool.userPoolId,
         IDP_TIER_GUARD: props.idpTierGuard,
         NODE_OPTIONS: "--enable-source-maps",
-      },
-      bundling: {
-        minify: true,
-        target: LAMBDA_NODEJS_BUNDLING_TARGET,
-        sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
-        externalModules: [],
       },
     });
 

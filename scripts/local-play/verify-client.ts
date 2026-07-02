@@ -29,6 +29,8 @@ const VerifyResponseSchema = z.object({
   correct: z.boolean(),
   points: z.number().finite().nonnegative().optional(),
   message: z.string().max(2_000).optional(),
+  /** [#2252] echo of the judged checkpoint (required when the request sent one). */
+  checkpointId: z.string().max(200).optional(),
 });
 
 const DEFAULT_TIMEOUT_MS = 5_000;
@@ -38,6 +40,13 @@ export interface VerifyOptions {
   readonly timeoutMs?: number;
   /** Injectable for tests; defaults to the global fetch. */
   readonly fetchImpl?: typeof fetch;
+  /**
+   * [#2252] multi-verify: which checkpoint this submission targets. Sent as a
+   * top-level `checkpointId` field; the container MUST echo it back and the
+   * echo is enforced here (a mismatched or missing echo fails the submission
+   * loudly — never mis-attribute a verdict to another checkpoint).
+   */
+  readonly checkpointId?: string;
 }
 
 async function readCappedText(response: Response, maxBytes: number): Promise<string> {
@@ -83,7 +92,11 @@ export async function verifySubmission(
     response = await fetchImpl(url.toString(), {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({ submission, context }),
+      body: JSON.stringify({
+        ...(options.checkpointId !== undefined ? { checkpointId: options.checkpointId } : {}),
+        submission,
+        context,
+      }),
       redirect: "error",
       signal: controller.signal,
     });
@@ -109,6 +122,14 @@ export async function verifySubmission(
   if (!result.success) {
     throw new Error(
       `problem container /verify returned an invalid verdict: ${result.error.message}`,
+    );
+  }
+  // [#2252] fail-closed checkpoint correlation: when we asked about a specific
+  // checkpoint, the verdict must name that same checkpoint. Anything else risks
+  // crediting the wrong checkpoint, so it is an error, not a wrong answer.
+  if (options.checkpointId !== undefined && result.data.checkpointId !== options.checkpointId) {
+    throw new Error(
+      `problem container /verify did not echo checkpointId "${options.checkpointId}" (got ${JSON.stringify(result.data.checkpointId)})`,
     );
   }
   return result.data;

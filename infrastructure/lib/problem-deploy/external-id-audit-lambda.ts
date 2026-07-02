@@ -1,18 +1,12 @@
 import * as path from "node:path";
-import { Duration, RemovalPolicy } from "aws-cdk-lib";
+import { Duration } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import * as iam from "aws-cdk-lib/aws-iam";
-import { Architecture } from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
-import {
-  LAMBDA_NODEJS_BUNDLING_TARGET,
-  LAMBDA_NODEJS_RUNTIME,
-  LAMBDA_SOURCE_MAP_ENABLED,
-} from "../utils/lambda-runtime.js";
+import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 
 export interface ExternalIdAuditLambdaProps {
   /** `CompetitorAccounts` DDB table (rotatedAt / createdAt を読み取る)。 */
@@ -48,14 +42,8 @@ export class ExternalIdAuditLambda extends Construct {
   constructor(scope: Construct, id: string, props: ExternalIdAuditLambdaProps) {
     super(scope, id);
 
-    this.fn = new NodejsFunction(this, "Function", {
-      logGroup: new LogGroup(this, "FunctionLogGroup", {
-        removalPolicy: RemovalPolicy.DESTROY,
-      }),
-      runtime: LAMBDA_NODEJS_RUNTIME,
-      architecture: Architecture.ARM_64,
+    this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "handlers/external-id-audit-handler/index.ts"),
-      handler: "handler",
       // DDB Scan + PutMetricData 1 回。MVP 規模で 5s 以内に終わる想定だが余裕で 60s。
       timeout: Duration.seconds(60),
       memorySize: 256,
@@ -63,12 +51,6 @@ export class ExternalIdAuditLambda extends Construct {
         COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName,
         DEPLOY_ENVIRONMENT: props.environmentName,
         NODE_OPTIONS: "--enable-source-maps",
-      },
-      bundling: {
-        minify: true,
-        target: LAMBDA_NODEJS_BUNDLING_TARGET,
-        sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
-        externalModules: [],
       },
     });
 

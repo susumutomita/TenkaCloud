@@ -1,4 +1,5 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import type { SubmitFlagOutcome as SubmitFlagWireOutcome } from "@tenkacloud/portal-contracts";
 import type {
   FlagScoringMetadata,
   MultiFlagEntry,
@@ -11,19 +12,13 @@ import { writeScoreEvent } from "../shared/score-event.js";
 import { evaluateGate, getEventGate } from "./event-gate.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
+/**
+ * Issue #2203: HTTP 200 で返る wire 応答 (ok / already_scored / wrong) の定義正本は
+ * `@tenkacloud/portal-contracts` の `SubmitFlagOutcome` (= SPA portal-client と共有)。
+ * 以下は HTTP status へ map される backend 内部 outcome を union で足したもの。
+ */
 export type SubmitFlagOutcome =
-  /**
-   * Issue #1796: multi-flag では `flagId` を含めて返し (= どの sub-flag が解けたか)、
-   * 単一 flag kind では flagId 無し (= 互換)。
-   */
-  | { kind: "ok"; scoreDelta: number; totalScore: number; flagId?: string }
-  | { kind: "already_scored"; totalScore: number }
-  /**
-   * Issue #817: 不正解。 wrongAnswerPenalty が問題 metadata で正の整数で設定されていれば
-   * score を減算する (= brute-force 対策、 team score は 0 で clamp)。 旧来の wrong (= 0 pt) は
-   * `scoreDelta: 0, totalScore: <変化なし>` で互換維持。
-   */
-  | { kind: "wrong"; scoreDelta: number; totalScore: number; wrongCount: number }
+  | SubmitFlagWireOutcome
   | { kind: "not_flag_problem" }
   /**
    * Issue #1796: multi-flag で flagId が指定されていない / metadata の flags[] に存在しない id。

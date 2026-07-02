@@ -9,7 +9,12 @@ TenkaCloud/
 ├── apps/                                    # Vite + React 19 + Cloudscape SPAs
 │   ├── admin-console/                       # System Admin (Control Plane UI, dev :5173)
 │   ├── application-admin-console/           # Tenant Admin (Application Plane UI, dev :5174)
-│   └── participant-portal/                  # Competitor portal (dev :5175)
+│   ├── participant-portal/                  # Competitor portal (dev :5175)
+│   └── developer-portal/                    # Pack-author-facing docs/tools SPA
+├── packages/                                # Shared workspace libraries (auth-client, saml-utils,
+│   │                                         # problem-runtime, problem-sdk, format,
+│   │                                         # coordination-plugin-sdk, portal-contracts, web-kit,
+│   │                                         # portal-plugin-sdk, problem-cost, problem-test-harness, trust-bridge)
 ├── infrastructure/                          # CDK (SBT 0.3.9) — every backend is a Lambda
 │   ├── bin/infrastructure.ts                # Stack wiring entry point
 │   ├── lib/
@@ -25,7 +30,10 @@ TenkaCloud/
 │   ├── environments/<env>/{config.json,.env}# Per-environment config; .env injects ${VAR:-default}
 │   └── templates/competitor-bootstrap.yaml  # One-time IAM Role rolled out in the competitor account
 ├── scripts/                                 # install.sh / cleanup.sh / provision-tenant.sh, etc.
-├── problems/<category>/<id>/                # One directory per problem (metadata.json + template.yaml)
+├── packs/                                   # In-repo sample/golden/reference problem packs (ADR-012 3-asset model)
+├── problems/                                # Git submodule → TenkaCloudChallenge (the community catalog).
+│   │                                         # Empty until `git submodule update --init`; cloned fresh at deploy time
+├── landing/                                 # Static marketing/demo site (GitHub Pages build output + locales)
 └── .github/workflows/ci.yml                 # PR-time lint / typecheck / test / build
 ```
 
@@ -55,7 +63,11 @@ We don't use a single-table DynamoDB design. Each stack owns its own tables (Ten
 | `make test`             | `vitest` across every workspace                                          |
 | `make lint`             | markdownlint + textlint + biome                                          |
 | `make fix`              | Auto-fix variant of the above (`make format` works too)                  |
-| `make before-commit`    | lint + test (required gate before opening a PR)                          |
+| `make before-commit`    | lint + test — fast local sanity check, NOT a full CI mirror (see below)  |
+| `make ci-local`         | Full CI mirror (audit-deps / submodule guard / lint / typecheck / coverage-gate / build), minus Codecov upload |
+| `make dev`              | Start all 3 SPA dev servers in parallel (admin-console :5173 / application-admin-console :5174 / participant-portal :5175) |
+| `make synth`            | Full `cdk synth` (real Lambda bundling — matches what `deploy` runs)     |
+| `make check-synth`      | Fast synth-shape check (`CDK_SKIP_BUNDLING=1`) + IAM Description ASCII gate |
 | `make deploy`           | **Lite mode** (single-tenant) deploy. Stands up AppPlaneCore + Participant Portal via `infrastructure/bin/tenkacloud-lite.ts` (#955) |
 | `make deploy-saas`      | **SaaS mode** (multi-tenant) deploy. Runs `scripts/install.sh` (3-phase deploy, stands up SBT ControlPlane) |
 | `make destroy`          | Tear down Lite mode                                                       |
@@ -63,6 +75,10 @@ We don't use a single-table DynamoDB design. Each stack owns its own tables (Ten
 | `make harness`          | Architecture invariant check (`.claude/harness/`)                       |
 | `make harness-test`     | Unit tests for the harness itself (`.claude/harness/`)                   |
 | `make tech-debt`        | Tech-debt scan (test smell / coupling / responsibility gaps)             |
+| `make doctor`           | Diagnose local toolchain / environment setup issues                      |
+| `make audit-deps`       | Supply-chain dependency lifecycle-script audit (see Supply chain security below) |
+| `make install_ci`       | CI-only install: `bun install --frozen-lockfile --ignore-scripts` + Safe Chain |
+| `make local`            | Docker local-play (no AWS) for one problem — `make local-up` / `local-down` / `local-status` / `local-evaluate` |
 | `make help`             | List every Makefile target                                               |
 
 Switch environments with `make deploy ENV=production` and similar. It loads `infrastructure/environments/<env>/.env`; if missing, `make env-check` (SaaS mode) / `make env-check-lite` (Lite mode, no `SYSTEM_ADMIN_EMAIL` required) fail with an error.
@@ -109,6 +125,8 @@ ADRs must be self-contained for OSS readers. Do not leave chat context, rolling-
 5. `/simplify` — final pass for duplication, complexity, and wasted code
 
 You are not done until they all pass. If something fails, find the root cause and fix the code (don't edit `biome.json` / `vitest.config.ts` / etc. to mask it).
+
+`make before-commit` (lint + test) is a fast sanity check, not a full CI mirror — CI (`.github/workflows/ci.yml`) additionally runs `audit-deps`, the submodule pin guard, and a 100％ coverage gate for agent-owned workspaces, so a green `before-commit` does not guarantee a green CI. Run `make ci-local` for the full mirror (same checks CI runs, same order, minus the Codecov upload) before opening a PR if you want that guarantee locally.
 
 ### Available skills
 
@@ -162,7 +180,7 @@ if (res.status === StatusCodes.UNAUTHORIZED) throw new PortalAuthError();  // �
 if (res.status === 401) throw new PortalAuthError();                       // ❌
 ```
 
-The legacy aliases (`HTTP_OK` / `HTTP_INTERNAL_ERROR` etc. in `infrastructure/lib/problem-deploy/handlers/shared/http-status.ts`) remain as deprecated re-exports. Don't use them in new code. They are derived from `StatusCodes.*`, so library updates flow through automatically.
+`StatusCodes.*` usage is enforced across the codebase — the legacy `HTTP_OK`-style numeric aliases have been removed entirely (0 usages remain).
 
 ## Prohibited
 
@@ -181,7 +199,7 @@ The legacy aliases (`HTTP_OK` / `HTTP_INTERNAL_ERROR` etc. in `infrastructure/li
 - No `innerHTML` / `eval` / `dangerouslySetInnerHTML`
 - AssumeRole into competitor accounts **always requires `ExternalId`** (`CDK_PARAM_DEPLOY_EXTERNAL_ID`)
 - The IAM Role in `infrastructure/templates/competitor-bootstrap.yaml` is least-privilege (only CFn CreateStack + whatever AWS services each problem template touches)
-- Dependencies are updated by Renovate / Dependabot; CI uses Safe Chain to detect malicious packages
+- Dependencies are updated by Renovate / Dependabot; CI runs Safe Chain as a best-effort check for malicious packages (`continue-on-error: true` — its own outage doesn't block CI; `--ignore-scripts` + `audit-deps` are the hard defense)
 
 ### Supply chain security (mini Shai-Hulud 2nd-wave mitigation, see [blog.flatt.tech/entry/mini_shai_hulud_2nd](https://blog.flatt.tech/entry/mini_shai_hulud_2nd))
 
@@ -190,7 +208,7 @@ A four-layer defense against credential-exfil attacks that abuse `prepare` / `po
 1. **Bun `trustedDependencies`**: Bun blocks transitive lifecycle scripts by default (secure by default). The `trustedDependencies` array in `package.json` is the explicit allowlist (currently empty).
 2. **`.npmrc`**: `ignore-scripts=true` + `min-release-age=168h` (7-day quarantine, npm 11+). Even if a contributor uses npm / yarn / pnpm, the protection is automatic.
 3. **CI audit** `make audit-deps` (`scripts/audit-dependencies.ts`): Scans `node_modules`, diffs packages with lifecycle scripts against `scripts/audit-baseline.json`, and fails on any new addition or new hook on an existing dep.
-4. **CI install policy** `make install_ci`: `bun install --frozen-lockfile --ignore-scripts` + Aikido Safe Chain malicious package detection.
+4. **CI install policy** `make install_ci`: `bun install --frozen-lockfile --ignore-scripts` + Aikido Safe Chain malicious package detection (Safe Chain's own setup step is `continue-on-error: true` — best-effort, not a hard CI gate; layers 1-3 are).
 
 Add packages to `trustedDependencies` in a stand-alone PR. Manually verify the script contents and summarize them in the PR body (if you see suspicious `curl` / `wget` / OS persistence / env-var exfil, do not add to the baseline — report it instead).
 
@@ -206,14 +224,14 @@ Add packages to `trustedDependencies` in a stand-alone PR. Manually verify the s
 | Events           | EventBridge (cross-plane: tenant creation / DeployCreateRequested / DeployDeleteRequested) |
 | Tests            | Vitest                                                                |
 | Lint / Format    | Biome (TS), markdownlint-cli2 + textlint (Markdown)                   |
-| Package manager  | Bun 1.3.11 (workspaces: `infrastructure` + `apps/*`)                  |
+| Package manager  | Bun 1.3.11 (workspaces: `infrastructure` + `apps/*` + `packages/*`)   |
 | CI               | GitHub Actions (`.github/workflows/ci.yml`)                           |
 
 ## Deploy flow
 
 ### Lite mode (default, `make deploy`)
 
-Issue #955 switched the default for `make deploy` to single-tenant Lite mode. It skips the SBT ControlPlane / tenant pipeline / SystemAdmin invitation entirely and deploys just two stacks via `infrastructure/bin/tenkacloud-lite.ts`: AppPlaneCore (`tenantId="local"`) + ProblemDeployBackend (Participant Portal). It is the single-tenant path for one organizer running one event. Teardown is `make destroy` (`make lite-down`).
+Issue #955 switched the default for `make deploy` to single-tenant Lite mode. It skips the SBT ControlPlane / tenant pipeline / SystemAdmin invitation entirely and deploys just two stacks via `infrastructure/bin/tenkacloud-lite.ts`: AppPlaneCore (`tenantId="local"`) + ProblemDeployBackend (Participant Portal). It is the single-tenant path for one organizer running one event. Teardown is `make destroy` (runs `scripts/tenkacloud-lite.ts down`).
 
 ### SaaS mode (opt-in, `make deploy-saas`)
 

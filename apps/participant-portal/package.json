@@ -17,6 +17,7 @@
     "@cloudscape-design/components": "^3.0.1308",
     "@cloudscape-design/global-styles": "^1.0.61",
     "@tenkacloud/format": "workspace:*",
+    "@tenkacloud/portal-contracts": "workspace:*",
     "@tenkacloud/web-kit": "workspace:*",
     "@tenkacloud/portal-plugin-sdk": "workspace:*",
     "http-status-codes": "^2.3.0",

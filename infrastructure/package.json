@@ -61,6 +61,7 @@
     "@smithy/signature-v4": "^5.4.3",
     "@smithy/types": "^4.14.2",
     "@tenkacloud/coordination-plugin-sdk": "workspace:*",
+    "@tenkacloud/portal-contracts": "workspace:*",
     "@tenkacloud/problem-runtime": "workspace:*",
     "@tenkacloud/problem-sdk": "workspace:*",
     "@tenkacloud/saml-utils": "workspace:*",

@@ -9,6 +9,7 @@ import { registerAuditLogRoutes } from "./routes/audit-log.js";
 import { registerBulkDeployRoutes } from "./routes/bulk-deploy.js";
 import { registerDisruptionRoutes } from "./routes/disruptions.js";
 import { registerEventRoutes } from "./routes/events.js";
+import { registerFeatureFlagsRoutes } from "./routes/feature-flags.js";
 import { registerLifecycleRoutes } from "./routes/lifecycle.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerScoringRoutes } from "./routes/scoring.js";
@@ -30,6 +31,8 @@ import { buildEventSharedResources } from "./shared.js";
  *   GET    /events/:eventId/disruptions/audit    — Disruption 発火履歴
  *   POST   /events/:eventId/disruptions/fire     — Disruption を fire
  *   DELETE /events/:eventId                — Bulk teardown
+ *   GET    /feature-flags                  — per-tenant runtime feature-flag overrides (#2231, any tenant role)
+ *   PUT    /admin/feature-flags            — full-replace the override set (TenantAdmin only)
  *
  * Auth: tenant API GW + Cognito JWT authorizer。tenantId は JWT `custom:tenantId` claim
  * から `resolveTenantId` で抽出する (DeployApi Lambda と同じ shape)。
@@ -69,6 +72,15 @@ app.onError(buildAuthErrorHandler({ logPrefix: "[events]" }));
 // healthz は skip。
 app.use("/events/*", createRoleCheckMiddleware({ healthzPath: "/healthz", roles: TENANT_ROLES }));
 
+// Issue #2231: /feature-flags (GET) is readable by any authenticated tenant role, same
+// gate as /events/* — `config.features` must resolve for TenantOperator / TenantViewer too
+// (e.g. the redTeam flag gates a tab all three roles can view). Only the PUT (below, under
+// /admin/*) is TenantAdmin-only.
+app.use(
+  "/feature-flags",
+  createRoleCheckMiddleware({ healthzPath: "/healthz", roles: TENANT_ROLES }),
+);
+
 // Issue #2200: 本 Lambda は /events/* に加えて /admin/* (= audit-log read) も配信する。
 // 各 handler 1 行目の `requireRole` (defense in depth として残す) に加えて blanket でも
 // TenantAdmin を要求し、 将来 /admin/* に route を足して requireRole を書き忘れても
@@ -89,6 +101,8 @@ registerBulkDeployRoutes(app, shared);
 registerDisruptionRoutes(app, shared);
 // Issue #1292: Tenant Admin 向け audit log read routes (= /admin/audit-log + /export)。
 registerAuditLogRoutes(app, shared);
+// Issue #2231 (ADR-035): per-tenant runtime feature-flag toggle (= /admin/feature-flags)。
+registerFeatureFlagsRoutes(app, shared);
 
 export const handler = handle(app) as (
   event: LambdaEvent,

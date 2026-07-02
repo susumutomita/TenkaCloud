@@ -1,6 +1,6 @@
-import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem } from "../deploy-handler/types.js";
+import { putEventsBatched } from "../shared/events.js";
 import { buildActiveDisruptionEffect } from "./disruption-effects.js";
 import { evaluateDisruptionTriggers, type FiredDisruption } from "./disruption-triggers.js";
 import type {
@@ -94,30 +94,34 @@ async function publishConditionDisruptions(
   fired: readonly FiredDisruption[],
   firedAt: string,
 ): Promise<void> {
-  const entries = fired.map((f) => ({
-    Source: DISRUPTION_EVENT_SOURCE,
-    DetailType: f.eventDetailType,
-    EventBusName: shared.eventBusName,
-    Detail: JSON.stringify({
-      disruptionId: f.disruptionId,
-      eventId: item.eventId,
-      problemId: item.problemId,
-      tenantId: item.tenantId,
-      teamId: item.teamId,
-      parameters: f.parameters,
-      requestId: `${item.jobId}#${f.disruptionId}`,
-      firedAt,
-      triggeredBy: f.triggerKind,
-      // [ADR-037 Slice 3] 宣言されていれば executor が rate() schedule で定期化する (= score-gated 定期妨害)。
-      ...(f.recurrence ? { recurrence: f.recurrence } : {}),
-    }),
+  const items = fired.map((f) => ({
+    item: f.disruptionId,
+    entry: {
+      Source: DISRUPTION_EVENT_SOURCE,
+      DetailType: f.eventDetailType,
+      EventBusName: shared.eventBusName,
+      Detail: JSON.stringify({
+        disruptionId: f.disruptionId,
+        eventId: item.eventId,
+        problemId: item.problemId,
+        tenantId: item.tenantId,
+        teamId: item.teamId,
+        parameters: f.parameters,
+        requestId: `${item.jobId}#${f.disruptionId}`,
+        firedAt,
+        triggeredBy: f.triggerKind,
+        // [ADR-037 Slice 3] 宣言されていれば executor が rate() schedule で定期化する (= score-gated 定期妨害)。
+        ...(f.recurrence ? { recurrence: f.recurrence } : {}),
+      }),
+    },
   }));
-  const resp = await shared.events.send(new PutEventsCommand({ Entries: entries }));
-  if ((resp.FailedEntryCount ?? 0) > 0) {
-    const codes = (resp.Entries ?? [])
-      .filter((e) => e.ErrorCode)
-      .map((e) => e.ErrorCode)
-      .join(",");
+  // Issue #2210: 旧コードは entries.length が 10 を超えると 1 回の PutEventsCommand に収まらず
+  // EventBridge の "at most 10 entries" 制約に違反していた (chunk 分割が無かった latent bug)。
+  // shared helper に委譲することで chunk 分割 + FailedEntryCount 検査が一箇所になる。
+  const results = await putEventsBatched(shared.events, items);
+  const failed = results.filter((r) => !r.success);
+  if (failed.length > 0) {
+    const codes = failed.map((r) => r.errorCode ?? "unknown").join(",");
     throw new Error(`condition disruption publish partial failure: ${codes}`);
   }
 }

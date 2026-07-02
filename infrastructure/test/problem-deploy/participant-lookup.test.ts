@@ -1,5 +1,6 @@
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveTargetAccessCapability } from "../../lib/problem-deploy/handlers/deploy-handler/composite-target-access";
 import { lookupTeamByLoginKey } from "../../lib/problem-deploy/handlers/participant-handler/lookup";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
 
@@ -585,5 +586,142 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     const json = JSON.stringify(view?.problems[0]?.applicationStatus);
     expect(json).not.toContain("FrontendUrl");
     expect(json).not.toContain("SecretInternalProbeName");
+  });
+});
+
+describe("provider resolution (#2233)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("should resolve provider to aws when runtimeProvider is absent (legacy row contract)", async () => {
+    // 行契約 (deploy-handler/types.ts): runtimeProvider 欠落 = aws/cloudformation。
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.provider).toBe("aws");
+  });
+
+  it("should echo runtimeProvider for non-AWS single-provider rows", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({ jobId: "J1", PK: "DEPLOYMENT#J1", runtimeProvider: "sakura" }),
+        sampleRow({ jobId: "J2", PK: "DEPLOYMENT#J2", runtimeProvider: "azure" }),
+        sampleRow({ jobId: "J3", PK: "DEPLOYMENT#J3", runtimeProvider: "gcp" }),
+      ],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems.map((p) => p.provider)).toEqual(["sakura", "azure", "gcp"]);
+  });
+
+  it("should echo runtimeProvider for composite-target-shaped rows (always explicit, aws included)", async () => {
+    // Composite target 行は runtimeProvider を常に明示する (aws 含む。composite-repository.ts)。
+    // 今日は GSI2 非掲載で /portal/me には現れないが、後続の「intentional view」が
+    // 追加されたとき resolver がそのまま動くことをここで pin する。
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          jobId: "T1",
+          PK: "DEPLOYMENT#T1",
+          parentDeploymentId: "PARENT1",
+          targetId: "aws-api",
+          targetOrdinal: 0,
+          runtimeProvider: "aws",
+          runtimeEngine: "cloudformation",
+          runtimeEntry: "aws/template.yaml",
+        }),
+        sampleRow({
+          jobId: "T2",
+          PK: "DEPLOYMENT#T2",
+          parentDeploymentId: "PARENT1",
+          targetId: "gcp-worker",
+          targetOrdinal: 1,
+          runtimeProvider: "gcp",
+          runtimeEngine: "infra-manager",
+          runtimeEntry: "gs://bucket/worker",
+        }),
+      ],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems.map((p) => p.provider)).toEqual(["aws", "gcp"]);
+  });
+
+  it("should pass an unknown stored provider through raw instead of mislabeling it as aws", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ runtimeProvider: "oraclecloud" })] });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.provider).toBe("oraclecloud");
+  });
+
+  it("should treat an empty runtimeProvider as the legacy aws contract", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ runtimeProvider: "" })] });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.provider).toBe("aws");
+  });
+});
+
+describe("access capabilities (#2235)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("should expose console and cli-credentials capabilities for an AWS problem", async () => {
+    // ADR-0001 / ADR-048 matrix: aws = managed (console + cli-credentials)。
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.accessCapabilities).toEqual(["console", "cli-credentials"]);
+  });
+
+  it("should expose the external-portal capability for gcp azure and sakura problems", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({ jobId: "J1", PK: "DEPLOYMENT#J1", runtimeProvider: "gcp" }),
+        sampleRow({ jobId: "J2", PK: "DEPLOYMENT#J2", runtimeProvider: "azure" }),
+        sampleRow({ jobId: "J3", PK: "DEPLOYMENT#J3", runtimeProvider: "sakura" }),
+      ],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems.map((p) => p.accessCapabilities)).toEqual([
+      ["external-portal"],
+      ["external-portal"],
+      ["external-portal"],
+    ]);
+  });
+
+  it("should expose the unsupported capability for an unknown provider", async () => {
+    // 未知 provider を console 対応と誤宣言しない (= descriptor を正直に保つ)。
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ runtimeProvider: "oraclecloud" })] });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.accessCapabilities).toEqual(["unsupported"]);
+  });
+
+  it("should keep capabilities consistent with the composite target access matrix", async () => {
+    // 正本は composite-target-access.ts の CAPABILITY_MATRIX。 view 側が別 matrix を
+    // 持って drift しないことを、 全プロバイダで直接照合して pin する。
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({ jobId: "J1", PK: "DEPLOYMENT#J1" }),
+        sampleRow({ jobId: "J2", PK: "DEPLOYMENT#J2", runtimeProvider: "gcp" }),
+      ],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.accessCapabilities).toEqual(
+      resolveTargetAccessCapability("aws", "COMPLETE"),
+    );
+    expect(view?.problems[1]?.accessCapabilities).toEqual(
+      resolveTargetAccessCapability("gcp", "COMPLETE"),
+    );
   });
 });

@@ -1,7 +1,7 @@
 import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { formatUsd } from "../../../../scripts/lib/problem-cost";
+import { formatUsd } from "@tenkacloud/problem-cost";
 import type { ProblemCostEstimateSummary } from "../data/problems";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;

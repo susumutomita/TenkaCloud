@@ -79,6 +79,8 @@ export function ShellLayout({
             // Issue #1292: 自テナント監査ログ (= deploy / event 操作の audit)。
             { type: "link", href: "/audit-log", text: t("nav.audit_log") },
             { type: "link", href: "/users", text: t("nav.tenant_users") },
+            // Issue #2231: per-tenant runtime feature-flag toggle.
+            { type: "link", href: "/settings", text: t("nav.settings") },
             // Issue #1294: per-tenant SAML SSO. Feature-flagged off until verified
             // end-to-end (otherwise operators mistake an unproven feature for ready).
             ...(samlSsoEnabled

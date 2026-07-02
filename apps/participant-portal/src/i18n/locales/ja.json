@@ -256,6 +256,11 @@
     "open_console_aria": "{problemId} の AWS Console を開く",
     "label_aws_account": "AWS Account",
     "label_region": "Region",
+    "label_provider": "クラウドプロバイダ",
+    "non_aws_body": "この問題は {provider} 上で動作するため、AWS Console からはアクセスしません。アクセス方法は主催者の案内に従ってください。",
+    "external_portal_button": "{provider} のポータルを開く",
+    "external_portal_aria": "{problemId} のプロバイダポータルを開く",
+    "external_portal_hint": "この問題は {provider} 上で動作します。プロバイダのポータルを開き、主催者から配布されたアカウントでサインインしてください — TenkaCloud はサインインセッションを仲介しません。",
     "cli": {
       "section_header": "CLI / SDK の一時資格情報",
       "body": "AWS CLI / boto3 / Terraform などから直接操作したい場合に、 1 時間有効の一時資格情報を発行します。 IAM スコープは Console と同じ (ParticipantViewerRole)。",
@@ -304,11 +309,11 @@
     "health_unknown": "未チェック",
     "last_scored_label": "最終加点",
     "outputs_header": "アクセス先 URL",
-    "stack_outputs_detail_header": "Stack Outputs (詳細)",
+    "stack_outputs_detail_header": "デプロイ出力 (詳細)",
     "celebrate_header": "🏆 クリア済み +{points} pt",
     "celebrate_body": "この問題は正解済みです。 引き続き他の問題に挑戦してください！",
     "submit_button": "Flag 提出 (+{points} pt)",
-    "flag_field_label": "Flag (Stack Output 値)",
+    "flag_field_label": "Flag (デプロイ出力値)",
     "flag_placeholder": "値を入力",
     "flag_mock_placeholder": "例: tenkacloudsample",
     "flag_mock_hint": "デモモードです — `tenkacloudsample` と入力すると正解の体験が出ます (= 部分一致でも OK。 `claude` / `42` 等の Easter egg もあります)。",
@@ -354,7 +359,7 @@
     "solved_header": "🎉 {label} — 解答済",
     "solved_body": "この flag で +{points} pt を獲得しました。",
     "submit_button": "提出 (+{points} pt)",
-    "flag_field_label": "{label} (Stack Output 値)"
+    "flag_field_label": "{label} (デプロイ出力値)"
   },
   "score_timeline": {
     "header": "スコア推移",

@@ -1,10 +1,22 @@
+import type {
+  ApplicationStatus,
+  ApplicationStatusOverall,
+  DeploymentLogEntry,
+  DeploymentLogView,
+  ParticipantHintView,
+  ParticipantScoringInfo,
+  ParticipantTeamView,
+  ParticipantProblemView as PortalParticipantProblemView,
+  TargetAccessCapability,
+} from "@tenkacloud/portal-contracts";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
+import { resolveTargetAccessCapability } from "../deploy-handler/composite-target-access.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { parseEndpointsHealth } from "../shared/endpoints-health.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
-import { evaluateGate, type GateBlock, getEventGate } from "./event-gate.js";
+import { evaluateGate, getEventGate } from "./event-gate.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 import { getSolvedFlagIds } from "./submit-flag.js";
 
@@ -16,157 +28,42 @@ import { getSolvedFlagIds } from "./submit-flag.js";
  */
 
 /**
- * Issue #742 Phase 4: progressive hint の view shape。 reveal 済 hint には content が乗り、
- * 未 reveal hint は content を含まない (= server-side で revealed=false な行は content を
- * 落として送り、 frontend に答えを漏らさない)。
+ * Issue #2203: participant 系 view 型の定義正本は `@tenkacloud/portal-contracts` に移設した
+ * (= SPA `portal-client` と同一定義を共有し、 field 追加の無音ドリフト (#2198) を typecheck で
+ * 検出する)。 本 module は既存 caller (routes / tests) 向けに re-export し、 backend が必ず
+ * 埋める field だけ下の intersection で optionality を tighten する。
+ */
+export type {
+  ApplicationStatus,
+  ApplicationStatusOverall,
+  DeploymentLogEntry,
+  DeploymentLogView,
+  MultiFlagEntryView,
+  ParticipantHintView,
+  ParticipantScoringInfo,
+  ParticipantTeamView,
+} from "@tenkacloud/portal-contracts";
+
+/**
+ * backend が構成する 1 problem view。 wire contract 上は旧 backend 互換のため optional な
+ * `provider` / `accessCapabilities` を、 現行 backend は常に返すので required に tighten する
+ * (= 定義の重複ではなく optionality の絞り込み。 shape の正本は contract 側)。
  *
- *   - id: stable identifier (= scoring.hints[].id と同じ)
- *   - penalty: reveal すると差し引かれるポイント (= 表示用、 0 許容)
- *   - revealed: 既に reveal 済なら true
- *   - content: revealed=true のときのみ存在
- *   - revealedAt: revealed=true のときのみ、 ISO 8601 (= UI で reveal 時刻表示用)
+ * `awsAccountId` は AWS Console 直接アクセス (SSO Credentials) のため公開する。 AWS の
+ * account id は機密ではない (= IAM role 信頼ポリシーや CFn template にも露出する)。
+ * `endpointsHealth` (per-endpoint の生死) を出さない設計判断は contract 側の docblock を参照。
  */
-export interface ParticipantHintView {
-  readonly id: string;
-  readonly penalty: number;
-  readonly revealed: boolean;
-  readonly content?: string;
-  readonly revealedAt?: string;
-}
-
-/**
- * Participant 側に出してよい scoring 情報の view。`kind` は 5 種 builtin DSL のいずれか
- * (ADR-012 Phase 3.B)。kind ごとに見える field は最小限 (= 答えとなる flagOutputKey の
- * 値 / 攻撃 counter の生値 / 内部 platformRules の細部は出さない)。
- */
-export interface ParticipantScoringInfo {
-  readonly kind:
-    | "flag"
-    | "multi-flag"
-    | "uptime"
-    | "uptime-flat"
-    | "uptime-multi"
-    | "phased-polling"
-    | "attack-detection";
-  readonly points?: number;
-  readonly pointsPerSuccess?: number;
-  readonly pointsAllOk?: number;
-  readonly pointsPerAttack?: number;
+export type ParticipantProblemView = PortalParticipantProblemView & {
   /**
-   * Issue #1796: multi-flag の sub-flag 一覧 (= portal が N 個の提出欄を出すための view)。
-   * `solved` は team の `solvedFlagIds` に id が入っているかで判定する。 正解値 (flagOutputKey の
-   * 値) は出さない (= 単一 flag kind の flagOutputKey strip と同方針)。
+   * [#2233] 行契約 (deploy-handler/types.ts): runtimeProvider 欠落 = aws/cloudformation
+   * (legacy 互換)。 未知の格納値は raw のまま返す (= 誤って aws 扱いにしない)。
    */
-  readonly flags?: readonly {
-    readonly id: string;
-    readonly label: string;
-    readonly points: number;
-    readonly solved: boolean;
-  }[];
+  readonly provider: string;
   /**
-   * Issue #742 Phase 4: progressive hint。 revealed=false な hint は content を持たず、
-   * frontend は locked 表示 + reveal button を出す。 revealed=true は content を含み
-   * unlocked 表示 (= 旧 string[] 形式から正式 view 形式に migrate)。
+   * [#2235 / ADR-0001·ADR-048] provider の純関数。 matrix の正本は composite-target-access.ts。
    */
-  readonly hints?: readonly ParticipantHintView[];
-  /** Challenge / flag のとき、提出済みなら true。再提出は加点されない。 */
-  readonly flagSubmitted?: boolean;
-}
-
-/**
- * チームに紐づく 1 problem 単位の view。team 集約 (`ParticipantTeamView.problems[]`) の
- * 1 要素として返す。
- */
-/**
- * Battle 系 (uptime kind) deployment の health 集約。`endpointsHealth` JSON を per-endpoint
- * のまま露出すると「どの endpoint が落ちているか」が見えてしまい Battle のゲーム性
- * (= 防御側が自分で調査) を破壊するため、aggregate のみに絞る (ADR-005 D1)。
- *
- * 旧 deployment / probe 未実行 / Challenge 系 (= flag kind、HealthCheck 対象外) は
- * `unknown` を返す。
- */
-export type ApplicationStatusOverall = "healthy" | "degraded" | "down" | "unknown";
-
-export interface ApplicationStatus {
-  readonly overall: ApplicationStatusOverall;
-  readonly healthyCount: number;
-  readonly totalCount: number;
-  /** 最後の probe 時刻 (ISO 8601)。`unknown` のときは undefined。 */
-  readonly checkedAt?: string;
-}
-
-export interface DeploymentLogEntry {
-  readonly id: string;
-  readonly timestamp: string;
-  readonly source: "deployment";
-  readonly level: "info" | "success" | "warning" | "error";
-  readonly message: string;
-}
-
-export interface DeploymentLogView {
-  /**
-   * `/portal/me` polling で差分判定するための cursor。現状は DDB row の updatedAt を使い、
-   * CloudWatch Logs 直読を後続で足す場合は nextToken に差し替え可能な shape にしておく。
-   */
-  readonly cursor: string;
-  readonly entries: readonly DeploymentLogEntry[];
-}
-
-export type ParticipantProblemView = Pick<
-  DeploymentItem,
-  "jobId" | "problemId" | "region" | "expiresAt" | "awsAccountId"
-> & {
-  readonly status: DeploymentStatus;
-  readonly stackOutputs: Record<string, string>;
-  readonly failureReason?: string;
-  readonly score: number;
-  readonly lastScoredAt?: string;
-  readonly lastResult?: "ok" | "fail";
-  readonly posture?: Record<string, boolean>;
-  readonly platform?: string;
-  readonly scoring?: ParticipantScoringInfo;
-  readonly deployLog: DeploymentLogView;
-  /** ADR-012 Phase 4 / Issue #607: deploy 開始時刻 (= DDB.createdAt の echo)。 portal の phase
-   *  countdown timeline (= metadata.phases[].afterMinutes の経過判定) に使う。 deploy 中の
-   *  PENDING / IN_PROGRESS でも present (= job 生成時刻)。 */
-  readonly createdAt?: string;
-  /**
-   * Battle (uptime kind) の集約 health。per-endpoint の URL / 名前は **絶対に出さない**
-   * (ADR-005 D1)。Challenge 形式 (flag kind) では undefined。
-   */
-  readonly applicationStatus?: ApplicationStatus;
-  // 設計判断: `endpointsHealth` (= どの endpoint が落ちているか) は participant API には
-  // 出さない。Battle のゲーム性は「壊れている原因を防御側自身が調査して復旧する」点に
-  // あり、画面で答え合わせをすると興ざめになる。露出するのは aggregate のみ。
-  // `awsAccountId` は AWS Console 直接アクセス (SSO Credentials) のため公開する。
-  // AWS の account id は機密ではない (= IAM role 信頼ポリシーや CFn template にも露出する)。
+  readonly accessCapabilities: readonly TargetAccessCapability[];
 };
-
-export interface ParticipantTeamView {
-  readonly team: {
-    readonly teamName: string;
-    readonly teamNameSetByCompetitor: boolean;
-    /** Phase 1 以前に作られた deployment は持たない。 */
-    readonly eventId?: string;
-    readonly teamId?: string;
-  };
-  readonly problems: readonly ParticipantProblemView[];
-  /**
-   * Issue #1038 P0 #2: 競技開始前 / 終了 / 一時停止 の gate 状態。 frontend が
-   * ProblemDetail page にロック画面を出すために使う (= competitor が競技開始前に問題詳細
-   * や hints を覗き見るのを防ぐ)。
-   *
-   * - `{ kind: "ok" }` = gate 通過、 通常表示
-   * - `{ kind: "scoring_not_started", startsAt? }` = 競技開始前、 ProblemDetail を隠す
-   * - `{ kind: "scoring_ended", endsAt? }` = 競技終了後、 ProblemDetail は閲覧可能だが
-   *   提出 / hint reveal は backend gate で reject される (= 既存挙動と同等)
-   * - `{ kind: "scoring_locked" }` = 一時 lock、 提出 / hint reveal は同様に reject
-   *
-   * eventId 不在 / gate 取得失敗時は **fail-closed** で scoring_not_started 扱い
-   * (= 安全側に倒す)。
-   */
-  readonly eventGate?: GateBlock | { readonly kind: "ok" };
-}
 
 /**
  * 1 deployment row → ParticipantProblemView 変換。
@@ -198,6 +95,15 @@ function stripAnswerOutputs(
   return stackOutputs;
 }
 
+/**
+ * [#2233] 行の runtimeProvider から participant へ出す provider を解決する。
+ * 行契約 (deploy-handler/types.ts): 欠落 / 空 = aws/cloudformation (legacy 行 / bulk-deploy 行)。
+ * 未知の格納値は raw で通す (= mislabel しない)。composite target 行は常に明示値を持つ。
+ */
+function resolveViewProvider(runtimeProvider: unknown): string {
+  return typeof runtimeProvider === "string" && runtimeProvider !== "" ? runtimeProvider : "aws";
+}
+
 export function toProblemView(
   item: Partial<DeploymentItem>,
   scoringMap: Record<string, ProblemScoringMetadata> = {},
@@ -207,12 +113,17 @@ export function toProblemView(
 
   const scoring = item.problemId ? scoringMap[item.problemId] : undefined;
   const stackOutputs = stripAnswerOutputs(parseStackOutputs(item.stackOutputs), scoring);
+  const provider = resolveViewProvider(item.runtimeProvider);
 
   return {
     jobId: String(item.jobId ?? ""),
     problemId: String(item.problemId ?? ""),
     region: String(item.region ?? ""),
     awsAccountId: String(item.awsAccountId ?? ""),
+    provider,
+    // [#2235] ADR-0001/048 の matrix を composite-target-access の resolver で解決する
+    // (= view 側に別 matrix を持たせず drift を防ぐ)。
+    accessCapabilities: resolveTargetAccessCapability(provider, status),
     status,
     stackOutputs,
     failureReason: status === "FAILED" ? item.failureReason : undefined,

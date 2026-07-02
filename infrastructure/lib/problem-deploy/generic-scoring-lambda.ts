@@ -1,18 +1,12 @@
 import * as path from "node:path";
-import { Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { type IEventBus, Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import * as iam from "aws-cdk-lib/aws-iam";
-import { Architecture } from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
-import {
-  LAMBDA_NODEJS_BUNDLING_TARGET,
-  LAMBDA_NODEJS_RUNTIME,
-  LAMBDA_SOURCE_MAP_ENABLED,
-} from "../utils/lambda-runtime.js";
+import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
 import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-credential-store.js";
 import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/sakura-credential-store.js";
@@ -117,14 +111,8 @@ export class GenericScoringLambda extends Construct {
   constructor(scope: Construct, id: string, props: GenericScoringLambdaProps) {
     super(scope, id);
 
-    this.fn = new NodejsFunction(this, "Function", {
-      logGroup: new LogGroup(this, "FunctionLogGroup", {
-        removalPolicy: RemovalPolicy.DESTROY,
-      }),
-      runtime: LAMBDA_NODEJS_RUNTIME,
-      architecture: Architecture.ARM_64,
+    this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "handlers/generic-scoring-handler/index.ts"),
-      handler: "handler",
       timeout: Duration.minutes(2),
       // #746: 旧 256MB だと cold start で OOM + init timeout が頻発し採点 Lambda が
       // 起動すらしなかった (CloudWatch logs で Init Duration 10001ms timeout +
@@ -150,34 +138,26 @@ export class GenericScoringLambda extends Construct {
         TEAMS_TABLE_NAME: props.teamsTable.tableName,
         NODE_OPTIONS: "--enable-source-maps",
       },
-      bundling: {
-        minify: true,
-        target: LAMBDA_NODEJS_BUNDLING_TARGET,
-        sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
-        externalModules: [],
-        // problem catalog (scoring / endpoints / phases) を bundle 時に literal 置換する。
-        // 旧 #810 の gzip+base64 env var は問題が増えるたび 4 KB 上限に張り付き、
-        // stackstack 追加で deploy 不可になった。 esbuild define で
-        // process.env.X を build 時に固定 JSON 文字列にし env を 0 化する。
-        // tests は process.env 経由で fixture を注入するので影響なし。
-        define: {
-          "process.env.BATTLE_PROBLEMS_SCORING": JSON.stringify(
-            JSON.stringify(props.problemsScoring),
-          ),
-          "process.env.PROBLEM_ENDPOINTS": JSON.stringify(JSON.stringify(props.problemsEndpoints)),
-          "process.env.BATTLE_PROBLEMS_PHASES": JSON.stringify(
-            JSON.stringify(props.problemsPhases),
-          ),
-          // #1422: condition-triggered disruption catalog を build 時 literal 置換 (env 4KB 回避)。
-          "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
-            JSON.stringify(props.problemsDisruptions),
-          ),
-          // [ADR-047 follow-up] scheduled auto-deploy が problemId→problemDir を解決するための catalog。
-          // EventApiLambda と同じく build 時 literal 置換し env 4KB 上限を回避 (#1308 と同パターン)。
-          "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
-            JSON.stringify(props.problemsCatalog),
-          ),
-        },
+      // problem catalog (scoring / endpoints / phases) を bundle 時に literal 置換する。
+      // 旧 #810 の gzip+base64 env var は問題が増えるたび 4 KB 上限に張り付き、
+      // stackstack 追加で deploy 不可になった。 esbuild define で
+      // process.env.X を build 時に固定 JSON 文字列にし env を 0 化する。
+      // tests は process.env 経由で fixture を注入するので影響なし。
+      bundlingDefine: {
+        "process.env.BATTLE_PROBLEMS_SCORING": JSON.stringify(
+          JSON.stringify(props.problemsScoring),
+        ),
+        "process.env.PROBLEM_ENDPOINTS": JSON.stringify(JSON.stringify(props.problemsEndpoints)),
+        "process.env.BATTLE_PROBLEMS_PHASES": JSON.stringify(JSON.stringify(props.problemsPhases)),
+        // #1422: condition-triggered disruption catalog を build 時 literal 置換 (env 4KB 回避)。
+        "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
+          JSON.stringify(props.problemsDisruptions),
+        ),
+        // [ADR-047 follow-up] scheduled auto-deploy が problemId→problemDir を解決するための catalog。
+        // EventApiLambda と同じく build 時 literal 置換し env 4KB 上限を回避 (#1308 と同パターン)。
+        "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
+          JSON.stringify(props.problemsCatalog),
+        ),
       },
     });
 

@@ -6,6 +6,7 @@
  *   - Cloudscape の Badge / Alert / Spinner を **直接** 触るのではなく、 一段抽象を挟むことで
  *     視覚 token (= 色 / 余白 / icon) を全 SPA 一括で変更できる。
  */
+export { ApiError, type CoreApiClient, createCoreApiClient } from "./api-client";
 export { AuthProvider, type AuthState, useAuth } from "./auth";
 export { renderBootError } from "./boot-error";
 export {
@@ -41,6 +42,6 @@ export {
 export { LoadingState, type LoadingStateProps } from "./LoadingState";
 export { Markdown, type MarkdownProps, renderMarkdownToSafeHtml } from "./markdown";
 export { ShellLayout, type ShellLayoutProps, type ShellUserMenu } from "./ShellLayout";
-export { StatusBadge, type StatusBadgeProps, type StatusTone, statusToTone } from "./StatusBadge";
+export { StatusBadge, type StatusBadgeProps, type StatusTone } from "./StatusBadge";
 export { useNowMs } from "./useNowMs";
 export { type UsePollingOptions, usePolling } from "./usePolling";

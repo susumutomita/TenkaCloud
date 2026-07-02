@@ -1,3 +1,4 @@
+import type { LeaderboardEntry, LeaderboardResponse } from "@tenkacloud/portal-contracts";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { queryAllItems } from "../shared/ddb-paginate.js";
@@ -5,44 +6,18 @@ import { getEventGate } from "./event-gate.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 /**
- * Leaderboard 1 行 (1 team の集計)。
+ * Issue #2203: LeaderboardEntry / LeaderboardResponse の定義正本は
+ * `@tenkacloud/portal-contracts` に移設 (= SPA portal-client と共有)。 公開可否の設計判断
+ * (teamLoginKey / tenantId / awsAccountId は絶対に出さない、 teamId は ULID なので可) と
+ * scoreboardFrozen の凍結 window 仕様は contract 側 docblock を参照。
  *
- * 競技者向けに公開しても安全な情報のみ:
- *   - displayTeamName / internalSlug 由来の表示名
- *   - そのチームの累計 score (live な deployment 行の合計)
- *   - 完了済 problem 数 (status=COMPLETE の数)
- *
- * teamLoginKey / tenantId / awsAccountId 等の運営情報は **絶対に出さない**。
- * teamId は同 event 内の同定に使うが、推測困難な ULID なので公開で問題ない。
+ * freeze 判定 (本 module の実装):
+ *   - now < endsAt - freezeMin       → false (= 通常表示)
+ *   - endsAt - freezeMin ≤ now < endsAt → **true** (= 凍結中)
+ *   - now ≥ endsAt                   → false (= 競技終了、 最終結果公開)
+ *   - endsAt 不在                    → false (= freeze 無効)
  */
-export interface LeaderboardEntry {
-  readonly rank: number;
-  readonly teamId: string;
-  readonly teamName: string;
-  readonly score: number;
-  readonly completedProblems: number;
-  readonly totalProblems: number;
-  /** 同 event 内で requester 自身のチームなら true (= UI でハイライト用)。 */
-  readonly isMyTeam: boolean;
-}
-
-export interface LeaderboardResponse {
-  readonly eventId: string;
-  readonly entries: readonly LeaderboardEntry[];
-  /**
-   * Issue #1038 P1 #9: scoreboard freeze (= 終了 30 分前から最終結果まで順位非公開)。
-   * true のとき frontend は entries を隠して「凍結中」 メッセージを表示。
-   *
-   * 判定:
-   *   - now < endsAt - 30 min      → false (= 通常表示)
-   *   - endsAt - 30 min ≤ now < endsAt → **true** (= 凍結中)
-   *   - now ≥ endsAt               → false (= 競技終了、 最終結果公開)
-   *   - endsAt 不在                → false (= freeze 無効)
-   */
-  readonly scoreboardFrozen?: boolean;
-  /** event の終了予定時刻 (= UI で「あと N 分で公開」 表示用)。 */
-  readonly endsAt?: string;
-}
+export type { LeaderboardEntry, LeaderboardResponse } from "@tenkacloud/portal-contracts";
 
 /**
  * `getLeaderboard` の結果。Phase 1 以前の旧 deployment (eventId 無し) は

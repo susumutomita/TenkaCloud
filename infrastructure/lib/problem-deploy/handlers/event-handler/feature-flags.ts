@@ -1,0 +1,86 @@
+import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { z } from "zod";
+import type { EventSharedResources } from "./shared.js";
+
+/**
+ * Issue #2231 (ADR-035): per-tenant runtime feature-flag overrides.
+ *
+ * ADR-020 Phase B admin surface pattern (mirrors `lock-scoring.ts`): reuse the existing
+ * per-tenant Events table (no new table — `DynamoDbLowCapacity` keeps the whole platform
+ * inside the Free Tier budget, so every new table is a cost decision, not a free one).
+ *
+ * Schema (single item per tenant):
+ *   PK: TENANT#<tenantId>
+ *   SK: FLAGS
+ *   flags: Record<string, boolean>
+ *   updatedAt / updatedBy
+ *
+ * Design decision (deliberately NOT duplicating the frontend's `FEATURE_REGISTRY`): the
+ * backend does not hold its own copy of the flag-key allowlist. Two definitions of "which
+ * keys are real" is exactly the drift class #2203 fixed for the participant contract — a
+ * flag added to the frontend registry would silently fail backend validation until someone
+ * remembered to update a second list. Instead, `FeatureFlagsPatchSchema` validates the wire
+ * shape only (identifier-looking string keys, boolean values, a sane key-count ceiling); an
+ * unrecognized key is stored but has no effect, because `resolveFeatureFlags` (web-kit)
+ * already discards override keys absent from the registry and non-boolean values. That
+ * makes the registry the single source of truth for "which flags exist" while the backend's
+ * job is narrower: reject garbage, and give TenantAdmin an audited on/off switch.
+ */
+
+const FLAG_KEY_RE = /^[a-zA-Z][a-zA-Z0-9]*$/;
+const MAX_FLAG_KEYS = 50;
+
+export const FeatureFlagsPatchSchema = z
+  .record(z.string().regex(FLAG_KEY_RE), z.boolean())
+  .refine((flags) => Object.keys(flags).length <= MAX_FLAG_KEYS, {
+    message: `too many flag keys (max ${MAX_FLAG_KEYS})`,
+  });
+export type FeatureFlagsPatch = z.infer<typeof FeatureFlagsPatchSchema>;
+
+interface FeatureFlagsItem {
+  readonly PK: string;
+  readonly SK: "FLAGS";
+  readonly tenantId: string;
+  readonly flags: Record<string, boolean>;
+  readonly updatedAt: string;
+  readonly updatedBy: string;
+}
+
+function flagsKey(tenantId: string): { PK: string; SK: "FLAGS" } {
+  return { PK: `TENANT#${tenantId}`, SK: "FLAGS" };
+}
+
+/** Read the tenant's stored flag overrides. No row yet (never saved) → `{}` (all registry defaults). */
+export async function getFeatureFlags(
+  shared: EventSharedResources,
+  tenantId: string,
+): Promise<Record<string, boolean>> {
+  const out = await shared.ddb.send(
+    new GetCommand({ TableName: shared.eventsTableName, Key: flagsKey(tenantId) }),
+  );
+  const item = out.Item as Partial<FeatureFlagsItem> | undefined;
+  return item?.flags ?? {};
+}
+
+/**
+ * Full-replace the tenant's flag overrides (Settings page saves the whole toggle state, not
+ * a partial patch — a stale client re-sending an old flag set would otherwise silently
+ * resurrect a flag another admin just turned off).
+ */
+export async function putFeatureFlags(
+  shared: EventSharedResources,
+  tenantId: string,
+  flags: Record<string, boolean>,
+  updatedBy: string,
+  nowMs: number,
+): Promise<Record<string, boolean>> {
+  const item: FeatureFlagsItem = {
+    ...flagsKey(tenantId),
+    tenantId,
+    flags,
+    updatedAt: new Date(nowMs).toISOString(),
+    updatedBy,
+  };
+  await shared.ddb.send(new PutCommand({ TableName: shared.eventsTableName, Item: item }));
+  return flags;
+}

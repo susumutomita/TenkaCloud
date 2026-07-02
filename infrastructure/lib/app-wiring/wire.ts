@@ -12,6 +12,7 @@ import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participa
 import { ProblemDeployBackendStack } from "../problem-deploy/problem-deploy-backend-stack.js";
 import { ServerlessSaaSPipeline } from "../tenant-pipeline/serverless-saas-pipeline.js";
 import { TenantTemplateStack } from "../tenant-template/tenant-template-stack.js";
+import { buildProblemDeployBackendBaseProps } from "./problem-deploy-backend-props.js";
 import { applyDynamoLowCapacity, applyGlobalAspects } from "./wire/aspects.js";
 import { registerStackDependencies } from "./wire/dependencies.js";
 import { addCostGuardrails, apiIdFromExecuteApiUrl } from "./wire/guardrails.js";
@@ -92,37 +93,22 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   // deploy 順序: ChallengePayloadStack の bucket が先に立ってから ProblemDeployBackend を deploy
   // しないと、 Worker Lambda が起動時に bucket name を IAM policy で参照する経路で
   // race condition が起きる。 explicit dependency で順序を pin。
+  // Issue #2209: source bundle + problems.* の共通 props は Lite (bin/tenkacloud-lite.ts) と
+  // 共有の factory に集約。 SaaS 固有の差分 (eventBusArn / quota / portal / challenge bucket)
+  // だけをここで足す。
   const problemDeployBackendStack = new ProblemDeployBackendStack(
     app,
     stackId("tenkacloud-problem-deploy", config.environment),
     {
       ...config.stackEnv,
+      ...buildProblemDeployBackendBaseProps(config),
       eventBusArn: controlPlaneStack.eventBusArn,
-      sourceBucketName: config.s3SourceBucket,
-      sourceObjectKey: config.sourceZip,
-      problemsCatalog: config.problems.catalog as ProblemDeployBackendCatalog,
-      problemsScoring: config.problems.scoring as ProblemDeployBackendScoring,
-      problemsEndpoints: config.problems.endpoints as ProblemDeployBackendEndpoints,
-      problemsPhases: config.problems.phases as ProblemDeployBackendPhases,
-      problemsVisibility: config.problems.visibility as ProblemDeployBackendVisibility,
-      // [ADR-023 / #2054] 非 AWS runtime catalog を deploy-handler の guard へ injection
-      problemRuntimes: config.problems.runtimes as Readonly<Record<string, unknown>>,
-      // Issue #888: per-problem `disruptions[]` を Lambda env に injection
-      problemsDisruptions: config.problems.disruptions as Readonly<Record<string, unknown>>,
-      // #1420 ADR-030 Phase 3: per-problem coordination plugin path を dispatcher へ injection
-      problemsCoordination: config.problems.coordination as Readonly<Record<string, unknown>>,
-      // #1420 ADR-030 Phase 3b: synth-bundle 済み coordination plugin (.mjs) を S3 へ配置
-      problemsCoordinationBundles: config.problems.coordinationBundles as Readonly<
-        Record<string, string>
-      >,
       ...(challengePayloadBucketName ? { challengePayloadBucketName } : {}),
       participantPortal: config.participantPortal as
         | { runtimeConfig: ParticipantPortalRuntimeConfig | "default-dev-mock" }
         | undefined,
-      deployConcurrentBuildLimit: config.deployConcurrentBuildLimit,
       // #1766: tier 別の同時デプロイ上限 (未設定ならクォータ無効)。
       deployQuotaByTier: config.deployQuotaByTier,
-      environmentName: config.environment,
     },
   );
   applyDynamoLowCapacity(problemDeployBackendStack, config);
@@ -182,6 +168,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       // ignore するため、 pooled / silo どちらでも同 env を渡してよい (ADR-018 と整合)。
       samlIdps: config.tenantSamlIdps,
       samlAdminAllowlist: config.tenantSamlAdminAllowlist,
+      // Issue #2230 (ADR-035): deploy 時 feature flag override を runtime-config に焼く。
+      features: config.features,
     },
   );
   cdk.Tags.of(tenantTemplateStack).add("TenantId", config.tenantId);
@@ -339,6 +327,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       // Issue #1335 Phase 1: SAML HRD directory (domain → providerName[])。 admin-console Login が
       // email から候補 IdP を解決して `identity_provider=` を組み立てる (= 公開 metadata、 非秘匿)。
       samlIdpDirectory: controlPlaneStack.samlIdpDirectory,
+      // Issue #2230 (ADR-035): deploy 時 feature flag override (admin-console 側 registry 用)。
+      features: config.features,
     },
   );
   cdk.Aspects.of(adminConsoleRuntimeConfigStack).add(new DestroyPolicySetter());
@@ -410,24 +400,3 @@ export interface TenkaCloudAppHandles {
   /** Issue #1031: runtime-config.json を SiteBucket に配置する専用 stack (= 旧 install.sh phase 2 を置換)。 */
   readonly adminConsoleRuntimeConfigStack: AdminConsoleRuntimeConfigStack;
 }
-
-// The `unknown` parts of ProblemsCatalogBundle map to the (unexported) prop types of
-// ProblemDeployBackendStack. They are intentionally widened in the AppConfig surface
-// (= app-config has no dependency on the construct's prop types) and re-narrowed here
-// at the consumer boundary. The cast is structurally safe because both sides originate
-// from the same `discoverProblems*` outputs.
-type ProblemDeployBackendCatalog = ConstructorParameters<
-  typeof ProblemDeployBackendStack
->[2]["problemsCatalog"];
-type ProblemDeployBackendScoring = ConstructorParameters<
-  typeof ProblemDeployBackendStack
->[2]["problemsScoring"];
-type ProblemDeployBackendEndpoints = ConstructorParameters<
-  typeof ProblemDeployBackendStack
->[2]["problemsEndpoints"];
-type ProblemDeployBackendPhases = ConstructorParameters<
-  typeof ProblemDeployBackendStack
->[2]["problemsPhases"];
-type ProblemDeployBackendVisibility = ConstructorParameters<
-  typeof ProblemDeployBackendStack
->[2]["problemsVisibility"];

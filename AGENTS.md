@@ -47,7 +47,7 @@ If something fails, fix the code. Don't paper over it by editing config files (`
 
 If `make harness` fails, cross-reference the invariant ID with the matching rule under `.claude/harness/src/rules/`. The harness's own unit tests are `make harness-test`; the entry points are `.claude/harness/bin/architecture.ts` / `bin/tech-debt.ts`, and the rule logic lives one-rule-per-file under `.claude/harness/src/rules/` and `.claude/harness/src/tech-debt/`.
 
-CI (`.github/workflows/ci.yml`) runs `make install_ci` → textlint → format check → typecheck → test → build. If `make before-commit` passes locally, CI passes — that's the contract.
+CI (`.github/workflows/ci.yml`) runs `make install_ci` → Safe Chain setup (best-effort, `continue-on-error: true` — a Safe Chain outage doesn't block CI) → **audit-deps** → **submodule pin guard** → textlint → format check → typecheck → **test-coverage + the 100％ coverage gate** (agent-owned workspaces) → build → Codecov upload. `before-commit` (lint + test) is a fast local sanity check, not a full CI mirror — it does **not** run audit-deps, the submodule guard, or the coverage gate, so a green `before-commit` does not guarantee a green CI. Run `make ci-local` before opening a PR if you want the full CI mirror locally (same checks, same order, minus the Codecov upload).
 
 ## Available skills
 
@@ -100,7 +100,7 @@ We do not maintain Codex CLI-specific skills or config — AGENTS.md alone guide
 - **HTTP status codes use `StatusCodes.*` (`http-status-codes` library).** Numeric literals such as `c.json(body, 200)` / `res.status === 401` are forbidden. Names make intent explicit (200 vs 202, 400 vs 409, etc.) and let you grep / lint by meaning.
   - backend: `import { StatusCodes } from "http-status-codes"; return c.json(body, StatusCodes.OK);`
   - frontend: `if (res.status === StatusCodes.UNAUTHORIZED) ...`
-  - The legacy aliases (`HTTP_OK` etc. in `infrastructure/lib/problem-deploy/handlers/shared/http-status.ts`) are deprecated. Don't use them in new code.
+  - `StatusCodes.*` usage is enforced across the codebase — the legacy `HTTP_OK`-style numeric aliases have been removed entirely (0 usages remain).
 
 ## Prohibited
 
@@ -124,7 +124,7 @@ The four defense layers are:
 1. **Bun's `trustedDependencies` model**: Bun does not run transitive lifecycle scripts by default. The root `package.json` `trustedDependencies` array is the allowlist (currently empty).
 2. **`.npmrc`**: To protect contributors who fall back to npm / yarn / pnpm, set `ignore-scripts=true` + `min-release-age=168h` (7-day quarantine).
 3. **CI audit** (`make audit-deps`): `scripts/audit-dependencies.ts` scans under `node_modules`, diffs packages with lifecycle scripts (preinstall / install / postinstall / preprepare / prepare / postprepare) against `scripts/audit-baseline.json`, and fails CI on any new addition or any new hook on an existing dep.
-4. **`--ignore-scripts` install + Safe Chain in CI**: `make install_ci` runs `bun install --frozen-lockfile --ignore-scripts`, plus Aikido Safe Chain to detect malicious packages.
+4. **`--ignore-scripts` install + Safe Chain in CI**: `make install_ci` runs `bun install --frozen-lockfile --ignore-scripts`. Aikido Safe Chain also runs in CI to detect malicious packages, but its setup step is `continue-on-error: true` — a Safe Chain outage or setup failure does not block CI (best-effort, not a hard gate). `--ignore-scripts` + `audit-deps` (layers 1-3) are the hard defense; Safe Chain is an additional best-effort check on top.
 
 ### Updating the baseline
 
@@ -164,6 +164,9 @@ apps/
   admin-console/                   # System Admin (Cognito Hosted UI / OAuth Code+PKCE)
   application-admin-console/       # Tenant Admin (per-tenant Application Plane)
   participant-portal/              # Competitor portal (per-team login key)
+  developer-portal/                # Pack-author-facing docs/tools SPA
+packages/                          # Shared workspace libraries (auth-client, saml-utils,
+                                    # problem-runtime, problem-sdk, format, web-kit, etc. — 10 packages)
 infrastructure/
   bin/infrastructure.ts            # Wiring for every stack
   lib/control-plane-stack.ts       # SBT ControlPlane
@@ -180,7 +183,10 @@ scripts/
   cleanup.sh                       # Idempotent teardown
   provision-tenant.sh              # Per-tenant deploy invoked from CodeBuild
   deprovision-tenant.sh            # Tenant teardown
-problems/<category>/<id>/          # metadata.json + template.yaml are the source of truth
+packs/                             # In-repo sample/golden/reference problem packs (ADR-012 3-asset model)
+problems/                          # Git submodule → TenkaCloudChallenge (the community catalog);
+                                    # empty until `git submodule update --init`
+landing/                           # Static marketing/demo site
 ```
 
 ## Cross-plane contracts (do not break)

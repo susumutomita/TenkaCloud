@@ -256,6 +256,11 @@
     "open_console_aria": "Open AWS Console for {problemId}",
     "label_aws_account": "AWS Account",
     "label_region": "Region",
+    "label_provider": "Cloud provider",
+    "non_aws_body": "This problem runs on {provider}, so it is not accessed through the AWS Console. Follow the event host's instructions for access.",
+    "external_portal_button": "Open the {provider} portal",
+    "external_portal_aria": "Open the provider portal for {problemId}",
+    "external_portal_hint": "This problem runs on {provider}. Open the provider portal and sign in with the account your event host provided — TenkaCloud does not broker the sign-in session.",
     "cli": {
       "section_header": "CLI / SDK temporary credentials",
       "body": "Issue 1-hour temporary credentials for AWS CLI / boto3 / Terraform usage. Same IAM scope as the Console (ParticipantViewerRole).",
@@ -304,11 +309,11 @@
     "health_unknown": "Not checked yet",
     "last_scored_label": "Last scored",
     "outputs_header": "Access URLs",
-    "stack_outputs_detail_header": "Stack Outputs (details)",
+    "stack_outputs_detail_header": "Deployment outputs (details)",
     "celebrate_header": "🏆 Cleared +{points} pt",
     "celebrate_body": "You've already solved this problem. Move on to the next!",
     "submit_button": "Submit flag (+{points} pt)",
-    "flag_field_label": "Flag (Stack Output value)",
+    "flag_field_label": "Flag (deployment output value)",
     "flag_placeholder": "Enter value",
     "flag_mock_placeholder": "e.g. tenkacloudsample",
     "flag_mock_hint": "Demo mode — type `tenkacloudsample` to feel the correct-answer celebration (partial matches work too; Easter eggs like `claude` / `42` also count).",
@@ -354,7 +359,7 @@
     "solved_header": "🎉 {label} — solved",
     "solved_body": "You earned +{points} pt for this flag.",
     "submit_button": "Submit (+{points} pt)",
-    "flag_field_label": "{label} (Stack Output value)"
+    "flag_field_label": "{label} (deployment output value)"
   },
   "score_timeline": {
     "header": "Score timeline",

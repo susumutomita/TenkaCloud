@@ -24,7 +24,9 @@ vi.mock("../../src/i18n", () => ({
 }));
 vi.mock("../../src/data/problems", () => ({ findProblemMetadata: mockFindMeta }));
 
-const { renderSubmissionState, QuestsPage } = await import("../../src/pages/Quests");
+const { renderSubmissionState, questCardTitle, QuestsPage } = await import(
+  "../../src/pages/Quests"
+);
 
 function problem(partial: Partial<ParticipantProblemView>): ParticipantProblemView {
   return {
@@ -156,7 +158,31 @@ beforeEach(() => {
 
 afterEach(() => vi.clearAllMocks());
 
+describe("questCardTitle (issue #2189: card must show the display name, not the id)", () => {
+  it("should return the catalog display name when metadata is found", () => {
+    mockFindMeta.mockImplementation((id: string) =>
+      id === "sqli-demo" ? { name: "スタッフ専用ログイン" } : undefined,
+    );
+    expect(questCardTitle("sqli-demo")).toBe("スタッフ専用ログイン");
+  });
+
+  it("should fall back to the problem id when no metadata is found", () => {
+    mockFindMeta.mockImplementation(() => undefined);
+    expect(questCardTitle("unknown-problem")).toBe("unknown-problem");
+  });
+});
+
 describe("QuestsPage", () => {
+  it("should show the problem's display name (not its raw id) on the quest card", () => {
+    mockFindMeta.mockImplementation((id: string) =>
+      id === "ctf-unsolved" ? { difficulty: 3, name: "スタッフ専用ログイン" } : undefined,
+    );
+    mockTeamView.mockReturnValue({ view: { problems: [flagUnsolved] }, error: null });
+    render(<QuestsPage />);
+    expect(screen.getByText("スタッフ専用ログイン")).toBeInTheDocument();
+    expect(screen.queryByText("ctf-unsolved")).not.toBeInTheDocument();
+  });
+
   it("should show a loading spinner while the view is undefined", () => {
     mockTeamView.mockReturnValue({ view: undefined, error: null });
     render(<QuestsPage />);

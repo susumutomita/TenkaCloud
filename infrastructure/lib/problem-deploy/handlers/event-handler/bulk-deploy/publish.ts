@@ -5,17 +5,19 @@ import {
   type DeployCreateRequestedDetail,
   EVENT_DETAIL_TYPE_BULK_DEPLOY_CREATE_REQUESTED,
   EVENT_SOURCE,
+  putEventsBatched,
 } from "../../shared/events.js";
 import { logDeployTrace } from "../../shared/trace-log.js";
 import type { EventSharedResources } from "../shared.js";
 import { markBulkEventDeploying } from "./persistence.js";
-import { type PlanEntry, PUT_EVENTS_BATCH, type PublishFailure } from "./types.js";
+import type { PlanEntry, PublishFailure } from "./types.js";
 
 /**
  * Event status の DEPLOYING 遷移と、 EventBridge への publish を並列実行する。
  * - feature flag (`useBulkDistributedMap` + `bulkDeployPayloadBucket` あり) なら
  *   Distributed Map 経路: S3 PutObject (= deployment 配列) + 1 BulkDeployCreateRequested publish
- * - 旧経路: PUT_EVENTS_BATCH ごとに直接 DeployCreateRequested を fan-out publish
+ * - 旧経路: `putEventsBatched` (shared/events.js) が chunk 分割して直接 DeployCreateRequested を
+ *   fan-out publish
  *
  * 戻り値は publish 失敗一覧。 caller が markPublishFailuresFailed で deployment を FAILED 化する。
  */
@@ -52,11 +54,25 @@ function publishBulkPlanEntries(
       }),
     ];
   }
-  const chunks: Promise<PublishFailure[]>[] = [];
-  for (let index = 0; index < plan.length; index += PUT_EVENTS_BATCH) {
-    chunks.push(publishPlanChunk(shared, plan.slice(index, index + PUT_EVENTS_BATCH)));
-  }
-  return chunks;
+  return [publishPlan(shared, plan)];
+}
+
+async function publishPlan(
+  shared: EventSharedResources,
+  plan: readonly PlanEntry[],
+): Promise<PublishFailure[]> {
+  const results = await putEventsBatched(
+    shared.events,
+    plan.map((p) => ({ item: p, entry: p.entry })),
+  );
+  return results
+    .filter((r) => !r.success)
+    .map((r) => ({
+      jobId: r.item.item.jobId,
+      reason: r.errorCode
+        ? `${r.errorCode}: ${r.errorMessage ?? "unknown error"}`
+        : (r.errorMessage ?? "unknown error"),
+    }));
 }
 
 /**
@@ -149,33 +165,5 @@ async function publishViaDistributedMap(
       jobId: d.jobId,
       reason: `BulkDeployCreateRequested publish failed: ${reason}`,
     }));
-  }
-}
-
-async function publishPlanChunk(
-  shared: EventSharedResources,
-  chunk: readonly PlanEntry[],
-): Promise<PublishFailure[]> {
-  try {
-    const out = await shared.events.send(
-      new PutEventsCommand({ Entries: chunk.map((p) => p.entry) }),
-    );
-    if ((out.FailedEntryCount ?? 0) === 0) return [];
-    const failures = (out.Entries ?? [])
-      .map((entry, i): PublishFailure | undefined =>
-        entry.ErrorCode
-          ? {
-              jobId: chunk[i]?.item.jobId ?? "<unknown>",
-              reason: `${entry.ErrorCode}: ${entry.ErrorMessage ?? "unknown error"}`,
-            }
-          : undefined,
-      )
-      .filter((f): f is PublishFailure => f !== undefined);
-    return failures.length > 0
-      ? failures
-      : chunk.map((p) => ({ jobId: p.item.jobId, reason: "unknown error" }));
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    return chunk.map((p) => ({ jobId: p.item.jobId, reason }));
   }
 }

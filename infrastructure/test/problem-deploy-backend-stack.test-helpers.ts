@@ -35,6 +35,23 @@ export function synthDefault(): Template {
   return cachedDefault;
 }
 
+// Issue #2232: useBulkDistributedMap: true を反映させた EventApi Lambda env を検証するための
+// 別 synth (= 既存 synthWithDeployConcurrentBuildLimit と同じ pattern)。
+export function synthWithBulkDistributedMap(): Template {
+  const app = new cdk.App();
+  const stack = new ProblemDeployBackendStack(app, "TestStackWithDistributedMap", {
+    eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
+    sourceBucketName: "test-source-bucket",
+    sourceObjectKey: "source.zip",
+    problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+    problemsScoring: {},
+    problemsEndpoints: {},
+    useBulkDistributedMap: true,
+    environmentName: "development",
+  });
+  return Template.fromStack(stack);
+}
+
 // #538: deployConcurrentBuildLimit を反映させた CodeBuild Project を検証するための別 synth。
 export function synthWithDeployConcurrentBuildLimit(): Template {
   const app = new cdk.App();

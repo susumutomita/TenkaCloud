@@ -14,7 +14,11 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { LocalPlayDeployment } from "./local-play/api";
-import { loadContainerProblem, resolveProblemDir } from "./local-play/manifest";
+import {
+  listLocalPlayProblems,
+  loadContainerProblem,
+  resolveProblemDir,
+} from "./local-play/manifest";
 import { assertPortFree, waitForLocalApi } from "./local-play/readiness";
 import { startLocalPlayServer } from "./local-play/server";
 import { buildRuntimeConfig } from "./participant-portal-runtime-config";
@@ -348,11 +352,35 @@ function down(): void {
   console.log("Local play stopped.");
 }
 
+/**
+ * Issue #2188: `make local list` — show which problems are playable locally
+ * (id / display name / category) so players can pick one instead of already
+ * needing to know the id.
+ */
+function listProblems(): void {
+  const summaries = listLocalPlayProblems(problemSearchRoots(REPO_ROOT));
+  if (summaries.length === 0) {
+    console.log(
+      "No local-play problems found. Run `git submodule update --init` (or `make doctor` / " +
+        "`make local`, which do this for you) to fetch the problems/ catalog.",
+    );
+    return;
+  }
+  console.log("Local-play problems (`make local PROBLEM=<id>`):\n");
+  const idWidth = Math.max(...summaries.map((s) => s.problemId.length), "id".length);
+  const categoryWidth = Math.max(...summaries.map((s) => s.category.length), "category".length);
+  console.log(`  ${"id".padEnd(idWidth)}  ${"category".padEnd(categoryWidth)}  name`);
+  for (const s of summaries) {
+    console.log(`  ${s.problemId.padEnd(idWidth)}  ${s.category.padEnd(categoryWidth)}  ${s.name}`);
+  }
+}
+
 function usage(): string {
   return [
     "Usage: bun run scripts/tenkacloud-local.ts <command>",
     "",
     "Commands:",
+    "  list             List local-play problems (id / category / name)",
     "  up [problemId]   Start the problem container and the local scoring API",
     "  serve <path>     Run the local Participant API (used internally by up)",
     "  status           Check the local Participant API",
@@ -364,6 +392,9 @@ function usage(): string {
 async function main(): Promise<void> {
   const [command, argument] = process.argv.slice(2);
   switch (command) {
+    case "list":
+      listProblems();
+      break;
     case "up":
       await up(argument ?? process.env.PROBLEM ?? DEFAULT_PROBLEM);
       break;

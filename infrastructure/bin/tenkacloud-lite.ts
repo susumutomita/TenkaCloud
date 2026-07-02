@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 import * as cdk from "aws-cdk-lib";
 import { resolveAppConfig } from "../lib/app-config/index.js";
-import { CodeBuildUseAwsManagedKms } from "../lib/cdk-aspect/codebuild-use-aws-managed-kms.js";
-import { DynamoDbLowCapacity } from "../lib/cdk-aspect/dynamodb-low-capacity.js";
-import { KmsKeyShortPendingWindow } from "../lib/cdk-aspect/kms-key-short-pending-window.js";
-import { LogGroupRetention } from "../lib/cdk-aspect/log-group-retention.js";
+import { buildProblemDeployBackendBaseProps } from "../lib/app-wiring/problem-deploy-backend-props.js";
+import { applyDynamoLowCapacity, applyGlobalAspects } from "../lib/app-wiring/wire/aspects.js";
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack.js";
 import { TenkaCloudLiteStack } from "../lib/tenkacloud-lite/index.js";
 import { resolveLiteStackNames } from "../lib/tenkacloud-lite/stack-names.js";
@@ -36,49 +34,23 @@ const config = resolveAppConfig({ env: process.env, binDir: import.meta.dirname 
 // (CLI runner `scripts/tenkacloud-lite.ts` と共有し、 describe/destroy の対象名と一致させる)。
 const liteStackNames = resolveLiteStackNames(config.environment);
 
-// Issue #952 / PR-957: cost allocation tag を App scope で全リソースに付与する。
-// SaaS mode (wire.ts) と同じ規則。 AWS Billing console で `Project` を Cost
-// Allocation Tag として activate すれば Budget / Cost Explorer で TenkaCloud
-// 分だけを抽出できる。
-cdk.Tags.of(app).add("Project", "TenkaCloud");
-cdk.Tags.of(app).add("Environment", config.environment);
-
-cdk.Aspects.of(app).add(new KmsKeyShortPendingWindow(config.kmsPendingWindowInDays));
-cdk.Aspects.of(app).add(new CodeBuildUseAwsManagedKms());
-// 全 LogGroup の retention を `CDK_PARAM_LOG_RETENTION_DAYS` (既定 1 日) に揃える。 KMS /
-// CodeBuild の App scope cost aspect と同じ位置に並べ、 Lite の両 stack の log group を一掃する。
-cdk.Aspects.of(app).add(new LogGroupRetention());
+// Issue #2209: App scope の Tags / Aspects (cost allocation tag / KMS pending window /
+// CodeBuild KMS / LogGroup retention) は SaaS mode (wire.ts) と同じヘルパを共有する。
+// Lite 側だけの手コピーは、 wire 側への Aspect 追加が Lite に伝播しない drift の温床だった。
+applyGlobalAspects(app, config);
 
 // Issue #778 ADR-016 Phase 2 / PR-#791: eventBusArn 省略で local bus 自動作成。
 const problemDeployBackend = new ProblemDeployBackendStack(app, liteStackNames.problemDeploy, {
   ...config.stackEnv,
+  // source bundle + problems.* の共通 props は SaaS (wire.ts) と共有の factory (#2209)。
+  // 新しい問題メタデータ field は factory に 1 回追加すれば両モードへ届く。
+  ...buildProblemDeployBackendBaseProps(config),
   // eventBusArn は **明示的に渡さない** (= Lite では ControlPlane 不在のため)
-  sourceBucketName: config.s3SourceBucket,
-  sourceObjectKey: config.sourceZip,
-  problemsCatalog: config.problems.catalog as Readonly<Record<string, string>>,
-  problemsScoring: config.problems.scoring as Readonly<Record<string, unknown>>,
-  problemsEndpoints: config.problems.endpoints as Readonly<Record<string, unknown>>,
-  problemsPhases: (config.problems.phases ?? {}) as Readonly<Record<string, unknown>>,
-  problemsVisibility: (config.problems.visibility ?? {}) as Readonly<Record<string, "private">>,
-  // [ADR-023 / #2054] Lite mode でも非 AWS runtime catalog を deploy guard へ渡す。
-  problemRuntimes: (config.problems.runtimes ?? {}) as Readonly<Record<string, unknown>>,
-  // Issue #888: Lite mode でも problemsDisruptions を Lambda env に渡す。
-  problemsDisruptions: (config.problems.disruptions ?? {}) as Readonly<Record<string, unknown>>,
-  // #1420 ADR-030 Phase 3: Lite mode でも coordination plugin path を dispatcher へ渡す。
-  problemsCoordination: (config.problems.coordination ?? {}) as Readonly<Record<string, unknown>>,
-  // #1420 ADR-030 Phase 3b: Lite mode でも synth-bundle 済み coordination plugin を S3 へ配置。
-  problemsCoordinationBundles: (config.problems.coordinationBundles ?? {}) as Readonly<
-    Record<string, string>
-  >,
   // Lite では participant portal を runtime-config "default-dev-mock" で立てる
   // (= portal Lambda + S3+CloudFront を持ち込む)。 frontend は backend mode で動く。
   participantPortal: { runtimeConfig: "default-dev-mock" },
-  deployConcurrentBuildLimit: config.deployConcurrentBuildLimit,
-  environmentName: config.environment,
 });
-cdk.Aspects.of(problemDeployBackend).add(
-  new DynamoDbLowCapacity(config.dynamoReadCapacity, config.dynamoWriteCapacity),
-);
+applyDynamoLowCapacity(problemDeployBackend, config);
 
 // AppPlaneCore (= tenantId="local" 固定) を抱える Lite stack。 ProblemDeploy stack
 // の Lambda refs を cross-stack で渡す (= 既存 Full mode の TenantTemplateStack
@@ -97,8 +69,9 @@ const liteStack = new TenkaCloudLiteStack(app, liteStackNames.app, {
   // Issue #1340 Phase 2: opt-in per-tenant SAML (= 未設定なら空配列で no-op)。
   samlIdps: config.tenantSamlIdps,
   samlAdminAllowlist: config.tenantSamlAdminAllowlist,
+  // Issue #2230 (ADR-035): Lite mode でも deploy 時 feature flag override を焼く
+  // (= nonAwsRuntime の検証は Lite が主戦場)。
+  features: config.features,
 });
-cdk.Aspects.of(liteStack).add(
-  new DynamoDbLowCapacity(config.dynamoReadCapacity, config.dynamoWriteCapacity),
-);
+applyDynamoLowCapacity(liteStack, config);
 liteStack.addDependency(problemDeployBackend);
