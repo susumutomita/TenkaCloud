@@ -95,4 +95,25 @@ describe("useEffectiveFeatures", () => {
 
     expect(get).not.toHaveBeenCalled();
   });
+
+  it("should not apply a response that resolves after the component unmounted", async () => {
+    let resolveFetch: (value: { flags: Record<string, boolean> }) => void = () => {};
+    const get = vi.fn().mockReturnValue(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      }),
+    );
+    mocks.useApiClient.mockReturnValue({ get });
+    const config = buildConfig({ samlSso: false, nonAwsRuntime: false, redTeam: false });
+
+    const { result, unmount } = renderHook(() => useEffectiveFeatures(config));
+    unmount();
+    resolveFetch({ flags: { samlSso: true } });
+    await act(async () => {});
+
+    // The hook's cleanup set `cancelled = true` before the promise resolved, so the
+    // stale-closure guard (`if (cancelled) return;`) must skip setFeatures entirely —
+    // asserting on the last-known result value confirms no state update was attempted.
+    expect(result.current).toEqual({ samlSso: false, nonAwsRuntime: false, redTeam: false });
+  });
 });

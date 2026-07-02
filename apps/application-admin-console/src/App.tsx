@@ -71,8 +71,7 @@ export function App({ config }: { config: AppConfig }) {
  */
 function AppRoutes({ baseConfig }: { baseConfig: AppConfig }) {
   const features = useEffectiveFeatures(baseConfig);
-  const config: AppConfig =
-    features === baseConfig.features ? baseConfig : { ...baseConfig, features };
+  const config: AppConfig = { ...baseConfig, features };
 
   return (
     <Routes>
