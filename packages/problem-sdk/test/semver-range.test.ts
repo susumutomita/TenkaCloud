@@ -46,6 +46,26 @@ describe("satisfiesCoreRange: comparator operators", () => {
     expect(satisfiesCoreRange("3.0.0", "^1.0.0 || ^3.0.0")).toBe(true);
   });
 
+  it("should treat a bare major-only token as [major.0.0, (major+1).0.0)", () => {
+    expect(satisfiesCoreRange("1.5.0", "1")).toBe(true);
+    expect(satisfiesCoreRange("2.0.0", "1")).toBe(false);
+  });
+
+  it("should treat a bare major.minor token (no patch) as [major.minor.0, major.(minor+1).0)", () => {
+    expect(satisfiesCoreRange("1.2.9", "1.2")).toBe(true);
+    expect(satisfiesCoreRange("1.3.0", "1.2")).toBe(false);
+  });
+
+  it("should keep the leftmost non-zero component fixed for a 0.x caret range", () => {
+    expect(satisfiesCoreRange("0.2.9", "^0.2.0")).toBe(true);
+    expect(satisfiesCoreRange("0.3.0", "^0.2.0")).toBe(false);
+  });
+
+  it("should bound a 0.0.x caret range to patch-level only", () => {
+    expect(satisfiesCoreRange("0.0.3", "^0.0.3")).toBe(true);
+    expect(satisfiesCoreRange("0.0.4", "^0.0.3")).toBe(false);
+  });
+
   it("should return false for an invalid version or range", () => {
     expect(satisfiesCoreRange("not-semver", "^1.0.0")).toBe(false);
     expect(satisfiesCoreRange("1.0.0", "")).toBe(false);
