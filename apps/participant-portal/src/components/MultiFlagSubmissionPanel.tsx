@@ -8,9 +8,10 @@ import { useState } from "react";
 import { type MultiFlagEntryView, type SubmitFlagOutcome, submitFlag } from "../api/portal-client";
 import { useIsMock } from "../config-context";
 import { evaluateMockFlag } from "../dev-mock/flag-submit";
-import { useT } from "../i18n";
+import { useLang, useT } from "../i18n";
 import { CelebrationOverlay } from "./CelebrationOverlay";
 import { formatProblemPanelActionError } from "./ProblemPanel.helpers";
+import { HintsPanel } from "./ProblemPanelFlagSubmission";
 
 /**
  * Issue #1796: multi-flag kind の提出パネル。 1 問題に N 個の独立 flag を持ち、 競技者が各 flag を
@@ -78,6 +79,9 @@ function SubFlagRow({
   onScored: () => Promise<void>;
 }) {
   const t = useT();
+  const lang = useLang();
+  // [#2252] i18n.en.checks 由来の label 訳 (multi-verify)。 無ければ ja label に fallback。
+  const label = lang === "en" && flag.i18n?.en?.label ? flag.i18n.en.label : flag.label;
   // dev-mock mode のとき submit を backend に投げず evaluateMockFlag で local 評価する
   // (= 単一 flag kind の FlagSubmissionPanel と同方針)。
   const isMock = useIsMock();
@@ -92,7 +96,7 @@ function SubFlagRow({
     return (
       <>
         {outcome?.kind === "ok" && <CelebrationOverlay visible />}
-        <Alert type="success" header={t("multi_flag.solved_header", { label: flag.label })}>
+        <Alert type="success" header={t("multi_flag.solved_header", { label })}>
           {t("multi_flag.solved_body", { points: flag.points })}
         </Alert>
       </>
@@ -129,7 +133,7 @@ function SubFlagRow({
           }
         >
           <FormField
-            label={t("multi_flag.flag_field_label", { label: flag.label })}
+            label={t("multi_flag.flag_field_label", { label })}
             description={isMock ? t("problem_panel.flag_mock_hint") : undefined}
           >
             <Input
@@ -174,6 +178,16 @@ function SubFlagRow({
         <Alert type="error" header={t("problem_panel.submit_failed_header")}>
           {submitError}
         </Alert>
+      )}
+      {/* [#2252] multi-verify: per-check progressive hints。 flat reveal route を再利用。 */}
+      {flag.hints && flag.hints.length > 0 && (
+        <HintsPanel
+          apiBaseUrl={apiBaseUrl}
+          sessionToken={sessionToken}
+          problemId={problemId}
+          hints={flag.hints}
+          onRevealed={onScored}
+        />
       )}
     </SpaceBetween>
   );

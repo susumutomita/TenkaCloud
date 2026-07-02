@@ -43,6 +43,7 @@
       .meta { display: flex; flex-wrap: wrap; gap: 0.5rem 1.4rem; margin: 0.6rem 0 1.4rem; color: var(--muted); font-size: 0.9rem; }
       .badge { display: inline-block; padding: 0.12em 0.6em; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
       .b-proposed { background: #fff3da; color: var(--warn); }
+      .b-accepted { background: #e2f4e8; color: var(--ok); }
       .pill { display: inline-block; padding: 0.08em 0.5em; border-radius: 4px; font-size: 0.78rem; font-weight: 600; color: #fff; }
       .p-aws { background: var(--aws); color: #3a2600; }
       .p-gcp { background: var(--gcp); }
@@ -66,7 +67,7 @@
   <body>
     <h1>ADR-048 — Managed participant access for composite targets (AWS / GCP / Azure / Sakura)</h1>
     <div class="meta">
-      <span><strong>Status:</strong> <span class="badge b-proposed">Proposed</span></span>
+      <span><strong>Status:</strong> <span class="badge b-accepted">Accepted</span> (2026-07-02, together with ADR-0001)</span>
       <span><strong>Date:</strong> 2026-06-30</span>
       <span><strong>Epic:</strong> Composite Runtime (#2058)</span>
       <span><strong>Supersedes:</strong> none</span>
@@ -306,10 +307,14 @@
       </tbody>
     </table>
 
-    <h2>5. API contract draft</h2>
+    <h2>5. API contract</h2>
     <p>
-      The provider-neutral descriptor already exists in code (#2076). The issuance boundary below is a draft for the
-      follow-up issues; only the descriptor and lookup ship at this ADR's acceptance.
+      The provider-neutral descriptor exists in code (#2076); the AWS console / CLI bridge for composite
+      targets is implemented (#2077). For single-provider problems the capability is <strong>embedded in the
+      <code>GET /portal/me</code> problem view</strong> rather than served from a dedicated endpoint (#2235):
+      the portal already renders everything from that one team-scoped fetch, the capability is a pure,
+      secret-free function of the stored provider, and a separate endpoint would only add a second fetch and
+      a second polling surface.
     </p>
     <pre><code>// Shipped (#2076): provider-neutral, secret-free description of a target.
 type TargetAccessCapability =
@@ -325,10 +330,18 @@ type TargetAccessDescriptor = {
   capability: readonly TargetAccessCapability[];
 };
 
-// GET /participant/composite/{parentDeploymentId}/targets/{targetDeploymentId}/access
-//   -> 200 { descriptor }            // team-owned, COMPLETE
-//   -> 409 { reason: "not_ready" }   // team-owned, not COMPLETE
-//   -> 404                           // not found OR another team (indistinguishable)
+// Shipped (#2235): every problem in GET /portal/me carries its capability,
+// resolved by the same matrix (composite-target-access resolver — one source of truth).
+type ParticipantProblemView = {
+  // ...existing fields...
+  provider: string; // canonical: "aws" | "sakura" | "azure" | "gcp"; absent row contract = aws
+  accessCapabilities: readonly TargetAccessCapability[];
+};
+
+// Shipped (#2076/#2077): composite target access + AWS bridge.
+// GET /portal/me/composite/{parentDeploymentId}/targets/{targetDeploymentId}/console-signin-url
+// GET /portal/me/composite/{parentDeploymentId}/targets/{targetDeploymentId}/cli-credentials
+//   -> AWS targets only; non-AWS targets are rejected as a capability mismatch.
 
 // Draft (future issuance boundary; AWS managed mode only at first release):
 // POST /participant/composite/{parentDeploymentId}/targets/{targetDeploymentId}/session
@@ -336,6 +349,18 @@ type TargetAccessDescriptor = {
 //   -> 200 { url?, credentials?, expiresAt }   // returned once; never persisted
 //   -> 404 / 409 / 410                          // not found / not ready / grant consumed or expired
 //   external-portal providers: no session endpoint; the descriptor is terminal.</code></pre>
+
+    <h3>5.1 External-portal destination source</h3>
+    <p>
+      The <code>external-portal</code> destination for GCP / Azure / Sakura is a <strong>platform-owned constant
+      map of the providers' public console URLs</strong>, shipped in the participant portal frontend next to the
+      provider display-name map. It is deliberately <em>not</em> declared in problem metadata (an author-supplied
+      URL would be a redirect vector needing its own allowlist, and it would put an authoring burden on every
+      problem) and never accepted from the participant. The backend therefore ships the capability only; the
+      frontend pairs it with the constant destination and locale-specific sign-in instructions. Per-connection
+      deep links (e.g. a GCP console URL carrying the team connection's project id) can be layered on later as a
+      server-derived enrichment without changing this contract.
+    </p>
 
     <h2>6. Audit, revocation, and fallback</h2>
     <h3>6.1 Required audit events</h3>
@@ -380,9 +405,14 @@ type TargetAccessDescriptor = {
       <li><span class="pill p-gcp">GCP</span> Whether a future managed mode uses Workload Identity Federation for a viewer-scoped, keyless session, and what the audience / attribute binding would be.</li>
       <li><span class="pill p-azure">Azure</span> Whether a viewer-scoped managed session is feasible via Entra ID without storing app secrets, and the equivalent of an <code>ExternalId</code> confused-deputy guard.</li>
       <li><span class="pill p-sakura">Sakura</span> Whether any managed access is offered at all, or it stays external-portal indefinitely.</li>
-      <li><strong>All providers</strong> The exact external-portal URL shape (if any) and whether presenting it constitutes information disclosure for a given problem.</li>
       <li><strong>AWS</strong> Final max session TTL and console sign-in token TTL within the bounds in Table&nbsp;1.</li>
     </ul>
+    <p>
+      <strong>Resolved</strong> — the external-portal URL shape question is decided in §5.1: a platform-owned
+      constant map of the providers' public console URLs (frontend), never problem metadata or participant
+      input. A public console sign-in page discloses nothing about a problem, so no per-problem disclosure
+      review is required for it.
+    </p>
 
     <h2>9. Security review checklist</h2>
     <ul class="check">
@@ -439,7 +469,7 @@ type TargetAccessDescriptor = {
     </ul>
 
     <footer>
-      ADR-048 · TenkaCloud architecture decision record · Status: Proposed · 2026-06-30
+      ADR-048 · TenkaCloud architecture decision record · Status: Accepted · 2026-07-02
     </footer>
   </body>
 </html>

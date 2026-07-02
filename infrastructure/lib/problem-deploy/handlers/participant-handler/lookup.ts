@@ -1,4 +1,8 @@
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
+import {
+  resolveTargetAccessCapability,
+  type TargetAccessCapability,
+} from "../deploy-handler/composite-target-access.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
@@ -141,6 +145,15 @@ export type ParticipantProblemView = Pick<
    * 未知の格納値は raw のまま返す (= 誤って aws 扱いにしない。portal 側は raw 値 fallback 表示)。
    */
   readonly provider: string;
+  /**
+   * [#2235 / ADR-0001·ADR-048] この問題への参加者アクセス capability。provider の純関数で、
+   * matrix の正本は composite-target-access.ts (aws → console + cli-credentials、
+   * gcp / azure / sakura → external-portal、未知 provider → unsupported)。portal は
+   * これで導線 (AWS Console/CLI vs external-portal 案内) を分岐する。credential /
+   * URL は含まない — external-portal の宛先はプラットフォーム所有の定数マップ
+   * (portal frontend) が持ち、参加者入力・problem metadata からは供給しない。
+   */
+  readonly accessCapabilities: readonly TargetAccessCapability[];
   // 設計判断: `endpointsHealth` (= どの endpoint が落ちているか) は participant API には
   // 出さない。Battle のゲーム性は「壊れている原因を防御側自身が調査して復旧する」点に
   // あり、画面で答え合わせをすると興ざめになる。露出するのは aggregate のみ。
@@ -222,13 +235,17 @@ export function toProblemView(
 
   const scoring = item.problemId ? scoringMap[item.problemId] : undefined;
   const stackOutputs = stripAnswerOutputs(parseStackOutputs(item.stackOutputs), scoring);
+  const provider = resolveViewProvider(item.runtimeProvider);
 
   return {
     jobId: String(item.jobId ?? ""),
     problemId: String(item.problemId ?? ""),
     region: String(item.region ?? ""),
     awsAccountId: String(item.awsAccountId ?? ""),
-    provider: resolveViewProvider(item.runtimeProvider),
+    provider,
+    // [#2235] ADR-0001/048 の matrix を composite-target-access の resolver で解決する
+    // (= view 側に別 matrix を持たせず drift を防ぐ)。
+    accessCapabilities: resolveTargetAccessCapability(provider, status),
     status,
     stackOutputs,
     failureReason: status === "FAILED" ? item.failureReason : undefined,

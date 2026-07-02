@@ -194,3 +194,43 @@ describe("MultiFlagSubmissionPanel", () => {
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
   });
 });
+
+describe("multi-verify extensions (issue #2252)", () => {
+  const HINTED_FLAGS = [
+    {
+      id: "public-backup",
+      label: "公開バックアップ",
+      points: 50,
+      solved: false,
+      i18n: { en: { label: "Public backup" } },
+      hints: [{ id: "h-backup", penalty: 2, revealed: false }],
+    },
+    { id: "weak-admin-pw", label: "弱い管理者パスワード", points: 70, solved: false },
+  ];
+
+  afterEach(() => {
+    window.localStorage.removeItem("tenkacloud.portal.locale");
+  });
+
+  it("should render a per-check HintsPanel only for entries that carry hints", () => {
+    renderPanel({ flags: HINTED_FLAGS });
+    // HintsPanel の reveal ボタンが hint 付き check にだけ 1 つ出る
+    expect(screen.getAllByRole("button", { name: /ヒント|hint/i })).toHaveLength(1);
+  });
+
+  it("should keep entries without hints unchanged (no HintsPanel)", () => {
+    renderPanel({ flags: [HINTED_FLAGS[1]] });
+    expect(screen.queryByRole("button", { name: /ヒント|hint/i })).not.toBeInTheDocument();
+  });
+
+  it("should show the i18n.en label when the locale is en and fall back to ja otherwise", () => {
+    window.localStorage.setItem("tenkacloud.portal.locale", "en");
+    const first = renderPanel({ flags: HINTED_FLAGS });
+    expect(screen.getByText(/Public backup/)).toBeInTheDocument();
+    first.unmount();
+
+    window.localStorage.setItem("tenkacloud.portal.locale", "ja");
+    renderPanel({ flags: HINTED_FLAGS });
+    expect(screen.getByText(/公開バックアップ/)).toBeInTheDocument();
+  });
+});
