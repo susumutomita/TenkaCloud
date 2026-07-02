@@ -9,6 +9,7 @@ import { registerAuditLogRoutes } from "./routes/audit-log.js";
 import { registerBulkDeployRoutes } from "./routes/bulk-deploy.js";
 import { registerDisruptionRoutes } from "./routes/disruptions.js";
 import { registerEventRoutes } from "./routes/events.js";
+import { registerFeatureFlagsRoutes } from "./routes/feature-flags.js";
 import { registerLifecycleRoutes } from "./routes/lifecycle.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerScoringRoutes } from "./routes/scoring.js";
@@ -30,6 +31,8 @@ import { buildEventSharedResources } from "./shared.js";
  *   GET    /events/:eventId/disruptions/audit    — Disruption 発火履歴
  *   POST   /events/:eventId/disruptions/fire     — Disruption を fire
  *   DELETE /events/:eventId                — Bulk teardown
+ *   GET    /admin/feature-flags            — per-tenant runtime feature-flag overrides (#2231)
+ *   PUT    /admin/feature-flags            — full-replace the override set (TenantAdmin only)
  *
  * Auth: tenant API GW + Cognito JWT authorizer。tenantId は JWT `custom:tenantId` claim
  * から `resolveTenantId` で抽出する (DeployApi Lambda と同じ shape)。
@@ -89,6 +92,8 @@ registerBulkDeployRoutes(app, shared);
 registerDisruptionRoutes(app, shared);
 // Issue #1292: Tenant Admin 向け audit log read routes (= /admin/audit-log + /export)。
 registerAuditLogRoutes(app, shared);
+// Issue #2231 (ADR-035): per-tenant runtime feature-flag toggle (= /admin/feature-flags)。
+registerFeatureFlagsRoutes(app, shared);
 
 export const handler = handle(app) as (
   event: LambdaEvent,
