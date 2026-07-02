@@ -1,17 +1,11 @@
 import * as path from "node:path";
-import { Duration, RemovalPolicy } from "aws-cdk-lib";
+import { Duration } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { Rule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
-import { Architecture } from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
-import {
-  LAMBDA_NODEJS_BUNDLING_TARGET,
-  LAMBDA_NODEJS_RUNTIME,
-  LAMBDA_SOURCE_MAP_ENABLED,
-} from "../utils/lambda-runtime.js";
+import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 
 export interface SignInAuditLambdaProps {
   /** ADR-020 Phase D の admin audit log table (= `PK=SYSTEM#<env>` 又は `PK=TENANT#<id>` の sign-in 行を書く)。 */
@@ -59,14 +53,8 @@ export class SignInAuditLambda extends Construct {
   constructor(scope: Construct, id: string, props: SignInAuditLambdaProps) {
     super(scope, id);
 
-    this.fn = new NodejsFunction(this, "Function", {
-      logGroup: new LogGroup(this, "FunctionLogGroup", {
-        removalPolicy: RemovalPolicy.DESTROY,
-      }),
-      runtime: LAMBDA_NODEJS_RUNTIME,
-      architecture: Architecture.ARM_64,
+    this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "handlers/sign-in-audit/index.ts"),
-      handler: "handler",
       timeout: Duration.seconds(10),
       memorySize: 256,
       environment: {
@@ -77,12 +65,6 @@ export class SignInAuditLambda extends Construct {
         // SYSTEM にフォールバック、 Phase 1 Control Plane 動作互換)。
         ...(props.auditTenantId ? { AUDIT_TENANT_ID: props.auditTenantId } : {}),
         NODE_OPTIONS: "--enable-source-maps",
-      },
-      bundling: {
-        minify: true,
-        target: LAMBDA_NODEJS_BUNDLING_TARGET,
-        sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
-        externalModules: [],
       },
     });
 

@@ -51,6 +51,14 @@ export interface MultiFlagEntryView {
   readonly label: string;
   readonly points: number;
   readonly solved: boolean;
+  /**
+   * [#2252] multi-verify (local-play) の per-check hints。 AWS multi-flag は現状
+   * 送らない (= optional、 既存問題に影響なし)。 shape は問題レベルの hints と同一で、
+   * reveal も既存 flat route (`/problems/:id/hints/:hintId/reveal`) を使う。
+   */
+  readonly hints?: readonly ParticipantHintView[];
+  /** [#2252] `i18n.en.checks[]` 由来の label 訳。 配点・ID は翻訳側に重複させない。 */
+  readonly i18n?: { readonly en?: { readonly label?: string } };
 }
 
 /**
