@@ -157,4 +157,33 @@ describe("DisruptionExecutorLambda (ADR-031 #1419)", () => {
     },
     SYNTH_TIMEOUT_MS,
   );
+
+  it(
+    "should synth with an empty disruptions catalog when problemsDisruptions is omitted",
+    () => {
+      // catalog 未配線 (= problemsDisruptions undefined) でも bundlingDefine の `?? {}` fallback で
+      // 空 catalog として synth できることを pin する (dormant 経路の regression 防止)。
+      const app = new App();
+      const stack = new Stack(app, "TestStackNoCatalog");
+      const deployments = new Table(stack, "Deployments", {
+        partitionKey: { name: "PK", type: AttributeType.STRING },
+      });
+      const disruptions = new Table(stack, "Disruptions", {
+        partitionKey: { name: "PK", type: AttributeType.STRING },
+        sortKey: { name: "SK", type: AttributeType.STRING },
+      });
+      new DisruptionExecutorLambda(stack, "Executor", {
+        environmentName: "development",
+        eventBus: new EventBus(stack, "Bus"),
+        deploymentsTable: deployments,
+        disruptionsTable: disruptions,
+      });
+      const tpl = Template.fromStack(stack);
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({ Runtime: "nodejs22.x", Architectures: ["arm64"] }),
+      );
+    },
+    SYNTH_TIMEOUT_MS,
+  );
 });
