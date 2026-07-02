@@ -1,5 +1,6 @@
 import type { EventBridgeEvent } from "aws-lambda";
 import { writeAuditEvent } from "../shared/audit-log.js";
+import { isSbtOnboardingDetailType, type SbtOnboardingDetailType } from "./sbt-detail-types.js";
 
 /**
  * Issue #1034: SBT Control Plane が発する tenant onboarding / offboarding events を audit
@@ -32,7 +33,12 @@ interface SbtTenantEventDetail {
   readonly actor?: string;
 }
 
-const SBT_DETAIL_TYPE_TO_ACTION: Readonly<Record<string, { action: string; outcome: string }>> = {
+// Issue #2201: キー集合を `Record<SbtOnboardingDetailType, ...>` で型固定する。 共有定数
+// (sbt-detail-types.ts) と 1 キーでもずれると型エラーになり、 Rule フィルタとの整合が
+// コンパイル時に保証される。
+const SBT_DETAIL_TYPE_TO_ACTION: Readonly<
+  Record<SbtOnboardingDetailType, { action: string; outcome: string }>
+> = {
   onboardingRequest: { action: "tenant_create_requested", outcome: "success" },
   onboardingSuccess: { action: "tenant_create_succeeded", outcome: "success" },
   onboardingFailure: { action: "tenant_create_failed", outcome: "error" },
@@ -41,7 +47,7 @@ const SBT_DETAIL_TYPE_TO_ACTION: Readonly<Record<string, { action: string; outco
   offboardingFailure: { action: "tenant_delete_failed", outcome: "error" },
 };
 
-export type SbtTenantEventDetailType = keyof typeof SBT_DETAIL_TYPE_TO_ACTION;
+export type SbtTenantEventDetailType = SbtOnboardingDetailType;
 
 const FALLBACK_ACTOR = "sbt-control-plane";
 
@@ -88,8 +94,9 @@ export function mapEventToAudit(
     return mapCodeBuildEvent(event as EventBridgeEvent<string, CodeBuildStateChangeDetail>);
   }
   const tenantDetail = event.detail as SbtTenantEventDetail;
-  const mapping = SBT_DETAIL_TYPE_TO_ACTION[event["detail-type"]];
-  if (!mapping) return null;
+  const detailType = event["detail-type"];
+  if (!isSbtOnboardingDetailType(detailType)) return null;
+  const mapping = SBT_DETAIL_TYPE_TO_ACTION[detailType];
   const { actor, actorUsername } = resolveActor(tenantDetail);
   const occurredAtMs = event.time ? new Date(event.time).getTime() : Date.now();
   const extra: Record<string, string> = {};
