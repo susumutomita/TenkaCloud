@@ -1,18 +1,12 @@
 import * as path from "node:path";
-import { Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IEventBus } from "aws-cdk-lib/aws-events";
 import { PolicyStatement } from "aws-cdk-lib/aws-iam";
-import { Architecture } from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
-import {
-  LAMBDA_NODEJS_BUNDLING_TARGET,
-  LAMBDA_NODEJS_RUNTIME,
-  LAMBDA_SOURCE_MAP_ENABLED,
-} from "../utils/lambda-runtime.js";
+import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 
 export interface EventApiLambdaProps {
   readonly eventsTable: Table;
@@ -90,14 +84,8 @@ export class EventApiLambda extends Construct {
   constructor(scope: Construct, id: string, props: EventApiLambdaProps) {
     super(scope, id);
 
-    this.fn = new NodejsFunction(this, "Function", {
-      logGroup: new LogGroup(this, "FunctionLogGroup", {
-        removalPolicy: RemovalPolicy.DESTROY,
-      }),
-      runtime: LAMBDA_NODEJS_RUNTIME,
-      architecture: Architecture.ARM_64,
+    this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "handlers/event-handler/index.ts"),
-      handler: "handler",
       // Bulk teardown は teams × problems 全行を Update + chunk publish するので
       // teams=25 × problems=30 = 750 行で 30 秒前後を見込む。Phase 3 で Distributed
       // Map に切り出すまでの暫定。
@@ -124,25 +112,19 @@ export class EventApiLambda extends Construct {
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
         NODE_OPTIONS: "--enable-source-maps",
       },
-      bundling: {
-        minify: true,
-        target: LAMBDA_NODEJS_BUNDLING_TARGET,
-        sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
-        externalModules: [],
-        // Issue #1308: BATTLE_PROBLEMS_CATALOG + BATTLE_PROBLEMS_DISRUPTIONS は問題が増える
-        // たび growing し、 4 KB Lambda env hard limit に張り付いた (= EventApi の deploy が
-        // CREATE_FAILED)。 #1158 (GenericScoring / ParticipantPortal) と同じ esbuild define で
-        // build 時に literal 置換し env を 0 化する。 handler は process.env を読む既存 code の
-        // まま (= build 後に literal JSON 文字列が埋まる)。 tests は process.env 経由で fixture を
-        // 注入するので影響なし。
-        define: {
-          "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
-            JSON.stringify(props.problemsCatalog),
-          ),
-          "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
-            JSON.stringify(props.problemsDisruptions),
-          ),
-        },
+      // Issue #1308: BATTLE_PROBLEMS_CATALOG + BATTLE_PROBLEMS_DISRUPTIONS は問題が増える
+      // たび growing し、 4 KB Lambda env hard limit に張り付いた (= EventApi の deploy が
+      // CREATE_FAILED)。 #1158 (GenericScoring / ParticipantPortal) と同じ esbuild define で
+      // build 時に literal 置換し env を 0 化する。 handler は process.env を読む既存 code の
+      // まま (= build 後に literal JSON 文字列が埋まる)。 tests は process.env 経由で fixture を
+      // 注入するので影響なし。
+      bundlingDefine: {
+        "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
+          JSON.stringify(props.problemsCatalog),
+        ),
+        "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
+          JSON.stringify(props.problemsDisruptions),
+        ),
       },
     });
 
