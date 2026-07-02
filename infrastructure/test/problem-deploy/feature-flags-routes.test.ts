@@ -4,10 +4,11 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { buildAuthErrorHandler } from "../../lib/problem-deploy/handlers/shared/auth-wiring";
 
 /**
- * Issue #2231: /admin/feature-flags route layer. Storage (getFeatureFlags / putFeatureFlags)
- * is mocked; auth is injected via the dev override env (mirrors audit-log-routes.test.ts).
- * No JWT `sub` claim in these requests, so `resolveCognitoSub` resolves to "unknown"
- * (matches auth.ts's documented no-JWT fallback — no DEFAULT_COGNITO_SUB override exists).
+ * Issue #2231: /feature-flags (GET, any tenant role) + /admin/feature-flags (PUT, TenantAdmin
+ * only) route layer. Storage (getFeatureFlags / putFeatureFlags) is mocked; auth is injected
+ * via the dev override env (mirrors audit-log-routes.test.ts). No JWT `sub` claim in these
+ * requests, so `resolveCognitoSub` resolves to "unknown" (matches auth.ts's documented no-JWT
+ * fallback — no DEFAULT_COGNITO_SUB override exists).
  */
 const mocks = vi.hoisted(() => ({
   getFeatureFlags: vi.fn(),
@@ -52,21 +53,34 @@ afterEach(() => {
   process.env.DEFAULT_USER_ROLE = "TenantAdmin";
 });
 
-describe("GET /admin/feature-flags", () => {
-  it("should return the tenant's stored flags", async () => {
+describe("GET /feature-flags", () => {
+  it("should return the tenant's stored flags for a TenantAdmin caller", async () => {
     mocks.getFeatureFlags.mockResolvedValueOnce({ samlSso: true });
 
-    const res = await buildApp().request("/admin/feature-flags");
+    const res = await buildApp().request("/feature-flags");
 
     expect(res.status).toBe(StatusCodes.OK);
     expect(await res.json()).toEqual({ flags: { samlSso: true } });
     expect(mocks.getFeatureFlags).toHaveBeenCalledWith(shared, "tenant-test");
   });
 
+  it.each([
+    "TenantOperator",
+    "TenantViewer",
+  ])("should return the tenant's stored flags for a %s caller (config.features must resolve for every role)", async (role) => {
+    process.env.DEFAULT_USER_ROLE = role;
+    mocks.getFeatureFlags.mockResolvedValueOnce({ redTeam: true });
+
+    const res = await buildApp().request("/feature-flags");
+
+    expect(res.status).toBe(StatusCodes.OK);
+    expect(await res.json()).toEqual({ flags: { redTeam: true } });
+  });
+
   it("should return {} when the tenant has no saved overrides", async () => {
     mocks.getFeatureFlags.mockResolvedValueOnce({});
 
-    const res = await buildApp().request("/admin/feature-flags");
+    const res = await buildApp().request("/feature-flags");
 
     expect(await res.json()).toEqual({ flags: {} });
   });
@@ -74,9 +88,18 @@ describe("GET /admin/feature-flags", () => {
   it("should surface a read error via handleRouteError (5xx)", async () => {
     mocks.getFeatureFlags.mockRejectedValueOnce(new Error("ddb boom"));
 
-    const res = await buildApp().request("/admin/feature-flags");
+    const res = await buildApp().request("/feature-flags");
 
     expect(res.status).toBeGreaterThanOrEqual(500);
+  });
+
+  it("should reject a caller with no recognized tenant role (fail-closed)", async () => {
+    delete process.env.DEFAULT_USER_ROLE;
+
+    const res = await buildApp().request("/feature-flags");
+
+    expect(res.status).toBe(StatusCodes.FORBIDDEN);
+    expect(mocks.getFeatureFlags).not.toHaveBeenCalled();
   });
 });
 
