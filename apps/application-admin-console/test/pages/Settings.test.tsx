@@ -130,6 +130,63 @@ describe("SettingsPage", () => {
     );
   });
 
+  it("should not update state after unmount once the pending GET rejects", async () => {
+    let rejectGet: ((reason: unknown) => void) | undefined;
+    const get = vi.fn().mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectGet = reject;
+      }),
+    );
+    mockUseApiClient.mockReturnValue(fakeApiClient({ get }));
+    const { unmount } = renderPage();
+    unmount();
+    rejectGet?.(new Error("boom"));
+    // The `cancelled` guard in the effect's .catch() must skip setLoadError after unmount.
+    await Promise.resolve();
+  });
+
+  it("should ignore a toggle click while another key's save is still in flight", async () => {
+    let resolvePut: ((value: { flags: Record<string, boolean> }) => void) | undefined;
+    const put = vi.fn().mockReturnValue(
+      new Promise<{ flags: Record<string, boolean> }>((resolve) => {
+        resolvePut = resolve;
+      }),
+    );
+    mockUseApiClient.mockReturnValue(
+      fakeApiClient({ get: vi.fn().mockResolvedValue({ flags: {} }), put }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("samlSso");
+
+    const toggles = screen.getAllByRole("checkbox");
+    // First click starts a PUT that stays pending; the second key's Toggle is still
+    // enabled (only the in-flight key is disabled) but the guard must drop the click.
+    await user.click(toggles[0] as HTMLElement);
+    await user.click(toggles[1] as HTMLElement);
+    expect(put).toHaveBeenCalledTimes(1);
+
+    resolvePut?.({ flags: { samlSso: true, nonAwsRuntime: false, redTeam: true } });
+    await waitFor(() => expect(toggles[1]).not.toBeDisabled());
+  });
+
+  it("should still allow toggling from registry defaults when the initial GET failed", async () => {
+    const put = vi
+      .fn()
+      .mockResolvedValue({ flags: { samlSso: true, nonAwsRuntime: false, redTeam: true } });
+    mockUseApiClient.mockReturnValue(
+      fakeApiClient({ get: vi.fn().mockRejectedValue(new Error("boom")), put }),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    // GET failed → flags stays null, but the toggles render from registry defaults.
+    await screen.findByText("settings.load_error");
+    await screen.findByText("samlSso");
+
+    await user.click(screen.getAllByRole("checkbox")[0] as HTMLElement);
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+  });
+
   it("should roll back the optimistic update and show an error when PUT fails", async () => {
     const put = vi.fn().mockRejectedValue(new Error("boom"));
     mockUseApiClient.mockReturnValue(

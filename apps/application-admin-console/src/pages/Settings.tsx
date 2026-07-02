@@ -58,7 +58,11 @@ export function SettingsPage({ config }: { config: AppConfig }) {
 
   const handleToggle = useCallback(
     async (key: FlagKey, next: boolean) => {
-      if (!apiClient || savingKey) return;
+      /* v8 ignore next -- defensive: without an apiClient the flags never load, the spinner renders, and no Toggle exists to click, so this guard's true branch is unreachable from the UI */
+      if (!apiClient) return;
+      // A save is in flight for another key (the in-flight key's own Toggle is disabled);
+      // ignore the click so concurrent full-replace PUTs can't race each other.
+      if (savingKey) return;
       const previous = flags ?? {};
       // PUT /admin/feature-flags is full-replace (see feature-flags.ts's putFeatureFlags
       // docblock) — send every known key's current resolved value, not just the one that
