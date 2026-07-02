@@ -6,6 +6,7 @@
  *   - Cloudscape の Badge / Alert / Spinner を **直接** 触るのではなく、 一段抽象を挟むことで
  *     視覚 token (= 色 / 余白 / icon) を全 SPA 一括で変更できる。
  */
+export { ApiError, type CoreApiClient, createCoreApiClient } from "./api-client";
 export { AuthProvider, type AuthState, useAuth } from "./auth";
 export { renderBootError } from "./boot-error";
 export {
