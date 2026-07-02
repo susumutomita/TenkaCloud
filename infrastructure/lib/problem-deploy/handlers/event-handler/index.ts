@@ -12,6 +12,7 @@ import { registerEventRoutes } from "./routes/events.js";
 import { registerFeatureFlagsRoutes } from "./routes/feature-flags.js";
 import { registerLifecycleRoutes } from "./routes/lifecycle.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
+import { registerProgressionGateRoutes } from "./routes/progression-gate.js";
 import { registerScoringRoutes } from "./routes/scoring.js";
 import { buildEventSharedResources } from "./shared.js";
 
@@ -24,6 +25,8 @@ import { buildEventSharedResources } from "./shared.js";
  *   POST   /events/:eventId/end
  *   POST   /events/:eventId/lock-scoring
  *   DELETE /events/:eventId/lock-scoring
+ *   PUT    /events/:eventId/progression-gate — Progression Gate 設定 (#2283, flag ON のみ)
+ *   DELETE /events/:eventId/progression-gate — Gate 設定除去 (idempotent)
  *   POST   /events/:eventId/notifications  — 運営 → 競技者 通知 1 件作成 (ADR-006)
  *   POST   /events/:eventId/archive
  *   POST   /events/:eventId/deploy         — Bulk deploy (teams × problems を fan-out)
@@ -96,6 +99,8 @@ app.get("/events/healthz", (c) => c.json({ ok: true }));
 registerEventRoutes(app, shared);
 registerLifecycleRoutes(app, shared);
 registerScoringRoutes(app, shared);
+// Issue #2283: Progression Gate (問題アンロック / チーム別ハンデ) 設定 routes。
+registerProgressionGateRoutes(app, shared);
 registerNotificationRoutes(app, shared);
 registerBulkDeployRoutes(app, shared);
 registerDisruptionRoutes(app, shared);

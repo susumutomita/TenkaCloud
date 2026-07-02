@@ -6,18 +6,23 @@ import {
   bulkTeardownEvent,
   createEvent,
   createNotification,
+  deleteEventProgressionGate,
   EVENT_ID_RE,
   endEvent,
   getEvent,
+  getTenantFeatureFlags,
   listEvents,
   lockEventScoring,
+  type ProgressionGateConfig,
+  putEventProgressionGate,
+  putTenantFeatureFlags,
   setEventSchedule,
   unlockEventScoring,
 } from "../../src/api/events-client";
 
 interface CapturedCall {
   path: string;
-  method: "GET" | "POST" | "PATCH" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
 }
 
@@ -32,7 +37,10 @@ function fakeClient(response: unknown): { client: ApiClient; calls: CapturedCall
       calls.push({ path, method: "POST", body });
       return Promise.resolve(response);
     }),
-    put: vi.fn().mockResolvedValue(response),
+    put: vi.fn().mockImplementation((path: string, body: unknown) => {
+      calls.push({ path, method: "PUT", body });
+      return Promise.resolve(response);
+    }),
     patch: vi.fn().mockImplementation((path: string, body: unknown) => {
       calls.push({ path, method: "PATCH", body });
       return Promise.resolve(response);
@@ -210,6 +218,56 @@ describe("unlockEventScoring", () => {
     expect(calls[0]?.path).toBe("events/EV1/lock-scoring");
     expect(calls[0]?.method).toBe("DELETE");
     expect(out.scoringLocked).toBe(false);
+  });
+});
+
+// Issue #2283: Progression Gate (問題アンロック / チーム別ハンデ) の設定 API
+describe("putEventProgressionGate", () => {
+  it("should PUT /events/{id}/progression-gate with the config body and return it", async () => {
+    const config: ProgressionGateConfig = {
+      gateProblemId: "hello-gate",
+      unlockTargetIds: ["locked-1", "locked-2"],
+      defaultPolicy: "required",
+      teamOverrides: { t1: { policy: "off" }, t2: { policy: "required", completionBonus: 500 } },
+    };
+    const { client, calls } = fakeClient({ progressionGate: config });
+    const out = await putEventProgressionGate(client, "EV1", config);
+    expect(calls[0]?.path).toBe("events/EV1/progression-gate");
+    expect(calls[0]?.method).toBe("PUT");
+    expect(calls[0]?.body).toEqual(config);
+    expect(out.progressionGate).toEqual(config);
+  });
+});
+
+describe("deleteEventProgressionGate", () => {
+  it("should DELETE /events/{id}/progression-gate (via delJson) and return removed", async () => {
+    const { client, calls } = fakeClient({ removed: true });
+    const out = await deleteEventProgressionGate(client, "EV1");
+    expect(calls[0]?.path).toBe("events/EV1/progression-gate");
+    expect(calls[0]?.method).toBe("DELETE");
+    expect(out.removed).toBe(true);
+  });
+});
+
+describe("getTenantFeatureFlags", () => {
+  it("should GET feature-flags and unwrap the flags record", async () => {
+    const { client, calls } = fakeClient({ flags: { challengePrerequisiteGate: true } });
+    const out = await getTenantFeatureFlags(client);
+    expect(calls[0]?.path).toBe("feature-flags");
+    expect(calls[0]?.method).toBe("GET");
+    expect(out).toEqual({ challengePrerequisiteGate: true });
+  });
+});
+
+describe("putTenantFeatureFlags", () => {
+  it("should PUT admin/feature-flags with the full flag record and unwrap flags", async () => {
+    const body = { redTeam: true, challengePrerequisiteGate: true };
+    const { client, calls } = fakeClient({ flags: body });
+    const out = await putTenantFeatureFlags(client, body);
+    expect(calls[0]?.path).toBe("admin/feature-flags");
+    expect(calls[0]?.method).toBe("PUT");
+    expect(calls[0]?.body).toEqual(body);
+    expect(out).toEqual(body);
   });
 });
 

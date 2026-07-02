@@ -71,6 +71,14 @@ describe("portalFetch", () => {
     expect((err as PortalValidationError).details).toEqual({ missingHintId: "h2" });
   });
 
+  it("should carry gateProblemId for a challenge_prerequisite_not_met 409 (Issue #2283)", async () => {
+    mockFetch(jsonRes(409, { error: "challenge_prerequisite_not_met", gateProblemId: "gate-1" }));
+    const err = await portalFetch(BASE, "submit-flag", KEY, { throwOn409: true }).catch((e) => e);
+    expect(err).toBeInstanceOf(PortalValidationError);
+    expect((err as PortalValidationError).errorCode).toBe("challenge_prerequisite_not_met");
+    expect((err as PortalValidationError).details).toEqual({ gateProblemId: "gate-1" });
+  });
+
   it("should fall back to conflict on a 409 with an unparseable body", async () => {
     // 不正 JSON → readPortalErrorBody の catch → {} → body.error 不在 → "conflict"。
     mockFetch(jsonRes(409, "not-json{"));

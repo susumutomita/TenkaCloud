@@ -100,13 +100,10 @@ export function useTeamView(): TeamViewState {
   return useContext(Ctx);
 }
 
-/**
- * Polling 結果が前回と意味的に同じなら true → setView を skip し React 再 render を抑制。
- * Home / TopNav の両方が context 経由で再 render するため、no-op 検出は重要。
- */
 // Issue #2222: the pure diff-decision functions below now live in
 // team-view-diff.ts; re-exported here so existing imports of TeamViewProvider
-// (this module's public interface) don't need to change.
+// (this module's public interface) don't need to change. Issue #2283 folded the
+// `progression` (lock/unlock) diff into that module's `viewIsUnchanged`.
 export type { LeaderboardRefreshDecision, PortalMeRefreshDecision };
 export {
   leaderboardIsUnchanged,

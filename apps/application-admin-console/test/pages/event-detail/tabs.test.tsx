@@ -6,6 +6,7 @@ import type {
   EventTabContentProps,
 } from "../../../src/pages/event-detail/tab-content-props";
 import {
+  GateTab,
   isEventTabId,
   NotificationsTab,
   ProblemsTab,
@@ -80,6 +81,15 @@ vi.mock("../../../src/components/event-detail/EventNotificationsPanel", () => ({
     </button>
   ),
 }));
+// [#2283] Progression / Gate (Advanced) tab の thin wrapper 配線検証用 stub。
+vi.mock("../../../src/components/event-detail/EventProgressionGatePanel", () => ({
+  // biome-ignore lint/suspicious/noExplicitAny: stub props。
+  EventProgressionGatePanel: (p: any) => (
+    <button type="button" data-testid="gate-refresh" onClick={p.onRefresh}>
+      gate
+    </button>
+  ),
+}));
 
 const operations = (over: Partial<EventOperations> = {}): EventOperations =>
   ({
@@ -124,6 +134,8 @@ describe("isEventTabId", () => {
   it("should accept known tab ids and reject others", () => {
     expect(isEventTabId("schedule")).toBe(true);
     expect(isEventTabId("overview")).toBe(true);
+    // [#2283] Progression / Gate (Advanced) tab。
+    expect(isEventTabId("gate")).toBe(true);
     expect(isEventTabId("bogus")).toBe(false);
   });
 });
@@ -138,6 +150,7 @@ describe("readTabFromHash", () => {
   it("should read a valid tab id from the hash (with trailing params)", () => {
     expect(readTabFromHash("#tab=schedule")).toBe("schedule");
     expect(readTabFromHash("#tab=notifications&foo=bar")).toBe("notifications");
+    expect(readTabFromHash("#tab=gate")).toBe("gate");
   });
 });
 
@@ -197,5 +210,12 @@ describe("tab wrappers", () => {
     render(<NotificationsTab {...props({ operations: ops })} />);
     fireEvent.click(screen.getByTestId("notify-open"));
     expect(ops.setNotifyModalOpen).toHaveBeenCalledWith(true);
+  });
+
+  it("should wire GateTab refresh to manualRefresh (#2283)", () => {
+    const manualRefresh = vi.fn();
+    render(<GateTab {...props({ manualRefresh })} />);
+    fireEvent.click(screen.getByTestId("gate-refresh"));
+    expect(manualRefresh).toHaveBeenCalled();
   });
 });

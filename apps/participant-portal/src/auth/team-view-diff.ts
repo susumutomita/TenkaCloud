@@ -13,6 +13,11 @@ export function viewIsUnchanged(
 ): boolean {
   if (!prev) return false;
   if (prev.team.teamName !== next.team.teamName) return false;
+  // Issue #2283: `progression` (lock/unlock 遷移) も比較対象。 小さな plain JSON なので
+  // stackOutputs 比較と同じく JSON.stringify で全 field を漏れなく比較する (= field 追加時に
+  // 黙って取りこぼさない)。 unlock 時は lockedProblemIds 縮小に加え該当 problem の stackOutputs
+  // 再充填も起きるが、 後者は下の per-problem JSON 比較が検出する。
+  if (JSON.stringify(prev.progression) !== JSON.stringify(next.progression)) return false;
   if (prev.problems.length !== next.problems.length) return false;
   for (let i = 0; i < prev.problems.length; i++) {
     const p = prev.problems[i] as ParticipantProblemView;

@@ -257,3 +257,108 @@ describe("QuestsPage", () => {
     expect(screen.getByText("ctf-cleared")).toBeInTheDocument();
   });
 });
+
+// ── Issue #2283: Progression Gate の badge / 解放条件表示 ─────────────────────
+const gateProgression = (over: Record<string, unknown> = {}) => ({
+  gateProblemId: "uptime-battle",
+  gateCompleted: false,
+  policy: "required",
+  completionBonus: 100,
+  lockedProblemIds: ["ctf-unsolved"],
+  ...over,
+});
+
+describe("QuestsPage Progression Gate (Issue #2283)", () => {
+  it("should show a locked badge and the unlock condition on a locked card (still visible)", () => {
+    mockTeamView.mockReturnValue({
+      view: { problems: [flagUnsolved, battle], progression: gateProgression() },
+      error: null,
+    });
+    render(<QuestsPage />);
+    // locked card は隠さない
+    expect(screen.getByText("ctf-unsolved")).toBeInTheDocument();
+    expect(screen.getByText("quests.locked_badge")).toBeInTheDocument();
+    // gate 問題の name は view に無い → problemId に fall back
+    expect(
+      screen.getByText('quests.locked_unlock_condition|{"gateName":"uptime-battle"}'),
+    ).toBeInTheDocument();
+  });
+
+  it("should resolve the gate display name for the unlock condition when the view carries it", () => {
+    const namedGate = problem({
+      problemId: "uptime-battle",
+      jobId: "job-3",
+      name: "Hello World Battle",
+      scoring: { kind: "uptime" },
+    });
+    mockTeamView.mockReturnValue({
+      view: { problems: [flagUnsolved, namedGate], progression: gateProgression() },
+      error: null,
+    });
+    render(<QuestsPage />);
+    expect(
+      screen.getByText('quests.locked_unlock_condition|{"gateName":"Hello World Battle"}'),
+    ).toBeInTheDocument();
+  });
+
+  it("should show the start-here badge and the completion bonus on the incomplete gate card", () => {
+    mockTeamView.mockReturnValue({
+      view: { problems: [flagUnsolved, battle], progression: gateProgression() },
+      error: null,
+    });
+    render(<QuestsPage />);
+    expect(screen.getByText("quests.gate_start_here")).toBeInTheDocument();
+    expect(screen.getByText('quests.gate_completion_bonus|{"points":100}')).toBeInTheDocument();
+  });
+
+  it("should omit the completion-bonus badge when the bonus is 0", () => {
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [flagUnsolved, battle],
+        progression: gateProgression({ completionBonus: 0 }),
+      },
+      error: null,
+    });
+    render(<QuestsPage />);
+    expect(screen.getByText("quests.gate_start_here")).toBeInTheDocument();
+    expect(screen.queryByText(/quests\.gate_completion_bonus/)).not.toBeInTheDocument();
+  });
+
+  it("should show the bonus badge but no unlock promise for a policy-off team (Issue #2283)", () => {
+    // policy "off" の team は lockedProblemIds が空 → 「最初にここから (完了で解放)」は虚偽なので
+    // 出さない。 完了 bonus は locked の有無と無関係に付与されるため badge は残す。
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [flagUnsolved, battle],
+        progression: gateProgression({ policy: "off", lockedProblemIds: [] }),
+      },
+      error: null,
+    });
+    render(<QuestsPage />);
+    expect(screen.queryByText("quests.gate_start_here")).not.toBeInTheDocument();
+    expect(screen.queryByText("quests.locked_badge")).not.toBeInTheDocument();
+    expect(screen.getByText('quests.gate_completion_bonus|{"points":100}')).toBeInTheDocument();
+  });
+
+  it("should drop all gate badges once the gate is completed (locked list emptied)", () => {
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [flagUnsolved, battle],
+        progression: gateProgression({ gateCompleted: true, lockedProblemIds: [] }),
+      },
+      error: null,
+    });
+    render(<QuestsPage />);
+    expect(screen.queryByText("quests.gate_start_here")).not.toBeInTheDocument();
+    expect(screen.queryByText("quests.locked_badge")).not.toBeInTheDocument();
+    expect(screen.queryByText(/quests\.locked_unlock_condition/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/quests\.gate_completion_bonus/)).not.toBeInTheDocument();
+  });
+
+  it("should render no gate UI at all without progression (= feature flag OFF / no gate config)", () => {
+    mockTeamView.mockReturnValue({ view: { problems: [flagUnsolved, battle] }, error: null });
+    render(<QuestsPage />);
+    expect(screen.queryByText("quests.gate_start_here")).not.toBeInTheDocument();
+    expect(screen.queryByText("quests.locked_badge")).not.toBeInTheDocument();
+  });
+});

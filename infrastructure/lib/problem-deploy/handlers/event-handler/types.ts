@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  type ProgressionGateConfig,
+  ProgressionGateConfigSchema,
+} from "../shared/progression-gate.js";
 
 /**
  * 1 競技イベント (= ADR-004 の Event aggregate) の DDB 行 shape。
@@ -83,6 +87,15 @@ export interface EventItem {
    * 効く ([[participant-handler/leaderboard.ts:DEFAULT_FREEZE_MINUTES]])。
    */
   scoreboardFreezeMinutes?: number;
+  /**
+   * Issue #2283: Progression Gate (問題アンロック / チーム別ハンデ) 設定。
+   * `PUT /events/:eventId/progression-gate` で保存 / `DELETE` で除去。 未設定 = Gate 無し
+   * (= 従来どおり全問題を開始可能)。 enforcement は per-tenant feature flag
+   * `challengePrerequisiteGate` (既定 OFF) が ON のときだけ有効 — 設定が残っていても
+   * flag OFF なら participant / scoring 側は無視するので、 進行中 Event でも flag OFF 切替で
+   * 即 unlock される。 shape の正本は `../shared/progression-gate.ts`。
+   */
+  progressionGate?: ProgressionGateConfig;
 }
 
 export const EventStatusSchema = z.enum([
@@ -342,15 +355,16 @@ export type EventDeploymentSummary = z.infer<typeof EventDeploymentSummarySchema
  * Issue #1038 P1 #7: operator が Event 詳細画面で全 team の score event 推移を一目で
  * 把握できるよう、 EventDetail に optional な team-grouped score events を含める。
  *
- * 公開 source は 4 種 (= uptime / flag / flag-wrong / hint)。 marker 用 `attack-detected`
- * (= result=down) は累計 score に影響しないので除外。 leaderboard 合計と chart 累積を一致
- * させる目的で、 participant 側 chart endpoint (= `/portal/leaderboard/score-events`) と
- * 同じ shape にする。
+ * 公開 source は 5 種 (= uptime / flag / flag-wrong / hint / gate-bonus)。 marker 用
+ * `attack-detected` (= result=down) は累計 score に影響しないので除外。 leaderboard 合計と
+ * chart 累積を一致させる目的で、 participant 側 chart endpoint
+ * (= `/portal/leaderboard/score-events`) と同じ shape にする (gate-bonus は #2283 の
+ * Gate 完了 bonus — score に加算されるので除外すると合計と chart がズレる)。
  */
 export const TeamScoreEventViewSchema = z.object({
   jobId: z.string(),
   problemId: z.string(),
-  source: z.enum(["uptime", "flag", "flag-wrong", "hint"]),
+  source: z.enum(["uptime", "flag", "flag-wrong", "hint", "gate-bonus"]),
   points: z.number(),
   result: z.enum(["ok", "wrong"]),
   occurredAt: z.string(),
@@ -379,6 +393,11 @@ export const EventDetailSchema = EventSummarySchema.extend({
    * teams[] と同じ順序 (= teamId 昇順) で並べる。
    */
   scoreEventsByTeam: z.array(TeamScoreEventsSchema).optional(),
+  /**
+   * Issue #2283: Progression Gate 設定 (未設定 = Gate 無し)。 detail 経路のみ返す
+   * (一覧 summary には載せない — list 画面は Gate の有無を必要としない)。
+   */
+  progressionGate: ProgressionGateConfigSchema.optional(),
 });
 export type EventDetail = z.infer<typeof EventDetailSchema>;
 

@@ -1,5 +1,10 @@
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
+import {
+  readTenantFeatureFlags,
+  type TenantFeatureFlagsItem,
+  tenantFlagsKey,
+} from "../shared/tenant-feature-flags.js";
 import type { EventSharedResources } from "./shared.js";
 
 /**
@@ -37,29 +42,16 @@ export const FeatureFlagsPatchSchema = z
   });
 export type FeatureFlagsPatch = z.infer<typeof FeatureFlagsPatchSchema>;
 
-interface FeatureFlagsItem {
-  readonly PK: string;
-  readonly SK: "FLAGS";
-  readonly tenantId: string;
-  readonly flags: Record<string, boolean>;
-  readonly updatedAt: string;
-  readonly updatedBy: string;
-}
-
-function flagsKey(tenantId: string): { PK: string; SK: "FLAGS" } {
-  return { PK: `TENANT#${tenantId}`, SK: "FLAGS" };
-}
-
-/** Read the tenant's stored flag overrides. No row yet (never saved) → `{}` (all registry defaults). */
+/**
+ * Read the tenant's stored flag overrides. No row yet (never saved) → `{}` (all registry
+ * defaults). Row shape + read path live in `shared/tenant-feature-flags.ts` (#2283) so the
+ * participant / scoring Lambdas apply the exact same flag judgement as this admin surface.
+ */
 export async function getFeatureFlags(
   shared: EventSharedResources,
   tenantId: string,
 ): Promise<Record<string, boolean>> {
-  const out = await shared.ddb.send(
-    new GetCommand({ TableName: shared.eventsTableName, Key: flagsKey(tenantId) }),
-  );
-  const item = out.Item as Partial<FeatureFlagsItem> | undefined;
-  return item?.flags ?? {};
+  return readTenantFeatureFlags(shared.ddb, shared.eventsTableName, tenantId);
 }
 
 /**
@@ -74,8 +66,8 @@ export async function putFeatureFlags(
   updatedBy: string,
   nowMs: number,
 ): Promise<Record<string, boolean>> {
-  const item: FeatureFlagsItem = {
-    ...flagsKey(tenantId),
+  const item: TenantFeatureFlagsItem = {
+    ...tenantFlagsKey(tenantId),
     tenantId,
     flags,
     updatedAt: new Date(nowMs).toISOString(),

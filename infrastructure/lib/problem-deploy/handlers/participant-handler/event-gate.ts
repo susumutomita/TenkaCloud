@@ -1,4 +1,5 @@
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
+import { type ProgressionGateConfig, parseProgressionGate } from "../shared/progression-gate.js";
 import type { ParticipantSharedResources } from "./shared.js";
 
 /**
@@ -31,6 +32,12 @@ export interface EventGate {
    * operator が `PATCH /events/:eventId/schedule` で更新できる。
    */
   readonly scoreboardFreezeMinutes: number | undefined;
+  /**
+   * Issue #2283: Progression Gate 設定 (未設定 / 不正 shape = Gate 無し)。 challenge access
+   * guard (`challenge-access.ts`) と `/portal/me` の progression view が使う。 enforcement は
+   * per-tenant flag `challengePrerequisiteGate` が ON のときだけ効く (guard 側で判定)。
+   */
+  readonly progressionGate: ProgressionGateConfig | undefined;
 }
 
 /**
@@ -47,7 +54,8 @@ export async function getEventGate(
       new GetCommand({
         TableName: shared.eventsTableName,
         Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        ProjectionExpression: "scoringLocked, startsAt, endsAt, #s, scoreboardFreezeMinutes",
+        ProjectionExpression:
+          "scoringLocked, startsAt, endsAt, #s, scoreboardFreezeMinutes, progressionGate",
         ExpressionAttributeNames: { "#s": "status" },
       }),
     );
@@ -58,6 +66,7 @@ export async function getEventGate(
           endsAt?: string;
           status?: string;
           scoreboardFreezeMinutes?: number;
+          progressionGate?: unknown;
         }
       | undefined;
     if (!item) return undefined;
@@ -68,6 +77,7 @@ export async function getEventGate(
       status: item.status,
       scoreboardFreezeMinutes:
         typeof item.scoreboardFreezeMinutes === "number" ? item.scoreboardFreezeMinutes : undefined,
+      progressionGate: parseProgressionGate(item.progressionGate),
     };
   } catch (err) {
     console.warn("[event-gate] getEventGate failed", {

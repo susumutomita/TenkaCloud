@@ -87,7 +87,8 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 async function openOperationsTab() {
-  const opsTab = await screen.findByRole("tab", { name: /Advanced|高度操作/ });
+  // [#2283] gate tab のラベルも "(Advanced)" を含むため、 高度操作 tab は完全一致寄りで判定。
+  const opsTab = await screen.findByRole("tab", { name: /^Advanced$|高度操作/ });
   await userEvent.click(opsTab);
 }
 

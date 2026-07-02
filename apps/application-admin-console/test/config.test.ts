@@ -58,6 +58,7 @@ describe("loadConfig", () => {
         samlSso: false,
         nonAwsRuntime: false,
         redTeam: true,
+        challengePrerequisiteGate: false,
       });
     });
 
@@ -82,6 +83,7 @@ describe("loadConfig", () => {
         samlSso: true,
         nonAwsRuntime: true,
         redTeam: false,
+        challengePrerequisiteGate: false,
       });
     });
   });
@@ -106,21 +108,41 @@ describe("loadConfig", () => {
     it("should default all features OFF when VITE_FEATURES is absent", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
       const config = await loadConfig(env);
-      expect(config.features).toEqual({ samlSso: false, nonAwsRuntime: false, redTeam: true });
+      expect(config.features).toEqual({
+        samlSso: false,
+        nonAwsRuntime: false,
+        redTeam: true,
+        challengePrerequisiteGate: false,
+      });
     });
 
     it("should opt features in from a VITE_FEATURES JSON object", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
       const config = await loadConfig({ ...env, VITE_FEATURES: '{"samlSso":true}' });
-      expect(config.features).toEqual({ samlSso: true, nonAwsRuntime: false, redTeam: true });
+      expect(config.features).toEqual({
+        samlSso: true,
+        nonAwsRuntime: false,
+        redTeam: true,
+        challengePrerequisiteGate: false,
+      });
     });
 
     it("should ignore invalid / non-object VITE_FEATURES and use defaults", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 404 })));
       const bad = await loadConfig({ ...env, VITE_FEATURES: "not-json" });
-      expect(bad.features).toEqual({ samlSso: false, nonAwsRuntime: false, redTeam: true });
+      expect(bad.features).toEqual({
+        samlSso: false,
+        nonAwsRuntime: false,
+        redTeam: true,
+        challengePrerequisiteGate: false,
+      });
       const arr = await loadConfig({ ...env, VITE_FEATURES: "[1,2]" });
-      expect(arr.features).toEqual({ samlSso: false, nonAwsRuntime: false, redTeam: true });
+      expect(arr.features).toEqual({
+        samlSso: false,
+        nonAwsRuntime: false,
+        redTeam: true,
+        challengePrerequisiteGate: false,
+      });
     });
   });
 

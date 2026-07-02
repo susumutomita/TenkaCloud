@@ -4,15 +4,17 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Issue #1318: Event Detail 画面を 7 tabs に再編した時の構造テスト。
+ * Issue #1318: Event Detail 画面を tabs に再編した時の構造テスト。
+ * Issue #2283: Progression / Gate (Advanced) tab を追加し 8 tabs になった。
  *
  * 「温泉宿状態」 (情報過密 で workflow が読めない) 解消を確認する。
  *
- * - 7 tabs (Overview / Schedule / Problems / Teams / Scoreboard / Notifications / Operations) が並ぶ
+ * - 8 tabs (Overview / Schedule / Problems / Teams / Scoreboard / Notifications / Advanced /
+ *   Progression / Gate) が並ぶ
  * - Overview tab が default で active
  * - tab 切替で Schedule の中身が表示される
  * - URL fragment #tab=problems で初期 tab を選択できる
- * - すべての section (Phase indicator / Force ARCHIVED / 問題セット / 通知 など) が 7 tabs のどこかに残る (情報欠落なし)
+ * - すべての section (Phase indicator / Force ARCHIVED / 問題セット / 通知 など) が tabs のどこかに残る (情報欠落なし)
  */
 
 const mocks = vi.hoisted(() => ({
@@ -98,18 +100,21 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("EventDetailPage #1318 tabs", () => {
-  it("should render all 7 workflow tabs", async () => {
+  it("should render all 8 workflow tabs", async () => {
     mocks.getEvent.mockResolvedValueOnce(baseDetail);
     renderPage();
     await waitFor(() => expect(screen.getAllByText(/Tabs Test Event/).length).toBeGreaterThan(0));
-    // tab のラベル (button 内のテキスト) が 7 つ揃っていること。
+    // tab のラベル (button 内のテキスト) が 8 つ揃っていること。
     expect(screen.getByRole("tab", { name: /Overview|概要/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Schedule|スケジュール/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Problems|問題/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Teams|チーム/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Scoreboard|スコア/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Notifications|通知/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Advanced|高度操作/ })).toBeInTheDocument();
+    // gate tab のラベルも "(Advanced)" を含むため、 高度操作 tab は完全一致寄りで判定。
+    expect(screen.getByRole("tab", { name: /^Advanced$|高度操作/ })).toBeInTheDocument();
+    // [#2283] Progression / Gate (Advanced) tab は feature flag に関係なく常時表示。
+    expect(screen.getByRole("tab", { name: /Progression|進行 \/ Gate/ })).toBeInTheDocument();
   });
 
   it("should render Overview tab content (Phase indicator) by default", async () => {
@@ -150,7 +155,7 @@ describe("EventDetailPage #1318 tabs", () => {
     renderPage();
     await waitFor(() => expect(screen.getAllByText(/Tabs Test Event/).length).toBeGreaterThan(0));
     const user = userEvent.setup();
-    const opsTab = screen.getByRole("tab", { name: /Advanced|高度操作/ });
+    const opsTab = screen.getByRole("tab", { name: /^Advanced$|高度操作/ });
     await user.click(opsTab);
     // Force ARCHIVED rescue button が Operations tab に残る (= 情報欠落なし)
     await waitFor(() => {

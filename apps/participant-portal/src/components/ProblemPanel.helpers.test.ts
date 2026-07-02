@@ -69,6 +69,14 @@ describe("formatProblemPanelActionError — non-gate errors", () => {
     expect(fmt(new PortalValidationError("flag_too_long"))).toContain(VKEY);
   });
 
+  it("should map challenge_prerequisite_not_met to the gate guidance message (Issue #2283)", () => {
+    // locked 問題への flag 提出 / hint reveal は backend 409 → PortalValidationError。
+    // UI は通常先回り lock するが、 polling 反映前の隙間に届いたら親切文言を出す。
+    expect(
+      fmt(new PortalValidationError("challenge_prerequisite_not_met", { gateProblemId: "gate-1" })),
+    ).toBe("problem_panel.prerequisite_locked_error");
+  });
+
   it("should fall back to the Error message, then String() for unknowns", () => {
     expect(fmt(new Error("boom"))).toBe("boom");
     expect(fmt("weird")).toBe("weird");

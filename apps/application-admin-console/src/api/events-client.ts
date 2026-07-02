@@ -79,7 +79,8 @@ export interface EventDeploymentSummary {
 export interface TeamScoreEventView {
   jobId: string;
   problemId: string;
-  source: "uptime" | "flag" | "flag-wrong" | "hint";
+  /** Issue #2283: "gate-bonus" = Progression Gate 完了時に 1 度だけ付与される固定ボーナス。 */
+  source: "uptime" | "flag" | "flag-wrong" | "hint" | "gate-bonus";
   points: number;
   result: "ok" | "wrong";
   occurredAt: string;
@@ -92,6 +93,31 @@ export interface TeamScoreEvents {
   events: readonly TeamScoreEventView[];
 }
 
+/** Issue #2283: Progression Gate の team 単位 policy。 "required" = Gate 完了まで unlock target を lock / "off" = bypass。 */
+export type ProgressionGatePolicy = "required" | "off";
+
+/** Issue #2283: team 単位の上書き。 `completionBonus` は Gate 完了時に 1 度だけ付与 (int 0..100000、省略時 0)。 */
+export interface ProgressionGateTeamOverride {
+  policy: ProgressionGatePolicy;
+  completionBonus?: number;
+}
+
+/**
+ * Issue #2283: Event 1 件の Progression Gate 設定 (= `PUT /events/:eventId/progression-gate` body)。
+ * wire shape の source of truth は
+ * infrastructure/lib/problem-deploy/handlers/shared/progression-gate.ts の
+ * `ProgressionGateConfigSchema` (自己参照 / 重複 target は backend が reject する)。
+ */
+export interface ProgressionGateConfig {
+  /** Gate になる challenge の problemId (Event の問題セットに含まれること)。 */
+  gateProblemId: string;
+  /** Gate 完了までロックする problemId (1..49、重複なし、gateProblemId を含まない)。 */
+  unlockTargetIds: readonly string[];
+  defaultPolicy: ProgressionGatePolicy;
+  /** key = その Event の teamId。 未記載 team は defaultPolicy に従う。 */
+  teamOverrides?: Readonly<Record<string, ProgressionGateTeamOverride>>;
+}
+
 export interface EventDetail extends EventSummary {
   teams: readonly TeamSummary[];
   problems: readonly EventProblemTarget[];
@@ -102,6 +128,8 @@ export interface EventDetail extends EventSummary {
   deploymentsByProblem: Readonly<Record<string, readonly EventDeploymentSummary[]>>;
   /** Issue #1038 P1 #7: opt-in で全 team の累計 score event timeline を含む。 */
   scoreEventsByTeam?: readonly TeamScoreEvents[];
+  /** Issue #2283: Progression Gate 設定。未設定 (= Gate 無し) は undefined。 */
+  progressionGate?: ProgressionGateConfig;
 }
 
 export interface CreateEventTeamInput {
@@ -308,4 +336,62 @@ export async function createNotification(
     `events/${encodeURIComponent(eventId)}/notifications`,
     body,
   );
+}
+
+export interface PutProgressionGateResult {
+  progressionGate: ProgressionGateConfig;
+}
+
+/**
+ * Issue #2283: Progression Gate 設定を保存する (full-replace)。
+ * tenant runtime flag `challengePrerequisiteGate` OFF は 409 `{ error: "feature_disabled" }`、
+ * cross-entity 検証失敗は 400 `{ error: "invalid_progression_gate", reason }` が返る。
+ */
+export async function putEventProgressionGate(
+  api: ApiClient,
+  eventId: string,
+  config: ProgressionGateConfig,
+): Promise<PutProgressionGateResult> {
+  return api.put<PutProgressionGateResult>(
+    `events/${encodeURIComponent(eventId)}/progression-gate`,
+    config,
+  );
+}
+
+export interface RemoveProgressionGateResult {
+  /** idempotent: 既に未設定だった場合は false (= no-op でも 200)。 */
+  removed: boolean;
+}
+
+/** Issue #2283: Progression Gate 設定を除去する (idempotent。flag OFF でも掃除経路として許可)。 */
+export async function deleteEventProgressionGate(
+  api: ApiClient,
+  eventId: string,
+): Promise<RemoveProgressionGateResult> {
+  return api.delJson<RemoveProgressionGateResult>(
+    `events/${encodeURIComponent(eventId)}/progression-gate`,
+  );
+}
+
+interface TenantFeatureFlagsResponse {
+  flags: Record<string, boolean>;
+}
+
+/**
+ * ADR-035 / Issue #2283: per-tenant runtime feature flag overrides を取得する (全 tenant role 可)。
+ * backend の Gate 判定は tenant DDB 行のみを見るため、 Gate UI の有効判定も
+ * `config.features` (build/runtime-config 由来) ではなく本経路を使う (= backend と判定源を一致)。
+ */
+export async function getTenantFeatureFlags(api: ApiClient): Promise<Record<string, boolean>> {
+  const res = await api.get<TenantFeatureFlagsResponse>("feature-flags");
+  return res.flags;
+}
+
+/** ADR-035: per-tenant feature flag overrides を full-replace する (TenantAdmin のみ、他 role は 403)。 */
+export async function putTenantFeatureFlags(
+  api: ApiClient,
+  flags: Readonly<Record<string, boolean>>,
+): Promise<Record<string, boolean>> {
+  const res = await api.put<TenantFeatureFlagsResponse>("admin/feature-flags", flags);
+  return res.flags;
 }

@@ -44,6 +44,8 @@ interface PortalErrorBody {
   readonly reason?: string;
   /** Issue #1315: hint_out_of_order の 「次に開けるべき直前 hint」 id。 */
   readonly missingHintId?: string;
+  /** Issue #2283: challenge_prerequisite_not_met の 「先に完了すべき Gate 問題」 id。 */
+  readonly gateProblemId?: string;
 }
 
 function isAssumeRoleStage(value: unknown): value is AssumeRoleStage {
@@ -98,6 +100,15 @@ async function throwConflictError(res: Response): Promise<never> {
   if (body.error === "hint_out_of_order") {
     throw new PortalValidationError("hint_out_of_order", {
       missingHintId: body.missingHintId,
+    });
+  }
+  // Issue #2283: Progression Gate。 locked 問題への mutation (flag 提出 / endpoint 登録 /
+  // hint reveal) は 409 challenge_prerequisite_not_met で拒否される。 gateProblemId を
+  // details に詰めて UI が 「どの Gate 問題を先に完了すべきか」 を案内できるようにする。
+  // (通常は UI 側の lock 表示で到達しない — backend guard の defense-in-depth。)
+  if (body.error === "challenge_prerequisite_not_met") {
+    throw new PortalValidationError("challenge_prerequisite_not_met", {
+      gateProblemId: body.gateProblemId,
     });
   }
   throw new PortalValidationError(body.error ?? "conflict");

@@ -186,6 +186,19 @@ export interface DeploymentItem {
    */
   flagSubmitted?: boolean;
   /**
+   * Issue #2283: この行が Progression Gate の Gate challenge で、 完了 bonus
+   * (teamOverrides[].completionBonus) を加算済みなら加算時刻 (ISO 8601)。
+   * `attribute_not_exists` ConditionExpression の冪等 guard として使い、 bonus の
+   * 二重加算をレースから守る (= flagSubmitted と同じ one-time パターン)。
+   */
+  gateBonusAwardedAt?: string;
+  /**
+   * Issue #2283: Gate 完了を scoring tick が latch した時刻 (ISO 8601)。 完了後に uptime
+   * penalty で score が 0 以下へ戻っても unlock 状態を維持するための one-time marker
+   * (bonus の有無と独立に全 team の Gate 行へ書かれる)。
+   */
+  gateCompletedAt?: string;
+  /**
    * Issue #1796: multi-flag kind で正解済みの sub-flag id の集合。 DynamoDB の String Set (SS)
    * として保持し、 lib-dynamodb が JS `Set<string>` ↔ SS を marshal する。 旧 row / 手書き行は
    * 持たない (= 「未解答」 と等価) ので、 単一 `flagSubmitted` boolean を集合へ拡張した形。

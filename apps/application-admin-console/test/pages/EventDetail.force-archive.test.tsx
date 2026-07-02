@@ -85,7 +85,8 @@ describe("EventDetailPage #708 Force ARCHIVED rescue", () => {
   // #1318: tabs 構造化により Force ARCHIVED は Operations tab に移動。
   // status=TEARDOWN の Event 詳細を開いて Operations tab を選択する helper。
   async function openOperationsTab() {
-    const opsTab = await screen.findByRole("tab", { name: /Advanced|高度操作/ });
+    // [#2283] gate tab のラベルも "(Advanced)" を含むため、 高度操作 tab は完全一致寄りで判定。
+    const opsTab = await screen.findByRole("tab", { name: /^Advanced$|高度操作/ });
     await userEvent.click(opsTab);
   }
 

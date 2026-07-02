@@ -21,9 +21,11 @@ export {
   type ParticipantEventGate,
   type ParticipantHintView,
   type ParticipantProblemView,
+  type ParticipantProgressionView,
   type ParticipantScoringInfo,
   type ParticipantTeamView,
   type ProblemTextI18n,
+  type ProgressionGatePolicy,
   type ScoringKind,
   type SubmitFlagOutcome,
   type TargetAccessCapability,
@@ -46,11 +48,12 @@ export type AssumeRoleStage = "competitor" | "participant_viewer";
  * Phase 3: 自チームのスコア変動履歴 (時系列降順)。
  * Issue #1001: flag 提出 / uptime probe 成功に加え、 ヒント開封 / 不正解 flag の
  * 減点行も含む。 source / points の符号で 「加点 / 減点」 を区別する。
+ * Issue #2283: Progression Gate 完了時の 1 回限り bonus は source="gate-bonus" で届く。
  */
 export interface ScoreEventView {
   readonly jobId: string;
   readonly problemId: string;
-  readonly source: "uptime" | "flag" | "flag-wrong" | "hint";
+  readonly source: "uptime" | "flag" | "flag-wrong" | "hint" | "gate-bonus";
   readonly points: number;
   readonly result: "ok" | "wrong";
   readonly occurredAt: string;
@@ -66,12 +69,12 @@ export interface ScoreEventsResponse {
  * - `teamId` は ULID (= 推測困難)、 leaderboard と同じ
  * - `teamName` は displayTeamName ?? slug
  * - `events` は occurredAt 昇順 (= chart の cumulative 累積を 1 pass で組める)
- * - source / result は `ScoreEventView` と同じ 4-source 包含
+ * - source / result は `ScoreEventView` と同じ source 包含 (#2283 で "gate-bonus" 追加)
  */
 export interface TeamScoreEventView {
   readonly jobId: string;
   readonly problemId: string;
-  readonly source: "uptime" | "flag" | "flag-wrong" | "hint";
+  readonly source: "uptime" | "flag" | "flag-wrong" | "hint" | "gate-bonus";
   readonly points: number;
   readonly result: "ok" | "wrong";
   readonly occurredAt: string;

@@ -24,6 +24,16 @@ export const FEATURE_REGISTRY = {
     stability: "experimental",
     defaultEnabled: true,
   },
+  challengePrerequisiteGate: {
+    // Issue #2283: Progression Gate (問題アンロック / チーム別ハンデ)。 EventDetail の
+    // "Progression / Gate (Advanced)" tab が編集 UI。 backend は per-tenant runtime flag
+    // (GET /feature-flags の DDB row) だけを判定するため、 UI 側の有効判定もこの registry
+    // default ではなく同 API を読む (= backend と判定源を一致させる)。
+    description:
+      "Progression Gate — the advanced event rule that locks unlock-target problems until a gate challenge is completed (with per-team overrides / completion bonuses).",
+    stability: "experimental",
+    defaultEnabled: false,
+  },
 } as const satisfies FeatureRegistry;
 
 export type AppFeatures = ResolvedFeatures<typeof FEATURE_REGISTRY>;

@@ -13,6 +13,9 @@ vi.mock("../../lib/problem-deploy/handlers/participant-handler/shared", () => ({
     eventsTableName: "TestEvents",
     ddb: { send: vi.fn() },
   }),
+  // #2283: getJobPrerequisiteBlock (jobId 経路の Progression Gate guard) が team 行を引く。
+  // 空 = 該当行なし → guard 素通し (= 各 route 本来の outcome を検証する既存テストを保つ)。
+  queryTeamItems: vi.fn(async () => []),
 }));
 
 vi.mock("../../lib/problem-deploy/handlers/participant-handler/lookup", () => ({

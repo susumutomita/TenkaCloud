@@ -20,6 +20,12 @@ import { useIsMock } from "../config-context";
 import { findProblemMetadata } from "../data/problems";
 import { useT } from "../i18n";
 import { categoryOf } from "../lib/category";
+import {
+  gateProblemDisplayName,
+  hasGateCompletionBonus,
+  isGateAwaitingCompletion,
+  isPrerequisiteLocked,
+} from "../lib/progression";
 
 /**
  * 競技者向けの 「解答状態」 (= 解けた / 解けてない)。 #821 / #822 で導入、 issue #34 で
@@ -136,6 +142,14 @@ export function QuestsPage() {
 
   const allProblems = useMemo(() => view?.problems ?? [], [view]);
 
+  // Issue #2283: Progression Gate。 progression 不在 (= Gate 設定なし / feature flag OFF)
+  // なら以降の badge / hint は一切出ない (= 従来表示)。
+  const progression = view?.progression;
+  const gateName = useMemo(
+    () => gateProblemDisplayName(progression, allProblems),
+    [progression, allProblems],
+  );
+
   const counts = useMemo(() => {
     return {
       all: allProblems.length,
@@ -162,27 +176,48 @@ export function QuestsPage() {
     () => ({
       header: (problem: ParticipantProblemView) => {
         const s = renderSubmissionState(problem, t);
+        // Issue #2283: Progression Gate の出し分け。 locked 問題は隠さず「ロック中」 badge +
+        // 解放条件を出し、 Gate 問題 (未完了時) には 「最初にここから」 を目立たせる。
+        // policy "off" の team (= locked 無し) には解放約束 badge を出さないが、 完了 bonus
+        // badge は locked の有無と無関係に出す (hasGateCompletionBonus)。
+        const locked = isPrerequisiteLocked(progression, problem.problemId);
+        const gatePending = isGateAwaitingCompletion(progression, problem.problemId);
+        const bonusPending = hasGateCompletionBonus(progression, problem.problemId);
         return (
-          <SpaceBetween size="xs" direction="horizontal" alignItems="center">
-            <Link
-              fontSize="heading-m"
-              href={`/problems/${encodeURIComponent(problem.jobId)}`}
-              onFollow={(e) => {
-                e.preventDefault();
-                navigate(`/problems/${encodeURIComponent(problem.jobId)}`);
-              }}
-            >
-              {questCardTitle(problem.problemId)}
-            </Link>
-            {categoryBadge(problem.scoring, t("quests.category_uncategorized"))}
-            {difficultyBadge(problem.problemId, t)}
-            <StatusIndicator type={s.type}>{s.label}</StatusIndicator>
+          <SpaceBetween size="xxs">
+            <SpaceBetween size="xs" direction="horizontal" alignItems="center">
+              <Link
+                fontSize="heading-m"
+                href={`/problems/${encodeURIComponent(problem.jobId)}`}
+                onFollow={(e) => {
+                  e.preventDefault();
+                  navigate(`/problems/${encodeURIComponent(problem.jobId)}`);
+                }}
+              >
+                {questCardTitle(problem.problemId)}
+              </Link>
+              {categoryBadge(problem.scoring, t("quests.category_uncategorized"))}
+              {difficultyBadge(problem.problemId, t)}
+              {gatePending && <Badge color="green">{t("quests.gate_start_here")}</Badge>}
+              {bonusPending && progression && (
+                <Badge color="blue">
+                  {t("quests.gate_completion_bonus", { points: progression.completionBonus })}
+                </Badge>
+              )}
+              {locked && <Badge color="grey">{t("quests.locked_badge")}</Badge>}
+              <StatusIndicator type={s.type}>{s.label}</StatusIndicator>
+            </SpaceBetween>
+            {locked && (
+              <Box variant="small" color="text-status-inactive">
+                {t("quests.locked_unlock_condition", { gateName })}
+              </Box>
+            )}
           </SpaceBetween>
         );
       },
       sections: [],
     }),
-    [navigate, t],
+    [navigate, t, progression, gateName],
   );
 
   const emptyUnsolved = (

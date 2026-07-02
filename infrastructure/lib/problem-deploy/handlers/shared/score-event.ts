@@ -32,12 +32,14 @@ export interface ScoreEventItem {
    * - `hint`: 競技者がヒントを開封し penalty が deduct された (Issue #1038 P1 #8、 2026-05-18)。
    *   旧来 hint reveal は score を直 ADD するだけで score event 履歴に出ず、 「-30 pt なのに
    *   履歴 0 件」 表示の不整合になっていた。
+   * - `gate-bonus`: Progression Gate (Issue #2283) の完了 bonus。 team override の
+   *   `completionBonus` を Gate challenge 完了時に 1 度だけ加算した marker。
    */
-  source: "uptime" | "flag" | "flag-wrong" | "attack-detected" | "hint";
+  source: "uptime" | "flag" | "flag-wrong" | "attack-detected" | "hint" | "gate-bonus";
   /**
    * 加算ポイント。`uptime` = scoring.pointsPerSuccess、`flag` = scoring.points、
    * `flag-wrong` = -wrongAnswerPenalty (= 減点、 負数)、 `attack-detected` = 0 (= イベント marker のみ)、
-   * `hint` = -hint.penalty (= 減点、 負数)。
+   * `hint` = -hint.penalty (= 減点、 負数)、 `gate-bonus` = teamOverrides[].completionBonus (= 正数)。
    */
   points: number;
   /**
@@ -75,7 +77,22 @@ export async function writeScoreEvent(
   points: number,
   occurredAt: string,
 ): Promise<void> {
-  const item: ScoreEventItem = {
+  const item = buildScoreEventItem(parent, source, points, occurredAt);
+  await ddb.send(new PutCommand({ TableName: tableName, Item: item }));
+}
+
+/**
+ * ScoreEventItem を組み立てる pure builder。 単発 PutItem (`writeScoreEvent`) のほか、
+ * score 加算と event append を 1 transaction で書く経路 (#2283 gate-bonus — 「score は
+ * 加算されたのに履歴行が無い」 分裂を構造的に防ぐ) からも使う。
+ */
+export function buildScoreEventItem(
+  parent: Pick<DeploymentItem, "jobId" | "problemId" | "teamId" | "eventId" | "expiresAt">,
+  source: ScoreEventItem["source"],
+  points: number,
+  occurredAt: string,
+): ScoreEventItem {
+  return {
     PK: `DEPLOYMENT#${parent.jobId}`,
     SK: `EVENT#${occurredAt}#${ulid()}`,
     jobId: parent.jobId,
@@ -88,5 +105,4 @@ export async function writeScoreEvent(
     occurredAt,
     expiresAt: Number(parent.expiresAt ?? 0),
   };
-  await ddb.send(new PutCommand({ TableName: tableName, Item: item }));
 }

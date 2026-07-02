@@ -17,6 +17,7 @@
 import { EventNotificationsPanel } from "../../components/event-detail/EventNotificationsPanel";
 import { EventParticipantsPanel } from "../../components/event-detail/EventParticipantsPanel";
 import { EventProblemSetPanel } from "../../components/event-detail/EventProblemSetPanel";
+import { EventProgressionGatePanel } from "../../components/event-detail/EventProgressionGatePanel";
 import { EventSchedulePanel } from "../../components/event-detail/EventSchedulePanel";
 import { EventTeamsPanel } from "../../components/event-detail/EventTeamsPanel";
 import { TeamRankingPanel } from "../../components/TeamRankingPanel";
@@ -38,6 +39,9 @@ export const EVENT_TAB_IDS = [
   "operations",
   // [#1417/#1666] feature-flagged (redTeam): the tab only renders when config.features.redTeam.
   "disruptions",
+  // [#2283] Advanced な競技ルール (Progression Gate)。 tab は常時表示し、 panel 側が
+  // per-tenant runtime flag (challengePrerequisiteGate) で編集可否を切り替える。
+  "gate",
 ] as const;
 
 export type EventTabId = (typeof EVENT_TAB_IDS)[number];
@@ -138,6 +142,26 @@ export function DisruptionsTab({ apiClient, canMutateTenant, detail, t }: EventT
       apiClient={apiClient}
       canMutateTenant={canMutateTenant}
       detail={detail}
+      t={t}
+    />
+  );
+}
+
+// [#2283] Progression / Gate (Advanced) tab。 保存成功 / 除去成功時に manualRefresh で
+// detail を取り直す (= progressionGate の反映)。
+export function GateTab({
+  apiClient,
+  canMutateTenant,
+  detail,
+  manualRefresh,
+  t,
+}: EventTabContentProps) {
+  return (
+    <EventProgressionGatePanel
+      apiClient={apiClient}
+      canMutateTenant={canMutateTenant}
+      detail={detail}
+      onRefresh={manualRefresh}
       t={t}
     />
   );

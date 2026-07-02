@@ -1,5 +1,6 @@
 import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { createCursorCodec } from "../shared/cursor-codec.js";
+import { parseProgressionGate } from "../shared/progression-gate.js";
 import type { EventSharedResources } from "./shared.js";
 import { collectTeamScoreEvents, type DeploymentRefForScoreEvents } from "./team-score-events.js";
 import type {
@@ -192,12 +193,15 @@ export async function getEventDetail(
     : undefined;
 
   const summary = toSummary(event);
+  // Issue #2283: 保存済み Gate 設定を detail に載せる (不正 shape は寛容 parse で除外)。
+  const progressionGate = parseProgressionGate(event.progressionGate);
   return {
     ...summary,
     problems: Array.isArray(event.problems) ? (event.problems as EventDetail["problems"]) : [],
     teams,
     deploymentsByProblem,
     ...(scoreEventsByTeam !== undefined ? { scoreEventsByTeam } : {}),
+    ...(progressionGate !== undefined ? { progressionGate } : {}),
   };
 }
 

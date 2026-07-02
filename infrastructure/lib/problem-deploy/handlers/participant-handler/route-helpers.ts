@@ -41,6 +41,9 @@ const ERROR_STATUS = {
   // Issue #13 / scoring gate: 競技開始前 / 終了後の提出。 409 (= 状態的に受け付けない)。
   scoring_not_started: StatusCodes.CONFLICT,
   scoring_ended: StatusCodes.CONFLICT,
+  // Issue #2283: Progression Gate 未完了の locked challenge への競技操作。 409 (= 状態系、
+  // Gate challenge 完了で解消する)。 body に gateProblemId を含めて UI が誘導文言を出す。
+  challenge_prerequisite_not_met: StatusCodes.CONFLICT,
   misconfigured: StatusCodes.INTERNAL_SERVER_ERROR,
   // Issue #705: SSO の "misconfigured" を細分化 (= 原因切り分け可能に)。
   assume_role_failed: StatusCodes.INTERNAL_SERVER_ERROR,

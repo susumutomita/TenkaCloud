@@ -94,7 +94,12 @@ const config = (over: Partial<AppConfig> = {}): AppConfig =>
     tenantName: "Acme",
     apiBaseUrl: "https://api.example.com",
     isolation: "silo",
-    features: { samlSso: true, nonAwsRuntime: false, redTeam: false },
+    features: {
+      samlSso: true,
+      nonAwsRuntime: false,
+      redTeam: false,
+      challengePrerequisiteGate: false,
+    },
     ...over,
   }) as AppConfig;
 const idp = (over: Partial<TenantIdpSummary> = {}): TenantIdpSummary =>
@@ -120,7 +125,16 @@ afterEach(() => vi.clearAllMocks());
 
 describe("IdentityProvidersPage", () => {
   it("should show the feature-disabled hero (and skip fetch) when featureSamlSso is off", () => {
-    renderPage(config({ features: { samlSso: false, nonAwsRuntime: false, redTeam: false } }));
+    renderPage(
+      config({
+        features: {
+          samlSso: false,
+          nonAwsRuntime: false,
+          redTeam: false,
+          challengePrerequisiteGate: false,
+        },
+      }),
+    );
     expect(screen.getByText("Identity providers are not available")).toBeInTheDocument();
     expect(mockCreateClient).not.toHaveBeenCalled();
   });
