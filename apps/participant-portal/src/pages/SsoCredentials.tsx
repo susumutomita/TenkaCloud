@@ -5,14 +5,25 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import type { ParticipantProblemView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { CliCredentialsPanel } from "../components/CliCredentialsPanel";
 import { useConsoleAccess } from "../components/useConsoleAccess";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
-import { problemProvider, providerLabel } from "../data/providers";
+import { externalPortalUrl, problemProvider, providerLabel } from "../data/providers";
 import { useT } from "../i18n";
+
+/**
+ * [#2235 / ADR-048 §5.1] external-portal 導線の宛先。backend の capability 配信と
+ * プラットフォーム定数マップの両方が揃うときだけ返す (= 判定は backend、宛先は
+ * platform 定数。participant 入力・problem metadata からは供給しない)。
+ */
+function externalPortalHref(problem: ParticipantProblemView): string | undefined {
+  if (!problem.accessCapabilities?.includes("external-portal")) return undefined;
+  return externalPortalUrl(problemProvider(problem));
+}
 
 /**
  * AWS Console ワンクリック login。競技者は自前 AWS ログイン不要で、Portal の button
@@ -127,7 +138,26 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
           <Container
             key={problem.jobId}
             header={
-              <Header variant="h2">
+              <Header
+                variant="h2"
+                actions={
+                  externalPortalHref(problem) !== undefined && (
+                    <Button
+                      iconName="external"
+                      href={externalPortalHref(problem)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      ariaLabel={t("sso_credentials.external_portal_aria", {
+                        problemId: problem.problemId,
+                      })}
+                    >
+                      {t("sso_credentials.external_portal_button", {
+                        provider: providerLabel(problemProvider(problem)),
+                      })}
+                    </Button>
+                  )
+                }
+              >
                 <code>{problem.problemId}</code>
               </Header>
             }
@@ -143,9 +173,13 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
                 ]}
               />
               <Box variant="p">
-                {t("sso_credentials.non_aws_body", {
-                  provider: providerLabel(problemProvider(problem)),
-                })}
+                {externalPortalHref(problem) !== undefined
+                  ? t("sso_credentials.external_portal_hint", {
+                      provider: providerLabel(problemProvider(problem)),
+                    })
+                  : t("sso_credentials.non_aws_body", {
+                      provider: providerLabel(problemProvider(problem)),
+                    })}
               </Box>
             </SpaceBetween>
           </Container>

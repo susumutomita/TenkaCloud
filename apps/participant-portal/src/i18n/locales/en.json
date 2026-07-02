@@ -258,6 +258,9 @@
     "label_region": "Region",
     "label_provider": "Cloud provider",
     "non_aws_body": "This problem runs on {provider}, so it is not accessed through the AWS Console. Follow the event host's instructions for access.",
+    "external_portal_button": "Open the {provider} portal",
+    "external_portal_aria": "Open the provider portal for {problemId}",
+    "external_portal_hint": "This problem runs on {provider}. Open the provider portal and sign in with the account your event host provided — TenkaCloud does not broker the sign-in session.",
     "cli": {
       "section_header": "CLI / SDK temporary credentials",
       "body": "Issue 1-hour temporary credentials for AWS CLI / boto3 / Terraform usage. Same IAM scope as the Console (ParticipantViewerRole).",
