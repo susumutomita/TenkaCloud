@@ -33,19 +33,32 @@ import { Construct } from "constructs";
  *   - 集計 period は 1 日 (= 月次 cap の 1/30) で計算、 80% 閾値を sum で判定
  */
 
+/**
+ * Issue #2239: monitor 対象 1 件 = 呼び出し元が付与する安定 `label` (英数字、caller が一意性を
+ * 保証) + 実行時解決される `name` (Lambda functionName / DDB tableName — cross-stack 参照だと
+ * CFn token になりうる)。 construct ID には `label` だけを使う (`name` を sanitize して ID に
+ * 混ぜると、 token の内部採番 `Token[TOKEN.N]` がプロセス内の token 生成順に依存する文字列に
+ * 化けて logical ID に混入し、 無関係な変更で token 生成順がずれるたびに Alarm が
+ * DELETE+CREATE される事故を起こす)。
+ */
+export interface FreeTierAlarmTarget {
+  readonly label: string;
+  readonly name: string;
+}
+
 export interface FreeTierAlarmsProps {
   /** 通知先 SNS topic (= CostBudget と共有を推奨)。 */
   readonly notificationTopic: ITopic;
   /**
-   * monitor 対象の Lambda function 名一覧。 各 function に対して invocations + errors alarm を
+   * monitor 対象の Lambda function 一覧。 各 function に対して invocations + errors alarm を
    * 立てる。 全部の合計を 1 つの alarm にする方が安いが、 どの function が暴走したかが見えない
    * ので個別に立てる。
    */
-  readonly lambdaFunctionNames: readonly string[];
+  readonly lambdaFunctionNames: readonly FreeTierAlarmTarget[];
   /**
-   * monitor 対象の DDB Table 名一覧。 ConsumedReadCapacityUnits / WriteCapacityUnits を見る。
+   * monitor 対象の DDB Table 一覧。 ConsumedReadCapacityUnits / WriteCapacityUnits を見る。
    */
-  readonly dynamoDbTableNames: readonly string[];
+  readonly dynamoDbTableNames: readonly FreeTierAlarmTarget[];
   /**
    * #1080: monitor 対象の API Gateway (HTTP / REST 混在) のリスト。 5XX rate alarm を立てる。
    */
@@ -106,8 +119,8 @@ export class FreeTierAlarms extends Construct {
     const apiGw5xxThreshold = props.apiGateway5xxDailyThreshold ?? DEFAULT_API_GATEWAY_5XX_DAILY;
     const action = new SnsAction(props.notificationTopic);
 
-    this.lambdaAlarms = props.lambdaFunctionNames.map((fnName, idx) => {
-      const alarm = new Alarm(this, `LambdaInvocations${sanitize(fnName)}${idx}`, {
+    this.lambdaAlarms = props.lambdaFunctionNames.map(({ label, name: fnName }) => {
+      const alarm = new Alarm(this, `LambdaInvocations${sanitize(label)}`, {
         alarmName: `tenkacloud-freetier-lambda-${fnName}`,
         alarmDescription: `Lambda ${fnName} の日次 invocations が ${lambdaThreshold} を超過 (= Free Tier 80% 相当)`,
         metric: new Metric({
@@ -130,8 +143,8 @@ export class FreeTierAlarms extends Construct {
     // #1080: Lambda errors を日次で監視 (= バグ / 設定ミス / 外部依存障害の早期検知)。
     // Invocations と別 alarm にしているのは、 invocations は cost 観点 / errors は health 観点で
     // 役割が違うため (= operator が同じ通知でも文脈で切り分けられる)。
-    this.lambdaErrorAlarms = props.lambdaFunctionNames.map((fnName, idx) => {
-      const alarm = new Alarm(this, `LambdaErrors${sanitize(fnName)}${idx}`, {
+    this.lambdaErrorAlarms = props.lambdaFunctionNames.map(({ label, name: fnName }) => {
+      const alarm = new Alarm(this, `LambdaErrors${sanitize(label)}`, {
         alarmName: `tenkacloud-health-lambda-errors-${fnName}`,
         alarmDescription: `Lambda ${fnName} の日次 Errors が ${lambdaErrorThreshold} 件を超過 (= バグ / 設定ミス疑い)`,
         metric: new Metric({
@@ -178,8 +191,8 @@ export class FreeTierAlarms extends Construct {
       return alarm;
     });
 
-    this.dynamoDbAlarms = props.dynamoDbTableNames.flatMap((tableName, idx) => {
-      const readAlarm = new Alarm(this, `DdbReadCapacity${sanitize(tableName)}${idx}`, {
+    this.dynamoDbAlarms = props.dynamoDbTableNames.flatMap(({ label, name: tableName }) => {
+      const readAlarm = new Alarm(this, `DdbReadCapacity${sanitize(label)}`, {
         alarmName: `tenkacloud-freetier-ddb-read-${tableName}`,
         alarmDescription: `DDB ${tableName} の日次 ConsumedReadCapacityUnits が ${ddbThreshold} を超過`,
         metric: new Metric({
@@ -196,7 +209,7 @@ export class FreeTierAlarms extends Construct {
         treatMissingData: TreatMissingData.NOT_BREACHING,
       });
       readAlarm.addAlarmAction(action);
-      const writeAlarm = new Alarm(this, `DdbWriteCapacity${sanitize(tableName)}${idx}`, {
+      const writeAlarm = new Alarm(this, `DdbWriteCapacity${sanitize(label)}`, {
         alarmName: `tenkacloud-freetier-ddb-write-${tableName}`,
         alarmDescription: `DDB ${tableName} の日次 ConsumedWriteCapacityUnits が ${ddbThreshold} を超過`,
         metric: new Metric({
