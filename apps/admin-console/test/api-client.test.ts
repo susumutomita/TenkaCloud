@@ -84,6 +84,19 @@ describe("createApiClient", () => {
     });
   });
 
+  describe("when fetch rejects (network error)", () => {
+    it("should normalize the failure to ApiError(0) with a network-error message", async () => {
+      // Issue #2199: fetch throwing a raw TypeError (CORS preflight failure / DNS
+      // failure / API unreachable) must not leak to the UI as an unhandled exception.
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+      const api = createApiClient(config, "T");
+      await expect(api.get("tenants")).rejects.toMatchObject({
+        status: 0,
+        message: expect.stringContaining("Network error: Failed to fetch"),
+      });
+    });
+  });
+
   it("should append a trailing slash to apiBaseUrl when it lacks one (already-slash kept)", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
