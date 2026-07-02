@@ -377,76 +377,107 @@ function parseVerifyScoring(
   };
 }
 
-const CHECK_ID_RE = /^[a-z0-9-]+$/;
+// #2252 structural contract — kept byte-identical to the SDK parser
+// (packages/problem-sdk) and the catalog validator so the same fixture is valid
+// in all three: id starts alphanumeric, 1–64 chars; labels ≤80; 2–8 checks.
+const CHECK_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const CHECK_LABEL_MAX = 80;
+const MIN_CHECKS = 2;
+const MAX_CHECKS = 8;
 
 /**
  * [#2252] Validate `scoring.checks` loudly (make local fails with the exact
- * field). Constraints per the issue contract: 1+ checks, ids `^[a-z0-9-]+$` and
- * unique, non-empty labels, positive integer points, penalty >= 0. Hint ids must
- * additionally be unique across the whole problem: the portal's reveal route is
- * keyed on `hintId` alone, so a cross-check collision would make a reveal
- * ambiguous.
+ * field). Constraints per the issue contract, matching the catalog validator:
+ * 2–8 checks; ids `^[a-z0-9][a-z0-9-]{0,63}$` and unique; labels non-empty and
+ * ≤80 chars; positive integer points; `wrongAnswerPenalty` a non-negative
+ * integer ≤ that check's points. Hint ids must additionally be unique across the
+ * whole problem: the portal's reveal route is keyed on `hintId` alone, so a
+ * cross-check collision would make a reveal ambiguous.
  */
 function parseMultiVerifyScoring(
   scoring: RawMetadata["scoring"],
   checkById: ReadonlyMap<string, EnglishCheckOverlay>,
 ): ContainerMultiVerifyScoring {
   const rawChecks = scoring?.checks;
-  if (!Array.isArray(rawChecks) || rawChecks.length === 0) {
-    throw new Error("scoring.checks must be a non-empty array");
+  if (!Array.isArray(rawChecks) || rawChecks.length < MIN_CHECKS || rawChecks.length > MAX_CHECKS) {
+    throw new Error(`scoring.checks must have ${MIN_CHECKS}–${MAX_CHECKS} entries (multi-verify)`);
   }
   const seenCheckIds = new Set<string>();
   const seenHintIds = new Set<string>();
-  const checks = rawChecks.map((raw, index) => {
-    if (typeof raw !== "object" || raw === null) {
-      throw new Error(`scoring.checks[${index}] must be an object`);
-    }
-    const check = raw as {
-      id?: unknown;
-      label?: unknown;
-      points?: unknown;
-      wrongAnswerPenalty?: unknown;
-      hints?: unknown;
-    };
-    const id = requiredString(check.id, `scoring.checks[${index}].id`);
-    if (!CHECK_ID_RE.test(id)) {
-      throw new Error(`scoring.checks[${index}].id must match ^[a-z0-9-]+$ (got "${id}")`);
-    }
-    if (seenCheckIds.has(id)) {
-      throw new Error(`scoring.checks[${index}].id "${id}" is duplicated`);
-    }
-    seenCheckIds.add(id);
-    const label = requiredString(check.label, `scoring.checks[${index}].label`);
-    const points = nonNegativeNumber(check.points, `scoring.checks[${index}].points`);
-    if (points <= 0 || !Number.isInteger(points)) {
-      throw new Error(`scoring.checks[${index}].points must be a positive integer`);
-    }
-    const overlay = checkById.get(id);
-    const hints = normalizeHints(check.hints, overlay?.hintById ?? new Map());
-    for (const hint of hints) {
-      if (seenHintIds.has(hint.id)) {
-        throw new Error(
-          `scoring.checks[${index}].hints id "${hint.id}" is duplicated (hint ids must be unique across the problem)`,
-        );
-      }
-      seenHintIds.add(hint.id);
-    }
-    return {
-      id,
-      label,
-      points,
-      wrongAnswerPenalty: nonNegativeNumber(
-        check.wrongAnswerPenalty,
-        `scoring.checks[${index}].wrongAnswerPenalty`,
-        0,
-      ),
-      hints,
-      ...(overlay?.label !== undefined ? { i18n: { en: { label: overlay.label } } } : {}),
-    };
-  });
+  const checks = rawChecks.map((raw, index) =>
+    parseOneCheck(raw, index, checkById, seenCheckIds, seenHintIds),
+  );
   return {
     kind: "multi-verify",
     checks,
     totalPoints: checks.reduce((sum, check) => sum + check.points, 0),
+  };
+}
+
+/** Validate + normalize one multi-verify check (throws with the exact field). */
+function parseOneCheck(
+  raw: unknown,
+  index: number,
+  checkById: ReadonlyMap<string, EnglishCheckOverlay>,
+  seenCheckIds: Set<string>,
+  seenHintIds: Set<string>,
+): ContainerCheck {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error(`scoring.checks[${index}] must be an object`);
+  }
+  const check = raw as {
+    id?: unknown;
+    label?: unknown;
+    points?: unknown;
+    wrongAnswerPenalty?: unknown;
+    hints?: unknown;
+  };
+  const id = requiredString(check.id, `scoring.checks[${index}].id`);
+  if (!CHECK_ID_RE.test(id)) {
+    throw new Error(
+      `scoring.checks[${index}].id must match ^[a-z0-9][a-z0-9-]{0,63}$ (got "${id}")`,
+    );
+  }
+  if (seenCheckIds.has(id)) {
+    throw new Error(`scoring.checks[${index}].id "${id}" is duplicated`);
+  }
+  seenCheckIds.add(id);
+  const label = requiredString(check.label, `scoring.checks[${index}].label`);
+  if (label.length > CHECK_LABEL_MAX) {
+    throw new Error(
+      `scoring.checks[${index}].label must be ${CHECK_LABEL_MAX} characters or fewer`,
+    );
+  }
+  const points = nonNegativeNumber(check.points, `scoring.checks[${index}].points`);
+  if (points <= 0 || !Number.isInteger(points)) {
+    throw new Error(`scoring.checks[${index}].points must be a positive integer`);
+  }
+  const wrongAnswerPenalty = nonNegativeNumber(
+    check.wrongAnswerPenalty,
+    `scoring.checks[${index}].wrongAnswerPenalty`,
+    0,
+  );
+  if (wrongAnswerPenalty > points) {
+    throw new Error(
+      `scoring.checks[${index}].wrongAnswerPenalty must not exceed the check points (${points})`,
+    );
+  }
+  const overlay = checkById.get(id);
+  const hints = normalizeHints(check.hints, overlay?.hintById ?? new Map());
+  for (const hint of hints) {
+    if (seenHintIds.has(hint.id)) {
+      throw new Error(
+        `scoring.checks[${index}].hints id "${hint.id}" is duplicated (hint ids must be unique across the problem)`,
+      );
+    }
+    seenHintIds.add(hint.id);
+  }
+  return {
+    id,
+    label,
+    points,
+    wrongAnswerPenalty,
+    hints,
+    ...(overlay?.label !== undefined ? { i18n: { en: { label: overlay.label } } } : {}),
   };
 }
