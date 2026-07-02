@@ -1,18 +1,12 @@
 import * as path from "node:path";
-import { Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IEventBus } from "aws-cdk-lib/aws-events";
 import * as iam from "aws-cdk-lib/aws-iam";
-import { Architecture } from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
+import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { grantChallengePayloadRead } from "../utils/iam-helpers.js";
-import {
-  LAMBDA_NODEJS_BUNDLING_TARGET,
-  LAMBDA_NODEJS_RUNTIME,
-  LAMBDA_SOURCE_MAP_ENABLED,
-} from "../utils/lambda-runtime.js";
 import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-credential-store.js";
@@ -101,14 +95,8 @@ export class DeployApiLambda extends Construct {
   constructor(scope: Construct, id: string, props: DeployApiLambdaProps) {
     super(scope, id);
 
-    this.fn = new NodejsFunction(this, "Function", {
-      logGroup: new LogGroup(this, "FunctionLogGroup", {
-        removalPolicy: RemovalPolicy.DESTROY,
-      }),
-      runtime: LAMBDA_NODEJS_RUNTIME,
-      architecture: Architecture.ARM_64,
+    this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "handlers/deploy-handler/index.ts"),
-      handler: "handler",
       timeout: Duration.seconds(15),
       memorySize: 256,
       environment: {
@@ -134,21 +122,15 @@ export class DeployApiLambda extends Construct {
         CLOUD_ACTION_ENFORCEMENT_MODE: props.cloudActionEnforcementMode ?? "shadow",
         NODE_OPTIONS: "--enable-source-maps",
       },
-      bundling: {
-        minify: true,
-        target: LAMBDA_NODEJS_BUNDLING_TARGET,
-        sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
-        externalModules: [],
-        // Issue #1308: BATTLE_PROBLEMS_CATALOG は問題が増えるたび growing し 4 KB Lambda env
-        // hard limit に張り付いた (= EventApi / DeployApi の deploy が CREATE_FAILED)。 #1158
-        // (GenericScoring / ParticipantPortal) と同じ esbuild define で build 時に literal 置換
-        // し env を 0 化する。 handler は process.env を読む既存 code のまま (= build 後に literal
-        // JSON 文字列が埋まる)。 tests は process.env 経由で fixture を注入するので影響なし。
-        define: {
-          "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
-            JSON.stringify(props.problemsCatalog),
-          ),
-        },
+      // Issue #1308: BATTLE_PROBLEMS_CATALOG は問題が増えるたび growing し 4 KB Lambda env
+      // hard limit に張り付いた (= EventApi / DeployApi の deploy が CREATE_FAILED)。 #1158
+      // (GenericScoring / ParticipantPortal) と同じ esbuild define で build 時に literal 置換
+      // し env を 0 化する。 handler は process.env を読む既存 code のまま (= build 後に literal
+      // JSON 文字列が埋まる)。 tests は process.env 経由で fixture を注入するので影響なし。
+      bundlingDefine: {
+        "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
+          JSON.stringify(props.problemsCatalog),
+        ),
       },
     });
 
