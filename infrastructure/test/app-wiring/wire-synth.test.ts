@@ -55,16 +55,6 @@ function synthApp(envOverrides: Record<string, string | undefined> = {}) {
   return app.synth();
 }
 
-/**
- * FreeTierAlarms (observability) は cross-stack token の文字列化 (`TokenTOKEN<n>`) を
- * construct ID に含めるため、token 採番に依存して logical ID が揺れる (= Issue 化済みの
- * 既知の脆弱性)。snapshot が採番順で flake しないよう token 番号 + 後続 hash を潰して
- * 正規化する。それ以外の logical ID は無加工で pin される。
- */
-function normalizeLogicalId(id: string): string {
-  return id.replace(/TokenTOKEN\d+[0-9A-F]*/g, "TokenTOKENX");
-}
-
 describe("buildTenkaCloudApp synth regression (issue #2192)", () => {
   const assembly = synthApp();
 
@@ -96,9 +86,7 @@ describe("buildTenkaCloudApp synth regression (issue #2192)", () => {
   it("should keep every stack's logical ID set (REPLACE/DELETE guard)", () => {
     for (const stack of assembly.stacks) {
       const resources = (stack.template as { Resources?: Record<string, unknown> }).Resources;
-      const logicalIds = Object.keys(resources ?? {})
-        .map(normalizeLogicalId)
-        .sort();
+      const logicalIds = Object.keys(resources ?? {}).sort();
       expect(logicalIds).toMatchSnapshot(stack.stackName);
     }
   });
