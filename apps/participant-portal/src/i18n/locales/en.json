@@ -306,11 +306,11 @@
     "health_unknown": "Not checked yet",
     "last_scored_label": "Last scored",
     "outputs_header": "Access URLs",
-    "stack_outputs_detail_header": "Stack Outputs (details)",
+    "stack_outputs_detail_header": "Deployment outputs (details)",
     "celebrate_header": "🏆 Cleared +{points} pt",
     "celebrate_body": "You've already solved this problem. Move on to the next!",
     "submit_button": "Submit flag (+{points} pt)",
-    "flag_field_label": "Flag (Stack Output value)",
+    "flag_field_label": "Flag (deployment output value)",
     "flag_placeholder": "Enter value",
     "flag_mock_placeholder": "e.g. tenkacloudsample",
     "flag_mock_hint": "Demo mode — type `tenkacloudsample` to feel the correct-answer celebration (partial matches work too; Easter eggs like `claude` / `42` also count).",
@@ -356,7 +356,7 @@
     "solved_header": "🎉 {label} — solved",
     "solved_body": "You earned +{points} pt for this flag.",
     "submit_button": "Submit (+{points} pt)",
-    "flag_field_label": "{label} (Stack Output value)"
+    "flag_field_label": "{label} (deployment output value)"
   },
   "score_timeline": {
     "header": "Score timeline",
