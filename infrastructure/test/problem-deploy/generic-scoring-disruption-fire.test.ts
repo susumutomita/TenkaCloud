@@ -211,6 +211,15 @@ describe("condition-triggered disruption fire", () => {
     // publish 失敗 → 2nd UpdateCommand (firedDisruptions) は走らない (score の 1 件のみ)。
     expect(updateCommands().length).toBe(1);
   });
+
+  it("should not persist firedDisruptions when the whole PutEvents request rejects (issue #2210)", async () => {
+    configureScoringAndDisruptions();
+    ebSend.mockRejectedValue(new Error("network down"));
+    mockDdb();
+    await runHandler();
+    expect(ebSend).toHaveBeenCalledTimes(1);
+    expect(updateCommands().length).toBe(1);
+  });
 });
 
 /**

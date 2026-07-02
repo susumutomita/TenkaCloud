@@ -341,7 +341,7 @@ function printFailureGuide(io: CliIO, phase: string): void {
       "[lite] よくある原因と対処:",
       "[lite]   - credentials expired       → aws sso login / 新しい session を取得",
       "[lite]   - role 不足                  → 必要な IAM permission を付与",
-      "[lite]   - bootstrap 未実行           → make bootstrap",
+      "[lite]   - bootstrap 未実行           → cd infrastructure && bun run cdk bootstrap",
       "[lite]   - region 不一致 (.env と現環境) → AWS_REGION を .env と一致させる",
       "",
     ].join("\n"),
@@ -369,8 +369,8 @@ function printPostDeployGuide(io: CliIO, input: PostDeployGuideInput): void {
     "================================================================",
     "",
     "Access URLs:",
-    `  - Application Admin Console: ${input.consoleUrl ?? "(unknown — make lite-console-url)"}`,
-    `  - Participant Portal:        ${input.portalUrl ?? "(unknown — make lite-portal-url)"}`,
+    `  - Application Admin Console: ${input.consoleUrl ?? "(unknown — bun run scripts/tenkacloud-lite.ts console-url)"}`,
+    `  - Participant Portal:        ${input.portalUrl ?? "(unknown — bun run scripts/tenkacloud-lite.ts portal-url)"}`,
     "",
   ];
   if (input.tenantAdminEmail) {
