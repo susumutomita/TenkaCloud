@@ -168,11 +168,43 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
       Namespace: "AWS/ApiGateway",
       MetricName: "5xx",
       Threshold: 50,
+      Dimensions: [
+        { Name: "ApiId", Value: "abc123" },
+        { Name: "Stage", Value: "$default" },
+      ],
     });
     tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
       Namespace: "AWS/ApiGateway",
       MetricName: "5XXError",
       Threshold: 50,
+      Dimensions: [
+        { Name: "ApiName", Value: "tenant-api" },
+        { Name: "Stage", Value: "prod" },
+      ],
+    });
+  });
+
+  it("#1080: should omit the Stage dimension for API Gateway targets without a stage", () => {
+    const { stack, topic } = buildStack();
+    new FreeTierAlarms(stack, "Alarms", {
+      notificationTopic: topic,
+      lambdaFunctionNames: [],
+      dynamoDbTableNames: [],
+      apiGateways: [
+        { kind: "http", label: "control-plane", apiId: "abc123" },
+        { kind: "rest", label: "tenant", apiName: "tenant-api" },
+      ],
+    });
+    const tpl = Template.fromStack(stack);
+    tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+      Namespace: "AWS/ApiGateway",
+      MetricName: "5xx",
+      Dimensions: [{ Name: "ApiId", Value: "abc123" }],
+    });
+    tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+      Namespace: "AWS/ApiGateway",
+      MetricName: "5XXError",
+      Dimensions: [{ Name: "ApiName", Value: "tenant-api" }],
     });
   });
 });
