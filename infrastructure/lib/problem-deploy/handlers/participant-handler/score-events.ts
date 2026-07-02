@@ -10,14 +10,14 @@ import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
  * Issue #1038 P1 #8 follow-up: hint reveal (= PR-1043) / 不正解 flag (Issue #817 で書き込み済)
  * は score を確かに動かすが、 旧 toView が `"uptime"` / `"flag"` のみ通過させていたため履歴に
  * 出てこなかった (= user 観測「ヒントひらいたときのスコアが score events 履歴に出ない」)。
- * `score-event.ts` の writer 側 union は既に `"uptime" | "flag" | "flag-wrong" | "hint" |
- * "attack-detected"` を持つ。 そのうち competitor の累計 score に影響する 4 種を公開する
+ * `score-event.ts` の writer 側 union のうち competitor の累計 score に影響する 5 種
+ * (uptime / flag / flag-wrong / hint / gate-bonus #2283) を公開する
  * (= `attack-detected` は marker 用、 frontend にスコア行として並べない)。
  */
 export interface ScoreEventView {
   readonly jobId: string;
   readonly problemId: string;
-  readonly source: "uptime" | "flag" | "flag-wrong" | "hint";
+  readonly source: "uptime" | "flag" | "flag-wrong" | "hint" | "gate-bonus";
   readonly points: number;
   readonly result: "ok" | "wrong";
   readonly occurredAt: string;
@@ -110,7 +110,15 @@ export async function listScoreEvents(
  * `hint`) も公開する。 `attack-detected` (= marker 用 result=down 行) は participant の
  * 累計 score に影響しないので score event 履歴には載せない (= 別 endpoint `battle-attacks`)。
  */
-const ALLOWED_SOURCES = new Set<ScoreEventView["source"]>(["uptime", "flag", "flag-wrong", "hint"]);
+// #2283: gate-bonus (Gate 完了 bonus) も score を動かすので履歴に載せる (= 「total は +N
+// なのに履歴 0 件」 の不整合を作らない、 leaderboard-score-events / team-score-events と同じ)。
+const ALLOWED_SOURCES = new Set<ScoreEventView["source"]>([
+  "uptime",
+  "flag",
+  "flag-wrong",
+  "hint",
+  "gate-bonus",
+]);
 const ALLOWED_RESULTS = new Set<ScoreEventView["result"]>(["ok", "wrong"]);
 
 function toView(item: Partial<ScoreEventItem>): ScoreEventView | undefined {

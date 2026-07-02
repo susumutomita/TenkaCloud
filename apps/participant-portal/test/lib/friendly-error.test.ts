@@ -52,6 +52,15 @@ describe("friendlyErrorMessage", () => {
     );
   });
 
+  it("should translate challenge_prerequisite_not_met to the gate guidance (Issue #2283)", () => {
+    expect(
+      friendlyErrorMessage(
+        new PortalValidationError("challenge_prerequisite_not_met", { gateProblemId: "gate-1" }),
+        pseudoT,
+      ),
+    ).toBe("[friendly_error.prerequisite_locked]");
+  });
+
   it("should include correlation id for PortalNetworkError when provided", () => {
     expect(
       friendlyErrorMessage(new PortalNetworkError(502, "bad gateway"), pseudoT, {

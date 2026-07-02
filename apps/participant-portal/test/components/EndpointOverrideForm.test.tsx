@@ -127,6 +127,11 @@ describe("EndpointOverrideForm", () => {
       ],
       [new PortalValidationError("unknown_slot"), "problem_detail.endpoint_error_unknown_slot"],
       [new PortalValidationError("no_endpoints"), "problem_detail.endpoint_error_no_endpoints"],
+      // Issue #2283: locked 問題への endpoint mutation は 409 challenge_prerequisite_not_met。
+      [
+        new PortalValidationError("challenge_prerequisite_not_met"),
+        "problem_detail.endpoint_error_prerequisite_locked",
+      ],
       [new PortalValidationError("weird_code"), "problem_detail.endpoint_error_generic"],
       [new Error("plain failure"), "plain failure"],
       ["string-failure", "string-failure"],

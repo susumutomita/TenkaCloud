@@ -106,6 +106,9 @@ const ALLOWED_SOURCES = new Set<TeamScoreEventView["source"]>([
   "flag",
   "flag-wrong",
   "hint",
+  // #2283: Gate 完了 bonus は score に加算されるので、 除外すると leaderboard 合計と
+  // chart 累積がズレる。 公開 source に含める。
+  "gate-bonus",
 ]);
 const ALLOWED_RESULTS = new Set<TeamScoreEventView["result"]>(["ok", "wrong"]);
 

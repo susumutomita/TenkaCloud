@@ -11,6 +11,7 @@ import { RATE_LIMITS } from "../shared/rate-limiter.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
 import { BATTLE_ATTACKS_SINCE_MIN_DEFAULT, listBattleAttacks } from "./battle-attacks.js";
 import { castEvent, INBOX_SINCE_MS_MAX, readInbox } from "./cast-event.js";
+import { getJobPrerequisiteBlock, type PrerequisiteBlock } from "./challenge-access.js";
 import {
   bridgeCompositeCliCredentials,
   bridgeCompositeConsoleSignin,
@@ -97,6 +98,15 @@ const app = new Hono();
 // されるため SPA は壊れず、 cli-credentials 等の機密 JSON が no-store になる。
 app.use("*", secureApiHeaders());
 
+/**
+ * Issue #2283: `challenge_prerequisite_not_met` の共通 responder。 UI が
+ * 「先に <gateProblemId> を完了」 誘導を出せるよう gateProblemId を body に含める
+ * (scoring_not_started + startsAt と同 pattern)。 5+ route が同じ mapping を使うので集約。
+ */
+function respondPrerequisiteBlock(c: Context, block: PrerequisiteBlock) {
+  return respondError(c, block.kind, { gateProblemId: block.gateProblemId });
+}
+
 app.get("/portal/healthz", (c) => c.json({ ok: true }));
 
 app.get("/portal/me", (c) =>
@@ -119,6 +129,9 @@ app.get("/portal/me/console-signin-url", (c) =>
   withBearerAuth(c, "sso", async (token) => {
     const q = parseQuery(c, SsoQuerySchema);
     if (!q.ok) return q.response;
+    // Issue #2283: locked challenge の stack へ Console access させない (先行着手防止)。
+    const prerequisite = await getJobPrerequisiteBlock(shared, token, q.data.jobId);
+    if (prerequisite) return respondPrerequisiteBlock(c, prerequisite);
     const outcome = await getConsoleSigninUrl(shared, token, q.data.jobId);
     if (outcome.kind === "ok") return c.json({ loginUrl: outcome.loginUrl }, StatusCodes.OK);
     if (outcome.kind === "assume_role_failed") {
@@ -144,6 +157,9 @@ app.get("/portal/me/cli-credentials", (c) =>
     async (token) => {
       const q = parseQuery(c, SsoQuerySchema);
       if (!q.ok) return q.response;
+      // Issue #2283: locked challenge の stack へ CLI credentials を発行しない。
+      const prerequisite = await getJobPrerequisiteBlock(shared, token, q.data.jobId);
+      if (prerequisite) return respondPrerequisiteBlock(c, prerequisite);
       const outcome = await getCliCredentials(shared, token, q.data.jobId);
       if (outcome.kind === "ok")
         return c.json({ credentials: outcome.credentials }, StatusCodes.OK);
@@ -183,6 +199,14 @@ app.get(
       async (token) => {
         const params = parseParams(c, CompositeTargetAccessParamSchema);
         if (!params.ok) return params.response;
+        // Issue #2283: composite parent (= catalog 上の問題) が locked なら target への
+        // AWS access も発行しない (parentDeploymentId = 親 deployment の jobId)。
+        const prerequisite = await getJobPrerequisiteBlock(
+          shared,
+          token,
+          params.data.parentDeploymentId,
+        );
+        if (prerequisite) return respondPrerequisiteBlock(c, prerequisite);
         const outcome = await bridgeCompositeConsoleSignin(shared, compositeAwsAccessDeps, {
           teamLoginKey: token,
           parentDeploymentId: params.data.parentDeploymentId,
@@ -210,6 +234,13 @@ app.get(
       async (token) => {
         const params = parseParams(c, CompositeTargetAccessParamSchema);
         if (!params.ok) return params.response;
+        // Issue #2283: composite parent が locked なら CLI credentials も発行しない。
+        const prerequisite = await getJobPrerequisiteBlock(
+          shared,
+          token,
+          params.data.parentDeploymentId,
+        );
+        if (prerequisite) return respondPrerequisiteBlock(c, prerequisite);
         const outcome = await bridgeCompositeCliCredentials(shared, compositeAwsAccessDeps, {
           teamLoginKey: token,
           parentDeploymentId: params.data.parentDeploymentId,
@@ -316,6 +347,11 @@ app.get("/portal/me/deploy-logs", (c) =>
       const limit = parseDeployLogLimit(q.data.limit);
       if (limit === null) return respondError(c, "invalid_limit");
 
+      // Issue #2283: CodeBuild log は CFn Outputs (接続情報) を echo するため、 locked
+      // challenge の log は返さない (= stackOutputs 空化の bypass 防止)。
+      const prerequisite = await getJobPrerequisiteBlock(shared, token, q.data.jobId);
+      if (prerequisite) return respondPrerequisiteBlock(c, prerequisite);
+
       const outcome = await getParticipantDeployLogs(shared, defaultDeployLogDeps, token, {
         jobId: q.data.jobId,
         nextToken: q.data.nextToken,
@@ -419,6 +455,10 @@ function respondSubmitFlagOutcome(
   if (outcome.kind === "scoring_ended") {
     return respondError(c, "scoring_ended", { endsAt: outcome.endsAt });
   }
+  if (outcome.kind === "challenge_prerequisite_not_met") {
+    // Issue #2283: locked challenge への提出。
+    return respondPrerequisiteBlock(c, outcome);
+  }
   if (
     outcome.kind === "unauthorized" ||
     outcome.kind === "not_flag_problem" ||
@@ -447,6 +487,10 @@ function respondHintRevealOutcome(
     // body に含めて返す (= scoring_not_started + startsAt と同じ pattern)。
     return respondError(c, "hint_out_of_order", { missingHintId: outcome.missingHintId });
   }
+  if (outcome.kind === "challenge_prerequisite_not_met") {
+    // Issue #2283: locked challenge の hint 開封。
+    return respondPrerequisiteBlock(c, outcome);
+  }
   if (
     outcome.kind === "unauthorized" ||
     outcome.kind === "not_flag_problem" ||
@@ -474,6 +518,10 @@ app.get("/portal/me/problems/:problemId/endpoints", (c) =>
     if (outcome.kind === "ok") {
       return c.json({ endpoints: outcome.endpoints, teamId: outcome.teamId }, StatusCodes.OK);
     }
+    if (outcome.kind === "challenge_prerequisite_not_met") {
+      // Issue #2283: locked challenge の endpoint 一覧 (接続 URL) は返さない。
+      return respondPrerequisiteBlock(c, outcome);
+    }
     return respondError(c, outcome.kind);
   }),
 );
@@ -498,6 +546,10 @@ app.post("/portal/me/problems/:problemId/endpoints/:slot", (c) =>
       if (outcome.kind === "ok") {
         return c.json({ endpoints: outcome.endpoints, teamId: outcome.teamId }, StatusCodes.OK);
       }
+      if (outcome.kind === "challenge_prerequisite_not_met") {
+        // Issue #2283: locked challenge への endpoint 登録 / 更新。
+        return respondPrerequisiteBlock(c, outcome);
+      }
       return respondError(c, outcome.kind);
     },
     RATE_LIMITS.WRITE_LOW,
@@ -519,6 +571,10 @@ app.delete("/portal/me/problems/:problemId/endpoints/:slot", (c) =>
       );
       if (outcome.kind === "ok") {
         return c.json({ endpoints: outcome.endpoints, teamId: outcome.teamId }, StatusCodes.OK);
+      }
+      if (outcome.kind === "challenge_prerequisite_not_met") {
+        // Issue #2283: locked challenge の endpoint override 解除。
+        return respondPrerequisiteBlock(c, outcome);
       }
       return respondError(c, outcome.kind);
     },

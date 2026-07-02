@@ -17,6 +17,7 @@ import {
   type LeaderboardResponse,
   type NotificationsResponse,
   type ParticipantProblemView,
+  type ParticipantProgressionView,
   type ParticipantTeamView,
   PortalAuthError,
 } from "../api/portal-client";
@@ -93,8 +94,26 @@ export function useTeamView(): TeamViewState {
 }
 
 /**
+ * Issue #2283: Progression Gate view の no-op 判定。 field 個別比較だと
+ * `ParticipantProgressionView` に field が増えたとき黙って無視される (= 変化を取りこぼす) ため、
+ * 既存の per-problem `stackOutputs` と同じ JSON 比較に寄せる。 どちらか片方だけ不在
+ * (= Gate 設定の ON/OFF 切替) も 「変化あり」 として拾う (undefined は JSON.stringify で
+ * undefined になり、 object 側の文字列とは一致しない)。
+ */
+function progressionIsUnchanged(
+  prev: ParticipantProgressionView | undefined,
+  next: ParticipantProgressionView | undefined,
+): boolean {
+  return JSON.stringify(prev) === JSON.stringify(next);
+}
+
+/**
  * Polling 結果が前回と意味的に同じなら true → setView を skip し React 再 render を抑制。
  * Home / TopNav の両方が context 経由で再 render するため、no-op 検出は重要。
+ *
+ * Issue #2283: `progression` (lock/unlock 遷移) も比較対象。 unlock 時は
+ * lockedProblemIds の縮小に加えて該当 problem の stackOutputs が再充填されるが、
+ * 後者は既存の per-problem `stackOutputs` JSON 比較が検出する。
  */
 export function viewIsUnchanged(
   prev: ParticipantTeamView | null,
@@ -102,6 +121,7 @@ export function viewIsUnchanged(
 ): boolean {
   if (!prev) return false;
   if (prev.team.teamName !== next.team.teamName) return false;
+  if (!progressionIsUnchanged(prev.progression, next.progression)) return false;
   if (prev.problems.length !== next.problems.length) return false;
   for (let i = 0; i < prev.problems.length; i++) {
     const p = prev.problems[i] as ParticipantProblemView;

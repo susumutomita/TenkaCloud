@@ -188,6 +188,158 @@ describe("ProblemDetailPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  // ── Issue #2283: Progression Gate lock / hint の render 分岐 ────────────────
+  it("should lock the body with an info alert when the problem is prerequisite-locked", () => {
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith({
+          problems: [
+            problem(),
+            problem({ jobId: "job-gate", problemId: "gate-1", name: "Gate One" }),
+          ],
+          progression: {
+            gateProblemId: "gate-1",
+            gateCompleted: false,
+            policy: "required",
+            completionBonus: 50,
+            lockedProblemIds: ["hello-world"],
+          },
+        }),
+      }),
+    );
+    renderPage();
+    expect(screen.getByText("problem_detail.prerequisite_locked_header")).toBeInTheDocument();
+    // gate 名は team view の name で解決される
+    expect(
+      screen.getByText('problem_detail.prerequisite_locked_body|{"gateName":"Gate One"}'),
+    ).toBeInTheDocument();
+    // gate 問題が deploy 済 → 詳細ページへの link
+    expect(
+      screen.getByText('problem_detail.prerequisite_locked_gate_link|{"gateName":"Gate One"}'),
+    ).toBeInTheDocument();
+    // body / flag 提出 / endpoint form は render しない
+    expect(screen.queryByTestId("problem-panel")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("endpoint-form")).not.toBeInTheDocument();
+  });
+
+  it("should navigate to the gate problem page when the gate link is followed", async () => {
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith({
+          problems: [
+            problem(),
+            problem({ jobId: "job-gate", problemId: "gate-1", name: "Gate One" }),
+          ],
+          progression: {
+            gateProblemId: "gate-1",
+            gateCompleted: false,
+            policy: "required",
+            completionBonus: 0,
+            lockedProblemIds: ["hello-world"],
+          },
+        }),
+      }),
+    );
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByText('problem_detail.prerequisite_locked_gate_link|{"gateName":"Gate One"}'),
+    );
+    expect(mockNav).toHaveBeenCalledWith("/problems/job-gate");
+  });
+
+  it("should lock without a gate link when the gate problem is not deployed to the team", () => {
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith({
+          progression: {
+            gateProblemId: "gate-1",
+            gateCompleted: false,
+            policy: "required",
+            completionBonus: 0,
+            lockedProblemIds: ["hello-world"],
+          },
+        }),
+      }),
+    );
+    renderPage();
+    // gate 名は problemId slug に fall back し、 link は出ない
+    expect(
+      screen.getByText('problem_detail.prerequisite_locked_body|{"gateName":"gate-1"}'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('problem_detail.prerequisite_locked_gate_link|{"gateName":"gate-1"}'),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should prefer the scoring_not_started lock over the prerequisite lock", () => {
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith({
+          eventGate: { kind: "scoring_not_started" },
+          progression: {
+            gateProblemId: "gate-1",
+            gateCompleted: false,
+            policy: "required",
+            completionBonus: 0,
+            lockedProblemIds: ["hello-world"],
+          },
+        }),
+      }),
+    );
+    renderPage();
+    expect(screen.getByText("problem_detail.scoring_not_started_header")).toBeInTheDocument();
+    expect(screen.queryByText("problem_detail.prerequisite_locked_header")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("problem-panel")).not.toBeInTheDocument();
+  });
+
+  it("should show the gate hint with the bonus on the gate problem's own page", () => {
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith({
+          progression: {
+            gateProblemId: "hello-world",
+            gateCompleted: false,
+            policy: "required",
+            completionBonus: 50,
+            lockedProblemIds: ["s3-treasure"],
+          },
+        }),
+      }),
+    );
+    renderPage();
+    expect(screen.getByText("problem_detail.gate_hint_header")).toBeInTheDocument();
+    expect(screen.getByText(/problem_detail\.gate_hint_body/)).toBeInTheDocument();
+    expect(screen.getByText(/problem_detail\.gate_hint_bonus.*50/)).toBeInTheDocument();
+    // Gate 自身は lock されない → body は出る
+    expect(screen.getByTestId("problem-panel")).toBeInTheDocument();
+  });
+
+  it("should omit the bonus line when completionBonus is 0 and hide the hint once completed", () => {
+    const progression = {
+      gateProblemId: "hello-world",
+      gateCompleted: false,
+      policy: "required",
+      completionBonus: 0,
+      lockedProblemIds: ["s3-treasure"],
+    };
+    mockTeamView.mockReturnValue(teamView({ view: viewWith({ progression }) }));
+    const { unmount } = renderPage();
+    expect(screen.getByText("problem_detail.gate_hint_header")).toBeInTheDocument();
+    expect(screen.queryByText(/problem_detail\.gate_hint_bonus/)).not.toBeInTheDocument();
+    unmount();
+
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith({
+          progression: { ...progression, gateCompleted: true, lockedProblemIds: [] },
+        }),
+      }),
+    );
+    renderPage();
+    expect(screen.queryByText("problem_detail.gate_hint_header")).not.toBeInTheDocument();
+  });
+
   it("should render the full detail with info section and all child sections", async () => {
     mockFindMeta.mockReturnValue(meta());
     mockTeamView.mockReturnValue(teamView({ view: viewWith() }));

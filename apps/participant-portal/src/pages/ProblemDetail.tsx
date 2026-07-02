@@ -5,6 +5,7 @@ import Button from "@cloudscape-design/components/button";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
+import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { Markdown } from "@tenkacloud/web-kit";
 import { useMemo } from "react";
@@ -23,6 +24,11 @@ import {
 } from "../data/problems";
 import { providerLabel } from "../data/providers";
 import { useI18n, useT } from "../i18n";
+import {
+  findGateProblem,
+  isGateAwaitingCompletion,
+  isPrerequisiteLocked,
+} from "../lib/progression";
 import { PortalPluginSlots } from "../plugins/PortalPluginSlots";
 
 const DIFFICULTY_KEY: Record<ProblemCatalogEntry["difficulty"], string> = {
@@ -93,12 +99,22 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
     [metadata, locale],
   );
   const locked = isProblemDetailLocked(view?.eventGate);
-  const canRenderBody = canRenderProblemDetailBody({ hasProblem: !!problem, locked });
+  // Issue #2283: Progression Gate。 event gate (scoring_not_started) と同じ方針で
+  // prerequisite-locked 問題も body / flag 提出 / endpoint form を render しない。
+  // 実際の拒否は backend の 409 guard — ここは UX (先回り lock 表示)。
+  const prereqLocked = isPrerequisiteLocked(view?.progression, problem?.problemId);
+  const gatePending = isGateAwaitingCompletion(view?.progression, problem?.problemId);
+  const gateProblem = findGateProblem(view?.progression, view?.problems);
+  // #2283: 表示名は既に引いた gateProblem から導出する (gateProblemDisplayName を呼ぶと
+  // view.problems を二重走査するだけ)。 fallback は problemId slug (= 同 helper と同じ規約)。
+  const gateName = gateProblem?.name ?? view?.progression?.gateProblemId ?? "";
+  const anyLocked = locked || prereqLocked;
+  const canRenderBody = canRenderProblemDetailBody({ hasProblem: !!problem, locked: anyLocked });
   const canRenderEndpoints = canRenderEndpointOverride({
     hasProblem: !!problem,
     hasMetadata: !!metadata,
     endpointCount: metadata?.endpoints.length ?? 0,
-    locked,
+    locked: anyLocked,
   });
   const scoringNotStartedAt = getScoringNotStartedStartsAt(view?.eventGate);
 
@@ -123,9 +139,15 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
        *   競技公平性 (= 開始前に hints / 問題文を読んで準備するのを防ぐ) のため必須。 */}
       <ProblemDetailStatusAlerts
         error={error}
+        gateName={gateName}
+        gatePending={gatePending}
+        gateProblem={gateProblem}
         jobId={jobId}
         locked={locked}
+        onNavigate={navigate}
+        prereqLocked={prereqLocked}
         problem={problem}
+        progression={view?.progression}
         scoringNotStartedAt={scoringNotStartedAt}
         t={t}
         view={view}
@@ -188,17 +210,29 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
 
 function ProblemDetailStatusAlerts({
   error,
+  gateName,
+  gatePending,
+  gateProblem,
   jobId,
   locked,
+  onNavigate,
+  prereqLocked,
   problem,
+  progression,
   scoringNotStartedAt,
   t,
   view,
 }: {
   error: string | null;
+  gateName: string;
+  gatePending: boolean;
+  gateProblem?: ParticipantProblemView;
   jobId: string;
   locked: boolean;
+  onNavigate: (to: string) => void;
+  prereqLocked: boolean;
   problem?: ParticipantProblemView;
+  progression?: ParticipantTeamView["progression"];
   scoringNotStartedAt?: string;
   t: (key: string, params?: Readonly<Record<string, string | number>>) => string;
   view: ParticipantTeamView | null;
@@ -226,6 +260,43 @@ function ProblemDetailStatusAlerts({
                 {t("problem_detail.scoring_not_started_starts_at_label")}:{" "}
                 <code>{new Date(scoringNotStartedAt).toLocaleString()}</code>
               </>
+            )}
+          </Box>
+        </Alert>
+      )}
+      {/* Issue #2283: Progression Gate。 prerequisite-locked 問題は scoring_not_started と
+       *   同じ lock screen パターンで案内し、 body / flag 提出 / endpoint form は render しない。
+       *   Gate 問題が自 team に deploy 済みなら詳細ページへの link を出す。 event gate lock
+       *   (scoring_not_started) が同時に効いているときはそちらを優先 (= 二重 Alert を避ける)。 */}
+      {problem && !locked && prereqLocked && (
+        <Alert type="info" header={t("problem_detail.prerequisite_locked_header")}>
+          <Box variant="p">
+            {t("problem_detail.prerequisite_locked_body", { gateName })}
+            {gateProblem && (
+              <>
+                <br />
+                <Link
+                  href={`/problems/${encodeURIComponent(gateProblem.jobId)}`}
+                  onFollow={(e) => {
+                    e.preventDefault();
+                    onNavigate(`/problems/${encodeURIComponent(gateProblem.jobId)}`);
+                  }}
+                >
+                  {t("problem_detail.prerequisite_locked_gate_link", { gateName })}
+                </Link>
+              </>
+            )}
+          </Box>
+        </Alert>
+      )}
+      {/* Issue #2283: Gate 問題自身の詳細ページには 「これを完了すると他の問題が解放される」
+       *   hint を出す (+ completionBonus があれば bonus 予告)。 lock ではないので body は出る。 */}
+      {problem && !locked && gatePending && (
+        <Alert type="info" header={t("problem_detail.gate_hint_header")}>
+          <Box variant="p">
+            {t("problem_detail.gate_hint_body")}
+            {progression && progression.completionBonus > 0 && (
+              <> {t("problem_detail.gate_hint_bonus", { points: progression.completionBonus })}</>
             )}
           </Box>
         </Alert>

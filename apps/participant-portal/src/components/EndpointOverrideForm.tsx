@@ -66,6 +66,11 @@ function formatValidationError(err: unknown, t: TFn): string {
         return t("problem_detail.endpoint_error_unknown_slot");
       case "no_endpoints":
         return t("problem_detail.endpoint_error_no_endpoints");
+      // Issue #2283: Progression Gate。 locked 問題への endpoint 登録 / 更新 / 削除は
+      // backend が 409 challenge_prerequisite_not_met で拒否する (UI は通常 lock 表示で
+      // 到達しない — defense-in-depth)。
+      case "challenge_prerequisite_not_met":
+        return t("problem_detail.endpoint_error_prerequisite_locked");
       default:
         return t("problem_detail.endpoint_error_generic", { errorCode: err.errorCode });
     }

@@ -25,7 +25,7 @@ import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 export interface TeamScoreEventView {
   readonly jobId: string;
   readonly problemId: string;
-  readonly source: "uptime" | "flag" | "flag-wrong" | "hint";
+  readonly source: "uptime" | "flag" | "flag-wrong" | "hint" | "gate-bonus";
   readonly points: number;
   readonly result: "ok" | "wrong";
   readonly occurredAt: string;
@@ -217,15 +217,17 @@ async function collectTeamEvents(
 /**
  * ScoreEventItem (DDB row) → TeamScoreEventView (公開 shape)。
  *
- * leaderboard 合計と chart 累積を一致させるため、 scoring に影響する 4 source
- * (uptime / flag / flag-wrong / hint) を通す。 marker 用 `attack-detected` (= result=down) は
- * 累計 score に影響しないので除外 (= chart に並べない)。
+ * leaderboard 合計と chart 累積を一致させるため、 scoring に影響する 5 source
+ * (uptime / flag / flag-wrong / hint / gate-bonus) を通す。 marker 用 `attack-detected`
+ * (= result=down) は累計 score に影響しないので除外 (= chart に並べない)。
+ * gate-bonus (#2283) は Gate 完了 bonus — score に加算されるので除外すると合計とズレる。
  */
 const ALLOWED_SOURCES = new Set<TeamScoreEventView["source"]>([
   "uptime",
   "flag",
   "flag-wrong",
   "hint",
+  "gate-bonus",
 ]);
 const ALLOWED_RESULTS = new Set<TeamScoreEventView["result"]>(["ok", "wrong"]);
 

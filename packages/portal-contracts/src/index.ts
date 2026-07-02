@@ -235,6 +235,33 @@ export type ParticipantEventGate =
   | { readonly kind: "scoring_locked" };
 
 /**
+ * Issue #2283: Progression Gate (問題アンロック / チーム別ハンデ) の team 視点 view。
+ * Event に Gate 設定があり、 かつ per-tenant feature flag `challengePrerequisiteGate`
+ * (既定 OFF) が ON のときだけ backend が `/portal/me` に含める。 それ以外は field ごと
+ * 不在 (= 従来 shape、 全問題を従来どおり開始可能)。
+ *
+ * lock 状態は backend が毎 read 導出する。 frontend は
+ *   - `lockedProblemIds` に含まれる問題を locked 表示する (存在は隠さない)
+ *   - `gateProblemId` を 「最初にここから」 と案内する
+ *   - `gateCompleted` になったら (polling / 再取得で) unlock 表示へ遷移する
+ * だけで、 実際の拒否は backend の access guard が行う (= UI 改ざんで bypass 不可)。
+ */
+export type ProgressionGatePolicy = "required" | "off";
+
+export interface ParticipantProgressionView {
+  /** 前提 (Gate) challenge の problemId。 */
+  readonly gateProblemId: string;
+  /** この team が Gate を完了済みか (= 初回加点 / flag 正解)。 */
+  readonly gateCompleted: boolean;
+  /** この team に効いている policy (Event default + team override 合成後)。 */
+  readonly policy: ProgressionGatePolicy;
+  /** Gate 完了時に 1 度だけ付与される bonus (無指定 team は 0)。 */
+  readonly completionBonus: number;
+  /** 現時点で locked な problemId 一覧 (policy=off / 完了後は空)。 */
+  readonly lockedProblemIds: readonly string[];
+}
+
+/**
  * Phase 2c: team の集約 view。 1 teamLoginKey で event 内の N 問題を引ける。
  *
  * 設計判断: per-endpoint health (どの endpoint が落ちているか) は participant API には
@@ -251,6 +278,12 @@ export interface ParticipantTeamView {
   readonly problems: readonly ParticipantProblemView[];
   /** Issue #1038 P0 #2: event gate (= 競技開始前 / 終了 / lock 中) status。 */
   readonly eventGate?: ParticipantEventGate;
+  /**
+   * Issue #2283: Progression Gate の team 視点 view。 Gate 設定なし / feature flag OFF
+   * (既定) では不在 (= 既存挙動)。 locked 問題は `stackOutputs` が空で返る点に注意
+   * (unlock 後の再取得で埋まる)。
+   */
+  readonly progression?: ParticipantProgressionView;
 }
 
 /**

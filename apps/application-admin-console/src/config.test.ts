@@ -42,6 +42,8 @@ describe("loadConfig demo mode (#1954)", () => {
     expect(cfg.apiBaseUrl).toBe("https://demo.invalid");
     expect(cfg.samlIdpDirectory).toEqual({});
     expect(cfg.features).toBeDefined();
+    // Issue #2283: registry default OFF (tenant runtime flag が唯一の有効化経路)。
+    expect(cfg.features?.challengePrerequisiteGate).toBe(false);
     // default participant-demo hand-off target
     expect(cfg.participantPortalUrl).toBe("/portal-demo");
   });

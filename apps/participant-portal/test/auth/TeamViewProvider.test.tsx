@@ -177,6 +177,62 @@ describe("viewIsUnchanged", () => {
       expect(viewIsUnchanged(view(), view({ problems: [prob(diff)] }))).toBe(false);
     }
   });
+
+  // ── Issue #2283: Progression Gate の lock / unlock 遷移を polling が拾う ──────
+  const progression = (over: Record<string, unknown> = {}) => ({
+    gateProblemId: "gate-1",
+    gateCompleted: false,
+    policy: "required",
+    completionBonus: 50,
+    lockedProblemIds: ["p-1", "p-2"],
+    ...over,
+  });
+
+  it("should treat identical progression views as unchanged", () => {
+    expect(
+      viewIsUnchanged(view({ progression: progression() }), view({ progression: progression() })),
+    ).toBe(true);
+  });
+
+  it("should detect any progression field change (Issue #2283)", () => {
+    const cases = [
+      { gateProblemId: "gate-2" },
+      { gateCompleted: true },
+      { policy: "off" },
+      { completionBonus: 0 },
+      { lockedProblemIds: ["p-1"] }, // unlock で縮む
+      { lockedProblemIds: ["p-1", "p-3"] }, // 同じ長さで中身が違う
+      { lockedProblemIds: [] }, // 全解放
+    ];
+    for (const diff of cases) {
+      expect(
+        viewIsUnchanged(
+          view({ progression: progression() }),
+          view({ progression: progression(diff) }),
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it("should detect progression appearing or disappearing (= gate config / flag toggle)", () => {
+    expect(viewIsUnchanged(view(), view({ progression: progression() }))).toBe(false);
+    expect(viewIsUnchanged(view({ progression: progression() }), view())).toBe(false);
+    // 両方不在 (= 従来 shape) は unchanged のまま
+    expect(viewIsUnchanged(view(), view())).toBe(true);
+  });
+
+  it("should detect the stackOutputs refill that follows an unlock (Issue #2283)", () => {
+    // unlock 前: locked 問題は stackOutputs 空 / unlock 後: 再取得で outputs が埋まる
+    const before = view({
+      problems: [prob({ problemId: "p-1", stackOutputs: {} })],
+      progression: progression(),
+    });
+    const after = view({
+      problems: [prob({ problemId: "p-1", stackOutputs: { Url: "https://unlocked" } })],
+      progression: progression({ gateCompleted: true, lockedProblemIds: [] }),
+    });
+    expect(viewIsUnchanged(before, after)).toBe(false);
+  });
 });
 
 describe("leaderboardIsUnchanged", () => {

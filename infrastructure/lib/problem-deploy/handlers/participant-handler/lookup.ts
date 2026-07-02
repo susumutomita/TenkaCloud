@@ -16,7 +16,7 @@ import { parseStackOutputs } from "../shared/cfn-status.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { parseEndpointsHealth } from "../shared/endpoints-health.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
-import { evaluateGate, getEventGate } from "./event-gate.js";
+import { decorateTeamView } from "./challenge-access.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 import { getSolvedFlagIds } from "./submit-flag.js";
 
@@ -367,14 +367,10 @@ export async function lookupTeamByLoginKey(
   const view = buildTeamView(items, shared.problemsScoring);
   if (!view) return undefined;
 
-  // eventGate を取得して team view に注入。 eventId 不在は gate 不明 → fail-closed。
-  const eventId = view.team.eventId;
-  if (eventId) {
-    const gate = await getEventGate(shared, eventId);
-    const block = evaluateGate(gate, Date.now());
-    return { ...view, eventGate: block ?? { kind: "ok" } };
-  }
-  return { ...view, eventGate: { kind: "scoring_not_started" } };
+  // eventGate + progression (Issue #2283) の注入と locked 問題の stackOutputs 空化は
+  // decorateTeamView に集約 (= PATCH /portal/me 応答と同じ経路)。 eventId 不在は
+  // gate 不明 → fail-closed (scoring_not_started)。
+  return decorateTeamView(shared, items, view);
 }
 
 /**

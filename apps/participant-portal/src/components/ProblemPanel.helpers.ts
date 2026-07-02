@@ -88,6 +88,12 @@ export function formatProblemPanelActionError(
 ): string {
   if (err instanceof PortalScoringGateError) return describeScoringGate(t, err);
   if (err instanceof PortalValidationError) {
+    // Issue #2283: Progression Gate。 locked 問題への flag 提出 / hint reveal は backend が
+    // 409 challenge_prerequisite_not_met で拒否する。 UI は通常 lock 表示で先回りするので
+    // 到達しないが、 polling 反映前の隙間で届いたときに親切文言を出す (defense-in-depth)。
+    if (err.errorCode === "challenge_prerequisite_not_met") {
+      return t("problem_panel.prerequisite_locked_error");
+    }
     return t(validationMessageKey, { errorCode: err.errorCode });
   }
   if (err instanceof Error) return err.message;

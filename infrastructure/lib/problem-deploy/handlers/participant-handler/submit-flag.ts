@@ -9,7 +9,7 @@ import type { DeploymentItem } from "../deploy-handler/types.js";
 import { flagMatches } from "../generic-scoring-handler/kinds/flag.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import { writeScoreEvent } from "../shared/score-event.js";
-import { evaluateGate, getEventGate } from "./event-gate.js";
+import { getCompetitionAccessBlock } from "./challenge-access.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 /**
@@ -35,6 +35,12 @@ export type SubmitFlagOutcome =
    */
   | { kind: "scoring_not_started"; startsAt?: string }
   | { kind: "scoring_ended"; endsAt?: string }
+  /**
+   * Issue #2283: Progression Gate 未完了。 locked challenge への flag 提出を server-side で
+   * 拒否する (= UI 改ざん / API 直呼びで bypass 不可)。 `gateProblemId` は先に完了すべき
+   * Gate challenge。
+   */
+  | { kind: "challenge_prerequisite_not_met"; gateProblemId: string }
   | { kind: "unauthorized" };
 
 /**
@@ -67,11 +73,11 @@ export async function submitFlag(
   const item = items.find((i) => i.problemId === problemId);
   if (!isSubmitFlagItem(item)) return { kind: "unauthorized" };
 
-  // Issue #13 / scoring gate: 競技開始前 / 終了後 / lock 時は加点経路を返さない
-  // (= 提出履歴は残さず、 該当 outcome を UI に伝える)。 Event GET は 1 RCU、 submit-flag は
-  // per-attempt の rare path なので read-through で十分。 旧来 (#558) は scoringLocked
-  // のみ checked。 本 PR で startsAt / endsAt / status も追加し、 competition gate を完全化。
-  const blocked = await getFlagGateBlock(shared, item);
+  // Issue #13 / scoring gate + Issue #2283 / Progression Gate: 競技開始前 / 終了後 / lock 中 /
+  // 前提問題未完了は加点経路を返さない (= 提出履歴は残さず、 該当 outcome を UI に伝える)。
+  // Event GET は 1 RCU、 submit-flag は per-attempt の rare path なので read-through で十分。
+  // 判定は reveal-hint と共通の getCompetitionAccessBlock に集約 (= 片側だけ条件が増える drift 防止)。
+  const blocked = await getCompetitionAccessBlock(shared, items, item);
   if (blocked) return blocked;
 
   const scoring = scoringMap[item.problemId];
@@ -255,15 +261,6 @@ function isSubmitFlagItem(
   item: Partial<DeploymentItem> | undefined,
 ): item is Partial<DeploymentItem> & { PK: string; problemId: string } {
   return typeof item?.PK === "string" && typeof item.problemId === "string";
-}
-
-async function getFlagGateBlock(
-  shared: ParticipantSharedResources,
-  item: Partial<DeploymentItem>,
-): Promise<SubmitFlagOutcome | undefined> {
-  if (typeof item.eventId !== "string" || item.eventId.length === 0) return undefined;
-  const gate = await getEventGate(shared, item.eventId);
-  return evaluateGate(gate, Date.now());
 }
 
 async function scoreWrongFlag(

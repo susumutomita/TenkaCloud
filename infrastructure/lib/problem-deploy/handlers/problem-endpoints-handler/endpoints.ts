@@ -1,4 +1,5 @@
 import type { DeploymentItem } from "../deploy-handler/types.js";
+import { getPrerequisiteBlockByEventId } from "../participant-handler/challenge-access.js";
 import { type ParticipantSharedResources, queryTeamItems } from "../participant-handler/shared.js";
 import { isSsrfSafeUrl, unwrapIPv6MappedIPv4 } from "../shared/ssrf-guard.js";
 import { type ResolvedEndpoint, resolveEndpoints } from "./resolve.js";
@@ -39,7 +40,13 @@ export type ListEndpointsOutcome =
   | { kind: "ok"; endpoints: ResolvedEndpoint[]; teamId: string }
   | { kind: "unauthorized" }
   | { kind: "no_endpoints" }
-  | { kind: "misconfigured" };
+  | { kind: "misconfigured" }
+  /**
+   * Issue #2283: Progression Gate 未完了。 一覧 (GET) も stackOutputs 由来の接続 URL を
+   * 返すため、 locked challenge では拒否する (= /portal/me の stackOutputs 空化と同じ防御層。
+   * ここを素通しにすると GET 直呼びで locked 問題の endpoint が読める)。
+   */
+  | { kind: "challenge_prerequisite_not_met"; gateProblemId: string };
 
 /**
  * GET /portal/me/problems/:problemId/endpoints — 該当 team × problem の slot 一覧を返す。
@@ -64,6 +71,15 @@ export async function listProblemEndpoints(
 
   const slots = shared.problemsEndpoints[problemId] ?? [];
   if (slots.length === 0) return { kind: "no_endpoints" };
+
+  // Issue #2283: locked challenge の endpoint URL (stackOutputs 由来) は一覧でも返さない。
+  const prerequisite = await getPrerequisiteBlockByEventId(
+    shared,
+    items,
+    problemId,
+    deployment.eventId,
+  );
+  if (prerequisite) return prerequisite;
 
   const overrides = await queryOverrides(
     shared.ddb,
@@ -91,7 +107,12 @@ export type PutOverrideOutcome =
   | { kind: "slot_not_overridable" }
   | { kind: "invalid_url" }
   | { kind: "no_endpoints" }
-  | { kind: "misconfigured" };
+  | { kind: "misconfigured" }
+  /**
+   * Issue #2283: Progression Gate 未完了。 locked challenge への endpoint 登録 / 更新 / 解除
+   * (= 採点開始のトリガーになる競技操作) を server-side で拒否する。
+   */
+  | { kind: "challenge_prerequisite_not_met"; gateProblemId: string };
 
 /**
  * 競技者向け URL validation。`https?://...` のみ許容、 private IP / VPC 内 endpoint は許容
@@ -137,6 +158,16 @@ export async function upsertProblemEndpointOverride(
   if (!slotDef.overridable) return { kind: "slot_not_overridable" };
   if (!isValidOverrideUrl(urlValue)) return { kind: "invalid_url" };
 
+  // Issue #2283: locked challenge への endpoint 登録は採点開始を意味するので Gate を通す。
+  // 無料の入力検証を先に済ませ、 拒否確定の request で DDB read を発生させない。
+  const prerequisite = await getPrerequisiteBlockByEventId(
+    shared,
+    items,
+    problemId,
+    deployment.eventId,
+  );
+  if (prerequisite) return prerequisite;
+
   const tenantId = deployment.tenantId;
   await putOverride(shared.ddb, shared.endpointsTableName, {
     tenantId,
@@ -171,7 +202,9 @@ export type DeleteOverrideOutcome =
   | { kind: "unauthorized" }
   | { kind: "unknown_slot" }
   | { kind: "no_endpoints" }
-  | { kind: "misconfigured" };
+  | { kind: "misconfigured" }
+  /** Issue #2283: locked challenge の override 解除も probing 対象を変える競技操作なので拒否。 */
+  | { kind: "challenge_prerequisite_not_met"; gateProblemId: string };
 
 /**
  * DELETE /portal/me/problems/:problemId/endpoints/:slot — override を解除 (= default に戻す)。
@@ -192,6 +225,16 @@ export async function deleteProblemEndpointOverride(
   const slots = shared.problemsEndpoints[problemId] ?? [];
   if (slots.length === 0) return { kind: "no_endpoints" };
   if (!slots.some((s) => s.slot === slot)) return { kind: "unknown_slot" };
+
+  // Issue #2283: 解除 (= default URL への切替) も probing 対象を変えるので Gate を通す。
+  // 無料の入力検証を先に済ませ、 拒否確定の request で DDB read を発生させない。
+  const prerequisite = await getPrerequisiteBlockByEventId(
+    shared,
+    items,
+    problemId,
+    deployment.eventId,
+  );
+  if (prerequisite) return prerequisite;
 
   const tenantId = deployment.tenantId;
   await deleteOverride(shared.ddb, shared.endpointsTableName, {

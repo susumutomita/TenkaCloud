@@ -12,6 +12,7 @@ import {
   buildScheduledTeardownResources,
 } from "../event-handler/shared.js";
 import { forEachScanPage } from "../shared/ddb-paginate.js";
+import { type ProgressionGateConfig, parseProgressionGate } from "../shared/progression-gate.js";
 import { writeScoreEvent } from "../shared/score-event.js";
 import { reconcileDeployStatusMaintenance } from "./composite-status-reconciler.js";
 import { maybeFireConditionDisruptions } from "./condition-disruption-fire.js";
@@ -22,6 +23,12 @@ import {
   resolveOperatorEffects,
 } from "./disruption-effects.js";
 import { reconcileEventStatuses } from "./event-reconciler.js";
+import {
+  type GateCompletionCache,
+  isLockedForScoring,
+  maybeLatchGateCompletion,
+  type TenantFlagCache,
+} from "./gate-completion-bonus.js";
 import { runAttackDetectionKind } from "./kinds/attack-detection.js";
 import { runPhasedPollingKind } from "./kinds/phased-polling.js";
 import { runUptimeFlatKind } from "./kinds/uptime-flat.js";
@@ -111,6 +118,11 @@ export async function handler(): Promise<void> {
   const operatorEffects = new Map<string, ActiveDisruptionEffect[]>();
   const queriedEvents = new Set<string>();
 
+  // [#2283] Progression Gate 用の invocation-scoped cache: per-tenant feature flag (tenant
+  // ごとに 1 read) + per-(event, team) の Gate 完了判定 (team ごとに 1 GSI2 Query)。
+  const tenantFlagCache: TenantFlagCache = new Map();
+  const gateCompletionCache: GateCompletionCache = new Map();
+
   // `Limit: 200` は 1 ページあたりの件数上限 (全体上限ではない)。forEachScanPage が
   // `LastEvaluatedKey` を追って全ページ drain するので per-page の BatchGet / 並列処理は従来どおり。
   await forEachScanPage(
@@ -126,7 +138,8 @@ export async function handler(): Promise<void> {
       const items = page as Partial<DeploymentItem>[];
 
       // #558: deployment が属する event の `scoringLocked` を per-invocation で BatchGet 取得。
-      const lockedMap = await fetchScoringLockedMap(shared, items);
+      // #2283: 同じ BatchGet で progressionGate (Gate 完了 bonus 用) も引く。
+      const eventMetaMap = await fetchEventScoringMetaMap(shared, items);
       await loadOperatorEffects(shared, items, queriedEvents, operatorEffects, nowMs);
 
       await Promise.all(
@@ -135,9 +148,10 @@ export async function handler(): Promise<void> {
           await processDeployment(
             shared,
             item,
-            lockedMap,
+            eventMetaMap,
             phasesByProblemId,
             operatorEffects.get(key) ?? [],
+            { tenantFlagCache, gateCompletionCache },
             nowMs,
             nowIso,
           ).catch((err) => {
@@ -203,9 +217,10 @@ async function loadOperatorEffects(
 async function processDeployment(
   shared: GenericScoringSharedResources,
   item: Partial<DeploymentItem>,
-  lockedMap: Map<string, boolean>,
+  eventMetaMap: Map<string, EventScoringMeta>,
   phasesByProblemId: Record<string, readonly PhaseEntry[]>,
   operatorEffects: readonly ActiveDisruptionEffect[],
+  gateCaches: { tenantFlagCache: TenantFlagCache; gateCompletionCache: GateCompletionCache },
   nowMs: number,
   nowIso: string,
 ): Promise<void> {
@@ -214,7 +229,11 @@ async function processDeployment(
     return;
   }
   if (!isScoringActive(item, nowIso)) return;
-  if (item.eventId && lockedMap.get(item.eventId) === true) return;
+  const eventMeta = item.eventId ? eventMetaMap.get(item.eventId) : undefined;
+  if (eventMeta?.scoringLocked === true) return;
+
+  // [#2283] Progression Gate: Gate 行の完了 latch + bonus / locked target の採点 skip。
+  if (await applyProgressionGateTick(shared, item, eventMeta, nowIso, gateCaches)) return;
 
   const scoring = shared.problemsScoring[item.problemId];
   if (!scoring) return;
@@ -244,18 +263,9 @@ async function processDeployment(
     prevState,
   };
 
-  let result: KindResult;
-  if (scoring.kind === "uptime" || scoring.kind === "uptime-flat") {
-    result = await runUptimeFlatKind({ ...input, scoring });
-  } else if (scoring.kind === "uptime-multi") {
-    result = await runUptimeMultiKind({ ...input, scoring });
-  } else if (scoring.kind === "phased-polling") {
-    result = await runPhasedPollingKind({ ...input, scoring });
-  } else if (scoring.kind === "attack-detection") {
-    result = runAttackDetectionKind({ ...input, scoring });
-  } else {
-    return;
-  }
+  const kindResult = await dispatchKindHandler(input);
+  if (!kindResult) return;
+  let result = kindResult;
 
   // [ADR-033 / #1665] active な disruption 採点効果 (condition-fired + operator-fired) を畳み込む。
   // active 効果が無い問題は完全に挙動不変 (= 余分な scoringState write を出さない)。
@@ -275,6 +285,56 @@ async function processDeployment(
     phasesByProblemId,
     nowMs,
     nowIso,
+  );
+}
+
+/**
+ * scoring kind → kind handler の dispatch。 未知 kind (flag / multi-flag / composite 等の
+ * polling 対象外) は `undefined` (= 呼び出し側で no-op)。
+ */
+async function dispatchKindHandler(input: KindHandlerInput): Promise<KindResult | undefined> {
+  const scoring = input.scoring;
+  if (scoring.kind === "uptime" || scoring.kind === "uptime-flat") {
+    return runUptimeFlatKind({ ...input, scoring });
+  }
+  if (scoring.kind === "uptime-multi") {
+    return runUptimeMultiKind({ ...input, scoring });
+  }
+  if (scoring.kind === "phased-polling") {
+    return runPhasedPollingKind({ ...input, scoring });
+  }
+  if (scoring.kind === "attack-detection") {
+    return runAttackDetectionKind({ ...input, scoring });
+  }
+  return undefined;
+}
+
+/**
+ * [#2283] Progression Gate の tick 内処理。
+ *   - Gate challenge 行なら完了 latch (gateCompletedAt) + 完了 bonus (1 team 1 回)
+ *   - unlock target 行なら Gate 未完了の間 `true` を返して採点を skip させる
+ *     (= 参加者が触れない locked 問題に自動で加点 / 減点しない)
+ */
+async function applyProgressionGateTick(
+  shared: GenericScoringSharedResources,
+  item: Partial<DeploymentItem>,
+  eventMeta: EventScoringMeta | undefined,
+  nowIso: string,
+  gateCaches: { tenantFlagCache: TenantFlagCache; gateCompletionCache: GateCompletionCache },
+): Promise<boolean> {
+  await maybeLatchGateCompletion(
+    shared,
+    item,
+    eventMeta?.progressionGate,
+    nowIso,
+    gateCaches.tenantFlagCache,
+  );
+  return isLockedForScoring(
+    shared,
+    item,
+    eventMeta?.progressionGate,
+    gateCaches.tenantFlagCache,
+    gateCaches.gateCompletionCache,
   );
 }
 
@@ -457,16 +517,23 @@ export async function queryOverridesForDeployment(
   }
 }
 
+/** #558 / #2283: 採点 tick が event 行から読む gate fields。 */
+interface EventScoringMeta {
+  readonly scoringLocked: boolean;
+  readonly progressionGate: ProgressionGateConfig | undefined;
+}
+
 /**
  * #558: 同 invocation 内 deployments の distinct eventId について Events table を BatchGet
- * し、 scoringLocked=true な eventId の Map を返す。
+ * し、 eventId → { scoringLocked, progressionGate } の Map を返す。
  *
  * Phase 3.B で health-check-handler から本 module へ relocate (= 動作不変)。
+ * #2283 で progressionGate (Gate 完了 bonus 用) を同じ BatchGet に相乗りさせた。
  */
-async function fetchScoringLockedMap(
+async function fetchEventScoringMetaMap(
   shared: GenericScoringSharedResources,
   items: readonly Partial<DeploymentItem>[],
-): Promise<Map<string, boolean>> {
+): Promise<Map<string, EventScoringMeta>> {
   const eventIds = Array.from(
     new Set(
       items
@@ -481,17 +548,20 @@ async function fetchScoringLockedMap(
         RequestItems: {
           [shared.eventsTableName]: {
             Keys: eventIds.map((eventId) => ({ PK: `EVENT#${eventId}`, SK: "META" })),
-            ProjectionExpression: "eventId, scoringLocked",
+            ProjectionExpression: "eventId, scoringLocked, progressionGate",
           },
         },
       }),
     );
     const rows = out.Responses?.[shared.eventsTableName] ?? [];
-    const map = new Map<string, boolean>();
+    const map = new Map<string, EventScoringMeta>();
     for (const row of rows) {
-      const r = row as { eventId?: string; scoringLocked?: boolean };
-      if (typeof r.eventId === "string" && r.scoringLocked === true) {
-        map.set(r.eventId, true);
+      const r = row as { eventId?: string; scoringLocked?: boolean; progressionGate?: unknown };
+      if (typeof r.eventId === "string") {
+        map.set(r.eventId, {
+          scoringLocked: r.scoringLocked === true,
+          progressionGate: parseProgressionGate(r.progressionGate),
+        });
       }
     }
     return map;
@@ -500,14 +570,16 @@ async function fetchScoringLockedMap(
     // しないことを保証する。 lock 状態が読めない (= transient DDB error) ときに fail-open
     // で「全 event 未ロック扱い」してしまうと、 ロック中 event にも加点してしまう。
     // fail-closed として本 batch の全 eventId を locked 扱いにし、 該当 deployment の
-    // 採点を 1 tick skip させる (= 次 tick で retry)。
+    // 採点を 1 tick skip させる (= 次 tick で retry。 gate bonus も同様に次 tick へ持ち越し)。
     console.warn(
-      "[generic-scoring] fetchScoringLockedMap failed (fail-closed: treat batch as locked)",
+      "[generic-scoring] fetchEventScoringMetaMap failed (fail-closed: treat batch as locked)",
       {
         message: err instanceof Error ? err.message : String(err),
       },
     );
-    return new Map(eventIds.map((id) => [id, true] as const));
+    return new Map(
+      eventIds.map((id) => [id, { scoringLocked: true, progressionGate: undefined }] as const),
+    );
   }
 }
 

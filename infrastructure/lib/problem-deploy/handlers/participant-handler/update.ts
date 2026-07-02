@@ -1,6 +1,7 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
+import { decorateTeamView } from "./challenge-access.js";
 import { buildTeamView, type ParticipantTeamView } from "./lookup.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
@@ -73,5 +74,7 @@ export async function setDisplayTeamName(
     .filter((a): a is Partial<DeploymentItem> => !!a);
   const view = buildTeamView(updatedItems, shared.problemsScoring);
   if (!view) return { kind: "unauthorized" };
-  return { kind: "ok", view };
+  // Issue #2283: rename 応答も `/portal/me` と同じ decoration を通す。 素の buildTeamView を
+  // 返すと locked 問題の stackOutputs (接続情報) が PATCH 応答から漏れる。
+  return { kind: "ok", view: await decorateTeamView(shared, updatedItems, view) };
 }

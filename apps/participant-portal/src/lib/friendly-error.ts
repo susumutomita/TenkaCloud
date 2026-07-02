@@ -53,6 +53,12 @@ export function friendlyErrorMessage(
     if (err.errorCode === "invalid_url") {
       return t("friendly_error.invalid_url");
     }
+    // Issue #2283: Progression Gate。 locked 問題への mutation は backend が 409
+    // challenge_prerequisite_not_met で拒否する。 UI の lock 表示で通常は到達しないが、
+    // 届いたら 「先に Gate 問題を完了して」 と案内する (defense-in-depth)。
+    if (err.errorCode === "challenge_prerequisite_not_met") {
+      return t("friendly_error.prerequisite_locked");
+    }
     return t("friendly_error.validation_generic", { code: err.errorCode });
   }
   if (err instanceof PortalNetworkError) {

@@ -19,6 +19,7 @@ import {
   DisruptionsTab,
   EVENT_TAB_IDS,
   type EventTabId,
+  GateTab,
   NotificationsTab,
   OperationsTab,
   OverviewTab,
@@ -278,6 +279,8 @@ function renderTabs({
     notifications: <NotificationsTab {...props} />,
     operations: <OperationsTab {...props} />,
     disruptions: <DisruptionsTab {...props} />,
+    // [#2283] Progression / Gate (Advanced): tab は常時表示 (panel 側が tenant runtime flag を判定)。
+    gate: <GateTab {...props} />,
   } as const;
   // The red-team Disruptions tab is feature-flagged (config.features.redTeam) — hidden until the
   // cross-account executor is verified live, so operators don't fire into an unproven path.

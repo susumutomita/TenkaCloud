@@ -3,7 +3,7 @@ import type { ProblemScoringMetadata, ProgressiveHint } from "../../../utils/sco
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
 import { writeScoreEvent } from "../shared/score-event.js";
-import { evaluateGate, getEventGate } from "./event-gate.js";
+import { getCompetitionAccessBlock } from "./challenge-access.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 /**
@@ -41,7 +41,12 @@ export type RevealHintOutcome =
    */
   | { kind: "scoring_not_started"; startsAt?: string }
   | { kind: "scoring_ended"; endsAt?: string }
-  | { kind: "scoring_locked" };
+  | { kind: "scoring_locked" }
+  /**
+   * Issue #2283: Progression Gate 未完了。 locked challenge の hint 開封 (= penalty accrue を
+   * 伴う競技操作) を server-side で拒否する。
+   */
+  | { kind: "challenge_prerequisite_not_met"; gateProblemId: string };
 
 export async function revealHint(
   shared: ParticipantSharedResources,
@@ -58,7 +63,8 @@ export async function revealHint(
 
   // Issue #1005: ヒント開封も submit-flag と同じ scoring gate を通す。
   // 開始前 / 終了後 / scoringLocked では penalty を accrue させない (= 公平性)。
-  const blocked = await getHintGateBlock(shared, item);
+  // Issue #2283: 同じ判定 (getCompetitionAccessBlock) で Progression Gate も enforce する。
+  const blocked = await getCompetitionAccessBlock(shared, items, item);
   if (blocked) return blocked;
 
   const scoring = scoringMap[item.problemId];
@@ -118,15 +124,6 @@ function isRevealHintItem(
   item: Partial<DeploymentItem> | undefined,
 ): item is Partial<DeploymentItem> & { PK: string; problemId: string } {
   return typeof item?.PK === "string" && typeof item.problemId === "string";
-}
-
-async function getHintGateBlock(
-  shared: ParticipantSharedResources,
-  item: Partial<DeploymentItem>,
-): Promise<RevealHintOutcome | undefined> {
-  if (typeof item.eventId !== "string" || item.eventId.length === 0) return undefined;
-  const gate = await getEventGate(shared, item.eventId);
-  return evaluateGate(gate, Date.now());
 }
 
 async function updateHintReveal(

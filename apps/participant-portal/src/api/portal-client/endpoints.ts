@@ -59,6 +59,8 @@ export async function deleteProblemEndpointOverride(
     apiBaseUrl,
     `portal/me/problems/${encodeURIComponent(problemId)}/endpoints/${encodeURIComponent(slot)}`,
     teamLoginKey,
-    { method: "DELETE", throwOn400: true, signal },
+    // Issue #2283: locked 問題への delete も 409 challenge_prerequisite_not_met で拒否される
+    // ため throwOn409 を opt-in (= PortalValidationError → inline の親切文言に変換)。
+    { method: "DELETE", throwOn400: true, throwOn409: true, signal },
   )) as ParticipantEndpointsResponse;
 }
