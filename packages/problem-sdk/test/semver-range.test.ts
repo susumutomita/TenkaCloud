@@ -5,8 +5,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { satisfiesCoreRange } from "../src/manifest.js";
 import { validatePackManifest } from "../src/public-validators.js";
+import { satisfiesCoreRange } from "../src/semver-range.js";
 import { VALID_MANIFEST } from "./fixtures.js";
 
 describe("satisfiesCoreRange: comparator operators", () => {
@@ -44,6 +44,26 @@ describe("satisfiesCoreRange: comparator operators", () => {
     expect(satisfiesCoreRange("1.5.0", ">=1.0.0 <2.0.0")).toBe(true);
     expect(satisfiesCoreRange("2.5.0", ">=1.0.0 <2.0.0")).toBe(false);
     expect(satisfiesCoreRange("3.0.0", "^1.0.0 || ^3.0.0")).toBe(true);
+  });
+
+  it("should treat a bare major-only token as [major.0.0, (major+1).0.0)", () => {
+    expect(satisfiesCoreRange("1.5.0", "1")).toBe(true);
+    expect(satisfiesCoreRange("2.0.0", "1")).toBe(false);
+  });
+
+  it("should treat a bare major.minor token (no patch) as [major.minor.0, major.(minor+1).0)", () => {
+    expect(satisfiesCoreRange("1.2.9", "1.2")).toBe(true);
+    expect(satisfiesCoreRange("1.3.0", "1.2")).toBe(false);
+  });
+
+  it("should keep the leftmost non-zero component fixed for a 0.x caret range", () => {
+    expect(satisfiesCoreRange("0.2.9", "^0.2.0")).toBe(true);
+    expect(satisfiesCoreRange("0.3.0", "^0.2.0")).toBe(false);
+  });
+
+  it("should bound a 0.0.x caret range to patch-level only", () => {
+    expect(satisfiesCoreRange("0.0.3", "^0.0.3")).toBe(true);
+    expect(satisfiesCoreRange("0.0.4", "^0.0.3")).toBe(false);
   });
 
   it("should return false for an invalid version or range", () => {
@@ -101,5 +121,34 @@ describe("satisfiesCoreRange / isValidSemverRange: hyphen-range bounds", () => {
   it("should still accept a plain-version hyphen range", () => {
     expect(validatePackManifest({ ...VALID_MANIFEST, core: "1.0.0 - 2.0.0" })).toEqual([]);
     expect(satisfiesCoreRange("1.5.0", "1.0.0 - 2.0.0")).toBe(true);
+  });
+});
+
+describe("satisfiesCoreRange: wildcard/partial tokens with >, >=, <, <= operators", () => {
+  it("should fall back to the [lower, upper) interval for a wildcard token", () => {
+    expect(satisfiesCoreRange("1.5.0", ">1.x")).toBe(false);
+    expect(satisfiesCoreRange("2.0.0", ">1.x")).toBe(true);
+    expect(satisfiesCoreRange("1.5.0", ">=1")).toBe(true);
+    expect(satisfiesCoreRange("0.9.0", ">=1")).toBe(false);
+    expect(satisfiesCoreRange("0.9.0", "<1.x")).toBe(true);
+    expect(satisfiesCoreRange("1.5.0", "<1.x")).toBe(false);
+    expect(satisfiesCoreRange("1.5.0", "<=1.2")).toBe(false);
+    expect(satisfiesCoreRange("1.1.0", "<=1.2")).toBe(true);
+  });
+});
+
+describe("satisfiesCoreRange: pre-release precedence edge cases", () => {
+  it("should rank a release higher than a prerelease when comparing an exact prerelease bound", () => {
+    // version has no prerelease (a.length===0) but the exact bound does (b.length!==0).
+    expect(satisfiesCoreRange("1.0.0", ">=1.0.0-rc.1")).toBe(true);
+  });
+
+  it("should rank a non-numeric prerelease identifier higher than a numeric one", () => {
+    expect(satisfiesCoreRange("1.0.0-alpha", ">=1.0.0-1")).toBe(true);
+    expect(satisfiesCoreRange("1.0.0-1", ">=1.0.0-alpha")).toBe(false);
+  });
+
+  it("should treat an invalid (empty-segment) OR clause as an invalid range", () => {
+    expect(satisfiesCoreRange("1.0.0", "1.0.0 || ")).toBe(false);
   });
 });

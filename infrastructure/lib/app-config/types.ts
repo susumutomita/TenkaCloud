@@ -102,6 +102,14 @@ export interface AppConfig {
   readonly deployConcurrentBuildLimit: number | undefined;
 
   /**
+   * Issue #2232: Bulk Deploy を Step Functions Distributed Map 経由で発火するか
+   * (`CDK_PARAM_BULK_DEPLOY_VIA_DISTRIBUTED_MAP`)。 未設定 (デフォルト) は既存の legacy
+   * fan-out のまま。 true にすると `BulkDeployCreateStateMachine` の DistributedMap 分岐が
+   * 到達可能になる。
+   */
+  readonly useBulkDistributedMap: boolean;
+
+  /**
    * #1766: tier 別の同時デプロイ上限 (`CDK_PARAM_DEPLOY_QUOTA_BY_TIER`、JSON
    * `{"basic":N,"advanced":N,"platinum":N}`)。未設定ならクォータ無効 (= 在来挙動 / Lite mode)。
    */
