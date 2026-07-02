@@ -55,7 +55,8 @@ We don't use a single-table DynamoDB design. Each stack owns its own tables (Ten
 | `make test`             | `vitest` across every workspace                                          |
 | `make lint`             | markdownlint + textlint + biome                                          |
 | `make fix`              | Auto-fix variant of the above (`make format` works too)                  |
-| `make before-commit`    | lint + test (required gate before opening a PR)                          |
+| `make before-commit`    | lint + test — fast local sanity check, NOT a full CI mirror (see below)  |
+| `make ci-local`         | Full CI mirror (audit-deps / submodule guard / lint / typecheck / coverage-gate / build), minus Codecov upload |
 | `make deploy`           | **Lite mode** (single-tenant) deploy. Stands up AppPlaneCore + Participant Portal via `infrastructure/bin/tenkacloud-lite.ts` (#955) |
 | `make deploy-saas`      | **SaaS mode** (multi-tenant) deploy. Runs `scripts/install.sh` (3-phase deploy, stands up SBT ControlPlane) |
 | `make destroy`          | Tear down Lite mode                                                       |
@@ -109,6 +110,8 @@ ADRs must be self-contained for OSS readers. Do not leave chat context, rolling-
 5. `/simplify` — final pass for duplication, complexity, and wasted code
 
 You are not done until they all pass. If something fails, find the root cause and fix the code (don't edit `biome.json` / `vitest.config.ts` / etc. to mask it).
+
+`make before-commit` (lint + test) is a fast sanity check, not a full CI mirror — CI (`.github/workflows/ci.yml`) additionally runs `audit-deps`, the submodule pin guard, and a 100％ coverage gate for agent-owned workspaces, so a green `before-commit` does not guarantee a green CI. Run `make ci-local` for the full mirror (same checks CI runs, same order, minus the Codecov upload) before opening a PR if you want that guarantee locally.
 
 ### Available skills
 
@@ -181,7 +184,7 @@ The legacy aliases (`HTTP_OK` / `HTTP_INTERNAL_ERROR` etc. in `infrastructure/li
 - No `innerHTML` / `eval` / `dangerouslySetInnerHTML`
 - AssumeRole into competitor accounts **always requires `ExternalId`** (`CDK_PARAM_DEPLOY_EXTERNAL_ID`)
 - The IAM Role in `infrastructure/templates/competitor-bootstrap.yaml` is least-privilege (only CFn CreateStack + whatever AWS services each problem template touches)
-- Dependencies are updated by Renovate / Dependabot; CI uses Safe Chain to detect malicious packages
+- Dependencies are updated by Renovate / Dependabot; CI runs Safe Chain as a best-effort check for malicious packages (`continue-on-error: true` — its own outage doesn't block CI; `--ignore-scripts` + `audit-deps` are the hard defense)
 
 ### Supply chain security (mini Shai-Hulud 2nd-wave mitigation, see [blog.flatt.tech/entry/mini_shai_hulud_2nd](https://blog.flatt.tech/entry/mini_shai_hulud_2nd))
 
@@ -190,7 +193,7 @@ A four-layer defense against credential-exfil attacks that abuse `prepare` / `po
 1. **Bun `trustedDependencies`**: Bun blocks transitive lifecycle scripts by default (secure by default). The `trustedDependencies` array in `package.json` is the explicit allowlist (currently empty).
 2. **`.npmrc`**: `ignore-scripts=true` + `min-release-age=168h` (7-day quarantine, npm 11+). Even if a contributor uses npm / yarn / pnpm, the protection is automatic.
 3. **CI audit** `make audit-deps` (`scripts/audit-dependencies.ts`): Scans `node_modules`, diffs packages with lifecycle scripts against `scripts/audit-baseline.json`, and fails on any new addition or new hook on an existing dep.
-4. **CI install policy** `make install_ci`: `bun install --frozen-lockfile --ignore-scripts` + Aikido Safe Chain malicious package detection.
+4. **CI install policy** `make install_ci`: `bun install --frozen-lockfile --ignore-scripts` + Aikido Safe Chain malicious package detection (Safe Chain's own setup step is `continue-on-error: true` — best-effort, not a hard CI gate; layers 1-3 are).
 
 Add packages to `trustedDependencies` in a stand-alone PR. Manually verify the script contents and summarize them in the PR body (if you see suspicious `curl` / `wget` / OS persistence / env-var exfil, do not add to the baseline — report it instead).
 
