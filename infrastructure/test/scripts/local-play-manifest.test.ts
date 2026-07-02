@@ -352,6 +352,14 @@ describe("loadContainerProblem: multi-verify (issue #2252)", () => {
     points: 50,
     ...over,
   });
+  // A distinct, always-valid sibling so fixtures satisfy the 2-check minimum
+  // while a test exercises the first check.
+  const other = (over: Record<string, unknown> = {}) => ({
+    id: "exposed-config",
+    label: "設定ファイルの控え",
+    points: 50,
+    ...over,
+  });
   const multiVerify = (checks: unknown[], i18nChecks?: unknown[]) =>
     fixture({
       scoring: { kind: "multi-verify", checks },
@@ -395,7 +403,10 @@ describe("loadContainerProblem: multi-verify (issue #2252)", () => {
     const problem = loadContainerProblem(
       DIR,
       multiVerify(
-        [check({ hints: [{ id: "h-backup", content: "公開パスを確認する", penalty: 0 }] })],
+        [
+          check({ hints: [{ id: "h-backup", content: "公開パスを確認する", penalty: 0 }] }),
+          other(),
+        ],
         [
           {
             id: "public-backup",
@@ -413,20 +424,41 @@ describe("loadContainerProblem: multi-verify (issue #2252)", () => {
     });
   });
 
-  it("should fail loudly on empty checks / duplicate ids / bad id / non-integer points", () => {
-    expect(() => loadContainerProblem(DIR, multiVerify([]))).toThrow(/non-empty array/);
+  it("should enforce the 2–8 check count (fail-closed)", () => {
+    expect(() => loadContainerProblem(DIR, multiVerify([]))).toThrow(/2–8 entries/);
+    expect(() => loadContainerProblem(DIR, multiVerify([check()]))).toThrow(/2–8 entries/);
+    const nine = Array.from({ length: 9 }, (_, i) => check({ id: `c${i}` }));
+    expect(() => loadContainerProblem(DIR, multiVerify(nine))).toThrow(/2–8 entries/);
+  });
+
+  it("should fail loudly on duplicate ids / bad id / non-integer points", () => {
     expect(() => loadContainerProblem(DIR, multiVerify([check(), check()]))).toThrow(
       /is duplicated/,
     );
-    expect(() => loadContainerProblem(DIR, multiVerify([check({ id: "Bad_ID" })]))).toThrow(
+    expect(() =>
+      loadContainerProblem(DIR, multiVerify([check({ id: "Bad_ID" }), other()])),
+    ).toThrow(/must match/);
+    expect(() => loadContainerProblem(DIR, multiVerify([check({ id: "-lead" }), other()]))).toThrow(
       /must match/,
     );
-    expect(() => loadContainerProblem(DIR, multiVerify([check({ points: 12.5 })]))).toThrow(
+    expect(() =>
+      loadContainerProblem(DIR, multiVerify([check({ points: 12.5 }), other()])),
+    ).toThrow(/positive integer/);
+    expect(() => loadContainerProblem(DIR, multiVerify([check({ points: 0 }), other()]))).toThrow(
       /positive integer/,
     );
-    expect(() => loadContainerProblem(DIR, multiVerify([check({ points: 0 })]))).toThrow(
-      /positive integer/,
-    );
+  });
+
+  it("should reject a label longer than 80 chars and a penalty above the check points", () => {
+    expect(() =>
+      loadContainerProblem(DIR, multiVerify([check({ label: "あ".repeat(81) }), other()])),
+    ).toThrow(/80 characters or fewer/);
+    expect(() =>
+      loadContainerProblem(
+        DIR,
+        multiVerify([check({ points: 50, wrongAnswerPenalty: 51 }), other()]),
+      ),
+    ).toThrow(/must not exceed the check points/);
   });
 
   it("should fail loudly when hint ids collide across checks (reveal route is keyed on hintId)", () => {

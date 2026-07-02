@@ -374,27 +374,48 @@ function parseMultiFlagEntry(value: unknown): MultiFlagEntry | undefined {
   };
 }
 
-const MULTI_VERIFY_CHECK_ID = /^[a-z0-9-]+$/;
+// #2252 contract (must match the catalog SCHEMA.json + validate-problems.ts so
+// the same fixture is valid in both): id starts alphanumeric, 1–64 chars.
+const MULTI_VERIFY_CHECK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const MULTI_VERIFY_LABEL_MAX = 80;
+const MULTI_VERIFY_MIN_CHECKS = 2;
+const MULTI_VERIFY_MAX_CHECKS = 8;
 
 /**
  * Issue #2252: narrow the multi-verify kind. Same never-partial-drop policy as
  * multi-flag — one invalid check rejects the whole object (a silently dropped
- * checkpoint would change the problem total per competitor). Fail-closed extras
- * per the #2252 contract: check ids must match `^[a-z0-9-]+$` and be unique,
- * points must be positive integers, and hint ids must be unique within a check
- * (the reveal record is keyed on them).
+ * checkpoint would change the problem total per competitor). The structural
+ * contract mirrors the catalog validator exactly so a fixture valid for the
+ * catalog is valid here and vice versa: 2–8 checks; ids match
+ * `^[a-z0-9][a-z0-9-]{0,63}$` and are unique; labels are non-empty and ≤80
+ * chars; points are positive integers; `wrongAnswerPenalty` ≤ that check's
+ * points; and hint ids are unique **across the whole problem** (the portal
+ * reveal route is keyed on `hintId` alone). Tier-point totals and the 50% hint
+ * cap are authoring regulation enforced catalog-side, not here (the platform
+ * has no difficulty tier at runtime).
  */
 function parseMultiVerify(value: unknown): MultiVerifyScoringMetadata | undefined {
   const m = value as { checks?: unknown };
-  if (!Array.isArray(m.checks) || m.checks.length === 0) return undefined;
+  if (
+    !Array.isArray(m.checks) ||
+    m.checks.length < MULTI_VERIFY_MIN_CHECKS ||
+    m.checks.length > MULTI_VERIFY_MAX_CHECKS
+  ) {
+    return undefined;
+  }
 
   const checks: MultiVerifyCheck[] = [];
   const seenIds = new Set<string>();
+  const seenHintIds = new Set<string>();
   for (const raw of m.checks) {
     const check = parseMultiVerifyCheck(raw);
     if (!check) return undefined;
     if (seenIds.has(check.id)) return undefined;
     seenIds.add(check.id);
+    for (const hint of check.hints ?? []) {
+      if (seenHintIds.has(hint.id)) return undefined;
+      seenHintIds.add(hint.id);
+    }
     checks.push(check);
   }
   return { kind: "multi-verify", checks };
@@ -411,9 +432,20 @@ function parseMultiVerifyCheck(value: unknown): MultiVerifyCheck | undefined {
   };
   const id = optionalNonEmptyString(c.id);
   const label = optionalNonEmptyString(c.label);
-  if (!id || !MULTI_VERIFY_CHECK_ID.test(id) || !label) return undefined;
+  if (!id || !MULTI_VERIFY_CHECK_ID.test(id) || !label || label.length > MULTI_VERIFY_LABEL_MAX) {
+    return undefined;
+  }
   if (typeof c.points !== "number" || !Number.isInteger(c.points) || c.points <= 0) {
     return undefined;
+  }
+  // wrongAnswerPenalty (if present) must be a valid non-negative integer ≤ points.
+  // An out-of-range value rejects the whole problem (never silently clamp a
+  // checkpoint's penalty — the catalog validator rejects it too).
+  if (c.wrongAnswerPenalty !== undefined) {
+    const waP = c.wrongAnswerPenalty;
+    if (typeof waP !== "number" || !Number.isInteger(waP) || waP < 0 || waP > c.points) {
+      return undefined;
+    }
   }
   const hints = parseHints(c.hints);
   if (hints) {
