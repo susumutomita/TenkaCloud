@@ -1,5 +1,6 @@
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, it } from "vitest";
+import { SBT_ONBOARDING_DETAIL_TYPES } from "../lib/problem-deploy/handlers/system-audit-writer/sbt-detail-types";
 import { synthDefault } from "./problem-deploy-backend-stack.test-helpers";
 
 describe("ProblemDeployBackendStack (MVP-1) — EventBridge Rules", () => {
@@ -48,20 +49,16 @@ describe("ProblemDeployBackendStack (MVP-1) — EventBridge Rules", () => {
     );
   });
 
-  it("should have an EventBridge Rule listening to the 6 SBT onboarding/offboarding detailTypes", () => {
+  it("should have an EventBridge Rule listening to exactly the shared SBT onboarding/offboarding detailTypes", () => {
     // Issue #1034 SystemAuditWriter: SBT bus 経由で onboarding / offboarding event を audit log に書く。
+    // Issue #2201: フィルタは sbt-detail-types.ts の共有定数と**完全一致** (= 部分一致でなく) で
+    // 固定する。 handler 側の対応表は Record<SbtOnboardingDetailType, ...> で同じ定数に型固定
+    // されているため、 Rule と対応表のキー集合が同一であることが機械保証される。
     tpl.hasResourceProperties(
       "AWS::Events::Rule",
       Match.objectLike({
         EventPattern: Match.objectLike({
-          "detail-type": Match.arrayWith([
-            "onboardingRequest",
-            "onboardingSuccess",
-            "onboardingFailure",
-            "offboardingRequest",
-            "offboardingSuccess",
-            "offboardingFailure",
-          ]),
+          "detail-type": [...SBT_ONBOARDING_DETAIL_TYPES],
         }),
       }),
     );
