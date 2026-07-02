@@ -1,8 +1,8 @@
 import * as cdk from "aws-cdk-lib";
 import type { Distribution } from "aws-cdk-lib/aws-cloudfront";
 import type { Bucket } from "aws-cdk-lib/aws-s3";
-import { BucketDeployment, CacheControl, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
+import { deployRuntimeConfigJson } from "./hosting/spa-hosting.js";
 
 /**
  * Issue #1031: admin-console の `runtime-config.json` を SiteBucket に配置する専用 stack。
@@ -73,13 +73,10 @@ export class AdminConsoleRuntimeConfigStack extends cdk.Stack {
       samlIdpDirectory: props.samlIdpDirectory,
     };
 
-    new BucketDeployment(this, "RuntimeConfigDeployment", {
-      sources: [Source.jsonData("runtime-config.json", runtimeConfig)],
-      destinationBucket: props.siteBucket,
-      distribution: props.distribution,
-      distributionPaths: ["/runtime-config.json"],
-      prune: false,
-      cacheControl: [CacheControl.noStore(), CacheControl.noCache(), CacheControl.mustRevalidate()],
-    });
+    deployRuntimeConfigJson(
+      this,
+      { siteBucket: props.siteBucket, distribution: props.distribution },
+      runtimeConfig,
+    );
   }
 }
