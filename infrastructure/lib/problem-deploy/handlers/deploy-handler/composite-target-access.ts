@@ -100,9 +100,13 @@ function normalizeProvider(raw: string): TargetAccessProvider {
  * result depends only on the provider argument. The `status` argument documents
  * that capability is independent of readiness (readiness is gated upstream); it
  * does not influence the result.
+ *
+ * [#2235] `provider` accepts any stored string (composite target rows and the
+ * participant problem view both carry a free-form `runtimeProvider`); unknown
+ * values normalize to `unsupported` instead of being mislabeled.
  */
 export function resolveTargetAccessCapability(
-  provider: TargetAccessProvider,
+  provider: string,
   _status: string,
 ): readonly TargetAccessCapability[] {
   return CAPABILITY_MATRIX[normalizeProvider(provider)];
