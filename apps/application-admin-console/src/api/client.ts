@@ -1,4 +1,4 @@
-import { toErrorMessage } from "@tenkacloud/web-kit";
+import { type CoreApiClient, createCoreApiClient } from "@tenkacloud/web-kit";
 import { useMemo } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import {
@@ -10,83 +10,20 @@ import type { AppConfig } from "../config";
 // Issue #1954: demo mode の fixture client。 call-time のみ参照する循環 import (load-time は不使用)。
 import { createDemoApiClient } from "./demo-client";
 
-/**
- * apps/admin-console/src/api/client.ts と同実装 (tenant API 呼び出し用の最小 HTTP client)。
- * 将来 packages/api-client 等に切り出すかは別 Issue。
- */
+// Issue #2226: fetch->ApiError plumbing + the get/post/put/patch/del/delJson method
+// superset now live in @tenkacloud/web-kit's createCoreApiClient (shared with
+// admin-console); re-exported here so existing imports of ApiError from this
+// module are unchanged. This app layers `tenantAccess` (RBAC) on top of the core.
+export { ApiError } from "@tenkacloud/web-kit";
 
-export interface ApiClient {
+export interface ApiClient extends CoreApiClient {
   readonly tenantAccess?: TenantConsoleAccess;
-  get<T>(path: string): Promise<T>;
-  post<T>(path: string, body: unknown): Promise<T>;
-  put<T>(path: string, body: unknown): Promise<T>;
-  patch<T>(path: string, body: unknown): Promise<T>;
-  del(path: string): Promise<void>;
-  /** 削除系で JSON body を返す経路 (例: bulk teardown の集計結果)。 */
-  delJson<T>(path: string): Promise<T>;
 }
 
 export function createApiClient(baseUrl: string, idToken: string): ApiClient {
-  const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
-  const tenantAccess = resolveTenantConsoleAccess(decodeIdToken(idToken));
-
-  const request = async (path: string, init: RequestInit = {}): Promise<Response> => {
-    const url = new URL(path.replace(/^\//, ""), base);
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        ...init,
-        headers: {
-          authorization: `Bearer ${idToken}`,
-          "content-type": "application/json",
-          ...init.headers,
-        },
-      });
-    } catch (err) {
-      // Issue #1096: 「Failed to fetch」 (= fetch が TypeError を throw する CORS
-      // preflight 失敗 / network unreachable / API 不在 等) を ApiError に正規化し、
-      // 上位 UI で 「ネットワーク経路エラー」 として region / API URL / 推奨手順を
-      // 含む operator-friendly message に変換できるようにする。 status=0 を sentinel
-      // にして上位 friendly-error mapping から判別する。
-      const detail = toErrorMessage(err);
-      throw new ApiError(
-        0,
-        `Network error: ${detail} (URL: ${url.toString()}, method: ${init.method ?? "GET"})`,
-      );
-    }
-    if (!res.ok) {
-      const detail = await res.text().catch(() => "");
-      throw new ApiError(res.status, detail || res.statusText);
-    }
-    return res;
-  };
-
   return {
-    tenantAccess,
-    async get<T>(path: string): Promise<T> {
-      return (await request(path)).json() as Promise<T>;
-    },
-    async post<T>(path: string, body: unknown): Promise<T> {
-      return (
-        await request(path, { method: "POST", body: JSON.stringify(body) })
-      ).json() as Promise<T>;
-    },
-    async put<T>(path: string, body: unknown): Promise<T> {
-      return (
-        await request(path, { method: "PUT", body: JSON.stringify(body) })
-      ).json() as Promise<T>;
-    },
-    async patch<T>(path: string, body: unknown): Promise<T> {
-      return (
-        await request(path, { method: "PATCH", body: JSON.stringify(body) })
-      ).json() as Promise<T>;
-    },
-    async del(path: string): Promise<void> {
-      await request(path, { method: "DELETE" });
-    },
-    async delJson<T>(path: string): Promise<T> {
-      return (await request(path, { method: "DELETE" })).json() as Promise<T>;
-    },
+    ...createCoreApiClient(baseUrl, idToken),
+    tenantAccess: resolveTenantConsoleAccess(decodeIdToken(idToken)),
   };
 }
 
@@ -102,14 +39,4 @@ export function useApiClient(config: AppConfig): ApiClient | null {
     if (config.mode === "demo") return createDemoApiClient();
     return auth.tokens ? createApiClient(config.apiBaseUrl, auth.tokens.idToken) : null;
   }, [auth.tokens, config.apiBaseUrl, config.mode]);
-}
-
-export class ApiError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(`API ${status}: ${message}`);
-    this.name = "ApiError";
-  }
 }
