@@ -1,0 +1,134 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Hello Multicloud (aws-hello target). The smallest free AWS half of a Composite
+  problem: a Lambda Function URL that answers 200 with a static hello payload.
+  The composite-probe scorer GETs the AwsHelloUrl output; nothing else runs.
+  NOTE: this template deliberately lives at the problem-directory ROOT as
+  template.yaml because the live AWS CFn path (CodeBuild deploy-battles.sh)
+  always deploys "<problemDir>/template.yaml" and does not read the composite
+  target's entry value.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Description: Stack and resource name prefix injected by the TenkaCloud deploy chain.
+    AllowedPattern: "^tc-[a-z0-9]+(-[a-z0-9]+)+$"
+
+  TenkaCloudAccountId:
+    Type: String
+    Description: >-
+      TenkaCloud operator account id. Trust anchor for the participant viewer
+      role (read-only access bridge for this target).
+    AllowedPattern: "^[0-9]{12}$"
+
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: >-
+      External id the operator account must present when assuming the
+      participant viewer role (confused-deputy guard; always required).
+
+Resources:
+  HelloFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Least-privilege execution role for the hello function (logs only).
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  HelloFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Returns a static hello payload; probed by the composite-probe scorer.
+      Runtime: python3.12
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 3
+      Role: !GetAtt HelloFunctionRole.Arn
+      Code:
+        ZipFile: |
+          import json
+
+          def handler(event, context):
+              return {
+                  "statusCode": 200,
+                  "headers": {"content-type": "application/json"},
+                  "body": json.dumps({"hello": "aws", "problem": "hello-multicloud"}),
+              }
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value: !Ref NamePrefix
+
+  HelloFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt HelloFunction.Arn
+      AuthType: NONE
+
+  HelloFunctionUrlPublicAccess:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt HelloFunction.Arn
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  # Read-only role the platform's AWS access bridge (composite console / CLI
+  # routes) assumes for this target. Scoped to looking at the hello function
+  # only -- no write access anywhere.
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Read-only participant access for the aws-hello target.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${TenkaCloudAccountId}:root"
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ProblemSpecific
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: OpenCloudShellSession
+                Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+              - Sid: ReadOwnHelloFunction
+                Effect: Allow
+                Action:
+                  - lambda:GetFunction
+                  - lambda:GetFunctionUrlConfig
+                Resource: !GetAtt HelloFunction.Arn
+
+Outputs:
+  AwsHelloUrl:
+    Description: HTTPS hello endpoint probed by the composite-probe scorer. Non-sensitive.
+    Value: !GetAtt HelloFunctionUrl.FunctionUrl
+
+  ParticipantViewerRoleArn:
+    Description: Read-only role the platform's AWS access bridge assumes for this target.
+    Value: !GetAtt ParticipantViewerRole.Arn

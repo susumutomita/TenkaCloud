@@ -1,0 +1,144 @@
+[
+  {
+    "name": "scores success when both cloud targets probe 200",
+    "metadata": {
+      "id": "hello-multicloud",
+      "runtime": {
+        "kind": "composite",
+        "targets": [
+          {
+            "id": "aws-hello",
+            "provider": "aws",
+            "engine": "cloudformation",
+            "entry": "template.yaml"
+          },
+          {
+            "id": "gcp-hello",
+            "provider": "gcp",
+            "engine": "infra-manager",
+            "entry": "gcp/terraform"
+          }
+        ]
+      },
+      "scoring": {
+        "kind": "composite-probe",
+        "success": "all",
+        "pointsAllOk": 100,
+        "targets": [
+          {
+            "targetId": "aws-hello",
+            "probe": "https",
+            "outputKey": "AwsHelloUrl",
+            "expectStatus": [200]
+          },
+          {
+            "targetId": "gcp-hello",
+            "probe": "https",
+            "outputKey": "GcpHelloUrl",
+            "expectStatus": [200]
+          }
+        ]
+      }
+    },
+    "runtime": {
+      "kind": "composite",
+      "targets": [
+        {
+          "id": "aws-hello",
+          "provider": "aws",
+          "engine": "cloudformation",
+          "entry": "template.yaml"
+        },
+        {
+          "id": "gcp-hello",
+          "provider": "gcp",
+          "engine": "infra-manager",
+          "entry": "gcp/terraform"
+        }
+      ]
+    },
+    "deployment": "ready",
+    "outputs": {
+      "AwsHelloUrl": "https://aws-hello.example.invalid",
+      "GcpHelloUrl": "https://gcp-hello.example.invalid"
+    },
+    "probeResults": {
+      "https://aws-hello.example.invalid": { "status": 200, "reachable": true },
+      "https://gcp-hello.example.invalid": { "status": 200, "reachable": true }
+    },
+    "expected": { "valid": true, "score": "success" }
+  },
+  {
+    "name": "scores failure when the GCP target is down",
+    "metadata": {
+      "id": "hello-multicloud",
+      "runtime": {
+        "kind": "composite",
+        "targets": [
+          {
+            "id": "aws-hello",
+            "provider": "aws",
+            "engine": "cloudformation",
+            "entry": "template.yaml"
+          },
+          {
+            "id": "gcp-hello",
+            "provider": "gcp",
+            "engine": "infra-manager",
+            "entry": "gcp/terraform"
+          }
+        ]
+      },
+      "scoring": {
+        "kind": "composite-probe",
+        "success": "all",
+        "pointsAllOk": 100,
+        "targets": [
+          {
+            "targetId": "aws-hello",
+            "probe": "https",
+            "outputKey": "AwsHelloUrl",
+            "expectStatus": [200]
+          },
+          {
+            "targetId": "gcp-hello",
+            "probe": "https",
+            "outputKey": "GcpHelloUrl",
+            "expectStatus": [200]
+          }
+        ]
+      }
+    },
+    "runtime": {
+      "kind": "composite",
+      "targets": [
+        {
+          "id": "aws-hello",
+          "provider": "aws",
+          "engine": "cloudformation",
+          "entry": "template.yaml"
+        },
+        {
+          "id": "gcp-hello",
+          "provider": "gcp",
+          "engine": "infra-manager",
+          "entry": "gcp/terraform"
+        }
+      ]
+    },
+    "deployment": "ready",
+    "outputs": {
+      "AwsHelloUrl": "https://aws-hello.example.invalid",
+      "GcpHelloUrl": "https://gcp-hello.example.invalid"
+    },
+    "probeResults": {
+      "https://aws-hello.example.invalid": { "status": 200, "reachable": true },
+      "https://gcp-hello.example.invalid": { "status": 503, "reachable": true }
+    },
+    "expected": {
+      "valid": true,
+      "score": "failure",
+      "diagnostics": ["SCORING_PROBE_FAILED"]
+    }
+  }
+]

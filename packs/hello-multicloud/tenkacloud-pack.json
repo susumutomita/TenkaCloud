@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "com.tenkacloud.hello-multicloud",
+  "version": "0.1.0",
+  "core": "^1.0.0",
+  "title": "Hello Multicloud pack",
+  "description": "The smallest deployable Composite sample: one Challenge that stands up a free hello endpoint on AWS (Lambda Function URL) and on Google Cloud (Cloud Run), scored by composite-probe against both targets. Use it to smoke-test composite deploy, per-target status, namespaced outputs, scoring, and teardown end to end.",
+  "license": "Apache-2.0",
+  "problemsRoot": "problems",
+  "requiredRuntimes": [
+    {
+      "provider": "aws",
+      "engine": "cloudformation"
+    },
+    {
+      "provider": "gcp",
+      "engine": "infra-manager"
+    }
+  ]
+}
