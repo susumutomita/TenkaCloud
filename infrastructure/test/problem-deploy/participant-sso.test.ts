@@ -499,3 +499,119 @@ describe("getConsoleSigninUrl: not_ready 経路の structured log (#759)", () =>
     fetchSpy2.mockRestore();
   });
 });
+
+describe("getConsoleSigninUrl (issue #2214: STS/HTTP via deps injection, no vi.mock)", () => {
+  it("should complete the full chain using only deps (sts / buildParticipantClient / fetchClient)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+
+    const stage1Send = vi.fn().mockResolvedValue({
+      Credentials: {
+        AccessKeyId: "AKIADEPLOY",
+        SecretAccessKey: "DEPLOYSECRET",
+        SessionToken: "DEPLOYTOKEN",
+        Expiration: new Date(),
+      },
+    });
+    const stage2Send = vi.fn().mockResolvedValue({
+      Credentials: {
+        AccessKeyId: "AKIAFAKE",
+        SecretAccessKey: "SECRETFAKE",
+        SessionToken: "TOKENFAKE",
+        Expiration: new Date(),
+      },
+    });
+    const fetchClient = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ SigninToken: "SIGNIN_TOKEN_VALUE" }), { status: 200 }),
+      );
+    const buildParticipantClient = vi.fn().mockReturnValue({ send: stage2Send });
+
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID, {
+      sts: { send: stage1Send },
+      buildParticipantClient,
+      fetchClient: fetchClient as unknown as typeof fetch,
+    });
+
+    expect(result.kind).toBe("ok");
+    expect(stage1Send).toHaveBeenCalledTimes(1);
+    expect(stage2Send).toHaveBeenCalledTimes(1);
+    expect(buildParticipantClient).toHaveBeenCalledWith({
+      accessKeyId: "AKIADEPLOY",
+      secretAccessKey: "DEPLOYSECRET",
+      sessionToken: "DEPLOYTOKEN",
+      expiration: expect.any(Date),
+    });
+    expect(fetchClient).toHaveBeenCalledTimes(1);
+  });
+
+  it("should surface a stage=competitor assume_role_failed when the injected stage-1 sts client rejects", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+    const stage1Send = vi.fn().mockRejectedValue(new Error("AccessDenied"));
+    const fetchClient = vi.fn();
+
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID, {
+      sts: { send: stage1Send },
+      fetchClient: fetchClient as unknown as typeof fetch,
+    });
+
+    expect(result).toEqual({ kind: "assume_role_failed", stage: "competitor", reason: "Error" });
+    expect(fetchClient).not.toHaveBeenCalled();
+  });
+
+  it("should surface a stage=participant_viewer assume_role_failed when the injected stage-2 client rejects", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+    const stage1Send = vi.fn().mockResolvedValue({
+      Credentials: {
+        AccessKeyId: "AKIADEPLOY",
+        SecretAccessKey: "DEPLOYSECRET",
+        SessionToken: "DEPLOYTOKEN",
+      },
+    });
+    const stage2Send = vi.fn().mockRejectedValue(new Error("AccessDenied"));
+    const fetchClient = vi.fn();
+
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID, {
+      sts: { send: stage1Send },
+      buildParticipantClient: () => ({ send: stage2Send }),
+      fetchClient: fetchClient as unknown as typeof fetch,
+    });
+
+    expect(result).toEqual({
+      kind: "assume_role_failed",
+      stage: "participant_viewer",
+      reason: "Error",
+    });
+    expect(fetchClient).not.toHaveBeenCalled();
+  });
+
+  it("should use the injected fetchClient (not global fetch) for the federation token exchange", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+    const globalFetchSpy = vi.spyOn(globalThis, "fetch");
+    const okCreds = {
+      Credentials: {
+        AccessKeyId: "AKIA",
+        SecretAccessKey: "SECRET",
+        SessionToken: "TOKEN",
+      },
+    };
+    const fetchClient = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ SigninToken: "T" }), { status: 200 }));
+
+    const result = await getConsoleSigninUrl(shared, TEAM_KEY, VALID_JOB_ID, {
+      sts: { send: vi.fn().mockResolvedValue(okCreds) },
+      buildParticipantClient: () => ({ send: vi.fn().mockResolvedValue(okCreds) }),
+      fetchClient: fetchClient as unknown as typeof fetch,
+    });
+
+    expect(result.kind).toBe("ok");
+    expect(fetchClient).toHaveBeenCalledTimes(1);
+    expect(globalFetchSpy).not.toHaveBeenCalled();
+    globalFetchSpy.mockRestore();
+  });
+});

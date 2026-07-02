@@ -24,9 +24,10 @@
 import { randomInt } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
-import { PutEventsCommand, type PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
+import type { PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
 import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
+import { putEventsBatched } from "../shared/events.js";
 import { logDeployTrace } from "../shared/trace-log.js";
 import { writeRecurringRegistry } from "./disruption-recurring.js";
 import type {
@@ -308,48 +309,40 @@ async function publishEntries(
 ): Promise<void> {
   // PR #889 review: publish 内容は audit に書く mergedParameters と一致させる
   // (= 旧コードは input.parameters のみで base parameters を欠いていた)。
-  const entries: PutEventsRequestEntry[] = affectedTeamIds.map((teamId) => ({
-    Source: EVENT_SOURCE,
-    DetailType: detailType,
-    EventBusName: shared.eventBusName,
-    Detail: JSON.stringify({
-      disruptionId: input.disruptionId,
-      eventId: input.eventId,
-      problemId: input.problemId,
-      tenantId: input.tenantId,
-      teamId,
-      parameters: mergedParameters,
-      requestId: input.requestId,
-      firedAt,
-      // [ADR-037] scheduled fire: executor がこの分数だけ注入を遅延予約する。 即時は省略。
-      ...(input.afterMinutes ? { afterMinutes: input.afterMinutes } : {}),
-      // [ADR-037] recurring fire: executor が rate(intervalMinutes) schedule を作る。 即時/予約では省略。
-      ...(input.recurrence ? { recurrence: input.recurrence } : {}),
+  const items: Array<{ item: string; entry: PutEventsRequestEntry }> = affectedTeamIds.map(
+    (teamId) => ({
+      item: teamId,
+      entry: {
+        Source: EVENT_SOURCE,
+        DetailType: detailType,
+        EventBusName: shared.eventBusName,
+        Detail: JSON.stringify({
+          disruptionId: input.disruptionId,
+          eventId: input.eventId,
+          problemId: input.problemId,
+          tenantId: input.tenantId,
+          teamId,
+          parameters: mergedParameters,
+          requestId: input.requestId,
+          firedAt,
+          // [ADR-037] scheduled fire: executor がこの分数だけ注入を遅延予約する。 即時は省略。
+          ...(input.afterMinutes ? { afterMinutes: input.afterMinutes } : {}),
+          // [ADR-037] recurring fire: executor が rate(intervalMinutes) schedule を作る。 即時/予約では省略。
+          ...(input.recurrence ? { recurrence: input.recurrence } : {}),
+        }),
+      },
     }),
-  }));
-  const BATCH = 10;
-  const failureDetails: Array<{ entryIndex: number; errorCode: string; errorMessage: string }> = [];
-  for (let i = 0; i < entries.length; i += BATCH) {
-    const chunk = entries.slice(i, i + BATCH);
-    const resp = await shared.events.send(new PutEventsCommand({ Entries: chunk }));
-    // PR #889 review: PutEvents は HTTP 200 でも entry 単位の失敗を返す。 FailedEntryCount を
-    // 必ず確認し、 失敗があれば throw して audit 行を書かないようにする (= 整合性確保)。
-    if ((resp.FailedEntryCount ?? 0) > 0) {
-      for (const [idx, e] of (resp.Entries ?? []).entries()) {
-        if (e.ErrorCode) {
-          failureDetails.push({
-            entryIndex: i + idx,
-            errorCode: e.ErrorCode,
-            errorMessage: e.ErrorMessage ?? "",
-          });
-        }
-      }
-    }
-  }
+  );
+  // PR #889 review: PutEvents は HTTP 200 でも entry 単位の失敗を返す。 FailedEntryCount を
+  // 必ず確認し、 失敗があれば throw して audit 行を書かないようにする (= 整合性確保)。
+  const results = await putEventsBatched(shared.events, items);
+  const failureDetails = results
+    .filter((r) => !r.success)
+    .map((r) => ({ teamId: r.item, errorCode: r.errorCode ?? "unknown" }));
   if (failureDetails.length > 0) {
     throw new Error(
       `disruption publish partial failure: ${failureDetails
-        .map((f) => `entry[${f.entryIndex}]=${f.errorCode}`)
+        .map((f) => `team[${f.teamId}]=${f.errorCode}`)
         .join(", ")}`,
     );
   }

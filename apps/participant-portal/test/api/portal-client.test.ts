@@ -52,6 +52,10 @@ describe("getPortalMe", () => {
     expect(url.toString()).toBe("https://api.example.com/portal/me");
     expect(init.method).toBe("GET");
     expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${KEY}`);
+    // Issue #2190: without cache:"no-store" the browser HTTP cache can serve a
+    // stale response for a manual refetch (refresh button / post-publish
+    // reload) even though a full page reload would revalidate.
+    expect(init.cache).toBe("no-store");
   });
 
   it("should produce the same URL regardless of trailing slash", async () => {

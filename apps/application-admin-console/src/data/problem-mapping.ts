@@ -13,13 +13,13 @@
  * broken. `problems.ts` re-exports these for its existing consumers.
  */
 
+import { analyzeProblemCost, type ProblemCostEstimate } from "@tenkacloud/problem-cost";
 import {
   CONTAINER_RUNTIMES,
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
   RESERVED_RUNTIMES,
 } from "@tenkacloud/problem-runtime";
-import { analyzeProblemCost, type ProblemCostEstimate } from "../../../../scripts/lib/problem-cost";
 import type { ProblemCostEstimateSummary, ProblemDetail, ProblemMetadata } from "./problems";
 
 export function metadataToDetail(metadata: ProblemMetadata, templateYaml?: string): ProblemDetail {
