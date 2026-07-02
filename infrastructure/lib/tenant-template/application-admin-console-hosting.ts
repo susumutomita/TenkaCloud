@@ -1,20 +1,10 @@
 import * as path from "node:path";
-import { RemovalPolicy, Stack } from "aws-cdk-lib";
-import {
-  Distribution,
-  HttpVersion,
-  OriginAccessIdentity,
-  PriceClass,
-  ViewerProtocolPolicy,
-} from "aws-cdk-lib/aws-cloudfront";
-import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
-import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
-import { BucketDeployment, CacheControl, Source } from "aws-cdk-lib/aws-s3-deployment";
+import { Stack } from "aws-cdk-lib";
+import type { Distribution } from "aws-cdk-lib/aws-cloudfront";
+import type { Bucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
-import {
-  buildCustomDomainDistributionProps,
-  type CustomDomainConfig,
-} from "../security/cloudfront-custom-domain.js";
+import { buildSpaHosting, deployRuntimeConfigJson } from "../hosting/spa-hosting.js";
+import type { CustomDomainConfig } from "../security/cloudfront-custom-domain.js";
 import { buildSecurityHeadersPolicy } from "../security/cloudfront-headers.js";
 
 interface ApplicationAdminConsoleHostingProps {
@@ -85,6 +75,13 @@ interface RuntimeConfigProps {
    * 非秘匿で runtime-config.json に書き込んで OK。
    */
   readonly samlIdpDirectory: Readonly<Record<string, readonly string[]>>;
+  /**
+   * Issue #2230 (ADR-035): SPA feature flag の deploy 時 override。 SPA 側
+   * `resolveFeatureFlags(FEATURE_REGISTRY, runtimeConfig.features)` が registry default に
+   * merge する (未知 key / 非 boolean は SPA 側で無視)。 未設定なら `features` key 自体を
+   * 書かない (= 旧 runtime-config と byte 互換、 registry default のまま)。
+   */
+  readonly features?: Readonly<Record<string, boolean>>;
 }
 
 /**
@@ -116,17 +113,6 @@ export class ApplicationAdminConsoleHosting extends Construct {
   constructor(scope: Construct, id: string, props: ApplicationAdminConsoleHostingProps) {
     super(scope, id);
 
-    this.bucket = new Bucket(this, "SiteBucket", {
-      encryption: BucketEncryption.S3_MANAGED,
-      enforceSSL: true,
-      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
-      removalPolicy: RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-    });
-
-    const oai = new OriginAccessIdentity(this, "OAI");
-    this.bucket.grantRead(oai);
-
     // Issue #855 + #896: CloudFront に security headers を強制。 application-admin-console は
     // tenant 別の API GW + Cognito UserPool 経路に connect するが、 具体 URL は per-tenant で
     // 動的に決まる (= runtime-config.json 経由)。 CSP host-source の wildcard は **leftmost のみ**
@@ -143,26 +129,6 @@ export class ApplicationAdminConsoleHosting extends Construct {
       formActionAllowedOrigins: ["https://*.amazoncognito.com"],
     });
 
-    this.distribution = new Distribution(this, "Distribution", {
-      // Issue #1695: customDomain 設定時のみ TLS 1.2 強制 (= ACM 証明書必須)。 未設定は NO-OP。
-      ...buildCustomDomainDistributionProps(this, "ViewerCertificate", props.customDomain),
-      defaultBehavior: {
-        origin: S3BucketOrigin.withOriginAccessIdentity(this.bucket, { originAccessIdentity: oai }),
-        viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        responseHeadersPolicy: securityHeaders,
-      },
-      defaultRootObject: "index.html",
-      httpVersion: HttpVersion.HTTP2,
-      priceClass: PriceClass.PRICE_CLASS_100,
-      errorResponses: [
-        { httpStatus: 403, responseHttpStatus: 200, responsePagePath: "/index.html" },
-        { httpStatus: 404, responseHttpStatus: 200, responsePagePath: "/index.html" },
-      ],
-    });
-
-    this.distributionDomainName = this.distribution.distributionDomainName;
-    this.distributionUrl = `https://${this.distribution.distributionDomainName}`;
-
     // dist/ は infrastructure/lib/tenant-template/ から 3 階層上にある
     // apps/application-admin-console/dist を参照する。
     // host 実行時 (phase 1 pooled stack) は TenkaCloud/apps/application-admin-console/dist、
@@ -178,13 +144,18 @@ export class ApplicationAdminConsoleHosting extends Construct {
       "dist",
     );
 
-    new BucketDeployment(this, "SiteDeployment", {
-      sources: [Source.asset(distDir)],
-      destinationBucket: this.bucket,
-      distribution: this.distribution,
-      // runtime-config.json を別途配置するので prune=false (他 key を消さない)
-      prune: false,
+    // 共通スキャフォールド (S3 + OAI + CloudFront + SPA fallback + dist deployment) は
+    // buildSpaHosting (Issue #2207) に集約。 本 Construct は CSP と runtime-config だけを持つ。
+    const hosting = buildSpaHosting(this, {
+      distDir,
+      securityHeaders,
+      customDomain: props.customDomain,
     });
+    this.bucket = hosting.siteBucket;
+    this.distribution = hosting.distribution;
+
+    this.distributionDomainName = this.distribution.distributionDomainName;
+    this.distributionUrl = `https://${this.distribution.distributionDomainName}`;
   }
 
   /**
@@ -214,16 +185,15 @@ export class ApplicationAdminConsoleHosting extends Construct {
       ...(props.competitorBootstrapTemplateUrl
         ? { competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl }
         : {}),
+      // Issue #2230 (ADR-035): 旧来 S3 手編集しか経路が無かった feature flag override の正規経路。
+      ...(props.features ? { features: props.features } : {}),
     };
     // Issue #867: runtime-config.json は CloudFront cache 無効化。 pooled tenants 共有 CDN
     // でも tenant 別 config を返すため cache はリスク (= 設定混線)。
-    new BucketDeployment(this, "RuntimeConfigDeployment", {
-      sources: [Source.jsonData("runtime-config.json", data)],
-      destinationBucket: this.bucket,
-      distribution: this.distribution,
-      distributionPaths: ["/runtime-config.json"],
-      prune: false,
-      cacheControl: [CacheControl.noStore(), CacheControl.noCache(), CacheControl.mustRevalidate()],
-    });
+    deployRuntimeConfigJson(
+      this,
+      { siteBucket: this.bucket, distribution: this.distribution },
+      data,
+    );
   }
 }

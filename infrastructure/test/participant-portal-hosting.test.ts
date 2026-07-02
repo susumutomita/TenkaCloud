@@ -107,4 +107,71 @@ describe("ParticipantPortalHosting", () => {
       expect(leaking).toEqual([]);
     });
   });
+
+  // Issue #867 / #2207: runtime-config.json は deployRuntimeConfig 経由でのみ配信され、
+  // no-cache + /runtime-config.json invalidation + 末尾スラッシュ正規化を維持する。
+  describe("deployRuntimeConfig", () => {
+    function synthWithRuntimeConfig(coordinationApiUrl?: string): Template {
+      const app = new cdk.App();
+      const stack = new cdk.Stack(app, "RuntimeConfigStack", {
+        env: { account: "123456789012", region: "ap-northeast-1" },
+      });
+      const hosting = new ParticipantPortalHosting(stack, "Portal");
+      hosting.deployRuntimeConfig({
+        apiBaseUrl: "https://api.example.com/",
+        eventTitle: "Spring Cup",
+        eventRegion: "ap-northeast-1",
+        mode: "backend",
+        ...(coordinationApiUrl ? { coordinationApiUrl } : {}),
+      });
+      return Template.fromStack(stack);
+    }
+
+    it("should deploy runtime-config.json with no-cache headers and invalidation", () => {
+      const template = synthWithRuntimeConfig();
+      template.hasResourceProperties("Custom::CDKBucketDeployment", {
+        SystemMetadata: { "cache-control": "no-store, no-cache, must-revalidate" },
+        DistributionPaths: ["/runtime-config.json"],
+        Prune: false,
+      });
+    });
+
+    // Source.jsonData は中身をテンプレートではなく asset (S3 zip) に焼くため、 値の検証は
+    // synth した assembly から runtime-config deployment の SourceObjectKeys が指す asset を
+    // 読んで行う (= 共有 CDK_OUTDIR に残る他テストの asset に影響されない、 keyed lookup)。
+    function readRuntimeConfigAsset(coordinationApiUrl?: string): Record<string, unknown> {
+      const app = new cdk.App();
+      const stack = new cdk.Stack(app, "RuntimeConfigContentStack", {
+        env: { account: "123456789012", region: "ap-northeast-1" },
+      });
+      const hosting = new ParticipantPortalHosting(stack, "Portal");
+      hosting.deployRuntimeConfig({
+        apiBaseUrl: "https://api.example.com/",
+        eventTitle: "Spring Cup",
+        eventRegion: "ap-northeast-1",
+        mode: "backend",
+        ...(coordinationApiUrl ? { coordinationApiUrl } : {}),
+      });
+      const assemblyDir = app.synth().directory;
+      const deployments = Template.fromStack(stack).findResources("Custom::CDKBucketDeployment", {
+        Properties: { DistributionPaths: ["/runtime-config.json"] },
+      });
+      const [resource] = Object.values(deployments);
+      const [sourceKey] = resource?.Properties?.SourceObjectKeys as [string];
+      const assetDir = path.join(assemblyDir, `asset.${sourceKey.replace(/\.zip$/, "")}`);
+      return JSON.parse(fs.readFileSync(path.join(assetDir, "runtime-config.json"), "utf8"));
+    }
+
+    it("should strip trailing slashes from apiBaseUrl and coordinationApiUrl", () => {
+      const data = readRuntimeConfigAsset("https://coord.example.com/");
+      expect(data.apiBaseUrl).toBe("https://api.example.com");
+      expect(data.coordinationApiUrl).toBe("https://coord.example.com");
+    });
+
+    it("should omit coordinationApiUrl when the dispatcher is not wired", () => {
+      const data = readRuntimeConfigAsset();
+      expect(data).not.toHaveProperty("coordinationApiUrl");
+      expect(data.mode).toBe("backend");
+    });
+  });
 });

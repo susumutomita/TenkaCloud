@@ -102,6 +102,11 @@ export interface AppPlaneCoreProps {
    * のみ意味を持つ。 空配列 = federated sign-in 全拒否 (fail-safe)。
    */
   readonly samlAdminAllowlist?: readonly string[];
+  /**
+   * Issue #2230 (ADR-035): SPA feature flag の deploy 時 override。 runtime-config.json の
+   * `features` に焼かれ、application-admin-console の `resolveFeatureFlags` が merge する。
+   */
+  readonly features?: Readonly<Record<string, boolean>>;
 }
 
 export interface AppPlaneCoreHandles {
@@ -234,6 +239,7 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
   });
 
   applicationAdminConsoleHosting.deployRuntimeConfig({
+    features: props.features,
     cognitoDomain: identityProvider.cognitoDomainUrl,
     cognitoClientId: identityProvider.tenantUserPoolClient.userPoolClientId,
     tenantId: props.tenantId,

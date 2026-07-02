@@ -109,6 +109,14 @@ export interface AppConfig {
     | { readonly basic: number; readonly advanced: number; readonly platinum: number }
     | undefined;
 
+  /**
+   * Issue #2230 (ADR-035): SPA feature flag の deploy 時 override
+   * (`CDK_PARAM_FEATURES`、JSON `{"nonAwsRuntime":true}` 形式)。runtime-config.json の
+   * `features` に焼かれ、各 SPA の `resolveFeatureFlags` が registry default に merge する。
+   * 未設定なら `features` key 自体を書かない (= 旧 runtime-config と byte 互換)。
+   */
+  readonly features: Readonly<Record<string, boolean>> | undefined;
+
   // Issue #1031: 旧 `adminConsoleOriginForCors` (= `CDK_PARAM_ADMIN_CONSOLE_ORIGIN`) は廃止。
   // admin-console-hosting が先に立ち、 cross-stack ref で control-plane / admin-console-insight
   // に流れる (= Phase 3 env-var dance が不要になる)。
