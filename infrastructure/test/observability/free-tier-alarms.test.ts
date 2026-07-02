@@ -26,8 +26,11 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
     const { stack, topic } = buildStack();
     new FreeTierAlarms(stack, "Alarms", {
       notificationTopic: topic,
-      lambdaFunctionNames: ["fn-a", "fn-b"],
-      dynamoDbTableNames: ["table-x"],
+      lambdaFunctionNames: [
+        { label: "fn-a", name: "fn-a" },
+        { label: "fn-b", name: "fn-b" },
+      ],
+      dynamoDbTableNames: [{ label: "table-x", name: "table-x" }],
     });
     const tpl = Template.fromStack(stack);
     // Lambda: 2 fn × (invocations + errors) = 4 / DDB: 1 table × (read + write) = 2
@@ -38,7 +41,7 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
     const { stack, topic } = buildStack();
     new FreeTierAlarms(stack, "Alarms", {
       notificationTopic: topic,
-      lambdaFunctionNames: ["fn-a"],
+      lambdaFunctionNames: [{ label: "fn-a", name: "fn-a" }],
       dynamoDbTableNames: [],
     });
     const tpl = Template.fromStack(stack);
@@ -55,7 +58,7 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
     new FreeTierAlarms(stack, "Alarms", {
       notificationTopic: topic,
       lambdaFunctionNames: [],
-      dynamoDbTableNames: ["table-x"],
+      dynamoDbTableNames: [{ label: "table-x", name: "table-x" }],
     });
     const tpl = Template.fromStack(stack);
     tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
@@ -74,7 +77,7 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
     const { stack, topic } = buildStack();
     new FreeTierAlarms(stack, "Alarms", {
       notificationTopic: topic,
-      lambdaFunctionNames: ["fn-a"],
+      lambdaFunctionNames: [{ label: "fn-a", name: "fn-a" }],
       dynamoDbTableNames: [],
     });
     const tpl = Template.fromStack(stack);
@@ -88,8 +91,8 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
     const { stack, topic } = buildStack();
     new FreeTierAlarms(stack, "Alarms", {
       notificationTopic: topic,
-      lambdaFunctionNames: ["fn-a"],
-      dynamoDbTableNames: ["table-x"],
+      lambdaFunctionNames: [{ label: "fn-a", name: "fn-a" }],
+      dynamoDbTableNames: [{ label: "table-x", name: "table-x" }],
       lambdaDailyInvocationThreshold: 5000,
       dynamoDbDailyConsumedThreshold: 50000,
     });
@@ -104,23 +107,40 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
     });
   });
 
-  it("should not collide on logical IDs even for resource names containing non-alphanumerics (dot / hyphen)", () => {
+  it("should sanitize non-alphanumeric labels into a valid logical ID (no synth crash)", () => {
     const { stack, topic } = buildStack();
     new FreeTierAlarms(stack, "Alarms", {
       notificationTopic: topic,
-      lambdaFunctionNames: ["fn-a.b", "fn-a-b"],
+      // `name` (the real, possibly-token function name) may contain any character; `label`
+      // (caller-supplied, deterministic) is what construct IDs derive from.
+      lambdaFunctionNames: [{ label: "deploy-api", name: "tenkacloud-deploy-api-fn.prod" }],
       dynamoDbTableNames: [],
     });
     const tpl = Template.fromStack(stack);
-    // 2 Lambda fn × (invocations + errors) = 4 (= sanitize で衝突しない logical ID)
-    tpl.resourceCountIs("AWS::CloudWatch::Alarm", 4);
+    tpl.resourceCountIs("AWS::CloudWatch::Alarm", 2);
+  });
+
+  it("#2239: should produce identical logical IDs across two synths of the same labeled config", () => {
+    // Construct IDs must depend only on the caller-supplied `label`, never on a CFn token's
+    // process-local numbering -- otherwise an unrelated code change can shift token allocation
+    // order and force every FreeTierAlarms Alarm through a DELETE+CREATE on next deploy.
+    const targets = {
+      lambdaFunctionNames: [{ label: "deploy-api", name: "some-token-like-value-1" }],
+      dynamoDbTableNames: [{ label: "deployments", name: "some-token-like-value-2" }],
+    };
+    const idsOf = () => {
+      const { stack, topic } = buildStack();
+      new FreeTierAlarms(stack, "Alarms", { notificationTopic: topic, ...targets });
+      return Object.keys(Template.fromStack(stack).findResources("AWS::CloudWatch::Alarm")).sort();
+    };
+    expect(idsOf()).toEqual(idsOf());
   });
 
   it("#1080: should provision a Lambda errors alarm (metric=Errors / threshold=default 50)", () => {
     const { stack, topic } = buildStack();
     new FreeTierAlarms(stack, "Alarms", {
       notificationTopic: topic,
-      lambdaFunctionNames: ["fn-a"],
+      lambdaFunctionNames: [{ label: "fn-a", name: "fn-a" }],
       dynamoDbTableNames: [],
     });
     const tpl = Template.fromStack(stack);
@@ -148,11 +168,43 @@ describe("FreeTierAlarms (#952 cost guardrails)", () => {
       Namespace: "AWS/ApiGateway",
       MetricName: "5xx",
       Threshold: 50,
+      Dimensions: [
+        { Name: "ApiId", Value: "abc123" },
+        { Name: "Stage", Value: "$default" },
+      ],
     });
     tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
       Namespace: "AWS/ApiGateway",
       MetricName: "5XXError",
       Threshold: 50,
+      Dimensions: [
+        { Name: "ApiName", Value: "tenant-api" },
+        { Name: "Stage", Value: "prod" },
+      ],
+    });
+  });
+
+  it("#1080: should omit the Stage dimension for API Gateway targets without a stage", () => {
+    const { stack, topic } = buildStack();
+    new FreeTierAlarms(stack, "Alarms", {
+      notificationTopic: topic,
+      lambdaFunctionNames: [],
+      dynamoDbTableNames: [],
+      apiGateways: [
+        { kind: "http", label: "control-plane", apiId: "abc123" },
+        { kind: "rest", label: "tenant", apiName: "tenant-api" },
+      ],
+    });
+    const tpl = Template.fromStack(stack);
+    tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+      Namespace: "AWS/ApiGateway",
+      MetricName: "5xx",
+      Dimensions: [{ Name: "ApiId", Value: "abc123" }],
+    });
+    tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
+      Namespace: "AWS/ApiGateway",
+      MetricName: "5XXError",
+      Dimensions: [{ Name: "ApiName", Value: "tenant-api" }],
     });
   });
 });

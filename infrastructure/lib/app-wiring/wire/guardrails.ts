@@ -49,34 +49,39 @@ export function addCostGuardrails(args: {
   });
 }
 
+// Issue #2239: FreeTierAlarms construct ID は `label` (deterministic, caller が一意性を保証)
+// だけを使う。 `name` は Lambda functionName / DDB tableName の実値 (cross-stack 参照だと CFn
+// token) で、 alarmName / metric dimension にのみ使う。
 function freeTierLambdaNames(args: {
   readonly problemDeployBackendStack: ProblemDeployBackendStack;
   readonly adminConsoleInsightStack: AdminConsoleInsightStack;
-}): string[] {
+}): ConstructorParameters<typeof FreeTierAlarms>[2]["lambdaFunctionNames"] {
   const problem = args.problemDeployBackendStack;
   return [
-    problem.deployApiLambda.functionName,
-    problem.eventApiLambda.functionName,
-    args.adminConsoleInsightStack.lambdaFunctionName,
-    problem.competitorAccountsApiLambda.functionName,
-    problem.externalIdAuditLambda.functionName,
-    problem.genericScoringLambda.functionName,
-    ...(problem.participantPortalLambda ? [problem.participantPortalLambda.functionName] : []),
+    { label: "deploy-api", name: problem.deployApiLambda.functionName },
+    { label: "event-api", name: problem.eventApiLambda.functionName },
+    { label: "admin-insight", name: args.adminConsoleInsightStack.lambdaFunctionName },
+    { label: "competitor-accounts", name: problem.competitorAccountsApiLambda.functionName },
+    { label: "external-id-audit", name: problem.externalIdAuditLambda.functionName },
+    { label: "generic-scoring", name: problem.genericScoringLambda.functionName },
+    ...(problem.participantPortalLambda
+      ? [{ label: "participant-portal", name: problem.participantPortalLambda.functionName }]
+      : []),
   ];
 }
 
 function freeTierTableNames(args: {
   readonly problemDeployBackendStack: ProblemDeployBackendStack;
   readonly bootstrapTemplateStack: BootstrapTemplateStack;
-}): string[] {
+}): ConstructorParameters<typeof FreeTierAlarms>[2]["dynamoDbTableNames"] {
   const problem = args.problemDeployBackendStack;
   return [
-    problem.deploymentsTable.tableName,
-    problem.eventsTable.tableName,
-    problem.teamsTable.tableName,
-    problem.competitorAccountsTable.tableName,
-    problem.problemEndpointsTable.tableName,
-    args.bootstrapTemplateStack.tenantMappingTable.tableName,
+    { label: "deployments", name: problem.deploymentsTable.tableName },
+    { label: "events", name: problem.eventsTable.tableName },
+    { label: "teams", name: problem.teamsTable.tableName },
+    { label: "competitor-accounts", name: problem.competitorAccountsTable.tableName },
+    { label: "problem-endpoints", name: problem.problemEndpointsTable.tableName },
+    { label: "tenant-mapping", name: args.bootstrapTemplateStack.tenantMappingTable.tableName },
   ];
 }
 

@@ -71,6 +71,11 @@ function buildPortalFetchInit(teamLoginKey: string, options: PortalFetchOptions)
     headers,
     body: hasBody ? JSON.stringify(options.body) : undefined,
     signal: options.signal,
+    // Issue #2190: without this, the browser HTTP cache can serve a stale GET
+    // response for a manual refetch (refresh button / post-publish reload),
+    // even though a full page reload would revalidate via max-age=0. Portal
+    // state (hints/scoring) must always reflect the server's current state.
+    cache: "no-store",
   };
 }
 

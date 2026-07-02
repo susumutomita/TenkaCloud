@@ -23,7 +23,16 @@
     "audit_log": "Audit log",
     "tenant_users": "Users",
     "identity_providers": "Identity providers",
+    "settings": "Settings",
     "admin_section": "Admin"
+  },
+  "settings": {
+    "header": "Feature flags",
+    "description": "Toggle runtime features for this tenant. Changes take effect immediately and are recorded in the audit log.",
+    "load_error": "Failed to load feature flags.",
+    "save_error": "Failed to update the feature flag.",
+    "readonly_notice": "Only a tenant admin can change these settings.",
+    "stability_experimental": "Experimental"
   },
   "auth": {
     "sign_out": "Sign out"

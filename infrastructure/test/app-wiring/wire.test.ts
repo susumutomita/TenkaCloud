@@ -162,4 +162,20 @@ describe("buildTenkaCloudApp", () => {
       "tenkacloud-problem-deploy -> tenkacloud-challenge-payload",
     );
   });
+
+  it("#2239: should add a participant-portal free-tier alarm only when the portal is enabled", () => {
+    const alarmIds = (app: cdk.App): string[] => {
+      const observability = app.node.children
+        .filter(cdk.Stack.isStack)
+        .find((stack) => stack.node.id === "tenkacloud-observability");
+      const freeTier = observability?.node.tryFindChild("FreeTierAlarms");
+      return freeTier ? freeTier.node.children.map((child) => child.node.id) : [];
+    };
+    // Default (portal disabled): the ternary's [] arm — no participant-portal alarm.
+    expect(alarmIds(buildApp())).not.toContain("LambdaInvocationsparticipantportal");
+    // Portal enabled: the label-bearing arm produces the deterministic construct ID.
+    expect(alarmIds(buildApp({ CDK_PARAM_ENABLE_PARTICIPANT_PORTAL: "true" }))).toContain(
+      "LambdaInvocationsparticipantportal",
+    );
+  });
 });

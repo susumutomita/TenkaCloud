@@ -8,14 +8,15 @@ export JSII_DEPRECATED := quiet
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install_ci submodule-latest build typecheck test test-coverage clean-test-outdir audit-deps before-commit \
+.PHONY: help install install_ci submodule-latest build typecheck test test-coverage clean-test-outdir audit-deps before-commit ci-local \
         lint lint-md lint-text lint-format \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
         env-check env-check-lite env-init \
         deploy deploy-saas destroy destroy-saas \
         deploy-battles destroy-battles \
-        doctor local local-up local-down local-status local-evaluate
+        dev synth check-synth \
+        doctor local local-up local-down local-status local-list local-evaluate
 
 help:
 	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
@@ -55,6 +56,23 @@ audit-deps:    ; bun run audit:dependencies
 GATE_CHECKS := lint test
 
 before-commit: $(GATE_CHECKS)
+
+# Issue #2219: `before-commit` (lint + test) is a fast pre-push sanity check, not a full CI
+# mirror — CI (.github/workflows/ci.yml) additionally runs audit-deps / the submodule pin
+# guard / coverage-gate (100% for agent-owned workspaces) / build, so a green `before-commit`
+# does not guarantee a green CI. `ci-local` runs everything CI runs, in CI's own order, minus
+# the Codecov upload step (network + secret, not meaningful to run locally).
+ci-local:
+	git fetch --no-tags origin main:refs/remotes/origin/main
+	git -C problems fetch --no-tags --unshallow origin 2>/dev/null || git -C problems fetch --no-tags origin || true
+	$(MAKE) audit-deps
+	bun run .claude/skills/quality-gates/scripts/run.ts submodule-not-behind
+	$(MAKE) lint-text
+	$(MAKE) lint-format
+	$(MAKE) typecheck
+	$(MAKE) test-coverage
+	bun run .claude/skills/quality-gates/scripts/run.ts coverage-gate
+	$(MAKE) build
 
 # ===== Lint / Fix =====
 lint:   lint-md lint-text lint-format
@@ -157,6 +175,29 @@ deploy-saas:          env-check
 destroy:              env-check-lite  ; bun run scripts/tenkacloud-lite.ts down
 destroy-saas:         env-check       ; bash scripts/cleanup.sh
 
+# ===== Local dev (no AWS) =====
+# Issue #2228: AGENTS.md "SPA dev servers" documented this target before it existed.
+# Starts all 3 SPA dev servers in parallel (admin-console :5173 / application-admin-console
+# :5174 / participant-portal :5175). Ctrl-C stops all three (bun --parallel propagates SIGINT).
+dev:
+	bun run --filter '@TenkaCloud/admin-console' --filter '@TenkaCloud/application-admin-console' --filter '@TenkaCloud/participant-portal' --parallel dev
+
+# ===== Synth (no deploy) =====
+# Issue #2228: AGENTS.md / infrastructure/bin/infrastructure.ts referenced `make check-synth`
+# and `make synth` as the offline infra-review gate before either existed.
+#   - `synth`: full CFn synth (real Lambda bundling — slow, matches what `deploy` runs).
+#   - `check-synth`: fast synth-only shape check (CDK_SKIP_BUNDLING=1 skips Docker Lambda
+#     bundling, #1446) + the IAM Description ASCII gate (#664) that only sees synth output.
+#     This is the "infra changes carry extra care" verification step AGENTS.md's Role
+#     split section points agents at.
+synth:
+	$(CDK) synth --all --quiet
+
+check-synth: export CDK_SKIP_BUNDLING := 1
+check-synth:
+	$(CDK) synth --all --quiet
+	bun run .claude/skills/quality-gates/scripts/check-synth-iam-ascii.ts
+
 # ===== Local play (Docker, no AWS) =====
 # Issue #2054: AWS 非依存の CTF コンテナ。 問題コンテナが `/verify` と採点条件を持ち、
 # TenkaCloud は採点 (participant API / portal / leaderboard / hint) だけを担う。 Kumo は撤去。
@@ -185,6 +226,7 @@ doctor:
 local:
 	@sh scripts/onboard-bootstrap.sh $(ONBOARD_FLAGS)
 	@bun run scripts/tenkacloud-onboard.ts preflight $(ONBOARD_FLAGS)
+	@echo "Playing PROBLEM=$(PROBLEM). Run 'make local-list' to see other local-play problems."
 	@set -e; \
 	$(MAKE) local-up PROBLEM="$(PROBLEM)" LOCAL_API_PORT="$(LOCAL_API_PORT)"; \
 	trap '$(MAKE) local-down' EXIT INT TERM; \
@@ -198,6 +240,11 @@ local-down:
 
 local-status:
 	@bun run scripts/tenkacloud-local.ts status
+
+# Issue #2188: list local-play problems (id / category / display name) so
+# players can pick one instead of already needing to know its id.
+local-list:
+	@bun run scripts/tenkacloud-local.ts list
 
 local-evaluate:
 	@if [ -z "$(FLAG)" ]; then \

@@ -102,9 +102,25 @@ export type SsoDeploymentLoader = (
   jobId: string,
 ) => Promise<Partial<DeploymentItem> | undefined>;
 
+/** The subset of STSClient this module actually calls (= `send`). */
+export type StsClient = Pick<STSClient, "send">;
+
 export interface SsoDeploymentDeps {
   /** Override how the deployment row is resolved. Defaults to the GSI2 team query. */
   readonly loadDeployment?: SsoDeploymentLoader;
+  /**
+   * Issue #2214: stage 1 AssumeRole client (tenant ExternalId → CompetitorDeployRole).
+   * Defaults to a real, module-level `STSClient`.
+   */
+  readonly sts?: StsClient;
+  /**
+   * Issue #2214: stage 2 AssumeRole client factory (jobId ExternalId → ParticipantViewerRole).
+   * A factory (not a fixed client) because stage 2's client must be scoped to the stage 1
+   * credentials, which differ per call. Defaults to `new STSClient({ credentials })`.
+   */
+  readonly buildParticipantClient?: (credentials: SdkCredentials) => StsClient;
+  /** HTTP client for the federation `getSigninToken` exchange. Defaults to global `fetch`. */
+  readonly fetchClient?: typeof fetch;
 }
 
 type StsCredentialShape = {
@@ -162,9 +178,9 @@ export async function getConsoleSigninUrl(
   if (!deployment) return { kind: "unauthorized" };
   const ready = validateSsoDeployment(jobId, deployment);
   if ("kind" in ready) return ready;
-  const chain = await assumeParticipantCredentials(shared, ready, jobId);
+  const chain = await assumeParticipantCredentials(shared, ready, jobId, deps);
   if (chain.kind !== "ok") return chain;
-  const signinToken = await fetchSigninToken(jobId, chain.credentials);
+  const signinToken = await fetchSigninToken(jobId, chain.credentials, deps.fetchClient ?? fetch);
   if (typeof signinToken !== "string") return signinToken;
 
   const destination = buildConsoleDestination({ region: ready.region });
@@ -300,6 +316,7 @@ async function assumeParticipantCredentials(
   shared: ParticipantSharedResources,
   ready: ReadySsoDeployment,
   jobId: string,
+  deps: SsoDeploymentDeps,
 ): Promise<AssumeChainOutcome> {
   const externalIdResult = await loadTenantExternalId(shared, ready.tenantId, jobId);
   if (externalIdResult.kind !== "ok") return externalIdResult;
@@ -308,7 +325,7 @@ async function assumeParticipantCredentials(
   // Stage 1: tenant CompetitorDeployRole を tenant ExternalId で AssumeRole。
   let competitorCredentials: SdkCredentials | undefined;
   try {
-    const competitor = await sts.send(
+    const competitor = await (deps.sts ?? sts).send(
       new AssumeRoleCommand({
         RoleArn: ready.competitorRoleArn,
         RoleSessionName: `participant-sso-${jobId}`,
@@ -325,7 +342,7 @@ async function assumeParticipantCredentials(
   // Stage 2: per-problem ParticipantViewerRole を jobId ExternalId で AssumeRole。
   let participantCredentials: SdkCredentials | undefined;
   try {
-    const session = await assumeParticipantRole(competitorCredentials, ready, jobId);
+    const session = await assumeParticipantRole(competitorCredentials, ready, jobId, deps);
     participantCredentials = toSdkCredentials(session.Credentials);
   } catch (err) {
     return assumeRoleFailure("participant_viewer", jobId, err);
@@ -358,11 +375,8 @@ async function loadTenantExternalId(
   return { kind: "assume_role_failed", stage: "competitor", reason: "Tenant ExternalId missing" };
 }
 
-function assumeParticipantRole(
-  credentials: SdkCredentials,
-  ready: ReadySsoDeployment,
-  jobId: string,
-) {
+/** Default stage-2 client factory: a fresh STSClient scoped to the stage-1 credentials. */
+function defaultParticipantClient(credentials: SdkCredentials): StsClient {
   // SDK が credentials の expiration field を見ない (= 認証には不要) ので、 stage 2 の
   // STSClient には accessKeyId / secretAccessKey / sessionToken だけ渡す。 expiration を
   // 含めると 既存テスト `toContainEqual` が 3-field の credentials object と等価判定できない。
@@ -372,7 +386,17 @@ function assumeParticipantRole(
       secretAccessKey: credentials.secretAccessKey,
       sessionToken: credentials.sessionToken,
     },
-  }).send(
+  });
+}
+
+function assumeParticipantRole(
+  credentials: SdkCredentials,
+  ready: ReadySsoDeployment,
+  jobId: string,
+  deps: SsoDeploymentDeps,
+) {
+  const client = (deps.buildParticipantClient ?? defaultParticipantClient)(credentials);
+  return client.send(
     new AssumeRoleCommand({
       RoleArn: ready.participantRoleArn,
       RoleSessionName: `${ready.problemId}-${jobId}`,
@@ -400,6 +424,7 @@ function missingSsoCredentials(stage: AssumeRoleStage, jobId: string): AssumeCha
 async function fetchSigninToken(
   jobId: string,
   credentials: SdkCredentials,
+  httpFetch: typeof fetch,
 ): Promise<string | SsoOutcome> {
   const sessionJson = JSON.stringify({
     sessionId: credentials.accessKeyId,
@@ -407,7 +432,7 @@ async function fetchSigninToken(
     sessionToken: credentials.sessionToken,
   });
   const tokenUrl = `${FEDERATION_ENDPOINT}?Action=getSigninToken&Session=${encodeURIComponent(sessionJson)}`;
-  const tokenRes = await fetch(tokenUrl, { method: "GET" });
+  const tokenRes = await httpFetch(tokenUrl, { method: "GET" });
   if (!tokenRes.ok) {
     console.error("[sso] federation endpoint non-200", {
       jobId,
@@ -460,7 +485,7 @@ export async function getCliCredentials(
     // (= validateSsoDeployment は status 系のみ返す)。
     return mapSsoOutcomeToCliOutcome(ready);
   }
-  const chain = await assumeParticipantCredentials(shared, ready, jobId);
+  const chain = await assumeParticipantCredentials(shared, ready, jobId, deps);
   if (chain.kind !== "ok") {
     logDeployTrace("portal.cli.assume_role_failed", {
       jobId,

@@ -23,7 +23,16 @@
     "audit_log": "監査ログ",
     "tenant_users": "ユーザー",
     "identity_providers": "ID プロバイダ",
+    "settings": "設定",
     "admin_section": "管理"
+  },
+  "settings": {
+    "header": "フィーチャーフラグ",
+    "description": "このテナント向けの実行機能を切り替えます。変更は即座に反映され、監査ログに記録されます。",
+    "load_error": "フィーチャーフラグの取得に失敗しました。",
+    "save_error": "フィーチャーフラグの更新に失敗しました。",
+    "readonly_notice": "この設定を変更できるのはテナント管理者のみです。",
+    "stability_experimental": "実験的機能"
   },
   "auth": {
     "sign_out": "サインアウト"

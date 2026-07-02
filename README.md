@@ -57,6 +57,8 @@ cd TenkaCloud
 make local
 ```
 
+- `make local-list` lists every local-play problem (id / category / display name)
+  so you can pick one: `make local PROBLEM=<id>`.
 - `make doctor` reports the prerequisites and changes nothing.
 - `make local YES=1` pre-approves software installs (also used by CI / automation).
   In a non-interactive run without `YES=1`, nothing is installed — the missing
