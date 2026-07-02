@@ -1,119 +1,36 @@
 /**
- * Portal API の domain 型定義。 backend `ParticipantTeamView` / `ScoreEventView` 等と
- * 1:1 で対応する shape を集約。 `dev-mock-fixtures` / `lib/category.ts` 等の
+ * Portal API の domain 型定義。 `dev-mock-fixtures` / `lib/category.ts` 等の
  * 「型のみ参照」 callers はこのファイルだけを import すれば足りるようにする。
+ *
+ * Issue #2203: backend `ParticipantTeamView` 等と 1:1 対応していた手写しミラー型は
+ * `@tenkacloud/portal-contracts` に移設し、 backend (participant-handler) と本 SPA が
+ * 同一定義を import する (= field 追加の無音ドリフト #2198 を typecheck で検出)。
+ * まだ移設していない view 型 (score-events / sso / battle-attacks / notifications /
+ * reveal-hint / endpoints 系) はこのファイルに残る — 後続 Issue で移設する。
  */
 
-export type DeploymentStatus =
-  | "PENDING"
-  // Issue #2019 / ADR-017: held by TrustBridge enforcement pending operator
-  // approval (no stack created yet). In-flight, not terminal — treated like
-  // PENDING in the portal.
-  | "APPROVAL_PENDING"
-  | "IN_PROGRESS"
-  | "COMPLETE"
-  | "FAILED"
-  | "DELETING"
-  | "DELETED"
-  | "EXPIRED"
-  | "AUTO_DELETED";
+export {
+  type ApplicationStatus,
+  type ApplicationStatusOverall,
+  type DeploymentLogEntry,
+  type DeploymentLogView,
+  type DeploymentStatus,
+  type LeaderboardEntry,
+  type LeaderboardResponse,
+  type MultiFlagEntryView,
+  type ParticipantEventGate,
+  type ParticipantHintView,
+  type ParticipantProblemView,
+  type ParticipantScoringInfo,
+  type ParticipantTeamView,
+  type ProblemTextI18n,
+  type ScoringKind,
+  type SubmitFlagOutcome,
+  type TargetAccessCapability,
+  TERMINAL_STATUSES,
+} from "@tenkacloud/portal-contracts";
 
-export const TERMINAL_STATUSES: ReadonlySet<DeploymentStatus> = new Set([
-  "COMPLETE",
-  "FAILED",
-  "DELETED",
-  "EXPIRED",
-  "AUTO_DELETED",
-]);
-
-/**
- * ADR-012 で定義された 5 種の builtin scoring kind。
- * Phase 1 (旧 view) は flag / uptime のみだったが、 Phase 3 で phased-polling /
- * uptime-flat / uptime-multi / attack-detection が追加された。
- * UI 表示 (= categoryOf) は ADR-005 で Battle / Challenge の 2 軸に collapse する。
- */
-export type ScoringKind =
-  | "flag"
-  | "multi-flag"
-  | "uptime"
-  | "uptime-flat"
-  | "uptime-multi"
-  | "phased-polling"
-  | "attack-detection";
-
-/**
- * Issue #1796: multi-flag の 1 sub-flag の view (= backend `ParticipantScoringInfo.flags[]` と
- * 同じ shape)。 正解値 (flagOutputKey の値) は含めない (= 答えを漏らさない)。 `solved` は team の
- * 解済 flag id 集合に含まれるかで判定済み。
- */
-export interface MultiFlagEntryView {
-  readonly id: string;
-  readonly label: string;
-  readonly points: number;
-  readonly solved: boolean;
-  /**
-   * [#2252] multi-verify (local-play) の per-check hints。 AWS multi-flag は現状
-   * 送らない (= optional、 既存問題に影響なし)。 shape は問題レベルの hints と同一で、
-   * reveal も既存 flat route (`/problems/:id/hints/:hintId/reveal`) を使う。
-   */
-  readonly hints?: readonly ParticipantHintView[];
-  /** [#2252] `i18n.en.checks[]` 由来の label 訳。 配点・ID は翻訳側に重複させない。 */
-  readonly i18n?: { readonly en?: { readonly label?: string } };
-}
-
-/**
- * Issue #742 Phase 4: progressive hint view shape (= backend
- * `ParticipantHintView` と同じ)。 revealed=false な hint は content 不在 (= 答えを
- * frontend に漏らさない)、 revealed=true は content + revealedAt を含む。
- */
-export interface ParticipantHintView {
-  readonly id: string;
-  readonly penalty: number;
-  readonly revealed: boolean;
-  readonly content?: string;
-  readonly revealedAt?: string;
-  /**
-   * #2054 i18n: locale override of `content` (en only; ja is the canonical
-   * `content`). Present only once the hint is revealed, mirroring `content`.
-   */
-  readonly i18n?: { readonly en?: { readonly content?: string } };
-}
-
-export interface ParticipantScoringInfo {
-  readonly kind: ScoringKind;
-  readonly points?: number;
-  readonly pointsPerSuccess?: number;
-  readonly hints?: readonly ParticipantHintView[];
-  readonly flagSubmitted?: boolean;
-  /** Issue #1796: multi-flag の sub-flag 一覧 (= N 個の提出欄を出すための view)。 */
-  readonly flags?: readonly MultiFlagEntryView[];
-}
-
-/**
- * Battle (uptime kind) の集約 health (ADR-005 D1)。per-endpoint URL / 名前は **絶対に
- * 露出しない** (= ゲーム性のため)。Challenge (flag kind) では undefined。
- */
-export type ApplicationStatusOverall = "healthy" | "degraded" | "down" | "unknown";
-
-export interface ApplicationStatus {
-  readonly overall: ApplicationStatusOverall;
-  readonly healthyCount: number;
-  readonly totalCount: number;
-  readonly checkedAt?: string;
-}
-
-export interface DeploymentLogEntry {
-  readonly id: string;
-  readonly timestamp: string;
-  readonly source: "deployment" | "codebuild";
-  readonly level: "info" | "success" | "warning" | "error";
-  readonly message: string;
-}
-
-export interface DeploymentLogView {
-  readonly cursor: string;
-  readonly entries: readonly DeploymentLogEntry[];
-}
+import type { DeploymentLogEntry } from "@tenkacloud/portal-contracts";
 
 export interface DeployLogsResponse {
   readonly jobId: string;
@@ -122,107 +39,6 @@ export interface DeployLogsResponse {
   readonly nextToken?: string;
   readonly entries: readonly Omit<DeploymentLogEntry, "level">[];
 }
-
-/**
- * #2054 i18n: competitor-facing problem text translated into a non-default
- * locale (en). The default language (ja) lives in the top-level fields.
- */
-export interface ProblemTextI18n {
-  readonly name?: string;
-  readonly description?: string;
-  readonly instructions?: string;
-}
-
-/**
- * Phase 2c: 1 problem 単位の view (= team の N 問題のうち 1 つ)。
- */
-export interface ParticipantProblemView {
-  readonly jobId: string;
-  readonly problemId: string;
-  /**
-   * #1975: 問題文 (metadata.json 由来)。 local mode の Participant API は同梱して返すので、
-   * portal は「何の問題か / 何をすべきか」 を表示できる。 AWS mode の participant-handler は
-   * まだ返さない (= 別 follow-up) ため optional。 不在時は problemId を title に fall back する。
-   */
-  readonly name?: string;
-  readonly description?: string;
-  readonly instructions?: string;
-  /**
-   * #2054 i18n: locale override of name/description/instructions (en only; ja is
-   * the canonical top-level value). The portal's locale switcher resolves the
-   * displayed text via `localizeProblem`. Absent when no translation is shipped.
-   */
-  readonly i18n?: { readonly en?: ProblemTextI18n };
-  readonly region: string;
-  /** 競技アカウント ID。SSO Credentials の AWS Console federation で使う。 */
-  readonly awsAccountId: string;
-  /**
-   * [#2233] 問題が動く cloud provider。canonical 値は "aws" | "sakura" | "azure" | "gcp"。
-   * backend (participant-handler lookup) は常に返すが、旧 backend 応答との互換のため
-   * optional (不在 = aws。= 行契約と同じ legacy 既定、`problemProvider()` で解決する)。
-   * 未知値は raw 表示 fallback (`providerLabel()`)。
-   */
-  readonly provider?: string;
-  readonly status: DeploymentStatus;
-  readonly stackOutputs: Record<string, string>;
-  readonly failureReason?: string;
-  readonly expiresAt: number;
-  readonly score: number;
-  readonly lastScoredAt?: string;
-  readonly lastResult?: "ok" | "fail";
-  readonly posture?: Record<string, boolean>;
-  readonly platform?: string;
-  readonly scoring?: ParticipantScoringInfo;
-  readonly deployLog: DeploymentLogView;
-  /** Issue #607: deploy 開始時刻 (DDB.createdAt の echo)。 portal の phase countdown が
-   *  metadata.phases / disruptions の afterMinutes との差で残時間を計算する。 deploy 中の
-   *  PENDING / IN_PROGRESS でも present。 */
-  readonly createdAt?: string;
-  /** ADR-005 Phase 3.1: Battle (uptime) のみ aggregate health を露出。 */
-  readonly applicationStatus?: ApplicationStatus;
-}
-
-/**
- * Issue #1038 P0 #2: 競技開始前 / 終了 / 一時停止 の gate 状態を backend が
- * 計算して返す (= participant-handler `/portal/me`)。
- *
- * frontend は `kind: "scoring_not_started"` のとき ProblemDetail page を lock screen
- * (= 「競技開始前です」 表示) に切り替える。 backend 側で fail-closed を担保するので
- * eventId 不在 / gate 取得失敗時も "scoring_not_started" が返り、 不正アクセスを防ぐ。
- */
-export type ParticipantEventGate =
-  | { readonly kind: "ok" }
-  | { readonly kind: "scoring_not_started"; readonly startsAt?: string }
-  | { readonly kind: "scoring_ended"; readonly endsAt?: string }
-  | { readonly kind: "scoring_locked" };
-
-/**
- * Phase 2c: team の集約 view。1 teamLoginKey で event 内の N 問題を引ける。
- *
- * 設計判断: per-endpoint health (どの endpoint が落ちているか) は participant API には
- * 出さない。Battle のゲーム性 = 「なぜ壊れているかを防御側自身が調査して回復する」。
- */
-export interface ParticipantTeamView {
-  readonly team: {
-    readonly teamName: string;
-    readonly teamNameSetByCompetitor: boolean;
-    readonly eventId?: string;
-    readonly teamId?: string;
-  };
-  readonly problems: readonly ParticipantProblemView[];
-  /** Issue #1038 P0 #2: event gate (= 競技開始前 / 終了 / lock 中) status。 */
-  readonly eventGate?: ParticipantEventGate;
-}
-
-export type SubmitFlagOutcome =
-  /** Issue #1796: multi-flag のとき、 どの sub-flag が解けたかを示す `flagId` を含む。 */
-  | { kind: "ok"; scoreDelta: number; totalScore: number; flagId?: string }
-  | { kind: "already_scored"; totalScore: number }
-  /**
-   * Issue #817: 不正解。 問題 metadata に `wrongAnswerPenalty` が設定されていれば
-   * `scoreDelta` は負数 (= 減点)。 設定されていなければ 0。 wrongCount は累計試行回数。
-   */
-  | { kind: "wrong"; scoreDelta: number; totalScore: number; wrongCount: number };
 
 export type AssumeRoleStage = "competitor" | "participant_viewer";
 
@@ -242,34 +58,6 @@ export interface ScoreEventView {
 
 export interface ScoreEventsResponse {
   readonly entries: readonly ScoreEventView[];
-}
-
-/**
- * Phase 3: Event scope の team ランキング (= Scoreboard)。
- * 同じ event 内の全 team を score 降順 + 同点は teamName 昇順で並べた配列を返す。
- */
-export interface LeaderboardEntry {
-  readonly rank: number;
-  readonly teamId: string;
-  readonly teamName: string;
-  readonly score: number;
-  readonly completedProblems: number;
-  readonly totalProblems: number;
-  /** requester 自身のチームなら true (UI ハイライト用)。 */
-  readonly isMyTeam: boolean;
-}
-
-export interface LeaderboardResponse {
-  readonly eventId: string;
-  readonly entries: readonly LeaderboardEntry[];
-  /**
-   * Issue #1038 P1 #9: scoreboard freeze (= 終了 30 分前から最終結果まで順位非公開)。
-   * true なら frontend は entries を隠して「凍結中」 メッセージを表示する (= 終盤の
-   * 駆け込み防止 + 競技公平性)。
-   */
-  readonly scoreboardFrozen?: boolean;
-  /** event の終了予定時刻 (ISO 8601、 UI で「あと N 分で公開」 表示用)。 */
-  readonly endsAt?: string;
 }
 
 /**
