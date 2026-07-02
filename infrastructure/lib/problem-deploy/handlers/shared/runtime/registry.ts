@@ -2,15 +2,18 @@
  * [ADR-023 / Issue #1268] Adapter registry / selector.
  *
  * Maps a normalized `ProblemRuntime` to the concrete adapter that knows how
- * to drive that provider/engine. Phase 1: only `aws/cloudformation` is
- * registered. Any other combination throws `RuntimeNotSupportedError`.
+ * to drive that provider/engine. `aws/cloudformation` is always executable;
+ * `sakura/apprun`, `azure/bicep`, `gcp/infra-manager` (ADR-026/027, #1410-#1412)
+ * are executable when the deploy handler wired their account-gated context
+ * (per-team credential + provider client) — without it they fall through to
+ * `RuntimeNotSupportedError` with a roadmap-aware message. Anything else throws
+ * as a likely typo.
  *
  * The registry is intentionally not a public map (= no module-level
  * `register(adapter)` API) because:
- *   - Phase 1 has exactly one adapter; a Map would be over-engineering.
- *   - Adding a second adapter is its own PR with its own ADR amendment, at
- *     which point we revisit the data structure.
- *   - A static switch makes the supported set greppable / auditable.
+ *   - A static if-chain keeps the supported set greppable / auditable.
+ *   - Whether a non-AWS provider is executable is a per-deployment wiring
+ *     question (`deps.<provider>` present?), not a static registration question.
  */
 
 import {

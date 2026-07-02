@@ -259,6 +259,43 @@ describe("utility builders", () => {
     expect(openConsole).toHaveBeenCalledWith("job-2");
   });
 
+  it("[#2234] should exclude non-AWS problems from the console utility (provider gate)", () => {
+    const openConsole = vi.fn();
+    const navigate = vi.fn();
+    const u = buildConsoleUtility(
+      [
+        { jobId: "job-aws", problemId: "p-aws", awsAccountId: "111122223333" },
+        // 非 AWS 行も deploy request 由来の awsAccountId を持つ — provider でゲートされること
+        {
+          jobId: "job-skr",
+          problemId: "p-sakura",
+          awsAccountId: "111122223333",
+          provider: "sakura",
+        },
+      ],
+      openConsole,
+      navigate,
+      (k) => k,
+    ) as ButtonUtil;
+    // aws 1 件だけが consolable → dropdown ではなく単一 button でその問題を開く
+    u.onClick?.({} as never);
+    expect(openConsole).toHaveBeenCalledWith("job-aws");
+  });
+
+  it("[#2234] should route to the SSO page when only non-AWS problems are deployed", () => {
+    const openConsole = vi.fn();
+    const navigate = vi.fn();
+    const u = buildConsoleUtility(
+      [{ jobId: "job-gcp", problemId: "p-gcp", awsAccountId: "111122223333", provider: "gcp" }],
+      openConsole,
+      navigate,
+      (k) => k,
+    ) as ButtonUtil;
+    u.onClick?.({} as never);
+    expect(navigate).toHaveBeenCalledWith("/tools/sso");
+    expect(openConsole).not.toHaveBeenCalled();
+  });
+
   it("should navigate for internal links and defer to the browser for external ones", () => {
     const navigate = vi.fn();
     const preventDefault = vi.fn();
