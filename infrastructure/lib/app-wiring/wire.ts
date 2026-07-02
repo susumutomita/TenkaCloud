@@ -182,6 +182,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       // ignore するため、 pooled / silo どちらでも同 env を渡してよい (ADR-018 と整合)。
       samlIdps: config.tenantSamlIdps,
       samlAdminAllowlist: config.tenantSamlAdminAllowlist,
+      // Issue #2230 (ADR-035): deploy 時 feature flag override を runtime-config に焼く。
+      features: config.features,
     },
   );
   cdk.Tags.of(tenantTemplateStack).add("TenantId", config.tenantId);
@@ -339,6 +341,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       // Issue #1335 Phase 1: SAML HRD directory (domain → providerName[])。 admin-console Login が
       // email から候補 IdP を解決して `identity_provider=` を組み立てる (= 公開 metadata、 非秘匿)。
       samlIdpDirectory: controlPlaneStack.samlIdpDirectory,
+      // Issue #2230 (ADR-035): deploy 時 feature flag override (admin-console 側 registry 用)。
+      features: config.features,
     },
   );
   cdk.Aspects.of(adminConsoleRuntimeConfigStack).add(new DestroyPolicySetter());

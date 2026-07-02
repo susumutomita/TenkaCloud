@@ -68,6 +68,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   const challengePayload = resolveChallengePayload(env, config, environment);
   const deployConcurrentBuildLimit = resolveDeployConcurrentBuildLimit(env);
   const deployQuotaByTier = resolveDeployQuotaByTier(env);
+  const features = resolveFeatures(env);
 
   // Issue #1031: 旧 `CDK_PARAM_ADMIN_CONSOLE_ORIGIN` env 直読みは廃止。 admin-console-hosting
   // が先に立ち、 cross-stack ref で control-plane / admin-console-insight に流れる。
@@ -118,6 +119,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     customDomains: config?.customDomains,
     deployConcurrentBuildLimit,
     deployQuotaByTier,
+    features,
     controlPlaneSamlIdps,
     controlPlaneSamlAdminAllowlist,
     tenantSamlIdps,
@@ -330,6 +332,37 @@ function resolveDeployConcurrentBuildLimit(env: NodeJS.ProcessEnv): number | und
  */
 function resolveDeployQuotaByTier(env: NodeJS.ProcessEnv) {
   return parseDeployQuota(env.CDK_PARAM_DEPLOY_QUOTA_BY_TIER);
+}
+
+/**
+ * Issue #2230 (ADR-035): `CDK_PARAM_FEATURES` (JSON) を synth 時に検証して SPA feature flag
+ * の deploy 時 override にする。壊れた値を runtime-config.json まで持ち越さないため、
+ * JSON でない / object でない / boolean 以外の値はここで fail loudly する
+ * (= SPA 側 `resolveFeatureFlags` は tolerant だが、deploy 入力の誤りは synth で止める)。
+ * 未設定は undefined (= runtime-config に `features` key を書かない)。
+ */
+export function resolveFeatures(
+  env: NodeJS.ProcessEnv,
+): Readonly<Record<string, boolean>> | undefined {
+  const raw = env.CDK_PARAM_FEATURES;
+  if (raw === undefined || raw.trim() === "") return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`CDK_PARAM_FEATURES は JSON object で指定してください (got: ${raw})`);
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`CDK_PARAM_FEATURES は JSON object で指定してください (got: ${raw})`);
+  }
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value !== "boolean") {
+      throw new Error(
+        `CDK_PARAM_FEATURES の "${key}" は boolean で指定してください (got: ${JSON.stringify(value)})`,
+      );
+    }
+  }
+  return parsed as Readonly<Record<string, boolean>>;
 }
 
 function resolveBudgetConfig(

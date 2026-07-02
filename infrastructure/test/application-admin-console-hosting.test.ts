@@ -167,6 +167,12 @@ describe("ApplicationAdminConsoleHosting", () => {
       template.resourceCountIs("AWS::CloudFront::Distribution", 1);
     });
 
+    it("Issue #2230: features 未設定なら features key 自体を書かない (= 旧 runtime-config と互換)", () => {
+      const { stack } = synthWithRuntimeConfig();
+      const json = readRuntimeConfigJson(stack);
+      expect("features" in json).toBe(false);
+    });
+
     it("Issue #458 後: runtime-config.json に deployApiUrl は出ない (Deploy 系 endpoint は apiUrl に統合)", () => {
       const { stack } = synthWithRuntimeConfig();
       const json = readRuntimeConfigJson(stack);
@@ -177,5 +183,39 @@ describe("ApplicationAdminConsoleHosting", () => {
       expect(json.tenantName).toBeDefined();
       expect(json.apiUrl).toBeDefined();
     });
+  });
+});
+
+describe("Issue #2230 (ADR-035): features を渡して deployRuntimeConfig を呼んだとき", () => {
+  it("should bake the features map into runtime-config.json", () => {
+    // 共有 CDK_OUTDIR を他 fixture の asset と共有すると誤読するため、専用 outdir で synth する。
+    const outdirBase = process.env.CDK_OUTDIR ?? path.join(__dirname, "..", "cdk.out.test");
+    fs.mkdirSync(outdirBase, { recursive: true });
+    const outdir = fs.mkdtempSync(path.join(outdirBase, "features-test-"));
+    const app = new cdk.App({ outdir });
+    const stack = new cdk.Stack(app, "FeaturesTestStack");
+    const hosting = new ApplicationAdminConsoleHosting(stack, "Hosting", {
+      tenantId: "tenant-1",
+    });
+    hosting.deployRuntimeConfig({
+      cognitoDomain: "https://example.auth.ap-northeast-1.amazoncognito.com",
+      cognitoClientId: "test-client",
+      tenantId: "tenant-1",
+      tenantName: "Acme Manufacturing Division",
+      apiUrl: "https://abc.execute-api.ap-northeast-1.amazonaws.com/prod/",
+      isolation: "silo",
+      samlIdpDirectory: {},
+      features: { nonAwsRuntime: true, redTeam: false },
+    });
+    const assemblyDir = app.synth().directory;
+    const assetDir = fs
+      .readdirSync(assemblyDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name.startsWith("asset."))
+      .map((d) => path.join(assemblyDir, d.name, "runtime-config.json"))
+      .find((candidate) => fs.existsSync(candidate));
+    if (!assetDir) throw new Error("runtime-config.json asset not found");
+    const json = JSON.parse(fs.readFileSync(assetDir, "utf-8")) as Record<string, unknown>;
+    expect(json.features).toEqual({ nonAwsRuntime: true, redTeam: false });
+    expect(json.isolation).toBe("silo");
   });
 });
