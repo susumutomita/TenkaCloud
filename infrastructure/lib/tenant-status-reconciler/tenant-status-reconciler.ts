@@ -1,17 +1,11 @@
 import * as path from "node:path";
-import { Duration, RemovalPolicy } from "aws-cdk-lib";
+import { Duration } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
-import { Architecture } from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
-import {
-  LAMBDA_NODEJS_BUNDLING_TARGET,
-  LAMBDA_NODEJS_RUNTIME,
-  LAMBDA_SOURCE_MAP_ENABLED,
-} from "../utils/lambda-runtime.js";
+import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 
 export interface TenantStatusReconcilerProps {
   /**
@@ -42,25 +36,13 @@ export class TenantStatusReconciler extends Construct {
   constructor(scope: Construct, id: string, props: TenantStatusReconcilerProps) {
     super(scope, id);
 
-    this.fn = new NodejsFunction(this, "Function", {
-      logGroup: new LogGroup(this, "FunctionLogGroup", {
-        removalPolicy: RemovalPolicy.DESTROY,
-      }),
-      runtime: LAMBDA_NODEJS_RUNTIME,
-      architecture: Architecture.ARM_64,
+    this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "handlers/handler.ts"),
-      handler: "handler",
       timeout: Duration.seconds(60),
       memorySize: 256,
       environment: {
         TENANT_MAPPING_TABLE_NAME: props.tenantMappingTable.tableName,
         NODE_OPTIONS: "--enable-source-maps",
-      },
-      bundling: {
-        minify: true,
-        target: LAMBDA_NODEJS_BUNDLING_TARGET,
-        sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
-        externalModules: [],
       },
     });
     props.tenantMappingTable.grantReadWriteData(this.fn);

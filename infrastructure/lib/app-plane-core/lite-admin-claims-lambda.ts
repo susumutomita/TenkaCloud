@@ -1,16 +1,10 @@
 import * as path from "node:path";
-import { Duration, RemovalPolicy } from "aws-cdk-lib";
+import { Duration } from "aws-cdk-lib";
 import type { UserPool } from "aws-cdk-lib/aws-cognito";
 import { LambdaVersion, UserPoolOperation } from "aws-cdk-lib/aws-cognito";
-import { Architecture } from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
-import {
-  LAMBDA_NODEJS_BUNDLING_TARGET,
-  LAMBDA_NODEJS_RUNTIME,
-  LAMBDA_SOURCE_MAP_ENABLED,
-} from "../utils/lambda-runtime.js";
+import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 
 export interface LiteAdminClaimsLambdaProps {
   /**
@@ -49,14 +43,8 @@ export class LiteAdminClaimsLambda extends Construct {
   constructor(scope: Construct, id: string, props: LiteAdminClaimsLambdaProps) {
     super(scope, id);
 
-    this.fn = new NodejsFunction(this, "Function", {
-      logGroup: new LogGroup(this, "FunctionLogGroup", {
-        removalPolicy: RemovalPolicy.DESTROY,
-      }),
-      runtime: LAMBDA_NODEJS_RUNTIME,
-      architecture: Architecture.ARM_64,
+    this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "./handlers/pre-token-generation/index.ts"),
-      handler: "handler",
       // Cognito Pre-Token Generation trigger は sync invoke で 5s が上限。 Lambda の
       // timeout を 5s に揃え、 cold start で trigger が timeout して JWT 発行が失敗する
       // 経路を避ける (= warm 化された後は数 ms で完了)。
@@ -64,12 +52,6 @@ export class LiteAdminClaimsLambda extends Construct {
       memorySize: 128,
       environment: {
         NODE_OPTIONS: "--enable-source-maps",
-      },
-      bundling: {
-        minify: true,
-        target: LAMBDA_NODEJS_BUNDLING_TARGET,
-        sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
-        externalModules: [],
       },
     });
 
