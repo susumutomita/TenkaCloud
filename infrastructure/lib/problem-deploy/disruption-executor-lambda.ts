@@ -1,18 +1,12 @@
 import * as path from "node:path";
-import { ArnFormat, Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
+import { ArnFormat, Duration, Stack } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { type IEventBus, Rule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import * as iam from "aws-cdk-lib/aws-iam";
-import { Architecture } from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
-import {
-  LAMBDA_NODEJS_BUNDLING_TARGET,
-  LAMBDA_NODEJS_RUNTIME,
-  LAMBDA_SOURCE_MAP_ENABLED,
-} from "../utils/lambda-runtime.js";
+import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface DisruptionExecutorLambdaProps {
@@ -81,19 +75,13 @@ export class DisruptionExecutorLambda extends Construct {
       },
     });
 
-    this.fn = new NodejsFunction(this, "Function", {
+    this.fn = defineNodejsFunction(this, {
       functionName,
       // functionName は self-invoke ARN 構築のため固定だが、 log group 名は AUTO にする。
       // `/aws/lambda/<functionName>` を明示すると、 既に deploy 済の環境で Lambda が auto 作成した
       // 同名 log group と "already exists" 衝突を起こし deploy が失敗する。 Lambda は LoggingConfig
       // 経由でこの明示 group に書くので機能は不変、 旧 auto group は孤立するだけ (retention は Aspect)。
-      logGroup: new LogGroup(this, "FunctionLogGroup", {
-        removalPolicy: RemovalPolicy.DESTROY,
-      }),
-      runtime: LAMBDA_NODEJS_RUNTIME,
-      architecture: Architecture.ARM_64,
       entry: path.resolve(import.meta.dirname, "handlers/disruption-executor-handler/index.ts"),
-      handler: "handler",
       timeout: Duration.seconds(60),
       memorySize: 512,
       environment: {
@@ -103,17 +91,11 @@ export class DisruptionExecutorLambda extends Construct {
         EXECUTOR_FUNCTION_ARN: executorArn,
         NODE_OPTIONS: "--enable-source-maps",
       },
-      bundling: {
-        minify: true,
-        target: LAMBDA_NODEJS_BUNDLING_TARGET,
-        sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
-        externalModules: [],
-        // disruptions catalog (action 込) を build 時 literal 置換 (env 4KB 回避、 fire と同 catalog)。
-        define: {
-          "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
-            JSON.stringify(props.problemsDisruptions ?? {}),
-          ),
-        },
+      // disruptions catalog (action 込) を build 時 literal 置換 (env 4KB 回避、 fire と同 catalog)。
+      bundlingDefine: {
+        "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
+          JSON.stringify(props.problemsDisruptions ?? {}),
+        ),
       },
     });
 

@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import {
   ManagedPolicy,
@@ -8,20 +8,10 @@ import {
   Role,
   ServicePrincipal,
 } from "aws-cdk-lib/aws-iam";
-import {
-  Architecture,
-  type FunctionUrl,
-  FunctionUrlAuthType,
-  HttpMethod,
-} from "aws-cdk-lib/aws-lambda";
-import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { LogGroup } from "aws-cdk-lib/aws-logs";
+import { type FunctionUrl, FunctionUrlAuthType, HttpMethod } from "aws-cdk-lib/aws-lambda";
+import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
-import {
-  LAMBDA_NODEJS_BUNDLING_TARGET,
-  LAMBDA_NODEJS_RUNTIME,
-  LAMBDA_SOURCE_MAP_ENABLED,
-} from "../utils/lambda-runtime.js";
+import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface ParticipantPortalLambdaProps {
@@ -160,14 +150,8 @@ export class ParticipantPortalLambda extends Construct {
       ],
     });
 
-    this.fn = new NodejsFunction(this, "Function", {
-      logGroup: new LogGroup(this, "FunctionLogGroup", {
-        removalPolicy: RemovalPolicy.DESTROY,
-      }),
-      runtime: LAMBDA_NODEJS_RUNTIME,
-      architecture: Architecture.ARM_64,
+    this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "handlers/participant-handler/index.ts"),
-      handler: "handler",
       // 巨大 bundle (= externalModules:[] で AWS SDK / Hono / zod を全部内包、 約 33MB) の
       // cold start init が Lambda の 10s INIT 予算を超えると、 init が invoke phase に持ち越され
       // function timeout に達して 502 (`INIT_REPORT ... Phase: invoke Status: timeout`)。 sign-in が
@@ -188,20 +172,14 @@ export class ParticipantPortalLambda extends Construct {
         DEPLOY_ENVIRONMENT: props.environmentName,
         NODE_OPTIONS: "--enable-source-maps",
       },
-      bundling: {
-        minify: true,
-        target: LAMBDA_NODEJS_BUNDLING_TARGET,
-        sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
-        externalModules: [],
-        // Issue #1158: 旧 #810 の gzip+base64 env 圧縮では問題追加で 4 KB を再度超える。
-        // esbuild define で build 時に literal 置換し env を 0 化する。 handler は
-        // process.env を読む既存コードのまま (= build 後に literal JSON が埋まる)。
-        define: {
-          "process.env.BATTLE_PROBLEMS_SCORING": JSON.stringify(
-            JSON.stringify(props.problemsScoring),
-          ),
-          "process.env.PROBLEM_ENDPOINTS": JSON.stringify(JSON.stringify(props.problemsEndpoints)),
-        },
+      // Issue #1158: 旧 #810 の gzip+base64 env 圧縮では問題追加で 4 KB を再度超える。
+      // esbuild define で build 時に literal 置換し env を 0 化する。 handler は
+      // process.env を読む既存コードのまま (= build 後に literal JSON が埋まる)。
+      bundlingDefine: {
+        "process.env.BATTLE_PROBLEMS_SCORING": JSON.stringify(
+          JSON.stringify(props.problemsScoring),
+        ),
+        "process.env.PROBLEM_ENDPOINTS": JSON.stringify(JSON.stringify(props.problemsEndpoints)),
       },
     });
 

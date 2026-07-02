@@ -1,5 +1,6 @@
 import type { Duration } from "aws-cdk-lib";
 import { RemovalPolicy } from "aws-cdk-lib";
+import type { IRole } from "aws-cdk-lib/aws-iam";
 import { Architecture } from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { LogGroup } from "aws-cdk-lib/aws-logs";
@@ -27,6 +28,14 @@ import {
 export interface DefineNodejsFunctionProps {
   /** handler entry point (`path.resolve(import.meta.dirname, "handlers/.../index.ts")`)。 */
   readonly entry: string;
+  /**
+   * 物理 Lambda 名の固定 (例: disruption-executor の self-invoke ARN 構築)。
+   * 通常は未指定 (= CFn 自動命名)。 log group 名は固定しない (= 明示すると deploy 済み環境で
+   * Lambda auto 作成の同名 group と "already exists" 衝突するため、 group は AUTO のまま)。
+   */
+  readonly functionName?: string;
+  /** 事前作成した実行 role を使う場合のみ指定 (例: self-invoke の循環参照回避)。未指定なら auto。 */
+  readonly role?: IRole;
   /** Lambda env。呼び出し元の現行値をそのまま渡す (NODE_OPTIONS の有無も呼び出し元が決める)。 */
   readonly environment: Record<string, string>;
   readonly timeout: Duration;
@@ -40,6 +49,8 @@ export function defineNodejsFunction(
   props: DefineNodejsFunctionProps,
 ): NodejsFunction {
   return new NodejsFunction(scope, "Function", {
+    ...(props.functionName ? { functionName: props.functionName } : {}),
+    ...(props.role ? { role: props.role } : {}),
     logGroup: new LogGroup(scope, "FunctionLogGroup", {
       removalPolicy: RemovalPolicy.DESTROY,
     }),
