@@ -57,7 +57,7 @@ export type RuntimeMetadataInput = {
   readonly cfnTemplate?: unknown;
 };
 
-/** The only provider/engine the platform can execute today (ADR-023 D4). */
+/** The always-executable provider/engine (ADR-023 D4) — needs no per-team provider credential. */
 export const EXECUTABLE_PROVIDER = "aws" as const;
 export const EXECUTABLE_ENGINE = "cloudformation" as const;
 
@@ -70,10 +70,12 @@ export const MAX_COMPOSITE_TARGETS = 8;
 
 /**
  * [ADR-026 / ADR-027] Provider/engine pairs the metadata layer recognizes as
- * **planned** (a real roadmap provider) but that are **not yet executable** (no
- * adapter registered). Distinguishing these from a typo lets the deploy worker
- * and the validator point authors at the tracker (#1408) instead of failing
- * generically. Each engine PR moves its pair out of this set as it ships.
+ * real roadmap providers. Their adapters ship with the platform (#1410-#1412),
+ * but a deployment is executable only when the deploy handler wired that
+ * provider's **account-gated context** (per-team credential + client). Absent
+ * that context, the "reserved" classification lets the deploy worker and the
+ * validator point authors/operators at the credential setup guide instead of
+ * failing generically as a typo.
  */
 export const RESERVED_RUNTIMES: readonly { readonly provider: string; readonly engine: string }[] =
   [

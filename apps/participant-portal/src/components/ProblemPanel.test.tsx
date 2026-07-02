@@ -387,7 +387,7 @@ describe("ProblemPanel render branches", () => {
     expect(link).toHaveAttribute("href", "https://app.example.com");
     expect(screen.getAllByRole("link")).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole("button", { name: /Stack Outputs/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Deployment outputs/ }));
     expect(screen.getByText("arn:aws:iam::1:role/x")).toBeInTheDocument();
     expect(screen.getByText("tc-x402-paywall-team-1")).toBeInTheDocument();
   });
@@ -402,7 +402,7 @@ describe("ProblemPanel render branches", () => {
     });
 
     expect(screen.queryByText(/Access URLs|アクセス先 URL/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Stack Outputs/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Deployment outputs/ }));
     expect(screen.getByText("tc-no-url")).toBeInTheDocument();
     expect(screen.getByText("/tc-no-url/endpoint")).toBeInTheDocument();
   });
