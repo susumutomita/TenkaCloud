@@ -80,6 +80,7 @@ describe("loadContainerProblem", () => {
     expect(problem.verifyUrl).toBe("http://127.0.0.1:18081/verify");
     expect(problem.secretEnv).toEqual(["FLAG_SEED"]);
     expect(problem.scoring).toEqual({
+      kind: "verify",
       points: 200,
       wrongAnswerPenalty: 10,
       hints: [{ id: "hint-1", content: "Try a quote.", penalty: 0 }],
@@ -107,7 +108,12 @@ describe("loadContainerProblem", () => {
     expect(problem.description).toBe("");
     expect(problem.instructions).toBe("");
     expect(problem.secretEnv).toEqual([]);
-    expect(problem.scoring).toEqual({ points: 100, wrongAnswerPenalty: 0, hints: [] });
+    expect(problem.scoring).toEqual({
+      kind: "verify",
+      points: 100,
+      wrongAnswerPenalty: 0,
+      hints: [],
+    });
   });
 
   it("should reject a non-verify scoring kind", () => {
@@ -336,5 +342,111 @@ describe("manifest loader against the real filesystem", () => {
     expect(problem.problemId).toBe("fixture-problem");
     expect(problem.composeProjectName).toBe("tc-local-fixture-problem");
     expect(problem.scoring.points).toBe(150);
+  });
+});
+
+describe("loadContainerProblem: multi-verify (issue #2252)", () => {
+  const check = (over: Record<string, unknown> = {}) => ({
+    id: "public-backup",
+    label: "公開バックアップ",
+    points: 50,
+    ...over,
+  });
+  const multiVerify = (checks: unknown[], i18nChecks?: unknown[]) =>
+    fixture({
+      scoring: { kind: "multi-verify", checks },
+      ...(i18nChecks ? { i18n: { en: { name: "WP Ops", checks: i18nChecks } } } : {}),
+    });
+
+  it("should parse checks with per-check penalty/hints and compute totalPoints", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      multiVerify([
+        check({
+          wrongAnswerPenalty: 5,
+          hints: [{ id: "h-backup", content: "公開パスを確認する", penalty: 2 }],
+        }),
+        check({ id: "weak-admin-pw", label: "弱い管理者パスワード", points: 70 }),
+      ]),
+    );
+    expect(problem.scoring).toEqual({
+      kind: "multi-verify",
+      totalPoints: 120,
+      checks: [
+        {
+          id: "public-backup",
+          label: "公開バックアップ",
+          points: 50,
+          wrongAnswerPenalty: 5,
+          hints: [{ id: "h-backup", content: "公開パスを確認する", penalty: 2 }],
+        },
+        {
+          id: "weak-admin-pw",
+          label: "弱い管理者パスワード",
+          points: 70,
+          wrongAnswerPenalty: 0,
+          hints: [],
+        },
+      ],
+    });
+  });
+
+  it("should overlay i18n.en.checks label + hint content by id (scoring stays top-level)", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      multiVerify(
+        [check({ hints: [{ id: "h-backup", content: "公開パスを確認する", penalty: 0 }] })],
+        [
+          {
+            id: "public-backup",
+            label: "Public backup",
+            hints: [{ id: "h-backup", content: "Check the public path" }],
+          },
+        ],
+      ),
+    );
+    expect(problem.scoring.kind).toBe("multi-verify");
+    if (problem.scoring.kind !== "multi-verify") throw new Error("unreachable");
+    expect(problem.scoring.checks[0].i18n).toEqual({ en: { label: "Public backup" } });
+    expect(problem.scoring.checks[0].hints[0].i18n).toEqual({
+      en: { content: "Check the public path" },
+    });
+  });
+
+  it("should fail loudly on empty checks / duplicate ids / bad id / non-integer points", () => {
+    expect(() => loadContainerProblem(DIR, multiVerify([]))).toThrow(/non-empty array/);
+    expect(() => loadContainerProblem(DIR, multiVerify([check(), check()]))).toThrow(
+      /is duplicated/,
+    );
+    expect(() => loadContainerProblem(DIR, multiVerify([check({ id: "Bad_ID" })]))).toThrow(
+      /must match/,
+    );
+    expect(() => loadContainerProblem(DIR, multiVerify([check({ points: 12.5 })]))).toThrow(
+      /positive integer/,
+    );
+    expect(() => loadContainerProblem(DIR, multiVerify([check({ points: 0 })]))).toThrow(
+      /positive integer/,
+    );
+  });
+
+  it("should fail loudly when hint ids collide across checks (reveal route is keyed on hintId)", () => {
+    expect(() =>
+      loadContainerProblem(
+        DIR,
+        multiVerify([
+          check({ hints: [{ id: "shared", content: "a", penalty: 0 }] }),
+          check({
+            id: "second",
+            hints: [{ id: "shared", content: "b", penalty: 0 }],
+          }),
+        ]),
+      ),
+    ).toThrow(/unique across the problem/);
+  });
+
+  it("should keep rejecting non-container scoring kinds", () => {
+    expect(() =>
+      loadContainerProblem(DIR, fixture({ scoring: { kind: "flag", points: 100 } })),
+    ).toThrow(/expected "verify" or "multi-verify"/);
   });
 });

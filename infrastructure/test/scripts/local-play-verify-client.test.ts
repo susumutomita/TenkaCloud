@@ -100,3 +100,52 @@ describe("verifySubmission", () => {
     ).rejects.toThrow(/unreachable/);
   });
 });
+
+describe("verifySubmission: multi-verify checkpointId (issue #2252)", () => {
+  it("should send checkpointId top-level and accept a matching echo", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ correct: true, checkpointId: "public-backup" }),
+    );
+    const result = await verifySubmission(VERIFY_URL, "TC{x}", CONTEXT, {
+      fetchImpl,
+      checkpointId: "public-backup",
+    });
+    expect(result.correct).toBe(true);
+    expect(result.checkpointId).toBe("public-backup");
+    const [, init] = fetchImpl.mock.calls[0];
+    expect(JSON.parse(init?.body as string)).toEqual({
+      checkpointId: "public-backup",
+      submission: "TC{x}",
+      context: CONTEXT,
+    });
+  });
+
+  it("should fail loudly when the container omits the checkpointId echo", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ correct: true }));
+    await expect(
+      verifySubmission(VERIFY_URL, "TC{x}", CONTEXT, {
+        fetchImpl,
+        checkpointId: "public-backup",
+      }),
+    ).rejects.toThrow(/did not echo checkpointId "public-backup"/);
+  });
+
+  it("should fail loudly when the echo names a different checkpoint (never mis-credit)", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ correct: true, checkpointId: "weak-admin-pw" }),
+    );
+    await expect(
+      verifySubmission(VERIFY_URL, "TC{x}", CONTEXT, {
+        fetchImpl,
+        checkpointId: "public-backup",
+      }),
+    ).rejects.toThrow(/did not echo checkpointId/);
+  });
+
+  it("should keep the legacy single-verify request shape without checkpointId", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ correct: true }));
+    await verifySubmission(VERIFY_URL, "TC{x}", CONTEXT, { fetchImpl });
+    const [, init] = fetchImpl.mock.calls[0];
+    expect(JSON.parse(init?.body as string)).toEqual({ submission: "TC{x}", context: CONTEXT });
+  });
+});

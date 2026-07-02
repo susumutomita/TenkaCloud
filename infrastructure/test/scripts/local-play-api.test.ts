@@ -20,6 +20,7 @@ const PROBLEM: ContainerProblem = {
   verifyUrl: "http://127.0.0.1:18081/verify",
   secretEnv: ["FLAG_SEED"],
   scoring: {
+    kind: "verify",
     points: 200,
     wrongAnswerPenalty: 10,
     hints: [
@@ -342,5 +343,189 @@ describe("local-play API", () => {
       (await handleLocalPlayRequest(get("/portal/me/deploy-logs"), state, NOW)).body,
     ).toMatchObject({ complete: true });
     expect((await handleLocalPlayRequest(get("/nope"), state, NOW)).status).toBe(404);
+  });
+});
+
+describe("local-play API: multi-verify (issue #2252)", () => {
+  const MULTI_PROBLEM: ContainerProblem = {
+    ...PROBLEM,
+    problemId: "wp-ops",
+    composeProjectName: "tc-local-wp-ops",
+    scoring: {
+      kind: "multi-verify",
+      totalPoints: 120,
+      checks: [
+        {
+          id: "public-backup",
+          label: "公開バックアップ",
+          points: 50,
+          wrongAnswerPenalty: 5,
+          hints: [{ id: "h-backup", content: "公開パスを確認する", penalty: 2 }],
+          i18n: { en: { label: "Public backup" } },
+        },
+        {
+          id: "weak-admin-pw",
+          label: "弱い管理者パスワード",
+          points: 70,
+          wrongAnswerPenalty: 0,
+          hints: [],
+        },
+      ],
+    },
+  };
+
+  function multiState(verify: VerifyFn) {
+    return createLocalPlayState({ problem: MULTI_PROBLEM }, { verify });
+  }
+
+  const submit = (flagId: string | undefined, flag = "TC{x}") =>
+    post("/portal/me/submit-flag", {
+      problemId: "wp-ops",
+      flag,
+      ...(flagId !== undefined ? { flagId } : {}),
+    });
+
+  it("should render the multi-flag view: totals, per-check entries, gated hints, en labels", async () => {
+    const state = multiState(vi.fn());
+    const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const problem = (view.body as { problems: Array<Record<string, unknown>> }).problems[0];
+    expect(problem.score).toBe(0);
+    expect(problem.scoring).toEqual({
+      kind: "multi-flag",
+      points: 120,
+      flags: [
+        {
+          id: "public-backup",
+          label: "公開バックアップ",
+          points: 50,
+          solved: false,
+          i18n: { en: { label: "Public backup" } },
+          hints: [{ id: "h-backup", penalty: 2, revealed: false }],
+        },
+        { id: "weak-admin-pw", label: "弱い管理者パスワード", points: 70, solved: false },
+      ],
+    });
+  });
+
+  it("should judge one checkpoint via the container and award metadata points only", async () => {
+    // container returns a points override — multi-verify must ignore it (metadata is 正本).
+    const verify = vi.fn(async () => ({
+      correct: true,
+      points: 9_999,
+      checkpointId: "public-backup",
+    }));
+    const state = multiState(verify);
+
+    const res = await handleLocalPlayRequest(submit("public-backup"), state, NOW);
+    expect(res.body).toEqual({
+      kind: "ok",
+      scoreDelta: 50,
+      totalScore: 50,
+      flagId: "public-backup",
+    });
+    expect(verify).toHaveBeenCalledWith(
+      MULTI_PROBLEM.verifyUrl,
+      "TC{x}",
+      { teamId: "local", problemId: "wp-ops" },
+      { checkpointId: "public-backup" },
+    );
+  });
+
+  it("should be idempotent per checkpoint: resubmission never re-calls the container", async () => {
+    const verify = vi.fn(async () => ({ correct: true, checkpointId: "public-backup" }));
+    const state = multiState(verify);
+    await handleLocalPlayRequest(submit("public-backup"), state, NOW);
+
+    const again = await handleLocalPlayRequest(submit("public-backup", "wrong-now"), state, NOW);
+    expect(again.body).toEqual({
+      kind: "already_scored",
+      totalScore: 50,
+      flagId: "public-backup",
+    });
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(state.score).toBe(50);
+  });
+
+  it("should apply the per-check wrong-answer penalty and count wrongs per check", async () => {
+    const verify = vi.fn(
+      async (_u: string, _s: string, _c: unknown, o?: { checkpointId?: string }) => ({
+        correct: false,
+        checkpointId: o?.checkpointId,
+      }),
+    );
+    const state = multiState(verify as VerifyFn);
+
+    const wrongA = await handleLocalPlayRequest(submit("public-backup"), state, NOW);
+    expect(wrongA.body).toEqual({
+      kind: "wrong",
+      scoreDelta: -5,
+      totalScore: -5,
+      wrongCount: 1,
+      flagId: "public-backup",
+    });
+    // 別 check の誤答は penalty 0 / wrongCount は check 単位で独立
+    const wrongB = await handleLocalPlayRequest(submit("weak-admin-pw"), state, NOW);
+    expect(wrongB.body).toEqual({
+      kind: "wrong",
+      scoreDelta: 0,
+      totalScore: -5,
+      wrongCount: 1,
+      flagId: "weak-admin-pw",
+    });
+  });
+
+  it("should fail closed on unknown / missing flagId without calling the container", async () => {
+    const verify = vi.fn();
+    const state = multiState(verify);
+    const unknown = await handleLocalPlayRequest(submit("not-a-check"), state, NOW);
+    expect(unknown.status).toBe(404);
+    expect(unknown.body).toEqual({ kind: "unknown_flag" });
+    const missing = await handleLocalPlayRequest(submit(undefined), state, NOW);
+    expect(missing.status).toBe(404);
+    expect(missing.body).toEqual({ kind: "unknown_flag" });
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  it("should complete the problem only when every checkpoint is solved", async () => {
+    const verify = vi.fn(
+      async (_u: string, _s: string, _c: unknown, o?: { checkpointId?: string }) => ({
+        correct: true,
+        checkpointId: o?.checkpointId,
+      }),
+    );
+    const state = multiState(verify as VerifyFn);
+
+    await handleLocalPlayRequest(submit("public-backup"), state, NOW);
+    const partial = await handleLocalPlayRequest(get("/portal/leaderboard"), state, NOW);
+    expect(
+      (partial.body as { entries: Array<{ completedProblems: number }> }).entries[0]
+        .completedProblems,
+    ).toBe(0);
+
+    await handleLocalPlayRequest(submit("weak-admin-pw"), state, NOW);
+    const done = await handleLocalPlayRequest(get("/portal/leaderboard"), state, NOW);
+    expect(
+      (done.body as { entries: Array<{ completedProblems: number }> }).entries[0].completedProblems,
+    ).toBe(1);
+
+    const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const problem = (view.body as { problems: Array<Record<string, unknown>> }).problems[0];
+    expect(problem.score).toBe(120);
+    expect(problem.lastResult).toBe("ok");
+  });
+
+  it("should reveal a per-check hint through the flat reveal route with its penalty", async () => {
+    const state = multiState(vi.fn());
+    const res = await handleLocalPlayRequest(
+      post("/portal/me/problems/wp-ops/hints/h-backup/reveal", {}),
+      state,
+      NOW,
+    );
+    expect(res.body).toMatchObject({
+      kind: "ok",
+      content: "公開パスを確認する",
+      penaltyApplied: 2,
+      totalScore: -2,
+    });
   });
 });

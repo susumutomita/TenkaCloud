@@ -200,7 +200,7 @@ function formatRevealError(
  * 成功時に親 (= onScored) を呼んで score / hint 状態を refetch する (= optimistic に状態
  * 更新せず、 server truth を読み直す)。 失敗時は inline error を表示。
  */
-function HintsPanel({
+export function HintsPanel({
   apiBaseUrl,
   sessionToken,
   problemId,
