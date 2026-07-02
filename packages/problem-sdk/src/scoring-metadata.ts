@@ -8,9 +8,11 @@
  * stay in infra because they depend on `node:zlib`; everything here is pure and
  * deterministic (no I/O, no env, no clock).
  *
- * 6 builtin kinds (ADR-012 Phase 3.B 5 + #1796 multi-flag) + #2070 composite-probe:
+ * 6 builtin kinds (ADR-012 Phase 3.B 5 + #1796 multi-flag) + #2070 composite-probe
+ * + #2252 multi-verify (local container problems):
  *   - `flag`              — single submission (Challenge, submission scoring)
  *   - `multi-flag`        — N independent flags in one problem, partial points
+ *   - `multi-verify`      — N container-judged checkpoints (docker local-play), partial points
  *   - `uptime-flat`       — independent endpoint probes, points when all OK
  *   - `uptime-multi`      — N slots AND-probed, points all OK / failure penalty
  *   - `phased-polling`    — time-based score rules, platform classification + bonus
@@ -55,6 +57,31 @@ export interface MultiFlagEntry {
 export interface MultiFlagScoringMetadata {
   readonly kind: "multi-flag";
   readonly flags: readonly MultiFlagEntry[];
+}
+
+/**
+ * Issue #2252: one checkpoint of a `multi-verify` (docker local-play) problem.
+ * The container owns the answer and judges a submission per checkpoint via
+ * `POST /verify` (`checkpointId` in the request); the platform holds points
+ * only — there is deliberately no `flagOutputKey` and no expected value here.
+ */
+export interface MultiVerifyCheck {
+  readonly id: string;
+  /** Competitor-facing label. Must not spoil the vulnerability (authoring rule). */
+  readonly label: string;
+  readonly points: number;
+  readonly wrongAnswerPenalty?: number;
+  readonly hints?: readonly ProgressiveHint[];
+}
+
+/**
+ * Issue #2252: `multi-verify` kind — N independent container-judged checkpoints
+ * summing to the problem total. Valid only for `runtime.provider: docker`
+ * problems (`make local`); the deploy worker never sends these to a cloud.
+ */
+export interface MultiVerifyScoringMetadata {
+  readonly kind: "multi-verify";
+  readonly checks: readonly MultiVerifyCheck[];
 }
 
 export interface UptimeFlatEndpoint {
@@ -179,6 +206,7 @@ export interface CompositeProbeScoringMetadata {
 export type ProblemScoringMetadata =
   | FlagScoringMetadata
   | MultiFlagScoringMetadata
+  | MultiVerifyScoringMetadata
   | UptimeFlatScoringMetadata
   | UptimeMultiScoringMetadata
   | PhasedPollingScoringMetadata
@@ -195,6 +223,7 @@ export function parseScoringMetadata(value: unknown): ProblemScoringMetadata | u
   const v = value as { kind?: unknown };
   if (v.kind === "flag") return parseFlag(value);
   if (v.kind === "multi-flag") return parseMultiFlag(value);
+  if (v.kind === "multi-verify") return parseMultiVerify(value);
   if (v.kind === "uptime" || v.kind === "uptime-flat") return parseUptimeFlat(value, v.kind);
   if (v.kind === "uptime-multi") return parseUptimeMulti(value);
   if (v.kind === "phased-polling") return parsePhasedPolling(value);
@@ -341,6 +370,61 @@ function parseMultiFlagEntry(value: unknown): MultiFlagEntry | undefined {
     flagOutputKey,
     points: e.points,
     wrongAnswerPenalty: clampWrongAnswerPenalty(e.wrongAnswerPenalty),
+    ...(hints ? { hints } : {}),
+  };
+}
+
+const MULTI_VERIFY_CHECK_ID = /^[a-z0-9-]+$/;
+
+/**
+ * Issue #2252: narrow the multi-verify kind. Same never-partial-drop policy as
+ * multi-flag — one invalid check rejects the whole object (a silently dropped
+ * checkpoint would change the problem total per competitor). Fail-closed extras
+ * per the #2252 contract: check ids must match `^[a-z0-9-]+$` and be unique,
+ * points must be positive integers, and hint ids must be unique within a check
+ * (the reveal record is keyed on them).
+ */
+function parseMultiVerify(value: unknown): MultiVerifyScoringMetadata | undefined {
+  const m = value as { checks?: unknown };
+  if (!Array.isArray(m.checks) || m.checks.length === 0) return undefined;
+
+  const checks: MultiVerifyCheck[] = [];
+  const seenIds = new Set<string>();
+  for (const raw of m.checks) {
+    const check = parseMultiVerifyCheck(raw);
+    if (!check) return undefined;
+    if (seenIds.has(check.id)) return undefined;
+    seenIds.add(check.id);
+    checks.push(check);
+  }
+  return { kind: "multi-verify", checks };
+}
+
+function parseMultiVerifyCheck(value: unknown): MultiVerifyCheck | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const c = value as {
+    id?: unknown;
+    label?: unknown;
+    points?: unknown;
+    wrongAnswerPenalty?: unknown;
+    hints?: unknown;
+  };
+  const id = optionalNonEmptyString(c.id);
+  const label = optionalNonEmptyString(c.label);
+  if (!id || !MULTI_VERIFY_CHECK_ID.test(id) || !label) return undefined;
+  if (typeof c.points !== "number" || !Number.isInteger(c.points) || c.points <= 0) {
+    return undefined;
+  }
+  const hints = parseHints(c.hints);
+  if (hints) {
+    const hintIds = new Set(hints.map((hint) => hint.id));
+    if (hintIds.size !== hints.length) return undefined;
+  }
+  return {
+    id,
+    label,
+    points: c.points,
+    wrongAnswerPenalty: clampWrongAnswerPenalty(c.wrongAnswerPenalty),
     ...(hints ? { hints } : {}),
   };
 }
