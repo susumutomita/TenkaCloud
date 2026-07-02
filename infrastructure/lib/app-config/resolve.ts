@@ -68,6 +68,11 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   const challengePayload = resolveChallengePayload(env, config, environment);
   const deployConcurrentBuildLimit = resolveDeployConcurrentBuildLimit(env);
   const deployQuotaByTier = resolveDeployQuotaByTier(env);
+  // Issue #2232: previously wired end-to-end (stack prop → Lambda env →
+  // handler → DistributedMap state machine) with no way to set it true in
+  // production — the DistributedMap branch was permanently unreachable
+  // outside tests. Default false preserves the existing legacy fan-out.
+  const useBulkDistributedMap = env.CDK_PARAM_BULK_DEPLOY_VIA_DISTRIBUTED_MAP === "true";
   const features = resolveFeatures(env);
 
   // Issue #1031: 旧 `CDK_PARAM_ADMIN_CONSOLE_ORIGIN` env 直読みは廃止。 admin-console-hosting
@@ -119,6 +124,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     customDomains: config?.customDomains,
     deployConcurrentBuildLimit,
     deployQuotaByTier,
+    useBulkDistributedMap,
     features,
     controlPlaneSamlIdps,
     controlPlaneSamlAdminAllowlist,

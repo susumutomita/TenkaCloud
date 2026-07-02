@@ -367,13 +367,14 @@ async function reconcileSingleEvent(
   // deployDeps 未配線 (= Teams / catalog env 無し) なら skip (= dormant、 後方互換)。
   // bulkDeployEvent が status を DRAFT → DEPLOYING に倒すので、 通常遷移より先に発火し early return。
   if (resolveScheduledDeployDue(event, nowMs) && ctx.deployDeps) {
-    await fireScheduledDeploy(ctx, ctx.deployDeps, {
-      PK: event.PK,
-      tenantId: event.tenantId,
-      eventId: event.eventId,
-      nowMs,
-      nowIso,
-    });
+    await fireScheduledAction(
+      ctx,
+      ctx.deployDeps,
+      { PK: event.PK, tenantId: event.tenantId, eventId: event.eventId, nowMs, nowIso },
+      "deploy",
+      bulkDeployEvent,
+      "deployFiredAt",
+    );
     return;
   }
   // DRAFT は通常の status 遷移対象外 (resolveEventStatusTransition は DRAFT で undefined)。
@@ -385,13 +386,14 @@ async function reconcileSingleEvent(
   // teardownDeps 未配線 (= CompetitorAccounts env 無し) なら skip (= dormant、 後方互換)。
   // bulkTeardownEvent が status を TEARDOWN に倒すので、 通常遷移より先に発火し early return する。
   if (resolveScheduledTeardownDue(event, nowMs) && ctx.teardownDeps) {
-    await fireScheduledTeardown(ctx, ctx.teardownDeps, {
-      PK: event.PK,
-      tenantId: event.tenantId,
-      eventId: event.eventId,
-      nowMs,
-      nowIso,
-    });
+    await fireScheduledAction(
+      ctx,
+      ctx.teardownDeps,
+      { PK: event.PK, tenantId: event.tenantId, eventId: event.eventId, nowMs, nowIso },
+      "teardown",
+      bulkTeardownEvent,
+      "teardownFiredAt",
+    );
     return;
   }
 
@@ -484,12 +486,13 @@ async function applyEventStatusTransition(
 }
 
 /**
- * [ADR-047] scheduled teardown を発火する。 既存 `bulkTeardownEvent` を再利用 (= 手動「Event を削除」
- * と同一経路: Deployments を DELETING に倒し DeployDeleteRequested を publish、 Event を TEARDOWN に)。
- * 直後に teardownFiredAt を記録 (= 二重発火防止の補助 + 監査)。 失敗は warn で握り潰す
+ * [ADR-047 / ADR-047 follow-up] scheduled teardown / deploy を発火する (旧 fireScheduledTeardown /
+ * fireScheduledDeploy の鏡像を統合、 issue #2223)。 `bulkTeardownEvent` / `bulkDeployEvent` を
+ * `publishFn` として受け取り再利用する (= 手動「Event を削除」/「Deploy」と同一経路)。 直後に
+ * teardownFiredAt / deployFiredAt を記録 (= 二重発火防止の補助 + 監査)。 失敗は warn で握り潰す
  * (= 次 tick で再評価。 status guard が一次冪等なので毎分 tick / 採点を巻き込まない)。
  */
-async function fireScheduledTeardown(
+async function fireScheduledAction(
   ctx: ReconcileEventStatusesContext,
   deps: EventSharedResources,
   args: {
@@ -499,17 +502,26 @@ async function fireScheduledTeardown(
     readonly nowMs: number;
     readonly nowIso: string;
   },
+  kind: "teardown" | "deploy",
+  publishFn: (
+    deps: EventSharedResources,
+    tenantId: string,
+    eventId: string,
+    nowMs: number,
+  ) => Promise<{ readonly kind: string; readonly result?: { readonly enqueued: number } }>,
+  firedAttr: "teardownFiredAt" | "deployFiredAt",
 ): Promise<void> {
+  const label = kind === "teardown" ? "ADR-047" : "ADR-047 follow-up";
   try {
-    const outcome = await bulkTeardownEvent(deps, args.tenantId, args.eventId, args.nowMs);
-    console.log("[generic-scoring] scheduled auto-teardown fired (ADR-047)", {
+    const outcome = await publishFn(deps, args.tenantId, args.eventId, args.nowMs);
+    console.log(`[generic-scoring] scheduled auto-${kind} fired (${label})`, {
       eventId: args.eventId,
       outcome: outcome.kind,
-      enqueued: outcome.kind === "ok" ? outcome.result.enqueued : undefined,
+      enqueued: outcome.kind === "ok" ? outcome.result?.enqueued : undefined,
     });
-    await recordFired(ctx, args, "teardownFiredAt");
+    await recordFired(ctx, args, firedAttr);
   } catch (err) {
-    console.warn("[generic-scoring] scheduled auto-teardown failed", {
+    console.warn(`[generic-scoring] scheduled auto-${kind} failed`, {
       eventId: args.eventId,
       message: err instanceof Error ? err.message : String(err),
     });
@@ -544,40 +556,6 @@ async function recordFired(
   } catch (err) {
     if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return;
     console.warn(`[generic-scoring] recordFired(${firedAttr}) failed`, {
-      eventId: args.eventId,
-      message: err instanceof Error ? err.message : String(err),
-    });
-  }
-}
-
-/**
- * [ADR-047 follow-up] scheduled deploy を発火する (fireScheduledTeardown の鏡像)。 既存
- * `bulkDeployEvent` を再利用 (= 手動「Deploy」と同一経路: teams × problems の deployment 行を
- * 一括 PUT し DeployCreateRequested を publish、 Event を DRAFT → DEPLOYING に倒す)。 直後に
- * deployFiredAt を記録 (= 二重発火防止の補助 + 監査)。 失敗は warn で握り潰す (= 次 tick で再評価。
- * status guard が一次冪等なので毎分 tick / 採点を巻き込まない)。
- */
-async function fireScheduledDeploy(
-  ctx: ReconcileEventStatusesContext,
-  deps: EventSharedResources,
-  args: {
-    readonly PK: string;
-    readonly tenantId: string;
-    readonly eventId: string;
-    readonly nowMs: number;
-    readonly nowIso: string;
-  },
-): Promise<void> {
-  try {
-    const outcome = await bulkDeployEvent(deps, args.tenantId, args.eventId, args.nowMs);
-    console.log("[generic-scoring] scheduled auto-deploy fired (ADR-047 follow-up)", {
-      eventId: args.eventId,
-      outcome: outcome.kind,
-      enqueued: outcome.kind === "ok" ? outcome.result.enqueued : undefined,
-    });
-    await recordFired(ctx, args, "deployFiredAt");
-  } catch (err) {
-    console.warn("[generic-scoring] scheduled auto-deploy failed", {
       eventId: args.eventId,
       message: err instanceof Error ? err.message : String(err),
     });

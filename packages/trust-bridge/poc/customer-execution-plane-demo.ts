@@ -33,10 +33,10 @@ import {
   type CustomerExecutionPolicy,
   type ExchangeContext,
   INTENT_VERSION,
-  MockCloudAdapter,
   type PolicyEvaluator,
   signIntent,
 } from "../src/index.js";
+import { MockCloudAdapter } from "../src/mock-cloud-adapter.js";
 
 // --- Shared fixtures -------------------------------------------------------
 

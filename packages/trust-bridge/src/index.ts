@@ -115,20 +115,9 @@ export {
   createCfnTemplateInspector,
   DEFAULT_FORBIDDEN_TEMPLATE_PATTERNS,
 } from "./local-policy.js";
-export type {
-  LocalStackCloudAdapterOptions,
-  LocalStackCredential,
-  LocalStackExchangeContext,
-} from "./localstack-cloud-adapter.js";
-export { LocalStackCloudAdapter } from "./localstack-cloud-adapter.js";
-export type {
-  MockCloudAdapterOptions,
-  MockCloudCredential,
-  MockCloudExchangeContext,
-  MockDeploymentSignal,
-  MockDeploymentSignalStatus,
-} from "./mock-cloud-adapter.js";
-export { MockCloudAdapter } from "./mock-cloud-adapter.js";
+// Issue #2216: LocalStackCloudAdapter / MockCloudAdapter are test/PoC fixtures standing in for
+// a real cloud adapter (aws/azure/gcp), not part of the public API surface. Non-test consumers
+// import them directly from their module file instead of through this barrel.
 
 export type {
   ExchangeContext,

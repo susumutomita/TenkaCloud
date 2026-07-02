@@ -227,6 +227,17 @@ describe("fireDisruption (#888)", () => {
     expect(puts).toHaveLength(1);
   });
 
+  it("should fall back to errorCode=unknown when the whole PutEvents request rejects (issue #2210)", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [{ teamId: "T1" }] }); // team list
+    ddbSend.mockResolvedValueOnce({}); // idempotency Put
+    eventsSend.mockRejectedValueOnce(new Error("network down"));
+
+    await expect(fireDisruption(shared, baseInput())).rejects.toThrow(
+      /partial failure: team\[T1\]=unknown/,
+    );
+  });
+
   it("audit row に mergedParameters / firedBy / scope / requestId が書かれる", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [{ teamId: "T1" }] });

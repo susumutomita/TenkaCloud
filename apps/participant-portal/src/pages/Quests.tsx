@@ -88,6 +88,15 @@ function categoryBadge(scoring: ParticipantScoringInfo | undefined, uncategorize
  * 詳細画面に集約。 大会の戦略決定はカードを並べて 「どれをやるか」 を決める用途なので、 過剰な
  * 詳細を出すと逆に「どれを見ればよいかわからない」 を生む (= image #35 の指摘)。
  */
+/**
+ * Issue #2189: the quest list card was showing the raw problem id instead of
+ * its display name (the detail screen already shows the name). Falls back to
+ * the id when the catalog has no metadata for it (e.g. a stale/removed problem).
+ */
+export function questCardTitle(problemId: string): string {
+  return findProblemMetadata(problemId)?.name ?? problemId;
+}
+
 function difficultyBadge(problemId: string, t: TFn): React.ReactElement | null {
   const meta = findProblemMetadata(problemId);
   if (!meta) return null;
@@ -163,7 +172,7 @@ export function QuestsPage() {
                 navigate(`/problems/${encodeURIComponent(problem.jobId)}`);
               }}
             >
-              <code>{problem.problemId}</code>
+              {questCardTitle(problem.problemId)}
             </Link>
             {categoryBadge(problem.scoring, t("quests.category_uncategorized"))}
             {difficultyBadge(problem.problemId, t)}
