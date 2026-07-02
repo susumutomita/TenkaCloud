@@ -238,6 +238,8 @@ function GateEditor({
   };
 
   const handleSave = async () => {
+    // save button の disabled が同条件を mirror するため、 この guard は UI 経路では不到達 (防御的)。
+    /* v8 ignore next */
     if (!apiClient || !canMutateTenant || saveInFlight || validationErrorKey) return;
     // validateDraft が gateProblemId 非 null を保証済み。
     /* v8 ignore next */
@@ -300,6 +302,8 @@ function GateEditor({
           options={problemIds.map((id) => ({ value: id, label: id }))}
           placeholder={t("gate.gate_problem_placeholder")}
           onChange={({ detail: d }) => {
+            // option は全件 value 付きで構築するため、 undefined guard は型 narrowing の防御 (不到達)。
+            /* v8 ignore next */
             if (d.selectedOption.value) handleGateChange(d.selectedOption.value);
           }}
           disabled={!canMutateTenant}
@@ -357,6 +361,8 @@ function GateEditor({
                   onChange={({ detail: d }) =>
                     setDraft(team.teamId, {
                       ...draft,
+                      // option は全件 value 付きなので ?? の右辺は型ガード (不到達)。
+                      /* v8 ignore next */
                       policy: (d.selectedOption.value ?? "inherit") as OverridePolicyChoice,
                     })
                   }
@@ -487,6 +493,8 @@ export function EventProgressionGatePanel({
   const enabled = flags?.[GATE_FLAG] === true;
 
   const handleToggleFlag = async (next: boolean) => {
+    // Toggle の disabled が同条件 (!apiClient || toggleInFlight) を mirror するため guard は不到達 (防御的)。
+    /* v8 ignore next */
     if (!apiClient || toggleInFlight) return;
     setToggleInFlight(true);
     setToggleError(null);

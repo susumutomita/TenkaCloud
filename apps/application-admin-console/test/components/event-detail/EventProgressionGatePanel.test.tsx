@@ -410,4 +410,208 @@ describe("EventProgressionGatePanel", () => {
     expect(radio?.findInputByValue("required")?.getElement().disabled).toBe(true);
     expect(radio?.findInputByValue("off")?.getElement().disabled).toBe(true);
   });
+
+  it("should surface the raw message when the gate save fails with a non-API error", async () => {
+    // mapGateSaveError: ApiError 以外 (network 断など) は toErrorMessage の素の文言に落ちる。
+    getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+    putGate.mockRejectedValue(new Error("network boom"));
+    renderPanel({ detail: detail({ progressionGate: storedGate }) });
+    await screen.findByText("gate.save_button");
+    fireEvent.click(screen.getByText("gate.save_button"));
+    expect(await screen.findByText("gate.error_save_header")).toBeInTheDocument();
+    expect(screen.getByText("network boom")).toBeInTheDocument();
+  });
+
+  it("should fall back to the raw message for a 409 conflict without feature_disabled", async () => {
+    // 409 でも body が feature_disabled でなければ専用文言に写像しない (別種の conflict)。
+    getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+    putGate.mockRejectedValue(
+      new ApiError(StatusCodes.CONFLICT, JSON.stringify({ error: "already_started" })),
+    );
+    renderPanel({ detail: detail({ progressionGate: storedGate }) });
+    await screen.findByText("gate.save_button");
+    fireEvent.click(screen.getByText("gate.save_button"));
+    expect(await screen.findByText('API 409: {"error":"already_started"}')).toBeInTheDocument();
+    expect(screen.queryByText("gate.error_feature_disabled")).not.toBeInTheDocument();
+  });
+
+  it("should fall back to the raw message for a 400 without a mappable reason", async () => {
+    // reason が allowlist (GATE_INVALID_REASONS) に無い 400 は素の文言に落とす。
+    getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+    const body = JSON.stringify({ error: "invalid_progression_gate", reason: "mystery_reason" });
+    putGate.mockRejectedValue(new ApiError(StatusCodes.BAD_REQUEST, body));
+    renderPanel({ detail: detail({ progressionGate: storedGate }) });
+    await screen.findByText("gate.save_button");
+    fireEvent.click(screen.getByText("gate.save_button"));
+    expect(await screen.findByText(`API 400: ${body}`)).toBeInTheDocument();
+    expect(screen.queryByText("gate.error_reason_mystery_reason")).not.toBeInTheDocument();
+  });
+
+  it("should show the save error alert when removing the gate fails", async () => {
+    getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+    deleteGate.mockRejectedValue(new Error("remove boom"));
+    const onRefresh = vi.fn();
+    renderPanel({ detail: detail({ progressionGate: storedGate }), onRefresh });
+    await screen.findByText("gate.remove_button");
+    fireEvent.click(screen.getByText("gate.remove_button"));
+    fireEvent.click(screen.getByText("gate.modal_remove_confirm"));
+    expect(await screen.findByText("gate.error_save_header")).toBeInTheDocument();
+    expect(screen.getByText("remove boom")).toBeInTheDocument();
+    expect(onRefresh).not.toHaveBeenCalled();
+  });
+
+  it("should clear the saved flash when it is dismissed", async () => {
+    getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+    renderPanel({ detail: detail({ progressionGate: storedGate }) });
+    await screen.findByText("gate.save_button");
+    fireEvent.click(screen.getByText("gate.save_button"));
+    expect(await screen.findByText("gate.saved_flash")).toBeInTheDocument();
+    wrapper().findAlert()?.findDismissButton()?.click();
+    await waitFor(() => expect(screen.queryByText("gate.saved_flash")).not.toBeInTheDocument());
+  });
+
+  it("should change the default policy via the radio group", async () => {
+    getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+    const { container } = renderPanel();
+    await screen.findByText("gate.save_button");
+    const radio = createWrapper(container).findRadioGroup();
+    // 空 form の default は required。 off をクリックすると選択が切り替わる。
+    expect(radio?.findInputByValue("required")?.getElement().checked).toBe(true);
+    const offInput = radio?.findInputByValue("off")?.getElement();
+    expect(offInput).toBeDefined();
+    fireEvent.click(offInput as HTMLInputElement);
+    await waitFor(() => expect(radio?.findInputByValue("off")?.getElement().checked).toBe(true));
+  });
+
+  it("should close the remove modal via its dismiss control without deleting", async () => {
+    getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+    renderPanel({ detail: detail({ progressionGate: storedGate }) });
+    await screen.findByText("gate.remove_button");
+    fireEvent.click(screen.getByText("gate.remove_button"));
+    const modal = wrapper().findModal();
+    expect(modal).not.toBeNull();
+    modal?.findDismissButton().click();
+    await waitFor(() => expect(wrapper().findModal()).toBeNull());
+    expect(deleteGate).not.toHaveBeenCalled();
+  });
+
+  it("should not delete the gate when the api client is gone while the confirm modal is open", async () => {
+    // handleRemove の guard: modal の confirm button は !apiClient で disable されないため、
+    // modal open 中に apiClient が失われても DELETE を撃たないことを pin する。
+    getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+    const { rerender } = renderPanel({ detail: detail({ progressionGate: storedGate }) });
+    await screen.findByText("gate.remove_button");
+    fireEvent.click(screen.getByText("gate.remove_button"));
+    expect(wrapper().findModal()).not.toBeNull();
+    rerender(
+      <EventProgressionGatePanel
+        apiClient={null}
+        canMutateTenant
+        detail={detail({ progressionGate: storedGate })}
+        onRefresh={vi.fn()}
+        t={t}
+      />,
+    );
+    fireEvent.click(screen.getByText("gate.modal_remove_confirm"));
+    expect(deleteGate).not.toHaveBeenCalled();
+  });
+
+  it("should prune the new gate problem from the unlock targets on gate change", async () => {
+    // 自己参照 (gate ∈ targets) 防止: gate を既存 target の問題に変更すると target から除外される。
+    getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+    const { container } = renderPanel({ detail: detail({ progressionGate: storedGate }) });
+    await screen.findByText("gate.save_button");
+    const cw = createWrapper(container);
+    expect(cw.findMultiselect()?.findTokens()).toHaveLength(1);
+    const gateSelect = cw.findSelect();
+    gateSelect?.openDropdown();
+    gateSelect?.selectOptionByValue("p-a");
+    await waitFor(() => expect(cw.findMultiselect()?.findTokens()).toHaveLength(0));
+    expect(screen.getByText("gate.error_no_targets")).toBeInTheDocument();
+  });
+
+  it("should show a zero override count when the stored config has no teamOverrides", async () => {
+    // flag OFF read-only summary: teamOverrides 未設定 (undefined) は count 0 と表示する。
+    const noOverrides: ProgressionGateConfig = {
+      gateProblemId: "p-gate",
+      unlockTargetIds: ["p-a"],
+      defaultPolicy: "off",
+    };
+    renderPanel({ detail: detail({ progressionGate: noOverrides }) });
+    expect(await screen.findByText("gate.stored_readonly_header")).toBeInTheDocument();
+    expect(screen.getByText('gate.stored_overrides_count:{"count":0}')).toBeInTheDocument();
+  });
+
+  it("should prefill an empty bonus for stored overrides without completionBonus and omit it on save", async () => {
+    // completionBonus 未設定 / 0 はどちらも空欄で prefill し、 保存時も completionBonus を省略する。
+    getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+    const noBonusGate: ProgressionGateConfig = {
+      gateProblemId: "p-gate",
+      unlockTargetIds: ["p-a"],
+      defaultPolicy: "required",
+      teamOverrides: { t1: { policy: "off" }, t2: { policy: "required", completionBonus: 0 } },
+    };
+    renderPanel({ detail: detail({ progressionGate: noBonusGate }) });
+    await screen.findByText("gate.save_button");
+    const bonusInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(bonusInputs[0]?.value).toBe("");
+    expect(bonusInputs[1]?.value).toBe("");
+    fireEvent.click(screen.getByText("gate.save_button"));
+    await waitFor(() =>
+      expect(putGate).toHaveBeenCalledWith(fakeApi, "EVT1", {
+        gateProblemId: "p-gate",
+        unlockTargetIds: ["p-a"],
+        defaultPolicy: "required",
+        teamOverrides: { t1: { policy: "off" }, t2: { policy: "required" } },
+      }),
+    );
+  });
+
+  it("should show the overrides-empty hint when the event has no teams", async () => {
+    getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+    renderPanel({ detail: detail({ teams: [] }) });
+    await screen.findByText("gate.save_button");
+    expect(screen.getByText("gate.overrides_empty")).toBeInTheDocument();
+  });
+
+  it("should fall back to the raw message when the flag toggle fails with a non-403 error", async () => {
+    putFlags.mockRejectedValue(new Error("toggle boom"));
+    renderPanel();
+    await screen.findByText("gate.disabled_alert_header");
+    toggle()?.findNativeInput().click();
+    expect(await screen.findByText("toggle boom")).toBeInTheDocument();
+    expect(screen.queryByText("gate.error_toggle_forbidden")).not.toBeInTheDocument();
+  });
+
+  it("should ignore the flags response arriving after unmount", async () => {
+    // effect の cancelled guard: unmount 後に届いた応答で setState しない。
+    let resolveFlags: (flags: Record<string, boolean>) => void = () => {};
+    getFlags.mockImplementationOnce(
+      () =>
+        new Promise<Record<string, boolean>>((resolve) => {
+          resolveFlags = resolve;
+        }),
+    );
+    const { unmount } = renderPanel();
+    unmount();
+    resolveFlags({ challengePrerequisiteGate: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(getFlags).toHaveBeenCalledTimes(1);
+  });
+
+  it("should ignore a flags fetch failure arriving after unmount", async () => {
+    // effect の cancelled guard (エラー側): unmount 後の失敗を error state に反映しない。
+    let rejectFlags: (err: Error) => void = () => {};
+    getFlags.mockImplementationOnce(
+      () =>
+        new Promise<Record<string, boolean>>((_resolve, reject) => {
+          rejectFlags = reject;
+        }),
+    );
+    const { unmount } = renderPanel();
+    unmount();
+    rejectFlags(new Error("late boom"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(getFlags).toHaveBeenCalledTimes(1);
+  });
 });
