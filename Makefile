@@ -15,6 +15,7 @@ export JSII_DEPRECATED := quiet
         env-check env-check-lite env-init \
         deploy deploy-saas destroy destroy-saas \
         deploy-battles destroy-battles \
+        dev synth check-synth \
         doctor local local-up local-down local-status local-evaluate
 
 help:
@@ -156,6 +157,29 @@ deploy-saas:          env-check
 
 destroy:              env-check-lite  ; bun run scripts/tenkacloud-lite.ts down
 destroy-saas:         env-check       ; bash scripts/cleanup.sh
+
+# ===== Local dev (no AWS) =====
+# Issue #2228: AGENTS.md "SPA dev servers" documented this target before it existed.
+# Starts all 3 SPA dev servers in parallel (admin-console :5173 / application-admin-console
+# :5174 / participant-portal :5175). Ctrl-C stops all three (bun --parallel propagates SIGINT).
+dev:
+	bun run --filter '@TenkaCloud/admin-console' --filter '@TenkaCloud/application-admin-console' --filter '@TenkaCloud/participant-portal' --parallel dev
+
+# ===== Synth (no deploy) =====
+# Issue #2228: AGENTS.md / infrastructure/bin/infrastructure.ts referenced `make check-synth`
+# and `make synth` as the offline infra-review gate before either existed.
+#   - `synth`: full CFn synth (real Lambda bundling — slow, matches what `deploy` runs).
+#   - `check-synth`: fast synth-only shape check (CDK_SKIP_BUNDLING=1 skips Docker Lambda
+#     bundling, #1446) + the IAM Description ASCII gate (#664) that only sees synth output.
+#     This is the "infra changes carry extra care" verification step AGENTS.md's Role
+#     split section points agents at.
+synth:
+	$(CDK) synth --all --quiet
+
+check-synth: export CDK_SKIP_BUNDLING := 1
+check-synth:
+	$(CDK) synth --all --quiet
+	bun run .claude/skills/quality-gates/scripts/check-synth-iam-ascii.ts
 
 # ===== Local play (Docker, no AWS) =====
 # Issue #2054: AWS 非依存の CTF コンテナ。 問題コンテナが `/verify` と採点条件を持ち、
