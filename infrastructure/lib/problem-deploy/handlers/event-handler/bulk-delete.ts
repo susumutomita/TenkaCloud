@@ -1,4 +1,4 @@
-import { PutEventsCommand, type PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
+import type { PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
@@ -6,6 +6,7 @@ import {
   type DeployDeleteRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
   EVENT_SOURCE,
+  putEventsBatched,
 } from "../shared/events.js";
 import { type EventSharedResources, queryDeploymentsByEvent } from "./shared.js";
 import type { EventItem } from "./types.js";
@@ -26,8 +27,6 @@ export interface BulkTeardownResult {
 export type BulkTeardownOutcome =
   | { kind: "ok"; result: BulkTeardownResult }
   | { kind: "not_found" };
-
-const PUT_EVENTS_BATCH = 10;
 
 type UpdateOutcome = { entry: PutEventsRequestEntry; jobId: string } | { skip: true };
 
@@ -83,32 +82,15 @@ export async function bulkTeardownEvent(
     else pending.push(o);
   }
 
-  // EventBridge PutEvents の chunk を Promise.all で並列発火。
-  // #1797: PutEvents は HTTP 200 でも `FailedEntryCount > 0` で個別 entry が落ちうる
+  // #1797 / #2210: PutEvents は HTTP 200 でも `FailedEntryCount > 0` で個別 entry が落ちうる
   // (throttling 等)。 旧コードは送りっぱなしで FailedEntryCount を見ず、 落ちた teardown event を
   // silent に握り潰して stack を orphan 化させていた (= 他の PutEvents 経路は全て検査済なのに
-  // ここだけ未検査だった)。 各 chunk の結果を検査し、 publish できなかった jobId を集める。
-  const publishChunk = async (
-    chunk: Array<{ entry: PutEventsRequestEntry; jobId: string }>,
-  ): Promise<string[]> => {
-    try {
-      const out = await shared.events.send(
-        new PutEventsCommand({ Entries: chunk.map((c) => c.entry) }),
-      );
-      if ((out.FailedEntryCount ?? 0) === 0) return [];
-      // PutEvents response.Entries は入力 Entries と同順。 ErrorCode 付きが失敗 entry。
-      return (out.Entries ?? [])
-        .map((e, i) => (e.ErrorCode ? chunk[i]?.jobId : undefined))
-        .filter((j): j is string => j !== undefined);
-    } catch {
-      // chunk 全体が reject → その chunk の jobId は全て publish 失敗扱い。
-      return chunk.map((c) => c.jobId);
-    }
-  };
-  const putChunks: Promise<string[]>[] = [];
-  for (let i = 0; i < pending.length; i += PUT_EVENTS_BATCH) {
-    putChunks.push(publishChunk(pending.slice(i, i + PUT_EVENTS_BATCH)));
-  }
+  // ここだけ未検査だった)。 chunk 分割 + FailedEntryCount 検査は shared helper に委譲、 ここは
+  // 「失敗した jobId を集める」 という call site 固有の意味付けだけを持つ。
+  const publish = putEventsBatched(
+    shared.events,
+    pending.map((p) => ({ item: p.jobId, entry: p.entry })),
+  );
 
   // #557: Event status を TEARDOWN に倒す。bulk-deploy が DRAFT → DEPLOYING にする
   // 対称で、こちらは「終端化中」 marker。`updateEventScheduledStatus` の対と同じ pattern。
@@ -136,8 +118,8 @@ export async function bulkTeardownEvent(
         throw err;
       }
     });
-  const [failedPerChunk] = await Promise.all([Promise.all(putChunks), updateStatus]);
-  const failedJobIds = failedPerChunk.flat();
+  const [publishResults] = await Promise.all([publish, updateStatus]);
+  const failedJobIds = publishResults.filter((r) => !r.success).map((r) => r.item);
 
   // #1797: publish に失敗した行は DELETING のまま放置すると、 次回 DELETE 呼び出しで
   // 「既に DELETING」 として skip され永久に teardown されない (= silent orphan)。 単一 delete

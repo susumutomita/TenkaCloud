@@ -100,7 +100,7 @@ We do not maintain Codex CLI-specific skills or config — AGENTS.md alone guide
 - **HTTP status codes use `StatusCodes.*` (`http-status-codes` library).** Numeric literals such as `c.json(body, 200)` / `res.status === 401` are forbidden. Names make intent explicit (200 vs 202, 400 vs 409, etc.) and let you grep / lint by meaning.
   - backend: `import { StatusCodes } from "http-status-codes"; return c.json(body, StatusCodes.OK);`
   - frontend: `if (res.status === StatusCodes.UNAUTHORIZED) ...`
-  - The legacy aliases (`HTTP_OK` etc. in `infrastructure/lib/problem-deploy/handlers/shared/http-status.ts`) are deprecated. Don't use them in new code.
+  - `StatusCodes.*` usage is enforced across the codebase — the legacy `HTTP_OK`-style numeric aliases have been removed entirely (0 usages remain).
 
 ## Prohibited
 
@@ -164,6 +164,9 @@ apps/
   admin-console/                   # System Admin (Cognito Hosted UI / OAuth Code+PKCE)
   application-admin-console/       # Tenant Admin (per-tenant Application Plane)
   participant-portal/              # Competitor portal (per-team login key)
+  developer-portal/                # Pack-author-facing docs/tools SPA
+packages/                          # Shared workspace libraries (auth-client, saml-utils,
+                                    # problem-runtime, problem-sdk, format, web-kit, etc. — 10 packages)
 infrastructure/
   bin/infrastructure.ts            # Wiring for every stack
   lib/control-plane-stack.ts       # SBT ControlPlane
@@ -180,7 +183,10 @@ scripts/
   cleanup.sh                       # Idempotent teardown
   provision-tenant.sh              # Per-tenant deploy invoked from CodeBuild
   deprovision-tenant.sh            # Tenant teardown
-problems/<category>/<id>/          # metadata.json + template.yaml are the source of truth
+packs/                             # In-repo sample/golden/reference problem packs (ADR-012 3-asset model)
+problems/                          # Git submodule → TenkaCloudChallenge (the community catalog);
+                                    # empty until `git submodule update --init`
+landing/                           # Static marketing/demo site
 ```
 
 ## Cross-plane contracts (do not break)

@@ -133,6 +133,19 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
     );
   });
 
+  it("should default useBulkDistributedMap to false when unset (#2232)", () => {
+    expect(resolve(baseEnv()).useBulkDistributedMap).toBe(false);
+  });
+
+  it("should enable useBulkDistributedMap only when CDK_PARAM_BULK_DEPLOY_VIA_DISTRIBUTED_MAP is exactly 'true' (#2232)", () => {
+    expect(
+      resolve(baseEnv({ CDK_PARAM_BULK_DEPLOY_VIA_DISTRIBUTED_MAP: "true" })).useBulkDistributedMap,
+    ).toBe(true);
+    expect(
+      resolve(baseEnv({ CDK_PARAM_BULK_DEPLOY_VIA_DISTRIBUTED_MAP: "yes" })).useBulkDistributedMap,
+    ).toBe(false);
+  });
+
   it("should fall back to real problem discovery when no discoverProblems stub is injected", () => {
     // exercises discoverAppProblems' production branch (real problems/ scan via the submodule).
     const cfg = resolveAppConfig({

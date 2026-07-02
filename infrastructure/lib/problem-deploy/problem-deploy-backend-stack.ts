@@ -3,38 +3,23 @@ import { CfnOutput } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { EventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
-import { BlockPublicAccess, Bucket, BucketEncryption, type IBucket } from "aws-cdk-lib/aws-s3";
+import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
 import { AdminAuditLogTable } from "./admin-audit-log-table.js";
-import { BulkDeployCreateStateMachine } from "./bulk-deploy-create-state-machine.js";
+import { buildDeployPipeline } from "./build-deploy-pipeline.js";
+import { buildParticipantPortalSubsystem } from "./build-participant-portal-subsystem.js";
 import { CompetitorAccountsApiLambda } from "./competitor-accounts-api-lambda.js";
 import { CompetitorAccountsTable } from "./competitor-accounts-table.js";
 import { CompetitorBootstrapHosting } from "./competitor-bootstrap-hosting.js";
-import { CoordinationDispatcherLambda } from "./coordination-dispatcher-lambda.js";
-import { CoordinationPluginBundle } from "./coordination-plugin-bundle.js";
 import { DeployApiLambda } from "./deploy-api-lambda.js";
-import { DeployCodeBuildProject } from "./deploy-codebuild-project.js";
-import { DeployCreateStateMachine } from "./deploy-create-state-machine.js";
-import { DeployDeleteStateMachine } from "./deploy-delete-state-machine.js";
-import {
-  BulkDeployCreateEventRule,
-  DeployDeleteEventRule,
-  DeployEventRule,
-} from "./deploy-event-rule.js";
 import { DeploymentsTable } from "./deployments-table.js";
-import { DescribeStackLambda } from "./describe-stack-lambda.js";
 import { DisruptionExecutorLambda } from "./disruption-executor-lambda.js";
 import { DisruptionsTable } from "./disruptions-table.js";
 import { EventApiLambda } from "./event-api-lambda.js";
 import { EventsTable } from "./events-table.js";
 import { ExternalIdAuditLambda } from "./external-id-audit-lambda.js";
 import { GenericScoringLambda } from "./generic-scoring-lambda.js";
-import {
-  DEFAULT_DEV_MOCK_RUNTIME_CONFIG,
-  ParticipantPortalHosting,
-  type ParticipantPortalRuntimeConfig,
-} from "./participant-portal-hosting.js";
-import { ParticipantPortalLambda } from "./participant-portal-lambda.js";
+import type { ParticipantPortalRuntimeConfig } from "./participant-portal-hosting.js";
 import { ProblemEndpointsTable } from "./problem-endpoints-table.js";
 import { SystemAuditWriterLambda } from "./system-audit-writer-lambda.js";
 import { TeamsTable } from "./teams-table.js";
@@ -410,62 +395,24 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     });
     this.competitorAccountsApiLambda = competitorAccountsApi.fn;
 
-    // CodeBuild Project: source.zip から `scripts/deploy-battles.sh` を実行する。
-    // #538: Bulk Deploy 並列度の hard cap は account-wide CodeBuild concurrent build
-    // quota (region default 60)。本 prop で project 単位に明示 cap を指定できる
-    // (= operator が Service Quota を引き上げた値を伝える経路 / sandbox で暴走防止)。
-    const sourceBucket = Bucket.fromBucketName(this, "SourceBucket", props.sourceBucketName);
-    const codeBuild = new DeployCodeBuildProject(this, "DeployCodeBuild", {
-      sourceBucket,
+    // Issue #2220: CodeBuild + DeployCreate/Delete state machines + Bulk Distributed Map
+    // pipeline, extracted to build-deploy-pipeline.ts. `bulkPayloadBucket` stays here (also
+    // used by EventApiLambda above, wired before this pipeline — bucket logical ID unchanged).
+    const deployPipeline = buildDeployPipeline(this, {
+      deploymentsTable: deployments.table,
+      eventBus,
+      bulkPayloadBucket,
+      sourceBucketName: props.sourceBucketName,
       sourceObjectKey: props.sourceObjectKey,
-      concurrentBuildLimit: props.deployConcurrentBuildLimit,
+      deployConcurrentBuildLimit: props.deployConcurrentBuildLimit,
       environmentName: props.environmentName,
     });
-    this.deployCodeBuildProjectName = codeBuild.project.projectName;
-
-    const describeStack = new DescribeStackLambda(this, "DescribeStack", {
-      environmentName: props.environmentName,
-    });
-
-    const stateMachine = new DeployCreateStateMachine(this, "DeployCreate", {
-      codeBuildProject: codeBuild.project,
-      describeStackFunction: describeStack.fn,
-      deploymentsTable: deployments.table,
-    });
-    this.deployCreateStateMachineArn = stateMachine.stateMachine.stateMachineArn;
-
-    // EventBridge Rule: `DeployCreateRequested` event を State Machine に流す。
-    new DeployEventRule(this, "DeployCreateRule", {
-      eventBus,
-      stateMachine: stateMachine.stateMachine,
-    });
-
-    // 削除経路 (deploy 対称): `DeployDeleteRequested` → DeployDelete State Machine →
-    // 同 CodeBuild Project (`OPERATION=delete`) → `scripts/delete-battles.sh` → CFn DeleteStack。
-    // State Machine 完了で DDB の status を `DELETING` → `DELETED` / `FAILED` に書き戻す。
-    const deleteStateMachine = new DeployDeleteStateMachine(this, "DeployDelete", {
-      codeBuildProject: codeBuild.project,
-      deploymentsTable: deployments.table,
-    });
-    this.deployDeleteStateMachineArn = deleteStateMachine.stateMachine.stateMachineArn;
-    new DeployDeleteEventRule(this, "DeployDeleteRule", {
-      eventBus,
-      stateMachine: deleteStateMachine.stateMachine,
-    });
-
-    // Issue #910 (#895 Phase 2.C): Distributed Map state machine + EventBridge Rule。
-    // bulkPayloadBucket は上で EventApiLambda 用に先行生成済 (= bucket logical ID 維持)。
-    const bulkStateMachine = new BulkDeployCreateStateMachine(this, "BulkDeployCreate", {
-      childStateMachine: stateMachine.stateMachine,
-      payloadBucket: bulkPayloadBucket,
-    });
-    new BulkDeployCreateEventRule(this, "BulkDeployCreateRule", {
-      eventBus,
-      stateMachine: bulkStateMachine.stateMachine,
-    });
+    this.deployCodeBuildProjectName = deployPipeline.deployCodeBuildProjectName;
+    this.deployCreateStateMachineArn = deployPipeline.deployCreateStateMachineArn;
+    this.deployDeleteStateMachineArn = deployPipeline.deployDeleteStateMachineArn;
     // outputs: handler refactor (= 2.C.2.b) で API Lambda が PutObject に使う。
-    this.bulkDeployPayloadBucketName = bulkPayloadBucket.bucketName;
-    this.bulkDeployCreateStateMachineArn = bulkStateMachine.stateMachine.stateMachineArn;
+    this.bulkDeployPayloadBucketName = deployPipeline.bulkDeployPayloadBucketName;
+    this.bulkDeployCreateStateMachineArn = deployPipeline.bulkDeployCreateStateMachineArn;
 
     // ADR-012 Phase 3.B: 1 分間隔の Generic Scoring Lambda (= 旧 HealthCheckLambda の後継)。
     // 2 つの責務を持つ:
@@ -508,67 +455,23 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     });
     this.externalIdAuditLambda = externalIdAudit.fn;
 
+    // Issue #2220: portal Lambda + coordination dispatcher + CloudFront hosting, extracted to
+    // build-participant-portal-subsystem.ts. Same `if (props.participantPortal)` guard as before.
     if (props.participantPortal) {
-      const portalLambda = new ParticipantPortalLambda(this, "ParticipantPortalLambda", {
+      const portalSubsystem = buildParticipantPortalSubsystem(this, {
         deploymentsTable: deployments.table,
         eventsTable: events.table,
         endpointsTable: endpoints.table,
         problemsScoring: props.problemsScoring,
         problemsEndpoints: props.problemsEndpoints,
+        problemsCoordination: props.problemsCoordination ?? {},
+        problemsCoordinationBundles: props.problemsCoordinationBundles ?? {},
         environmentName: props.environmentName,
+        runtimeConfig: props.participantPortal.runtimeConfig,
+        region: this.region,
       });
-      this.participantPortalLambda = portalLambda.fn;
-      new CfnOutput(this, "ParticipantPortalApiUrl", {
-        value: portalLambda.url.url,
-        description: "Participant Portal Lambda Function URL (auth via teamLoginKey bearer).",
-      });
-
-      // ADR-030 Phase 2 (#1420): inter-team coordination dispatch を participant-portal Lambda
-      // (sts:AssumeRole / ssm / kms 保持) から分離し、 coordination state 行しか触れない最小 IAM の
-      // 専用 Lambda で動かす。 未信頼の問題同梱 plugin を in-process 実行しても competitor 資格情報・
-      // 他テナントデータに到達できない (ADR-030 S2)。
-      // Phase 3b: coordination plugin を宣言した問題があれば、 synth-bundle 済み .mjs を専用 S3 bucket に
-      // 配置し、 dispatcher が runtime に download → import() する (= S1 動的 load)。 0 件なら bucket 不要。
-      const coordinationBucket = coordinationPluginBucket(
-        this,
-        (props.problemsCoordinationBundles ?? {}) as Record<string, string>,
-      );
-      const coordinationDispatcher = new CoordinationDispatcherLambda(
-        this,
-        "CoordinationDispatcher",
-        {
-          deploymentsTable: deployments.table,
-          eventsTable: events.table,
-          environmentName: props.environmentName,
-          // ADR-030 Phase 3 config layer: 問題の coordination plugin path を scope resolver へ渡す。
-          problemsCoordination: props.problemsCoordination ?? {},
-          // ADR-030 Phase 3b: plugin .mjs を materialize する S3 bucket (宣言問題がある時のみ)。
-          ...(coordinationBucket ? { pluginBucket: coordinationBucket } : {}),
-        },
-      );
-      new CfnOutput(this, "CoordinationDispatcherApiUrl", {
-        value: coordinationDispatcher.url.url,
-        description:
-          "Coordination Dispatcher Lambda Function URL (ADR-030 最小 IAM、 teamLoginKey bearer 認証)。",
-      });
-
-      const portal = new ParticipantPortalHosting(this, "ParticipantPortal");
-      const baseConfig =
-        props.participantPortal.runtimeConfig === "default-dev-mock"
-          ? DEFAULT_DEV_MOCK_RUNTIME_CONFIG(this.region)
-          : props.participantPortal.runtimeConfig;
-      portal.deployRuntimeConfig({
-        ...baseConfig,
-        apiBaseUrl: portalLambda.url.url,
-        mode: "backend",
-        // #1420: 専用 coordination dispatcher の Function URL を portal へ配る (slot が叩く)。
-        coordinationApiUrl: coordinationDispatcher.url.url,
-      });
-      this.participantPortalUrl = portal.distributionUrl;
-      new CfnOutput(this, "ParticipantPortalUrl", {
-        value: portal.distributionUrl,
-        description: "Participant Portal CloudFront URL.",
-      });
+      this.participantPortalLambda = portalSubsystem.participantPortalLambda;
+      this.participantPortalUrl = portalSubsystem.participantPortalUrl;
     }
 
     new CfnOutput(this, "DeploymentsTableName", {
@@ -589,7 +492,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         "Issue #459 / ADR-002 Competitor Accounts table 名 (tenant ↔ 競技者 AWS account 紐付け)。",
     });
     new CfnOutput(this, "DeployCreateStateMachineArn", {
-      value: stateMachine.stateMachine.stateMachineArn,
+      value: this.deployCreateStateMachineArn,
       description: "Deploy 起動を司る Step Functions State Machine の ARN。",
     });
     new CfnOutput(this, "ProblemEndpointsTableName", {
@@ -598,17 +501,4 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         "ADR-012 Phase 3.A Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
     });
   }
-}
-
-/**
- * #1420 ADR-030 Phase 3b: coordination plugin を宣言した問題がある時だけ bundle bucket を作る
- * (= 0 件なら undefined を返し、 dispatcher は importer 未配線で全 route not_configured)。
- * constructor から分離して認知的複雑度を抑える。
- */
-function coordinationPluginBucket(
-  scope: Construct,
-  bundles: Record<string, string>,
-): IBucket | undefined {
-  if (Object.keys(bundles).length === 0) return undefined;
-  return new CoordinationPluginBundle(scope, "CoordinationPluginBundle", { bundles }).bucket;
 }

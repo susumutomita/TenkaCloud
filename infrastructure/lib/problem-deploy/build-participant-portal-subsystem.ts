@@ -1,0 +1,114 @@
+import { CfnOutput } from "aws-cdk-lib";
+import type { Table } from "aws-cdk-lib/aws-dynamodb";
+import type { IFunction } from "aws-cdk-lib/aws-lambda";
+import type { IBucket } from "aws-cdk-lib/aws-s3";
+import type { Construct } from "constructs";
+import { CoordinationDispatcherLambda } from "./coordination-dispatcher-lambda.js";
+import { CoordinationPluginBundle } from "./coordination-plugin-bundle.js";
+import {
+  DEFAULT_DEV_MOCK_RUNTIME_CONFIG,
+  ParticipantPortalHosting,
+  type ParticipantPortalRuntimeConfig,
+} from "./participant-portal-hosting.js";
+import { ParticipantPortalLambda } from "./participant-portal-lambda.js";
+
+export interface BuildParticipantPortalSubsystemArgs {
+  readonly deploymentsTable: Table;
+  readonly eventsTable: Table;
+  readonly endpointsTable: Table;
+  readonly problemsScoring: Readonly<Record<string, unknown>>;
+  readonly problemsEndpoints: Readonly<Record<string, unknown>>;
+  readonly problemsCoordination: Readonly<Record<string, unknown>>;
+  readonly problemsCoordinationBundles: Readonly<Record<string, string>>;
+  readonly environmentName: string;
+  readonly runtimeConfig: ParticipantPortalRuntimeConfig | "default-dev-mock";
+  readonly region: string;
+}
+
+export interface ParticipantPortalSubsystemOutputs {
+  readonly participantPortalLambda: IFunction;
+  readonly participantPortalUrl: string;
+}
+
+/**
+ * Issue #2220: extracted verbatim from `ProblemDeployBackendStack`'s constructor (formerly
+ * lines 511-572, guarded by `if (props.participantPortal)`) to shrink the constructor. `scope`
+ * MUST be the stack instance itself (all construct IDs below are unprefixed, exactly as they
+ * were inline) — moving this to a nested construct would change every logical ID beneath it
+ * (data-loss-class REPLACE on the portal Lambda / CloudFront distribution). Caller decides
+ * whether to call this at all (mirrors the original `if (props.participantPortal)` guard).
+ *
+ * ADR-030 Phase 2 (#1420): inter-team coordination dispatch を participant-portal Lambda
+ * (sts:AssumeRole / ssm / kms 保持) から分離し、 coordination state 行しか触れない最小 IAM の
+ * 専用 Lambda で動かす。 未信頼の問題同梱 plugin を in-process 実行しても competitor 資格情報・
+ * 他テナントデータに到達できない (ADR-030 S2)。
+ * Phase 3b: coordination plugin を宣言した問題があれば、 synth-bundle 済み .mjs を専用 S3 bucket に
+ * 配置し、 dispatcher が runtime に download → import() する (= S1 動的 load)。 0 件なら bucket 不要。
+ */
+export function buildParticipantPortalSubsystem(
+  scope: Construct,
+  args: BuildParticipantPortalSubsystemArgs,
+): ParticipantPortalSubsystemOutputs {
+  const portalLambda = new ParticipantPortalLambda(scope, "ParticipantPortalLambda", {
+    deploymentsTable: args.deploymentsTable,
+    eventsTable: args.eventsTable,
+    endpointsTable: args.endpointsTable,
+    problemsScoring: args.problemsScoring,
+    problemsEndpoints: args.problemsEndpoints,
+    environmentName: args.environmentName,
+  });
+  new CfnOutput(scope, "ParticipantPortalApiUrl", {
+    value: portalLambda.url.url,
+    description: "Participant Portal Lambda Function URL (auth via teamLoginKey bearer).",
+  });
+
+  const coordinationBucket = coordinationPluginBucket(scope, args.problemsCoordinationBundles);
+  const coordinationDispatcher = new CoordinationDispatcherLambda(scope, "CoordinationDispatcher", {
+    deploymentsTable: args.deploymentsTable,
+    eventsTable: args.eventsTable,
+    environmentName: args.environmentName,
+    // ADR-030 Phase 3 config layer: 問題の coordination plugin path を scope resolver へ渡す。
+    problemsCoordination: args.problemsCoordination,
+    // ADR-030 Phase 3b: plugin .mjs を materialize する S3 bucket (宣言問題がある時のみ)。
+    ...(coordinationBucket ? { pluginBucket: coordinationBucket } : {}),
+  });
+  new CfnOutput(scope, "CoordinationDispatcherApiUrl", {
+    value: coordinationDispatcher.url.url,
+    description:
+      "Coordination Dispatcher Lambda Function URL (ADR-030 最小 IAM、 teamLoginKey bearer 認証)。",
+  });
+
+  const portal = new ParticipantPortalHosting(scope, "ParticipantPortal");
+  const baseConfig =
+    args.runtimeConfig === "default-dev-mock"
+      ? DEFAULT_DEV_MOCK_RUNTIME_CONFIG(args.region)
+      : args.runtimeConfig;
+  portal.deployRuntimeConfig({
+    ...baseConfig,
+    apiBaseUrl: portalLambda.url.url,
+    mode: "backend",
+    // #1420: 専用 coordination dispatcher の Function URL を portal へ配る (slot が叩く)。
+    coordinationApiUrl: coordinationDispatcher.url.url,
+  });
+  new CfnOutput(scope, "ParticipantPortalUrl", {
+    value: portal.distributionUrl,
+    description: "Participant Portal CloudFront URL.",
+  });
+
+  return {
+    participantPortalLambda: portalLambda.fn,
+    participantPortalUrl: portal.distributionUrl,
+  };
+}
+
+/**
+ * #1420 ADR-030 Phase 3b: coordination plugin を宣言した問題がある時だけ bundle bucket を作る
+ * (= 0 件なら undefined を返し、 dispatcher は importer 未配線で全 route not_configured)。
+ */
+function coordinationPluginBucket(
+  scope: Construct,
+  bundles: Readonly<Record<string, string>>,
+): IBucket | undefined {
+  if (Object.keys(bundles).length === 0) return undefined;
+  return new CoordinationPluginBundle(scope, "CoordinationPluginBundle", { bundles }).bucket;
+}
