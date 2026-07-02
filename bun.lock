@@ -55,6 +55,7 @@
         "@cloudscape-design/global-styles": "^1.0.61",
         "@tenkacloud/auth-client": "workspace:*",
         "@tenkacloud/format": "workspace:*",
+        "@tenkacloud/problem-cost": "workspace:*",
         "@tenkacloud/problem-runtime": "workspace:*",
         "@tenkacloud/web-kit": "workspace:*",
         "http-status-codes": "^2.3.0",
@@ -241,6 +242,17 @@
       },
       "peerDependencies": {
         "react": "^19.0.0",
+      },
+    },
+    "packages/problem-cost": {
+      "name": "@tenkacloud/problem-cost",
+      "version": "0.1.0",
+      "dependencies": {
+        "yaml": "^1.10.3",
+      },
+      "devDependencies": {
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.9",
       },
     },
     "packages/problem-runtime": {
@@ -974,6 +986,8 @@
     "@tenkacloud/portal-contracts": ["@tenkacloud/portal-contracts@workspace:packages/portal-contracts"],
 
     "@tenkacloud/portal-plugin-sdk": ["@tenkacloud/portal-plugin-sdk@workspace:packages/portal-plugin-sdk"],
+
+    "@tenkacloud/problem-cost": ["@tenkacloud/problem-cost@workspace:packages/problem-cost"],
 
     "@tenkacloud/problem-runtime": ["@tenkacloud/problem-runtime@workspace:packages/problem-runtime"],
 

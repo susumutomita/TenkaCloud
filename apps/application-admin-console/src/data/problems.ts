@@ -7,7 +7,7 @@
  * 静的 build-time discovery で 1 元化を保つ。
  */
 
-import type { CostRiskLevel } from "../../../../scripts/lib/problem-cost";
+import type { CostRiskLevel } from "@tenkacloud/problem-cost";
 import {
   buildEffectiveCatalog,
   type CoreCatalogInput,
