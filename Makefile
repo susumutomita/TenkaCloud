@@ -8,7 +8,7 @@ export JSII_DEPRECATED := quiet
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install_ci submodule-latest build typecheck test test-coverage clean-test-outdir audit-deps before-commit \
+.PHONY: help install install_ci submodule-latest build typecheck test test-coverage clean-test-outdir audit-deps before-commit ci-local \
         lint lint-md lint-text lint-format \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
@@ -56,6 +56,23 @@ audit-deps:    ; bun run audit:dependencies
 GATE_CHECKS := lint test
 
 before-commit: $(GATE_CHECKS)
+
+# Issue #2219: `before-commit` (lint + test) is a fast pre-push sanity check, not a full CI
+# mirror — CI (.github/workflows/ci.yml) additionally runs audit-deps / the submodule pin
+# guard / coverage-gate (100% for agent-owned workspaces) / build, so a green `before-commit`
+# does not guarantee a green CI. `ci-local` runs everything CI runs, in CI's own order, minus
+# the Codecov upload step (network + secret, not meaningful to run locally).
+ci-local:
+	git fetch --no-tags origin main:refs/remotes/origin/main
+	git -C problems fetch --no-tags --unshallow origin 2>/dev/null || git -C problems fetch --no-tags origin || true
+	$(MAKE) audit-deps
+	bun run .claude/skills/quality-gates/scripts/run.ts submodule-not-behind
+	$(MAKE) lint-text
+	$(MAKE) lint-format
+	$(MAKE) typecheck
+	$(MAKE) test-coverage
+	bun run .claude/skills/quality-gates/scripts/run.ts coverage-gate
+	$(MAKE) build
 
 # ===== Lint / Fix =====
 lint:   lint-md lint-text lint-format
