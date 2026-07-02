@@ -123,3 +123,32 @@ describe("satisfiesCoreRange / isValidSemverRange: hyphen-range bounds", () => {
     expect(satisfiesCoreRange("1.5.0", "1.0.0 - 2.0.0")).toBe(true);
   });
 });
+
+describe("satisfiesCoreRange: wildcard/partial tokens with >, >=, <, <= operators", () => {
+  it("should fall back to the [lower, upper) interval for a wildcard token", () => {
+    expect(satisfiesCoreRange("1.5.0", ">1.x")).toBe(false);
+    expect(satisfiesCoreRange("2.0.0", ">1.x")).toBe(true);
+    expect(satisfiesCoreRange("1.5.0", ">=1")).toBe(true);
+    expect(satisfiesCoreRange("0.9.0", ">=1")).toBe(false);
+    expect(satisfiesCoreRange("0.9.0", "<1.x")).toBe(true);
+    expect(satisfiesCoreRange("1.5.0", "<1.x")).toBe(false);
+    expect(satisfiesCoreRange("1.5.0", "<=1.2")).toBe(false);
+    expect(satisfiesCoreRange("1.1.0", "<=1.2")).toBe(true);
+  });
+});
+
+describe("satisfiesCoreRange: pre-release precedence edge cases", () => {
+  it("should rank a release higher than a prerelease when comparing an exact prerelease bound", () => {
+    // version has no prerelease (a.length===0) but the exact bound does (b.length!==0).
+    expect(satisfiesCoreRange("1.0.0", ">=1.0.0-rc.1")).toBe(true);
+  });
+
+  it("should rank a non-numeric prerelease identifier higher than a numeric one", () => {
+    expect(satisfiesCoreRange("1.0.0-alpha", ">=1.0.0-1")).toBe(true);
+    expect(satisfiesCoreRange("1.0.0-1", ">=1.0.0-alpha")).toBe(false);
+  });
+
+  it("should treat an invalid (empty-segment) OR clause as an invalid range", () => {
+    expect(satisfiesCoreRange("1.0.0", "1.0.0 || ")).toBe(false);
+  });
+});
