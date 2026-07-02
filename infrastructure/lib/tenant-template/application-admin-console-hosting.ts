@@ -181,6 +181,10 @@ export class ApplicationAdminConsoleHosting extends Construct {
     };
     // Issue #867: runtime-config.json は CloudFront cache 無効化。 pooled tenants 共有 CDN
     // でも tenant 別 config を返すため cache はリスク (= 設定混線)。
-    deployRuntimeConfigJson(this, { siteBucket: this.bucket, distribution: this.distribution }, data);
+    deployRuntimeConfigJson(
+      this,
+      { siteBucket: this.bucket, distribution: this.distribution },
+      data,
+    );
   }
 }

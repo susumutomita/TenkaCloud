@@ -99,16 +99,20 @@ export class ParticipantPortalHosting extends Construct {
   deployRuntimeConfig(config: ParticipantPortalRuntimeConfig): void {
     // Issue #867: runtime-config.json は CloudFront / browser キャッシュさせない。
     // event 切替 / mode 切替時に古い設定が残ると participant 全員の画面が壊れる。
-    deployRuntimeConfigJson(this, { siteBucket: this.bucket, distribution: this.distribution }, {
-      apiBaseUrl: (config.apiBaseUrl ?? "").replace(/\/$/, ""),
-      eventTitle: config.eventTitle,
-      eventRegion: config.eventRegion,
-      mode: config.mode,
-      // #1420: coordination dispatcher URL (= 専用 Lambda)。 未配線なら key を出さない。
-      ...(config.coordinationApiUrl
-        ? { coordinationApiUrl: config.coordinationApiUrl.replace(/\/$/, "") }
-        : {}),
-    });
+    deployRuntimeConfigJson(
+      this,
+      { siteBucket: this.bucket, distribution: this.distribution },
+      {
+        apiBaseUrl: (config.apiBaseUrl ?? "").replace(/\/$/, ""),
+        eventTitle: config.eventTitle,
+        eventRegion: config.eventRegion,
+        mode: config.mode,
+        // #1420: coordination dispatcher URL (= 専用 Lambda)。 未配線なら key を出さない。
+        ...(config.coordinationApiUrl
+          ? { coordinationApiUrl: config.coordinationApiUrl.replace(/\/$/, "") }
+          : {}),
+      },
+    );
   }
 }
 

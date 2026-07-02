@@ -1,20 +1,10 @@
 import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
-import {
-  Distribution,
-  HttpVersion,
-  OriginAccessIdentity,
-  PriceClass,
-  ViewerProtocolPolicy,
-} from "aws-cdk-lib/aws-cloudfront";
-import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
-import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
-import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
+import type { Distribution } from "aws-cdk-lib/aws-cloudfront";
+import type { Bucket } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
-import {
-  buildCustomDomainDistributionProps,
-  type CustomDomainConfig,
-} from "./security/cloudfront-custom-domain.js";
+import { buildSpaHosting } from "./hosting/spa-hosting.js";
+import type { CustomDomainConfig } from "./security/cloudfront-custom-domain.js";
 import { buildSecurityHeadersPolicy } from "./security/cloudfront-headers.js";
 
 /**
@@ -56,17 +46,6 @@ export class AdminConsoleHostingStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: AdminConsoleHostingStackProps) {
     super(scope, id, props);
 
-    this.siteBucket = new Bucket(this, "SiteBucket", {
-      encryption: BucketEncryption.S3_MANAGED,
-      enforceSSL: true,
-      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-    });
-
-    const oai = new OriginAccessIdentity(this, "OAI");
-    this.siteBucket.grantRead(oai);
-
     // Issue #1031: CSP は region wildcard。 詳細は file header 参照。
     const region = cdk.Stack.of(this).region;
     const securityHeaders = buildSecurityHeadersPolicy(this, "SecurityHeaders", {
@@ -78,35 +57,18 @@ export class AdminConsoleHostingStack extends cdk.Stack {
       formActionAllowedOrigins: ["https://*.amazoncognito.com"],
     });
 
-    this.distribution = new Distribution(this, "Distribution", {
-      // Issue #1695: customDomain 設定時のみ domainNames + ACM 証明書 + TLS 1.2 強制。 未設定は NO-OP。
-      ...buildCustomDomainDistributionProps(this, "ViewerCertificate", props.customDomain),
-      defaultBehavior: {
-        origin: S3BucketOrigin.withOriginAccessIdentity(this.siteBucket, {
-          originAccessIdentity: oai,
-        }),
-        viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        responseHeadersPolicy: securityHeaders,
-      },
-      defaultRootObject: "index.html",
-      httpVersion: HttpVersion.HTTP2,
-      priceClass: PriceClass.PRICE_CLASS_100,
-      errorResponses: [
-        { httpStatus: 403, responseHttpStatus: 200, responsePagePath: "/index.html" },
-        { httpStatus: 404, responseHttpStatus: 200, responsePagePath: "/index.html" },
-      ],
+    // dist/ をアップロード (URL 非依存の静的ファイル)。共通スキャフォールドは
+    // buildSpaHosting (Issue #2207) に集約。 runtime-config.json は別 stack が書く。
+    const distDir = path.join(import.meta.dirname, "..", "..", "apps", "admin-console", "dist");
+    const hosting = buildSpaHosting(this, {
+      distDir,
+      securityHeaders,
+      customDomain: props.customDomain,
     });
+    this.siteBucket = hosting.siteBucket;
+    this.distribution = hosting.distribution;
 
     this.distributionDomainName = this.distribution.distributionDomainName;
-
-    // dist/ をアップロード (URL 非依存の静的ファイル)
-    const distDir = path.join(import.meta.dirname, "..", "..", "apps", "admin-console", "dist");
-    new BucketDeployment(this, "SiteDeployment", {
-      sources: [Source.asset(distDir)],
-      destinationBucket: this.siteBucket,
-      distribution: this.distribution,
-      prune: false, // runtime-config.json は別 stack が書くので他 key を残す
-    });
 
     new cdk.CfnOutput(this, "AdminConsoleUrl", {
       value: `https://${this.distribution.distributionDomainName}`,
