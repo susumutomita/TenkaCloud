@@ -163,6 +163,13 @@ export interface ParticipantProblemView {
    * 未知値は raw 表示 fallback (`providerLabel()`)。
    */
   readonly provider?: string;
+  /**
+   * [#2235 / ADR-0001·ADR-048] 参加者アクセス capability ("console" | "cli-credentials" |
+   * "external-portal" | "unsupported")。matrix の正本は backend
+   * (composite-target-access resolver) — frontend は判定を持たない。旧 backend 応答
+   * との互換のため optional。不在時は導線を追加しない (従来の案内文のまま)。
+   */
+  readonly accessCapabilities?: readonly string[];
   readonly status: DeploymentStatus;
   readonly stackOutputs: Record<string, string>;
   readonly failureReason?: string;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { problemProvider, providerLabel } from "../../src/data/providers";
+import { externalPortalUrl, problemProvider, providerLabel } from "../../src/data/providers";
 
 describe("providers (#2233)", () => {
   it("should map canonical providers to brand labels", () => {
@@ -29,5 +29,25 @@ describe("providers (#2233)", () => {
 
   it("should echo an explicit provider", () => {
     expect(problemProvider({ provider: "sakura" })).toBe("sakura");
+  });
+
+  it("should map external-portal providers to their public console URLs", () => {
+    // [#2235 / ADR-048 §5.1] プラットフォーム所有の定数マップ (metadata / 参加者入力からは供給しない)。
+    expect(externalPortalUrl("gcp")).toBe("https://console.cloud.google.com/");
+    expect(externalPortalUrl("azure")).toBe("https://portal.azure.com/");
+    expect(externalPortalUrl("sakura")).toBe("https://secure.sakura.ad.jp/cloud/");
+  });
+
+  it("should return no external portal for aws (managed console path)", () => {
+    expect(externalPortalUrl("aws")).toBeUndefined();
+  });
+
+  it("should return no external portal for an unknown provider", () => {
+    expect(externalPortalUrl("oraclecloud")).toBeUndefined();
+  });
+
+  it("should not resolve external portal URLs through the prototype chain", () => {
+    expect(externalPortalUrl("toString")).toBeUndefined();
+    expect(externalPortalUrl("constructor")).toBeUndefined();
   });
 });
