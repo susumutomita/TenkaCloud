@@ -16,6 +16,7 @@ import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-cli
 import { useAuth } from "../auth/AuthProvider";
 import { TeamViewProvider, useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig } from "../config";
+import { problemProvider } from "../data/providers";
 import { useI18n } from "../i18n";
 import { CountdownTimer } from "./CountdownTimer";
 import { buildLocaleUtility } from "./locale-switcher";
@@ -135,12 +136,15 @@ export function buildConsoleUtility(
     readonly jobId: string;
     readonly problemId: string;
     readonly awsAccountId?: string;
+    readonly provider?: string;
   }[],
   openConsole: (jobId: string) => void,
   navigate: (href: string) => void,
   t: Translate,
 ): TopNavigationProps.Utility {
-  const consolable = problems.filter((p) => p.awsAccountId);
+  // [#2234] 非 AWS 行も deploy request 由来の awsAccountId を持つため、 provider でゲートする
+  // (= Sakura/Azure/GCP 問題に "Open AWS Console" を誤表示しない、 ADR-0001 の matrix)。
+  const consolable = problems.filter((p) => problemProvider(p) === "aws" && p.awsAccountId);
   if (consolable.length === 0) {
     return {
       type: "button",

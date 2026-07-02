@@ -306,11 +306,11 @@
     "health_unknown": "未チェック",
     "last_scored_label": "最終加点",
     "outputs_header": "アクセス先 URL",
-    "stack_outputs_detail_header": "Stack Outputs (詳細)",
+    "stack_outputs_detail_header": "デプロイ出力 (詳細)",
     "celebrate_header": "🏆 クリア済み +{points} pt",
     "celebrate_body": "この問題は正解済みです。 引き続き他の問題に挑戦してください！",
     "submit_button": "Flag 提出 (+{points} pt)",
-    "flag_field_label": "Flag (Stack Output 値)",
+    "flag_field_label": "Flag (デプロイ出力値)",
     "flag_placeholder": "値を入力",
     "flag_mock_placeholder": "例: tenkacloudsample",
     "flag_mock_hint": "デモモードです — `tenkacloudsample` と入力すると正解の体験が出ます (= 部分一致でも OK。 `claude` / `42` 等の Easter egg もあります)。",
@@ -356,7 +356,7 @@
     "solved_header": "🎉 {label} — 解答済",
     "solved_body": "この flag で +{points} pt を獲得しました。",
     "submit_button": "提出 (+{points} pt)",
-    "flag_field_label": "{label} (Stack Output 値)"
+    "flag_field_label": "{label} (デプロイ出力値)"
   },
   "score_timeline": {
     "header": "スコア推移",
