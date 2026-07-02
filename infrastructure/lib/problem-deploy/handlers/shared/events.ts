@@ -1,4 +1,4 @@
-import type { EventBridgeClient } from "@aws-sdk/client-eventbridge";
+import type { EventBridgeClient, PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import { z } from "zod";
 import { logDeployTrace } from "./trace-log.js";
@@ -216,4 +216,77 @@ export async function publishProblemEvent(args: {
       ? `${failed.ErrorCode}: ${failed.ErrorMessage ?? "unknown error"}`
       : "unknown error",
   );
+}
+
+/** EventBridge `PutEvents`'s own limit: at most 10 entries per request. */
+export const PUT_EVENTS_BATCH_SIZE = 10;
+
+/** One entry to batch-publish, carrying the caller's own correlation `item` alongside it. */
+export interface PutEventsBatchItem<T> {
+  readonly item: T;
+  readonly entry: PutEventsRequestEntry;
+}
+
+/**
+ * Per-entry outcome of {@link putEventsBatched}, index-aligned back to the input via `item`
+ * (not array index — chunking makes index correlation across chunks error-prone).
+ */
+export interface PutEventsBatchResult<T> {
+  readonly item: T;
+  readonly success: boolean;
+  readonly errorCode?: string;
+  readonly errorMessage?: string;
+}
+
+/**
+ * Issue #2210: the chunked `PutEvents` pattern (split into groups of
+ * {@link PUT_EVENTS_BATCH_SIZE}, send, check `FailedEntryCount`, map failed entries by
+ * index-aligned `ErrorCode`) was reimplemented in 4 handler call sites — one of which
+ * (`disruption-fire.ts`) redefined its own local `BATCH = 10` constant, and another
+ * (`condition-disruption-fire.ts`) didn't chunk at all (a latent bug once more than 10
+ * disruption targets fire at once). This is the single shared implementation; each caller
+ * only owns turning `PutEventsBatchResult[]` into its own failure shape (a jobId list, a
+ * `PublishFailure[]`, or a thrown `Error`) — that mapping differs by design per call site
+ * and stays there.
+ */
+export async function putEventsBatched<T>(
+  client: EventBridgeClient,
+  items: readonly PutEventsBatchItem<T>[],
+): Promise<PutEventsBatchResult<T>[]> {
+  const chunks: PutEventsBatchItem<T>[][] = [];
+  for (let i = 0; i < items.length; i += PUT_EVENTS_BATCH_SIZE) {
+    chunks.push(items.slice(i, i + PUT_EVENTS_BATCH_SIZE));
+  }
+  const results = await Promise.all(chunks.map((chunk) => sendPutEventsChunk(client, chunk)));
+  return results.flat();
+}
+
+async function sendPutEventsChunk<T>(
+  client: EventBridgeClient,
+  chunk: readonly PutEventsBatchItem<T>[],
+): Promise<PutEventsBatchResult<T>[]> {
+  try {
+    const out = await client.send(new PutEventsCommand({ Entries: chunk.map((c) => c.entry) }));
+    if ((out.FailedEntryCount ?? 0) === 0) {
+      return chunk.map((c) => ({ item: c.item, success: true }));
+    }
+    // PutEvents response.Entries is index-aligned with the request Entries.
+    return chunk.map((c, i) => {
+      const entry = out.Entries?.[i];
+      if (entry?.ErrorCode) {
+        return {
+          item: c.item,
+          success: false,
+          errorCode: entry.ErrorCode,
+          errorMessage: entry.ErrorMessage ?? "unknown error",
+        };
+      }
+      return { item: c.item, success: true };
+    });
+  } catch (err) {
+    // The whole chunk's request rejected (network/throttling) — every entry in it is
+    // unpublished, matching the pre-existing per-call-site "chunk reject → all failed" handling.
+    const reason = err instanceof Error ? err.message : String(err);
+    return chunk.map((c) => ({ item: c.item, success: false, errorMessage: reason }));
+  }
 }

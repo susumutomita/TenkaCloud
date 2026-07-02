@@ -14,124 +14,22 @@ import {
   setEventSchedule,
   unlockEventScoring,
 } from "../api/events-client";
+import {
+  type EndsAtValidation,
+  formatEndEventError,
+  resolveScheduledStartInput,
+  validateDeployAtInput,
+  validateEndsAtInput,
+  validateTeardownAtInput,
+} from "./event-operations-validation";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
-export interface EndsAtValidation {
-  readonly canSubmit: boolean;
-  /** i18n key (= `event_detail.error_*`) returned for the caller to resolve via useT(). */
-  readonly errorKey?: string;
-  readonly value?: Date;
-}
-
-export function validateEndsAtInput(
-  date: string,
-  time: string,
-  startsAt: string | undefined,
-  nowMs: number,
-): EndsAtValidation {
-  if (!date || !time) return { canSubmit: false };
-  const value = new Date(`${date}T${time}:00`);
-  if (Number.isNaN(value.getTime())) {
-    return { canSubmit: false, errorKey: "event_detail.error_endsat_format" };
-  }
-  if (value.getTime() < nowMs - 60_000) {
-    return { canSubmit: false, errorKey: "event_detail.error_endsat_past" };
-  }
-  if (startsAt) {
-    const startsAtMs = new Date(startsAt).getTime();
-    if (Number.isFinite(startsAtMs) && value.getTime() <= startsAtMs) {
-      return { canSubmit: false, errorKey: "event_detail.error_endsat_before_start" };
-    }
-  }
-  return { canSubmit: true, value };
-}
-
-/**
- * [ADR-047] 自動撤去予定時刻の入力検証。 過去不可 (now-60s 以前) かつ endsAt 以降 (= 採点 gate を
- * 閉じてから撤去する always-ends 不変条件)。 endsAt 未設定なら下限制約なし。
- */
-export function validateTeardownAtInput(
-  date: string,
-  time: string,
-  endsAt: string | undefined,
-  nowMs: number,
-): EndsAtValidation {
-  if (!date || !time) return { canSubmit: false };
-  const value = new Date(`${date}T${time}:00`);
-  if (Number.isNaN(value.getTime())) {
-    return { canSubmit: false, errorKey: "event_detail.error_teardown_format" };
-  }
-  if (value.getTime() < nowMs - 60_000) {
-    return { canSubmit: false, errorKey: "event_detail.error_teardown_past" };
-  }
-  if (endsAt) {
-    const endsAtMs = new Date(endsAt).getTime();
-    if (Number.isFinite(endsAtMs) && value.getTime() < endsAtMs) {
-      return { canSubmit: false, errorKey: "event_detail.error_teardown_before_ends" };
-    }
-  }
-  return { canSubmit: true, value };
-}
-
-/**
- * [ADR-047 follow-up] 自動デプロイ予定時刻の入力検証 (validateTeardownAtInput の鏡像)。 過去不可
- * (now-60s 以前) かつ endsAt 以前 (= deploy → 採点 → 終了 の時系列を保つ)。 endsAt 未設定なら
- * 上限制約なし。
- */
-export function validateDeployAtInput(
-  date: string,
-  time: string,
-  endsAt: string | undefined,
-  nowMs: number,
-): EndsAtValidation {
-  if (!date || !time) return { canSubmit: false };
-  const value = new Date(`${date}T${time}:00`);
-  if (Number.isNaN(value.getTime())) {
-    return { canSubmit: false, errorKey: "event_detail.error_deploy_format" };
-  }
-  if (value.getTime() < nowMs - 60_000) {
-    return { canSubmit: false, errorKey: "event_detail.error_deploy_past" };
-  }
-  if (endsAt) {
-    const endsAtMs = new Date(endsAt).getTime();
-    if (Number.isFinite(endsAtMs) && value.getTime() > endsAtMs) {
-      return { canSubmit: false, errorKey: "event_detail.error_deploy_after_ends" };
-    }
-  }
-  return { canSubmit: true, value };
-}
-
-function resolveScheduledStartInput(
-  date: string,
-  time: string,
-  nowMs: number,
-  t: Translate,
-):
-  | { readonly ok: true; readonly startsAt: string }
-  | { readonly ok: false; readonly error: string } {
-  if (!date || !time) return { ok: false, error: t("event_detail.error_date_time_required") };
-  // DatePicker は YYYY-MM-DD、TimeInput は HH:mm。秒は :00 固定で組む (operator UX が分精度想定)。
-  const local = new Date(`${date}T${time}:00`);
-  if (Number.isNaN(local.getTime())) {
-    return { ok: false, error: t("event_detail.error_date_time_format") };
-  }
-  if (local.getTime() < nowMs - 60_000) {
-    return { ok: false, error: t("event_detail.error_startsat_past") };
-  }
-  return { ok: true, startsAt: local.toISOString() };
-}
-
-function formatEndEventError(err: unknown, t: Translate): string {
-  if (err instanceof ApiError && err.status === StatusCodes.CONFLICT) {
-    const match = err.message.match(/"currentStatus"\s*:\s*"([A-Z_]+)"/);
-    const current = match?.[1];
-    return current
-      ? t("event_detail.error_end_status_with_current", { current })
-      : t("event_detail.error_end_status");
-  }
-  return toErrorMessage(err);
-}
+// Issue #2221: the 4 pure validators/formatters below now live in
+// event-operations-validation.ts; re-exported here so existing imports of
+// useEventOperations (this hook's public interface) don't need to change.
+export type { EndsAtValidation };
+export { validateDeployAtInput, validateEndsAtInput, validateTeardownAtInput };
 
 export function useEventOperations(args: {
   readonly apiClient: ApiClient | null;
