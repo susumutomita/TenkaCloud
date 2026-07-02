@@ -98,10 +98,10 @@ export function parseConfig(configContent: string, logger: Logger): Config {
  *   - placeholder は env で展開、未設定 + default 無しは tolerant=true なら literal `${VAR}` のまま残る
  *   - JSON parse して `Config` interface に揃える (JSON Schema validation はしない)
  *
- * tolerant が default なのは、bin 側の段階導入を許すため: 現状 `dynamoDbConfig` /
- * `kmsConfig` 以外の field (controlPlaneConfig 等) は bin が直接 process.env を読んで
- * おり config.json 経由ではない。それらに literal `${VAR}` が残っていても bin が無視
- * するので安全。後続 PR で段階的に config.json 経由に寄せていく前提。
+ * tolerant が default なのは、 default 無し placeholder (= `accountId` の
+ * `${AWS_ACCOUNT_ID}` 等) が creds 不在の synth / test で未展開のまま残ることを許すため。
+ * consumer (resolve.ts) は展開済みの値だけを読む。 なお control-plane 系の設定は
+ * config.json ではなく `CDK_PARAM_*` env 経由が正 (Issue #2197 で死に設定を削除済み)。
  */
 export function loadConfig(envName: string, baseDir: string): Config | undefined {
   const configPath = path.resolve(baseDir, `../environments/${envName}/config.json`);

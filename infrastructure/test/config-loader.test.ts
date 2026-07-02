@@ -152,13 +152,14 @@ describe("loadConfig (環境別 config.json + .env)", () => {
 
   describe("dynamoDbConfig 以外のセクションに env 未設定の placeholder があるとき", () => {
     it("should retain literal placeholders in tolerant mode while keeping dynamoDbConfig usable as usual", () => {
+      // Issue #2197: 旧 controlPlaneConfig を例にしていたが死に設定として削除したため、
+      // default 無し placeholder の現役代表 (= accountId の ${AWS_ACCOUNT_ID}) で tolerant
+      // 挙動を pin する。
       writeConfig("development", {
-        controlPlaneConfig: {
-          systemAdminEmail: ph("TenkaCloud_ADMIN_EMAIL"),
-        },
+        accountId: ph("AWS_ACCOUNT_ID"),
         dynamoDbConfig: { billingMode: "PROVISIONED", readCapacity: 1, writeCapacity: 1 },
       });
-      delete process.env.TenkaCloud_ADMIN_EMAIL;
+      delete process.env.AWS_ACCOUNT_ID;
 
       const config = loadConfig("development", baseDir);
       expect(config?.dynamoDbConfig).toEqual({
@@ -166,7 +167,7 @@ describe("loadConfig (環境別 config.json + .env)", () => {
         readCapacity: 1,
         writeCapacity: 1,
       });
-      expect(config?.controlPlaneConfig?.systemAdminEmail).toBe(ph("TenkaCloud_ADMIN_EMAIL"));
+      expect(config?.accountId).toBe(ph("AWS_ACCOUNT_ID"));
     });
   });
 });

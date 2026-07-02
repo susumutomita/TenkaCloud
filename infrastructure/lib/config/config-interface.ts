@@ -10,8 +10,10 @@ export interface Config {
   readonly region: string;
   readonly environment: string;
 
-  readonly controlPlaneConfig: ControlPlaneConfig;
-  readonly bootstrapConfig: BootstrapConfig;
+  // Issue #2197: 旧 controlPlaneConfig / bootstrapConfig セクションは削除した。 CDK は
+  // 一度もこれらを読んでおらず (callback / CORS は cross-stack ref、 systemAdminEmail は
+  // `CDK_PARAM_SYSTEM_ADMIN_EMAIL` env を resolve.ts が読む)、 config.json で編集しても
+  // 効かない罠になっていた。 control-plane 系の設定は `CDK_PARAM_*` env 経由が正。
   readonly dynamoDbConfig?: DynamoDbConfig;
   readonly kmsConfig?: KmsConfig;
   /**
@@ -104,38 +106,6 @@ export interface DynamoDbConfig {
   readonly readCapacity?: number | string;
   /** PROVISIONED 時のみ使用。PAY_PER_REQUEST では無視される。 */
   readonly writeCapacity?: number | string;
-}
-
-export interface ControlPlaneConfig {
-  readonly systemAdminEmail: string;
-  readonly systemAdminRoleName?: string;
-  readonly enableAdvancedSecurityMode?: boolean;
-  readonly setAPIGWScopes?: boolean;
-  readonly disableAPILogging?: boolean;
-  /**
-   * Cognito invitation email に埋め込む primary OAuth callback URL。SBT 内蔵 UserPoolUserClient の
-   * 1 個目の callbackUrl にもなる。未指定時は localhost dev の URL。
-   */
-  readonly primaryCallbackUrl?: string;
-  /**
-   * 追加で SBT UserPoolUserClient に許可する OAuth callback URL。escape hatch で override する。
-   */
-  readonly additionalCallbackUrls?: readonly string[];
-  /** 追加で許可する OAuth logout URL。 */
-  readonly additionalLogoutUrls?: readonly string[];
-  /**
-   * Control Plane API Gateway (HTTP API) の CORS 許可 Origin。未指定時は localhost dev 系の
-   * default が入る。prod では CloudFront domain を env で指定する。
-   */
-  readonly allowedCorsOrigins?: readonly string[];
-  // Issue #1066: SAML IdP 関連は廃止。 MFA 必須化 (Issue #1035) で代替。
-}
-
-export interface BootstrapConfig {
-  /**
-   * tenant stack の CloudFormation 名 prefix。`${prefix}-${tenantId}` で生成・削除する。
-   */
-  readonly tenantCfnStackPrefix: string;
 }
 
 /**

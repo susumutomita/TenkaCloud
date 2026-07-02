@@ -1,14 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": [
-    "appName",
-    "accountId",
-    "region",
-    "environment",
-    "controlPlaneConfig",
-    "bootstrapConfig"
-  ],
+  "required": ["appName", "accountId", "region", "environment"],
   "$defs": {
     "customDomainConfig": {
       "type": "object",
@@ -36,7 +29,9 @@
         },
         "attributeMapping": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
+          "additionalProperties": {
+            "type": "string"
+          },
           "description": "SAML AttributeStatement Name → Cognito attribute name のマップ。 未指定なら email のみ自動。"
         },
         "providerName": {
@@ -69,43 +64,8 @@
       "type": "string",
       "enum": ["development", "staging", "production"]
     },
-    "controlPlaneConfig": {
-      "type": "object",
-      "required": ["systemAdminEmail"],
-      "properties": {
-        "systemAdminEmail": { "type": "string", "format": "email" },
-        "systemAdminRoleName": { "type": "string", "default": "SystemAdmin" },
-        "enableAdvancedSecurityMode": { "type": "boolean", "default": true },
-        "setAPIGWScopes": { "type": "boolean", "default": true },
-        "disableAPILogging": { "type": "boolean", "default": false },
-        "primaryCallbackUrl": { "type": "string", "format": "uri" },
-        "additionalCallbackUrls": {
-          "type": "array",
-          "items": { "type": "string", "format": "uri" },
-          "minItems": 1
-        },
-        "additionalLogoutUrls": {
-          "type": "array",
-          "items": { "type": "string", "format": "uri" },
-          "minItems": 1
-        },
-        "allowedCorsOrigins": {
-          "type": "array",
-          "items": { "type": "string", "format": "uri" },
-          "minItems": 1
-        },
-        "samlIdp": { "$ref": "#/$defs/samlIdpConfig" }
-      },
-      "additionalProperties": false
-    },
-    "tenantSamlConfig": { "$ref": "#/$defs/samlIdpConfig" },
-    "bootstrapConfig": {
-      "type": "object",
-      "required": ["tenantCfnStackPrefix"],
-      "properties": {
-        "tenantCfnStackPrefix": { "type": "string", "minLength": 1 }
-      },
-      "additionalProperties": false
+    "tenantSamlConfig": {
+      "$ref": "#/$defs/samlIdpConfig"
     },
     "dynamoDbConfig": {
       "type": "object",
@@ -117,14 +77,26 @@
         },
         "readCapacity": {
           "anyOf": [
-            { "type": "integer", "minimum": 1 },
-            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
           ]
         },
         "writeCapacity": {
           "anyOf": [
-            { "type": "integer", "minimum": 1 },
-            { "type": "string", "pattern": "^[1-9][0-9]*$" }
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
           ]
         }
       },
@@ -135,8 +107,15 @@
       "properties": {
         "pendingWindowInDays": {
           "anyOf": [
-            { "type": "integer", "minimum": 7, "maximum": 30 },
-            { "type": "string", "pattern": "^([7-9]|[12][0-9]|30)$" }
+            {
+              "type": "integer",
+              "minimum": 7,
+              "maximum": 30
+            },
+            {
+              "type": "string",
+              "pattern": "^([7-9]|[12][0-9]|30)$"
+            }
           ]
         }
       },
@@ -148,15 +127,29 @@
       "properties": {
         "keepNoncurrentVersions": {
           "anyOf": [
-            { "type": "integer", "minimum": 1, "maximum": 100 },
-            { "type": "string", "pattern": "^[1-9][0-9]?$|^100$" }
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            {
+              "type": "string",
+              "pattern": "^[1-9][0-9]?$|^100$"
+            }
           ],
           "description": "旧 version の保持世代数 (= AWS NewerNoncurrentVersions)。"
         },
         "expireAfterDays": {
           "anyOf": [
-            { "type": "integer", "minimum": 1, "maximum": 365 },
-            { "type": "string", "pattern": "^[1-9][0-9]{0,2}$|^36[0-5]$" }
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365
+            },
+            {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,2}$|^36[0-5]$"
+            }
           ],
           "description": "Noncurrent 化してから expire までの日数 (= AWS NoncurrentDays)。"
         }
@@ -164,11 +157,23 @@
       "additionalProperties": false
     },
     "monthlyCostLimitUsd": {
-      "anyOf": [{ "type": "integer", "minimum": 0 }, { "type": "string", "pattern": "^[0-9]+$" }]
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        }
+      ]
     },
     "budgetAlarmEmails": {
       "type": "array",
-      "items": { "type": "string", "format": "email" }
+      "items": {
+        "type": "string",
+        "format": "email"
+      }
     },
     "challengePayloadConfig": {
       "type": "object",
@@ -186,7 +191,9 @@
         "githubBranches": {
           "type": "array",
           "description": "AssumeRole 許可 branch 一覧。 未指定なら ['main']。",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "existingOidcProviderArn": {
           "type": "string",
@@ -194,8 +201,15 @@
         },
         "noncurrentExpirationDays": {
           "anyOf": [
-            { "type": "integer", "minimum": 1, "maximum": 365 },
-            { "type": "string", "pattern": "^[1-9][0-9]{0,2}$|^36[0-5]$" }
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365
+            },
+            {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,2}$|^36[0-5]$"
+            }
           ],
           "description": "Noncurrent 化してから expire までの日数 (default 30)。"
         }
@@ -206,9 +220,15 @@
       "type": "object",
       "description": "Issue #1695: 各 SPA hosting のカスタムドメイン + ACM 証明書 (us-east-1) 設定。 設定した hosting のみ CloudFront viewer 最小 TLS を 1.2 に強制する。 未指定は default 証明書配信 (NO-OP)。",
       "properties": {
-        "adminConsole": { "$ref": "#/$defs/customDomainConfig" },
-        "applicationAdminConsole": { "$ref": "#/$defs/customDomainConfig" },
-        "participantPortal": { "$ref": "#/$defs/customDomainConfig" }
+        "adminConsole": {
+          "$ref": "#/$defs/customDomainConfig"
+        },
+        "applicationAdminConsole": {
+          "$ref": "#/$defs/customDomainConfig"
+        },
+        "participantPortal": {
+          "$ref": "#/$defs/customDomainConfig"
+        }
       },
       "additionalProperties": false
     }

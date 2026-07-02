@@ -23,9 +23,9 @@ function runLifecycle(overrides: Record<string, string> = {}): ReturnType<typeof
 describe("scripts/print-source-bundle-lifecycle.ts", () => {
   it("should emit a policy in Lite mode without SYSTEM_ADMIN_EMAIL set", () => {
     // Reproduces the CodeBuild Lite-deploy failure: the buildspec injects
-    // TENANT_ADMIN_EMAIL but not SYSTEM_ADMIN_EMAIL, and config.json's
-    // controlPlaneConfig.systemAdminEmail = ${SYSTEM_ADMIN_EMAIL} (no default).
-    // The lifecycle policy must not depend on that SaaS-only field.
+    // TENANT_ADMIN_EMAIL but not SYSTEM_ADMIN_EMAIL. The lifecycle policy must not
+    // depend on that SaaS-only value (issue #2197 removed the old
+    // controlPlaneConfig.systemAdminEmail config.json field it once came from).
     const result = runLifecycle();
 
     expect(result.status, result.stderr).toBe(0);
