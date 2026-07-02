@@ -600,3 +600,29 @@ describe("ADR-020 Phase B.1 (#948): competitor-accounts-handler route role gates
     });
   });
 });
+
+describe("Issue #2200: event-handler /admin/* blanket role guard", () => {
+  it("GET /admin/audit-log は TenantViewer で 403 (= blanket guard が fail-closed)", async () => {
+    process.env.DEFAULT_USER_ROLE = "TenantViewer";
+    const res = await eventApp.request("/admin/audit-log");
+    await expectForbidden(res);
+  });
+
+  it("GET /admin/audit-log/export は TenantOperator で 403", async () => {
+    process.env.DEFAULT_USER_ROLE = "TenantOperator";
+    const res = await eventApp.request("/admin/audit-log/export");
+    await expectForbidden(res);
+  });
+
+  it("GET /admin/audit-log は TenantAdmin で pass (= 既存挙動不変)", async () => {
+    process.env.DEFAULT_USER_ROLE = "TenantAdmin";
+    const res = await eventApp.request("/admin/audit-log");
+    await expectNotForbidden(res);
+  });
+
+  it("route 未定義の /admin/* も handler 到達前に 403 (= 将来の requireRole 書き忘れ耐性)", async () => {
+    process.env.DEFAULT_USER_ROLE = "TenantViewer";
+    const res = await eventApp.request("/admin/does-not-exist");
+    await expectForbidden(res);
+  });
+});
