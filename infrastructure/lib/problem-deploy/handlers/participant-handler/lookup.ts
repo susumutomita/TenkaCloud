@@ -135,6 +135,12 @@ export type ParticipantProblemView = Pick<
    * (ADR-005 D1)。Challenge 形式 (flag kind) では undefined。
    */
   readonly applicationStatus?: ApplicationStatus;
+  /**
+   * [#2233] 問題が動く cloud provider。canonical 値は "aws" | "sakura" | "azure" | "gcp"。
+   * 行契約 (deploy-handler/types.ts): runtimeProvider 欠落 = aws/cloudformation (legacy 互換)。
+   * 未知の格納値は raw のまま返す (= 誤って aws 扱いにしない。portal 側は raw 値 fallback 表示)。
+   */
+  readonly provider: string;
   // 設計判断: `endpointsHealth` (= どの endpoint が落ちているか) は participant API には
   // 出さない。Battle のゲーム性は「壊れている原因を防御側自身が調査して復旧する」点に
   // あり、画面で答え合わせをすると興ざめになる。露出するのは aggregate のみ。
@@ -198,6 +204,15 @@ function stripAnswerOutputs(
   return stackOutputs;
 }
 
+/**
+ * [#2233] 行の runtimeProvider から participant へ出す provider を解決する。
+ * 行契約 (deploy-handler/types.ts): 欠落 / 空 = aws/cloudformation (legacy 行 / bulk-deploy 行)。
+ * 未知の格納値は raw で通す (= mislabel しない)。composite target 行は常に明示値を持つ。
+ */
+function resolveViewProvider(runtimeProvider: unknown): string {
+  return typeof runtimeProvider === "string" && runtimeProvider !== "" ? runtimeProvider : "aws";
+}
+
 export function toProblemView(
   item: Partial<DeploymentItem>,
   scoringMap: Record<string, ProblemScoringMetadata> = {},
@@ -213,6 +228,7 @@ export function toProblemView(
     problemId: String(item.problemId ?? ""),
     region: String(item.region ?? ""),
     awsAccountId: String(item.awsAccountId ?? ""),
+    provider: resolveViewProvider(item.runtimeProvider),
     status,
     stackOutputs,
     failureReason: status === "FAILED" ? item.failureReason : undefined,

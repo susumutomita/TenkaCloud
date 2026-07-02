@@ -9,8 +9,8 @@ import {
 import type { AppConfig } from "../../src/config";
 
 /**
- * SsoCredentialsPage の render 分岐 (error / loading / empty / problem 一覧 + awsAccountId
- * filter) と AWS Console ワンクリック login (mock blocked / 成功 window.open / 各 error 種別
+ * SsoCredentialsPage の render 分岐 (error / loading / empty / AWS・非 AWS の provider 分岐
+ * [#2233]) と AWS Console ワンクリック login (mock blocked / 成功 window.open / 各 error 種別
  * = auth_logout・assume_role・validation・generic Error・非 Error) を pin する。共有 hook と
  * getConsoleSigninUrl を mock し、 Portal*Error クラスと CliCredentialsPanel stub は実物/差し替え。
  */
@@ -98,21 +98,86 @@ describe("SsoCredentialsPage render branches", () => {
     expect(screen.getByText("sso_credentials.empty_problems")).toBeInTheDocument();
   });
 
-  it("should render only problems that have an awsAccountId", () => {
+  it("should treat a problem without provider as AWS (legacy view contract)", () => {
+    // 旧 backend 応答 (provider 欠落) は行契約どおり aws 扱い — 表示・導線は従来どおり。
+    mockTeamView.mockReturnValue({ view: { problems: [problem()] }, error: undefined });
+    renderPage();
+    expect(screen.getByText("hello-world")).toBeInTheDocument();
+    expect(screen.getByText("111122223333")).toBeInTheDocument();
+    expect(screen.getByText("sso_credentials.open_console_button")).toBeInTheDocument();
+    expect(screen.getByTestId("cli-job-1")).toBeInTheDocument();
+  });
+
+  it("should render a non-AWS problem with its provider instead of dropping it", () => {
+    // #2233: 非 AWS 問題は SSO ページから消さない。provider 名と説明を出し、
+    // AWS Console ボタン / CLI panel は出さない (external-portal 導線は RC-32 第3弾)。
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [problem({ jobId: "job-2", problemId: "sakura-quest", provider: "sakura" })],
+      },
+      error: undefined,
+    });
+    renderPage();
+    expect(screen.getByText("sakura-quest")).toBeInTheDocument();
+    expect(screen.getByText("Sakura Cloud")).toBeInTheDocument();
+    expect(
+      screen.getByText('sso_credentials.non_aws_body|{"provider":"Sakura Cloud"}'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("sso_credentials.open_console_button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("cli-job-2")).not.toBeInTheDocument();
+    // AWS アカウント行は非 AWS 問題では出さない (deploy request 由来の値で誤解を招くため)。
+    expect(screen.queryByText("111122223333")).not.toBeInTheDocument();
+  });
+
+  it("should render mixed AWS and non-AWS problems side by side", () => {
     mockTeamView.mockReturnValue({
       view: {
         problems: [
-          problem({ jobId: "job-1", problemId: "with-account" }),
-          problem({ jobId: "job-2", problemId: "no-account", awsAccountId: undefined }),
+          problem({ jobId: "job-1", problemId: "aws-quest", provider: "aws" }),
+          problem({ jobId: "job-2", problemId: "gcp-quest", provider: "gcp" }),
         ],
       },
       error: undefined,
     });
     renderPage();
-    expect(screen.getByText("with-account")).toBeInTheDocument();
-    expect(screen.queryByText("no-account")).not.toBeInTheDocument();
-    expect(screen.getByText("111122223333")).toBeInTheDocument();
+    expect(screen.getByText("aws-quest")).toBeInTheDocument();
+    expect(screen.getByText("gcp-quest")).toBeInTheDocument();
+    expect(screen.getByText("Google Cloud")).toBeInTheDocument();
+    // Console ボタンと CLI panel は AWS 側だけ。
+    expect(screen.getAllByText("sso_credentials.open_console_button")).toHaveLength(1);
     expect(screen.getByTestId("cli-job-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("cli-job-2")).not.toBeInTheDocument();
+  });
+
+  it("should render an unknown provider with its raw value", () => {
+    // 未知 provider は raw 値 fallback (新 provider 追加時の安全側表示)。
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [problem({ jobId: "job-9", problemId: "mystery", provider: "oraclecloud" })],
+      },
+      error: undefined,
+    });
+    renderPage();
+    expect(screen.getByText("mystery")).toBeInTheDocument();
+    expect(screen.getByText("oraclecloud")).toBeInTheDocument();
+  });
+
+  it("should keep the page populated when the team has only non-AWS problems", () => {
+    // 全問非 AWS でも空白ページにしない (以前は filter で全滅 → 空 state も出ない不具合形)。
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [
+          problem({ jobId: "job-2", problemId: "sakura-quest", provider: "sakura" }),
+          problem({ jobId: "job-3", problemId: "azure-quest", provider: "azure" }),
+        ],
+      },
+      error: undefined,
+    });
+    renderPage();
+    expect(screen.getByText("sakura-quest")).toBeInTheDocument();
+    expect(screen.getByText("azure-quest")).toBeInTheDocument();
+    expect(screen.getByText("Azure")).toBeInTheDocument();
+    expect(screen.queryByText("sso_credentials.empty_problems")).not.toBeInTheDocument();
   });
 
   it("should not render the CLI panel when there is no session token", () => {
