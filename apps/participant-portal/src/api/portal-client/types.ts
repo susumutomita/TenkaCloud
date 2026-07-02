@@ -148,6 +148,13 @@ export interface ParticipantProblemView {
   readonly region: string;
   /** 競技アカウント ID。SSO Credentials の AWS Console federation で使う。 */
   readonly awsAccountId: string;
+  /**
+   * [#2233] 問題が動く cloud provider。canonical 値は "aws" | "sakura" | "azure" | "gcp"。
+   * backend (participant-handler lookup) は常に返すが、旧 backend 応答との互換のため
+   * optional (不在 = aws。= 行契約と同じ legacy 既定、`problemProvider()` で解決する)。
+   * 未知値は raw 表示 fallback (`providerLabel()`)。
+   */
+  readonly provider?: string;
   readonly status: DeploymentStatus;
   readonly stackOutputs: Record<string, string>;
   readonly failureReason?: string;

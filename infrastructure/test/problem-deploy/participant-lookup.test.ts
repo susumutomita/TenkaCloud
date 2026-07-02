@@ -587,3 +587,80 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(json).not.toContain("SecretInternalProbeName");
   });
 });
+
+describe("provider resolution (#2233)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("should resolve provider to aws when runtimeProvider is absent (legacy row contract)", async () => {
+    // 行契約 (deploy-handler/types.ts): runtimeProvider 欠落 = aws/cloudformation。
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.provider).toBe("aws");
+  });
+
+  it("should echo runtimeProvider for non-AWS single-provider rows", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({ jobId: "J1", PK: "DEPLOYMENT#J1", runtimeProvider: "sakura" }),
+        sampleRow({ jobId: "J2", PK: "DEPLOYMENT#J2", runtimeProvider: "azure" }),
+        sampleRow({ jobId: "J3", PK: "DEPLOYMENT#J3", runtimeProvider: "gcp" }),
+      ],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems.map((p) => p.provider)).toEqual(["sakura", "azure", "gcp"]);
+  });
+
+  it("should echo runtimeProvider for composite-target-shaped rows (always explicit, aws included)", async () => {
+    // Composite target 行は runtimeProvider を常に明示する (aws 含む。composite-repository.ts)。
+    // 今日は GSI2 非掲載で /portal/me には現れないが、後続の「intentional view」が
+    // 追加されたとき resolver がそのまま動くことをここで pin する。
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          jobId: "T1",
+          PK: "DEPLOYMENT#T1",
+          parentDeploymentId: "PARENT1",
+          targetId: "aws-api",
+          targetOrdinal: 0,
+          runtimeProvider: "aws",
+          runtimeEngine: "cloudformation",
+          runtimeEntry: "aws/template.yaml",
+        }),
+        sampleRow({
+          jobId: "T2",
+          PK: "DEPLOYMENT#T2",
+          parentDeploymentId: "PARENT1",
+          targetId: "gcp-worker",
+          targetOrdinal: 1,
+          runtimeProvider: "gcp",
+          runtimeEngine: "infra-manager",
+          runtimeEntry: "gs://bucket/worker",
+        }),
+      ],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems.map((p) => p.provider)).toEqual(["aws", "gcp"]);
+  });
+
+  it("should pass an unknown stored provider through raw instead of mislabeling it as aws", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ runtimeProvider: "oraclecloud" })] });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.provider).toBe("oraclecloud");
+  });
+
+  it("should treat an empty runtimeProvider as the legacy aws contract", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ runtimeProvider: "" })] });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.provider).toBe("aws");
+  });
+});

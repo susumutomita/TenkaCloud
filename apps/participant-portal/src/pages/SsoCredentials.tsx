@@ -11,6 +11,7 @@ import { CliCredentialsPanel } from "../components/CliCredentialsPanel";
 import { useConsoleAccess } from "../components/useConsoleAccess";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
+import { problemProvider, providerLabel } from "../data/providers";
 import { useT } from "../i18n";
 
 /**
@@ -70,9 +71,12 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
         </Container>
       )}
 
-      {view?.problems
-        .filter((p) => p.awsAccountId)
-        .map((problem) => (
+      {/* [#2233] provider 分岐: AWS は従来どおり Console/CLI 導線、非 AWS は provider を明示
+          して external-portal 対象として表示する (アクセス導線の配信は RC-32 第3弾)。
+          以前の `.filter((p) => p.awsAccountId)` は非 AWS 行 (deploy request 由来の
+          awsAccountId を持つ) に AWS Console ボタンを誤表示していた。 */}
+      {view?.problems.map((problem) =>
+        problemProvider(problem) === "aws" ? (
           <Container
             key={problem.jobId}
             header={
@@ -119,7 +123,34 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
               )}
             </SpaceBetween>
           </Container>
-        ))}
+        ) : (
+          <Container
+            key={problem.jobId}
+            header={
+              <Header variant="h2">
+                <code>{problem.problemId}</code>
+              </Header>
+            }
+          >
+            <SpaceBetween size="m">
+              <KeyValuePairs
+                columns={2}
+                items={[
+                  {
+                    label: t("sso_credentials.label_provider"),
+                    value: providerLabel(problemProvider(problem)),
+                  },
+                ]}
+              />
+              <Box variant="p">
+                {t("sso_credentials.non_aws_body", {
+                  provider: providerLabel(problemProvider(problem)),
+                })}
+              </Box>
+            </SpaceBetween>
+          </Container>
+        ),
+      )}
     </SpaceBetween>
   );
 }
