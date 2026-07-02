@@ -29,8 +29,6 @@ export type BulkDeployOutcome = { kind: "ok"; result: BulkDeployResult } | { kin
  * retry/forceRedeploy 時は 1 entry = Put + Delete の 2 ops なので、 entry 数はこの半分が上限。
  */
 export const TRANSACT_WRITE_BATCH = 25;
-/** EventBridge PutEvents 1 call = 10 entries の上限。 */
-export const PUT_EVENTS_BATCH = 10;
 
 /** 既定 TTL 7 日 (= deployments の DDB TTL attribute へ秒単位で書き込む)。 */
 export const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
