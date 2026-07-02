@@ -182,4 +182,93 @@ describe("local problem test harness", () => {
     expect(result.passed).toBe(false);
     expect(result.score).toBe("success");
   });
+
+  it("should not run the scorer when the deployment fixture is 'failed'", () => {
+    const result = runTestCase(
+      PACK_ID,
+      flagCase({
+        deployment: "failed",
+        expected: { valid: true, score: "not-runnable", diagnostics: ["SCORING_DEPLOY_FAILED"] },
+      }),
+    );
+    expect(result.score).toBe("not-runnable");
+    expect(result.passed).toBe(true);
+    expect(result.diagnostics.map((d) => d.code)).toContain("SCORING_DEPLOY_FAILED");
+  });
+
+  it("should pass when every expected diagnostic code is present", () => {
+    const result = runTestCase(
+      PACK_ID,
+      flagCase({
+        outputs: {},
+        expected: {
+          valid: true,
+          score: "not-runnable",
+          diagnostics: ["SCORING_MISSING_OUTPUT_KEY"],
+        },
+      }),
+    );
+    expect(result.passed).toBe(true);
+  });
+
+  it("should not run the scorer when the scoring kind is outside the known union", () => {
+    // narrowScoring returns undefined for an unrecognized kind, so no score is set
+    // (the case is treated as deploy-only for scoring purposes).
+    const result = runTestCase(PACK_ID, {
+      name: "unknown-kind",
+      metadata: { id: "x", scoring: { kind: "mystery-kind" } } as never,
+      runtime: { provider: "aws", engine: "cloudformation", entry: "template.yaml" },
+      deployment: "ready",
+      expected: { valid: false },
+    });
+    expect(result.score).toBeUndefined();
+  });
+
+  it("should default missing outputs to an empty map when scoring runs", () => {
+    // A scoring case that omits `outputs` entirely must still run the scorer against
+    // an empty output map (→ not-runnable), never crash on undefined.
+    const result = runTestCase(PACK_ID, {
+      name: "no-outputs",
+      metadata: {
+        id: "hello-flag",
+        scoring: { kind: "flag", flagOutputKey: "FlagValue", points: 100 },
+      },
+      runtime: { provider: "aws", engine: "cloudformation", entry: "template.yaml" },
+      deployment: "ready",
+      expected: { valid: true, score: "not-runnable" },
+    });
+    expect(result.score).toBe("not-runnable");
+    expect(result.passed).toBe(true);
+  });
+
+  it("should report SDK validation diagnostics and stable-sort them alongside scorer diagnostics", () => {
+    // Invalid metadata (missing flagOutputKey) yields a validation diagnostic; the
+    // scorer then also raises a missing-output diagnostic, so the result carries two
+    // and exercises the stable diagnostic sort.
+    const result = runTestCase(PACK_ID, {
+      name: "invalid-flag",
+      metadata: { id: "broken", scoring: { kind: "flag" } } as never,
+      runtime: { provider: "aws", engine: "cloudformation", entry: "template.yaml" },
+      deployment: "ready",
+      outputs: {},
+      expected: { valid: false },
+    });
+    expect(result.valid).toBe(false);
+    expect(result.diagnostics.length).toBeGreaterThanOrEqual(2);
+    // Stable sort: paths are non-decreasing.
+    const paths = result.diagnostics.map((d) => d.path);
+    expect([...paths].sort((a, b) => a.localeCompare(b))).toEqual(paths);
+  });
+
+  it("should fail when an expected diagnostic code is absent from the actuals", () => {
+    // The fixture scores cleanly (success, no diagnostics), so an author asserting
+    // a diagnostic code that never fires must see passed=false.
+    const result = runTestCase(
+      PACK_ID,
+      flagCase({
+        expected: { valid: true, score: "success", diagnostics: ["SCORING_MISSING_OUTPUT_KEY"] },
+      }),
+    );
+    expect(result.passed).toBe(false);
+  });
 });
