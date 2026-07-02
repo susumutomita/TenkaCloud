@@ -209,6 +209,34 @@ describe("getPrerequisiteBlock", () => {
     });
   });
 
+  it("should keep the target unlocked after a completed gate is torn down (latch on DELETED row)", async () => {
+    mockFlags({ challengePrerequisiteGate: true });
+    // 完了済 Gate を teardown した状態: Gate 行は DELETED で gateCompletedAt 済、 live 行なし。
+    // durable latch を拾って unlock を維持する (= teardown で unlock target を再 lock しない)。
+    const items = [
+      {
+        PK: "DEPLOYMENT#job-gate-done",
+        problemId: "hello-world-battle",
+        tenantId: "tenant-test",
+        teamId: "team-beginner",
+        status: "DELETED",
+        score: 0,
+        gateCompletedAt: "2026-07-02T00:00:00.000Z",
+      },
+      {
+        PK: "DEPLOYMENT#job-target",
+        problemId: "stackstack-battle",
+        tenantId: "tenant-test",
+        teamId: "team-beginner",
+        score: 0,
+      },
+    ];
+
+    const block = await getPrerequisiteBlock(shared, items, "stackstack-battle", gate);
+
+    expect(block).toBeUndefined();
+  });
+
   it("should treat a latched gateCompletedAt as completed even at score 0", async () => {
     mockFlags({ challengePrerequisiteGate: true });
     const items = teamItems({ gateScore: 0 }).map((i) =>

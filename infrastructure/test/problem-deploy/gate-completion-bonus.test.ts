@@ -255,6 +255,32 @@ describe("isLockedForScoring", () => {
     expect(locked).toBe(false);
   });
 
+  it("should keep scoring the target after a completed gate is torn down (latch on DELETED row)", async () => {
+    // GSI2 query が live 行を返さず、 完了済 Gate の DELETED 行 (gateCompletedAt 済) だけを返す状態。
+    // durable latch を拾って完了扱いにし、 unlock target の採点を再 lock しない。
+    send.mockImplementation((cmd: unknown) => {
+      if (cmd instanceof GetCommand) {
+        return Promise.resolve({ Item: { flags: { challengePrerequisiteGate: true } } });
+      }
+      if (cmd instanceof QueryCommand) {
+        return Promise.resolve({
+          Items: [gateItem({ status: "DELETED", score: 0, gateCompletedAt: NOW }), targetItem()],
+        });
+      }
+      throw new Error("unexpected command");
+    });
+
+    const locked = await isLockedForScoring(
+      shared,
+      targetItem(),
+      config,
+      freshFlagCache(),
+      freshCompletionCache(),
+    );
+
+    expect(locked).toBe(false);
+  });
+
   it("should not skip when the tenant flag is OFF (default)", async () => {
     mockDdb({ flagEnabled: false, gateRowScore: 0 });
 

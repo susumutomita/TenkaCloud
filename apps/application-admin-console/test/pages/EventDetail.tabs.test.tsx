@@ -4,15 +4,17 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Issue #1318: Event Detail 画面を 7 tabs に再編した時の構造テスト。
+ * Issue #1318: Event Detail 画面を tabs に再編した時の構造テスト。
+ * Issue #2283: Progression / Gate (Advanced) tab を追加し 8 tabs になった。
  *
  * 「温泉宿状態」 (情報過密 で workflow が読めない) 解消を確認する。
  *
- * - 7 tabs (Overview / Schedule / Problems / Teams / Scoreboard / Notifications / Operations) が並ぶ
+ * - 8 tabs (Overview / Schedule / Problems / Teams / Scoreboard / Notifications / Advanced /
+ *   Progression / Gate) が並ぶ
  * - Overview tab が default で active
  * - tab 切替で Schedule の中身が表示される
  * - URL fragment #tab=problems で初期 tab を選択できる
- * - すべての section (Phase indicator / Force ARCHIVED / 問題セット / 通知 など) が 7 tabs のどこかに残る (情報欠落なし)
+ * - すべての section (Phase indicator / Force ARCHIVED / 問題セット / 通知 など) が tabs のどこかに残る (情報欠落なし)
  */
 
 const mocks = vi.hoisted(() => ({

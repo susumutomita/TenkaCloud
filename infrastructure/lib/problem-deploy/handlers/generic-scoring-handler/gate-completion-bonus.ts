@@ -1,12 +1,12 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { QueryCommand, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
-import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
+import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
   CHALLENGE_PREREQUISITE_GATE_FLAG,
   isGateCompleted,
   type ProgressionGateConfig,
   resolveTeamGatePolicy,
+  selectGateCompletionRow,
 } from "../shared/progression-gate.js";
 import { buildScoreEventItem } from "../shared/score-event.js";
 import { isTenantFeatureEnabled } from "../shared/tenant-feature-flags.js";
@@ -63,11 +63,6 @@ function isGateFlagEnabled(
   );
   cache.set(tenantId, promise);
   return promise;
-}
-
-function isLiveRow(row: Partial<DeploymentItem>): boolean {
-  const status = (row.status ?? "PENDING") as DeploymentStatus;
-  return !DELETED_LIKE_STATUSES.has(status);
 }
 
 /**
@@ -219,6 +214,7 @@ async function fetchGateCompleted(
     }),
   );
   const rows = (out.Items ?? []) as Partial<DeploymentItem>[];
-  const gateRow = rows.find((r) => r.problemId === config.gateProblemId && isLiveRow(r));
-  return isGateCompleted(gateRow);
+  // 完了済 Gate を teardown しても latch 行 (gateCompletedAt) を拾って完了を保持する
+  // (participant guard の selectGateCompletionRow と同じ durable 判定 → 挙動を揃える)。
+  return isGateCompleted(selectGateCompletionRow(rows, config.gateProblemId));
 }

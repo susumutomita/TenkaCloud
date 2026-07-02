@@ -222,6 +222,7 @@
     "gate_hint_header": "Start here",
     "gate_hint_body": "This is the gate challenge. Completing it unlocks the other locked problems.",
     "gate_hint_bonus": "A one-time +{points} pt bonus is awarded on completion.",
+    "gate_bonus_only_header": "Completion bonus available",
     "endpoint_header": "Endpoint registration",
     "endpoint_description": "Switch your team's service URL to a re-hosted target (Lambda / ECS / App Runner, etc.) and the scoring engine will probe that URL. The URL must be an absolute http:// or https:// URL.",
     "endpoint_list_failed_header": "Failed to load endpoints",

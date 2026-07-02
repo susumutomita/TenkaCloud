@@ -45,29 +45,36 @@ const eventRow = {
  *   3. UpdateCommand (progressionGate SET)
  * command 種別 + Key で応答を切り替える。
  */
-function mockDdbFor(opts: {
+interface MockDdbOpts {
   flags?: Record<string, boolean>;
   event?: Record<string, unknown> | undefined;
   teamIds?: readonly string[];
-}) {
+  updateError?: Error;
+}
+
+/** command 種別 + Key ごとの成功応答 (updateError は closure 側で分岐)。 */
+function ddbResponseFor(cmd: unknown, opts: MockDdbOpts): unknown {
+  if (cmd instanceof GetCommand && cmd.input.Key?.SK === "FLAGS") {
+    return { Item: opts.flags ? { flags: opts.flags } : undefined };
+  }
+  if (cmd instanceof GetCommand) return { Item: opts.event };
+  if (cmd instanceof QueryCommand) {
+    return { Items: (opts.teamIds ?? []).map((teamId) => ({ teamId })) };
+  }
+  if (cmd instanceof UpdateCommand) return { Attributes: {} };
+  throw new Error(`unexpected command: ${String(cmd)}`);
+}
+
+function mockDdbFor(opts: MockDdbOpts) {
   send.mockImplementation((cmd: unknown) => {
-    if (cmd instanceof GetCommand && cmd.input.Key?.SK === "FLAGS") {
-      return Promise.resolve({ Item: opts.flags ? { flags: opts.flags } : undefined });
-    }
-    if (cmd instanceof GetCommand) {
-      return Promise.resolve({ Item: opts.event });
-    }
-    if (cmd instanceof QueryCommand) {
-      return Promise.resolve({ Items: (opts.teamIds ?? []).map((teamId) => ({ teamId })) });
-    }
-    if (cmd instanceof UpdateCommand) {
-      return Promise.resolve({ Attributes: {} });
-    }
-    throw new Error(`unexpected command: ${String(cmd)}`);
+    if (cmd instanceof UpdateCommand && opts.updateError) return Promise.reject(opts.updateError);
+    return Promise.resolve(ddbResponseFor(cmd, opts));
   });
 }
 
-beforeEach(() => vi.clearAllMocks());
+// resetAllMocks: mockImplementation / once キューまで毎テスト初期化する。 mockDdbFor (implementation)
+// と removeProgressionGate 群の mockResolvedValueOnce が混在するため、 clear では実装が漏れる。
+beforeEach(() => vi.resetAllMocks());
 
 describe("setProgressionGate", () => {
   it("should reject with feature_disabled when the tenant flag is OFF (default)", async () => {
@@ -154,6 +161,31 @@ describe("setProgressionGate", () => {
     });
     const outcome = await setProgressionGate(shared, "tenant-test", EVENT_ID, config, NOW);
     expect(outcome).toEqual({ kind: "invalid", reason: "event_archived" });
+  });
+
+  it("should return not_found when the write loses a race (event deleted / tenant changed)", async () => {
+    const err = new Error("cond");
+    err.name = "ConditionalCheckFailedException";
+    mockDdbFor({
+      flags: { challengePrerequisiteGate: true },
+      event: eventRow,
+      teamIds: ["team-1"],
+      updateError: err,
+    });
+    const outcome = await setProgressionGate(shared, "tenant-test", EVENT_ID, config, NOW);
+    expect(outcome).toEqual({ kind: "not_found" });
+  });
+
+  it("should rethrow a non-conditional write failure", async () => {
+    mockDdbFor({
+      flags: { challengePrerequisiteGate: true },
+      event: eventRow,
+      teamIds: ["team-1"],
+      updateError: new Error("ddb boom"),
+    });
+    await expect(setProgressionGate(shared, "tenant-test", EVENT_ID, config, NOW)).rejects.toThrow(
+      "ddb boom",
+    );
   });
 });
 

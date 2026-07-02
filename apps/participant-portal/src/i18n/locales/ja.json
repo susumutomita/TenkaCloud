@@ -222,6 +222,7 @@
     "gate_hint_header": "最初にここから",
     "gate_hint_body": "この問題は Gate です。 完了すると、 ロック中の他の問題が解放されます。",
     "gate_hint_bonus": "完了時に +{points} pt のボーナスが 1 回だけ加算されます。",
+    "gate_bonus_only_header": "完了ボーナスあり",
     "endpoint_header": "Endpoint 登録",
     "endpoint_description": "自チームの service URL を Lambda / ECS / App Runner 等の再ホスト先に切り替えるとスコア engine がその URL を probe します。 URL は https:// または http:// の絶対 URL で。",
     "endpoint_list_failed_header": "Endpoint 一覧の取得に失敗しました",

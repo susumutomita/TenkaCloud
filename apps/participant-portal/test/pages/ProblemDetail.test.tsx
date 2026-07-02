@@ -315,6 +315,49 @@ describe("ProblemDetailPage", () => {
     expect(screen.getByTestId("problem-panel")).toBeInTheDocument();
   });
 
+  it("should show a bonus-only notice on the gate page for a policy-off team (no unlock hint)", () => {
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith({
+          progression: {
+            gateProblemId: "hello-world",
+            gateCompleted: false,
+            policy: "off",
+            completionBonus: 50,
+            lockedProblemIds: [],
+          },
+        }),
+      }),
+    );
+    renderPage();
+    // policy "off" の team は何も locked されないので unlock hint (gate_hint) は出ない。
+    expect(screen.queryByText("problem_detail.gate_hint_header")).not.toBeInTheDocument();
+    // 完了 bonus 予告は locked と無関係に出る (= off team もボーナスは獲得できる)。
+    expect(screen.getByText("problem_detail.gate_bonus_only_header")).toBeInTheDocument();
+    expect(screen.getByText(/problem_detail\.gate_hint_bonus.*50/)).toBeInTheDocument();
+    // Gate 自身は lock されない → body は出る。
+    expect(screen.getByTestId("problem-panel")).toBeInTheDocument();
+  });
+
+  it("should not show a bonus-only notice when the policy-off team has no completion bonus", () => {
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith({
+          progression: {
+            gateProblemId: "hello-world",
+            gateCompleted: false,
+            policy: "off",
+            completionBonus: 0,
+            lockedProblemIds: [],
+          },
+        }),
+      }),
+    );
+    renderPage();
+    expect(screen.queryByText("problem_detail.gate_bonus_only_header")).not.toBeInTheDocument();
+    expect(screen.queryByText("problem_detail.gate_hint_header")).not.toBeInTheDocument();
+  });
+
   it("should omit the bonus line when completionBonus is 0 and hide the hint once completed", () => {
     const progression = {
       gateProblemId: "hello-world",

@@ -26,6 +26,7 @@ import { providerLabel } from "../data/providers";
 import { useI18n, useT } from "../i18n";
 import {
   findGateProblem,
+  hasGateCompletionBonus,
   isGateAwaitingCompletion,
   isPrerequisiteLocked,
 } from "../lib/progression";
@@ -104,6 +105,9 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
   // 実際の拒否は backend の 409 guard — ここは UX (先回り lock 表示)。
   const prereqLocked = isPrerequisiteLocked(view?.progression, problem?.problemId);
   const gatePending = isGateAwaitingCompletion(view?.progression, problem?.problemId);
+  // #2283: 完了 bonus の予告は locked の有無と無関係 (policy "off" の team は何も locked
+  // されないが完了 bonus は付く)。 gatePending の unlock hint とは別軸で判定する。
+  const bonusPending = hasGateCompletionBonus(view?.progression, problem?.problemId);
   const gateProblem = findGateProblem(view?.progression, view?.problems);
   // #2283: 表示名は既に引いた gateProblem から導出する (gateProblemDisplayName を呼ぶと
   // view.problems を二重走査するだけ)。 fallback は problemId slug (= 同 helper と同じ規約)。
@@ -139,6 +143,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
        *   競技公平性 (= 開始前に hints / 問題文を読んで準備するのを防ぐ) のため必須。 */}
       <ProblemDetailStatusAlerts
         error={error}
+        bonusPending={bonusPending}
         gateName={gateName}
         gatePending={gatePending}
         gateProblem={gateProblem}
@@ -210,6 +215,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
 
 function ProblemDetailStatusAlerts({
   error,
+  bonusPending,
   gateName,
   gatePending,
   gateProblem,
@@ -224,6 +230,7 @@ function ProblemDetailStatusAlerts({
   view,
 }: {
   error: string | null;
+  bonusPending: boolean;
   gateName: string;
   gatePending: boolean;
   gateProblem?: ParticipantProblemView;
@@ -298,6 +305,16 @@ function ProblemDetailStatusAlerts({
             {progression && progression.completionBonus > 0 && (
               <> {t("problem_detail.gate_hint_bonus", { points: progression.completionBonus })}</>
             )}
+          </Box>
+        </Alert>
+      )}
+      {/* Issue #2283: policy "off" の team は Gate 未完了でも何も locked されないので unlock hint
+       *   (gatePending) は出ないが、 完了 bonus は付与される。 その場合だけ bonus 予告を単独で出す
+       *   (gatePending 側は bonus を inline 表示済みなので二重に出さない)。 */}
+      {problem && !locked && !gatePending && bonusPending && progression && (
+        <Alert type="info" header={t("problem_detail.gate_bonus_only_header")}>
+          <Box variant="p">
+            {t("problem_detail.gate_hint_bonus", { points: progression.completionBonus })}
           </Box>
         </Alert>
       )}

@@ -77,19 +77,28 @@ export async function setProgressionGate(
   );
   if (invalid) return { kind: "invalid", reason: invalid };
 
-  await shared.ddb.send(
-    new UpdateCommand({
-      TableName: shared.eventsTableName,
-      Key: { PK: `EVENT#${eventId}`, SK: "META" },
-      UpdateExpression: "SET progressionGate = :cfg, updatedAt = :now",
-      ConditionExpression: "tenantId = :tenantId",
-      ExpressionAttributeValues: {
-        ":cfg": config,
-        ":now": new Date(nowMs).toISOString(),
-        ":tenantId": tenantId,
-      },
-    }),
-  );
+  try {
+    await shared.ddb.send(
+      new UpdateCommand({
+        TableName: shared.eventsTableName,
+        Key: { PK: `EVENT#${eventId}`, SK: "META" },
+        UpdateExpression: "SET progressionGate = :cfg, updatedAt = :now",
+        ConditionExpression: "tenantId = :tenantId",
+        ExpressionAttributeValues: {
+          ":cfg": config,
+          ":now": new Date(nowMs).toISOString(),
+          ":tenantId": tenantId,
+        },
+      }),
+    );
+  } catch (err) {
+    // read と write の間に event が消えた / tenant が変わった race は 404 に倒す
+    // (removeProgressionGate と同じ扱い。 存在を漏らさず 500 も出さない)。
+    if (err instanceof Error && err.name === "ConditionalCheckFailedException") {
+      return { kind: "not_found" };
+    }
+    throw err;
+  }
   return { kind: "ok", progressionGate: config };
 }
 

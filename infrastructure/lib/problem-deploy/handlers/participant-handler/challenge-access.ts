@@ -7,6 +7,7 @@ import {
   isGateCompleted,
   type ProgressionGateConfig,
   resolveTeamGatePolicy,
+  selectGateCompletionRow,
 } from "../shared/progression-gate.js";
 import { isTenantFeatureEnabled } from "../shared/tenant-feature-flags.js";
 import { type EventGate, evaluateGate, type GateBlock, getEventGate } from "./event-gate.js";
@@ -82,17 +83,6 @@ function isLiveItem(item: Partial<DeploymentItem>): boolean {
   return !DELETED_LIKE_STATUSES.has(status);
 }
 
-/**
- * Gate challenge の live deployment 行。 teardown → 再 deploy で残った stale 行が
- * 完了判定を乗っ取らないよう、 live 行を優先して引く (無ければ undefined = 未完了)。
- */
-function findLiveGateItem(
-  items: readonly Partial<DeploymentItem>[],
-  config: ProgressionGateConfig,
-): Partial<DeploymentItem> | undefined {
-  return items.find((i) => i.problemId === config.gateProblemId && isLiveItem(i));
-}
-
 function findIdentitySample(
   items: readonly Partial<DeploymentItem>[],
 ): { readonly tenantId?: string; readonly teamId?: string } | undefined {
@@ -112,7 +102,7 @@ function lockedSetFor(
   items: readonly Partial<DeploymentItem>[],
   teamId: string | undefined,
 ): ReadonlySet<string> {
-  const gateCompleted = isGateCompleted(findLiveGateItem(items, config));
+  const gateCompleted = isGateCompleted(selectGateCompletionRow(items, config.gateProblemId));
   return computeLockedProblemIds(config, teamId, gateCompleted);
 }
 
@@ -211,7 +201,7 @@ export async function buildProgressionView(
   if (!sample?.tenantId) return undefined;
   if (!(await isGateFlagEnabled(shared, sample.tenantId))) return undefined;
 
-  const gateCompleted = isGateCompleted(findLiveGateItem(items, config));
+  const gateCompleted = isGateCompleted(selectGateCompletionRow(items, config.gateProblemId));
   const { policy, completionBonus } = resolveTeamGatePolicy(config, sample.teamId);
   const locked = computeLockedProblemIds(config, sample.teamId, gateCompleted);
   return {
