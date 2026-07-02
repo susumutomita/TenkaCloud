@@ -17,11 +17,12 @@
  *     CDK の deploy 進捗 UI を そのまま見せた方が初見者に親切。
  *   - CFn outputs の読み取りは AWS CLI を spawn する (= bun の依存に
  *     `@aws-sdk/client-cloudformation` を増やさない、 操作が単純な read のみ)。
- *   - stack 名は固定 (`tenkacloud-lite` + `tenkacloud-lite-problem-deploy`)。
- *     Lite は 1 deploy = 1 stack 集合の前提なので環境別の suffix は持たない。
+ *   - stack 名は `infrastructure/lib/tenkacloud-lite/stack-names.ts` が単一 source of
+ *     truth (Issue #2193)。 CDK app と同じ規則で env suffix を解決する (development は
+ *     suffix なし、 staging / production 等は `-<env>`) ので、 deploy / status / destroy が
+ *     常に同じ stack を指す。
  *   - bin/infrastructure.ts は touch しない。 Lite stack の wiring は別 bin entry
- *     (`infrastructure/bin/tenkacloud-lite.ts`、 Phase 5 で追加) が担う想定。
- *     本 PR では CLI 単体の scaffold + Makefile target のみ。
+ *     (`infrastructure/bin/tenkacloud-lite.ts`) が担う。
  *
  * テスト容易性のため `main` を export し、 spawn 系を injectable にしている (= unit test
  * から AWS や CDK を実行せずに subcommand dispatch / help / unknown を観測する)。
@@ -30,11 +31,15 @@
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import {
+  resolveLiteEnvironment,
+  resolveLiteStackNames,
+} from "../infrastructure/lib/tenkacloud-lite/stack-names";
 
-export const LITE_STACK_NAMES = {
-  app: "tenkacloud-lite",
-  problemDeploy: "tenkacloud-lite-problem-deploy",
-} as const;
+// Issue #2193: CDK app (bin/tenkacloud-lite.ts) と同じ規則で env suffix を解決する。
+// Makefile が `infrastructure/environments/<env>/.env` を load してから本 CLI を起動する
+// ため、 process 起動時点の CDK_PARAM_ENVIRONMENT で確定する。
+export const LITE_STACK_NAMES = resolveLiteStackNames(resolveLiteEnvironment(process.env));
 
 // cdk + tsx を repo root から呼ぶ。 monorepo workspace で aws-cdk / tsx は **repo root**
 // の node_modules に hoist されるため、 `infrastructure/node_modules/.bin/cdk` は broken
@@ -131,8 +136,8 @@ function printHelp(io: CliIO): void {
   }
   io.stdout("\n");
   io.stdout(
-    "Phase 4 scope (本 PR): CLI scaffold + Makefile target。 実 AWS deploy 経路は\n" +
-      "Phase 5 で追加する `infrastructure/bin/tenkacloud-lite.ts` (= bin entry) と組み合わせて完成する。\n",
+    `対象 stack: ${LITE_STACK_NAMES.app} / ${LITE_STACK_NAMES.problemDeploy}\n` +
+      "(環境は CDK_PARAM_ENVIRONMENT で切替。 development 以外は stack 名に -<env> が付く)\n",
   );
 }
 
