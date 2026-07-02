@@ -5,8 +5,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { satisfiesCoreRange } from "../src/manifest.js";
 import { validatePackManifest } from "../src/public-validators.js";
+import { satisfiesCoreRange } from "../src/semver-range.js";
 import { VALID_MANIFEST } from "./fixtures.js";
 
 describe("satisfiesCoreRange: comparator operators", () => {
