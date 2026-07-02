@@ -97,6 +97,9 @@ const liteStack = new TenkaCloudLiteStack(app, liteStackNames.app, {
   // Issue #1340 Phase 2: opt-in per-tenant SAML (= 未設定なら空配列で no-op)。
   samlIdps: config.tenantSamlIdps,
   samlAdminAllowlist: config.tenantSamlAdminAllowlist,
+  // Issue #2230 (ADR-035): Lite mode でも deploy 時 feature flag override を焼く
+  // (= nonAwsRuntime の検証は Lite が主戦場)。
+  features: config.features,
 });
 cdk.Aspects.of(liteStack).add(
   new DynamoDbLowCapacity(config.dynamoReadCapacity, config.dynamoWriteCapacity),

@@ -177,8 +177,10 @@ provider の問題は「近日対応」のまま選べません（Issue 2167）�
 
 ### 1. 機能フラグを ON にする
 
-`runtime-config.json` に `features: { "nonAwsRuntime": true }` を設定します（ADR-035、デフォルト OFF）。
-Application Admin Console の Competitor Accounts ページに Team Cloud Credentials パネルが現れます。
+`.env`（`infrastructure/environments/<env>/.env`）に `CDK_PARAM_FEATURES='{"nonAwsRuntime":true}'`
+を設定して deploy します（ADR-035、デフォルト OFF。Issue 2230 で S3 上の `runtime-config.json`
+手編集は不要になりました）。Application Admin Console の Competitor Accounts ページに
+Team Cloud Credentials パネルが現れます。
 
 ### 2. provider 側で認証情報を作る
 

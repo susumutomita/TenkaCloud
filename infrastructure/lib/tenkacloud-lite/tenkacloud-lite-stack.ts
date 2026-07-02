@@ -53,6 +53,8 @@ export interface TenkaCloudLiteStackProps extends StackProps {
    * 空配列 = federated sign-in 全拒否 (fail-safe)。
    */
   readonly samlAdminAllowlist?: readonly string[];
+  /** Issue #2230 (ADR-035): runtime-config.json に焼く SPA feature flag override (未設定 = key なし)。 */
+  readonly features?: Readonly<Record<string, boolean>>;
 }
 
 /**
@@ -102,6 +104,7 @@ export class TenkaCloudLiteStack extends Stack {
     const samlIdps = new SamlIdpsTable(this, "SamlIdps");
 
     const appPlane = buildAppPlaneCore(this, {
+      features: props.features,
       tenantId: LITE_TENANT_ID,
       tenantName: LITE_TENANT_NAME,
       environment: props.environment,

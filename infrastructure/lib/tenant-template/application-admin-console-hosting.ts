@@ -85,6 +85,13 @@ interface RuntimeConfigProps {
    * 非秘匿で runtime-config.json に書き込んで OK。
    */
   readonly samlIdpDirectory: Readonly<Record<string, readonly string[]>>;
+  /**
+   * Issue #2230 (ADR-035): SPA feature flag の deploy 時 override。 SPA 側
+   * `resolveFeatureFlags(FEATURE_REGISTRY, runtimeConfig.features)` が registry default に
+   * merge する (未知 key / 非 boolean は SPA 側で無視)。 未設定なら `features` key 自体を
+   * 書かない (= 旧 runtime-config と byte 互換、 registry default のまま)。
+   */
+  readonly features?: Readonly<Record<string, boolean>>;
 }
 
 /**
@@ -214,6 +221,8 @@ export class ApplicationAdminConsoleHosting extends Construct {
       ...(props.competitorBootstrapTemplateUrl
         ? { competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl }
         : {}),
+      // Issue #2230 (ADR-035): 旧来 S3 手編集しか経路が無かった feature flag override の正規経路。
+      ...(props.features ? { features: props.features } : {}),
     };
     // Issue #867: runtime-config.json は CloudFront cache 無効化。 pooled tenants 共有 CDN
     // でも tenant 別 config を返すため cache はリスク (= 設定混線)。

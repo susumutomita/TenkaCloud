@@ -83,6 +83,8 @@ interface TenantTemplateStackProps extends StackProps {
    * `samlIdps` 設定時のみ意味を持つ。 空配列 = federated sign-in 全拒否 (fail-safe)。
    */
   samlAdminAllowlist?: readonly string[];
+  /** Issue #2230 (ADR-035): runtime-config.json に焼く SPA feature flag override (未設定 = key なし)。 */
+  features?: Readonly<Record<string, boolean>>;
 }
 
 export class TenantTemplateStack extends Stack {
@@ -140,6 +142,7 @@ export class TenantTemplateStack extends Stack {
       : (props.samlAdminAllowlist ?? []);
 
     const appPlaneCore = buildAppPlaneCore(this, {
+      features: props.features,
       tenantId: props.tenantId,
       tenantName: props.tenantName,
       environment: props.environment,
