@@ -12,7 +12,8 @@
 
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { EmptyState, ErrorState, LoadingState, StatusBadge, statusToTone } from "../src";
+import { EmptyState, ErrorState, LoadingState, StatusBadge } from "../src";
+import { statusToTone } from "../src/StatusBadge";
 
 describe("EmptyState", () => {
   it("should render headline only when body and action are omitted", () => {
