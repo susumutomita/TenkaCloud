@@ -256,6 +256,9 @@
     "open_console_aria": "Open AWS Console for {problemId}",
     "label_aws_account": "AWS Account",
     "label_region": "Region",
+    "label_provider": "Cloud provider",
+    "external_portal_header": "Access via the provider's portal",
+    "external_portal_notice": "This problem runs on {provider}. The one-click AWS Console sign-in and CLI credentials do not apply here — access the environment from the {provider} portal using the credentials provided by your event operator.",
     "cli": {
       "section_header": "CLI / SDK temporary credentials",
       "body": "Issue 1-hour temporary credentials for AWS CLI / boto3 / Terraform usage. Same IAM scope as the Console (ParticipantViewerRole).",

@@ -22,6 +22,7 @@ import {
   resolveLocalizedNarrative,
 } from "../data/problems";
 import { useI18n, useT } from "../i18n";
+import { PROVIDER_LABEL } from "../lib/provider";
 import { PortalPluginSlots } from "../plugins/PortalPluginSlots";
 
 const DIFFICULTY_KEY: Record<ProblemCatalogEntry["difficulty"], string> = {
@@ -30,17 +31,6 @@ const DIFFICULTY_KEY: Record<ProblemCatalogEntry["difficulty"], string> = {
   3: "problem_detail.difficulty_3",
   4: "problem_detail.difficulty_4",
   5: "problem_detail.difficulty_5",
-};
-
-/**
- * ADR-026 / ADR-027: 問題の実行先 cloud を競技者に明示する badge 表示名。 brand 名なので
- * locale 非依存。 未知 provider は raw 値をそのまま出す (= 新 provider 追加時の安全側 fallback)。
- */
-const PROVIDER_LABEL: Record<string, string> = {
-  aws: "AWS",
-  sakura: "Sakura Cloud",
-  azure: "Azure",
-  gcp: "Google Cloud",
 };
 
 interface ProblemDetailGate {

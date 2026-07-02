@@ -12,6 +12,7 @@ import { useConsoleAccess } from "../components/useConsoleAccess";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
+import { PROVIDER_LABEL, resolveProblemProvider } from "../lib/provider";
 
 /**
  * AWS Console ワンクリック login。競技者は自前 AWS ログイン不要で、Portal の button
@@ -70,9 +71,48 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
         </Container>
       )}
 
-      {view?.problems
-        .filter((p) => p.awsAccountId)
-        .map((problem) => (
+      {view?.problems.map((problem) => {
+        const provider = resolveProblemProvider(problem);
+        // Issue #2233 (ADR-0001): 非 AWS 問題は Console/CLI federation の対象外。 従来は
+        // `.filter((p) => p.awsAccountId)` で一覧から無言で消えていたが、 provider を明示して
+        // 表示する (アクセス先 URL の配信は ADR-048 / #2235 の external-portal 導線で行う)。
+        if (provider !== "aws") {
+          return (
+            <Container
+              key={problem.jobId}
+              header={
+                <Header variant="h2">
+                  <code>{problem.problemId}</code>
+                </Header>
+              }
+            >
+              <SpaceBetween size="m">
+                <KeyValuePairs
+                  columns={2}
+                  items={[
+                    {
+                      label: t("sso_credentials.label_provider"),
+                      value: PROVIDER_LABEL[provider] ?? provider,
+                    },
+                    { label: t("sso_credentials.label_region"), value: problem.region },
+                  ]}
+                />
+                <Alert
+                  type="info"
+                  header={t("sso_credentials.external_portal_header")}
+                  data-testid={`external-portal-${problem.jobId}`}
+                >
+                  {t("sso_credentials.external_portal_notice", {
+                    provider: PROVIDER_LABEL[provider] ?? provider,
+                  })}
+                </Alert>
+              </SpaceBetween>
+            </Container>
+          );
+        }
+        // 旧 filter の防御を維持: aws なのに awsAccountId 欠損 (legacy 破損 row) は出さない。
+        if (!problem.awsAccountId) return null;
+        return (
           <Container
             key={problem.jobId}
             header={
@@ -119,7 +159,8 @@ export function SsoCredentialsPage({ config }: { config: AppConfig }) {
               )}
             </SpaceBetween>
           </Container>
-        ))}
+        );
+      })}
     </SpaceBetween>
   );
 }

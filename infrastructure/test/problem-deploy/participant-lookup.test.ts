@@ -587,3 +587,36 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(json).not.toContain("SecretInternalProbeName");
   });
 });
+
+describe("Issue #2233: provider resolution (ADR-0001)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("should resolve provider to aws when runtimeProvider is absent (legacy / aws-cloudformation rows)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.provider).toBe("aws");
+  });
+
+  it("should surface a non-AWS runtimeProvider (sakura / azure / gcp)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({ jobId: "JOB1", runtimeProvider: "sakura" }),
+        sampleRow({ jobId: "JOB2", PK: "DEPLOYMENT#JOB2", runtimeProvider: "gcp" }),
+      ],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems.map((p) => p.provider)).toEqual(["sakura", "gcp"]);
+  });
+
+  it("should fall back to aws for unknown runtimeProvider values (fail-safe)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ runtimeProvider: "cloudflare" })] });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.provider).toBe("aws");
+  });
+});

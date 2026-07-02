@@ -117,6 +117,13 @@ export type ParticipantProblemView = Pick<
   "jobId" | "problemId" | "region" | "expiresAt" | "awsAccountId"
 > & {
   readonly status: DeploymentStatus;
+  /**
+   * Issue #2233 (ADR-0001): この deployment の実行先 cloud provider。 AWS 以外は
+   * Console / CLI federation の対象外 (= external-portal 導線、 ADR-0001 の matrix)。
+   * DDB row は非 AWS runtime のときだけ `runtimeProvider` を持つ (deploy.ts) ため、
+   * 欠損 = legacy / aws/cloudformation 経路 = "aws" に解決する。
+   */
+  readonly provider: "aws" | "sakura" | "azure" | "gcp";
   readonly stackOutputs: Record<string, string>;
   readonly failureReason?: string;
   readonly score: number;
@@ -198,6 +205,21 @@ function stripAnswerOutputs(
   return stackOutputs;
 }
 
+const NON_AWS_PROVIDERS = new Set(["sakura", "azure", "gcp"] as const);
+
+/**
+ * Issue #2233: DeploymentItem.runtimeProvider (= 非 AWS runtime のときだけ永続化、 deploy.ts)
+ * から参加者向け provider を解決する。 欠損 / 未知値は "aws" (= legacy 互換 + composite は
+ * ADR-048 の aws-access-bridge 経由で AWS 導線が正)。
+ */
+function resolveProblemProvider(item: Partial<DeploymentItem>): "aws" | "sakura" | "azure" | "gcp" {
+  const raw = item.runtimeProvider;
+  if (typeof raw === "string" && (NON_AWS_PROVIDERS as ReadonlySet<string>).has(raw)) {
+    return raw as "sakura" | "azure" | "gcp";
+  }
+  return "aws";
+}
+
 export function toProblemView(
   item: Partial<DeploymentItem>,
   scoringMap: Record<string, ProblemScoringMetadata> = {},
@@ -214,6 +236,7 @@ export function toProblemView(
     region: String(item.region ?? ""),
     awsAccountId: String(item.awsAccountId ?? ""),
     status,
+    provider: resolveProblemProvider(item),
     stackOutputs,
     failureReason: status === "FAILED" ? item.failureReason : undefined,
     expiresAt: Number(item.expiresAt ?? 0),

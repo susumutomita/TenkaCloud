@@ -253,3 +253,36 @@ describe("SsoCredentialsPage open-console flow", () => {
     await waitFor(() => expect(buttonB).toBeEnabled());
   });
 });
+
+describe("Issue #2233: provider-aware rendering (ADR-0001)", () => {
+  it("should render non-AWS problems with an external-portal notice instead of hiding them", () => {
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [
+          problem({ jobId: "job-aws", problemId: "aws-problem" }),
+          problem({
+            jobId: "job-skr",
+            problemId: "sakura-problem",
+            provider: "sakura",
+            awsAccountId: "",
+          }),
+        ],
+      },
+      error: undefined,
+    });
+    renderPage();
+    expect(screen.getByText("sakura-problem")).toBeInTheDocument();
+    expect(screen.getByText("sso_credentials.external_portal_header")).toBeInTheDocument();
+    expect(screen.getByText("Sakura Cloud")).toBeInTheDocument();
+    expect(screen.queryByTestId("cli-job-skr")).not.toBeInTheDocument();
+    expect(screen.getByTestId("cli-job-aws")).toBeInTheDocument();
+    expect(screen.getAllByText("sso_credentials.open_console_button")).toHaveLength(1);
+  });
+
+  it("should treat a missing provider field as aws (legacy backend compat)", () => {
+    mockTeamView.mockReturnValue({ view: { problems: [problem()] }, error: undefined });
+    renderPage();
+    expect(screen.getByTestId("cli-job-1")).toBeInTheDocument();
+    expect(screen.queryByText("sso_credentials.external_portal_header")).not.toBeInTheDocument();
+  });
+});

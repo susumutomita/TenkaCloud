@@ -148,6 +148,13 @@ export interface ParticipantProblemView {
   readonly region: string;
   /** 競技アカウント ID。SSO Credentials の AWS Console federation で使う。 */
   readonly awsAccountId: string;
+  /**
+   * Issue #2233 (ADR-0001): この deployment の実行先 cloud provider。 AWS のみ Console /
+   * CLI federation の対象で、 それ以外は external-portal 導線 (ADR-0001 の matrix)。
+   * 旧 backend は本 field を送らないため optional — 欠損は "aws" として扱う
+   * (`resolveProblemProvider`)。
+   */
+  readonly provider?: "aws" | "sakura" | "azure" | "gcp";
   readonly status: DeploymentStatus;
   readonly stackOutputs: Record<string, string>;
   readonly failureReason?: string;
