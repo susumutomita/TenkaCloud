@@ -12,7 +12,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import type { LocalPlayDeployment } from "./local-play/api";
 import {
@@ -20,7 +19,7 @@ import {
   loadContainerProblem,
   resolveProblemDir,
 } from "./local-play/manifest";
-import { renderProblemMenu, resolveProblemSelection } from "./local-play/picker";
+import { runSearchableProblemPicker } from "./local-play/picker";
 import { assertPortFree, waitForLocalApi } from "./local-play/readiness";
 import { startLocalPlayServer } from "./local-play/server";
 import { buildRuntimeConfig } from "./participant-portal-runtime-config";
@@ -378,10 +377,10 @@ function listProblems(): void {
 }
 
 /**
- * Issue #2188: interactive problem picker. Prints the menu + prompt to stderr and
- * the single chosen id to stdout, so `make local` can capture it with command
- * substitution while the player sees the menu. Only invoked for an interactive
- * run with no explicit PROBLEM; a non-TTY invocation exits non-zero rather than
+ * Issue #2188 follow-up: full-screen searchable problem picker. The TUI is
+ * rendered to stderr and the single chosen id goes to stdout, so `make local`
+ * can capture it with command substitution. Only invoked for an interactive run
+ * with no explicit PROBLEM; non-TTY invocation exits non-zero rather than
  * hanging or silently defaulting.
  */
 async function pick(): Promise<void> {
@@ -394,38 +393,20 @@ async function pick(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  if (!process.stdin.isTTY) {
+  if (!process.stdin.isTTY || !process.stderr.isTTY) {
     process.stderr.write(
       "Not a terminal. Re-run `make local PROBLEM=<id>` (see `make local-list`).\n",
     );
     process.exitCode = 1;
     return;
   }
-  process.stderr.write(`${renderProblemMenu(summaries)}\n\n`);
-  const rl = createInterface({ input: process.stdin, output: process.stderr });
-  try {
-    // Bounded so a closed / garbage stream can't spin forever; a human picking
-    // a listed number lands on the first attempt.
-    for (let attempt = 0; attempt < 20; attempt++) {
-      const chosen = resolveProblemSelection(
-        await rl.question("Problem number or id: "),
-        summaries,
-      );
-      if (chosen) {
-        process.stdout.write(`${chosen}\n`);
-        return;
-      }
-      process.stderr.write("Please enter a listed number or problem id.\n");
-    }
-    process.stderr.write("No valid selection. Re-run `make local PROBLEM=<id>`.\n");
-    process.exitCode = 1;
-  } catch {
-    // stdin closed (EOF / Ctrl-D) before a valid choice — abort, don't default.
-    process.stderr.write("\nNo problem selected. Re-run `make local PROBLEM=<id>`.\n");
-    process.exitCode = 1;
-  } finally {
-    rl.close();
+  const chosen = await runSearchableProblemPicker(summaries);
+  if (chosen) {
+    process.stdout.write(`${chosen}\n`);
+    return;
   }
+  process.stderr.write("No problem selected. Re-run `make local PROBLEM=<id>`.\n");
+  process.exitCode = 1;
 }
 
 function usage(): string {
@@ -434,7 +415,7 @@ function usage(): string {
     "",
     "Commands:",
     "  list             List local-play problems (id / category / name)",
-    "  pick             Interactively choose a problem (prints the id to stdout)",
+    "  pick             Interactively search for a problem (prints the id to stdout)",
     "  up [problemId]   Start the problem container and the local scoring API",
     "  serve <path>     Run the local Participant API (used internally by up)",
     "  status           Check the local Participant API",
