@@ -100,12 +100,28 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    */
   readonly useBulkDistributedMap?: boolean;
   /**
+   * Issue #2291 (ADR-049 §9): DeployCreate を CodeBuild ではなく Lambda CreateStack +
+   * DescribeStacks poll 経路にするか (`CDK_PARAM_DEPLOY_VIA_LAMBDA`)。default (未指定 / false) は
+   * 在来の CodeBuild 経路で、追加リソースなし = CFn テンプレ byte 互換。true で {@link CfnDeployLambda}
+   * を生成し、`DeployCreate` state machine が Lambda + poll 定義に切り替わる。
+   */
+  readonly deployViaLambda?: boolean;
+  /**
    * Issue #2311 (ADR-049 cost-zero): 監査ログ出力を on/off する。default (未指定 / true) は
    * 従来どおり監査 Lambda 群 (deploy-api / event-api / competitor-accounts-api /
    * system-audit-writer) が `writeAuditEvent` する。false のとき各 Lambda env に
    * `AUDIT_LOG_ENABLED="false"` を注入し no-op 化する (= 書き込みコスト節約)。
    */
   readonly auditLogEnabled?: boolean;
+  /**
+   * Issue #2290 (ADR-049 §5.1): control-plane data backend の選択 (`dynamodb` | `turso` | `sql`)。
+   * event-handler の `getEventDetail` が Events / Teams repository を組み立てる cold-start factory
+   * (`createEventsRepository` / `createTeamsRepository`) の seam を切替える。default (未指定 /
+   * `dynamodb`) は監査 Lambda 群 (deploy-api / event-api / competitor-accounts-api /
+   * system-audit-writer) の env を足さず在来 DDB 経路 (= CFn テンプレ byte 互換)。`turso` / `sql` の
+   * ときだけ各 Lambda env に `CONTROL_DATA_BACKEND` を注入する。
+   */
+  readonly controlDataBackend?: string;
   /**
    * ADR-008 Phase 3 (Issue #642): `problemId → "private"` の map。
    * `discoverProblemsVisibility` で metadata.json から自動収集。 空 map なら全 public 扱い (dormant)。
@@ -310,6 +326,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       environmentName: props.environmentName,
       // Issue #2311: 監査ログ feature flag (off で writeAuditEvent が no-op)。
       auditLogEnabled: props.auditLogEnabled,
+      // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
+      controlDataBackend: props.controlDataBackend,
     });
 
     // tenant API から invoke される Lambda。validation + DDB Put + EventBridge PutEvents のみ。
@@ -333,6 +351,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       adminAuditLogTable: adminAuditLog.table,
       // Issue #2311: 監査ログ feature flag。
       auditLogEnabled: props.auditLogEnabled,
+      // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
+      controlDataBackend: props.controlDataBackend,
       // #1766: tier 別の同時デプロイ上限 (env JSON)。
       deployQuotaByTier: props.deployQuotaByTier,
       // Issue #2019 / ADR-017: TrustBridge enforcement mode (undefined → lambda
@@ -384,6 +404,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       adminAuditLogTable: adminAuditLog.table,
       // Issue #2311: 監査ログ feature flag。
       auditLogEnabled: props.auditLogEnabled,
+      // Issue #2290: control-plane data backend。event-handler の getEventDetail が Events / Teams
+      // repository seam を切替える (= turso/sql 選択時のみ CONTROL_DATA_BACKEND を注入)。
+      controlDataBackend: props.controlDataBackend,
     });
     this.eventApiLambda = eventApi.fn;
 
@@ -407,6 +430,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       adminAuditLogTable: adminAuditLog.table,
       // Issue #2311: 監査ログ feature flag。
       auditLogEnabled: props.auditLogEnabled,
+      // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
+      controlDataBackend: props.controlDataBackend,
     });
     this.competitorAccountsApiLambda = competitorAccountsApi.fn;
 
@@ -421,6 +446,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       sourceObjectKey: props.sourceObjectKey,
       deployConcurrentBuildLimit: props.deployConcurrentBuildLimit,
       environmentName: props.environmentName,
+      // Issue #2291: flag OFF (default) では CodeBuild 経路のまま (追加リソースなし)。
+      deployViaLambda: props.deployViaLambda,
     });
     this.deployCodeBuildProjectName = deployPipeline.deployCodeBuildProjectName;
     this.deployCreateStateMachineArn = deployPipeline.deployCreateStateMachineArn;

@@ -7,6 +7,7 @@ import {
   Choice,
   Condition,
   DefinitionBody,
+  type IChainable,
   IntegrationPattern,
   JsonPath,
   LogLevel,
@@ -14,6 +15,8 @@ import {
   Result,
   StateMachine,
   TaskInput,
+  Wait,
+  WaitTime,
 } from "aws-cdk-lib/aws-stepfunctions";
 import {
   CodeBuildStartBuild,
@@ -38,6 +41,17 @@ export interface DeployCreateStateMachineProps {
    * `COMPLETE` / `FAILED` に更新するために必要。
    */
   readonly deploymentsTable: ITable;
+  /**
+   * Issue #2291 (ADR-049 §9): true のとき CodeBuild を使わず、CreateStack を行う **deploy Lambda**
+   * を invoke し、`describeStackFunction` で DescribeStacks を polling して terminal まで待つ。
+   * default (false / 未指定) は在来の CodeBuild `.sync` path で、CFn テンプレは byte 互換。
+   */
+  readonly deployViaLambda?: boolean;
+  /**
+   * Issue #2291: CreateStack を行う deploy Lambda (= {@link CfnDeployLambda})。
+   * `deployViaLambda === true` のときのみ必須。CodeBuild path では未使用。
+   */
+  readonly cfnDeployFunction?: IFunction;
 }
 
 /**
@@ -100,6 +114,33 @@ export class DeployCreateStateMachine extends Construct {
       resultPath: JsonPath.DISCARD,
     });
 
+    // Issue #2291 (ADR-049 §9): 在来 CodeBuild 経路と Lambda CreateStack 経路の 2 branch。
+    // default (deployViaLambda=false/未指定) は CodeBuild 定義を **そのまま** 生成するので、
+    // 既存 CFn テンプレと byte 互換 (追加リソースなし)。true のときだけ Lambda + poll 定義。
+    const definitionHead = props.deployViaLambda
+      ? this.buildLambdaDefinition(props, markInProgress)
+      : this.buildCodeBuildDefinition(props, markInProgress);
+
+    this.stateMachine = new StateMachine(this, "StateMachine", {
+      definitionBody: DefinitionBody.fromChainable(definitionHead),
+      timeout: Duration.minutes(60),
+      logs: { destination: logGroup, level: LogLevel.ALL },
+      tracingEnabled: true,
+    });
+
+    // DynamoUpdateItem task は CDK 側で grant しないので明示。
+    props.deploymentsTable.grantWriteData(this.stateMachine);
+  }
+
+  /**
+   * 在来 (default) の CodeBuild `.sync` 定義。`deployViaLambda` が false / 未指定のとき使う。
+   * 生成する construct ID / chain / StateMachine props は #2291 前と完全一致させ、
+   * flag OFF の synth を byte 互換に保つ (= additive リソースは一切増やさない)。
+   */
+  private buildCodeBuildDefinition(
+    props: DeployCreateStateMachineProps,
+    markInProgress: DynamoUpdateItem,
+  ): IChainable {
     // Phase 2.2 (Issue #459): AssumeRole metadata は 2 fields が両方あるときだけ
     // CodeBuild env に渡す。Step Functions の optional path 直接参照は field 欠落時に
     // States.Runtime で即死するため、Choice で cross-account / same-account を明示分岐する。
@@ -241,15 +282,100 @@ export class DeployCreateStateMachine extends Construct {
     startCodeBuildCrossAccount.next(describeStacks);
     invalidAssumeRoleMetadata.next(markFailedWithoutBuildId);
 
-    this.stateMachine = new StateMachine(this, "StateMachine", {
-      definitionBody: DefinitionBody.fromChainable(markInProgress.next(routeCreateInput)),
-      timeout: Duration.minutes(60),
-      logs: { destination: logGroup, level: LogLevel.ALL },
-      tracingEnabled: true,
+    return markInProgress.next(routeCreateInput);
+  }
+
+  /**
+   * Issue #2291 (ADR-049 §9): Lambda CreateStack + DescribeStacks poll 定義。
+   * `deployViaLambda === true` のときだけ生成する (additive; default synth には現れない)。
+   *
+   * flow: MarkInProgress → InvokeCfnDeploy (CreateStack を投げて即 return) → Wait →
+   *   DescribeStack (poll) → RoutePollStatus:
+   *     - CREATE_COMPLETE / UPDATE_COMPLETE          → MarkSucceeded (stackId + stackOutputs)
+   *     - ROLLBACK_COMPLETE / CREATE_FAILED / …      → MarkFailed (StackStatusReason を failureReason に)
+   *     - それ以外 (in-progress)                      → Wait へ戻り polling を継続
+   *
+   * DDB の status 遷移 (IN_PROGRESS→COMPLETE/FAILED) と stackId / stackOutputs / failureReason
+   * field は CodeBuild path と同一契約。buildId は CodeBuild 固有なので Lambda path では書かない。
+   */
+  private buildLambdaDefinition(
+    props: DeployCreateStateMachineProps,
+    markInProgress: DynamoUpdateItem,
+  ): IChainable {
+    const cfnDeployFunction = props.cfnDeployFunction;
+    if (!cfnDeployFunction) {
+      throw new Error("cfnDeployFunction is required when deployViaLambda is true");
+    }
+
+    // CreateStack を投げて即 return する deploy Lambda。detail (元 EventBridge event の detail)
+    // を渡す。payloadResponseOnly で $.deploy は Lambda response ({ stackId }) になる。
+    const invokeCfnDeploy = new LambdaInvoke(this, "InvokeCfnDeploy", {
+      lambdaFunction: cfnDeployFunction,
+      payload: TaskInput.fromObject({ detail: JsonPath.objectAt("$.detail") }),
+      payloadResponseOnly: true,
+      resultPath: "$.deploy",
     });
 
-    // DynamoUpdateItem task は CDK 側で grant しないので明示。
-    props.deploymentsTable.grantWriteData(this.stateMachine);
+    // CFn stack 反映まで少し待ってから DescribeStacks を叩く (直後は stack がまだ見えない)。
+    const waitBeforePoll = new Wait(this, "WaitBeforePoll", {
+      time: WaitTime.duration(Duration.seconds(15)),
+    });
+
+    // DescribeStackLambda を再利用。$.cfn は DescribeStacks output (= CodeBuild path と同契約)。
+    const describeStacks = new LambdaInvoke(this, "DescribeStack", {
+      lambdaFunction: props.describeStackFunction,
+      payload: TaskInput.fromObject({ detail: JsonPath.objectAt("$.detail") }),
+      payloadResponseOnly: true,
+      resultPath: "$.cfn",
+    });
+
+    // Lambda path は buildId を持たない (= CodeBuild 固有)。MarkSucceeded / MarkFailed は
+    // buildId を書かない variant を使う。
+    const markSucceeded = this.buildMarkSucceededWithoutBuildId(props.deploymentsTable);
+    const markFailed = this.buildMarkFailed(props.deploymentsTable, "MarkFailed", false);
+    const useStackStatusReasonAsFailureCause = new Pass(
+      this,
+      "UseStackStatusReasonAsFailureCause",
+      {
+        parameters: { "Cause.$": "$.cfn.Stacks[0].StackStatusReason" },
+        resultPath: "$.error",
+      },
+    );
+    useStackStatusReasonAsFailureCause.next(markFailed);
+
+    const routePollStatus = new Choice(this, "RoutePollStatus")
+      .when(
+        Condition.or(
+          Condition.stringEquals("$.cfn.Stacks[0].StackStatus", "CREATE_COMPLETE"),
+          Condition.stringEquals("$.cfn.Stacks[0].StackStatus", "UPDATE_COMPLETE"),
+        ),
+        markSucceeded,
+      )
+      .when(
+        Condition.or(
+          Condition.stringEquals("$.cfn.Stacks[0].StackStatus", "ROLLBACK_COMPLETE"),
+          Condition.stringEquals("$.cfn.Stacks[0].StackStatus", "ROLLBACK_FAILED"),
+          Condition.stringEquals("$.cfn.Stacks[0].StackStatus", "CREATE_FAILED"),
+          Condition.stringEquals("$.cfn.Stacks[0].StackStatus", "UPDATE_ROLLBACK_COMPLETE"),
+          Condition.stringEquals("$.cfn.Stacks[0].StackStatus", "UPDATE_ROLLBACK_FAILED"),
+          Condition.stringEquals("$.cfn.Stacks[0].StackStatus", "DELETE_FAILED"),
+        ),
+        useStackStatusReasonAsFailureCause,
+      )
+      // それ以外 (CREATE_IN_PROGRESS 等の中間状態) は poll を継続。
+      .otherwise(waitBeforePoll);
+
+    // MarkInProgress / InvokeCfnDeploy / DescribeStacks のいずれの失敗も FAILED に倒す
+    // (buildId 無し variant を共用)。$.error.Cause に States.TaskFailed の Cause が入る。
+    markInProgress.addCatch(markFailed, { resultPath: "$.error" });
+    invokeCfnDeploy.addCatch(markFailed, { resultPath: "$.error" });
+    describeStacks.addCatch(markFailed, { resultPath: "$.error" });
+
+    invokeCfnDeploy.next(waitBeforePoll);
+    waitBeforePoll.next(describeStacks);
+    describeStacks.next(routePollStatus);
+
+    return markInProgress.next(invokeCfnDeploy);
   }
 
   private buildMarkSucceeded(table: ITable): DynamoUpdateItem {
@@ -269,6 +395,28 @@ export class DeployCreateStateMachine extends Construct {
           JsonPath.jsonToString(JsonPath.objectAt("$.cfn.Stacks[0].Outputs")),
         ),
         ":buildId": DynamoAttributeValue.fromString(JsonPath.stringAt("$.codebuild.Build.Id")),
+      },
+    });
+  }
+
+  /**
+   * Issue #2291: Lambda path 用の MarkSucceeded。CodeBuild 固有の `buildId` を書かない以外は
+   * {@link buildMarkSucceeded} と同一 (status=COMPLETE, stackId, stackOutputs)。
+   */
+  private buildMarkSucceededWithoutBuildId(table: ITable): DynamoUpdateItem {
+    return new DynamoUpdateItem(this, "MarkSucceeded", {
+      table,
+      key: deploymentKey(),
+      updateExpression:
+        "SET #status = :status, updatedAt = :updatedAt, stackId = :stackId, stackOutputs = :stackOutputs",
+      expressionAttributeNames: { "#status": "status" },
+      expressionAttributeValues: {
+        ":status": DynamoAttributeValue.fromString("COMPLETE"),
+        ":updatedAt": stateEnteredTime(),
+        ":stackId": DynamoAttributeValue.fromString(JsonPath.stringAt("$.cfn.Stacks[0].StackId")),
+        ":stackOutputs": DynamoAttributeValue.fromString(
+          JsonPath.jsonToString(JsonPath.objectAt("$.cfn.Stacks[0].Outputs")),
+        ),
       },
     });
   }

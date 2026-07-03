@@ -7,6 +7,7 @@ import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { auditLogEnabledEnv } from "./audit-log-env.js";
+import { controlDataBackendEnv } from "./control-data-backend-env.js";
 import { SBT_ONBOARDING_DETAIL_TYPES } from "./handlers/system-audit-writer/sbt-detail-types.js";
 
 export interface SystemAuditWriterLambdaProps {
@@ -20,6 +21,11 @@ export interface SystemAuditWriterLambdaProps {
    * Issue #2311: 監査ログ feature flag。false で `AUDIT_LOG_ENABLED="false"` を注入し no-op 化。
    */
   readonly auditLogEnabled?: boolean;
+  /**
+   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso|sql)。監査 Lambda 群と
+   * lockstep で env を配線する。default (未指定 / `dynamodb`) は env を足さず byte 互換。
+   */
+  readonly controlDataBackend?: string;
 }
 
 /**
@@ -57,6 +63,8 @@ export class SystemAuditWriterLambda extends Construct {
         DEPLOY_ENVIRONMENT: props.environmentName,
         // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
         ...auditLogEnabledEnv(props.auditLogEnabled),
+        // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
+        ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
         NODE_OPTIONS: "--enable-source-maps",
       },
     });

@@ -146,6 +146,17 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
     ).toBe(false);
   });
 
+  it("should default deployViaLambda to false when unset (#2291 no regression)", () => {
+    expect(resolve(baseEnv()).deployViaLambda).toBe(false);
+  });
+
+  it("should enable deployViaLambda only when CDK_PARAM_DEPLOY_VIA_LAMBDA is exactly 'true' (#2291)", () => {
+    expect(resolve(baseEnv({ CDK_PARAM_DEPLOY_VIA_LAMBDA: "true" })).deployViaLambda).toBe(true);
+    // 設定ミス値は在来 CodeBuild 経路のまま (= fail-safe、追加リソースを誤って生やさない)。
+    expect(resolve(baseEnv({ CDK_PARAM_DEPLOY_VIA_LAMBDA: "yes" })).deployViaLambda).toBe(false);
+    expect(resolve(baseEnv({ CDK_PARAM_DEPLOY_VIA_LAMBDA: "1" })).deployViaLambda).toBe(false);
+  });
+
   it("should default auditLogEnabled to true when unset (#2311 no regression)", () => {
     expect(resolve(baseEnv()).auditLogEnabled).toBe(true);
   });
@@ -155,6 +166,39 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
     // 明示 "true" / 設定ミス値 ("0" 等) は enabled のまま (= 監査を誤って消さない fail-safe)。
     expect(resolve(baseEnv({ CDK_PARAM_AUDIT_LOG_ENABLED: "true" })).auditLogEnabled).toBe(true);
     expect(resolve(baseEnv({ CDK_PARAM_AUDIT_LOG_ENABLED: "0" })).auditLogEnabled).toBe(true);
+  });
+
+  it("should default controlDataBackend to 'dynamodb' when unset (#2290 no regression)", () => {
+    expect(resolve(baseEnv()).controlDataBackend).toBe("dynamodb");
+    // 空文字 / 空白のみも default 扱い (= 在来 DDB 経路、byte 互換)。
+    expect(resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "" })).controlDataBackend).toBe(
+      "dynamodb",
+    );
+    expect(resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "  " })).controlDataBackend).toBe(
+      "dynamodb",
+    );
+  });
+
+  it("should accept turso / sql and normalize case for controlDataBackend (#2290)", () => {
+    expect(resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "turso" })).controlDataBackend).toBe(
+      "turso",
+    );
+    expect(resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "sql" })).controlDataBackend).toBe(
+      "sql",
+    );
+    // 大文字混在は lowercase 正規化する。
+    expect(resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "Turso" })).controlDataBackend).toBe(
+      "turso",
+    );
+    expect(
+      resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "DynamoDB" })).controlDataBackend,
+    ).toBe("dynamodb");
+  });
+
+  it("should throw loudly on an unknown controlDataBackend value instead of silently defaulting (#2290)", () => {
+    expect(() => resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "postgres" }))).toThrow(
+      /CDK_PARAM_CONTROL_DATA_BACKEND must be one of dynamodb\|turso\|sql/,
+    );
   });
 
   it("should fall back to real problem discovery when no discoverProblems stub is injected", () => {
