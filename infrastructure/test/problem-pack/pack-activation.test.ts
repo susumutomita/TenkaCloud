@@ -13,6 +13,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { ProblemsCatalogBundle } from "../../lib/app-config/types";
 import type { CoreProblemInput, PlatformContext } from "../../lib/problem-pack/effective-catalog";
 import {
   createEventSnapshot,
@@ -116,6 +117,69 @@ function installPackFrom(
 const CORE: readonly CoreProblemInput[] = [
   { problemId: "core-warmup", directory: "problems/challenges/core-warmup", projections: {} },
 ];
+
+/** Distinct pack id so a coordination pack coexists with the default `installPackFrom` pack. */
+const COORD_PACK_ID = "com.example.coordination-pack";
+const COORD_PROBLEM_ID = "coord-problem";
+const COORD_PLUGIN_REL = "coordination/router.ts";
+/**
+ * A self-contained coordination plugin (no SDK import) so esbuild bundles it from the temp
+ * snapshot dir without resolving workspace node_modules — same convention as the
+ * bundle-coordination-plugins unit test.
+ */
+const COORD_PLUGIN_SRC =
+  "const plugin = { initialState: () => ({}), validateOp: () => ({ ok: true }), applyOp: (s) => s, projectForTeam: (s) => s };\nexport default plugin;\n";
+
+/** Build a valid pack whose single problem opts into ADR-028 inter-team coordination. */
+function writeCoordinationPack(
+  dir: string,
+  options: { problemId?: string; pluginSrc?: string } = {},
+): string {
+  const problemId = options.problemId ?? COORD_PROBLEM_ID;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "tenkacloud-pack.json"),
+    JSON.stringify(manifest({ id: COORD_PACK_ID }), null, 2),
+  );
+  const problemDir = path.join(dir, "problems", "challenges", problemId);
+  fs.mkdirSync(path.join(problemDir, "coordination"), { recursive: true });
+  fs.writeFileSync(
+    path.join(problemDir, "metadata.json"),
+    JSON.stringify(
+      { ...awsProblem(problemId), interTeamCoordination: { plugin: COORD_PLUGIN_REL } },
+      null,
+      2,
+    ),
+  );
+  fs.writeFileSync(path.join(problemDir, "template.yaml"), "# CFn deploy body\nResources: {}\n");
+  fs.writeFileSync(path.join(problemDir, COORD_PLUGIN_REL), options.pluginSrc ?? COORD_PLUGIN_SRC);
+  return dir;
+}
+
+/** Install a coordination pack from a fresh source dir and return its lock entry. */
+function installCoordinationPackFrom(
+  name: string,
+  options: { problemId?: string; pluginSrc?: string } = {},
+) {
+  const sourceDir = path.join(base, name);
+  writeCoordinationPack(sourceDir, options);
+  const result = installPack({
+    sourceDir,
+    storeDir,
+    installedAt: INSTALLED_AT,
+    coreVersion: CORE_VERSION,
+    availableRuntimes: AVAILABLE_RUNTIMES,
+  });
+  if (!result.ok) throw new Error(`install failed: ${result.message}`);
+  return result.entry;
+}
+
+/** An empty local core root — the pack under test supplies the only problems. */
+function emptyCoreRoot(): string {
+  const dir = path.join(base, "empty-core");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
 
 describe("ActivationStore.activate (#2095)", () => {
   it("should make an inactive pack invisible to the tenant effective catalog", () => {
@@ -488,5 +552,96 @@ describe("core-only tenant regression (#2095)", () => {
     for (const value of Object.values(provenance)) {
       expect(value.source).toBe("core");
     }
+  });
+});
+
+/**
+ * [ADR-028/030 activation (#2323)] Installed-snapshot coordination activation.
+ *
+ * Slice 1 (PR #2328) taught `SnapshotCatalogSource.loadBundle` to read a pack's
+ * `coordination` / `coordinationBundle` back off `projections`, but the production
+ * installed-snapshot path (`ActivationStore.loadSnapshotInput`) still handed it `projections: {}`,
+ * so an installed + active coordination pack stayed inert. These tests pin that
+ * `tenantCatalogSource` (the deploy / synth path) now discovers the pack's
+ * `interTeamCoordination.plugin` from the immutable snapshot dir and synth-bundles it onto the
+ * effective bundle, while every other path (activate() dry-run, event-pin via the default
+ * `snapshotInputsForTenant`) stays byte-identical (`projections: {}`, no esbuild, never throws).
+ */
+describe("ActivationStore coordination activation (#2323)", () => {
+  it("should carry an installed pack's coordination plugin + bundle onto the effective bundle via tenantCatalogSource", () => {
+    installCoordinationPackFrom("coord-pack");
+    const store = new ActivationStore(storeDir, PLATFORM);
+    expect(store.activate({ tenantId: TENANT_A, packId: COORD_PACK_ID, version: "1.0.0" }).ok).toBe(
+      true,
+    );
+
+    const bundle = tenantCatalogSource(store, TENANT_A, PLATFORM).loadBundle(
+      emptyCoreRoot(),
+    ) as ProblemsCatalogBundle;
+
+    // The pack's declaration reaches `coordination` (→ dispatcher scope resolver) ...
+    expect((bundle.coordination as Record<string, unknown>)[COORD_PROBLEM_ID]).toEqual({
+      plugin: COORD_PLUGIN_REL,
+    });
+    // ... and the synth-bundled `.mjs` reaches `coordinationBundles` (→ CoordinationPluginBundle S3).
+    const bundles = bundle.coordinationBundles as Record<string, string>;
+    expect(bundles[COORD_PROBLEM_ID]).toContain("validateOp");
+  });
+
+  it("should keep snapshotInputsForTenant byte-identical unless coordination activation is requested", () => {
+    installCoordinationPackFrom("coord-pack");
+    const store = new ActivationStore(storeDir, PLATFORM);
+    store.activate({ tenantId: TENANT_A, packId: COORD_PACK_ID, version: "1.0.0" });
+
+    // Default (event-pin path): projections stay empty — no coordination, no esbuild.
+    const defaultInputs = store.snapshotInputsForTenant(TENANT_A);
+    expect(defaultInputs[0].problems[0].projections).toEqual({});
+
+    // Opt-in (deploy path): the coordination declaration is carried onto projections.
+    const activated = store.snapshotInputsForTenant(TENANT_A, { withCoordinationProjection: true });
+    expect(activated[0].problems[0].projections).toMatchObject({
+      coordination: { plugin: COORD_PLUGIN_REL },
+    });
+  });
+
+  it("should leave a pack that declares no coordination byte-identical on the deploy path", () => {
+    // A normal (non-coordination) pack must contribute no coordination keys even through the
+    // opt-in deploy path, so a coordination-free deploy is a NO-OP.
+    installPackFrom("plain-pack", { problemId: "pack-only" });
+    const store = new ActivationStore(storeDir, PLATFORM);
+    store.activate({ tenantId: TENANT_A, packId: "com.example.cloud-pack", version: "1.0.0" });
+
+    const bundle = tenantCatalogSource(store, TENANT_A, PLATFORM).loadBundle(
+      emptyCoreRoot(),
+    ) as ProblemsCatalogBundle;
+
+    expect(bundle.coordination).toEqual({});
+    expect(bundle.coordinationBundles).toEqual({});
+    const inputs = store.snapshotInputsForTenant(TENANT_A, { withCoordinationProjection: true });
+    expect(inputs[0].problems[0].projections).toEqual({});
+  });
+
+  it("should still let a coordination pack activate without bundling (dry-run never throws)", () => {
+    // A coordination pack whose plugin CANNOT be bundled still installs + activates: the dry-run
+    // compose never bundles, so activate() keeps its "never throws" contract.
+    installCoordinationPackFrom("broken-pack", { pluginSrc: "export default (;\n" });
+    const store = new ActivationStore(storeDir, PLATFORM);
+
+    const activated = store.activate({
+      tenantId: TENANT_A,
+      packId: COORD_PACK_ID,
+      version: "1.0.0",
+    });
+    expect(activated.ok).toBe(true);
+  });
+
+  it("should fail loud at synth when a coordination pack's plugin cannot be bundled", () => {
+    // The deploy path must not silently drop a broken plugin: tenantCatalogSource eagerly resolves
+    // + synth-bundles the active snapshots, so esbuild throws loud (no silent fallback).
+    installCoordinationPackFrom("broken-pack", { pluginSrc: "export default (;\n" });
+    const store = new ActivationStore(storeDir, PLATFORM);
+    store.activate({ tenantId: TENANT_A, packId: COORD_PACK_ID, version: "1.0.0" });
+
+    expect(() => tenantCatalogSource(store, TENANT_A, PLATFORM)).toThrow();
   });
 });
