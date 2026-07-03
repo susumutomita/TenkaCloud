@@ -126,7 +126,7 @@ ADRs must be self-contained for OSS readers. Do not leave chat context, rolling-
 
 You are not done until they all pass. If something fails, find the root cause and fix the code (don't edit `biome.json` / `vitest.config.ts` / etc. to mask it).
 
-`make before-commit` (lint + test) is a fast sanity check, not a full CI mirror — CI (`.github/workflows/ci.yml`) additionally runs `audit-deps`, the submodule pin guard, and a 100％ coverage gate for agent-owned workspaces, so a green `before-commit` does not guarantee a green CI. Run `make ci-local` for the full mirror (same checks CI runs, same order, minus the Codecov upload) before opening a PR if you want that guarantee locally.
+`make before-commit` (lint + test) is a fast sanity check, not a full CI mirror — CI (`.github/workflows/ci.yml`) additionally runs `audit-deps`, the submodule pin guard, **problem-catalog validation** (`make validate-problems` — schema + the bilingual `README.md`/`README.ja.md` invariant, #2254), and a 100％ coverage gate for agent-owned workspaces, so a green `before-commit` does not guarantee a green CI. Run `make ci-local` for the full mirror (same checks CI runs, same order, minus the Codecov upload) before opening a PR if you want that guarantee locally.
 
 ### Available skills
 
