@@ -5,6 +5,7 @@ import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
 import { buildAuthErrorHandler, createRoleCheckMiddleware } from "../shared/auth-wiring.js";
 import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
+import { parseSchema } from "../shared/http-parse.js";
 import {
   asCompositeDescriptor,
   type CompositeRuntimeDescriptor,
@@ -180,13 +181,8 @@ async function handleCompositeDeploy(
   quotaTier: QuotaTier,
   body: unknown,
 ): Promise<Response> {
-  const parsed = CompositeDeployRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json(
-      { error: "validation_failed", issues: parsed.error.issues },
-      StatusCodes.BAD_REQUEST,
-    );
-  }
+  const parsed = parseSchema(c, CompositeDeployRequestSchema, body);
+  if (!parsed.ok) return parsed.response;
   try {
     const response = await startCompositeDeployment(
       buildCompositeDeployDeps(ctx, parsed.data.teamName),
@@ -228,13 +224,8 @@ app.post("/problems/:problemId/deploy", async (c) => {
     return handleCompositeDeploy(c, ctx, problemId, composite, quotaTier, body);
   }
 
-  const parsed = DeployRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json(
-      { error: "validation_failed", issues: parsed.error.issues },
-      StatusCodes.BAD_REQUEST,
-    );
-  }
+  const parsed = parseSchema(c, DeployRequestSchema, body);
+  if (!parsed.ok) return parsed.response;
 
   try {
     const response = await startDeployment(ctx, {

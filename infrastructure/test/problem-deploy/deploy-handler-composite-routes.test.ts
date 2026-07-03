@@ -250,6 +250,17 @@ describe("POST /problems/:problemId/deploy — composite routing (#2075)", () =>
     expect(body).toMatchObject({ error: "deploy_quota_exceeded", tier: "basic", limit: 2 });
     expect(spies.dispatch).not.toHaveBeenCalled();
   });
+
+  it("should 400 validation_failed on a malformed composite body", async () => {
+    // A wrong-typed field fails CompositeDeployRequestSchema before any dispatch —
+    // the composite path returns the same validation_failed shape as the legacy path.
+    const res = await post("/problems/cross-cloud/deploy", { region: 123 });
+
+    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    expect(((await res.json()) as { error: string }).error).toBe("validation_failed");
+    expect(spies.materialize).not.toHaveBeenCalled();
+    expect(spies.dispatch).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /problems/:problemId/deploy — legacy path unchanged (#2075)", () => {
