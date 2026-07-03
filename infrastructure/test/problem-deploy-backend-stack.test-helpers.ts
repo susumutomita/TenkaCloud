@@ -1,5 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
+import { Project } from "aws-cdk-lib/aws-codebuild";
 import { CoordinationDispatcherLambda } from "../lib/problem-deploy/coordination-dispatcher-lambda";
 import { ParticipantPortalLambda } from "../lib/problem-deploy/participant-portal-lambda";
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack";
@@ -150,6 +151,8 @@ export function synthParticipantPortalLambdaOnly(): Template {
     problemsScoring: {},
     problemsEndpoints: {},
     environmentName: "development",
+    // deploy-logs streaming grant の対象 (= codebuild:BatchGetBuilds / logs:GetLogEvents scope)。
+    deployCodeBuildProject: Project.fromProjectName(stack, "DeployCodeBuild", "tc-deploy-project"),
   });
   return Template.fromStack(stack);
 }

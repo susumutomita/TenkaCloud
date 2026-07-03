@@ -1,3 +1,4 @@
+import type { IProject } from "aws-cdk-lib/aws-codebuild";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IEventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
@@ -33,6 +34,14 @@ export interface BuildDeployPipelineArgs {
 
 export interface DeployPipelineOutputs {
   readonly deployCodeBuildProjectName: string;
+  /**
+   * Deploy CodeBuild `Project` construct itself. The Participant Portal Lambda needs a
+   * least-privilege grant to read this project's builds (`codebuild:BatchGetBuilds`) and its
+   * CloudWatch log group (`logs:GetLogEvents`) so `GET /portal/me/deploy-logs` can stream a
+   * team's deploy log. Passing the construct (not just its name) lets the caller derive both
+   * the project ARN and the `/aws/codebuild/<projectName>` log-group ARN.
+   */
+  readonly deployCodeBuildProject: IProject;
   readonly deployCreateStateMachineArn: string;
   readonly deployDeleteStateMachineArn: string;
   readonly bulkDeployPayloadBucketName: string;
@@ -125,6 +134,7 @@ export function buildDeployPipeline(
 
   return {
     deployCodeBuildProjectName: codeBuild.project.projectName,
+    deployCodeBuildProject: codeBuild.project,
     deployCreateStateMachineArn: stateMachine.stateMachine.stateMachineArn,
     deployDeleteStateMachineArn: deleteStateMachine.stateMachine.stateMachineArn,
     bulkDeployPayloadBucketName: args.bulkPayloadBucket.bucketName,

@@ -1,4 +1,5 @@
 import { CfnOutput } from "aws-cdk-lib";
+import type { IProject } from "aws-cdk-lib/aws-codebuild";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
@@ -23,6 +24,12 @@ export interface BuildParticipantPortalSubsystemArgs {
   readonly environmentName: string;
   readonly runtimeConfig: ParticipantPortalRuntimeConfig | "default-dev-mock";
   readonly region: string;
+  /**
+   * Deploy CodeBuild `Project`。`GET /portal/me/deploy-logs` が競技者の deploy build ログを
+   * stream するのに、 portal Lambda role へ この project の build + log group への read-only を
+   * least-privilege で付与するために渡す (`ParticipantPortalLambda` が grant を組み立てる)。
+   */
+  readonly deployCodeBuildProject: IProject;
 }
 
 export interface ParticipantPortalSubsystemOutputs {
@@ -62,6 +69,7 @@ export function buildParticipantPortalSubsystem(
     problemsScoring: args.problemsScoring,
     problemsEndpoints: args.problemsEndpoints,
     environmentName: args.environmentName,
+    deployCodeBuildProject: args.deployCodeBuildProject,
   });
   new CfnOutput(scope, "ParticipantPortalApiUrl", {
     value: portalLambda.url.url,
