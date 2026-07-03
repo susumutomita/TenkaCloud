@@ -158,6 +158,41 @@ export function synthParticipantPortalLambdaOnly(): Template {
 }
 
 /**
+ * Issue #2291: ParticipantPortalLambda 単体 synth で `deployJobLogGroup` を渡した (= deployViaLambda
+ * ON 相当の) variant。 Lambda 経路の jobId stream を read する `DeployJobLogsRead` grant +
+ * `DEPLOY_JOB_LOG_GROUP` env の付与を検証する。 flag OFF 版は `synthParticipantPortalLambdaOnly`。
+ */
+export function synthParticipantPortalLambdaOnlyWithJobLogGroup(): Template {
+  const app = new cdk.App();
+  const stack = new cdk.Stack(app, "TestStack");
+  const deployments = new cdk.aws_dynamodb.Table(stack, "Deployments", {
+    partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
+    sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
+  });
+  const events = new cdk.aws_dynamodb.Table(stack, "Events", {
+    partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
+    sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
+  });
+  const endpoints = new cdk.aws_dynamodb.Table(stack, "ProblemEndpoints", {
+    partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
+    sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
+  });
+  const jobLogGroup = new cdk.aws_logs.LogGroup(stack, "JobLogGroup");
+  new ParticipantPortalLambda(stack, "ParticipantPortal", {
+    deploymentsTable: deployments,
+    eventsTable: events,
+    endpointsTable: endpoints,
+    problemsScoring: {},
+    problemsEndpoints: {},
+    environmentName: "development",
+    deployCodeBuildProject: Project.fromProjectName(stack, "DeployCodeBuild", "tc-deploy-project"),
+    // #2291: Lambda 経路の deploy 進捗を read する read scope。
+    deployJobLogGroup: jobLogGroup,
+  });
+  return Template.fromStack(stack);
+}
+
+/**
  * ADR-030 Phase 2 (#1420): CoordinationDispatcherLambda 単体 synth。 stack 全体 synth は
  * ParticipantPortalHosting の dist asset を要求するため、 IAM (最小権限) / Function URL の検証は
  * construct 単体で行う (= synthParticipantPortalLambdaOnly と同方針)。

@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { ResourceNotFoundException } from "@aws-sdk/client-cloudwatch-logs";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getParticipantDeployLogs,
   parseDeployLogLimit,
@@ -46,6 +47,13 @@ describe("parseDeployLogLimit", () => {
 });
 
 describe("getParticipantDeployLogs", () => {
+  // #2291: the Lambda-path branch is gated on this env. Clear it after every test so the
+  // CodeBuild-path tests (which assert the empty-fallback when buildId is absent) see today's
+  // exact behavior and no env leaks across tests.
+  afterEach(() => {
+    delete process.env.DEPLOY_JOB_LOG_GROUP;
+  });
+
   it("should return unauthorized when there are no deployments linked to teamLoginKey", async () => {
     vi.mocked(queryTeamItems).mockResolvedValueOnce([]);
     const deps = buildDeps();
@@ -215,5 +223,134 @@ describe("getParticipantDeployLogs", () => {
     expect(out.kind).toBe("ok");
     if (out.kind !== "ok") return;
     expect(out.response.entries[0]?.message).toBe("[redacted scoring output]");
+  });
+
+  it("should stream Lambda-path deploy logs from the jobId CloudWatch stream when DEPLOY_JOB_LOG_GROUP is set", async () => {
+    process.env.DEPLOY_JOB_LOG_GROUP = "/tenkacloud/deploy-jobs";
+    // No buildId (Lambda path has no CodeBuild build) → the jobId stream is read instead.
+    vi.mocked(queryTeamItems).mockResolvedValueOnce([
+      { jobId: JOB_ID, status: "IN_PROGRESS", problemId: "hello-world" },
+    ]);
+    const deps = buildDeps();
+    deps.logs.send.mockResolvedValueOnce({
+      events: [
+        {
+          timestamp: 1_779_273_600_000,
+          ingestionTime: 1_779_273_600_100,
+          message: "Deploying stack tc-x-y ...",
+        },
+        {
+          timestamp: 1_779_273_601_000,
+          ingestionTime: 1_779_273_601_100,
+          message: "CreateStack submitted (stackId arn:aws:cfn:...)",
+        },
+      ],
+      nextForwardToken: "next-token",
+    });
+
+    const out = await getParticipantDeployLogs(shared, deps, TEAM_KEY, {
+      jobId: JOB_ID,
+      nextToken: "prev-token",
+      limit: 25,
+    });
+
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.response).toEqual({
+      jobId: JOB_ID,
+      buildStatus: "IN_PROGRESS",
+      complete: false,
+      nextToken: "next-token",
+      entries: [
+        {
+          id: "1779273600000:1779273600100:0",
+          timestamp: "2026-05-20T10:40:00.000Z",
+          source: "lambda",
+          message: "Deploying stack tc-x-y ...",
+        },
+        {
+          id: "1779273601000:1779273601100:1",
+          timestamp: "2026-05-20T10:40:01.000Z",
+          source: "lambda",
+          message: "CreateStack submitted (stackId arn:aws:cfn:...)",
+        },
+      ],
+    });
+    // Reads the jobId-keyed stream in the configured group; no CodeBuild lookup on the Lambda path.
+    expect(deps.logs.send.mock.calls[0]?.[0].input).toMatchObject({
+      logGroupName: "/tenkacloud/deploy-jobs",
+      logStreamName: JOB_ID,
+      nextToken: "prev-token",
+      limit: 25,
+      startFromHead: true,
+    });
+    expect(deps.codebuild.send).not.toHaveBeenCalled();
+  });
+
+  it("should return empty entries when the job log stream does not exist yet", async () => {
+    process.env.DEPLOY_JOB_LOG_GROUP = "/tenkacloud/deploy-jobs";
+    vi.mocked(queryTeamItems).mockResolvedValueOnce([
+      { jobId: JOB_ID, status: "PENDING", problemId: "hello-world" },
+    ]);
+    const deps = buildDeps();
+    deps.logs.send.mockRejectedValueOnce(
+      new ResourceNotFoundException({
+        message: "The specified log stream does not exist.",
+        $metadata: {},
+      }),
+    );
+
+    const out = await getParticipantDeployLogs(shared, deps, TEAM_KEY, { jobId: JOB_ID });
+
+    expect(out).toEqual({
+      kind: "ok",
+      response: {
+        jobId: JOB_ID,
+        buildStatus: "PENDING",
+        complete: false,
+        entries: [],
+      },
+    });
+  });
+
+  it("should redact sensitive Lambda-path lines identically to the CodeBuild path", async () => {
+    process.env.DEPLOY_JOB_LOG_GROUP = "/tenkacloud/deploy-jobs";
+    vi.mocked(queryTeamItems).mockResolvedValueOnce([
+      { jobId: JOB_ID, status: "IN_PROGRESS", problemId: "hello-world" },
+    ]);
+    const deps = buildDeps();
+    deps.logs.send.mockResolvedValueOnce({
+      events: [
+        {
+          timestamp: 1_779_273_600_000,
+          ingestionTime: 1_779_273_600_100,
+          message: "using externalId abc",
+        },
+      ],
+      nextForwardToken: "next-token",
+    });
+
+    const out = await getParticipantDeployLogs(shared, deps, TEAM_KEY, { jobId: JOB_ID });
+
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.response.entries[0]?.message).toBe("[redacted sensitive output]");
+  });
+
+  it("should keep the empty-fallback (no CloudWatch read) when DEPLOY_JOB_LOG_GROUP is unset", async () => {
+    // Default-safe: with the flag OFF the env is absent and the Lambda-path branch never runs.
+    vi.mocked(queryTeamItems).mockResolvedValueOnce([
+      { jobId: JOB_ID, status: "PENDING", problemId: "hello-world" },
+    ]);
+    const deps = buildDeps();
+
+    const out = await getParticipantDeployLogs(shared, deps, TEAM_KEY, { jobId: JOB_ID });
+
+    expect(out).toEqual({
+      kind: "ok",
+      response: { jobId: JOB_ID, buildStatus: "PENDING", complete: false, entries: [] },
+    });
+    expect(deps.logs.send).not.toHaveBeenCalled();
+    expect(deps.codebuild.send).not.toHaveBeenCalled();
   });
 });

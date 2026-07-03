@@ -518,6 +518,11 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         // GET /portal/me/deploy-logs が この deploy CodeBuild project の build + log group を
         // read するため、 portal Lambda role へ least-privilege grant を付与する (下で構築)。
         deployCodeBuildProject: deployPipeline.deployCodeBuildProject,
+        // Issue #2291: deployViaLambda ON のときのみ、 Lambda 経路の deploy 進捗 (jobId stream) を
+        // portal が read できるよう job log group を渡す。 flag OFF では undefined = 追加 grant/env なし。
+        ...(deployPipeline.deployJobLogGroup
+          ? { deployJobLogGroup: deployPipeline.deployJobLogGroup }
+          : {}),
       });
       this.participantPortalLambda = portalSubsystem.participantPortalLambda;
       this.participantPortalUrl = portalSubsystem.participantPortalUrl;

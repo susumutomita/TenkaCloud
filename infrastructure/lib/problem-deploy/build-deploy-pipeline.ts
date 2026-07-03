@@ -2,6 +2,7 @@ import type { IProject } from "aws-cdk-lib/aws-codebuild";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IEventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
+import type { ILogGroup } from "aws-cdk-lib/aws-logs";
 import { Bucket } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
 import { BulkDeployCreateStateMachine } from "./bulk-deploy-create-state-machine.js";
@@ -46,6 +47,13 @@ export interface DeployPipelineOutputs {
   readonly deployDeleteStateMachineArn: string;
   readonly bulkDeployPayloadBucketName: string;
   readonly bulkDeployCreateStateMachineArn: string;
+  /**
+   * Issue #2291: the Lambda deploy path's dedicated job-progress log group. Present only when
+   * `deployViaLambda` is ON (the {@link CfnDeployLambda} that owns it is created only then).
+   * Threaded to the participant portal Lambda so `GET /portal/me/deploy-logs` can stream a team's
+   * Lambda-path deploy progress by jobId. `undefined` on the default CodeBuild path (NO-OP).
+   */
+  readonly deployJobLogGroup?: ILogGroup;
 }
 
 /**
@@ -86,12 +94,15 @@ export function buildDeployPipeline(
   // Issue #2291: flag ON のときだけ deploy Lambda を生成する (= flag OFF の synth は
   // CfnDeploy 構築が無く byte 互換)。CodeBuild は delete 経路が使い続けるので常に生成する。
   let cfnDeployFunction: IFunction | undefined;
+  let deployJobLogGroup: ILogGroup | undefined;
   if (args.deployViaLambda) {
     const cfnDeploy = new CfnDeployLambda(scope, "CfnDeploy", {
       environmentName: args.environmentName,
       sourceBucketName: args.sourceBucketName,
     });
     cfnDeployFunction = cfnDeploy.fn;
+    // #2291: hand the job-progress log group to the caller → participant portal read scope.
+    deployJobLogGroup = cfnDeploy.jobLogGroup;
   }
 
   const stateMachine = new DeployCreateStateMachine(scope, "DeployCreate", {
@@ -139,5 +150,7 @@ export function buildDeployPipeline(
     deployDeleteStateMachineArn: deleteStateMachine.stateMachine.stateMachineArn,
     bulkDeployPayloadBucketName: args.bulkPayloadBucket.bucketName,
     bulkDeployCreateStateMachineArn: bulkStateMachine.stateMachine.stateMachineArn,
+    // #2291: undefined on the default CodeBuild path (flag OFF) → no participant read grant added.
+    ...(deployJobLogGroup ? { deployJobLogGroup } : {}),
   };
 }

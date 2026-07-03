@@ -2,6 +2,7 @@ import { CfnOutput } from "aws-cdk-lib";
 import type { IProject } from "aws-cdk-lib/aws-codebuild";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
+import type { ILogGroup } from "aws-cdk-lib/aws-logs";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
 import { CoordinationDispatcherLambda } from "./coordination-dispatcher-lambda.js";
@@ -30,6 +31,12 @@ export interface BuildParticipantPortalSubsystemArgs {
    * least-privilege で付与するために渡す (`ParticipantPortalLambda` が grant を組み立てる)。
    */
   readonly deployCodeBuildProject: IProject;
+  /**
+   * Issue #2291: Lambda 経路 (`deployViaLambda` ON) の deploy 進捗を書く jobId stream の log group。
+   * present のときだけ portal Lambda に `logs:GetLogEvents` read scope + `DEPLOY_JOB_LOG_GROUP` env を
+   * 付与する。 未指定 (= CodeBuild 経路 / flag OFF) では追加 grant/env なし (= synth byte 互換)。
+   */
+  readonly deployJobLogGroup?: ILogGroup;
 }
 
 export interface ParticipantPortalSubsystemOutputs {
@@ -70,6 +77,8 @@ export function buildParticipantPortalSubsystem(
     problemsEndpoints: args.problemsEndpoints,
     environmentName: args.environmentName,
     deployCodeBuildProject: args.deployCodeBuildProject,
+    // #2291: only when the Lambda deploy path is on (flag OFF → absent, no extra grant/env).
+    ...(args.deployJobLogGroup ? { deployJobLogGroup: args.deployJobLogGroup } : {}),
   });
   new CfnOutput(scope, "ParticipantPortalApiUrl", {
     value: portalLambda.url.url,

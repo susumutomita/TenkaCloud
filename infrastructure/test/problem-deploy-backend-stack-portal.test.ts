@@ -1,6 +1,9 @@
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
-import { synthParticipantPortalLambdaOnly } from "./problem-deploy-backend-stack.test-helpers";
+import {
+  synthParticipantPortalLambdaOnly,
+  synthParticipantPortalLambdaOnlyWithJobLogGroup,
+} from "./problem-deploy-backend-stack.test-helpers";
 
 describe("ParticipantPortalLambda wiring (#535)", () => {
   const tpl = synthParticipantPortalLambdaOnly();
@@ -192,5 +195,81 @@ describe("ParticipantPortalLambda wiring (#535)", () => {
     expect(logs?.Resource).not.toBe("*");
     // CloudWatch log group for the CodeBuild project, streams covered by the trailing `:*`.
     expect(JSON.stringify(logs?.Resource)).toContain("/aws/codebuild/");
+  });
+
+  it("#2291 default-safe: should NOT add DEPLOY_JOB_LOG_GROUP env or DeployJobLogsRead when no job log group is wired", () => {
+    // Flag OFF (deployJobLogGroup absent): the portal Lambda is byte-identical to today —
+    // no Lambda-path read grant, no env. This is the no-regression guard.
+    const functions = tpl.findResources("AWS::Lambda::Function");
+    const vars =
+      (
+        Object.values(functions)[0] as {
+          Properties?: { Environment?: { Variables?: Record<string, unknown> } };
+        }
+      ).Properties?.Environment?.Variables ?? {};
+    expect(vars.DEPLOY_JOB_LOG_GROUP).toBeUndefined();
+
+    const roles = tpl.findResources("AWS::IAM::Role");
+    const hasDeployJobLogsRead = Object.values(roles).some((r) =>
+      (
+        (r as { Properties?: { Policies?: Array<{ PolicyName?: string }> } }).Properties
+          ?.Policies ?? []
+      ).some((p) => p.PolicyName === "DeployJobLogsRead"),
+    );
+    expect(hasDeployJobLogsRead).toBe(false);
+  });
+});
+
+describe("ParticipantPortalLambda Lambda-path deploy logs (#2291)", () => {
+  const tpl = synthParticipantPortalLambdaOnlyWithJobLogGroup();
+
+  it("should inject DEPLOY_JOB_LOG_GROUP env when a job log group is wired", () => {
+    tpl.hasResourceProperties(
+      "AWS::Lambda::Function",
+      Match.objectLike({
+        Environment: Match.objectLike({
+          Variables: Match.objectLike({ DEPLOY_JOB_LOG_GROUP: Match.anyValue() }),
+        }),
+      }),
+    );
+  });
+
+  it("should grant logs:GetLogEvents on the job log group via a DeployJobLogsRead inline policy (no wildcard)", () => {
+    tpl.hasResourceProperties(
+      "AWS::IAM::Role",
+      Match.objectLike({
+        Policies: Match.arrayWith([
+          Match.objectLike({
+            PolicyName: "DeployJobLogsRead",
+            PolicyDocument: Match.objectLike({
+              Statement: Match.arrayWith([
+                Match.objectLike({ Action: "logs:GetLogEvents", Effect: "Allow" }),
+              ]),
+            }),
+          }),
+        ]),
+      }),
+    );
+
+    // Least-privilege: the GetLogEvents resource is not `*` (scoped to the job log group `:*`).
+    const roles = tpl.findResources("AWS::IAM::Role");
+    const portalRole = Object.values(roles).find((r) =>
+      (
+        (r as { Properties?: { Policies?: Array<{ PolicyName?: string }> } }).Properties
+          ?.Policies ?? []
+      ).some((p) => p.PolicyName === "DeployJobLogsRead"),
+    );
+    const stmt = (
+      portalRole as {
+        Properties?: {
+          Policies?: Array<{
+            PolicyName?: string;
+            PolicyDocument?: { Statement?: Array<{ Action?: unknown; Resource?: unknown }> };
+          }>;
+        };
+      }
+    ).Properties?.Policies?.find((p) => p.PolicyName === "DeployJobLogsRead")?.PolicyDocument
+      ?.Statement?.[0];
+    expect(stmt?.Resource).not.toBe("*");
   });
 });

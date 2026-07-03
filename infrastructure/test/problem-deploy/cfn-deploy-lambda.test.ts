@@ -148,4 +148,42 @@ describe("CfnDeployLambda (#2291)", () => {
       }),
     );
   });
+
+  it("should create a dedicated job-progress LogGroup (1-month retention) for #2291", () => {
+    // FunctionLogGroup has no explicit retention; the #2291 job log group is the only one with
+    // RetentionInDays=30 (RetentionDays.ONE_MONTH), so it uniquely identifies it.
+    buildTemplate().hasResourceProperties(
+      "AWS::Logs::LogGroup",
+      Match.objectLike({ RetentionInDays: 30 }),
+    );
+  });
+
+  it("should inject DEPLOY_JOB_LOG_GROUP env pointing at the job LogGroup", () => {
+    buildTemplate().hasResourceProperties(
+      "AWS::Lambda::Function",
+      Match.objectLike({
+        Environment: Match.objectLike({
+          Variables: Match.objectLike({ DEPLOY_JOB_LOG_GROUP: Match.anyValue() }),
+        }),
+      }),
+    );
+  });
+
+  it("should grant only CreateLogStream + PutLogEvents on the job LogGroup (no wildcard)", () => {
+    buildTemplate().hasResourceProperties(
+      "AWS::IAM::Policy",
+      Match.objectLike({
+        PolicyDocument: Match.objectLike({
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
+              Effect: "Allow",
+              // Scoped to the job log group ARN + its streams (`:*`), never `*`.
+              Resource: Match.not("*"),
+            }),
+          ]),
+        }),
+      }),
+    );
+  });
 });

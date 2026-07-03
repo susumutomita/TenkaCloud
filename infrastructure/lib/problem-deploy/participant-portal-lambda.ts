@@ -11,6 +11,7 @@ import {
 } from "aws-cdk-lib/aws-iam";
 import { type FunctionUrl, FunctionUrlAuthType, HttpMethod } from "aws-cdk-lib/aws-lambda";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import type { ILogGroup } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
@@ -50,6 +51,13 @@ export interface ParticipantPortalLambdaProps {
    * で stream するため、 project ARN + log-group ARN を least-privilege grant として使う。
    */
   readonly deployCodeBuildProject: IProject;
+  /**
+   * Issue #2291: Lambda 経路 (`deployViaLambda` ON) の deploy 進捗を書く jobId stream の log group。
+   * present のときだけ、 `GET /portal/me/deploy-logs` (deploy-logs.ts) が jobId stream を
+   * `logs:GetLogEvents` で read できるよう read-only grant (`DeployJobLogsRead`) + `DEPLOY_JOB_LOG_GROUP`
+   * env を付与する。 未指定 (= CodeBuild 経路 / flag OFF) では追加せず、 synth は byte 互換。
+   */
+  readonly deployJobLogGroup?: ILogGroup;
 }
 
 /**
@@ -185,6 +193,21 @@ export class ParticipantPortalLambda extends Construct {
             }),
           ],
         }),
+        // Issue #2291: Lambda 経路の deploy 進捗を read する grant。 `deployJobLogGroup` が渡された
+        // (= deployViaLambda ON) ときだけ inline policy を足す。 flag OFF では spread が空 = 追加なし
+        // (synth byte 互換)。 read-only の `logs:GetLogEvents` を job log group の全 stream (`:*`) に scope。
+        ...(props.deployJobLogGroup
+          ? {
+              DeployJobLogsRead: new PolicyDocument({
+                statements: [
+                  new PolicyStatement({
+                    actions: ["logs:GetLogEvents"],
+                    resources: [`${props.deployJobLogGroup.logGroupArn}:*`],
+                  }),
+                ],
+              }),
+            }
+          : {}),
       },
       managedPolicies: [
         ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSLambdaBasicExecutionRole"),
@@ -212,6 +235,13 @@ export class ParticipantPortalLambda extends Construct {
         PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName,
         DEPLOY_ENVIRONMENT: props.environmentName,
         NODE_OPTIONS: "--enable-source-maps",
+        // Issue #2291: deploy-logs.ts が runtime に process.env で読む job log group 名 (= jobId stream
+        // の親 group)。 deployViaLambda ON のときだけ注入し、 flag OFF では env そのものが無い
+        // (= deploy-logs.ts は従来どおり empty entries を返す = byte 互換)。 esbuild define ではなく
+        // 通常の runtime env (CFn token = log group 名) なので plain conditional spread で足す。
+        ...(props.deployJobLogGroup
+          ? { DEPLOY_JOB_LOG_GROUP: props.deployJobLogGroup.logGroupName }
+          : {}),
       },
       // Issue #1158: 旧 #810 の gzip+base64 env 圧縮では問題追加で 4 KB を再度超える。
       // esbuild define で build 時に literal 置換し env を 0 化する。 handler は
