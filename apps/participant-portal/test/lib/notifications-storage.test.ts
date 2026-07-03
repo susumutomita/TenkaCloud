@@ -43,7 +43,7 @@ describe("notifications-storage", () => {
     it("should return null (not throw) when localStorage access is blocked (= private window)", () => {
       // Safari private mode 等では getItem 自体が SecurityError を投げる。 unread badge の
       // ために portal 全体を落とさず、 既読時刻不明 = null に倒すのが正しい防御挙動。
-      const spy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      const spy = vi.spyOn(localStorage, "getItem").mockImplementation(() => {
         throw new Error("SecurityError: localStorage is disabled");
       });
       try {
