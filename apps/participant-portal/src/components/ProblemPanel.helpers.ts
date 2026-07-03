@@ -133,6 +133,7 @@ export function localizeProblem(
     ...(en?.name?.trim() ? { name: en.name } : {}),
     ...(en?.description?.trim() ? { description: en.description } : {}),
     ...(en?.instructions?.trim() ? { instructions: en.instructions } : {}),
+    ...(en?.writeup?.trim() ? { writeup: en.writeup } : {}),
     ...(problem.scoring && hints
       ? { scoring: { ...problem.scoring, hints: hints.map(localizeHint) } }
       : {}),

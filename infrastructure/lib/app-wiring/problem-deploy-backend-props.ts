@@ -22,6 +22,8 @@ export function buildProblemDeployBackendBaseProps(config: AppConfig) {
     sourceObjectKey: config.sourceZip,
     problemsCatalog: config.problems.catalog as ProblemDeployBackendProps["problemsCatalog"],
     problemsScoring: config.problems.scoring as ProblemDeployBackendProps["problemsScoring"],
+    problemsWriteups: (config.problems.writeups ??
+      {}) as ProblemDeployBackendProps["problemsWriteups"],
     problemsEndpoints: config.problems.endpoints as ProblemDeployBackendProps["problemsEndpoints"],
     // 実運用の catalog source (LocalCatalogSource) は 9 キーすべてを常に返すため、以下の
     // `?? {}` は stub 注入時 (テスト等) 限定の防御。旧 Lite 側の式をそのまま採用する。

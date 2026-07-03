@@ -59,6 +59,8 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * このキーが無い (= 採点無効)。
    */
   readonly problemsScoring: Readonly<Record<string, unknown>>;
+  /** Issue #2191: backend-only JA/EN explanations released after event end to solved teams. */
+  readonly problemsWriteups?: Readonly<Record<string, unknown>>;
   /**
    * ADR-012 Phase 3.A: `problemId → endpoints[]` の map。`discoverProblemsEndpoints`
    * で metadata.json から自動収集して synth 時に注入する。Participant Portal の
@@ -515,6 +517,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         eventsTable: events.table,
         endpointsTable: endpoints.table,
         problemsScoring: props.problemsScoring,
+        problemsWriteups: props.problemsWriteups ?? {},
         problemsEndpoints: props.problemsEndpoints,
         problemsCoordination: props.problemsCoordination ?? {},
         problemsCoordinationBundles: props.problemsCoordinationBundles ?? {},

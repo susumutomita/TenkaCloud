@@ -219,6 +219,8 @@ export interface AppConfig {
 export interface ProblemsCatalogBundle {
   readonly catalog: unknown;
   readonly scoring: unknown;
+  /** Issue #2191: `{problemId: {ja,en}}` post-solve explanations, backend-only. */
+  readonly writeups?: unknown;
   readonly endpoints: unknown;
   readonly phases: unknown;
   readonly visibility: unknown;

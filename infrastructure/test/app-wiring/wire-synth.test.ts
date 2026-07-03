@@ -24,6 +24,7 @@ import { buildTenkaCloudApp } from "../../lib/app-wiring/wire";
 const stubProblems = () => ({
   catalog: [],
   scoring: {},
+  writeups: {},
   endpoints: {},
   phases: {},
   visibility: [],

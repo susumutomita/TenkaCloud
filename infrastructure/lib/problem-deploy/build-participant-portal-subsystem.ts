@@ -19,6 +19,7 @@ export interface BuildParticipantPortalSubsystemArgs {
   readonly eventsTable: Table;
   readonly endpointsTable: Table;
   readonly problemsScoring: Readonly<Record<string, unknown>>;
+  readonly problemsWriteups: Readonly<Record<string, unknown>>;
   readonly problemsEndpoints: Readonly<Record<string, unknown>>;
   readonly problemsCoordination: Readonly<Record<string, unknown>>;
   readonly problemsCoordinationBundles: Readonly<Record<string, string>>;
@@ -74,6 +75,7 @@ export function buildParticipantPortalSubsystem(
     eventsTable: args.eventsTable,
     endpointsTable: args.endpointsTable,
     problemsScoring: args.problemsScoring,
+    problemsWriteups: args.problemsWriteups,
     problemsEndpoints: args.problemsEndpoints,
     environmentName: args.environmentName,
     deployCodeBuildProject: args.deployCodeBuildProject,

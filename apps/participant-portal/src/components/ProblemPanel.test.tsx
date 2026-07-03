@@ -374,6 +374,16 @@ describe("ProblemPanel render branches", () => {
     expect(screen.getByTestId("multi-flag-panel")).toBeInTheDocument();
   });
 
+  it("renders a released writeup and omits the section when the API withholds it", () => {
+    const { unmount } = renderPanel({ writeup: "原因と根本対策" });
+    expect(screen.getByText("原因と根本対策")).toBeInTheDocument();
+    expect(screen.getByText(/Explanation and remediation|解説と対策/)).toBeInTheDocument();
+    unmount();
+
+    renderPanel({ writeup: undefined });
+    expect(screen.queryByText(/Explanation and remediation|解説と対策/)).not.toBeInTheDocument();
+  });
+
   it("should render URL outputs in the access panel and move internal outputs to details", () => {
     renderPanel({
       status: "COMPLETE",

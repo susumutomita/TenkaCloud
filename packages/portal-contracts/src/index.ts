@@ -155,6 +155,8 @@ export interface ProblemTextI18n {
   readonly name?: string;
   readonly description?: string;
   readonly instructions?: string;
+  /** Issue #2191: translated post-solve explanation; absent until release policy allows it. */
+  readonly writeup?: string;
 }
 
 /**
@@ -182,6 +184,11 @@ export interface ParticipantProblemView {
   readonly name?: string;
   readonly description?: string;
   readonly instructions?: string;
+  /**
+   * Issue #2191: learning explanation. The backend omits it during cloud competition
+   * and for unsolved problems; local drill mode includes it only after completion.
+   */
+  readonly writeup?: string;
   /**
    * #2054 i18n: locale override of name/description/instructions (en only; ja is
    * the canonical top-level value). The portal's locale switcher resolves the

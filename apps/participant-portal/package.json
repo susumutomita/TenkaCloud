@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "start": "vite preview",
-    "build": "tsc --noEmit && vite build",
-    "build:pages": "vite build --base ${PORTAL_BASE:-/portal-demo/}",
+    "build": "tsc --noEmit && vite build && bun run scripts/assert-no-writeups-in-dist.ts",
+    "build:pages": "vite build --base ${PORTAL_BASE:-/portal-demo/} && bun run scripts/assert-no-writeups-in-dist.ts",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "test": "vitest run",

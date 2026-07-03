@@ -270,6 +270,19 @@ describe("loadContainerProblem", () => {
     ]);
   });
 
+  it("keeps bilingual writeups in dedicated post-solve fields", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      fixture({
+        writeup: "日本語の解説",
+        i18n: { en: { writeup: "English explanation" } },
+      }),
+    );
+    expect(problem.writeup).toBe("日本語の解説");
+    expect(problem.writeupI18n).toBe("English explanation");
+    expect(problem.i18n).toBeUndefined();
+  });
+
   it("should attach hint translations only for matching ids and skip malformed entries", () => {
     const problem = loadContainerProblem(
       DIR,

@@ -5,6 +5,8 @@ import {
   clearTenantFlagCacheForTest,
   getPrerequisiteBlock,
   getPrerequisiteBlockByEventId,
+  isProblemSolvedForWriteup,
+  releaseSolvedWriteups,
 } from "../../lib/problem-deploy/handlers/participant-handler/challenge-access";
 import type { EventGate } from "../../lib/problem-deploy/handlers/participant-handler/event-gate";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
@@ -328,5 +330,91 @@ describe("buildProgressionView", () => {
         progressionGate: undefined,
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("writeup release policy (#2191)", () => {
+  const problem = {
+    jobId: "job-sqli",
+    problemId: "sqli-demo",
+    region: "ap-northeast-1",
+    awsAccountId: "123456789012",
+    status: "COMPLETE" as const,
+    stackOutputs: {},
+    expiresAt: 0,
+    score: 100,
+    deployLog: { cursor: "", entries: [] },
+    scoring: { kind: "flag" as const, points: 100, flagSubmitted: true },
+  };
+  const writeups = {
+    "sqli-demo": { ja: "JA explanation", en: "EN explanation" },
+  };
+
+  it("never releases a writeup while the cloud event is running", () => {
+    const problems = [problem];
+    expect(releaseSolvedWriteups(problems, writeups, false)).toBe(problems);
+    expect(releaseSolvedWriteups(problems, writeups, false)[0]).not.toHaveProperty("writeup");
+  });
+
+  it("releases both locales after event end only for a solved problem", () => {
+    const released = releaseSolvedWriteups([problem], writeups, true);
+    expect(released[0]).toMatchObject({
+      writeup: "JA explanation",
+      i18n: { en: { writeup: "EN explanation" } },
+    });
+
+    const unsolved = { ...problem, scoring: { ...problem.scoring, flagSubmitted: false } };
+    expect(releaseSolvedWriteups([unsolved], writeups, true)[0]).not.toHaveProperty("writeup");
+  });
+
+  it("requires all multi-flag checkpoints to be solved", () => {
+    expect(isProblemSolvedForWriteup({ ...problem, scoring: undefined })).toBe(false);
+    expect(
+      isProblemSolvedForWriteup({
+        ...problem,
+        scoring: {
+          kind: "multi-flag",
+          points: 200,
+          flags: [
+            { id: "a", label: "A", points: 100, solved: true },
+            { id: "b", label: "B", points: 100, solved: false },
+          ],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      isProblemSolvedForWriteup({
+        ...problem,
+        scoring: {
+          kind: "multi-flag",
+          points: 200,
+          flags: [
+            { id: "a", label: "A", points: 100, solved: true },
+            { id: "b", label: "B", points: 100, solved: true },
+          ],
+        },
+      }),
+    ).toBe(true);
+    expect(
+      isProblemSolvedForWriteup({
+        ...problem,
+        scoring: { kind: "multi-flag", points: 200 },
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps solved problems unchanged when no writeup is registered", () => {
+    expect(releaseSolvedWriteups([problem], {}, true)).toEqual([problem]);
+  });
+
+  it("preserves existing localized metadata when attaching a writeup", () => {
+    const localized = {
+      ...problem,
+      i18n: { en: { title: "Existing title" } },
+    };
+    expect(releaseSolvedWriteups([localized], writeups, true)[0]?.i18n?.en).toEqual({
+      title: "Existing title",
+      writeup: "EN explanation",
+    });
   });
 });

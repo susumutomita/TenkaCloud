@@ -141,9 +141,10 @@ describe("LocalCatalogSource (#2092)", () => {
 
     const bundle = new LocalCatalogSource().loadBundle(root);
 
-    // Each of the nine projections the backend stacks consume must be present.
+    // Each projection the backend stacks consume must be present.
     expect(bundle).toHaveProperty("catalog");
     expect(bundle).toHaveProperty("scoring");
+    expect(bundle).toHaveProperty("writeups");
     expect(bundle).toHaveProperty("endpoints");
     expect(bundle).toHaveProperty("phases");
     expect(bundle).toHaveProperty("visibility");

@@ -1,4 +1,5 @@
 import type { ParticipantProgressionView, ParticipantTeamView } from "@tenkacloud/portal-contracts";
+import type { ProblemWriteup } from "../../../utils/writeup-metadata.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import {
@@ -231,15 +232,58 @@ export async function decorateTeamView(
   // locked 問題は stackOutputs を空にして返す (= lock 中に接続情報を見て先行着手できない
   // 防御層。 unlock 後の再取得で埋まる)。
   const progression = await buildProgressionView(shared, items, gate);
-  const problems = progression
+  const accessFilteredProblems = progression
     ? view.problems.map((p) =>
         progression.lockedProblemIds.includes(p.problemId) ? { ...p, stackOutputs: {} } : p,
       )
     : view.problems;
+  // Cloud competition policy: writeups are released only after the event gate reports ended
+  // and only for problems this team solved. Before that, the field is absent from the wire
+  // response (the text lives only in the backend Lambda bundle, never in browser assets).
+  const problems = releaseSolvedWriteups(
+    accessFilteredProblems,
+    shared.problemsWriteups ?? {},
+    block?.kind === "scoring_ended",
+  );
   return {
     ...view,
     problems,
     eventGate: block ?? { kind: "ok" },
     ...(progression ? { progression } : {}),
   };
+}
+
+export function isProblemSolvedForWriteup(
+  problem: ParticipantTeamView["problems"][number],
+): boolean {
+  if (problem.scoring?.kind === "flag") return problem.scoring.flagSubmitted === true;
+  if (problem.scoring?.kind === "multi-flag") {
+    const flags = problem.scoring.flags ?? [];
+    return flags.length > 0 && flags.every((flag) => flag.solved);
+  }
+  return false;
+}
+
+function attachSolvedWriteup(
+  problem: ParticipantTeamView["problems"][number],
+  writeup: ProblemWriteup | undefined,
+): ParticipantTeamView["problems"][number] {
+  if (!writeup || !isProblemSolvedForWriteup(problem)) return problem;
+  return {
+    ...problem,
+    writeup: writeup.ja,
+    i18n: {
+      ...problem.i18n,
+      en: { ...problem.i18n?.en, writeup: writeup.en },
+    },
+  };
+}
+
+export function releaseSolvedWriteups(
+  problems: ParticipantTeamView["problems"],
+  writeups: Readonly<Record<string, ProblemWriteup>>,
+  eventEnded: boolean,
+): ParticipantTeamView["problems"] {
+  if (!eventEnded) return problems;
+  return problems.map((problem) => attachSolvedWriteup(problem, writeups[problem.problemId]));
 }

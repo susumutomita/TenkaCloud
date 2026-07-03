@@ -8,6 +8,7 @@ import {
   discoverProblemsDisruptions,
   discoverProblemsScoring,
   discoverProblemsVisibility,
+  discoverProblemsWriteups,
 } from "../lib/utils/discover-problems-catalog";
 
 /**
@@ -117,6 +118,22 @@ describe("discoverProblemsCatalog", () => {
     const catalog = discoverProblemsCatalog(workspace);
 
     expect(catalog).toEqual({ "hello-world": "problems/challenges/hello-world" });
+  });
+});
+
+describe("discoverProblemsWriteups (#2191)", () => {
+  it("collects complete bilingual pairs and skips incomplete entries", () => {
+    writeProblem("challenges", "complete", {
+      id: "complete",
+      writeup: "日本語",
+      i18n: { en: { writeup: "English" } },
+    });
+    writeProblem("challenges", "ja-only", { id: "ja-only", writeup: "日本語" });
+    writeProblem("challenges", "none", { id: "none" });
+
+    expect(discoverProblemsWriteups(workspace)).toEqual({
+      complete: { ja: "日本語", en: "English" },
+    });
   });
 });
 

@@ -4,6 +4,7 @@ import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
 import { type ProblemEndpointSlot, parseEndpointsEnv } from "../../../utils/endpoints-metadata.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
+import { type ProblemWriteup, parseWriteupsEnv } from "../../../utils/writeup-metadata.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 
 /**
@@ -33,6 +34,8 @@ export interface ParticipantSharedResources {
   readonly env?: string;
   /** `{ [problemId]: ProblemScoringMetadata }`。submit-flag が採点に使う。 */
   readonly problemsScoring: Record<string, ProblemScoringMetadata>;
+  /** Issue #2191: backend-only post-solve explanations. */
+  readonly problemsWriteups?: Record<string, ProblemWriteup>;
   /**
    * ADR-012 Phase 3.A: `{ [problemId]: ProblemEndpointSlot[] }`。endpoint registry
    * route が default URL 算出に使う。`endpoints[]` 宣言の無い problem は key ごと不在。
@@ -51,6 +54,7 @@ export function buildParticipantSharedResources(): ParticipantSharedResources {
     ssm: new SSMClient({}),
     env: getEnv("DEPLOY_ENVIRONMENT"),
     problemsScoring: parseScoringEnv(process.env.BATTLE_PROBLEMS_SCORING),
+    problemsWriteups: parseWriteupsEnv(process.env.BATTLE_PROBLEMS_WRITEUPS),
     problemsEndpoints: parseEndpointsEnv(process.env.PROBLEM_ENDPOINTS),
   };
 }

@@ -32,10 +32,12 @@ export const ParticipantSessionSchema = z.object({
 
 export type ParticipantSession = z.infer<typeof ParticipantSessionSchema>;
 
-export function loadSession(): ParticipantSession | null {
+export function loadSession(
+  storage: Pick<Storage, "getItem"> = localStorage,
+): ParticipantSession | null {
   let raw: string | null;
   try {
-    raw = localStorage.getItem(STORAGE_KEY);
+    raw = storage.getItem(STORAGE_KEY);
   } catch {
     return null;
   }
