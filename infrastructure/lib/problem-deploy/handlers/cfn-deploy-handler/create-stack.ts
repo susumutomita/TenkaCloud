@@ -21,7 +21,7 @@
  * DescribeStacks until terminal and writes the DDB status transitions.
  */
 
-import { randomBytes } from "node:crypto";
+import { randomInt } from "node:crypto";
 import {
   Capability,
   CloudFormationClient,
@@ -55,12 +55,18 @@ export const RANDOM_PASSWORD_TOKEN = "__RANDOM_PASSWORD__" as const;
 
 const ALPHANUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-/** `randomBytes` → 32-char `[A-Za-z0-9]` (mirrors `tr -dc 'A-Za-z0-9' | head -c 32`). */
+/**
+ * 32-char `[A-Za-z0-9]` (mirrors `tr -dc 'A-Za-z0-9' | head -c 32`).
+ *
+ * Uses `crypto.randomInt(max)` (rejection sampling internally) rather than
+ * `randomBytes(n) % 62` — the latter is biased because 256 is not a multiple of
+ * 62, so indices 0-7 would be drawn slightly more often (CodeQL: "biased random
+ * numbers from a cryptographically secure source"). `randomInt` is uniform.
+ */
 export function generateRandomAlphanumeric(length = 32): string {
   const chars: string[] = [];
-  for (const byte of randomBytes(length)) {
-    // `byte % 62` is always in range, so the indexed char is defined.
-    chars.push(ALPHANUMERIC.charAt(byte % ALPHANUMERIC.length));
+  for (let i = 0; i < length; i++) {
+    chars.push(ALPHANUMERIC.charAt(randomInt(ALPHANUMERIC.length)));
   }
   return chars.join("");
 }
