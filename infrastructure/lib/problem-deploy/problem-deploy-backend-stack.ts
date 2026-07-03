@@ -100,6 +100,13 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    */
   readonly useBulkDistributedMap?: boolean;
   /**
+   * Issue #2291 (ADR-049 §9): DeployCreate を CodeBuild ではなく Lambda CreateStack +
+   * DescribeStacks poll 経路にするか (`CDK_PARAM_DEPLOY_VIA_LAMBDA`)。default (未指定 / false) は
+   * 在来の CodeBuild 経路で、追加リソースなし = CFn テンプレ byte 互換。true で {@link CfnDeployLambda}
+   * を生成し、`DeployCreate` state machine が Lambda + poll 定義に切り替わる。
+   */
+  readonly deployViaLambda?: boolean;
+  /**
    * Issue #2311 (ADR-049 cost-zero): 監査ログ出力を on/off する。default (未指定 / true) は
    * 従来どおり監査 Lambda 群 (deploy-api / event-api / competitor-accounts-api /
    * system-audit-writer) が `writeAuditEvent` する。false のとき各 Lambda env に
@@ -421,6 +428,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       sourceObjectKey: props.sourceObjectKey,
       deployConcurrentBuildLimit: props.deployConcurrentBuildLimit,
       environmentName: props.environmentName,
+      // Issue #2291: flag OFF (default) では CodeBuild 経路のまま (追加リソースなし)。
+      deployViaLambda: props.deployViaLambda,
     });
     this.deployCodeBuildProjectName = deployPipeline.deployCodeBuildProjectName;
     this.deployCreateStateMachineArn = deployPipeline.deployCreateStateMachineArn;

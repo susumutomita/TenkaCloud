@@ -73,6 +73,9 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   // production — the DistributedMap branch was permanently unreachable
   // outside tests. Default false preserves the existing legacy fan-out.
   const useBulkDistributedMap = env.CDK_PARAM_BULK_DEPLOY_VIA_DISTRIBUTED_MAP === "true";
+  // Issue #2291: DeployCreate を Lambda CreateStack + poll 経路にするか。default false (未設定 /
+  // "false" は在来 CodeBuild 経路で CFn テンプレ byte 互換)。"true" のときだけ CfnDeployLambda を生成。
+  const deployViaLambda = env.CDK_PARAM_DEPLOY_VIA_LAMBDA === "true";
   // Issue #2311: 監査ログ出力の on/off。default true (未設定 / "true" は従来どおり出力 →
   // リグレッションなし)。明示 "false" のときだけ監査 Lambda 群を no-op 化する。
   const auditLogEnabled = env.CDK_PARAM_AUDIT_LOG_ENABLED !== "false";
@@ -128,6 +131,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     deployConcurrentBuildLimit,
     deployQuotaByTier,
     useBulkDistributedMap,
+    deployViaLambda,
     auditLogEnabled,
     features,
     controlPlaneSamlIdps,

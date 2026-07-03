@@ -19,7 +19,10 @@ import { DeployCreateStateMachine } from "../../lib/problem-deploy/deploy-create
  * JSONPath を resolve して Lambda に渡す)。
  */
 
-function buildTestStack(): { stack: cdk.Stack; template: Template } {
+function buildTestStack(opts: { deployViaLambda?: boolean } = {}): {
+  stack: cdk.Stack;
+  template: Template;
+} {
   const app = new cdk.App();
   const stack = new cdk.Stack(app, "Test", {
     env: { account: "123456789012", region: "ap-northeast-1" },
@@ -39,12 +42,29 @@ function buildTestStack(): { stack: cdk.Stack; template: Template } {
       path: "source.zip",
     }),
   });
+  const cfnDeployFn = new LambdaFunction(stack, "CfnDeployFn", {
+    runtime: Runtime.NODEJS_22_X,
+    handler: "index.handler",
+    code: Code.fromInline("exports.handler = async () => ({});"),
+  });
   new DeployCreateStateMachine(stack, "Sm", {
     codeBuildProject,
     describeStackFunction: describeStackFn,
     deploymentsTable: deployments,
+    ...(opts.deployViaLambda
+      ? { deployViaLambda: true as const, cfnDeployFunction: cfnDeployFn }
+      : {}),
   });
   return { stack, template: Template.fromStack(stack) };
+}
+
+function definitionJson(template: Template): string {
+  const sm = Object.values(template.findResources("AWS::StepFunctions::StateMachine"))[0];
+  const definitionString = sm?.Properties?.DefinitionString;
+  if (typeof definitionString === "string") return definitionString;
+  const join = definitionString["Fn::Join"];
+  const parts = join[1] as Array<string | Record<string, unknown>>;
+  return parts.map((p) => (typeof p === "string" ? p : "ARN_PLACEHOLDER")).join("");
 }
 
 describe("DeployCreateStateMachine DescribeStack task (#809 regression)", () => {
@@ -134,5 +154,79 @@ describe("DeployCreateStateMachine DescribeStack task (#809 regression)", () => 
     // 既存 TENKACLOUD_CORRELATION_ID と PROBLEM_EXTERNAL_ID も維持されているべき (regression 防止)
     expect(asJson).toContain('"Name":"TENKACLOUD_CORRELATION_ID"');
     expect(asJson).toContain('"Name":"PROBLEM_EXTERNAL_ID"');
+  });
+});
+
+/**
+ * Issue #2291 (ADR-049 §9): deployViaLambda feature flag. Flag OFF keeps the CodeBuild `.sync`
+ * definition unchanged; flag ON swaps to the Lambda CreateStack + DescribeStacks poll definition.
+ */
+describe("DeployCreateStateMachine deployViaLambda flag (#2291)", () => {
+  it("should keep the CodeBuild StartBuild task when the flag is OFF (default, unchanged)", () => {
+    const asJson = definitionJson(buildTestStack().template);
+    // CodeBuild `.sync` (RUN_JOB) 経路が定義に残っている。
+    expect(asJson).toContain("startBuild.sync");
+    expect(asJson).toContain('"StartDeployCodeBuild"');
+    // Lambda 経路の state は現れない (= 追加リソースなし)。
+    expect(asJson).not.toContain('"InvokeCfnDeploy"');
+    expect(asJson).not.toContain('"WaitBeforePoll"');
+  });
+
+  it("should invoke the deploy Lambda + DescribeStack poll loop when the flag is ON", () => {
+    const asJson = definitionJson(buildTestStack({ deployViaLambda: true }).template);
+    // Lambda CreateStack + poll 経路。
+    expect(asJson).toContain('"InvokeCfnDeploy"');
+    expect(asJson).toContain('"WaitBeforePoll"');
+    expect(asJson).toContain('"RoutePollStatus"');
+    expect(asJson).toContain('"DescribeStack"');
+    // terminal 判定 (success / failure) が poll Choice にある。
+    expect(asJson).toContain("CREATE_COMPLETE");
+    expect(asJson).toContain("ROLLBACK_COMPLETE");
+    // CodeBuild は create 経路では使われない (delete state machine は別ファイル)。
+    expect(asJson).not.toContain("startBuild.sync");
+    expect(asJson).not.toContain('"StartDeployCodeBuild"');
+  });
+
+  it("should still write the same COMPLETE / FAILED DDB status transitions in the Lambda branch", () => {
+    const asJson = definitionJson(buildTestStack({ deployViaLambda: true }).template);
+    // status transitions (IN_PROGRESS→COMPLETE/FAILED) + stackId / stackOutputs 契約を維持。
+    expect(asJson).toContain("IN_PROGRESS");
+    expect(asJson).toContain("COMPLETE");
+    expect(asJson).toContain("FAILED");
+    expect(asJson).toContain("stackId");
+    expect(asJson).toContain("stackOutputs");
+    // Lambda 経路は buildId を書かない (= CodeBuild 固有)。
+    expect(asJson).not.toContain("codebuild.Build.Id");
+  });
+
+  it("should require cfnDeployFunction when deployViaLambda is true", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "Bad", {
+      env: { account: "123456789012", region: "ap-northeast-1" },
+    });
+    const deployments = new Table(stack, "Deployments", {
+      partitionKey: { name: "PK", type: AttributeType.STRING },
+      sortKey: { name: "SK", type: AttributeType.STRING },
+    });
+    const describeStackFn = new LambdaFunction(stack, "DescribeStackFn", {
+      runtime: Runtime.NODEJS_22_X,
+      handler: "index.handler",
+      code: Code.fromInline("exports.handler = async () => ({});"),
+    });
+    const codeBuildProject = new Project(stack, "CodeBuild", {
+      source: Source.s3({
+        bucket: cdk.aws_s3.Bucket.fromBucketName(stack, "Src", "test-source-bucket"),
+        path: "source.zip",
+      }),
+    });
+    expect(
+      () =>
+        new DeployCreateStateMachine(stack, "Sm", {
+          codeBuildProject,
+          describeStackFunction: describeStackFn,
+          deploymentsTable: deployments,
+          deployViaLambda: true,
+        }),
+    ).toThrow(/cfnDeployFunction is required/);
   });
 });

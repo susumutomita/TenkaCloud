@@ -146,6 +146,17 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
     ).toBe(false);
   });
 
+  it("should default deployViaLambda to false when unset (#2291 no regression)", () => {
+    expect(resolve(baseEnv()).deployViaLambda).toBe(false);
+  });
+
+  it("should enable deployViaLambda only when CDK_PARAM_DEPLOY_VIA_LAMBDA is exactly 'true' (#2291)", () => {
+    expect(resolve(baseEnv({ CDK_PARAM_DEPLOY_VIA_LAMBDA: "true" })).deployViaLambda).toBe(true);
+    // 設定ミス値は在来 CodeBuild 経路のまま (= fail-safe、追加リソースを誤って生やさない)。
+    expect(resolve(baseEnv({ CDK_PARAM_DEPLOY_VIA_LAMBDA: "yes" })).deployViaLambda).toBe(false);
+    expect(resolve(baseEnv({ CDK_PARAM_DEPLOY_VIA_LAMBDA: "1" })).deployViaLambda).toBe(false);
+  });
+
   it("should default auditLogEnabled to true when unset (#2311 no regression)", () => {
     expect(resolve(baseEnv()).auditLogEnabled).toBe(true);
   });
