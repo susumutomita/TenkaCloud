@@ -50,6 +50,8 @@ export function buildProblemDeployBackendBaseProps(config: AppConfig) {
     // ことで SaaS (wire.ts) と Lite (bin/tenkacloud-lite.ts) の両モードへ同一に届く (= Lite mode
     // での flag 切替配線)。default "dynamodb" は Lambda env を足さず CFn byte 互換。
     controlDataBackend: config.controlDataBackend,
+    tursoDatabaseUrl: config.tursoDatabaseUrl,
+    tursoAuthTokenParameterName: config.tursoAuthTokenParameterName,
     environmentName: config.environment,
   } as const;
 }

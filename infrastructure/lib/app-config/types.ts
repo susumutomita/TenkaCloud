@@ -143,6 +143,10 @@ export interface AppConfig {
    * (`createEventsRepository` / `createTeamsRepository`) が SQLite 実装を選ぶ。
    */
   readonly controlDataBackend: ControlDataBackend;
+  /** Public libSQL/Turso database URL, injected only into the Event API Lambda. */
+  readonly tursoDatabaseUrl: string | undefined;
+  /** SSM SecureString parameter name containing the Turso auth token. */
+  readonly tursoAuthTokenParameterName: string | undefined;
 
   /**
    * #1766: tier 別の同時デプロイ上限 (`CDK_PARAM_DEPLOY_QUOTA_BY_TIER`、JSON

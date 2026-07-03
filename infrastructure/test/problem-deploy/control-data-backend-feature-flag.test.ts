@@ -1,4 +1,4 @@
-import type { Template } from "aws-cdk-lib/assertions";
+import { Match, type Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 import {
   SYNTH_TIMEOUT_MS,
@@ -45,6 +45,25 @@ describe("control-data backend feature flag env wiring (#2290)", () => {
       for (const id of BACKEND_LAMBDA_IDS) {
         expect(envOf(tpl, id).CONTROL_DATA_BACKEND, id).toBe("turso");
       }
+      expect(envOf(tpl, "EventApi").TURSO_DATABASE_URL).toBe("libsql://example.turso.io");
+      expect(envOf(tpl, "EventApi").TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe(
+        "/tenkacloud/development/turso-token",
+      );
+      // The secret reference and permission belong only to the Lambda that opens the DB.
+      expect(envOf(tpl, "DeployApi").TURSO_AUTH_TOKEN_PARAMETER_NAME).toBeUndefined();
+      tpl.hasResourceProperties("AWS::IAM::Policy", {
+        PolicyDocument: {
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Action: "ssm:GetParameter",
+              Resource: Match.anyValue(),
+            }),
+          ]),
+        },
+      });
+      expect(JSON.stringify(tpl.toJSON())).toContain(
+        ":parameter/tenkacloud/development/turso-token",
+      );
     },
     SYNTH_TIMEOUT_MS,
   );

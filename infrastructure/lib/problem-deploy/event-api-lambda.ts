@@ -78,6 +78,10 @@ export interface EventApiLambdaProps {
    * `dynamodb`) は env を足さず byte 互換、`turso` / `sql` で `CONTROL_DATA_BACKEND` を注入する。
    */
   readonly controlDataBackend?: string;
+  /** Public remote libSQL URL. Never contains authentication material. */
+  readonly tursoDatabaseUrl?: string;
+  /** SSM SecureString parameter name containing the libSQL auth token. */
+  readonly tursoAuthTokenParameterName?: string;
 }
 
 /**
@@ -126,6 +130,10 @@ export class EventApiLambda extends Construct {
         ...auditLogEnabledEnv(props.auditLogEnabled),
         // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
         ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
+        ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
+        ...(props.tursoAuthTokenParameterName
+          ? { TURSO_AUTH_TOKEN_PARAMETER_NAME: props.tursoAuthTokenParameterName }
+          : {}),
         NODE_OPTIONS: "--enable-source-maps",
       },
       // Issue #1308: BATTLE_PROBLEMS_CATALOG + BATTLE_PROBLEMS_DISRUPTIONS は問題が増える
@@ -163,6 +171,18 @@ export class EventApiLambda extends Construct {
     // のため、 read 権限も必須。 旧 `grantWriteData` だけだと AccessDenied で 5xx になり、
     // UI が "Failed to fetch" を表示する (PR review で `[USER-REVIEW]` として残っていた配線完了)。
     props.adminAuditLogTable?.grantReadWriteData(this.fn);
+    if (props.tursoAuthTokenParameterName) {
+      this.fn.addToRolePolicy(
+        new PolicyStatement({
+          actions: ["ssm:GetParameter"],
+          resources: [
+            `arn:${Stack.of(this).partition}:ssm:${Stack.of(this).region}:${
+              Stack.of(this).account
+            }:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
+          ],
+        }),
+      );
+    }
     // Issue #910 (#895 Phase 2.C.2.b): bulk payload bucket への PutObject 権限。 bucket が
     // 渡されたときのみ grant (= 未配線時の余分な IAM を避ける)。 useBulkDistributedMap が
     // false でも grant を入れておくと、 flag を flip するだけで切替できる (= 段階移行)。

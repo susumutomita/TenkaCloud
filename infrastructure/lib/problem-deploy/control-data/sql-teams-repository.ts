@@ -19,8 +19,8 @@ import type { SqlExecutor, TeamRecord, TeamsRepository } from "./types.js";
  * `sha256(key)`. Both are looked up by the same plaintext key
  * ({@link SqlTeamsRepository.getTeamByLoginKey}) and return the same team.
  */
-export const TEAMS_SCHEMA_SQL = `
-CREATE TABLE IF NOT EXISTS teams (
+export const TEAMS_SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS teams (
   event_id       TEXT    NOT NULL,
   team_id        TEXT    NOT NULL,
   tenant_id      TEXT    NOT NULL,
@@ -28,12 +28,15 @@ CREATE TABLE IF NOT EXISTS teams (
   expires_at     INTEGER NOT NULL,
   payload        TEXT    NOT NULL,
   PRIMARY KEY (event_id, team_id)
-);
-CREATE INDEX IF NOT EXISTS idx_teams_tenant
-  ON teams (tenant_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_login_key_hash
-  ON teams (login_key_hash) WHERE login_key_hash IS NOT NULL;
-`;
+)`,
+  `CREATE INDEX IF NOT EXISTS idx_teams_tenant
+  ON teams (tenant_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_login_key_hash
+  ON teams (login_key_hash) WHERE login_key_hash IS NOT NULL`,
+] as const;
+
+/** SQL script form retained for local SQLite parity tests and manual bootstrap. */
+export const TEAMS_SCHEMA_SQL = `${TEAMS_SCHEMA_STATEMENTS.join(";\n")};`;
 
 /**
  * [Issue #2290] SHA-256 hash of a participant `teamLoginKey`, hex-encoded (64

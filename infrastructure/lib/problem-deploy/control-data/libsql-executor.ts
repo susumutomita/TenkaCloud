@@ -1,0 +1,51 @@
+import type { Client, InArgs, InStatement, ResultSet } from "@libsql/client/http";
+import { EVENTS_SCHEMA_STATEMENTS } from "./sql-events-repository.js";
+import { TEAMS_SCHEMA_STATEMENTS } from "./sql-teams-repository.js";
+import type { SqlExecutor, SqlParam, SqlRow, SqlRunResult } from "./types.js";
+
+type LibsqlClient = Pick<Client, "execute" | "batch">;
+
+function statement(sql: string, params: readonly SqlParam[] = []): InStatement {
+  return { sql, args: [...params] as InArgs };
+}
+
+function rows(result: ResultSet): readonly SqlRow[] {
+  return result.rows as readonly SqlRow[];
+}
+
+/**
+ * Production SqlExecutor for Turso / remote sqld.
+ *
+ * The HTTP-only entrypoint avoids pulling the native local-SQLite client into
+ * the Lambda bundle. Each repository operation maps to one libSQL request.
+ */
+export class LibsqlExecutor implements SqlExecutor {
+  constructor(private readonly client: LibsqlClient) {}
+
+  async run(sql: string, params?: readonly SqlParam[]): Promise<SqlRunResult> {
+    const result = await this.client.execute(statement(sql, params));
+    return { changes: result.rowsAffected };
+  }
+
+  async get(sql: string, params?: readonly SqlParam[]): Promise<SqlRow | undefined> {
+    const result = await this.client.execute(statement(sql, params));
+    return rows(result)[0];
+  }
+
+  async all(sql: string, params?: readonly SqlParam[]): Promise<readonly SqlRow[]> {
+    return rows(await this.client.execute(statement(sql, params)));
+  }
+}
+
+/**
+ * Idempotent schema bootstrap. `batch(..., "write")` is a non-interactive,
+ * atomic transaction, so it does not consume Turso's five-second interactive
+ * transaction window.
+ */
+export async function initializeControlDataSchema(client: LibsqlClient): Promise<void> {
+  const statements: InStatement[] = [
+    ...EVENTS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...TEAMS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+  ];
+  await client.batch(statements, "write");
+}

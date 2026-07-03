@@ -122,6 +122,10 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * ときだけ各 Lambda env に `CONTROL_DATA_BACKEND` を注入する。
    */
   readonly controlDataBackend?: string;
+  /** Public remote libSQL URL. Required when controlDataBackend is turso/sql. */
+  readonly tursoDatabaseUrl?: string;
+  /** SSM SecureString parameter name containing the remote libSQL auth token. */
+  readonly tursoAuthTokenParameterName?: string;
   /**
    * ADR-008 Phase 3 (Issue #642): `problemId → "private"` の map。
    * `discoverProblemsVisibility` で metadata.json から自動収集。 空 map なら全 public 扱い (dormant)。
@@ -407,6 +411,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       // Issue #2290: control-plane data backend。event-handler の getEventDetail が Events / Teams
       // repository seam を切替える (= turso/sql 選択時のみ CONTROL_DATA_BACKEND を注入)。
       controlDataBackend: props.controlDataBackend,
+      tursoDatabaseUrl: props.tursoDatabaseUrl,
+      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
     });
     this.eventApiLambda = eventApi.fn;
 
