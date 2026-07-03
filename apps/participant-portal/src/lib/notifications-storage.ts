@@ -21,10 +21,13 @@ function storageKey(eventId: string): string {
 }
 
 /** 最終既読時刻 (ISO 8601) を localStorage から読む。未設定 / private window 等は null。 */
-export function loadLastSeenAt(eventId: string): string | null {
+export function loadLastSeenAt(
+  eventId: string,
+  storage: Pick<Storage, "getItem"> = localStorage,
+): string | null {
   if (typeof eventId !== "string" || eventId.length === 0) return null;
   try {
-    return localStorage.getItem(storageKey(eventId));
+    return storage.getItem(storageKey(eventId));
   } catch {
     return null;
   }
