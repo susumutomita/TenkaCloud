@@ -10,9 +10,8 @@ import { SYNTH_TIMEOUT_MS } from "./problem-deploy-backend-stack.test-helpers";
 // Issue #2220 coverage follow-up: `ParticipantPortalHosting` requires
 // `apps/participant-portal/dist` to exist (CI runs tests before `make build`, so it never
 // does — see `test/problem-deploy-backend-stack.test-helpers.ts`'s `synthParticipantPortalLambdaOnly`
-// comment). Mock it here so we can synth the full `participantPortal` branch (both
-// `buildParticipantPortalSubsystem` and its `coordinationPluginBucket` helper) without a real
-// CloudFront asset.
+// comment). Mock it here so we can synth the full participant portal branch without a real
+// CloudFront asset while the shared coordination bundle also feeds GenericScoring.
 const { mockDeployRuntimeConfig } = vi.hoisted(() => ({ mockDeployRuntimeConfig: vi.fn() }));
 
 vi.mock("../lib/problem-deploy/participant-portal-hosting.js", () => ({
@@ -41,6 +40,12 @@ async function synthWithParticipantPortal(
     problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
     problemsScoring: {},
     problemsEndpoints: {},
+    problemsCoordination: Object.fromEntries(
+      Object.keys(problemsCoordinationBundles).map((problemId) => [
+        problemId,
+        { plugin: `coordination/${problemId}.ts` },
+      ]),
+    ),
     problemsCoordinationBundles,
     environmentName: "development",
     participantPortal: { runtimeConfig: "default-dev-mock" },
@@ -89,6 +94,22 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
       // #1420 Phase 3b: declaring a coordination bundle adds exactly one bucket
       // (CoordinationPluginBundle) over the no-bundles baseline.
       expect(withBundlesCount).toBe(withoutBundlesCount + 1);
+
+      const pluginReaders = Object.values(
+        withBundles.findResources("AWS::Lambda::Function"),
+      ).filter((resource) => JSON.stringify(resource).includes("COORDINATION_PLUGIN_BUCKET"));
+      // The participant dispatcher handles ops; a separate minimal-IAM Lambda drives tick().
+      expect(pluginReaders).toHaveLength(2);
+
+      const genericScoring = Object.entries(
+        withBundles.findResources("AWS::Lambda::Function"),
+      ).find(([logicalId]) => logicalId.includes("GenericScoringFunction"));
+      expect(JSON.stringify(genericScoring?.[1])).not.toContain("COORDINATION_PLUGIN_BUCKET");
+
+      const scoringRule = Object.values(withBundles.findResources("AWS::Events::Rule")).find(
+        (resource) => JSON.stringify(resource).includes("TenkaCloud 1-min tick"),
+      ) as { Properties?: { Targets?: unknown[] } } | undefined;
+      expect(scoringRule?.Properties?.Targets).toHaveLength(2);
     },
     SYNTH_TIMEOUT_MS,
   );

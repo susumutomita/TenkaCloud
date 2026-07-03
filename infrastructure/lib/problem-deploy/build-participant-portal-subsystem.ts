@@ -4,7 +4,6 @@ import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
 import { CoordinationDispatcherLambda } from "./coordination-dispatcher-lambda.js";
-import { CoordinationPluginBundle } from "./coordination-plugin-bundle.js";
 import {
   DEFAULT_DEV_MOCK_RUNTIME_CONFIG,
   ParticipantPortalHosting,
@@ -19,7 +18,7 @@ export interface BuildParticipantPortalSubsystemArgs {
   readonly problemsScoring: Readonly<Record<string, unknown>>;
   readonly problemsEndpoints: Readonly<Record<string, unknown>>;
   readonly problemsCoordination: Readonly<Record<string, unknown>>;
-  readonly problemsCoordinationBundles: Readonly<Record<string, string>>;
+  readonly coordinationPluginBucket?: IBucket;
   readonly environmentName: string;
   readonly runtimeConfig: ParticipantPortalRuntimeConfig | "default-dev-mock";
   readonly region: string;
@@ -62,7 +61,6 @@ export function buildParticipantPortalSubsystem(
     description: "Participant Portal Lambda Function URL (auth via teamLoginKey bearer).",
   });
 
-  const coordinationBucket = coordinationPluginBucket(scope, args.problemsCoordinationBundles);
   const coordinationDispatcher = new CoordinationDispatcherLambda(scope, "CoordinationDispatcher", {
     deploymentsTable: args.deploymentsTable,
     eventsTable: args.eventsTable,
@@ -70,7 +68,7 @@ export function buildParticipantPortalSubsystem(
     // ADR-030 Phase 3 config layer: 問題の coordination plugin path を scope resolver へ渡す。
     problemsCoordination: args.problemsCoordination,
     // ADR-030 Phase 3b: plugin .mjs を materialize する S3 bucket (宣言問題がある時のみ)。
-    ...(coordinationBucket ? { pluginBucket: coordinationBucket } : {}),
+    ...(args.coordinationPluginBucket ? { pluginBucket: args.coordinationPluginBucket } : {}),
   });
   new CfnOutput(scope, "CoordinationDispatcherApiUrl", {
     value: coordinationDispatcher.url.url,
@@ -99,16 +97,4 @@ export function buildParticipantPortalSubsystem(
     participantPortalLambda: portalLambda.fn,
     participantPortalUrl: portal.distributionUrl,
   };
-}
-
-/**
- * #1420 ADR-030 Phase 3b: coordination plugin を宣言した問題がある時だけ bundle bucket を作る
- * (= 0 件なら undefined を返し、 dispatcher は importer 未配線で全 route not_configured)。
- */
-function coordinationPluginBucket(
-  scope: Construct,
-  bundles: Readonly<Record<string, string>>,
-): IBucket | undefined {
-  if (Object.keys(bundles).length === 0) return undefined;
-  return new CoordinationPluginBundle(scope, "CoordinationPluginBundle", { bundles }).bucket;
 }

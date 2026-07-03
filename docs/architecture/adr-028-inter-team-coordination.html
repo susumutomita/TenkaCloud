@@ -147,19 +147,16 @@
       <li>Battle authors have a copyable pattern for inter-team interaction that requires no platform change.</li>
       <li>The platform carries one small always-on dispatcher for events that use coordination; its cost is bounded
         by the polling cadence and the single per-event row.</li>
+      <li>The generic scoring engine invokes <code>runTick</code> once per coordinated event on its one-minute
+        pass, supplies the complete Teams-table roster, and persists only identity-changing transitions with the
+        same optimistic lock used by participant operations.</li>
     </ul>
 
     <h2>Open items</h2>
     <p>The following extend this decision and are tracked as follow-up work; none blocks the contract above.</p>
     <ul>
-      <li><strong>Pack-path activation.</strong> The live dispatcher is fed from the core <code>problems/</code>
-        catalog today. Carrying pack-declared coordination through the installed-snapshot composition
-        (<code>SnapshotCatalogSource</code>) so an in-repo or installed pack reaches a running dispatcher is a
-        separate activation step.</li>
-      <li><strong>Scoring-driven tick.</strong> <code>tick</code> is defined and unit-tested but has no host caller
-        yet; wiring the generic scoring engine's per-minute pass to invoke <code>runTick</code> is pending.</li>
       <li><strong>Full roster in scope.</strong> The scope resolver currently seeds the context with the requesting
-        team's id; supplying the complete event roster to <code>initialState</code> is a refinement.</li>
+        team's id for participant operations. The scoring-driven tick supplies the complete event roster.</li>
       <li><strong>Bundle integrity pinning.</strong> The plugin importer has a digest-verification seam
         (<code>sha256:</code>) that can be turned on to fail closed on a tampered bundle.</li>
     </ul>

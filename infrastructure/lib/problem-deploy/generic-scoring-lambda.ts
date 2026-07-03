@@ -4,6 +4,7 @@ import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { type IEventBus, Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import * as iam from "aws-cdk-lib/aws-iam";
+import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
@@ -58,6 +59,8 @@ export interface GenericScoringLambdaProps {
    * disruption を tick で eval し condition-triggered 発火する。 disruptions[] 無しの問題は不在キー。
    */
   readonly problemsDisruptions: Readonly<Record<string, unknown>>;
+  /** Optional minimal-IAM coordination tick target sharing this one-minute clock. */
+  readonly coordinationTickFunction?: IFunction;
   /**
    * [ADR-033 / #1665] disruptions audit table。 operator-fired disruption の active 採点効果を tick で
    * 解決するため read-only で query する (= scoring-side effect)。
@@ -214,7 +217,12 @@ export class GenericScoringLambda extends Construct {
       schedule: Schedule.rate(Duration.minutes(1)),
       description:
         "TenkaCloud 1-min tick: ADR-012 generic scoring dispatcher + Event status reconcile (#557 #539).",
-      targets: [new LambdaFunction(this.fn)],
+      targets: [
+        new LambdaFunction(this.fn),
+        ...(props.coordinationTickFunction
+          ? [new LambdaFunction(props.coordinationTickFunction)]
+          : []),
+      ],
     });
   }
 }

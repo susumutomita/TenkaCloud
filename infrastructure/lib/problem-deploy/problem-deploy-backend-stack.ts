@@ -11,6 +11,8 @@ import { buildParticipantPortalSubsystem } from "./build-participant-portal-subs
 import { CompetitorAccountsApiLambda } from "./competitor-accounts-api-lambda.js";
 import { CompetitorAccountsTable } from "./competitor-accounts-table.js";
 import { CompetitorBootstrapHosting } from "./competitor-bootstrap-hosting.js";
+import { CoordinationPluginBundle } from "./coordination-plugin-bundle.js";
+import { CoordinationTickLambda } from "./coordination-tick-lambda.js";
 import { DeployApiLambda } from "./deploy-api-lambda.js";
 import { DeploymentsTable } from "./deployments-table.js";
 import { DisruptionExecutorLambda } from "./disruption-executor-lambda.js";
@@ -456,6 +458,22 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     this.bulkDeployPayloadBucketName = deployPipeline.bulkDeployPayloadBucketName;
     this.bulkDeployCreateStateMachineArn = deployPipeline.bulkDeployCreateStateMachineArn;
 
+    const coordinationBundles = props.problemsCoordinationBundles ?? {};
+    const coordinationPluginBucket =
+      Object.keys(coordinationBundles).length > 0
+        ? new CoordinationPluginBundle(this, "CoordinationPluginBundle", {
+            bundles: coordinationBundles,
+          }).bucket
+        : undefined;
+    const coordinationTick = coordinationPluginBucket
+      ? new CoordinationTickLambda(this, "CoordinationTick", {
+          deploymentsTable: deployments.table,
+          teamsTable: teams.table,
+          pluginBucket: coordinationPluginBucket,
+          problemsCoordination: props.problemsCoordination ?? {},
+        })
+      : undefined;
+
     // ADR-012 Phase 3.B: 1 分間隔の Generic Scoring Lambda (= 旧 HealthCheckLambda の後継)。
     // 2 つの責務を持つ:
     // - 採点 dispatch (= 5 種 builtin kind の handler に dispatch、`flag` は polling では no-op)
@@ -472,6 +490,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       problemsPhases: props.problemsPhases ?? {},
       // #1422 (ADR-013 Phase 2): condition-triggered disruption の eval + in-account 発火。
       problemsDisruptions: props.problemsDisruptions ?? {},
+      coordinationTickFunction: coordinationTick?.fn,
       // [ADR-033 / #1665] operator-fired disruption の active 採点効果を tick で解決する (read-only)。
       disruptionsTable: disruptions.table,
       // [ADR-047] scheduled auto-teardown が bulkTeardownEvent で cross-account role を解決する (read-only)。
@@ -507,7 +526,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         problemsScoring: props.problemsScoring,
         problemsEndpoints: props.problemsEndpoints,
         problemsCoordination: props.problemsCoordination ?? {},
-        problemsCoordinationBundles: props.problemsCoordinationBundles ?? {},
+        coordinationPluginBucket,
         environmentName: props.environmentName,
         runtimeConfig: props.participantPortal.runtimeConfig,
         region: this.region,
