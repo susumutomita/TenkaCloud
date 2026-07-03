@@ -50,12 +50,15 @@ fi
 # the legacy non-hashed `tenkacloud-source-<account>-<region>` value (which the
 # Makefile default still emits) — i.e. this script is authoritative and upgrades the
 # legacy form to the per-env form. An explicit custom bucket name is left untouched.
-LEGACY_BUCKET="tenkacloud-source-${ACCOUNT_ID}-${REGION}"
+# Bucket-name construction is centralized in scripts/lib/names.sh (#2194) so the
+# creator (here), cleanup, and the destroy path all compute the exact same strings.
+# shellcheck source=lib/names.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/names.sh"
+LEGACY_BUCKET="$(tc_source_bucket_legacy_name "${ACCOUNT_ID}" "${REGION}")"
 if [ -z "${CDK_PARAM_S3_BUCKET_NAME:-}" ] \
   || [ "${CDK_PARAM_S3_BUCKET_NAME}" = "tenkacloud-source-placeholder" ] \
   || [ "${CDK_PARAM_S3_BUCKET_NAME}" = "${LEGACY_BUCKET}" ]; then
-  ENV_HASH="$(printf '%s' "${ACCOUNT_ID}-${ENV:-development}" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -c1-8)"
-  CDK_PARAM_S3_BUCKET_NAME="${LEGACY_BUCKET}-${ENV_HASH}"
+  CDK_PARAM_S3_BUCKET_NAME="$(tc_source_bucket_name "${ACCOUNT_ID}" "${REGION}" "${ENV:-development}")"
 fi
 export CDK_PARAM_S3_BUCKET_NAME
 export CDK_SOURCE_NAME="${CDK_SOURCE_NAME:-source.zip}"
