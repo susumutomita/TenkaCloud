@@ -87,6 +87,15 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   // Issue #2290: control-plane data backend の選択。default "dynamodb" (未設定 / "dynamodb" は
   // 在来 DDB 経路で Lambda env を足さない = byte 互換)。turso/sql 以外は synth 時に throw。
   const controlDataBackend = resolveControlDataBackend(env);
+  const tursoDatabaseUrl = env.CDK_PARAM_TURSO_DATABASE_URL?.trim() || undefined;
+  const tursoAuthTokenParameterName =
+    env.CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME?.trim() || undefined;
+  if (controlDataBackend !== "dynamodb" && (!tursoDatabaseUrl || !tursoAuthTokenParameterName)) {
+    throw new Error(
+      "CDK_PARAM_TURSO_DATABASE_URL and CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME " +
+        "are required when CDK_PARAM_CONTROL_DATA_BACKEND is turso/sql.",
+    );
+  }
   const features = resolveFeatures(env);
 
   // Issue #1031: 旧 `CDK_PARAM_ADMIN_CONSOLE_ORIGIN` env 直読みは廃止。 admin-console-hosting
@@ -142,6 +151,8 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     deployViaLambda,
     auditLogEnabled,
     controlDataBackend,
+    tursoDatabaseUrl,
+    tursoAuthTokenParameterName,
     features,
     controlPlaneSamlIdps,
     controlPlaneSamlAdminAllowlist,

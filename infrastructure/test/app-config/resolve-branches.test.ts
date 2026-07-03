@@ -180,19 +180,29 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
   });
 
   it("should accept turso / sql and normalize case for controlDataBackend (#2290)", () => {
-    expect(resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "turso" })).controlDataBackend).toBe(
-      "turso",
-    );
-    expect(resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "sql" })).controlDataBackend).toBe(
-      "sql",
-    );
+    const remote = {
+      CDK_PARAM_TURSO_DATABASE_URL: "libsql://example.turso.io",
+      CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/turso-token",
+    };
+    expect(
+      resolve(baseEnv({ ...remote, CDK_PARAM_CONTROL_DATA_BACKEND: "turso" })).controlDataBackend,
+    ).toBe("turso");
+    expect(
+      resolve(baseEnv({ ...remote, CDK_PARAM_CONTROL_DATA_BACKEND: "sql" })).controlDataBackend,
+    ).toBe("sql");
     // 大文字混在は lowercase 正規化する。
-    expect(resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "Turso" })).controlDataBackend).toBe(
-      "turso",
-    );
+    expect(
+      resolve(baseEnv({ ...remote, CDK_PARAM_CONTROL_DATA_BACKEND: "Turso" })).controlDataBackend,
+    ).toBe("turso");
     expect(
       resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "DynamoDB" })).controlDataBackend,
     ).toBe("dynamodb");
+  });
+
+  it("should require the Turso URL and SSM token parameter for a remote backend", () => {
+    expect(() => resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "turso" }))).toThrow(
+      /CDK_PARAM_TURSO_DATABASE_URL/,
+    );
   });
 
   it("should throw loudly on an unknown controlDataBackend value instead of silently defaulting (#2290)", () => {

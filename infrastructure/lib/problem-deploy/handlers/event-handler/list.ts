@@ -1,6 +1,5 @@
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
-import { createEventsRepository } from "../../control-data/events-repository.js";
-import { createTeamsRepository } from "../../control-data/teams-repository.js";
+import { resolveControlDataRepositories } from "../../control-data/runtime-repositories.js";
 import { createCursorCodec } from "../shared/cursor-codec.js";
 import { parseProgressionGate } from "../shared/progression-gate.js";
 import type { EventSharedResources } from "./shared.js";
@@ -136,17 +135,14 @@ export async function getEventDetail(
   // (TeamsTable には participant が直接書けないので displayName が常に空のままになる、
   // という ADR-004 Phase 2c 統合ギャップへの補正)。GSI1 = TENANT#<tenantId> 全件取得 →
   // eventId で in-memory filter。
-  const eventsRepo = createEventsRepository(process.env.CONTROL_DATA_BACKEND, {
+  const repositories = await resolveControlDataRepositories({
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
-  });
-  const teamsRepo = createTeamsRepository(process.env.CONTROL_DATA_BACKEND, {
-    ddb: shared.ddb,
     teamsTableName: shared.teamsTableName,
   });
   const [event, teamRecords, deploymentsOut] = await Promise.all([
-    eventsRepo.getEvent(tenantId, eventId),
-    teamsRepo.listTeamsByEvent(eventId),
+    repositories.events.getEvent(tenantId, eventId),
+    repositories.teams.listTeamsByEvent(eventId),
     shared.ddb.send(
       new QueryCommand({
         TableName: shared.deploymentsTableName,

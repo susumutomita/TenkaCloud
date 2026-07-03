@@ -11,18 +11,21 @@ import type { EventRecord, EventsRepository, SqlExecutor } from "./types.js";
  * round-trip without a migration, with denormalized columns for the query paths
  * that must be indexable (tenant listing, TTL prune) rather than JSON-scanned.
  */
-export const EVENTS_SCHEMA_SQL = `
-CREATE TABLE IF NOT EXISTS events (
+export const EVENTS_SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS events (
   event_id   TEXT    PRIMARY KEY,
   tenant_id  TEXT    NOT NULL,
   status     TEXT    NOT NULL,
   created_at TEXT    NOT NULL,
   expires_at INTEGER NOT NULL,
   payload    TEXT    NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_events_tenant_created
-  ON events (tenant_id, created_at DESC);
-`;
+)`,
+  `CREATE INDEX IF NOT EXISTS idx_events_tenant_created
+  ON events (tenant_id, created_at DESC)`,
+] as const;
+
+/** SQL script form retained for local SQLite parity tests and manual bootstrap. */
+export const EVENTS_SCHEMA_SQL = `${EVENTS_SCHEMA_STATEMENTS.join(";\n")};`;
 
 export class SqlEventsRepository implements EventsRepository {
   constructor(private readonly sql: SqlExecutor) {}

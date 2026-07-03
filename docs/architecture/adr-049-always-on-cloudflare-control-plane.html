@@ -1010,8 +1010,11 @@ export interface TeamsRepository {
         on the Service-Specific Terms; re-read the live terms once before GA.</li>
       <li>Turso p95 latency from Lambda ap-northeast-1 and from Workers (post-2025 diskless
         architecture has no trustworthy public benchmark) — Phase 1 measures it.</li>
-      <li>Turso interactive-transaction limits (5 s window) vs the longest control-plane transaction —
-        Phase 1 confirms <code>batch()</code> suffices everywhere.</li>
+      <li><strong>Validated in Phase 1:</strong> Events/Teams repository operations are single SQL
+        statements, and idempotent schema bootstrap uses one atomic
+        <code>client.batch(statements, "write")</code>. The production adapter never opens an
+        interactive transaction, so Turso's 5 s interactive window is not on these paths. Unit tests pin
+        the write-batch contract; re-evaluate if a future aggregate operation spans multiple statements.</li>
       <li>Step Functions transition count under the 750-deploy bulk path after CodeBuild removal —
         validate the ≈$0.7/wave estimate in Phase 2.</li>
       <li>GitHub Actions runtime-deploy duration (CDK deploy of the runtime stack) and whether the

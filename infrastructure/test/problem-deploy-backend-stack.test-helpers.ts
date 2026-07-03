@@ -83,6 +83,8 @@ export function synthWithControlDataBackendTurso(): Template {
     problemsScoring: {},
     problemsEndpoints: {},
     controlDataBackend: "turso",
+    tursoDatabaseUrl: "libsql://example.turso.io",
+    tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
     environmentName: "development",
   });
   return Template.fromStack(stack);
