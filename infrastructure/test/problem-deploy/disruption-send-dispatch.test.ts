@@ -99,4 +99,39 @@ describe("sendDispatch (ADR-031 #1419)", () => {
       sendDispatch({ kind: "ssm-run-command", target: "i-x", params: {} }, target, deps),
     ).rejects.toThrow("AccessDenied");
   });
+
+  // [#1710 / IAM audit] same-account (Lite) mode: `target.credentials` 不在。 executor role が
+  // `ssm-run-command` しか許可していない kind は AccessDenied ではなく fail-closed で loud に落とす。
+  describe("same-account (Lite) mode — no assumed credentials", () => {
+    const liteTarget: DispatchTarget = { region: "ap-northeast-1" };
+
+    it("should fail loudly for lambda-invoke instead of calling Lambda", async () => {
+      const { deps, lambda, factories } = makeDeps();
+      await expect(
+        sendDispatch({ kind: "lambda-invoke", target: "fault-fn", params: {} }, liteTarget, deps),
+      ).rejects.toThrow(/lambda-invoke.*not supported in same-account/);
+      expect(factories.lambdaFactory).not.toHaveBeenCalled();
+      expect(lambda).not.toHaveBeenCalled();
+    });
+
+    it("should fail loudly for cfn-stack-update instead of calling CloudFormation", async () => {
+      const { deps, cfn, factories } = makeDeps();
+      await expect(
+        sendDispatch(
+          { kind: "cfn-stack-update", target: "team-stack", params: {} },
+          liteTarget,
+          deps,
+        ),
+      ).rejects.toThrow(/cfn-stack-update.*not supported in same-account/);
+      expect(factories.cfnFactory).not.toHaveBeenCalled();
+      expect(cfn).not.toHaveBeenCalled();
+    });
+
+    it("should still run ssm-run-command (the one kind the Lite executor role grants)", async () => {
+      const { deps, ssm, factories } = makeDeps();
+      await sendDispatch({ kind: "ssm-run-command", target: "i-x", params: {} }, liteTarget, deps);
+      expect(factories.ssmFactory).toHaveBeenCalledWith(liteTarget);
+      expect(ssm).toHaveBeenCalledTimes(1);
+    });
+  });
 });
