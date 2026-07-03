@@ -10,7 +10,8 @@
  * 本パッケージは **型 + 純 util だけ** を提供する (React / AWS SDK 非依存。 portal-plugin-sdk と
  * 同形)。 実際の DDB 永続化 / cross-account 配送は platform 側 (infrastructure、 ADR-028 D3/D4)。
  *
- * Status: ADR-028 は Draft。 contract が変われば本 SDK も追従する (version 互換は別途)。
+ * Status: ADR-028 Accepted (docs/architecture/adr-028-inter-team-coordination.html)。 参照 Battle は
+ * `packs/reference-coordination-battle`。 contract が変われば本 SDK も追従する (version 互換は別途)。
  */
 
 /** event 開始時に `initialState` へ渡る文脈。 機密は含めない (= 問題 plugin に見せてよい範囲)。 */
