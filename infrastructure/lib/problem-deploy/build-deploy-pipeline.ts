@@ -102,6 +102,10 @@ export function buildDeployPipeline(
   const deleteStateMachine = new DeployDeleteStateMachine(scope, "DeployDelete", {
     codeBuildProject: codeBuild.project,
     deploymentsTable: args.deploymentsTable,
+    // Issue #2291: flag OFF では以下 2 prop は undefined = CodeBuild 定義を生成 (在来と同一、
+    // 追加リソースなし)。flag ON では create path と同じ CfnDeployLambda を共用する (別 Lambda
+    // は作らない; index.ts が action で create / delete を分岐)。
+    ...(args.deployViaLambda ? { deployViaLambda: true, cfnDeployFunction } : {}),
   });
   new DeployDeleteEventRule(scope, "DeployDeleteRule", {
     eventBus: args.eventBus,

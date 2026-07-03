@@ -1,22 +1,28 @@
 import { Duration } from "aws-cdk-lib";
 import type { Project } from "aws-cdk-lib/aws-codebuild";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
+import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import {
   Choice,
   Condition,
   DefinitionBody,
+  type IChainable,
   IntegrationPattern,
   JsonPath,
   LogLevel,
   Pass,
   Result,
   StateMachine,
+  TaskInput,
+  Wait,
+  WaitTime,
 } from "aws-cdk-lib/aws-stepfunctions";
 import {
   CodeBuildStartBuild,
   DynamoAttributeValue,
   DynamoUpdateItem,
+  LambdaInvoke,
 } from "aws-cdk-lib/aws-stepfunctions-tasks";
 import { Construct } from "constructs";
 import { deploymentKey, stateEnteredTime } from "./state-machine-helpers.js";
@@ -33,12 +39,23 @@ export interface DeployDeleteStateMachineProps {
    * `DELETED` / `FAILED` に更新するために必要。
    */
   readonly deploymentsTable: ITable;
+  /**
+   * Issue #2291 (ADR-049 §9): true のとき CodeBuild を使わず、DeleteStack を行う **deploy Lambda**
+   * を invoke し、DescribeStacks を polling して DELETE_COMPLETE / 消滅まで待つ。default
+   * (false / 未指定) は在来の CodeBuild `.sync` path で、CFn テンプレは byte 互換。
+   */
+  readonly deployViaLambda?: boolean;
+  /**
+   * Issue #2291: DeleteStack + DescribeStacks poll を行う deploy Lambda (= create path と同じ
+   * `CfnDeployLambda`; index.ts が `action` で create / delete / describe-delete を分岐)。
+   * `deployViaLambda === true` のときのみ必須。CodeBuild path では未使用。
+   */
+  readonly cfnDeployFunction?: IFunction;
 }
 
 /**
  * 問題 stack の削除を司る Step Functions State Machine。`DeployCreateStateMachine`
- * と対称な構造で、CodeBuildStartBuild `.sync` で delete script の完了を待ち、結果を
- * DDB row に書き戻す (status: `DELETING` → `DELETED` / `FAILED`)。
+ * と対称な構造で、結果を DDB row に書き戻す (status: `DELETING` → `DELETED` / `FAILED`)。
  *
  * 入力 shape (event detail):
  *   {
@@ -49,9 +66,12 @@ export interface DeployDeleteStateMachineProps {
  *     "awsAccountId": "123456789012"
  *   }
  *
- * verified deployment は `competitorRoleArn` / `externalIdParameterName` を CodeBuild に
- * 渡し、delete-battles.sh が ExternalId 付き AssumeRole 後に target account の stack を消す。
- * 旧 event detail は same-account fallback に倒す。
+ * verified deployment は `competitorRoleArn` / `externalIdParameterName` を使い、ExternalId 付き
+ * AssumeRole 後に target account の stack を消す。旧 event detail は same-account fallback に倒す。
+ *
+ * Issue #2291 (ADR-049 §9): 在来 CodeBuild 経路と Lambda DeleteStack 経路の 2 branch。
+ * default (deployViaLambda=false/未指定) は CodeBuild 定義を **そのまま** 生成するので、既存
+ * CFn テンプレと byte 互換 (追加リソースなし)。true のときだけ Lambda + poll 定義。
  */
 export class DeployDeleteStateMachine extends Construct {
   public readonly stateMachine: StateMachine;
@@ -63,6 +83,26 @@ export class DeployDeleteStateMachine extends Construct {
       retention: RetentionDays.ONE_WEEK,
     });
 
+    const definitionHead = props.deployViaLambda
+      ? this.buildLambdaDefinition(props)
+      : this.buildCodeBuildDefinition(props);
+
+    this.stateMachine = new StateMachine(this, "StateMachine", {
+      definitionBody: DefinitionBody.fromChainable(definitionHead),
+      timeout: Duration.minutes(60),
+      logs: { destination: logGroup, level: LogLevel.ALL },
+      tracingEnabled: true,
+    });
+
+    props.deploymentsTable.grantWriteData(this.stateMachine);
+  }
+
+  /**
+   * 在来 (default) の CodeBuild `.sync` 定義。`deployViaLambda` が false / 未指定のとき使う。
+   * 生成する construct ID / chain は #2291 前と完全一致させ、flag OFF の synth を byte 互換に
+   * 保つ (= additive リソースは一切増やさない)。
+   */
+  private buildCodeBuildDefinition(props: DeployDeleteStateMachineProps): IChainable {
     const startCodeBuildSameAccount = new CodeBuildStartBuild(this, "StartDeleteCodeBuild", {
       project: props.codeBuildProject,
       integrationPattern: IntegrationPattern.RUN_JOB,
@@ -145,14 +185,91 @@ export class DeployDeleteStateMachine extends Construct {
     startCodeBuildCrossAccount.next(markDeleted);
     invalidAssumeRoleMetadata.next(markFailed);
 
-    this.stateMachine = new StateMachine(this, "StateMachine", {
-      definitionBody: DefinitionBody.fromChainable(routeDeleteInput),
-      timeout: Duration.minutes(60),
-      logs: { destination: logGroup, level: LogLevel.ALL },
-      tracingEnabled: true,
+    return routeDeleteInput;
+  }
+
+  /**
+   * Issue #2291 (ADR-049 §9): Lambda DeleteStack + DescribeStacks poll 定義。
+   * `deployViaLambda === true` のときだけ生成する (additive; default synth には現れない)。
+   *
+   * flow: InvokeCfnDelete (DeleteStack を投げて即 return) → Wait → DescribeDeleteStatus (poll) →
+   *   RoutePollStatus:
+   *     - DELETE_COMPLETE (消滅は handler が DELETE_COMPLETE に正規化) → MarkDeleted
+   *     - DELETE_FAILED                                              → MarkFailed (StackStatusReason)
+   *     - それ以外 (DELETE_IN_PROGRESS 等)                            → Wait へ戻り polling を継続
+   *
+   * `DeployCreateStateMachine` の Lambda branch と対称。create branch が routeCreateInput Choice を
+   * handler に collapse したのと同様、same-account / cross-account の分岐は Lambda 内 (=
+   * assumeCompetitorRole) が担う。`$.detail.awsAccountId` は handler の #1797 account 検証で
+   * load-bearing のまま残し、欠損 event は DeployDeleteRequestedDetailSchema の Zod parse が
+   * loud fail → addCatch → MarkFailed に倒す (= CodeBuild path の isPresent ガードと同等安全)。
+   *
+   * DDB の status 遷移 (DELETING→DELETED/FAILED) は CodeBuild path と同一契約。buildId は
+   * CodeBuild 固有なので Lambda path では書かない (MarkDeleted / MarkFailed は元から buildId 非依存)。
+   */
+  private buildLambdaDefinition(props: DeployDeleteStateMachineProps): IChainable {
+    const cfnDeployFunction = props.cfnDeployFunction;
+    if (!cfnDeployFunction) {
+      throw new Error("cfnDeployFunction is required when deployViaLambda is true");
+    }
+
+    // DeleteStack を投げて即 return する deploy Lambda。detail (元 EventBridge event の detail) と
+    // action=delete を渡す。payloadResponseOnly で $.delete は Lambda response ({ deleted }) になる。
+    const invokeCfnDelete = new LambdaInvoke(this, "InvokeCfnDelete", {
+      lambdaFunction: cfnDeployFunction,
+      payload: TaskInput.fromObject({ action: "delete", detail: JsonPath.objectAt("$.detail") }),
+      payloadResponseOnly: true,
+      resultPath: "$.delete",
     });
 
-    props.deploymentsTable.grantWriteData(this.stateMachine);
+    // DeleteStack は async。反映まで少し待ってから DescribeStacks を叩く。
+    const waitBeforePoll = new Wait(this, "WaitBeforePoll", {
+      time: WaitTime.duration(Duration.seconds(15)),
+    });
+
+    // 同 Lambda を action=describe-delete で invoke。消滅は handler が DELETE_COMPLETE に正規化する。
+    // $.cfn は DescribeStacks 相当 output (= create path の DescribeStack と同じ shape)。
+    const describeDeleteStatus = new LambdaInvoke(this, "DescribeDeleteStatus", {
+      lambdaFunction: cfnDeployFunction,
+      payload: TaskInput.fromObject({
+        action: "describe-delete",
+        detail: JsonPath.objectAt("$.detail"),
+      }),
+      payloadResponseOnly: true,
+      resultPath: "$.cfn",
+    });
+
+    const markDeleted = this.buildMarkDeleted(props.deploymentsTable);
+    const markFailed = this.buildMarkFailed(props.deploymentsTable);
+    const useStackStatusReasonAsFailureCause = new Pass(
+      this,
+      "UseStackStatusReasonAsFailureCause",
+      {
+        parameters: { "Cause.$": "$.cfn.Stacks[0].StackStatusReason" },
+        resultPath: "$.error",
+      },
+    );
+    useStackStatusReasonAsFailureCause.next(markFailed);
+
+    const routePollStatus = new Choice(this, "RoutePollStatus")
+      .when(Condition.stringEquals("$.cfn.Stacks[0].StackStatus", "DELETE_COMPLETE"), markDeleted)
+      .when(
+        Condition.stringEquals("$.cfn.Stacks[0].StackStatus", "DELETE_FAILED"),
+        useStackStatusReasonAsFailureCause,
+      )
+      // それ以外 (DELETE_IN_PROGRESS 等の中間状態) は poll を継続。
+      .otherwise(waitBeforePoll);
+
+    // InvokeCfnDelete / DescribeDeleteStatus のいずれの失敗も FAILED に倒す。$.error.Cause に
+    // States.TaskFailed の Cause (= Zod parse fail / account mismatch / DeleteStack error) が入る。
+    invokeCfnDelete.addCatch(markFailed, { resultPath: "$.error" });
+    describeDeleteStatus.addCatch(markFailed, { resultPath: "$.error" });
+
+    invokeCfnDelete.next(waitBeforePoll);
+    waitBeforePoll.next(describeDeleteStatus);
+    describeDeleteStatus.next(routePollStatus);
+
+    return invokeCfnDelete;
   }
 
   private buildMarkDeleted(table: ITable): DynamoUpdateItem {
