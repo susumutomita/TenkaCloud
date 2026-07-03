@@ -1,4 +1,5 @@
-import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { createEventsRepository } from "../../control-data/events-repository.js";
 import { createCursorCodec } from "../shared/cursor-codec.js";
 import { parseProgressionGate } from "../shared/progression-gate.js";
 import type { EventSharedResources } from "./shared.js";
@@ -123,18 +124,21 @@ export async function getEventDetail(
   eventId: string,
   opts: { readonly withScoreEvents?: boolean; readonly includeLoginKeys?: boolean } = {},
 ): Promise<EventDetail | undefined> {
-  // Event Get と Teams Query は依存関係なし → 並列発火でラウンドトリップを 1 回分節約。
-  // Event / Teams / Deployments を並列発火。Deployments は競技者が PATCH /portal/me で
-  // 設定した displayTeamName を引くため必要 (TeamsTable には participant が直接書け
-  // ないので displayName が常に空のままになる、という ADR-004 Phase 2c 統合ギャップ
-  // への補正)。GSI1 = TENANT#<tenantId> 全件取得 → eventId で in-memory filter。
-  const [eventOut, teamsOut, deploymentsOut] = await Promise.all([
-    shared.ddb.send(
-      new GetCommand({
-        TableName: shared.eventsTableName,
-        Key: { PK: `EVENT#${eventId}`, SK: "META" },
-      }),
-    ),
+  // [ADR-049 §5.1] Event 行の point read は repository seam 経由 (getEvent が tenant
+  // scope + 404 判定を担う)。 default backend = dynamodb なので発火する GetCommand は
+  // 従来と byte 互換 (= 同 table / 同 Key / 同 client)、 CFn 差分 0。 CONTROL_DATA_BACKEND
+  // を turso/sql に切替えると同 read が SQLite に向く (適用は @libsql adapter 配線後)。
+  // Event Get と Teams / Deployments Query は依存関係なし → 並列発火でラウンドトリップを節約。
+  // Deployments は競技者が PATCH /portal/me で設定した displayTeamName を引くため必要
+  // (TeamsTable には participant が直接書けないので displayName が常に空のままになる、
+  // という ADR-004 Phase 2c 統合ギャップへの補正)。GSI1 = TENANT#<tenantId> 全件取得 →
+  // eventId で in-memory filter。
+  const eventsRepo = createEventsRepository(process.env.CONTROL_DATA_BACKEND, {
+    ddb: shared.ddb,
+    eventsTableName: shared.eventsTableName,
+  });
+  const [event, teamsOut, deploymentsOut] = await Promise.all([
+    eventsRepo.getEvent(tenantId, eventId),
     shared.ddb.send(
       new QueryCommand({
         TableName: shared.teamsTableName,
@@ -160,9 +164,9 @@ export async function getEventDetail(
       }),
     ),
   ]);
-  const event = eventOut.Item as Partial<EventItem> | undefined;
+  // getEvent は tenant 不一致 / 不在をどちらも undefined に畳んでいる (= 従来の
+  // `!event || event.tenantId !== tenantId` を repository 内へ移設)。
   if (!event) return undefined;
-  if (event.tenantId !== tenantId) return undefined;
 
   const teamItems = (teamsOut.Items ?? []) as Partial<TeamItem>[];
   const { displayNameByTeamId, deploymentsByProblem, deploymentRefs } =
