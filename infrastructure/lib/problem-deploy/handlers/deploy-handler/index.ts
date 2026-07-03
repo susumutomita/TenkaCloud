@@ -5,6 +5,7 @@ import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
 import { buildAuthErrorHandler, createRoleCheckMiddleware } from "../shared/auth-wiring.js";
 import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
+import { parseJsonBody } from "../shared/http-parse.js";
 import {
   asCompositeDescriptor,
   type CompositeRuntimeDescriptor,
@@ -178,15 +179,9 @@ async function handleCompositeDeploy(
   problemId: string,
   descriptor: CompositeRuntimeDescriptor,
   quotaTier: QuotaTier,
-  body: unknown,
 ): Promise<Response> {
-  const parsed = CompositeDeployRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json(
-      { error: "validation_failed", issues: parsed.error.issues },
-      StatusCodes.BAD_REQUEST,
-    );
-  }
+  const parsed = await parseJsonBody(c, CompositeDeployRequestSchema);
+  if (!parsed.ok) return parsed.response;
   try {
     const response = await startCompositeDeployment(
       buildCompositeDeployDeps(ctx, parsed.data.teamName),
@@ -206,13 +201,6 @@ app.post("/problems/:problemId/deploy", async (c) => {
   }
   requireTenantNotSuspended(c);
 
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
-  }
-
   const ctx = buildContext(shared, resolveTenantId(c));
   // #1766: quota tier は JWT claim から route で解決し、enforcement 自体は
   // startDeployment / startCompositeDeployment 内で行う (PR-1803 review)。
@@ -222,19 +210,16 @@ app.post("/problems/:problemId/deploy", async (c) => {
   // runtime metadata BEFORE any write. Only a `runtime.kind=composite` problem
   // forks here; every legacy / single-provider problem (descriptor undefined or
   // single) falls through to the byte-identical `startDeployment` path below.
+  // Issue #2211: JSON parse + Zod 検証は分岐ごとの schema で shared `parseJsonBody`
+  // に委譲する (invalid_body / validation_failed の応答形状は不変)。
   const descriptor = ctx.resolveProblemRuntimeDescriptor?.(problemId);
   const composite = asCompositeDescriptor(descriptor);
   if (composite) {
-    return handleCompositeDeploy(c, ctx, problemId, composite, quotaTier, body);
+    return handleCompositeDeploy(c, ctx, problemId, composite, quotaTier);
   }
 
-  const parsed = DeployRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json(
-      { error: "validation_failed", issues: parsed.error.issues },
-      StatusCodes.BAD_REQUEST,
-    );
-  }
+  const parsed = await parseJsonBody(c, DeployRequestSchema);
+  if (!parsed.ok) return parsed.response;
 
   try {
     const response = await startDeployment(ctx, {

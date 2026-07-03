@@ -3,8 +3,13 @@ import { StatusCodes } from "http-status-codes";
 import type { z } from "zod";
 import { requireRole, requireTenantNotSuspended } from "../deploy-handler/auth.js";
 import { ULID_RE as EVENT_ID_RE } from "../shared/constants.js";
+import { parseJsonBody } from "../shared/http-parse.js";
 import { isEventOwnedByTenant } from "./disruption-fire.js";
 import type { EventSharedResources } from "./shared.js";
+
+// Issue #2211: JSON body の parse + Zod 検証 + 標準 400 整形は shared/http-parse.ts に集約。
+// event-handler の既存 import 経路 (routes/*, tests) を保つため re-export する。
+export { parseJsonBody };
 
 type RouteResult = Response | Promise<Response>;
 
@@ -70,19 +75,12 @@ export function withJsonBody<TSchema extends z.ZodType>(
   };
 }
 
-export async function parseJsonBody<TSchema extends z.ZodType>(
-  c: Context,
-  schema: TSchema,
-): Promise<ParseResult<z.infer<TSchema>>> {
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    return { ok: false, response: c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST) };
-  }
-  return parseSchemaBody(c, schema, body);
-}
-
+/**
+ * Issue #2211: body が省略可能な route 用の parse。空 body は `{}` として schema に通し
+ * (default 値の適用を許す)、非空だけ JSON parse する。`c.req.json()` を無条件に呼ぶ shared
+ * `parseJsonBody` とは parse 段が異なるため個別実装のまま残すが、`invalid_body` /
+ * `validation_failed` の応答形状は shared と同一。
+ */
 export async function parseOptionalJsonBody<TSchema extends z.ZodType>(
   c: Context,
   schema: TSchema,
