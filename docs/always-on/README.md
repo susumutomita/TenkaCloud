@@ -28,7 +28,7 @@ and the DNS rollback exercise remain open.
 | --- | --- | --- |
 | Auth0 MAU | The official B2B pricing page lists 25,000 monthly active users and five Organizations on Free. | Confirmed |
 | Auth0 role model | The same comparison table excludes Role Management from Free; B2B Essentials lists role-based access control per Organization. The issue's Auth0 RBAC design therefore requires a paid plan or an explicit move to application-owned role claims. | Decision required |
-| Cloudflare commercial use | The current Self-Serve Subscription Agreement grants an Entity the right to use the Services and does not impose a blanket non-commercial-use restriction. It does prohibit reselling access, bypassing quotas, and several regulated uses. This engineering review is not legal advice. | Confirmed for implementation |
+| Cloudflare commercial use | The current Self-Serve Subscription Agreement grants an organization the right to use the Services and does not impose a blanket non-commercial-use restriction. It does prohibit reselling access, bypassing quotas, and several regulated uses. This engineering review is not legal advice. | Confirmed for implementation |
 | Event-month capacity | Workers Paid has a $5 USD monthly minimum. Free is limited to 100,000 requests/day and 10 ms CPU/invocation, so running an event on Free is unsupported. | Confirmed |
 | D1 versus Turso | The repository now has a D1 implementation, but production read/write volume and cross-region latency have not been measured. | Open |
 
