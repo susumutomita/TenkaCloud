@@ -1,0 +1,64 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "tenkacloud-always-on-control-plane",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "upload_source_maps": true,
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.05
+    }
+  },
+  "vars": {
+    "AUTH0_ISSUER": "https://replace-me.auth0.com/",
+    "AUTH0_AUDIENCE": "https://api.tenkacloud.dev",
+    "AUTH0_CLIENT_ID": "replace-me",
+    "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles"
+  },
+  "d1_databases": [
+    {
+      "binding": "CONTROL_DB",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "env": {
+    "staging": {
+      "name": "tenkacloud-always-on-control-plane-staging",
+      "vars": {
+        "AUTH0_ISSUER": "https://replace-me-staging.auth0.com/",
+        "AUTH0_AUDIENCE": "https://staging-api.tenkacloud.dev",
+        "AUTH0_CLIENT_ID": "replace-me-staging",
+        "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles"
+      },
+      "d1_databases": [
+        {
+          "binding": "CONTROL_DB",
+          "migrations_dir": "migrations"
+        }
+      ]
+    },
+    "production": {
+      "name": "tenkacloud-always-on-control-plane-production",
+      "vars": {
+        "AUTH0_ISSUER": "https://replace-me.auth0.com/",
+        "AUTH0_AUDIENCE": "https://api.tenkacloud.dev",
+        "AUTH0_CLIENT_ID": "replace-me",
+        "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles"
+      },
+      "d1_databases": [
+        {
+          "binding": "CONTROL_DB",
+          "migrations_dir": "migrations"
+        }
+      ]
+    }
+  }
+}
