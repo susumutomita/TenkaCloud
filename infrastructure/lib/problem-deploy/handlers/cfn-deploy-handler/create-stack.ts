@@ -284,6 +284,10 @@ async function describeStackStatus(
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/** Poll interval + overall timeout for {@link defaultWaitForStackDelete} (pre-create delete drain). */
+const DELETE_POLL_INTERVAL_MS = 5_000;
+const DELETE_WAIT_TIMEOUT_MS = 4 * 60_000;
+
 /**
  * Bounded poll until the stack is gone. TODO(#2291 follow-up): a very long delete can exceed the
  * Lambda timeout; the hardened path (SFN-driven delete + re-drive) is deferred. For the common
@@ -293,14 +297,14 @@ async function defaultWaitForStackDelete(
   cfn: Pick<CloudFormationClient, "send">,
   stackName: string,
 ): Promise<void> {
-  const deadline = Date.now() + 4 * 60 * 1000;
+  const deadline = Date.now() + DELETE_WAIT_TIMEOUT_MS;
   while (Date.now() < deadline) {
     const status = await describeStackStatus(cfn, stackName);
     if (status === undefined) return;
     if (status === "DELETE_FAILED") {
       throw new Error(`unrecoverable stack ${stackName} could not be deleted (DELETE_FAILED)`);
     }
-    await sleep(5000);
+    await sleep(DELETE_POLL_INTERVAL_MS);
   }
   throw new Error(`timed out waiting for stack ${stackName} to delete before re-create`);
 }
