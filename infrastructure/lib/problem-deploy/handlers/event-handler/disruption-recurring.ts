@@ -21,6 +21,9 @@ import { recurringScheduleNameOf } from "../disruption-executor-handler/schedule
 import type { DisruptionFireInput } from "./disruption-types.js";
 import type { EventSharedResources } from "./shared.js";
 
+/** ミリ秒 / 分。 `intervalMinutes` を epoch ms 換算するのに使う。 */
+const MS_PER_MINUTE = 60_000;
+
 export interface ActiveRecurringRow {
   readonly requestId: string;
   readonly problemId: string;
@@ -56,7 +59,7 @@ export async function writeRecurringRegistry(
 ): Promise<void> {
   if (!input.recurrence) return;
   const endsAt = new Date(
-    input.nowMs + input.recurrence.intervalMinutes * input.recurrence.maxFires * 60_000,
+    input.nowMs + input.recurrence.intervalMinutes * input.recurrence.maxFires * MS_PER_MINUTE,
   ).toISOString();
   await shared.ddb.send(
     new PutCommand({
