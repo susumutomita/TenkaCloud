@@ -1,0 +1,142 @@
+import { type CoordinationContext, runTick } from "@tenkacloud/coordination-plugin-sdk";
+import { z } from "zod";
+import {
+  COORDINATION_TICK_ACTION,
+  type CoordinationTickBatch,
+  type CoordinationTickTarget,
+} from "../shared/coordination-tick-contract.js";
+import type { CoordinationConfig } from "./coordination-handler.js";
+import { loadCoordinationPlugin, type PluginImporter } from "./coordination-plugin-loader.js";
+import {
+  type CoordinationStoreDeps,
+  readCoordinationState,
+  writeCoordinationState,
+} from "./coordination-store.js";
+
+/**
+ * ADR-028 scoring-driven tick (#2324): time-driven coordination 遷移 (= capture-window クローズ /
+ * alliance 失効 等) を **CoordinationDispatcher Lambda 内** で駆動する tick host。
+ *
+ * ADR-028/030 の資格情報分離を守るため、 pack-author 由来の plugin の `runTick` 実行は op 経路
+ * (`applyOp`) と同じ最小 IAM の dispatcher 内に閉じる (= 採点 Lambda の ssm/kms と同居させない)。
+ * dispatcher は既に (a) plugin bundle の importer (S3 materialize、 ADR-030 Phase 3b) と (b) coordination
+ * shared row への Get/Put grant を持つので、 tick はそれらを **そのまま再利用** する (= 追加 IAM ゼロ)。
+ *
+ * 副作用 (DDB read/write) は {@link CoordinationTickDeps} 越しに注入し、 意味論 (initialState / tick) は
+ * 問題同梱 plugin に委譲する。 op 経路 {@link dispatchCoordinationOp} と同じ「read → 純関数 → 楽観 write」
+ * 構造で、 write は同一の version 条件付き optimistic write。 変化が無ければ書かない (= WCU 節約)。
+ */
+
+/** tick 実行の依存注入 (= plugin importer + shared row store + 宣言 config)。 */
+export interface CoordinationTickDeps {
+  /** 問題同梱 plugin を動的 import する関数 (= 本番は S3 materialize、 dispatcher が既に持つ seam)。 */
+  readonly importer: PluginImporter;
+  readonly store: CoordinationStoreDeps;
+  /** 宣言 gate: `config[moduleRef]` を持つ問題だけ tick する (= 未宣言 ref を load させない)。 */
+  readonly config: CoordinationConfig;
+}
+
+/** batch 処理の結果サマリ (= async invoke 応答は捨てられるが、 直接テスト / ログ用に返す)。 */
+export interface CoordinationTickBatchResult {
+  /** 受理した target 数。 */
+  readonly ticked: number;
+  /** state が進んで実際に write した数 (= no-op tick は含まない)。 */
+  readonly written: number;
+}
+
+const TickTargetSchema = z.object({
+  tenantId: z.string().min(1),
+  eventId: z.string().min(1),
+  moduleRef: z.string().min(1),
+  eventNowMs: z.number().finite(),
+  teamIds: z.array(z.string()).default([]),
+});
+const TickBatchSchema = z.object({
+  action: z.literal(COORDINATION_TICK_ACTION),
+  nowIso: z.string().min(1),
+  targets: z.array(TickTargetSchema),
+});
+
+/**
+ * 直接 Invoke の event が tick batch なら parse して返す (= Zod で境界検証)。 HTTP event (= Function URL)
+ * や未知形状は `null` を返し、 dispatcher handler が Hono app に委譲する判定に使う。
+ */
+export function parseCoordinationTickBatch(event: unknown): CoordinationTickBatch | null {
+  const parsed = TickBatchSchema.safeParse(event);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * batch の各 target を tick する。 1 target の失敗は次 tick で再評価するため握り潰す (= silent に
+ * せず warn で可視化)。 return は実 write 数 (= no-op tick は 0)。
+ */
+export async function handleCoordinationTickBatch(
+  deps: CoordinationTickDeps,
+  batch: CoordinationTickBatch,
+): Promise<CoordinationTickBatchResult> {
+  let written = 0;
+  for (const target of batch.targets) {
+    const didWrite = await tickCoordinationEvent(deps, target, batch.nowIso).catch((err) => {
+      console.warn(`[coordination-dispatcher] tick failed event=${target.eventId}`, {
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return false;
+    });
+    if (didWrite) written += 1;
+  }
+  return { ticked: batch.targets.length, written };
+}
+
+/**
+ * 1 event の tick: 宣言 gate → plugin load → shared row read → `runTick` → 変化時のみ optimistic write。
+ * 実際に write したら `true`。 no-op / 未宣言 / load 不可 / conflict は `false` (= 書き込みなし)。
+ */
+async function tickCoordinationEvent(
+  deps: CoordinationTickDeps,
+  target: CoordinationTickTarget,
+  nowIso: string,
+): Promise<boolean> {
+  // 宣言 gate: coordination を宣言していない problemId は tick しない (= 未宣言 ref を load させない)。
+  if (!deps.config[target.moduleRef]) return false;
+  const plugin = await loadCoordinationPlugin(deps.importer, target.moduleRef);
+  if (!plugin) {
+    // 宣言済だが bundle 不在 / 壊れた plugin。 op 経路の `plugin_unavailable` と同じく副作用に触れず、
+    // silent success にせず warn で可視化する (= fail loud、 次 tick で再試行)。
+    console.warn(
+      `[coordination-dispatcher] plugin unavailable event=${target.eventId} problem=${target.moduleRef}`,
+    );
+    return false;
+  }
+  const existing = await readCoordinationState(deps.store, target.tenantId, target.eventId);
+  const ctx: CoordinationContext = { eventId: target.eventId, teamIds: [...target.teamIds] };
+  const currentState = existing?.state ?? plugin.initialState(ctx);
+  const version = existing?.version ?? 0;
+  // eventNowMs は採点 pass が算出した event 相対経過 (= plugin の tick 契約、 参照 Battle は
+  // CAPTURE_WINDOW_MS と比較)。 dispatcher は clock を持たず、 渡された値だけで純関数を回す。
+  const nextState = runTick(plugin, currentState, target.eventNowMs);
+  if (!coordinationStateChanged(currentState, nextState)) return false;
+  const written = await writeCoordinationState(
+    deps.store,
+    target.tenantId,
+    target.eventId,
+    nextState,
+    version,
+    nowIso,
+  );
+  if (written.kind === "conflict") {
+    // 並行 op が version race に勝った (= applyOp が先に書いた)。 lost-update を作らず次 tick で
+    // 最新 state を再読込して再評価する (= op 経路と同じ optimistic-lock 契約)。
+    console.warn(`[coordination-dispatcher] tick write conflict event=${target.eventId}`);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * tick 前後の state が実質変わったか。 `runTick` は no-op 時に同一参照を返す契約なので、 まず参照で
+ * 弾き (= 最頻ケースを 0 コスト)、 万一 clone を返す plugin 向けに JSON 構造比較で fallback する。
+ */
+export function coordinationStateChanged(prev: unknown, next: unknown): boolean {
+  if (prev === next) return false;
+  return JSON.stringify(prev) !== JSON.stringify(next);
+}

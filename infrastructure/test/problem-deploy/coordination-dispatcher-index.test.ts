@@ -28,7 +28,7 @@ vi.mock("../../lib/problem-deploy/handlers/participant-handler/coordination-hand
   parseCoordinationConfig: () => ({}),
 }));
 
-const { app } = await import(
+const { app, handler } = await import(
   "../../lib/problem-deploy/handlers/coordination-dispatcher-handler/index"
 );
 
@@ -106,5 +106,48 @@ describe("GET /portal/me/coordination/projection", () => {
   it("should 404 when coordination is not configured", async () => {
     mocks.handleCoordinationProjection.mockResolvedValueOnce({ kind: "not_configured" });
     expect((await get(PROJ)).status).toBe(StatusCodes.NOT_FOUND);
+  });
+});
+
+// [ADR-028 / #2324] direct Invoke の tick batch は Hono を通さず本 Lambda 内で処理する。 それ以外の
+// (= Function URL) HTTP event は従来どおり Hono app に委譲する (= op / projection 経路は不変)。
+describe("handler (scoring-driven tick batch vs HTTP delegation)", () => {
+  it("should process a coordination-tick batch invoke without going through Hono", async () => {
+    // parseCoordinationConfig は {} に mock されているため、 宣言 gate で全 target が skip される
+    // (= plugin load / store 到達なし)。 tick 経路 (= Hono を通らない) を通ったことを結果形で確認する。
+    const res = await handler(
+      {
+        action: "coordination-tick",
+        nowIso: "2026-06-01T00:00:00.000Z",
+        targets: [
+          { tenantId: "t1", eventId: "e1", moduleRef: "cap", eventNowMs: 900_000, teamIds: [] },
+        ],
+      },
+      {} as never,
+    );
+    expect(res).toEqual({ ticked: 1, written: 0 });
+  });
+
+  it("should delegate a Function URL HTTP event to the Hono app", async () => {
+    const httpEvent = {
+      version: "2.0",
+      routeKey: "$default",
+      rawPath: "/portal/healthz",
+      rawQueryString: "",
+      headers: {},
+      requestContext: {
+        http: {
+          method: "GET",
+          path: "/portal/healthz",
+          protocol: "HTTP/1.1",
+          sourceIp: "1.2.3.4",
+          userAgent: "vitest",
+        },
+      },
+      isBase64Encoded: false,
+    };
+    const res = (await handler(httpEvent, {} as never)) as { statusCode: number; body: string };
+    expect(res.statusCode).toBe(StatusCodes.OK);
+    expect(JSON.parse(res.body)).toEqual({ ok: true });
   });
 });

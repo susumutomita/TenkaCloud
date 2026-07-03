@@ -472,6 +472,10 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       problemsPhases: props.problemsPhases ?? {},
       // #1422 (ADR-013 Phase 2): condition-triggered disruption の eval + in-account 発火。
       problemsDisruptions: props.problemsDisruptions ?? {},
+      // [ADR-028 / #2324] scoring-driven coordination tick 用の宣言 config (= どの problemId が
+      // coordination を宣言しているか、 plugin code ではない metadata)。 per-minute pass が tick 対象を
+      // 判定し、 実 runTick は最小 IAM の CoordinationDispatcher Lambda へ Invoke で委ねる (下で配線)。
+      problemsCoordination: props.problemsCoordination ?? {},
       // [ADR-033 / #1665] operator-fired disruption の active 採点効果を tick で解決する (read-only)。
       disruptionsTable: disruptions.table,
       // [ADR-047] scheduled auto-teardown が bulkTeardownEvent で cross-account role を解決する (read-only)。
@@ -514,6 +518,17 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       });
       this.participantPortalLambda = portalSubsystem.participantPortalLambda;
       this.participantPortalUrl = portalSubsystem.participantPortalUrl;
+
+      // [ADR-028 / #2324] scoring-driven coordination tick 配線: 採点 Lambda は per-minute pass で tick
+      // 対象を集め、 CoordinationDispatcher Lambda を async Invoke して plugin の runTick を最小 IAM の
+      // dispatcher 内で走らせる (= ADR-028/030 の資格情報分離を保つ)。 採点 role が得る唯一の追加 IAM は
+      // dispatcher function ARN に scope された `lambda:InvokeFunction` (= sts/ssm/kms/s3 は付与しない)。
+      const dispatcher = portalSubsystem.coordinationDispatcherLambda;
+      dispatcher.grantInvoke(genericScoring.fn);
+      genericScoring.fn.addEnvironment(
+        "COORDINATION_DISPATCHER_FUNCTION_NAME",
+        dispatcher.functionName,
+      );
     }
 
     new CfnOutput(this, "DeploymentsTableName", {

@@ -1,4 +1,5 @@
 import { type Context, Hono } from "hono";
+import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { StatusCodes } from "http-status-codes";
 import {
@@ -9,6 +10,11 @@ import {
   parseCoordinationConfig,
 } from "../participant-handler/coordination-handler.js";
 import type { PluginImporter } from "../participant-handler/coordination-plugin-loader.js";
+import {
+  type CoordinationTickDeps,
+  handleCoordinationTickBatch,
+  parseCoordinationTickBatch,
+} from "../participant-handler/coordination-tick.js";
 import { parseJsonBody, withBearerAuth } from "../participant-handler/route-helpers.js";
 import { CoordinationOpBodySchema } from "../participant-handler/schemas.js";
 import { buildParticipantSharedResources } from "../participant-handler/shared.js";
@@ -37,13 +43,23 @@ const coordinationImporter: PluginImporter = pluginBucket
   ? defaultS3PluginImporter(pluginBucket)
   : (ref) => Promise.reject(new Error(`coordination plugin bucket not configured: ${ref}`));
 
+const coordinationConfig = parseCoordinationConfig(process.env.PROBLEM_COORDINATION);
+
 const coordinationDeps: CoordinationHandlerDeps = {
   importer: coordinationImporter,
   store: { ddb: shared.ddb, tableName: shared.tableName },
-  resolveScope: makeCoordinationScopeResolver(
-    shared,
-    parseCoordinationConfig(process.env.PROBLEM_COORDINATION),
-  ),
+  resolveScope: makeCoordinationScopeResolver(shared, coordinationConfig),
+};
+
+/**
+ * ADR-028 scoring-driven tick (#2324): 採点 Lambda が直接 Invoke する tick batch を、 op 経路と同じ最小
+ * IAM の本 Lambda 内で処理するための deps。 importer (S3 materialize) / store (coordination row) は上の
+ * op 経路と同一 (= 追加 IAM ゼロ)、 config は宣言 gate に使う。
+ */
+const tickDeps: CoordinationTickDeps = {
+  importer: coordinationImporter,
+  store: coordinationDeps.store,
+  config: coordinationConfig,
 };
 
 /** coordination handler の outcome を HTTP 応答に写す (= StatusCodes 名で意図を明示)。 */
@@ -103,5 +119,19 @@ app.get("/portal/me/coordination/projection", (c) =>
   ),
 );
 
-export const handler = handle(app);
+const honoHandler = handle(app);
+
+/**
+ * ADR-028 scoring-driven tick (#2324): Lambda の entry。 採点 Lambda からの直接 Invoke (= tick batch
+ * payload) なら plugin の `runTick` を **本 Lambda 内** (= 最小 IAM、 op 経路と同じ場所) で処理する。
+ * それ以外 (= Function URL 経由の HTTP event) は従来どおり Hono app へ委譲する (= op / projection 経路は
+ * 完全に不変)。 判別は payload 形状 (`parseCoordinationTickBatch`) のみで、 tick 経路は HTTP を通らない
+ * (= bearer 認証の対象外、 到達は `lambda:InvokeFunction` を持つ採点 Lambda role に IAM で限定される)。
+ */
+export const handler = async (event: unknown, context: LambdaContext): Promise<unknown> => {
+  const batch = parseCoordinationTickBatch(event);
+  if (batch) return handleCoordinationTickBatch(tickDeps, batch);
+  return honoHandler(event as LambdaEvent, context);
+};
+
 export { app };

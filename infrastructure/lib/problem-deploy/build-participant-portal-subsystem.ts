@@ -28,6 +28,12 @@ export interface BuildParticipantPortalSubsystemArgs {
 export interface ParticipantPortalSubsystemOutputs {
   readonly participantPortalLambda: IFunction;
   readonly participantPortalUrl: string;
+  /**
+   * [ADR-028 / #2324] scoring-driven coordination tick の実行先。 採点 Lambda が per-minute pass で
+   * tick 対象を集めて本 Lambda を async Invoke し、 plugin の runTick を最小 IAM の dispatcher 内で走らせる
+   * (= 資格情報分離、 ADR-028/030)。 caller が `grantInvoke` + function name env を配線するため公開する。
+   */
+  readonly coordinationDispatcherLambda: IFunction;
 }
 
 /**
@@ -98,6 +104,8 @@ export function buildParticipantPortalSubsystem(
   return {
     participantPortalLambda: portalLambda.fn,
     participantPortalUrl: portal.distributionUrl,
+    // [ADR-028 / #2324] 採点 Lambda が tick batch を async Invoke する先 (= caller が grantInvoke + env)。
+    coordinationDispatcherLambda: coordinationDispatcher.fn,
   };
 }
 

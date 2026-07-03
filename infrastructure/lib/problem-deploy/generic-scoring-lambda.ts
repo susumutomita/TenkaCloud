@@ -59,6 +59,14 @@ export interface GenericScoringLambdaProps {
    */
   readonly problemsDisruptions: Readonly<Record<string, unknown>>;
   /**
+   * [ADR-028 / #2324] `{ [problemId]: { plugin } }`。 coordination を宣言した問題の宣言 metadata
+   * (= `discoverProblemsCoordination` の出力、 dispatcher の `PROBLEM_COORDINATION` と同一 source)。
+   * per-minute pass の tick が「どの event が coordination を宣言しているか」判定するのに使う。 これは
+   * 宣言 metadata であって plugin code ではないので、 採点 Lambda に持たせても資格情報分離を壊さない
+   * (= 実 runTick は最小 IAM の CoordinationDispatcher Lambda で走る、 ADR-028/030)。 宣言 0 件なら空。
+   */
+  readonly problemsCoordination?: Readonly<Record<string, unknown>>;
+  /**
    * [ADR-033 / #1665] disruptions audit table。 operator-fired disruption の active 採点効果を tick で
    * 解決するため read-only で query する (= scoring-side effect)。
    */
@@ -157,6 +165,13 @@ export class GenericScoringLambda extends Construct {
         // EventApiLambda と同じく build 時 literal 置換し env 4KB 上限を回避 (#1308 と同パターン)。
         "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
           JSON.stringify(props.problemsCatalog),
+        ),
+        // [ADR-028 / #2324] coordination 宣言 config を build 時 literal 置換 (env 4KB 回避、
+        // scoring/phases/disruptions catalog と同方式)。 tick が「どの problemId が coordination を
+        // 宣言しているか」判定するため (= plugin code ではなく宣言 metadata、 dispatcher と同一 source)。
+        // 宣言 0 件なら `{}` (= tick 対象なし)。 env var は増やさない。
+        "process.env.PROBLEM_COORDINATION": JSON.stringify(
+          JSON.stringify(props.problemsCoordination ?? {}),
         ),
       },
     });
