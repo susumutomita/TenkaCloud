@@ -638,6 +638,24 @@ const ssm = new SSMClient({});
 const sts = new STSClient({});
 const s3 = new S3Client({});
 
+export function buildCloudFormationClient(params: {
+  readonly region: string;
+  readonly credentials?: Credentials;
+}): CloudFormationClient {
+  return new CloudFormationClient({
+    region: params.region,
+    ...(params.credentials
+      ? {
+          credentials: {
+            accessKeyId: params.credentials.AccessKeyId ?? "",
+            secretAccessKey: params.credentials.SecretAccessKey ?? "",
+            sessionToken: params.credentials.SessionToken,
+          },
+        }
+      : {}),
+  });
+}
+
 export async function handler(
   input: CreateStackInput,
 ): Promise<{ readonly stackId?: string; readonly operation: "create" | "update" | "noop" }> {
@@ -647,19 +665,7 @@ export async function handler(
   return createStackForDeployment(input, {
     ssm,
     sts,
-    cfnClient: ({ region, credentials }) =>
-      new CloudFormationClient({
-        region,
-        ...(credentials
-          ? {
-              credentials: {
-                accessKeyId: credentials.AccessKeyId ?? "",
-                secretAccessKey: credentials.SecretAccessKey ?? "",
-                sessionToken: credentials.SessionToken,
-              },
-            }
-          : {}),
-      }),
+    cfnClient: buildCloudFormationClient,
     // Public problems read the materialized tree from S3; private problems (challengePayloadUrl
     // set) download + unzip the presigned payload via challenge-payload-artifacts.ts.
     resolveArtifacts: buildArtifactsResolver({

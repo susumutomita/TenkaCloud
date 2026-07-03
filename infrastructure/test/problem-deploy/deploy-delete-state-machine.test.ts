@@ -180,4 +180,14 @@ describe("DeployDeleteStateMachine deployViaLambda flag (#2291)", () => {
         }),
     ).toThrow(/cfnDeployFunction is required/);
   });
+
+  it("should require codeBuildProject on the default CodeBuild path", () => {
+    const { stack, deployments } = buildBareStack();
+    expect(
+      () =>
+        new DeployDeleteStateMachine(stack, "Sm", {
+          deploymentsTable: deployments,
+        }),
+    ).toThrow(/codeBuildProject is required/);
+  });
 });

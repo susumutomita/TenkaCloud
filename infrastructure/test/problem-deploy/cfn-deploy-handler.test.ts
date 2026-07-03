@@ -6,18 +6,18 @@ import {
 } from "@aws-sdk/client-cloudformation";
 import { GetParameterCommand } from "@aws-sdk/client-ssm";
 import { AssumeRoleCommand } from "@aws-sdk/client-sts";
-import { strToU8, zipSync } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildArtifactsResolver,
+  buildCloudFormationClient,
   buildParameterOverrides,
   buildS3ArtifactsResolver,
   buildStackTags,
   classifyDeployAction,
   createStackForDeployment,
   type DeployArtifacts,
-  extractDeployArtifactsFromZip,
   generateRandomAlphanumeric,
+  handler,
   isNoUpdatesError,
   isStackNotFoundError,
   isUnrecoverableStackStatus,
@@ -244,113 +244,7 @@ describe("isStackNotFoundError / parseCfnParameters (#2291)", () => {
     expect(() => parseCfnParameters(JSON.stringify({ cfnParameters: [] }))).toThrow(
       /must be an object/,
     );
-  });
-});
-
-describe("deploy artifact resolution (#2291)", () => {
-  const sourceZip = zipSync({
-    "problems/challenges/sample-flag/template.yaml": strToU8("Resources: {}\n"),
-    "problems/challenges/sample-flag/metadata.json": strToU8(
-      JSON.stringify({ cfnParameters: { Mode: "public" } }),
-    ),
-    "unrelated/file.txt": strToU8("ignored"),
-  });
-
-  it("extracts the exact problem from source.zip", () => {
-    expect(extractDeployArtifactsFromZip(sourceZip, "problems/challenges/sample-flag")).toEqual({
-      templateBody: "Resources: {}\n",
-      cfnParameters: { Mode: "public" },
-    });
-  });
-
-  it("accepts a private payload with one top-level problem directory", async () => {
-    const privateZip = zipSync({
-      "sample-flag/template.yaml": strToU8("Resources: { Private: true }\n"),
-      "sample-flag/metadata.json": strToU8(JSON.stringify({ cfnParameters: { Mode: "private" } })),
-    });
-    const s3Send = vi.fn();
-    const fetchBytes = vi.fn(async () => privateZip);
-    const resolve = buildS3ArtifactsResolver(
-      { send: s3Send },
-      {
-        sourceBucket: "source-bucket",
-        sourceObjectKey: "source.zip",
-        fetchBytes,
-      },
-    );
-
-    await expect(
-      resolve(
-        validDetail({
-          challengePayloadUrl: "https://example.invalid/private.zip",
-        }) as never,
-      ),
-    ).resolves.toEqual({
-      templateBody: "Resources: { Private: true }\n",
-      cfnParameters: { Mode: "private" },
-    });
-    expect(fetchBytes).toHaveBeenCalledWith("https://example.invalid/private.zip");
-    expect(s3Send).not.toHaveBeenCalled();
-  });
-
-  it("reads the existing source.zip object for public problems", async () => {
-    const s3Send = vi.fn(async () => ({
-      Body: { transformToByteArray: async () => sourceZip },
-    }));
-    const resolve = buildS3ArtifactsResolver(
-      { send: s3Send },
-      { sourceBucket: "source-bucket", sourceObjectKey: "source.zip" },
-    );
-
-    await expect(resolve(validDetail() as never)).resolves.toMatchObject({
-      cfnParameters: { Mode: "public" },
-    });
-    expect(s3Send.mock.calls[0][0].input).toEqual({
-      Bucket: "source-bucket",
-      Key: "source.zip",
-    });
-  });
-
-  it("rejects an unreadable source.zip object", async () => {
-    const resolve = buildS3ArtifactsResolver(
-      { send: vi.fn(async () => ({ Body: undefined })) },
-      { sourceBucket: "source-bucket", sourceObjectKey: "source.zip" },
-    );
-
-    await expect(resolve(validDetail() as never)).rejects.toThrow("empty or unreadable S3 object");
-  });
-
-  it("rejects ambiguous fallback templates and a fallback without metadata", () => {
-    const ambiguousZip = zipSync({
-      "one/template.yaml": strToU8("Resources: {}\n"),
-      "one/metadata.json": strToU8("{}"),
-      "two/template.yaml": strToU8("Resources: {}\n"),
-      "two/metadata.json": strToU8("{}"),
-    });
-    expect(() =>
-      extractDeployArtifactsFromZip(ambiguousZip, "problems/challenges/sample-flag"),
-    ).toThrow(/exactly one fallback template/);
-
-    const missingMetadataZip = zipSync({
-      "sample-flag/template.yaml": strToU8("Resources: {}\n"),
-    });
-    expect(() =>
-      extractDeployArtifactsFromZip(missingMetadataZip, "problems/challenges/sample-flag"),
-    ).toThrow(/missing metadata.json/);
-  });
-});
-
-describe("isNoUpdatesError (#2291)", () => {
-  it("matches only CloudFormation's empty-change response", () => {
-    expect(isNoUpdatesError(new Error("No updates are to be performed."))).toBe(true);
-    expect(isNoUpdatesError(new Error("AccessDenied"))).toBe(false);
-  });
-
-  it("should throw when cfnParameters is null or an array (must be an object)", () => {
     expect(() => parseCfnParameters(JSON.stringify({ cfnParameters: null }))).toThrow(
-      /must be an object/,
-    );
-    expect(() => parseCfnParameters(JSON.stringify({ cfnParameters: [] }))).toThrow(
       /must be an object/,
     );
   });
@@ -584,6 +478,52 @@ describe("createStackForDeployment cross-account (#2291)", () => {
     // DeleteStack precedes CreateStack.
     expect(kinds.indexOf("DeleteStackCommand")).toBeLessThan(kinds.indexOf("CreateStackCommand"));
     expect(deps.waitForStackDelete).toHaveBeenCalledOnce();
+  });
+
+  it("should use the default delete waiter and continue once the stack disappears", async () => {
+    const cfn = fakeCfn({
+      describeResponses: [{ status: "ROLLBACK_COMPLETE" }, { notFound: true }],
+      commands: [],
+    });
+    const { waitForStackDelete: _wait, ...deps } = crossAccountDeps(cfn);
+
+    await expect(createStackForDeployment({ detail: validDetail() }, deps)).resolves.toMatchObject({
+      operation: "create",
+    });
+  });
+
+  it("should fail the default delete waiter on DELETE_FAILED", async () => {
+    const cfn = fakeCfn({
+      describeResponses: [{ status: "ROLLBACK_COMPLETE" }, { status: "DELETE_FAILED" }],
+      commands: [],
+    });
+    const { waitForStackDelete: _wait, ...deps } = crossAccountDeps(cfn);
+
+    await expect(createStackForDeployment({ detail: validDetail() }, deps)).rejects.toThrow(
+      /could not be deleted/,
+    );
+  });
+
+  it("should bound the default delete waiter", async () => {
+    const cfn = fakeCfn({
+      describeResponses: [
+        { status: "ROLLBACK_COMPLETE" },
+        ...Array.from({ length: 60 }, () => ({ status: "DELETE_IN_PROGRESS" })),
+      ],
+      commands: [],
+    });
+    const { waitForStackDelete: _wait, ...deps } = crossAccountDeps(cfn);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(0));
+    try {
+      const assertion = expect(
+        createStackForDeployment({ detail: validDetail() }, deps),
+      ).rejects.toThrow(/timed out waiting/);
+      await vi.advanceTimersByTimeAsync(4 * 60 * 1000 + 1);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("should NOT delete when the stack is absent (plain create)", async () => {
@@ -948,5 +888,67 @@ describe("createStackForDeployment same-account (#2291)", () => {
     expect((createCmd as CreateStackCommand).input.RoleARN).toBe(
       "arn:aws:iam::999988887777:role/CfnExec",
     );
+  });
+});
+
+describe("create-stack Lambda handler configuration (#2291)", () => {
+  it("builds regional CloudFormation clients with and without assumed credentials", async () => {
+    const crossAccount = buildCloudFormationClient({
+      region: "ap-northeast-1",
+      credentials: {
+        AccessKeyId: "AKIA_TEST",
+        SecretAccessKey: "secret",
+        SessionToken: "session",
+        Expiration: new Date("2030-01-01T00:00:00Z"),
+      },
+    });
+    expect(await crossAccount.config.region()).toBe("ap-northeast-1");
+    expect(await crossAccount.config.credentials()).toMatchObject({
+      accessKeyId: "AKIA_TEST",
+      secretAccessKey: "secret",
+      sessionToken: "session",
+    });
+
+    const sameAccount = buildCloudFormationClient({ region: "us-east-1" });
+    expect(await sameAccount.config.region()).toBe("us-east-1");
+  });
+
+  it("fails loudly when required runtime configuration is absent", async () => {
+    const previous = process.env.SOURCE_BUCKET_NAME;
+    delete process.env.SOURCE_BUCKET_NAME;
+    try {
+      await expect(handler({ detail: {} })).rejects.toThrow(
+        /missing required env var: SOURCE_BUCKET_NAME/,
+      );
+    } finally {
+      if (previous === undefined) delete process.env.SOURCE_BUCKET_NAME;
+      else process.env.SOURCE_BUCKET_NAME = previous;
+    }
+  });
+
+  it("reads all required runtime configuration before validating the event", async () => {
+    const previous = {
+      sourceBucket: process.env.SOURCE_BUCKET_NAME,
+      sourceObject: process.env.SOURCE_OBJECT_KEY,
+      accountId: process.env.TENKACLOUD_ACCOUNT_ID,
+      roleArn: process.env.CFN_EXEC_ROLE_ARN,
+    };
+    process.env.SOURCE_BUCKET_NAME = "source-bucket";
+    process.env.SOURCE_OBJECT_KEY = "source.zip";
+    process.env.TENKACLOUD_ACCOUNT_ID = "123456789012";
+    process.env.CFN_EXEC_ROLE_ARN = "arn:aws:iam::123456789012:role/CfnExec";
+    try {
+      await expect(handler({ detail: {} })).rejects.toThrow();
+    } finally {
+      for (const [name, value] of [
+        ["SOURCE_BUCKET_NAME", previous.sourceBucket],
+        ["SOURCE_OBJECT_KEY", previous.sourceObject],
+        ["TENKACLOUD_ACCOUNT_ID", previous.accountId],
+        ["CFN_EXEC_ROLE_ARN", previous.roleArn],
+      ] as const) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
   });
 });

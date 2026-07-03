@@ -307,4 +307,27 @@ describe("DeployCreateStateMachine deployViaLambda flag (#2291)", () => {
       }),
     );
   });
+
+  it("should require codeBuildProject on the default CodeBuild path", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "MissingCodeBuild", {
+      env: { account: "123456789012", region: "ap-northeast-1" },
+    });
+    const deployments = new Table(stack, "Deployments", {
+      partitionKey: { name: "PK", type: AttributeType.STRING },
+      sortKey: { name: "SK", type: AttributeType.STRING },
+    });
+    const describeStackFn = new LambdaFunction(stack, "DescribeStackFn", {
+      runtime: Runtime.NODEJS_22_X,
+      handler: "index.handler",
+      code: Code.fromInline("exports.handler = async () => ({});"),
+    });
+    expect(
+      () =>
+        new DeployCreateStateMachine(stack, "Sm", {
+          describeStackFunction: describeStackFn,
+          deploymentsTable: deployments,
+        }),
+    ).toThrow(/codeBuildProject is required/);
+  });
 });
