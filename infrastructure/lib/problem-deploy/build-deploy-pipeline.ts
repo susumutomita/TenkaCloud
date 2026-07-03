@@ -1,9 +1,11 @@
+import * as path from "node:path";
 import type { IProject } from "aws-cdk-lib/aws-codebuild";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IEventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { ILogGroup } from "aws-cdk-lib/aws-logs";
 import { Bucket } from "aws-cdk-lib/aws-s3";
+import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
 import { BulkDeployCreateStateMachine } from "./bulk-deploy-create-state-machine.js";
 import { CfnDeployLambda } from "./cfn-deploy-lambda.js";
@@ -103,6 +105,38 @@ export function buildDeployPipeline(
     cfnDeployFunction = cfnDeploy.fn;
     // #2291: hand the job-progress log group to the caller → participant portal read scope.
     deployJobLogGroup = cfnDeploy.jobLogGroup;
+
+    // Issue #2291 (ADR-049 §9): materialize the repo `problems/` tree (un-zipped) into the
+    // source bucket so `buildS3ArtifactsResolver` (create-stack.ts) can GetObject
+    // `${detail.problemDir}/template.yaml` + `${detail.problemDir}/metadata.json`. `problemDir`
+    // is validated as `problems/<category>/<id>` (events.ts `DeployCreateRequestedDetailSchema`),
+    // so uploading `problems/`'s contents under the `problems/` key prefix lands the objects at
+    // `problems/<category>/<id>/{template.yaml,metadata.json}` — byte-for-byte the on-disk layout
+    // `deploy-battles.sh` reads. Gated on `deployViaLambda`, so the default (flag OFF) synth adds
+    // no BucketDeployment and stays byte-identical. Copying the whole tree (rather than filtering
+    // to just the two files) is deliberate: the default GLOB ignore strategy cannot re-include a
+    // nested file whose parent directory is excluded, so a `!**/template.yaml` filter would skip
+    // the very files we need. The tree is small (~1.7MB) once `node_modules` is excluded, and the
+    // resolver only ever reads the two keys above, so the extra docs/schema objects are inert.
+    //
+    // prune:false is MANDATORY. The source bucket ALSO holds `source.zip` (the CodeBuild deploy
+    // bundle, uploaded by install.sh) and other objects. BucketDeployment's default prune:true
+    // deletes every object in the destination that is not part of this asset — that would wipe
+    // source.zip and break the CodeBuild deploy/delete path. Never remove prune:false here.
+    new BucketDeployment(scope, "ProblemArtifacts", {
+      sources: [
+        Source.asset(path.resolve(import.meta.dirname, "../../../problems"), {
+          // Exclude the catalog's dev dependencies: large and irrelevant to the deploy body.
+          // (A positive directory exclude has no glob re-include pitfall.)
+          exclude: ["node_modules"],
+        }),
+      ],
+      destinationBucket: sourceBucket,
+      destinationKeyPrefix: "problems",
+      prune: false,
+      // The copy handler unzips + `aws s3 sync`s the tree; 256MB comfortably covers the small tree.
+      memoryLimit: 256,
+    });
   }
 
   const stateMachine = new DeployCreateStateMachine(scope, "DeployCreate", {
