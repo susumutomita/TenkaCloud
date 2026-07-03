@@ -9,28 +9,11 @@ sudo yum install -y python3-pip
 sudo python3 -m pip install --upgrade setuptools
 sudo python3 -m pip install git-remote-codecommit
 
-export REGION=$AWS_REGION
-echo "REGION: ${REGION}"
-
-export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-echo "ACCOUNT_ID: ${ACCOUNT_ID}"
-
-# #2194: CDK_PARAM_S3_BUCKET_NAME is injected by the deprovisioning ScriptJob env with
-# the resolved (per-environment) bucket name the deploy created. Do NOT recompute it
-# here — the old local recompute diverged from the real hashed name. Fail loud if missing.
-if [ -z "${CDK_PARAM_S3_BUCKET_NAME:-}" ]; then
-  echo "ERROR: CDK_PARAM_S3_BUCKET_NAME is not set (expected from the deprovisioning ScriptJob env)" >&2
-  exit 1
-fi
-echo "CDK_PARAM_S3_BUCKET_NAME: ${CDK_PARAM_S3_BUCKET_NAME}"
-export CDK_SOURCE_NAME="source.zip"
-
-VERSIONS=$(aws s3api list-object-versions --bucket "$CDK_PARAM_S3_BUCKET_NAME" --prefix "$CDK_SOURCE_NAME" --query 'Versions[?IsLatest==`true`].{VersionId:VersionId}' --output text 2>&1)
-CDK_PARAM_COMMIT_ID=$(echo "$VERSIONS" | awk 'NR==1{print $1}')
-echo "CDK_PARAM_COMMIT_ID: ${CDK_PARAM_COMMIT_ID}"
-
-aws s3api get-object --bucket "$CDK_PARAM_S3_BUCKET_NAME" --key "$CDK_SOURCE_NAME" --version-id "$CDK_PARAM_COMMIT_ID" "$CDK_SOURCE_NAME" 2>&1
-unzip -o "$CDK_SOURCE_NAME"
+# Source-bundle fetch preamble is shared with provision-tenant.sh and inlined here
+# at synth time from scripts/lib/fetch-source-bundle.sh (#2217). It resolves
+# account/region, reads the injected CDK_PARAM_S3_BUCKET_NAME, and downloads + unzips
+# source.zip. Runs before the bundle exists, so it cannot be `source`d at runtime.
+# @@INJECT:fetch-source-bundle@@
 
 # shellcheck source=lib/install-node.sh
 source ./scripts/lib/install-node.sh

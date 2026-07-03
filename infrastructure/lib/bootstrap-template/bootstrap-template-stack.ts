@@ -1,4 +1,3 @@
-import * as fs from "node:fs";
 import {
   BashJobRunner,
   type BashJobRunnerProps,
@@ -12,6 +11,7 @@ import { EventBus } from "aws-cdk-lib/aws-events";
 import type { Construct } from "constructs";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
 import { TenantStatusReconciler } from "../tenant-status-reconciler/tenant-status-reconciler.js";
+import { composeTenantScript } from "./compose-tenant-script.js";
 import { buildTenantJobRunnerPermissions } from "./job-runner-permissions.js";
 import { TenantApiKey } from "./tenant-api-key.js";
 
@@ -87,7 +87,7 @@ export class BootstrapTemplateStack extends Stack {
     const provisioningJobRunnerProps: BashJobRunnerProps = {
       eventManager: eventManager,
       permissions: jobRunnerPermissions,
-      script: fs.readFileSync("../scripts/provision-tenant.sh", "utf8"),
+      script: composeTenantScript("../scripts/provision-tenant.sh"),
       postScript: "",
       environmentStringVariablesFromIncomingEvent: ["tenantId", "tier", "tenantName", "email"],
       environmentVariablesToOutgoingEvent: [
@@ -115,7 +115,7 @@ export class BootstrapTemplateStack extends Stack {
     const deprovisioningJobRunnerProps: BashJobRunnerProps = {
       eventManager: eventManager,
       permissions: jobRunnerPermissions,
-      script: fs.readFileSync("../scripts/deprovision-tenant.sh", "utf8"),
+      script: composeTenantScript("../scripts/deprovision-tenant.sh"),
       environmentStringVariablesFromIncomingEvent: ["tenantId"],
       environmentVariablesToOutgoingEvent: ["tenantStatus"],
       outgoingEvent: DetailType.DEPROVISION_SUCCESS,
