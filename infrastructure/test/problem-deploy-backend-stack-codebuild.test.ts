@@ -1,12 +1,14 @@
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 import {
-  synthDefault,
+  synthWithCodeBuild,
   synthWithDeployConcurrentBuildLimit,
 } from "./problem-deploy-backend-stack.test-helpers";
 
+// Issue #2291: Lambda deploy 経路が既定になったため、CodeBuild Project を検証するこの suite は
+// 在来 CodeBuild 経路 (CDK_PARAM_DEPLOY_VIA_LAMBDA=false rollback 相当) を明示的に synth する。
 describe("ProblemDeployBackendStack (MVP-1) — CodeBuild Project (runs deploy-battles.sh)", () => {
-  const tpl = synthDefault();
+  const tpl = synthWithCodeBuild();
 
   it("should create 1 CodeBuild Project", () => {
     tpl.resourceCountIs("AWS::CodeBuild::Project", 1);

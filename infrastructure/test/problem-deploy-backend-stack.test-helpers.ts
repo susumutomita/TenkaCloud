@@ -17,6 +17,12 @@ export const SYNTH_TIMEOUT_MS = 120_000;
 // describe ブロック単位で 1 度 synth すれば再利用できる。
 // Issue #1249: ファイル分割後、複数の test file が同じ default Template を読むので、
 // helper module scope でメモ化することで synth コストの増加を防ぐ (元 file と同じ 2 synth)。
+//
+// Issue #2291 完了: `deployViaLambda` の既定が Lambda 経路へ反転した (resolve.ts で
+// CDK_PARAM_DEPLOY_VIA_LAMBDA が未設定なら true)。よって synthDefault は **Lambda deploy 経路**の
+// stack shape を返す (= CfnDeploy Lambda + ProblemArtifacts BucketDeployment + Lambda-poll SFN、
+// problem-deploy CodeBuild Project は 0 個)。在来 CodeBuild 経路を検証したい test は
+// {@link synthWithCodeBuild} (= CDK_PARAM_DEPLOY_VIA_LAMBDA=false rollback 相当) を使う。
 let cachedDefault: Template | undefined;
 export function synthDefault(): Template {
   if (cachedDefault) return cachedDefault;
@@ -30,10 +36,37 @@ export function synthDefault(): Template {
     },
     problemsScoring: {},
     problemsEndpoints: {},
+    // Issue #2291: Lambda deploy 経路が新既定 (= `make deploy` の live-test 対象)。
+    deployViaLambda: true,
     environmentName: "development",
   });
   cachedDefault = Template.fromStack(stack);
   return cachedDefault;
+}
+
+// Issue #2291 rollback path: `CDK_PARAM_DEPLOY_VIA_LAMBDA=false` は在来 CodeBuild deploy 経路を
+// byte 互換で復元する。problem-deploy CodeBuild Project (と CodeBuild を叩く SFN 定義) を実際に
+// 検証したい test はこの helper を使う (= 既定反転前の synthDefault と同一 shape)。複数 test file
+// から読まれるので synthDefault と同様メモ化する。
+let cachedCodeBuild: Template | undefined;
+export function synthWithCodeBuild(): Template {
+  if (cachedCodeBuild) return cachedCodeBuild;
+  const app = new cdk.App();
+  const stack = new ProblemDeployBackendStack(app, "TestStackCodeBuild", {
+    eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
+    sourceBucketName: "test-source-bucket",
+    sourceObjectKey: "source.zip",
+    problemsCatalog: {
+      "hello-world": "problems/challenges/hello-world",
+    },
+    problemsScoring: {},
+    problemsEndpoints: {},
+    // 明示 false = 在来 CodeBuild 経路 (rollback / legacy path)。
+    deployViaLambda: false,
+    environmentName: "development",
+  });
+  cachedCodeBuild = Template.fromStack(stack);
+  return cachedCodeBuild;
 }
 
 // Issue #2232: useBulkDistributedMap: true を反映させた EventApi Lambda env を検証するための
@@ -90,21 +123,12 @@ export function synthWithControlDataBackendTurso(): Template {
   return Template.fromStack(stack);
 }
 
-// Issue #2291: deployViaLambda: true を反映させ、 Lambda deploy 経路 (CfnDeployLambda +
-// EmitDeployFailedEvent) と SystemAuditWriter の DeployFailureRule を検証するための別 synth。
+// Issue #2291: Lambda deploy 経路 (CfnDeployLambda + EmitDeployFailedEvent + DeployFailureRule) を
+// 明示的に検証するための helper。既定反転後 (#2291 完了) は synthDefault と同一 shape なので、
+// 重複 synth を避けて synthDefault のメモ化 Template をそのまま返す。Lambda 経路を意図する
+// describe が intent-first に読めるよう別名として残す。
 export function synthWithDeployViaLambda(): Template {
-  const app = new cdk.App();
-  const stack = new ProblemDeployBackendStack(app, "TestStackDeployViaLambda", {
-    eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
-    sourceBucketName: "test-source-bucket",
-    sourceObjectKey: "source.zip",
-    problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
-    problemsScoring: {},
-    problemsEndpoints: {},
-    deployViaLambda: true,
-    environmentName: "development",
-  });
-  return Template.fromStack(stack);
+  return synthDefault();
 }
 
 // #538: deployConcurrentBuildLimit を反映させた CodeBuild Project を検証するための別 synth。

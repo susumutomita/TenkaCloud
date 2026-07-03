@@ -146,15 +146,17 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
     ).toBe(false);
   });
 
-  it("should default deployViaLambda to false when unset (#2291 no regression)", () => {
-    expect(resolve(baseEnv()).deployViaLambda).toBe(false);
+  it("should default deployViaLambda to true when unset (#2291 Lambda-default)", () => {
+    expect(resolve(baseEnv()).deployViaLambda).toBe(true);
   });
 
-  it("should enable deployViaLambda only when CDK_PARAM_DEPLOY_VIA_LAMBDA is exactly 'true' (#2291)", () => {
+  it("should disable deployViaLambda only when CDK_PARAM_DEPLOY_VIA_LAMBDA is exactly 'false' (#2291 rollback)", () => {
+    expect(resolve(baseEnv({ CDK_PARAM_DEPLOY_VIA_LAMBDA: "false" })).deployViaLambda).toBe(false);
+    // 明示 "true" は当然 Lambda 経路。
     expect(resolve(baseEnv({ CDK_PARAM_DEPLOY_VIA_LAMBDA: "true" })).deployViaLambda).toBe(true);
-    // 設定ミス値は在来 CodeBuild 経路のまま (= fail-safe、追加リソースを誤って生やさない)。
-    expect(resolve(baseEnv({ CDK_PARAM_DEPLOY_VIA_LAMBDA: "yes" })).deployViaLambda).toBe(false);
-    expect(resolve(baseEnv({ CDK_PARAM_DEPLOY_VIA_LAMBDA: "1" })).deployViaLambda).toBe(false);
+    // "false" 以外の値はすべて Lambda 既定を維持する (= `!== "false"`、rollback は完全一致のみ)。
+    expect(resolve(baseEnv({ CDK_PARAM_DEPLOY_VIA_LAMBDA: "yes" })).deployViaLambda).toBe(true);
+    expect(resolve(baseEnv({ CDK_PARAM_DEPLOY_VIA_LAMBDA: "1" })).deployViaLambda).toBe(true);
   });
 
   it("should default auditLogEnabled to true when unset (#2311 no regression)", () => {
