@@ -995,12 +995,10 @@ describe("create-stack Lambda handler configuration (#2291)", () => {
   it("should read all required runtime configuration before validating the event", async () => {
     const previous = {
       sourceBucket: process.env.SOURCE_BUCKET_NAME,
-      sourceObject: process.env.SOURCE_OBJECT_KEY,
       accountId: process.env.TENKACLOUD_ACCOUNT_ID,
       roleArn: process.env.CFN_EXEC_ROLE_ARN,
     };
     process.env.SOURCE_BUCKET_NAME = "source-bucket";
-    process.env.SOURCE_OBJECT_KEY = "source.zip";
     process.env.TENKACLOUD_ACCOUNT_ID = "123456789012";
     process.env.CFN_EXEC_ROLE_ARN = "arn:aws:iam::123456789012:role/CfnExec";
     try {
@@ -1010,7 +1008,6 @@ describe("create-stack Lambda handler configuration (#2291)", () => {
     } finally {
       for (const [name, value] of [
         ["SOURCE_BUCKET_NAME", previous.sourceBucket],
-        ["SOURCE_OBJECT_KEY", previous.sourceObject],
         ["TENKACLOUD_ACCOUNT_ID", previous.accountId],
         ["CFN_EXEC_ROLE_ARN", previous.roleArn],
       ] as const) {

@@ -99,7 +99,6 @@ export function buildDeployPipeline(
     const cfnDeploy = new CfnDeployLambda(scope, "CfnDeploy", {
       environmentName: args.environmentName,
       sourceBucketName: args.sourceBucketName,
-      sourceObjectKey: args.sourceObjectKey,
     });
     cfnDeployFunction = cfnDeploy.fn;
     deployJobLogGroup = cfnDeploy.deploymentLogGroup;

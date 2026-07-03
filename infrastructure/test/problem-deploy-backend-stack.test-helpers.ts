@@ -53,21 +53,6 @@ export function synthWithBulkDistributedMap(): Template {
   return Template.fromStack(stack);
 }
 
-export function synthWithDeployViaLambda(): Template {
-  const app = new cdk.App();
-  const stack = new ProblemDeployBackendStack(app, "TestStackLambdaDeploy", {
-    eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
-    sourceBucketName: "test-source-bucket",
-    sourceObjectKey: "source.zip",
-    problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
-    problemsScoring: {},
-    problemsEndpoints: {},
-    deployViaLambda: true,
-    environmentName: "development",
-  });
-  return Template.fromStack(stack);
-}
-
 // Issue #2311: auditLogEnabled: false を反映させ、 監査を書く Lambda 群の env に
 // AUDIT_LOG_ENABLED="false" が注入されることを検証するための別 synth。
 export function synthWithAuditLogDisabled(): Template {

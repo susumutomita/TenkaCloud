@@ -19,8 +19,6 @@ export interface CfnDeployLambdaProps {
    * `serverless-saas-{account}-{region}`)。 `s3:GetObject` を本 bucket に限定する。
    */
   readonly sourceBucketName: string;
-  /** Existing source bundle object key (`source.zip`). */
-  readonly sourceObjectKey: string;
 }
 
 /**
@@ -83,13 +81,10 @@ export class CfnDeployLambda extends Construct {
       entry: path.resolve(import.meta.dirname, "handlers/cfn-deploy-handler/index.ts"),
       // pre-delete の bounded wait (最大 4 分) を挟むため 5 分。 詳細は create-stack.ts の TODO 参照。
       timeout: Duration.minutes(5),
-      // `source.zip` is read as a compressed buffer and only the selected problem is inflated.
-      // 512 MB leaves headroom for the archive + Lambda bundle under the 128 MB upload cap.
-      memorySize: 512,
+      memorySize: 256,
       environment: {
         NODE_OPTIONS: "--enable-source-maps",
         SOURCE_BUCKET_NAME: props.sourceBucketName,
-        SOURCE_OBJECT_KEY: props.sourceObjectKey,
         TENKACLOUD_ACCOUNT_ID: stack.account,
         CFN_EXEC_ROLE_ARN: this.cfnExecRole.roleArn,
         DEPLOYMENT_LOG_GROUP_NAME: this.deploymentLogGroup.logGroupName,

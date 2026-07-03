@@ -159,8 +159,6 @@ describe("ObservabilityStack", () => {
   });
 
   it("should omit the retired deploy CodeBuild metric in Lambda mode", () => {
-    expect(dashboardBody(synthDefault(undefined, null))).not.toContain(
-      "tenkacloud-problem-deploy",
-    );
+    expect(dashboardBody(synthDefault(undefined, null))).not.toContain("tenkacloud-problem-deploy");
   });
 });

@@ -264,11 +264,7 @@ export function parseCfnParameters(metadataJson: string): Readonly<Record<string
   return out;
 }
 
-async function getS3Text(
-  s3: Pick<S3Client, "send">,
-  bucket: string,
-  key: string,
-): Promise<string> {
+async function getS3Text(s3: Pick<S3Client, "send">, bucket: string, key: string): Promise<string> {
   const out = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   const body = out.Body;
   if (!body || typeof (body as { transformToString?: unknown }).transformToString !== "function") {
