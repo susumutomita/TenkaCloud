@@ -161,4 +161,80 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
     },
     SYNTH_TIMEOUT_MS,
   );
+
+  it(
+    "should wire the scoring-driven coordination tick: GenericScoring gains lambda:InvokeFunction on the dispatcher + its function name env, and no S3 (#2324)",
+    async () => {
+      const tpl = await synthWithParticipantPortal({});
+      const fns = tpl.findResources("AWS::Lambda::Function");
+      const scoring = Object.entries(fns).find(
+        ([name]) => name.includes("GenericScoring") && name.includes("Function"),
+      );
+      expect(scoring).toBeDefined();
+
+      // (a) 採点 Lambda は dispatcher の function name を env で受け取り、 tick batch を Invoke する。
+      const env =
+        (
+          scoring?.[1] as {
+            Properties?: { Environment?: { Variables?: Record<string, unknown> } };
+          }
+        )?.Properties?.Environment?.Variables ?? {};
+      expect(env.COORDINATION_DISPATCHER_FUNCTION_NAME).toBeDefined();
+
+      // (b) 採点 role が coordination のために得る IAM は `lambda:InvokeFunction` のみ (= dispatcher へ
+      // 委譲するためだけ)。 plugin bundle を読むための `s3:*` は付与しない (= plugin は dispatcher 内でのみ
+      // load、 ADR-028/030 の資格情報分離)。
+      const policies = tpl.findResources("AWS::IAM::Policy");
+      const scoringPolicies = Object.entries(policies).filter(([name]) =>
+        name.includes("GenericScoring"),
+      );
+      const scoringActions = scoringPolicies.flatMap(([, p]) =>
+        (
+          (
+            p as {
+              Properties?: { PolicyDocument?: { Statement?: Array<{ Action?: unknown }> } };
+            }
+          ).Properties?.PolicyDocument?.Statement ?? []
+        ).flatMap((s) => ([] as unknown[]).concat(s.Action ?? [])),
+      );
+      expect(scoringActions).toContain("lambda:InvokeFunction");
+      expect(scoringActions.some((a) => typeof a === "string" && a.startsWith("s3:"))).toBe(false);
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should keep the CoordinationDispatcher role minimal-IAM (no sts/ssm/kms), unchanged by the tick (#2324)",
+    async () => {
+      const tpl = await synthWithParticipantPortal({});
+      // dispatcher の IAM は明示 Role の inline policy (= `AWS::IAM::Role` の Properties.Policies)。
+      const roles = tpl.findResources("AWS::IAM::Role");
+      const dispatcherRole = Object.entries(roles).find(([name]) =>
+        name.includes("CoordinationDispatcher"),
+      );
+      expect(dispatcherRole).toBeDefined();
+      const inlinePolicies =
+        (
+          dispatcherRole?.[1] as {
+            Properties?: {
+              Policies?: Array<{ PolicyDocument?: { Statement?: Array<{ Action?: unknown }> } }>;
+            };
+          }
+        ).Properties?.Policies ?? [];
+      const dispatcherActions = inlinePolicies
+        .flatMap((pol) =>
+          (pol.PolicyDocument?.Statement ?? []).flatMap((s) =>
+            ([] as unknown[]).concat(s.Action ?? []),
+          ),
+        )
+        .filter((a): a is string => typeof a === "string");
+      // op 経路と同じ最小 IAM を維持: coordination row の DDB Query/Get/Put のみ。 tick を本 Lambda 内で
+      // 走らせても、 競技者資格情報に到達しうる sts/ssm/kms は付与されない (= ADR-028/030 の分離)。
+      expect(dispatcherActions).toContain("dynamodb:PutItem");
+      expect(dispatcherActions.some((a) => a.startsWith("sts:"))).toBe(false);
+      expect(dispatcherActions.some((a) => a.startsWith("ssm:"))).toBe(false);
+      expect(dispatcherActions.some((a) => a.startsWith("kms:"))).toBe(false);
+    },
+    SYNTH_TIMEOUT_MS,
+  );
 });

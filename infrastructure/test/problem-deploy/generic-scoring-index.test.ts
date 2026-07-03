@@ -24,6 +24,9 @@ const mocks = vi.hoisted(() => ({
   runPhasedPollingKind: vi.fn(),
   runAttackDetectionKind: vi.fn(),
   writeScoreEvent: vi.fn(),
+  coordinationCollect: vi.fn(),
+  coordinationRun: vi.fn(),
+  createCoordinationTickPass: vi.fn(),
 }));
 vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/shared", async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
@@ -63,6 +66,18 @@ vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/attack-
 vi.mock("../../lib/problem-deploy/handlers/shared/score-event", () => ({
   writeScoreEvent: mocks.writeScoreEvent,
 }));
+// [ADR-028 / #2324] coordination tick glue は本 index test では mock し、 handler が per-page で
+// collect し scan 後に run すること だけを pin する (= tick 本体は coordination-tick.test.ts で網羅)。
+vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/coordination-tick", () => ({
+  createCoordinationTickPass: mocks.createCoordinationTickPass,
+  parseCoordinationProblemIds: vi.fn(() => new Set()),
+}));
+vi.mock(
+  "../../lib/problem-deploy/handlers/generic-scoring-handler/coordination-tick-dispatch",
+  () => ({
+    createLambdaTickInvoker: vi.fn(() => async () => undefined),
+  }),
+);
 
 const { handler, queryOverridesForDeployment, parsePhasesEnv } = await import(
   "../../lib/problem-deploy/handlers/generic-scoring-handler/index"
@@ -150,6 +165,12 @@ beforeEach(() => {
   mocks.runPhasedPollingKind.mockResolvedValue(EMPTY_RESULT);
   mocks.runAttackDetectionKind.mockReturnValue(EMPTY_RESULT); // sync, not awaited
   mocks.writeScoreEvent.mockResolvedValue(undefined);
+  mocks.coordinationRun.mockResolvedValue(undefined);
+  mocks.coordinationCollect.mockReturnValue(undefined);
+  mocks.createCoordinationTickPass.mockReturnValue({
+    collect: mocks.coordinationCollect,
+    run: mocks.coordinationRun,
+  });
   shared = {
     ddb,
     deploymentsTableName: "TestDeployments",
@@ -183,6 +204,17 @@ describe("handler scan loop", () => {
     mocks.reconcileEventStatuses.mockRejectedValueOnce(new Error("reconcile boom"));
     cfg.scanPages = [{ Items: [], LastEvaluatedKey: undefined }];
     await expect(handler()).resolves.toBeUndefined();
+  });
+
+  it("should collect coordination tick targets per page and run the tick once (#2324)", async () => {
+    cfg.scanPages = [
+      { Items: [], LastEvaluatedKey: { PK: "x" } },
+      { Items: [], LastEvaluatedKey: undefined },
+    ];
+    await handler();
+    expect(mocks.createCoordinationTickPass).toHaveBeenCalledTimes(1);
+    expect(mocks.coordinationCollect).toHaveBeenCalledTimes(2); // once per scan page
+    expect(mocks.coordinationRun).toHaveBeenCalledTimes(1); // after the scan drains
   });
 
   it("should swallow a non-Error reconcile rejection (String(err) branch)", async () => {

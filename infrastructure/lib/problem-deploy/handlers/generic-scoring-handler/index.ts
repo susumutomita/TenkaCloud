@@ -10,6 +10,8 @@ import { type ProgressionGateConfig, parseProgressionGate } from "../shared/prog
 import { applyKindResult } from "./apply-kind-result.js";
 import { reconcileDeployStatusMaintenance } from "./composite-status-reconciler.js";
 import { maybeFireConditionDisruptions } from "./condition-disruption-fire.js";
+import { createCoordinationTickPass, parseCoordinationProblemIds } from "./coordination-tick.js";
+import { createLambdaTickInvoker } from "./coordination-tick-dispatch.js";
 import {
   applyDisruptionEffects,
   type DisruptionAuditRowLike,
@@ -118,6 +120,14 @@ export async function handler(): Promise<void> {
   const tenantFlagCache: TenantFlagCache = new Map();
   const gateCompletionCache: GateCompletionCache = new Map();
 
+  // [ADR-028 / #2324] scoring-driven coordination tick。 資格情報分離 (ADR-028/030) のため採点 Lambda は
+  // plugin を実行せず、 tick 対象を集めて最小 IAM の CoordinationDispatcher を 1 回 async Invoke するだけ。
+  const coordinationTick = createCoordinationTickPass(
+    createLambdaTickInvoker(),
+    process.env.COORDINATION_DISPATCHER_FUNCTION_NAME ?? "",
+    parseCoordinationProblemIds(process.env.PROBLEM_COORDINATION),
+  );
+
   // `Limit: 200` は 1 ページあたりの件数上限 (全体上限ではない)。forEachScanPage が
   // `LastEvaluatedKey` を追って全ページ drain するので per-page の BatchGet / 並列処理は従来どおり。
   await forEachScanPage(
@@ -131,6 +141,8 @@ export async function handler(): Promise<void> {
     },
     async (page) => {
       const items = page as Partial<DeploymentItem>[];
+
+      coordinationTick.collect(items, nowIso); // [#2324] tick 対象を per-page で集約 (= 1 event 1 tick)。
 
       // #558: deployment が属する event の `scoringLocked` を per-invocation で BatchGet 取得。
       // #2283: 同じ BatchGet で progressionGate (Gate 完了 bonus 用) も引く。
@@ -159,7 +171,10 @@ export async function handler(): Promise<void> {
     },
   );
 
-  await Promise.all([reconcilePromise, runtimeReconcilePromise]);
+  // [ADR-028 / #2324] coordination tick は scan で集めた target に依存するため scan 後に起動する。
+  const coordinationPromise = coordinationTick.run(nowMs, nowIso);
+
+  await Promise.all([reconcilePromise, runtimeReconcilePromise, coordinationPromise]);
 }
 
 /** [ADR-033 / ADR-029] 採点効果の最大 window (= 1h)。 これより古い audit 行は active になりえない。 */
