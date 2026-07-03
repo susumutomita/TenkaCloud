@@ -1,6 +1,6 @@
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { createClient, type Client } from "@libsql/client/http";
+import { type Client, createClient } from "@libsql/client/http";
 import { createEventsRepository } from "./events-repository.js";
 import { initializeControlDataSchema, LibsqlExecutor } from "./libsql-executor.js";
 import { createTeamsRepository } from "./teams-repository.js";
