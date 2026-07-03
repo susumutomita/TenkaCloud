@@ -28,6 +28,7 @@ vi.mock("../lib/problem-deploy/participant-portal-hosting.js", () => ({
 
 async function synthWithParticipantPortal(
   problemsCoordinationBundles: Readonly<Record<string, string>>,
+  includeCoordinationMap = true,
 ): Promise<Template> {
   const { ProblemDeployBackendStack } = await import(
     "../lib/problem-deploy/problem-deploy-backend-stack.js"
@@ -40,12 +41,16 @@ async function synthWithParticipantPortal(
     problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
     problemsScoring: {},
     problemsEndpoints: {},
-    problemsCoordination: Object.fromEntries(
-      Object.keys(problemsCoordinationBundles).map((problemId) => [
-        problemId,
-        { plugin: `coordination/${problemId}.ts` },
-      ]),
-    ),
+    ...(includeCoordinationMap
+      ? {
+          problemsCoordination: Object.fromEntries(
+            Object.keys(problemsCoordinationBundles).map((problemId) => [
+              problemId,
+              { plugin: `coordination/${problemId}.ts` },
+            ]),
+          ),
+        }
+      : {}),
     problemsCoordinationBundles,
     environmentName: "development",
     participantPortal: { runtimeConfig: "default-dev-mock" },
@@ -86,9 +91,12 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
         withoutBundles.findResources("AWS::S3::Bucket"),
       ).length;
 
-      const withBundles = await synthWithParticipantPortal({
-        "hello-world": "coordination/hello-world.mjs",
-      });
+      const withBundles = await synthWithParticipantPortal(
+        {
+          "hello-world": "coordination/hello-world.mjs",
+        },
+        false,
+      );
       const withBundlesCount = Object.keys(withBundles.findResources("AWS::S3::Bucket")).length;
 
       // #1420 Phase 3b: declaring a coordination bundle adds exactly one bucket

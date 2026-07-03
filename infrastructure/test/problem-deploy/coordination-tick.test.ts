@@ -55,6 +55,21 @@ describe("coordination scoring tick (#2324)", () => {
     expect(put?.input.Item).toMatchObject({ state: { closed: true }, version: 5 });
   });
 
+  it("should initialize a missing coordination row at version zero", async () => {
+    const { send, store } = fakeStore({});
+
+    await expect(
+      tickCoordinationState(async () => ({ default: plugin }), store, {
+        ...input,
+        eventNowMs: 1_000,
+      }),
+    ).resolves.toEqual({ kind: "updated" });
+
+    const put = send.mock.calls.map((call) => call[0]).find((value) => value instanceof PutCommand);
+    expect(put?.input.Item).toMatchObject({ state: { closed: true }, version: 1 });
+    expect(put?.input.ConditionExpression).toContain("attribute_not_exists");
+  });
+
   it("should not write when runTick returns the existing state", async () => {
     const { send, store } = fakeStore({ state: { closed: false }, version: 2 });
 
