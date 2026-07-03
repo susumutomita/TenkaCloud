@@ -349,7 +349,7 @@ describe("buildTerminalLog — branch coverage", () => {
     const deployment = { ...baseDeployment, status: "PENDING" as DeploymentStatus };
     const phases = derivePhases(deployment, null);
     const lines = buildTerminalLog(deployment, null, phases);
-    expect(lines.some((l) => l.text.includes("CodeBuild console URL not yet available"))).toBe(
+    expect(lines.some((l) => l.text.includes("CloudFormation console URL not yet available"))).toBe(
       true,
     );
     expect(lines.some((l) => l.text.includes("No CloudFormation events observed yet."))).toBe(true);
@@ -393,7 +393,7 @@ describe("buildTerminalLog", () => {
     expect(lines.some((l) => l.text.includes("MyBucket"))).toBe(true);
   });
 
-  it("should show CodeBuild console link inside Building phase when consoleUrl is present", () => {
+  it("should show CloudFormation console link inside Building phase when consoleUrl is present", () => {
     const phases = derivePhases(
       { ...baseDeployment, status: "IN_PROGRESS" },
       progressWithCreateInProgress,
@@ -403,6 +403,6 @@ describe("buildTerminalLog", () => {
       progressWithCreateInProgress,
       phases,
     );
-    expect(lines.some((l) => l.text.includes("CodeBuild console:"))).toBe(true);
+    expect(lines.some((l) => l.text.includes("CloudFormation console:"))).toBe(true);
   });
 });
