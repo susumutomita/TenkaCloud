@@ -3,7 +3,7 @@ import { Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 import { ObservabilityStack } from "../../lib/observability/cloudwatch-dashboard-stack";
 
-function synthDefault(): Template {
+function synthDefault(cfnDeploy?: string): Template {
   const app = new cdk.App();
   const stack = new ObservabilityStack(app, "ObservabilityStack", {
     environment: "test",
@@ -31,6 +31,8 @@ function synthDefault(): Template {
       competitorAccounts: "competitor-accounts",
       externalIdAudit: "external-id-audit",
       genericScoring: "generic-scoring",
+      // Issue #2291: Lambda deploy path (CfnDeploy). Present only when deployViaLambda is ON.
+      ...(cfnDeploy ? { cfnDeploy } : {}),
     },
     apiGateways: {
       controlPlane: {
@@ -68,6 +70,24 @@ function dashboardBody(template: Template): string {
     Properties?: { DashboardBody?: unknown };
   };
   return JSON.stringify(dashboard.Properties?.DashboardBody);
+}
+
+function widgetCount(template: Template): number {
+  const dashboards = template.findResources("AWS::CloudWatch::Dashboard");
+  const dashboard = Object.values(dashboards)[0] as {
+    Properties?: { DashboardBody?: unknown };
+  };
+  const bodyValue = dashboard.Properties?.DashboardBody;
+  // DashboardBody is an `Fn::Join` (region/account tokens are interpolated into the JSON string).
+  // Reconstruct the JSON by concatenating the literal parts and substituting tokens with a
+  // placeholder so the result stays valid JSON, then count the `widgets` array length.
+  const bodyString =
+    typeof bodyValue === "string"
+      ? bodyValue
+      : ((bodyValue as { "Fn::Join"?: [string, unknown[]] })["Fn::Join"]?.[1] ?? [])
+          .map((part) => (typeof part === "string" ? part : "TOKEN"))
+          .join("");
+  return (JSON.parse(bodyString) as { widgets: unknown[] }).widgets.length;
 }
 
 describe("ObservabilityStack", () => {
@@ -112,5 +132,26 @@ describe("ObservabilityStack", () => {
     ]) {
       expect(body).toContain(expected);
     }
+  });
+
+  it("should add a CfnDeploy Lambda widget to the dashboard when the function name is provided", () => {
+    const withCfnDeploy = synthDefault("cfn-deploy");
+    const body = dashboardBody(withCfnDeploy);
+
+    // The Lambda-path deploy widget carries its own title and plots the CfnDeploy function.
+    expect(body).toContain("Deploy chain - Lambda (CfnDeploy)");
+    // AWS/Lambda metrics render as [namespace, metricName, "FunctionName", <name>, ...] in the body.
+    expect(body).toContain("FunctionName");
+    expect(body).toContain("cfn-deploy");
+    // One extra widget (row) is appended relative to the default (flag-off) dashboard.
+    expect(widgetCount(withCfnDeploy)).toBe(widgetCount(tpl) + 1);
+  });
+
+  it("should NOT add the CfnDeploy Lambda widget when the name is absent", () => {
+    const body = dashboardBody(tpl);
+
+    // Default-safe: flag-off leaves the dashboard byte-identical (no Lambda-path deploy widget).
+    expect(body).not.toContain("Deploy chain - Lambda (CfnDeploy)");
+    expect(widgetCount(tpl)).toBe(8);
   });
 });

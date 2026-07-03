@@ -262,6 +262,13 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   /** Problem deploy CodeBuild project name for CloudWatch metrics. */
   public readonly deployCodeBuildProjectName: string;
   /**
+   * Issue #2291 (ADR-049 §9): Lambda deploy path (`CfnDeployLambda`) function name for the
+   * ObservabilityStack dashboard. Present only when `deployViaLambda` is ON (the Lambda is created
+   * only then). `undefined` on the default CodeBuild path (flag OFF) → the dashboard adds no
+   * CfnDeploy widget (default-safe / byte-identical).
+   */
+  public readonly cfnDeployLambdaName?: string;
+  /**
    * Issue #910 (#895 Phase 2.C): bulk batch deploy 用 Distributed Map State Machine ARN。
    * 後続 PR (= 2.C.2.b) で API Lambda が `StartExecution` で起動する。
    */
@@ -461,6 +468,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       deployViaLambda: props.deployViaLambda,
     });
     this.deployCodeBuildProjectName = deployPipeline.deployCodeBuildProjectName;
+    // Issue #2291: undefined on the default CodeBuild path (flag OFF) → ObservabilityStack skips the
+    // CfnDeploy Lambda widget (= default-safe, dashboard body byte-identical).
+    this.cfnDeployLambdaName = deployPipeline.cfnDeployLambdaName;
     this.deployCreateStateMachineArn = deployPipeline.deployCreateStateMachineArn;
     this.deployDeleteStateMachineArn = deployPipeline.deployDeleteStateMachineArn;
     // outputs: handler refactor (= 2.C.2.b) で API Lambda が PutObject に使う。

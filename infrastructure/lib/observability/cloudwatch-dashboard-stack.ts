@@ -35,6 +35,13 @@ export interface ObservabilityStackProps extends cdk.StackProps {
     readonly competitorAccounts: string;
     readonly externalIdAudit: string;
     readonly genericScoring: string;
+    /**
+     * Issue #2291 (ADR-049 §9): Lambda deploy path の `CfnDeployLambda` 関数名。
+     * `deployViaLambda` ON のときだけ `buildDeployPipeline` が Lambda を生成するため、その名前を
+     * cross-stack ref で受け取る。undefined (= flag OFF / CodeBuild 経路) のときは Lambda-path 用
+     * widget を dashboard に足さない (= default-safe、 dashboard body byte 互換)。
+     */
+    readonly cfnDeploy?: string;
   };
   readonly apiGateways: {
     readonly controlPlane: ApiGatewayMetricTarget;
@@ -86,6 +93,15 @@ export class ObservabilityStack extends cdk.Stack {
     dashboard.addWidgets(this.ddbCapacityWidget(props), this.ddbThrottleWidget(props));
     dashboard.addWidgets(this.lambdaCriticalWidget(props), this.lambdaHelperWidget(props));
     dashboard.addWidgets(this.apiGatewayTrafficWidget(props), this.apiGatewayLatencyWidget(props));
+
+    // Issue #2291 (ADR-049 §9): Lambda deploy path (`CfnDeployLambda`) の可視化。CodeBuild widget と
+    // parity になる Invocations / Errors / Duration / Throttles を出す。`deployViaLambda` ON のときだけ
+    // 関数名が渡ってくるので、それを条件に widget を append する。flag OFF では addWidgets を呼ばず、
+    // dashboard body は従来と byte 互換 (= default-safe)。
+    const cfnDeployFunctionName = props.lambdaFunctionNames.cfnDeploy;
+    if (cfnDeployFunctionName) {
+      dashboard.addWidgets(this.deployLambdaWidget(cfnDeployFunctionName));
+    }
 
     new cdk.CfnOutput(this, "DashboardNameOutput", {
       value: dashboardName,
@@ -178,6 +194,28 @@ export class ObservabilityStack extends cdk.Stack {
       ),
       leftYAxis: { label: "builds", min: 0 },
       rightYAxis: { label: "seconds", min: 0 },
+    });
+  }
+
+  /**
+   * Issue #2291 (ADR-049 §9): Lambda deploy path (`CfnDeployLambda`) の metrics widget。
+   * CodeBuild widget と parity になるよう、deploy を実行する Lambda の Invocations / Errors /
+   * Throttles (count 軸) と Duration p99 (ms 軸) を出す。呼び出し元が `cfnDeploy` 名の有無を
+   * 判定してから呼ぶため、ここでは名前が存在する前提 (= flag OFF では呼ばれない)。
+   */
+  private deployLambdaWidget(functionName: string): cloudwatch.GraphWidget {
+    return new cloudwatch.GraphWidget({
+      title: "Deploy chain - Lambda (CfnDeploy)",
+      width: 12,
+      height: 6,
+      left: [
+        this.lambdaMetric("Invocations", functionName, "CfnDeploy invocations"),
+        this.lambdaMetric("Errors", functionName, "CfnDeploy errors"),
+        this.lambdaMetric("Throttles", functionName, "CfnDeploy throttles"),
+      ],
+      right: [this.lambdaMetric("Duration", functionName, "CfnDeploy p99", "p99")],
+      leftYAxis: { label: "count", min: 0 },
+      rightYAxis: { label: "milliseconds", min: 0 },
     });
   }
 
