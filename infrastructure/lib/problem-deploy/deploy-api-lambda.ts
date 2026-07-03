@@ -7,6 +7,7 @@ import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { grantChallengePayloadRead } from "../utils/iam-helpers.js";
+import { auditLogEnabledEnv } from "./audit-log-env.js";
 import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-credential-store.js";
@@ -61,6 +62,12 @@ export interface DeployApiLambdaProps {
    */
   readonly adminAuditLogTable?: Table;
   /**
+   * Issue #2311: 監査ログ feature flag。false で env `AUDIT_LOG_ENABLED="false"` を注入し
+   * `writeAuditEvent` を no-op 化する (= 書き込みコスト節約)。default (undefined/true) は env を
+   * 足さず従来どおり (byte 互換)。
+   */
+  readonly auditLogEnabled?: boolean;
+  /**
    * #1766: tier 別の同時デプロイ上限。指定時は `DEPLOY_QUOTA_BY_TIER` env (JSON) を注入し、
    * handler が deploy 受付時に enforce する (超過 = 429)。未指定はクォータ無効 (空文字 env)。
    */
@@ -113,6 +120,8 @@ export class DeployApiLambda extends Construct {
         CHALLENGE_PAYLOAD_BUCKET: props.challengePayloadBucketName ?? "",
         // Issue #950: audit log table 名 (未配線なら空文字、 handler の writeAuditEvent が no-op)
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
+        // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
+        ...auditLogEnabledEnv(props.auditLogEnabled),
         // #1766: tier 別同時デプロイ上限 (未配線なら空文字 = クォータ無効)
         DEPLOY_QUOTA_BY_TIER: props.deployQuotaByTier
           ? JSON.stringify(props.deployQuotaByTier)

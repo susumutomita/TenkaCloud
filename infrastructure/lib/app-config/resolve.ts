@@ -73,6 +73,9 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   // production — the DistributedMap branch was permanently unreachable
   // outside tests. Default false preserves the existing legacy fan-out.
   const useBulkDistributedMap = env.CDK_PARAM_BULK_DEPLOY_VIA_DISTRIBUTED_MAP === "true";
+  // Issue #2311: 監査ログ出力の on/off。default true (未設定 / "true" は従来どおり出力 →
+  // リグレッションなし)。明示 "false" のときだけ監査 Lambda 群を no-op 化する。
+  const auditLogEnabled = env.CDK_PARAM_AUDIT_LOG_ENABLED !== "false";
   const features = resolveFeatures(env);
 
   // Issue #1031: 旧 `CDK_PARAM_ADMIN_CONSOLE_ORIGIN` env 直読みは廃止。 admin-console-hosting
@@ -125,6 +128,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     deployConcurrentBuildLimit,
     deployQuotaByTier,
     useBulkDistributedMap,
+    auditLogEnabled,
     features,
     controlPlaneSamlIdps,
     controlPlaneSamlAdminAllowlist,

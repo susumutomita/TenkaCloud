@@ -56,6 +56,22 @@ export function resolveAuditRetentionDays(): number {
 /** SOC2 enterprise default. Re-exported for CDK tests and ADR alignment. */
 export const SOC2_AUDIT_RETENTION_DAYS = ENTERPRISE_AUDIT_TTL_DAYS;
 
+/**
+ * Issue #2311 (ADR-049 cost-zero): 監査ログ出力の on/off を deploy 時に切り替える feature flag。
+ *
+ * 監査行 1 write = `DynamoDbLowCapacity` で 1 WCU に固定された table への 1 write であり、
+ * organizer にとっては書き込みコスト (WCU 予算 / burst credit) とのトレードオフになる。監査が
+ * 不要なイベントでは出力を止めてコストを節約できるようにする。
+ *
+ * env `AUDIT_LOG_ENABLED` が明示的に `"false"` のときだけ無効化する (= **default on**、未設定 /
+ * `"true"` は従来どおり書き込む → 旧挙動互換でリグレッションなし)。全ての監査書き込みは
+ * `writeAuditEvent` を通る (admin 操作 / SBT onboarding / Cognito sign-in の各 Lambda 含む) ため、
+ * ここ 1 箇所の gate で全経路をカバーする。
+ */
+export function isAuditLoggingEnabled(): boolean {
+  return process.env.AUDIT_LOG_ENABLED !== "false";
+}
+
 export type AuditOutcome = "success" | "forbidden" | "not_found" | "conflict" | "error";
 
 export interface AuditEvent {
@@ -107,6 +123,8 @@ export async function writeAuditEvent(
   event: AuditEvent,
   client: AuditClient = documentClient,
 ): Promise<boolean> {
+  // Issue #2311: feature flag で無効化されていれば table 配線に関係なく no-op。
+  if (!isAuditLoggingEnabled()) return false;
   const cfg = getEnv();
   if (!cfg) return false;
   const occurredAt = new Date(event.occurredAtMs).toISOString();

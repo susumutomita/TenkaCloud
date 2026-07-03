@@ -64,6 +64,12 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
    */
   readonly auditRetentionDays?: number;
   /**
+   * Issue #2311: 監査ログ feature flag。false のとき admin-insight / sign-in-audit Lambda 群へ
+   * `AUDIT_LOG_ENABLED="false"` を注入し監査書き込みを no-op 化する (= 書き込みコスト節約)。
+   * default (undefined/true) は従来どおり。
+   */
+  readonly auditLogEnabled?: boolean;
+  /**
    * Issue #1431: in-console cost visibility。 `CostBudget` が作る月次予算名
    * (= `tenkacloud-<env>-monthly-cost`)。 budget は `monthlyCostLimitUsd > 0` の環境でのみ作られるため、
    * その時だけ渡す。 指定時は admin-insight Lambda が AWS Budgets `DescribeBudget` (無料) で消化率を返す。
@@ -130,6 +136,8 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       ...(props.auditRetentionDays !== undefined
         ? { auditRetentionDays: props.auditRetentionDays }
         : {}),
+      // Issue #2311: 監査ログ feature flag。
+      auditLogEnabled: props.auditLogEnabled,
       // Issue #1431: cost panel。 budget が配線された環境でのみ DescribeBudget を許可する。
       // accountId は Stack の account (= deploy 時に解決される token / 具体値) を使い、
       // wire.ts に account を二重配線しない。
@@ -267,6 +275,8 @@ export class AdminConsoleInsightStack extends cdk.Stack {
         userPoolId: props.cognitoUserPool.userPoolId,
         adminAuditLogTable: props.adminAuditLogTable,
         environmentName: props.environmentName,
+        // Issue #2311: 監査ログ feature flag。
+        auditLogEnabled: props.auditLogEnabled,
         // Phase 1 は tenantId 未指定 → handler が SYSTEM にフォールバック (= 既存挙動)。
       });
     }
@@ -284,6 +294,8 @@ export class AdminConsoleInsightStack extends cdk.Stack {
           adminAuditLogTable: props.adminAuditLogTable,
           environmentName: props.environmentName,
           auditTenantId: tenant.tenantId,
+          // Issue #2311: 監査ログ feature flag。
+          auditLogEnabled: props.auditLogEnabled,
         });
       }
     }

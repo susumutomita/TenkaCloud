@@ -100,6 +100,13 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    */
   readonly useBulkDistributedMap?: boolean;
   /**
+   * Issue #2311 (ADR-049 cost-zero): 監査ログ出力を on/off する。default (未指定 / true) は
+   * 従来どおり監査 Lambda 群 (deploy-api / event-api / competitor-accounts-api /
+   * system-audit-writer) が `writeAuditEvent` する。false のとき各 Lambda env に
+   * `AUDIT_LOG_ENABLED="false"` を注入し no-op 化する (= 書き込みコスト節約)。
+   */
+  readonly auditLogEnabled?: boolean;
+  /**
    * ADR-008 Phase 3 (Issue #642): `problemId → "private"` の map。
    * `discoverProblemsVisibility` で metadata.json から自動収集。 空 map なら全 public 扱い (dormant)。
    */
@@ -301,6 +308,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       eventBus,
       adminAuditLogTable: adminAuditLog.table,
       environmentName: props.environmentName,
+      // Issue #2311: 監査ログ feature flag (off で writeAuditEvent が no-op)。
+      auditLogEnabled: props.auditLogEnabled,
     });
 
     // tenant API から invoke される Lambda。validation + DDB Put + EventBridge PutEvents のみ。
@@ -322,6 +331,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       environmentName: props.environmentName,
       // Issue #950 (ADR-020 Phase D): admin audit log を write
       adminAuditLogTable: adminAuditLog.table,
+      // Issue #2311: 監査ログ feature flag。
+      auditLogEnabled: props.auditLogEnabled,
       // #1766: tier 別の同時デプロイ上限 (env JSON)。
       deployQuotaByTier: props.deployQuotaByTier,
       // Issue #2019 / ADR-017: TrustBridge enforcement mode (undefined → lambda
@@ -371,6 +382,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       useBulkDistributedMap: props.useBulkDistributedMap ?? false,
       // Issue #950
       adminAuditLogTable: adminAuditLog.table,
+      // Issue #2311: 監査ログ feature flag。
+      auditLogEnabled: props.auditLogEnabled,
     });
     this.eventApiLambda = eventApi.fn;
 
@@ -392,6 +405,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       environmentName: props.environmentName,
       // Issue #950
       adminAuditLogTable: adminAuditLog.table,
+      // Issue #2311: 監査ログ feature flag。
+      auditLogEnabled: props.auditLogEnabled,
     });
     this.competitorAccountsApiLambda = competitorAccountsApi.fn;
 

@@ -4,6 +4,7 @@ import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
+import { auditLogEnabledEnv } from "../problem-deploy/audit-log-env.js";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 
 export interface AdminInsightApiLambdaProps {
@@ -42,6 +43,10 @@ export interface AdminInsightApiLambdaProps {
    * 未指定なら handler default の 90 日 (= OSS / self-hosted)。
    */
   readonly auditRetentionDays?: number;
+  /**
+   * Issue #2311: 監査ログ feature flag。false で `AUDIT_LOG_ENABLED="false"` を注入し no-op 化。
+   */
+  readonly auditLogEnabled?: boolean;
   /**
    * Issue #1431: in-console cost visibility。 `CostBudget` が作る月次予算名 (= `<prefix>-monthly-cost`)。
    * 指定時は handler が AWS Budgets `DescribeBudget` (無料) で消化率を返す。 未指定なら
@@ -89,6 +94,8 @@ export class AdminInsightApiLambda extends Construct {
         DEPROVISIONING_STATE_MACHINE_ARN: props.deprovisioningStateMachineArn ?? "",
         // Issue #950 (ADR-020 Phase D): admin audit log table 名 (= read-only 経由で表示)
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
+        // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
+        ...auditLogEnabledEnv(props.auditLogEnabled),
         ...(props.auditRetentionDays !== undefined
           ? { AUDIT_RETENTION_DAYS: String(props.auditRetentionDays) }
           : {}),

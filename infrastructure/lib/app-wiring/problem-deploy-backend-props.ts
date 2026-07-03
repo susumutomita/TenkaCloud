@@ -41,6 +41,8 @@ export function buildProblemDeployBackendBaseProps(config: AppConfig) {
     deployConcurrentBuildLimit: config.deployConcurrentBuildLimit,
     // Issue #2232: was permanently unreachable in production (no CDK_PARAM_* wired it true).
     useBulkDistributedMap: config.useBulkDistributedMap,
+    // Issue #2311: 監査ログ出力の on/off。両モードで同一挙動にするため base props に集約。
+    auditLogEnabled: config.auditLogEnabled,
     environmentName: config.environment,
   } as const;
 }
