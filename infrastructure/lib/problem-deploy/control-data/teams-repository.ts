@@ -4,7 +4,13 @@ import { SqlTeamsRepository } from "./sql-teams-repository.js";
 import type { SqlExecutor, TeamsRepository } from "./types.js";
 
 export { DynamoDbTeamsRepository } from "./dynamodb-teams-repository.js";
-export { hashLoginKey, SqlTeamsRepository, TEAMS_SCHEMA_SQL } from "./sql-teams-repository.js";
+export {
+  hashLoginKey,
+  SqlTeamsRepository,
+  TEAM_LOGIN_KEY_SCRUB_MIGRATION_ID,
+  TEAM_LOGIN_KEY_SCRUB_SQL,
+  TEAMS_SCHEMA_SQL,
+} from "./sql-teams-repository.js";
 export type {
   ControlDataBackend,
   SqlExecutor,

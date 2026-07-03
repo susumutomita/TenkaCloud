@@ -63,6 +63,7 @@ function recordToItem(record: TeamRecord): TeamItem {
     GSI1PK: `TENANT#${record.tenantId}`,
     GSI1SK: `EVENT#${record.eventId}#TEAM#${record.teamId}`,
     ...record,
+    teamLoginKey: record.teamLoginKey ?? "",
   };
   if (record.teamLoginKey) {
     base.GSI2PK = `TEAMKEY#${record.teamLoginKey}`;
@@ -137,6 +138,15 @@ export class DynamoDbTeamsRepository implements TeamsRepository {
 
   async putTeam(record: TeamRecord): Promise<void> {
     await this.ddb.send(new PutCommand({ TableName: this.tableName, Item: recordToItem(record) }));
+  }
+
+  async deleteTeam(eventId: string, teamId: string): Promise<void> {
+    await this.ddb.send(
+      new DeleteCommand({
+        TableName: this.tableName,
+        Key: { PK: `EVENT#${eventId}`, SK: `${TEAM_SK_PREFIX}${teamId}` },
+      }),
+    );
   }
 
   async pruneExpired(nowEpochSeconds: number): Promise<number> {

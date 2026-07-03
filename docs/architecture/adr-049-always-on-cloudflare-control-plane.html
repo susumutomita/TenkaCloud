@@ -506,17 +506,21 @@
       aggregate-scoped repository interfaces — domain methods, not a generic key-value shim — so each
       backend implements them idiomatically:
     </p>
-    <pre><code>// packages/control-data (new workspace package)
+    <pre><code>// infrastructure/lib/problem-deploy/control-data
 export interface EventsRepository {
-  getEvent(tenantId: string, eventId: string): Promise&lt;EventRecord | null&gt;;
-  listEvents(tenantId: string, cursor?: string): Promise&lt;Page&lt;EventRecord&gt;&gt;;
+  getEvent(tenantId: string, eventId: string): Promise&lt;EventRecord | undefined&gt;;
+  listEventsByTenant(tenantId: string): Promise&lt;readonly EventRecord[]&gt;;
   putEvent(record: EventRecord): Promise&lt;void&gt;;
-  transitionStatus(eventId: string, from: EventStatus, to: EventStatus): Promise&lt;boolean&gt;;
+  deleteEvent(eventId: string): Promise&lt;void&gt;;
+  pruneExpired(nowEpochSeconds: number): Promise&lt;number&gt;;
 }
 export interface TeamsRepository {
-  putTeam(record: TeamRecord): Promise&lt;void&gt;;                 // stores loginKeyHash, never plaintext
-  findTeamByLoginKeyHash(hash: string): Promise&lt;TeamRecord | null&gt;;
-  listTeams(eventId: string): Promise&lt;readonly TeamRecord[]&gt;;
+  getTeam(tenantId: string, eventId: string, teamId: string): Promise&lt;TeamRecord | undefined&gt;;
+  getTeamByLoginKey(loginKey: string): Promise&lt;TeamRecord | undefined&gt;; // SQL hashes internally
+  listTeamsByEvent(eventId: string): Promise&lt;readonly TeamRecord[]&gt;;
+  putTeam(record: TeamRecord): Promise&lt;void&gt;;
+  deleteTeam(eventId: string, teamId: string): Promise&lt;void&gt;;
+  pruneExpired(nowEpochSeconds: number): Promise&lt;number&gt;;
 }
 // implementations:
 //   DynamoDbEventsRepository / DynamoDbTeamsRepository  — extraction of today's code, default
@@ -528,6 +532,15 @@ export interface TeamsRepository {
       enough for one PR wave, load-bearing enough to prove the model (team lookup is on the participant
       hot path). Deployments, ProblemEndpoints, and Disruptions are explicitly <em>not</em> abstracted:
       they are event-runtime data and stay DynamoDB (Table 4).
+    </p>
+    <p>
+      During Phase 1, <code>CONTROL_DATA_BACKEND=turso|sql</code> selects a
+      <strong>DynamoDB-primary mirrored repository</strong>. Upserts commit to DynamoDB before SQL;
+      deletes and TTL pruning remove SQL before DynamoDB; reads reconcile missing, stale, and orphaned
+      SQL rows before returning the SQL result. This ordering makes the rollback contract structural:
+      switching the flag to <code>dynamodb</code> never loses a Turso-only write. Once production
+      parity and latency are proven, a later cutover can remove the canonical read without changing
+      handler-facing interfaces.
     </p>
 
     <h3>5.2 Why SQLite as the contract, and why Turso first</h3>
@@ -597,6 +610,18 @@ export interface TeamsRepository {
       interval). Raw score events (the per-tick audit timeline) never leave the event-runtime DynamoDB
       table; they are exported to flat storage at event archive time. This drops event-day control-store
       reads to &lt;1M rows and makes both hosts comfortable.
+    </p>
+    <p>
+      <strong>Phase-1 quota validation (2026-07-04):</strong> the executable model in
+      <code>control-data/quota-model.ts</code> uses a conservative 300-participant, 24-hour event with
+      one snapshot read per participant every 30 seconds, 25,000 changed-team summary writes, and one
+      snapshot replacement every 30 seconds. That is <strong>864,000 row reads</strong> and
+      <strong>27,880 row writes</strong> (25,000 summaries + 2,880 snapshots): 0.1728% of the current
+      500M monthly read allowance and 0.2788% of the 10M monthly write allowance. The constants are
+      pinned by unit tests and were rechecked against the
+      <a href="https://turso.tech/pricing">official Turso pricing page</a>; Turso's
+      <a href="https://docs.turso.tech/help/usage-and-billing">usage definition</a> counts scanned and
+      updated rows, so the model is intentionally expressed in rows rather than requests.
     </p>
 
     <h2>6. One-time AWS Console access: keep the existing AWS-side issuer, drop Cognito</h2>
@@ -1018,6 +1043,10 @@ export interface TeamsRepository {
         conclusion.</li>
       <li>Turso p95 latency from Lambda ap-northeast-1 and from Workers (post-2025 diskless
         architecture has no trustworthy public benchmark) — Phase 1 measures it.</li>
+      <li><strong>Validated in Phase 1:</strong> the 300-participant event-day scoring and
+        one-row leaderboard-snapshot flow consumes 864,000 row reads and 27,880 row writes, or
+        0.1728% / 0.2788% of the current free monthly allowances. The executable quota model and
+        boundary tests fail the gate when either allowance is exceeded.</li>
       <li><strong>Validated in Phase 1:</strong> Events/Teams repository operations are single SQL
         statements, and idempotent schema bootstrap uses one atomic
         <code>client.batch(statements, "write")</code>. The production adapter never opens an

@@ -30,6 +30,8 @@ export interface EventsRepository {
   getEvent(tenantId: string, eventId: string): Promise<EventRecord | undefined>;
   /** Upsert one event row. */
   putEvent(record: EventRecord): Promise<void>;
+  /** Delete one event row by its domain identifier. */
+  deleteEvent(eventId: string): Promise<void>;
   /**
    * All events for a tenant, newest-first by `createdAt` (mirrors the DynamoDB
    * GSI1 query with `ScanIndexForward=false`).
@@ -57,7 +59,16 @@ export interface EventsRepository {
  * keys are an implementation detail of the DynamoDB backend; the SQLite backends
  * derive their own keys / columns.
  */
-export type TeamRecord = Omit<TeamItem, "PK" | "SK" | "GSI1PK" | "GSI1SK" | "GSI2PK" | "GSI2SK">;
+export type TeamRecord = Omit<
+  TeamItem,
+  "PK" | "SK" | "GSI1PK" | "GSI1SK" | "GSI2PK" | "GSI2SK" | "teamLoginKey"
+> & {
+  /**
+   * Present for DynamoDB reads and when the caller already supplied the key.
+   * SQL point/list payloads deliberately omit the plaintext bearer.
+   */
+  readonly teamLoginKey?: string;
+};
 
 /**
  * [ADR-049 §5.1] Aggregate-scoped repository for the Teams aggregate — domain
@@ -96,6 +107,8 @@ export interface TeamsRepository {
   listTeamsByEvent(eventId: string): Promise<readonly TeamRecord[]>;
   /** Upsert one team row. */
   putTeam(record: TeamRecord): Promise<void>;
+  /** Delete one team row by its event/team domain identifiers. */
+  deleteTeam(eventId: string, teamId: string): Promise<void>;
   /**
    * TTL-equivalent sweep: delete teams whose `expiresAt` (epoch seconds, `> 0`)
    * is at or before `nowEpochSeconds`, and return the number deleted. DynamoDB has
@@ -122,12 +135,9 @@ export interface SqlRunResult {
  * decoupled from any concrete client. Node's built-in `node:sqlite`
  * (`DatabaseSync`) backs it for tests and offline validation; a production
  * `@libsql/client` (Turso / self-hosted sqld) adapter — and a Cloudflare D1
- * binding adapter — map onto the same three methods.
- *
- * TODO(ADR-049 §5.2 follow-up): add the `@libsql/client` adapter (Turso) and the
- * D1 binding adapter. This is deferred deliberately — adding `@libsql/client` is
- * a supply-chain-sensitive dependency decision handled separately — so this seam
- * introduces NO new runtime dependency.
+ * binding adapter — map onto the same three methods. Production Lambda wiring
+ * uses the HTTP-only `@libsql/client` adapter in `runtime-repositories.ts`; a
+ * future Cloudflare D1 binding adapter keeps this repository contract unchanged.
  */
 export interface SqlExecutor {
   run(sql: string, params?: readonly SqlParam[]): SqlRunResult | Promise<SqlRunResult>;
