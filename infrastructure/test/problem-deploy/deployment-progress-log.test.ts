@@ -35,6 +35,27 @@ describe("buildDeploymentProgressWriter (#2291)", () => {
     expect(send.mock.calls[1][0]).toBeInstanceOf(PutLogEventsCommand);
   });
 
+  it("recognizes an already-existing stream from the error message", async () => {
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("log stream already exists"))
+      .mockResolvedValueOnce({});
+    const write = buildDeploymentProgressWriter({ send }, "/group");
+
+    await write("01HXJOB", "polling");
+
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("does nothing when no deployment log group is configured", async () => {
+    const send = vi.fn(async () => ({}));
+    const write = buildDeploymentProgressWriter({ send }, undefined);
+
+    await write("01HXJOB", "polling");
+
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("is fail-open when CloudWatch Logs rejects the write", async () => {
     const send = vi.fn(async () => {
       throw Object.assign(new Error("throttled"), { name: "ThrottlingException" });
@@ -44,6 +65,18 @@ describe("buildDeploymentProgressWriter (#2291)", () => {
       const write = buildDeploymentProgressWriter({ send }, "/group");
       await expect(write("01HXJOB", "polling")).resolves.toBeUndefined();
       expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("reports an unknown reason for non-Error logging failures", async () => {
+    const send = vi.fn(() => Promise.reject("throttled"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const write = buildDeploymentProgressWriter({ send }, "/group");
+      await write("01HXJOB", "polling");
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('"reason":"unknown"'));
     } finally {
       warn.mockRestore();
     }

@@ -832,6 +832,42 @@ describe("createStackForDeployment progress logging (#2291)", () => {
     expect(rec.messages.some((m) => m.startsWith("Deploy failed: "))).toBe(true);
   });
 
+  it("should stringify non-Error CreateStack failures in progress output", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    cfn.send.mockImplementation(async (command: unknown) => {
+      if (command instanceof CreateStackCommand) return Promise.reject("create rejected");
+      if (command instanceof DescribeStacksCommand) {
+        throw new Error("Stack with id tc-sample-flag-demo-team does not exist");
+      }
+      return {};
+    });
+    const rec = recordingProgressFactory();
+    const deps = { ...crossAccountDeps(cfn), progressFactory: rec.factory };
+
+    await expect(createStackForDeployment({ detail: validDetail() }, deps)).rejects.toBe(
+      "create rejected",
+    );
+    expect(rec.messages).toContain("Deploy failed: create rejected");
+  });
+
+  it("should report a submitted CreateStack even when AWS omits StackId", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    cfn.send.mockImplementation(async (command: unknown) => {
+      if (command instanceof CreateStackCommand) return {};
+      if (command instanceof DescribeStacksCommand) {
+        throw new Error("Stack with id tc-sample-flag-demo-team does not exist");
+      }
+      return {};
+    });
+    const rec = recordingProgressFactory();
+    const deps = { ...crossAccountDeps(cfn), progressFactory: rec.factory };
+
+    await expect(createStackForDeployment({ detail: validDetail() }, deps)).resolves.toEqual({
+      operation: "create",
+    });
+    expect(rec.messages).toContain("CreateStack submitted (stackId -)");
+  });
+
   it("should stream Update progress lines when the existing stack is healthy", async () => {
     const cfn = fakeCfn({ describeResponses: [{ status: "CREATE_COMPLETE" }], commands: [] });
     const rec = recordingProgressFactory();
@@ -868,6 +904,24 @@ describe("createStackForDeployment progress logging (#2291)", () => {
     );
     expect(rec.messages.some((m) => m.startsWith("Deploy failed: "))).toBe(true);
   });
+
+  it("should stringify non-Error UpdateStack failures in progress output", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ status: "CREATE_COMPLETE" }], commands: [] });
+    cfn.send.mockImplementation(async (command: unknown) => {
+      if (command instanceof DescribeStacksCommand) {
+        return { Stacks: [{ StackStatus: "CREATE_COMPLETE" }] };
+      }
+      if (command instanceof UpdateStackCommand) return Promise.reject("update rejected");
+      return {};
+    });
+    const rec = recordingProgressFactory();
+    const deps = { ...crossAccountDeps(cfn), progressFactory: rec.factory };
+
+    await expect(createStackForDeployment({ detail: validDetail() }, deps)).rejects.toBe(
+      "update rejected",
+    );
+    expect(rec.messages).toContain("Deploy failed: update rejected");
+  });
 });
 
 describe("createStackForDeployment same-account (#2291)", () => {
@@ -892,7 +946,7 @@ describe("createStackForDeployment same-account (#2291)", () => {
 });
 
 describe("create-stack Lambda handler configuration (#2291)", () => {
-  it("builds regional CloudFormation clients with and without assumed credentials", async () => {
+  it("should build regional CloudFormation clients with and without assumed credentials", async () => {
     const crossAccount = buildCloudFormationClient({
       region: "ap-northeast-1",
       credentials: {
@@ -911,9 +965,21 @@ describe("create-stack Lambda handler configuration (#2291)", () => {
 
     const sameAccount = buildCloudFormationClient({ region: "us-east-1" });
     expect(await sameAccount.config.region()).toBe("us-east-1");
+
+    const incomplete = buildCloudFormationClient({
+      region: "eu-west-1",
+      credentials: {
+        AccessKeyId: undefined,
+        SecretAccessKey: undefined,
+      },
+    });
+    expect(await incomplete.config.credentials()).toMatchObject({
+      accessKeyId: "",
+      secretAccessKey: "",
+    });
   });
 
-  it("fails loudly when required runtime configuration is absent", async () => {
+  it("should fail loudly when required runtime configuration is absent", async () => {
     const previous = process.env.SOURCE_BUCKET_NAME;
     delete process.env.SOURCE_BUCKET_NAME;
     try {
@@ -926,7 +992,7 @@ describe("create-stack Lambda handler configuration (#2291)", () => {
     }
   });
 
-  it("reads all required runtime configuration before validating the event", async () => {
+  it("should read all required runtime configuration before validating the event", async () => {
     const previous = {
       sourceBucket: process.env.SOURCE_BUCKET_NAME,
       sourceObject: process.env.SOURCE_OBJECT_KEY,
@@ -938,6 +1004,8 @@ describe("create-stack Lambda handler configuration (#2291)", () => {
     process.env.TENKACLOUD_ACCOUNT_ID = "123456789012";
     process.env.CFN_EXEC_ROLE_ARN = "arn:aws:iam::123456789012:role/CfnExec";
     try {
+      await expect(handler({ detail: {} })).rejects.toThrow();
+      delete process.env.CFN_EXEC_ROLE_ARN;
       await expect(handler({ detail: {} })).rejects.toThrow();
     } finally {
       for (const [name, value] of [

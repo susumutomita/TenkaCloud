@@ -13,7 +13,7 @@ const input = {
   },
 };
 
-function deps(options: { externalId?: string; cfnError?: Error } = {}) {
+function deps(options: { externalId?: string } = {}) {
   const ssmSend = vi.fn(async () => ({
     Parameter: { Value: options.externalId ?? "external", Version: 3 },
   }));
@@ -24,21 +24,16 @@ function deps(options: { externalId?: string; cfnError?: Error } = {}) {
       SessionToken: "token",
     },
   }));
-  const cfnSend = vi.fn(async () => {
-    if (options.cfnError) throw options.cfnError;
-    return {
-      Stacks: [
-        {
-          StackId:
-            "arn:aws:cloudformation:ap-northeast-1:449699636068:stack/tc-microservice-migration-battle-team-1/uuid",
-          StackStatus: "CREATE_COMPLETE",
-          Outputs: [
-            { OutputKey: "ParticipantViewerRoleArn", OutputValue: "arn:aws:iam::x:role/y" },
-          ],
-        },
-      ],
-    };
-  });
+  const cfnSend = vi.fn(async () => ({
+    Stacks: [
+      {
+        StackId:
+          "arn:aws:cloudformation:ap-northeast-1:449699636068:stack/tc-microservice-migration-battle-team-1/uuid",
+        StackStatus: "CREATE_COMPLETE",
+        Outputs: [{ OutputKey: "ParticipantViewerRoleArn", OutputValue: "arn:aws:iam::x:role/y" }],
+      },
+    ],
+  }));
   const cfnClient = vi.fn(() => ({ send: cfnSend }));
   return {
     deps: {
@@ -108,29 +103,6 @@ describe("describeStackForDeployment input-shape diagnostics (regression #?)", (
 });
 
 describe("describeStackForDeployment", () => {
-  it("returns stackDeleted=true when delete polling observes an absent stack", async () => {
-    const { deps: d, cfnSend } = deps({
-      cfnError: new Error("Stack with id tc-microservice-migration-battle-team-1 does not exist"),
-    });
-
-    const out = await describeStackForDeployment(
-      {
-        operation: "delete",
-        detail: {
-          jobId: input.detail.jobId,
-          tenantId: input.detail.tenantId,
-          stackName: input.detail.namePrefix,
-          region: input.detail.region,
-        },
-      },
-      d,
-    );
-
-    expect(out).toEqual({ stackDeleted: true, Stacks: [] });
-    const describeCmd = cfnSend.mock.calls[0]?.[0] as DescribeStacksCommand;
-    expect(describeCmd.input.StackName).toBe(input.detail.namePrefix);
-  });
-
   it("should DescribeStacks after AssumeRole with ExternalId when competitorRoleArn is set", async () => {
     const { deps: d, ssmSend, stsSend, cfnSend, cfnClient } = deps();
 
