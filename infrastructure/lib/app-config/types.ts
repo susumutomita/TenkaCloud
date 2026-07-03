@@ -110,6 +110,14 @@ export interface AppConfig {
   readonly useBulkDistributedMap: boolean;
 
   /**
+   * Issue #2291 (ADR-049 §9): DeployCreate を CodeBuild ではなく Lambda CreateStack +
+   * DescribeStacks poll 経路にするか (`CDK_PARAM_DEPLOY_VIA_LAMBDA`)。**default false**
+   * (未設定 / `"false"` は在来の CodeBuild 経路で CFn テンプレ byte 互換)。`"true"` のときだけ
+   * `CfnDeployLambda` を生成し、`DeployCreate` state machine が Lambda + poll 定義になる。
+   */
+  readonly deployViaLambda: boolean;
+
+  /**
    * Issue #2311 (ADR-049 cost-zero): 監査ログ出力を deploy 時に on/off する
    * (`CDK_PARAM_AUDIT_LOG_ENABLED`)。監査行 1 write = 1 WCU 固定 table への 1 write のため、
    * 書き込みコストとのトレードオフで organizer が停止できる。**default true** (未設定 /

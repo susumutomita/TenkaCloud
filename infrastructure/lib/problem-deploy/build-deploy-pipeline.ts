@@ -1,8 +1,10 @@
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IEventBus } from "aws-cdk-lib/aws-events";
+import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { Bucket } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
 import { BulkDeployCreateStateMachine } from "./bulk-deploy-create-state-machine.js";
+import { CfnDeployLambda } from "./cfn-deploy-lambda.js";
 import { DeployCodeBuildProject } from "./deploy-codebuild-project.js";
 import { DeployCreateStateMachine } from "./deploy-create-state-machine.js";
 import { DeployDeleteStateMachine } from "./deploy-delete-state-machine.js";
@@ -21,6 +23,12 @@ export interface BuildDeployPipelineArgs {
   readonly sourceObjectKey: string;
   readonly deployConcurrentBuildLimit?: number;
   readonly environmentName: string;
+  /**
+   * Issue #2291 (ADR-049 §9): true のとき DeployCreate を Lambda CreateStack + DescribeStacks
+   * poll 経路にし、専用 {@link CfnDeployLambda} を生成する。default (false / 未指定) は在来の
+   * CodeBuild 経路で、追加リソースなし = CFn テンプレ byte 互換。
+   */
+  readonly deployViaLambda?: boolean;
 }
 
 export interface DeployPipelineOutputs {
@@ -66,10 +74,23 @@ export function buildDeployPipeline(
     environmentName: args.environmentName,
   });
 
+  // Issue #2291: flag ON のときだけ deploy Lambda を生成する (= flag OFF の synth は
+  // CfnDeploy 構築が無く byte 互換)。CodeBuild は delete 経路が使い続けるので常に生成する。
+  let cfnDeployFunction: IFunction | undefined;
+  if (args.deployViaLambda) {
+    const cfnDeploy = new CfnDeployLambda(scope, "CfnDeploy", {
+      environmentName: args.environmentName,
+      sourceBucketName: args.sourceBucketName,
+    });
+    cfnDeployFunction = cfnDeploy.fn;
+  }
+
   const stateMachine = new DeployCreateStateMachine(scope, "DeployCreate", {
     codeBuildProject: codeBuild.project,
     describeStackFunction: describeStack.fn,
     deploymentsTable: args.deploymentsTable,
+    // flag OFF では以下 2 prop は undefined = CodeBuild 定義を生成 (在来と同一)。
+    ...(args.deployViaLambda ? { deployViaLambda: true, cfnDeployFunction } : {}),
   });
 
   // EventBridge Rule: `DeployCreateRequested` event を State Machine に流す。
