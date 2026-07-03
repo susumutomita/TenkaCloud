@@ -1,4 +1,5 @@
 import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { z } from "zod";
 import { ULID_RE as JOB_ID_RE } from "../shared/constants.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
@@ -54,33 +55,34 @@ export class InvalidRetryRequestError extends Error {
   }
 }
 
+/**
+ * Issue #2211: the request boundary is validated with Zod like every other mutating
+ * route, replacing the hand-rolled checks. The validation semantics are unchanged —
+ * a non-object body / non-array / empty / >750 / non-ULID entry all still reject, and
+ * duplicates are still removed after parse (see below). Static messages are preserved;
+ * only the dynamic `(got N)` / `(got <value>)` suffixes are dropped (they were never
+ * asserted and echoing the offending value back is unnecessary).
+ */
+const RetryRequestSchema = z.object({
+  failedJobIds: z
+    .array(z.string().regex(JOB_ID_RE, "failedJobIds must all be ULID strings"))
+    .min(1, "failedJobIds must not be empty")
+    .max(MAX_RETRY_BATCH_SIZE, `failedJobIds must not exceed ${MAX_RETRY_BATCH_SIZE} entries`),
+});
+
 export function validateRetryRequest(raw: unknown): RetryDeploymentsRequest {
-  if (!raw || typeof raw !== "object") {
-    throw new InvalidRetryRequestError("body must be a JSON object");
-  }
-  const failedJobIds = (raw as { failedJobIds?: unknown }).failedJobIds;
-  if (!Array.isArray(failedJobIds)) {
-    throw new InvalidRetryRequestError("failedJobIds must be an array of jobId strings");
-  }
-  if (failedJobIds.length === 0) {
-    throw new InvalidRetryRequestError("failedJobIds must not be empty");
-  }
-  if (failedJobIds.length > MAX_RETRY_BATCH_SIZE) {
-    throw new InvalidRetryRequestError(
-      `failedJobIds must not exceed ${MAX_RETRY_BATCH_SIZE} entries (got ${failedJobIds.length})`,
-    );
-  }
-  for (const jobId of failedJobIds) {
-    if (typeof jobId !== "string" || !JOB_ID_RE.test(jobId)) {
-      throw new InvalidRetryRequestError(
-        `failedJobIds must all be ULID strings (got ${JSON.stringify(jobId)})`,
-      );
-    }
+  const parsed = RetryRequestSchema.safeParse(raw);
+  if (!parsed.success) {
+    // Join every issue message into one string. A failed parse always carries at
+    // least one issue, so this is a plain expression with no fallback branch to leave
+    // untested (an empty array — unreachable here — would simply join to "").
+    const message = parsed.error.issues.map((issue) => issue.message).join("; ");
+    throw new InvalidRetryRequestError(message);
   }
   // dedupe しないと同じ jobId を 2 回触りに行って 2 回目が ConditionExpression で fail する
   // (= 1 回目で PENDING に戻した直後の row は FAILED でなくなる)。 caller が混入させた重複を
   // 無害化する。
-  const deduped = Array.from(new Set(failedJobIds as readonly string[]));
+  const deduped = Array.from(new Set(parsed.data.failedJobIds));
   return { failedJobIds: deduped };
 }
 
