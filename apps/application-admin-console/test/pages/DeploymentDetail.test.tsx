@@ -248,7 +248,7 @@ describe("DeploymentDetailPage (Netlify-style phase + log view)", () => {
     expect(within(terminalLog).getByText(/CREATE_IN_PROGRESS MyBucket/)).toBeInTheDocument();
   });
 
-  it("should show CodeBuild console link inside Building phase when consoleUrl is present", async () => {
+  it("should show CloudFormation console link inside Building phase when consoleUrl is present", async () => {
     mocks.getDeployment.mockResolvedValue({ ...baseDeployment, status: "IN_PROGRESS" });
     mocks.getStackProgress.mockResolvedValue({
       ...emptyProgress,
@@ -259,7 +259,7 @@ describe("DeploymentDetailPage (Netlify-style phase + log view)", () => {
 
     // ExpandableSection の body は collapsed でも DOM には存在する (Cloudscape spec)。
     // Building phase body 内の link を text で拾う。
-    expect(screen.getByText(/Open CodeBuild \/ CloudFormation logs/)).toBeInTheDocument();
+    expect(screen.getByText(/Open CloudFormation logs/)).toBeInTheDocument();
   });
 
   it("should show an invalid-job-id alert for a malformed jobId (no fetch)", () => {

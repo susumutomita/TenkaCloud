@@ -249,9 +249,12 @@ function enqueuedPhaseLines(deployment: DeploymentSummary): LogLine[] {
 
 function buildingPhaseLines(stackProgress: StackProgress | null): LogLine[] {
   return [
+    // `consoleUrl` is a CloudFormation console deep link (backend `buildCfnConsoleUrl`), not a
+    // CodeBuild one — the label mislabeled it "CodeBuild" on every deploy (CodeBuild + Lambda
+    // paths alike). #2291: name it for what it links to.
     stackProgress?.consoleUrl
-      ? { header: false, text: `CodeBuild console: ${stackProgress.consoleUrl}` }
-      : { header: false, text: "CodeBuild console URL not yet available" },
+      ? { header: false, text: `CloudFormation console: ${stackProgress.consoleUrl}` }
+      : { header: false, text: "CloudFormation console URL not yet available" },
   ];
 }
 
