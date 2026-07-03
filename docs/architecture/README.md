@@ -38,8 +38,9 @@ following are known and intentionally out of scope for that issue's first pass:
   documented — read the referencing code's own comments for the current understanding, and
   consider drafting the ADR (or filing a follow-up issue) instead of adding another dangling
   reference.
-- **ADR-028** (coordination) — deliberately deferred until Issue #2195's decision lands; draft it
-  alongside that issue, not before.
+- **ADR-028** (inter-team coordination) — **Accepted**, drafted at
+  [`adr-028-inter-team-coordination.html`](./adr-028-inter-team-coordination.html) alongside Issue
+  #2195's decision to adopt the coordination plugin contract.
 
 ## Adding a new ADR
 
