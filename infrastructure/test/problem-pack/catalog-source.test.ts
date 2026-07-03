@@ -286,3 +286,124 @@ describe("SnapshotCatalogSource (#2092)", () => {
     expect(snapshot).toEqual(local);
   });
 });
+
+/**
+ * [#2323] Coordination ACTIVATION through the snapshot adapter.
+ *
+ * ADR-028 packs may declare `interTeamCoordination.plugin`. Before #2323 the snapshot
+ * adapter propagated only the pack's catalog directory map, so an installed coordination
+ * pack was inert — its `coordination` / `coordinationBundles` projections never reached the
+ * effective bundle (and therefore never reached the dispatcher). These tests pin that a pack
+ * whose problem carries a `coordination` projection + a bundled `.mjs` now flows both onto the
+ * bundle, while a core-only / non-coordination load stays byte-identical (NO-OP) and the
+ * compose fail-closed guarantees (duplicate id / unavailable runtime) still throw.
+ */
+const COORDINATION_BUNDLE_MJS = "export default { reduce: (state) => state };";
+
+function coordinationPackSnapshot(options?: { readonly withBundle?: boolean }) {
+  const withBundle = options?.withBundle ?? true;
+  return {
+    manifest: {
+      schemaVersion: 1 as const,
+      id: "com.example.coordination-pack",
+      version: "1.0.0",
+      core: "^1.0.0",
+      title: "Coordination pack",
+      description: "Declares an inter-team coordination plugin (ADR-028).",
+      license: "Apache-2.0",
+      problemsRoot: "problems",
+      requiredRuntimes: [{ provider: "aws" as const, engine: "cloudformation" as const }],
+    },
+    contentDigest: "c".repeat(64),
+    problems: [
+      {
+        problemId: "sector-control",
+        directory: "problems/battles/sector-control",
+        projections: {
+          coordination: { plugin: "coordination/sector-control.ts" },
+          ...(withBundle ? { coordinationBundle: COORDINATION_BUNDLE_MJS } : {}),
+        },
+      },
+    ],
+  };
+}
+
+describe("SnapshotCatalogSource coordination activation (#2323)", () => {
+  it("should propagate a pack's coordination plugin and bundle into the effective bundle", () => {
+    writeRepresentativeCatalog();
+
+    const bundle = new SnapshotCatalogSource({
+      snapshots: [coordinationPackSnapshot()],
+    }).loadBundle(root);
+
+    // The pack's coordination declaration reaches `coordination` (→ dispatcher scope resolver).
+    expect((bundle.coordination as Record<string, unknown>)["sector-control"]).toEqual({
+      plugin: "coordination/sector-control.ts",
+    });
+    // The synth-bundled `.mjs` reaches `coordinationBundles` (→ CoordinationPluginBundle S3).
+    expect((bundle.coordinationBundles as Record<string, string>)["sector-control"]).toBe(
+      COORDINATION_BUNDLE_MJS,
+    );
+    // The pack problem is also additive in the catalog directory map (unchanged behavior).
+    expect((bundle.catalog as Record<string, string>)["sector-control"]).toBe(
+      "problems/battles/sector-control",
+    );
+  });
+
+  it("should keep core coordination byte-identical when no pack declares coordination", () => {
+    writeRepresentativeCatalog();
+    const core = new LocalCatalogSource().loadBundle(root);
+
+    // A pack that adds a NON-coordination problem must not perturb the coordination maps.
+    const bundle = new SnapshotCatalogSource({
+      snapshots: [
+        {
+          manifest: {
+            schemaVersion: 1,
+            id: "com.example.plain-pack",
+            version: "1.0.0",
+            core: "^1.0.0",
+            title: "Plain pack",
+            description: "Adds a problem with no coordination.",
+            license: "Apache-2.0",
+            problemsRoot: "problems",
+            requiredRuntimes: [{ provider: "aws", engine: "cloudformation" }],
+          },
+          contentDigest: "d".repeat(64),
+          problems: [
+            { problemId: "plain", directory: "problems/challenges/plain", projections: {} },
+          ],
+        },
+      ],
+    }).loadBundle(root);
+
+    expect(bundle.coordination).toEqual(core.coordination);
+    expect(bundle.coordinationBundles).toEqual(core.coordinationBundles);
+  });
+
+  it("should carry the plugin declaration even when the pack ships no bundle", () => {
+    writeRepresentativeCatalog();
+
+    const bundle = new SnapshotCatalogSource({
+      snapshots: [coordinationPackSnapshot({ withBundle: false })],
+    }).loadBundle(root);
+
+    // Declaration flows; the (absent) bundle simply contributes no `coordinationBundles` key.
+    expect((bundle.coordination as Record<string, unknown>)["sector-control"]).toEqual({
+      plugin: "coordination/sector-control.ts",
+    });
+    expect(bundle.coordinationBundles).toEqual({});
+  });
+
+  it("should fail closed when a coordination pack's required runtime is unavailable", () => {
+    writeRepresentativeCatalog();
+
+    const source = new SnapshotCatalogSource({
+      snapshots: [coordinationPackSnapshot()],
+      // Platform offers no runtime, so the pack's aws/cloudformation requirement is unmet.
+      platform: { availableRuntimes: [] },
+    });
+
+    expect(() => source.loadBundle(root)).toThrow(/RUNTIME_UNAVAILABLE/);
+  });
+});

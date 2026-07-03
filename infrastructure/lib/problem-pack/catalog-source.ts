@@ -156,16 +156,50 @@ export class SnapshotCatalogSource implements CatalogSource {
       throw new Error(`[SnapshotCatalogSource] ${result.reason}: ${result.message}`);
     }
 
-    // Legacy core projections flow through UNCHANGED. Pack problems are additive:
-    // they extend the catalog directory map only; scoring / endpoints / etc. for a
-    // pack are a later issue's concern (activation), so legacy rows never change.
+    // Legacy core projections flow through UNCHANGED. Pack problems are additive.
+    // ADR-028/030 activation (#2323): a pack that declares `interTeamCoordination.plugin`
+    // now has its coordination projection reach the effective bundle — mirroring how the
+    // catalog directory map is already merged — so it flows on to the coordination
+    // dispatcher (props → CoordinationDispatcherLambda / CoordinationPluginBundle) instead
+    // of going inert once installed as a snapshot. Two projection keys are carried, matching
+    // the core shapes:
+    //   - `coordination`       → `{ plugin }`  (same value shape as `discoverProblemsCoordination`)
+    //   - `coordinationBundle` → the self-contained `.mjs` text (one entry of `bundleCoordinationPlugins`)
+    // Scoring / endpoints / etc. for a pack remain a later issue's concern, so their legacy
+    // rows still never change here.
     const packCatalog: Record<string, string> = {};
+    const packCoordination: Record<string, unknown> = {};
+    const packCoordinationBundles: Record<string, string> = {};
     for (const entry of result.entries) {
-      if (entry.provenance.source === "pack") packCatalog[entry.problemId] = entry.directory;
+      if (entry.provenance.source !== "pack") continue;
+      packCatalog[entry.problemId] = entry.directory;
+      // `projections` is the untyped ({@link composeEffectiveCatalog} passes it through
+      // verbatim) vehicle carrying the pack's per-problem coordination declaration + its
+      // synth-bundled plugin. Absent keys mean "no coordination" (not an error), so a pack
+      // without coordination contributes nothing and the core rows stay byte-identical.
+      const coordination = (entry.projections as { coordination?: unknown }).coordination;
+      if (coordination !== undefined) packCoordination[entry.problemId] = coordination;
+      const coordinationBundle = (entry.projections as { coordinationBundle?: unknown })
+        .coordinationBundle;
+      if (typeof coordinationBundle === "string") {
+        packCoordinationBundles[entry.problemId] = coordinationBundle;
+      }
     }
     return {
       ...coreBundle,
       catalog: { ...(coreBundle.catalog as Record<string, string>), ...packCatalog },
+      // Pack coordination is spread ON TOP of the core projections (`{ ...core, ...pack }`),
+      // never replacing them — packs cannot override core (compose already fails closed on a
+      // duplicate id). With no pack coordination both spreads are `{ ...core }` (deep-equal to
+      // today's bundle = NO-OP).
+      coordination: {
+        ...(coreBundle.coordination as Record<string, unknown>),
+        ...packCoordination,
+      },
+      coordinationBundles: {
+        ...(coreBundle.coordinationBundles as Record<string, string>),
+        ...packCoordinationBundles,
+      },
     };
   }
 
