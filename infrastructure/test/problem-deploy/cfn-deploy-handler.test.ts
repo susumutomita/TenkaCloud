@@ -9,6 +9,7 @@ import { GetParameterCommand } from "@aws-sdk/client-ssm";
 import { AssumeRoleCommand } from "@aws-sdk/client-sts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  buildArtifactsResolver,
   buildParameterOverrides,
   buildS3ArtifactsResolver,
   buildStackTags,
@@ -341,6 +342,63 @@ describe("buildS3ArtifactsResolver (#2291)", () => {
       sourceBucket: "src-bucket",
     });
     await expect(resolve(validDetail() as never)).rejects.toThrow(/empty or unreadable S3 object/);
+  });
+});
+
+describe("buildArtifactsResolver (#2291)", () => {
+  it("should resolve artifacts from the challenge payload when challengePayloadUrl is set", async () => {
+    const resolveFromS3 = vi.fn(async () => artifacts);
+    const fetchPayloadArtifacts = vi.fn(async () => ({
+      templateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources: {Payload: {}}\n",
+      metadataText: JSON.stringify({ cfnParameters: { FlagSeed: "from-payload" } }),
+    }));
+    const resolve = buildArtifactsResolver({ resolveFromS3, fetchPayloadArtifacts });
+
+    const out = await resolve(
+      validDetail({ challengePayloadUrl: "https://s3.example/presigned?sig=x" }) as never,
+    );
+
+    // Private path: fetched the presigned payload, parsed its metadata; never touched S3.
+    expect(fetchPayloadArtifacts).toHaveBeenCalledWith("https://s3.example/presigned?sig=x");
+    expect(resolveFromS3).not.toHaveBeenCalled();
+    expect(out.templateBody).toContain("Payload");
+    expect(out.cfnParameters).toEqual({ FlagSeed: "from-payload" });
+  });
+
+  it("should resolve from the source bucket when challengePayloadUrl is absent (public path unchanged)", async () => {
+    const resolveFromS3 = vi.fn(async () => artifacts);
+    const fetchPayloadArtifacts = vi.fn(async () => {
+      throw new Error("must not fetch a payload for a public problem");
+    });
+    const resolve = buildArtifactsResolver({ resolveFromS3, fetchPayloadArtifacts });
+
+    const out = await resolve(validDetail() as never);
+
+    expect(resolveFromS3).toHaveBeenCalledOnce();
+    expect(fetchPayloadArtifacts).not.toHaveBeenCalled();
+    expect(out).toBe(artifacts);
+  });
+
+  it("should treat an empty-string challengePayloadUrl as public (source bucket)", async () => {
+    // Zod allows only a valid URL or undefined, but the resolver guards on non-empty defensively.
+    const resolveFromS3 = vi.fn(async () => artifacts);
+    const fetchPayloadArtifacts = vi.fn(async () => ({ templateBody: "x", metadataText: "{}" }));
+    const resolve = buildArtifactsResolver({ resolveFromS3, fetchPayloadArtifacts });
+
+    await resolve({ ...validDetail(), challengePayloadUrl: "" } as never);
+
+    expect(resolveFromS3).toHaveBeenCalledOnce();
+    expect(fetchPayloadArtifacts).not.toHaveBeenCalled();
+  });
+
+  it("should default to the real payload fetcher when none is injected (public path still works offline)", async () => {
+    // No fetchPayloadArtifacts injected → defaults to the real module fn; the public path does not
+    // reach it, so this resolves from S3 without any network.
+    const resolveFromS3 = vi.fn(async () => artifacts);
+    const resolve = buildArtifactsResolver({ resolveFromS3 });
+    const out = await resolve(validDetail() as never);
+    expect(out).toBe(artifacts);
+    expect(resolveFromS3).toHaveBeenCalledOnce();
   });
 });
 
