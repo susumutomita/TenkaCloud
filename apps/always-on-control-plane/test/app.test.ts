@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { createMiddleware } from "hono/factory";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { organizerForTest, teamForTest } from "../src/auth.js";
 import type { AppEnvironment } from "../src/types.js";
@@ -279,6 +279,27 @@ describe("always-on control plane Worker", () => {
     );
     expect(invalidJson.status).toBe(400);
 
+    const nonObjectBody = await app.request(
+      "https://control.example/v1/admin/events",
+      json("POST", []),
+      env,
+    );
+    expect(nonObjectBody.status).toBe(400);
+
+    const blankName = await app.request(
+      "https://control.example/v1/admin/events",
+      json("POST", { name: "  " }),
+      env,
+    );
+    expect(blankName.status).toBe(400);
+
+    const invalidOptionalDate = await app.request(
+      "https://control.example/v1/admin/events",
+      json("POST", { name: "Invalid date", startsAt: 123 }),
+      env,
+    );
+    expect(invalidOptionalDate.status).toBe(400);
+
     const invalidPoints = await app.request(
       "https://control.example/v1/admin/events/missing/checkpoints",
       json("PUT", {
@@ -341,6 +362,38 @@ describe("always-on control plane Worker", () => {
       env,
     );
     expect(crossEventSubmit.status).toBe(404);
+  });
+
+  it("returns a sanitized 500 when storage fails unexpectedly", async () => {
+    await seedProjection();
+    await env.CONTROL_DB.prepare(
+      `INSERT INTO events (
+        event_id, tenant_id, name, status, created_at, updated_at
+      ) VALUES ('event-failure', 'tenant-acme', 'Failure', 'DRAFT', 'now', 'now')`,
+    ).run();
+    await env.CONTROL_DB.prepare(`
+      CREATE TRIGGER reject_team_insert
+      BEFORE INSERT ON teams
+      BEGIN
+        SELECT RAISE(ABORT, 'simulated storage failure');
+      END;
+    `).run();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const response = await organizerApp(adminPayload()).request(
+        "https://control.example/v1/admin/events/event-failure/teams",
+        json("POST", { displayName: "Rejected" }),
+        env,
+      );
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({ error: "internal server error" });
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining('"event":"always-on.request.failed"'),
+      );
+    } finally {
+      error.mockRestore();
+      await env.CONTROL_DB.exec("DROP TRIGGER reject_team_insert;");
+    }
   });
 
   it("supports deterministic organizer middleware injection for Worker tests", async () => {
