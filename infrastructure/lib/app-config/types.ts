@@ -6,6 +6,14 @@ import type { CustomDomainsConfig } from "../security/cloudfront-custom-domain.j
 export type { ApiKeySSMParameterNames };
 
 /**
+ * Issue #2290 (ADR-049 §5.1): control-plane data backend selector。app-config は construct 層
+ * (`../problem-deploy/…`) に依存しない upstream レイヤなので、`control-data/types.ts` の
+ * `ControlDataBackend` を import せずここに local 定義する (= 同一の literal union)。runtime factory
+ * (`createEventsRepository` / `createTeamsRepository`) が cold-start で再検証するため二重管理でも安全。
+ */
+export type ControlDataBackend = "dynamodb" | "turso" | "sql";
+
+/**
  * Issue #766: bin/infrastructure.ts に散在していた env / config 解決を 1 つの shape に
  * 集約する。pure function `resolveAppConfig` の戻り値で、 stack 配線層 (= `lib/app-wiring`)
  * からはこの object だけを参照する (= 副作用無し、 順序依存無し、 単体テスト可能)。
@@ -126,6 +134,15 @@ export interface AppConfig {
    * 足さず既存テンプレートと byte 互換 (CFn 差分 0)。
    */
   readonly auditLogEnabled: boolean;
+
+  /**
+   * Issue #2290 (ADR-049 §5.1): Events / Teams repository seam の backend を deploy 時に選ぶ
+   * (`CDK_PARAM_CONTROL_DATA_BACKEND`、`dynamodb` | `turso` | `sql`)。**default `"dynamodb"`**
+   * (未設定は在来の DDB 経路で、Lambda env を足さず CFn テンプレ byte 互換)。`turso` / `sql` の
+   * ときだけ EventApi 系 Lambda に `CONTROL_DATA_BACKEND` を注入し、cold-start factory
+   * (`createEventsRepository` / `createTeamsRepository`) が SQLite 実装を選ぶ。
+   */
+  readonly controlDataBackend: ControlDataBackend;
 
   /**
    * #1766: tier 別の同時デプロイ上限 (`CDK_PARAM_DEPLOY_QUOTA_BY_TIER`、JSON

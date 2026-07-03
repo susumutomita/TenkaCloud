@@ -114,6 +114,15 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    */
   readonly auditLogEnabled?: boolean;
   /**
+   * Issue #2290 (ADR-049 §5.1): control-plane data backend の選択 (`dynamodb` | `turso` | `sql`)。
+   * event-handler の `getEventDetail` が Events / Teams repository を組み立てる cold-start factory
+   * (`createEventsRepository` / `createTeamsRepository`) の seam を切替える。default (未指定 /
+   * `dynamodb`) は監査 Lambda 群 (deploy-api / event-api / competitor-accounts-api /
+   * system-audit-writer) の env を足さず在来 DDB 経路 (= CFn テンプレ byte 互換)。`turso` / `sql` の
+   * ときだけ各 Lambda env に `CONTROL_DATA_BACKEND` を注入する。
+   */
+  readonly controlDataBackend?: string;
+  /**
    * ADR-008 Phase 3 (Issue #642): `problemId → "private"` の map。
    * `discoverProblemsVisibility` で metadata.json から自動収集。 空 map なら全 public 扱い (dormant)。
    */
@@ -317,6 +326,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       environmentName: props.environmentName,
       // Issue #2311: 監査ログ feature flag (off で writeAuditEvent が no-op)。
       auditLogEnabled: props.auditLogEnabled,
+      // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
+      controlDataBackend: props.controlDataBackend,
     });
 
     // tenant API から invoke される Lambda。validation + DDB Put + EventBridge PutEvents のみ。
@@ -340,6 +351,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       adminAuditLogTable: adminAuditLog.table,
       // Issue #2311: 監査ログ feature flag。
       auditLogEnabled: props.auditLogEnabled,
+      // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
+      controlDataBackend: props.controlDataBackend,
       // #1766: tier 別の同時デプロイ上限 (env JSON)。
       deployQuotaByTier: props.deployQuotaByTier,
       // Issue #2019 / ADR-017: TrustBridge enforcement mode (undefined → lambda
@@ -391,6 +404,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       adminAuditLogTable: adminAuditLog.table,
       // Issue #2311: 監査ログ feature flag。
       auditLogEnabled: props.auditLogEnabled,
+      // Issue #2290: control-plane data backend。event-handler の getEventDetail が Events / Teams
+      // repository seam を切替える (= turso/sql 選択時のみ CONTROL_DATA_BACKEND を注入)。
+      controlDataBackend: props.controlDataBackend,
     });
     this.eventApiLambda = eventApi.fn;
 
@@ -414,6 +430,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       adminAuditLogTable: adminAuditLog.table,
       // Issue #2311: 監査ログ feature flag。
       auditLogEnabled: props.auditLogEnabled,
+      // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
+      controlDataBackend: props.controlDataBackend,
     });
     this.competitorAccountsApiLambda = competitorAccountsApi.fn;
 
