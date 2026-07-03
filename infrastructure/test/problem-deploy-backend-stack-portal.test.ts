@@ -138,4 +138,59 @@ describe("ParticipantPortalLambda wiring (#535)", () => {
       }),
     );
   });
+
+  it("should grant scoped codebuild:BatchGetBuilds + logs:GetLogEvents for deploy-log streaming", () => {
+    // Bug fix: `GET /portal/me/deploy-logs` (deploy-logs.ts) calls codebuild:BatchGetBuilds then
+    // logs:GetLogEvents to stream a team's deploy build log. The participant role granted neither,
+    // so the route returned AccessDenied in production. Assert both grants exist, on the
+    // DeployLogsRead inline policy, scoped to the deploy project (not `*`).
+    tpl.hasResourceProperties(
+      "AWS::IAM::Role",
+      Match.objectLike({
+        Policies: Match.arrayWith([
+          Match.objectLike({
+            PolicyName: "DeployLogsRead",
+            PolicyDocument: Match.objectLike({
+              Statement: Match.arrayWith([
+                Match.objectLike({ Action: "codebuild:BatchGetBuilds", Effect: "Allow" }),
+                Match.objectLike({ Action: "logs:GetLogEvents", Effect: "Allow" }),
+              ]),
+            }),
+          }),
+        ]),
+      }),
+    );
+
+    // Least-privilege: neither statement uses a `*` resource. BatchGetBuilds is scoped to the
+    // deploy project ARN; GetLogEvents is scoped to its `/aws/codebuild/<projectName>` log group.
+    const roles = tpl.findResources("AWS::IAM::Role");
+    const portalRole = Object.values(roles).find((r) =>
+      (
+        (r as { Properties?: { Policies?: Array<{ PolicyName?: string }> } }).Properties
+          ?.Policies ?? []
+      ).some((p) => p.PolicyName === "DeployLogsRead"),
+    );
+    expect(portalRole).toBeDefined();
+    const deployLogsPolicy = (
+      portalRole as {
+        Properties?: {
+          Policies?: Array<{
+            PolicyName?: string;
+            PolicyDocument?: { Statement?: Array<{ Action?: unknown; Resource?: unknown }> };
+          }>;
+        };
+      }
+    ).Properties?.Policies?.find((p) => p.PolicyName === "DeployLogsRead");
+    const statements = deployLogsPolicy?.PolicyDocument?.Statement ?? [];
+
+    const codebuild = statements.find((s) => s.Action === "codebuild:BatchGetBuilds");
+    expect(codebuild?.Resource).not.toBe("*");
+    // Project ARN (`arn:...:codebuild:...:project/...`) — scoped to the deploy project.
+    expect(JSON.stringify(codebuild?.Resource)).toContain(":project/");
+
+    const logs = statements.find((s) => s.Action === "logs:GetLogEvents");
+    expect(logs?.Resource).not.toBe("*");
+    // CloudWatch log group for the CodeBuild project, streams covered by the trailing `:*`.
+    expect(JSON.stringify(logs?.Resource)).toContain("/aws/codebuild/");
+  });
 });

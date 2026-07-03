@@ -515,6 +515,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         environmentName: props.environmentName,
         runtimeConfig: props.participantPortal.runtimeConfig,
         region: this.region,
+        // GET /portal/me/deploy-logs が この deploy CodeBuild project の build + log group を
+        // read するため、 portal Lambda role へ least-privilege grant を付与する (下で構築)。
+        deployCodeBuildProject: deployPipeline.deployCodeBuildProject,
       });
       this.participantPortalLambda = portalSubsystem.participantPortalLambda;
       this.participantPortalUrl = portalSubsystem.participantPortalUrl;

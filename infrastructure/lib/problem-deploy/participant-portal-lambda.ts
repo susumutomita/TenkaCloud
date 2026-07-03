@@ -1,5 +1,6 @@
 import * as path from "node:path";
-import { Duration, Stack } from "aws-cdk-lib";
+import { ArnFormat, Duration, Stack } from "aws-cdk-lib";
+import type { IProject } from "aws-cdk-lib/aws-codebuild";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import {
   ManagedPolicy,
@@ -43,6 +44,12 @@ export interface ParticipantPortalLambdaProps {
    * (`/{environmentName}/tenants/{tenantId}/external-id`).
    */
   readonly environmentName: string;
+  /**
+   * Deploy CodeBuild `Project`。`GET /portal/me/deploy-logs` (deploy-logs.ts) が この project の
+   * build を `codebuild:BatchGetBuilds` で引き、 その CloudWatch log group を `logs:GetLogEvents`
+   * で stream するため、 project ARN + log-group ARN を least-privilege grant として使う。
+   */
+  readonly deployCodeBuildProject: IProject;
 }
 
 /**
@@ -141,6 +148,40 @@ export class ParticipantPortalLambda extends Construct {
             new PolicyStatement({
               actions: ["sts:AssumeRole"],
               resources: ["arn:aws:iam::*:role/TenkaCloud-*"],
+            }),
+          ],
+        }),
+        // Bug fix: participant deploy-log streaming needs read access to the deploy CodeBuild
+        // project's builds + its log group.
+        // EN: `GET /portal/me/deploy-logs` (deploy-logs.ts) resolves a team's deploy build via
+        // `codebuild:BatchGetBuilds` (to read `build.logs.groupName`/`streamName`) and then reads
+        // the stream with `logs:GetLogEvents`. The participant role granted neither, so the route
+        // returned AccessDenied in production. Grant read-only, scoped to the deploy project ARN
+        // and its `/aws/codebuild/<projectName>` log group only (no `*`).
+        // JA: `GET /portal/me/deploy-logs` (deploy-logs.ts) は competitor の deploy build を
+        // `codebuild:BatchGetBuilds` で解決し (`build.logs` の group/stream 取得)、 その log stream を
+        // `logs:GetLogEvents` で読む。 participant role に両権限が無く 本番で AccessDenied になっていた。
+        // deploy project ARN と その `/aws/codebuild/<projectName>` log group に scope した read-only
+        // のみ付与する (`*` 不使用)。
+        DeployLogsRead: new PolicyDocument({
+          statements: [
+            new PolicyStatement({
+              actions: ["codebuild:BatchGetBuilds"],
+              resources: [props.deployCodeBuildProject.projectArn],
+            }),
+            new PolicyStatement({
+              actions: ["logs:GetLogEvents"],
+              // CodeBuild default CloudWatch logging writes to `/aws/codebuild/<projectName>`;
+              // the trailing `:*` scopes to every log stream in that group (deploy-logs.ts reads
+              // `build.logs.streamName` dynamically). Derived from account/region via formatArn.
+              resources: [
+                stack.formatArn({
+                  service: "logs",
+                  resource: "log-group",
+                  resourceName: `/aws/codebuild/${props.deployCodeBuildProject.projectName}:*`,
+                  arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+                }),
+              ],
             }),
           ],
         }),
