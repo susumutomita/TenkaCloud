@@ -16,9 +16,12 @@ import { DeployDeleteStateMachine } from "../../lib/problem-deploy/deploy-delete
  * `sts get-caller-identity` と突き合わせて mismatch を loud fail させる。
  */
 
-function buildTestStack(opts: { deployViaLambda?: boolean } = {}): {
+/** The stack scaffolding (deployments table + CodeBuild project) shared by every case, without the
+ *  state machine — so the error case can reuse it instead of re-building the boilerplate. */
+function buildBareStack(): {
   stack: cdk.Stack;
-  template: Template;
+  deployments: Table;
+  codeBuildProject: Project;
 } {
   const app = new cdk.App();
   const stack = new cdk.Stack(app, "Test", {
@@ -34,6 +37,14 @@ function buildTestStack(opts: { deployViaLambda?: boolean } = {}): {
       path: "source.zip",
     }),
   });
+  return { stack, deployments, codeBuildProject };
+}
+
+function buildTestStack(opts: { deployViaLambda?: boolean } = {}): {
+  stack: cdk.Stack;
+  template: Template;
+} {
+  const { stack, deployments, codeBuildProject } = buildBareStack();
   // Only stub the shared CfnDeployLambda when the flag is ON, so the flag-OFF stack stays
   // Lambda-free (= the byte-compat resource-count assertion below is meaningful).
   const lambdaProps = opts.deployViaLambda
@@ -151,27 +162,15 @@ describe("DeployDeleteStateMachine deployViaLambda flag (#2291)", () => {
 
   it("should still write the same DELETED / FAILED DDB status transitions in the Lambda branch", () => {
     const asl = extractDefinition(buildTestStack({ deployViaLambda: true }).template);
-    expect(asl).toContain("DELETED");
-    expect(asl).toContain("FAILED");
+    // Match the quoted DDB status values (not bare substrings, which could hit incidental text).
+    expect(asl).toContain('"DELETED"');
+    expect(asl).toContain('"FAILED"');
     // Lambda 経路は buildId を書かない (= CodeBuild 固有; MarkDeleted / MarkFailed は元から非依存)。
     expect(asl).not.toContain("codebuild.Build.Id");
   });
 
   it("should require cfnDeployFunction when deployViaLambda is true", () => {
-    const app = new cdk.App();
-    const stack = new cdk.Stack(app, "Bad", {
-      env: { account: "123456789012", region: "ap-northeast-1" },
-    });
-    const deployments = new Table(stack, "Deployments", {
-      partitionKey: { name: "PK", type: AttributeType.STRING },
-      sortKey: { name: "SK", type: AttributeType.STRING },
-    });
-    const codeBuildProject = new Project(stack, "CodeBuild", {
-      source: Source.s3({
-        bucket: cdk.aws_s3.Bucket.fromBucketName(stack, "Src", "test-source-bucket"),
-        path: "source.zip",
-      }),
-    });
+    const { stack, deployments, codeBuildProject } = buildBareStack();
     expect(
       () =>
         new DeployDeleteStateMachine(stack, "Sm", {
