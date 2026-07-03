@@ -78,6 +78,13 @@ describe("validateRetryRequest", () => {
       InvalidRetryRequestError,
     );
   });
+  it("配列要素が string でないとき throw (Zod 化後も型不正を拒否)", () => {
+    expect(() => validateRetryRequest({ failedJobIds: [123] })).toThrow(InvalidRetryRequestError);
+    expect(() => validateRetryRequest({ failedJobIds: [null] })).toThrow(InvalidRetryRequestError);
+  });
+  it("failedJobIds が欠落しているとき throw", () => {
+    expect(() => validateRetryRequest({})).toThrow(InvalidRetryRequestError);
+  });
   it("750 件超のとき throw", () => {
     const big = Array.from({ length: 751 }, () => VALID_JOB_ID);
     expect(() => validateRetryRequest({ failedJobIds: big })).toThrow(InvalidRetryRequestError);
