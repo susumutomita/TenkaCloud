@@ -11,7 +11,12 @@ import { type CatalogSource, LocalCatalogSource } from "../problem-pack/catalog-
 import { parseTenantAdminAllowlist } from "../tenant-template/saml-admin-allowlist.js";
 import { parseTenantSamlIdpConfig } from "../tenant-template/saml-identity-providers.js";
 import { loadConfig } from "../utils/config-loader.js";
-import type { ApiKeySSMParameterNames, AppConfig, ProblemsCatalogBundle } from "./types.js";
+import type {
+  ApiKeySSMParameterNames,
+  AppConfig,
+  ControlDataBackend,
+  ProblemsCatalogBundle,
+} from "./types.js";
 
 /**
  * Issue #766: bin/infrastructure.ts に散在していた env / config 解決を 1 つの pure function
@@ -79,6 +84,9 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   // Issue #2311: 監査ログ出力の on/off。default true (未設定 / "true" は従来どおり出力 →
   // リグレッションなし)。明示 "false" のときだけ監査 Lambda 群を no-op 化する。
   const auditLogEnabled = env.CDK_PARAM_AUDIT_LOG_ENABLED !== "false";
+  // Issue #2290: control-plane data backend の選択。default "dynamodb" (未設定 / "dynamodb" は
+  // 在来 DDB 経路で Lambda env を足さない = byte 互換)。turso/sql 以外は synth 時に throw。
+  const controlDataBackend = resolveControlDataBackend(env);
   const features = resolveFeatures(env);
 
   // Issue #1031: 旧 `CDK_PARAM_ADMIN_CONSOLE_ORIGIN` env 直読みは廃止。 admin-console-hosting
@@ -133,6 +141,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     useBulkDistributedMap,
     deployViaLambda,
     auditLogEnabled,
+    controlDataBackend,
     features,
     controlPlaneSamlIdps,
     controlPlaneSamlAdminAllowlist,
@@ -337,6 +346,24 @@ function resolveDeployConcurrentBuildLimit(env: NodeJS.ProcessEnv): number | und
     );
   }
   return limit;
+}
+
+/**
+ * Issue #2290 (ADR-049 §5.1): control-plane data backend の選択フラグ
+ * (`CDK_PARAM_CONTROL_DATA_BACKEND`) を synth 時に検証する。Events / Teams repository seam を
+ * `dynamodb` / `turso` / `sql` から選ぶ。**default `"dynamodb"`** (未設定 / 空文字は在来 DDB 経路で、
+ * `controlDataBackendEnv` が Lambda env を足さない = CFn テンプレ byte 互換)。大文字小文字は無視して
+ * lowercase 正規化し、3 値以外は throw する (= runtime factory の guard と揃えた fail-loud、
+ * 壊れた値を Lambda まで持ち越さない / no-silent-fallback)。
+ */
+function resolveControlDataBackend(env: NodeJS.ProcessEnv): ControlDataBackend {
+  const raw = env.CDK_PARAM_CONTROL_DATA_BACKEND;
+  if (raw === undefined || raw.trim() === "") return "dynamodb";
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "dynamodb" || normalized === "turso" || normalized === "sql") {
+    return normalized;
+  }
+  throw new Error(`CDK_PARAM_CONTROL_DATA_BACKEND must be one of dynamodb|turso|sql, got: ${raw}`);
 }
 
 /**
