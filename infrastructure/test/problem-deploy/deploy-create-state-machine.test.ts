@@ -2,6 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { Project, Source } from "aws-cdk-lib/aws-codebuild";
 import { AttributeType, Table } from "aws-cdk-lib/aws-dynamodb";
+import { EventBus } from "aws-cdk-lib/aws-events";
 import { Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
 import { describe, expect, it } from "vitest";
 import { DeployCreateStateMachine } from "../../lib/problem-deploy/deploy-create-state-machine";
@@ -47,12 +48,14 @@ function buildTestStack(opts: { deployViaLambda?: boolean } = {}): {
     handler: "index.handler",
     code: Code.fromInline("exports.handler = async () => ({});"),
   });
+  // Issue #2291: Lambda path は失敗 event の PutEvents 先として EventBus が必須。
+  const eventBus = new EventBus(stack, "Bus");
   new DeployCreateStateMachine(stack, "Sm", {
     codeBuildProject,
     describeStackFunction: describeStackFn,
     deploymentsTable: deployments,
     ...(opts.deployViaLambda
-      ? { deployViaLambda: true as const, cfnDeployFunction: cfnDeployFn }
+      ? { deployViaLambda: true as const, cfnDeployFunction: cfnDeployFn, eventBus }
       : {}),
   });
   return { stack, template: Template.fromStack(stack) };
@@ -228,5 +231,80 @@ describe("DeployCreateStateMachine deployViaLambda flag (#2291)", () => {
           deployViaLambda: true,
         }),
     ).toThrow(/cfnDeployFunction is required/);
+  });
+
+  it("should require eventBus when deployViaLambda is true (fail loud, #2291)", () => {
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, "NoBus", {
+      env: { account: "123456789012", region: "ap-northeast-1" },
+    });
+    const deployments = new Table(stack, "Deployments", {
+      partitionKey: { name: "PK", type: AttributeType.STRING },
+      sortKey: { name: "SK", type: AttributeType.STRING },
+    });
+    const describeStackFn = new LambdaFunction(stack, "DescribeStackFn", {
+      runtime: Runtime.NODEJS_22_X,
+      handler: "index.handler",
+      code: Code.fromInline("exports.handler = async () => ({});"),
+    });
+    const codeBuildProject = new Project(stack, "CodeBuild", {
+      source: Source.s3({
+        bucket: cdk.aws_s3.Bucket.fromBucketName(stack, "Src", "test-source-bucket"),
+        path: "source.zip",
+      }),
+    });
+    const cfnDeployFn = new LambdaFunction(stack, "CfnDeployFn", {
+      runtime: Runtime.NODEJS_22_X,
+      handler: "index.handler",
+      code: Code.fromInline("exports.handler = async () => ({});"),
+    });
+    // cfnDeployFunction は渡すが eventBus を渡さない → eventBus guard で throw。
+    expect(
+      () =>
+        new DeployCreateStateMachine(stack, "Sm", {
+          codeBuildProject,
+          describeStackFunction: describeStackFn,
+          deploymentsTable: deployments,
+          deployViaLambda: true,
+          cfnDeployFunction: cfnDeployFn,
+        }),
+    ).toThrow(/eventBus is required/);
+  });
+
+  it("should emit a Deploy Failed event on the Lambda failure path when deployViaLambda is true", () => {
+    const { template } = buildTestStack({ deployViaLambda: true });
+    const asJson = definitionJson(template);
+    // MarkFailed の後段に EventBridge PutEvents task があり、custom event を出す。
+    expect(asJson).toContain('"EmitDeployFailedEvent"');
+    expect(asJson).toContain("events:putEvents"); // Step Functions の EventBridge 統合 ARN
+    expect(asJson).toContain("TenkaCloud Deploy Failed"); // DetailType
+    expect(asJson).toContain("tenkacloud.problem-deploy"); // Source
+    // detail は failureReason を $.error.Cause から引く (= CodeBuild path MarkFailed と同 source)。
+    expect(asJson).toContain('"failureReason.$":"$.error.Cause"');
+    // MarkFailed → EmitDeployFailedEvent の順序 (= DDB を FAILED にしてから通知する)。
+    expect(asJson).toContain('"Next":"EmitDeployFailedEvent"');
+  });
+
+  it("should NOT emit a Deploy Failed event when deployViaLambda is off (default-safe)", () => {
+    const asJson = definitionJson(buildTestStack().template);
+    expect(asJson).not.toContain("EmitDeployFailedEvent");
+    expect(asJson).not.toContain("TenkaCloud Deploy Failed");
+    expect(asJson).not.toContain("events:putEvents");
+  });
+
+  it("should grant the state machine role events:PutEvents (least-privilege) when the flag is ON", () => {
+    const { template } = buildTestStack({ deployViaLambda: true });
+    template.hasResourceProperties(
+      "AWS::IAM::Policy",
+      Match.objectLike({
+        PolicyDocument: Match.objectLike({
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Action: "events:PutEvents",
+            }),
+          ]),
+        }),
+      }),
+    );
   });
 });

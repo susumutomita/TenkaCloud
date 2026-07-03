@@ -334,6 +334,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       auditLogEnabled: props.auditLogEnabled,
       // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
       controlDataBackend: props.controlDataBackend,
+      // Issue #2291: Lambda deploy 経路のとき、失敗 event を拾う DeployFailureRule を有効化
+      // (= CodeBuild path の CodeBuild FAILED audit と parity)。flag OFF では Rule なし = byte 互換。
+      deployViaLambda: props.deployViaLambda,
     });
 
     // tenant API から invoke される Lambda。validation + DDB Put + EventBridge PutEvents のみ。

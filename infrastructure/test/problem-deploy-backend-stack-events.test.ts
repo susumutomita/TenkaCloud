@@ -1,7 +1,10 @@
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, it } from "vitest";
 import { SBT_ONBOARDING_DETAIL_TYPES } from "../lib/problem-deploy/handlers/system-audit-writer/sbt-detail-types";
-import { synthDefault } from "./problem-deploy-backend-stack.test-helpers";
+import {
+  synthDefault,
+  synthWithDeployViaLambda,
+} from "./problem-deploy-backend-stack.test-helpers";
 
 describe("ProblemDeployBackendStack (MVP-1) — EventBridge Rules", () => {
   const tpl = synthDefault();
@@ -77,5 +80,39 @@ describe("ProblemDeployBackendStack (MVP-1) — EventBridge Rules", () => {
         }),
       }),
     );
+  });
+
+  it("Issue #2291: should NOT add the deploy-failure rule when deployViaLambda is off (default-safe)", () => {
+    // flag OFF (= synthDefault) では `TenkaCloud Deploy Failed` を listen する Rule は無い。
+    const rules = tpl.findResources("AWS::Events::Rule");
+    const hasDeployFailedRule = Object.values(rules).some((r) => {
+      const detailType = r.Properties?.EventPattern?.["detail-type"];
+      return Array.isArray(detailType) && detailType.includes("TenkaCloud Deploy Failed");
+    });
+    if (hasDeployFailedRule) {
+      throw new Error("deploy-failure rule must not exist when deployViaLambda is off");
+    }
+  });
+});
+
+describe("ProblemDeployBackendStack — deployViaLambda EventBridge Rules (Issue #2291)", () => {
+  const tpl = synthWithDeployViaLambda();
+
+  it("should add a deploy-failure rule listening to TenkaCloud Deploy Failed when deployViaLambda is true", () => {
+    tpl.hasResourceProperties(
+      "AWS::Events::Rule",
+      Match.objectLike({
+        EventPattern: Match.objectLike({
+          source: ["tenkacloud.problem-deploy"],
+          "detail-type": ["TenkaCloud Deploy Failed"],
+        }),
+      }),
+    );
+  });
+
+  it("should have 9 EventBridge Rules (default 8 + DeployFailureRule)", () => {
+    // 在来 8 (Create / Delete / BulkCreate / GenericScoring / ExternalIdAudit / SystemAuditWriter /
+    // CodeBuildFailure / DisruptionExecutor) + Issue #2291 DeployFailureRule = 9。
+    tpl.resourceCountIs("AWS::Events::Rule", 9);
   });
 });

@@ -26,6 +26,14 @@ export interface SystemAuditWriterLambdaProps {
    * lockstep で env を配線する。default (未指定 / `dynamodb`) は env を足さず byte 互換。
    */
   readonly controlDataBackend?: string;
+  /**
+   * Issue #2291 (ADR-049 §9): Lambda deploy 経路 (`deployViaLambda=true`) が有効なとき true。
+   * true のときだけ `deployFailureRule` (= 共通 bus 上の `TenkaCloud Deploy Failed` を拾う Rule)
+   * を追加する。CodeBuild path と違い Lambda deploy 失敗は AWS service event を出さないため、
+   * `DeployCreate` state machine が emit する custom event を audit に橋渡しする。default
+   * (未指定 / false) は Rule を足さず byte 互換。
+   */
+  readonly deployViaLambda?: boolean;
 }
 
 /**
@@ -50,6 +58,12 @@ export class SystemAuditWriterLambda extends Construct {
    * Rule 構築になる。
    */
   public readonly codeBuildFailureRule: Rule;
+  /**
+   * Issue #2291 (ADR-049 §9): Lambda deploy 経路の失敗 event (= `DeployCreate` state machine が
+   * SBT bus に PutEvents する `TenkaCloud Deploy Failed`) を listen する Rule。 `deployViaLambda`
+   * が true のときだけ生成する (= CodeBuild path しか無い環境では byte 互換で undefined)。
+   */
+  public readonly deployFailureRule?: Rule;
 
   constructor(scope: Construct, id: string, props: SystemAuditWriterLambdaProps) {
     super(scope, id);
@@ -103,5 +117,22 @@ export class SystemAuditWriterLambda extends Construct {
       },
       targets: [new LambdaFunction(this.fn)],
     });
+
+    // Issue #2291: Lambda deploy 経路が有効なときだけ、`DeployCreate` state machine が SBT bus に
+    // 出す `TenkaCloud Deploy Failed` を拾う Rule を足す。CodeBuild path (`CodeBuild Build State
+    // Change` FAILED) と対になる parity: Lambda deploy 失敗も SYSTEM scope audit に載る。flag OFF
+    // (default) では Rule を作らないので追加リソースなし = byte 互換。
+    if (props.deployViaLambda) {
+      this.deployFailureRule = new Rule(this, "DeployFailureRule", {
+        eventBus: props.eventBus,
+        description:
+          "Route TenkaCloud Deploy Failed (Lambda deploy path) events to SystemAuditWriter Lambda (Issue #2291)",
+        eventPattern: {
+          source: ["tenkacloud.problem-deploy"],
+          detailType: ["TenkaCloud Deploy Failed"],
+        },
+        targets: [new LambdaFunction(this.fn)],
+      });
+    }
   }
 }

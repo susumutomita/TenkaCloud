@@ -109,8 +109,12 @@ export function buildDeployPipeline(
     codeBuildProject: codeBuild.project,
     describeStackFunction: describeStack.fn,
     deploymentsTable: args.deploymentsTable,
-    // flag OFF では以下 2 prop は undefined = CodeBuild 定義を生成 (在来と同一)。
-    ...(args.deployViaLambda ? { deployViaLambda: true, cfnDeployFunction } : {}),
+    // flag OFF では以下 prop は undefined = CodeBuild 定義を生成 (在来と同一、追加リソースなし)。
+    // flag ON では Lambda 経路 + 失敗時の `TenkaCloud Deploy Failed` PutEvents を有効化するため
+    // 共通 EventBus を渡す (= SystemAuditWriterLambda が同 bus 上で拾う、Issue #2291)。
+    ...(args.deployViaLambda
+      ? { deployViaLambda: true, cfnDeployFunction, eventBus: args.eventBus }
+      : {}),
   });
 
   // EventBridge Rule: `DeployCreateRequested` event を State Machine に流す。
