@@ -3,7 +3,7 @@ import type { BattleAttacksResponse, DeployLogsResponse } from "./types";
 
 /**
  * 1 problem に閉じた inspection / telemetry endpoints。
- *   - getDeployLogs: deploy 中の CodeBuild / CloudWatch Logs を nextToken で増分取得
+ *   - getDeployLogs: deploy runtime の CloudWatch Logs を nextToken で増分取得
  *   - getBattleAttacks: 自 team の指定 deployment における attack-detected event 時系列
  *
  * `team.ts` は「自チーム全体」 の cross-cut。 こちらは「1 problem に焦点を当てた」 view。

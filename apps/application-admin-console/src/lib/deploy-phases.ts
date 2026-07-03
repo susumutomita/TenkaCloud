@@ -4,7 +4,7 @@
  * 既存の backend を変えずに、`DeploymentSummary` + `StackProgress` だけから派生する。
  * Phase の status は次の順で決まる:
  *   1. Enqueued — deployment row が存在すれば必ず Complete (= 観測時点で row はある)
- *   2. Building — CodeBuild step の代理。stack events / resources が 1 件でも観測されたら
+ *   2. Building — deploy executor step。stack events / resources が 1 件でも観測されたら
  *      Complete、まだなら IN_PROGRESS は In Progress、FAILED + 観測なし は Failed。
  *   3. CloudFormation Deploy — events を見て判定。すべて `_COMPLETE` なら Complete、
  *      `_FAILED` を含めば Failed、`_IN_PROGRESS` を含めば In Progress、空なら Pending。
@@ -88,7 +88,7 @@ function eventsToPhaseStatus(events: readonly StackProgressEvent[]): PhaseStatus
 
 /**
  * Phase 2: Building の status を判定する。
- * - CFn 進行が観測されていれば必ず complete (= CodeBuild は成功して CFn に渡した)
+ * - CFn 進行が観測されていれば必ず complete (= executor は成功して CFn に渡した)
  * - 観測されていない場合は status のみから推定 (= PENDING / IN_PROGRESS / FAILED / terminal)
  */
 export function deriveBuildingStatus(

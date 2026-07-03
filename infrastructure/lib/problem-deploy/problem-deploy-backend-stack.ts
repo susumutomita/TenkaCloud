@@ -260,7 +260,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   /** DeployDelete Step Functions State Machine ARN for CloudWatch metrics. */
   public readonly deployDeleteStateMachineArn: string;
   /** Problem deploy CodeBuild project name for CloudWatch metrics. */
-  public readonly deployCodeBuildProjectName: string;
+  public readonly deployCodeBuildProjectName?: string;
   /**
    * Issue #2291 (ADR-049 §9): Lambda deploy path (`CfnDeployLambda`) function name for the
    * ObservabilityStack dashboard. Present only when `deployViaLambda` is ON (the Lambda is created
@@ -539,7 +539,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         region: this.region,
         // GET /portal/me/deploy-logs が この deploy CodeBuild project の build + log group を
         // read するため、 portal Lambda role へ least-privilege grant を付与する (下で構築)。
-        deployCodeBuildProject: deployPipeline.deployCodeBuildProject,
+        ...(deployPipeline.deployCodeBuildProject
+          ? { deployCodeBuildProject: deployPipeline.deployCodeBuildProject }
+          : {}),
         // Issue #2291: deployViaLambda ON のときのみ、 Lambda 経路の deploy 進捗 (jobId stream) を
         // portal が read できるよう job log group を渡す。 flag OFF では undefined = 追加 grant/env なし。
         ...(deployPipeline.deployJobLogGroup

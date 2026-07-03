@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { synthDefault } from "./problem-deploy-backend-stack.test-helpers";
+import {
+  synthDefault,
+  synthWithDeployViaLambda,
+} from "./problem-deploy-backend-stack.test-helpers";
 
 describe("ProblemDeployBackendStack (MVP-1) — Step Functions State Machines", () => {
   const tpl = synthDefault();
@@ -97,5 +100,36 @@ describe("ProblemDeployBackendStack (MVP-1) — Step Functions State Machines", 
     expect(deleteStateMachine).toContain("$.detail.competitorRoleArn");
     expect(deleteStateMachine).toContain("$.detail.externalIdParameterName");
     expect(deleteStateMachine).toContain("MarkFailed");
+  });
+});
+
+describe("ProblemDeployBackendStack Lambda deploy flag (#2291)", () => {
+  const tpl = synthWithDeployViaLambda();
+
+  it("should switch both create and delete state machines to Lambda polling", () => {
+    const definitions = Object.values(tpl.findResources("AWS::StepFunctions::StateMachine")).map(
+      (stateMachine) => JSON.stringify(stateMachine),
+    );
+    const create = definitions.find((definition) => definition.includes("InvokeCfnDeploy"));
+    const remove = definitions.find((definition) => definition.includes("InvokeCfnDelete"));
+
+    expect(create).toContain("RoutePollStatus");
+    expect(remove).toContain("RoutePollStatus");
+    expect(create).not.toContain("StartDeployCodeBuild");
+    expect(remove).not.toContain("StartDeleteCodeBuild");
+  });
+
+  it("should not create the retired problem-deploy CodeBuild project", () => {
+    tpl.resourceCountIs("AWS::CodeBuild::Project", 0);
+  });
+
+  it("should pass the materialized problem-tree bucket to the deploy Lambda", () => {
+    const lambdas = Object.values(tpl.findResources("AWS::Lambda::Function")).map((resource) =>
+      JSON.stringify(resource),
+    );
+    const deployLambda = lambdas.find((resource) => resource.includes("CFN_EXEC_ROLE_ARN"));
+
+    expect(deployLambda).toContain('"SOURCE_BUCKET_NAME":"test-source-bucket"');
+    expect(deployLambda).not.toContain("SOURCE_OBJECT_KEY");
   });
 });

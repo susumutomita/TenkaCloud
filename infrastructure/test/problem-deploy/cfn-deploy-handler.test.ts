@@ -4,12 +4,12 @@ import {
   DescribeStacksCommand,
   UpdateStackCommand,
 } from "@aws-sdk/client-cloudformation";
-import type { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { GetParameterCommand } from "@aws-sdk/client-ssm";
 import { AssumeRoleCommand } from "@aws-sdk/client-sts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildArtifactsResolver,
+  buildCloudFormationClient,
   buildParameterOverrides,
   buildS3ArtifactsResolver,
   buildStackTags,
@@ -17,6 +17,7 @@ import {
   createStackForDeployment,
   type DeployArtifacts,
   generateRandomAlphanumeric,
+  handler,
   isNoUpdatesError,
   isStackNotFoundError,
   isUnrecoverableStackStatus,
@@ -77,6 +78,7 @@ function scriptedDescribe(scripted: FakeCfnState["describeResponses"][number]) {
 /** A fake CloudFormation client whose DescribeStacks responses are scripted per call. */
 function fakeCfn(state: FakeCfnState) {
   let describeIndex = 0;
+
   return {
     send: vi.fn(async (command: unknown) => {
       state.commands.push(command);
@@ -239,13 +241,10 @@ describe("isStackNotFoundError / parseCfnParameters (#2291)", () => {
   it("should throw loudly on non-string cfnParameters values (fail loud, no silent drop)", () => {
     expect(() => parseCfnParameters(JSON.stringify({ cfnParameters: { A: 1 } }))).toThrow(/string/);
     expect(() => parseCfnParameters("not json")).toThrow(/valid JSON/);
-  });
-
-  it("should throw when cfnParameters is null or an array (must be an object)", () => {
-    expect(() => parseCfnParameters(JSON.stringify({ cfnParameters: null }))).toThrow(
+    expect(() => parseCfnParameters(JSON.stringify({ cfnParameters: [] }))).toThrow(
       /must be an object/,
     );
-    expect(() => parseCfnParameters(JSON.stringify({ cfnParameters: [] }))).toThrow(
+    expect(() => parseCfnParameters(JSON.stringify({ cfnParameters: null }))).toThrow(
       /must be an object/,
     );
   });
@@ -401,7 +400,6 @@ describe("buildArtifactsResolver (#2291)", () => {
     expect(resolveFromS3).toHaveBeenCalledOnce();
   });
 });
-
 describe("createStackForDeployment cross-account (#2291)", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -482,6 +480,52 @@ describe("createStackForDeployment cross-account (#2291)", () => {
     expect(deps.waitForStackDelete).toHaveBeenCalledOnce();
   });
 
+  it("should use the default delete waiter and continue once the stack disappears", async () => {
+    const cfn = fakeCfn({
+      describeResponses: [{ status: "ROLLBACK_COMPLETE" }, { notFound: true }],
+      commands: [],
+    });
+    const { waitForStackDelete: _wait, ...deps } = crossAccountDeps(cfn);
+
+    await expect(createStackForDeployment({ detail: validDetail() }, deps)).resolves.toMatchObject({
+      operation: "create",
+    });
+  });
+
+  it("should fail the default delete waiter on DELETE_FAILED", async () => {
+    const cfn = fakeCfn({
+      describeResponses: [{ status: "ROLLBACK_COMPLETE" }, { status: "DELETE_FAILED" }],
+      commands: [],
+    });
+    const { waitForStackDelete: _wait, ...deps } = crossAccountDeps(cfn);
+
+    await expect(createStackForDeployment({ detail: validDetail() }, deps)).rejects.toThrow(
+      /could not be deleted/,
+    );
+  });
+
+  it("should bound the default delete waiter", async () => {
+    const cfn = fakeCfn({
+      describeResponses: [
+        { status: "ROLLBACK_COMPLETE" },
+        ...Array.from({ length: 60 }, () => ({ status: "DELETE_IN_PROGRESS" })),
+      ],
+      commands: [],
+    });
+    const { waitForStackDelete: _wait, ...deps } = crossAccountDeps(cfn);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(0));
+    try {
+      const assertion = expect(
+        createStackForDeployment({ detail: validDetail() }, deps),
+      ).rejects.toThrow(/timed out waiting/);
+      await vi.advanceTimersByTimeAsync(4 * 60 * 1000 + 1);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("should NOT delete when the stack is absent (plain create)", async () => {
     const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
     const deps = crossAccountDeps(cfn);
@@ -490,6 +534,16 @@ describe("createStackForDeployment cross-account (#2291)", () => {
     const kinds = cfn.send.mock.calls.map((c) => (c[0] as object).constructor.name);
     expect(kinds).not.toContain("DeleteStackCommand");
     expect(deps.waitForStackDelete).not.toHaveBeenCalled();
+  });
+
+  it("should UpdateStack rather than CreateStack when a healthy stack exists", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ status: "CREATE_COMPLETE" }], commands: [] });
+    const result = await createStackForDeployment({ detail: validDetail() }, crossAccountDeps(cfn));
+
+    expect(result.operation).toBe("update");
+    const kinds = cfn.send.mock.calls.map((c) => (c[0] as object).constructor.name);
+    expect(kinds).toContain("UpdateStackCommand");
+    expect(kinds).not.toContain("CreateStackCommand");
   });
 
   it("should reject an invalid event detail (schema fail-loud)", async () => {
@@ -615,7 +669,7 @@ describe("createStackForDeployment create-or-update collapse (#2291)", () => {
     });
     const deps = crossAccountDeps(cfn);
     const result = await createStackForDeployment({ detail: validDetail() }, deps);
-    expect(result).toEqual({});
+    expect(result).toEqual({ operation: "noop" });
   });
 
   it("should re-throw a non-'not found' DescribeStacks error while resolving the no-op StackId", async () => {
@@ -778,6 +832,42 @@ describe("createStackForDeployment progress logging (#2291)", () => {
     expect(rec.messages.some((m) => m.startsWith("Deploy failed: "))).toBe(true);
   });
 
+  it("should stringify non-Error CreateStack failures in progress output", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    cfn.send.mockImplementation(async (command: unknown) => {
+      if (command instanceof CreateStackCommand) return Promise.reject("create rejected");
+      if (command instanceof DescribeStacksCommand) {
+        throw new Error("Stack with id tc-sample-flag-demo-team does not exist");
+      }
+      return {};
+    });
+    const rec = recordingProgressFactory();
+    const deps = { ...crossAccountDeps(cfn), progressFactory: rec.factory };
+
+    await expect(createStackForDeployment({ detail: validDetail() }, deps)).rejects.toBe(
+      "create rejected",
+    );
+    expect(rec.messages).toContain("Deploy failed: create rejected");
+  });
+
+  it("should report a submitted CreateStack even when AWS omits StackId", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    cfn.send.mockImplementation(async (command: unknown) => {
+      if (command instanceof CreateStackCommand) return {};
+      if (command instanceof DescribeStacksCommand) {
+        throw new Error("Stack with id tc-sample-flag-demo-team does not exist");
+      }
+      return {};
+    });
+    const rec = recordingProgressFactory();
+    const deps = { ...crossAccountDeps(cfn), progressFactory: rec.factory };
+
+    await expect(createStackForDeployment({ detail: validDetail() }, deps)).resolves.toEqual({
+      operation: "create",
+    });
+    expect(rec.messages).toContain("CreateStack submitted (stackId -)");
+  });
+
   it("should stream Update progress lines when the existing stack is healthy", async () => {
     const cfn = fakeCfn({ describeResponses: [{ status: "CREATE_COMPLETE" }], commands: [] });
     const rec = recordingProgressFactory();
@@ -814,6 +904,24 @@ describe("createStackForDeployment progress logging (#2291)", () => {
     );
     expect(rec.messages.some((m) => m.startsWith("Deploy failed: "))).toBe(true);
   });
+
+  it("should stringify non-Error UpdateStack failures in progress output", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ status: "CREATE_COMPLETE" }], commands: [] });
+    cfn.send.mockImplementation(async (command: unknown) => {
+      if (command instanceof DescribeStacksCommand) {
+        return { Stacks: [{ StackStatus: "CREATE_COMPLETE" }] };
+      }
+      if (command instanceof UpdateStackCommand) return Promise.reject("update rejected");
+      return {};
+    });
+    const rec = recordingProgressFactory();
+    const deps = { ...crossAccountDeps(cfn), progressFactory: rec.factory };
+
+    await expect(createStackForDeployment({ detail: validDetail() }, deps)).rejects.toBe(
+      "update rejected",
+    );
+    expect(rec.messages).toContain("Deploy failed: update rejected");
+  });
 });
 
 describe("createStackForDeployment same-account (#2291)", () => {
@@ -834,5 +942,78 @@ describe("createStackForDeployment same-account (#2291)", () => {
     expect((createCmd as CreateStackCommand).input.RoleARN).toBe(
       "arn:aws:iam::999988887777:role/CfnExec",
     );
+  });
+});
+
+describe("create-stack Lambda handler configuration (#2291)", () => {
+  it("should build regional CloudFormation clients with and without assumed credentials", async () => {
+    const crossAccount = buildCloudFormationClient({
+      region: "ap-northeast-1",
+      credentials: {
+        AccessKeyId: "AKIA_TEST",
+        SecretAccessKey: "secret",
+        SessionToken: "session",
+        Expiration: new Date("2030-01-01T00:00:00Z"),
+      },
+    });
+    expect(await crossAccount.config.region()).toBe("ap-northeast-1");
+    expect(await crossAccount.config.credentials()).toMatchObject({
+      accessKeyId: "AKIA_TEST",
+      secretAccessKey: "secret",
+      sessionToken: "session",
+    });
+
+    const sameAccount = buildCloudFormationClient({ region: "us-east-1" });
+    expect(await sameAccount.config.region()).toBe("us-east-1");
+
+    const incomplete = buildCloudFormationClient({
+      region: "eu-west-1",
+      credentials: {
+        AccessKeyId: undefined,
+        SecretAccessKey: undefined,
+      },
+    });
+    expect(await incomplete.config.credentials()).toMatchObject({
+      accessKeyId: "",
+      secretAccessKey: "",
+    });
+  });
+
+  it("should fail loudly when required runtime configuration is absent", async () => {
+    const previous = process.env.SOURCE_BUCKET_NAME;
+    delete process.env.SOURCE_BUCKET_NAME;
+    try {
+      await expect(handler({ detail: {} })).rejects.toThrow(
+        /missing required env var: SOURCE_BUCKET_NAME/,
+      );
+    } finally {
+      if (previous === undefined) delete process.env.SOURCE_BUCKET_NAME;
+      else process.env.SOURCE_BUCKET_NAME = previous;
+    }
+  });
+
+  it("should read all required runtime configuration before validating the event", async () => {
+    const previous = {
+      sourceBucket: process.env.SOURCE_BUCKET_NAME,
+      accountId: process.env.TENKACLOUD_ACCOUNT_ID,
+      roleArn: process.env.CFN_EXEC_ROLE_ARN,
+    };
+    process.env.SOURCE_BUCKET_NAME = "source-bucket";
+    process.env.TENKACLOUD_ACCOUNT_ID = "123456789012";
+    process.env.CFN_EXEC_ROLE_ARN = "arn:aws:iam::123456789012:role/CfnExec";
+    try {
+      await expect(handler({ detail: {} })).rejects.toThrow();
+      delete process.env.CFN_EXEC_ROLE_ARN;
+      await expect(handler({ detail: {} })).rejects.toThrow();
+    } finally {
+      for (const [name, value] of [
+        ["SOURCE_BUCKET_NAME", previous.sourceBucket],
+        ["TENKACLOUD_ACCOUNT_ID", previous.accountId],
+        ["CFN_EXEC_ROLE_ARN", previous.roleArn],
+      ] as const) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
   });
 });

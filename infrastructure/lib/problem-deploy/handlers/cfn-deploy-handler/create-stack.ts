@@ -36,7 +36,6 @@ import {
   UpdateStackCommand,
   type UpdateStackCommandOutput,
 } from "@aws-sdk/client-cloudformation";
-import { CloudWatchLogsClient } from "@aws-sdk/client-cloudwatch-logs";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { type Credentials, STSClient } from "@aws-sdk/client-sts";
@@ -49,13 +48,16 @@ import {
   assumeCompetitorRole,
 } from "../shared/assume-competitor-role.js";
 import {
+  type DeploymentProgressWriter,
+  writeDeploymentProgress,
+} from "../shared/deployment-progress-log.js";
+import {
   type DeployCreateRequestedDetail,
   DeployCreateRequestedDetailSchema,
 } from "../shared/events.js";
 import { logDeployTrace, warnDeployTrace } from "../shared/trace-log.js";
 import {
   type JobProgressLogger,
-  makeJobProgressLogger,
   NOOP_JOB_PROGRESS_LOGGER,
   safeProgressInfo,
 } from "./job-progress-log.js";
@@ -353,11 +355,7 @@ export interface CreateStackDeps extends AssumeCompetitorRoleDeps {
     cfn: Pick<CloudFormationClient, "send">,
     stackName: string,
   ) => Promise<void>;
-  /**
-   * Issue #2291: factory for the per-job progress logger (keyed by `jobId`). Present only when the
-   * deploy Lambda has a job log group wired (`DEPLOY_JOB_LOG_GROUP` env, `deployViaLambda` ON).
-   * Absent → {@link NOOP_JOB_PROGRESS_LOGGER} (default-safe, no CloudWatch writes).
-   */
+  readonly progress?: DeploymentProgressWriter;
   readonly progressFactory?: (jobId: string) => JobProgressLogger;
 }
 
@@ -398,10 +396,6 @@ async function describeStackId(
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/** Poll interval + overall timeout for {@link defaultWaitForStackDelete} (pre-create delete drain). */
-const DELETE_POLL_INTERVAL_MS = 5_000;
-const DELETE_WAIT_TIMEOUT_MS = 4 * 60_000;
-
 /**
  * Bounded poll until the stack is gone. TODO(#2291 follow-up): a very long delete can exceed the
  * Lambda timeout; the hardened path (SFN-driven delete + re-drive) is deferred. For the common
@@ -411,14 +405,14 @@ async function defaultWaitForStackDelete(
   cfn: Pick<CloudFormationClient, "send">,
   stackName: string,
 ): Promise<void> {
-  const deadline = Date.now() + DELETE_WAIT_TIMEOUT_MS;
+  const deadline = Date.now() + 4 * 60 * 1000;
   while (Date.now() < deadline) {
     const status = await describeStackStatus(cfn, stackName);
     if (status === undefined) return;
     if (status === "DELETE_FAILED") {
       throw new Error(`unrecoverable stack ${stackName} could not be deleted (DELETE_FAILED)`);
     }
-    await sleep(DELETE_POLL_INTERVAL_MS);
+    await sleep(5000);
   }
   throw new Error(`timed out waiting for stack ${stackName} to delete before re-create`);
 }
@@ -431,7 +425,7 @@ interface DeployCommandArgs {
   readonly tags: readonly CfnTag[];
   /** Same-account CFn exec role; undefined for cross-account (runs under assumed creds). */
   readonly roleArn: string | undefined;
-  readonly progress: JobProgressLogger;
+  readonly reportProgress: (message: string) => Promise<void>;
 }
 
 /**
@@ -443,9 +437,12 @@ interface DeployCommandArgs {
 async function updateHealthyStack(
   cfn: Pick<CloudFormationClient, "send">,
   args: DeployCommandArgs,
-): Promise<{ readonly stackId?: string }> {
-  const { detail, correlationId, progress } = args;
-  await safeProgressInfo(progress, `Updating stack ${detail.namePrefix} ...`);
+): Promise<{
+  readonly stackId?: string;
+  readonly operation: "update" | "noop";
+}> {
+  const { detail, correlationId, reportProgress } = args;
+  await reportProgress(`Updating stack ${detail.namePrefix} ...`);
   let updated: UpdateStackCommandOutput;
   try {
     updated = await cfn.send(
@@ -467,19 +464,16 @@ async function updateHealthyStack(
         stackName: detail.namePrefix,
         region: detail.region,
       });
-      await safeProgressInfo(progress, "No changes to apply");
+      await reportProgress("No changes to apply");
       const stackId = await describeStackId(cfn, detail.namePrefix);
-      return stackId ? { stackId } : {};
+      return stackId ? { stackId, operation: "noop" } : { operation: "noop" };
     }
     // Best-effort failure line for the participant; the throw still drives the SM → DDB FAILED.
-    await safeProgressInfo(
-      progress,
-      `Deploy failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    await reportProgress(`Deploy failed: ${err instanceof Error ? err.message : String(err)}`);
     throw err;
   }
   const updateStackId = updated.StackId;
-  await safeProgressInfo(progress, `UpdateStack submitted (stackId ${updateStackId ?? "-"})`);
+  await reportProgress(`UpdateStack submitted (stackId ${updateStackId ?? "-"})`);
   logDeployTrace("deploy.cfn-lambda.update-stack.submitted", {
     jobId: detail.jobId,
     correlationId,
@@ -488,7 +482,7 @@ async function updateHealthyStack(
     region: detail.region,
     stackId: updateStackId,
   });
-  return { stackId: updateStackId };
+  return { stackId: updateStackId, operation: "update" };
 }
 
 /**
@@ -498,13 +492,15 @@ async function updateHealthyStack(
 export async function createStackForDeployment(
   input: CreateStackInput,
   deps: CreateStackDeps,
-): Promise<{ readonly stackId?: string }> {
+): Promise<{ readonly stackId?: string; readonly operation: "create" | "update" | "noop" }> {
   const detail = DeployCreateRequestedDetailSchema.parse(input.detail);
   const correlationId = detail.correlationId ?? detail.jobId;
   const generateToken = deps.generateToken ?? (() => generateRandomAlphanumeric(32));
-  // #2291: competitor-visible deploy progress. NOOP when no job log group is wired (flag OFF).
-  // All lines are secret-free (no ExternalId / credentials / random password).
-  const progress = deps.progressFactory?.(detail.jobId) ?? NOOP_JOB_PROGRESS_LOGGER;
+  const jobProgress = deps.progressFactory?.(detail.jobId) ?? NOOP_JOB_PROGRESS_LOGGER;
+  const reportProgress = async (message: string): Promise<void> => {
+    await safeProgressInfo(jobProgress, message);
+    await deps.progress?.(detail.jobId, message);
+  };
 
   logDeployTrace("deploy.cfn-lambda.start", {
     jobId: detail.jobId,
@@ -514,6 +510,7 @@ export async function createStackForDeployment(
     region: detail.region,
     hasCompetitorRole: Boolean(detail.competitorRoleArn),
   });
+  await reportProgress(`Preparing CloudFormation deployment for ${detail.problemId}`);
 
   const artifacts = await deps.resolveArtifacts(detail);
 
@@ -545,7 +542,7 @@ export async function createStackForDeployment(
   });
 
   const cfn = deps.cfnClient({ region: detail.region, credentials });
-  await safeProgressInfo(progress, `Deploying stack ${detail.namePrefix} ...`);
+  await reportProgress(`Deploying stack ${detail.namePrefix} ...`);
 
   // Create-or-update collapse (mirrors idempotent `aws cloudformation deploy`): pick the action
   // from the live stack status. An absent stack → create; a healthy stack → in-place update; an
@@ -569,10 +566,7 @@ export async function createStackForDeployment(
       stackName: detail.namePrefix,
       status: existingStatus,
     });
-    await safeProgressInfo(
-      progress,
-      `Deleting unrecoverable stack (${existingStatus}) before re-create ...`,
-    );
+    await reportProgress(`Deleting unrecoverable stack (${existingStatus}) before re-create ...`);
     await cfn.send(new DeleteStackCommand({ StackName: detail.namePrefix }));
     const waitForStackDelete = deps.waitForStackDelete ?? defaultWaitForStackDelete;
     await waitForStackDelete(cfn, detail.namePrefix);
@@ -591,35 +585,28 @@ export async function createStackForDeployment(
       parameters,
       tags,
       roleArn,
-      progress,
+      reportProgress,
     });
   }
 
   // action is "create" or "delete-recreate" (the stack is now absent) → CreateStack.
+  const stackInput = {
+    StackName: detail.namePrefix,
+    TemplateBody: artifacts.templateBody,
+    Parameters: parameters,
+    Capabilities: [Capability.CAPABILITY_NAMED_IAM],
+    Tags: tags,
+    ...(roleArn ? { RoleARN: roleArn } : {}),
+  };
   let out: CreateStackCommandOutput;
   try {
-    out = await cfn.send(
-      new CreateStackCommand({
-        StackName: detail.namePrefix,
-        TemplateBody: artifacts.templateBody,
-        Parameters: parameters,
-        Capabilities: [Capability.CAPABILITY_NAMED_IAM],
-        Tags: tags,
-        ...(roleArn ? { RoleARN: roleArn } : {}),
-        // OnFailure defaults to ROLLBACK: a failed CREATE lands in ROLLBACK_COMPLETE (unrecoverable),
-        // which the next run's pre-delete cleans — matches `aws cloudformation deploy` semantics.
-      }),
+    out = await cfn.send(new CreateStackCommand(stackInput));
+  } catch (error) {
+    await reportProgress(
+      `Deploy failed: ${error instanceof Error ? error.message : String(error)}`,
     );
-  } catch (err) {
-    // Best-effort failure line for the participant; the throw still drives the SM → DDB FAILED.
-    await safeProgressInfo(
-      progress,
-      `Deploy failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    throw err;
+    throw error;
   }
-  await safeProgressInfo(progress, `CreateStack submitted (stackId ${out.StackId ?? "-"})`);
-
   logDeployTrace("deploy.cfn-lambda.create-stack.submitted", {
     jobId: detail.jobId,
     correlationId,
@@ -628,7 +615,8 @@ export async function createStackForDeployment(
     region: detail.region,
     stackId: out.StackId,
   });
-  return { stackId: out.StackId };
+  await reportProgress(`CreateStack submitted (stackId ${out.StackId ?? "-"})`);
+  return { stackId: out.StackId, operation: "create" };
 }
 
 // ---------------------------------------------------------------------------
@@ -645,31 +633,35 @@ function requireEnv(name: string): string {
 const ssm = new SSMClient({});
 const sts = new STSClient({});
 const s3 = new S3Client({});
-const cwLogs = new CloudWatchLogsClient({});
 
-export async function handler(input: CreateStackInput): Promise<{ readonly stackId?: string }> {
+export function buildCloudFormationClient(params: {
+  readonly region: string;
+  readonly credentials?: Credentials;
+}): CloudFormationClient {
+  return new CloudFormationClient({
+    region: params.region,
+    ...(params.credentials
+      ? {
+          credentials: {
+            accessKeyId: params.credentials.AccessKeyId ?? "",
+            secretAccessKey: params.credentials.SecretAccessKey ?? "",
+            sessionToken: params.credentials.SessionToken,
+          },
+        }
+      : {}),
+  });
+}
+
+export async function handler(
+  input: CreateStackInput,
+): Promise<{ readonly stackId?: string; readonly operation: "create" | "update" | "noop" }> {
   const sourceBucket = requireEnv("SOURCE_BUCKET_NAME");
   const tenkaCloudAccountId = requireEnv("TENKACLOUD_ACCOUNT_ID");
   const cfnExecRoleArn = process.env.CFN_EXEC_ROLE_ARN || undefined;
-  // #2291: only wire a real progress logger when the dedicated job log group is present
-  // (deployViaLambda ON). Absent → NOOP inside createStackForDeployment (default-safe).
-  const jobLogGroup = process.env.DEPLOY_JOB_LOG_GROUP || undefined;
   return createStackForDeployment(input, {
     ssm,
     sts,
-    cfnClient: ({ region, credentials }) =>
-      new CloudFormationClient({
-        region,
-        ...(credentials
-          ? {
-              credentials: {
-                accessKeyId: credentials.AccessKeyId ?? "",
-                secretAccessKey: credentials.SecretAccessKey ?? "",
-                sessionToken: credentials.SessionToken,
-              },
-            }
-          : {}),
-      }),
+    cfnClient: buildCloudFormationClient,
     // Public problems read the materialized tree from S3; private problems (challengePayloadUrl
     // set) download + unzip the presigned payload via challenge-payload-artifacts.ts.
     resolveArtifacts: buildArtifactsResolver({
@@ -677,11 +669,6 @@ export async function handler(input: CreateStackInput): Promise<{ readonly stack
     }),
     tenkaCloudAccountId,
     cfnExecRoleArn,
-    ...(jobLogGroup
-      ? {
-          progressFactory: (jobId: string) =>
-            makeJobProgressLogger({ logs: cwLogs, logGroupName: jobLogGroup, jobId }),
-        }
-      : {}),
+    progress: writeDeploymentProgress,
   });
 }

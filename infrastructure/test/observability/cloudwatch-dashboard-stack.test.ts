@@ -3,7 +3,10 @@ import { Template } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 import { ObservabilityStack } from "../../lib/observability/cloudwatch-dashboard-stack";
 
-function synthDefault(cfnDeploy?: string): Template {
+function synthDefault(
+  cfnDeploy?: string,
+  problemDeployProjectName: string | null = "tenkacloud-problem-deploy",
+): Template {
   const app = new cdk.App();
   const stack = new ObservabilityStack(app, "ObservabilityStack", {
     environment: "test",
@@ -12,7 +15,7 @@ function synthDefault(cfnDeploy?: string): Template {
       deployDeleteArn: "arn:aws:states:ap-northeast-1:123456789012:stateMachine:DeployDelete",
     },
     codeBuildProjectNames: {
-      problemDeploy: "tenkacloud-problem-deploy",
+      problemDeploy: problemDeployProjectName ?? undefined,
       provisioning: "tenkacloud-saas-provisioning",
     },
     dynamoDbTableNames: {
@@ -153,5 +156,9 @@ describe("ObservabilityStack", () => {
     // Default-safe: flag-off leaves the dashboard byte-identical (no Lambda-path deploy widget).
     expect(body).not.toContain("Deploy chain - Lambda (CfnDeploy)");
     expect(widgetCount(tpl)).toBe(8);
+  });
+
+  it("should omit the retired deploy CodeBuild metric in Lambda mode", () => {
+    expect(dashboardBody(synthDefault(undefined, null))).not.toContain("tenkacloud-problem-deploy");
   });
 });

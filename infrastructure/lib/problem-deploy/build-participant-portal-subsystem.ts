@@ -31,7 +31,7 @@ export interface BuildParticipantPortalSubsystemArgs {
    * stream するのに、 portal Lambda role へ この project の build + log group への read-only を
    * least-privilege で付与するために渡す (`ParticipantPortalLambda` が grant を組み立てる)。
    */
-  readonly deployCodeBuildProject: IProject;
+  readonly deployCodeBuildProject?: IProject;
   /**
    * Issue #2291: Lambda 経路 (`deployViaLambda` ON) の deploy 進捗を書く jobId stream の log group。
    * present のときだけ portal Lambda に `logs:GetLogEvents` read scope + `DEPLOY_JOB_LOG_GROUP` env を
@@ -78,7 +78,7 @@ export function buildParticipantPortalSubsystem(
     problemsWriteups: args.problemsWriteups,
     problemsEndpoints: args.problemsEndpoints,
     environmentName: args.environmentName,
-    deployCodeBuildProject: args.deployCodeBuildProject,
+    ...(args.deployCodeBuildProject ? { deployCodeBuildProject: args.deployCodeBuildProject } : {}),
     // #2291: only when the Lambda deploy path is on (flag OFF → absent, no extra grant/env).
     ...(args.deployJobLogGroup ? { deployJobLogGroup: args.deployJobLogGroup } : {}),
   });
