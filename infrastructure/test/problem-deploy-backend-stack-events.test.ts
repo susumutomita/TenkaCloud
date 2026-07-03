@@ -2,12 +2,14 @@ import { Match } from "aws-cdk-lib/assertions";
 import { describe, it } from "vitest";
 import { SBT_ONBOARDING_DETAIL_TYPES } from "../lib/problem-deploy/handlers/system-audit-writer/sbt-detail-types";
 import {
-  synthDefault,
+  synthWithCodeBuild,
   synthWithDeployViaLambda,
 } from "./problem-deploy-backend-stack.test-helpers";
 
+// Issue #2291: Lambda 既定では DeployFailureRule が加わり Rule 数が 9 になるため、在来 8 Rule と
+// CodeBuild 失敗 Rule を検証するこの suite は CodeBuild 経路 (flag=false rollback 相当) を明示 synth する。
 describe("ProblemDeployBackendStack (MVP-1) — EventBridge Rules", () => {
-  const tpl = synthDefault();
+  const tpl = synthWithCodeBuild();
 
   it("should have 8 EventBridge Rules (Create / Delete / BulkCreate / GenericScoring / ExternalIdAudit schedule / SystemAuditWriter (Issue #1034) / CodeBuildFailure (Issue #1029) / DisruptionExecutor (ADR-031 #1419))", () => {
     // 旧 2 (Create / Delete state-machine event rules)
@@ -82,8 +84,8 @@ describe("ProblemDeployBackendStack (MVP-1) — EventBridge Rules", () => {
     );
   });
 
-  it("Issue #2291: should NOT add the deploy-failure rule when deployViaLambda is off (default-safe)", () => {
-    // flag OFF (= synthDefault) では `TenkaCloud Deploy Failed` を listen する Rule は無い。
+  it("Issue #2291: should NOT add the deploy-failure rule when deployViaLambda is off (rollback-safe)", () => {
+    // flag OFF (= synthWithCodeBuild) では `TenkaCloud Deploy Failed` を listen する Rule は無い。
     const rules = tpl.findResources("AWS::Events::Rule");
     const hasDeployFailedRule = Object.values(rules).some((r) => {
       const detailType = r.Properties?.EventPattern?.["detail-type"];

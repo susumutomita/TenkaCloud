@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  synthDefault,
+  synthWithCodeBuild,
   synthWithDeployViaLambda,
 } from "./problem-deploy-backend-stack.test-helpers";
 
+// Issue #2291: この suite は CodeBuild `.sync` (StartDeployCodeBuild / StartDeleteCodeBuild) 定義を
+// 検証するので、Lambda 既定へ反転後も在来 CodeBuild 経路を明示 synth する (= flag=false rollback 相当)。
 describe("ProblemDeployBackendStack (MVP-1) — Step Functions State Machines", () => {
-  const tpl = synthDefault();
+  const tpl = synthWithCodeBuild();
 
   it("should create 3 State Machines (Create / Delete / BulkCreate) (Issue #910 Phase 2.C.2.a)", () => {
     tpl.resourceCountIs("AWS::StepFunctions::StateMachine", 3);

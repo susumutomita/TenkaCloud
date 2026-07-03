@@ -1,7 +1,7 @@
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 import {
-  synthDefault,
+  synthWithCodeBuild,
   synthWithDeployViaLambda,
 } from "./problem-deploy-backend-stack.test-helpers";
 
@@ -36,10 +36,11 @@ describe("ProblemDeployBackendStack — problem artifacts materialization (Issue
 });
 
 describe("ProblemDeployBackendStack — no artifacts materialization when deployViaLambda is off", () => {
-  const tpl = synthDefault();
+  // Issue #2291: Lambda が既定になったので、flag OFF (在来 CodeBuild 経路) を明示 synth する。
+  const tpl = synthWithCodeBuild();
 
   it("should NOT add the bucket deployment when deployViaLambda is off", () => {
-    // The default (flag-OFF) stack still has the CompetitorBootstrapHosting BucketDeployment, but
+    // The flag-OFF (CodeBuild) stack still has the CompetitorBootstrapHosting BucketDeployment, but
     // it targets its own generated bucket — none may target the shared source bucket.
     const deployments = tpl.findResources("Custom::CDKBucketDeployment");
     const targetingSource = Object.values(deployments).filter(
