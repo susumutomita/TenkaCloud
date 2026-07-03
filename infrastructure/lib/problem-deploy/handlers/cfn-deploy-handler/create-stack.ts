@@ -15,10 +15,14 @@
  *     replaced by a fresh 32-char alphanumeric secret (mirrors `build_parameter_overrides`).
  *   - A stack left in an un-updatable state (ROLLBACK_COMPLETE / CREATE_FAILED / …) is deleted
  *     before re-create (mirrors `delete_unrecoverable_stack_if_present`).
+ *   - Create-or-update collapse: a healthy existing stack (CREATE_COMPLETE / UPDATE_COMPLETE / …)
+ *     is updated in place via UpdateStack, and an unchanged template ("No updates are to be
+ *     performed.") is a successful no-op — mirrors idempotent `aws cloudformation deploy` so a
+ *     re-deploy over a live stack no longer fails with `AlreadyExists`.
  *   - `tc-{problemSlug}-{teamSlug}` stack name + `TenkaCloud:*` tags.
  *
- * NON-blocking: this returns right after CreateStack; the Step Functions poll loop watches
- * DescribeStacks until terminal and writes the DDB status transitions.
+ * NON-blocking: this returns right after CreateStack/UpdateStack; the Step Functions poll loop
+ * watches DescribeStacks until terminal and writes the DDB status transitions.
  */
 
 import { randomInt } from "node:crypto";
@@ -29,6 +33,8 @@ import {
   type CreateStackCommandOutput,
   DeleteStackCommand,
   DescribeStacksCommand,
+  UpdateStackCommand,
+  type UpdateStackCommandOutput,
 } from "@aws-sdk/client-cloudformation";
 import { CloudWatchLogsClient } from "@aws-sdk/client-cloudwatch-logs";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
@@ -173,9 +179,51 @@ export function isUnrecoverableStackStatus(status: string | undefined): boolean 
   return status !== undefined && UNRECOVERABLE_STACK_STATUSES.has(status);
 }
 
+/**
+ * A stack in one of these states already deployed cleanly; a re-deploy is an in-place UpdateStack
+ * (create-or-update collapse — mirrors what idempotent `aws cloudformation deploy` does for an
+ * existing stack). `UPDATE_ROLLBACK_COMPLETE` and the two `IMPORT_*_COMPLETE` states are also
+ * updatable, so they belong here rather than in the unrecoverable (pre-delete) set.
+ */
+const HEALTHY_STACK_STATUSES: ReadonlySet<string> = new Set([
+  "CREATE_COMPLETE",
+  "UPDATE_COMPLETE",
+  "UPDATE_ROLLBACK_COMPLETE",
+  "IMPORT_COMPLETE",
+  "IMPORT_ROLLBACK_COMPLETE",
+]);
+
+/** The deploy action a live stack status implies (create-or-update collapse decision). */
+export type DeployAction = "create" | "update" | "delete-recreate" | "in-progress";
+
+/**
+ * Decide how to deploy over an existing stack, given its current status:
+ *   - `undefined` (absent) → `"create"` (plain CreateStack).
+ *   - unrecoverable ({@link isUnrecoverableStackStatus}: ROLLBACK_COMPLETE / CREATE_FAILED / …) →
+ *     `"delete-recreate"` (DeleteStack, wait, then CreateStack).
+ *   - healthy ({@link HEALTHY_STACK_STATUSES}) → `"update"` (in-place UpdateStack).
+ *   - anything else (a transitional `*_IN_PROGRESS`) → `"in-progress"` (caller must fail loud; we
+ *     never silently skip a deploy over a stack that is still settling).
+ */
+export function classifyDeployAction(status: string | undefined): DeployAction {
+  if (status === undefined) return "create";
+  if (isUnrecoverableStackStatus(status)) return "delete-recreate";
+  if (HEALTHY_STACK_STATUSES.has(status)) return "update";
+  return "in-progress";
+}
+
 /** CloudFormation reports an absent stack as an error whose message contains "does not exist". */
 export function isStackNotFoundError(err: unknown): boolean {
   return err instanceof Error && /does not exist/i.test(err.message);
+}
+
+/**
+ * UpdateStack against a stack whose template + parameters are unchanged fails with
+ * "No updates are to be performed." — an idempotent re-deploy, not a real failure. Treated as a
+ * successful no-op (mirrors `aws cloudformation deploy --no-fail-on-empty-changeset`).
+ */
+export function isNoUpdatesError(err: unknown): boolean {
+  return err instanceof Error && /no updates are to be performed/i.test(err.message);
 }
 
 // ---------------------------------------------------------------------------
@@ -296,6 +344,24 @@ async function describeStackStatus(
   }
 }
 
+/**
+ * Resolve the physical StackId for the no-update no-op return value (UpdateStack does not report a
+ * StackId when it raises "No updates are to be performed."). An absent stack yields `undefined`; any
+ * other DescribeStacks error is rethrown (fail loud — matches {@link describeStackStatus}).
+ */
+async function describeStackId(
+  cfn: Pick<CloudFormationClient, "send">,
+  stackName: string,
+): Promise<string | undefined> {
+  try {
+    const out = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+    return out.Stacks?.[0]?.StackId;
+  } catch (err) {
+    if (isStackNotFoundError(err)) return undefined;
+    throw err;
+  }
+}
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Poll interval + overall timeout for {@link defaultWaitForStackDelete} (pre-create delete drain). */
@@ -321,6 +387,74 @@ async function defaultWaitForStackDelete(
     await sleep(DELETE_POLL_INTERVAL_MS);
   }
   throw new Error(`timed out waiting for stack ${stackName} to delete before re-create`);
+}
+
+interface DeployCommandArgs {
+  readonly detail: DeployCreateRequestedDetail;
+  readonly correlationId: string;
+  readonly templateBody: string;
+  readonly parameters: readonly CfnParameter[];
+  readonly tags: readonly CfnTag[];
+  /** Same-account CFn exec role; undefined for cross-account (runs under assumed creds). */
+  readonly roleArn: string | undefined;
+  readonly progress: JobProgressLogger;
+}
+
+/**
+ * In-place UpdateStack over a healthy existing stack (create-or-update collapse). An unchanged
+ * template raises "No updates are to be performed." — treated as a successful no-op that resolves
+ * its StackId from DescribeStacks (mirrors `aws cloudformation deploy --no-fail-on-empty-changeset`).
+ * A non-no-op failure emits a best-effort progress line and re-throws (fail loud → SM → DDB FAILED).
+ */
+async function updateHealthyStack(
+  cfn: Pick<CloudFormationClient, "send">,
+  args: DeployCommandArgs,
+): Promise<{ readonly stackId?: string }> {
+  const { detail, correlationId, progress } = args;
+  await safeProgressInfo(progress, `Updating stack ${detail.namePrefix} ...`);
+  let updated: UpdateStackCommandOutput;
+  try {
+    updated = await cfn.send(
+      new UpdateStackCommand({
+        StackName: detail.namePrefix,
+        TemplateBody: args.templateBody,
+        Parameters: [...args.parameters],
+        Capabilities: [Capability.CAPABILITY_NAMED_IAM],
+        Tags: [...args.tags],
+        ...(args.roleArn ? { RoleARN: args.roleArn } : {}),
+      }),
+    );
+  } catch (err) {
+    if (isNoUpdatesError(err)) {
+      logDeployTrace("deploy.cfn-lambda.update-stack.no-op", {
+        jobId: detail.jobId,
+        correlationId,
+        tenantId: detail.tenantId,
+        stackName: detail.namePrefix,
+        region: detail.region,
+      });
+      await safeProgressInfo(progress, "No changes to apply");
+      const stackId = await describeStackId(cfn, detail.namePrefix);
+      return stackId ? { stackId } : {};
+    }
+    // Best-effort failure line for the participant; the throw still drives the SM → DDB FAILED.
+    await safeProgressInfo(
+      progress,
+      `Deploy failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    throw err;
+  }
+  const updateStackId = updated.StackId;
+  await safeProgressInfo(progress, `UpdateStack submitted (stackId ${updateStackId ?? "-"})`);
+  logDeployTrace("deploy.cfn-lambda.update-stack.submitted", {
+    jobId: detail.jobId,
+    correlationId,
+    tenantId: detail.tenantId,
+    stackName: detail.namePrefix,
+    region: detail.region,
+    stackId: updateStackId,
+  });
+  return { stackId: updateStackId };
 }
 
 /**
@@ -379,9 +513,22 @@ export async function createStackForDeployment(
   const cfn = deps.cfnClient({ region: detail.region, credentials });
   await safeProgressInfo(progress, `Deploying stack ${detail.namePrefix} ...`);
 
-  // Delete an un-updatable stack (ROLLBACK_COMPLETE / CREATE_FAILED / …) before re-create.
+  // Create-or-update collapse (mirrors idempotent `aws cloudformation deploy`): pick the action
+  // from the live stack status. An absent stack → create; a healthy stack → in-place update; an
+  // un-updatable stack → delete + re-create; a transitional `*_IN_PROGRESS` → fail loud.
   const existingStatus = await describeStackStatus(cfn, detail.namePrefix);
-  if (isUnrecoverableStackStatus(existingStatus)) {
+  const action = classifyDeployAction(existingStatus);
+
+  // Never silently skip a deploy over a stack that is still settling — fail loud so the SM → DDB
+  // records FAILED rather than a no-op success while the stack keeps transitioning.
+  if (action === "in-progress") {
+    throw new Error(
+      `stack ${detail.namePrefix} is currently ${existingStatus}; cannot deploy until it settles`,
+    );
+  }
+
+  // Delete an un-updatable stack (ROLLBACK_COMPLETE / CREATE_FAILED / …) before re-create.
+  if (action === "delete-recreate") {
     warnDeployTrace("deploy.cfn-lambda.delete-unrecoverable", {
       jobId: detail.jobId,
       correlationId,
@@ -401,12 +548,20 @@ export async function createStackForDeployment(
   // deploys run under the assumed competitor credentials, so no RoleARN is passed.
   const roleArn = credentials === undefined ? deps.cfnExecRoleArn : undefined;
 
-  // TODO(#2291 follow-up): this is the CREATE path only. `deploy-battles.sh` uses
-  // `aws cloudformation deploy` (create-or-update idempotent); re-deploying a *healthy*
-  // CREATE_COMPLETE / UPDATE_COMPLETE stack here would fail with AlreadyExists. The
-  // create-or-update collapse (UpdateStack + no-op on empty changeset) is deferred to a later
-  // slice. Dormant in production because the `deployViaLambda` flag is OFF by default.
+  // A healthy stack is updated in place (create-or-update collapse).
+  if (action === "update") {
+    return updateHealthyStack(cfn, {
+      detail,
+      correlationId,
+      templateBody: artifacts.templateBody,
+      parameters,
+      tags,
+      roleArn,
+      progress,
+    });
+  }
 
+  // action is "create" or "delete-recreate" (the stack is now absent) → CreateStack.
   let out: CreateStackCommandOutput;
   try {
     out = await cfn.send(

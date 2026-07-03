@@ -353,4 +353,90 @@ describe("getParticipantDeployLogs", () => {
     expect(deps.logs.send).not.toHaveBeenCalled();
     expect(deps.codebuild.send).not.toHaveBeenCalled();
   });
+
+  it("should return empty entries (with nextToken) when the job log stream has no events yet", async () => {
+    // Lambda path, stream exists but no events buffered — the `events ?? []` fallback yields [].
+    process.env.DEPLOY_JOB_LOG_GROUP = "/tenkacloud/deploy-jobs";
+    vi.mocked(queryTeamItems).mockResolvedValueOnce([
+      { jobId: JOB_ID, status: "IN_PROGRESS", problemId: "hello-world" },
+    ]);
+    const deps = buildDeps();
+    deps.logs.send.mockResolvedValueOnce({ nextForwardToken: "same-token" });
+
+    const out = await getParticipantDeployLogs(shared, deps, TEAM_KEY, { jobId: JOB_ID });
+
+    expect(out).toEqual({
+      kind: "ok",
+      response: {
+        jobId: JOB_ID,
+        buildStatus: "IN_PROGRESS",
+        complete: false,
+        nextToken: "same-token",
+        entries: [],
+      },
+    });
+  });
+
+  it("should re-throw a non-ResourceNotFound error from the job log stream (fail loud)", async () => {
+    process.env.DEPLOY_JOB_LOG_GROUP = "/tenkacloud/deploy-jobs";
+    vi.mocked(queryTeamItems).mockResolvedValueOnce([
+      { jobId: JOB_ID, status: "IN_PROGRESS", problemId: "hello-world" },
+    ]);
+    const deps = buildDeps();
+    deps.logs.send.mockRejectedValueOnce(new Error("Throttling"));
+
+    await expect(
+      getParticipantDeployLogs(shared, deps, TEAM_KEY, { jobId: JOB_ID }),
+    ).rejects.toThrow(/Throttling/);
+  });
+
+  it("should truncate an overlong log message", async () => {
+    process.env.DEPLOY_JOB_LOG_GROUP = "/tenkacloud/deploy-jobs";
+    vi.mocked(queryTeamItems).mockResolvedValueOnce([
+      { jobId: JOB_ID, status: "IN_PROGRESS", problemId: "hello-world" },
+    ]);
+    const deps = buildDeps();
+    deps.logs.send.mockResolvedValueOnce({
+      events: [
+        {
+          timestamp: 1_779_273_600_000,
+          ingestionTime: 1_779_273_600_100,
+          message: "a".repeat(4_100),
+        },
+      ],
+      nextForwardToken: "next-token",
+    });
+
+    const out = await getParticipantDeployLogs(shared, deps, TEAM_KEY, { jobId: JOB_ID });
+
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    const message = out.response.entries[0]?.message ?? "";
+    expect(message.endsWith("... [truncated]")).toBe(true);
+    expect(message.length).toBe(4_000 + "... [truncated]".length);
+  });
+
+  it("should return empty entries when a CodeBuild build reports no log group/stream", async () => {
+    // CodeBuild path: a build without logs.groupName/streamName yields an empty-but-OK response.
+    vi.mocked(queryTeamItems).mockResolvedValueOnce([
+      { jobId: JOB_ID, status: "IN_PROGRESS", buildId: "project:build-1" },
+    ]);
+    const deps = buildDeps();
+    deps.codebuild.send.mockResolvedValueOnce({
+      builds: [{ id: "project:build-1", buildStatus: "IN_PROGRESS", logs: {} }],
+    });
+
+    const out = await getParticipantDeployLogs(shared, deps, TEAM_KEY, { jobId: JOB_ID });
+
+    expect(out).toEqual({
+      kind: "ok",
+      response: {
+        jobId: JOB_ID,
+        buildStatus: "IN_PROGRESS",
+        complete: false,
+        entries: [],
+      },
+    });
+    expect(deps.logs.send).not.toHaveBeenCalled();
+  });
 });
