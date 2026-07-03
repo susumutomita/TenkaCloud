@@ -1,5 +1,6 @@
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { createEventsRepository } from "../../control-data/events-repository.js";
+import { createTeamsRepository } from "../../control-data/teams-repository.js";
 import { createCursorCodec } from "../shared/cursor-codec.js";
 import { parseProgressionGate } from "../shared/progression-gate.js";
 import type { EventSharedResources } from "./shared.js";
@@ -9,7 +10,6 @@ import type {
   EventDetail,
   EventItem,
   EventSummary,
-  TeamItem,
   TeamSummary,
 } from "./types.js";
 
@@ -124,10 +124,13 @@ export async function getEventDetail(
   eventId: string,
   opts: { readonly withScoreEvents?: boolean; readonly includeLoginKeys?: boolean } = {},
 ): Promise<EventDetail | undefined> {
-  // [ADR-049 §5.1] Event 行の point read は repository seam 経由 (getEvent が tenant
-  // scope + 404 判定を担う)。 default backend = dynamodb なので発火する GetCommand は
-  // 従来と byte 互換 (= 同 table / 同 Key / 同 client)、 CFn 差分 0。 CONTROL_DATA_BACKEND
-  // を turso/sql に切替えると同 read が SQLite に向く (適用は @libsql adapter 配線後)。
+  // [ADR-049 §5.1] Event 行の point read も Teams 一覧も repository seam 経由 (getEvent が
+  // tenant scope + 404 判定を、 listTeamsByEvent が base-table query を担う)。 default backend
+  // = dynamodb なので発火する GetCommand / QueryCommand は従来と byte 互換 (= 同 table / 同 Key
+  // / 同 KeyConditionExpression / 同 client)、 CFn 差分 0。 CONTROL_DATA_BACKEND を turso/sql に
+  // 切替えると同 read が SQLite に向く (適用は @libsql adapter 配線後)。 listTeamsByEvent は
+  // teamId 昇順で TeamRecord[] (物理キー無し) を返すが、 下流は teamId / internalSlug /
+  // displayName / teamLoginKey / awsAccountId の domain field しか読まないので挙動は同一。
   // Event Get と Teams / Deployments Query は依存関係なし → 並列発火でラウンドトリップを節約。
   // Deployments は競技者が PATCH /portal/me で設定した displayTeamName を引くため必要
   // (TeamsTable には participant が直接書けないので displayName が常に空のままになる、
@@ -137,18 +140,13 @@ export async function getEventDetail(
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
   });
-  const [event, teamsOut, deploymentsOut] = await Promise.all([
+  const teamsRepo = createTeamsRepository(process.env.CONTROL_DATA_BACKEND, {
+    ddb: shared.ddb,
+    teamsTableName: shared.teamsTableName,
+  });
+  const [event, teamRecords, deploymentsOut] = await Promise.all([
     eventsRepo.getEvent(tenantId, eventId),
-    shared.ddb.send(
-      new QueryCommand({
-        TableName: shared.teamsTableName,
-        KeyConditionExpression: "PK = :pk AND begins_with(SK, :tprefix)",
-        ExpressionAttributeValues: {
-          ":pk": `EVENT#${eventId}`,
-          ":tprefix": "TEAM#",
-        },
-      }),
-    ),
+    teamsRepo.listTeamsByEvent(eventId),
     shared.ddb.send(
       new QueryCommand({
         TableName: shared.deploymentsTableName,
@@ -168,11 +166,10 @@ export async function getEventDetail(
   // `!event || event.tenantId !== tenantId` を repository 内へ移設)。
   if (!event) return undefined;
 
-  const teamItems = (teamsOut.Items ?? []) as Partial<TeamItem>[];
   const { displayNameByTeamId, deploymentsByProblem, deploymentRefs } =
     aggregateDeploymentsForEvent(deploymentsOut.Items ?? [], eventId);
 
-  const teams: TeamSummary[] = teamItems.map((t) => {
+  const teams: TeamSummary[] = teamRecords.map((t) => {
     const teamId = String(t.teamId ?? "");
     const fromTeamsTable = typeof t.displayName === "string" ? t.displayName : undefined;
     return {
