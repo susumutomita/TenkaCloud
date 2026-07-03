@@ -34,7 +34,7 @@ make harness-test
 
 ### Invariants (CLAUDE.md「Architecture invariants」)
 
-- `INVARIANT_CONTROL_PLANE_USES_SBT` — Control Plane は `@cdklabs/sbt-aws` の ControlPlane construct に乗せる
+- `INVARIANT_CONTROL_PLANE_USES_SBT` — **SaaS mode の** Control Plane は `@cdklabs/sbt-aws` の ControlPlane construct に乗せる (Lite mode = ADR-016 / Always-On mode = ADR-049 は SBT 非使用のため対象外)
 - `INVARIANT_CONTROL_PLANE_DOES_NOT_HOST_TENANT_RUNTIME` — Control Plane は tenant manager。runtime を持ち込まない
 - `INVARIANT_TENANT_ISOLATION_AT_INFRA_LAYER` — テナント分離はインフラ層 (DDB PK / stack 分離) で実現
 - `INVARIANT_PR_SHIPS_WORKING_INCREMENT` — PR 単体で観察可能な機能が動く

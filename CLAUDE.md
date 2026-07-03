@@ -89,7 +89,7 @@ Codified as one-rule-per-file under `.claude/harness/src/rules/` (summarized in 
 
 | ID                                                    | Summary                                                                            |
 | ----------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `INVARIANT_CONTROL_PLANE_USES_SBT`                    | The Control Plane must sit on top of the `@cdklabs/sbt-aws` ControlPlane construct |
+| `INVARIANT_CONTROL_PLANE_USES_SBT`                    | The **SaaS-mode** Control Plane must sit on top of the `@cdklabs/sbt-aws` ControlPlane construct. Lite mode (ADR-016) and Always-On mode (ADR-049) do not use SBT and are out of scope. |
 | `INVARIANT_CONTROL_PLANE_DOES_NOT_HOST_TENANT_RUNTIME`| The Control Plane is the tenant manager. Tenant runtime must not live there       |
 | `INVARIANT_TENANT_ISOLATION_AT_INFRA_LAYER`           | Tenant isolation lives in the infra layer (DDB PK / stack separation). No tenant logic in the app |
 | `INVARIANT_APP_CODE_IS_UNMODIFIED`                    | `apps/*/dist/` is shared across tenants. Differences must flow through `runtime-config.json` |
