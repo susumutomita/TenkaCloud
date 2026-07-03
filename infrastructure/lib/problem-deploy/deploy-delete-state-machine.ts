@@ -33,7 +33,7 @@ export interface DeployDeleteStateMachineProps {
    * `DeployCreateStateMachine` と同じ Project を共用する想定 (`OPERATION` env で
    * create / delete を分岐)。
    */
-  readonly codeBuildProject: Project;
+  readonly codeBuildProject?: Project;
   /**
    * Deployment 行を持つ DDB Table。CodeBuild 完了時に `status` を `DELETING` →
    * `DELETED` / `FAILED` に更新するために必要。
@@ -103,8 +103,12 @@ export class DeployDeleteStateMachine extends Construct {
    * 保つ (= additive リソースは一切増やさない)。
    */
   private buildCodeBuildDefinition(props: DeployDeleteStateMachineProps): IChainable {
+    const codeBuildProject = props.codeBuildProject;
+    if (!codeBuildProject) {
+      throw new Error("codeBuildProject is required when deployViaLambda is false");
+    }
     const startCodeBuildSameAccount = new CodeBuildStartBuild(this, "StartDeleteCodeBuild", {
-      project: props.codeBuildProject,
+      project: codeBuildProject,
       integrationPattern: IntegrationPattern.RUN_JOB,
       environmentVariablesOverride: {
         OPERATION: { value: "delete" },
@@ -123,7 +127,7 @@ export class DeployDeleteStateMachine extends Construct {
       this,
       "StartDeleteCodeBuildCrossAccount",
       {
-        project: props.codeBuildProject,
+        project: codeBuildProject,
         integrationPattern: IntegrationPattern.RUN_JOB,
         environmentVariablesOverride: {
           OPERATION: { value: "delete" },

@@ -4,9 +4,9 @@ import {
   DescribeStacksCommand,
   UpdateStackCommand,
 } from "@aws-sdk/client-cloudformation";
-import type { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { GetParameterCommand } from "@aws-sdk/client-ssm";
 import { AssumeRoleCommand } from "@aws-sdk/client-sts";
+import { strToU8, zipSync } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildArtifactsResolver,
@@ -16,6 +16,7 @@ import {
   classifyDeployAction,
   createStackForDeployment,
   type DeployArtifacts,
+  extractDeployArtifactsFromZip,
   generateRandomAlphanumeric,
   isNoUpdatesError,
   isStackNotFoundError,
@@ -77,6 +78,7 @@ function scriptedDescribe(scripted: FakeCfnState["describeResponses"][number]) {
 /** A fake CloudFormation client whose DescribeStacks responses are scripted per call. */
 function fakeCfn(state: FakeCfnState) {
   let describeIndex = 0;
+
   return {
     send: vi.fn(async (command: unknown) => {
       state.commands.push(command);
@@ -239,6 +241,109 @@ describe("isStackNotFoundError / parseCfnParameters (#2291)", () => {
   it("should throw loudly on non-string cfnParameters values (fail loud, no silent drop)", () => {
     expect(() => parseCfnParameters(JSON.stringify({ cfnParameters: { A: 1 } }))).toThrow(/string/);
     expect(() => parseCfnParameters("not json")).toThrow(/valid JSON/);
+    expect(() => parseCfnParameters(JSON.stringify({ cfnParameters: [] }))).toThrow(
+      /must be an object/,
+    );
+  });
+});
+
+describe("deploy artifact resolution (#2291)", () => {
+  const sourceZip = zipSync({
+    "problems/challenges/sample-flag/template.yaml": strToU8("Resources: {}\n"),
+    "problems/challenges/sample-flag/metadata.json": strToU8(
+      JSON.stringify({ cfnParameters: { Mode: "public" } }),
+    ),
+    "unrelated/file.txt": strToU8("ignored"),
+  });
+
+  it("extracts the exact problem from source.zip", () => {
+    expect(extractDeployArtifactsFromZip(sourceZip, "problems/challenges/sample-flag")).toEqual({
+      templateBody: "Resources: {}\n",
+      cfnParameters: { Mode: "public" },
+    });
+  });
+
+  it("accepts a private payload with one top-level problem directory", async () => {
+    const privateZip = zipSync({
+      "sample-flag/template.yaml": strToU8("Resources: { Private: true }\n"),
+      "sample-flag/metadata.json": strToU8(JSON.stringify({ cfnParameters: { Mode: "private" } })),
+    });
+    const s3Send = vi.fn();
+    const fetchBytes = vi.fn(async () => privateZip);
+    const resolve = buildS3ArtifactsResolver(
+      { send: s3Send },
+      {
+        sourceBucket: "source-bucket",
+        sourceObjectKey: "source.zip",
+        fetchBytes,
+      },
+    );
+
+    await expect(
+      resolve(
+        validDetail({
+          challengePayloadUrl: "https://example.invalid/private.zip",
+        }) as never,
+      ),
+    ).resolves.toEqual({
+      templateBody: "Resources: { Private: true }\n",
+      cfnParameters: { Mode: "private" },
+    });
+    expect(fetchBytes).toHaveBeenCalledWith("https://example.invalid/private.zip");
+    expect(s3Send).not.toHaveBeenCalled();
+  });
+
+  it("reads the existing source.zip object for public problems", async () => {
+    const s3Send = vi.fn(async () => ({
+      Body: { transformToByteArray: async () => sourceZip },
+    }));
+    const resolve = buildS3ArtifactsResolver(
+      { send: s3Send },
+      { sourceBucket: "source-bucket", sourceObjectKey: "source.zip" },
+    );
+
+    await expect(resolve(validDetail() as never)).resolves.toMatchObject({
+      cfnParameters: { Mode: "public" },
+    });
+    expect(s3Send.mock.calls[0][0].input).toEqual({
+      Bucket: "source-bucket",
+      Key: "source.zip",
+    });
+  });
+
+  it("rejects an unreadable source.zip object", async () => {
+    const resolve = buildS3ArtifactsResolver(
+      { send: vi.fn(async () => ({ Body: undefined })) },
+      { sourceBucket: "source-bucket", sourceObjectKey: "source.zip" },
+    );
+
+    await expect(resolve(validDetail() as never)).rejects.toThrow("empty or unreadable S3 object");
+  });
+
+  it("rejects ambiguous fallback templates and a fallback without metadata", () => {
+    const ambiguousZip = zipSync({
+      "one/template.yaml": strToU8("Resources: {}\n"),
+      "one/metadata.json": strToU8("{}"),
+      "two/template.yaml": strToU8("Resources: {}\n"),
+      "two/metadata.json": strToU8("{}"),
+    });
+    expect(() =>
+      extractDeployArtifactsFromZip(ambiguousZip, "problems/challenges/sample-flag"),
+    ).toThrow(/exactly one fallback template/);
+
+    const missingMetadataZip = zipSync({
+      "sample-flag/template.yaml": strToU8("Resources: {}\n"),
+    });
+    expect(() =>
+      extractDeployArtifactsFromZip(missingMetadataZip, "problems/challenges/sample-flag"),
+    ).toThrow(/missing metadata.json/);
+  });
+});
+
+describe("isNoUpdatesError (#2291)", () => {
+  it("matches only CloudFormation's empty-change response", () => {
+    expect(isNoUpdatesError(new Error("No updates are to be performed."))).toBe(true);
+    expect(isNoUpdatesError(new Error("AccessDenied"))).toBe(false);
   });
 
   it("should throw when cfnParameters is null or an array (must be an object)", () => {
@@ -401,7 +506,6 @@ describe("buildArtifactsResolver (#2291)", () => {
     expect(resolveFromS3).toHaveBeenCalledOnce();
   });
 });
-
 describe("createStackForDeployment cross-account (#2291)", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -490,6 +594,16 @@ describe("createStackForDeployment cross-account (#2291)", () => {
     const kinds = cfn.send.mock.calls.map((c) => (c[0] as object).constructor.name);
     expect(kinds).not.toContain("DeleteStackCommand");
     expect(deps.waitForStackDelete).not.toHaveBeenCalled();
+  });
+
+  it("should UpdateStack rather than CreateStack when a healthy stack exists", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ status: "CREATE_COMPLETE" }], commands: [] });
+    const result = await createStackForDeployment({ detail: validDetail() }, crossAccountDeps(cfn));
+
+    expect(result.operation).toBe("update");
+    const kinds = cfn.send.mock.calls.map((c) => (c[0] as object).constructor.name);
+    expect(kinds).toContain("UpdateStackCommand");
+    expect(kinds).not.toContain("CreateStackCommand");
   });
 
   it("should reject an invalid event detail (schema fail-loud)", async () => {
@@ -615,7 +729,7 @@ describe("createStackForDeployment create-or-update collapse (#2291)", () => {
     });
     const deps = crossAccountDeps(cfn);
     const result = await createStackForDeployment({ detail: validDetail() }, deps);
-    expect(result).toEqual({});
+    expect(result).toEqual({ operation: "noop" });
   });
 
   it("should re-throw a non-'not found' DescribeStacks error while resolving the no-op StackId", async () => {

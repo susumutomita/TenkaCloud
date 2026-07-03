@@ -1,15 +1,25 @@
-import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation";
+import {
+  CloudFormationClient,
+  DescribeStacksCommand,
+  type DescribeStacksCommandOutput,
+} from "@aws-sdk/client-cloudformation";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { type Credentials, STSClient } from "@aws-sdk/client-sts";
 import { assumeCompetitorRole } from "../shared/assume-competitor-role.js";
+import {
+  type DeploymentProgressWriter,
+  writeDeploymentProgress,
+} from "../shared/deployment-progress-log.js";
 import { errorDeployTrace, logDeployTrace } from "../shared/trace-log.js";
 
 export interface DescribeStackStateMachineInput {
+  readonly operation?: "create" | "delete";
   readonly detail?: {
     readonly jobId?: string;
     readonly correlationId?: string;
     readonly tenantId?: string;
     readonly namePrefix?: string;
+    readonly stackName?: string;
     readonly region?: string;
     readonly competitorRoleArn?: string;
     readonly externalIdParameterName?: string;
@@ -23,6 +33,7 @@ export interface DescribeStackDeps {
     readonly region: string;
     readonly credentials?: Credentials;
   }) => Pick<CloudFormationClient, "send">;
+  readonly progress?: DeploymentProgressWriter;
 }
 
 function requireString(value: unknown, field: string): string {
@@ -74,7 +85,10 @@ export async function describeStackForDeployment(
   }
   const jobId = requireString(detail.jobId, "detail.jobId");
   const correlationId = detail.correlationId || jobId;
-  const stackName = requireString(detail.namePrefix, "detail.namePrefix");
+  const stackName = requireString(
+    input.operation === "delete" ? detail.stackName : detail.namePrefix,
+    input.operation === "delete" ? "detail.stackName" : "detail.namePrefix",
+  );
   const region = requireString(detail.region, "detail.region");
   logDeployTrace("deploy.describe-stack.start", {
     jobId,
@@ -93,7 +107,27 @@ export async function describeStackForDeployment(
     graceFallbackTraceEvent: "deploy.describe-stack.assume-role.grace-fallback",
   });
   const cfn = deps.cfnClient({ region, credentials });
-  const out = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+  let out: DescribeStacksCommandOutput;
+  try {
+    out = await cfn.send(new DescribeStacksCommand({ StackName: stackName }));
+  } catch (error) {
+    if (
+      input.operation === "delete" &&
+      error instanceof Error &&
+      /does not exist/i.test(error.message)
+    ) {
+      logDeployTrace("deploy.describe-stack.deleted", {
+        jobId,
+        correlationId,
+        tenantId: detail.tenantId,
+        stackName,
+        region,
+      });
+      await deps.progress?.(jobId, `CloudFormation stack ${stackName} deleted`);
+      return { stackDeleted: true, Stacks: [] };
+    }
+    throw error;
+  }
   logDeployTrace("deploy.describe-stack.succeeded", {
     jobId,
     correlationId,
@@ -103,7 +137,11 @@ export async function describeStackForDeployment(
     stackStatus: out.Stacks?.[0]?.StackStatus,
     stackId: out.Stacks?.[0]?.StackId,
   });
-  return out;
+  await deps.progress?.(
+    jobId,
+    `CloudFormation ${stackName}: ${out.Stacks?.[0]?.StackStatus ?? "UNKNOWN"}`,
+  );
+  return input.operation === "delete" ? { ...out, stackDeleted: false } : out;
 }
 
 const ssm = new SSMClient({});
@@ -126,5 +164,6 @@ export async function handler(input: DescribeStackStateMachineInput) {
             }
           : {}),
       }),
+    progress: writeDeploymentProgress,
   });
 }

@@ -31,7 +31,7 @@ import { deploymentKey, stateEnteredTime } from "./state-machine-helpers.js";
 
 export interface DeployCreateStateMachineProps {
   /** 実体の deploy を担う CodeBuild Project (= `scripts/deploy-battles.sh` を実行)。 */
-  readonly codeBuildProject: Project;
+  readonly codeBuildProject?: Project;
   /**
    * CodeBuild 完了後に competitor account 側の CloudFormation stack を読む Lambda。
    * verified deployment は ExternalId 付き AssumeRole が必要なため、Step Functions の
@@ -147,6 +147,10 @@ export class DeployCreateStateMachine extends Construct {
     props: DeployCreateStateMachineProps,
     markInProgress: DynamoUpdateItem,
   ): IChainable {
+    const codeBuildProject = props.codeBuildProject;
+    if (!codeBuildProject) {
+      throw new Error("codeBuildProject is required when deployViaLambda is false");
+    }
     // Phase 2.2 (Issue #459): AssumeRole metadata は 2 fields が両方あるときだけ
     // CodeBuild env に渡す。Step Functions の optional path 直接参照は field 欠落時に
     // States.Runtime で即死するため、Choice で cross-account / same-account を明示分岐する。
@@ -158,7 +162,7 @@ export class DeployCreateStateMachine extends Construct {
     // ケース) で 1 batch を識別する。 単発 / authoring iteration では未指定 = jobId と
     // 同値 fallback で扱う (= deploy-battles.sh 側で fallback)。
     const startCodeBuildSameAccount = new CodeBuildStartBuild(this, "StartDeployCodeBuild", {
-      project: props.codeBuildProject,
+      project: codeBuildProject,
       integrationPattern: IntegrationPattern.RUN_JOB,
       environmentVariablesOverride: {
         BATTLE_PROBLEM_DIR: { value: JsonPath.stringAt("$.detail.problemDir") },
@@ -176,7 +180,7 @@ export class DeployCreateStateMachine extends Construct {
       this,
       "StartDeployCodeBuildCrossAccount",
       {
-        project: props.codeBuildProject,
+        project: codeBuildProject,
         integrationPattern: IntegrationPattern.RUN_JOB,
         environmentVariablesOverride: {
           BATTLE_PROBLEM_DIR: { value: JsonPath.stringAt("$.detail.problemDir") },

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { synthDefault } from "./problem-deploy-backend-stack.test-helpers";
+import {
+  synthDefault,
+  synthWithDeployViaLambda,
+} from "./problem-deploy-backend-stack.test-helpers";
 
 describe("ProblemDeployBackendStack (MVP-1) — Step Functions State Machines", () => {
   const tpl = synthDefault();
@@ -97,5 +100,36 @@ describe("ProblemDeployBackendStack (MVP-1) — Step Functions State Machines", 
     expect(deleteStateMachine).toContain("$.detail.competitorRoleArn");
     expect(deleteStateMachine).toContain("$.detail.externalIdParameterName");
     expect(deleteStateMachine).toContain("MarkFailed");
+  });
+});
+
+describe("ProblemDeployBackendStack Lambda deploy flag (#2291)", () => {
+  const tpl = synthWithDeployViaLambda();
+
+  it("switches both create and delete state machines to Lambda polling", () => {
+    const definitions = Object.values(tpl.findResources("AWS::StepFunctions::StateMachine")).map(
+      (stateMachine) => JSON.stringify(stateMachine),
+    );
+    const create = definitions.find((definition) => definition.includes("InvokeCfnDeploy"));
+    const remove = definitions.find((definition) => definition.includes("InvokeCfnDelete"));
+
+    expect(create).toContain("RoutePollStatus");
+    expect(remove).toContain("RoutePollStatus");
+    expect(create).not.toContain("StartDeployCodeBuild");
+    expect(remove).not.toContain("StartDeleteCodeBuild");
+  });
+
+  it("does not create the retired problem-deploy CodeBuild project", () => {
+    tpl.resourceCountIs("AWS::CodeBuild::Project", 0);
+  });
+
+  it("passes the existing source.zip contract to the deploy Lambda", () => {
+    const lambdas = Object.values(tpl.findResources("AWS::Lambda::Function")).map((resource) =>
+      JSON.stringify(resource),
+    );
+    const deployLambda = lambdas.find((resource) => resource.includes("SOURCE_OBJECT_KEY"));
+
+    expect(deployLambda).toContain('"SOURCE_BUCKET_NAME":"test-source-bucket"');
+    expect(deployLambda).toContain('"SOURCE_OBJECT_KEY":"source.zip"');
   });
 });

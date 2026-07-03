@@ -16,7 +16,7 @@ export interface ObservabilityStackProps extends cdk.StackProps {
     readonly deployDeleteArn: string;
   };
   readonly codeBuildProjectNames: {
-    readonly problemDeploy: string;
+    readonly problemDeploy?: string;
     readonly provisioning?: string;
   };
   readonly dynamoDbTableNames: {
@@ -169,7 +169,9 @@ export class ObservabilityStack extends cdk.Stack {
 
   private deployCodeBuildWidget(props: ObservabilityStackProps): cloudwatch.GraphWidget {
     const projects = [
-      { label: "problem-deploy", name: props.codeBuildProjectNames.problemDeploy },
+      ...(props.codeBuildProjectNames.problemDeploy
+        ? [{ label: "problem-deploy", name: props.codeBuildProjectNames.problemDeploy }]
+        : []),
       ...(props.codeBuildProjectNames.provisioning
         ? [
             {

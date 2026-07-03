@@ -36,25 +36,12 @@ export interface BuildDeployPipelineArgs {
 }
 
 export interface DeployPipelineOutputs {
-  readonly deployCodeBuildProjectName: string;
-  /**
-   * Deploy CodeBuild `Project` construct itself. The Participant Portal Lambda needs a
-   * least-privilege grant to read this project's builds (`codebuild:BatchGetBuilds`) and its
-   * CloudWatch log group (`logs:GetLogEvents`) so `GET /portal/me/deploy-logs` can stream a
-   * team's deploy log. Passing the construct (not just its name) lets the caller derive both
-   * the project ARN and the `/aws/codebuild/<projectName>` log-group ARN.
-   */
-  readonly deployCodeBuildProject: IProject;
+  readonly deployCodeBuildProjectName?: string;
+  readonly deployCodeBuildProject?: IProject;
   readonly deployCreateStateMachineArn: string;
   readonly deployDeleteStateMachineArn: string;
   readonly bulkDeployPayloadBucketName: string;
   readonly bulkDeployCreateStateMachineArn: string;
-  /**
-   * Issue #2291: the Lambda deploy path's dedicated job-progress log group. Present only when
-   * `deployViaLambda` is ON (the {@link CfnDeployLambda} that owns it is created only then).
-   * Threaded to the participant portal Lambda so `GET /portal/me/deploy-logs` can stream a team's
-   * Lambda-path deploy progress by jobId. `undefined` on the default CodeBuild path (NO-OP).
-   */
   readonly deployJobLogGroup?: ILogGroup;
   /**
    * Issue #2291: the Lambda deploy path's `CfnDeployLambda` function name. Present only when
@@ -90,29 +77,37 @@ export function buildDeployPipeline(
   args: BuildDeployPipelineArgs,
 ): DeployPipelineOutputs {
   const sourceBucket = Bucket.fromBucketName(scope, "SourceBucket", args.sourceBucketName);
-  const codeBuild = new DeployCodeBuildProject(scope, "DeployCodeBuild", {
-    sourceBucket,
-    sourceObjectKey: args.sourceObjectKey,
-    concurrentBuildLimit: args.deployConcurrentBuildLimit,
-    environmentName: args.environmentName,
-  });
+  let codeBuild: DeployCodeBuildProject | undefined;
+  if (!args.deployViaLambda) {
+    codeBuild = new DeployCodeBuildProject(scope, "DeployCodeBuild", {
+      sourceBucket,
+      sourceObjectKey: args.sourceObjectKey,
+      concurrentBuildLimit: args.deployConcurrentBuildLimit,
+      environmentName: args.environmentName,
+    });
+  }
 
   const describeStack = new DescribeStackLambda(scope, "DescribeStack", {
     environmentName: args.environmentName,
   });
 
-  // Issue #2291: flag ON のときだけ deploy Lambda を生成する (= flag OFF の synth は
-  // CfnDeploy 構築が無く byte 互換)。CodeBuild は delete 経路が使い続けるので常に生成する。
+  // Issue #2291: flag ON のときだけ deploy Lambda を生成し、create/delete の両経路から
+  // CodeBuild を除去する。flag OFF の synth は CfnDeploy 構築が無く従来どおり。
   let cfnDeployFunction: IFunction | undefined;
   let deployJobLogGroup: ILogGroup | undefined;
   if (args.deployViaLambda) {
     const cfnDeploy = new CfnDeployLambda(scope, "CfnDeploy", {
       environmentName: args.environmentName,
       sourceBucketName: args.sourceBucketName,
+      sourceObjectKey: args.sourceObjectKey,
     });
     cfnDeployFunction = cfnDeploy.fn;
-    // #2291: hand the job-progress log group to the caller → participant portal read scope.
-    deployJobLogGroup = cfnDeploy.jobLogGroup;
+    deployJobLogGroup = cfnDeploy.deploymentLogGroup;
+    describeStack.fn.addEnvironment(
+      "DEPLOYMENT_LOG_GROUP_NAME",
+      cfnDeploy.deploymentLogGroup.logGroupName,
+    );
+    cfnDeploy.deploymentLogGroup.grantWrite(describeStack.fn);
 
     // Issue #2291 (ADR-049 §9): materialize the repo `problems/` tree (un-zipped) into the
     // source bucket so `buildS3ArtifactsResolver` (create-stack.ts) can GetObject
@@ -148,7 +143,7 @@ export function buildDeployPipeline(
   }
 
   const stateMachine = new DeployCreateStateMachine(scope, "DeployCreate", {
-    codeBuildProject: codeBuild.project,
+    codeBuildProject: codeBuild?.project,
     describeStackFunction: describeStack.fn,
     deploymentsTable: args.deploymentsTable,
     // flag OFF では以下 prop は undefined = CodeBuild 定義を生成 (在来と同一、追加リソースなし)。
@@ -166,7 +161,7 @@ export function buildDeployPipeline(
   });
 
   const deleteStateMachine = new DeployDeleteStateMachine(scope, "DeployDelete", {
-    codeBuildProject: codeBuild.project,
+    codeBuildProject: codeBuild?.project,
     deploymentsTable: args.deploymentsTable,
     // Issue #2291: flag OFF では以下 2 prop は undefined = CodeBuild 定義を生成 (在来と同一、
     // 追加リソースなし)。flag ON では create path と同じ CfnDeployLambda を共用する (別 Lambda
@@ -190,8 +185,8 @@ export function buildDeployPipeline(
   });
 
   return {
-    deployCodeBuildProjectName: codeBuild.project.projectName,
-    deployCodeBuildProject: codeBuild.project,
+    deployCodeBuildProjectName: codeBuild?.project.projectName,
+    deployCodeBuildProject: codeBuild?.project,
     deployCreateStateMachineArn: stateMachine.stateMachine.stateMachineArn,
     deployDeleteStateMachineArn: deleteStateMachine.stateMachine.stateMachineArn,
     bulkDeployPayloadBucketName: args.bulkPayloadBucket.bucketName,

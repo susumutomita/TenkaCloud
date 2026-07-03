@@ -19,6 +19,7 @@ function buildTemplate(): Template {
   new CfnDeployLambda(stack, "CfnDeploy", {
     environmentName: "development",
     sourceBucketName: "serverless-saas-123456789012-ap-northeast-1",
+    sourceObjectKey: "source.zip",
   });
   return Template.fromStack(stack);
 }
@@ -142,6 +143,7 @@ describe("CfnDeployLambda (#2291)", () => {
         Environment: Match.objectLike({
           Variables: Match.objectLike({
             SOURCE_BUCKET_NAME: "serverless-saas-123456789012-ap-northeast-1",
+            SOURCE_OBJECT_KEY: "source.zip",
             TENKACLOUD_ACCOUNT_ID: "123456789012",
           }),
         }),

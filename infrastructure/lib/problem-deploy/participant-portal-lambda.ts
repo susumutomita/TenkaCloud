@@ -55,7 +55,7 @@ export interface ParticipantPortalLambdaProps {
    * build を `codebuild:BatchGetBuilds` で引き、 その CloudWatch log group を `logs:GetLogEvents`
    * で stream するため、 project ARN + log-group ARN を least-privilege grant として使う。
    */
-  readonly deployCodeBuildProject: IProject;
+  readonly deployCodeBuildProject?: IProject;
   /**
    * Issue #2291: Lambda 経路 (`deployViaLambda` ON) の deploy 進捗を書く jobId stream の log group。
    * present のときだけ、 `GET /portal/me/deploy-logs` (deploy-logs.ts) が jobId stream を
@@ -176,28 +176,32 @@ export class ParticipantPortalLambda extends Construct {
         // `logs:GetLogEvents` で読む。 participant role に両権限が無く 本番で AccessDenied になっていた。
         // deploy project ARN と その `/aws/codebuild/<projectName>` log group に scope した read-only
         // のみ付与する (`*` 不使用)。
-        DeployLogsRead: new PolicyDocument({
-          statements: [
-            new PolicyStatement({
-              actions: ["codebuild:BatchGetBuilds"],
-              resources: [props.deployCodeBuildProject.projectArn],
-            }),
-            new PolicyStatement({
-              actions: ["logs:GetLogEvents"],
-              // CodeBuild default CloudWatch logging writes to `/aws/codebuild/<projectName>`;
-              // the trailing `:*` scopes to every log stream in that group (deploy-logs.ts reads
-              // `build.logs.streamName` dynamically). Derived from account/region via formatArn.
-              resources: [
-                stack.formatArn({
-                  service: "logs",
-                  resource: "log-group",
-                  resourceName: `/aws/codebuild/${props.deployCodeBuildProject.projectName}:*`,
-                  arnFormat: ArnFormat.COLON_RESOURCE_NAME,
-                }),
-              ],
-            }),
-          ],
-        }),
+        ...(props.deployCodeBuildProject
+          ? {
+              DeployLogsRead: new PolicyDocument({
+                statements: [
+                  new PolicyStatement({
+                    actions: ["codebuild:BatchGetBuilds"],
+                    resources: [props.deployCodeBuildProject.projectArn],
+                  }),
+                  new PolicyStatement({
+                    actions: ["logs:GetLogEvents"],
+                    // CodeBuild default CloudWatch logging writes to
+                    // `/aws/codebuild/<projectName>`; the trailing `:*` scopes to every log
+                    // stream in that group (deploy-logs.ts reads the stream name dynamically).
+                    resources: [
+                      stack.formatArn({
+                        service: "logs",
+                        resource: "log-group",
+                        resourceName: `/aws/codebuild/${props.deployCodeBuildProject.projectName}:*`,
+                        arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            }
+          : {}),
         // Issue #2291: Lambda 経路の deploy 進捗を read する grant。 `deployJobLogGroup` が渡された
         // (= deployViaLambda ON) ときだけ inline policy を足す。 flag OFF では spread が空 = 追加なし
         // (synth byte 互換)。 read-only の `logs:GetLogEvents` を job log group の全 stream (`:*`) に scope。
