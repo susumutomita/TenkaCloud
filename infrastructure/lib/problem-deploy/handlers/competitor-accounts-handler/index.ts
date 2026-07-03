@@ -13,6 +13,7 @@ import {
   TENANT_ROLES,
 } from "../deploy-handler/auth.js";
 import { extractAuditContext, writeAuditEvent } from "../shared/audit-log.js";
+import { parseJsonBody } from "../shared/http-parse.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
 import { routeDelete, routeGet, routePut } from "./saml-routes.js";
 import { buildCompetitorAccountsSharedResources } from "./shared.js";
@@ -202,19 +203,8 @@ app.patch("/admin/users/:username", async (c) => {
 
 app.post("/admin/competitor-accounts", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE]);
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
-  }
-  const parsed = CreateCompetitorAccountRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json(
-      { error: "validation_failed", issues: parsed.error.issues },
-      StatusCodes.BAD_REQUEST,
-    );
-  }
+  const parsed = await parseJsonBody(c, CreateCompetitorAccountRequestSchema);
+  if (!parsed.ok) return parsed.response;
   const tenantIdForCreate = resolveTenantId(c);
   const auditCreate = extractAuditContext(c);
   try {
