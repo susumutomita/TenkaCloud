@@ -41,6 +41,10 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { type Credentials, STSClient } from "@aws-sdk/client-sts";
 import {
+  type ChallengePayloadArtifacts,
+  fetchChallengePayloadArtifacts,
+} from "../../challenge-payload-artifacts.js";
+import {
   type AssumeCompetitorRoleDeps,
   assumeCompetitorRole,
 } from "../shared/assume-competitor-role.js";
@@ -268,14 +272,11 @@ async function getS3Text(s3: Pick<S3Client, "send">, bucket: string, key: string
 }
 
 /**
- * Production artifacts resolver: read the problem's `template.yaml` + `metadata.json` from the
- * source bucket.
- *
- * TODO(#2291 follow-up): this assumes the `problems/` tree is materialized (un-zipped) in the
- * source bucket under the same layout `deploy-battles.sh` reads on disk. The artifact-publishing
- * step (materializing `problems/` into S3 at deploy time) and the private-problem presigned
- * `challengePayloadUrl` fetch are finalized in a later slice of #2291. This path is dormant in
- * production because the `deployViaLambda` flag is OFF by default.
+ * Public-problem artifacts resolver: read the problem's `template.yaml` + `metadata.json` from the
+ * materialized `problems/` tree in the source bucket (published by #2347). Private problems do not
+ * materialize their tree — they flow through {@link buildArtifactsResolver} + the presigned
+ * `challengePayloadUrl` instead. This path is dormant in production because the `deployViaLambda`
+ * flag is OFF by default.
  */
 export function buildS3ArtifactsResolver(
   s3: Pick<S3Client, "send">,
@@ -293,6 +294,39 @@ export function buildS3ArtifactsResolver(
       `${detail.problemDir}/metadata.json`,
     );
     return { templateBody, cfnParameters: parseCfnParameters(metadataText) };
+  };
+}
+
+export interface ArtifactsResolverDeps {
+  /** Public-problem path: read the materialized tree from the source bucket (slice 6, #2347). */
+  readonly resolveFromS3: (detail: DeployCreateRequestedDetail) => Promise<DeployArtifacts>;
+  /**
+   * Private-problem path: download + unzip the presigned `challengePayloadUrl`. Defaults to the
+   * real {@link fetchChallengePayloadArtifacts} (injected as a fake in tests). Kept as an injected
+   * dep so no raw `fetch(` appears under `lib/handlers/` (handler-must-not-call-fetch rule) — the
+   * HTTP+unzip primitive lives in `challenge-payload-artifacts.ts`.
+   */
+  readonly fetchPayloadArtifacts?: (url: string) => Promise<ChallengePayloadArtifacts>;
+}
+
+/**
+ * Issue #2291: the deploy path resolver. Mirrors the `resolve_problem_dir()` branch in
+ * `deploy-battles.sh`:
+ *   - `detail.challengePayloadUrl` is a non-empty string (a **private** problem) → download + unzip
+ *     the presigned payload and parse its `metadata.json` `cfnParameters`.
+ *   - otherwise (a **public** problem) → the existing source-bucket read, byte-for-byte unchanged.
+ */
+export function buildArtifactsResolver(
+  deps: ArtifactsResolverDeps,
+): (detail: DeployCreateRequestedDetail) => Promise<DeployArtifacts> {
+  const fetchPayloadArtifacts = deps.fetchPayloadArtifacts ?? fetchChallengePayloadArtifacts;
+  return async (detail) => {
+    const payloadUrl = detail.challengePayloadUrl;
+    if (typeof payloadUrl === "string" && payloadUrl.length > 0) {
+      const { templateBody, metadataText } = await fetchPayloadArtifacts(payloadUrl);
+      return { templateBody, cfnParameters: parseCfnParameters(metadataText) };
+    }
+    return deps.resolveFromS3(detail);
   };
 }
 
@@ -636,7 +670,11 @@ export async function handler(input: CreateStackInput): Promise<{ readonly stack
             }
           : {}),
       }),
-    resolveArtifacts: buildS3ArtifactsResolver(s3, { sourceBucket }),
+    // Public problems read the materialized tree from S3; private problems (challengePayloadUrl
+    // set) download + unzip the presigned payload via challenge-payload-artifacts.ts.
+    resolveArtifacts: buildArtifactsResolver({
+      resolveFromS3: buildS3ArtifactsResolver(s3, { sourceBucket }),
+    }),
     tenkaCloudAccountId,
     cfnExecRoleArn,
     ...(jobLogGroup
