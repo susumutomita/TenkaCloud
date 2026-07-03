@@ -192,6 +192,28 @@ describe("tenant users routes", () => {
     });
   });
 
+  it("should 400 invalid_body when the invite body is not JSON", async () => {
+    const res = await buildApp().request("/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "not json{",
+    });
+    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    expect(await res.json()).toEqual({ error: "invalid_body" });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("should 400 validation_failed when the invite body fails the schema", async () => {
+    const res = await buildApp().request("/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: 123 }),
+    });
+    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    expect(((await res.json()) as { error: string }).error).toBe("validation_failed");
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("should return conflict when Cognito reports an existing username", async () => {
     const err = new Error("already exists");
     err.name = "UsernameExistsException";
@@ -320,6 +342,17 @@ describe("tenant users routes", () => {
         status: "CONFIRMED",
       },
     });
+  });
+
+  it("should 400 validation_failed when the change-role body fails the schema", async () => {
+    const res = await buildApp().request("/admin/users/member%40example.test", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "NotARole" }),
+    });
+    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    expect(((await res.json()) as { error: string }).error).toBe("validation_failed");
+    expect(send).not.toHaveBeenCalled();
   });
 
   it("should block changing the signed-in user's role", async () => {

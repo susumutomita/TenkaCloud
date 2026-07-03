@@ -171,6 +171,35 @@ async function readJson(c: Context): Promise<unknown | undefined> {
   }
 }
 
+/**
+ * Issue #2211: the read-JSON → `invalid_body` → Zod-validate → `validation_failed`
+ * boundary was copied at every mutating users route. These handlers return the
+ * `{ status, body }` UsersRouteResult union (not a Hono Response), so they can't use
+ * the shared http-parse helper; this local helper folds the duplication while keeping
+ * the exact same response shapes.
+ */
+async function readAndValidateBody<S extends z.ZodType>(
+  c: Context,
+  schema: S,
+): Promise<{ ok: true; data: z.infer<S> } | { ok: false; result: UsersRouteResult }> {
+  const body = await readJson(c);
+  if (body === undefined) {
+    return {
+      ok: false,
+      result: { status: StatusCodes.BAD_REQUEST, body: { error: "invalid_body" } },
+    };
+  }
+  const parsed = schema.safeParse(body);
+  if (parsed.success) return { ok: true, data: parsed.data };
+  return {
+    ok: false,
+    result: {
+      status: StatusCodes.BAD_REQUEST,
+      body: { error: "validation_failed", issues: parsed.error.issues },
+    },
+  };
+}
+
 function isNamedAwsError(err: unknown, names: readonly string[]): boolean {
   return err instanceof Error && names.includes(err.name);
 }
@@ -298,16 +327,8 @@ export async function routeCreateUser(
   const userPoolId = resolveCallerUserPoolId(c);
   if (!userPoolId) return missingCognitoContext();
 
-  const body = await readJson(c);
-  if (body === undefined)
-    return { status: StatusCodes.BAD_REQUEST, body: { error: "invalid_body" } };
-  const parsed = InviteUserRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return {
-      status: StatusCodes.BAD_REQUEST,
-      body: { error: "validation_failed", issues: parsed.error.issues },
-    };
-  }
+  const parsed = await readAndValidateBody(c, InviteUserRequestSchema);
+  if (!parsed.ok) return parsed.result;
 
   const audit = auditBase(c, tenantId);
   const actorSub = resolveCognitoSub(c);
@@ -412,16 +433,8 @@ export async function routeChangeUserRole(
   const username = c.req.param("username");
   if (!username) return { status: StatusCodes.BAD_REQUEST, body: { error: "invalid_username" } };
 
-  const body = await readJson(c);
-  if (body === undefined)
-    return { status: StatusCodes.BAD_REQUEST, body: { error: "invalid_body" } };
-  const parsed = ChangeRoleRequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return {
-      status: StatusCodes.BAD_REQUEST,
-      body: { error: "validation_failed", issues: parsed.error.issues },
-    };
-  }
+  const parsed = await readAndValidateBody(c, ChangeRoleRequestSchema);
+  if (!parsed.ok) return parsed.result;
 
   const audit = auditBase(c, tenantId);
   try {
