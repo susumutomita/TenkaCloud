@@ -53,7 +53,13 @@ fi
 
 export REGION="$(aws configure get region)"
 export ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-SOURCE_BUCKET="tenkacloud-source-${ACCOUNT_ID}-${REGION}"
+# Bucket-name construction is centralized in scripts/lib/names.sh (#2194). The real
+# deployed bucket is the per-environment HASHED form; the legacy no-hash name only
+# lingers from pre-#1749 deploys. Sweep BOTH at teardown so neither is orphaned.
+# shellcheck source=lib/names.sh
+source "${TenkaCloud_ROOT}/scripts/lib/names.sh"
+SOURCE_BUCKET="$(tc_source_bucket_legacy_name "${ACCOUNT_ID}" "${REGION}")"
+SOURCE_BUCKET_CANONICAL="$(tc_source_bucket_name "${ACCOUNT_ID}" "${REGION}" "${ENV:-development}")"
 
 # bin/infrastructure.ts が CDK_PARAM_* を要求し、fromBucketName は DNS 検証で短い値だと synth が落ちる。
 # shell に残る empty/"NA" 等の汚染が export を貫通した実害があったので unset → export の順で衛生化。
@@ -126,14 +132,18 @@ log "cdk destroy --all (backend stacks)..."
 bun cdk destroy --all --force || log "  (some stacks not destroyed; review AWS console)"
 
 # install.sh が作る source bucket は CDK 管理外なので手動で空 → delete-bucket。
-log "removing source bucket ${SOURCE_BUCKET}..."
-if aws s3api head-bucket --bucket "${SOURCE_BUCKET}" --expected-bucket-owner "${ACCOUNT_ID}" 2>/dev/null; then
-  empty_versioned_bucket "${SOURCE_BUCKET}"
-  aws s3api delete-bucket --bucket "${SOURCE_BUCKET}"
-  log "  removed"
-else
-  log "  (already gone)"
-fi
+# 実デプロイは HASHED 形式を作るが、pre-#1749 の legacy 形式が残っている環境もあるので
+# 両形式を掃く (#2194)。 存在しない bucket は head-bucket が falsy = no-op で安全。
+for source_bucket in "${SOURCE_BUCKET_CANONICAL}" "${SOURCE_BUCKET}"; do
+  log "removing source bucket ${source_bucket}..."
+  if aws s3api head-bucket --bucket "${source_bucket}" --expected-bucket-owner "${ACCOUNT_ID}" 2>/dev/null; then
+    empty_versioned_bucket "${source_bucket}"
+    aws s3api delete-bucket --bucket "${source_bucket}"
+    log "  removed"
+  else
+    log "  (already gone)"
+  fi
+done
 
 # SBT ref-arch の API Key (`server-Basic-*` / `server-Stand-*` / `server-Premi-*` /
 # `server-Plati-*`、 旧 stack 名 prefix が CFn 上のリソース名に焼かれている) と
