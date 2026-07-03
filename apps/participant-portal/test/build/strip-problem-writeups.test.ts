@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { stripProblemWriteups } from "../../build/strip-problem-writeups";
+import {
+  stripProblemWriteups,
+  stripProblemWriteupsPlugin,
+} from "../../build/strip-problem-writeups";
 
 describe("stripProblemWriteups (#2191 spoiler boundary)", () => {
   it("removes JA and EN writeups while preserving safe metadata", () => {
@@ -27,5 +30,13 @@ describe("stripProblemWriteups (#2191 spoiler boundary)", () => {
     expect(
       stripProblemWriteups('{"id":"safe"}', "/repo/problems/challenges/safe/metadata.json"),
     ).toBeNull();
+  });
+
+  it("registers the spoiler stripping transform before Vite's JSON plugin", () => {
+    expect(stripProblemWriteupsPlugin()).toEqual({
+      name: "tenkacloud-strip-problem-writeups",
+      enforce: "pre",
+      transform: stripProblemWriteups,
+    });
   });
 });
