@@ -2,6 +2,7 @@ import type { MiddlewareHandler } from "hono";
 import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
 import { jwk } from "hono/jwk";
+import { StatusCodes } from "http-status-codes";
 import { sha256Hex } from "./crypto.js";
 import type { AppEnvironment, OrganizerContext, TeamContext } from "./types.js";
 
@@ -14,7 +15,9 @@ function isObject(value: unknown): value is JsonObject {
 function requiredClaim(payload: JsonObject, name: string): string {
   const value = payload[name];
   if (typeof value !== "string" || value.length === 0) {
-    throw new HTTPException(401, { message: `missing token claim: ${name}` });
+    throw new HTTPException(StatusCodes.UNAUTHORIZED, {
+      message: `missing token claim: ${name}`,
+    });
   }
   return value;
 }
@@ -39,7 +42,9 @@ export const organizerProjectionMiddleware = createMiddleware<AppEnvironment>(
   async (context, next) => {
     const rawPayload: unknown = context.get("jwtPayload");
     if (!isObject(rawPayload)) {
-      throw new HTTPException(401, { message: "invalid access token payload" });
+      throw new HTTPException(StatusCodes.UNAUTHORIZED, {
+        message: "invalid access token payload",
+      });
     }
     const subject = requiredClaim(rawPayload, "sub");
     const organizationId = requiredClaim(rawPayload, "org_id");
@@ -54,10 +59,12 @@ export const organizerProjectionMiddleware = createMiddleware<AppEnvironment>(
       .bind(organizationId)
       .first<{ tenant_id: string; suspended: number }>();
     if (!projection) {
-      throw new HTTPException(403, { message: "organization is not mapped to a tenant" });
+      throw new HTTPException(StatusCodes.FORBIDDEN, {
+        message: "organization is not mapped to a tenant",
+      });
     }
     if (projection.suspended === 1) {
-      throw new HTTPException(403, { message: "tenant is suspended" });
+      throw new HTTPException(StatusCodes.FORBIDDEN, { message: "tenant is suspended" });
     }
     context.set("organizer", {
       subject,
@@ -75,7 +82,7 @@ export function requireOrganizerRole(
   return createMiddleware<AppEnvironment>(async (context, next) => {
     const organizer = context.get("organizer");
     if (!allowedRoles.some((role) => organizer.roles.includes(role))) {
-      throw new HTTPException(403, { message: "insufficient role" });
+      throw new HTTPException(StatusCodes.FORBIDDEN, { message: "insufficient role" });
     }
     await next();
   });
@@ -85,16 +92,33 @@ export const teamBearerMiddleware = createMiddleware<AppEnvironment>(async (cont
   const authorization = context.req.header("authorization");
   const match = /^Bearer\s+(.+)$/iu.exec(authorization ?? "");
   if (!match?.[1]) {
-    throw new HTTPException(401, { message: "missing team bearer token" });
+    throw new HTTPException(StatusCodes.UNAUTHORIZED, {
+      message: "missing team bearer token",
+    });
   }
   const loginKeyHash = await sha256Hex(match[1]);
   const team = await context.env.CONTROL_DB.prepare(
-    "SELECT team_id, event_id, display_name FROM teams WHERE login_key_hash = ?",
+    `SELECT teams.team_id, teams.event_id, teams.display_name,
+            tenant_auth_projection.suspended
+       FROM teams
+       LEFT JOIN tenant_auth_projection
+         ON tenant_auth_projection.tenant_id = teams.tenant_id
+      WHERE teams.login_key_hash = ?`,
   )
     .bind(loginKeyHash)
-    .first<{ team_id: string; event_id: string; display_name: string }>();
+    .first<{
+      team_id: string;
+      event_id: string;
+      display_name: string;
+      suspended: number | null;
+    }>();
   if (!team) {
-    throw new HTTPException(401, { message: "invalid team bearer token" });
+    throw new HTTPException(StatusCodes.UNAUTHORIZED, {
+      message: "invalid team bearer token",
+    });
+  }
+  if (team.suspended !== 0) {
+    throw new HTTPException(StatusCodes.FORBIDDEN, { message: "tenant is suspended" });
   }
   context.set("team", {
     teamId: team.team_id,

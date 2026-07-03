@@ -26,6 +26,8 @@
   "d1_databases": [
     {
       "binding": "CONTROL_DB",
+      "database_name": "tenkacloud-always-on-control-plane-local",
+      "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
     }
   ],
@@ -41,6 +43,8 @@
       "d1_databases": [
         {
           "binding": "CONTROL_DB",
+          "database_name": "tenkacloud-always-on-control-plane-staging",
+          "database_id": "00000000-0000-0000-0000-000000000000",
           "migrations_dir": "migrations"
         }
       ]
@@ -56,6 +60,8 @@
       "d1_databases": [
         {
           "binding": "CONTROL_DB",
+          "database_name": "tenkacloud-always-on-control-plane-production",
+          "database_id": "00000000-0000-0000-0000-000000000000",
           "migrations_dir": "migrations"
         }
       ]

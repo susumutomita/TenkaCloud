@@ -36,17 +36,11 @@ jobs:
       - run: bun run --filter @tenkacloud/always-on-control-plane test
       - name: Reject placeholder Auth0 configuration
         run: |
-          if grep -q "replace-me" apps/always-on-control-plane/wrangler.jsonc; then
-            echo "Replace Auth0 placeholders before deployment." >&2
+          if grep -Eq "replace-me|00000000-0000-0000-0000-000000000000" \
+            apps/always-on-control-plane/wrangler.jsonc; then
+            echo "Replace Auth0 and D1 placeholders before deployment." >&2
             exit 1
           fi
-
-      - uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/always-on-control-plane
-          command: deploy --env ${{ inputs.environment }}
 
       - name: Apply D1 migrations
         uses: cloudflare/wrangler-action@v3
@@ -55,3 +49,10 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/always-on-control-plane
           command: d1 migrations apply CONTROL_DB --env ${{ inputs.environment }} --remote
+
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/always-on-control-plane
+          command: deploy --env ${{ inputs.environment }}

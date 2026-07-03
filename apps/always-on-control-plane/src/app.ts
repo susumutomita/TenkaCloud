@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 import { secureHeaders } from "hono/secure-headers";
+import { StatusCodes } from "http-status-codes";
 import {
   auth0JwtMiddleware,
   organizerProjectionMiddleware,
@@ -26,7 +27,9 @@ type JsonObject = Record<string, unknown>;
 function requiredString(input: JsonObject, key: string): string {
   const value = input[key];
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new HTTPException(400, { message: `${key} must be a non-empty string` });
+    throw new HTTPException(StatusCodes.BAD_REQUEST, {
+      message: `${key} must be a non-empty string`,
+    });
   }
   return value.trim();
 }
@@ -35,7 +38,7 @@ function optionalString(input: JsonObject, key: string): string | undefined {
   const value = input[key];
   if (value === undefined || value === null || value === "") return undefined;
   if (typeof value !== "string") {
-    throw new HTTPException(400, { message: `${key} must be a string` });
+    throw new HTTPException(StatusCodes.BAD_REQUEST, { message: `${key} must be a string` });
   }
   return value;
 }
@@ -45,10 +48,14 @@ async function readObject(request: { json(): Promise<unknown> }): Promise<JsonOb
   try {
     value = await request.json();
   } catch {
-    throw new HTTPException(400, { message: "request body must be valid JSON" });
+    throw new HTTPException(StatusCodes.BAD_REQUEST, {
+      message: "request body must be valid JSON",
+    });
   }
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new HTTPException(400, { message: "request body must be a JSON object" });
+    throw new HTTPException(StatusCodes.BAD_REQUEST, {
+      message: "request body must be a JSON object",
+    });
   }
   return value as JsonObject;
 }
@@ -64,7 +71,9 @@ function eventInput(body: JsonObject): EventInput {
 function checkpointInput(body: JsonObject): CheckpointInput {
   const points = body.points;
   if (!Number.isInteger(points) || Number(points) <= 0) {
-    throw new HTTPException(400, { message: "points must be a positive integer" });
+    throw new HTTPException(StatusCodes.BAD_REQUEST, {
+      message: "points must be a positive integer",
+    });
   }
   return {
     problemId: requiredString(body, "problemId"),
@@ -81,7 +90,8 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
     "*",
     bodyLimit({
       maxSize: 32 * 1024,
-      onError: (context) => context.json({ error: "request body too large" }, 413),
+      onError: (context) =>
+        context.json({ error: "request body too large" }, StatusCodes.REQUEST_TOO_LONG),
     }),
   );
 
@@ -96,7 +106,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
         reason: error instanceof Error ? error.message : "unknown",
       }),
     );
-    return context.json({ error: "internal server error" }, 500);
+    return context.json({ error: "internal server error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   });
 
   app.get("/health", (context) =>
@@ -130,7 +140,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
       organizer.tenantId,
       eventInput(await readObject(context.req)),
     );
-    return context.json(event, 201);
+    return context.json(event, StatusCodes.CREATED);
   });
 
   app.post(
@@ -149,12 +159,12 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
         );
       } catch (error) {
         if (error instanceof Error && error.message === "event not found") {
-          throw new HTTPException(404, { message: error.message });
+          throw new HTTPException(StatusCodes.NOT_FOUND, { message: error.message });
         }
         throw error;
       }
       // loginKey is intentionally exposed only by this one response.
-      return context.json(team, 201);
+      return context.json(team, StatusCodes.CREATED);
     },
   );
 
@@ -172,11 +182,11 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
         );
       } catch (error) {
         if (error instanceof Error && error.message === "event not found") {
-          throw new HTTPException(404, { message: error.message });
+          throw new HTTPException(StatusCodes.NOT_FOUND, { message: error.message });
         }
         throw error;
       }
-      return context.body(null, 204);
+      return context.body(null, StatusCodes.NO_CONTENT);
     },
   );
 
@@ -195,7 +205,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
     const team = context.get("team");
     const eventId = context.req.param("eventId");
     if (team.eventId !== eventId) {
-      throw new HTTPException(404, { message: "event not found" });
+      throw new HTTPException(StatusCodes.NOT_FOUND, { message: "event not found" });
     }
     const store = new ControlStore(context.env.CONTROL_DB);
     return context.json({ items: await store.leaderboard(eventId) });
@@ -206,7 +216,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
     const body = await readObject(context.req);
     const eventId = requiredString(body, "eventId");
     if (team.eventId !== eventId) {
-      throw new HTTPException(404, { message: "event not found" });
+      throw new HTTPException(StatusCodes.NOT_FOUND, { message: "event not found" });
     }
     const store = new ControlStore(context.env.CONTROL_DB);
     const result = await store.submitCheckpoint({
@@ -216,7 +226,10 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
       checkpointId: requiredString(body, "checkpointId"),
       flag: requiredString(body, "flag"),
     });
-    return context.json({ result }, result === "incorrect" ? 422 : 200);
+    return context.json(
+      { result },
+      result === "incorrect" ? StatusCodes.UNPROCESSABLE_ENTITY : StatusCodes.OK,
+    );
   });
 
   return app;

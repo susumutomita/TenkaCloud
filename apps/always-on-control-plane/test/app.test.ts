@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { createMiddleware } from "hono/factory";
+import { StatusCodes } from "http-status-codes";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { organizerForTest, teamForTest } from "../src/auth.js";
@@ -56,10 +57,10 @@ beforeEach(async () => {
 });
 
 describe("always-on control plane Worker", () => {
-  it("serves health and the stable runtime-config contract without authentication", async () => {
+  it("should serve health and the stable runtime-config contract without authentication", async () => {
     const app = organizerApp(adminPayload());
     const health = await app.request("https://control.example/health", undefined, env);
-    expect(health.status).toBe(200);
+    expect(health.status).toBe(StatusCodes.OK);
     await expect(health.json()).resolves.toEqual({
       ok: true,
       service: "tenkacloud-always-on-control-plane",
@@ -76,34 +77,34 @@ describe("always-on control plane Worker", () => {
     });
   });
 
-  it("fails closed for malformed, unmapped, suspended, and underprivileged organizers", async () => {
+  it("should fail closed for malformed, unmapped, suspended, and underprivileged organizers", async () => {
     await seedProjection();
     const noToken = await createApp().request(
       "https://control.example/v1/admin/events",
       undefined,
       env,
     );
-    expect(noToken.status).toBe(401);
+    expect(noToken.status).toBe(StatusCodes.UNAUTHORIZED);
 
     const invalidPayload = await organizerApp(null).request(
       "https://control.example/v1/admin/events",
       undefined,
       env,
     );
-    expect(invalidPayload.status).toBe(401);
+    expect(invalidPayload.status).toBe(StatusCodes.UNAUTHORIZED);
 
     const malformed = await organizerApp({ sub: "auth0|organizer" }).request(
       "https://control.example/v1/admin/events",
       undefined,
       env,
     );
-    expect(malformed.status).toBe(401);
+    expect(malformed.status).toBe(StatusCodes.UNAUTHORIZED);
 
     const unmapped = await organizerApp({
       ...adminPayload(),
       org_id: "org_unknown",
     }).request("https://control.example/v1/admin/events", undefined, env);
-    expect(unmapped.status).toBe(403);
+    expect(unmapped.status).toBe(StatusCodes.FORBIDDEN);
 
     await env.CONTROL_DB.prepare("UPDATE tenant_auth_projection SET suspended = 1 WHERE org_id = ?")
       .bind("org_acme")
@@ -113,7 +114,7 @@ describe("always-on control plane Worker", () => {
       undefined,
       env,
     );
-    expect(suspended.status).toBe(403);
+    expect(suspended.status).toBe(StatusCodes.FORBIDDEN);
 
     await env.CONTROL_DB.prepare("UPDATE tenant_auth_projection SET suspended = 0 WHERE org_id = ?")
       .bind("org_acme")
@@ -123,10 +124,10 @@ describe("always-on control plane Worker", () => {
       json("POST", { name: "Denied" }),
       env,
     );
-    expect(viewerWrite.status).toBe(403);
+    expect(viewerWrite.status).toBe(StatusCodes.FORBIDDEN);
   });
 
-  it("runs event creation, team handoff, multi-checkpoint scoring, and leaderboard end to end", async () => {
+  it("should run event creation, team handoff, multi-checkpoint scoring, and leaderboard end to end", async () => {
     await seedProjection();
     const app = organizerApp(adminPayload());
 
@@ -138,7 +139,7 @@ describe("always-on control plane Worker", () => {
       }),
       env,
     );
-    expect(createEvent.status).toBe(201);
+    expect(createEvent.status).toBe(StatusCodes.CREATED);
     const event = (await createEvent.json()) as { eventId: string };
 
     const list = await app.request("https://control.example/v1/admin/events", undefined, env);
@@ -150,7 +151,7 @@ describe("always-on control plane Worker", () => {
       json("POST", { displayName: "Blue Team" }),
       env,
     );
-    expect(createTeam.status).toBe(201);
+    expect(createTeam.status).toBe(StatusCodes.CREATED);
     const team = (await createTeam.json()) as { teamId: string; loginKey: string };
     expect(team.loginKey.length).toBeGreaterThan(30);
     const storedTeam = await env.CONTROL_DB.prepare(
@@ -169,7 +170,7 @@ describe("always-on control plane Worker", () => {
         json("PUT", { problemId: "sqli-demo", ...checkpoint }),
         env,
       );
-      expect(response.status).toBe(204);
+      expect(response.status).toBe(StatusCodes.NO_CONTENT);
     }
 
     const portalMe = await app.request(
@@ -197,7 +198,7 @@ describe("always-on control plane Worker", () => {
       ),
       env,
     );
-    expect(incorrect.status).toBe(422);
+    expect(incorrect.status).toBe(StatusCodes.UNPROCESSABLE_ENTITY);
     await expect(incorrect.json()).resolves.toEqual({ result: "incorrect" });
 
     for (const [checkpointId, flag] of [
@@ -253,20 +254,32 @@ describe("always-on control plane Worker", () => {
         }),
       ],
     });
+
+    await env.CONTROL_DB.prepare(
+      "UPDATE tenant_auth_projection SET suspended = 1 WHERE tenant_id = ?",
+    )
+      .bind("tenant-acme")
+      .run();
+    const suspendedTeam = await app.request(
+      "https://control.example/v1/portal/me",
+      { headers: { authorization: `Bearer ${team.loginKey}` } },
+      env,
+    );
+    expect(suspendedTeam.status).toBe(StatusCodes.FORBIDDEN);
   });
 
-  it("rejects invalid team credentials, cross-event reads, and malformed bodies", async () => {
+  it("should reject invalid team credentials, cross-event reads, and malformed bodies", async () => {
     await seedProjection();
     const app = organizerApp(adminPayload());
     const missingBearer = await app.request("https://control.example/v1/portal/me", undefined, env);
-    expect(missingBearer.status).toBe(401);
+    expect(missingBearer.status).toBe(StatusCodes.UNAUTHORIZED);
 
     const invalidBearer = await app.request(
       "https://control.example/v1/portal/me",
       { headers: { authorization: "Bearer invalid" } },
       env,
     );
-    expect(invalidBearer.status).toBe(401);
+    expect(invalidBearer.status).toBe(StatusCodes.UNAUTHORIZED);
 
     const invalidJson = await app.request(
       "https://control.example/v1/admin/events",
@@ -277,28 +290,28 @@ describe("always-on control plane Worker", () => {
       },
       env,
     );
-    expect(invalidJson.status).toBe(400);
+    expect(invalidJson.status).toBe(StatusCodes.BAD_REQUEST);
 
     const nonObjectBody = await app.request(
       "https://control.example/v1/admin/events",
       json("POST", []),
       env,
     );
-    expect(nonObjectBody.status).toBe(400);
+    expect(nonObjectBody.status).toBe(StatusCodes.BAD_REQUEST);
 
     const blankName = await app.request(
       "https://control.example/v1/admin/events",
       json("POST", { name: "  " }),
       env,
     );
-    expect(blankName.status).toBe(400);
+    expect(blankName.status).toBe(StatusCodes.BAD_REQUEST);
 
     const invalidOptionalDate = await app.request(
       "https://control.example/v1/admin/events",
       json("POST", { name: "Invalid date", startsAt: 123 }),
       env,
     );
-    expect(invalidOptionalDate.status).toBe(400);
+    expect(invalidOptionalDate.status).toBe(StatusCodes.BAD_REQUEST);
 
     const invalidPoints = await app.request(
       "https://control.example/v1/admin/events/missing/checkpoints",
@@ -310,14 +323,14 @@ describe("always-on control plane Worker", () => {
       }),
       env,
     );
-    expect(invalidPoints.status).toBe(400);
+    expect(invalidPoints.status).toBe(StatusCodes.BAD_REQUEST);
 
     const missingTeamEvent = await app.request(
       "https://control.example/v1/admin/events/missing/teams",
       json("POST", { displayName: "No event" }),
       env,
     );
-    expect(missingTeamEvent.status).toBe(404);
+    expect(missingTeamEvent.status).toBe(StatusCodes.NOT_FOUND);
 
     const missingCheckpointEvent = await app.request(
       "https://control.example/v1/admin/events/missing/checkpoints",
@@ -329,14 +342,14 @@ describe("always-on control plane Worker", () => {
       }),
       env,
     );
-    expect(missingCheckpointEvent.status).toBe(404);
+    expect(missingCheckpointEvent.status).toBe(StatusCodes.NOT_FOUND);
 
     const oversized = await app.request(
       "https://control.example/v1/admin/events",
       json("POST", { name: "x".repeat(33 * 1024) }),
       env,
     );
-    expect(oversized.status).toBe(413);
+    expect(oversized.status).toBe(StatusCodes.REQUEST_TOO_LONG);
 
     const teamApp = createApp({
       teamAuth: teamForTest({
@@ -350,7 +363,7 @@ describe("always-on control plane Worker", () => {
       undefined,
       env,
     );
-    expect(crossEventRead.status).toBe(404);
+    expect(crossEventRead.status).toBe(StatusCodes.NOT_FOUND);
     const crossEventSubmit = await teamApp.request(
       "https://control.example/v1/portal/flags",
       json("POST", {
@@ -361,10 +374,10 @@ describe("always-on control plane Worker", () => {
       }),
       env,
     );
-    expect(crossEventSubmit.status).toBe(404);
+    expect(crossEventSubmit.status).toBe(StatusCodes.NOT_FOUND);
   });
 
-  it("returns a sanitized 500 when storage fails unexpectedly", async () => {
+  it("should return a sanitized 500 when storage fails unexpectedly", async () => {
     await seedProjection();
     await env.CONTROL_DB.prepare(
       `INSERT INTO events (
@@ -385,7 +398,7 @@ describe("always-on control plane Worker", () => {
         json("POST", { displayName: "Rejected" }),
         env,
       );
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
       await expect(response.json()).resolves.toEqual({ error: "internal server error" });
       expect(error).toHaveBeenCalledWith(
         expect.stringContaining('"event":"always-on.request.failed"'),
@@ -396,7 +409,7 @@ describe("always-on control plane Worker", () => {
     }
   });
 
-  it("supports deterministic organizer middleware injection for Worker tests", async () => {
+  it("should support deterministic organizer middleware injection for Worker tests", async () => {
     const organizer = {
       subject: "test|organizer",
       organizationId: "org_test",
@@ -408,6 +421,6 @@ describe("always-on control plane Worker", () => {
       organizerProjection: organizerForTest(organizer),
     });
     const response = await app.request("https://control.example/v1/admin/events", undefined, env);
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(StatusCodes.OK);
   });
 });
