@@ -30,6 +30,7 @@ import {
   DeleteStackCommand,
   DescribeStacksCommand,
 } from "@aws-sdk/client-cloudformation";
+import { CloudWatchLogsClient } from "@aws-sdk/client-cloudwatch-logs";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { type Credentials, GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
 import {
@@ -41,6 +42,12 @@ import {
   DeployDeleteRequestedDetailSchema,
 } from "../shared/events.js";
 import { errorDeployTrace, logDeployTrace, warnDeployTrace } from "../shared/trace-log.js";
+import {
+  type JobProgressLogger,
+  makeJobProgressLogger,
+  NOOP_JOB_PROGRESS_LOGGER,
+  safeProgressInfo,
+} from "./job-progress-log.js";
 
 // ---------------------------------------------------------------------------
 // Pure helpers (no AWS SDK calls)
@@ -99,10 +106,29 @@ export interface DeleteStackDeps extends AssumeCompetitorRoleDeps {
   }) => Pick<STSClient, "send">;
   /** Same-account CFn execution role ARN (`--role-arn` equivalent). Omitted for cross-account. */
   readonly cfnExecRoleArn?: string;
+  /**
+   * Issue #2291: factory for the per-job progress logger (keyed by `jobId`), mirroring the create
+   * path so a teardown watched via `GET /portal/me/deploy-logs` shows progress on the Lambda path
+   * too. Present only when the job log group is wired (`DEPLOY_JOB_LOG_GROUP`, `deployViaLambda`
+   * ON); absent → {@link NOOP_JOB_PROGRESS_LOGGER} (default-safe, no CloudWatch writes).
+   */
+  readonly progressFactory?: (jobId: string) => JobProgressLogger;
 }
 
 export interface DeleteStackInput {
   readonly detail?: unknown;
+}
+
+/** Emit a competitor-visible terminal line for the delete poll (DELETE_COMPLETE / DELETE_FAILED). */
+async function emitDeleteTerminalProgress(
+  progress: JobProgressLogger,
+  stack: PollStackStatus,
+): Promise<void> {
+  if (stack.StackStatus === "DELETE_COMPLETE") {
+    await safeProgressInfo(progress, "Delete complete");
+  } else if (stack.StackStatus === "DELETE_FAILED") {
+    await safeProgressInfo(progress, `Delete failed: ${stack.StackStatusReason ?? "unknown"}`);
+  }
 }
 
 /** Assume the competitor role (if configured) and build a CFn client for the target account. */
@@ -177,6 +203,8 @@ export async function deleteStackForDeployment(
 ): Promise<{ readonly deleted: boolean }> {
   const detail = DeployDeleteRequestedDetailSchema.parse(input.detail);
   const { cfn, credentials, correlationId } = await resolveTargetContext(detail, deps);
+  // #2291: NOOP when no job log group is wired (flag OFF). Lines are secret-free.
+  const progress = deps.progressFactory?.(detail.jobId) ?? NOOP_JOB_PROGRESS_LOGGER;
 
   logDeployTrace("deploy.cfn-lambda.delete.start", {
     jobId: detail.jobId,
@@ -195,6 +223,8 @@ export async function deleteStackForDeployment(
     jobId: detail.jobId,
     correlationId,
   });
+
+  await safeProgressInfo(progress, `Deleting stack ${detail.stackName} ...`);
 
   // same-account delete passes the dedicated CFn execution role (`--role-arn`); cross-account
   // deletes run under the assumed competitor credentials, so no RoleARN is passed (#1381).
@@ -215,8 +245,13 @@ export async function deleteStackForDeployment(
         stackName: detail.stackName,
         region: detail.region,
       });
+      await safeProgressInfo(progress, "Delete complete");
       return { deleted: true };
     }
+    await safeProgressInfo(
+      progress,
+      `Delete failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
     throw err;
   }
 
@@ -227,6 +262,7 @@ export async function deleteStackForDeployment(
     stackName: detail.stackName,
     region: detail.region,
   });
+  await safeProgressInfo(progress, `Delete submitted for stack ${detail.stackName}`);
   return { deleted: true };
 }
 
@@ -243,6 +279,8 @@ export async function describeDeleteStackForPoll(
 ): Promise<PollStackResult> {
   const detail = DeployDeleteRequestedDetailSchema.parse(input.detail);
   const { cfn, credentials, correlationId } = await resolveTargetContext(detail, deps);
+  // #2291: NOOP when no job log group is wired (flag OFF).
+  const progress = deps.progressFactory?.(detail.jobId) ?? NOOP_JOB_PROGRESS_LOGGER;
 
   // #1797 (poll): a name miss (empty Stacks / ValidationError) is only terminal SUCCESS when the
   // credentials are still on the target account. Without this, drifted creds could turn a
@@ -258,45 +296,51 @@ export async function describeDeleteStackForPoll(
       correlationId,
     });
 
+  let result: PollStackResult;
   try {
     const out = await cfn.send(new DescribeStacksCommand({ StackName: detail.stackName }));
     const stack = out.Stacks?.[0];
     if (!stack?.StackStatus) {
       // CFn returns the stack or throws; an empty Stacks array means it is gone.
       await assertOnTargetAccount();
-      return goneStackResult(detail.stackName);
+      result = goneStackResult(detail.stackName);
+    } else {
+      // The SM's DELETE_FAILED branch reads StackStatusReason via JsonPath
+      // (`$.cfn.Stacks[0].StackStatusReason`). CloudFormation does not always populate it, so
+      // guarantee the field on DELETE_FAILED with a static fallback — a missing field would throw
+      // States.Runtime in the failure Pass and strand the row in DELETING instead of reaching
+      // MarkFailed. Other statuses stay sparse (their reason, if any, is passed through but never
+      // referenced).
+      const failureReason =
+        stack.StackStatus === "DELETE_FAILED"
+          ? (stack.StackStatusReason ?? "CloudFormation reported DELETE_FAILED without a reason")
+          : stack.StackStatusReason;
+      result = {
+        Stacks: [
+          {
+            StackStatus: stack.StackStatus,
+            ...(failureReason ? { StackStatusReason: failureReason } : {}),
+            ...(stack.StackId ? { StackId: stack.StackId } : {}),
+          },
+        ],
+      };
     }
-    // The SM's DELETE_FAILED branch reads StackStatusReason via JsonPath
-    // (`$.cfn.Stacks[0].StackStatusReason`). CloudFormation does not always populate it, so guarantee
-    // the field on DELETE_FAILED with a static fallback — a missing field would throw States.Runtime
-    // in the failure Pass and strand the row in DELETING instead of reaching MarkFailed. Other
-    // statuses stay sparse (their reason, if any, is passed through but never referenced).
-    const failureReason =
-      stack.StackStatus === "DELETE_FAILED"
-        ? (stack.StackStatusReason ?? "CloudFormation reported DELETE_FAILED without a reason")
-        : stack.StackStatusReason;
-    return {
-      Stacks: [
-        {
-          StackStatus: stack.StackStatus,
-          ...(failureReason ? { StackStatusReason: failureReason } : {}),
-          ...(stack.StackId ? { StackId: stack.StackId } : {}),
-        },
-      ],
-    };
   } catch (err) {
-    if (isStackAlreadyDeletedError(err)) {
-      await assertOnTargetAccount();
-      logDeployTrace("deploy.cfn-lambda.delete.poll.gone", {
-        jobId: detail.jobId,
-        correlationId,
-        stackName: detail.stackName,
-        region: detail.region,
-      });
-      return goneStackResult(detail.stackName);
-    }
-    throw err;
+    if (!isStackAlreadyDeletedError(err)) throw err;
+    await assertOnTargetAccount();
+    logDeployTrace("deploy.cfn-lambda.delete.poll.gone", {
+      jobId: detail.jobId,
+      correlationId,
+      stackName: detail.stackName,
+      region: detail.region,
+    });
+    result = goneStackResult(detail.stackName);
   }
+
+  // #2291: only DELETE_COMPLETE / DELETE_FAILED emit a competitor-visible terminal line; an
+  // in-progress poll writes nothing (so a multi-poll teardown yields one terminal line, not many).
+  await emitDeleteTerminalProgress(progress, result.Stacks[0]);
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -306,6 +350,7 @@ export async function describeDeleteStackForPoll(
 
 const ssm = new SSMClient({});
 const sts = new STSClient({});
+const cwLogs = new CloudWatchLogsClient({});
 
 /** Shape STS `Credentials` into the AWS SDK v3 `credentials` option (empty for same-account). */
 function sdkCredentials(credentials?: Credentials) {
@@ -321,6 +366,9 @@ function sdkCredentials(credentials?: Credentials) {
 }
 
 function buildRealDeps(): DeleteStackDeps {
+  // #2291: only wire a real progress logger when the dedicated job log group is present
+  // (deployViaLambda ON). Absent → NOOP inside the delete handlers (default-safe).
+  const jobLogGroup = process.env.DEPLOY_JOB_LOG_GROUP || undefined;
   return {
     ssm,
     sts,
@@ -329,6 +377,12 @@ function buildRealDeps(): DeleteStackDeps {
     stsIdentityClient: ({ region, credentials }) =>
       new STSClient({ region, ...sdkCredentials(credentials) }),
     cfnExecRoleArn: process.env.CFN_EXEC_ROLE_ARN || undefined,
+    ...(jobLogGroup
+      ? {
+          progressFactory: (jobId: string) =>
+            makeJobProgressLogger({ logs: cwLogs, logGroupName: jobLogGroup, jobId }),
+        }
+      : {}),
   };
 }
 

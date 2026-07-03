@@ -316,6 +316,88 @@ describe("createStackForDeployment cross-account (#2291)", () => {
   });
 });
 
+describe("createStackForDeployment progress logging (#2291)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function recordingProgressFactory() {
+    const messages: string[] = [];
+    const jobIds: string[] = [];
+    const factory = (jobId: string) => {
+      jobIds.push(jobId);
+      return {
+        info: async (message: string) => {
+          messages.push(message);
+        },
+      };
+    };
+    return { factory, messages, jobIds };
+  }
+
+  it("should stream progress lines to the job logger when a progressFactory is provided", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    const rec = recordingProgressFactory();
+    const deps = { ...crossAccountDeps(cfn), progressFactory: rec.factory };
+    await createStackForDeployment({ detail: validDetail() }, deps);
+
+    // The factory is keyed by the deploy jobId.
+    expect(rec.jobIds).toEqual([VALID_JOB_ID]);
+    // Human-readable transitions mirror what a CodeBuild log would show — and carry no secrets.
+    expect(rec.messages).toContain("Deploying stack tc-sample-flag-demo-team ...");
+    expect(rec.messages.some((m) => m.startsWith("CreateStack submitted (stackId "))).toBe(true);
+    expect(rec.messages.join("\n")).not.toContain("external-id-secret-value");
+  });
+
+  it("should emit a delete line when a pre-existing unrecoverable stack is removed", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ status: "ROLLBACK_COMPLETE" }], commands: [] });
+    const rec = recordingProgressFactory();
+    const deps = { ...crossAccountDeps(cfn), progressFactory: rec.factory };
+    await createStackForDeployment({ detail: validDetail() }, deps);
+
+    expect(
+      rec.messages.some((m) =>
+        m.startsWith("Deleting unrecoverable stack (ROLLBACK_COMPLETE) before re-create"),
+      ),
+    ).toBe(true);
+  });
+
+  it("should not require a logger (NOOP) when progressFactory is absent", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    const deps = crossAccountDeps(cfn); // no progressFactory
+    const result = await createStackForDeployment({ detail: validDetail() }, deps);
+    expect(result.stackId).toBe("arn:aws:cloudformation:ap-northeast-1:123456789012:stack/tc/1");
+  });
+
+  it("should not fail the deploy when a progress write throws (best-effort logging)", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    const throwingFactory = () => ({
+      info: async () => {
+        throw new Error("CloudWatch unavailable");
+      },
+    });
+    const deps = { ...crossAccountDeps(cfn), progressFactory: throwingFactory };
+    const result = await createStackForDeployment({ detail: validDetail() }, deps);
+    // Deploy still succeeded despite every progress write failing.
+    expect(result.stackId).toBe("arn:aws:cloudformation:ap-northeast-1:123456789012:stack/tc/1");
+  });
+
+  it("should emit a 'Deploy failed' line and rethrow when CreateStack fails", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    cfn.send.mockImplementation(async (command: unknown) => {
+      if (command instanceof CreateStackCommand) throw new Error("AlreadyExistsException");
+      if (command instanceof DescribeStacksCommand) {
+        throw new Error("Stack with id tc-sample-flag-demo-team does not exist");
+      }
+      return {};
+    });
+    const rec = recordingProgressFactory();
+    const deps = { ...crossAccountDeps(cfn), progressFactory: rec.factory };
+    await expect(createStackForDeployment({ detail: validDetail() }, deps)).rejects.toThrow(
+      /AlreadyExistsException/,
+    );
+    expect(rec.messages.some((m) => m.startsWith("Deploy failed: "))).toBe(true);
+  });
+});
+
 describe("createStackForDeployment same-account (#2291)", () => {
   beforeEach(() => vi.clearAllMocks());
 

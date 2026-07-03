@@ -253,6 +253,93 @@ describe("deleteStackForDeployment same-account (#2291)", () => {
   });
 });
 
+describe("delete progress logging (#2291)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function recordingProgressFactory() {
+    const messages: string[] = [];
+    const jobIds: string[] = [];
+    const factory = (jobId: string) => {
+      jobIds.push(jobId);
+      return {
+        info: async (message: string) => {
+          messages.push(message);
+        },
+      };
+    };
+    return { factory, messages, jobIds };
+  }
+
+  it("should stream delete progress lines when a progressFactory is provided", async () => {
+    const cfn = fakeCfn({ describeResponses: [], commands: [] });
+    const rec = recordingProgressFactory();
+    const deps = { ...crossAccountDeps(cfn), progressFactory: rec.factory };
+    await deleteStackForDeployment({ detail: validDetail() }, deps);
+
+    expect(rec.jobIds).toEqual([VALID_JOB_ID]);
+    expect(rec.messages).toContain(`Deleting stack ${STACK_NAME} ...`);
+    expect(rec.messages).toContain(`Delete submitted for stack ${STACK_NAME}`);
+    expect(rec.messages.join("\n")).not.toContain("external-id-secret-value");
+  });
+
+  it("should emit 'Delete complete' when the stack was already gone (idempotent)", async () => {
+    const cfn = fakeCfn({
+      describeResponses: [],
+      commands: [],
+      deleteThrows: "Stack does not exist",
+    });
+    const rec = recordingProgressFactory();
+    const deps = { ...crossAccountDeps(cfn), progressFactory: rec.factory };
+    await deleteStackForDeployment({ detail: validDetail() }, deps);
+    expect(rec.messages).toContain("Delete complete");
+  });
+
+  it("should not require a logger (NOOP) when progressFactory is absent", async () => {
+    const cfn = fakeCfn({ describeResponses: [], commands: [] });
+    const result = await deleteStackForDeployment({ detail: validDetail() }, crossAccountDeps(cfn));
+    expect(result.deleted).toBe(true);
+  });
+
+  it("should not fail the delete when a progress write throws (best-effort logging)", async () => {
+    const cfn = fakeCfn({ describeResponses: [], commands: [] });
+    const throwingFactory = () => ({
+      info: async () => {
+        throw new Error("CloudWatch unavailable");
+      },
+    });
+    const deps = { ...crossAccountDeps(cfn), progressFactory: throwingFactory };
+    const result = await deleteStackForDeployment({ detail: validDetail() }, deps);
+    expect(result.deleted).toBe(true);
+  });
+
+  it("should emit a 'Delete complete' terminal line from the poll when the stack is gone", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    const rec = recordingProgressFactory();
+    const deps = { ...crossAccountDeps(cfn), progressFactory: rec.factory };
+    await describeDeleteStackForPoll({ detail: validDetail() }, deps);
+    expect(rec.messages).toContain("Delete complete");
+  });
+
+  it("should emit a 'Delete failed' terminal line from the poll on DELETE_FAILED", async () => {
+    const cfn = fakeCfn({
+      describeResponses: [{ status: "DELETE_FAILED", reason: "S3 bucket not empty" }],
+      commands: [],
+    });
+    const rec = recordingProgressFactory();
+    const deps = { ...crossAccountDeps(cfn), progressFactory: rec.factory };
+    await describeDeleteStackForPoll({ detail: validDetail() }, deps);
+    expect(rec.messages).toContain("Delete failed: S3 bucket not empty");
+  });
+
+  it("should not emit a terminal line while the delete is still in progress", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ status: "DELETE_IN_PROGRESS" }], commands: [] });
+    const rec = recordingProgressFactory();
+    const deps = { ...crossAccountDeps(cfn), progressFactory: rec.factory };
+    await describeDeleteStackForPoll({ detail: validDetail() }, deps);
+    expect(rec.messages).toEqual([]);
+  });
+});
+
 describe("describeDeleteStackForPoll (#2291)", () => {
   beforeEach(() => vi.clearAllMocks());
 

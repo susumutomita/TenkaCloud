@@ -1,7 +1,8 @@
 import * as path from "node:path";
-import { Duration, Stack } from "aws-cdk-lib";
+import { Duration, RemovalPolicy, Stack } from "aws-cdk-lib";
 import * as iam from "aws-cdk-lib/aws-iam";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
+import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
@@ -36,6 +37,12 @@ export interface CfnDeployLambdaProps {
  *
  * 任意リソース作成の広域権限は Lambda role からは剥がし、CFn 専用 service role
  * ({@link cfnExecRole}) に閉じ込める。same-account deploy 時に CreateStack へ PassRole する。
+ *
+ * #2291 progress log: この Lambda は deploy/delete の進捗を jobId 名の CloudWatch stream に書き、
+ * participant portal の `GET /portal/me/deploy-logs` (deploy-logs.ts) が {@link jobLogGroup} を
+ * env `DEPLOY_JOB_LOG_GROUP` 経由で読み戻す。CodeBuild build log を持たない Lambda 経路でも
+ * 競技者が deploy 進捗を見られるようにするための専用 log group。write 権限は本 group に限定した
+ * `logs:CreateLogStream` / `logs:PutLogEvents` のみ (function 自身の log group は Basic exec role が担保)。
  */
 export class CfnDeployLambda extends Construct {
   public readonly fn: NodejsFunction;
@@ -43,10 +50,23 @@ export class CfnDeployLambda extends Construct {
   /** CloudFormation 実行 role (same-account CreateStack で `RoleARN` に渡す)。 */
   public readonly cfnExecRole: iam.Role;
 
+  /**
+   * #2291: deploy/delete 進捗を jobId 名 stream に書く専用 log group。participant portal Lambda が
+   * この group を read scope として受け取り (`build-participant-portal-subsystem.ts` 経由)、
+   * `deploy-logs.ts` が jobId stream を `logs:GetLogEvents` で stream する。
+   */
+  public readonly jobLogGroup: LogGroup;
+
   constructor(scope: Construct, id: string, props: CfnDeployLambdaProps) {
     super(scope, id);
 
     const stack = Stack.of(this);
+
+    // #2291: deploy 進捗の jobId 名 stream 置き場。1 ヶ月保持で cost を抑え、stack 削除で消す。
+    this.jobLogGroup = new LogGroup(this, "JobLogGroup", {
+      retention: RetentionDays.ONE_MONTH,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
 
     // #1381 踏襲: 問題テンプレが作る任意リソースの広域権限は CFn 専用 service role に閉じ込める。
     this.cfnExecRole = new iam.Role(this, "CfnExecRole", {
@@ -77,8 +97,21 @@ export class CfnDeployLambda extends Construct {
         SOURCE_BUCKET_NAME: props.sourceBucketName,
         TENKACLOUD_ACCOUNT_ID: stack.account,
         CFN_EXEC_ROLE_ARN: this.cfnExecRole.roleArn,
+        // #2291: handler が jobId 名 stream に進捗を書く先。deploy-logs.ts が同 env で read する。
+        DEPLOY_JOB_LOG_GROUP: this.jobLogGroup.logGroupName,
       },
     });
+
+    // #2291: 進捗書き込みは本 job log group への CreateLogStream / PutLogEvents に限定 (least-privilege)。
+    // function 自身の log group は AWSLambdaBasicExecutionRole が担保する (= 別 group、ここでは触らない)。
+    // stream (`:*`) と group ARN の両方を対象にする (PutLogEvents は stream ARN で評価される)。
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["logs:CreateLogStream", "logs:PutLogEvents"],
+        resources: [this.jobLogGroup.logGroupArn, `${this.jobLogGroup.logGroupArn}:*`],
+      }),
+    );
 
     // #1381 踏襲: stack 操作系 CFn action は命名規約 `tc-*` に scope。
     this.fn.addToRolePolicy(

@@ -128,8 +128,12 @@ export interface ApplicationStatus {
 export interface DeploymentLogEntry {
   readonly id: string;
   readonly timestamp: string;
-  /** `/portal/me` 同梱 log は "deployment" のみ。 "codebuild" は deploy-logs route が送る。 */
-  readonly source: "deployment" | "codebuild";
+  /**
+   * `/portal/me` 同梱 log は "deployment" のみ。 "codebuild" は deploy-logs route が (CodeBuild
+   * 経路の deploy build から) 送る。 "lambda" は同 route が Lambda 経路の deploy (#2291) で jobId
+   * 名の CloudWatch stream から送る (= deployViaLambda ON。 CodeBuild build が無いケース)。
+   */
+  readonly source: "deployment" | "codebuild" | "lambda";
   readonly level: "info" | "success" | "warning" | "error";
   readonly message: string;
 }

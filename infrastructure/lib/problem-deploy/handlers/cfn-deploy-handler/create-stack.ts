@@ -26,9 +26,11 @@ import {
   Capability,
   CloudFormationClient,
   CreateStackCommand,
+  type CreateStackCommandOutput,
   DeleteStackCommand,
   DescribeStacksCommand,
 } from "@aws-sdk/client-cloudformation";
+import { CloudWatchLogsClient } from "@aws-sdk/client-cloudwatch-logs";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { type Credentials, STSClient } from "@aws-sdk/client-sts";
@@ -41,6 +43,12 @@ import {
   DeployCreateRequestedDetailSchema,
 } from "../shared/events.js";
 import { logDeployTrace, warnDeployTrace } from "../shared/trace-log.js";
+import {
+  type JobProgressLogger,
+  makeJobProgressLogger,
+  NOOP_JOB_PROGRESS_LOGGER,
+  safeProgressInfo,
+} from "./job-progress-log.js";
 
 // ---------------------------------------------------------------------------
 // Pure helpers (fully unit-tested, no AWS SDK calls)
@@ -263,6 +271,12 @@ export interface CreateStackDeps extends AssumeCompetitorRoleDeps {
     cfn: Pick<CloudFormationClient, "send">,
     stackName: string,
   ) => Promise<void>;
+  /**
+   * Issue #2291: factory for the per-job progress logger (keyed by `jobId`). Present only when the
+   * deploy Lambda has a job log group wired (`DEPLOY_JOB_LOG_GROUP` env, `deployViaLambda` ON).
+   * Absent → {@link NOOP_JOB_PROGRESS_LOGGER} (default-safe, no CloudWatch writes).
+   */
+  readonly progressFactory?: (jobId: string) => JobProgressLogger;
 }
 
 export interface CreateStackInput {
@@ -320,6 +334,9 @@ export async function createStackForDeployment(
   const detail = DeployCreateRequestedDetailSchema.parse(input.detail);
   const correlationId = detail.correlationId ?? detail.jobId;
   const generateToken = deps.generateToken ?? (() => generateRandomAlphanumeric(32));
+  // #2291: competitor-visible deploy progress. NOOP when no job log group is wired (flag OFF).
+  // All lines are secret-free (no ExternalId / credentials / random password).
+  const progress = deps.progressFactory?.(detail.jobId) ?? NOOP_JOB_PROGRESS_LOGGER;
 
   logDeployTrace("deploy.cfn-lambda.start", {
     jobId: detail.jobId,
@@ -360,6 +377,7 @@ export async function createStackForDeployment(
   });
 
   const cfn = deps.cfnClient({ region: detail.region, credentials });
+  await safeProgressInfo(progress, `Deploying stack ${detail.namePrefix} ...`);
 
   // Delete an un-updatable stack (ROLLBACK_COMPLETE / CREATE_FAILED / …) before re-create.
   const existingStatus = await describeStackStatus(cfn, detail.namePrefix);
@@ -370,6 +388,10 @@ export async function createStackForDeployment(
       stackName: detail.namePrefix,
       status: existingStatus,
     });
+    await safeProgressInfo(
+      progress,
+      `Deleting unrecoverable stack (${existingStatus}) before re-create ...`,
+    );
     await cfn.send(new DeleteStackCommand({ StackName: detail.namePrefix }));
     const waitForStackDelete = deps.waitForStackDelete ?? defaultWaitForStackDelete;
     await waitForStackDelete(cfn, detail.namePrefix);
@@ -385,18 +407,29 @@ export async function createStackForDeployment(
   // create-or-update collapse (UpdateStack + no-op on empty changeset) is deferred to a later
   // slice. Dormant in production because the `deployViaLambda` flag is OFF by default.
 
-  const out = await cfn.send(
-    new CreateStackCommand({
-      StackName: detail.namePrefix,
-      TemplateBody: artifacts.templateBody,
-      Parameters: parameters,
-      Capabilities: [Capability.CAPABILITY_NAMED_IAM],
-      Tags: tags,
-      ...(roleArn ? { RoleARN: roleArn } : {}),
-      // OnFailure defaults to ROLLBACK: a failed CREATE lands in ROLLBACK_COMPLETE (unrecoverable),
-      // which the next run's pre-delete cleans — matches `aws cloudformation deploy` semantics.
-    }),
-  );
+  let out: CreateStackCommandOutput;
+  try {
+    out = await cfn.send(
+      new CreateStackCommand({
+        StackName: detail.namePrefix,
+        TemplateBody: artifacts.templateBody,
+        Parameters: parameters,
+        Capabilities: [Capability.CAPABILITY_NAMED_IAM],
+        Tags: tags,
+        ...(roleArn ? { RoleARN: roleArn } : {}),
+        // OnFailure defaults to ROLLBACK: a failed CREATE lands in ROLLBACK_COMPLETE (unrecoverable),
+        // which the next run's pre-delete cleans — matches `aws cloudformation deploy` semantics.
+      }),
+    );
+  } catch (err) {
+    // Best-effort failure line for the participant; the throw still drives the SM → DDB FAILED.
+    await safeProgressInfo(
+      progress,
+      `Deploy failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    throw err;
+  }
+  await safeProgressInfo(progress, `CreateStack submitted (stackId ${out.StackId ?? "-"})`);
 
   logDeployTrace("deploy.cfn-lambda.create-stack.submitted", {
     jobId: detail.jobId,
@@ -423,11 +456,15 @@ function requireEnv(name: string): string {
 const ssm = new SSMClient({});
 const sts = new STSClient({});
 const s3 = new S3Client({});
+const cwLogs = new CloudWatchLogsClient({});
 
 export async function handler(input: CreateStackInput): Promise<{ readonly stackId?: string }> {
   const sourceBucket = requireEnv("SOURCE_BUCKET_NAME");
   const tenkaCloudAccountId = requireEnv("TENKACLOUD_ACCOUNT_ID");
   const cfnExecRoleArn = process.env.CFN_EXEC_ROLE_ARN || undefined;
+  // #2291: only wire a real progress logger when the dedicated job log group is present
+  // (deployViaLambda ON). Absent → NOOP inside createStackForDeployment (default-safe).
+  const jobLogGroup = process.env.DEPLOY_JOB_LOG_GROUP || undefined;
   return createStackForDeployment(input, {
     ssm,
     sts,
@@ -447,5 +484,11 @@ export async function handler(input: CreateStackInput): Promise<{ readonly stack
     resolveArtifacts: buildS3ArtifactsResolver(s3, { sourceBucket }),
     tenkaCloudAccountId,
     cfnExecRoleArn,
+    ...(jobLogGroup
+      ? {
+          progressFactory: (jobId: string) =>
+            makeJobProgressLogger({ logs: cwLogs, logGroupName: jobLogGroup, jobId }),
+        }
+      : {}),
   });
 }

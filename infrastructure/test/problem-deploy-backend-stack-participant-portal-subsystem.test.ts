@@ -29,6 +29,7 @@ vi.mock("../lib/problem-deploy/participant-portal-hosting.js", () => ({
 
 async function synthWithParticipantPortal(
   problemsCoordinationBundles: Readonly<Record<string, string>>,
+  opts: { deployViaLambda?: boolean } = {},
 ): Promise<Template> {
   const { ProblemDeployBackendStack } = await import(
     "../lib/problem-deploy/problem-deploy-backend-stack.js"
@@ -44,8 +45,22 @@ async function synthWithParticipantPortal(
     problemsCoordinationBundles,
     environmentName: "development",
     participantPortal: { runtimeConfig: "default-dev-mock" },
+    // #2291: flag OFF (default) では CfnDeploy / job log group を生成しない。
+    ...(opts.deployViaLambda ? { deployViaLambda: true } : {}),
   });
   return Template.fromStack(stack);
+}
+
+/** Return the participant portal Lambda's env Variables from a synthesized template. */
+function participantPortalEnv(tpl: Template): Record<string, unknown> {
+  const functions = tpl.findResources("AWS::Lambda::Function");
+  const portal = Object.entries(functions).find(
+    ([name]) => name.includes("ParticipantPortal") && name.includes("Function"),
+  );
+  return (
+    (portal?.[1] as { Properties?: { Environment?: { Variables?: Record<string, unknown> } } })
+      ?.Properties?.Environment?.Variables ?? {}
+  );
 }
 
 describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => {
@@ -199,6 +214,62 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
       );
       expect(scoringActions).toContain("lambda:InvokeFunction");
       expect(scoringActions.some((a) => typeof a === "string" && a.startsWith("s3:"))).toBe(false);
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should NOT wire DEPLOY_JOB_LOG_GROUP into the participant portal when deployViaLambda is OFF (default, #2291 no regression)",
+    async () => {
+      const tpl = await synthWithParticipantPortal({});
+      expect(participantPortalEnv(tpl).DEPLOY_JOB_LOG_GROUP).toBeUndefined();
+
+      // No DeployJobLogsRead grant on the default (CodeBuild) path.
+      const roles = tpl.findResources("AWS::IAM::Role");
+      const hasGrant = Object.values(roles).some((r) =>
+        (
+          (r as { Properties?: { Policies?: Array<{ PolicyName?: string }> } }).Properties
+            ?.Policies ?? []
+        ).some((p) => p.PolicyName === "DeployJobLogsRead"),
+      );
+      expect(hasGrant).toBe(false);
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should wire the job log group into the participant portal when deployViaLambda is ON (#2291)",
+    async () => {
+      const tpl = await synthWithParticipantPortal({}, { deployViaLambda: true });
+
+      // (a) the dedicated job-progress log group exists (RetentionDays.ONE_MONTH = 30).
+      tpl.hasResourceProperties("AWS::Logs::LogGroup", Match.objectLike({ RetentionInDays: 30 }));
+
+      // (b) the CfnDeploy function gains DEPLOY_JOB_LOG_GROUP + a scoped write grant.
+      tpl.hasResourceProperties(
+        "AWS::IAM::Policy",
+        Match.objectLike({
+          PolicyDocument: Match.objectLike({
+            Statement: Match.arrayWith([
+              Match.objectLike({
+                Action: ["logs:CreateLogStream", "logs:PutLogEvents"],
+                Effect: "Allow",
+              }),
+            ]),
+          }),
+        }),
+      );
+
+      // (c) the participant portal function gains DEPLOY_JOB_LOG_GROUP + a scoped read grant.
+      expect(participantPortalEnv(tpl).DEPLOY_JOB_LOG_GROUP).toBeDefined();
+      const roles = tpl.findResources("AWS::IAM::Role");
+      const hasReadGrant = Object.values(roles).some((r) =>
+        (
+          (r as { Properties?: { Policies?: Array<{ PolicyName?: string }> } }).Properties
+            ?.Policies ?? []
+        ).some((p) => p.PolicyName === "DeployJobLogsRead"),
+      );
+      expect(hasReadGrant).toBe(true);
     },
     SYNTH_TIMEOUT_MS,
   );
