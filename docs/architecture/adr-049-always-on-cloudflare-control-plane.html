@@ -874,9 +874,12 @@ export interface TeamsRepository {
           event day, well inside 10M writes / 500M reads per month)</td>
           <td>Quota exceed = blocked queries (no surprise billing); Developer plan $4.99 if
             sustained growth</td></tr>
-        <tr><td>Auth0 free plan</td><td>$0</td><td>$0 (organizers only — participants don't touch
-          Auth0)</td><td>25,000 MAU claimed; conflicting 7,500 reports — verify before Phase 3
-          (§14)</td></tr>
+        <tr><td>Auth0</td><td>$0 for authentication-only prototype</td>
+          <td><strong>Plan decision required:</strong> the official 2026-07-03 comparison lists
+            25,000 MAU and five Organizations on Free, but excludes Role Management; B2B Essentials
+            includes per-Organization RBAC</td>
+          <td>Use a paid B2B plan or explicitly replace Auth0 RBAC with an audited,
+            application-owned role projection</td></tr>
         <tr><td>GitHub Actions (public repo)</td><td>$0</td><td>$0</td><td>n/a on standard runners</td></tr>
         <tr><td>AWS between events</td><td>$0 — no deployed runtime, no tick, no control tables</td>
           <td>—</td><td>—</td></tr>
@@ -1004,10 +1007,15 @@ export interface TeamsRepository {
 
     <h2>14. Open validation items</h2>
     <ul class="check">
-      <li>Auth0 free-plan MAU: official sources say 25,000; multiple 2026 trackers say 7,500. Re-verify on
-        the live pricing page before Phase 3 commits. Either figure covers organizer-only usage.</li>
-      <li>Cloudflare free-plan commercial-use terms: conclusion (allowed for the developer platform) rests
-        on the Service-Specific Terms; re-read the live terms once before GA.</li>
+      <li><strong>Verified 2026-07-03:</strong> the live Auth0 B2B pricing page lists 25,000 MAU and
+        five Organizations on Free. It also lists Role Management as unavailable on Free and
+        per-Organization RBAC under B2B Essentials. Phase 3 must choose paid Auth0 RBAC or an audited,
+        application-owned role projection before production.</li>
+      <li><strong>Verified 2026-07-03:</strong> Cloudflare's Self-Serve Subscription Agreement grants
+        an Entity a right to use the Services and contains no blanket non-commercial-use restriction.
+        The implementation must still comply with the agreement's no-resale, quota, regulated-data,
+        and acceptable-use restrictions; obtain legal review if the business requires a legal
+        conclusion.</li>
       <li>Turso p95 latency from Lambda ap-northeast-1 and from Workers (post-2025 diskless
         architecture has no trustworthy public benchmark) — Phase 1 measures it.</li>
       <li><strong>Validated in Phase 1:</strong> Events/Teams repository operations are single SQL

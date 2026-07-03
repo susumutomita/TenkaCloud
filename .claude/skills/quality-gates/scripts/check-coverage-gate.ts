@@ -37,7 +37,12 @@ export const GATED_WORKSPACES = [
 ] as const;
 
 /** gate しないが現在値を表示する workspace (owner lane、 100% への道筋表示用)。 */
-export const REPORTED_WORKSPACES = ["infrastructure"] as const;
+export const REPORTED_WORKSPACES = [
+  "infrastructure",
+  // Issue #2292 Phase 3 foundation. Move to GATED_WORKSPACES once its first
+  // auth/storage branch suite reaches 100%.
+  "apps/always-on-control-plane",
+] as const;
 
 interface Metric {
   readonly found: number;

@@ -24,6 +24,7 @@
     "@lezer/xml": ["prepare"],
     "@lezer/yaml": ["prepare"],
     "@marijn/find-cluster-break": ["prepare"],
+    "@sindresorhus/is": ["prepare"],
     "@so-ric/colorspace": ["prepare"],
     "@swc/core": ["postinstall"],
     "@textlint-ja/textlint-rule-preset-ai-writing": ["prepare"],
@@ -81,6 +82,7 @@
     "vue-demi": ["postinstall"],
     "w3c-keyname": ["prepare"],
     "web-worker": ["prepare"],
-    "whatwg-url": ["prepare"]
+    "whatwg-url": ["prepare"],
+    "workerd": ["postinstall"]
   }
 }
