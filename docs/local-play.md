@@ -34,12 +34,17 @@ Lambda) — one `/verify` contract, two runtimes.
 ## Run it
 
 ```bash
+make local                        # search and choose a problem interactively
 make local PROBLEM=sqli-demo      # start the container + scoring API + portal
+make local-list                   # print every playable problem id
 make local-status                 # is local play running?
 make local-evaluate FLAG='TC{…}'  # submit a flag from the CLI
 make local-down                   # stop everything and restore runtime-config
 ```
 
+Without `PROBLEM=`, `make local` opens a searchable terminal picker. Type part
+of a problem id or display name, move with `↑` / `↓`, and press Enter. Scripts
+and non-interactive runs must keep using `PROBLEM=<id>`. After selection,
 `make local` starts the problem container and the loopback scoring API, then
 runs the Participant Portal dev server. Log in with any non-empty team key. The
 challenge endpoints are shown on the problem page; attack them, recover the
