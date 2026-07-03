@@ -368,6 +368,7 @@ describe("writeup release policy (#2191)", () => {
   });
 
   it("requires all multi-flag checkpoints to be solved", () => {
+    expect(isProblemSolvedForWriteup({ ...problem, scoring: undefined })).toBe(false);
     expect(
       isProblemSolvedForWriteup({
         ...problem,
@@ -394,5 +395,26 @@ describe("writeup release policy (#2191)", () => {
         },
       }),
     ).toBe(true);
+    expect(
+      isProblemSolvedForWriteup({
+        ...problem,
+        scoring: { kind: "multi-flag", points: 200 },
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps solved problems unchanged when no writeup is registered", () => {
+    expect(releaseSolvedWriteups([problem], {}, true)).toEqual([problem]);
+  });
+
+  it("preserves existing localized metadata when attaching a writeup", () => {
+    const localized = {
+      ...problem,
+      i18n: { en: { title: "Existing title" } },
+    };
+    expect(releaseSolvedWriteups([localized], writeups, true)[0]?.i18n?.en).toEqual({
+      title: "Existing title",
+      writeup: "EN explanation",
+    });
   });
 });
