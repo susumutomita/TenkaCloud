@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { buildDeploymentProgressWriter } from "../../lib/problem-deploy/handlers/shared/deployment-progress-log.js";
 
 describe("buildDeploymentProgressWriter (#2291)", () => {
-  it("writes to the deterministic jobId stream", async () => {
+  it("should write to the deterministic jobId stream", async () => {
     const send = vi.fn(async () => ({}));
     const write = buildDeploymentProgressWriter({ send }, "/tenkacloud/problem-deploy/progress");
 
@@ -22,7 +22,7 @@ describe("buildDeploymentProgressWriter (#2291)", () => {
     });
   });
 
-  it("continues when the stream already exists", async () => {
+  it("should continue when the stream already exists", async () => {
     const alreadyExists = Object.assign(new Error("already exists"), {
       name: "ResourceAlreadyExistsException",
     });
@@ -35,7 +35,7 @@ describe("buildDeploymentProgressWriter (#2291)", () => {
     expect(send.mock.calls[1][0]).toBeInstanceOf(PutLogEventsCommand);
   });
 
-  it("recognizes an already-existing stream from the error message", async () => {
+  it("should recognize an already-existing stream from the error message", async () => {
     const send = vi
       .fn()
       .mockRejectedValueOnce(new Error("log stream already exists"))
@@ -47,7 +47,7 @@ describe("buildDeploymentProgressWriter (#2291)", () => {
     expect(send).toHaveBeenCalledTimes(2);
   });
 
-  it("does nothing when no deployment log group is configured", async () => {
+  it("should do nothing when no deployment log group is configured", async () => {
     const send = vi.fn(async () => ({}));
     const write = buildDeploymentProgressWriter({ send }, undefined);
 
@@ -56,7 +56,7 @@ describe("buildDeploymentProgressWriter (#2291)", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("is fail-open when CloudWatch Logs rejects the write", async () => {
+  it("should be fail-open when CloudWatch Logs rejects the write", async () => {
     const send = vi.fn(async () => {
       throw Object.assign(new Error("throttled"), { name: "ThrottlingException" });
     });
@@ -70,7 +70,7 @@ describe("buildDeploymentProgressWriter (#2291)", () => {
     }
   });
 
-  it("reports an unknown reason for non-Error logging failures", async () => {
+  it("should report an unknown reason for non-Error logging failures", async () => {
     const send = vi.fn(() => Promise.reject("throttled"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
