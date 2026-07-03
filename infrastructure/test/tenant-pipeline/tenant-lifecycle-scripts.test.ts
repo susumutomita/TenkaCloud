@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { composeTenantScript } from "../../lib/bootstrap-template/compose-tenant-script";
 
 const REPO_ROOT = resolve(__dirname, "../../..");
 
@@ -46,7 +47,10 @@ describe("tenant lifecycle scripts", () => {
   });
 
   it("deprovision script should unpack source.zip before sourcing the runtime helper", () => {
-    const script = readRepoFile("scripts/deprovision-tenant.sh");
+    // #2217: the fetch/unzip preamble now lives in scripts/lib/fetch-source-bundle.sh
+    // and is inlined at synth by composeTenantScript. Assert the ordering invariant
+    // on the COMPOSED script (what actually runs), not the raw marker-bearing file.
+    const script = composeTenantScript(resolve(REPO_ROOT, "scripts/deprovision-tenant.sh"));
     const unzipIndex = script.indexOf('unzip -o "$CDK_SOURCE_NAME"');
     const sourceIndex = script.indexOf("source ./scripts/lib/install-node.sh");
 
