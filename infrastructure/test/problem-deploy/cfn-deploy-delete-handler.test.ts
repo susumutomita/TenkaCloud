@@ -297,4 +297,25 @@ describe("describeDeleteStackForPoll (#2291)", () => {
       /Throttling/,
     );
   });
+
+  it("should attach a fallback StackStatusReason on DELETE_FAILED without a reason (#2291)", async () => {
+    // CloudFormation does not always populate StackStatusReason. The SM's DELETE_FAILED branch reads
+    // it via JsonPath, so a missing field would throw States.Runtime and strand the row in DELETING.
+    const cfn = fakeCfn({ describeResponses: [{ status: "DELETE_FAILED" }], commands: [] });
+    const deps = crossAccountDeps(cfn);
+    const out = await describeDeleteStackForPoll({ detail: validDetail() }, deps);
+    expect(out.Stacks[0].StackStatus).toBe("DELETE_FAILED");
+    expect(out.Stacks[0].StackStatusReason).toBe(
+      "CloudFormation reported DELETE_FAILED without a reason",
+    );
+  });
+
+  it("should fail loud when the poll 'gone' path lands on the wrong account (#1797)", async () => {
+    // A name miss under drifted credentials must not advance teardown for another account.
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    const deps = crossAccountDeps(cfn, { callerAccount: "999999999999" });
+    await expect(describeDeleteStackForPoll({ detail: validDetail() }, deps)).rejects.toThrow(
+      /would silently survive/,
+    );
+  });
 });

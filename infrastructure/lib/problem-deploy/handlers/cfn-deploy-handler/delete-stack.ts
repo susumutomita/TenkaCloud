@@ -242,26 +242,51 @@ export async function describeDeleteStackForPoll(
   deps: DeleteStackDeps,
 ): Promise<PollStackResult> {
   const detail = DeployDeleteRequestedDetailSchema.parse(input.detail);
-  const { cfn, correlationId } = await resolveTargetContext(detail, deps);
+  const { cfn, credentials, correlationId } = await resolveTargetContext(detail, deps);
+
+  // #1797 (poll): a name miss (empty Stacks / ValidationError) is only terminal SUCCESS when the
+  // credentials are still on the target account. Without this, drifted creds could turn a
+  // wrong-account name miss into DELETE_COMPLETE and advance teardown for a stack that still exists.
+  // Checked only on the "gone" transition (not every poll), so the extra STS call is one-shot.
+  const assertOnTargetAccount = () =>
+    assertCredentialsTargetExpectedAccount(deps, {
+      region: detail.region,
+      credentials,
+      expectedAccountId: detail.awsAccountId,
+      stackName: detail.stackName,
+      jobId: detail.jobId,
+      correlationId,
+    });
 
   try {
     const out = await cfn.send(new DescribeStacksCommand({ StackName: detail.stackName }));
     const stack = out.Stacks?.[0];
     if (!stack?.StackStatus) {
       // CFn returns the stack or throws; an empty Stacks array means it is gone.
+      await assertOnTargetAccount();
       return goneStackResult(detail.stackName);
     }
+    // The SM's DELETE_FAILED branch reads StackStatusReason via JsonPath
+    // (`$.cfn.Stacks[0].StackStatusReason`). CloudFormation does not always populate it, so guarantee
+    // the field on DELETE_FAILED with a static fallback — a missing field would throw States.Runtime
+    // in the failure Pass and strand the row in DELETING instead of reaching MarkFailed. Other
+    // statuses stay sparse (their reason, if any, is passed through but never referenced).
+    const failureReason =
+      stack.StackStatus === "DELETE_FAILED"
+        ? (stack.StackStatusReason ?? "CloudFormation reported DELETE_FAILED without a reason")
+        : stack.StackStatusReason;
     return {
       Stacks: [
         {
           StackStatus: stack.StackStatus,
-          ...(stack.StackStatusReason ? { StackStatusReason: stack.StackStatusReason } : {}),
+          ...(failureReason ? { StackStatusReason: failureReason } : {}),
           ...(stack.StackId ? { StackId: stack.StackId } : {}),
         },
       ],
     };
   } catch (err) {
     if (isStackAlreadyDeletedError(err)) {
+      await assertOnTargetAccount();
       logDeployTrace("deploy.cfn-lambda.delete.poll.gone", {
         jobId: detail.jobId,
         correlationId,
