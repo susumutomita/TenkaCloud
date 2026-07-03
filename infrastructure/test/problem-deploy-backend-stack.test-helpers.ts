@@ -69,6 +69,24 @@ export function synthWithAuditLogDisabled(): Template {
   return Template.fromStack(stack);
 }
 
+// Issue #2290: controlDataBackend: "turso" を反映させ、監査 Lambda 群の env に
+// CONTROL_DATA_BACKEND="turso" が注入されることを検証するための別 synth (= synthWithAuditLogDisabled
+// と同じ pattern)。
+export function synthWithControlDataBackendTurso(): Template {
+  const app = new cdk.App();
+  const stack = new ProblemDeployBackendStack(app, "TestStackControlDataTurso", {
+    eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
+    sourceBucketName: "test-source-bucket",
+    sourceObjectKey: "source.zip",
+    problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+    problemsScoring: {},
+    problemsEndpoints: {},
+    controlDataBackend: "turso",
+    environmentName: "development",
+  });
+  return Template.fromStack(stack);
+}
+
 // #538: deployConcurrentBuildLimit を反映させた CodeBuild Project を検証するための別 synth。
 export function synthWithDeployConcurrentBuildLimit(): Template {
   const app = new cdk.App();

@@ -168,6 +168,39 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
     expect(resolve(baseEnv({ CDK_PARAM_AUDIT_LOG_ENABLED: "0" })).auditLogEnabled).toBe(true);
   });
 
+  it("should default controlDataBackend to 'dynamodb' when unset (#2290 no regression)", () => {
+    expect(resolve(baseEnv()).controlDataBackend).toBe("dynamodb");
+    // 空文字 / 空白のみも default 扱い (= 在来 DDB 経路、byte 互換)。
+    expect(resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "" })).controlDataBackend).toBe(
+      "dynamodb",
+    );
+    expect(resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "  " })).controlDataBackend).toBe(
+      "dynamodb",
+    );
+  });
+
+  it("should accept turso / sql and normalize case for controlDataBackend (#2290)", () => {
+    expect(resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "turso" })).controlDataBackend).toBe(
+      "turso",
+    );
+    expect(resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "sql" })).controlDataBackend).toBe(
+      "sql",
+    );
+    // 大文字混在は lowercase 正規化する。
+    expect(resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "Turso" })).controlDataBackend).toBe(
+      "turso",
+    );
+    expect(
+      resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "DynamoDB" })).controlDataBackend,
+    ).toBe("dynamodb");
+  });
+
+  it("should throw loudly on an unknown controlDataBackend value instead of silently defaulting (#2290)", () => {
+    expect(() => resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "postgres" }))).toThrow(
+      /CDK_PARAM_CONTROL_DATA_BACKEND must be one of dynamodb\|turso\|sql/,
+    );
+  });
+
   it("should fall back to real problem discovery when no discoverProblems stub is injected", () => {
     // exercises discoverAppProblems' production branch (real problems/ scan via the submodule).
     const cfg = resolveAppConfig({

@@ -8,6 +8,7 @@ import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { grantChallengePayloadRead } from "../utils/iam-helpers.js";
 import { auditLogEnabledEnv } from "./audit-log-env.js";
+import { controlDataBackendEnv } from "./control-data-backend-env.js";
 import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-credential-store.js";
@@ -68,6 +69,12 @@ export interface DeployApiLambdaProps {
    */
   readonly auditLogEnabled?: boolean;
   /**
+   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso|sql)。監査 Lambda 群と
+   * lockstep で env を配線する (= 実際に repository seam を使うのは EventApi だが、AUDIT_LOG_ENABLED と
+   * 同じ注入面に揃える)。default (未指定 / `dynamodb`) は env を足さず byte 互換。
+   */
+  readonly controlDataBackend?: string;
+  /**
    * #1766: tier 別の同時デプロイ上限。指定時は `DEPLOY_QUOTA_BY_TIER` env (JSON) を注入し、
    * handler が deploy 受付時に enforce する (超過 = 429)。未指定はクォータ無効 (空文字 env)。
    */
@@ -122,6 +129,8 @@ export class DeployApiLambda extends Construct {
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
         // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
         ...auditLogEnabledEnv(props.auditLogEnabled),
+        // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
+        ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
         // #1766: tier 別同時デプロイ上限 (未配線なら空文字 = クォータ無効)
         DEPLOY_QUOTA_BY_TIER: props.deployQuotaByTier
           ? JSON.stringify(props.deployQuotaByTier)
