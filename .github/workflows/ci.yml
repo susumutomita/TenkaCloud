@@ -66,6 +66,13 @@ jobs:
           git -C problems fetch --no-tags --unshallow origin 2>/dev/null || git -C problems fetch --no-tags origin || true
           bun run .claude/skills/quality-gates/scripts/run.ts submodule-not-behind
 
+      # #2254: enforce the catalog authoring contract (schema + bilingual-README invariant) against
+      # the platform's problems/ mirror, so a README-less / schema-invalid problem fails platform CI
+      # too — not only the catalog repo's own CI. Green today (all problems valid); catches drift.
+      - name: Validate problem catalog (schema + bilingual README, #2254)
+        run: |
+          make validate-problems
+
       - name: Run textlint
         run: |
           make lint-text

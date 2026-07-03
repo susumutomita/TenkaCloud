@@ -67,6 +67,7 @@ ci-local:
 	git -C problems fetch --no-tags --unshallow origin 2>/dev/null || git -C problems fetch --no-tags origin || true
 	$(MAKE) audit-deps
 	bun run .claude/skills/quality-gates/scripts/run.ts submodule-not-behind
+	$(MAKE) validate-problems
 	$(MAKE) lint-text
 	$(MAKE) lint-format
 	$(MAKE) typecheck
@@ -91,6 +92,16 @@ HARNESS := bun run .claude/harness/bin
 harness:      ; $(HARNESS)/architecture.ts --staged --fail-on=error
 harness-test: ; cd .claude/harness && bun vitest run
 tech-debt:    ; $(HARNESS)/tech-debt.ts
+
+# ===== Problem catalog validation (#2254) =====
+# Run the catalog authoring-contract validator (schema + the bilingual-README invariant from
+# TenkaCloudChallenge #136: each problem dir must carry non-empty, non-symlink README.md +
+# README.ja.md) against the platform's problems/ mirror. This makes a README-less / schema-invalid
+# problem fail platform CI too — not only the catalog repo's own CI — closing the drift #2254 flags.
+# problems/ is a git submodule (not a workspace member), so its own deps (ajv etc.) install here.
+validate-problems:
+	git submodule update --init problems
+	cd problems && bun install --frozen-lockfile --ignore-scripts && bun run scripts/validate-problems.ts
 
 # ===== CDK =====
 # 環境切替。make deploy ENV=production 等で上書き可能。デフォルトは development。
