@@ -59,6 +59,21 @@ const FALLBACK_ACTOR = "sbt-control-plane";
 const CODEBUILD_DETAIL_TYPE = "CodeBuild Build State Change";
 const CODEBUILD_ACTOR = "codebuild";
 
+/**
+ * Issue #2291 (ADR-049 §9): Lambda deploy path (`deployViaLambda=true`) は CodeBuild を
+ * 使わないので、その失敗は `CodeBuild Build State Change` event を発しない。 CodeBuild path と
+ * parity を取るため、`DeployCreate` state machine が Lambda 失敗経路で emit する
+ * `TenkaCloud Deploy Failed` event を SYSTEM scope の `deploy_failed` 行として audit に集約する。
+ */
+const DEPLOY_FAILED_DETAIL_TYPE = "TenkaCloud Deploy Failed";
+const DEPLOY_FAILED_ACTOR = "problem-deploy";
+/**
+ * `failureReason` (= CFn StackStatusReason / States.TaskFailed Cause) は数 KB になりうるので
+ * audit 行に載せる前に頭を切り詰める。 secret は載せない (jobId/tenantId/problemId/region/
+ * failureReason のみ = CodeBuild path が既に DDB に持つのと同じ非機密データ)。
+ */
+const MAX_FAILURE_REASON_LENGTH = 500;
+
 export function resolveActor(detail: SbtTenantEventDetail): {
   actor: string;
   actorUsername?: string;
@@ -75,6 +90,19 @@ interface CodeBuildStateChangeDetail {
   readonly region?: string;
 }
 
+/**
+ * Issue #2291: `DeployCreate` state machine の Lambda 失敗経路が `EventBridgePutEvents` で
+ * 詰める detail。 全 field は `DeployCreateRequested` event に既に載っている非機密値
+ * (jobId/tenantId/problemId/region) と失敗理由文字列のみ。
+ */
+interface DeployFailedEventDetail {
+  readonly jobId?: string;
+  readonly tenantId?: string;
+  readonly problemId?: string;
+  readonly region?: string;
+  readonly failureReason?: string;
+}
+
 export interface MappedAuditRow {
   readonly tenantId: string;
   readonly action: string;
@@ -87,11 +115,18 @@ export interface MappedAuditRow {
 }
 
 export function mapEventToAudit(
-  event: EventBridgeEvent<string, SbtTenantEventDetail | CodeBuildStateChangeDetail>,
+  event: EventBridgeEvent<
+    string,
+    SbtTenantEventDetail | CodeBuildStateChangeDetail | DeployFailedEventDetail
+  >,
 ): MappedAuditRow | null {
   // Issue #1029: CodeBuild Build State Change で build-status=FAILED のものを audit に記録する。
   if (event["detail-type"] === CODEBUILD_DETAIL_TYPE) {
     return mapCodeBuildEvent(event as EventBridgeEvent<string, CodeBuildStateChangeDetail>);
+  }
+  // Issue #2291: Lambda deploy path の失敗 event を SYSTEM scope の deploy_failed 行にする。
+  if (event["detail-type"] === DEPLOY_FAILED_DETAIL_TYPE) {
+    return mapDeployFailedEvent(event as EventBridgeEvent<string, DeployFailedEventDetail>);
   }
   const tenantDetail = event.detail as SbtTenantEventDetail;
   const detailType = event["detail-type"];
@@ -143,8 +178,40 @@ function mapCodeBuildEvent(
   };
 }
 
+/**
+ * Issue #2291: `TenkaCloud Deploy Failed` event (= Lambda deploy path の失敗) を SYSTEM scope の
+ * `deploy_failed` 行にする。 CodeBuild path (`codebuild_failed`) と対になる観測性 fix。 secret は
+ * 載せず、`DeployCreateRequested` が既に持つ非機密値 + 切り詰めた failureReason のみ書く。
+ */
+function mapDeployFailedEvent(
+  event: EventBridgeEvent<string, DeployFailedEventDetail>,
+): MappedAuditRow {
+  const detail = event.detail;
+  const occurredAtMs = event.time ? new Date(event.time).getTime() : Date.now();
+  const extra: Record<string, string> = {};
+  if (detail.jobId) extra.jobId = detail.jobId;
+  if (detail.region) extra.region = detail.region;
+  if (detail.tenantId) extra.tenantId = detail.tenantId;
+  if (detail.failureReason) {
+    extra.failureReason = detail.failureReason.slice(0, MAX_FAILURE_REASON_LENGTH);
+  }
+  return {
+    tenantId: "SYSTEM",
+    action: "deploy_failed",
+    outcome: "error",
+    target: detail.problemId ?? detail.jobId,
+    actor: DEPLOY_FAILED_ACTOR,
+    actorUsername: undefined,
+    occurredAtMs,
+    extra,
+  };
+}
+
 export async function handler(
-  event: EventBridgeEvent<string, SbtTenantEventDetail | CodeBuildStateChangeDetail>,
+  event: EventBridgeEvent<
+    string,
+    SbtTenantEventDetail | CodeBuildStateChangeDetail | DeployFailedEventDetail
+  >,
 ): Promise<void> {
   const row = mapEventToAudit(event);
   if (!row) {

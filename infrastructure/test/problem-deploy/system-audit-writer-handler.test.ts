@@ -122,4 +122,36 @@ describe("system-audit-writer handler", () => {
     await handler(ev("CodeBuild Build State Change", { "build-status": "SUCCEEDED" }));
     expect(mocks.writeAuditEvent).not.toHaveBeenCalled();
   });
+
+  it("should write a deploy_failed row through the handler (Issue #2291)", async () => {
+    await handler(
+      ev(
+        "TenkaCloud Deploy Failed",
+        {
+          jobId: "01HXJOB",
+          tenantId: "tenant-acme",
+          problemId: "hello-world",
+          region: "ap-northeast-1",
+          failureReason: "CREATE_FAILED: boom",
+        },
+        "2026-07-01T09:00:00.000Z",
+      ),
+    );
+    expect(mocks.writeAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "SYSTEM",
+        action: "deploy_failed",
+        outcome: "error",
+        target: "hello-world",
+        actor: "problem-deploy",
+        occurredAtMs: Date.parse("2026-07-01T09:00:00.000Z"),
+        extra: {
+          jobId: "01HXJOB",
+          region: "ap-northeast-1",
+          tenantId: "tenant-acme",
+          failureReason: "CREATE_FAILED: boom",
+        },
+      }),
+    );
+  });
 });

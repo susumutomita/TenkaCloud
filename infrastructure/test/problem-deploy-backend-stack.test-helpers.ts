@@ -90,6 +90,23 @@ export function synthWithControlDataBackendTurso(): Template {
   return Template.fromStack(stack);
 }
 
+// Issue #2291: deployViaLambda: true を反映させ、 Lambda deploy 経路 (CfnDeployLambda +
+// EmitDeployFailedEvent) と SystemAuditWriter の DeployFailureRule を検証するための別 synth。
+export function synthWithDeployViaLambda(): Template {
+  const app = new cdk.App();
+  const stack = new ProblemDeployBackendStack(app, "TestStackDeployViaLambda", {
+    eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
+    sourceBucketName: "test-source-bucket",
+    sourceObjectKey: "source.zip",
+    problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+    problemsScoring: {},
+    problemsEndpoints: {},
+    deployViaLambda: true,
+    environmentName: "development",
+  });
+  return Template.fromStack(stack);
+}
+
 // #538: deployConcurrentBuildLimit を反映させた CodeBuild Project を検証するための別 synth。
 export function synthWithDeployConcurrentBuildLimit(): Template {
   const app = new cdk.App();

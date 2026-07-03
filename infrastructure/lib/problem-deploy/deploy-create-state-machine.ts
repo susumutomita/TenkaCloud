@@ -1,6 +1,7 @@
 import { Duration } from "aws-cdk-lib";
 import type { Project } from "aws-cdk-lib/aws-codebuild";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
+import type { IEventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import {
@@ -22,6 +23,7 @@ import {
   CodeBuildStartBuild,
   DynamoAttributeValue,
   DynamoUpdateItem,
+  EventBridgePutEvents,
   LambdaInvoke,
 } from "aws-cdk-lib/aws-stepfunctions-tasks";
 import { Construct } from "constructs";
@@ -52,6 +54,10 @@ export interface DeployCreateStateMachineProps {
    * `deployViaLambda === true` のときのみ必須。CodeBuild path では未使用。
    */
   readonly cfnDeployFunction?: IFunction;
+  /**
+   * Issue #2291: SBT 共通 EventBus。Lambda path 失敗時に `TenkaCloud Deploy Failed` を PutEvents し、`SystemAuditWriterLambda` が `deploy_failed` 行に集約する。ON のときのみ必須。
+   */
+  readonly eventBus?: IEventBus;
 }
 
 /**
@@ -306,6 +312,12 @@ export class DeployCreateStateMachine extends Construct {
     if (!cfnDeployFunction) {
       throw new Error("cfnDeployFunction is required when deployViaLambda is true");
     }
+    // Issue #2291: 失敗 event の PutEvents 先。Lambda path は AWS service event を出さないので bus が
+    // 無いと失敗が audit に載らない (= 本 issue の gap)。fail loud (cfnDeployFunction と同方針)。
+    const eventBus = props.eventBus;
+    if (!eventBus) {
+      throw new Error("eventBus is required when deployViaLambda is true");
+    }
 
     // CreateStack を投げて即 return する deploy Lambda。detail (元 EventBridge event の detail)
     // を渡す。payloadResponseOnly で $.deploy は Lambda response ({ stackId }) になる。
@@ -331,8 +343,36 @@ export class DeployCreateStateMachine extends Construct {
 
     // Lambda path は buildId を持たない (= CodeBuild 固有)。MarkSucceeded / MarkFailed は
     // buildId を書かない variant を使う。
+    // Issue #2291: MarkFailed の後段に EmitDeployFailedEvent を繋ぐため resultPath を DISCARD にし、
+    // `$.detail` / `$.error` を温存する。CodeBuild path は default のまま (byte 互換)。
     const markSucceeded = this.buildMarkSucceededWithoutBuildId(props.deploymentsTable);
-    const markFailed = this.buildMarkFailed(props.deploymentsTable, "MarkFailed", false);
+    const markFailed = this.buildMarkFailed(
+      props.deploymentsTable,
+      "MarkFailed",
+      false,
+      JsonPath.DISCARD,
+    );
+
+    // Issue #2291: DDB を FAILED にした後、`SystemAuditWriterLambda` が拾う失敗 event を 1 件 PutEvents する。
+    // detail は非機密値 (jobId/tenantId/problemId/region) + `$.error.Cause`。EventBridgePutEvents が SM role
+    // に対象 bus scope の `events:PutEvents` を自動付与する (least-privilege)。
+    const emitDeployFailedEvent = new EventBridgePutEvents(this, "EmitDeployFailedEvent", {
+      entries: [
+        {
+          eventBus,
+          source: "tenkacloud.problem-deploy",
+          detailType: "TenkaCloud Deploy Failed",
+          detail: TaskInput.fromObject({
+            jobId: JsonPath.stringAt("$.detail.jobId"),
+            tenantId: JsonPath.stringAt("$.detail.tenantId"),
+            problemId: JsonPath.stringAt("$.detail.problemId"),
+            region: JsonPath.stringAt("$.detail.region"),
+            failureReason: JsonPath.stringAt("$.error.Cause"),
+          }),
+        },
+      ],
+    });
+    markFailed.next(emitDeployFailedEvent);
     const useStackStatusReasonAsFailureCause = new Pass(
       this,
       "UseStackStatusReasonAsFailureCause",
@@ -421,7 +461,13 @@ export class DeployCreateStateMachine extends Construct {
     });
   }
 
-  private buildMarkFailed(table: ITable, id: string, persistBuildId: boolean): DynamoUpdateItem {
+  // `resultPath` default は task 出力が `$` を上書きする。Issue #2291 の Lambda path は `JsonPath.DISCARD` を渡して `$.detail` / `$.error` を温存し、後段 PutEvents を可能にする。
+  private buildMarkFailed(
+    table: ITable,
+    id: string,
+    persistBuildId: boolean,
+    resultPath?: string,
+  ): DynamoUpdateItem {
     return new DynamoUpdateItem(this, id, {
       table,
       key: deploymentKey(),
@@ -446,6 +492,7 @@ export class DeployCreateStateMachine extends Construct {
             }
           : {}),
       },
+      ...(resultPath ? { resultPath } : {}),
     });
   }
 }

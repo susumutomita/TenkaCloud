@@ -143,6 +143,87 @@ describe("system-audit-writer (Issue #1034)", () => {
     });
   });
 
+  describe("TenkaCloud Deploy Failed (Issue #2291)", () => {
+    function buildDeployFailedEvent(
+      detail: Record<string, unknown>,
+      opts: { detailType?: string; time?: string } = {},
+    ) {
+      return {
+        version: "0",
+        id: "evt-df-1",
+        "detail-type": opts.detailType ?? "TenkaCloud Deploy Failed",
+        source: "tenkacloud.problem-deploy",
+        account: "123456789012",
+        ...(opts.time === undefined ? {} : { time: opts.time }),
+        region: "ap-northeast-1",
+        resources: [],
+        detail,
+      } as unknown as EventBridgeEvent<string, Record<string, unknown>>;
+    }
+
+    it('should map a "TenkaCloud Deploy Failed" event to a SYSTEM deploy_failed audit row', () => {
+      const row = mapEventToAudit(
+        buildDeployFailedEvent(
+          {
+            jobId: "01HXJOB",
+            tenantId: "tenant-acme",
+            problemId: "hello-world",
+            region: "ap-northeast-1",
+            failureReason: "CREATE_FAILED: resource did not stabilize",
+          },
+          { time: "2026-07-01T09:00:00.000Z" },
+        ),
+      );
+      expect(row).not.toBeNull();
+      expect(row?.tenantId).toBe("SYSTEM");
+      expect(row?.action).toBe("deploy_failed");
+      expect(row?.outcome).toBe("error");
+      expect(row?.target).toBe("hello-world");
+      expect(row?.actor).toBe("problem-deploy");
+      expect(row?.actorUsername).toBeUndefined();
+      expect(row?.occurredAtMs).toBe(Date.parse("2026-07-01T09:00:00.000Z"));
+      expect(row?.extra).toEqual({
+        jobId: "01HXJOB",
+        region: "ap-northeast-1",
+        tenantId: "tenant-acme",
+        failureReason: "CREATE_FAILED: resource did not stabilize",
+      });
+    });
+
+    it("should truncate an over-long failureReason", () => {
+      const longReason = "x".repeat(2000);
+      const row = mapEventToAudit(
+        buildDeployFailedEvent({ jobId: "j", problemId: "p", failureReason: longReason }),
+      );
+      expect(row?.extra.failureReason).toHaveLength(500);
+      expect(row?.extra.failureReason).toBe("x".repeat(500));
+    });
+
+    it("should fall back to jobId as target and Date.now() when problemId / time are absent", () => {
+      const before = Date.now();
+      const row = mapEventToAudit(buildDeployFailedEvent({ jobId: "only-job" }));
+      // problemId 不在 → target は jobId fallback。 region/tenantId/failureReason 不在 → extra は jobId のみ。
+      expect(row?.target).toBe("only-job");
+      expect(row?.extra).toEqual({ jobId: "only-job" });
+      // event.time 不在 → occurredAtMs は Date.now() fallback (= 現在時刻近傍)。
+      expect(row?.occurredAtMs).toBeGreaterThanOrEqual(before);
+    });
+
+    it("should omit jobId from extra when it is absent (target uses problemId)", () => {
+      const row = mapEventToAudit(buildDeployFailedEvent({ problemId: "p-only" }));
+      // jobId 不在 → extra から省く (present-only)。 target は problemId。
+      expect(row?.target).toBe("p-only");
+      expect(row?.extra).toEqual({});
+    });
+
+    it("should still skip unknown detail-types", () => {
+      const row = mapEventToAudit(
+        buildDeployFailedEvent({ jobId: "j" }, { detailType: "SomethingUnrelated" }),
+      );
+      expect(row).toBeNull();
+    });
+  });
+
   describe("resolveActor", () => {
     it("should prefer detail.sub (Cognito stable identifier)", () => {
       expect(resolveActor({ sub: "cog-sub-1", cognitoUsername: "alice@example" })).toEqual({
