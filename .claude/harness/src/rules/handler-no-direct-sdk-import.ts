@@ -1,4 +1,5 @@
-import type { Finding, Rule, RuleContext } from "../types.ts";
+import { scanLinesByRegex } from "../scan-lines.ts";
+import type { Rule } from "../types.ts";
 
 /**
  * Issue #986 / SOLID enforcement: Lambda handler routing layer
@@ -37,31 +38,20 @@ function shouldInspect(path: string): boolean {
   return true;
 }
 
+const SDK_PACKAGE_RE = /@aws-sdk\/(client-[a-z-]+|lib-[a-z-]+)/;
+
 export const handlerNoDirectSdkImport: Rule = {
   id: "handler-no-direct-sdk-import",
   severity: "warning",
-  check(ctx: RuleContext): readonly Finding[] {
-    const findings: Finding[] = [];
-    for (const path of ctx.files) {
-      if (!shouldInspect(path)) continue;
-      let content: string;
-      try {
-        content = ctx.readFile(path);
-      } catch {
-        continue;
-      }
-      const lines = content.split("\n");
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (!line) continue;
-        if (!SDK_IMPORT_RE.test(line)) continue;
-        const pkgMatch = line.match(/@aws-sdk\/(client-[a-z-]+|lib-[a-z-]+)/);
-        const pkg = pkgMatch?.[0] ?? "@aws-sdk/?";
-        findings.push({
-          ruleId: "handler-no-direct-sdk-import",
-          severity: "warning",
-          filePath: path,
-          line: i + 1,
+  check(ctx) {
+    return scanLinesByRegex(ctx, {
+      ruleId: "handler-no-direct-sdk-import",
+      severity: "warning",
+      shouldInspect,
+      lineRegex: SDK_IMPORT_RE,
+      buildFinding: ({ line }) => {
+        const pkg = line.match(SDK_PACKAGE_RE)?.[0] ?? "@aws-sdk/?";
+        return {
           match: pkg,
           message:
             "Handler routing layer is importing an AWS SDK client (" +
@@ -70,9 +60,8 @@ export const handlerNoDirectSdkImport: Rule = {
           recommendation:
             "Move SDK calls into a service / repository module. Keep index.ts as routes only. " +
             "See Issue #986 Phase B for the layered architecture pattern.",
-        });
-      }
-    }
-    return findings;
+        };
+      },
+    });
   },
 };

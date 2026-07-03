@@ -1,4 +1,5 @@
-import type { Finding, Rule, RuleContext } from "../types.ts";
+import { scanLinesByRegex } from "../scan-lines.ts";
+import type { Rule } from "../types.ts";
 
 /**
  * CLAUDE.md / harness.md: `lib/handlers/` は `fetch(` を直接呼ばない (= HTTP I/O は
@@ -18,9 +19,6 @@ import type { Finding, Rule, RuleContext } from "../types.ts";
  */
 
 const FETCH_CALL_RE = /\bfetch\s*\(/;
-const LINE_COMMENT_RE = /^\s*(\/\/|\*|\/\*)/;
-const BLOCK_COMMENT_OPEN_RE = /\/\*/;
-const BLOCK_COMMENT_CLOSE_RE = /\*\//;
 
 function shouldInspect(path: string): boolean {
   if (!path.startsWith("infrastructure/lib/")) return false;
@@ -30,56 +28,29 @@ function shouldInspect(path: string): boolean {
   return true;
 }
 
-function scanFile(path: string, content: string): Finding[] {
-  const findings: Finding[] = [];
-  const lines = content.split("\n");
-  // `/* ... */` の内側 (継続行が `*` で始まらない自由記述スタイルを含む) を除外する簡易
-  // state machine。文字列リテラル内の `/*` までは追わない (= レビュー指摘の false positive
-  // 解消が目的で、完全な TS パースは過剰)。
-  let inBlockComment = false;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line) continue;
-    if (inBlockComment) {
-      if (BLOCK_COMMENT_CLOSE_RE.test(line)) inBlockComment = false;
-      continue;
-    }
-    if (BLOCK_COMMENT_OPEN_RE.test(line) && !BLOCK_COMMENT_CLOSE_RE.test(line)) {
-      inBlockComment = true;
-    }
-    if (LINE_COMMENT_RE.test(line)) continue;
-    if (!FETCH_CALL_RE.test(line)) continue;
-    findings.push({
-      ruleId: "handler-must-not-call-fetch",
-      severity: "error",
-      filePath: path,
-      line: i + 1,
-      match: "fetch(",
-      message:
-        "Handler code is calling fetch() directly. HTTP I/O belongs in an injectable " +
-        "client module (Service / Repository layer), not in lib/handlers/.",
-      recommendation:
-        "Extract the HTTP call into a dedicated client (see infrastructure/lib/problem-deploy/" +
-        "runtime-clients/ for the established pattern) and inject it, so handlers stay " +
-        "mockable and timeout/retry policy stays centralized.",
-    });
-  }
-  return findings;
-}
-
 export const handlerMustNotCallFetch: Rule = {
   id: "handler-must-not-call-fetch",
   severity: "error",
-  check(ctx: RuleContext): readonly Finding[] {
-    const findings: Finding[] = [];
-    for (const path of ctx.files) {
-      if (!shouldInspect(path)) continue;
-      try {
-        findings.push(...scanFile(path, ctx.readFile(path)));
-      } catch {
-        // 読めないファイル (削除 / バイナリ) は skip。
-      }
-    }
-    return findings;
+  check(ctx) {
+    // `stripComments` reproduces the block/line-comment state machine this rule
+    // carried inline: a `fetch(` inside a `/* ... */` block or a `//` comment is
+    // not a violation (= the false positive this rule was written to avoid).
+    return scanLinesByRegex(ctx, {
+      ruleId: "handler-must-not-call-fetch",
+      severity: "error",
+      shouldInspect,
+      lineRegex: FETCH_CALL_RE,
+      stripComments: true,
+      buildFinding: () => ({
+        match: "fetch(",
+        message:
+          "Handler code is calling fetch() directly. HTTP I/O belongs in an injectable " +
+          "client module (Service / Repository layer), not in lib/handlers/.",
+        recommendation:
+          "Extract the HTTP call into a dedicated client (see infrastructure/lib/problem-deploy/" +
+          "runtime-clients/ for the established pattern) and inject it, so handlers stay " +
+          "mockable and timeout/retry policy stays centralized.",
+      }),
+    });
   },
 };
