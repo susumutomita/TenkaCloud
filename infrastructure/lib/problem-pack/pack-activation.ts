@@ -35,6 +35,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { z } from "zod";
+import { bundleCoordinationPlugins } from "../utils/bundle-coordination-plugins.js";
+import { discoverProblemsCoordination } from "../utils/discover-problems-catalog.js";
 import { type CatalogSource, SnapshotCatalogSource } from "./catalog-source.js";
 import {
   type ComposeEffectiveCatalogResult,
@@ -109,25 +111,80 @@ const DEFAULT_PLATFORM: ActivationPlatform = {
 };
 
 /**
+ * [ADR-028/030 activation (#2323)] How a snapshot is projected into a compose input.
+ *
+ * `withCoordinationProjection` は既定 false。false のとき snapshot は catalog 行のみを出す
+ * (`projections: {}`) — scoring / endpoints と同じく、pack の projection activation は別 slice の
+ * 担当。true のとき (= {@link tenantCatalogSource} の deploy / synth 経路) だけ、pack が宣言した
+ * `interTeamCoordination.plugin` を immutable snapshot dir から discover + synth-bundle して各 problem
+ * の `projections` に載せる。これにより installed pack の coordination が effective bundle →
+ * dispatcher へ届く (core `problems/` を {@link LocalCatalogSource} が扱うのと同じ形)。
+ *
+ * Default false keeps the activate() dry-run and event-pin paths byte-identical: they never run
+ * esbuild and never throw, so `activate()` keeps its "never throws" contract.
+ */
+interface SnapshotInputOptions {
+  /** Discover + synth-bundle each problem's coordination plugin onto its `projections`. */
+  readonly withCoordinationProjection?: boolean;
+}
+
+/**
  * Read + parse the immutable snapshot of one installed revision into a compose
  * input. Reuses the #2088 validator so it stays in lockstep with what validates;
  * returns undefined when the revision's snapshot is missing or invalid.
+ *
+ * [ADR-028/030 activation (#2323)] When `options.withCoordinationProjection` is set, each problem
+ * that declares `interTeamCoordination.plugin` also carries its coordination declaration + the
+ * synth-bundled `.mjs` on `projections` (discovered from the snapshot dir, which `copySnapshot`
+ * already populated with the plugin source). A broken plugin fails loud at synth (esbuild throws) —
+ * never a silent drop. Problems without coordination keep `projections: {}` (byte-identical), and
+ * with the option off nothing is discovered / bundled at all.
  */
-function loadSnapshotInput(storeDir: string, entry: PackLockEntry): PackSnapshotInput | undefined {
+function loadSnapshotInput(
+  storeDir: string,
+  entry: PackLockEntry,
+  options: SnapshotInputOptions = {},
+): PackSnapshotInput | undefined {
   const snapshotAbs = path.join(storeDir, entry.snapshotPath);
   const validation = validatePackDirectory(snapshotAbs);
   const manifest: PackManifest | undefined = validation.manifest;
   if (!manifest) return undefined;
   const root = manifest.problemsRoot ?? "problems";
+  const coordinationProjections = options.withCoordinationProjection
+    ? loadCoordinationProjections(path.join(snapshotAbs, root))
+    : undefined;
   return {
     manifest,
     contentDigest: entry.contentDigest,
     problems: validation.problemIds.map((problemId) => ({
       problemId,
       directory: root,
-      projections: {},
+      projections: coordinationProjections?.[problemId] ?? {},
     })),
   };
+}
+
+/**
+ * [ADR-028/030 activation (#2323)] problems root 配下の各問題について
+ * `interTeamCoordination.plugin` を discover し、plugin を synth-bundle して、problemId 別の
+ * `projections` fragment (`{ coordination, coordinationBundle }`) を返す。coordination を宣言しない
+ * 問題はキーごと不在 (呼び出し側で `{}` へ fallback = byte-identical)。値の shape は
+ * {@link LocalCatalogSource} が core `problems/` に載せるものと同一で、
+ * {@link SnapshotCatalogSource.loadBundle} がそのまま `coordination` / `coordinationBundles` に読み戻す。
+ */
+function loadCoordinationProjections(
+  problemsRootAbs: string,
+): Record<string, Readonly<Record<string, unknown>>> {
+  const coordination = discoverProblemsCoordination(problemsRootAbs);
+  const bundles = bundleCoordinationPlugins(problemsRootAbs);
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [problemId, declaration] of Object.entries(coordination)) {
+    const projection: Record<string, unknown> = { coordination: declaration };
+    const bundle = bundles[problemId];
+    if (typeof bundle === "string") projection.coordinationBundle = bundle;
+    out[problemId] = projection;
+  }
+  return out;
 }
 
 /**
@@ -271,10 +328,19 @@ export class ActivationStore {
     return this.read().some((r) => r.packId === entry.packId && r.version === entry.version);
   }
 
-  /** Map the tenant's active records onto already-validated compose snapshot inputs. */
-  snapshotInputsForTenant(tenantId: string): readonly PackSnapshotInput[] {
+  /**
+   * Map the tenant's active records onto already-validated compose snapshot inputs.
+   *
+   * [ADR-028/030 activation (#2323)] `options.withCoordinationProjection` を渡した経路
+   * (= {@link tenantCatalogSource}) だけが pack の coordination plugin を discover + bundle して
+   * projections に載せる。既定 (event-pin など) は `projections: {}` で byte-identical。
+   */
+  snapshotInputsForTenant(
+    tenantId: string,
+    options: SnapshotInputOptions = {},
+  ): readonly PackSnapshotInput[] {
     const lock = readLock(this.storeDir);
-    return this.activeSnapshotInputs(lock, this.listForTenant(tenantId));
+    return this.activeSnapshotInputs(lock, this.listForTenant(tenantId), options);
   }
 
   private composeFor(
@@ -295,6 +361,7 @@ export class ActivationStore {
   private activeSnapshotInputs(
     lock: ReturnType<typeof readLock>,
     records: readonly ActivationRecord[],
+    options: SnapshotInputOptions = {},
   ): PackSnapshotInput[] {
     const inputs: PackSnapshotInput[] = [];
     for (const record of records) {
@@ -302,7 +369,7 @@ export class ActivationStore {
         (p) => p.packId === record.packId && p.version === record.version,
       );
       if (!entry) continue;
-      const snapshot = loadSnapshotInput(this.storeDir, entry);
+      const snapshot = loadSnapshotInput(this.storeDir, entry, options);
       if (snapshot) inputs.push(snapshot);
     }
     return inputs;
@@ -360,6 +427,12 @@ export function composeTenantEffectiveCatalog(input: {
  * appears only for the tenant whose store activated it. With no activations the
  * source is byte-identical to {@link LocalCatalogSource}, so a core-only tenant
  * is unchanged. Reads ONLY the local store — no clock, no remote fetch.
+ *
+ * [ADR-028/030 activation (#2323)] This is the deploy / synth catalog path, so it opts into
+ * coordination projection: an installed + active pack that declares `interTeamCoordination.plugin`
+ * has its coordination declaration + synth-bundled `.mjs` carried onto the effective bundle (and on
+ * to the coordination dispatcher) instead of going inert once installed as a snapshot. A pack
+ * without coordination — and a core-only tenant — stays byte-identical (NO-OP).
  */
 export function tenantCatalogSource(
   store: ActivationStore,
@@ -367,7 +440,7 @@ export function tenantCatalogSource(
   platform: ActivationPlatform = DEFAULT_PLATFORM,
 ): CatalogSource {
   return new SnapshotCatalogSource({
-    snapshots: store.snapshotInputsForTenant(tenantId),
+    snapshots: store.snapshotInputsForTenant(tenantId, { withCoordinationProjection: true }),
     platform,
   });
 }
