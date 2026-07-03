@@ -56,6 +56,14 @@ export interface DeployPipelineOutputs {
    * Lambda-path deploy progress by jobId. `undefined` on the default CodeBuild path (NO-OP).
    */
   readonly deployJobLogGroup?: ILogGroup;
+  /**
+   * Issue #2291: the Lambda deploy path's `CfnDeployLambda` function name. Present only when
+   * `deployViaLambda` is ON (the {@link CfnDeployLambda} that owns it is created only then).
+   * Threaded to the ObservabilityStack so the dashboard can plot a Lambda-path deploy widget
+   * (Invocations / Errors / Duration / Throttles). `undefined` on the default CodeBuild path
+   * (flag OFF) → the observability dashboard adds no CfnDeploy widget (default-safe / byte-identical).
+   */
+  readonly cfnDeployLambdaName?: string;
 }
 
 /**
@@ -190,5 +198,8 @@ export function buildDeployPipeline(
     bulkDeployCreateStateMachineArn: bulkStateMachine.stateMachine.stateMachineArn,
     // #2291: undefined on the default CodeBuild path (flag OFF) → no participant read grant added.
     ...(deployJobLogGroup ? { deployJobLogGroup } : {}),
+    // #2291: surface the Lambda-path deploy function name for ObservabilityStack. undefined on the
+    // default CodeBuild path (flag OFF) → dashboard adds no CfnDeploy widget (default-safe).
+    ...(cfnDeployFunction ? { cfnDeployLambdaName: cfnDeployFunction.functionName } : {}),
   };
 }

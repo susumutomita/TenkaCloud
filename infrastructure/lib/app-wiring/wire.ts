@@ -268,6 +268,11 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
         competitorAccounts: problemDeployBackendStack.competitorAccountsApiLambda.functionName,
         externalIdAudit: problemDeployBackendStack.externalIdAuditLambda.functionName,
         genericScoring: problemDeployBackendStack.genericScoringLambda.functionName,
+        // Issue #2291: Lambda deploy path の CfnDeploy 関数名 (= deployViaLambda ON のときだけ存在)。
+        // undefined (flag OFF / CodeBuild 経路) なら key を足さず dashboard は byte 互換 (default-safe)。
+        ...(problemDeployBackendStack.cfnDeployLambdaName
+          ? { cfnDeploy: problemDeployBackendStack.cfnDeployLambdaName }
+          : {}),
       },
       apiGateways: {
         controlPlane: {
