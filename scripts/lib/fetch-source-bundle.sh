@@ -8,7 +8,10 @@
 export REGION=$AWS_REGION
 echo "REGION: ${REGION}"
 
-export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+# Split assignment from export so a failed/expired STS call is not masked by
+# export's own success (SC2155) — fail loud on bad credentials.
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+export ACCOUNT_ID
 echo "ACCOUNT_ID: ${ACCOUNT_ID}"
 
 # Download serverless reference solution from S3 bucket.

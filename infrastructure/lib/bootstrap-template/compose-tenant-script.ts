@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import { resolve } from "node:path";
 
 /**
  * [#2217] The tenant provision/deprovision ScriptJob scripts share an identical
@@ -13,13 +14,22 @@ import * as fs from "node:fs";
 /** The exact marker line each tenant script carries where the fetch snippet goes. */
 export const FETCH_SOURCE_BUNDLE_MARKER = "# @@INJECT:fetch-source-bundle@@";
 
-/** Path to the shared fetch snippet, relative to the CDK app cwd (`infrastructure/`). */
-const FETCH_SNIPPET_PATH = "../scripts/lib/fetch-source-bundle.sh";
+/**
+ * Absolute path to the shared fetch snippet, resolved relative to THIS module (not
+ * `process.cwd()`), so composition works regardless of where the process launched.
+ * `compose-tenant-script.ts` lives at `infrastructure/lib/bootstrap-template/`, so
+ * the repo root is three levels up.
+ */
+const FETCH_SNIPPET_PATH = resolve(
+  import.meta.dirname,
+  "../../../scripts/lib/fetch-source-bundle.sh",
+);
 
 /**
  * Read a tenant ScriptJob script and inline the shared fetch snippet at its marker.
  * Throws (fail-loud, no silent no-op) if the marker is absent — a missing marker
- * would otherwise ship a script that never downloads the source bundle.
+ * would otherwise ship a script that never downloads the source bundle. `scriptPath`
+ * should be absolute (callers resolve it relative to their own module).
  */
 export function composeTenantScript(
   scriptPath: string,

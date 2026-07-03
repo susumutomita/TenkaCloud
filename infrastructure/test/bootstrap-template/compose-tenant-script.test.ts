@@ -1,8 +1,11 @@
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   composeTenantScript,
   FETCH_SOURCE_BUNDLE_MARKER,
 } from "../../lib/bootstrap-template/compose-tenant-script";
+
+const REPO_ROOT = resolve(__dirname, "../../..");
 
 /**
  * [#2217] composeTenantScript inlines the shared source-bundle fetch snippet into
@@ -12,9 +15,9 @@ import {
  * never downloads the bundle).
  */
 describe("composeTenantScript (#2217)", () => {
-  for (const script of ["../scripts/provision-tenant.sh", "../scripts/deprovision-tenant.sh"]) {
+  for (const script of ["scripts/provision-tenant.sh", "scripts/deprovision-tenant.sh"]) {
     describe(script, () => {
-      const composed = composeTenantScript(script);
+      const composed = composeTenantScript(resolve(REPO_ROOT, script));
 
       it("should replace the injection marker with the fetch snippet", () => {
         expect(composed).not.toContain(FETCH_SOURCE_BUNDLE_MARKER);

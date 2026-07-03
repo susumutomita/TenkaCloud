@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import {
   BashJobRunner,
   type BashJobRunnerProps,
@@ -87,7 +88,9 @@ export class BootstrapTemplateStack extends Stack {
     const provisioningJobRunnerProps: BashJobRunnerProps = {
       eventManager: eventManager,
       permissions: jobRunnerPermissions,
-      script: composeTenantScript("../scripts/provision-tenant.sh"),
+      script: composeTenantScript(
+        resolve(import.meta.dirname, "../../../scripts/provision-tenant.sh"),
+      ),
       postScript: "",
       environmentStringVariablesFromIncomingEvent: ["tenantId", "tier", "tenantName", "email"],
       environmentVariablesToOutgoingEvent: [
@@ -115,7 +118,9 @@ export class BootstrapTemplateStack extends Stack {
     const deprovisioningJobRunnerProps: BashJobRunnerProps = {
       eventManager: eventManager,
       permissions: jobRunnerPermissions,
-      script: composeTenantScript("../scripts/deprovision-tenant.sh"),
+      script: composeTenantScript(
+        resolve(import.meta.dirname, "../../../scripts/deprovision-tenant.sh"),
+      ),
       environmentStringVariablesFromIncomingEvent: ["tenantId"],
       environmentVariablesToOutgoingEvent: ["tenantStatus"],
       outgoingEvent: DetailType.DEPROVISION_SUCCESS,
