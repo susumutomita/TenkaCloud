@@ -7,6 +7,7 @@ import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
+import { auditLogEnabledEnv } from "./audit-log-env.js";
 
 export interface EventApiLambdaProps {
   readonly eventsTable: Table;
@@ -66,6 +67,10 @@ export interface EventApiLambdaProps {
    * Issue #950 (ADR-020 Phase D): admin 操作 audit log 用 DDB Table。 deploy-api-lambda と同じ。
    */
   readonly adminAuditLogTable?: Table;
+  /**
+   * Issue #2311: 監査ログ feature flag。false で `AUDIT_LOG_ENABLED="false"` を注入し no-op 化。
+   */
+  readonly auditLogEnabled?: boolean;
 }
 
 /**
@@ -110,6 +115,8 @@ export class EventApiLambda extends Construct {
         BULK_DEPLOY_VIA_DISTRIBUTED_MAP: props.useBulkDistributedMap ? "true" : "false",
         // Issue #950: audit log table 名 (未配線なら空文字)
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
+        // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
+        ...auditLogEnabledEnv(props.auditLogEnabled),
         NODE_OPTIONS: "--enable-source-maps",
       },
       // Issue #1308: BATTLE_PROBLEMS_CATALOG + BATTLE_PROBLEMS_DISRUPTIONS は問題が増える

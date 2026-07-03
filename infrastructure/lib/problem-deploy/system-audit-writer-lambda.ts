@@ -6,6 +6,7 @@ import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
+import { auditLogEnabledEnv } from "./audit-log-env.js";
 import { SBT_ONBOARDING_DETAIL_TYPES } from "./handlers/system-audit-writer/sbt-detail-types.js";
 
 export interface SystemAuditWriterLambdaProps {
@@ -15,6 +16,10 @@ export interface SystemAuditWriterLambdaProps {
   readonly adminAuditLogTable: Table;
   /** `SYSTEM#<env>` の env suffix (= writeAuditEvent が `DEPLOY_ENVIRONMENT` を読む)。 */
   readonly environmentName: string;
+  /**
+   * Issue #2311: 監査ログ feature flag。false で `AUDIT_LOG_ENABLED="false"` を注入し no-op 化。
+   */
+  readonly auditLogEnabled?: boolean;
 }
 
 /**
@@ -50,6 +55,8 @@ export class SystemAuditWriterLambda extends Construct {
       environment: {
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable.tableName,
         DEPLOY_ENVIRONMENT: props.environmentName,
+        // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
+        ...auditLogEnabledEnv(props.auditLogEnabled),
         NODE_OPTIONS: "--enable-source-maps",
       },
     });

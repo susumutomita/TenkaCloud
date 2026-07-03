@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type AuditClient,
   extractAuditContext,
+  isAuditLoggingEnabled,
   resolveAuditRetentionDays,
   SOC2_AUDIT_RETENTION_DAYS,
   writeAuditEvent,
@@ -19,10 +20,12 @@ import {
 const ORIGINAL_TABLE = process.env.ADMIN_AUDIT_LOG_TABLE_NAME;
 const ORIGINAL_ENV = process.env.DEPLOY_ENVIRONMENT;
 const ORIGINAL_RETENTION = process.env.AUDIT_RETENTION_DAYS;
+const ORIGINAL_AUDIT_ENABLED = process.env.AUDIT_LOG_ENABLED;
 beforeEach(() => {
   process.env.ADMIN_AUDIT_LOG_TABLE_NAME = "TestAuditLog";
   process.env.DEPLOY_ENVIRONMENT = "test-env";
   delete process.env.AUDIT_RETENTION_DAYS;
+  delete process.env.AUDIT_LOG_ENABLED;
 });
 afterEach(() => {
   if (ORIGINAL_TABLE === undefined) delete process.env.ADMIN_AUDIT_LOG_TABLE_NAME;
@@ -31,6 +34,8 @@ afterEach(() => {
   else process.env.DEPLOY_ENVIRONMENT = ORIGINAL_ENV;
   if (ORIGINAL_RETENTION === undefined) delete process.env.AUDIT_RETENTION_DAYS;
   else process.env.AUDIT_RETENTION_DAYS = ORIGINAL_RETENTION;
+  if (ORIGINAL_AUDIT_ENABLED === undefined) delete process.env.AUDIT_LOG_ENABLED;
+  else process.env.AUDIT_LOG_ENABLED = ORIGINAL_AUDIT_ENABLED;
 });
 
 function buildMockClient(): { client: AuditClient; send: ReturnType<typeof vi.fn> } {
@@ -96,6 +101,23 @@ describe("writeAuditEvent (#950)", () => {
     const ok = await writeAuditEvent(baseEvent, client);
     expect(ok).toBe(false);
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it("should noop and return false when AUDIT_LOG_ENABLED=false (#2311 cost toggle)", async () => {
+    // feature flag off → table 配線があっても 1 write も出さない (= write cost 節約)。
+    process.env.AUDIT_LOG_ENABLED = "false";
+    const { client, send } = buildMockClient();
+    const ok = await writeAuditEvent(baseEvent, client);
+    expect(ok).toBe(false);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("should still write when AUDIT_LOG_ENABLED=true (explicit on)", async () => {
+    process.env.AUDIT_LOG_ENABLED = "true";
+    const { client, send } = buildMockClient();
+    const ok = await writeAuditEvent(baseEvent, client);
+    expect(ok).toBe(true);
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   it("DDB 例外なら false を返して console.error を出し、 throw しない", async () => {
@@ -172,6 +194,29 @@ describe("resolveAuditRetentionDays (#1341)", () => {
     expect(resolveAuditRetentionDays()).toBe(90);
     process.env.AUDIT_RETENTION_DAYS = "0";
     expect(resolveAuditRetentionDays()).toBe(90);
+  });
+});
+
+describe("isAuditLoggingEnabled (#2311)", () => {
+  it("should default to enabled when AUDIT_LOG_ENABLED is unset (no regression)", () => {
+    delete process.env.AUDIT_LOG_ENABLED;
+    expect(isAuditLoggingEnabled()).toBe(true);
+  });
+
+  it("should be enabled for AUDIT_LOG_ENABLED='true'", () => {
+    process.env.AUDIT_LOG_ENABLED = "true";
+    expect(isAuditLoggingEnabled()).toBe(true);
+  });
+
+  it("should be disabled only for the exact string 'false'", () => {
+    process.env.AUDIT_LOG_ENABLED = "false";
+    expect(isAuditLoggingEnabled()).toBe(false);
+  });
+
+  it("should treat any non-'false' value as enabled (fail-safe toward keeping the trail)", () => {
+    // 設定ミス (例: "0" / "off") で意図せず audit が消えるより、 明示 "false" のみ無効化する。
+    process.env.AUDIT_LOG_ENABLED = "0";
+    expect(isAuditLoggingEnabled()).toBe(true);
   });
 });
 

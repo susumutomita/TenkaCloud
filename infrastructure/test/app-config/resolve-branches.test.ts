@@ -146,6 +146,17 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
     ).toBe(false);
   });
 
+  it("should default auditLogEnabled to true when unset (#2311 no regression)", () => {
+    expect(resolve(baseEnv()).auditLogEnabled).toBe(true);
+  });
+
+  it("should disable auditLogEnabled only when CDK_PARAM_AUDIT_LOG_ENABLED is exactly 'false' (#2311)", () => {
+    expect(resolve(baseEnv({ CDK_PARAM_AUDIT_LOG_ENABLED: "false" })).auditLogEnabled).toBe(false);
+    // 明示 "true" / 設定ミス値 ("0" 等) は enabled のまま (= 監査を誤って消さない fail-safe)。
+    expect(resolve(baseEnv({ CDK_PARAM_AUDIT_LOG_ENABLED: "true" })).auditLogEnabled).toBe(true);
+    expect(resolve(baseEnv({ CDK_PARAM_AUDIT_LOG_ENABLED: "0" })).auditLogEnabled).toBe(true);
+  });
+
   it("should fall back to real problem discovery when no discoverProblems stub is injected", () => {
     // exercises discoverAppProblems' production branch (real problems/ scan via the submodule).
     const cfg = resolveAppConfig({

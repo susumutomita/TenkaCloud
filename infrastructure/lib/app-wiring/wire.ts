@@ -202,6 +202,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       deprovisioningStateMachineArn: bootstrapTemplateStack.deprovisioningStateMachineArn,
       // Issue #950 (ADR-020 Phase D): admin audit log table を cross-stack read で渡す
       adminAuditLogTable: problemDeployBackendStack.adminAuditLogTable,
+      // Issue #2311: 監査ログ feature flag を admin-insight / sign-in-audit Lambda 群へ伝播。
+      auditLogEnabled: config.auditLogEnabled,
       // Issue #1335 Phase 1: Control Plane UserPool に Pre-Token Generation trigger を attach し、
       // sign-in 成功時に audit 行を書き出す。 UserPool + Audit Table が両方ある stack は本 stack のみ
       // (= Control Plane が UserPool を作り、 ProblemDeploy が audit table を作る、 2 つの cross-stack

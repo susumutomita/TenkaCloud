@@ -5,6 +5,7 @@ import { Rule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
+import { auditLogEnabledEnv } from "../problem-deploy/audit-log-env.js";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 
 export interface SignInAuditLambdaProps {
@@ -26,6 +27,10 @@ export interface SignInAuditLambdaProps {
    * 値は AUDIT_TENANT_ID env として Lambda に流す (= handler が tenant 分岐に使う)。
    */
   readonly auditTenantId?: string;
+  /**
+   * Issue #2311: 監査ログ feature flag。false で `AUDIT_LOG_ENABLED="false"` を注入し no-op 化。
+   */
+  readonly auditLogEnabled?: boolean;
 }
 
 /**
@@ -64,6 +69,8 @@ export class SignInAuditLambda extends Construct {
         // Issue #1340 Phase 2: tenant 配線時のみ tenantId env を渡す (= 未指定なら handler が
         // SYSTEM にフォールバック、 Phase 1 Control Plane 動作互換)。
         ...(props.auditTenantId ? { AUDIT_TENANT_ID: props.auditTenantId } : {}),
+        // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
+        ...auditLogEnabledEnv(props.auditLogEnabled),
         NODE_OPTIONS: "--enable-source-maps",
       },
     });

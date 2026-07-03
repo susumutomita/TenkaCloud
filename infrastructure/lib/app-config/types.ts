@@ -110,6 +110,16 @@ export interface AppConfig {
   readonly useBulkDistributedMap: boolean;
 
   /**
+   * Issue #2311 (ADR-049 cost-zero): 監査ログ出力を deploy 時に on/off する
+   * (`CDK_PARAM_AUDIT_LOG_ENABLED`)。監査行 1 write = 1 WCU 固定 table への 1 write のため、
+   * 書き込みコストとのトレードオフで organizer が停止できる。**default true** (未設定 /
+   * `"true"` は従来どおり出力)。明示的に `"false"` のときだけ監査 Lambda 群へ
+   * `AUDIT_LOG_ENABLED="false"` を注入し `writeAuditEvent` を no-op 化する。有効時は env を
+   * 足さず既存テンプレートと byte 互換 (CFn 差分 0)。
+   */
+  readonly auditLogEnabled: boolean;
+
+  /**
    * #1766: tier 別の同時デプロイ上限 (`CDK_PARAM_DEPLOY_QUOTA_BY_TIER`、JSON
    * `{"basic":N,"advanced":N,"platinum":N}`)。未設定ならクォータ無効 (= 在来挙動 / Lite mode)。
    */
