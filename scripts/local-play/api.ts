@@ -154,15 +154,21 @@ function solvedProblemScore(state: LocalPlayState): { score: number; complete: b
 function problemView(state: LocalPlayState, now: number) {
   const problem = state.deployment.problem;
   const { score, complete } = solvedProblemScore(state);
+  const englishText = {
+    ...(problem.i18n?.en ?? {}),
+    ...(complete && problem.writeupI18n ? { writeup: problem.writeupI18n } : {}),
+  };
   return {
     jobId: jobIdOf(problem.problemId),
     problemId: problem.problemId,
     name: problem.name,
     description: problem.description,
     instructions: problem.instructions,
+    // Local mode is a drill: reveal immediately after the whole problem is solved.
+    ...(complete && problem.writeup ? { writeup: problem.writeup } : {}),
     // #2054 i18n: ship the en overlay so the portal locale switcher can render
     // the problem in English (ja stays the top-level canonical).
-    ...(problem.i18n ? { i18n: problem.i18n } : {}),
+    ...(Object.keys(englishText).length > 0 ? { i18n: { en: englishText } } : {}),
     region: "local",
     awsAccountId: "local",
     status: "COMPLETE",

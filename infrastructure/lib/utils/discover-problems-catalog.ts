@@ -25,8 +25,9 @@ import {
   parsePhaseEntry,
 } from "./metadata-parser.js";
 import { type ProblemScoringMetadata, parseScoringMetadata } from "./scoring-metadata.js";
+import type { ProblemWriteup } from "./writeup-metadata.js";
 
-export type { ProblemEndpointSlot, ProblemScoringMetadata };
+export type { ProblemEndpointSlot, ProblemScoringMetadata, ProblemWriteup };
 
 // metadata-parser.ts に移した pure parser / 型は、 従来 import 元 (この catalog file) から
 // 引き続き import できるよう re-export する (= 既存 importer の互換維持)。
@@ -74,6 +75,28 @@ export function discoverProblemsScoring(
   for (const meta of iterateProblemsMetadata(problemsRoot)) {
     const cfg = parseScoringMetadata(meta.scoring);
     if (cfg) result[meta.id] = cfg;
+  }
+  return result;
+}
+
+/**
+ * Issue #2191: JA/EN writeup pairs are bundled only into the participant backend Lambda.
+ * They are deliberately excluded from the participant SPA catalog because browser-bundled
+ * writeups would be readable through DevTools before the competition ends.
+ */
+export function discoverProblemsWriteups(problemsRoot: string): Record<string, ProblemWriteup> {
+  const result: Record<string, ProblemWriteup> = {};
+  for (const meta of iterateProblemsMetadata(problemsRoot)) {
+    const ja = meta.writeup;
+    const en = (meta.i18n as { en?: { writeup?: unknown } } | undefined)?.en?.writeup;
+    if (
+      typeof ja === "string" &&
+      ja.trim().length > 0 &&
+      typeof en === "string" &&
+      en.trim().length > 0
+    ) {
+      result[meta.id] = { ja, en };
+    }
   }
   return result;
 }
@@ -230,6 +253,8 @@ interface ProblemMetadataEntry {
   interTeamCoordination: unknown;
   runtime: unknown;
   cfnTemplate: unknown;
+  writeup: unknown;
+  i18n: unknown;
 }
 
 function* iterateProblemsMetadata(problemsRoot: string): Generator<ProblemMetadataEntry> {
@@ -269,6 +294,8 @@ function readProblemMetadata(
       interTeamCoordination?: unknown;
       runtime?: unknown;
       cfnTemplate?: unknown;
+      writeup?: unknown;
+      i18n?: unknown;
     };
     if (typeof meta.id !== "string" || meta.id.length === 0) {
       console.warn(`[discoverProblemsCatalog] ${metadataPath}: missing or invalid 'id' field`);
@@ -286,6 +313,8 @@ function readProblemMetadata(
       interTeamCoordination: meta.interTeamCoordination,
       runtime: meta.runtime,
       cfnTemplate: meta.cfnTemplate,
+      writeup: meta.writeup,
+      i18n: meta.i18n,
     };
   } catch (err) {
     console.warn(

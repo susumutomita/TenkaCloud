@@ -38,6 +38,7 @@ import {
   discoverProblemsRuntime,
   discoverProblemsScoring,
   discoverProblemsVisibility,
+  discoverProblemsWriteups,
 } from "../utils/discover-problems-catalog.js";
 import {
   composeEffectiveCatalog,
@@ -77,6 +78,7 @@ export class LocalCatalogSource implements CatalogSource {
     return {
       catalog: discoverProblemsCatalog(problemsRoot),
       scoring: discoverProblemsScoring(problemsRoot),
+      writeups: discoverProblemsWriteups(problemsRoot),
       endpoints: discoverProblemsEndpoints(problemsRoot),
       phases: discoverProblemsPhases(problemsRoot),
       visibility: discoverProblemsVisibility(problemsRoot),

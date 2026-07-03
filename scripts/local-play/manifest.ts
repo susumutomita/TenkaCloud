@@ -23,6 +23,7 @@ export interface LocalizedProblemText {
   readonly name?: string;
   readonly description?: string;
   readonly instructions?: string;
+  readonly writeup?: string;
 }
 
 export interface ContainerHint {
@@ -69,6 +70,10 @@ export interface ContainerProblem {
   readonly name: string;
   readonly description: string;
   readonly instructions: string;
+  /** Issue #2191: canonical JA learning explanation, released only after local solve. */
+  readonly writeup?: string;
+  /** English writeup kept separate so it cannot enter an unsolved API response via `i18n`. */
+  readonly writeupI18n?: string;
   /** `metadata.i18n` overlay (currently `en` only). Absent when no translation. */
   readonly i18n?: { readonly en?: LocalizedProblemText };
   /** Absolute path to the problem directory (the metadata.json lives here). */
@@ -108,6 +113,7 @@ interface RawMetadata {
   readonly name?: unknown;
   readonly description?: unknown;
   readonly instructions?: unknown;
+  readonly writeup?: unknown;
   // [ADR-023] container delivery is declared via the catalog's `runtime` field.
   readonly runtime?: {
     readonly provider?: unknown;
@@ -129,6 +135,7 @@ interface RawMetadata {
       readonly name?: unknown;
       readonly description?: unknown;
       readonly instructions?: unknown;
+      readonly writeup?: unknown;
       readonly hints?: unknown;
       readonly checks?: unknown;
     };
@@ -215,6 +222,17 @@ function parseEnglishText(en: EnglishBlock): LocalizedProblemText | undefined {
     ...(instructions !== undefined ? { instructions } : {}),
   };
   return Object.keys(text).length > 0 ? text : undefined;
+}
+
+function parseWriteupFields(
+  metadata: RawMetadata,
+): Pick<ContainerProblem, "writeup" | "writeupI18n"> {
+  const writeup = optionalString(metadata.writeup);
+  const writeupI18n = optionalString(metadata.i18n?.en?.writeup);
+  return {
+    ...(writeup ? { writeup } : {}),
+    ...(writeupI18n ? { writeupI18n } : {}),
+  };
 }
 
 /** Map `hint id → translated content`; malformed entries are skipped. */
@@ -397,6 +415,7 @@ export function loadContainerProblem(
         : problemId,
     description: typeof metadata.description === "string" ? metadata.description : "",
     instructions: typeof metadata.instructions === "string" ? metadata.instructions : "",
+    ...parseWriteupFields(metadata),
     ...(overlay.text ? { i18n: { en: overlay.text } } : {}),
     problemDir,
     composePath,

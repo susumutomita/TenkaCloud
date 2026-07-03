@@ -35,6 +35,11 @@ export interface ParticipantPortalLambdaProps {
    */
   readonly problemsScoring: Readonly<Record<string, unknown>>;
   /**
+   * Issue #2191: spoiler-bearing explanations. Bundled into this backend Lambda only;
+   * never injected into the participant browser bundle.
+   */
+  readonly problemsWriteups?: Readonly<Record<string, unknown>>;
+  /**
    * ADR-012 Phase 3.A: `{ [problemId]: ProblemEndpointSlot[] }` 形の endpoint 宣言。
    * `discoverProblemsEndpoints` で metadata.json から自動収集して synth 時に注入する。
    * GET /endpoints が default URL を CFn output から read-through 算出するため参照。
@@ -249,6 +254,9 @@ export class ParticipantPortalLambda extends Construct {
       bundlingDefine: {
         "process.env.BATTLE_PROBLEMS_SCORING": JSON.stringify(
           JSON.stringify(props.problemsScoring),
+        ),
+        "process.env.BATTLE_PROBLEMS_WRITEUPS": JSON.stringify(
+          JSON.stringify(props.problemsWriteups ?? {}),
         ),
         "process.env.PROBLEM_ENDPOINTS": JSON.stringify(JSON.stringify(props.problemsEndpoints)),
       },

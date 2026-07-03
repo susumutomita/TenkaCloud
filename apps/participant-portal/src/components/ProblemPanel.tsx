@@ -185,6 +185,18 @@ function ProblemStatement({ problem, t }: { problem: ParticipantProblemView; t: 
   );
 }
 
+/** Writeup is absent from the API until its spoiler-release policy is satisfied. */
+function ProblemWriteup({ problem, t }: { problem: ParticipantProblemView; t: ProblemPanelT }) {
+  if (!problem.writeup?.trim()) return null;
+  return (
+    <Container header={<Header variant="h3">{t("problem_panel.writeup_heading")}</Header>}>
+      <Box variant="p">
+        <pre style={PROBLEM_TEXT_STYLE}>{problem.writeup}</pre>
+      </Box>
+    </Container>
+  );
+}
+
 /** 改行尊重 + フォントは本文継承 (= autoLink / innerHTML を避けた安全なプレーンテキスト)。 */
 const PROBLEM_TEXT_STYLE = {
   margin: 0,
@@ -290,6 +302,7 @@ export function ProblemPanel({
         {/* #1975: 問題文 (name / description / instructions)。 local mode は同梱して返すので
             「何の問題か / 何をすべきか」 を表示できる。 AWS mode は未配信なので不在時は何も出さない。 */}
         <ProblemStatement problem={problem} t={t} />
+        <ProblemWriteup problem={problem} t={t} />
         {/* Audit #3: Job ID (= 内部 ULID) は競技者に見せない。 Region は問題ごとに異なる
             (operator が問題単位で deploy 先を選ぶ) ため、 どの region に建っているかを明示する
             (= 「Event region」 1 つだけだと混乱する、 運用フィードバック)。 */}

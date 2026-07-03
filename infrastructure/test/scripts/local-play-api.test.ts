@@ -13,6 +13,8 @@ const PROBLEM: ContainerProblem = {
   name: "SQL Injection Demo",
   description: "Vulnerable login.",
   instructions: "Bypass the login and read the flag.",
+  writeup: "日本語の解説",
+  writeupI18n: "English explanation",
   problemDir: "/repo/examples/local-play/sqli-demo",
   composePath: "/repo/examples/local-play/sqli-demo/local/docker-compose.yml",
   composeProjectName: "tc-local-sqli-demo",
@@ -97,6 +99,8 @@ describe("local-play API", () => {
     expect(problem.scoring.flagSubmitted).toBe(false);
     expect(problem.scoring.hints).toHaveLength(2);
     expect(problem.score).toBe(0);
+    expect(problem).not.toHaveProperty("writeup");
+    expect(problem).not.toHaveProperty("i18n");
   });
 
   it("should delegate a correct submission to /verify and award the manifest points", async () => {
@@ -114,6 +118,15 @@ describe("local-play API", () => {
     expect(res.body).toEqual({ kind: "ok", scoreDelta: 200, totalScore: 200 });
     expect(state.solved.has("sqli-demo")).toBe(true);
     expect(state.scoreEvents[0]).toMatchObject({ source: "flag", points: 200, result: "ok" });
+
+    const team = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const solvedProblem = (
+      team.body as {
+        problems: Array<{ writeup?: string; i18n?: { en?: { writeup?: string } } }>;
+      }
+    ).problems[0];
+    expect(solvedProblem.writeup).toBe("日本語の解説");
+    expect(solvedProblem.i18n?.en?.writeup).toBe("English explanation");
   });
 
   it("should honor a points override returned by /verify", async () => {

@@ -126,6 +126,7 @@ describe("localizeProblem", () => {
     name: "SQL インジェクション",
     description: "脆弱なログイン。",
     instructions: "ログインを突破。",
+    writeup: "日本語の解説",
     region: "local",
     awsAccountId: "local",
     status: "COMPLETE",
@@ -133,7 +134,14 @@ describe("localizeProblem", () => {
     expiresAt: 0,
     score: 0,
     deployLog: { cursor: "", entries: [] },
-    i18n: { en: { name: "SQL Injection", description: "Vuln login.", instructions: "Bypass it." } },
+    i18n: {
+      en: {
+        name: "SQL Injection",
+        description: "Vuln login.",
+        instructions: "Bypass it.",
+        writeup: "English explanation",
+      },
+    },
     scoring: {
       kind: "flag",
       points: 200,
@@ -159,6 +167,7 @@ describe("localizeProblem", () => {
     expect(out.name).toBe("SQL Injection");
     expect(out.description).toBe("Vuln login.");
     expect(out.instructions).toBe("Bypass it.");
+    expect(out.writeup).toBe("English explanation");
     expect(out.scoring?.hints?.[0].content).toBe("Try a quote.");
     // a hint without a translation keeps its canonical (here: absent) content
     expect(out.scoring?.hints?.[1].content).toBeUndefined();
