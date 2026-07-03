@@ -91,6 +91,47 @@ describe("IntentIngressStack (ADR-049 Phase 4 / #2293)", () => {
     t.resourceCountIs("AWS::Events::EventBus", 0);
   });
 
+  it("should omit the optional scope env vars when no audience/allowlists are configured", () => {
+    // Only the required props: exercises the `: {}` (absent) side of the conditional
+    // env spreads for EXPECTED_AUDIENCE / ALLOWED_TENANT_IDS / ALLOWED_EVENT_IDS.
+    const app = new App();
+    const stack = new IntentIngressStack(app, "TestIntentIngressMinimal", {
+      verifySecretParameterName: "/tenkacloud/intent-verify-secret",
+      problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+      env: { account: "111111111111", region: "us-east-1" },
+    });
+    Template.fromStack(stack).hasResourceProperties("AWS::Lambda::Function", {
+      Environment: {
+        Variables: Match.objectLike({
+          VERIFY_SECRET_PARAM: "/tenkacloud/intent-verify-secret",
+          EXPECTED_AUDIENCE: Match.absent(),
+          ALLOWED_TENANT_IDS: Match.absent(),
+          ALLOWED_EVENT_IDS: Match.absent(),
+        }),
+      },
+    });
+  });
+
+  it("should prepend a slash to the SSM ARN when the verify-secret name has no leading slash", () => {
+    // Exercises the ELSE of `verifySecretParameterName.startsWith("/")`: a bare name
+    // must be normalized to `.../parameter/<name>` in the scoped resource ARN.
+    synth({ verifySecretParameterName: "tenkacloud/intent-verify-secret" }).hasResourceProperties(
+      "AWS::IAM::Policy",
+      {
+        PolicyDocument: Match.objectLike({
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Action: "ssm:GetParameter",
+              Resource: Match.stringLikeRegexp(
+                "arn:aws:ssm:\\*:111111111111:parameter/tenkacloud/intent-verify-secret",
+              ),
+            }),
+          ]),
+        }),
+      },
+    );
+  });
+
   it("should not grant the ingress Lambda any sts:AssumeRole (no control-plane trust)", () => {
     const policies = synth().findResources("AWS::IAM::Policy");
     for (const policy of Object.values(policies)) {

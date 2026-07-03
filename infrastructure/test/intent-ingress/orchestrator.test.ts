@@ -88,6 +88,31 @@ describe("handleIntentIngress (ADR-049 Phase 4 / #2293)", () => {
     expect(res.status).toBe(StatusCodes.UNAUTHORIZED);
   });
 
+  // The remaining JWS/timing failure reasons all collapse to the same coarse
+  // `intent-unauthorized` (no signature-vs-secret oracle). Exercise each so every
+  // fall-through `case` in `verifyFailureResponse` is covered.
+  const unauthorizedReasons = [
+    "jws-malformed",
+    "jws-unknown-algorithm",
+    "jws-secret-not-resolved",
+    "jws-payload-parse-failed",
+    "not-yet-valid",
+  ] as const;
+
+  it.each(
+    unauthorizedReasons,
+  )("should 401 intent-unauthorized on a %s verification failure (no oracle detail)", async (reason) => {
+    const { deps, published } = fakeDeps(makeVerified(), {
+      verify: async () => ({ ok: false, reason }),
+    });
+    const res = await handleIntentIngress(body("t"), deps);
+    expect(res).toEqual({
+      status: StatusCodes.UNAUTHORIZED,
+      body: { reason: "intent-unauthorized" },
+    });
+    expect(published).toHaveLength(0);
+  });
+
   it("should 409 nonce-replay on a replayed nonce", async () => {
     const { deps } = fakeDeps(makeVerified(), {
       verify: async () => ({ ok: false, reason: "nonce-replay" }),
