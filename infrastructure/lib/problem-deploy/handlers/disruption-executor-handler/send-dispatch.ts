@@ -75,6 +75,23 @@ export async function sendDispatch(
   target: DispatchTarget,
   deps: SendDispatchDeps,
 ): Promise<void> {
+  // [#1710 / IAM audit] 同一アカウント (Lite) mode では AssumeRole 先が無く、 dispatch は executor
+  // 自身の credentials で実行される (= `target.credentials` 不在)。 executor role は Lite 向けに
+  // `ssm-run-command` (SendCommand) だけを scope 付きで許可しており、 `lambda-invoke`
+  // (`lambda:InvokeFunction`) と `cfn-stack-update` (`cloudformation:UpdateStack`) は付与していない。
+  // そのまま SDK を叩くと AccessDenied になり「infra 設定ミス」に見える誤診を招くため、 ここで
+  // fail-closed に落として未対応であることを loud に示す。 SaaS mode は assumed competitor role で
+  // 全 kind が動くので本 guard は通過する (= `target.credentials` が有る)。
+  // EN: In same-account (Lite) mode there is no assumed competitor role, so the dispatch runs under
+  // the executor's OWN role, which grants only `ssm-run-command`. Fail loudly for the ungranted
+  // kinds instead of surfacing a misleading AccessDenied. (Granting Lite parity would be a separate,
+  // deliberate change to the executor role — see #1710's scoping rationale.)
+  if (!target.credentials && dispatch.kind !== "ssm-run-command") {
+    throw new Error(
+      `Disruption kind "${dispatch.kind}" is not supported in same-account (Lite) mode ` +
+        "(the executor role grants only ssm-run-command there); run this event in SaaS mode.",
+    );
+  }
   if (dispatch.kind === "ssm-run-command") {
     await deps.ssmClient(target).send(
       new SendCommandCommand({
