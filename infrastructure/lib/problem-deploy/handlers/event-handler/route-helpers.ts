@@ -3,6 +3,7 @@ import { StatusCodes } from "http-status-codes";
 import type { z } from "zod";
 import { requireRole, requireTenantNotSuspended } from "../deploy-handler/auth.js";
 import { ULID_RE as EVENT_ID_RE } from "../shared/constants.js";
+import { parseJsonBody, parseOptionalJsonBody } from "../shared/http-parse.js";
 import { isEventOwnedByTenant } from "./disruption-fire.js";
 import type { EventSharedResources } from "./shared.js";
 
@@ -70,34 +71,10 @@ export function withJsonBody<TSchema extends z.ZodType>(
   };
 }
 
-export async function parseJsonBody<TSchema extends z.ZodType>(
-  c: Context,
-  schema: TSchema,
-): Promise<ParseResult<z.infer<TSchema>>> {
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    return { ok: false, response: c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST) };
-  }
-  return parseSchemaBody(c, schema, body);
-}
-
-export async function parseOptionalJsonBody<TSchema extends z.ZodType>(
-  c: Context,
-  schema: TSchema,
-): Promise<ParseResult<z.infer<TSchema>>> {
-  let body: unknown = {};
-  const raw = await c.req.text().catch(() => "");
-  if (raw.length > 0) {
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      return { ok: false, response: c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST) };
-    }
-  }
-  return parseSchemaBody(c, schema, body);
-}
+// Issue #2211: JSON body parsing now lives in shared/http-parse.ts (identical
+// `invalid_body` / `validation_failed` shapes). Re-export so callers importing
+// these from this module are unchanged; `withJsonBody` above uses the imported one.
+export { parseJsonBody, parseOptionalJsonBody };
 
 export function handleRouteError(
   c: Context,
@@ -132,20 +109,4 @@ function parseEventId(c: Context): ParseResult<string> {
     return { ok: true, data: eventId };
   }
   return { ok: false, response: c.json({ error: "invalid_event_id" }, StatusCodes.BAD_REQUEST) };
-}
-
-function parseSchemaBody<TSchema extends z.ZodType>(
-  c: Context,
-  schema: TSchema,
-  body: unknown,
-): ParseResult<z.infer<TSchema>> {
-  const parsed = schema.safeParse(body);
-  if (parsed.success) return { ok: true, data: parsed.data };
-  return {
-    ok: false,
-    response: c.json(
-      { error: "validation_failed", issues: parsed.error.issues },
-      StatusCodes.BAD_REQUEST,
-    ),
-  };
 }
