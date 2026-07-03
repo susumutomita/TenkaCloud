@@ -19,7 +19,15 @@ export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 echo "ACCOUNT_ID: ${ACCOUNT_ID}"
 
 # Download serverless reference solution from S3 bucket.
-export CDK_PARAM_S3_BUCKET_NAME="tenkacloud-source-${ACCOUNT_ID}-${REGION}"
+# #2194: CDK_PARAM_S3_BUCKET_NAME is injected by the provisioning ScriptJob env with
+# the resolved (per-environment) bucket name the deploy actually created. Do NOT
+# recompute it here — this runs before source.zip is unzipped (so scripts/lib/names.sh
+# is unavailable), and the old local recompute diverged from the real hashed name,
+# making provisioning read a non-existent bucket. Fail loud if it is missing.
+if [ -z "${CDK_PARAM_S3_BUCKET_NAME:-}" ]; then
+  echo "ERROR: CDK_PARAM_S3_BUCKET_NAME is not set (expected from the provisioning ScriptJob env)" >&2
+  exit 1
+fi
 echo "CDK_PARAM_S3_BUCKET_NAME: ${CDK_PARAM_S3_BUCKET_NAME}"
 export CDK_SOURCE_NAME="source.zip"
 
