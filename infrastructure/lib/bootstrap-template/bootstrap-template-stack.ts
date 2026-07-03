@@ -24,6 +24,13 @@ interface BootstrapTemplateStackProps extends StackProps {
   eventBusArn: string;
   systemAdminEmail: string;
   /**
+   * #2194: the resolved (per-environment) source-bundle S3 bucket name the deploy
+   * created (`CDK_PARAM_S3_BUCKET_NAME`). Injected into the provision/deprovision
+   * ScriptJob environment so they read the exact bucket instead of recomputing a
+   * divergent name.
+   */
+  sourceBucketName: string;
+  /**
    * TenantMappingTable の billing mode。`PROVISIONED` (default) のときは
    * `tenantMappingTableReadCapacity` / `tenantMappingTableWriteCapacity` を使う。
    * `PAY_PER_REQUEST` のときは capacity 指定は無視される。
@@ -51,6 +58,7 @@ export class BootstrapTemplateStack extends Stack {
     super(scope, id, props);
 
     const systemAdminEmail = props.systemAdminEmail;
+    const sourceBucketName = props.sourceBucketName;
     const eventBusArn = props.eventBusArn;
 
     const eventBus = EventBus.fromEventBusArn(this, "EventBus", eventBusArn);
@@ -94,6 +102,9 @@ export class BootstrapTemplateStack extends Stack {
         // the control plane is also deployed. To ensure the operation does not error out, this value
         // is provided as an env parameter.
         CDK_PARAM_SYSTEM_ADMIN_EMAIL: systemAdminEmail,
+        // #2194: the exact source bucket the deploy created, so provision-tenant.sh
+        // reads it directly instead of recomputing a divergent (no-hash) name.
+        CDK_PARAM_S3_BUCKET_NAME: sourceBucketName,
       },
       outgoingEvent: DetailType.PROVISION_SUCCESS,
       incomingEvent: DetailType.ONBOARDING_REQUEST,
@@ -115,6 +126,9 @@ export class BootstrapTemplateStack extends Stack {
         // the control plane is also deployed. To ensure the operation does not error out, this value
         // is provided as an env parameter.
         CDK_PARAM_SYSTEM_ADMIN_EMAIL: systemAdminEmail,
+        // #2194: the exact source bucket the deploy created, so deprovision-tenant.sh
+        // reads it directly instead of recomputing a divergent (no-hash) name.
+        CDK_PARAM_S3_BUCKET_NAME: sourceBucketName,
       },
     };
 

@@ -15,7 +15,13 @@ echo "REGION: ${REGION}"
 export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 echo "ACCOUNT_ID: ${ACCOUNT_ID}"
 
-export CDK_PARAM_S3_BUCKET_NAME="tenkacloud-source-${ACCOUNT_ID}-${REGION}"
+# #2194: CDK_PARAM_S3_BUCKET_NAME is injected by the deprovisioning ScriptJob env with
+# the resolved (per-environment) bucket name the deploy created. Do NOT recompute it
+# here — the old local recompute diverged from the real hashed name. Fail loud if missing.
+if [ -z "${CDK_PARAM_S3_BUCKET_NAME:-}" ]; then
+  echo "ERROR: CDK_PARAM_S3_BUCKET_NAME is not set (expected from the deprovisioning ScriptJob env)" >&2
+  exit 1
+fi
 echo "CDK_PARAM_S3_BUCKET_NAME: ${CDK_PARAM_S3_BUCKET_NAME}"
 export CDK_SOURCE_NAME="source.zip"
 

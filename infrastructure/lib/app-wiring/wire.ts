@@ -122,6 +122,10 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
     {
       ...config.stackEnv,
       systemAdminEmail: config.systemAdminEmail,
+      // #2194: the resolved (per-environment) source bucket name, so the tenant
+      // provision/deprovision ScriptJobs read the exact bucket the deploy created
+      // instead of recomputing a divergent name.
+      sourceBucketName: config.s3SourceBucket,
       eventBusArn: controlPlaneStack.eventBusArn,
       apiKeyPlatinumTierParameter: config.apiKeyPlatinumTierParameter,
       apiKeyPremiumTierParameter: config.apiKeyPremiumTierParameter,
