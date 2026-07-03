@@ -1,6 +1,15 @@
 import { createHash } from "node:crypto";
 import type { SqlExecutor, TeamRecord, TeamsRepository } from "./types.js";
 
+export const TEAM_LOGIN_KEY_SCRUB_MIGRATION_ID = "2026-07-04-team-login-key-payload-scrub";
+export const TEAM_LOGIN_KEY_SCRUB_SQL =
+  "UPDATE teams SET payload = json_remove(payload, '$.teamLoginKey') " +
+  "WHERE json_type(payload, '$.teamLoginKey') IS NOT NULL " +
+  `AND NOT EXISTS (
+    SELECT 1 FROM control_data_migrations
+    WHERE migration_id = '${TEAM_LOGIN_KEY_SCRUB_MIGRATION_ID}'
+  )`;
+
 /**
  * [ADR-049 §5.1 / §5.2] SQLite implementation of {@link TeamsRepository}. One SQL
  * layer in the SQLite dialect covers both Turso (libSQL) and Cloudflare D1;
@@ -33,6 +42,13 @@ export const TEAMS_SCHEMA_STATEMENTS = [
   ON teams (tenant_id)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_login_key_hash
   ON teams (login_key_hash) WHERE login_key_hash IS NOT NULL`,
+  `CREATE TABLE IF NOT EXISTS control_data_migrations (
+  migration_id TEXT PRIMARY KEY,
+  applied_at   TEXT NOT NULL
+)`,
+  TEAM_LOGIN_KEY_SCRUB_SQL,
+  `INSERT OR IGNORE INTO control_data_migrations (migration_id, applied_at)
+  VALUES ('${TEAM_LOGIN_KEY_SCRUB_MIGRATION_ID}', datetime('now'))`,
 ] as const;
 
 /** SQL script form retained for local SQLite parity tests and manual bootstrap. */
@@ -45,6 +61,17 @@ export const TEAMS_SCHEMA_SQL = `${TEAMS_SCHEMA_STATEMENTS.join(";\n")};`;
  */
 export function hashLoginKey(key: string): string {
   return createHash("sha256").update(key, "utf8").digest("hex");
+}
+
+function payloadWithoutLoginKey(record: TeamRecord): string {
+  const { teamLoginKey: _teamLoginKey, ...safeRecord } = record;
+  return JSON.stringify(safeRecord);
+}
+
+function recordWithoutStoredLoginKey(payload: unknown): TeamRecord {
+  const parsed = JSON.parse(String(payload)) as TeamRecord;
+  const { teamLoginKey: _teamLoginKey, ...safeRecord } = parsed;
+  return safeRecord;
 }
 
 export class SqlTeamsRepository implements TeamsRepository {
@@ -61,7 +88,7 @@ export class SqlTeamsRepository implements TeamsRepository {
     );
     // Same guard as the DDB backend: absent row or tenant mismatch → undefined.
     if (!row || row.tenant_id !== tenantId) return undefined;
-    return JSON.parse(String(row.payload)) as TeamRecord;
+    return recordWithoutStoredLoginKey(row.payload);
   }
 
   async getTeamByLoginKey(loginKey: string): Promise<TeamRecord | undefined> {
@@ -71,7 +98,12 @@ export class SqlTeamsRepository implements TeamsRepository {
       hashLoginKey(loginKey),
     ]);
     if (!row) return undefined;
-    return JSON.parse(String(row.payload)) as TeamRecord;
+    return {
+      ...recordWithoutStoredLoginKey(row.payload),
+      // The caller already presented this bearer. Restore it in memory only;
+      // it is never loaded from or persisted to SQL.
+      teamLoginKey: loginKey,
+    };
   }
 
   async listTeamsByEvent(eventId: string): Promise<readonly TeamRecord[]> {
@@ -80,7 +112,7 @@ export class SqlTeamsRepository implements TeamsRepository {
       "SELECT payload FROM teams WHERE event_id = ? ORDER BY team_id ASC",
       [eventId],
     );
-    return rows.map((row) => JSON.parse(String(row.payload)) as TeamRecord);
+    return rows.map((row) => recordWithoutStoredLoginKey(row.payload));
   }
 
   async putTeam(record: TeamRecord): Promise<void> {
@@ -99,9 +131,13 @@ export class SqlTeamsRepository implements TeamsRepository {
         record.tenantId,
         loginKeyHash,
         record.expiresAt,
-        JSON.stringify(record),
+        payloadWithoutLoginKey(record),
       ],
     );
+  }
+
+  async deleteTeam(eventId: string, teamId: string): Promise<void> {
+    await this.sql.run("DELETE FROM teams WHERE event_id = ? AND team_id = ?", [eventId, teamId]);
   }
 
   async pruneExpired(nowEpochSeconds: number): Promise<number> {

@@ -74,6 +74,15 @@ export class DynamoDbEventsRepository implements EventsRepository {
     await this.ddb.send(new PutCommand({ TableName: this.tableName, Item: recordToItem(record) }));
   }
 
+  async deleteEvent(eventId: string): Promise<void> {
+    await this.ddb.send(
+      new DeleteCommand({
+        TableName: this.tableName,
+        Key: { PK: `EVENT#${eventId}`, SK: EVENT_SK },
+      }),
+    );
+  }
+
   async listEventsByTenant(tenantId: string): Promise<readonly EventRecord[]> {
     const records: EventRecord[] = [];
     let exclusiveStartKey: Record<string, unknown> | undefined;

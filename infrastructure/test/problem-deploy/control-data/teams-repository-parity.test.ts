@@ -14,6 +14,8 @@ import {
   hashLoginKey,
   type SqlExecutor,
   SqlTeamsRepository,
+  TEAM_LOGIN_KEY_SCRUB_MIGRATION_ID,
+  TEAM_LOGIN_KEY_SCRUB_SQL,
   TEAMS_SCHEMA_SQL,
   type TeamRecord,
   type TeamsRepository,
@@ -124,12 +126,19 @@ const backends: ReadonlyArray<readonly [string, () => TeamsRepository]> = [
   ["SqlTeamsRepository", () => new SqlTeamsRepository(makeSqliteExecutor())],
 ];
 
-describe.each(backends)("TeamsRepository parity: %s", (_name, makeRepo) => {
+function withoutLoginKey(record: TeamRecord): TeamRecord {
+  const { teamLoginKey: _teamLoginKey, ...safeRecord } = record;
+  return safeRecord;
+}
+
+describe.each(backends)("TeamsRepository parity: %s", (name, makeRepo) => {
   it("should round-trip putTeam then getTeam identically", async () => {
     const repo = makeRepo();
     const record = sampleRecord({ displayName: "Team Alpha" });
     await repo.putTeam(record);
-    expect(await repo.getTeam(record.tenantId, record.eventId, record.teamId)).toEqual(record);
+    expect(await repo.getTeam(record.tenantId, record.eventId, record.teamId)).toEqual(
+      name === "SqlTeamsRepository" ? withoutLoginKey(record) : record,
+    );
   });
 
   it("should return undefined for a missing team", async () => {
@@ -168,6 +177,15 @@ describe.each(backends)("TeamsRepository parity: %s", (_name, makeRepo) => {
     );
     expect(got?.internalSlug).toBe("v2");
     expect(got?.displayName).toBe("Renamed");
+  });
+
+  it("should delete a team idempotently", async () => {
+    const repo = makeRepo();
+    const record = sampleRecord();
+    await repo.putTeam(record);
+    await repo.deleteTeam(record.eventId, record.teamId);
+    await repo.deleteTeam(record.eventId, record.teamId);
+    expect(await repo.getTeam(record.tenantId, record.eventId, record.teamId)).toBeUndefined();
   });
 
   it("should list an event's teams ordered by teamId ascending", async () => {
@@ -239,7 +257,9 @@ describe("createTeamsRepository", () => {
     const repo = createTeamsRepository("turso", { sql: makeSqliteExecutor() });
     const record = sampleRecord();
     await repo.putTeam(record);
-    expect(await repo.getTeam(record.tenantId, record.eventId, record.teamId)).toEqual(record);
+    expect(await repo.getTeam(record.tenantId, record.eventId, record.teamId)).toEqual(
+      withoutLoginKey(record),
+    );
   });
 
   it("should fail loudly when the SQL backend is selected without a SqlExecutor", () => {
@@ -278,11 +298,13 @@ describe("hashLoginKey (Issue #2290)", () => {
     await repo.putTeam(record);
 
     const row = await executor.get(
-      "SELECT login_key_hash FROM teams WHERE event_id = ? AND team_id = ?",
+      "SELECT login_key_hash, payload FROM teams WHERE event_id = ? AND team_id = ?",
       [record.eventId, record.teamId],
     );
     expect(row?.login_key_hash).toBe(hashLoginKey(plaintext));
     expect(row?.login_key_hash).not.toBe(plaintext);
+    expect(String(row?.payload)).not.toContain(plaintext);
+    expect(JSON.parse(String(row?.payload))).not.toHaveProperty("teamLoginKey");
   });
 
   it("should store NULL in login_key_hash when the team has no login key", async () => {
@@ -295,5 +317,38 @@ describe("hashLoginKey (Issue #2290)", () => {
       ["01EVENTAAAAAAAAAAAAAAAAAAA", "01TEAMAAAAAAAAAAAAAAAAAAAA"],
     );
     expect(row?.login_key_hash).toBeNull();
+  });
+
+  it("should scrub a legacy plaintext login key from payloads and never return it on point reads", async () => {
+    const executor = makeSqliteExecutor();
+    const record = sampleRecord({ teamLoginKey: "LEGACY-PLAINTEXT" });
+    await executor.run(
+      `INSERT INTO teams (
+         event_id, team_id, tenant_id, login_key_hash, expires_at, payload
+       ) VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        record.eventId,
+        record.teamId,
+        record.tenantId,
+        hashLoginKey("LEGACY-PLAINTEXT"),
+        record.expiresAt,
+        JSON.stringify(record),
+      ],
+    );
+    const repository = new SqlTeamsRepository(executor);
+
+    await expect(
+      repository.getTeam(record.tenantId, record.eventId, record.teamId),
+    ).resolves.toEqual(withoutLoginKey(record));
+    await executor.run("DELETE FROM control_data_migrations WHERE migration_id = ?", [
+      TEAM_LOGIN_KEY_SCRUB_MIGRATION_ID,
+    ]);
+    await executor.run(TEAM_LOGIN_KEY_SCRUB_SQL);
+    const row = await executor.get("SELECT payload FROM teams WHERE event_id = ? AND team_id = ?", [
+      record.eventId,
+      record.teamId,
+    ]);
+    expect(String(row?.payload)).not.toContain("LEGACY-PLAINTEXT");
+    expect(JSON.parse(String(row?.payload))).not.toHaveProperty("teamLoginKey");
   });
 });

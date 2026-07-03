@@ -3,6 +3,7 @@ import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { type Client, createClient } from "@libsql/client/http";
 import { createEventsRepository } from "./events-repository.js";
 import { initializeControlDataSchema, LibsqlExecutor } from "./libsql-executor.js";
+import { MirroredEventsRepository, MirroredTeamsRepository } from "./mirrored-repositories.js";
 import { createTeamsRepository } from "./teams-repository.js";
 import type { EventsRepository, TeamsRepository } from "./types.js";
 
@@ -84,9 +85,20 @@ export function createControlDataRepositoryResolver(
       const client = deps.createClient({ url, authToken });
       await initializeControlDataSchema(client);
       const sql = new LibsqlExecutor(client);
+      const canonicalEvents = createEventsRepository("dynamodb", {
+        ddb: input.ddb,
+        eventsTableName: input.eventsTableName,
+      });
+      const canonicalTeams = createTeamsRepository("dynamodb", {
+        ddb: input.ddb,
+        teamsTableName: input.teamsTableName,
+      });
       return {
-        events: createEventsRepository(backend, { sql }),
-        teams: createTeamsRepository(backend, { sql }),
+        events: new MirroredEventsRepository(
+          canonicalEvents,
+          createEventsRepository(backend, { sql }),
+        ),
+        teams: new MirroredTeamsRepository(canonicalTeams, createTeamsRepository(backend, { sql })),
       };
     })();
     return cached;

@@ -17,7 +17,7 @@ function result(rows: readonly Record<string, unknown>[] = [], rowsAffected = 0)
 }
 
 describe("LibsqlExecutor", () => {
-  it("maps run/get/all onto parameterized libSQL execute calls", async () => {
+  it("should map run/get/all onto parameterized libSQL execute calls", async () => {
     const execute = vi
       .fn()
       .mockResolvedValueOnce(result([], 3))
@@ -39,7 +39,7 @@ describe("LibsqlExecutor", () => {
     });
   });
 
-  it("bootstraps all schema statements in one non-interactive write batch", async () => {
+  it("should bootstrap all schema statements in one non-interactive write batch", async () => {
     const batch = vi.fn().mockResolvedValue([]);
     const client = { batch } as unknown as Client;
 
@@ -48,12 +48,18 @@ describe("LibsqlExecutor", () => {
     expect(batch).toHaveBeenCalledTimes(1);
     const [statements, mode] = batch.mock.calls[0] ?? [];
     expect(mode).toBe("write");
-    expect(statements).toHaveLength(5);
+    expect(statements).toHaveLength(11);
     expect(statements.map((entry: { sql: string }) => entry.sql)).toEqual(
       expect.arrayContaining([
         expect.stringContaining("CREATE TABLE IF NOT EXISTS events"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS teams"),
         expect.stringContaining("idx_teams_login_key_hash"),
+        expect.stringContaining("json_remove(payload, '$.teamLoginKey')"),
+        expect.stringContaining("CREATE TABLE IF NOT EXISTS control_data_migrations"),
+        expect.stringContaining("INSERT OR IGNORE INTO control_data_migrations"),
+        expect.stringContaining("CREATE TABLE IF NOT EXISTS score_summary"),
+        expect.stringContaining("idx_score_summary_leaderboard"),
+        expect.stringContaining("CREATE TABLE IF NOT EXISTS leaderboard_snapshots"),
       ]),
     );
   });

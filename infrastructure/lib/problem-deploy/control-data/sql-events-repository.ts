@@ -58,6 +58,10 @@ export class SqlEventsRepository implements EventsRepository {
     );
   }
 
+  async deleteEvent(eventId: string): Promise<void> {
+    await this.sql.run("DELETE FROM events WHERE event_id = ?", [eventId]);
+  }
+
   async listEventsByTenant(tenantId: string): Promise<readonly EventRecord[]> {
     const rows = await this.sql.all(
       // event_id tiebreak keeps ordering deterministic when createdAt collides.
