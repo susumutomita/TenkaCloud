@@ -1,12 +1,18 @@
+// Deep imports (not the barrel) so the Worker never pulls the browser-only
+// Cognito redirect helpers — those reference `window`, which is absent from the
+// Worker's TS lib. These two modules are pure WebCrypto and Worker-safe.
+import { createCachingJwksResolver } from "@tenkacloud/auth-client/jwks-resolver";
+import { type JwksResolver, verifyOidcJwt } from "@tenkacloud/auth-client/oidc-jwks-verify";
 import type { MiddlewareHandler } from "hono";
 import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
-import { jwk } from "hono/jwk";
 import { StatusCodes } from "http-status-codes";
 import { sha256Hex } from "./crypto.js";
 import type { AppEnvironment, OrganizerContext, TeamContext } from "./types.js";
 
 type JsonObject = Record<string, unknown>;
+
+const jwksResolvers = new Map<string, JwksResolver>();
 
 function isObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -22,16 +28,44 @@ function requiredClaim(payload: JsonObject, name: string): string {
   return value;
 }
 
-export function auth0JwtMiddleware(): MiddlewareHandler<AppEnvironment> {
-  return async (context, next) =>
-    jwk({
-      jwks_uri: `${context.env.AUTH0_ISSUER.replace(/\/+$/u, "")}/.well-known/jwks.json`,
-      alg: ["RS256"],
-      verification: {
-        iss: context.env.AUTH0_ISSUER,
-        aud: context.env.AUTH0_AUDIENCE,
-      },
-    })(context, next);
+interface Auth0JwtMiddlewareOverrides {
+  readonly fetchImpl?: typeof fetch;
+}
+
+export function auth0JwtMiddleware(
+  overrides?: Auth0JwtMiddlewareOverrides,
+): MiddlewareHandler<AppEnvironment> {
+  const fetchImpl = overrides?.fetchImpl ?? globalThis.fetch;
+  return async (context, next) => {
+    const authorization = context.req.header("authorization");
+    const match = /^Bearer\s+(.+)$/iu.exec(authorization ?? "");
+    if (!match?.[1]) {
+      throw new HTTPException(StatusCodes.UNAUTHORIZED, {
+        message: "missing or malformed access token",
+      });
+    }
+
+    const jwksUri = `${context.env.AUTH0_ISSUER.replace(/\/+$/u, "")}/.well-known/jwks.json`;
+    let jwksResolver = jwksResolvers.get(jwksUri);
+    if (!jwksResolver) {
+      jwksResolver = createCachingJwksResolver({ jwksUri, fetchImpl });
+      jwksResolvers.set(jwksUri, jwksResolver);
+    }
+
+    const outcome = await verifyOidcJwt(match[1], {
+      jwksResolver,
+      issuer: context.env.AUTH0_ISSUER,
+      audience: context.env.AUTH0_AUDIENCE,
+    });
+    if (!outcome.valid) {
+      throw new HTTPException(StatusCodes.UNAUTHORIZED, {
+        message: "invalid access token",
+      });
+    }
+
+    context.set("jwtPayload", outcome.claims);
+    await next();
+  };
 }
 
 /**

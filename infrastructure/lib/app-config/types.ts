@@ -119,9 +119,9 @@ export interface AppConfig {
 
   /**
    * Issue #2291 (ADR-049 §9): DeployCreate を CodeBuild ではなく Lambda CreateStack +
-   * DescribeStacks poll 経路にするか (`CDK_PARAM_DEPLOY_VIA_LAMBDA`)。**default false**
-   * (未設定 / `"false"` は在来の CodeBuild 経路で CFn テンプレ byte 互換)。`"true"` のときだけ
-   * `CfnDeployLambda` を生成し、`DeployCreate` state machine が Lambda + poll 定義になる。
+   * DescribeStacks poll 経路にするか (`CDK_PARAM_DEPLOY_VIA_LAMBDA`)。**default true**
+   * (未設定は Lambda + poll 経路)。在来の CodeBuild 経路へ戻す場合だけ明示的に `"false"` を
+   * 指定する。
    */
   readonly deployViaLambda: boolean;
 
