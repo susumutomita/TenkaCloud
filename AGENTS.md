@@ -59,6 +59,7 @@ Invoke as `/<skill>`. Implementations live in `.claude/skills/<skill>/SKILL.md`.
 | `/tech-debt`       | Run `make tech-debt` to generate the tech-debt backlog                                  |
 | `/quality-gates`   | Run the off-body quality-gate checks (HTTP magic / template / coverage / merge / submodule) |
 | `/spec`            | Write a technical specification in the Open Web Docs (MDN) style                       |
+| `/blindspot-pass`  | Review-only unknown-unknowns pass over an Issue / ADR / PR diff / directory (code-backed) |
 
 In addition, the common skills (`/review`, `/security-review`, `/simplify`, `/init`, etc.) that ship with Claude Code itself are also available; they are not TenkaCloud-specific.
 

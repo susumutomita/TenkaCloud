@@ -138,6 +138,7 @@ Live under `.claude/skills/` and are invoked as `/<skill-name>`.
 | `/tech-debt`       | Run `make tech-debt` to generate the tech-debt backlog (assertion roulette / coupling / fallback detection) |
 | `/quality-gates`   | Run the off-body quality-gate checks (HTTP magic numbers / template / coverage / IAM ASCII / merge / submodule) |
 | `/spec`            | Write a technical specification in the Open Web Docs (MDN) style                       |
+| `/blindspot-pass`  | Review-only pass over an Issue / ADR / PR diff / directory to surface unknown-unknowns (unconnected producer/consumer, per-route default drift, split data seams) with code-backed evidence |
 
 ### TDD
 
