@@ -16,11 +16,15 @@ const catalog: Record<string, string> = {
   "hello-world": "problems/challenges/hello-world",
 };
 const resolveProblemDir = (problemId: string): string | undefined => catalog[problemId];
+const VERIFIED_ACCOUNT = {
+  competitorRoleArn: "arn:aws:iam::111111111111:role/TenkaCloud-tenant-a-deploy-Role",
+  externalIdParameterName: "/test/tenants/tenant-a/external-id",
+} as const;
 
 describe("buildDeployCreateDetail (ADR-049 Phase 4 / #2293)", () => {
   it("should build a frozen DeployCreateRequested detail from intent identifiers", () => {
     const intent = makeVerified();
-    const result = buildDeployCreateDetail(intent, { resolveProblemDir });
+    const result = buildDeployCreateDetail(intent, { resolveProblemDir }, VERIFIED_ACCOUNT);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     // Conforms to the authoritative frozen schema.
@@ -35,7 +39,16 @@ describe("buildDeployCreateDetail (ADR-049 Phase 4 / #2293)", () => {
       namePrefix: "tc-hello-world-team-alpha",
       region: "us-east-1",
       awsAccountId: "111111111111",
+      ...VERIFIED_ACCOUNT,
     });
+  });
+
+  it("should omit cross-account fields when no verified account is provided", () => {
+    const result = buildDeployCreateDetail(makeVerified(), { resolveProblemDir });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.detail).not.toHaveProperty("competitorRoleArn");
+    expect(result.detail).not.toHaveProperty("externalIdParameterName");
   });
 
   it("should fall back to requestId for jobId when deploymentId is absent", () => {
@@ -135,7 +148,7 @@ describe("buildDeployCreateDetail (ADR-049 Phase 4 / #2293)", () => {
 describe("buildDeployDeleteDetail (ADR-049 Phase 4 / #2293)", () => {
   it("should build a frozen DeployDeleteRequested detail from intent identifiers", () => {
     const intent = makeVerified({ action: { type: "destroy" } });
-    const result = buildDeployDeleteDetail(intent);
+    const result = buildDeployDeleteDetail(intent, VERIFIED_ACCOUNT);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(DeployDeleteRequestedDetailSchema.safeParse(result.detail).success).toBe(true);
@@ -146,7 +159,16 @@ describe("buildDeployDeleteDetail (ADR-049 Phase 4 / #2293)", () => {
       stackName: "tc-hello-world-team-alpha",
       region: "us-east-1",
       awsAccountId: "111111111111",
+      ...VERIFIED_ACCOUNT,
     });
+  });
+
+  it("should omit cross-account fields when no verified account is provided", () => {
+    const result = buildDeployDeleteDetail(makeVerified({ action: { type: "destroy" } }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.detail).not.toHaveProperty("competitorRoleArn");
+    expect(result.detail).not.toHaveProperty("externalIdParameterName");
   });
 
   it("should reject problem-id-missing for a destroy intent without a problemId", () => {

@@ -14,7 +14,18 @@ const SECRET_STRING = "intent-ingress-test-secret-0123456789";
 /** Captured AWS_REGION so per-test mutations never leak to other test files. */
 const ORIGINAL_AWS_REGION = process.env.AWS_REGION;
 
-const captured = vi.hoisted(() => ({ entries: undefined as unknown }));
+const captured = vi.hoisted(() => ({
+  entries: undefined as unknown,
+  accountLookup: undefined as unknown,
+}));
+
+const competitorAccount = vi.hoisted(() => ({
+  item: {
+    verified: true,
+    competitorRoleName: "TenkaCloud-tenant-a-deploy-Role",
+    region: "us-east-1",
+  } as Record<string, unknown> | undefined,
+}));
 
 /**
  * Mutable SSM behaviour: `value` drives the empty-parameter branch; `reject` (when set)
@@ -44,8 +55,23 @@ vi.mock("@aws-sdk/client-dynamodb", () => ({
 }));
 
 vi.mock("@aws-sdk/lib-dynamodb", () => ({
-  DynamoDBDocumentClient: { from: () => ({ send: async () => ({}) }) },
+  DynamoDBDocumentClient: {
+    from: () => ({
+      send: async (command: { input: unknown; kind: string }) => {
+        if (command.kind === "get") {
+          captured.accountLookup = command.input;
+          return { Item: competitorAccount.item };
+        }
+        return {};
+      },
+    }),
+  },
   PutCommand: class {
+    readonly kind = "put";
+    constructor(public input: unknown) {}
+  },
+  GetCommand: class {
+    readonly kind = "get";
     constructor(public input: unknown) {}
   },
 }));
@@ -71,11 +97,19 @@ async function loadHandler() {
 describe("intent-ingress handler (ADR-049 Phase 4 / #2293)", () => {
   beforeEach(() => {
     captured.entries = undefined;
+    captured.accountLookup = undefined;
+    competitorAccount.item = {
+      verified: true,
+      competitorRoleName: "TenkaCloud-tenant-a-deploy-Role",
+      region: "us-east-1",
+    };
     ssmSecret.value = SECRET_STRING;
     ssmSecret.reject = undefined;
     process.env.NONCE_TABLE_NAME = "nonce-table";
     process.env.VERIFY_SECRET_PARAM = "/tenkacloud/intent-verify-secret";
     process.env.DEPLOY_EVENT_BUS_NAME = "tenkacloud-deploy";
+    process.env.COMPETITOR_ACCOUNTS_TABLE_NAME = "competitor-accounts";
+    process.env.DEPLOY_ENVIRONMENT = "test";
     process.env.PROBLEMS_CATALOG = JSON.stringify({
       "hello-world": "problems/challenges/hello-world",
     });
@@ -85,6 +119,8 @@ describe("intent-ingress handler (ADR-049 Phase 4 / #2293)", () => {
     delete process.env.NONCE_TABLE_NAME;
     delete process.env.VERIFY_SECRET_PARAM;
     delete process.env.DEPLOY_EVENT_BUS_NAME;
+    delete process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
+    delete process.env.DEPLOY_ENVIRONMENT;
     delete process.env.PROBLEMS_CATALOG;
     delete process.env.EXPECTED_AUDIENCE;
     delete process.env.ALLOWED_TENANT_IDS;
@@ -118,7 +154,25 @@ describe("intent-ingress handler (ADR-049 Phase 4 / #2293)", () => {
       problemId: "hello-world",
       problemDir: "problems/challenges/hello-world",
       awsAccountId: "111111111111",
+      competitorRoleArn: "arn:aws:iam::111111111111:role/TenkaCloud-tenant-a-deploy-Role",
+      externalIdParameterName: "/test/tenants/tenant-a/external-id",
     });
+    expect(captured.accountLookup).toEqual({
+      TableName: "competitor-accounts",
+      Key: { PK: "TENANT#tenant-a", SK: "ACCOUNT#111111111111" },
+    });
+  });
+
+  it("should 403 account-not-verified without publishing when the account row is absent", async () => {
+    competitorAccount.item = undefined;
+    const token = signIntent(makeIntent(), { secret: TEST_SECRET });
+    const handler = await loadHandler();
+
+    const res = await handler({ body: JSON.stringify({ token }) });
+
+    expect(res.statusCode).toBe(StatusCodes.FORBIDDEN);
+    expect(JSON.parse(res.body)).toEqual({ reason: "account-not-verified" });
+    expect(captured.entries).toBeUndefined();
   });
 
   it("should 400 a malformed request body without publishing", async () => {

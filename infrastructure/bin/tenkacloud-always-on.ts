@@ -76,6 +76,8 @@ export function buildIntentIngressApp(options: BuildIntentIngressAppOptions): cd
   cdk.Aspects.of(app).add(new LogGroupRetention());
 
   const verifySecretParameterName = requireEnv(env, VERIFY_SECRET_PARAM_ENV);
+  const competitorAccountsTableName = requireEnv(env, "CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME");
+  const competitorAccountsTableArn = requireEnv(env, "CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN");
   const problemsCatalog = (options.discoverCatalog ?? discoverProblemsCatalog)(
     // resolveAppConfig の discoverAppProblems と同じ problems/ root (= repo 直下)。
     path.resolve(options.binDir, "..", "..", "problems"),
@@ -90,6 +92,9 @@ export function buildIntentIngressApp(options: BuildIntentIngressAppOptions): cd
     ...resolveStackEnv(env),
     verifySecretParameterName,
     problemsCatalog,
+    competitorAccountsTableName,
+    competitorAccountsTableArn,
+    environmentName: environment,
     // 省略時は stack 側が local bus を作る (= standalone)。渡せば既存 deploy bus へ re-emit。
     ...(eventBusArn ? { eventBusArn } : {}),
     ...(expectedAudience ? { expectedAudience } : {}),
@@ -119,11 +124,7 @@ function resolveStackEnv(env: NodeJS.ProcessEnv): { env?: { account: string; reg
 function requireEnv(env: NodeJS.ProcessEnv, name: string): string {
   const value = env[name];
   if (value === undefined || value.trim() === "") {
-    throw new Error(
-      `${name} is required to deploy the always-on signed-intent ingress. ` +
-        "Set it to the SSM SecureString parameter name that holds the JWS verify secret " +
-        "(e.g. /tenkacloud/intent-ingress/verify-secret).",
-    );
+    throw new Error(`${name} is required to deploy the always-on signed-intent ingress.`);
   }
   return value;
 }

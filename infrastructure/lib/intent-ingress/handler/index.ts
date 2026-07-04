@@ -2,8 +2,10 @@ import { DdbNonceStore, verifyIntent } from "@TenkaCloud/trust-bridge";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
+import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { StatusCodes } from "http-status-codes";
 import { parseProblemsCatalog } from "../../problem-deploy/handlers/shared/catalog.js";
+import { resolveVerifiedCompetitorAccount } from "../../problem-deploy/handlers/shared/competitor-account-lookup.js";
 import { publishProblemEvent } from "../../problem-deploy/handlers/shared/events.js";
 import { handleIntentIngress, type IntentIngressDeps } from "../orchestrator.js";
 import { authorizeIntentScope, type IntentScopeConfig } from "../scope-authorization.js";
@@ -65,20 +67,41 @@ async function buildDeps(): Promise<IntentIngressDeps> {
   const region = process.env.AWS_REGION;
   const clientConfig = region ? { region } : {};
   const secret = await resolveVerifySecret(new SSMClient(clientConfig));
+  const dynamodb = new DynamoDBClient(clientConfig);
+  const ddb = DynamoDBDocumentClient.from(dynamodb);
 
   const nonceStore = new DdbNonceStore({
-    client: buildDdbConditionalPutClient(new DynamoDBClient(clientConfig)),
+    client: buildDdbConditionalPutClient(dynamodb),
     tableName: env("NONCE_TABLE_NAME"),
   });
   const events = new EventBridgeClient(clientConfig);
   const busName = env("DEPLOY_EVENT_BUS_NAME");
   const catalog = parseProblemsCatalog(process.env.PROBLEMS_CATALOG);
   const scopeConfig = buildScopeConfig();
+  const competitorAccountsTableName = env("COMPETITOR_ACCOUNTS_TABLE_NAME");
+  const deployEnvironment = env("DEPLOY_ENVIRONMENT");
 
   return {
     verify: (token) => verifyIntent(token, { resolveSecret: () => secret, nonceStore }),
     authorizeScope: (intent) => authorizeIntentScope(intent, scopeConfig),
     resolveProblemDir: (problemId) => catalog[problemId],
+    resolveVerifiedAccount: async (tenantId, awsAccountId) => {
+      const verified = await resolveVerifiedCompetitorAccount(
+        {
+          ddb,
+          competitorAccountsTableName,
+          env: deployEnvironment,
+        },
+        tenantId,
+        awsAccountId,
+      );
+      return verified
+        ? {
+            competitorRoleArn: verified.competitorRoleArn,
+            externalIdParameterName: verified.externalIdParameterName,
+          }
+        : null;
+    },
     publish: (detailType, jobId, detail) =>
       publishProblemEvent({ client: events, busName, detailType, jobId, detail }),
   };
