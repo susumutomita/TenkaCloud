@@ -10,6 +10,12 @@ import {
   requireOrganizerRole,
   teamBearerMiddleware,
 } from "./auth.js";
+import {
+  type DeployIntentCommandInput,
+  DeployIntentCommandInputSchema,
+  intentGatewayFromEnvironment,
+  issueDeployIntentCommand,
+} from "./deploy-intents.js";
 import { type CheckpointInput, ControlStore, type EventInput } from "./store.js";
 import type { AppEnvironment } from "./types.js";
 
@@ -20,6 +26,8 @@ interface AppOptions {
   readonly organizerJwt?: MiddlewareHandler<AppEnvironment>;
   readonly organizerProjection?: MiddlewareHandler<AppEnvironment>;
   readonly teamAuth?: MiddlewareHandler<AppEnvironment>;
+  /** Transport used to reach the AWS intent ingress; injectable for tests. */
+  readonly intentFetch?: typeof fetch;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -68,6 +76,17 @@ function eventInput(body: JsonObject): EventInput {
   };
 }
 
+function deployIntentInput(body: JsonObject): DeployIntentCommandInput {
+  const parsed = DeployIntentCommandInputSchema.safeParse(body);
+  if (!parsed.success) {
+    const message = parsed.error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join("; ");
+    throw new HTTPException(StatusCodes.BAD_REQUEST, { message });
+  }
+  return parsed.data;
+}
+
 function checkpointInput(body: JsonObject): CheckpointInput {
   const points = body.points;
   if (!Number.isInteger(points) || Number(points) <= 0) {
@@ -84,6 +103,7 @@ function checkpointInput(body: JsonObject): CheckpointInput {
 }
 
 export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
+  const intentFetch = options.intentFetch ?? (fetch.bind(globalThis) as typeof fetch);
   const app = new Hono<AppEnvironment>();
   app.use("*", secureHeaders());
   app.use(
@@ -187,6 +207,49 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
         throw error;
       }
       return context.body(null, StatusCodes.NO_CONTENT);
+    },
+  );
+
+  app.post(
+    "/v1/admin/events/:eventId/deploy-intents",
+    requireOrganizerRole(MUTATING_ROLES),
+    async (context) => {
+      const organizer = context.get("organizer");
+      const eventId = context.req.param("eventId");
+      const input = deployIntentInput(await readObject(context.req));
+      const store = new ControlStore(context.env.CONTROL_DB);
+      if (!(await store.hasTeam(organizer.tenantId, eventId, input.teamId))) {
+        throw new HTTPException(StatusCodes.NOT_FOUND, { message: "team not found" });
+      }
+      const gateway = intentGatewayFromEnvironment(context.env, intentFetch);
+      const outcome = await issueDeployIntentCommand(
+        { ...input, tenantId: organizer.tenantId, eventId },
+        gateway,
+      );
+      if (!outcome.accepted) {
+        console.error(
+          JSON.stringify({
+            event: "always-on.deploy-intent.rejected",
+            ingressStatus: outcome.ingressStatus,
+            reason: outcome.reason,
+          }),
+        );
+        // An ingress 4xx means the organizer's command itself was rejected
+        // (correctable input, e.g. an unknown problemId) — that is not a
+        // gateway failure. Ingress 5xx and unreachable-transport map to 502.
+        const commandRejected =
+          outcome.ingressStatus !== undefined &&
+          outcome.ingressStatus >= StatusCodes.BAD_REQUEST &&
+          outcome.ingressStatus < StatusCodes.INTERNAL_SERVER_ERROR;
+        return context.json(
+          { error: "deploy intent rejected by ingress", reason: outcome.reason },
+          commandRejected ? StatusCodes.UNPROCESSABLE_ENTITY : StatusCodes.BAD_GATEWAY,
+        );
+      }
+      return context.json(
+        { requestId: outcome.requestId, deploymentId: outcome.deploymentId },
+        StatusCodes.ACCEPTED,
+      );
     },
   );
 

@@ -85,6 +85,12 @@ export type {
   DdbNonceStoreOptions,
 } from "./ddb-nonce-store.js";
 export { DdbNonceStore } from "./ddb-nonce-store.js";
+export {
+  DEPLOY_AWS_ACCOUNT_ID_PATTERN,
+  DEPLOY_AWS_REGION_PATTERN,
+  DEPLOY_COMMAND_PATTERN_VECTORS,
+  DEPLOY_PROBLEM_ID_PATTERN,
+} from "./deploy-command-patterns.js";
 export type {
   GcpAdapterOptions,
   GcpCredential,
@@ -96,6 +102,13 @@ export type {
   GenerateServiceAccountTokenOutput,
 } from "./gcp-workload-identity.js";
 export { GcpWorkloadIdentityFederationExchange } from "./gcp-workload-identity.js";
+export type { BuildIntentParams } from "./intent-issuer.js";
+export {
+  buildDeployIntent,
+  buildDestroyIntent,
+  buildIntentRequestBody,
+  issueSignedIntentRequest,
+} from "./intent-issuer.js";
 export type {
   JwsHeader,
   SignOptions,

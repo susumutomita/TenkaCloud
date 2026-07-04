@@ -71,6 +71,16 @@ export class ControlStore {
     return { teamId, loginKey };
   }
 
+  async hasTeam(tenantId: string, eventId: string, teamId: string): Promise<boolean> {
+    const row = await this.db
+      .prepare(
+        "SELECT 1 AS present FROM teams WHERE team_id = ? AND event_id = ? AND tenant_id = ?",
+      )
+      .bind(teamId, eventId, tenantId)
+      .first<{ present: number }>();
+    return row !== null;
+  }
+
   async putCheckpoint(tenantId: string, eventId: string, input: CheckpointInput): Promise<void> {
     const flagHash = await sha256Hex(input.flag);
     const result = await this.db

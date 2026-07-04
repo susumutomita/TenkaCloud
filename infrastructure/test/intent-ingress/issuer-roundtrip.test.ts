@@ -1,13 +1,13 @@
-import { verifyIntent } from "@TenkaCloud/trust-bridge";
-import { StatusCodes } from "http-status-codes";
-import { describe, expect, it } from "vitest";
-import type { DeployDetailType } from "../../lib/intent-ingress/action-map";
 import {
   type BuildIntentParams,
   buildDeployIntent,
   buildDestroyIntent,
   issueSignedIntentRequest,
-} from "../../lib/intent-ingress/issuer";
+  verifyIntent,
+} from "@TenkaCloud/trust-bridge";
+import { StatusCodes } from "http-status-codes";
+import { describe, expect, it } from "vitest";
+import type { DeployDetailType } from "../../lib/intent-ingress/action-map";
 import { handleIntentIngress, type IntentIngressDeps } from "../../lib/intent-ingress/orchestrator";
 import { authorizeIntentScope } from "../../lib/intent-ingress/scope-authorization";
 

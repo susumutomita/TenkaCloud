@@ -1,15 +1,11 @@
-import {
-  type CloudActionIntent,
-  INTENT_VERSION,
-  parseCloudActionIntent,
-  type SignOptions,
-  signIntent,
-} from "@TenkaCloud/trust-bridge";
+import { type SignOptions, signIntent } from "./jws.js";
+import { type CloudActionIntent, INTENT_VERSION, parseCloudActionIntent } from "./schema.js";
 
 /**
  * ADR-049 Phase 4 (Issue #2293) — signed-intent ISSUER (control-plane sign-side).
  *
- * The symmetric counterpart to the ingress verify-side (`orchestrator.ts`). This is
+ * The symmetric counterpart to the ingress verify-side
+ * (`infrastructure/lib/intent-ingress/orchestrator.ts`). This is
  * the code half of the "Workers-side intent issuance": it builds a `CloudActionIntent`
  * from typed deploy/destroy parameters, validates it against the SAME authoritative
  * `CloudActionIntentSchema` the ingress verifies against, signs it with the shared

@@ -71,6 +71,34 @@ Do not put Auth0 client secrets or Cloudflare tokens in `wrangler.jsonc`.
 Deployment uses the repository/environment secrets
 `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 
+## Signed intent issuance (Phase 4)
+
+`POST /v1/admin/events/:eventId/deploy-intents` lets a mutating organizer role
+mint a JWS-signed `CloudActionIntent` (`action: "deploy" | "destroy"`) and relay
+it to the AWS intent-ingress Function URL. The intent carries identifiers only;
+`ExternalId` and other cross-account secrets stay on the AWS side. Configuration
+per environment:
+
+- `INTENT_INGRESS_URL` (var): the Function URL emitted by the
+  `tenkacloud-intent-ingress` stack (`make deploy-always-on-ingress`).
+- `INTENT_AUDIENCE` (var): must equal the ingress
+  `CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE` value when that check is enabled.
+- `INTENT_SIGNING_SECRET` (secret): set with
+  `bunx wrangler secret put INTENT_SIGNING_SECRET --env production`. Trust-bridge
+  JWS is HS256 in Phase 1, so this value must equal the SSM SecureString the
+  ingress reads through `CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM`. Rotate by
+  writing the new value to SSM first, then updating the Workers secret.
+
+The Worker validates the command shape against the frozen deploy detail contract
+(problem slug, 12-digit AWS account, region; shared patterns exported by
+trust-bridge), confirms the team belongs to the organizer's tenant and event,
+and returns `202` with `requestId` and `deploymentId`. For a deploy the two are
+equal and become the `jobId` the ingress re-emits; keep the `deploymentId` — a
+destroy command must send it back so the delete targets the same deployment
+identity. An ingress 4xx (the command itself was rejected, e.g. an unknown
+problem) surfaces as `422` with the ingress' stable reason code; an ingress 5xx
+or an unreachable ingress surfaces as `502`.
+
 ## Event-month plan runbook
 
 1. At least seven days before an event, enable Workers Paid for the Cloudflare

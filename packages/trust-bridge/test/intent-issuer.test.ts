@@ -1,4 +1,3 @@
-import { INTENT_VERSION, parseCloudActionIntent, verifySignature } from "@TenkaCloud/trust-bridge";
 import { describe, expect, it } from "vitest";
 import {
   type BuildIntentParams,
@@ -6,8 +5,12 @@ import {
   buildDestroyIntent,
   buildIntentRequestBody,
   issueSignedIntentRequest,
-} from "../../lib/intent-ingress/issuer";
-import { TEST_SECRET } from "./intent-fixtures";
+} from "../src/intent-issuer.js";
+import { verifySignature } from "../src/jws.js";
+import { INTENT_VERSION, parseCloudActionIntent } from "../src/schema.js";
+
+/** Signing key shared by the sign/verify assertions in this file. */
+const TEST_SECRET = new TextEncoder().encode("intent-issuer-test-secret 0123456789");
 
 /**
  * Unit tests for the signed-intent ISSUER (ADR-049 Phase 4 / #2293). The round-trip
