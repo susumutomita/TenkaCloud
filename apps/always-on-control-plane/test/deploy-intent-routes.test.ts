@@ -5,6 +5,7 @@ import { StatusCodes } from "http-status-codes";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import type { AppEnvironment } from "../src/types.js";
+import { acceptedIngressResponse, capturedAt, captureFetch } from "./helpers/intent-capture.js";
 
 const ROLES_CLAIM = "https://tenkacloud.dev/roles";
 const SECRET_TEXT = "route-test-signing-secret 0123456789";
@@ -37,40 +38,15 @@ function adminPayload(roles: readonly string[] = ["TenantAdmin"]) {
   };
 }
 
-function json(method: string, body: unknown, token?: string): RequestInit {
+function json(method: string, body: unknown): RequestInit {
   return {
     method,
-    headers: {
-      "content-type": "application/json",
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   };
 }
 
 const envWithSecret = { ...env, INTENT_SIGNING_SECRET: SECRET_TEXT };
-
-interface CapturedRequest {
-  readonly url: string;
-  readonly init: RequestInit;
-}
-
-function acceptingIntentFetch(): { intentFetch: typeof fetch; captured: CapturedRequest[] } {
-  const captured: CapturedRequest[] = [];
-  const intentFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    captured.push({ url: String(input), init: init ?? {} });
-    return new Response(JSON.stringify({ requestId: "from-ingress" }), {
-      status: StatusCodes.ACCEPTED,
-    });
-  });
-  return { intentFetch: intentFetch as unknown as typeof fetch, captured };
-}
-
-function capturedAt(captured: CapturedRequest[], index: number): CapturedRequest {
-  const request = captured[index];
-  if (!request) throw new Error(`no captured request at index ${index}`);
-  return request;
-}
 
 async function createEventAndTeam(app: ReturnType<typeof createApp>) {
   const eventRes = await app.request(
@@ -113,8 +89,8 @@ beforeEach(async () => {
 
 describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293)", () => {
   it("should sign an intent for the organizer's tenant and POST it to the configured ingress", async () => {
-    const { intentFetch, captured } = acceptingIntentFetch();
-    const app = organizerApp(adminPayload(), intentFetch);
+    const { fetchImpl, captured } = captureFetch(acceptedIngressResponse);
+    const app = organizerApp(adminPayload(), fetchImpl);
     const { eventId, teamId } = await createEventAndTeam(app);
 
     const res = await app.request(
@@ -124,8 +100,9 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     );
 
     expect(res.status).toBe(StatusCodes.ACCEPTED);
-    const responseBody = (await res.json()) as { requestId: string };
+    const responseBody = (await res.json()) as { requestId: string; deploymentId: string };
     expect(responseBody.requestId).toEqual(expect.any(String));
+    expect(responseBody.deploymentId).toBe(responseBody.requestId);
 
     expect(captured).toHaveLength(1);
     const request = capturedAt(captured, 0);
@@ -141,27 +118,32 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     expect(outcome.intent.audience).toBe(env.INTENT_AUDIENCE);
   });
 
-  it("should mint destroy intents through the same route", async () => {
-    const { intentFetch, captured } = acceptingIntentFetch();
-    const app = organizerApp(adminPayload(), intentFetch);
+  it("should mint destroy intents that carry the original deploymentId", async () => {
+    const { fetchImpl, captured } = captureFetch(acceptedIngressResponse);
+    const app = organizerApp(adminPayload(), fetchImpl);
     const { eventId, teamId } = await createEventAndTeam(app);
 
     const res = await app.request(
       `https://control.example/v1/admin/events/${eventId}/deploy-intents`,
-      json("POST", deployBody(teamId, { action: "destroy" })),
+      json("POST", deployBody(teamId, { action: "destroy", deploymentId: "job-original" })),
       envWithSecret,
     );
 
     expect(res.status).toBe(StatusCodes.ACCEPTED);
+    await expect(res.json()).resolves.toEqual({
+      requestId: expect.any(String),
+      deploymentId: "job-original",
+    });
     const { token } = JSON.parse(String(capturedAt(captured, 0).init.body)) as { token: string };
     const outcome = await verifyIntent(token, { resolveSecret: () => SECRET });
     if (!outcome.ok) throw new Error(`token did not verify: ${outcome.reason}`);
     expect(outcome.intent.action.type).toBe("destroy");
+    expect(outcome.intent.source.deploymentId).toBe("job-original");
   });
 
   it("should reject malformed commands before anything is signed", async () => {
-    const { intentFetch, captured } = acceptingIntentFetch();
-    const app = organizerApp(adminPayload(), intentFetch);
+    const { fetchImpl, captured } = captureFetch(acceptedIngressResponse);
+    const app = organizerApp(adminPayload(), fetchImpl);
     const { eventId, teamId } = await createEventAndTeam(app);
     const url = `https://control.example/v1/admin/events/${eventId}/deploy-intents`;
 
@@ -171,6 +153,9 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
       deployBody(teamId, { awsAccountId: "1234" }),
       deployBody(teamId, { region: "AP-NORTHEAST-1" }),
       deployBody(teamId, { teamId: "" }),
+      // deploymentId contract: a deploy must not supply it; a destroy must.
+      deployBody(teamId, { deploymentId: "job-1" }),
+      deployBody(teamId, { action: "destroy" }),
     ];
     for (const body of cases) {
       const res = await app.request(url, json("POST", body), envWithSecret);
@@ -180,8 +165,8 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
   });
 
   it("should return 404 when the team does not belong to the organizer's tenant and event", async () => {
-    const { intentFetch, captured } = acceptingIntentFetch();
-    const app = organizerApp(adminPayload(), intentFetch);
+    const { fetchImpl, captured } = captureFetch(acceptedIngressResponse);
+    const app = organizerApp(adminPayload(), fetchImpl);
     const { eventId, teamId } = await createEventAndTeam(app);
 
     // Unknown team in the organizer's own event.
@@ -224,8 +209,8 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
   });
 
   it("should deny read-only organizer roles", async () => {
-    const { intentFetch, captured } = acceptingIntentFetch();
-    const app = organizerApp(adminPayload(["TenantViewer"]), intentFetch);
+    const { fetchImpl, captured } = captureFetch(acceptedIngressResponse);
+    const app = organizerApp(adminPayload(["TenantViewer"]), fetchImpl);
     const res = await app.request(
       "https://control.example/v1/admin/events/some-event/deploy-intents",
       json("POST", deployBody("some-team")),
@@ -235,14 +220,36 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     expect(captured).toHaveLength(0);
   });
 
-  it("should map an ingress rejection to 502 with the ingress' stable reason", async () => {
-    const rejectingFetch = vi.fn(
-      async () =>
-        new Response(JSON.stringify({ reason: "intent-unauthorized" }), {
-          status: StatusCodes.UNAUTHORIZED,
+  it("should map an ingress 4xx (rejected command) to 422 with the ingress' stable reason", async () => {
+    const { fetchImpl } = captureFetch(
+      () =>
+        new Response(JSON.stringify({ reason: "unknown-problem-dir" }), {
+          status: StatusCodes.UNPROCESSABLE_ENTITY,
         }),
-    ) as unknown as typeof fetch;
-    const app = organizerApp(adminPayload(), rejectingFetch);
+    );
+    const app = organizerApp(adminPayload(), fetchImpl);
+    const { eventId, teamId } = await createEventAndTeam(app);
+
+    const res = await app.request(
+      `https://control.example/v1/admin/events/${eventId}/deploy-intents`,
+      json("POST", deployBody(teamId)),
+      envWithSecret,
+    );
+    expect(res.status).toBe(StatusCodes.UNPROCESSABLE_ENTITY);
+    await expect(res.json()).resolves.toEqual({
+      error: "deploy intent rejected by ingress",
+      reason: "unknown-problem-dir",
+    });
+  });
+
+  it("should map an ingress 5xx to 502 with the ingress' stable reason", async () => {
+    const { fetchImpl } = captureFetch(
+      () =>
+        new Response(JSON.stringify({ reason: "event-publish-failed" }), {
+          status: StatusCodes.INTERNAL_SERVER_ERROR,
+        }),
+    );
+    const app = organizerApp(adminPayload(), fetchImpl);
     const { eventId, teamId } = await createEventAndTeam(app);
 
     const res = await app.request(
@@ -253,13 +260,32 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     expect(res.status).toBe(StatusCodes.BAD_GATEWAY);
     await expect(res.json()).resolves.toEqual({
       error: "deploy intent rejected by ingress",
-      reason: "intent-unauthorized",
+      reason: "event-publish-failed",
+    });
+  });
+
+  it("should map an unreachable ingress to 502 ingress-unreachable (not a generic 500)", async () => {
+    const failingFetch = vi.fn(async () => {
+      throw new Error("connection reset");
+    }) as unknown as typeof fetch;
+    const app = organizerApp(adminPayload(), failingFetch);
+    const { eventId, teamId } = await createEventAndTeam(app);
+
+    const res = await app.request(
+      `https://control.example/v1/admin/events/${eventId}/deploy-intents`,
+      json("POST", deployBody(teamId)),
+      envWithSecret,
+    );
+    expect(res.status).toBe(StatusCodes.BAD_GATEWAY);
+    await expect(res.json()).resolves.toEqual({
+      error: "deploy intent rejected by ingress",
+      reason: "ingress-unreachable",
     });
   });
 
   it("should fail loudly (500) when the signing secret binding is absent", async () => {
-    const { intentFetch, captured } = acceptingIntentFetch();
-    const app = organizerApp(adminPayload(), intentFetch);
+    const { fetchImpl, captured } = captureFetch(acceptedIngressResponse);
+    const app = organizerApp(adminPayload(), fetchImpl);
     const { eventId, teamId } = await createEventAndTeam(app);
 
     const res = await app.request(

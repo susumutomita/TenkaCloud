@@ -11,7 +11,8 @@ import {
   teamBearerMiddleware,
 } from "./auth.js";
 import {
-  type DeployIntentAction,
+  type DeployIntentCommandInput,
+  DeployIntentCommandInputSchema,
   intentGatewayFromEnvironment,
   issueDeployIntentCommand,
 } from "./deploy-intents.js";
@@ -20,13 +21,6 @@ import type { AppEnvironment } from "./types.js";
 
 const MUTATING_ROLES = ["TenantAdmin", "TenantOperator"] as const;
 const READING_ROLES = [...MUTATING_ROLES, "TenantViewer"] as const;
-
-const DEPLOY_INTENT_ACTIONS: readonly DeployIntentAction[] = ["deploy", "destroy"];
-// These mirror the frozen DeployCreate/DeleteRequested detail schema on the AWS
-// side, so a command the ingress would reject fails here before it is signed.
-const PROBLEM_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
-const AWS_ACCOUNT_ID_PATTERN = /^\d{12}$/;
-const AWS_REGION_PATTERN = /^[a-z]{2}-[a-z]+-\d+$/;
 
 interface AppOptions {
   readonly organizerJwt?: MiddlewareHandler<AppEnvironment>;
@@ -82,45 +76,15 @@ function eventInput(body: JsonObject): EventInput {
   };
 }
 
-interface DeployIntentInput {
-  readonly action: DeployIntentAction;
-  readonly teamId: string;
-  readonly problemId: string;
-  readonly awsAccountId: string;
-  readonly region: string;
-}
-
-function isDeployIntentAction(value: string): value is DeployIntentAction {
-  return (DEPLOY_INTENT_ACTIONS as readonly string[]).includes(value);
-}
-
-function patternString(body: JsonObject, key: string, pattern: RegExp, hint: string): string {
-  const value = requiredString(body, key);
-  if (!pattern.test(value)) {
-    throw new HTTPException(StatusCodes.BAD_REQUEST, { message: `${key} must be ${hint}` });
+function deployIntentInput(body: JsonObject): DeployIntentCommandInput {
+  const parsed = DeployIntentCommandInputSchema.safeParse(body);
+  if (!parsed.success) {
+    const message = parsed.error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join("; ");
+    throw new HTTPException(StatusCodes.BAD_REQUEST, { message });
   }
-  return value;
-}
-
-function deployIntentInput(body: JsonObject): DeployIntentInput {
-  const action = requiredString(body, "action");
-  if (!isDeployIntentAction(action)) {
-    throw new HTTPException(StatusCodes.BAD_REQUEST, {
-      message: 'action must be "deploy" or "destroy"',
-    });
-  }
-  return {
-    action,
-    teamId: requiredString(body, "teamId"),
-    problemId: patternString(body, "problemId", PROBLEM_ID_PATTERN, "a lowercase problem slug"),
-    awsAccountId: patternString(
-      body,
-      "awsAccountId",
-      AWS_ACCOUNT_ID_PATTERN,
-      "a 12-digit AWS account id",
-    ),
-    region: patternString(body, "region", AWS_REGION_PATTERN, "an AWS region name"),
-  };
+  return parsed.data;
 }
 
 function checkpointInput(body: JsonObject): CheckpointInput {
@@ -270,12 +234,22 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
             reason: outcome.reason,
           }),
         );
+        // An ingress 4xx means the organizer's command itself was rejected
+        // (correctable input, e.g. an unknown problemId) — that is not a
+        // gateway failure. Ingress 5xx and unreachable-transport map to 502.
+        const commandRejected =
+          outcome.ingressStatus !== undefined &&
+          outcome.ingressStatus >= StatusCodes.BAD_REQUEST &&
+          outcome.ingressStatus < StatusCodes.INTERNAL_SERVER_ERROR;
         return context.json(
           { error: "deploy intent rejected by ingress", reason: outcome.reason },
-          StatusCodes.BAD_GATEWAY,
+          commandRejected ? StatusCodes.UNPROCESSABLE_ENTITY : StatusCodes.BAD_GATEWAY,
         );
       }
-      return context.json({ requestId: outcome.requestId }, StatusCodes.ACCEPTED);
+      return context.json(
+        { requestId: outcome.requestId, deploymentId: outcome.deploymentId },
+        StatusCodes.ACCEPTED,
+      );
     },
   );
 

@@ -3,12 +3,19 @@ import { StatusCodes } from "http-status-codes";
 import { describe, expect, it, vi } from "vitest";
 import {
   type DeployIntentCommand,
+  DeployIntentCommandInputSchema,
   INTENT_TTL_SECONDS,
   INTENT_WORKLOAD_ID,
   type IntentGateway,
   intentGatewayFromEnvironment,
   issueDeployIntentCommand,
 } from "../src/deploy-intents.js";
+import {
+  acceptedIngressResponse,
+  type CapturedRequest,
+  capturedAt,
+  captureFetch,
+} from "./helpers/intent-capture.js";
 
 const SECRET_TEXT = "worker-intent-signing-secret 0123456789";
 const SECRET = new TextEncoder().encode(SECRET_TEXT);
@@ -28,42 +35,21 @@ function command(overrides: Partial<DeployIntentCommand> = {}): DeployIntentComm
   };
 }
 
-interface CapturedRequest {
-  readonly url: string;
-  readonly init: RequestInit;
-}
-
 function gatewayWithResponse(
   response: () => Response,
   overrides: Partial<IntentGateway> = {},
 ): { gateway: IntentGateway; captured: CapturedRequest[] } {
-  const captured: CapturedRequest[] = [];
-  const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    captured.push({ url: String(input), init: init ?? {} });
-    return response();
-  });
+  const { fetchImpl, captured } = captureFetch(response);
   return {
     gateway: {
       ingressUrl: INGRESS_URL,
       audience: AUDIENCE,
       signingSecret: SECRET,
-      fetchImpl: fetchImpl as unknown as typeof fetch,
+      fetchImpl,
       ...overrides,
     },
     captured,
   };
-}
-
-function accepted(): Response {
-  return new Response(JSON.stringify({ requestId: "ignored-by-worker" }), {
-    status: StatusCodes.ACCEPTED,
-  });
-}
-
-function capturedAt(captured: CapturedRequest[], index: number): CapturedRequest {
-  const request = captured[index];
-  if (!request) throw new Error(`no captured request at index ${index}`);
-  return request;
 }
 
 async function verifyCapturedToken(captured: CapturedRequest[]) {
@@ -76,10 +62,14 @@ async function verifyCapturedToken(captured: CapturedRequest[]) {
 
 describe("issueDeployIntentCommand (ADR-049 Phase 4 / #2293)", () => {
   it("should POST a signed deploy intent the ingress verify-side accepts", async () => {
-    const { gateway, captured } = gatewayWithResponse(accepted);
+    const { gateway, captured } = gatewayWithResponse(acceptedIngressResponse);
     const outcome = await issueDeployIntentCommand(command(), gateway);
 
-    expect(outcome).toEqual({ accepted: true, requestId: expect.any(String) });
+    expect(outcome).toEqual({
+      accepted: true,
+      requestId: expect.any(String),
+      deploymentId: expect.any(String),
+    });
     const request = capturedAt(captured, 0);
     expect(request.url).toBe(INGRESS_URL);
     expect(request.init.method).toBe("POST");
@@ -110,26 +100,40 @@ describe("issueDeployIntentCommand (ADR-049 Phase 4 / #2293)", () => {
     expect(intent.constraints.allowPrivilegeEscalation).toBe(false);
   });
 
-  it("should return the minted requestId as the deployment identity (jobId contract)", async () => {
-    const { gateway, captured } = gatewayWithResponse(accepted);
+  it("should mint deploymentId == requestId for a deploy (jobId contract)", async () => {
+    const { gateway, captured } = gatewayWithResponse(acceptedIngressResponse);
     const outcome = await issueDeployIntentCommand(command(), gateway);
     const intent = await verifyCapturedToken(captured);
     // The ingress derives jobId from source.deploymentId ?? requestId; pinning
     // deploymentId === requestId keeps one identity across both planes.
-    expect(outcome).toEqual({ accepted: true, requestId: intent.requestId });
+    expect(outcome).toEqual({
+      accepted: true,
+      requestId: intent.requestId,
+      deploymentId: intent.requestId,
+    });
     expect(intent.source.deploymentId).toBe(intent.requestId);
   });
 
-  it("should mint a destroy intent with action.type=destroy and the DeleteStack scope", async () => {
-    const { gateway, captured } = gatewayWithResponse(accepted);
-    await issueDeployIntentCommand(command({ action: "destroy" }), gateway);
+  it("should carry the caller-supplied deploymentId on a destroy (targets the original job)", async () => {
+    const { gateway, captured } = gatewayWithResponse(acceptedIngressResponse);
+    const outcome = await issueDeployIntentCommand(
+      command({ action: "destroy", deploymentId: "job-original" }),
+      gateway,
+    );
     const intent = await verifyCapturedToken(captured);
     expect(intent.action.type).toBe("destroy");
     expect(intent.action.requestedScopes).toEqual(["cloudformation:DeleteStack"]);
+    expect(intent.source.deploymentId).toBe("job-original");
+    expect(intent.requestId).not.toBe("job-original");
+    expect(outcome).toEqual({
+      accepted: true,
+      requestId: intent.requestId,
+      deploymentId: "job-original",
+    });
   });
 
   it("should mint a fresh requestId and nonce per command (no replayable token reuse)", async () => {
-    const { gateway, captured } = gatewayWithResponse(accepted);
+    const { gateway, captured } = gatewayWithResponse(acceptedIngressResponse);
     await issueDeployIntentCommand(command(), gateway);
     await issueDeployIntentCommand(command(), gateway);
     const first = JSON.parse(String(capturedAt(captured, 0).init.body)) as { token: string };
@@ -142,13 +146,15 @@ describe("issueDeployIntentCommand (ADR-049 Phase 4 / #2293)", () => {
   });
 
   it("should omit the audience claim when the gateway has none configured", async () => {
-    const { gateway, captured } = gatewayWithResponse(accepted, { audience: undefined });
+    const { gateway, captured } = gatewayWithResponse(acceptedIngressResponse, {
+      audience: undefined,
+    });
     await issueDeployIntentCommand(command(), gateway);
     const intent = await verifyCapturedToken(captured);
     expect("audience" in intent).toBe(false);
   });
 
-  it("should surface the ingress' stable reason code on a rejection", async () => {
+  it("should surface the ingress' stable reason code and status on a rejection", async () => {
     const { gateway } = gatewayWithResponse(
       () =>
         new Response(JSON.stringify({ reason: "tenant-not-allowed" }), {
@@ -185,6 +191,60 @@ describe("issueDeployIntentCommand (ADR-049 Phase 4 / #2293)", () => {
       ingressStatus: StatusCodes.BAD_REQUEST,
       reason: "ingress-rejected",
     });
+  });
+
+  it("should report a transport-level fetch failure as ingress-unreachable (no ingressStatus)", async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("connection reset");
+    }) as unknown as typeof fetch;
+    const gateway: IntentGateway = {
+      ingressUrl: INGRESS_URL,
+      audience: AUDIENCE,
+      signingSecret: SECRET,
+      fetchImpl,
+    };
+    const outcome = await issueDeployIntentCommand(command(), gateway);
+    expect(outcome).toEqual({ accepted: false, reason: "ingress-unreachable" });
+
+    // Non-Error throwables collapse to the same stable outcome.
+    const throwingString = vi.fn(async () => {
+      throw "socket hang up";
+    }) as unknown as typeof fetch;
+    const stringOutcome = await issueDeployIntentCommand(command(), {
+      ...gateway,
+      fetchImpl: throwingString,
+    });
+    expect(stringOutcome).toEqual({ accepted: false, reason: "ingress-unreachable" });
+  });
+});
+
+describe("DeployIntentCommandInputSchema (ADR-049 Phase 4 / #2293)", () => {
+  const base = {
+    action: "deploy",
+    teamId: "team-1",
+    problemId: "hello-world",
+    awsAccountId: "111111111111",
+    region: "ap-northeast-1",
+  };
+
+  it("should accept a deploy without deploymentId and a destroy with one", () => {
+    expect(DeployIntentCommandInputSchema.safeParse(base).success).toBe(true);
+    expect(
+      DeployIntentCommandInputSchema.safeParse({
+        ...base,
+        action: "destroy",
+        deploymentId: "job-1",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("should reject a deploy that supplies deploymentId and a destroy that omits it", () => {
+    expect(
+      DeployIntentCommandInputSchema.safeParse({ ...base, deploymentId: "job-1" }).success,
+    ).toBe(false);
+    expect(DeployIntentCommandInputSchema.safeParse({ ...base, action: "destroy" }).success).toBe(
+      false,
+    );
   });
 });
 

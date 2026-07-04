@@ -90,10 +90,14 @@ per environment:
   writing the new value to SSM first, then updating the Workers secret.
 
 The Worker validates the command shape against the frozen deploy detail contract
-(problem slug, 12-digit AWS account, region), confirms the team belongs to the
-organizer's tenant and event, and returns `202` with the minted `requestId`
-(equal to the `jobId` the ingress re-emits). An ingress rejection surfaces as
-`502` with the ingress' stable reason code.
+(problem slug, 12-digit AWS account, region; shared patterns exported by
+trust-bridge), confirms the team belongs to the organizer's tenant and event,
+and returns `202` with `requestId` and `deploymentId`. For a deploy the two are
+equal and become the `jobId` the ingress re-emits; keep the `deploymentId` — a
+destroy command must send it back so the delete targets the same deployment
+identity. An ingress 4xx (the command itself was rejected, e.g. an unknown
+problem) surfaces as `422` with the ingress' stable reason code; an ingress 5xx
+or an unreachable ingress surfaces as `502`.
 
 ## Event-month plan runbook
 

@@ -2,9 +2,13 @@ import {
   type BuildIntentParams,
   buildDeployIntent,
   buildDestroyIntent,
+  DEPLOY_AWS_ACCOUNT_ID_PATTERN,
+  DEPLOY_AWS_REGION_PATTERN,
+  DEPLOY_PROBLEM_ID_PATTERN,
   issueSignedIntentRequest,
 } from "@TenkaCloud/trust-bridge";
 import { StatusCodes } from "http-status-codes";
+import { z } from "zod";
 
 /**
  * ADR-049 Phase 4 (Issue #2293) — Workers-side signed-intent issuance.
@@ -23,7 +27,44 @@ export const INTENT_TTL_SECONDS = 300;
 /** The workload identity claimed in `source.workloadId` for intents minted here. */
 export const INTENT_WORKLOAD_ID = "always-on-control-plane";
 
-export type DeployIntentAction = "deploy" | "destroy";
+/**
+ * Organizer command body. Identifier shapes mirror the frozen deploy detail
+ * schema (via the trust-bridge patterns), so a command the ingress would reject
+ * fails fast before a signature + nonce is spent. `deploymentId` is the identity
+ * a deploy 202 returned; a destroy MUST reference it so the downstream jobId
+ * matches the deployment row being destroyed (a deploy must not supply one —
+ * the Worker mints it).
+ */
+export const DeployIntentCommandInputSchema = z
+  .object({
+    action: z.enum(["deploy", "destroy"]),
+    teamId: z.string().min(1),
+    problemId: z.string().regex(DEPLOY_PROBLEM_ID_PATTERN, "must be a lowercase problem slug"),
+    awsAccountId: z
+      .string()
+      .regex(DEPLOY_AWS_ACCOUNT_ID_PATTERN, "must be a 12-digit AWS account id"),
+    region: z.string().regex(DEPLOY_AWS_REGION_PATTERN, "must be an AWS region name"),
+    deploymentId: z.string().min(1).optional(),
+  })
+  .superRefine((input, ctx) => {
+    if (input.action === "deploy" && input.deploymentId !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["deploymentId"],
+        message: "must be omitted for deploy commands (the Worker mints it)",
+      });
+    }
+    if (input.action === "destroy" && input.deploymentId === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["deploymentId"],
+        message: "destroy requires the deploymentId returned by the original deploy",
+      });
+    }
+  });
+
+export type DeployIntentCommandInput = z.infer<typeof DeployIntentCommandInputSchema>;
+export type DeployIntentAction = DeployIntentCommandInput["action"];
 
 /** CloudFormation scopes requested per action; the AWS side enforces actual IAM. */
 const ACTION_SCOPES: Record<DeployIntentAction, readonly string[]> = {
@@ -31,15 +72,10 @@ const ACTION_SCOPES: Record<DeployIntentAction, readonly string[]> = {
   destroy: ["cloudformation:DeleteStack"],
 };
 
-export interface DeployIntentCommand {
-  readonly action: DeployIntentAction;
+export type DeployIntentCommand = DeployIntentCommandInput & {
   readonly tenantId: string;
   readonly eventId: string;
-  readonly teamId: string;
-  readonly problemId: string;
-  readonly awsAccountId: string;
-  readonly region: string;
-}
+};
 
 export interface IntentGateway {
   readonly ingressUrl: string;
@@ -49,8 +85,8 @@ export interface IntentGateway {
 }
 
 export type DeployIntentOutcome =
-  | { readonly accepted: true; readonly requestId: string }
-  | { readonly accepted: false; readonly ingressStatus: number; readonly reason: string };
+  | { readonly accepted: true; readonly requestId: string; readonly deploymentId: string }
+  | { readonly accepted: false; readonly ingressStatus?: number; readonly reason: string };
 
 /** Bindings consumed here; `INTENT_SIGNING_SECRET` is a Workers secret, not a var. */
 export interface IntentEnvironment {
@@ -99,20 +135,23 @@ async function ingressReason(response: Response): Promise<string> {
 }
 
 /**
- * Mint, sign, and POST one deploy/destroy intent. `deploymentId` is pinned to the
- * minted `requestId`, so the jobId the ingress derives equals the requestId returned
- * to the organizer — one identity across both planes.
+ * Mint, sign, and POST one deploy/destroy intent. For a deploy, `deploymentId`
+ * is pinned to the minted `requestId`, so the jobId the ingress derives equals
+ * the requestId returned to the organizer. For a destroy, the caller-supplied
+ * `deploymentId` (from the original deploy 202) is carried instead, so the
+ * downstream delete marks the SAME deployment row — never a fresh phantom id.
  */
 export async function issueDeployIntentCommand(
   command: DeployIntentCommand,
   gateway: IntentGateway,
 ): Promise<DeployIntentOutcome> {
   const requestId = crypto.randomUUID();
+  const deploymentId = command.deploymentId ?? requestId;
   const params: BuildIntentParams = {
     tenantId: command.tenantId,
     workloadId: INTENT_WORKLOAD_ID,
     problemId: command.problemId,
-    deploymentId: requestId,
+    deploymentId,
     teamId: command.teamId,
     eventId: command.eventId,
     providerAccountRef: command.awsAccountId,
@@ -128,13 +167,24 @@ export async function issueDeployIntentCommand(
     command.action === "deploy" ? buildDeployIntent(params) : buildDestroyIntent(params);
   const { body } = issueSignedIntentRequest(intent, { secret: gateway.signingSecret });
 
-  const response = await gateway.fetchImpl(gateway.ingressUrl, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body,
-  });
+  let response: Response;
+  try {
+    response = await gateway.fetchImpl(gateway.ingressUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "always-on.deploy-intent.ingress-unreachable",
+        reason: error instanceof Error ? error.message : "unknown",
+      }),
+    );
+    return { accepted: false, reason: "ingress-unreachable" };
+  }
   if (response.status === StatusCodes.ACCEPTED) {
-    return { accepted: true, requestId };
+    return { accepted: true, requestId, deploymentId };
   }
   return {
     accepted: false,

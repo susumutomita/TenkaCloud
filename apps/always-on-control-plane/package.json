@@ -16,7 +16,8 @@
   "dependencies": {
     "@TenkaCloud/trust-bridge": "workspace:*",
     "hono": "^4.12.27",
-    "http-status-codes": "^2.3.0"
+    "http-status-codes": "^2.3.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.18.0",

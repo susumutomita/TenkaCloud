@@ -85,6 +85,11 @@ export type {
   DdbNonceStoreOptions,
 } from "./ddb-nonce-store.js";
 export { DdbNonceStore } from "./ddb-nonce-store.js";
+export {
+  DEPLOY_AWS_ACCOUNT_ID_PATTERN,
+  DEPLOY_AWS_REGION_PATTERN,
+  DEPLOY_PROBLEM_ID_PATTERN,
+} from "./deploy-command-patterns.js";
 export type {
   GcpAdapterOptions,
   GcpCredential,
