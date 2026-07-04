@@ -84,7 +84,12 @@ export function buildIntentIngressApp(options: BuildIntentIngressAppOptions): cd
   );
 
   const eventBusArn = nonEmpty(env.CDK_PARAM_EVENT_BUS_ARN);
-  const expectedAudience = nonEmpty(env.CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE);
+  // #2365: audience pinning is REQUIRED, not optional. The ingress Function URL is
+  // authType:NONE, so without an expected audience any validly-signed intent is accepted
+  // (fail-open). Requiring it here means the ingress can never be deployed unpinned; the
+  // value must equal the control plane's INTENT_AUDIENCE (Worker) so a token minted for a
+  // different plane is rejected. Tenant/event allowlists remain optional defense-in-depth.
+  const expectedAudience = requireEnv(env, "CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE");
   const allowedTenantIds = parseCsv(env.CDK_PARAM_INTENT_INGRESS_ALLOWED_TENANT_IDS);
   const allowedEventIds = parseCsv(env.CDK_PARAM_INTENT_INGRESS_ALLOWED_EVENT_IDS);
 
@@ -95,9 +100,9 @@ export function buildIntentIngressApp(options: BuildIntentIngressAppOptions): cd
     competitorAccountsTableName,
     competitorAccountsTableArn,
     environmentName: environment,
+    expectedAudience,
     // 省略時は stack 側が local bus を作る (= standalone)。渡せば既存 deploy bus へ re-emit。
     ...(eventBusArn ? { eventBusArn } : {}),
-    ...(expectedAudience ? { expectedAudience } : {}),
     ...(allowedTenantIds ? { allowedTenantIds } : {}),
     ...(allowedEventIds ? { allowedEventIds } : {}),
   });
