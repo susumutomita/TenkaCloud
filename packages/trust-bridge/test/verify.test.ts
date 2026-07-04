@@ -1,6 +1,7 @@
 import { createHmac, randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { signIntent } from "../src/jws.js";
+import { signIntentEs256 } from "../src/jws-es256.js";
 import { type CloudActionIntent, INTENT_VERSION } from "../src/schema.js";
 import { type NonceStore, verifyIntent } from "../src/verify.js";
 
@@ -48,6 +49,37 @@ function craftToken(header: unknown, payload: string, secret: Uint8Array): strin
 }
 
 describe("verifyIntent (#795 Phase 1)", () => {
+  it("should dispatch ES256 to the public-key verifier and return a branded intent", async () => {
+    const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify",
+    ]);
+    const privateKey = await crypto.subtle.exportKey("jwk", pair.privateKey);
+    const publicKey = await crypto.subtle.exportKey("jwk", pair.publicKey);
+    const token = await signIntentEs256(intent(), { privateKey });
+    const result = await verifyIntent(token, {
+      resolvePublicKey: () => publicKey,
+      now: () => new Date("2026-05-15T19:00:00.000Z"),
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.intent.requestId).toBe("req-v-1");
+  });
+
+  it("should map ES256 without a public-key resolver to jws-unknown-algorithm", async () => {
+    const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify",
+    ]);
+    const privateKey = await crypto.subtle.exportKey("jwk", pair.privateKey);
+    const token = await signIntentEs256(intent(), { privateKey });
+    const result = await verifyIntent(token, {
+      now: () => new Date("2026-05-15T19:00:00.000Z"),
+    });
+
+    expect(result).toEqual({ ok: false, reason: "jws-unknown-algorithm" });
+  });
+
   it("should return ok=true with a branded type for a valid token, future expiresAt, and unused nonce", async () => {
     const secret = randomBytes(32);
     const token = signIntent(intent(), { secret });

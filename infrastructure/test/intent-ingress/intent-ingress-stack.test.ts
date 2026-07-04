@@ -10,6 +10,7 @@ function synth(overrides: Partial<IntentIngressStackProps> = {}): Template {
   const app = new App();
   const stack = new IntentIngressStack(app, "TestIntentIngress", {
     verifySecretParameterName: "/tenkacloud/intent-verify-secret",
+    verifyPublicKeyParameterName: "/tenkacloud/intent-verify-public-jwk",
     expectedAudience: "plane://tenka/ingress",
     allowedTenantIds: ["tenant-a"],
     allowedEventIds: ["event-a"],
@@ -37,7 +38,7 @@ describe("IntentIngressStack (ADR-049 Phase 4 / #2293)", () => {
     });
   });
 
-  it("should grant ssm:GetParameter scoped to the verify-secret parameter", () => {
+  it("should grant ssm:GetParameter scoped to both verification parameters", () => {
     synth().hasResourceProperties("AWS::IAM::Policy", {
       PolicyDocument: Match.objectLike({
         Statement: Match.arrayWith([
@@ -45,6 +46,12 @@ describe("IntentIngressStack (ADR-049 Phase 4 / #2293)", () => {
             Action: "ssm:GetParameter",
             Resource: Match.stringLikeRegexp(
               "arn:aws:ssm:\\*:111111111111:parameter/tenkacloud/intent-verify-secret",
+            ),
+          }),
+          Match.objectLike({
+            Action: "ssm:GetParameter",
+            Resource: Match.stringLikeRegexp(
+              "arn:aws:ssm:\\*:111111111111:parameter/tenkacloud/intent-verify-public-jwk",
             ),
           }),
         ]),
@@ -88,6 +95,7 @@ describe("IntentIngressStack (ADR-049 Phase 4 / #2293)", () => {
       Environment: {
         Variables: Match.objectLike({
           VERIFY_SECRET_PARAM: "/tenkacloud/intent-verify-secret",
+          VERIFY_PUBLIC_KEY_PARAM: "/tenkacloud/intent-verify-public-jwk",
           EXPECTED_AUDIENCE: "plane://tenka/ingress",
           ALLOWED_TENANT_IDS: "tenant-a",
           ALLOWED_EVENT_IDS: "event-a",
@@ -115,6 +123,7 @@ describe("IntentIngressStack (ADR-049 Phase 4 / #2293)", () => {
     const app = new App();
     const stack = new IntentIngressStack(app, "TestIntentIngressMinimal", {
       verifySecretParameterName: "/tenkacloud/intent-verify-secret",
+      verifyPublicKeyParameterName: "/tenkacloud/intent-verify-public-jwk",
       problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
       competitorAccountsTableName: "CompetitorAccounts",
       competitorAccountsTableArn:
@@ -126,6 +135,7 @@ describe("IntentIngressStack (ADR-049 Phase 4 / #2293)", () => {
       Environment: {
         Variables: Match.objectLike({
           VERIFY_SECRET_PARAM: "/tenkacloud/intent-verify-secret",
+          VERIFY_PUBLIC_KEY_PARAM: "/tenkacloud/intent-verify-public-jwk",
           EXPECTED_AUDIENCE: Match.absent(),
           ALLOWED_TENANT_IDS: Match.absent(),
           ALLOWED_EVENT_IDS: Match.absent(),
@@ -152,6 +162,23 @@ describe("IntentIngressStack (ADR-049 Phase 4 / #2293)", () => {
         }),
       },
     );
+  });
+
+  it("should prepend a slash to the SSM ARN when the public-key name has no leading slash", () => {
+    synth({
+      verifyPublicKeyParameterName: "tenkacloud/intent-verify-public-jwk",
+    }).hasResourceProperties("AWS::IAM::Policy", {
+      PolicyDocument: Match.objectLike({
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Action: "ssm:GetParameter",
+            Resource: Match.stringLikeRegexp(
+              "arn:aws:ssm:\\*:111111111111:parameter/tenkacloud/intent-verify-public-jwk",
+            ),
+          }),
+        ]),
+      }),
+    });
   });
 
   it("should not grant the ingress Lambda any sts:AssumeRole (no control-plane trust)", () => {

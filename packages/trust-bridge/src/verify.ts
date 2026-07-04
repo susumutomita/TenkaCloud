@@ -1,6 +1,16 @@
-import { type VerifyOptions, type VerifyOutcome, verifySignature } from "./jws.js";
+import type { webcrypto } from "node:crypto";
+import {
+  base64urlDecode,
+  type JwsHeader,
+  type VerifyOptions,
+  type VerifyOutcome,
+  verifySignature,
+} from "./jws.js";
+import { verifySignatureEs256 } from "./jws-es256.js";
 import type { CloudActionIntent, VerifiedCloudActionIntent } from "./schema.js";
 import { brandVerified, parseCloudActionIntent } from "./schema.js";
+
+type JsonWebKey = webcrypto.JsonWebKey;
 
 /**
  * Issue #795 / ADR-017 Phase 1: 上位 verify entrypoint。
@@ -54,8 +64,39 @@ export interface IntentVerifyError {
 export type IntentVerifyOutcome = IntentVerifyOk | IntentVerifyError;
 
 export interface IntentVerifyOptions extends VerifyOptions {
+  readonly resolvePublicKey?: (
+    header: JwsHeader,
+  ) => JsonWebKey | undefined | Promise<JsonWebKey | undefined>;
   readonly nonceStore?: NonceStore;
   readonly now?: () => Date;
+}
+
+function peekAlgorithm(token: string): string | undefined {
+  const parts = token.split(".");
+  if (parts.length !== 3) return undefined;
+  const [headerB64] = parts as [string, string, string];
+  try {
+    const headerJson = new TextDecoder().decode(base64urlDecode(headerB64));
+    return (JSON.parse(headerJson) as { alg?: string }).alg;
+  } catch {
+    return undefined;
+  }
+}
+
+async function verifyJws(token: string, options: IntentVerifyOptions): Promise<VerifyOutcome> {
+  const algorithm = peekAlgorithm(token);
+  if (algorithm === undefined) {
+    return { ok: false, reason: "malformed-token" };
+  }
+  if (algorithm !== "ES256") {
+    return verifySignature(token, options);
+  }
+  if (!options.resolvePublicKey) {
+    return { ok: false, reason: "unknown-algorithm" };
+  }
+  return verifySignatureEs256(token, {
+    resolvePublicKey: options.resolvePublicKey,
+  });
 }
 
 function mapJwsReason(reason: VerifyOutcome & { ok: false }): IntentVerifyFailureReason {
@@ -77,7 +118,7 @@ export async function verifyIntent(
   token: string,
   options: IntentVerifyOptions,
 ): Promise<IntentVerifyOutcome> {
-  const jwsOutcome = verifySignature(token, options);
+  const jwsOutcome = await verifyJws(token, options);
   if (!jwsOutcome.ok) {
     return { ok: false, reason: mapJwsReason(jwsOutcome) };
   }

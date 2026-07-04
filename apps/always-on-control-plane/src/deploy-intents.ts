@@ -5,7 +5,7 @@ import {
   DEPLOY_AWS_ACCOUNT_ID_PATTERN,
   DEPLOY_AWS_REGION_PATTERN,
   DEPLOY_PROBLEM_ID_PATTERN,
-  issueSignedIntentRequest,
+  issueSignedIntentRequestEs256,
 } from "@TenkaCloud/trust-bridge";
 import { StatusCodes } from "http-status-codes";
 import { z } from "zod";
@@ -17,8 +17,7 @@ import { z } from "zod";
  * and POSTs it to the AWS intent-ingress Function URL. The intent carries only
  * identifiers — never `ExternalId` or other cross-account secrets; the AWS side
  * resolves those from SSM. The signing key is the Workers secret
- * `INTENT_SIGNING_SECRET` and must hold the same value as the SSM SecureString the
- * ingress verifies with (trust-bridge JWS is HS256 in Phase 1).
+ * `INTENT_SIGNING_PRIVATE_JWK`; AWS receives only the matching public JWK.
  */
 
 /** Validity window for a minted intent; the ingress rejects anything older. */
@@ -80,7 +79,7 @@ export type DeployIntentCommand = DeployIntentCommandInput & {
 export interface IntentGateway {
   readonly ingressUrl: string;
   readonly audience?: string;
-  readonly signingSecret: Uint8Array;
+  readonly signingPrivateKey: JsonWebKey;
   readonly fetchImpl: typeof fetch;
 }
 
@@ -88,11 +87,11 @@ export type DeployIntentOutcome =
   | { readonly accepted: true; readonly requestId: string; readonly deploymentId: string }
   | { readonly accepted: false; readonly ingressStatus?: number; readonly reason: string };
 
-/** Bindings consumed here; `INTENT_SIGNING_SECRET` is a Workers secret, not a var. */
+/** Bindings consumed here; `INTENT_SIGNING_PRIVATE_JWK` is a Workers secret, not a var. */
 export interface IntentEnvironment {
   readonly INTENT_INGRESS_URL?: string;
   readonly INTENT_AUDIENCE?: string;
-  readonly INTENT_SIGNING_SECRET?: string;
+  readonly INTENT_SIGNING_PRIVATE_JWK?: string;
 }
 
 function requiredBinding(value: string | undefined, name: string): string {
@@ -107,12 +106,16 @@ export function intentGatewayFromEnvironment(
   fetchImpl: typeof fetch,
 ): IntentGateway {
   const ingressUrl = requiredBinding(environment.INTENT_INGRESS_URL, "INTENT_INGRESS_URL");
-  const secret = requiredBinding(environment.INTENT_SIGNING_SECRET, "INTENT_SIGNING_SECRET");
+  const privateJwkJson = requiredBinding(
+    environment.INTENT_SIGNING_PRIVATE_JWK,
+    "INTENT_SIGNING_PRIVATE_JWK",
+  );
+  const signingPrivateKey: JsonWebKey = JSON.parse(privateJwkJson);
   const audience = environment.INTENT_AUDIENCE;
   return {
     ingressUrl,
     ...(audience ? { audience } : {}),
-    signingSecret: new TextEncoder().encode(secret),
+    signingPrivateKey,
     fetchImpl,
   };
 }
@@ -165,7 +168,9 @@ export async function issueDeployIntentCommand(
   };
   const intent =
     command.action === "deploy" ? buildDeployIntent(params) : buildDestroyIntent(params);
-  const { body } = issueSignedIntentRequest(intent, { secret: gateway.signingSecret });
+  const { body } = await issueSignedIntentRequestEs256(intent, {
+    privateKey: gateway.signingPrivateKey,
+  });
 
   let response: Response;
   try {

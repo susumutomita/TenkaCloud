@@ -30,6 +30,8 @@ import { LAMBDA_LOG_RETENTION, LAMBDA_NODEJS_RUNTIME } from "../utils/lambda-run
 export interface IntentIngressStackProps extends StackProps {
   /** SSM SecureString parameter holding the JWS verification secret. */
   readonly verifySecretParameterName: string;
+  /** SSM String parameter holding the public ES256 verification JWK. */
+  readonly verifyPublicKeyParameterName: string;
   /**
    * Existing deploy EventBridge bus ARN. When provided the frozen event is re-emitted
    * onto that bus (production wiring); when omitted a local bus is created so the stack
@@ -96,6 +98,7 @@ export class IntentIngressStack extends Stack {
       environment: {
         NONCE_TABLE_NAME: this.nonceTable.tableName,
         VERIFY_SECRET_PARAM: props.verifySecretParameterName,
+        VERIFY_PUBLIC_KEY_PARAM: props.verifyPublicKeyParameterName,
         DEPLOY_EVENT_BUS_NAME: this.eventBus.eventBusName,
         COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTableName,
         DEPLOY_ENVIRONMENT: props.environmentName,
@@ -155,6 +158,20 @@ export class IntentIngressStack extends Stack {
             props.verifySecretParameterName.startsWith("/")
               ? props.verifySecretParameterName
               : `/${props.verifySecretParameterName}`
+          }`,
+        ],
+      }),
+    );
+    // The ES256 public JWK is not secret: read its SSM String parameter without KMS access.
+    fn.addToRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ["ssm:GetParameter"],
+        resources: [
+          `arn:aws:ssm:*:${this.account}:parameter${
+            props.verifyPublicKeyParameterName.startsWith("/")
+              ? props.verifyPublicKeyParameterName
+              : `/${props.verifyPublicKeyParameterName}`
           }`,
         ],
       }),

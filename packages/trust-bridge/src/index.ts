@@ -7,7 +7,7 @@
  * Phase 1 出荷範囲:
  *   - CloudActionIntent schema (zod)
  *   - canonical JSON serialization
- *   - JWS HS256 sign / verify
+ *   - JWS HS256 and ES256 sign / verify
  *   - TTL / notBefore 検証
  *   - nonce hook 抽象
  *   - audit record helper
@@ -108,6 +108,7 @@ export {
   buildDestroyIntent,
   buildIntentRequestBody,
   issueSignedIntentRequest,
+  issueSignedIntentRequestEs256,
 } from "./intent-issuer.js";
 export type {
   JwsHeader,
@@ -116,7 +117,18 @@ export type {
   VerifyOptions,
   VerifyOutcome,
 } from "./jws.js";
-export { signIntent, verifySignature } from "./jws.js";
+export {
+  base64urlDecode,
+  base64urlEncode,
+  signIntent,
+  verifySignature,
+} from "./jws.js";
+export type { Es256SignOptions, Es256VerifyOptions } from "./jws-es256.js";
+export {
+  ALG_ES256,
+  signIntentEs256,
+  verifySignatureEs256,
+} from "./jws-es256.js";
 export type {
   BudgetPolicyEvaluatorOptions,
   CfnTemplateInspectorOptions,

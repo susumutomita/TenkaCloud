@@ -1,6 +1,6 @@
 import { verifyIntent } from "@TenkaCloud/trust-bridge";
 import { StatusCodes } from "http-status-codes";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   type DeployIntentCommand,
   DeployIntentCommandInputSchema,
@@ -18,10 +18,19 @@ import {
   captureFetch,
 } from "./helpers/intent-capture.js";
 
-const SECRET_TEXT = "worker-intent-signing-secret 0123456789";
-const SECRET = new TextEncoder().encode(SECRET_TEXT);
 const INGRESS_URL = "https://ingress.example/intents";
 const AUDIENCE = "plane://tenkacloud/intent-ingress";
+let PRIVATE_JWK: JsonWebKey;
+let PUBLIC_JWK: JsonWebKey;
+
+beforeAll(async () => {
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+    "sign",
+    "verify",
+  ]);
+  PRIVATE_JWK = await crypto.subtle.exportKey("jwk", pair.privateKey);
+  PUBLIC_JWK = await crypto.subtle.exportKey("jwk", pair.publicKey);
+});
 
 function command(overrides: Partial<DeployIntentCommand> = {}): DeployIntentCommand {
   return {
@@ -45,7 +54,7 @@ function gatewayWithResponse(
     gateway: {
       ingressUrl: INGRESS_URL,
       audience: AUDIENCE,
-      signingSecret: SECRET,
+      signingPrivateKey: PRIVATE_JWK,
       fetchImpl,
       ...overrides,
     },
@@ -55,7 +64,9 @@ function gatewayWithResponse(
 
 async function verifyCapturedToken(captured: CapturedRequest[]) {
   expect(captured).toHaveLength(1);
-  const outcome = await verifyIntent(capturedToken(captured, 0), { resolveSecret: () => SECRET });
+  const outcome = await verifyIntent(capturedToken(captured, 0), {
+    resolvePublicKey: () => PUBLIC_JWK,
+  });
   if (!outcome.ok) throw new Error(`token did not verify: ${outcome.reason}`);
   return outcome.intent;
 }
@@ -137,10 +148,10 @@ describe("issueDeployIntentCommand (ADR-049 Phase 4 / #2293)", () => {
     await issueDeployIntentCommand(command(), gateway);
     await issueDeployIntentCommand(command(), gateway);
     const firstIntent = await verifyIntent(capturedToken(captured, 0), {
-      resolveSecret: () => SECRET,
+      resolvePublicKey: () => PUBLIC_JWK,
     });
     const secondIntent = await verifyIntent(capturedToken(captured, 1), {
-      resolveSecret: () => SECRET,
+      resolvePublicKey: () => PUBLIC_JWK,
     });
     if (!firstIntent.ok || !secondIntent.ok) throw new Error("tokens did not verify");
     expect(firstIntent.intent.requestId).not.toBe(secondIntent.intent.requestId);
@@ -202,7 +213,7 @@ describe("issueDeployIntentCommand (ADR-049 Phase 4 / #2293)", () => {
     const gateway: IntentGateway = {
       ingressUrl: INGRESS_URL,
       audience: AUDIENCE,
-      signingSecret: SECRET,
+      signingPrivateKey: PRIVATE_JWK,
       fetchImpl,
     };
     const outcome = await issueDeployIntentCommand(command(), gateway);
@@ -260,13 +271,13 @@ describe("intentGatewayFromEnvironment (ADR-049 Phase 4 / #2293)", () => {
       {
         INTENT_INGRESS_URL: INGRESS_URL,
         INTENT_AUDIENCE: AUDIENCE,
-        INTENT_SIGNING_SECRET: SECRET_TEXT,
+        INTENT_SIGNING_PRIVATE_JWK: JSON.stringify(PRIVATE_JWK),
       },
       fetchImpl,
     );
     expect(gateway.ingressUrl).toBe(INGRESS_URL);
     expect(gateway.audience).toBe(AUDIENCE);
-    expect(gateway.signingSecret).toEqual(SECRET);
+    expect(gateway.signingPrivateKey).toEqual(PRIVATE_JWK);
     expect(gateway.fetchImpl).toBe(fetchImpl);
   });
 
@@ -275,7 +286,7 @@ describe("intentGatewayFromEnvironment (ADR-049 Phase 4 / #2293)", () => {
       {
         INTENT_INGRESS_URL: INGRESS_URL,
         INTENT_AUDIENCE: "",
-        INTENT_SIGNING_SECRET: SECRET_TEXT,
+        INTENT_SIGNING_PRIVATE_JWK: JSON.stringify(PRIVATE_JWK),
       },
       fetchImpl,
     );
@@ -284,19 +295,31 @@ describe("intentGatewayFromEnvironment (ADR-049 Phase 4 / #2293)", () => {
 
   it("should fail loudly when the ingress URL binding is missing", () => {
     expect(() =>
-      intentGatewayFromEnvironment({ INTENT_SIGNING_SECRET: SECRET_TEXT }, fetchImpl),
+      intentGatewayFromEnvironment(
+        { INTENT_SIGNING_PRIVATE_JWK: JSON.stringify(PRIVATE_JWK) },
+        fetchImpl,
+      ),
     ).toThrow(/INTENT_INGRESS_URL is not configured/);
   });
 
-  it("should fail loudly when the signing secret binding is missing or empty", () => {
+  it("should fail loudly when the signing private JWK binding is missing or empty", () => {
     expect(() =>
       intentGatewayFromEnvironment({ INTENT_INGRESS_URL: INGRESS_URL }, fetchImpl),
-    ).toThrow(/INTENT_SIGNING_SECRET is not configured/);
+    ).toThrow(/INTENT_SIGNING_PRIVATE_JWK is not configured/);
     expect(() =>
       intentGatewayFromEnvironment(
-        { INTENT_INGRESS_URL: INGRESS_URL, INTENT_SIGNING_SECRET: "" },
+        { INTENT_INGRESS_URL: INGRESS_URL, INTENT_SIGNING_PRIVATE_JWK: "" },
         fetchImpl,
       ),
-    ).toThrow(/INTENT_SIGNING_SECRET is not configured/);
+    ).toThrow(/INTENT_SIGNING_PRIVATE_JWK is not configured/);
+  });
+
+  it("should fail loudly when the signing private JWK is invalid JSON", () => {
+    expect(() =>
+      intentGatewayFromEnvironment(
+        { INTENT_INGRESS_URL: INGRESS_URL, INTENT_SIGNING_PRIVATE_JWK: "{" },
+        fetchImpl,
+      ),
+    ).toThrow(SyntaxError);
   });
 });

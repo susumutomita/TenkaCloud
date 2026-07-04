@@ -5,8 +5,10 @@ import {
   buildDestroyIntent,
   buildIntentRequestBody,
   issueSignedIntentRequest,
+  issueSignedIntentRequestEs256,
 } from "../src/intent-issuer.js";
 import { verifySignature } from "../src/jws.js";
+import { verifySignatureEs256 } from "../src/jws-es256.js";
 import { INTENT_VERSION, parseCloudActionIntent } from "../src/schema.js";
 
 /** Signing key shared by the sign/verify assertions in this file. */
@@ -167,6 +169,28 @@ describe("issueSignedIntentRequest (ADR-049 Phase 4 / #2293)", () => {
     const intent = buildDeployIntent(fullParams());
     const { token } = issueSignedIntentRequest(intent, { secret: TEST_SECRET, kid: "key-2026" });
     const outcome = verifySignature(token, { resolveSecret: () => TEST_SECRET });
+    expect(outcome.ok && outcome.header.kid).toBe("key-2026");
+  });
+});
+
+describe("issueSignedIntentRequestEs256 (ADR-049 §7 / #2365)", () => {
+  it("should sign the intent and return a public-key-verifiable request body", async () => {
+    const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify",
+    ]);
+    const privateKey = await crypto.subtle.exportKey("jwk", pair.privateKey);
+    const publicKey = await crypto.subtle.exportKey("jwk", pair.publicKey);
+    const intent = buildDeployIntent(fullParams());
+    const { token, body } = await issueSignedIntentRequestEs256(intent, {
+      privateKey,
+      kid: "key-2026",
+    });
+
+    expect(JSON.parse(body)).toEqual({ token });
+    const outcome = await verifySignatureEs256(token, {
+      resolvePublicKey: () => publicKey,
+    });
     expect(outcome.ok && outcome.header.kid).toBe("key-2026");
   });
 });

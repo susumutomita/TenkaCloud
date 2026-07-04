@@ -2,7 +2,7 @@ import { verifyIntent } from "@TenkaCloud/trust-bridge";
 import { env } from "cloudflare:workers";
 import { createMiddleware } from "hono/factory";
 import { StatusCodes } from "http-status-codes";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import type { AppEnvironment } from "../src/types.js";
 import {
@@ -13,8 +13,17 @@ import {
 } from "./helpers/intent-capture.js";
 
 const ROLES_CLAIM = "https://tenkacloud.dev/roles";
-const SECRET_TEXT = "route-test-signing-secret 0123456789";
-const SECRET = new TextEncoder().encode(SECRET_TEXT);
+let PRIVATE_JWK: JsonWebKey;
+let PUBLIC_JWK: JsonWebKey;
+
+beforeAll(async () => {
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+    "sign",
+    "verify",
+  ]);
+  PRIVATE_JWK = await crypto.subtle.exportKey("jwk", pair.privateKey);
+  PUBLIC_JWK = await crypto.subtle.exportKey("jwk", pair.publicKey);
+});
 
 function organizerApp(payload: unknown, intentFetch?: typeof fetch) {
   return createApp({
@@ -51,19 +60,21 @@ function json(method: string, body: unknown): RequestInit {
   };
 }
 
-const envWithSecret = { ...env, INTENT_SIGNING_SECRET: SECRET_TEXT };
+function envWithPrivateKey() {
+  return { ...env, INTENT_SIGNING_PRIVATE_JWK: JSON.stringify(PRIVATE_JWK) };
+}
 
 async function createEventAndTeam(app: ReturnType<typeof createApp>) {
   const eventRes = await app.request(
     "https://control.example/v1/admin/events",
     json("POST", { name: "Battle Day" }),
-    envWithSecret,
+    envWithPrivateKey(),
   );
   const { eventId } = (await eventRes.json()) as { eventId: string };
   const teamRes = await app.request(
     `https://control.example/v1/admin/events/${eventId}/teams`,
     json("POST", { displayName: "Team Alpha" }),
-    envWithSecret,
+    envWithPrivateKey(),
   );
   const { teamId } = (await teamRes.json()) as { teamId: string };
   return { eventId, teamId };
@@ -101,7 +112,7 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     const res = await app.request(
       `https://control.example/v1/admin/events/${eventId}/deploy-intents`,
       json("POST", deployBody(teamId)),
-      envWithSecret,
+      envWithPrivateKey(),
     );
 
     expect(res.status).toBe(StatusCodes.ACCEPTED);
@@ -112,7 +123,7 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     expect(captured).toHaveLength(1);
     expect(capturedAt(captured, 0).url).toBe(env.INTENT_INGRESS_URL);
     const outcome = await verifyIntent(capturedToken(captured, 0), {
-      resolveSecret: () => SECRET,
+      resolvePublicKey: () => PUBLIC_JWK,
     });
     if (!outcome.ok) throw new Error(`token did not verify: ${outcome.reason}`);
     // tenantId comes from the organizer projection — never from the request body.
@@ -131,7 +142,7 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     const res = await app.request(
       `https://control.example/v1/admin/events/${eventId}/deploy-intents`,
       json("POST", deployBody(teamId, { action: "destroy", deploymentId: "job-original" })),
-      envWithSecret,
+      envWithPrivateKey(),
     );
 
     expect(res.status).toBe(StatusCodes.ACCEPTED);
@@ -140,7 +151,7 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
       deploymentId: "job-original",
     });
     const outcome = await verifyIntent(capturedToken(captured, 0), {
-      resolveSecret: () => SECRET,
+      resolvePublicKey: () => PUBLIC_JWK,
     });
     if (!outcome.ok) throw new Error(`token did not verify: ${outcome.reason}`);
     expect(outcome.intent.action.type).toBe("destroy");
@@ -164,7 +175,7 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
       deployBody(teamId, { action: "destroy" }),
     ];
     for (const body of cases) {
-      const res = await app.request(url, json("POST", body), envWithSecret);
+      const res = await app.request(url, json("POST", body), envWithPrivateKey());
       expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     }
     expect(captured).toHaveLength(0);
@@ -179,7 +190,7 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     const unknownTeam = await app.request(
       `https://control.example/v1/admin/events/${eventId}/deploy-intents`,
       json("POST", deployBody(crypto.randomUUID())),
-      envWithSecret,
+      envWithPrivateKey(),
     );
     expect(unknownTeam.status).toBe(StatusCodes.NOT_FOUND);
 
@@ -187,7 +198,7 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     const otherEvent = await app.request(
       `https://control.example/v1/admin/events/${crypto.randomUUID()}/deploy-intents`,
       json("POST", deployBody(teamId)),
-      envWithSecret,
+      envWithPrivateKey(),
     );
     expect(otherEvent.status).toBe(StatusCodes.NOT_FOUND);
 
@@ -208,7 +219,7 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     const crossTenant = await app.request(
       "https://control.example/v1/admin/events/other-event/deploy-intents",
       json("POST", deployBody("other-team")),
-      envWithSecret,
+      envWithPrivateKey(),
     );
     expect(crossTenant.status).toBe(StatusCodes.NOT_FOUND);
     expect(captured).toHaveLength(0);
@@ -220,7 +231,7 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     const res = await app.request(
       "https://control.example/v1/admin/events/some-event/deploy-intents",
       json("POST", deployBody("some-team")),
-      envWithSecret,
+      envWithPrivateKey(),
     );
     expect(res.status).toBe(StatusCodes.FORBIDDEN);
     expect(captured).toHaveLength(0);
@@ -239,7 +250,7 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     const res = await app.request(
       `https://control.example/v1/admin/events/${eventId}/deploy-intents`,
       json("POST", deployBody(teamId)),
-      envWithSecret,
+      envWithPrivateKey(),
     );
     expect(res.status).toBe(StatusCodes.UNPROCESSABLE_ENTITY);
     await expect(res.json()).resolves.toEqual({
@@ -261,7 +272,7 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     const res = await app.request(
       `https://control.example/v1/admin/events/${eventId}/deploy-intents`,
       json("POST", deployBody(teamId)),
-      envWithSecret,
+      envWithPrivateKey(),
     );
     expect(res.status).toBe(StatusCodes.BAD_GATEWAY);
     await expect(res.json()).resolves.toEqual({
@@ -280,7 +291,7 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     const res = await app.request(
       `https://control.example/v1/admin/events/${eventId}/deploy-intents`,
       json("POST", deployBody(teamId)),
-      envWithSecret,
+      envWithPrivateKey(),
     );
     expect(res.status).toBe(StatusCodes.BAD_GATEWAY);
     await expect(res.json()).resolves.toEqual({
@@ -289,7 +300,7 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     });
   });
 
-  it("should fail loudly (500) when the signing secret binding is absent", async () => {
+  it("should fail loudly (500) when the signing private JWK binding is absent", async () => {
     const { fetchImpl, captured } = captureFetch(acceptedIngressResponse);
     const app = organizerApp(adminPayload(), fetchImpl);
     const { eventId, teamId } = await createEventAndTeam(app);

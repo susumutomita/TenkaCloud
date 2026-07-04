@@ -35,6 +35,8 @@ export const INTENT_INGRESS_STACK_ID = "tenkacloud-intent-ingress";
 
 /** verify secret parameter 名を保持する必須 env の名前 (fail-loud の対象)。 */
 export const VERIFY_SECRET_PARAM_ENV = "CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM";
+/** ES256 public JWK SSM String parameter name (required; not a secret). */
+export const VERIFY_PUBLIC_KEY_PARAM_ENV = "CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM";
 
 export interface BuildIntentIngressAppOptions {
   /** 解決に使う環境変数 (production は `process.env`、test は fake env)。 */
@@ -76,6 +78,7 @@ export function buildIntentIngressApp(options: BuildIntentIngressAppOptions): cd
   cdk.Aspects.of(app).add(new LogGroupRetention());
 
   const verifySecretParameterName = requireEnv(env, VERIFY_SECRET_PARAM_ENV);
+  const verifyPublicKeyParameterName = requireEnv(env, VERIFY_PUBLIC_KEY_PARAM_ENV);
   const competitorAccountsTableName = requireEnv(env, "CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME");
   const competitorAccountsTableArn = requireEnv(env, "CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN");
   const problemsCatalog = (options.discoverCatalog ?? discoverProblemsCatalog)(
@@ -96,6 +99,7 @@ export function buildIntentIngressApp(options: BuildIntentIngressAppOptions): cd
   const stack = new IntentIngressStack(app, INTENT_INGRESS_STACK_ID, {
     ...resolveStackEnv(env),
     verifySecretParameterName,
+    verifyPublicKeyParameterName,
     problemsCatalog,
     competitorAccountsTableName,
     competitorAccountsTableArn,
