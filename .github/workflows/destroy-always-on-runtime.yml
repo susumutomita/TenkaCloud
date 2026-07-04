@@ -1,16 +1,26 @@
 name: destroy-always-on-runtime
 
-# ADR-049 Phase 4 (Issue #2293) SLICE 3 — Always-On event runtime lifecycle (destroy).
+# ADR-049 Phase 4 (Issue #2363) — Always-On per-event runtime lifecycle (destroy).
 #
-# Tears down the signed-intent ingress (slices 1-2) via `make destroy-always-on-ingress`.
-# Mirrors deploy-always-on-runtime.yml: GitHub OIDC only (sts:AssumeRoleWithWebIdentity),
-# no long-lived AWS access keys, same environment / permission hardening (ADR-049 §12).
+# Tears down ONLY the per-event runtime stack (tenkacloud-event-runtime-<eventId>) via
+# `make destroy-always-on-runtime` — the single stack for this event, never `--all`, so it
+# cannot take down other events' runtimes or the shared ingress. Mirrors
+# deploy-always-on-runtime.yml: GitHub OIDC only (sts:AssumeRoleWithWebIdentity), no
+# long-lived AWS access keys, same environment / permission hardening (ADR-049 §12).
 
 on:
   workflow_dispatch:
     inputs:
       eventId:
         description: Always-On event identifier to destroy the runtime for
+        required: true
+        type: string
+      tenantId:
+        description: Tenant that owns the event
+        required: true
+        type: string
+      expiresAt:
+        description: ISO-8601 deadline the runtime was tagged with (required for the destroy app synth)
         required: true
         type: string
       awsRegion:
@@ -64,11 +74,14 @@ jobs:
           aws-region: ${{ inputs.awsRegion }}
           mask-aws-account-id: true
 
-      - name: Destroy Always-On event runtime (signed-intent ingress)
+      - name: Destroy Always-On per-event runtime
         env:
+          # Untrusted-input-safe: dispatch inputs flow through env vars, never inline in run.
           # Do NOT echo account IDs; log only the stack / event identifiers.
           CDK_PARAM_AWS_REGION: ${{ inputs.awsRegion }}
-          ALWAYS_ON_EVENT_ID: ${{ inputs.eventId }}
+          CDK_PARAM_ALWAYS_ON_EVENT_ID: ${{ inputs.eventId }}
+          CDK_PARAM_ALWAYS_ON_TENANT_ID: ${{ inputs.tenantId }}
+          CDK_PARAM_ALWAYS_ON_EXPIRES_AT: ${{ inputs.expiresAt }}
         run: |
-          echo "Destroying Always-On runtime for event: ${ALWAYS_ON_EVENT_ID}"
-          make destroy-always-on-ingress
+          echo "Destroying Always-On per-event runtime for event: ${CDK_PARAM_ALWAYS_ON_EVENT_ID}"
+          make destroy-always-on-runtime

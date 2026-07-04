@@ -1,8 +1,11 @@
 name: deploy-always-on-runtime
 
-# ADR-049 Phase 4 (Issue #2293) SLICE 3 — Always-On event runtime lifecycle (deploy).
+# ADR-049 Phase 4 (Issue #2363) — Always-On per-event runtime lifecycle (deploy).
 #
-# Stands up the signed-intent ingress (slices 1-2) via `make deploy-always-on-ingress`.
+# Deploys the PER-EVENT runtime stack (tenkacloud-event-runtime-<eventId>) via
+# `make deploy-always-on-runtime`, keyed by the eventId input. This is distinct from the
+# event-independent signed-intent ingress (deployed once via `make deploy-always-on-ingress`).
+# The stack carries the TenkaCloud:* runtime tags so the nightly sweeper can reclaim it.
 # Authentication is GitHub OIDC only (sts:AssumeRoleWithWebIdentity) — there are NO
 # long-lived AWS access keys in this repo. The assumable role and its hard-pinned trust
 # policy are provisioned by `infrastructure/lib/always-on-runtime/github-oidc-deploy-role-stack.ts`.
@@ -12,6 +15,14 @@ on:
     inputs:
       eventId:
         description: Always-On event identifier to deploy the runtime for
+        required: true
+        type: string
+      tenantId:
+        description: Tenant that owns the event
+        required: true
+        type: string
+      expiresAt:
+        description: ISO-8601 hard deadline (event end + grace) after which the sweeper reclaims the runtime
         required: true
         type: string
       awsRegion:
@@ -65,11 +76,14 @@ jobs:
           aws-region: ${{ inputs.awsRegion }}
           mask-aws-account-id: true
 
-      - name: Deploy Always-On event runtime (signed-intent ingress)
+      - name: Deploy Always-On per-event runtime
         env:
+          # Untrusted-input-safe: dispatch inputs flow through env vars, never inline in run.
           # Do NOT echo account IDs; log only the stack / event identifiers.
           CDK_PARAM_AWS_REGION: ${{ inputs.awsRegion }}
-          ALWAYS_ON_EVENT_ID: ${{ inputs.eventId }}
+          CDK_PARAM_ALWAYS_ON_EVENT_ID: ${{ inputs.eventId }}
+          CDK_PARAM_ALWAYS_ON_TENANT_ID: ${{ inputs.tenantId }}
+          CDK_PARAM_ALWAYS_ON_EXPIRES_AT: ${{ inputs.expiresAt }}
         run: |
-          echo "Deploying Always-On runtime for event: ${ALWAYS_ON_EVENT_ID}"
-          make deploy-always-on-ingress
+          echo "Deploying Always-On per-event runtime for event: ${CDK_PARAM_ALWAYS_ON_EVENT_ID}"
+          make deploy-always-on-runtime

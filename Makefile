@@ -16,6 +16,7 @@ export JSII_DEPRECATED := quiet
         deploy deploy-saas destroy destroy-saas \
         deploy-battles destroy-battles \
         deploy-always-on-ingress destroy-always-on-ingress synth-always-on-ingress \
+        deploy-always-on-runtime destroy-always-on-runtime synth-always-on-runtime \
         dev synth check-synth \
         doctor local local-up local-down local-status local-list local-evaluate
 
@@ -341,3 +342,32 @@ destroy-always-on-ingress:
 	  exit 1; \
 	fi
 	$(CDK) destroy --app "$(ALWAYS_ON_INGRESS_APP)" --all --force
+
+# ===== Always-On per-event runtime (ADR-049 Phase 4 / #2363) =====
+# ingress (上) は event 非依存の singleton。ここは event ごとに立て/畳む per-event runtime stack
+# (bin/tenkacloud-always-on-runtime.ts)。stack id は tenkacloud-event-runtime-<eventId> で、
+# deploy/destroy とも **その 1 stack のみ** を対象にする (`--all` は使わない = 他 event / ingress を
+# 巻き込まない)。stack は runtime-tags (TenkaCloud:ManagedBy=always-on-runtime 他) を付与するので、
+# 夜間 sweeper が期限切れ runtime を検出・削除できる。
+#
+# 必須 env: CDK_PARAM_ALWAYS_ON_EVENT_ID / _TENANT_ID / _EXPIRES_AT (ISO-8601 のハード期限)。
+ALWAYS_ON_RUNTIME_APP := bunx tsx bin/tenkacloud-always-on-runtime.ts
+ALWAYS_ON_RUNTIME_STACK := tenkacloud-event-runtime-$(CDK_PARAM_ALWAYS_ON_EVENT_ID)
+
+deploy-always-on-runtime:
+	@if [ -z "$${CDK_PARAM_ALWAYS_ON_EVENT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_TENANT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EXPIRES_AT}" ]; then \
+	  echo "error: CDK_PARAM_ALWAYS_ON_EVENT_ID / _TENANT_ID / _EXPIRES_AT が未指定 (per-event runtime lifecycle に必須。#2363)。" >&2; \
+	  exit 1; \
+	fi
+	$(CDK) deploy --app "$(ALWAYS_ON_RUNTIME_APP)" "$(ALWAYS_ON_RUNTIME_STACK)" $(APPROVAL)
+
+synth-always-on-runtime: export CDK_SKIP_BUNDLING := 1
+synth-always-on-runtime:
+	$(CDK) synth --app "$(ALWAYS_ON_RUNTIME_APP)" "$(ALWAYS_ON_RUNTIME_STACK)" --quiet
+
+destroy-always-on-runtime:
+	@if [ -z "$${CDK_PARAM_ALWAYS_ON_EVENT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_TENANT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EXPIRES_AT}" ]; then \
+	  echo "error: CDK_PARAM_ALWAYS_ON_EVENT_ID / _TENANT_ID / _EXPIRES_AT が未指定 (destroy も app synth のため必須)。" >&2; \
+	  exit 1; \
+	fi
+	$(CDK) destroy --app "$(ALWAYS_ON_RUNTIME_APP)" "$(ALWAYS_ON_RUNTIME_STACK)" --force
