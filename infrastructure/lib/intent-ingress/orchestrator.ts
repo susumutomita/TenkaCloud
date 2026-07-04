@@ -34,6 +34,14 @@ export interface IntentIngressDeps {
   readonly authorizeScope: (intent: VerifiedCloudActionIntent) => IntentScopeVerdict;
   /** problemId → problemDir; mirrors the deploy handler's `problemsCatalog[problemId]`. */
   readonly resolveProblemDir: (problemId: string) => string | undefined;
+  /** Resolve only a verified tenant-owned competitor account; null rejects the intent. */
+  readonly resolveVerifiedAccount: (
+    tenantId: string,
+    awsAccountId: string,
+  ) => Promise<{
+    readonly competitorRoleArn: string;
+    readonly externalIdParameterName: string;
+  } | null>;
   /** Re-emit onto the existing deploy bus (bind `publishProblemEvent` with client/bus here). */
   readonly publish: (
     detailType: DeployDetailType,
@@ -104,16 +112,34 @@ export async function handleIntentIngress(
     return { status: StatusCodes.UNPROCESSABLE_ENTITY, body: { reason: mapping.reason } };
   }
 
-  // 5. Build the FROZEN detail (fails closed on missing identifiers / bad shape).
+  // 5. Resolve the tenant-owned deployment account. Both deploy and destroy must carry
+  // the role + ExternalId parameter pair so downstream execution cannot fall back to
+  // same-account credentials.
+  const resolvedAccount = await deps.resolveVerifiedAccount(
+    intent.source.tenantId,
+    intent.target.providerAccountRef,
+  );
+  if (resolvedAccount === null) {
+    return {
+      status: StatusCodes.FORBIDDEN,
+      body: { reason: "account-not-verified" },
+    };
+  }
+
+  // 6. Build the FROZEN detail (fails closed on missing identifiers / bad shape).
   const built =
     mapping.detailType === "DeployCreateRequested"
-      ? buildDeployCreateDetail(intent, { resolveProblemDir: deps.resolveProblemDir })
-      : buildDeployDeleteDetail(intent);
+      ? buildDeployCreateDetail(
+          intent,
+          { resolveProblemDir: deps.resolveProblemDir },
+          resolvedAccount,
+        )
+      : buildDeployDeleteDetail(intent, resolvedAccount);
   if (!built.ok) {
     return { status: StatusCodes.UNPROCESSABLE_ENTITY, body: { reason: built.reason } };
   }
 
-  // 6. Re-emit onto the existing deploy bus. A publish failure is a loud 5xx with a
+  // 7. Re-emit onto the existing deploy bus. A publish failure is a loud 5xx with a
   // stable code — never the raw EventBridge error message.
   try {
     await deps.publish(mapping.detailType, built.detail.jobId, built.detail);

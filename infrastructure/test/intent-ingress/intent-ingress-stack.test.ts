@@ -14,6 +14,9 @@ function synth(overrides: Partial<IntentIngressStackProps> = {}): Template {
     allowedTenantIds: ["tenant-a"],
     allowedEventIds: ["event-a"],
     problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+    competitorAccountsTableName: "CompetitorAccounts",
+    competitorAccountsTableArn: "arn:aws:dynamodb:us-east-1:111111111111:table/CompetitorAccounts",
+    environmentName: "test",
     env: { account: "111111111111", region: "us-east-1" },
     ...overrides,
   });
@@ -67,6 +70,19 @@ describe("IntentIngressStack (ADR-049 Phase 4 / #2293)", () => {
     });
   });
 
+  it("should grant only dynamodb:GetItem on the competitor-accounts table", () => {
+    synth().hasResourceProperties("AWS::IAM::Policy", {
+      PolicyDocument: Match.objectLike({
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Action: "dynamodb:GetItem",
+            Resource: "arn:aws:dynamodb:us-east-1:111111111111:table/CompetitorAccounts",
+          }),
+        ]),
+      }),
+    });
+  });
+
   it("should inject the scope + infra env vars into the ingress Lambda", () => {
     synth().hasResourceProperties("AWS::Lambda::Function", {
       Environment: {
@@ -75,6 +91,8 @@ describe("IntentIngressStack (ADR-049 Phase 4 / #2293)", () => {
           EXPECTED_AUDIENCE: "plane://tenka/ingress",
           ALLOWED_TENANT_IDS: "tenant-a",
           ALLOWED_EVENT_IDS: "event-a",
+          COMPETITOR_ACCOUNTS_TABLE_NAME: "CompetitorAccounts",
+          DEPLOY_ENVIRONMENT: "test",
         }),
       },
     });
@@ -98,6 +116,10 @@ describe("IntentIngressStack (ADR-049 Phase 4 / #2293)", () => {
     const stack = new IntentIngressStack(app, "TestIntentIngressMinimal", {
       verifySecretParameterName: "/tenkacloud/intent-verify-secret",
       problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+      competitorAccountsTableName: "CompetitorAccounts",
+      competitorAccountsTableArn:
+        "arn:aws:dynamodb:us-east-1:111111111111:table/CompetitorAccounts",
+      environmentName: "test",
       env: { account: "111111111111", region: "us-east-1" },
     });
     Template.fromStack(stack).hasResourceProperties("AWS::Lambda::Function", {

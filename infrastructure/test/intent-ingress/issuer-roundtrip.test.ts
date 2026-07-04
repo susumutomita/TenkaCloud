@@ -27,6 +27,10 @@ const SECRET = new TextEncoder().encode("issuer-roundtrip-secret-abcdef 01234567
 const WRONG_SECRET = new TextEncoder().encode("wrong-issuer-roundtrip-secret-9876543210");
 
 const EXPECTED_AUDIENCE = "plane://tenka/ingress";
+const VERIFIED_ACCOUNT = {
+  competitorRoleArn: "arn:aws:iam::111111111111:role/TenkaCloud-tenant-a-deploy-Role",
+  externalIdParameterName: "/test/tenants/tenant-a/external-id",
+} as const;
 
 /** Fake platform problems catalog: problemId → problemDir. */
 const resolveProblemDir = (problemId: string): string | undefined =>
@@ -72,6 +76,7 @@ function realDeps(secret: Uint8Array): { deps: IntentIngressDeps; captured: Capt
         allowedEventIds: ["event-a"],
       }),
     resolveProblemDir,
+    resolveVerifiedAccount: async () => VERIFIED_ACCOUNT,
     publish: async (detailType, jobId, detail) => {
       captured.push({ detailType, jobId, detail });
     },
@@ -102,6 +107,7 @@ describe("issuer → ingress round-trip (ADR-049 Phase 4 / #2293)", () => {
       namePrefix: "tc-hello-world-team-alpha",
       region: "us-east-1",
       awsAccountId: "111111111111",
+      ...VERIFIED_ACCOUNT,
     });
   });
 
@@ -122,15 +128,18 @@ describe("issuer → ingress round-trip (ADR-049 Phase 4 / #2293)", () => {
       stackName: "tc-hello-world-team-alpha",
       region: "us-east-1",
       awsAccountId: "111111111111",
+      ...VERIFIED_ACCOUNT,
     });
   });
 
   it("should be rejected 401 when a single character of the signed token is flipped", async () => {
     const intent = buildDeployIntent(params());
     const { token } = issueSignedIntentRequest(intent, { secret: SECRET });
-    // Flip the final signature character to a guaranteed-different one → HMAC mismatch.
-    const lastChar = token.at(-1);
-    const tampered = `${token.slice(0, -1)}${lastChar === "A" ? "B" : "A"}`;
+    // Flip the first signature character. Changing the final base64url character can
+    // leave decoded padding bits unchanged, so it is not a guaranteed HMAC mismatch.
+    const [header, payload, signature] = token.split(".");
+    const tamperedSignature = `${signature[0] === "A" ? "B" : "A"}${signature.slice(1)}`;
+    const tampered = `${header}.${payload}.${tamperedSignature}`;
     const body = JSON.stringify({ token: tampered });
 
     const { deps, captured } = realDeps(SECRET);
