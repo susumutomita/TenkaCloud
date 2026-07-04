@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildIntentIngressApp,
   INTENT_INGRESS_STACK_ID,
+  VERIFY_PUBLIC_KEY_PARAM_ENV,
   VERIFY_SECRET_PARAM_ENV,
 } from "../../bin/tenkacloud-always-on";
 
@@ -28,6 +29,7 @@ vi.mock("../../lib/utils/discover-problems-catalog", () => ({
 
 const BASE_ENV: NodeJS.ProcessEnv = {
   [VERIFY_SECRET_PARAM_ENV]: "/tenkacloud/intent-ingress/verify-secret",
+  [VERIFY_PUBLIC_KEY_PARAM_ENV]: "/tenkacloud/intent-ingress/verify-public-jwk",
   CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME: "CompetitorAccounts",
   CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN:
     "arn:aws:dynamodb:us-east-1:111111111111:table/CompetitorAccounts",
@@ -91,11 +93,12 @@ describe("bin/tenkacloud-always-on.ts (ADR-049 Phase 4 / #2293 SLICE 2)", () => 
     });
   });
 
-  it("should inject the verify-secret param name into the ingress Lambda env", () => {
+  it("should inject both verification param names into the ingress Lambda env", () => {
     synthIngress().hasResourceProperties("AWS::Lambda::Function", {
       Environment: {
         Variables: Match.objectLike({
           VERIFY_SECRET_PARAM: "/tenkacloud/intent-ingress/verify-secret",
+          VERIFY_PUBLIC_KEY_PARAM: "/tenkacloud/intent-ingress/verify-public-jwk",
           COMPETITOR_ACCOUNTS_TABLE_NAME: "CompetitorAccounts",
           DEPLOY_ENVIRONMENT: "test",
         }),
@@ -151,6 +154,7 @@ describe("bin/tenkacloud-always-on.ts (ADR-049 Phase 4 / #2293 SLICE 2)", () => 
   });
 
   it.each([
+    VERIFY_PUBLIC_KEY_PARAM_ENV,
     "CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME",
     "CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN",
     // #2365: audience pinning is required — the ingress must never deploy fail-open.
@@ -185,11 +189,14 @@ describe("bin/tenkacloud-always-on.ts (ADR-049 Phase 4 / #2293 SLICE 2)", () => 
     const savedArgv1 = process.argv[1];
     const hadSecret = VERIFY_SECRET_PARAM_ENV in process.env;
     const savedSecret = process.env[VERIFY_SECRET_PARAM_ENV];
+    const hadPublicKey = VERIFY_PUBLIC_KEY_PARAM_ENV in process.env;
+    const savedPublicKey = process.env[VERIFY_PUBLIC_KEY_PARAM_ENV];
     const savedTableName = process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME;
     const savedTableArn = process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN;
     const savedAudience = process.env.CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE;
     process.argv[1] = modPath;
     process.env[VERIFY_SECRET_PARAM_ENV] = "/tenkacloud/intent-ingress/verify-secret";
+    process.env[VERIFY_PUBLIC_KEY_PARAM_ENV] = "/tenkacloud/intent-ingress/verify-public-jwk";
     process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME = "CompetitorAccounts";
     process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN =
       "arn:aws:dynamodb:us-east-1:111111111111:table/CompetitorAccounts";
@@ -201,6 +208,8 @@ describe("bin/tenkacloud-always-on.ts (ADR-049 Phase 4 / #2293 SLICE 2)", () => 
       process.argv[1] = savedArgv1;
       if (hadSecret) process.env[VERIFY_SECRET_PARAM_ENV] = savedSecret;
       else delete process.env[VERIFY_SECRET_PARAM_ENV];
+      if (hadPublicKey) process.env[VERIFY_PUBLIC_KEY_PARAM_ENV] = savedPublicKey;
+      else delete process.env[VERIFY_PUBLIC_KEY_PARAM_ENV];
       if (savedTableName === undefined) delete process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME;
       else process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME = savedTableName;
       if (savedTableArn === undefined) delete process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN;

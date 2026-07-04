@@ -1,4 +1,4 @@
-import { signIntent } from "@TenkaCloud/trust-bridge";
+import { signIntent, signIntentEs256 } from "@TenkaCloud/trust-bridge";
 import { StatusCodes } from "http-status-codes";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeIntent, TEST_SECRET } from "./intent-fixtures";
@@ -34,15 +34,28 @@ const competitorAccount = vi.hoisted(() => ({
 const ssmSecret = vi.hoisted(() => ({
   value: undefined as string | undefined,
   reject: undefined as unknown,
+  inputs: [] as { Name?: string; WithDecryption?: boolean }[],
+}));
+
+const ssmPublicKey = vi.hoisted(() => ({
+  value: undefined as string | undefined,
 }));
 
 vi.mock("@aws-sdk/client-ssm", () => ({
   SSMClient: class {
-    async send() {
+    async send(command: { input: { Name?: string; WithDecryption?: boolean } }) {
+      ssmSecret.inputs.push(command.input);
       if (ssmSecret.reject !== undefined) {
         throw ssmSecret.reject;
       }
-      return { Parameter: { Value: ssmSecret.value } };
+      return {
+        Parameter: {
+          Value:
+            command.input.Name === "/tenkacloud/intent-verify-public-jwk"
+              ? ssmPublicKey.value
+              : ssmSecret.value,
+        },
+      };
     }
   },
   GetParameterCommand: class {
@@ -105,8 +118,11 @@ describe("intent-ingress handler (ADR-049 Phase 4 / #2293)", () => {
     };
     ssmSecret.value = SECRET_STRING;
     ssmSecret.reject = undefined;
+    ssmSecret.inputs = [];
+    ssmPublicKey.value = "{}";
     process.env.NONCE_TABLE_NAME = "nonce-table";
     process.env.VERIFY_SECRET_PARAM = "/tenkacloud/intent-verify-secret";
+    process.env.VERIFY_PUBLIC_KEY_PARAM = "/tenkacloud/intent-verify-public-jwk";
     process.env.DEPLOY_EVENT_BUS_NAME = "tenkacloud-deploy";
     process.env.COMPETITOR_ACCOUNTS_TABLE_NAME = "competitor-accounts";
     process.env.DEPLOY_ENVIRONMENT = "test";
@@ -118,6 +134,7 @@ describe("intent-ingress handler (ADR-049 Phase 4 / #2293)", () => {
   afterEach(() => {
     delete process.env.NONCE_TABLE_NAME;
     delete process.env.VERIFY_SECRET_PARAM;
+    delete process.env.VERIFY_PUBLIC_KEY_PARAM;
     delete process.env.DEPLOY_EVENT_BUS_NAME;
     delete process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
     delete process.env.DEPLOY_ENVIRONMENT;
@@ -161,6 +178,26 @@ describe("intent-ingress handler (ADR-049 Phase 4 / #2293)", () => {
       TableName: "competitor-accounts",
       Key: { PK: "TENANT#tenant-a", SK: "ACCOUNT#111111111111" },
     });
+    expect(ssmSecret.inputs).toEqual([
+      { Name: "/tenkacloud/intent-verify-secret", WithDecryption: true },
+      { Name: "/tenkacloud/intent-verify-public-jwk" },
+    ]);
+  });
+
+  it("should verify an ES256 intent with the public JWK from SSM String", async () => {
+    const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify",
+    ]);
+    const privateKey = await crypto.subtle.exportKey("jwk", pair.privateKey);
+    ssmPublicKey.value = JSON.stringify(await crypto.subtle.exportKey("jwk", pair.publicKey));
+    const token = await signIntentEs256(makeIntent(), { privateKey });
+    const handler = await loadHandler();
+
+    const res = await handler({ body: JSON.stringify({ token }) });
+
+    expect(res.statusCode).toBe(StatusCodes.ACCEPTED);
+    expect(JSON.parse(res.body)).toEqual({ requestId: "job-abc" });
   });
 
   it("should 403 account-not-verified without publishing when the account row is absent", async () => {
@@ -208,6 +245,28 @@ describe("intent-ingress handler (ADR-049 Phase 4 / #2293)", () => {
     const token = signIntent(makeIntent(), { secret: TEST_SECRET });
     const handler = await loadHandler();
     const res = await handler({ body: JSON.stringify({ token }) });
+    expect(res.statusCode).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    expect(JSON.parse(res.body)).toEqual({ reason: "internal-error" });
+    expect(captured.entries).toBeUndefined();
+  });
+
+  it("should 500 internal-error when the verify public-key parameter is empty", async () => {
+    ssmPublicKey.value = "";
+    const token = signIntent(makeIntent(), { secret: TEST_SECRET });
+    const handler = await loadHandler();
+    const res = await handler({ body: JSON.stringify({ token }) });
+
+    expect(res.statusCode).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    expect(JSON.parse(res.body)).toEqual({ reason: "internal-error" });
+    expect(captured.entries).toBeUndefined();
+  });
+
+  it("should 500 internal-error when the verify public-key parameter is invalid JSON", async () => {
+    ssmPublicKey.value = "{";
+    const token = signIntent(makeIntent(), { secret: TEST_SECRET });
+    const handler = await loadHandler();
+    const res = await handler({ body: JSON.stringify({ token }) });
+
     expect(res.statusCode).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect(JSON.parse(res.body)).toEqual({ reason: "internal-error" });
     expect(captured.entries).toBeUndefined();

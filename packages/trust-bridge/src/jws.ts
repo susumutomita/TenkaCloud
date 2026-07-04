@@ -21,7 +21,7 @@ import { type CloudActionIntent, canonicalize } from "./schema.js";
  */
 
 const ALG_HS256 = "HS256" as const;
-type Alg = typeof ALG_HS256;
+type Alg = typeof ALG_HS256 | "ES256";
 
 export interface JwsHeader {
   readonly alg: Alg;
@@ -35,7 +35,7 @@ export interface SignOptions {
 }
 
 export interface VerifyOptions {
-  readonly resolveSecret: (header: JwsHeader) => Uint8Array | undefined;
+  readonly resolveSecret?: (header: JwsHeader) => Uint8Array | undefined;
 }
 
 export type VerifyOutcome =
@@ -49,18 +49,27 @@ export type VerifyFailureReason =
   | "signature-mismatch"
   | "payload-parse-failed";
 
-function base64urlEncode(bytes: Uint8Array): string {
-  return Buffer.from(bytes)
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+export function base64urlEncode(bytes: Uint8Array): string {
+  return (
+    Buffer.from(bytes)
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      // Strip base64 padding with a global char replace, NOT an anchored `/=+$/`: now that this
+      // helper is exported (jws-es256 reuses it), CodeQL flags `=+$` as js/polynomial-redos on
+      // library input. `=` only ever appears as trailing padding in base64 output, so removing
+      // every `=` is equivalent and has no backtracking.
+      .replace(/=/g, "")
+  );
 }
 
-function base64urlDecode(text: string): Uint8Array {
+export function base64urlDecode(text: string): Uint8Array<ArrayBuffer> {
   const padded = text.replace(/-/g, "+").replace(/_/g, "/");
   const pad = padded.length % 4 === 0 ? "" : "=".repeat(4 - (padded.length % 4));
-  return new Uint8Array(Buffer.from(padded + pad, "base64"));
+  const decoded = Buffer.from(padded + pad, "base64");
+  const bytes = new Uint8Array(decoded.byteLength);
+  bytes.set(decoded);
+  return bytes;
 }
 
 function hmacSha256(secret: Uint8Array, signingInput: string): Uint8Array {
@@ -121,7 +130,7 @@ export function verifySignature(token: string, options: VerifyOptions): VerifyOu
     return { ok: false, reason: "unknown-algorithm" };
   }
 
-  const secret = options.resolveSecret(header);
+  const secret = options.resolveSecret?.(header);
   if (!secret) {
     return { ok: false, reason: "secret-not-resolved" };
   }

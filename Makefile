@@ -307,7 +307,8 @@ destroy-battles:
 # operator が単体 deploy できる経路。ControlPlane / tenant pipeline / SBT を一切持ち込まないため、
 # `make deploy` / `deploy-saas` / `deploy-battles` に対しては完全に NO-OP。
 #
-# 必須 env: CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM (= JWS 検証秘密を保持する SSM SecureString 名) /
+# 必須 env: CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM (= HS256 rollback 用 SSM SecureString 名) /
+#           CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM (= ES256 公開 JWK を保持する SSM String 名) /
 #           CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME / _ARN (= ProblemDeployBackend の CompetitorAccounts
 #           DDB。 ingress が verified account を解決し、未検証 intent を fail-closed するために GetItem する。#2362) /
 #           CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE (= audience pinning。未指定だと ingress は
@@ -318,6 +319,7 @@ destroy-battles:
 # 使い方:
 #   make deploy-always-on-ingress \
 #     CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM=/tenkacloud/intent-ingress/verify-secret \
+#     CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM=/tenkacloud/intent-ingress/verify-public-jwk \
 #     CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME=... CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN=...
 ALWAYS_ON_INGRESS_APP := bunx tsx bin/tenkacloud-always-on.ts
 
@@ -325,6 +327,11 @@ deploy-always-on-ingress:
 	@if [ -z "$${CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM}" ]; then \
 	  echo "error: CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM が未指定 (= JWS 検証秘密を保持する SSM SecureString 名)。" >&2; \
 	  echo "  例: make deploy-always-on-ingress CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM=/tenkacloud/intent-ingress/verify-secret" >&2; \
+	  exit 1; \
+	fi
+	@if [ -z "$${CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM}" ]; then \
+	  echo "error: CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM が未指定 (= ES256 公開 JWK を保持する SSM String 名)。" >&2; \
+	  echo "  例: make deploy-always-on-ingress CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM=/tenkacloud/intent-ingress/verify-public-jwk" >&2; \
 	  exit 1; \
 	fi
 	@if [ -z "$${CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN}" ]; then \
@@ -345,6 +352,10 @@ synth-always-on-ingress:
 destroy-always-on-ingress:
 	@if [ -z "$${CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM}" ]; then \
 	  echo "error: CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM が未指定 (destroy も app synth のため必須)。" >&2; \
+	  exit 1; \
+	fi
+	@if [ -z "$${CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM}" ]; then \
+	  echo "error: CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM が未指定 (destroy も app synth のため必須)。" >&2; \
 	  exit 1; \
 	fi
 	$(CDK) destroy --app "$(ALWAYS_ON_INGRESS_APP)" --all --force

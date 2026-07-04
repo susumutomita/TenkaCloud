@@ -83,11 +83,52 @@ per environment:
   `tenkacloud-intent-ingress` stack (`make deploy-always-on-ingress`).
 - `INTENT_AUDIENCE` (var): must equal the ingress
   `CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE` value when that check is enabled.
-- `INTENT_SIGNING_SECRET` (secret): set with
-  `bunx wrangler secret put INTENT_SIGNING_SECRET --env production`. Trust-bridge
-  JWS is HS256 in Phase 1, so this value must equal the SSM SecureString the
-  ingress reads through `CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM`. Rotate by
-  writing the new value to SSM first, then updating the Workers secret.
+- `INTENT_SIGNING_PRIVATE_JWK` (secret): the ES256 private JWK. Set it with
+  `bunx wrangler secret put INTENT_SIGNING_PRIVATE_JWK --env production`.
+
+### Signing key (ES256)
+
+Generate a P-256 keypair with Node 20+ WebCrypto. Keep the generated private JWK
+out of the repository and shell history:
+
+```sh
+KEYPAIR_JSON="$(
+  node --input-type=module <<'NODE'
+const pair = await crypto.subtle.generateKey(
+  { name: "ECDSA", namedCurve: "P-256" },
+  true,
+  ["sign", "verify"],
+);
+console.log(JSON.stringify({
+  privateJwk: await crypto.subtle.exportKey("jwk", pair.privateKey),
+  publicJwk: await crypto.subtle.exportKey("jwk", pair.publicKey),
+}));
+NODE
+)"
+PRIVATE_JWK="$(printf '%s' "$KEYPAIR_JSON" | jq -c .privateJwk)"
+PUBLIC_JWK="$(printf '%s' "$KEYPAIR_JSON" | jq -c .publicJwk)"
+printf '%s' "$PRIVATE_JWK" |
+  bunx wrangler secret put INTENT_SIGNING_PRIVATE_JWK --env production
+aws ssm put-parameter \
+  --name "$CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM" \
+  --type String \
+  --value "$PUBLIC_JWK" \
+  --overwrite
+unset KEYPAIR_JSON PRIVATE_JWK PUBLIC_JWK
+```
+
+The public JWK is intentionally stored as an SSM `String`, not `SecureString`;
+the ingress Lambda receives its parameter name through
+`CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM`. The private JWK exists only
+as the Cloudflare Worker secret. Trust-bridge ES256 supports a `kid` protected
+header for key selection when a keyed resolver is used.
+
+For rotation, publish the new public JWK to SSM, roll
+`INTENT_SIGNING_PRIVATE_JWK` to the matching private JWK, verify ingress, and
+then retire the old key material. HS256 verification through
+`CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM` remains available for rollback
+and other trust-bridge consumers; do not remove that SecureString during this
+migration.
 
 The Worker validates the command shape against the frozen deploy detail contract
 (problem slug, 12-digit AWS account, region; shared patterns exported by

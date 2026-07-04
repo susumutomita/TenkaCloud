@@ -1,4 +1,5 @@
 import { DdbNonceStore, verifyIntent } from "@TenkaCloud/trust-bridge";
+import type { webcrypto } from "node:crypto";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
@@ -10,6 +11,8 @@ import { publishProblemEvent } from "../../problem-deploy/handlers/shared/events
 import { handleIntentIngress, type IntentIngressDeps } from "../orchestrator.js";
 import { authorizeIntentScope, type IntentScopeConfig } from "../scope-authorization.js";
 import { buildDdbConditionalPutClient } from "./aws-clients.js";
+
+type JsonWebKey = webcrypto.JsonWebKey;
 
 /**
  * ADR-049 Phase 4 (Issue #2293): signed-intent ingress Lambda entry (Function URL).
@@ -63,10 +66,26 @@ function resolveVerifySecret(ssm: SSMClient): Promise<Uint8Array> {
   return cachedSecret;
 }
 
+/** Resolve the ES256 public JWK from an SSM String parameter once per cold start. */
+let cachedPublicKey: Promise<JsonWebKey> | undefined;
+function resolveVerifyPublicKey(ssm: SSMClient): Promise<JsonWebKey> {
+  cachedPublicKey ??= (async () => {
+    const out = await ssm.send(new GetParameterCommand({ Name: env("VERIFY_PUBLIC_KEY_PARAM") }));
+    const value = out.Parameter?.Value;
+    if (!value) {
+      throw new Error("verify public key parameter is empty");
+    }
+    return JSON.parse(value) as JsonWebKey;
+  })();
+  return cachedPublicKey;
+}
+
 async function buildDeps(): Promise<IntentIngressDeps> {
   const region = process.env.AWS_REGION;
   const clientConfig = region ? { region } : {};
-  const secret = await resolveVerifySecret(new SSMClient(clientConfig));
+  const ssm = new SSMClient(clientConfig);
+  const secret = await resolveVerifySecret(ssm);
+  const publicJwk = await resolveVerifyPublicKey(ssm);
   const dynamodb = new DynamoDBClient(clientConfig);
   const ddb = DynamoDBDocumentClient.from(dynamodb);
 
@@ -82,7 +101,12 @@ async function buildDeps(): Promise<IntentIngressDeps> {
   const deployEnvironment = env("DEPLOY_ENVIRONMENT");
 
   return {
-    verify: (token) => verifyIntent(token, { resolveSecret: () => secret, nonceStore }),
+    verify: (token) =>
+      verifyIntent(token, {
+        resolveSecret: () => secret,
+        resolvePublicKey: () => publicJwk,
+        nonceStore,
+      }),
     authorizeScope: (intent) => authorizeIntentScope(intent, scopeConfig),
     resolveProblemDir: (problemId) => catalog[problemId],
     resolveVerifiedAccount: async (tenantId, awsAccountId) => {

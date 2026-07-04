@@ -43,6 +43,15 @@ describe("JWS HS256 sign / verify (#795 Phase 1)", () => {
     if (!result.ok) expect(result.reason).toBe("malformed-token");
   });
 
+  it("should return malformed-token when the protected header is not JSON", () => {
+    const malformedHeader = Buffer.from("{").toString("base64url");
+    const result = verifySignature(`${malformedHeader}.e30.c2ln`, {
+      resolveSecret: () => randomBytes(32),
+    });
+
+    expect(result).toEqual({ ok: false, reason: "malformed-token" });
+  });
+
   it("should return secret-not-resolved when the secret cannot be resolved", () => {
     const secret = randomBytes(32);
     const token = signIntent(intent(), { secret });

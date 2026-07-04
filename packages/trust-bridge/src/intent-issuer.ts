@@ -1,4 +1,5 @@
 import { type SignOptions, signIntent } from "./jws.js";
+import { type Es256SignOptions, signIntentEs256 } from "./jws-es256.js";
 import { type CloudActionIntent, INTENT_VERSION, parseCloudActionIntent } from "./schema.js";
 
 /**
@@ -16,11 +17,11 @@ import { type CloudActionIntent, INTENT_VERSION, parseCloudActionIntent } from "
  *     entry point). A bad parameter fails loudly (throw) — never silently coerced —
  *     so a malformed intent can never be minted and signed (AGENTS.md: no silent
  *     fallbacks).
- *   - Signing reuses `signIntent` (never a reimplemented signer), so the JWS bytes
- *     the ingress verifies are produced by the one canonical HS256 path.
- *   - The signing key is injected as `secret: Uint8Array` via `SignOptions`; this
- *     module never resolves SSM / KMS. The Workers host resolves the key and passes
- *     it in, so the issuance LOGIC stays pure and offline-testable.
+ *   - Signing reuses the canonical HS256 or ES256 signer, so the JWS bytes the
+ *     ingress verifies are never produced by a reimplemented framing path.
+ *   - Signing material is injected via `SignOptions` / `Es256SignOptions`; this
+ *     module never resolves Worker secrets, SSM, or KMS, so issuance stays pure
+ *     and offline-testable.
  *   - `action.engine` is pinned to `cloudformation` and `target.provider` to `aws`:
  *     this issuer mints AWS-CloudFormation deploy/destroy commands, matching the
  *     frozen `DeployCreate/DeleteRequested` detail the ingress re-emits.
@@ -137,5 +138,14 @@ export function issueSignedIntentRequest(
   signOptions: SignOptions,
 ): { readonly token: string; readonly body: string } {
   const token = signIntent(intent, signOptions);
+  return { token, body: buildIntentRequestBody(token) };
+}
+
+/** ES256 variant for issuers that keep the signing private key at the edge. */
+export async function issueSignedIntentRequestEs256(
+  intent: CloudActionIntent,
+  signOptions: Es256SignOptions,
+): Promise<{ readonly token: string; readonly body: string }> {
+  const token = await signIntentEs256(intent, signOptions);
   return { token, body: buildIntentRequestBody(token) };
 }
