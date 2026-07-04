@@ -163,31 +163,51 @@ export const teamBearerMiddleware = createMiddleware<AppEnvironment>(async (cont
 });
 
 /**
- * Gate for the tenant-onboarding endpoint (`/v1/system/*`). The presented bearer must equal
- * the `SYSTEM_ADMIN_TOKEN` Workers secret. Both sides are SHA-256 hashed before comparison so
- * the equality check runs over fixed-length hex (does not short-circuit on the first differing
- * secret byte). A missing binding is a 500 (misconfiguration), NOT a 401 (which would read as a
- * bad token).
+ * Build a bearer gate for a machine-to-machine endpoint whose token is a Workers secret. The
+ * presented bearer must equal the secret; both sides are SHA-256 hashed before comparison so the
+ * equality check runs over fixed-length hex (does not short-circuit on the first differing secret
+ * byte). A missing binding is a 500 (misconfiguration), NOT a 401 (which would read as a bad token).
  */
-export const systemAdminMiddleware = createMiddleware<AppEnvironment>(async (context, next) => {
-  const authorization = context.req.header("authorization");
-  const match = /^Bearer\s+(.+)$/iu.exec(authorization ?? "");
-  if (!match?.[1]) {
-    throw new HTTPException(StatusCodes.UNAUTHORIZED, {
-      message: "missing system admin token",
-    });
-  }
-  const expectedToken = context.env.SYSTEM_ADMIN_TOKEN;
-  if (!expectedToken) {
-    throw new Error("SYSTEM_ADMIN_TOKEN is not configured");
-  }
-  const [presented, expected] = await Promise.all([sha256Hex(match[1]), sha256Hex(expectedToken)]);
-  if (presented !== expected) {
-    throw new HTTPException(StatusCodes.UNAUTHORIZED, {
-      message: "invalid system admin token",
-    });
-  }
-  await next();
+function bearerSecretMiddleware(config: {
+  readonly selectSecret: (env: AppEnvironment["Bindings"]) => string | undefined;
+  readonly missingTokenMessage: string;
+  readonly invalidTokenMessage: string;
+  readonly missingSecretError: string;
+}): MiddlewareHandler<AppEnvironment> {
+  return createMiddleware<AppEnvironment>(async (context, next) => {
+    const match = /^Bearer\s+(.+)$/iu.exec(context.req.header("authorization") ?? "");
+    if (!match?.[1]) {
+      throw new HTTPException(StatusCodes.UNAUTHORIZED, { message: config.missingTokenMessage });
+    }
+    const expectedToken = config.selectSecret(context.env);
+    if (!expectedToken) {
+      throw new Error(config.missingSecretError);
+    }
+    const [presented, expected] = await Promise.all([
+      sha256Hex(match[1]),
+      sha256Hex(expectedToken),
+    ]);
+    if (presented !== expected) {
+      throw new HTTPException(StatusCodes.UNAUTHORIZED, { message: config.invalidTokenMessage });
+    }
+    await next();
+  });
+}
+
+/** Gate for the tenant-onboarding endpoint (`/v1/system/*`), keyed by `SYSTEM_ADMIN_TOKEN`. */
+export const systemAdminMiddleware = bearerSecretMiddleware({
+  selectSecret: (env) => env.SYSTEM_ADMIN_TOKEN,
+  missingTokenMessage: "missing system admin token",
+  invalidTokenMessage: "invalid system admin token",
+  missingSecretError: "SYSTEM_ADMIN_TOKEN is not configured",
+});
+
+/** Gate for the event-runtime score feed (`/v1/runtime/*`), keyed by `RUNTIME_FEED_TOKEN`. */
+export const runtimeFeedMiddleware = bearerSecretMiddleware({
+  selectSecret: (env) => env.RUNTIME_FEED_TOKEN,
+  missingTokenMessage: "missing runtime feed token",
+  invalidTokenMessage: "invalid runtime feed token",
+  missingSecretError: "RUNTIME_FEED_TOKEN is not configured",
 });
 
 export function organizerForTest(input: OrganizerContext): MiddlewareHandler<AppEnvironment> {

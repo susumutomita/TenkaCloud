@@ -8,6 +8,7 @@ import {
   auth0JwtMiddleware,
   organizerProjectionMiddleware,
   requireOrganizerRole,
+  runtimeFeedMiddleware,
   systemAdminMiddleware,
   teamBearerMiddleware,
 } from "./auth.js";
@@ -29,6 +30,8 @@ interface AppOptions {
   readonly teamAuth?: MiddlewareHandler<AppEnvironment>;
   /** System-admin gate for `/v1/system/*`; injectable for tests. */
   readonly systemAuth?: MiddlewareHandler<AppEnvironment>;
+  /** Event-runtime score-feed gate for `/v1/runtime/*`; injectable for tests. */
+  readonly runtimeAuth?: MiddlewareHandler<AppEnvironment>;
   /** Transport used to reach the AWS intent ingress; injectable for tests. */
   readonly intentFetch?: typeof fetch;
 }
@@ -170,6 +173,49 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
       tenantId,
       suspended: rawSuspended ?? false,
     });
+    return context.body(null, StatusCodes.NO_CONTENT);
+  });
+
+  app.use("/v1/runtime/*", options.runtimeAuth ?? runtimeFeedMiddleware);
+
+  // Score feed: the AWS event runtime pushes each team's authoritative uptime points for an
+  // event; the leaderboard sums these with the flag-materialized score_summary. Batched so one
+  // scoring tick is one call.
+  app.post("/v1/runtime/events/:eventId/score-summaries", async (context) => {
+    const eventId = context.req.param("eventId");
+    if (eventId.trim().length === 0) {
+      throw new HTTPException(StatusCodes.BAD_REQUEST, { message: "eventId must be non-empty" });
+    }
+    const body = await readObject(context.req);
+    const rawScores = body.scores;
+    if (!Array.isArray(rawScores) || rawScores.length === 0) {
+      throw new HTTPException(StatusCodes.BAD_REQUEST, {
+        message: "scores must be a non-empty array",
+      });
+    }
+    const scores = rawScores.map((entry) => {
+      if (typeof entry !== "object" || entry === null) {
+        throw new HTTPException(StatusCodes.BAD_REQUEST, {
+          message: "each score must be an object",
+        });
+      }
+      const record = entry as JsonObject;
+      const points = record.points;
+      if (!Number.isInteger(points) || Number(points) < 0) {
+        throw new HTTPException(StatusCodes.BAD_REQUEST, {
+          message: "points must be a non-negative integer",
+        });
+      }
+      return { teamId: requiredString(record, "teamId"), points: Number(points) };
+    });
+    const store = new ControlStore(context.env.CONTROL_DB);
+    for (const score of scores) {
+      await store.upsertRuntimeScore({
+        eventId: eventId.trim(),
+        teamId: score.teamId,
+        points: score.points,
+      });
+    }
     return context.body(null, StatusCodes.NO_CONTENT);
   });
 

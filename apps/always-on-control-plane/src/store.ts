@@ -165,18 +165,46 @@ export class ControlStore {
     return alreadySolved ? "already_solved" : "incorrect";
   }
 
+  /**
+   * Upsert an event runtime's uptime-score contribution for a team (ADR-049 Phase 5 / #2294).
+   * The AWS event runtime pushes the authoritative uptime points; the leaderboard sums them
+   * with the flag-materialized `score_summary`.
+   */
+  async upsertRuntimeScore(input: {
+    readonly eventId: string;
+    readonly teamId: string;
+    readonly points: number;
+  }): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO runtime_score (event_id, team_id, points, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(event_id, team_id) DO UPDATE SET
+           points = excluded.points,
+           updated_at = excluded.updated_at`,
+      )
+      .bind(input.eventId, input.teamId, input.points, new Date().toISOString())
+      .run();
+  }
+
   async leaderboard(eventId: string): Promise<readonly Record<string, unknown>[]> {
+    // Every team has a score_summary row (the AFTER-INSERT-ON-teams trigger seeds it at 0), so
+    // start FROM score_summary (each team appears once) and LEFT JOIN the uptime contribution.
+    // The displayed score sums the flag-materialized score_summary.score with runtime_score.points;
+    // when runtime_score is empty this reduces to the flag-only leaderboard (backward compatible).
     const result = await this.db
       .prepare(
         `SELECT summary.team_id AS teamId,
                 team.display_name AS displayName,
-                summary.score,
+                summary.score + COALESCE(runtime.points, 0) AS score,
                 summary.solved_checkpoints AS solvedCheckpoints,
-                summary.updated_at AS updatedAt
+                MAX(summary.updated_at, COALESCE(runtime.updated_at, '')) AS updatedAt
            FROM score_summary AS summary
            JOIN teams AS team ON team.team_id = summary.team_id
+           LEFT JOIN runtime_score AS runtime
+                  ON runtime.team_id = summary.team_id AND runtime.event_id = summary.event_id
           WHERE summary.event_id = ?
-          ORDER BY summary.score DESC, summary.updated_at ASC, summary.team_id ASC`,
+          ORDER BY score DESC, updatedAt ASC, summary.team_id ASC`,
       )
       .bind(eventId)
       .all();

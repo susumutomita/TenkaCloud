@@ -23,6 +23,8 @@ export interface SecretBindings {
    * secret; optional here because a misconfigured deployment must fail loudly at use.
    */
   readonly SYSTEM_ADMIN_TOKEN?: string;
+  /** Bearer for the AWS event-runtime score feed (`/v1/runtime/*`). A Workers secret. */
+  readonly RUNTIME_FEED_TOKEN?: string;
 }
 
 export type AppEnvironment = {
