@@ -31,6 +31,8 @@ const BASE_ENV: NodeJS.ProcessEnv = {
   CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME: "CompetitorAccounts",
   CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN:
     "arn:aws:dynamodb:us-east-1:111111111111:table/CompetitorAccounts",
+  // #2365: audience pinning is required; the ingress cannot be deployed fail-open.
+  CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE: "plane://tenka/ingress",
   CDK_PARAM_ENVIRONMENT: "test",
   CDK_PARAM_AWS_ACCOUNT_ID: "111111111111",
   CDK_PARAM_AWS_REGION: "us-east-1",
@@ -113,7 +115,7 @@ describe("bin/tenkacloud-always-on.ts (ADR-049 Phase 4 / #2293 SLICE 2)", () => 
     t.resourceCountIs("AWS::Events::EventBus", 0);
   });
 
-  it("should pass the optional audience + allowlists from comma-separated env into the Lambda", () => {
+  it("should pass the required audience + optional allowlists from comma-separated env into the Lambda", () => {
     const t = synthIngress({
       ...BASE_ENV,
       CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE: "plane://tenka/ingress",
@@ -151,6 +153,8 @@ describe("bin/tenkacloud-always-on.ts (ADR-049 Phase 4 / #2293 SLICE 2)", () => 
   it.each([
     "CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME",
     "CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN",
+    // #2365: audience pinning is required — the ingress must never deploy fail-open.
+    "CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE",
   ])("should throw loudly when required %s is missing", (name) => {
     const env = { ...BASE_ENV };
     delete env[name];
@@ -183,11 +187,13 @@ describe("bin/tenkacloud-always-on.ts (ADR-049 Phase 4 / #2293 SLICE 2)", () => 
     const savedSecret = process.env[VERIFY_SECRET_PARAM_ENV];
     const savedTableName = process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME;
     const savedTableArn = process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN;
+    const savedAudience = process.env.CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE;
     process.argv[1] = modPath;
     process.env[VERIFY_SECRET_PARAM_ENV] = "/tenkacloud/intent-ingress/verify-secret";
     process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME = "CompetitorAccounts";
     process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN =
       "arn:aws:dynamodb:us-east-1:111111111111:table/CompetitorAccounts";
+    process.env.CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE = "plane://tenka/ingress";
     vi.resetModules();
     try {
       await expect(import("../../bin/tenkacloud-always-on")).resolves.toBeDefined();
@@ -199,6 +205,9 @@ describe("bin/tenkacloud-always-on.ts (ADR-049 Phase 4 / #2293 SLICE 2)", () => 
       else process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME = savedTableName;
       if (savedTableArn === undefined) delete process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN;
       else process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN = savedTableArn;
+      if (savedAudience === undefined)
+        delete process.env.CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE;
+      else process.env.CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE = savedAudience;
       vi.resetModules();
     }
   });

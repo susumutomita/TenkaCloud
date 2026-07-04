@@ -309,9 +309,11 @@ destroy-battles:
 #
 # 必須 env: CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM (= JWS 検証秘密を保持する SSM SecureString 名) /
 #           CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME / _ARN (= ProblemDeployBackend の CompetitorAccounts
-#           DDB。 ingress が verified account を解決し、未検証 intent を fail-closed するために GetItem する。#2362)。
+#           DDB。 ingress が verified account を解決し、未検証 intent を fail-closed するために GetItem する。#2362) /
+#           CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE (= audience pinning。未指定だと ingress は
+#           fail-open で任意 audience の署名 intent を受理する。control plane の INTENT_AUDIENCE と一致必須。#2365)。
 # 任意 env: CDK_PARAM_EVENT_BUS_ARN (既存 deploy bus へ re-emit。省略で local bus) /
-#           CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE / _ALLOWED_TENANT_IDS / _ALLOWED_EVENT_IDS。
+#           CDK_PARAM_INTENT_INGRESS_ALLOWED_TENANT_IDS / _ALLOWED_EVENT_IDS (defense-in-depth)。
 #
 # 使い方:
 #   make deploy-always-on-ingress \
@@ -327,6 +329,10 @@ deploy-always-on-ingress:
 	fi
 	@if [ -z "$${CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN}" ]; then \
 	  echo "error: CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME / _ARN が未指定 (= ingress の verified-account 解決に必須。#2362)。" >&2; \
+	  exit 1; \
+	fi
+	@if [ -z "$${CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE}" ]; then \
+	  echo "error: CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE が未指定 (= audience pinning。未指定は fail-open。#2365)。" >&2; \
 	  exit 1; \
 	fi
 	$(CDK) deploy --app "$(ALWAYS_ON_INGRESS_APP)" --all $(APPROVAL)
