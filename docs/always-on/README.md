@@ -218,6 +218,27 @@ ON CONFLICT(org_id) DO UPDATE SET
 The SPA-facing `/runtime-config.json` retains runtime configuration outside the
 application bundle and reports the Auth0 issuer, audience, and public client ID.
 
+## Score feed (Phase 5, #2294)
+
+Battle (uptime-kind) scoring runs in the AWS event runtime, while flag scoring
+runs on the Worker. The runtime pushes each team's authoritative uptime points
+into the control store so the leaderboard sums both:
+
+```http
+POST /v1/runtime/events/{eventId}/score-summaries
+Authorization: Bearer <RUNTIME_FEED_TOKEN>
+Content-Type: application/json
+
+{ "scores": [ { "teamId": "…", "points": 120 } ] }
+```
+
+`RUNTIME_FEED_TOKEN` is a Workers secret
+(`bunx wrangler secret put RUNTIME_FEED_TOKEN --env <environment>`), distinct
+from the organizer and system-admin credentials. The leaderboard reads
+`score_summary.score + runtime_score.points`, so an empty `runtime_score`
+reduces to the flag-only leaderboard. The AWS-side producer (the uptime scoring
+that calls this endpoint) is tracked as the remaining GA work in #2294.
+
 ## Rollback
 
 The Worker deployment is versioned by Cloudflare. Application rollback is
