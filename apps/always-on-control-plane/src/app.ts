@@ -253,6 +253,23 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
     return context.json(event, StatusCodes.CREATED);
   });
 
+  // Export a control-store scoring snapshot so an organizer can archive it before reconciliation
+  // prunes a long-ended event. Per-tick runtime events remain an AWS-runtime archive concern.
+  app.get(
+    "/v1/admin/events/:eventId/export",
+    requireOrganizerRole(READING_ROLES),
+    async (context) => {
+      const organizer = context.get("organizer");
+      const eventId = context.req.param("eventId");
+      const store = new ControlStore(context.env.CONTROL_DB);
+      const scores = await store.exportEventScores(organizer.tenantId, eventId);
+      if (scores === null) {
+        throw new HTTPException(StatusCodes.NOT_FOUND, { message: "event not found" });
+      }
+      return context.json({ eventId, ...scores });
+    },
+  );
+
   app.post(
     "/v1/admin/events/:eventId/teams",
     requireOrganizerRole(MUTATING_ROLES),

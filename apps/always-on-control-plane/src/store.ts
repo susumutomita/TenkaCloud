@@ -240,4 +240,57 @@ export class ControlStore {
       .all();
     return result.results;
   }
+
+  /**
+   * Export a control-store scoring snapshot for a tenant-owned event before reconciliation prunes
+   * it (ADR-049 Phase 5 / #2294). Per-tick runtime score events stay in the AWS event runtime and
+   * are not represented here. Returns `null` when the event is not owned by the tenant.
+   */
+  async exportEventScores(
+    tenantId: string,
+    eventId: string,
+  ): Promise<{
+    readonly scoreSummary: readonly Record<string, unknown>[];
+    readonly runtimeScores: readonly Record<string, unknown>[];
+    readonly submissions: readonly Record<string, unknown>[];
+  } | null> {
+    const owned = await this.db
+      .prepare("SELECT 1 AS present FROM events WHERE event_id = ? AND tenant_id = ?")
+      .bind(eventId, tenantId)
+      .first<{ present: number }>();
+    if (owned === null) return null;
+
+    const [scoreSummary, runtimeScores, submissions] = await Promise.all([
+      this.db
+        .prepare(
+          `SELECT team_id AS teamId, score, solved_checkpoints AS solvedCheckpoints,
+                  updated_at AS updatedAt
+             FROM score_summary WHERE event_id = ? ORDER BY team_id ASC`,
+        )
+        .bind(eventId)
+        .all(),
+      this.db
+        .prepare(
+          `SELECT team_id AS teamId, points, updated_at AS updatedAt
+             FROM runtime_score WHERE event_id = ? ORDER BY team_id ASC`,
+        )
+        .bind(eventId)
+        .all(),
+      this.db
+        .prepare(
+          `SELECT team_id AS teamId, problem_id AS problemId, checkpoint_id AS checkpointId,
+                  awarded_points AS awardedPoints, submitted_at AS submittedAt
+             FROM submissions WHERE event_id = ?
+            ORDER BY team_id ASC, problem_id ASC, checkpoint_id ASC`,
+        )
+        .bind(eventId)
+        .all(),
+    ]);
+
+    return {
+      scoreSummary: scoreSummary.results,
+      runtimeScores: runtimeScores.results,
+      submissions: submissions.results,
+    };
+  }
 }

@@ -35,6 +35,12 @@ This preserves ADR-014's freshness contract (a status change is visible within
 one Cron interval) while keeping the platform at zero always-on AWS compute
 between events.
 
+Before that prune deletes a long-ended event, an organizer can archive its
+control-store scoring snapshot via `GET /v1/admin/events/{eventId}/export`
+(organizer-role gated and tenant-scoped). It returns `scoreSummary`,
+`runtimeScores`, and `submissions`. Per-tick Battle score events remain in the
+AWS event runtime and require a separate archive export.
+
 ## Phase 3 gate verification (2026-07-03)
 
 | Gate | Verified result | Status |
