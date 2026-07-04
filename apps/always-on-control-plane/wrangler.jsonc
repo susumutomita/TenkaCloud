@@ -8,6 +8,11 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "upload_source_maps": true,
+  // Control-plane reconciliation (event status transitions + prune) every 5 minutes,
+  // so Always-On mode needs no constant AWS tick (ADR-049 Phase 5 / #2294).
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
   "observability": {
     "enabled": true,
     "logs": {
