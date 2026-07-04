@@ -306,18 +306,26 @@ destroy-battles:
 # operator が単体 deploy できる経路。ControlPlane / tenant pipeline / SBT を一切持ち込まないため、
 # `make deploy` / `deploy-saas` / `deploy-battles` に対しては完全に NO-OP。
 #
-# 必須 env: CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM (= JWS 検証秘密を保持する SSM SecureString 名)。
+# 必須 env: CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM (= JWS 検証秘密を保持する SSM SecureString 名) /
+#           CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME / _ARN (= ProblemDeployBackend の CompetitorAccounts
+#           DDB。 ingress が verified account を解決し、未検証 intent を fail-closed するために GetItem する。#2362)。
 # 任意 env: CDK_PARAM_EVENT_BUS_ARN (既存 deploy bus へ re-emit。省略で local bus) /
 #           CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE / _ALLOWED_TENANT_IDS / _ALLOWED_EVENT_IDS。
 #
 # 使い方:
-#   make deploy-always-on-ingress CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM=/tenkacloud/intent-ingress/verify-secret
+#   make deploy-always-on-ingress \
+#     CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM=/tenkacloud/intent-ingress/verify-secret \
+#     CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME=... CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN=...
 ALWAYS_ON_INGRESS_APP := bunx tsx bin/tenkacloud-always-on.ts
 
 deploy-always-on-ingress:
 	@if [ -z "$${CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM}" ]; then \
 	  echo "error: CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM が未指定 (= JWS 検証秘密を保持する SSM SecureString 名)。" >&2; \
 	  echo "  例: make deploy-always-on-ingress CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM=/tenkacloud/intent-ingress/verify-secret" >&2; \
+	  exit 1; \
+	fi
+	@if [ -z "$${CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN}" ]; then \
+	  echo "error: CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME / _ARN が未指定 (= ingress の verified-account 解決に必須。#2362)。" >&2; \
 	  exit 1; \
 	fi
 	$(CDK) deploy --app "$(ALWAYS_ON_INGRESS_APP)" --all $(APPROVAL)

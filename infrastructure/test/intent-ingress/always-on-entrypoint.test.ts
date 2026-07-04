@@ -28,6 +28,10 @@ vi.mock("../../lib/utils/discover-problems-catalog", () => ({
 
 const BASE_ENV: NodeJS.ProcessEnv = {
   [VERIFY_SECRET_PARAM_ENV]: "/tenkacloud/intent-ingress/verify-secret",
+  CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME: "CompetitorAccounts",
+  CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN:
+    "arn:aws:dynamodb:us-east-1:111111111111:table/CompetitorAccounts",
+  CDK_PARAM_ENVIRONMENT: "test",
   CDK_PARAM_AWS_ACCOUNT_ID: "111111111111",
   CDK_PARAM_AWS_REGION: "us-east-1",
 };
@@ -90,6 +94,8 @@ describe("bin/tenkacloud-always-on.ts (ADR-049 Phase 4 / #2293 SLICE 2)", () => 
       Environment: {
         Variables: Match.objectLike({
           VERIFY_SECRET_PARAM: "/tenkacloud/intent-ingress/verify-secret",
+          COMPETITOR_ACCOUNTS_TABLE_NAME: "CompetitorAccounts",
+          DEPLOY_ENVIRONMENT: "test",
         }),
       },
     });
@@ -142,6 +148,15 @@ describe("bin/tenkacloud-always-on.ts (ADR-049 Phase 4 / #2293 SLICE 2)", () => 
     );
   });
 
+  it.each([
+    "CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME",
+    "CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN",
+  ])("should throw loudly when required %s is missing", (name) => {
+    const env = { ...BASE_ENV };
+    delete env[name];
+    expect(() => buildApp(env)).toThrow(name);
+  });
+
   it("should skip Lambda bundling when CDK_SKIP_BUNDLING=1 is set", () => {
     // Fast synth-shape passthrough (mirrors bin/infrastructure.ts): the bundling-stacks context is
     // emptied so `make check-synth`-style runs never bundle the ingress Lambda.
@@ -166,8 +181,13 @@ describe("bin/tenkacloud-always-on.ts (ADR-049 Phase 4 / #2293 SLICE 2)", () => 
     const savedArgv1 = process.argv[1];
     const hadSecret = VERIFY_SECRET_PARAM_ENV in process.env;
     const savedSecret = process.env[VERIFY_SECRET_PARAM_ENV];
+    const savedTableName = process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME;
+    const savedTableArn = process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN;
     process.argv[1] = modPath;
     process.env[VERIFY_SECRET_PARAM_ENV] = "/tenkacloud/intent-ingress/verify-secret";
+    process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME = "CompetitorAccounts";
+    process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN =
+      "arn:aws:dynamodb:us-east-1:111111111111:table/CompetitorAccounts";
     vi.resetModules();
     try {
       await expect(import("../../bin/tenkacloud-always-on")).resolves.toBeDefined();
@@ -175,6 +195,10 @@ describe("bin/tenkacloud-always-on.ts (ADR-049 Phase 4 / #2293 SLICE 2)", () => 
       process.argv[1] = savedArgv1;
       if (hadSecret) process.env[VERIFY_SECRET_PARAM_ENV] = savedSecret;
       else delete process.env[VERIFY_SECRET_PARAM_ENV];
+      if (savedTableName === undefined) delete process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME;
+      else process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME = savedTableName;
+      if (savedTableArn === undefined) delete process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN;
+      else process.env.CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN = savedTableArn;
       vi.resetModules();
     }
   });

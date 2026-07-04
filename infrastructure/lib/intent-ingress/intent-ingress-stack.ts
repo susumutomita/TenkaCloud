@@ -44,6 +44,12 @@ export interface IntentIngressStackProps extends StackProps {
   readonly allowedEventIds?: readonly string[];
   /** problemId → problemDir catalog (mirrors the deploy handler's `BATTLE_PROBLEMS_CATALOG`). */
   readonly problemsCatalog: Readonly<Record<string, string>>;
+  /** Existing ProblemDeployBackend CompetitorAccounts table name. */
+  readonly competitorAccountsTableName: string;
+  /** Existing ProblemDeployBackend CompetitorAccounts table ARN. */
+  readonly competitorAccountsTableArn: string;
+  /** Deployment stage used to derive the tenant ExternalId SSM parameter path. */
+  readonly environmentName: string;
 }
 
 export class IntentIngressStack extends Stack {
@@ -91,6 +97,8 @@ export class IntentIngressStack extends Stack {
         NONCE_TABLE_NAME: this.nonceTable.tableName,
         VERIFY_SECRET_PARAM: props.verifySecretParameterName,
         DEPLOY_EVENT_BUS_NAME: this.eventBus.eventBusName,
+        COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTableName,
+        DEPLOY_ENVIRONMENT: props.environmentName,
         ...(props.expectedAudience ? { EXPECTED_AUDIENCE: props.expectedAudience } : {}),
         ...(props.allowedTenantIds && props.allowedTenantIds.length > 0
           ? { ALLOWED_TENANT_IDS: props.allowedTenantIds.join(",") }
@@ -129,6 +137,14 @@ export class IntentIngressStack extends Stack {
     this.nonceTable.grantWriteData(fn);
     // Re-emit onto the deploy bus.
     this.eventBus.grantPutEventsTo(fn);
+    // Resolve only the requested tenant/account row; no scan/query or write access.
+    fn.addToRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ["dynamodb:GetItem"],
+        resources: [props.competitorAccountsTableArn],
+      }),
+    );
     // Read the JWS verification secret (SecureString), scoped to the exact parameter ARN.
     fn.addToRolePolicy(
       new PolicyStatement({

@@ -14,6 +14,11 @@ import { makeIntent, makeVerified, TEST_SECRET } from "./intent-fixtures";
 const resolveProblemDir = (problemId: string): string | undefined =>
   ({ "hello-world": "problems/challenges/hello-world" })[problemId];
 
+const VERIFIED_ACCOUNT = {
+  competitorRoleArn: "arn:aws:iam::111111111111:role/TenkaCloud-tenant-a-deploy-Role",
+  externalIdParameterName: "/test/tenants/tenant-a/external-id",
+} as const;
+
 /** Deps that always verify to the given intent and always authorize; captures publishes. */
 function fakeDeps(
   intent: VerifiedCloudActionIntent,
@@ -31,6 +36,7 @@ function fakeDeps(
     verify: async () => ({ ok: true, intent }) satisfies IntentVerifyOutcome,
     authorizeScope: () => ({ ok: true }),
     resolveProblemDir,
+    resolveVerifiedAccount: async () => VERIFIED_ACCOUNT,
     publish: async (detailType, jobId, detail) => {
       published.push({ detailType, jobId, detail });
     },
@@ -133,13 +139,35 @@ describe("handleIntentIngress (ADR-049 Phase 4 / #2293)", () => {
   });
 
   it("should 422 not-a-deploy-command for a non-deploy action", async () => {
-    const { deps, published } = fakeDeps(makeVerified({ action: { type: "inspect" } }));
+    const resolveVerifiedAccount = vi.fn();
+    const { deps, published } = fakeDeps(makeVerified({ action: { type: "inspect" } }), {
+      resolveVerifiedAccount,
+    });
     const res = await handleIntentIngress(body("t"), deps);
     expect(res).toEqual({
       status: StatusCodes.UNPROCESSABLE_ENTITY,
       body: { reason: "not-a-deploy-command" },
     });
     expect(published).toHaveLength(0);
+    expect(resolveVerifiedAccount).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["deploy", makeVerified()],
+    ["destroy", makeVerified({ action: { type: "destroy" } })],
+  ] as const)("should 403 account-not-verified without publishing for an unverified %s account", async (_action, intent) => {
+    const publish = vi.fn();
+    const resolveVerifiedAccount = vi.fn().mockResolvedValue(null);
+    const { deps } = fakeDeps(intent, { publish, resolveVerifiedAccount });
+
+    const res = await handleIntentIngress(body("t"), deps);
+
+    expect(res).toEqual({
+      status: StatusCodes.FORBIDDEN,
+      body: { reason: "account-not-verified" },
+    });
+    expect(resolveVerifiedAccount).toHaveBeenCalledWith("tenant-a", "111111111111");
+    expect(publish).not.toHaveBeenCalled();
   });
 
   it("should 422 with the build reason when a deploy intent lacks a problemId", async () => {
@@ -176,6 +204,7 @@ describe("handleIntentIngress (ADR-049 Phase 4 / #2293)", () => {
       problemId: "hello-world",
       problemDir: "problems/challenges/hello-world",
       teamSlug: "team-alpha",
+      ...VERIFIED_ACCOUNT,
     });
   });
 
@@ -185,7 +214,10 @@ describe("handleIntentIngress (ADR-049 Phase 4 / #2293)", () => {
     const res = await handleIntentIngress(body("t"), deps);
     expect(res.status).toBe(StatusCodes.ACCEPTED);
     expect(published[0].detailType).toBe("DeployDeleteRequested");
-    expect(published[0].detail).toMatchObject({ stackName: "tc-hello-world-team-alpha" });
+    expect(published[0].detail).toMatchObject({
+      stackName: "tc-hello-world-team-alpha",
+      ...VERIFIED_ACCOUNT,
+    });
   });
 
   it("should run end-to-end with the REAL verify + scope path on a genuinely signed intent", async () => {
@@ -195,6 +227,7 @@ describe("handleIntentIngress (ADR-049 Phase 4 / #2293)", () => {
       verify: (t) => verifyIntent(t, { resolveSecret: () => TEST_SECRET }),
       authorizeScope: (i) => authorizeIntentScope(i, { allowedTenantIds: ["tenant-a"] }),
       resolveProblemDir,
+      resolveVerifiedAccount: async () => VERIFIED_ACCOUNT,
       publish: async (_detailType, _jobId, detail) => {
         published.push(detail);
       },
@@ -217,6 +250,7 @@ describe("handleIntentIngress (ADR-049 Phase 4 / #2293)", () => {
       verify: verifySpy,
       authorizeScope: (i) => authorizeIntentScope(i, {}),
       resolveProblemDir,
+      resolveVerifiedAccount: async () => VERIFIED_ACCOUNT,
       publish: async () => undefined,
     };
     const res = await handleIntentIngress(body(tampered), deps);

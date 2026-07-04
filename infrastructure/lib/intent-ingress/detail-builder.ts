@@ -33,10 +33,10 @@ import {
  *   - `problemDir` is NOT an intent identifier (the frozen schema carries no problem
  *     directory / category). It is resolved from the platform problems catalog
  *     (problemId → dir), mirroring the deploy handler's `problemsCatalog[problemId]`.
- *   - `competitorRoleArn` / `externalIdParameterName` are cross-account AssumeRole
- *     metadata the intent does not carry; they are left unset (both optional in the
- *     frozen schema). The downstream worker still resolves the verified competitor
- *     account for the tenant, so SLICE 1 re-emit stays same-account-safe.
+ *   - The ingress resolves the tenant's verified competitor account and fails closed
+ *     when none exists. Its `competitorRoleArn` / `externalIdParameterName` pair is
+ *     threaded into the frozen detail so the downstream worker AssumeRoles into the
+ *     competitor account instead of deploying in the platform account.
  */
 
 export interface DetailBuildConfig {
@@ -45,6 +45,11 @@ export interface DetailBuildConfig {
    * handler's `problemsCatalog[problemId]`. Returns `undefined` for an unknown problem.
    */
   readonly resolveProblemDir: (problemId: string) => string | undefined;
+}
+
+export interface ResolvedCompetitorAccount {
+  readonly competitorRoleArn: string;
+  readonly externalIdParameterName: string;
 }
 
 export type DetailBuildFailureReason =
@@ -83,6 +88,7 @@ function deriveJobId(intent: VerifiedCloudActionIntent): string {
 export function buildDeployCreateDetail(
   intent: VerifiedCloudActionIntent,
   cfg: DetailBuildConfig,
+  resolvedAccount?: ResolvedCompetitorAccount,
 ): DeployCreateDetailResult {
   const problemId = intent.source.problemId;
   if (problemId === undefined) {
@@ -111,6 +117,7 @@ export function buildDeployCreateDetail(
     namePrefix: buildStackPrefix(problemId, teamId),
     region,
     awsAccountId: intent.target.providerAccountRef,
+    ...(resolvedAccount ?? {}),
   };
 
   // Emit only what the authoritative frozen schema accepts. A non-conforming
@@ -134,6 +141,7 @@ export function buildDeployCreateDetail(
  */
 export function buildDeployDeleteDetail(
   intent: VerifiedCloudActionIntent,
+  resolvedAccount?: ResolvedCompetitorAccount,
 ): DeployDeleteDetailResult {
   const problemId = intent.source.problemId;
   if (problemId === undefined) {
@@ -155,6 +163,7 @@ export function buildDeployDeleteDetail(
     stackName: buildStackPrefix(problemId, teamId),
     region,
     awsAccountId: intent.target.providerAccountRef,
+    ...(resolvedAccount ?? {}),
   };
 
   const parsed = DeployDeleteRequestedDetailSchema.safeParse(candidate);
