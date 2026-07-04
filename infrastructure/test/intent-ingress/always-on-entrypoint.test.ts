@@ -1,11 +1,18 @@
+import { fileURLToPath } from "node:url";
 import type { App, Stack } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildIntentIngressApp,
   INTENT_INGRESS_STACK_ID,
   VERIFY_SECRET_PARAM_ENV,
 } from "../../bin/tenkacloud-always-on";
+
+// The entrypoint-guard path calls the real discoverProblemsCatalog (no injected hook), so mock it
+// here to keep the argv-guard test independent of whether the problems/ submodule is checked out.
+vi.mock("../../lib/utils/discover-problems-catalog", () => ({
+  discoverProblemsCatalog: () => ({ "hello-world": "problems/challenges/hello-world" }),
+}));
 
 /**
  * ADR-049 Phase 4 (#2293) SLICE 2 — bin/tenkacloud-always-on.ts の手動デプロイ経路。
@@ -133,5 +140,55 @@ describe("bin/tenkacloud-always-on.ts (ADR-049 Phase 4 / #2293 SLICE 2)", () => 
     expect(() => buildApp({ ...BASE_ENV, [VERIFY_SECRET_PARAM_ENV]: "   " })).toThrow(
       VERIFY_SECRET_PARAM_ENV,
     );
+  });
+
+  it("should skip Lambda bundling when CDK_SKIP_BUNDLING=1 is set", () => {
+    // Fast synth-shape passthrough (mirrors bin/infrastructure.ts): the bundling-stacks context is
+    // emptied so `make check-synth`-style runs never bundle the ingress Lambda.
+    const app = buildApp({ ...BASE_ENV, CDK_SKIP_BUNDLING: "1" });
+    expect(app.node.tryGetContext("aws:cdk:bundling-stacks")).toEqual([]);
+    expect(Template.fromStack(findStack(app, INTENT_INGRESS_STACK_ID))).toBeDefined();
+  });
+
+  it("should treat an all-whitespace allowlist CSV as no allowlist", () => {
+    // parseCsv drops empty items; an all-whitespace value folds to undefined (allowlist disabled).
+    synthIngress({
+      ...BASE_ENV,
+      CDK_PARAM_INTENT_INGRESS_ALLOWED_TENANT_IDS: " , , ",
+    }).hasResourceProperties("AWS::Lambda::Function", {
+      Environment: { Variables: Match.objectLike({ ALLOWED_TENANT_IDS: Match.absent() }) },
+    });
+  });
+
+  it("should build the app when the file is invoked as the CDK entrypoint (argv guard)", async () => {
+    // Drive the thin argv-guard shim: point argv[1] at the module path so the guard fires on import.
+    const modPath = fileURLToPath(new URL("../../bin/tenkacloud-always-on.ts", import.meta.url));
+    const savedArgv1 = process.argv[1];
+    const hadSecret = VERIFY_SECRET_PARAM_ENV in process.env;
+    const savedSecret = process.env[VERIFY_SECRET_PARAM_ENV];
+    process.argv[1] = modPath;
+    process.env[VERIFY_SECRET_PARAM_ENV] = "/tenkacloud/intent-ingress/verify-secret";
+    vi.resetModules();
+    try {
+      await expect(import("../../bin/tenkacloud-always-on")).resolves.toBeDefined();
+    } finally {
+      process.argv[1] = savedArgv1;
+      if (hadSecret) process.env[VERIFY_SECRET_PARAM_ENV] = savedSecret;
+      else delete process.env[VERIFY_SECRET_PARAM_ENV];
+      vi.resetModules();
+    }
+  });
+
+  it("should not fire the entrypoint guard when argv carries no script path", async () => {
+    // Exercises the `process.argv[1] ? ... : ""` fallback: with no script path the guard stays inert.
+    const savedArgv1 = process.argv[1];
+    process.argv[1] = "";
+    vi.resetModules();
+    try {
+      await expect(import("../../bin/tenkacloud-always-on")).resolves.toBeDefined();
+    } finally {
+      process.argv[1] = savedArgv1;
+      vi.resetModules();
+    }
   });
 });
