@@ -23,6 +23,9 @@ import type { AppEnvironment } from "./types.js";
 
 const MUTATING_ROLES = ["TenantAdmin", "TenantOperator"] as const;
 const READING_ROLES = [...MUTATING_ROLES, "TenantViewer"] as const;
+const MAX_RUNTIME_SCORES_PER_REQUEST = 100;
+const MIN_RUNTIME_SCORE_POINTS = -2_147_483_648;
+const MAX_RUNTIME_SCORE_POINTS = 2_147_483_647;
 
 interface AppOptions {
   readonly organizerJwt?: MiddlewareHandler<AppEnvironment>;
@@ -193,6 +196,11 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
         message: "scores must be a non-empty array",
       });
     }
+    if (rawScores.length > MAX_RUNTIME_SCORES_PER_REQUEST) {
+      throw new HTTPException(StatusCodes.BAD_REQUEST, {
+        message: `scores must not exceed ${MAX_RUNTIME_SCORES_PER_REQUEST} entries`,
+      });
+    }
     const scores = rawScores.map((entry) => {
       if (typeof entry !== "object" || entry === null) {
         throw new HTTPException(StatusCodes.BAD_REQUEST, {
@@ -201,19 +209,26 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
       }
       const record = entry as JsonObject;
       const points = record.points;
-      if (!Number.isInteger(points) || Number(points) < 0) {
+      if (
+        !Number.isSafeInteger(points) ||
+        Number(points) < MIN_RUNTIME_SCORE_POINTS ||
+        Number(points) > MAX_RUNTIME_SCORE_POINTS
+      ) {
         throw new HTTPException(StatusCodes.BAD_REQUEST, {
-          message: "points must be a non-negative integer",
+          message: `points must be a safe integer between ${MIN_RUNTIME_SCORE_POINTS} and ${MAX_RUNTIME_SCORE_POINTS}`,
         });
       }
       return { teamId: requiredString(record, "teamId"), points: Number(points) };
     });
+    if (new Set(scores.map(({ teamId }) => teamId)).size !== scores.length) {
+      throw new HTTPException(StatusCodes.BAD_REQUEST, {
+        message: "scores must contain each teamId at most once",
+      });
+    }
     const store = new ControlStore(context.env.CONTROL_DB);
-    for (const score of scores) {
-      await store.upsertRuntimeScore({
-        eventId: eventId.trim(),
-        teamId: score.teamId,
-        points: score.points,
+    if (!(await store.upsertRuntimeScores(eventId.trim(), scores))) {
+      throw new HTTPException(StatusCodes.BAD_REQUEST, {
+        message: "every score must reference a team in the event",
       });
     }
     return context.body(null, StatusCodes.NO_CONTENT);

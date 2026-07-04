@@ -128,13 +128,72 @@ describe("POST /v1/runtime/events/:eventId/score-summaries (#2294)", () => {
       { scores: [] },
       { scores: "nope" },
       { scores: [{ teamId: "team-1" }] },
-      { scores: [{ teamId: "team-1", points: -1 }] },
+      { scores: [{ teamId: "team-1", points: -2_147_483_649 }] },
       { scores: [{ teamId: "team-1", points: 1.5 }] },
+      { scores: [{ teamId: "team-1", points: Number.MAX_SAFE_INTEGER }] },
       { scores: [{ points: 5 }] },
       { scores: [42] },
     ]) {
       expect((await post("evt", body, RUNTIME_TOKEN)).status).toBe(StatusCodes.BAD_REQUEST);
     }
+  });
+
+  it("should accept a negative authoritative score after uptime penalties", async () => {
+    await seedTeam("evt", "team-1", "Alpha");
+    const res = await post("evt", { scores: [{ teamId: "team-1", points: -25 }] }, RUNTIME_TOKEN);
+    expect(res.status).toBe(StatusCodes.NO_CONTENT);
+    const board = await new ControlStore(env.CONTROL_DB).leaderboard("evt");
+    expect(board[0]).toMatchObject({ teamId: "team-1", score: -25 });
+  });
+
+  it("should reject duplicate teams and oversized batches", async () => {
+    await seedTeam("evt", "team-1", "Alpha");
+    expect(
+      (
+        await post(
+          "evt",
+          {
+            scores: [
+              { teamId: "team-1", points: 1 },
+              { teamId: "team-1", points: 2 },
+            ],
+          },
+          RUNTIME_TOKEN,
+        )
+      ).status,
+    ).toBe(StatusCodes.BAD_REQUEST);
+    expect(
+      (
+        await post(
+          "evt",
+          {
+            scores: Array.from({ length: 101 }, (_, index) => ({
+              teamId: `team-${index}`,
+              points: index,
+            })),
+          },
+          RUNTIME_TOKEN,
+        )
+      ).status,
+    ).toBe(StatusCodes.BAD_REQUEST);
+  });
+
+  it("should reject unknown and cross-event teams without partially updating the batch", async () => {
+    await seedTeam("evt", "team-1", "Alpha");
+    await seedTeam("other", "team-2", "Bravo");
+    const res = await post(
+      "evt",
+      {
+        scores: [
+          { teamId: "team-1", points: 30 },
+          { teamId: "team-2", points: 70 },
+        ],
+      },
+      RUNTIME_TOKEN,
+    );
+    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    const board = await new ControlStore(env.CONTROL_DB).leaderboard("evt");
+    expect(board).toEqual([expect.objectContaining({ teamId: "team-1", score: 0 })]);
   });
 
   it("should reject a whitespace-only eventId with 400", async () => {

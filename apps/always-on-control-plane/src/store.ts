@@ -13,6 +13,11 @@ export interface CheckpointInput {
   readonly points: number;
 }
 
+export interface RuntimeScoreInput {
+  readonly teamId: string;
+  readonly points: number;
+}
+
 export class ControlStore {
   constructor(private readonly db: D1Database) {}
 
@@ -170,21 +175,46 @@ export class ControlStore {
    * The AWS event runtime pushes the authoritative uptime points; the leaderboard sums them
    * with the flag-materialized `score_summary`.
    */
+  async upsertRuntimeScores(
+    eventId: string,
+    scores: readonly RuntimeScoreInput[],
+  ): Promise<boolean> {
+    const placeholders = scores.map(() => "?").join(", ");
+    const teams = await this.db
+      .prepare(
+        `SELECT team_id
+           FROM teams
+          WHERE event_id = ?
+            AND team_id IN (${placeholders})`,
+      )
+      .bind(eventId, ...scores.map(({ teamId }) => teamId))
+      .all<{ team_id: string }>();
+    if (teams.results.length !== scores.length) return false;
+
+    const updatedAt = new Date().toISOString();
+    await this.db.batch(
+      scores.map(({ teamId, points }) =>
+        this.db
+          .prepare(
+            `INSERT INTO runtime_score (event_id, team_id, points, updated_at)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT(event_id, team_id) DO UPDATE SET
+               points = excluded.points,
+               updated_at = excluded.updated_at`,
+          )
+          .bind(eventId, teamId, points, updatedAt),
+      ),
+    );
+    return true;
+  }
+
   async upsertRuntimeScore(input: {
     readonly eventId: string;
     readonly teamId: string;
     readonly points: number;
   }): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT INTO runtime_score (event_id, team_id, points, updated_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(event_id, team_id) DO UPDATE SET
-           points = excluded.points,
-           updated_at = excluded.updated_at`,
-      )
-      .bind(input.eventId, input.teamId, input.points, new Date().toISOString())
-      .run();
+    const updated = await this.upsertRuntimeScores(input.eventId, [input]);
+    if (!updated) throw new Error("team does not belong to event");
   }
 
   async leaderboard(eventId: string): Promise<readonly Record<string, unknown>[]> {
