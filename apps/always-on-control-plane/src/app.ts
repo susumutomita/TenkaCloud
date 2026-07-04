@@ -10,16 +10,30 @@ import {
   requireOrganizerRole,
   teamBearerMiddleware,
 } from "./auth.js";
+import {
+  type DeployIntentAction,
+  intentGatewayFromEnvironment,
+  issueDeployIntentCommand,
+} from "./deploy-intents.js";
 import { type CheckpointInput, ControlStore, type EventInput } from "./store.js";
 import type { AppEnvironment } from "./types.js";
 
 const MUTATING_ROLES = ["TenantAdmin", "TenantOperator"] as const;
 const READING_ROLES = [...MUTATING_ROLES, "TenantViewer"] as const;
 
+const DEPLOY_INTENT_ACTIONS: readonly DeployIntentAction[] = ["deploy", "destroy"];
+// These mirror the frozen DeployCreate/DeleteRequested detail schema on the AWS
+// side, so a command the ingress would reject fails here before it is signed.
+const PROBLEM_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+const AWS_ACCOUNT_ID_PATTERN = /^\d{12}$/;
+const AWS_REGION_PATTERN = /^[a-z]{2}-[a-z]+-\d+$/;
+
 interface AppOptions {
   readonly organizerJwt?: MiddlewareHandler<AppEnvironment>;
   readonly organizerProjection?: MiddlewareHandler<AppEnvironment>;
   readonly teamAuth?: MiddlewareHandler<AppEnvironment>;
+  /** Transport used to reach the AWS intent ingress; injectable for tests. */
+  readonly intentFetch?: typeof fetch;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -68,6 +82,47 @@ function eventInput(body: JsonObject): EventInput {
   };
 }
 
+interface DeployIntentInput {
+  readonly action: DeployIntentAction;
+  readonly teamId: string;
+  readonly problemId: string;
+  readonly awsAccountId: string;
+  readonly region: string;
+}
+
+function isDeployIntentAction(value: string): value is DeployIntentAction {
+  return (DEPLOY_INTENT_ACTIONS as readonly string[]).includes(value);
+}
+
+function patternString(body: JsonObject, key: string, pattern: RegExp, hint: string): string {
+  const value = requiredString(body, key);
+  if (!pattern.test(value)) {
+    throw new HTTPException(StatusCodes.BAD_REQUEST, { message: `${key} must be ${hint}` });
+  }
+  return value;
+}
+
+function deployIntentInput(body: JsonObject): DeployIntentInput {
+  const action = requiredString(body, "action");
+  if (!isDeployIntentAction(action)) {
+    throw new HTTPException(StatusCodes.BAD_REQUEST, {
+      message: 'action must be "deploy" or "destroy"',
+    });
+  }
+  return {
+    action,
+    teamId: requiredString(body, "teamId"),
+    problemId: patternString(body, "problemId", PROBLEM_ID_PATTERN, "a lowercase problem slug"),
+    awsAccountId: patternString(
+      body,
+      "awsAccountId",
+      AWS_ACCOUNT_ID_PATTERN,
+      "a 12-digit AWS account id",
+    ),
+    region: patternString(body, "region", AWS_REGION_PATTERN, "an AWS region name"),
+  };
+}
+
 function checkpointInput(body: JsonObject): CheckpointInput {
   const points = body.points;
   if (!Number.isInteger(points) || Number(points) <= 0) {
@@ -84,6 +139,7 @@ function checkpointInput(body: JsonObject): CheckpointInput {
 }
 
 export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
+  const intentFetch = options.intentFetch ?? (fetch.bind(globalThis) as typeof fetch);
   const app = new Hono<AppEnvironment>();
   app.use("*", secureHeaders());
   app.use(
@@ -187,6 +243,39 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
         throw error;
       }
       return context.body(null, StatusCodes.NO_CONTENT);
+    },
+  );
+
+  app.post(
+    "/v1/admin/events/:eventId/deploy-intents",
+    requireOrganizerRole(MUTATING_ROLES),
+    async (context) => {
+      const organizer = context.get("organizer");
+      const eventId = context.req.param("eventId");
+      const input = deployIntentInput(await readObject(context.req));
+      const store = new ControlStore(context.env.CONTROL_DB);
+      if (!(await store.hasTeam(organizer.tenantId, eventId, input.teamId))) {
+        throw new HTTPException(StatusCodes.NOT_FOUND, { message: "team not found" });
+      }
+      const gateway = intentGatewayFromEnvironment(context.env, intentFetch);
+      const outcome = await issueDeployIntentCommand(
+        { ...input, tenantId: organizer.tenantId, eventId },
+        gateway,
+      );
+      if (!outcome.accepted) {
+        console.error(
+          JSON.stringify({
+            event: "always-on.deploy-intent.rejected",
+            ingressStatus: outcome.ingressStatus,
+            reason: outcome.reason,
+          }),
+        );
+        return context.json(
+          { error: "deploy intent rejected by ingress", reason: outcome.reason },
+          StatusCodes.BAD_GATEWAY,
+        );
+      }
+      return context.json({ requestId: outcome.requestId }, StatusCodes.ACCEPTED);
     },
   );
 

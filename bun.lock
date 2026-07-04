@@ -51,6 +51,7 @@
       "name": "@tenkacloud/always-on-control-plane",
       "version": "0.1.0",
       "dependencies": {
+        "@TenkaCloud/trust-bridge": "workspace:*",
         "hono": "^4.12.27",
         "http-status-codes": "^2.3.0",
       },

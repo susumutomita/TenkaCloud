@@ -21,7 +21,9 @@
     "AUTH0_ISSUER": "https://replace-me.auth0.com/",
     "AUTH0_AUDIENCE": "https://api.tenkacloud.dev",
     "AUTH0_CLIENT_ID": "replace-me",
-    "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles"
+    "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles",
+    "INTENT_INGRESS_URL": "https://replace-me.lambda-url.ap-northeast-1.on.aws/",
+    "INTENT_AUDIENCE": "plane://tenkacloud/intent-ingress"
   },
   "d1_databases": [
     {
@@ -38,7 +40,9 @@
         "AUTH0_ISSUER": "https://replace-me-staging.auth0.com/",
         "AUTH0_AUDIENCE": "https://staging-api.tenkacloud.dev",
         "AUTH0_CLIENT_ID": "replace-me-staging",
-        "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles"
+        "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles",
+        "INTENT_INGRESS_URL": "https://replace-me-staging.lambda-url.ap-northeast-1.on.aws/",
+        "INTENT_AUDIENCE": "plane://tenkacloud/intent-ingress"
       },
       "d1_databases": [
         {
@@ -55,7 +59,9 @@
         "AUTH0_ISSUER": "https://replace-me.auth0.com/",
         "AUTH0_AUDIENCE": "https://api.tenkacloud.dev",
         "AUTH0_CLIENT_ID": "replace-me",
-        "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles"
+        "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles",
+        "INTENT_INGRESS_URL": "https://replace-me.lambda-url.ap-northeast-1.on.aws/",
+        "INTENT_AUDIENCE": "plane://tenkacloud/intent-ingress"
       },
       "d1_databases": [
         {
