@@ -1091,6 +1091,21 @@ export interface TeamsRepository {
         Lambda handlers that own control data today, so choosing it first forces compute and data to move
         simultaneously — the opposite of strangler-fig. It remains the natural endgame host once compute
         is on Workers, via the same SQLite schema and seam.</p>
+      <p><strong>Decision (Always-On mode): D1 is adopted as the Always-On control store.</strong>
+        Always-On compute runs on Workers, so this is exactly the endgame the paragraph above anticipated,
+        not a contradiction of it. The two stores are not competing: <em>D1</em> holds the Workers-native
+        Always-On control plane (events, teams, score summaries, the tenant→org projection), while the
+        DynamoDB-canonical + Turso-mirror seam (§5) is the <em>Lambda-era</em> (SaaS / Lite) strangler
+        bridge, where compute is still on AWS and needs libSQL-over-HTTP reachability. The AWS event
+        runtime never reads or writes D1 directly (which it could not do as a first-class client);
+        instead it writes score summaries <em>into</em> the control store through the Worker's
+        authenticated API (the score-summary feed), so the &ldquo;two data planes&rdquo; split is the
+        migration architecture — control data on Cloudflare, event runtime on AWS — bridged by the
+        signed-intent seam (commands) and the score-summary feed (results). The tenant→org projection is
+        onboarded through a system-admin-gated Worker endpoint
+        (<code>PUT /v1/system/tenant-auth-projections/&lt;orgId&gt;</code>). Turso's role narrows to the
+        Lambda-era seam; if that seam is later retired, D1 (or self-hosted <code>sqld</code>) hosts the
+        one remaining SQLite contract.</p>
     </details>
     <details>
       <summary>DynamoDB behind the seam for Always-On mode (Workers → DynamoDB over HTTP)</summary>

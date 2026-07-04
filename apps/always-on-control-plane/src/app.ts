@@ -8,6 +8,7 @@ import {
   auth0JwtMiddleware,
   organizerProjectionMiddleware,
   requireOrganizerRole,
+  systemAdminMiddleware,
   teamBearerMiddleware,
 } from "./auth.js";
 import {
@@ -26,6 +27,8 @@ interface AppOptions {
   readonly organizerJwt?: MiddlewareHandler<AppEnvironment>;
   readonly organizerProjection?: MiddlewareHandler<AppEnvironment>;
   readonly teamAuth?: MiddlewareHandler<AppEnvironment>;
+  /** System-admin gate for `/v1/system/*`; injectable for tests. */
+  readonly systemAuth?: MiddlewareHandler<AppEnvironment>;
   /** Transport used to reach the AWS intent ingress; injectable for tests. */
   readonly intentFetch?: typeof fetch;
 }
@@ -143,6 +146,32 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
       },
     }),
   );
+
+  app.use("/v1/system/*", options.systemAuth ?? systemAdminMiddleware);
+
+  // Onboard (or update) an Auth0 Organization -> tenant mapping the organizer auth path reads
+  // on every request. `suspended: true` revokes access immediately (checked per request).
+  app.put("/v1/system/tenant-auth-projections/:orgId", async (context) => {
+    const orgId = context.req.param("orgId");
+    if (orgId.trim().length === 0) {
+      throw new HTTPException(StatusCodes.BAD_REQUEST, { message: "orgId must be non-empty" });
+    }
+    const body = await readObject(context.req);
+    const tenantId = requiredString(body, "tenantId");
+    const rawSuspended = body.suspended;
+    if (rawSuspended !== undefined && typeof rawSuspended !== "boolean") {
+      throw new HTTPException(StatusCodes.BAD_REQUEST, {
+        message: "suspended must be a boolean",
+      });
+    }
+    const store = new ControlStore(context.env.CONTROL_DB);
+    await store.upsertTenantAuthProjection({
+      orgId: orgId.trim(),
+      tenantId,
+      suspended: rawSuspended ?? false,
+    });
+    return context.body(null, StatusCodes.NO_CONTENT);
+  });
 
   app.use("/v1/admin/*", options.organizerJwt ?? auth0JwtMiddleware());
   app.use("/v1/admin/*", options.organizerProjection ?? organizerProjectionMiddleware);

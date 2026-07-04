@@ -162,6 +162,34 @@ export const teamBearerMiddleware = createMiddleware<AppEnvironment>(async (cont
   await next();
 });
 
+/**
+ * Gate for the tenant-onboarding endpoint (`/v1/system/*`). The presented bearer must equal
+ * the `SYSTEM_ADMIN_TOKEN` Workers secret. Both sides are SHA-256 hashed before comparison so
+ * the equality check runs over fixed-length hex (does not short-circuit on the first differing
+ * secret byte). A missing binding is a 500 (misconfiguration), NOT a 401 (which would read as a
+ * bad token).
+ */
+export const systemAdminMiddleware = createMiddleware<AppEnvironment>(async (context, next) => {
+  const authorization = context.req.header("authorization");
+  const match = /^Bearer\s+(.+)$/iu.exec(authorization ?? "");
+  if (!match?.[1]) {
+    throw new HTTPException(StatusCodes.UNAUTHORIZED, {
+      message: "missing system admin token",
+    });
+  }
+  const expectedToken = context.env.SYSTEM_ADMIN_TOKEN;
+  if (!expectedToken) {
+    throw new Error("SYSTEM_ADMIN_TOKEN is not configured");
+  }
+  const [presented, expected] = await Promise.all([sha256Hex(match[1]), sha256Hex(expectedToken)]);
+  if (presented !== expected) {
+    throw new HTTPException(StatusCodes.UNAUTHORIZED, {
+      message: "invalid system admin token",
+    });
+  }
+  await next();
+});
+
 export function organizerForTest(input: OrganizerContext): MiddlewareHandler<AppEnvironment> {
   return createMiddleware<AppEnvironment>(async (context, next) => {
     context.set("organizer", input);
