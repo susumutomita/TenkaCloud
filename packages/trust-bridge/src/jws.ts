@@ -50,11 +50,17 @@ export type VerifyFailureReason =
   | "payload-parse-failed";
 
 export function base64urlEncode(bytes: Uint8Array): string {
-  return Buffer.from(bytes)
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  return (
+    Buffer.from(bytes)
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      // Strip base64 padding with a global char replace, NOT an anchored `/=+$/`: now that this
+      // helper is exported (jws-es256 reuses it), CodeQL flags `=+$` as js/polynomial-redos on
+      // library input. `=` only ever appears as trailing padding in base64 output, so removing
+      // every `=` is equivalent and has no backtracking.
+      .replace(/=/g, "")
+  );
 }
 
 export function base64urlDecode(text: string): Uint8Array<ArrayBuffer> {
