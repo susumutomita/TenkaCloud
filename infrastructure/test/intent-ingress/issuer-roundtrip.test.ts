@@ -128,9 +128,14 @@ describe("issuer → ingress round-trip (ADR-049 Phase 4 / #2293)", () => {
   it("should be rejected 401 when a single character of the signed token is flipped", async () => {
     const intent = buildDeployIntent(params());
     const { token } = issueSignedIntentRequest(intent, { secret: SECRET });
-    // Flip the final signature character to a guaranteed-different one → HMAC mismatch.
-    const lastChar = token.at(-1);
-    const tampered = `${token.slice(0, -1)}${lastChar === "A" ? "B" : "A"}`;
+    // Flip the FIRST signature character (not the last). The last base64url char of a
+    // 32-byte HMAC carries only 2 significant bits, so several chars decode to the same
+    // signature bytes — flipping it is non-deterministic (occasionally still verifies).
+    // The first char spans the top 6 bits of signature byte 0, so any change always
+    // alters the decoded signature → a guaranteed HMAC mismatch.
+    const [header, payload, signature] = token.split(".") as [string, string, string];
+    const firstChar = signature[0];
+    const tampered = `${header}.${payload}.${firstChar === "A" ? "B" : "A"}${signature.slice(1)}`;
     const body = JSON.stringify({ token: tampered });
 
     const { deps, captured } = realDeps(SECRET);
