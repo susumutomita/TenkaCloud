@@ -25,6 +25,7 @@ import {
   LambdaInvoke,
 } from "aws-cdk-lib/aws-stepfunctions-tasks";
 import { Construct } from "constructs";
+import { DEPLOY_STATUS_POLL_INTERVAL_SECONDS } from "./deploy-cost-model.js";
 import { deploymentKey, stateEnteredTime } from "./state-machine-helpers.js";
 
 export interface DeployDeleteStateMachineProps {
@@ -226,9 +227,10 @@ export class DeployDeleteStateMachine extends Construct {
       resultPath: "$.delete",
     });
 
-    // DeleteStack は async。反映まで少し待ってから DescribeStacks を叩く。
+    // DeleteStack は async。反映まで少し待ってから DescribeStacks を叩く。間隔は
+    // deploy-cost-model.ts の共有定数 (30s) で create path の poll loop と同値。
     const waitBeforePoll = new Wait(this, "WaitBeforePoll", {
-      time: WaitTime.duration(Duration.seconds(15)),
+      time: WaitTime.duration(Duration.seconds(DEPLOY_STATUS_POLL_INTERVAL_SECONDS)),
     });
 
     // 同 Lambda を action=describe-delete で invoke。消滅は handler が DELETE_COMPLETE に正規化する。
