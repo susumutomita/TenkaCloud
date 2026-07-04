@@ -32,3 +32,9 @@ export function capturedAt(captured: CapturedRequest[], index: number): Captured
   if (!request) throw new Error(`no captured request at index ${index}`);
   return request;
 }
+
+/** The compact JWS token carried by a captured ingress request body. */
+export function capturedToken(captured: CapturedRequest[], index: number): string {
+  const body = JSON.parse(String(capturedAt(captured, index).init.body)) as { token: string };
+  return body.token;
+}

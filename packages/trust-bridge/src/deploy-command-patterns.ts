@@ -22,3 +22,24 @@ export const DEPLOY_AWS_ACCOUNT_ID_PATTERN = /^\d{12}$/;
 
 /** AWS region name, e.g. `ap-northeast-1`. */
 export const DEPLOY_AWS_REGION_PATTERN = /^[a-z]{2}-[a-z]+-\d+$/;
+
+/**
+ * Shared accept/reject vectors for the patterns above. The trust-bridge unit
+ * test and the infrastructure schema-parity test iterate these IDENTICAL
+ * vectors, so a vector added in one place is exercised against both the mirror
+ * pattern and the authoritative frozen schema.
+ */
+export const DEPLOY_COMMAND_PATTERN_VECTORS = {
+  problemId: {
+    accept: ["a", "hello-world", "a1-b2-c3", "x".repeat(64)],
+    reject: ["", "Hello-World", "hello_world", "-leading", "trailing-", "x".repeat(65)],
+  },
+  awsAccountId: {
+    accept: ["111111111111"],
+    reject: ["", "1234", "1111111111111", "11111111111a"],
+  },
+  region: {
+    accept: ["ap-northeast-1", "us-east-1", "eu-west-2"],
+    reject: ["", "AP-NORTHEAST-1", "us-east", "useast1", "us-east-1a"],
+  },
+} as const;

@@ -5,7 +5,12 @@ import { StatusCodes } from "http-status-codes";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import type { AppEnvironment } from "../src/types.js";
-import { acceptedIngressResponse, capturedAt, captureFetch } from "./helpers/intent-capture.js";
+import {
+  acceptedIngressResponse,
+  capturedAt,
+  capturedToken,
+  captureFetch,
+} from "./helpers/intent-capture.js";
 
 const ROLES_CLAIM = "https://tenkacloud.dev/roles";
 const SECRET_TEXT = "route-test-signing-secret 0123456789";
@@ -105,10 +110,10 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
     expect(responseBody.deploymentId).toBe(responseBody.requestId);
 
     expect(captured).toHaveLength(1);
-    const request = capturedAt(captured, 0);
-    expect(request.url).toBe(env.INTENT_INGRESS_URL);
-    const { token } = JSON.parse(String(request.init.body)) as { token: string };
-    const outcome = await verifyIntent(token, { resolveSecret: () => SECRET });
+    expect(capturedAt(captured, 0).url).toBe(env.INTENT_INGRESS_URL);
+    const outcome = await verifyIntent(capturedToken(captured, 0), {
+      resolveSecret: () => SECRET,
+    });
     if (!outcome.ok) throw new Error(`token did not verify: ${outcome.reason}`);
     // tenantId comes from the organizer projection — never from the request body.
     expect(outcome.intent.source.tenantId).toBe("tenant-acme");
@@ -134,8 +139,9 @@ describe("POST /v1/admin/events/:eventId/deploy-intents (ADR-049 Phase 4 / #2293
       requestId: expect.any(String),
       deploymentId: "job-original",
     });
-    const { token } = JSON.parse(String(capturedAt(captured, 0).init.body)) as { token: string };
-    const outcome = await verifyIntent(token, { resolveSecret: () => SECRET });
+    const outcome = await verifyIntent(capturedToken(captured, 0), {
+      resolveSecret: () => SECRET,
+    });
     if (!outcome.ok) throw new Error(`token did not verify: ${outcome.reason}`);
     expect(outcome.intent.action.type).toBe("destroy");
     expect(outcome.intent.source.deploymentId).toBe("job-original");

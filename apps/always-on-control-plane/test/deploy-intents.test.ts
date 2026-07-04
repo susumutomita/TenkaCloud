@@ -14,6 +14,7 @@ import {
   acceptedIngressResponse,
   type CapturedRequest,
   capturedAt,
+  capturedToken,
   captureFetch,
 } from "./helpers/intent-capture.js";
 
@@ -54,8 +55,7 @@ function gatewayWithResponse(
 
 async function verifyCapturedToken(captured: CapturedRequest[]) {
   expect(captured).toHaveLength(1);
-  const body = JSON.parse(String(capturedAt(captured, 0).init.body)) as { token: string };
-  const outcome = await verifyIntent(body.token, { resolveSecret: () => SECRET });
+  const outcome = await verifyIntent(capturedToken(captured, 0), { resolveSecret: () => SECRET });
   if (!outcome.ok) throw new Error(`token did not verify: ${outcome.reason}`);
   return outcome.intent;
 }
@@ -136,10 +136,12 @@ describe("issueDeployIntentCommand (ADR-049 Phase 4 / #2293)", () => {
     const { gateway, captured } = gatewayWithResponse(acceptedIngressResponse);
     await issueDeployIntentCommand(command(), gateway);
     await issueDeployIntentCommand(command(), gateway);
-    const first = JSON.parse(String(capturedAt(captured, 0).init.body)) as { token: string };
-    const second = JSON.parse(String(capturedAt(captured, 1).init.body)) as { token: string };
-    const firstIntent = await verifyIntent(first.token, { resolveSecret: () => SECRET });
-    const secondIntent = await verifyIntent(second.token, { resolveSecret: () => SECRET });
+    const firstIntent = await verifyIntent(capturedToken(captured, 0), {
+      resolveSecret: () => SECRET,
+    });
+    const secondIntent = await verifyIntent(capturedToken(captured, 1), {
+      resolveSecret: () => SECRET,
+    });
     if (!firstIntent.ok || !secondIntent.ok) throw new Error("tokens did not verify");
     expect(firstIntent.intent.requestId).not.toBe(secondIntent.intent.requestId);
     expect(firstIntent.intent.nonce).not.toBe(secondIntent.intent.nonce);
