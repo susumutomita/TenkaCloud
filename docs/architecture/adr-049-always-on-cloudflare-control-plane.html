@@ -66,7 +66,7 @@
   <body>
     <h1>ADR-049 — Always-On Control Plane on Cloudflare, On-Demand AWS Event Runtime</h1>
     <div class="meta">
-      <span><strong>Status:</strong> <span class="badge b-proposed">Proposed</span></span>
+      <span><strong>Status:</strong> <span class="badge b-accepted">Accepted</span></span>
       <span><strong>Date:</strong> 2026-07-02</span>
       <span><strong>Epic:</strong> Always-on Control Plane (#2279)</span>
       <span><strong>Supersedes:</strong> none (adds a third deployment mode next to ADR-016 Lite mode)</span>
@@ -1058,6 +1058,13 @@ export interface TeamsRepository {
         20-concurrent free plan ever queues lifecycle workflows behind CI.</li>
       <li>AWS account free-plan type (pre/post-July-2025) of the target deployment account — affects
         Table 8's "$0 within free tier" cells.</li>
+      <li><strong>Phase 5 (GA):</strong> the full Always-On machinery is implemented and covered by
+        tests — control plane on D1 with Workers-Cron reconciliation + prune, the ES256 signed-intent
+        command seam, the per-event runtime lifecycle, flag scoring on Workers, Battle (uptime-kind)
+        scoring scoped to the per-event runtime feeding score summaries to the Worker, the raw-score
+        export, and the Always-On mode docs. The <em>only</em> remaining item is the batched live
+        measurement of the design targets in §11 — $0 idle, $5 per event month (Workers Paid), and
+        &lt;$5 per-event AWS variable cost — to be recorded once a live event runs.</li>
     </ul>
 
     <h2>15. Consequences</h2>
