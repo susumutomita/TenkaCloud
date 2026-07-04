@@ -16,6 +16,28 @@ export interface CheckpointInput {
 export class ControlStore {
   constructor(private readonly db: D1Database) {}
 
+  /**
+   * Onboard (or update) the Auth0 Organization → tenant mapping the organizer auth path
+   * reads on every request. `suspended` also drives instant revocation.
+   */
+  async upsertTenantAuthProjection(input: {
+    readonly orgId: string;
+    readonly tenantId: string;
+    readonly suspended: boolean;
+  }): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO tenant_auth_projection (org_id, tenant_id, suspended, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(org_id) DO UPDATE SET
+           tenant_id = excluded.tenant_id,
+           suspended = excluded.suspended,
+           updated_at = excluded.updated_at`,
+      )
+      .bind(input.orgId, input.tenantId, input.suspended ? 1 : 0, new Date().toISOString())
+      .run();
+  }
+
   async listEvents(tenantId: string): Promise<readonly Record<string, unknown>[]> {
     const result = await this.db
       .prepare(

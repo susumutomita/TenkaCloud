@@ -164,9 +164,25 @@ tokens must contain:
 - `https://tenkacloud.dev/roles`: an array containing `TenantAdmin`,
   `TenantOperator`, or `TenantViewer`.
 
-The Worker does not trust a suspension claim from the token. Seed or update the
-`tenant_auth_projection` row whenever organization membership or suspension
-state changes:
+The Worker does not trust a suspension claim from the token. Onboard or update
+the `tenant_auth_projection` row (Auth0 Organization → tenant, plus the
+suspension flag) through the system endpoint whenever organization membership or
+suspension state changes:
+
+```http
+PUT /v1/system/tenant-auth-projections/{orgId}
+Authorization: Bearer <SYSTEM_ADMIN_TOKEN>
+Content-Type: application/json
+
+{ "tenantId": "tenant-example", "suspended": false }
+```
+
+`SYSTEM_ADMIN_TOKEN` is a Workers secret
+(`bunx wrangler secret put SYSTEM_ADMIN_TOKEN --env <environment>`), distinct
+from any tenant/organizer credential. `suspended: true` revokes access
+immediately — the middleware re-checks the projection on every request, so an
+already-signed-in organizer is denied on the next call. The raw SQL below is an
+equivalent break-glass fallback.
 
 The current middleware accepts the namespaced role claim independently of how
 Auth0 creates it. Before production, choose and document one supported source:

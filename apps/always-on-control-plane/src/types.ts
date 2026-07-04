@@ -18,6 +18,11 @@ export interface TeamContext {
  */
 export interface SecretBindings {
   readonly INTENT_SIGNING_PRIVATE_JWK?: string;
+  /**
+   * System-admin bearer for the tenant-onboarding endpoint (`/v1/system/*`). A Workers
+   * secret; optional here because a misconfigured deployment must fail loudly at use.
+   */
+  readonly SYSTEM_ADMIN_TOKEN?: string;
 }
 
 export type AppEnvironment = {
