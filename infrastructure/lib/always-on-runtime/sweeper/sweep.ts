@@ -27,6 +27,8 @@ export interface ManagedStack {
   readonly tenantId?: string;
   /** `TenkaCloud:EventId` tag value. */
   readonly eventId?: string;
+  /** Stack output naming the raw score-event archive Lambda. */
+  readonly archiveFunctionName?: string;
 }
 
 /** The CloudFormation edge the sweeper needs (list managed stacks + delete one by name). */
@@ -35,6 +37,8 @@ export interface CfnStacksClient {
   listManagedStacks(): Promise<readonly ManagedStack[]>;
   /** Issue `DeleteStack` for one stack by name. Rejects on failure (the sweeper retries). */
   deleteStack(stackName: string): Promise<void>;
+  /** Invoke the stack's archive function before deletion. Rejects on function/API failure. */
+  archiveStack(archiveFunctionName: string, eventId: string): Promise<void>;
 }
 
 /** A cleanup that exhausted all retries — the payload the sweeper turns into a GitHub issue. */
@@ -116,6 +120,30 @@ async function deleteWithRetry(
   return { ok: false, attempts: maxAttempts, lastError };
 }
 
+async function archiveWithRetry(
+  stacks: CfnStacksClient,
+  stack: ManagedStack,
+  maxAttempts: number,
+): Promise<DeleteOutcome> {
+  if (!stack.eventId || !stack.archiveFunctionName) {
+    return {
+      ok: false,
+      attempts: 0,
+      lastError: "eventId or ArchiveFunctionName is missing; refusing deletion without archive",
+    };
+  }
+  let lastError = "";
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await stacks.archiveStack(stack.archiveFunctionName, stack.eventId);
+      return { ok: true, attempts: attempt };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  return { ok: false, attempts: maxAttempts, lastError };
+}
+
 /**
  * Sweep every expired always-on runtime stack: delete-with-retry each candidate, and file exactly
  * one GitHub issue per candidate that exhausts its retries. Returns a `{ scanned, expired, deleted,
@@ -129,6 +157,16 @@ export async function sweepExpiredRuntimes(deps: SweepDeps, now: Date): Promise<
   let deleted = 0;
   let failed = 0;
   for (const stack of expired) {
+    const archive = await archiveWithRetry(deps.stacks, stack, maxAttempts);
+    if (!archive.ok) {
+      failed += 1;
+      await deps.issues.openCleanupFailureIssue({
+        stackName: stack.stackName,
+        attempts: archive.attempts,
+        lastError: `archive failed: ${archive.lastError}`,
+      });
+      continue;
+    }
     const outcome = await deleteWithRetry(deps.stacks, stack.stackName, maxAttempts);
     if (outcome.ok) {
       deleted += 1;

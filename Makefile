@@ -16,7 +16,7 @@ export JSII_DEPRECATED := quiet
         deploy deploy-saas destroy destroy-saas \
         deploy-battles destroy-battles \
         deploy-always-on-ingress destroy-always-on-ingress synth-always-on-ingress \
-        deploy-always-on-runtime destroy-always-on-runtime synth-always-on-runtime \
+        deploy-always-on-runtime archive-always-on-runtime destroy-always-on-runtime synth-always-on-runtime \
         dev synth check-synth \
         doctor local local-up local-down local-status local-list local-evaluate
 
@@ -373,7 +373,7 @@ ALWAYS_ON_RUNTIME_APP := bunx tsx bin/tenkacloud-always-on-runtime.ts
 ALWAYS_ON_RUNTIME_STACK := tenkacloud-event-runtime-$(CDK_PARAM_ALWAYS_ON_EVENT_ID)
 
 deploy-always-on-runtime:
-	@if [ -z "$${CDK_PARAM_ALWAYS_ON_EVENT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_TENANT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EXPIRES_AT}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_DEPLOYMENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EVENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_ENDPOINTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_CONTROL_PLANE_URL}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER}" ]; then \
+	@if [ -z "$${CDK_PARAM_ALWAYS_ON_EVENT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_TENANT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EXPIRES_AT}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_DEPLOYMENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EVENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_ENDPOINTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_CONTROL_PLANE_URL}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_ARCHIVE_BUCKET_NAME}" ]; then \
 	  echo "error: Always-On runtime lifecycle/scoring の必須 CDK_PARAM が不足しています。docs/always-on/README.md を確認してください (#2294)。" >&2; \
 	  exit 1; \
 	fi
@@ -383,8 +383,35 @@ synth-always-on-runtime: export CDK_SKIP_BUNDLING := 1
 synth-always-on-runtime:
 	$(CDK) synth --app "$(ALWAYS_ON_RUNTIME_APP)" "$(ALWAYS_ON_RUNTIME_STACK)" --quiet
 
+archive-always-on-runtime:
+	@set -eu; \
+	function_name=$$(aws cloudformation describe-stacks \
+	  --stack-name "$(ALWAYS_ON_RUNTIME_STACK)" \
+	  --query "Stacks[0].Outputs[?OutputKey=='ArchiveFunctionName'].OutputValue | [0]" \
+	  --output text); \
+	if [ -z "$$function_name" ] || [ "$$function_name" = "None" ]; then \
+	  echo "error: ArchiveFunctionName output が $(ALWAYS_ON_RUNTIME_STACK) にありません。" >&2; \
+	  exit 1; \
+	fi; \
+	payload=$$(bun -e 'process.stdout.write(JSON.stringify({eventId: process.env.CDK_PARAM_ALWAYS_ON_EVENT_ID}))'); \
+	response_file=$$(mktemp); \
+	trap 'rm -f "$$response_file"' EXIT; \
+	function_error=$$(aws lambda invoke \
+	  --function-name "$$function_name" \
+	  --cli-binary-format raw-in-base64-out \
+	  --payload "$$payload" \
+	  --query FunctionError \
+	  --output text \
+	  "$$response_file"); \
+	cat "$$response_file"; \
+	echo; \
+	if [ "$$function_error" != "None" ]; then \
+	  echo "error: raw score-event archive failed; runtime stack is kept for retry." >&2; \
+	  exit 1; \
+	fi
+
 destroy-always-on-runtime:
-	@if [ -z "$${CDK_PARAM_ALWAYS_ON_EVENT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_TENANT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EXPIRES_AT}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_DEPLOYMENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EVENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_ENDPOINTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_CONTROL_PLANE_URL}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER}" ]; then \
+	@if [ -z "$${CDK_PARAM_ALWAYS_ON_EVENT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_TENANT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EXPIRES_AT}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_DEPLOYMENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EVENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_ENDPOINTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_CONTROL_PLANE_URL}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_ARCHIVE_BUCKET_NAME}" ]; then \
 	  echo "error: destroy の app synth に必要な Always-On runtime CDK_PARAM が不足しています。" >&2; \
 	  exit 1; \
 	fi

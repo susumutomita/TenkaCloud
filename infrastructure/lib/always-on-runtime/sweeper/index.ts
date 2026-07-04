@@ -1,6 +1,7 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CloudFormationClient } from "@aws-sdk/client-cloudformation";
+import { LambdaClient } from "@aws-sdk/client-lambda";
 import { createCfnStacksClient } from "./cfn-stacks-client.js";
 import { createGitHubIssueFiler } from "./github-issue-filer.js";
 import { type SweepSummary, sweepExpiredRuntimes } from "./sweep.js";
@@ -74,7 +75,7 @@ export async function runSweeper(options: RunSweeperOptions): Promise<SweepSumma
   const log = options.log ?? ((message: string) => console.log(message));
 
   const cfn = new CloudFormationClient({ region: config.region });
-  const stacks = createCfnStacksClient(cfn);
+  const stacks = createCfnStacksClient(cfn, new LambdaClient({ region: config.region }));
   const issues = createGitHubIssueFiler({ repo: config.repo, token: config.token });
 
   const summary = await sweepExpiredRuntimes({ stacks, issues }, now);

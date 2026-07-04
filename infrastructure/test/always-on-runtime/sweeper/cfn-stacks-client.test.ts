@@ -3,6 +3,7 @@ import {
   DeleteStackCommand,
   DescribeStacksCommand,
 } from "@aws-sdk/client-cloudformation";
+import { InvokeCommand, type LambdaClient } from "@aws-sdk/client-lambda";
 import { describe, expect, it, vi } from "vitest";
 import {
   MANAGED_BY_ALWAYS_ON_RUNTIME,
@@ -26,6 +27,7 @@ describe("createCfnStacksClient", () => {
               { Key: TAG_TENANT_ID, Value: "tenant-1" },
               { Key: TAG_EVENT_ID, Value: "evt-1" },
             ],
+            Outputs: [{ OutputKey: "ArchiveFunctionName", OutputValue: "archive-runtime-a" }],
           },
         ],
         NextToken: "page-2",
@@ -48,6 +50,7 @@ describe("createCfnStacksClient", () => {
         expiresAt: "2026-07-01T00:00:00.000Z",
         tenantId: "tenant-1",
         eventId: "evt-1",
+        archiveFunctionName: "archive-runtime-a",
       },
       { stackName: "runtime-b" },
     ]);
@@ -86,5 +89,44 @@ describe("createCfnStacksClient", () => {
     const command = send.mock.calls[0][0];
     expect(command).toBeInstanceOf(DeleteStackCommand);
     expect((command as DeleteStackCommand).input).toEqual({ StackName: "runtime-x" });
+  });
+
+  it("should invoke the archive Lambda synchronously and surface function errors", async () => {
+    const cfnSend = vi.fn(async () => ({}));
+    const lambdaSend = vi
+      .fn()
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        FunctionError: "Unhandled",
+        Payload: new TextEncoder().encode('{"errorMessage":"archive failed"}'),
+      });
+    const client = createCfnStacksClient(
+      { send: cfnSend } as unknown as CloudFormationClient,
+      { send: lambdaSend } as unknown as LambdaClient,
+    );
+
+    await client.archiveStack("archive-fn", "evt-1");
+    const command = lambdaSend.mock.calls[0][0];
+    expect(command).toBeInstanceOf(InvokeCommand);
+    expect((command as InvokeCommand).input).toMatchObject({
+      FunctionName: "archive-fn",
+      InvocationType: "RequestResponse",
+    });
+    expect(new TextDecoder().decode((command as InvokeCommand).input.Payload)).toBe(
+      '{"eventId":"evt-1"}',
+    );
+
+    await expect(client.archiveStack("archive-fn", "evt-1")).rejects.toThrow(
+      /archive Lambda failed.*archive failed/,
+    );
+  });
+
+  it("should fail loudly when archive support is used without a Lambda client", async () => {
+    const client = createCfnStacksClient({
+      send: vi.fn(async () => ({})),
+    } as unknown as CloudFormationClient);
+    await expect(client.archiveStack("archive-fn", "evt-1")).rejects.toThrow(
+      /Lambda client is required/,
+    );
   });
 });

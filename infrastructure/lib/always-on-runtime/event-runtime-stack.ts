@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
+import { EventRuntimeArchive, type EventRuntimeArchiveProps } from "./event-runtime-archive.js";
 import { EventRuntimeScoring, type EventRuntimeScoringProps } from "./event-runtime-scoring.js";
 import { applyAlwaysOnRuntimeTags, MANAGED_BY_ALWAYS_ON_RUNTIME } from "./runtime-tags.js";
 
@@ -39,6 +40,7 @@ export interface EventRuntimeStackProps extends cdk.StackProps {
   readonly tenantId: string;
   readonly expiresAt: string;
   readonly scoring?: Omit<EventRuntimeScoringProps, "eventId">;
+  readonly archive?: Omit<EventRuntimeArchiveProps, "eventId">;
 }
 
 /**
@@ -77,6 +79,16 @@ export class EventRuntimeStack extends cdk.Stack {
       new EventRuntimeScoring(this, "Scoring", {
         ...props.scoring,
         eventId: props.eventId,
+      });
+    }
+    if (props.archive) {
+      const archive = new EventRuntimeArchive(this, "Archive", {
+        ...props.archive,
+        eventId: props.eventId,
+      });
+      new cdk.CfnOutput(this, "ArchiveFunctionName", {
+        value: archive.fn.functionName,
+        description: "Invoke before destroy to export raw score events.",
       });
     }
 
