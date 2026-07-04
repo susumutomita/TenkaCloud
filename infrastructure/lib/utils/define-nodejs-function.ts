@@ -40,6 +40,8 @@ export interface DefineNodejsFunctionProps {
   readonly environment: Record<string, string>;
   readonly timeout: Duration;
   readonly memorySize: number;
+  /** Optional per-function concurrency cap. Omitted for existing functions to preserve templates. */
+  readonly reservedConcurrentExecutions?: number;
   /** esbuild `define` (例: #1308 の 4KB env 上限回避の literal 置換)。未指定なら define なし。 */
   readonly bundlingDefine?: Record<string, string>;
 }
@@ -60,6 +62,9 @@ export function defineNodejsFunction(
     handler: "handler",
     timeout: props.timeout,
     memorySize: props.memorySize,
+    ...(props.reservedConcurrentExecutions !== undefined
+      ? { reservedConcurrentExecutions: props.reservedConcurrentExecutions }
+      : {}),
     environment: props.environment,
     bundling: {
       minify: true,

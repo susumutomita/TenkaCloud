@@ -237,7 +237,26 @@ Content-Type: application/json
 from the organizer and system-admin credentials. The leaderboard reads
 `score_summary.score + runtime_score.points`, so an empty `runtime_score`
 reduces to the flag-only leaderboard. The AWS-side producer (the uptime scoring
-that calls this endpoint) is tracked as the remaining GA work in #2294.
+that calls this endpoint) runs in each per-event runtime stack on a one-minute
+EventBridge schedule. It scans only that stack's immutable `eventId` scope,
+dispatches Battle kinds (`uptime-*`, `phased-polling`, and
+`attack-detection`), and posts one authoritative total per team. Flag kinds
+remain on Workers.
+
+Configure these GitHub Environment variables for the
+`deploy-always-on-runtime` / `destroy-always-on-runtime` workflows:
+
+- `ALWAYS_ON_DEPLOYMENTS_TABLE_NAME`
+- `ALWAYS_ON_EVENTS_TABLE_NAME`
+- `ALWAYS_ON_ENDPOINTS_TABLE_NAME`
+- `ALWAYS_ON_CONTROL_PLANE_URL`
+- `ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER` (SSM SecureString parameter name)
+- optional `ALWAYS_ON_DISRUPTIONS_TABLE_NAME` and `ALWAYS_ON_EVENT_BUS_NAME`
+
+The feed bearer is fetched with decryption at invocation time and is never put
+in Lambda environment variables or workflow logs. The runtime schedule and
+Lambda are deleted with the event stack, so there is no AWS tick between
+events.
 
 ## Rollback
 

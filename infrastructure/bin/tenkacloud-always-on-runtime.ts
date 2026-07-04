@@ -10,6 +10,12 @@ import { CodeBuildUseAwsManagedKms } from "../lib/cdk-aspect/codebuild-use-aws-m
 import { DynamoDbLowCapacity } from "../lib/cdk-aspect/dynamodb-low-capacity.js";
 import { KmsKeyShortPendingWindow } from "../lib/cdk-aspect/kms-key-short-pending-window.js";
 import { LogGroupRetention } from "../lib/cdk-aspect/log-group-retention.js";
+import {
+  discoverProblemsDisruptions,
+  discoverProblemsEndpoints,
+  discoverProblemsPhases,
+  discoverProblemsScoring,
+} from "../lib/utils/discover-problems-catalog.js";
 
 /**
  * ADR-049 Phase 4 per-event runtime composition root.
@@ -23,6 +29,14 @@ import { LogGroupRetention } from "../lib/cdk-aspect/log-group-retention.js";
 export const ALWAYS_ON_EVENT_ID_ENV = "CDK_PARAM_ALWAYS_ON_EVENT_ID";
 export const ALWAYS_ON_TENANT_ID_ENV = "CDK_PARAM_ALWAYS_ON_TENANT_ID";
 export const ALWAYS_ON_EXPIRES_AT_ENV = "CDK_PARAM_ALWAYS_ON_EXPIRES_AT";
+export const ALWAYS_ON_DEPLOYMENTS_TABLE_ENV = "CDK_PARAM_ALWAYS_ON_DEPLOYMENTS_TABLE_NAME";
+export const ALWAYS_ON_EVENTS_TABLE_ENV = "CDK_PARAM_ALWAYS_ON_EVENTS_TABLE_NAME";
+export const ALWAYS_ON_ENDPOINTS_TABLE_ENV = "CDK_PARAM_ALWAYS_ON_ENDPOINTS_TABLE_NAME";
+export const ALWAYS_ON_DISRUPTIONS_TABLE_ENV = "CDK_PARAM_ALWAYS_ON_DISRUPTIONS_TABLE_NAME";
+export const ALWAYS_ON_EVENT_BUS_ENV = "CDK_PARAM_ALWAYS_ON_EVENT_BUS_NAME";
+export const ALWAYS_ON_CONTROL_PLANE_URL_ENV = "CDK_PARAM_ALWAYS_ON_CONTROL_PLANE_URL";
+export const ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER_ENV =
+  "CDK_PARAM_ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER";
 
 export interface BuildEventRuntimeAppOptions {
   readonly env: NodeJS.ProcessEnv;
@@ -64,6 +78,7 @@ export function buildEventRuntimeApp(options: BuildEventRuntimeAppOptions): cdk.
     eventId,
     tenantId,
     expiresAt,
+    scoring: buildScoringProps(env),
   });
 
   // Stack-scope aspect matches applyDynamoLowCapacity; it is a no-op until the runtime owns a table.
@@ -75,6 +90,25 @@ export function buildEventRuntimeApp(options: BuildEventRuntimeAppOptions): cdk.
   );
 
   return app;
+}
+
+function buildScoringProps(env: NodeJS.ProcessEnv) {
+  const problemsRoot = path.resolve(import.meta.dirname, "../../problems");
+  const disruptionsTableName = env[ALWAYS_ON_DISRUPTIONS_TABLE_ENV]?.trim();
+  const eventBusName = env[ALWAYS_ON_EVENT_BUS_ENV]?.trim();
+  return {
+    deploymentsTableName: requireEnv(env, ALWAYS_ON_DEPLOYMENTS_TABLE_ENV),
+    eventsTableName: requireEnv(env, ALWAYS_ON_EVENTS_TABLE_ENV),
+    endpointsTableName: requireEnv(env, ALWAYS_ON_ENDPOINTS_TABLE_ENV),
+    ...(disruptionsTableName ? { disruptionsTableName } : {}),
+    ...(eventBusName ? { eventBusName } : {}),
+    runtimeFeedTokenParameterName: requireEnv(env, ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER_ENV),
+    controlPlaneUrl: requireEnv(env, ALWAYS_ON_CONTROL_PLANE_URL_ENV),
+    problemsScoring: discoverProblemsScoring(problemsRoot),
+    problemsEndpoints: discoverProblemsEndpoints(problemsRoot),
+    problemsPhases: discoverProblemsPhases(problemsRoot),
+    problemsDisruptions: discoverProblemsDisruptions(problemsRoot),
+  };
 }
 
 /** Make the stack environment-aware only when account and region are both configured. */

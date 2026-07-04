@@ -367,13 +367,14 @@ destroy-always-on-ingress:
 # 巻き込まない)。stack は runtime-tags (TenkaCloud:ManagedBy=always-on-runtime 他) を付与するので、
 # 夜間 sweeper が期限切れ runtime を検出・削除できる。
 #
-# 必須 env: CDK_PARAM_ALWAYS_ON_EVENT_ID / _TENANT_ID / _EXPIRES_AT (ISO-8601 のハード期限)。
+# 必須 env: lifecycle 3 値に加え、runtime scoring が参照する既存 event-data table 名、
+# Workers URL、SSM SecureString の score-feed token parameter 名。
 ALWAYS_ON_RUNTIME_APP := bunx tsx bin/tenkacloud-always-on-runtime.ts
 ALWAYS_ON_RUNTIME_STACK := tenkacloud-event-runtime-$(CDK_PARAM_ALWAYS_ON_EVENT_ID)
 
 deploy-always-on-runtime:
-	@if [ -z "$${CDK_PARAM_ALWAYS_ON_EVENT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_TENANT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EXPIRES_AT}" ]; then \
-	  echo "error: CDK_PARAM_ALWAYS_ON_EVENT_ID / _TENANT_ID / _EXPIRES_AT が未指定 (per-event runtime lifecycle に必須。#2363)。" >&2; \
+	@if [ -z "$${CDK_PARAM_ALWAYS_ON_EVENT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_TENANT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EXPIRES_AT}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_DEPLOYMENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EVENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_ENDPOINTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_CONTROL_PLANE_URL}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER}" ]; then \
+	  echo "error: Always-On runtime lifecycle/scoring の必須 CDK_PARAM が不足しています。docs/always-on/README.md を確認してください (#2294)。" >&2; \
 	  exit 1; \
 	fi
 	$(CDK) deploy --app "$(ALWAYS_ON_RUNTIME_APP)" "$(ALWAYS_ON_RUNTIME_STACK)" $(APPROVAL)
@@ -383,8 +384,8 @@ synth-always-on-runtime:
 	$(CDK) synth --app "$(ALWAYS_ON_RUNTIME_APP)" "$(ALWAYS_ON_RUNTIME_STACK)" --quiet
 
 destroy-always-on-runtime:
-	@if [ -z "$${CDK_PARAM_ALWAYS_ON_EVENT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_TENANT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EXPIRES_AT}" ]; then \
-	  echo "error: CDK_PARAM_ALWAYS_ON_EVENT_ID / _TENANT_ID / _EXPIRES_AT が未指定 (destroy も app synth のため必須)。" >&2; \
+	@if [ -z "$${CDK_PARAM_ALWAYS_ON_EVENT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_TENANT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EXPIRES_AT}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_DEPLOYMENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EVENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_ENDPOINTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_CONTROL_PLANE_URL}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER}" ]; then \
+	  echo "error: destroy の app synth に必要な Always-On runtime CDK_PARAM が不足しています。" >&2; \
 	  exit 1; \
 	fi
 	$(CDK) destroy --app "$(ALWAYS_ON_RUNTIME_APP)" "$(ALWAYS_ON_RUNTIME_STACK)" --force

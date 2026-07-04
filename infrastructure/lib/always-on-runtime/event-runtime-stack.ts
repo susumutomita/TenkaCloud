@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import type { Construct } from "constructs";
+import { EventRuntimeScoring, type EventRuntimeScoringProps } from "./event-runtime-scoring.js";
 import { applyAlwaysOnRuntimeTags, MANAGED_BY_ALWAYS_ON_RUNTIME } from "./runtime-tags.js";
 
 /** Prefix shared by every per-event runtime stack targeted by the lifecycle workflows. */
@@ -37,6 +38,7 @@ export interface EventRuntimeStackProps extends cdk.StackProps {
   readonly eventId: string;
   readonly tenantId: string;
   readonly expiresAt: string;
+  readonly scoring?: Omit<EventRuntimeScoringProps, "eventId">;
 }
 
 /**
@@ -70,6 +72,13 @@ export class EventRuntimeStack extends cdk.Stack {
       }),
       description: "TenkaCloud Always-On event runtime manifest.",
     });
+
+    if (props.scoring) {
+      new EventRuntimeScoring(this, "Scoring", {
+        ...props.scoring,
+        eventId: props.eventId,
+      });
+    }
 
     applyAlwaysOnRuntimeTags(this, {
       eventId: props.eventId,
