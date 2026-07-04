@@ -3,8 +3,13 @@ import { type App, Stack } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ALWAYS_ON_CONTROL_PLANE_URL_ENV,
+  ALWAYS_ON_DEPLOYMENTS_TABLE_ENV,
+  ALWAYS_ON_ENDPOINTS_TABLE_ENV,
   ALWAYS_ON_EVENT_ID_ENV,
+  ALWAYS_ON_EVENTS_TABLE_ENV,
   ALWAYS_ON_EXPIRES_AT_ENV,
+  ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER_ENV,
   ALWAYS_ON_TENANT_ID_ENV,
   buildEventRuntimeApp,
 } from "../../bin/tenkacloud-always-on-runtime.js";
@@ -29,6 +34,11 @@ const BASE_ENV: NodeJS.ProcessEnv = {
   [ALWAYS_ON_EVENT_ID_ENV]: EVENT_ID,
   [ALWAYS_ON_TENANT_ID_ENV]: TENANT_ID,
   [ALWAYS_ON_EXPIRES_AT_ENV]: EXPIRES_AT,
+  [ALWAYS_ON_DEPLOYMENTS_TABLE_ENV]: "Deployments",
+  [ALWAYS_ON_EVENTS_TABLE_ENV]: "Events",
+  [ALWAYS_ON_ENDPOINTS_TABLE_ENV]: "ProblemEndpoints",
+  [ALWAYS_ON_CONTROL_PLANE_URL_ENV]: "https://control.example",
+  [ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER_ENV]: "/tenkacloud/runtime/feed-token",
   CDK_PARAM_AWS_ACCOUNT_ID: "111111111111",
   CDK_PARAM_AWS_REGION: "ap-northeast-1",
   CDK_SKIP_BUNDLING: "1",
@@ -62,6 +72,47 @@ describe("buildEventRuntimeApp", () => {
         Environment: "development",
       },
     });
+    template.hasResourceProperties("AWS::Events::Rule", {
+      ScheduleExpression: "rate(1 minute)",
+      State: "ENABLED",
+      Targets: [
+        Match.objectLike({
+          Input: JSON.stringify({ eventId: EVENT_ID }),
+        }),
+      ],
+    });
+    template.hasResourceProperties("AWS::Lambda::Function", {
+      ReservedConcurrentExecutions: 1,
+      Environment: {
+        Variables: Match.objectLike({
+          DEPLOYMENTS_TABLE_NAME: "Deployments",
+          EVENTS_TABLE_NAME: "Events",
+          PROBLEM_ENDPOINTS_TABLE_NAME: "ProblemEndpoints",
+          ALWAYS_ON_CONTROL_PLANE_URL: "https://control.example",
+          RUNTIME_FEED_TOKEN_PARAMETER_NAME: "/tenkacloud/runtime/feed-token",
+        }),
+      },
+    });
+    template.hasResourceProperties("AWS::Lambda::EventInvokeConfig", {
+      MaximumEventAgeInSeconds: 120,
+      MaximumRetryAttempts: 0,
+    });
+    template.hasResourceProperties("AWS::IAM::Policy", {
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Action: "kms:Decrypt",
+            Effect: "Allow",
+            Resource: "*",
+            Condition: {
+              StringEquals: {
+                "kms:EncryptionContext:PARAMETER_ARN": Match.anyValue(),
+              },
+            },
+          }),
+        ]),
+      },
+    });
   });
 
   it.each([
@@ -71,6 +122,11 @@ describe("buildEventRuntimeApp", () => {
     ["blank", ALWAYS_ON_TENANT_ID_ENV, ""],
     ["missing", ALWAYS_ON_EXPIRES_AT_ENV, undefined],
     ["blank", ALWAYS_ON_EXPIRES_AT_ENV, "   "],
+    ["missing", ALWAYS_ON_DEPLOYMENTS_TABLE_ENV, undefined],
+    ["missing", ALWAYS_ON_EVENTS_TABLE_ENV, undefined],
+    ["missing", ALWAYS_ON_ENDPOINTS_TABLE_ENV, undefined],
+    ["missing", ALWAYS_ON_CONTROL_PLANE_URL_ENV, undefined],
+    ["missing", ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER_ENV, undefined],
   ])("should fail loudly when %s %s is supplied", (_case, envName, value) => {
     const env = { ...BASE_ENV, [envName]: value };
     expect(() => buildEventRuntimeApp({ env })).toThrow(envName);
@@ -107,7 +163,7 @@ describe("buildEventRuntimeApp", () => {
         Environment: "production",
       }),
     });
-  });
+  }, 15_000);
 });
 
 describe("tenkacloud-always-on-runtime entrypoint guard", () => {
@@ -116,6 +172,12 @@ describe("tenkacloud-always-on-runtime entrypoint guard", () => {
     [ALWAYS_ON_EVENT_ID_ENV]: process.env[ALWAYS_ON_EVENT_ID_ENV],
     [ALWAYS_ON_TENANT_ID_ENV]: process.env[ALWAYS_ON_TENANT_ID_ENV],
     [ALWAYS_ON_EXPIRES_AT_ENV]: process.env[ALWAYS_ON_EXPIRES_AT_ENV],
+    [ALWAYS_ON_DEPLOYMENTS_TABLE_ENV]: process.env[ALWAYS_ON_DEPLOYMENTS_TABLE_ENV],
+    [ALWAYS_ON_EVENTS_TABLE_ENV]: process.env[ALWAYS_ON_EVENTS_TABLE_ENV],
+    [ALWAYS_ON_ENDPOINTS_TABLE_ENV]: process.env[ALWAYS_ON_ENDPOINTS_TABLE_ENV],
+    [ALWAYS_ON_CONTROL_PLANE_URL_ENV]: process.env[ALWAYS_ON_CONTROL_PLANE_URL_ENV],
+    [ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER_ENV]:
+      process.env[ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER_ENV],
   };
 
   afterEach(() => {
@@ -135,6 +197,11 @@ describe("tenkacloud-always-on-runtime entrypoint guard", () => {
     process.env[ALWAYS_ON_EVENT_ID_ENV] = EVENT_ID;
     process.env[ALWAYS_ON_TENANT_ID_ENV] = TENANT_ID;
     process.env[ALWAYS_ON_EXPIRES_AT_ENV] = EXPIRES_AT;
+    process.env[ALWAYS_ON_DEPLOYMENTS_TABLE_ENV] = "Deployments";
+    process.env[ALWAYS_ON_EVENTS_TABLE_ENV] = "Events";
+    process.env[ALWAYS_ON_ENDPOINTS_TABLE_ENV] = "ProblemEndpoints";
+    process.env[ALWAYS_ON_CONTROL_PLANE_URL_ENV] = "https://control.example";
+    process.env[ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER_ENV] = "/tenkacloud/runtime/feed-token";
     vi.resetModules();
 
     await expect(import("../../bin/tenkacloud-always-on-runtime.js")).resolves.toBeDefined();
