@@ -244,6 +244,16 @@ For full multi-tenant operation — pooled tiers (BASIC / ADVANCED), silo tier (
 
 Teardown is `make destroy-saas` (`scripts/cleanup.sh`). It is written to be idempotent from any partial-failure / partial-delete state.
 
+### Always-On mode (ADR-049)
+
+A third mode whose goal is **zero always-on AWS compute between events**. It does not use SBT (see the `INVARIANT_CONTROL_PLANE_USES_SBT` row) and is deployed as independent pieces rather than one `make` target:
+
+- **Control plane** — the Cloudflare Worker `apps/always-on-control-plane` (D1 store; events / teams / score summaries / the Auth0-org→tenant projection). Organizer auth is Auth0 (RS256 JWKS); participants use SHA-256-hashed team keys. Deployed via the manual-approval `deploy-always-on-control-plane.yml` workflow. Reconciliation (event status + prune) runs on a Workers Cron (`triggers.crons`), so the control plane needs no AWS tick.
+- **Command seam** — the Worker mints ES256-signed `CloudActionIntent`s (`packages/trust-bridge`) and POSTs them to the AWS **signed-intent ingress** (a Lambda Function URL, `make deploy-always-on-ingress`), which verifies + scope-authorizes them and re-emits the frozen deploy events onto the existing bus. Zero idle compute (a Function URL, not a constant tick).
+- **Per-event runtime** — a per-event CDK stack (`bin/tenkacloud-always-on-runtime.ts`, stack id `tenkacloud-event-runtime-<eventId>`) deployed / destroyed by the `deploy-` / `destroy-always-on-runtime.yml` workflows (GitHub OIDC, no long-lived keys) and reclaimed by the nightly cleanup sweeper via its `TenkaCloud:*` tags. It exists **only during an event**.
+
+The store-convergence decision (D1 as the Always-On control store; the DynamoDB/Turso seam as the Lambda-era bridge; AWS runtime writes summaries into the control store via the Worker API) is recorded in ADR-049 §16. Remaining GA work (uptime-kind scoring inside the per-event runtime + the score-summary feed, and the live fixed/variable-cost measurement) is tracked in #2294.
+
 ## Pointers
 
 - **Architecture invariants**: [`.claude/harness/`](./.claude/harness/) — invariant rules + PR Discipline checks (summarized in the table above)
