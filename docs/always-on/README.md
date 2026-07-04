@@ -22,6 +22,19 @@ This is a foundation slice of issue #2292. SPA migration, Auth0 tenant
 provisioning automation, sign-in Log Streams, live D1/Turso volume comparison,
 and the DNS rollback exercise remain open.
 
+## Reconciliation on Workers Cron (Phase 5, #2294)
+
+In Always-On mode the control plane runs on Workers, so event-status transitions
+and expired-data pruning are driven by a Workers Cron trigger
+(`triggers.crons` in `wrangler.jsonc`, every 5 minutes) — not by a constant AWS
+per-minute tick (that monolith belongs to SaaS/Lite mode). `reconcileEvents`
+moves `DRAFT → ACTIVE` once `starts_at` passes and `ACTIVE → ENDED` once
+`ends_at` passes, then prunes events ended longer ago than the 90-day retention
+window (with their teams / checkpoints / submissions / score-summary rows).
+This preserves ADR-014's freshness contract (a status change is visible within
+one Cron interval) while keeping the platform at zero always-on AWS compute
+between events.
+
 ## Phase 3 gate verification (2026-07-03)
 
 | Gate | Verified result | Status |
