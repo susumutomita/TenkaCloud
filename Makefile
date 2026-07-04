@@ -15,6 +15,7 @@ export JSII_DEPRECATED := quiet
         env-check env-check-lite env-init \
         deploy deploy-saas destroy destroy-saas \
         deploy-battles destroy-battles \
+        deploy-always-on-ingress destroy-always-on-ingress synth-always-on-ingress \
         dev synth check-synth \
         doctor local local-up local-down local-status local-list local-evaluate
 
@@ -298,3 +299,37 @@ destroy-battles:
 	  exit 1; \
 	fi
 	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/destroy-battles.sh $(BATTLES)
+
+# ===== Always-On ingress (ADR-049 Phase 4 / #2293) =====
+# ADR-049 §8 "runtime スタックの手動デプロイ経路 (make target) を維持"。SLICE 1 で deploy 可能だが
+# どの bin にも未配線だった IntentIngressStack を、専用 app (bin/tenkacloud-always-on.ts) 経由で
+# operator が単体 deploy できる経路。ControlPlane / tenant pipeline / SBT を一切持ち込まないため、
+# `make deploy` / `deploy-saas` / `deploy-battles` に対しては完全に NO-OP。
+#
+# 必須 env: CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM (= JWS 検証秘密を保持する SSM SecureString 名)。
+# 任意 env: CDK_PARAM_EVENT_BUS_ARN (既存 deploy bus へ re-emit。省略で local bus) /
+#           CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE / _ALLOWED_TENANT_IDS / _ALLOWED_EVENT_IDS。
+#
+# 使い方:
+#   make deploy-always-on-ingress CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM=/tenkacloud/intent-ingress/verify-secret
+ALWAYS_ON_INGRESS_APP := bunx tsx bin/tenkacloud-always-on.ts
+
+deploy-always-on-ingress:
+	@if [ -z "$${CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM}" ]; then \
+	  echo "error: CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM が未指定 (= JWS 検証秘密を保持する SSM SecureString 名)。" >&2; \
+	  echo "  例: make deploy-always-on-ingress CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM=/tenkacloud/intent-ingress/verify-secret" >&2; \
+	  exit 1; \
+	fi
+	$(CDK) deploy --app "$(ALWAYS_ON_INGRESS_APP)" --all $(APPROVAL)
+
+# offline synth 検証 (Docker Lambda バンドルを skip する高速 shape チェック、check-synth と同じ思想)。
+synth-always-on-ingress: export CDK_SKIP_BUNDLING := 1
+synth-always-on-ingress:
+	$(CDK) synth --app "$(ALWAYS_ON_INGRESS_APP)" --all --quiet
+
+destroy-always-on-ingress:
+	@if [ -z "$${CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM}" ]; then \
+	  echo "error: CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM が未指定 (destroy も app synth のため必須)。" >&2; \
+	  exit 1; \
+	fi
+	$(CDK) destroy --app "$(ALWAYS_ON_INGRESS_APP)" --all --force
