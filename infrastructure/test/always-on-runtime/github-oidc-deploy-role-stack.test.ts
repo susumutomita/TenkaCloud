@@ -10,8 +10,8 @@ import { GithubOidcDeployRoleStack } from "../../lib/always-on-runtime/github-oi
  * ADR-049 Phase 4 (Issue #2293) SLICE 3 — GitHub Actions OIDC deploy-role stack.
  * Pins the security-critical invariants of the runtime-lifecycle trust:
  *   - trust policy hard-pins aud (StringEquals) + sub (StringLike, environment-scoped)
- *   - the role is least-privilege (only sts:AssumeRole on cdk-* bootstrap roles),
- *     NOT AdministratorAccess / `*:*`
+ *   - deploy is limited to cdk-* bootstrap roles; sweeper mutations are limited to
+ *     tenkacloud-event-runtime-* resources
  *   - the OIDC provider is created when absent and imported when an ARN is supplied
  */
 
@@ -99,7 +99,7 @@ describe("GithubOidcDeployRoleStack (#2293 ADR-049 Phase 4 SLICE 3)", () => {
     });
   });
 
-  it("should grant ONLY sts:AssumeRole on the account's cdk bootstrap roles (least privilege)", () => {
+  it("should scope deploy role chaining to the account's cdk bootstrap roles", () => {
     const t = synth();
     t.hasResourceProperties("AWS::IAM::Policy", {
       PolicyDocument: {
@@ -117,6 +117,36 @@ describe("GithubOidcDeployRoleStack (#2293 ADR-049 Phase 4 SLICE 3)", () => {
         ]),
       },
     });
+  });
+
+  it("should grant the sweeper only event-runtime delete and archive mutations", () => {
+    const t = synth();
+    t.hasResourceProperties("AWS::IAM::Policy", {
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Effect: "Allow",
+            Action: "cloudformation:DescribeStacks",
+            Resource: "*",
+          }),
+          Match.objectLike({
+            Effect: "Allow",
+            Action: "cloudformation:DeleteStack",
+            Resource: Match.anyValue(),
+          }),
+          Match.objectLike({
+            Effect: "Allow",
+            Action: "lambda:InvokeFunction",
+            Resource: Match.anyValue(),
+          }),
+        ]),
+      },
+    });
+    const policies = JSON.stringify(t.findResources("AWS::IAM::Policy"));
+    expect(policies).toContain(
+      `cloudformation:${REGION}:${ACCOUNT}:stack/tenkacloud-event-runtime-*/*`,
+    );
+    expect(policies).toContain(`lambda:${REGION}:${ACCOUNT}:function:tenkacloud-event-runtime-*`);
   });
 
   it("should scope the assumable bootstrap roles to a custom cdk qualifier", () => {
@@ -151,7 +181,7 @@ describe("GithubOidcDeployRoleStack (#2293 ADR-049 Phase 4 SLICE 3)", () => {
     }
   });
 
-  it("should NOT grant any wildcard `*` action or `*` resource anywhere in the template", () => {
+  it("should allow only the read-only DescribeStacks action to use wildcard resource scope", () => {
     const t = synth();
     const collectActions = (statement: { Action?: unknown }): string[] => {
       const action = statement.Action;
@@ -167,7 +197,9 @@ describe("GithubOidcDeployRoleStack (#2293 ADR-049 Phase 4 SLICE 3)", () => {
       const statements = policy.Properties?.PolicyDocument?.Statement ?? [];
       for (const statement of statements) {
         expect(collectActions(statement)).not.toContain("*");
-        expect(collectResources(statement)).not.toContain("*");
+        if (collectResources(statement).includes("*")) {
+          expect(collectActions(statement)).toEqual(["cloudformation:DescribeStacks"]);
+        }
       }
     }
   });

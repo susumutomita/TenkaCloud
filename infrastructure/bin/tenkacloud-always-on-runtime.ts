@@ -37,6 +37,7 @@ export const ALWAYS_ON_EVENT_BUS_ENV = "CDK_PARAM_ALWAYS_ON_EVENT_BUS_NAME";
 export const ALWAYS_ON_CONTROL_PLANE_URL_ENV = "CDK_PARAM_ALWAYS_ON_CONTROL_PLANE_URL";
 export const ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER_ENV =
   "CDK_PARAM_ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER";
+export const ALWAYS_ON_ARCHIVE_BUCKET_ENV = "CDK_PARAM_ALWAYS_ON_ARCHIVE_BUCKET_NAME";
 
 export interface BuildEventRuntimeAppOptions {
   readonly env: NodeJS.ProcessEnv;
@@ -79,6 +80,10 @@ export function buildEventRuntimeApp(options: BuildEventRuntimeAppOptions): cdk.
     tenantId,
     expiresAt,
     scoring: buildScoringProps(env),
+    archive: {
+      deploymentsTableName: requireEnv(env, ALWAYS_ON_DEPLOYMENTS_TABLE_ENV),
+      archiveBucketName: requireEnv(env, ALWAYS_ON_ARCHIVE_BUCKET_ENV),
+    },
   });
 
   // Stack-scope aspect matches applyDynamoLowCapacity; it is a no-op until the runtime owns a table.

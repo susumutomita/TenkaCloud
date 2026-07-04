@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as iam from "aws-cdk-lib/aws-iam";
 import type { Construct } from "constructs";
+import { EVENT_RUNTIME_STACK_ID_PREFIX } from "./event-runtime-stack.js";
 
 /**
  * ADR-049 Phase 4 (Issue #2293) SLICE 3 — GitHub Actions OIDC runtime-lifecycle role.
@@ -20,11 +21,11 @@ import type { Construct } from "constructs";
  *     GitHub Environment (with its protection rules) can.
  *
  * Least privilege (ADR-049 §8):
- *   - The role does NOT hold AdministratorAccess or `*:*`. Its only permission is
- *     `sts:AssumeRole` on the account's CDK bootstrap roles (`cdk-<qualifier>-*`),
- *     which is the standard "GitHub OIDC -> cdk bootstrap roles" deploy pattern. The
- *     actual CloudFormation / S3 / IAM authority lives in those bootstrap roles, not
- *     here, so a leaked GitHub token grants nothing beyond assuming them.
+ *   - CDK deploy/destroy may assume only this account's bootstrap roles.
+ *   - The nightly sweeper may inspect CloudFormation stacks, but may delete only
+ *     `tenkacloud-event-runtime-*` stacks and invoke only Lambdas whose physical name
+ *     belongs to those stacks. `DescribeStacks` requires `Resource: *` when called
+ *     without a stack name; no mutating wildcard grant is present.
  *
  * Like `CustomerExecutionPlaneStack` / `IntentIngressStack`, this is a standalone,
  * deployable `Stack` that is intentionally NOT wired into the main `bin/infrastructure.ts`
@@ -116,9 +117,7 @@ export class GithubOidcDeployRoleStack extends cdk.Stack {
       maxSessionDuration: cdk.Duration.hours(1),
     });
 
-    // Least privilege: the ONLY grant is sts:AssumeRole onto this account's CDK
-    // bootstrap roles. No AdministratorAccess, no `*:*`. `cdk deploy` from CI assumes
-    // these; the bootstrap roles carry the real CloudFormation / S3 / IAM authority.
+    // CDK lifecycle commands role-chain into the account's bootstrap roles.
     role.addToPolicy(
       new iam.PolicyStatement({
         sid: "AssumeCdkBootstrapRoles",
@@ -129,6 +128,38 @@ export class GithubOidcDeployRoleStack extends cdk.Stack {
           `arn:aws:iam::${this.account}:role/cdk-${cdkQualifier}-file-publishing-role-*`,
           `arn:aws:iam::${this.account}:role/cdk-${cdkQualifier}-lookup-role-*`,
           `arn:aws:iam::${this.account}:role/cdk-${cdkQualifier}-cfn-exec-role-*`,
+        ],
+      }),
+    );
+
+    // The sweeper uses the AWS SDK directly after assuming this role. Its read edge must
+    // be account-wide because DescribeStacks has no resource-scoped list form; both
+    // mutation edges remain pinned to the per-event runtime naming contract.
+    role.addToPolicy(
+      new iam.PolicyStatement({
+        sid: "InspectCloudFormationStacks",
+        effect: iam.Effect.ALLOW,
+        actions: ["cloudformation:DescribeStacks"],
+        resources: ["*"],
+      }),
+    );
+    role.addToPolicy(
+      new iam.PolicyStatement({
+        sid: "CleanupAlwaysOnRuntime",
+        effect: iam.Effect.ALLOW,
+        actions: ["cloudformation:DeleteStack"],
+        resources: [
+          `arn:${this.partition}:cloudformation:${this.region}:${this.account}:stack/${EVENT_RUNTIME_STACK_ID_PREFIX}-*/*`,
+        ],
+      }),
+    );
+    role.addToPolicy(
+      new iam.PolicyStatement({
+        sid: "InvokeAlwaysOnRuntimeArchive",
+        effect: iam.Effect.ALLOW,
+        actions: ["lambda:InvokeFunction"],
+        resources: [
+          `arn:${this.partition}:lambda:${this.region}:${this.account}:function:${EVENT_RUNTIME_STACK_ID_PREFIX}-*`,
         ],
       }),
     );

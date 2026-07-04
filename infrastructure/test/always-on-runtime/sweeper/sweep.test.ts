@@ -15,6 +15,8 @@ const FUTURE = "2026-07-05T00:00:00.000Z";
 const alwaysOn = (stackName: string, expiresAt?: string): ManagedStack => ({
   stackName,
   managedBy: MANAGED_BY_ALWAYS_ON_RUNTIME,
+  eventId: `event-${stackName}`,
+  archiveFunctionName: `archive-${stackName}`,
   ...(expiresAt !== undefined ? { expiresAt } : {}),
 });
 
@@ -22,8 +24,9 @@ const alwaysOn = (stackName: string, expiresAt?: string): ManagedStack => ({
 function fakeStacks(
   list: readonly ManagedStack[],
   deleteStack: CfnStacksClient["deleteStack"],
+  archiveStack: CfnStacksClient["archiveStack"] = vi.fn(async () => {}),
 ): CfnStacksClient {
-  return { listManagedStacks: async () => list, deleteStack };
+  return { listManagedStacks: async () => list, deleteStack, archiveStack };
 }
 
 function fakeIssues(): IssueFiler & { openCleanupFailureIssue: ReturnType<typeof vi.fn> } {
@@ -45,6 +48,26 @@ describe("sweepExpiredRuntimes", () => {
     expect(deleteStack).toHaveBeenCalledWith("expired-a");
     expect(issues.openCleanupFailureIssue).not.toHaveBeenCalled();
     expect(summary).toEqual({ scanned: 2, expired: 1, deleted: 1, failed: 0 });
+  });
+
+  it("should refuse deletion and file an issue when the raw score archive fails", async () => {
+    const deleteStack = vi.fn(async () => {});
+    const archiveStack = vi.fn(async () => {
+      throw new Error("archive bucket unavailable");
+    });
+    const issues = fakeIssues();
+    const stacks = fakeStacks([alwaysOn("expired", PAST)], deleteStack, archiveStack);
+
+    const summary = await sweepExpiredRuntimes({ stacks, issues, maxAttempts: 2 }, NOW);
+
+    expect(archiveStack).toHaveBeenCalledTimes(2);
+    expect(deleteStack).not.toHaveBeenCalled();
+    expect(issues.openCleanupFailureIssue).toHaveBeenCalledWith({
+      stackName: "expired",
+      attempts: 2,
+      lastError: "archive failed: archive bucket unavailable",
+    });
+    expect(summary).toEqual({ scanned: 1, expired: 1, deleted: 0, failed: 1 });
   });
 
   it("should never delete a non-expired or non-always-on-runtime stack", async () => {
@@ -151,6 +174,7 @@ describe("sweepExpiredRuntimes", () => {
         throw new Error("cfn describe-stacks failed");
       },
       deleteStack: vi.fn(async () => {}),
+      archiveStack: vi.fn(async () => {}),
     };
 
     await expect(sweepExpiredRuntimes({ stacks, issues }, NOW)).rejects.toThrow(

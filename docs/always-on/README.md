@@ -257,12 +257,27 @@ Configure these GitHub Environment variables for the
 - `ALWAYS_ON_ENDPOINTS_TABLE_NAME`
 - `ALWAYS_ON_CONTROL_PLANE_URL`
 - `ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER` (SSM SecureString parameter name)
+- `ALWAYS_ON_ARCHIVE_BUCKET_NAME` (existing private S3 bucket)
 - optional `ALWAYS_ON_DISRUPTIONS_TABLE_NAME` and `ALWAYS_ON_EVENT_BUS_NAME`
 
 The feed bearer is fetched with decryption at invocation time and is never put
 in Lambda environment variables or workflow logs. The runtime schedule and
 Lambda are deleted with the event stack, so there is no AWS tick between
 events.
+
+The destroy workflow invokes the event stack's archive Lambda before
+CloudFormation deletion. It exports only that event's raw DynamoDB `EVENT#`
+score rows as bounded JSONL parts under
+`events/{eventId}/score-events/runs/{archiveId}/`, then atomically publishes
+`events/{eventId}/score-events/latest.json`. A failed export stops teardown so
+the runtime data remains available for retry.
+
+The nightly sweeper uses the same GitHub OIDC role as runtime lifecycle
+workflows. Redeploy `tenkacloud-always-on-oidc` after upgrading: its direct AWS
+SDK permissions allow account-wide `DescribeStacks` (CloudFormation does not
+offer a resource-scoped list form), while `DeleteStack` and
+`lambda:InvokeFunction` remain restricted to
+`tenkacloud-event-runtime-*` resources.
 
 ## Rollback
 

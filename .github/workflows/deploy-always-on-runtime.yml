@@ -91,6 +91,7 @@ jobs:
           CDK_PARAM_ALWAYS_ON_EVENT_BUS_NAME: ${{ vars.ALWAYS_ON_EVENT_BUS_NAME }}
           CDK_PARAM_ALWAYS_ON_CONTROL_PLANE_URL: ${{ vars.ALWAYS_ON_CONTROL_PLANE_URL }}
           CDK_PARAM_ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER: ${{ vars.ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER }}
+          CDK_PARAM_ALWAYS_ON_ARCHIVE_BUCKET_NAME: ${{ vars.ALWAYS_ON_ARCHIVE_BUCKET_NAME }}
         run: |
           echo "Deploying Always-On per-event runtime for event: ${CDK_PARAM_ALWAYS_ON_EVENT_ID}"
           make deploy-always-on-runtime

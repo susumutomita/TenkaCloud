@@ -3,6 +3,7 @@ import { type App, Stack } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ALWAYS_ON_ARCHIVE_BUCKET_ENV,
   ALWAYS_ON_CONTROL_PLANE_URL_ENV,
   ALWAYS_ON_DEPLOYMENTS_TABLE_ENV,
   ALWAYS_ON_ENDPOINTS_TABLE_ENV,
@@ -39,6 +40,7 @@ const BASE_ENV: NodeJS.ProcessEnv = {
   [ALWAYS_ON_ENDPOINTS_TABLE_ENV]: "ProblemEndpoints",
   [ALWAYS_ON_CONTROL_PLANE_URL_ENV]: "https://control.example",
   [ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER_ENV]: "/tenkacloud/runtime/feed-token",
+  [ALWAYS_ON_ARCHIVE_BUCKET_ENV]: "tenkacloud-score-archive",
   CDK_PARAM_AWS_ACCOUNT_ID: "111111111111",
   CDK_PARAM_AWS_REGION: "ap-northeast-1",
   CDK_SKIP_BUNDLING: "1",
@@ -113,6 +115,24 @@ describe("buildEventRuntimeApp", () => {
         ]),
       },
     });
+    template.hasOutput("ArchiveFunctionName", {
+      Description: "Invoke before destroy to export raw score events.",
+      Value: Match.anyValue(),
+    });
+    template.hasResourceProperties("AWS::Lambda::Function", {
+      ReservedConcurrentExecutions: 1,
+      Timeout: 900,
+      Environment: {
+        Variables: Match.objectLike({
+          DEPLOYMENTS_TABLE_NAME: "Deployments",
+          SCORE_ARCHIVE_BUCKET_NAME: "tenkacloud-score-archive",
+        }),
+      },
+    });
+    template.hasResourceProperties("AWS::Lambda::EventInvokeConfig", {
+      MaximumEventAgeInSeconds: 900,
+      MaximumRetryAttempts: 0,
+    });
   });
 
   it.each([
@@ -127,6 +147,7 @@ describe("buildEventRuntimeApp", () => {
     ["missing", ALWAYS_ON_ENDPOINTS_TABLE_ENV, undefined],
     ["missing", ALWAYS_ON_CONTROL_PLANE_URL_ENV, undefined],
     ["missing", ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER_ENV, undefined],
+    ["missing", ALWAYS_ON_ARCHIVE_BUCKET_ENV, undefined],
   ])("should fail loudly when %s %s is supplied", (_case, envName, value) => {
     const env = { ...BASE_ENV, [envName]: value };
     expect(() => buildEventRuntimeApp({ env })).toThrow(envName);
@@ -178,6 +199,7 @@ describe("tenkacloud-always-on-runtime entrypoint guard", () => {
     [ALWAYS_ON_CONTROL_PLANE_URL_ENV]: process.env[ALWAYS_ON_CONTROL_PLANE_URL_ENV],
     [ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER_ENV]:
       process.env[ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER_ENV],
+    [ALWAYS_ON_ARCHIVE_BUCKET_ENV]: process.env[ALWAYS_ON_ARCHIVE_BUCKET_ENV],
   };
 
   afterEach(() => {
@@ -202,6 +224,7 @@ describe("tenkacloud-always-on-runtime entrypoint guard", () => {
     process.env[ALWAYS_ON_ENDPOINTS_TABLE_ENV] = "ProblemEndpoints";
     process.env[ALWAYS_ON_CONTROL_PLANE_URL_ENV] = "https://control.example";
     process.env[ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER_ENV] = "/tenkacloud/runtime/feed-token";
+    process.env[ALWAYS_ON_ARCHIVE_BUCKET_ENV] = "tenkacloud-score-archive";
     vi.resetModules();
 
     await expect(import("../../bin/tenkacloud-always-on-runtime.js")).resolves.toBeDefined();
