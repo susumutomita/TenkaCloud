@@ -27,6 +27,7 @@ import {
   LambdaInvoke,
 } from "aws-cdk-lib/aws-stepfunctions-tasks";
 import { Construct } from "constructs";
+import { DEPLOY_STATUS_POLL_INTERVAL_SECONDS } from "./deploy-cost-model.js";
 import { deploymentKey, stateEnteredTime } from "./state-machine-helpers.js";
 
 export interface DeployCreateStateMachineProps {
@@ -333,8 +334,10 @@ export class DeployCreateStateMachine extends Construct {
     });
 
     // CFn stack 反映まで少し待ってから DescribeStacks を叩く (直後は stack がまだ見えない)。
+    // 間隔は deploy-cost-model.ts の共有定数 (30s)。SFN 遷移コスト (750 波 ≈$0.7) を左右するので
+    // create / delete の poll loop で同値に保つ。
     const waitBeforePoll = new Wait(this, "WaitBeforePoll", {
-      time: WaitTime.duration(Duration.seconds(15)),
+      time: WaitTime.duration(Duration.seconds(DEPLOY_STATUS_POLL_INTERVAL_SECONDS)),
     });
 
     // DescribeStackLambda を再利用。$.cfn は DescribeStacks output (= CodeBuild path と同契約)。
