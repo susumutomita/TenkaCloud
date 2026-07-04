@@ -27,6 +27,11 @@ export {
   type TokenSet,
 } from "./cognito";
 export {
+  type CachingJwksResolverOptions,
+  createCachingJwksResolver,
+  DEFAULT_CACHE_TTL_SEC,
+} from "./jwks-resolver";
+export {
   DEFAULT_CLOCK_TOLERANCE_SEC,
   type Jwk,
   type JwksResolver,
