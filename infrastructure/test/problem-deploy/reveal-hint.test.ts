@@ -215,6 +215,32 @@ describe("revealHint (#742 Phase 3)", () => {
     });
   });
 
+  // ---- hintReveal: "flat" は順序制約を外す (per-problem opt-in、 既定は sequential) ----
+  describe("flat hint reveal mode (scoring.hintReveal = 'flat')", () => {
+    function flatScoringMap(): Record<string, ProblemScoringMetadata> {
+      return {
+        "hello-world": {
+          kind: "flag",
+          flagOutputKey: "ParameterValue",
+          points: 100,
+          hints: DEFAULT_HINTS,
+          hintReveal: "flat",
+        },
+      };
+    }
+
+    it("should allow revealing hint 2 before hint 1 when flat (no hint_out_of_order)", async () => {
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ score: 100, hintsRevealed: [] })] });
+      ddbSend.mockResolvedValueOnce({ Attributes: { score: 80 } });
+      const out = await revealHint(shared, flatScoringMap(), TEAM_KEY, "hello-world", "hint-2");
+      expect(out.kind).toBe("ok");
+      if (out.kind !== "ok") return;
+      expect(out.penaltyApplied).toBe(20);
+      expect(out.totalScore).toBe(80);
+    });
+  });
+
   it("既に reveal 済の hintId は already_revealed (= content + 既存 score を返す、 idempotent)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({

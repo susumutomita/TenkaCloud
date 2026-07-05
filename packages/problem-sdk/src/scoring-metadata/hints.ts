@@ -20,6 +20,29 @@ export interface ProgressiveHint {
 }
 
 /**
+ * How a problem's progressive hints unlock.
+ *   - `sequential` (default): hint N opens only after hints 1..N-1 are revealed
+ *     (the original #1315 progressive-gate behavior — escalating penalties stay
+ *     meaningful because you cannot skip straight to the last hint).
+ *   - `flat`: every hint is independently revealable in any order.
+ * Authored top-level under `scoring` (`"hintReveal": "flat"`), it governs every
+ * hint group in the problem (the single `flag`/`verify` list, or each
+ * `multi-verify` check's list). Sequential is the backward-compatible default,
+ * so an unset / invalid value keeps existing problems unchanged.
+ */
+export type HintRevealMode = "sequential" | "flat";
+
+/**
+ * Narrow the optional `scoring.hintReveal` field. Only the two literals are
+ * honored; anything else (absent / typo / wrong type) resolves to `undefined`,
+ * which every consumer treats as `sequential`. Kept faithful (does not collapse
+ * an explicit `"sequential"` to `undefined`) so a round-trip preserves intent.
+ */
+export function parseHintRevealMode(value: unknown): HintRevealMode | undefined {
+  return value === "flat" || value === "sequential" ? value : undefined;
+}
+
+/**
  * Issue #817: wrongAnswerPenalty is optional. Invalid (negative / non-integer /
  * non-number) clamps to undefined (= no penalty, safe side).
  */

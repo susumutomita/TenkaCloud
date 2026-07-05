@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { parseHintRevealMode } from "../src/scoring-metadata/hints.js";
 import { parseScoringMetadata } from "../src/scoring-metadata.js";
 
 describe("parseScoringMetadata: non-object / unknown kind", () => {
@@ -73,6 +74,59 @@ describe("parseScoringMetadata: flag", () => {
       hints: [{ id: "h1", content: "x", penalty: 3.9 }, { content: "no-id" }],
     });
     expect(v2?.kind === "flag" && v2.hints).toEqual([{ id: "h1", content: "x", penalty: 3 }]);
+  });
+});
+
+describe("parseHintRevealMode: hint unlock order (flat vs sequential)", () => {
+  it("should honor the two literals and default everything else to undefined", () => {
+    expect(parseHintRevealMode("flat")).toBe("flat");
+    expect(parseHintRevealMode("sequential")).toBe("sequential");
+    // Absent / typo / wrong type all resolve to undefined (= sequential default).
+    expect(parseHintRevealMode(undefined)).toBeUndefined();
+    expect(parseHintRevealMode("FLAT")).toBeUndefined();
+    expect(parseHintRevealMode("ordered")).toBeUndefined();
+    expect(parseHintRevealMode(1)).toBeUndefined();
+    expect(parseHintRevealMode(null)).toBeUndefined();
+  });
+
+  it("should carry hintReveal on a flag problem, defaulting to undefined", () => {
+    const flat = parseScoringMetadata({
+      kind: "flag",
+      flagOutputKey: "Flag",
+      points: 100,
+      hintReveal: "flat",
+    });
+    expect(flat).toMatchObject({ kind: "flag", hintReveal: "flat" });
+    const unset = parseScoringMetadata({ kind: "flag", flagOutputKey: "Flag", points: 100 });
+    expect(unset?.kind === "flag" && unset.hintReveal).toBeUndefined();
+    const bogus = parseScoringMetadata({
+      kind: "flag",
+      flagOutputKey: "Flag",
+      points: 100,
+      hintReveal: "nope",
+    });
+    expect(bogus?.kind === "flag" && bogus.hintReveal).toBeUndefined();
+  });
+
+  it("should carry a top-level hintReveal on a multi-verify problem", () => {
+    const flat = parseScoringMetadata({
+      kind: "multi-verify",
+      hintReveal: "flat",
+      checks: [
+        { id: "a", label: "A", points: 50 },
+        { id: "b", label: "B", points: 50 },
+      ],
+    });
+    expect(flat).toMatchObject({ kind: "multi-verify", hintReveal: "flat" });
+    // Unset omits the key entirely (kept minimal, unlike the always-present flag field).
+    const unset = parseScoringMetadata({
+      kind: "multi-verify",
+      checks: [
+        { id: "a", label: "A", points: 50 },
+        { id: "b", label: "B", points: 50 },
+      ],
+    });
+    expect(unset && "hintReveal" in unset).toBe(false);
   });
 });
 

@@ -34,11 +34,20 @@ export interface ContainerHint {
   readonly i18n?: { readonly en?: { readonly content: string } };
 }
 
+/**
+ * Hint unlock order, mirroring the SDK's `HintRevealMode` (kept inline so this
+ * self-contained manifest parser needs no cross-package import). Unset =
+ * `sequential` (default); `flat` lets every hint open in any order. The portal
+ * reads it off the scoring view and drops its order gate accordingly.
+ */
+export type ContainerHintRevealMode = "sequential" | "flat";
+
 export interface ContainerVerifyScoring {
   readonly kind: "verify";
   readonly points: number;
   readonly wrongAnswerPenalty: number;
   readonly hints: readonly ContainerHint[];
+  readonly hintReveal?: ContainerHintRevealMode;
 }
 
 /**
@@ -61,6 +70,8 @@ export interface ContainerMultiVerifyScoring {
   readonly checks: readonly ContainerCheck[];
   /** Σ checks[].points — the problem total (= 部分点の母数). */
   readonly totalPoints: number;
+  /** Top-level hint unlock order shared by every check. Unset = `sequential`. */
+  readonly hintReveal?: ContainerHintRevealMode;
 }
 
 export type ContainerScoring = ContainerVerifyScoring | ContainerMultiVerifyScoring;
@@ -129,6 +140,7 @@ interface RawMetadata {
     readonly wrongAnswerPenalty?: unknown;
     readonly hints?: unknown;
     readonly checks?: unknown;
+    readonly hintReveal?: unknown;
   };
   readonly i18n?: {
     readonly en?: {
@@ -147,6 +159,11 @@ function requiredString(value: unknown, field: string): string {
     throw new Error(`${field} must be a non-empty string`);
   }
   return value;
+}
+
+/** Narrow `scoring.hintReveal`; only the two literals count, else undefined (= sequential). */
+function parseHintReveal(value: unknown): ContainerHintRevealMode | undefined {
+  return value === "flat" || value === "sequential" ? value : undefined;
 }
 
 function nonNegativeNumber(value: unknown, field: string, fallback?: number): number {
@@ -433,6 +450,7 @@ function parseVerifyScoring(
 ): ContainerVerifyScoring {
   const points = nonNegativeNumber(scoring?.points, "scoring.points");
   if (points <= 0) throw new Error("scoring.points must be greater than zero");
+  const hintReveal = parseHintReveal(scoring?.hintReveal);
   return {
     kind: "verify",
     points,
@@ -442,6 +460,7 @@ function parseVerifyScoring(
       0,
     ),
     hints: normalizeHints(scoring?.hints, hintById),
+    ...(hintReveal ? { hintReveal } : {}),
   };
 }
 
@@ -475,10 +494,12 @@ function parseMultiVerifyScoring(
   const checks = rawChecks.map((raw, index) =>
     parseOneCheck(raw, index, checkById, seenCheckIds, seenHintIds),
   );
+  const hintReveal = parseHintReveal(scoring?.hintReveal);
   return {
     kind: "multi-verify",
     checks,
     totalPoints: checks.reduce((sum, check) => sum + check.points, 0),
+    ...(hintReveal ? { hintReveal } : {}),
   };
 }
 

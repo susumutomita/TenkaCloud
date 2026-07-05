@@ -101,6 +101,20 @@ describe("local-play API", () => {
     expect(problem.score).toBe(0);
     expect(problem).not.toHaveProperty("writeup");
     expect(problem).not.toHaveProperty("i18n");
+    // Default (unset) omits hintReveal → portal keeps the sequential gate.
+    expect(problem.scoring).not.toHaveProperty("hintReveal");
+  });
+
+  it("should surface hintReveal:'flat' on a verify (flag) view when opted in", async () => {
+    const flatProblem: ContainerProblem = {
+      ...PROBLEM,
+      scoring: { ...PROBLEM.scoring, hintReveal: "flat" } as ContainerProblem["scoring"],
+    };
+    const state = createLocalPlayState({ problem: flatProblem }, { verify: neverVerify });
+    const res = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const problem = (res.body as { problems: Array<{ scoring: Record<string, unknown> }> })
+      .problems[0];
+    expect(problem.scoring).toMatchObject({ kind: "flag", hintReveal: "flat" });
   });
 
   it("should delegate a correct submission to /verify and award the manifest points", async () => {
@@ -418,6 +432,17 @@ describe("local-play API: multi-verify (issue #2252)", () => {
         { id: "weak-admin-pw", label: "弱い管理者パスワード", points: 70, solved: false },
       ],
     });
+  });
+
+  it("should surface hintReveal:'flat' at the top of the multi-flag view when opted in", async () => {
+    const flatProblem: ContainerProblem = {
+      ...MULTI_PROBLEM,
+      scoring: { ...MULTI_PROBLEM.scoring, hintReveal: "flat" } as ContainerProblem["scoring"],
+    };
+    const state = createLocalPlayState({ problem: flatProblem }, { verify: vi.fn() });
+    const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const problem = (view.body as { problems: Array<Record<string, unknown>> }).problems[0];
+    expect(problem.scoring).toMatchObject({ kind: "multi-flag", hintReveal: "flat" });
   });
 
   it("should judge one checkpoint via the container and award metadata points only", async () => {

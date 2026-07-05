@@ -8,6 +8,7 @@ import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useState } from "react";
 import {
+  type HintRevealMode,
   type ParticipantHintView,
   PortalValidationError,
   revealHint,
@@ -32,6 +33,7 @@ export function FlagSubmissionPanel({
   points,
   hints,
   onScored,
+  revealOrder,
 }: {
   apiBaseUrl: string;
   sessionToken: string;
@@ -40,6 +42,8 @@ export function FlagSubmissionPanel({
   points: number;
   hints: readonly ParticipantHintView[];
   onScored: () => Promise<void>;
+  /** 問題 `scoring.hintReveal`; `"flat"` で hint 順序ゲートを外す (既定 sequential)。 */
+  revealOrder?: HintRevealMode;
 }) {
   const t = useT();
   // dev-mock mode (= LP 「モックで試す」 動線) のとき submit を backend に投げず、
@@ -105,6 +109,7 @@ export function FlagSubmissionPanel({
           problemId={problemId}
           hints={hints}
           onRevealed={onScored}
+          revealOrder={revealOrder}
         />
       )}
       <form onSubmit={handleSubmit}>
@@ -206,12 +211,19 @@ export function HintsPanel({
   problemId,
   hints,
   onRevealed,
+  revealOrder,
 }: {
   apiBaseUrl: string;
   sessionToken: string;
   problemId: string;
   hints: readonly ParticipantHintView[];
   onRevealed: () => Promise<void>;
+  /**
+   * Issue #1315 ← 問題 `scoring.hintReveal`: hint 公開順。 `"flat"` のとき順序ゲート
+   * (predecessor lock) を外し、 全 hint を任意順で開封できる。 未指定 / `"sequential"`
+   * は既定の progressive gate (hint N は hint 1..N-1 開封後のみ)。
+   */
+  revealOrder?: HintRevealMode;
 }) {
   const t = useT();
   const [revealing, setRevealing] = useState<string | null>(null);
@@ -238,6 +250,8 @@ export function HintsPanel({
   };
 
   const revealedCount = hints.filter((h) => h.revealed).length;
+  // flat モードでは順序ゲートを一切かけない (= どの hint も独立に開封できる)。
+  const flat = revealOrder === "flat";
   return (
     <>
       <Alert
@@ -249,8 +263,9 @@ export function HintsPanel({
             // Issue #1315: progressive hint 順序制約。 Hint N (index i) は Hint 1..i が
             // すべて revealed=true のときのみ button 有効。 backend (409 hint_out_of_order)
             // と同じ contract を UI で先回り disable し、 不要な round trip を抑える。
+            // flat モード (問題の scoring.hintReveal="flat") では順序制約を外す。
             const predecessorsRevealed = hints.slice(0, i).every((prev) => prev.revealed);
-            const lockedByOrder = !predecessorsRevealed;
+            const lockedByOrder = !flat && !predecessorsRevealed;
             const ariaLabel = lockedByOrder
               ? t("problem_panel.hint_predecessor_required_aria", { index: i })
               : undefined;

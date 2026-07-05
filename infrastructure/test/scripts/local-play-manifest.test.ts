@@ -103,6 +103,27 @@ describe("loadContainerProblem", () => {
       wrongAnswerPenalty: 10,
       hints: [{ id: "hint-1", content: "Try a quote.", penalty: 0 }],
     });
+    // Unset hintReveal is omitted (= sequential default).
+    expect(problem.scoring).not.toHaveProperty("hintReveal");
+  });
+
+  it("should parse scoring.hintReveal:'flat' and ignore invalid values", () => {
+    const flat = loadContainerProblem(
+      DIR,
+      fixture({ scoring: { ...VALID_METADATA.scoring, hintReveal: "flat" } }),
+    );
+    expect(flat.scoring).toMatchObject({ kind: "verify", hintReveal: "flat" });
+    // An explicit "sequential" round-trips; a typo is dropped to the default (absent).
+    const seq = loadContainerProblem(
+      DIR,
+      fixture({ scoring: { ...VALID_METADATA.scoring, hintReveal: "sequential" } }),
+    );
+    expect(seq.scoring).toMatchObject({ hintReveal: "sequential" });
+    const bogus = loadContainerProblem(
+      DIR,
+      fixture({ scoring: { ...VALID_METADATA.scoring, hintReveal: "nope" } }),
+    );
+    expect(bogus.scoring).not.toHaveProperty("hintReveal");
   });
 
   it("should default name/description/instructions/secretEnv/hints when omitted", () => {
@@ -428,6 +449,19 @@ describe("loadContainerProblem: multi-verify (issue #2252)", () => {
         },
       ],
     });
+  });
+
+  it("should parse a top-level hintReveal:'flat' for the whole multi-verify problem", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      fixture({
+        scoring: { kind: "multi-verify", hintReveal: "flat", checks: [check(), other()] },
+      }),
+    );
+    expect(problem.scoring).toMatchObject({ kind: "multi-verify", hintReveal: "flat" });
+    // Default (helper omits it) stays absent.
+    const seq = loadContainerProblem(DIR, multiVerify([check(), other()]));
+    expect(seq.scoring).not.toHaveProperty("hintReveal");
   });
 
   it("should overlay i18n.en.checks label + hint content by id (scoring stays top-level)", () => {

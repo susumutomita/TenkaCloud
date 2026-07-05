@@ -415,6 +415,24 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(JSON.stringify(problems)).not.toContain("flag-answer");
   });
 
+  it("should surface hintReveal:'flat' on the flag scoring view (opt-in)", async () => {
+    const scoring = {
+      "flat-hints-problem": {
+        kind: "flag" as const,
+        flagOutputKey: "FlagAnswer",
+        points: 100,
+        hints: [{ id: "h1", content: "any-order hint", penalty: 5 }],
+        hintReveal: "flat" as const,
+      },
+    };
+    const { shared, ddbSend } = buildShared(scoring);
+    ddbSend.mockResolvedValueOnce({
+      Items: [sampleRow({ jobId: "J1", PK: "DEPLOYMENT#J1", problemId: "flat-hints-problem" })],
+    });
+    const problems = (await lookupTeamByLoginKey(shared, "KEY1"))?.problems ?? [];
+    expect(problems[0]?.scoring).toMatchObject({ kind: "flag", hintReveal: "flat" });
+  });
+
   it("should expose the latest measured posture and platform snapshot", async () => {
     const scoring = {
       "security-battle-royale": { kind: "uptime" as const, pointsPerSuccess: 50 },

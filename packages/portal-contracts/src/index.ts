@@ -55,6 +55,15 @@ export type ScoringKind =
   | "attack-detection";
 
 /**
+ * ヒントの公開順 (問題の `scoring.hintReveal`)。 `problem-sdk` の `HintRevealMode` の
+ * 参加者向けミラー (= portal-contracts は problem-sdk に依存しない契約境界なので、
+ * `ScoringKind` と同様にここで独立宣言する)。
+ *   - `"flat"`     — 全 hint を任意順で公開可 (portal は順序ゲートを外す)
+ *   - `"sequential"` / 未指定 — hint 1→2→3 の順 (既定。 progressive gate 維持)
+ */
+export type HintRevealMode = "sequential" | "flat";
+
+/**
  * Issue #1796: multi-flag の 1 sub-flag の view。 正解値 (flagOutputKey の値) は含めない
  * (= 答えを漏らさない)。 `solved` は team の解済 flag id 集合に含まれるかで判定済み。
  */
@@ -108,6 +117,14 @@ export interface ParticipantScoringInfo {
   readonly flagSubmitted?: boolean;
   /** Issue #1796: multi-flag の sub-flag 一覧 (= N 個の提出欄を出すための view)。 */
   readonly flags?: readonly MultiFlagEntryView[];
+  /**
+   * 問題が指定する hint 公開順 (`scoring.hintReveal`)。 問題レベルの hints にも
+   * 各 sub-flag の hints にも同じモードが適用される。
+   *   - `"flat"`     — 全 hint を任意順で公開可 (portal は順序ゲートを外す)
+   *   - `"sequential"` / 未指定 — hint 1→2→3 の順 (既定。 progressive gate 維持)
+   * 答えではないので participant に出してよい (= どの順で開けられるかの UI 情報のみ)。
+   */
+  readonly hintReveal?: HintRevealMode;
 }
 
 /**

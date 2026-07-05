@@ -200,6 +200,15 @@ describe("HintsPanel order constraint (Issue #1315)", () => {
     expect(buttons[1]).toBeDisabled(); // hint-3
   });
 
+  it("should enable every hint button in flat mode regardless of order", () => {
+    renderPanel({ hints: HINTS_3, revealOrder: "flat" });
+    const buttons = findRevealButtons();
+    expect(buttons).toHaveLength(3);
+    // flat: 順序ゲート無し → 全 button enabled。 「先に公開してください」 の note も出ない。
+    for (const button of buttons) expect(button).toBeEnabled();
+    expect(screen.queryByText(/Reveal Hint \d+ first|ヒント \d+ を先に公開/)).toBeNull();
+  });
+
   it("should render revealed hint content with a relative timestamp", () => {
     const { container } = renderPanel({
       hints: [

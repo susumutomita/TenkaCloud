@@ -274,6 +274,9 @@ function toScoringInfo(
       kind: "flag",
       points: scoring.points,
       ...(hintViews ? { hints: hintViews } : {}),
+      // 順序ゲートを外す flat モードの問題だけ hintReveal を露出する (= 既定 sequential は
+      // 送らず、 既存問題の view を不変に保つ)。 frontend HintsPanel がこれを見て lock を外す。
+      ...(scoring.hintReveal ? { hintReveal: scoring.hintReveal } : {}),
       flagSubmitted: item.flagSubmitted === true,
     };
   }

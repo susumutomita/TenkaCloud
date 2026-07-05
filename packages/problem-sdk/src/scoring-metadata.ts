@@ -53,7 +53,7 @@ export type {
   CompositeProbeTarget,
 } from "./scoring-metadata/composite.js";
 export type { FlagScoringMetadata } from "./scoring-metadata/flag.js";
-export type { ProgressiveHint } from "./scoring-metadata/hints.js";
+export type { HintRevealMode, ProgressiveHint } from "./scoring-metadata/hints.js";
 export type { MultiFlagEntry, MultiFlagScoringMetadata } from "./scoring-metadata/multi-flag.js";
 export type {
   MultiVerifyCheck,
