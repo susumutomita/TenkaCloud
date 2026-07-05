@@ -93,9 +93,13 @@ export async function revealHint(
   // Issue #1315: 順序制約。 Hint N (index > 0) は Hint 1..N-1 がすべて reveal 済の
   // ときのみ開封可。 違反時は missing する 「次に開けるべき直前 hint」 の id を返す
   // (= UI で 「Hint N-1 を先に reveal」 文言を組み立てるため)。
-  const missingPredecessor = findMissingPredecessor(hints, hintIndex, alreadyRevealed);
-  if (missingPredecessor) {
-    return { kind: "hint_out_of_order", missingHintId: missingPredecessor };
+  // 問題が `scoring.hintReveal: "flat"` を指定した場合はこの順序制約を外し、 任意順で
+  // 開封できるようにする (既定 = sequential なので既存問題の挙動は不変)。
+  if (scoring.hintReveal !== "flat") {
+    const missingPredecessor = findMissingPredecessor(hints, hintIndex, alreadyRevealed);
+    if (missingPredecessor) {
+      return { kind: "hint_out_of_order", missingHintId: missingPredecessor };
+    }
   }
 
   return updateHintReveal(shared, item, hint, hintId);

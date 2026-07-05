@@ -5,7 +5,12 @@ import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useState } from "react";
-import { type MultiFlagEntryView, type SubmitFlagOutcome, submitFlag } from "../api/portal-client";
+import {
+  type HintRevealMode,
+  type MultiFlagEntryView,
+  type SubmitFlagOutcome,
+  submitFlag,
+} from "../api/portal-client";
 import { useIsMock } from "../config-context";
 import { evaluateMockFlag } from "../dev-mock/flag-submit";
 import { useLang, useT } from "../i18n";
@@ -32,12 +37,15 @@ export function MultiFlagSubmissionPanel({
   problemId,
   flags,
   onScored,
+  revealOrder,
 }: {
   apiBaseUrl: string;
   sessionToken: string;
   problemId: string;
   flags: readonly MultiFlagEntryView[];
   onScored: () => Promise<void>;
+  /** 問題 `scoring.hintReveal`; `"flat"` で各 sub-flag の hint 順序ゲートを外す。 */
+  revealOrder?: HintRevealMode;
 }) {
   const t = useT();
   const solvedCount = flags.filter((f) => f.solved).length;
@@ -59,6 +67,7 @@ export function MultiFlagSubmissionPanel({
           problemId={problemId}
           flag={flag}
           onScored={onScored}
+          revealOrder={revealOrder}
         />
       ))}
     </SpaceBetween>
@@ -71,12 +80,14 @@ function SubFlagRow({
   problemId,
   flag,
   onScored,
+  revealOrder,
 }: {
   apiBaseUrl: string;
   sessionToken: string;
   problemId: string;
   flag: MultiFlagEntryView;
   onScored: () => Promise<void>;
+  revealOrder?: HintRevealMode;
 }) {
   const t = useT();
   const lang = useLang();
@@ -179,7 +190,8 @@ function SubFlagRow({
           {submitError}
         </Alert>
       )}
-      {/* [#2252] multi-verify: per-check progressive hints。 flat reveal route を再利用。 */}
+      {/* [#2252] multi-verify: per-check progressive hints。 flat reveal route を再利用。
+          revealOrder="flat" のとき各 check の hint 順序ゲートを外す。 */}
       {flag.hints && flag.hints.length > 0 && (
         <HintsPanel
           apiBaseUrl={apiBaseUrl}
@@ -187,6 +199,7 @@ function SubFlagRow({
           problemId={problemId}
           hints={flag.hints}
           onRevealed={onScored}
+          revealOrder={revealOrder}
         />
       )}
     </SpaceBetween>

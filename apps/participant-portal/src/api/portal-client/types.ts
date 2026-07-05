@@ -15,6 +15,7 @@ export {
   type DeploymentLogEntry,
   type DeploymentLogView,
   type DeploymentStatus,
+  type HintRevealMode,
   type LeaderboardEntry,
   type LeaderboardResponse,
   type MultiFlagEntryView,

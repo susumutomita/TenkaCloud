@@ -1,5 +1,10 @@
 import { StatusCodes } from "http-status-codes";
-import type { ContainerCheck, ContainerHint, ContainerProblem } from "./manifest";
+import type {
+  ContainerCheck,
+  ContainerHint,
+  ContainerHintRevealMode,
+  ContainerProblem,
+} from "./manifest";
 import { type VerifyContext, type VerifyResult, verifySubmission } from "./verify-client";
 
 /**
@@ -123,10 +128,14 @@ function multiVerifyScoringView(
   state: LocalPlayState,
   checks: readonly ContainerCheck[],
   totalPoints: number,
+  hintReveal: ContainerHintRevealMode | undefined,
 ) {
   return {
     kind: "multi-flag",
     points: totalPoints,
+    // 順序ゲートを外す flat の問題だけ露出 (既定 sequential は送らない)。 portal の
+    // HintsPanel がこれを見て各 sub-flag の hint lock を外す。
+    ...(hintReveal ? { hintReveal } : {}),
     flags: checks.map((check) => ({
       id: check.id,
       label: check.label,
@@ -186,8 +195,14 @@ function problemView(state: LocalPlayState, now: number) {
             points: problem.scoring.points,
             flagSubmitted: complete,
             hints: hintViews(state, problem.scoring.hints),
+            ...(problem.scoring.hintReveal ? { hintReveal: problem.scoring.hintReveal } : {}),
           }
-        : multiVerifyScoringView(state, problem.scoring.checks, problem.scoring.totalPoints),
+        : multiVerifyScoringView(
+            state,
+            problem.scoring.checks,
+            problem.scoring.totalPoints,
+            problem.scoring.hintReveal,
+          ),
     deployLog: { cursor: "", entries: [] },
     createdAt: new Date(now).toISOString(),
   };

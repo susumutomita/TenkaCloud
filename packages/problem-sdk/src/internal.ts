@@ -60,6 +60,7 @@ export {
   type CompositeProbeScoringMetadata,
   type CompositeProbeTarget,
   type FlagScoringMetadata,
+  type HintRevealMode,
   type MultiFlagEntry,
   type MultiFlagScoringMetadata,
   type PhasedPollingBonus,

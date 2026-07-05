@@ -3,7 +3,13 @@
  * verbatim from scoring-metadata.ts.
  */
 
-import { clampWrongAnswerPenalty, type ProgressiveHint, parseHints } from "./hints.js";
+import {
+  clampWrongAnswerPenalty,
+  type HintRevealMode,
+  type ProgressiveHint,
+  parseHintRevealMode,
+  parseHints,
+} from "./hints.js";
 
 export interface FlagScoringMetadata {
   readonly kind: "flag";
@@ -12,6 +18,8 @@ export interface FlagScoringMetadata {
   /** Issue #817: per-wrong-answer penalty (brute-force mitigation). 0 / unset = none. */
   readonly wrongAnswerPenalty?: number;
   readonly hints?: readonly ProgressiveHint[];
+  /** Hint unlock order; unset = `sequential` (default). See {@link HintRevealMode}. */
+  readonly hintReveal?: HintRevealMode;
 }
 
 export function parseFlag(value: unknown): FlagScoringMetadata | undefined {
@@ -20,6 +28,7 @@ export function parseFlag(value: unknown): FlagScoringMetadata | undefined {
     points?: unknown;
     wrongAnswerPenalty?: unknown;
     hints?: unknown;
+    hintReveal?: unknown;
   };
   if (typeof f.flagOutputKey !== "string") return undefined;
   if (typeof f.points !== "number" || !Number.isFinite(f.points) || f.points <= 0) return undefined;
@@ -29,5 +38,6 @@ export function parseFlag(value: unknown): FlagScoringMetadata | undefined {
     points: f.points,
     wrongAnswerPenalty: clampWrongAnswerPenalty(f.wrongAnswerPenalty),
     hints: parseHints(f.hints),
+    hintReveal: parseHintRevealMode(f.hintReveal),
   };
 }

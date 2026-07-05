@@ -3,7 +3,13 @@
  * Extracted verbatim from scoring-metadata.ts.
  */
 
-import { clampWrongAnswerPenalty, type ProgressiveHint, parseHints } from "./hints.js";
+import {
+  clampWrongAnswerPenalty,
+  type HintRevealMode,
+  type ProgressiveHint,
+  parseHintRevealMode,
+  parseHints,
+} from "./hints.js";
 import { optionalNonEmptyString } from "./primitives.js";
 
 /**
@@ -29,6 +35,12 @@ export interface MultiVerifyCheck {
 export interface MultiVerifyScoringMetadata {
   readonly kind: "multi-verify";
   readonly checks: readonly MultiVerifyCheck[];
+  /**
+   * Hint unlock order shared by every check's hint list; unset = `sequential`
+   * (default). Top-level (not per-check) so one problem cannot mix orders — the
+   * portal reveal route is keyed on `hintId` alone. See {@link HintRevealMode}.
+   */
+  readonly hintReveal?: HintRevealMode;
 }
 
 // #2252 contract (must match the catalog SCHEMA.json + validate-problems.ts so
@@ -52,7 +64,7 @@ const MULTI_VERIFY_MAX_CHECKS = 8;
  * has no difficulty tier at runtime).
  */
 export function parseMultiVerify(value: unknown): MultiVerifyScoringMetadata | undefined {
-  const m = value as { checks?: unknown };
+  const m = value as { checks?: unknown; hintReveal?: unknown };
   if (
     !Array.isArray(m.checks) ||
     m.checks.length < MULTI_VERIFY_MIN_CHECKS ||
@@ -75,7 +87,8 @@ export function parseMultiVerify(value: unknown): MultiVerifyScoringMetadata | u
     }
     checks.push(check);
   }
-  return { kind: "multi-verify", checks };
+  const hintReveal = parseHintRevealMode(m.hintReveal);
+  return { kind: "multi-verify", checks, ...(hintReveal ? { hintReveal } : {}) };
 }
 
 function parseMultiVerifyCheck(value: unknown): MultiVerifyCheck | undefined {

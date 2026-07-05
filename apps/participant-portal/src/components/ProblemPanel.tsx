@@ -363,6 +363,7 @@ export function ProblemPanel({
             points={flagScoring.points ?? 0}
             hints={flagScoring.hints ?? []}
             onScored={onScored}
+            revealOrder={flagScoring.hintReveal}
           />
         )}
         {multiFlagScoring && (
@@ -372,6 +373,7 @@ export function ProblemPanel({
             problemId={problem.problemId}
             flags={multiFlagScoring.flags ?? []}
             onScored={onScored}
+            revealOrder={multiFlagScoring.hintReveal}
           />
         )}
       </SpaceBetween>
