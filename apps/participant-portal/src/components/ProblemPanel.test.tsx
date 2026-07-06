@@ -6,6 +6,8 @@ import {
   PortalScoringGateError,
   PortalValidationError,
 } from "../api/portal-client";
+import type { CloudMode } from "../config";
+import { AppConfigProvider } from "../config-context";
 import { I18nProvider } from "../i18n";
 import {
   buildAutoDeleteNotice,
@@ -34,8 +36,20 @@ vi.mock("./MultiFlagSubmissionPanel", () => ({
   MultiFlagSubmissionPanel: () => <div data-testid="multi-flag-panel" />,
 }));
 
-function withI18n(node: React.ReactNode) {
-  return <I18nProvider>{node}</I18nProvider>;
+function withI18n(node: React.ReactNode, cloudMode: CloudMode = "real") {
+  return (
+    <AppConfigProvider
+      config={{
+        apiBaseUrl: "https://api.example.com",
+        eventTitle: "Test event",
+        eventRegion: "ap-northeast-1",
+        mode: "backend",
+        cloudMode,
+      }}
+    >
+      <I18nProvider>{node}</I18nProvider>
+    </AppConfigProvider>
+  );
 }
 
 const echoT = (key: string, params?: Readonly<Record<string, string | number>>) =>
@@ -313,7 +327,7 @@ describe("ProblemPanel pure helpers", () => {
 });
 
 describe("ProblemPanel render branches", () => {
-  const renderPanel = (over: Partial<ParticipantProblemView>) =>
+  const renderPanel = (over: Partial<ParticipantProblemView>, cloudMode: CloudMode = "real") =>
     render(
       withI18n(
         <ProblemPanel
@@ -322,6 +336,7 @@ describe("ProblemPanel render branches", () => {
           sessionToken="team-key"
           onScored={async () => undefined}
         />,
+        cloudMode,
       ),
     );
 
@@ -375,13 +390,24 @@ describe("ProblemPanel render branches", () => {
   });
 
   it("renders a released writeup and omits the section when the API withholds it", () => {
-    const { unmount } = renderPanel({ writeup: "原因と根本対策" });
+    const { unmount } = renderPanel({ writeup: "原因と根本対策" }, "local");
     expect(screen.getByText("原因と根本対策")).toBeInTheDocument();
     expect(screen.getByText(/Explanation and remediation|解説と対策/)).toBeInTheDocument();
+    // Local mode shows the pointer to the tenka-drill skill (no AI runs in the portal).
+    expect(screen.getByText(/\/tenka-drill hello-world/)).toBeInTheDocument();
     unmount();
 
-    renderPanel({ writeup: undefined });
+    renderPanel({ writeup: undefined }, "local");
     expect(screen.queryByText(/Explanation and remediation|解説と対策/)).not.toBeInTheDocument();
+    // The pointer only lives inside the writeup panel, so it is gone too.
+    expect(screen.queryByText(/tenka-drill/)).not.toBeInTheDocument();
+  });
+
+  it("hides the tenka-drill pointer on the cloud side (writeup shows, pointer does not)", () => {
+    // Cloud releases writeups post-event; an AWS competitor has no local repo/skill.
+    renderPanel({ writeup: "原因と根本対策" }, "real");
+    expect(screen.getByText("原因と根本対策")).toBeInTheDocument();
+    expect(screen.queryByText(/tenka-drill/)).not.toBeInTheDocument();
   });
 
   it("should render URL outputs in the access panel and move internal outputs to details", () => {
@@ -484,7 +510,7 @@ describe("ProblemPanel render branches", () => {
 });
 
 describe("ProblemPanel countdown polling", () => {
-  const renderPanel = (over: Partial<ParticipantProblemView>) =>
+  const renderPanel = (over: Partial<ParticipantProblemView>, cloudMode: CloudMode = "real") =>
     render(
       withI18n(
         <ProblemPanel
@@ -493,6 +519,7 @@ describe("ProblemPanel countdown polling", () => {
           sessionToken="team-key"
           onScored={async () => undefined}
         />,
+        cloudMode,
       ),
     );
 
