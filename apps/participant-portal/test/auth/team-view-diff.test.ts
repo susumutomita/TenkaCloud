@@ -51,6 +51,41 @@ describe("team-view-diff (Issue #2222)", () => {
     expect(leaderboardIsUnchanged(null, l1)).toBe(false);
   });
 
+  it("should treat a hint reveal as a change even when score is unchanged", () => {
+    // Repro: in local-play a hint reveal moves the penalty into the server's
+    // running score, NOT the per-problem `score`, so the old diff (which only
+    // watched score / flagSubmitted) discarded the refetch and the revealed
+    // content never rendered until a full reload. The whole `scoring` object is
+    // compared now, so the revealed flip + content is detected.
+    const locked = (over: Record<string, unknown> = {}) =>
+      prob({
+        score: 0,
+        scoring: {
+          kind: "flag",
+          points: 100,
+          flagSubmitted: false,
+          hints: [{ id: "h1", penalty: 20, revealed: false }],
+        },
+        ...over,
+      }) as ParticipantProblemView;
+    const before = view({ problems: [locked()] });
+    const after = view({
+      problems: [
+        locked({
+          scoring: {
+            kind: "flag",
+            points: 100,
+            flagSubmitted: false,
+            hints: [{ id: "h1", penalty: 20, revealed: true, content: "secret", revealedAt: "t" }],
+          },
+        }),
+      ],
+    });
+    expect(viewIsUnchanged(before, after)).toBe(false);
+    // Idempotent: identical scoring (incl. revealed hints) is still unchanged.
+    expect(viewIsUnchanged(after, after)).toBe(true);
+  });
+
   it("should map settled results to refresh decisions directly", () => {
     expect(toPortalMeRefreshDecision({ status: "fulfilled", value: view() })).toEqual({
       kind: "view",
