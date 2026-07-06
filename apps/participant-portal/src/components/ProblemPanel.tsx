@@ -10,6 +10,7 @@ import StatusIndicator, {
 } from "@cloudscape-design/components/status-indicator";
 import { useNowMs } from "@tenkacloud/web-kit";
 import type { DeploymentStatus, ParticipantProblemView } from "../api/portal-client";
+import { useAppConfig } from "../config-context";
 import { useLang, useT } from "../i18n";
 import { describeAgo } from "../lib/format";
 import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
@@ -187,12 +188,22 @@ function ProblemStatement({ problem, t }: { problem: ParticipantProblemView; t: 
 
 /** Writeup is absent from the API until its spoiler-release policy is satisfied. */
 function ProblemWriteup({ problem, t }: { problem: ParticipantProblemView; t: ProblemPanelT }) {
+  // Cloud releases writeups too (post-event, solved), so gate the local-only
+  // drill pointer on local mode — an AWS competitor has no repo / `tenka-drill`.
+  const isLocal = useAppConfig().cloudMode === "local";
   if (!problem.writeup?.trim()) return null;
   return (
     <Container header={<Header variant="h3">{t("problem_panel.writeup_heading")}</Header>}>
       <Box variant="p">
         <pre style={PROBLEM_TEXT_STYLE}>{problem.writeup}</pre>
       </Box>
+      {/* Local-only pointer to the `tenka-drill` skill: no AI runs in the portal;
+          the learner digs deeper in their own Claude Code (their subscription). */}
+      {isLocal && (
+        <Box variant="small" color="text-status-inactive" margin={{ top: "s" }}>
+          {t("problem_panel.writeup_drill_hint", { command: `/tenka-drill ${problem.problemId}` })}
+        </Box>
+      )}
     </Container>
   );
 }

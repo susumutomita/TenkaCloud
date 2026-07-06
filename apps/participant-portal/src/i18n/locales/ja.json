@@ -308,6 +308,7 @@
     "kind_unknown": "(未設定)",
     "statement_heading": "問題内容",
     "writeup_heading": "解説と対策",
+    "writeup_drill_hint": "さらに深掘りしたいときは、手元の Claude Code で {command} を実行してください。",
     "failure_reason_header": "失敗理由",
     "stale_header": "スコアが伸びていません",
     "stale_body": "直近の採点から {ago} 経過。 サービスのどこかが期待通り応答していない可能性があります。",
