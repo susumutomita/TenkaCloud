@@ -28,7 +28,11 @@ export function viewIsUnchanged(
       p.score !== n.score ||
       p.lastScoredAt !== n.lastScoredAt ||
       p.lastResult !== n.lastResult ||
-      p.scoring?.flagSubmitted !== n.scoring?.flagSubmitted ||
+      // scoring 全体を比較する。 flagSubmitted に加え、 hint reveal (revealed / content) や
+      // multi-flag の sub-flag solved 遷移も検出する。 local-play では hint penalty が
+      // per-problem score に乗らないため score 比較だけでは reveal を取りこぼし、 refetch が
+      // 破棄されて 「開いたヒントがリロードするまで出ない」 退行になっていた。
+      JSON.stringify(p.scoring) !== JSON.stringify(n.scoring) ||
       p.failureReason !== n.failureReason ||
       p.deployLog?.cursor !== n.deployLog?.cursor ||
       JSON.stringify(p.stackOutputs) !== JSON.stringify(n.stackOutputs)
