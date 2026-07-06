@@ -23,7 +23,7 @@
     "@tenkacloud/problem-sdk": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^24.12.4",
+    "@types/node": "^26.1.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }

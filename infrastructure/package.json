@@ -33,7 +33,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1079.0",
     "@biomejs/biome": "^2.5.2",
     "@types/aws-lambda": "^8.10.161",
-    "@types/node": "^24.12.4",
+    "@types/node": "^26.1.0",
     "aws-cdk": "2.1122.0",
     "cdk-nag": "^3.0.1",
     "hono": "^4.12.22",
