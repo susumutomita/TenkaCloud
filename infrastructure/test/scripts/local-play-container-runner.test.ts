@@ -1,0 +1,125 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  ContainerRunner,
+  type ContainerRunnerDeps,
+} from "../../../scripts/local-play/container-runner";
+import type { ContainerProblem } from "../../../scripts/local-play/manifest";
+
+const COMPOSE = [
+  "services:",
+  "  app:",
+  "    ports:",
+  '      - "127.0.0.1:18080:8080"',
+  '      - "127.0.0.1:18081:8081"',
+].join("\n");
+
+const problem = (): ContainerProblem =>
+  ({
+    problemId: "sqli-demo",
+    name: "SQLi",
+    description: "",
+    instructions: "",
+    problemDir: "/p/sqli-demo",
+    composePath: "/p/sqli-demo/local/docker-compose.yml",
+    composeProjectName: "tc-local-sqli-demo",
+    challengeEndpoints: { Web: "http://127.0.0.1:18080/" },
+    verifyUrl: "http://127.0.0.1:18081/verify",
+    secretEnv: ["FLAG_SEED"],
+    scoring: { kind: "verify", points: 100, wrongAnswerPenalty: 0, hints: [] },
+  }) as ContainerProblem;
+
+function makeDeps(over: Partial<ContainerRunnerDeps> = {}) {
+  const compose: Array<[string, string, string, string | undefined]> = [];
+  const reached: string[] = [];
+  const temps: Array<[string, string]> = [];
+  const removed: string[] = [];
+  const deps: ContainerRunnerDeps = {
+    runCompose: vi.fn((composePath, _p, action, _e, _a, projectDirectory) => {
+      compose.push([action, composePath, _p, projectDirectory]);
+    }),
+    waitForReachable: vi.fn(async (url: string) => {
+      reached.push(url);
+    }),
+    generateSecretEnv: vi.fn(() => ({ FLAG_SEED: "secret" })),
+    readCompose: vi.fn(() => COMPOSE),
+    writeTempCompose: vi.fn((path: string, content: string) => temps.push([path, content])),
+    removeTempCompose: vi.fn((path: string) => removed.push(path)),
+    log: vi.fn(),
+    ...over,
+  };
+  return { deps, compose, reached, temps, removed };
+}
+
+describe("ContainerRunner: start (#2392 Phase 2)", () => {
+  it("should run offset 0 from the original compose with no temp file", async () => {
+    const { deps, compose, reached, temps } = makeDeps();
+    const runner = new ContainerRunner("/local", deps);
+    const started = await runner.start(problem(), 0);
+    expect(temps).toEqual([]); // no remapped copy at offset 0
+    expect(compose).toEqual([
+      ["up", "/p/sqli-demo/local/docker-compose.yml", "tc-local-sqli-demo", undefined],
+    ]);
+    expect(reached).toEqual(["http://127.0.0.1:18080/"]); // original port
+    expect(started.problem.challengeEndpoints).toEqual({ Web: "http://127.0.0.1:18080/" });
+    expect(started.problem.verifyUrl).toBe("http://127.0.0.1:18081/verify");
+    expect(started.unit).toMatchObject({ composePath: "/p/sqli-demo/local/docker-compose.yml" });
+    expect(started.unit.remappedComposePath).toBeUndefined();
+  });
+
+  it("should run a later offset from a remapped temp compose with --project-directory", async () => {
+    const { deps, compose, reached, temps } = makeDeps();
+    const runner = new ContainerRunner("/local", deps);
+    const started = await runner.start(problem(), 100);
+    // temp compose written with remapped ports
+    expect(temps).toHaveLength(1);
+    expect(temps[0][0]).toBe("/local/tc-local-sqli-demo.compose.yml");
+    expect(temps[0][1]).toContain('"127.0.0.1:18180:8080"');
+    // compose up runs from the temp file with the original dir as project-directory
+    expect(compose).toEqual([
+      ["up", "/local/tc-local-sqli-demo.compose.yml", "tc-local-sqli-demo", "/p/sqli-demo/local"],
+    ]);
+    // waits on the offset endpoints, and the returned problem's URLs follow the offset
+    expect(reached).toEqual(["http://127.0.0.1:18180/"]);
+    expect(started.problem.challengeEndpoints).toEqual({ Web: "http://127.0.0.1:18180/" });
+    expect(started.problem.verifyUrl).toBe("http://127.0.0.1:18181/verify");
+    expect(started.unit).toMatchObject({
+      composePath: "/local/tc-local-sqli-demo.compose.yml",
+      projectDirectory: "/p/sqli-demo/local",
+      remappedComposePath: "/local/tc-local-sqli-demo.compose.yml",
+    });
+  });
+
+  it("should propagate a compose-up failure (lifecycle marks it error)", async () => {
+    const { deps } = makeDeps({
+      runCompose: vi.fn(() => {
+        throw new Error("docker up failed");
+      }),
+    });
+    const runner = new ContainerRunner("/local", deps);
+    await expect(runner.start(problem(), 0)).rejects.toThrow(/docker up failed/);
+  });
+});
+
+describe("ContainerRunner: stop (#2392 Phase 2)", () => {
+  it("should compose-down and remove the temp compose when remapped", async () => {
+    const { deps, compose, removed } = makeDeps();
+    const runner = new ContainerRunner("/local", deps);
+    const { unit } = await runner.start(problem(), 100);
+    compose.length = 0; // ignore the up call
+    runner.stop(unit);
+    expect(compose).toEqual([
+      ["down", "/local/tc-local-sqli-demo.compose.yml", "tc-local-sqli-demo", "/p/sqli-demo/local"],
+    ]);
+    expect(removed).toEqual(["/local/tc-local-sqli-demo.compose.yml"]);
+  });
+
+  it("should compose-down without removing a temp file for an offset-0 unit", async () => {
+    const { deps, compose, removed } = makeDeps();
+    const runner = new ContainerRunner("/local", deps);
+    const { unit } = await runner.start(problem(), 0);
+    compose.length = 0;
+    runner.stop(unit);
+    expect(compose[0]?.[0]).toBe("down");
+    expect(removed).toEqual([]);
+  });
+});
