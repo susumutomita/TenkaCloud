@@ -367,7 +367,18 @@
     "hint_predecessor_required": "ヒント {index} を先に公開してください。",
     "hint_predecessor_required_aria": "ヒント {index} を先に公開すると、このヒントが公開できます。",
     "hint_out_of_order_error": "ヒント {index} を先に公開してください。",
-    "prerequisite_locked_error": "この問題を開始するには、先に Gate 問題を完了してください。"
+    "prerequisite_locked_error": "この問題を開始するには、先に Gate 問題を完了してください。",
+    "lifecycle_running": "稼働中",
+    "lifecycle_stopped": "停止中",
+    "lifecycle_starting": "起動中…",
+    "lifecycle_error": "エラー",
+    "lifecycle_start_button": "起動",
+    "lifecycle_stop_button": "停止",
+    "lifecycle_stopped_body": "この問題のコンテナは停止しています。起動すると挑戦用エンドポイントが立ち上がり、flag を提出できるようになります。",
+    "lifecycle_running_body": "コンテナは稼働中です。挑戦を終えたら停止してローカルリソースを解放できます (スコアは保持されます)。",
+    "lifecycle_error_header": "コンテナエラー",
+    "lifecycle_error_body": "問題コンテナがエラーになりました。もう一度起動してください。",
+    "lifecycle_action_failed_header": "コンテナ操作に失敗しました"
   },
   "multi_flag": {
     "progress_header": "解答した flag: {solved} / {total}",

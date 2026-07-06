@@ -14,7 +14,8 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { LocalPlayDeployment } from "./local-play/api";
-import { type PlannedProblem, parseProblemIds, planProblem } from "./local-play/deployment-plan";
+import { ContainerRunner, type LocalComposeUnit } from "./local-play/container-runner";
+import { parseProblemIds } from "./local-play/deployment-plan";
 import {
   listLocalPlayProblems,
   loadContainerProblem,
@@ -26,30 +27,28 @@ import { startLocalPlayServer } from "./local-play/server";
 import { buildRuntimeConfig } from "./participant-portal-runtime-config";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const DEFAULT_PROBLEM = "sqli-demo";
 const DEFAULT_API_PORT = 3199;
-
-/** [#2392] One problem's docker compose unit within a multi-problem session. */
-interface LocalComposeUnit {
-  readonly problemId: string;
-  /** The compose file docker runs: the original for problem 0, a remapped temp copy for later ones. */
-  readonly composePath: string;
-  readonly composeProjectName: string;
-  readonly secretEnv: readonly string[];
-  /** Original problem `local/` dir; set when running a remapped copy so relative paths resolve. */
-  readonly projectDirectory?: string;
-  /** Temp remapped compose to delete on teardown (absent for the unremapped first problem). */
-  readonly remappedComposePath?: string;
-}
+/** [#2392 Phase 2] How often the serve process sweeps for idle containers. */
+const REAP_INTERVAL_MS = 60_000;
 
 interface LocalProcessState {
   readonly pid: number;
   readonly apiBaseUrl: string;
+  /** The pre-started problems (`PROBLEM=a,b,c`); the API serves the whole catalog. */
   readonly problemIds: readonly string[];
-  readonly units: readonly LocalComposeUnit[];
   readonly deploymentPath: string;
   readonly runtimeConfigPath: string;
   readonly runtimeConfigBackupPath?: string;
+}
+
+/**
+ * [#2392 Phase 2] `units.json` — the serve process's persisted mirror of its
+ * running compose units. Containers are started INSIDE the detached serve
+ * process, so `down` (a separate process) reads this file to know what to tear
+ * down — even after a crash.
+ */
+interface RecordedUnits {
+  readonly units: readonly LocalComposeUnit[];
 }
 
 /**
@@ -108,6 +107,7 @@ function paths() {
     localDir,
     statePath: join(localDir, "state.json"),
     deploymentPath: join(localDir, "deployment.json"),
+    unitsPath: join(localDir, "units.json"),
     runtimeConfigBackupPath: join(localDir, "runtime-config.backup.json"),
     logPath: join(localDir, "api.log"),
     runtimeConfigPath: join(
@@ -230,47 +230,66 @@ function restoreRuntimeConfig(
 }
 
 /**
- * Bring up one planned problem's container on its assigned host-port block and
- * return the compose unit needed to tear it down. Problem 0 runs from its own
- * compose file; later problems run from a port-remapped temp copy with
- * `--project-directory` pinned to the original dir so relative paths resolve.
+ * [#2392 Phase 2] The real docker adapter for the on-demand lifecycle: a
+ * `ContainerRunner` wired to this process's compose / readiness / secret / fs
+ * primitives. `serve` injects it into the API; `up` / `down` use it to reclaim
+ * recorded units.
  */
-async function startProblemUnit(plan: PlannedProblem, localDir: string): Promise<LocalComposeUnit> {
-  const problem = plan.problem;
-  const composeEnv: NodeJS.ProcessEnv = { ...process.env, ...generateSecretEnv(problem.secretEnv) };
-  let composePath = problem.composePath;
-  let projectDirectory: string | undefined;
-  let remappedComposePath: string | undefined;
-  if (plan.remapped) {
-    remappedComposePath = join(localDir, `${problem.composeProjectName}.compose.yml`);
-    writeFileSync(remappedComposePath, plan.composeText, "utf8");
-    composePath = remappedComposePath;
-    projectDirectory = dirname(problem.composePath);
-  }
-  console.log(`Starting problem container for ${problem.name}...`);
-  runCompose(composePath, problem.composeProjectName, "up", composeEnv, false, projectDirectory);
-  await Promise.all(
-    Object.entries(problem.challengeEndpoints).map(([label, url]) =>
-      waitForReachable(url, `challenge endpoint ${label}`),
-    ),
-  );
-  return {
-    problemId: problem.problemId,
-    composePath,
-    composeProjectName: problem.composeProjectName,
-    secretEnv: problem.secretEnv,
-    ...(projectDirectory ? { projectDirectory } : {}),
-    ...(remappedComposePath ? { remappedComposePath } : {}),
-  };
+function createContainerRunner(localDir: string): ContainerRunner {
+  return new ContainerRunner(localDir, {
+    runCompose,
+    waitForReachable: (url, label) => waitForReachable(url, label),
+    generateSecretEnv,
+    readCompose: (path) => readFileSync(path, "utf8"),
+    writeTempCompose: (path, content) => writeFileSync(path, content, "utf8"),
+    removeTempCompose: unlinkIfExists,
+    log: (message) => console.log(message),
+  });
 }
 
-/** Tear down one compose unit (idempotent) and drop its remapped temp compose. */
-function tearDownUnit(unit: LocalComposeUnit): void {
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  // Blank the per-deploy secret names so compose interpolation does not warn on down.
-  for (const name of unit.secretEnv) env[name] = "";
-  runCompose(unit.composePath, unit.composeProjectName, "down", env, true, unit.projectDirectory);
-  if (unit.remappedComposePath) unlinkIfExists(unit.remappedComposePath);
+/**
+ * Tear down every container recorded in `units.json` (idempotent compose down)
+ * and drop the file. Used by `down`, by `up`'s failure cleanup, and by `up` to
+ * reclaim leftovers from a crashed previous session before starting a new one.
+ */
+function tearDownRecordedUnits(p: ReturnType<typeof paths>): void {
+  if (!existsSync(p.unitsPath)) return;
+  const runner = createContainerRunner(p.localDir);
+  for (const unit of readJson<RecordedUnits>(p.unitsPath).units) runner.stop(unit);
+  unlinkIfExists(p.unitsPath);
+}
+
+/** Pre-start one problem through the serve process's API (its lifecycle owns the container). */
+async function startProblemViaApi(apiBaseUrl: string, problemId: string): Promise<void> {
+  const response = await fetch(
+    `${apiBaseUrl}/portal/me/problems/${encodeURIComponent(problemId)}/start`,
+    { method: "POST", headers: { authorization: "Bearer local" } },
+  );
+  if (!response.ok) {
+    throw new Error(
+      `failed to start problem "${problemId}" (HTTP ${response.status}): ${await response.text()}`,
+    );
+  }
+}
+
+/** Print the running problems' challenge endpoints as the API sees them (post-remap). */
+async function printRunningEndpoints(apiBaseUrl: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}/portal/me`, {
+    headers: { authorization: "Bearer local" },
+  });
+  const body = (await response.json()) as {
+    problems?: Array<{
+      name: string;
+      stackOutputs: Record<string, string>;
+      lifecycle?: { status?: string };
+    }>;
+  };
+  for (const problem of body.problems ?? []) {
+    if (problem.lifecycle?.status !== "running") continue;
+    for (const [label, url] of Object.entries(problem.stackOutputs)) {
+      console.log(`Challenge — ${problem.name} (${label}): ${url}`);
+    }
+  }
 }
 
 async function up(problemArg: string): Promise<void> {
@@ -281,19 +300,32 @@ async function up(problemArg: string): Promise<void> {
   assertDockerAvailable();
 
   const problemIds = parseProblemIds(problemArg);
-  if (problemIds.length === 0) {
-    throw new Error("No problem specified. Set PROBLEM=<id> (comma-separate several).");
-  }
   const apiPort = positivePort(process.env.LOCAL_API_PORT, DEFAULT_API_PORT, "LOCAL_API_PORT");
   const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
   await assertPortFree(apiPort, "Participant API");
   mkdirSync(p.localDir, { recursive: true });
+  // Leftover containers from a crashed session would collide with this one on
+  // the same port blocks — reclaim them first (idempotent).
+  tearDownRecordedUnits(p);
 
-  // Plan each problem onto its own host-port block (pure) before touching Docker.
-  const plans: PlannedProblem[] = problemIds.map((id, index) => {
-    const problem = loadContainerProblem(resolveProblemDir(problemSearchRoots(REPO_ROOT), id));
-    return planProblem(problem, index, readFileSync(problem.composePath, "utf8"));
-  });
+  // [#2392 Phase 2] Warm session: the API serves the WHOLE local-play catalog
+  // and containers start on demand. PROBLEM= only picks what to pre-start —
+  // none means a warm session with zero containers.
+  const roots = problemSearchRoots(REPO_ROOT);
+  const catalog = listLocalPlayProblems(roots).map((summary) =>
+    loadContainerProblem(resolveProblemDir(roots, summary.problemId)),
+  );
+  if (catalog.length === 0) {
+    throw new Error(
+      "No local-play problems found. Run `git submodule update --init` to fetch the problems/ catalog.",
+    );
+  }
+  const catalogIds = new Set(catalog.map((problem) => problem.problemId));
+  for (const id of problemIds) {
+    if (!catalogIds.has(id)) {
+      throw new Error(`problem "${id}" was not found under: ${roots.join(", ")}`);
+    }
+  }
 
   let runtimeConfigBackedUp = false;
   if (existsSync(p.runtimeConfigBackupPath)) {
@@ -305,17 +337,18 @@ async function up(problemArg: string): Promise<void> {
     runtimeConfigBackedUp = true;
   }
 
-  const units: LocalComposeUnit[] = [];
   let apiPid: number | undefined;
   try {
-    for (const plan of plans) {
-      units.push(await startProblemUnit(plan, p.localDir));
-    }
-
-    const deployment: LocalPlayDeployment = { problems: plans.map((plan) => plan.problem) };
+    const deployment: LocalPlayDeployment = { problems: catalog };
     writePrivateJson(p.deploymentPath, deployment);
     apiPid = startApi(p.deploymentPath, apiPort, p.logPath);
     await waitForLocalApi(apiBaseUrl, problemIds, apiPid, p.logPath);
+
+    // Pre-start the requested problems through the API so the serve process's
+    // lifecycle owns every container (cap + idle reaping included).
+    for (const id of problemIds) {
+      await startProblemViaApi(apiBaseUrl, id);
+    }
 
     const runtimeConfig = buildLocalRuntimeConfig(apiBaseUrl);
     writeFileSync(p.runtimeConfigPath, `${JSON.stringify(runtimeConfig, null, 2)}\n`, "utf8");
@@ -324,26 +357,24 @@ async function up(problemArg: string): Promise<void> {
       pid: apiPid,
       apiBaseUrl,
       problemIds,
-      units,
       deploymentPath: p.deploymentPath,
       runtimeConfigPath: p.runtimeConfigPath,
       ...(runtimeConfigBackedUp ? { runtimeConfigBackupPath: p.runtimeConfigBackupPath } : {}),
     };
     writePrivateJson(p.statePath, state);
 
-    console.log(`Local play is ready (${plans.length} problem${plans.length > 1 ? "s" : ""}).`);
+    console.log(
+      `Local play is ready (catalog: ${catalog.length} problem${catalog.length > 1 ? "s" : ""}, ` +
+        `${problemIds.length} pre-started).`,
+    );
     console.log(`Participant API: ${apiBaseUrl}`);
-    for (const plan of plans) {
-      for (const [label, url] of Object.entries(plan.problem.challengeEndpoints)) {
-        console.log(`Challenge — ${plan.problem.name} (${label}): ${url}`);
-      }
-    }
+    await printRunningEndpoints(apiBaseUrl);
     console.log("Log in to the Participant Portal with any non-empty key.");
   } catch (error) {
     if (apiPid !== undefined) stopPid(apiPid);
     unlinkIfExists(p.deploymentPath);
     restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, true);
-    for (const unit of units) tearDownUnit(unit);
+    tearDownRecordedUnits(p);
     throw error;
   }
 }
@@ -352,11 +383,44 @@ async function serve(deploymentPath: string): Promise<void> {
   if (!existsSync(deploymentPath)) {
     throw new Error(`Local deployment state was not found: ${deploymentPath}`);
   }
+  const p = paths();
   const deployment = readJson<LocalPlayDeployment>(deploymentPath);
   const port = positivePort(process.env.LOCAL_API_PORT, DEFAULT_API_PORT, "LOCAL_API_PORT");
-  const server = await startLocalPlayServer(port, deployment);
+
+  // [#2392 Phase 2] On-demand docker: the API's lifecycle drives the real
+  // ContainerRunner, and every start/stop is mirrored to units.json so `down`
+  // (a separate process) can reclaim the containers even after a crash.
+  const runner = createContainerRunner(p.localDir);
+  const units = new Map<string, LocalComposeUnit>();
+  const persistUnits = (): void => {
+    writePrivateJson(p.unitsPath, { units: [...units.values()] } satisfies RecordedUnits);
+  };
+  const server = await startLocalPlayServer(port, deployment, {
+    startContainer: async (problem, offset) => {
+      const started = await runner.start(problem, offset);
+      units.set(started.unit.problemId, started.unit);
+      persistUnits();
+      return started;
+    },
+    stopContainer: (unit) => {
+      runner.stop(unit);
+      units.delete(unit.problemId);
+      persistUnits();
+    },
+  });
+
+  // Idle sweeper: reclaim containers nobody touched for `idleMs`. Unref'd so
+  // the timer alone never keeps the process alive.
+  const reaper = setInterval(() => {
+    void server.state.lifecycle.reapIdle().catch((error) => {
+      console.error(`idle reap failed: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }, REAP_INTERVAL_MS);
+  reaper.unref();
+
   console.log(`Local Participant API listening on http://127.0.0.1:${server.port}`);
   const shutdown = async () => {
+    clearInterval(reaper);
     await server.close();
     process.exit(0);
   };
@@ -370,7 +434,10 @@ async function status(): Promise<void> {
   if (!existsSync(p.statePath)) throw new Error("Local play is not running.");
   const state = readJson<LocalProcessState>(p.statePath);
   await waitForReachable(`${state.apiBaseUrl}/healthz`, "local Participant API", 3_000);
-  console.log(`Local play is running (${state.problemIds.join(", ")}).`);
+  // A warm session may have pre-started nothing — problems start on demand.
+  const preStarted =
+    state.problemIds.length > 0 ? state.problemIds.join(", ") : "on-demand, none pre-started";
+  console.log(`Local play is running (${preStarted}).`);
   console.log(`Participant API: ${state.apiBaseUrl}`);
 }
 
@@ -395,11 +462,9 @@ async function evaluate(flag: string): Promise<void> {
 
 function down(): void {
   const p = paths();
-  let units: readonly LocalComposeUnit[] = [];
   if (existsSync(p.statePath)) {
     const state = readJson<LocalProcessState>(p.statePath);
     stopPid(state.pid);
-    units = state.units;
     unlinkIfExists(state.deploymentPath);
     restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, true);
     unlinkIfExists(p.statePath);
@@ -407,7 +472,9 @@ function down(): void {
     unlinkIfExists(p.deploymentPath);
     restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, false);
   }
-  for (const unit of units) tearDownUnit(unit);
+  // [#2392 Phase 2] Containers are owned by the serve process's lifecycle;
+  // units.json is its persisted mirror, so this also reclaims crash leftovers.
+  tearDownRecordedUnits(p);
   console.log("Local play stopped.");
 }
 
@@ -474,7 +541,7 @@ function usage(): string {
     "Commands:",
     "  list             List local-play problems (id / category / name)",
     "  pick             Interactively search for a problem (prints the id to stdout)",
-    "  up [problemId]   Start the problem container and the local scoring API",
+    "  up [problemIds]  Start the warm local session; PROBLEM=a,b,c pre-starts those containers",
     "  serve <path>     Run the local Participant API (used internally by up)",
     "  status           Check the local Participant API",
     "  evaluate <flag>  Submit a flag through the local scoring API",
@@ -492,7 +559,9 @@ async function main(): Promise<void> {
       await pick();
       break;
     case "up":
-      await up(argument ?? process.env.PROBLEM ?? DEFAULT_PROBLEM);
+      // [#2392 Phase 2] No PROBLEM = a warm session with zero containers;
+      // problems start on demand from the portal / API.
+      await up(argument ?? process.env.PROBLEM ?? "");
       break;
     case "serve":
       if (!argument) throw new Error("serve requires a deployment state path");

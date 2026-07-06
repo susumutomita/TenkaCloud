@@ -3,7 +3,6 @@ import {
   offsetLoopbackEndpoints,
   offsetLoopbackUrl,
   PORT_STRIDE,
-  portOffsetForIndex,
   remapComposeHostPorts,
 } from "../../../scripts/local-play/port-remap";
 
@@ -22,19 +21,6 @@ const COMPOSE = [
   "        - -e",
   "        - \"fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1))\"",
 ].join("\n");
-
-describe("port-remap: portOffsetForIndex (#2392)", () => {
-  it("should give index 0 a zero offset and space later problems by PORT_STRIDE", () => {
-    expect(portOffsetForIndex(0)).toBe(0);
-    expect(portOffsetForIndex(1)).toBe(PORT_STRIDE);
-    expect(portOffsetForIndex(3)).toBe(3 * PORT_STRIDE);
-  });
-
-  it("should reject a negative or non-integer index", () => {
-    expect(() => portOffsetForIndex(-1)).toThrow(/non-negative integer/);
-    expect(() => portOffsetForIndex(1.5)).toThrow(/non-negative integer/);
-  });
-});
 
 describe("port-remap: remapComposeHostPorts (#2392)", () => {
   it("should offset only the published host port, never the container or healthcheck port", () => {

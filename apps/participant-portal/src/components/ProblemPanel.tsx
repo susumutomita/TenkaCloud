@@ -9,7 +9,11 @@ import StatusIndicator, {
   type StatusIndicatorProps,
 } from "@cloudscape-design/components/status-indicator";
 import { useNowMs } from "@tenkacloud/web-kit";
-import type { DeploymentStatus, ParticipantProblemView } from "../api/portal-client";
+import type {
+  DeploymentStatus,
+  ParticipantProblemView,
+  ProblemLifecycleStatus,
+} from "../api/portal-client";
 import { useAppConfig } from "../config-context";
 import { useLang, useT } from "../i18n";
 import { describeAgo } from "../lib/format";
@@ -20,6 +24,7 @@ import {
   type ProblemPanelT,
 } from "./ProblemPanel.helpers";
 import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
+import { ProblemLifecyclePanel } from "./ProblemPanelLifecycle";
 
 const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   PENDING: "pending",
@@ -32,6 +37,18 @@ const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   DELETED: "stopped",
   EXPIRED: "warning",
   AUTO_DELETED: "stopped",
+};
+
+/**
+ * [#2392 Phase 2] local-play on-demand container の header 表示。 lifecycle field を持つ
+ * 問題は deploy status (= local backend では常に COMPLETE) ではなく container の状態を
+ * header に出す (= 「Running」 なのに endpoint が無い、 という嘘をつかない)。
+ */
+const LIFECYCLE_STATUS_TYPE: Record<ProblemLifecycleStatus, StatusIndicatorProps.Type> = {
+  stopped: "stopped",
+  starting: "loading",
+  running: "success",
+  error: "error",
 };
 
 const SCORING_KIND_KEY: Record<string, string> = {
@@ -144,6 +161,16 @@ export function getCompleteMultiFlagScoring(
   const scoring = problem.scoring;
   if (problem.status !== "COMPLETE" || scoring?.kind !== "multi-flag") return undefined;
   return scoring;
+}
+
+/**
+ * [#2392 Phase 2] play surface (access URL / flag 提出) を出してよいか。 lifecycle 不在は
+ * AWS mode (= per-competitor container 無し) なので常に playable (後方互換)。 stopped /
+ * starting / error の間は stackOutputs が空・ submit が 409 not_running になるため隠す。
+ */
+export function isProblemPlayable(problem: ParticipantProblemView): boolean {
+  const status = problem.lifecycle?.status;
+  return status === undefined || status === "running";
 }
 
 /**
@@ -280,6 +307,9 @@ export function ProblemPanel({
   const flagScoring = getCompleteFlagScoring(problem);
   const multiFlagScoring = getCompleteMultiFlagScoring(problem);
   const stackOutputs = splitStackOutputs(problem.stackOutputs);
+  // [#2392 Phase 2] local-play on-demand container。 lifecycle 不在 = AWS mode = running 扱い。
+  const lifecycleStatus = problem.lifecycle?.status;
+  const playable = isProblemPlayable(problem);
   // Issue #1917: uptime kind のみ集約 health を返す。 採点が減点したとき「サービスが落ちている」
   // と一目で分かるよう Score の隣に出す (= 減点理由の可視化)。
   const health = problem.applicationStatus
@@ -293,9 +323,15 @@ export function ProblemPanel({
           variant="h2"
           description={`${kindLabel} / ${problem.score} pt`}
           actions={
-            <StatusIndicator type={STATUS_TYPE[problem.status]}>
-              {t(`quests.status_label.${problem.status}`)}
-            </StatusIndicator>
+            lifecycleStatus !== undefined ? (
+              <StatusIndicator type={LIFECYCLE_STATUS_TYPE[lifecycleStatus]}>
+                {t(`problem_panel.lifecycle_${lifecycleStatus}`)}
+              </StatusIndicator>
+            ) : (
+              <StatusIndicator type={STATUS_TYPE[problem.status]}>
+                {t(`quests.status_label.${problem.status}`)}
+              </StatusIndicator>
+            )
           }
         >
           {resolveProblemTitle(problem)}
@@ -314,6 +350,16 @@ export function ProblemPanel({
             「何の問題か / 何をすべきか」 を表示できる。 AWS mode は未配信なので不在時は何も出さない。 */}
         <ProblemStatement problem={problem} t={t} />
         <ProblemWriteup problem={problem} t={t} />
+        {/* [#2392 Phase 2] on-demand start / stop control。 lifecycle 不在 (= AWS mode) は出さない。 */}
+        {lifecycleStatus !== undefined && (
+          <ProblemLifecyclePanel
+            status={lifecycleStatus}
+            apiBaseUrl={apiBaseUrl}
+            sessionToken={sessionToken}
+            problemId={problem.problemId}
+            onScored={onScored}
+          />
+        )}
         {/* Audit #3: Job ID (= 内部 ULID) は競技者に見せない。 Region は問題ごとに異なる
             (operator が問題単位で deploy 先を選ぶ) ため、 どの region に建っているかを明示する
             (= 「Event region」 1 つだけだと混乱する、 運用フィードバック)。 */}
@@ -338,54 +384,60 @@ export function ProblemPanel({
           ]}
         />
 
-        {stackOutputs.accessUrlEntries.length > 0 && (
-          <Container header={<Header variant="h3">{t("problem_panel.outputs_header")}</Header>}>
-            <KeyValuePairs
-              items={stackOutputs.accessUrlEntries.map(([label, value]) => ({
-                label,
-                value: (
-                  <a href={value} target="_blank" rel="noreferrer noopener">
-                    <code>{value}</code>
-                  </a>
-                ),
-              }))}
-            />
-          </Container>
-        )}
-        {stackOutputs.detailEntries.length > 0 && (
-          <ExpandableSection
-            headerText={t("problem_panel.stack_outputs_detail_header")}
-            defaultExpanded={false}
-          >
-            <KeyValuePairs
-              items={stackOutputs.detailEntries.map(([label, value]) => ({
-                label,
-                value: <code>{value}</code>,
-              }))}
-            />
-          </ExpandableSection>
-        )}
-        {flagScoring && (
-          <FlagSubmissionPanel
-            apiBaseUrl={apiBaseUrl}
-            sessionToken={sessionToken}
-            problemId={problem.problemId}
-            flagSubmitted={flagScoring.flagSubmitted ?? false}
-            points={flagScoring.points ?? 0}
-            hints={flagScoring.hints ?? []}
-            onScored={onScored}
-            revealOrder={flagScoring.hintReveal}
-          />
-        )}
-        {multiFlagScoring && (
-          <MultiFlagSubmissionPanel
-            apiBaseUrl={apiBaseUrl}
-            sessionToken={sessionToken}
-            problemId={problem.problemId}
-            flags={multiFlagScoring.flags ?? []}
-            onScored={onScored}
-            revealOrder={multiFlagScoring.hintReveal}
-          />
+        {/* [#2392 Phase 2] play surface。 on-demand container が running でない間は
+            (stale な) endpoint と提出 UI を隠し、 上の start control に差し替える。 */}
+        {playable && (
+          <>
+            {stackOutputs.accessUrlEntries.length > 0 && (
+              <Container header={<Header variant="h3">{t("problem_panel.outputs_header")}</Header>}>
+                <KeyValuePairs
+                  items={stackOutputs.accessUrlEntries.map(([label, value]) => ({
+                    label,
+                    value: (
+                      <a href={value} target="_blank" rel="noreferrer noopener">
+                        <code>{value}</code>
+                      </a>
+                    ),
+                  }))}
+                />
+              </Container>
+            )}
+            {stackOutputs.detailEntries.length > 0 && (
+              <ExpandableSection
+                headerText={t("problem_panel.stack_outputs_detail_header")}
+                defaultExpanded={false}
+              >
+                <KeyValuePairs
+                  items={stackOutputs.detailEntries.map(([label, value]) => ({
+                    label,
+                    value: <code>{value}</code>,
+                  }))}
+                />
+              </ExpandableSection>
+            )}
+            {flagScoring && (
+              <FlagSubmissionPanel
+                apiBaseUrl={apiBaseUrl}
+                sessionToken={sessionToken}
+                problemId={problem.problemId}
+                flagSubmitted={flagScoring.flagSubmitted ?? false}
+                points={flagScoring.points ?? 0}
+                hints={flagScoring.hints ?? []}
+                onScored={onScored}
+                revealOrder={flagScoring.hintReveal}
+              />
+            )}
+            {multiFlagScoring && (
+              <MultiFlagSubmissionPanel
+                apiBaseUrl={apiBaseUrl}
+                sessionToken={sessionToken}
+                problemId={problem.problemId}
+                flags={multiFlagScoring.flags ?? []}
+                onScored={onScored}
+                revealOrder={multiFlagScoring.hintReveal}
+              />
+            )}
+          </>
         )}
       </SpaceBetween>
     </Container>

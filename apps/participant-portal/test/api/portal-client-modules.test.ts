@@ -5,6 +5,8 @@ import {
   getConsoleSigninUrl,
   getScoreEvents,
   revealHint,
+  startProblem,
+  stopProblem,
   updateTeamName,
 } from "../../src/api/portal-client";
 
@@ -31,6 +33,28 @@ describe("revealHint", () => {
     expect(result).toEqual({ hintText: "look at the IAM policy" });
     const [url, init] = fetchMock.mock.calls[0] ?? [];
     expect(String(url)).toContain("/portal/me/problems/prob%201/hints/hint%2F2/reveal");
+    expect((init as RequestInit)?.method).toBe("POST");
+  });
+});
+
+describe("startProblem", () => {
+  it("should POST the encoded on-demand start endpoint and return the lifecycle status", async () => {
+    const fetchMock = mockFetch({ status: "running" });
+    const result = await startProblem(API, KEY, "prob 1");
+    expect(result).toEqual({ status: "running" });
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(String(url)).toContain("/portal/me/problems/prob%201/start");
+    expect((init as RequestInit)?.method).toBe("POST");
+  });
+});
+
+describe("stopProblem", () => {
+  it("should POST the encoded on-demand stop endpoint and return the lifecycle status", async () => {
+    const fetchMock = mockFetch({ status: "stopped" });
+    const result = await stopProblem(API, KEY, "prob/1");
+    expect(result).toEqual({ status: "stopped" });
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(String(url)).toContain("/portal/me/problems/prob%2F1/stop");
     expect((init as RequestInit)?.method).toBe("POST");
   });
 });

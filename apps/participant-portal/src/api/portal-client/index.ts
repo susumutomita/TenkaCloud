@@ -9,6 +9,7 @@
  *   - fetch.ts        — `portalFetch` 共通層 (401 / 400 / 409 / 500 mapping)
  *   - team.ts         — `getPortalMe` / `updateTeamName` / `getScoreEvents`
  *   - scoring.ts      — `submitFlag` / `revealHint`
+ *   - lifecycle.ts    — `startProblem` / `stopProblem` (local-play on-demand container, #2392)
  *   - leaderboard.ts  — `getLeaderboard` / `getLeaderboardScoreEvents`
  *   - notifications.ts— `getNotifications`
  *   - sso.ts          — `getConsoleSigninUrl` / `getCliCredentials`
@@ -21,6 +22,7 @@
 export * from "./endpoints";
 export * from "./errors";
 export * from "./leaderboard";
+export * from "./lifecycle";
 export * from "./notifications";
 export * from "./problems";
 export * from "./scoring";

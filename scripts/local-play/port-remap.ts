@@ -31,14 +31,6 @@ export interface ComposePortRemap {
   readonly portMap: ReadonlyMap<number, number>;
 }
 
-/** The host-port offset for the problem at index `i` (0 → no change). */
-export function portOffsetForIndex(index: number): number {
-  if (!Number.isInteger(index) || index < 0) {
-    throw new Error(`problem index must be a non-negative integer (got ${index})`);
-  }
-  return index * PORT_STRIDE;
-}
-
 /**
  * Rewrite every published host port in `composeText` by `offset`, returning the
  * new text and the base→new host-port map. `offset === 0` is the identity (the

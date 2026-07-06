@@ -1,10 +1,13 @@
 import { StatusCodes } from "http-status-codes";
+import type { LocalComposeUnit, StartedContainer } from "./container-runner";
 import type {
   ContainerCheck,
   ContainerHint,
   ContainerHintRevealMode,
   ContainerProblem,
 } from "./manifest";
+import { offsetLoopbackEndpoints, offsetLoopbackUrl } from "./port-remap";
+import { ProblemLifecycle, type ProblemStatus } from "./problem-lifecycle";
 import { type VerifyContext, type VerifyResult, verifySubmission } from "./verify-client";
 
 /**
@@ -17,6 +20,13 @@ import { type VerifyContext, type VerifyResult, verifySubmission } from "./verif
  * keyed by `problemId` (a `runtimes` Map), so `/portal/me` returns every
  * problem and submit / reveal route to the addressed one. The single-problem
  * case is just a 1-entry map.
+ *
+ * [#2392 Phase 2] The session is warm: `deployment.problems` is the WHOLE
+ * local-play catalog, but containers start on demand (`ProblemLifecycle` owns
+ * the cap / LRU eviction / idle reaping). Docker is injected through
+ * `CreateStateOptions.startContainer` / `stopContainer` — `serve` wires the
+ * real `ContainerRunner` in; the default is a dockerless fake so the API is
+ * unit-tested with no containers.
  */
 
 export const LOCAL_CONTEXT = {
@@ -25,9 +35,23 @@ export const LOCAL_CONTEXT = {
 } as const;
 
 export interface LocalPlayDeployment {
-  /** [#2392] The problems this session serves (order = portal display order). */
+  /** [#2392] The full local-play catalog (order = portal display order). */
   readonly problems: readonly ContainerProblem[];
 }
+
+/** [#2392 Phase 2] 同時起動コンテナ数の既定キャップ / default cap on running containers. */
+export const DEFAULT_MAX_RUNNING = 3;
+/** [#2392 Phase 2] 無操作コンテナを回収するまでの既定時間 (15 分) / default idle-reap window. */
+export const DEFAULT_IDLE_MS = 15 * 60 * 1000;
+
+/** Injected docker start: bring `problem` up on `offset` and return the remapped problem + teardown unit. */
+export type StartProblemContainer = (
+  problem: ContainerProblem,
+  offset: number,
+) => Promise<StartedContainer>;
+
+/** Injected docker stop: tear one started unit down (idempotent). */
+export type StopProblemContainer = (unit: LocalComposeUnit) => void | Promise<void>;
 
 export type VerifyFn = (
   verifyUrl: string,
@@ -52,7 +76,13 @@ export interface LocalPlayScoreEvent {
  * score including hint / wrong-answer penalties.
  */
 interface ProblemRuntime {
-  readonly problem: ContainerProblem;
+  /**
+   * [#2392 Phase 2] The currently-active problem: the catalog original while
+   * stopped, the offset-remapped copy while running. The offset moves only
+   * `challengeEndpoints` / `verifyUrl` onto the assigned port block — scoring
+   * never changes.
+   */
+  problem: ContainerProblem;
   readonly solved: Set<string>;
   readonly revealedHints: Map<string, string>;
   readonly wrongCounts: Map<string, number>;
@@ -65,6 +95,8 @@ export interface LocalPlayState {
   /** Score events across all problems (each carries its own problemId). */
   readonly scoreEvents: LocalPlayScoreEvent[];
   readonly verify: VerifyFn;
+  /** [#2392 Phase 2] On-demand container lifecycle (cap / LRU eviction / idle reaping). */
+  readonly lifecycle: ProblemLifecycle;
   teamName: string;
 }
 
@@ -85,6 +117,44 @@ const jobIdOf = (problemId: string) => `local-${problemId}`;
 export interface CreateStateOptions {
   readonly teamName?: string;
   readonly verify?: VerifyFn;
+  /** [#2392 Phase 2] Max simultaneously-running containers (default {@link DEFAULT_MAX_RUNNING}). */
+  readonly maxRunning?: number;
+  /** [#2392 Phase 2] Idle window before a running container is reaped (default {@link DEFAULT_IDLE_MS}). */
+  readonly idleMs?: number;
+  /** Clock injected so cap / idle behavior is deterministic in tests. */
+  readonly now?: () => number;
+  /** Docker start seam; `serve` injects the real `ContainerRunner`. */
+  readonly startContainer?: StartProblemContainer;
+  /** Docker stop seam; `serve` injects the real `ContainerRunner`. */
+  readonly stopContainer?: StopProblemContainer;
+}
+
+/**
+ * [#2392 Phase 2] Default docker seam for tests: no container runs. "Starting"
+ * a problem just moves its loopback URLs onto the assigned port block — the
+ * same URL rewrite the real `ContainerRunner` applies — so the on-demand flow
+ * is fully observable without Docker. 本番の `serve` は必ず実 Docker アダプタ
+ * を注入する (この fake が production で動くことはない)。
+ */
+function fakeStartContainer(problem: ContainerProblem, offset: number): Promise<StartedContainer> {
+  const portMap = new Map<number, number>();
+  for (const url of [...Object.values(problem.challengeEndpoints), problem.verifyUrl]) {
+    const port = Number(new URL(url).port);
+    portMap.set(port, port + offset);
+  }
+  return Promise.resolve({
+    problem: {
+      ...problem,
+      challengeEndpoints: offsetLoopbackEndpoints(problem.challengeEndpoints, portMap),
+      verifyUrl: offsetLoopbackUrl(problem.verifyUrl, portMap),
+    },
+    unit: {
+      problemId: problem.problemId,
+      composePath: problem.composePath,
+      composeProjectName: problem.composeProjectName,
+      secretEnv: problem.secretEnv,
+    },
+  });
 }
 
 export function createLocalPlayState(
@@ -92,7 +162,9 @@ export function createLocalPlayState(
   options: CreateStateOptions = {},
 ): LocalPlayState {
   const runtimes = new Map<string, ProblemRuntime>();
+  const catalog = new Map<string, ContainerProblem>();
   for (const problem of deployment.problems) {
+    catalog.set(problem.problemId, problem);
     runtimes.set(problem.problemId, {
       problem,
       solved: new Set(),
@@ -101,10 +173,45 @@ export function createLocalPlayState(
       score: 0,
     });
   }
+  const startContainer = options.startContainer ?? fakeStartContainer;
+  const stopContainer = options.stopContainer ?? (() => {});
+  /** Teardown handle per running problem (the lifecycle only knows ids + offsets). */
+  const units = new Map<string, LocalComposeUnit>();
+  const lifecycle = new ProblemLifecycle(
+    [...catalog.keys()],
+    {
+      // 起動: catalog 原本を offset へ remap して runtime に差し替える /
+      // start the catalog original on its offset block and swap it in.
+      startContainer: async (problemId, offset) => {
+        const problem = catalog.get(problemId);
+        const runtime = runtimes.get(problemId);
+        if (!problem || !runtime) throw new Error(`unknown problem: ${problemId}`);
+        const started = await startContainer(problem, offset);
+        units.set(problemId, started.unit);
+        runtime.problem = started.problem;
+      },
+      // 停止: unit を破棄して catalog 原本へ戻す / tear the unit down and
+      // restore the catalog original (stale offset URLs must not linger).
+      stopContainer: async (problemId) => {
+        const unit = units.get(problemId);
+        units.delete(problemId);
+        if (unit) await stopContainer(unit);
+        const problem = catalog.get(problemId);
+        const runtime = runtimes.get(problemId);
+        if (problem && runtime) runtime.problem = problem;
+      },
+      now: options.now ?? Date.now,
+    },
+    {
+      maxRunning: options.maxRunning ?? DEFAULT_MAX_RUNNING,
+      idleMs: options.idleMs ?? DEFAULT_IDLE_MS,
+    },
+  );
   return {
     runtimes,
     scoreEvents: [],
     verify: options.verify ?? verifySubmission,
+    lifecycle,
     teamName: options.teamName ?? "Local Player",
   };
 }
@@ -182,7 +289,7 @@ function isProblemComplete(runtime: ProblemRuntime): boolean {
   return scoring.checks.every((check) => runtime.solved.has(check.id));
 }
 
-function problemView(runtime: ProblemRuntime, now: number) {
+function problemView(runtime: ProblemRuntime, now: number, status: ProblemStatus) {
   const problem = runtime.problem;
   const complete = isProblemComplete(runtime);
   const englishText = {
@@ -203,8 +310,12 @@ function problemView(runtime: ProblemRuntime, now: number) {
     region: "local",
     awsAccountId: "local",
     status: "COMPLETE",
-    // The challenge surface URLs the participant attacks (loopback only).
-    stackOutputs: problem.challengeEndpoints,
+    // [#2392 Phase 2] on-demand container state — the portal renders its
+    // start / stop affordance from this field.
+    lifecycle: { status },
+    // The challenge surface URLs the participant attacks (loopback only). A
+    // stopped problem must not leak (stale) endpoints of a down container.
+    stackOutputs: status === "running" ? problem.challengeEndpoints : {},
     expiresAt: now + 365 * 24 * 60 * 60 * 1000,
     // [#2392] running per-problem score incl. hint / wrong-answer penalties (the
     // header total is the sum, matching the leaderboard).
@@ -242,7 +353,9 @@ function teamView(state: LocalPlayState, now: number): LocalPlayResponse {
         eventId: LOCAL_CONTEXT.eventId,
         teamId: LOCAL_CONTEXT.teamId,
       },
-      problems: [...state.runtimes.values()].map((runtime) => problemView(runtime, now)),
+      problems: [...state.runtimes.entries()].map(([problemId, runtime]) =>
+        problemView(runtime, now, state.lifecycle.statusOf(problemId) ?? "stopped"),
+      ),
       eventGate: { kind: "ok" },
     },
   };
@@ -316,6 +429,12 @@ async function submitFlag(
     return { status: StatusCodes.BAD_REQUEST, body: { error: "invalid_flag" } };
   }
   const problem = runtime.problem;
+  // [#2392 Phase 2] A stopped container cannot judge — refuse loudly instead of
+  // timing out against a down /verify. Playing keeps the container warm (touch).
+  if (state.lifecycle.statusOf(problem.problemId) !== "running") {
+    return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
+  }
+  state.lifecycle.touch(problem.problemId);
   const target = resolveSubmissionTarget(runtime, body.flagId);
   if (!target) {
     // Mirrors the AWS multi-flag contract: unknown / missing flagId → 404
@@ -426,6 +545,12 @@ function revealHint(
 ): LocalPlayResponse {
   const runtime = state.runtimes.get(problemId);
   if (!runtime) return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
+  // [#2392 Phase 2] Hints are part of playing the problem — gate on a running
+  // container and keep it warm, matching submit.
+  if (state.lifecycle.statusOf(problemId) !== "running") {
+    return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
+  }
+  state.lifecycle.touch(problemId);
   const problem = runtime.problem;
   // [#2252] multi-verify hints live per check; ids are unique across the problem
   // (enforced by the manifest) so the flat reveal route stays unambiguous.
@@ -502,7 +627,47 @@ function leaderboard(state: LocalPlayState): LocalPlayResponse {
   };
 }
 
+/** [#2392 Phase 2] POST /portal/me/problems/:id/start — on-demand container start. */
+async function startProblem(problemId: string, state: LocalPlayState): Promise<LocalPlayResponse> {
+  if (!state.runtimes.has(problemId)) {
+    return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
+  }
+  try {
+    await state.lifecycle.ensureRunning(problemId);
+  } catch (error) {
+    // Fail loudly: a container that would not come up must not look playable.
+    return {
+      status: StatusCodes.BAD_GATEWAY,
+      body: {
+        error: "start_failed",
+        message: error instanceof Error ? error.message : "problem container failed to start",
+      },
+    };
+  }
+  return { status: StatusCodes.OK, body: { status: state.lifecycle.statusOf(problemId) } };
+}
+
+/** [#2392 Phase 2] POST /portal/me/problems/:id/stop — release the container + its port slot. */
+async function stopProblem(problemId: string, state: LocalPlayState): Promise<LocalPlayResponse> {
+  if (!state.runtimes.has(problemId)) {
+    return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
+  }
+  await state.lifecycle.stop(problemId);
+  return { status: StatusCodes.OK, body: { status: state.lifecycle.statusOf(problemId) } };
+}
+
+const START_RE = /^\/portal\/me\/problems\/([^/]+)\/start$/;
+const STOP_RE = /^\/portal\/me\/problems\/([^/]+)\/stop$/;
 const REVEAL_RE = /^\/portal\/me\/problems\/([^/]+)\/hints\/([^/]+)\/reveal$/;
+
+/** Decode one percent-escaped path segment; undefined when malformed (→ 404, not 500). */
+function decodePathSegment(raw: string): string | undefined {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return undefined;
+  }
+}
 
 function handleGet(
   request: LocalPlayRequest,
@@ -561,6 +726,43 @@ function handlePatch(
   return teamView(state, now);
 }
 
+function handlePost(
+  request: LocalPlayRequest,
+  state: LocalPlayState,
+  iso: string,
+): Promise<LocalPlayResponse> | LocalPlayResponse | undefined {
+  if (request.path === "/portal/me/submit-flag") {
+    return submitFlag(request, state, iso);
+  }
+  const start = START_RE.exec(request.path);
+  if (start) {
+    const problemId = decodePathSegment(start[1]);
+    if (problemId === undefined) {
+      return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
+    }
+    return startProblem(problemId, state);
+  }
+  const stop = STOP_RE.exec(request.path);
+  if (stop) {
+    const problemId = decodePathSegment(stop[1]);
+    if (problemId === undefined) {
+      return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
+    }
+    return stopProblem(problemId, state);
+  }
+  const match = REVEAL_RE.exec(request.path);
+  if (match) {
+    const problemId = decodePathSegment(match[1]);
+    const hintId = decodePathSegment(match[2]);
+    if (problemId === undefined || hintId === undefined) {
+      // A malformed percent escape is just an unknown hint, not a 500.
+      return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
+    }
+    return revealHint(problemId, hintId, state, iso);
+  }
+  return undefined;
+}
+
 export async function handleLocalPlayRequest(
   request: LocalPlayRequest,
   state: LocalPlayState,
@@ -576,22 +778,8 @@ export async function handleLocalPlayRequest(
     if (response) return response;
   }
   if (request.method === "POST") {
-    if (request.path === "/portal/me/submit-flag") {
-      return submitFlag(request, state, iso);
-    }
-    const match = REVEAL_RE.exec(request.path);
-    if (match) {
-      let problemId: string;
-      let hintId: string;
-      try {
-        problemId = decodeURIComponent(match[1]);
-        hintId = decodeURIComponent(match[2]);
-      } catch {
-        // A malformed percent escape is just an unknown hint, not a 500.
-        return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
-      }
-      return revealHint(problemId, hintId, state, iso);
-    }
+    const response = handlePost(request, state, iso);
+    if (response) return response;
   }
   return { status: StatusCodes.NOT_FOUND, body: { error: "not_found" } };
 }
