@@ -14,6 +14,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { LocalPlayDeployment } from "./local-play/api";
+import { type PlannedProblem, parseProblemIds, planProblem } from "./local-play/deployment-plan";
 import {
   listLocalPlayProblems,
   loadContainerProblem,
@@ -28,13 +29,24 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_PROBLEM = "sqli-demo";
 const DEFAULT_API_PORT = 3199;
 
-interface LocalProcessState {
-  readonly pid: number;
-  readonly apiBaseUrl: string;
+/** [#2392] One problem's docker compose unit within a multi-problem session. */
+interface LocalComposeUnit {
   readonly problemId: string;
+  /** The compose file docker runs: the original for problem 0, a remapped temp copy for later ones. */
   readonly composePath: string;
   readonly composeProjectName: string;
   readonly secretEnv: readonly string[];
+  /** Original problem `local/` dir; set when running a remapped copy so relative paths resolve. */
+  readonly projectDirectory?: string;
+  /** Temp remapped compose to delete on teardown (absent for the unremapped first problem). */
+  readonly remappedComposePath?: string;
+}
+
+interface LocalProcessState {
+  readonly pid: number;
+  readonly apiBaseUrl: string;
+  readonly problemIds: readonly string[];
+  readonly units: readonly LocalComposeUnit[];
   readonly deploymentPath: string;
   readonly runtimeConfigPath: string;
   readonly runtimeConfigBackupPath?: string;
@@ -63,8 +75,14 @@ export function composeArgs(
   composePath: string,
   projectName: string,
   action: "up" | "down",
+  projectDirectory?: string,
 ): string[] {
   const base = ["compose", "-f", composePath, "-p", projectName];
+  // [#2392] When a problem runs from a port-remapped copy in .tenkacloud/local,
+  // pin --project-directory to the original problem dir so relative build
+  // contexts and volume mounts still resolve. Omitted (identity) for the first
+  // problem, which runs from its own compose file.
+  if (projectDirectory) base.push("--project-directory", projectDirectory);
   return action === "up"
     ? [...base, "up", "-d", "--wait"]
     : [...base, "down", "--volumes", "--remove-orphans"];
@@ -126,14 +144,12 @@ function runCompose(
   action: "up" | "down",
   env: NodeJS.ProcessEnv,
   allowFailure = false,
+  projectDirectory?: string,
 ): void {
-  const result = spawnSync("docker", composeArgs(composePath, projectName, action), {
-    cwd: REPO_ROOT,
-    env,
-    stdio: "inherit",
-  });
+  const args = composeArgs(composePath, projectName, action, projectDirectory);
+  const result = spawnSync("docker", args, { cwd: REPO_ROOT, env, stdio: "inherit" });
   if (!allowFailure && result.status !== 0) {
-    throw new Error(`docker ${composeArgs(composePath, projectName, action).join(" ")} failed`);
+    throw new Error(`docker ${args.join(" ")} failed`);
   }
 }
 
@@ -213,22 +229,71 @@ function restoreRuntimeConfig(
   }
 }
 
-async function up(problemId: string): Promise<void> {
+/**
+ * Bring up one planned problem's container on its assigned host-port block and
+ * return the compose unit needed to tear it down. Problem 0 runs from its own
+ * compose file; later problems run from a port-remapped temp copy with
+ * `--project-directory` pinned to the original dir so relative paths resolve.
+ */
+async function startProblemUnit(plan: PlannedProblem, localDir: string): Promise<LocalComposeUnit> {
+  const problem = plan.problem;
+  const composeEnv: NodeJS.ProcessEnv = { ...process.env, ...generateSecretEnv(problem.secretEnv) };
+  let composePath = problem.composePath;
+  let projectDirectory: string | undefined;
+  let remappedComposePath: string | undefined;
+  if (plan.remapped) {
+    remappedComposePath = join(localDir, `${problem.composeProjectName}.compose.yml`);
+    writeFileSync(remappedComposePath, plan.composeText, "utf8");
+    composePath = remappedComposePath;
+    projectDirectory = dirname(problem.composePath);
+  }
+  console.log(`Starting problem container for ${problem.name}...`);
+  runCompose(composePath, problem.composeProjectName, "up", composeEnv, false, projectDirectory);
+  await Promise.all(
+    Object.entries(problem.challengeEndpoints).map(([label, url]) =>
+      waitForReachable(url, `challenge endpoint ${label}`),
+    ),
+  );
+  return {
+    problemId: problem.problemId,
+    composePath,
+    composeProjectName: problem.composeProjectName,
+    secretEnv: problem.secretEnv,
+    ...(projectDirectory ? { projectDirectory } : {}),
+    ...(remappedComposePath ? { remappedComposePath } : {}),
+  };
+}
+
+/** Tear down one compose unit (idempotent) and drop its remapped temp compose. */
+function tearDownUnit(unit: LocalComposeUnit): void {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  // Blank the per-deploy secret names so compose interpolation does not warn on down.
+  for (const name of unit.secretEnv) env[name] = "";
+  runCompose(unit.composePath, unit.composeProjectName, "down", env, true, unit.projectDirectory);
+  if (unit.remappedComposePath) unlinkIfExists(unit.remappedComposePath);
+}
+
+async function up(problemArg: string): Promise<void> {
   const p = paths();
   if (existsSync(p.statePath)) {
     throw new Error("Local play is already running. Run `make local-down` first.");
   }
   assertDockerAvailable();
 
-  const problemDir = resolveProblemDir(problemSearchRoots(REPO_ROOT), problemId);
-  const problem = loadContainerProblem(problemDir);
+  const problemIds = parseProblemIds(problemArg);
+  if (problemIds.length === 0) {
+    throw new Error("No problem specified. Set PROBLEM=<id> (comma-separate several).");
+  }
   const apiPort = positivePort(process.env.LOCAL_API_PORT, DEFAULT_API_PORT, "LOCAL_API_PORT");
   const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
   await assertPortFree(apiPort, "Participant API");
-
   mkdirSync(p.localDir, { recursive: true });
-  const secretEnv = generateSecretEnv(problem.secretEnv);
-  const composeEnv: NodeJS.ProcessEnv = { ...process.env, ...secretEnv };
+
+  // Plan each problem onto its own host-port block (pure) before touching Docker.
+  const plans: PlannedProblem[] = problemIds.map((id, index) => {
+    const problem = loadContainerProblem(resolveProblemDir(problemSearchRoots(REPO_ROOT), id));
+    return planProblem(problem, index, readFileSync(problem.composePath, "utf8"));
+  });
 
   let runtimeConfigBackedUp = false;
   if (existsSync(p.runtimeConfigBackupPath)) {
@@ -239,20 +304,18 @@ async function up(problemId: string): Promise<void> {
     copyFileSync(p.runtimeConfigPath, p.runtimeConfigBackupPath);
     runtimeConfigBackedUp = true;
   }
+
+  const units: LocalComposeUnit[] = [];
   let apiPid: number | undefined;
   try {
-    console.log(`Starting problem container for ${problem.name}...`);
-    runCompose(problem.composePath, problem.composeProjectName, "up", composeEnv);
-    await Promise.all(
-      Object.entries(problem.challengeEndpoints).map(([label, url]) =>
-        waitForReachable(url, `challenge endpoint ${label}`),
-      ),
-    );
+    for (const plan of plans) {
+      units.push(await startProblemUnit(plan, p.localDir));
+    }
 
-    const deployment: LocalPlayDeployment = { problem };
+    const deployment: LocalPlayDeployment = { problems: plans.map((plan) => plan.problem) };
     writePrivateJson(p.deploymentPath, deployment);
     apiPid = startApi(p.deploymentPath, apiPort, p.logPath);
-    await waitForLocalApi(apiBaseUrl, problem.problemId, apiPid, p.logPath);
+    await waitForLocalApi(apiBaseUrl, problemIds, apiPid, p.logPath);
 
     const runtimeConfig = buildLocalRuntimeConfig(apiBaseUrl);
     writeFileSync(p.runtimeConfigPath, `${JSON.stringify(runtimeConfig, null, 2)}\n`, "utf8");
@@ -260,27 +323,27 @@ async function up(problemId: string): Promise<void> {
     const state: LocalProcessState = {
       pid: apiPid,
       apiBaseUrl,
-      problemId: problem.problemId,
-      composePath: problem.composePath,
-      composeProjectName: problem.composeProjectName,
-      secretEnv: problem.secretEnv,
+      problemIds,
+      units,
       deploymentPath: p.deploymentPath,
       runtimeConfigPath: p.runtimeConfigPath,
       ...(runtimeConfigBackedUp ? { runtimeConfigBackupPath: p.runtimeConfigBackupPath } : {}),
     };
     writePrivateJson(p.statePath, state);
 
-    console.log(`Local play is ready: ${problem.name}`);
+    console.log(`Local play is ready (${plans.length} problem${plans.length > 1 ? "s" : ""}).`);
     console.log(`Participant API: ${apiBaseUrl}`);
-    for (const [label, url] of Object.entries(problem.challengeEndpoints)) {
-      console.log(`Challenge (${label}): ${url}`);
+    for (const plan of plans) {
+      for (const [label, url] of Object.entries(plan.problem.challengeEndpoints)) {
+        console.log(`Challenge — ${plan.problem.name} (${label}): ${url}`);
+      }
     }
     console.log("Log in to the Participant Portal with any non-empty key.");
   } catch (error) {
     if (apiPid !== undefined) stopPid(apiPid);
     unlinkIfExists(p.deploymentPath);
     restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, true);
-    runCompose(problem.composePath, problem.composeProjectName, "down", composeEnv, true);
+    for (const unit of units) tearDownUnit(unit);
     throw error;
   }
 }
@@ -307,7 +370,7 @@ async function status(): Promise<void> {
   if (!existsSync(p.statePath)) throw new Error("Local play is not running.");
   const state = readJson<LocalProcessState>(p.statePath);
   await waitForReachable(`${state.apiBaseUrl}/healthz`, "local Participant API", 3_000);
-  console.log(`Local play is running (${state.problemId}).`);
+  console.log(`Local play is running (${state.problemIds.join(", ")}).`);
   console.log(`Participant API: ${state.apiBaseUrl}`);
 }
 
@@ -315,10 +378,15 @@ async function evaluate(flag: string): Promise<void> {
   const p = paths();
   if (!existsSync(p.statePath)) throw new Error("Local play is not running.");
   const state = readJson<LocalProcessState>(p.statePath);
+  // Submit to PROBLEM when it names a problem in the session, else the first one.
+  const envProblem = process.env.PROBLEM;
+  const problemId =
+    envProblem && state.problemIds.includes(envProblem) ? envProblem : state.problemIds[0];
+  if (!problemId) throw new Error("Local play has no problems to evaluate against.");
   const response = await fetch(`${state.apiBaseUrl}/portal/me/submit-flag`, {
     method: "POST",
     headers: { authorization: "Bearer local", "content-type": "application/json" },
-    body: JSON.stringify({ problemId: state.problemId, flag }),
+    body: JSON.stringify({ problemId, flag }),
   });
   const outcome = (await response.json()) as { kind?: string };
   console.log(JSON.stringify(outcome, null, 2));
@@ -327,15 +395,11 @@ async function evaluate(flag: string): Promise<void> {
 
 function down(): void {
   const p = paths();
-  let composePath: string | undefined;
-  let projectName: string | undefined;
-  let secretNames: readonly string[] = [];
+  let units: readonly LocalComposeUnit[] = [];
   if (existsSync(p.statePath)) {
     const state = readJson<LocalProcessState>(p.statePath);
     stopPid(state.pid);
-    composePath = state.composePath;
-    projectName = state.composeProjectName;
-    secretNames = state.secretEnv;
+    units = state.units;
     unlinkIfExists(state.deploymentPath);
     restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, true);
     unlinkIfExists(p.statePath);
@@ -343,13 +407,7 @@ function down(): void {
     unlinkIfExists(p.deploymentPath);
     restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, false);
   }
-  if (composePath && projectName) {
-    // Blank the per-deploy secret names so compose interpolation does not warn
-    // during teardown (the values are irrelevant to `down`).
-    const env: NodeJS.ProcessEnv = { ...process.env };
-    for (const name of secretNames) env[name] = "";
-    runCompose(composePath, projectName, "down", env, true);
-  }
+  for (const unit of units) tearDownUnit(unit);
   console.log("Local play stopped.");
 }
 

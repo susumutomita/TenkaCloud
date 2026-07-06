@@ -58,6 +58,21 @@ describe("composeArgs", () => {
       "--remove-orphans",
     ]);
   });
+
+  it("should pin --project-directory when a port-remapped copy runs (#2392)", () => {
+    expect(composeArgs("/tmp/tc-local-b.compose.yml", "tc-local-b", "up", "/p/b/local")).toEqual([
+      "compose",
+      "-f",
+      "/tmp/tc-local-b.compose.yml",
+      "-p",
+      "tc-local-b",
+      "--project-directory",
+      "/p/b/local",
+      "up",
+      "-d",
+      "--wait",
+    ]);
+  });
 });
 
 describe("buildLocalRuntimeConfig", () => {

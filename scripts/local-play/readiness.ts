@@ -42,13 +42,13 @@ export function assertPortFree(port: number, label: string): Promise<void> {
 
 /**
  * Wait until the local Participant API at `apiBaseUrl` reports it is *our*
- * server for `problemId`. Fails loudly when the spawned process dies, when a
- * foreign server answers the port, or on timeout -- never silently succeeds
- * against the wrong backend.
+ * server for `problemIds` (#2392: a session may serve several). Fails loudly
+ * when the spawned process dies, when a foreign server answers the port, or on
+ * timeout -- never silently succeeds against the wrong backend.
  */
 export async function waitForLocalApi(
   apiBaseUrl: string,
-  problemId: string,
+  problemIds: readonly string[],
   pid: number,
   logPath: string,
   timeoutMs = 30_000,
@@ -69,10 +69,11 @@ export async function waitForLocalApi(
       body = undefined; // startup race; the server may not be listening yet
     }
     if (body !== undefined) {
-      if (isLocalApiHealthy(body, problemId)) return;
+      if (isLocalApiHealthy(body, problemIds)) return;
       throw new Error(
         `${apiBaseUrl} is served by another process (healthz=${JSON.stringify(body)}); ` +
-          `expected local play for "${problemId}". Stop it or pass a different LOCAL_API_PORT.`,
+          `expected local play for "${problemIds.join(", ")}". ` +
+          "Stop it or pass a different LOCAL_API_PORT.",
       );
     }
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));

@@ -11,8 +11,12 @@ import { type VerifyContext, type VerifyResult, verifySubmission } from "./verif
  * The local scoring API. It owns the participant-facing portal contract (team
  * view, leaderboard, hints, score events) but holds NO answer: a flag
  * submission is delegated to the problem container's `/verify` and the verdict
- * is recorded. The participant sees a single-submission ("flag") problem; the
- * platform never evaluates correctness itself (Issue #2054).
+ * is recorded. The platform never evaluates correctness itself (Issue #2054).
+ *
+ * [#2392] The API serves N problems in one session. All per-problem state is
+ * keyed by `problemId` (a `runtimes` Map), so `/portal/me` returns every
+ * problem and submit / reveal route to the addressed one. The single-problem
+ * case is just a 1-entry map.
  */
 
 export const LOCAL_CONTEXT = {
@@ -21,7 +25,8 @@ export const LOCAL_CONTEXT = {
 } as const;
 
 export interface LocalPlayDeployment {
-  readonly problem: ContainerProblem;
+  /** [#2392] The problems this session serves (order = portal display order). */
+  readonly problems: readonly ContainerProblem[];
 }
 
 export type VerifyFn = (
@@ -40,20 +45,27 @@ export interface LocalPlayScoreEvent {
   readonly occurredAt: string;
 }
 
-export interface LocalPlayState {
-  readonly deployment: LocalPlayDeployment;
-  /**
-   * verify kind: contains the problemId once solved. multi-verify (#2252):
-   * contains the solved check ids — the idempotency key is (problemId, checkId)
-   * and the single local-play problem makes the problemId implicit.
-   */
+/**
+ * Per-problem runtime state. `solved` / `wrongCounts` keys are the submission
+ * target (problemId for `verify`, check id for `multi-verify`); `revealedHints`
+ * keys are hint ids (unique within a problem). `score` is this problem's running
+ * score including hint / wrong-answer penalties.
+ */
+interface ProblemRuntime {
+  readonly problem: ContainerProblem;
   readonly solved: Set<string>;
   readonly revealedHints: Map<string, string>;
   readonly wrongCounts: Map<string, number>;
+  score: number;
+}
+
+export interface LocalPlayState {
+  /** Per-problem runtime keyed by problemId; insertion order is display order. */
+  readonly runtimes: Map<string, ProblemRuntime>;
+  /** Score events across all problems (each carries its own problemId). */
   readonly scoreEvents: LocalPlayScoreEvent[];
   readonly verify: VerifyFn;
   teamName: string;
-  score: number;
 }
 
 export interface LocalPlayRequest {
@@ -79,32 +91,48 @@ export function createLocalPlayState(
   deployment: LocalPlayDeployment,
   options: CreateStateOptions = {},
 ): LocalPlayState {
+  const runtimes = new Map<string, ProblemRuntime>();
+  for (const problem of deployment.problems) {
+    runtimes.set(problem.problemId, {
+      problem,
+      solved: new Set(),
+      revealedHints: new Map(),
+      wrongCounts: new Map(),
+      score: 0,
+    });
+  }
   return {
-    deployment,
-    solved: new Set(),
-    revealedHints: new Map(),
-    wrongCounts: new Map(),
+    runtimes,
     scoreEvents: [],
     verify: options.verify ?? verifySubmission,
     teamName: options.teamName ?? "Local Player",
-    score: 0,
   };
+}
+
+/** Session total = sum of every problem's running score. */
+function sessionScore(state: LocalPlayState): number {
+  let total = 0;
+  for (const rt of state.runtimes.values()) total += rt.score;
+  return total;
 }
 
 /**
  * Identity check for the readiness probe: is the server answering `/healthz`
- * *our* local-play instance for `problemId`? Guards against silently adopting a
- * foreign server squatting on the API port.
+ * *our* local-play session serving (at least) `problemIds`? Guards against
+ * silently adopting a foreign server squatting on the API port.
  */
-export function isLocalApiHealthy(body: unknown, problemId: string): boolean {
+export function isLocalApiHealthy(body: unknown, problemIds: readonly string[]): boolean {
   if (typeof body !== "object" || body === null) return false;
-  const payload = body as { status?: unknown; mode?: unknown; problemId?: unknown };
-  return payload.status === "ok" && payload.mode === "local" && payload.problemId === problemId;
+  const payload = body as { status?: unknown; mode?: unknown; problemIds?: unknown };
+  if (payload.status !== "ok" || payload.mode !== "local") return false;
+  if (!Array.isArray(payload.problemIds)) return false;
+  const served = new Set(payload.problemIds.filter((id): id is string => typeof id === "string"));
+  return problemIds.every((id) => served.has(id));
 }
 
-function hintViews(state: LocalPlayState, hints: readonly ContainerHint[]) {
+function hintViews(runtime: ProblemRuntime, hints: readonly ContainerHint[]) {
   return hints.map((hint) => {
-    const revealedAt = state.revealedHints.get(hint.id);
+    const revealedAt = runtime.revealedHints.get(hint.id);
     return {
       id: hint.id,
       penalty: hint.penalty,
@@ -125,7 +153,7 @@ function hintViews(state: LocalPlayState, hints: readonly ContainerHint[]) {
  * new portal scoring kind. Per-check hints ride on the optional `hints` field.
  */
 function multiVerifyScoringView(
-  state: LocalPlayState,
+  runtime: ProblemRuntime,
   checks: readonly ContainerCheck[],
   totalPoints: number,
   hintReveal: ContainerHintRevealMode | undefined,
@@ -140,29 +168,23 @@ function multiVerifyScoringView(
       id: check.id,
       label: check.label,
       points: check.points,
-      solved: state.solved.has(check.id),
+      solved: runtime.solved.has(check.id),
       ...(check.i18n ? { i18n: check.i18n } : {}),
-      ...(check.hints.length > 0 ? { hints: hintViews(state, check.hints) } : {}),
+      ...(check.hints.length > 0 ? { hints: hintViews(runtime, check.hints) } : {}),
     })),
   };
 }
 
-function solvedProblemScore(state: LocalPlayState): { score: number; complete: boolean } {
-  const scoring = state.deployment.problem.scoring;
-  if (scoring.kind === "verify") {
-    const complete = state.solved.has(state.deployment.problem.problemId);
-    return { score: complete ? scoring.points : 0, complete };
-  }
-  const solvedChecks = scoring.checks.filter((check) => state.solved.has(check.id));
-  return {
-    score: solvedChecks.reduce((sum, check) => sum + check.points, 0),
-    complete: solvedChecks.length === scoring.checks.length,
-  };
+/** Whether every submission target of a problem is solved (gates the writeup). */
+function isProblemComplete(runtime: ProblemRuntime): boolean {
+  const scoring = runtime.problem.scoring;
+  if (scoring.kind === "verify") return runtime.solved.has(runtime.problem.problemId);
+  return scoring.checks.every((check) => runtime.solved.has(check.id));
 }
 
-function problemView(state: LocalPlayState, now: number) {
-  const problem = state.deployment.problem;
-  const { score, complete } = solvedProblemScore(state);
+function problemView(runtime: ProblemRuntime, now: number) {
+  const problem = runtime.problem;
+  const complete = isProblemComplete(runtime);
   const englishText = {
     ...(problem.i18n?.en ?? {}),
     ...(complete && problem.writeupI18n ? { writeup: problem.writeupI18n } : {}),
@@ -184,7 +206,9 @@ function problemView(state: LocalPlayState, now: number) {
     // The challenge surface URLs the participant attacks (loopback only).
     stackOutputs: problem.challengeEndpoints,
     expiresAt: now + 365 * 24 * 60 * 60 * 1000,
-    score,
+    // [#2392] running per-problem score incl. hint / wrong-answer penalties (the
+    // header total is the sum, matching the leaderboard).
+    score: runtime.score,
     ...(complete ? { lastResult: "ok" as const } : {}),
     // Participant-facing view: single submission box ("flag") for verify, the
     // existing multi-flag shape for multi-verify. Scoring stays delegated.
@@ -194,11 +218,11 @@ function problemView(state: LocalPlayState, now: number) {
             kind: "flag",
             points: problem.scoring.points,
             flagSubmitted: complete,
-            hints: hintViews(state, problem.scoring.hints),
+            hints: hintViews(runtime, problem.scoring.hints),
             ...(problem.scoring.hintReveal ? { hintReveal: problem.scoring.hintReveal } : {}),
           }
         : multiVerifyScoringView(
-            state,
+            runtime,
             problem.scoring.checks,
             problem.scoring.totalPoints,
             problem.scoring.hintReveal,
@@ -218,7 +242,7 @@ function teamView(state: LocalPlayState, now: number): LocalPlayResponse {
         eventId: LOCAL_CONTEXT.eventId,
         teamId: LOCAL_CONTEXT.teamId,
       },
-      problems: [problemView(state, now)],
+      problems: [...state.runtimes.values()].map((runtime) => problemView(runtime, now)),
       eventGate: { kind: "ok" },
     },
   };
@@ -230,8 +254,8 @@ function teamView(state: LocalPlayState, now: number): LocalPlayResponse {
  * the current score would make hints free at the start of play (when score is
  * 0), letting a player reveal the answer-bearing hint for nothing.
  */
-function applyPenalty(state: LocalPlayState, penalty: number): number {
-  state.score -= penalty;
+function applyPenalty(runtime: ProblemRuntime, penalty: number): number {
+  runtime.score -= penalty;
   return penalty;
 }
 
@@ -253,10 +277,10 @@ interface SubmissionTarget {
 }
 
 function resolveSubmissionTarget(
-  state: LocalPlayState,
+  runtime: ProblemRuntime,
   flagId: unknown,
 ): SubmissionTarget | undefined {
-  const problem = state.deployment.problem;
+  const problem = runtime.problem;
   if (problem.scoring.kind === "verify") {
     // Single-submission problems ignore flagId (mirrors the AWS single-flag path).
     return {
@@ -286,23 +310,25 @@ async function submitFlag(
   iso: string,
 ): Promise<LocalPlayResponse> {
   const body = (request.body ?? {}) as { problemId?: unknown; flag?: unknown; flagId?: unknown };
-  const problem = state.deployment.problem;
-  if (body.problemId !== problem.problemId || typeof body.flag !== "string") {
+  const runtime =
+    typeof body.problemId === "string" ? state.runtimes.get(body.problemId) : undefined;
+  if (!runtime || typeof body.flag !== "string") {
     return { status: StatusCodes.BAD_REQUEST, body: { error: "invalid_flag" } };
   }
-  const target = resolveSubmissionTarget(state, body.flagId);
+  const problem = runtime.problem;
+  const target = resolveSubmissionTarget(runtime, body.flagId);
   if (!target) {
     // Mirrors the AWS multi-flag contract: unknown / missing flagId → 404
     // { kind: "unknown_flag" } (route-helpers ERROR_STATUS).
     return { status: StatusCodes.NOT_FOUND, body: { kind: "unknown_flag" } };
   }
   const flagIdEcho = target.checkpointId !== undefined ? { flagId: target.checkpointId } : {};
-  if (state.solved.has(target.key)) {
+  if (runtime.solved.has(target.key)) {
     // Idempotent per (problemId, checkpointId): a re-submission — right or
     // wrong — never re-calls the container, never re-awards, never re-penalizes.
     return {
       status: StatusCodes.OK,
-      body: { kind: "already_scored", totalScore: state.score, ...flagIdEcho },
+      body: { kind: "already_scored", totalScore: sessionScore(state), ...flagIdEcho },
     };
   }
 
@@ -329,31 +355,52 @@ async function submitFlag(
     };
   }
 
-  if (verdict.correct) {
-    state.solved.add(target.key);
-    const award = target.allowPointsOverride ? (verdict.points ?? target.points) : target.points;
-    state.score += award;
-    state.scoreEvents.unshift({
-      jobId: jobIdOf(problem.problemId),
-      problemId: problem.problemId,
-      source: "flag",
-      points: award,
-      result: "ok",
-      occurredAt: iso,
-    });
-    return {
-      status: StatusCodes.OK,
-      body: { kind: "ok", scoreDelta: award, totalScore: state.score, ...flagIdEcho },
-    };
-  }
+  return verdict.correct
+    ? recordCorrect(state, runtime, target, verdict, iso, flagIdEcho)
+    : recordWrong(state, runtime, target, iso, flagIdEcho);
+}
 
-  const wrongCount = (state.wrongCounts.get(target.key) ?? 0) + 1;
-  state.wrongCounts.set(target.key, wrongCount);
-  const penalty = applyPenalty(state, target.wrongAnswerPenalty);
+/** Award a correct submission's points (metadata is authoritative for multi-verify). */
+function recordCorrect(
+  state: LocalPlayState,
+  runtime: ProblemRuntime,
+  target: SubmissionTarget,
+  verdict: VerifyResult,
+  iso: string,
+  flagIdField: { flagId?: string },
+): LocalPlayResponse {
+  runtime.solved.add(target.key);
+  const award = target.allowPointsOverride ? (verdict.points ?? target.points) : target.points;
+  runtime.score += award;
+  state.scoreEvents.unshift({
+    jobId: jobIdOf(runtime.problem.problemId),
+    problemId: runtime.problem.problemId,
+    source: "flag",
+    points: award,
+    result: "ok",
+    occurredAt: iso,
+  });
+  return {
+    status: StatusCodes.OK,
+    body: { kind: "ok", scoreDelta: award, totalScore: sessionScore(state), ...flagIdField },
+  };
+}
+
+/** Record a wrong submission and its (possibly zero) penalty. */
+function recordWrong(
+  state: LocalPlayState,
+  runtime: ProblemRuntime,
+  target: SubmissionTarget,
+  iso: string,
+  flagIdField: { flagId?: string },
+): LocalPlayResponse {
+  const wrongCount = (runtime.wrongCounts.get(target.key) ?? 0) + 1;
+  runtime.wrongCounts.set(target.key, wrongCount);
+  const penalty = applyPenalty(runtime, target.wrongAnswerPenalty);
   const scoreDelta = penalty === 0 ? 0 : -penalty;
   state.scoreEvents.unshift({
-    jobId: jobIdOf(problem.problemId),
-    problemId: problem.problemId,
+    jobId: jobIdOf(runtime.problem.problemId),
+    problemId: runtime.problem.problemId,
     source: "flag-wrong",
     points: scoreDelta,
     result: "wrong",
@@ -361,7 +408,13 @@ async function submitFlag(
   });
   return {
     status: StatusCodes.OK,
-    body: { kind: "wrong", scoreDelta, totalScore: state.score, wrongCount, ...flagIdEcho },
+    body: {
+      kind: "wrong",
+      scoreDelta,
+      totalScore: sessionScore(state),
+      wrongCount,
+      ...flagIdField,
+    },
   };
 }
 
@@ -371,7 +424,9 @@ function revealHint(
   state: LocalPlayState,
   iso: string,
 ): LocalPlayResponse {
-  const problem = state.deployment.problem;
+  const runtime = state.runtimes.get(problemId);
+  if (!runtime) return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
+  const problem = runtime.problem;
   // [#2252] multi-verify hints live per check; ids are unique across the problem
   // (enforced by the manifest) so the flat reveal route stays unambiguous.
   const allHints =
@@ -379,11 +434,11 @@ function revealHint(
       ? problem.scoring.hints
       : problem.scoring.checks.flatMap((check) => check.hints);
   const hint = allHints.find((candidate) => candidate.id === hintId);
-  if (problemId !== problem.problemId || !hint) {
+  if (!hint) {
     return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
   }
   const i18n = hint.i18n ? { i18n: hint.i18n } : {};
-  const existing = state.revealedHints.get(hint.id);
+  const existing = runtime.revealedHints.get(hint.id);
   if (existing) {
     return {
       status: StatusCodes.OK,
@@ -392,13 +447,13 @@ function revealHint(
         content: hint.content,
         ...i18n,
         penaltyApplied: 0,
-        totalScore: state.score,
+        totalScore: sessionScore(state),
         revealedAt: existing,
       },
     };
   }
-  const penalty = applyPenalty(state, hint.penalty);
-  state.revealedHints.set(hint.id, iso);
+  const penalty = applyPenalty(runtime, hint.penalty);
+  runtime.revealedHints.set(hint.id, iso);
   if (penalty > 0) {
     state.scoreEvents.unshift({
       jobId: jobIdOf(problem.problemId),
@@ -416,16 +471,17 @@ function revealHint(
       content: hint.content,
       ...i18n,
       penaltyApplied: penalty,
-      totalScore: state.score,
+      totalScore: sessionScore(state),
       revealedAt: iso,
     },
   };
 }
 
 function leaderboard(state: LocalPlayState): LocalPlayResponse {
-  // [#2252] multi-verify counts as one completed problem only when every
-  // checkpoint is solved (partial progress is score-only).
-  const { complete } = solvedProblemScore(state);
+  // [#2252/#2392] a multi-verify problem counts as complete only when every
+  // checkpoint is solved; the session may hold several problems.
+  const runtimes = [...state.runtimes.values()];
+  const completed = runtimes.filter((rt) => isProblemComplete(rt)).length;
   return {
     status: StatusCodes.OK,
     body: {
@@ -435,9 +491,9 @@ function leaderboard(state: LocalPlayState): LocalPlayResponse {
           rank: 1,
           teamId: LOCAL_CONTEXT.teamId,
           teamName: state.teamName,
-          score: state.score,
-          completedProblems: complete ? 1 : 0,
-          totalProblems: 1,
+          score: sessionScore(state),
+          completedProblems: completed,
+          totalProblems: state.runtimes.size,
           isMyTeam: true,
         },
       ],
@@ -457,7 +513,7 @@ function handleGet(
     case "/healthz":
       return {
         status: StatusCodes.OK,
-        body: { status: "ok", mode: "local", problemId: state.deployment.problem.problemId },
+        body: { status: "ok", mode: "local", problemIds: [...state.runtimes.keys()] },
       };
     case "/portal/me":
       return teamView(state, now);

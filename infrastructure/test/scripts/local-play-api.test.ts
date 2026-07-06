@@ -35,7 +35,14 @@ const PROBLEM: ContainerProblem = {
 const NOW = Date.UTC(2026, 5, 26, 0, 0, 0);
 
 function stateWith(verify: VerifyFn, teamName = "Local Player") {
-  return createLocalPlayState({ problem: PROBLEM }, { verify, teamName });
+  return createLocalPlayState({ problems: [PROBLEM] }, { verify, teamName });
+}
+
+/** The sole per-problem runtime of a single-problem session (solved / score live here now). */
+function soleRuntime(state: ReturnType<typeof createLocalPlayState>) {
+  const runtime = state.runtimes.values().next().value;
+  if (!runtime) throw new Error("no problem runtime in state");
+  return runtime;
 }
 
 function get(path: string): LocalPlayRequest {
@@ -47,22 +54,24 @@ function post(path: string, body: unknown): LocalPlayRequest {
 }
 
 describe("isLocalApiHealthy", () => {
-  const healthy = { status: "ok", mode: "local", problemId: "sqli-demo" };
+  const healthy = { status: "ok", mode: "local", problemIds: ["sqli-demo", "api-idor-demo"] };
 
-  it("should accept this instance's own healthz payload for the expected problem", () => {
-    expect(isLocalApiHealthy(healthy, "sqli-demo")).toBe(true);
+  it("should accept a session that serves every expected problem", () => {
+    expect(isLocalApiHealthy(healthy, ["sqli-demo"])).toBe(true);
+    expect(isLocalApiHealthy(healthy, ["sqli-demo", "api-idor-demo"])).toBe(true);
   });
 
-  it("should reject a foreign server (different problem / mode) on the same port", () => {
-    expect(isLocalApiHealthy({ ...healthy, problemId: "other" }, "sqli-demo")).toBe(false);
-    expect(isLocalApiHealthy({ ...healthy, mode: "localstack" }, "sqli-demo")).toBe(false);
-    expect(isLocalApiHealthy({ status: "ok", mode: "local" }, "sqli-demo")).toBe(false);
+  it("should reject a foreign server (missing problem / wrong mode) on the same port", () => {
+    // a session that does not serve one of the expected ids
+    expect(isLocalApiHealthy(healthy, ["sqli-demo", "other"])).toBe(false);
+    expect(isLocalApiHealthy({ ...healthy, mode: "localstack" }, ["sqli-demo"])).toBe(false);
+    expect(isLocalApiHealthy({ status: "ok", mode: "local" }, ["sqli-demo"])).toBe(false);
   });
 
   it("should reject non-object or empty payloads", () => {
-    expect(isLocalApiHealthy(null, "sqli-demo")).toBe(false);
-    expect(isLocalApiHealthy("ok", "sqli-demo")).toBe(false);
-    expect(isLocalApiHealthy({}, "sqli-demo")).toBe(false);
+    expect(isLocalApiHealthy(null, ["sqli-demo"])).toBe(false);
+    expect(isLocalApiHealthy("ok", ["sqli-demo"])).toBe(false);
+    expect(isLocalApiHealthy({}, ["sqli-demo"])).toBe(false);
   });
 });
 
@@ -73,7 +82,7 @@ describe("local-play API", () => {
 
   it("should report healthz as our local instance", async () => {
     const res = await handleLocalPlayRequest(get("/healthz"), stateWith(neverVerify), NOW);
-    expect(res.body).toEqual({ status: "ok", mode: "local", problemId: "sqli-demo" });
+    expect(res.body).toEqual({ status: "ok", mode: "local", problemIds: ["sqli-demo"] });
   });
 
   it("should serve the team view with challenge endpoints and a flag-kind scoring panel", async () => {
@@ -110,7 +119,7 @@ describe("local-play API", () => {
       ...PROBLEM,
       scoring: { ...PROBLEM.scoring, hintReveal: "flat" } as ContainerProblem["scoring"],
     };
-    const state = createLocalPlayState({ problem: flatProblem }, { verify: neverVerify });
+    const state = createLocalPlayState({ problems: [flatProblem] }, { verify: neverVerify });
     const res = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
     const problem = (res.body as { problems: Array<{ scoring: Record<string, unknown> }> })
       .problems[0];
@@ -130,7 +139,7 @@ describe("local-play API", () => {
       problemId: "sqli-demo",
     });
     expect(res.body).toEqual({ kind: "ok", scoreDelta: 200, totalScore: 200 });
-    expect(state.solved.has("sqli-demo")).toBe(true);
+    expect(soleRuntime(state).solved.has("sqli-demo")).toBe(true);
     expect(state.scoreEvents[0]).toMatchObject({ source: "flag", points: 200, result: "ok" });
 
     const team = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
@@ -155,7 +164,7 @@ describe("local-play API", () => {
 
   it("should record a wrong submission with a penalty", async () => {
     const state = stateWith(async () => ({ correct: false }));
-    state.score = 50;
+    soleRuntime(state).score = 50;
     const res = await handleLocalPlayRequest(
       post("/portal/me/submit-flag", { problemId: "sqli-demo", flag: "wrong" }),
       state,
@@ -204,27 +213,27 @@ describe("local-play API", () => {
     );
     expect(res.status).toBe(502);
     expect(res.body).toMatchObject({ error: "verify_unavailable" });
-    expect(state.solved.size).toBe(0);
+    expect(soleRuntime(state).solved.size).toBe(0);
     expect(state.scoreEvents).toHaveLength(0);
   });
 
   it("should reveal a hint and apply its penalty once", async () => {
     const state = stateWith(neverVerify);
-    state.score = 100;
+    soleRuntime(state).score = 100;
     const first = await handleLocalPlayRequest(
       post("/portal/me/problems/sqli-demo/hints/hint-2/reveal", {}),
       state,
       NOW,
     );
     expect(first.body).toMatchObject({ kind: "ok", content: "Use OR 1=1.", penaltyApplied: 25 });
-    expect(state.score).toBe(75);
+    expect(soleRuntime(state).score).toBe(75);
     const second = await handleLocalPlayRequest(
       post("/portal/me/problems/sqli-demo/hints/hint-2/reveal", {}),
       state,
       NOW,
     );
     expect(second.body).toMatchObject({ kind: "already_revealed", penaltyApplied: 0 });
-    expect(state.score).toBe(75);
+    expect(soleRuntime(state).score).toBe(75);
   });
 
   it("should charge a hint penalty in full even at score 0 (no free hints)", async () => {
@@ -235,7 +244,7 @@ describe("local-play API", () => {
       NOW,
     );
     expect(res.body).toMatchObject({ kind: "ok", penaltyApplied: 25 });
-    expect(state.score).toBe(-25);
+    expect(soleRuntime(state).score).toBe(-25);
   });
 
   it("should treat a malformed percent-escaped hint path as unknown (404, not 500)", async () => {
@@ -275,7 +284,7 @@ describe("local-play API", () => {
         ],
       },
     };
-    const state = createLocalPlayState({ problem }, { verify: neverVerify });
+    const state = createLocalPlayState({ problems: [problem] }, { verify: neverVerify });
     const before = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
     const beforeProblem = (before.body as { problems: Array<Record<string, unknown>> }).problems[0];
     expect(beforeProblem.i18n).toEqual({
@@ -402,7 +411,7 @@ describe("local-play API: multi-verify (issue #2252)", () => {
   };
 
   function multiState(verify: VerifyFn) {
-    return createLocalPlayState({ problem: MULTI_PROBLEM }, { verify });
+    return createLocalPlayState({ problems: [MULTI_PROBLEM] }, { verify });
   }
 
   const submit = (flagId: string | undefined, flag = "TC{x}") =>
@@ -439,7 +448,7 @@ describe("local-play API: multi-verify (issue #2252)", () => {
       ...MULTI_PROBLEM,
       scoring: { ...MULTI_PROBLEM.scoring, hintReveal: "flat" } as ContainerProblem["scoring"],
     };
-    const state = createLocalPlayState({ problem: flatProblem }, { verify: vi.fn() });
+    const state = createLocalPlayState({ problems: [flatProblem] }, { verify: vi.fn() });
     const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
     const problem = (view.body as { problems: Array<Record<string, unknown>> }).problems[0];
     expect(problem.scoring).toMatchObject({ kind: "multi-flag", hintReveal: "flat" });
@@ -481,7 +490,7 @@ describe("local-play API: multi-verify (issue #2252)", () => {
       flagId: "public-backup",
     });
     expect(verify).toHaveBeenCalledTimes(1);
-    expect(state.score).toBe(50);
+    expect(soleRuntime(state).score).toBe(50);
   });
 
   it("should apply the per-check wrong-answer penalty and count wrongs per check", async () => {
@@ -565,5 +574,93 @@ describe("local-play API: multi-verify (issue #2252)", () => {
       penaltyApplied: 2,
       totalScore: -2,
     });
+  });
+});
+
+describe("local-play API: multi-problem session (#2392)", () => {
+  const second: ContainerProblem = {
+    ...PROBLEM,
+    problemId: "api-idor-demo",
+    name: "IDOR Demo",
+    challengeEndpoints: { Web: "http://127.0.0.1:18180/" },
+    verifyUrl: "http://127.0.0.1:18181/verify",
+    scoring: {
+      kind: "verify",
+      points: 100,
+      wrongAnswerPenalty: 5,
+      hints: [{ id: "idor-1", content: "swap the id", penalty: 10 }],
+    },
+  };
+  const twoProblems = (verify: VerifyFn) =>
+    createLocalPlayState({ problems: [PROBLEM, second] }, { verify });
+
+  it("should list both problems in healthz and the team view (display order)", async () => {
+    const state = twoProblems(async () => ({ correct: false }));
+    const health = await handleLocalPlayRequest(get("/healthz"), state, NOW);
+    expect(health.body).toEqual({
+      status: "ok",
+      mode: "local",
+      problemIds: ["sqli-demo", "api-idor-demo"],
+    });
+    const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const ids = (view.body as { problems: Array<{ problemId: string }> }).problems.map(
+      (p) => p.problemId,
+    );
+    expect(ids).toEqual(["sqli-demo", "api-idor-demo"]);
+  });
+
+  it("should route a submission to the addressed problem and total across the session", async () => {
+    // The container only 'verifies' for the second problem's /verify url.
+    const verify = vi.fn<VerifyFn>(async (url) => ({ correct: url.includes("18181") }));
+    const state = twoProblems(verify);
+    const res = await handleLocalPlayRequest(
+      post("/portal/me/submit-flag", { problemId: "api-idor-demo", flag: "TC{x}" }),
+      state,
+      NOW,
+    );
+    expect(res.body).toMatchObject({ kind: "ok", scoreDelta: 100, totalScore: 100 });
+    expect(verify).toHaveBeenCalledWith("http://127.0.0.1:18181/verify", "TC{x}", {
+      teamId: "local",
+      problemId: "api-idor-demo",
+    });
+    // The first problem is untouched; the total is the session sum.
+    const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const problems = (view.body as { problems: Array<{ problemId: string; score: number }> })
+      .problems;
+    expect(problems[0]).toMatchObject({ problemId: "sqli-demo", score: 0 });
+    expect(problems[1]).toMatchObject({ problemId: "api-idor-demo", score: 100 });
+  });
+
+  it("should route a hint reveal by problemId and reject a hint from another problem", async () => {
+    const state = twoProblems(async () => ({ correct: false }));
+    const ok = await handleLocalPlayRequest(
+      post("/portal/me/problems/api-idor-demo/hints/idor-1/reveal", {}),
+      state,
+      NOW,
+    );
+    expect(ok.body).toMatchObject({ kind: "ok", penaltyApplied: 10, totalScore: -10 });
+    // idor-1 belongs to api-idor-demo; addressing it under sqli-demo is unknown.
+    const wrong = await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/hints/idor-1/reveal", {}),
+      state,
+      NOW,
+    );
+    expect(wrong.status).toBe(404);
+  });
+
+  it("should count completed problems and the session score in the leaderboard", async () => {
+    const state = twoProblems(async () => ({ correct: true }));
+    await handleLocalPlayRequest(
+      post("/portal/me/submit-flag", { problemId: "sqli-demo", flag: "TC{x}" }),
+      state,
+      NOW,
+    );
+    const lb = await handleLocalPlayRequest(get("/portal/leaderboard"), state, NOW);
+    const entry = (
+      lb.body as {
+        entries: Array<{ score: number; completedProblems: number; totalProblems: number }>;
+      }
+    ).entries[0];
+    expect(entry).toMatchObject({ score: 200, completedProblems: 1, totalProblems: 2 });
   });
 });
