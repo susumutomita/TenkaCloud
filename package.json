@@ -34,7 +34,7 @@
   "author": "Susumu Tomita (https://susumutomita.netlify.app/)",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
+    "@biomejs/biome": "^2.5.2",
     "@textlint-ja/textlint-rule-preset-ai-writing": "^1.7.0",
     "@vitest/coverage-v8": "^4.1.9",
     "husky": "^9.1.7",
