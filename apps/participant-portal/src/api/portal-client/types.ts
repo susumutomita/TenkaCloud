@@ -12,6 +12,9 @@
 export {
   type ApplicationStatus,
   type ApplicationStatusOverall,
+  type AttackProbeOutcome,
+  type AttackProbeResult,
+  type AttackProbeStatus,
   type DeploymentLogEntry,
   type DeploymentLogView,
   type DeploymentStatus,

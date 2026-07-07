@@ -1,5 +1,7 @@
+import type { AttackProbeResult } from "@tenkacloud/portal-contracts";
 import { resolveDefaultUrl } from "../../../../utils/endpoints-metadata.js";
 import type { UptimeMultiScoringMetadata } from "../../../../utils/scoring-metadata.js";
+import { serializeAttackProbeStatus } from "../../shared/attack-probe-status.js";
 import { parseStackOutputs } from "../../shared/cfn-status.js";
 import {
   computeSince,
@@ -68,27 +70,47 @@ async function computeAttackBlockedBonus(
 }
 
 /**
- * [ADR-034 / #1666] optional attack-probes: send each attack payload and sum the penalty for every
- * probe whose response status lands in `vulnerableStatus` (= the defense was breached). Unresolved /
- * unreachable slots are not penalized (availability is judged by probedSlots, separately).
+ * [ADR-034 / #1666, Issue #2422] optional attack-probes: send each attack payload and classify the
+ * per-probe outcome for this cycle. A probe whose response status lands in `vulnerableStatus` is
+ * `landed` (= defense breached → `penalty` applied); a resolvable probe that returns any other
+ * status is `blocked` (= defense held, no penalty); an unresolved / unreachable probe is `skipped`
+ * (availability is judged by probedSlots, separately, so we don't penalize or claim a block).
+ *
+ * `totalPenalty` sums only `landed` probes (= identical scoring to the pre-#2422 penalty). The
+ * `outcomes` feed the participant portal so a green-but-unpatched defender sees which probe still
+ * lands. Non-spoiler: only the author-provided `label` / `symptom` cross the boundary — never the
+ * probe's slot / path.
  */
-async function computeAttackPenalty(
+async function computeAttackProbeOutcomes(
   attackProbes: UptimeMultiScoringMetadata["attackProbes"],
   resolve: SlotResolver,
-): Promise<number> {
-  if (!attackProbes || attackProbes.length === 0) return 0;
-  const vulnerable = await Promise.all(
-    attackProbes.map(async (ap) => {
+): Promise<{ readonly totalPenalty: number; readonly outcomes: readonly AttackProbeResult[] }> {
+  if (!attackProbes || attackProbes.length === 0) return { totalPenalty: 0, outcomes: [] };
+  const outcomes = await Promise.all(
+    attackProbes.map(async (ap): Promise<AttackProbeResult> => {
+      const display = {
+        penalty: ap.penalty,
+        ...(ap.label ? { label: ap.label } : {}),
+        ...(ap.symptom ? { symptom: ap.symptom } : {}),
+      } as const;
       const base = resolve(ap.slot);
-      if (!base) return false;
+      if (!base) return { ...display, outcome: "skipped" };
       const probe = await probeUrl(joinUrl(base, ap.path), {
         ...(ap.method ? { method: ap.method } : {}),
         ...(ap.body !== undefined ? { body: ap.body } : {}),
       });
-      return probe.status !== undefined && ap.vulnerableStatus.includes(probe.status);
+      if (probe.status === undefined) return { ...display, outcome: "skipped" };
+      return {
+        ...display,
+        outcome: ap.vulnerableStatus.includes(probe.status) ? "landed" : "blocked",
+      };
     }),
   );
-  return attackProbes.reduce((sum, ap, i) => (vulnerable[i] ? sum + ap.penalty : sum), 0);
+  const totalPenalty = outcomes.reduce(
+    (sum, o) => (o.outcome === "landed" ? sum + o.penalty : sum),
+    0,
+  );
+  return { totalPenalty, outcomes };
 }
 
 /** Build the score-event ledger entries for this cycle. */
@@ -166,7 +188,8 @@ export async function runUptimeMultiKind(
     prevState.attackCount,
   );
 
-  const attackPenalty = await computeAttackPenalty(scoring.attackProbes, resolveSlotBaseUrl);
+  const { totalPenalty: attackPenalty, outcomes: attackOutcomes } =
+    await computeAttackProbeOutcomes(scoring.attackProbes, resolveSlotBaseUrl);
 
   const scoreDelta = baseDelta + bonusPoints - attackPenalty;
   const scoreEvents = buildScoreEvents(
@@ -176,10 +199,17 @@ export async function runUptimeMultiKind(
     attackPenalty,
     nowIso,
   );
+  // [#2422] attackProbes を持つ問題だけ、 直近サイクルの per-probe snapshot を書く
+  // (= 他 kind / 旧行は列を持たず後方互換)。 defender が「どの probe がまだ刺さっているか」を見る。
+  const attackProbesJson =
+    attackOutcomes.length > 0
+      ? serializeAttackProbeStatus({ checkedAt: nowIso, probes: attackOutcomes })
+      : undefined;
   return {
     scoreDelta,
     scoreEvents,
     endpointsHealthJson: JSON.stringify(newHealth),
+    ...(attackProbesJson !== undefined ? { attackProbesJson } : {}),
     lastResult: allOk ? "ok" : "fail",
     ...(attackDetected || attackPenalty > 0 ? { attackDetected: true } : {}),
     ...(bonusState ? { newState: bonusState } : {}),

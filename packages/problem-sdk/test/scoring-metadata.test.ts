@@ -231,6 +231,48 @@ describe("parseScoringMetadata: uptime-multi", () => {
     expect(result && "attackProbes" in result && result.attackProbes).toHaveLength(1);
   });
 
+  it("[#2422] should parse the optional non-spoiler label / symptom on an attack-probe", () => {
+    const result = parseScoringMetadata({
+      kind: "uptime-multi",
+      pointsAllOk: 50,
+      probedSlots: [{ slot: "web", path: "/health", expectStatus: [200] }],
+      attackProbes: [
+        {
+          slot: "web",
+          path: "/sqli",
+          vulnerableStatus: [200],
+          penalty: 5,
+          label: "  SQLi auth-bypass probe  ",
+          symptom: "  still returns 200 to the crafted login  ",
+        },
+      ],
+    });
+    const probe = result?.kind === "uptime-multi" ? result.attackProbes?.[0] : undefined;
+    expect(probe?.label).toBe("SQLi auth-bypass probe"); // trimmed
+    expect(probe?.symptom).toBe("still returns 200 to the crafted login"); // trimmed
+  });
+
+  it("[#2422] should drop a blank label / symptom and cap over-long values", () => {
+    const result = parseScoringMetadata({
+      kind: "uptime-multi",
+      pointsAllOk: 50,
+      probedSlots: [{ slot: "web", path: "/health", expectStatus: [200] }],
+      attackProbes: [
+        {
+          slot: "web",
+          path: "/sqli",
+          vulnerableStatus: [200],
+          penalty: 5,
+          label: "   ", // blank → dropped
+          symptom: "s".repeat(200), // capped at 160
+        },
+      ],
+    });
+    const probe = result?.kind === "uptime-multi" ? result.attackProbes?.[0] : undefined;
+    expect(probe && "label" in probe).toBe(false);
+    expect(probe?.symptom).toHaveLength(160);
+  });
+
   it("should reject empty probedSlots or non-positive points and drop a bad attack section", () => {
     expect(
       parseScoringMetadata({ kind: "uptime-multi", pointsAllOk: 50, probedSlots: [] }),

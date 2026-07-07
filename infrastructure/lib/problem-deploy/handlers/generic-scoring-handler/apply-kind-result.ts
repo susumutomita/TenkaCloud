@@ -55,6 +55,12 @@ export function buildKindResultUpdate(
     setParts.push("endpointsHealth = :health");
     values[":health"] = result.endpointsHealthJson;
   }
+  // [#2422] uptime-multi の直近サイクル attack-probe snapshot。 endpointsHealth と同型で、
+  // present な kind (= attackProbes 設定あり) のときだけ書く (= 他 kind / 旧行は列を持たない)。
+  if (result.attackProbesJson !== undefined) {
+    setParts.push("attackProbes = :attackProbes");
+    values[":attackProbes"] = result.attackProbesJson;
+  }
   if (result.postureJson !== undefined) {
     setParts.push("posture = :posture");
     values[":posture"] = result.postureJson;

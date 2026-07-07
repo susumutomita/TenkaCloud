@@ -2,6 +2,8 @@ import type { StatusIndicatorProps } from "@cloudscape-design/components/status-
 import {
   type ApplicationStatus,
   type ApplicationStatusOverall,
+  type AttackProbeOutcome,
+  type AttackProbeResult,
   type ParticipantHintView,
   type ParticipantProblemView,
   PortalScoringGateError,
@@ -37,6 +39,73 @@ export function describeApplicationStatus(
       healthy: status.healthyCount,
       total: status.totalCount,
     }),
+  };
+}
+
+/**
+ * Issue #2422: 1 attack-probe の直近サイクルの結果を StatusIndicator + 人間可読ラベルに変換する。
+ * defender は「green (200) なのに満点にならない理由」= まだ刺さっている probe を、 正確な endpoint /
+ * 脆弱性クラスを知らずとも「landed → -N pt このサイクル」という形で把握できる (非スポイラー)。
+ *
+ *   - landed  → error   「−penalty pt (このサイクル)」= 脆弱、 まだ刺さっている
+ *   - blocked → success 「防御成功 (0 pt)」= 防げている
+ *   - skipped → pending 「判定不能」= slot 未解決 / 到達不能 (可用性は別途)
+ *
+ * `label` / `symptom` は問題側 metadata が明示した非スポイラー文言のみ。 label 不在なら index で採番。
+ */
+const ATTACK_PROBE_INDICATOR: Record<AttackProbeOutcome, StatusIndicatorProps.Type> = {
+  landed: "error",
+  blocked: "success",
+  skipped: "pending",
+};
+
+export interface AttackProbeRow {
+  readonly type: StatusIndicatorProps.Type;
+  readonly name: string;
+  readonly outcomeLabel: string;
+  readonly symptom?: string;
+}
+
+export function describeAttackProbe(
+  probe: AttackProbeResult,
+  index: number,
+  t: ProblemPanelT,
+): AttackProbeRow {
+  const name = probe.label?.trim()
+    ? probe.label
+    : t("problem_panel.attack_probe_default_name", {
+        index: index + 1,
+      });
+  const delta = probe.outcome === "landed" ? -probe.penalty : 0;
+  return {
+    type: ATTACK_PROBE_INDICATOR[probe.outcome],
+    name,
+    outcomeLabel: t(`problem_panel.attack_probe_${probe.outcome}`, {
+      penalty: probe.penalty,
+      delta,
+    }),
+    ...(probe.symptom?.trim() ? { symptom: probe.symptom } : {}),
+  };
+}
+
+/**
+ * Issue #2422: 攻撃 probe の集約要約。 landed が 1 つでもあれば warning (= 減点中) を、 全て
+ * blocked/skipped なら success 寄りの中立を返し、 セクション見出しの StatusIndicator に使う。
+ */
+export function summarizeAttackProbes(
+  probes: readonly AttackProbeResult[],
+  t: ProblemPanelT,
+): { readonly type: StatusIndicatorProps.Type; readonly label: string } {
+  const landed = probes.filter((p) => p.outcome === "landed").length;
+  if (landed > 0) {
+    return {
+      type: "warning",
+      label: t("problem_panel.attack_probe_summary_landed", { landed, total: probes.length }),
+    };
+  }
+  return {
+    type: "success",
+    label: t("problem_panel.attack_probe_summary_clear", { total: probes.length }),
   };
 }
 

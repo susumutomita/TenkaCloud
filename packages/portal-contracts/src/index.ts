@@ -142,6 +142,39 @@ export interface ApplicationStatus {
   readonly checkedAt?: string;
 }
 
+/**
+ * Issue #2422: 1 attack-probe の直近サイクルの結果。
+ *   - `"landed"`  — 攻撃 probe が刺さり、 このサイクルで penalty が減点された (= 脆弱)
+ *   - `"blocked"` — probe は撃たれたが防御が持ちこたえ、 減点なし (= 防御成功)
+ *   - `"skipped"` — slot 未解決 / 到達不能で判定不能 (= 減点なし。 可用性は別途 applicationStatus)
+ *
+ * 非スポイラー不変条件 (ADR-005 D1 / AGENTS.md §10): probe の `slot` / `path` (= 正確な
+ * endpoint) や脆弱性クラスは **絶対に含めない**。 出せるのは問題側 metadata が明示的に開示した
+ * `label` / `symptom` (author が書いた非スポイラー文言) と、 減点量 (`penalty`) のみ。
+ */
+export type AttackProbeOutcome = "landed" | "blocked" | "skipped";
+
+export interface AttackProbeResult {
+  /** 問題 metadata が開示した非スポイラーな probe 名 (未設定なら UI が index で採番)。 */
+  readonly label?: string;
+  /** 問題 metadata が開示した非スポイラーな症状文言 (脆弱性クラス・endpoint は含めない)。 */
+  readonly symptom?: string;
+  readonly outcome: AttackProbeOutcome;
+  /** この probe が landed のときに減点される points (> 0)。 delta = landed ? -penalty : 0。 */
+  readonly penalty: number;
+}
+
+/**
+ * Issue #2422: uptime-multi Battle の直近サイクルの attack-probe 集約。 defender が
+ * 「green (200) なのに満点にならない理由」 (= まだ刺さっている probe) を可視化する。
+ * attackProbes 未設定の問題 / 旧 deployment 行では undefined。
+ */
+export interface AttackProbeStatus {
+  /** 最後に attack-probe を撃った時刻 (ISO 8601)。 */
+  readonly checkedAt?: string;
+  readonly probes: readonly AttackProbeResult[];
+}
+
 export interface DeploymentLogEntry {
   readonly id: string;
   readonly timestamp: string;
@@ -253,6 +286,12 @@ export interface ParticipantProblemView {
   readonly createdAt?: string;
   /** ADR-005 Phase 3.1: Battle (uptime) のみ aggregate health を露出。 */
   readonly applicationStatus?: ApplicationStatus;
+  /**
+   * Issue #2422: uptime-multi Battle の直近サイクルの attack-probe 結果 (= 「green なのに
+   * 満点でない理由」)。 attackProbes を持つ問題でのみ present、 それ以外は undefined。
+   * per-endpoint URL / 脆弱性クラスは含めず、 問題側が開示した label / symptom のみ。
+   */
+  readonly attackProbeStatus?: AttackProbeStatus;
 }
 
 /**
