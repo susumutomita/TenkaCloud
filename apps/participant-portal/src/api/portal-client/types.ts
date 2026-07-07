@@ -33,7 +33,19 @@ export {
   TERMINAL_STATUSES,
 } from "@tenkacloud/portal-contracts";
 
-import type { DeploymentLogEntry } from "@tenkacloud/portal-contracts";
+import type { DeploymentLogEntry, ParticipantProblemView } from "@tenkacloud/portal-contracts";
+
+/**
+ * [#2392 Phase 2] local-play on-demand container lifecycle。 `lifecycle` は
+ * `ParticipantProblemView` の optional field (不在 = AWS mode = 常時 running 扱い)。
+ * union を手写しせず contract から導出する (= drift を typecheck で検出)。
+ */
+export type ProblemLifecycleStatus = NonNullable<ParticipantProblemView["lifecycle"]>["status"];
+
+/** `POST /portal/me/problems/:id/start` / `.../stop` の応答 body。 */
+export interface ProblemLifecycleActionResponse {
+  readonly status: ProblemLifecycleStatus;
+}
 
 export interface DeployLogsResponse {
   readonly jobId: string;

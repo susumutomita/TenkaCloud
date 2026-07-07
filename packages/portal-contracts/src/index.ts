@@ -212,6 +212,13 @@ export interface ParticipantProblemView {
    * displayed text via `localizeProblem`. Absent when no translation is shipped.
    */
   readonly i18n?: { readonly en?: ProblemTextI18n };
+  /**
+   * [#2392 Phase 2] local-play on-demand container status. The warm local
+   * session serves the whole catalog, so a problem is `stopped` until started.
+   * AWS mode never sends it (no per-competitor container lifecycle); absent is
+   * treated as `running` (backward compat with the pre-Phase-2 wire).
+   */
+  readonly lifecycle?: { readonly status: "stopped" | "starting" | "running" | "error" };
   readonly region: string;
   /** 競技アカウント ID。 SSO Credentials の AWS Console federation で使う。
    *  (機密ではない — IAM role 信頼ポリシーや CFn template にも露出する。) */

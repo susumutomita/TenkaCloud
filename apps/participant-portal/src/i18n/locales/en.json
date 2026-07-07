@@ -367,7 +367,18 @@
     "hint_predecessor_required": "Reveal Hint {index} first.",
     "hint_predecessor_required_aria": "Reveal Hint {index} first before unlocking this one.",
     "hint_out_of_order_error": "Reveal Hint {index} first before this one.",
-    "prerequisite_locked_error": "Complete the prerequisite (gate) challenge first to start this problem."
+    "prerequisite_locked_error": "Complete the prerequisite (gate) challenge first to start this problem.",
+    "lifecycle_running": "Running",
+    "lifecycle_stopped": "Stopped",
+    "lifecycle_starting": "Starting…",
+    "lifecycle_error": "Error",
+    "lifecycle_start_button": "Start",
+    "lifecycle_stop_button": "Stop",
+    "lifecycle_stopped_body": "This problem's container is not running. Start it to bring up the challenge endpoints and submit flags.",
+    "lifecycle_running_body": "The container is running. Stop it when you're done to free local resources — your score is kept.",
+    "lifecycle_error_header": "Container error",
+    "lifecycle_error_body": "The problem container hit an error. Start it again to retry.",
+    "lifecycle_action_failed_header": "Container operation failed"
   },
   "multi_flag": {
     "progress_header": "Flags solved: {solved} / {total}",

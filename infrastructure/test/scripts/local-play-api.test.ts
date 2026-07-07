@@ -34,8 +34,11 @@ const PROBLEM: ContainerProblem = {
 
 const NOW = Date.UTC(2026, 5, 26, 0, 0, 0);
 
-function stateWith(verify: VerifyFn, teamName = "Local Player") {
-  return createLocalPlayState({ problems: [PROBLEM] }, { verify, teamName });
+/** A single-problem session with the problem already running (on-demand start, fake docker). */
+async function stateWith(verify: VerifyFn, teamName = "Local Player") {
+  const state = createLocalPlayState({ problems: [PROBLEM] }, { verify, teamName });
+  await state.lifecycle.ensureRunning(PROBLEM.problemId);
+  return state;
 }
 
 /** The sole per-problem runtime of a single-problem session (solved / score live here now). */
@@ -81,18 +84,19 @@ describe("local-play API", () => {
   };
 
   it("should report healthz as our local instance", async () => {
-    const res = await handleLocalPlayRequest(get("/healthz"), stateWith(neverVerify), NOW);
+    const res = await handleLocalPlayRequest(get("/healthz"), await stateWith(neverVerify), NOW);
     expect(res.body).toEqual({ status: "ok", mode: "local", problemIds: ["sqli-demo"] });
   });
 
   it("should serve the team view with challenge endpoints and a flag-kind scoring panel", async () => {
-    const res = await handleLocalPlayRequest(get("/portal/me"), stateWith(neverVerify), NOW);
+    const res = await handleLocalPlayRequest(get("/portal/me"), await stateWith(neverVerify), NOW);
     const body = res.body as {
       team: { teamName: string };
       problems: Array<{
         problemId: string;
         instructions: string;
         stackOutputs: Record<string, string>;
+        lifecycle: { status: string };
         scoring: { kind: string; points: number; flagSubmitted: boolean; hints: unknown[] };
         score: number;
       }>;
@@ -103,6 +107,7 @@ describe("local-play API", () => {
     const problem = body.problems[0];
     expect(problem.problemId).toBe("sqli-demo");
     expect(problem.instructions).toBe("Bypass the login and read the flag.");
+    expect(problem.lifecycle).toEqual({ status: "running" });
     expect(problem.stackOutputs).toEqual({ Web: "http://127.0.0.1:18080/" });
     expect(problem.scoring.kind).toBe("flag");
     expect(problem.scoring.flagSubmitted).toBe(false);
@@ -128,7 +133,7 @@ describe("local-play API", () => {
 
   it("should delegate a correct submission to /verify and award the manifest points", async () => {
     const verify = vi.fn<VerifyFn>(async () => ({ correct: true }));
-    const state = stateWith(verify);
+    const state = await stateWith(verify);
     const res = await handleLocalPlayRequest(
       post("/portal/me/submit-flag", { problemId: "sqli-demo", flag: "TC{x}" }),
       state,
@@ -153,7 +158,7 @@ describe("local-play API", () => {
   });
 
   it("should honor a points override returned by /verify", async () => {
-    const state = stateWith(async () => ({ correct: true, points: 120 }));
+    const state = await stateWith(async () => ({ correct: true, points: 120 }));
     const res = await handleLocalPlayRequest(
       post("/portal/me/submit-flag", { problemId: "sqli-demo", flag: "TC{x}" }),
       state,
@@ -163,7 +168,7 @@ describe("local-play API", () => {
   });
 
   it("should record a wrong submission with a penalty", async () => {
-    const state = stateWith(async () => ({ correct: false }));
+    const state = await stateWith(async () => ({ correct: false }));
     soleRuntime(state).score = 50;
     const res = await handleLocalPlayRequest(
       post("/portal/me/submit-flag", { problemId: "sqli-demo", flag: "wrong" }),
@@ -175,7 +180,7 @@ describe("local-play API", () => {
   });
 
   it("should be idempotent once solved", async () => {
-    const state = stateWith(async () => ({ correct: true }));
+    const state = await stateWith(async () => ({ correct: true }));
     await handleLocalPlayRequest(
       post("/portal/me/submit-flag", { problemId: "sqli-demo", flag: "TC{x}" }),
       state,
@@ -191,7 +196,7 @@ describe("local-play API", () => {
 
   it("should reject a malformed submission without calling /verify", async () => {
     const verify = vi.fn<VerifyFn>(async () => ({ correct: true }));
-    const state = stateWith(verify);
+    const state = await stateWith(verify);
     const res = await handleLocalPlayRequest(
       post("/portal/me/submit-flag", { problemId: "other", flag: "x" }),
       state,
@@ -203,7 +208,7 @@ describe("local-play API", () => {
   });
 
   it("should fail loudly (502) when /verify is unavailable, without scoring", async () => {
-    const state = stateWith(async () => {
+    const state = await stateWith(async () => {
       throw new Error("ECONNREFUSED");
     });
     const res = await handleLocalPlayRequest(
@@ -218,7 +223,7 @@ describe("local-play API", () => {
   });
 
   it("should reveal a hint and apply its penalty once", async () => {
-    const state = stateWith(neverVerify);
+    const state = await stateWith(neverVerify);
     soleRuntime(state).score = 100;
     const first = await handleLocalPlayRequest(
       post("/portal/me/problems/sqli-demo/hints/hint-2/reveal", {}),
@@ -237,7 +242,7 @@ describe("local-play API", () => {
   });
 
   it("should charge a hint penalty in full even at score 0 (no free hints)", async () => {
-    const state = stateWith(neverVerify); // score starts at 0
+    const state = await stateWith(neverVerify); // score starts at 0
     const res = await handleLocalPlayRequest(
       post("/portal/me/problems/sqli-demo/hints/hint-2/reveal", {}),
       state,
@@ -250,7 +255,7 @@ describe("local-play API", () => {
   it("should treat a malformed percent-escaped hint path as unknown (404, not 500)", async () => {
     const res = await handleLocalPlayRequest(
       post("/portal/me/problems/sqli-demo/hints/%/reveal", {}),
-      stateWith(neverVerify),
+      await stateWith(neverVerify),
       NOW,
     );
     expect(res.status).toBe(404);
@@ -260,7 +265,7 @@ describe("local-play API", () => {
   it("should 404 an unknown hint", async () => {
     const res = await handleLocalPlayRequest(
       post("/portal/me/problems/sqli-demo/hints/nope/reveal", {}),
-      stateWith(neverVerify),
+      await stateWith(neverVerify),
       NOW,
     );
     expect(res.status).toBe(404);
@@ -285,6 +290,7 @@ describe("local-play API", () => {
       },
     };
     const state = createLocalPlayState({ problems: [problem] }, { verify: neverVerify });
+    await state.lifecycle.ensureRunning(problem.problemId);
     const before = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
     const beforeProblem = (before.body as { problems: Array<Record<string, unknown>> }).problems[0];
     expect(beforeProblem.i18n).toEqual({
@@ -328,13 +334,13 @@ describe("local-play API", () => {
   });
 
   it("should omit i18n from the team view when the problem ships no translation", async () => {
-    const res = await handleLocalPlayRequest(get("/portal/me"), stateWith(neverVerify), NOW);
+    const res = await handleLocalPlayRequest(get("/portal/me"), await stateWith(neverVerify), NOW);
     const problem = (res.body as { problems: Array<Record<string, unknown>> }).problems[0];
     expect(problem).not.toHaveProperty("i18n");
   });
 
   it("should expose a single-team leaderboard reflecting the score", async () => {
-    const state = stateWith(async () => ({ correct: true }));
+    const state = await stateWith(async () => ({ correct: true }));
     await handleLocalPlayRequest(
       post("/portal/me/submit-flag", { problemId: "sqli-demo", flag: "TC{x}" }),
       state,
@@ -347,7 +353,7 @@ describe("local-play API", () => {
   });
 
   it("should rename the team and reject an empty name", async () => {
-    const state = stateWith(neverVerify);
+    const state = await stateWith(neverVerify);
     const ok = await handleLocalPlayRequest(
       { method: "PATCH", path: "/portal/me", query: {}, body: { teamName: "  Red  " } },
       state,
@@ -363,7 +369,7 @@ describe("local-play API", () => {
   });
 
   it("should serve score events, notifications, deploy-logs and 404 unknown routes", async () => {
-    const state = stateWith(neverVerify);
+    const state = await stateWith(neverVerify);
     expect((await handleLocalPlayRequest(get("/portal/me/score-events"), state, NOW)).body).toEqual(
       {
         entries: [],
@@ -410,8 +416,10 @@ describe("local-play API: multi-verify (issue #2252)", () => {
     },
   };
 
-  function multiState(verify: VerifyFn) {
-    return createLocalPlayState({ problems: [MULTI_PROBLEM] }, { verify });
+  async function multiState(verify: VerifyFn) {
+    const state = createLocalPlayState({ problems: [MULTI_PROBLEM] }, { verify });
+    await state.lifecycle.ensureRunning(MULTI_PROBLEM.problemId);
+    return state;
   }
 
   const submit = (flagId: string | undefined, flag = "TC{x}") =>
@@ -422,7 +430,7 @@ describe("local-play API: multi-verify (issue #2252)", () => {
     });
 
   it("should render the multi-flag view: totals, per-check entries, gated hints, en labels", async () => {
-    const state = multiState(vi.fn());
+    const state = await multiState(vi.fn());
     const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
     const problem = (view.body as { problems: Array<Record<string, unknown>> }).problems[0];
     expect(problem.score).toBe(0);
@@ -461,7 +469,7 @@ describe("local-play API: multi-verify (issue #2252)", () => {
       points: 9_999,
       checkpointId: "public-backup",
     }));
-    const state = multiState(verify);
+    const state = await multiState(verify);
 
     const res = await handleLocalPlayRequest(submit("public-backup"), state, NOW);
     expect(res.body).toEqual({
@@ -480,7 +488,7 @@ describe("local-play API: multi-verify (issue #2252)", () => {
 
   it("should be idempotent per checkpoint: resubmission never re-calls the container", async () => {
     const verify = vi.fn(async () => ({ correct: true, checkpointId: "public-backup" }));
-    const state = multiState(verify);
+    const state = await multiState(verify);
     await handleLocalPlayRequest(submit("public-backup"), state, NOW);
 
     const again = await handleLocalPlayRequest(submit("public-backup", "wrong-now"), state, NOW);
@@ -500,7 +508,7 @@ describe("local-play API: multi-verify (issue #2252)", () => {
         checkpointId: o?.checkpointId,
       }),
     );
-    const state = multiState(verify as VerifyFn);
+    const state = await multiState(verify as VerifyFn);
 
     const wrongA = await handleLocalPlayRequest(submit("public-backup"), state, NOW);
     expect(wrongA.body).toEqual({
@@ -523,7 +531,7 @@ describe("local-play API: multi-verify (issue #2252)", () => {
 
   it("should fail closed on unknown / missing flagId without calling the container", async () => {
     const verify = vi.fn();
-    const state = multiState(verify);
+    const state = await multiState(verify);
     const unknown = await handleLocalPlayRequest(submit("not-a-check"), state, NOW);
     expect(unknown.status).toBe(404);
     expect(unknown.body).toEqual({ kind: "unknown_flag" });
@@ -540,7 +548,7 @@ describe("local-play API: multi-verify (issue #2252)", () => {
         checkpointId: o?.checkpointId,
       }),
     );
-    const state = multiState(verify as VerifyFn);
+    const state = await multiState(verify as VerifyFn);
 
     await handleLocalPlayRequest(submit("public-backup"), state, NOW);
     const partial = await handleLocalPlayRequest(get("/portal/leaderboard"), state, NOW);
@@ -562,7 +570,7 @@ describe("local-play API: multi-verify (issue #2252)", () => {
   });
 
   it("should reveal a per-check hint through the flat reveal route with its penalty", async () => {
-    const state = multiState(vi.fn());
+    const state = await multiState(vi.fn());
     const res = await handleLocalPlayRequest(
       post("/portal/me/problems/wp-ops/hints/h-backup/reveal", {}),
       state,
@@ -591,11 +599,15 @@ describe("local-play API: multi-problem session (#2392)", () => {
       hints: [{ id: "idor-1", content: "swap the id", penalty: 10 }],
     },
   };
-  const twoProblems = (verify: VerifyFn) =>
-    createLocalPlayState({ problems: [PROBLEM, second] }, { verify });
+  const twoProblems = async (verify: VerifyFn) => {
+    const state = createLocalPlayState({ problems: [PROBLEM, second] }, { verify });
+    await state.lifecycle.ensureRunning(PROBLEM.problemId);
+    await state.lifecycle.ensureRunning(second.problemId);
+    return state;
+  };
 
   it("should list both problems in healthz and the team view (display order)", async () => {
-    const state = twoProblems(async () => ({ correct: false }));
+    const state = await twoProblems(async () => ({ correct: false }));
     const health = await handleLocalPlayRequest(get("/healthz"), state, NOW);
     expect(health.body).toEqual({
       status: "ok",
@@ -610,16 +622,18 @@ describe("local-play API: multi-problem session (#2392)", () => {
   });
 
   it("should route a submission to the addressed problem and total across the session", async () => {
-    // The container only 'verifies' for the second problem's /verify url.
-    const verify = vi.fn<VerifyFn>(async (url) => ({ correct: url.includes("18181") }));
-    const state = twoProblems(verify);
+    // The container only 'verifies' for the second problem's /verify url. That
+    // problem started second, so its URLs sit on the offset-100 port block
+    // (base 18181 → 18281) — submissions must follow the running container.
+    const verify = vi.fn<VerifyFn>(async (url) => ({ correct: url.includes("18281") }));
+    const state = await twoProblems(verify);
     const res = await handleLocalPlayRequest(
       post("/portal/me/submit-flag", { problemId: "api-idor-demo", flag: "TC{x}" }),
       state,
       NOW,
     );
     expect(res.body).toMatchObject({ kind: "ok", scoreDelta: 100, totalScore: 100 });
-    expect(verify).toHaveBeenCalledWith("http://127.0.0.1:18181/verify", "TC{x}", {
+    expect(verify).toHaveBeenCalledWith("http://127.0.0.1:18281/verify", "TC{x}", {
       teamId: "local",
       problemId: "api-idor-demo",
     });
@@ -632,7 +646,7 @@ describe("local-play API: multi-problem session (#2392)", () => {
   });
 
   it("should route a hint reveal by problemId and reject a hint from another problem", async () => {
-    const state = twoProblems(async () => ({ correct: false }));
+    const state = await twoProblems(async () => ({ correct: false }));
     const ok = await handleLocalPlayRequest(
       post("/portal/me/problems/api-idor-demo/hints/idor-1/reveal", {}),
       state,
@@ -649,7 +663,7 @@ describe("local-play API: multi-problem session (#2392)", () => {
   });
 
   it("should count completed problems and the session score in the leaderboard", async () => {
-    const state = twoProblems(async () => ({ correct: true }));
+    const state = await twoProblems(async () => ({ correct: true }));
     await handleLocalPlayRequest(
       post("/portal/me/submit-flag", { problemId: "sqli-demo", flag: "TC{x}" }),
       state,
@@ -662,5 +676,348 @@ describe("local-play API: multi-problem session (#2392)", () => {
       }
     ).entries[0];
     expect(entry).toMatchObject({ score: 200, completedProblems: 1, totalProblems: 2 });
+  });
+});
+
+describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => {
+  const IDOR: ContainerProblem = {
+    ...PROBLEM,
+    problemId: "api-idor-demo",
+    name: "IDOR Demo",
+    composeProjectName: "tc-local-api-idor-demo",
+    challengeEndpoints: { Web: "http://127.0.0.1:18180/" },
+    verifyUrl: "http://127.0.0.1:18181/verify",
+  };
+  const neverVerify: VerifyFn = async () => {
+    throw new Error("verify should not be called");
+  };
+
+  it("should expose the whole catalog stopped: healthz lists it, views hide endpoints", async () => {
+    const state = createLocalPlayState({ problems: [PROBLEM, IDOR] }, { verify: neverVerify });
+    const health = await handleLocalPlayRequest(get("/healthz"), state, NOW);
+    expect(health.body).toEqual({
+      status: "ok",
+      mode: "local",
+      problemIds: ["sqli-demo", "api-idor-demo"],
+    });
+    const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const problems = (
+      view.body as {
+        problems: Array<{
+          name: string;
+          description: string;
+          stackOutputs: Record<string, string>;
+          lifecycle: { status: string };
+          scoring: { kind: string; points: number };
+        }>;
+      }
+    ).problems;
+    expect(problems).toHaveLength(2);
+    for (const problem of problems) {
+      expect(problem.lifecycle).toEqual({ status: "stopped" });
+      // a stopped container's endpoints must not leak into the portal
+      expect(problem.stackOutputs).toEqual({});
+    }
+    // the display / scoring shell stays so the portal can render a start affordance
+    expect(problems[0].name).toBe("SQL Injection Demo");
+    expect(problems[0].description).toBe("Vulnerable login.");
+    expect(problems[0].scoring).toMatchObject({ kind: "flag", points: 200 });
+  });
+
+  it("should start a problem on demand and surface its endpoints while running", async () => {
+    const state = createLocalPlayState({ problems: [PROBLEM] }, { verify: neverVerify });
+    const res = await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/start", {}),
+      state,
+      NOW,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: "running" });
+    const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const problem = (
+      view.body as {
+        problems: Array<{ stackOutputs: Record<string, string>; lifecycle: { status: string } }>;
+      }
+    ).problems[0];
+    expect(problem.lifecycle).toEqual({ status: "running" });
+    // first start takes offset 0 → the declared ports are kept as-is
+    expect(problem.stackOutputs).toEqual({ Web: "http://127.0.0.1:18080/" });
+  });
+
+  it("should move the second running problem onto its own port block", async () => {
+    const state = createLocalPlayState({ problems: [PROBLEM, IDOR] }, { verify: neverVerify });
+    await handleLocalPlayRequest(post("/portal/me/problems/sqli-demo/start", {}), state, NOW);
+    await handleLocalPlayRequest(post("/portal/me/problems/api-idor-demo/start", {}), state, NOW);
+    const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const problems = (view.body as { problems: Array<{ stackOutputs: Record<string, string> }> })
+      .problems;
+    expect(problems[0].stackOutputs).toEqual({ Web: "http://127.0.0.1:18080/" });
+    // offset 100: the fake docker applies the same URL remap as ContainerRunner
+    expect(problems[1].stackOutputs).toEqual({ Web: "http://127.0.0.1:18280/" });
+  });
+
+  it("should 404 start/stop for an unknown or malformed problem id", async () => {
+    const state = createLocalPlayState({ problems: [PROBLEM] }, { verify: neverVerify });
+    const start = await handleLocalPlayRequest(
+      post("/portal/me/problems/nope/start", {}),
+      state,
+      NOW,
+    );
+    expect(start.status).toBe(404);
+    expect(start.body).toEqual({ error: "unknown_problem" });
+    const stop = await handleLocalPlayRequest(
+      post("/portal/me/problems/nope/stop", {}),
+      state,
+      NOW,
+    );
+    expect(stop.status).toBe(404);
+    expect(stop.body).toEqual({ error: "unknown_problem" });
+    // a malformed percent escape is an unknown problem, not a 500
+    const badStart = await handleLocalPlayRequest(
+      post("/portal/me/problems/%/start", {}),
+      state,
+      NOW,
+    );
+    expect(badStart.status).toBe(404);
+    const badStop = await handleLocalPlayRequest(
+      post("/portal/me/problems/%/stop", {}),
+      state,
+      NOW,
+    );
+    expect(badStop.status).toBe(404);
+  });
+
+  it("should fail a start loudly (502 start_failed) and mark the problem error", async () => {
+    const state = createLocalPlayState(
+      { problems: [PROBLEM] },
+      {
+        verify: neverVerify,
+        startContainer: async () => {
+          throw new Error("compose boom");
+        },
+      },
+    );
+    const res = await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/start", {}),
+      state,
+      NOW,
+    );
+    expect(res.status).toBe(502);
+    expect(res.body).toEqual({ error: "start_failed", message: "compose boom" });
+    const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const problem = (view.body as { problems: Array<{ lifecycle: { status: string } }> })
+      .problems[0];
+    expect(problem.lifecycle).toEqual({ status: "error" });
+  });
+
+  it("should stop a running problem, tear its unit down, and restore the catalog problem", async () => {
+    const stopped: string[] = [];
+    const state = createLocalPlayState(
+      { problems: [PROBLEM] },
+      {
+        verify: neverVerify,
+        stopContainer: (unit) => {
+          stopped.push(unit.problemId);
+        },
+      },
+    );
+    await handleLocalPlayRequest(post("/portal/me/problems/sqli-demo/start", {}), state, NOW);
+    const res = await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/stop", {}),
+      state,
+      NOW,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: "stopped" });
+    expect(stopped).toEqual(["sqli-demo"]);
+    // the runtime holds the catalog original again (no stale offset URLs)
+    expect(state.runtimes.get("sqli-demo")?.problem).toBe(PROBLEM);
+    const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const problem = (
+      view.body as {
+        problems: Array<{ stackOutputs: Record<string, string>; lifecycle: { status: string } }>;
+      }
+    ).problems[0];
+    expect(problem.lifecycle).toEqual({ status: "stopped" });
+    expect(problem.stackOutputs).toEqual({});
+  });
+
+  it("should adopt the problem returned by the injected docker start (submit hits its /verify)", async () => {
+    const verify = vi.fn<VerifyFn>(async () => ({ correct: true }));
+    const remapped: ContainerProblem = {
+      ...PROBLEM,
+      challengeEndpoints: { Web: "http://127.0.0.1:28080/" },
+      verifyUrl: "http://127.0.0.1:28081/verify",
+    };
+    const state = createLocalPlayState(
+      { problems: [PROBLEM] },
+      {
+        verify,
+        startContainer: async () => ({
+          problem: remapped,
+          unit: {
+            problemId: PROBLEM.problemId,
+            composePath: PROBLEM.composePath,
+            composeProjectName: PROBLEM.composeProjectName,
+            secretEnv: PROBLEM.secretEnv,
+          },
+        }),
+      },
+    );
+    await handleLocalPlayRequest(post("/portal/me/problems/sqli-demo/start", {}), state, NOW);
+    const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const problem = (view.body as { problems: Array<{ stackOutputs: Record<string, string> }> })
+      .problems[0];
+    expect(problem.stackOutputs).toEqual({ Web: "http://127.0.0.1:28080/" });
+    await handleLocalPlayRequest(
+      post("/portal/me/submit-flag", { problemId: "sqli-demo", flag: "TC{x}" }),
+      state,
+      NOW,
+    );
+    expect(verify).toHaveBeenCalledWith("http://127.0.0.1:28081/verify", "TC{x}", {
+      teamId: "local",
+      problemId: "sqli-demo",
+    });
+  });
+
+  it("should refuse submit and hint reveal with 409 not_running while stopped", async () => {
+    const verify = vi.fn<VerifyFn>(async () => ({ correct: true }));
+    const state = createLocalPlayState({ problems: [PROBLEM] }, { verify });
+    const submit = await handleLocalPlayRequest(
+      post("/portal/me/submit-flag", { problemId: "sqli-demo", flag: "TC{x}" }),
+      state,
+      NOW,
+    );
+    expect(submit.status).toBe(409);
+    expect(submit.body).toEqual({ error: "not_running" });
+    expect(verify).not.toHaveBeenCalled();
+    const reveal = await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/hints/hint-2/reveal", {}),
+      state,
+      NOW,
+    );
+    expect(reveal.status).toBe(409);
+    expect(reveal.body).toEqual({ error: "not_running" });
+    // no penalty was charged for the refused reveal
+    expect(state.runtimes.get("sqli-demo")?.score).toBe(0);
+  });
+
+  it("should keep an actively played problem warm: submit/reveal touch beats the idle reaper", async () => {
+    let clock = 0;
+    const state = createLocalPlayState(
+      { problems: [PROBLEM, IDOR] },
+      { verify: async () => ({ correct: false }), now: () => clock, idleMs: 1_000 },
+    );
+    await state.lifecycle.ensureRunning(PROBLEM.problemId); // touched at t=0
+    await state.lifecycle.ensureRunning(IDOR.problemId); // touched at t=0
+    clock = 800;
+    await handleLocalPlayRequest(
+      post("/portal/me/submit-flag", { problemId: "sqli-demo", flag: "wrong" }),
+      state,
+      clock,
+    );
+    clock = 1_500; // cutoff = 500: sqli was touched at 800, idor is stale at 0
+    await state.lifecycle.reapIdle();
+    expect(state.lifecycle.statusOf("sqli-demo")).toBe("running");
+    expect(state.lifecycle.statusOf("api-idor-demo")).toBe("stopped");
+  });
+
+  it("should keep a problem warm via hint reveal too", async () => {
+    let clock = 0;
+    const state = createLocalPlayState(
+      { problems: [PROBLEM] },
+      { verify: neverVerify, now: () => clock, idleMs: 1_000 },
+    );
+    await state.lifecycle.ensureRunning(PROBLEM.problemId);
+    clock = 800;
+    await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/hints/hint-1/reveal", {}),
+      state,
+      clock,
+    );
+    clock = 1_500;
+    await state.lifecycle.reapIdle();
+    expect(state.lifecycle.statusOf("sqli-demo")).toBe("running");
+  });
+
+  it("should evict the LRU running problem when starting beyond maxRunning", async () => {
+    const stopped: string[] = [];
+    const state = createLocalPlayState(
+      { problems: [PROBLEM, IDOR] },
+      {
+        verify: neverVerify,
+        maxRunning: 1,
+        stopContainer: (unit) => {
+          stopped.push(unit.problemId);
+        },
+      },
+    );
+    const first = await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/start", {}),
+      state,
+      NOW,
+    );
+    expect(first.body).toEqual({ status: "running" });
+    const second = await handleLocalPlayRequest(
+      post("/portal/me/problems/api-idor-demo/start", {}),
+      state,
+      NOW,
+    );
+    expect(second.body).toEqual({ status: "running" });
+    // the cap is 1: starting the second evicted the first (its unit torn down)
+    expect(stopped).toEqual(["sqli-demo"]);
+    expect(state.lifecycle.statusOf("sqli-demo")).toBe("stopped");
+    expect(state.lifecycle.statusOf("api-idor-demo")).toBe("running");
+  });
+
+  it("should treat a start of an already-running problem as idempotent", async () => {
+    const startCalls: string[] = [];
+    const state = createLocalPlayState(
+      { problems: [PROBLEM] },
+      {
+        verify: neverVerify,
+        startContainer: async (problem) => {
+          startCalls.push(problem.problemId);
+          return {
+            problem,
+            unit: {
+              problemId: problem.problemId,
+              composePath: problem.composePath,
+              composeProjectName: problem.composeProjectName,
+              secretEnv: problem.secretEnv,
+            },
+          };
+        },
+      },
+    );
+    await handleLocalPlayRequest(post("/portal/me/problems/sqli-demo/start", {}), state, NOW);
+    const again = await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/start", {}),
+      state,
+      NOW,
+    );
+    expect(again.body).toEqual({ status: "running" });
+    expect(startCalls).toEqual(["sqli-demo"]); // the container was not restarted
+  });
+
+  it("should no-op a stop of an already-stopped problem", async () => {
+    const stopped: string[] = [];
+    const state = createLocalPlayState(
+      { problems: [PROBLEM] },
+      {
+        verify: neverVerify,
+        stopContainer: (unit) => {
+          stopped.push(unit.problemId);
+        },
+      },
+    );
+    const res = await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/stop", {}),
+      state,
+      NOW,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: "stopped" });
+    expect(stopped).toEqual([]);
   });
 });
