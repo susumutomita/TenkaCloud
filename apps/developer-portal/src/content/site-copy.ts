@@ -13,6 +13,7 @@ export interface HeroCopy {
   readonly titleEm: string;
   readonly sub: string;
   readonly ctaCatalog: string;
+  readonly ctaDemo: string;
   readonly ctaDevelopers: string;
   readonly ctaOss: string;
   readonly trust: string;
@@ -137,6 +138,7 @@ export const HOME_COPY: Record<Locale, HomeCopy> = {
       titleEm: "天下一。",
       sub: "本物の AWS で競う、OSS のクラウド競技プラットフォーム。「ローカルでは動く」アプリを本番品質へ ── 認証・公開範囲・監査・可用性の仕上がりを毎分自動採点し、順位がリアルタイムに動く。主催者はイベント・採点・再利用できる問題カタログを 1 画面で運営できます。",
       ctaCatalog: "問題カタログを見る",
+      ctaDemo: "ライブデモを触る",
       ctaDevelopers: "開発者向けドキュメント",
       ctaOss: "GitHub で試す",
       trust: "合同会社 BULL 運営 · Apache License 2.0",
@@ -286,6 +288,7 @@ export const HOME_COPY: Record<Locale, HomeCopy> = {
       titleEm: "arena.",
       sub: 'An OSS competition platform on real AWS. Take an app that "only works locally" and make it production-grade — auth, exposure, auditing, and uptime are scored automatically every minute, and the ranking moves in real time. Organizers run the event, the scoring, and a reusable problem catalog from one screen.',
       ctaCatalog: "Browse the catalog",
+      ctaDemo: "Try the live demo",
       ctaDevelopers: "Developer docs",
       ctaOss: "Try the OSS on GitHub",
       trust: "Operated by BULL LLC · Apache License 2.0",

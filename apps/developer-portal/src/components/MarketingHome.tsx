@@ -108,6 +108,9 @@ export function MarketingHome({ locale }: { locale: Locale }) {
               <a className="cta-primary" data-cta="home-catalog" href={catalogPath(locale)}>
                 {copy.hero.ctaCatalog}
               </a>
+              <a data-cta="home-demo" href="/product/">
+                {copy.hero.ctaDemo}
+              </a>
               <a data-cta="home-developers" href="/developers/">
                 {copy.hero.ctaDevelopers}
               </a>
