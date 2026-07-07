@@ -34,6 +34,18 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        {/* Legacy landing type stack: Inter + Noto Sans JP (sans) + JetBrains Mono
+            (mono), loaded via Google Fonts the same way landing/index.html did. A
+            runtime <link> keeps the static export build self-contained (no build-time
+            font fetch) and there is no CSP header blocking fonts.googleapis.com. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        />
+      </head>
       <body>
         <AppShell>{children}</AppShell>
       </body>
