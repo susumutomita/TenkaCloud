@@ -16,6 +16,10 @@
     "expireAfterDays": "${SOURCE_BUNDLE_EXPIRE_DAYS:-1}"
   },
   "monthlyCostLimitUsd": "${MONTHLY_COST_LIMIT_USD:-50}",
+  "opsMonitoringConfig": {
+    "monthlyCostLimitUsd": "${CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD:-10}",
+    "budgetThresholdPercent": "${CDK_PARAM_OPS_BUDGET_THRESHOLD_PERCENT:-100}"
+  },
   "challengePayloadConfig": {
     "bucketPrefix": "tc-challenges-",
     "githubRepository": "susumutomita/TenkaCloudChallenge",

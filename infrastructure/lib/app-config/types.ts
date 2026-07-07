@@ -214,6 +214,19 @@ export interface AppConfig {
   readonly monthlyCostLimitUsd: number | undefined;
   /** Budget alarm 通知の追加 email 宛先 (systemAdminEmail は自動同梱)。 */
   readonly budgetAlarmEmails: readonly string[] | undefined;
+
+  /**
+   * Issue #2406: scoring/sweeper/cost ops monitoring. Undefined unless
+   * CDK_PARAM_OPS_ALERT_EMAIL is set; the ProblemDeployBackendStack creates no monitoring
+   * resources when this is undefined.
+   */
+  readonly opsMonitoring:
+    | {
+        readonly alertEmail: string;
+        readonly monthlyCostLimitUsd: number;
+        readonly budgetThresholdPercent: number;
+      }
+    | undefined;
 }
 
 export interface ProblemsCatalogBundle {

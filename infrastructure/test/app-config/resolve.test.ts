@@ -255,6 +255,51 @@ describe("resolveAppConfig", () => {
     expect(cfg.monthlyCostLimitUsd).toBe(50);
     expect(typeof cfg.monthlyCostLimitUsd).toBe("number");
   });
+
+  it("should keep ops monitoring disabled when CDK_PARAM_OPS_ALERT_EMAIL is unset", () => {
+    const cfg = resolveAppConfig({
+      env: baseEnv(),
+      binDir: BIN_DIR,
+      fs: fsAlwaysMissing,
+      dotenvConfig: noopDotenv,
+      discoverProblems: stubProblems,
+    });
+    expect(cfg.opsMonitoring).toBeUndefined();
+  });
+
+  it("should enable ops monitoring from CDK_PARAM_OPS_ALERT_EMAIL with the default monthly cap", () => {
+    const cfg = resolveAppConfig({
+      env: baseEnv({ CDK_PARAM_OPS_ALERT_EMAIL: "ops@example.com" }),
+      binDir: BIN_DIR,
+      fs: fsAlwaysMissing,
+      dotenvConfig: noopDotenv,
+      discoverProblems: stubProblems,
+    });
+    expect(cfg.opsMonitoring).toEqual({
+      alertEmail: "ops@example.com",
+      monthlyCostLimitUsd: 10,
+      budgetThresholdPercent: 100,
+    });
+  });
+
+  it("should override ops budget amount and threshold from CDK_PARAM env", () => {
+    const cfg = resolveAppConfig({
+      env: baseEnv({
+        CDK_PARAM_OPS_ALERT_EMAIL: "ops@example.com",
+        CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD: "25",
+        CDK_PARAM_OPS_BUDGET_THRESHOLD_PERCENT: "90",
+      }),
+      binDir: BIN_DIR,
+      fs: fsAlwaysMissing,
+      dotenvConfig: noopDotenv,
+      discoverProblems: stubProblems,
+    });
+    expect(cfg.opsMonitoring).toEqual({
+      alertEmail: "ops@example.com",
+      monthlyCostLimitUsd: 25,
+      budgetThresholdPercent: 90,
+    });
+  });
 });
 
 describe("resolveApiKeyValue", () => {

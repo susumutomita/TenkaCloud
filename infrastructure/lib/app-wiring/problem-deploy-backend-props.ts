@@ -54,6 +54,7 @@ export function buildProblemDeployBackendBaseProps(config: AppConfig) {
     controlDataBackend: config.controlDataBackend,
     tursoDatabaseUrl: config.tursoDatabaseUrl,
     tursoAuthTokenParameterName: config.tursoAuthTokenParameterName,
+    opsMonitoring: config.opsMonitoring,
     environmentName: config.environment,
   } as const;
 }
