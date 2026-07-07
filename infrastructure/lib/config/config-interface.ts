@@ -37,6 +37,11 @@ export interface Config {
    * を渡すときに使う。
    */
   readonly budgetAlarmEmails?: readonly string[];
+  /**
+   * Issue #2406: ops monitoring budget defaults. The monitoring resources themselves remain
+   * dormant unless CDK_PARAM_OPS_ALERT_EMAIL is set.
+   */
+  readonly opsMonitoringConfig?: OpsMonitoringConfig;
 
   /**
    * ADR-003 Phase 2 / problem catalog split: TenkaCloudChallenge repo の publish.yml が
@@ -68,6 +73,11 @@ export interface ChallengePayloadConfig {
   readonly existingOidcProviderArn?: string;
   /** Noncurrent S3 object を削除するまでの日数 (default 30)。 */
   readonly noncurrentExpirationDays?: number | string;
+}
+
+export interface OpsMonitoringConfig {
+  readonly monthlyCostLimitUsd?: number | string;
+  readonly budgetThresholdPercent?: number | string;
 }
 
 // Issue #1066: SAML IdP 機能を全廃。 MFA 必須化 (Issue #1035) で代替済。

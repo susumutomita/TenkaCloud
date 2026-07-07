@@ -103,6 +103,28 @@ export function synthWithAuditLogDisabled(): Template {
   return Template.fromStack(stack);
 }
 
+// Issue #2406: ops monitoring is opt-in via CDK_PARAM_OPS_ALERT_EMAIL. This helper pins the
+// ProblemDeployBackendStack shape when the alerting email is present.
+export function synthWithOpsMonitoring(): Template {
+  const app = new cdk.App();
+  const stack = new ProblemDeployBackendStack(app, "TestStackOpsMonitoring", {
+    eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
+    sourceBucketName: "test-source-bucket",
+    sourceObjectKey: "source.zip",
+    problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+    problemsScoring: {},
+    problemsEndpoints: {},
+    deployViaLambda: true,
+    environmentName: "development",
+    opsMonitoring: {
+      alertEmail: "ops@example.com",
+      monthlyCostLimitUsd: 25,
+      budgetThresholdPercent: 90,
+    },
+  });
+  return Template.fromStack(stack);
+}
+
 // Issue #2290: controlDataBackend: "turso" を反映させ、監査 Lambda 群の env に
 // CONTROL_DATA_BACKEND="turso" が注入されることを検証するための別 synth (= synthWithAuditLogDisabled
 // と同じ pattern)。

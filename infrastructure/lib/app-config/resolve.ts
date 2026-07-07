@@ -113,6 +113,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   // schema (config-schema.json) は integer / 数値文字列 ("50") の双方を許容するため、
   // ここでも `${MONTHLY_COST_LIMIT_USD:-50}` 経由で来た文字列を Number で正規化する。
   const budget = resolveBudgetConfig(config);
+  const opsMonitoring = resolveOpsMonitoringConfig(env, config);
 
   // Issue #1335 Phase 1: Control Plane SAML opt-in env を parse (= 未設定なら空配列)。
   // 不正な JSON / 形式は parseSamlIdpConfig / parseAdminAllowlist が throw する (fail-loud)。
@@ -161,6 +162,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     tenantSamlIdps,
     tenantSamlAdminAllowlist,
     ...budget,
+    ...opsMonitoring,
   };
 }
 
@@ -431,6 +433,45 @@ function resolveBudgetConfig(
         ? config.budgetAlarmEmails
         : undefined,
   };
+}
+
+function resolveOpsMonitoringConfig(
+  env: NodeJS.ProcessEnv,
+  config: LoadedConfig,
+): Pick<AppConfig, "opsMonitoring"> {
+  const alertEmail = env.CDK_PARAM_OPS_ALERT_EMAIL?.trim();
+  if (!alertEmail) return { opsMonitoring: undefined };
+
+  const monthlyCostLimitUsd = parsePositiveNumber(
+    env.CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD ??
+      config?.opsMonitoringConfig?.monthlyCostLimitUsd ??
+      10,
+    "CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD",
+  );
+  const budgetThresholdPercent = parsePositiveNumber(
+    env.CDK_PARAM_OPS_BUDGET_THRESHOLD_PERCENT ??
+      config?.opsMonitoringConfig?.budgetThresholdPercent ??
+      100,
+    "CDK_PARAM_OPS_BUDGET_THRESHOLD_PERCENT",
+    100,
+  );
+
+  return {
+    opsMonitoring: {
+      alertEmail,
+      monthlyCostLimitUsd,
+      budgetThresholdPercent,
+    },
+  };
+}
+
+function parsePositiveNumber(raw: number | string, label: string, max?: number): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0 || (max !== undefined && parsed > max)) {
+    const suffix = max === undefined ? "" : ` and <= ${max}`;
+    throw new Error(`${label} must be a positive number${suffix} (got: ${raw})`);
+  }
+  return parsed;
 }
 
 interface ResolveApiKeyValueArgs {

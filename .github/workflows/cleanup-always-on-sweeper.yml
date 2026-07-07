@@ -53,3 +53,16 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bun run lib/always-on-runtime/sweeper/index.ts
+
+      - name: Notify sweeper workflow failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Always-On cleanup sweeper workflow failed" \
+            --body "The nightly cleanup sweeper workflow failed before it completed. Run: ${RUN_URL}
+
+This can leave expired Always-On runtime stacks running. Inspect the failed job, rerun the workflow, and manually destroy any expired runtime stack that remains."

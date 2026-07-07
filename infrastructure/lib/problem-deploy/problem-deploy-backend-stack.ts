@@ -20,6 +20,7 @@ import { EventCapacityRunbook } from "./event-capacity-runbook.js";
 import { EventsTable } from "./events-table.js";
 import { ExternalIdAuditLambda } from "./external-id-audit-lambda.js";
 import { GenericScoringLambda } from "./generic-scoring-lambda.js";
+import { OpsMonitoring, type OpsMonitoringConfig } from "./ops-monitoring.js";
 import type { ParticipantPortalRuntimeConfig } from "./participant-portal-hosting.js";
 import { ProblemEndpointsTable } from "./problem-endpoints-table.js";
 import { SystemAuditWriterLambda } from "./system-audit-writer-lambda.js";
@@ -175,6 +176,11 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
     readonly advanced: number;
     readonly platinum: number;
   };
+  /**
+   * Issue #2406: ops alerting for GenericScoring liveness/errors and monthly cost drift.
+   * Undefined means fully dormant: no SNS topic, CloudWatch alarms, or Budget resources.
+   */
+  readonly opsMonitoring?: OpsMonitoringConfig;
   /**
    * Issue #2019 / ADR-017: TrustBridge high-risk enforcement mode for the deploy
    * Lambda (`CLOUD_ACTION_ENFORCEMENT_MODE` env)。 default `"shadow"` (= 既存挙動、
@@ -540,6 +546,12 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     });
     this.genericScoringLambda = genericScoring.fn;
 
+    addOpsMonitoring(this, {
+      opsMonitoring: props.opsMonitoring,
+      environmentName: props.environmentName,
+      genericScoringLambda: genericScoring.fn,
+    });
+
     // Phase 3.2 / Issue #603: ExternalId rotation age 監査 Lambda。1 日 1 回起動して
     // CompetitorAccounts table を Scan し、各 (tenantId, awsAccountId) の rotation age を
     // CloudWatch メトリクス `TenkaCloud/CompetitorAccounts/RotationAge` に publish する。
@@ -619,4 +631,20 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         "ADR-012 Phase 3.A Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
     });
   }
+}
+
+function addOpsMonitoring(
+  scope: Construct,
+  props: {
+    readonly opsMonitoring: OpsMonitoringConfig | undefined;
+    readonly environmentName: string;
+    readonly genericScoringLambda: IFunction;
+  },
+): void {
+  if (!props.opsMonitoring) return;
+  new OpsMonitoring(scope, "OpsMonitoring", {
+    ...props.opsMonitoring,
+    environmentName: props.environmentName,
+    genericScoringLambda: props.genericScoringLambda,
+  });
 }

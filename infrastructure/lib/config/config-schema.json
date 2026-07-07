@@ -175,6 +175,38 @@
         "format": "email"
       }
     },
+    "opsMonitoringConfig": {
+      "type": "object",
+      "description": "Issue #2406: scoring/sweeper/cost ops monitoring defaults. Resources are created only when CDK_PARAM_OPS_ALERT_EMAIL is set.",
+      "properties": {
+        "monthlyCostLimitUsd": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            }
+          ]
+        },
+        "budgetThresholdPercent": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            {
+              "type": "string",
+              "pattern": "^([1-9]|[1-9][0-9]|100)$"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "challengePayloadConfig": {
       "type": "object",
       "description": "ADR-003 Phase 2 / problem catalog split。 TenkaCloudChallenge repo の publish.yml が S3 にアップロードするための bucket + OIDC IAM Role 設定。 未指定なら ChallengePayloadStack は立てない。",
