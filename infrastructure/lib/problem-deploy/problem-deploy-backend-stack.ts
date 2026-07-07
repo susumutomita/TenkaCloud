@@ -16,6 +16,7 @@ import { DeploymentsTable } from "./deployments-table.js";
 import { DisruptionExecutorLambda } from "./disruption-executor-lambda.js";
 import { DisruptionsTable } from "./disruptions-table.js";
 import { EventApiLambda } from "./event-api-lambda.js";
+import { EventCapacityRunbook } from "./event-capacity-runbook.js";
 import { EventsTable } from "./events-table.js";
 import { ExternalIdAuditLambda } from "./external-id-audit-lambda.js";
 import { GenericScoringLambda } from "./generic-scoring-lambda.js";
@@ -306,6 +307,15 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // で 365 / SOC2 enterprise 用に上げる)。
     const adminAuditLog = new AdminAuditLogTable(this, "AdminAuditLog");
     this.adminAuditLogTable = adminAuditLog.table;
+
+    // #2410: event-window DynamoDB capacity runbook. Tables stay at the 1/1
+    // floor (cost-zero idle); an operator raises the event-hot tables for the
+    // event window via this bounded SSM runbook and lowers them afterwards.
+    // No auto-scaling (no silent ramp / cost-explosion) — see EventCapacityRunbook.
+    new EventCapacityRunbook(this, "EventCapacityRunbook", {
+      documentName: `tenkacloud-${props.environmentName}-event-capacity`,
+      tables: [deployments.table, events.table, teams.table, endpoints.table, disruptions.table],
+    });
 
     // Issue #1053: 競技者向け CFn bootstrap template の S3 hosting を本 stack に持つ。
     // 旧 AdminConsoleHostingStack から移管 (= Lite / SaaS 両モード対応 + 3-phase env-var dance 解消)。

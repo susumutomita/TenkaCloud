@@ -60,3 +60,16 @@ describe("ProblemDeployBackendStack (MVP-1) — legacy 経路の廃止", () => {
     tpl.resourceCountIs("AWS::ApiGatewayV2::Api", 0);
   });
 });
+
+describe("ProblemDeployBackendStack — event capacity runbook (#2410)", () => {
+  const tpl = synthDefault();
+
+  it("should wire the bounded SSM capacity runbook (not auto-scaling)", () => {
+    tpl.hasResourceProperties("AWS::SSM::Document", {
+      DocumentType: "Automation",
+      Name: Match.stringLikeRegexp("event-capacity"),
+    });
+    // The whole point: operator-driven, never a silent auto-scaler.
+    tpl.resourceCountIs("AWS::ApplicationAutoScaling::ScalableTarget", 0);
+  });
+});
