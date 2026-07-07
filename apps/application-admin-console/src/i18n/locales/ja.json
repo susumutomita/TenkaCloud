@@ -914,5 +914,29 @@
     "error_gate_required": "Gate challenge を選択してください。",
     "error_no_targets": "アンロック対象を 1 つ以上選択してください。",
     "error_bonus_range": "完了ボーナスは 0〜100000 の整数で入力してください。"
+  },
+  "capacity": {
+    "header": "DynamoDB キャパシティ",
+    "description": "event-hot テーブルの直近 {windowMinutes} 分の消費状況。runbook の上限 (ceiling) は {ceiling} RCU/WCU。",
+    "refresh": "更新",
+    "loading": "キャパシティ情報を取得中",
+    "empty": "データがありません",
+    "load_failed": "キャパシティ情報の取得に失敗しました: {message}",
+    "col_table": "テーブル",
+    "col_health": "状態",
+    "col_provisioned": "プロビジョン (R / W)",
+    "col_consumed_read": "消費 Read/sec (平均 → ピーク)",
+    "col_consumed_write": "消費 Write/sec (平均 → ピーク)",
+    "col_throttles": "Throttle 件数",
+    "health_throttling": "Throttle 発生",
+    "health_hot": "余裕なし (ピーク 80% 超)",
+    "health_ok": "OK",
+    "role_deployments": "Deployments",
+    "role_events": "Events",
+    "role_teams": "Teams",
+    "role_problemEndpoints": "ProblemEndpoints",
+    "role_disruptions": "Disruptions",
+    "runbook_hint": "キャパを上げ下げする (SSM runbook)",
+    "runbook_doc_pointer": "上げ幅の目安と手順は docs/operations/dynamodb-event-capacity.md を参照。イベント後は同じ runbook で 1/1 に戻します。"
   }
 }

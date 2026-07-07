@@ -16,6 +16,7 @@ import { DeploymentsTable } from "./deployments-table.js";
 import { DisruptionExecutorLambda } from "./disruption-executor-lambda.js";
 import { DisruptionsTable } from "./disruptions-table.js";
 import { EventApiLambda } from "./event-api-lambda.js";
+import { EventCapacityRunbook } from "./event-capacity-runbook.js";
 import { EventsTable } from "./events-table.js";
 import { ExternalIdAuditLambda } from "./external-id-audit-lambda.js";
 import { GenericScoringLambda } from "./generic-scoring-lambda.js";
@@ -396,6 +397,25 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       ],
     });
 
+    // Issue #2410 Slice 1: イベント中の DynamoDB キャパシティを運営が明示的に上げ下げする
+    // SSM Automation Runbook。event-hot 5 テーブル (Deployments / Events / Teams /
+    // ProblemEndpoints / Disruptions) に allowedValues + IAM resource の二重で固定し、
+    // ハード上限 ceiling (200) で課金爆死を構造的に防ぐ。オートスケーリングは採用しない。
+    const capacityRunbook = new EventCapacityRunbook(this, "EventCapacityRunbook", {
+      eventHotTables: [
+        deployments.table,
+        events.table,
+        teams.table,
+        endpoints.table,
+        disruptions.table,
+      ],
+    });
+    new CfnOutput(this, "EventCapacityRunbookName", {
+      value: capacityRunbook.documentName,
+      description:
+        "Issue #2410 SSM Automation document 名。aws ssm start-automation-execution --document-name に渡してイベント中のキャパを上げ下げする。",
+    });
+
     // ADR-004 Phase 1+2a: Event / Team CRUD + Bulk Deploy/Teardown Lambda。
     // Phase 2a で deployment 行の作成 / status 更新 + EventBridge fan-out publish を担う。
     // Phase 2.2 (Issue #459): CompetitorAccounts table + env を渡して verified-only gate を有効化。
@@ -410,6 +430,10 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       environmentName: props.environmentName,
       // Issue #888: disruption fire / audit / catalog で参照
       disruptionsTable: disruptions.table,
+      // Issue #2410 Slice 2: キャパ監視 (`GET /admin/capacity`) の event-hot 5 テーブル目 +
+      // Slice 1 runbook の document 名 (UI が実行コマンド例を表示する)。
+      problemEndpointsTable: endpoints.table,
+      capacityRunbookDocumentName: capacityRunbook.documentName,
       problemsDisruptions: (props.problemsDisruptions ?? {}) as Readonly<
         Record<string, readonly unknown[]>
       >,
