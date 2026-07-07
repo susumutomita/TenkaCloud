@@ -19,6 +19,12 @@ export interface CfnDeployLambdaProps {
    * `serverless-saas-{account}-{region}`)。 `s3:GetObject` を本 bucket に限定する。
    */
   readonly sourceBucketName: string;
+  /**
+   * Score-engine / operator-attacker egress CIDRs injected into problem templates that declare
+   * an `AllowedCidr` parameter. Undefined keeps single-team/local flows compatible and the handler
+   * emits a warning when such a template relies on its default.
+   */
+  readonly deployAllowedCidrs?: readonly string[];
 }
 
 /**
@@ -89,6 +95,9 @@ export class CfnDeployLambda extends Construct {
         CFN_EXEC_ROLE_ARN: this.cfnExecRole.roleArn,
         DEPLOYMENT_LOG_GROUP_NAME: this.deploymentLogGroup.logGroupName,
         DEPLOY_JOB_LOG_GROUP: this.deploymentLogGroup.logGroupName,
+        ...(props.deployAllowedCidrs && props.deployAllowedCidrs.length > 0
+          ? { DEPLOY_ALLOWED_CIDRS: props.deployAllowedCidrs.join(",") }
+          : {}),
       },
     });
     this.deploymentLogGroup.grantWrite(this.fn);

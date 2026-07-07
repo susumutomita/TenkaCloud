@@ -44,6 +44,11 @@ import {
   fetchChallengePayloadArtifacts,
 } from "../../challenge-payload-artifacts.js";
 import {
+  type AllowedCidrOverrideDecision,
+  parseDeployAllowedCidrs,
+  resolveAllowedCidrOverride,
+} from "../../deploy-allowed-cidrs.js";
+import {
   type AssumeCompetitorRoleDeps,
   assumeCompetitorRole,
 } from "../shared/assume-competitor-role.js";
@@ -110,6 +115,12 @@ export interface BuildParameterOverridesArgs {
   readonly externalId: string;
   /** Token generator for `__RANDOM_PASSWORD__` (injected for deterministic tests). */
   readonly generateToken: () => string;
+  /** Problem template body, used to detect an optional `AllowedCidr` CFn parameter. */
+  readonly templateBody?: string;
+  /** Score-engine / operator-attacker egress CIDRs configured by the platform operator. */
+  readonly deployAllowedCidrs?: readonly string[];
+  /** Precomputed decision, passed by createStackForDeployment to avoid parsing the template twice. */
+  readonly allowedCidrOverride?: AllowedCidrOverrideDecision;
 }
 
 /**
@@ -121,13 +132,28 @@ export function buildParameterOverrides(args: BuildParameterOverridesArgs): CfnP
   if (args.externalId.length < 16) {
     throw new Error("problem ExternalId (CFn parameter) must be at least 16 characters");
   }
+  const allowedCidrOverride =
+    args.allowedCidrOverride ??
+    (args.templateBody
+      ? resolveAllowedCidrOverride({
+          templateBody: args.templateBody,
+          deployAllowedCidrs: args.deployAllowedCidrs,
+        })
+      : ({ kind: "not-declared" } as const));
   const overrides: CfnParameter[] = [
     { ParameterKey: "NamePrefix", ParameterValue: args.namePrefix },
     { ParameterKey: "TenkaCloudAccountId", ParameterValue: args.tenkaCloudAccountId },
     { ParameterKey: "ExternalId", ParameterValue: args.externalId },
   ];
+  if (allowedCidrOverride.kind === "configured") {
+    overrides.push({
+      ParameterKey: "AllowedCidr",
+      ParameterValue: allowedCidrOverride.parameterValue,
+    });
+  }
   for (const [key, value] of Object.entries(args.cfnParameters)) {
     if (!key) continue;
+    if (allowedCidrOverride.kind === "configured" && key === "AllowedCidr") continue;
     const resolved = value === RANDOM_PASSWORD_TOKEN ? args.generateToken() : value;
     overrides.push({ ParameterKey: key, ParameterValue: resolved });
   }
@@ -357,6 +383,8 @@ export interface CreateStackDeps extends AssumeCompetitorRoleDeps {
   ) => Promise<void>;
   readonly progress?: DeploymentProgressWriter;
   readonly progressFactory?: (jobId: string) => JobProgressLogger;
+  /** Score-engine / operator-attacker egress CIDRs for templates that declare `AllowedCidr`. */
+  readonly deployAllowedCidrs?: readonly string[];
 }
 
 export interface CreateStackInput {
@@ -415,6 +443,46 @@ async function defaultWaitForStackDelete(
     await sleep(5000);
   }
   throw new Error(`timed out waiting for stack ${stackName} to delete before re-create`);
+}
+
+function warnAllowedCidrDecision(args: {
+  readonly decision: AllowedCidrOverrideDecision;
+  readonly detail: DeployCreateRequestedDetail;
+  readonly correlationId: string;
+}): void {
+  const { decision, detail, correlationId } = args;
+  if (decision.kind === "unconfigured") {
+    warnDeployTrace("deploy.cfn-lambda.allowed-cidr.unconfigured", {
+      jobId: detail.jobId,
+      correlationId,
+      tenantId: detail.tenantId,
+      stackName: detail.namePrefix,
+      problemId: detail.problemId,
+      parameterType: decision.parameterType,
+      multiTeamGriefingRisk: true,
+      message:
+        "Template declares AllowedCidr but DEPLOY_ALLOWED_CIDRS is not configured; CloudFormation default may expose app ingress.",
+    });
+    return;
+  }
+  if (
+    decision.kind !== "configured" ||
+    decision.configuredCidrCount <= decision.injectedCidrCount
+  ) {
+    return;
+  }
+  warnDeployTrace("deploy.cfn-lambda.allowed-cidr.primary-only", {
+    jobId: detail.jobId,
+    correlationId,
+    tenantId: detail.tenantId,
+    stackName: detail.namePrefix,
+    problemId: detail.problemId,
+    parameterType: decision.parameterType,
+    configuredCidrCount: decision.configuredCidrCount,
+    injectedCidrCount: decision.injectedCidrCount,
+    primaryAllowedCidr: decision.parameterValue,
+    message: "AllowedCidr is a single-value parameter; using the first configured CIDR only.",
+  });
 }
 
 interface DeployCommandArgs {
@@ -513,6 +581,11 @@ export async function createStackForDeployment(
   await reportProgress(`Preparing CloudFormation deployment for ${detail.problemId}`);
 
   const artifacts = await deps.resolveArtifacts(detail);
+  const allowedCidrOverride = resolveAllowedCidrOverride({
+    templateBody: artifacts.templateBody,
+    deployAllowedCidrs: deps.deployAllowedCidrs,
+  });
+  warnAllowedCidrDecision({ decision: allowedCidrOverride, detail, correlationId });
 
   // ExternalId is ALWAYS required for cross-account AssumeRole (never optional). Same-account
   // (dev) returns undefined credentials — the shared helper enforces the invariant.
@@ -532,6 +605,9 @@ export async function createStackForDeployment(
     // Mirror the shell path: PROBLEM_EXTERNAL_ID = $.detail.jobId (a ULID, >= 16 chars).
     externalId: detail.jobId,
     generateToken,
+    templateBody: artifacts.templateBody,
+    deployAllowedCidrs: deps.deployAllowedCidrs,
+    allowedCidrOverride,
   });
   const tags = buildStackTags({
     namePrefix: detail.namePrefix,
@@ -658,6 +734,7 @@ export async function handler(
   const sourceBucket = requireEnv("SOURCE_BUCKET_NAME");
   const tenkaCloudAccountId = requireEnv("TENKACLOUD_ACCOUNT_ID");
   const cfnExecRoleArn = process.env.CFN_EXEC_ROLE_ARN || undefined;
+  const deployAllowedCidrs = parseDeployAllowedCidrs(process.env.DEPLOY_ALLOWED_CIDRS);
   return createStackForDeployment(input, {
     ssm,
     sts,
@@ -669,6 +746,7 @@ export async function handler(
     }),
     tenkaCloudAccountId,
     cfnExecRoleArn,
+    deployAllowedCidrs,
     progress: writeDeploymentProgress,
   });
 }

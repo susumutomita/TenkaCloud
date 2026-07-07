@@ -179,6 +179,31 @@ describe("resolveAppConfig", () => {
     expect(cfg.deployConcurrentBuildLimit).toBeUndefined();
   });
 
+  it("should resolve CDK_PARAM_DEPLOY_ALLOWED_CIDRS as the deploy-time app ingress allowlist", () => {
+    const cfg = resolveAppConfig({
+      env: baseEnv({
+        CDK_PARAM_DEPLOY_ALLOWED_CIDRS: " 198.51.100.10/32,203.0.113.0/24 ",
+      }),
+      binDir: BIN_DIR,
+      fs: fsAlwaysMissing,
+      dotenvConfig: noopDotenv,
+      discoverProblems: stubProblems,
+    });
+    expect(cfg.deployAllowedCidrs).toEqual(["198.51.100.10/32", "203.0.113.0/24"]);
+  });
+
+  it("should reject malformed CDK_PARAM_DEPLOY_ALLOWED_CIDRS entries", () => {
+    expect(() =>
+      resolveAppConfig({
+        env: baseEnv({ CDK_PARAM_DEPLOY_ALLOWED_CIDRS: "198.51.100.10/33" }),
+        binDir: BIN_DIR,
+        fs: fsAlwaysMissing,
+        dotenvConfig: noopDotenv,
+        discoverProblems: stubProblems,
+      }),
+    ).toThrow(/CDK_PARAM_DEPLOY_ALLOWED_CIDRS/);
+  });
+
   it("should return participantPortal with runtimeConfig when CDK_PARAM_ENABLE_PARTICIPANT_PORTAL=true", () => {
     const cfg = resolveAppConfig({
       env: baseEnv({

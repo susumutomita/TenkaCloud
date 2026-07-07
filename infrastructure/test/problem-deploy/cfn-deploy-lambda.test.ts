@@ -11,7 +11,9 @@ import { CfnDeployLambda } from "../../lib/problem-deploy/cfn-deploy-lambda";
  * condition-scoped, and `s3:GetObject` limited to the source bucket.
  */
 
-function buildTemplate(): Template {
+function buildTemplate(
+  options: { readonly deployAllowedCidrs?: readonly string[] } = {},
+): Template {
   const app = new cdk.App();
   const stack = new cdk.Stack(app, "Test", {
     env: { account: "123456789012", region: "ap-northeast-1" },
@@ -19,6 +21,7 @@ function buildTemplate(): Template {
   new CfnDeployLambda(stack, "CfnDeploy", {
     environmentName: "development",
     sourceBucketName: "serverless-saas-123456789012-ap-northeast-1",
+    deployAllowedCidrs: options.deployAllowedCidrs,
   });
   return Template.fromStack(stack);
 }
@@ -164,6 +167,30 @@ describe("CfnDeployLambda (#2291)", () => {
       Match.objectLike({
         Environment: Match.objectLike({
           Variables: Match.objectLike({ DEPLOY_JOB_LOG_GROUP: Match.anyValue() }),
+        }),
+      }),
+    );
+  });
+
+  it("should inject DEPLOY_ALLOWED_CIDRS env only when configured", () => {
+    buildTemplate({
+      deployAllowedCidrs: ["198.51.100.10/32", "203.0.113.0/24"],
+    }).hasResourceProperties(
+      "AWS::Lambda::Function",
+      Match.objectLike({
+        Environment: Match.objectLike({
+          Variables: Match.objectLike({
+            DEPLOY_ALLOWED_CIDRS: "198.51.100.10/32,203.0.113.0/24",
+          }),
+        }),
+      }),
+    );
+
+    buildTemplate().hasResourceProperties(
+      "AWS::Lambda::Function",
+      Match.objectLike({
+        Environment: Match.objectLike({
+          Variables: Match.not(Match.objectLike({ DEPLOY_ALLOWED_CIDRS: Match.anyValue() })),
         }),
       }),
     );

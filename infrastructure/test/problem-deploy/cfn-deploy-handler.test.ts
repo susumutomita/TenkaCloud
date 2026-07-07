@@ -8,6 +8,10 @@ import { GetParameterCommand } from "@aws-sdk/client-ssm";
 import { AssumeRoleCommand } from "@aws-sdk/client-sts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  parseDeployAllowedCidrs,
+  resolveAllowedCidrOverride,
+} from "../../lib/problem-deploy/deploy-allowed-cidrs.js";
+import {
   buildArtifactsResolver,
   buildCloudFormationClient,
   buildParameterOverrides,
@@ -56,6 +60,21 @@ const artifacts: DeployArtifacts = {
   templateBody: "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n",
   cfnParameters: { FlagSeed: RANDOM_PASSWORD_TOKEN },
 };
+
+const templateWithStringAllowedCidr =
+  "AWSTemplateFormatVersion: '2010-09-09'\n" +
+  "Parameters:\n" +
+  "  AllowedCidr:\n" +
+  "    Type: String\n" +
+  "    Default: 0.0.0.0/0\n" +
+  "Resources: {}\n";
+
+const templateWithCommaAllowedCidr =
+  "AWSTemplateFormatVersion: '2010-09-09'\n" +
+  "Parameters:\n" +
+  "  AllowedCidr:\n" +
+  "    Type: CommaDelimitedList\n" +
+  "Resources: {}\n";
 
 interface FakeCfnState {
   readonly describeResponses: Array<{ status?: string; notFound?: boolean; throw?: string }>;
@@ -175,6 +194,142 @@ describe("buildParameterOverrides (#2291)", () => {
     });
     expect(params.some((p) => p.ParameterKey === "")).toBe(false);
     expect(params).toContainEqual({ ParameterKey: "Keep", ParameterValue: "kept" });
+  });
+
+  it("should inject the scoped AllowedCidr when configured and the template declares it", () => {
+    const params = buildParameterOverrides({
+      cfnParameters: { AllowedCidr: "0.0.0.0/0", FlagSeed: "fixed" },
+      namePrefix: "tc-x-y",
+      tenkaCloudAccountId: "111122223333",
+      externalId: VALID_JOB_ID,
+      generateToken: () => "TOK",
+      templateBody: templateWithStringAllowedCidr,
+      deployAllowedCidrs: ["198.51.100.10/32", "203.0.113.0/24"],
+    });
+
+    expect(params).toContainEqual({
+      ParameterKey: "AllowedCidr",
+      ParameterValue: "198.51.100.10/32",
+    });
+    expect(params.filter((p) => p.ParameterKey === "AllowedCidr")).toHaveLength(1);
+    expect(params).toContainEqual({ ParameterKey: "FlagSeed", ParameterValue: "fixed" });
+    expect(params.slice(0, 3)).toEqual([
+      { ParameterKey: "NamePrefix", ParameterValue: "tc-x-y" },
+      { ParameterKey: "TenkaCloudAccountId", ParameterValue: "111122223333" },
+      { ParameterKey: "ExternalId", ParameterValue: VALID_JOB_ID },
+    ]);
+  });
+
+  it("should not inject AllowedCidr when the template does not declare it", () => {
+    const params = buildParameterOverrides({
+      cfnParameters: {},
+      namePrefix: "tc-x-y",
+      tenkaCloudAccountId: "111122223333",
+      externalId: VALID_JOB_ID,
+      generateToken: () => "TOK",
+      templateBody: artifacts.templateBody,
+      deployAllowedCidrs: ["198.51.100.10/32"],
+    });
+
+    expect(params.some((p) => p.ParameterKey === "AllowedCidr")).toBe(false);
+  });
+});
+
+describe("deploy AllowedCidr scoping (#2423)", () => {
+  it("should parse CDK_PARAM_DEPLOY_ALLOWED_CIDRS as a trimmed comma-separated CIDR list", () => {
+    expect(parseDeployAllowedCidrs(" 198.51.100.10/32,203.0.113.0/24 ")).toEqual([
+      "198.51.100.10/32",
+      "203.0.113.0/24",
+    ]);
+    expect(parseDeployAllowedCidrs(undefined)).toBeUndefined();
+    expect(parseDeployAllowedCidrs(" , ")).toBeUndefined();
+  });
+
+  it("should reject malformed deploy AllowedCidr entries before synth/runtime use", () => {
+    expect(() => parseDeployAllowedCidrs("198.51.100.10")).toThrow(/CIDR/);
+    expect(() => parseDeployAllowedCidrs("198.51.100.10/33")).toThrow(/prefix/);
+    expect(() => parseDeployAllowedCidrs("198.51.100.10/xx")).toThrow(/prefix/);
+    expect(() => parseDeployAllowedCidrs("not-an-ip/32")).toThrow(/IP address/);
+  });
+
+  it("should accept an IPv6 CIDR (prefix up to 128)", () => {
+    expect(parseDeployAllowedCidrs("2001:db8::/48")).toEqual(["2001:db8::/48"]);
+    expect(() => parseDeployAllowedCidrs("2001:db8::/129")).toThrow(/prefix/);
+  });
+
+  it("should use the primary CIDR for a String AllowedCidr parameter", () => {
+    expect(
+      resolveAllowedCidrOverride({
+        templateBody: templateWithStringAllowedCidr,
+        deployAllowedCidrs: ["198.51.100.10/32", "203.0.113.0/24"],
+      }),
+    ).toEqual({
+      kind: "configured",
+      parameterValue: "198.51.100.10/32",
+      parameterType: "String",
+      configuredCidrCount: 2,
+      injectedCidrCount: 1,
+    });
+  });
+
+  it("should pass all CIDRs for a CommaDelimitedList AllowedCidr parameter", () => {
+    expect(
+      resolveAllowedCidrOverride({
+        templateBody: templateWithCommaAllowedCidr,
+        deployAllowedCidrs: ["198.51.100.10/32", "203.0.113.0/24"],
+      }),
+    ).toEqual({
+      kind: "configured",
+      parameterValue: "198.51.100.10/32,203.0.113.0/24",
+      parameterType: "CommaDelimitedList",
+      configuredCidrCount: 2,
+      injectedCidrCount: 2,
+    });
+  });
+
+  it("should no-op when the template has no AllowedCidr parameter", () => {
+    expect(
+      resolveAllowedCidrOverride({
+        templateBody: artifacts.templateBody,
+        deployAllowedCidrs: ["198.51.100.10/32"],
+      }),
+    ).toEqual({ kind: "not-declared" });
+  });
+
+  it("should report the unconfigured warning decision when AllowedCidr is declared", () => {
+    expect(
+      resolveAllowedCidrOverride({
+        templateBody: templateWithStringAllowedCidr,
+        deployAllowedCidrs: undefined,
+      }),
+    ).toEqual({
+      kind: "unconfigured",
+      parameterType: "String",
+    });
+  });
+
+  it("should throw a wrapped error when the template YAML is malformed", () => {
+    expect(() =>
+      resolveAllowedCidrOverride({
+        templateBody: "Parameters: [unterminated-flow-sequence",
+        deployAllowedCidrs: ["198.51.100.10/32"],
+      }),
+    ).toThrow(/could not be parsed/);
+  });
+
+  it("should default to String when AllowedCidr declares no explicit Type", () => {
+    expect(
+      resolveAllowedCidrOverride({
+        templateBody: "Parameters:\n  AllowedCidr:\n    Default: 0.0.0.0/0\n",
+        deployAllowedCidrs: ["198.51.100.10/32"],
+      }),
+    ).toEqual({
+      kind: "configured",
+      parameterValue: "198.51.100.10/32",
+      parameterType: "String",
+      configuredCidrCount: 1,
+      injectedCidrCount: 1,
+    });
   });
 });
 
@@ -464,6 +619,63 @@ describe("createStackForDeployment cross-account (#2291)", () => {
         credentials: expect.objectContaining({ AccessKeyId: "AKIA_TEST" }),
       }),
     );
+  });
+
+  it("should pass scoped AllowedCidr to CreateStack when configured and the template declares it", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    const deps = {
+      ...crossAccountDeps(cfn),
+      resolveArtifacts: vi.fn(async () => ({
+        ...artifacts,
+        templateBody: templateWithStringAllowedCidr,
+      })),
+      deployAllowedCidrs: ["198.51.100.10/32", "203.0.113.0/24"],
+    };
+    await createStackForDeployment({ detail: validDetail() }, deps);
+
+    const createCmd = cfn.send.mock.calls
+      .map((c) => c[0])
+      .find((c) => c instanceof CreateStackCommand);
+    expect((createCmd as CreateStackCommand).input.Parameters).toContainEqual({
+      ParameterKey: "AllowedCidr",
+      ParameterValue: "198.51.100.10/32",
+    });
+  });
+
+  it("should warn and leave AllowedCidr unset when the template declares it but no scoped CIDR is configured", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    const deps = {
+      ...crossAccountDeps(cfn),
+      resolveArtifacts: vi.fn(async () => ({
+        ...artifacts,
+        templateBody: templateWithStringAllowedCidr,
+      })),
+      deployAllowedCidrs: undefined,
+    };
+    let warned = false;
+    try {
+      await createStackForDeployment({ detail: validDetail() }, deps);
+      warned = warn.mock.calls.some((call) => {
+        const line = String(call[0]);
+        return (
+          line.includes("deploy.cfn-lambda.allowed-cidr.unconfigured") &&
+          line.includes("multiTeamGriefingRisk")
+        );
+      });
+    } finally {
+      warn.mockRestore();
+    }
+
+    expect(warned).toBe(true);
+    const createCmd = cfn.send.mock.calls
+      .map((c) => c[0])
+      .find((c) => c instanceof CreateStackCommand);
+    expect(
+      (createCmd as CreateStackCommand).input.Parameters?.some(
+        (p) => p.ParameterKey === "AllowedCidr",
+      ),
+    ).toBe(false);
   });
 
   it("should delete an unrecoverable stack before re-create, then CreateStack", async () => {

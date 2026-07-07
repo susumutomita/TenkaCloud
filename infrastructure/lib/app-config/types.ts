@@ -108,6 +108,12 @@ export interface AppConfig {
 
   /** Bulk Deploy の CodeBuild 並列度 (未設定なら AWS account-level quota に任せる)。 */
   readonly deployConcurrentBuildLimit: number | undefined;
+  /**
+   * Issue #2423: score-engine / operator-attacker egress CIDRs for battle app ingress.
+   * `CDK_PARAM_DEPLOY_ALLOWED_CIDRS` is comma-separated; undefined keeps single-team/local
+   * deploys compatible, with a runtime warning when a template declares `AllowedCidr`.
+   */
+  readonly deployAllowedCidrs: readonly string[] | undefined;
 
   /**
    * Issue #2232: Bulk Deploy を Step Functions Distributed Map 経由で発火するか

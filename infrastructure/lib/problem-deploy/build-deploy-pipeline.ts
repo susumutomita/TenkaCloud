@@ -27,6 +27,8 @@ export interface BuildDeployPipelineArgs {
   readonly sourceObjectKey: string;
   readonly deployConcurrentBuildLimit?: number;
   readonly environmentName: string;
+  /** Score-engine / operator-attacker egress CIDRs for problem templates declaring AllowedCidr. */
+  readonly deployAllowedCidrs?: readonly string[];
   /**
    * Issue #2291 (ADR-049 §9): true のとき DeployCreate を Lambda CreateStack + DescribeStacks
    * poll 経路にし、専用 {@link CfnDeployLambda} を生成する。default (false / 未指定) は在来の
@@ -99,6 +101,7 @@ export function buildDeployPipeline(
     const cfnDeploy = new CfnDeployLambda(scope, "CfnDeploy", {
       environmentName: args.environmentName,
       sourceBucketName: args.sourceBucketName,
+      deployAllowedCidrs: args.deployAllowedCidrs,
     });
     cfnDeployFunction = cfnDeploy.fn;
     deployJobLogGroup = cfnDeploy.deploymentLogGroup;

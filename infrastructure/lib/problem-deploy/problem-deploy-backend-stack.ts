@@ -168,6 +168,13 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
   readonly deployConcurrentBuildLimit?: number;
 
   /**
+   * Issue #2423: score-engine / operator-attacker egress CIDRs. When set, the Lambda deploy
+   * path injects this into problem templates that declare `AllowedCidr` so battle app ingress is
+   * not left at a catalog default such as 0.0.0.0/0.
+   */
+  readonly deployAllowedCidrs?: readonly string[];
+
+  /**
    * #1766: tier 別の同時デプロイ上限。DeployApi Lambda の `DEPLOY_QUOTA_BY_TIER` env (JSON)
    * に渡す。未設定ならクォータ無効 (= 在来挙動 / Lite mode)。
    */
@@ -498,6 +505,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       sourceBucketName: props.sourceBucketName,
       sourceObjectKey: props.sourceObjectKey,
       deployConcurrentBuildLimit: props.deployConcurrentBuildLimit,
+      deployAllowedCidrs: props.deployAllowedCidrs,
       environmentName: props.environmentName,
       // Issue #2291: flag OFF (default) では CodeBuild 経路のまま (追加リソースなし)。
       deployViaLambda: props.deployViaLambda,
