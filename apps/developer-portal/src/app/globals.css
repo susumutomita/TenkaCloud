@@ -421,3 +421,352 @@ main {
   padding: 16px;
   color: var(--muted);
 }
+
+/* Marketing home + catalog (#2408). Built from the shared tokens above so the
+   marketing surface inherits the one design system (ADR-0003 §6). */
+.btn--ghost {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.lang-switch {
+  font-size: 14px;
+}
+
+.lang-switch a {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 12px;
+  color: var(--muted);
+}
+
+.lang-switch a:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.marketing-hero {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  text-align: left;
+  padding: 40px 20px 56px;
+}
+
+.marketing-hero__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.marketing-hero__mark {
+  color: var(--accent);
+}
+
+.marketing-badge {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+.marketing-hero h1 {
+  font-size: 42px;
+  line-height: 1.2;
+  margin: 0 0 16px;
+  max-width: 18ch;
+}
+
+.marketing-hero__em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+.marketing-hero p {
+  color: var(--muted);
+  font-size: 18px;
+  max-width: 720px;
+  margin: 0 0 24px;
+}
+
+.marketing-hero .hero__actions {
+  justify-content: flex-start;
+}
+
+.marketing-hero__trust {
+  font-size: 13.5px;
+  margin-top: 20px;
+}
+
+.marketing-section {
+  padding: 48px 0;
+}
+
+.marketing-section--alt {
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.marketing-wrap {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.marketing-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 0 0 8px;
+}
+
+.marketing-wrap h2 {
+  font-size: 28px;
+  margin: 0 0 10px;
+}
+
+.marketing-lead {
+  color: var(--muted);
+  font-size: 17px;
+  max-width: 760px;
+  margin: 0 0 24px;
+}
+
+.marketing-twoup {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.marketing-tile {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 22px;
+}
+
+.marketing-kicker {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: 18px;
+}
+
+.marketing-tile p,
+.marketing-card p,
+.marketing-pricing p {
+  color: var(--muted);
+}
+
+.marketing-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+}
+
+.marketing-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 20px;
+}
+
+.marketing-card h3 {
+  margin: 4px 0 8px;
+  font-size: 18px;
+}
+
+.marketing-role {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 0;
+}
+
+.marketing-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+}
+
+.marketing-step {
+  display: flex;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 18px;
+}
+
+.marketing-step__n {
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 20px;
+}
+
+.marketing-step h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.marketing-bullets {
+  margin: 0;
+  padding-left: 20px;
+  max-width: 760px;
+}
+
+.marketing-bullets li {
+  margin-bottom: 10px;
+}
+
+.marketing-pricing {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.marketing-price {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 8px 0 2px;
+  color: var(--ink);
+}
+
+.marketing-price__unit {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-left: 4px;
+}
+
+.marketing-scope {
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.marketing-features {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  flex: 1;
+}
+
+.marketing-features li {
+  position: relative;
+  padding-left: 20px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 14.5px;
+}
+
+.marketing-features li::before {
+  content: "→";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+}
+
+.marketing-fineprint {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: 8px 0 12px;
+}
+
+.marketing-legal-line {
+  font-size: 13px;
+  margin-top: 16px;
+}
+
+/* Catalog */
+.catalog-topline {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.catalog-legend {
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 2.1;
+}
+
+.catalog-group {
+  margin-top: 32px;
+}
+
+.catalog-count {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 18px;
+}
+
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.catalog-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 18px;
+}
+
+.catalog-card__head {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.catalog-card h3 {
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+
+.catalog-card__id {
+  font-size: 12.5px;
+  color: var(--muted);
+  background: var(--panel);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.catalog-tags {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.catalog-tags li {
+  font-size: 11.5px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.catalog-source {
+  margin-top: 32px;
+  font-size: 13px;
+  color: var(--muted);
+}

@@ -20,6 +20,7 @@ export interface NavSection {
 // Top-level header navigation, identical on every route.
 export const PRIMARY_NAV: readonly NavLink[] = [
   { label: "Product", href: "/product/" },
+  { label: "Catalog", href: "/catalog/" },
   { label: "Developers", href: "/developers/" },
   { label: "Docs", href: "/developers/docs/getting-started/" },
   { label: "API Reference", href: "/developers/api/" },
@@ -45,6 +46,7 @@ export const FOOTER_SECTIONS: readonly NavSection[] = [
     title: "Product",
     links: [
       { label: "Overview", href: "/product/" },
+      { label: "Problem catalog", href: "/catalog/" },
       { label: "Developer hub", href: "/developers/" },
     ],
   },
