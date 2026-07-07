@@ -423,8 +423,12 @@ function sum(values: readonly number[]): number {
 export function parseEstimatedDurationHours(input: string): number | undefined {
   const normalized = input.trim();
   if (normalized.length === 0) return undefined;
+  // Digit runs are bounded (`{1,4}` / `{1,2}`) rather than `+`: two adjacent
+  // unbounded numeric groups separated by `\s*` let a non-matching tail (e.g.
+  // "5h 10x") drive polynomial backtracking (CodeQL js/polynomial-redos). No
+  // real duration exceeds 9999 h/min, so bounding keeps matching linear.
   const hourMinute =
-    /(\d+(?:\.\d+)?)\s*(?:h|hr|hour|hours|時間)\s*(\d+(?:\.\d+)?)\s*(?:m|min|minute|minutes|分)/i.exec(
+    /(\d{1,4}(?:\.\d{1,2})?)\s*(?:h|hr|hour|hours|時間)\s*(\d{1,4}(?:\.\d{1,2})?)\s*(?:m|min|minute|minutes|分)/i.exec(
       normalized,
     );
   if (hourMinute?.[1] && hourMinute[2]) {

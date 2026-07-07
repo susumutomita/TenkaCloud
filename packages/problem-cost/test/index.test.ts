@@ -155,6 +155,14 @@ describe("parseEstimatedDurationHours", () => {
   it("should return undefined when there are no numbers at all", () => {
     expect(parseEstimatedDurationHours("unknown")).toBeUndefined();
   });
+
+  it("should not backtrack catastrophically on a long non-matching digit run", () => {
+    // Regression guard for js/polynomial-redos: before bounding the numeric
+    // groups this input (a huge digit run with a non-matching tail) drove the
+    // hour+minute regex into O(n^2) backtracking. The test completing quickly
+    // is the proof; the value is still `undefined` (no h/m unit present).
+    expect(parseEstimatedDurationHours(`${"9".repeat(50_000)} x`)).toBeUndefined();
+  });
 });
 
 describe("formatUsd", () => {
