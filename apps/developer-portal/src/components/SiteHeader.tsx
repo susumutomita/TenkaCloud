@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PRIMARY_NAV } from "@/lib/navigation";
 import { BrandMark } from "./BrandMark";
 import { CommandSearch } from "./CommandSearch";
+import { HeaderLangSwitch } from "./HeaderLangSwitch";
 
 // The one global header (ADR-0003 §6). Rendered by the app shell so it wraps every
 // route — landing, docs, and the Scalar API reference alike — from the single
@@ -26,6 +27,7 @@ export function SiteHeader() {
           ))}
         </nav>
         <span className="site-header__spacer" />
+        <HeaderLangSwitch />
         <CommandSearch />
         <button
           type="button"
