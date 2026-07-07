@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PRIMARY_NAV } from "@/lib/navigation";
+import { BrandMark } from "./BrandMark";
 import { CommandSearch } from "./CommandSearch";
 
 // The one global header (ADR-0003 §6). Rendered by the app shell so it wraps every
@@ -14,7 +15,8 @@ export function SiteHeader() {
     <header className="site-header">
       <div className="site-header__inner">
         <a className="site-header__brand" href="/">
-          TenkaCloud
+          <BrandMark size={22} className="site-header__mark" />
+          <span>TenkaCloud</span>
         </a>
         <nav className="site-header__nav" aria-label="Primary">
           {PRIMARY_NAV.map((link) => (
