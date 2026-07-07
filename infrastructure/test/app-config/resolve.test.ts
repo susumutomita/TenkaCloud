@@ -300,6 +300,59 @@ describe("resolveAppConfig", () => {
       budgetThresholdPercent: 90,
     });
   });
+
+  it("should fall back to literal ops defaults when the environment has no config.json", () => {
+    const cfg = resolveAppConfig({
+      env: baseEnv({
+        CDK_PARAM_ENVIRONMENT: "staging",
+        CDK_PARAM_OPS_ALERT_EMAIL: "ops@example.com",
+        // staging is production-like: API key parameters must be provided explicitly
+        CDK_PARAM_API_KEY_PLATINUM_TIER_PARAMETER: "test-platinum",
+        CDK_PARAM_API_KEY_PREMIUM_TIER_PARAMETER: "test-premium",
+        CDK_PARAM_API_KEY_STANDARD_TIER_PARAMETER: "test-standard",
+        CDK_PARAM_API_KEY_BASIC_TIER_PARAMETER: "test-basic",
+      }),
+      binDir: BIN_DIR,
+      fs: fsAlwaysMissing,
+      dotenvConfig: noopDotenv,
+      discoverProblems: stubProblems,
+    });
+    expect(cfg.opsMonitoring).toEqual({
+      alertEmail: "ops@example.com",
+      monthlyCostLimitUsd: 10,
+      budgetThresholdPercent: 100,
+    });
+  });
+
+  it("should throw when CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD is not a positive number", () => {
+    expect(() =>
+      resolveAppConfig({
+        env: baseEnv({
+          CDK_PARAM_OPS_ALERT_EMAIL: "ops@example.com",
+          CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD: "-5",
+        }),
+        binDir: BIN_DIR,
+        fs: fsAlwaysMissing,
+        dotenvConfig: noopDotenv,
+        discoverProblems: stubProblems,
+      }),
+    ).toThrow(/CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD must be a positive number/);
+  });
+
+  it("should throw when CDK_PARAM_OPS_BUDGET_THRESHOLD_PERCENT exceeds 100", () => {
+    expect(() =>
+      resolveAppConfig({
+        env: baseEnv({
+          CDK_PARAM_OPS_ALERT_EMAIL: "ops@example.com",
+          CDK_PARAM_OPS_BUDGET_THRESHOLD_PERCENT: "150",
+        }),
+        binDir: BIN_DIR,
+        fs: fsAlwaysMissing,
+        dotenvConfig: noopDotenv,
+        discoverProblems: stubProblems,
+      }),
+    ).toThrow(/CDK_PARAM_OPS_BUDGET_THRESHOLD_PERCENT must be a positive number and <= 100/);
+  });
 });
 
 describe("resolveApiKeyValue", () => {
