@@ -49,6 +49,17 @@ export interface UptimeMultiScoringMetadata {
     readonly body?: string;
     readonly vulnerableStatus: readonly number[];
     readonly penalty: number;
+    /**
+     * [Issue #2422] optional non-spoiler display name surfaced to the participant portal.
+     * Author-controlled; NEVER derive it from slot/path (= the exact endpoint stays hidden).
+     * Trimmed and capped at 80 chars; absent → the portal numbers the probe by index.
+     */
+    readonly label?: string;
+    /**
+     * [Issue #2422] optional non-spoiler symptom line (e.g. "still returns 200 to the probe").
+     * Describes the observable effect, NOT the vulnerability class or endpoint. Capped at 160 chars.
+     */
+    readonly symptom?: string;
   }[];
   readonly hints?: readonly ProgressiveHint[];
 }
@@ -138,6 +149,18 @@ export function parseUptimeMulti(value: unknown): UptimeMultiScoringMetadata | u
   };
 }
 
+/**
+ * [Issue #2422] optional non-spoiler display string: trim, drop when blank, cap length.
+ * Author-controlled portal copy — never derived from slot/path. Over-cap values are truncated
+ * rather than dropped so a slightly-too-long label still renders (best-effort, non-fatal).
+ */
+function parseProbeDisplayString(value: unknown, maxLen: number): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return undefined;
+  return trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed;
+}
+
 /** [ADR-034 / #1666] parse one attack-probe fail-safe. slot/path/vulnerableStatus/penalty required. */
 function parseAttackProbe(
   value: unknown,
@@ -150,6 +173,8 @@ function parseAttackProbe(
     body?: unknown;
     vulnerableStatus?: unknown;
     penalty?: unknown;
+    label?: unknown;
+    symptom?: unknown;
   };
   if (typeof p.slot !== "string" || p.slot.length === 0) return undefined;
   if (typeof p.path !== "string" || p.path.length === 0) return undefined;
@@ -158,6 +183,9 @@ function parseAttackProbe(
     ? p.vulnerableStatus.filter((s): s is number => typeof s === "number")
     : [];
   if (vulnerableStatus.length === 0) return undefined;
+  // [Issue #2422] author-provided non-spoiler display copy (label / symptom) for the portal.
+  const label = parseProbeDisplayString(p.label, 80);
+  const symptom = parseProbeDisplayString(p.symptom, 160);
   return {
     slot: p.slot,
     path: p.path,
@@ -165,6 +193,8 @@ function parseAttackProbe(
     ...(typeof p.body === "string" ? { body: p.body } : {}),
     vulnerableStatus,
     penalty: p.penalty,
+    ...(label ? { label } : {}),
+    ...(symptom ? { symptom } : {}),
   };
 }
 

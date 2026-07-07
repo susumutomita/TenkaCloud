@@ -93,6 +93,11 @@ const FULL_RESULT = {
   scoreEvents: [{ source: "uptime", points: 10, occurredAt: "2026-06-01T00:00:00Z" }],
   lastResult: "ok",
   endpointsHealthJson: "{}",
+  // [#2422] uptime-multi の直近サイクル attack-probe snapshot も 1 UpdateItem で書き戻す。
+  attackProbesJson: JSON.stringify({
+    checkedAt: "2026-06-01T00:00:00Z",
+    probes: [{ outcome: "landed", penalty: 60 }],
+  }),
   postureJson: JSON.stringify({ db_present: true, auth_enabled: false }),
   platform: "posture-1",
   newState: { attackCount: 1 },
@@ -423,6 +428,9 @@ describe("applyKindResult / buildKindResultUpdate / appendKindScoreEvents", () =
     expect(update.UpdateExpression).toContain("ADD score :pts");
     expect(update.UpdateExpression).toContain("lastResult = :lr");
     expect(update.UpdateExpression).toContain("endpointsHealth = :health");
+    // [#2422] attackProbes snapshot column is threaded through apply-kind-result.
+    expect(update.UpdateExpression).toContain("attackProbes = :attackProbes");
+    expect(update.ExpressionAttributeValues?.[":attackProbes"]).toBe(FULL_RESULT.attackProbesJson);
     expect(update.UpdateExpression).toContain("posture = :posture");
     expect(update.UpdateExpression).toContain("platform = :platform");
     expect(update.UpdateExpression).toContain("scoringState = :state");

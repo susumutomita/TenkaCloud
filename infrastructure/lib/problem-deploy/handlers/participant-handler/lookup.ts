@@ -12,6 +12,7 @@ import type {
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import { resolveTargetAccessCapability } from "../deploy-handler/composite-target-access.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
+import { parseAttackProbeStatus } from "../shared/attack-probe-status.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { parseEndpointsHealth } from "../shared/endpoints-health.js";
@@ -142,6 +143,10 @@ export function toProblemView(
     // endpointsHealth aggregate を出す (ADR-005 D1: per-endpoint URL は隠す)。
     // attack-detection / flag では undefined (= probe しない kind)。
     applicationStatus: isUptimeKind(scoring?.kind) ? toApplicationStatus(item) : undefined,
+    // [#2422] uptime-multi の attack-probe 結果 (= 「green なのに満点でない理由」)。 attackProbes
+    // を持つ問題でのみ行に present。 snapshot は非スポイラー (label/symptom/outcome/penalty のみ、
+    // slot/path は含まない) なので、 kind 判定なしで present のときそのまま露出できる。
+    attackProbeStatus: parseAttackProbeStatus(item.attackProbes),
   };
 }
 

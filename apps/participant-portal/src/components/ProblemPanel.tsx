@@ -17,6 +17,7 @@ import type {
 import { useAppConfig } from "../config-context";
 import { useLang, useT } from "../i18n";
 import { describeAgo } from "../lib/format";
+import { AttackProbesPanel } from "./AttackProbesPanel";
 import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
 import {
   describeApplicationStatus,
@@ -383,6 +384,13 @@ export function ProblemPanel({
             },
           ]}
         />
+
+        {/* Issue #2422: uptime-multi の attack-probe 結果。 「green なのに満点でない理由」を
+            defender に見せる (= まだ刺さっている probe + このサイクルの減点)。 attackProbes を
+            持つ問題でのみ backend が返すので、 それ以外では何も描画されない。 */}
+        {problem.attackProbeStatus && problem.attackProbeStatus.probes.length > 0 && (
+          <AttackProbesPanel status={problem.attackProbeStatus} t={t} />
+        )}
 
         {/* [#2392 Phase 2] play surface。 on-demand container が running でない間は
             (stale な) endpoint と提出 UI を隠し、 上の start control に差し替える。 */}

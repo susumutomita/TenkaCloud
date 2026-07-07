@@ -470,6 +470,61 @@ describe("ProblemPanel render branches", () => {
     expect(screen.queryByText(/Service health|サービス状態/)).not.toBeInTheDocument();
   });
 
+  it("should surface why a green app scores less via the attack-probe panel (#2422)", () => {
+    renderPanel({
+      status: "COMPLETE",
+      scoring: { kind: "uptime-multi", pointsAllOk: 100 },
+      applicationStatus: { overall: "healthy", healthyCount: 2, totalCount: 2 },
+      attackProbeStatus: {
+        checkedAt: "2026-07-07T00:00:00.000Z",
+        probes: [
+          {
+            outcome: "landed",
+            penalty: 60,
+            label: "Auth bypass",
+            symptom: "still accepts a login",
+          },
+          { outcome: "blocked", penalty: 30 },
+        ],
+      },
+    });
+    // Green (healthy 2/2) but the section explains the deduction: a probe is still landing.
+    expect(screen.getByText(/Attack probe results|攻撃 probe の結果/)).toBeInTheDocument();
+    expect(screen.getByText(/Auth bypass/)).toBeInTheDocument();
+    expect(screen.getByText(/still accepts a login/)).toBeInTheDocument();
+    // summary indicates 1 of 2 probes still landing.
+    expect(screen.getByText(/1 of 2|2 件中 1 件/)).toBeInTheDocument();
+    // the blocked probe falls back to an index-numbered name (no author label).
+    expect(screen.getByText(/Attack probe 2|攻撃 probe 2/)).toBeInTheDocument();
+  });
+
+  it("should show an all-clear attack-probe summary when nothing lands (#2422)", () => {
+    renderPanel({
+      status: "COMPLETE",
+      scoring: { kind: "uptime-multi", pointsAllOk: 100 },
+      attackProbeStatus: {
+        probes: [
+          { outcome: "blocked", penalty: 30, label: "SQLi probe" },
+          { outcome: "skipped", penalty: 10 },
+        ],
+      },
+    });
+    expect(screen.getByText(/All 2 probes blocked|2 件すべて防御/)).toBeInTheDocument();
+    expect(screen.getByText(/SQLi probe/)).toBeInTheDocument();
+  });
+
+  it("should omit the attack-probe panel when the snapshot is absent or empty (#2422)", () => {
+    const { unmount } = renderPanel({ status: "COMPLETE", scoring: { kind: "uptime-multi" } });
+    expect(screen.queryByText(/Attack probe results|攻撃 probe の結果/)).not.toBeInTheDocument();
+    unmount();
+    renderPanel({
+      status: "COMPLETE",
+      scoring: { kind: "uptime-multi" },
+      attackProbeStatus: { probes: [] },
+    });
+    expect(screen.queryByText(/Attack probe results|攻撃 probe の結果/)).not.toBeInTheDocument();
+  });
+
   it("should render the name as the panel title when present (#1975)", () => {
     renderPanel({ name: "Reachability Check", problemId: "net-evo-01" });
     expect(screen.getByText("Reachability Check")).toBeInTheDocument();

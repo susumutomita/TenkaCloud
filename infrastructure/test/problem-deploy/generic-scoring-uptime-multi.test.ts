@@ -360,4 +360,111 @@ describe("uptime-multi kind", () => {
     expect(result.scoreDelta).toBe(100);
     expect(result.attackDetected).toBeUndefined();
   });
+
+  // [#2422] per-cycle attack-probe snapshot for the participant portal (fired / landed / blocked).
+  function withLabeledAttackProbe(): KindHandlerInput<UptimeMultiScoringMetadata> {
+    const base = withAttackProbe();
+    return {
+      ...base,
+      scoring: {
+        ...base.scoring,
+        attackProbes: [
+          {
+            slot: "api",
+            path: "/api/v1/auth",
+            method: "POST",
+            body: JSON.stringify({ username: "' OR '1'='1", password: "x" }),
+            vulnerableStatus: [200],
+            penalty: 60,
+            label: "Auth bypass probe",
+            symptom: "still accepts a crafted login",
+          },
+        ],
+      },
+    };
+  }
+
+  it("should emit an attackProbesJson snapshot marking a landed probe (defense failed)", async () => {
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const result = await runUptimeMultiKind(withLabeledAttackProbe());
+    expect(result.scoreDelta).toBe(40); // 100 − 60 landed
+    const snapshot = JSON.parse(result.attackProbesJson ?? "{}");
+    expect(snapshot.checkedAt).toBe(NOW_ISO);
+    expect(snapshot.probes).toEqual([
+      {
+        outcome: "landed",
+        penalty: 60,
+        label: "Auth bypass probe",
+        symptom: "still accepts a crafted login",
+      },
+    ]);
+  });
+
+  it("should mark a defended probe as blocked with no penalty in the snapshot", async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      status: url.includes("/api/v1/auth") ? 403 : 200,
+      url,
+      text: async () => "",
+    }));
+    const result = await runUptimeMultiKind(withLabeledAttackProbe());
+    expect(result.scoreDelta).toBe(100);
+    const snapshot = JSON.parse(result.attackProbesJson ?? "{}");
+    expect(snapshot.probes[0].outcome).toBe("blocked");
+    expect(result.attackDetected).toBeUndefined();
+  });
+
+  it("should mark an unreachable probe as skipped (availability judged separately)", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if ((url as string).includes("/api/v1/auth")) throw new TypeError("network");
+      return { status: 200, url, text: async () => "" };
+    });
+    const result = await runUptimeMultiKind(withLabeledAttackProbe());
+    expect(result.scoreDelta).toBe(100);
+    const snapshot = JSON.parse(result.attackProbesJson ?? "{}");
+    expect(snapshot.probes[0].outcome).toBe("skipped");
+  });
+
+  it("should mark a probe whose slot cannot be resolved as skipped", async () => {
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const base = withLabeledAttackProbe();
+    const input = {
+      ...base,
+      scoring: {
+        ...base.scoring,
+        attackProbes: [
+          { slot: "missing", path: "/x", vulnerableStatus: [200], penalty: 30, label: "Ghost" },
+        ],
+      },
+    };
+    const snapshot = JSON.parse((await runUptimeMultiKind(input)).attackProbesJson ?? "{}");
+    expect(snapshot.probes).toEqual([{ outcome: "skipped", penalty: 30, label: "Ghost" }]);
+  });
+
+  it("should omit label/symptom from the snapshot when the probe declares none", async () => {
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const result = await runUptimeMultiKind(withAttackProbe()); // no label/symptom
+    const snapshot = JSON.parse(result.attackProbesJson ?? "{}");
+    expect(snapshot.probes[0]).toEqual({ outcome: "landed", penalty: 60 });
+  });
+
+  it("should never leak the probe slot/path into the snapshot (non-spoiler guard)", async () => {
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const result = await runUptimeMultiKind(withLabeledAttackProbe());
+    expect(result.attackProbesJson).not.toContain("/api/v1/auth");
+    expect(result.attackProbesJson).not.toContain("api"); // slot name excluded too
+  });
+
+  it("should not emit attackProbesJson when attackProbes is absent (backward compat)", async () => {
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const result = await runUptimeMultiKind(buildInput());
+    expect(result.attackProbesJson).toBeUndefined();
+  });
+
+  it("should not emit attackProbesJson when attackProbes is an empty array", async () => {
+    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    const base = withAttackProbe();
+    const input = { ...base, scoring: { ...base.scoring, attackProbes: [] } };
+    const result = await runUptimeMultiKind(input);
+    expect(result.attackProbesJson).toBeUndefined();
+  });
 });

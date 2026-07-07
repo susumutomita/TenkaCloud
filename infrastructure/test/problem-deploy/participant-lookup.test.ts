@@ -585,6 +585,64 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(view?.problems[0]?.applicationStatus).toBeUndefined();
   });
 
+  /* Issue #2422: attackProbeStatus surface -------------------------------- */
+
+  it("should surface the attack-probe snapshot from the deployment row (#2422)", async () => {
+    const scoring = { p: { kind: "uptime-multi" as const, probedSlots: [], pointsAllOk: 5 } };
+    const { shared, ddbSend } = buildShared(scoring);
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          problemId: "p",
+          attackProbes: JSON.stringify({
+            checkedAt: "2026-07-07T00:00:00.000Z",
+            probes: [
+              { outcome: "landed", penalty: 60, label: "Auth bypass", symptom: "accepts login" },
+              { outcome: "blocked", penalty: 30 },
+            ],
+          }),
+        }),
+      ],
+    });
+
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.attackProbeStatus).toEqual({
+      checkedAt: "2026-07-07T00:00:00.000Z",
+      probes: [
+        { outcome: "landed", penalty: 60, label: "Auth bypass", symptom: "accepts login" },
+        { outcome: "blocked", penalty: 30 },
+      ],
+    });
+  });
+
+  it("should leave attackProbeStatus undefined when the row has no snapshot (#2422)", async () => {
+    const scoring = { p: { kind: "uptime-multi" as const, probedSlots: [], pointsAllOk: 5 } };
+    const { shared, ddbSend } = buildShared(scoring);
+    ddbSend.mockResolvedValueOnce({ Items: [sampleRow({ problemId: "p" })] });
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.attackProbeStatus).toBeUndefined();
+  });
+
+  it("should never leak a probe slot/path into attackProbeStatus (non-spoiler guard, #2422)", async () => {
+    const scoring = { p: { kind: "uptime-multi" as const, probedSlots: [], pointsAllOk: 5 } };
+    const { shared, ddbSend } = buildShared(scoring);
+    // Even if a corrupt row smuggled slot/path in, the parser only keeps the wire fields.
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          problemId: "p",
+          attackProbes: JSON.stringify({
+            probes: [{ outcome: "landed", penalty: 60, slot: "api", path: "/secret-endpoint" }],
+          }),
+        }),
+      ],
+    });
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    const json = JSON.stringify(view?.problems[0]?.attackProbeStatus);
+    expect(json).not.toContain("secret-endpoint");
+    expect(json).not.toContain("slot");
+  });
+
   it("should never include endpoint names / URLs in applicationStatus (snapshot guard)", async () => {
     const scoring = { p: { kind: "uptime" as const, pointsPerSuccess: 5, endpoints: [] } };
     const { shared, ddbSend } = buildShared(scoring);

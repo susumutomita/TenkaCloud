@@ -218,6 +218,14 @@ export interface DeploymentItem {
    */
   endpointsHealth?: string;
   /**
+   * [Issue #2422] uptime-multi の直近サイクル attack-probe 結果の JSON 文字列。
+   * shape: `{ checkedAt?, probes: [{ label?, symptom?, outcome, penalty }] }`。
+   * 「green (200) なのに満点でない理由」 (= まだ刺さっている probe) を participant portal に
+   * 見せる。 非スポイラー不変条件により slot / path (= 正確な endpoint)・脆弱性クラスは含めない。
+   * attackProbes を持つ問題でのみ書かれ、 旧行 / 他 kind は本属性を持たない (= 後方互換)。
+   */
+  attackProbes?: string;
+  /**
    * ADR-012 Phase 3.B: 5 種 builtin kind の中で polling 越しに per-deployment で保持する
    * scoring state の JSON 文字列。
    * - `attack-detection` の前回 counter (= 差分加算の baseline)

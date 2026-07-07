@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   type ApplicationStatus,
+  type AttackProbeResult,
   type ParticipantProblemView,
   PortalScoringGateError,
   PortalValidationError,
@@ -8,9 +9,11 @@ import {
 } from "../api/portal-client";
 import {
   describeApplicationStatus,
+  describeAttackProbe,
   formatProblemPanelActionError,
   localizeProblem,
   shouldRefreshAfterFlagSubmit,
+  summarizeAttackProbes,
 } from "./ProblemPanel.helpers";
 
 // `t` echoes the key (+ params) so each branch is identifiable by its returned key.
@@ -116,6 +119,66 @@ describe("describeApplicationStatus (#1917)", () => {
     expect(out.label).toContain("problem_panel.health_degraded");
     expect(out.label).toContain('"healthy":2');
     expect(out.label).toContain('"total":5');
+  });
+});
+
+describe("describeAttackProbe (#2422)", () => {
+  const probe = (over: Partial<AttackProbeResult>): AttackProbeResult => ({
+    outcome: "landed",
+    penalty: 60,
+    ...over,
+  });
+
+  it("should map landed to an error indicator with the negative delta this cycle", () => {
+    const row = describeAttackProbe(probe({ outcome: "landed", penalty: 60 }), 0, t);
+    expect(row.type).toBe("error");
+    expect(row.outcomeLabel).toContain("problem_panel.attack_probe_landed");
+    expect(row.outcomeLabel).toContain('"delta":-60');
+    expect(row.outcomeLabel).toContain('"penalty":60');
+  });
+
+  it("should map blocked to success and skipped to pending with a zero delta", () => {
+    expect(describeAttackProbe(probe({ outcome: "blocked" }), 0, t).type).toBe("success");
+    const skipped = describeAttackProbe(probe({ outcome: "skipped" }), 0, t);
+    expect(skipped.type).toBe("pending");
+    expect(skipped.outcomeLabel).toContain('"delta":0');
+  });
+
+  it("should use the author label when present and index-number it otherwise", () => {
+    expect(describeAttackProbe(probe({ label: "Auth bypass" }), 0, t).name).toBe("Auth bypass");
+    const unnamed = describeAttackProbe(probe({ label: "   " }), 2, t);
+    expect(unnamed.name).toContain("problem_panel.attack_probe_default_name");
+    expect(unnamed.name).toContain('"index":3'); // index + 1
+  });
+
+  it("should include a non-blank symptom and drop a blank one", () => {
+    expect(describeAttackProbe(probe({ symptom: "accepts login" }), 0, t).symptom).toBe(
+      "accepts login",
+    );
+    expect(describeAttackProbe(probe({ symptom: "   " }), 0, t).symptom).toBeUndefined();
+    expect(describeAttackProbe(probe({}), 0, t).symptom).toBeUndefined();
+  });
+});
+
+describe("summarizeAttackProbes (#2422)", () => {
+  const p = (outcome: AttackProbeResult["outcome"]): AttackProbeResult => ({
+    outcome,
+    penalty: 10,
+  });
+
+  it("should warn when at least one probe is still landing", () => {
+    const out = summarizeAttackProbes([p("landed"), p("blocked")], t);
+    expect(out.type).toBe("warning");
+    expect(out.label).toContain("problem_panel.attack_probe_summary_landed");
+    expect(out.label).toContain('"landed":1');
+    expect(out.label).toContain('"total":2');
+  });
+
+  it("should report success when every probe is blocked or skipped", () => {
+    const out = summarizeAttackProbes([p("blocked"), p("skipped")], t);
+    expect(out.type).toBe("success");
+    expect(out.label).toContain("problem_panel.attack_probe_summary_clear");
+    expect(out.label).toContain('"total":2');
   });
 });
 
