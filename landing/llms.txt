@@ -1,0 +1,36 @@
+# TenkaCloud
+
+> A multi-tenant SaaS cloud-competition platform on AWS. Teams solve real cloud problems delivered as **Battle** (real-time, head-to-head) or **Challenge** (self-paced, evergreen). Built on the AWS SaaS Builder Toolkit (`@cdklabs/sbt-aws`); the Control Plane, Application Plane, and per-competitor problem deployment are all expressed in AWS CDK.
+
+> 日本語: TenkaCloud は、本物の AWS 環境で Battle (リアルタイム対戦) と Challenge (自習型演習) を開催するための、Apache 2.0 のオープンソース・クラウド実戦演習プラットフォームです。
+
+TenkaCloud's core extension model is its open problem catalog: a problem is a plugin (`metadata.json` + a single-page CloudFormation `template.yaml` + optional portal slots), and the platform is the host that deploys it into a competitor's own AWS account, scores it, and renders the competitor portal. Every backend is an AWS Lambda (Hono); the frontends are Vite + React + Cloudscape SPAs. DynamoDB tables are forced to PROVISIONED 1/1 to stay inside the AWS Free Tier. There are two deploy modes: **Lite** (single-tenant, one organizer, ~10 min) and **SaaS** (full multi-tenant, pooled + silo tiers).
+
+This file follows the [llms.txt](https://llmstxt.org/) convention. Links point to the canonical sources in the GitHub repository.
+
+## Start here
+
+- [Landing page — 日本語](https://tenkacloud.com/?lang=ja): AWS クラウド実戦演習、Battle / Challenge、料金、導入方法
+- [Landing page — English](https://tenkacloud.com/index.en.html): product overview, Battle / Challenge modes, pricing, and deployment model
+- [README](https://github.com/susumutomita/TenkaCloud/blob/main/README.md): project overview, quick start, and command reference
+
+## Contributing & extending
+
+- [CONTRIBUTING](https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md): setup, development flow, gates, and community roles
+- [Roadmap](https://github.com/susumutomita/TenkaCloud/blob/main/ROADMAP.md): product direction and starter tasks
+- [Competitor-side setup](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md): the least-privilege IAM role to roll out in a competitor account
+
+## Authoring problems
+
+- [Problem catalog repo (TenkaCloudChallenge)](https://github.com/susumutomita/TenkaCloudChallenge#readme): where competition problems live and are contributed
+- [Problem schema + conventions](https://github.com/susumutomita/TenkaCloud/blob/main/problems/README.md): `metadata.json` schema and `template.yaml` conventions
+
+## For AI coding agents
+
+- [AGENTS.md](https://github.com/susumutomita/TenkaCloud/blob/main/AGENTS.md): operational rules for agents (Claude Code, Codex CLI) — role split, gates, prohibitions
+- [CLAUDE.md](https://github.com/susumutomita/TenkaCloud/blob/main/CLAUDE.md): full product overview, architecture, invariants, and command list
+
+## Optional
+
+- [GitHub repository](https://github.com/susumutomita/TenkaCloud): source of truth for code, issues, and discussions
+- [GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions): questions and design discussion
