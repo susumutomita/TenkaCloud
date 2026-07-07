@@ -1,0 +1,130 @@
+# イベント運用 Runbook
+
+Issue #2407。TenkaCloud で 1 回のイベント (Battle / Challenge) を運営する運営者向けの手順書。作問者でなくても、この文書だけで前日準備から撤収まで通せることを目標にする。キャパシティ運用の詳細は [dynamodb-event-capacity.md](./dynamodb-event-capacity.md)、デプロイ手順の詳細は [DEPLOYMENT_GUIDE.md](../../DEPLOYMENT_GUIDE.md)、問題ごとの当日運用は各問題の `OPERATOR.md` (catalog repo) に委ねる。
+
+## 前提: どのモードで動かすか
+
+イベント規模で運用モードを決める。デプロイ手順そのものは DEPLOYMENT_GUIDE.md にあるので、ここでは「どれを選ぶか」だけ確認する。
+
+| モード | 起動 | 何が立つか | 向いている規模 |
+| --- | --- | --- | --- |
+| Lite (単一テナント、デフォルト) | `make deploy` / Console から `lite-pipeline.yaml` | 2 スタック (`ProblemDeployBackendStack` + `TenkaCloudLiteStack`)。Tenant Admin Console + Participant Portal。`tenantId="local"` 固定 | 主催者 1 人 / 1 イベント |
+| SaaS (マルチテナント) | `make deploy-saas` (`scripts/install.sh`) | SBT ControlPlane + Bootstrap + pooled Tenant + 各 SPA hosting。System Admin 招待あり | 複数テナント / 常設運用 |
+| Always-On (ADR-049) | Cloudflare Worker + `make deploy-always-on-ingress` + `make deploy-always-on-runtime` | 常時稼働ゼロ。イベント期間だけ per-event runtime スタック | イベント間の AWS 常時コストを 0 にしたいとき |
+
+- Lite / SaaS は AWS の 1 分 tick (EventBridge `rate(1 minute)`) で採点する。
+- Always-On は per-event runtime スタック内の同じ 1 分 tick で Battle を採点し、Flag は Worker 側で採点する。イベント終了後に runtime を destroy すれば AWS 側の常時課金は消える。
+- 環境切替は `make deploy ENV=production` のように `ENV` で行う (`infrastructure/environments/<env>/.env` を読む)。
+
+## 前日準備
+
+前日までに次を全部潰しておく。当日に初めて触る要素をなくすのが目的。
+
+### 1. デプロイと Outputs の確認
+
+- 使うモードでデプロイが完了していること。Lite なら `tenkacloud-lite` / `tenkacloud-lite-problem-deploy` の 2 スタックが `CREATE_COMPLETE` / `UPDATE_COMPLETE`。
+- 各スタックの Outputs から次を控える。
+  - Participant Portal の URL (`tenkacloud-problem-deploy` / Lite は `tenkacloud-lite-problem-deploy`)。
+  - Admin Console / Application Admin Console の URL。
+  - `EventCapacityRunbookName` (キャパシティ変更に使う SSM Automation document 名)。
+- `.env` に `TENANT_ADMIN_EMAIL` (Lite) または `SYSTEM_ADMIN_EMAIL` (SaaS)、`AWS_REGION`、`CDK_PARAM_DEPLOY_EXTERNAL_ID` が入っていること。Always-On はさらに ingress / runtime 用の `CDK_PARAM_*` が必要 (DEPLOYMENT_GUIDE.md / docs/always-on/README.md)。
+
+### 2. 競技アカウント (competitor account) の bootstrap 確認
+
+各競技チームの AWS アカウントに問題スタックをデプロイするには、そのアカウント側で一度だけ `infrastructure/templates/competitor-bootstrap.yaml` を流し、IAM ロール `TenkaCloud-CompetitorDeploy-Role` を作っておく必要がある。
+
+- このロールの信頼ポリシーは「`arn:aws:iam::<TenkaCloud アカウント>:root` からの `sts:AssumeRole`」を **`sts:ExternalId` 一致を条件に** 許可している (アカウント + ExternalId の 2 要素、Confused Deputy 対策)。
+- 運営側の ExternalId は SSM SecureString に置き、`CDK_PARAM_DEPLOY_EXTERNAL_ID` で配線する。**ExternalId は常に必須** (省略した AssumeRole は禁止)。
+- 前日に、テスト用に 1 アカウントぶんデプロイを流して AssumeRole が通ることを確認する。ここが通らないと当日の一括デプロイが全チーム落ちる。
+
+### 3. 問題ごとの smoke test
+
+出題する各問題について、捨てチーム用スタックを 1 個デプロイし、その問題の `OPERATOR.md` (catalog repo の `battles/<id>/OPERATOR.md` / `challenges/<id>/`) の「Before the event」に従って動作確認する。
+
+- Battle の URL 系 Output はデフォルトで空文字 `""` になっている (参加者がエンドポイントを登録するまで採点が始まらない participant-action gate)。デプロイ直後にスコアが 0 なのは正常。
+- 各問題の想定する登録手順 (例: `Ec2HostHint` を各スロットに貼る) と、採点エンジンが叩くヘルスパス (例: `/`、`/api/v1/apistatus`、`/meta` + `/score`) が 200 を返すことを確認する。
+- 赤チーム (disruption) を持つ問題は、`OPERATOR.md` の smoke test スクリプトを 1 回流し、fault injection と revert が効くことを確認する。
+
+### 4. キャパシティの事前スケール
+
+参加者 portal の polling と採点 tick で read が支配的になる。throttle は participant 体験を直撃するので、**出てから上げるのではなく、イベント開始 30 分前に規模の目安どおり事前に上げる**。
+
+- 対象は event-hot な 5 テーブル: `Deployments` / `Events` / `Teams` / `ProblemEndpoints` / `Disruptions`。
+- 手順・規模別の目安値・課金感覚・戻し方は [dynamodb-event-capacity.md](./dynamodb-event-capacity.md) に集約してある。`EventCapacityRunbookName` の SSM Automation を `aws ssm start-automation-execution` で回す。
+- 上げたら必ず撤収チェックリストで 1/1 に戻す (戻し忘れが唯一の課金爆死経路)。
+
+### 5. 参加者ログイン鍵の確認
+
+- 参加者は **チームごとのログイン鍵** で Participant Portal に入る (個人アカウントでも Cognito でもない)。鍵は 43 文字の base64url 文字列で、デプロイ時に発行され UI に一度だけ表示される。
+- 鍵そのものが bearer トークンになる (毎 polling で `Authorization` に載る)。アイドル 6 時間で自動ログアウトする。
+- 前日に、テストチームの鍵で実際にログインし、そのチームのデプロイと採点が portal に見えることを確認する。招待リンク `/login#invite=<鍵>` は鍵を prefill するが自動送信はしない (鍵が履歴に残らないよう hash は消える)。
+
+## 当日タイムライン
+
+| 時刻 | やること |
+| --- | --- |
+| T-60 分 | 全スタックの状態を再確認。Participant Portal / Admin Console が開くこと。前日から `.env` や ExternalId を変えていないこと |
+| T-30 分 | キャパシティを規模の目安値に事前スケール (5 テーブル、[capacity runbook](./dynamodb-event-capacity.md))。scale-up は無制限なので余裕を持って上げる |
+| T-15 分 | 参加者へ Participant Portal URL とチームログイン鍵を配布。各チームが問題スタックをデプロイ (または運営が一括デプロイ) |
+| T-5 分 | 各チームがエンドポイントを登録し、採点が回り始めていることを Deployments のスコアで確認。まだ 0 のチームは登録漏れ (下の「スコアが止まった」参照) |
+| T-0 | 競技開始。以降は disruption スケジュールを各問題の `OPERATOR.md` で把握しつつ部屋を監視 |
+| 競技中 | キャパシティ panel (30 秒 polling) を監視。`Throttle 発生` (赤) が出たら即 1 段上げる。bulk deploy 直前は `Deployments` の write を一時的に 1 段上げる |
+| 終了 | 採点を止める (イベント終了時刻を過ぎた round は tick が自動で skip する)。順位を確定 |
+| 撤収 | 下の撤収チェックリスト |
+
+- disruption の fire 時刻は問題ごとに違い、多くは `publicHint: false` (参加者に見えない)。運営は各問題の `OPERATOR.md` の赤チーム表で把握する。参加者には明かさない。
+- `afterMinutes` など運営が調整可能なパラメータは各問題の `disruptions[].operatorEditable` に列挙されている。
+
+## よくある障害と切り分け
+
+### スコアが止まった (特定チームだけ / 全チーム)
+
+採点は 1 分ごとの EventBridge tick で、各チームの **実効エンドポイント URL** (`override ?? default`) を叩く。止まる原因は主に 4 つ。
+
+1. **エンドポイント未登録** (特定チーム): Battle の default URL は空文字なので、参加者が override を登録するまで採点対象にならず、その tick は no-op になる。application-admin-console のイベント詳細、または Deployments のスコアで「0 のまま」のチームを特定し、`ProblemEndpoints` に override が入っているか確認する。→ 参加者にエンドポイント登録 (例: `Ec2HostHint` を各スロットに貼る) を促す。
+2. **プローブ失敗** (特定チーム): 登録済みだがエンドポイントが 200 を返していない。全エンドポイントが OK の tick でしか加点しない問題が多い (`uptime-multi` / `uptime-flat`)。その問題の `OPERATOR.md` の smoke test コマンドで当該チームの URL を叩き、アプリが落ちていないか、disruption が刺さっていないかを確認する。
+3. **キャパシティ throttle** (全チーム): event-hot 5 テーブルが 1/1 のまま参加者が増えると、tick の read (`Events` / `Teams` / `ProblemEndpoints`) や score write (`Deployments`) が throttle して採点が詰まる。キャパシティ panel の `Throttle 発生` (赤) を確認し、[capacity runbook](./dynamodb-event-capacity.md) で上げる。**全チームのスコアが同時に止まったらまずこれを疑う**。
+4. **イベントが active でない** (全チーム): 開始前 (未来スケジュール) または終了後の round は tick が意図的に skip する。イベント定義の開始 / 終了時刻を確認する。
+
+### デプロイ失敗 (問題スタックが競技アカウントに立たない)
+
+デプロイは `DeployCreateRequested` イベント → `DeployCreateStateMachine` → CFn デプロイ handler が競技アカウントに AssumeRole して CFn CreateStack する。ジョブは `Deployments` テーブルに 1 行ずつ記録され、`status` / `failureReason` が入る。まずそこを見る。
+
+- **AssumeRole / ExternalId 不一致** (`AccessDenied`): 競技アカウントの `TenkaCloud-CompetitorDeploy-Role` の信頼ポリシーが、運営アカウントか ExternalId で弾いている。競技アカウントで `competitor-bootstrap.yaml` が正しい `TenkaCloudAccountId` + `ExternalId` で流されているか、運営側の ExternalId SSM SecureString が一致するかを確認する。ExternalId ローテーション中の取りこぼしは 1 世代前のパラメータで自動リトライされるが、それでも落ちるなら値ズレ。
+- **CFn CreateStack 失敗**: スタックが `CREATE_FAILED` / `ROLLBACK_COMPLETE` などの terminal 状態。`failureReason` (= `StackStatusReason`) を読む。terminal 状態のスタックは delete してから再作成される。競技アカウント側の CloudFormation イベントを直接見ると根本原因 (権限 / リソース上限 / テンプレートエラー) が分かる。
+- **テンプレート / メタデータ不備**: `metadata.json is not valid JSON`、`cfnParameters` が文字列でない、問題側の ExternalId パラメータが 16 文字未満、S3 上のテンプレート object が空、などは handler が明示メッセージを出す。作問側の問題なので該当問題の catalog を確認する。
+- **一括デプロイが全チーム落ちる**: 個別要因でなく bootstrap / ExternalId の配線ミス。前日に 1 アカウントで AssumeRole を確認していれば当日は起きにくい。
+
+### 参加者ログイン不可
+
+Participant Portal のログインはチームログイン鍵そのものを bearer にする (参加者側に Cognito / JWT はない)。失敗の切り分けは次のとおり。
+
+- **鍵が空**: フロントが `EMPTY_TEAM_LOGIN_KEY` を出し、リクエストは飛ばない。→ 鍵を入力してもらう。
+- **鍵の形式が不正** (43 文字の base64url でない): DynamoDB を引く前に **401**。コピー&ペーストで前後に空白 / 改行が混ざっている、鍵が途中で切れている、を疑う。
+- **形式は正しいがチームが見つからない**: 鍵がローテーション / TTL 失効した、または撤収でスタックが消えて sparse GSI2 の行が消えた、などで **401** (`PortalAuthError`)。→ 有効な鍵を再発行 / 再配布する。デプロイをテスト中に消していないか確認する。
+- **バックエンド到達不能**: フロントが `BACKEND_UNREACHABLE`。Participant Portal のバックエンド (`tenkacloud-problem-deploy`) が生きているか、URL / runtime-config が正しいかを確認する。
+- 鍵の保存方式はバックエンドで異なる (デフォルト DynamoDB は sparse GSI2 `TEAMKEY#<鍵>` に平文で索引、Always-On / SQL 経路は SHA-256 ハッシュのみ)。どちらでも「鍵 = そのチームの認証情報」なので、鍵の配布経路は限定する。
+
+## 撤収チェックリスト
+
+イベント終了後、上から順に。**キャパシティの戻しと問題スタックの削除は必須**。
+
+- [ ] 順位を確定し、必要なら Deployments のスコア履歴 (`EVENT#...` 行) を控える。
+- [ ] **キャパシティを 1/1 に戻す** (event-hot 5 テーブル)。[capacity runbook](./dynamodb-event-capacity.md) の scale-down。scale-down はテーブルあたり 1 日の回数制限があるので、細かく下げず一発で 1/1 に戻す。上げっぱなしの放置が唯一の課金爆死経路。
+- [ ] **各チームの問題スタックを削除**: `aws cloudformation delete-stack --stack-name <チームスタック名>`。問題によっては参加者が作った managed リソース (Lambda / ECS / App Runner / ALB / ECR / SG など) がスタック外に残る (例: microservice-migration-battle)。各問題の `OPERATOR.md` の「After the event」に従い、`${NamePrefix}` prefix / `TenkaCloud:NamePrefix` タグで掃く。
+- [ ] Battle 問題のログイン鍵は TTL で自動失効するが、早期に無効化したい場合はデプロイを削除する。
+- [ ] Always-On の場合: `make archive-always-on-runtime` でスコアを退避してから `make destroy-always-on-runtime`。per-event runtime を消せば AWS 常時課金が 0 に戻る (nightly sweeper も `tenkacloud-event-runtime-*` を掃除する)。D1 は互換期間中は消さない。
+- [ ] プラットフォーム自体を畳む場合のみ: Lite は `make destroy` (Console 経由なら CodeBuild を `ACTION=destroy` で再実行)、SaaS は `make destroy-saas` (`scripts/cleanup.sh`、部分削除からでも冪等)。単発イベントごとにプラットフォームまで消す必要はない。
+
+## リハーサル振り返り
+
+イベント後のドライラン振り返り項目 (実イベントでの気づきの反映) は #2405 で別途扱う。実イベントを 1 回通してから、この Runbook に不足していた切り分け手順を追記すること。
+
+## 参照
+
+- [dynamodb-event-capacity.md](./dynamodb-event-capacity.md) — イベント中のキャパシティ運用の詳細手順
+- [DEPLOYMENT_GUIDE.md](../../DEPLOYMENT_GUIDE.md) — Lite / SaaS の具体的なデプロイ手順
+- [docs/always-on/README.md](../always-on/README.md) — Always-On モードの運用
+- [docs/local-play.md](../local-play.md) — AWS なしのローカル動作確認 (`make local`)
+- `infrastructure/templates/README.md` — 競技アカウント側の bootstrap 手順
+- 各問題の `OPERATOR.md` (catalog repo `battles/<id>/OPERATOR.md`) — 問題ごとの当日運用・赤チーム・撤収
