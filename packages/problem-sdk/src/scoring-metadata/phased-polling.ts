@@ -17,7 +17,12 @@ export interface PhasedPollingResponsePenalty {
 }
 
 export interface PhasedPollingBonus {
-  /** Only known bonus kind is `all-slots-on-platforms` (Phase 3.B). */
+  /**
+   * Bonus kind. Known kinds honored by the engine: `all-slots-on-platforms` (membership —
+   * every slot on a platform from `platforms`) and `all-slots-distinct-platforms` (Issue #2421
+   * — membership AND all slots pairwise distinct). Both evaluate the URL-verified tier
+   * (Issue #2420), so `/meta` tampering cannot satisfy them.
+   */
   readonly kind: string;
   readonly points: number;
   readonly once?: boolean;
