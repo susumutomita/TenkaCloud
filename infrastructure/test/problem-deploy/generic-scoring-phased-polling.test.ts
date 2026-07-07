@@ -16,6 +16,14 @@ const NOW_AT_30MIN = "2026-05-12T09:30:00.000Z";
 const NOW_AT_70MIN = "2026-05-12T10:10:00.000Z";
 const NOW_AT_100MIN = "2026-05-12T10:40:00.000Z";
 
+// Issue #2420: managed-runtime host URLs whose tier the engine trusts (an AWS-owned hostname a
+// team on EC2 cannot mint), vs an EC2 host that must never earn managed-tier points on self-report.
+const LAMBDA_URL = "https://svc-abc123.lambda-url.us-east-1.on.aws/";
+const APIGW_URL = "https://abc123.execute-api.us-east-1.amazonaws.com/";
+const APPRUNNER_URL = "https://abc123.us-east-1.awsapprunner.com/";
+const ELB_URL = "https://tc-mig-team1-1234567890.us-east-1.elb.amazonaws.com/";
+const EC2_HOST_URL = "http://ec2-203-0-113-7.compute-1.amazonaws.com/";
+
 const baseScoring: PhasedPollingScoringMetadata = {
   kind: "phased-polling",
   intervalMinutes: 1,
@@ -149,7 +157,9 @@ describe("phased-polling kind", () => {
           ...buildInput().deployment,
           stackOutputs: JSON.stringify({
             UsersUrl: "https://api.example.com/",
-            OrdersUrl: "https://orders.example.com/",
+            // Issue #2420: orders self-reports lambda AND is registered behind a real Lambda
+            // Function URL, so it genuinely earns the managed 1000/slot rate.
+            OrdersUrl: LAMBDA_URL,
           }),
         },
         scoring: { ...baseScoring, probe: { ...baseScoring.probe, posturePath: "/posture" } },
@@ -201,7 +211,15 @@ describe("phased-polling kind", () => {
         text: async () => JSON.stringify({ platform: "lambda" }),
       })
       .mockResolvedValueOnce({ status: 200, text: async () => "" });
-    const result = await runPhasedPollingKind(buildInput());
+    // Issue #2420: the slot must be registered behind a real Lambda host for the tier to verify.
+    const result = await runPhasedPollingKind(
+      buildInput({
+        deployment: {
+          ...buildInput().deployment,
+          stackOutputs: JSON.stringify({ BaseUrl: LAMBDA_URL }),
+        },
+      }),
+    );
     // 1 slot で all-slots 条件が満たされるので bonus も同時に発火
     expect(result.scoreDelta).toBe(1000 + 5000);
   });
@@ -265,16 +283,23 @@ describe("phased-polling kind", () => {
       }
       return { status: 200, text: async () => "" };
     });
-    const result = await runPhasedPollingKind(buildInput());
+    // Issue #2420: slot registered behind a real Lambda host so the lambda tier verifies.
+    const lambdaInput = () =>
+      buildInput({
+        deployment: {
+          ...buildInput().deployment,
+          stackOutputs: JSON.stringify({ BaseUrl: LAMBDA_URL }),
+        },
+      });
+    const result = await runPhasedPollingKind(lambdaInput());
     expect(result.scoreDelta).toBe(1000 + 5000);
     expect(result.newState?.bonusAwarded?.["all-slots-on-platforms"]).toBe(true);
 
     // 次 tick (= prevState に awarded フラグあり) では bonus 加点なし
-    const next = await runPhasedPollingKind(
-      buildInput({
-        prevState: { bonusAwarded: { "all-slots-on-platforms": true } },
-      }),
-    );
+    const next = await runPhasedPollingKind({
+      ...lambdaInput(),
+      prevState: { bonusAwarded: { "all-slots-on-platforms": true } },
+    });
     expect(next.scoreDelta).toBe(1000);
   });
 
@@ -291,5 +316,170 @@ describe("phased-polling kind", () => {
     // 遅延を確実に inject できないため、 ここでは responsePenalty 適用なし path を pin する
     const result = await runPhasedPollingKind(buildInput());
     expect(result.scoreDelta).toBe(100);
+  });
+
+  // --- Issue #2420: verify the hosting tier from the registered URL, not the /meta self-report ---
+
+  function singleSlotInput(
+    url: string,
+    scoringOverride: PhasedPollingScoringMetadata = baseScoring,
+    extra: Partial<KindHandlerInput<PhasedPollingScoringMetadata>> = {},
+  ): KindHandlerInput<PhasedPollingScoringMetadata> {
+    return buildInput({
+      deployment: { ...buildInput().deployment, stackOutputs: JSON.stringify({ BaseUrl: url }) },
+      scoring: scoringOverride,
+      ...extra,
+    });
+  }
+
+  it("should NOT award managed-tier points or the bonus when an EC2 service self-reports lambda", async () => {
+    // /meta lies "lambda" but the registered URL is the EC2 host → verified tier is ec2.
+    fetchMock
+      .mockResolvedValueOnce({
+        status: 200,
+        text: async () => JSON.stringify({ platform: "lambda" }),
+      })
+      .mockResolvedValueOnce({ status: 200, text: async () => "" });
+    const result = await runPhasedPollingKind(singleSlotInput(EC2_HOST_URL));
+    expect(result.scoreDelta).toBe(100); // ec2 rate, not 1000, and no +5000 bonus
+    expect(result.newState).toBeUndefined();
+    expect(result.platform).toBe("ec2");
+  });
+
+  it("should apply the degraded phase to a service faking lambda while still on EC2", async () => {
+    // degraded phase keys on the verified tier (ec2), so the faked lambda is still degraded.
+    fetchMock
+      .mockResolvedValueOnce({
+        status: 200,
+        text: async () => JSON.stringify({ platform: "lambda" }),
+      })
+      .mockResolvedValueOnce({ status: 200, text: async () => "" });
+    const result = await runPhasedPollingKind(
+      singleSlotInput(EC2_HOST_URL, baseScoring, {
+        nowMs: Date.parse(NOW_AT_70MIN),
+        nowIso: NOW_AT_70MIN,
+      }),
+    );
+    expect(result.scoreDelta).toBe(10); // ec2 degradedPoints, not lambda's 1000
+  });
+
+  it("should award lambda-tier points for a service behind API Gateway even if /meta says ec2", async () => {
+    // URL host wins over the self-report: execute-api → lambda tier.
+    const noBonus: PhasedPollingScoringMetadata = { ...baseScoring, bonuses: [] };
+    fetchMock
+      .mockResolvedValueOnce({ status: 200, text: async () => JSON.stringify({ platform: "ec2" }) })
+      .mockResolvedValueOnce({ status: 200, text: async () => "" });
+    const result = await runPhasedPollingKind(singleSlotInput(APIGW_URL, noBonus));
+    expect(result.scoreDelta).toBe(1000);
+    expect(result.platform).toBe("lambda");
+  });
+
+  it("should award apprunner-tier points when the URL host is an App Runner service", async () => {
+    const noBonus: PhasedPollingScoringMetadata = { ...baseScoring, bonuses: [] };
+    fetchMock
+      .mockResolvedValueOnce({ status: 200, text: async () => JSON.stringify({ platform: "ec2" }) })
+      .mockResolvedValueOnce({ status: 200, text: async () => "" });
+    const result = await runPhasedPollingKind(singleSlotInput(APPRUNNER_URL, noBonus));
+    expect(result.scoreDelta).toBe(1000);
+    expect(result.platform).toBe("apprunner");
+  });
+
+  // --- Issue #2421: all-slots-distinct-platforms bonus (uses the verified tier from #2420) ---
+
+  const THREE_SLOTS = [
+    { slot: "users", key: "UsersUrl" },
+    { slot: "orders", key: "OrdersUrl" },
+    { slot: "catalog", key: "CatalogUrl" },
+  ] as const;
+
+  const distinctScoring: PhasedPollingScoringMetadata = {
+    ...baseScoring,
+    bonuses: [
+      {
+        kind: "all-slots-distinct-platforms",
+        platforms: ["lambda", "ecs", "apprunner"],
+        points: 8000,
+        once: true,
+      },
+    ],
+  };
+
+  function threeSlotInput(
+    urls: Readonly<Record<string, string>>,
+    scoringOverride: PhasedPollingScoringMetadata = distinctScoring,
+  ): KindHandlerInput<PhasedPollingScoringMetadata> {
+    const stackOutputs: Record<string, string> = {};
+    for (const s of THREE_SLOTS) stackOutputs[s.key] = urls[s.slot] ?? EC2_HOST_URL;
+    return buildInput({
+      deployment: { ...buildInput().deployment, stackOutputs: JSON.stringify(stackOutputs) },
+      scoring: scoringOverride,
+      slots: THREE_SLOTS.map((s) => ({
+        slot: s.slot,
+        default: { from: "cfn-output", key: s.key, appendPath: `/${s.slot}` },
+        overridable: true,
+      })),
+    });
+  }
+
+  /** All slots healthy; /meta echoes the slot name (irrelevant — the URL host decides the tier). */
+  function mockAllHealthy(): void {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith("/meta")) {
+        return { status: 200, text: async () => JSON.stringify({ platform: "ec2" }) };
+      }
+      return { status: 200, text: async () => "" };
+    });
+  }
+
+  it("should award all-slots-distinct-platforms when every slot is on a distinct managed runtime", async () => {
+    mockAllHealthy();
+    const result = await runPhasedPollingKind(
+      threeSlotInput({ users: LAMBDA_URL, orders: ELB_URL, catalog: APPRUNNER_URL }),
+    );
+    // lambda(1000) + ecs(1000) + apprunner(1000) + distinct bonus(8000)
+    expect(result.scoreDelta).toBe(3000 + 8000);
+    expect(result.newState?.bonusAwarded?.["all-slots-distinct-platforms"]).toBe(true);
+  });
+
+  it("should NOT award all-slots-distinct-platforms when two slots share a platform", async () => {
+    mockAllHealthy();
+    const result = await runPhasedPollingKind(
+      threeSlotInput({ users: LAMBDA_URL, orders: LAMBDA_URL, catalog: APPRUNNER_URL }),
+    );
+    // two lambda + one apprunner → not pairwise distinct → base points only, no bonus
+    expect(result.scoreDelta).toBe(3000);
+    expect(result.newState).toBeUndefined();
+  });
+
+  it("should NOT award distinct bonus when a slot fakes lambda while on EC2 (verified tier blocks it)", async () => {
+    // catalog is registered on the EC2 host but self-reports lambda → verified ec2 → outside the set.
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith("/meta")) {
+        return { status: 200, text: async () => JSON.stringify({ platform: "lambda" }) };
+      }
+      return { status: 200, text: async () => "" };
+    });
+    const result = await runPhasedPollingKind(
+      threeSlotInput({ users: LAMBDA_URL, orders: ELB_URL, catalog: EC2_HOST_URL }),
+    );
+    // lambda(1000) + ecs(1000) + ec2(100, Phase 0) → 2100, distinct bonus withheld
+    expect(result.scoreDelta).toBe(2100);
+    expect(result.newState).toBeUndefined();
+  });
+
+  it("should treat all-slots-distinct-platforms with an empty platforms set as unsatisfied", async () => {
+    mockAllHealthy();
+    const emptyPlatforms: PhasedPollingScoringMetadata = {
+      ...baseScoring,
+      bonuses: [{ kind: "all-slots-distinct-platforms", platforms: [], points: 8000, once: true }],
+    };
+    const result = await runPhasedPollingKind(
+      threeSlotInput(
+        { users: LAMBDA_URL, orders: ELB_URL, catalog: APPRUNNER_URL },
+        emptyPlatforms,
+      ),
+    );
+    expect(result.scoreDelta).toBe(3000); // base points only, no bonus
+    expect(result.newState).toBeUndefined();
   });
 });
