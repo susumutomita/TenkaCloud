@@ -12,6 +12,8 @@
     "check:links": "tsx scripts/check-internal-links.ts",
     "generate:reference": "tsx scripts/generate-reference.ts",
     "check:reference": "tsx scripts/generate-reference.ts --check",
+    "generate:catalog": "tsx scripts/generate-catalog.ts",
+    "check:catalog": "tsx scripts/generate-catalog.ts --check",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage"
   },

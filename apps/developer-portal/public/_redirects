@@ -1,0 +1,25 @@
+# Cloudflare Pages redirects for the tenkacloud.com flip (#2408, ADR-0003 §10 stage 5).
+#
+# After the flip the developer portal serves tenkacloud.com. These rules keep the
+# old static-landing URLs alive so external links and search results do not 404.
+# `SOURCE  DESTINATION  STATUS` — Cloudflare serves a real file first, so only paths
+# with no matching file hit these rules. Copied verbatim into the build output
+# (out/_redirects) because Next.js `output: export` copies the public/ directory.
+
+# Old localized landing entry points → the new JA (root) / EN (/en) marketing home.
+/index.html        /        301
+/index.en.html     /en/     301
+
+# Legal pages moved from flat .html files to trailing-slash routes.
+/privacy.html      /privacy/       301
+/privacy.en.html   /en/privacy/    301
+/terms.html        /terms/         301
+/terms.en.html     /en/terms/      301
+/legal.html        /legal/         301
+/legal.en.html     /en/legal/      301
+
+# The embedded live demos (participant-portal / application-admin-console mocks)
+# were built into the old landing only. Until they are rebuilt under the portal,
+# send their bookmarked URLs to the product overview instead of 404.
+/portal-demo/*     /product/       302
+/admin-demo/*      /product/       302
