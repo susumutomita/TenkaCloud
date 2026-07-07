@@ -38,6 +38,18 @@ export interface EventApiLambdaProps {
    */
   readonly disruptionsTable: Table;
   /**
+   * Issue #2410 Slice 2: キャパ監視 (`GET /admin/capacity`) が DescribeTable する
+   * event-hot テーブルの 1 つ。他 4 テーブル (Events / Teams / Deployments / Disruptions)
+   * は既存 props を流用し、本 prop で 5 テーブルが揃う。
+   */
+  readonly problemEndpointsTable: Table;
+  /**
+   * Issue #2410 Slice 1 の SSM Automation document 名。`GET /admin/capacity` response に
+   * echo され、event 管理画面がそのまま実行コマンド例を表示する。stack が常に runbook と
+   * 同時に配線するため必須 (handler 側は env 欠落 = 旧 deploy を null として扱う)。
+   */
+  readonly capacityRunbookDocumentName: string;
+  /**
    * Issue #888: problem metadata.json の `disruptions[]` 宣言。 Lambda runtime で
    * `(problemId, disruptionId)` lookup に使う。
    */
@@ -120,6 +132,9 @@ export class EventApiLambda extends Construct {
         ...(props.defaultTenantId ? { DEFAULT_TENANT_ID: props.defaultTenantId } : {}),
         // Issue #888: disruption fire / catalog / audit Lambda 経路で参照
         DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName,
+        // Issue #2410 Slice 2: キャパ監視の event-hot 5 テーブル目 + runbook document 名。
+        PROBLEM_ENDPOINTS_TABLE_NAME: props.problemEndpointsTable.tableName,
+        CAPACITY_RUNBOOK_DOCUMENT_NAME: props.capacityRunbookDocumentName,
         // Issue #910 (#895 Phase 2.C.2.b): bulk batch payload S3 bucket + feature flag。
         // bucket 未配線時は空文字、 flag は default false (= 旧 fan-out 維持)。
         BULK_DEPLOY_PAYLOAD_BUCKET: props.bulkDeployPayloadBucket?.bucketName ?? "",
@@ -189,6 +204,28 @@ export class EventApiLambda extends Construct {
     if (props.bulkDeployPayloadBucket) {
       props.bulkDeployPayloadBucket.grantPut(this.fn);
     }
+    // Issue #2410 Slice 2: キャパ監視 (`GET /admin/capacity`) は event-hot 5 テーブルの
+    // DescribeTable (現行プロビジョン読み取り) + CloudWatch GetMetricData (消費/throttle) のみ。
+    // GetMetricData は resource-level permission 非対応のため resources は "*" (AWS 仕様)。
+    const eventHotTables = [
+      props.eventsTable,
+      props.teamsTable,
+      props.deploymentsTable,
+      props.problemEndpointsTable,
+      props.disruptionsTable,
+    ];
+    this.fn.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["dynamodb:DescribeTable"],
+        resources: eventHotTables.map((t) => t.tableArn),
+      }),
+    );
+    this.fn.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["cloudwatch:GetMetricData"],
+        resources: ["*"],
+      }),
+    );
     // [ADR-037 Slice 2] recurring disruption の早期解除 (operator の一覧→Cancel) は、 executor が作った
     // `tc-recur-*` rate schedule を同一アカウントから消す。 DeleteSchedule を tc-recur-* に scope して付与
     // (= 最小権限。 作成は executor、 削除は本 Lambda)。 EndDate 到達分は aws-scheduler が自動削除する。

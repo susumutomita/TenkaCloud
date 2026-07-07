@@ -4,6 +4,7 @@ import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { DeployProgressPanel } from "../../components/event-detail/DeployProgressPanel";
 import { EventRescuePanel } from "../../components/event-detail/EventWizardPanel";
+import { CapacityPanel } from "./CapacityPanel";
 import type { EventTabContentProps } from "./tab-content-props";
 
 /**
@@ -16,8 +17,10 @@ import type { EventTabContentProps } from "./tab-content-props";
  * 表示 section:
  *  1. EventRescuePanel — status === TEARDOWN のときだけ render する force-archive 復旧
  *  2. Deploy 進捗詳細 — DeployProgressPanel。 deployment が 0 件のときは empty hint
+ *  3. CapacityPanel — イベント中の DynamoDB キャパ監視 (#2410、TenantAdmin のみ read 可)
  */
 export function OperationsTab({
+  apiClient,
   canMutateTenant,
   counts,
   detail,
@@ -59,6 +62,8 @@ export function OperationsTab({
           <Alert type="info">{t("event_detail.operations_deploy_progress_empty")}</Alert>
         )}
       </Container>
+
+      <CapacityPanel apiClient={apiClient} t={t} />
     </SpaceBetween>
   );
 }

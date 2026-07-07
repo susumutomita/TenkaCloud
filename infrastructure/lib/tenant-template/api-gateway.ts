@@ -215,6 +215,12 @@ export class ApiGateway extends Construct {
     auditLog.addMethod("GET", eventIntegration, deployMethodOptions);
     auditLog.addResource("export").addMethod("GET", eventIntegration, deployMethodOptions);
 
+    // Issue #2410 Slice 2: イベント中の DynamoDB キャパ監視 (TenantAdmin のみ、read-only)。
+    // EventApi handler 側の `/admin/capacity` route と同じ EventApi integration に公開する
+    // (resource が無いと Gateway 403 に CORS が付かず browser が "Failed to fetch" になる、
+    // Issue #1292 audit-log と同じ理由)。
+    admin.addResource("capacity").addMethod("GET", eventIntegration, deployMethodOptions);
+
     // Issue #1312: per-tenant SAML IdP CRUD route。 Application Plane (silo / Lite) のみ有効。
     //   /tenant/idp                  GET=list / POST=create
     //   /tenant/idp/{idpId}          GET=detail / PATCH=update / DELETE=remove

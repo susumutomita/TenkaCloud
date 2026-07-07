@@ -914,5 +914,32 @@
     "error_gate_required": "Choose a gate challenge.",
     "error_no_targets": "Choose at least one unlock target.",
     "error_bonus_range": "Completion bonus must be an integer between 0 and 100000."
+  },
+  "capacity": {
+    "header": "DynamoDB capacity",
+    "description": "Event-hot table consumption over the last {windowMinutes} minutes. The runbook ceiling is {ceiling} RCU/WCU.",
+    "refresh": "Refresh",
+    "loading": "Loading capacity data",
+    "empty": "No data",
+    "load_failed": "Failed to load capacity data: {message}",
+    "col_table": "Table",
+    "col_health": "Health",
+    "col_provisioned": "Provisioned (R / W)",
+    "col_consumed_read": "Consumed read/sec (avg → peak)",
+    "col_consumed_write": "Consumed write/sec (avg → peak)",
+    "col_throttles": "Throttle events",
+    "health_throttling": "Throttling",
+    "health_hot": "Hot (peak over 80%)",
+    "health_ok": "OK",
+    "role_deployments": "Deployments",
+    "role_events": "Events",
+    "role_teams": "Teams",
+    "role_problemEndpoints": "ProblemEndpoints",
+    "role_disruptions": "Disruptions",
+    "runbook_hint": "Scale capacity up or down (SSM runbook)",
+    "runbook_doc_pointer": "See docs/operations/dynamodb-event-capacity.md for sizing guidance. Scale back to 1/1 with the same runbook after the event.",
+    "forbidden": "Capacity monitoring is visible to TenantAdmin only.",
+    "unconfigured": "The capacity monitoring backend is not wired yet (deploy chain update required).",
+    "demo_unsupported": "Demo mode does not simulate capacity monitoring."
   }
 }

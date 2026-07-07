@@ -7,6 +7,7 @@ import { buildAuthErrorHandler, createRoleCheckMiddleware } from "../shared/auth
 import { secureApiHeaders } from "../shared/secure-headers.js";
 import { registerAuditLogRoutes } from "./routes/audit-log.js";
 import { registerBulkDeployRoutes } from "./routes/bulk-deploy.js";
+import { registerCapacityRoutes } from "./routes/capacity.js";
 import { registerDisruptionRoutes } from "./routes/disruptions.js";
 import { registerEventRoutes } from "./routes/events.js";
 import { registerFeatureFlagsRoutes } from "./routes/feature-flags.js";
@@ -36,6 +37,7 @@ import { buildEventSharedResources } from "./shared.js";
  *   DELETE /events/:eventId                — Bulk teardown
  *   GET    /feature-flags                  — per-tenant runtime feature-flag overrides (#2231, any tenant role)
  *   PUT    /admin/feature-flags            — full-replace the override set (TenantAdmin only)
+ *   GET    /admin/capacity                 — event-hot DynamoDB キャパ監視 (#2410, TenantAdmin only)
  *
  * Auth: tenant API GW + Cognito JWT authorizer。tenantId は JWT `custom:tenantId` claim
  * から `resolveTenantId` で抽出する (DeployApi Lambda と同じ shape)。
@@ -108,6 +110,8 @@ registerDisruptionRoutes(app, shared);
 registerAuditLogRoutes(app, shared);
 // Issue #2231 (ADR-035): per-tenant runtime feature-flag toggle (= /admin/feature-flags)。
 registerFeatureFlagsRoutes(app, shared);
+// Issue #2410 Slice 2: event-hot DynamoDB キャパ監視 (= /admin/capacity、read-only)。
+registerCapacityRoutes(app, shared);
 
 export const handler = handle(app) as (
   event: LambdaEvent,

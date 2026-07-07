@@ -230,4 +230,23 @@ describe("tenant ApiGateway", () => {
       ResourceId: { Ref: exportResourceId },
     });
   });
+
+  it("should bind GET /admin/capacity to the EventApi integration (#2410)", () => {
+    const adminResourceId = Object.entries(
+      tpl.findResources("AWS::ApiGateway::Resource", {
+        Properties: { PathPart: "admin" },
+      }),
+    )[0]?.[0];
+    expect(adminResourceId).toBeDefined();
+    const capacityResourceId = Object.entries(
+      tpl.findResources("AWS::ApiGateway::Resource", {
+        Properties: { ParentId: { Ref: adminResourceId }, PathPart: "capacity" },
+      }),
+    )[0]?.[0];
+    expect(capacityResourceId).toBeDefined();
+    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+      HttpMethod: "GET",
+      ResourceId: { Ref: capacityResourceId },
+    });
+  });
 });
