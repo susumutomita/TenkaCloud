@@ -5,6 +5,7 @@ import * as dotenv from "dotenv";
 import { parseAdminAllowlist } from "../control-plane/saml-admin-allowlist.js";
 import { parseSamlIdpConfig } from "../control-plane/saml-identity-providers.js";
 import { getEnv } from "../helper-functions.js";
+import { parseDeployAllowedCidrs } from "../problem-deploy/deploy-allowed-cidrs.js";
 import { parseDeployQuota } from "../problem-deploy/handlers/deploy-handler/deploy-quota.js";
 import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting.js";
 import { type CatalogSource, LocalCatalogSource } from "../problem-pack/catalog-source.js";
@@ -72,6 +73,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   const challengePayloadBucketName = env.CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET || undefined;
   const challengePayload = resolveChallengePayload(env, config, environment);
   const deployConcurrentBuildLimit = resolveDeployConcurrentBuildLimit(env);
+  const deployAllowedCidrs = parseDeployAllowedCidrs(env.CDK_PARAM_DEPLOY_ALLOWED_CIDRS);
   const deployQuotaByTier = resolveDeployQuotaByTier(env);
   // Issue #2232: previously wired end-to-end (stack prop → Lambda env →
   // handler → DistributedMap state machine) with no way to set it true in
@@ -149,6 +151,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     // Issue #1695: config.json の customDomains を AppConfig にそのまま透過 (opt-in TLS 1.2)。
     customDomains: config?.customDomains,
     deployConcurrentBuildLimit,
+    deployAllowedCidrs,
     deployQuotaByTier,
     useBulkDistributedMap,
     deployViaLambda,

@@ -41,6 +41,7 @@ export function buildProblemDeployBackendBaseProps(config: AppConfig) {
       Record<string, string>
     >,
     deployConcurrentBuildLimit: config.deployConcurrentBuildLimit,
+    deployAllowedCidrs: config.deployAllowedCidrs,
     // Issue #2232: was permanently unreachable in production (no CDK_PARAM_* wired it true).
     useBulkDistributedMap: config.useBulkDistributedMap,
     // Issue #2291: DeployCreate を Lambda CreateStack 経路にするか。両モードで同一挙動にするため

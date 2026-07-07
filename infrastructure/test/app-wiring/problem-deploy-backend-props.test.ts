@@ -49,8 +49,18 @@ describe("buildProblemDeployBackendBaseProps", () => {
       problemsCoordination: fullBundle.coordination,
       problemsCoordinationBundles: fullBundle.coordinationBundles,
       deployConcurrentBuildLimit: 2,
+      deployAllowedCidrs: undefined,
       environmentName: "development",
     });
+  });
+
+  it("should thread deployAllowedCidrs into the shared backend props", () => {
+    const props = buildProblemDeployBackendBaseProps({
+      ...stubConfig(fullBundle),
+      deployAllowedCidrs: ["198.51.100.10/32", "203.0.113.0/24"],
+    } as AppConfig);
+
+    expect(props.deployAllowedCidrs).toEqual(["198.51.100.10/32", "203.0.113.0/24"]);
   });
 
   it("should fall back to empty objects for optional bundle keys missing from a stub source", () => {
