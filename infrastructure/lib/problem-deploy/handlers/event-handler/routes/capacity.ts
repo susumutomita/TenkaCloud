@@ -7,6 +7,7 @@ import {
   getCapacityOverview,
 } from "../capacity.js";
 import { handleRouteError } from "../route-helpers.js";
+import type { EventSharedResources } from "../shared.js";
 
 /**
  * Issue #2410 Slice 2: イベント中の DynamoDB キャパシティ監視 read route。
@@ -17,11 +18,11 @@ import { handleRouteError } from "../route-helpers.js";
  * TenantAdmin 限定 (index.ts の `/admin/*` blanket middleware + 本 handler 1 行目の
  * `requireRole` の defense in depth)。read-only なので audit log は書かない。
  */
-export function registerCapacityRoutes(app: Hono): void {
-  app.get("/admin/capacity", (c) => handleCapacityOverview(c));
+export function registerCapacityRoutes(app: Hono, shared: EventSharedResources): void {
+  app.get("/admin/capacity", (c) => handleCapacityOverview(c, shared));
 }
 
-async function handleCapacityOverview(c: Context): Promise<Response> {
+async function handleCapacityOverview(c: Context, shared: EventSharedResources): Promise<Response> {
   requireRole(c, [TENANT_ADMIN_ROLE]);
   const parsed = CapacityQuerySchema.safeParse({
     ...(c.req.query("windowMinutes") !== undefined
@@ -32,7 +33,9 @@ async function handleCapacityOverview(c: Context): Promise<Response> {
     return c.json({ error: "invalid_window_minutes" }, StatusCodes.BAD_REQUEST);
   }
   try {
-    const overview = await getCapacityOverview({ windowMinutes: parsed.data.windowMinutes });
+    const overview = await getCapacityOverview(shared, {
+      windowMinutes: parsed.data.windowMinutes,
+    });
     return c.json(overview, StatusCodes.OK);
   } catch (err) {
     if (err instanceof CapacityUnconfiguredError) {

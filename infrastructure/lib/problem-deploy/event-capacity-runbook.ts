@@ -39,7 +39,8 @@ def handler(event, context):
         }
         changed.append("table")
     gsi_updates = []
-    for gsi in desc.get("GlobalSecondaryIndexes", []):
+    gsis = desc.get("GlobalSecondaryIndexes", [])
+    for gsi in gsis:
         current = gsi["ProvisionedThroughput"]
         if current["ReadCapacityUnits"] != rcu or current["WriteCapacityUnits"] != wcu:
             gsi_updates.append(
@@ -56,10 +57,24 @@ def handler(event, context):
             changed.append(gsi["IndexName"])
     if gsi_updates:
         update["GlobalSecondaryIndexUpdates"] = gsi_updates
+    # base + all GSIs are billed independently: billed totals make the real
+    # cost visible in the SSM execution output (ceiling is per parameter).
+    billed_read = rcu * (1 + len(gsis))
+    billed_write = wcu * (1 + len(gsis))
     if not changed:
-        return {"changed": changed, "message": "already at requested capacity"}
+        return {
+            "changed": changed,
+            "message": "already at requested capacity",
+            "billedReadCapacityUnits": billed_read,
+            "billedWriteCapacityUnits": billed_write,
+        }
     ddb.update_table(**update)
-    return {"changed": changed, "message": "UpdateTable issued"}
+    return {
+        "changed": changed,
+        "message": "UpdateTable issued",
+        "billedReadCapacityUnits": billed_read,
+        "billedWriteCapacityUnits": billed_write,
+    }
 `;
 
 export interface EventCapacityRunbookProps {
@@ -78,7 +93,10 @@ export interface EventCapacityRunbookProps {
  * 課金爆死ガード (4 層):
  *  1. PROVISIONED のまま (on-demand へは切替えない) — リクエスト激増は throttle するだけ
  *  2. ハード上限 {@link EVENT_CAPACITY_CEILING} — parameter `allowedPattern` と script 内
- *     assert の二重化。桁打ち間違いは実行前に fail
+ *     assert の二重化。桁打ち間違いは実行前に fail。注意: ceiling は **parameter 単位**。
+ *     base と全 GSI を同値に揃えるため、課金合計は 指定値 × (1 + GSI 数) になる (例:
+ *     GSI 3 本の Deployments を 200 にすると課金は 800 RCU 相当)。script が
+ *     billedRead/WriteCapacityUnits を出力し、運用 doc の目安表も合算前提で書く
  *  3. 手動 SSM 実行 = 実行履歴 (StartAutomationExecution) が必ず残る
  *  4. イベント後の明示 scale-down (同 runbook で 1/1 に戻す)。CFn がテーブルを次に UPDATE
  *     する deploy でも template の 1/1 に収斂する
@@ -171,6 +189,16 @@ export class EventCapacityRunbook extends Construct {
             outputs: [
               { Name: "Changed", Selector: "$.Payload.changed", Type: "StringList" },
               { Name: "Message", Selector: "$.Payload.message", Type: "String" },
+              {
+                Name: "BilledReadCapacityUnits",
+                Selector: "$.Payload.billedReadCapacityUnits",
+                Type: "Integer",
+              },
+              {
+                Name: "BilledWriteCapacityUnits",
+                Selector: "$.Payload.billedWriteCapacityUnits",
+                Type: "Integer",
+              },
             ],
           },
         ],

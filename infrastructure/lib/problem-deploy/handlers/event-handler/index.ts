@@ -111,7 +111,7 @@ registerAuditLogRoutes(app, shared);
 // Issue #2231 (ADR-035): per-tenant runtime feature-flag toggle (= /admin/feature-flags)。
 registerFeatureFlagsRoutes(app, shared);
 // Issue #2410 Slice 2: event-hot DynamoDB キャパ監視 (= /admin/capacity、read-only)。
-registerCapacityRoutes(app);
+registerCapacityRoutes(app, shared);
 
 export const handler = handle(app) as (
   event: LambdaEvent,

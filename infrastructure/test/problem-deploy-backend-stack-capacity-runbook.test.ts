@@ -73,6 +73,10 @@ describe("ProblemDeployBackendStack — event capacity runbook (#2410)", {
     expect(steps[0]?.inputs?.Script).toContain(`CEILING = ${EVENT_CAPACITY_CEILING}`);
     // GSI もまとめて同値に揃える (= base だけ上げて GSI throttle で詰まる事故を防ぐ)。
     expect(steps[0]?.inputs?.Script).toContain("GlobalSecondaryIndexUpdates");
+    // 課金合計 (指定値 x (1 + GSI 数)) を実行結果に出す (= ceiling は parameter 単位である
+    // ことの透明化。#2410 課金爆死ガードの補助線)。
+    expect(steps[0]?.inputs?.Script).toContain("billedReadCapacityUnits");
+    expect(steps[0]?.inputs?.Script).toContain("billedWriteCapacityUnits");
   });
 
   it("should grant the automation role only DescribeTable/UpdateTable on the event-hot tables", () => {

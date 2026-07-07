@@ -10,6 +10,7 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { z } from "zod";
 import { EVENT_CAPACITY_CEILING } from "../../event-capacity-constants.js";
+import type { EventSharedResources } from "./shared.js";
 
 /**
  * Issue #2410 Slice 2: イベント中の DynamoDB キャパシティ監視 backend。
@@ -21,6 +22,11 @@ import { EVENT_CAPACITY_CEILING } from "../../event-capacity-constants.js";
  *  - CloudWatch GetMetricData: 直近 window の消費 (avg / peak per-sec) + throttle 件数
  *    (base は Consumed / Throttle の 4 系列、GSI は throttle 2 系列 — runbook が base と GSI を
  *    同値に揃えるため、GSI 側は「throttle が出ているか」だけが意思決定に効く)
+ *
+ * 監視ビューは「見えているのに間違っている」が最悪 (throttle 中に緑を出す) なので、部分欠損は
+ * すべて fail loudly: CloudWatch の欠損 series / 非 Complete StatusCode / 予期しない pagination、
+ * DescribeTable の欠損 (Table / ProvisionedThroughput / IndexName) はエラーにして route の 5xx に
+ * 変換する (silent zero は返さない)。
  *
  * ADR-014 / AGENTS.md の方針どおり frontend は polling でこの route を叩く (SSE/WS なし)。
  */
@@ -93,25 +99,33 @@ interface EventHotTable {
   readonly tableName: string;
 }
 
-/** role → env 名の対応 (EventApiLambda が注入する)。 */
-const EVENT_HOT_TABLE_ENVS: readonly (readonly [CapacityTableRole, string])[] = [
-  ["deployments", "DEPLOYMENTS_TABLE_NAME"],
-  ["events", "EVENTS_TABLE_NAME"],
-  ["teams", "TEAMS_TABLE_NAME"],
-  ["problemEndpoints", "PROBLEM_ENDPOINTS_TABLE_NAME"],
-  ["disruptions", "DISRUPTIONS_TABLE_NAME"],
-];
-
 /**
- * env から event-hot 5 テーブルを解決する。1 つでも未配線なら
- * {@link CapacityUnconfiguredError} — 部分的な監視ビューを黙って返さない (silent fallback 禁止)。
+ * event-hot 5 テーブルを解決する。4 テーブルは既存の {@link EventSharedResources}
+ * (= cold start で getEnv fail-fast 済み) から、5 つ目の ProblemEndpoints だけ本 slice で
+ * 追加した env から読む。未配線なら {@link CapacityUnconfiguredError} — 部分的な監視ビューを
+ * 黙って返さない (silent fallback 禁止)。
+ *
+ * この 5 テーブルの並びは stack 側の `EventCapacityRunbook` 配線 (allowedValues + IAM) と
+ * `docs/operations/dynamodb-event-capacity.md` の表と対応する。event-hot テーブルを増減する
+ * ときは 3 箇所を揃えること。
  */
-export function resolveEventHotTables(): readonly EventHotTable[] {
-  return EVENT_HOT_TABLE_ENVS.map(([role, envName]) => {
-    const tableName = process.env[envName] ?? "";
-    if (tableName.length === 0) throw new CapacityUnconfiguredError(envName);
-    return { role, tableName };
-  });
+export function resolveEventHotTables(
+  shared: Pick<
+    EventSharedResources,
+    "deploymentsTableName" | "eventsTableName" | "teamsTableName" | "disruptionsTableName"
+  >,
+): readonly EventHotTable[] {
+  const problemEndpointsTableName = process.env.PROBLEM_ENDPOINTS_TABLE_NAME ?? "";
+  if (problemEndpointsTableName.length === 0) {
+    throw new CapacityUnconfiguredError("PROBLEM_ENDPOINTS_TABLE_NAME");
+  }
+  return [
+    { role: "deployments", tableName: shared.deploymentsTableName },
+    { role: "events", tableName: shared.eventsTableName },
+    { role: "teams", tableName: shared.teamsTableName },
+    { role: "problemEndpoints", tableName: problemEndpointsTableName },
+    { role: "disruptions", tableName: shared.disruptionsTableName },
+  ];
 }
 
 export interface CapacityClients {
@@ -135,12 +149,20 @@ export function defaultCapacityClients(): CapacityClients {
 const DDB_METRIC_NAMESPACE = "AWS/DynamoDB";
 const PERIOD_SECONDS = 60;
 
-interface MetricSeriesIds {
-  readonly consumedRead: string;
-  readonly consumedWrite: string;
-  readonly readThrottle: string;
-  readonly writeThrottle: string;
-  readonly gsiThrottles: readonly { indexName: string; read: string; write: string }[];
+/** 1 テーブル分の probe (テーブル・DescribeTable 結果・metric series id を 1 レコードに束ねる)。 */
+interface TableProbe {
+  readonly role: CapacityTableRole;
+  readonly tableName: string;
+  readonly desc: TableDescription;
+  readonly consumedReadId: string;
+  readonly consumedWriteId: string;
+  readonly readThrottleId: string;
+  readonly writeThrottleId: string;
+  readonly gsis: readonly {
+    readonly indexName: string;
+    readonly readThrottleId: string;
+    readonly writeThrottleId: string;
+  }[];
 }
 
 function metricQuery(
@@ -175,66 +197,144 @@ function round3(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
-/** DescribeTable 結果から provisioned RCU/WCU を取り出す (on-demand は本 platform に存在しない)。 */
-function provisionedOf(throughput?: { ReadCapacityUnits?: number; WriteCapacityUnits?: number }): {
-  read: number;
-  write: number;
-} {
-  return {
-    read: throughput?.ReadCapacityUnits ?? 0,
-    write: throughput?.WriteCapacityUnits ?? 0,
+/**
+ * DescribeTable 結果から provisioned RCU/WCU を取り出す。欠損は fail loudly — 本 platform は
+ * `DynamoDbLowCapacity` Aspect で PROVISIONED 固定なので、ProvisionedThroughput 欠損 (= out-of-band
+ * で on-demand 化された等) は「0/0 で緑」ではなくエラーとして運営に見せるべき異常。
+ */
+function requireProvisioned(
+  throughput: { ReadCapacityUnits?: number; WriteCapacityUnits?: number } | undefined,
+  context: string,
+): { read: number; write: number } {
+  const read = throughput?.ReadCapacityUnits;
+  const write = throughput?.WriteCapacityUnits;
+  if (read === undefined || write === undefined) {
+    throw new Error(
+      `DescribeTable returned no provisioned throughput for ${context} (drifted to on-demand?)`,
+    );
+  }
+  return { read, write };
+}
+
+/** DescribeTable + metric series id 割当。GSI の IndexName 欠損はここで fail loudly。 */
+async function probeTables(
+  tables: readonly EventHotTable[],
+  ddb: Pick<DynamoDBClient, "send">,
+): Promise<readonly TableProbe[]> {
+  return Promise.all(
+    tables.map(async (t, i): Promise<TableProbe> => {
+      const out = await ddb.send(new DescribeTableCommand({ TableName: t.tableName }));
+      const desc = (out as { Table?: TableDescription }).Table;
+      if (!desc) {
+        throw new Error(`DescribeTable returned no table description for ${t.tableName}`);
+      }
+      return {
+        role: t.role,
+        tableName: t.tableName,
+        desc,
+        consumedReadId: `t${i}cr`,
+        consumedWriteId: `t${i}cw`,
+        readThrottleId: `t${i}rt`,
+        writeThrottleId: `t${i}wt`,
+        gsis: (desc.GlobalSecondaryIndexes ?? []).map((gsi, j) => {
+          if (!gsi.IndexName) {
+            throw new Error(`DescribeTable returned a GSI without IndexName on ${t.tableName}`);
+          }
+          return {
+            indexName: gsi.IndexName,
+            readThrottleId: `t${i}g${j}rt`,
+            writeThrottleId: `t${i}g${j}wt`,
+          };
+        }),
+      };
+    }),
+  );
+}
+
+function buildMetricQueries(probes: readonly TableProbe[]): MetricDataQuery[] {
+  const queries: MetricDataQuery[] = [];
+  for (const probe of probes) {
+    const dim = [{ Name: "TableName", Value: probe.tableName }];
+    queries.push(
+      metricQuery(probe.consumedReadId, "ConsumedReadCapacityUnits", dim),
+      metricQuery(probe.consumedWriteId, "ConsumedWriteCapacityUnits", dim),
+      metricQuery(probe.readThrottleId, "ReadThrottleEvents", dim),
+      metricQuery(probe.writeThrottleId, "WriteThrottleEvents", dim),
+    );
+    for (const gsi of probe.gsis) {
+      const gsiDim = [...dim, { Name: "GlobalSecondaryIndexName", Value: gsi.indexName }];
+      queries.push(
+        metricQuery(gsi.readThrottleId, "ReadThrottleEvents", gsiDim),
+        metricQuery(gsi.writeThrottleId, "WriteThrottleEvents", gsiDim),
+      );
+    }
+  }
+  return queries;
+}
+
+/**
+ * GetMetricData response を series id → datapoints に引き当てる。欠損 series / 非 Complete
+ * StatusCode (InternalError / PartialData) / 予期しない NextToken は fail loudly — 「throttle=0」に
+ * 見える partial view を返すと、運営が throttle 中に scale-up を見送る事故になる。
+ * (query 数は 5 テーブル + 全 GSI でも数十件 = GetMetricData の 1 page (500 series) に収まる想定。)
+ */
+function indexMetricResults(
+  metricData: {
+    NextToken?: string;
+    MetricDataResults?: { Id?: string; StatusCode?: string; Values?: number[] }[];
+  },
+  queries: readonly MetricDataQuery[],
+): (id: string) => readonly number[] {
+  if (metricData.NextToken) {
+    throw new Error("GetMetricData returned an unexpected paginated response (NextToken set)");
+  }
+  const incomplete: string[] = [];
+  const valuesById = new Map<string, readonly number[]>();
+  for (const result of metricData.MetricDataResults ?? []) {
+    if (!result.Id) continue;
+    if (result.StatusCode !== undefined && result.StatusCode !== "Complete") {
+      incomplete.push(`${result.Id}=${result.StatusCode}`);
+      continue;
+    }
+    valuesById.set(result.Id, result.Values ?? []);
+  }
+  if (incomplete.length > 0) {
+    throw new Error(`GetMetricData returned incomplete series: ${incomplete.join(", ")}`);
+  }
+  const missing = queries.map((q) => q.Id ?? "").filter((id) => id !== "" && !valuesById.has(id));
+  if (missing.length > 0) {
+    throw new Error(`GetMetricData response is missing series: ${missing.join(", ")}`);
+  }
+  return (id) => {
+    const values = valuesById.get(id);
+    /* v8 ignore next -- 上の missing 検査で不到達 (防御) */
+    if (!values) throw new Error(`GetMetricData response is missing series: ${id}`);
+    return values;
   };
 }
 
-export async function getCapacityOverview(opts: {
-  readonly windowMinutes: number;
-  /** テスト注入用。省略時は現在時刻。 */
-  readonly now?: Date;
-  /** テスト注入用。省略時は module-scope の production clients。 */
-  readonly clients?: CapacityClients;
-}): Promise<CapacityOverview> {
-  const tables = resolveEventHotTables();
+export async function getCapacityOverview(
+  shared: Pick<
+    EventSharedResources,
+    "deploymentsTableName" | "eventsTableName" | "teamsTableName" | "disruptionsTableName"
+  >,
+  opts: {
+    readonly windowMinutes: number;
+    /** テスト注入用。省略時は現在時刻。 */
+    readonly now?: Date;
+    /** テスト注入用。省略時は module-scope の production clients。 */
+    readonly clients?: CapacityClients;
+  },
+): Promise<CapacityOverview> {
+  const tables = resolveEventHotTables(shared);
   const clients = opts.clients ?? defaultCapacityClients();
   const now = opts.now ?? new Date();
 
-  const descriptions = await Promise.all(
-    tables.map(async (t) => {
-      const out = await clients.ddb.send(new DescribeTableCommand({ TableName: t.tableName }));
-      return (out as { Table?: TableDescription }).Table ?? {};
-    }),
-  );
-
-  // Metric query は DescribeTable の GSI 一覧に依存するため 2 段で組む。
-  const seriesIds: MetricSeriesIds[] = [];
-  const queries: MetricDataQuery[] = [];
-  tables.forEach((t, i) => {
-    const dim = [{ Name: "TableName", Value: t.tableName }];
-    const ids: MetricSeriesIds = {
-      consumedRead: `t${i}cr`,
-      consumedWrite: `t${i}cw`,
-      readThrottle: `t${i}rt`,
-      writeThrottle: `t${i}wt`,
-      gsiThrottles: (descriptions[i]?.GlobalSecondaryIndexes ?? []).map((gsi, j) => ({
-        indexName: gsi.IndexName ?? `gsi${j}`,
-        read: `t${i}g${j}rt`,
-        write: `t${i}g${j}wt`,
-      })),
-    };
-    seriesIds.push(ids);
-    queries.push(
-      metricQuery(ids.consumedRead, "ConsumedReadCapacityUnits", dim),
-      metricQuery(ids.consumedWrite, "ConsumedWriteCapacityUnits", dim),
-      metricQuery(ids.readThrottle, "ReadThrottleEvents", dim),
-      metricQuery(ids.writeThrottle, "WriteThrottleEvents", dim),
-    );
-    for (const gsi of ids.gsiThrottles) {
-      const gsiDim = [...dim, { Name: "GlobalSecondaryIndexName", Value: gsi.indexName }];
-      queries.push(
-        metricQuery(gsi.read, "ReadThrottleEvents", gsiDim),
-        metricQuery(gsi.write, "WriteThrottleEvents", gsiDim),
-      );
-    }
-  });
+  // Metric query は DescribeTable の GSI 一覧に依存するため 2 段 (probe → GetMetricData)。
+  // GSI 構成は deploy でしか変わらないが、キャパ値は runbook で runtime に変わるので
+  // DescribeTable を毎回引く (= 鮮度優先。 module-scope cache にはしない)。
+  const probes = await probeTables(tables, clients.ddb);
+  const queries = buildMetricQueries(probes);
 
   const metricData = await clients.cw.send(
     new GetMetricDataCommand({
@@ -243,49 +343,42 @@ export async function getCapacityOverview(opts: {
       MetricDataQueries: queries,
     }),
   );
-  const valuesById = new Map<string, readonly number[]>();
-  for (const result of (metricData as { MetricDataResults?: { Id?: string; Values?: number[] }[] })
-    .MetricDataResults ?? []) {
-    if (result.Id) valuesById.set(result.Id, result.Values ?? []);
-  }
-  const seriesOf = (id: string): readonly number[] => valuesById.get(id) ?? [];
+  const seriesOf = indexMetricResults(metricData, queries);
 
   const windowSeconds = opts.windowMinutes * 60;
   return {
     windowMinutes: opts.windowMinutes,
     ceiling: EVENT_CAPACITY_CEILING,
-    runbookDocumentName:
-      (process.env.CAPACITY_RUNBOOK_DOCUMENT_NAME ?? "").length > 0
-        ? (process.env.CAPACITY_RUNBOOK_DOCUMENT_NAME as string)
-        : null,
+    runbookDocumentName: process.env.CAPACITY_RUNBOOK_DOCUMENT_NAME || null,
     generatedAt: now.toISOString(),
-    tables: tables.map((t, i): CapacityTableSummary => {
-      const desc = descriptions[i] ?? {};
-      const base = provisionedOf(desc.ProvisionedThroughput);
-      const ids = seriesIds[i] as MetricSeriesIds;
-      const gsiThrottleById = new Map(ids.gsiThrottles.map((g) => [g.indexName, g]));
+    tables: probes.map((probe): CapacityTableSummary => {
+      const base = requireProvisioned(probe.desc.ProvisionedThroughput, probe.tableName);
+      const descGsis = probe.desc.GlobalSecondaryIndexes ?? [];
       return {
-        role: t.role,
-        tableName: t.tableName,
+        role: probe.role,
+        tableName: probe.tableName,
         provisionedRead: base.read,
         provisionedWrite: base.write,
-        gsis: (desc.GlobalSecondaryIndexes ?? []).map((gsi, j): CapacityGsiSummary => {
-          const p = provisionedOf(gsi.ProvisionedThroughput);
-          const throttleIds = gsiThrottleById.get(gsi.IndexName ?? `gsi${j}`);
+        // probe.gsis は descGsis と同一走査で作っているので位置対応が保証される。
+        gsis: probe.gsis.map((gsi, j): CapacityGsiSummary => {
+          const p = requireProvisioned(
+            descGsis[j]?.ProvisionedThroughput,
+            `${probe.tableName}/${gsi.indexName}`,
+          );
           return {
-            indexName: gsi.IndexName ?? `gsi${j}`,
+            indexName: gsi.indexName,
             provisionedRead: p.read,
             provisionedWrite: p.write,
-            readThrottleEvents: throttleIds ? sum(seriesOf(throttleIds.read)) : 0,
-            writeThrottleEvents: throttleIds ? sum(seriesOf(throttleIds.write)) : 0,
+            readThrottleEvents: sum(seriesOf(gsi.readThrottleId)),
+            writeThrottleEvents: sum(seriesOf(gsi.writeThrottleId)),
           };
         }),
-        consumedReadPerSecAvg: round3(sum(seriesOf(ids.consumedRead)) / windowSeconds),
-        consumedWritePerSecAvg: round3(sum(seriesOf(ids.consumedWrite)) / windowSeconds),
-        consumedReadPerSecPeak: round3(max(seriesOf(ids.consumedRead)) / PERIOD_SECONDS),
-        consumedWritePerSecPeak: round3(max(seriesOf(ids.consumedWrite)) / PERIOD_SECONDS),
-        readThrottleEvents: sum(seriesOf(ids.readThrottle)),
-        writeThrottleEvents: sum(seriesOf(ids.writeThrottle)),
+        consumedReadPerSecAvg: round3(sum(seriesOf(probe.consumedReadId)) / windowSeconds),
+        consumedWritePerSecAvg: round3(sum(seriesOf(probe.consumedWriteId)) / windowSeconds),
+        consumedReadPerSecPeak: round3(max(seriesOf(probe.consumedReadId)) / PERIOD_SECONDS),
+        consumedWritePerSecPeak: round3(max(seriesOf(probe.consumedWriteId)) / PERIOD_SECONDS),
+        readThrottleEvents: sum(seriesOf(probe.readThrottleId)),
+        writeThrottleEvents: sum(seriesOf(probe.writeThrottleId)),
       };
     }),
   };

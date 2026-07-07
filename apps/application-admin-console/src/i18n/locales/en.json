@@ -937,6 +937,9 @@
     "role_problemEndpoints": "ProblemEndpoints",
     "role_disruptions": "Disruptions",
     "runbook_hint": "Scale capacity up or down (SSM runbook)",
-    "runbook_doc_pointer": "See docs/operations/dynamodb-event-capacity.md for sizing guidance. Scale back to 1/1 with the same runbook after the event."
+    "runbook_doc_pointer": "See docs/operations/dynamodb-event-capacity.md for sizing guidance. Scale back to 1/1 with the same runbook after the event.",
+    "forbidden": "Capacity monitoring is visible to TenantAdmin only.",
+    "unconfigured": "The capacity monitoring backend is not wired yet (deploy chain update required).",
+    "demo_unsupported": "Demo mode does not simulate capacity monitoring."
   }
 }

@@ -45,10 +45,10 @@ export interface EventApiLambdaProps {
   readonly problemEndpointsTable: Table;
   /**
    * Issue #2410 Slice 1 の SSM Automation document 名。`GET /admin/capacity` response に
-   * echo され、event 管理画面がそのまま実行コマンド例を表示する。未配線なら env を注入しない
-   * (= response では null)。
+   * echo され、event 管理画面がそのまま実行コマンド例を表示する。stack が常に runbook と
+   * 同時に配線するため必須 (handler 側は env 欠落 = 旧 deploy を null として扱う)。
    */
-  readonly capacityRunbookDocumentName?: string;
+  readonly capacityRunbookDocumentName: string;
   /**
    * Issue #888: problem metadata.json の `disruptions[]` 宣言。 Lambda runtime で
    * `(problemId, disruptionId)` lookup に使う。
@@ -134,9 +134,7 @@ export class EventApiLambda extends Construct {
         DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName,
         // Issue #2410 Slice 2: キャパ監視の event-hot 5 テーブル目 + runbook document 名。
         PROBLEM_ENDPOINTS_TABLE_NAME: props.problemEndpointsTable.tableName,
-        ...(props.capacityRunbookDocumentName
-          ? { CAPACITY_RUNBOOK_DOCUMENT_NAME: props.capacityRunbookDocumentName }
-          : {}),
+        CAPACITY_RUNBOOK_DOCUMENT_NAME: props.capacityRunbookDocumentName,
         // Issue #910 (#895 Phase 2.C.2.b): bulk batch payload S3 bucket + feature flag。
         // bucket 未配線時は空文字、 flag は default false (= 旧 fan-out 維持)。
         BULK_DEPLOY_PAYLOAD_BUCKET: props.bulkDeployPayloadBucket?.bucketName ?? "",

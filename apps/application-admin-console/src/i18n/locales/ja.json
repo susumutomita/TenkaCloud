@@ -937,6 +937,9 @@
     "role_problemEndpoints": "ProblemEndpoints",
     "role_disruptions": "Disruptions",
     "runbook_hint": "キャパを上げ下げする (SSM runbook)",
-    "runbook_doc_pointer": "上げ幅の目安と手順は docs/operations/dynamodb-event-capacity.md を参照。イベント後は同じ runbook で 1/1 に戻します。"
+    "runbook_doc_pointer": "上げ幅の目安と手順は docs/operations/dynamodb-event-capacity.md を参照。イベント後は同じ runbook で 1/1 に戻します。",
+    "forbidden": "キャパシティ監視は TenantAdmin のみ閲覧できます。",
+    "unconfigured": "キャパシティ監視 backend が未配線です (deploy chain の更新が必要)。",
+    "demo_unsupported": "demo mode ではキャパシティ監視を simulate しません。"
   }
 }

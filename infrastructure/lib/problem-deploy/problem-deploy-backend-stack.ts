@@ -401,14 +401,19 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // SSM Automation Runbook。event-hot 5 テーブル (Deployments / Events / Teams /
     // ProblemEndpoints / Disruptions) に allowedValues + IAM resource の二重で固定し、
     // ハード上限 ceiling (200) で課金爆死を構造的に防ぐ。オートスケーリングは採用しない。
+    //
+    // この配列が event-hot テーブルの唯一の stack 側 source。handler 側の対応 (capacity.ts
+    // `resolveEventHotTables`) と運用 doc (docs/operations/dynamodb-event-capacity.md) の表は
+    // この並びと揃えること (増減時は 3 箇所同時に更新)。
+    const eventHotTables = [
+      deployments.table,
+      events.table,
+      teams.table,
+      endpoints.table,
+      disruptions.table,
+    ];
     const capacityRunbook = new EventCapacityRunbook(this, "EventCapacityRunbook", {
-      eventHotTables: [
-        deployments.table,
-        events.table,
-        teams.table,
-        endpoints.table,
-        disruptions.table,
-      ],
+      eventHotTables,
     });
     new CfnOutput(this, "EventCapacityRunbookName", {
       value: capacityRunbook.documentName,

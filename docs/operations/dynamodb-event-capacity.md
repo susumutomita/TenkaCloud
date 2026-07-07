@@ -19,15 +19,15 @@ Issue #2410。有料イベントで throttle を出さないために、イベ�
 
 runbook の `TableName` は以下の 5 テーブルに `allowedValues` + IAM resource の二重で固定されている。
 
-| テーブル | 役割 | イベント中の負荷源 |
-| --- | --- | --- |
-| Deployments | deploy ジョブ state | bulk deploy、参加者 portal の polling |
-| Events | イベント定義 | 管理画面 / 採点 tick の read |
-| Teams | チーム定義 | 参加者 login、採点 tick の read |
-| ProblemEndpoints | endpoint registry | 参加者 portal の endpoint 解決 |
-| Disruptions | Red Team 障害の audit | disruption fire / 採点 tick |
+| テーブル | 役割 | GSI 数 | 課金倍率 | イベント中の負荷源 |
+| --- | --- | --- | --- | --- |
+| Deployments | deploy ジョブ state | 3 | x4 | bulk deploy、参加者 portal の polling |
+| Events | イベント定義 | 1 | x2 | 管理画面 / 採点 tick の read |
+| Teams | チーム定義 | 2 | x3 | 参加者 login、採点 tick の read |
+| ProblemEndpoints | endpoint registry | 0 | x1 | 参加者 portal の endpoint 解決 |
+| Disruptions | Red Team 障害の audit | 1 | x2 | disruption fire / 採点 tick |
 
-runbook は base table と全 GSI を**同じ値**に揃える (base だけ上げて GSI throttle で write が詰まる事故を防ぐ)。
+runbook は base table と全 GSI を**同じ値**に揃える (base だけ上げて GSI throttle で write が詰まる事故を防ぐ)。したがって**課金合計は「指定値 × (1 + GSI 数)」**になる — ceiling 200 は parameter 単位のガードであり、GSI 3 本の Deployments を 200 にすると課金は 800 RCU / 800 WCU 相当。runbook の実行結果 (`billedReadCapacityUnits` / `billedWriteCapacityUnits`) にこの合算値が出力される。
 
 ## いつ上げるか
 
@@ -55,6 +55,7 @@ runbook は base table と全 GSI を**同じ値**に揃える (base だけ上�
 - read が支配的 (portal polling / 採点 tick)。write は bulk deploy と採点書き込みの瞬間に出る。
 - bulk deploy 直前は Deployments の **write** を一時的に 1 段上げると安全 (750 行規模の一括 Put)。
 - ceiling (200) に張り付いても足りない場合は、polling 間隔を伸ばす / イベントを分割する。ceiling 自体を上げる変更は課金ガードの再設計を伴うので、単独判断で行わない。
+- 表の値は base table への指定値。課金は GSI 分を含む「指定値 × 課金倍率」で見積もる (中規模の合計は base 75 RCU / 30 WCU だが、課金は約 170 RCU / 80 WCU 相当)。
 
 ## 上げ方 (scale-up)
 
@@ -92,9 +93,10 @@ done
 
 ## コスト感覚
 
-ap-northeast-1 の provisioned スループットは 1 RCU ≒ 0.000142 USD/h、1 WCU ≒ 0.000742 USD/h。中規模イベント (合計 75 RCU / 30 WCU) を 8 時間動かしても 1 USD 未満。**戻し忘れて 1 か月放置**すると数十 USD 規模になるので、ガードは「上げ幅」ではなく「戻し忘れ」に対して張る。
+ap-northeast-1 の provisioned スループットは 1 RCU ≒ 0.000142 USD/h、1 WCU ≒ 0.000742 USD/h。中規模イベント (課金合計 ≒ 170 RCU / 80 WCU、GSI 分込み) を 8 時間動かしても 1 USD 未満。**戻し忘れて 1 か月放置**すると中規模で 60 USD 前後、ceiling 張り付き (Deployments 200 = 課金 800/800) なら 500 USD 超になるので、ガードは「上げ幅」ではなく「戻し忘れ」に対して張る。
 
 ## 権限
 
 - runbook の automation role は event-hot 5 テーブルへの `dynamodb:DescribeTable` / `dynamodb:UpdateTable` のみ (最小権限)。他テーブルには IAM 的にも適用できない。
+- **実行する運営側の IAM** には `ssm:StartAutomationExecution` (対象 document) と、automation role を渡すための `iam:PassRole` (対象 = `EventCapacityRunbookName` と同 stack の AutomationRole) が必要。platform を deploy した AdministratorAccess 相当ならそのまま実行できる。least-privilege な運営ユーザーを切る場合はこの 2 権限を付与する。
 - 監視 API (`GET /admin/capacity`) は TenantAdmin のみ。read-only で、Lambda 側の IAM も DescribeTable + `cloudwatch:GetMetricData` に限定している。

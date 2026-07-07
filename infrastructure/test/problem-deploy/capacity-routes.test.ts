@@ -30,10 +30,19 @@ const { registerCapacityRoutes } = await import(
   "../../lib/problem-deploy/handlers/event-handler/routes/capacity"
 );
 
+// route は shared から 4 テーブル名を引く (capacity.ts の resolveEventHotTables)。
+// biome-ignore lint/suspicious/noExplicitAny: 最小 shared (route は service 層に委譲するだけ)。
+const shared = {
+  deploymentsTableName: "Deployments-x",
+  eventsTableName: "Events-x",
+  teamsTableName: "Teams-x",
+  disruptionsTableName: "Disruptions-x",
+} as any;
+
 const buildApp = () => {
   const app = new Hono();
   app.onError(buildAuthErrorHandler({ logPrefix: "[events]" }));
-  registerCapacityRoutes(app);
+  registerCapacityRoutes(app, shared);
   return app;
 };
 
@@ -57,7 +66,7 @@ describe("GET /admin/capacity", () => {
 
     expect(res.status).toBe(StatusCodes.OK);
     expect(await res.json()).toEqual(overview);
-    expect(mocks.getCapacityOverview).toHaveBeenCalledWith({ windowMinutes: 30 });
+    expect(mocks.getCapacityOverview).toHaveBeenCalledWith(shared, { windowMinutes: 30 });
   });
 
   it("should pass a valid windowMinutes query through to the service", async () => {
@@ -66,7 +75,7 @@ describe("GET /admin/capacity", () => {
     const res = await buildApp().request("/admin/capacity?windowMinutes=60");
 
     expect(res.status).toBe(StatusCodes.OK);
-    expect(mocks.getCapacityOverview).toHaveBeenCalledWith({ windowMinutes: 60 });
+    expect(mocks.getCapacityOverview).toHaveBeenCalledWith(shared, { windowMinutes: 60 });
   });
 
   it.each([

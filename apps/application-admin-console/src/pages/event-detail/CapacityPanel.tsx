@@ -6,26 +6,24 @@ import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Table from "@cloudscape-design/components/table";
-import { toErrorMessage, usePolling } from "@tenkacloud/web-kit";
-import { type ReactNode, useCallback, useState } from "react";
-import { type CapacityOverview, getCapacityOverview } from "../../api/capacity-client";
+import { type ReactNode, useMemo, useState } from "react";
 import type { ApiClient } from "../../api/client";
-import { DEPLOYMENT_POLL_INTERVAL_MS } from "../../constants/polling";
+import { useCapacityOverview } from "../../hooks/useCapacityOverview";
 import {
   buildCapacityRows,
   buildRunbookCommand,
   type CapacityHealth,
   type CapacityRowModel,
 } from "../../lib/capacity-status";
-
-type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
+import type { Translate } from "./tab-content-props";
 
 /**
  * Issue #2410 Slice 2: イベント中の DynamoDB キャパシティ監視 panel (高度操作 tab)。
  *
  * 運営が「消費 / プロビジョン / throttle」を見ながら Slice 1 の SSM runbook でキャパを
- * 上げ下げするための read-only ビュー。30 秒 polling (SSE/WS は導入しない方針)。
- * backend は TenantAdmin 限定 (`GET /admin/capacity`) — 他 role では 403 が error 表示になる。
+ * 上げ下げするための read-only ビュー。30 秒 polling (SSE/WS は導入しない方針) は
+ * {@link useCapacityOverview} が担い、403 (TenantAdmin 以外) / 503 (未配線) / 501 (demo) は
+ * polling を止めて情報 alert に切替える (エラーの赤 alert を出し続けない)。
  */
 
 function healthIndicator(health: CapacityHealth, t: Translate): ReactNode {
@@ -38,27 +36,83 @@ function healthIndicator(health: CapacityHealth, t: Translate): ReactNode {
   return <StatusIndicator type="success">{t("capacity.health_ok")}</StatusIndicator>;
 }
 
+/** runbook コマンド例に使うテーブル: throttling > hot > 先頭 (対応が要る所を例示する)。 */
+export function pickExampleTable(rows: readonly CapacityRowModel[]): string | null {
+  const target =
+    rows.find((r) => r.health === "throttling") ?? rows.find((r) => r.health === "hot") ?? rows[0];
+  return target ? target.tableName : null;
+}
+
+const TERMINAL_MESSAGE_KEYS = {
+  forbidden: "capacity.forbidden",
+  unavailable: "capacity.unconfigured",
+  unsupported: "capacity.demo_unsupported",
+} as const;
+
 export function CapacityPanel({ apiClient, t }: { apiClient: ApiClient | null; t: Translate }) {
-  const [overview, setOverview] = useState<CapacityOverview | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const { overview, error, terminalReason, refresh } = useCapacityOverview(apiClient);
+  // 手動 refresh 中だけ button spinner を回す (30 秒 polling では回さない)。
+  const [manualRefreshInFlight, setManualRefreshInFlight] = useState(false);
 
-  const refresh = useCallback(async () => {
-    if (!apiClient) return;
-    setRefreshing(true);
+  const rows = useMemo(() => (overview ? buildCapacityRows(overview) : []), [overview]);
+  const columnDefinitions = useMemo(
+    () => [
+      {
+        id: "table",
+        header: t("capacity.col_table"),
+        cell: (row: CapacityRowModel) => (
+          <SpaceBetween size="xxs">
+            <Box variant="strong">{t(`capacity.role_${row.role}`)}</Box>
+            <Box fontSize="body-s" color="text-status-inactive">
+              {row.tableName}
+            </Box>
+          </SpaceBetween>
+        ),
+      },
+      {
+        id: "health",
+        header: t("capacity.col_health"),
+        cell: (row: CapacityRowModel) => healthIndicator(row.health, t),
+      },
+      {
+        id: "provisioned",
+        header: t("capacity.col_provisioned"),
+        cell: (row: CapacityRowModel) => row.provisionedLabel,
+      },
+      {
+        id: "consumedRead",
+        header: t("capacity.col_consumed_read"),
+        cell: (row: CapacityRowModel) => row.consumedReadLabel,
+      },
+      {
+        id: "consumedWrite",
+        header: t("capacity.col_consumed_write"),
+        cell: (row: CapacityRowModel) => row.consumedWriteLabel,
+      },
+      {
+        id: "throttles",
+        header: t("capacity.col_throttles"),
+        cell: (row: CapacityRowModel) =>
+          row.throttleEvents > 0 ? (
+            <StatusIndicator type="error">{row.throttleEvents}</StatusIndicator>
+          ) : (
+            <Box>0</Box>
+          ),
+      },
+    ],
+    [t],
+  );
+
+  const onManualRefresh = async () => {
+    setManualRefreshInFlight(true);
     try {
-      setOverview(await getCapacityOverview(apiClient));
-      setError(null);
-    } catch (err) {
-      setError(toErrorMessage(err));
+      await refresh();
     } finally {
-      setRefreshing(false);
+      setManualRefreshInFlight(false);
     }
-  }, [apiClient]);
+  };
 
-  usePolling(refresh, DEPLOYMENT_POLL_INTERVAL_MS);
-
-  const rows = overview ? buildCapacityRows(overview) : [];
+  const exampleTable = overview?.runbookDocumentName ? pickExampleTable(rows) : null;
 
   return (
     <Container
@@ -66,15 +120,19 @@ export function CapacityPanel({ apiClient, t }: { apiClient: ApiClient | null; t
       header={
         <Header
           variant="h3"
-          description={t("capacity.description", {
-            windowMinutes: overview?.windowMinutes ?? 30,
-            ceiling: overview?.ceiling ?? 200,
-          })}
+          description={
+            overview
+              ? t("capacity.description", {
+                  windowMinutes: overview.windowMinutes,
+                  ceiling: overview.ceiling,
+                })
+              : undefined
+          }
           actions={
             <Button
               iconName="refresh"
-              loading={refreshing}
-              onClick={() => void refresh()}
+              loading={manualRefreshInFlight}
+              onClick={() => void onManualRefresh()}
               data-testid="capacity-refresh"
             >
               {t("capacity.refresh")}
@@ -86,75 +144,39 @@ export function CapacityPanel({ apiClient, t }: { apiClient: ApiClient | null; t
       }
     >
       <SpaceBetween size="m">
-        {error && (
-          <Alert type="error" data-testid="capacity-error">
-            {t("capacity.load_failed", { message: error })}
+        {terminalReason ? (
+          // 403 / 503 / 501 (demo) は再 poll しても変わらない terminal 状態: 赤エラーではなく
+          // 情報 alert 1 枚に落として polling も止める (useCapacityOverview 側)。
+          <Alert type="info" data-testid="capacity-terminal">
+            {t(TERMINAL_MESSAGE_KEYS[terminalReason])}
           </Alert>
-        )}
-        <Table<CapacityRowModel>
-          variant="embedded"
-          items={[...rows]}
-          loading={!overview && !error}
-          loadingText={t("capacity.loading")}
-          columnDefinitions={[
-            {
-              id: "table",
-              header: t("capacity.col_table"),
-              cell: (row) => (
-                <SpaceBetween size="xxs">
-                  <Box variant="strong">{t(`capacity.role_${row.role}`)}</Box>
-                  <Box fontSize="body-s" color="text-status-inactive">
-                    {row.tableName}
-                  </Box>
-                </SpaceBetween>
-              ),
-            },
-            {
-              id: "health",
-              header: t("capacity.col_health"),
-              cell: (row) => healthIndicator(row.health, t),
-            },
-            {
-              id: "provisioned",
-              header: t("capacity.col_provisioned"),
-              cell: (row) => row.provisionedLabel,
-            },
-            {
-              id: "consumedRead",
-              header: t("capacity.col_consumed_read"),
-              cell: (row) => row.consumedReadLabel,
-            },
-            {
-              id: "consumedWrite",
-              header: t("capacity.col_consumed_write"),
-              cell: (row) => row.consumedWriteLabel,
-            },
-            {
-              id: "throttles",
-              header: t("capacity.col_throttles"),
-              cell: (row) =>
-                row.throttleEvents > 0 ? (
-                  <StatusIndicator type="error">{row.throttleEvents}</StatusIndicator>
-                ) : (
-                  <Box>0</Box>
-                ),
-            },
-          ]}
-          empty={<Box textAlign="center">{t("capacity.empty")}</Box>}
-        />
-        {overview?.runbookDocumentName && (
-          <Box data-testid="capacity-runbook-hint">
-            <Box variant="strong">{t("capacity.runbook_hint")}</Box>
-            <Box variant="code" fontSize="body-s">
-              {buildRunbookCommand(
-                overview.runbookDocumentName,
-                rows[0]?.tableName ?? "<TableName>",
-              )}
-            </Box>
-            <Box fontSize="body-s" color="text-status-inactive">
-              {t("capacity.runbook_doc_pointer")}
-            </Box>
-          </Box>
+        ) : (
+          <>
+            {error && (
+              <Alert type="error" data-testid="capacity-error">
+                {t("capacity.load_failed", { message: error })}
+              </Alert>
+            )}
+            <Table<CapacityRowModel>
+              variant="embedded"
+              items={rows}
+              loading={!overview && !error}
+              loadingText={t("capacity.loading")}
+              columnDefinitions={columnDefinitions}
+              empty={<Box textAlign="center">{t("capacity.empty")}</Box>}
+            />
+            {overview?.runbookDocumentName && (
+              <Box data-testid="capacity-runbook-hint">
+                <Box variant="strong">{t("capacity.runbook_hint")}</Box>
+                <Box variant="code" fontSize="body-s">
+                  {buildRunbookCommand(overview.runbookDocumentName, exampleTable ?? "<TableName>")}
+                </Box>
+                <Box fontSize="body-s" color="text-status-inactive">
+                  {t("capacity.runbook_doc_pointer")}
+                </Box>
+              </Box>
+            )}
+          </>
         )}
       </SpaceBetween>
     </Container>

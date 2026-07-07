@@ -11,16 +11,16 @@ import {
 
 /**
  * Issue #2410 Slice 2: capacity overview service unit tests.
- * AWS clients are injected fakes; env carries the 5 event-hot table names the
- * EventApiLambda construct wires in production.
+ * The 4 legacy table names come from the shared resources (as in production);
+ * the 5th (ProblemEndpoints) and the runbook document name come from env.
+ * AWS clients are injected fakes.
  */
 
-const TABLE_ENVS = {
-  DEPLOYMENTS_TABLE_NAME: "Deployments-x",
-  EVENTS_TABLE_NAME: "Events-x",
-  TEAMS_TABLE_NAME: "Teams-x",
-  PROBLEM_ENDPOINTS_TABLE_NAME: "Endpoints-x",
-  DISRUPTIONS_TABLE_NAME: "Disruptions-x",
+const SHARED = {
+  deploymentsTableName: "Deployments-x",
+  eventsTableName: "Events-x",
+  teamsTableName: "Teams-x",
+  disruptionsTableName: "Disruptions-x",
 } as const;
 
 const NOW = new Date("2026-07-07T12:00:00.000Z");
@@ -49,13 +49,41 @@ function describeWithGsi(tableName: string) {
   };
 }
 
-function buildClients(metricResults: readonly { Id: string; Values: number[] }[]) {
+interface FakeOptions {
+  /** series id → per-minute datapoints。未指定 id は [] (静かなテーブル)。 */
+  readonly values?: Record<string, number[]>;
+  /** GetMetricData 応答からこの id の series を落とす (= 欠損 series の再現)。 */
+  readonly omitIds?: readonly string[];
+  /** series id → StatusCode 上書き ("Complete" 以外で incomplete を再現)。 */
+  readonly statusCodes?: Record<string, string>;
+  /** 応答に NextToken を付ける (= 予期しない pagination の再現)。 */
+  readonly nextToken?: string;
+  /** DescribeTable 応答の差し替え。 */
+  readonly describe?: (tableName: string) => unknown;
+}
+
+function buildClients(opts: FakeOptions = {}) {
   const ddbSend = vi.fn(async (cmd: unknown) => {
     const name = (cmd as DescribeTableCommand).input.TableName as string;
-    if (name === TABLE_ENVS.DEPLOYMENTS_TABLE_NAME) return describeWithGsi(name);
+    if (opts.describe) return opts.describe(name);
+    if (name === SHARED.deploymentsTableName) return describeWithGsi(name);
     return plainDescription(name);
   });
-  const cwSend = vi.fn(async () => ({ MetricDataResults: [...metricResults] }));
+  // GetMetricData fake は投げられた query 全 id に "Complete" な series を返す (実 AWS の
+  // 挙動と同じ)。欠損 / incomplete / pagination は opts で明示的に注入する。
+  const cwSend = vi.fn(async (cmd: unknown) => {
+    const input = (cmd as GetMetricDataCommand).input;
+    return {
+      ...(opts.nextToken ? { NextToken: opts.nextToken } : {}),
+      MetricDataResults: (input.MetricDataQueries ?? [])
+        .filter((q) => !(opts.omitIds ?? []).includes(q.Id ?? ""))
+        .map((q) => ({
+          Id: q.Id,
+          StatusCode: opts.statusCodes?.[q.Id ?? ""] ?? "Complete",
+          Values: opts.values?.[q.Id ?? ""] ?? [],
+        })),
+    };
+  });
   return {
     clients: {
       ddb: { send: ddbSend as never },
@@ -67,18 +95,18 @@ function buildClients(metricResults: readonly { Id: string; Values: number[] }[]
 }
 
 beforeEach(() => {
-  for (const [key, value] of Object.entries(TABLE_ENVS)) process.env[key] = value;
+  process.env.PROBLEM_ENDPOINTS_TABLE_NAME = "Endpoints-x";
   delete process.env.CAPACITY_RUNBOOK_DOCUMENT_NAME;
 });
 
 afterEach(() => {
-  for (const key of Object.keys(TABLE_ENVS)) delete process.env[key];
+  delete process.env.PROBLEM_ENDPOINTS_TABLE_NAME;
   delete process.env.CAPACITY_RUNBOOK_DOCUMENT_NAME;
 });
 
 describe("resolveEventHotTables", () => {
-  it("should resolve the 5 event-hot tables from env in stable role order", () => {
-    expect(resolveEventHotTables()).toEqual([
+  it("should resolve the 5 event-hot tables (4 from shared, ProblemEndpoints from env) in stable role order", () => {
+    expect(resolveEventHotTables(SHARED)).toEqual([
       { role: "deployments", tableName: "Deployments-x" },
       { role: "events", tableName: "Events-x" },
       { role: "teams", tableName: "Teams-x" },
@@ -87,10 +115,10 @@ describe("resolveEventHotTables", () => {
     ]);
   });
 
-  it("should throw CapacityUnconfiguredError when a table env is missing (no partial view)", () => {
+  it("should throw CapacityUnconfiguredError when the ProblemEndpoints env is missing (no partial view)", () => {
     delete process.env.PROBLEM_ENDPOINTS_TABLE_NAME;
-    expect(() => resolveEventHotTables()).toThrow(CapacityUnconfiguredError);
-    expect(() => resolveEventHotTables()).toThrow(/PROBLEM_ENDPOINTS_TABLE_NAME/);
+    expect(() => resolveEventHotTables(SHARED)).toThrow(CapacityUnconfiguredError);
+    expect(() => resolveEventHotTables(SHARED)).toThrow(/PROBLEM_ENDPOINTS_TABLE_NAME/);
   });
 });
 
@@ -117,18 +145,19 @@ describe("CapacityQuerySchema", () => {
 
 describe("getCapacityOverview", () => {
   it("should combine DescribeTable provisioning with CloudWatch consumption and throttles", async () => {
-    const { clients } = buildClients([
-      // Deployments base: consumed read 60/min + 120/min, write 30/min; throttled reads 2+1
-      { Id: "t0cr", Values: [60, 120] },
-      { Id: "t0cw", Values: [30] },
-      { Id: "t0rt", Values: [2, 1] },
-      { Id: "t0wt", Values: [] },
-      // Deployments GSI1 throttles
-      { Id: "t0g0rt", Values: [4] },
-      { Id: "t0g0wt", Values: [5, 6] },
-    ]);
+    const { clients } = buildClients({
+      values: {
+        // Deployments base: consumed read 60/min + 120/min, write 30/min; throttled reads 2+1
+        t0cr: [60, 120],
+        t0cw: [30],
+        t0rt: [2, 1],
+        // Deployments GSI1 throttles
+        t0g0rt: [4],
+        t0g0wt: [5, 6],
+      },
+    });
 
-    const overview = await getCapacityOverview({ windowMinutes: 30, now: NOW, clients });
+    const overview = await getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients });
 
     expect(overview.windowMinutes).toBe(30);
     expect(overview.ceiling).toBe(200);
@@ -175,9 +204,9 @@ describe("getCapacityOverview", () => {
   });
 
   it("should query CloudWatch once for the whole window with per-table and per-GSI series", async () => {
-    const { clients, cwSend } = buildClients([]);
+    const { clients, cwSend } = buildClients();
 
-    await getCapacityOverview({ windowMinutes: 15, now: NOW, clients });
+    await getCapacityOverview(SHARED, { windowMinutes: 15, now: NOW, clients });
 
     expect(cwSend).toHaveBeenCalledTimes(1);
     const cmd = cwSend.mock.calls[0]?.[0] as GetMetricDataCommand;
@@ -195,25 +224,118 @@ describe("getCapacityOverview", () => {
     expect(gsiQuery?.MetricStat?.Stat).toBe("Sum");
   });
 
-  it("should echo the runbook document name from env, and null when unwired", async () => {
-    const { clients } = buildClients([]);
-    const unwired = await getCapacityOverview({ windowMinutes: 30, now: NOW, clients });
+  it("should echo the runbook document name from env, and null when unwired or empty", async () => {
+    const { clients } = buildClients();
+    const unwired = await getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients });
     expect(unwired.runbookDocumentName).toBeNull();
 
+    process.env.CAPACITY_RUNBOOK_DOCUMENT_NAME = "";
+    const empty = await getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients });
+    expect(empty.runbookDocumentName).toBeNull();
+
     process.env.CAPACITY_RUNBOOK_DOCUMENT_NAME = "stack-event-capacity";
-    const wired = await getCapacityOverview({ windowMinutes: 30, now: NOW, clients });
+    const wired = await getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients });
     expect(wired.runbookDocumentName).toBe("stack-event-capacity");
   });
 
   it("should describe all 5 event-hot tables", async () => {
-    const { clients, ddbSend } = buildClients([]);
+    const { clients, ddbSend } = buildClients();
 
-    await getCapacityOverview({ windowMinutes: 30, now: NOW, clients });
+    await getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients });
 
     const described = ddbSend.mock.calls.map(
       (call) => (call[0] as DescribeTableCommand).input.TableName,
     );
-    expect(described.sort()).toEqual(Object.values(TABLE_ENVS).sort());
+    expect(described.sort()).toEqual(
+      ["Deployments-x", "Events-x", "Teams-x", "Endpoints-x", "Disruptions-x"].sort(),
+    );
     expect(ddbSend.mock.calls[0]?.[0]).toBeInstanceOf(DescribeTableCommand);
+  });
+
+  // --- fail-loud paths: a partial monitoring view must never render as "all green" ---
+
+  it("should fail loudly when GetMetricData paginates unexpectedly (NextToken)", async () => {
+    const { clients } = buildClients({ nextToken: "tok" });
+
+    await expect(
+      getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients }),
+    ).rejects.toThrow(/paginated/);
+  });
+
+  it("should fail loudly when a series comes back incomplete (InternalError / PartialData)", async () => {
+    const { clients } = buildClients({ statusCodes: { t0rt: "InternalError" } });
+
+    await expect(
+      getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients }),
+    ).rejects.toThrow(/incomplete series: t0rt=InternalError/);
+  });
+
+  it("should fail loudly when a queried series is missing from the response", async () => {
+    const { clients } = buildClients({ omitIds: ["t1cw"] });
+
+    await expect(
+      getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients }),
+    ).rejects.toThrow(/missing series: t1cw/);
+  });
+
+  it("should fail loudly when DescribeTable returns no table description", async () => {
+    const { clients } = buildClients({
+      describe: (name) => (name === "Teams-x" ? {} : plainDescription(name)),
+    });
+
+    await expect(
+      getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients }),
+    ).rejects.toThrow(/no table description for Teams-x/);
+  });
+
+  it("should fail loudly when a table has no provisioned throughput (on-demand drift)", async () => {
+    const { clients } = buildClients({
+      describe: (name) =>
+        name === "Events-x" ? { Table: { TableName: name } } : plainDescription(name),
+    });
+
+    await expect(
+      getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients }),
+    ).rejects.toThrow(/no provisioned throughput for Events-x/);
+  });
+
+  it("should fail loudly when a GSI has no provisioned throughput", async () => {
+    const { clients } = buildClients({
+      describe: (name) =>
+        name === "Deployments-x"
+          ? {
+              Table: {
+                TableName: name,
+                ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 2 },
+                GlobalSecondaryIndexes: [{ IndexName: "GSI1" }],
+              },
+            }
+          : plainDescription(name),
+    });
+
+    await expect(
+      getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients }),
+    ).rejects.toThrow(/no provisioned throughput for Deployments-x\/GSI1/);
+  });
+
+  it("should fail loudly when a GSI has no IndexName", async () => {
+    const { clients } = buildClients({
+      describe: (name) =>
+        name === "Deployments-x"
+          ? {
+              Table: {
+                TableName: name,
+                ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 2 },
+                GlobalSecondaryIndexes: [
+                  { ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 } },
+                ],
+              },
+            }
+          : plainDescription(name),
+    });
+
+    await expect(
+      getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients }),
+    ).rejects.toThrow(/GSI without IndexName on Deployments-x/);
   });
 });
