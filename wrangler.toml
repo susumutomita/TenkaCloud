@@ -1,28 +1,19 @@
-# Cloudflare Pages configuration for tenkacloud.com.
+# Cloudflare Pages build configuration.
 #
-# #2408 cutover (ADR-0003 §10): tenkacloud.com serves the unified developer portal
-# (apps/developer-portal — a Next.js static export) instead of the old static
-# `landing/` directory. Old landing URLs are preserved by the portal's
-# apps/developer-portal/public/_redirects (copied into the build output).
+# The published site is the static `landing/` directory. The `build:pages`
+# script (see package.json) builds the participant-portal demo and stages it
+# under `landing/portal-demo/` so the landing page can embed a live mock.
 #
-# `name` is the Cloudflare Pages project name bound to the tenkacloud.com custom
-# domain in the dashboard. It cannot be supplied via an env var, so a fork replaces
-# this single line with its own project name.
+# `name` is the Cloudflare Pages project name. Cloudflare's Pages config
+# validation requires it at the top level and it cannot be supplied via an
+# environment variable, so a fork or other deployment replaces this single
+# line with its own project name.
 #
-# `pages_build_output_dir` is the repo-relative publish directory. The portal's
-# static export (`next build` with output: "export") lands in
-# apps/developer-portal/out.
-#
-# ⚠ REQUIRED DASHBOARD CHANGE — this file only takes effect together with the Pages
-# project's Build configuration (which lives in the dashboard, not here):
-#     Build command:          bun install --frozen-lockfile && bun run --filter @TenkaCloud/developer-portal build
-#     Build output directory: apps/developer-portal/out
-#     Root directory:         / (repository root)
-# The portal build needs NO git submodule — the public catalog is a committed
-# artifact (src/content/catalog-data.ts) — so the Pages "git submodules" setting can
-# stay off.
+# `pages_build_output_dir` is the repo-relative publish directory — identical
+# for every environment — and its presence unlocks the dashboard's
+# "build output directory" field.
 #
 # `compatibility_date` is intentionally omitted: it is only needed for Pages
 # Functions, which this static site does not use.
 name = "tenkacloud-www"
-pages_build_output_dir = "apps/developer-portal/out"
+pages_build_output_dir = "landing"
