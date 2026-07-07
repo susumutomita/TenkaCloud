@@ -29,7 +29,9 @@ const TEMPLATES = [
       "ssm:StartSession",
       "ssm:TerminateSession",
       "lambda:GetFunction",
-      "scheduler:GetSchedule",
+      // scheduler:GetSchedule was dropped in catalog #167, which removed the
+      // self-firing EventBridge Scheduler (it duplicated the phase disruption
+      // and never reverted). The participant role no longer touches Scheduler.
       "logs:FilterLogEvents",
     ],
   },
