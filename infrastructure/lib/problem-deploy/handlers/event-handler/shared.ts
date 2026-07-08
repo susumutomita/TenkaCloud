@@ -3,6 +3,7 @@ import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { S3Client } from "@aws-sdk/client-s3";
 import { SchedulerClient } from "@aws-sdk/client-scheduler";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { z } from "zod";
 import { getEnv } from "../../../helper-functions.js";
 import type { EffectiveCatalogProvenance } from "../../../problem-pack/effective-catalog.js";
 import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
@@ -30,6 +31,11 @@ export type DeploymentProvenanceResolver = (
 ) =>
   | { readonly provenance: EffectiveCatalogProvenance; readonly catalogSnapshotId: string }
   | undefined;
+
+export type PackCatalogProvenance = Extract<
+  EffectiveCatalogProvenance,
+  { readonly source: "pack" }
+>;
 
 /**
  * Event handler Lambda module-scope で 1 度だけ build される shared resources。
@@ -61,6 +67,11 @@ export interface EventSharedResources {
   readonly problemsCatalog: Readonly<Record<string, string>>;
   /** Issue #888: problem metadata.json の `disruptions[]` 宣言 (problemId 毎)。 */
   readonly problemsDisruptions: Readonly<Record<string, readonly ProblemDisruptionEntry[]>>;
+  /**
+   * Issue #2464: pack-only problem provenance burned in by esbuild define. Core problems are
+   * absent, so `{}` means the runtime catalog has no active pack rows.
+   */
+  readonly problemsProvenance: Readonly<Record<string, PackCatalogProvenance>>;
   /**
    * Issue #910 (#895 Phase 2.C): bulk batch を Distributed Map 経路で実行するときの
    * S3 payload bucket。 未配線 (= 旧 fan-out 経路) なら空文字。
@@ -97,6 +108,7 @@ export function buildEventSharedResources(): EventSharedResources {
     scheduler: new SchedulerClient({}),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
     problemsDisruptions: parseProblemsDisruptions(process.env.BATTLE_PROBLEMS_DISRUPTIONS),
+    problemsProvenance: parseProblemsProvenance(process.env.BATTLE_PROBLEMS_PROVENANCE),
     bulkDeployPayloadBucket: process.env.BULK_DEPLOY_PAYLOAD_BUCKET ?? "",
     useBulkDistributedMap:
       (process.env.BULK_DEPLOY_VIA_DISTRIBUTED_MAP ?? "").toLowerCase() === "true",
@@ -143,6 +155,7 @@ export function buildScheduledTeardownResources(): EventSharedResources | undefi
     scheduler: new SchedulerClient({}),
     problemsCatalog: {},
     problemsDisruptions: {},
+    problemsProvenance: {},
     bulkDeployPayloadBucket: "",
     useBulkDistributedMap: false,
   };
@@ -193,6 +206,7 @@ export function buildScheduledDeployResources(): EventSharedResources | undefine
     // deploy 未使用 field の placeholder (bulkDeployEvent fan-out 経路は参照しない)。
     disruptionsTableName: process.env.DISRUPTIONS_TABLE_NAME ?? "",
     problemsDisruptions: {},
+    problemsProvenance: {},
     // Distributed Map 経路は EventApiLambda 専用 (= S3 bucket env)。 reconciler は旧 fan-out
     // 経路 (N×M DeployCreateRequested publish) を使うので bucket 不要 / flag は false 固定。
     bulkDeployPayloadBucket: "",
@@ -277,6 +291,32 @@ function parseProblemsDisruptions(
   } catch {
     return {};
   }
+}
+
+const PackCatalogProvenanceSchema = z
+  .object({
+    source: z.literal("pack"),
+    packId: z.string().min(1),
+    packVersion: z.string().min(1),
+    contentDigest: z.string().min(1),
+  })
+  .strict();
+
+const ProblemsProvenanceSchema = z.record(z.string(), PackCatalogProvenanceSchema);
+
+function parseProblemsProvenance(
+  raw: string | undefined,
+): Readonly<Record<string, PackCatalogProvenance>> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    const result = ProblemsProvenanceSchema.safeParse(parsed);
+    if (result.success) return result.data;
+  } catch {
+    // Fall through to the warning below. The handler keeps the legacy core-only path.
+  }
+  console.warn("[event-handler] invalid BATTLE_PROBLEMS_PROVENANCE; using empty provenance map");
+  return {};
 }
 
 /**

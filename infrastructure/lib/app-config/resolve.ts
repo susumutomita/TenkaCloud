@@ -9,6 +9,7 @@ import { parseDeployAllowedCidrs } from "../problem-deploy/deploy-allowed-cidrs.
 import { parseDeployQuota } from "../problem-deploy/handlers/deploy-handler/deploy-quota.js";
 import type { ParticipantPortalRuntimeConfig } from "../problem-deploy/participant-portal-hosting.js";
 import { type CatalogSource, LocalCatalogSource } from "../problem-pack/catalog-source.js";
+import type { EffectiveCatalogProvenance } from "../problem-pack/effective-catalog.js";
 import { parseTenantAdminAllowlist } from "../tenant-template/saml-admin-allowlist.js";
 import { parseTenantSamlIdpConfig } from "../tenant-template/saml-identity-providers.js";
 import { loadConfig } from "../utils/config-loader.js";
@@ -328,14 +329,29 @@ function resolveParticipantPortal(
 
 function discoverAppProblems(input: ResolveAppConfigInput): ProblemsCatalogBundle {
   const problemsRoot = path.resolve(input.binDir, "..", "..", "problems");
-  if (input.discoverProblems) return input.discoverProblems(problemsRoot);
+  if (input.discoverProblems)
+    return withPackOnlyProvenance(input.discoverProblems(problemsRoot), {});
   // [#2092] Backend deploy paths consume ONE effective catalog through the source
   // abstraction. The default {@link LocalCatalogSource} preserves the exact current
   // synth-time behavior (byte-identical), so this is a CFn NO-OP. Lite mode can
   // pass a SnapshotCatalogSource from `bin/tenkacloud-lite.ts` when a local
   // activation store exists; SaaS pooled remains unwired.
   const source = input.catalogSource ?? new LocalCatalogSource();
-  return source.loadBundle(problemsRoot);
+  return withPackOnlyProvenance(
+    source.loadBundle(problemsRoot),
+    source.describeProvenance(problemsRoot),
+  );
+}
+
+function withPackOnlyProvenance(
+  bundle: ProblemsCatalogBundle,
+  provenance: Readonly<Record<string, EffectiveCatalogProvenance>>,
+): ProblemsCatalogBundle {
+  const packOnly: Record<string, EffectiveCatalogProvenance> = {};
+  for (const [problemId, entry] of Object.entries(provenance)) {
+    if (entry.source === "pack") packOnly[problemId] = entry;
+  }
+  return { ...bundle, provenance: packOnly };
 }
 
 function resolveChallengePayload(

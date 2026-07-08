@@ -1,4 +1,8 @@
 import { ulid } from "ulid";
+import {
+  computeCatalogSnapshotId,
+  type PinnedProblemProvenance,
+} from "../../../problem-pack/event-pin.js";
 import type { EventRecord } from "../../control-data/events-repository.js";
 import type { TeamRecord } from "../../control-data/teams-repository.js";
 import { generateTeamLoginKey } from "../deploy-handler/team-key.js";
@@ -80,6 +84,7 @@ export async function createEvent(
     createdAt,
     updatedAt: createdAt,
     expiresAt,
+    ...buildEventCatalogPin(shared, ctx.tenantId),
   };
 
   const repositories = await resolveEventRepositories(shared);
@@ -103,6 +108,44 @@ export async function createEvent(
     })),
     problems: req.problems,
   };
+}
+
+function buildEventCatalogPin(
+  shared: EventSharedResources,
+  tenantId: string,
+): Pick<EventRecord, "catalogSnapshotId" | "packProvenance"> {
+  const problems = buildPinnedProblems(shared);
+  const packProvenance = buildPackProvenance(problems);
+  if (Object.keys(packProvenance).length === 0) return {};
+  return {
+    catalogSnapshotId: computeCatalogSnapshotId(tenantId, problems),
+    packProvenance,
+  };
+}
+
+function buildPinnedProblems(shared: EventSharedResources): readonly PinnedProblemProvenance[] {
+  return Object.keys(shared.problemsCatalog)
+    .sort((a, b) => a.localeCompare(b))
+    .map((problemId) => ({
+      problemId,
+      provenance: shared.problemsProvenance[problemId] ?? { source: "core" },
+    }));
+}
+
+function buildPackProvenance(
+  problems: readonly PinnedProblemProvenance[],
+): NonNullable<EventRecord["packProvenance"]> {
+  const packProvenance: NonNullable<EventRecord["packProvenance"]> = {};
+  for (const problem of problems) {
+    const provenance = problem.provenance;
+    if (provenance.source !== "pack") continue;
+    packProvenance[problem.problemId] = {
+      packId: provenance.packId,
+      packVersion: provenance.packVersion,
+      contentDigest: provenance.contentDigest,
+    };
+  }
+  return packProvenance;
 }
 
 function validateNoDuplicateSlugs(req: CreateEventRequest): void {

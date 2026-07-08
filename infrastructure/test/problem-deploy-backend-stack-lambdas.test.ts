@@ -1,5 +1,6 @@
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
+import { eventApiBundlingDefine } from "../lib/problem-deploy/event-api-lambda";
 import {
   synthDefault,
   synthWithDeployConcurrentBuildLimit,
@@ -84,6 +85,31 @@ describe("ProblemDeployBackendStack (MVP-1) — Deploy API Lambda (invoked from 
     // pin: 残しておく env が消えていないこと (= regression 防止)
     expect(vars.EVENTS_TABLE_NAME).toBeDefined();
     expect(vars.DISRUPTIONS_TABLE_NAME).toBeDefined();
+  });
+
+  it("EventApi Lambda bundling define should include the runtime provenance map (#2464)", () => {
+    const define = eventApiBundlingDefine({
+      problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+      problemsDisruptions: {},
+      problemsProvenance: {
+        "pack-problem": {
+          source: "pack",
+          packId: "com.example.cloud-pack",
+          packVersion: "1.0.0",
+          contentDigest: "sha256-abc",
+        },
+      },
+    });
+    expect(JSON.parse(define["process.env.BATTLE_PROBLEMS_PROVENANCE"])).toBe(
+      JSON.stringify({
+        "pack-problem": {
+          source: "pack",
+          packId: "com.example.cloud-pack",
+          packVersion: "1.0.0",
+          contentDigest: "sha256-abc",
+        },
+      }),
+    );
   });
 
   it("EventApi Lambda total env size should stay under 3 KB (1 KB margin under the 4 KB hard limit, #1308)", () => {

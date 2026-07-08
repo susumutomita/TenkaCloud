@@ -86,6 +86,11 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    */
   readonly problemsDisruptions?: Readonly<Record<string, unknown>>;
   /**
+   * Issue #2464: pack-sourced `problemId → provenance` map. EventApiLambda uses it at event
+   * creation time to pin the active catalog snapshot onto the event record.
+   */
+  readonly problemsProvenance?: Readonly<Record<string, unknown>>;
+  /**
    * ADR-028/030 Phase 3 (#1420): `problemId → { plugin }` の map。 `discoverProblemsCoordination` で
    * metadata.json の `interTeamCoordination.plugin` から自動収集。 CoordinationDispatcher Lambda の
    * scope resolver が team→moduleRef を解決するのに使う。 未宣言の問題はキーが無い。
@@ -464,6 +469,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       problemsDisruptions: (props.problemsDisruptions ?? {}) as Readonly<
         Record<string, readonly unknown[]>
       >,
+      problemsProvenance: props.problemsProvenance ?? {},
       // Issue #910 Phase 2.C.2.b: bulk batch payload bucket + feature flag。
       bulkDeployPayloadBucket: bulkPayloadBucket,
       useBulkDistributedMap: props.useBulkDistributedMap ?? false,

@@ -55,6 +55,11 @@ export interface EventApiLambdaProps {
    */
   readonly problemsDisruptions: Readonly<Record<string, readonly unknown[]>>;
   /**
+   * Issue #2464: problemId → pack provenance map for pack-sourced catalog entries only.
+   * Burned into the handler with esbuild define; core-only path is `{}`.
+   */
+  readonly problemsProvenance?: Readonly<Record<string, unknown>>;
+  /**
    * tenantId として handler に渡す `DEFAULT_TENANT_ID` env (DeployApi と同じ fallback)。
    * Cognito JWT 結線後は JWT claim から取る。
    */
@@ -94,6 +99,22 @@ export interface EventApiLambdaProps {
   readonly tursoDatabaseUrl?: string;
   /** SSM SecureString parameter name containing the libSQL auth token. */
   readonly tursoAuthTokenParameterName?: string;
+}
+
+export function eventApiBundlingDefine(props: {
+  readonly problemsCatalog: Readonly<Record<string, string>>;
+  readonly problemsDisruptions: Readonly<Record<string, readonly unknown[]>>;
+  readonly problemsProvenance?: Readonly<Record<string, unknown>>;
+}): Record<string, string> {
+  return {
+    "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(JSON.stringify(props.problemsCatalog)),
+    "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
+      JSON.stringify(props.problemsDisruptions),
+    ),
+    "process.env.BATTLE_PROBLEMS_PROVENANCE": JSON.stringify(
+      JSON.stringify(props.problemsProvenance ?? {}),
+    ),
+  };
 }
 
 /**
@@ -157,14 +178,7 @@ export class EventApiLambda extends Construct {
       // build 時に literal 置換し env を 0 化する。 handler は process.env を読む既存 code の
       // まま (= build 後に literal JSON 文字列が埋まる)。 tests は process.env 経由で fixture を
       // 注入するので影響なし。
-      bundlingDefine: {
-        "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
-          JSON.stringify(props.problemsCatalog),
-        ),
-        "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
-          JSON.stringify(props.problemsDisruptions),
-        ),
-      },
+      bundlingDefine: eventApiBundlingDefine(props),
     });
 
     // Events / Teams への RW (Phase 1 の CRUD)、Deployments への RW (Phase 2a の

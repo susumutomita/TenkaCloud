@@ -289,4 +289,9 @@ export interface ProblemsCatalogBundle {
   readonly coordination: unknown;
   /** ADR-030 Phase 3b #1420: `{ [problemId]: bundledMjs }` (= synth-bundle 済み coordination plugin)。 */
   readonly coordinationBundles: unknown;
+  /**
+   * [Problem Packs / Issue #2464] `problemId → EffectiveCatalogProvenance` for pack-sourced
+   * problems only. Core problems are intentionally absent (`{}` on the core-only path).
+   */
+  readonly provenance?: unknown;
 }

@@ -31,6 +31,7 @@ const PACK_PROVENANCE: EffectiveCatalogProvenance = {
 
 function buildShared(
   resolveDeploymentProvenance?: EventSharedResources["resolveDeploymentProvenance"],
+  overrides: Partial<EventSharedResources> = {},
 ): EventSharedResources {
   return {
     eventsTableName: "TestEvents",
@@ -49,9 +50,11 @@ function buildShared(
       "core-problem": "problems/challenges/core-problem",
     },
     problemsDisruptions: {},
+    problemsProvenance: {},
     bulkDeployPayloadBucket: "",
     useBulkDistributedMap: false,
     resolveDeploymentProvenance,
+    ...overrides,
   };
 }
 
@@ -80,14 +83,19 @@ const emptyExisting: ExistingDeploymentIndex = {
 function buildPlanFor(
   problemId: string,
   resolver?: EventSharedResources["resolveDeploymentProvenance"],
+  event: Parameters<typeof buildBulkDeployPlan>[0]["event"] = {
+    startsAt: undefined,
+    endsAt: undefined,
+  },
+  sharedOverrides: Partial<EventSharedResources> = {},
 ) {
-  const shared = buildShared(resolver);
+  const shared = buildShared(resolver, sharedOverrides);
   return buildBulkDeployPlan({
     shared,
     tenantId: TENANT,
     eventId: EVENT_ID,
     nowMs: NOW_MS,
-    event: { startsAt: undefined, endsAt: undefined },
+    event,
     selected: selected(problemId),
     existing: emptyExisting,
     verified: new Map([
@@ -134,5 +142,73 @@ describe("buildBulkDeployPlan provenance", () => {
     const plan = buildPlanFor("pack-problem", undefined);
     expect(plan.entries).toHaveLength(1);
     expect(plan.entries[0].item).not.toHaveProperty("provenance");
+  });
+
+  it("should resolve pack deployment provenance from the event record pin when no resolver is wired", () => {
+    const plan = buildPlanFor("pack-problem", undefined, {
+      catalogSnapshotId: "snap-from-event",
+      packProvenance: {
+        "pack-problem": {
+          packId: "com.example.cloud-pack",
+          packVersion: "1.2.0",
+          contentDigest: "sha256-abc",
+        },
+      },
+    });
+    expect(plan.entries).toHaveLength(1);
+    expect(plan.entries[0].item.provenance).toEqual({
+      packId: "com.example.cloud-pack",
+      packVersion: "1.2.0",
+      contentDigest: "sha256-abc",
+      catalogSnapshotId: "snap-from-event",
+    });
+  });
+
+  it("should leave a core deployment row unchanged when the event pin has no pack row for that problem", () => {
+    const plan = buildPlanFor("core-problem", undefined, {
+      catalogSnapshotId: "snap-from-event",
+      packProvenance: {
+        "pack-problem": {
+          packId: "com.example.cloud-pack",
+          packVersion: "1.2.0",
+          contentDigest: "sha256-abc",
+        },
+      },
+    });
+    expect(plan.entries).toHaveLength(1);
+    expect(plan.entries[0].item).not.toHaveProperty("provenance");
+  });
+
+  it("should keep deployment provenance immutable from the event record even if runtime provenance changes", () => {
+    const plan = buildPlanFor(
+      "pack-problem",
+      undefined,
+      {
+        catalogSnapshotId: "snap-original",
+        packProvenance: {
+          "pack-problem": {
+            packId: "com.example.cloud-pack",
+            packVersion: "1.2.0",
+            contentDigest: "sha256-original",
+          },
+        },
+      },
+      {
+        problemsProvenance: {
+          "pack-problem": {
+            source: "pack",
+            packId: "com.example.cloud-pack",
+            packVersion: "2.0.0",
+            contentDigest: "sha256-new",
+          },
+        },
+      },
+    );
+    expect(plan.entries[0].item.provenance).toEqual({
+      packId: "com.example.cloud-pack",
+      packVersion: "1.2.0",
+      contentDigest: "sha256-original",
+      catalogSnapshotId: "snap-original",
+    });
   });
 });

@@ -72,7 +72,7 @@ export type CreateEventResult =
  * Equal pins yield an equal id regardless of wall-clock time, so the pin is
  * reproducible.
  */
-function computeCatalogSnapshotId(
+export function computeCatalogSnapshotId(
   tenantId: string,
   problems: readonly PinnedProblemProvenance[],
 ): string {

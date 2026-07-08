@@ -10,8 +10,18 @@ import {
   type CreateEventRequest,
   CreateEventRequestSchema,
 } from "../../lib/problem-deploy/handlers/event-handler/types";
+import { computeCatalogSnapshotId } from "../../lib/problem-pack/event-pin";
 
 const NOW_MS = 1_700_000_000_000;
+const CREATED_AT = new Date(NOW_MS).toISOString();
+const DEFAULT_EXPIRES_AT = Math.floor((NOW_MS + 7 * 24 * 60 * 60 * 1000) / 1000);
+
+const PACK_PROVENANCE = {
+  source: "pack",
+  packId: "com.example.cloud-pack",
+  packVersion: "1.0.0",
+  contentDigest: "sha256-abc",
+} as const;
 
 const teamsOf = (n: number) =>
   Array.from({ length: n }, (_, i) => ({
@@ -35,7 +45,7 @@ describe("CreateEventRequestSchema teams cap (event 1 row + teams must fit one 1
   });
 });
 
-function buildShared(): {
+function buildShared(overrides: Partial<EventSharedResources> = {}): {
   shared: EventSharedResources;
   ddbSend: ReturnType<typeof vi.fn>;
 } {
@@ -44,6 +54,9 @@ function buildShared(): {
     eventsTableName: "TestEvents",
     teamsTableName: "TestTeams",
     ddb: { send: ddbSend } as unknown as EventSharedResources["ddb"],
+    problemsCatalog: { "hello-world-battle": "problems/battles/hello-world-battle" },
+    problemsProvenance: {},
+    ...overrides,
   };
   return { shared, ddbSend };
 }
@@ -179,6 +192,68 @@ describe("createEvent", () => {
       ?.Put?.Item;
     expect(eventItem?.GSI1PK).toBe("TENANT#tenant-acme");
     expect(eventItem?.GSI1SK).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("should omit catalogSnapshotId and packProvenance when the active catalog has no pack rows", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({});
+
+    await createEvent(shared, { tenantId: "tenant-acme", nowMs: NOW_MS }, sampleRequest());
+
+    const eventItem = (ddbSend.mock.calls[0]?.[0] as TransactWriteCommand).input.TransactItems?.[0]
+      ?.Put?.Item;
+    expect(eventItem).toEqual({
+      PK: `EVENT#${eventItem?.eventId}`,
+      SK: "META",
+      GSI1PK: "TENANT#tenant-acme",
+      GSI1SK: CREATED_AT,
+      eventId: eventItem?.eventId,
+      tenantId: "tenant-acme",
+      name: "Tenka Battle Cup 2026",
+      status: "DRAFT",
+      problems: sampleRequest().problems,
+      teamCount: 2,
+      createdAt: CREATED_AT,
+      updatedAt: CREATED_AT,
+      expiresAt: DEFAULT_EXPIRES_AT,
+    });
+  });
+
+  it("should pin the full active catalog snapshot and write packProvenance for pack rows only", async () => {
+    const { shared, ddbSend } = buildShared({
+      problemsCatalog: {
+        "core-problem": "problems/challenges/core-problem",
+        "pack-problem": "pack-problems/com.example.cloud-pack/1.0.0/challenges/pack-problem",
+      },
+      problemsProvenance: {
+        "pack-problem": PACK_PROVENANCE,
+      },
+    });
+    ddbSend.mockResolvedValueOnce({});
+
+    await createEvent(
+      shared,
+      { tenantId: "tenant-acme", nowMs: NOW_MS },
+      sampleRequest({
+        problems: [{ problemId: "core-problem", defaultRegion: "ap-northeast-1" }],
+      }),
+    );
+
+    const eventItem = (ddbSend.mock.calls[0]?.[0] as TransactWriteCommand).input.TransactItems?.[0]
+      ?.Put?.Item;
+    expect(eventItem?.packProvenance).toEqual({
+      "pack-problem": {
+        packId: "com.example.cloud-pack",
+        packVersion: "1.0.0",
+        contentDigest: "sha256-abc",
+      },
+    });
+    expect(eventItem?.catalogSnapshotId).toBe(
+      computeCatalogSnapshotId("tenant-acme", [
+        { problemId: "core-problem", provenance: { source: "core" } },
+        { problemId: "pack-problem", provenance: PACK_PROVENANCE },
+      ]),
+    );
   });
 
   it("should surface a TransactWrite conflict as a loud error (500 path)", async () => {

@@ -34,6 +34,8 @@ export function buildProblemDeployBackendBaseProps(config: AppConfig) {
     problemRuntimes: (config.problems.runtimes ?? {}) as Readonly<Record<string, unknown>>,
     // Issue #888: per-problem `disruptions[]` を Lambda env に injection
     problemsDisruptions: (config.problems.disruptions ?? {}) as Readonly<Record<string, unknown>>,
+    // Issue #2464: pack-only provenance is pinned onto events by EventApiLambda at create time.
+    problemsProvenance: (config.problems.provenance ?? {}) as Readonly<Record<string, unknown>>,
     // #1420 ADR-030 Phase 3: per-problem coordination plugin path を dispatcher へ injection
     problemsCoordination: (config.problems.coordination ?? {}) as Readonly<Record<string, unknown>>,
     // #1420 ADR-030 Phase 3b: synth-bundle 済み coordination plugin (.mjs) を S3 へ配置
