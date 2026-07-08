@@ -1,4 +1,12 @@
-import type { DeploymentItem } from "../handlers/deploy-handler/types.js";
+import type {
+  CompositeParentDeploymentItem,
+  CompositeTargetDeploymentItem,
+} from "../handlers/deploy-handler/composite-deployment.js";
+import type {
+  DeploymentItem,
+  DeploymentStatus,
+  HintRevealRecord,
+} from "../handlers/deploy-handler/types.js";
 import type { EventItem, TeamItem } from "../handlers/event-handler/types.js";
 import type { NotificationItem } from "../handlers/shared/notification.js";
 import type { ProgressionGateConfig } from "../handlers/shared/progression-gate.js";
@@ -501,6 +509,44 @@ export type DeploymentRecord = Omit<
   "PK" | "SK" | "GSI1PK" | "GSI1SK" | "GSI2PK" | "GSI2SK" | "GSI3PK" | "GSI3SK"
 >;
 
+export type CompositeParentDeploymentRecord = Omit<CompositeParentDeploymentItem, "PK" | "SK">;
+
+export type CompositeTargetDeploymentRecord = Omit<
+  CompositeTargetDeploymentItem,
+  "PK" | "SK" | "GSI3PK" | "GSI3SK"
+>;
+
+/**
+ * [Issue #2441 / Phase B2] Result of one conditional Deployment mutation. Mirrors
+ * {@link EventMutationOutcome}: DynamoDB CCFs stay inside the seam, and methods
+ * only carry `record` when the pre-seam write returned a post-image or explicitly
+ * probed after a condition failure.
+ */
+export type DeploymentMutationOutcome =
+  | { readonly outcome: "updated"; readonly record?: DeploymentRecord }
+  | { readonly outcome: "conflict"; readonly record?: DeploymentRecord }
+  | { readonly outcome: "not_found" };
+
+export interface DeploymentKindScoringResult {
+  readonly scoreDelta: number;
+  readonly lastResult?: DeploymentRecord["lastResult"];
+  readonly endpointsHealthJson?: string;
+  readonly attackProbesJson?: string;
+  readonly postureJson?: string;
+  readonly platform?: string;
+  readonly newState?: unknown;
+}
+
+export interface DeploymentSchedulePatch {
+  readonly startsAt?: string;
+  readonly endsAt?: string;
+}
+
+export interface BulkDeploymentCreateEntry {
+  readonly record: DeploymentRecord;
+  readonly replacesJobId?: string;
+}
+
 /**
  * [Issue #2441 / Phase B1] The domain shape of one `EVENT#<isoTs>#<ulid>` score
  * event row (the sparse scoring-history sub-aggregate that co-habits the
@@ -742,4 +788,151 @@ export interface DeploymentsRepository {
     tenantId: string,
     eventId: string,
   ): Promise<CoordinationStateRecord | undefined>;
+
+  // ---------------------------------------------------------------------------
+  // [Issue #2441 / Phase B2] Conditional/atomic writes. Every DynamoDB
+  // UpdateExpression / ConditionExpression lives in the backend verbatim; callers
+  // consume outcome data instead of catching backend-specific CCF exceptions.
+  // ---------------------------------------------------------------------------
+
+  putDeployment(record: DeploymentRecord): Promise<void>;
+  markFailedIfPending(
+    jobId: string,
+    tenantId: string,
+    reason: string,
+    at: string,
+    expiresAt: number,
+  ): Promise<DeploymentMutationOutcome>;
+  retryToPending(jobId: string, tenantId: string, at: string): Promise<DeploymentMutationOutcome>;
+  compensateRetryToFailed(
+    jobId: string,
+    tenantId: string,
+    reason: string,
+    at: string,
+    expiresAt: number,
+  ): Promise<DeploymentMutationOutcome>;
+  markDeleting(
+    jobId: string,
+    tenantId: string,
+    at: string,
+    expiresAt: number,
+  ): Promise<DeploymentMutationOutcome>;
+  compensateDeleteToFailed(
+    jobId: string,
+    tenantId: string,
+    reason: string,
+    at: string,
+    expiresAt: number,
+  ): Promise<DeploymentMutationOutcome>;
+  markApprovalPending(
+    jobId: string,
+    tenantId: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  failCompositeTargetIfPending(
+    jobId: string,
+    reason: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  markCompositeParentDeleting(jobId: string, at: string): Promise<DeploymentMutationOutcome>;
+  putCompositeParent(record: CompositeParentDeploymentRecord): Promise<DeploymentMutationOutcome>;
+  putCompositeTarget(record: CompositeTargetDeploymentRecord): Promise<DeploymentMutationOutcome>;
+
+  applyMultiFlagCorrectScore(
+    jobId: string,
+    points: number,
+    flagId: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  applyMultiFlagWrongPenalty(
+    jobId: string,
+    penalty: number,
+    flagId: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  applyFlagWrongPenalty(
+    jobId: string,
+    penalty: number,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  applyFlagCorrectScore(
+    jobId: string,
+    points: number,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  applyHintPenalty(
+    jobId: string,
+    hint: HintRevealRecord,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  updateDisplayTeamName(
+    jobId: string,
+    name: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+
+  applyKindScoringResult(
+    jobId: string,
+    result: DeploymentKindScoringResult,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  casCompositeParentStatus(
+    jobId: string,
+    previousStatus: DeploymentStatus,
+    nextStatus: DeploymentStatus,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  latchGateCompleted(jobId: string, at: string): Promise<DeploymentMutationOutcome>;
+  awardGateBonusAtomic(
+    parent: Pick<DeploymentRecord, "jobId" | "problemId" | "teamId" | "eventId" | "expiresAt">,
+    bonus: number,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  setScoringState(jobId: string, stateJson: string, at: string): Promise<DeploymentMutationOutcome>;
+  markStuckDeletingFailed(
+    jobId: string,
+    reason: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  transitionRuntimeStatus(
+    jobId: string,
+    tenantId: string,
+    currentStatus: DeploymentStatus,
+    nextStatus: DeploymentStatus,
+    stackOutputs: string | undefined,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+
+  compensateBulkTeardown(
+    jobId: string,
+    tenantId: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  markDeletingForBulk(
+    jobId: string,
+    tenantId: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  applySchedulePatch(
+    jobId: string,
+    tenantId: string,
+    patch: DeploymentSchedulePatch,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  createBulkDeployments(
+    tenantId: string,
+    entries: readonly BulkDeploymentCreateEntry[],
+  ): Promise<DeploymentMutationOutcome>;
+  compensateBulkCreateToFailed(
+    jobId: string,
+    tenantId: string,
+    reason: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  stampEventEndsAt(
+    jobId: string,
+    tenantId: string,
+    endsAt: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
 }
