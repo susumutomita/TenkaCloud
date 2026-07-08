@@ -1,4 +1,15 @@
-import type { EventRecord, EventsRepository, TeamRecord, TeamsRepository } from "./types.js";
+import type { ProgressionGateConfig } from "../handlers/shared/progression-gate.js";
+import type {
+  ClearProgressionGateOutcome,
+  CreateEventWithTeamsOutcome,
+  EventMutationOutcome,
+  EventRecord,
+  EventSchedulePatch,
+  EventsRepository,
+  ScheduleFiredKind,
+  TeamRecord,
+  TeamsRepository,
+} from "./types.js";
 
 function sameEventRecord(left: EventRecord, right: EventRecord): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
@@ -80,6 +91,141 @@ export class MirroredEventsRepository implements EventsRepository {
   async pruneExpired(nowEpochSeconds: number): Promise<number> {
     await this.replica.pruneExpired(nowEpochSeconds);
     return this.canonical.pruneExpired(nowEpochSeconds);
+  }
+
+  // ---------------------------------------------------------------------------
+  // [Issue #2437] Conditional writes: canonical (DynamoDB) first, its outcome is
+  // adopted, and the SAME domain operation is applied to the replica only when
+  // the canonical write succeeded. A replica failure throws (fail loudly — no
+  // silent fallback); a replica outcome mismatch from drift is left to the
+  // read-repair paths above (every read reconciles the replica from canonical).
+  // ---------------------------------------------------------------------------
+
+  /** Adopt the canonical outcome; run the replica op only on a canonical success. */
+  private async mirrorWrite<T extends { readonly outcome: string }>(
+    canonicalOutcome: T,
+    applyToReplica: () => Promise<unknown>,
+  ): Promise<T> {
+    if (canonicalOutcome.outcome === "updated" || canonicalOutcome.outcome === "created") {
+      await applyToReplica();
+    }
+    return canonicalOutcome;
+  }
+
+  async endEvent(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome> {
+    return this.mirrorWrite(await this.canonical.endEvent(tenantId, eventId, at), () =>
+      this.replica.endEvent(tenantId, eventId, at),
+    );
+  }
+
+  async lockScoring(
+    tenantId: string,
+    eventId: string,
+    lockedBy: string,
+    at: string,
+  ): Promise<EventMutationOutcome> {
+    return this.mirrorWrite(await this.canonical.lockScoring(tenantId, eventId, lockedBy, at), () =>
+      this.replica.lockScoring(tenantId, eventId, lockedBy, at),
+    );
+  }
+
+  async unlockScoring(
+    tenantId: string,
+    eventId: string,
+    at: string,
+  ): Promise<EventMutationOutcome> {
+    return this.mirrorWrite(await this.canonical.unlockScoring(tenantId, eventId, at), () =>
+      this.replica.unlockScoring(tenantId, eventId, at),
+    );
+  }
+
+  async archiveEvent(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome> {
+    return this.mirrorWrite(await this.canonical.archiveEvent(tenantId, eventId, at), () =>
+      this.replica.archiveEvent(tenantId, eventId, at),
+    );
+  }
+
+  async updateSchedule(
+    tenantId: string,
+    eventId: string,
+    patch: EventSchedulePatch,
+    at: string,
+  ): Promise<EventMutationOutcome> {
+    return this.mirrorWrite(await this.canonical.updateSchedule(tenantId, eventId, patch, at), () =>
+      this.replica.updateSchedule(tenantId, eventId, patch, at),
+    );
+  }
+
+  async markTeardown(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome> {
+    return this.mirrorWrite(await this.canonical.markTeardown(tenantId, eventId, at), () =>
+      this.replica.markTeardown(tenantId, eventId, at),
+    );
+  }
+
+  async setProgressionGate(
+    tenantId: string,
+    eventId: string,
+    config: ProgressionGateConfig,
+    at: string,
+  ): Promise<EventMutationOutcome> {
+    return this.mirrorWrite(
+      await this.canonical.setProgressionGate(tenantId, eventId, config, at),
+      () => this.replica.setProgressionGate(tenantId, eventId, config, at),
+    );
+  }
+
+  async clearProgressionGate(
+    tenantId: string,
+    eventId: string,
+    at: string,
+  ): Promise<ClearProgressionGateOutcome> {
+    return this.mirrorWrite(await this.canonical.clearProgressionGate(tenantId, eventId, at), () =>
+      this.replica.clearProgressionGate(tenantId, eventId, at),
+    );
+  }
+
+  async markDeploying(
+    tenantId: string,
+    eventId: string,
+    at: string,
+  ): Promise<EventMutationOutcome> {
+    return this.mirrorWrite(await this.canonical.markDeploying(tenantId, eventId, at), () =>
+      this.replica.markDeploying(tenantId, eventId, at),
+    );
+  }
+
+  async transitionStatus(
+    tenantId: string,
+    eventId: string,
+    from: string,
+    to: string,
+    at: string,
+  ): Promise<EventMutationOutcome> {
+    return this.mirrorWrite(
+      await this.canonical.transitionStatus(tenantId, eventId, from, to, at),
+      () => this.replica.transitionStatus(tenantId, eventId, from, to, at),
+    );
+  }
+
+  async markScheduleFired(
+    tenantId: string,
+    eventId: string,
+    kind: ScheduleFiredKind,
+    at: string,
+  ): Promise<EventMutationOutcome> {
+    return this.mirrorWrite(
+      await this.canonical.markScheduleFired(tenantId, eventId, kind, at),
+      () => this.replica.markScheduleFired(tenantId, eventId, kind, at),
+    );
+  }
+
+  async createEventWithTeams(
+    event: EventRecord,
+    teams: readonly TeamRecord[],
+  ): Promise<CreateEventWithTeamsOutcome> {
+    return this.mirrorWrite(await this.canonical.createEventWithTeams(event, teams), () =>
+      this.replica.createEventWithTeams(event, teams),
+    );
   }
 }
 

@@ -1,4 +1,3 @@
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { EventRecord } from "../../control-data/events-repository.js";
 import type { TeamRecord } from "../../control-data/teams-repository.js";
 import {
@@ -7,7 +6,6 @@ import {
 } from "../shared/progression-gate.js";
 import { getFeatureFlags } from "./feature-flags.js";
 import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
-import type { EventItem } from "./types.js";
 
 /**
  * Issue #2283: Progression Gate 設定の service 層。
@@ -67,34 +65,26 @@ export async function setProgressionGate(
   const invalid = validateAgainstEvent(config, event, teamRecords);
   if (invalid) return { kind: "invalid", reason: invalid };
 
-  try {
-    await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.eventsTableName,
-        Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        UpdateExpression: "SET progressionGate = :cfg, updatedAt = :now",
-        ConditionExpression: "tenantId = :tenantId",
-        ExpressionAttributeValues: {
-          ":cfg": config,
-          ":now": new Date(nowMs).toISOString(),
-          ":tenantId": tenantId,
-        },
-      }),
-    );
-  } catch (err) {
-    // read と write の間に event が消えた / tenant が変わった race は 404 に倒す
-    // (removeProgressionGate と同じ扱い。 存在を漏らさず 500 も出さない)。
-    if (err instanceof Error && err.name === "ConditionalCheckFailedException") {
-      return { kind: "not_found" };
-    }
-    throw err;
-  }
+  // [#2437 Phase A2] 条件付き書き込みは repository seam の `setProgressionGate` に移設。
+  // 条件は tenant 照合のみ → read と write の間に event が消えた / tenant が変わった race は
+  // seam が not_found に畳む (removeProgressionGate と同じ扱い。 存在を漏らさず 500 も出さない)。
+  const result = await repositories.events.setProgressionGate(
+    tenantId,
+    eventId,
+    config,
+    new Date(nowMs).toISOString(),
+  );
+  if (result.outcome !== "updated") return { kind: "not_found" };
   return { kind: "ok", progressionGate: config };
 }
 
 /**
  * Gate 設定を除去する。 idempotent: 既に未設定でも `ok` (removed=false) を返す。
  * lock 状態は永続していない (= read 時導出) ので、 除去は次の read から即 unlock を意味する。
+ *
+ * [#2437 Phase A2] 条件付き書き込み (ALL_OLD 相当の removed 判定を含む) は repository seam
+ * の `clearProgressionGate` に移設。 tenant 不一致 / 行不在は seam が not_found に畳む
+ * (存在を漏らさない、 HTTP ステータス対応は不変)。
  */
 export async function removeProgressionGate(
   shared: EventSharedResources,
@@ -102,29 +92,14 @@ export async function removeProgressionGate(
   eventId: string,
   nowMs: number,
 ): Promise<RemoveProgressionGateOutcome> {
-  try {
-    const out = await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.eventsTableName,
-        Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        UpdateExpression: "REMOVE progressionGate SET updatedAt = :now",
-        ConditionExpression: "tenantId = :tenantId",
-        ExpressionAttributeValues: {
-          ":now": new Date(nowMs).toISOString(),
-          ":tenantId": tenantId,
-        },
-        ReturnValues: "ALL_OLD",
-      }),
-    );
-    const before = out.Attributes as Partial<EventItem> | undefined;
-    return { kind: "ok", removed: before?.progressionGate !== undefined };
-  } catch (err) {
-    // tenant 不一致 / 行不在はどちらも ConditionalCheckFailed → 404 (存在を漏らさない)。
-    if (err instanceof Error && err.name === "ConditionalCheckFailedException") {
-      return { kind: "not_found" };
-    }
-    throw err;
-  }
+  const repositories = await resolveEventRepositories(shared);
+  const result = await repositories.events.clearProgressionGate(
+    tenantId,
+    eventId,
+    new Date(nowMs).toISOString(),
+  );
+  if (result.outcome === "not_found") return { kind: "not_found" };
+  return { kind: "ok", removed: result.removed };
 }
 
 function validateAgainstEvent(

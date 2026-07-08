@@ -33,6 +33,8 @@ const ddb = {
 const shared = {
   ddb,
   eventsTableName: "Events",
+  // resolveEventRepositories (mirror 対応 seam) が Teams repo も構築するため必須。
+  teamsTableName: "Teams",
   deploymentsTableName: "Deployments",
 } as unknown as EventSharedResources;
 

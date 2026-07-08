@@ -39,6 +39,38 @@ describe("LibsqlExecutor", () => {
     });
   });
 
+  it("should run batch statements as one non-interactive write transaction (#2437)", async () => {
+    const batch = vi.fn().mockResolvedValue([result([], 1), result([], 2)]);
+    const client = { batch } as unknown as Client;
+    const sql = new LibsqlExecutor(client);
+
+    await expect(
+      sql.batch([
+        { sql: "INSERT INTO t (id) VALUES (?)", params: ["one"] },
+        { sql: "INSERT INTO t (id) VALUES (?)", params: ["two"] },
+      ]),
+    ).resolves.toEqual([{ changes: 1 }, { changes: 2 }]);
+
+    expect(batch).toHaveBeenCalledTimes(1);
+    const [statements, mode] = batch.mock.calls[0] ?? [];
+    expect(mode).toBe("write");
+    expect(statements).toEqual([
+      { sql: "INSERT INTO t (id) VALUES (?)", args: ["one"] },
+      { sql: "INSERT INTO t (id) VALUES (?)", args: ["two"] },
+    ]);
+  });
+
+  it("should propagate a batch failure (transaction rolled back by libSQL)", async () => {
+    const batch = vi
+      .fn()
+      .mockRejectedValue(new Error("SQLITE_CONSTRAINT: UNIQUE constraint failed: t.id"));
+    const sql = new LibsqlExecutor({ batch } as unknown as Client);
+
+    await expect(
+      sql.batch([{ sql: "INSERT INTO t (id) VALUES (?)", params: ["dup"] }]),
+    ).rejects.toThrow(/UNIQUE constraint failed/);
+  });
+
   it("should bootstrap all schema statements in one non-interactive write batch", async () => {
     const batch = vi.fn().mockResolvedValue([]);
     const client = { batch } as unknown as Client;

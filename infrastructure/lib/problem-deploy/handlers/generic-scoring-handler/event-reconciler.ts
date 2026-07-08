@@ -1,8 +1,9 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { QueryCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import type { ScheduleFiredKind } from "../../control-data/events-repository.js";
 import { bulkTeardownEvent } from "../event-handler/bulk-delete.js";
 import { bulkDeployEvent } from "../event-handler/bulk-deploy.js";
-import type { EventSharedResources } from "../event-handler/shared.js";
+import { type EventSharedResources, resolveEventsRepository } from "../event-handler/shared.js";
 
 /**
  * #557 / #539: Event status の auto-transition reconciler (= 1-min tick で deployment 集約
@@ -373,7 +374,6 @@ async function reconcileSingleEvent(
       { PK: event.PK, tenantId: event.tenantId, eventId: event.eventId, nowMs, nowIso },
       "deploy",
       bulkDeployEvent,
-      "deployFiredAt",
     );
     return;
   }
@@ -392,7 +392,6 @@ async function reconcileSingleEvent(
       { PK: event.PK, tenantId: event.tenantId, eventId: event.eventId, nowMs, nowIso },
       "teardown",
       bulkTeardownEvent,
-      "teardownFiredAt",
     );
     return;
   }
@@ -453,31 +452,23 @@ async function applyEventStatusTransition(
   },
 ): Promise<void> {
   try {
-    await ctx.ddb.send(
-      new UpdateCommand({
-        TableName: ctx.eventsTableName,
-        Key: { PK: args.PK, SK: "META" },
-        UpdateExpression: "SET #status = :next, updatedAt = :now",
-        // race 防止: 期待 current status と一致しているときのみ更新 (= operator が
-        // 手動 archive / 再 deploy で先に動かしてたら CCF で skip)。
-        ConditionExpression: "tenantId = :tenant AND #status = :current",
-        ExpressionAttributeNames: { "#status": "status" },
-        ExpressionAttributeValues: {
-          ":tenant": args.tenantId,
-          ":current": args.from,
-          ":next": args.to,
-          ":now": args.nowIso,
-        },
-      }),
+    // 楽観 CAS は repository seam の `transitionStatus` に移設。 conflict (= operator が
+    // 手動 archive / 再 deploy で先に動かしてたレース) は skip し次 tick で再評価する
+    // (= 旧 CCF 握り潰しと同じ、 probe read も費やさない)。
+    const result = await resolveEventsRepository(ctx).transitionStatus(
+      args.tenantId,
+      args.eventId,
+      args.from,
+      args.to,
+      args.nowIso,
     );
+    if (result.outcome !== "updated") return;
     console.log("[generic-scoring] Event status auto-transition", {
       eventId: args.eventId,
       from: args.from,
       to: args.to,
     });
   } catch (err) {
-    const code = (err as { name?: string })?.name ?? "";
-    if (code === "ConditionalCheckFailedException") return;
     console.warn("[generic-scoring] Event status update failed", {
       eventId: args.eventId,
       message: err instanceof Error ? err.message : String(err),
@@ -502,14 +493,13 @@ async function fireScheduledAction(
     readonly nowMs: number;
     readonly nowIso: string;
   },
-  kind: "teardown" | "deploy",
+  kind: ScheduleFiredKind,
   publishFn: (
     deps: EventSharedResources,
     tenantId: string,
     eventId: string,
     nowMs: number,
   ) => Promise<{ readonly kind: string; readonly result?: { readonly enqueued: number } }>,
-  firedAttr: "teardownFiredAt" | "deployFiredAt",
 ): Promise<void> {
   const label = kind === "teardown" ? "ADR-047" : "ADR-047 follow-up";
   try {
@@ -519,7 +509,7 @@ async function fireScheduledAction(
       outcome: outcome.kind,
       enqueued: outcome.kind === "ok" ? outcome.result?.enqueued : undefined,
     });
-    await recordFired(ctx, args, firedAttr);
+    await recordFired(ctx, args, kind);
   } catch (err) {
     console.warn(`[generic-scoring] scheduled auto-${kind} failed`, {
       eventId: args.eventId,
@@ -530,8 +520,8 @@ async function fireScheduledAction(
 
 /**
  * scheduled action の発火記録 (teardownFiredAt / deployFiredAt)。 二重発火防止の補助 + 監査。
- * `attribute_not_exists` で冪等化し、 ConditionalCheckFailedException (= 既発火) は握り潰す。
- * `firedAttr` は固定の literal union なので UpdateExpression への injection はない。
+ * [#2437 Phase A2] 冪等な条件付き書き込みは repository seam の `markScheduleFired` に移設。
+ * conflict (= 既発火、 attribute_not_exists 不成立) は握り潰す (旧 CCF 握り潰しと同じ挙動)。
  */
 async function recordFired(
   ctx: ReconcileEventStatusesContext,
@@ -541,20 +531,17 @@ async function recordFired(
     readonly eventId: string;
     readonly nowIso: string;
   },
-  firedAttr: "teardownFiredAt" | "deployFiredAt",
+  kind: ScheduleFiredKind,
 ): Promise<void> {
+  const firedAttr = kind === "teardown" ? "teardownFiredAt" : "deployFiredAt";
   try {
-    await ctx.ddb.send(
-      new UpdateCommand({
-        TableName: ctx.eventsTableName,
-        Key: { PK: args.PK, SK: "META" },
-        UpdateExpression: `SET ${firedAttr} = :now`,
-        ConditionExpression: `tenantId = :tenant AND attribute_not_exists(${firedAttr})`,
-        ExpressionAttributeValues: { ":tenant": args.tenantId, ":now": args.nowIso },
-      }),
+    await resolveEventsRepository(ctx).markScheduleFired(
+      args.tenantId,
+      args.eventId,
+      kind,
+      args.nowIso,
     );
   } catch (err) {
-    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return;
     console.warn(`[generic-scoring] recordFired(${firedAttr}) failed`, {
       eventId: args.eventId,
       message: err instanceof Error ? err.message : String(err),

@@ -1,32 +1,23 @@
-import { DatabaseSync } from "node:sqlite";
-import {
-  DeleteCommand,
-  type DynamoDBDocumentClient,
-  GetCommand,
-  PutCommand,
-  QueryCommand,
-  ScanCommand,
-} from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it } from "vitest";
 import {
   createTeamsRepository,
   DynamoDbTeamsRepository,
   hashLoginKey,
-  type SqlExecutor,
   SqlTeamsRepository,
   TEAM_LOGIN_KEY_SCRUB_MIGRATION_ID,
   TEAM_LOGIN_KEY_SCRUB_SQL,
-  TEAMS_SCHEMA_SQL,
   type TeamRecord,
   type TeamsRepository,
 } from "../../../lib/problem-deploy/control-data/teams-repository";
+import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 /**
  * [ADR-049 §5] Parity suite for the Teams repository seam. The SAME assertions run
  * against both backends so DynamoDB (behavior-preserving extraction) and SQLite
  * (Turso / D1 dialect) are provably interchangeable:
- *   - DynamoDb impl against a faithful in-memory fake DocumentClient (real
- *     round-trip: put → get returns the stored row; base-table + GSI2 queries).
+ *   - DynamoDb impl against the shared in-memory fake DocumentClient
+ *     (`control-data-write.test-helpers.ts` — real round-trip: put → get returns
+ *     the stored row; base-table + GSI2 queries).
  *   - Sql impl against Node's built-in `node:sqlite` DatabaseSync (`:memory:`),
  *     so no new dependency is introduced.
  *
@@ -38,73 +29,6 @@ import {
  */
 
 const TABLE = "Teams";
-
-/** In-memory DynamoDB document client covering the commands the repo issues. */
-function makeFakeDdb(): DynamoDBDocumentClient {
-  const store = new Map<string, Record<string, unknown>>();
-  const keyOf = (pk: unknown, sk: unknown): string => `${String(pk)} ${String(sk)}`;
-
-  // biome-ignore lint/suspicious/noExplicitAny: fake dispatches by command class.
-  const send = async (cmd: any): Promise<unknown> => {
-    if (cmd instanceof PutCommand) {
-      const item = cmd.input.Item as Record<string, unknown>;
-      store.set(keyOf(item.PK, item.SK), item);
-      return {};
-    }
-    if (cmd instanceof GetCommand) {
-      const key = cmd.input.Key as Record<string, unknown>;
-      return { Item: store.get(keyOf(key.PK, key.SK)) };
-    }
-    if (cmd instanceof QueryCommand) {
-      const values = cmd.input.ExpressionAttributeValues ?? {};
-      const pk = values[":pk"];
-      if (cmd.input.IndexName === "GSI2") {
-        // Participant-login lookup: GSI2PK = TEAMKEY#<key> (sparse).
-        const items = [...store.values()].filter((it) => it.GSI2PK === pk);
-        return { Items: items };
-      }
-      // base-table: PK = :pk AND begins_with(SK, :tprefix), SK 昇順 (ScanIndexForward=true).
-      const prefix = String(values[":tprefix"]);
-      const items = [...store.values()]
-        .filter((it) => it.PK === pk && String(it.SK).startsWith(prefix))
-        .sort((a, b) => String(a.SK).localeCompare(String(b.SK)));
-      return { Items: items };
-    }
-    if (cmd instanceof ScanCommand) {
-      const values = cmd.input.ExpressionAttributeValues ?? {};
-      const zero = Number(values[":zero"]);
-      const now = Number(values[":now"]);
-      const items = [...store.values()].filter((it) => {
-        const exp = Number(it.expiresAt);
-        return exp > zero && exp <= now;
-      });
-      return { Items: items };
-    }
-    if (cmd instanceof DeleteCommand) {
-      const key = cmd.input.Key as Record<string, unknown>;
-      store.delete(keyOf(key.PK, key.SK));
-      return {};
-    }
-    throw new Error(`FakeDdb: unsupported command ${cmd?.constructor?.name}`);
-  };
-
-  return { send } as unknown as DynamoDBDocumentClient;
-}
-
-/** node:sqlite-backed SqlExecutor (in-memory), used for the SQL parity backend. */
-function makeSqliteExecutor(): SqlExecutor {
-  const db = new DatabaseSync(":memory:");
-  db.exec(TEAMS_SCHEMA_SQL);
-  return {
-    run: (sql, params = []) => {
-      const result = db.prepare(sql).run(...params);
-      return { changes: result.changes };
-    },
-    get: (sql, params = []) =>
-      db.prepare(sql).get(...params) as Record<string, unknown> | undefined,
-    all: (sql, params = []) => db.prepare(sql).all(...params) as Record<string, unknown>[],
-  };
-}
 
 function sampleRecord(overrides: Partial<TeamRecord> = {}): TeamRecord {
   return {

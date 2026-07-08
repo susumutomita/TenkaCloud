@@ -165,6 +165,158 @@ describe("MirroredEventsRepository", () => {
   });
 });
 
+/**
+ * [Issue #2437] Conditional-write mirroring: canonical (DDB) first, adopt its
+ * outcome, apply the same domain operation to the replica only on a canonical
+ * success, and fail loudly on replica errors (no silent fallback).
+ */
+describe("MirroredEventsRepository conditional writes (#2437)", () => {
+  const AT = "2026-07-08T12:00:00.000Z";
+
+  function stubEvents(overrides: Record<string, unknown>): EventsRepository {
+    return overrides as unknown as EventsRepository;
+  }
+
+  it("should apply the same operation to the replica after a canonical updated outcome", async () => {
+    const order: string[] = [];
+    const canonicalEnd = vi.fn(async () => {
+      order.push("canonical");
+      return { outcome: "updated" as const, event: event({ status: "ENDED" }) };
+    });
+    const replicaEnd = vi.fn(async () => {
+      order.push("replica");
+      return { outcome: "updated" as const, event: event({ status: "ENDED" }) };
+    });
+    const repository = new MirroredEventsRepository(
+      stubEvents({ endEvent: canonicalEnd }),
+      stubEvents({ endEvent: replicaEnd }),
+    );
+
+    const result = await repository.endEvent("tenant-1", "event-1", AT);
+
+    expect(result.outcome).toBe("updated");
+    expect(order).toEqual(["canonical", "replica"]);
+    expect(replicaEnd).toHaveBeenCalledWith("tenant-1", "event-1", AT);
+  });
+
+  it("should adopt the canonical outcome and skip the replica on conflict / not_found", async () => {
+    const replicaLock = vi.fn();
+    const repository = new MirroredEventsRepository(
+      stubEvents({
+        lockScoring: vi.fn(async () => ({
+          outcome: "conflict" as const,
+          event: event({ scoringLocked: true }),
+        })),
+        markTeardown: vi.fn(async () => ({ outcome: "not_found" as const })),
+      }),
+      stubEvents({ lockScoring: replicaLock, markTeardown: replicaLock }),
+    );
+
+    const conflict = await repository.lockScoring("tenant-1", "event-1", "sub", AT);
+    expect(conflict.outcome).toBe("conflict");
+    const notFound = await repository.markTeardown("tenant-1", "event-1", AT);
+    expect(notFound).toEqual({ outcome: "not_found" });
+    expect(replicaLock).not.toHaveBeenCalled();
+  });
+
+  it("should propagate a replica failure loudly after a canonical success", async () => {
+    const repository = new MirroredEventsRepository(
+      stubEvents({
+        archiveEvent: vi.fn(async () => ({ outcome: "updated" as const })),
+      }),
+      stubEvents({
+        archiveEvent: vi.fn(async () => {
+          throw new Error("replica down");
+        }),
+      }),
+    );
+
+    await expect(repository.archiveEvent("tenant-1", "event-1", AT)).rejects.toThrow(
+      "replica down",
+    );
+  });
+
+  it("should mirror createEventWithTeams only after the canonical create succeeded", async () => {
+    const created = event();
+    const teams = [team()];
+    const replicaCreate = vi.fn(async () => ({ outcome: "created" as const }));
+    const repository = new MirroredEventsRepository(
+      stubEvents({ createEventWithTeams: vi.fn(async () => ({ outcome: "created" as const })) }),
+      stubEvents({ createEventWithTeams: replicaCreate }),
+    );
+
+    await expect(repository.createEventWithTeams(created, teams)).resolves.toEqual({
+      outcome: "created",
+    });
+    expect(replicaCreate).toHaveBeenCalledWith(created, teams);
+
+    const replicaConflictCreate = vi.fn();
+    const conflicted = new MirroredEventsRepository(
+      stubEvents({ createEventWithTeams: vi.fn(async () => ({ outcome: "conflict" as const })) }),
+      stubEvents({ createEventWithTeams: replicaConflictCreate }),
+    );
+    await expect(conflicted.createEventWithTeams(created, teams)).resolves.toEqual({
+      outcome: "conflict",
+    });
+    expect(replicaConflictCreate).not.toHaveBeenCalled();
+  });
+
+  it("should mirror the remaining conditional writes with the same arguments", async () => {
+    const gate = { gateProblemId: "p1", unlockTargetIds: ["p2"] };
+    const patch = { endsAt: "2026-07-09T00:00:00.000Z" };
+    const replicaCalls: Record<string, ReturnType<typeof vi.fn>> = {
+      unlockScoring: vi.fn(async () => ({ outcome: "updated" as const })),
+      updateSchedule: vi.fn(async () => ({ outcome: "updated" as const })),
+      setProgressionGate: vi.fn(async () => ({ outcome: "updated" as const })),
+      clearProgressionGate: vi.fn(async () => ({ outcome: "updated" as const, removed: true })),
+      markDeploying: vi.fn(async () => ({ outcome: "updated" as const })),
+      transitionStatus: vi.fn(async () => ({ outcome: "updated" as const })),
+      markScheduleFired: vi.fn(async () => ({ outcome: "updated" as const })),
+    };
+    const canonicalCalls = {
+      unlockScoring: vi.fn(async () => ({ outcome: "updated" as const })),
+      updateSchedule: vi.fn(async () => ({ outcome: "updated" as const })),
+      setProgressionGate: vi.fn(async () => ({ outcome: "updated" as const })),
+      clearProgressionGate: vi.fn(async () => ({ outcome: "updated" as const, removed: true })),
+      markDeploying: vi.fn(async () => ({ outcome: "updated" as const })),
+      transitionStatus: vi.fn(async () => ({ outcome: "updated" as const })),
+      markScheduleFired: vi.fn(async () => ({ outcome: "updated" as const })),
+    };
+    const repository = new MirroredEventsRepository(
+      stubEvents(canonicalCalls),
+      stubEvents(replicaCalls),
+    );
+
+    await repository.unlockScoring("tenant-1", "event-1", AT);
+    await repository.updateSchedule("tenant-1", "event-1", patch, AT);
+    await repository.setProgressionGate("tenant-1", "event-1", gate, AT);
+    const cleared = await repository.clearProgressionGate("tenant-1", "event-1", AT);
+    await repository.markDeploying("tenant-1", "event-1", AT);
+    await repository.transitionStatus("tenant-1", "event-1", "DEPLOYING", "READY", AT);
+    await repository.markScheduleFired("tenant-1", "event-1", "teardown", AT);
+
+    expect(cleared).toEqual({ outcome: "updated", removed: true });
+    expect(replicaCalls.unlockScoring).toHaveBeenCalledWith("tenant-1", "event-1", AT);
+    expect(replicaCalls.updateSchedule).toHaveBeenCalledWith("tenant-1", "event-1", patch, AT);
+    expect(replicaCalls.setProgressionGate).toHaveBeenCalledWith("tenant-1", "event-1", gate, AT);
+    expect(replicaCalls.clearProgressionGate).toHaveBeenCalledWith("tenant-1", "event-1", AT);
+    expect(replicaCalls.markDeploying).toHaveBeenCalledWith("tenant-1", "event-1", AT);
+    expect(replicaCalls.transitionStatus).toHaveBeenCalledWith(
+      "tenant-1",
+      "event-1",
+      "DEPLOYING",
+      "READY",
+      AT,
+    );
+    expect(replicaCalls.markScheduleFired).toHaveBeenCalledWith(
+      "tenant-1",
+      "event-1",
+      "teardown",
+      AT,
+    );
+  });
+});
+
 describe("MirroredTeamsRepository", () => {
   it("should heal team point, login-key, and event-list reads", async () => {
     const current = team({ internalSlug: "current" });

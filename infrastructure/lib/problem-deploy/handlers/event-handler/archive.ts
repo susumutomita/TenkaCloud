@@ -1,5 +1,4 @@
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { type EventSharedResources, resolveEventsRepository } from "./shared.js";
+import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
 
 /**
  * `archiveEvent` の結果。
@@ -21,7 +20,9 @@ export type ArchiveEventOutcome =
  *   - Team 行も TTL を持つので放っておけば消える
  *   - 物理削除を別 op にすると確認 modal が増えて UX 重くなる
  *
- * 状態遷移は `ConditionExpression` で atomic に check (= 並列操作のレース防止)。
+ * 状態遷移の atomic check (= 並列操作のレース防止) は repository seam の
+ * `archiveEvent(tenantId, eventId, at)` が担う。 [#2437 Phase A2] CCF catch + probe Get
+ * の分岐は `EventMutationOutcome` union の分岐に置き換え (HTTP ステータス対応は不変)。
  */
 export async function archiveEvent(
   shared: EventSharedResources,
@@ -31,35 +32,12 @@ export async function archiveEvent(
 ): Promise<ArchiveEventOutcome> {
   const now = new Date(nowMs).toISOString();
 
-  try {
-    await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.eventsTableName,
-        Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        UpdateExpression: "SET #s = :archived, archivedAt = :now, updatedAt = :now",
-        // tenant 跨ぎ防止 + 許可状態のみに限定 (DRAFT / ENDED / TEARDOWN)
-        ConditionExpression: "tenantId = :tenantId AND #s IN (:draft, :ended, :teardown)",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":archived": "ARCHIVED",
-          ":draft": "DRAFT",
-          ":ended": "ENDED",
-          ":teardown": "TEARDOWN",
-          ":now": now,
-          ":tenantId": tenantId,
-        },
-      }),
-    );
-    return { kind: "ok", archivedAt: now };
-  } catch (err) {
-    if (err instanceof Error && err.name === "ConditionalCheckFailedException") {
-      // 行不在 / tenant 不一致 / 許可外状態のいずれか → seam で区別。 getEvent は
-      // 行不在 / tenant 不一致をどちらも undefined に畳む (= 従来の手動比較を repository へ移設)。
-      const event = await resolveEventsRepository(shared).getEvent(tenantId, eventId);
-      if (!event) return { kind: "not_found" };
-      const status = typeof event.status === "string" ? event.status : "?";
-      return { kind: "not_archivable", status };
-    }
-    throw err;
-  }
+  const repositories = await resolveEventRepositories(shared);
+  const result = await repositories.events.archiveEvent(tenantId, eventId, now);
+  if (result.outcome === "updated") return { kind: "ok", archivedAt: now };
+  if (result.outcome === "not_found") return { kind: "not_found" };
+  return {
+    kind: "not_archivable",
+    status: typeof result.event?.status === "string" ? result.event.status : "?",
+  };
 }

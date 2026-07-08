@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { SqlExecutor, TeamRecord, TeamsRepository } from "./types.js";
+import type { SqlExecutor, SqlParam, TeamRecord, TeamsRepository } from "./types.js";
 
 export const TEAM_LOGIN_KEY_SCRUB_MIGRATION_ID = "2026-07-04-team-login-key-payload-scrub";
 export const TEAM_LOGIN_KEY_SCRUB_SQL =
@@ -63,9 +63,38 @@ export function hashLoginKey(key: string): string {
   return createHash("sha256").update(key, "utf8").digest("hex");
 }
 
-function payloadWithoutLoginKey(record: TeamRecord): string {
+/**
+ * JSON payload with the plaintext bearer stripped ([Issue #2290] the login key
+ * never lands in the payload column).
+ */
+function teamPayloadWithoutLoginKey(record: TeamRecord): string {
   const { teamLoginKey: _teamLoginKey, ...safeRecord } = record;
   return JSON.stringify(safeRecord);
+}
+
+/**
+ * [#2437] Column list + positional params for inserting one team row. Shared by
+ * {@link SqlTeamsRepository.putTeam} and
+ * `SqlEventsRepository.createEventWithTeams` so the atomic event+teams
+ * transaction marshals rows exactly like this repository's own writes
+ * (sparse `login_key_hash`, login-key-scrubbed payload).
+ */
+export const TEAM_INSERT_SQL =
+  "INSERT INTO teams (event_id, team_id, tenant_id, login_key_hash, expires_at, payload) " +
+  "VALUES (?, ?, ?, ?, ?, ?)";
+
+/** Positional params matching {@link TEAM_INSERT_SQL}. */
+export function teamRowParams(record: TeamRecord): SqlParam[] {
+  // sparse index parity: empty teamLoginKey stores NULL so it stays out of the
+  // login-key index (matches DDB's sparse GSI2).
+  return [
+    record.eventId,
+    record.teamId,
+    record.tenantId,
+    record.teamLoginKey ? hashLoginKey(record.teamLoginKey) : null,
+    record.expiresAt,
+    teamPayloadWithoutLoginKey(record),
+  ];
 }
 
 function recordWithoutStoredLoginKey(payload: unknown): TeamRecord {
@@ -116,23 +145,12 @@ export class SqlTeamsRepository implements TeamsRepository {
   }
 
   async putTeam(record: TeamRecord): Promise<void> {
-    // sparse index parity: empty teamLoginKey stores NULL so it stays out of the
-    // login-key index (matches DDB's sparse GSI2).
-    const loginKeyHash = record.teamLoginKey ? hashLoginKey(record.teamLoginKey) : null;
     await this.sql.run(
-      "INSERT INTO teams (event_id, team_id, tenant_id, login_key_hash, expires_at, payload) " +
-        "VALUES (?, ?, ?, ?, ?, ?) " +
+      `${TEAM_INSERT_SQL} ` +
         "ON CONFLICT(event_id, team_id) DO UPDATE SET " +
         "tenant_id = excluded.tenant_id, login_key_hash = excluded.login_key_hash, " +
         "expires_at = excluded.expires_at, payload = excluded.payload",
-      [
-        record.eventId,
-        record.teamId,
-        record.tenantId,
-        loginKeyHash,
-        record.expiresAt,
-        payloadWithoutLoginKey(record),
-      ],
+      teamRowParams(record),
     );
   }
 

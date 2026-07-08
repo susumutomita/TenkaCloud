@@ -231,15 +231,22 @@ export function resolveEventRepositories(
 }
 
 /**
- * [ADR-049 §5.1] Events aggregate **のみ** を読む handler 向けの events-only seam。
+ * [ADR-049 §5.1] Events aggregate **のみ** を触る、 Teams table を持たない実行 context 向けの
+ * events-only seam。
  *
  * Teams repo を構築しない (= `teamsTableName` を要求しない) ため、 scheduled teardown 経路
  * (`buildScheduledTeardownResources` は `teamsTableName` を空にする) から呼ばれる bulk-teardown
- * のような Events-only reader でも安全に使える。 default backend では従来と byte 互換の
- * GetCommand を `shared.ddb` 経由で発火する。 point read は
- * `resolveEventsRepository(shared).getEvent(tenantId, eventId)` (= tenant scope + 404 判定を内包)。
+ * や、 毎分 reconciler (generic-scoring Lambda) のような Events-only writer でも安全に使える。
+ * default backend では従来と byte 互換の Get/UpdateCommand を `shared.ddb` 経由で発火する。
+ *
+ * [#2437] 注意: この seam は sync factory なので Turso adapter を配線できず、
+ * `CONTROL_DATA_BACKEND=turso` では fail-loud に throw する (A1 からの既知の段階的制約)。
+ * Teams table が配線されている event-api の handler は、 mirror backend も効く
+ * {@link resolveEventRepositories} を使うこと。
  */
-export function resolveEventsRepository(shared: EventSharedResources): EventsRepository {
+export function resolveEventsRepository(
+  shared: Pick<EventSharedResources, "ddb" | "eventsTableName">,
+): EventsRepository {
   return createEventsRepository(process.env.CONTROL_DATA_BACKEND, {
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
