@@ -1,9 +1,8 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { EventSchedulePatch } from "../../control-data/events-repository.js";
-import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
   type EventSharedResources,
-  queryDeploymentsByEvent,
+  resolveDeploymentsRepository,
   resolveEventRepositories,
 } from "./shared.js";
 
@@ -278,24 +277,23 @@ async function propagateSchedule(
   eventId: string,
   update: DeploymentScheduleUpdate,
 ): Promise<number> {
-  const deployments = await queryDeploymentsByEvent(shared, tenantId, eventId, "PK");
-  const targets = deployments
-    .map((deployment) => deployment as Pick<DeploymentItem, "PK">)
-    .filter((deployment) => typeof deployment.PK === "string");
-  await Promise.all(targets.map((target) => updateDeploymentSchedule(shared, target, update)));
-  return targets.length;
+  const repository = await resolveDeploymentsRepository(shared);
+  const targetJobIds = await repository.listDeploymentKeysByEvent(tenantId, eventId);
+  await Promise.all(targetJobIds.map((jobId) => updateDeploymentSchedule(shared, jobId, update)));
+  return targetJobIds.length;
 }
 
 async function updateDeploymentSchedule(
   shared: EventSharedResources,
-  target: Pick<DeploymentItem, "PK">,
+  jobId: string,
   update: DeploymentScheduleUpdate,
 ): Promise<void> {
   try {
     await shared.ddb.send(
       new UpdateCommand({
         TableName: shared.deploymentsTableName,
-        Key: { PK: target.PK, SK: "META" },
+        // listDeploymentKeysByEvent returns domain jobIds; the write remains raw.
+        Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
         UpdateExpression: update.deploymentExpression,
         ConditionExpression: "tenantId = :tenantId",
         ExpressionAttributeValues: update.deploymentValues,

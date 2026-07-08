@@ -1,6 +1,5 @@
-import { queryAllItemsBounded } from "../shared/ddb-paginate.js";
 import type { ScoreEventItem } from "../shared/score-event.js";
-import type { EventSharedResources } from "./shared.js";
+import { type EventSharedResources, resolveDeploymentsRepository } from "./shared.js";
 import type { TeamScoreEvents, TeamScoreEventView } from "./types.js";
 
 /**
@@ -20,7 +19,7 @@ const PER_TEAM_LIMIT = 200;
 const MAX_PAGES_PER_DEPLOYMENT = 3;
 
 export interface DeploymentRefForScoreEvents {
-  readonly PK: string;
+  readonly jobId: string;
   readonly teamId: string;
   readonly teamName?: string;
 }
@@ -36,24 +35,24 @@ export async function collectTeamScoreEvents(
     readonly displayNameByTeamId: ReadonlyMap<string, string>;
   },
 ): Promise<TeamScoreEvents[]> {
-  // teamId → { teamName, deploymentPKs[] }
-  const byTeam = new Map<string, { teamName: string; deploymentPKs: string[] }>();
+  // teamId → { teamName, deploymentJobIds[] }
+  const byTeam = new Map<string, { teamName: string; deploymentJobIds: string[] }>();
   for (const d of args.deployments) {
-    if (!d.PK || !d.teamId) continue;
+    if (!d.jobId || !d.teamId) continue;
     let bucket = byTeam.get(d.teamId);
     if (!bucket) {
       bucket = {
         teamName: args.displayNameByTeamId.get(d.teamId) ?? d.teamName ?? d.teamId,
-        deploymentPKs: [],
+        deploymentJobIds: [],
       };
       byTeam.set(d.teamId, bucket);
     }
-    bucket.deploymentPKs.push(d.PK);
+    bucket.deploymentJobIds.push(d.jobId);
   }
 
   const teams: TeamScoreEvents[] = await Promise.all(
     [...byTeam.entries()].map(async ([teamId, meta]) => {
-      const collected = await collectEventsForDeployments(shared, meta.deploymentPKs);
+      const collected = await collectEventsForDeployments(shared, meta.deploymentJobIds);
       collected.sort((a, b) =>
         a.occurredAt < b.occurredAt ? -1 : a.occurredAt > b.occurredAt ? 1 : 0,
       );
@@ -74,24 +73,18 @@ export async function collectTeamScoreEvents(
 
 async function collectEventsForDeployments(
   shared: Pick<EventSharedResources, "ddb" | "deploymentsTableName">,
-  deploymentPKs: readonly string[],
+  deploymentJobIds: readonly string[],
 ): Promise<TeamScoreEventView[]> {
   const collected: TeamScoreEventView[] = [];
+  const deployments = await resolveDeploymentsRepository(shared);
   await Promise.all(
-    deploymentPKs.map(async (pk) => {
+    deploymentJobIds.map(async (jobId) => {
       // 1 deployment partition あたり最大 MAX_PAGES_PER_DEPLOYMENT ページまで drain (= 1 request
       // あたりの query 回数を bound)。全 team 合算後に caller が PER_TEAM_LIMIT で truncate する。
-      const rows = await queryAllItemsBounded(
-        shared.ddb,
-        {
-          TableName: shared.deploymentsTableName,
-          KeyConditionExpression: "PK = :pk AND begins_with(SK, :evpfx)",
-          ExpressionAttributeValues: { ":pk": pk, ":evpfx": "EVENT#" },
-          ScanIndexForward: false,
-          Limit: PER_TEAM_LIMIT,
-        },
-        MAX_PAGES_PER_DEPLOYMENT,
-      );
+      const rows = await deployments.listScoreEvents(jobId, {
+        pageSize: PER_TEAM_LIMIT,
+        maxPages: MAX_PAGES_PER_DEPLOYMENT,
+      });
       for (const it of rows as Partial<ScoreEventItem>[]) {
         const v = toView(it);
         if (v) collected.push(v);

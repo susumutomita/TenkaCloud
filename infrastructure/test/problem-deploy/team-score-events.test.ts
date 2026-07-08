@@ -57,8 +57,8 @@ describe("collectTeamScoreEvents", () => {
 
     const teams = await collectTeamScoreEvents(shared, {
       deployments: [
-        { PK: "DEPLOYMENT#J1", teamId: "TEAM_A", teamName: "team-a" },
-        { PK: "DEPLOYMENT#J2", teamId: "TEAM_B", teamName: "team-b" },
+        { jobId: "J1", teamId: "TEAM_A", teamName: "team-a" },
+        { jobId: "J2", teamId: "TEAM_B", teamName: "team-b" },
       ],
       displayNameByTeamId: new Map([
         ["TEAM_A", "Alpha"],
@@ -91,7 +91,7 @@ describe("collectTeamScoreEvents", () => {
       ],
     });
     const teams = await collectTeamScoreEvents(shared, {
-      deployments: [{ PK: "DEPLOYMENT#J1", teamId: "TEAM_A" }],
+      deployments: [{ jobId: "J1", teamId: "TEAM_A" }],
       displayNameByTeamId: new Map(),
     });
     expect(teams[0]?.events).toHaveLength(4);
@@ -116,7 +116,7 @@ describe("collectTeamScoreEvents", () => {
       ],
     });
     const teams = await collectTeamScoreEvents(shared, {
-      deployments: [{ PK: "DEPLOYMENT#J1", teamId: "TEAM_A" }],
+      deployments: [{ jobId: "J1", teamId: "TEAM_A" }],
       displayNameByTeamId: new Map(),
     });
     expect(teams[0]?.events).toHaveLength(1);
@@ -126,7 +126,7 @@ describe("collectTeamScoreEvents", () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [ev()] });
     const teams = await collectTeamScoreEvents(shared, {
-      deployments: [{ PK: "DEPLOYMENT#J1", teamId: "TEAM_X" }],
+      deployments: [{ jobId: "J1", teamId: "TEAM_X" }],
       displayNameByTeamId: new Map(),
     });
     expect(teams[0]?.teamName).toBe("TEAM_X");
@@ -136,7 +136,7 @@ describe("collectTeamScoreEvents", () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [ev()] });
     await collectTeamScoreEvents(shared, {
-      deployments: [{ PK: "DEPLOYMENT#J1", teamId: "TEAM_A" }],
+      deployments: [{ jobId: "J1", teamId: "TEAM_A" }],
       displayNameByTeamId: new Map(),
     });
     const cmd = ddbSend.mock.calls[0]?.[0] as QueryCommand;
@@ -161,8 +161,8 @@ describe("collectTeamScoreEvents", () => {
     });
     const teams = await collectTeamScoreEvents(shared, {
       deployments: [
-        { PK: "DEPLOYMENT#J1", teamId: "TEAM_A" },
-        { PK: "DEPLOYMENT#J2", teamId: "TEAM_A" },
+        { jobId: "J1", teamId: "TEAM_A" },
+        { jobId: "J2", teamId: "TEAM_A" },
       ],
       displayNameByTeamId: new Map(),
     });
@@ -194,7 +194,7 @@ describe("collectTeamScoreEvents", () => {
       Items: [ev({ occurredAt: "2026-05-08T10:03:00.000Z" })],
     });
     const teams = await collectTeamScoreEvents(shared, {
-      deployments: [{ PK: "DEPLOYMENT#J1", teamId: "TEAM_A" }],
+      deployments: [{ jobId: "J1", teamId: "TEAM_A" }],
       displayNameByTeamId: new Map(),
     });
     expect(ddbSend).toHaveBeenCalledTimes(3);
@@ -234,7 +234,7 @@ describe("collectTeamScoreEvents", () => {
       ],
     });
     const teams = await collectTeamScoreEvents(shared, {
-      deployments: [{ PK: "DEPLOYMENT#LEAK_PK_SENTINEL", teamId: "TEAM_A" }],
+      deployments: [{ jobId: "LEAK_PK_SENTINEL", teamId: "TEAM_A" }],
       displayNameByTeamId: new Map(),
     });
     const json = JSON.stringify(teams);

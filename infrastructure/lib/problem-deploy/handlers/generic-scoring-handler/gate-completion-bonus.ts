@@ -1,5 +1,5 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { QueryCommand, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
@@ -11,6 +11,7 @@ import {
 } from "../shared/progression-gate.js";
 import { buildScoreEventItem } from "../shared/score-event.js";
 import { isTenantFeatureEnabled } from "../shared/tenant-feature-flags.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 
 /**
  * Issue #2283: scoring tick 側の Progression Gate 処理。
@@ -207,15 +208,9 @@ async function fetchGateCompleted(
   const teamKey =
     typeof item.GSI2PK === "string" && item.GSI2PK.length > 0 ? item.GSI2PK : undefined;
   if (!teamKey) return false;
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.deploymentsTableName,
-      IndexName: "GSI2",
-      KeyConditionExpression: "GSI2PK = :pk",
-      ExpressionAttributeValues: { ":pk": teamKey },
-    }),
-  );
-  const rows = (out.Items ?? []) as Partial<DeploymentItem>[];
+  const loginKey = teamKey.startsWith("TEAMKEY#") ? teamKey.slice("TEAMKEY#".length) : teamKey;
+  const repository = await resolveDeploymentsRepository(shared);
+  const rows = (await repository.listByTeamLoginKey(loginKey)) as Partial<DeploymentItem>[];
   // 完了済 Gate を teardown しても latch 行 (gateCompletedAt) を拾って完了を保持する
   // (participant guard の selectGateCompletionRow と同じ durable 判定 → 挙動を揃える)。
   return isGateCompleted(selectGateCompletionRow(rows, config.gateProblemId));

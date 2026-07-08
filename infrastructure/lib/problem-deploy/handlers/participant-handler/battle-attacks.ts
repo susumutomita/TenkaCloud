@@ -1,8 +1,11 @@
-import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES, ULID_RE } from "../shared/constants.js";
 import type { ScoreEventItem } from "../shared/score-event.js";
-import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
+import {
+  type ParticipantSharedResources,
+  queryTeamItems,
+  resolveDeploymentsRepository,
+} from "./shared.js";
 
 /**
  * `GET /portal/me/battle-attacks?jobId=&sinceMin=` の response shape (ADR-005 D2)。
@@ -73,8 +76,8 @@ export async function listBattleAttacks(
     if (i.jobId !== jobIdRaw) return false;
     const status = (i.status ?? "PENDING") as DeploymentStatus;
     return !DELETED_LIKE_STATUSES.has(status);
-  }) as Pick<DeploymentItem, "PK" | "jobId" | "problemId"> | undefined;
-  if (!target || typeof target.PK !== "string") return { kind: "not_found" };
+  }) as Pick<DeploymentItem, "jobId" | "problemId"> | undefined;
+  if (!target) return { kind: "not_found" };
 
   const sinceIso = new Date(nowMs - sinceMinRaw * 60_000).toISOString();
   // 時間窓は SK の prefix `EVENT#<isoTimestamp>#<ulid>` を使い key condition で BETWEEN
@@ -84,27 +87,10 @@ export async function listBattleAttacks(
   const skStart = `EVENT#${sinceIso}`;
   const skEnd = "EVENT#~";
 
-  const events: Partial<ScoreEventItem>[] = [];
-  let exclusiveStart: Record<string, unknown> | undefined;
-  do {
-    const out = await shared.ddb.send(
-      new QueryCommand({
-        TableName: shared.tableName,
-        KeyConditionExpression: "PK = :pk AND SK BETWEEN :sk_start AND :sk_end",
-        ExpressionAttributeValues: {
-          ":pk": target.PK,
-          ":sk_start": skStart,
-          ":sk_end": skEnd,
-        },
-        ScanIndexForward: false,
-        ExclusiveStartKey: exclusiveStart,
-      }),
-    );
-    for (const item of (out.Items ?? []) as Partial<ScoreEventItem>[]) {
-      if (typeof item.source === "string") events.push(item);
-    }
-    exclusiveStart = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-  } while (exclusiveStart);
+  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const events = (
+    await deploymentsRepository.listScoreEventsInRange(target.jobId, skStart, skEnd)
+  ).filter((item) => typeof item.source === "string") as Partial<ScoreEventItem>[];
 
   // attack-detected と uptime を分けて、attack-detected の各行に recoveredAt を結合する。
   const attacks = events.filter((e) => e.source === "attack-detected");

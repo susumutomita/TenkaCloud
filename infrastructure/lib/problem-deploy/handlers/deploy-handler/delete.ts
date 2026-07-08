@@ -1,4 +1,4 @@
-import { GetCommand, UpdateCommand, type UpdateCommandInput } from "@aws-sdk/lib-dynamodb";
+import { UpdateCommand, type UpdateCommandInput } from "@aws-sdk/lib-dynamodb";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
@@ -16,6 +16,7 @@ import { logDeployTrace } from "../shared/trace-log.js";
 import { buildAdapterDependencies } from "./adapter-dependencies.js";
 import type { DeploySharedResources } from "./deploy.js";
 import { slugify } from "./naming.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 import type { DeploymentItem, DeploymentStatus } from "./types.js";
 
 export type TeardownOutcome =
@@ -43,13 +44,10 @@ export async function requestTeardown(
   jobId: string,
   nowMs: number,
 ): Promise<TeardownOutcome> {
-  const got = await shared.ddb.send(
-    new GetCommand({
-      TableName: shared.tableName,
-      Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-    }),
-  );
-  const item = got.Item as Partial<DeploymentItem> | undefined;
+  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const item = (await deploymentsRepository.getDeployment(jobId)) as
+    | Partial<DeploymentItem>
+    | undefined;
   if (!item) return { kind: "not_found" };
   if (item.tenantId !== tenantId) return { kind: "not_found" };
   const status = (item.status ?? "PENDING") as DeploymentStatus;

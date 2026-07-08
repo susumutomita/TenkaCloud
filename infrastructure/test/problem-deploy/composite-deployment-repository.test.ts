@@ -86,6 +86,15 @@ function makeFakeDdb(): FakeDdb {
   };
 }
 
+function stripPhysicalKeys(row: Record<string, unknown>): Record<string, unknown> {
+  const record = { ...row };
+  delete record.PK;
+  delete record.SK;
+  delete record.GSI3PK;
+  delete record.GSI3SK;
+  return record;
+}
+
 const parentInput = (
   over: Partial<CreateCompositeParentInput> = {},
 ): CreateCompositeParentInput => ({
@@ -138,7 +147,7 @@ describe("composite deployment repository (#2061)", () => {
     expect(created).not.toHaveProperty("teamName");
 
     const fetched = await getCompositeParent(fake.deps, "parent-1");
-    expect(fetched).toEqual(created);
+    expect(fetched).toEqual(stripPhysicalKeys(created));
   });
 
   it("[#2063] stores team identity on the parent when supplied", async () => {
@@ -211,8 +220,6 @@ describe("composite deployment repository (#2061)", () => {
     for (const p of providers) {
       const row = await getCompositeTarget(fake.deps, p.targetDeploymentId);
       expect(row).toMatchObject({
-        PK: `DEPLOYMENT#${p.targetDeploymentId}`,
-        SK: "META",
         jobId: p.targetDeploymentId,
         parentDeploymentId: "parent-1",
         targetId: p.targetId,
@@ -221,6 +228,10 @@ describe("composite deployment repository (#2061)", () => {
         runtimeEngine: p.engine,
         runtimeEntry: p.entry,
       });
+      expect(row).not.toHaveProperty("PK");
+      expect(row).not.toHaveProperty("SK");
+      expect(row).not.toHaveProperty("GSI3PK");
+      expect(row).not.toHaveProperty("GSI3SK");
     }
     // 1 parent + 4 targets, each its own row.
     expect(fake.rows()).toHaveLength(5);

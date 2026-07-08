@@ -7,10 +7,11 @@ import {
   INTENT_VERSION,
 } from "@TenkaCloud/trust-bridge";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { logDeployTrace } from "../shared/trace-log.js";
-import type { DeploymentItem, DeploymentStatus, DeployResponse } from "./types.js";
+import { resolveDeploymentsRepository } from "./shared.js";
+import type { DeploymentStatus, DeployResponse } from "./types.js";
 
 /**
  * Issue #2019 / ADR-017: staged enforcement gate for the single-deploy path.
@@ -74,39 +75,22 @@ async function replacesExistingStack(
   namePrefix: string,
   selfJobId: string,
 ): Promise<boolean> {
-  let exclusiveStartKey: Record<string, unknown> | undefined;
-  do {
-    const out = await deps.ddb.send(
-      new QueryCommand({
-        TableName: deps.tableName,
-        IndexName: "GSI1",
-        KeyConditionExpression: "GSI1PK = :pk",
-        // `status` is a DDB reserved word — alias it. Project what we need to both
-        // classify the row and exclude our own (jobId).
-        FilterExpression: "namePrefix = :np",
-        ProjectionExpression: "namePrefix, jobId, #s",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}`, ":np": namePrefix },
-        ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
-      }),
-    );
-    const items = (out.Items ?? []) as Partial<DeploymentItem>[];
-    for (const item of items) {
-      // Skip our own just-written row — it is not a stack we would "replace".
-      if (item.jobId === selfJobId) {
-        continue;
-      }
-      const status = (item.status ?? "PENDING") as DeploymentStatus;
-      // Deleted-like rows are gone; FAILED rows left no live stack. Anything else
-      // (PENDING / APPROVAL_PENDING / IN_PROGRESS / COMPLETE / DELETING) means a
-      // stack with this name is — or is about to be — live, so this deploy would
-      // replace it.
-      if (status !== "FAILED" && !DELETED_LIKE_STATUSES.has(status)) {
-        return true;
-      }
+  const repository = await resolveDeploymentsRepository(deps);
+  const items = await repository.findByNamePrefix(tenantId, namePrefix);
+  for (const item of items) {
+    // Skip our own just-written row — it is not a stack we would "replace".
+    if (item.jobId === selfJobId) {
+      continue;
     }
-    exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-  } while (exclusiveStartKey);
+    const status = (item.status ?? "PENDING") as DeploymentStatus;
+    // Deleted-like rows are gone; FAILED rows left no live stack. Anything else
+    // (PENDING / APPROVAL_PENDING / IN_PROGRESS / COMPLETE / DELETING) means a
+    // stack with this name is — or is about to be — live, so this deploy would
+    // replace it.
+    if (status !== "FAILED" && !DELETED_LIKE_STATUSES.has(status)) {
+      return true;
+    }
+  }
   return false;
 }
 

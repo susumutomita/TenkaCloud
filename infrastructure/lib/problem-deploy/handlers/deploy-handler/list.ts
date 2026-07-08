@@ -1,8 +1,7 @@
-import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
-import { createCursorCodec } from "../shared/cursor-codec.js";
-import { isCompositeParentItem } from "./composite-deployment.js";
+import { COMPOSITE_RUNTIME_KIND } from "./composite-deployment.js";
 import { buildCompositeDetail, type CompositeDetail } from "./composite-detail.js";
 import type { DeploySharedResources } from "./deploy.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 import type { DeploymentItem, DeploymentProvenance, DeploymentStatus } from "./types.js";
 
 export interface DeploymentSummary {
@@ -110,16 +109,6 @@ export function toDetail(item: Partial<DeploymentItem>): DeploymentSummary {
 }
 
 /**
- * Issue #862: cursor は DDB ExclusiveStartKey にそのまま渡るので、 値のセマンティック
- * (= PK が `DEPLOYMENT#<ulid>` / SK が `META` / GSI1 query なので GSI1PK / GSI1SK もあり得る)
- * に絞ったキー allowlist で shape を pin する。 共通の validated codec
- * (`shared/cursor-codec.ts`) に allowlist を注入して使う。
- */
-const cursorCodec = createCursorCodec(
-  new Set(["PK", "SK", "GSI1PK", "GSI1SK", "GSI2PK", "GSI2SK"]),
-);
-
-/**
  * 指定 tenant の Deployment 一覧を新しい順に返す。`problemId` が指定されたら
  * GSI1 query 後に in-memory で絞り込む (テナント当たりの行数が小さい前提)。
  */
@@ -128,27 +117,15 @@ export async function listDeployments(
   request: ListDeploymentsRequest,
 ): Promise<ListDeploymentsResponse> {
   const limit = Math.min(Math.max(request.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
-  const exclusiveStartKey = request.cursor ? cursorCodec.decode(request.cursor) : undefined;
-
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.tableName,
-      IndexName: "GSI1",
-      KeyConditionExpression: "GSI1PK = :pk",
-      ExpressionAttributeValues: { ":pk": `TENANT#${request.tenantId}` },
-      ScanIndexForward: false,
-      Limit: limit,
-      ExclusiveStartKey: exclusiveStartKey,
-    }),
-  );
-
-  const raw = (out.Items ?? []) as Partial<DeploymentItem>[];
+  const repository = await resolveDeploymentsRepository(shared);
+  const page = await repository.listByTenantPage(request.tenantId, {
+    limit,
+    cursor: request.cursor,
+  });
+  const raw = page.items as Partial<DeploymentItem>[];
   const filtered = request.problemId ? raw.filter((i) => i.problemId === request.problemId) : raw;
   const items = filtered.map(toSummary);
-  const nextCursor = out.LastEvaluatedKey
-    ? cursorCodec.encode(out.LastEvaluatedKey as Record<string, unknown>)
-    : undefined;
-  return { items, nextCursor };
+  return { items, nextCursor: page.nextCursor };
 }
 
 /**
@@ -160,20 +137,17 @@ export async function getDeployment(
   tenantId: string,
   jobId: string,
 ): Promise<DeploymentSummary | undefined> {
-  const out = await shared.ddb.send(
-    new GetCommand({
-      TableName: shared.tableName,
-      Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-    }),
-  );
-  const item = out.Item as Partial<DeploymentItem> | undefined;
+  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const item = (await deploymentsRepository.getDeployment(jobId)) as
+    | Partial<DeploymentItem>
+    | undefined;
   if (!item) return undefined;
   if (item.tenantId !== tenantId) return undefined;
   const detail = toDetail(item);
   // [#2073] Composite parent 行のときだけ target-level status を付与する。
   // legacy single-provider 行は `isCompositeParentItem` が false なので素の detail
   // を返し、byte 互換を保つ。tenant 認可は上の `item.tenantId !== tenantId` で確定済。
-  if (isCompositeParentItem(item)) {
+  if ((item as { runtimeKind?: unknown }).runtimeKind === COMPOSITE_RUNTIME_KIND) {
     const composite = await buildCompositeDetail(shared, jobId);
     return { ...detail, composite };
   }

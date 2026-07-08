@@ -22,12 +22,7 @@
  *     cleanup.
  */
 
-import {
-  type DynamoDBDocumentClient,
-  GetCommand,
-  PutCommand,
-  QueryCommand,
-} from "@aws-sdk/lib-dynamodb";
+import { type DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import {
   COMPOSITE_RUNTIME_KIND,
   COMPOSITE_VERSION,
@@ -36,15 +31,19 @@ import {
   compositeTargetGsi3Pk,
   compositeTargetGsi3Sk,
   deploymentPk,
-  isCompositeParentItem,
-  isCompositeTargetItem,
   MAX_COMPOSITE_TARGETS,
   MIN_COMPOSITE_TARGETS,
 } from "./composite-deployment.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 import type { DeploymentStatus } from "./types.js";
 
-const GSI3_INDEX_NAME = "GSI3";
 const CONDITION_PK_ABSENT = "attribute_not_exists(PK)";
+
+export type CompositeParentDeploymentRecord = Omit<CompositeParentDeploymentItem, "PK" | "SK">;
+export type CompositeTargetDeploymentRecord = Omit<
+  CompositeTargetDeploymentItem,
+  "PK" | "SK" | "GSI3PK" | "GSI3SK"
+>;
 
 /** Injected dependencies. The `ddb` client is created by the caller, not here. */
 export interface CompositeDeploymentRepositoryDeps {
@@ -184,7 +183,7 @@ export async function createCompositeParent(
       existing.accountGroupId === item.accountGroupId &&
       existing.problemSetId === item.problemSetId
     ) {
-      return existing;
+      return item;
     }
     throw new CompositeParentConflictError(
       input.parentDeploymentId,
@@ -214,7 +213,7 @@ export async function createCompositeTarget(
   //    otherwise a loud conflict (never a silent overwrite).
   const existing = await getRawRow(deps, input.targetDeploymentId);
   if (existing) {
-    if (!isCompositeTargetItem(existing)) {
+    if (!isCompositeTargetRecord(existing)) {
       throw new CompositeTargetConflictError(
         input.targetDeploymentId,
         "a non-composite-target row already exists at this id",
@@ -231,7 +230,7 @@ export async function createCompositeTarget(
   //    the same targetId under the same parent is a conflict).
   const siblings = await listCompositeTargets(deps, input.parentDeploymentId);
   const clash = siblings.find(
-    (sibling) => sibling.targetId === input.targetId && sibling.PK !== item.PK,
+    (sibling) => sibling.targetId === input.targetId && sibling.jobId !== item.jobId,
   );
   if (clash) {
     throw new CompositeTargetConflictError(
@@ -265,18 +264,18 @@ export async function createCompositeTarget(
 export async function getCompositeParent(
   deps: CompositeDeploymentRepositoryDeps,
   parentDeploymentId: string,
-): Promise<CompositeParentDeploymentItem | undefined> {
+): Promise<CompositeParentDeploymentRecord | undefined> {
   const row = await getRawRow(deps, parentDeploymentId);
-  return isCompositeParentItem(row) ? row : undefined;
+  return isCompositeParentRecord(row) ? row : undefined;
 }
 
 /** Read a composite target row, or undefined if absent / not a target row. */
 export async function getCompositeTarget(
   deps: CompositeDeploymentRepositoryDeps,
   targetDeploymentId: string,
-): Promise<CompositeTargetDeploymentItem | undefined> {
+): Promise<CompositeTargetDeploymentRecord | undefined> {
   const row = await getRawRow(deps, targetDeploymentId);
-  return isCompositeTargetItem(row) ? row : undefined;
+  return isCompositeTargetRecord(row) ? row : undefined;
 }
 
 /**
@@ -286,30 +285,32 @@ export async function getCompositeTarget(
 export async function listCompositeTargets(
   deps: CompositeDeploymentRepositoryDeps,
   parentDeploymentId: string,
-): Promise<CompositeTargetDeploymentItem[]> {
-  const out = await deps.ddb.send(
-    new QueryCommand({
-      TableName: deps.tableName,
-      IndexName: GSI3_INDEX_NAME,
-      KeyConditionExpression: "GSI3PK = :pk",
-      ExpressionAttributeValues: { ":pk": compositeTargetGsi3Pk(parentDeploymentId) },
-      ScanIndexForward: true,
-    }),
-  );
-  return (out.Items ?? []).filter(isCompositeTargetItem);
+): Promise<CompositeTargetDeploymentRecord[]> {
+  const repository = await resolveDeploymentsRepository(deps);
+  const rows = await repository.listCompositeTargets(parentDeploymentId);
+  // The sparse GSI3 is populated only by composite target rows. The pre-seam
+  // `isCompositeTargetItem` guard depended on SK === "META", but the repository
+  // returns domain records with physical keys stripped, so that check is both
+  // impossible and redundant here.
+  return rows.filter(isCompositeTargetRecord);
 }
 
 async function getRawRow(
   deps: CompositeDeploymentRepositoryDeps,
   deploymentId: string,
 ): Promise<Record<string, unknown> | undefined> {
-  const out = await deps.ddb.send(
-    new GetCommand({
-      TableName: deps.tableName,
-      Key: { PK: deploymentPk(deploymentId), SK: "META" },
-    }),
+  const repository = await resolveDeploymentsRepository(deps);
+  return (await repository.getDeployment(deploymentId)) as Record<string, unknown> | undefined;
+}
+
+function isCompositeParentRecord(row: unknown): row is CompositeParentDeploymentRecord {
+  return (row as { runtimeKind?: unknown } | undefined)?.runtimeKind === COMPOSITE_RUNTIME_KIND;
+}
+
+function isCompositeTargetRecord(row: unknown): row is CompositeTargetDeploymentRecord {
+  return (
+    typeof (row as { parentDeploymentId?: unknown } | undefined)?.parentDeploymentId === "string"
   );
-  return out.Item as Record<string, unknown> | undefined;
 }
 
 function buildCompositeTargetItem(
@@ -349,7 +350,7 @@ function buildCompositeTargetItem(
 }
 
 function immutableTargetFieldsMatch(
-  existing: CompositeTargetDeploymentItem,
+  existing: CompositeTargetDeploymentRecord,
   next: CompositeTargetDeploymentItem,
 ): boolean {
   return (

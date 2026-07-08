@@ -1,6 +1,9 @@
-import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { parseProgressionGate } from "../shared/progression-gate.js";
-import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
+import {
+  type EventSharedResources,
+  resolveDeploymentsRepository,
+  resolveEventRepositories,
+} from "./shared.js";
 import { collectTeamScoreEvents, type DeploymentRefForScoreEvents } from "./team-score-events.js";
 import type {
   EventDeploymentSummary,
@@ -118,30 +121,18 @@ export async function getEventDetail(
   // という ADR-004 Phase 2c 統合ギャップへの補正)。GSI1 = TENANT#<tenantId> 全件取得 →
   // eventId で in-memory filter。
   const repositories = await resolveEventRepositories(shared);
+  const deploymentsRepository = await resolveDeploymentsRepository(shared);
   const [event, teamRecords, deploymentsOut] = await Promise.all([
     repositories.events.getEvent(tenantId, eventId),
     repositories.teams.listTeamsByEvent(eventId),
-    shared.ddb.send(
-      new QueryCommand({
-        TableName: shared.deploymentsTableName,
-        IndexName: "GSI1",
-        KeyConditionExpression: "GSI1PK = :pk",
-        ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}` },
-        // problemId / jobId / status は per-problem deploy 状況を組み立てるのに必要。
-        // displayTeamName は既存の teams[].displayName 上書き用。
-        // PK / teamName は Issue #1038 P1 #7 で per-team score events を引くために追加 projection。
-        ProjectionExpression:
-          "PK, teamId, eventId, displayTeamName, teamName, problemId, jobId, #s",
-        ExpressionAttributeNames: { "#s": "status" },
-      }),
-    ),
+    deploymentsRepository.listDeploymentSummariesByTenant(tenantId),
   ]);
   // getEvent は tenant 不一致 / 不在をどちらも undefined に畳んでいる (= 従来の
   // `!event || event.tenantId !== tenantId` を repository 内へ移設)。
   if (!event) return undefined;
 
   const { displayNameByTeamId, deploymentsByProblem, deploymentRefs } =
-    aggregateDeploymentsForEvent(deploymentsOut.Items ?? [], eventId);
+    aggregateDeploymentsForEvent(deploymentsOut as readonly Record<string, unknown>[], eventId);
 
   const teams: TeamSummary[] = teamRecords.map((t) => {
     const teamId = String(t.teamId ?? "");
@@ -216,10 +207,10 @@ function captureDeploymentRef(
   d: Record<string, unknown>,
   refs: DeploymentRefForScoreEvents[],
 ): void {
-  if (typeof d.PK !== "string") return;
+  if (typeof d.jobId !== "string") return;
   if (typeof d.teamId !== "string") return;
   refs.push({
-    PK: d.PK,
+    jobId: d.jobId,
     teamId: d.teamId,
     teamName: typeof d.teamName === "string" ? d.teamName : undefined,
   });

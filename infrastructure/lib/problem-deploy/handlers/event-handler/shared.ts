@@ -7,6 +7,7 @@ import { z } from "zod";
 import { getEnv } from "../../../helper-functions.js";
 import type { EffectiveCatalogProvenance } from "../../../problem-pack/effective-catalog.js";
 import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
+import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
 import type { EventsRepository } from "../../control-data/events-repository.js";
 import {
   type ControlDataRepositories,
@@ -281,6 +282,27 @@ export function resolveTeamsRepository(shared: EventSharedResources): Promise<Te
   });
 }
 
+/**
+ * [Issue #2441 / Phase B1] Deployments READ seam for event-handler modules.
+ *
+ * Default backend stays DynamoDB and emits the same GSI1/base-table reads through
+ * the same injected DocumentClient. `CONTROL_DATA_BACKEND=turso/sql` is the
+ * known B4 constraint: the control-data factory fails loudly until the SQL
+ * Deployments backend exists.
+ *
+ * [#2467-era runtime] Delegates to the cold-start-cached `controlDataRuntime`
+ * (mirror of {@link resolveEventsRepository} / {@link resolveTeamsRepository}),
+ * so `Promise<DeploymentsRepository>` — caller must await before use.
+ */
+export function resolveDeploymentsRepository(
+  shared: Pick<EventSharedResources, "ddb" | "deploymentsTableName">,
+): Promise<DeploymentsRepository> {
+  return controlDataRuntime.resolveDeploymentsRepository({
+    ddb: shared.ddb,
+    deploymentsTableName: shared.deploymentsTableName,
+  });
+}
+
 function parseProblemsDisruptions(
   raw: string | undefined,
 ): Readonly<Record<string, readonly ProblemDisruptionEntry[]>> {
@@ -336,6 +358,11 @@ export async function queryDeploymentsByEvent(
   eventId: string,
   projectionExpression?: string,
 ): Promise<Partial<DeploymentItem>[]> {
+  if (projectionExpression === undefined) {
+    const repository = await resolveDeploymentsRepository(shared);
+    return [...(await repository.listByTenantAndEvent(tenantId, eventId))];
+  }
+
   // Issue #670: DDB は `status` 等の reserved word を ProjectionExpression / FilterExpression
   // / UpdateExpression 全てで alias 必須。 caller が `#s` を含む projection を渡すケース
   // (= bulk-deploy.ts が `jobId, teamId, problemId, #s` で呼ぶ) を黙ってサポートするため、

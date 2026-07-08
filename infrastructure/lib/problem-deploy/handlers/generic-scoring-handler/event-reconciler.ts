@@ -1,9 +1,10 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { EventRecord, ScheduleFiredKind } from "../../control-data/events-repository.js";
 import { bulkTeardownEvent } from "../event-handler/bulk-delete.js";
 import { bulkDeployEvent } from "../event-handler/bulk-deploy.js";
 import { type EventSharedResources, resolveEventsRepository } from "../event-handler/shared.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 
 /**
  * #557 / #539: Event status の auto-transition reconciler (= 1-min tick で deployment 集約
@@ -152,12 +153,11 @@ const STUCK_DELETING_THRESHOLD_MS = 30 * 60 * 1000;
 /**
  * Project field set for the reconciler:
  *   - `status`: 必須 (= 既存 `resolveEventStatusTransition` の入力)
- *   - `PK`: rescue UpdateItem を打つときに要る (= Issue #828 stuck DELETING rescue 経路)。
- *     pre-#828 の旧 row や、 古い fixtures では projection されていない可能性があるので optional。
+ *   - `jobId`: rescue UpdateItem を打つときに `DEPLOYMENT#<jobId>` を再構築する。
  *   - `updatedAt`: stuck 判定の閾値比較 (= Issue #828)。 未設定行は rescue skip (= safe default)。
  */
 interface DeploymentReconcilerRow {
-  readonly PK?: string;
+  readonly jobId?: string;
   readonly status: string;
   readonly updatedAt?: string;
 }
@@ -185,35 +185,9 @@ async function queryDeploymentRowsForEvent(
   ctx: ReconcileEventStatusesContext,
   event: { tenantId: string; eventId: string },
 ): Promise<DeploymentReconcilerRow[]> {
-  const rows: DeploymentReconcilerRow[] = [];
-  let exclusiveStartKey: Record<string, unknown> | undefined;
-
-  do {
-    const depsOut = await ctx.ddb.send(
-      new QueryCommand({
-        TableName: ctx.deploymentsTableName,
-        IndexName: "GSI1",
-        KeyConditionExpression: "GSI1PK = :pk",
-        FilterExpression: "eventId = :ev",
-        ProjectionExpression: "PK, #status, updatedAt",
-        ExpressionAttributeNames: { "#status": "status" },
-        ExpressionAttributeValues: {
-          ":pk": `TENANT#${event.tenantId}`,
-          ":ev": event.eventId,
-        },
-        ExclusiveStartKey: exclusiveStartKey,
-      }),
-    );
-
-    for (const item of depsOut.Items ?? []) {
-      const cast = item as { PK?: string; status?: string; updatedAt?: string };
-      if (!cast.status) continue;
-      rows.push({ PK: cast.PK, status: cast.status, updatedAt: cast.updatedAt });
-    }
-    exclusiveStartKey = depsOut.LastEvaluatedKey as Record<string, unknown> | undefined;
-  } while (exclusiveStartKey);
-
-  return rows;
+  const repository = await resolveDeploymentsRepository(ctx);
+  const rows = await repository.listReconcilerRowsByEvent(event.tenantId, event.eventId);
+  return rows.map((row) => ({ jobId: row.jobId, status: row.status, updatedAt: row.updatedAt }));
 }
 
 /**
@@ -242,12 +216,15 @@ async function rescueStuckDeletingDeployment(
   thresholdMs: number,
 ): Promise<boolean> {
   const updatedAtMs = staleDeletingUpdatedAtMs(row, nowMs, thresholdMs);
-  if (updatedAtMs === undefined || !row.PK) return false;
+  if (updatedAtMs === undefined || !row.jobId) return false;
+  // listReconcilerRowsByEvent returns domain jobIds; the rescue write still
+  // targets the physical DynamoDB deployment row.
+  const pk = `DEPLOYMENT#${row.jobId}`;
   try {
     await ctx.ddb.send(
       new UpdateCommand({
         TableName: ctx.deploymentsTableName,
-        Key: { PK: row.PK, SK: "META" },
+        Key: { PK: pk, SK: "META" },
         UpdateExpression:
           "SET #status = :failed, updatedAt = :now, #reason = :reason REMOVE GSI2PK, GSI2SK",
         ConditionExpression: "#status = :deleting",
@@ -261,14 +238,14 @@ async function rescueStuckDeletingDeployment(
       }),
     );
     console.warn("[generic-scoring] rescued stuck DELETING deployment", {
-      PK: row.PK,
+      PK: pk,
       staleForMs: nowMs - updatedAtMs,
     });
     return true;
   } catch (err) {
     if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return false;
     console.warn("[generic-scoring] stuck-DELETING rescue failed", {
-      PK: row.PK,
+      PK: pk,
       message: err instanceof Error ? err.message : String(err),
     });
     return false;

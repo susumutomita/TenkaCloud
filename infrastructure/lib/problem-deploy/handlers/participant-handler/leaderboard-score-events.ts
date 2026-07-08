@@ -1,8 +1,11 @@
-import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import type { ScoreEventItem } from "../shared/score-event.js";
-import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
+import {
+  type ParticipantSharedResources,
+  queryTeamItems,
+  resolveDeploymentsRepository,
+} from "./shared.js";
 
 /**
  * Issue #1038 P1 #6: 全チームの累計スコア推移を 1 endpoint で返す (= participant-portal の
@@ -60,7 +63,7 @@ const MAX_PAGES_PER_DEPLOYMENT = 3;
  * 流れ:
  *   1. GSI2 (TEAMKEY#) で requester 行 → tenantId / eventId / 自 teamId
  *   2. GSI1 (TENANT#) + eventId filter で 同 event の全 deployment を回収
- *   3. teamId 単位に group + teamName / deployment PK 集合を構築
+ *   3. teamId 単位に group + teamName / deployment jobId 集合を構築
  *   4. 各 (team, deployment) を Promise.all で並列 query (PK + begins_with EVENT#)
  *   5. team 単位で events を occurredAt 昇順 sort + cap、 累計 score 降順で team 並べ替え
  *
@@ -90,22 +93,19 @@ export async function getLeaderboardScoreEvents(
     return { kind: "no_event" };
   }
 
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.tableName,
-      IndexName: "GSI1",
-      KeyConditionExpression: "GSI1PK = :pk",
-      FilterExpression: "eventId = :ev",
-      ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}`, ":ev": eventId },
-    }),
-  );
-  const eventDeployments = (out.Items ?? []) as Partial<DeploymentItem>[];
+  // #1797/#1815: pre-seam this endpoint read one GSI1 page only. The repository
+  // method owns the full drain, matching leaderboard/event-handler correctness.
+  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const eventDeployments = (await deploymentsRepository.listByTenantAndEvent(
+    tenantId,
+    eventId,
+  )) as Partial<DeploymentItem>[];
 
   const teamMeta = groupDeploymentsByTeam(eventDeployments);
 
   const teamsResult: TeamScoreEvents[] = await Promise.all(
     [...teamMeta.entries()].map(async ([teamId, meta]) => {
-      const collected = await collectTeamEvents(shared, meta.deploymentPKs);
+      const collected = await collectTeamEvents(shared, meta.deploymentJobIds);
       collected.sort((a, b) =>
         a.occurredAt < b.occurredAt ? -1 : a.occurredAt > b.occurredAt ? 1 : 0,
       );
@@ -131,7 +131,7 @@ export async function getLeaderboardScoreEvents(
 
 interface TeamMetaEntry {
   teamName: string;
-  deploymentPKs: string[];
+  deploymentJobIds: string[];
 }
 
 /** Deployments を teamId 単位に group。 displayTeamName / slug の優先順位は leaderboard と同じ。 */
@@ -148,7 +148,7 @@ function groupDeploymentsByTeam(
 /** 1 deployment 行を team bucket に取り込む (= groupDeploymentsByTeam の per-item helper)。 */
 function addItemToTeamMeta(teamMeta: Map<string, TeamMetaEntry>, item: Partial<DeploymentItem>) {
   if (typeof item.teamId !== "string") return;
-  if (typeof item.PK !== "string") return;
+  if (typeof item.jobId !== "string") return;
   const status = (item.status ?? "PENDING") as DeploymentStatus;
   if (DELETED_LIKE_STATUSES.has(status)) return;
   if (!hasScoreTimelineActivity(item)) return;
@@ -157,12 +157,12 @@ function addItemToTeamMeta(teamMeta: Map<string, TeamMetaEntry>, item: Partial<D
   const teamName = display ?? slug;
   let m = teamMeta.get(item.teamId);
   if (!m) {
-    m = { teamName, deploymentPKs: [] };
+    m = { teamName, deploymentJobIds: [] };
     teamMeta.set(item.teamId, m);
   } else if (display && m.teamName !== display) {
     m.teamName = display;
   }
-  m.deploymentPKs.push(item.PK);
+  m.deploymentJobIds.push(item.jobId);
 }
 
 /**
@@ -180,34 +180,22 @@ function hasScoreTimelineActivity(item: Partial<DeploymentItem>): boolean {
   return false;
 }
 
-/** 1 team の全 deployment PK について EVENT# rows を回収。 page 上限まで読む。 */
+/** 1 team の全 deployment jobId について EVENT# rows を回収。 page 上限まで読む。 */
 async function collectTeamEvents(
   shared: ParticipantSharedResources,
-  deploymentPKs: readonly string[],
+  deploymentJobIds: readonly string[],
 ): Promise<TeamScoreEventView[]> {
   const collected: TeamScoreEventView[] = [];
+  const deployments = await resolveDeploymentsRepository(shared);
   await Promise.all(
-    deploymentPKs.map(async (pk) => {
-      let exclusiveStart: Record<string, unknown> | undefined;
-      let pages = 0;
-      while (pages < MAX_PAGES_PER_DEPLOYMENT && collected.length < PER_TEAM_LIMIT) {
-        const evOut = await shared.ddb.send(
-          new QueryCommand({
-            TableName: shared.tableName,
-            KeyConditionExpression: "PK = :pk AND begins_with(SK, :evpfx)",
-            ExpressionAttributeValues: { ":pk": pk, ":evpfx": "EVENT#" },
-            ScanIndexForward: false,
-            Limit: PER_TEAM_LIMIT,
-            ExclusiveStartKey: exclusiveStart,
-          }),
-        );
-        for (const it of (evOut.Items ?? []) as Partial<ScoreEventItem>[]) {
-          const v = toView(it);
-          if (v) collected.push(v);
-        }
-        exclusiveStart = evOut.LastEvaluatedKey as Record<string, unknown> | undefined;
-        pages++;
-        if (!exclusiveStart) break;
+    deploymentJobIds.map(async (jobId) => {
+      const rows = await deployments.listScoreEvents(jobId, {
+        pageSize: PER_TEAM_LIMIT,
+        maxPages: MAX_PAGES_PER_DEPLOYMENT,
+      });
+      for (const it of rows as Partial<ScoreEventItem>[]) {
+        const v = toView(it);
+        if (v) collected.push(v);
       }
     }),
   );

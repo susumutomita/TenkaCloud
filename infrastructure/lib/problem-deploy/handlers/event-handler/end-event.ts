@@ -1,8 +1,7 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
   type EventSharedResources,
-  queryDeploymentsByEvent,
+  resolveDeploymentsRepository,
   resolveEventRepositories,
 } from "./shared.js";
 
@@ -60,20 +59,20 @@ export async function endEvent(
   // updated: 成功判定は outcome 自身が担う。 post-image 無しの degenerate 応答
   // (ALL_NEW が Attributes を返さない) は repository 層が not_found に畳み済み。
 
-  const deploymentsOut = await queryDeploymentsByEvent(shared, tenantId, eventId, "PK");
-  const targets = deploymentsOut
-    .map((d) => d as Pick<DeploymentItem, "PK">)
-    .filter((d) => typeof d.PK === "string");
+  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const targetJobIds = await deploymentsRepository.listDeploymentKeysByEvent(tenantId, eventId);
 
+  // The read seam returns domain jobIds; this raw write still targets the
+  // DynamoDB row, so rebuild the physical deployment PK at the boundary.
   // #872: tenantId 一致を atomic に強制 (= queryDeploymentsByEvent が GSI1=TENANT#... で
   // 引いているので transitively 安全だが、 write レベルで明示する defense-in-depth)。
   await Promise.all(
-    targets.map((d) =>
+    targetJobIds.map((jobId) =>
       shared.ddb
         .send(
           new UpdateCommand({
             TableName: shared.deploymentsTableName,
-            Key: { PK: d.PK, SK: "META" },
+            Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
             UpdateExpression: "SET eventEndsAt = :e, updatedAt = :now",
             ConditionExpression: "tenantId = :tenantId",
             ExpressionAttributeValues: { ":e": now, ":now": now, ":tenantId": tenantId },
@@ -87,5 +86,5 @@ export async function endEvent(
     ),
   );
 
-  return { kind: "ok", endsAt: now, updatedDeployments: targets.length };
+  return { kind: "ok", endsAt: now, updatedDeployments: targetJobIds.length };
 }

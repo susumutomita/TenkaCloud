@@ -1,9 +1,12 @@
 import type { LeaderboardEntry, LeaderboardResponse } from "@tenkacloud/portal-contracts";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
-import { queryAllItems } from "../shared/ddb-paginate.js";
 import { getEventGate } from "./event-gate.js";
-import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
+import {
+  type ParticipantSharedResources,
+  queryTeamItems,
+  resolveDeploymentsRepository,
+} from "./shared.js";
 
 /**
  * Issue #2203: LeaderboardEntry / LeaderboardResponse の定義正本は
@@ -67,16 +70,11 @@ export async function getLeaderboard(
   // なので RCU は変わらないが network / Lambda 内処理量を節約。
   // #1815: 全ページ drain しないと TENANT# パーティションが 1MB 超のとき後続ページの team が
   // leaderboard から欠落する (= 順位表に出ない / scores 欠落の公平性 bug)。
-  const eventDeployments = (await queryAllItems(shared.ddb, {
-    TableName: shared.tableName,
-    IndexName: "GSI1",
-    KeyConditionExpression: "GSI1PK = :pk",
-    FilterExpression: "eventId = :ev",
-    ExpressionAttributeValues: {
-      ":pk": `TENANT#${tenantId}`,
-      ":ev": eventId,
-    },
-  })) as Partial<DeploymentItem>[];
+  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const eventDeployments = (await deploymentsRepository.listByTenantAndEvent(
+    tenantId,
+    eventId,
+  )) as Partial<DeploymentItem>[];
 
   // Issue #1038 P1 #9: scoreboard freeze 判定。 event gate を引いて endsAt を取得し、
   // 終了 N 分前から終了時刻までは順位を隠す (= 競技公平性、 終盤の駆け込み防止)。
