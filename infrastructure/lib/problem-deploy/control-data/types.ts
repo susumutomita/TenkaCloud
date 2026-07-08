@@ -281,7 +281,11 @@ export interface EventsRepository {
    * map (callers that need fail-closed behavior on a read error handle that
    * themselves — this method propagates errors, it does not swallow them).
    * Returns an empty map for an empty `eventIds` array without issuing a
-   * request.
+   * request. `eventIds` is deduplicated internally before dispatch and must
+   * contain at most 100 distinct ids per call (mirrors DynamoDB
+   * BatchGetItem's own duplicate-key / 100-key-per-request limits — both
+   * backends enforce this symmetrically for parity, the same precedent as
+   * `createEventWithTeams`'s 100-item TransactWrite cap).
    */
   batchGetEvents(eventIds: readonly string[]): Promise<ReadonlyMap<string, EventScoringMeta>>;
   /**

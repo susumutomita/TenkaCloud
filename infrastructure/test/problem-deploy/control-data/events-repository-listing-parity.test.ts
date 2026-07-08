@@ -149,6 +149,21 @@ describe.each(backends)("EventsRepository listing/batch/count parity: %s", (_nam
       const repo = makeRepo();
       expect((await repo.batchGetEvents([])).size).toBe(0);
     });
+
+    it("should dedupe repeated ids instead of erroring (mirrors DynamoDB's own duplicate-key rejection)", async () => {
+      const repo = makeRepo();
+      await repo.putEvent(sampleRecord({ eventId: "e1", scoringLocked: false }));
+
+      const map = await repo.batchGetEvents(["e1", "e1", "e1"]);
+      expect(map.size).toBe(1);
+      expect(map.get("e1")).toEqual({ scoringLocked: false, progressionGate: undefined });
+    });
+
+    it("should reject more than 100 distinct ids (mirrors DynamoDB's BatchGetItem per-request cap)", async () => {
+      const repo = makeRepo();
+      const ids = Array.from({ length: 101 }, (_, i) => `e${i}`);
+      await expect(repo.batchGetEvents(ids)).rejects.toThrow();
+    });
   });
 
   describe("countEventsByTenant", () => {

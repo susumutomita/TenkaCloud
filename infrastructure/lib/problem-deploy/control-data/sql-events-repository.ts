@@ -191,10 +191,19 @@ export class SqlEventsRepository implements EventsRepository {
   ): Promise<ReadonlyMap<string, EventScoringMeta>> {
     const map = new Map<string, EventScoringMeta>();
     if (eventIds.length === 0) return map;
-    const placeholders = eventIds.map(() => "?").join(", ");
+    // [PR #2455 review] `IN (...)` tolerates duplicates/any length on its own, but
+    // dedupe + the 100-id cap are enforced here too so both backends agree on the
+    // same input contract (mirrors createEventWithTeams's symmetric 100-item cap).
+    const ids = [...new Set(eventIds)];
+    if (ids.length > 100) {
+      throw new Error(
+        `batchGetEvents: ${ids.length} distinct ids exceeds the 100-key BatchGet limit`,
+      );
+    }
+    const placeholders = ids.map(() => "?").join(", ");
     const rows = await this.sql.all(
       `SELECT event_id, payload FROM events WHERE event_id IN (${placeholders})`,
-      eventIds,
+      ids,
     );
     for (const row of rows) {
       const record = JSON.parse(String(row.payload)) as EventRecord;

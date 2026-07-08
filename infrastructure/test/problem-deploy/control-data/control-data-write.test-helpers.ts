@@ -351,10 +351,15 @@ export function makeFakeDdb(): DynamoDBDocumentClient {
     return {};
   };
 
-  const runQuery = (cmd: QueryCommand): { Items?: Item[]; Count?: number } => {
+  const runQuery = (
+    cmd: QueryCommand,
+  ): { Items?: Item[]; Count?: number; LastEvaluatedKey?: Item } => {
     const result = query(cmd);
-    // Real DynamoDB's `Select: "COUNT"` response omits Items and carries Count instead.
-    return cmd.input.Select === "COUNT" ? { Count: result.Items.length } : result;
+    // Real DynamoDB's `Select: "COUNT"` response omits Items and carries Count instead,
+    // but still paginates — LastEvaluatedKey must survive the COUNT branch too.
+    return cmd.input.Select === "COUNT"
+      ? { Count: result.Items.length, LastEvaluatedKey: result.LastEvaluatedKey }
+      : result;
   };
 
   // biome-ignore lint/suspicious/noExplicitAny: fake dispatches by command class.

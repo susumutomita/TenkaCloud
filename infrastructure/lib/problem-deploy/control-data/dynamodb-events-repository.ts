@@ -216,6 +216,18 @@ export class DynamoDbEventsRepository implements EventsRepository {
   ): Promise<ReadonlyMap<string, EventScoringMeta>> {
     const map = new Map<string, EventScoringMeta>();
     if (eventIds.length === 0) return map;
+    // [PR #2455 review] Real DynamoDB BatchGet rejects a request whose Keys
+    // contain a duplicate (ValidationException) — dedupe defensively so a
+    // caller that hasn't already deduped (unlike today's sole caller,
+    // fetchEventScoringMetaMap) doesn't fail the whole batch. Also caps at
+    // BatchGet's 100-key-per-request limit (mirrors createEventWithTeams's
+    // 100-item TransactWrite cap); a caller needing more must chunk itself.
+    const ids = [...new Set(eventIds)];
+    if (ids.length > 100) {
+      throw new Error(
+        `batchGetEvents: ${ids.length} distinct ids exceeds the 100-key BatchGet limit`,
+      );
+    }
     // [#558] UnprocessedKeys are not retried, mirroring the pre-seam handler's
     // behavior — a partial BatchGet response yields a partial map, and callers
     // treat a missing id as "no meta" (fail-closed policy lives in the caller).
@@ -223,7 +235,7 @@ export class DynamoDbEventsRepository implements EventsRepository {
       new BatchGetCommand({
         RequestItems: {
           [this.tableName]: {
-            Keys: eventIds.map((eventId) => ({ PK: `EVENT#${eventId}`, SK: EVENT_SK })),
+            Keys: ids.map((eventId) => ({ PK: `EVENT#${eventId}`, SK: EVENT_SK })),
             ProjectionExpression: "eventId, scoringLocked, progressionGate",
           },
         },
