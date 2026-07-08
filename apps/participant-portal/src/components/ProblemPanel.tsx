@@ -8,7 +8,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator, {
   type StatusIndicatorProps,
 } from "@cloudscape-design/components/status-indicator";
-import { useNowMs } from "@tenkacloud/web-kit";
+import { Markdown, useNowMs } from "@tenkacloud/web-kit";
 import type {
   DeploymentStatus,
   ParticipantProblemView,
@@ -182,34 +182,32 @@ export function resolveProblemTitle(problem: ParticipantProblemView): string {
   return problem.name?.trim() ? problem.name : problem.problemId;
 }
 
-/** description / instructions のいずれかが非空なら問題文セクションを描画する。 */
+/**
+ * #2473: description が非空なら問題文セクションを描画する。 instructions は
+ * 問題情報 (`ProblemInfoSection` / `ProblemDetail.tsx`) 側に一本化済みで、ここでは
+ * 描画しない (= 二重表示の解消)。 instructions のみ非空・description 空のときは
+ * 空セクションを出さないよう、判定も description のみに絞る。
+ */
 export function hasProblemStatement(problem: ParticipantProblemView): boolean {
-  return Boolean(problem.description?.trim() || problem.instructions?.trim());
+  return Boolean(problem.description?.trim());
 }
 
 /**
- * #1975: 問題文 (description + instructions) を読みやすい preformatted text で描画する。
+ * #1975 / #2473: 問題文 (description) を Markdown で描画する。
  *
- * instructions は markdown 風のプレーンテキストになりうるが、 改行を尊重しつつ
- * innerHTML / dangerouslySetInnerHTML は使わない (= XSS 面を作らない)。 不在の field は出さない
- * ので、 AWS mode (問題文未配信) では section 全体が描画されず、 既存挙動のまま。
+ * instructions は問題情報側にのみ出す (このセクションでの重複表示をやめた)。 description は
+ * `ProblemDetail` の `narrative.instructions` と同じ安全経路 (`@tenkacloud/web-kit` の
+ * `Markdown` = marked → DOMPurify sanitize) で描画するので、 `## 見出し` 等が正しく描画され、
+ * XSS 面も増えない。
  */
 function ProblemStatement({ problem, t }: { problem: ParticipantProblemView; t: ProblemPanelT }) {
-  if (!hasProblemStatement(problem)) return null;
+  // Inline (not `hasProblemStatement(problem)`) so TS narrows `problem.description` to
+  // `string` here without an unreachable `?? ""` fallback branch — same gate condition,
+  // same semantics as `hasProblemStatement`, just expressed so the type checker can see it.
+  if (!problem.description?.trim()) return null;
   return (
     <Container header={<Header variant="h3">{t("problem_panel.statement_heading")}</Header>}>
-      <SpaceBetween size="xs">
-        {problem.description?.trim() && (
-          <Box variant="p">
-            <pre style={PROBLEM_TEXT_STYLE}>{problem.description}</pre>
-          </Box>
-        )}
-        {problem.instructions?.trim() && (
-          <Box variant="p">
-            <pre style={PROBLEM_TEXT_STYLE}>{problem.instructions}</pre>
-          </Box>
-        )}
-      </SpaceBetween>
+      <Markdown source={problem.description} />
     </Container>
   );
 }
@@ -222,9 +220,7 @@ function ProblemWriteup({ problem, t }: { problem: ParticipantProblemView; t: Pr
   if (!problem.writeup?.trim()) return null;
   return (
     <Container header={<Header variant="h3">{t("problem_panel.writeup_heading")}</Header>}>
-      <Box variant="p">
-        <pre style={PROBLEM_TEXT_STYLE}>{problem.writeup}</pre>
-      </Box>
+      <Markdown source={problem.writeup} />
       {/* Local-only pointer to the `tenka-drill` skill: no AI runs in the portal;
           the learner digs deeper in their own Claude Code (their subscription). */}
       {isLocal && (
@@ -235,14 +231,6 @@ function ProblemWriteup({ problem, t }: { problem: ParticipantProblemView; t: Pr
     </Container>
   );
 }
-
-/** 改行尊重 + フォントは本文継承 (= autoLink / innerHTML を避けた安全なプレーンテキスト)。 */
-const PROBLEM_TEXT_STYLE = {
-  margin: 0,
-  whiteSpace: "pre-wrap",
-  fontFamily: "inherit",
-  fontSize: "inherit",
-} as const;
 
 function ProblemPanelAlerts({
   problem,
@@ -347,8 +335,9 @@ export function ProblemPanel({
           now={now}
           t={t}
         />
-        {/* #1975: 問題文 (name / description / instructions)。 local mode は同梱して返すので
-            「何の問題か / 何をすべきか」 を表示できる。 AWS mode は未配信なので不在時は何も出さない。 */}
+        {/* #1975: 問題文 (name / description)。 local mode は同梱して返すので「何の問題か」を
+            表示できる。 instructions は問題情報側に一本化済み (#2473)。 AWS mode は description も
+            未配信なので不在時は何も出さない。 */}
         <ProblemStatement problem={problem} t={t} />
         <ProblemWriteup problem={problem} t={t} />
         {/* [#2392 Phase 2] on-demand start / stop control。 lifecycle 不在 (= AWS mode) は出さない。 */}

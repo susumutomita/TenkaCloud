@@ -316,13 +316,15 @@ describe("ProblemPanel pure helpers", () => {
     expect(resolveProblemTitle(p({ name: "   " }))).toBe("hello-world");
   });
 
-  it("should detect a problem statement only when description or instructions is non-empty", () => {
+  it("should detect a problem statement only when description is non-empty (#2473: instructions alone does not count)", () => {
     const p = (over: Partial<ParticipantProblemView>) => ({ ...baseProblem, ...over });
     expect(hasProblemStatement(p({}))).toBe(false);
     expect(hasProblemStatement(p({ description: "", instructions: "" }))).toBe(false);
     expect(hasProblemStatement(p({ description: "  " }))).toBe(false);
     expect(hasProblemStatement(p({ description: "Solve it" }))).toBe(true);
-    expect(hasProblemStatement(p({ instructions: "Do A then B" }))).toBe(true);
+    // instructions now renders only in 問題情報 (ProblemInfoSection); alone it must not
+    // trigger the 問題内容 section here (would otherwise render an empty container).
+    expect(hasProblemStatement(p({ instructions: "Do A then B" }))).toBe(false);
   });
 });
 
@@ -408,6 +410,13 @@ describe("ProblemPanel render branches", () => {
     renderPanel({ writeup: "原因と根本対策" }, "real");
     expect(screen.getByText("原因と根本対策")).toBeInTheDocument();
     expect(screen.queryByText(/tenka-drill/)).not.toBeInTheDocument();
+  });
+
+  it("should render the writeup as real Markdown, not literal ## text (#2473)", () => {
+    renderPanel({ writeup: "## 何が起きていたか\n\n根本原因の説明。" }, "local");
+    expect(screen.getByRole("heading", { name: "何が起きていたか" })).toBeInTheDocument();
+    expect(screen.queryByText(/^## /)).not.toBeInTheDocument();
+    expect(screen.getByText("根本原因の説明。")).toBeInTheDocument();
   });
 
   it("should render URL outputs in the access panel and move internal outputs to details", () => {
@@ -531,28 +540,41 @@ describe("ProblemPanel render branches", () => {
     expect(screen.queryByText("net-evo-01")).not.toBeInTheDocument();
   });
 
-  it("should render the problem statement heading + description + instructions (#1975)", () => {
+  it("should render the description as real Markdown, not literal ## text (#1975 / #2473)", () => {
     renderPanel({
       name: "Reachability Check",
-      description: "Make the endpoint reachable.",
-      instructions: "Step 1\nStep 2",
+      description: "## Make the endpoint reachable\n\nSolve it.",
     });
     expect(screen.getByText(/^Problem$|^問題内容$/)).toBeInTheDocument();
-    expect(screen.getByText("Make the endpoint reachable.")).toBeInTheDocument();
-    // 改行を尊重したテキスト (pre-wrap) として instructions が出る。
-    expect(screen.getByText(/Step 1/)).toBeInTheDocument();
+    // A `## heading` in description becomes a real heading element, not literal `## ` text.
+    expect(
+      screen.getByRole("heading", { name: "Make the endpoint reachable" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^## /)).not.toBeInTheDocument();
+    expect(screen.getByText("Solve it.")).toBeInTheDocument();
   });
 
-  it("should render only the description when instructions is absent (#1975)", () => {
-    renderPanel({ description: "Only a description here." });
+  it("does not render instructions in 問題内容 — it lives only in 問題情報 (#2473 dedup)", () => {
+    // Regression guard for the duplicate-rendering bug: instructions must not leak
+    // into ProblemStatement (問題内容) any more, even though it is still present on
+    // the API payload (ProblemInfoSection / 問題情報 is the sole renderer now).
+    renderPanel({
+      description: "Only a description here.",
+      instructions: "DISTINCTIVE_INSTRUCTIONS_TEXT_NOT_SHOWN_HERE",
+    });
     expect(screen.getByText(/^Problem$|^問題内容$/)).toBeInTheDocument();
     expect(screen.getByText("Only a description here.")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/DISTINCTIVE_INSTRUCTIONS_TEXT_NOT_SHOWN_HERE/),
+    ).not.toBeInTheDocument();
   });
 
-  it("should render only the instructions when description is absent (#1975)", () => {
+  it("should omit the problem statement section when only instructions is present (#2473)", () => {
+    // hasProblemStatement now checks description only, so an instructions-only
+    // problem must not render an (otherwise empty) 問題内容 section.
     renderPanel({ instructions: "Only instructions here." });
-    expect(screen.getByText(/^Problem$|^問題内容$/)).toBeInTheDocument();
-    expect(screen.getByText("Only instructions here.")).toBeInTheDocument();
+    expect(screen.queryByText(/^Problem$|^問題内容$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Only instructions here\./)).not.toBeInTheDocument();
   });
 
   it("should omit the problem statement section entirely in AWS mode (no statement)", () => {
@@ -627,7 +649,9 @@ describe("ProblemPanel i18n (#2054)", () => {
     );
     expect(screen.getByText("SQL Injection — Login Bypass")).toBeInTheDocument();
     expect(screen.getByText("A deliberately vulnerable login (EN).")).toBeInTheDocument();
-    expect(screen.getByText("Bypass the login (EN).")).toBeInTheDocument();
+    // #2473: instructions is no longer rendered inside ProblemPanel/問題内容 (it lives only in
+    // ProblemInfoSection / 問題情報 on ProblemDetail, which this component test does not mount).
+    expect(screen.queryByText("Bypass the login (EN).")).not.toBeInTheDocument();
     expect(screen.queryByText("脆弱なログイン (JA)。")).not.toBeInTheDocument();
   });
 
