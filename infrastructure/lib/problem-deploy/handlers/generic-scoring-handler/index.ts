@@ -1,6 +1,6 @@
 import { type DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { EventScoringMeta } from "../../control-data/events-repository.js";
-import { buildEndpointPK } from "../../problem-endpoints-table.js";
+import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
   buildScheduledDeployResources,
@@ -43,6 +43,7 @@ import {
   type PhaseEntry,
   parseScoringState,
   resolveDeploymentsRepository,
+  resolveProblemEndpointsRepository,
 } from "./shared.js";
 
 /**
@@ -440,7 +441,16 @@ function foldActiveDisruptionEffects(
 }
 
 /**
- * 1 (tenant, team, problem) の override 行を Query で全件引く (= slot 数 << 10)。
+ * 1 (tenant, team, problem) の override 行を全件引く (= slot 数 << 10)。
+ *
+ * [Issue #2442 / Phase C1] raw `QueryCommand` は `resolveProblemEndpointsRepository`
+ * (control-data seam) 経由に置き換えた。`tableName` が空文字なのは 2 通りある:
+ *   - pure SQL backend (`turso`/`sql`) 選択時 — table 自体が synth されず env も配線されない
+ *     (= 正常。 `controlDataRuntime.needsManualPrune()` が true を返す — A5 で導入した
+ *     既存 predicate を再利用して pure backend かどうかを判定する)
+ *   - dynamodb / mirror backend で本当に未配線 (= 旧来の「機能無効」状態)
+ * 後者だけ `[]` に degrade する (= 1 mis-wired site が tick 全体を落とさない、既存挙動を維持)。
+ * pure backend は tableName を無視して seam が SQL executor 直結で解決するため、素通りする。
  */
 export async function queryOverridesForDeployment(
   ddb: DynamoDBDocumentClient,
@@ -449,27 +459,16 @@ export async function queryOverridesForDeployment(
   teamId: string,
   problemId: string,
 ): Promise<{ readonly slot: string; readonly overrideUrl: string }[]> {
-  if (!tableName) return [];
+  if (!tableName && !controlDataRuntime.needsManualPrune()) return [];
   try {
-    const out = await ddb.send(
-      new QueryCommand({
-        TableName: tableName,
-        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-        ExpressionAttributeValues: {
-          ":pk": buildEndpointPK(tenantId, teamId, problemId),
-          ":sk": "SLOT#",
-        },
-      }),
-    );
-    const items = (out.Items ?? []) as Array<{ slot?: string; overrideUrl?: string }>;
-    return items
+    const repo = await resolveProblemEndpointsRepository({ ddb, endpointsTableName: tableName });
+    const rows = await repo.queryOverrides(tenantId, teamId, problemId);
+    return rows
       .filter(
-        (i): i is { slot: string; overrideUrl: string } =>
-          typeof i.slot === "string" &&
-          typeof i.overrideUrl === "string" &&
-          i.overrideUrl.length > 0,
+        (r): r is typeof r & { overrideUrl: string } =>
+          typeof r.overrideUrl === "string" && r.overrideUrl.length > 0,
       )
-      .map((i) => ({ slot: i.slot, overrideUrl: i.overrideUrl }));
+      .map((r) => ({ slot: r.slot, overrideUrl: r.overrideUrl }));
   } catch (err) {
     // 旧: return [] (= 採点を default URL で続行) は、 競技者が override 済なのに古い
     // default に対して silent-wrong-data scoring が走るリスクがある。 throw して outer

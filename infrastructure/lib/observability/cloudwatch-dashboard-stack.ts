@@ -34,7 +34,13 @@ export interface ObservabilityStackProps extends cdk.StackProps {
     readonly events?: string;
     readonly teams?: string;
     readonly competitorAccounts: string;
-    readonly problemEndpoints: string;
+    /**
+     * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは
+     * ProblemEndpoints table が synth されないため `undefined`。 dashboard は該当 widget を省く
+     * (= default-safe、既存 dynamodb backend の dashboard body は byte 互換、
+     * {@link deployments} と同じ条件)。
+     */
+    readonly problemEndpoints?: string;
     readonly tenantMappingTable: string;
   };
   readonly lambdaFunctionNames: {
@@ -339,9 +345,9 @@ export class ObservabilityStack extends cdk.Stack {
   }
 
   private ddbTargets(props: ObservabilityStackProps): NamedMetricTarget[] {
-    // Issue #2440 / #2441: 純 SQL backend では deployments/events/teams が undefined
-    // (= table 自体が無い) なので widget を省く (criticalLambdaTargets の participantPortal と
-    // 同じ filter パターン)。
+    // Issue #2440 / #2441 / #2442: 純 SQL backend では deployments/events/teams/problemEndpoints
+    // が undefined (= table 自体が無い) なので widget を省く (criticalLambdaTargets の
+    // participantPortal と同じ filter パターン)。
     const targets: Array<NamedMetricTarget | undefined> = [
       props.dynamoDbTableNames.deployments
         ? { label: "Deployments", name: props.dynamoDbTableNames.deployments }
@@ -353,7 +359,9 @@ export class ObservabilityStack extends cdk.Stack {
         ? { label: "Teams", name: props.dynamoDbTableNames.teams }
         : undefined,
       { label: "CompetitorAccounts", name: props.dynamoDbTableNames.competitorAccounts },
-      { label: "ProblemEndpoints", name: props.dynamoDbTableNames.problemEndpoints },
+      props.dynamoDbTableNames.problemEndpoints
+        ? { label: "ProblemEndpoints", name: props.dynamoDbTableNames.problemEndpoints }
+        : undefined,
       { label: "TenantMappingTable", name: props.dynamoDbTableNames.tenantMappingTable },
     ];
     return targets.filter((target): target is NamedMetricTarget => target !== undefined);

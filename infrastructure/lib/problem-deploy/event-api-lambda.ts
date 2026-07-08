@@ -54,8 +54,14 @@ export interface EventApiLambdaProps {
    * Issue #2410 Slice 2: キャパ監視 (`GET /admin/capacity`) が DescribeTable する
    * event-hot テーブルの 1 つ。他 4 テーブル (Events / Teams / Deployments / Disruptions)
    * は既存 props を流用し、本 prop で 5 テーブルが揃う。
+   *
+   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
+   * `PROBLEM_ENDPOINTS_TABLE_NAME` は注入せず、DescribeTable IAM の対象からも外す — override
+   * registry の読み書きは repository seam (`resolveProblemEndpointsRepository`) が SQL executor
+   * 直結で処理する。`dynamodb` / `*-mirror` では従来どおり必ず渡される。
    */
-  readonly problemEndpointsTable: Table;
+  readonly problemEndpointsTable?: Table;
   /**
    * Issue #2410 Slice 1 の SSM Automation document 名。`GET /admin/capacity` response に
    * echo され、event 管理画面がそのまま実行コマンド例を表示する。stack が常に runbook と
@@ -172,7 +178,10 @@ export class EventApiLambda extends Construct {
         // Issue #888: disruption fire / catalog / audit Lambda 経路で参照
         DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName,
         // Issue #2410 Slice 2: キャパ監視の event-hot 5 テーブル目 + runbook document 名。
-        PROBLEM_ENDPOINTS_TABLE_NAME: props.problemEndpointsTable.tableName,
+        // Issue #2442: 純 SQL backend では table 自体が無いので env も足さない。
+        ...(props.problemEndpointsTable
+          ? { PROBLEM_ENDPOINTS_TABLE_NAME: props.problemEndpointsTable.tableName }
+          : {}),
         CAPACITY_RUNBOOK_DOCUMENT_NAME: props.capacityRunbookDocumentName,
         // Issue #910 (#895 Phase 2.C.2.b): bulk batch payload S3 bucket + feature flag。
         // bucket 未配線時は空文字、 flag は default false (= 旧 fan-out 維持)。
@@ -240,8 +249,8 @@ export class EventApiLambda extends Construct {
     // Issue #2410 Slice 2: キャパ監視 (`GET /admin/capacity`) は event-hot 5 テーブルの
     // DescribeTable (現行プロビジョン読み取り) + CloudWatch GetMetricData (消費/throttle) のみ。
     // GetMetricData は resource-level permission 非対応のため resources は "*" (AWS 仕様)。
-    // Issue #2440: 純 SQL backend では Events/Teams が無いので DescribeTable IAM からも除外する
-    // (= 存在しない table ARN を resources に含めない)。
+    // Issue #2440 / #2442: 純 SQL backend では Events/Teams/ProblemEndpoints が無いので
+    // DescribeTable IAM からも除外する (= 存在しない table ARN を resources に含めない)。
     const eventHotTables = [
       props.eventsTable,
       props.teamsTable,

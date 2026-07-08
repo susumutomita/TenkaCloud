@@ -10,9 +10,11 @@ import {
   MirroredEventsRepository,
   MirroredFeatureFlagsRepository,
   MirroredNotificationsRepository,
+  MirroredProblemEndpointsRepository,
   MirroredTeamsRepository,
 } from "./mirrored-repositories.js";
 import { createNotificationsRepository } from "./notifications-repository.js";
+import { createProblemEndpointsRepository } from "./problem-endpoints-repository.js";
 import { createTeamsRepository } from "./teams-repository.js";
 import type {
   ControlDataBackend,
@@ -20,6 +22,7 @@ import type {
   EventsRepository,
   FeatureFlagsRepository,
   NotificationsRepository,
+  ProblemEndpointsRepository,
   SqlExecutor,
   TeamsRepository,
 } from "./types.js";
@@ -73,6 +76,16 @@ export interface ControlDataRuntime {
     readonly ddb?: DynamoDBDocumentClient;
     readonly deploymentsTableName?: string;
   }) => Promise<DeploymentsRepository>;
+  /**
+   * [Issue #2442 / Phase C1] Cold-start resolver for the ProblemEndpoints seam.
+   * Participates in all five `CONTROL_DATA_BACKEND` values like Deployments:
+   * `dynamodb` returns DDB, `turso` / `sql` return pure SQL, and mirror modes
+   * write through DDB then SQL while serving reads from canonical DDB.
+   */
+  readonly resolveProblemEndpointsRepository: (input: {
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly endpointsTableName?: string;
+  }) => Promise<ProblemEndpointsRepository>;
 }
 
 export interface RuntimeEnvironment {
@@ -118,7 +131,11 @@ function selectBackend(env: RuntimeEnvironment): SelectedBackend {
 function requireDdbAndTableName(
   ddb: DynamoDBDocumentClient | undefined,
   tableName: string | undefined,
-  tableNameLabel: "eventsTableName" | "teamsTableName" | "deploymentsTableName",
+  tableNameLabel:
+    | "eventsTableName"
+    | "teamsTableName"
+    | "deploymentsTableName"
+    | "endpointsTableName",
   backendKind: "dynamodb" | "mirror",
 ): { readonly ddb: DynamoDBDocumentClient; readonly tableName: string } {
   if (!ddb || !tableName) {
@@ -326,6 +343,39 @@ export function createControlDataRuntime(deps: RuntimeDependencies): ControlData
     );
   }
 
+  /** [Issue #2442 / Phase C1] Resolver for the ProblemEndpoints seam (mirrors resolveDeploymentsRepository). */
+  async function resolveProblemEndpointsRepository(input: {
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly endpointsTableName?: string;
+  }): Promise<ProblemEndpointsRepository> {
+    const backend = selectBackend(deps.env);
+    if (backend.kind === "pure") {
+      const sql = await acquireSqlExecutor();
+      return createProblemEndpointsRepository(backend.dialect, { sql });
+    }
+
+    const requiredInput = requireDdbAndTableName(
+      input.ddb,
+      input.endpointsTableName,
+      "endpointsTableName",
+      backend.kind,
+    );
+    if (backend.kind === "dynamodb") {
+      return createProblemEndpointsRepository("dynamodb", {
+        ddb: requiredInput.ddb,
+        endpointsTableName: requiredInput.tableName,
+      });
+    }
+    const sql = await acquireSqlExecutor();
+    return new MirroredProblemEndpointsRepository(
+      createProblemEndpointsRepository("dynamodb", {
+        ddb: requiredInput.ddb,
+        endpointsTableName: requiredInput.tableName,
+      }),
+      createProblemEndpointsRepository(backend.dialect, { sql }),
+    );
+  }
+
   return {
     needsManualPrune: () => selectBackend(deps.env).kind === "pure",
     resolveRepositories: async (input) => {
@@ -342,6 +392,7 @@ export function createControlDataRuntime(deps: RuntimeDependencies): ControlData
     resolveNotificationsRepository,
     resolveFeatureFlagsRepository,
     resolveDeploymentsRepository,
+    resolveProblemEndpointsRepository,
   };
 }
 

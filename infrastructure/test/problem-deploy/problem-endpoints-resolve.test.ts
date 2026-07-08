@@ -20,8 +20,6 @@ const slot = (
 });
 
 const override = (slotName: string, url: string): EndpointOverrideItem => ({
-  PK: "TENANT#t#TEAM#tm#PROBLEM#p",
-  SK: `SLOT#${slotName}`,
   tenantId: "t",
   teamId: "tm",
   problemId: "p",

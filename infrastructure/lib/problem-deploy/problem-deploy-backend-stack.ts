@@ -280,8 +280,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   public readonly teamsTable?: Table;
   /** CompetitorAccounts table name is surfaced to ObservabilityStack metrics. */
   public readonly competitorAccountsTable: Table;
-  /** ProblemEndpoints table name is surfaced to ObservabilityStack metrics. */
-  public readonly problemEndpointsTable: Table;
+  /**
+   * ProblemEndpoints table name is surfaced to ObservabilityStack metrics.
+   *
+   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは本 table を
+   * **synth しない** (= `undefined`) — DynamoDB standing cost をゼロにする A5/B6 と同じ条件。
+   * `dynamodb` / `*-mirror` では従来どおり必ず存在する ({@link eventsTable} と同じ条件)。
+   */
+  public readonly problemEndpointsTable?: Table;
   /**
    * Issue #950 (ADR-020 Phase D): admin audit log table。 AdminConsoleInsightStack が
    * cross-stack read で audit UI に出すため公開する (= read-only)。
@@ -340,7 +346,12 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     const teams = pureSql ? undefined : new TeamsTable(this, "Teams");
     // ADR-012 Phase 3.A: Endpoint registry。per (tenant, team, problem, slot) で override
     // URL を保管する。default URL は read-through で deployment.stackOutputs から算出。
-    const endpoints = new ProblemEndpointsTable(this, "ProblemEndpoints");
+    //
+    // [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは Events/Teams/
+    // Deployments と同条件で **synth しない**。62 handler サイトが repository seam
+    // (`resolveProblemEndpointsRepository`) 経由で読み書きするため、pure SQL では本 table への
+    // 参照が残らない (壊れる参照は下記で個別に条件化)。
+    const endpoints = pureSql ? undefined : new ProblemEndpointsTable(this, "ProblemEndpoints");
     // ADR-011 #590: AdminConsoleInsightStack に cross-stack で渡すため expose する。
     this.deploymentsTable = deployments?.table;
     this.eventsTable = events?.table;
@@ -349,7 +360,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // 1 行 = 1 (tenantId, awsAccountId)。verified=false は deploy 不可。
     const competitorAccounts = new CompetitorAccountsTable(this, "CompetitorAccounts");
     this.competitorAccountsTable = competitorAccounts.table;
-    this.problemEndpointsTable = endpoints.table;
+    this.problemEndpointsTable = endpoints?.table;
     // Issue #888: Red Team Disruption Injection の audit log + idempotency
     const disruptions = new DisruptionsTable(this, "Disruptions");
     // Issue #950 (ADR-020 Phase D): admin 操作の append-only 監査ログ。 3 handler Lambda +
@@ -456,14 +467,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // `resolveEventHotTables`) と運用 doc (docs/operations/dynamodb-event-capacity.md) の表は
     // この並びと揃えること (増減時は 3 箇所同時に更新)。
     //
-    // Issue #2440 / #2441: 純 SQL backend では Events/Teams/Deployments が無いので runbook の
-    // allowedValues / IAM からも除外する (= filter で undefined を落とす。存在しない table を
-    // runbook 対象にしない)。
+    // Issue #2440 / #2441 / #2442: 純 SQL backend では Events/Teams/Deployments/ProblemEndpoints
+    // が無いので runbook の allowedValues / IAM からも除外する (= filter で undefined を落とす。
+    // 存在しない table を runbook 対象にしない)。
     const eventHotTables = [
       deployments?.table,
       events?.table,
       teams?.table,
-      endpoints.table,
+      endpoints?.table,
       disruptions.table,
     ].filter((t): t is Table => t !== undefined);
     const capacityRunbook = new EventCapacityRunbook(this, "EventCapacityRunbook", {
@@ -491,7 +502,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       disruptionsTable: disruptions.table,
       // Issue #2410 Slice 2: キャパ監視 (`GET /admin/capacity`) の event-hot 5 テーブル目 +
       // Slice 1 runbook の document 名 (UI が実行コマンド例を表示する)。
-      problemEndpointsTable: endpoints.table,
+      // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant/
+      // DescribeTable IAM を EventApiLambda 側で条件化)。
+      problemEndpointsTable: endpoints?.table,
       capacityRunbookDocumentName: capacityRunbook.documentName,
       problemsDisruptions: (props.problemsDisruptions ?? {}) as Readonly<
         Record<string, readonly unknown[]>
@@ -580,7 +593,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     const genericScoring = new GenericScoringLambda(this, "GenericScoring", {
       deploymentsTable: deployments?.table,
       eventsTable: events?.table,
-      endpointsTable: endpoints.table,
+      // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant を
+      // GenericScoringLambda 側で条件化。override 読み取りは repository seam 経由)。
+      endpointsTable: endpoints?.table,
       problemsScoring: props.problemsScoring,
       problemsEndpoints: props.problemsEndpoints,
       problemsPhases: props.problemsPhases ?? {},
@@ -632,7 +647,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       const portalSubsystem = buildParticipantPortalSubsystem(this, {
         deploymentsTable: deployments?.table,
         eventsTable: events?.table,
-        endpointsTable: endpoints.table,
+        // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant/IAM を
+        // ParticipantPortalLambda 側で条件化。override 読み書きは repository seam 経由)。
+        endpointsTable: endpoints?.table,
         problemsScoring: props.problemsScoring,
         problemsWriteups: props.problemsWriteups ?? {},
         problemsEndpoints: props.problemsEndpoints,
@@ -701,11 +718,15 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       value: this.deployCreateStateMachineArn,
       description: "Deploy 起動を司る Step Functions State Machine の ARN。",
     });
-    new CfnOutput(this, "ProblemEndpointsTableName", {
-      value: endpoints.table.tableName,
-      description:
-        "ADR-012 Phase 3.A Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
-    });
+    // Issue #2442: 純 SQL backend では table 自体が無いので output も作らない (存在しない
+    // 論理 ID を参照する CfnOutput は synth できない、Events/Teams/Deployments と同じ条件)。
+    if (endpoints) {
+      new CfnOutput(this, "ProblemEndpointsTableName", {
+        value: endpoints.table.tableName,
+        description:
+          "ADR-012 Phase 3.A Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
+      });
+    }
   }
 }
 

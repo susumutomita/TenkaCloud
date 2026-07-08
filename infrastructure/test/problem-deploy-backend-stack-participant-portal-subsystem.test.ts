@@ -395,4 +395,54 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
     },
     SYNTH_TIMEOUT_MS,
   );
+
+  it(
+    "should omit PROBLEM_ENDPOINTS_TABLE_NAME env + the EndpointsRW policy + the ProblemEndpoints table when the pure SQL backend is selected (#2442 Phase C1)",
+    async () => {
+      const tpl = await synthWithParticipantPortal(
+        {},
+        {
+          controlDataBackend: "turso",
+          tursoDatabaseUrl: "libsql://example.turso.io",
+          tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
+        },
+      );
+      expect(participantPortalEnv(tpl).PROBLEM_ENDPOINTS_TABLE_NAME).toBeUndefined();
+
+      const roles = tpl.findResources("AWS::IAM::Role");
+      const portalRole = Object.entries(roles).find(([name]) =>
+        name.includes("ParticipantPortalLambda"),
+      );
+      expect(portalRole).toBeDefined();
+      const policyNames = (
+        (portalRole?.[1] as { Properties?: { Policies?: Array<{ PolicyName?: string }> } })
+          ?.Properties?.Policies ?? []
+      ).map((p) => p.PolicyName);
+      expect(policyNames).not.toContain("EndpointsRW");
+
+      // No AWS::DynamoDB::Table logical id starting with ProblemEndpoints (pure SQL: no table synth).
+      const tableIds = Object.keys(tpl.findResources("AWS::DynamoDB::Table"));
+      expect(tableIds.some((id) => id.startsWith("ProblemEndpoints"))).toBe(false);
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should keep PROBLEM_ENDPOINTS_TABLE_NAME env + the EndpointsRW policy for the default dynamodb backend (byte-compat)",
+    async () => {
+      const tpl = await synthWithParticipantPortal({});
+      expect(participantPortalEnv(tpl).PROBLEM_ENDPOINTS_TABLE_NAME).toBeDefined();
+
+      const roles = tpl.findResources("AWS::IAM::Role");
+      const portalRole = Object.entries(roles).find(([name]) =>
+        name.includes("ParticipantPortalLambda"),
+      );
+      const policyNames = (
+        (portalRole?.[1] as { Properties?: { Policies?: Array<{ PolicyName?: string }> } })
+          ?.Properties?.Policies ?? []
+      ).map((p) => p.PolicyName);
+      expect(policyNames).toContain("EndpointsRW");
+    },
+    SYNTH_TIMEOUT_MS,
+  );
 });

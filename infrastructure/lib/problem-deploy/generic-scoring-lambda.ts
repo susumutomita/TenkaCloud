@@ -48,8 +48,13 @@ export interface GenericScoringLambdaProps {
    * ADR-012 Phase 3.A: Endpoint registry table (= ProblemEndpoints)。 dispatcher は
    * per (tenant, team, problem) で override 行を Query で引き、 effective URL (= override ?? default)
    * を probe する。
+   *
+   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
+   * grant も付与しない — override 読み取りは repository seam
+   * (`resolveProblemEndpointsRepository`) が SQL executor 直結で処理する。
    */
-  readonly endpointsTable: ITable;
+  readonly endpointsTable?: ITable;
   /**
    * `{ [problemId]: scoring }` 形の 5 種 builtin scoring 設定 (ADR-012 Phase 3.B)。
    * `scoring` field を持たない問題は不在キー (= 採点無効)。
@@ -160,7 +165,11 @@ export class GenericScoringLambda extends Construct {
         // Issue #2440: 純 SQL backend では table が無いので env も足さない (= cold start が
         // EVENTS_TABLE_NAME 不在でも通る。 shared builder 側の緩和と対で成立する)。
         ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
-        PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName,
+        // Issue #2442: 純 SQL backend では table が無いので env も足さない (= cold start が
+        // PROBLEM_ENDPOINTS_TABLE_NAME 不在でも通る。 shared builder 側の緩和と対で成立する)。
+        ...(props.endpointsTable
+          ? { PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName }
+          : {}),
         // #1422: condition-triggered disruption の publish 先 (手動 fire と同じ deploy bus)。
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
         // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler の credential path 構築用。
@@ -219,7 +228,8 @@ export class GenericScoringLambda extends Construct {
     // Issue #2440: 純 SQL backend では table 自体が無いので grant も付与しない。
     props.eventsTable?.grantReadWriteData(this.fn);
     // Endpoint registry: per (tenant, team, problem) の override 行を Query する (= read-only)。
-    props.endpointsTable.grantReadData(this.fn);
+    // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。
+    props.endpointsTable?.grantReadData(this.fn);
     // [ADR-033 / #1665] disruptions audit table: operator-fired disruption の active 採点効果を
     // event ごとに Query する (= read-only、 scoring-side effect の解決)。
     props.disruptionsTable.grantReadData(this.fn);
