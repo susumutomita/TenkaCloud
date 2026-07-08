@@ -1,11 +1,13 @@
-import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import type { EventRecord } from "../../control-data/events-repository.js";
+import type { TeamRecord } from "../../control-data/teams-repository.js";
 import {
   CHALLENGE_PREREQUISITE_GATE_FLAG,
   type ProgressionGateConfig,
 } from "../shared/progression-gate.js";
 import { getFeatureFlags } from "./feature-flags.js";
-import type { EventSharedResources } from "./shared.js";
-import type { EventItem, TeamItem } from "./types.js";
+import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
+import type { EventItem } from "./types.js";
 
 /**
  * Issue #2283: Progression Gate 設定の service 層。
@@ -44,37 +46,25 @@ export async function setProgressionGate(
   config: ProgressionGateConfig,
   nowMs: number,
 ): Promise<SetProgressionGateOutcome> {
-  // 3 read (tenant flag / event META / teams) は独立なので並列発火。
-  const [flags, eventOut, teamsOut] = await Promise.all([
+  // 3 read (tenant flag / event META / teams) は独立なので並列発火。 event 行と team 一覧は
+  // repository seam 経由 (getEvent が tenant scope + 404 判定を、 listTeamsByEvent が
+  // base-table query を担う)。 旧 teams query は ProjectionExpression=teamId だったが、
+  // validateAgainstEvent は teamId しか読まないので全属性取得でも挙動は不変。
+  const repositories = await resolveEventRepositories(shared);
+  const [flags, event, teamRecords] = await Promise.all([
     getFeatureFlags(shared, tenantId),
-    shared.ddb.send(
-      new GetCommand({
-        TableName: shared.eventsTableName,
-        Key: { PK: `EVENT#${eventId}`, SK: "META" },
-      }),
-    ),
-    shared.ddb.send(
-      new QueryCommand({
-        TableName: shared.teamsTableName,
-        KeyConditionExpression: "PK = :pk AND begins_with(SK, :tprefix)",
-        ExpressionAttributeValues: { ":pk": `EVENT#${eventId}`, ":tprefix": "TEAM#" },
-        ProjectionExpression: "teamId",
-      }),
-    ),
+    repositories.events.getEvent(tenantId, eventId),
+    repositories.teams.listTeamsByEvent(eventId),
   ]);
 
   // Flag OFF の tenant では設定自体を受け付けない (誤設定 → 有効化事故の予防)。
   if (flags[CHALLENGE_PREREQUISITE_GATE_FLAG] !== true) return { kind: "feature_disabled" };
 
-  const event = eventOut.Item as Partial<EventItem> | undefined;
-  if (!event || event.tenantId !== tenantId) return { kind: "not_found" };
+  // getEvent は tenant 不一致 / 不在をどちらも undefined に畳む (= 従来の手動照合を移設)。
+  if (!event) return { kind: "not_found" };
   if (event.status === "ARCHIVED") return { kind: "invalid", reason: "event_archived" };
 
-  const invalid = validateAgainstEvent(
-    config,
-    event,
-    (teamsOut.Items ?? []) as Partial<TeamItem>[],
-  );
+  const invalid = validateAgainstEvent(config, event, teamRecords);
   if (invalid) return { kind: "invalid", reason: invalid };
 
   try {
@@ -139,8 +129,8 @@ export async function removeProgressionGate(
 
 function validateAgainstEvent(
   config: ProgressionGateConfig,
-  event: Partial<EventItem>,
-  teams: readonly Partial<TeamItem>[],
+  event: EventRecord,
+  teams: readonly TeamRecord[],
 ): ProgressionGateInvalidReason | undefined {
   const problemIds = new Set(
     (Array.isArray(event.problems) ? event.problems : []).map((p) => p.problemId),

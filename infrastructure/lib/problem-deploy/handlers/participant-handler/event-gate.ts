@@ -1,4 +1,4 @@
-import { GetCommand } from "@aws-sdk/lib-dynamodb";
+import { createEventsRepository } from "../../control-data/events-repository.js";
 import { type ProgressionGateConfig, parseProgressionGate } from "../shared/progression-gate.js";
 import type { ParticipantSharedResources } from "./shared.js";
 
@@ -42,42 +42,45 @@ export interface EventGate {
 
 /**
  * Event 行の gate fields (scoringLocked / startsAt / endsAt / status / scoreboardFreezeMinutes)
- * を 1 GetItem で取得。 不在 / DDB error は fail-closed (= undefined 返却、 evaluateGate 側で
- * scoring_not_started に変換) で安全側に倒す。
+ * を repository seam の point read で取得。 不在 / DDB error は fail-closed (= undefined 返却、
+ * evaluateGate 側で scoring_not_started に変換) で安全側に倒す。
+ *
+ * [ADR-049 §5.1] `tenantId` は競技者の deployment 行 (= その team の tenant) から導出して渡す。
+ * 競技者が参照する eventId は常に自 tenant の event なので `getEvent(tenantId, eventId)` は
+ * 従来の tenant-agnostic Get と同じ event を返す。 tenant 不一致 (= 別 tenant の eventId、
+ * 実運用では発生しない) は undefined に畳まれ、 本モジュールの fail-closed 契約に沿って
+ * scoring_not_started に倒れる。 tenantId が導出不能な旧行は fail-closed で安全側。
+ *
+ * 旧実装は ProjectionExpression で gate fields のみ読んでいたが、 getEvent は全属性を読む。
+ * 読む属性が増えるだけで挙動は不変 (1/1 PROVISIONED では RCU 増も非問題)。 default backend
+ * (`CONTROL_DATA_BACKEND` 未設定 = `dynamodb`) では従来と byte 互換の GetCommand を
+ * `shared.ddb` 経由で発火する。 participant Lambda は Teams table 配線を持たないため events
+ * repository のみ構築する (getEvent は teamsTableName を必要としない)。
  */
 export async function getEventGate(
   shared: ParticipantSharedResources,
+  tenantId: string | undefined,
   eventId: string,
 ): Promise<EventGate | undefined> {
+  // tenantId が導出できない (= identity を持つ live deployment 行が無い) 場合は fail-closed。
+  if (!tenantId) return undefined;
   try {
-    const out = await shared.ddb.send(
-      new GetCommand({
-        TableName: shared.eventsTableName,
-        Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        ProjectionExpression:
-          "scoringLocked, startsAt, endsAt, #s, scoreboardFreezeMinutes, progressionGate",
-        ExpressionAttributeNames: { "#s": "status" },
-      }),
-    );
-    const item = out.Item as
-      | {
-          scoringLocked?: boolean;
-          startsAt?: string;
-          endsAt?: string;
-          status?: string;
-          scoreboardFreezeMinutes?: number;
-          progressionGate?: unknown;
-        }
-      | undefined;
-    if (!item) return undefined;
+    const events = createEventsRepository(process.env.CONTROL_DATA_BACKEND, {
+      ddb: shared.ddb,
+      eventsTableName: shared.eventsTableName,
+    });
+    const event = await events.getEvent(tenantId, eventId);
+    if (!event) return undefined;
     return {
-      scoringLocked: item.scoringLocked === true,
-      startsAt: item.startsAt,
-      endsAt: item.endsAt,
-      status: item.status,
+      scoringLocked: event.scoringLocked === true,
+      startsAt: event.startsAt,
+      endsAt: event.endsAt,
+      status: event.status,
       scoreboardFreezeMinutes:
-        typeof item.scoreboardFreezeMinutes === "number" ? item.scoreboardFreezeMinutes : undefined,
-      progressionGate: parseProgressionGate(item.progressionGate),
+        typeof event.scoreboardFreezeMinutes === "number"
+          ? event.scoreboardFreezeMinutes
+          : undefined,
+      progressionGate: parseProgressionGate(event.progressionGate),
     };
   } catch (err) {
     console.warn("[event-gate] getEventGate failed", {

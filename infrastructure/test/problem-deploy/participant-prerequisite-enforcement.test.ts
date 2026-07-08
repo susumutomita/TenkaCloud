@@ -98,8 +98,11 @@ function buildScenario(opts: ScenarioOpts = {}) {
         Item: { flags: { challengePrerequisiteGate: opts.flagEnabled !== false } },
       });
     }
+    // #2436: getEventGate は repository seam (events.getEvent) 経由になり team の tenantId で
+    // event 行を tenant scope する。 event META 行に deployment 行と同じ tenantId を持たせて通過させる。
     return Promise.resolve({
       Item: {
+        tenantId: "tenant-test",
         status: "READY",
         startsAt: "2020-01-01T00:00:00.000Z",
         ...(opts.gateStored !== false ? { progressionGate: gateConfig } : {}),

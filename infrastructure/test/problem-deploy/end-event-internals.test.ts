@@ -8,7 +8,12 @@ import type { EventSharedResources } from "../../lib/problem-deploy/handlers/eve
  * denormalize の CCF skip / 非 CCF throw / PK filter を pin する。
  */
 const mocks = vi.hoisted(() => ({ queryDeploymentsByEvent: vi.fn() }));
-vi.mock("../../lib/problem-deploy/handlers/event-handler/shared", () => ({
+// queryDeploymentsByEvent だけ差し替え、 resolveEventRepositories は実装を保つ (= CCF probe が
+// repository seam 経由で fake `shared.ddb` の GetCommand を発火し、 cfg.probeItem を読む)。
+vi.mock("../../lib/problem-deploy/handlers/event-handler/shared", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("../../lib/problem-deploy/handlers/event-handler/shared")
+  >()),
   queryDeploymentsByEvent: mocks.queryDeploymentsByEvent,
 }));
 

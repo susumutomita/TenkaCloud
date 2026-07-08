@@ -1,9 +1,10 @@
+import type { TeamRecord } from "../../../control-data/teams-repository.js";
 import {
   resolveVerifiedCompetitorAccount,
   type VerifiedCompetitorAccount,
 } from "../../shared/competitor-account-lookup.js";
 import type { EventSharedResources } from "../shared.js";
-import type { EventProblemTarget, TeamItem } from "../types.js";
+import type { EventProblemTarget } from "../types.js";
 
 /**
  * teams × problems から候補 awsAccountId を抽出し、 CompetitorAccounts table を引いて
@@ -15,7 +16,7 @@ import type { EventProblemTarget, TeamItem } from "../types.js";
 export async function resolveBulkVerifiedAccounts(
   shared: EventSharedResources,
   tenantId: string,
-  teams: readonly TeamItem[],
+  teams: readonly TeamRecord[],
   problems: readonly EventProblemTarget[],
 ): Promise<Map<string, VerifiedCompetitorAccount>> {
   const accountIds = candidateBulkAccountIds(teams, problems);
@@ -38,7 +39,7 @@ export async function resolveBulkVerifiedAccounts(
 }
 
 function candidateBulkAccountIds(
-  teams: readonly TeamItem[],
+  teams: readonly TeamRecord[],
   problems: readonly EventProblemTarget[],
 ): Set<string> {
   const ids = new Set<string>();

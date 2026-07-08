@@ -1,6 +1,11 @@
-import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import type { EventRecord } from "../../control-data/events-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
-import { type EventSharedResources, queryDeploymentsByEvent } from "./shared.js";
+import {
+  type EventSharedResources,
+  queryDeploymentsByEvent,
+  resolveEventsRepository,
+} from "./shared.js";
 import type { EventItem } from "./types.js";
 
 /**
@@ -94,8 +99,8 @@ export async function setEventSchedule(
   const validation = validateScheduleParams(params);
   if (validation) return validation;
 
-  const currentEvent = await getCurrentSchedule(shared, eventId);
-  if (!currentEvent || currentEvent.tenantId !== tenantId) return { kind: "not_found" };
+  const currentEvent = await getCurrentSchedule(shared, tenantId, eventId);
+  if (!currentEvent) return { kind: "not_found" };
 
   const effectiveStartsAt = startsAt ?? currentEvent.startsAt;
   const effectiveEndsAt = endsAt ?? currentEvent.endsAt;
@@ -214,20 +219,13 @@ function validateScheduleOrder(
 
 async function getCurrentSchedule(
   shared: EventSharedResources,
+  tenantId: string,
   eventId: string,
-): Promise<
-  Pick<EventItem, "tenantId" | "startsAt" | "endsAt" | "teardownAt" | "deployAt"> | undefined
-> {
-  const currentOut = await shared.ddb.send(
-    new GetCommand({
-      TableName: shared.eventsTableName,
-      Key: { PK: `EVENT#${eventId}`, SK: "META" },
-      ProjectionExpression: "tenantId, startsAt, endsAt, teardownAt, deployAt",
-    }),
-  );
-  return currentOut.Item as
-    | Pick<EventItem, "tenantId" | "startsAt" | "endsAt" | "teardownAt" | "deployAt">
-    | undefined;
+): Promise<EventRecord | undefined> {
+  // getEvent は tenant scope + 404 判定を内包する (= 従来の Get + `tenantId` 手動照合と等価)。
+  // 旧実装は ProjectionExpression で startsAt / endsAt / teardownAt / deployAt に絞っていたが、
+  // 属性を全部読むだけで挙動は不変 (1/1 PROVISIONED では RCU 増も非問題)。
+  return resolveEventsRepository(shared).getEvent(tenantId, eventId);
 }
 
 interface ScheduleUpdate {

@@ -6,6 +6,18 @@ import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
 import type { EffectiveCatalogProvenance } from "../../../problem-pack/effective-catalog.js";
 import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
+import {
+  createEventsRepository,
+  type EventsRepository,
+} from "../../control-data/events-repository.js";
+import {
+  type ControlDataRepositories,
+  resolveControlDataRepositories,
+} from "../../control-data/runtime-repositories.js";
+import {
+  createTeamsRepository,
+  type TeamsRepository,
+} from "../../control-data/teams-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
 
@@ -191,6 +203,62 @@ export function buildScheduledDeployResources(): EventSharedResources | undefine
     bulkDeployPayloadBucket: "",
     useBulkDistributedMap: false,
   };
+}
+
+/**
+ * [ADR-049 §5.1] Events **かつ** Teams aggregate を読む handler 向けの repository seam。
+ *
+ * `event-handler/list.ts` の `getEventDetail` と同型 (= 同じ `shared.ddb` / table 名を渡す)。
+ * default backend (`CONTROL_DATA_BACKEND` 未設定 = `dynamodb`) では従来と byte 互換の
+ * GetCommand / QueryCommand を `shared.ddb` 経由で発火するので CFn 差分ゼロ。 cold-start の
+ * client / token cache は resolver 内蔵 (`runtime-repositories.ts`)。 Events META の point read は
+ * `repositories.events.getEvent(tenantId, eventId)` (= tenant scope + 404 判定を内包)、 event 配下
+ * team 一覧は `repositories.teams.listTeamsByEvent(eventId)` を使う。
+ *
+ * teams repo も構築するため `teamsTableName` が必須 — Teams を読む handler
+ * (list / progression-gate / disruption fire / bulk-deploy) 専用。 Events のみ読む handler
+ * (= scheduled teardown 経路で `teamsTableName` が空になりうる bulk-teardown 等) は
+ * {@link resolveEventsRepository} を使うこと。
+ */
+export function resolveEventRepositories(
+  shared: EventSharedResources,
+): Promise<ControlDataRepositories> {
+  return resolveControlDataRepositories({
+    ddb: shared.ddb,
+    eventsTableName: shared.eventsTableName,
+    teamsTableName: shared.teamsTableName,
+  });
+}
+
+/**
+ * [ADR-049 §5.1] Events aggregate **のみ** を読む handler 向けの events-only seam。
+ *
+ * Teams repo を構築しない (= `teamsTableName` を要求しない) ため、 scheduled teardown 経路
+ * (`buildScheduledTeardownResources` は `teamsTableName` を空にする) から呼ばれる bulk-teardown
+ * のような Events-only reader でも安全に使える。 default backend では従来と byte 互換の
+ * GetCommand を `shared.ddb` 経由で発火する。 point read は
+ * `resolveEventsRepository(shared).getEvent(tenantId, eventId)` (= tenant scope + 404 判定を内包)。
+ */
+export function resolveEventsRepository(shared: EventSharedResources): EventsRepository {
+  return createEventsRepository(process.env.CONTROL_DATA_BACKEND, {
+    ddb: shared.ddb,
+    eventsTableName: shared.eventsTableName,
+  });
+}
+
+/**
+ * [ADR-049 §5.1] Teams aggregate **のみ** を読む handler 向けの teams-only seam (events-only の鏡像)。
+ *
+ * Events repo を構築しない (= `eventsTableName` を要求しない) ため、 Events table を参照しない
+ * teams reader (= disruption fire の scope 解決) が余分な env 依存なしで使える。 default backend
+ * では従来と byte 互換の QueryCommand (`PK = EVENT#<eventId> AND begins_with(SK, "TEAM#")`) を
+ * `shared.ddb` 経由で発火し、 teamId 昇順の {@link TeamRecord}[] を返す。
+ */
+export function resolveTeamsRepository(shared: EventSharedResources): TeamsRepository {
+  return createTeamsRepository(process.env.CONTROL_DATA_BACKEND, {
+    ddb: shared.ddb,
+    teamsTableName: shared.teamsTableName,
+  });
 }
 
 function parseProblemsDisruptions(

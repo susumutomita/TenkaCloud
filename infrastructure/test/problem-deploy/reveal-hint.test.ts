@@ -331,7 +331,11 @@ describe("revealHint (#742 Phase 3)", () => {
 
   // ---- Issue #1005 / scoring gate (= submit-flag と同じ gate を hint reveal でも通す) ----
   describe("competition scoring gate (Issue #1005)", () => {
-    const eventRow = sampleRow({ eventId: "EVT1", score: 0 });
+    // #2436: getEventGate は repository seam (events.getEvent) 経由になり team の tenantId で
+    // event 行を tenant scope する。 team の deployment 行 (findIdentitySample が読む) と event META
+    // 行の両方に同じ tenantId を持たせる (= 実データと同じ、 seam の tenant 照合を通過)。
+    const TENANT = "tenant-acme";
+    const eventRow = sampleRow({ eventId: "EVT1", score: 0, tenantId: TENANT });
 
     it("should fail-closed with scoring_not_started and not call UpdateItem when the Event row is missing", async () => {
       const { shared, ddbSend } = buildShared();
@@ -347,7 +351,9 @@ describe("revealHint (#742 Phase 3)", () => {
       const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       const { shared, ddbSend } = buildShared();
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
-      ddbSend.mockResolvedValueOnce({ Item: { status: "READY", startsAt: future } });
+      ddbSend.mockResolvedValueOnce({
+        Item: { tenantId: TENANT, status: "READY", startsAt: future },
+      });
       const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
       expect(out).toEqual({ kind: "scoring_not_started", startsAt: future });
     });
@@ -358,7 +364,7 @@ describe("revealHint (#742 Phase 3)", () => {
       const { shared, ddbSend } = buildShared();
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
       ddbSend.mockResolvedValueOnce({
-        Item: { status: "READY", startsAt: before, endsAt: past },
+        Item: { tenantId: TENANT, status: "READY", startsAt: before, endsAt: past },
       });
       const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
       expect(out).toEqual({ kind: "scoring_ended", endsAt: past });
@@ -368,7 +374,9 @@ describe("revealHint (#742 Phase 3)", () => {
       const before = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       const { shared, ddbSend } = buildShared();
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
-      ddbSend.mockResolvedValueOnce({ Item: { status: "ENDED", startsAt: before } });
+      ddbSend.mockResolvedValueOnce({
+        Item: { tenantId: TENANT, status: "ENDED", startsAt: before },
+      });
       const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
       expect(out.kind).toBe("scoring_ended");
     });
@@ -378,7 +386,7 @@ describe("revealHint (#742 Phase 3)", () => {
       const { shared, ddbSend } = buildShared();
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
       ddbSend.mockResolvedValueOnce({
-        Item: { status: "READY", startsAt: before, scoringLocked: true },
+        Item: { tenantId: TENANT, status: "READY", startsAt: before, scoringLocked: true },
       });
       const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");
       expect(out.kind).toBe("scoring_locked");
@@ -390,7 +398,7 @@ describe("revealHint (#742 Phase 3)", () => {
       const { shared, ddbSend } = buildShared();
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
       ddbSend.mockResolvedValueOnce({
-        Item: { status: "READY", startsAt: before, endsAt: future },
+        Item: { tenantId: TENANT, status: "READY", startsAt: before, endsAt: future },
       });
       ddbSend.mockResolvedValueOnce({ Attributes: { score: -10 } });
       const out = await revealHint(shared, buildScoringMap(), TEAM_KEY, "hello-world", "hint-1");

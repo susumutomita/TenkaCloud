@@ -143,7 +143,8 @@ export async function getPrerequisiteBlockByEventId(
   eventId: string | undefined,
 ): Promise<PrerequisiteBlock | undefined> {
   if (typeof eventId !== "string" || eventId.length === 0) return undefined;
-  const gate = await getEventGate(shared, eventId);
+  // tenantId は team の deployment 行 (= 自 tenant) から導出して seam の tenant scope に渡す。
+  const gate = await getEventGate(shared, findIdentitySample(items)?.tenantId, eventId);
   return getPrerequisiteBlock(shared, items, targetProblemId, gate);
 }
 
@@ -158,7 +159,9 @@ export async function getCompetitionAccessBlock(
   item: Partial<DeploymentItem> & { problemId: string },
 ): Promise<GateBlock | PrerequisiteBlock | undefined> {
   if (typeof item.eventId !== "string" || item.eventId.length === 0) return undefined;
-  const gate = await getEventGate(shared, item.eventId);
+  // 対象 deployment 行の tenantId (= 自 tenant) を seam の tenant scope に渡す。
+  const tenantId = item.tenantId ?? findIdentitySample(items)?.tenantId;
+  const gate = await getEventGate(shared, tenantId, item.eventId);
   const blocked = evaluateGate(gate, Date.now());
   if (blocked) return blocked;
   return getPrerequisiteBlock(shared, items, item.problemId, gate);
@@ -227,7 +230,8 @@ export async function decorateTeamView(
   const eventId = view.team.eventId;
   if (!eventId) return { ...view, eventGate: { kind: "scoring_not_started" } };
 
-  const gate = await getEventGate(shared, eventId);
+  // tenantId は team の deployment 行 (= 自 tenant) から導出して seam の tenant scope に渡す。
+  const gate = await getEventGate(shared, findIdentitySample(items)?.tenantId, eventId);
   const block = evaluateGate(gate, Date.now());
   // locked 問題は stackOutputs を空にして返す (= lock 中に接続情報を見て先行着手できない
   // 防御層。 unlock 後の再取得で埋まる)。

@@ -1,5 +1,5 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { EventSharedResources } from "./shared.js";
+import { type EventSharedResources, resolveEventsRepository } from "./shared.js";
 import type { EventItem } from "./types.js";
 
 /**
@@ -130,18 +130,13 @@ async function resolveLockFailure(
   eventId: string,
   targetLock: boolean,
 ): Promise<LockScoringOutcome> {
-  const { GetCommand } = await import("@aws-sdk/lib-dynamodb");
-  const probe = await shared.ddb.send(
-    new GetCommand({
-      TableName: shared.eventsTableName,
-      Key: { PK: `EVENT#${eventId}`, SK: "META" },
-    }),
-  );
-  const item = probe.Item as Partial<EventItem> | undefined;
-  if (!item || item.tenantId !== tenantId) return { kind: "not_found" };
-  const status = typeof item.status === "string" ? item.status : "?";
+  // getEvent は tenant 不一致 / 行不在をどちらも undefined に畳む (= 従来の
+  // `!item || item.tenantId !== tenantId` を repository 内へ移設)。
+  const event = await resolveEventsRepository(shared).getEvent(tenantId, eventId);
+  if (!event) return { kind: "not_found" };
+  const status = typeof event.status === "string" ? event.status : "?";
   if (!LOCKABLE_STATUSES.has(status)) return { kind: "not_lockable", status };
-  const current = item.scoringLocked === true;
+  const current = event.scoringLocked === true;
   if (current === targetLock) return { kind: "already", scoringLocked: current };
   return { kind: "not_lockable", status };
 }

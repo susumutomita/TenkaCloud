@@ -240,6 +240,10 @@ describe("submitFlag", () => {
   // 提出を加点経路に通さない。
   describe("competition scoring gate (Issue #13)", () => {
     const eventRow = sampleRow({ eventId: "EVT1", score: 0 });
+    // #2436: getEventGate は repository seam (events.getEvent) 経由になり team の tenantId で
+    // event 行を tenant scope する。 実 event META 行は必ず tenantId を持つので fixture にも付与
+    // (team の deployment 行 = sampleRow の tenantId "tenant-acme" と一致させる)。
+    const TENANT = "tenant-acme";
 
     it("should fail-closed with scoring_not_started when the Event row is missing", async () => {
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
@@ -256,7 +260,7 @@ describe("submitFlag", () => {
 
     it("should return scoring_not_started when startsAt is unset (READY but time unspecified)", async () => {
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
-      ddbSend.mockResolvedValueOnce({ Item: { status: "READY" } });
+      ddbSend.mockResolvedValueOnce({ Item: { tenantId: TENANT, status: "READY" } });
       const out = await submitFlag(
         shared,
         flagScoring,
@@ -270,7 +274,9 @@ describe("submitFlag", () => {
     it("should return scoring_not_started with startsAt when now < startsAt", async () => {
       const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
-      ddbSend.mockResolvedValueOnce({ Item: { status: "READY", startsAt: future } });
+      ddbSend.mockResolvedValueOnce({
+        Item: { tenantId: TENANT, status: "READY", startsAt: future },
+      });
       const out = await submitFlag(
         shared,
         flagScoring,
@@ -286,7 +292,7 @@ describe("submitFlag", () => {
       const before = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
       ddbSend.mockResolvedValueOnce({
-        Item: { status: "READY", startsAt: before, endsAt: past },
+        Item: { tenantId: TENANT, status: "READY", startsAt: before, endsAt: past },
       });
       const out = await submitFlag(
         shared,
@@ -301,7 +307,9 @@ describe("submitFlag", () => {
     it("should return scoring_ended when status=ENDED, even if startsAt is set", async () => {
       const before = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
-      ddbSend.mockResolvedValueOnce({ Item: { status: "ENDED", startsAt: before } });
+      ddbSend.mockResolvedValueOnce({
+        Item: { tenantId: TENANT, status: "ENDED", startsAt: before },
+      });
       const out = await submitFlag(
         shared,
         flagScoring,
@@ -317,7 +325,7 @@ describe("submitFlag", () => {
       const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
       ddbSend.mockResolvedValueOnce({
-        Item: { status: "READY", startsAt: before, endsAt: future },
+        Item: { tenantId: TENANT, status: "READY", startsAt: before, endsAt: future },
       });
       ddbSend.mockResolvedValueOnce({ Attributes: { score: 100 } });
       const out = await submitFlag(
@@ -334,7 +342,7 @@ describe("submitFlag", () => {
       const before = new Date(Date.now() - 60 * 60 * 1000).toISOString();
       ddbSend.mockResolvedValueOnce({ Items: [eventRow] });
       ddbSend.mockResolvedValueOnce({
-        Item: { status: "READY", startsAt: before, scoringLocked: true },
+        Item: { tenantId: TENANT, status: "READY", startsAt: before, scoringLocked: true },
       });
       const out = await submitFlag(
         shared,
