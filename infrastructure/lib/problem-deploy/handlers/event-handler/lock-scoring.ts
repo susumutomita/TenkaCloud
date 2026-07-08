@@ -45,8 +45,9 @@ export async function lockScoring(
 
   const repositories = await resolveEventRepositories(shared);
   const result = await repositories.events.lockScoring(tenantId, eventId, lockedBy, now);
+  // updated: 成功判定は outcome 自身が担う (post-image 無しの degenerate 応答は
+  // repository 層が not_found に畳み済み)。
   if (result.outcome === "updated") {
-    if (!result.event) return { kind: "not_found" };
     return { kind: "ok", scoringLocked: true, scoringLockedAt: now };
   }
   if (result.outcome === "not_found") return { kind: "not_found" };
@@ -70,7 +71,6 @@ export async function unlockScoring(
   const repositories = await resolveEventRepositories(shared);
   const result = await repositories.events.unlockScoring(tenantId, eventId, now);
   if (result.outcome === "updated") {
-    if (!result.event) return { kind: "not_found" };
     return { kind: "ok", scoringLocked: false };
   }
   if (result.outcome === "not_found") return { kind: "not_found" };

@@ -181,6 +181,20 @@ describe("createEvent", () => {
     expect(eventItem?.GSI1SK).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  it("should surface a TransactWrite conflict as a loud error (500 path)", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockRejectedValueOnce(
+      Object.assign(new Error("Transaction cancelled"), {
+        name: "TransactionCanceledException",
+        CancellationReasons: [{ Code: "ConditionalCheckFailed" }],
+      }),
+    );
+
+    await expect(
+      createEvent(shared, { tenantId: "tenant-acme", nowMs: NOW_MS }, sampleRequest()),
+    ).rejects.toThrow(/createEventWithTeams conflict/);
+  });
+
   it("should prevent double creation on the same PK via ConditionExpression (defense in depth)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({});

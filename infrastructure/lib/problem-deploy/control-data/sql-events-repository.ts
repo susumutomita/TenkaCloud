@@ -412,14 +412,21 @@ export class SqlEventsRepository implements EventsRepository {
 /**
  * SQLite dialect uniqueness-violation detector, covering both drivers we run
  * on: `node:sqlite` ("UNIQUE constraint failed: …") and `@libsql/client`
- * (`LibsqlError` with a `SQLITE_CONSTRAINT_PRIMARYKEY` / `_UNIQUE` code and the
- * same message text). Deliberately narrow: only PRIMARY KEY / UNIQUE violations
- * convert to `conflict` — other constraint classes (NOT NULL / CHECK / FK)
- * signal a data bug and must keep failing loudly.
+ * (`LibsqlError` carries `code = "SQLITE_CONSTRAINT"` with the specific
+ * `SQLITE_CONSTRAINT_PRIMARYKEY` / `_UNIQUE` value on `extendedCode`).
+ * Deliberately narrow: only PRIMARY KEY / UNIQUE violations convert to
+ * `conflict` — other constraint classes (NOT NULL / CHECK / FK) signal a data
+ * bug and must keep failing loudly.
  */
 function isUniqueConstraintViolation(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
-  const code = (err as { code?: unknown }).code;
-  if (code === "SQLITE_CONSTRAINT_PRIMARYKEY" || code === "SQLITE_CONSTRAINT_UNIQUE") return true;
+  const { code, extendedCode } = err as { code?: unknown; extendedCode?: unknown };
+  if (
+    [code, extendedCode].some(
+      (value) => value === "SQLITE_CONSTRAINT_PRIMARYKEY" || value === "SQLITE_CONSTRAINT_UNIQUE",
+    )
+  ) {
+    return true;
+  }
   return err.message.includes("UNIQUE constraint failed");
 }

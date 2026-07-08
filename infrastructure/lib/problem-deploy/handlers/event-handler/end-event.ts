@@ -57,7 +57,8 @@ export async function endEvent(
       status: typeof result.event?.status === "string" ? result.event.status : "?",
     };
   }
-  if (!result.event) return { kind: "not_found" };
+  // updated: 成功判定は outcome 自身が担う。 post-image 無しの degenerate 応答
+  // (ALL_NEW が Attributes を返さない) は repository 層が not_found に畳み済み。
 
   const deploymentsOut = await queryDeploymentsByEvent(shared, tenantId, eventId, "PK");
   const targets = deploymentsOut

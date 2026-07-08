@@ -261,6 +261,24 @@ describe("MirroredEventsRepository conditional writes (#2437)", () => {
     expect(replicaConflictCreate).not.toHaveBeenCalled();
   });
 
+  it("should mirror lockScoring / markTeardown to the replica after a canonical success", async () => {
+    const replicaLock = vi.fn(async () => ({ outcome: "updated" as const }));
+    const replicaTeardown = vi.fn(async () => ({ outcome: "updated" as const }));
+    const repository = new MirroredEventsRepository(
+      stubEvents({
+        lockScoring: vi.fn(async () => ({ outcome: "updated" as const, event: event() })),
+        markTeardown: vi.fn(async () => ({ outcome: "updated" as const })),
+      }),
+      stubEvents({ lockScoring: replicaLock, markTeardown: replicaTeardown }),
+    );
+
+    await repository.lockScoring("tenant-1", "event-1", "sub", AT);
+    await repository.markTeardown("tenant-1", "event-1", AT);
+
+    expect(replicaLock).toHaveBeenCalledWith("tenant-1", "event-1", "sub", AT);
+    expect(replicaTeardown).toHaveBeenCalledWith("tenant-1", "event-1", AT);
+  });
+
   it("should mirror the remaining conditional writes with the same arguments", async () => {
     const gate = { gateProblemId: "p1", unlockTargetIds: ["p2"] };
     const patch = { endsAt: "2026-07-09T00:00:00.000Z" };
