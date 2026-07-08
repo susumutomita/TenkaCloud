@@ -183,27 +183,17 @@ export function resolveProblemTitle(problem: ParticipantProblemView): string {
 }
 
 /**
- * #2473: description が非空なら問題文セクションを描画する。 instructions は
- * 問題情報 (`ProblemInfoSection` / `ProblemDetail.tsx`) 側に一本化済みで、ここでは
- * 描画しない (= 二重表示の解消)。 instructions のみ非空・description 空のときは
- * 空セクションを出さないよう、判定も description のみに絞る。
- */
-export function hasProblemStatement(problem: ParticipantProblemView): boolean {
-  return Boolean(problem.description?.trim());
-}
-
-/**
  * #1975 / #2473: 問題文 (description) を Markdown で描画する。
  *
- * instructions は問題情報側にのみ出す (このセクションでの重複表示をやめた)。 description は
- * `ProblemDetail` の `narrative.instructions` と同じ安全経路 (`@tenkacloud/web-kit` の
- * `Markdown` = marked → DOMPurify sanitize) で描画するので、 `## 見出し` 等が正しく描画され、
- * XSS 面も増えない。
+ * instructions は問題情報 (`ProblemInfoSection` / `ProblemDetail.tsx`) 側に一本化済みで、
+ * ここでは描画しない (= 二重表示の解消)。 description は `ProblemDetail` の
+ * `narrative.instructions` と同じ安全経路 (`@tenkacloud/web-kit` の `Markdown` = marked →
+ * DOMPurify sanitize) で描画するので、 `## 見出し` 等が正しく描画され、 XSS 面も増えない。
+ * description が空 (instructions のみ) のときは空セクションを出さない。
  */
 function ProblemStatement({ problem, t }: { problem: ParticipantProblemView; t: ProblemPanelT }) {
-  // Inline (not `hasProblemStatement(problem)`) so TS narrows `problem.description` to
-  // `string` here without an unreachable `?? ""` fallback branch — same gate condition,
-  // same semantics as `hasProblemStatement`, just expressed so the type checker can see it.
+  // `?.trim()` の真偽で TS が `problem.description` を `string` に narrow するので、 Markdown
+  // source に不到達な `?? ""` fallback branch を作らずに済む。
   if (!problem.description?.trim()) return null;
   return (
     <Container header={<Header variant="h3">{t("problem_panel.statement_heading")}</Header>}>

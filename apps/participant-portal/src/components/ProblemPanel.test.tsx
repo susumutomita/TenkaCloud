@@ -14,7 +14,6 @@ import {
   describeProblemKind,
   getCompleteFlagScoring,
   getCompleteMultiFlagScoring,
-  hasProblemStatement,
   isHttpUrlOutput,
   isStaleProblem,
   isUptimeScoring,
@@ -314,17 +313,6 @@ describe("ProblemPanel pure helpers", () => {
     // problemId fallback: undefined name and blank/whitespace name.
     expect(resolveProblemTitle(p({ name: undefined }))).toBe("hello-world");
     expect(resolveProblemTitle(p({ name: "   " }))).toBe("hello-world");
-  });
-
-  it("should detect a problem statement only when description is non-empty (#2473: instructions alone does not count)", () => {
-    const p = (over: Partial<ParticipantProblemView>) => ({ ...baseProblem, ...over });
-    expect(hasProblemStatement(p({}))).toBe(false);
-    expect(hasProblemStatement(p({ description: "", instructions: "" }))).toBe(false);
-    expect(hasProblemStatement(p({ description: "  " }))).toBe(false);
-    expect(hasProblemStatement(p({ description: "Solve it" }))).toBe(true);
-    // instructions now renders only in 問題情報 (ProblemInfoSection); alone it must not
-    // trigger the 問題内容 section here (would otherwise render an empty container).
-    expect(hasProblemStatement(p({ instructions: "Do A then B" }))).toBe(false);
   });
 });
 
