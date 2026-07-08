@@ -8,9 +8,6 @@
     "readCapacity": "${DYNAMODB_READ_CAPACITY:-1}",
     "writeCapacity": "${DYNAMODB_WRITE_CAPACITY:-1}"
   },
-  "kmsConfig": {
-    "pendingWindowInDays": "${KMS_PENDING_WINDOW_DAYS:-7}"
-  },
   "sourceBundleConfig": {
     "keepNoncurrentVersions": "${SOURCE_BUNDLE_KEEP_VERSIONS:-5}",
     "expireAfterDays": "${SOURCE_BUNDLE_EXPIRE_DAYS:-1}"

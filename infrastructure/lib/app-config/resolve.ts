@@ -240,9 +240,7 @@ function resolveDynamoConfig(
     isDynamoProvisioned: dynamoBillingMode === BillingMode.PROVISIONED,
     dynamoReadCapacity: Number(env.CDK_PARAM_DYNAMODB_READ_CAPACITY || ddb?.readCapacity || 1),
     dynamoWriteCapacity: Number(env.CDK_PARAM_DYNAMODB_WRITE_CAPACITY || ddb?.writeCapacity || 1),
-    kmsPendingWindowInDays: Number(
-      env.CDK_PARAM_KMS_PENDING_WINDOW_DAYS || config?.kmsConfig?.pendingWindowInDays || 7,
-    ),
+    kmsPendingWindowInDays: Number(env.CDK_PARAM_KMS_PENDING_WINDOW_DAYS || 7),
   };
 }
 

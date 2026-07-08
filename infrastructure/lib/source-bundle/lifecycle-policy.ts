@@ -8,8 +8,8 @@ import type { SourceBundleConfig } from "../config/config-interface.js";
  * は `expireAfterDays` 日経過で expire させる。
  *
  * 設定値は `infrastructure/environments/<env>/config.json` の `sourceBundleConfig` に住む。
- * placeholder 展開後 string で来ることがあるため `Number()` で正規化する (= dynamoDbConfig /
- * kmsConfig と同パターン)。 未指定 (= undefined) 時は default 5 / 1 を使う。
+ * placeholder 展開後 string で来ることがあるため `Number()` で正規化する (= dynamoDbConfig
+ * と同パターン)。 未指定 (= undefined) 時は default 5 / 1 を使う。
  */
 const DEFAULT_KEEP_NONCURRENT_VERSIONS = 5;
 const DEFAULT_EXPIRE_AFTER_DAYS = 1;

@@ -102,25 +102,6 @@
       },
       "additionalProperties": false
     },
-    "kmsConfig": {
-      "type": "object",
-      "properties": {
-        "pendingWindowInDays": {
-          "anyOf": [
-            {
-              "type": "integer",
-              "minimum": 7,
-              "maximum": 30
-            },
-            {
-              "type": "string",
-              "pattern": "^([7-9]|[12][0-9]|30)$"
-            }
-          ]
-        }
-      },
-      "additionalProperties": false
-    },
     "sourceBundleConfig": {
       "type": "object",
       "required": ["keepNoncurrentVersions", "expireAfterDays"],

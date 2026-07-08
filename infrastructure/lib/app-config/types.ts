@@ -60,7 +60,15 @@ export interface AppConfig {
   readonly dynamoReadCapacity: number;
   readonly dynamoWriteCapacity: number;
 
-  /** KMS Key 削除待機期間 (= cost cleanup 用、 7-30 日)。 */
+  /**
+   * KMS Key の削除待機期間。`make destroy` 後 KMS Key が "Pending Deletion" 状態のまま
+   * 課金される期間 ($1/key/月) を縮めるため、AWS KMS の許容範囲 [7, 30] 内で指定する。
+   *
+   *   - dev / training: 7 (= 最短、課金最小化)
+   *   - production: 14〜30 (= 監査要件 / 誤削除時の rollback 余地)
+   *
+   * `CDK_PARAM_KMS_PENDING_WINDOW_DAYS` で override し、resolve 層で `Number()` 正規化する。
+   */
   readonly kmsPendingWindowInDays: number;
 
   /** API Key VALUE (4 tier 分。 production / staging では env 必須、 dev は deterministic default)。 */
