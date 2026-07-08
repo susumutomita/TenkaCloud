@@ -200,7 +200,8 @@ export async function fireDisruption(
 
   // 3. event 配下 team 一覧 → scope 解決。 teams-only seam 経由 (= base-table query、
   // teamId 昇順の TeamRecord[])。 resolveTargetTeams は teamId しか読まないので挙動は不変。
-  const allTeams = await resolveTeamsRepository(shared).listTeamsByEvent(input.eventId);
+  const teams = await resolveTeamsRepository(shared);
+  const allTeams = await teams.listTeamsByEvent(input.eventId);
   if (allTeams.length === 0) return { kind: "no_targets" };
   const affected = resolveTargetTeams(input.scope, allTeams, input);
   if (affected.length === 0) return { kind: "no_targets" };
@@ -352,7 +353,8 @@ export async function isEventOwnedByTenant(
 ): Promise<boolean> {
   // getEvent は tenant 不一致 / 不在をどちらも undefined に畳むので、 undefined でなければ
   // 「その tenant が所有する event」 (= 従来の `!!item && item.tenantId === tenantId` と等価)。
-  const event = await resolveEventsRepository(shared).getEvent(tenantId, eventId);
+  const events = await resolveEventsRepository(shared);
+  const event = await events.getEvent(tenantId, eventId);
   return event !== undefined;
 }
 
@@ -446,7 +448,8 @@ export async function listDisruptionCatalog(
     disruption: (typeof shared.problemsDisruptions)[string][number];
   }>;
 }> {
-  const event = await resolveEventsRepository(shared).getEvent(tenantId, eventId);
+  const events = await resolveEventsRepository(shared);
+  const event = await events.getEvent(tenantId, eventId);
   const problemIds = Array.isArray(event?.problems)
     ? event.problems.map((p) => p.problemId).filter((p): p is string => typeof p === "string")
     : [];

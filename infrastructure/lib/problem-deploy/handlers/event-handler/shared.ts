@@ -6,18 +6,13 @@ import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
 import type { EffectiveCatalogProvenance } from "../../../problem-pack/effective-catalog.js";
 import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
-import {
-  createEventsRepository,
-  type EventsRepository,
-} from "../../control-data/events-repository.js";
+import type { EventsRepository } from "../../control-data/events-repository.js";
 import {
   type ControlDataRepositories,
+  controlDataRuntime,
   resolveControlDataRepositories,
 } from "../../control-data/runtime-repositories.js";
-import {
-  createTeamsRepository,
-  type TeamsRepository,
-} from "../../control-data/teams-repository.js";
+import type { TeamsRepository } from "../../control-data/teams-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
 
@@ -239,15 +234,16 @@ export function resolveEventRepositories(
  * や、 毎分 reconciler (generic-scoring Lambda) のような Events-only writer でも安全に使える。
  * default backend では従来と byte 互換の Get/UpdateCommand を `shared.ddb` 経由で発火する。
  *
- * [#2437] 注意: この seam は sync factory なので Turso adapter を配線できず、
- * `CONTROL_DATA_BACKEND=turso` では fail-loud に throw する (A1 からの既知の段階的制約)。
- * Teams table が配線されている event-api の handler は、 mirror backend も効く
- * {@link resolveEventRepositories} を使うこと。
+ * [#2450] cold-start cache 済みの async resolver (`controlDataRuntime`) 経由で解決するため、
+ * `CONTROL_DATA_BACKEND=turso|sql` でも Mirrored で動作する (read は canonical DDB の passthrough)。
+ * SSM GetParameter (WithDecryption) + libsql client 構築は turso 選択時のみ・Lambda instance
+ * ごとに 1 回だけ (dynamodb default では SSM に触れず、 発火コマンドも従来と byte 互換)。
+ * `Promise<EventsRepository>` を返すので caller は await してからメソッドを呼ぶ。
  */
 export function resolveEventsRepository(
   shared: Pick<EventSharedResources, "ddb" | "eventsTableName">,
-): EventsRepository {
-  return createEventsRepository(process.env.CONTROL_DATA_BACKEND, {
+): Promise<EventsRepository> {
+  return controlDataRuntime.resolveEventsRepository({
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
   });
@@ -260,9 +256,12 @@ export function resolveEventsRepository(
  * teams reader (= disruption fire の scope 解決) が余分な env 依存なしで使える。 default backend
  * では従来と byte 互換の QueryCommand (`PK = EVENT#<eventId> AND begins_with(SK, "TEAM#")`) を
  * `shared.ddb` 経由で発火し、 teamId 昇順の {@link TeamRecord}[] を返す。
+ *
+ * [#2450] events-only seam と同じく cold-start cache 済みの async resolver (`controlDataRuntime`)
+ * 経由で解決するため、 `CONTROL_DATA_BACKEND=turso|sql` でも Mirrored で動作する。 `Promise` を返す。
  */
-export function resolveTeamsRepository(shared: EventSharedResources): TeamsRepository {
-  return createTeamsRepository(process.env.CONTROL_DATA_BACKEND, {
+export function resolveTeamsRepository(shared: EventSharedResources): Promise<TeamsRepository> {
+  return controlDataRuntime.resolveTeamsRepository({
     ddb: shared.ddb,
     teamsTableName: shared.teamsTableName,
   });

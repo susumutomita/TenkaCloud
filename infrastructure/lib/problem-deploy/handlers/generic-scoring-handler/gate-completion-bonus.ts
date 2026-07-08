@@ -1,6 +1,6 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { QueryCommand, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { createFeatureFlagsRepository } from "../../control-data/feature-flags-repository.js";
+import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
   CHALLENGE_PREREQUISITE_GATE_FLAG,
@@ -56,13 +56,13 @@ function isGateFlagEnabled(
 ): Promise<boolean> {
   const cached = cache.get(tenantId);
   if (cached) return cached;
-  // GateScoringShared は participant/event の shared 型と別物なので seam resolver を通さず
-  // factory を直呼びする。 default backend では従来と byte 互換の GetCommand が飛ぶ。
-  const repo = createFeatureFlagsRepository(process.env.CONTROL_DATA_BACKEND, {
-    ddb: shared.ddb,
-    eventsTableName: shared.eventsTableName,
-  });
-  const promise = isTenantFeatureEnabled(repo, tenantId, CHALLENGE_PREREQUISITE_GATE_FLAG);
+  // [#2450] cold-start cache 済みの async resolver (`controlDataRuntime`) 経由で FeatureFlags
+  // repository を解決するため `CONTROL_DATA_BACKEND=turso|sql` でも動作する。 default backend では
+  // 従来と byte 互換の GetCommand が飛ぶ。 tick (1 invocation) 内 cache の構造は不変 —
+  // cache に入れる `Promise<boolean>` の構築だけ `.then()` 連結にする。
+  const promise = controlDataRuntime
+    .resolveFeatureFlagsRepository({ ddb: shared.ddb, eventsTableName: shared.eventsTableName })
+    .then((repo) => isTenantFeatureEnabled(repo, tenantId, CHALLENGE_PREREQUISITE_GATE_FLAG));
   cache.set(tenantId, promise);
   return promise;
 }

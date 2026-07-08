@@ -1,9 +1,7 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import {
-  createEventsRepository,
-  type EventsRepository,
-} from "../../../problem-deploy/control-data/events-repository.js";
+import type { EventsRepository } from "../../../problem-deploy/control-data/events-repository.js";
+import { controlDataRuntime } from "../../../problem-deploy/control-data/runtime-repositories.js";
 
 /**
  * AdminInsight Lambda が module load で 1 度だけ作るリソース束。
@@ -58,21 +56,18 @@ export function buildSharedResources(): AdminInsightSharedResources {
  * [ADR-049 §5.1 / #2438] Events aggregate 専用 read seam (event-handler/shared.ts の
  * `resolveEventsRepository` と同型)。 default backend (`CONTROL_DATA_BACKEND` 未設定 =
  * dynamodb) では従来と byte 互換の Query を `shared.ddb` 経由で発火する。 admin-insight は
- * Events の read-only 集計のみ行う (mutating method は使わない) ため、 sync factory の
- * events-only seam で十分。
+ * Events の read-only 集計のみ行う (mutating method は使わない) ため、 events-only seam で十分。
  *
- * **[#2437 と同じ既知の制約]** この resolver は sync factory なので Turso/SQL executor を
- * 組み立てられない。 `CONTROL_DATA_BACKEND=turso|sql` が渡ると `createEventsRepository` が
- * `deps.sql` 欠落で fail-loud に throw する (= 意図的。 silent に DynamoDB へ fallback しない — repo の
- * "no silent fallbacks" 原則)。 `AdminInsightApiLambdaProps.controlDataBackend` は現状どの caller
- * (`wire.ts` 含む) からも `"turso"` を渡されていないため到達しないが、 将来 SQL 対応が必要になったら
- * `event-handler/shared.ts` の async `resolveEventRepositories` と同様に SSM + libsql client 構築を
- * 別途スレッドすること (この sync 版のまま turso を有効化してはいけない)。
+ * [#2450] turso 対応済み: cold-start cache 済みの async resolver (`controlDataRuntime`) 経由で
+ * 解決するため `CONTROL_DATA_BACKEND=turso|sql` でも動作する (read は Mirrored の canonical
+ * passthrough)。 `AdminInsightApiLambdaProps.controlDataBackend` に `"turso"` を渡すと
+ * `CONTROL_DATA_BACKEND` env が注入され、 SSM read 権限は `tursoAuthTokenParameterName` 指定時に
+ * 付与される。 `Promise<EventsRepository>` を返すので caller は await する。
  */
 export function resolveEventsRepository(
   shared: Pick<AdminInsightSharedResources, "ddb" | "eventsTableName">,
-): EventsRepository {
-  return createEventsRepository(process.env.CONTROL_DATA_BACKEND, {
+): Promise<EventsRepository> {
+  return controlDataRuntime.resolveEventsRepository({
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
   });

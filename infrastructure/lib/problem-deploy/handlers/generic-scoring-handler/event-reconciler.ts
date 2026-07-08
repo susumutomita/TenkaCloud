@@ -307,7 +307,8 @@ export async function reconcileEventStatuses(
   ctx: ReconcileEventStatusesContext,
   nowIso: string,
 ): Promise<void> {
-  const events = await resolveEventsRepository(ctx).listEventsByStatus(RECONCILED_STATUSES);
+  const repository = await resolveEventsRepository(ctx);
+  const events = await repository.listEventsByStatus(RECONCILED_STATUSES);
   const nowMs = Date.parse(nowIso);
   await Promise.all(events.map((event) => reconcileSingleEvent(ctx, event, nowIso, nowMs)));
 }
@@ -408,8 +409,10 @@ async function applyEventStatusTransition(
   try {
     // 楽観 CAS は repository seam の `transitionStatus` に移設。 conflict (= operator が
     // 手動 archive / 再 deploy で先に動かしてたレース) は skip し次 tick で再評価する
-    // (= 旧 CCF 握り潰しと同じ、 probe read も費やさない)。
-    const result = await resolveEventsRepository(ctx).transitionStatus(
+    // (= 旧 CCF 握り潰しと同じ、 probe read も費やさない)。 [#2450] resolver は async 化したが
+    // config エラー (turso env 不足) も既存 catch で warn + skip され次 tick で再評価される。
+    const repository = await resolveEventsRepository(ctx);
+    const result = await repository.transitionStatus(
       args.tenantId,
       args.eventId,
       args.from,
@@ -487,12 +490,8 @@ async function recordFired(
 ): Promise<void> {
   const firedAttr = kind === "teardown" ? "teardownFiredAt" : "deployFiredAt";
   try {
-    await resolveEventsRepository(ctx).markScheduleFired(
-      args.tenantId,
-      args.eventId,
-      kind,
-      args.nowIso,
-    );
+    const repository = await resolveEventsRepository(ctx);
+    await repository.markScheduleFired(args.tenantId, args.eventId, kind, args.nowIso);
   } catch (err) {
     console.warn(`[generic-scoring] recordFired(${firedAttr}) failed`, {
       eventId: args.eventId,

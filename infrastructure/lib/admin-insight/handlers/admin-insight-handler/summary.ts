@@ -77,7 +77,7 @@ async function countTenantEvents(
   shared: AdminInsightSharedResources,
   tenantId: string,
 ): Promise<number> {
-  return resolveEventsRepository(shared).countEventsByTenant(tenantId);
+  return (await resolveEventsRepository(shared)).countEventsByTenant(tenantId);
 }
 
 /**

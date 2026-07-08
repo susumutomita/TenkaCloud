@@ -56,10 +56,12 @@ export async function bulkTeardownEvent(
   eventId: string,
   nowMs: number,
 ): Promise<BulkTeardownOutcome> {
-  // getEvent は tenant 不一致 / event 不在をどちらも undefined に畳む
-  // (= 従来の `!event || event.tenantId !== tenantId` を repository 内へ移設)。 events-only seam
+  // events-only seam を 1 度だけ解決し getEvent / markTeardown で使い回す (= turso 選択時の
+  // cold-start cache を 1 回に畳む)。 getEvent は tenant 不一致 / event 不在をどちらも undefined に
+  // 畳む (= 従来の `!event || event.tenantId !== tenantId` を repository 内へ移設)。 events-only seam
   // を使う (scheduled teardown 経路は Teams table を配線しないため)。
-  const event = await resolveEventsRepository(shared).getEvent(tenantId, eventId);
+  const events = await resolveEventsRepository(shared);
+  const event = await events.getEvent(tenantId, eventId);
   if (!event) return { kind: "not_found" };
 
   const targets = await queryDeploymentsByEvent(shared, tenantId, eventId);
@@ -97,7 +99,7 @@ export async function bulkTeardownEvent(
   // の `markTeardown(tenantId, eventId, at)` に移設 (ARCHIVED は踏み越えない条件も seam 内)。
   // conflict (= 既に ARCHIVED / 行不在) は触らないだけで成功扱い (handler は getEvent で確認済)。
   // PutEvents と並列実行 (互いに依存なし)。
-  const updateStatus = resolveEventsRepository(shared).markTeardown(tenantId, eventId, updatedAt);
+  const updateStatus = events.markTeardown(tenantId, eventId, updatedAt);
   const [publishResults] = await Promise.all([publish, updateStatus]);
   const failedJobIds = publishResults.filter((r) => !r.success).map((r) => r.item);
 
