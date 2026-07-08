@@ -4,9 +4,15 @@ import type { DeploymentsRepository } from "./types.js";
 
 export { DynamoDbDeploymentsRepository } from "./dynamodb-deployments-repository.js";
 export type {
+  BulkDeploymentCreateEntry,
+  CompositeParentDeploymentRecord,
+  CompositeTargetDeploymentRecord,
   ControlDataBackend,
   CoordinationStateRecord,
+  DeploymentKindScoringResult,
+  DeploymentMutationOutcome,
   DeploymentRecord,
+  DeploymentSchedulePatch,
   DeploymentsPage,
   DeploymentsRepository,
   InboxEventRecord,

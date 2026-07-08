@@ -1,4 +1,3 @@
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { SubmitFlagOutcome as SubmitFlagWireOutcome } from "@tenkacloud/portal-contracts";
 import type {
   FlagScoringMetadata,
@@ -10,7 +9,11 @@ import { flagMatches } from "../generic-scoring-handler/kinds/flag.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import { writeScoreEvent } from "../shared/score-event.js";
 import { getCompetitionAccessBlock } from "./challenge-access.js";
-import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
+import {
+  type ParticipantSharedResources,
+  queryTeamItems,
+  resolveDeploymentsRepository,
+} from "./shared.js";
 
 /**
  * Issue #2203: HTTP 200 で返る wire 応答 (ok / already_scored / wrong) の定義正本は
@@ -158,36 +161,18 @@ async function scoreCorrectMultiFlag(
 ): Promise<SubmitFlagOutcome> {
   // solvedFlagIds に entry.id が未収録のときだけ ADD する (= 2 重加算をレースから守る)。
   const now = new Date().toISOString();
-  try {
-    const updated = await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.tableName,
-        Key: { PK: item.PK, SK: "META" },
-        UpdateExpression:
-          "ADD score :pts, solvedFlagIds :flagIdSet SET lastScoredAt = :now, updatedAt = :now",
-        ConditionExpression:
-          "attribute_not_exists(solvedFlagIds) OR NOT contains(solvedFlagIds, :flagId)",
-        ExpressionAttributeValues: {
-          ":pts": entry.points,
-          ":flagIdSet": new Set([entry.id]),
-          ":flagId": entry.id,
-          ":now": now,
-        },
-        ReturnValues: "ALL_NEW",
-      }),
-    );
-    const totalScore = Number(
-      (updated.Attributes as { score?: unknown })?.score ?? Number(item.score ?? 0) + entry.points,
-    );
-    // 加点成功時のみ score event 行を append (= 単一 flag kind と同じ「flag」source を踏襲)。
-    if (item.jobId) await writeMultiFlagScoreEvent(shared, item, "flag", entry.points, now);
-    return { kind: "ok", scoreDelta: entry.points, totalScore, flagId: entry.id };
-  } catch (err) {
-    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") {
-      return { kind: "already_scored", totalScore: Number(item.score ?? 0) + entry.points };
-    }
-    throw err;
+  const jobId = String(item.jobId ?? "");
+  const repository = await resolveDeploymentsRepository(shared);
+  const outcome = await repository.applyMultiFlagCorrectScore(jobId, entry.points, entry.id, now);
+  // [Issue #2441 / Phase B2] `applyMultiFlagCorrectScore` folds the CCF into
+  // `conflict` (no probe) instead of throwing.
+  if (outcome.outcome !== "updated") {
+    return { kind: "already_scored", totalScore: Number(item.score ?? 0) + entry.points };
   }
+  const totalScore = Number(outcome.record?.score ?? Number(item.score ?? 0) + entry.points);
+  // 加点成功時のみ score event 行を append (= 単一 flag kind と同じ「flag」source を踏襲)。
+  if (item.jobId) await writeMultiFlagScoreEvent(shared, item, "flag", entry.points, now);
+  return { kind: "ok", scoreDelta: entry.points, totalScore, flagId: entry.id };
 }
 
 async function scoreWrongMultiFlag(
@@ -199,39 +184,23 @@ async function scoreWrongMultiFlag(
   // penalty 無し (= 0 / 未設定) は単一 flag kind と同じ legacy wrong shape (= 加点経路を打たない)。
   if (penalty === 0) return legacyWrongFlagOutcome(item);
   const now = new Date().toISOString();
-  try {
-    // 既に解済の flag は減点しない (= correct 経路と同じ not-already-solved condition)。
-    const updated = await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.tableName,
-        Key: { PK: item.PK, SK: "META" },
-        UpdateExpression: "ADD wrongAnswerCount :one, score :neg SET updatedAt = :now",
-        ConditionExpression:
-          "attribute_not_exists(solvedFlagIds) OR NOT contains(solvedFlagIds, :flagId)",
-        ExpressionAttributeValues: {
-          ":one": 1,
-          ":neg": -penalty,
-          ":flagId": entry.id,
-          ":now": now,
-        },
-        ReturnValues: "ALL_NEW",
-      }),
-    );
-    const attrs = updated.Attributes as { score?: unknown; wrongAnswerCount?: unknown } | undefined;
-    const rawScore = Number(attrs?.score ?? 0);
-    if (item.jobId) await writeMultiFlagScoreEvent(shared, item, "flag-wrong", -penalty, now);
-    return {
-      kind: "wrong",
-      scoreDelta: -penalty,
-      totalScore: rawScore < 0 ? 0 : rawScore,
-      wrongCount: Number(attrs?.wrongAnswerCount ?? 1),
-    };
-  } catch (err) {
-    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") {
-      return { kind: "already_scored", totalScore: Number(item.score ?? 0) };
-    }
-    throw err;
+  const jobId = String(item.jobId ?? "");
+  // 既に解済の flag は減点しない (= correct 経路と同じ not-already-solved condition)。
+  // [Issue #2441 / Phase B2] `applyMultiFlagWrongPenalty` folds the CCF into
+  // `conflict` (no probe) instead of throwing.
+  const repository = await resolveDeploymentsRepository(shared);
+  const outcome = await repository.applyMultiFlagWrongPenalty(jobId, penalty, entry.id, now);
+  if (outcome.outcome !== "updated") {
+    return { kind: "already_scored", totalScore: Number(item.score ?? 0) };
   }
+  const rawScore = Number(outcome.record?.score ?? 0);
+  if (item.jobId) await writeMultiFlagScoreEvent(shared, item, "flag-wrong", -penalty, now);
+  return {
+    kind: "wrong",
+    scoreDelta: -penalty,
+    totalScore: rawScore < 0 ? 0 : rawScore,
+    wrongCount: Number(outcome.record?.wrongAnswerCount ?? 1),
+  };
 }
 
 function writeMultiFlagScoreEvent(
@@ -271,16 +240,22 @@ async function scoreWrongFlag(
   const penalty = scoring.wrongAnswerPenalty ?? 0;
   if (penalty === 0) return legacyWrongFlagOutcome(item);
   const wrongNow = new Date().toISOString();
-  try {
-    const wrong = await updateWrongFlag(shared, item.PK, penalty, wrongNow);
-    if (item.jobId) await writeFlagScoreEvent(shared, item, "flag-wrong", -penalty, wrongNow);
-    return { kind: "wrong", scoreDelta: -penalty, ...wrong };
-  } catch (err) {
-    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") {
-      return { kind: "already_scored", totalScore: Number(item.score ?? 0) };
-    }
-    throw err;
+  const jobId = String(item.jobId ?? "");
+  // [Issue #2441 / Phase B2] `applyFlagWrongPenalty` folds the CCF into
+  // `conflict` (no probe) instead of throwing.
+  const repository = await resolveDeploymentsRepository(shared);
+  const outcome = await repository.applyFlagWrongPenalty(jobId, penalty, wrongNow);
+  if (outcome.outcome !== "updated") {
+    return { kind: "already_scored", totalScore: Number(item.score ?? 0) };
   }
+  const rawScore = Number(outcome.record?.score ?? 0);
+  if (item.jobId) await writeFlagScoreEvent(shared, item, "flag-wrong", -penalty, wrongNow);
+  return {
+    kind: "wrong",
+    scoreDelta: -penalty,
+    totalScore: rawScore < 0 ? 0 : rawScore,
+    wrongCount: Number(outcome.record?.wrongAnswerCount ?? 1),
+  };
 }
 
 function legacyWrongFlagOutcome(item: Partial<DeploymentItem>): SubmitFlagOutcome {
@@ -292,30 +267,6 @@ function legacyWrongFlagOutcome(item: Partial<DeploymentItem>): SubmitFlagOutcom
   };
 }
 
-async function updateWrongFlag(
-  shared: ParticipantSharedResources,
-  PK: string,
-  penalty: number,
-  now: string,
-): Promise<{ readonly totalScore: number; readonly wrongCount: number }> {
-  const updated = await shared.ddb.send(
-    new UpdateCommand({
-      TableName: shared.tableName,
-      Key: { PK, SK: "META" },
-      UpdateExpression: "ADD wrongAnswerCount :one, score :neg SET updatedAt = :now",
-      ConditionExpression: "attribute_not_exists(flagSubmitted) OR flagSubmitted = :false",
-      ExpressionAttributeValues: { ":one": 1, ":neg": -penalty, ":false": false, ":now": now },
-      ReturnValues: "ALL_NEW",
-    }),
-  );
-  const attrs = updated.Attributes as { score?: unknown; wrongAnswerCount?: unknown } | undefined;
-  const rawScore = Number(attrs?.score ?? 0);
-  return {
-    totalScore: rawScore < 0 ? 0 : rawScore,
-    wrongCount: Number(attrs?.wrongAnswerCount ?? 1),
-  };
-}
-
 async function scoreCorrectFlag(
   shared: ParticipantSharedResources,
   item: Partial<DeploymentItem> & { PK: string; problemId: string },
@@ -323,40 +274,25 @@ async function scoreCorrectFlag(
 ): Promise<SubmitFlagOutcome> {
   // ConditionExpression で flagSubmitted=true への 2 重加算を防ぐ。レース勝者だけが加点される。
   const now = new Date().toISOString();
-  try {
-    const updated = await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.tableName,
-        Key: { PK: item.PK, SK: "META" },
-        UpdateExpression:
-          "ADD score :pts SET flagSubmitted = :true, lastScoredAt = :now, updatedAt = :now",
-        ConditionExpression: "attribute_not_exists(flagSubmitted) OR flagSubmitted = :false",
-        ExpressionAttributeValues: {
-          ":pts": scoring.points,
-          ":true": true,
-          ":false": false,
-          ":now": now,
-        },
-        ReturnValues: "ALL_NEW",
-      }),
-    );
-    const totalScore = Number((updated.Attributes as { score?: unknown })?.score ?? scoring.points);
-
-    // 加点成功時のみ score event 行を append。失敗 (= already_scored の race) では
-    // 既存の event 行が記録済みなので二重に書かない。
-    // #745: 旧実装は Put 失敗を console.warn で握り潰していたが、 score events 履歴が空のまま
-    // header の score だけ加点される矛盾を生んだ (= IAM 不足で silent skip)。 AGENTS.md
-    // 「モック / スタブで握り潰す fallback 禁止」 違反だったので、 失敗は throw して
-    // route-helpers の internal_error 経路で 500 を返す。
-    if (item.jobId) await writeFlagScoreEvent(shared, item, "flag", scoring.points, now);
-
-    return { kind: "ok", scoreDelta: scoring.points, totalScore };
-  } catch (err) {
-    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") {
-      return { kind: "already_scored", totalScore: Number(item.score ?? 0) + scoring.points };
-    }
-    throw err;
+  const jobId = String(item.jobId ?? "");
+  // [Issue #2441 / Phase B2] `applyFlagCorrectScore` folds the CCF into
+  // `conflict` (no probe) instead of throwing.
+  const repository = await resolveDeploymentsRepository(shared);
+  const outcome = await repository.applyFlagCorrectScore(jobId, scoring.points, now);
+  if (outcome.outcome !== "updated") {
+    return { kind: "already_scored", totalScore: Number(item.score ?? 0) + scoring.points };
   }
+  const totalScore = Number(outcome.record?.score ?? scoring.points);
+
+  // 加点成功時のみ score event 行を append。失敗 (= already_scored の race) では
+  // 既存の event 行が記録済みなので二重に書かない。
+  // #745: 旧実装は Put 失敗を console.warn で握り潰していたが、 score events 履歴が空のまま
+  // header の score だけ加点される矛盾を生んだ (= IAM 不足で silent skip)。 AGENTS.md
+  // 「モック / スタブで握り潰す fallback 禁止」 違反だったので、 失敗は throw して
+  // route-helpers の internal_error 経路で 500 を返す。
+  if (item.jobId) await writeFlagScoreEvent(shared, item, "flag", scoring.points, now);
+
+  return { kind: "ok", scoreDelta: scoring.points, totalScore };
 }
 
 function writeFlagScoreEvent(

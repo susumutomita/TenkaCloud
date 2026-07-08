@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Issue #1424: generic scoring dispatcher Lambda (index.ts, ADR-012 Phase 3.B) の
- * orchestration 層 (handler / processDeployment / applyKindResult / buildKindResultUpdate /
+ * orchestration 層 (handler / processDeployment / applyKindResult /
  * appendKindScoreEvents / fetchScoringLockedMap / queryOverridesForDeployment / parsePhasesEnv)
  * を pin する。 既存の kind / reconciler 単体テスト群は sibling module を直接叩いており
  * index.ts の scan-loop + dispatch glue を通っていなかったため 44% branch だった。
@@ -439,7 +439,7 @@ describe("kind dispatch", () => {
   });
 });
 
-describe("applyKindResult / buildKindResultUpdate / appendKindScoreEvents", () => {
+describe("applyKindResult / appendKindScoreEvents", () => {
   it("should write a full result (ADD score + SET fields) and append score events", async () => {
     mocks.runUptimeFlatKind.mockResolvedValueOnce(FULL_RESULT);
     shared.problemsScoring = { p1: { kind: "uptime-flat" } };
@@ -477,11 +477,19 @@ describe("applyKindResult / buildKindResultUpdate / appendKindScoreEvents", () =
     expect(ddb.send.mock.calls.some((c) => c[0] instanceof UpdateCommand)).toBe(false);
   });
 
-  it("should not append score events when jobId is missing (default expiresAt path)", async () => {
+  it("should skip the write and score events when jobId is missing (default expiresAt path)", async () => {
+    // [Issue #2441 / Phase B2] `applyKindResult` now calls the Deployments write
+    // seam (`applyKindScoringResult(jobId, ...)`), which derives the physical
+    // key from `jobId` itself — there is no longer a raw-PK write path that can
+    // run without one. Every real Scan row always carries `jobId` (written at
+    // deploy time, never removed), so this tightens an unreachable-in-production
+    // edge case rather than changing real behavior; pre-seam this asserted the
+    // opposite (`toBe(true)`) because the legacy code keyed the UpdateItem off
+    // `item.PK` directly and only `appendKindScoreEvents` itself guarded on `jobId`.
     mocks.runUptimeFlatKind.mockResolvedValueOnce(FULL_RESULT);
     shared.problemsScoring = { p1: { kind: "uptime-flat" } };
     await runWith({ ...baseItem(), jobId: undefined, expiresAt: undefined, eventId: undefined });
-    expect(ddb.send.mock.calls.some((c) => c[0] instanceof UpdateCommand)).toBe(true);
+    expect(ddb.send.mock.calls.some((c) => c[0] instanceof UpdateCommand)).toBe(false);
     expect(mocks.writeScoreEvent).not.toHaveBeenCalled();
   });
 

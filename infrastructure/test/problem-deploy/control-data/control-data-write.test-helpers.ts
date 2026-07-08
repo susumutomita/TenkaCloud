@@ -36,6 +36,7 @@ import type { SqlExecutor } from "../../../lib/problem-deploy/control-data/types
 type Item = Record<string, unknown>;
 type Names = Record<string, string> | undefined;
 type Values = Record<string, unknown> | undefined;
+type TransactItem = NonNullable<TransactWriteCommand["input"]["TransactItems"]>[number];
 
 function resolveName(token: string, names: Names): string {
   return token.startsWith("#") ? (names?.[token] ?? token) : token;
@@ -43,6 +44,18 @@ function resolveName(token: string, names: Names): string {
 
 function tokenize(expr: string): string[] {
   return expr.match(/[#:]?[A-Za-z0-9_.]+|<>|=|\(|\)|,/g) ?? [];
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function containsValue(container: unknown, needle: unknown): boolean {
+  if (container instanceof Set) return [...container].some((value) => deepEqual(value, needle));
+  if (Array.isArray(container)) return container.some((value) => deepEqual(value, needle));
+  if (typeof container === "string" && typeof needle === "string")
+    return container.includes(needle);
+  return false;
 }
 
 /**
@@ -72,20 +85,35 @@ export function evalConditionExpression(
   const operandValue = (token: string): unknown =>
     token.startsWith(":") ? values?.[token] : item[resolveName(token, names)];
 
-  function parsePrimary(): boolean {
-    if (peek() === "(") {
-      next();
-      const value = parseOr();
-      expect(")");
-      return value;
-    }
-    if (peek() === "attribute_not_exists") {
+  function parseAttributeFunction(): boolean | undefined {
+    const fn = peek();
+    if (fn === "attribute_not_exists") {
       next();
       expect("(");
       const attr = next();
       expect(")");
       return item[resolveName(attr, names)] === undefined;
     }
+    if (fn === "attribute_exists") {
+      next();
+      expect("(");
+      const attr = next();
+      expect(")");
+      return item[resolveName(attr, names)] !== undefined;
+    }
+    if (fn === "contains") {
+      next();
+      expect("(");
+      const attr = next();
+      expect(",");
+      const value = next();
+      expect(")");
+      return containsValue(item[resolveName(attr, names)], operandValue(value));
+    }
+    return undefined;
+  }
+
+  function parseComparison(): boolean {
     const left = next();
     const op = next();
     if (op === "=") return operandValue(left) === operandValue(next());
@@ -101,6 +129,20 @@ export function evalConditionExpression(
       return list.includes(operandValue(left));
     }
     throw new Error(`FakeDdb: unsupported operator "${op}" in: ${expr}`);
+  }
+
+  function parsePrimary(): boolean {
+    if (peek() === "NOT") {
+      next();
+      return !parsePrimary();
+    }
+    if (peek() === "(") {
+      next();
+      const value = parseOr();
+      expect(")");
+      return value;
+    }
+    return parseAttributeFunction() ?? parseComparison();
   }
   function parseAnd(): boolean {
     let value = parsePrimary();
@@ -128,32 +170,117 @@ export function evalConditionExpression(
   return result;
 }
 
-/** Applies an UpdateExpression (`SET a = :v, …` / `REMOVE a, …` clauses) in place. */
+function splitTopLevelCommas(body: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < body.length; i += 1) {
+    const char = body[i];
+    if (char === "(") depth += 1;
+    else if (char === ")") depth -= 1;
+    else if (char === "," && depth === 0) {
+      parts.push(body.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  const tail = body.slice(start).trim();
+  if (tail) parts.push(tail);
+  return parts;
+}
+
+function splitTopLevelEquals(assignment: string): readonly [string, string] {
+  let depth = 0;
+  for (let i = 0; i < assignment.length; i += 1) {
+    const char = assignment[i];
+    if (char === "(") depth += 1;
+    else if (char === ")") depth -= 1;
+    else if (char === "=" && depth === 0) {
+      return [assignment.slice(0, i).trim(), assignment.slice(i + 1).trim()];
+    }
+  }
+  throw new Error(`FakeDdb: unsupported SET assignment "${assignment}"`);
+}
+
+function splitUpdateClauses(expr: string): Array<readonly ["SET" | "REMOVE" | "ADD", string]> {
+  const matches = [...expr.matchAll(/\b(SET|REMOVE|ADD)\b/g)];
+  return matches.map((match, index) => {
+    const keyword = match[1] as "SET" | "REMOVE" | "ADD";
+    const start = (match.index ?? 0) + keyword.length;
+    const end = matches[index + 1]?.index ?? expr.length;
+    return [keyword, expr.slice(start, end).trim()] as const;
+  });
+}
+
+function evalUpdateValue(item: Item, rawValue: string, names: Names, values: Values): unknown {
+  if (rawValue.startsWith(":")) return values?.[rawValue];
+  const listAppend = rawValue.match(
+    /^list_append\(if_not_exists\(([^,]+),\s*(:[A-Za-z0-9_]+)\),\s*(:[A-Za-z0-9_]+)\)$/,
+  );
+  if (listAppend) {
+    const attr = resolveName(listAppend[1]?.trim() ?? "", names);
+    const fallback = values?.[listAppend[2] ?? ""];
+    const append = values?.[listAppend[3] ?? ""];
+    const base = item[attr] === undefined ? fallback : item[attr];
+    if (!Array.isArray(base) || !Array.isArray(append)) {
+      throw new Error(`FakeDdb: list_append operands must be arrays in "${rawValue}"`);
+    }
+    return [...base, ...append];
+  }
+  throw new Error(`FakeDdb: unsupported SET value "${rawValue}"`);
+}
+
+function applySetClause(item: Item, body: string, names: Names, values: Values): void {
+  for (const assignment of splitTopLevelCommas(body)) {
+    const [rawAttr, rawValue] = splitTopLevelEquals(assignment);
+    if (!rawAttr) throw new Error(`FakeDdb: unsupported SET assignment "${assignment}"`);
+    item[resolveName(rawAttr, names)] = evalUpdateValue(item, rawValue, names, values);
+  }
+}
+
+function applyRemoveClause(item: Item, body: string, names: Names): void {
+  for (const rawAttr of splitTopLevelCommas(body)) {
+    delete item[resolveName(rawAttr.trim(), names)];
+  }
+}
+
+function applyAddValue(item: Item, attr: string, delta: unknown, rawValue: string): void {
+  if (typeof delta === "number") {
+    item[attr] = Number(item[attr] ?? 0) + delta;
+    return;
+  }
+  if (delta instanceof Set) {
+    const existing = item[attr] instanceof Set ? (item[attr] as Set<unknown>) : new Set();
+    item[attr] = new Set([...existing, ...delta]);
+    return;
+  }
+  throw new Error(`FakeDdb: unsupported ADD value "${rawValue}"`);
+}
+
+function applyAddClause(item: Item, body: string, names: Names, values: Values): void {
+  for (const addition of splitTopLevelCommas(body)) {
+    const [rawAttr, rawValue] = addition.trim().split(/\s+/);
+    if (!rawAttr || !rawValue?.startsWith(":")) {
+      throw new Error(`FakeDdb: unsupported ADD expression "${addition}"`);
+    }
+    applyAddValue(item, resolveName(rawAttr, names), values?.[rawValue], rawValue);
+  }
+}
+
+/** Applies an UpdateExpression (`SET` / `REMOVE` / `ADD` clauses) in place. */
 export function applyUpdateExpression(
   item: Item,
   expr: string,
   names: Names,
   values: Values,
 ): void {
-  const clauses = expr
-    .split(/\b(SET|REMOVE)\b/)
-    .map((clause) => clause.trim())
-    .filter(Boolean);
-  for (let index = 0; index < clauses.length; index += 2) {
-    const keyword = clauses[index];
-    const body = clauses[index + 1] ?? "";
+  const clauses = splitUpdateClauses(expr);
+  for (const [keyword, body] of clauses) {
     if (keyword === "SET") {
-      for (const assignment of body.split(",")) {
-        const [rawAttr, rawValue] = assignment.split("=").map((part) => part.trim());
-        if (!rawAttr || !rawValue?.startsWith(":")) {
-          throw new Error(`FakeDdb: unsupported SET assignment "${assignment}"`);
-        }
-        item[resolveName(rawAttr, names)] = values?.[rawValue];
-      }
+      applySetClause(item, body, names, values);
     } else if (keyword === "REMOVE") {
-      for (const rawAttr of body.split(",")) {
-        delete item[resolveName(rawAttr.trim(), names)];
-      }
+      applyRemoveClause(item, body, names);
+    } else if (keyword === "ADD") {
+      applyAddClause(item, body, names, values);
     } else {
       throw new Error(`FakeDdb: unsupported update clause "${keyword}"`);
     }
@@ -405,24 +532,90 @@ export function makeFakeDdb(options: { readonly pageSize?: number } = {}): Dynam
     return {};
   };
 
+  const conditionCode = (ok: boolean): "None" | "ConditionalCheckFailed" =>
+    ok ? "None" : "ConditionalCheckFailed";
+
+  const transactPutConditionCode = (put: NonNullable<TransactItem["Put"]>) => {
+    const item = put.Item as Item;
+    const existing = tableFor(put.TableName).get(keyOf(item.PK, item.SK)) ?? {};
+    const ok = put.ConditionExpression
+      ? evalConditionExpression(
+          put.ConditionExpression,
+          existing,
+          put.ExpressionAttributeNames,
+          put.ExpressionAttributeValues,
+        )
+      : true;
+    return conditionCode(ok);
+  };
+
+  const transactUpdateConditionCode = (updateEntry: NonNullable<TransactItem["Update"]>) => {
+    const key = updateEntry.Key as Item;
+    const existing = tableFor(updateEntry.TableName).get(keyOf(key.PK, key.SK)) ?? {};
+    const ok = updateEntry.ConditionExpression
+      ? evalConditionExpression(
+          updateEntry.ConditionExpression,
+          existing,
+          updateEntry.ExpressionAttributeNames,
+          updateEntry.ExpressionAttributeValues,
+        )
+      : true;
+    return conditionCode(ok);
+  };
+
+  const transactDeleteConditionCode = (deleteEntry: NonNullable<TransactItem["Delete"]>) => {
+    const key = deleteEntry.Key as Item;
+    const existing = tableFor(deleteEntry.TableName).get(keyOf(key.PK, key.SK)) ?? {};
+    const ok = deleteEntry.ConditionExpression
+      ? evalConditionExpression(
+          deleteEntry.ConditionExpression,
+          existing,
+          deleteEntry.ExpressionAttributeNames,
+          deleteEntry.ExpressionAttributeValues,
+        )
+      : true;
+    return conditionCode(ok);
+  };
+
+  const transactConditionCode = (entry: TransactItem): "None" | "ConditionalCheckFailed" => {
+    if (entry.Put) return transactPutConditionCode(entry.Put);
+    if (entry.Update) return transactUpdateConditionCode(entry.Update);
+    if (entry.Delete) return transactDeleteConditionCode(entry.Delete);
+    throw new Error("FakeDdb: unsupported transact item");
+  };
+
+  const applyTransactItem = (entry: TransactItem): void => {
+    const put = entry.Put;
+    const updateEntry = entry.Update;
+    const deleteEntry = entry.Delete;
+    if (put) {
+      const item = put.Item as Item;
+      tableFor(put.TableName).set(keyOf(item.PK, item.SK), item);
+      return;
+    }
+    if (updateEntry) {
+      const table = tableFor(updateEntry.TableName);
+      const key = updateEntry.Key as Item;
+      const storeKey = keyOf(key.PK, key.SK);
+      const item = table.get(storeKey) ?? { PK: key.PK, SK: key.SK };
+      applyUpdateExpression(
+        item,
+        updateEntry.UpdateExpression ?? "",
+        updateEntry.ExpressionAttributeNames,
+        updateEntry.ExpressionAttributeValues,
+      );
+      table.set(storeKey, item);
+      return;
+    }
+    if (deleteEntry) {
+      const key = deleteEntry.Key as Item;
+      tableFor(deleteEntry.TableName).delete(keyOf(key.PK, key.SK));
+    }
+  };
+
   const transactWrite = (cmd: TransactWriteCommand): Record<string, never> => {
     const items = cmd.input.TransactItems ?? [];
-    const reasons = items.map((entry) => {
-      const put = entry.Put;
-      if (!put) throw new Error("FakeDdb: only Put transact items are supported");
-      const table = tableFor(put.TableName);
-      const item = put.Item as Item;
-      const existing = table.get(keyOf(item.PK, item.SK)) ?? {};
-      const ok = put.ConditionExpression
-        ? evalConditionExpression(
-            put.ConditionExpression,
-            existing,
-            put.ExpressionAttributeNames,
-            put.ExpressionAttributeValues,
-          )
-        : true;
-      return ok ? "None" : "ConditionalCheckFailed";
-    });
+    const reasons = items.map(transactConditionCode);
     if (reasons.includes("ConditionalCheckFailed")) {
       // All-or-nothing: nothing above is applied on any per-item failure.
       const err = new Error("Transaction cancelled, please refer cancellation reasons");
@@ -431,18 +624,26 @@ export function makeFakeDdb(options: { readonly pageSize?: number } = {}): Dynam
         reasons.map((code) => ({ Code: code }));
       throw err;
     }
-    for (const entry of items) {
-      const put = entry.Put;
-      if (!put) continue;
-      const item = put.Item as Item;
-      tableFor(put.TableName).set(keyOf(item.PK, item.SK), item);
-    }
+    for (const entry of items) applyTransactItem(entry);
     return {};
   };
 
   const put = (cmd: PutCommand): Record<string, never> => {
     const item = cmd.input.Item as Item;
-    tableFor(cmd.input.TableName).set(keyOf(item.PK, item.SK), item);
+    const table = tableFor(cmd.input.TableName);
+    const existing = table.get(keyOf(item.PK, item.SK)) ?? {};
+    if (
+      cmd.input.ConditionExpression &&
+      !evalConditionExpression(
+        cmd.input.ConditionExpression,
+        existing,
+        cmd.input.ExpressionAttributeNames,
+        cmd.input.ExpressionAttributeValues,
+      )
+    ) {
+      throw conditionalCheckFailed();
+    }
+    table.set(keyOf(item.PK, item.SK), item);
     return {};
   };
 

@@ -26,10 +26,8 @@
  * with fake adapters and never reaches a real cloud.
  */
 
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { COMPOSITE_PROVIDERS } from "@tenkacloud/problem-runtime";
 import type { ProblemRuntimeAdapter } from "../shared/runtime/adapter.js";
-import { deploymentPk } from "./composite-deployment.js";
 import {
   type CompositeDeploymentRepositoryDeps,
   type CompositeTargetDeploymentRecord,
@@ -42,6 +40,7 @@ import type {
 } from "./composite-target-connection.js";
 import { slugify } from "./naming.js";
 import { dispatchPreparedDeployment } from "./prepared-dispatch.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 
 export type CompositeTargetOutcome = "started" | "preflight_failed" | "dispatch_failed";
 
@@ -92,10 +91,6 @@ function nonSecretReason(error: unknown): string {
   return error instanceof Error && error.name ? error.name : "unknown error";
 }
 
-function isConditionalCheckFailed(error: unknown): boolean {
-  return (error as { name?: string } | undefined)?.name === "ConditionalCheckFailedException";
-}
-
 function buildConnectionInput(
   target: CompositeTargetDeploymentRecord,
 ): ResolveCompositeTargetConnectionInput {
@@ -118,31 +113,22 @@ function buildConnectionInput(
  * Mark a target PENDING → FAILED with a non-secret reason. Conditional on PENDING
  * so it never clobbers a status the provider path has already advanced, and so a
  * concurrent / repeat call is idempotent.
+ *
+ * [Issue #2441 / Phase B2] `failCompositeTargetIfPending` folds the CCF into a
+ * `conflict` outcome instead of throwing — discarding it here is the
+ * byte-identical no-op the pre-seam CCF-swallow produced.
  */
 async function markTargetFailed(
   deps: CompositeDispatchDeps,
   targetDeploymentId: string,
   reason: string,
 ): Promise<void> {
-  try {
-    await deps.repo.ddb.send(
-      new UpdateCommand({
-        TableName: deps.repo.tableName,
-        Key: { PK: deploymentPk(targetDeploymentId), SK: "META" },
-        UpdateExpression: "SET #s = :failed, failureReason = :reason, updatedAt = :now",
-        ConditionExpression: "#s = :pending",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":failed": "FAILED",
-          ":pending": "PENDING",
-          ":reason": reason,
-          ":now": new Date(deps.now()).toISOString(),
-        },
-      }),
-    );
-  } catch (err) {
-    if (!isConditionalCheckFailed(err)) throw err;
-  }
+  const repository = await resolveDeploymentsRepository(deps.repo);
+  await repository.failCompositeTargetIfPending(
+    targetDeploymentId,
+    reason,
+    new Date(deps.now()).toISOString(),
+  );
 }
 
 async function dispatchOneTarget(

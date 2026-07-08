@@ -1,4 +1,3 @@
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
 import { ULID_RE as JOB_ID_RE } from "../shared/constants.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
@@ -147,27 +146,12 @@ async function transitionRetryToPending(
   jobId: string,
   now: () => number,
 ): Promise<boolean> {
-  try {
-    await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.tableName,
-        Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-        UpdateExpression: "SET #s = :pending, updatedAt = :updatedAt REMOVE failureReason",
-        ConditionExpression: "#s = :failed AND tenantId = :tenantId",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":pending": "PENDING",
-          ":failed": "FAILED",
-          ":updatedAt": new Date(now()).toISOString(),
-          ":tenantId": tenantId,
-        },
-      }),
-    );
-    return true;
-  } catch (err) {
-    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return false;
-    throw err;
-  }
+  // [Issue #2441 / Phase B2] `retryToPending` folds the CCF into `conflict` —
+  // no probe (fire-and-forget shape), so the boolean collapse below is
+  // byte-identical to the pre-seam try/catch.
+  const repository = await resolveDeploymentsRepository(shared);
+  const outcome = await repository.retryToPending(jobId, tenantId, new Date(now()).toISOString());
+  return outcome.outcome === "updated";
 }
 
 function buildRetryDetail(
@@ -231,24 +215,14 @@ async function compensateRetryPublishFailure(
   now: () => number,
 ): Promise<void> {
   try {
-    await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.tableName,
-        Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-        // Issue #1200: FAILED terminal 化のタイミングで expiresAt を 7 日 retention に refresh。
-        UpdateExpression:
-          "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason, expiresAt = :expiresAt",
-        ConditionExpression: "#s = :pending AND tenantId = :tenantId",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":failed": "FAILED",
-          ":pending": "PENDING",
-          ":updatedAt": new Date(now()).toISOString(),
-          ":reason": "Failed to re-publish DeployCreateRequested event during retry",
-          ":tenantId": tenantId,
-          ":expiresAt": deploymentTerminalExpiresAt(now()),
-        },
-      }),
+    // Issue #1200: FAILED terminal 化のタイミングで expiresAt を 7 日 retention に refresh。
+    const repository = await resolveDeploymentsRepository(shared);
+    await repository.compensateRetryToFailed(
+      jobId,
+      tenantId,
+      "Failed to re-publish DeployCreateRequested event during retry",
+      new Date(now()).toISOString(),
+      deploymentTerminalExpiresAt(now()),
     );
   } catch {
     // ignore: best-effort rollback

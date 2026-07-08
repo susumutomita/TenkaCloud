@@ -1,5 +1,4 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { EventRecord, ScheduleFiredKind } from "../../control-data/events-repository.js";
 import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { bulkTeardownEvent } from "../event-handler/bulk-delete.js";
@@ -219,32 +218,28 @@ async function rescueStuckDeletingDeployment(
   const updatedAtMs = staleDeletingUpdatedAtMs(row, nowMs, thresholdMs);
   if (updatedAtMs === undefined || !row.jobId) return false;
   // listReconcilerRowsByEvent returns domain jobIds; the rescue write still
-  // targets the physical DynamoDB deployment row.
+  // targets the physical DynamoDB deployment row (the seam derives the PK).
   const pk = `DEPLOYMENT#${row.jobId}`;
+  const reason = `reconciler: stuck DELETING > ${Math.floor(thresholdMs / 60_000)} min, treating as FAILED to unblock Event TEARDOWN (#828)`;
   try {
-    await ctx.ddb.send(
-      new UpdateCommand({
-        TableName: ctx.deploymentsTableName,
-        Key: { PK: pk, SK: "META" },
-        UpdateExpression:
-          "SET #status = :failed, updatedAt = :now, #reason = :reason REMOVE GSI2PK, GSI2SK",
-        ConditionExpression: "#status = :deleting",
-        ExpressionAttributeNames: { "#status": "status", "#reason": "failureReason" },
-        ExpressionAttributeValues: {
-          ":deleting": "DELETING",
-          ":failed": "FAILED",
-          ":now": new Date(nowMs).toISOString(),
-          ":reason": `reconciler: stuck DELETING > ${Math.floor(thresholdMs / 60_000)} min, treating as FAILED to unblock Event TEARDOWN (#828)`,
-        },
-      }),
+    // [Issue #2441 / Phase B2] `markStuckDeletingFailed` folds the CCF into a
+    // `conflict` outcome instead of throwing (= the pre-seam CCF-catch → silent
+    // `return false`); an outcome other than "updated" hits the same branch as
+    // the old CCF catch, no warning logged. A genuine SDK/network error still
+    // throws, caught below and logged exactly like the pre-seam non-CCF catch.
+    const repository = await resolveDeploymentsRepository(ctx);
+    const outcome = await repository.markStuckDeletingFailed(
+      row.jobId,
+      reason,
+      new Date(nowMs).toISOString(),
     );
+    if (outcome.outcome !== "updated") return false;
     console.warn("[generic-scoring] rescued stuck DELETING deployment", {
       PK: pk,
       staleForMs: nowMs - updatedAtMs,
     });
     return true;
   } catch (err) {
-    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return false;
     console.warn("[generic-scoring] stuck-DELETING rescue failed", {
       PK: pk,
       message: err instanceof Error ? err.message : String(err),

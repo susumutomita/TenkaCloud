@@ -1,15 +1,25 @@
+import type { BulkDeploymentCreateEntry } from "../../../control-data/deployments-repository.js";
 import {
-  TransactWriteCommand,
-  type TransactWriteCommandInput,
-  UpdateCommand,
-} from "@aws-sdk/lib-dynamodb";
-import { type EventSharedResources, resolveEventRepositories } from "../shared.js";
+  type EventSharedResources,
+  resolveDeploymentsRepository,
+  resolveEventRepositories,
+} from "../shared.js";
 import { type PlanEntry, type PublishFailure, TRANSACT_WRITE_BATCH } from "./types.js";
 
 /**
  * Plan entries を DDB TransactWrite で chunk 単位に書き込む。 retry/forceRedeploy 経路では
  * 1 entry あたり Put + Delete の 2 ops、 通常経路は Put のみ。 chunk size は 25 ops 上限から
  * 逆算する。 Put は `attribute_not_exists(PK)` で同 jobId 重複を防ぐ。
+ *
+ * [Issue #2441 / Phase B2] Each chunk goes through the seam's
+ * `createBulkDeployments` (the identical Put+Delete TransactWrite, built
+ * verbatim inside the repository). The pre-seam `TransactWriteCommand` had no
+ * try/catch: a `ConditionalCheck` failure (stale plan — a jobId collision, or a
+ * `replacesJobId` row that changed tenant / was deleted between planning and
+ * write) propagated as an uncaught `TransactionCanceledException`, surfacing to
+ * the operator instead of silently dropping part of the plan. The seam folds
+ * that into a `conflict` outcome rather than throwing, so `writeBulkDeployChunk`
+ * re-throws on a non-`updated` outcome to keep that fail-loud contract.
  */
 export async function writeBulkDeployPlan(
   shared: EventSharedResources,
@@ -19,44 +29,29 @@ export async function writeBulkDeployPlan(
 ): Promise<void> {
   const opsPerEntry = replacesExisting ? 2 : 1;
   const planPerChunk = Math.floor(TRANSACT_WRITE_BATCH / opsPerEntry);
-  const writes: Promise<unknown>[] = [];
+  const repo = await resolveDeploymentsRepository(shared);
+  const writes: Promise<void>[] = [];
   for (let index = 0; index < plan.length; index += planPerChunk) {
-    const transactItems = buildTransactItems(
-      shared,
-      tenantId,
-      plan.slice(index, index + planPerChunk),
-    );
-    writes.push(shared.ddb.send(new TransactWriteCommand({ TransactItems: transactItems })));
+    writes.push(writeBulkDeployChunk(repo, tenantId, plan.slice(index, index + planPerChunk)));
   }
   await Promise.all(writes);
 }
 
-function buildTransactItems(
-  shared: EventSharedResources,
+async function writeBulkDeployChunk(
+  repo: Awaited<ReturnType<typeof resolveDeploymentsRepository>>,
   tenantId: string,
-  plan: readonly PlanEntry[],
-): TransactWriteCommandInput["TransactItems"] {
-  const items: TransactWriteCommandInput["TransactItems"] = [];
-  for (const entry of plan) {
-    items.push({
-      Put: {
-        TableName: shared.deploymentsTableName,
-        Item: entry.item,
-        ConditionExpression: "attribute_not_exists(PK)",
-      },
-    });
-    if (entry.replacesJobId) {
-      items.push({
-        Delete: {
-          TableName: shared.deploymentsTableName,
-          Key: { PK: `DEPLOYMENT#${entry.replacesJobId}`, SK: "META" },
-          ConditionExpression: "tenantId = :tenantId",
-          ExpressionAttributeValues: { ":tenantId": tenantId },
-        },
-      });
-    }
+  chunk: readonly PlanEntry[],
+): Promise<void> {
+  const entries: BulkDeploymentCreateEntry[] = chunk.map((entry) => ({
+    record: entry.item,
+    ...(entry.replacesJobId ? { replacesJobId: entry.replacesJobId } : {}),
+  }));
+  const outcome = await repo.createBulkDeployments(tenantId, entries);
+  if (outcome.outcome !== "updated") {
+    throw new Error(
+      `bulk deploy plan write conflict for tenant=${tenantId} (a targeted row changed since planning)`,
+    );
   }
-  return items;
 }
 
 /**
@@ -80,6 +75,11 @@ export async function markBulkEventDeploying(
 /**
  * Publish 失敗 deployment を FAILED に倒す。 PENDING からのみ遷移 (= 別経路で進んだ行を
  * 巻き戻さない)。 ConditionalCheckFailed は no-op (= 既に他経路で更新済み)。
+ *
+ * [Issue #2441 / Phase B2] `compensateBulkCreateToFailed` folds the CCF into a
+ * `conflict` outcome instead of throwing — discarding it here reproduces the
+ * pre-seam CCF-swallow; a genuine non-CCF error still throws from inside the
+ * seam and propagates here unchanged.
  */
 export async function markPublishFailuresFailed(
   shared: EventSharedResources,
@@ -87,30 +87,15 @@ export async function markPublishFailuresFailed(
   failures: readonly PublishFailure[],
   updatedAt: string,
 ): Promise<void> {
+  const repo = await resolveDeploymentsRepository(shared);
   await Promise.all(
-    failures.map(async (failure) => {
-      try {
-        await shared.ddb.send(
-          new UpdateCommand({
-            TableName: shared.deploymentsTableName,
-            Key: { PK: `DEPLOYMENT#${failure.jobId}`, SK: "META" },
-            UpdateExpression: "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason",
-            ConditionExpression: "tenantId = :tenantId AND #s = :pending",
-            ExpressionAttributeNames: { "#s": "status" },
-            ExpressionAttributeValues: {
-              ":failed": "FAILED",
-              ":pending": "PENDING",
-              ":tenantId": tenantId,
-              ":updatedAt": updatedAt,
-              ":reason": `Failed to publish DeployCreateRequested event: ${failure.reason}`,
-            },
-          }),
-        );
-      } catch (err) {
-        if (!(err instanceof Error) || err.name !== "ConditionalCheckFailedException") {
-          throw err;
-        }
-      }
-    }),
+    failures.map((failure) =>
+      repo.compensateBulkCreateToFailed(
+        failure.jobId,
+        tenantId,
+        `Failed to publish DeployCreateRequested event: ${failure.reason}`,
+        updatedAt,
+      ),
+    ),
   );
 }
