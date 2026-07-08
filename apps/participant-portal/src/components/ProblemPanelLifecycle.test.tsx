@@ -103,7 +103,7 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
 
     // Play surface is replaced: no flag panel, no access-URL link, even if outputs leaked.
     expect(screen.queryByTestId("flag-panel")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /challenge.example.com/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /challenge\.example\.com/ })).not.toBeInTheDocument();
     // Header status reflects the container, not the deploy job.
     expect(screen.getByText("Stopped")).toBeInTheDocument();
     expect(screen.getByText(/Start it to bring up the challenge endpoints/)).toBeInTheDocument();
