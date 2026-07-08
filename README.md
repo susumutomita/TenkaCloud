@@ -116,6 +116,20 @@ portal/          # optional React components for the Participant Portal
 
 [catalog]: https://github.com/susumutomita/TenkaCloudChallenge
 
+## Enterprise / internal training
+
+If you are considering TenkaCloud for enterprise or internal training use — hands-on
+security/operations drills, evaluation or onboarding exercises, custom/private problem
+sets, or instructor-led workshops — please feel free to reach out via the
+[contact form](https://forms.gle/djVprYmq3hFgJA7P9) or
+[GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions).
+
+TenkaCloud is open source, but we would love to learn more about real-world training
+needs, custom exercise requirements, and how organizations want to run hands-on
+operations/security drills.
+
+企業内での研修・演習・評価・独自教材の提供などで利用を検討される場合は、ぜひ一度お声がけください。TenkaCloud はオープンソースとして公開していますが、実際の現場で求められる題材、運用方法、閉じた環境での利用要件を伺いながら、プロダクトと教材の両方を改善していきたいと考えています。
+
 ## Contributing
 
 1. Read [CONTRIBUTING.md](./CONTRIBUTING.md) and [AGENTS.md](./AGENTS.md).

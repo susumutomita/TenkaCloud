@@ -351,6 +351,8 @@
       "ent.h2": "まずは話してみませんか。",
       "ent.p":
         "クラウド人材育成プログラム、 内製化推進、 継続的な AWS 演習 — 規模 / 期間 / 参加者像を聞いた上で、 適切なプランを一緒に決めます。",
+      "ent.enterprise":
+        "企業内での研修・演習・評価・独自教材の提供などで利用を検討される場合は、ぜひ一度お声がけください。TenkaCloud はオープンソースとして公開していますが、実際の現場で求められる題材、運用方法、閉じた環境での利用要件を伺いながら、プロダクトと教材の両方を改善していきたいと考えています。",
       "ent.cta1": "お問い合わせ",
       "ent.cta2": "GitHub を見る",
       "contact.cta": "お問い合わせフォーム",
@@ -596,6 +598,8 @@
       "ent.h2": "Let's talk.",
       "ent.p":
         "Cloud enablement programs, internal onboarding, recurring AWS drills — share your scale, cadence, and audience, and we'll figure out the right setup together.",
+      "ent.enterprise":
+        "If you are considering TenkaCloud for enterprise or internal training use, please feel free to contact us. TenkaCloud is open source, but we would love to learn more about real-world training needs, custom exercise requirements, and how organizations want to run hands-on operations/security drills.",
       "ent.cta1": "Get in touch",
       "ent.cta2": "View on GitHub",
       "contact.cta": "Open the contact form",

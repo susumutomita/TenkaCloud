@@ -174,3 +174,12 @@ the harness (no answer, no scoring conditions):
   timeout, and a response body cap.
 - The portal stays HTTPS-only in backend mode; loopback HTTP is the one
   exception, because it never leaves the machine (#871 / #1975).
+
+## Enterprise / internal training
+
+Local play also works for closed-network company trainings and internal drills. If
+you are considering TenkaCloud for enterprise or internal training use, please feel
+free to reach out via the
+[contact form](https://forms.gle/djVprYmq3hFgJA7P9) or
+[GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions) — we
+would love to learn about real-world training needs and custom exercise requirements.
