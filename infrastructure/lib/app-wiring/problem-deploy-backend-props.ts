@@ -47,6 +47,10 @@ export function buildProblemDeployBackendBaseProps(config: AppConfig) {
     // Issue #2291: DeployCreate を Lambda CreateStack 経路にするか。両モードで同一挙動にするため
     // base props に集約 (default false = 在来 CodeBuild、CFn テンプレ byte 互換)。
     deployViaLambda: config.deployViaLambda,
+    // Issue #2462: Lite が activation store から解決した pack assets を materialize 用に渡す。
+    // 両モードで同一に届くよう base props に集約するが、SaaS (bin/infrastructure.ts) は packAssets を
+    // 解決しない (= undefined)。undefined / 空 → BucketDeployment 追加ゼロ = CFn byte 互換。
+    packAssets: config.packAssets,
     // Issue #2311: 監査ログ出力の on/off。両モードで同一挙動にするため base props に集約。
     auditLogEnabled: config.auditLogEnabled,
     // Issue #2290: control-plane data backend (dynamodb|turso|sql) の選択。base props に集約する

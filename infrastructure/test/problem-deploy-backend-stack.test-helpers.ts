@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
 import { Project } from "aws-cdk-lib/aws-codebuild";
+import type { PackAsset } from "../lib/app-config/types";
 import { CoordinationDispatcherLambda } from "../lib/problem-deploy/coordination-dispatcher-lambda";
 import { ParticipantPortalLambda } from "../lib/problem-deploy/participant-portal-lambda";
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack";
@@ -151,6 +152,25 @@ export function synthWithControlDataBackendTurso(): Template {
 // describe が intent-first に読めるよう別名として残す。
 export function synthWithDeployViaLambda(): Template {
   return synthDefault();
+}
+
+// Issue #2462: active pack の実体を materialize する `packAssets` を渡した Lambda 経路の synth。
+// `problemsRootAbs` は実在ディレクトリを要する (Source.asset が synth 時に stage する) ため、
+// 呼び出し側が fixture dir を作って渡す。
+export function synthWithPackAssets(packAssets: readonly PackAsset[]): Template {
+  const app = new cdk.App();
+  const stack = new ProblemDeployBackendStack(app, "TestStackPackAssets", {
+    eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
+    sourceBucketName: "test-source-bucket",
+    sourceObjectKey: "source.zip",
+    problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+    problemsScoring: {},
+    problemsEndpoints: {},
+    deployViaLambda: true,
+    packAssets,
+    environmentName: "development",
+  });
+  return Template.fromStack(stack);
 }
 
 // #538: deployConcurrentBuildLimit を反映させた CodeBuild Project を検証するための別 synth。

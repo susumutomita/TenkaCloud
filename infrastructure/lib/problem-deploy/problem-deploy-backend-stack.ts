@@ -5,6 +5,7 @@ import { EventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
+import type { PackAsset } from "../app-config/types.js";
 import { AdminAuditLogTable } from "./admin-audit-log-table.js";
 import { buildDeployPipeline } from "./build-deploy-pipeline.js";
 import { buildParticipantPortalSubsystem } from "./build-participant-portal-subsystem.js";
@@ -110,6 +111,14 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * を生成し、`DeployCreate` state machine が Lambda + poll 定義に切り替わる。
    */
   readonly deployViaLambda?: boolean;
+  /**
+   * [Problem Packs / Issue #2462] Installed + active pack revisions to materialize into the source
+   * bucket alongside the core `problems/` tree (Lite only; resolved from `.tenkacloud/pack-store` in
+   * `bin/tenkacloud-lite.ts`). Only consumed on the Lambda deploy path (`deployViaLambda`).
+   * undefined / empty (the default core-only path, and SaaS — pooled activation wiring is #2459) adds
+   * no `BucketDeployment` = CFn テンプレ byte 互換。
+   */
+  readonly packAssets?: readonly PackAsset[];
   /**
    * Issue #2311 (ADR-049 cost-zero): 監査ログ出力を on/off する。default (未指定 / true) は
    * 従来どおり監査 Lambda 群 (deploy-api / event-api / competitor-accounts-api /
@@ -509,6 +518,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       environmentName: props.environmentName,
       // Issue #2291: flag OFF (default) では CodeBuild 経路のまま (追加リソースなし)。
       deployViaLambda: props.deployViaLambda,
+      // Issue #2462: active pack の実体を core problems/ の隣に materialize する (Lambda 経路のみ)。
+      // undefined / 空 → BucketDeployment 追加ゼロ = CFn byte 互換。
+      packAssets: props.packAssets,
     });
     this.deployCodeBuildProjectName = deployPipeline.deployCodeBuildProjectName;
     // Issue #2291: undefined on the default CodeBuild path (flag OFF) → ObservabilityStack skips the

@@ -14,6 +14,28 @@ export type { ApiKeySSMParameterNames };
 export type ControlDataBackend = "dynamodb" | "turso" | "sql";
 
 /**
+ * [Problem Packs / Issue #2462] One active pack's on-disk materialization descriptor.
+ *
+ * Points at the ABSOLUTE `problemsRoot` of an installed + active pack's immutable snapshot
+ * so Lite synth (`bin/tenkacloud-lite.ts` → `buildDeployPipeline`) can stage a per-pack
+ * `BucketDeployment` that copies `<problemsRootAbs>/<category>/<id>/{template.yaml,metadata.json}`
+ * into the source bucket under `pack-problems/<packId>/<version>/…` — the exact key space the
+ * catalog directory keys (`buildPackProblemDirectory`) resolve to and the Lambda deploy path's
+ * `buildS3ArtifactsResolver` reads. This is a materialization input (a filesystem path to copy
+ * from), NOT a catalog projection, so it lives on {@link AppConfig} rather than inside
+ * {@link ProblemsCatalogBundle}. Empty / undefined (the default, core-only path) materializes
+ * nothing → CFn byte-identical.
+ */
+export interface PackAsset {
+  /** Reverse-DNS pack id from the pack manifest (e.g. `com.example.cloud-pack`). */
+  readonly packId: string;
+  /** Immutable pack revision version from the manifest (e.g. `1.0.0`). */
+  readonly version: string;
+  /** Absolute path to the pack snapshot's problems root (the `BucketDeployment` source). */
+  readonly problemsRootAbs: string;
+}
+
+/**
  * Issue #766: bin/infrastructure.ts に散在していた env / config 解決を 1 つの shape に
  * 集約する。pure function `resolveAppConfig` の戻り値で、 stack 配線層 (= `lib/app-wiring`)
  * からはこの object だけを参照する (= 副作用無し、 順序依存無し、 単体テスト可能)。
@@ -80,6 +102,14 @@ export interface AppConfig {
 
   /** `problems/<category>/<id>/metadata.json` から auto-discovery した catalog + 各種 sub-feature。 */
   readonly problems: ProblemsCatalogBundle;
+
+  /**
+   * [Problem Packs / Issue #2462] Installed + active pack revisions to materialize into the source
+   * bucket at synth time (Lite only, resolved from `.tenkacloud/pack-store` in
+   * `bin/tenkacloud-lite.ts`). Undefined / empty on the default core-only path and for SaaS
+   * (pooled activation wiring is #2459), so no `BucketDeployment` is added = CFn byte-identical.
+   */
+  readonly packAssets?: readonly PackAsset[];
 
   /** ADR-008 Phase 2 (#642): private 問題 payload を格納する S3 bucket 名 (未設定なら undefined)。 */
   readonly challengePayloadBucketName: string | undefined;

@@ -19,12 +19,24 @@
  *
  *   - {@link SnapshotCatalogSource} composes the local core catalog with already
  *     validated installed pack snapshots through the pure {@link composeEffectiveCatalog}
- *     composer (#2091). It is ADDED but NOT ACTIVATED by default: nothing wires it
- *     into `resolve.ts`, and with no installed snapshots it produces a bundle deeply
- *     equal to {@link LocalCatalogSource}'s — so it is dormant until a later issue
- *     turns it on. Duplicate ids / unavailable runtimes fail closed (loudly), never
- *     a silent fallback. There is NO remote fetch here — snapshots are loaded
- *     upstream (#2090) and passed in already validated.
+ *     composer (#2091). Lite mode (`bin/tenkacloud-lite.ts`) wires it from the
+ *     activation store when `.tenkacloud/pack-store` exists (#2462); SaaS pooled
+ *     mode is still intentionally unwired (#2459). With no installed snapshots it
+ *     produces a bundle deeply equal to {@link LocalCatalogSource}'s. Duplicate ids
+ *     / unavailable runtimes fail closed (loudly), never a silent fallback. There is
+ *     NO remote fetch here — snapshots are loaded upstream (#2090) and passed in
+ *     already validated.
+ *
+ * Known scope limits of the #2462 Lite wiring (documented so the "catalog shows it,
+ * deploy 404s" half-state is not mistaken for done):
+ *   - A pack contributes its catalog directory + coordination projection only. Pack
+ *     SCORING / endpoints / phases are NOT projected yet, so pack problems deploy but
+ *     do not score — that is the follow-up #2463.
+ *   - SaaS pooled activation is unwired (#2459): only Lite `bin/tenkacloud-lite.ts`
+ *     reads the activation store today.
+ *   - Materialization rides the LAMBDA deploy path only. The CodeBuild deploy path
+ *     (console ACTION=deploy over the install.sh `source.zip`) does not carry the pack
+ *     store, so pack problems are unavailable there.
  */
 
 import type { ProblemsCatalogBundle } from "../app-config/types.js";
@@ -127,9 +139,9 @@ const DEFAULT_PLATFORM_RUNTIMES: readonly ProviderEngineCapability[] = [
 
 /**
  * A catalog source that composes the local core catalog with installed pack
- * snapshots via the pure {@link composeEffectiveCatalog}. ADDED but NOT ACTIVATED:
- * nothing wires it into `resolve.ts`. With `snapshots: []` it is byte-identical to
- * {@link LocalCatalogSource}, so it stays dormant until a later issue activates it.
+ * snapshots via the pure {@link composeEffectiveCatalog}. Lite can opt into this
+ * source through `bin/tenkacloud-lite.ts` (#2462); SaaS pooled remains unwired
+ * (#2459). With `snapshots: []` it is byte-identical to {@link LocalCatalogSource}.
  *
  * On a fail-closed composition (duplicate id across core/pack, unavailable runtime,
  * unsatisfied core range) it THROWS loudly — never a silent mock / empty fallback.
