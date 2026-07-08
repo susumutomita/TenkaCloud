@@ -1,5 +1,9 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import {
+  createEventsRepository,
+  type EventsRepository,
+} from "../../../problem-deploy/control-data/events-repository.js";
 
 /**
  * AdminInsight Lambda が module load で 1 度だけ作るリソース束。
@@ -48,4 +52,20 @@ export function buildSharedResources(): AdminInsightSharedResources {
     usageTableName: process.env.USAGE_FACTS_TABLE_NAME ?? "",
     environmentName: process.env.DEPLOY_ENVIRONMENT ?? "development",
   };
+}
+
+/**
+ * [ADR-049 §5.1 / #2438] Events aggregate 専用 read seam (event-handler/shared.ts の
+ * `resolveEventsRepository` と同型)。 default backend (`CONTROL_DATA_BACKEND` 未設定 =
+ * dynamodb) では従来と byte 互換の Query を `shared.ddb` 経由で発火する。 admin-insight は
+ * Events の read-only 集計のみ行う (mutating method は使わない) ため、 sync factory の
+ * events-only seam で十分。
+ */
+export function resolveEventsRepository(
+  shared: Pick<AdminInsightSharedResources, "ddb" | "eventsTableName">,
+): EventsRepository {
+  return createEventsRepository(process.env.CONTROL_DATA_BACKEND, {
+    ddb: shared.ddb,
+    eventsTableName: shared.eventsTableName,
+  });
 }

@@ -79,6 +79,29 @@ export interface EventSchedulePatch {
 export type ScheduleFiredKind = "teardown" | "deploy";
 
 /**
+ * [Issue #2438 / Phase A3] One page of {@link EventsRepository.listEventsPage}.
+ * `nextCursor` is an **opaque** token — its shape is a backend implementation
+ * detail (DDB: the pre-seam `ExclusiveStartKey` cursor codec, byte-identical
+ * wire format; SQL: a `(createdAt, eventId)` keyset token). A cursor minted by
+ * one backend is never valid on the other; callers must not decode it
+ * themselves.
+ */
+export interface EventsPage {
+  readonly events: readonly EventRecord[];
+  readonly nextCursor?: string;
+}
+
+/**
+ * [Issue #2438 / Phase A3] Scoring-gate fields the generic-scoring reconciler
+ * reads per distinct `eventId` in a tick (`scoringLocked` gate + Progression
+ * Gate config). Mirrors the pre-seam handler's local `EventScoringMeta`.
+ */
+export interface EventScoringMeta {
+  readonly scoringLocked: boolean;
+  readonly progressionGate: ProgressionGateConfig | undefined;
+}
+
+/**
  * [ADR-049 §5.1] Aggregate-scoped repository for the Events aggregate — domain
  * methods, not a generic key-value shim. Two interchangeable backends implement
  * it: {@link DynamoDbEventsRepository} (status quo, the default) and
@@ -229,6 +252,43 @@ export interface EventsRepository {
     event: EventRecord,
     teams: readonly TeamRecord[],
   ): Promise<CreateEventWithTeamsOutcome>;
+  /**
+   * [#2438 / Phase A3] Cursor-paginated tenant listing (newest-first by
+   * `createdAt`, mirrors {@link listEventsByTenant}'s ordering). Unlike
+   * `listEventsByTenant` (full-page drain, no cursor — required for the
+   * caller's own internal use), this is the seam for a UI list view: it
+   * returns at most `opts.limit` events plus an opaque `nextCursor` when more
+   * remain. `opts.cursor` replays a prior `nextCursor`; an absent/invalid
+   * cursor starts from the first page.
+   */
+  listEventsPage(
+    tenantId: string,
+    opts: { readonly limit: number; readonly cursor?: string },
+  ): Promise<EventsPage>;
+  /**
+   * [#2438 / Phase A3] Cross-tenant status scan for the auto-transition
+   * reconciler (moved from `event-reconciler.ts`'s base-table Scan). Returns
+   * every event across every tenant whose `status` is one of `statuses`
+   * (full-page drain — the reconciler must not miss a matching event to a
+   * later Scan page). Returns `[]` for an empty `statuses` array without
+   * issuing a request.
+   */
+  listEventsByStatus(statuses: readonly string[]): Promise<readonly EventRecord[]>;
+  /**
+   * [#2438 / Phase A3] Batch scoring-meta read for the generic-scoring tick
+   * (moved from `generic-scoring-handler/index.ts`'s BatchGet). Returns a map
+   * keyed by `eventId`; an id with no matching row is simply absent from the
+   * map (callers that need fail-closed behavior on a read error handle that
+   * themselves — this method propagates errors, it does not swallow them).
+   * Returns an empty map for an empty `eventIds` array without issuing a
+   * request.
+   */
+  batchGetEvents(eventIds: readonly string[]): Promise<ReadonlyMap<string, EventScoringMeta>>;
+  /**
+   * [#2438 / Phase A3] Tenant event count (moved from admin-insight
+   * `summary.ts`'s `Select: COUNT` query, full-page drain).
+   */
+  countEventsByTenant(tenantId: string): Promise<number>;
 }
 
 /**

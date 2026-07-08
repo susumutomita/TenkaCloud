@@ -5,6 +5,8 @@ import type {
   EventMutationOutcome,
   EventRecord,
   EventSchedulePatch,
+  EventScoringMeta,
+  EventsPage,
   EventsRepository,
   ScheduleFiredKind,
   TeamRecord,
@@ -91,6 +93,36 @@ export class MirroredEventsRepository implements EventsRepository {
   async pruneExpired(nowEpochSeconds: number): Promise<number> {
     await this.replica.pruneExpired(nowEpochSeconds);
     return this.canonical.pruneExpired(nowEpochSeconds);
+  }
+
+  // ---------------------------------------------------------------------------
+  // [Issue #2438 / Phase A3] List/scan/batch/count reads. These are read-only
+  // aggregate views (a UI page, a reconciler sweep, a scoring batch, a count) —
+  // unlike `getEvent` / `listEventsByTenant`, they have no per-record identity
+  // to read-repair against, so the canonical (DynamoDB) result is returned
+  // directly. Replica drift, if any, self-heals through the point-read /
+  // tenant-list paths above the next time each record is touched.
+  // ---------------------------------------------------------------------------
+
+  async listEventsPage(
+    tenantId: string,
+    opts: { readonly limit: number; readonly cursor?: string },
+  ): Promise<EventsPage> {
+    return this.canonical.listEventsPage(tenantId, opts);
+  }
+
+  async listEventsByStatus(statuses: readonly string[]): Promise<readonly EventRecord[]> {
+    return this.canonical.listEventsByStatus(statuses);
+  }
+
+  async batchGetEvents(
+    eventIds: readonly string[],
+  ): Promise<ReadonlyMap<string, EventScoringMeta>> {
+    return this.canonical.batchGetEvents(eventIds);
+  }
+
+  async countEventsByTenant(tenantId: string): Promise<number> {
+    return this.canonical.countEventsByTenant(tenantId);
   }
 
   // ---------------------------------------------------------------------------

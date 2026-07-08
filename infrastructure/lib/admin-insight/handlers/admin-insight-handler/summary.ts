@@ -1,5 +1,5 @@
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
-import type { AdminInsightSharedResources } from "./shared.js";
+import { type AdminInsightSharedResources, resolveEventsRepository } from "./shared.js";
 
 /**
  * 1 tenant 分の deploy / event 集計。ADR-011 Phase 1 API の正本 shape:
@@ -69,31 +69,15 @@ async function countTenantDeployments(
 }
 
 /**
- * 1 tenant の Events 総件数。Events GSI1 (TENANT#<id>) を Select=COUNT で叩く。
- * AggregationCount で page 跨ぎを安全に集計する。
+ * 1 tenant の Events 総件数。 [ADR-049 §5.1 / #2438] repository seam
+ * (`countEventsByTenant`) 経由。 default backend (dynamodb) では従来と byte 互換の
+ * GSI1 (TENANT#<id>) Select=COUNT query を全 page drain する。
  */
 async function countTenantEvents(
   shared: AdminInsightSharedResources,
   tenantId: string,
 ): Promise<number> {
-  let total = 0;
-  let lastEvaluatedKey: Record<string, unknown> | undefined;
-  do {
-    const out = await shared.ddb.send(
-      new QueryCommand({
-        TableName: shared.eventsTableName,
-        IndexName: "GSI1",
-        KeyConditionExpression: "GSI1PK = :pk",
-        ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}` },
-        // payload 不要 (COUNT のみで良い)。
-        Select: "COUNT",
-        ExclusiveStartKey: lastEvaluatedKey,
-      }),
-    );
-    total += out.Count ?? 0;
-    lastEvaluatedKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-  } while (lastEvaluatedKey);
-  return total;
+  return resolveEventsRepository(shared).countEventsByTenant(tenantId);
 }
 
 /**

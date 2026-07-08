@@ -93,6 +93,15 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
     readonly tenantId: string;
     readonly userPoolId: string;
   }>;
+  /**
+   * [Issue #2438 / Phase A3] control-plane data backend (dynamodb|turso|sql)。 未指定
+   * (= 既存テンプレートと byte 互換) が既定。`ProblemDeployBackendStack` の同名 prop と同型。
+   */
+  readonly controlDataBackend?: string;
+  /** Public remote libSQL URL. Never contains authentication material. */
+  readonly tursoDatabaseUrl?: string;
+  /** SSM SecureString parameter name containing the libSQL auth token. */
+  readonly tursoAuthTokenParameterName?: string;
 }
 
 /**
@@ -143,6 +152,12 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       // wire.ts に account を二重配線しない。
       ...(props.costBudgetName
         ? { costBudgetName: props.costBudgetName, costBudgetAccountId: this.account }
+        : {}),
+      // Issue #2438: control-plane data backend。 未指定なら env を足さず byte 互換。
+      controlDataBackend: props.controlDataBackend,
+      ...(props.tursoDatabaseUrl ? { tursoDatabaseUrl: props.tursoDatabaseUrl } : {}),
+      ...(props.tursoAuthTokenParameterName
+        ? { tursoAuthTokenParameterName: props.tursoAuthTokenParameterName }
         : {}),
     });
     this.lambdaFunctionName = lambda.fn.functionName;

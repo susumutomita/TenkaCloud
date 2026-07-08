@@ -335,6 +335,73 @@ describe("MirroredEventsRepository conditional writes (#2437)", () => {
   });
 });
 
+describe("MirroredEventsRepository listing/batch/count seam (#2438)", () => {
+  function stubEvents(overrides: Record<string, unknown>): EventsRepository {
+    return overrides as unknown as EventsRepository;
+  }
+
+  it("should delegate listEventsPage to canonical only", async () => {
+    const canonicalPage = vi.fn(async () => ({ events: [event()], nextCursor: "cursor-1" }));
+    const replica = vi.fn();
+    const repository = new MirroredEventsRepository(
+      stubEvents({ listEventsPage: canonicalPage }),
+      stubEvents({ listEventsPage: replica }),
+    );
+
+    const result = await repository.listEventsPage("tenant-1", { limit: 10, cursor: "c" });
+
+    expect(result).toEqual({ events: [event()], nextCursor: "cursor-1" });
+    expect(canonicalPage).toHaveBeenCalledWith("tenant-1", { limit: 10, cursor: "c" });
+    expect(replica).not.toHaveBeenCalled();
+  });
+
+  it("should delegate listEventsByStatus to canonical only", async () => {
+    const canonicalByStatus = vi.fn(async () => [event({ status: "READY" })]);
+    const replica = vi.fn();
+    const repository = new MirroredEventsRepository(
+      stubEvents({ listEventsByStatus: canonicalByStatus }),
+      stubEvents({ listEventsByStatus: replica }),
+    );
+
+    const result = await repository.listEventsByStatus(["READY"]);
+
+    expect(result).toEqual([event({ status: "READY" })]);
+    expect(canonicalByStatus).toHaveBeenCalledWith(["READY"]);
+    expect(replica).not.toHaveBeenCalled();
+  });
+
+  it("should delegate batchGetEvents to canonical only", async () => {
+    const meta = new Map([["event-1", { scoringLocked: true, progressionGate: undefined }]]);
+    const canonicalBatch = vi.fn(async () => meta);
+    const replica = vi.fn();
+    const repository = new MirroredEventsRepository(
+      stubEvents({ batchGetEvents: canonicalBatch }),
+      stubEvents({ batchGetEvents: replica }),
+    );
+
+    const result = await repository.batchGetEvents(["event-1"]);
+
+    expect(result).toBe(meta);
+    expect(canonicalBatch).toHaveBeenCalledWith(["event-1"]);
+    expect(replica).not.toHaveBeenCalled();
+  });
+
+  it("should delegate countEventsByTenant to canonical only", async () => {
+    const canonicalCount = vi.fn(async () => 3);
+    const replica = vi.fn();
+    const repository = new MirroredEventsRepository(
+      stubEvents({ countEventsByTenant: canonicalCount }),
+      stubEvents({ countEventsByTenant: replica }),
+    );
+
+    const result = await repository.countEventsByTenant("tenant-1");
+
+    expect(result).toBe(3);
+    expect(canonicalCount).toHaveBeenCalledWith("tenant-1");
+    expect(replica).not.toHaveBeenCalled();
+  });
+});
+
 describe("MirroredTeamsRepository", () => {
   it("should heal team point, login-key, and event-list reads", async () => {
     const current = team({ internalSlug: "current" });

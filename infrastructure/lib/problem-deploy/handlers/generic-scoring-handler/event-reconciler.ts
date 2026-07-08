@@ -1,6 +1,6 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { QueryCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { ScheduleFiredKind } from "../../control-data/events-repository.js";
+import { QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import type { EventRecord, ScheduleFiredKind } from "../../control-data/events-repository.js";
 import { bulkTeardownEvent } from "../event-handler/bulk-delete.js";
 import { bulkDeployEvent } from "../event-handler/bulk-deploy.js";
 import { type EventSharedResources, resolveEventsRepository } from "../event-handler/shared.js";
@@ -287,8 +287,8 @@ function staleDeletingUpdatedAtMs(
 }
 
 /**
- * Events table を scan して `DEPLOYING` / `READY` / `TEARDOWN` 状態の Event について
- * 自動遷移を判定 (#557 #539 / Issue #1038 P0 #3):
+ * [#557 #539 / #1038 P0 #3] `DEPLOYING` / `READY` / `TEARDOWN` / `ENDED` / `DRAFT` 状態の
+ * Event について自動遷移を判定する:
  *   - `DEPLOYING`: 子 deployment 全 terminal → `READY`
  *   - `READY` + `endsAt` 経過 → `ENDED`
  *   - `TEARDOWN`: 子 deployment 全 終端 → `ARCHIVED`
@@ -296,72 +296,29 @@ function staleDeletingUpdatedAtMs(
  * 各 Event の判定は **並列**: 1 件遅い tenant が他を block しない。Update が CCF
  * (= operator 手動遷移などの race) で失敗した行は silent skip (= 次の tick で再評価)。
  *
- * Scan limit 100: TenkaCloud MVP 規模 (events ~10 件 / tenant、~5 tenants) で 1 tick で
- * 全件処理できる範囲。Phase 2+ で増えたら GSI3 (PK=STATUS) で query 化を検討。
+ * [#2438 / Phase A3] Events への raw Scan は repository seam
+ * (`listEventsByStatus`) に移設済み。 TenkaCloud MVP 規模 (events ~10 件 / tenant、
+ * ~5 tenants) で 1 tick 全件を drain できる範囲。 Phase 2+ で増えたら backend 側の
+ * query 化 (GSI3 等) を検討する。
  */
+const RECONCILED_STATUSES = ["DEPLOYING", "READY", "TEARDOWN", "ENDED", "DRAFT"] as const;
+
 export async function reconcileEventStatuses(
   ctx: ReconcileEventStatusesContext,
   nowIso: string,
 ): Promise<void> {
-  let exclusiveStartKey: Record<string, unknown> | undefined;
-  do {
-    const out = await ctx.ddb.send(
-      new ScanCommand({
-        TableName: ctx.eventsTableName,
-        // [ADR-047] ENDED も拾う (= teardownAt 経過の自動撤去対象)。 teardownAt / teardownFiredAt を投影。
-        // [ADR-047 follow-up] DRAFT も拾う (= deployAt 経過の自動デプロイ対象)。 deployAt / deployFiredAt を投影。
-        ProjectionExpression:
-          "PK, tenantId, eventId, #status, endsAt, teardownAt, teardownFiredAt, deployAt, deployFiredAt",
-        ExpressionAttributeNames: { "#status": "status" },
-        FilterExpression:
-          "#status = :deploying OR #status = :ready OR #status = :teardown OR #status = :ended OR #status = :draft",
-        ExpressionAttributeValues: {
-          ":deploying": "DEPLOYING",
-          ":ready": "READY",
-          ":teardown": "TEARDOWN",
-          ":ended": "ENDED",
-          ":draft": "DRAFT",
-        },
-        Limit: 100,
-        ExclusiveStartKey: exclusiveStartKey,
-      }),
-    );
-    const items = (out.Items ?? []) as Array<{
-      PK?: string;
-      tenantId?: string;
-      eventId?: string;
-      status?: string;
-      endsAt?: string;
-      teardownAt?: string;
-      teardownFiredAt?: string;
-      deployAt?: string;
-      deployFiredAt?: string;
-    }>;
-
-    const nowMs = Date.parse(nowIso);
-    await Promise.all(items.map((event) => reconcileSingleEvent(ctx, event, nowIso, nowMs)));
-
-    exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-  } while (exclusiveStartKey);
+  const events = await resolveEventsRepository(ctx).listEventsByStatus(RECONCILED_STATUSES);
+  const nowMs = Date.parse(nowIso);
+  await Promise.all(events.map((event) => reconcileSingleEvent(ctx, event, nowIso, nowMs)));
 }
 
 async function reconcileSingleEvent(
   ctx: ReconcileEventStatusesContext,
-  event: {
-    readonly PK?: string;
-    readonly tenantId?: string;
-    readonly eventId?: string;
-    readonly status?: string;
-    readonly endsAt?: string;
-    readonly teardownAt?: string;
-    readonly teardownFiredAt?: string;
-    readonly deployAt?: string;
-    readonly deployFiredAt?: string;
-  },
+  event: EventRecord,
   nowIso: string,
   nowMs: number,
 ): Promise<void> {
-  if (!event.tenantId || !event.eventId || !event.status || !event.PK) return;
+  if (!event.tenantId || !event.eventId || !event.status) return;
   const eventStatus: string = event.status;
 
   // [ADR-047 follow-up] scheduled auto-deploy: deployAt 経過の DRAFT を自動 deploy。
@@ -371,7 +328,7 @@ async function reconcileSingleEvent(
     await fireScheduledAction(
       ctx,
       ctx.deployDeps,
-      { PK: event.PK, tenantId: event.tenantId, eventId: event.eventId, nowMs, nowIso },
+      { tenantId: event.tenantId, eventId: event.eventId, nowMs, nowIso },
       "deploy",
       bulkDeployEvent,
     );
@@ -389,7 +346,7 @@ async function reconcileSingleEvent(
     await fireScheduledAction(
       ctx,
       ctx.teardownDeps,
-      { PK: event.PK, tenantId: event.tenantId, eventId: event.eventId, nowMs, nowIso },
+      { tenantId: event.tenantId, eventId: event.eventId, nowMs, nowIso },
       "teardown",
       bulkTeardownEvent,
     );
@@ -402,7 +359,6 @@ async function reconcileSingleEvent(
     const next = resolveEventStatusTransition(eventStatus, [], { endsAt: event.endsAt, nowMs });
     if (!next) return;
     await applyEventStatusTransition(ctx, {
-      PK: event.PK,
       tenantId: event.tenantId,
       eventId: event.eventId,
       from: eventStatus,
@@ -431,7 +387,6 @@ async function reconcileSingleEvent(
   const next = resolveEventStatusTransition(eventStatus, adjustedStatuses);
   if (!next) return;
   await applyEventStatusTransition(ctx, {
-    PK: event.PK,
     tenantId: event.tenantId,
     eventId: event.eventId,
     from: eventStatus,
@@ -443,7 +398,6 @@ async function reconcileSingleEvent(
 async function applyEventStatusTransition(
   ctx: ReconcileEventStatusesContext,
   args: {
-    readonly PK: string;
     readonly tenantId: string;
     readonly eventId: string;
     readonly from: string;
@@ -487,7 +441,6 @@ async function fireScheduledAction(
   ctx: ReconcileEventStatusesContext,
   deps: EventSharedResources,
   args: {
-    readonly PK: string;
     readonly tenantId: string;
     readonly eventId: string;
     readonly nowMs: number;
@@ -526,7 +479,6 @@ async function fireScheduledAction(
 async function recordFired(
   ctx: ReconcileEventStatusesContext,
   args: {
-    readonly PK: string;
     readonly tenantId: string;
     readonly eventId: string;
     readonly nowIso: string;

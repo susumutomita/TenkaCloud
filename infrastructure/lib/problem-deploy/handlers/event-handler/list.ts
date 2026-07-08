@@ -1,5 +1,4 @@
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
-import { createCursorCodec } from "../shared/cursor-codec.js";
 import { parseProgressionGate } from "../shared/progression-gate.js";
 import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
 import { collectTeamScoreEvents, type DeploymentRefForScoreEvents } from "./team-score-events.js";
@@ -44,14 +43,6 @@ export interface ListEventsResponse {
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
-/**
- * Issue #862: cursor は DDB ExclusiveStartKey にそのまま渡るので、 EventsTable の
- * 有効キー (base table の PK/SK + GSI1 query の GSI1PK/GSI1SK) に絞った allowlist で
- * shape を pin する。 共通の validated codec (`shared/cursor-codec.ts`) を使い、 不正な
- * cursor は最初から page し直す。
- */
-const cursorCodec = createCursorCodec(new Set(["PK", "SK", "GSI1PK", "GSI1SK"]));
-
 function toSummary(item: Partial<EventItem>): EventSummary {
   return {
     eventId: String(item.eventId ?? ""),
@@ -77,30 +68,22 @@ function toSummary(item: Partial<EventItem>): EventSummary {
 
 /**
  * 指定 tenant の Event 一覧を新しい順に返す (GSI1: TENANT#<tenantId> / createdAt)。
+ *
+ * [ADR-049 §5.1 / #2438] repository seam 経由 (`repositories.events.listEventsPage`)。
+ * default backend (dynamodb) では同じ Query + cursor codec (allowlist PK/SK/GSI1PK/GSI1SK)
+ * を発火するので、 流通中の cursor 互換 / CFn 差分は無い (byte 互換)。
  */
 export async function listEvents(
   shared: EventSharedResources,
   req: ListEventsRequest,
 ): Promise<ListEventsResponse> {
   const limit = Math.min(Math.max(req.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
-  const exclusiveStartKey = req.cursor ? cursorCodec.decode(req.cursor) : undefined;
-
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.eventsTableName,
-      IndexName: "GSI1",
-      KeyConditionExpression: "GSI1PK = :pk",
-      ExpressionAttributeValues: { ":pk": `TENANT#${req.tenantId}` },
-      ScanIndexForward: false,
-      Limit: limit,
-      ExclusiveStartKey: exclusiveStartKey,
-    }),
-  );
-
-  const items = (out.Items ?? []).map((i) => toSummary(i as Partial<EventItem>));
-  const nextCursor = out.LastEvaluatedKey
-    ? cursorCodec.encode(out.LastEvaluatedKey as Record<string, unknown>)
-    : undefined;
+  const repositories = await resolveEventRepositories(shared);
+  const { events, nextCursor } = await repositories.events.listEventsPage(req.tenantId, {
+    limit,
+    cursor: req.cursor,
+  });
+  const items = events.map((event) => toSummary(event));
   return { items, nextCursor };
 }
 

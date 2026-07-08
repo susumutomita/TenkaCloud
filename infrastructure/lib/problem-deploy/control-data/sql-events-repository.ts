@@ -1,4 +1,7 @@
-import type { ProgressionGateConfig } from "../handlers/shared/progression-gate.js";
+import {
+  type ProgressionGateConfig,
+  parseProgressionGate,
+} from "../handlers/shared/progression-gate.js";
 import { TEAM_INSERT_SQL, teamRowParams } from "./sql-teams-repository.js";
 import type {
   ClearProgressionGateOutcome,
@@ -6,6 +9,8 @@ import type {
   EventMutationOutcome,
   EventRecord,
   EventSchedulePatch,
+  EventScoringMeta,
+  EventsPage,
   EventsRepository,
   ScheduleFiredKind,
   SqlExecutor,
@@ -13,6 +18,37 @@ import type {
   SqlStatement,
   TeamRecord,
 } from "./types.js";
+
+/**
+ * [#2438 / Phase A3] Opaque keyset cursor for {@link SqlEventsRepository.listEventsPage}
+ * — a `(createdAt, eventId)` tiebreak pair matching the `ORDER BY created_at DESC,
+ * event_id DESC` used by both this method and {@link SqlEventsRepository.listEventsByTenant}.
+ * Deliberately a **different wire format** than the DynamoDB backend's
+ * `ExclusiveStartKey`-based cursor: a cursor minted by one backend decodes to
+ * `undefined` on the other (missing `createdAt`/`eventId` keys), which safely
+ * restarts pagination from the first page instead of crashing.
+ */
+interface EventsKeysetCursor {
+  readonly createdAt: string;
+  readonly eventId: string;
+}
+
+function encodeKeysetCursor(cursor: EventsKeysetCursor): string {
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+function decodeKeysetCursor(cursor: string): EventsKeysetCursor | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== "object") return undefined;
+  const { createdAt, eventId } = parsed as Partial<EventsKeysetCursor>;
+  if (typeof createdAt !== "string" || typeof eventId !== "string") return undefined;
+  return { createdAt, eventId };
+}
 
 /**
  * [ADR-049 §5.1 / §5.2] SQLite implementation of {@link EventsRepository}. One
@@ -104,6 +140,77 @@ export class SqlEventsRepository implements EventsRepository {
       [nowEpochSeconds],
     );
     return Number(result.changes);
+  }
+
+  async listEventsPage(
+    tenantId: string,
+    opts: { readonly limit: number; readonly cursor?: string },
+  ): Promise<EventsPage> {
+    const after = opts.cursor ? decodeKeysetCursor(opts.cursor) : undefined;
+    // Fetch one extra row to know whether a next page exists without a second round trip.
+    const rows = after
+      ? await this.sql.all(
+          "SELECT payload, created_at, event_id FROM events WHERE tenant_id = ? " +
+            "AND (created_at < ? OR (created_at = ? AND event_id < ?)) " +
+            "ORDER BY created_at DESC, event_id DESC LIMIT ?",
+          [tenantId, after.createdAt, after.createdAt, after.eventId, opts.limit + 1],
+        )
+      : await this.sql.all(
+          "SELECT payload, created_at, event_id FROM events WHERE tenant_id = ? " +
+            "ORDER BY created_at DESC, event_id DESC LIMIT ?",
+          [tenantId, opts.limit + 1],
+        );
+    const hasMore = rows.length > opts.limit;
+    const page = hasMore ? rows.slice(0, opts.limit) : rows;
+    const events = page.map((row) => JSON.parse(String(row.payload)) as EventRecord);
+    const last = page[page.length - 1];
+    const nextCursor =
+      hasMore && last
+        ? encodeKeysetCursor({
+            createdAt: String(last.created_at),
+            eventId: String(last.event_id),
+          })
+        : undefined;
+    return { events, nextCursor };
+  }
+
+  async listEventsByStatus(statuses: readonly string[]): Promise<readonly EventRecord[]> {
+    if (statuses.length === 0) return [];
+    const placeholders = statuses.map(() => "?").join(", ");
+    const rows = await this.sql.all(
+      // event_id tiebreak keeps ordering deterministic for tests; the reconciler
+      // (the sole caller) processes matches independent of order.
+      `SELECT payload FROM events WHERE status IN (${placeholders}) ORDER BY event_id`,
+      statuses,
+    );
+    return rows.map((row) => JSON.parse(String(row.payload)) as EventRecord);
+  }
+
+  async batchGetEvents(
+    eventIds: readonly string[],
+  ): Promise<ReadonlyMap<string, EventScoringMeta>> {
+    const map = new Map<string, EventScoringMeta>();
+    if (eventIds.length === 0) return map;
+    const placeholders = eventIds.map(() => "?").join(", ");
+    const rows = await this.sql.all(
+      `SELECT event_id, payload FROM events WHERE event_id IN (${placeholders})`,
+      eventIds,
+    );
+    for (const row of rows) {
+      const record = JSON.parse(String(row.payload)) as EventRecord;
+      map.set(String(row.event_id), {
+        scoringLocked: record.scoringLocked === true,
+        progressionGate: parseProgressionGate(record.progressionGate),
+      });
+    }
+    return map;
+  }
+
+  async countEventsByTenant(tenantId: string): Promise<number> {
+    const row = await this.sql.get("SELECT COUNT(*) as cnt FROM events WHERE tenant_id = ?", [
+      tenantId,
+    ]);
+    return Number(row?.cnt ?? 0);
   }
 
   // ---------------------------------------------------------------------------

@@ -12,6 +12,8 @@ export type {
   EventMutationOutcome,
   EventRecord,
   EventSchedulePatch,
+  EventScoringMeta,
+  EventsPage,
   EventsRepository,
   ScheduleFiredKind,
   SqlExecutor,

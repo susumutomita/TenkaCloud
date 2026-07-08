@@ -296,4 +296,87 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
       expect(Object.keys(outputs)).toContain("AdminInsightApiUrl");
     });
   });
+
+  describe("Issue #2438: control-plane data backend env wiring", () => {
+    function synthWithControlDataBackend(props: {
+      readonly controlDataBackend?: string;
+      readonly tursoDatabaseUrl?: string;
+      readonly tursoAuthTokenParameterName?: string;
+    }): Template {
+      const app = new cdk.App();
+      const fixtures = new cdk.Stack(app, "Fixtures2438", {
+        env: { account: "123456789012", region: "ap-northeast-1" },
+      });
+      const userPool = new UserPool(fixtures, "UserPool", { selfSignUpEnabled: false });
+      const userPoolClient = userPool.addClient("UserClient");
+      const deployments = new Table(fixtures, "Deployments", {
+        partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
+      });
+      const events = new Table(fixtures, "Events", {
+        partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
+      });
+      const teams = new Table(fixtures, "Teams", {
+        partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
+      });
+
+      const stack = new AdminConsoleInsightStack(app, "InsightStack2438", {
+        env: { account: "123456789012", region: "ap-northeast-1" },
+        cognitoUserPool: userPool,
+        cognitoUserClientId: userPoolClient.userPoolClientId,
+        deploymentsTable: deployments,
+        eventsTable: events,
+        teamsTable: teams,
+        ...props,
+      });
+      return Template.fromStack(stack);
+    }
+
+    it("should NOT add CONTROL_DATA_BACKEND by default (byte-compat, no regression)", () => {
+      const tpl = synthWithControlDataBackend({});
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Environment: Match.objectLike({
+            Variables: Match.not(Match.objectLike({ CONTROL_DATA_BACKEND: Match.anyValue() })),
+          }),
+        }),
+      );
+    });
+
+    it("should inject CONTROL_DATA_BACKEND + Turso env and grant ssm:GetParameter when turso is selected", () => {
+      const tpl = synthWithControlDataBackend({
+        controlDataBackend: "turso",
+        tursoDatabaseUrl: "libsql://example.turso.io",
+        tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
+      });
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Environment: Match.objectLike({
+            Variables: Match.objectLike({
+              CONTROL_DATA_BACKEND: "turso",
+              TURSO_DATABASE_URL: "libsql://example.turso.io",
+              TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/development/turso-token",
+            }),
+          }),
+        }),
+      );
+      tpl.hasResourceProperties(
+        "AWS::IAM::Policy",
+        Match.objectLike({
+          PolicyDocument: Match.objectLike({
+            Statement: Match.arrayWith([
+              Match.objectLike({ Action: "ssm:GetParameter", Resource: Match.anyValue() }),
+            ]),
+          }),
+        }),
+      );
+      expect(JSON.stringify(tpl.toJSON())).toContain(
+        ":parameter/tenkacloud/development/turso-token",
+      );
+    });
+  });
 });
