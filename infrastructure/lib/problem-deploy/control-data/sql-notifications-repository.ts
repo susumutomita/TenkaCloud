@@ -80,4 +80,12 @@ export class SqlNotificationsRepository implements NotificationsRepository {
       hasMore && last ? encodeKeysetCursor({ s: String(last.sort_key) }) : undefined;
     return { notifications, nextCursor };
   }
+
+  async pruneExpired(nowEpochSeconds: number): Promise<number> {
+    const result = await this.sql.run(
+      "DELETE FROM notifications WHERE expires_at > 0 AND expires_at <= ?",
+      [nowEpochSeconds],
+    );
+    return Number(result.changes);
+  }
 }

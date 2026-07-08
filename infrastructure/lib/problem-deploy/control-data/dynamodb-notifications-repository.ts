@@ -1,4 +1,10 @@
-import { type DynamoDBDocumentClient, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  DeleteCommand,
+  type DynamoDBDocumentClient,
+  PutCommand,
+  QueryCommand,
+  ScanCommand,
+} from "@aws-sdk/lib-dynamodb";
 import { createCursorCodec } from "../handlers/shared/cursor-codec.js";
 import type { NotificationItem } from "../handlers/shared/notification.js";
 import type { NotificationRecord, NotificationsPage, NotificationsRepository } from "./types.js";
@@ -61,5 +67,31 @@ export class DynamoDbNotificationsRepository implements NotificationsRepository 
       ? NOTIFICATIONS_PAGE_CURSOR_CODEC.encode(out.LastEvaluatedKey as Record<string, unknown>)
       : undefined;
     return { notifications, nextCursor };
+  }
+
+  async pruneExpired(nowEpochSeconds: number): Promise<number> {
+    let deleted = 0;
+    let exclusiveStartKey: Record<string, unknown> | undefined;
+    do {
+      const out = await this.ddb.send(
+        new ScanCommand({
+          TableName: this.tableName,
+          FilterExpression: "expiresAt > :zero AND expiresAt <= :now",
+          ExpressionAttributeValues: { ":zero": 0, ":now": nowEpochSeconds },
+          ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
+        }),
+      );
+      for (const item of (out.Items ?? []) as Record<string, unknown>[]) {
+        await this.ddb.send(
+          new DeleteCommand({
+            TableName: this.tableName,
+            Key: { PK: item.PK, SK: item.SK },
+          }),
+        );
+        deleted += 1;
+      }
+      exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
+    } while (exclusiveStartKey);
+    return deleted;
   }
 }

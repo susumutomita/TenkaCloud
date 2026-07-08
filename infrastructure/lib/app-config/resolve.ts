@@ -106,7 +106,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   if (controlDataBackend !== "dynamodb" && (!tursoDatabaseUrl || !tursoAuthTokenParameterName)) {
     throw new Error(
       "CDK_PARAM_TURSO_DATABASE_URL and CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME " +
-        "are required when CDK_PARAM_CONTROL_DATA_BACKEND is turso/sql.",
+        "are required when CDK_PARAM_CONTROL_DATA_BACKEND is turso/sql/turso-mirror/sql-mirror.",
     );
   }
   const features = resolveFeatures(env);
@@ -395,19 +395,28 @@ function resolveDeployConcurrentBuildLimit(env: NodeJS.ProcessEnv): number | und
 /**
  * Issue #2290 (ADR-049 §5.1): control-plane data backend の選択フラグ
  * (`CDK_PARAM_CONTROL_DATA_BACKEND`) を synth 時に検証する。Events / Teams repository seam を
- * `dynamodb` / `turso` / `sql` から選ぶ。**default `"dynamodb"`** (未設定 / 空文字は在来 DDB 経路で、
+ * `dynamodb` / `turso` / `sql` / `turso-mirror` / `sql-mirror` から選ぶ。**default `"dynamodb"`** (未設定 / 空文字は在来 DDB 経路で、
  * `controlDataBackendEnv` が Lambda env を足さない = CFn テンプレ byte 互換)。大文字小文字は無視して
- * lowercase 正規化し、3 値以外は throw する (= runtime factory の guard と揃えた fail-loud、
+ * lowercase 正規化し、5 値以外は throw する (= runtime factory の guard と揃えた fail-loud、
  * 壊れた値を Lambda まで持ち越さない / no-silent-fallback)。
  */
 function resolveControlDataBackend(env: NodeJS.ProcessEnv): ControlDataBackend {
   const raw = env.CDK_PARAM_CONTROL_DATA_BACKEND;
   if (raw === undefined || raw.trim() === "") return "dynamodb";
   const normalized = raw.trim().toLowerCase();
-  if (normalized === "dynamodb" || normalized === "turso" || normalized === "sql") {
+  if (
+    normalized === "dynamodb" ||
+    normalized === "turso" ||
+    normalized === "sql" ||
+    normalized === "turso-mirror" ||
+    normalized === "sql-mirror"
+  ) {
     return normalized;
   }
-  throw new Error(`CDK_PARAM_CONTROL_DATA_BACKEND must be one of dynamodb|turso|sql, got: ${raw}`);
+  throw new Error(
+    "CDK_PARAM_CONTROL_DATA_BACKEND must be one of " +
+      `dynamodb|turso|sql|turso-mirror|sql-mirror, got: ${raw}`,
+  );
 }
 
 /**

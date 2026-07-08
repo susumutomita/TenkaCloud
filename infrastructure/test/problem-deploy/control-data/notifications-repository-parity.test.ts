@@ -175,6 +175,36 @@ describe.each(backends)("NotificationsRepository parity: %s", (_name, makeRepo) 
       { ...record, title: "After", body: "After body", severity: "warning" },
     ]);
   });
+
+  it("should prune expired notifications and keep unexpired or non-TTL rows", async () => {
+    const repo = makeRepo();
+    await repo.append(
+      sampleRecord({
+        notificationId: "expired",
+        occurredAt: "2026-07-08T00:00:00.000Z",
+        expiresAt: 100,
+      }),
+    );
+    await repo.append(
+      sampleRecord({
+        notificationId: "active",
+        occurredAt: "2026-07-08T01:00:00.000Z",
+        expiresAt: 200,
+      }),
+    );
+    await repo.append(
+      sampleRecord({
+        notificationId: "no-ttl",
+        occurredAt: "2026-07-08T02:00:00.000Z",
+        expiresAt: 0,
+      }),
+    );
+
+    await expect(repo.pruneExpired(150)).resolves.toBe(1);
+    const page = await repo.listByEvent("01EVENTAAAAAAAAAAAAAAAAAAA", { limit: 50 });
+
+    expect(page.notifications.map((record) => record.notificationId)).toEqual(["no-ttl", "active"]);
+  });
 });
 
 describe("DynamoDbNotificationsRepository physical row", () => {
@@ -221,6 +251,16 @@ describe("MirroredNotificationsRepository", () => {
             .filter((record) => record.eventId === eventId)
             .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt)),
         }),
+        pruneExpired: async (nowEpochSeconds) => {
+          let deleted = 0;
+          for (const [k, record] of records) {
+            if (record.expiresAt > 0 && record.expiresAt <= nowEpochSeconds) {
+              records.delete(k);
+              deleted += 1;
+            }
+          }
+          return deleted;
+        },
       },
     };
   }
@@ -245,8 +285,8 @@ describe("MirroredNotificationsRepository", () => {
       notifications: [sampleRecord({ notificationId: "replica" })],
     }));
     const repository = new MirroredNotificationsRepository(
-      { append: async () => {}, listByEvent: canonicalList },
-      { append: async () => {}, listByEvent: replicaList },
+      { append: async () => {}, listByEvent: canonicalList, pruneExpired: async () => 0 },
+      { append: async () => {}, listByEvent: replicaList, pruneExpired: async () => 0 },
     );
 
     const page = await repository.listByEvent("01EVENTAAAAAAAAAAAAAAAAAAA", {
@@ -260,5 +300,22 @@ describe("MirroredNotificationsRepository", () => {
       cursor: "cursor-1",
     });
     expect(replicaList).not.toHaveBeenCalled();
+  });
+
+  it("should prune replica first and return the canonical delete count", async () => {
+    const expired = sampleRecord({ notificationId: "expired", expiresAt: 100 });
+    const active = sampleRecord({ notificationId: "active", expiresAt: 200 });
+    const canonical = memoryNotifications([expired, active]);
+    const replica = memoryNotifications([expired, active]);
+    const repository = new MirroredNotificationsRepository(canonical.repo, replica.repo);
+
+    await expect(repository.pruneExpired(150)).resolves.toBe(1);
+
+    expect([...canonical.records.values()].map((record) => record.notificationId)).toEqual([
+      "active",
+    ]);
+    expect([...replica.records.values()].map((record) => record.notificationId)).toEqual([
+      "active",
+    ]);
   });
 });

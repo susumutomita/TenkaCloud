@@ -367,6 +367,11 @@ export class MirroredNotificationsRepository implements NotificationsRepository 
   ): Promise<NotificationsPage> {
     return this.canonical.listByEvent(eventId, opts);
   }
+
+  async pruneExpired(nowEpochSeconds: number): Promise<number> {
+    await this.replica.pruneExpired(nowEpochSeconds);
+    return this.canonical.pruneExpired(nowEpochSeconds);
+  }
 }
 
 export class MirroredFeatureFlagsRepository implements FeatureFlagsRepository {
