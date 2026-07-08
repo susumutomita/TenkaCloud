@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CAPACITY_WINDOW_DEFAULT_MINUTES,
   CapacityQuerySchema,
-  CapacityUnconfiguredError,
   getCapacityOverview,
   resolveEventHotTables,
 } from "../../lib/problem-deploy/handlers/event-handler/capacity";
@@ -115,10 +114,18 @@ describe("resolveEventHotTables", () => {
     ]);
   });
 
-  it("should throw CapacityUnconfiguredError when the ProblemEndpoints env is missing (no partial view)", () => {
+  // Issue #2442 (Phase C1): pure SQL backend (turso|sql) では ProblemEndpoints table 自体も
+  // synth されず、shared builder はその table 名 env を空文字にフォールバックする
+  // (generic-scoring-handler/shared.ts 参照)。events/teams と同じ緩和: throw ではなく監視対象
+  // から除外する (= 残り 4 role で capacity overview は動作する)。
+  it("should drop the problemEndpoints role whose tableName is empty (pure SQL backend, no partial-view crash)", () => {
     delete process.env.PROBLEM_ENDPOINTS_TABLE_NAME;
-    expect(() => resolveEventHotTables(SHARED)).toThrow(CapacityUnconfiguredError);
-    expect(() => resolveEventHotTables(SHARED)).toThrow(/PROBLEM_ENDPOINTS_TABLE_NAME/);
+    expect(resolveEventHotTables(SHARED)).toEqual([
+      { role: "deployments", tableName: "Deployments-x" },
+      { role: "events", tableName: "Events-x" },
+      { role: "teams", tableName: "Teams-x" },
+      { role: "disruptions", tableName: "Disruptions-x" },
+    ]);
   });
 
   // Issue #2440 (ADR-049 §5.1 Phase A5): pure SQL backend (turso|sql) では Events/Teams table

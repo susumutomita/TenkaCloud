@@ -25,7 +25,11 @@ export interface BuildParticipantPortalSubsystemArgs {
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。
    */
   readonly eventsTable?: Table;
-  readonly endpointsTable: Table;
+  /**
+   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。
+   */
+  readonly endpointsTable?: Table;
   readonly problemsScoring: Readonly<Record<string, unknown>>;
   readonly problemsWriteups: Readonly<Record<string, unknown>>;
   readonly problemsEndpoints: Readonly<Record<string, unknown>>;

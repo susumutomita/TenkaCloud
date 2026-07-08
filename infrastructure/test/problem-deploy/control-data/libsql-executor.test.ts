@@ -80,7 +80,7 @@ describe("LibsqlExecutor", () => {
     expect(batch).toHaveBeenCalledTimes(1);
     const [statements, mode] = batch.mock.calls[0] ?? [];
     expect(mode).toBe("write");
-    expect(statements).toHaveLength(24);
+    expect(statements).toHaveLength(25);
     expect(statements.map((entry: { sql: string }) => entry.sql)).toEqual(
       expect.arrayContaining([
         expect.stringContaining("CREATE TABLE IF NOT EXISTS events"),
@@ -96,6 +96,8 @@ describe("LibsqlExecutor", () => {
         expect.stringContaining("json_remove(payload, '$.teamLoginKey')"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS control_data_migrations"),
         expect.stringContaining("INSERT OR IGNORE INTO control_data_migrations"),
+        // [Issue #2442 / Phase C1] ProblemEndpoints aggregate schema.
+        expect.stringContaining("CREATE TABLE IF NOT EXISTS problem_endpoints"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS score_summary"),
         expect.stringContaining("idx_score_summary_leaderboard"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS leaderboard_snapshots"),

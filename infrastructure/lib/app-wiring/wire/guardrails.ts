@@ -85,7 +85,11 @@ function freeTierTableNames(args: {
     ...(problem.eventsTable ? [{ label: "events", name: problem.eventsTable.tableName }] : []),
     ...(problem.teamsTable ? [{ label: "teams", name: problem.teamsTable.tableName }] : []),
     { label: "competitor-accounts", name: problem.competitorAccountsTable.tableName },
-    { label: "problem-endpoints", name: problem.problemEndpointsTable.tableName },
+    // Issue #2442: 純 SQL backend では ProblemEndpoints table 自体が無いのでアラームも作らない
+    // (= 上の deployments/events/teams と同じ conditional-spread パターン)。
+    ...(problem.problemEndpointsTable
+      ? [{ label: "problem-endpoints", name: problem.problemEndpointsTable.tableName }]
+      : []),
     { label: "tenant-mapping", name: args.bootstrapTemplateStack.tenantMappingTable.tableName },
   ];
 }

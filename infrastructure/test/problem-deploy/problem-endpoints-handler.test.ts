@@ -142,6 +142,22 @@ describe("listProblemEndpoints", () => {
     expect(mockedQueryTeamItems).not.toHaveBeenCalled();
   });
 
+  it("should NOT short-circuit to misconfigured when endpointsTableName is empty under a pure SQL backend (#2442 Phase C1)", async () => {
+    // pure SQL (turso|sql) は ProblemEndpoints table 自体を synth しないため env が空文字になる
+    // (= 正常状態)。 空文字を無条件に misconfigured 扱いすると pure SQL backend で常に 500 になる
+    // regression を生む — queryTeamItems まで到達することを確認する。
+    process.env.CONTROL_DATA_BACKEND = "turso";
+    try {
+      mockedQueryTeamItems.mockResolvedValueOnce([]);
+      const shared = buildShared({ endpointsTableName: "" });
+      const r = await listProblemEndpoints(shared, "key", "battle-1");
+      expect(r.kind).toBe("unauthorized");
+      expect(mockedQueryTeamItems).toHaveBeenCalledTimes(1);
+    } finally {
+      delete process.env.CONTROL_DATA_BACKEND;
+    }
+  });
+
   it("#703: should always populate defaultKey from metadata default.key so the UI can hint even without stackOutputs", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([
       { ...teamRow, stackOutputs: undefined, problemId: "battle-1" },

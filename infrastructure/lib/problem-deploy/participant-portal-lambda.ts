@@ -39,8 +39,14 @@ export interface ParticipantPortalLambdaProps {
   /**
    * ADR-012 Phase 3.A: Endpoint registry テーブル。
    * `/portal/me/problems/:problemId/endpoints` 系 route が読み書きする。
+   *
+   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
+   * `EndpointsRW` inline policy も付与しない — override 読み書きは repository seam
+   * (`resolveProblemEndpointsRepository`) が SQL executor 直結で処理する
+   * ({@link eventsTable} と同じ条件)。
    */
-  readonly endpointsTable: ITable;
+  readonly endpointsTable?: ITable;
   /**
    * `{ [problemId]: { kind, flagOutputKey, points, ... } }` 形の scoring 設定。
    * `discoverProblemsScoring` で metadata.json から自動収集して synth 時に注入する。
@@ -169,19 +175,25 @@ export class ParticipantPortalLambda extends Construct {
           : {}),
         // ADR-012 Phase 3.A: Endpoint registry の override 行 R/W。
         // PutItem / DeleteItem / Query で 1 (tenant, team, problem, slot) を扱う。
-        EndpointsRW: new PolicyDocument({
-          statements: [
-            new PolicyStatement({
-              actions: [
-                "dynamodb:Query",
-                "dynamodb:PutItem",
-                "dynamodb:DeleteItem",
-                "dynamodb:GetItem",
-              ],
-              resources: [props.endpointsTable.tableArn],
-            }),
-          ],
-        }),
+        // Issue #2442: 純 SQL backend では table 自体が無いので policy を足さない (repository
+        // seam が SQL executor 直結で処理する。`eventsTable`/`EventsRead` と同じ pattern)。
+        ...(props.endpointsTable
+          ? {
+              EndpointsRW: new PolicyDocument({
+                statements: [
+                  new PolicyStatement({
+                    actions: [
+                      "dynamodb:Query",
+                      "dynamodb:PutItem",
+                      "dynamodb:DeleteItem",
+                      "dynamodb:GetItem",
+                    ],
+                    resources: [props.endpointsTable.tableArn],
+                  }),
+                ],
+              }),
+            }
+          : {}),
         ConsoleSso: new PolicyDocument({
           statements: [
             new PolicyStatement({
@@ -280,7 +292,10 @@ export class ParticipantPortalLambda extends Construct {
         ...(deploymentsTable ? { DEPLOYMENTS_TABLE_NAME: deploymentsTable.tableName } : {}),
         // Issue #2440: 純 SQL backend では table が無いので env も足さない。
         ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
-        PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName,
+        // Issue #2442: 純 SQL backend では table が無いので env も足さない。
+        ...(props.endpointsTable
+          ? { PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName }
+          : {}),
         DEPLOY_ENVIRONMENT: props.environmentName,
         // [Issue #2440]: control-plane data backend (default dynamodb は env を足さず byte 互換)。
         ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),

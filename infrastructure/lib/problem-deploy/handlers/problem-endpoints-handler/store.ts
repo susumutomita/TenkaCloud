@@ -1,29 +1,20 @@
-import {
-  DeleteCommand,
-  type DynamoDBDocumentClient,
-  PutCommand,
-  QueryCommand,
-} from "@aws-sdk/lib-dynamodb";
-import { buildEndpointPK, buildEndpointSK } from "../../problem-endpoints-table.js";
+import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import type { ProblemEndpointRecord } from "../../control-data/types.js";
 
 /**
- * 1 (tenant, team, problem, slot) を表す DDB 行の最小 shape。
+ * [Issue #2442 / Phase C1] Domain shape of one (tenant, team, problem, slot)
+ * override row. Re-exported under its pre-seam name (`EndpointOverrideItem`)
+ * for the existing callers (`resolve.ts`) — the raw DDB access these three
+ * functions used to perform inline now lives behind
+ * {@link controlDataRuntime.resolveProblemEndpointsRepository}
+ * ({@link DynamoDbProblemEndpointsRepository} / {@link SqlProblemEndpointsRepository}),
+ * so this is the domain record (no physical PK/SK), not a raw DDB item.
  *
  * `defaultCacheUrl` は Phase 3.A 時点では未使用 (= read-through 算出)。Phase 3.B で
  * deploy 完了 hook が書き込む余地を残す。
  */
-export interface EndpointOverrideItem {
-  PK: string;
-  SK: string;
-  tenantId: string;
-  teamId: string;
-  problemId: string;
-  slot: string;
-  overrideUrl?: string;
-  defaultCacheUrl?: string;
-  platform?: string;
-  updatedAt: string;
-}
+export type EndpointOverrideItem = ProblemEndpointRecord;
 
 export interface PutOverrideArgs {
   tenantId: string;
@@ -39,9 +30,7 @@ export async function putOverride(
   tableName: string,
   args: PutOverrideArgs,
 ): Promise<EndpointOverrideItem> {
-  const item: EndpointOverrideItem = {
-    PK: buildEndpointPK(args.tenantId, args.teamId, args.problemId),
-    SK: buildEndpointSK(args.slot),
+  const record: ProblemEndpointRecord = {
     tenantId: args.tenantId,
     teamId: args.teamId,
     problemId: args.problemId,
@@ -49,8 +38,12 @@ export async function putOverride(
     overrideUrl: args.overrideUrl,
     updatedAt: args.nowIso,
   };
-  await ddb.send(new PutCommand({ TableName: tableName, Item: item }));
-  return item;
+  const repo = await controlDataRuntime.resolveProblemEndpointsRepository({
+    ddb,
+    endpointsTableName: tableName,
+  });
+  await repo.putOverride(record);
+  return record;
 }
 
 export interface DeleteOverrideArgs {
@@ -65,15 +58,11 @@ export async function deleteOverride(
   tableName: string,
   args: DeleteOverrideArgs,
 ): Promise<void> {
-  await ddb.send(
-    new DeleteCommand({
-      TableName: tableName,
-      Key: {
-        PK: buildEndpointPK(args.tenantId, args.teamId, args.problemId),
-        SK: buildEndpointSK(args.slot),
-      },
-    }),
-  );
+  const repo = await controlDataRuntime.resolveProblemEndpointsRepository({
+    ddb,
+    endpointsTableName: tableName,
+  });
+  await repo.deleteOverride(args.tenantId, args.teamId, args.problemId, args.slot);
 }
 
 export async function queryOverrides(
@@ -83,15 +72,9 @@ export async function queryOverrides(
   teamId: string,
   problemId: string,
 ): Promise<EndpointOverrideItem[]> {
-  const out = await ddb.send(
-    new QueryCommand({
-      TableName: tableName,
-      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-      ExpressionAttributeValues: {
-        ":pk": buildEndpointPK(tenantId, teamId, problemId),
-        ":sk": "SLOT#",
-      },
-    }),
-  );
-  return (out.Items ?? []) as EndpointOverrideItem[];
+  const repo = await controlDataRuntime.resolveProblemEndpointsRepository({
+    ddb,
+    endpointsTableName: tableName,
+  });
+  return [...(await repo.queryOverrides(tenantId, teamId, problemId))];
 }
