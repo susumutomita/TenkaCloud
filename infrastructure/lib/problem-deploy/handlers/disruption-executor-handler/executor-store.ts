@@ -11,8 +11,8 @@ import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import { type DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
-import { queryAllItems } from "../shared/ddb-paginate.js";
 import type { DeploymentTarget, DisruptionFiredDetail } from "./execute.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 
 export interface ExecutorResources {
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
@@ -93,18 +93,13 @@ export async function resolveDeployment(
   // #1815: 全ページ drain。GSI1(TENANT#)+filter は対象行が後続ページに居ると missed になり、
   // resolveDeployment が undefined を返して disruption が silent no-op する (= この関数が
   // 直そうとした不具合そのものの再来)。
-  const items = (await queryAllItems(resources.ddb, {
-    TableName: resources.deploymentsTableName,
-    IndexName: "GSI1",
-    KeyConditionExpression: "GSI1PK = :pk",
-    FilterExpression: "eventId = :ev AND teamId = :tid AND problemId = :pid",
-    ExpressionAttributeValues: {
-      ":pk": `TENANT#${detail.tenantId}`,
-      ":ev": detail.eventId,
-      ":tid": detail.teamId,
-      ":pid": detail.problemId,
-    },
-  })) as Partial<DeploymentItem>[];
+  const repository = await resolveDeploymentsRepository(resources);
+  const items = (await repository.listByEventTeamProblem(
+    detail.tenantId,
+    detail.eventId,
+    detail.teamId,
+    detail.problemId,
+  )) as Partial<DeploymentItem>[];
   // #1710: cross-account 情報 (competitorRoleArn / externalIdParameterName) は要求しない。
   // 同一アカウント (Lite) deploy では両者とも欠落するのが正常。
   const ready = items.find(

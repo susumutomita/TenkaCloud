@@ -9,6 +9,8 @@ import {
 } from "../../../utils/discover-problems-catalog.js";
 import { type ProblemEndpointSlot, parseEndpointsEnv } from "../../../utils/endpoints-metadata.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
+import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
+import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { isSsrfSafeUrl } from "../shared/ssrf-guard.js";
 
@@ -63,6 +65,31 @@ export function buildSharedResources(): GenericScoringSharedResources {
     ssm: new SSMClient({}),
     sakuraAppRunBaseUrl: process.env.SAKURA_APPRUN_BASE_URL || undefined,
   };
+}
+
+export interface GenericScoringDeploymentsSharedResources {
+  readonly ddb: Pick<DynamoDBDocumentClient, "send">;
+  readonly deploymentsTableName: string;
+}
+
+/**
+ * [Issue #2441 / Phase B1] Deployments READ seam for generic-scoring modules.
+ *
+ * Default backend stays DynamoDB and emits the same Query/Get reads through the
+ * same injected DocumentClient. `CONTROL_DATA_BACKEND=turso/sql` is the known
+ * B4 constraint: the control-data factory fails loudly until the SQL
+ * Deployments backend exists.
+ *
+ * [#2467-era runtime] Delegates to the cold-start-cached `controlDataRuntime`,
+ * so `Promise<DeploymentsRepository>` — caller must await before use.
+ */
+export function resolveDeploymentsRepository(
+  shared: GenericScoringDeploymentsSharedResources,
+): Promise<DeploymentsRepository> {
+  return controlDataRuntime.resolveDeploymentsRepository({
+    ddb: shared.ddb as DynamoDBDocumentClient,
+    deploymentsTableName: shared.deploymentsTableName,
+  });
 }
 
 /**

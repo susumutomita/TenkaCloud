@@ -29,9 +29,10 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { COMPOSITE_PROVIDERS } from "@tenkacloud/problem-runtime";
 import type { ProblemRuntimeAdapter } from "../shared/runtime/adapter.js";
-import { type CompositeTargetDeploymentItem, deploymentPk } from "./composite-deployment.js";
+import { deploymentPk } from "./composite-deployment.js";
 import {
   type CompositeDeploymentRepositoryDeps,
+  type CompositeTargetDeploymentRecord,
   getCompositeParent,
   listCompositeTargets,
 } from "./composite-repository.js";
@@ -96,7 +97,7 @@ function isConditionalCheckFailed(error: unknown): boolean {
 }
 
 function buildConnectionInput(
-  target: CompositeTargetDeploymentItem,
+  target: CompositeTargetDeploymentRecord,
 ): ResolveCompositeTargetConnectionInput {
   if (target.runtimeProvider === "aws") {
     return {
@@ -146,7 +147,7 @@ async function markTargetFailed(
 
 async function dispatchOneTarget(
   deps: CompositeDispatchDeps,
-  target: CompositeTargetDeploymentItem,
+  target: CompositeTargetDeploymentRecord,
 ): Promise<CompositeTargetDispatchResult> {
   const base = { targetId: target.targetId, targetDeploymentId: target.jobId };
 

@@ -1,10 +1,11 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { SSMClient } from "@aws-sdk/client-ssm";
-import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
 import { type ProblemEndpointSlot, parseEndpointsEnv } from "../../../utils/endpoints-metadata.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 import { type ProblemWriteup, parseWriteupsEnv } from "../../../utils/writeup-metadata.js";
+import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
 import type { FeatureFlagsRepository } from "../../control-data/feature-flags-repository.js";
 import type { NotificationsRepository } from "../../control-data/notifications-repository.js";
 import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
@@ -63,6 +64,46 @@ export function buildParticipantSharedResources(): ParticipantSharedResources {
   };
 }
 
+export interface ParticipantDeploymentsTableSharedResources {
+  readonly tableName: string;
+  readonly ddb: Pick<DynamoDBDocumentClient, "send">;
+}
+
+/**
+ * [Issue #2441 / Phase B1] Deployments READ seam for participant-handler modules.
+ *
+ * Default backend stays DynamoDB and emits the same GSI2/base-table reads through
+ * the same injected DocumentClient. `CONTROL_DATA_BACKEND=turso/sql` is the
+ * known B4 constraint: the control-data factory fails loudly until the SQL
+ * Deployments backend exists.
+ *
+ * [#2467-era runtime] Delegates to the cold-start-cached `controlDataRuntime`,
+ * so `Promise<DeploymentsRepository>` — caller must await before use.
+ */
+export function resolveDeploymentsRepository(
+  shared: ParticipantDeploymentsTableSharedResources,
+): Promise<DeploymentsRepository> {
+  return controlDataRuntime.resolveDeploymentsRepository({
+    ddb: shared.ddb as DynamoDBDocumentClient,
+    deploymentsTableName: shared.tableName,
+  });
+}
+
+function rehydrateDeploymentKeys(
+  item: Awaited<ReturnType<DeploymentsRepository["listByTeamLoginKey"]>>[number],
+  teamLoginKey: string,
+): Partial<DeploymentItem> {
+  return {
+    PK: `DEPLOYMENT#${item.jobId}`,
+    SK: "META",
+    GSI1PK: `TENANT#${item.tenantId}`,
+    GSI1SK: item.createdAt,
+    GSI2PK: `TEAMKEY#${teamLoginKey}`,
+    GSI2SK: item.createdAt,
+    ...item,
+  };
+}
+
 /**
  * teamLoginKey で GSI2 を Query して team の全 deployment 行を返す共通 helper
  * (lookup / update / submit-flag が同じ query を使うため)。
@@ -71,15 +112,12 @@ export async function queryTeamItems(
   shared: ParticipantSharedResources,
   teamLoginKey: string,
 ): Promise<Partial<DeploymentItem>[]> {
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.tableName,
-      IndexName: "GSI2",
-      KeyConditionExpression: "GSI2PK = :pk",
-      ExpressionAttributeValues: { ":pk": `TEAMKEY#${teamLoginKey}` },
-    }),
-  );
-  return (out.Items ?? []) as Partial<DeploymentItem>[];
+  const repository = await resolveDeploymentsRepository(shared);
+  const rows = await repository.listByTeamLoginKey(teamLoginKey);
+  // queryTeamItems is still shared with B2/B3 write handlers. The repository
+  // returns domain records (no physical keys), so keep this legacy helper's
+  // return shape stable by reconstructing the META keys its write callers use.
+  return rows.map((item) => rehydrateDeploymentKeys(item, teamLoginKey));
 }
 
 /**

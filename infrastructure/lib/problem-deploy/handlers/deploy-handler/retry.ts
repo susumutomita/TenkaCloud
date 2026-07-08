@@ -1,4 +1,4 @@
-import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
 import { ULID_RE as JOB_ID_RE } from "../shared/constants.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
@@ -9,6 +9,7 @@ import {
 } from "../shared/events.js";
 import { logDeployTrace } from "../shared/trace-log.js";
 import type { DeploySharedResources } from "./deploy.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 import type { DeploymentItem } from "./types.js";
 
 /**
@@ -97,13 +98,10 @@ async function retryOne(
   jobId: string,
   now: () => number,
 ): Promise<RetryDeploymentResult> {
-  const out = await shared.ddb.send(
-    new GetCommand({
-      TableName: shared.tableName,
-      Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-    }),
-  );
-  const item = out.Item as Partial<DeploymentItem> | undefined;
+  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const item = (await deploymentsRepository.getDeployment(jobId)) as
+    | Partial<DeploymentItem>
+    | undefined;
   if (!item?.jobId) {
     return { jobId, action: "skipped", reason: "not_found" };
   }

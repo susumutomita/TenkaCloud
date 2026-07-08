@@ -1,8 +1,12 @@
-import { PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES, ULID_RE } from "../shared/constants.js";
-import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
+import {
+  type ParticipantSharedResources,
+  queryTeamItems,
+  resolveDeploymentsRepository,
+} from "./shared.js";
 
 /**
  * 「Battle 中のイベント注入 + チーム間 interactive 交流」 の platform-side dispatch primitive。
@@ -150,17 +154,10 @@ export async function castEvent(
   const sender = pickSenderContext(myItems);
   if (!sender) return { kind: "not_ready" };
 
-  const targetRows = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.tableName,
-      KeyConditionExpression: "PK = :pk AND SK = :sk",
-      ExpressionAttributeValues: {
-        ":pk": `DEPLOYMENT#${input.targetJobId}`,
-        ":sk": "META",
-      },
-    }),
-  );
-  const target = (targetRows.Items?.[0] ?? undefined) as Partial<DeploymentItem> | undefined;
+  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const target = (await deploymentsRepository.queryDeploymentMeta(input.targetJobId)) as
+    | Partial<DeploymentItem>
+    | undefined;
   if (!target) return { kind: "target_not_found" };
   const targetStatus = (target.status ?? "PENDING") as DeploymentStatus;
   if (DELETED_LIKE_STATUSES.has(targetStatus)) return { kind: "target_not_found" };
@@ -216,28 +213,11 @@ async function queryInboxRows(
   const sinceIso = new Date(sinceMs).toISOString();
   const skStart = `${INBOX_SK_PREFIX}${sinceIso}`;
   const skEnd = `${INBOX_SK_PREFIX}~`;
-  const rows: Record<string, unknown>[] = [];
-  let exclusiveStart: Record<string, unknown> | undefined;
-  do {
-    const out = await shared.ddb.send(
-      new QueryCommand({
-        TableName: shared.tableName,
-        KeyConditionExpression: "PK = :pk AND SK BETWEEN :sk_start AND :sk_end",
-        ExpressionAttributeValues: {
-          ":pk": `DEPLOYMENT#${jobId}`,
-          ":sk_start": skStart,
-          ":sk_end": skEnd,
-        },
-        ScanIndexForward: false,
-        ExclusiveStartKey: exclusiveStart,
-      }),
-    );
-    for (const item of (out.Items ?? []) as Record<string, unknown>[]) {
-      rows.push(item);
-    }
-    exclusiveStart = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-  } while (exclusiveStart);
-  return rows;
+  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  return [...(await deploymentsRepository.listInboxEventsInRange(jobId, skStart, skEnd))] as Record<
+    string,
+    unknown
+  >[];
 }
 
 /**

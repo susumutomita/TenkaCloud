@@ -1,6 +1,7 @@
 import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { PutCommand } from "@aws-sdk/lib-dynamodb";
+import { resolveDeploymentsRepository } from "./shared.js";
 
 /**
  * ADR-028 D3 (#1420): inter-team coordination の per-event 共有 state を保存する store。
@@ -40,11 +41,8 @@ export async function readCoordinationState(
   tenantId: string,
   eventId: string,
 ): Promise<CoordinationStateRow | undefined> {
-  const out = await deps.ddb.send(
-    new GetCommand({ TableName: deps.tableName, Key: { PK: pk(tenantId, eventId), SK } }),
-  );
-  if (!out.Item) return undefined;
-  return { state: out.Item.state, version: Number(out.Item.version ?? 0) };
+  const repository = await resolveDeploymentsRepository(deps);
+  return repository.readCoordinationState(tenantId, eventId);
 }
 
 export type WriteCoordinationOutcome = { kind: "ok" } | { kind: "conflict" };

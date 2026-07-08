@@ -232,7 +232,8 @@ describe("Composite four-provider contract: deploy materialization and ordered d
     expect(targets.map((t) => t.targetId)).toEqual(FOUR_PROVIDER_TARGET_IDS);
     for (const target of targets) {
       expect(target.parentDeploymentId).toBe(PARENT_ID);
-      expect(target.SK).toBe("META");
+      expect(target).not.toHaveProperty("PK");
+      expect(target).not.toHaveProperty("SK");
       expect(target.tenantId).toBe(FOUR_PROVIDER_TENANT_ID);
       expect(typeof target.runtimeProvider).toBe("string");
     }

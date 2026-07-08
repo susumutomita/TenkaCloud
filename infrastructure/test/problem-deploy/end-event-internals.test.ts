@@ -1,5 +1,6 @@
-import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { endEvent } from "../../lib/problem-deploy/handlers/event-handler/end-event";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
 
 /**
@@ -7,29 +8,19 @@ import type { EventSharedResources } from "../../lib/problem-deploy/handlers/eve
  * の probe による not_found / not_endable 区別、 非 CCF rethrow、 !updatedEvent、 per-deployment
  * denormalize の CCF skip / 非 CCF throw / PK filter を pin する。
  */
-const mocks = vi.hoisted(() => ({ queryDeploymentsByEvent: vi.fn() }));
-// queryDeploymentsByEvent だけ差し替え、 resolveEventRepositories は実装を保つ (= CCF probe が
-// repository seam 経由で fake `shared.ddb` の GetCommand を発火し、 cfg.probeItem を読む)。
-vi.mock("../../lib/problem-deploy/handlers/event-handler/shared", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("../../lib/problem-deploy/handlers/event-handler/shared")
-  >()),
-  queryDeploymentsByEvent: mocks.queryDeploymentsByEvent,
-}));
-
-const { endEvent } = await import("../../lib/problem-deploy/handlers/event-handler/end-event");
-
 const ccf = () =>
   Object.assign(new Error("conditional"), { name: "ConditionalCheckFailedException" });
 const cfg = {
   eventUpdate: undefined as { resolve?: unknown; reject?: unknown } | undefined,
   probeItem: undefined as Record<string, unknown> | undefined,
+  depItems: [] as Record<string, unknown>[],
   depReject: undefined as unknown,
 };
 const ddb = {
   // biome-ignore lint/suspicious/noExplicitAny: fake dispatches by command + TableName.
   send: vi.fn(async (cmd: any) => {
     if (cmd instanceof GetCommand) return { Item: cfg.probeItem };
+    if (cmd instanceof QueryCommand) return { Items: cfg.depItems };
     if (cmd instanceof UpdateCommand) {
       if (cmd.input.TableName === "Events") {
         if (cfg.eventUpdate?.reject) throw cfg.eventUpdate.reject;
@@ -54,21 +45,27 @@ beforeEach(() => {
   vi.clearAllMocks();
   cfg.eventUpdate = { resolve: { eventId: "e1", status: "ENDED" } };
   cfg.probeItem = undefined;
+  cfg.depItems = [];
   cfg.depReject = undefined;
-  mocks.queryDeploymentsByEvent.mockResolvedValue([]);
 });
 
 describe("endEvent", () => {
   it("should end a READY event and denormalize eventEndsAt to its deployments", async () => {
-    mocks.queryDeploymentsByEvent.mockResolvedValueOnce([
-      { PK: "DEPLOYMENT#1" },
-      { PK: "DEPLOYMENT#2" },
-      { notPk: "x" }, // no PK string → filtered out
-    ]);
+    cfg.depItems = [{ PK: "DEPLOYMENT#1" }, { PK: "DEPLOYMENT#2" }];
     const res = await endEvent(shared, "t1", "e1", 1_700_000_000_000);
     expect(res).toMatchObject({ kind: "ok", updatedDeployments: 2 });
     // 1 event update + 2 deployment updates.
     expect(ddb.send.mock.calls.filter((c) => c[0] instanceof UpdateCommand)).toHaveLength(3);
+    const deploymentUpdates = ddb.send.mock.calls
+      .map((c) => c[0])
+      .filter(
+        (cmd): cmd is UpdateCommand =>
+          cmd instanceof UpdateCommand && cmd.input.TableName === "Deployments",
+      );
+    expect(deploymentUpdates.map((cmd) => cmd.input.Key)).toEqual([
+      { PK: "DEPLOYMENT#1", SK: "META" },
+      { PK: "DEPLOYMENT#2", SK: "META" },
+    ]);
   });
 
   it("should return not_found when the ConditionalCheck fails and the event is absent", async () => {
@@ -106,14 +103,14 @@ describe("endEvent", () => {
   });
 
   it("should skip a deployment denormalize that hits a ConditionalCheck (idempotent)", async () => {
-    mocks.queryDeploymentsByEvent.mockResolvedValueOnce([{ PK: "DEPLOYMENT#1" }]);
+    cfg.depItems = [{ PK: "DEPLOYMENT#1" }];
     cfg.depReject = ccf();
     const res = await endEvent(shared, "t1", "e1", 1);
     expect(res).toMatchObject({ kind: "ok", updatedDeployments: 1 });
   });
 
   it("should rethrow a non-ConditionalCheck error from a deployment denormalize", async () => {
-    mocks.queryDeploymentsByEvent.mockResolvedValueOnce([{ PK: "DEPLOYMENT#1" }]);
+    cfg.depItems = [{ PK: "DEPLOYMENT#1" }];
     cfg.depReject = new Error("dep ddb down");
     await expect(endEvent(shared, "t1", "e1", 1)).rejects.toThrow("dep ddb down");
   });

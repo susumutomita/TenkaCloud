@@ -1,8 +1,11 @@
-import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import type { ScoreEventItem } from "../shared/score-event.js";
-import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
+import {
+  type ParticipantSharedResources,
+  queryTeamItems,
+  resolveDeploymentsRepository,
+} from "./shared.js";
 
 /**
  * participant 向けに公開する score event 1 行 (内部 PK/SK 等は出さない)。
@@ -54,8 +57,8 @@ export async function listScoreEvents(
   // editable な (live) 行のみから event 行を引く。DELETING / DELETED の親は無視。
   const liveJobs = myItems.filter((i) => {
     const status = (i.status ?? "PENDING") as DeploymentStatus;
-    return !DELETED_LIKE_STATUSES.has(status) && typeof i.PK === "string" && i.jobId;
-  }) as Array<Pick<DeploymentItem, "PK" | "jobId">>;
+    return !DELETED_LIKE_STATUSES.has(status) && typeof i.jobId === "string";
+  }) as Array<Pick<DeploymentItem, "jobId">>;
 
   if (liveJobs.length === 0) return { kind: "unauthorized" };
 
@@ -65,32 +68,18 @@ export async function listScoreEvents(
   // 詰まったときに valid scoring 行が押し出される。LastEvaluatedKey で paginate して
   // valid 行が limit 件集まる (or 親なし) まで読む。MAX_PAGES で暴走防止。
   const MAX_PAGES = 5;
+  const deployments = await resolveDeploymentsRepository(shared);
   const eventChunks = await Promise.all(
     liveJobs.map(async (job) => {
+      const rows = await deployments.listScoreEvents(job.jobId, {
+        pageSize: limit,
+        maxPages: MAX_PAGES,
+      });
       const collected: ScoreEventView[] = [];
-      let exclusiveStart: Record<string, unknown> | undefined;
-      let pages = 0;
-      while (collected.length < limit && pages < MAX_PAGES) {
-        const out = await shared.ddb.send(
-          new QueryCommand({
-            TableName: shared.tableName,
-            KeyConditionExpression: "PK = :pk AND begins_with(SK, :evpfx)",
-            ExpressionAttributeValues: {
-              ":pk": job.PK,
-              ":evpfx": "EVENT#",
-            },
-            ScanIndexForward: false,
-            Limit: limit,
-            ExclusiveStartKey: exclusiveStart,
-          }),
-        );
-        for (const item of (out.Items ?? []) as Partial<ScoreEventItem>[]) {
-          const v = toView(item);
-          if (v) collected.push(v);
-        }
-        exclusiveStart = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-        pages++;
-        if (!exclusiveStart) break;
+      for (const item of rows as Partial<ScoreEventItem>[]) {
+        const v = toView(item);
+        if (v) collected.push(v);
+        if (collected.length >= limit) break;
       }
       return collected;
     }),

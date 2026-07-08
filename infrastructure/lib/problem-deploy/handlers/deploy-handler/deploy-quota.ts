@@ -1,7 +1,7 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { Context } from "hono";
 import { extractClaims } from "./auth.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 
 /**
  * Issue #1766: tier 別の同時デプロイクォータ。
@@ -111,33 +111,10 @@ export async function enforceDeployQuota(
 ): Promise<void> {
   if (!deps.quota) return;
   const limit = deps.quota[tier];
-  // Derive the IN-list placeholders from ACTIVE_STATUSES so the two never drift
-  // (adding a status to the const automatically extends the filter).
-  const statusPlaceholders = ACTIVE_STATUSES.map((_, i) => `:s${i}`);
-  const statusValues = Object.fromEntries(ACTIVE_STATUSES.map((s, i) => [`:s${i}`, s] as const));
-  let active = 0;
-  let lastEvaluatedKey: Record<string, unknown> | undefined;
-  do {
-    const out = await deps.ddb.send(
-      new QueryCommand({
-        TableName: deps.tableName,
-        IndexName: "GSI1",
-        KeyConditionExpression: "GSI1PK = :pk",
-        FilterExpression: `#s IN (${statusPlaceholders.join(", ")})`,
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":pk": `TENANT#${tenantId}`,
-          ...statusValues,
-        },
-        Select: "COUNT",
-        ExclusiveStartKey: lastEvaluatedKey,
-      }),
-    );
-    active += out.Count ?? 0;
-    lastEvaluatedKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-    // 既に超過が確定したら残り page は読まない (RCU 節約)。
-    if (active >= limit) break;
-  } while (lastEvaluatedKey);
+  const repository = await resolveDeploymentsRepository(deps);
+  const active = await repository.countActiveByTenant(tenantId, ACTIVE_STATUSES, {
+    stopAtCount: limit,
+  });
   if (active >= limit) {
     throw new DeployQuotaExceededError(tier, limit, active);
   }
