@@ -15,7 +15,7 @@ import { useLocation, useNavigate } from "react-router";
 import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { TeamViewProvider, useTeamView } from "../auth/TeamViewProvider";
-import type { AppConfig } from "../config";
+import type { AppConfig, CloudMode } from "../config";
 import { problemProvider } from "../data/providers";
 import { useI18n } from "../i18n";
 import { CountdownTimer } from "./CountdownTimer";
@@ -233,37 +233,48 @@ export function handleSideNavFollow(
 /**
  * SideNavigation items (notifications 未読 badge 用に動的構築)。`unread` を渡して
  * `info` バッジに件数を出す。> 99 は "99+" にクランプして badge 横幅を一定にする。
+ *
+ * Issue #2474: `cloudMode === "local"` (単独ドリル) は主催者アナウンスも federate 先の
+ * AWS も無いため、 AWS 専用の導線を出さない — `Tools` セクション (SSO 資格情報) を丸ごと省き、
+ * `Event` セクションから `notifications` link を落とす (unread badge 計算も local では不要)。
+ * `mock` (dev-mock) / `real` は従来どおり全導線を出す。
  */
-function buildSideNavItems(unread: number, t: (key: string) => string): SideNavigationProps.Item[] {
-  const notificationsLink: SideNavigationProps.Link = {
-    type: "link",
-    href: "/notifications",
-    text: t("nav.notifications"),
-    info:
-      unread > 0 ? <Badge color="red">{unread > 99 ? "99+" : String(unread)}</Badge> : undefined,
-  };
-  return [
-    {
-      type: "section",
-      text: t("nav.event_section"),
-      items: [
-        { type: "link", href: "/", text: t("nav.home") },
-        { type: "link", href: "/scoreboard", text: t("nav.scoreboard") },
-        { type: "link", href: "/score-events", text: t("nav.score_events") },
-        notificationsLink,
-      ],
-    },
+export function buildSideNavItems(
+  unread: number,
+  t: (key: string) => string,
+  cloudMode: CloudMode,
+): SideNavigationProps.Item[] {
+  const isLocal = cloudMode === "local";
+  const eventItems: SideNavigationProps.Item[] = [
+    { type: "link", href: "/", text: t("nav.home") },
+    { type: "link", href: "/scoreboard", text: t("nav.scoreboard") },
+    { type: "link", href: "/score-events", text: t("nav.score_events") },
+  ];
+  if (!isLocal) {
+    eventItems.push({
+      type: "link",
+      href: "/notifications",
+      text: t("nav.notifications"),
+      info:
+        unread > 0 ? <Badge color="red">{unread > 99 ? "99+" : String(unread)}</Badge> : undefined,
+    });
+  }
+  const sections: SideNavigationProps.Item[] = [
+    { type: "section", text: t("nav.event_section"), items: eventItems },
     {
       type: "section",
       text: t("nav.quests_section"),
       items: [{ type: "link", href: "/problems", text: t("nav.problems") }],
     },
-    {
+  ];
+  if (!isLocal) {
+    sections.push({
       type: "section",
       text: t("nav.tools_section"),
       items: [{ type: "link", href: "/tools/sso", text: t("nav.sso_credentials") }],
-    },
-  ];
+    });
+  }
+  return sections;
 }
 
 export function ShellLayout({ config, children }: { config: AppConfig; children: ReactNode }) {
@@ -296,7 +307,18 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
     return [
       localeUtility,
       // Issue #1919: AWS Console 導線を右上常設にして「入口が分からない」を解消する。
-      buildConsoleUtility(teamView.view?.problems ?? [], consoleAccess.openConsole, navigate, t),
+      // Issue #2474: ただし local (単独ドリル) は federate 先の AWS が無く Console を開けない
+      // (= "Portal API 404") ので、 local のときは常設 utility から外す。
+      ...(config.cloudMode === "local"
+        ? []
+        : [
+            buildConsoleUtility(
+              teamView.view?.problems ?? [],
+              consoleAccess.openConsole,
+              navigate,
+              t,
+            ),
+          ]),
       buildRefreshLatestUtility(teamView.refresh, t),
       buildAutoRefreshUtility(teamView.autoRefreshEnabled, teamView.setAutoRefreshEnabled, t),
       // #547: 旧 `menu-dropdown` + 空 items は chevron で展開できそうに見えて何も出ない
@@ -318,14 +340,15 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
     teamView.leaderboard,
     teamView.leaderboardNoEvent,
     config.mode,
+    config.cloudMode,
     locale,
     setLocale,
     t,
   ]);
 
   const sideNavItems = useMemo(
-    () => buildSideNavItems(teamView.unreadNotificationCount, t),
-    [teamView.unreadNotificationCount, t],
+    () => buildSideNavItems(teamView.unreadNotificationCount, t, config.cloudMode),
+    [teamView.unreadNotificationCount, t, config.cloudMode],
   );
 
   return (
