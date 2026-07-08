@@ -1,4 +1,5 @@
 import {
+  BatchGetCommand,
   DeleteCommand,
   type DynamoDBDocumentClient,
   GetCommand,
@@ -11,7 +12,11 @@ import {
   type UpdateCommandInput,
 } from "@aws-sdk/lib-dynamodb";
 import type { EventItem } from "../handlers/event-handler/types.js";
-import type { ProgressionGateConfig } from "../handlers/shared/progression-gate.js";
+import { createCursorCodec } from "../handlers/shared/cursor-codec.js";
+import {
+  type ProgressionGateConfig,
+  parseProgressionGate,
+} from "../handlers/shared/progression-gate.js";
 import { teamRecordToItem } from "./dynamodb-teams-repository.js";
 import type {
   ClearProgressionGateOutcome,
@@ -19,6 +24,8 @@ import type {
   EventMutationOutcome,
   EventRecord,
   EventSchedulePatch,
+  EventScoringMeta,
+  EventsPage,
   EventsRepository,
   ScheduleFiredKind,
   TeamRecord,
@@ -39,6 +46,13 @@ import type {
 
 const EVENT_SK = "META" as const;
 const DDB_KEY_ATTRS: ReadonlySet<string> = new Set(["PK", "SK", "GSI1PK", "GSI1SK"]);
+
+/**
+ * [#862 / #2438] Same allowlist + wire format as the pre-seam `list.ts` cursor
+ * codec (moved here verbatim). Moving the Query into this seam must not
+ * invalidate cursors already handed out mid-pagination to a UI.
+ */
+const EVENTS_PAGE_CURSOR_CODEC = createCursorCodec(new Set(["PK", "SK", "GSI1PK", "GSI1SK"]));
 
 /** Strip the physical DDB keys, yielding the domain {@link EventRecord}. */
 function itemToRecord(item: Record<string, unknown>): EventRecord {
@@ -142,6 +156,120 @@ export class DynamoDbEventsRepository implements EventsRepository {
       exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
     } while (exclusiveStartKey);
     return records;
+  }
+
+  async listEventsPage(
+    tenantId: string,
+    opts: { readonly limit: number; readonly cursor?: string },
+  ): Promise<EventsPage> {
+    const exclusiveStartKey = opts.cursor
+      ? EVENTS_PAGE_CURSOR_CODEC.decode(opts.cursor)
+      : undefined;
+    const out = await this.ddb.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        IndexName: "GSI1",
+        KeyConditionExpression: "GSI1PK = :pk",
+        ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}` },
+        ScanIndexForward: false,
+        Limit: opts.limit,
+        ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
+      }),
+    );
+    const events = (out.Items ?? []).map((item) => itemToRecord(item as Record<string, unknown>));
+    const nextCursor = out.LastEvaluatedKey
+      ? EVENTS_PAGE_CURSOR_CODEC.encode(out.LastEvaluatedKey as Record<string, unknown>)
+      : undefined;
+    return { events, nextCursor };
+  }
+
+  async listEventsByStatus(statuses: readonly string[]): Promise<readonly EventRecord[]> {
+    if (statuses.length === 0) return [];
+    // Placeholder names are generated (not the caller's status strings) so this
+    // works for any status set; DynamoDB does not care about alias naming.
+    const filterExpression = statuses.map((_, i) => `#s = :s${i}`).join(" OR ");
+    const expressionAttributeValues = Object.fromEntries(statuses.map((s, i) => [`:s${i}`, s]));
+    const records: EventRecord[] = [];
+    let exclusiveStartKey: Record<string, unknown> | undefined;
+    do {
+      const out = await this.ddb.send(
+        new ScanCommand({
+          TableName: this.tableName,
+          FilterExpression: filterExpression,
+          ExpressionAttributeNames: { "#s": "status" },
+          ExpressionAttributeValues: expressionAttributeValues,
+          // Mirrors the pre-seam reconciler Scan's page size (MVP scale).
+          Limit: 100,
+          ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
+        }),
+      );
+      for (const item of (out.Items ?? []) as Record<string, unknown>[]) {
+        records.push(itemToRecord(item));
+      }
+      exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
+    } while (exclusiveStartKey);
+    return records;
+  }
+
+  async batchGetEvents(
+    eventIds: readonly string[],
+  ): Promise<ReadonlyMap<string, EventScoringMeta>> {
+    const map = new Map<string, EventScoringMeta>();
+    if (eventIds.length === 0) return map;
+    // [PR #2455 review] Real DynamoDB BatchGet rejects a request whose Keys
+    // contain a duplicate (ValidationException) — dedupe defensively so a
+    // caller that hasn't already deduped (unlike today's sole caller,
+    // fetchEventScoringMetaMap) doesn't fail the whole batch. Also caps at
+    // BatchGet's 100-key-per-request limit (mirrors createEventWithTeams's
+    // 100-item TransactWrite cap); a caller needing more must chunk itself.
+    const ids = [...new Set(eventIds)];
+    if (ids.length > 100) {
+      throw new Error(
+        `batchGetEvents: ${ids.length} distinct ids exceeds the 100-key BatchGet limit`,
+      );
+    }
+    // [#558] UnprocessedKeys are not retried, mirroring the pre-seam handler's
+    // behavior — a partial BatchGet response yields a partial map, and callers
+    // treat a missing id as "no meta" (fail-closed policy lives in the caller).
+    const out = await this.ddb.send(
+      new BatchGetCommand({
+        RequestItems: {
+          [this.tableName]: {
+            Keys: ids.map((eventId) => ({ PK: `EVENT#${eventId}`, SK: EVENT_SK })),
+            ProjectionExpression: "eventId, scoringLocked, progressionGate",
+          },
+        },
+      }),
+    );
+    const rows = (out.Responses?.[this.tableName] ?? []) as Record<string, unknown>[];
+    for (const row of rows) {
+      if (typeof row.eventId !== "string") continue;
+      map.set(row.eventId, {
+        scoringLocked: row.scoringLocked === true,
+        progressionGate: parseProgressionGate(row.progressionGate),
+      });
+    }
+    return map;
+  }
+
+  async countEventsByTenant(tenantId: string): Promise<number> {
+    let total = 0;
+    let exclusiveStartKey: Record<string, unknown> | undefined;
+    do {
+      const out = await this.ddb.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          IndexName: "GSI1",
+          KeyConditionExpression: "GSI1PK = :pk",
+          ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}` },
+          Select: "COUNT",
+          ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
+        }),
+      );
+      total += out.Count ?? 0;
+      exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
+    } while (exclusiveStartKey);
+    return total;
   }
 
   async pruneExpired(nowEpochSeconds: number): Promise<number> {

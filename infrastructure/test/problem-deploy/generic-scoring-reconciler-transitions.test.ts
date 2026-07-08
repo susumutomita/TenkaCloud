@@ -106,33 +106,23 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     expect(ddbSend).toHaveBeenCalledTimes(5);
   });
 
-  it("Event filter should target DEPLOYING / READY / TEARDOWN + ENDED + DRAFT (ADR-047 + follow-up) and project teardownAt / deployAt", async () => {
+  it("Event filter should target DEPLOYING / READY / TEARDOWN + ENDED + DRAFT (ADR-047 + follow-up)", async () => {
+    // [#2438 / Phase A3] The raw Scan moved into the `listEventsByStatus` repository
+    // seam (`dynamodb-events-repository.ts`), which generates its own `:s0, :s1, …`
+    // placeholder names and always projects the full row (EventRecord shape) — so
+    // this test now pins the *status set* passed to the seam, not literal DDB
+    // expression-attribute names (that shape is covered by the repository's own
+    // parity tests). ARCHIVED must stay excluded.
     ddbSend.mockResolvedValueOnce({ Items: [] });
     await reconcileEventStatuses(ctx, NOW_ISO);
     const scanCmd = ddbSend.mock.calls[0]?.[0] as {
       input: {
-        ProjectionExpression: string;
-        FilterExpression: string;
         ExpressionAttributeValues: Record<string, string>;
       };
     };
-    // ADR-047: ENDED も拾う (teardownAt 経過の自動撤去対象)。
-    // ADR-047 follow-up: DRAFT も拾う (deployAt 経過の自動デプロイ対象)。 ARCHIVED は対象外のまま。
-    expect(scanCmd.input.FilterExpression).toBe(
-      "#status = :deploying OR #status = :ready OR #status = :teardown OR #status = :ended OR #status = :draft",
-    );
-    expect(scanCmd.input.ExpressionAttributeValues[":deploying"]).toBe("DEPLOYING");
-    expect(scanCmd.input.ExpressionAttributeValues[":ready"]).toBe("READY");
-    expect(scanCmd.input.ExpressionAttributeValues[":teardown"]).toBe("TEARDOWN");
-    expect(scanCmd.input.ExpressionAttributeValues[":ended"]).toBe("ENDED");
-    expect(scanCmd.input.ExpressionAttributeValues[":draft"]).toBe("DRAFT");
-    // Issue #1038 P0 #3: READY → ENDED 判定に endsAt が要るので projection に含める
-    expect(scanCmd.input.ProjectionExpression).toContain("endsAt");
-    // ADR-047: 自動撤去判定に teardownAt / teardownFiredAt を projection に含める
-    expect(scanCmd.input.ProjectionExpression).toContain("teardownAt");
-    // ADR-047 follow-up: 自動デプロイ判定に deployAt / deployFiredAt を projection に含める
-    expect(scanCmd.input.ProjectionExpression).toContain("deployAt");
-    expect(scanCmd.input.ProjectionExpression).toContain("deployFiredAt");
+    const filteredStatuses = new Set(Object.values(scanCmd.input.ExpressionAttributeValues));
+    expect(filteredStatuses).toEqual(new Set(["DEPLOYING", "READY", "TEARDOWN", "ENDED", "DRAFT"]));
+    expect(filteredStatuses.has("ARCHIVED")).toBe(false);
   });
 
   it("should NOT query child deployments for a DRAFT event that is not deploy-due (dormant / no deployDeps)", async () => {
@@ -209,6 +199,16 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     });
 
     await reconcileEventStatuses(ctx, NOW_ISO);
+    expect(ddbSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("should skip a malformed event row missing tenantId/eventId/status (defensive guard)", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [{ PK: "EVENT#BAD", tenantId: "tenant-acme", status: "DEPLOYING" }], // no eventId
+    });
+
+    await reconcileEventStatuses(ctx, NOW_ISO);
+    // Scan only — the malformed row returns early before any Query/Update.
     expect(ddbSend).toHaveBeenCalledTimes(1);
   });
 });

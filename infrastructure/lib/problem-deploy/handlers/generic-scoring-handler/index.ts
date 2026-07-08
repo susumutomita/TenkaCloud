@@ -1,12 +1,13 @@
-import { BatchGetCommand, type DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { type DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import type { EventScoringMeta } from "../../control-data/events-repository.js";
 import { buildEndpointPK } from "../../problem-endpoints-table.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
   buildScheduledDeployResources,
   buildScheduledTeardownResources,
+  resolveEventsRepository,
 } from "../event-handler/shared.js";
 import { forEachScanPage } from "../shared/ddb-paginate.js";
-import { type ProgressionGateConfig, parseProgressionGate } from "../shared/progression-gate.js";
 import { applyKindResult } from "./apply-kind-result.js";
 import { reconcileDeployStatusMaintenance } from "./composite-status-reconciler.js";
 import { maybeFireConditionDisruptions } from "./condition-disruption-fire.js";
@@ -496,18 +497,14 @@ export async function queryOverridesForDeployment(
   }
 }
 
-/** #558 / #2283: 採点 tick が event 行から読む gate fields。 */
-interface EventScoringMeta {
-  readonly scoringLocked: boolean;
-  readonly progressionGate: ProgressionGateConfig | undefined;
-}
-
 /**
- * #558: 同 invocation 内 deployments の distinct eventId について Events table を BatchGet
- * し、 eventId → { scoringLocked, progressionGate } の Map を返す。
+ * #558: 同 invocation 内 deployments の distinct eventId について、 repository seam
+ * (`batchGetEvents`) で eventId → { scoringLocked, progressionGate } の Map を取得する。
  *
  * Phase 3.B で health-check-handler から本 module へ relocate (= 動作不変)。
  * #2283 で progressionGate (Gate 完了 bonus 用) を同じ BatchGet に相乗りさせた。
+ * [#2438 / Phase A3] BatchGet 自体は repository seam に移設済み — 本関数が持つのは
+ * fail-closed policy (下記 catch) のみ。
  */
 async function fetchEventScoringMetaMap(
   shared: GenericScoringSharedResources,
@@ -521,29 +518,12 @@ async function fetchEventScoringMetaMap(
     ),
   );
   if (eventIds.length === 0) return new Map();
+  // [#2438] repository の解決 (backend 選択) はここで行う — CONTROL_DATA_BACKEND の設定ミス /
+  // SQL 未配線のような setup エラーは下の try に入れない (fail-closed の対象は read failure のみ)。
+  // config エラーを fail-closed に畳むと「ロック中」と誤認させたまま原因を隠してしまう。
+  const repository = resolveEventsRepository(shared);
   try {
-    const out = await shared.ddb.send(
-      new BatchGetCommand({
-        RequestItems: {
-          [shared.eventsTableName]: {
-            Keys: eventIds.map((eventId) => ({ PK: `EVENT#${eventId}`, SK: "META" })),
-            ProjectionExpression: "eventId, scoringLocked, progressionGate",
-          },
-        },
-      }),
-    );
-    const rows = out.Responses?.[shared.eventsTableName] ?? [];
-    const map = new Map<string, EventScoringMeta>();
-    for (const row of rows) {
-      const r = row as { eventId?: string; scoringLocked?: boolean; progressionGate?: unknown };
-      if (typeof r.eventId === "string") {
-        map.set(r.eventId, {
-          scoringLocked: r.scoringLocked === true,
-          progressionGate: parseProgressionGate(r.progressionGate),
-        });
-      }
-    }
-    return map;
+    return new Map(await repository.batchGetEvents(eventIds));
   } catch (err) {
     // #558 の scoring lock 契約: operator が「ロック中」とマークした event に points を加算
     // しないことを保証する。 lock 状態が読めない (= transient DDB error) ときに fail-open

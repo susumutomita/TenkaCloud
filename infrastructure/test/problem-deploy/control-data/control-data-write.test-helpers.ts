@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import {
+  BatchGetCommand,
   DeleteCommand,
   type DynamoDBDocumentClient,
   GetCommand,
@@ -181,7 +182,7 @@ export function makeFakeDdb(): DynamoDBDocumentClient {
   };
   const keyOf = (pk: unknown, sk: unknown): string => `${String(pk)} ${String(sk)}`;
 
-  const query = (cmd: QueryCommand): { Items: Item[] } => {
+  const query = (cmd: QueryCommand): { Items: Item[]; LastEvaluatedKey?: Item } => {
     const table = tableFor(cmd.input.TableName);
     const values = cmd.input.ExpressionAttributeValues ?? {};
     const pk = values[":pk"];
@@ -197,15 +198,75 @@ export function makeFakeDdb(): DynamoDBDocumentClient {
         .sort((a, b) => String(a.SK).localeCompare(String(b.SK)));
       return { Items: items };
     }
-    // GSI1: GSI1PK = :pk, GSI1SK order per ScanIndexForward.
+    // GSI1: GSI1PK = :pk, GSI1SK order per ScanIndexForward. `Limit` /
+    // `ExclusiveStartKey` are honored here (unlike the other branches above)
+    // because this is the only path callers page through (`listEventsPage` /
+    // `countEventsByTenant`'s Select=COUNT full-drain).
     const forward = cmd.input.ScanIndexForward !== false;
-    const items = [...table.values()]
+    let items = [...table.values()]
       .filter((it) => it.GSI1PK === pk)
       .sort((a, b) => {
         const cmp = String(a.GSI1SK).localeCompare(String(b.GSI1SK));
         return forward ? cmp : -cmp;
       });
+    const exclusiveStartKey = cmd.input.ExclusiveStartKey as Item | undefined;
+    if (exclusiveStartKey) {
+      const startSk = String(exclusiveStartKey.GSI1SK);
+      items = items.filter((it) => {
+        const cmp = String(it.GSI1SK).localeCompare(startSk);
+        return forward ? cmp > 0 : cmp < 0;
+      });
+    }
+    const limit = cmd.input.Limit;
+    if (limit !== undefined && items.length > limit) {
+      const page = items.slice(0, limit);
+      const last = page[page.length - 1] as Item;
+      return {
+        Items: page,
+        LastEvaluatedKey: { PK: last.PK, SK: last.SK, GSI1PK: last.GSI1PK, GSI1SK: last.GSI1SK },
+      };
+    }
     return { Items: items };
+  };
+
+  const scan = (cmd: ScanCommand): { Items: Item[] } => {
+    const values = cmd.input.ExpressionAttributeValues ?? {};
+    if (values[":zero"] !== undefined && values[":now"] !== undefined) {
+      // TTL prune sweep (`expiresAt > :zero AND expiresAt <= :now`) uses `>` / `<=`,
+      // which `evalConditionExpression` doesn't support — hand-evaluated as before.
+      const zero = Number(values[":zero"]);
+      const now = Number(values[":now"]);
+      const items = [...tableFor(cmd.input.TableName).values()].filter((it) => {
+        const exp = Number(it.expiresAt);
+        return exp > zero && exp <= now;
+      });
+      return { Items: items };
+    }
+    // General full-table Scan filtered by FilterExpression (`=` / `<>` / `IN` / OR / AND
+    // — the same grammar `evalConditionExpression` already supports for conditional writes).
+    const items = [...tableFor(cmd.input.TableName).values()].filter((it) =>
+      cmd.input.FilterExpression
+        ? evalConditionExpression(
+            cmd.input.FilterExpression,
+            it,
+            cmd.input.ExpressionAttributeNames,
+            cmd.input.ExpressionAttributeValues,
+          )
+        : true,
+    );
+    return { Items: items };
+  };
+
+  const batchGet = (cmd: BatchGetCommand): { Responses: Record<string, Item[]> } => {
+    const responses: Record<string, Item[]> = {};
+    for (const [tableName, spec] of Object.entries(cmd.input.RequestItems ?? {})) {
+      const table = tableFor(tableName);
+      const keys = (spec as { Keys?: Item[] }).Keys ?? [];
+      responses[tableName] = keys
+        .map((key) => table.get(keyOf(key.PK, key.SK)))
+        .filter((item): item is Item => item !== undefined);
+    }
+    return { Responses: responses };
   };
 
   const update = (cmd: UpdateCommand): { Attributes?: Item } => {
@@ -273,36 +334,51 @@ export function makeFakeDdb(): DynamoDBDocumentClient {
     return {};
   };
 
+  const put = (cmd: PutCommand): Record<string, never> => {
+    const item = cmd.input.Item as Item;
+    tableFor(cmd.input.TableName).set(keyOf(item.PK, item.SK), item);
+    return {};
+  };
+
+  const get = (cmd: GetCommand): { Item?: Item } => {
+    const key = cmd.input.Key as Item;
+    return { Item: tableFor(cmd.input.TableName).get(keyOf(key.PK, key.SK)) };
+  };
+
+  const del = (cmd: DeleteCommand): Record<string, never> => {
+    const key = cmd.input.Key as Item;
+    tableFor(cmd.input.TableName).delete(keyOf(key.PK, key.SK));
+    return {};
+  };
+
+  const runQuery = (
+    cmd: QueryCommand,
+  ): { Items?: Item[]; Count?: number; LastEvaluatedKey?: Item } => {
+    const result = query(cmd);
+    // Real DynamoDB's `Select: "COUNT"` response omits Items and carries Count instead,
+    // but still paginates — LastEvaluatedKey must survive the COUNT branch too.
+    return cmd.input.Select === "COUNT"
+      ? { Count: result.Items.length, LastEvaluatedKey: result.LastEvaluatedKey }
+      : result;
+  };
+
+  // biome-ignore lint/suspicious/noExplicitAny: fake dispatches by command class.
+  const handlers = new Map<unknown, (cmd: any) => unknown>([
+    [PutCommand, put],
+    [GetCommand, get],
+    [QueryCommand, runQuery],
+    [ScanCommand, scan],
+    [BatchGetCommand, batchGet],
+    [DeleteCommand, del],
+    [UpdateCommand, update],
+    [TransactWriteCommand, transactWrite],
+  ]);
+
   // biome-ignore lint/suspicious/noExplicitAny: fake dispatches by command class.
   const send = async (cmd: any): Promise<unknown> => {
-    if (cmd instanceof PutCommand) {
-      const item = cmd.input.Item as Item;
-      tableFor(cmd.input.TableName).set(keyOf(item.PK, item.SK), item);
-      return {};
-    }
-    if (cmd instanceof GetCommand) {
-      const key = cmd.input.Key as Item;
-      return { Item: tableFor(cmd.input.TableName).get(keyOf(key.PK, key.SK)) };
-    }
-    if (cmd instanceof QueryCommand) return query(cmd);
-    if (cmd instanceof ScanCommand) {
-      const values = cmd.input.ExpressionAttributeValues ?? {};
-      const zero = Number(values[":zero"]);
-      const now = Number(values[":now"]);
-      const items = [...tableFor(cmd.input.TableName).values()].filter((it) => {
-        const exp = Number(it.expiresAt);
-        return exp > zero && exp <= now;
-      });
-      return { Items: items };
-    }
-    if (cmd instanceof DeleteCommand) {
-      const key = cmd.input.Key as Item;
-      tableFor(cmd.input.TableName).delete(keyOf(key.PK, key.SK));
-      return {};
-    }
-    if (cmd instanceof UpdateCommand) return update(cmd);
-    if (cmd instanceof TransactWriteCommand) return transactWrite(cmd);
-    throw new Error(`FakeDdb: unsupported command ${cmd?.constructor?.name}`);
+    const handler = handlers.get(cmd.constructor);
+    if (!handler) throw new Error(`FakeDdb: unsupported command ${cmd?.constructor?.name}`);
+    return handler(cmd);
   };
 
   return { send } as unknown as DynamoDBDocumentClient;

@@ -1,10 +1,11 @@
 import * as path from "node:path";
-import { Duration } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { auditLogEnabledEnv } from "../problem-deploy/audit-log-env.js";
+import { controlDataBackendEnv } from "../problem-deploy/control-data-backend-env.js";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 
 export interface AdminInsightApiLambdaProps {
@@ -58,6 +59,24 @@ export interface AdminInsightApiLambdaProps {
    * を渡す (env-agnostic token なら deploy 時に解決される)。
    */
   readonly costBudgetAccountId?: string;
+  /**
+   * [Issue #2438 / Phase A3] control-plane data backend (dynamodb|turso|sql)。
+   * `summary.ts` の `countTenantEvents` が Events repository seam を組み立てる際に読む。
+   * default (未指定 / `dynamodb`) は env を足さず byte 互換 — env 注入のメカニズム自体は
+   * `EventApiLambda` と同型。
+   *
+   * **注意**: `EventApiLambda` と異なり、 このLambda の handler 層 (`resolveEventsRepository`,
+   * `admin-insight-handler/shared.ts`) は sync factory のままで Turso/SQL executor を
+   * 組み立てられない。 `"turso"` / `"sql"` を渡すと `CONTROL_DATA_BACKEND` 注入は成功するが、
+   * ランタイムで `/admin/insight/tenants/summary` が毎回 fail-loud に 500 を返す
+   * (= 意図的な no-silent-fallback、 SQL executor スレッド未実装のため)。 SQL 対応するまでは
+   * `undefined` のまま (dynamodb 固定) で運用すること。
+   */
+  readonly controlDataBackend?: string;
+  /** Public remote libSQL URL. Never contains authentication material. */
+  readonly tursoDatabaseUrl?: string;
+  /** SSM SecureString parameter name containing the libSQL auth token. */
+  readonly tursoAuthTokenParameterName?: string;
 }
 
 /**
@@ -103,6 +122,12 @@ export class AdminInsightApiLambda extends Construct {
         // 未指定なら空 → handler は available:false (= 外部リンク表示) に倒す。
         COST_BUDGET_NAME: props.costBudgetName ?? "",
         COST_BUDGET_ACCOUNT_ID: props.costBudgetAccountId ?? "",
+        // [Issue #2438]: control-plane data backend (default dynamodb は env を足さず byte 互換)。
+        ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
+        ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
+        ...(props.tursoAuthTokenParameterName
+          ? { TURSO_AUTH_TOKEN_PARAMETER_NAME: props.tursoAuthTokenParameterName }
+          : {}),
         NODE_OPTIONS: "--enable-source-maps",
       },
     });
@@ -180,6 +205,21 @@ export class AdminInsightApiLambda extends Construct {
           actions: ["budgets:ViewBudget"],
           resources: [
             `arn:aws:budgets::${props.costBudgetAccountId}:budget/${props.costBudgetName}`,
+          ],
+        }),
+      );
+    }
+
+    // [Issue #2438]: turso/sql backend が Turso auth token を読むための SSM SecureString
+    // read 権限。 未配線 (= dynamodb default) なら付与しない (`EventApiLambda` と同型)。
+    if (props.tursoAuthTokenParameterName) {
+      this.fn.addToRolePolicy(
+        new PolicyStatement({
+          actions: ["ssm:GetParameter"],
+          resources: [
+            `arn:${Stack.of(this).partition}:ssm:${Stack.of(this).region}:${
+              Stack.of(this).account
+            }:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
           ],
         }),
       );

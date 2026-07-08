@@ -25,18 +25,21 @@ describe("reconcileEventStatuses pagination (#557 #539)", () => {
   });
   afterEach(() => ddbSend.mockReset());
 
-  it("Scan should paginate (with LastEvaluatedKey → next Scan)", async () => {
+  it("Scan should paginate (with LastEvaluatedKey → next Scan) before processing any event", async () => {
+    // [#2438 / Phase A3] listEventsByStatus drains every events-Scan page up front
+    // (repository seam contract), THEN the reconciler processes the combined list —
+    // so both Scan pages land before the first per-event deployments Query.
     ddbSend.mockResolvedValueOnce({
       Items: [{ PK: "EVENT#P1", tenantId: "t", eventId: "P1", status: "DEPLOYING" }],
       LastEvaluatedKey: { PK: "cursor" },
     });
-    ddbSend.mockResolvedValueOnce({ Items: [{ status: "COMPLETE" }] });
-    ddbSend.mockResolvedValueOnce({});
-    ddbSend.mockResolvedValueOnce({ Items: [] });
+    ddbSend.mockResolvedValueOnce({ Items: [] }); // events scan page 2 (drains, no more events)
+    ddbSend.mockResolvedValueOnce({ Items: [{ status: "COMPLETE" }] }); // deployments query for P1
+    ddbSend.mockResolvedValueOnce({}); // transitionStatus update
 
     await reconcileEventStatuses(ctx, NOW_ISO);
     expect(ddbSend).toHaveBeenCalledTimes(4);
-    const scan2 = ddbSend.mock.calls[3]?.[0] as {
+    const scan2 = ddbSend.mock.calls[1]?.[0] as {
       input: { ExclusiveStartKey?: Record<string, unknown> };
     };
     expect(scan2.input.ExclusiveStartKey).toEqual({ PK: "cursor" });
