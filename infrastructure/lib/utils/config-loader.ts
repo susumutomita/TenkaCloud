@@ -6,7 +6,7 @@ import type { Config } from "../config/config-interface.js";
 export interface ExpandOptions {
   /**
    * true なら env 未設定 + default 無しの placeholder を throw せず literal `${VAR}` のまま残す。
-   * 用途: bin/infrastructure.ts は config 全体のうち `dynamoDbConfig` / `kmsConfig` 等の
+   * 用途: bin/infrastructure.ts は config 全体のうち `dynamoDbConfig` 等の
    * 限定セクションしか consume しないので、無関係セクション (`${TenkaCloud_ADMIN_EMAIL}`
    * 等) の env 未設定で全体が落ちるのを避ける。consumer 側 (bin) が読まない field なら
    * literal `${VAR}` で残っていても無害。

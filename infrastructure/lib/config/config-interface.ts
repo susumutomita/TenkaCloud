@@ -15,7 +15,6 @@ export interface Config {
   // `CDK_PARAM_SYSTEM_ADMIN_EMAIL` env を resolve.ts が読む)、 config.json で編集しても
   // 効かない罠になっていた。 control-plane 系の設定は `CDK_PARAM_*` env 経由が正。
   readonly dynamoDbConfig?: DynamoDbConfig;
-  readonly kmsConfig?: KmsConfig;
   /**
    * Issue #1056: deploy artifact bucket (= `tenkacloud-source-<account>-<region>`) の
    * lifecycle policy。 同 key に PUT し続ける versioning=Enabled bucket で旧 version が
@@ -81,20 +80,6 @@ export interface OpsMonitoringConfig {
 }
 
 // Issue #1066: SAML IdP 機能を全廃。 MFA 必須化 (Issue #1035) で代替済。
-
-/**
- * KMS Key の削除待機期間。`make destroy` 後 KMS Key が "Pending Deletion" 状態のまま
- * 課金される期間 ($1/key/月) を縮めるため、AWS KMS の許容範囲 [7, 30] 内で指定。
- *
- *   - dev / training: 7 (= 最短、課金最小化)
- *   - production: 14〜30 (= 監査要件 / 誤削除時の rollback 余地)
- *
- * 値は config.json + `${ENV_VAR:-default}` placeholder から渡るため、文字列で来ること
- * がある (placeholder 展開後は string)。bin で `Number()` 正規化する。
- */
-export interface KmsConfig {
-  readonly pendingWindowInDays?: number | string;
-}
 
 /**
  * DynamoDB の billing mode と provisioned throughput。
