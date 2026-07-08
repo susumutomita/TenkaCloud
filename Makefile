@@ -214,14 +214,10 @@ check-synth:
 # ===== Local play (Docker, no AWS) =====
 # Issue #2054: AWS 非依存の CTF コンテナ。 問題コンテナが `/verify` と採点条件を持ち、
 # TenkaCloud は採点 (participant API / portal / leaderboard / hint) だけを担う。 Kumo は撤去。
-#   make local PROBLEM=sqli-demo   問題コンテナ + 採点 API を起動し Participant Portal を立ち上げる
+#   make local                     採点 API + Participant Portal を起動 (問題はポータルで選択)
+#   make local PROBLEM=sqli-demo   問題コンテナを pre-start し、採点 API + Portal を起動
 #   make local-down                コンテナ停止 + runtime-config 復元
 #   make local-evaluate FLAG=...   採点 API 経由でフラグを提出 (= 問題コンテナ /verify に委譲)
-PROBLEM ?= sqli-demo
-# Issue #2188: distinguish an explicit `PROBLEM=<id>` (command line / env) from the
-# default above. `$(origin PROBLEM)` is `file` only when it fell through to the
-# default, so a non-empty PROBLEM_EXPLICIT means the player named a problem.
-PROBLEM_EXPLICIT := $(filter-out file,$(origin PROBLEM))
 # Issue #2119: `make local YES=1` pre-approves software installs (also for automation).
 ONBOARD_FLAGS := $(if $(YES),--yes,)
 
@@ -239,16 +235,18 @@ doctor:
 # Step 2 (bun onboarder): initialize the problems/ submodule + diagnose Docker,
 #   installing only with consent (or YES=1); a non-interactive run without YES=1
 #   stops with the missing prerequisites instead of installing.
-# Step 3: start the problem container + scoring API, then the Participant Portal.
+# Step 3: start the scoring API, then the Participant Portal. PROBLEM=<id>
+#   optionally pre-starts a container; otherwise players deploy from the portal.
 local:
 	@sh scripts/onboard-bootstrap.sh $(ONBOARD_FLAGS)
 	@bun run scripts/tenkacloud-onboard.ts preflight $(ONBOARD_FLAGS)
 	@set -e; \
 	problem="$(PROBLEM)"; \
-	if [ -z "$(PROBLEM_EXPLICIT)" ] && [ -z "$(YES)" ] && [ -t 0 ]; then \
-	  problem=$$(bun run scripts/tenkacloud-local.ts pick); \
+	if [ -n "$$problem" ]; then \
+	  echo "Pre-starting PROBLEM=$$problem. Run 'make local-list' to see other local-play problems."; \
+	else \
+	  echo "No PROBLEM specified; choose and deploy a problem from the Participant Portal."; \
 	fi; \
-	echo "Playing PROBLEM=$$problem. Run 'make local-list' to see other local-play problems."; \
 	$(MAKE) local-up PROBLEM="$$problem" LOCAL_API_PORT="$(LOCAL_API_PORT)"; \
 	cleanup() { \
 	  trap - EXIT INT TERM; \
@@ -268,8 +266,8 @@ local-down:
 local-status:
 	@bun run scripts/tenkacloud-local.ts status
 
-# Issue #2188: list local-play problems (id / category / display name) so
-# players can pick one instead of already needing to know its id.
+# Issue #2188: list local-play problems (id / category / display name) for
+# players who want to pre-start one by id.
 local-list:
 	@bun run scripts/tenkacloud-local.ts list
 

@@ -6,6 +6,7 @@ describe("deployment-plan: parseProblemIds (#2392)", () => {
     expect(parseProblemIds("a, b ,c")).toEqual(["a", "b", "c"]);
     expect(parseProblemIds("a,,a, b,a")).toEqual(["a", "b"]);
     expect(parseProblemIds("solo")).toEqual(["solo"]);
+    expect(parseProblemIds("")).toEqual([]);
     expect(parseProblemIds("  ,  ")).toEqual([]);
   });
 });

@@ -21,7 +21,6 @@ import {
   loadContainerProblem,
   resolveProblemDir,
 } from "./local-play/manifest";
-import { runSearchableProblemPicker } from "./local-play/picker";
 import { assertPortFree, waitForLocalApi } from "./local-play/readiness";
 import { startLocalPlayServer } from "./local-play/server";
 import { buildRuntimeConfig } from "./participant-portal-runtime-config";
@@ -309,7 +308,7 @@ async function up(problemArg: string): Promise<void> {
   tearDownRecordedUnits(p);
 
   // [#2392 Phase 2] Warm session: the API serves the WHOLE local-play catalog
-  // and containers start on demand. PROBLEM= only picks what to pre-start —
+  // and containers start on demand. PROBLEM= only selects what to pre-start —
   // none means a warm session with zero containers.
   const roots = problemSearchRoots(REPO_ROOT);
   const catalog = listLocalPlayProblems(roots).map((summary) =>
@@ -480,7 +479,7 @@ function down(): void {
 
 /**
  * Issue #2188: `make local list` — show which problems are playable locally
- * (id / display name / category) so players can pick one instead of already
+ * (id / display name / category) so players can choose one instead of already
  * needing to know the id.
  */
 function listProblems(): void {
@@ -501,46 +500,12 @@ function listProblems(): void {
   }
 }
 
-/**
- * Issue #2188 follow-up: full-screen searchable problem picker. The TUI is
- * rendered to stderr and the single chosen id goes to stdout, so `make local`
- * can capture it with command substitution. Only invoked for an interactive run
- * with no explicit PROBLEM; non-TTY invocation exits non-zero rather than
- * hanging or silently defaulting.
- */
-async function pick(): Promise<void> {
-  const summaries = listLocalPlayProblems(problemSearchRoots(REPO_ROOT));
-  if (summaries.length === 0) {
-    process.stderr.write(
-      "No local-play problems found. Run `git submodule update --init` (or `make doctor`) " +
-        "to fetch the problems/ catalog.\n",
-    );
-    process.exitCode = 1;
-    return;
-  }
-  if (!process.stdin.isTTY || !process.stderr.isTTY) {
-    process.stderr.write(
-      "Not a terminal. Re-run `make local PROBLEM=<id>` (see `make local-list`).\n",
-    );
-    process.exitCode = 1;
-    return;
-  }
-  const chosen = await runSearchableProblemPicker(summaries);
-  if (chosen) {
-    process.stdout.write(`${chosen}\n`);
-    return;
-  }
-  process.stderr.write("No problem selected. Re-run `make local PROBLEM=<id>`.\n");
-  process.exitCode = 1;
-}
-
 function usage(): string {
   return [
     "Usage: bun run scripts/tenkacloud-local.ts <command>",
     "",
     "Commands:",
     "  list             List local-play problems (id / category / name)",
-    "  pick             Interactively search for a problem (prints the id to stdout)",
     "  up [problemIds]  Start the warm local session; PROBLEM=a,b,c pre-starts those containers",
     "  serve <path>     Run the local Participant API (used internally by up)",
     "  status           Check the local Participant API",
@@ -554,9 +519,6 @@ async function main(): Promise<void> {
   switch (command) {
     case "list":
       listProblems();
-      break;
-    case "pick":
-      await pick();
       break;
     case "up":
       // [#2392 Phase 2] No PROBLEM = a warm session with zero containers;

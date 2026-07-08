@@ -64,6 +64,10 @@ describe("isLocalApiHealthy", () => {
     expect(isLocalApiHealthy(healthy, ["sqli-demo", "api-idor-demo"])).toBe(true);
   });
 
+  it("should accept a warm session with no pre-started problems", () => {
+    expect(isLocalApiHealthy(healthy, [])).toBe(true);
+  });
+
   it("should reject a foreign server (missing problem / wrong mode) on the same port", () => {
     // a session that does not serve one of the expected ids
     expect(isLocalApiHealthy(healthy, ["sqli-demo", "other"])).toBe(false);
