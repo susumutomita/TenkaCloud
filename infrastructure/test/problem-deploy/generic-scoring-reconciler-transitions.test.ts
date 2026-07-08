@@ -201,4 +201,14 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     await reconcileEventStatuses(ctx, NOW_ISO);
     expect(ddbSend).toHaveBeenCalledTimes(1);
   });
+
+  it("should skip a malformed event row missing tenantId/eventId/status (defensive guard)", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [{ PK: "EVENT#BAD", tenantId: "tenant-acme", status: "DEPLOYING" }], // no eventId
+    });
+
+    await reconcileEventStatuses(ctx, NOW_ISO);
+    // Scan only — the malformed row returns early before any Query/Update.
+    expect(ddbSend).toHaveBeenCalledTimes(1);
+  });
 });

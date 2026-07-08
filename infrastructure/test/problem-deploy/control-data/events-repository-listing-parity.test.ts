@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { describe, expect, it, vi } from "vitest";
 import {
   DynamoDbEventsRepository,
   type EventRecord,
   type EventsRepository,
   SqlEventsRepository,
 } from "../../../lib/problem-deploy/control-data/events-repository";
+import type { SqlExecutor } from "../../../lib/problem-deploy/control-data/types";
 import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 /**
@@ -164,5 +166,69 @@ describe.each(backends)("EventsRepository listing/batch/count parity: %s", (_nam
       const repo = makeRepo();
       expect(await repo.countEventsByTenant("tenant-empty")).toBe(0);
     });
+  });
+});
+
+describe("SqlEventsRepository listEventsPage cursor decode edge cases", () => {
+  function encodeCursor(value: unknown): string {
+    return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+  }
+
+  it("should restart from the first page when the cursor decodes to a non-object", async () => {
+    const repo = new SqlEventsRepository(makeSqliteExecutor());
+    await repo.putEvent(sampleRecord({ eventId: "e1" }));
+    const page = await repo.listEventsPage("tenant-a", { limit: 50, cursor: encodeCursor(null) });
+    expect(page.events.map((e) => e.eventId)).toEqual(["e1"]);
+  });
+
+  it("should restart from the first page when the cursor object is missing createdAt/eventId", async () => {
+    const repo = new SqlEventsRepository(makeSqliteExecutor());
+    await repo.putEvent(sampleRecord({ eventId: "e1" }));
+    const page = await repo.listEventsPage("tenant-a", {
+      limit: 50,
+      cursor: encodeCursor({ foo: "bar" }),
+    });
+    expect(page.events.map((e) => e.eventId)).toEqual(["e1"]);
+  });
+});
+
+describe("SqlEventsRepository countEventsByTenant defensive row-absent path", () => {
+  it("should return 0 when the driver's COUNT query yields no row at all", async () => {
+    // node:sqlite's `SELECT COUNT(*)` always returns a row (even for 0 matches), so this
+    // guards against a defensive `row?.cnt` branch a real driver quirk could still hit.
+    const stubSql: SqlExecutor = {
+      run: () => ({ changes: 0 }),
+      get: () => undefined,
+      all: () => [],
+      batch: () => [],
+    };
+    const repo = new SqlEventsRepository(stubSql);
+    expect(await repo.countEventsByTenant("tenant-a")).toBe(0);
+  });
+});
+
+describe("DynamoDbEventsRepository multi-page pagination internals", () => {
+  it("should sum Count across multiple GSI1 Query pages for countEventsByTenant", async () => {
+    const send = vi.fn();
+    send.mockResolvedValueOnce({
+      Count: 2,
+      LastEvaluatedKey: { PK: "EVENT#a", SK: "META", GSI1PK: "TENANT#tenant-a", GSI1SK: "x" },
+    });
+    send.mockResolvedValueOnce({ Count: 3 });
+    const repo = new DynamoDbEventsRepository({ send } as unknown as DynamoDBDocumentClient, TABLE);
+
+    expect(await repo.countEventsByTenant("tenant-a")).toBe(5);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("should follow LastEvaluatedKey across multiple Scan pages for listEventsByStatus (Items-absent page included)", async () => {
+    const send = vi.fn();
+    // First page has no `Items` at all (real DynamoDB can omit it on a filtered-empty page).
+    send.mockResolvedValueOnce({ LastEvaluatedKey: { PK: "EVENT#a", SK: "META" } });
+    send.mockResolvedValueOnce({ Items: [] });
+    const repo = new DynamoDbEventsRepository({ send } as unknown as DynamoDBDocumentClient, TABLE);
+
+    expect(await repo.listEventsByStatus(["DRAFT"])).toEqual([]);
+    expect(send).toHaveBeenCalledTimes(2);
   });
 });
