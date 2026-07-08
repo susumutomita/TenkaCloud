@@ -33,9 +33,17 @@ let storeDir: string;
 const INSTALLED_AT = "2026-06-29T00:00:00.000Z";
 const CORE_VERSION = "1.0.0";
 const AVAILABLE_RUNTIMES = [{ provider: "aws", engine: "cloudformation" }] as const;
+const PROJECTION_AVAILABLE_RUNTIMES = [
+  { provider: "aws", engine: "cloudformation" },
+  { provider: "gcp", engine: "infra-manager" },
+] as const;
 const PLATFORM: PlatformContext = {
   coreVersion: CORE_VERSION,
   availableRuntimes: AVAILABLE_RUNTIMES,
+};
+const PROJECTION_PLATFORM: PlatformContext = {
+  coreVersion: CORE_VERSION,
+  availableRuntimes: PROJECTION_AVAILABLE_RUNTIMES,
 };
 
 const TENANT_A = "tenant-a";
@@ -130,6 +138,21 @@ const COORD_PLUGIN_REL = "coordination/router.ts";
 const COORD_PLUGIN_SRC =
   "const plugin = { initialState: () => ({}), validateOp: () => ({ ok: true }), applyOp: (s) => s, projectForTeam: (s) => s };\nexport default plugin;\n";
 
+const PROJECTION_PACK_ID = "com.example.projection-pack";
+const PROJECTION_PROBLEM_ID = "projection-problem";
+const PROJECTION_ENDPOINT = {
+  slot: "web",
+  default: { from: "cfn-output", key: "WebUrl", appendPath: "/health" },
+  overridable: true,
+  label: "Web",
+};
+const PROJECTION_PHASE = { name: "attack", afterMinutes: 15, description: "Attack starts" };
+const PROJECTION_DISRUPTION = {
+  id: "latency",
+  name: "Latency",
+  eventDetailType: "ProjectionLatency",
+};
+
 /** Build a valid pack whose single problem opts into ADR-028 inter-team coordination. */
 function writeCoordinationPack(
   dir: string,
@@ -169,6 +192,65 @@ function installCoordinationPackFrom(
     installedAt: INSTALLED_AT,
     coreVersion: CORE_VERSION,
     availableRuntimes: AVAILABLE_RUNTIMES,
+  });
+  if (!result.ok) throw new Error(`install failed: ${result.message}`);
+  return result.entry;
+}
+
+function projectionProblem(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: PROJECTION_PROBLEM_ID,
+    title: PROJECTION_PROBLEM_ID,
+    category: "challenges",
+    runtime: { provider: "gcp", engine: "infra-manager", entry: "main.yaml" },
+    scoring: { kind: "flag", flagOutputKey: "Flag", points: 120 },
+    endpoints: [PROJECTION_ENDPOINT],
+    phases: [PROJECTION_PHASE],
+    disruptions: [PROJECTION_DISRUPTION],
+    writeup: "日本語の解説",
+    i18n: { en: { writeup: "English writeup" } },
+    ...overrides,
+  };
+}
+
+function writeProjectionPack(
+  dir: string,
+  options: { metadataOverrides?: Record<string, unknown> } = {},
+): string {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "tenkacloud-pack.json"),
+    JSON.stringify(
+      manifest({
+        id: PROJECTION_PACK_ID,
+        requiredRuntimes: [{ provider: "gcp", engine: "infra-manager" }],
+      }),
+      null,
+      2,
+    ),
+  );
+  const problemDir = path.join(dir, "problems", "challenges", PROJECTION_PROBLEM_ID);
+  fs.mkdirSync(problemDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(problemDir, "metadata.json"),
+    JSON.stringify(projectionProblem(options.metadataOverrides), null, 2),
+  );
+  fs.writeFileSync(path.join(problemDir, "main.yaml"), "resources: []\n");
+  return dir;
+}
+
+function installProjectionPackFrom(
+  name: string,
+  options: { metadataOverrides?: Record<string, unknown> } = {},
+) {
+  const sourceDir = path.join(base, name);
+  writeProjectionPack(sourceDir, options);
+  const result = installPack({
+    sourceDir,
+    storeDir,
+    installedAt: INSTALLED_AT,
+    coreVersion: CORE_VERSION,
+    availableRuntimes: PROJECTION_AVAILABLE_RUNTIMES,
   });
   if (!result.ok) throw new Error(`install failed: ${result.message}`);
   return result.entry;
@@ -682,20 +764,21 @@ describe("ActivationStore coordination activation (#2323)", () => {
     const store = new ActivationStore(storeDir, PLATFORM);
     store.activate({ tenantId: TENANT_A, packId: COORD_PACK_ID, version: "1.0.0" });
 
-    // Default (event-pin path): projections stay empty — no coordination, no esbuild.
+    // Default (event-pin path): projections stay empty — no scoring/coordination, no esbuild.
     const defaultInputs = store.snapshotInputsForTenant(TENANT_A);
     expect(defaultInputs[0].problems[0].projections).toEqual({});
 
-    // Opt-in (deploy path): the coordination declaration is carried onto projections.
+    // Opt-in (deploy path): the core extractors populate scoring, and coordination is bundled.
     const activated = store.snapshotInputsForTenant(TENANT_A, { withCoordinationProjection: true });
     expect(activated[0].problems[0].projections).toMatchObject({
+      scoring: { kind: "flag", flagOutputKey: "Flag", points: 100 },
       coordination: { plugin: COORD_PLUGIN_REL },
     });
   });
 
-  it("should leave a pack that declares no coordination byte-identical on the deploy path", () => {
-    // A normal (non-coordination) pack must contribute no coordination keys even through the
-    // opt-in deploy path, so a coordination-free deploy is a NO-OP.
+  it("should leave coordination maps empty when a pack declares no coordination on the deploy path", () => {
+    // A normal (non-coordination) pack must contribute no coordination keys even though
+    // #2463 now projects scoring and the other non-coordination metadata.
     installPackFrom("plain-pack", { problemId: "pack-only" });
     const store = new ActivationStore(storeDir, PLATFORM);
     store.activate({ tenantId: TENANT_A, packId: "com.example.cloud-pack", version: "1.0.0" });
@@ -707,7 +790,10 @@ describe("ActivationStore coordination activation (#2323)", () => {
     expect(bundle.coordination).toEqual({});
     expect(bundle.coordinationBundles).toEqual({});
     const inputs = store.snapshotInputsForTenant(TENANT_A, { withCoordinationProjection: true });
-    expect(inputs[0].problems[0].projections).toEqual({});
+    expect(inputs[0].problems[0].projections).toMatchObject({
+      scoring: { kind: "flag", flagOutputKey: "Flag", points: 100 },
+    });
+    expect(inputs[0].problems[0].projections).not.toHaveProperty("coordination");
   });
 
   it("should still let a coordination pack activate without bundling (dry-run never throws)", () => {
@@ -732,5 +818,69 @@ describe("ActivationStore coordination activation (#2323)", () => {
     store.activate({ tenantId: TENANT_A, packId: COORD_PACK_ID, version: "1.0.0" });
 
     expect(() => tenantCatalogSource(store, TENANT_A, PLATFORM)).toThrow();
+  });
+});
+
+describe("ActivationStore pack projection activation (#2463)", () => {
+  it("should carry installed pack scoring/endpoints/phases/runtimes/disruptions/writeups via tenantCatalogSource", () => {
+    installProjectionPackFrom("projection-pack");
+    const store = new ActivationStore(storeDir, PROJECTION_PLATFORM);
+    expect(
+      store.activate({ tenantId: TENANT_A, packId: PROJECTION_PACK_ID, version: "1.0.0" }).ok,
+    ).toBe(true);
+
+    const bundle = tenantCatalogSource(store, TENANT_A, PROJECTION_PLATFORM).loadBundle(
+      emptyCoreRoot(),
+    ) as ProblemsCatalogBundle;
+
+    expect((bundle.catalog as Record<string, string>)[PROJECTION_PROBLEM_ID]).toBe(
+      `pack-problems/${PROJECTION_PACK_ID}/1.0.0/challenges/${PROJECTION_PROBLEM_ID}`,
+    );
+    expect((bundle.scoring as Record<string, unknown>)[PROJECTION_PROBLEM_ID]).toEqual({
+      kind: "flag",
+      flagOutputKey: "Flag",
+      points: 120,
+    });
+    expect((bundle.endpoints as Record<string, unknown>)[PROJECTION_PROBLEM_ID]).toEqual([
+      PROJECTION_ENDPOINT,
+    ]);
+    expect((bundle.phases as Record<string, unknown>)[PROJECTION_PROBLEM_ID]).toEqual([
+      PROJECTION_PHASE,
+    ]);
+    expect((bundle.runtimes as Record<string, unknown>)[PROJECTION_PROBLEM_ID]).toEqual({
+      provider: "gcp",
+      engine: "infra-manager",
+      entry: "main.yaml",
+    });
+    expect((bundle.disruptions as Record<string, unknown>)[PROJECTION_PROBLEM_ID]).toEqual([
+      PROJECTION_DISRUPTION,
+    ]);
+    expect((bundle.writeups as Record<string, unknown>)[PROJECTION_PROBLEM_ID]).toEqual({
+      ja: "日本語の解説",
+      en: "English writeup",
+    });
+    // `visibility: public` is omitted by the core extractor, so the pack contributes no
+    // visibility row unless it declares private visibility, which is rejected below.
+    expect(bundle.visibility).toEqual({});
+  });
+
+  it("should keep default snapshot inputs projection-free for event pinning", () => {
+    installProjectionPackFrom("projection-pack");
+    const store = new ActivationStore(storeDir, PROJECTION_PLATFORM);
+    store.activate({ tenantId: TENANT_A, packId: PROJECTION_PACK_ID, version: "1.0.0" });
+
+    expect(store.snapshotInputsForTenant(TENANT_A)[0].problems[0].projections).toEqual({});
+  });
+
+  it("should fail loud at synth when an active pack declares private visibility", () => {
+    installProjectionPackFrom("private-pack", { metadataOverrides: { visibility: "private" } });
+    const store = new ActivationStore(storeDir, PROJECTION_PLATFORM);
+    expect(
+      store.activate({ tenantId: TENANT_A, packId: PROJECTION_PACK_ID, version: "1.0.0" }).ok,
+    ).toBe(true);
+
+    expect(() => tenantCatalogSource(store, TENANT_A, PROJECTION_PLATFORM)).toThrow(
+      /packId='com\.example\.projection-pack'.*problemId='projection-problem'.*ADR-008 presigned/,
+    );
   });
 });

@@ -74,6 +74,17 @@ function writePack(root: string, problemId: string): void {
       title: problemId,
       cfnTemplate: "template.yaml",
       scoring: { kind: "flag", flagOutputKey: "Flag", points: 100 },
+      endpoints: [
+        {
+          slot: "web",
+          default: { from: "cfn-output", key: "WebUrl", appendPath: "/health" },
+          overridable: true,
+        },
+      ],
+      phases: [{ name: "attack", afterMinutes: 10 }],
+      disruptions: [{ id: "latency", name: "Latency", eventDetailType: "LatencyFired" }],
+      writeup: "パック問題の解説",
+      i18n: { en: { writeup: "Pack problem writeup" } },
     }),
   );
   fs.writeFileSync(path.join(problemDir, "template.yaml"), "Resources: {}\n");
@@ -116,6 +127,28 @@ describe("resolveAppConfig pack catalog source (#2462)", () => {
     expect(cfg.problems.catalog).toMatchObject({
       "core-only": "problems/challenges/core-only",
       "pack-only": "pack-problems/com.example.cloud-pack/1.0.0/challenges/pack-only",
+    });
+    expect((cfg.problems.scoring as Record<string, unknown>)["pack-only"]).toEqual({
+      kind: "flag",
+      flagOutputKey: "Flag",
+      points: 100,
+    });
+    expect((cfg.problems.endpoints as Record<string, unknown>)["pack-only"]).toEqual([
+      {
+        slot: "web",
+        default: { from: "cfn-output", key: "WebUrl", appendPath: "/health" },
+        overridable: true,
+      },
+    ]);
+    expect((cfg.problems.phases as Record<string, unknown>)["pack-only"]).toEqual([
+      { name: "attack", afterMinutes: 10 },
+    ]);
+    expect((cfg.problems.disruptions as Record<string, unknown>)["pack-only"]).toEqual([
+      { id: "latency", name: "Latency", eventDetailType: "LatencyFired" },
+    ]);
+    expect((cfg.problems.writeups as Record<string, unknown>)["pack-only"]).toEqual({
+      ja: "パック問題の解説",
+      en: "Pack problem writeup",
     });
   });
 

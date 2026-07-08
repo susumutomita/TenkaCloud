@@ -37,7 +37,16 @@ import * as path from "node:path";
 import { z } from "zod";
 import type { PackAsset } from "../app-config/types.js";
 import { bundleCoordinationPlugins } from "../utils/bundle-coordination-plugins.js";
-import { discoverProblemsCoordination } from "../utils/discover-problems-catalog.js";
+import {
+  discoverProblemsCoordination,
+  discoverProblemsDisruptions,
+  discoverProblemsEndpoints,
+  discoverProblemsPhases,
+  discoverProblemsRuntime,
+  discoverProblemsScoring,
+  discoverProblemsVisibility,
+  discoverProblemsWriteups,
+} from "../utils/discover-problems-catalog.js";
 import { type CatalogSource, SnapshotCatalogSource } from "./catalog-source.js";
 import {
   type ComposeEffectiveCatalogResult,
@@ -115,17 +124,16 @@ const DEFAULT_PLATFORM: ActivationPlatform = {
  * [ADR-028/030 activation (#2323)] How a snapshot is projected into a compose input.
  *
  * `withCoordinationProjection` は既定 false。false のとき snapshot は catalog 行のみを出す
- * (`projections: {}`) — scoring / endpoints と同じく、pack の projection activation は別 slice の
- * 担当。true のとき (= {@link tenantCatalogSource} の deploy / synth 経路) だけ、pack が宣言した
- * `interTeamCoordination.plugin` を immutable snapshot dir から discover + synth-bundle して各 problem
- * の `projections` に載せる。これにより installed pack の coordination が effective bundle →
- * dispatcher へ届く (core `problems/` を {@link LocalCatalogSource} が扱うのと同じ形)。
+ * (`projections: {}`)。true のとき (= {@link tenantCatalogSource} の deploy / synth 経路) だけ、
+ * core catalog と同じ `discoverProblems*` extractor を immutable snapshot dir に回し、scoring /
+ * endpoints / phases / runtime / disruptions / writeups / coordination を各 problem の `projections`
+ * に載せる。coordination plugin は同時に synth-bundle する。
  *
  * Default false keeps the activate() dry-run and event-pin paths byte-identical: they never run
  * esbuild and never throw, so `activate()` keeps its "never throws" contract.
  */
 interface SnapshotInputOptions {
-  /** Discover + synth-bundle each problem's coordination plugin onto its `projections`. */
+  /** Discover each problem's deploy-time projections, including coordination plugin bundling. */
   readonly withCoordinationProjection?: boolean;
 }
 
@@ -134,12 +142,11 @@ interface SnapshotInputOptions {
  * input. Reuses the #2088 validator so it stays in lockstep with what validates;
  * returns undefined when the revision's snapshot is missing or invalid.
  *
- * [ADR-028/030 activation (#2323)] When `options.withCoordinationProjection` is set, each problem
- * that declares `interTeamCoordination.plugin` also carries its coordination declaration + the
- * synth-bundled `.mjs` on `projections` (discovered from the snapshot dir, which `copySnapshot`
- * already populated with the plugin source). A broken plugin fails loud at synth (esbuild throws) —
- * never a silent drop. Problems without coordination keep `projections: {}` (byte-identical), and
- * with the option off nothing is discovered / bundled at all.
+ * [ADR-028/030 activation (#2323) + #2463] When `options.withCoordinationProjection` is set, each
+ * problem carries the same deploy-time projections the core `problems/` tree would expose:
+ * scoring / endpoints / phases / runtimes / disruptions / writeups plus coordination declaration
+ * and synth-bundled `.mjs` when present. A broken plugin fails loud at synth (esbuild throws) —
+ * never a silent drop. With the option off nothing is discovered / bundled at all.
  */
 function loadSnapshotInput(
   storeDir: string,
@@ -152,8 +159,8 @@ function loadSnapshotInput(
   if (!manifest) return undefined;
   const root = manifest.problemsRoot ?? "problems";
   const directoryByProblemId = buildPackProblemDirectoryMap(manifest, validation.problems);
-  const coordinationProjections = options.withCoordinationProjection
-    ? loadCoordinationProjections(path.join(snapshotAbs, root))
+  const snapshotProjections = options.withCoordinationProjection
+    ? loadSnapshotProjections(path.join(snapshotAbs, root), manifest)
     : undefined;
   return {
     manifest,
@@ -168,7 +175,7 @@ function loadSnapshotInput(
       return {
         problemId,
         directory,
-        projections: coordinationProjections?.[problemId] ?? {},
+        projections: snapshotProjections?.[problemId] ?? {},
       };
     }),
   };
@@ -209,26 +216,60 @@ function toPosixPath(value: string): string {
 }
 
 /**
- * [ADR-028/030 activation (#2323)] problems root 配下の各問題について
- * `interTeamCoordination.plugin` を discover し、plugin を synth-bundle して、problemId 別の
- * `projections` fragment (`{ coordination, coordinationBundle }`) を返す。coordination を宣言しない
- * 問題はキーごと不在 (呼び出し側で `{}` へ fallback = byte-identical)。値の shape は
- * {@link LocalCatalogSource} が core `problems/` に載せるものと同一で、
- * {@link SnapshotCatalogSource.loadBundle} がそのまま `coordination` / `coordinationBundles` に読み戻す。
+ * [ADR-028/030 activation (#2323) + #2463] problems root 配下の各問題について core と同じ
+ * `discoverProblems*` extractor を走らせ、problemId 別の `projections` fragment を返す。各 value
+ * の shape は {@link LocalCatalogSource} が core `problems/` に載せるものと同一で、pack 側で独自
+ * parse はしない。未宣言の projection はキーごと不在 (呼び出し側で `{}` へ fallback = NO-OP)。
+ *
+ * `visibility: private` はここで fail-loud にする。packs は ADR-008 の presigned payload 経路に
+ * 対応しておらず、黙って public 扱い / 除外をすると payload の露出ポリシーを誤るため。
  */
-function loadCoordinationProjections(
+function loadSnapshotProjections(
   problemsRootAbs: string,
+  manifest: PackManifest,
 ): Record<string, Readonly<Record<string, unknown>>> {
+  const visibility = discoverProblemsVisibility(problemsRootAbs);
+  for (const problemId of Object.keys(visibility)) {
+    throw new Error(
+      `[ProblemPackProjection] packId='${manifest.id}' problemId='${problemId}' declares visibility: private, but packs do not support the ADR-008 presigned payload path; refusing to synth (a private problem must not silently become public).`,
+    );
+  }
+
+  const out: Record<string, Record<string, unknown>> = {};
+  mergeProjection(out, "scoring", discoverProblemsScoring(problemsRootAbs));
+  mergeProjection(out, "endpoints", discoverProblemsEndpoints(problemsRootAbs));
+  mergeProjection(out, "phases", discoverProblemsPhases(problemsRootAbs));
+  mergeProjection(out, "runtimes", discoverProblemsRuntime(problemsRootAbs));
+  mergeProjection(out, "disruptions", discoverProblemsDisruptions(problemsRootAbs));
+  mergeProjection(out, "writeups", discoverProblemsWriteups(problemsRootAbs));
+
   const coordination = discoverProblemsCoordination(problemsRootAbs);
   const bundles = bundleCoordinationPlugins(problemsRootAbs);
-  const out: Record<string, Record<string, unknown>> = {};
   for (const [problemId, declaration] of Object.entries(coordination)) {
-    const projection: Record<string, unknown> = { coordination: declaration };
+    const projection = projectionFor(out, problemId);
+    projection.coordination = declaration;
     const bundle = bundles[problemId];
     if (typeof bundle === "string") projection.coordinationBundle = bundle;
-    out[problemId] = projection;
   }
   return out;
+}
+
+function mergeProjection(
+  out: Record<string, Record<string, unknown>>,
+  key: string,
+  discovered: Readonly<Record<string, unknown>>,
+): void {
+  for (const [problemId, value] of Object.entries(discovered)) {
+    projectionFor(out, problemId)[key] = value;
+  }
+}
+
+function projectionFor(
+  out: Record<string, Record<string, unknown>>,
+  problemId: string,
+): Record<string, unknown> {
+  out[problemId] ??= {};
+  return out[problemId];
 }
 
 /**
