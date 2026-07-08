@@ -13,7 +13,7 @@
 
 import { dirname, join } from "node:path";
 import type { ContainerProblem } from "./manifest";
-import { offsetLoopbackEndpoints, offsetLoopbackUrl, remapComposeHostPorts } from "./port-remap";
+import { remapComposeHostPorts, remapContainerProblem } from "./port-remap";
 
 /** One problem's compose unit — the handle needed to tear it down. */
 export interface LocalComposeUnit {
@@ -77,11 +77,7 @@ export class ContainerRunner {
       composePath = remappedComposePath;
       projectDirectory = dirname(problem.composePath);
     }
-    const remappedProblem: ContainerProblem = {
-      ...problem,
-      challengeEndpoints: offsetLoopbackEndpoints(problem.challengeEndpoints, portMap),
-      verifyUrl: offsetLoopbackUrl(problem.verifyUrl, portMap),
-    };
+    const remappedProblem = remapContainerProblem(problem, portMap);
     const composeEnv: NodeJS.ProcessEnv = {
       ...process.env,
       ...this.deps.generateSecretEnv(problem.secretEnv),

@@ -18,7 +18,7 @@ const problem = (): ContainerProblem =>
     problemId: "sqli-demo",
     name: "SQLi",
     description: "",
-    instructions: "",
+    instructions: "Attack http://127.0.0.1:18080/login.",
     problemDir: "/p/sqli-demo",
     composePath: "/p/sqli-demo/local/docker-compose.yml",
     composeProjectName: "tc-local-sqli-demo",
@@ -82,6 +82,8 @@ describe("ContainerRunner: start (#2392 Phase 2)", () => {
     expect(reached).toEqual(["http://127.0.0.1:18180/"]);
     expect(started.problem.challengeEndpoints).toEqual({ Web: "http://127.0.0.1:18180/" });
     expect(started.problem.verifyUrl).toBe("http://127.0.0.1:18181/verify");
+    // The instructions prose moves onto the same block as the surface it quotes.
+    expect(started.problem.instructions).toBe("Attack http://127.0.0.1:18180/login.");
     expect(started.unit).toMatchObject({
       composePath: "/local/tc-local-sqli-demo.compose.yml",
       projectDirectory: "/p/sqli-demo/local",
