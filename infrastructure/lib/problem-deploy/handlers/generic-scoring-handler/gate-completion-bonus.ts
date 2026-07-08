@@ -1,5 +1,4 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
@@ -9,7 +8,6 @@ import {
   resolveTeamGatePolicy,
   selectGateCompletionRow,
 } from "../shared/progression-gate.js";
-import { buildScoreEventItem } from "../shared/score-event.js";
 import { isTenantFeatureEnabled } from "../shared/tenant-feature-flags.js";
 import { resolveDeploymentsRepository } from "./shared.js";
 
@@ -96,63 +94,53 @@ export async function maybeLatchGateCompletion(
 
 type GateRow = Partial<DeploymentItem> & { PK: string; jobId: string; problemId: string };
 
-/** 完了 latch (one-time)。 既に latch 済みなら skip。 レースは condition で防ぐ。 */
+/**
+ * 完了 latch (one-time)。 既に latch 済みなら skip。 レースは condition で防ぐ。
+ *
+ * [Issue #2441 / Phase B2] `latchGateCompleted` folds the CCF into a `conflict`
+ * outcome instead of throwing — discarding it here reproduces the pre-seam
+ * CCF-swallow (a concurrent tick that latched first is a benign no-op).
+ */
 async function latchCompletedAt(
   shared: GateScoringShared,
   item: GateRow,
   nowIso: string,
 ): Promise<void> {
   if (typeof item.gateCompletedAt === "string") return;
-  try {
-    await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.deploymentsTableName,
-        Key: { PK: item.PK, SK: "META" },
-        UpdateExpression: "SET gateCompletedAt = :now, updatedAt = :now",
-        ConditionExpression: "attribute_not_exists(gateCompletedAt)",
-        ExpressionAttributeValues: { ":now": nowIso },
-      }),
-    );
-  } catch (err) {
-    if (!(err instanceof Error && err.name === "ConditionalCheckFailedException")) throw err;
-  }
+  const repository = await resolveDeploymentsRepository(shared);
+  await repository.latchGateCompleted(item.jobId, nowIso);
 }
 
-/** score ADD + 履歴行 append を 1 transaction に (= 片方だけ成功する分裂を防ぐ)。 */
+/**
+ * score ADD + 履歴行 append を 1 transaction に (= 片方だけ成功する分裂を防ぐ)。
+ *
+ * [Issue #2441 / Phase B2] `awardGateBonusAtomic` builds the identical
+ * TransactWrite (ADD score + `gateBonusAwardedAt` latch, EVENT# score-event Put)
+ * verbatim inside the seam. Its own CCF handling narrows to a
+ * `ConditionalCheckFailed` cancellation reason (folds to a `conflict` outcome);
+ * the pre-seam catch here also swallowed ANY OTHER `TransactionCanceledException`
+ * (e.g. a transient per-item throttle inside the same transaction, or an error
+ * that carries no `CancellationReasons` at all) as a "retry next tick" no-op —
+ * keep that wider swallow at the call site so those still don't fail the tick.
+ */
 async function awardBonusTransact(
   shared: GateScoringShared,
   item: GateRow,
   completionBonus: number,
   nowIso: string,
 ): Promise<void> {
-  const scoreEvent = buildScoreEventItem(
-    {
-      jobId: item.jobId,
-      problemId: item.problemId,
-      teamId: item.teamId,
-      eventId: item.eventId,
-      expiresAt: item.expiresAt ?? 0,
-    },
-    "gate-bonus",
-    completionBonus,
-    nowIso,
-  );
   try {
-    await shared.ddb.send(
-      new TransactWriteCommand({
-        TransactItems: [
-          {
-            Update: {
-              TableName: shared.deploymentsTableName,
-              Key: { PK: item.PK, SK: "META" },
-              UpdateExpression: "ADD score :bonus SET gateBonusAwardedAt = :now, updatedAt = :now",
-              ConditionExpression: "attribute_not_exists(gateBonusAwardedAt)",
-              ExpressionAttributeValues: { ":bonus": completionBonus, ":now": nowIso },
-            },
-          },
-          { Put: { TableName: shared.deploymentsTableName, Item: scoreEvent } },
-        ],
-      }),
+    const repository = await resolveDeploymentsRepository(shared);
+    await repository.awardGateBonusAtomic(
+      {
+        jobId: item.jobId,
+        problemId: item.problemId,
+        teamId: item.teamId,
+        eventId: item.eventId,
+        expiresAt: item.expiresAt ?? 0,
+      },
+      completionBonus,
+      nowIso,
     );
   } catch (err) {
     // 並行 tick が先に付与した (condition fail) / transient throttle — どちらも swallow。

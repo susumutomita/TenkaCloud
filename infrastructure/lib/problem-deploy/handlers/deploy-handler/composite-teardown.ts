@@ -24,14 +24,13 @@
  * cloud. Parent + target rows are never deleted here.
  */
 
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { deploymentPk } from "./composite-deployment.js";
 import {
   type CompositeDeploymentRepositoryDeps,
   getCompositeParent,
   listCompositeTargets,
 } from "./composite-repository.js";
 import type { TeardownOutcome } from "./delete.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 
 export type CompositeTeardownOutcome =
   | "accepted"
@@ -72,10 +71,6 @@ export interface CompositeTeardownDeps {
   readonly now: () => number;
 }
 
-function isConditionalCheckFailed(error: unknown): boolean {
-  return (error as { name?: string } | undefined)?.name === "ConditionalCheckFailedException";
-}
-
 /** Map the per-target {@link TeardownOutcome} to a composite outcome. */
 function mapOutcome(outcome: TeardownOutcome): CompositeTeardownOutcome {
   switch (outcome.kind) {
@@ -94,29 +89,20 @@ function mapOutcome(outcome: TeardownOutcome): CompositeTeardownOutcome {
 /**
  * Conditionally flip the parent to DELETING. A row already in DELETING (repeat
  * request) trips the condition and is a no-op, not an error.
+ *
+ * [Issue #2441 / Phase B2] `markCompositeParentDeleting` folds the CCF into a
+ * `conflict` outcome instead of throwing — discarding it here is the
+ * byte-identical no-op the pre-seam CCF-swallow produced.
  */
 async function markParentDeleting(
   deps: CompositeTeardownDeps,
   parentDeploymentId: string,
 ): Promise<void> {
-  try {
-    await deps.repo.ddb.send(
-      new UpdateCommand({
-        TableName: deps.repo.tableName,
-        Key: { PK: deploymentPk(parentDeploymentId), SK: "META" },
-        UpdateExpression: "SET #s = :deleting, updatedAt = :now",
-        ConditionExpression: "runtimeKind = :composite AND #s <> :deleting",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":deleting": "DELETING",
-          ":composite": "composite",
-          ":now": new Date(deps.now()).toISOString(),
-        },
-      }),
-    );
-  } catch (err) {
-    if (!isConditionalCheckFailed(err)) throw err;
-  }
+  const repository = await resolveDeploymentsRepository(deps.repo);
+  await repository.markCompositeParentDeleting(
+    parentDeploymentId,
+    new Date(deps.now()).toISOString(),
+  );
 }
 
 async function teardownOneTarget(

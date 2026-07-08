@@ -1,4 +1,4 @@
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import type { DeploymentSchedulePatch } from "../../control-data/deployments-repository.js";
 import type { EventSchedulePatch } from "../../control-data/events-repository.js";
 import {
   type EventSharedResources,
@@ -131,7 +131,8 @@ export async function setEventSchedule(
     shared,
     tenantId,
     eventId,
-    buildDeploymentScheduleUpdate(tenantId, params),
+    { startsAt: params.startsAt, endsAt: params.endsAt },
+    now,
   );
 
   return {
@@ -229,11 +230,6 @@ function validateScheduleOrder(
   return { kind: "ends_before_starts", startsAt, endsAt };
 }
 
-interface DeploymentScheduleUpdate {
-  readonly deploymentExpression: string;
-  readonly deploymentValues: Record<string, string>;
-}
-
 /**
  * Event 行へ書く field だけを patch に写す (Event 側の式構築は repository seam)。
  * [ADR-047] teardownAt / [ADR-047 follow-up] deployAt は event 行のみ
@@ -250,57 +246,25 @@ function buildSchedulePatch(params: SetEventScheduleParams): EventSchedulePatch 
   };
 }
 
-function buildDeploymentScheduleUpdate(
-  tenantId: string,
-  params: SetEventScheduleParams,
-): DeploymentScheduleUpdate {
-  const now = new Date(params.nowMs).toISOString();
-  const deploymentParts = ["updatedAt = :now"];
-  const deploymentValues: Record<string, string> = { ":now": now, ":tenantId": tenantId };
-  if (params.startsAt !== undefined) {
-    deploymentParts.push("eventStartsAt = :s");
-    deploymentValues[":s"] = params.startsAt;
-  }
-  if (params.endsAt !== undefined) {
-    deploymentParts.push("eventEndsAt = :e");
-    deploymentValues[":e"] = params.endsAt;
-  }
-  return {
-    deploymentExpression: `SET ${deploymentParts.join(", ")}`,
-    deploymentValues,
-  };
-}
-
+/**
+ * [Issue #2441 / Phase B2] `applySchedulePatch` builds the identical dynamic SET
+ * expression (`eventStartsAt` / `eventEndsAt` appended only when defined)
+ * verbatim inside the seam and folds the CCF into a `not_found` outcome instead
+ * of throwing — the pre-seam catch also silently skipped on CCF (a row that
+ * changed tenant or was deleted mid-propagation), so discarding the outcome
+ * here reproduces that no-op.
+ */
 async function propagateSchedule(
   shared: EventSharedResources,
   tenantId: string,
   eventId: string,
-  update: DeploymentScheduleUpdate,
+  patch: DeploymentSchedulePatch,
+  now: string,
 ): Promise<number> {
-  const repository = await resolveDeploymentsRepository(shared);
-  const targetJobIds = await repository.listDeploymentKeysByEvent(tenantId, eventId);
-  await Promise.all(targetJobIds.map((jobId) => updateDeploymentSchedule(shared, jobId, update)));
+  const repo = await resolveDeploymentsRepository(shared);
+  const targetJobIds = await repo.listDeploymentKeysByEvent(tenantId, eventId);
+  await Promise.all(
+    targetJobIds.map((jobId) => repo.applySchedulePatch(jobId, tenantId, patch, now)),
+  );
   return targetJobIds.length;
-}
-
-async function updateDeploymentSchedule(
-  shared: EventSharedResources,
-  jobId: string,
-  update: DeploymentScheduleUpdate,
-): Promise<void> {
-  try {
-    await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.deploymentsTableName,
-        // listDeploymentKeysByEvent returns domain jobIds; the write remains raw.
-        Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-        UpdateExpression: update.deploymentExpression,
-        ConditionExpression: "tenantId = :tenantId",
-        ExpressionAttributeValues: update.deploymentValues,
-      }),
-    );
-  } catch (err) {
-    if (err instanceof Error && err.name === "ConditionalCheckFailedException") return;
-    throw err;
-  }
 }

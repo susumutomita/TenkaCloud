@@ -22,8 +22,7 @@
  * here. Deploy-phase aggregation (#2068) is untouched — this is deletion only.
  */
 
-import { type DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { deploymentPk } from "../deploy-handler/composite-deployment.js";
+import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import {
   type CompositeDeploymentRepositoryDeps,
   getCompositeParent,
@@ -31,6 +30,7 @@ import {
 } from "../deploy-handler/composite-repository.js";
 import type { DeploymentStatus } from "../deploy-handler/types.js";
 import { forEachScanPage } from "../shared/ddb-paginate.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 
 /** A target is confirmed torn down only in one of these terminal states. */
 const TEARDOWN_COMPLETE_STATUSES: ReadonlySet<string> = new Set([
@@ -63,10 +63,6 @@ export class CompositeTeardownNotReconcilableError extends Error {
 
 function repoDeps(deps: CompositeTeardownReconcileDeps): CompositeDeploymentRepositoryDeps {
   return { ddb: deps.ddb, tableName: deps.deploymentsTableName };
-}
-
-function isConditionalCheckFailed(error: unknown): boolean {
-  return (error as { name?: string } | undefined)?.name === "ConditionalCheckFailedException";
 }
 
 /**
@@ -107,31 +103,22 @@ export async function reconcileCompositeParentTeardown(
     return { previousStatus, nextStatus: previousStatus, changed: false };
   }
 
-  try {
-    await deps.ddb.send(
-      new UpdateCommand({
-        TableName: deps.deploymentsTableName,
-        Key: { PK: deploymentPk(input.parentDeploymentId), SK: "META" },
-        UpdateExpression: "SET #s = :next, updatedAt = :now",
-        // Only write when the parent is still DELETING AND a composite parent — a
-        // concurrent writer makes this a no-op, not an error.
-        ConditionExpression: "#s = :prev AND runtimeKind = :composite",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":next": "DELETED",
-          ":prev": "DELETING",
-          ":now": input.nowIso,
-          ":composite": "composite",
-        },
-      }),
-    );
-    return { previousStatus, nextStatus: "DELETED", changed: true };
-  } catch (err) {
-    if (isConditionalCheckFailed(err)) {
-      return { previousStatus, nextStatus: previousStatus, changed: false };
-    }
-    throw err;
-  }
+  // [Issue #2441 / Phase B2] `casCompositeParentStatus` (shared with the deploy-phase
+  // reconciler — the two Update expressions were identical) folds the CCF into a
+  // `conflict` outcome instead of throwing: only write when the parent is still
+  // DELETING AND a composite parent, a concurrent writer makes this a no-op.
+  const repository = await resolveDeploymentsRepository(deps);
+  const outcome = await repository.casCompositeParentStatus(
+    input.parentDeploymentId,
+    "DELETING",
+    "DELETED",
+    input.nowIso,
+  );
+  return {
+    previousStatus,
+    nextStatus: outcome.outcome === "updated" ? "DELETED" : previousStatus,
+    changed: outcome.outcome === "updated",
+  };
 }
 
 /**

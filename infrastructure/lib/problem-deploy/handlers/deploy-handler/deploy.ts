@@ -3,7 +3,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { S3Client } from "@aws-sdk/client-s3";
 import { SSMClient } from "@aws-sdk/client-ssm";
-import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
@@ -36,6 +36,7 @@ import {
 import { buildStackPrefix, slugify } from "./naming.js";
 import { dispatchPreparedDeployment } from "./prepared-dispatch.js";
 import { generateChallengePayloadUrl } from "./presigned-url.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 import { generateTeamLoginKey } from "./team-key.js";
 import type { DeploymentItem, DeployRequest, DeployResponse } from "./types.js";
 
@@ -230,14 +231,7 @@ export async function startDeployment(
   const expiresAt = toEpochSeconds(nowMs + (ctx.ttlMs ?? DEFAULT_TTL_MS));
   const createdAt = new Date(nowMs).toISOString();
 
-  const item: DeploymentItem = {
-    PK: `DEPLOYMENT#${jobId}`,
-    SK: "META",
-    GSI1PK: `TENANT#${ctx.tenantId}`,
-    GSI1SK: createdAt,
-    GSI2PK: `TEAMKEY#${teamLoginKey}`,
-    GSI2SK: createdAt,
-
+  const item: Omit<DeploymentItem, "PK" | "SK" | "GSI1PK" | "GSI1SK" | "GSI2PK" | "GSI2SK"> = {
     jobId,
     problemId: request.problemId,
     tenantId: ctx.tenantId,
@@ -258,12 +252,8 @@ export async function startDeployment(
     ...runtimeItemFields(runtime),
   };
 
-  await ctx.ddb.send(
-    new PutCommand({
-      TableName: ctx.tableName,
-      Item: item,
-    }),
-  );
+  const deploymentsRepository = await resolveDeploymentsRepository(ctx);
+  await deploymentsRepository.putDeployment(item);
 
   // ADR-008 Phase 3: private 問題 + bucket bind 済なら S3 から 15min TTL presigned URL を
   // 発行。 CodeBuild の deploy-battles.sh が CHALLENGE_PAYLOAD_URL を fetch して zip 展開する。
@@ -340,27 +330,19 @@ export async function startDeployment(
     });
   } catch (err) {
     try {
-      await ctx.ddb.send(
-        new UpdateCommand({
-          TableName: ctx.tableName,
-          Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-          // Issue #1200: FAILED terminal 化のタイミングで expiresAt を 7 日 retention に
-          // refresh する (= 旧来 create 時の 8h session TTL を上書きし、 audit 履歴を 7 日残す)。
-          UpdateExpression:
-            "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason, expiresAt = :expiresAt",
-          // #872: compensation 経路に tenantId condition (= 直前 PutItem 自身が item.tenantId を
-          // 書いているので transitively 一致するが、 write レベルで明示する defense-in-depth)。
-          ConditionExpression: "tenantId = :tenantId AND #s = :pending",
-          ExpressionAttributeNames: { "#s": "status" },
-          ExpressionAttributeValues: {
-            ":failed": "FAILED",
-            ":pending": "PENDING",
-            ":updatedAt": new Date(ctx.now()).toISOString(),
-            ":reason": "Failed to publish DeployCreateRequested event",
-            ":tenantId": item.tenantId,
-            ":expiresAt": deploymentTerminalExpiresAt(ctx.now()),
-          },
-        }),
+      // Issue #1200: FAILED terminal 化のタイミングで expiresAt を 7 日 retention に
+      // refresh する (= 旧来 create 時の 8h session TTL を上書きし、 audit 履歴を 7 日残す)。
+      // #872: compensation 経路に tenantId condition (= 直前 PutItem 自身が item.tenantId を
+      // 書いているので transitively 一致するが、 write レベルで明示する defense-in-depth)。
+      // [Issue #2441 / Phase B2] seam の `markFailedIfPending` は CCF を `conflict`
+      // outcome に畳むので投げない — outer catch はそれ以外の書込失敗 (ネットワーク等)
+      // だけを best-effort に握りつぶす、旧来と同じ挙動。
+      await deploymentsRepository.markFailedIfPending(
+        jobId,
+        item.tenantId,
+        "Failed to publish DeployCreateRequested event",
+        new Date(ctx.now()).toISOString(),
+        deploymentTerminalExpiresAt(ctx.now()),
       );
     } catch {
       // best-effort: compensation failure should not hide the original publish error.

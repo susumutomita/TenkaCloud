@@ -1,10 +1,13 @@
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { ProblemScoringMetadata, ProgressiveHint } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
 import { writeScoreEvent } from "../shared/score-event.js";
 import { getCompetitionAccessBlock } from "./challenge-access.js";
-import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
+import {
+  type ParticipantSharedResources,
+  queryTeamItems,
+  resolveDeploymentsRepository,
+} from "./shared.js";
 
 /**
  * Issue #742 Phase 3: progressive hint reveal API。
@@ -138,57 +141,29 @@ async function updateHintReveal(
 ): Promise<RevealHintOutcome> {
   const now = new Date().toISOString();
   const record = { hintId: hint.id, revealedAt: now, penaltyApplied: hint.penalty };
-  try {
-    const updated = await writeHintReveal(shared, item.PK, hint, record, now);
-    const totalScore = Number((updated.Attributes as { score?: unknown })?.score ?? -hint.penalty);
-    await writeHintScoreEvent(shared, item, hint, hintId, now);
+  const jobId = String(item.jobId ?? "");
+  // [Issue #2441 / Phase B2] `applyHintPenalty` folds the CCF into `conflict`
+  // (no probe) instead of throwing.
+  const repository = await resolveDeploymentsRepository(shared);
+  const outcome = await repository.applyHintPenalty(jobId, record, now);
+  if (outcome.outcome !== "updated") {
+    // Race: 同 hintId が他経路で既に append された。 already_revealed として返す。
     return {
-      kind: "ok",
+      kind: "already_revealed",
       content: hint.content,
       penaltyApplied: hint.penalty,
-      totalScore,
-      revealedAt: now,
+      totalScore: Number(item.score ?? 0),
     };
-  } catch (err) {
-    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") {
-      // Race: 同 hintId が他経路で既に append された。 already_revealed として返す。
-      return {
-        kind: "already_revealed",
-        content: hint.content,
-        penaltyApplied: hint.penalty,
-        totalScore: Number(item.score ?? 0),
-      };
-    }
-    throw err;
   }
-}
-
-function writeHintReveal(
-  shared: ParticipantSharedResources,
-  PK: string,
-  hint: ProgressiveHint,
-  record: { readonly hintId: string; readonly revealedAt: string; readonly penaltyApplied: number },
-  now: string,
-) {
-  return shared.ddb.send(
-    new UpdateCommand({
-      TableName: shared.tableName,
-      Key: { PK, SK: "META" },
-      UpdateExpression:
-        "SET hintsRevealed = list_append(if_not_exists(hintsRevealed, :empty), :record), updatedAt = :now " +
-        "ADD score :neg",
-      ConditionExpression:
-        "attribute_not_exists(hintsRevealed) OR NOT contains(hintsRevealed, :recordForContains)",
-      ExpressionAttributeValues: {
-        ":empty": [],
-        ":record": [record],
-        ":recordForContains": record,
-        ":now": now,
-        ":neg": hint.penalty === 0 ? 0 : -hint.penalty,
-      },
-      ReturnValues: "ALL_NEW",
-    }),
-  );
+  const totalScore = Number(outcome.record?.score ?? -hint.penalty);
+  await writeHintScoreEvent(shared, item, hint, hintId, now);
+  return {
+    kind: "ok",
+    content: hint.content,
+    penaltyApplied: hint.penalty,
+    totalScore,
+    revealedAt: now,
+  };
 }
 
 async function writeHintScoreEvent(

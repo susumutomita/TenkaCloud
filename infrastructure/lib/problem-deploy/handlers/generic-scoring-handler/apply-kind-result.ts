@@ -1,7 +1,10 @@
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { writeScoreEvent } from "../shared/score-event.js";
-import type { GenericScoringSharedResources, KindResult } from "./shared.js";
+import {
+  type GenericScoringSharedResources,
+  type KindResult,
+  resolveDeploymentsRepository,
+} from "./shared.js";
 
 /**
  * KindResult を deployment 行に書き戻す。 score 加算 / endpointsHealth 更新 / lastResult 更新 /
@@ -14,6 +17,15 @@ import type { GenericScoringSharedResources, KindResult } from "./shared.js";
  * `processDeployment` `.catch` で他 deployment と隔離されるが、 CloudWatch には残り
  * EventBridge 次 tick で retry される)。 AGENTS.md 「モック / スタブで握り潰す fallback 禁止」
  * に整合。
+ *
+ * [Issue #2441 / Phase B2] The dynamic ADD/SET expression this used to build
+ * inline (`buildKindResultUpdate`, now removed as dead code) lives verbatim
+ * inside `DeploymentsRepository.applyKindScoringResult` instead — the seam
+ * requires `jobId` (it derives the physical key itself), so the guard below now
+ * also skips when `jobId` is absent. Every real Scan row always carries `jobId`
+ * (it is written at deploy time and never removed); a PK-without-jobId row
+ * cannot occur outside a synthetic test fixture, so this tightens rather than
+ * changes production behavior.
  */
 export async function applyKindResult(
   shared: GenericScoringSharedResources,
@@ -21,59 +33,14 @@ export async function applyKindResult(
   result: KindResult,
   nowIso: string,
 ): Promise<void> {
-  if (!item.PK) return;
-  const update = buildKindResultUpdate(result, nowIso);
+  if (!item.PK || !item.jobId) return;
 
-  await shared.ddb.send(
-    new UpdateCommand({
-      TableName: shared.deploymentsTableName,
-      Key: { PK: item.PK, SK: "META" },
-      UpdateExpression: update.expression,
-      ExpressionAttributeValues: update.values,
-    }),
-  );
+  const repository = await resolveDeploymentsRepository(shared);
+  await repository.applyKindScoringResult(item.jobId, result, nowIso);
 
   // score event 行 (= 履歴 marker) を append。失敗は throw して outer
   // `processDeployment` の .catch (= 1 tick skip + warn log) に委ねる (= 次 tick で retry)。
   await appendKindScoreEvents(shared, item, result);
-}
-
-export function buildKindResultUpdate(
-  result: KindResult,
-  nowIso: string,
-): { readonly expression: string; readonly values: Record<string, unknown> } {
-  // UpdateExpression を field 存在に応じて動的に組む。常に updatedAt / lastScoredAt を更新。
-  const setParts: string[] = ["lastScoredAt = :now", "updatedAt = :now"];
-  const values: Record<string, unknown> = { ":now": nowIso };
-  const addScore = result.scoreDelta !== 0 ? "ADD score :pts " : "";
-  if (result.scoreDelta !== 0) values[":pts"] = result.scoreDelta;
-  if (result.lastResult) {
-    setParts.push("lastResult = :lr");
-    values[":lr"] = result.lastResult;
-  }
-  if (result.endpointsHealthJson !== undefined) {
-    setParts.push("endpointsHealth = :health");
-    values[":health"] = result.endpointsHealthJson;
-  }
-  // [#2422] uptime-multi の直近サイクル attack-probe snapshot。 endpointsHealth と同型で、
-  // present な kind (= attackProbes 設定あり) のときだけ書く (= 他 kind / 旧行は列を持たない)。
-  if (result.attackProbesJson !== undefined) {
-    setParts.push("attackProbes = :attackProbes");
-    values[":attackProbes"] = result.attackProbesJson;
-  }
-  if (result.postureJson !== undefined) {
-    setParts.push("posture = :posture");
-    values[":posture"] = result.postureJson;
-  }
-  if (result.platform !== undefined) {
-    setParts.push("platform = :platform");
-    values[":platform"] = result.platform;
-  }
-  if (result.newState !== undefined) {
-    setParts.push("scoringState = :state");
-    values[":state"] = JSON.stringify(result.newState);
-  }
-  return { expression: `${addScore}SET ${setParts.join(", ")}`, values };
 }
 
 export async function appendKindScoreEvents(

@@ -1,13 +1,13 @@
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { putEventsBatched } from "../shared/events.js";
 import { buildActiveDisruptionEffect } from "./disruption-effects.js";
 import { evaluateDisruptionTriggers, type FiredDisruption } from "./disruption-triggers.js";
-import type {
-  DeploymentScoringState,
-  GenericScoringSharedResources,
-  KindResult,
-  PhaseEntry,
+import {
+  type DeploymentScoringState,
+  type GenericScoringSharedResources,
+  type KindResult,
+  type PhaseEntry,
+  resolveDeploymentsRepository,
 } from "./shared.js";
 
 /**
@@ -35,7 +35,11 @@ export async function maybeFireConditionDisruptions(
   nowMs: number,
   nowIso: string,
 ): Promise<void> {
-  if (!shared.eventBusName || !item.problemId || !item.PK) return;
+  // [Issue #2441 / Phase B2] `setScoringState` derives its physical key from
+  // `jobId` (it no longer accepts a raw PK), so the guard also requires it —
+  // every real Scan row carries `jobId` (written at deploy time, never
+  // removed), so this tightens rather than changes production behavior.
+  if (!shared.eventBusName || !item.problemId || !item.PK || !item.jobId) return;
   const disruptions = shared.problemsDisruptions[item.problemId];
   if (!disruptions || disruptions.length === 0) return;
 
@@ -66,21 +70,15 @@ export async function maybeFireConditionDisruptions(
     return declared ? [buildActiveDisruptionEffect(f.disruptionId, declared, nowMs)] : [];
   });
   const activeEffects = [...survivingPrior, ...newEffects];
-  await shared.ddb.send(
-    new UpdateCommand({
-      TableName: shared.deploymentsTableName,
-      Key: { PK: item.PK, SK: "META" },
-      UpdateExpression: "SET scoringState = :state, updatedAt = :now",
-      ExpressionAttributeValues: {
-        ":state": JSON.stringify({
-          ...baseState,
-          firedDisruptions: mergedFired,
-          ...(activeEffects.length > 0 ? { activeEffects } : {}),
-        }),
-        ":now": nowIso,
-      },
-    }),
-  );
+  const stateJson = JSON.stringify({
+    ...baseState,
+    firedDisruptions: mergedFired,
+    ...(activeEffects.length > 0 ? { activeEffects } : {}),
+  });
+  // [Issue #2441 / Phase B2] Unconditional write (no ConditionExpression) — the
+  // seam call is byte-identical to the pre-seam UpdateCommand.
+  const repository = await resolveDeploymentsRepository(shared);
+  await repository.setScoringState(item.jobId, stateJson, nowIso);
 }
 
 /**

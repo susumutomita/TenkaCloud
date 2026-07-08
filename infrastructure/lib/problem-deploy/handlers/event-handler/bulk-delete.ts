@@ -1,5 +1,4 @@
 import type { PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import {
@@ -11,6 +10,7 @@ import {
 import {
   type EventSharedResources,
   queryDeploymentsByEvent,
+  resolveDeploymentsRepository,
   resolveEventsRepository,
 } from "./shared.js";
 
@@ -134,22 +134,11 @@ async function compensateBulkTeardownPublish(
   updatedAt: string,
 ): Promise<void> {
   try {
-    await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.deploymentsTableName,
-        Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-        UpdateExpression: "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason",
-        ConditionExpression: "tenantId = :tenantId AND #s = :deleting",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":failed": "FAILED",
-          ":deleting": "DELETING",
-          ":updatedAt": updatedAt,
-          ":reason": "Failed to publish DeployDeleteRequested event (bulk teardown)",
-          ":tenantId": tenantId,
-        },
-      }),
-    );
+    // [Issue #2441 / Phase B2] `compensateBulkTeardown` folds the CCF into a
+    // `conflict` outcome; the try/catch here still guards against any other
+    // DDB error (best-effort, matches delete.ts's compensateFailedTeardownPublish).
+    const repository = await resolveDeploymentsRepository(shared);
+    await repository.compensateBulkTeardown(jobId, tenantId, updatedAt);
   } catch {
     // best-effort: CCF (行が既に DELETING でない) も他の DDB error も握る。 巻き戻し失敗が
     // 元の publish 失敗 (= result.failed に計上済) を覆い隠さないようにする。 delete.ts の
@@ -213,33 +202,11 @@ async function transitionBulkTargetToDeleting(
   updatedAt: string,
   jobId: string,
 ): Promise<boolean> {
-  try {
-    await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.deploymentsTableName,
-        Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-        UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt",
-        // Issue #2019: include APPROVAL_PENDING (:ap) so a held deploy is not
-        // orphaned by bulk teardown (it has no live stack; DeleteStack is a no-op).
-        ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :ap, :i, :c, :f)",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":deleting": "DELETING",
-          ":updatedAt": updatedAt,
-          ":tenantId": tenantId,
-          ":p": "PENDING",
-          ":ap": "APPROVAL_PENDING",
-          ":i": "IN_PROGRESS",
-          ":c": "COMPLETE",
-          ":f": "FAILED",
-        },
-      }),
-    );
-    return true;
-  } catch (err) {
-    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return false;
-    throw err;
-  }
+  // [Issue #2441 / Phase B2] `markDeletingForBulk` folds the CCF into a
+  // `conflict` outcome instead of throwing.
+  const repository = await resolveDeploymentsRepository(shared);
+  const outcome = await repository.markDeletingForBulk(jobId, tenantId, updatedAt);
+  return outcome.outcome === "updated";
 }
 
 async function buildBulkTeardownDetail(

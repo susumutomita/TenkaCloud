@@ -17,8 +17,7 @@
  * issue.
  */
 
-import { type DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { deploymentPk } from "../deploy-handler/composite-deployment.js";
+import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import {
   type CompositeDeploymentRepositoryDeps,
   getCompositeParent,
@@ -31,6 +30,7 @@ import {
 import type { DeploymentStatus } from "../deploy-handler/types.js";
 import { forEachScanPage } from "../shared/ddb-paginate.js";
 import { reconcileCompositeParentTeardowns } from "./composite-teardown-reconciler.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 
 /** Parents in a non-terminal deploy-phase status are worth re-deriving. */
 const PARENT_RECONCILABLE_STATUSES = ["PENDING", "IN_PROGRESS"] as const;
@@ -59,10 +59,6 @@ export class CompositeParentNotReconcilableError extends Error {
 
 function repoDeps(deps: CompositeParentReconcileDeps): CompositeDeploymentRepositoryDeps {
   return { ddb: deps.ddb, tableName: deps.deploymentsTableName };
-}
-
-function isConditionalCheckFailed(error: unknown): boolean {
-  return (error as { name?: string } | undefined)?.name === "ConditionalCheckFailedException";
 }
 
 /**
@@ -107,31 +103,18 @@ export async function reconcileCompositeParentDeployStatus(
     return { previousStatus, nextStatus, changed: false };
   }
 
-  try {
-    await deps.ddb.send(
-      new UpdateCommand({
-        TableName: deps.deploymentsTableName,
-        Key: { PK: deploymentPk(input.parentDeploymentId), SK: "META" },
-        UpdateExpression: "SET #s = :next, updatedAt = :now",
-        // Only write when the parent is still what we read AND is a composite
-        // parent — a concurrent writer makes this a no-op, not an error.
-        ConditionExpression: "#s = :prev AND runtimeKind = :composite",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":next": nextStatus,
-          ":prev": previousStatus,
-          ":now": input.nowIso,
-          ":composite": "composite",
-        },
-      }),
-    );
-    return { previousStatus, nextStatus, changed: true };
-  } catch (err) {
-    if (isConditionalCheckFailed(err)) {
-      return { previousStatus, nextStatus, changed: false };
-    }
-    throw err;
-  }
+  // [Issue #2441 / Phase B2] `casCompositeParentStatus` folds the CCF into a
+  // `conflict` outcome instead of throwing — only write when the parent is
+  // still what we read AND is a composite parent; a concurrent writer makes
+  // this a no-op, not an error, exactly as the pre-seam CCF-catch did.
+  const repository = await resolveDeploymentsRepository(deps);
+  const outcome = await repository.casCompositeParentStatus(
+    input.parentDeploymentId,
+    previousStatus,
+    nextStatus,
+    input.nowIso,
+  );
+  return { previousStatus, nextStatus, changed: outcome.outcome === "updated" };
 }
 
 /**

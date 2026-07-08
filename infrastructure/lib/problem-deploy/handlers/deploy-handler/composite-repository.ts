@@ -22,7 +22,7 @@
  *     cleanup.
  */
 
-import { type DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import {
   COMPOSITE_RUNTIME_KIND,
   COMPOSITE_VERSION,
@@ -36,8 +36,6 @@ import {
 } from "./composite-deployment.js";
 import { resolveDeploymentsRepository } from "./shared.js";
 import type { DeploymentStatus } from "./types.js";
-
-const CONDITION_PK_ABSENT = "attribute_not_exists(PK)";
 
 export type CompositeParentDeploymentRecord = Omit<CompositeParentDeploymentItem, "PK" | "SK">;
 export type CompositeTargetDeploymentRecord = Omit<
@@ -118,10 +116,6 @@ export interface CreateCompositeTargetInput {
   readonly problemSetId?: string;
 }
 
-function isConditionalCheckFailed(err: unknown): boolean {
-  return (err as { name?: string } | undefined)?.name === "ConditionalCheckFailedException";
-}
-
 /**
  * Create the composite parent coordination row. Idempotent: re-creating with the
  * same immutable identity (tenant / problem / targetCount / shared team and
@@ -161,35 +155,33 @@ export async function createCompositeParent(
     ...(input.problemSetId ? { problemSetId: input.problemSetId } : {}),
   };
 
-  try {
-    await deps.ddb.send(
-      new PutCommand({
-        TableName: deps.tableName,
-        Item: item,
-        ConditionExpression: CONDITION_PK_ABSENT,
-      }),
-    );
+  const repository = await resolveDeploymentsRepository(deps);
+  const outcome = await repository.putCompositeParent(item);
+  if (outcome.outcome === "updated") return item;
+
+  // [Issue #2441 / Phase B2] `putCompositeParent` folds the CCF into `conflict`
+  // (with a probed record) instead of throwing. The idempotency comparison
+  // below is unchanged — it still re-reads through the same read seam
+  // (`getCompositeParent`) rather than trusting `outcome.record`'s narrower
+  // `DeploymentRecord` shape, so the field-by-field check stays byte-identical
+  // to the pre-seam CCF-catch + Get.
+  const existing = await getCompositeParent(deps, input.parentDeploymentId);
+  if (
+    existing &&
+    existing.tenantId === item.tenantId &&
+    existing.problemId === item.problemId &&
+    existing.targetCount === item.targetCount &&
+    existing.teamName === item.teamName &&
+    existing.teamLoginKey === item.teamLoginKey &&
+    existing.accountGroupId === item.accountGroupId &&
+    existing.problemSetId === item.problemSetId
+  ) {
     return item;
-  } catch (err) {
-    if (!isConditionalCheckFailed(err)) throw err;
-    const existing = await getCompositeParent(deps, input.parentDeploymentId);
-    if (
-      existing &&
-      existing.tenantId === item.tenantId &&
-      existing.problemId === item.problemId &&
-      existing.targetCount === item.targetCount &&
-      existing.teamName === item.teamName &&
-      existing.teamLoginKey === item.teamLoginKey &&
-      existing.accountGroupId === item.accountGroupId &&
-      existing.problemSetId === item.problemSetId
-    ) {
-      return item;
-    }
-    throw new CompositeParentConflictError(
-      input.parentDeploymentId,
-      "a different parent row already exists at this id",
-    );
   }
+  throw new CompositeParentConflictError(
+    input.parentDeploymentId,
+    "a different parent row already exists at this id",
+  );
 }
 
 /**
@@ -240,22 +232,15 @@ export async function createCompositeTarget(
   }
 
   // 3. Persist, guarding against a concurrent writer racing the same PK.
-  try {
-    await deps.ddb.send(
-      new PutCommand({
-        TableName: deps.tableName,
-        Item: item,
-        ConditionExpression: CONDITION_PK_ABSENT,
-      }),
+  // [Issue #2441 / Phase B2] `putCompositeTarget` folds the CCF into a
+  // `conflict` outcome (no probe) instead of throwing.
+  const repository = await resolveDeploymentsRepository(deps);
+  const outcome = await repository.putCompositeTarget(item);
+  if (outcome.outcome !== "updated") {
+    throw new CompositeTargetConflictError(
+      input.targetDeploymentId,
+      "a row was created concurrently at this id",
     );
-  } catch (err) {
-    if (isConditionalCheckFailed(err)) {
-      throw new CompositeTargetConflictError(
-        input.targetDeploymentId,
-        "a row was created concurrently at this id",
-      );
-    }
-    throw err;
   }
   return item;
 }

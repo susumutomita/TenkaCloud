@@ -1,4 +1,3 @@
-import { UpdateCommand, type UpdateCommandInput } from "@aws-sdk/lib-dynamodb";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
@@ -188,51 +187,23 @@ async function transitionTeardownToDeleting(
   updatedAt: string,
   nowMs: number,
 ): Promise<Extract<TeardownOutcome, { kind: "race" }> | undefined> {
-  try {
-    await shared.ddb.send(
-      new UpdateCommand(buildTeardownUpdate(shared, tenantId, jobId, updatedAt, nowMs)),
-    );
-    return undefined;
-  } catch (err) {
-    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") {
-      return { kind: "race", reason: "tenant_or_status_mismatch" };
-    }
-    throw err;
+  // Issue #1200: DELETING に遷移したタイミングで expiresAt を 7 日 retention に refresh する
+  // (= teardown が成功して DELETED に最終遷移するまでに competition session TTL (8h) が
+  // 切れて DDB から消える事故を防ぐ。 DELETING 中の audit trail を保護する)。
+  // Issue #2019: APPROVAL_PENDING is a held, deletable state — an operator rejecting a
+  // held deploy must be able to tear it down (its CFn stack was never created, so the
+  // DeleteStack the worker issues is a no-op, transitioning the row cleanly to DELETED).
+  const repository = await resolveDeploymentsRepository(shared);
+  const outcome = await repository.markDeleting(
+    jobId,
+    tenantId,
+    updatedAt,
+    deploymentTerminalExpiresAt(nowMs),
+  );
+  if (outcome.outcome === "conflict") {
+    return { kind: "race", reason: "tenant_or_status_mismatch" };
   }
-}
-
-function buildTeardownUpdate(
-  shared: DeploySharedResources,
-  tenantId: string,
-  jobId: string,
-  updatedAt: string,
-  nowMs: number,
-): UpdateCommandInput {
-  return {
-    TableName: shared.tableName,
-    Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-    // Issue #1200: DELETING に遷移したタイミングで expiresAt を 7 日 retention に refresh する
-    // (= teardown が成功して DELETED に最終遷移するまでに competition session TTL (8h) が
-    // 切れて DDB から消える事故を防ぐ。 DELETING 中の audit trail を保護する)。
-    UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt, expiresAt = :expiresAt",
-    // Issue #2019: APPROVAL_PENDING (:ap) is a held, deletable state — an operator
-    // rejecting a held deploy must be able to tear it down. Its CFn stack was never
-    // created, so the DeleteStack the worker issues is a no-op (delete of a
-    // nonexistent stack succeeds), transitioning the row cleanly to DELETED.
-    ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :ap, :i, :c, :f)",
-    ExpressionAttributeNames: { "#s": "status" },
-    ExpressionAttributeValues: {
-      ":deleting": "DELETING",
-      ":updatedAt": updatedAt,
-      ":tenantId": tenantId,
-      ":p": "PENDING",
-      ":ap": "APPROVAL_PENDING",
-      ":i": "IN_PROGRESS",
-      ":c": "COMPLETE",
-      ":f": "FAILED",
-      ":expiresAt": deploymentTerminalExpiresAt(nowMs),
-    },
-  };
+  return undefined;
 }
 
 async function publishTeardown(
@@ -264,24 +235,14 @@ async function compensateFailedTeardownPublish(
   reason = "Failed to publish DeployDeleteRequested event",
 ): Promise<void> {
   try {
-    await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.tableName,
-        Key: { PK: `DEPLOYMENT#${jobId}`, SK: "META" },
-        // Issue #1200: FAILED 化のタイミングで expiresAt を 7 日 retention に refresh。
-        UpdateExpression:
-          "SET #s = :failed, updatedAt = :updatedAt, failureReason = :reason, expiresAt = :expiresAt",
-        ConditionExpression: "tenantId = :tenantId AND #s = :deleting",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":failed": "FAILED",
-          ":deleting": "DELETING",
-          ":updatedAt": new Date(nowMs).toISOString(),
-          ":reason": reason,
-          ":tenantId": tenantId,
-          ":expiresAt": deploymentTerminalExpiresAt(nowMs),
-        },
-      }),
+    // Issue #1200: FAILED 化のタイミングで expiresAt を 7 日 retention に refresh。
+    const repository = await resolveDeploymentsRepository(shared);
+    await repository.compensateDeleteToFailed(
+      jobId,
+      tenantId,
+      reason,
+      new Date(nowMs).toISOString(),
+      deploymentTerminalExpiresAt(nowMs),
     );
   } catch {
     // best-effort: compensation 失敗は黙って捨て、元の publish エラーを表に出す

@@ -7,7 +7,6 @@ import {
   INTENT_VERSION,
 } from "@TenkaCloud/trust-bridge";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { logDeployTrace } from "../shared/trace-log.js";
 import { resolveDeploymentsRepository } from "./shared.js";
@@ -167,23 +166,21 @@ export interface HoldForApprovalInput {
  * write only fires on our own `PENDING` row scoped to the tenant (defense in
  * depth against a concurrent transition), and notably **runs no AssumeRole /
  * CloudFormation** — that is the whole point of the hold.
+ *
+ * [Issue #2441 / Phase B2] The pre-seam call let a `ConditionalCheckFailedException`
+ * propagate uncaught (no try/catch here) — the defense-in-depth check is meant to
+ * fail loud. `markApprovalPending` folds the CCF into a `conflict` outcome instead
+ * of throwing, so this rethrows on anything but `updated` to keep that fail-loud
+ * behavior byte-identical.
  */
 export async function holdForApproval(input: HoldForApprovalInput): Promise<void> {
-  await input.ddb.send(
-    new UpdateCommand({
-      TableName: input.tableName,
-      Key: { PK: `DEPLOYMENT#${input.jobId}`, SK: "META" },
-      UpdateExpression: "SET #s = :approvalPending, updatedAt = :updatedAt",
-      ConditionExpression: "tenantId = :tenantId AND #s = :pending",
-      ExpressionAttributeNames: { "#s": "status" },
-      ExpressionAttributeValues: {
-        ":approvalPending": "APPROVAL_PENDING",
-        ":pending": "PENDING",
-        ":updatedAt": input.nowIso,
-        ":tenantId": input.tenantId,
-      },
-    }),
-  );
+  const repository = await resolveDeploymentsRepository(input);
+  const outcome = await repository.markApprovalPending(input.jobId, input.tenantId, input.nowIso);
+  if (outcome.outcome !== "updated") {
+    throw new Error(
+      `holdForApproval: conditional PENDING -> APPROVAL_PENDING failed for jobId=${input.jobId} (outcome=${outcome.outcome})`,
+    );
+  }
 }
 
 export interface MaybeHoldDeployInput {

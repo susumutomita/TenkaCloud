@@ -1,7 +1,6 @@
 import type { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import type { SSMClient } from "@aws-sdk/client-ssm";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import {
   type AdapterDependencyConfig,
   buildAdapterDependencies,
@@ -16,6 +15,7 @@ import {
   type RuntimeStatus,
   selectAdapter,
 } from "../shared/runtime/index.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 
 /**
  * [ADR-026/027/032 / #1410-1412] 非 AWS runtime (sakura/azure/gcp) deployment の status reconciler。
@@ -151,34 +151,22 @@ interface ReconcileUpdate {
 /**
  * status (+ ready なら stackOutputs) を conditional update で書き戻す。 並行 teardown / 他 tick との race は
  * 読み取り時 status と一致する condition で弾き、 ConditionalCheckFailed は次 tick へ委ねて throw しない。
+ *
+ * [Issue #2441 / Phase B2] `transitionRuntimeStatus` builds the identical
+ * dynamic SET expression (`stackOutputs` appended only when defined) verbatim
+ * inside the seam and folds the CCF into a `conflict` outcome instead of
+ * throwing — discarding it here reproduces the pre-seam CCF-swallow.
  */
 async function applyReconcileUpdate(deps: RuntimeReconcileDeps, u: ReconcileUpdate): Promise<void> {
-  const sets = ["#s = :next", "updatedAt = :now"];
-  const values: Record<string, unknown> = {
-    ":next": u.nextStatus,
-    ":now": u.nowIso,
-    ":cur": u.currentStatus,
-    ":tenant": u.tenantId,
-  };
-  if (u.stackOutputs !== undefined) {
-    sets.push("stackOutputs = :outputs");
-    values[":outputs"] = u.stackOutputs;
-  }
-  try {
-    await deps.ddb.send(
-      new UpdateCommand({
-        TableName: deps.deploymentsTableName,
-        Key: { PK: `DEPLOYMENT#${u.jobId}`, SK: "META" },
-        UpdateExpression: `SET ${sets.join(", ")}`,
-        ConditionExpression: "tenantId = :tenant AND #s = :cur",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: values,
-      }),
-    );
-  } catch (err) {
-    if ((err as { name?: string })?.name === "ConditionalCheckFailedException") return;
-    throw err;
-  }
+  const repository = await resolveDeploymentsRepository(deps);
+  await repository.transitionRuntimeStatus(
+    u.jobId,
+    u.tenantId,
+    u.currentStatus,
+    u.nextStatus,
+    u.stackOutputs,
+    u.nowIso,
+  );
 }
 
 /**

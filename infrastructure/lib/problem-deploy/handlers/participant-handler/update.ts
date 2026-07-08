@@ -1,9 +1,13 @@
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
+import type { DeploymentRecord } from "../../control-data/deployments-repository.js";
+import type { DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { decorateTeamView } from "./challenge-access.js";
 import { buildTeamView, type ParticipantTeamView } from "./lookup.js";
-import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
+import {
+  type ParticipantSharedResources,
+  queryTeamItems,
+  resolveDeploymentsRepository,
+} from "./shared.js";
 
 const TEAM_NAME_RE = /^[A-Za-z0-9 _\-぀-ヿ一-鿿]{1,40}$/;
 
@@ -56,22 +60,16 @@ export async function setDisplayTeamName(
   if (editable.length === 0) return { kind: "unauthorized" };
 
   const now = new Date().toISOString();
+  // [Issue #2441 / Phase B2] `updateDisplayTeamName` is unconditional (no
+  // ConditionExpression) — the outcome is always `updated` with the ALL_NEW
+  // record, byte-identical to the pre-seam per-row UpdateCommand.
+  const repository = await resolveDeploymentsRepository(shared);
   const updateResults = await Promise.all(
-    editable.map((item) =>
-      shared.ddb.send(
-        new UpdateCommand({
-          TableName: shared.tableName,
-          Key: { PK: item.PK as string, SK: "META" },
-          UpdateExpression: "SET displayTeamName = :name, updatedAt = :now",
-          ExpressionAttributeValues: { ":name": name, ":now": now },
-          ReturnValues: "ALL_NEW",
-        }),
-      ),
-    ),
+    editable.map((item) => repository.updateDisplayTeamName(String(item.jobId ?? ""), name, now)),
   );
   const updatedItems = updateResults
-    .map((r) => r.Attributes as Partial<DeploymentItem> | undefined)
-    .filter((a): a is Partial<DeploymentItem> => !!a);
+    .map((r) => (r.outcome === "updated" ? r.record : undefined))
+    .filter((a): a is DeploymentRecord => !!a);
   const view = buildTeamView(updatedItems, shared.problemsScoring);
   if (!view) return { kind: "unauthorized" };
   // Issue #2283: rename 応答も `/portal/me` と同じ decoration を通す。 素の buildTeamView を
