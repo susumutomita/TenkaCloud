@@ -412,6 +412,28 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
     });
   });
 
+  it("[Issue #2441 Phase B PR-6] should apply DeployDelete's MarkDeleted idempotently and clear the login-key index", async () => {
+    const { repo } = makeBackend();
+    await repo.putDeployment(
+      deployment({ jobId: "delete-sfn", status: "DELETING", teamLoginKey: "KEY-DELETE" }),
+    );
+    expect((await repo.listByTeamLoginKey("KEY-DELETE")).map((r) => r.jobId)).toEqual([
+      "delete-sfn",
+    ]);
+
+    await expectOutcome(repo.markDeleted("delete-sfn", AT), "updated");
+    expect(await repo.getDeployment("delete-sfn")).toMatchObject({
+      status: "DELETED",
+      updatedAt: AT,
+    });
+    // GSI2 (DDB: REMOVE GSI2PK/GSI2SK) / login_key_hash (SQL) must be cleared so the deleted
+    // deployment no longer resolves via the participant-login-key lookup.
+    expect(await repo.listByTeamLoginKey("KEY-DELETE")).toEqual([]);
+
+    // At-least-once SFN retry: re-applying MarkDeleted stays idempotent.
+    await expectOutcome(repo.markDeleted("delete-sfn", AT), "updated");
+  });
+
   it("should preserve scoring and generic write outcome branches", async () => {
     const { repo } = makeBackend();
     await repo.putDeployment(deployment({ jobId: "flag", score: 0, wrongAnswerCount: 0 }));

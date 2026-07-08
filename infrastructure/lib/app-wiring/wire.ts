@@ -260,7 +260,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
         provisioning: serverlessSaaSPipeline.provisioningCodeBuildProjectName,
       },
       dynamoDbTableNames: {
-        deployments: problemDeployBackendStack.deploymentsTable.tableName,
+        // Issue #2441: 純 SQL backend では Deployments table 自体が無い (= undefined)。
+        deployments: problemDeployBackendStack.deploymentsTable?.tableName,
         // Issue #2440: 純 SQL backend では Events/Teams table 自体が無い (= undefined)。
         events: problemDeployBackendStack.eventsTable?.tableName,
         teams: problemDeployBackendStack.teamsTable?.tableName,

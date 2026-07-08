@@ -4,19 +4,27 @@ import type { AdminInsightSharedResources } from "../../lib/admin-insight/handle
 import { summarizeTenants } from "../../lib/admin-insight/handlers/admin-insight-handler/summary";
 
 /**
- * Issue #1418: admin-insight summary.ts は 75% branch だった。 既存 summary.test は active/failed
- * 集計・dedup・pagination を見るが、 out.Items / item.status / out.Count の `?? default` 枝と
- * neither-active-nor-failed status が未カバー。 command を TableName で分岐する fake で pin する。
+ * Issue #1418: admin-insight summary.ts は 75% branch だった。既存 summary.test は active/failed
+ * 集計・dedup・pagination を見るが、`out.Count` の `?? default` 枝が未カバー。command を
+ * TableName で分岐する fake で pin する。
+ *
+ * [Issue #2441 / Phase B PR-6] `countTenantDeployments` は raw `QueryCommand` + client-side
+ * status 集計から `DeploymentsRepository.countActiveByTenant` (2 回の `Select=COUNT` Query、
+ * active/failed それぞれ) に置き換わった。fake は Deployments 宛の 2 呼び出しを
+ * `ExpressionAttributeValues` の値 (`"FAILED"` の有無) で区別する。
  */
 const cfg = {
-  deploy: {} as Record<string, unknown>,
+  deployActive: {} as Record<string, unknown>,
+  deployFailed: {} as Record<string, unknown>,
   events: {} as Record<string, unknown>,
 };
 const ddb = {
-  // biome-ignore lint/suspicious/noExplicitAny: fake dispatches by TableName.
+  // biome-ignore lint/suspicious/noExplicitAny: fake dispatches by TableName + filter values.
   send: vi.fn(async (cmd: any) => {
     if (cmd instanceof QueryCommand) {
-      return cmd.input.TableName === "Deployments" ? cfg.deploy : cfg.events;
+      if (cmd.input.TableName !== "Deployments") return cfg.events;
+      const values = Object.values(cmd.input.ExpressionAttributeValues ?? {});
+      return values.includes("FAILED") ? cfg.deployFailed : cfg.deployActive;
     }
     return {};
   }),
@@ -29,13 +37,15 @@ const shared = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  cfg.deploy = {};
+  cfg.deployActive = {};
+  cfg.deployFailed = {};
   cfg.events = {};
 });
 
 describe("summarizeTenants edge branches", () => {
-  it("should default deploy/event counts when DDB returns no Items or Count", async () => {
-    cfg.deploy = {}; // no Items → out.Items ?? []
+  it("should default deploy/event counts to 0 when DDB returns no Count", async () => {
+    cfg.deployActive = {}; // no Count → out.Count ?? 0 (repository default)
+    cfg.deployFailed = {};
     cfg.events = {}; // no Count → out.Count ?? 0
     const res = await summarizeTenants(shared, ["t1"]);
     expect(res.items[0]).toEqual({
@@ -46,15 +56,9 @@ describe("summarizeTenants edge branches", () => {
     });
   });
 
-  it("should ignore non-active/non-failed statuses and default a missing status to ''", async () => {
-    cfg.deploy = {
-      Items: [
-        { status: "IN_PROGRESS" }, // active
-        { status: "FAILED" }, // failed
-        { status: "COMPLETE" }, // neither → ignored
-        {}, // missing status → "" → ignored
-      ],
-    };
+  it("should surface distinct active/failed counts from the two countActiveByTenant queries", async () => {
+    cfg.deployActive = { Count: 1 };
+    cfg.deployFailed = { Count: 1 };
     cfg.events = { Count: 4 };
     const res = await summarizeTenants(shared, ["t1"]);
     expect(res.items[0]).toMatchObject({ activeDeploys: 1, failedDeploys: 1, totalEvents: 4 });

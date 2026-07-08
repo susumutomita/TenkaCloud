@@ -101,7 +101,9 @@ describe("buildEventSharedResources", () => {
   });
 
   it("should throw when a required env var is missing", () => {
-    delete process.env.DEPLOYMENTS_TABLE_NAME;
+    // [Issue #2441 Phase B PR-6] DEPLOYMENTS_TABLE_NAME is no longer required (see below);
+    // COMPETITOR_ACCOUNTS_TABLE_NAME remains a `getEnv`-required field.
+    delete process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
     expect(() => buildEventSharedResources()).toThrow();
   });
 
@@ -117,6 +119,15 @@ describe("buildEventSharedResources", () => {
     const s = buildEventSharedResources();
     expect(s.eventsTableName).toBe("");
     expect(s.teamsTableName).toBe("");
+  });
+
+  // [Issue #2441 / Phase B PR-6] Deployments table is not synthesized under pure SQL
+  // backends either (same condition as Events/Teams above), so this builder must not
+  // fail-fast when DEPLOYMENTS_TABLE_NAME is absent.
+  it("should default deploymentsTableName to '' when unset (pure SQL backend cold start)", () => {
+    delete process.env.DEPLOYMENTS_TABLE_NAME;
+    expect(() => buildEventSharedResources()).not.toThrow();
+    expect(buildEventSharedResources().deploymentsTableName).toBe("");
   });
 });
 
@@ -136,7 +147,9 @@ describe("buildParticipantSharedResources", () => {
   });
 
   it("should throw when a required env var is missing", () => {
-    delete process.env.DEPLOYMENTS_TABLE_NAME;
+    // [Issue #2441 Phase B PR-6] DEPLOYMENTS_TABLE_NAME is no longer required (see below);
+    // DEPLOY_ENVIRONMENT remains a `getEnv`-required field.
+    delete process.env.DEPLOY_ENVIRONMENT;
     expect(() => buildParticipantSharedResources()).toThrow();
   });
 
@@ -147,6 +160,15 @@ describe("buildParticipantSharedResources", () => {
     delete process.env.EVENTS_TABLE_NAME;
     expect(() => buildParticipantSharedResources()).not.toThrow();
     expect(buildParticipantSharedResources().eventsTableName).toBe("");
+  });
+
+  // [Issue #2441 / Phase B PR-6] Deployments table is not synthesized under pure SQL
+  // backends either (same condition as Events above), so this builder must not fail-fast
+  // when DEPLOYMENTS_TABLE_NAME is absent.
+  it("should default tableName to '' when DEPLOYMENTS_TABLE_NAME is unset (pure SQL backend cold start)", () => {
+    delete process.env.DEPLOYMENTS_TABLE_NAME;
+    expect(() => buildParticipantSharedResources()).not.toThrow();
+    expect(buildParticipantSharedResources().tableName).toBe("");
   });
 });
 

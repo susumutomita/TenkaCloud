@@ -12,8 +12,13 @@ export interface AdminInsightApiLambdaProps {
   /**
    * 問題 deploy 状況 (active / failed 集計) の出元。`ProblemDeployBackendStack` の
    * `Deployments` table を cross-stack 参照する。Read-only (= ADR-011 D6 Phase 1 は read-only)。
+   *
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
+   * grant も付与しない — deploy 状況集計は repository seam (`resolveDeploymentsRepository` /
+   * `countActiveByTenant`) が SQL executor 直結で処理する ({@link eventsTable} と同じ条件)。
    */
-  readonly deploymentsTable: Table;
+  readonly deploymentsTable?: Table;
   /**
    * 競技 Event 総数の出元。`ProblemDeployBackendStack` の `Events` table を cross-stack 参照する。
    * Read-only。
@@ -110,7 +115,10 @@ export class AdminInsightApiLambda extends Construct {
       timeout: Duration.seconds(15),
       memorySize: 256,
       environment: {
-        DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
+        // Issue #2441: 純 SQL backend では table 自体が無いので env も足さない。
+        ...(props.deploymentsTable
+          ? { DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName }
+          : {}),
         // Issue #2440: 純 SQL backend では table が無いので env も足さない。
         ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
         ...(props.teamsTable ? { TEAMS_TABLE_NAME: props.teamsTable.tableName } : {}),
@@ -142,7 +150,8 @@ export class AdminInsightApiLambda extends Construct {
     // Phase 1.B drill-down (#598) で Teams も読む必要が出たため read を追加する。
     // GSI も含めて read できる必要があるので grantReadData (= GetItem / Query / Scan + index)
     // を使う (= 個別 PolicyStatement で限定するより SBT 同型の grantRead で十分)。
-    props.deploymentsTable.grantReadData(this.fn);
+    // Issue #2441: 純 SQL backend では table 自体が無いので grant も付与しない。
+    props.deploymentsTable?.grantReadData(this.fn);
     // Issue #2440: 純 SQL backend では table 自体が無いので grant も付与しない。
     props.eventsTable?.grantReadData(this.fn);
     // Issue #950 (ADR-020 Phase D): admin audit log の read-only access (GSI も含む)

@@ -3,7 +3,11 @@ import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentMutationOutcome, DeploymentsRepository } from "../../control-data/types.js";
 
-export type DeployStatusWriterTransition = "markInProgress" | "markSucceeded" | "markFailed";
+export type DeployStatusWriterTransition =
+  | "markInProgress"
+  | "markSucceeded"
+  | "markFailed"
+  | "markDeleted";
 
 export interface DeployStatusWriterEvent {
   readonly transition?: DeployStatusWriterTransition;
@@ -65,12 +69,20 @@ export async function applyDeployStatusWrite(
         updatedAt,
       );
     case "markFailed":
+      // Shared by both DeployCreate's MarkFailed/MarkFailedWithoutBuildId and
+      // DeployDelete's MarkFailed (#2441 Phase B PR-6): the DDB UpdateExpression is
+      // byte-identical (SET status=FAILED, updatedAt, failureReason, optional
+      // buildId) regardless of which state machine wrote it — DeployDelete never
+      // sends `buildId`, matching the CodeBuild-only `buildId` semantics already
+      // encoded by {@link optionalString}.
       return deps.repository.markCreateFailed(
         jobId,
         requireString(event.failureReason, "failureReason"),
         optionalString(event.buildId, "buildId"),
         updatedAt,
       );
+    case "markDeleted":
+      return deps.repository.markDeleted(jobId, updatedAt);
     default:
       throw new Error(`Unsupported DeployStatusWriter transition: ${transition}`);
   }

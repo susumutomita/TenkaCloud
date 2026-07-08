@@ -124,4 +124,67 @@ describe("deploy-status-writer-handler", () => {
       ),
     ).rejects.toThrow(/stackOutputs/);
   });
+
+  // [Issue #2441 / Phase B PR-6] DeployDelete's SFN write-back states (MarkDeleted / MarkFailed)
+  // share this same Lambda + repository seam as DeployCreate.
+  describe("DeployDelete transitions (#2441 Phase B PR-6)", () => {
+    it("should route MarkDeleted into the repository seam and clear the login-key hash index", async () => {
+      const sql = makeSqliteExecutor();
+      const repository = new SqlDeploymentsRepository(sql);
+      await repository.putDeployment(deployment({ status: "DELETING", teamLoginKey: "KEY-A" }));
+
+      await expect(
+        applyDeployStatusWrite(
+          { transition: "markDeleted", jobId: "job-1", updatedAt: AT },
+          {
+            repository,
+          },
+        ),
+      ).resolves.toMatchObject({ outcome: "updated" });
+
+      expect(await repository.getDeployment("job-1")).toMatchObject({
+        status: "DELETED",
+        updatedAt: AT,
+      });
+      // The DDB equivalent (`REMOVE GSI2PK, GSI2SK`) un-indexes the sparse participant
+      // login-key GSI; the SQL backend clears the `login_key_hash` column instead so
+      // `listByTeamLoginKey` no longer resolves the deleted deployment.
+      const row = await sql.get("SELECT login_key_hash FROM deployments WHERE job_id = ?", [
+        "job-1",
+      ]);
+      expect(row?.login_key_hash).toBeNull();
+      expect(await repository.listByTeamLoginKey("KEY-A")).toEqual([]);
+    });
+
+    it("should route DeployDelete's MarkFailed (no buildId) via the same markCreateFailed write as DeployCreate", async () => {
+      const repository = new SqlDeploymentsRepository(makeSqliteExecutor());
+      await repository.putDeployment(deployment({ status: "DELETING" }));
+
+      await expect(
+        applyDeployStatusWrite(
+          {
+            transition: "markFailed",
+            jobId: "job-1",
+            updatedAt: AT,
+            failureReason: "delete-stack error",
+          },
+          { repository },
+        ),
+      ).resolves.toMatchObject({ outcome: "updated" });
+
+      const record = await repository.getDeployment("job-1");
+      expect(record).toMatchObject({ status: "FAILED", failureReason: "delete-stack error" });
+      expect(record?.buildId).toBeUndefined();
+    });
+
+    it("should return not_found (not throw) for markDeleted on a missing jobId (handler()'s assertUpdated is the fail-loud layer)", async () => {
+      const repository = new SqlDeploymentsRepository(makeSqliteExecutor());
+      await expect(
+        applyDeployStatusWrite(
+          { transition: "markDeleted", jobId: "missing", updatedAt: AT },
+          { repository },
+        ),
+      ).resolves.toEqual({ outcome: "not_found" });
+    });
+  });
 });

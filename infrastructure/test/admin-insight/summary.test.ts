@@ -11,29 +11,38 @@ function buildShared(send: ReturnType<typeof vi.fn>) {
   };
 }
 
+/**
+ * [Issue #2441 / Phase B PR-6] `countTenantDeployments` now delegates to the
+ * `DeploymentsRepository.countActiveByTenant` seam instead of a raw single Query
+ * that read full items and counted status client-side. The repository issues TWO
+ * `Select=COUNT` + `FilterExpression: "#s IN (...)"` queries against Deployments
+ * (one for the active statuses, one for FAILED) — distinguishable from the
+ * Events count query (no `FilterExpression`, see `countEventsByTenant`) by
+ * `cmd.input.FilterExpression` presence, and from each other by which status
+ * value the filter's `ExpressionAttributeValues` carries.
+ */
+function mockDeploymentsAndEventsCounts(counts: {
+  readonly active: number;
+  readonly failed: number;
+  readonly events: number;
+}): ReturnType<typeof vi.fn> {
+  return vi.fn().mockImplementation(async (cmd: QueryCommand) => {
+    const tableName = cmd.input.TableName;
+    if (tableName === "TestEvents") return { Count: counts.events };
+    if (tableName === "TestDeployments") {
+      const values = Object.values(cmd.input.ExpressionAttributeValues ?? {});
+      if (values.includes("FAILED")) return { Count: counts.failed };
+      return { Count: counts.active };
+    }
+    throw new Error(`unexpected table: ${tableName}`);
+  });
+}
+
 describe("summarizeTenants", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("single tenant: should correctly aggregate active/failed deploy + total events", async () => {
-    const send = vi.fn().mockImplementation(async (cmd: QueryCommand) => {
-      const tableName = cmd.input.TableName;
-      if (tableName === "TestDeployments") {
-        return {
-          Items: [
-            { status: "PENDING" },
-            { status: "IN_PROGRESS" },
-            { status: "IN_PROGRESS" },
-            { status: "FAILED" },
-            { status: "COMPLETE" }, // active / failed どちらでもないので counter には入らない
-            { status: "DELETED" },
-          ],
-        };
-      }
-      if (tableName === "TestEvents") {
-        return { Count: 7 };
-      }
-      throw new Error(`unexpected table: ${tableName}`);
-    });
+    const send = mockDeploymentsAndEventsCounts({ active: 3, failed: 1, events: 7 });
     const shared = buildShared(send);
     const result = await summarizeTenants(shared, ["tenant-a"]);
     expect(result.items).toHaveLength(1);
@@ -46,16 +55,16 @@ describe("summarizeTenants", () => {
   });
 
   it("should query duplicate tenantIds only once", async () => {
-    const send = vi.fn().mockResolvedValue({ Items: [], Count: 0 });
+    const send = mockDeploymentsAndEventsCounts({ active: 0, failed: 0, events: 0 });
     const shared = buildShared(send);
     await summarizeTenants(shared, ["tenant-a", "tenant-a", "tenant-a"]);
-    // 1 tenant あたり Deployments query + Events query = 2 invocation。
-    // 重複除去が効いていれば 2 回しか送らない。
-    expect(send).toHaveBeenCalledTimes(2);
+    // 1 tenant あたり Deployments (active + failed の 2 query) + Events query = 3 invocation。
+    // 重複除去が効いていれば 3 回しか送らない。
+    expect(send).toHaveBeenCalledTimes(3);
   });
 
   it("should preserve input order (after dedupe) in results", async () => {
-    const send = vi.fn().mockResolvedValue({ Items: [], Count: 0 });
+    const send = mockDeploymentsAndEventsCounts({ active: 0, failed: 0, events: 0 });
     const shared = buildShared(send);
     const result = await summarizeTenants(shared, ["tenant-c", "tenant-a", "tenant-b"]);
     expect(result.items.map((i) => i.tenantId)).toEqual(["tenant-c", "tenant-a", "tenant-b"]);
@@ -70,32 +79,29 @@ describe("summarizeTenants", () => {
   });
 
   it("should aggregate across all pages when LastEvaluatedKey indicates more pages", async () => {
-    let deployCall = 0;
+    let activeCall = 0;
     const send = vi.fn().mockImplementation(async (cmd: QueryCommand) => {
       const tableName = cmd.input.TableName;
-      if (tableName === "TestDeployments") {
-        deployCall += 1;
-        if (deployCall === 1) {
-          return {
-            Items: [{ status: "PENDING" }, { status: "FAILED" }],
-            LastEvaluatedKey: { PK: "DEPLOYMENT#x" },
-          };
-        }
-        return { Items: [{ status: "IN_PROGRESS" }] };
+      if (tableName !== "TestDeployments") return { Count: 0 };
+      const values = Object.values(cmd.input.ExpressionAttributeValues ?? {});
+      if (values.includes("FAILED")) return { Count: 1 };
+      activeCall += 1;
+      if (activeCall === 1) {
+        return { Count: 1, LastEvaluatedKey: { PK: "DEPLOYMENT#x" } };
       }
-      return { Count: 0 };
+      return { Count: 1 };
     });
     const shared = buildShared(send);
     const result = await summarizeTenants(shared, ["tenant-a"]);
     expect(result.items[0]).toMatchObject({
       tenantId: "tenant-a",
-      activeDeploys: 2, // PENDING + IN_PROGRESS
+      activeDeploys: 2, // 2 pages, 1 each
       failedDeploys: 1,
     });
   });
 
   it("Deployments query should use GSI1 + TENANT#<id> partition key", async () => {
-    const send = vi.fn().mockResolvedValue({ Items: [], Count: 0 });
+    const send = mockDeploymentsAndEventsCounts({ active: 0, failed: 0, events: 0 });
     const shared = buildShared(send);
     await summarizeTenants(shared, ["tenant-acme"]);
     const deployQuery = send.mock.calls
@@ -106,14 +112,12 @@ describe("summarizeTenants", () => {
     expect(deployQuery?.input.ExpressionAttributeValues?.[":pk"]).toBe("TENANT#tenant-acme");
   });
 
-  it("Events query should minimize payload via Select=COUNT", async () => {
-    const send = vi.fn().mockResolvedValue({ Items: [], Count: 0 });
+  it("Deployments/Events queries should minimize payload via Select=COUNT", async () => {
+    const send = mockDeploymentsAndEventsCounts({ active: 0, failed: 0, events: 0 });
     const shared = buildShared(send);
     await summarizeTenants(shared, ["tenant-acme"]);
-    const eventsQuery = send.mock.calls
-      .map((call) => call[0] as QueryCommand)
-      .find((cmd) => cmd.input.TableName === "TestEvents");
-    expect(eventsQuery).toBeDefined();
-    expect(eventsQuery?.input.Select).toBe("COUNT");
+    for (const cmd of send.mock.calls.map((call) => call[0] as QueryCommand)) {
+      expect(cmd.input.Select).toBe("COUNT");
+    }
   });
 });

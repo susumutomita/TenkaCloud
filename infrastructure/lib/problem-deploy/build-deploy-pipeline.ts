@@ -22,7 +22,13 @@ import { DeployStatusWriterLambda } from "./deploy-status-writer-lambda.js";
 import { DescribeStackLambda } from "./describe-stack-lambda.js";
 
 export interface BuildDeployPipelineArgs {
-  readonly deploymentsTable: Table;
+  /**
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合
+   * `DeployStatusWriterLambda` が生成され、DeployCreate/DeployDelete 双方の SFN 書き戻しは
+   * Lambda invoke 経由になる (= 本 table を参照しない)。
+   */
+  readonly deploymentsTable?: Table;
   readonly eventBus: IEventBus;
   readonly bulkPayloadBucket: Bucket;
   readonly sourceBucketName: string;
@@ -236,6 +242,9 @@ export function buildDeployPipeline(
     // 追加リソースなし)。flag ON では create path と同じ CfnDeployLambda を共用する (別 Lambda
     // は作らない; index.ts が action で create / delete を分岐)。
     ...(args.deployViaLambda ? { deployViaLambda: true, cfnDeployFunction } : {}),
+    // [Issue #2441 Phase B PR-6] pure SQL のときは DeployCreate と同じ DeployStatusWriterLambda
+    // を共用する (別 Lambda は作らない; MarkDeleted/MarkFailed が transition name で分岐)。
+    ...(statusWriter ? { statusWriterFunction: statusWriter.fn } : {}),
   });
   new DeployDeleteEventRule(scope, "DeployDeleteRule", {
     eventBus: args.eventBus,

@@ -24,8 +24,13 @@ export interface EventApiLambdaProps {
   /**
    * Phase 2a (Bulk Deploy / Bulk Teardown) で deployment 行を作成 / 状態更新するため
    * 既存 Deployments table への RW 権限が必要。
+   *
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
+   * grant も付与しない — Deployments read/write は repository seam
+   * (`resolveDeploymentsRepository`) が SQL executor 直結で処理する。
    */
-  readonly deploymentsTable: Table;
+  readonly deploymentsTable?: Table;
   /**
    * Phase 2.2 (Issue #459): Bulk Deploy が deploy 前に verified=true 行のみ許可する
    * gate のため、CompetitorAccounts table を Read する。
@@ -153,7 +158,10 @@ export class EventApiLambda extends Construct {
         // cold start が EVENTS_TABLE_NAME 不在でも通る)。
         ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
         ...(props.teamsTable ? { TEAMS_TABLE_NAME: props.teamsTable.tableName } : {}),
-        DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
+        // Issue #2441: 純 SQL backend では table 自体が無いので env も足さない。
+        ...(props.deploymentsTable
+          ? { DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName }
+          : {}),
         // Phase 2.2 (Issue #459): bulk-deploy が CompetitorAccounts table を引いて verified-only
         // gate を実現するため、table 名と SSM path 構築用 env 名を Lambda 環境に注入する。
         COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName,
@@ -196,7 +204,7 @@ export class EventApiLambda extends Construct {
     // Issue #2440: 純 SQL backend では table 自体が無いので grant も付与しない。
     props.eventsTable?.grantReadWriteData(this.fn);
     props.teamsTable?.grantReadWriteData(this.fn);
-    props.deploymentsTable.grantReadWriteData(this.fn);
+    props.deploymentsTable?.grantReadWriteData(this.fn);
     // Phase 2.2 (Issue #459): CompetitorAccounts は read-only (verified gate のみ)。
     // verify / Put / Delete は CompetitorAccountsApiLambda 側で行うので、本 Lambda には
     // RW を付与しない (= 最小権限)。

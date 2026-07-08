@@ -243,6 +243,12 @@ export class MirroredDeploymentsRepository implements DeploymentsRepository {
     );
   }
 
+  async markDeleted(jobId: string, at: string): Promise<DeploymentMutationOutcome> {
+    return this.mirrorWrite(await this.canonical.markDeleted(jobId, at), () =>
+      this.replica.markDeleted(jobId, at),
+    );
+  }
+
   async markFailedIfPending(
     jobId: string,
     tenantId: string,

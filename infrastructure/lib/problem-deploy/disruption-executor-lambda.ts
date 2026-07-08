@@ -13,8 +13,16 @@ export interface DisruptionExecutorLambdaProps {
   readonly environmentName: string;
   /** disruption-fire が `*DisruptionFired` を publish する EventBus。 本 Lambda がその rule の target。 */
   readonly eventBus: IEventBus;
-  /** team deployment 解決 (GSI1 Query) 用。 */
-  readonly deploymentsTable: ITable;
+  /**
+   * team deployment 解決 (GSI1 Query) 用。
+   *
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
+   * GSI1 Query IAM も付与しない — team deployment 解決は repository seam
+   * (`resolveDeploymentsRepository`) が SQL executor 直結で処理する
+   * (`executor-store.ts` は既に seam 経由)。
+   */
+  readonly deploymentsTable?: ITable;
   /** EXEC# 冪等行 (conditional Put) 用。 fire の REQUEST#/AUDIT# と同居。 */
   readonly disruptionsTable: ITable;
   /** `{ [problemId]: ProblemDisruptionEntry[] }` (action 込)。 build 時 literal 置換で env 4KB を回避。 */
@@ -85,7 +93,10 @@ export class DisruptionExecutorLambda extends Construct {
       timeout: Duration.seconds(60),
       memorySize: 512,
       environment: {
-        DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
+        // Issue #2441: 純 SQL backend では table 自体が無いので env も足さない。
+        ...(props.deploymentsTable
+          ? { DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName }
+          : {}),
         DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName,
         REVERT_SCHEDULER_ROLE_ARN: this.schedulerRole.roleArn,
         EXECUTOR_FUNCTION_ARN: executorArn,
@@ -141,17 +152,20 @@ export class DisruptionExecutorLambda extends Construct {
         ],
       }),
     );
-    // deployments: team deployment 解決は GSI1 Query のみ。
-    this.fn.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ["dynamodb:Query"],
-        resources: [
-          props.deploymentsTable.tableArn,
-          `${props.deploymentsTable.tableArn}/index/GSI1`,
-        ],
-      }),
-    );
+    // deployments: team deployment 解決は GSI1 Query のみ。Issue #2441: 純 SQL backend では
+    // table 自体が無いので IAM も付与しない (repository seam が SQL executor 直結で処理する)。
+    if (props.deploymentsTable) {
+      this.fn.addToRolePolicy(
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["dynamodb:Query"],
+          resources: [
+            props.deploymentsTable.tableArn,
+            `${props.deploymentsTable.tableArn}/index/GSI1`,
+          ],
+        }),
+      );
+    }
     // disruptions: EXEC# 冪等 claim は conditional PutItem のみ。
     this.fn.addToRolePolicy(
       new iam.PolicyStatement({

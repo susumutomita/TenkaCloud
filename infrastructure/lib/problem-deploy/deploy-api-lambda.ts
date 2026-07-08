@@ -15,7 +15,13 @@ import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-cre
 import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/sakura-credential-store.js";
 
 export interface DeployApiLambdaProps {
-  readonly deploymentsTable: Table;
+  /**
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
+   * `DEPLOYMENTS_TABLE_NAME` は空文字、grant も付与しない — deploy 起動 (PutItem) は
+   * repository seam (`resolveDeploymentsRepository`) が SQL executor 直結で処理する。
+   */
+  readonly deploymentsTable?: Table;
   readonly eventBus: IEventBus;
   /**
    * Phase 2.2 (Issue #459): single-deploy / stack-progress が verified=true 行のみ
@@ -114,7 +120,11 @@ export class DeployApiLambda extends Construct {
       timeout: Duration.seconds(15),
       memorySize: 256,
       environment: {
-        DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
+        // Issue #2441: 純 SQL backend では table 自体が無いので env も足さない (= CFn byte 互換 /
+        // EVENTS_TABLE_NAME と同じ conditional-spread パターン)。
+        ...(props.deploymentsTable
+          ? { DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName }
+          : {}),
         // Phase 2.2 (Issue #459)
         COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName,
         DEPLOY_ENVIRONMENT: props.environmentName,
@@ -156,7 +166,7 @@ export class DeployApiLambda extends Construct {
     // Phase 2.2 (Issue #459): verified-only gate のために CompetitorAccounts は read-only で
     // 引く。AssumeRole / SSM SecureString は CompetitorAccountsApiLambda + State Machine 経由
     // (= 本 Lambda は同期 API 経路のみ担う)。
-    props.deploymentsTable.grantReadWriteData(this.fn);
+    props.deploymentsTable?.grantReadWriteData(this.fn);
     props.competitorAccountsTable.grantReadData(this.fn);
     props.eventBus.grantPutEventsTo(this.fn);
     // Issue #950 (ADR-020 Phase D): admin 操作 audit log を append-only 書き込む。

@@ -700,6 +700,28 @@ export class SqlDeploymentsRepository implements DeploymentsRepository {
     });
   }
 
+  /**
+   * [Issue #2441 / Phase B PR-6] DeployDelete SFN `MarkDeleted`. Unlike
+   * {@link mutateCreateStatusWrite} (which only touches status/updated_at/payload),
+   * this also clears `login_key_hash` — the SQL equivalent of DDB's `REMOVE
+   * GSI2PK, GSI2SK` — by deleting `teamLoginKey` from the in-memory record before
+   * a full-row rewrite (`DEPLOYMENT_UPDATE_SET`), so a deleted deployment no
+   * longer resolves via `listByTeamLoginKey`.
+   */
+  async markDeleted(jobId: string, at: string): Promise<DeploymentMutationOutcome> {
+    const row = await this.getDeploymentRow(jobId);
+    if (!row) return { outcome: "not_found" };
+    const record = deploymentFromPayload(row.payload) as MutableDeploymentRecord;
+    record.status = "DELETED";
+    record.updatedAt = at;
+    delete (record as Record<string, unknown>).teamLoginKey;
+    const result = await this.sql.run(
+      `UPDATE deployments SET ${DEPLOYMENT_UPDATE_SET} WHERE job_id = ?`,
+      [...deploymentUpdateParams(record), jobId],
+    );
+    return Number(result.changes) > 0 ? { outcome: "updated" } : { outcome: "not_found" };
+  }
+
   async markFailedIfPending(
     jobId: string,
     tenantId: string,

@@ -13,7 +13,13 @@ import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-cre
 import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/sakura-credential-store.js";
 
 export interface GenericScoringLambdaProps {
-  readonly deploymentsTable: ITable;
+  /**
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
+   * grant も付与しない — 採点 dispatch / event status reconcile の Deployments 読み書きは
+   * repository seam (`resolveDeploymentsRepository`) が SQL executor 直結で処理する。
+   */
+  readonly deploymentsTable?: ITable;
   /**
    * Events table。Event status の auto-transition (#557 / #539) を 1-min tick で reconcile する。
    * 採点 dispatcher とは独立の責務だが、 cron schedule (= rate(1 minute)) を共有する。
@@ -147,7 +153,10 @@ export class GenericScoringLambda extends Construct {
       // 余裕を持たせる (= cold start 後の steady state は実測 256MB 未満で済むはず)。
       memorySize: 1024,
       environment: {
-        DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
+        // Issue #2441: 純 SQL backend では table 自体が無いので env も足さない。
+        ...(props.deploymentsTable
+          ? { DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName }
+          : {}),
         // Issue #2440: 純 SQL backend では table が無いので env も足さない (= cold start が
         // EVENTS_TABLE_NAME 不在でも通る。 shared builder 側の緩和と対で成立する)。
         ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
@@ -204,7 +213,7 @@ export class GenericScoringLambda extends Construct {
 
     // Lambda が deployments table を Scan + UpdateItem できるよう許可 (= 採点 score 加算 +
     // endpointsHealth / scoringState 更新)。
-    props.deploymentsTable.grantReadWriteData(this.fn);
+    props.deploymentsTable?.grantReadWriteData(this.fn);
     // Events table: Scan で DEPLOYING / TEARDOWN 行を拾い、 conditional UpdateItem で
     // READY / ARCHIVED に遷移させる (#557 #539)。 BatchGet で scoringLocked も読む (#558)。
     // Issue #2440: 純 SQL backend では table 自体が無いので grant も付与しない。

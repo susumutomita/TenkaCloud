@@ -3,12 +3,20 @@ import { describe, expect, it, vi } from "vitest";
 import { queryDeploymentsByEvent } from "../../lib/problem-deploy/handlers/event-handler/shared";
 
 /**
- * Issue #670: bulk-deploy が `jobId, teamId, problemId, #s` という projection で
- * queryDeploymentsByEvent を呼び、 DDB が ExpressionAttributeNames に `#s` が
- * 定義されていないため `Invalid ProjectionExpression` で 500 に潰れていた。
- * helper 側で `#s` alias を自動定義することを pin。
+ * [Issue #2441 / Phase B PR-6] `queryDeploymentsByEvent` used to have a raw-`QueryCommand`
+ * fast path (`projectionExpression` param, historically for Issue #670's `#s` alias fix) that
+ * bypassed the `DeploymentsRepository` seam entirely. That path hard-coded
+ * `TableName: shared.deploymentsTableName`, which is `""` once pure SQL backends
+ * (turso|sql) stop synthesizing the Deployments table — a residual gap the 62-site
+ * migration (Phase B1-B3) missed since `bulk-deploy/orchestrator.ts` was its only caller.
+ * The parameter is gone; every caller now goes through `resolveDeploymentsRepository` +
+ * `listByTenantAndEvent` (default backend keeps the byte-identical full-page-drain
+ * GSI1 Query this file used to construct by hand; that Query's own pagination /
+ * `#1797` full-page-drain behavior is pinned in
+ * `test/problem-deploy/control-data/deployments-repository.test.ts` +
+ * `deployments-repository-parity.test.ts`, not duplicated here).
  */
-describe("queryDeploymentsByEvent (Issue #670)", () => {
+describe("queryDeploymentsByEvent (#2441 Phase B PR-6: repository seam, no raw bypass)", () => {
   const buildShared = (sendSpy: ReturnType<typeof vi.fn>) => ({
     ddb: { send: sendSpy } as never,
     deploymentsTableName: "TestDeployments",
@@ -22,60 +30,25 @@ describe("queryDeploymentsByEvent (Issue #670)", () => {
     problemsCatalog: {},
   });
 
-  it("should provide an ExpressionAttributeNames alias when projection contains `#s`", async () => {
-    const send = vi.fn().mockResolvedValue({ Items: [] });
-    await queryDeploymentsByEvent(
-      buildShared(send),
-      "tenant-acme",
-      "evt-1",
-      "jobId, teamId, problemId, #s",
-    );
-    expect(send).toHaveBeenCalledOnce();
-    const cmd = send.mock.calls[0]?.[0] as QueryCommand;
-    expect(cmd.input.ProjectionExpression).toBe("jobId, teamId, problemId, #s");
-    expect(cmd.input.ExpressionAttributeNames).toEqual({ "#s": "status" });
-  });
-
-  it("projection に `#s` が無いなら ExpressionAttributeNames を提供しない (= 既存挙動互換)", async () => {
-    const send = vi.fn().mockResolvedValue({ Items: [] });
-    await queryDeploymentsByEvent(
-      buildShared(send),
-      "tenant-acme",
-      "evt-1",
-      "jobId, teamId, problemId",
-    );
-    const cmd = send.mock.calls[0]?.[0] as QueryCommand;
-    expect(cmd.input.ProjectionExpression).toBe("jobId, teamId, problemId");
-    expect(cmd.input.ExpressionAttributeNames).toBeUndefined();
-  });
-
-  it("projection 自体未指定なら ProjectionExpression を付けない", async () => {
-    const send = vi.fn().mockResolvedValue({ Items: [] });
-    await queryDeploymentsByEvent(buildShared(send), "tenant-acme", "evt-1");
-    const cmd = send.mock.calls[0]?.[0] as QueryCommand;
-    expect(cmd.input.ProjectionExpression).toBeUndefined();
-    expect(cmd.input.ExpressionAttributeNames).toBeUndefined();
-  });
-
-  it("#1797: should drain every page (DynamoDB 1MB limit) so no deployment is missed", async () => {
-    // GSI1PK=TENANT#<id> パーティションが 1MB を超えると Query は LastEvaluatedKey を返して
-    // ページ分割する。旧コードは 1 ページ目しか読まず、後続ページの deployment を取りこぼした
-    // → teardown で対象 stack が enqueue されず orphan 化 / end-event / schedule 伝播も漏れる。
-    // FilterExpression(eventId) は各ページ内で適用されるので、目的 event の行が後続ページに
-    // 居ると完全に missed。全ページを drain する。
+  it("should delegate to the repository seam (GSI1 Query on the default dynamodb backend)", async () => {
     const send = vi
       .fn()
-      .mockResolvedValueOnce({ Items: [{ jobId: "a" }], LastEvaluatedKey: { PK: "p1" } })
-      .mockResolvedValueOnce({ Items: [{ jobId: "b" }], LastEvaluatedKey: { PK: "p2" } })
-      .mockResolvedValueOnce({ Items: [{ jobId: "c" }] });
-
+      .mockResolvedValueOnce({
+        Items: [{ PK: "DEPLOYMENT#a", SK: "META", jobId: "a", eventId: "evt-1" }],
+      })
+      .mockResolvedValue({ Items: [] });
     const result = await queryDeploymentsByEvent(buildShared(send), "tenant-acme", "evt-1");
+    expect(send).toHaveBeenCalled();
+    const cmd = send.mock.calls[0]?.[0] as QueryCommand;
+    expect(cmd.input.TableName).toBe("TestDeployments");
+    expect(cmd.input.IndexName).toBe("GSI1");
+    expect(cmd.input.ExpressionAttributeValues?.[":pk"]).toBe("TENANT#tenant-acme");
+    expect(result.map((r) => r.jobId)).toEqual(["a"]);
+  });
 
-    expect(send).toHaveBeenCalledTimes(3);
-    expect(result.map((r) => r.jobId)).toEqual(["a", "b", "c"]);
-    // 1 ページ目は ExclusiveStartKey 無し、2 ページ目以降は前ページの LastEvaluatedKey を渡す。
-    expect((send.mock.calls[0]?.[0] as QueryCommand).input.ExclusiveStartKey).toBeUndefined();
-    expect((send.mock.calls[1]?.[0] as QueryCommand).input.ExclusiveStartKey).toEqual({ PK: "p1" });
-    expect((send.mock.calls[2]?.[0] as QueryCommand).input.ExclusiveStartKey).toEqual({ PK: "p2" });
+  it("should return an empty array when no rows match (no throw on an empty page)", async () => {
+    const send = vi.fn().mockResolvedValue({ Items: [] });
+    const result = await queryDeploymentsByEvent(buildShared(send), "tenant-acme", "evt-1");
+    expect(result).toEqual([]);
   });
 });

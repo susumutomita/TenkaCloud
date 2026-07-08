@@ -8,7 +8,13 @@ import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { controlDataBackendEnv } from "./control-data-backend-env.js";
 
 export interface DeployStatusWriterLambdaProps {
-  readonly deploymentsTable: Table;
+  /**
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。この Lambda は
+   * `pureSql` のときのみ生成されるため、実運用では常に `undefined` で渡ってくる
+   * (repository seam が SQL executor 直結で処理するため table 自体を参照しない)。
+   */
+  readonly deploymentsTable?: Table;
   readonly controlDataBackend?: string;
   readonly tursoDatabaseUrl?: string;
   readonly tursoAuthTokenParameterName?: string;
@@ -33,7 +39,13 @@ export class DeployStatusWriterLambda extends Construct {
       timeout: Duration.seconds(15),
       memorySize: 256,
       environment: {
-        DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
+        // This Lambda is only synthesized when pureSql (see build-deploy-pipeline.ts), so in
+        // production `deploymentsTable` is always undefined here — the repository seam never
+        // touches DDB. Kept optional for defensive/test-level construction symmetry with the
+        // other Deployments-consuming Lambdas.
+        ...(props.deploymentsTable
+          ? { DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName }
+          : {}),
         ...controlDataBackendEnv(backend),
         ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
         ...(props.tursoAuthTokenParameterName
@@ -44,7 +56,7 @@ export class DeployStatusWriterLambda extends Construct {
     });
 
     if (!pureSql) {
-      props.deploymentsTable.grantReadWriteData(this.fn);
+      props.deploymentsTable?.grantReadWriteData(this.fn);
     }
     if (props.tursoAuthTokenParameterName) {
       this.fn.addToRolePolicy(

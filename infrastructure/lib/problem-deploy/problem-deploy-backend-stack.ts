@@ -257,8 +257,13 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   /**
    * Deployments table (ADR-011 #590 で AdminConsoleInsightStack が read-only に
    * 跨ぐため公開)。grantReadData は呼び出し側で行う。
+   *
+   * [Issue #2441 / Phase B PR-6 / ADR-049 §5.1] `controlDataBackend` が純 SQL
+   * (`turso`/`sql`) のときは本 table を **synth しない** (= `undefined`) — DynamoDB
+   * standing cost (テーブル+GSI3本=4ユニット常時) をゼロにする PR-6 の核心。
+   * `dynamodb` / `*-mirror` では従来どおり必ず存在する ({@link eventsTable} と同じ条件)。
    */
-  public readonly deploymentsTable: Table;
+  public readonly deploymentsTable?: Table;
   /**
    * Events table (ADR-011 #590 で AdminConsoleInsightStack が cross-stack read する)。
    *
@@ -317,7 +322,6 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ProblemDeployBackendStackProps) {
     super(scope, id, props);
 
-    const deployments = new DeploymentsTable(this, "Deployments");
     // ADR-004 Phase 1: Event / Team の 2 Table を Deployments と並列に持つ。
     // Phase 2 で Bulk Deploy / Bulk Teardown を State Machine 経由で動かす。
     //
@@ -325,14 +329,20 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // ときは Events/Teams を **synth しない** — DynamoDB standing cost (Events+Teams+GSI 3本 =
     // 5 ユニット常時) をゼロにする。`turso-mirror`/`sql-mirror` は DDB が正本のまま (= Mirrored)
     // なので通常どおりテーブルを作る。
+    //
+    // [Issue #2441 / Phase B PR-6] 同じ条件で Deployments も **synth しない**。GSI3本を持つ単体
+    // 最大のコスト源 (テーブル+GSI=4ユニット常時) をゼロにする本 PR の核心。62 handler サイト +
+    // SFN 書き戻し (Phase B PR-1〜5) が既に repository seam を経由しているため、pure SQL では
+    // 本 table への参照が残らない (壊れる参照は下記で個別に条件化)。
     const pureSql = props.controlDataBackend === "turso" || props.controlDataBackend === "sql";
+    const deployments = pureSql ? undefined : new DeploymentsTable(this, "Deployments");
     const events = pureSql ? undefined : new EventsTable(this, "Events");
     const teams = pureSql ? undefined : new TeamsTable(this, "Teams");
     // ADR-012 Phase 3.A: Endpoint registry。per (tenant, team, problem, slot) で override
     // URL を保管する。default URL は read-through で deployment.stackOutputs から算出。
     const endpoints = new ProblemEndpointsTable(this, "ProblemEndpoints");
     // ADR-011 #590: AdminConsoleInsightStack に cross-stack で渡すため expose する。
-    this.deploymentsTable = deployments.table;
+    this.deploymentsTable = deployments?.table;
     this.eventsTable = events?.table;
     this.teamsTable = teams?.table;
     // Issue #459 / ADR-002 Phase 2.1: tenant ↔ 競技者 AWS account の許可表。
@@ -390,7 +400,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // tenant API から invoke される Lambda。validation + DDB Put + EventBridge PutEvents のみ。
     // Phase 2.2 (Issue #459): CompetitorAccounts table + env を渡して verified-only gate を有効化。
     const deployApi = new DeployApiLambda(this, "DeployApi", {
-      deploymentsTable: deployments.table,
+      deploymentsTable: deployments?.table,
       competitorAccountsTable: competitorAccounts.table,
       eventBus,
       defaultTenantId: props.defaultTenantId,
@@ -446,10 +456,11 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // `resolveEventHotTables`) と運用 doc (docs/operations/dynamodb-event-capacity.md) の表は
     // この並びと揃えること (増減時は 3 箇所同時に更新)。
     //
-    // Issue #2440: 純 SQL backend では Events/Teams が無いので runbook の allowedValues / IAM
-    // からも除外する (= filter で undefined を落とす。存在しない table を runbook 対象にしない)。
+    // Issue #2440 / #2441: 純 SQL backend では Events/Teams/Deployments が無いので runbook の
+    // allowedValues / IAM からも除外する (= filter で undefined を落とす。存在しない table を
+    // runbook 対象にしない)。
     const eventHotTables = [
-      deployments.table,
+      deployments?.table,
       events?.table,
       teams?.table,
       endpoints.table,
@@ -470,7 +481,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     const eventApi = new EventApiLambda(this, "EventApi", {
       eventsTable: events?.table,
       teamsTable: teams?.table,
-      deploymentsTable: deployments.table,
+      deploymentsTable: deployments?.table,
       competitorAccountsTable: competitorAccounts.table,
       eventBus,
       problemsCatalog: props.problemsCatalog,
@@ -507,7 +518,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     new DisruptionExecutorLambda(this, "DisruptionExecutor", {
       environmentName: props.environmentName,
       eventBus,
-      deploymentsTable: deployments.table,
+      deploymentsTable: deployments?.table,
       disruptionsTable: disruptions.table,
       problemsDisruptions: (props.problemsDisruptions ?? {}) as Readonly<Record<string, unknown>>,
     });
@@ -530,7 +541,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // pipeline, extracted to build-deploy-pipeline.ts. `bulkPayloadBucket` stays here (also
     // used by EventApiLambda above, wired before this pipeline — bucket logical ID unchanged).
     const deployPipeline = buildDeployPipeline(this, {
-      deploymentsTable: deployments.table,
+      deploymentsTable: deployments?.table,
       eventBus,
       bulkPayloadBucket,
       sourceBucketName: props.sourceBucketName,
@@ -567,7 +578,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // uptime 問題が無い tenant でも reconcile は要るので **常に instantiate** (= 旧
     // `if (problemsScoring.length > 0)` ガードは撤去のまま継続)。
     const genericScoring = new GenericScoringLambda(this, "GenericScoring", {
-      deploymentsTable: deployments.table,
+      deploymentsTable: deployments?.table,
       eventsTable: events?.table,
       endpointsTable: endpoints.table,
       problemsScoring: props.problemsScoring,
@@ -619,7 +630,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // build-participant-portal-subsystem.ts. Same `if (props.participantPortal)` guard as before.
     if (props.participantPortal) {
       const portalSubsystem = buildParticipantPortalSubsystem(this, {
-        deploymentsTable: deployments.table,
+        deploymentsTable: deployments?.table,
         eventsTable: events?.table,
         endpointsTable: endpoints.table,
         problemsScoring: props.problemsScoring,
@@ -661,12 +672,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       );
     }
 
-    new CfnOutput(this, "DeploymentsTableName", {
-      value: deployments.table.tableName,
-      description: "Deploy ジョブを記録する DynamoDB テーブル名。",
-    });
-    // Issue #2440: 純 SQL backend では table 自体が無いので output も作らない (存在しない
+    // Issue #2440 / #2441: 純 SQL backend では table 自体が無いので output も作らない (存在しない
     // 論理 ID を参照する CfnOutput は synth できない)。
+    if (deployments) {
+      new CfnOutput(this, "DeploymentsTableName", {
+        value: deployments.table.tableName,
+        description: "Deploy ジョブを記録する DynamoDB テーブル名。",
+      });
+    }
     if (events) {
       new CfnOutput(this, "EventsTableName", {
         value: events.table.tableName,

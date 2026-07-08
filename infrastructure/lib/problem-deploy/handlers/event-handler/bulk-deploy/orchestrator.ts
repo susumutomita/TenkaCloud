@@ -51,12 +51,7 @@ export async function bulkDeployEvent(
   }
   const selected = selectBulkDeployTargets(eventId, tenantId, loaded, request);
   if (!selected) return emptyBulkDeployResult(eventId);
-  const existingDeployments = await queryDeploymentsByEvent(
-    shared,
-    tenantId,
-    eventId,
-    "jobId, teamId, problemId, #s",
-  );
+  const existingDeployments = await queryDeploymentsByEvent(shared, tenantId, eventId);
   const existing = indexExistingDeployments(existingDeployments);
   const retryFailedOnly = request?.retryFailedOnly === true;
   const forceRedeploy = request?.forceRedeploy === true;
