@@ -94,6 +94,42 @@ CodeBuild project itself.
 
 <sub>Prefer a local terminal, or need multi-tenant SaaS? See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md).</sub>
 
+## Running costs
+
+TenkaCloud runs in one of two profiles. The default is tuned for AWS-native,
+zero-friction operation; a second profile is being built for individuals who want the
+standing cost as close to $0 as possible.
+
+| Profile | For | Control data | Problem deploy |
+| --- | --- | --- | --- |
+| **AWS-native** (default) | Teams / companies who want everything inside AWS | DynamoDB (provisioned 1/1) | Lambda `CreateStack` (default) |
+| **Zero-cost** (opt-in, in progress) | Individuals, trials, personal events | Turso (libSQL) — being introduced | Lambda `CreateStack` (default) |
+
+Lite mode (`make deploy`) is already the lean path. The problem-deploy backend runs on
+**Lambda `CreateStack`/`UpdateStack` by default** (no CodeBuild project), and the KMS
+customer-managed key was removed in favor of the AWS-managed key. The one remaining
+standing cost in Lite mode is DynamoDB: eight tables plus eight GSIs pinned at
+PROVISIONED 1/1, which bills even while idle.
+
+### Measured cost (single AWS account, 2026-06)
+
+| Source | Monthly | Status |
+| --- | --- | --- |
+| DynamoDB (provisioned tables) | ~$7.06 | Standing cost — a table bills even at 1/1. Turso backend in progress (tracker #2435) |
+| CodeBuild (problem deploy) | part of ~$2.55 | **Resolved** — the Lambda deploy path is the default (#2353); no CodeBuild project in Lite mode |
+| CodeBuild (SaaS tenant provisioning) | part of ~$2.55 | SaaS-mode only; not present in Lite mode |
+| KMS customer-managed key | $0 | **Resolved** — AWS-managed key via a CDK Aspect |
+| Retained tables after `destroy` | cumulative | **Resolved** — `make destroy` now warns and prints delete commands (#2445) |
+
+> **Free Tier note.** New-style AWS Free Tier accounts (2025-07 onward) are
+> credit-based: there is **no** always-free 25 RCU/WCU DynamoDB allowance. Credits can
+> make the visible bill read $0, but Usage still accrues from the first hour and becomes
+> a real charge once the credits run out.
+
+The DynamoDB → Turso (libSQL) control-data backend that removes this last standing cost
+is **in progress** (tracker #2435, phases A–C). The opt-in setup steps will be
+documented here once that path is complete.
+
 ## Add your own problems
 
 Problems live in their own repo — [TenkaCloudChallenge][catalog], cloned in at deploy
