@@ -1,7 +1,7 @@
 import type { ProblemScoringMetadata, ProgressiveHint } from "../../../utils/scoring-metadata.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
-import { writeScoreEvent } from "../shared/score-event.js";
+import { buildScoreEventRecord } from "../shared/score-event.js";
 import { getCompetitionAccessBlock } from "./challenge-access.js";
 import {
   type ParticipantSharedResources,
@@ -180,19 +180,20 @@ async function writeHintScoreEvent(
   // 握り潰す fallback 禁止」 違反だったので、 失敗は log した上で throw し、
   // route-helpers の internal_error 経路で 500 を返す (= CloudWatch + Portal retry に乗せる)。
   try {
-    await writeScoreEvent(
-      shared.ddb,
-      shared.tableName,
-      {
-        jobId: String(item.jobId ?? ""),
-        problemId: item.problemId,
-        ...(typeof item.teamId === "string" ? { teamId: item.teamId } : {}),
-        ...(typeof item.eventId === "string" ? { eventId: item.eventId } : {}),
-        expiresAt: Number(item.expiresAt ?? 0),
-      },
-      "hint",
-      -hint.penalty,
-      now,
+    const repository = await resolveDeploymentsRepository(shared);
+    await repository.appendScoreEvent(
+      buildScoreEventRecord(
+        {
+          jobId: String(item.jobId ?? ""),
+          problemId: item.problemId,
+          ...(typeof item.teamId === "string" ? { teamId: item.teamId } : {}),
+          ...(typeof item.eventId === "string" ? { eventId: item.eventId } : {}),
+          expiresAt: Number(item.expiresAt ?? 0),
+        },
+        "hint",
+        -hint.penalty,
+        now,
+      ),
     );
   } catch (err) {
     console.error("[reveal-hint] writeScoreEvent failed", {

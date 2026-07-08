@@ -462,11 +462,13 @@ export function makeFakeDdb(options: { readonly pageSize?: number } = {}): Dynam
     return queryBase(cmd, table, values, pk);
   };
 
-  const scan = (cmd: ScanCommand): { Items: Item[] } => {
+  const scan = (cmd: ScanCommand): { Items: Item[]; LastEvaluatedKey?: Item } => {
     const values = cmd.input.ExpressionAttributeValues ?? {};
     if (values[":zero"] !== undefined && values[":now"] !== undefined) {
       // TTL prune sweep (`expiresAt > :zero AND expiresAt <= :now`) uses `>` / `<=`,
       // which `evalConditionExpression` doesn't support — hand-evaluated as before.
+      // No pagination here: the pre-existing Events/Teams/Notifications prune sweeps
+      // never exercised multi-page Scan drain.
       const zero = Number(values[":zero"]);
       const now = Number(values[":now"]);
       const items = [...tableFor(cmd.input.TableName).values()].filter((it) => {
@@ -477,7 +479,7 @@ export function makeFakeDdb(options: { readonly pageSize?: number } = {}): Dynam
     }
     // General full-table Scan filtered by FilterExpression (`=` / `<>` / `IN` / OR / AND
     // — the same grammar `evalConditionExpression` already supports for conditional writes).
-    const items = [...tableFor(cmd.input.TableName).values()].filter((it) =>
+    const matched = [...tableFor(cmd.input.TableName).values()].filter((it) =>
       cmd.input.FilterExpression
         ? evalConditionExpression(
             cmd.input.FilterExpression,
@@ -487,6 +489,24 @@ export function makeFakeDdb(options: { readonly pageSize?: number } = {}): Dynam
           )
         : true,
     );
+    // [#2441 / Phase B3] Every real Scan site sets its own `Limit` (200 verbatim),
+    // so `Limit ?? forcedPageSize` would never let `forcedPageSize` engage. Only
+    // `forcedPageSize` being *explicitly set* forces multi-page drain (capped
+    // below whatever `Limit` the command carries — a real Scan can also
+    // page well short of `Limit` on the 1MB response-size boundary, so this is a
+    // faithful page-size simulation, not a Limit override). Every pre-#2441 Scan
+    // caller (no `pageSize` passed) reproduces the old single-page, unsorted-order
+    // behavior exactly (no slicing applied, `Limit` fully ignored).
+    if (forcedPageSize === undefined) return { Items: matched };
+    const limit = Math.min(cmd.input.Limit ?? Number.POSITIVE_INFINITY, forcedPageSize);
+    const sorted = matched.sort((a, b) => keyOf(a.PK, a.SK).localeCompare(keyOf(b.PK, b.SK)));
+    const esk = cmd.input.ExclusiveStartKey as Item | undefined;
+    const items = esk ? sorted.filter((it) => keyOf(it.PK, it.SK) > keyOf(esk.PK, esk.SK)) : sorted;
+    if (items.length > limit) {
+      const page = items.slice(0, limit);
+      const last = page[page.length - 1] as Item;
+      return { Items: page, LastEvaluatedKey: { PK: last.PK, SK: last.SK } };
+    }
     return { Items: items };
   };
 

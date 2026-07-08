@@ -79,7 +79,13 @@ export async function maybeLatchGateCompletion(
 ): Promise<void> {
   if (!progressionGate) return;
   if (!item.problemId || item.problemId !== progressionGate.gateProblemId) return;
-  if (!item.PK || !item.jobId || !item.tenantId) return;
+  // [Issue #2441 / Phase B3] `item` flows from
+  // `DeploymentsRepository.forEachCompleteDeploymentPage`, whose
+  // `DeploymentRecord` never carries the physical `PK` (neither
+  // `latchCompletedAt` nor `awardBonusTransact` below reads it — both derive
+  // their keys from `jobId`, per B2). Dropped from the guard and from
+  // `GateRow`; `jobId` alone is the correct precondition.
+  if (!item.jobId || !item.tenantId) return;
   if (!isGateCompleted(item)) return;
 
   await latchCompletedAt(shared, item as GateRow, nowIso);
@@ -92,7 +98,7 @@ export async function maybeLatchGateCompletion(
   await awardBonusTransact(shared, item as GateRow, completionBonus, nowIso);
 }
 
-type GateRow = Partial<DeploymentItem> & { PK: string; jobId: string; problemId: string };
+type GateRow = Partial<DeploymentItem> & { jobId: string; problemId: string };
 
 /**
  * 完了 latch (one-time)。 既に latch 済みなら skip。 レースは condition で防ぐ。

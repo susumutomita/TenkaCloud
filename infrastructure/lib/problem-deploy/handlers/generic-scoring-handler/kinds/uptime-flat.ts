@@ -43,7 +43,11 @@ export async function runUptimeFlatKind(
   input: KindHandlerInput<UptimeFlatScoringMetadata>,
 ): Promise<KindResult> {
   const { deployment, scoring, slots, overrides, nowIso } = input;
-  if (!deployment.PK || !deployment.problemId) return noopKindResult();
+  // [Issue #2441 / Phase B3] `deployment` flows from
+  // `DeploymentsRepository.forEachCompleteDeploymentPage`, whose
+  // `DeploymentRecord` never carries the physical `PK` (unused here beyond this
+  // guard) — dropped; `problemId` alone is the correct precondition.
+  if (!deployment.problemId) return noopKindResult();
 
   const outputs = parseStackOutputs(deployment.stackOutputs);
   const overrideMap = new Map<string, string>();

@@ -19,7 +19,11 @@ export function runAttackDetectionKind(
   input: KindHandlerInput<AttackDetectionScoringMetadata>,
 ): KindResult {
   const { deployment, scoring, nowIso, prevState } = input;
-  if (!deployment.PK || !deployment.problemId) return noopKindResult();
+  // [Issue #2441 / Phase B3] `deployment` flows from
+  // `DeploymentsRepository.forEachCompleteDeploymentPage`, whose
+  // `DeploymentRecord` never carries the physical `PK` (unused here beyond this
+  // guard) — dropped; `problemId` alone is the correct precondition.
+  if (!deployment.problemId) return noopKindResult();
 
   const outputs = parseStackOutputs(deployment.stackOutputs);
   // 差分加点 + cap + baseline 追従の共通ロジックは attack-counter.ts に集約 (uptime-multi の

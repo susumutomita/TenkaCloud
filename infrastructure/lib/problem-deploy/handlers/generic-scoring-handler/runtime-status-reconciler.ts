@@ -7,7 +7,6 @@ import {
 } from "../deploy-handler/adapter-dependencies.js";
 import { slugify } from "../deploy-handler/naming.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
-import { forEachScanPage } from "../shared/ddb-paginate.js";
 import {
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
@@ -29,14 +28,6 @@ import { resolveDeploymentsRepository } from "./shared.js";
  * 既存行 (runtimeProvider 無し) / AWS 行は scan filter で除外され完全に従来どおり。 conditional update で
  * 並行 teardown 等との race を弾く (= 期待 status と一致するときだけ書く)。
  */
-
-/** 非終端の status (= reconcile 対象)。 終端 (DELETED/EXPIRED/AUTO_DELETED) は触らない。 */
-const RECONCILABLE_STATUSES: readonly DeploymentStatus[] = [
-  "PENDING",
-  "IN_PROGRESS",
-  "COMPLETE",
-  "DELETING",
-];
 
 /** RuntimeStatus (adapter の 6-state) を DeploymentStatus に射影する。 */
 export function mapRuntimeStatus(status: RuntimeStatus): DeploymentStatus {
@@ -177,35 +168,22 @@ export async function reconcileRuntimeStatuses(
   deps: RuntimeReconcileDeps,
   nowIso: string,
 ): Promise<void> {
-  // `Limit: 200` は 1 ページあたりの件数上限。forEachScanPage が `LastEvaluatedKey` を追って
-  // 全ページ drain するので、page ごとに `Promise.all` で 1 件ずつ reconcile する従来の挙動は不変。
-  await forEachScanPage(
-    deps.ddb,
-    {
-      TableName: deps.deploymentsTableName,
-      FilterExpression: "attribute_exists(runtimeProvider) AND #s IN (:p, :i, :c, :d)",
-      ExpressionAttributeNames: { "#s": "status" },
-      ExpressionAttributeValues: {
-        ":p": RECONCILABLE_STATUSES[0],
-        ":i": RECONCILABLE_STATUSES[1],
-        ":c": RECONCILABLE_STATUSES[2],
-        ":d": RECONCILABLE_STATUSES[3],
-      },
-      Limit: 200,
-    },
-    async (page) => {
-      const items = page as Partial<DeploymentItem>[];
-      await Promise.all(
-        items.map((item) =>
-          reconcileRuntimeDeployment(deps, item, nowIso).catch((err) => {
-            console.warn("[runtime-reconciler] reconcile failed", {
-              jobId: item.jobId,
-              provider: item.runtimeProvider,
-              message: err instanceof Error ? err.message : String(err),
-            });
-          }),
-        ),
-      );
-    },
-  );
+  // [Issue #2441 / Phase B3] `forEachRuntimeReconcilablePage` absorbs the
+  // 200-per-page Scan + `LastEvaluatedKey` drain into the Deployments seam; the
+  // per-page `Promise.all` reconcile fan-out below stays unchanged.
+  const repository = await resolveDeploymentsRepository(deps);
+  await repository.forEachRuntimeReconcilablePage(async (page) => {
+    const items = page as Partial<DeploymentItem>[];
+    await Promise.all(
+      items.map((item) =>
+        reconcileRuntimeDeployment(deps, item, nowIso).catch((err) => {
+          console.warn("[runtime-reconciler] reconcile failed", {
+            jobId: item.jobId,
+            provider: item.runtimeProvider,
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }),
+      ),
+    );
+  });
 }

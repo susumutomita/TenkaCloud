@@ -28,12 +28,8 @@ import {
   CompositeStatusError,
 } from "../deploy-handler/composite-status.js";
 import type { DeploymentStatus } from "../deploy-handler/types.js";
-import { forEachScanPage } from "../shared/ddb-paginate.js";
 import { reconcileCompositeParentTeardowns } from "./composite-teardown-reconciler.js";
 import { resolveDeploymentsRepository } from "./shared.js";
-
-/** Parents in a non-terminal deploy-phase status are worth re-deriving. */
-const PARENT_RECONCILABLE_STATUSES = ["PENDING", "IN_PROGRESS"] as const;
 
 export interface CompositeParentReconcileDeps {
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
@@ -127,36 +123,27 @@ export async function reconcileCompositeParents(
   deps: CompositeParentReconcileDeps,
   nowIso: string,
 ): Promise<void> {
-  await forEachScanPage(
-    deps.ddb,
-    {
-      TableName: deps.deploymentsTableName,
-      FilterExpression: "runtimeKind = :composite AND #s IN (:p, :i)",
-      ExpressionAttributeNames: { "#s": "status" },
-      ExpressionAttributeValues: {
-        ":composite": "composite",
-        ":p": PARENT_RECONCILABLE_STATUSES[0],
-        ":i": PARENT_RECONCILABLE_STATUSES[1],
-      },
-      Limit: 200,
-    },
-    async (page) => {
-      await Promise.all(
-        page.map((item) => {
-          const parentDeploymentId = String((item as { jobId?: unknown }).jobId ?? "");
-          if (!parentDeploymentId) return Promise.resolve();
-          return reconcileCompositeParentDeployStatus(deps, { parentDeploymentId, nowIso }).catch(
-            (err) => {
-              console.warn("[composite-reconciler] reconcile failed", {
-                parentDeploymentId,
-                message: err instanceof Error ? err.message : String(err),
-              });
-            },
-          );
-        }),
-      );
-    },
-  );
+  // [Issue #2441 / Phase B3] `forEachCompositeDeployReconcilablePage` returns the
+  // domain `DeploymentRecord`, whose `jobId` is a required field (derived from
+  // the physical PK) — the pre-seam raw-item `String(item.jobId ?? "")` guard
+  // defended against a row with no PK at all, which cannot occur through the
+  // seam (mirrors the B2 `applyKindResult` jobId-tightening precedent).
+  const repository = await resolveDeploymentsRepository(deps);
+  await repository.forEachCompositeDeployReconcilablePage(async (page) => {
+    await Promise.all(
+      page.map((item) => {
+        const parentDeploymentId = item.jobId;
+        return reconcileCompositeParentDeployStatus(deps, { parentDeploymentId, nowIso }).catch(
+          (err) => {
+            console.warn("[composite-reconciler] reconcile failed", {
+              parentDeploymentId,
+              message: err instanceof Error ? err.message : String(err),
+            });
+          },
+        );
+      }),
+    );
+  });
 }
 
 /**

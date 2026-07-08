@@ -39,7 +39,13 @@ export async function maybeFireConditionDisruptions(
   // `jobId` (it no longer accepts a raw PK), so the guard also requires it —
   // every real Scan row carries `jobId` (written at deploy time, never
   // removed), so this tightens rather than changes production behavior.
-  if (!shared.eventBusName || !item.problemId || !item.PK || !item.jobId) return;
+  //
+  // [Issue #2441 / Phase B3] `item` flows from
+  // `DeploymentsRepository.forEachCompleteDeploymentPage`, whose
+  // `DeploymentRecord` never carries the physical `PK` — the `!item.PK` half of
+  // this guard would now always be true, silently short-circuiting every tick.
+  // Dropped; `jobId` alone is the correct precondition.
+  if (!shared.eventBusName || !item.problemId || !item.jobId) return;
   const disruptions = shared.problemsDisruptions[item.problemId];
   if (!disruptions || disruptions.length === 0) return;
 

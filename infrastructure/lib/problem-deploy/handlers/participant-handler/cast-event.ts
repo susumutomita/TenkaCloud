@@ -1,4 +1,3 @@
-import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES, ULID_RE } from "../shared/constants.js";
@@ -168,22 +167,18 @@ export async function castEvent(
   const occurredAt = new Date().toISOString();
   const inboxId = ulid();
   const ttl = Math.floor(Date.now() / 1000) + INBOX_TTL_SECONDS;
-  await shared.ddb.send(
-    new PutCommand({
-      TableName: shared.tableName,
-      Item: {
-        PK: `DEPLOYMENT#${input.targetJobId}`,
-        SK: `${INBOX_SK_PREFIX}${occurredAt}#${inboxId}`,
-        eventId: sender.eventId,
-        fromTeamId: sender.teamId,
-        fromJobId: sender.jobId,
-        kind: input.kind,
-        payload: input.payload ?? {},
-        occurredAt,
-        ttl,
-      },
-    }),
-  );
+  // [Issue #2441 / Phase B3] `appendInboxEvent` derives the physical
+  // `INBOX#<occurredAt>#<inboxId>` SK; `inboxId` is generated here (not by the
+  // backend) because it also becomes the domain-visible `CastEventOutcome.eventId`.
+  await deploymentsRepository.appendInboxEvent(input.targetJobId, inboxId, {
+    eventId: sender.eventId,
+    fromTeamId: sender.teamId,
+    fromJobId: sender.jobId,
+    kind: input.kind,
+    payload: input.payload ?? {},
+    occurredAt,
+    ttl,
+  });
   return { kind: "ok", eventId: inboxId, occurredAt };
 }
 

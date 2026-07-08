@@ -790,6 +790,75 @@ export interface DeploymentsRepository {
   ): Promise<CoordinationStateRecord | undefined>;
 
   // ---------------------------------------------------------------------------
+  // [Issue #2441 / Phase B3] Full-table Scans, per-page callback. Unlike the
+  // GSI1/GSI2/GSI3 `list*` reads above (which drain internally and return every
+  // row), these mirror `handlers/shared/ddb-paginate.ts`'s `forEachScanPage`:
+  // the caller supplies `onPage`, and the backend invokes it once per physical
+  // page so per-page fan-out (BatchGet / bounded `Promise.all`) stays intact —
+  // collecting every row into memory first would change that fan-out width.
+  // Every FilterExpression / ProjectionExpression / Limit is a verbatim
+  // relocation of the named pre-seam site.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Every `status=COMPLETE` deployment, optionally scoped to one `eventId`
+   * (`FilterExpression` `#status = :complete [AND eventId = :eventId]`,
+   * `Limit=200`). Site: `generic-scoring-handler/index.ts` (the scoring-tick
+   * dispatch scan). `eventId === undefined` runs the unscoped (global tick)
+   * variant; the caller's own `eventId` equality re-check (confused-deputy
+   * guard for mocks / malformed rows) stays in the caller.
+   */
+  forEachCompleteDeploymentPage(
+    eventId: string | undefined,
+    onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
+  ): Promise<void>;
+  /**
+   * Composite parent rows in a non-terminal deploy-phase status
+   * (`FilterExpression` `runtimeKind = :composite AND #s IN (:p, :i)` fixed to
+   * `PENDING`/`IN_PROGRESS`, `Limit=200`). Site:
+   * `generic-scoring-handler/composite-status-reconciler.ts`
+   * `reconcileCompositeParents`.
+   */
+  forEachCompositeDeployReconcilablePage(
+    onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
+  ): Promise<void>;
+  /**
+   * Composite parent rows currently `DELETING` (`FilterExpression`
+   * `runtimeKind = :composite AND #s = :deleting`, `Limit=200`). Site:
+   * `generic-scoring-handler/composite-teardown-reconciler.ts`
+   * `reconcileCompositeParentTeardowns`. A distinct method from
+   * {@link forEachCompositeDeployReconcilablePage} because the FilterExpression
+   * differs (`=` vs `IN`), per the seam's one-method-per-expression rule.
+   */
+  forEachCompositeTeardownPendingPage(
+    onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
+  ): Promise<void>;
+  /**
+   * Active non-AWS runtime rows (`FilterExpression`
+   * `attribute_exists(runtimeProvider) AND #s IN (:p, :i, :c, :d)` fixed to
+   * `PENDING`/`IN_PROGRESS`/`COMPLETE`/`DELETING`, `Limit=200`). Site:
+   * `generic-scoring-handler/runtime-status-reconciler.ts`
+   * `reconcileRuntimeStatuses`.
+   */
+  forEachRuntimeReconcilablePage(
+    onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
+  ): Promise<void>;
+  /**
+   * COMPLETE deployments for one `eventId` with a team score
+   * (`FilterExpression` `#status = :complete AND eventId = :eventId AND
+   * attribute_exists(teamId) AND attribute_exists(score)`,
+   * `ProjectionExpression "eventId, teamId, problemId, score"`,
+   * `ConsistentRead=true`, `Limit=200`). Site:
+   * `generic-scoring-handler/runtime-score-feed.ts` `publishRuntimeScoreFeed`.
+   */
+  forEachRuntimeScoreFeedPage(
+    eventId: string,
+    onPage: (
+      items: readonly Pick<DeploymentRecord, "eventId" | "teamId" | "problemId" | "score">[],
+    ) => Promise<void>,
+  ): Promise<void>;
+
+  // ---------------------------------------------------------------------------
   // [Issue #2441 / Phase B2] Conditional/atomic writes. Every DynamoDB
   // UpdateExpression / ConditionExpression lives in the backend verbatim; callers
   // consume outcome data instead of catching backend-specific CCF exceptions.
@@ -933,6 +1002,43 @@ export interface DeploymentsRepository {
     jobId: string,
     tenantId: string,
     endsAt: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+
+  // ---------------------------------------------------------------------------
+  // [Issue #2441 / Phase B3] Sub-aggregate writes (verbatim Puts / conditional
+  // Put moved from `handlers/shared/`).
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Appends one score-event row (`PK = DEPLOYMENT#<jobId>`, `SK =
+   * EVENT#<occurredAt>#<ulid>` — the physical SK is derived here, never
+   * supplied by the caller). Site: `handlers/shared/score-event.ts`
+   * `writeScoreEvent` (callers: `apply-kind-result.ts` / `submit-flag.ts` /
+   * `reveal-hint.ts`).
+   */
+  appendScoreEvent(record: ScoreEventRecord): Promise<void>;
+  /**
+   * Appends one inter-team inbox row (`PK = DEPLOYMENT#<jobId>`, `SK =
+   * INBOX#<occurredAt>#<inboxId>`). `jobId` is the **target** deployment (the
+   * recipient's partition); `inboxId` is the caller-generated ulid that also
+   * becomes the domain-visible cast-event id. Site:
+   * `participant-handler/cast-event.ts` `castEvent`.
+   */
+  appendInboxEvent(jobId: string, inboxId: string, record: InboxEventRecord): Promise<void>;
+  /**
+   * Optimistic-lock write of the per-event coordination state (`PutItem`,
+   * `ConditionExpression "attribute_not_exists(version) OR version =
+   * :expected"`, `version` set to `expectedVersion + 1`). Mirrors the A2/B2
+   * union contract: `conflict` folds the DynamoDB `ConditionalCheckFailed`
+   * instead of throwing (never `not_found` — a first write creates the row).
+   * Site: `participant-handler/coordination-store.ts` `writeCoordinationState`.
+   */
+  writeCoordinationState(
+    tenantId: string,
+    eventId: string,
+    state: unknown,
+    expectedVersion: number,
     at: string,
   ): Promise<DeploymentMutationOutcome>;
 }

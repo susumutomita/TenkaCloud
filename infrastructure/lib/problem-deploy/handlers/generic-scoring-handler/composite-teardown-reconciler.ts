@@ -29,7 +29,6 @@ import {
   listCompositeTargets,
 } from "../deploy-handler/composite-repository.js";
 import type { DeploymentStatus } from "../deploy-handler/types.js";
-import { forEachScanPage } from "../shared/ddb-paginate.js";
 import { resolveDeploymentsRepository } from "./shared.js";
 
 /** A target is confirmed torn down only in one of these terminal states. */
@@ -131,33 +130,24 @@ export async function reconcileCompositeParentTeardowns(
   deps: CompositeTeardownReconcileDeps,
   nowIso: string,
 ): Promise<void> {
-  await forEachScanPage(
-    deps.ddb,
-    {
-      TableName: deps.deploymentsTableName,
-      FilterExpression: "runtimeKind = :composite AND #s = :deleting",
-      ExpressionAttributeNames: { "#s": "status" },
-      ExpressionAttributeValues: {
-        ":composite": "composite",
-        ":deleting": "DELETING",
-      },
-      Limit: 200,
-    },
-    async (page) => {
-      await Promise.all(
-        page.map((item) => {
-          const parentDeploymentId = String((item as { jobId?: unknown }).jobId ?? "");
-          if (!parentDeploymentId) return Promise.resolve();
-          return reconcileCompositeParentTeardown(deps, { parentDeploymentId, nowIso }).catch(
-            (err) => {
-              console.warn("[composite-teardown-reconciler] reconcile failed", {
-                parentDeploymentId,
-                message: err instanceof Error ? err.message : String(err),
-              });
-            },
-          );
-        }),
-      );
-    },
-  );
+  // [Issue #2441 / Phase B3] `forEachCompositeTeardownPendingPage` returns the
+  // domain `DeploymentRecord`, whose `jobId` is a required field (derived from
+  // the physical PK) — mirrors the same tightening in
+  // `composite-status-reconciler.ts` `reconcileCompositeParents`.
+  const repository = await resolveDeploymentsRepository(deps);
+  await repository.forEachCompositeTeardownPendingPage(async (page) => {
+    await Promise.all(
+      page.map((item) => {
+        const parentDeploymentId = item.jobId;
+        return reconcileCompositeParentTeardown(deps, { parentDeploymentId, nowIso }).catch(
+          (err) => {
+            console.warn("[composite-teardown-reconciler] reconcile failed", {
+              parentDeploymentId,
+              message: err instanceof Error ? err.message : String(err),
+            });
+          },
+        );
+      }),
+    );
+  });
 }

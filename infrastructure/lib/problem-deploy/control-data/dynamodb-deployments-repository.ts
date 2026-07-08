@@ -4,11 +4,14 @@ import {
   PutCommand,
   QueryCommand,
   type QueryCommandInput,
+  ScanCommand,
+  type ScanCommandInput,
   TransactWriteCommand,
   type TransactWriteCommandInput,
   UpdateCommand,
   type UpdateCommandInput,
 } from "@aws-sdk/lib-dynamodb";
+import { ulid } from "ulid";
 import {
   compositeTargetGsi3Pk,
   compositeTargetGsi3Sk,
@@ -54,6 +57,7 @@ import type {
 const DEPLOYMENT_PK_PREFIX = "DEPLOYMENT#" as const;
 const META_SK = "META" as const;
 const EVENT_SK_PREFIX = "EVENT#" as const;
+const INBOX_SK_PREFIX = "INBOX#" as const;
 const COORD_STATE_SK = "STATE" as const;
 
 /** Base PK for a deployment partition. */
@@ -273,6 +277,32 @@ export class DynamoDbDeploymentsRepository implements DeploymentsRepository {
       if (!exclusiveStartKey) break;
     }
     return items;
+  }
+
+  /**
+   * [Issue #2441 / Phase B3] Drain a full-table Scan, invoking `onPage` once per
+   * physical page (mirrors `handlers/shared/ddb-paginate.ts`'s
+   * `forEachScanPage`) instead of collecting every row into memory — the
+   * per-page callers below depend on this to keep their per-page BatchGet /
+   * bounded `Promise.all` fan-out unchanged. The caller must NOT pass
+   * `ExclusiveStartKey` (this loop owns it).
+   */
+  private async scanAllPages(
+    input: Omit<ScanCommandInput, "TableName" | "ExclusiveStartKey">,
+    onPage: (items: Record<string, unknown>[]) => Promise<void>,
+  ): Promise<void> {
+    let exclusiveStartKey: Record<string, unknown> | undefined;
+    do {
+      const out = await this.ddb.send(
+        new ScanCommand({
+          TableName: this.tableName,
+          ...input,
+          ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
+        }),
+      );
+      await onPage((out.Items ?? []) as Record<string, unknown>[]);
+      exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
+    } while (exclusiveStartKey);
   }
 
   // -- Point reads ----------------------------------------------------------
@@ -581,6 +611,116 @@ export class DynamoDbDeploymentsRepository implements DeploymentsRepository {
     const item = out.Item as Record<string, unknown> | undefined;
     if (!item) return undefined;
     return { state: item.state, version: Number(item.version ?? 0) };
+  }
+
+  // -- Full-table Scans (per-page callback) --------------------------------
+
+  async forEachCompleteDeploymentPage(
+    eventId: string | undefined,
+    onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
+  ): Promise<void> {
+    const input: Omit<ScanCommandInput, "TableName" | "ExclusiveStartKey"> = eventId
+      ? {
+          FilterExpression: "#status = :complete AND eventId = :eventId",
+          ExpressionAttributeNames: { "#status": "status" },
+          ExpressionAttributeValues: { ":complete": "COMPLETE", ":eventId": eventId },
+          Limit: 200,
+        }
+      : {
+          FilterExpression: "#status = :complete",
+          ExpressionAttributeNames: { "#status": "status" },
+          ExpressionAttributeValues: { ":complete": "COMPLETE" },
+          Limit: 200,
+        };
+    await this.scanAllPages(input, async (items) => {
+      await onPage(items.map(itemToRecord));
+    });
+  }
+
+  async forEachCompositeDeployReconcilablePage(
+    onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
+  ): Promise<void> {
+    await this.scanAllPages(
+      {
+        FilterExpression: "runtimeKind = :composite AND #s IN (:p, :i)",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":composite": "composite",
+          ":p": "PENDING",
+          ":i": "IN_PROGRESS",
+        },
+        Limit: 200,
+      },
+      async (items) => {
+        await onPage(items.map(itemToRecord));
+      },
+    );
+  }
+
+  async forEachCompositeTeardownPendingPage(
+    onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
+  ): Promise<void> {
+    await this.scanAllPages(
+      {
+        FilterExpression: "runtimeKind = :composite AND #s = :deleting",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: { ":composite": "composite", ":deleting": "DELETING" },
+        Limit: 200,
+      },
+      async (items) => {
+        await onPage(items.map(itemToRecord));
+      },
+    );
+  }
+
+  async forEachRuntimeReconcilablePage(
+    onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
+  ): Promise<void> {
+    await this.scanAllPages(
+      {
+        FilterExpression: "attribute_exists(runtimeProvider) AND #s IN (:p, :i, :c, :d)",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":p": "PENDING",
+          ":i": "IN_PROGRESS",
+          ":c": "COMPLETE",
+          ":d": "DELETING",
+        },
+        Limit: 200,
+      },
+      async (items) => {
+        await onPage(items.map(itemToRecord));
+      },
+    );
+  }
+
+  async forEachRuntimeScoreFeedPage(
+    eventId: string,
+    onPage: (
+      items: readonly Pick<DeploymentRecord, "eventId" | "teamId" | "problemId" | "score">[],
+    ) => Promise<void>,
+  ): Promise<void> {
+    await this.scanAllPages(
+      {
+        FilterExpression:
+          "#status = :complete AND eventId = :eventId AND attribute_exists(teamId) AND attribute_exists(score)",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: { ":complete": "COMPLETE", ":eventId": eventId },
+        ProjectionExpression: "eventId, teamId, problemId, score",
+        ConsistentRead: true,
+        Limit: 200,
+      },
+      async (items) => {
+        await onPage(
+          items.map((item) => ({
+            eventId: item.eventId as string | undefined,
+            teamId: item.teamId as string | undefined,
+            problemId: item.problemId as string,
+            score: item.score as number | undefined,
+          })),
+        );
+      },
+    );
   }
 
   // -- Conditional / atomic writes ------------------------------------------
@@ -1236,5 +1376,88 @@ export class DynamoDbDeploymentsRepository implements DeploymentsRepository {
       },
       "not_found",
     );
+  }
+
+  // -- Sub-aggregate writes (verbatim Puts) ----------------------------------
+
+  /**
+   * [Issue #2441 / Phase B3] The physical SK (`EVENT#<occurredAt>#<ulid>`) is
+   * derived here, not by the caller — mirrors `handlers/shared/score-event.ts`
+   * `buildScoreEventItem`'s SK construction, minus the PK/SK the domain
+   * `ScoreEventRecord` never carries.
+   */
+  async appendScoreEvent(record: ScoreEventRecord): Promise<void> {
+    await this.ddb.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          PK: deploymentPk(record.jobId),
+          SK: `${EVENT_SK_PREFIX}${record.occurredAt}#${ulid()}`,
+          ...record,
+        },
+      }),
+    );
+  }
+
+  /**
+   * [Issue #2441 / Phase B3] `jobId` is the recipient (target) deployment, not
+   * part of `InboxEventRecord` — mirrors `participant-handler/cast-event.ts`
+   * `castEvent`'s Put, which addresses the target's partition. `inboxId` is
+   * generated by the caller (it round-trips into the domain-visible
+   * `CastEventOutcome`), so it is a parameter rather than derived here.
+   */
+  async appendInboxEvent(jobId: string, inboxId: string, record: InboxEventRecord): Promise<void> {
+    await this.ddb.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          PK: deploymentPk(jobId),
+          SK: `${INBOX_SK_PREFIX}${record.occurredAt}#${inboxId}`,
+          eventId: record.eventId,
+          fromTeamId: record.fromTeamId,
+          fromJobId: record.fromJobId,
+          kind: record.kind,
+          payload: record.payload ?? {},
+          occurredAt: record.occurredAt,
+          ttl: record.ttl,
+        },
+      }),
+    );
+  }
+
+  /**
+   * [Issue #2441 / Phase B3] Verbatim relocation of
+   * `participant-handler/coordination-store.ts`'s optimistic-lock Put — the
+   * `ConditionalCheckFailedException` catch folds into `{ outcome: "conflict" }`
+   * instead of throwing (A2/B2 union contract). Never `not_found`: an absent
+   * row is a valid target for the first write (`expectedVersion` 0).
+   */
+  async writeCoordinationState(
+    tenantId: string,
+    eventId: string,
+    state: unknown,
+    expectedVersion: number,
+    at: string,
+  ): Promise<DeploymentMutationOutcome> {
+    try {
+      await this.ddb.send(
+        new PutCommand({
+          TableName: this.tableName,
+          Item: {
+            PK: coordinationPk(tenantId, eventId),
+            SK: COORD_STATE_SK,
+            state,
+            version: expectedVersion + 1,
+            updatedAt: at,
+          },
+          ConditionExpression: "attribute_not_exists(version) OR version = :expected",
+          ExpressionAttributeValues: { ":expected": expectedVersion },
+        }),
+      );
+      return { outcome: "updated" };
+    } catch (err) {
+      if (isConditionalCheckFailed(err)) return { outcome: "conflict" };
+      throw err;
+    }
   }
 }

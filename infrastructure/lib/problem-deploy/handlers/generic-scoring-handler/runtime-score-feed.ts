@@ -1,7 +1,7 @@
 import { GetParameterCommand, type SSMClient } from "@aws-sdk/client-ssm";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem } from "../deploy-handler/types.js";
-import { forEachScanPage } from "../shared/ddb-paginate.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 
 const MIN_RUNTIME_SCORE_POINTS = -2_147_483_648;
 const MAX_RUNTIME_SCORE_POINTS = 2_147_483_647;
@@ -33,52 +33,43 @@ export async function publishRuntimeScoreFeed(
   if (config.runtimeProblemIds.length === 0) return;
   const scoresByTeam = new Map<string, number>();
   const runtimeProblemIds = new Set(config.runtimeProblemIds);
-  await forEachScanPage(
-    dependencies.ddb,
-    {
-      TableName: config.deploymentsTableName,
-      FilterExpression:
-        "#status = :complete AND eventId = :eventId AND attribute_exists(teamId) AND attribute_exists(score)",
-      ExpressionAttributeNames: { "#status": "status" },
-      ExpressionAttributeValues: {
-        ":complete": "COMPLETE",
-        ":eventId": config.eventId,
-      },
-      ProjectionExpression: "eventId, teamId, problemId, score",
-      ConsistentRead: true,
-      Limit: 200,
-    },
-    async (page) => {
-      for (const row of page as Partial<DeploymentItem>[]) {
-        if (
-          row.eventId !== config.eventId ||
-          typeof row.teamId !== "string" ||
-          typeof row.problemId !== "string" ||
-          !runtimeProblemIds.has(row.problemId)
-        ) {
-          continue;
-        }
-        const points = row.score;
-        if (
-          typeof points !== "number" ||
-          !Number.isSafeInteger(points) ||
-          points < MIN_RUNTIME_SCORE_POINTS ||
-          points > MAX_RUNTIME_SCORE_POINTS
-        ) {
-          throw new Error(`invalid runtime score for team ${row.teamId}`);
-        }
-        const total = (scoresByTeam.get(row.teamId) ?? 0) + points;
-        if (
-          !Number.isSafeInteger(total) ||
-          total < MIN_RUNTIME_SCORE_POINTS ||
-          total > MAX_RUNTIME_SCORE_POINTS
-        ) {
-          throw new Error(`runtime score overflow for team ${row.teamId}`);
-        }
-        scoresByTeam.set(row.teamId, total);
+  // [Issue #2441 / Phase B3] `forEachRuntimeScoreFeedPage` absorbs the
+  // 200-per-page, `ConsistentRead` Scan + `LastEvaluatedKey` drain into the
+  // Deployments seam; the per-row aggregation below is unchanged.
+  const repository = await resolveDeploymentsRepository({
+    ddb: dependencies.ddb,
+    deploymentsTableName: config.deploymentsTableName,
+  });
+  await repository.forEachRuntimeScoreFeedPage(config.eventId, async (page) => {
+    for (const row of page as Partial<DeploymentItem>[]) {
+      if (
+        row.eventId !== config.eventId ||
+        typeof row.teamId !== "string" ||
+        typeof row.problemId !== "string" ||
+        !runtimeProblemIds.has(row.problemId)
+      ) {
+        continue;
       }
-    },
-  );
+      const points = row.score;
+      if (
+        typeof points !== "number" ||
+        !Number.isSafeInteger(points) ||
+        points < MIN_RUNTIME_SCORE_POINTS ||
+        points > MAX_RUNTIME_SCORE_POINTS
+      ) {
+        throw new Error(`invalid runtime score for team ${row.teamId}`);
+      }
+      const total = (scoresByTeam.get(row.teamId) ?? 0) + points;
+      if (
+        !Number.isSafeInteger(total) ||
+        total < MIN_RUNTIME_SCORE_POINTS ||
+        total > MAX_RUNTIME_SCORE_POINTS
+      ) {
+        throw new Error(`runtime score overflow for team ${row.teamId}`);
+      }
+      scoresByTeam.set(row.teamId, total);
+    }
+  });
   if (scoresByTeam.size === 0) return;
 
   const parameter = await dependencies.ssm.send(
