@@ -379,4 +379,74 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
       );
     });
   });
+
+  describe("Issue #2440 (ADR-049 §5.1 Phase A5): eventsTable/teamsTable are optional (pure SQL backend)", () => {
+    /**
+     * `ProblemDeployBackendStack` does not synth Events/Teams tables when
+     * `controlDataBackend` is a pure SQL value (turso|sql), so it hands `undefined` cross-stack
+     * refs to `AdminConsoleInsightStack`. This must synth cleanly with no EVENTS_TABLE_NAME /
+     * TEAMS_TABLE_NAME env and no read grant on a nonexistent table.
+     */
+    function synthWithoutEventsTeamsTables(): Template {
+      const app = new cdk.App();
+      const fixtures = new cdk.Stack(app, "Fixtures2440", {
+        env: { account: "123456789012", region: "ap-northeast-1" },
+      });
+      const userPool = new UserPool(fixtures, "UserPool", { selfSignUpEnabled: false });
+      const userPoolClient = userPool.addClient("UserClient");
+      const deployments = new Table(fixtures, "Deployments", {
+        partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
+        sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
+      });
+
+      const stack = new AdminConsoleInsightStack(app, "InsightStack2440", {
+        env: { account: "123456789012", region: "ap-northeast-1" },
+        cognitoUserPool: userPool,
+        cognitoUserClientId: userPoolClient.userPoolClientId,
+        deploymentsTable: deployments,
+        // eventsTable / teamsTable omitted (= undefined, mirroring the pure SQL backend).
+        controlDataBackend: "turso",
+        tursoDatabaseUrl: "libsql://example.turso.io",
+        tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
+      });
+      return Template.fromStack(stack);
+    }
+
+    it("should synth without throwing and omit EVENTS_TABLE_NAME/TEAMS_TABLE_NAME env", () => {
+      const tpl = synthWithoutEventsTeamsTables();
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Environment: Match.objectLike({
+            Variables: Match.not(
+              Match.objectLike({
+                EVENTS_TABLE_NAME: Match.anyValue(),
+                TEAMS_TABLE_NAME: Match.anyValue(),
+              }),
+            ),
+          }),
+        }),
+      );
+    });
+
+    it("should grant read-only access to Deployments only (no dangling grant on a nonexistent Events/Teams table)", () => {
+      const tpl = synthWithoutEventsTeamsTables();
+      const policies = tpl.findResources("AWS::IAM::Policy");
+      const actions = Object.values(policies).flatMap((p) =>
+        (
+          (
+            p as {
+              Properties?: { PolicyDocument?: { Statement?: Array<{ Action?: unknown }> } };
+            }
+          ).Properties?.PolicyDocument?.Statement ?? []
+        ).flatMap((s) => ([] as unknown[]).concat(s.Action ?? [])),
+      );
+      // Turso SSM read is still granted (control-data seam), but no dynamodb grant references a
+      // second/third table beyond Deployments (there is exactly 1 DynamoDB table in this stack's
+      // fixtures, so any dynamodb:* grant necessarily scopes to it alone).
+      expect(actions).toContain("ssm:GetParameter");
+      const tableCount = Object.keys(tpl.findResources("AWS::DynamoDB::Table")).length;
+      expect(tableCount).toBe(0); // Deployments lives in the Fixtures2440 stack, not this one.
+    });
+  });
 });

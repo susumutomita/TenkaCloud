@@ -7,6 +7,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
+import { controlDataBackendEnv } from "./control-data-backend-env.js";
 import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
 import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-credential-store.js";
 import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/sakura-credential-store.js";
@@ -16,15 +17,21 @@ export interface GenericScoringLambdaProps {
   /**
    * Events table。Event status の auto-transition (#557 / #539) を 1-min tick で reconcile する。
    * 採点 dispatcher とは独立の責務だが、 cron schedule (= rate(1 minute)) を共有する。
+   *
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
+   * `EVENTS_TABLE_NAME` は注入せず grant も付与しない — Events 読み書きは repository seam
+   * (`resolveEventsRepository` / `controlDataRuntime`) が SQL executor 直結で処理する。
    */
-  readonly eventsTable: ITable;
+  readonly eventsTable?: ITable;
   /**
    * [ADR-047 follow-up] Teams table (read-only)。 scheduled auto-deploy が `bulkDeployEvent` 経由で
    * event の teams を Query して teams × problems の deployment 行を一括生成するため。 これを配線すると
    * `buildScheduledDeployResources()` が有効化され、 reconciler が deployAt 経過の DRAFT event を
-   * 自動 deploy する (未配線なら dormant、 teardownAt の鏡像)。
+   * 自動 deploy する (未配線なら dormant、 teardownAt の鏡像)。 {@link eventsTable} と同じ条件で
+   * 純 SQL backend 選択時は `undefined`。
    */
-  readonly teamsTable: ITable;
+  readonly teamsTable?: ITable;
   /**
    * [ADR-047 follow-up] `{ [problemId]: problemDir }` の catalog。 scheduled auto-deploy が
    * problemId → problemDir を解決して DeployCreateRequested を組み立てるため。 EventApiLambda の
@@ -88,6 +95,17 @@ export interface GenericScoringLambdaProps {
    * credential 解決用の environment 名 (`/<env>/tenants/.../{sakura-api-key|azure-credential|gcp-credential}`)。
    */
   readonly environmentName: string;
+  /**
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] control-plane data backend (dynamodb|turso|sql|
+   * turso-mirror|sql-mirror)。 event status reconcile (`resolveEventsRepository`) と manual prune
+   * tick (`controlDataRuntime.needsManualPrune`) の両方がこの env を読む。default (未指定 /
+   * `dynamodb`) は env を足さず byte 互換。`EventApiLambda` と同型の注入パターン。
+   */
+  readonly controlDataBackend?: string;
+  /** Public remote libSQL URL. Never contains authentication material. */
+  readonly tursoDatabaseUrl?: string;
+  /** SSM SecureString parameter name containing the libSQL auth token. */
+  readonly tursoAuthTokenParameterName?: string;
 }
 
 /**
@@ -130,7 +148,9 @@ export class GenericScoringLambda extends Construct {
       memorySize: 1024,
       environment: {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
-        EVENTS_TABLE_NAME: props.eventsTable.tableName,
+        // Issue #2440: 純 SQL backend では table が無いので env も足さない (= cold start が
+        // EVENTS_TABLE_NAME 不在でも通る。 shared builder 側の緩和と対で成立する)。
+        ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
         PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName,
         // #1422: condition-triggered disruption の publish 先 (手動 fire と同じ deploy bus)。
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
@@ -143,7 +163,13 @@ export class GenericScoringLambda extends Construct {
         COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName,
         // [ADR-047 follow-up] scheduled auto-deploy 用。 buildScheduledDeployResources がこの env +
         // BATTLE_PROBLEMS_CATALOG (下の define) を見て有効化する (未設定なら scheduled deploy は dormant)。
-        TEAMS_TABLE_NAME: props.teamsTable.tableName,
+        ...(props.teamsTable ? { TEAMS_TABLE_NAME: props.teamsTable.tableName } : {}),
+        // [Issue #2440]: control-plane data backend (default dynamodb は env を足さず byte 互換)。
+        ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
+        ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
+        ...(props.tursoAuthTokenParameterName
+          ? { TURSO_AUTH_TOKEN_PARAMETER_NAME: props.tursoAuthTokenParameterName }
+          : {}),
         NODE_OPTIONS: "--enable-source-maps",
       },
       // problem catalog (scoring / endpoints / phases) を bundle 時に literal 置換する。
@@ -181,7 +207,8 @@ export class GenericScoringLambda extends Construct {
     props.deploymentsTable.grantReadWriteData(this.fn);
     // Events table: Scan で DEPLOYING / TEARDOWN 行を拾い、 conditional UpdateItem で
     // READY / ARCHIVED に遷移させる (#557 #539)。 BatchGet で scoringLocked も読む (#558)。
-    props.eventsTable.grantReadWriteData(this.fn);
+    // Issue #2440: 純 SQL backend では table 自体が無いので grant も付与しない。
+    props.eventsTable?.grantReadWriteData(this.fn);
     // Endpoint registry: per (tenant, team, problem) の override 行を Query する (= read-only)。
     props.endpointsTable.grantReadData(this.fn);
     // [ADR-033 / #1665] disruptions audit table: operator-fired disruption の active 採点効果を
@@ -193,10 +220,24 @@ export class GenericScoringLambda extends Construct {
     // [ADR-047 follow-up] scheduled auto-deploy: bulkDeployEvent が event の teams を Query する
     // (= read-only)。 Deployments への TransactWrite / event bus publish は既存 grant を再利用する
     // (deployments.grantReadWriteData + eventBus.grantPutEventsTo)。 これで scheduled deploy が有効化される。
-    props.teamsTable.grantReadData(this.fn);
+    props.teamsTable?.grantReadData(this.fn);
     // #1422: condition-triggered disruption を event bus に publish する (= events:PutEvents、
     // 当該 bus に scope された least-privilege)。
     props.eventBus.grantPutEventsTo(this.fn);
+    // [Issue #2440]: turso/sql backend が Turso auth token を読むための SSM SecureString
+    // read 権限。 未配線 (= dynamodb default) なら付与しない (`EventApiLambda` と同型)。
+    if (props.tursoAuthTokenParameterName) {
+      this.fn.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ["ssm:GetParameter"],
+          resources: [
+            `arn:${Stack.of(this).partition}:ssm:${Stack.of(this).region}:${
+              Stack.of(this).account
+            }:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
+          ],
+        }),
+      );
+    }
 
     // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler が per-team credential
     // (sakura/azure/gcp SecureString) を decrypt 取得する。 deploy-api-lambda と同じ prefix-scope。

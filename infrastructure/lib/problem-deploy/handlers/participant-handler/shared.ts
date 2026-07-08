@@ -51,7 +51,11 @@ export interface ParticipantSharedResources {
 export function buildParticipantSharedResources(): ParticipantSharedResources {
   return {
     tableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
-    eventsTableName: getEnv("EVENTS_TABLE_NAME"),
+    // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso|sql) では Events table
+    // 自体が synth されず env も配線されないため、module-load を fail-fast にすると cold start
+    // が落ちる。空文字 default に緩和し、dynamodb / mirror backend の誤設定は runtime resolver
+    // (`runtime-repositories.ts`) が fail loud に受ける (= silent fallback にはならない)。
+    eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",
     // 未配線時 (= legacy stack) でも import が落ちないよう env 必須にしない (= 空文字)。
     // route 側で空チェックして 503 を返す経路にする。
     endpointsTableName: process.env.PROBLEM_ENDPOINTS_TABLE_NAME ?? "",

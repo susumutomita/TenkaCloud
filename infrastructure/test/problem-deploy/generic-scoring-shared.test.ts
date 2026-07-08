@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isScoringActive } from "../../lib/problem-deploy/handlers/generic-scoring-handler/scoring-active";
 import {
+  buildSharedResources,
   joinUrl,
   parseScoringState,
   probeUrl,
@@ -15,6 +16,31 @@ import {
  * 旧 health-check-handler から `generic-scoring-handler/` に relocate された helper の test。
  * 動作不変 (= health-check-handler.test.ts と同一 assertion)。
  */
+
+describe("buildSharedResources cold start (#2440 ADR-049 §5.1 Phase A5)", () => {
+  const REQUIRED_ENV = {
+    DEPLOYMENTS_TABLE_NAME: "Deployments",
+    PROBLEM_ENDPOINTS_TABLE_NAME: "ProblemEndpoints",
+  };
+
+  beforeEach(() => {
+    for (const [k, v] of Object.entries(REQUIRED_ENV)) process.env[k] = v;
+    delete process.env.EVENTS_TABLE_NAME;
+  });
+  afterEach(() => {
+    for (const k of Object.keys(REQUIRED_ENV)) delete process.env[k];
+  });
+
+  it("should not throw and should default eventsTableName to '' when EVENTS_TABLE_NAME is unset (pure SQL backend cold start)", () => {
+    expect(() => buildSharedResources()).not.toThrow();
+    expect(buildSharedResources().eventsTableName).toBe("");
+  });
+
+  it("should still read EVENTS_TABLE_NAME when present (dynamodb/mirror backend)", () => {
+    process.env.EVENTS_TABLE_NAME = "Events";
+    expect(buildSharedResources().eventsTableName).toBe("Events");
+  });
+});
 
 describe("isScoringActive (relocated from health-check-handler)", () => {
   const NOW = "2026-05-08T10:00:00.000Z";

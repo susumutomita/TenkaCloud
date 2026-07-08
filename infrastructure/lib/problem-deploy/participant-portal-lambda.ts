@@ -14,6 +14,7 @@ import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import type { ILogGroup } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
+import { controlDataBackendEnv } from "./control-data-backend-env.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface ParticipantPortalLambdaProps {
@@ -21,8 +22,13 @@ export interface ParticipantPortalLambdaProps {
   /**
    * Events table (ADR-006 Notifications で参照)。
    * `GET /portal/me/notifications` が `PK=EVENT#<eventId>` で `dynamodb:Query`。
+   *
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
+   * `EVENTS_TABLE_NAME` も EventsRead IAM も付与しない — notifications / feature-flags は
+   * repository seam (`controlDataRuntime`) が SQL executor 直結で処理する。
    */
-  readonly eventsTable: ITable;
+  readonly eventsTable?: ITable;
   /**
    * ADR-012 Phase 3.A: Endpoint registry テーブル。
    * `/portal/me/problems/:problemId/endpoints` 系 route が読み書きする。
@@ -63,6 +69,17 @@ export interface ParticipantPortalLambdaProps {
    * env を付与する。 未指定 (= CodeBuild 経路 / flag OFF) では追加せず、 synth は byte 互換。
    */
   readonly deployJobLogGroup?: ILogGroup;
+  /**
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] control-plane data backend (dynamodb|turso|sql|
+   * turso-mirror|sql-mirror)。 notifications / feature-flags の repository seam
+   * (`controlDataRuntime`) がこの env を読む。default (未指定 / `dynamodb`) は env を足さず
+   * byte 互換。`EventApiLambda` と同型の注入パターン。
+   */
+  readonly controlDataBackend?: string;
+  /** Public remote libSQL URL. Never contains authentication material. */
+  readonly tursoDatabaseUrl?: string;
+  /** SSM SecureString parameter name containing the libSQL auth token. */
+  readonly tursoAuthTokenParameterName?: string;
 }
 
 /**
@@ -122,14 +139,19 @@ export class ParticipantPortalLambda extends Construct {
         // 返し、 fail-closed で `scoring_not_started` に倒れて Event は採点中なのに flag 提出
         // が「競技はまだ開始していません」 で reject されていた。
         // 書き込みは event-handler / health-check 側に閉じる (= participant は read-only)。
-        EventsRead: new PolicyDocument({
-          statements: [
-            new PolicyStatement({
-              actions: ["dynamodb:Query", "dynamodb:GetItem"],
-              resources: [props.eventsTable.tableArn],
-            }),
-          ],
-        }),
+        // Issue #2440: 純 SQL backend では table 自体が無いので policy を足さない。
+        ...(props.eventsTable
+          ? {
+              EventsRead: new PolicyDocument({
+                statements: [
+                  new PolicyStatement({
+                    actions: ["dynamodb:Query", "dynamodb:GetItem"],
+                    resources: [props.eventsTable.tableArn],
+                  }),
+                ],
+              }),
+            }
+          : {}),
         // ADR-012 Phase 3.A: Endpoint registry の override 行 R/W。
         // PutItem / DeleteItem / Query で 1 (tenant, team, problem, slot) を扱う。
         EndpointsRW: new PolicyDocument({
@@ -240,9 +262,16 @@ export class ParticipantPortalLambda extends Construct {
       role,
       environment: {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
-        EVENTS_TABLE_NAME: props.eventsTable.tableName,
+        // Issue #2440: 純 SQL backend では table が無いので env も足さない。
+        ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
         PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName,
         DEPLOY_ENVIRONMENT: props.environmentName,
+        // [Issue #2440]: control-plane data backend (default dynamodb は env を足さず byte 互換)。
+        ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
+        ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
+        ...(props.tursoAuthTokenParameterName
+          ? { TURSO_AUTH_TOKEN_PARAMETER_NAME: props.tursoAuthTokenParameterName }
+          : {}),
         NODE_OPTIONS: "--enable-source-maps",
         // Issue #2291: deploy-logs.ts が runtime に process.env で読む job log group 名 (= jobId stream
         // の親 group)。 deployViaLambda ON のときだけ注入し、 flag OFF では env そのものが無い
@@ -265,6 +294,21 @@ export class ParticipantPortalLambda extends Construct {
         "process.env.PROBLEM_ENDPOINTS": JSON.stringify(JSON.stringify(props.problemsEndpoints)),
       },
     });
+
+    // [Issue #2440]: turso/sql backend が Turso auth token を読むための SSM SecureString
+    // read 権限。 未配線 (= dynamodb default) なら付与しない (`EventApiLambda` と同型)。
+    if (props.tursoAuthTokenParameterName) {
+      this.fn.addToRolePolicy(
+        new PolicyStatement({
+          actions: ["ssm:GetParameter"],
+          resources: [
+            `arn:${stack.partition}:ssm:${stack.region}:${
+              stack.account
+            }:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
+          ],
+        }),
+      );
+    }
 
     this.url = this.fn.addFunctionUrl({
       authType: FunctionUrlAuthType.NONE,

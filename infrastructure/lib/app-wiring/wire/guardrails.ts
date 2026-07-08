@@ -77,8 +77,10 @@ function freeTierTableNames(args: {
   const problem = args.problemDeployBackendStack;
   return [
     { label: "deployments", name: problem.deploymentsTable.tableName },
-    { label: "events", name: problem.eventsTable.tableName },
-    { label: "teams", name: problem.teamsTable.tableName },
+    // Issue #2440: 純 SQL backend では Events/Teams table 自体が無いのでアラームも作らない
+    // (= freeTierLambdaNames の participantPortal と同じ conditional-spread パターン)。
+    ...(problem.eventsTable ? [{ label: "events", name: problem.eventsTable.tableName }] : []),
+    ...(problem.teamsTable ? [{ label: "teams", name: problem.teamsTable.tableName }] : []),
     { label: "competitor-accounts", name: problem.competitorAccountsTable.tableName },
     { label: "problem-endpoints", name: problem.problemEndpointsTable.tableName },
     { label: "tenant-mapping", name: args.bootstrapTemplateStack.tenantMappingTable.tableName },

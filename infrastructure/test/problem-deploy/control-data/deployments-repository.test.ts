@@ -666,7 +666,32 @@ describe("resolveDeploymentsRepository (runtime)", () => {
     expect(repo).toBeInstanceOf(DynamoDbDeploymentsRepository);
   });
 
-  it("should propagate the factory's Phase B4 fail-loud for a turso backend", async () => {
+  // [#2440 / Phase A5] CONTROL_DATA_BACKEND governs only the four Phase-A
+  // aggregates (Events/Teams/Notifications/FeatureFlags). Deployments has no
+  // SQL implementation until Phase B4, and its DynamoDB table is synthesized
+  // regardless of backend (A5's pure mode drops the Events/Teams tables
+  // only) — so the resolver always returns the DynamoDB backend here too,
+  // superseding the pre-A5 "fail loudly on turso/sql" pin.
+  const nonDynamodbBackends = ["turso", "sql", "turso-mirror", "sql-mirror"];
+  it.each(nonDynamodbBackends)(
+    "should still return the DynamoDB backend for CONTROL_DATA_BACKEND=%s " +
+      "(Deployments has no SQL impl until Phase B4)",
+    async (backend) => {
+      const runtime = createControlDataRuntime({
+        env: { CONTROL_DATA_BACKEND: backend },
+        ssm: { send: vi.fn() },
+        createClient: vi.fn(),
+      });
+
+      const repo = await runtime.resolveDeploymentsRepository({
+        ddb: makeFakeDdb(),
+        deploymentsTableName: TABLE,
+      });
+      expect(repo).toBeInstanceOf(DynamoDbDeploymentsRepository);
+    },
+  );
+
+  it("should fail loudly when ddb/deploymentsTableName are missing, regardless of backend", async () => {
     const runtime = createControlDataRuntime({
       env: { CONTROL_DATA_BACKEND: "turso" },
       ssm: { send: vi.fn() },
@@ -674,7 +699,8 @@ describe("resolveDeploymentsRepository (runtime)", () => {
     });
 
     await expect(
-      runtime.resolveDeploymentsRepository({ ddb: makeFakeDdb(), deploymentsTableName: TABLE }),
-    ).rejects.toThrow(/Phase B4/);
+      // @ts-expect-error deploymentsTableName intentionally omitted
+      runtime.resolveDeploymentsRepository({ ddb: makeFakeDdb() }),
+    ).rejects.toThrow(/requires deps.ddb/);
   });
 });

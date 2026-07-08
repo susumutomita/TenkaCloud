@@ -18,10 +18,13 @@ export interface CoordinationDispatcherLambdaProps {
   /** team-login-key 認証 (GSI2 Query) + coordination state 行 (PK=COORD#...) の Get/Put 先。 */
   readonly deploymentsTable: ITable;
   /**
-   * `buildParticipantSharedResources` が `EVENTS_TABLE_NAME` env を要求するため渡す。 coordination
-   * route は events を読まない (= IAM も付与しない)。 共有 builder の env 要件を満たすためだけの配線。
+   * `buildParticipantSharedResources` が読む `EVENTS_TABLE_NAME` env の source。 coordination
+   * route は events を読まない (= IAM は付与しない)。 [Issue #2440 / ADR-049 §5.1 Phase A5]
+   * `controlDataBackend` が純 SQL (`turso`/`sql`) のとき `ProblemDeployBackendStack` は本
+   * table を synth しない (= `undefined`)。 その場合 env も注入しない (= shared builder は
+   * env 不在でも空文字にフォールバックするだけで dispatcher の挙動に影響しない)。
    */
-  readonly eventsTable: ITable;
+  readonly eventsTable?: ITable;
   /** `buildParticipantSharedResources` が要求する `DEPLOY_ENVIRONMENT`。 coordination では未使用。 */
   readonly environmentName: string;
   /**
@@ -92,8 +95,9 @@ export class CoordinationDispatcherLambda extends Construct {
       role,
       environment: {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
-        // 共有 builder (buildParticipantSharedResources) の env 要件。 coordination では未使用。
-        EVENTS_TABLE_NAME: props.eventsTable.tableName,
+        // 共有 builder (buildParticipantSharedResources) の env。 coordination では未使用。
+        // Issue #2440: 純 SQL backend では table が無いので env も足さない。
+        ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
         DEPLOY_ENVIRONMENT: props.environmentName,
         // ADR-030 Phase 3b: plugin .mjs を materialize する S3 bucket。 未指定なら importer 未配線。
         ...(props.pluginBucket

@@ -120,6 +120,18 @@ describe("resolveEventHotTables", () => {
     expect(() => resolveEventHotTables(SHARED)).toThrow(CapacityUnconfiguredError);
     expect(() => resolveEventHotTables(SHARED)).toThrow(/PROBLEM_ENDPOINTS_TABLE_NAME/);
   });
+
+  // Issue #2440 (ADR-049 §5.1 Phase A5): pure SQL backend (turso|sql) では Events/Teams table
+  // 自体が synth されず、shared builder はそれらの table 名 env を空文字にフォールバックする
+  // (event-handler/shared.ts 参照)。DescribeTable(TableName="") で fail するのを防ぐため、
+  // 空 tableName の role は監視対象から除外する (= 残り 3 role で capacity overview は動作する)。
+  it("should drop events/teams roles whose tableName is empty (pure SQL backend, no partial-view crash)", () => {
+    expect(resolveEventHotTables({ ...SHARED, eventsTableName: "", teamsTableName: "" })).toEqual([
+      { role: "deployments", tableName: "Deployments-x" },
+      { role: "problemEndpoints", tableName: "Endpoints-x" },
+      { role: "disruptions", tableName: "Disruptions-x" },
+    ]);
+  });
 });
 
 describe("CapacityQuerySchema", () => {

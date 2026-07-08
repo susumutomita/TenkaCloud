@@ -96,8 +96,14 @@ export interface EventSharedResources {
 
 export function buildEventSharedResources(): EventSharedResources {
   return {
-    eventsTableName: getEnv("EVENTS_TABLE_NAME"),
-    teamsTableName: getEnv("TEAMS_TABLE_NAME"),
+    // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso|sql) 選択時は Events/Teams
+    // table 自体が synth されない (= env も未配線) ため、module-load を`getEnv`の fail-fast に
+    // 委ねると cold start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb /
+    // mirror backend での誤設定 (= 本来 table がある構成で env を配線し忘れた場合) は runtime
+    // resolver (`runtime-repositories.ts` の `requireDdbAndTableName`) が fail loud に受ける
+    // (= silent fallback にはならない)。
+    eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",
+    teamsTableName: process.env.TEAMS_TABLE_NAME ?? "",
     deploymentsTableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
     competitorAccountsTableName: getEnv("COMPETITOR_ACCOUNTS_TABLE_NAME"),
     disruptionsTableName: getEnv("DISRUPTIONS_TABLE_NAME"),

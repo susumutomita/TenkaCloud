@@ -11,8 +11,16 @@ import { auditLogEnabledEnv } from "./audit-log-env.js";
 import { controlDataBackendEnv } from "./control-data-backend-env.js";
 
 export interface EventApiLambdaProps {
-  readonly eventsTable: Table;
-  readonly teamsTable: Table;
+  /**
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき、
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
+   * `EVENTS_TABLE_NAME` は注入せず、grant も付与しない — Events CRUD は repository seam
+   * (`resolveEventRepositories`) が SQL executor 直結で処理する。`dynamodb` / `*-mirror` では
+   * 従来どおり必ず渡される。
+   */
+  readonly eventsTable?: Table;
+  /** {@link eventsTable} と同じ条件 (純 SQL 選択時は `undefined`)。 */
+  readonly teamsTable?: Table;
   /**
    * Phase 2a (Bulk Deploy / Bulk Teardown) で deployment 行を作成 / 状態更新するため
    * 既存 Deployments table への RW 権限が必要。
@@ -141,8 +149,10 @@ export class EventApiLambda extends Construct {
       timeout: Duration.seconds(60),
       memorySize: 512,
       environment: {
-        EVENTS_TABLE_NAME: props.eventsTable.tableName,
-        TEAMS_TABLE_NAME: props.teamsTable.tableName,
+        // Issue #2440: 純 SQL backend では table が無いので env も足さない (= CFn byte 互換 /
+        // cold start が EVENTS_TABLE_NAME 不在でも通る)。
+        ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
+        ...(props.teamsTable ? { TEAMS_TABLE_NAME: props.teamsTable.tableName } : {}),
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
         // Phase 2.2 (Issue #459): bulk-deploy が CompetitorAccounts table を引いて verified-only
         // gate を実現するため、table 名と SSM path 構築用 env 名を Lambda 環境に注入する。
@@ -183,8 +193,9 @@ export class EventApiLambda extends Construct {
 
     // Events / Teams への RW (Phase 1 の CRUD)、Deployments への RW (Phase 2a の
     // bulk deploy / teardown で行を Put + Update)、EventBus への PutEvents (fan-out)。
-    props.eventsTable.grantReadWriteData(this.fn);
-    props.teamsTable.grantReadWriteData(this.fn);
+    // Issue #2440: 純 SQL backend では table 自体が無いので grant も付与しない。
+    props.eventsTable?.grantReadWriteData(this.fn);
+    props.teamsTable?.grantReadWriteData(this.fn);
     props.deploymentsTable.grantReadWriteData(this.fn);
     // Phase 2.2 (Issue #459): CompetitorAccounts は read-only (verified gate のみ)。
     // verify / Put / Delete は CompetitorAccountsApiLambda 側で行うので、本 Lambda には
@@ -221,13 +232,15 @@ export class EventApiLambda extends Construct {
     // Issue #2410 Slice 2: キャパ監視 (`GET /admin/capacity`) は event-hot 5 テーブルの
     // DescribeTable (現行プロビジョン読み取り) + CloudWatch GetMetricData (消費/throttle) のみ。
     // GetMetricData は resource-level permission 非対応のため resources は "*" (AWS 仕様)。
+    // Issue #2440: 純 SQL backend では Events/Teams が無いので DescribeTable IAM からも除外する
+    // (= 存在しない table ARN を resources に含めない)。
     const eventHotTables = [
       props.eventsTable,
       props.teamsTable,
       props.deploymentsTable,
       props.problemEndpointsTable,
       props.disruptionsTable,
-    ];
+    ].filter((t): t is Table => t !== undefined);
     this.fn.addToRolePolicy(
       new PolicyStatement({
         actions: ["dynamodb:DescribeTable"],

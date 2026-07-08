@@ -17,15 +17,21 @@ export interface AdminInsightApiLambdaProps {
   /**
    * 競技 Event 総数の出元。`ProblemDeployBackendStack` の `Events` table を cross-stack 参照する。
    * Read-only。
+   *
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
+   * `EVENTS_TABLE_NAME` も grant も付与しない — Events 集計は repository seam
+   * (`resolveEventsRepository` / `controlDataRuntime`) が SQL executor 直結で処理する。
    */
-  readonly eventsTable: Table;
+  readonly eventsTable?: Table;
   /**
    * Phase 1.B drill-down で読み取り対象になる Teams table (#598)。
    * EventDetail の teams[] を組み立てるのに read 権限を付与する (= read-only)。
    * teamLoginKey は handler 層で undefined に潰すため、本 IAM では projection 制限を
    * かけない (= GetItem/Query レベルで全 attribute を引けるが、handler が出口で塗りつぶす)。
+   * {@link eventsTable} と同じ条件で純 SQL backend 選択時は `undefined`。
    */
-  readonly teamsTable: Table;
+  readonly teamsTable?: Table;
   /**
    * Issue #814 Phase 2: SBT BashJobRunner の deprovisioning state machine ARN。
    * 指定時は \`states:ListExecutions\` 権限と env を付与し、 admin-insight handler が
@@ -105,8 +111,9 @@ export class AdminInsightApiLambda extends Construct {
       memorySize: 256,
       environment: {
         DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
-        EVENTS_TABLE_NAME: props.eventsTable.tableName,
-        TEAMS_TABLE_NAME: props.teamsTable.tableName,
+        // Issue #2440: 純 SQL backend では table が無いので env も足さない。
+        ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
+        ...(props.teamsTable ? { TEAMS_TABLE_NAME: props.teamsTable.tableName } : {}),
         // Issue #814 Phase 2: deprovisioning Step Functions ARN を env に渡す (= 未指定なら空)。
         // handler は env の有無で route を 503 にするか実 SFN.ListExecutions を呼ぶか分岐する。
         DEPROVISIONING_STATE_MACHINE_ARN: props.deprovisioningStateMachineArn ?? "",
@@ -136,10 +143,11 @@ export class AdminInsightApiLambda extends Construct {
     // GSI も含めて read できる必要があるので grantReadData (= GetItem / Query / Scan + index)
     // を使う (= 個別 PolicyStatement で限定するより SBT 同型の grantRead で十分)。
     props.deploymentsTable.grantReadData(this.fn);
-    props.eventsTable.grantReadData(this.fn);
+    // Issue #2440: 純 SQL backend では table 自体が無いので grant も付与しない。
+    props.eventsTable?.grantReadData(this.fn);
     // Issue #950 (ADR-020 Phase D): admin audit log の read-only access (GSI も含む)
     props.adminAuditLogTable?.grantReadData(this.fn);
-    props.teamsTable.grantReadData(this.fn);
+    props.teamsTable?.grantReadData(this.fn);
 
     // Phase 1.B (#598) CFn Describe: deploy job 詳細ページの "Stack 進行状況" セクションが
     // DescribeStackEvents / DescribeStackResources を直接叩く。Resource:* なのは、CFn の

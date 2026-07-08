@@ -16,7 +16,11 @@ import { ParticipantPortalLambda } from "./participant-portal-lambda.js";
 
 export interface BuildParticipantPortalSubsystemArgs {
   readonly deploymentsTable: Table;
-  readonly eventsTable: Table;
+  /**
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。
+   */
+  readonly eventsTable?: Table;
   readonly endpointsTable: Table;
   readonly problemsScoring: Readonly<Record<string, unknown>>;
   readonly problemsWriteups: Readonly<Record<string, unknown>>;
@@ -38,6 +42,16 @@ export interface BuildParticipantPortalSubsystemArgs {
    * 付与する。 未指定 (= CodeBuild 経路 / flag OFF) では追加 grant/env なし (= synth byte 互換)。
    */
   readonly deployJobLogGroup?: ILogGroup;
+  /**
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] control-plane data backend。 `ParticipantPortalLambda`
+   * にのみ渡す (`CoordinationDispatcherLambda` は ADR-030 S2 の最小 IAM を維持するため turso
+   * env/IAM を持たせない)。
+   */
+  readonly controlDataBackend?: string;
+  /** Public remote libSQL URL. Never contains authentication material. */
+  readonly tursoDatabaseUrl?: string;
+  /** SSM SecureString parameter name containing the libSQL auth token. */
+  readonly tursoAuthTokenParameterName?: string;
 }
 
 export interface ParticipantPortalSubsystemOutputs {
@@ -81,6 +95,12 @@ export function buildParticipantPortalSubsystem(
     ...(args.deployCodeBuildProject ? { deployCodeBuildProject: args.deployCodeBuildProject } : {}),
     // #2291: only when the Lambda deploy path is on (flag OFF → absent, no extra grant/env).
     ...(args.deployJobLogGroup ? { deployJobLogGroup: args.deployJobLogGroup } : {}),
+    // Issue #2440: control-plane data backend (default dynamodb は env を足さず byte 互換)。
+    controlDataBackend: args.controlDataBackend,
+    ...(args.tursoDatabaseUrl ? { tursoDatabaseUrl: args.tursoDatabaseUrl } : {}),
+    ...(args.tursoAuthTokenParameterName
+      ? { tursoAuthTokenParameterName: args.tursoAuthTokenParameterName }
+      : {}),
   });
   new CfnOutput(scope, "ParticipantPortalApiUrl", {
     value: portalLambda.url.url,
