@@ -42,8 +42,12 @@ export interface DeployCreateStateMachineProps {
   /**
    * Deployment 行を持つ DDB Table。CodeBuild 完了時に `status` を `PENDING` →
    * `COMPLETE` / `FAILED` に更新するために必要。
+   *
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合
+   * {@link statusWriterFunction} が必須で、本 table は一切参照されない。
    */
-  readonly deploymentsTable: ITable;
+  readonly deploymentsTable?: ITable;
   /**
    * Issue #2291 (ADR-049 §9): true のとき CodeBuild を使わず、CreateStack を行う **deploy Lambda**
    * を invoke し、`describeStackFunction` で DescribeStacks を polling して terminal まで待つ。
@@ -137,6 +141,9 @@ export class DeployCreateStateMachine extends Construct {
     // DynamoUpdateItem task は CDK 側で grant しないので明示。Pure SQL status-writer 経路では
     // State Machine 自身は DDB に触らない (= Lambda invoke だけ)。
     if (!props.statusWriterFunction) {
+      if (!props.deploymentsTable) {
+        throw new Error("deploymentsTable is required when statusWriterFunction is not provided");
+      }
       props.deploymentsTable.grantWriteData(this.stateMachine);
     }
   }
@@ -153,6 +160,9 @@ export class DeployCreateStateMachine extends Construct {
         JsonPath.DISCARD,
         props.statusWriterFunction,
       );
+    }
+    if (!props.deploymentsTable) {
+      throw new Error("deploymentsTable is required when statusWriterFunction is not provided");
     }
     return new DynamoUpdateItem(this, "MarkInProgress", {
       table: props.deploymentsTable,
@@ -484,7 +494,7 @@ export class DeployCreateStateMachine extends Construct {
   }
 
   private buildMarkSucceeded(
-    table: ITable,
+    table: ITable | undefined,
     statusWriterFunction?: IFunction,
   ): DeployStatusWriteTask {
     if (statusWriterFunction) {
@@ -501,6 +511,9 @@ export class DeployCreateStateMachine extends Construct {
         undefined,
         statusWriterFunction,
       );
+    }
+    if (!table) {
+      throw new Error("deploymentsTable is required when statusWriterFunction is not provided");
     }
     return new DynamoUpdateItem(this, "MarkSucceeded", {
       table,
@@ -527,7 +540,7 @@ export class DeployCreateStateMachine extends Construct {
    * {@link buildMarkSucceeded} と同一 (status=COMPLETE, stackId, stackOutputs)。
    */
   private buildMarkSucceededWithoutBuildId(
-    table: ITable,
+    table: ITable | undefined,
     statusWriterFunction?: IFunction,
   ): DeployStatusWriteTask {
     if (statusWriterFunction) {
@@ -543,6 +556,9 @@ export class DeployCreateStateMachine extends Construct {
         undefined,
         statusWriterFunction,
       );
+    }
+    if (!table) {
+      throw new Error("deploymentsTable is required when statusWriterFunction is not provided");
     }
     return new DynamoUpdateItem(this, "MarkSucceeded", {
       table,
@@ -563,7 +579,7 @@ export class DeployCreateStateMachine extends Construct {
 
   // `resultPath` default は task 出力が `$` を上書きする。Issue #2291 の Lambda path は `JsonPath.DISCARD` を渡して `$.detail` / `$.error` を温存し、後段 PutEvents を可能にする。
   private buildMarkFailed(
-    table: ITable,
+    table: ITable | undefined,
     id: string,
     persistBuildId: boolean,
     resultPath?: string,
@@ -582,6 +598,9 @@ export class DeployCreateStateMachine extends Construct {
         resultPath,
         statusWriterFunction,
       );
+    }
+    if (!table) {
+      throw new Error("deploymentsTable is required when statusWriterFunction is not provided");
     }
     return new DynamoUpdateItem(this, id, {
       table,

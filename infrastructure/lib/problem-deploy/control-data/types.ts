@@ -894,6 +894,17 @@ export interface DeploymentsRepository {
     buildId: string | undefined,
     at: string,
   ): Promise<DeploymentMutationOutcome>;
+  /**
+   * [Issue #2441 / Phase B PR-6] DeployDelete SFN `MarkDeleted`: unconditional
+   * `SET #status = :status, updatedAt = :updatedAt REMOVE GSI2PK, GSI2SK` — same
+   * at-least-once, condition-free semantics as {@link markCreateInProgress}. The
+   * `REMOVE GSI2PK, GSI2SK` clears the sparse participant-login-key index (SQL
+   * backends clear the `team_login_key_hash` column instead) so a deleted
+   * deployment no longer resolves via `listByTeamLoginKey`. DeployDelete's own
+   * `MarkFailed` state reuses {@link markCreateFailed} (with `buildId` undefined)
+   * since the DDB UpdateExpression is byte-identical.
+   */
+  markDeleted(jobId: string, at: string): Promise<DeploymentMutationOutcome>;
   markFailedIfPending(
     jobId: string,
     tenantId: string,

@@ -802,6 +802,22 @@ export class DynamoDbDeploymentsRepository implements DeploymentsRepository {
     return { outcome: "updated" };
   }
 
+  async markDeleted(jobId: string, at: string): Promise<DeploymentMutationOutcome> {
+    await this.ddb.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: this.deploymentKey(jobId),
+        UpdateExpression: "SET #status = :status, updatedAt = :updatedAt REMOVE GSI2PK, GSI2SK",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: {
+          ":status": "DELETED",
+          ":updatedAt": at,
+        },
+      }),
+    );
+    return { outcome: "updated" };
+  }
+
   async markFailedIfPending(
     jobId: string,
     tenantId: string,

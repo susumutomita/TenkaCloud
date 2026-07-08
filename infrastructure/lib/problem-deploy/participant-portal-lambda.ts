@@ -18,7 +18,14 @@ import { controlDataBackendEnv } from "./control-data-backend-env.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface ParticipantPortalLambdaProps {
-  readonly deploymentsTable: ITable;
+  /**
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
+   * `DeploymentsRead` inline policy も付与しない — 参加者の deployment / coordination /
+   * score-event 読み書きは repository seam (`resolveDeploymentsRepository`) が SQL executor
+   * 直結で処理する ({@link eventsTable} と同じ条件)。
+   */
+  readonly deploymentsTable?: ITable;
   /**
    * Events table (ADR-006 Notifications で参照)。
    * `GET /portal/me/notifications` が `PK=EVENT#<eventId>` で `dynamodb:Query`。
@@ -102,36 +109,44 @@ export class ParticipantPortalLambda extends Construct {
       props.environmentName,
     );
 
+    const deploymentsTable = props.deploymentsTable;
+
     const role = new Role(this, "Role", {
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
       inlinePolicies: {
-        DeploymentsRead: new PolicyDocument({
-          statements: [
-            new PolicyStatement({
-              actions: ["dynamodb:Query"],
-              resources: [
-                props.deploymentsTable.tableArn,
-                `${props.deploymentsTable.tableArn}/index/GSI1`,
-                `${props.deploymentsTable.tableArn}/index/GSI2`,
-              ],
-            }),
-            // 競技者の表示名 (`displayTeamName`) 更新のみ。テーブル全体に対する
-            // UpdateItem だが、Lambda コードは GSI2 経由で取得した自分の行しか
-            // 触らないので、実質的な書き込み対象は teamLoginKey 所有者の 1 行に限られる。
-            new PolicyStatement({
-              actions: ["dynamodb:UpdateItem"],
-              resources: [props.deploymentsTable.tableArn],
-            }),
-            // #745: writeScoreEvent (= submit-flag handler が flag 正解時に PK=`DEPLOYMENT#${jobId}`
-            // / SK=`EVENT#${ts}#${ulid}` で score event 行を append) が PutItem を発行する。
-            // この grant が無いと AccessDenied で silent skip され、 UI で 「加点済だが履歴 0 件」
-            // の矛盾が発生していた (= CloudWatch logs で確認済)。
-            new PolicyStatement({
-              actions: ["dynamodb:PutItem"],
-              resources: [props.deploymentsTable.tableArn],
-            }),
-          ],
-        }),
+        // Issue #2441: 純 SQL backend では table 自体が無いので policy を足さない (repository
+        // seam が SQL executor 直結で処理する。`eventsTable`/`EventsRead` と同じ pattern)。
+        ...(deploymentsTable
+          ? {
+              DeploymentsRead: new PolicyDocument({
+                statements: [
+                  new PolicyStatement({
+                    actions: ["dynamodb:Query"],
+                    resources: [
+                      deploymentsTable.tableArn,
+                      `${deploymentsTable.tableArn}/index/GSI1`,
+                      `${deploymentsTable.tableArn}/index/GSI2`,
+                    ],
+                  }),
+                  // 競技者の表示名 (`displayTeamName`) 更新のみ。テーブル全体に対する
+                  // UpdateItem だが、Lambda コードは GSI2 経由で取得した自分の行しか
+                  // 触らないので、実質的な書き込み対象は teamLoginKey 所有者の 1 行に限られる。
+                  new PolicyStatement({
+                    actions: ["dynamodb:UpdateItem"],
+                    resources: [deploymentsTable.tableArn],
+                  }),
+                  // #745: writeScoreEvent (= submit-flag handler が flag 正解時に PK=`DEPLOYMENT#${jobId}`
+                  // / SK=`EVENT#${ts}#${ulid}` で score event 行を append) が PutItem を発行する。
+                  // この grant が無いと AccessDenied で silent skip され、 UI で 「加点済だが履歴 0 件」
+                  // の矛盾が発生していた (= CloudWatch logs で確認済)。
+                  new PolicyStatement({
+                    actions: ["dynamodb:PutItem"],
+                    resources: [deploymentsTable.tableArn],
+                  }),
+                ],
+              }),
+            }
+          : {}),
         // ADR-006 Notifications: Events table の partition Query 権限 + 単一行 GetItem。
         // GetItem は Issue #1005 で導入された event-gate.ts (= submit-flag / hint reveal
         // が共有する scoring gate) が PK=EVENT#<id> / SK=META 1 行を `dynamodb:GetItem` で
@@ -261,7 +276,8 @@ export class ParticipantPortalLambda extends Construct {
       memorySize: 1024,
       role,
       environment: {
-        DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
+        // Issue #2441: 純 SQL backend では table 自体が無いので env も足さない。
+        ...(deploymentsTable ? { DEPLOYMENTS_TABLE_NAME: deploymentsTable.tableName } : {}),
         // Issue #2440: 純 SQL backend では table が無いので env も足さない。
         ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
         PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName,

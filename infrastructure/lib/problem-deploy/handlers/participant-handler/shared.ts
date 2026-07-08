@@ -50,7 +50,12 @@ export interface ParticipantSharedResources {
 
 export function buildParticipantSharedResources(): ParticipantSharedResources {
   return {
-    tableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
+    // [Issue #2441 / Phase B PR-6] pure SQL backend (turso|sql) では Deployments table 自体が
+    // synth されず env も配線されないため、module-load を fail-fast にすると cold start が落ちる。
+    // 空文字 default に緩和し、dynamodb / mirror backend の誤設定は runtime resolver
+    // (`runtime-repositories.ts`) が fail loud に受ける (= silent fallback にはならない、
+    // EVENTS_TABLE_NAME と同じ緩和)。
+    tableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
     // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso|sql) では Events table
     // 自体が synth されず env も配線されないため、module-load を fail-fast にすると cold start
     // が落ちる。空文字 default に緩和し、dynamodb / mirror backend の誤設定は runtime resolver

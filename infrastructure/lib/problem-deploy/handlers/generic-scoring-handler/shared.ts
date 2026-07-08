@@ -48,7 +48,12 @@ export interface GenericScoringSharedResources {
 export function buildSharedResources(): GenericScoringSharedResources {
   return {
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
-    deploymentsTableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
+    // [Issue #2441 / Phase B PR-6] pure SQL backend (turso|sql) では Deployments table 自体が
+    // synth されず env も配線されないため、毎 tick 呼ばれる本 builder を fail-fast にすると採点
+    // tick そのものが落ちる。空文字 default に緩和し、dynamodb / mirror backend の誤設定は
+    // runtime resolver (`runtime-repositories.ts`) が fail loud に受ける (= silent fallback には
+    // ならない、EVENTS_TABLE_NAME と同じ緩和)。
+    deploymentsTableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
     // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso|sql) では Events table
     // 自体が synth されず env も配線されないため、 毎 tick 呼ばれる本 builder を fail-fast にすると
     // 採点 tick そのものが落ちる。空文字 default に緩和し、dynamodb / mirror backend の誤設定は

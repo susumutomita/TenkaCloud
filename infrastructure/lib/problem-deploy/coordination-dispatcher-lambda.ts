@@ -15,8 +15,16 @@ import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 
 export interface CoordinationDispatcherLambdaProps {
-  /** team-login-key 認証 (GSI2 Query) + coordination state 行 (PK=COORD#...) の Get/Put 先。 */
-  readonly deploymentsTable: ITable;
+  /**
+   * team-login-key 認証 (GSI2 Query) + coordination state 行 (PK=COORD#...) の Get/Put 先。
+   *
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
+   * `CoordinationRW` inline policy も付与しない — team-login-key 認証 / coordination state は
+   * repository seam (`resolveDeploymentsRepository`、`coordination-store.ts` は既に seam 経由) が
+   * SQL executor 直結で処理する。
+   */
+  readonly deploymentsTable?: ITable;
   /**
    * `buildParticipantSharedResources` が読む `EVENTS_TABLE_NAME` env の source。 coordination
    * route は events を読まない (= IAM は付与しない)。 [Issue #2440 / ADR-049 §5.1 Phase A5]
@@ -61,27 +69,34 @@ export class CoordinationDispatcherLambda extends Construct {
   constructor(scope: Construct, id: string, props: CoordinationDispatcherLambdaProps) {
     super(scope, id);
 
+    const deploymentsTable = props.deploymentsTable;
+
     const role = new Role(this, "Role", {
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
       inlinePolicies: {
         // team-login-key 認証 (= GSI2 Query) + coordination state 行 (PK=COORD#...) の Get/Put。
         // ADR-030 S2: sts:AssumeRole / ssm:GetParameter / kms:Decrypt は **意図的に付与しない**
         // (= 未信頼 plugin が競技者資格情報・ExternalId に到達する経路を IAM 上に存在させない)。
-        CoordinationRW: new PolicyDocument({
-          statements: [
-            new PolicyStatement({
-              actions: ["dynamodb:Query"],
-              resources: [
-                props.deploymentsTable.tableArn,
-                `${props.deploymentsTable.tableArn}/index/GSI2`,
-              ],
-            }),
-            new PolicyStatement({
-              actions: ["dynamodb:GetItem", "dynamodb:PutItem"],
-              resources: [props.deploymentsTable.tableArn],
-            }),
-          ],
-        }),
+        // Issue #2441: 純 SQL backend では table 自体が無いので policy を足さない。
+        ...(deploymentsTable
+          ? {
+              CoordinationRW: new PolicyDocument({
+                statements: [
+                  new PolicyStatement({
+                    actions: ["dynamodb:Query"],
+                    resources: [
+                      deploymentsTable.tableArn,
+                      `${deploymentsTable.tableArn}/index/GSI2`,
+                    ],
+                  }),
+                  new PolicyStatement({
+                    actions: ["dynamodb:GetItem", "dynamodb:PutItem"],
+                    resources: [deploymentsTable.tableArn],
+                  }),
+                ],
+              }),
+            }
+          : {}),
       },
       managedPolicies: [
         ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSLambdaBasicExecutionRole"),
@@ -94,7 +109,8 @@ export class CoordinationDispatcherLambda extends Construct {
       memorySize: 512,
       role,
       environment: {
-        DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName,
+        // Issue #2441: 純 SQL backend では table 自体が無いので env も足さない。
+        ...(deploymentsTable ? { DEPLOYMENTS_TABLE_NAME: deploymentsTable.tableName } : {}),
         // 共有 builder (buildParticipantSharedResources) の env。 coordination では未使用。
         // Issue #2440: 純 SQL backend では table が無いので env も足さない。
         ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),

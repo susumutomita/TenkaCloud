@@ -1,5 +1,8 @@
-import { QueryCommand } from "@aws-sdk/lib-dynamodb";
-import { type AdminInsightSharedResources, resolveEventsRepository } from "./shared.js";
+import {
+  type AdminInsightSharedResources,
+  resolveDeploymentsRepository,
+  resolveEventsRepository,
+} from "./shared.js";
 
 /**
  * 1 tenant 分の deploy / event 集計。ADR-011 Phase 1 API の正本 shape:
@@ -25,46 +28,30 @@ export interface TenantsSummaryResponse {
   readonly items: readonly TenantSummary[];
 }
 
-const ACTIVE_DEPLOY_STATUSES = new Set(["PENDING", "IN_PROGRESS"]);
+const ACTIVE_DEPLOY_STATUSES = ["PENDING", "IN_PROGRESS"];
+const FAILED_DEPLOY_STATUSES = ["FAILED"];
 
 /**
- * 1 tenant の Deployments GSI1 を全 page 読みつつ status カウントを返す。
+ * 1 tenant の deploy status カウント。
  *
- * GSI1PK = `TENANT#<tenantId>`、Sort key は createdAt 降順で良いが、本集計では順序は問わない
- * のでデフォルト (= 昇順 / `ScanIndexForward: true`) のまま使う。`ProjectionExpression` で
- * `status` のみ取り、payload を最小化する (= Free Tier RCU 圧迫を避ける)。
- *
- * Phase 1.A は tenant 数 ~5 × deployments/tenant ~50 ≒ 250 行で十分。Phase 3 (dashboard)
- * では tenant 数が伸びてくるので、本 query ロジックを置き換える (= reverse-aggregated 行を
- * 別 GSI / pre-aggregation table に置く設計に切替)。
+ * [Issue #2441 / Phase B PR-6] repository seam (`countActiveByTenant`) 経由に置き換えた。
+ * 従来は本 module 専用の raw GSI1 `QueryCommand` (`ProjectionExpression: "#s"`, 1 query で
+ * active/failed 両方を集計) だったが、pure SQL backend (turso|sql) では Deployments table
+ * 自体が synth されず `shared.deploymentsTableName` が空文字になるため即死していた。
+ * `countActiveByTenant` は deploy-quota.ts (#2441 Phase B1) で既に全 backend 実装済みの
+ * 汎用カウントメソッドなので、それを active/failed の 2 回呼ぶ形に寄せる。default backend
+ * (dynamodb) は 1 回の full-item Query が `Select=COUNT` の 2 回の Query に分かれる差分のみ
+ * (該当 API は operator の低頻度ダッシュボード呼び出しで、ホットパスではない)。
  */
 async function countTenantDeployments(
   shared: AdminInsightSharedResources,
   tenantId: string,
 ): Promise<{ activeDeploys: number; failedDeploys: number }> {
-  let activeDeploys = 0;
-  let failedDeploys = 0;
-  let lastEvaluatedKey: Record<string, unknown> | undefined;
-  do {
-    const out = await shared.ddb.send(
-      new QueryCommand({
-        TableName: shared.deploymentsTableName,
-        IndexName: "GSI1",
-        KeyConditionExpression: "GSI1PK = :pk",
-        ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}` },
-        // `status` は DDB reserved word なので ExpressionAttributeNames で alias する。
-        ProjectionExpression: "#s",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExclusiveStartKey: lastEvaluatedKey,
-      }),
-    );
-    for (const item of out.Items ?? []) {
-      const status = String((item as { status?: unknown }).status ?? "");
-      if (ACTIVE_DEPLOY_STATUSES.has(status)) activeDeploys += 1;
-      else if (status === "FAILED") failedDeploys += 1;
-    }
-    lastEvaluatedKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-  } while (lastEvaluatedKey);
+  const repository = await resolveDeploymentsRepository(shared);
+  const [activeDeploys, failedDeploys] = await Promise.all([
+    repository.countActiveByTenant(tenantId, ACTIVE_DEPLOY_STATUSES),
+    repository.countActiveByTenant(tenantId, FAILED_DEPLOY_STATUSES),
+  ]);
   return { activeDeploys, failedDeploys };
 }
 

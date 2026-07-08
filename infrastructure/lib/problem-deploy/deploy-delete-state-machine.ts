@@ -38,8 +38,13 @@ export interface DeployDeleteStateMachineProps {
   /**
    * Deployment 行を持つ DDB Table。CodeBuild 完了時に `status` を `DELETING` →
    * `DELETED` / `FAILED` に更新するために必要。
+   *
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合
+   * {@link statusWriterFunction} が必須で、native `DynamoUpdateItem` の代わりに Lambda
+   * status-writer 経由で書く (= `DeployCreateStateMachine` と同型)。
    */
-  readonly deploymentsTable: ITable;
+  readonly deploymentsTable?: ITable;
   /**
    * Issue #2291 (ADR-049 §9): true のとき CodeBuild を使わず、DeleteStack を行う **deploy Lambda**
    * を invoke し、DescribeStacks を polling して DELETE_COMPLETE / 消滅まで待つ。default
@@ -52,7 +57,17 @@ export interface DeployDeleteStateMachineProps {
    * `deployViaLambda === true` のときのみ必須。CodeBuild path では未使用。
    */
   readonly cfnDeployFunction?: IFunction;
+  /**
+   * [Issue #2441 Phase B PR-6] When present, MarkDeleted/MarkFailed use this Lambda
+   * instead of native `DynamoUpdateItem` (same `DeployStatusWriterLambda` instance
+   * `DeployCreateStateMachine` uses — shared, not a second Lambda). Only pure SQL
+   * backends pass it; default and mirror backends keep DDB canonical direct writes
+   * for byte-compatible ASL/IAM.
+   */
+  readonly statusWriterFunction?: IFunction;
 }
+
+type DeployDeleteStatusWriteTask = DynamoUpdateItem | LambdaInvoke;
 
 /**
  * 問題 stack の削除を司る Step Functions State Machine。`DeployCreateStateMachine`
@@ -95,7 +110,14 @@ export class DeployDeleteStateMachine extends Construct {
       tracingEnabled: true,
     });
 
-    props.deploymentsTable.grantWriteData(this.stateMachine);
+    // [Issue #2441 Phase B PR-6] Pure SQL status-writer 経路では State Machine 自身は DDB に
+    // 触らない (= Lambda invoke だけ、DeployCreateStateMachine と同型)。
+    if (!props.statusWriterFunction) {
+      if (!props.deploymentsTable) {
+        throw new Error("deploymentsTable is required when statusWriterFunction is not provided");
+      }
+      props.deploymentsTable.grantWriteData(this.stateMachine);
+    }
   }
 
   /**
@@ -181,8 +203,8 @@ export class DeployDeleteStateMachine extends Construct {
       )
       .otherwise(invalidAssumeRoleMetadata);
 
-    const markDeleted = this.buildMarkDeleted(props.deploymentsTable);
-    const markFailed = this.buildMarkFailed(props.deploymentsTable);
+    const markDeleted = this.buildMarkDeleted(props.deploymentsTable, props.statusWriterFunction);
+    const markFailed = this.buildMarkFailed(props.deploymentsTable, props.statusWriterFunction);
 
     startCodeBuildSameAccount.addCatch(markFailed, { resultPath: "$.error" });
     startCodeBuildCrossAccount.addCatch(markFailed, { resultPath: "$.error" });
@@ -245,8 +267,8 @@ export class DeployDeleteStateMachine extends Construct {
       resultPath: "$.cfn",
     });
 
-    const markDeleted = this.buildMarkDeleted(props.deploymentsTable);
-    const markFailed = this.buildMarkFailed(props.deploymentsTable);
+    const markDeleted = this.buildMarkDeleted(props.deploymentsTable, props.statusWriterFunction);
+    const markFailed = this.buildMarkFailed(props.deploymentsTable, props.statusWriterFunction);
     const useStackStatusReasonAsFailureCause = new Pass(
       this,
       "UseStackStatusReasonAsFailureCause",
@@ -278,7 +300,42 @@ export class DeployDeleteStateMachine extends Construct {
     return invokeCfnDelete;
   }
 
-  private buildMarkDeleted(table: ITable): DynamoUpdateItem {
+  /**
+   * [Issue #2441 Phase B PR-6] Shared status-writer invoke builder, mirroring
+   * `DeployCreateStateMachine.buildStatusWriterInvoke`. `retryOnServiceExceptions:
+   * false` matches the explicit-retry-free `DynamoUpdateItem` tasks it replaces.
+   */
+  private buildStatusWriterInvoke(
+    id: string,
+    payload: Record<string, unknown>,
+    statusWriterFunction: IFunction,
+  ): LambdaInvoke {
+    return new LambdaInvoke(this, id, {
+      lambdaFunction: statusWriterFunction,
+      payload: TaskInput.fromObject(payload),
+      payloadResponseOnly: true,
+      retryOnServiceExceptions: false,
+    });
+  }
+
+  private buildMarkDeleted(
+    table: ITable | undefined,
+    statusWriterFunction?: IFunction,
+  ): DeployDeleteStatusWriteTask {
+    if (statusWriterFunction) {
+      return this.buildStatusWriterInvoke(
+        "MarkDeleted",
+        {
+          transition: "markDeleted",
+          jobId: JsonPath.stringAt("$.detail.jobId"),
+          updatedAt: JsonPath.stringAt("$$.State.EnteredTime"),
+        },
+        statusWriterFunction,
+      );
+    }
+    if (!table) {
+      throw new Error("deploymentsTable is required when statusWriterFunction is not provided");
+    }
     return new DynamoUpdateItem(this, "MarkDeleted", {
       table,
       key: deploymentKey(),
@@ -293,7 +350,25 @@ export class DeployDeleteStateMachine extends Construct {
     });
   }
 
-  private buildMarkFailed(table: ITable): DynamoUpdateItem {
+  private buildMarkFailed(
+    table: ITable | undefined,
+    statusWriterFunction?: IFunction,
+  ): DeployDeleteStatusWriteTask {
+    if (statusWriterFunction) {
+      return this.buildStatusWriterInvoke(
+        "MarkFailed",
+        {
+          transition: "markFailed",
+          jobId: JsonPath.stringAt("$.detail.jobId"),
+          updatedAt: JsonPath.stringAt("$$.State.EnteredTime"),
+          failureReason: JsonPath.stringAt("$.error.Cause"),
+        },
+        statusWriterFunction,
+      );
+    }
+    if (!table) {
+      throw new Error("deploymentsTable is required when statusWriterFunction is not provided");
+    }
     return new DynamoUpdateItem(this, "MarkFailed", {
       table,
       key: deploymentKey(),

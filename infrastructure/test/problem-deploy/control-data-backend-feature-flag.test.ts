@@ -164,50 +164,117 @@ describe("DeployCreate SFN SQL status-writer branch (#2441 Phase B PR-5)", () =>
   );
 });
 
-describe("pure SQL backend does not synth Events/Teams tables (#2440 ADR-049 §5.1 Phase A5)", () => {
+describe("pure SQL backend does not synth Events/Teams/Deployments tables (#2440 A5 / #2441 Phase B PR-6)", () => {
   it(
-    "should NOT create Events/Teams AWS::DynamoDB::Table when controlDataBackend='turso' (pure SQL)",
+    "should NOT create Events/Teams/Deployments AWS::DynamoDB::Table when controlDataBackend='turso' (pure SQL)",
     () => {
       const tpl = synthWithControlDataBackendTurso();
       const ids = tableLogicalIds(tpl);
       expect(ids.some((id) => id.startsWith("Events"))).toBe(false);
       expect(ids.some((id) => id.startsWith("Teams"))).toBe(false);
-      // Deployments / ProblemEndpoints / Disruptions / CompetitorAccounts / AdminAuditLog are
-      // out of A5's scope and must still exist (5 tables, byte-compat minus Events/Teams).
-      expect(ids.some((id) => id.startsWith("Deployments"))).toBe(true);
+      // [Issue #2441 Phase B PR-6] Deployments (GSI3 本、単体最大のコスト源) も pure SQL では
+      // synth されない。ProblemEndpoints / Disruptions / CompetitorAccounts / AdminAuditLog は
+      // 依然 out of scope で存在する (4 tables remain, byte-compat minus Events/Teams/Deployments)。
+      expect(ids.some((id) => id.startsWith("Deployments"))).toBe(false);
       expect(ids.some((id) => id.startsWith("ProblemEndpoints"))).toBe(true);
       expect(ids.some((id) => id.startsWith("Disruptions"))).toBe(true);
-      // No CfnOutput referencing the (nonexistent) Events/Teams tables.
+      expect(ids.some((id) => id.startsWith("CompetitorAccounts"))).toBe(true);
+      expect(ids.some((id) => id.startsWith("AdminAuditLog"))).toBe(true);
+      // No CfnOutput referencing the (nonexistent) Events/Teams/Deployments tables.
       expect(() => tpl.hasOutput("EventsTableName", {})).toThrow();
       expect(() => tpl.hasOutput("TeamsTableName", {})).toThrow();
+      expect(() => tpl.hasOutput("DeploymentsTableName", {})).toThrow();
     },
     SYNTH_TIMEOUT_MS,
   );
 
   it(
-    "should default (dynamodb) synth Events/Teams tables and their CfnOutputs (byte-compat)",
+    "should default (dynamodb) synth Events/Teams/Deployments tables and their CfnOutputs (byte-compat)",
     () => {
       const tpl = synthDefault();
       const ids = tableLogicalIds(tpl);
       expect(ids.some((id) => id.startsWith("Events"))).toBe(true);
       expect(ids.some((id) => id.startsWith("Teams"))).toBe(true);
+      expect(ids.some((id) => id.startsWith("Deployments"))).toBe(true);
       tpl.hasOutput("EventsTableName", {});
       tpl.hasOutput("TeamsTableName", {});
+      tpl.hasOutput("DeploymentsTableName", {});
     },
     SYNTH_TIMEOUT_MS,
   );
 
   it(
-    "should still create Events/Teams tables + inject CONTROL_DATA_BACKEND='turso-mirror' when the migration-bridge backend is selected",
+    "should still create Events/Teams/Deployments tables + inject CONTROL_DATA_BACKEND='turso-mirror' when the migration-bridge backend is selected",
     () => {
       const tpl = synthWithControlDataBackendTursoMirror();
       const ids = tableLogicalIds(tpl);
       expect(ids.some((id) => id.startsWith("Events"))).toBe(true);
       expect(ids.some((id) => id.startsWith("Teams"))).toBe(true);
+      expect(ids.some((id) => id.startsWith("Deployments"))).toBe(true);
       expect(envOf(tpl, "EventApi").CONTROL_DATA_BACKEND).toBe("turso-mirror");
       expect(envOf(tpl, "GenericScoring").CONTROL_DATA_BACKEND).toBe("turso-mirror");
       tpl.hasOutput("EventsTableName", {});
       tpl.hasOutput("TeamsTableName", {});
+      tpl.hasOutput("DeploymentsTableName", {});
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should omit DEPLOYMENTS_TABLE_NAME entirely from DeployApi/EventApi/GenericScoring env under turso (same conditional-spread pattern as EVENTS_TABLE_NAME)",
+    () => {
+      const tpl = synthWithControlDataBackendTurso();
+      for (const id of ["DeployApi", "EventApi", "GenericScoring"] as const) {
+        expect(envOf(tpl, id).DEPLOYMENTS_TABLE_NAME, id).toBeUndefined();
+      }
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+});
+
+describe("DeployDelete SFN SQL status-writer branch (#2441 Phase B PR-6)", () => {
+  function deployDeleteDefinition(tpl: Template): string {
+    const definitions = Object.values(tpl.findResources("AWS::StepFunctions::StateMachine")).map(
+      (resource) =>
+        definitionToJson(
+          (resource as { Properties?: { DefinitionString?: unknown } }).Properties
+            ?.DefinitionString,
+        ),
+    );
+    const definition = definitions.find(
+      (candidate) =>
+        candidate.includes('"StartDeleteCodeBuild"') || candidate.includes('"InvokeCfnDelete"'),
+    );
+    expect(definition).toBeDefined();
+    return definition ?? "";
+  }
+
+  it(
+    "should share the DeployStatusWriter Lambda for MarkDeleted/MarkFailed and drop DynamoUpdateItem when controlDataBackend='turso'",
+    () => {
+      const tpl = synthWithControlDataBackendTurso();
+      const definition = deployDeleteDefinition(tpl);
+
+      // The same DeployStatusWriter Lambda serves both DeployCreate and DeployDelete — no
+      // second writer Lambda is created.
+      expect(lambdaIds(tpl).filter((id) => id.includes("DeployStatusWriter"))).toHaveLength(1);
+      expect(definition).toContain('"transition":"markDeleted"');
+      expect(definition).toContain('"transition":"markFailed"');
+      expect(definition).not.toContain("dynamodb:updateItem");
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should keep native DDB status writes for default and mirror backends",
+    () => {
+      const defaultDefinition = deployDeleteDefinition(synthDefault());
+      const mirrorDefinition = deployDeleteDefinition(synthWithControlDataBackendTursoMirror());
+
+      expect(defaultDefinition).toContain("dynamodb:updateItem");
+      expect(mirrorDefinition).toContain("dynamodb:updateItem");
+      expect(defaultDefinition).not.toContain('"transition":"markDeleted"');
+      expect(mirrorDefinition).not.toContain('"transition":"markDeleted"');
     },
     SYNTH_TIMEOUT_MS,
   );

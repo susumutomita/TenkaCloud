@@ -449,4 +449,62 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
       expect(tableCount).toBe(0); // Deployments lives in the Fixtures2440 stack, not this one.
     });
   });
+
+  describe("Issue #2441 (Phase B PR-6): deploymentsTable is also optional (pure SQL backend)", () => {
+    /**
+     * `ProblemDeployBackendStack` does not synth the Deployments table either when
+     * `controlDataBackend` is pure SQL, so it hands `undefined` for all three cross-stack
+     * table refs. This must synth cleanly with no DEPLOYMENTS_TABLE_NAME env, no read grant
+     * on a nonexistent table, and the tenant summary must still resolve deploy counts via
+     * the repository seam (`countActiveByTenant`) rather than a raw DDB reference.
+     */
+    function synthWithoutAnyTables(): Template {
+      const app = new cdk.App();
+      const fixtures = new cdk.Stack(app, "Fixtures2441", {
+        env: { account: "123456789012", region: "ap-northeast-1" },
+      });
+      const userPool = new UserPool(fixtures, "UserPool", { selfSignUpEnabled: false });
+      const userPoolClient = userPool.addClient("UserClient");
+
+      const stack = new AdminConsoleInsightStack(app, "InsightStack2441", {
+        env: { account: "123456789012", region: "ap-northeast-1" },
+        cognitoUserPool: userPool,
+        cognitoUserClientId: userPoolClient.userPoolClientId,
+        // deploymentsTable / eventsTable / teamsTable all omitted (= undefined, mirroring the
+        // pure SQL backend where ProblemDeployBackendStack synths none of the three).
+        controlDataBackend: "turso",
+        tursoDatabaseUrl: "libsql://example.turso.io",
+        tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
+      });
+      return Template.fromStack(stack);
+    }
+
+    it("should synth without throwing and omit DEPLOYMENTS_TABLE_NAME env", () => {
+      const tpl = synthWithoutAnyTables();
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Environment: Match.objectLike({
+            Variables: Match.not(Match.objectLike({ DEPLOYMENTS_TABLE_NAME: Match.anyValue() })),
+          }),
+        }),
+      );
+    });
+
+    it("should not add any dynamodb:* grant (zero DynamoDB tables cross-referenced)", () => {
+      const tpl = synthWithoutAnyTables();
+      const policies = tpl.findResources("AWS::IAM::Policy");
+      const actions = Object.values(policies).flatMap((p) =>
+        (
+          (
+            p as {
+              Properties?: { PolicyDocument?: { Statement?: Array<{ Action?: unknown }> } };
+            }
+          ).Properties?.PolicyDocument?.Statement ?? []
+        ).flatMap((s) => ([] as unknown[]).concat(s.Action ?? [])),
+      );
+      expect(actions.some((a) => String(a).startsWith("dynamodb:"))).toBe(false);
+      expect(Object.keys(tpl.findResources("AWS::DynamoDB::Table"))).toHaveLength(0);
+    });
+  });
 });

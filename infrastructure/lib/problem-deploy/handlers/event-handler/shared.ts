@@ -2,7 +2,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { S3Client } from "@aws-sdk/client-s3";
 import { SchedulerClient } from "@aws-sdk/client-scheduler";
-import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
 import { getEnv } from "../../../helper-functions.js";
 import type { EffectiveCatalogProvenance } from "../../../problem-pack/effective-catalog.js";
@@ -104,7 +104,12 @@ export function buildEventSharedResources(): EventSharedResources {
     // (= silent fallback にはならない)。
     eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",
     teamsTableName: process.env.TEAMS_TABLE_NAME ?? "",
-    deploymentsTableName: getEnv("DEPLOYMENTS_TABLE_NAME"),
+    // [Issue #2441 / Phase B PR-6] pure SQL backend (turso|sql) では Deployments table 自体が
+    // synth されず env も配線されないため、module-load を `getEnv` の fail-fast に委ねると
+    // cold start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb / mirror
+    // backend の誤設定は runtime resolver (`runtime-repositories.ts`) が fail loud に受ける
+    // (= silent fallback にはならない、EVENTS_TABLE_NAME/TEAMS_TABLE_NAME と同じ緩和)。
+    deploymentsTableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
     competitorAccountsTableName: getEnv("COMPETITOR_ACCOUNTS_TABLE_NAME"),
     disruptionsTableName: getEnv("DISRUPTIONS_TABLE_NAME"),
     eventBusName: getEnv("DEPLOY_EVENT_BUS_NAME"),
@@ -350,61 +355,24 @@ function parseProblemsProvenance(
 /**
  * Deployments table から指定 event の全行を取得する共通 helper。
  *
- * 内部的に GSI1 (TENANT#<tenantId>) を query し、`FilterExpression` で eventId 一致だけ
- * を返す。Filter は post-read のため RCU は変わらないが、ネットワーク転送 + Lambda 内
- * 処理量は削減できる (= ~750 行規模で意味のある差)。
+ * [Issue #2441 / Phase B PR-6] repository seam (`listByTenantAndEvent`) 経由に統一。
+ * 従来は呼び出し側が `projectionExpression` (= `"jobId, teamId, problemId, #s"`) を渡すと
+ * 本 helper が raw `QueryCommand` を直接発火する近道を持っていたが、これは repository seam を
+ * 迂回する唯一の残存経路で、pure SQL backend (turso|sql) では table 自体が無いため
+ * `TableName: ""` で即死していた (= B1〜B3 の 62-site 移行から漏れていた回帰)。default backend
+ * では projection 分だけ読み取りペイロードが増えるが (GSI1 の full-item Query)、bulk-deploy /
+ * scheduled auto-deploy は低頻度の operator 操作であり、backend 抽象を全サイトで貫徹する方を
+ * 優先する。
  *
- * Phase 3+ で eventId 専用 GSI に切り替えれば 1 query で済むが、現状は単一 tenant 内
- * 全 deployment が <100 程度の運用想定で十分。Phase 2a の bulk-delete から、Phase 2c
- * 経由の schedule (eventStartsAt 伝播) まで同じ query が必要なので 1 箇所に集約。
+ * 内部的に GSI1 (TENANT#<tenantId>) + `eventId` filter で全 page drain する
+ * (#1797: 1 ページ目だけ読むと後続ページの対象を取りこぼす)。Phase 2a の bulk-delete から
+ * Phase 2c 経由の schedule (eventStartsAt 伝播) まで同じ query が必要なので 1 箇所に集約。
  */
 export async function queryDeploymentsByEvent(
   shared: EventSharedResources,
   tenantId: string,
   eventId: string,
-  projectionExpression?: string,
 ): Promise<Partial<DeploymentItem>[]> {
-  if (projectionExpression === undefined) {
-    const repository = await resolveDeploymentsRepository(shared);
-    return [...(await repository.listByTenantAndEvent(tenantId, eventId))];
-  }
-
-  // Issue #670: DDB は `status` 等の reserved word を ProjectionExpression / FilterExpression
-  // / UpdateExpression 全てで alias 必須。 caller が `#s` を含む projection を渡すケース
-  // (= bulk-deploy.ts が `jobId, teamId, problemId, #s` で呼ぶ) を黙ってサポートするため、
-  // alias を本 helper 側で定義する。 caller が `#s` を使わなくても extra alias は ignored。
-  //
-  // #1797: GSI1PK=TENANT#<id> パーティションが 1MB を超えると Query は LastEvaluatedKey を
-  // 返してページ分割する。1 ページ目だけ読むと後続ページの deployment を取りこぼし、teardown
-  // (bulk-delete) / end-event / schedule 伝播 / bulk-deploy の既存検知が黙って漏れる
-  // (= 対象 stack が enqueue されず orphan 化)。FilterExpression(eventId) は各ページ内で
-  // 適用されるので、目的 event の行が後続ページに居ると完全に missed。全ページを drain する。
-  const items: Partial<DeploymentItem>[] = [];
-  let exclusiveStartKey: Record<string, unknown> | undefined;
-  do {
-    const out = await shared.ddb.send(
-      new QueryCommand({
-        TableName: shared.deploymentsTableName,
-        IndexName: "GSI1",
-        KeyConditionExpression: "GSI1PK = :pk",
-        FilterExpression: "eventId = :ev",
-        ExpressionAttributeValues: {
-          ":pk": `TENANT#${tenantId}`,
-          ":ev": eventId,
-        },
-        ...(projectionExpression
-          ? {
-              ProjectionExpression: projectionExpression,
-              ...(projectionExpression.includes("#s")
-                ? { ExpressionAttributeNames: { "#s": "status" } }
-                : {}),
-            }
-          : {}),
-        ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
-      }),
-    );
-    items.push(...((out.Items ?? []) as Partial<DeploymentItem>[]));
-    exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-  } while (exclusiveStartKey);
-  return items;
+  const repository = await resolveDeploymentsRepository(shared);
+  return [...(await repository.listByTenantAndEvent(tenantId, eventId))];
 }

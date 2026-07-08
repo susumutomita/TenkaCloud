@@ -23,8 +23,11 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
   /**
    * 問題 deploy 状況 (active / failed) を集計するため `ProblemDeployBackendStack` の
    * Deployments table を cross-stack 参照する。Read-only。
+   *
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。
    */
-  readonly deploymentsTable: Table;
+  readonly deploymentsTable?: Table;
   /**
    * 競技 Event の総数を集計するため `ProblemDeployBackendStack` の Events table を
    * cross-stack 参照する。Read-only。

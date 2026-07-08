@@ -1,5 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type { DeploymentsRepository } from "../../../problem-deploy/control-data/deployments-repository.js";
 import type { EventsRepository } from "../../../problem-deploy/control-data/events-repository.js";
 import { controlDataRuntime } from "../../../problem-deploy/control-data/runtime-repositories.js";
 
@@ -7,11 +8,13 @@ import { controlDataRuntime } from "../../../problem-deploy/control-data/runtime
  * AdminInsight Lambda が module load で 1 度だけ作るリソース束。
  *
  * Lambda warm invoke で SDK client / connection pool を使い回すため、handler 外で
- * `buildSharedResources()` を呼ぶ。`DEPLOYMENTS_TABLE_NAME` が無い場合は **module 評価時に
- * throw** して `Initialization Error` で落とす (= 後段 routes が `undefined` 参照で意味不明な
- * 500 を返すよりは fail-fast)。[Issue #2440 / ADR-049 §5.1 Phase A5] `EVENTS_TABLE_NAME` /
+ * `buildSharedResources()` を呼ぶ。[Issue #2440 / ADR-049 §5.1 Phase A5] `EVENTS_TABLE_NAME` /
  * `TEAMS_TABLE_NAME` は純 SQL backend (turso|sql) で table 自体が synth されないため対象外
- * (空文字 default、下記参照)。
+ * (空文字 default、下記参照)。[Issue #2441 / Phase B PR-6] `DEPLOYMENTS_TABLE_NAME` も同じ
+ * 条件で synth されないため、同じ空文字 default に統一した (以前は module 評価時に throw して
+ * いたが、それだと turso backend で AdminInsight Lambda 自体が Initialization Error で落ちる)。
+ * dynamodb / mirror backend の誤設定は runtime resolver (`runtime-repositories.ts`) が fail
+ * loud に受ける (= silent fallback にはならない)。
  */
 export interface AdminInsightSharedResources {
   readonly deploymentsTableName: string;
@@ -32,18 +35,12 @@ export interface AdminInsightSharedResources {
   readonly environmentName: string;
 }
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`AdminInsight Lambda の env ${name} が未設定です`);
-  }
-  return value;
-}
-
 export function buildSharedResources(): AdminInsightSharedResources {
   const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
   return {
-    deploymentsTableName: requireEnv("DEPLOYMENTS_TABLE_NAME"),
+    // [Issue #2441 / Phase B PR-6] pure SQL backend (turso|sql) では Deployments table 自体が
+    // synth されず env も配線されない。EVENTS_TABLE_NAME/TEAMS_TABLE_NAME と同じ空文字 default。
+    deploymentsTableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
     // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso|sql) では Events/Teams
     // table 自体が synth されず env も配線されないため、module-load を fail-fast にすると cold
     // start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb / mirror backend
@@ -77,5 +74,24 @@ export function resolveEventsRepository(
   return controlDataRuntime.resolveEventsRepository({
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
+  });
+}
+
+/**
+ * [Issue #2441 / Phase B PR-6] Deployments aggregate 専用 read seam (mirror of
+ * {@link resolveEventsRepository}). `summary.ts`'s `countTenantDeployments` uses
+ * this instead of a raw GSI1 `QueryCommand` so tenant deploy-status counts keep
+ * working when `controlDataBackend` is pure SQL (turso|sql) — the previous raw
+ * query hard-coded `TableName: shared.deploymentsTableName`, which is `""` once
+ * the Deployments table is no longer synthesized. default backend (`dynamodb`)
+ * stays byte-identical to the pre-seam Query it replaces, other than splitting
+ * one full-item Query into two `Select=COUNT` queries (see `countActiveByTenant`).
+ */
+export function resolveDeploymentsRepository(
+  shared: Pick<AdminInsightSharedResources, "ddb" | "deploymentsTableName">,
+): Promise<DeploymentsRepository> {
+  return controlDataRuntime.resolveDeploymentsRepository({
+    ddb: shared.ddb,
+    deploymentsTableName: shared.deploymentsTableName,
   });
 }
