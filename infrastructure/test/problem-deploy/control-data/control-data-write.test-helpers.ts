@@ -10,6 +10,8 @@ import {
   TransactWriteCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { FEATURE_FLAGS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-feature-flags-repository";
+import { NOTIFICATIONS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-notifications-repository";
 import { EVENTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-events-repository";
 import { TEAMS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-teams-repository";
 import type { SqlExecutor } from "../../../lib/problem-deploy/control-data/types";
@@ -191,11 +193,28 @@ export function makeFakeDdb(): DynamoDBDocumentClient {
       return { Items: [...table.values()].filter((it) => it.GSI2PK === pk) };
     }
     if (cmd.input.KeyConditionExpression?.includes("begins_with")) {
-      // base-table: PK = :pk AND begins_with(SK, :tprefix), SK 昇順。
-      const prefix = String(values[":tprefix"]);
-      const items = [...table.values()]
+      // base-table: PK = :pk AND begins_with(SK, :tprefix/:prefix), SK order per ScanIndexForward.
+      const prefix = String(values[":tprefix"] ?? values[":prefix"]);
+      const forward = cmd.input.ScanIndexForward !== false;
+      let items = [...table.values()]
         .filter((it) => it.PK === pk && String(it.SK).startsWith(prefix))
-        .sort((a, b) => String(a.SK).localeCompare(String(b.SK)));
+        .sort((a, b) => {
+          const cmp = String(a.SK).localeCompare(String(b.SK));
+          return forward ? cmp : -cmp;
+        });
+      const exclusiveStartKey = cmd.input.ExclusiveStartKey as Item | undefined;
+      if (exclusiveStartKey) {
+        const startIndex = items.findIndex(
+          (it) => it.PK === exclusiveStartKey.PK && it.SK === exclusiveStartKey.SK,
+        );
+        if (startIndex >= 0) items = items.slice(startIndex + 1);
+      }
+      const limit = cmd.input.Limit;
+      if (limit !== undefined && items.length > limit) {
+        const page = items.slice(0, limit);
+        const last = page[page.length - 1] as Item;
+        return { Items: page, LastEvaluatedKey: { PK: last.PK, SK: last.SK } };
+      }
       return { Items: items };
     }
     // GSI1: GSI1PK = :pk, GSI1SK order per ScanIndexForward. `Limit` /
@@ -385,8 +404,8 @@ export function makeFakeDdb(): DynamoDBDocumentClient {
 }
 
 /**
- * node:sqlite-backed SqlExecutor (in-memory) bootstrapped with BOTH the events
- * and teams schemas (the atomic event+teams create spans both tables).
+ * node:sqlite-backed SqlExecutor (in-memory) bootstrapped with the control-data
+ * schemas the repository parity tests exercise.
  * `batch` wraps the statements in BEGIN/COMMIT with ROLLBACK on failure —
  * the same all-or-nothing semantics `LibsqlExecutor.batch` gets from
  * `client.batch(…, "write")`.
@@ -395,6 +414,8 @@ export function makeSqliteExecutor(): SqlExecutor {
   const db = new DatabaseSync(":memory:");
   db.exec(EVENTS_SCHEMA_SQL);
   db.exec(TEAMS_SCHEMA_SQL);
+  db.exec(NOTIFICATIONS_SCHEMA_SQL);
+  db.exec(FEATURE_FLAGS_SCHEMA_SQL);
   return {
     run: (sql, params = []) => {
       const result = db.prepare(sql).run(...params);

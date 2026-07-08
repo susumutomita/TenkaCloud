@@ -1,4 +1,6 @@
 import type { Client, InArgs, InStatement, ResultSet } from "@libsql/client/http";
+import { FEATURE_FLAGS_SCHEMA_STATEMENTS } from "./sql-feature-flags-repository.js";
+import { NOTIFICATIONS_SCHEMA_STATEMENTS } from "./sql-notifications-repository.js";
 import { SCORE_SUMMARY_SCHEMA_STATEMENTS } from "./score-summary-schema.js";
 import { EVENTS_SCHEMA_STATEMENTS } from "./sql-events-repository.js";
 import { TEAMS_SCHEMA_STATEMENTS } from "./sql-teams-repository.js";
@@ -58,6 +60,8 @@ export async function initializeControlDataSchema(client: LibsqlClient): Promise
   const statements: InStatement[] = [
     ...EVENTS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
     ...TEAMS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...NOTIFICATIONS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...FEATURE_FLAGS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
     ...SCORE_SUMMARY_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
   ];
   await client.batch(statements, "write");

@@ -80,11 +80,13 @@ describe("LibsqlExecutor", () => {
     expect(batch).toHaveBeenCalledTimes(1);
     const [statements, mode] = batch.mock.calls[0] ?? [];
     expect(mode).toBe("write");
-    expect(statements).toHaveLength(11);
+    expect(statements).toHaveLength(13);
     expect(statements.map((entry: { sql: string }) => entry.sql)).toEqual(
       expect.arrayContaining([
         expect.stringContaining("CREATE TABLE IF NOT EXISTS events"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS teams"),
+        expect.stringContaining("CREATE TABLE IF NOT EXISTS notifications"),
+        expect.stringContaining("CREATE TABLE IF NOT EXISTS tenant_feature_flags"),
         expect.stringContaining("idx_teams_login_key_hash"),
         expect.stringContaining("json_remove(payload, '$.teamLoginKey')"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS control_data_migrations"),
