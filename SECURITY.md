@@ -43,6 +43,13 @@ problem's training scenario is a feature, not a bug*. Please report only issues
 that let a problem escape its isolated competitor account or that affect the
 platform itself.
 
+## Issue comment attachments
+
+TenkaCloud does not accept zip archives, binaries, installer files, shell
+scripts, or patch files through Issue / PR comments. Submit code changes as a
+normal pull request instead. Maintainers should avoid downloading or extracting
+comment attachments unless they have been inspected in a safe environment.
+
 ## Hardening and posture
 
 - Cross-account `AssumeRole` into competitor accounts always requires `ExternalId`,

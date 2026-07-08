@@ -31,6 +31,13 @@ For first-time contributors:
 4. Run `make before-commit` (lint / format / typecheck / tests / build)
 5. Open a PR (title under 70 characters, Conventional Commits)
 
+## Comment attachments
+
+Do not submit zip archives, binaries, installer files, shell scripts, or patch
+files through Issue / PR comments. TenkaCloud reviews code changes through normal
+pull requests so maintainers can inspect the diff and CI result before running or
+downloading anything.
+
 ## Roadmap and starter tasks
 
 - [ROADMAP.md](./ROADMAP.md) shows the current product direction.
