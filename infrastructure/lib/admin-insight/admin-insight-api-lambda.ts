@@ -62,8 +62,15 @@ export interface AdminInsightApiLambdaProps {
   /**
    * [Issue #2438 / Phase A3] control-plane data backend (dynamodb|turso|sql)。
    * `summary.ts` の `countTenantEvents` が Events repository seam を組み立てる際に読む。
-   * default (未指定 / `dynamodb`) は env を足さず byte 互換、`turso` / `sql` で
-   * `CONTROL_DATA_BACKEND` を注入する (`EventApiLambda` と同型)。
+   * default (未指定 / `dynamodb`) は env を足さず byte 互換 — env 注入のメカニズム自体は
+   * `EventApiLambda` と同型。
+   *
+   * **注意**: `EventApiLambda` と異なり、 このLambda の handler 層 (`resolveEventsRepository`,
+   * `admin-insight-handler/shared.ts`) は sync factory のままで Turso/SQL executor を
+   * 組み立てられない。 `"turso"` / `"sql"` を渡すと `CONTROL_DATA_BACKEND` 注入は成功するが、
+   * ランタイムで `/admin/insight/tenants/summary` が毎回 fail-loud に 500 を返す
+   * (= 意図的な no-silent-fallback、 SQL executor スレッド未実装のため)。 SQL 対応するまでは
+   * `undefined` のまま (dynamodb 固定) で運用すること。
    */
   readonly controlDataBackend?: string;
   /** Public remote libSQL URL. Never contains authentication material. */

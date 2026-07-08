@@ -345,6 +345,22 @@ describe("processDeployment guard branches", () => {
     expect(mocks.runUptimeFlatKind).not.toHaveBeenCalled();
   });
 
+  it("should fail loudly (not fail-closed) on a CONTROL_DATA_BACKEND config error", async () => {
+    // [#2438 review] resolveEventsRepository() must be resolved outside the fail-closed
+    // try/catch — a bad backend selection is a setup bug, not a transient read failure,
+    // and must not be silently swallowed into "treat batch as locked".
+    const previous = process.env.CONTROL_DATA_BACKEND;
+    process.env.CONTROL_DATA_BACKEND = "turso";
+    shared.problemsScoring = { p1: { kind: "uptime-flat" } };
+    try {
+      await expect(runWith(baseItem())).rejects.toThrow(/SqlExecutor/);
+      expect(mocks.runUptimeFlatKind).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env.CONTROL_DATA_BACKEND;
+      else process.env.CONTROL_DATA_BACKEND = previous;
+    }
+  });
+
   it("should skip a problem with no scoring config", async () => {
     shared.problemsScoring = {};
     await runWith({ ...baseItem(), eventId: undefined });

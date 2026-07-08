@@ -518,8 +518,12 @@ async function fetchEventScoringMetaMap(
     ),
   );
   if (eventIds.length === 0) return new Map();
+  // [#2438] repository の解決 (backend 選択) はここで行う — CONTROL_DATA_BACKEND の設定ミス /
+  // SQL 未配線のような setup エラーは下の try に入れない (fail-closed の対象は read failure のみ)。
+  // config エラーを fail-closed に畳むと「ロック中」と誤認させたまま原因を隠してしまう。
+  const repository = resolveEventsRepository(shared);
   try {
-    return new Map(await resolveEventsRepository(shared).batchGetEvents(eventIds));
+    return new Map(await repository.batchGetEvents(eventIds));
   } catch (err) {
     // #558 の scoring lock 契約: operator が「ロック中」とマークした event に points を加算
     // しないことを保証する。 lock 状態が読めない (= transient DDB error) ときに fail-open

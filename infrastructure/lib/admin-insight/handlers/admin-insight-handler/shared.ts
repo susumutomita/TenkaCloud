@@ -60,6 +60,14 @@ export function buildSharedResources(): AdminInsightSharedResources {
  * dynamodb) では従来と byte 互換の Query を `shared.ddb` 経由で発火する。 admin-insight は
  * Events の read-only 集計のみ行う (mutating method は使わない) ため、 sync factory の
  * events-only seam で十分。
+ *
+ * **[#2437 と同じ既知の制約]** この resolver は sync factory なので Turso/SQL executor を
+ * 組み立てられない。 `CONTROL_DATA_BACKEND=turso|sql` が渡ると `createEventsRepository` が
+ * `deps.sql` 欠落で fail-loud に throw する (= 意図的。 silent に DynamoDB へ fallback しない — repo の
+ * "no silent fallbacks" 原則)。 `AdminInsightApiLambdaProps.controlDataBackend` は現状どの caller
+ * (`wire.ts` 含む) からも `"turso"` を渡されていないため到達しないが、 将来 SQL 対応が必要になったら
+ * `event-handler/shared.ts` の async `resolveEventRepositories` と同様に SSM + libsql client 構築を
+ * 別途スレッドすること (この sync 版のまま turso を有効化してはいけない)。
  */
 export function resolveEventsRepository(
   shared: Pick<AdminInsightSharedResources, "ddb" | "eventsTableName">,
