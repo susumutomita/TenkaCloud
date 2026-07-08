@@ -55,8 +55,12 @@ function itemToRecord(item: Record<string, unknown>): TeamRecord {
  * is indistinguishable from one written by the existing transactional create path.
  * GSI2PK / GSI2SK are written **only when `teamLoginKey` is non-empty** so the
  * participant-login index stays sparse (matches create.ts / teardown behavior).
+ *
+ * Exported for `DynamoDbEventsRepository.createEventWithTeams` (#2437) — the
+ * atomic event+teams transaction must marshal team rows with the exact same
+ * keys as this repository's own writes.
  */
-function recordToItem(record: TeamRecord): TeamItem {
+export function teamRecordToItem(record: TeamRecord): TeamItem {
   const base: TeamItem = {
     PK: `EVENT#${record.eventId}`,
     SK: `${TEAM_SK_PREFIX}${record.teamId}`,
@@ -137,7 +141,9 @@ export class DynamoDbTeamsRepository implements TeamsRepository {
   }
 
   async putTeam(record: TeamRecord): Promise<void> {
-    await this.ddb.send(new PutCommand({ TableName: this.tableName, Item: recordToItem(record) }));
+    await this.ddb.send(
+      new PutCommand({ TableName: this.tableName, Item: teamRecordToItem(record) }),
+    );
   }
 
   async deleteTeam(eventId: string, teamId: string): Promise<void> {

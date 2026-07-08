@@ -2,7 +2,7 @@ import type { Client, InArgs, InStatement, ResultSet } from "@libsql/client/http
 import { SCORE_SUMMARY_SCHEMA_STATEMENTS } from "./score-summary-schema.js";
 import { EVENTS_SCHEMA_STATEMENTS } from "./sql-events-repository.js";
 import { TEAMS_SCHEMA_STATEMENTS } from "./sql-teams-repository.js";
-import type { SqlExecutor, SqlParam, SqlRow, SqlRunResult } from "./types.js";
+import type { SqlExecutor, SqlParam, SqlRow, SqlRunResult, SqlStatement } from "./types.js";
 
 type LibsqlClient = Pick<Client, "execute" | "batch">;
 
@@ -35,6 +35,17 @@ export class LibsqlExecutor implements SqlExecutor {
 
   async all(sql: string, params?: readonly SqlParam[]): Promise<readonly SqlRow[]> {
     return rows(await this.client.execute(statement(sql, params)));
+  }
+
+  async batch(statements: readonly SqlStatement[]): Promise<readonly SqlRunResult[]> {
+    // `batch(..., "write")` is libSQL's non-interactive atomic transaction — the
+    // same primitive the schema bootstrap below uses. All-or-nothing: a
+    // constraint violation rolls every statement back and the error propagates.
+    const results = await this.client.batch(
+      statements.map((entry) => statement(entry.sql, entry.params)),
+      "write",
+    );
+    return results.map((result) => ({ changes: result.rowsAffected }));
   }
 }
 

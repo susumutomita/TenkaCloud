@@ -6,13 +6,19 @@ import type { EventsRepository, SqlExecutor } from "./types.js";
 export { DynamoDbEventsRepository } from "./dynamodb-events-repository.js";
 export { EVENTS_SCHEMA_SQL, SqlEventsRepository } from "./sql-events-repository.js";
 export type {
+  ClearProgressionGateOutcome,
   ControlDataBackend,
+  CreateEventWithTeamsOutcome,
+  EventMutationOutcome,
   EventRecord,
+  EventSchedulePatch,
   EventsRepository,
+  ScheduleFiredKind,
   SqlExecutor,
   SqlParam,
   SqlRow,
   SqlRunResult,
+  SqlStatement,
 } from "./types.js";
 
 /**
@@ -25,6 +31,12 @@ export interface CreateEventsRepositoryDeps {
   readonly ddb?: DynamoDBDocumentClient;
   /** Events table name — required for the `dynamodb` backend. */
   readonly eventsTableName?: string;
+  /**
+   * Teams table name — needed on the `dynamodb` backend only by
+   * `createEventWithTeams` (#2437, the atomic event+teams transaction).
+   * Events-only wirings may omit it; that method then fails loudly.
+   */
+  readonly teamsTableName?: string;
   /** SQL driver — required for the `turso` / `sql` backend. */
   readonly sql?: SqlExecutor;
 }
@@ -64,5 +76,5 @@ export function createEventsRepository(
   if (!deps.ddb || !deps.eventsTableName) {
     throw new Error("DynamoDbEventsRepository requires deps.ddb and deps.eventsTableName.");
   }
-  return new DynamoDbEventsRepository(deps.ddb, deps.eventsTableName);
+  return new DynamoDbEventsRepository(deps.ddb, deps.eventsTableName, deps.teamsTableName);
 }

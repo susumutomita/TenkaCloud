@@ -54,6 +54,9 @@ export function createControlDataRepositoryResolver(
         events: createEventsRepository(backend, {
           ddb: input.ddb,
           eventsTableName: input.eventsTableName,
+          // #2437: createEventWithTeams (atomic event+teams transaction) writes
+          // the Teams table through the Events repository.
+          teamsTableName: input.teamsTableName,
         }),
         teams: createTeamsRepository(backend, {
           ddb: input.ddb,
@@ -88,6 +91,7 @@ export function createControlDataRepositoryResolver(
       const canonicalEvents = createEventsRepository("dynamodb", {
         ddb: input.ddb,
         eventsTableName: input.eventsTableName,
+        teamsTableName: input.teamsTableName,
       });
       const canonicalTeams = createTeamsRepository("dynamodb", {
         ddb: input.ddb,

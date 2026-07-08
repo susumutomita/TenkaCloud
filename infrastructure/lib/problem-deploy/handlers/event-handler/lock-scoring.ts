@@ -1,6 +1,5 @@
-import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { type EventSharedResources, resolveEventsRepository } from "./shared.js";
-import type { EventItem } from "./types.js";
+import type { EventRecord } from "../../control-data/events-repository.js";
+import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
 
 /**
  * #558 `lockScoring` / `unlockScoring` の結果。
@@ -30,6 +29,10 @@ const LOCKABLE_STATUSES = new Set(["READY", "ENDED"]);
  * 加点経路への影響 (本関数の外):
  * - HealthCheck Lambda が event の scoringLocked を check して probe / 加点 skip
  * - submit-flag handler が event の scoringLocked を check して `scoring_locked` outcome 返す
+ *
+ * [#2437 Phase A2] 条件付き書き込みは repository seam の
+ * `lockScoring(tenantId, eventId, by, at)` に移設。 CCF catch + probe Get の分岐は
+ * `EventMutationOutcome` union の分岐に置き換え (HTTP ステータス対応は不変)。
  */
 export async function lockScoring(
   shared: EventSharedResources,
@@ -40,37 +43,15 @@ export async function lockScoring(
 ): Promise<LockScoringOutcome> {
   const now = new Date(nowMs).toISOString();
 
-  try {
-    const updateOut = await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.eventsTableName,
-        Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        UpdateExpression:
-          "SET scoringLocked = :t, scoringLockedAt = :now, scoringLockedBy = :who, updatedAt = :now",
-        ConditionExpression:
-          "tenantId = :tenantId AND (#s = :ready OR #s = :ended) AND (attribute_not_exists(scoringLocked) OR scoringLocked = :f)",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":t": true,
-          ":f": false,
-          ":now": now,
-          ":who": lockedBy,
-          ":tenantId": tenantId,
-          ":ready": "READY",
-          ":ended": "ENDED",
-        },
-        ReturnValues: "ALL_NEW",
-      }),
-    );
-    const item = updateOut.Attributes as Partial<EventItem> | undefined;
-    if (!item) return { kind: "not_found" };
+  const repositories = await resolveEventRepositories(shared);
+  const result = await repositories.events.lockScoring(tenantId, eventId, lockedBy, now);
+  // updated: 成功判定は outcome 自身が担う (post-image 無しの degenerate 応答は
+  // repository 層が not_found に畳み済み)。
+  if (result.outcome === "updated") {
     return { kind: "ok", scoringLocked: true, scoringLockedAt: now };
-  } catch (err) {
-    if (err instanceof Error && err.name === "ConditionalCheckFailedException") {
-      return resolveLockFailure(shared, tenantId, eventId, true);
-    }
-    throw err;
   }
+  if (result.outcome === "not_found") return { kind: "not_found" };
+  return classifyLockConflict(result.event, true);
 }
 
 /**
@@ -87,52 +68,25 @@ export async function unlockScoring(
 ): Promise<LockScoringOutcome> {
   const now = new Date(nowMs).toISOString();
 
-  try {
-    const updateOut = await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.eventsTableName,
-        Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        UpdateExpression:
-          "REMOVE scoringLocked, scoringLockedAt, scoringLockedBy SET updatedAt = :now",
-        ConditionExpression:
-          "tenantId = :tenantId AND (#s = :ready OR #s = :ended) AND scoringLocked = :t",
-        ExpressionAttributeNames: { "#s": "status" },
-        ExpressionAttributeValues: {
-          ":t": true,
-          ":now": now,
-          ":tenantId": tenantId,
-          ":ready": "READY",
-          ":ended": "ENDED",
-        },
-        ReturnValues: "ALL_NEW",
-      }),
-    );
-    const item = updateOut.Attributes as Partial<EventItem> | undefined;
-    if (!item) return { kind: "not_found" };
+  const repositories = await resolveEventRepositories(shared);
+  const result = await repositories.events.unlockScoring(tenantId, eventId, now);
+  if (result.outcome === "updated") {
     return { kind: "ok", scoringLocked: false };
-  } catch (err) {
-    if (err instanceof Error && err.name === "ConditionalCheckFailedException") {
-      return resolveLockFailure(shared, tenantId, eventId, false);
-    }
-    throw err;
   }
+  if (result.outcome === "not_found") return { kind: "not_found" };
+  return classifyLockConflict(result.event, false);
 }
 
 /**
- * Condition fail 時の理由を Get で確認して outcome を組み立てる。
- *   - 行不在 / tenant 不一致 → not_found
+ * 条件不成立 (conflict) の理由を probe 済み event から組み立てる。
+ *   - probe 結果無し → not_found (defensive、seam は conflict に必ず event を同梱する)
  *   - status が lockable でない → not_lockable
  *   - 既に target 状態 → already (idempotent)
  */
-async function resolveLockFailure(
-  shared: EventSharedResources,
-  tenantId: string,
-  eventId: string,
+function classifyLockConflict(
+  event: EventRecord | undefined,
   targetLock: boolean,
-): Promise<LockScoringOutcome> {
-  // getEvent は tenant 不一致 / 行不在をどちらも undefined に畳む (= 従来の
-  // `!item || item.tenantId !== tenantId` を repository 内へ移設)。
-  const event = await resolveEventsRepository(shared).getEvent(tenantId, eventId);
+): LockScoringOutcome {
   if (!event) return { kind: "not_found" };
   const status = typeof event.status === "string" ? event.status : "?";
   if (!LOCKABLE_STATUSES.has(status)) return { kind: "not_lockable", status };

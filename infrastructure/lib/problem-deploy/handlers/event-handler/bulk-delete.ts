@@ -93,31 +93,11 @@ export async function bulkTeardownEvent(
   );
 
   // #557: Event status を TEARDOWN に倒す。bulk-deploy が DRAFT → DEPLOYING にする
-  // 対称で、こちらは「終端化中」 marker。`updateEventScheduledStatus` の対と同じ pattern。
-  // ConditionExpression で ARCHIVED は踏み越えない (= 一度 archive 済の event を逆走させない)。
-  // CCF は既に ARCHIVED か行不在 → 触らないだけで成功扱い (handler は GetCommand で確認済)。
+  // 対称で、こちらは「終端化中」 marker。 [#2437 Phase A2] 条件付き書き込みは repository seam
+  // の `markTeardown(tenantId, eventId, at)` に移設 (ARCHIVED は踏み越えない条件も seam 内)。
+  // conflict (= 既に ARCHIVED / 行不在) は触らないだけで成功扱い (handler は getEvent で確認済)。
   // PutEvents と並列実行 (互いに依存なし)。
-  const updateStatus = shared.ddb
-    .send(
-      new UpdateCommand({
-        TableName: shared.eventsTableName,
-        Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        UpdateExpression: "SET #status = :teardown, updatedAt = :now",
-        ConditionExpression: "tenantId = :tenantId AND #status <> :archived",
-        ExpressionAttributeNames: { "#status": "status" },
-        ExpressionAttributeValues: {
-          ":teardown": "TEARDOWN",
-          ":archived": "ARCHIVED",
-          ":tenantId": tenantId,
-          ":now": updatedAt,
-        },
-      }),
-    )
-    .catch((err: unknown) => {
-      if (err instanceof Error && err.name !== "ConditionalCheckFailedException") {
-        throw err;
-      }
-    });
+  const updateStatus = resolveEventsRepository(shared).markTeardown(tenantId, eventId, updatedAt);
   const [publishResults] = await Promise.all([publish, updateStatus]);
   const failedJobIds = publishResults.filter((r) => !r.success).map((r) => r.item);
 

@@ -5,9 +5,24 @@ import {
   PutCommand,
   QueryCommand,
   ScanCommand,
+  TransactWriteCommand,
+  type TransactWriteCommandInput,
+  UpdateCommand,
+  type UpdateCommandInput,
 } from "@aws-sdk/lib-dynamodb";
 import type { EventItem } from "../handlers/event-handler/types.js";
-import type { EventRecord, EventsRepository } from "./types.js";
+import type { ProgressionGateConfig } from "../handlers/shared/progression-gate.js";
+import { teamRecordToItem } from "./dynamodb-teams-repository.js";
+import type {
+  ClearProgressionGateOutcome,
+  CreateEventWithTeamsOutcome,
+  EventMutationOutcome,
+  EventRecord,
+  EventSchedulePatch,
+  EventsRepository,
+  ScheduleFiredKind,
+  TeamRecord,
+} from "./types.js";
 
 /**
  * [ADR-049 §5.1] DynamoDB implementation of {@link EventsRepository}. This is a
@@ -51,10 +66,33 @@ function recordToItem(record: EventRecord): EventItem {
   };
 }
 
+function isConditionalCheckFailed(err: unknown): boolean {
+  return err instanceof Error && err.name === "ConditionalCheckFailedException";
+}
+
+/**
+ * TransactWrite reports a failed per-item `ConditionExpression` as a
+ * `TransactionCanceledException` whose `CancellationReasons` carry
+ * `ConditionalCheckFailed` — the transactional sibling of a plain CCF.
+ */
+function isTransactConditionalCheckFailed(err: unknown): boolean {
+  if (!(err instanceof Error) || err.name !== "TransactionCanceledException") return false;
+  const reasons = (err as { CancellationReasons?: ReadonlyArray<{ Code?: string }> })
+    .CancellationReasons;
+  return (reasons ?? []).some((reason) => reason?.Code === "ConditionalCheckFailed");
+}
+
 export class DynamoDbEventsRepository implements EventsRepository {
   constructor(
     private readonly ddb: DynamoDBDocumentClient,
     private readonly tableName: string,
+    /**
+     * [#2437] Required only by {@link createEventWithTeams} (the one method that
+     * writes the Teams table). Events-only wirings (e.g. the scheduled-teardown
+     * path, which has no Teams table) may omit it — calling
+     * `createEventWithTeams` without it fails loudly.
+     */
+    private readonly teamsTableName?: string,
   ) {}
 
   async getEvent(tenantId: string, eventId: string): Promise<EventRecord | undefined> {
@@ -134,5 +172,409 @@ export class DynamoDbEventsRepository implements EventsRepository {
       exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
     } while (exclusiveStartKey);
     return deleted;
+  }
+
+  // ---------------------------------------------------------------------------
+  // [Issue #2437 / Phase A2] Conditional writes. Every Update/Condition
+  // expression below is a verbatim relocation of the pre-seam handler code —
+  // do not "improve" an expression here without a dedicated migration issue.
+  // ---------------------------------------------------------------------------
+
+  /** Key of the Events META row (same derivation as every read above). */
+  private eventKey(eventId: string): { PK: string; SK: string } {
+    return { PK: `EVENT#${eventId}`, SK: EVENT_SK };
+  }
+
+  /**
+   * CCF probe (mirrors the pre-seam catch + Get pattern): absent row / tenant
+   * mismatch folds to `not_found`, anything else is a state `conflict` carrying
+   * the probed event.
+   */
+  private async probeConflict(tenantId: string, eventId: string): Promise<EventMutationOutcome> {
+    const event = await this.getEvent(tenantId, eventId);
+    if (!event) return { outcome: "not_found" };
+    return { outcome: "conflict", event };
+  }
+
+  /**
+   * Maps an `ALL_NEW` response to `updated`. A missing `Attributes` (never
+   * produced by real DynamoDB on a successful ALL_NEW update) folds to
+   * `not_found`, preserving the pre-seam handlers' defensive branch.
+   */
+  private static updatedFrom(
+    attributes: Record<string, unknown> | undefined,
+  ): EventMutationOutcome {
+    if (!attributes) return { outcome: "not_found" };
+    return { outcome: "updated", event: itemToRecord(attributes) };
+  }
+
+  /**
+   * One conditional Events-META update through the shared scaffold: fire the
+   * verbatim expression, map success per `ReturnValues`, and map a CCF per the
+   * method's `onCcf` policy (`probe` = re-read to split not_found/conflict,
+   * `conflict` = fire-and-forget fold with no probe read, `not_found` =
+   * tenant-scope-only condition).
+   */
+  private async conditionalUpdate(
+    tenantId: string,
+    eventId: string,
+    input: Omit<UpdateCommandInput, "TableName" | "Key">,
+    onCcf: "probe" | "conflict" | "not_found",
+  ): Promise<EventMutationOutcome> {
+    try {
+      const out = await this.ddb.send(
+        new UpdateCommand({
+          TableName: this.tableName,
+          Key: this.eventKey(eventId),
+          ...input,
+        }),
+      );
+      if (input.ReturnValues === "ALL_NEW") {
+        return DynamoDbEventsRepository.updatedFrom(out.Attributes);
+      }
+      return { outcome: "updated" };
+    } catch (err) {
+      if (!isConditionalCheckFailed(err)) throw err;
+      if (onCcf === "conflict") return { outcome: "conflict" };
+      if (onCcf === "not_found") return { outcome: "not_found" };
+      return this.probeConflict(tenantId, eventId);
+    }
+  }
+
+  async endEvent(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome> {
+    return this.conditionalUpdate(
+      tenantId,
+      eventId,
+      {
+        // #1095: ENDED 遷移と同時に scoringLocked / scoringLockedAt / scoringLockedBy を
+        //        立てる (= 採点 gate 自動 lock)。
+        UpdateExpression:
+          "SET #s = :ended, endsAt = :now, updatedAt = :now, scoringLocked = :true, scoringLockedAt = :now, scoringLockedBy = :system",
+        // tenant 跨ぎ防止 + status=READY のみ許可
+        ConditionExpression: "tenantId = :tenantId AND #s = :ready",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":ended": "ENDED",
+          ":ready": "READY",
+          ":now": at,
+          ":tenantId": tenantId,
+          ":true": true,
+          ":system": "system:end-event",
+        },
+        ReturnValues: "ALL_NEW",
+      },
+      "probe",
+    );
+  }
+
+  async lockScoring(
+    tenantId: string,
+    eventId: string,
+    lockedBy: string,
+    at: string,
+  ): Promise<EventMutationOutcome> {
+    return this.conditionalUpdate(
+      tenantId,
+      eventId,
+      {
+        UpdateExpression:
+          "SET scoringLocked = :t, scoringLockedAt = :now, scoringLockedBy = :who, updatedAt = :now",
+        ConditionExpression:
+          "tenantId = :tenantId AND (#s = :ready OR #s = :ended) AND (attribute_not_exists(scoringLocked) OR scoringLocked = :f)",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":t": true,
+          ":f": false,
+          ":now": at,
+          ":who": lockedBy,
+          ":tenantId": tenantId,
+          ":ready": "READY",
+          ":ended": "ENDED",
+        },
+        ReturnValues: "ALL_NEW",
+      },
+      "probe",
+    );
+  }
+
+  async unlockScoring(
+    tenantId: string,
+    eventId: string,
+    at: string,
+  ): Promise<EventMutationOutcome> {
+    return this.conditionalUpdate(
+      tenantId,
+      eventId,
+      {
+        UpdateExpression:
+          "REMOVE scoringLocked, scoringLockedAt, scoringLockedBy SET updatedAt = :now",
+        ConditionExpression:
+          "tenantId = :tenantId AND (#s = :ready OR #s = :ended) AND scoringLocked = :t",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":t": true,
+          ":now": at,
+          ":tenantId": tenantId,
+          ":ready": "READY",
+          ":ended": "ENDED",
+        },
+        ReturnValues: "ALL_NEW",
+      },
+      "probe",
+    );
+  }
+
+  async archiveEvent(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome> {
+    return this.conditionalUpdate(
+      tenantId,
+      eventId,
+      {
+        UpdateExpression: "SET #s = :archived, archivedAt = :now, updatedAt = :now",
+        // tenant 跨ぎ防止 + 許可状態のみに限定 (DRAFT / ENDED / TEARDOWN)
+        ConditionExpression: "tenantId = :tenantId AND #s IN (:draft, :ended, :teardown)",
+        ExpressionAttributeNames: { "#s": "status" },
+        ExpressionAttributeValues: {
+          ":archived": "ARCHIVED",
+          ":draft": "DRAFT",
+          ":ended": "ENDED",
+          ":teardown": "TEARDOWN",
+          ":now": at,
+          ":tenantId": tenantId,
+        },
+      },
+      "probe",
+    );
+  }
+
+  async updateSchedule(
+    tenantId: string,
+    eventId: string,
+    patch: EventSchedulePatch,
+    at: string,
+  ): Promise<EventMutationOutcome> {
+    // 動的 SET (schedule.ts buildScheduleUpdate の event 側と同一の組み立て順)。
+    const parts = ["updatedAt = :now"];
+    const values: Record<string, string | number> = { ":now": at, ":tenantId": tenantId };
+    if (patch.startsAt !== undefined) {
+      parts.push("startsAt = :startsAt");
+      values[":startsAt"] = patch.startsAt;
+    }
+    if (patch.endsAt !== undefined) {
+      parts.push("endsAt = :endsAt");
+      values[":endsAt"] = patch.endsAt;
+    }
+    if (patch.teardownAt !== undefined) {
+      parts.push("teardownAt = :teardownAt");
+      values[":teardownAt"] = patch.teardownAt;
+    }
+    if (patch.deployAt !== undefined) {
+      parts.push("deployAt = :deployAt");
+      values[":deployAt"] = patch.deployAt;
+    }
+    if (patch.scoreboardFreezeMinutes !== undefined) {
+      parts.push("scoreboardFreezeMinutes = :fz");
+      values[":fz"] = patch.scoreboardFreezeMinutes;
+    }
+    // 条件は tenant 照合のみ → CCF は行不在 / tenant 不一致 = not_found (probe 不要)。
+    return this.conditionalUpdate(
+      tenantId,
+      eventId,
+      {
+        UpdateExpression: `SET ${parts.join(", ")}`,
+        ConditionExpression: "tenantId = :tenantId",
+        ExpressionAttributeValues: values,
+        ReturnValues: "ALL_NEW",
+      },
+      "not_found",
+    );
+  }
+
+  async markTeardown(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome> {
+    // Fire-and-forget: 呼び出し側は skip するだけなので probe read を費やさない
+    // (= 旧 CCF 握り潰しと同一 I/O)。行不在も conflict に畳む。
+    return this.conditionalUpdate(
+      tenantId,
+      eventId,
+      {
+        UpdateExpression: "SET #status = :teardown, updatedAt = :now",
+        ConditionExpression: "tenantId = :tenantId AND #status <> :archived",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: {
+          ":teardown": "TEARDOWN",
+          ":archived": "ARCHIVED",
+          ":tenantId": tenantId,
+          ":now": at,
+        },
+      },
+      "conflict",
+    );
+  }
+
+  async setProgressionGate(
+    tenantId: string,
+    eventId: string,
+    config: ProgressionGateConfig,
+    at: string,
+  ): Promise<EventMutationOutcome> {
+    // 条件は tenant 照合のみ → CCF = not_found (旧 handler と同じ、存在を漏らさない)。
+    return this.conditionalUpdate(
+      tenantId,
+      eventId,
+      {
+        UpdateExpression: "SET progressionGate = :cfg, updatedAt = :now",
+        ConditionExpression: "tenantId = :tenantId",
+        ExpressionAttributeValues: {
+          ":cfg": config,
+          ":now": at,
+          ":tenantId": tenantId,
+        },
+      },
+      "not_found",
+    );
+  }
+
+  async clearProgressionGate(
+    tenantId: string,
+    eventId: string,
+    at: string,
+  ): Promise<ClearProgressionGateOutcome> {
+    try {
+      const out = await this.ddb.send(
+        new UpdateCommand({
+          TableName: this.tableName,
+          Key: this.eventKey(eventId),
+          UpdateExpression: "REMOVE progressionGate SET updatedAt = :now",
+          ConditionExpression: "tenantId = :tenantId",
+          ExpressionAttributeValues: {
+            ":now": at,
+            ":tenantId": tenantId,
+          },
+          ReturnValues: "ALL_OLD",
+        }),
+      );
+      const before = out.Attributes as Partial<EventItem> | undefined;
+      return { outcome: "updated", removed: before?.progressionGate !== undefined };
+    } catch (err) {
+      if (isConditionalCheckFailed(err)) return { outcome: "not_found" };
+      throw err;
+    }
+  }
+
+  async markDeploying(
+    tenantId: string,
+    eventId: string,
+    at: string,
+  ): Promise<EventMutationOutcome> {
+    return this.conditionalUpdate(
+      tenantId,
+      eventId,
+      {
+        UpdateExpression: "SET #status = :deploying, updatedAt = :now",
+        ConditionExpression:
+          "tenantId = :tenantId AND (#status = :draft OR #status = :ready OR #status = :deploying)",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: {
+          ":deploying": "DEPLOYING",
+          ":draft": "DRAFT",
+          ":ready": "READY",
+          ":now": at,
+          ":tenantId": tenantId,
+        },
+      },
+      "conflict",
+    );
+  }
+
+  async transitionStatus(
+    tenantId: string,
+    eventId: string,
+    from: string,
+    to: string,
+    at: string,
+  ): Promise<EventMutationOutcome> {
+    // 毎分 tick の CAS: 敗者は次 tick で再評価するだけなので probe しない。
+    return this.conditionalUpdate(
+      tenantId,
+      eventId,
+      {
+        UpdateExpression: "SET #status = :next, updatedAt = :now",
+        // race 防止: 期待 current status と一致しているときのみ更新 (= operator が
+        // 手動 archive / 再 deploy で先に動かしてたら CCF で skip)。
+        ConditionExpression: "tenantId = :tenant AND #status = :current",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: {
+          ":tenant": tenantId,
+          ":current": from,
+          ":next": to,
+          ":now": at,
+        },
+      },
+      "conflict",
+    );
+  }
+
+  async markScheduleFired(
+    tenantId: string,
+    eventId: string,
+    kind: ScheduleFiredKind,
+    at: string,
+  ): Promise<EventMutationOutcome> {
+    // firedAttr は固定の literal union なので UpdateExpression への injection はない。
+    // conflict = 既発火 (attribute_not_exists 不成立)。冪等 marker なので probe 不要。
+    const firedAttr = kind === "teardown" ? "teardownFiredAt" : "deployFiredAt";
+    return this.conditionalUpdate(
+      tenantId,
+      eventId,
+      {
+        UpdateExpression: `SET ${firedAttr} = :now`,
+        ConditionExpression: `tenantId = :tenant AND attribute_not_exists(${firedAttr})`,
+        ExpressionAttributeValues: { ":tenant": tenantId, ":now": at },
+      },
+      "conflict",
+    );
+  }
+
+  async createEventWithTeams(
+    event: EventRecord,
+    teams: readonly TeamRecord[],
+  ): Promise<CreateEventWithTeamsOutcome> {
+    if (!this.teamsTableName) {
+      throw new Error(
+        "DynamoDbEventsRepository.createEventWithTeams requires a teamsTableName " +
+          "(events-only wiring cannot write the Teams table).",
+      );
+    }
+    // TransactWrite は 100 items が AWS の上限。event 1 行 + teams を 1 つの atomic write で
+    // 書くため teams は最大 99 (= 100 - event 1 行)。 schema (CreateEventRequestSchema) が
+    // teams.max(99) なので validated path では発火しない defense-in-depth。
+    if (teams.length + 1 > 100) {
+      throw new Error(`TransactWrite items > 100 (teams=${teams.length} + event=1)`);
+    }
+    const transact: TransactWriteCommandInput = {
+      TransactItems: [
+        {
+          Put: {
+            TableName: this.tableName,
+            Item: recordToItem(event),
+            // 同一 eventId 二重生成防止 (実質起こらないが defense-in-depth)
+            ConditionExpression: "attribute_not_exists(PK)",
+          },
+        },
+        ...teams.map((team) => ({
+          Put: {
+            TableName: this.teamsTableName,
+            Item: teamRecordToItem(team),
+            ConditionExpression: "attribute_not_exists(PK)",
+          },
+        })),
+      ],
+    };
+    try {
+      await this.ddb.send(new TransactWriteCommand(transact));
+      return { outcome: "created" };
+    } catch (err) {
+      if (isTransactConditionalCheckFailed(err)) return { outcome: "conflict" };
+      throw err;
+    }
   }
 }

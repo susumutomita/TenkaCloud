@@ -3,7 +3,7 @@ import {
   type TransactWriteCommandInput,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
-import type { EventSharedResources } from "../shared.js";
+import { type EventSharedResources, resolveEventRepositories } from "../shared.js";
 import { type PlanEntry, type PublishFailure, TRANSACT_WRITE_BATCH } from "./types.js";
 
 /**
@@ -61,7 +61,11 @@ function buildTransactItems(
 
 /**
  * Event の status を DEPLOYING へ前進させる。 DRAFT / READY / DEPLOYING からのみ許可
- * (= ACTIVE / COMPLETE 等の後続状態を巻き戻さない)。 ConditionalCheckFailed は no-op。
+ * (= ACTIVE / COMPLETE 等の後続状態を巻き戻さない)。 [#2437 Phase A2] 条件付き書き込みは
+ * repository seam の `markDeploying(tenantId, eventId, at)` に移設 — 条件不成立は
+ * conflict outcome として返り no-op (= 旧 ConditionalCheckFailed 握り潰しと同じ挙動)。
+ * bulk-deploy は Teams table を必ず配線する (手動 route / scheduled deploy とも) ので、
+ * mirror backend も効く runtime resolver 経由で解決する。
  */
 export async function markBulkEventDeploying(
   shared: EventSharedResources,
@@ -69,28 +73,8 @@ export async function markBulkEventDeploying(
   eventId: string,
   createdAt: string,
 ): Promise<void> {
-  try {
-    await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.eventsTableName,
-        Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        UpdateExpression: "SET #status = :deploying, updatedAt = :now",
-        ConditionExpression:
-          "tenantId = :tenantId AND (#status = :draft OR #status = :ready OR #status = :deploying)",
-        ExpressionAttributeNames: { "#status": "status" },
-        ExpressionAttributeValues: {
-          ":deploying": "DEPLOYING",
-          ":draft": "DRAFT",
-          ":ready": "READY",
-          ":now": createdAt,
-          ":tenantId": tenantId,
-        },
-      }),
-    );
-  } catch (err) {
-    if (err instanceof Error && err.name === "ConditionalCheckFailedException") return;
-    throw err;
-  }
+  const repositories = await resolveEventRepositories(shared);
+  await repositories.events.markDeploying(tenantId, eventId, createdAt);
 }
 
 /**

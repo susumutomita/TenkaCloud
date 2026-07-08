@@ -1,8 +1,9 @@
-import { TransactWriteCommand, type TransactWriteCommandInput } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
+import type { EventRecord } from "../../control-data/events-repository.js";
+import type { TeamRecord } from "../../control-data/teams-repository.js";
 import { generateTeamLoginKey } from "../deploy-handler/team-key.js";
-import type { EventSharedResources } from "./shared.js";
-import type { CreateEventRequest, CreateEventResponse, EventItem, TeamItem } from "./types.js";
+import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
+import type { CreateEventRequest, CreateEventResponse } from "./types.js";
 
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 日
 
@@ -29,14 +30,18 @@ export class DuplicateProblemIdError extends Error {
 }
 
 /**
- * Event 1 行 + Teams N 行を **TransactWrite で原子的に書く**。
+ * Event 1 行 + Teams N 行を **原子的に書く** (repository seam の `createEventWithTeams`)。
  *
- * 失敗セマンティクス: TransactWrite は all-or-nothing なので、teamLoginKey の重複等で
+ * 失敗セマンティクス: 書き込みは all-or-nothing なので、teamLoginKey の重複等で
  * 1 件でも失敗したら全行が書かれない。caller は呼び直しで OK (eventId は ULID なので
  * idempotent ではない、新規生成する)。
  *
  * `teams` の internalSlug 重複と `problems` の problemId 重複は **caller 側で validate**
  * すべきだが、defense-in-depth で本関数でもチェックする (ConditionalCheckFailed より分かりやすい)。
+ *
+ * [#2437 Phase A2] DDB TransactWrite (event 1 + teams ≤99、 全行 attribute_not_exists) は
+ * repository seam に移設。 一意性違反は seam が `conflict` union に変換して返すので、
+ * 本 handler は throw に戻して従来どおり 500 経路に載せる (ULID 衝突は実質起こらない)。
  */
 export async function createEvent(
   shared: EventSharedResources,
@@ -51,34 +56,21 @@ export async function createEvent(
   const createdAt = new Date(nowMs).toISOString();
   const expiresAt = toEpochSeconds(nowMs + (ctx.ttlMs ?? DEFAULT_TTL_MS));
 
-  const teams = req.teams.map((t) => {
-    const teamId = ulid();
-    const teamLoginKey = generateTeamLoginKey();
-    const item: TeamItem = {
-      PK: `EVENT#${eventId}`,
-      SK: `TEAM#${teamId}`,
-      GSI1PK: `TENANT#${ctx.tenantId}`,
-      GSI1SK: `EVENT#${eventId}#TEAM#${teamId}`,
-      GSI2PK: `TEAMKEY#${teamLoginKey}`,
-      GSI2SK: "META",
-      eventId,
-      teamId,
-      tenantId: ctx.tenantId,
-      internalSlug: t.internalSlug,
-      teamLoginKey,
-      awsAccountId: t.awsAccountId,
-      createdAt,
-      updatedAt: createdAt,
-      expiresAt,
-    };
-    return item;
-  });
+  // teamLoginKey を required に保った型で持つ (TeamRecord 上は optional): 生成漏れを
+  // 型エラーにし、 response へ空 key が silent に流れないようにする。
+  const teams: Array<TeamRecord & { readonly teamLoginKey: string }> = req.teams.map((t) => ({
+    eventId,
+    teamId: ulid(),
+    tenantId: ctx.tenantId,
+    internalSlug: t.internalSlug,
+    teamLoginKey: generateTeamLoginKey(),
+    awsAccountId: t.awsAccountId,
+    createdAt,
+    updatedAt: createdAt,
+    expiresAt,
+  }));
 
-  const eventItem: EventItem = {
-    PK: `EVENT#${eventId}`,
-    SK: "META",
-    GSI1PK: `TENANT#${ctx.tenantId}`,
-    GSI1SK: createdAt,
+  const eventRecord: EventRecord = {
     eventId,
     tenantId: ctx.tenantId,
     name: req.name,
@@ -90,39 +82,18 @@ export async function createEvent(
     expiresAt,
   };
 
-  // TransactWrite は 100 items が AWS の上限。event 1 行 + teams を 1 つの atomic write で書くため
-  // teams は最大 99 (= 100 - event 1 行)。 schema (CreateEventRequestSchema) を teams.max(99) に
-  // 揃えたので、 検証を通った request はここに到達した時点で必ず teams <= 99。 100+ teams への対応は
-  // atomicity を犠牲にしないため Phase 2 (Distributed Map で chunk 化) に回す。
-  // 下記は schema を迂回した呼び出しに対する defense-in-depth (validated path では発火しない)。
-  if (teams.length + 1 > 100) {
-    throw new Error(`TransactWrite items > 100 (teams=${teams.length} + event=1)`);
+  const repositories = await resolveEventRepositories(shared);
+  const result = await repositories.events.createEventWithTeams(eventRecord, teams);
+  if (result.outcome === "conflict") {
+    // attribute_not_exists / 一意性制約の不成立。 ULID 生成なので実質起こらない —
+    // 旧実装が TransactionCanceledException をそのまま throw していたのと同じく
+    // 500 経路 (handleRouteError) に載せる。
+    throw new Error(`createEventWithTeams conflict: event/team row already exists (${eventId})`);
   }
-
-  const transact: TransactWriteCommandInput = {
-    TransactItems: [
-      {
-        Put: {
-          TableName: shared.eventsTableName,
-          Item: eventItem,
-          // 同一 eventId 二重生成防止 (実質起こらないが defense-in-depth)
-          ConditionExpression: "attribute_not_exists(PK)",
-        },
-      },
-      ...teams.map((t) => ({
-        Put: {
-          TableName: shared.teamsTableName,
-          Item: t,
-          ConditionExpression: "attribute_not_exists(PK)",
-        },
-      })),
-    ],
-  };
-  await shared.ddb.send(new TransactWriteCommand(transact));
 
   return {
     eventId,
-    status: eventItem.status,
+    status: eventRecord.status,
     createdAt,
     expiresAt,
     teams: teams.map((t) => ({

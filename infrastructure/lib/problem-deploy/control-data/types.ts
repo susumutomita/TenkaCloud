@@ -1,4 +1,5 @@
 import type { EventItem, TeamItem } from "../handlers/event-handler/types.js";
+import type { ProgressionGateConfig } from "../handlers/shared/progression-gate.js";
 
 /**
  * [ADR-049 §5.1] Control-plane data behind a repository seam.
@@ -14,12 +15,86 @@ import type { EventItem, TeamItem } from "../handlers/event-handler/types.js";
 export type EventRecord = Omit<EventItem, "PK" | "SK" | "GSI1PK" | "GSI1SK">;
 
 /**
+ * [Issue #2437 / Phase A2] Result of one conditional Event mutation. DynamoDB
+ * signals a failed `ConditionExpression` by throwing
+ * `ConditionalCheckFailedException`, while SQL backends signal it with
+ * `changes = 0` — this discriminated union absorbs both so handlers branch on
+ * data instead of catching backend-specific exceptions.
+ *
+ * - `updated`  — the conditional write applied. `event` carries the post-image
+ *   when the underlying write returns it (DynamoDB `ReturnValues: ALL_NEW` /
+ *   SQL `UPDATE … RETURNING`); methods whose DynamoDB call historically ran
+ *   without `ReturnValues` omit it (the DDB request stays byte-identical).
+ * - `conflict` — the row exists but the state condition did not hold. `event`
+ *   carries the probe read when the method probes on conflict (mirrors the
+ *   pre-seam CCF-catch + Get pattern); fire-and-forget methods skip the probe
+ *   and omit it.
+ * - `not_found` — the row is absent or belongs to another tenant
+ *   (404-equivalent, never leaks another tenant's row).
+ */
+export type EventMutationOutcome =
+  | { readonly outcome: "updated"; readonly event?: EventRecord }
+  | { readonly outcome: "conflict"; readonly event?: EventRecord }
+  | { readonly outcome: "not_found" };
+
+/**
+ * [Issue #2437] Result of {@link EventsRepository.clearProgressionGate}.
+ * `removed` distinguishes "a gate was actually removed" from the idempotent
+ * no-gate case (DynamoDB derives it from `ReturnValues: ALL_OLD`; SQL from a
+ * gate-present conditional `UPDATE … RETURNING`).
+ */
+export type ClearProgressionGateOutcome =
+  | { readonly outcome: "updated"; readonly removed: boolean }
+  | { readonly outcome: "not_found" };
+
+/**
+ * [Issue #2437] Result of {@link EventsRepository.createEventWithTeams}.
+ * `conflict` = a uniqueness constraint fired (DynamoDB `attribute_not_exists`
+ * cancellation / SQL PRIMARY KEY or UNIQUE violation) and **nothing** was
+ * written — both backends write the event + teams atomically.
+ */
+export type CreateEventWithTeamsOutcome =
+  | { readonly outcome: "created" }
+  | { readonly outcome: "conflict" };
+
+/**
+ * [Issue #2437] Partial schedule update for
+ * {@link EventsRepository.updateSchedule}. Only the defined fields are written
+ * (mirrors the pre-seam dynamic `SET` expression); validation of the values is
+ * the caller's responsibility (`setEventSchedule`).
+ */
+export interface EventSchedulePatch {
+  readonly startsAt?: string;
+  readonly endsAt?: string;
+  readonly teardownAt?: string;
+  readonly deployAt?: string;
+  readonly scoreboardFreezeMinutes?: number;
+}
+
+/**
+ * [Issue #2437] Which scheduled-action audit stamp
+ * {@link EventsRepository.markScheduleFired} writes: `teardown` →
+ * `teardownFiredAt`, `deploy` → `deployFiredAt` (ADR-047 / follow-up).
+ */
+export type ScheduleFiredKind = "teardown" | "deploy";
+
+/**
  * [ADR-049 §5.1] Aggregate-scoped repository for the Events aggregate — domain
  * methods, not a generic key-value shim. Two interchangeable backends implement
  * it: {@link DynamoDbEventsRepository} (status quo, the default) and
  * {@link SqlEventsRepository} (one SQL layer, SQLite dialect for Turso / D1).
  * Selection happens at cold start via the `CONTROL_DATA_BACKEND` flag through
  * {@link createEventsRepository}.
+ *
+ * [Issue #2437 / Phase A2] Conditional/atomic writes are domain methods with an
+ * {@link EventMutationOutcome} union return. Fixed contract: (a) outcomes are
+ * data, not exceptions; (b) the DynamoDB backend keeps the pre-seam
+ * Update/Condition expressions byte-identical; (c) every conditional mutation
+ * of an existing row includes the tenant check in its condition (no
+ * cross-tenant write can succeed). `createEventWithTeams` writes only NEW rows
+ * whose `tenantId` is part of the record payload itself, so its uniqueness
+ * conditions carry no separate tenant predicate (same as the pre-seam
+ * TransactWrite).
  */
 export interface EventsRepository {
   /**
@@ -44,6 +119,116 @@ export interface EventsRepository {
    * being run on a schedule.
    */
   pruneExpired(nowEpochSeconds: number): Promise<number>;
+
+  /**
+   * [#494 / #1095] READY → ENDED transition: stamps `endsAt` / `updatedAt` = `at`
+   * and auto-locks scoring (`scoringLocked` + audit fields, lockedBy =
+   * `system:end-event`). Only READY events can end; `conflict` carries the probed
+   * event so the caller can surface the blocking status.
+   */
+  endEvent(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome>;
+  /**
+   * [#558] Sets `scoringLocked = true` + audit fields. Allowed only while
+   * READY / ENDED and currently unlocked; `conflict` carries the probed event so
+   * the caller can tell "already locked" from "not lockable".
+   */
+  lockScoring(
+    tenantId: string,
+    eventId: string,
+    lockedBy: string,
+    at: string,
+  ): Promise<EventMutationOutcome>;
+  /**
+   * [#558] Removes `scoringLocked` + audit fields (reversible lock). Allowed only
+   * while READY / ENDED and currently locked; `conflict` carries the probed event.
+   */
+  unlockScoring(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome>;
+  /**
+   * [#493] Soft delete: DRAFT / ENDED / TEARDOWN → ARCHIVED with `archivedAt`.
+   * `conflict` carries the probed event (in-flight or already-archived status).
+   */
+  archiveEvent(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome>;
+  /**
+   * [#536 / #537 / ADR-047] Partial schedule update — writes only the fields
+   * present in `patch` plus `updatedAt`. The condition is tenant-scope only, so
+   * the union never yields `conflict` (a failed condition means the row is
+   * absent or foreign → `not_found`).
+   */
+  updateSchedule(
+    tenantId: string,
+    eventId: string,
+    patch: EventSchedulePatch,
+    at: string,
+  ): Promise<EventMutationOutcome>;
+  /**
+   * [#557] Marks the event TEARDOWN unless it is already ARCHIVED (an archived
+   * event must not regress). Fire-and-forget shape: no probe on `conflict`
+   * (callers skip, matching the pre-seam CCF-swallow), so `conflict` also covers
+   * the absent-row case.
+   */
+  markTeardown(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome>;
+  /**
+   * [#2283] Saves the Progression Gate config. Tenant-scope condition only —
+   * a failed condition folds to `not_found` (mirrors the pre-seam handler).
+   */
+  setProgressionGate(
+    tenantId: string,
+    eventId: string,
+    config: ProgressionGateConfig,
+    at: string,
+  ): Promise<EventMutationOutcome>;
+  /**
+   * [#2283] Removes the Progression Gate config (idempotent — `removed: false`
+   * when no gate was set). Tenant-scope condition only.
+   */
+  clearProgressionGate(
+    tenantId: string,
+    eventId: string,
+    at: string,
+  ): Promise<ClearProgressionGateOutcome>;
+  /**
+   * [Phase 2a] Advances the event to DEPLOYING from DRAFT / READY / DEPLOYING
+   * only (never rolls back a later status). Fire-and-forget shape: no probe on
+   * `conflict` (callers treat it as a no-op).
+   */
+  markDeploying(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome>;
+  /**
+   * [#557 / #539] Optimistic CAS for the reconciler: `from` → `to` only while the
+   * status still equals `from` (an operator race loses ⇒ `conflict`, the caller
+   * skips and re-evaluates next tick). No probe on `conflict` — the reconciler
+   * never needs the reason, and the pre-seam path spent no extra read.
+   */
+  transitionStatus(
+    tenantId: string,
+    eventId: string,
+    from: string,
+    to: string,
+    at: string,
+  ): Promise<EventMutationOutcome>;
+  /**
+   * [ADR-047] Idempotently stamps `teardownFiredAt` / `deployFiredAt` = `at`
+   * (audit + double-fire guard). `conflict` = already stamped; no probe.
+   * Deliberately does NOT touch `updatedAt` (byte-parity with the pre-seam
+   * reconciler write).
+   */
+  markScheduleFired(
+    tenantId: string,
+    eventId: string,
+    kind: ScheduleFiredKind,
+    at: string,
+  ): Promise<EventMutationOutcome>;
+  /**
+   * [#2437] Atomically creates one event row plus up to 99 team rows —
+   * all-or-nothing on both backends (DynamoDB TransactWrite / SQL write
+   * transaction). A uniqueness violation on any row converts to `conflict`
+   * with nothing written. Throws on more than 99 teams (DynamoDB's 100-item
+   * transaction cap, minus the event row; the SQL backend enforces the same cap
+   * for parity).
+   */
+  createEventWithTeams(
+    event: EventRecord,
+    teams: readonly TeamRecord[],
+  ): Promise<CreateEventWithTeamsOutcome>;
 }
 
 /**
@@ -129,18 +314,34 @@ export type SqlRow = Record<string, unknown>;
 export interface SqlRunResult {
   readonly changes: number | bigint;
 }
+/** One parameterized statement for {@link SqlExecutor.batch}. */
+export interface SqlStatement {
+  readonly sql: string;
+  readonly params?: readonly SqlParam[];
+}
 
 /**
  * [ADR-049 §5.1] Minimal injected SQL driver so {@link SqlEventsRepository} stays
  * decoupled from any concrete client. Node's built-in `node:sqlite`
  * (`DatabaseSync`) backs it for tests and offline validation; a production
  * `@libsql/client` (Turso / self-hosted sqld) adapter — and a Cloudflare D1
- * binding adapter — map onto the same three methods. Production Lambda wiring
+ * binding adapter — map onto the same methods. Production Lambda wiring
  * uses the HTTP-only `@libsql/client` adapter in `runtime-repositories.ts`; a
  * future Cloudflare D1 binding adapter keeps this repository contract unchanged.
+ *
+ * [Issue #2437] Contract notes:
+ * - `all()` accepts `UPDATE … RETURNING` statements — a conditional update and
+ *   its post-image (ALL_NEW equivalent) must be one statement; an update
+ *   followed by a re-read opens a race window and is forbidden.
+ * - `batch()` runs the statements in a **single write transaction**
+ *   (all-or-nothing). A constraint violation on any statement rolls the whole
+ *   batch back and rethrows the driver error.
  */
 export interface SqlExecutor {
   run(sql: string, params?: readonly SqlParam[]): SqlRunResult | Promise<SqlRunResult>;
   get(sql: string, params?: readonly SqlParam[]): SqlRow | undefined | Promise<SqlRow | undefined>;
   all(sql: string, params?: readonly SqlParam[]): readonly SqlRow[] | Promise<readonly SqlRow[]>;
+  batch(
+    statements: readonly SqlStatement[],
+  ): readonly SqlRunResult[] | Promise<readonly SqlRunResult[]>;
 }

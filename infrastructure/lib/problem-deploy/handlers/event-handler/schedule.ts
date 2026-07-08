@@ -1,12 +1,11 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { EventRecord } from "../../control-data/events-repository.js";
+import type { EventSchedulePatch } from "../../control-data/events-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
   type EventSharedResources,
   queryDeploymentsByEvent,
-  resolveEventsRepository,
+  resolveEventRepositories,
 } from "./shared.js";
-import type { EventItem } from "./types.js";
 
 /**
  * `setEventSchedule` の引数 (= startsAt / endsAt の組み合わせを 1 object で受ける)。
@@ -99,7 +98,12 @@ export async function setEventSchedule(
   const validation = validateScheduleParams(params);
   if (validation) return validation;
 
-  const currentEvent = await getCurrentSchedule(shared, tenantId, eventId);
+  // Event 行の read / write は同じ repository seam を使う。 mirror backend
+  // (`CONTROL_DATA_BACKEND=turso`) でも効くよう runtime resolver 経由 (default backend は
+  // byte 互換)。 getEvent は tenant scope + 404 判定を内包する (= 従来の Get +
+  // `tenantId` 手動照合と等価。 旧実装の ProjectionExpression 絞り込みは A1 で撤去済)。
+  const repositories = await resolveEventRepositories(shared);
+  const currentEvent = await repositories.events.getEvent(tenantId, eventId);
   if (!currentEvent) return { kind: "not_found" };
 
   const effectiveStartsAt = startsAt ?? currentEvent.startsAt;
@@ -114,13 +118,22 @@ export async function setEventSchedule(
   const effectiveDeployAt = deployAt ?? currentEvent.deployAt;
   const deployOrder = validateDeployOrder(effectiveDeployAt, effectiveEndsAt);
   if (deployOrder) return deployOrder;
-  const update = buildScheduleUpdate(tenantId, params);
-  const updatedEvent = await updateEventSchedule(shared, eventId, update);
-  if (!updatedEvent) return { kind: "not_found" };
+  // [#2437 Phase A2] Event 行の動的 SET + tenant 条件は repository seam の
+  // `updateSchedule(tenantId, eventId, patch, at)` に移設。 条件は tenant 照合のみなので
+  // union は updated / not_found の 2 値に畳まれる (HTTP ステータス対応は不変)。
+  const now = new Date(params.nowMs).toISOString();
+  const patch = buildSchedulePatch(params);
+  const result = await repositories.events.updateSchedule(tenantId, eventId, patch, now);
+  if (result.outcome !== "updated") return { kind: "not_found" };
 
   // 紐づく deployment 行を全部引いて eventStartsAt / eventEndsAt を伝播。
   // teardownAt / deployAt は event-level のみ (reconciler が event 行から読む) なので denormalize しない。
-  const updatedDeployments = await propagateSchedule(shared, tenantId, eventId, update);
+  const updatedDeployments = await propagateSchedule(
+    shared,
+    tenantId,
+    eventId,
+    buildDeploymentScheduleUpdate(tenantId, params),
+  );
 
   return {
     kind: "ok",
@@ -217,92 +230,53 @@ function validateScheduleOrder(
   return { kind: "ends_before_starts", startsAt, endsAt };
 }
 
-async function getCurrentSchedule(
-  shared: EventSharedResources,
-  tenantId: string,
-  eventId: string,
-): Promise<EventRecord | undefined> {
-  // getEvent は tenant scope + 404 判定を内包する (= 従来の Get + `tenantId` 手動照合と等価)。
-  // 旧実装は ProjectionExpression で startsAt / endsAt / teardownAt / deployAt に絞っていたが、
-  // 属性を全部読むだけで挙動は不変 (1/1 PROVISIONED では RCU 増も非問題)。
-  return resolveEventsRepository(shared).getEvent(tenantId, eventId);
-}
-
-interface ScheduleUpdate {
-  readonly eventExpression: string;
-  readonly eventValues: Record<string, string | number>;
+interface DeploymentScheduleUpdate {
   readonly deploymentExpression: string;
   readonly deploymentValues: Record<string, string>;
 }
 
-function buildScheduleUpdate(tenantId: string, params: SetEventScheduleParams): ScheduleUpdate {
-  const now = new Date(params.nowMs).toISOString();
-  const eventParts = ["updatedAt = :now"];
-  const deploymentParts = ["updatedAt = :now"];
-  const eventValues: Record<string, string | number> = { ":now": now, ":tenantId": tenantId };
-  const deploymentValues: Record<string, string> = { ":now": now, ":tenantId": tenantId };
-  if (params.startsAt !== undefined) {
-    eventParts.push("startsAt = :startsAt");
-    deploymentParts.push("eventStartsAt = :s");
-    eventValues[":startsAt"] = params.startsAt;
-    deploymentValues[":s"] = params.startsAt;
-  }
-  if (params.endsAt !== undefined) {
-    eventParts.push("endsAt = :endsAt");
-    deploymentParts.push("eventEndsAt = :e");
-    eventValues[":endsAt"] = params.endsAt;
-    deploymentValues[":e"] = params.endsAt;
-  }
-  if (params.teardownAt !== undefined) {
-    // [ADR-047] teardownAt は event 行のみ (reconciler が event から読む) — deployment 非伝播。
-    eventParts.push("teardownAt = :teardownAt");
-    eventValues[":teardownAt"] = params.teardownAt;
-  }
-  if (params.deployAt !== undefined) {
-    // [ADR-047 follow-up] deployAt は event 行のみ (reconciler が event から読む) — deployment 非伝播。
-    eventParts.push("deployAt = :deployAt");
-    eventValues[":deployAt"] = params.deployAt;
-  }
-  if (params.scoreboardFreezeMinutes !== undefined) {
-    eventParts.push("scoreboardFreezeMinutes = :fz");
-    eventValues[":fz"] = params.scoreboardFreezeMinutes;
-  }
+/**
+ * Event 行へ書く field だけを patch に写す (Event 側の式構築は repository seam)。
+ * [ADR-047] teardownAt / [ADR-047 follow-up] deployAt は event 行のみ
+ * (reconciler が event から読む) — deployment 非伝播。 両 backend とも
+ * `!== undefined` の field だけを書くので、 undefined のままの pick で挙動は同一。
+ */
+function buildSchedulePatch(params: SetEventScheduleParams): EventSchedulePatch {
   return {
-    eventExpression: `SET ${eventParts.join(", ")}`,
-    eventValues,
-    deploymentExpression: `SET ${deploymentParts.join(", ")}`,
-    deploymentValues,
+    startsAt: params.startsAt,
+    endsAt: params.endsAt,
+    teardownAt: params.teardownAt,
+    deployAt: params.deployAt,
+    scoreboardFreezeMinutes: params.scoreboardFreezeMinutes,
   };
 }
 
-async function updateEventSchedule(
-  shared: EventSharedResources,
-  eventId: string,
-  update: ScheduleUpdate,
-): Promise<Partial<EventItem> | undefined> {
-  try {
-    const out = await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.eventsTableName,
-        Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        UpdateExpression: update.eventExpression,
-        ConditionExpression: "tenantId = :tenantId",
-        ExpressionAttributeValues: update.eventValues,
-        ReturnValues: "ALL_NEW",
-      }),
-    );
-    return out.Attributes as Partial<EventItem> | undefined;
-  } catch (err) {
-    if (err instanceof Error && err.name === "ConditionalCheckFailedException") return undefined;
-    throw err;
+function buildDeploymentScheduleUpdate(
+  tenantId: string,
+  params: SetEventScheduleParams,
+): DeploymentScheduleUpdate {
+  const now = new Date(params.nowMs).toISOString();
+  const deploymentParts = ["updatedAt = :now"];
+  const deploymentValues: Record<string, string> = { ":now": now, ":tenantId": tenantId };
+  if (params.startsAt !== undefined) {
+    deploymentParts.push("eventStartsAt = :s");
+    deploymentValues[":s"] = params.startsAt;
   }
+  if (params.endsAt !== undefined) {
+    deploymentParts.push("eventEndsAt = :e");
+    deploymentValues[":e"] = params.endsAt;
+  }
+  return {
+    deploymentExpression: `SET ${deploymentParts.join(", ")}`,
+    deploymentValues,
+  };
 }
 
 async function propagateSchedule(
   shared: EventSharedResources,
   tenantId: string,
   eventId: string,
-  update: ScheduleUpdate,
+  update: DeploymentScheduleUpdate,
 ): Promise<number> {
   const deployments = await queryDeploymentsByEvent(shared, tenantId, eventId, "PK");
   const targets = deployments
@@ -315,7 +289,7 @@ async function propagateSchedule(
 async function updateDeploymentSchedule(
   shared: EventSharedResources,
   target: Pick<DeploymentItem, "PK">,
-  update: ScheduleUpdate,
+  update: DeploymentScheduleUpdate,
 ): Promise<void> {
   try {
     await shared.ddb.send(
