@@ -1,6 +1,7 @@
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { type Client, createClient } from "@libsql/client/http";
+import { createDeploymentsRepository } from "./deployments-repository.js";
 import { createEventsRepository } from "./events-repository.js";
 import { createFeatureFlagsRepository } from "./feature-flags-repository.js";
 import { initializeControlDataSchema, LibsqlExecutor } from "./libsql-executor.js";
@@ -13,6 +14,7 @@ import {
 import { createNotificationsRepository } from "./notifications-repository.js";
 import { createTeamsRepository } from "./teams-repository.js";
 import type {
+  DeploymentsRepository,
   EventsRepository,
   FeatureFlagsRepository,
   NotificationsRepository,
@@ -54,6 +56,19 @@ export interface ControlDataRuntime {
     readonly ddb: DynamoDBDocumentClient;
     readonly eventsTableName: string;
   }) => Promise<FeatureFlagsRepository>;
+  /**
+   * [Issue #2441 / Phase B1] Cold-start resolver for the Deployments READ seam.
+   * Selects the backend from `CONTROL_DATA_BACKEND` through
+   * {@link createDeploymentsRepository}: `dynamodb` (the default) returns the
+   * DDB backend; `turso` / `sql` fall through to the factory's fail-loud
+   * "Phase B4" error (no SQL implementation exists yet, so — unlike the
+   * Events / Teams / Notifications / FeatureFlags resolvers — this never
+   * calls `acquireSqlExecutor` and never returns a Mirrored implementation).
+   */
+  readonly resolveDeploymentsRepository: (input: {
+    readonly ddb: DynamoDBDocumentClient;
+    readonly deploymentsTableName: string;
+  }) => Promise<DeploymentsRepository>;
 }
 
 export interface RuntimeEnvironment {
@@ -209,6 +224,25 @@ export function createControlDataRuntime(deps: RuntimeDependencies): ControlData
     );
   }
 
+  /**
+   * [Issue #2441 / Phase B1] Deployments READ seam. Deliberately **not** folded
+   * into {@link resolveRepositories} / {@link ControlDataRepositories}: the full
+   * resolver stays byte-compatible (Events + Teams + Notifications +
+   * FeatureFlags only) until B4 adds the SQL Deployments backend and its
+   * mirror. `turso` / `sql` propagate the factory's fail-loud "Phase B4" error
+   * as-is — no `acquireSqlExecutor` call, no Mirrored wrapper.
+   */
+  async function resolveDeploymentsRepository(input: {
+    readonly ddb: DynamoDBDocumentClient;
+    readonly deploymentsTableName: string;
+  }): Promise<DeploymentsRepository> {
+    const backend = selectBackend(deps.env);
+    return createDeploymentsRepository(backend, {
+      ddb: input.ddb,
+      deploymentsTableName: input.deploymentsTableName,
+    });
+  }
+
   return {
     resolveRepositories: async (input) => {
       const [events, teams, notifications, featureFlags] = await Promise.all([
@@ -223,6 +257,7 @@ export function createControlDataRuntime(deps: RuntimeDependencies): ControlData
     resolveTeamsRepository,
     resolveNotificationsRepository,
     resolveFeatureFlagsRepository,
+    resolveDeploymentsRepository,
   };
 }
 

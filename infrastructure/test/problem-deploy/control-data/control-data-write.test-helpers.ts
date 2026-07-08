@@ -171,7 +171,13 @@ function conditionalCheckFailed(): Error {
  * repositories issue, including conditional writes. Table-scoped so one fake
  * backs both repositories.
  */
-export function makeFakeDdb(): DynamoDBDocumentClient {
+export function makeFakeDdb(options: { readonly pageSize?: number } = {}): DynamoDBDocumentClient {
+  // [#2441 / Phase B1] Optional forced page size. When set, drainable query
+  // branches (GSI1-with-filter / base-table begins_with / SK BETWEEN) paginate
+  // by this size even without an explicit `Limit`, so multi-page drain contracts
+  // can be pinned. Unset (the existing callers) = no forced pagination, so the
+  // A1-A4 write-parity suites see byte-identical fake behavior.
+  const forcedPageSize = options.pageSize;
   const tables = new Map<string, Map<string, Item>>();
   const tableFor = (name: unknown): Map<string, Item> => {
     const key = String(name);
@@ -184,59 +190,91 @@ export function makeFakeDdb(): DynamoDBDocumentClient {
   };
   const keyOf = (pk: unknown, sk: unknown): string => `${String(pk)} ${String(sk)}`;
 
-  const query = (cmd: QueryCommand): { Items: Item[]; LastEvaluatedKey?: Item } => {
-    const table = tableFor(cmd.input.TableName);
-    const values = cmd.input.ExpressionAttributeValues ?? {};
-    const pk = values[":pk"];
-    if (cmd.input.IndexName === "GSI2") {
-      // Participant-login lookup: GSI2PK = TEAMKEY#<key> (sparse).
-      return { Items: [...table.values()].filter((it) => it.GSI2PK === pk) };
-    }
-    if (cmd.input.KeyConditionExpression?.includes("begins_with")) {
-      // base-table: PK = :pk AND begins_with(SK, :tprefix/:prefix), SK order per ScanIndexForward.
-      const prefix = String(values[":tprefix"] ?? values[":prefix"]);
-      const forward = cmd.input.ScanIndexForward !== false;
-      let items = [...table.values()]
-        .filter((it) => it.PK === pk && String(it.SK).startsWith(prefix))
-        .sort((a, b) => {
-          const cmp = String(a.SK).localeCompare(String(b.SK));
-          return forward ? cmp : -cmp;
-        });
-      const exclusiveStartKey = cmd.input.ExclusiveStartKey as Item | undefined;
-      if (exclusiveStartKey) {
-        const startIndex = items.findIndex(
-          (it) => it.PK === exclusiveStartKey.PK && it.SK === exclusiveStartKey.SK,
-        );
-        if (startIndex >= 0) items = items.slice(startIndex + 1);
-      }
-      const limit = cmd.input.Limit;
-      if (limit !== undefined && items.length > limit) {
-        const page = items.slice(0, limit);
-        const last = page[page.length - 1] as Item;
-        return { Items: page, LastEvaluatedKey: { PK: last.PK, SK: last.SK } };
-      }
-      return { Items: items };
-    }
-    // GSI1: GSI1PK = :pk, GSI1SK order per ScanIndexForward. `Limit` /
-    // `ExclusiveStartKey` are honored here (unlike the other branches above)
-    // because this is the only path callers page through (`listEventsPage` /
-    // `countEventsByTenant`'s Select=COUNT full-drain).
+  /**
+   * Base-table pagination by SK (shared by begins_with / SK BETWEEN). Honors
+   * ScanIndexForward, ExclusiveStartKey (start-after by SK), and Limit ??
+   * forcedPageSize. LastEvaluatedKey is `{ PK, SK }` (base-table key).
+   *
+   * A cursor whose `PK` does not match the queried partition (a foreign/
+   * cross-partition cursor — real DynamoDB's per-partition pagination makes
+   * this an opaque, effectively-invalid position) is ignored rather than
+   * applied, so callers restart from the first page instead of the boundary
+   * silently emptying every result.
+   */
+  const paginateBySk = (
+    matched: Item[],
+    cmd: QueryCommand,
+    pk?: unknown,
+  ): { Items: Item[]; LastEvaluatedKey?: Item } => {
     const forward = cmd.input.ScanIndexForward !== false;
-    let items = [...table.values()]
-      .filter((it) => it.GSI1PK === pk)
+    let items = matched.sort((a, b) => {
+      const cmp = String(a.SK).localeCompare(String(b.SK));
+      return forward ? cmp : -cmp;
+    });
+    const esk = cmd.input.ExclusiveStartKey as Item | undefined;
+    if (esk && (pk === undefined || esk.PK === pk)) {
+      const startSk = String(esk.SK);
+      items = items.filter((it) => {
+        const cmp = String(it.SK).localeCompare(startSk);
+        return forward ? cmp > 0 : cmp < 0;
+      });
+    }
+    const limit = cmd.input.Limit ?? forcedPageSize;
+    if (limit !== undefined && items.length > limit) {
+      const page = items.slice(0, limit);
+      const last = page[page.length - 1] as Item;
+      return { Items: page, LastEvaluatedKey: { PK: last.PK, SK: last.SK } };
+    }
+    return { Items: items };
+  };
+
+  /** GSI3: composite parent → target (sparse, single page, ordered by GSI3SK). */
+  const queryGsi3 = (cmd: QueryCommand, table: Map<string, Item>, pk: unknown): Item[] => {
+    const forward = cmd.input.ScanIndexForward !== false;
+    return [...table.values()]
+      .filter((it) => it.GSI3PK === pk)
       .sort((a, b) => {
-        const cmp = String(a.GSI1SK).localeCompare(String(b.GSI1SK));
+        const cmp = String(a.GSI3SK).localeCompare(String(b.GSI3SK));
         return forward ? cmp : -cmp;
       });
-    const exclusiveStartKey = cmd.input.ExclusiveStartKey as Item | undefined;
-    if (exclusiveStartKey) {
-      const startSk = String(exclusiveStartKey.GSI1SK);
+  };
+
+  /**
+   * GSI1: `GSI1PK = :pk`, optional FilterExpression (#2441 eventId / status /
+   * namePrefix reads), GSI1SK order per ScanIndexForward, Limit ?? forcedPageSize
+   * paging with `{PK,SK,GSI1PK,GSI1SK}` LastEvaluatedKey.
+   */
+  const queryGsi1 = (
+    cmd: QueryCommand,
+    table: Map<string, Item>,
+    pk: unknown,
+  ): { Items: Item[]; LastEvaluatedKey?: Item } => {
+    const forward = cmd.input.ScanIndexForward !== false;
+    let items = [...table.values()].filter((it) => it.GSI1PK === pk);
+    const filter = cmd.input.FilterExpression;
+    if (filter) {
+      items = items.filter((it) =>
+        evalConditionExpression(
+          filter,
+          it,
+          cmd.input.ExpressionAttributeNames,
+          cmd.input.ExpressionAttributeValues,
+        ),
+      );
+    }
+    items.sort((a, b) => {
+      const cmp = String(a.GSI1SK).localeCompare(String(b.GSI1SK));
+      return forward ? cmp : -cmp;
+    });
+    const esk = cmd.input.ExclusiveStartKey as Item | undefined;
+    if (esk) {
+      const startSk = String(esk.GSI1SK);
       items = items.filter((it) => {
         const cmp = String(it.GSI1SK).localeCompare(startSk);
         return forward ? cmp > 0 : cmp < 0;
       });
     }
-    const limit = cmd.input.Limit;
+    const limit = cmd.input.Limit ?? forcedPageSize;
     if (limit !== undefined && items.length > limit) {
       const page = items.slice(0, limit);
       const last = page[page.length - 1] as Item;
@@ -246,6 +284,55 @@ export function makeFakeDdb(): DynamoDBDocumentClient {
       };
     }
     return { Items: items };
+  };
+
+  /** Base-table (no IndexName) reads: begins_with / SK BETWEEN / exact SK. */
+  const queryBase = (
+    cmd: QueryCommand,
+    table: Map<string, Item>,
+    values: Record<string, unknown>,
+    pk: unknown,
+  ): { Items: Item[]; LastEvaluatedKey?: Item } => {
+    const kce = cmd.input.KeyConditionExpression ?? "";
+    if (kce.includes("begins_with")) {
+      // PK = :pk AND begins_with(SK, :prefix) — the prefix placeholder differs
+      // per site (:tprefix TEAM# / :evpfx EVENT#), so extract it from the expr.
+      const match = kce.match(/begins_with\(SK,\s*(:[A-Za-z0-9_]+)\)/);
+      const prefix = String(values[match?.[1] ?? ":tprefix"]);
+      return paginateBySk(
+        [...table.values()].filter((it) => it.PK === pk && String(it.SK).startsWith(prefix)),
+        cmd,
+        pk,
+      );
+    }
+    if (kce.includes("BETWEEN")) {
+      // [#2441] PK = :pk AND SK BETWEEN :sk_start AND :sk_end (EVENT# / INBOX# ranges).
+      const start = String(values[":sk_start"]);
+      const end = String(values[":sk_end"]);
+      return paginateBySk(
+        [...table.values()].filter(
+          (it) => it.PK === pk && String(it.SK) >= start && String(it.SK) <= end,
+        ),
+        cmd,
+        pk,
+      );
+    }
+    // [#2441] Base-table exact read: PK = :pk AND SK = :sk (cast-event META Query).
+    const sk = values[":sk"];
+    return { Items: [...table.values()].filter((it) => it.PK === pk && it.SK === sk) };
+  };
+
+  const query = (cmd: QueryCommand): { Items: Item[]; LastEvaluatedKey?: Item } => {
+    const table = tableFor(cmd.input.TableName);
+    const values = cmd.input.ExpressionAttributeValues ?? {};
+    const pk = values[":pk"];
+    if (cmd.input.IndexName === "GSI2") {
+      // Participant-login lookup: GSI2PK = TEAMKEY#<key> (sparse, single page).
+      return { Items: [...table.values()].filter((it) => it.GSI2PK === pk) };
+    }
+    if (cmd.input.IndexName === "GSI3") return { Items: queryGsi3(cmd, table, pk) };
+    if (cmd.input.IndexName === "GSI1") return queryGsi1(cmd, table, pk);
+    return queryBase(cmd, table, values, pk);
   };
 
   const scan = (cmd: ScanCommand): { Items: Item[] } => {
