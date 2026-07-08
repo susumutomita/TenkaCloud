@@ -540,6 +540,11 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       environmentName: props.environmentName,
       // Issue #2291: flag OFF (default) では CodeBuild 経路のまま (追加リソースなし)。
       deployViaLambda: props.deployViaLambda,
+      // Issue #2441 Phase B PR-5: pure SQL backend uses a Lambda status-writer for DeployCreate
+      // SFN writeback states; dynamodb/mirror keep native DynamoUpdateItem.
+      controlDataBackend: props.controlDataBackend,
+      tursoDatabaseUrl: props.tursoDatabaseUrl,
+      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
       // Issue #2462: active pack の実体を core problems/ の隣に materialize する (Lambda 経路のみ)。
       // undefined / 空 → BucketDeployment 追加ゼロ = CFn byte 互換。
       packAssets: props.packAssets,

@@ -359,6 +359,59 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
     await expectOutcome(repo.stampEventEndsAt("schedule", "tenant-b", AT, AT), "not_found");
   });
 
+  it("should apply DeployCreate SFN status writes idempotently", async () => {
+    const { repo } = makeBackend();
+    await repo.putDeployment(deployment({ jobId: "sfn", status: "PENDING" }));
+
+    await expectOutcome(repo.markCreateInProgress("sfn", AT), "updated");
+    await expectOutcome(repo.markCreateInProgress("sfn", AT), "updated");
+    expect(await repo.getDeployment("sfn")).toMatchObject({
+      status: "IN_PROGRESS",
+      updatedAt: AT,
+    });
+
+    await expectOutcome(
+      repo.markCreateSucceeded(
+        "sfn",
+        "arn:aws:cloudformation:stack/sfn/1",
+        '[{"OutputKey":"Url"}]',
+        "build-1",
+        AT,
+      ),
+      "updated",
+    );
+    expect(await repo.getDeployment("sfn")).toMatchObject({
+      status: "COMPLETE",
+      stackId: "arn:aws:cloudformation:stack/sfn/1",
+      stackOutputs: '[{"OutputKey":"Url"}]',
+      buildId: "build-1",
+    });
+
+    await expectOutcome(
+      repo.markCreateSucceeded("sfn", "arn:aws:cloudformation:stack/sfn/2", "[]", undefined, AT),
+      "updated",
+    );
+    expect(await repo.getDeployment("sfn")).toMatchObject({
+      stackId: "arn:aws:cloudformation:stack/sfn/2",
+      stackOutputs: "[]",
+      buildId: "build-1",
+    });
+
+    await expectOutcome(repo.markCreateFailed("sfn", "rollback", undefined, AT), "updated");
+    expect(await repo.getDeployment("sfn")).toMatchObject({
+      status: "FAILED",
+      failureReason: "rollback",
+      buildId: "build-1",
+    });
+
+    await expectOutcome(repo.markCreateFailed("sfn", "build failed", "build-2", AT), "updated");
+    expect(await repo.getDeployment("sfn")).toMatchObject({
+      status: "FAILED",
+      failureReason: "build failed",
+      buildId: "build-2",
+    });
+  });
+
   it("should preserve scoring and generic write outcome branches", async () => {
     const { repo } = makeBackend();
     await repo.putDeployment(deployment({ jobId: "flag", score: 0, wrongAnswerCount: 0 }));

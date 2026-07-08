@@ -229,6 +229,88 @@ describe("DynamoDbDeploymentsRepository writes — Put rows", () => {
 });
 
 describe("DynamoDbDeploymentsRepository writes — status transitions", () => {
+  it("should pin DeployCreate SFN writeback expressions without conditions", async () => {
+    const { repo, seed, reset, commands } = recording();
+    await seed([itemFrom(deployment({ status: "PENDING" }))]);
+    reset();
+
+    await expectOutcome(repo.markCreateInProgress("j1", AT), "updated");
+    expect(updates(commands)[0].input).toMatchObject({
+      UpdateExpression: "SET #status = :status, updatedAt = :updatedAt",
+      ExpressionAttributeNames: { "#status": "status" },
+      ExpressionAttributeValues: {
+        ":status": "IN_PROGRESS",
+        ":updatedAt": AT,
+      },
+    });
+    expect(updates(commands)[0].input.ConditionExpression).toBeUndefined();
+    expect(await repo.getDeployment("j1")).toMatchObject({ status: "IN_PROGRESS" });
+
+    reset();
+    await expectOutcome(
+      repo.markCreateSucceeded("j1", "stack-1", '[{"OutputKey":"Url"}]', "build-1", AT),
+      "updated",
+    );
+    expect(updates(commands)[0].input).toMatchObject({
+      UpdateExpression:
+        "SET #status = :status, updatedAt = :updatedAt, stackId = :stackId, stackOutputs = :stackOutputs, buildId = :buildId",
+      ExpressionAttributeNames: { "#status": "status" },
+      ExpressionAttributeValues: {
+        ":status": "COMPLETE",
+        ":updatedAt": AT,
+        ":stackId": "stack-1",
+        ":stackOutputs": '[{"OutputKey":"Url"}]',
+        ":buildId": "build-1",
+      },
+    });
+
+    reset();
+    await expectOutcome(repo.markCreateSucceeded("j1", "stack-2", "[]", undefined, AT), "updated");
+    expect(updates(commands)[0].input).toMatchObject({
+      UpdateExpression:
+        "SET #status = :status, updatedAt = :updatedAt, stackId = :stackId, stackOutputs = :stackOutputs",
+      ExpressionAttributeValues: {
+        ":status": "COMPLETE",
+        ":updatedAt": AT,
+        ":stackId": "stack-2",
+        ":stackOutputs": "[]",
+      },
+    });
+    expect(updates(commands)[0].input.ExpressionAttributeValues[":buildId"]).toBeUndefined();
+    expect((await repo.getDeployment("j1"))?.buildId).toBe("build-1");
+
+    reset();
+    await expectOutcome(repo.markCreateFailed("j1", "rollback", "build-2", AT), "updated");
+    expect(updates(commands)[0].input).toMatchObject({
+      UpdateExpression:
+        "SET #status = :status, updatedAt = :updatedAt, #failureReason = :failureReason, buildId = :buildId",
+      ExpressionAttributeNames: {
+        "#status": "status",
+        "#failureReason": "failureReason",
+      },
+      ExpressionAttributeValues: {
+        ":status": "FAILED",
+        ":updatedAt": AT,
+        ":failureReason": "rollback",
+        ":buildId": "build-2",
+      },
+    });
+
+    reset();
+    await expectOutcome(repo.markCreateFailed("j1", "lambda failed", undefined, AT), "updated");
+    expect(updates(commands)[0].input).toMatchObject({
+      UpdateExpression:
+        "SET #status = :status, updatedAt = :updatedAt, #failureReason = :failureReason",
+      ExpressionAttributeValues: {
+        ":status": "FAILED",
+        ":updatedAt": AT,
+        ":failureReason": "lambda failed",
+      },
+    });
+    expect(updates(commands)[0].input.ExpressionAttributeValues[":buildId"]).toBeUndefined();
+    expect((await repo.getDeployment("j1"))?.buildId).toBe("build-2");
+  });
+
   it("should pin deploy/retry/delete/bulk status update expressions and fold CCFs", async () => {
     const cases = [
       {

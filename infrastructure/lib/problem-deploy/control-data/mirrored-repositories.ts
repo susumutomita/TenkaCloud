@@ -212,6 +212,37 @@ export class MirroredDeploymentsRepository implements DeploymentsRepository {
     await this.replica.putDeployment(record);
   }
 
+  async markCreateInProgress(jobId: string, at: string): Promise<DeploymentMutationOutcome> {
+    return this.mirrorWrite(await this.canonical.markCreateInProgress(jobId, at), () =>
+      this.replica.markCreateInProgress(jobId, at),
+    );
+  }
+
+  async markCreateSucceeded(
+    jobId: string,
+    stackId: string,
+    stackOutputs: string,
+    buildId: string | undefined,
+    at: string,
+  ): Promise<DeploymentMutationOutcome> {
+    return this.mirrorWrite(
+      await this.canonical.markCreateSucceeded(jobId, stackId, stackOutputs, buildId, at),
+      () => this.replica.markCreateSucceeded(jobId, stackId, stackOutputs, buildId, at),
+    );
+  }
+
+  async markCreateFailed(
+    jobId: string,
+    failureReason: string,
+    buildId: string | undefined,
+    at: string,
+  ): Promise<DeploymentMutationOutcome> {
+    return this.mirrorWrite(
+      await this.canonical.markCreateFailed(jobId, failureReason, buildId, at),
+      () => this.replica.markCreateFailed(jobId, failureReason, buildId, at),
+    );
+  }
+
   async markFailedIfPending(
     jobId: string,
     tenantId: string,

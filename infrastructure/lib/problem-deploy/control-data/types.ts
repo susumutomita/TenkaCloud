@@ -865,6 +865,35 @@ export interface DeploymentsRepository {
   // ---------------------------------------------------------------------------
 
   putDeployment(record: DeploymentRecord): Promise<void>;
+  /**
+   * DeployCreate SFN `MarkInProgress`: unconditional `SET #status = :status,
+   * updatedAt = :updatedAt`. It intentionally has no tenant/status condition so
+   * SFN task retries rewrite the same state instead of branching on a CCF.
+   */
+  markCreateInProgress(jobId: string, at: string): Promise<DeploymentMutationOutcome>;
+  /**
+   * DeployCreate SFN `MarkSucceeded` / `MarkSucceededWithoutBuildId`: writes
+   * COMPLETE plus stack metadata. `buildId` is omitted on the Lambda deploy path
+   * and must not clear an existing attribute, matching the SFN UpdateExpression.
+   */
+  markCreateSucceeded(
+    jobId: string,
+    stackId: string,
+    stackOutputs: string,
+    buildId: string | undefined,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+  /**
+   * DeployCreate SFN `MarkFailed` / `MarkFailedWithoutBuildId`: writes FAILED
+   * plus the failure reason. `buildId` follows the same optional semantics as
+   * {@link markCreateSucceeded}.
+   */
+  markCreateFailed(
+    jobId: string,
+    failureReason: string,
+    buildId: string | undefined,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
   markFailedIfPending(
     jobId: string,
     tenantId: string,

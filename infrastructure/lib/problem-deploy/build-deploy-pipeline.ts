@@ -18,6 +18,7 @@ import {
   DeployDeleteEventRule,
   DeployEventRule,
 } from "./deploy-event-rule.js";
+import { DeployStatusWriterLambda } from "./deploy-status-writer-lambda.js";
 import { DescribeStackLambda } from "./describe-stack-lambda.js";
 
 export interface BuildDeployPipelineArgs {
@@ -36,6 +37,14 @@ export interface BuildDeployPipelineArgs {
    * CodeBuild 経路で、追加リソースなし = CFn テンプレ byte 互換。
    */
   readonly deployViaLambda?: boolean;
+  /**
+   * [Issue #2441 Phase B PR-5] Control-data backend selector. Pure SQL
+   * (`turso` / `sql`) swaps DeployCreate's SFN status writes to
+   * DeployStatusWriterLambda; default and mirror modes keep native DDB writes.
+   */
+  readonly controlDataBackend?: string;
+  readonly tursoDatabaseUrl?: string;
+  readonly tursoAuthTokenParameterName?: string;
   /**
    * [Problem Packs / Issue #2462] Installed + active pack revisions to materialize alongside the
    * core `problems/` tree (Lite only; resolved from `.tenkacloud/pack-store`). Each entry gets a
@@ -191,6 +200,16 @@ export function buildDeployPipeline(
     }
   }
 
+  const pureSqlBackend = args.controlDataBackend === "turso" || args.controlDataBackend === "sql";
+  const statusWriter = pureSqlBackend
+    ? new DeployStatusWriterLambda(scope, "DeployStatusWriter", {
+        deploymentsTable: args.deploymentsTable,
+        controlDataBackend: args.controlDataBackend,
+        tursoDatabaseUrl: args.tursoDatabaseUrl,
+        tursoAuthTokenParameterName: args.tursoAuthTokenParameterName,
+      })
+    : undefined;
+
   const stateMachine = new DeployCreateStateMachine(scope, "DeployCreate", {
     codeBuildProject: codeBuild?.project,
     describeStackFunction: describeStack.fn,
@@ -201,6 +220,7 @@ export function buildDeployPipeline(
     ...(args.deployViaLambda
       ? { deployViaLambda: true, cfnDeployFunction, eventBus: args.eventBus }
       : {}),
+    ...(statusWriter ? { statusWriterFunction: statusWriter.fn } : {}),
   });
 
   // EventBridge Rule: `DeployCreateRequested` event を State Machine に流す。

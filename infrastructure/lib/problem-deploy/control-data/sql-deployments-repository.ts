@@ -331,6 +331,26 @@ export class SqlDeploymentsRepository implements DeploymentsRepository {
     return { outcome: "updated" };
   }
 
+  private async mutateCreateStatusWrite(
+    jobId: string,
+    mutate: (record: MutableDeploymentRecord) => void,
+  ): Promise<DeploymentMutationOutcome> {
+    const row = await this.getDeploymentRow(jobId);
+    if (!row) return { outcome: "not_found" };
+    const record = deploymentFromPayload(row.payload) as MutableDeploymentRecord;
+    mutate(record);
+    const result = await this.sql.run(
+      "UPDATE deployments SET status = ?, updated_at = ?, payload = ? WHERE job_id = ?",
+      [
+        optionalString(record.status),
+        optionalString(record.updatedAt),
+        payloadWithoutLoginKey(record),
+        jobId,
+      ],
+    );
+    return Number(result.changes) > 0 ? { outcome: "updated" } : { outcome: "not_found" };
+  }
+
   private async conditionalInsert(
     record: DeploymentWriteRecord,
     onConflict: "conflict" | { readonly probeTenantId: string },
@@ -641,6 +661,43 @@ export class SqlDeploymentsRepository implements DeploymentsRepository {
 
   async putDeployment(record: DeploymentRecord): Promise<void> {
     await this.putRecord(record);
+  }
+
+  async markCreateInProgress(jobId: string, at: string): Promise<DeploymentMutationOutcome> {
+    return this.mutateCreateStatusWrite(jobId, (record) => {
+      record.status = "IN_PROGRESS";
+      record.updatedAt = at;
+    });
+  }
+
+  async markCreateSucceeded(
+    jobId: string,
+    stackId: string,
+    stackOutputs: string,
+    buildId: string | undefined,
+    at: string,
+  ): Promise<DeploymentMutationOutcome> {
+    return this.mutateCreateStatusWrite(jobId, (record) => {
+      record.status = "COMPLETE";
+      record.updatedAt = at;
+      record.stackId = stackId;
+      record.stackOutputs = stackOutputs;
+      if (buildId !== undefined) record.buildId = buildId;
+    });
+  }
+
+  async markCreateFailed(
+    jobId: string,
+    failureReason: string,
+    buildId: string | undefined,
+    at: string,
+  ): Promise<DeploymentMutationOutcome> {
+    return this.mutateCreateStatusWrite(jobId, (record) => {
+      record.status = "FAILED";
+      record.updatedAt = at;
+      record.failureReason = failureReason;
+      if (buildId !== undefined) record.buildId = buildId;
+    });
   }
 
   async markFailedIfPending(
