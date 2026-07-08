@@ -26,6 +26,19 @@ isolated accounts.
 
 ---
 
+## Vision
+
+TenkaCloud is not only a competition platform. The product direction is a path
+from safe, individual practice to team competition: **local drills → practical
+courses / enterprise training → team competitions / GameDay → global
+community**. Local drills are live today (`make local`); courses, enterprise
+training as a packaged product, and a global community are directions we are
+building toward, not shipped features. See [`docs/vision.md`](./docs/vision.md)
+for the full picture, including what is live today versus where we are still
+headed.
+
+TenkaCloud は競技プラットフォームだけを目指しているわけではありません。個人が安全に練習できるローカルドリルから、実践的なコースや企業研修、チーム対抗の競技・GameDay、そしてグローバルなコミュニティへと進む道筋を目指しています。ローカルドリル (`make local`) は現時点で実際に動きますが、コースや企業研修のパッケージ化、グローバルコミュニティは今後の方向性であり、まだ実装されたものではありません。実装済みと構想中の区別を含めた全体像は [`docs/vision.md`](./docs/vision.md) を参照してください。
+
 ## What TenkaCloud gives you
 
 TenkaCloud turns a problem catalog into a live cloud drill:

@@ -4,6 +4,10 @@ TenkaCloud is moving toward a simple path for running real cloud competitions:
 start with Lite mode, grow into richer scenarios, then share problems as a
 community catalog.
 
+This roadmap is the near-term, contributor-facing view. For the longer-term
+product direction — local drills → courses / enterprise training → team
+competitions → global community — see [`docs/vision.md`](./docs/vision.md).
+
 ## Now
 
 These areas are active and ready for contributors.
