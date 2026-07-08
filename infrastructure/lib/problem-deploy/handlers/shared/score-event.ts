@@ -1,6 +1,5 @@
-import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
+import type { ScoreEventRecord } from "../../control-data/types.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 
 /**
@@ -57,44 +56,23 @@ export interface ScoreEventItem {
 }
 
 /**
- * 採点イベントを 1 行 PutItem する。HealthCheck (uptime / attack-detected) と
- * submit-flag (flag) / reveal-hint (hint) / generic-scoring から呼ばれるので shared/ に置く。
- *
- * #745 / #1243 / #1244: 書き込み失敗は throw する。 旧来の caller は console.warn で握り潰して
- * いたが、 親 score 加算と event 履歴の不整合 (= 「-10 pt なのに履歴 0 件」 / 「+100 pt なのに
- * timeline 0 件」) の温床になり、 portal の表示矛盾を生んでいた。 silent data loss より
- * visible failure を優先 (= CloudWatch + retry に乗せる)。
+ * [Issue #2441 / Phase B3] Pure builder for the domain view of one score event
+ * (no physical PK/SK — those are the `DeploymentsRepository.appendScoreEvent`
+ * backend's concern). HealthCheck (uptime / attack-detected) and submit-flag
+ * (flag) / reveal-hint (hint) / generic-scoring all build a record through this
+ * before calling their own resolved `DeploymentsRepository.appendScoreEvent`.
  *
  * `parent` から jobId / teamId / eventId / expiresAt を継承して event row を組む。
  * `result` は source に応じて自動決定 (= attack-detected なら "down"、 flag-wrong なら "wrong"、
  * それ以外は "ok")。
  */
-export async function writeScoreEvent(
-  ddb: DynamoDBDocumentClient,
-  tableName: string,
+export function buildScoreEventRecord(
   parent: Pick<DeploymentItem, "jobId" | "problemId" | "teamId" | "eventId" | "expiresAt">,
   source: ScoreEventItem["source"],
   points: number,
   occurredAt: string,
-): Promise<void> {
-  const item = buildScoreEventItem(parent, source, points, occurredAt);
-  await ddb.send(new PutCommand({ TableName: tableName, Item: item }));
-}
-
-/**
- * ScoreEventItem を組み立てる pure builder。 単発 PutItem (`writeScoreEvent`) のほか、
- * score 加算と event append を 1 transaction で書く経路 (#2283 gate-bonus — 「score は
- * 加算されたのに履歴行が無い」 分裂を構造的に防ぐ) からも使う。
- */
-export function buildScoreEventItem(
-  parent: Pick<DeploymentItem, "jobId" | "problemId" | "teamId" | "eventId" | "expiresAt">,
-  source: ScoreEventItem["source"],
-  points: number,
-  occurredAt: string,
-): ScoreEventItem {
+): ScoreEventRecord {
   return {
-    PK: `DEPLOYMENT#${parent.jobId}`,
-    SK: `EVENT#${occurredAt}#${ulid()}`,
     jobId: parent.jobId,
     problemId: parent.problemId,
     teamId: parent.teamId,
@@ -104,5 +82,26 @@ export function buildScoreEventItem(
     result: source === "attack-detected" ? "down" : source === "flag-wrong" ? "wrong" : "ok",
     occurredAt,
     expiresAt: Number(parent.expiresAt ?? 0),
+  };
+}
+
+/**
+ * ScoreEventItem (物理 PK/SK 付き) を組み立てる pure builder。 score 加算と event append を
+ * 1 transaction で書く経路 (#2283 gate-bonus — 「score は加算されたのに履歴行が無い」 分裂を
+ * 構造的に防ぐ、`DeploymentsRepository.awardGateBonusAtomic` の TransactWrite Put) が使う。
+ * B3 以降の単発 append は {@link buildScoreEventRecord} + `appendScoreEvent` に移行済み
+ * (SK の ulid はそちらでは backend が発番する)。
+ */
+export function buildScoreEventItem(
+  parent: Pick<DeploymentItem, "jobId" | "problemId" | "teamId" | "eventId" | "expiresAt">,
+  source: ScoreEventItem["source"],
+  points: number,
+  occurredAt: string,
+): ScoreEventItem {
+  const record = buildScoreEventRecord(parent, source, points, occurredAt);
+  return {
+    PK: `DEPLOYMENT#${parent.jobId}`,
+    SK: `EVENT#${occurredAt}#${ulid()}`,
+    ...record,
   };
 }

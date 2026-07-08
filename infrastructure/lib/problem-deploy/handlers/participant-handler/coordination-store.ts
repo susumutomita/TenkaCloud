@@ -1,6 +1,4 @@
-import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { resolveDeploymentsRepository } from "./shared.js";
 
 /**
@@ -14,13 +12,12 @@ import { resolveDeploymentsRepository } from "./shared.js";
  *
  * 書き込みは version 条件付き Put で楽観ロックする (= 同時 op の lost-update を防ぐ。
  * disruption-fire の conditional Put と同方針)。 conflict 時は caller が 409 で退避リトライ。
+ *
+ * [Issue #2441 / Phase B3] The PK/SK derivation + conditional Put now live in
+ * `DeploymentsRepository.writeCoordinationState`; this module maps its A2/B2-style
+ * `{ outcome: "updated" | "conflict" }` union back onto the pre-seam
+ * `WriteCoordinationOutcome` shape so callers are unchanged.
  */
-
-const SK = "STATE";
-
-function pk(tenantId: string, eventId: string): string {
-  return `COORD#${tenantId}#${eventId}`;
-}
 
 export interface CoordinationStateRow {
   /** plugin 固有の共有 state。 plugin の applyOp が返した値。 */
@@ -60,24 +57,13 @@ export async function writeCoordinationState(
   expectedVersion: number,
   nowIso: string,
 ): Promise<WriteCoordinationOutcome> {
-  try {
-    await deps.ddb.send(
-      new PutCommand({
-        TableName: deps.tableName,
-        Item: {
-          PK: pk(tenantId, eventId),
-          SK,
-          state,
-          version: expectedVersion + 1,
-          updatedAt: nowIso,
-        },
-        ConditionExpression: "attribute_not_exists(version) OR version = :expected",
-        ExpressionAttributeValues: { ":expected": expectedVersion },
-      }),
-    );
-    return { kind: "ok" };
-  } catch (err) {
-    if (err instanceof ConditionalCheckFailedException) return { kind: "conflict" };
-    throw err;
-  }
+  const repository = await resolveDeploymentsRepository(deps);
+  const outcome = await repository.writeCoordinationState(
+    tenantId,
+    eventId,
+    state,
+    expectedVersion,
+    nowIso,
+  );
+  return outcome.outcome === "updated" ? { kind: "ok" } : { kind: "conflict" };
 }

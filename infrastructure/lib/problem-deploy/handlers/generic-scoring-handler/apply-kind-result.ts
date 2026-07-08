@@ -1,5 +1,5 @@
 import type { DeploymentItem } from "../deploy-handler/types.js";
-import { writeScoreEvent } from "../shared/score-event.js";
+import { buildScoreEventRecord } from "../shared/score-event.js";
 import {
   type GenericScoringSharedResources,
   type KindResult,
@@ -26,6 +26,13 @@ import {
  * (it is written at deploy time and never removed); a PK-without-jobId row
  * cannot occur outside a synthetic test fixture, so this tightens rather than
  * changes production behavior.
+ *
+ * [Issue #2441 / Phase B3] `item` now flows from
+ * `DeploymentsRepository.forEachCompleteDeploymentPage`, whose `DeploymentRecord`
+ * never carries the physical `PK` (it is a backend implementation detail the
+ * seam hides) — the old `!item.PK` half of this guard would now always be
+ * true, silently short-circuiting the whole tick. Dropped; `jobId` alone is
+ * the correct — and now the only reachable — precondition.
  */
 export async function applyKindResult(
   shared: GenericScoringSharedResources,
@@ -33,7 +40,7 @@ export async function applyKindResult(
   result: KindResult,
   nowIso: string,
 ): Promise<void> {
-  if (!item.PK || !item.jobId) return;
+  if (!item.jobId) return;
 
   const repository = await resolveDeploymentsRepository(shared);
   await repository.applyKindScoringResult(item.jobId, result, nowIso);
@@ -56,18 +63,17 @@ export async function appendKindScoreEvents(
     eventId: item.eventId,
     expiresAt: item.expiresAt ?? 0,
   };
+  // [Issue #2441 / Phase B3] `appendScoreEvent` replaces the direct
+  // `writeScoreEvent(ddb, tableName, ...)` I/O call — same resolved repository
+  // as `applyKindScoringResult` above.
+  const repository = await resolveDeploymentsRepository(shared);
   for (const ev of result.scoreEvents) {
     // #1244: 失敗は log + throw。 上位 (= processDeployment の .catch) で 1 deployment 単位に
     // 隔離されるので他 deployment の採点は止まらないが、 score event 抜けは CloudWatch に
     // 残り、 次 tick で同 source が再評価されたときに再書き込みされる。
     try {
-      await writeScoreEvent(
-        shared.ddb,
-        shared.deploymentsTableName,
-        parent,
-        ev.source,
-        ev.points,
-        ev.occurredAt,
+      await repository.appendScoreEvent(
+        buildScoreEventRecord(parent, ev.source, ev.points, ev.occurredAt),
       );
     } catch (err) {
       console.error(`[generic-scoring] score-event write failed jobId=${item.jobId}`, {

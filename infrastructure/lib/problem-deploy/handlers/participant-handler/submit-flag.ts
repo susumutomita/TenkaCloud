@@ -7,7 +7,7 @@ import type {
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { flagMatches } from "../generic-scoring-handler/kinds/flag.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
-import { writeScoreEvent } from "../shared/score-event.js";
+import { buildScoreEventRecord } from "../shared/score-event.js";
 import { getCompetitionAccessBlock } from "./challenge-access.js";
 import {
   type ParticipantSharedResources,
@@ -203,26 +203,27 @@ async function scoreWrongMultiFlag(
   };
 }
 
-function writeMultiFlagScoreEvent(
+async function writeMultiFlagScoreEvent(
   shared: ParticipantSharedResources,
   item: Partial<DeploymentItem> & { problemId: string; jobId?: string },
   source: "flag" | "flag-wrong",
   points: number,
   occurredAt: string,
 ): Promise<void> {
-  return writeScoreEvent(
-    shared.ddb,
-    shared.tableName,
-    {
-      jobId: String(item.jobId ?? ""),
-      problemId: item.problemId,
-      teamId: item.teamId,
-      eventId: item.eventId,
-      expiresAt: item.expiresAt ?? 0,
-    },
-    source,
-    points,
-    occurredAt,
+  const repository = await resolveDeploymentsRepository(shared);
+  await repository.appendScoreEvent(
+    buildScoreEventRecord(
+      {
+        jobId: String(item.jobId ?? ""),
+        problemId: item.problemId,
+        teamId: item.teamId,
+        eventId: item.eventId,
+        expiresAt: item.expiresAt ?? 0,
+      },
+      source,
+      points,
+      occurredAt,
+    ),
   );
 }
 
@@ -295,25 +296,26 @@ async function scoreCorrectFlag(
   return { kind: "ok", scoreDelta: scoring.points, totalScore };
 }
 
-function writeFlagScoreEvent(
+async function writeFlagScoreEvent(
   shared: ParticipantSharedResources,
   item: Partial<DeploymentItem> & { problemId: string; jobId?: string },
   source: "flag" | "flag-wrong",
   points: number,
   occurredAt: string,
 ): Promise<void> {
-  return writeScoreEvent(
-    shared.ddb,
-    shared.tableName,
-    {
-      jobId: String(item.jobId ?? ""),
-      problemId: item.problemId,
-      teamId: item.teamId,
-      eventId: item.eventId,
-      expiresAt: item.expiresAt ?? 0,
-    },
-    source,
-    points,
-    occurredAt,
+  const repository = await resolveDeploymentsRepository(shared);
+  await repository.appendScoreEvent(
+    buildScoreEventRecord(
+      {
+        jobId: String(item.jobId ?? ""),
+        problemId: item.problemId,
+        teamId: item.teamId,
+        eventId: item.eventId,
+        expiresAt: item.expiresAt ?? 0,
+      },
+      source,
+      points,
+      occurredAt,
+    ),
   );
 }

@@ -1,4 +1,10 @@
-import { BatchGetCommand, QueryCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  BatchGetCommand,
+  PutCommand,
+  QueryCommand,
+  ScanCommand,
+  UpdateCommand,
+} from "@aws-sdk/lib-dynamodb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -8,9 +14,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * を pin する。 既存の kind / reconciler 単体テスト群は sibling module を直接叩いており
  * index.ts の scan-loop + dispatch glue を通っていなかったため 44% branch だった。
  *
- * 方針: buildSharedResources / reconcileEventStatuses / 4 kind handler / writeScoreEvent /
- * isScoringActive を mock。 DDB は command 種別で分岐する fake。 残り (processDeployment 等の
- * 純 glue) は実物を通す。
+ * 方針: buildSharedResources / reconcileEventStatuses / 4 kind handler / isScoringActive を
+ * mock。 DDB は command 種別で分岐する fake。 残り (processDeployment 等の純 glue) は実物を通す。
+ *
+ * [Issue #2441 / Phase B3] `appendKindScoreEvents` no longer calls the retired
+ * `writeScoreEvent` I/O function directly — it resolves the Deployments seam and
+ * calls `repository.appendScoreEvent`, which issues a `PutCommand` through the
+ * same fake `ddb`. Score-event assertions below observe that `PutCommand`
+ * instead of a mocked `writeScoreEvent`.
  */
 const EVENTS_TABLE = "TestEvents";
 const mocks = vi.hoisted(() => ({
@@ -23,7 +34,6 @@ const mocks = vi.hoisted(() => ({
   runUptimeMultiKind: vi.fn(),
   runPhasedPollingKind: vi.fn(),
   runAttackDetectionKind: vi.fn(),
-  writeScoreEvent: vi.fn(),
   coordinationCollect: vi.fn(),
   coordinationRun: vi.fn(),
   createCoordinationTickPass: vi.fn(),
@@ -67,9 +77,6 @@ vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/phased-
 vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/attack-detection", () => ({
   runAttackDetectionKind: mocks.runAttackDetectionKind,
 }));
-vi.mock("../../lib/problem-deploy/handlers/shared/score-event", () => ({
-  writeScoreEvent: mocks.writeScoreEvent,
-}));
 // [ADR-028 / #2324] coordination tick glue は本 index test では mock し、 handler が per-page で
 // collect し scan 後に run すること だけを pin する (= tick 本体は coordination-tick.test.ts で網羅)。
 vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/coordination-tick", () => ({
@@ -112,23 +119,41 @@ const cfg = {
   batchNoResponses: false,
   queryItems: [] as Array<Record<string, unknown>>,
   queryThrows: false,
+  // [Issue #2441 / Phase B3] score-event append now issues a PutCommand through
+  // this same fake (`appendKindScoreEvents` → `appendScoreEvent`).
+  putThrows: false,
+  putThrowString: false,
 };
+function handleBatchGetCommand(): object {
+  if (cfg.batchThrows) throw new Error("batch boom");
+  // 非 Error throw: String(err) 防御枝を踏ませるため意図的に string を投げる。
+  if (cfg.batchThrowString) throw "batch string boom";
+  if (cfg.batchNoResponses) return {}; // Responses undefined → ?? [] path
+  return { Responses: { [EVENTS_TABLE]: cfg.batchRows } };
+}
+
+function handleQueryCommand(): object {
+  if (cfg.queryThrows) throw new Error("query boom");
+  return { Items: cfg.queryItems };
+}
+
+// [Issue #2441 / Phase B3] score-event append now issues a PutCommand through this
+// same fake (`appendKindScoreEvents` → `appendScoreEvent`).
+function handlePutCommand(): object {
+  if (cfg.putThrows) throw new Error("score write boom");
+  // 非 Error throw: String(err) 防御枝を踏ませるため意図的に string を投げる。
+  if (cfg.putThrowString) throw "plain score fail";
+  return {};
+}
+
 const ddb = {
   // biome-ignore lint/suspicious/noExplicitAny: command union を instanceof で分岐する fake。
   send: vi.fn(async (cmd: any) => {
     if (cmd instanceof ScanCommand) return cfg.scanPages.shift() ?? { Items: [] };
-    if (cmd instanceof BatchGetCommand) {
-      if (cfg.batchThrows) throw new Error("batch boom");
-      // 非 Error throw: String(err) 防御枝を踏ませるため意図的に string を投げる。
-      if (cfg.batchThrowString) throw "batch string boom";
-      if (cfg.batchNoResponses) return {}; // Responses undefined → ?? [] path
-      return { Responses: { [EVENTS_TABLE]: cfg.batchRows } };
-    }
-    if (cmd instanceof QueryCommand) {
-      if (cfg.queryThrows) throw new Error("query boom");
-      return { Items: cfg.queryItems };
-    }
+    if (cmd instanceof BatchGetCommand) return handleBatchGetCommand();
+    if (cmd instanceof QueryCommand) return handleQueryCommand();
     if (cmd instanceof UpdateCommand) return {};
+    if (cmd instanceof PutCommand) return handlePutCommand();
     return {};
   }),
 };
@@ -159,6 +184,8 @@ beforeEach(() => {
   cfg.batchNoResponses = false;
   cfg.queryItems = [];
   cfg.queryThrows = false;
+  cfg.putThrows = false;
+  cfg.putThrowString = false;
   mocks.isScoringActive.mockReturnValue(true);
   mocks.reconcileEventStatuses.mockResolvedValue(undefined);
   mocks.reconcileRuntimeStatuses.mockResolvedValue(undefined);
@@ -173,7 +200,6 @@ beforeEach(() => {
   mocks.runUptimeMultiKind.mockResolvedValue(EMPTY_RESULT);
   mocks.runPhasedPollingKind.mockResolvedValue(EMPTY_RESULT);
   mocks.runAttackDetectionKind.mockReturnValue(EMPTY_RESULT); // sync, not awaited
-  mocks.writeScoreEvent.mockResolvedValue(undefined);
   mocks.coordinationRun.mockResolvedValue(undefined);
   mocks.coordinationCollect.mockReturnValue(undefined);
   mocks.createCoordinationTickPass.mockReturnValue({
@@ -458,7 +484,7 @@ describe("applyKindResult / appendKindScoreEvents", () => {
       JSON.stringify({ db_present: true, auth_enabled: false }),
     );
     expect(update.ExpressionAttributeValues?.[":platform"]).toBe("posture-1");
-    expect(mocks.writeScoreEvent).toHaveBeenCalledTimes(1);
+    expect(ddb.send.mock.calls.filter((c) => c[0] instanceof PutCommand)).toHaveLength(1);
   });
 
   it("should write a zero-delta result without ADD and append nothing", async () => {
@@ -467,14 +493,21 @@ describe("applyKindResult / appendKindScoreEvents", () => {
     await runWith({ ...baseItem(), eventId: undefined });
     const update = ddb.send.mock.calls.find((c) => c[0] instanceof UpdateCommand)?.[0].input;
     expect(update.UpdateExpression).not.toContain("ADD score");
-    expect(mocks.writeScoreEvent).not.toHaveBeenCalled();
+    expect(ddb.send.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(false);
   });
 
-  it("should skip the write when the deployment has no PK", async () => {
+  it("should still write when PK is absent (Phase B3: Scan rows carry no physical PK)", async () => {
+    // [Issue #2441 / Phase B3] `item` now flows from
+    // `DeploymentsRepository.forEachCompleteDeploymentPage`, whose
+    // `DeploymentRecord` never carries the physical `PK` — `applyKindResult`'s
+    // `!item.PK` guard was dropped (jobId alone is the precondition), so a
+    // missing PK no longer skips the write. Pre-B3 this asserted the opposite
+    // (`toBe(false)`) because the raw Scan item still carried PK/absence of it
+    // gated the legacy UpdateItem path.
     mocks.runUptimeFlatKind.mockResolvedValueOnce(FULL_RESULT);
     shared.problemsScoring = { p1: { kind: "uptime-flat" } };
     await runWith({ ...baseItem(), PK: undefined, eventId: undefined });
-    expect(ddb.send.mock.calls.some((c) => c[0] instanceof UpdateCommand)).toBe(false);
+    expect(ddb.send.mock.calls.some((c) => c[0] instanceof UpdateCommand)).toBe(true);
   });
 
   it("should skip the write and score events when jobId is missing (default expiresAt path)", async () => {
@@ -490,31 +523,32 @@ describe("applyKindResult / appendKindScoreEvents", () => {
     shared.problemsScoring = { p1: { kind: "uptime-flat" } };
     await runWith({ ...baseItem(), jobId: undefined, expiresAt: undefined, eventId: undefined });
     expect(ddb.send.mock.calls.some((c) => c[0] instanceof UpdateCommand)).toBe(false);
-    expect(mocks.writeScoreEvent).not.toHaveBeenCalled();
+    expect(ddb.send.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(false);
   });
 
   it("should default expiresAt to 0 when the deployment lacks one", async () => {
     mocks.runUptimeFlatKind.mockResolvedValueOnce(FULL_RESULT);
     shared.problemsScoring = { p1: { kind: "uptime-flat" } };
     await runWith({ ...baseItem(), expiresAt: undefined, eventId: undefined });
-    expect(mocks.writeScoreEvent).toHaveBeenCalledTimes(1);
-    expect(mocks.writeScoreEvent.mock.calls[0][2].expiresAt).toBe(0); // parent.expiresAt default
+    const put = ddb.send.mock.calls.find((c) => c[0] instanceof PutCommand)?.[0];
+    expect(put).toBeDefined();
+    expect(put.input.Item.expiresAt).toBe(0); // parent.expiresAt default
   });
 
-  it("should isolate a writeScoreEvent failure to one deployment", async () => {
+  it("should isolate a score-event append failure to one deployment", async () => {
     mocks.runUptimeFlatKind.mockResolvedValueOnce(FULL_RESULT);
-    mocks.writeScoreEvent.mockRejectedValueOnce(new Error("score write boom"));
+    cfg.putThrows = true;
     shared.problemsScoring = { p1: { kind: "uptime-flat" } };
     await expect(runWith({ ...baseItem(), eventId: undefined })).resolves.toBeUndefined();
-    expect(mocks.writeScoreEvent).toHaveBeenCalledTimes(1);
+    expect(ddb.send.mock.calls.filter((c) => c[0] instanceof PutCommand)).toHaveLength(1);
   });
 
-  it("should isolate a non-Error writeScoreEvent rejection (String(err) branch)", async () => {
+  it("should isolate a non-Error score-event append rejection (String(err) branch)", async () => {
     mocks.runUptimeFlatKind.mockResolvedValueOnce(FULL_RESULT);
-    mocks.writeScoreEvent.mockRejectedValueOnce("plain score fail");
+    cfg.putThrowString = true;
     shared.problemsScoring = { p1: { kind: "uptime-flat" } };
     await expect(runWith({ ...baseItem(), eventId: undefined })).resolves.toBeUndefined();
-    expect(mocks.writeScoreEvent).toHaveBeenCalledTimes(1);
+    expect(ddb.send.mock.calls.filter((c) => c[0] instanceof PutCommand)).toHaveLength(1);
   });
 });
 

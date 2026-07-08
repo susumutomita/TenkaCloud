@@ -7,7 +7,6 @@ import {
   buildScheduledTeardownResources,
   resolveEventsRepository,
 } from "../event-handler/shared.js";
-import { forEachScanPage } from "../shared/ddb-paginate.js";
 import { applyKindResult } from "./apply-kind-result.js";
 import { reconcileDeployStatusMaintenance } from "./composite-status-reconciler.js";
 import { maybeFireConditionDisruptions } from "./condition-disruption-fire.js";
@@ -43,6 +42,7 @@ import {
   type KindResult,
   type PhaseEntry,
   parseScoringState,
+  resolveDeploymentsRepository,
 } from "./shared.js";
 
 /**
@@ -143,28 +143,12 @@ export async function handler(event: GenericScoringTickEvent = {}): Promise<void
     parseCoordinationProblemIds(process.env.PROBLEM_COORDINATION),
   );
 
-  // `Limit: 200` は 1 ページあたりの件数上限 (全体上限ではない)。forEachScanPage が
-  // `LastEvaluatedKey` を追って全ページ drain するので per-page の BatchGet / 並列処理は従来どおり。
-  const scanInput = runtimeEventId
-    ? {
-        TableName: shared.deploymentsTableName,
-        FilterExpression: "#status = :complete AND eventId = :eventId",
-        ExpressionAttributeNames: { "#status": "status" },
-        ExpressionAttributeValues: {
-          ":complete": "COMPLETE",
-          ":eventId": runtimeEventId,
-        },
-        Limit: 200,
-      }
-    : {
-        TableName: shared.deploymentsTableName,
-        FilterExpression: "#status = :complete",
-        ExpressionAttributeNames: { "#status": "status" },
-        ExpressionAttributeValues: { ":complete": "COMPLETE" },
-        Limit: 200,
-      };
-  await forEachScanPage(shared.ddb, scanInput, async (page) => {
-    // DynamoDB applies FilterExpression server-side. Keep the in-process check as a
+  // [Issue #2441 / Phase B3] `forEachCompleteDeploymentPage` absorbs the
+  // 200-per-page Scan + `LastEvaluatedKey` drain into the Deployments seam;
+  // per-page BatchGet / parallel processing below stays unchanged.
+  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  await deploymentsRepository.forEachCompleteDeploymentPage(runtimeEventId, async (page) => {
+    // The backend applies FilterExpression server-side. Keep the in-process check as a
     // confused-deputy guard for mocks, future query adapters, and malformed rows.
     const items = (page as Partial<DeploymentItem>[]).filter(
       (item) => runtimeEventId === undefined || item.eventId === runtimeEventId,
