@@ -233,4 +233,11 @@ else
   log "  no orphan api keys found"
 fi
 
+# Issue #2444: 全 DynamoDB テーブルは RemovalPolicy.RETAIN なので stack を消しても残り、
+# provisioned capacity を課金し続ける。 残存テーブルを検出して概算コスト + 削除コマンドを警告する。
+# 削除はしない (RETAIN は意図的)。 best-effort: list 失敗は warning に留め exit code を変えない
+# (= 冪等性を壊さない。 module は常に exit 0 だが set -e 保険で || true)。
+log "scanning for retained DynamoDB tables (RETAIN keeps billing after destroy)..."
+bun run "${TenkaCloud_ROOT}/scripts/retain-table-warning.ts" || true
+
 log "cleanup complete."

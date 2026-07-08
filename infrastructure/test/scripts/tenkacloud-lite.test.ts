@@ -346,6 +346,64 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     }
   });
 
+  // Issue #2444: 全 DynamoDB テーブルは RETAIN なので destroy 後も残って課金し続ける。
+  // down の完了時に list-tables + describe-table で残存を検出し、 概算コスト + 削除コマンドを
+  // 警告する (best-effort、 exit code は変えない)。
+  it("down should warn about retained DynamoDB tables after destroying (#2444)", async () => {
+    const { io, calls, stdout } = buildIO({
+      inheritExitCode: 0,
+      capture: (_cmd, args) => {
+        if (args.includes("list-tables")) {
+          return {
+            code: 0,
+            stdout: JSON.stringify({
+              TableNames: ["tenkacloud-lite-problem-deploy-EventsTable-ABC", "unrelated-table"],
+            }),
+            stderr: "",
+          };
+        }
+        if (args.includes("describe-table")) {
+          return {
+            code: 0,
+            stdout: JSON.stringify({
+              Table: {
+                ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
+                GlobalSecondaryIndexes: [
+                  { ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 } },
+                ],
+              },
+            }),
+            stderr: "",
+          };
+        }
+        return { code: 0, stdout: "", stderr: "" };
+      },
+    });
+    const code = await main(["down"], io);
+    expect(code).toBe(0);
+    const listCall = calls.find((c) => c.cmd === "aws" && c.args.includes("list-tables"));
+    expect(listCall).toBeDefined();
+    const text = stdout.join("");
+    expect(text).toContain("tenkacloud-lite-problem-deploy-EventsTable-ABC");
+    expect(text).toContain(
+      "aws dynamodb delete-table --table-name tenkacloud-lite-problem-deploy-EventsTable-ABC",
+    );
+    expect(text).not.toContain("unrelated-table");
+  });
+
+  it("down should keep exit code 0 when the retained-table scan cannot list tables (#2444)", async () => {
+    const { io, stderr } = buildIO({
+      inheritExitCode: 0,
+      capture: (_cmd, args) =>
+        args.includes("list-tables")
+          ? { code: 255, stdout: "", stderr: "ExpiredToken" }
+          : { code: 0, stdout: "", stderr: "" },
+    });
+    const code = await main(["down"], io);
+    expect(code).toBe(0);
+    expect(stderr.join("")).toContain("スキップ");
+  });
+
   // Issue #1345: destroy 前に y/N 確認 prompt を入れる。 first-run user が誤爆して
   // DB データを消すのを防ぐ。 `--yes` で bypass 可能。
   it("down should ask for confirmation before destroying (#1345)", async () => {

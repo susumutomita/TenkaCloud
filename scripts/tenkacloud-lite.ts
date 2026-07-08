@@ -35,6 +35,7 @@ import {
   resolveLiteEnvironment,
   resolveLiteStackNames,
 } from "../infrastructure/lib/tenkacloud-lite/stack-names";
+import { warnRetainedTables } from "./retain-table-warning";
 
 // Issue #2193: CDK app (bin/tenkacloud-lite.ts) と同じ規則で env suffix を解決する。
 // Makefile が `infrastructure/environments/<env>/.env` を load してから本 CLI を起動する
@@ -505,19 +506,29 @@ async function cmdDown(args: readonly string[], io: CliIO): Promise<number> {
   for (const dir of SYNTH_ASSET_DIRS) io.ensureDir(dir);
   io.stdout("[lite] destroying 2 stacks...\n");
   // app stack を先に destroy (= cross-stack 参照 (DeployApi Lambda 等) の依存方向に合わせる)。
-  const code1 = await io.spawnInherit(CDK_BIN, [
+  let code = await io.spawnInherit(CDK_BIN, [
     ...CDK_OPTS,
     "destroy",
     LITE_STACK_NAMES.app,
     "--force",
   ]);
-  if (code1 !== 0) return code1;
-  return io.spawnInherit(CDK_BIN, [
-    ...CDK_OPTS,
-    "destroy",
-    LITE_STACK_NAMES.problemDeploy,
-    "--force",
-  ]);
+  if (code === 0) {
+    code = await io.spawnInherit(CDK_BIN, [
+      ...CDK_OPTS,
+      "destroy",
+      LITE_STACK_NAMES.problemDeploy,
+      "--force",
+    ]);
+  }
+  // Issue #2444: 全 DynamoDB テーブルは RemovalPolicy.RETAIN なので destroy 後も残って
+  // provisioned capacity を課金し続ける。 残存を検出して概算コスト + 削除コマンドを警告する。
+  // best-effort: creds 不在 / 権限不足でも 1 行の notice に留め、 destroy の exit code は変えない。
+  await warnRetainedTables({
+    aws: (args) => io.spawnCapture("aws", args),
+    stdout: io.stdout,
+    stderr: io.stderr,
+  });
+  return code;
 }
 
 async function cmdStatus(_args: readonly string[], io: CliIO): Promise<number> {
