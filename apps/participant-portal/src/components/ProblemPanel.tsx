@@ -8,7 +8,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator, {
   type StatusIndicatorProps,
 } from "@cloudscape-design/components/status-indicator";
-import { useNowMs } from "@tenkacloud/web-kit";
+import { Markdown, useNowMs } from "@tenkacloud/web-kit";
 import type {
   DeploymentStatus,
   ParticipantProblemView,
@@ -182,34 +182,38 @@ export function resolveProblemTitle(problem: ParticipantProblemView): string {
   return problem.name?.trim() ? problem.name : problem.problemId;
 }
 
-/** description / instructions のいずれかが非空なら問題文セクションを描画する。 */
-export function hasProblemStatement(problem: ParticipantProblemView): boolean {
-  return Boolean(problem.description?.trim() || problem.instructions?.trim());
+/**
+ * description が非空なら問題文セクションを描画する。
+ *
+ * #2473: instructions の正本は `ProblemInfoSection`(`ProblemDetail.tsx`)に一本化した
+ * (AWS モードでも出る唯一の instructions 描画経路)。ここは description のみで判定する —
+ * instructions だけ非空・description 空の問題では、もう描画するものが無いので false になる。
+ *
+ * TS の user-defined type guard (`problem is ... & { description: string }`) にして、
+ * 呼び出し側の `if (!hasProblemStatement(problem)) return null;` 後に `problem.description`
+ * が `string` に narrow されるようにする(= `?? ""` のような到達しない fallback 分岐を
+ * 作らずに済む)。
+ */
+export function hasProblemStatement(
+  problem: ParticipantProblemView,
+): problem is ParticipantProblemView & { description: string } {
+  return Boolean(problem.description?.trim());
 }
 
 /**
- * #1975: 問題文 (description + instructions) を読みやすい preformatted text で描画する。
+ * #1975 / #2473: 問題文 (description) を web-kit `<Markdown>` で描画する。
  *
- * instructions は markdown 風のプレーンテキストになりうるが、 改行を尊重しつつ
- * innerHTML / dangerouslySetInnerHTML は使わない (= XSS 面を作らない)。 不在の field は出さない
- * ので、 AWS mode (問題文未配信) では section 全体が描画されず、 既存挙動のまま。
+ * instructions は `ProblemInfoSection` 側で描画される(#2473 で重複表示を解消)ので、
+ * ここでは description のみを扱う。`<Markdown>` は marked → DOMPurify sanitize 済みの
+ * 安全経路(`ProblemDetail` と同じ)で、`innerHTML` / `dangerouslySetInnerHTML` を
+ * 直接使わない。不在の field は出さないので、AWS mode (問題文未配信) では section 全体が
+ * 描画されず、既存挙動のまま。
  */
 function ProblemStatement({ problem, t }: { problem: ParticipantProblemView; t: ProblemPanelT }) {
   if (!hasProblemStatement(problem)) return null;
   return (
     <Container header={<Header variant="h3">{t("problem_panel.statement_heading")}</Header>}>
-      <SpaceBetween size="xs">
-        {problem.description?.trim() && (
-          <Box variant="p">
-            <pre style={PROBLEM_TEXT_STYLE}>{problem.description}</pre>
-          </Box>
-        )}
-        {problem.instructions?.trim() && (
-          <Box variant="p">
-            <pre style={PROBLEM_TEXT_STYLE}>{problem.instructions}</pre>
-          </Box>
-        )}
-      </SpaceBetween>
+      <Markdown source={problem.description} />
     </Container>
   );
 }
@@ -222,9 +226,7 @@ function ProblemWriteup({ problem, t }: { problem: ParticipantProblemView; t: Pr
   if (!problem.writeup?.trim()) return null;
   return (
     <Container header={<Header variant="h3">{t("problem_panel.writeup_heading")}</Header>}>
-      <Box variant="p">
-        <pre style={PROBLEM_TEXT_STYLE}>{problem.writeup}</pre>
-      </Box>
+      <Markdown source={problem.writeup} />
       {/* Local-only pointer to the `tenka-drill` skill: no AI runs in the portal;
           the learner digs deeper in their own Claude Code (their subscription). */}
       {isLocal && (
@@ -235,14 +237,6 @@ function ProblemWriteup({ problem, t }: { problem: ParticipantProblemView; t: Pr
     </Container>
   );
 }
-
-/** 改行尊重 + フォントは本文継承 (= autoLink / innerHTML を避けた安全なプレーンテキスト)。 */
-const PROBLEM_TEXT_STYLE = {
-  margin: 0,
-  whiteSpace: "pre-wrap",
-  fontFamily: "inherit",
-  fontSize: "inherit",
-} as const;
 
 function ProblemPanelAlerts({
   problem,
@@ -347,8 +341,10 @@ export function ProblemPanel({
           now={now}
           t={t}
         />
-        {/* #1975: 問題文 (name / description / instructions)。 local mode は同梱して返すので
-            「何の問題か / 何をすべきか」 を表示できる。 AWS mode は未配信なので不在時は何も出さない。 */}
+        {/* #1975 / #2473: 問題文 (name / description)。 local mode は同梱して返すので
+            「何の問題か」 を表示できる。 instructions は ProblemInfoSection 側の唯一の描画経路に
+            一本化した(#2473)ので、ここでは description のみ。 AWS mode は未配信なので不在時は
+            何も出さない。 */}
         <ProblemStatement problem={problem} t={t} />
         <ProblemWriteup problem={problem} t={t} />
         {/* [#2392 Phase 2] on-demand start / stop control。 lifecycle 不在 (= AWS mode) は出さない。 */}
