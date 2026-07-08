@@ -10,6 +10,7 @@ import {
   TransactWriteCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { DEPLOYMENTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-deployments-repository";
 import { EVENTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-events-repository";
 import { FEATURE_FLAGS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-feature-flags-repository";
 import { NOTIFICATIONS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-notifications-repository";
@@ -724,6 +725,7 @@ export function makeSqliteExecutor(): SqlExecutor {
   db.exec(TEAMS_SCHEMA_SQL);
   db.exec(NOTIFICATIONS_SCHEMA_SQL);
   db.exec(FEATURE_FLAGS_SCHEMA_SQL);
+  db.exec(DEPLOYMENTS_SCHEMA_SQL);
   return {
     run: (sql, params = []) => {
       const result = db.prepare(sql).run(...params);
