@@ -1,3 +1,4 @@
+import type { SideNavigationProps } from "@cloudscape-design/components/side-navigation";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LeaderboardResponse, ParticipantTeamView } from "../../src/api/portal-client";
@@ -57,6 +58,7 @@ const {
   buildRefreshLatestUtility,
   buildConsoleUtility,
   buildProfileUtility,
+  buildSideNavItems,
   handleSideNavFollow,
   ShellLayout,
 } = await import("../../src/components/AppLayout");
@@ -314,6 +316,41 @@ describe("utility builders", () => {
   });
 });
 
+// ── side navigation items (Issue #2474) ─────────────────────────────────────
+const sectionByText = (items: SideNavigationProps.Item[], text: string) =>
+  items.find((i): i is SideNavigationProps.Section => i.type === "section" && i.text === text);
+
+const linkHrefs = (section: SideNavigationProps.Section | undefined) =>
+  (section?.items ?? []).map((i) => ("href" in i ? i.href : undefined));
+
+describe("buildSideNavItems (Issue #2474 local nav pruning)", () => {
+  it("should omit the Tools section and the notifications link in local cloud mode", () => {
+    const items = buildSideNavItems(0, (k) => k, "local");
+    // Tools (SSO 資格情報) セクションは丸ごと省く。
+    expect(sectionByText(items, "nav.tools_section")).toBeUndefined();
+    // Event セクションは home / scoreboard / score-events のみで notifications 無し。
+    expect(linkHrefs(sectionByText(items, "nav.event_section"))).toEqual([
+      "/",
+      "/scoreboard",
+      "/score-events",
+    ]);
+    // Quests セクションは維持。
+    expect(sectionByText(items, "nav.quests_section")).toBeDefined();
+  });
+
+  it("should keep the Tools section and notifications link in real cloud mode (regression guard)", () => {
+    const items = buildSideNavItems(0, (k) => k, "real");
+    expect(sectionByText(items, "nav.tools_section")).toBeDefined();
+    expect(linkHrefs(sectionByText(items, "nav.event_section"))).toContain("/notifications");
+  });
+
+  it("should keep the Tools section and notifications link in mock cloud mode (regression guard)", () => {
+    const items = buildSideNavItems(0, (k) => k, "mock");
+    expect(sectionByText(items, "nav.tools_section")).toBeDefined();
+    expect(linkHrefs(sectionByText(items, "nav.event_section"))).toContain("/notifications");
+  });
+});
+
 // ── ShellLayout component render ─────────────────────────────────────────────
 const tv = (over: Record<string, unknown> = {}) => ({
   view: null,
@@ -441,6 +478,18 @@ describe("ShellLayout", () => {
     renderShell({ cloudMode: "local" });
     expect(screen.getByText("app.local_cloud_header")).toBeInTheDocument();
     expect(screen.getByText("app.local_cloud_body")).toBeInTheDocument();
+  });
+
+  it("should hide the AWS Console utility and AWS-only nav links in local cloud mode (Issue #2474)", () => {
+    renderShell({ cloudMode: "local" });
+    // 右上 AWS Console utility を出さない。
+    expect(screen.queryByText("nav.open_console")).not.toBeInTheDocument();
+    // 左ナビの Tools (SSO 資格情報) / お知らせ (notifications) 導線も出さない。
+    expect(screen.queryByText("nav.tools_section")).not.toBeInTheDocument();
+    expect(screen.queryByText("nav.sso_credentials")).not.toBeInTheDocument();
+    expect(screen.queryByText("nav.notifications")).not.toBeInTheDocument();
+    // home / scoreboard など Event 導線は維持。
+    expect(screen.getAllByText("nav.scoreboard").length).toBeGreaterThan(0);
   });
 
   it("should show the unread notification count badge", () => {
