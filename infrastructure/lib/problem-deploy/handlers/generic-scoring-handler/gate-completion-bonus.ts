@@ -1,5 +1,6 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { QueryCommand, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { createFeatureFlagsRepository } from "../../control-data/feature-flags-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
   CHALLENGE_PREREQUISITE_GATE_FLAG,
@@ -55,12 +56,13 @@ function isGateFlagEnabled(
 ): Promise<boolean> {
   const cached = cache.get(tenantId);
   if (cached) return cached;
-  const promise = isTenantFeatureEnabled(
-    shared.ddb,
-    shared.eventsTableName,
-    tenantId,
-    CHALLENGE_PREREQUISITE_GATE_FLAG,
-  );
+  // GateScoringShared は participant/event の shared 型と別物なので seam resolver を通さず
+  // factory を直呼びする。 default backend では従来と byte 互換の GetCommand が飛ぶ。
+  const repo = createFeatureFlagsRepository(process.env.CONTROL_DATA_BACKEND, {
+    ddb: shared.ddb,
+    eventsTableName: shared.eventsTableName,
+  });
+  const promise = isTenantFeatureEnabled(repo, tenantId, CHALLENGE_PREREQUISITE_GATE_FLAG);
   cache.set(tenantId, promise);
   return promise;
 }

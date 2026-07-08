@@ -1,11 +1,6 @@
-import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
-import {
-  readTenantFeatureFlags,
-  type TenantFeatureFlagsItem,
-  tenantFlagsKey,
-} from "../shared/tenant-feature-flags.js";
-import type { EventSharedResources } from "./shared.js";
+import { readTenantFeatureFlags } from "../shared/tenant-feature-flags.js";
+import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
 
 /**
  * Issue #2231 (ADR-035): per-tenant runtime feature-flag overrides.
@@ -51,7 +46,8 @@ export async function getFeatureFlags(
   shared: EventSharedResources,
   tenantId: string,
 ): Promise<Record<string, boolean>> {
-  return readTenantFeatureFlags(shared.ddb, shared.eventsTableName, tenantId);
+  const repositories = await resolveEventRepositories(shared);
+  return readTenantFeatureFlags(repositories.featureFlags, tenantId);
 }
 
 /**
@@ -66,13 +62,12 @@ export async function putFeatureFlags(
   updatedBy: string,
   nowMs: number,
 ): Promise<Record<string, boolean>> {
-  const item: TenantFeatureFlagsItem = {
-    ...tenantFlagsKey(tenantId),
+  const repositories = await resolveEventRepositories(shared);
+  await repositories.featureFlags.put({
     tenantId,
     flags,
     updatedAt: new Date(nowMs).toISOString(),
     updatedBy,
-  };
-  await shared.ddb.send(new PutCommand({ TableName: shared.eventsTableName, Item: item }));
+  });
   return flags;
 }

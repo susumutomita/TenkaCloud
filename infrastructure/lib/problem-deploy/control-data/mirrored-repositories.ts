@@ -8,9 +8,14 @@ import type {
   EventScoringMeta,
   EventsPage,
   EventsRepository,
+  FeatureFlagsRepository,
+  NotificationRecord,
+  NotificationsPage,
+  NotificationsRepository,
   ScheduleFiredKind,
   TeamRecord,
   TeamsRepository,
+  TenantFeatureFlagsRecord,
 } from "./types.js";
 
 function sameEventRecord(left: EventRecord, right: EventRecord): boolean {
@@ -341,5 +346,43 @@ export class MirroredTeamsRepository implements TeamsRepository {
   async pruneExpired(nowEpochSeconds: number): Promise<number> {
     await this.replica.pruneExpired(nowEpochSeconds);
     return this.canonical.pruneExpired(nowEpochSeconds);
+  }
+}
+
+export class MirroredNotificationsRepository implements NotificationsRepository {
+  constructor(
+    private readonly canonical: NotificationsRepository,
+    private readonly replica: NotificationsRepository,
+  ) {}
+
+  async append(record: NotificationRecord): Promise<void> {
+    await this.canonical.append(record);
+    await this.replica.append(record);
+  }
+
+  // [#2439] cursor は backend 固有 token のため read-repair せず canonical を返す(A3 と同じ)。
+  async listByEvent(
+    eventId: string,
+    opts: { readonly limit: number; readonly cursor?: string },
+  ): Promise<NotificationsPage> {
+    return this.canonical.listByEvent(eventId, opts);
+  }
+}
+
+export class MirroredFeatureFlagsRepository implements FeatureFlagsRepository {
+  constructor(
+    private readonly canonical: FeatureFlagsRepository,
+    private readonly replica: FeatureFlagsRepository,
+  ) {}
+
+  async get(tenantId: string): Promise<TenantFeatureFlagsRecord | undefined> {
+    return this.canonical.get(tenantId);
+  }
+
+  // [#2439] この aggregate に delete は無く、 行は put 全置換でしか変わらない —
+  // write-through で replica は収束する(read-repair 不要)。
+  async put(record: TenantFeatureFlagsRecord): Promise<void> {
+    await this.canonical.put(record);
+    await this.replica.put(record);
   }
 }

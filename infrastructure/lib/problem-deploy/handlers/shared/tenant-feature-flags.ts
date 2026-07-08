@@ -1,5 +1,4 @@
-import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { GetCommand } from "@aws-sdk/lib-dynamodb";
+import type { FeatureFlagsRepository } from "../../control-data/feature-flags-repository.js";
 
 /**
  * Issue #2231 / #2283 (ADR-035): per-tenant runtime feature-flag 行の共有 reader。
@@ -9,6 +8,10 @@ import { GetCommand } from "@aws-sdk/lib-dynamodb";
  * 閉じていたが、 #2283 で participant-handler (challenge access guard) と
  * generic-scoring-handler (Gate 完了 bonus) も同じ判定を必要とするため、 row shape と
  * 読み経路をここへ一本化する (= 「同じ Flag 判定を backend の access guard にも適用する」)。
+ *
+ * [#2439 / ADR-049 §5.1] 物理 read は {@link FeatureFlagsRepository} seam に委譲する。 この
+ * helper は「行 → flag map / 判定」への畳み込みと fail-OFF ポリシーだけを担い、 DynamoDB /
+ * Turso いずれの backend でも同じ判定を返す (default backend では従来と byte 互換の GetCommand)。
  */
 
 /** FLAGS 行の shape (writer = event-handler/feature-flags.ts と共有する単一定義)。 */
@@ -30,15 +33,11 @@ export function tenantFlagsKey(tenantId: string): { PK: string; SK: "FLAGS" } {
  * (= 全 flag が registry default)。 DDB error は throw (caller が経路ごとに扱う)。
  */
 export async function readTenantFeatureFlags(
-  ddb: DynamoDBDocumentClient,
-  eventsTableName: string,
+  repo: FeatureFlagsRepository,
   tenantId: string,
 ): Promise<Record<string, boolean>> {
-  const out = await ddb.send(
-    new GetCommand({ TableName: eventsTableName, Key: tenantFlagsKey(tenantId) }),
-  );
-  const item = out.Item as Partial<TenantFeatureFlagsItem> | undefined;
-  return item?.flags ?? {};
+  const record = await repo.get(tenantId);
+  return record?.flags ?? {};
 }
 
 /**
@@ -50,13 +49,12 @@ export async function readTenantFeatureFlags(
  * あちらは 「lock 中に加点しない」 保証、 こちらは 「既定 OFF 機能で競技を止めない」 保証)。
  */
 export async function isTenantFeatureEnabled(
-  ddb: DynamoDBDocumentClient,
-  eventsTableName: string,
+  repo: FeatureFlagsRepository,
   tenantId: string,
   flagKey: string,
 ): Promise<boolean> {
   try {
-    const flags = await readTenantFeatureFlags(ddb, eventsTableName, tenantId);
+    const flags = await readTenantFeatureFlags(repo, tenantId);
     return flags[flagKey] === true;
   } catch (err) {
     console.warn("[tenant-feature-flags] read failed (treating flag as OFF)", {

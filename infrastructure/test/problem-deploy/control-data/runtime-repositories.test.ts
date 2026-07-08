@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import { DynamoDbEventsRepository } from "../../../lib/problem-deploy/control-data/events-repository.js";
 import {
   MirroredEventsRepository,
+  MirroredFeatureFlagsRepository,
+  MirroredNotificationsRepository,
   MirroredTeamsRepository,
 } from "../../../lib/problem-deploy/control-data/mirrored-repositories.js";
 import { createControlDataRepositoryResolver } from "../../../lib/problem-deploy/control-data/runtime-repositories.js";
@@ -57,6 +59,8 @@ describe("control-data runtime repository resolver", () => {
     expect(first).toBe(second);
     expect(first.events).toBeInstanceOf(MirroredEventsRepository);
     expect(first.teams).toBeInstanceOf(MirroredTeamsRepository);
+    expect(first.notifications).toBeInstanceOf(MirroredNotificationsRepository);
+    expect(first.featureFlags).toBeInstanceOf(MirroredFeatureFlagsRepository);
     expect(send).toHaveBeenCalledTimes(1);
     const command = send.mock.calls[0]?.[0];
     expect(command).toBeInstanceOf(GetParameterCommand);

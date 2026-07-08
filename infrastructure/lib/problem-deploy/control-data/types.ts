@@ -1,5 +1,7 @@
 import type { EventItem, TeamItem } from "../handlers/event-handler/types.js";
+import type { NotificationItem } from "../handlers/shared/notification.js";
 import type { ProgressionGateConfig } from "../handlers/shared/progression-gate.js";
+import type { TenantFeatureFlagsItem } from "../handlers/shared/tenant-feature-flags.js";
 
 /**
  * [ADR-049 §5.1] Control-plane data behind a repository seam.
@@ -89,6 +91,51 @@ export type ScheduleFiredKind = "teardown" | "deploy";
 export interface EventsPage {
   readonly events: readonly EventRecord[];
   readonly nextCursor?: string;
+}
+
+/**
+ * [#2439 / Phase A4] Notifications aggregate の domain shape(EventRecord と同じ流儀で
+ * 物理 DDB キーを除いたもの)。 SK 導出 (`NOTIFICATION#<occurredAt>#<notificationId>`) は
+ * DynamoDB backend の実装詳細。
+ */
+export type NotificationRecord = Omit<NotificationItem, "PK" | "SK">;
+
+/** [#2439] 1 ページ分の通知(EventsPage の鏡像)。 nextCursor は opaque・backend 固有。 */
+export interface NotificationsPage {
+  readonly notifications: readonly NotificationRecord[];
+  readonly nextCursor?: string;
+}
+
+export interface NotificationsRepository {
+  /**
+   * 1 通知を追記する。 `expiresAt` は親 event 行と同値(TTL 同期)を caller が保証。
+   * DDB は Put(同キー再送は上書き)、 SQL は upsert — 冪等性 parity。
+   */
+  append(record: NotificationRecord): Promise<void>;
+  /**
+   * event 配下の通知を occurredAt 降順で 1 ページ返す(SK =
+   * `NOTIFICATION#<iso>#<ulid>` の並びをそのまま使う)。 invalid/foreign cursor は
+   * 最初のページから(A3 と同じ)。 現行 caller (participant notifications) は cursor を
+   * 渡さない — seam の cursor は将来のページング用で挙動不変。
+   */
+  listByEvent(
+    eventId: string,
+    opts: { readonly limit: number; readonly cursor?: string },
+  ): Promise<NotificationsPage>;
+}
+
+/** [#2439] TenantFeatureFlags の domain shape(tenantId / flags / updatedAt / updatedBy)。 */
+export type TenantFeatureFlagsRecord = Omit<TenantFeatureFlagsItem, "PK" | "SK">;
+
+export interface FeatureFlagsRepository {
+  /** 行が無い(未保存)→ undefined。 caller 側 helper が `{}` に畳む(現行挙動)。 */
+  get(tenantId: string): Promise<TenantFeatureFlagsRecord | undefined>;
+  /**
+   * 全置換 upsert(admin Settings 保存)。 audit fields (updatedAt/updatedBy) を含む
+   * record 全体を渡す — issue 本文の `put(tenantId, flags)` から意図的に refine
+   * (putEvent(record) の先行 precedent と同型、 audit fields を落とさないため)。
+   */
+  put(record: TenantFeatureFlagsRecord): Promise<void>;
 }
 
 /**

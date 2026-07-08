@@ -2,14 +2,28 @@ import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { type Client, createClient } from "@libsql/client/http";
 import { createEventsRepository } from "./events-repository.js";
+import { createFeatureFlagsRepository } from "./feature-flags-repository.js";
 import { initializeControlDataSchema, LibsqlExecutor } from "./libsql-executor.js";
-import { MirroredEventsRepository, MirroredTeamsRepository } from "./mirrored-repositories.js";
+import {
+  MirroredEventsRepository,
+  MirroredFeatureFlagsRepository,
+  MirroredNotificationsRepository,
+  MirroredTeamsRepository,
+} from "./mirrored-repositories.js";
+import { createNotificationsRepository } from "./notifications-repository.js";
 import { createTeamsRepository } from "./teams-repository.js";
-import type { EventsRepository, TeamsRepository } from "./types.js";
+import type {
+  EventsRepository,
+  FeatureFlagsRepository,
+  NotificationsRepository,
+  TeamsRepository,
+} from "./types.js";
 
 export interface ControlDataRepositories {
   readonly events: EventsRepository;
   readonly teams: TeamsRepository;
+  readonly notifications: NotificationsRepository;
+  readonly featureFlags: FeatureFlagsRepository;
 }
 
 export interface ControlDataRuntimeInput {
@@ -62,6 +76,14 @@ export function createControlDataRepositoryResolver(
           ddb: input.ddb,
           teamsTableName: input.teamsTableName,
         }),
+        notifications: createNotificationsRepository(backend, {
+          ddb: input.ddb,
+          eventsTableName: input.eventsTableName,
+        }),
+        featureFlags: createFeatureFlagsRepository(backend, {
+          ddb: input.ddb,
+          eventsTableName: input.eventsTableName,
+        }),
       };
     }
     if (backend !== "turso" && backend !== "sql") {
@@ -97,12 +119,28 @@ export function createControlDataRepositoryResolver(
         ddb: input.ddb,
         teamsTableName: input.teamsTableName,
       });
+      const canonicalNotifications = createNotificationsRepository("dynamodb", {
+        ddb: input.ddb,
+        eventsTableName: input.eventsTableName,
+      });
+      const canonicalFeatureFlags = createFeatureFlagsRepository("dynamodb", {
+        ddb: input.ddb,
+        eventsTableName: input.eventsTableName,
+      });
       return {
         events: new MirroredEventsRepository(
           canonicalEvents,
           createEventsRepository(backend, { sql }),
         ),
         teams: new MirroredTeamsRepository(canonicalTeams, createTeamsRepository(backend, { sql })),
+        notifications: new MirroredNotificationsRepository(
+          canonicalNotifications,
+          createNotificationsRepository(backend, { sql }),
+        ),
+        featureFlags: new MirroredFeatureFlagsRepository(
+          canonicalFeatureFlags,
+          createFeatureFlagsRepository(backend, { sql }),
+        ),
       };
     })();
     return cached;

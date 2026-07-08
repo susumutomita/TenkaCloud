@@ -12,7 +12,11 @@ import {
 } from "../shared/progression-gate.js";
 import { isTenantFeatureEnabled } from "../shared/tenant-feature-flags.js";
 import { type EventGate, evaluateGate, type GateBlock, getEventGate } from "./event-gate.js";
-import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
+import {
+  type ParticipantSharedResources,
+  queryTeamItems,
+  resolveFeatureFlagsRepository,
+} from "./shared.js";
 
 /**
  * Issue #2283: challenge access 判定の単一箇所 (= Progression Gate enforcement)。
@@ -69,8 +73,7 @@ function isGateFlagEnabled(shared: ParticipantSharedResources, tenantId: string)
   const cached = tenantFlagCache.get(tenantId);
   if (cached && cached.expiresAtMs > nowMs) return cached.value;
   const value = isTenantFeatureEnabled(
-    shared.ddb,
-    shared.eventsTableName,
+    resolveFeatureFlagsRepository(shared),
     tenantId,
     CHALLENGE_PREREQUISITE_GATE_FLAG,
   );

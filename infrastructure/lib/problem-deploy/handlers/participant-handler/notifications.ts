@@ -1,7 +1,6 @@
-import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { NotificationItem, NotificationView } from "../shared/notification.js";
 import type { ParticipantSharedResources } from "./shared.js";
-import { queryTeamItems } from "./shared.js";
+import { queryTeamItems, resolveNotificationsRepository } from "./shared.js";
 
 /**
  * `GET /portal/me/notifications` の response shape (ADR-006)。
@@ -28,8 +27,9 @@ export const NOTIFICATIONS_MAX_LIMIT = 200;
  * 同 team の deployment 全行で一定 (= ADR-004 で event 1 件に紐づく構造) のため、
  * 任意の 1 行から拾えば十分。旧 jobId-based deployment (eventId 無し) は `no_event`。
  *
- * Events table を `PK = EVENT#<eventId>` AND `begins_with(SK, "NOTIFICATION#")` で
- * Query (ScanIndexForward=false で降順)。`limit` で取得件数制限。
+ * event 配下の通知を Notifications aggregate seam ({@link resolveNotificationsRepository})
+ * から occurredAt 降順で 1 ページ取得する。`limit` で取得件数制限。現行 API に cursor は無い
+ * ため `nextCursor` は捨てる (seam の cursor は将来のページング用で挙動不変)。
  *
  * 設計: tenantId / createdBy / 内部 PK/SK は **絶対に出さない** (NotificationView に
  * field が無いので構造的に漏れない)。
@@ -51,20 +51,11 @@ export async function listNotifications(
     .find((e): e is string => typeof e === "string" && e.length > 0);
   if (!eventId) return { kind: "no_event" };
 
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.eventsTableName,
-      KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
-      ExpressionAttributeValues: {
-        ":pk": `EVENT#${eventId}`,
-        ":prefix": "NOTIFICATION#",
-      },
-      ScanIndexForward: false,
-      Limit: limitRaw,
-    }),
-  );
+  const page = await resolveNotificationsRepository(shared).listByEvent(eventId, {
+    limit: limitRaw,
+  });
 
-  const items = ((out.Items ?? []) as Partial<NotificationItem>[])
+  const items = page.notifications
     .map(toView)
     .filter((v): v is NotificationView => v !== undefined);
 
