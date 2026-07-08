@@ -8,14 +8,16 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createDeploymentsRepository,
   DynamoDbDeploymentsRepository,
+  SqlDeploymentsRepository,
 } from "../../../lib/problem-deploy/control-data/deployments-repository";
+import { MirroredDeploymentsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import { createControlDataRuntime } from "../../../lib/problem-deploy/control-data/runtime-repositories";
-import { makeFakeDdb } from "./control-data-write.test-helpers";
+import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 /**
- * [Issue #2441 / Phase B1] DynamoDB-only test suite for the Deployments READ
- * seam. There is no SQL backend yet (B4), so — unlike the A-series parity
- * suites — this pins the DynamoDB backend two ways:
+ * [Issue #2441 / Phase B1] DynamoDB byte-pin test suite for the Deployments READ
+ * seam. The SQL parity suite lives in `deployments-repository-parity.test.ts`;
+ * this file keeps pinning the DynamoDB backend two ways:
  *   1. Round-trip: seed raw rows through the in-memory fake DocumentClient, read
  *      through the repository, assert the returned domain records.
  *   2. Byte-pin: record the Command that reaches the fake and assert the exact
@@ -632,9 +634,17 @@ describe("createDeploymentsRepository", () => {
     );
   });
 
-  it("should fail loudly for turso/sql until Phase B4 lands the SQL backend", () => {
-    expect(() => createDeploymentsRepository("turso", ddbDeps())).toThrow(/Phase B4/);
-    expect(() => createDeploymentsRepository("sql", ddbDeps())).toThrow(/Phase B4/);
+  it("should select the SQL backend for turso and sql flags", () => {
+    expect(createDeploymentsRepository("turso", { sql: makeSqliteExecutor() })).toBeInstanceOf(
+      SqlDeploymentsRepository,
+    );
+    expect(createDeploymentsRepository("sql", { sql: makeSqliteExecutor() })).toBeInstanceOf(
+      SqlDeploymentsRepository,
+    );
+  });
+
+  it("should fail loudly when the SQL backend is selected without a SqlExecutor", () => {
+    expect(() => createDeploymentsRepository("turso", {})).toThrow(/requires a SqlExecutor/);
   });
 
   it("should reject an unknown backend value", () => {
@@ -666,41 +676,61 @@ describe("resolveDeploymentsRepository (runtime)", () => {
     expect(repo).toBeInstanceOf(DynamoDbDeploymentsRepository);
   });
 
-  // [#2440 / Phase A5] CONTROL_DATA_BACKEND governs only the four Phase-A
-  // aggregates (Events/Teams/Notifications/FeatureFlags). Deployments has no
-  // SQL implementation until Phase B4, and its DynamoDB table is synthesized
-  // regardless of backend (A5's pure mode drops the Events/Teams tables
-  // only) — so the resolver always returns the DynamoDB backend here too,
-  // superseding the pre-A5 "fail loudly on turso/sql" pin.
-  const nonDynamodbBackends = ["turso", "sql", "turso-mirror", "sql-mirror"];
-  it.each(nonDynamodbBackends)(
-    "should still return the DynamoDB backend for CONTROL_DATA_BACKEND=%s " +
-      "(Deployments has no SQL impl until Phase B4)",
-    async (backend) => {
-      const runtime = createControlDataRuntime({
-        env: { CONTROL_DATA_BACKEND: backend },
-        ssm: { send: vi.fn() },
-        createClient: vi.fn(),
-      });
-
-      const repo = await runtime.resolveDeploymentsRepository({
-        ddb: makeFakeDdb(),
-        deploymentsTableName: TABLE,
-      });
-      expect(repo).toBeInstanceOf(DynamoDbDeploymentsRepository);
-    },
-  );
-
-  it("should fail loudly when ddb/deploymentsTableName are missing, regardless of backend", async () => {
+  it.each([
+    "turso",
+    "sql",
+  ])("should return the SQL backend for CONTROL_DATA_BACKEND=%s without DDB inputs", async (backend) => {
     const runtime = createControlDataRuntime({
-      env: { CONTROL_DATA_BACKEND: "turso" },
+      env: {
+        CONTROL_DATA_BACKEND: backend,
+        TURSO_DATABASE_URL: "file:local.db",
+        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
+      },
+      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
+      createClient: vi.fn().mockReturnValue({
+        execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
+        batch: vi.fn().mockResolvedValue([]),
+      }),
+    });
+
+    await expect(runtime.resolveDeploymentsRepository({})).resolves.toBeInstanceOf(
+      SqlDeploymentsRepository,
+    );
+  });
+
+  it.each([
+    "turso-mirror",
+    "sql-mirror",
+  ])("should return the mirrored backend for CONTROL_DATA_BACKEND=%s", async (backend) => {
+    const runtime = createControlDataRuntime({
+      env: {
+        CONTROL_DATA_BACKEND: backend,
+        TURSO_DATABASE_URL: "file:local.db",
+        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
+      },
+      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
+      createClient: vi.fn().mockReturnValue({
+        execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
+        batch: vi.fn().mockResolvedValue([]),
+      }),
+    });
+
+    const repo = await runtime.resolveDeploymentsRepository({
+      ddb: makeFakeDdb(),
+      deploymentsTableName: TABLE,
+    });
+    expect(repo).toBeInstanceOf(MirroredDeploymentsRepository);
+  });
+
+  it("should fail loudly when mirror/dynamodb backends are missing ddb/deploymentsTableName", async () => {
+    const runtime = createControlDataRuntime({
+      env: { CONTROL_DATA_BACKEND: "turso-mirror" },
       ssm: { send: vi.fn() },
       createClient: vi.fn(),
     });
 
-    await expect(
-      // @ts-expect-error deploymentsTableName intentionally omitted
-      runtime.resolveDeploymentsRepository({ ddb: makeFakeDdb() }),
-    ).rejects.toThrow(/requires deps.ddb/);
+    await expect(runtime.resolveDeploymentsRepository({ ddb: makeFakeDdb() })).rejects.toThrow(
+      /mirror backend requires ddb\/deploymentsTableName/,
+    );
   });
 });

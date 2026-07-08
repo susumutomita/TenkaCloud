@@ -6,6 +6,7 @@ import { createEventsRepository } from "./events-repository.js";
 import { createFeatureFlagsRepository } from "./feature-flags-repository.js";
 import { initializeControlDataSchema, LibsqlExecutor } from "./libsql-executor.js";
 import {
+  MirroredDeploymentsRepository,
   MirroredEventsRepository,
   MirroredFeatureFlagsRepository,
   MirroredNotificationsRepository,
@@ -63,25 +64,14 @@ export interface ControlDataRuntime {
     readonly eventsTableName?: string;
   }) => Promise<FeatureFlagsRepository>;
   /**
-   * [Issue #2441 / Phase B1; semantics fixed under #2440 / Phase A5] Cold-start
-   * resolver for the Deployments READ seam.
-   *
-   * `CONTROL_DATA_BACKEND` governs only the four Phase-A aggregates (Events /
-   * Teams / Notifications / FeatureFlags) — Deployments has no SQL
-   * implementation until **Phase B4**, and its DynamoDB table is synthesized
-   * for every backend value (A5's "pure" turso/sql mode removes the
-   * Events/Teams tables, not Deployments). This resolver therefore **always**
-   * returns the DynamoDB implementation regardless of `CONTROL_DATA_BACKEND` —
-   * it never calls `acquireSqlExecutor` and never returns a Mirrored
-   * implementation. (Pre-A5, `turso`/`sql` propagated the factory's fail-loud
-   * "Phase B4" error instead; that would now break the deploy path under a
-   * pure-turso deployment, where the Deployments table still exists and still
-   * needs to be read.) `ddb` / `deploymentsTableName` stay required inputs —
-   * missing either still fails loudly via {@link createDeploymentsRepository}.
+   * [Issue #2441 / Phase B4] Cold-start resolver for the Deployments seam.
+   * Deployments now participates in all five `CONTROL_DATA_BACKEND` values:
+   * `dynamodb` returns DDB, `turso` / `sql` return pure SQL, and mirror modes
+   * write through DDB then SQL while serving reads/scans from canonical DDB.
    */
   readonly resolveDeploymentsRepository: (input: {
-    readonly ddb: DynamoDBDocumentClient;
-    readonly deploymentsTableName: string;
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly deploymentsTableName?: string;
   }) => Promise<DeploymentsRepository>;
 }
 
@@ -128,7 +118,7 @@ function selectBackend(env: RuntimeEnvironment): SelectedBackend {
 function requireDdbAndTableName(
   ddb: DynamoDBDocumentClient | undefined,
   tableName: string | undefined,
-  tableNameLabel: "eventsTableName" | "teamsTableName",
+  tableNameLabel: "eventsTableName" | "teamsTableName" | "deploymentsTableName",
   backendKind: "dynamodb" | "mirror",
 ): { readonly ddb: DynamoDBDocumentClient; readonly tableName: string } {
   if (!ddb || !tableName) {
@@ -303,26 +293,37 @@ export function createControlDataRuntime(deps: RuntimeDependencies): ControlData
     );
   }
 
-  /**
-   * [Issue #2441 / Phase B1] Deployments READ seam. Deliberately **not** folded
-   * into {@link resolveRepositories} / {@link ControlDataRepositories}: the full
-   * resolver stays byte-compatible (Events + Teams + Notifications +
-   * FeatureFlags only) until B4 adds the SQL Deployments backend and its
-   * mirror.
-   *
-   * Unlike the four Phase-A resolvers above, this one ignores
-   * `CONTROL_DATA_BACKEND` entirely (see the doc comment on
-   * {@link ControlDataRuntime.resolveDeploymentsRepository}) and always asks
-   * the factory for `"dynamodb"` — the only backend Deployments has until B4.
-   */
+  /** Deployments remains separately resolved because legacy full resolver shape is unchanged. */
   async function resolveDeploymentsRepository(input: {
-    readonly ddb: DynamoDBDocumentClient;
-    readonly deploymentsTableName: string;
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly deploymentsTableName?: string;
   }): Promise<DeploymentsRepository> {
-    return createDeploymentsRepository("dynamodb", {
-      ddb: input.ddb,
-      deploymentsTableName: input.deploymentsTableName,
-    });
+    const backend = selectBackend(deps.env);
+    if (backend.kind === "pure") {
+      const sql = await acquireSqlExecutor();
+      return createDeploymentsRepository(backend.dialect, { sql });
+    }
+
+    const requiredInput = requireDdbAndTableName(
+      input.ddb,
+      input.deploymentsTableName,
+      "deploymentsTableName",
+      backend.kind,
+    );
+    if (backend.kind === "dynamodb") {
+      return createDeploymentsRepository("dynamodb", {
+        ddb: requiredInput.ddb,
+        deploymentsTableName: requiredInput.tableName,
+      });
+    }
+    const sql = await acquireSqlExecutor();
+    return new MirroredDeploymentsRepository(
+      createDeploymentsRepository("dynamodb", {
+        ddb: requiredInput.ddb,
+        deploymentsTableName: requiredInput.tableName,
+      }),
+      createDeploymentsRepository(backend.dialect, { sql }),
+    );
   }
 
   return {

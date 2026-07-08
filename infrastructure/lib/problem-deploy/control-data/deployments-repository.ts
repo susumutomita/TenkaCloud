@@ -1,8 +1,14 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { DynamoDbDeploymentsRepository } from "./dynamodb-deployments-repository.js";
-import type { DeploymentsRepository } from "./types.js";
+import { SqlDeploymentsRepository } from "./sql-deployments-repository.js";
+import type { DeploymentsRepository, SqlExecutor } from "./types.js";
 
 export { DynamoDbDeploymentsRepository } from "./dynamodb-deployments-repository.js";
+export {
+  DEPLOYMENTS_SCHEMA_SQL,
+  DEPLOYMENTS_SCHEMA_STATEMENTS,
+  SqlDeploymentsRepository,
+} from "./sql-deployments-repository.js";
 export type {
   BulkDeploymentCreateEntry,
   CompositeParentDeploymentRecord,
@@ -29,6 +35,8 @@ export interface CreateDeploymentsRepositoryDeps {
   readonly ddb?: DynamoDBDocumentClient;
   /** Deployments table name — required for the `dynamodb` backend. */
   readonly deploymentsTableName?: string;
+  /** SQL driver — required for the `turso` / `sql` backend. */
+  readonly sql?: SqlExecutor;
 }
 
 /**
@@ -38,9 +46,9 @@ export interface CreateDeploymentsRepositoryDeps {
  * (behavior-preserving): an unset / empty / `"dynamodb"` flag returns the DDB
  * repository, so the existing path is byte-identical.
  *
- * `"turso"` / `"sql"` fail loudly: the SQL implementation of the Deployments
- * seam lands in **Phase B4 (#2441)** — B1 ships only the DynamoDB backend plus
- * the interface. Any other value is a hard error (fail loud).
+ * `"turso"` / `"sql"` return the SQLite repository. Any other value is a hard
+ * error (fail loud). Mirror mode is composed by `runtime-repositories.ts`, not
+ * this aggregate factory.
  *
  * @param backend the raw `CONTROL_DATA_BACKEND` value (case-insensitive; may be undefined)
  * @param deps    backend-specific dependencies
@@ -52,10 +60,10 @@ export function createDeploymentsRepository(
   const selected = (backend ?? "dynamodb").toLowerCase();
 
   if (selected === "turso" || selected === "sql") {
-    throw new Error(
-      `CONTROL_DATA_BACKEND="${backend}" is not yet supported for the Deployments seam: ` +
-        "the SQL implementation lands in Phase B4 (#2441).",
-    );
+    if (!deps.sql) {
+      throw new Error(`CONTROL_DATA_BACKEND="${backend}" requires a SqlExecutor (deps.sql).`);
+    }
+    return new SqlDeploymentsRepository(deps.sql);
   }
 
   if (selected !== "dynamodb") {
