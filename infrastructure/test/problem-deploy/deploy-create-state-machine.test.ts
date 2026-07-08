@@ -20,7 +20,7 @@ import { DeployCreateStateMachine } from "../../lib/problem-deploy/deploy-create
  * JSONPath を resolve して Lambda に渡す)。
  */
 
-function buildTestStack(opts: { deployViaLambda?: boolean } = {}): {
+function buildTestStack(opts: { deployViaLambda?: boolean; statusWriter?: boolean } = {}): {
   stack: cdk.Stack;
   template: Template;
 } {
@@ -48,6 +48,13 @@ function buildTestStack(opts: { deployViaLambda?: boolean } = {}): {
     handler: "index.handler",
     code: Code.fromInline("exports.handler = async () => ({});"),
   });
+  const statusWriterFn = opts.statusWriter
+    ? new LambdaFunction(stack, "StatusWriterFn", {
+        runtime: Runtime.NODEJS_22_X,
+        handler: "index.handler",
+        code: Code.fromInline("exports.handler = async () => ({});"),
+      })
+    : undefined;
   // Issue #2291: Lambda path は失敗 event の PutEvents 先として EventBus が必須。
   const eventBus = new EventBus(stack, "Bus");
   new DeployCreateStateMachine(stack, "Sm", {
@@ -57,6 +64,7 @@ function buildTestStack(opts: { deployViaLambda?: boolean } = {}): {
     ...(opts.deployViaLambda
       ? { deployViaLambda: true as const, cfnDeployFunction: cfnDeployFn, eventBus }
       : {}),
+    ...(statusWriterFn ? { statusWriterFunction: statusWriterFn } : {}),
   });
   return { stack, template: Template.fromStack(stack) };
 }
@@ -329,5 +337,39 @@ describe("DeployCreateStateMachine deployViaLambda flag (#2291)", () => {
           deploymentsTable: deployments,
         }),
     ).toThrow(/codeBuildProject is required/);
+  });
+});
+
+describe("DeployCreateStateMachine SQL status-writer branch (#2441 Phase B PR-5)", () => {
+  it("should replace the four DeployCreate status writes with LambdaInvoke tasks", () => {
+    const asJson = definitionJson(buildTestStack({ statusWriter: true }).template);
+
+    expect(asJson).toContain('"MarkInProgress"');
+    expect(asJson).toContain('"MarkSucceeded"');
+    expect(asJson).toContain('"MarkFailed"');
+    expect(asJson).toContain('"MarkFailedWithoutBuildId"');
+    expect(asJson).toContain('"transition":"markInProgress"');
+    expect(asJson).toContain('"transition":"markSucceeded"');
+    expect(asJson).toContain('"transition":"markFailed"');
+    expect(asJson).not.toContain("dynamodb:updateItem");
+  });
+
+  it("should keep native DynamoUpdateItem tasks when statusWriterFunction is absent", () => {
+    const asJson = definitionJson(buildTestStack().template);
+    expect(asJson).toContain("dynamodb:updateItem");
+    expect(asJson).not.toContain('"transition":"markSucceeded"');
+  });
+
+  it("should omit buildId from status-writer payloads on the Lambda deploy path", () => {
+    const asJson = definitionJson(
+      buildTestStack({ deployViaLambda: true, statusWriter: true }).template,
+    );
+
+    expect(asJson).toContain('"InvokeCfnDeploy"');
+    expect(asJson).toContain('"transition":"markSucceeded"');
+    expect(asJson).toContain('"transition":"markFailed"');
+    expect(asJson).toContain('"EmitDeployFailedEvent"');
+    expect(asJson).not.toContain("codebuild.Build.Id");
+    expect(asJson).not.toContain("dynamodb:updateItem");
   });
 });

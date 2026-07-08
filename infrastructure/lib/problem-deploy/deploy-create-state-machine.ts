@@ -59,7 +59,16 @@ export interface DeployCreateStateMachineProps {
    * Issue #2291: SBT 共通 EventBus。Lambda path 失敗時に `TenkaCloud Deploy Failed` を PutEvents し、`SystemAuditWriterLambda` が `deploy_failed` 行に集約する。ON のときのみ必須。
    */
   readonly eventBus?: IEventBus;
+  /**
+   * [Issue #2441 Phase B PR-5] When present, the four DeployCreate status write
+   * states use this Lambda instead of native DynamoUpdateItem. Only pure SQL
+   * backends pass it; default and mirror backends keep DDB canonical direct
+   * writes for byte-compatible ASL/IAM.
+   */
+  readonly statusWriterFunction?: IFunction;
 }
+
+type DeployStatusWriteTask = DynamoUpdateItem | LambdaInvoke;
 
 /**
  * 問題 deploy 起動を司る Step Functions State Machine。
@@ -109,17 +118,7 @@ export class DeployCreateStateMachine extends Construct {
     // PENDING (deploy.ts が初期 row を書く時の値) を IN_PROGRESS に倒す。CodeBuild の
     // RUN_JOB は同期で 5〜15 分待つので、この中間遷移が無いと operator UI は polling
     // しても PENDING のまま固定で「動いていない」ように見える (実際は deploy 進行中)。
-    const markInProgress = new DynamoUpdateItem(this, "MarkInProgress", {
-      table: props.deploymentsTable,
-      key: deploymentKey(),
-      updateExpression: "SET #status = :status, updatedAt = :updatedAt",
-      expressionAttributeNames: { "#status": "status" },
-      expressionAttributeValues: {
-        ":status": DynamoAttributeValue.fromString("IN_PROGRESS"),
-        ":updatedAt": stateEnteredTime(),
-      },
-      resultPath: JsonPath.DISCARD,
-    });
+    const markInProgress = this.buildMarkInProgress(props);
 
     // Issue #2291 (ADR-049 §9): 在来 CodeBuild 経路と Lambda CreateStack 経路の 2 branch。
     // default (deployViaLambda=false/未指定) は CodeBuild 定義を **そのまま** 生成するので、
@@ -135,8 +134,37 @@ export class DeployCreateStateMachine extends Construct {
       tracingEnabled: true,
     });
 
-    // DynamoUpdateItem task は CDK 側で grant しないので明示。
-    props.deploymentsTable.grantWriteData(this.stateMachine);
+    // DynamoUpdateItem task は CDK 側で grant しないので明示。Pure SQL status-writer 経路では
+    // State Machine 自身は DDB に触らない (= Lambda invoke だけ)。
+    if (!props.statusWriterFunction) {
+      props.deploymentsTable.grantWriteData(this.stateMachine);
+    }
+  }
+
+  private buildMarkInProgress(props: DeployCreateStateMachineProps): DeployStatusWriteTask {
+    if (props.statusWriterFunction) {
+      return this.buildStatusWriterInvoke(
+        "MarkInProgress",
+        {
+          transition: "markInProgress",
+          jobId: JsonPath.stringAt("$.detail.jobId"),
+          updatedAt: JsonPath.stringAt("$$.State.EnteredTime"),
+        },
+        JsonPath.DISCARD,
+        props.statusWriterFunction,
+      );
+    }
+    return new DynamoUpdateItem(this, "MarkInProgress", {
+      table: props.deploymentsTable,
+      key: deploymentKey(),
+      updateExpression: "SET #status = :status, updatedAt = :updatedAt",
+      expressionAttributeNames: { "#status": "status" },
+      expressionAttributeValues: {
+        ":status": DynamoAttributeValue.fromString("IN_PROGRESS"),
+        ":updatedAt": stateEnteredTime(),
+      },
+      resultPath: JsonPath.DISCARD,
+    });
   }
 
   /**
@@ -146,7 +174,7 @@ export class DeployCreateStateMachine extends Construct {
    */
   private buildCodeBuildDefinition(
     props: DeployCreateStateMachineProps,
-    markInProgress: DynamoUpdateItem,
+    markInProgress: DeployStatusWriteTask,
   ): IChainable {
     const codeBuildProject = props.codeBuildProject;
     if (!codeBuildProject) {
@@ -246,12 +274,23 @@ export class DeployCreateStateMachine extends Construct {
       resultPath: "$.cfn",
     });
 
-    const markSucceeded = this.buildMarkSucceeded(props.deploymentsTable);
-    const markFailed = this.buildMarkFailed(props.deploymentsTable, "MarkFailed", true);
+    const markSucceeded = this.buildMarkSucceeded(
+      props.deploymentsTable,
+      props.statusWriterFunction,
+    );
+    const markFailed = this.buildMarkFailed(
+      props.deploymentsTable,
+      "MarkFailed",
+      true,
+      undefined,
+      props.statusWriterFunction,
+    );
     const markFailedWithoutBuildId = this.buildMarkFailed(
       props.deploymentsTable,
       "MarkFailedWithoutBuildId",
       false,
+      undefined,
+      props.statusWriterFunction,
     );
     const useStackStatusReasonAsFailureCause = new Pass(
       this,
@@ -311,7 +350,7 @@ export class DeployCreateStateMachine extends Construct {
    */
   private buildLambdaDefinition(
     props: DeployCreateStateMachineProps,
-    markInProgress: DynamoUpdateItem,
+    markInProgress: DeployStatusWriteTask,
   ): IChainable {
     const cfnDeployFunction = props.cfnDeployFunction;
     if (!cfnDeployFunction) {
@@ -352,12 +391,16 @@ export class DeployCreateStateMachine extends Construct {
     // buildId を書かない variant を使う。
     // Issue #2291: MarkFailed の後段に EmitDeployFailedEvent を繋ぐため resultPath を DISCARD にし、
     // `$.detail` / `$.error` を温存する。CodeBuild path は default のまま (byte 互換)。
-    const markSucceeded = this.buildMarkSucceededWithoutBuildId(props.deploymentsTable);
+    const markSucceeded = this.buildMarkSucceededWithoutBuildId(
+      props.deploymentsTable,
+      props.statusWriterFunction,
+    );
     const markFailed = this.buildMarkFailed(
       props.deploymentsTable,
       "MarkFailed",
       false,
       JsonPath.DISCARD,
+      props.statusWriterFunction,
     );
 
     // Issue #2291: DDB を FAILED にした後、`SystemAuditWriterLambda` が拾う失敗 event を 1 件 PutEvents する。
@@ -425,7 +468,40 @@ export class DeployCreateStateMachine extends Construct {
     return markInProgress.next(invokeCfnDeploy);
   }
 
-  private buildMarkSucceeded(table: ITable): DynamoUpdateItem {
+  private buildStatusWriterInvoke(
+    id: string,
+    payload: Record<string, unknown>,
+    resultPath: string | undefined,
+    statusWriterFunction: IFunction,
+  ): LambdaInvoke {
+    return new LambdaInvoke(this, id, {
+      lambdaFunction: statusWriterFunction,
+      payload: TaskInput.fromObject(payload),
+      payloadResponseOnly: true,
+      retryOnServiceExceptions: false,
+      ...(resultPath ? { resultPath } : {}),
+    });
+  }
+
+  private buildMarkSucceeded(
+    table: ITable,
+    statusWriterFunction?: IFunction,
+  ): DeployStatusWriteTask {
+    if (statusWriterFunction) {
+      return this.buildStatusWriterInvoke(
+        "MarkSucceeded",
+        {
+          transition: "markSucceeded",
+          jobId: JsonPath.stringAt("$.detail.jobId"),
+          updatedAt: JsonPath.stringAt("$$.State.EnteredTime"),
+          stackId: JsonPath.stringAt("$.cfn.Stacks[0].StackId"),
+          stackOutputs: JsonPath.jsonToString(JsonPath.objectAt("$.cfn.Stacks[0].Outputs")),
+          buildId: JsonPath.stringAt("$.codebuild.Build.Id"),
+        },
+        undefined,
+        statusWriterFunction,
+      );
+    }
     return new DynamoUpdateItem(this, "MarkSucceeded", {
       table,
       key: deploymentKey(),
@@ -450,7 +526,24 @@ export class DeployCreateStateMachine extends Construct {
    * Issue #2291: Lambda path 用の MarkSucceeded。CodeBuild 固有の `buildId` を書かない以外は
    * {@link buildMarkSucceeded} と同一 (status=COMPLETE, stackId, stackOutputs)。
    */
-  private buildMarkSucceededWithoutBuildId(table: ITable): DynamoUpdateItem {
+  private buildMarkSucceededWithoutBuildId(
+    table: ITable,
+    statusWriterFunction?: IFunction,
+  ): DeployStatusWriteTask {
+    if (statusWriterFunction) {
+      return this.buildStatusWriterInvoke(
+        "MarkSucceeded",
+        {
+          transition: "markSucceeded",
+          jobId: JsonPath.stringAt("$.detail.jobId"),
+          updatedAt: JsonPath.stringAt("$$.State.EnteredTime"),
+          stackId: JsonPath.stringAt("$.cfn.Stacks[0].StackId"),
+          stackOutputs: JsonPath.jsonToString(JsonPath.objectAt("$.cfn.Stacks[0].Outputs")),
+        },
+        undefined,
+        statusWriterFunction,
+      );
+    }
     return new DynamoUpdateItem(this, "MarkSucceeded", {
       table,
       key: deploymentKey(),
@@ -474,7 +567,22 @@ export class DeployCreateStateMachine extends Construct {
     id: string,
     persistBuildId: boolean,
     resultPath?: string,
-  ): DynamoUpdateItem {
+    statusWriterFunction?: IFunction,
+  ): DeployStatusWriteTask {
+    if (statusWriterFunction) {
+      return this.buildStatusWriterInvoke(
+        id,
+        {
+          transition: "markFailed",
+          jobId: JsonPath.stringAt("$.detail.jobId"),
+          updatedAt: JsonPath.stringAt("$$.State.EnteredTime"),
+          failureReason: JsonPath.stringAt("$.error.Cause"),
+          ...(persistBuildId ? { buildId: JsonPath.stringAt("$.codebuild.Build.Id") } : {}),
+        },
+        resultPath,
+        statusWriterFunction,
+      );
+    }
     return new DynamoUpdateItem(this, id, {
       table,
       key: deploymentKey(),

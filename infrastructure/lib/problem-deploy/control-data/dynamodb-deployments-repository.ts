@@ -729,6 +729,79 @@ export class DynamoDbDeploymentsRepository implements DeploymentsRepository {
     await this.ddb.send(new PutCommand({ TableName: this.tableName, Item: recordToItem(record) }));
   }
 
+  async markCreateInProgress(jobId: string, at: string): Promise<DeploymentMutationOutcome> {
+    await this.ddb.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: this.deploymentKey(jobId),
+        UpdateExpression: "SET #status = :status, updatedAt = :updatedAt",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: {
+          ":status": "IN_PROGRESS",
+          ":updatedAt": at,
+        },
+      }),
+    );
+    return { outcome: "updated" };
+  }
+
+  async markCreateSucceeded(
+    jobId: string,
+    stackId: string,
+    stackOutputs: string,
+    buildId: string | undefined,
+    at: string,
+  ): Promise<DeploymentMutationOutcome> {
+    const updateExpression =
+      "SET #status = :status, updatedAt = :updatedAt, stackId = :stackId, stackOutputs = :stackOutputs" +
+      (buildId !== undefined ? ", buildId = :buildId" : "");
+    await this.ddb.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: this.deploymentKey(jobId),
+        UpdateExpression: updateExpression,
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: {
+          ":status": "COMPLETE",
+          ":updatedAt": at,
+          ":stackId": stackId,
+          ":stackOutputs": stackOutputs,
+          ...(buildId !== undefined ? { ":buildId": buildId } : {}),
+        },
+      }),
+    );
+    return { outcome: "updated" };
+  }
+
+  async markCreateFailed(
+    jobId: string,
+    failureReason: string,
+    buildId: string | undefined,
+    at: string,
+  ): Promise<DeploymentMutationOutcome> {
+    const updateExpression =
+      "SET #status = :status, updatedAt = :updatedAt, #failureReason = :failureReason" +
+      (buildId !== undefined ? ", buildId = :buildId" : "");
+    await this.ddb.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: this.deploymentKey(jobId),
+        UpdateExpression: updateExpression,
+        ExpressionAttributeNames: {
+          "#status": "status",
+          "#failureReason": "failureReason",
+        },
+        ExpressionAttributeValues: {
+          ":status": "FAILED",
+          ":updatedAt": at,
+          ":failureReason": failureReason,
+          ...(buildId !== undefined ? { ":buildId": buildId } : {}),
+        },
+      }),
+    );
+    return { outcome: "updated" };
+  }
+
   async markFailedIfPending(
     jobId: string,
     tenantId: string,

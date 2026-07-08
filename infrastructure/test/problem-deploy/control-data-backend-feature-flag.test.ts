@@ -50,6 +50,33 @@ function envOf(tpl: Template, idFragment: string): Record<string, unknown> {
   );
 }
 
+function lambdaIds(tpl: Template): string[] {
+  return Object.keys(tpl.findResources("AWS::Lambda::Function"));
+}
+
+function definitionToJson(definitionString: unknown): string {
+  if (typeof definitionString === "string") return definitionString;
+  const join = (
+    definitionString as { "Fn::Join": [string, Array<string | Record<string, unknown>>] }
+  )["Fn::Join"];
+  return join[1].map((part) => (typeof part === "string" ? part : "ARN_PLACEHOLDER")).join("");
+}
+
+function deployCreateDefinition(tpl: Template): string {
+  const definitions = Object.values(tpl.findResources("AWS::StepFunctions::StateMachine")).map(
+    (resource) =>
+      definitionToJson(
+        (resource as { Properties?: { DefinitionString?: unknown } }).Properties?.DefinitionString,
+      ),
+  );
+  const definition = definitions.find(
+    (candidate) =>
+      candidate.includes('"StartDeployCodeBuild"') || candidate.includes('"InvokeCfnDeploy"'),
+  );
+  expect(definition).toBeDefined();
+  return definition ?? "";
+}
+
 describe("control-data backend feature flag env wiring (#2290)", () => {
   it(
     "should inject CONTROL_DATA_BACKEND='turso' into every wired Lambda when turso is selected",
@@ -66,6 +93,11 @@ describe("control-data backend feature flag env wiring (#2290)", () => {
       // tick) 経由で Turso DB を直接開くため、同じ secret 参照を持つ。
       expect(envOf(tpl, "GenericScoring").TURSO_DATABASE_URL).toBe("libsql://example.turso.io");
       expect(envOf(tpl, "GenericScoring").TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe(
+        "/tenkacloud/development/turso-token",
+      );
+      expect(envOf(tpl, "DeployStatusWriter").CONTROL_DATA_BACKEND).toBe("turso");
+      expect(envOf(tpl, "DeployStatusWriter").TURSO_DATABASE_URL).toBe("libsql://example.turso.io");
+      expect(envOf(tpl, "DeployStatusWriter").TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe(
         "/tenkacloud/development/turso-token",
       );
       // The secret reference and permission belong only to the Lambdas that open the DB.
@@ -94,6 +126,39 @@ describe("control-data backend feature flag env wiring (#2290)", () => {
       for (const id of BACKEND_LAMBDA_IDS) {
         expect(envOf(tpl, id).CONTROL_DATA_BACKEND, id).toBeUndefined();
       }
+      expect(lambdaIds(tpl).some((id) => id.includes("DeployStatusWriter"))).toBe(false);
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+});
+
+describe("DeployCreate SFN SQL status-writer branch (#2441 Phase B PR-5)", () => {
+  it(
+    "should use Lambda status writes and no DynamoUpdateItem integration when controlDataBackend='turso'",
+    () => {
+      const tpl = synthWithControlDataBackendTurso();
+      const definition = deployCreateDefinition(tpl);
+
+      expect(lambdaIds(tpl).some((id) => id.includes("DeployStatusWriter"))).toBe(true);
+      expect(definition).toContain('"transition":"markInProgress"');
+      expect(definition).toContain('"transition":"markSucceeded"');
+      expect(definition).toContain('"transition":"markFailed"');
+      expect(definition).not.toContain("dynamodb:updateItem");
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should keep native DDB status writes for default and mirror backends",
+    () => {
+      const defaultDefinition = deployCreateDefinition(synthDefault());
+      const mirrorTpl = synthWithControlDataBackendTursoMirror();
+      const mirrorDefinition = deployCreateDefinition(mirrorTpl);
+
+      expect(defaultDefinition).toContain("dynamodb:updateItem");
+      expect(mirrorDefinition).toContain("dynamodb:updateItem");
+      expect(lambdaIds(mirrorTpl).some((id) => id.includes("DeployStatusWriter"))).toBe(false);
+      expect(mirrorDefinition).not.toContain('"transition":"markSucceeded"');
     },
     SYNTH_TIMEOUT_MS,
   );
