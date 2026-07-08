@@ -393,6 +393,59 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     expect(calls.filter((c) => c.args.includes("destroy"))).toHaveLength(1);
   });
 
+  // Issue #2444: 全 DDB テーブルは RemovalPolicy.RETAIN なので destroy 後も残存して
+  // PROVISIONED 1/1 の standing cost を出し続ける。 down 完了時に残存テーブルを列挙して
+  // 警告する (削除はしない)。
+  it("down should warn about RETAIN-orphaned DynamoDB tables after teardown (#2444)", async () => {
+    const { io, stdout } = buildIO({
+      inheritExitCode: 0,
+      capture: (_cmd, args) => {
+        if (args.includes("list-tables")) {
+          return {
+            code: 0,
+            stdout: '{"TableNames":["tenkacloud-lite-Deployments","unrelated-Table"]}',
+            stderr: "",
+          };
+        }
+        if (args.includes("describe-table")) {
+          return {
+            code: 0,
+            stdout: '[{"IndexName":"GSI1"},{"IndexName":"GSI2"},{"IndexName":"GSI3"}]',
+            stderr: "",
+          };
+        }
+        return { code: 0, stdout: "", stderr: "" };
+      },
+    });
+    const code = await main(["down"], io);
+    expect(code).toBe(0);
+    const out = stdout.join("");
+    expect(out).toContain("RETAIN された DynamoDB テーブル");
+    expect(out).toContain("tenkacloud-lite-Deployments (GSI 3 本)");
+    expect(out).toContain("aws dynamodb delete-table --table-name tenkacloud-lite-Deployments");
+  });
+
+  it("down should stay silent about retained tables when none remain (#2444)", async () => {
+    const { io, stdout } = buildIO({
+      inheritExitCode: 0,
+      capture: (_cmd, args) =>
+        args.includes("list-tables")
+          ? { code: 0, stdout: '{"TableNames":["unrelated-Table"]}', stderr: "" }
+          : { code: 0, stdout: "", stderr: "" },
+    });
+    const code = await main(["down"], io);
+    expect(code).toBe(0);
+    expect(stdout.join("")).not.toContain("RETAIN された DynamoDB");
+  });
+
+  it("down should not run the retained-table warning when a destroy fails (#2444)", async () => {
+    const { io, calls } = buildIO({ inheritExitCode: 5 });
+    const code = await main(["down"], io);
+    // exit code は destroy の失敗コードのまま (warning が exit code を変えない)。
+    expect(code).toBe(5);
+    expect(calls.filter((c) => c.args.includes("list-tables"))).toHaveLength(0);
+  });
+
   // Regression: `cdk destroy` synths the shared CDK app (bin/tenkacloud-lite.ts ->
   // requireSystemAdminEmail), so teardown needs CDK_PARAM_SYSTEM_ADMIN_EMAIL just like
   // deploy. With only TENANT_ADMIN_EMAIL set (the .env the CodeBuild launcher writes),
