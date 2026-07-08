@@ -5,14 +5,9 @@ import { getEnv } from "../../../helper-functions.js";
 import { type ProblemEndpointSlot, parseEndpointsEnv } from "../../../utils/endpoints-metadata.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 import { type ProblemWriteup, parseWriteupsEnv } from "../../../utils/writeup-metadata.js";
-import {
-  createFeatureFlagsRepository,
-  type FeatureFlagsRepository,
-} from "../../control-data/feature-flags-repository.js";
-import {
-  createNotificationsRepository,
-  type NotificationsRepository,
-} from "../../control-data/notifications-repository.js";
+import type { FeatureFlagsRepository } from "../../control-data/feature-flags-repository.js";
+import type { NotificationsRepository } from "../../control-data/notifications-repository.js";
+import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 
 /**
@@ -91,20 +86,17 @@ export async function queryTeamItems(
  * [ADR-049 §5.1 / #2439] Notifications aggregate 専用 read seam
  * (admin-insight/event-handler の `resolveEventsRepository` と同型)。 default backend
  * (`CONTROL_DATA_BACKEND` 未設定 = dynamodb) では従来と byte 互換の Query を `shared.ddb`
- * 経由で発火する。 participant portal は通知の read しか行わないため sync factory の
- * aggregate-only seam で十分。
+ * 経由で発火する。 participant portal は通知の read しか行わない。
  *
- * **[#2437 と同じ既知の制約]** この resolver は sync factory なので Turso/SQL executor を
- * 組み立てられない。 `CONTROL_DATA_BACKEND=turso|sql` が渡ると `createNotificationsRepository`
- * が `deps.sql` 欠落で fail-loud に throw する (= 意図的。 silent に DynamoDB へ fallback
- * しない — repo の "no silent fallbacks" 原則)。 participant Lambda の SQL 有効化が必要に
- * なったら event-handler の async `resolveEventRepositories` と同様に SSM + libsql client 構築を
- * 別途スレッドすること (この sync 版のまま turso を有効化してはいけない)。
+ * [#2450] cold-start cache 済みの async resolver (`controlDataRuntime`) 経由で解決するため
+ * `CONTROL_DATA_BACKEND=turso|sql` でも Mirrored で動作する (read は canonical DDB の passthrough)。
+ * SSM GetParameter + libsql client 構築は turso 選択時のみ・Lambda instance ごとに 1 回だけ
+ * (dynamodb default では SSM に触れず byte 互換)。 `Promise` を返すので caller は await する。
  */
 export function resolveNotificationsRepository(
   shared: Pick<ParticipantSharedResources, "ddb" | "eventsTableName">,
-): NotificationsRepository {
-  return createNotificationsRepository(process.env.CONTROL_DATA_BACKEND, {
+): Promise<NotificationsRepository> {
+  return controlDataRuntime.resolveNotificationsRepository({
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
   });
@@ -114,12 +106,13 @@ export function resolveNotificationsRepository(
  * [ADR-049 §5.1 / #2439] TenantFeatureFlags aggregate 専用 read seam
  * ({@link resolveNotificationsRepository} の鏡像)。 challenge access guard の Gate flag 判定が
  * seam 経由で per-tenant flag 行を読む。 default backend では従来と byte 互換の GetCommand を
- * `shared.ddb` 経由で発火する。 sync factory の既知の制約は上記と同じ (turso は fail-loud)。
+ * `shared.ddb` 経由で発火する。 [#2450] notifications seam と同じく async resolver 経由なので
+ * `CONTROL_DATA_BACKEND=turso|sql` でも Mirrored で動作する。 `Promise` を返す。
  */
 export function resolveFeatureFlagsRepository(
   shared: Pick<ParticipantSharedResources, "ddb" | "eventsTableName">,
-): FeatureFlagsRepository {
-  return createFeatureFlagsRepository(process.env.CONTROL_DATA_BACKEND, {
+): Promise<FeatureFlagsRepository> {
+  return controlDataRuntime.resolveFeatureFlagsRepository({
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
   });

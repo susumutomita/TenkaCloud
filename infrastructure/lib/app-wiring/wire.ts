@@ -221,6 +221,13 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       ...(config.monthlyCostLimitUsd && config.monthlyCostLimitUsd > 0
         ? { costBudgetName: `tenkacloud-${config.environment}-monthly-cost` }
         : {}),
+      // [#2461] control-plane data backend を admin-insight Lambda にも届ける (= EventApiLambda /
+      // ProblemDeployBackendStack と同型)。 default "dynamodb" + turso URL 未設定なら Lambda env を
+      // 足さず SSM policy も付かないので CFn byte 互換 (= 既存 stack テストが pin 済み)。 turso 選択時
+      // のみ admin-insight Lambda に CONTROL_DATA_BACKEND env + SSM GetParameter policy が UPDATE される。
+      controlDataBackend: config.controlDataBackend,
+      tursoDatabaseUrl: config.tursoDatabaseUrl,
+      tursoAuthTokenParameterName: config.tursoAuthTokenParameterName,
     },
   );
 

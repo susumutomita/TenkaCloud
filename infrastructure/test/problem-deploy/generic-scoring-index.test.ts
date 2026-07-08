@@ -349,11 +349,15 @@ describe("processDeployment guard branches", () => {
     // [#2438 review] resolveEventsRepository() must be resolved outside the fail-closed
     // try/catch — a bad backend selection is a setup bug, not a transient read failure,
     // and must not be silently swallowed into "treat batch as locked".
+    // [#2450] The seam is now an async resolver (controlDataRuntime). Selecting turso without
+    // TURSO_DATABASE_URL still fails loudly, but now at env validation (before the libSQL
+    // client is built), so the surfaced message is the missing-env one rather than the old
+    // sync-factory "SqlExecutor" error. The fail-loud (not fail-closed) contract is unchanged.
     const previous = process.env.CONTROL_DATA_BACKEND;
     process.env.CONTROL_DATA_BACKEND = "turso";
     shared.problemsScoring = { p1: { kind: "uptime-flat" } };
     try {
-      await expect(runWith(baseItem())).rejects.toThrow(/SqlExecutor/);
+      await expect(runWith(baseItem())).rejects.toThrow(/TURSO_DATABASE_URL is required/);
       expect(mocks.runUptimeFlatKind).not.toHaveBeenCalled();
     } finally {
       if (previous === undefined) delete process.env.CONTROL_DATA_BACKEND;

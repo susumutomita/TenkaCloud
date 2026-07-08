@@ -521,7 +521,9 @@ async function fetchEventScoringMetaMap(
   // [#2438] repository の解決 (backend 選択) はここで行う — CONTROL_DATA_BACKEND の設定ミス /
   // SQL 未配線のような setup エラーは下の try に入れない (fail-closed の対象は read failure のみ)。
   // config エラーを fail-closed に畳むと「ロック中」と誤認させたまま原因を隠してしまう。
-  const repository = resolveEventsRepository(shared);
+  // [#2450] resolver は async 化したが await は try の外のまま — setup エラーは fail-closed に
+  // 畳まず outer processDeployment の .catch (= 1 tick skip + warn) に委ねる (A3 の設計判断を維持)。
+  const repository = await resolveEventsRepository(shared);
   try {
     return new Map(await repository.batchGetEvents(eventIds));
   } catch (err) {

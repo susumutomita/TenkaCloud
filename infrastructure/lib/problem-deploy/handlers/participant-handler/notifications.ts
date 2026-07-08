@@ -51,9 +51,8 @@ export async function listNotifications(
     .find((e): e is string => typeof e === "string" && e.length > 0);
   if (!eventId) return { kind: "no_event" };
 
-  const page = await resolveNotificationsRepository(shared).listByEvent(eventId, {
-    limit: limitRaw,
-  });
+  const notifications = await resolveNotificationsRepository(shared);
+  const page = await notifications.listByEvent(eventId, { limit: limitRaw });
 
   const items = page.notifications
     .map(toView)

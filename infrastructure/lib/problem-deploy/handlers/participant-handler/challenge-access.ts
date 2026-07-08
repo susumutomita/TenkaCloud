@@ -72,10 +72,10 @@ function isGateFlagEnabled(shared: ParticipantSharedResources, tenantId: string)
   const nowMs = Date.now();
   const cached = tenantFlagCache.get(tenantId);
   if (cached && cached.expiresAtMs > nowMs) return cached.value;
-  const value = isTenantFeatureEnabled(
-    resolveFeatureFlagsRepository(shared),
-    tenantId,
-    CHALLENGE_PREREQUISITE_GATE_FLAG,
+  // [#2450] resolver は async 化したが 30s TTL cache の構造は不変 — cache に入れる Promise の
+  // 構築だけ `.then()` 連結にする (`Promise<boolean>` のまま)。
+  const value = resolveFeatureFlagsRepository(shared).then((repo) =>
+    isTenantFeatureEnabled(repo, tenantId, CHALLENGE_PREREQUISITE_GATE_FLAG),
   );
   tenantFlagCache.set(tenantId, { value, expiresAtMs: nowMs + TENANT_FLAG_CACHE_TTL_MS });
   return value;

@@ -16,6 +16,7 @@ import type {
   EventsRepository,
   FeatureFlagsRepository,
   NotificationsRepository,
+  SqlExecutor,
   TeamsRepository,
 } from "./types.js";
 
@@ -32,17 +33,42 @@ export interface ControlDataRuntimeInput {
   readonly teamsTableName: string;
 }
 
-interface RuntimeEnvironment {
+export interface ControlDataRuntime {
+  readonly resolveRepositories: (
+    input: ControlDataRuntimeInput,
+  ) => Promise<ControlDataRepositories>;
+  readonly resolveEventsRepository: (input: {
+    readonly ddb: DynamoDBDocumentClient;
+    readonly eventsTableName: string;
+    readonly teamsTableName?: string;
+  }) => Promise<EventsRepository>;
+  readonly resolveTeamsRepository: (input: {
+    readonly ddb: DynamoDBDocumentClient;
+    readonly teamsTableName: string;
+  }) => Promise<TeamsRepository>;
+  readonly resolveNotificationsRepository: (input: {
+    readonly ddb: DynamoDBDocumentClient;
+    readonly eventsTableName: string;
+  }) => Promise<NotificationsRepository>;
+  readonly resolveFeatureFlagsRepository: (input: {
+    readonly ddb: DynamoDBDocumentClient;
+    readonly eventsTableName: string;
+  }) => Promise<FeatureFlagsRepository>;
+}
+
+export interface RuntimeEnvironment {
   readonly CONTROL_DATA_BACKEND?: string;
   readonly TURSO_DATABASE_URL?: string;
   readonly TURSO_AUTH_TOKEN_PARAMETER_NAME?: string;
 }
 
-interface RuntimeDependencies {
+export interface RuntimeDependencies {
   readonly env: RuntimeEnvironment;
   readonly ssm: Pick<SSMClient, "send">;
   readonly createClient: (config: { readonly url: string; readonly authToken: string }) => Client;
 }
+
+type SelectedBackend = "dynamodb" | "turso" | "sql";
 
 function required(value: string | undefined, name: string): string {
   const normalized = value?.trim();
@@ -52,48 +78,25 @@ function required(value: string | undefined, name: string): string {
   return normalized;
 }
 
+function selectBackend(env: RuntimeEnvironment): SelectedBackend {
+  const backend = env.CONTROL_DATA_BACKEND?.trim().toLowerCase() || "dynamodb";
+  if (backend === "dynamodb" || backend === "turso" || backend === "sql") return backend;
+  throw new Error(
+    `Unknown CONTROL_DATA_BACKEND="${env.CONTROL_DATA_BACKEND}" ` +
+      "(expected one of: dynamodb, turso, sql).",
+  );
+}
+
 /**
- * Builds a cold-start resolver. The returned closure caches both the decrypted
- * token and libSQL client; warm invocations do not call SSM or rerun schema DDL.
+ * Builds a cold-start runtime. The returned runtime caches the decrypted token
+ * and libSQL client as a SqlExecutor; warm invocations do not call SSM or rerun
+ * schema DDL, while aggregate repository objects remain request-scoped.
  */
-export function createControlDataRepositoryResolver(
-  deps: RuntimeDependencies,
-): (input: ControlDataRuntimeInput) => Promise<ControlDataRepositories> {
-  let cached: Promise<ControlDataRepositories> | undefined;
+export function createControlDataRuntime(deps: RuntimeDependencies): ControlDataRuntime {
+  let cachedSql: Promise<SqlExecutor> | undefined;
 
-  return async (input) => {
-    const backend = deps.env.CONTROL_DATA_BACKEND?.trim().toLowerCase() || "dynamodb";
-    if (backend === "dynamodb") {
-      return {
-        events: createEventsRepository(backend, {
-          ddb: input.ddb,
-          eventsTableName: input.eventsTableName,
-          // #2437: createEventWithTeams (atomic event+teams transaction) writes
-          // the Teams table through the Events repository.
-          teamsTableName: input.teamsTableName,
-        }),
-        teams: createTeamsRepository(backend, {
-          ddb: input.ddb,
-          teamsTableName: input.teamsTableName,
-        }),
-        notifications: createNotificationsRepository(backend, {
-          ddb: input.ddb,
-          eventsTableName: input.eventsTableName,
-        }),
-        featureFlags: createFeatureFlagsRepository(backend, {
-          ddb: input.ddb,
-          eventsTableName: input.eventsTableName,
-        }),
-      };
-    }
-    if (backend !== "turso" && backend !== "sql") {
-      throw new Error(
-        `Unknown CONTROL_DATA_BACKEND="${deps.env.CONTROL_DATA_BACKEND}" ` +
-          "(expected one of: dynamodb, turso, sql).",
-      );
-    }
-
-    cached ??= (async () => {
+  function acquireSqlExecutor(): Promise<SqlExecutor> {
+    cachedSql ??= (async () => {
       const url = required(deps.env.TURSO_DATABASE_URL, "TURSO_DATABASE_URL");
       const parameterName = required(
         deps.env.TURSO_AUTH_TOKEN_PARAMETER_NAME,
@@ -109,46 +112,137 @@ export function createControlDataRepositoryResolver(
 
       const client = deps.createClient({ url, authToken });
       await initializeControlDataSchema(client);
-      const sql = new LibsqlExecutor(client);
-      const canonicalEvents = createEventsRepository("dynamodb", {
+      return new LibsqlExecutor(client);
+    })().catch((err: unknown) => {
+      cachedSql = undefined;
+      throw err;
+    });
+    return cachedSql;
+  }
+
+  async function resolveEventsRepository(input: {
+    readonly ddb: DynamoDBDocumentClient;
+    readonly eventsTableName: string;
+    readonly teamsTableName?: string;
+  }): Promise<EventsRepository> {
+    const backend = selectBackend(deps.env);
+    if (backend === "dynamodb") {
+      return createEventsRepository(backend, {
+        ddb: input.ddb,
+        eventsTableName: input.eventsTableName,
+        // #2437: createEventWithTeams (atomic event+teams transaction) writes
+        // the Teams table through the Events repository.
+        teamsTableName: input.teamsTableName,
+      });
+    }
+    const sql = await acquireSqlExecutor();
+    return new MirroredEventsRepository(
+      createEventsRepository("dynamodb", {
         ddb: input.ddb,
         eventsTableName: input.eventsTableName,
         teamsTableName: input.teamsTableName,
-      });
-      const canonicalTeams = createTeamsRepository("dynamodb", {
+      }),
+      createEventsRepository(backend, { sql }),
+    );
+  }
+
+  async function resolveTeamsRepository(input: {
+    readonly ddb: DynamoDBDocumentClient;
+    readonly teamsTableName: string;
+  }): Promise<TeamsRepository> {
+    const backend = selectBackend(deps.env);
+    if (backend === "dynamodb") {
+      return createTeamsRepository(backend, {
         ddb: input.ddb,
         teamsTableName: input.teamsTableName,
       });
-      const canonicalNotifications = createNotificationsRepository("dynamodb", {
+    }
+    const sql = await acquireSqlExecutor();
+    return new MirroredTeamsRepository(
+      createTeamsRepository("dynamodb", {
+        ddb: input.ddb,
+        teamsTableName: input.teamsTableName,
+      }),
+      createTeamsRepository(backend, { sql }),
+    );
+  }
+
+  async function resolveNotificationsRepository(input: {
+    readonly ddb: DynamoDBDocumentClient;
+    readonly eventsTableName: string;
+  }): Promise<NotificationsRepository> {
+    const backend = selectBackend(deps.env);
+    if (backend === "dynamodb") {
+      return createNotificationsRepository(backend, {
         ddb: input.ddb,
         eventsTableName: input.eventsTableName,
       });
-      const canonicalFeatureFlags = createFeatureFlagsRepository("dynamodb", {
+    }
+    const sql = await acquireSqlExecutor();
+    return new MirroredNotificationsRepository(
+      createNotificationsRepository("dynamodb", {
+        ddb: input.ddb,
+        eventsTableName: input.eventsTableName,
+      }),
+      createNotificationsRepository(backend, { sql }),
+    );
+  }
+
+  async function resolveFeatureFlagsRepository(input: {
+    readonly ddb: DynamoDBDocumentClient;
+    readonly eventsTableName: string;
+  }): Promise<FeatureFlagsRepository> {
+    const backend = selectBackend(deps.env);
+    if (backend === "dynamodb") {
+      return createFeatureFlagsRepository(backend, {
         ddb: input.ddb,
         eventsTableName: input.eventsTableName,
       });
-      return {
-        events: new MirroredEventsRepository(
-          canonicalEvents,
-          createEventsRepository(backend, { sql }),
-        ),
-        teams: new MirroredTeamsRepository(canonicalTeams, createTeamsRepository(backend, { sql })),
-        notifications: new MirroredNotificationsRepository(
-          canonicalNotifications,
-          createNotificationsRepository(backend, { sql }),
-        ),
-        featureFlags: new MirroredFeatureFlagsRepository(
-          canonicalFeatureFlags,
-          createFeatureFlagsRepository(backend, { sql }),
-        ),
-      };
-    })();
-    return cached;
+    }
+    const sql = await acquireSqlExecutor();
+    return new MirroredFeatureFlagsRepository(
+      createFeatureFlagsRepository("dynamodb", {
+        ddb: input.ddb,
+        eventsTableName: input.eventsTableName,
+      }),
+      createFeatureFlagsRepository(backend, { sql }),
+    );
+  }
+
+  return {
+    resolveRepositories: async (input) => {
+      const [events, teams, notifications, featureFlags] = await Promise.all([
+        resolveEventsRepository(input),
+        resolveTeamsRepository(input),
+        resolveNotificationsRepository(input),
+        resolveFeatureFlagsRepository(input),
+      ]);
+      return { events, teams, notifications, featureFlags };
+    },
+    resolveEventsRepository,
+    resolveTeamsRepository,
+    resolveNotificationsRepository,
+    resolveFeatureFlagsRepository,
   };
 }
 
-export const resolveControlDataRepositories = createControlDataRepositoryResolver({
+/**
+ * Backward-compatible full resolver factory. Prefer {@link createControlDataRuntime}
+ * for aggregate-scoped resolution.
+ */
+export function createControlDataRepositoryResolver(
+  deps: RuntimeDependencies,
+): (input: ControlDataRuntimeInput) => Promise<ControlDataRepositories> {
+  const runtime = createControlDataRuntime(deps);
+  return (input) => runtime.resolveRepositories(input);
+}
+
+/** Module singleton backed by process.env, real SSM, and the real libSQL client. */
+export const controlDataRuntime = createControlDataRuntime({
   env: process.env,
   ssm: new SSMClient({}),
   createClient,
 });
+
+export const resolveControlDataRepositories =
+  controlDataRuntime.resolveRepositories.bind(controlDataRuntime);
