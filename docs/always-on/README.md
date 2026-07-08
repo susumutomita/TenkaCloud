@@ -272,11 +272,13 @@ score rows as bounded JSONL parts under
 `events/{eventId}/score-events/latest.json`. A failed export stops teardown so
 the runtime data remains available for retry.
 
-The nightly sweeper uses the same GitHub OIDC role as runtime lifecycle
-workflows. Redeploy `tenkacloud-always-on-oidc` after upgrading: its direct AWS
-SDK permissions allow account-wide `DescribeStacks` (CloudFormation does not
-offer a resource-scoped list form), while `DeleteStack` and
-`lambda:InvokeFunction` remain restricted to
+The cleanup sweeper script (`infrastructure/lib/always-on-runtime/sweeper/`,
+run manually — the nightly scheduled workflow was removed because its AWS OIDC
+environment was never provisioned; re-add it at GA #2294) uses the same GitHub
+OIDC role as runtime lifecycle workflows. Redeploy `tenkacloud-always-on-oidc`
+after upgrading: its direct AWS SDK permissions allow account-wide
+`DescribeStacks` (CloudFormation does not offer a resource-scoped list form),
+while `DeleteStack` and `lambda:InvokeFunction` remain restricted to
 `tenkacloud-event-runtime-*` resources.
 
 ## Rollback

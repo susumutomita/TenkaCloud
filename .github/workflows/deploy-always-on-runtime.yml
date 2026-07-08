@@ -5,7 +5,8 @@ name: deploy-always-on-runtime
 # Deploys the PER-EVENT runtime stack (tenkacloud-event-runtime-<eventId>) via
 # `make deploy-always-on-runtime`, keyed by the eventId input. This is distinct from the
 # event-independent signed-intent ingress (deployed once via `make deploy-always-on-ingress`).
-# The stack carries the TenkaCloud:* runtime tags so the nightly sweeper can reclaim it.
+# The stack carries the TenkaCloud:* runtime tags so expired runtimes can be identified for
+# cleanup (manual sweeper script / destroy workflow) and per-event cost attribution.
 # Authentication is GitHub OIDC only (sts:AssumeRoleWithWebIdentity) — there are NO
 # long-lived AWS access keys in this repo. The assumable role and its hard-pinned trust
 # policy are provisioned by `infrastructure/lib/always-on-runtime/github-oidc-deploy-role-stack.ts`.
@@ -22,7 +23,7 @@ on:
         required: true
         type: string
       expiresAt:
-        description: ISO-8601 hard deadline (event end + grace) after which the sweeper reclaims the runtime
+        description: ISO-8601 hard deadline (event end + grace) recorded on the TenkaCloud:ExpiresAt cleanup tag
         required: true
         type: string
       awsRegion:

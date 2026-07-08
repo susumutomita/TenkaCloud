@@ -113,7 +113,7 @@ Participant Portal のログインはチームログイン鍵そのものを bea
 - [ ] **キャパシティを 1/1 に戻す** (event-hot 5 テーブル)。[capacity runbook](./dynamodb-event-capacity.md) の scale-down。scale-down はテーブルあたり 1 日の回数制限があるので、細かく下げず一発で 1/1 に戻す。上げっぱなしの放置が唯一の課金爆死経路。
 - [ ] **各チームの問題スタックを削除**: `aws cloudformation delete-stack --stack-name <チームスタック名>`。問題によっては参加者が作った managed リソース (Lambda / ECS / App Runner / ALB / ECR / SG など) がスタック外に残る (例: microservice-migration-battle)。各問題の `OPERATOR.md` の「After the event」に従い、`${NamePrefix}` prefix / `TenkaCloud:NamePrefix` タグで掃く。
 - [ ] Battle 問題のログイン鍵は TTL で自動失効するが、早期に無効化したい場合はデプロイを削除する。
-- [ ] Always-On の場合: `make archive-always-on-runtime` でスコアを退避してから `make destroy-always-on-runtime`。per-event runtime を消せば AWS 常時課金が 0 に戻る (nightly sweeper も `tenkacloud-event-runtime-*` を掃除する)。D1 は互換期間中は消さない。
+- [ ] Always-On の場合: `make archive-always-on-runtime` でスコアを退避してから `make destroy-always-on-runtime`。per-event runtime を消せば AWS 常時課金が 0 に戻る (消し忘れは翌朝の自動掃除で拾われない — nightly sweeper は撤去済みなので必ずここで消す)。D1 は互換期間中は消さない。
 - [ ] プラットフォーム自体を畳む場合のみ: Lite は `make destroy` (Console 経由なら CodeBuild を `ACTION=destroy` で再実行)、SaaS は `make destroy-saas` (`scripts/cleanup.sh`、部分削除からでも冪等)。単発イベントごとにプラットフォームまで消す必要はない。
 
 ## リハーサル振り返り
