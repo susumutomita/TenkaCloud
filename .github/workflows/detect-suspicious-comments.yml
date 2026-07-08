@@ -1,0 +1,96 @@
+name: Detect suspicious comments
+
+on:
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Detect suspicious comment
+        id: detect
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
+          COMMENT_AUTHOR_LOGIN: ${{ github.event.comment.user.login }}
+          COMMENT_AUTHOR_TYPE: ${{ github.event.comment.user.type }}
+          COMMENT_URL: ${{ github.event.comment.html_url }}
+        run: bun run scripts/security/detect-suspicious-comment.ts
+
+      - name: Ensure maintainer-review label
+        if: steps.detect.outputs.suspicious == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LABEL_COLOR: B60205
+          LABEL_DESCRIPTION: External comment needs maintainer review before downloading attachments
+          LABEL_NAME: needs-maintainer-review
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${REPO}/labels/${LABEL_NAME}" >/dev/null 2>&1 || \
+            gh api --method POST "repos/${REPO}/labels" \
+              -f name="${LABEL_NAME}" \
+              -f color="${LABEL_COLOR}" \
+              -f description="${LABEL_DESCRIPTION}" >/dev/null
+
+      - name: Add maintainer-review label
+        if: steps.detect.outputs.suspicious == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          LABEL_NAME: needs-maintainer-review
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh issue edit "${ISSUE_NUMBER}" --repo "${REPO}" --add-label "${LABEL_NAME}"
+
+      - name: Post suspicious-comment warning
+        if: steps.detect.outputs.suspicious == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          warning_ids="$(
+            gh api --paginate "repos/${REPO}/issues/${ISSUE_NUMBER}/comments" \
+              --jq '.[] | select(.body | contains("<!-- tenkacloud-suspicious-comment-warning -->")) | .id'
+          )"
+
+          if [ -n "${warning_ids}" ]; then
+            {
+              echo "Suspicious-comment warning already exists; skipping duplicate comment."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          warning_body="$(cat <<'MARKDOWN'
+          <!-- tenkacloud-suspicious-comment-warning -->
+          ⚠️ Suspicious attachment or patch-style comment detected.
+
+          TenkaCloud does not accept zip archives, binaries, or patch files through issue comments.
+          Please submit code changes as a normal pull request so maintainers can review the diff and CI results.
+
+          Maintainers should avoid downloading or extracting the attached file unless it has been inspected in a safe environment.
+          MARKDOWN
+          )"
+
+          gh api --method POST "repos/${REPO}/issues/${ISSUE_NUMBER}/comments" \
+            -f body="${warning_body}" >/dev/null
