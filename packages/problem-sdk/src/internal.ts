@@ -52,6 +52,7 @@ export {
   parsePhaseEntry,
 } from "./metadata-parser.js";
 export { type ProblemMetadataView, validateMetadataSections } from "./metadata-sections.js";
+export type { PackProblem } from "./problem-metadata.js";
 export { isExistingDirectory, isInside, readDirNames, resolveInside } from "./safe-path.js";
 // Pure scoring-metadata section parsers + types.
 export {

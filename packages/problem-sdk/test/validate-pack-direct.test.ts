@@ -64,6 +64,7 @@ describe("validatePackDirectory: happy path", () => {
     expect(result.ok).toBe(true);
     expect(result.diagnostics).toEqual([]);
     expect(result.problemIds).toEqual(["hello"]);
+    expect(result.problems).toEqual([{ id: "hello", relDir: "problems/challenge/hello" }]);
     expect(result.manifest?.id).toBe("com.example.pack");
   });
 });

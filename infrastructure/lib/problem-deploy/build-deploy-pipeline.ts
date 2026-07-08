@@ -7,6 +7,7 @@ import type { ILogGroup } from "aws-cdk-lib/aws-logs";
 import { Bucket } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
+import type { PackAsset } from "../app-config/types.js";
 import { BulkDeployCreateStateMachine } from "./bulk-deploy-create-state-machine.js";
 import { CfnDeployLambda } from "./cfn-deploy-lambda.js";
 import { DeployCodeBuildProject } from "./deploy-codebuild-project.js";
@@ -35,6 +36,14 @@ export interface BuildDeployPipelineArgs {
    * CodeBuild 経路で、追加リソースなし = CFn テンプレ byte 互換。
    */
   readonly deployViaLambda?: boolean;
+  /**
+   * [Problem Packs / Issue #2462] Installed + active pack revisions to materialize alongside the
+   * core `problems/` tree (Lite only; resolved from `.tenkacloud/pack-store`). Each entry gets a
+   * `BucketDeployment` copying its snapshot problems root into `pack-problems/<packId>/<version>/…`.
+   * Only consumed on the Lambda deploy path (`deployViaLambda`); undefined / empty (the default and
+   * SaaS — pooled activation wiring is #2459) adds no resource = CFn byte-identical.
+   */
+  readonly packAssets?: readonly PackAsset[];
 }
 
 export interface DeployPipelineOutputs {
@@ -74,6 +83,17 @@ export interface DeployPipelineOutputs {
  *
  * Issue #910 (#895 Phase 2.C): Distributed Map state machine + EventBridge Rule。
  */
+/**
+ * Issue #2462: CDK-safe, per-pack construct id fragment. The reverse-DNS `packId` and dotted
+ * `version` carry `.`/`-` that are stripped from CFn logical ids, so `<packId>` + `<version>` are
+ * normalized to `[A-Za-z0-9]` runs joined by `-`. The fragment stays UNIQUE per (packId, version)
+ * — a collision would make CDK throw on duplicate sibling ids (fail-loud, not a silent overwrite).
+ */
+function packAssetConstructId(asset: PackAsset): string {
+  const normalize = (value: string): string => value.replace(/[^A-Za-z0-9]+/g, "-");
+  return `${normalize(asset.packId)}-${normalize(asset.version)}`;
+}
+
 export function buildDeployPipeline(
   scope: Construct,
   args: BuildDeployPipelineArgs,
@@ -142,6 +162,33 @@ export function buildDeployPipeline(
       // The copy handler unzips + `aws s3 sync`s the tree; 256MB comfortably covers the small tree.
       memoryLimit: 256,
     });
+
+    // Issue #2462: materialize each active pack's immutable snapshot problems root NEXT TO the core
+    // tree, under `pack-problems/<packId>/<version>/`. `packAssets[].problemsRootAbs` is the pack's
+    // problems root, so its `<category>/<id>/{template.yaml,metadata.json}` children land at
+    // `pack-problems/<packId>/<version>/<category>/<id>/…` — byte-for-byte the directory keys the
+    // catalog emits (`buildPackProblemDirectory`) and the resolver reads (create-stack.ts). Empty /
+    // undefined (default core-only, and SaaS pooled which is #2459) adds no resource = byte-identical.
+    //
+    // Known scope limits (this slice is Lite `make deploy` only):
+    //   - Scoring of pack problems is NOT wired yet — a pack contributes catalog + deploy body only
+    //     (its scoring/endpoints/phases projections are a later slice, #2463).
+    //   - The CodeBuild deploy path (console ACTION=deploy over source.zip) does NOT carry the
+    //     pack store, so pack problems are Lambda-path (`deployViaLambda`) only. That is why this
+    //     loop lives inside the `deployViaLambda` branch.
+    //
+    // prune:false is MANDATORY for the same reason as the core deployment above (the source bucket
+    // also holds source.zip + the core `problems/` tree). Each pack targets a DISTINCT key prefix, so
+    // packs never clobber the core tree or each other.
+    for (const asset of args.packAssets ?? []) {
+      new BucketDeployment(scope, `PackArtifacts-${packAssetConstructId(asset)}`, {
+        sources: [Source.asset(asset.problemsRootAbs, { exclude: ["node_modules"] })],
+        destinationBucket: sourceBucket,
+        destinationKeyPrefix: `pack-problems/${asset.packId}/${asset.version}`,
+        prune: false,
+        memoryLimit: 256,
+      });
+    }
   }
 
   const stateMachine = new DeployCreateStateMachine(scope, "DeployCreate", {

@@ -81,12 +81,12 @@ function writeValidPack(
   options: { manifestOverrides?: Record<string, unknown>; problemId?: string } = {},
 ): string {
   const problemId = options.problemId ?? "hello-world";
+  const packManifest = manifest(options.manifestOverrides);
+  const problemsRoot =
+    typeof packManifest.problemsRoot === "string" ? packManifest.problemsRoot : "problems";
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(
-    path.join(dir, "tenkacloud-pack.json"),
-    JSON.stringify(manifest(options.manifestOverrides), null, 2),
-  );
-  const problemDir = path.join(dir, "problems", "challenges", problemId);
+  fs.writeFileSync(path.join(dir, "tenkacloud-pack.json"), JSON.stringify(packManifest, null, 2));
+  const problemDir = path.join(dir, problemsRoot, "challenges", problemId);
   fs.mkdirSync(problemDir, { recursive: true });
   fs.writeFileSync(
     path.join(problemDir, "metadata.json"),
@@ -552,6 +552,95 @@ describe("core-only tenant regression (#2095)", () => {
     for (const value of Object.values(provenance)) {
       expect(value.source).toBe("core");
     }
+  });
+});
+
+describe("ActivationStore snapshot directory keys (#2462)", () => {
+  it("should key each active pack problem by pack id, version, and relative problem directory", () => {
+    installPackFrom("pack-a", { problemId: "pack-only" });
+    const store = new ActivationStore(storeDir, PLATFORM);
+    expect(
+      store.activate({ tenantId: TENANT_A, packId: "com.example.cloud-pack", version: "1.0.0" }).ok,
+    ).toBe(true);
+
+    const inputs = store.snapshotInputsForTenant(TENANT_A);
+
+    expect(inputs[0]?.problems).toEqual([
+      {
+        problemId: "pack-only",
+        directory: "pack-problems/com.example.cloud-pack/1.0.0/challenges/pack-only",
+        projections: {},
+      },
+    ]);
+  });
+
+  it("should strip a custom problemsRoot when building the per-problem directory key", () => {
+    installPackFrom("custom-root-pack", {
+      manifestOverrides: { problemsRoot: "catalog/problems" },
+      problemId: "root-stripped",
+    });
+    const store = new ActivationStore(storeDir, PLATFORM);
+    expect(
+      store.activate({ tenantId: TENANT_A, packId: "com.example.cloud-pack", version: "1.0.0" }).ok,
+    ).toBe(true);
+
+    const inputs = store.snapshotInputsForTenant(TENANT_A);
+
+    expect(inputs[0]?.problems[0]?.directory).toBe(
+      "pack-problems/com.example.cloud-pack/1.0.0/challenges/root-stripped",
+    );
+  });
+
+  it("should expose the on-disk pack assets a tenant's active revisions materialize from", () => {
+    installPackFrom("pack-a", { problemId: "pack-only" });
+    const store = new ActivationStore(storeDir, PLATFORM);
+    expect(
+      store.activate({ tenantId: TENANT_A, packId: "com.example.cloud-pack", version: "1.0.0" }).ok,
+    ).toBe(true);
+
+    const assets = store.packAssetsForTenant(TENANT_A);
+
+    expect(assets).toHaveLength(1);
+    expect(assets[0]?.packId).toBe("com.example.cloud-pack");
+    expect(assets[0]?.version).toBe("1.0.0");
+    // problemsRootAbs must point at the snapshot's problems root, so the pack's deploy body is
+    // actually reachable for the BucketDeployment (this is what makes deploy work, not 404).
+    expect(
+      fs.existsSync(
+        path.join(assets[0]?.problemsRootAbs ?? "", "challenges", "pack-only", "template.yaml"),
+      ),
+    ).toBe(true);
+  });
+
+  it("should point pack assets at a custom problemsRoot subdirectory of the snapshot", () => {
+    installPackFrom("custom-root-pack", {
+      manifestOverrides: { problemsRoot: "catalog/problems" },
+      problemId: "root-stripped",
+    });
+    const store = new ActivationStore(storeDir, PLATFORM);
+    expect(
+      store.activate({ tenantId: TENANT_A, packId: "com.example.cloud-pack", version: "1.0.0" }).ok,
+    ).toBe(true);
+
+    const assets = store.packAssetsForTenant(TENANT_A);
+
+    expect(assets[0]?.problemsRootAbs.endsWith(path.join("catalog", "problems"))).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(assets[0]?.problemsRootAbs ?? "", "challenges", "root-stripped", "template.yaml"),
+      ),
+    ).toBe(true);
+  });
+
+  it("should return no pack assets for a tenant with no active revisions", () => {
+    installPackFrom("pack-a", { problemId: "pack-only" });
+    const store = new ActivationStore(storeDir, PLATFORM);
+    expect(
+      store.activate({ tenantId: TENANT_A, packId: "com.example.cloud-pack", version: "1.0.0" }).ok,
+    ).toBe(true);
+
+    // A different tenant activated nothing → no assets (its Lite synth stays core-only).
+    expect(store.packAssetsForTenant(TENANT_B)).toEqual([]);
   });
 });
 

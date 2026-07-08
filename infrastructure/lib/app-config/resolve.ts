@@ -16,6 +16,7 @@ import type {
   ApiKeySSMParameterNames,
   AppConfig,
   ControlDataBackend,
+  PackAsset,
   ProblemsCatalogBundle,
 } from "./types.js";
 
@@ -48,6 +49,13 @@ export interface ResolveAppConfigInput {
    * のまま追加されており、 ここに差し替えても remote fetch は発生しない。
    */
   readonly catalogSource?: CatalogSource;
+  /**
+   * [#2462] Installed + active pack revisions to materialize at synth time. Built from the SAME
+   * local activation store as {@link catalogSource} by `bin/tenkacloud-lite.ts`, so the asset set
+   * and the pack catalog keys stay consistent. Passed straight through to
+   * {@link AppConfig.packAssets}; undefined on the default / SaaS path (= no materialization).
+   */
+  readonly packAssets?: readonly PackAsset[];
 }
 
 export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
@@ -146,6 +154,9 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     ...apiKeys,
     ...participantPortal,
     problems,
+    // [#2462] Pass the Lite activation store's pack assets straight through. Absent (default /
+    // SaaS) → the `packAssets` key is omitted entirely, keeping the AppConfig shape byte-identical.
+    ...(input.packAssets && input.packAssets.length > 0 ? { packAssets: input.packAssets } : {}),
     challengePayloadBucketName,
     challengePayload,
     // Issue #1695: config.json の customDomains を AppConfig にそのまま透過 (opt-in TLS 1.2)。
@@ -320,8 +331,9 @@ function discoverAppProblems(input: ResolveAppConfigInput): ProblemsCatalogBundl
   if (input.discoverProblems) return input.discoverProblems(problemsRoot);
   // [#2092] Backend deploy paths consume ONE effective catalog through the source
   // abstraction. The default {@link LocalCatalogSource} preserves the exact current
-  // synth-time behavior (byte-identical), so this is a CFn NO-OP. The snapshot
-  // adapter exists but is dormant — it is not wired here.
+  // synth-time behavior (byte-identical), so this is a CFn NO-OP. Lite mode can
+  // pass a SnapshotCatalogSource from `bin/tenkacloud-lite.ts` when a local
+  // activation store exists; SaaS pooled remains unwired.
   const source = input.catalogSource ?? new LocalCatalogSource();
   return source.loadBundle(problemsRoot);
 }

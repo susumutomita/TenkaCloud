@@ -35,6 +35,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { z } from "zod";
+import type { PackAsset } from "../app-config/types.js";
 import { bundleCoordinationPlugins } from "../utils/bundle-coordination-plugins.js";
 import { discoverProblemsCoordination } from "../utils/discover-problems-catalog.js";
 import { type CatalogSource, SnapshotCatalogSource } from "./catalog-source.js";
@@ -150,18 +151,61 @@ function loadSnapshotInput(
   const manifest: PackManifest | undefined = validation.manifest;
   if (!manifest) return undefined;
   const root = manifest.problemsRoot ?? "problems";
+  const directoryByProblemId = buildPackProblemDirectoryMap(manifest, validation.problems);
   const coordinationProjections = options.withCoordinationProjection
     ? loadCoordinationProjections(path.join(snapshotAbs, root))
     : undefined;
   return {
     manifest,
     contentDigest: entry.contentDigest,
-    problems: validation.problemIds.map((problemId) => ({
-      problemId,
-      directory: root,
-      projections: coordinationProjections?.[problemId] ?? {},
-    })),
+    problems: validation.problemIds.map((problemId) => {
+      const directory = directoryByProblemId.get(problemId);
+      if (!directory) {
+        throw new Error(
+          `Validated pack '${manifest.id}@${manifest.version}' did not expose a directory for problem '${problemId}'.`,
+        );
+      }
+      return {
+        problemId,
+        directory,
+        projections: coordinationProjections?.[problemId] ?? {},
+      };
+    }),
   };
+}
+
+function buildPackProblemDirectoryMap(
+  manifest: PackManifest,
+  problems: readonly { readonly id: string; readonly relDir: string }[],
+): ReadonlyMap<string, string> {
+  const out = new Map<string, string>();
+  for (const problem of problems) {
+    if (!out.has(problem.id)) {
+      out.set(problem.id, buildPackProblemDirectory(manifest, problem.relDir));
+    }
+  }
+  return out;
+}
+
+function buildPackProblemDirectory(manifest: PackManifest, packRelativeDir: string): string {
+  const problemsRoot = toPosixPath(manifest.problemsRoot ?? "problems").replace(/\/+$/g, "");
+  const problemDir = toPosixPath(packRelativeDir);
+  const prefix = `${problemsRoot}/`;
+  if (!problemDir.startsWith(prefix) || problemDir.length === prefix.length) {
+    throw new Error(
+      `Validated pack '${manifest.id}@${manifest.version}' returned problem directory '${packRelativeDir}' outside problemsRoot '${manifest.problemsRoot}'.`,
+    );
+  }
+  return path.posix.join(
+    "pack-problems",
+    manifest.id,
+    manifest.version,
+    problemDir.slice(prefix.length),
+  );
+}
+
+function toPosixPath(value: string): string {
+  return value.replace(/\\/g, "/");
 }
 
 /**
@@ -341,6 +385,39 @@ export class ActivationStore {
   ): readonly PackSnapshotInput[] {
     const lock = readLock(this.storeDir);
     return this.activeSnapshotInputs(lock, this.listForTenant(tenantId), options);
+  }
+
+  /**
+   * [Problem Packs / Issue #2462] The on-disk {@link PackAsset} descriptors for a tenant's active
+   * revisions: the ABSOLUTE problems root of each active pack's immutable snapshot, tagged with the
+   * manifest's `id` + `version`. Lite synth turns each into a `BucketDeployment` that materializes
+   * `pack-problems/<packId>/<version>/…` into the source bucket — the exact key space
+   * {@link buildPackProblemDirectory} emits for the catalog, so the materialized objects line up
+   * with the pack catalog directory keys.
+   *
+   * Reads ONLY the local store. A revision whose snapshot is missing / invalid is skipped, mirroring
+   * {@link loadSnapshotInput} on the catalog path (it validates with the SAME {@link validatePackDirectory}),
+   * so the asset set and the resolved catalog agree on which packs are present.
+   */
+  packAssetsForTenant(tenantId: string): readonly PackAsset[] {
+    const lock = readLock(this.storeDir);
+    const assets: PackAsset[] = [];
+    for (const record of this.listForTenant(tenantId)) {
+      const entry = lock.packs.find(
+        (p) => p.packId === record.packId && p.version === record.version,
+      );
+      if (!entry) continue;
+      const snapshotAbs = path.join(this.storeDir, entry.snapshotPath);
+      const manifest = validatePackDirectory(snapshotAbs).manifest;
+      if (!manifest) continue;
+      const root = manifest.problemsRoot ?? "problems";
+      assets.push({
+        packId: manifest.id,
+        version: manifest.version,
+        problemsRootAbs: path.join(snapshotAbs, root),
+      });
+    }
+    return assets;
   }
 
   private composeFor(

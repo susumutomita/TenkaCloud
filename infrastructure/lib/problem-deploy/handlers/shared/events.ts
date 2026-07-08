@@ -69,6 +69,17 @@ export function defaultCompetitorRoleName(opts: { tenantId: string; namespace?: 
   return `${prefix}${truncated}${suffix}`;
 }
 
+const CORE_PROBLEM_DIR = /^problems\/[a-z0-9-]+\/[a-z0-9-]+$/;
+const PACK_ID_SEGMENT = "[a-z0-9]+(?:-[a-z0-9]+)*(?:\\.[a-z0-9]+(?:-[a-z0-9]+)*)+";
+const PACK_VERSION_SEGMENT = "[a-z0-9]+(?:[.-][a-z0-9]+)*";
+const PACK_PROBLEM_DIR = new RegExp(
+  `^pack-problems/${PACK_ID_SEGMENT}/${PACK_VERSION_SEGMENT}/[a-z0-9-]+/[a-z0-9-]+$`,
+);
+
+function isProblemDir(value: string): boolean {
+  return CORE_PROBLEM_DIR.test(value) || PACK_PROBLEM_DIR.test(value);
+}
+
 /**
  * `DeployCreateRequested` event の `detail` schema。tenant API Lambda が publish 時に
  * validate し、Step Functions State Machine の `CodeBuildStartBuild` task が
@@ -83,7 +94,10 @@ export const DeployCreateRequestedDetailSchema = z.object({
   correlationId: z.string().min(1).optional(),
   tenantId: z.string().min(1),
   problemId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
-  problemDir: z.string().regex(/^problems\/[a-z0-9-]+\/[a-z0-9-]+$/),
+  problemDir: z.string().refine(isProblemDir, {
+    message:
+      "problemDir must be problems/<category>/<problem> or pack-problems/<reverse-dns-pack-id>/<version>/<category>/<problem>",
+  }),
   teamSlug: z.string().min(1).max(40),
   namePrefix: z.string().regex(/^tc-[a-z0-9]+(?:-[a-z0-9]+)+$/),
   region: z.string().regex(/^[a-z]{2}-[a-z]+-\d+$/),

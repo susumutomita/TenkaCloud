@@ -33,6 +33,7 @@ import {
 import type { PackDiagnostic } from "./diagnostics.js";
 import { type PackManifest, parsePackManifest } from "./manifest.js";
 import { validateMetadataSections } from "./metadata-sections.js";
+import type { PackProblem } from "./problem-metadata.js";
 import { isExistingDirectory, readDirNames, resolveInside } from "./safe-path.js";
 
 export type { PackDiagnostic, PackDiagnosticCode } from "./diagnostics.js";
@@ -49,6 +50,8 @@ export interface PackValidationResult {
   readonly manifest?: PackManifest;
   /** Discovered problem ids, sorted. Empty when discovery did not run. */
   readonly problemIds: readonly string[];
+  /** Discovered problems with pack-relative directories, sorted by problem id. */
+  readonly problems: readonly PackProblem[];
 }
 
 /** Internal: a discovered problem with its already-parsed metadata. */
@@ -76,12 +79,12 @@ export function validatePackDirectory(dir: string): PackValidationResult {
       path: "",
       message: `Pack directory '${dir}' does not exist. Pass the directory that contains ${PACK_MANIFEST_FILENAME}.`,
     });
-    return finalize(diagnostics, undefined, []);
+    return finalize(diagnostics, undefined, [], []);
   }
 
   const manifestResult = readManifest(packRoot, diagnostics);
   if (!manifestResult) {
-    return finalize(diagnostics, undefined, []);
+    return finalize(diagnostics, undefined, [], []);
   }
   const manifest = manifestResult;
 
@@ -93,7 +96,7 @@ export function validatePackDirectory(dir: string): PackValidationResult {
       path: "problemsRoot",
       message: `problemsRoot '${manifest.problemsRoot}' must resolve inside the pack root (no '..', absolute paths, or escaping symlinks).`,
     });
-    return finalize(diagnostics, manifest, []);
+    return finalize(diagnostics, manifest, [], []);
   }
   if (!isExistingDirectory(problemsRootAbs)) {
     diagnostics.push({
@@ -102,7 +105,7 @@ export function validatePackDirectory(dir: string): PackValidationResult {
       path: "problemsRoot",
       message: `problemsRoot '${manifest.problemsRoot}' was not found under the pack root.`,
     });
-    return finalize(diagnostics, manifest, []);
+    return finalize(diagnostics, manifest, [], []);
   }
 
   const problems = discoverProblems(packRoot, problemsRootAbs, manifest.problemsRoot, diagnostics);
@@ -113,7 +116,10 @@ export function validatePackDirectory(dir: string): PackValidationResult {
   }
 
   const problemIds = [...new Set(problems.map((p) => p.id))].sort((a, b) => a.localeCompare(b));
-  return finalize(diagnostics, manifest, problemIds);
+  const packProblems = problems
+    .map((problem) => ({ id: problem.id, relDir: problem.relDir }))
+    .sort((a, b) => a.id.localeCompare(b.id) || a.relDir.localeCompare(b.relDir));
+  return finalize(diagnostics, manifest, problemIds, packProblems);
 }
 
 function readManifest(packRoot: string, diagnostics: PackDiagnostic[]): PackManifest | undefined {
@@ -449,6 +455,7 @@ function finalize(
   diagnostics: PackDiagnostic[],
   manifest: PackManifest | undefined,
   problemIds: readonly string[],
+  problems: readonly PackProblem[],
 ): PackValidationResult {
   const sorted = [...diagnostics].sort(compareDiagnostics);
   return {
@@ -456,6 +463,7 @@ function finalize(
     diagnostics: sorted,
     ...(manifest ? { manifest } : {}),
     problemIds,
+    problems,
   };
 }
 
