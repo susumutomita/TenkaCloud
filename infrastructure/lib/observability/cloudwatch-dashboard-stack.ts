@@ -21,8 +21,13 @@ export interface ObservabilityStackProps extends cdk.StackProps {
   };
   readonly dynamoDbTableNames: {
     readonly deployments: string;
-    readonly events: string;
-    readonly teams: string;
+    /**
+     * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) の
+     * ときは Events/Teams table が synth されないため `undefined`。 dashboard は該当 widget を
+     * 省く (= default-safe、既存 dynamodb backend の dashboard body は byte 互換)。
+     */
+    readonly events?: string;
+    readonly teams?: string;
     readonly competitorAccounts: string;
     readonly problemEndpoints: string;
     readonly tenantMappingTable: string;
@@ -329,14 +334,21 @@ export class ObservabilityStack extends cdk.Stack {
   }
 
   private ddbTargets(props: ObservabilityStackProps): NamedMetricTarget[] {
-    return [
+    // Issue #2440: 純 SQL backend では events/teams が undefined (= table 自体が無い) なので
+    // widget を省く (criticalLambdaTargets の participantPortal と同じ filter パターン)。
+    const targets: Array<NamedMetricTarget | undefined> = [
       { label: "Deployments", name: props.dynamoDbTableNames.deployments },
-      { label: "Events", name: props.dynamoDbTableNames.events },
-      { label: "Teams", name: props.dynamoDbTableNames.teams },
+      props.dynamoDbTableNames.events
+        ? { label: "Events", name: props.dynamoDbTableNames.events }
+        : undefined,
+      props.dynamoDbTableNames.teams
+        ? { label: "Teams", name: props.dynamoDbTableNames.teams }
+        : undefined,
       { label: "CompetitorAccounts", name: props.dynamoDbTableNames.competitorAccounts },
       { label: "ProblemEndpoints", name: props.dynamoDbTableNames.problemEndpoints },
       { label: "TenantMappingTable", name: props.dynamoDbTableNames.tenantMappingTable },
     ];
+    return targets.filter((target): target is NamedMetricTarget => target !== undefined);
   }
 
   private criticalLambdaTargets(props: ObservabilityStackProps): NamedMetricTarget[] {

@@ -28,13 +28,17 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
   /**
    * 競技 Event の総数を集計するため `ProblemDeployBackendStack` の Events table を
    * cross-stack 参照する。Read-only。
+   *
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。
    */
-  readonly eventsTable: Table;
+  readonly eventsTable?: Table;
   /**
    * Phase 1.B 以降の drill-down で読む Teams table。Phase 1.A では env として渡すのみ
-   * (Lambda 側で read 権限は付与しない、ADR-011 D6 最小権限)。
+   * (Lambda 側で read 権限は付与しない、ADR-011 D6 最小権限)。{@link eventsTable} と同じ条件で
+   * 純 SQL backend 選択時は `undefined`。
    */
-  readonly teamsTable: Table;
+  readonly teamsTable?: Table;
   /**
    * admin-console (System Admin SPA) の CloudFront origin。CORS allow-list に明示する。
    * 未設定 (= phase 1 初回 deploy 時) は localhost dev origin のみ許可。

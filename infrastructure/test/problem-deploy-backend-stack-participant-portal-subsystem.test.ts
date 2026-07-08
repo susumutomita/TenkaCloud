@@ -29,7 +29,12 @@ vi.mock("../lib/problem-deploy/participant-portal-hosting.js", () => ({
 
 async function synthWithParticipantPortal(
   problemsCoordinationBundles: Readonly<Record<string, string>>,
-  opts: { deployViaLambda?: boolean } = {},
+  opts: {
+    deployViaLambda?: boolean;
+    controlDataBackend?: string;
+    tursoDatabaseUrl?: string;
+    tursoAuthTokenParameterName?: string;
+  } = {},
 ): Promise<Template> {
   const { ProblemDeployBackendStack } = await import(
     "../lib/problem-deploy/problem-deploy-backend-stack.js"
@@ -47,6 +52,12 @@ async function synthWithParticipantPortal(
     participantPortal: { runtimeConfig: "default-dev-mock" },
     // #2291: flag OFF (default) では CfnDeploy / job log group を生成しない。
     ...(opts.deployViaLambda ? { deployViaLambda: true } : {}),
+    // Issue #2440: control-plane data backend (turso/turso-mirror wiring pin).
+    ...(opts.controlDataBackend ? { controlDataBackend: opts.controlDataBackend } : {}),
+    ...(opts.tursoDatabaseUrl ? { tursoDatabaseUrl: opts.tursoDatabaseUrl } : {}),
+    ...(opts.tursoAuthTokenParameterName
+      ? { tursoAuthTokenParameterName: opts.tursoAuthTokenParameterName }
+      : {}),
   });
   return Template.fromStack(stack);
 }
@@ -305,6 +316,82 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
       expect(dispatcherActions.some((a) => a.startsWith("sts:"))).toBe(false);
       expect(dispatcherActions.some((a) => a.startsWith("ssm:"))).toBe(false);
       expect(dispatcherActions.some((a) => a.startsWith("kms:"))).toBe(false);
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should wire CONTROL_DATA_BACKEND + Turso env/IAM into ParticipantPortalLambda when turso is selected, leaving CoordinationDispatcher untouched (#2440)",
+    async () => {
+      const tpl = await synthWithParticipantPortal(
+        {},
+        {
+          controlDataBackend: "turso",
+          tursoDatabaseUrl: "libsql://example.turso.io",
+          tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
+        },
+      );
+      const env = participantPortalEnv(tpl);
+      expect(env.CONTROL_DATA_BACKEND).toBe("turso");
+      expect(env.TURSO_DATABASE_URL).toBe("libsql://example.turso.io");
+      expect(env.TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe("/tenkacloud/development/turso-token");
+      expect(JSON.stringify(tpl.toJSON())).toContain(
+        ":parameter/tenkacloud/development/turso-token",
+      );
+
+      // ADR-030 S2: the dispatcher must not gain sts/ssm/kms just because the portal did.
+      const roles = tpl.findResources("AWS::IAM::Role");
+      const dispatcherRole = Object.entries(roles).find(([name]) =>
+        name.includes("CoordinationDispatcher"),
+      );
+      const dispatcherActions = (
+        (
+          dispatcherRole?.[1] as {
+            Properties?: {
+              Policies?: Array<{ PolicyDocument?: { Statement?: Array<{ Action?: unknown }> } }>;
+            };
+          }
+        )?.Properties?.Policies ?? []
+      ).flatMap((pol) =>
+        (pol.PolicyDocument?.Statement ?? []).flatMap((s) =>
+          ([] as unknown[]).concat(s.Action ?? []),
+        ),
+      );
+      expect(dispatcherActions.some((a) => typeof a === "string" && a.startsWith("ssm:"))).toBe(
+        false,
+      );
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should omit EVENTS_TABLE_NAME env + the EventsRead policy from ParticipantPortalLambda when the pure SQL backend is selected (#2440)",
+    async () => {
+      const tpl = await synthWithParticipantPortal(
+        {},
+        {
+          controlDataBackend: "turso",
+          tursoDatabaseUrl: "libsql://example.turso.io",
+          tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
+        },
+      );
+      expect(participantPortalEnv(tpl).EVENTS_TABLE_NAME).toBeUndefined();
+
+      const roles = tpl.findResources("AWS::IAM::Role");
+      const portalRole = Object.entries(roles).find(([name]) =>
+        name.includes("ParticipantPortalLambda"),
+      );
+      expect(portalRole).toBeDefined();
+      const policyNames = (
+        (portalRole?.[1] as { Properties?: { Policies?: Array<{ PolicyName?: string }> } })
+          ?.Properties?.Policies ?? []
+      ).map((p) => p.PolicyName);
+      expect(policyNames).not.toContain("EventsRead");
+
+      // No AWS::DynamoDB::Table logical id starting with Events/Teams (pure SQL: no table synth).
+      const tableIds = Object.keys(tpl.findResources("AWS::DynamoDB::Table"));
+      expect(tableIds.some((id) => id.startsWith("Events"))).toBe(false);
+      expect(tableIds.some((id) => id.startsWith("Teams"))).toBe(false);
     },
     SYNTH_TIMEOUT_MS,
   );

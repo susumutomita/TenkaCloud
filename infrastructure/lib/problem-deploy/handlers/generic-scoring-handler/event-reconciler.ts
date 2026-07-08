@@ -1,6 +1,7 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { EventRecord, ScheduleFiredKind } from "../../control-data/events-repository.js";
+import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { bulkTeardownEvent } from "../event-handler/bulk-delete.js";
 import { bulkDeployEvent } from "../event-handler/bulk-deploy.js";
 import { type EventSharedResources, resolveEventsRepository } from "../event-handler/shared.js";
@@ -284,10 +285,35 @@ export async function reconcileEventStatuses(
   ctx: ReconcileEventStatusesContext,
   nowIso: string,
 ): Promise<void> {
+  await pruneExpiredControlData(nowIso);
   const repository = await resolveEventsRepository(ctx);
   const events = await repository.listEventsByStatus(RECONCILED_STATUSES);
   const nowMs = Date.parse(nowIso);
   await Promise.all(events.map((event) => reconcileSingleEvent(ctx, event, nowIso, nowMs)));
+}
+
+async function pruneExpiredControlData(nowIso: string): Promise<void> {
+  if (!controlDataRuntime.needsManualPrune()) return;
+  const nowMs = Date.parse(nowIso);
+  if (!Number.isFinite(nowMs)) return;
+  const nowEpochSeconds = Math.floor(nowMs / 1000);
+  await Promise.all([
+    controlDataRuntime.resolveEventsRepository({}),
+    controlDataRuntime.resolveTeamsRepository({}),
+    controlDataRuntime.resolveNotificationsRepository({}),
+  ])
+    .then(([events, teams, notifications]) =>
+      Promise.all([
+        events.pruneExpired(nowEpochSeconds),
+        teams.pruneExpired(nowEpochSeconds),
+        notifications.pruneExpired(nowEpochSeconds),
+      ]),
+    )
+    .catch((err: unknown) => {
+      console.warn("[generic-scoring] manual prune failed", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
 }
 
 async function reconcileSingleEvent(

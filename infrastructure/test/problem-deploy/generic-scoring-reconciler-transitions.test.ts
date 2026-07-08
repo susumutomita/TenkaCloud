@@ -1,9 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { controlDataRuntime } from "../../lib/problem-deploy/control-data/runtime-repositories";
 import {
   type ReconcileEventStatusesContext,
   reconcileEventStatuses,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/event-reconciler";
 import { buildCtx, NOW_ISO } from "./generic-scoring-reconciler.test-helpers";
+
+type EventsRepository = Awaited<ReturnType<typeof controlDataRuntime.resolveEventsRepository>>;
+type TeamsRepository = Awaited<ReturnType<typeof controlDataRuntime.resolveTeamsRepository>>;
+type NotificationsRepository = Awaited<
+  ReturnType<typeof controlDataRuntime.resolveNotificationsRepository>
+>;
 
 /**
  * #557 / #539 / #1038: end-to-end transition scenarios for the reconciler.
@@ -27,7 +34,10 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     ctx = built.ctx;
     ddbSend = built.ddbSend;
   });
-  afterEach(() => ddbSend.mockReset());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    ddbSend.mockReset();
+  });
 
   it("should transition to READY via Update when DEPLOYING and all child deployments are COMPLETE", async () => {
     ddbSend.mockResolvedValueOnce({
@@ -123,6 +133,86 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     const filteredStatuses = new Set(Object.values(scanCmd.input.ExpressionAttributeValues));
     expect(filteredStatuses).toEqual(new Set(["DEPLOYING", "READY", "TEARDOWN", "ENDED", "DRAFT"]));
     expect(filteredStatuses.has("ARCHIVED")).toBe(false);
+  });
+
+  it("should prune all expiring pure-SQL control-data aggregates before status reconciliation", async () => {
+    const nowEpochSeconds = Math.floor(Date.parse(NOW_ISO) / 1000);
+    const pruneEvents = {
+      pruneExpired: vi.fn(async () => 1),
+    } as unknown as EventsRepository;
+    const listEvents = {
+      listEventsByStatus: vi.fn(async () => []),
+    } as unknown as EventsRepository;
+    const pruneTeams = {
+      pruneExpired: vi.fn(async () => 2),
+    } as unknown as TeamsRepository;
+    const pruneNotifications = {
+      pruneExpired: vi.fn(async () => 3),
+    } as unknown as NotificationsRepository;
+    vi.spyOn(controlDataRuntime, "needsManualPrune").mockReturnValue(true);
+    vi.spyOn(controlDataRuntime, "resolveEventsRepository").mockImplementation(async (input) =>
+      input.eventsTableName ? listEvents : pruneEvents,
+    );
+    vi.spyOn(controlDataRuntime, "resolveTeamsRepository").mockResolvedValue(pruneTeams);
+    vi.spyOn(controlDataRuntime, "resolveNotificationsRepository").mockResolvedValue(
+      pruneNotifications,
+    );
+
+    await reconcileEventStatuses(ctx, NOW_ISO);
+
+    expect(pruneEvents.pruneExpired).toHaveBeenCalledWith(nowEpochSeconds);
+    expect(pruneTeams.pruneExpired).toHaveBeenCalledWith(nowEpochSeconds);
+    expect(pruneNotifications.pruneExpired).toHaveBeenCalledWith(nowEpochSeconds);
+    expect(listEvents.listEventsByStatus).toHaveBeenCalledWith([
+      "DEPLOYING",
+      "READY",
+      "TEARDOWN",
+      "ENDED",
+      "DRAFT",
+    ]);
+  });
+
+  it("should not resolve Teams or Notifications prune repositories when manual prune is disabled", async () => {
+    vi.spyOn(controlDataRuntime, "needsManualPrune").mockReturnValue(false);
+    const teamsSpy = vi.spyOn(controlDataRuntime, "resolveTeamsRepository");
+    const notificationsSpy = vi.spyOn(controlDataRuntime, "resolveNotificationsRepository");
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+
+    await reconcileEventStatuses(ctx, NOW_ISO);
+
+    expect(teamsSpy).not.toHaveBeenCalled();
+    expect(notificationsSpy).not.toHaveBeenCalled();
+    expect(ddbSend).toHaveBeenCalledTimes(1);
+  });
+
+  it("should warn and continue the status tick when manual prune fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const pruneEvents = {
+      pruneExpired: vi.fn(async () => {
+        throw new Error("temporary SQL outage");
+      }),
+    } as unknown as EventsRepository;
+    const listEvents = {
+      listEventsByStatus: vi.fn(async () => []),
+    } as unknown as EventsRepository;
+    vi.spyOn(controlDataRuntime, "needsManualPrune").mockReturnValue(true);
+    vi.spyOn(controlDataRuntime, "resolveEventsRepository").mockImplementation(async (input) =>
+      input.eventsTableName ? listEvents : pruneEvents,
+    );
+    vi.spyOn(controlDataRuntime, "resolveTeamsRepository").mockResolvedValue({
+      pruneExpired: vi.fn(async () => 0),
+    } as unknown as TeamsRepository);
+    vi.spyOn(controlDataRuntime, "resolveNotificationsRepository").mockResolvedValue({
+      pruneExpired: vi.fn(async () => 0),
+    } as unknown as NotificationsRepository);
+
+    await reconcileEventStatuses(ctx, NOW_ISO);
+
+    expect(warn).toHaveBeenCalledWith(
+      "[generic-scoring] manual prune failed",
+      expect.objectContaining({ message: "temporary SQL outage" }),
+    );
+    expect(listEvents.listEventsByStatus).toHaveBeenCalled();
   });
 
   it("should NOT query child deployments for a DRAFT event that is not deploy-due (dormant / no deployDeps)", async () => {

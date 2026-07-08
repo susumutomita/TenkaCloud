@@ -526,7 +526,8 @@ export interface TeamsRepository {
 //   DynamoDbEventsRepository / DynamoDbTeamsRepository  — extraction of today's code, default
 //   SqlEventsRepository / SqlTeamsRepository            — one SQL layer, SQLite dialect
 //     driver: @libsql/client (Turso; also self-hosted sqld)  |  D1 binding (Workers only)
-// selection at cold start: CONTROL_DATA_BACKEND=dynamodb|turso (feature flag, ADR-035 mechanism)</code></pre>
+// selection at cold start:
+//   CONTROL_DATA_BACKEND=dynamodb (default) | turso|sql (pure) | turso-mirror|sql-mirror (bridge)</code></pre>
     <p>
       Phase 1 scopes the seam to the <strong>Events and Teams aggregates in Lite mode</strong> — small
       enough for one PR wave, load-bearing enough to prove the model (team lookup is on the participant
@@ -534,13 +535,41 @@ export interface TeamsRepository {
       they are event-runtime data and stay DynamoDB (Table 4).
     </p>
     <p>
-      During Phase 1, <code>CONTROL_DATA_BACKEND=turso|sql</code> selects a
-      <strong>DynamoDB-primary mirrored repository</strong>. Upserts commit to DynamoDB before SQL;
-      deletes and TTL pruning remove SQL before DynamoDB; reads reconcile missing, stale, and orphaned
-      SQL rows before returning the SQL result. This ordering makes the rollback contract structural:
-      switching the flag to <code>dynamodb</code> never loses a Turso-only write. Once production
-      parity and latency are proven, a later cutover can remove the canonical read without changing
-      handler-facing interfaces.
+      <code>CONTROL_DATA_BACKEND</code> resolves to one of five values, in two families
+      (issue #2440, phase A5 of the seam rollout):
+    </p>
+    <ul>
+      <li><strong><code>dynamodb</code> (default):</strong> unchanged — DynamoDB only, no seam
+        overhead, byte-identical CloudFormation output.</li>
+      <li><strong><code>turso</code> / <code>sql</code> — pure SQL:</strong> the repository resolves
+        straight to the SQL implementation; the handler never touches
+        <code>DynamoDBDocumentClient</code> for Events/Teams/Notifications/FeatureFlags, and — load-bearing
+        for the cost goal — <strong>CDK does not synthesize the Events/Teams DynamoDB tables at all</strong>.
+        A mirrored data path alone does not remove DynamoDB's standing provisioned-capacity charge (a table
+        bills for existing, not for being written to); only not creating the table does. Because there is
+        no DynamoDB write path in this mode, <strong>the rollback contract is no longer free</strong>:
+        flipping back to <code>dynamodb</code> loses any write that only ever reached SQL, and — because
+        the DynamoDB tables use <code>RemovalPolicy.RETAIN</code> — re-selecting a non-pure backend on an
+        existing stack does not resurrect the old tables' data either (CloudFormation creates fresh ones).
+        Native DynamoDB TTL has no SQL equivalent, so pure-SQL backends rely on a manual prune driven by the
+        generic-scoring Lambda's per-minute reconcile tick instead (dynamodb/mirror backends skip it, since
+        DynamoDB TTL already does the job).</li>
+      <li><strong><code>turso-mirror</code> / <code>sql-mirror</code> — migration bridge:</strong> this is
+        the mode described as simply &ldquo;<code>turso</code>&rdquo; in §13's Phase 1 row, kept under a
+        new name once the pure values above were introduced. DynamoDB stays the
+        <strong>primary</strong> and CDK still synthesizes the Events/Teams tables. Upserts commit to
+        DynamoDB before SQL; deletes and TTL pruning remove SQL before DynamoDB; reads reconcile missing,
+        stale, and orphaned SQL rows before returning the SQL result. This ordering makes its own rollback
+        contract structural: switching the flag to <code>dynamodb</code> never loses a mirror-only write,
+        because DynamoDB already has everything. Use this value to validate a SQL replica (parity, latency)
+        against production traffic before cutting over to the pure value above — it does not, by itself,
+        remove any standing cost.</li>
+    </ul>
+    <p>
+      Recommended operational sequence for an existing <code>dynamodb</code> stack: deploy
+      <code>turso-mirror</code>/<code>sql-mirror</code> first and verify the SQL replica; redeploy with the
+      pure <code>turso</code>/<code>sql</code> value once satisfied (this is when the DynamoDB standing
+      cost actually disappears); then manually delete the now-orphaned, retained Events/Teams tables.
     </p>
 
     <h3>5.2 Why SQLite as the contract, and why Turso first</h3>
@@ -623,6 +652,27 @@ export interface TeamsRepository {
       <a href="https://docs.turso.tech/help/usage-and-billing">usage definition</a> counts scanned and
       updated rows, so the model is intentionally expressed in rows rather than requests.
     </p>
+    <table>
+      <caption>Table 5 — Turso free-tier quota constants (operational reference). Source of truth is
+        <code>infrastructure/lib/problem-deploy/control-data/quota-model.ts</code>; this table is
+        descriptive, not authoritative — re-verify against Turso's pricing page before relying on it for
+        capacity planning.</caption>
+      <thead>
+        <tr><th>Constant</th><th>Value</th><th>Applies to</th><th>Operational note</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>TURSO_FREE_MONTHLY_ROWS_READ</code></td><td>500,000,000 rows/month</td>
+          <td><code>turso</code>/<code>sql</code> (pure) and <code>turso-mirror</code>/<code>sql-mirror</code>
+            (mirror reads count too)</td>
+          <td>The Phase-1 quota validation above uses 0.1728% of this per event day; multiple concurrent
+            events are additive against the same monthly ceiling.</td></tr>
+        <tr><td><code>TURSO_FREE_MONTHLY_ROWS_WRITTEN</code></td><td>10,000,000 rows/month</td>
+          <td>same as above</td>
+          <td><code>turso-mirror</code>/<code>sql-mirror</code> writes every DynamoDB write a second time
+            to SQL, so a mirror deployment consumes this quota roughly 2× faster than the pure value for
+            the same traffic.</td></tr>
+      </tbody>
+    </table>
 
     <h2>6. One-time AWS Console access: keep the existing AWS-side issuer, drop Cognito</h2>
     <p>
@@ -720,7 +770,7 @@ export interface TeamsRepository {
       here (§9).
     </p>
     <table>
-      <caption>Table 5 — Runtime resource tagging contract. The existing <code>TenkaCloud:*</code> tag set
+      <caption>Table 6 — Runtime resource tagging contract. The existing <code>TenkaCloud:*</code> tag set
         applied to problem stacks by the deploy script is extended to every event-runtime resource via CDK
         <code>Tags.of(stack)</code>.</caption>
       <thead>
@@ -807,7 +857,7 @@ export interface TeamsRepository {
       Lambda without inline waits; ADR-014 makes polling the house style).
     </p>
     <table>
-      <caption>Table 6 — Executor options for the per-problem deploy job (burst target: 750 jobs per
+      <caption>Table 7 — Executor options for the per-problem deploy job (burst target: 750 jobs per
         wave, ~60 concurrent). Rates verified 2026-07-02.</caption>
       <thead>
         <tr><th>Option</th><th>Marginal cost / 1,000 build-min</th><th>Burst fit</th><th>Verdict</th></tr>
@@ -884,7 +934,7 @@ export interface TeamsRepository {
 
     <h2>11. Cost model</h2>
     <table>
-      <caption>Table 7 — Fixed (always-on) monthly cost. Assumes a small-event profile: ≤300 participants,
+      <caption>Table 8 — Fixed (always-on) monthly cost. Assumes a small-event profile: ≤300 participants,
         a few organizers, one or two events per month.</caption>
       <thead>
         <tr><th>Component</th><th>Idle month</th><th>Event month</th><th>First paid trigger</th></tr>
@@ -911,7 +961,7 @@ export interface TeamsRepository {
       </tbody>
     </table>
     <table>
-      <caption>Table 8 — Per-event variable cost (AWS, runtime deployed), at the 750-deploy design
+      <caption>Table 9 — Per-event variable cost (AWS, runtime deployed), at the 750-deploy design
         target.</caption>
       <thead>
         <tr><th>Item</th><th>Today</th><th>Always-On mode</th></tr>
@@ -939,7 +989,7 @@ export interface TeamsRepository {
 
     <h2>12. Threats and mitigations</h2>
     <table>
-      <caption>Table 9 — Threat model deltas introduced by the multi-cloud split.</caption>
+      <caption>Table 10 — Threat model deltas introduced by the multi-cloud split.</caption>
       <thead>
         <tr><th>Threat</th><th>Vector</th><th>Mitigation</th></tr>
       </thead>
@@ -985,7 +1035,7 @@ export interface TeamsRepository {
 
     <h2>13. Migration plan and rollback</h2>
     <table>
-      <caption>Table 10 — Phases. Each phase is one issue, independently shippable, with its own rollback.
+      <caption>Table 11 — Phases. Each phase is one issue, independently shippable, with its own rollback.
         Phases 1 and 2 pay for themselves even if the Cloudflare move never proceeds.</caption>
       <thead>
         <tr><th>Phase</th><th>Scope</th><th>Rollback</th></tr>
@@ -998,8 +1048,15 @@ export interface TeamsRepository {
           <td>Extract Events/Teams repositories in Lite mode; DynamoDB impl (default) + SQLite impl on
             Turso behind <code>CONTROL_DATA_BACKEND</code>; hash <code>teamLoginKey</code> in the SQL
             schema; measure p95 latency from Lambda (ap-northeast) and validate the scoring/leaderboard
-            data flow against quotas. Success gate: parity test suite green on both backends.</td>
-          <td>Flip the flag to <code>dynamodb</code>; Turso holds no data DynamoDB doesn't.</td></tr>
+            data flow against quotas. Success gate: parity test suite green on both backends. Landed as
+            issue #2440 sub-phases A1–A5: A1–A4 built the mirrored bridge (<code>turso-mirror</code>/
+            <code>sql-mirror</code>) and A5 added the pure values (<code>turso</code>/<code>sql</code>)
+            that stop CDK from synthesizing the Events/Teams DynamoDB tables (§5.1) — the step that
+            actually removes the standing DynamoDB cost.</td>
+          <td>While on <code>turso-mirror</code>/<code>sql-mirror</code>: flip the flag to
+            <code>dynamodb</code>; the mirror holds no data DynamoDB doesn't. Once cut over to the pure
+            <code>turso</code>/<code>sql</code> value this is <strong>no longer true</strong> — see the
+            rollback caveat in §5.1.</td></tr>
         <tr><td><strong>2 — CodeBuild retirement (independent cost win)</strong></td>
           <td>Deploy Lambda + SFN poll replaces <code>CodeBuildStartBuild.sync</code>; deploy-logs rewire;
             dashboard/audit-rule/test updates.</td>
@@ -1057,7 +1114,7 @@ export interface TeamsRepository {
       <li>GitHub Actions runtime-deploy duration (CDK deploy of the runtime stack) and whether the
         20-concurrent free plan ever queues lifecycle workflows behind CI.</li>
       <li>AWS account free-plan type (pre/post-July-2025) of the target deployment account — affects
-        Table 8's "$0 within free tier" cells.</li>
+        Table 9's "$0 within free tier" cells.</li>
       <li><strong>Phase 5 (GA):</strong> the full Always-On machinery is implemented and covered by
         tests — control plane on D1 with Workers-Cron reconciliation + prune, the ES256 signed-intent
         command seam, the per-event runtime lifecycle, flag scoring on Workers, Battle (uptime-kind)

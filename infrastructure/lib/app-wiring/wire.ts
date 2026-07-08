@@ -261,8 +261,9 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       },
       dynamoDbTableNames: {
         deployments: problemDeployBackendStack.deploymentsTable.tableName,
-        events: problemDeployBackendStack.eventsTable.tableName,
-        teams: problemDeployBackendStack.teamsTable.tableName,
+        // Issue #2440: 純 SQL backend では Events/Teams table 自体が無い (= undefined)。
+        events: problemDeployBackendStack.eventsTable?.tableName,
+        teams: problemDeployBackendStack.teamsTable?.tableName,
         competitorAccounts: problemDeployBackendStack.competitorAccountsTable.tableName,
         problemEndpoints: problemDeployBackendStack.problemEndpointsTable.tableName,
         tenantMappingTable: bootstrapTemplateStack.tenantMappingTable.tableName,

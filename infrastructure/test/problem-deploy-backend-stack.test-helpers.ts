@@ -126,9 +126,10 @@ export function synthWithOpsMonitoring(): Template {
   return Template.fromStack(stack);
 }
 
-// Issue #2290: controlDataBackend: "turso" を反映させ、監査 Lambda 群の env に
+// Issue #2290 / #2440: controlDataBackend: "turso" を反映させ、監査 Lambda 群の env に
 // CONTROL_DATA_BACKEND="turso" が注入されることを検証するための別 synth (= synthWithAuditLogDisabled
-// と同じ pattern)。
+// と同じ pattern)。[Issue #2440 / ADR-049 §5.1 Phase A5] "turso" は純 SQL backend (Events/Teams
+// テーブルを synth しない) を意味する。
 export function synthWithControlDataBackendTurso(): Template {
   const app = new cdk.App();
   const stack = new ProblemDeployBackendStack(app, "TestStackControlDataTurso", {
@@ -139,6 +140,26 @@ export function synthWithControlDataBackendTurso(): Template {
     problemsScoring: {},
     problemsEndpoints: {},
     controlDataBackend: "turso",
+    tursoDatabaseUrl: "libsql://example.turso.io",
+    tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
+    environmentName: "development",
+  });
+  return Template.fromStack(stack);
+}
+
+// [Issue #2440 / ADR-049 §5.1 Phase A5] controlDataBackend: "turso-mirror" (= 移行ブリッジ、
+// DDB 正本 + SQL replica) を反映させた synth。純 SQL の `synthWithControlDataBackendTurso` と
+// 対で、Events/Teams テーブルが従来どおり存在することを pin する。
+export function synthWithControlDataBackendTursoMirror(): Template {
+  const app = new cdk.App();
+  const stack = new ProblemDeployBackendStack(app, "TestStackControlDataTursoMirror", {
+    eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
+    sourceBucketName: "test-source-bucket",
+    sourceObjectKey: "source.zip",
+    problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+    problemsScoring: {},
+    problemsEndpoints: {},
+    controlDataBackend: "turso-mirror",
     tursoDatabaseUrl: "libsql://example.turso.io",
     tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
     environmentName: "development",

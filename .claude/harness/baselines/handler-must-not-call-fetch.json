@@ -3,7 +3,7 @@
     {
       "ruleId": "handler-must-not-call-fetch",
       "filePath": "infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/shared.ts",
-      "line": 212,
+      "line": 217,
       "match": "fetch("
     }
   ]

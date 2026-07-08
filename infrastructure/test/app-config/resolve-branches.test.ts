@@ -181,7 +181,7 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
     );
   });
 
-  it("should accept turso / sql and normalize case for controlDataBackend (#2290)", () => {
+  it("should accept pure and mirror SQL controlDataBackend values and normalize case (#2290)", () => {
     const remote = {
       CDK_PARAM_TURSO_DATABASE_URL: "libsql://example.turso.io",
       CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/turso-token",
@@ -197,6 +197,14 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
       resolve(baseEnv({ ...remote, CDK_PARAM_CONTROL_DATA_BACKEND: "Turso" })).controlDataBackend,
     ).toBe("turso");
     expect(
+      resolve(baseEnv({ ...remote, CDK_PARAM_CONTROL_DATA_BACKEND: "turso-mirror" }))
+        .controlDataBackend,
+    ).toBe("turso-mirror");
+    expect(
+      resolve(baseEnv({ ...remote, CDK_PARAM_CONTROL_DATA_BACKEND: "SQL-Mirror" }))
+        .controlDataBackend,
+    ).toBe("sql-mirror");
+    expect(
       resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "DynamoDB" })).controlDataBackend,
     ).toBe("dynamodb");
   });
@@ -205,11 +213,14 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
     expect(() => resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "turso" }))).toThrow(
       /CDK_PARAM_TURSO_DATABASE_URL/,
     );
+    expect(() => resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "sql-mirror" }))).toThrow(
+      /CDK_PARAM_TURSO_DATABASE_URL/,
+    );
   });
 
   it("should throw loudly on an unknown controlDataBackend value instead of silently defaulting (#2290)", () => {
     expect(() => resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "postgres" }))).toThrow(
-      /CDK_PARAM_CONTROL_DATA_BACKEND must be one of dynamodb\|turso\|sql/,
+      /CDK_PARAM_CONTROL_DATA_BACKEND must be one of dynamodb\|turso\|sql\|turso-mirror\|sql-mirror/,
     );
   });
 

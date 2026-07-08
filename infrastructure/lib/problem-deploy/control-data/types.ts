@@ -124,11 +124,22 @@ export interface NotificationsRepository {
     eventId: string,
     opts: { readonly limit: number; readonly cursor?: string },
   ): Promise<NotificationsPage>;
+  /**
+   * TTL-equivalent sweep for SQL backends. DynamoDB has native TTL, but exposes
+   * the same defensive manual sweep as Events / Teams so the pure-SQL runtime can
+   * prune all expiring aggregates from one reconciler tick.
+   */
+  pruneExpired(nowEpochSeconds: number): Promise<number>;
 }
 
 /** [#2439] TenantFeatureFlags の domain shape(tenantId / flags / updatedAt / updatedBy)。 */
 export type TenantFeatureFlagsRecord = Omit<TenantFeatureFlagsItem, "PK" | "SK">;
 
+/**
+ * TenantFeatureFlags has no TTL / expiresAt attribute, so it intentionally does
+ * not expose `pruneExpired`; manual prune covers only Events / Teams /
+ * Notifications.
+ */
 export interface FeatureFlagsRepository {
   /** 行が無い(未保存)→ undefined。 caller 側 helper が `{}` に畳む(現行挙動)。 */
   get(tenantId: string): Promise<TenantFeatureFlagsRecord | undefined>;
@@ -417,7 +428,7 @@ export interface TeamsRepository {
 }
 
 /** Backend selector value carried by the `CONTROL_DATA_BACKEND` flag. */
-export type ControlDataBackend = "dynamodb" | "turso" | "sql";
+export type ControlDataBackend = "dynamodb" | "turso" | "sql" | "turso-mirror" | "sql-mirror";
 
 /** Positional bind parameter accepted by {@link SqlExecutor}. */
 export type SqlParam = string | number | bigint | null;

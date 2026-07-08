@@ -7,9 +7,11 @@ import { controlDataRuntime } from "../../../problem-deploy/control-data/runtime
  * AdminInsight Lambda が module load で 1 度だけ作るリソース束。
  *
  * Lambda warm invoke で SDK client / connection pool を使い回すため、handler 外で
- * `buildSharedResources()` を呼ぶ。env が無い場合は **module 評価時に throw** して
- * `Initialization Error` で落とす (= 後段 routes が `undefined` 参照で意味不明な 500 を
- * 返すよりは fail-fast)。
+ * `buildSharedResources()` を呼ぶ。`DEPLOYMENTS_TABLE_NAME` が無い場合は **module 評価時に
+ * throw** して `Initialization Error` で落とす (= 後段 routes が `undefined` 参照で意味不明な
+ * 500 を返すよりは fail-fast)。[Issue #2440 / ADR-049 §5.1 Phase A5] `EVENTS_TABLE_NAME` /
+ * `TEAMS_TABLE_NAME` は純 SQL backend (turso|sql) で table 自体が synth されないため対象外
+ * (空文字 default、下記参照)。
  */
 export interface AdminInsightSharedResources {
   readonly deploymentsTableName: string;
@@ -42,8 +44,13 @@ export function buildSharedResources(): AdminInsightSharedResources {
   const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
   return {
     deploymentsTableName: requireEnv("DEPLOYMENTS_TABLE_NAME"),
-    eventsTableName: requireEnv("EVENTS_TABLE_NAME"),
-    teamsTableName: requireEnv("TEAMS_TABLE_NAME"),
+    // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso|sql) では Events/Teams
+    // table 自体が synth されず env も配線されないため、module-load を fail-fast にすると cold
+    // start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb / mirror backend
+    // の誤設定は runtime resolver (`runtime-repositories.ts`) が fail loud に受ける (= silent
+    // fallback にはならない)。
+    eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",
+    teamsTableName: process.env.TEAMS_TABLE_NAME ?? "",
     ddb,
     // Issue #950: 未配線時は空文字。 caller (audit route) が 503 を返す。
     auditTableName: process.env.ADMIN_AUDIT_LOG_TABLE_NAME ?? "",

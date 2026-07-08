@@ -101,8 +101,22 @@ describe("buildEventSharedResources", () => {
   });
 
   it("should throw when a required env var is missing", () => {
-    delete process.env.EVENTS_TABLE_NAME;
+    delete process.env.DEPLOYMENTS_TABLE_NAME;
     expect(() => buildEventSharedResources()).toThrow();
+  });
+
+  // Issue #2440 (ADR-049 §5.1 Phase A5): pure SQL backend (turso|sql) 選択時は Events/Teams
+  // table 自体が synth されず env も配線されない。cold start (module load) を fail-fast にすると
+  // Lambda が Initialization Error で落ちるため、空文字 default に緩和した (= silent fallback
+  // ではない。dynamodb/mirror backend の誤設定は runtime resolver 側の required チェックが
+  // fail loud に受ける、runtime-repositories.test.ts で pin 済み)。
+  it("should default eventsTableName/teamsTableName to '' when unset (pure SQL backend cold start)", () => {
+    delete process.env.EVENTS_TABLE_NAME;
+    delete process.env.TEAMS_TABLE_NAME;
+    expect(() => buildEventSharedResources()).not.toThrow();
+    const s = buildEventSharedResources();
+    expect(s.eventsTableName).toBe("");
+    expect(s.teamsTableName).toBe("");
   });
 });
 
@@ -124,6 +138,15 @@ describe("buildParticipantSharedResources", () => {
   it("should throw when a required env var is missing", () => {
     delete process.env.DEPLOYMENTS_TABLE_NAME;
     expect(() => buildParticipantSharedResources()).toThrow();
+  });
+
+  // Issue #2440 (ADR-049 §5.1 Phase A5): pure SQL backend (turso|sql) では Events table 自体が
+  // synth されず env も配線されない。cold start を fail-fast にすると Participant Portal Lambda
+  // が落ちるため空文字 default に緩和した。
+  it("should default eventsTableName to '' when unset (pure SQL backend cold start)", () => {
+    delete process.env.EVENTS_TABLE_NAME;
+    expect(() => buildParticipantSharedResources()).not.toThrow();
+    expect(buildParticipantSharedResources().eventsTableName).toBe("");
   });
 });
 

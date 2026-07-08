@@ -259,13 +259,20 @@ export class ProblemDeployBackendStack extends cdk.Stack {
    * 跨ぐため公開)。grantReadData は呼び出し側で行う。
    */
   public readonly deploymentsTable: Table;
-  /** Events table (ADR-011 #590 で AdminConsoleInsightStack が cross-stack read する)。 */
-  public readonly eventsTable: Table;
+  /**
+   * Events table (ADR-011 #590 で AdminConsoleInsightStack が cross-stack read する)。
+   *
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) の
+   * ときは本 table を **synth しない** (= `undefined`) — DynamoDB standing cost をゼロにする
+   * A5 の核心。 `dynamodb` / `*-mirror` では従来どおり必ず存在する。
+   */
+  public readonly eventsTable?: Table;
   /**
    * Teams table (ADR-011 Phase 1.B 以降で drill-down 用に読む)。Phase 1.A では
-   * 参照のみ (read 権限は付与しない)。
+   * 参照のみ (read 権限は付与しない)。{@link eventsTable} と同じ条件で純 SQL backend
+   * 選択時は `undefined`。
    */
-  public readonly teamsTable: Table;
+  public readonly teamsTable?: Table;
   /** CompetitorAccounts table name is surfaced to ObservabilityStack metrics. */
   public readonly competitorAccountsTable: Table;
   /** ProblemEndpoints table name is surfaced to ObservabilityStack metrics. */
@@ -313,15 +320,21 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     const deployments = new DeploymentsTable(this, "Deployments");
     // ADR-004 Phase 1: Event / Team の 2 Table を Deployments と並列に持つ。
     // Phase 2 で Bulk Deploy / Bulk Teardown を State Machine 経由で動かす。
-    const events = new EventsTable(this, "Events");
-    const teams = new TeamsTable(this, "Teams");
+    //
+    // [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) の
+    // ときは Events/Teams を **synth しない** — DynamoDB standing cost (Events+Teams+GSI 3本 =
+    // 5 ユニット常時) をゼロにする。`turso-mirror`/`sql-mirror` は DDB が正本のまま (= Mirrored)
+    // なので通常どおりテーブルを作る。
+    const pureSql = props.controlDataBackend === "turso" || props.controlDataBackend === "sql";
+    const events = pureSql ? undefined : new EventsTable(this, "Events");
+    const teams = pureSql ? undefined : new TeamsTable(this, "Teams");
     // ADR-012 Phase 3.A: Endpoint registry。per (tenant, team, problem, slot) で override
     // URL を保管する。default URL は read-through で deployment.stackOutputs から算出。
     const endpoints = new ProblemEndpointsTable(this, "ProblemEndpoints");
     // ADR-011 #590: AdminConsoleInsightStack に cross-stack で渡すため expose する。
     this.deploymentsTable = deployments.table;
-    this.eventsTable = events.table;
-    this.teamsTable = teams.table;
+    this.eventsTable = events?.table;
+    this.teamsTable = teams?.table;
     // Issue #459 / ADR-002 Phase 2.1: tenant ↔ 競技者 AWS account の許可表。
     // 1 行 = 1 (tenantId, awsAccountId)。verified=false は deploy 不可。
     const competitorAccounts = new CompetitorAccountsTable(this, "CompetitorAccounts");
@@ -432,13 +445,16 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // この配列が event-hot テーブルの唯一の stack 側 source。handler 側の対応 (capacity.ts
     // `resolveEventHotTables`) と運用 doc (docs/operations/dynamodb-event-capacity.md) の表は
     // この並びと揃えること (増減時は 3 箇所同時に更新)。
+    //
+    // Issue #2440: 純 SQL backend では Events/Teams が無いので runbook の allowedValues / IAM
+    // からも除外する (= filter で undefined を落とす。存在しない table を runbook 対象にしない)。
     const eventHotTables = [
       deployments.table,
-      events.table,
-      teams.table,
+      events?.table,
+      teams?.table,
       endpoints.table,
       disruptions.table,
-    ];
+    ].filter((t): t is Table => t !== undefined);
     const capacityRunbook = new EventCapacityRunbook(this, "EventCapacityRunbook", {
       eventHotTables,
     });
@@ -452,8 +468,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // Phase 2a で deployment 行の作成 / status 更新 + EventBridge fan-out publish を担う。
     // Phase 2.2 (Issue #459): CompetitorAccounts table + env を渡して verified-only gate を有効化。
     const eventApi = new EventApiLambda(this, "EventApi", {
-      eventsTable: events.table,
-      teamsTable: teams.table,
+      eventsTable: events?.table,
+      teamsTable: teams?.table,
       deploymentsTable: deployments.table,
       competitorAccountsTable: competitorAccounts.table,
       eventBus,
@@ -547,7 +563,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // `if (problemsScoring.length > 0)` ガードは撤去のまま継続)。
     const genericScoring = new GenericScoringLambda(this, "GenericScoring", {
       deploymentsTable: deployments.table,
-      eventsTable: events.table,
+      eventsTable: events?.table,
       endpointsTable: endpoints.table,
       problemsScoring: props.problemsScoring,
       problemsEndpoints: props.problemsEndpoints,
@@ -564,11 +580,16 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       competitorAccountsTable: competitorAccounts.table,
       // [ADR-047 follow-up] scheduled auto-deploy が bulkDeployEvent で teams を Query (read-only) +
       // catalog で problemId→problemDir を解決する。
-      teamsTable: teams.table,
+      teamsTable: teams?.table,
       problemsCatalog: props.problemsCatalog,
       eventBus,
       // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler の credential path 構築用。
       environmentName: props.environmentName,
+      // Issue #2440: control-plane data backend。event status reconcile + manual prune tick が
+      // repository seam 経由でこの env を読む (= turso/sql/turso-mirror/sql-mirror 選択時のみ注入)。
+      controlDataBackend: props.controlDataBackend,
+      tursoDatabaseUrl: props.tursoDatabaseUrl,
+      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
     });
     this.genericScoringLambda = genericScoring.fn;
 
@@ -594,7 +615,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     if (props.participantPortal) {
       const portalSubsystem = buildParticipantPortalSubsystem(this, {
         deploymentsTable: deployments.table,
-        eventsTable: events.table,
+        eventsTable: events?.table,
         endpointsTable: endpoints.table,
         problemsScoring: props.problemsScoring,
         problemsWriteups: props.problemsWriteups ?? {},
@@ -614,6 +635,11 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         ...(deployPipeline.deployJobLogGroup
           ? { deployJobLogGroup: deployPipeline.deployJobLogGroup }
           : {}),
+        // Issue #2440: control-plane data backend (ParticipantPortalLambda にのみ turso env/IAM
+        // を展開。CoordinationDispatcher は ADR-030 S2 の最小 IAM を維持する)。
+        controlDataBackend: props.controlDataBackend,
+        tursoDatabaseUrl: props.tursoDatabaseUrl,
+        tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
       });
       this.participantPortalLambda = portalSubsystem.participantPortalLambda;
       this.participantPortalUrl = portalSubsystem.participantPortalUrl;
@@ -634,14 +660,20 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       value: deployments.table.tableName,
       description: "Deploy ジョブを記録する DynamoDB テーブル名。",
     });
-    new CfnOutput(this, "EventsTableName", {
-      value: events.table.tableName,
-      description: "ADR-004 Events table 名 (1 競技イベント = 1 行)。",
-    });
-    new CfnOutput(this, "TeamsTableName", {
-      value: teams.table.tableName,
-      description: "ADR-004 Teams table 名 (1 チーム = 1 行、teamLoginKey は team scope)。",
-    });
+    // Issue #2440: 純 SQL backend では table 自体が無いので output も作らない (存在しない
+    // 論理 ID を参照する CfnOutput は synth できない)。
+    if (events) {
+      new CfnOutput(this, "EventsTableName", {
+        value: events.table.tableName,
+        description: "ADR-004 Events table 名 (1 競技イベント = 1 行)。",
+      });
+    }
+    if (teams) {
+      new CfnOutput(this, "TeamsTableName", {
+        value: teams.table.tableName,
+        description: "ADR-004 Teams table 名 (1 チーム = 1 行、teamLoginKey は team scope)。",
+      });
+    }
     new CfnOutput(this, "CompetitorAccountsTableName", {
       value: competitorAccounts.table.tableName,
       description:
