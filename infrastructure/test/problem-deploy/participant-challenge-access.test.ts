@@ -65,8 +65,15 @@ function mockFlags(flags: Record<string, boolean> | "error") {
       return Promise.resolve({ Item: { flags } });
     }
     if (cmd instanceof GetCommand && cmd.input.Key?.SK === "META") {
+      // #2436: getEventGate は repository seam 経由になり getEvent(tenantId, eventId) で
+      // tenant scope を照合する。 event META 行に team と同じ tenantId を持たせて通過させる。
       return Promise.resolve({
-        Item: { status: "READY", startsAt: "2026-01-01T00:00:00.000Z", progressionGate: config },
+        Item: {
+          tenantId: "tenant-test",
+          status: "READY",
+          startsAt: "2026-01-01T00:00:00.000Z",
+          progressionGate: config,
+        },
       });
     }
     throw new Error("unexpected command");

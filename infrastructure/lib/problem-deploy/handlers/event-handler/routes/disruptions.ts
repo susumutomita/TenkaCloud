@@ -183,7 +183,7 @@ export function registerDisruptionRoutes(app: Hono, shared: EventSharedResources
         const tenantId = resolveTenantId(c);
         const ownershipError = await requireEventOwnership({ c, shared, eventId, tenantId });
         if (ownershipError) return ownershipError;
-        const out = await listDisruptionCatalog(shared, eventId);
+        const out = await listDisruptionCatalog(shared, tenantId, eventId);
         return c.json(out, StatusCodes.OK);
       } catch (err) {
         return handleRouteError(c, "[disruptions] catalog failed", { eventId }, err);

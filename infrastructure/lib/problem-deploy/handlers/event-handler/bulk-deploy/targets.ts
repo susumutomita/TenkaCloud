@@ -1,7 +1,6 @@
-import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { warnDeployTrace } from "../../shared/trace-log.js";
-import type { EventSharedResources } from "../shared.js";
-import type { BulkDeployRequest, EventItem, EventProblemTarget, TeamItem } from "../types.js";
+import { type EventSharedResources, resolveEventRepositories } from "../shared.js";
+import type { BulkDeployRequest } from "../types.js";
 import type { LoadedBulkDeployTargets, SelectedBulkDeployTargets } from "./types.js";
 
 /**
@@ -13,27 +12,20 @@ export async function loadBulkDeployTargets(
   tenantId: string,
   eventId: string,
 ): Promise<LoadedBulkDeployTargets | undefined> {
-  const [eventOut, teamsOut] = await Promise.all([
-    shared.ddb.send(
-      new GetCommand({
-        TableName: shared.eventsTableName,
-        Key: { PK: `EVENT#${eventId}`, SK: "META" },
-      }),
-    ),
-    shared.ddb.send(
-      new QueryCommand({
-        TableName: shared.teamsTableName,
-        KeyConditionExpression: "PK = :pk AND begins_with(SK, :tprefix)",
-        ExpressionAttributeValues: { ":pk": `EVENT#${eventId}`, ":tprefix": "TEAM#" },
-      }),
-    ),
+  // Event 行の point read + Teams 一覧はどちらも repository seam 経由 (getEvent が
+  // tenant scope + 404 判定を、 listTeamsByEvent が base-table query を担う)。 独立なので並列発火。
+  const repositories = await resolveEventRepositories(shared);
+  const [event, allTeams] = await Promise.all([
+    repositories.events.getEvent(tenantId, eventId),
+    repositories.teams.listTeamsByEvent(eventId),
   ]);
-  const event = eventOut.Item as Partial<EventItem> | undefined;
-  if (!event || event.tenantId !== tenantId) return undefined;
+  // getEvent は tenant 不一致 / 不在をどちらも undefined に畳む
+  // (= 従来の `!event || event.tenantId !== tenantId` を repository 内へ移設)。
+  if (!event) return undefined;
   return {
     event,
-    allTeams: (teamsOut.Items ?? []) as TeamItem[],
-    allProblems: (Array.isArray(event.problems) ? event.problems : []) as EventProblemTarget[],
+    allTeams,
+    allProblems: Array.isArray(event.problems) ? event.problems : [],
   };
 }
 

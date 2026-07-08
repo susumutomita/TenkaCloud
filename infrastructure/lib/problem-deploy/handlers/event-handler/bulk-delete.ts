@@ -1,5 +1,5 @@
 import type { PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
-import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import {
@@ -8,8 +8,11 @@ import {
   EVENT_SOURCE,
   putEventsBatched,
 } from "../shared/events.js";
-import { type EventSharedResources, queryDeploymentsByEvent } from "./shared.js";
-import type { EventItem } from "./types.js";
+import {
+  type EventSharedResources,
+  queryDeploymentsByEvent,
+  resolveEventsRepository,
+} from "./shared.js";
 
 export interface BulkTeardownResult {
   readonly eventId: string;
@@ -53,14 +56,11 @@ export async function bulkTeardownEvent(
   eventId: string,
   nowMs: number,
 ): Promise<BulkTeardownOutcome> {
-  const eventOut = await shared.ddb.send(
-    new GetCommand({
-      TableName: shared.eventsTableName,
-      Key: { PK: `EVENT#${eventId}`, SK: "META" },
-    }),
-  );
-  const event = eventOut.Item as Partial<EventItem> | undefined;
-  if (!event || event.tenantId !== tenantId) return { kind: "not_found" };
+  // getEvent は tenant 不一致 / event 不在をどちらも undefined に畳む
+  // (= 従来の `!event || event.tenantId !== tenantId` を repository 内へ移設)。 events-only seam
+  // を使う (scheduled teardown 経路は Teams table を配線しないため)。
+  const event = await resolveEventsRepository(shared).getEvent(tenantId, eventId);
+  if (!event) return { kind: "not_found" };
 
   const targets = await queryDeploymentsByEvent(shared, tenantId, eventId);
   if (targets.length === 0) {

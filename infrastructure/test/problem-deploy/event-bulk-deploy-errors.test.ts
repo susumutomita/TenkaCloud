@@ -9,6 +9,9 @@ describe("bulkDeployEvent — error & guard paths", () => {
   it("should return not_found without DDB write / publish when the event is absent", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: undefined });
+    // #2436: loadBulkDeployTargets が Event Get と Teams 一覧を Promise.all で並列発火するため、
+    // event 不在でも seam の listTeamsByEvent は query 結果を読む。 concurrent の Teams 応答を渡す。
+    ddbSend.mockResolvedValueOnce({ Items: [] });
 
     const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
     expect(out).toEqual({ kind: "not_found" });
@@ -19,6 +22,9 @@ describe("bulkDeployEvent — error & guard paths", () => {
   it("should return not_found without writing on tenantId mismatch (cross-tenant leak guard)", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent({ tenantId: "tenant-other" }) });
+    // #2436: getEvent が tenant 不一致を undefined に畳むが、 並列の listTeamsByEvent は query 結果を
+    // 読むため concurrent の Teams 応答を渡す (= cross-tenant でも早期 not_found、 result は破棄)。
+    ddbSend.mockResolvedValueOnce({ Items: [] });
 
     const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
     expect(out).toEqual({ kind: "not_found" });

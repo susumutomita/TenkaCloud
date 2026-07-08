@@ -1,6 +1,10 @@
 import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem } from "../deploy-handler/types.js";
-import { type EventSharedResources, queryDeploymentsByEvent } from "./shared.js";
+import {
+  type EventSharedResources,
+  queryDeploymentsByEvent,
+  resolveEventsRepository,
+} from "./shared.js";
 import type { EventItem } from "./types.js";
 
 /**
@@ -70,16 +74,15 @@ export async function endEvent(
     updatedEvent = updateOut.Attributes as Partial<EventItem> | undefined;
   } catch (err) {
     if (err instanceof Error && err.name === "ConditionalCheckFailedException") {
-      // tenant 不一致 / 行不在 / status != READY のいずれか。区別するため Get で確認。
-      const probe = await shared.ddb.send(
-        new (await import("@aws-sdk/lib-dynamodb")).GetCommand({
-          TableName: shared.eventsTableName,
-          Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        }),
-      );
-      const item = probe.Item as Partial<EventItem> | undefined;
-      if (!item || item.tenantId !== tenantId) return { kind: "not_found" };
-      return { kind: "not_endable", status: typeof item.status === "string" ? item.status : "?" };
+      // tenant 不一致 / 行不在 / status != READY のいずれか。区別するため seam で確認。
+      // getEvent は tenant 不一致 / 不在をどちらも undefined に畳む (= 従来の
+      // `!item || item.tenantId !== tenantId` を repository 内へ移設)。
+      const event = await resolveEventsRepository(shared).getEvent(tenantId, eventId);
+      if (!event) return { kind: "not_found" };
+      return {
+        kind: "not_endable",
+        status: typeof event.status === "string" ? event.status : "?",
+      };
     }
     throw err;
   }

@@ -296,12 +296,15 @@ describe("listDisruptionCatalog (#888)", () => {
 
   it("should surface only disruptions matching event problems[] into the catalog", async () => {
     const { shared, ddbSend } = buildShared();
+    // #2436: repository seam 経由になり (shared, tenantId, eventId) 署名。 getEvent が tenant scope を
+    // 内包するので fixture Item に tenantId を持たせ、 seam の tenant 照合を通過させる。
     ddbSend.mockResolvedValueOnce({
       Item: {
+        tenantId: "tenant-acme",
         problems: [{ problemId: "battle-1" }, { problemId: "unknown-problem" }],
       },
     });
-    const out = await listDisruptionCatalog(shared, "EV1");
+    const out = await listDisruptionCatalog(shared, "tenant-acme", "EV1");
     expect(out.entries).toHaveLength(1);
     expect(out.entries[0]?.problemId).toBe("battle-1");
     expect(out.entries[0]?.disruption.id).toBe("router-throttle");

@@ -1,6 +1,5 @@
-import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { EventSharedResources } from "./shared.js";
-import type { EventItem } from "./types.js";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { type EventSharedResources, resolveEventsRepository } from "./shared.js";
 
 /**
  * `archiveEvent` の結果。
@@ -54,16 +53,11 @@ export async function archiveEvent(
     return { kind: "ok", archivedAt: now };
   } catch (err) {
     if (err instanceof Error && err.name === "ConditionalCheckFailedException") {
-      // 行不在 / tenant 不一致 / 許可外状態のいずれか → probe で区別
-      const probe = await shared.ddb.send(
-        new GetCommand({
-          TableName: shared.eventsTableName,
-          Key: { PK: `EVENT#${eventId}`, SK: "META" },
-        }),
-      );
-      const item = probe.Item as Partial<EventItem> | undefined;
-      if (!item || item.tenantId !== tenantId) return { kind: "not_found" };
-      const status = typeof item.status === "string" ? item.status : "?";
+      // 行不在 / tenant 不一致 / 許可外状態のいずれか → seam で区別。 getEvent は
+      // 行不在 / tenant 不一致をどちらも undefined に畳む (= 従来の手動比較を repository へ移設)。
+      const event = await resolveEventsRepository(shared).getEvent(tenantId, eventId);
+      if (!event) return { kind: "not_found" };
+      const status = typeof event.status === "string" ? event.status : "?";
       return { kind: "not_archivable", status };
     }
     throw err;

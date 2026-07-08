@@ -27,6 +27,7 @@ import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import type { PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
 import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
+import type { TeamRecord } from "../../control-data/teams-repository.js";
 import { putEventsBatched } from "../shared/events.js";
 import { logDeployTrace } from "../shared/trace-log.js";
 import { writeRecurringRegistry } from "./disruption-recurring.js";
@@ -36,8 +37,11 @@ import type {
   DisruptionFireOutcome,
   DisruptionFireResult,
 } from "./disruption-types.js";
-import type { EventSharedResources } from "./shared.js";
-import type { TeamItem } from "./types.js";
+import {
+  type EventSharedResources,
+  resolveEventsRepository,
+  resolveTeamsRepository,
+} from "./shared.js";
 
 const EVENT_SOURCE = "tenkacloud.disruptions";
 const AUDIT_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -51,7 +55,7 @@ const DUPLICATE_RESOLVE_RETRIES = 3;
  */
 function resolveTargetTeams(
   scope: DisruptionFireInput["scope"],
-  allTeams: readonly TeamItem[],
+  allTeams: readonly TeamRecord[],
   input: DisruptionFireInput,
 ): readonly string[] {
   if (scope === "all") {
@@ -194,8 +198,9 @@ export async function fireDisruption(
     ...input.parameters,
   };
 
-  // 3. event 配下 team 一覧 → scope 解決
-  const allTeams = await listTeamsByEvent(shared, input.eventId);
+  // 3. event 配下 team 一覧 → scope 解決。 teams-only seam 経由 (= base-table query、
+  // teamId 昇順の TeamRecord[])。 resolveTargetTeams は teamId しか読まないので挙動は不変。
+  const allTeams = await resolveTeamsRepository(shared).listTeamsByEvent(input.eventId);
   if (allTeams.length === 0) return { kind: "no_targets" };
   const affected = resolveTargetTeams(input.scope, allTeams, input);
   if (affected.length === 0) return { kind: "no_targets" };
@@ -285,20 +290,6 @@ export async function fireDisruption(
   };
 }
 
-async function listTeamsByEvent(
-  shared: EventSharedResources,
-  eventId: string,
-): Promise<readonly TeamItem[]> {
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.teamsTableName,
-      KeyConditionExpression: "PK = :pk AND begins_with(SK, :tprefix)",
-      ExpressionAttributeValues: { ":pk": `EVENT#${eventId}`, ":tprefix": "TEAM#" },
-    }),
-  );
-  return (out.Items ?? []) as TeamItem[];
-}
-
 async function publishEntries(
   shared: EventSharedResources,
   input: DisruptionFireInput,
@@ -359,14 +350,10 @@ export async function isEventOwnedByTenant(
   eventId: string,
   tenantId: string,
 ): Promise<boolean> {
-  const out = await shared.ddb.send(
-    new GetCommand({
-      TableName: shared.eventsTableName,
-      Key: { PK: `EVENT#${eventId}`, SK: "META" },
-    }),
-  );
-  const item = out.Item as { tenantId?: string } | undefined;
-  return !!item && item.tenantId === tenantId;
+  // getEvent は tenant 不一致 / 不在をどちらも undefined に畳むので、 undefined でなければ
+  // 「その tenant が所有する event」 (= 従来の `!!item && item.tenantId === tenantId` と等価)。
+  const event = await resolveEventsRepository(shared).getEvent(tenantId, eventId);
+  return event !== undefined;
 }
 
 /**
@@ -446,9 +433,12 @@ function decodeCursor(cursor: string): Record<string, unknown> | undefined {
  * publicHint=false の disruption も TenantAdmin 向けには返す (= operator view が前提)。
  *
  * PR #889 review: 呼び出し側 (handler/index.ts) で tenantId 一致を確認した上で呼ぶ前提。
+ * その tenantId を getEvent に渡すことで、 seam の tenant scope が呼び出し側の所有確認と
+ * 一致する (= 従来の tenant-agnostic Get + 呼び出し側の事前確認と等価)。
  */
 export async function listDisruptionCatalog(
   shared: EventSharedResources,
+  tenantId: string,
   eventId: string,
 ): Promise<{
   entries: Array<{
@@ -456,13 +446,7 @@ export async function listDisruptionCatalog(
     disruption: (typeof shared.problemsDisruptions)[string][number];
   }>;
 }> {
-  const out = await shared.ddb.send(
-    new GetCommand({
-      TableName: shared.eventsTableName,
-      Key: { PK: `EVENT#${eventId}`, SK: "META" },
-    }),
-  );
-  const event = out.Item as { problems?: Array<{ problemId: string }> } | undefined;
+  const event = await resolveEventsRepository(shared).getEvent(tenantId, eventId);
   const problemIds = Array.isArray(event?.problems)
     ? event.problems.map((p) => p.problemId).filter((p): p is string => typeof p === "string")
     : [];

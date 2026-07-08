@@ -1,8 +1,7 @@
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import type { NotificationCreateRequest, NotificationItem } from "../shared/notification.js";
-import type { EventSharedResources } from "./shared.js";
-import type { EventItem } from "./types.js";
+import { type EventSharedResources, resolveEventsRepository } from "./shared.js";
 
 /**
  * `createNotification` の結果。
@@ -34,14 +33,10 @@ export async function createNotification(
   req: NotificationCreateRequest,
   nowMs: number = Date.now(),
 ): Promise<CreateNotificationOutcome> {
-  const probe = await shared.ddb.send(
-    new GetCommand({
-      TableName: shared.eventsTableName,
-      Key: { PK: `EVENT#${eventId}`, SK: "META" },
-    }),
-  );
-  const event = probe.Item as Partial<EventItem> | undefined;
-  if (!event || event.tenantId !== tenantId) return { kind: "not_found" };
+  // getEvent は tenant 不一致 / event 不在をどちらも undefined に畳む
+  // (= 従来の `!event || event.tenantId !== tenantId` を repository 内へ移設)。
+  const event = await resolveEventsRepository(shared).getEvent(tenantId, eventId);
+  if (!event) return { kind: "not_found" };
 
   const notificationId = ulid();
   const occurredAt = new Date(nowMs).toISOString();

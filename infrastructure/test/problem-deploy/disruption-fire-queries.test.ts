@@ -143,23 +143,33 @@ describe("listDisruptionAudit", () => {
 });
 
 describe("listDisruptionCatalog", () => {
+  // #2436: repository seam 経由になり (shared, tenantId, eventId) 署名。 getEvent が tenant scope を
+  // 内包するので fixture eventItem は tenantId を持つ (= seam の tenant 照合を通過させる)。
   it("should merge per-problem disruptions for the event's problems", async () => {
-    cfg.eventItem = { problems: [{ problemId: "p1" }, { problemId: "p2" }, { problemId: "pX" }] };
-    const res = await listDisruptionCatalog(shared, "e1");
+    cfg.eventItem = {
+      tenantId: "t1",
+      problems: [{ problemId: "p1" }, { problemId: "p2" }, { problemId: "pX" }],
+    };
+    const res = await listDisruptionCatalog(shared, "t1", "e1");
     // p1 + p2 have catalogs; pX has none → skipped.
     expect(res.entries.map((e) => e.problemId)).toEqual(["p1", "p2"]);
   });
 
   it("should filter out non-string problemIds", async () => {
-    cfg.eventItem = { problems: [{ problemId: 42 }, { problemId: "p1" }] };
-    const res = await listDisruptionCatalog(shared, "e1");
+    cfg.eventItem = { tenantId: "t1", problems: [{ problemId: 42 }, { problemId: "p1" }] };
+    const res = await listDisruptionCatalog(shared, "t1", "e1");
     expect(res.entries.map((e) => e.problemId)).toEqual(["p1"]);
   });
 
   it("should return no entries when problems is missing or not an array", async () => {
-    cfg.eventItem = { problems: "not-an-array" };
-    expect((await listDisruptionCatalog(shared, "e1")).entries).toEqual([]);
-    cfg.eventItem = {};
-    expect((await listDisruptionCatalog(shared, "e1")).entries).toEqual([]);
+    cfg.eventItem = { tenantId: "t1", problems: "not-an-array" };
+    expect((await listDisruptionCatalog(shared, "t1", "e1")).entries).toEqual([]);
+    cfg.eventItem = { tenantId: "t1" };
+    expect((await listDisruptionCatalog(shared, "t1", "e1")).entries).toEqual([]);
+  });
+
+  it("should return no entries on a tenant mismatch (getEvent scopes by tenant)", async () => {
+    cfg.eventItem = { tenantId: "other", problems: [{ problemId: "p1" }] };
+    expect((await listDisruptionCatalog(shared, "t1", "e1")).entries).toEqual([]);
   });
 });

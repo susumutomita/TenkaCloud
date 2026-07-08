@@ -1,4 +1,5 @@
 import { ulid } from "ulid";
+import type { TeamRecord } from "../../../control-data/teams-repository.js";
 import { buildStackPrefix, slugify } from "../../deploy-handler/naming.js";
 import type { DeploymentItem } from "../../deploy-handler/types.js";
 import type { VerifiedCompetitorAccount } from "../../shared/competitor-account-lookup.js";
@@ -12,7 +13,7 @@ import {
   EVENT_SOURCE,
 } from "../../shared/events.js";
 import type { EventSharedResources } from "../shared.js";
-import type { EventItem, EventProblemTarget, TeamItem } from "../types.js";
+import type { EventItem, EventProblemTarget } from "../types.js";
 import {
   type BulkDeployPlan,
   DEFAULT_TTL_MS,
@@ -64,7 +65,7 @@ type BulkPlanCandidate =
 
 function buildBulkPlanEntry(
   args: BuildBulkDeployPlanArgs,
-  team: TeamItem,
+  team: TeamRecord,
   problem: EventProblemTarget,
   createdAt: string,
 ): BulkPlanCandidate {
@@ -112,7 +113,7 @@ function shouldSkipExistingPlanTarget(
 
 function createPlanEntry(
   args: BuildBulkDeployPlanArgs,
-  team: TeamItem,
+  team: TeamRecord,
   problem: EventProblemTarget,
   problemDir: string,
   awsAccountId: string,
@@ -157,7 +158,7 @@ function createPlanEntry(
 
 function createDeploymentItem(
   args: BuildBulkDeployPlanArgs,
-  team: TeamItem,
+  team: TeamRecord,
   problem: EventProblemTarget,
   awsAccountId: string,
   verified: VerifiedCompetitorAccount,
@@ -165,12 +166,16 @@ function createDeploymentItem(
   namePrefix: string,
   createdAt: string,
 ): DeploymentItem {
+  // TeamRecord は teamLoginKey を型上 optional にする (SQL backend が plaintext bearer を
+  // index 列に載せないため) が、 DDB backend の list は非キー属性として実値を保持する
+  // (create.ts が必ず非空 key を書き込む)。 従来の非空値を保つための coercion (実データでは常に非空)。
+  const teamLoginKey = team.teamLoginKey ?? "";
   return {
     PK: `DEPLOYMENT#${jobId}`,
     SK: "META",
     GSI1PK: `TENANT#${args.tenantId}`,
     GSI1SK: createdAt,
-    GSI2PK: `TEAMKEY#${team.teamLoginKey}`,
+    GSI2PK: `TEAMKEY#${teamLoginKey}`,
     GSI2SK: createdAt,
     jobId,
     problemId: problem.problemId,
@@ -180,7 +185,7 @@ function createDeploymentItem(
     region: problem.defaultRegion,
     teamName: team.internalSlug,
     namePrefix,
-    teamLoginKey: team.teamLoginKey,
+    teamLoginKey,
     status: "PENDING",
     createdAt,
     updatedAt: createdAt,
@@ -209,7 +214,7 @@ function resolvePlanProvenance(args: BuildBulkDeployPlanArgs, problemId: string)
 
 function createDeployDetail(
   tenantId: string,
-  team: TeamItem,
+  team: TeamRecord,
   problem: EventProblemTarget,
   problemDir: string,
   awsAccountId: string,

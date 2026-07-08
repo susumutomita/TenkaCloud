@@ -81,7 +81,8 @@ export async function getLeaderboard(
   // Issue #1038 P1 #9: scoreboard freeze 判定。 event gate を引いて endsAt を取得し、
   // 終了 N 分前から終了時刻までは順位を隠す (= 競技公平性、 終盤の駆け込み防止)。
   // N は Event 行の `scoreboardFreezeMinutes` で operator が可変設定 (default 30、 0 で無効化)。
-  const gate = await getEventGate(shared, eventId);
+  // tenantId は上のガード (行 60) で非空を保証済み。 seam の tenant scope に渡す。
+  const gate = await getEventGate(shared, tenantId, eventId);
   const endsAt = gate?.endsAt;
   const freezeMinutes = gate?.scoreboardFreezeMinutes ?? DEFAULT_FREEZE_MINUTES;
   const scoreboardFrozen = isWithinFreezeWindow(endsAt, Date.now(), freezeMinutes);
