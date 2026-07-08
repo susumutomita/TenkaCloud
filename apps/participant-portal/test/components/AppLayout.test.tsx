@@ -57,6 +57,7 @@ const {
   buildRefreshLatestUtility,
   buildConsoleUtility,
   buildProfileUtility,
+  buildSideNavItems,
   handleSideNavFollow,
   ShellLayout,
 } = await import("../../src/components/AppLayout");
@@ -314,6 +315,59 @@ describe("utility builders", () => {
   });
 });
 
+// ── side nav items (Issue #2474: hide AWS-only nav in local cloud mode) ──────
+type NavItem = ReturnType<typeof buildSideNavItems>[number];
+
+function collectHrefs(items: readonly NavItem[]): string[] {
+  return items.flatMap((item) => {
+    if ("href" in item && item.href) return [item.href];
+    if ("items" in item && item.items) return collectHrefs(item.items);
+    return [];
+  });
+}
+
+function sectionTexts(items: readonly NavItem[]): string[] {
+  return items
+    .filter((item): item is Extract<NavItem, { type: "section" }> => item.type === "section")
+    .map((item) => item.text);
+}
+
+describe("buildSideNavItems (Issue #2474)", () => {
+  it("should omit the Tools section and the notifications link in local cloud mode", () => {
+    const items = buildSideNavItems(0, (k) => k, "local");
+    expect(sectionTexts(items)).toEqual(["nav.event_section", "nav.quests_section"]);
+    const hrefs = collectHrefs(items);
+    expect(hrefs).toEqual(["/", "/scoreboard", "/score-events", "/problems"]);
+    expect(hrefs).not.toContain("/notifications");
+    expect(hrefs).not.toContain("/tools/sso");
+  });
+
+  it("should keep the Tools section and the notifications link in real cloud mode", () => {
+    const items = buildSideNavItems(0, (k) => k, "real");
+    expect(sectionTexts(items)).toEqual([
+      "nav.event_section",
+      "nav.quests_section",
+      "nav.tools_section",
+    ]);
+    const hrefs = collectHrefs(items);
+    expect(hrefs).toEqual([
+      "/",
+      "/scoreboard",
+      "/score-events",
+      "/notifications",
+      "/problems",
+      "/tools/sso",
+    ]);
+  });
+
+  it("should keep the Tools section and the notifications link in mock (dev-mock) cloud mode", () => {
+    const items = buildSideNavItems(0, (k) => k, "mock");
+    const hrefs = collectHrefs(items);
+    expect(hrefs).toContain("/notifications");
+    expect(hrefs).toContain("/tools/sso");
+  });
+});
+
 // ── ShellLayout component render ─────────────────────────────────────────────
 const tv = (over: Record<string, unknown> = {}) => ({
   view: null,
@@ -399,6 +453,21 @@ describe("ShellLayout", () => {
     mockAuth.mockReturnValue({ session: null, logout: vi.fn() });
     renderShell();
     expect(screen.queryByText("nav.open_console")).not.toBeInTheDocument();
+  });
+
+  it("should not render the AWS Console entry in local cloud mode (Issue #2474)", () => {
+    renderShell({ cloudMode: "local" });
+    expect(screen.queryByText("nav.open_console")).not.toBeInTheDocument();
+  });
+
+  it("should not render the notifications or SSO nav links in local cloud mode (Issue #2474)", () => {
+    renderShell({ cloudMode: "local" });
+    expect(screen.queryByText("nav.notifications")).not.toBeInTheDocument();
+    expect(screen.queryByText("nav.sso_credentials")).not.toBeInTheDocument();
+    expect(screen.queryByText("nav.tools_section")).not.toBeInTheDocument();
+    // Event セクションの残りは維持
+    expect(screen.getByText("nav.home")).toBeInTheDocument();
+    expect(screen.getByText("nav.scoreboard")).toBeInTheDocument();
   });
 
   it("should surface a console open failure as a dismissible error alert", () => {

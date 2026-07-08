@@ -15,7 +15,7 @@ import { useLocation, useNavigate } from "react-router";
 import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { TeamViewProvider, useTeamView } from "../auth/TeamViewProvider";
-import type { AppConfig } from "../config";
+import type { AppConfig, CloudMode } from "../config";
 import { problemProvider } from "../data/providers";
 import { useI18n } from "../i18n";
 import { CountdownTimer } from "./CountdownTimer";
@@ -233,8 +233,20 @@ export function handleSideNavFollow(
 /**
  * SideNavigation items (notifications 未読 badge 用に動的構築)。`unread` を渡して
  * `info` バッジに件数を出す。> 99 は "99+" にクランプして badge 横幅を一定にする。
+ *
+ * Issue #2474: `cloudMode === "local"` (単独 Docker drill) では AWS 専用導線を隠す。
+ * - Tools セクション(SSO 資格情報のみ)は丸ごと省く — federate 先の AWS が無く
+ *   「AWS Console を開く」が Portal API 404 になるだけのノイズ。
+ * - Event セクションの お知らせ(notifications) リンクは省く — local には主催者
+ *   アナウンスが存在しない。unread badge の計算自体も local では不要になる。
+ * `real` / `mock`(dev-mock) は従来どおり両方とも出す。
  */
-function buildSideNavItems(unread: number, t: (key: string) => string): SideNavigationProps.Item[] {
+export function buildSideNavItems(
+  unread: number,
+  t: Translate,
+  cloudMode: CloudMode,
+): SideNavigationProps.Item[] {
+  const isLocal = cloudMode === "local";
   const notificationsLink: SideNavigationProps.Link = {
     type: "link",
     href: "/notifications",
@@ -242,28 +254,33 @@ function buildSideNavItems(unread: number, t: (key: string) => string): SideNavi
     info:
       unread > 0 ? <Badge color="red">{unread > 99 ? "99+" : String(unread)}</Badge> : undefined,
   };
-  return [
+  const eventItems: SideNavigationProps.Item[] = [
+    { type: "link", href: "/", text: t("nav.home") },
+    { type: "link", href: "/scoreboard", text: t("nav.scoreboard") },
+    { type: "link", href: "/score-events", text: t("nav.score_events") },
+  ];
+  if (!isLocal) eventItems.push(notificationsLink);
+
+  const sections: SideNavigationProps.Item[] = [
     {
       type: "section",
       text: t("nav.event_section"),
-      items: [
-        { type: "link", href: "/", text: t("nav.home") },
-        { type: "link", href: "/scoreboard", text: t("nav.scoreboard") },
-        { type: "link", href: "/score-events", text: t("nav.score_events") },
-        notificationsLink,
-      ],
+      items: eventItems,
     },
     {
       type: "section",
       text: t("nav.quests_section"),
       items: [{ type: "link", href: "/problems", text: t("nav.problems") }],
     },
-    {
+  ];
+  if (!isLocal) {
+    sections.push({
       type: "section",
       text: t("nav.tools_section"),
       items: [{ type: "link", href: "/tools/sso", text: t("nav.sso_credentials") }],
-    },
-  ];
+    });
+  }
+  return sections;
 }
 
 export function ShellLayout({ config, children }: { config: AppConfig; children: ReactNode }) {
@@ -293,10 +310,23 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
     // Rank: leaderboard.entries.find(isMyTeam) の rank / 全 entries 数。
     // Phase 1 以前 (eventId 無し) は leaderboardNoEvent → "—"、未取得は "…"。
     const rank = formatTopNavRank(config.mode, teamView.leaderboard, teamView.leaderboardNoEvent);
+    // Issue #2474: local(単独 Docker drill)には federate 先の AWS が無く、Console は
+    // 開けず Portal API 404 になるだけなので utility 自体を出さない。
+    const consoleUtility =
+      config.cloudMode === "local"
+        ? []
+        : [
+            // Issue #1919: AWS Console 導線を右上常設にして「入口が分からない」を解消する。
+            buildConsoleUtility(
+              teamView.view?.problems ?? [],
+              consoleAccess.openConsole,
+              navigate,
+              t,
+            ),
+          ];
     return [
       localeUtility,
-      // Issue #1919: AWS Console 導線を右上常設にして「入口が分からない」を解消する。
-      buildConsoleUtility(teamView.view?.problems ?? [], consoleAccess.openConsole, navigate, t),
+      ...consoleUtility,
       buildRefreshLatestUtility(teamView.refresh, t),
       buildAutoRefreshUtility(teamView.autoRefreshEnabled, teamView.setAutoRefreshEnabled, t),
       // #547: 旧 `menu-dropdown` + 空 items は chevron で展開できそうに見えて何も出ない
@@ -318,14 +348,15 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
     teamView.leaderboard,
     teamView.leaderboardNoEvent,
     config.mode,
+    config.cloudMode,
     locale,
     setLocale,
     t,
   ]);
 
   const sideNavItems = useMemo(
-    () => buildSideNavItems(teamView.unreadNotificationCount, t),
-    [teamView.unreadNotificationCount, t],
+    () => buildSideNavItems(teamView.unreadNotificationCount, t, config.cloudMode),
+    [teamView.unreadNotificationCount, t, config.cloudMode],
   );
 
   return (
