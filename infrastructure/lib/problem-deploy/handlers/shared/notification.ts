@@ -1,10 +1,12 @@
 import { z } from "zod";
 
 /**
- * 運営 → 競技者 Notification の DDB 行 shape (ADR-006)。
+ * 運営 → 競技者 Notification の DynamoDB 行 shape (ADR-006)。
  *
  *   PK = `EVENT#<eventId>` (= 既存 Events partition と同居)
- *   SK = `NOTIFICATION#<occurredAt>#<ulid>` (時系列降順 sort + 衝突防止)
+ *   SK = 時系列降順のソートキー (`<prefix>#<occurredAt>#<ulid>` — 衝突防止に ulid を付す)。
+ *        [#2439] 具体的な prefix / 導出は Notifications aggregate seam の DynamoDB backend
+ *        (`control-data/dynamodb-notifications-repository.ts`) の実装詳細。
  *
  * 既存 META 行を巻き込まないので Event detail / list の Query には影響しない
  * (sparse な追加行)。TTL は親 event の `expiresAt` を継承し、event archive 後も

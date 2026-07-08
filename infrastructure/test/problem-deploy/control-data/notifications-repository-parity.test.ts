@@ -1,12 +1,12 @@
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it, vi } from "vitest";
+import { MirroredNotificationsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import {
   DynamoDbNotificationsRepository,
-  SqlNotificationsRepository,
   type NotificationRecord,
   type NotificationsRepository,
+  SqlNotificationsRepository,
 } from "../../../lib/problem-deploy/control-data/notifications-repository";
-import { MirroredNotificationsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 const TABLE = "Events";

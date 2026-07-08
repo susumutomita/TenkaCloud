@@ -1,7 +1,7 @@
-import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
-import type { NotificationCreateRequest, NotificationItem } from "../shared/notification.js";
-import { type EventSharedResources, resolveEventsRepository } from "./shared.js";
+import type { NotificationRecord } from "../../control-data/notifications-repository.js";
+import type { NotificationCreateRequest } from "../shared/notification.js";
+import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
 
 /**
  * `createNotification` の結果。
@@ -13,17 +13,19 @@ export type CreateNotificationOutcome =
   | { kind: "ok"; notificationId: string; occurredAt: string };
 
 /**
- * Event に紐づく 1 通知行を Events table に PutItem する (ADR-006)。
+ * Event に紐づく 1 通知を Notifications aggregate へ追記する (ADR-006)。
  *
  * `severity` 既定値は `info`。`expiresAt` は親 event 行と同値 (epoch seconds、TTL 同期)。
  * `createdBy` は operator の Cognito sub (tenant API GW + JWT authorizer から渡る `sub` claim)。
  *
  * 失敗セマンティクス:
  *   - tenant 不一致 / event 不在 → `not_found`
- *   - DDB 書き込み失敗 → throw (caller が 500 にする)
+ *   - 書き込み失敗 → throw (caller が 500 にする)
  *
- * 1 partition (= 1 event) に N 通知が並ぶが、SK = NOTIFICATION#<isoTs>#<ulid> なので
- * 同 ms の race も ulid suffix で衝突回避できる (= 採点 event 行と同じ流儀)。
+ * [#2439 / ADR-049 §5.1] 物理行 (DynamoDB backend では `PK=EVENT#<eventId>` /
+ * SK に時系列降順ソートキー) の導出は {@link NotificationsRepository} seam の実装詳細。 caller は
+ * PK/SK を持たない {@link NotificationRecord} を渡すだけ。 default backend では従来と byte 互換の
+ * PutItem が飛ぶ。 同 ms の race も notificationId (ulid) suffix で衝突回避できる。
  */
 export async function createNotification(
   shared: EventSharedResources,
@@ -33,16 +35,16 @@ export async function createNotification(
   req: NotificationCreateRequest,
   nowMs: number = Date.now(),
 ): Promise<CreateNotificationOutcome> {
+  // events / notifications 両 aggregate を 1 回だけ resolve して使い回す。
+  const repositories = await resolveEventRepositories(shared);
   // getEvent は tenant 不一致 / event 不在をどちらも undefined に畳む
   // (= 従来の `!event || event.tenantId !== tenantId` を repository 内へ移設)。
-  const event = await resolveEventsRepository(shared).getEvent(tenantId, eventId);
+  const event = await repositories.events.getEvent(tenantId, eventId);
   if (!event) return { kind: "not_found" };
 
   const notificationId = ulid();
   const occurredAt = new Date(nowMs).toISOString();
-  const item: NotificationItem = {
-    PK: `EVENT#${eventId}`,
-    SK: `NOTIFICATION#${occurredAt}#${notificationId}`,
+  const record: NotificationRecord = {
     notificationId,
     tenantId,
     eventId,
@@ -54,6 +56,6 @@ export async function createNotification(
     expiresAt: Number(event.expiresAt ?? 0),
   };
 
-  await shared.ddb.send(new PutCommand({ TableName: shared.eventsTableName, Item: item }));
+  await repositories.notifications.append(record);
   return { kind: "ok", notificationId, occurredAt };
 }

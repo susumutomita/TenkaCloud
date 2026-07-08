@@ -2,8 +2,8 @@ import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it, vi } from "vitest";
 import {
   DynamoDbFeatureFlagsRepository,
-  SqlFeatureFlagsRepository,
   type FeatureFlagsRepository,
+  SqlFeatureFlagsRepository,
   type TenantFeatureFlagsRecord,
 } from "../../../lib/problem-deploy/control-data/feature-flags-repository";
 import { MirroredFeatureFlagsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";

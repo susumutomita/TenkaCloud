@@ -1,8 +1,8 @@
 import type { Client, InArgs, InStatement, ResultSet } from "@libsql/client/http";
-import { FEATURE_FLAGS_SCHEMA_STATEMENTS } from "./sql-feature-flags-repository.js";
-import { NOTIFICATIONS_SCHEMA_STATEMENTS } from "./sql-notifications-repository.js";
 import { SCORE_SUMMARY_SCHEMA_STATEMENTS } from "./score-summary-schema.js";
 import { EVENTS_SCHEMA_STATEMENTS } from "./sql-events-repository.js";
+import { FEATURE_FLAGS_SCHEMA_STATEMENTS } from "./sql-feature-flags-repository.js";
+import { NOTIFICATIONS_SCHEMA_STATEMENTS } from "./sql-notifications-repository.js";
 import { TEAMS_SCHEMA_STATEMENTS } from "./sql-teams-repository.js";
 import type { SqlExecutor, SqlParam, SqlRow, SqlRunResult, SqlStatement } from "./types.js";
 
