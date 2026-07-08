@@ -60,13 +60,16 @@ export function remapComposeHostPorts(composeText: string, offset: number): Comp
 }
 
 /**
- * Rewrite the host port of loopback URLs (`http://127.0.0.1:<port>/…`) using a
- * base→new port map. Ports not in the map are left as-is (e.g. an internal port
- * a problem might reference). Used to move `challengeEndpoints` / `verifyUrl`
- * onto a problem's assigned host-port block.
+ * Rewrite the host port of every loopback URL embedded in `text`
+ * (`http://127.0.0.1:<port>/…`) using a base→new port map. Ports not in the map
+ * are left as-is (e.g. an internal port a problem might reference). Used both on
+ * a single value (`challengeEndpoints` / `verifyUrl`) and on free prose (a
+ * problem's markdown `instructions`, hints, and i18n overlays, which reference
+ * the challenge surface by absolute loopback URL) — the global regex rewrites
+ * each occurrence, so any number of URLs in one string all move together.
  */
-export function offsetLoopbackUrl(url: string, portMap: ReadonlyMap<number, number>): string {
-  return url.replace(LOOPBACK_URL_PORT_RE, (match, port: string) => {
+export function offsetLoopbackUrl(text: string, portMap: ReadonlyMap<number, number>): string {
+  return text.replace(LOOPBACK_URL_PORT_RE, (match, port: string) => {
     const mapped = portMap.get(Number(port));
     return mapped === undefined ? match : `127.0.0.1:${mapped}`;
   });
@@ -82,4 +85,35 @@ export function offsetLoopbackEndpoints(
     out[label] = offsetLoopbackUrl(url, portMap);
   }
   return out;
+}
+
+/** Deep-map every string in `value`, preserving its structure (arrays / objects). */
+function mapStrings<T>(value: T, mapString: (text: string) => string): T {
+  if (typeof value === "string") return mapString(value) as T;
+  if (Array.isArray(value)) return value.map((item) => mapStrings(item, mapString)) as T;
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) out[key] = mapStrings(item, mapString);
+    return out as T;
+  }
+  return value;
+}
+
+/**
+ * Move a problem onto an assigned host-port block: rewrite every loopback URL it
+ * mentions — `challengeEndpoints`, `verifyUrl`, AND the competitor-facing prose
+ * (`instructions` / `description` / `writeup` / hints / the `i18n.en` overlay) —
+ * using the compose remap's base→new port map.
+ *
+ * The prose must move with the endpoints: a catalog problem hard-codes the base
+ * port (`http://127.0.0.1:18080/…`) in its instructions and hints, so a problem
+ * running on a later block (e.g. the third problem, offset 200 → 18280) would
+ * otherwise tell the player to curl 18080 while its surface is on 18280 (#2392).
+ * A single deep string walk covers every text field at once, so a newly added
+ * prose field cannot silently miss the remap. Only ports present in `portMap`
+ * change; every other string (paths, ids, non-loopback text) is byte-for-byte
+ * identical, so the identity map (offset 0) is a true no-op.
+ */
+export function remapContainerProblem<T>(problem: T, portMap: ReadonlyMap<number, number>): T {
+  return mapStrings(problem, (text) => offsetLoopbackUrl(text, portMap));
 }

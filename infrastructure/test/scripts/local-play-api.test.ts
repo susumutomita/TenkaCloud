@@ -662,6 +662,41 @@ describe("local-play API: multi-problem session (#2392)", () => {
     expect(wrong.status).toBe(404);
   });
 
+  it("should remap the port in instructions to match the running container's block", async () => {
+    // The catalog problem hard-codes its base surface port in its prose (here
+    // 18180, matching `second`'s declared endpoints). Starting it second moves
+    // the surface to the offset-100 block (18280), and the instructions must
+    // follow — the portal must not tell the player the stale port (#2392).
+    const withPortInInstructions: ContainerProblem = {
+      ...second,
+      instructions: "Run `curl http://127.0.0.1:18180/internal/ops/status`.",
+      i18n: { en: { instructions: "Run `curl http://127.0.0.1:18180/internal/ops/status`." } },
+    };
+    const state = createLocalPlayState(
+      { problems: [PROBLEM, withPortInInstructions] },
+      { verify: async () => ({ correct: false }) },
+    );
+    await state.lifecycle.ensureRunning(PROBLEM.problemId);
+    await state.lifecycle.ensureRunning(withPortInInstructions.problemId);
+
+    const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const problem = (
+      view.body as {
+        problems: Array<{
+          instructions: string;
+          stackOutputs: Record<string, string>;
+          i18n?: { en?: { instructions?: string } };
+        }>;
+      }
+    ).problems[1];
+    expect(problem.instructions).toBe("Run `curl http://127.0.0.1:18280/internal/ops/status`.");
+    expect(problem.i18n?.en?.instructions).toBe(
+      "Run `curl http://127.0.0.1:18280/internal/ops/status`.",
+    );
+    // The instructions now agree with the surface URL the portal shows.
+    expect(problem.stackOutputs).toEqual({ Web: "http://127.0.0.1:18280/" });
+  });
+
   it("should count completed problems and the session score in the leaderboard", async () => {
     const state = await twoProblems(async () => ({ correct: true }));
     await handleLocalPlayRequest(

@@ -6,7 +6,7 @@ import type {
   ContainerHintRevealMode,
   ContainerProblem,
 } from "./manifest";
-import { offsetLoopbackEndpoints, offsetLoopbackUrl } from "./port-remap";
+import { remapContainerProblem } from "./port-remap";
 import { ProblemLifecycle, type ProblemStatus } from "./problem-lifecycle";
 import { type VerifyContext, type VerifyResult, verifySubmission } from "./verify-client";
 
@@ -78,9 +78,10 @@ export interface LocalPlayScoreEvent {
 interface ProblemRuntime {
   /**
    * [#2392 Phase 2] The currently-active problem: the catalog original while
-   * stopped, the offset-remapped copy while running. The offset moves only
-   * `challengeEndpoints` / `verifyUrl` onto the assigned port block — scoring
-   * never changes.
+   * stopped, the offset-remapped copy while running. The offset moves every
+   * loopback URL the problem mentions — `challengeEndpoints`, `verifyUrl`, and
+   * the instructions / hints prose that quote them — onto the assigned port
+   * block; points and answers never change.
    */
   problem: ContainerProblem;
   readonly solved: Set<string>;
@@ -143,11 +144,7 @@ function fakeStartContainer(problem: ContainerProblem, offset: number): Promise<
     portMap.set(port, port + offset);
   }
   return Promise.resolve({
-    problem: {
-      ...problem,
-      challengeEndpoints: offsetLoopbackEndpoints(problem.challengeEndpoints, portMap),
-      verifyUrl: offsetLoopbackUrl(problem.verifyUrl, portMap),
-    },
+    problem: remapContainerProblem(problem, portMap),
     unit: {
       problemId: problem.problemId,
       composePath: problem.composePath,
