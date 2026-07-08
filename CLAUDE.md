@@ -51,7 +51,7 @@ Goes through the EventBridge bus (Control Plane provisions it; `bin/infrastructu
 
 ### Data isolation
 
-We don't use a single-table DynamoDB design. Each stack owns its own tables (TenantMappingTable / Deployments / Apps / etc.), and tenant isolation is enforced via the `TenantId` partition key or by stack separation. **Every table is forced to PROVISIONED 1 RCU / 1 WCU by a CDK Aspect (`DynamoDbLowCapacity`)** so the whole platform fits inside the AWS Free Tier 25 RCU/WCU budget.
+We don't use a single-table DynamoDB design. Each stack owns its own tables (TenantMappingTable / Deployments / Apps / etc.), and tenant isolation is enforced via the `TenantId` partition key or by stack separation. **Every table is forced to PROVISIONED 1 RCU / 1 WCU by a CDK Aspect (`DynamoDbLowCapacity`)** to hold DynamoDB capacity at the practical minimum — originally sized to the legacy AWS Free Tier's always-free 25 RCU/WCU allowance. This is a **standing cost**, not free: new-style AWS Free Tier accounts (2025-07 onward) are credit-based and have **no** always-free 25 RCU/WCU DynamoDB tier, so provisioned tables accrue Usage from the first hour (credits may zero out the visible bill, but the charge is real once credits run out). The near-$0 personal path — a Turso (libSQL) control-data backend that removes this standing cost — is being introduced opt-in (tracker #2435); see the README "Running costs" section.
 
 ## Commands
 
