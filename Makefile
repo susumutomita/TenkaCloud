@@ -250,8 +250,14 @@ local:
 	fi; \
 	echo "Playing PROBLEM=$$problem. Run 'make local-list' to see other local-play problems."; \
 	$(MAKE) local-up PROBLEM="$$problem" LOCAL_API_PORT="$(LOCAL_API_PORT)"; \
-	trap '$(MAKE) local-down' EXIT INT TERM; \
-	cd apps/participant-portal && bun run dev --host 127.0.0.1
+	cleanup() { \
+	  trap - EXIT INT TERM; \
+	  $(MAKE) local-down; \
+	}; \
+	trap cleanup EXIT; \
+	trap 'cleanup; exit 130' INT; \
+	trap 'cleanup; exit 143' TERM; \
+	( cd apps/participant-portal && bun run dev --host 127.0.0.1 )
 
 local-up:
 	@PROBLEM="$(PROBLEM)" LOCAL_API_PORT="$(LOCAL_API_PORT)" bun run scripts/tenkacloud-local.ts up "$(PROBLEM)"
