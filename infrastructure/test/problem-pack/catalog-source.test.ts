@@ -22,7 +22,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LocalCatalogSource, SnapshotCatalogSource } from "../../lib/problem-pack/catalog-source";
 import {
   discoverProblemsCatalog,
@@ -103,6 +103,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   fs.rmSync(root, { recursive: true, force: true });
 });
 
@@ -185,20 +186,21 @@ describe("LocalCatalogSource (#2092)", () => {
 describe("SnapshotCatalogSource (#2092)", () => {
   it("should be dormant by default: core-only output equals the local bundle", () => {
     writeRepresentativeCatalog();
-    const local = new LocalCatalogSource().loadBundle(root);
+    const originalLoadBundle = LocalCatalogSource.prototype.loadBundle;
+    let coreBundle: ReturnType<LocalCatalogSource["loadBundle"]> | undefined;
+    vi.spyOn(LocalCatalogSource.prototype, "loadBundle").mockImplementation(function (
+      this: LocalCatalogSource,
+      problemsRoot: string,
+    ) {
+      const bundle = originalLoadBundle.call(this, problemsRoot);
+      coreBundle = bundle;
+      return bundle;
+    });
 
     // No installed snapshots → the snapshot adapter contributes nothing.
     const snapshot = new SnapshotCatalogSource({ snapshots: [] }).loadBundle(root);
 
-    expect(snapshot.catalog).toEqual(local.catalog);
-    expect(snapshot.scoring).toEqual(local.scoring);
-    expect(snapshot.endpoints).toEqual(local.endpoints);
-    expect(snapshot.phases).toEqual(local.phases);
-    expect(snapshot.visibility).toEqual(local.visibility);
-    expect(snapshot.runtimes).toEqual(local.runtimes);
-    expect(snapshot.disruptions).toEqual(local.disruptions);
-    expect(snapshot.coordination).toEqual(local.coordination);
-    expect(snapshot.coordinationBundles).toEqual(local.coordinationBundles);
+    expect(snapshot).toBe(coreBundle);
   });
 
   it("should leave legacy core rows untouched even when a pack adds problems", () => {
@@ -245,6 +247,172 @@ describe("SnapshotCatalogSource (#2092)", () => {
       snapshots: [],
     }).describeProvenance(root);
     expect(provenance["hello-world"]).toEqual({ source: "core" });
+  });
+
+  it("should keep every projection deep-equal to core when a pack declares no projections", () => {
+    writeRepresentativeCatalog();
+    const core = new LocalCatalogSource().loadBundle(root);
+
+    const bundle = new SnapshotCatalogSource({
+      snapshots: [
+        {
+          manifest: {
+            schemaVersion: 1,
+            id: "com.example.plain-pack",
+            version: "1.0.0",
+            core: "^1.0.0",
+            title: "Plain pack",
+            description: "Adds a problem with no projections.",
+            license: "Apache-2.0",
+            problemsRoot: "problems",
+            requiredRuntimes: [{ provider: "aws", engine: "cloudformation" }],
+          },
+          contentDigest: "e".repeat(64),
+          problems: [
+            {
+              problemId: "plain-pack-problem",
+              directory: "pack-problems/com.example.plain-pack/1.0.0/challenges/plain",
+              projections: {},
+            },
+          ],
+        },
+      ],
+    }).loadBundle(root);
+
+    expect((bundle.catalog as Record<string, string>)["plain-pack-problem"]).toBe(
+      "pack-problems/com.example.plain-pack/1.0.0/challenges/plain",
+    );
+    expect(bundle.scoring).toEqual(core.scoring);
+    expect(bundle.endpoints).toEqual(core.endpoints);
+    expect(bundle.phases).toEqual(core.phases);
+    expect(bundle.visibility).toEqual(core.visibility);
+    expect(bundle.runtimes).toEqual(core.runtimes);
+    expect(bundle.disruptions).toEqual(core.disruptions);
+    expect(bundle.writeups).toEqual(core.writeups);
+    expect(bundle.coordination).toEqual(core.coordination);
+    expect(bundle.coordinationBundles).toEqual(core.coordinationBundles);
+  });
+
+  it("should spread a pack's parsed projection fragments into the effective bundle", () => {
+    writeRepresentativeCatalog();
+
+    const bundle = new SnapshotCatalogSource({
+      snapshots: [
+        {
+          manifest: {
+            schemaVersion: 1,
+            id: "com.example.projection-pack",
+            version: "1.0.0",
+            core: "^1.0.0",
+            title: "Projection pack",
+            description: "Exercises every supported pack projection.",
+            license: "Apache-2.0",
+            problemsRoot: "problems",
+            requiredRuntimes: [
+              { provider: "aws", engine: "cloudformation" },
+              { provider: "gcp", engine: "infra-manager" },
+            ],
+          },
+          contentDigest: "f".repeat(64),
+          problems: [
+            {
+              problemId: "pack-projection",
+              directory: "pack-problems/com.example.projection-pack/1.0.0/challenges/projection",
+              projections: {
+                scoring: { kind: "flag", flagOutputKey: "Flag", points: 50 },
+                endpoints: [
+                  {
+                    slot: "web",
+                    default: { from: "cfn-output", key: "WebUrl", appendPath: "/health" },
+                    overridable: false,
+                  },
+                ],
+                phases: [{ name: "attack", afterMinutes: 10 }],
+                runtimes: { provider: "gcp", engine: "infra-manager", entry: "main.yaml" },
+                disruptions: [{ id: "latency", name: "Latency", eventDetailType: "Latency" }],
+                writeups: { ja: "解説", en: "Writeup" },
+                coordination: { plugin: "coordination/router.ts" },
+                coordinationBundle: "export default {};",
+              },
+            },
+          ],
+        },
+      ],
+      platform: {
+        availableRuntimes: [
+          { provider: "aws", engine: "cloudformation" },
+          { provider: "gcp", engine: "infra-manager" },
+        ],
+      },
+    }).loadBundle(root);
+
+    expect((bundle.scoring as Record<string, unknown>)["pack-projection"]).toEqual({
+      kind: "flag",
+      flagOutputKey: "Flag",
+      points: 50,
+    });
+    expect((bundle.endpoints as Record<string, unknown>)["pack-projection"]).toEqual([
+      {
+        slot: "web",
+        default: { from: "cfn-output", key: "WebUrl", appendPath: "/health" },
+        overridable: false,
+      },
+    ]);
+    expect((bundle.phases as Record<string, unknown>)["pack-projection"]).toEqual([
+      { name: "attack", afterMinutes: 10 },
+    ]);
+    expect((bundle.runtimes as Record<string, unknown>)["pack-projection"]).toEqual({
+      provider: "gcp",
+      engine: "infra-manager",
+      entry: "main.yaml",
+    });
+    expect((bundle.disruptions as Record<string, unknown>)["pack-projection"]).toEqual([
+      { id: "latency", name: "Latency", eventDetailType: "Latency" },
+    ]);
+    expect((bundle.writeups as Record<string, unknown>)["pack-projection"]).toEqual({
+      ja: "解説",
+      en: "Writeup",
+    });
+    expect((bundle.coordination as Record<string, unknown>)["pack-projection"]).toEqual({
+      plugin: "coordination/router.ts",
+    });
+    expect((bundle.coordinationBundles as Record<string, string>)["pack-projection"]).toBe(
+      "export default {};",
+    );
+  });
+
+  it("should fail loud when a pack projection declares private visibility", () => {
+    writeRepresentativeCatalog();
+
+    const source = new SnapshotCatalogSource({
+      snapshots: [
+        {
+          manifest: {
+            schemaVersion: 1,
+            id: "com.example.private-pack",
+            version: "1.0.0",
+            core: "^1.0.0",
+            title: "Private pack",
+            description: "Should fail because ADR-008 presigned payloads are unavailable.",
+            license: "Apache-2.0",
+            problemsRoot: "problems",
+            requiredRuntimes: [{ provider: "aws", engine: "cloudformation" }],
+          },
+          contentDigest: "a".repeat(64),
+          problems: [
+            {
+              problemId: "pack-private",
+              directory: "pack-problems/com.example.private-pack/1.0.0/challenges/private",
+              projections: { visibility: "private" },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(() => source.loadBundle(root)).toThrow(
+      /packId='com\.example\.private-pack'.*problemId='pack-private'.*ADR-008 presigned/,
+    );
   });
 
   it("should fail closed when a pack problem id duplicates a core id", () => {

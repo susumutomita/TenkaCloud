@@ -27,11 +27,10 @@
  *     NO remote fetch here — snapshots are loaded upstream (#2090) and passed in
  *     already validated.
  *
- * Known scope limits of the #2462 Lite wiring (documented so the "catalog shows it,
- * deploy 404s" half-state is not mistaken for done):
- *   - A pack contributes its catalog directory + coordination projection only. Pack
- *     SCORING / endpoints / phases are NOT projected yet, so pack problems deploy but
- *     do not score — that is the follow-up #2463.
+ * Known scope limits of the #2462 Lite wiring (documented so half-states are not
+ * mistaken for done):
+ *   - Pack `visibility: private` fails loud at synth because packs do not support
+ *     the ADR-008 presigned payload path yet; pack payloads must not be silently public.
  *   - SaaS pooled activation is unwired (#2459): only Lite `bin/tenkacloud-lite.ts`
  *     reads the activation store today.
  *   - Materialization rides the LAMBDA deploy path only. The CodeBuild deploy path
@@ -171,48 +170,55 @@ export class SnapshotCatalogSource implements CatalogSource {
     }
 
     // Legacy core projections flow through UNCHANGED. Pack problems are additive.
-    // ADR-028/030 activation (#2323): a pack that declares `interTeamCoordination.plugin`
-    // now has its coordination projection reach the effective bundle — mirroring how the
-    // catalog directory map is already merged — so it flows on to the coordination
-    // dispatcher (props → CoordinationDispatcherLambda / CoordinationPluginBundle) instead
-    // of going inert once installed as a snapshot. Two projection keys are carried, matching
-    // the core shapes:
-    //   - `coordination`       → `{ plugin }`  (same value shape as `discoverProblemsCoordination`)
-    //   - `coordinationBundle` → the self-contained `.mjs` text (one entry of `bundleCoordinationPlugins`)
-    // Scoring / endpoints / etc. for a pack remain a later issue's concern, so their legacy
-    // rows still never change here.
-    const packCatalog: Record<string, string> = {};
-    const packCoordination: Record<string, unknown> = {};
-    const packCoordinationBundles: Record<string, string> = {};
+    // #2463: the snapshot input already carries projection fragments produced by the
+    // same core `discoverProblems*` extractors. This adapter only spreads those fragments
+    // onto the effective bundle; it does not parse pack metadata a second time.
+    const pack = emptyPackProjectionBundle();
     for (const entry of result.entries) {
       if (entry.provenance.source !== "pack") continue;
-      packCatalog[entry.problemId] = entry.directory;
-      // `projections` is the untyped ({@link composeEffectiveCatalog} passes it through
-      // verbatim) vehicle carrying the pack's per-problem coordination declaration + its
-      // synth-bundled plugin. Absent keys mean "no coordination" (not an error), so a pack
-      // without coordination contributes nothing and the core rows stay byte-identical.
-      const coordination = (entry.projections as { coordination?: unknown }).coordination;
-      if (coordination !== undefined) packCoordination[entry.problemId] = coordination;
-      const coordinationBundle = (entry.projections as { coordinationBundle?: unknown })
-        .coordinationBundle;
+      pack.catalog[entry.problemId] = entry.directory;
+      const projections = entry.projections as PackProjectionFragment;
+      copyProjectionValue(pack.scoring, entry.problemId, projections.scoring);
+      copyProjectionValue(pack.endpoints, entry.problemId, projections.endpoints);
+      copyProjectionValue(pack.phases, entry.problemId, projections.phases);
+      if (projections.visibility === "private") {
+        throw new Error(
+          `[SnapshotCatalogSource] packId='${entry.provenance.packId}' problemId='${entry.problemId}' declares visibility: private, but packs do not support the ADR-008 presigned payload path; refusing to synth (a private problem must not silently become public).`,
+        );
+      }
+      copyProjectionValue(pack.visibility, entry.problemId, projections.visibility);
+      copyProjectionValue(pack.runtimes, entry.problemId, projections.runtimes);
+      copyProjectionValue(pack.disruptions, entry.problemId, projections.disruptions);
+      copyProjectionValue(pack.writeups, entry.problemId, projections.writeups);
+      copyProjectionValue(pack.coordination, entry.problemId, projections.coordination);
+      const coordinationBundle = projections.coordinationBundle;
       if (typeof coordinationBundle === "string") {
-        packCoordinationBundles[entry.problemId] = coordinationBundle;
+        pack.coordinationBundles[entry.problemId] = coordinationBundle;
       }
     }
     return {
       ...coreBundle,
-      catalog: { ...(coreBundle.catalog as Record<string, string>), ...packCatalog },
-      // Pack coordination is spread ON TOP of the core projections (`{ ...core, ...pack }`),
-      // never replacing them — packs cannot override core (compose already fails closed on a
-      // duplicate id). With no pack coordination both spreads are `{ ...core }` (deep-equal to
-      // today's bundle = NO-OP).
+      // Pack projections are spread after core (`{ ...core, ...pack }`) so the order is
+      // deterministic and additive; compose already fails closed on duplicate ids, so a pack
+      // cannot overwrite a core row.
+      catalog: { ...(coreBundle.catalog as Record<string, string>), ...pack.catalog },
+      scoring: { ...(coreBundle.scoring as Record<string, unknown>), ...pack.scoring },
+      endpoints: { ...(coreBundle.endpoints as Record<string, unknown>), ...pack.endpoints },
+      phases: { ...(coreBundle.phases as Record<string, unknown>), ...pack.phases },
+      visibility: { ...(coreBundle.visibility as Record<string, unknown>), ...pack.visibility },
+      runtimes: { ...(coreBundle.runtimes as Record<string, unknown>), ...pack.runtimes },
+      disruptions: {
+        ...(coreBundle.disruptions as Record<string, unknown>),
+        ...pack.disruptions,
+      },
+      writeups: { ...((coreBundle.writeups ?? {}) as Record<string, unknown>), ...pack.writeups },
       coordination: {
         ...(coreBundle.coordination as Record<string, unknown>),
-        ...packCoordination,
+        ...pack.coordination,
       },
       coordinationBundles: {
         ...(coreBundle.coordinationBundles as Record<string, string>),
-        ...packCoordinationBundles,
+        ...pack.coordinationBundles,
       },
     };
   }
@@ -240,4 +246,39 @@ export class SnapshotCatalogSource implements CatalogSource {
       availableRuntimes: this.options.platform?.availableRuntimes ?? DEFAULT_PLATFORM_RUNTIMES,
     };
   }
+}
+
+interface PackProjectionFragment {
+  readonly scoring?: unknown;
+  readonly endpoints?: unknown;
+  readonly phases?: unknown;
+  readonly visibility?: unknown;
+  readonly runtimes?: unknown;
+  readonly disruptions?: unknown;
+  readonly writeups?: unknown;
+  readonly coordination?: unknown;
+  readonly coordinationBundle?: unknown;
+}
+
+function emptyPackProjectionBundle() {
+  return {
+    catalog: {} as Record<string, string>,
+    scoring: {} as Record<string, unknown>,
+    endpoints: {} as Record<string, unknown>,
+    phases: {} as Record<string, unknown>,
+    visibility: {} as Record<string, unknown>,
+    runtimes: {} as Record<string, unknown>,
+    disruptions: {} as Record<string, unknown>,
+    writeups: {} as Record<string, unknown>,
+    coordination: {} as Record<string, unknown>,
+    coordinationBundles: {} as Record<string, string>,
+  };
+}
+
+function copyProjectionValue(
+  target: Record<string, unknown>,
+  problemId: string,
+  value: unknown,
+): void {
+  if (value !== undefined) target[problemId] = value;
 }
