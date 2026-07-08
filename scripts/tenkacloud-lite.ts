@@ -35,6 +35,7 @@ import {
   resolveLiteEnvironment,
   resolveLiteStackNames,
 } from "../infrastructure/lib/tenkacloud-lite/stack-names";
+import { reportRetainedTables } from "./lib/retained-tables";
 
 // Issue #2193: CDK app (bin/tenkacloud-lite.ts) と同じ規則で env suffix を解決する。
 // Makefile が `infrastructure/environments/<env>/.env` を load してから本 CLI を起動する
@@ -512,12 +513,19 @@ async function cmdDown(args: readonly string[], io: CliIO): Promise<number> {
     "--force",
   ]);
   if (code1 !== 0) return code1;
-  return io.spawnInherit(CDK_BIN, [
+  const code2 = await io.spawnInherit(CDK_BIN, [
     ...CDK_OPTS,
     "destroy",
     LITE_STACK_NAMES.problemDeploy,
     "--force",
   ]);
+  if (code2 !== 0) return code2;
+  // Issue #2444: 全 DDB テーブルは RemovalPolicy.RETAIN なので destroy 後も残り、
+  // PROVISIONED 1/1 の standing cost を出し続ける。 残存テーブルを列挙して警告する
+  // (削除はしない — RETAIN は意図的)。 list 失敗は警告に留め destroy の exit code は
+  // 変えない (reportRetainedTables は throw せず戻り値も持たない)。
+  await reportRetainedTables((args) => io.spawnCapture("aws", args), io.stdout);
+  return 0;
 }
 
 async function cmdStatus(_args: readonly string[], io: CliIO): Promise<number> {

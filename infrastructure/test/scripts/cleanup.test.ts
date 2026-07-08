@@ -307,4 +307,18 @@ describe("cleanup.sh idempotency (#2204)", { timeout: 30_000 }, () => {
     expect(awsCalls).not.toContain("ssm delete-parameter");
     expect(stdout).toContain("no orphan SSM parameters found");
   });
+
+  // Issue #2444: 全 DDB テーブルは RemovalPolicy.RETAIN なので destroy 後も残って課金し続ける。
+  // cleanup.sh は最後に report-retained-tables.ts を bun run して billing 警告を出す (削除はしない)。
+  // report スクリプトは常に exit 0 なので、 呼び出しても cleanup の exit code / 冪等性は変わらない。
+  it("should warn about RETAIN-orphaned DynamoDB tables before finishing", () => {
+    const { status, stderr, bunCalls, stdout } = run({});
+
+    expect(status, stderr).toBe(0);
+    expect(stdout).toContain("checking for RETAIN-orphaned DynamoDB tables");
+    expect(bunCalls).toContain("run");
+    expect(bunCalls).toContain("scripts/report-retained-tables.ts");
+    // The warning check runs before the completion banner (advisory is the final step).
+    expect(stdout).toContain("cleanup complete.");
+  });
 });
