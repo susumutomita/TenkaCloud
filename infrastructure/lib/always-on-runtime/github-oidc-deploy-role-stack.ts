@@ -22,7 +22,7 @@ import { EVENT_RUNTIME_STACK_ID_PREFIX } from "./event-runtime-stack.js";
  *
  * Least privilege (ADR-049 §8):
  *   - CDK deploy/destroy may assume only this account's bootstrap roles.
- *   - The nightly sweeper may inspect CloudFormation stacks, but may delete only
+ *   - The cleanup sweeper (manual script) may inspect CloudFormation stacks, but may delete only
  *     `tenkacloud-event-runtime-*` stacks and invoke only Lambdas whose physical name
  *     belongs to those stacks. `DescribeStacks` requires `Resource: *` when called
  *     without a stack name; no mutating wildcard grant is present.
@@ -132,9 +132,11 @@ export class GithubOidcDeployRoleStack extends cdk.Stack {
       }),
     );
 
-    // The sweeper uses the AWS SDK directly after assuming this role. Its read edge must
+    // The sweeper script uses the AWS SDK directly after assuming this role. Its read edge must
     // be account-wide because DescribeStacks has no resource-scoped list form; both
     // mutation edges remain pinned to the per-event runtime naming contract.
+    // justify: cloudformation:DescribeStacks (read-only list) has no resource-scoped form when
+    // called without a stack name (AWS API design) — mutations below stay ARN-pinned.
     role.addToPolicy(
       new iam.PolicyStatement({
         sid: "InspectCloudFormationStacks",

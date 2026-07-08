@@ -8,13 +8,15 @@ import { type SweepSummary, sweepExpiredRuntimes } from "./sweep.js";
 
 /**
  * ADR-049 Phase 4 (Issue #2293) SLICE 4 — the composition root that wires the real CloudFormation +
- * GitHub edges to the pure sweeper core ({@link ./sweep.ts}) and runs one sweep. Invoked nightly by
- * `.github/workflows/cleanup-always-on-sweeper.yml` (OIDC-assumed AWS creds + `GITHUB_TOKEN`).
+ * GitHub edges to the pure sweeper core ({@link ./sweep.ts}) and runs one sweep. Run manually
+ * (`bun run infrastructure/lib/always-on-runtime/sweeper/index.ts` with AWS credentials +
+ * `GITHUB_REPOSITORY` / `GITHUB_TOKEN`); the nightly GitHub Actions schedule was removed because
+ * its AWS OIDC environment was never provisioned and the workflow only produced failure noise —
+ * re-add a scheduled wrapper at Always-On GA (#2294) once `ALWAYS_ON_DEPLOY_ROLE_ARN` exists.
  *
  * The env-reading and log-formatting are extracted into pure, fully-testable helpers; the thin
  * real-client composition in {@link runSweeper} is what stays uncovered offline (it needs AWS).
- * Logging is stack-name / count only — never account IDs (the workflow also sets
- * `mask-aws-account-id: true` as belt-and-suspenders).
+ * Logging is stack-name / count only — never account IDs.
  */
 
 /** Required env names read by the sweeper (surfaced for tests + docs). */
@@ -34,8 +36,8 @@ function requireEnv(env: NodeJS.ProcessEnv, name: string): string {
   if (value === undefined || value.trim() === "") {
     throw new Error(
       `${name} is required to run the always-on-runtime cleanup sweeper. ` +
-        "It is provisioned by .github/workflows/cleanup-always-on-sweeper.yml " +
-        "(AWS_REGION via configure-aws-credentials; GITHUB_REPOSITORY / GITHUB_TOKEN by Actions).",
+        "Set AWS_REGION (plus AWS credentials) and GITHUB_REPOSITORY / GITHUB_TOKEN " +
+        "in the invoking shell.",
     );
   }
   return value;
@@ -84,7 +86,7 @@ export async function runSweeper(options: RunSweeperOptions): Promise<SweepSumma
 }
 
 // thin entrypoint shim: run only when invoked directly (`bun run .../sweeper/index.ts`), not when
-// imported by vitest. Set a non-zero exit code on failure so the scheduled workflow fails loud.
+// imported by vitest. Set a non-zero exit code on failure so the invoking shell fails loud.
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : "";
 if (invokedPath === fileURLToPath(import.meta.url)) {
   runSweeper({ env: process.env }).catch((err: unknown) => {

@@ -222,7 +222,7 @@ export interface AppConfig {
   readonly budgetAlarmEmails: readonly string[] | undefined;
 
   /**
-   * Issue #2406: scoring/sweeper/cost ops monitoring. Undefined unless
+   * Issue #2406: scoring/cost ops monitoring. Undefined unless
    * CDK_PARAM_OPS_ALERT_EMAIL is set; the ProblemDeployBackendStack creates no monitoring
    * resources when this is undefined.
    */

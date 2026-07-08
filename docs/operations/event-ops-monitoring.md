@@ -1,6 +1,6 @@
 # イベント運用監視 Runbook
 
-Issue #2406。採点停止、Always-On runtime sweeper 失敗、月次コスト逸脱を運営者が気付けるようにするための監視手順。
+Issue #2406。採点停止と月次コスト逸脱を運営者が気付けるようにするための監視手順。
 
 ## 有効化
 
@@ -23,7 +23,6 @@ CDK_PARAM_OPS_BUDGET_THRESHOLD_PERCENT=100
 | --- | --- | --- |
 | 採点エラー | CloudWatch Alarm (`AWS/Lambda Errors`) | GenericScoring Lambda の 5 分合計 Errors が 0 を超えた |
 | 採点停止 | CloudWatch Alarm (`AWS/Lambda Invocations`) | GenericScoring Lambda の 1 分 invocations が 5 分連続で 1 未満 |
-| Always-On sweeper 失敗 | GitHub Actions final step | `cleanup-always-on-sweeper` job が失敗したら GitHub issue を作成 |
 | 月次コスト逸脱 | `AWS::Budgets::Budget` + SNS | 月次実課金が設定額のしきい値を超えた |
 
 CloudWatch alarms は 2 件だけ。SNS email と AWS Budgets の先頭 2 件無料枠に収まるため、idle 時の有料 resource は増やさない。
@@ -44,12 +43,12 @@ CloudWatch alarms は 2 件だけ。SNS email と AWS Budgets の先頭 2 件無
 3. 手動で Lambda test invoke し、Invocations metric が戻るか確認する。
 4. イベント中に復旧できない場合は、採点結果を freeze し、参加者へ運営通知を出す。
 
-### Sweeper 失敗
+### Always-On runtime の残留確認 (イベント後)
 
-1. GitHub issue に貼られた Actions run を開き、失敗 step を確認する。
-2. OIDC assume-role、AWS API、GitHub issue 作成権限のどこで失敗したか切り分ける。
-3. `TenkaCloud:ManagedBy=always-on-runtime` かつ `TenkaCloud:ExpiresAt` が過去の stack が残っていないか確認する。
-4. 残っている場合は runtime archive の有無を確認してから手動 destroy し、workflow を再実行する。
+nightly の sweeper workflow は撤去済み (AWS OIDC environment 未整備のまま失敗通知だけを量産したため。Always-On GA #2294 で環境を用意してから再導入する)。イベント後は手動で残留を確認する。
+
+1. `TenkaCloud:ManagedBy=always-on-runtime` かつ `TenkaCloud:ExpiresAt` が過去の stack が残っていないか確認する。
+2. 残っている場合は runtime archive の有無を確認してから `make destroy-always-on-runtime` (または sweeper script `bun run infrastructure/lib/always-on-runtime/sweeper/index.ts` を AWS credentials + `GITHUB_REPOSITORY` / `GITHUB_TOKEN` 付きで手動実行) で削除する。
 
 ### Budget breach
 
