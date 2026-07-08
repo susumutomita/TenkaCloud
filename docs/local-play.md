@@ -10,13 +10,14 @@ approach.)
 ## How it works
 
 ```
-make local PROBLEM=<id>
-  ├─ docker compose up    the problem container (loopback only)
-  │     • per-deploy random secret (FLAG_SEED, …) injected as env
-  │     • the container serves the challenge surface AND POST /verify
+make local [PROBLEM=<id>]
   ├─ local scoring API    scripts/local-play (reuses the portal contract)
   │     • a flag submission is forwarded to the container's /verify
   │     • the verdict is recorded (score / leaderboard / hints / score events)
+  │     • PROBLEM=<id> pre-starts a container; otherwise containers start on demand
+  ├─ docker compose up    the selected problem container (loopback only)
+  │     • per-deploy random secret (FLAG_SEED, …) injected as env
+  │     • the container serves the challenge surface AND POST /verify
   └─ participant portal    wired via runtime-config (cloudMode:"local")
 make local-down → docker compose down + restore runtime-config
 ```
@@ -34,21 +35,20 @@ Lambda) — one `/verify` contract, two runtimes.
 ## Run it
 
 ```bash
-make local                        # search and choose a problem interactively
-make local PROBLEM=sqli-demo      # start the container + scoring API + portal
+make local                        # start the scoring API + portal; deploy from the portal
+make local PROBLEM=sqli-demo      # also pre-start that problem container
 make local-list                   # print every playable problem id
 make local-status                 # is local play running?
 make local-evaluate FLAG='TC{…}'  # submit a flag from the CLI
 make local-down                   # stop everything and restore runtime-config
 ```
 
-Without `PROBLEM=`, `make local` opens a searchable terminal picker. Type part
-of a problem id or display name, move with `↑` / `↓`, and press Enter. Scripts
-and non-interactive runs must keep using `PROBLEM=<id>`. After selection,
-`make local` starts the problem container and the loopback scoring API, then
-runs the Participant Portal dev server. Log in with any non-empty team key. The
-challenge endpoints are shown on the problem page; attack them, recover the
-flag, and submit it.
+Without `PROBLEM=`, `make local` pre-starts no problem containers. It starts the
+loopback scoring API and the Participant Portal dev server; choose a problem
+from the portal screen and deploy it there. Use `PROBLEM=<id>` only when you
+want the CLI to pre-start one or more containers before the portal opens. Log in
+with any non-empty team key. The challenge endpoints are shown on the problem
+page; attack them, recover the flag, and submit it.
 
 > Requires Docker with the compose plugin. The scoring API port defaults to
 > `3199` and can be overridden with `LOCAL_API_PORT`. If it is already taken,
@@ -128,8 +128,10 @@ One directory = one problem. Problems live **only** in the
 [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge)
 catalog (the `problems/` submodule) — never in this platform repo (ADR-008 /
 ADR-012). The platform is problem-agnostic: `make local PROBLEM=<id>` resolves
-`<id>` under `problems/challenges` or `problems/battles`. The reference
-container problem is `sqli-demo` in the catalog.
+`<id>` under `problems/challenges` or `problems/battles` when you choose to
+pre-start a container from the CLI. Otherwise the portal deploys selected
+problems on demand. The reference container problem is `sqli-demo` in the
+catalog.
 
 ```
 <problem>/
