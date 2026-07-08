@@ -19,6 +19,14 @@ const fullBundle = {
   disruptions: { p1: [{ id: "d1" }] },
   coordination: { p1: { plugin: "x.ts" } },
   coordinationBundles: { p1: "bundled.mjs" },
+  provenance: {
+    p1: {
+      source: "pack",
+      packId: "com.example.cloud-pack",
+      packVersion: "1.0.0",
+      contentDigest: "sha256-abc",
+    },
+  },
 } as const;
 
 function stubConfig(problems: unknown): AppConfig {
@@ -46,10 +54,19 @@ describe("buildProblemDeployBackendBaseProps", () => {
       problemsVisibility: fullBundle.visibility,
       problemRuntimes: fullBundle.runtimes,
       problemsDisruptions: fullBundle.disruptions,
+      problemsProvenance: fullBundle.provenance,
       problemsCoordination: fullBundle.coordination,
       problemsCoordinationBundles: fullBundle.coordinationBundles,
       deployConcurrentBuildLimit: 2,
       deployAllowedCidrs: undefined,
+      useBulkDistributedMap: undefined,
+      deployViaLambda: undefined,
+      packAssets: undefined,
+      auditLogEnabled: undefined,
+      controlDataBackend: undefined,
+      tursoDatabaseUrl: undefined,
+      tursoAuthTokenParameterName: undefined,
+      opsMonitoring: undefined,
       environmentName: "development",
     });
   });
@@ -69,7 +86,7 @@ describe("buildProblemDeployBackendBaseProps", () => {
         catalog: {},
         scoring: {},
         endpoints: {},
-        // phases 以下の 6 キーは LocalCatalogSource なら常に存在するが、
+        // phases 以下の bundle keys は LocalCatalogSource なら常に存在するが、
         // テスト用 stub 注入時は欠けうる (= 旧 Lite 側の `?? {}` 防御の互換)。
       }),
     );
@@ -79,6 +96,7 @@ describe("buildProblemDeployBackendBaseProps", () => {
     expect(props.problemsVisibility).toEqual({});
     expect(props.problemRuntimes).toEqual({});
     expect(props.problemsDisruptions).toEqual({});
+    expect(props.problemsProvenance).toEqual({});
     expect(props.problemsCoordination).toEqual({});
     expect(props.problemsCoordinationBundles).toEqual({});
   });

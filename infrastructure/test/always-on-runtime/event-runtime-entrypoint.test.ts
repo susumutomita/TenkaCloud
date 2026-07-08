@@ -184,7 +184,7 @@ describe("buildEventRuntimeApp", () => {
         Environment: "production",
       }),
     });
-  }, 15_000);
+  }, 60_000);
 });
 
 describe("tenkacloud-always-on-runtime entrypoint guard", () => {

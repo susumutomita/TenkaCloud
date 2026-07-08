@@ -26,6 +26,19 @@ export interface EventItem {
   updatedAt: string;
   expiresAt: number;
   /**
+   * [Problem Packs / Issue #2464] Deterministic id of the active catalog snapshot
+   * pinned when this event was created. Present only when the active catalog has
+   * at least one pack-sourced problem; core-only events omit it to keep the
+   * legacy row shape byte-identical.
+   */
+  catalogSnapshotId?: string;
+  /**
+   * [Problem Packs / Issue #2464] Pack-sourced provenance pinned at event creation,
+   * keyed by problem id. Core problems are intentionally absent (`undefined` =
+   * core); this field is omitted entirely when the active catalog has no pack rows.
+   */
+  packProvenance?: Record<string, { packId: string; packVersion: string; contentDigest: string }>;
+  /**
    * 競技開始時刻 (ISO8601, UTC)。これより前は HealthCheckLambda が probe / 採点を skip。
    * 未設定なら採点は始まらない (= deploy 直後に勝手にスコアが加算されるのを防ぐ)。
    * 値は分精度想定 (operator UI が DatePicker + TimeInput で入力)。

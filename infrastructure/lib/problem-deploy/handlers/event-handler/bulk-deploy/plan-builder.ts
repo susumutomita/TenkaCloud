@@ -203,13 +203,17 @@ function createDeploymentItem(
 
 /**
  * [#2096] Resolve a problem's display/audit-safe provenance from the event-pinned
- * snapshot via the injected resolver. Returns undefined for a core problem, when
- * the problem is not pinned, or when no resolver is wired.
+ * snapshot. The injected resolver remains for CLI/tests; otherwise the runtime
+ * path reads the pin embedded on the Event record. Returns undefined for a core
+ * problem, when the problem is not pinned, or when the event predates #2464.
  */
 function resolvePlanProvenance(args: BuildBulkDeployPlanArgs, problemId: string) {
   const resolved = args.shared.resolveDeploymentProvenance?.(args.eventId, problemId);
-  if (!resolved) return undefined;
-  return toDeploymentProvenance(resolved.provenance, resolved.catalogSnapshotId);
+  if (resolved) return toDeploymentProvenance(resolved.provenance, resolved.catalogSnapshotId);
+  const catalogSnapshotId = args.event.catalogSnapshotId;
+  const packProvenance = args.event.packProvenance?.[problemId];
+  if (!catalogSnapshotId || !packProvenance) return undefined;
+  return toDeploymentProvenance({ source: "pack", ...packProvenance }, catalogSnapshotId);
 }
 
 function createDeployDetail(

@@ -150,6 +150,14 @@ describe("resolveAppConfig pack catalog source (#2462)", () => {
       ja: "パック問題の解説",
       en: "Pack problem writeup",
     });
+    expect(cfg.problems.provenance).toEqual({
+      "pack-only": {
+        source: "pack",
+        packId: "com.example.cloud-pack",
+        packVersion: "1.0.0",
+        contentDigest: expect.any(String),
+      },
+    });
   });
 
   it("should keep the core-only catalog byte-identical when no store source is supplied", () => {
@@ -170,5 +178,6 @@ describe("resolveAppConfig pack catalog source (#2462)", () => {
 
     expect(first.problems).toEqual(second.problems);
     expect(first.problems.catalog).toEqual({ "core-only": "problems/challenges/core-only" });
+    expect(first.problems.provenance).toEqual({});
   });
 });

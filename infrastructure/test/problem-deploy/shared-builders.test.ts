@@ -27,6 +27,7 @@ const OPTIONAL_KEYS = [
   "PROBLEM_ENDPOINTS",
   "BATTLE_PROBLEMS_CATALOG",
   "BATTLE_PROBLEMS_DISRUPTIONS",
+  "BATTLE_PROBLEMS_PROVENANCE",
   "BULK_DEPLOY_PAYLOAD_BUCKET",
   "BULK_DEPLOY_VIA_DISTRIBUTED_MAP",
 ];
@@ -48,6 +49,7 @@ describe("buildEventSharedResources", () => {
     expect(s.bulkDeployPayloadBucket).toBe(""); // BULK_DEPLOY_PAYLOAD_BUCKET ?? ""
     expect(s.useBulkDistributedMap).toBe(false); // flag absent → false
     expect(s.problemsDisruptions).toEqual({}); // BATTLE_PROBLEMS_DISRUPTIONS absent → {}
+    expect(s.problemsProvenance).toEqual({}); // BATTLE_PROBLEMS_PROVENANCE absent → {}
     expect(s.ddb).toBeDefined();
     expect(s.events).toBeDefined();
   });
@@ -56,15 +58,41 @@ describe("buildEventSharedResources", () => {
     process.env.BULK_DEPLOY_PAYLOAD_BUCKET = "payloads";
     process.env.BULK_DEPLOY_VIA_DISTRIBUTED_MAP = "TRUE"; // case-insensitive
     process.env.BATTLE_PROBLEMS_DISRUPTIONS = JSON.stringify({ p1: [{ id: "d1" }] });
+    process.env.BATTLE_PROBLEMS_PROVENANCE = JSON.stringify({
+      p1: {
+        source: "pack",
+        packId: "com.example.cloud-pack",
+        packVersion: "1.0.0",
+        contentDigest: "sha256-abc",
+      },
+    });
     const s = buildEventSharedResources();
     expect(s.bulkDeployPayloadBucket).toBe("payloads");
     expect(s.useBulkDistributedMap).toBe(true);
     expect(s.problemsDisruptions).toMatchObject({ p1: [{ id: "d1" }] });
+    expect(s.problemsProvenance).toEqual({
+      p1: {
+        source: "pack",
+        packId: "com.example.cloud-pack",
+        packVersion: "1.0.0",
+        contentDigest: "sha256-abc",
+      },
+    });
   });
 
   it("should fall back to {} when BATTLE_PROBLEMS_DISRUPTIONS is invalid JSON", () => {
     process.env.BATTLE_PROBLEMS_DISRUPTIONS = "{not json";
     expect(buildEventSharedResources().problemsDisruptions).toEqual({});
+  });
+
+  it("should fall back to {} and warn when BATTLE_PROBLEMS_PROVENANCE has an invalid shape", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    process.env.BATTLE_PROBLEMS_PROVENANCE = JSON.stringify({
+      p1: { source: "core" },
+    });
+    expect(buildEventSharedResources().problemsProvenance).toEqual({});
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("BATTLE_PROBLEMS_PROVENANCE"));
+    warn.mockRestore();
   });
 
   it("should treat a non-true distributed-map flag as false", () => {
