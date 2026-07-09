@@ -29,6 +29,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_API_PORT = 3199;
 const PARTICIPANT_PORTAL_DEV_PORT = 5175;
 const LOCAL_API_PROXY_PATH = "/__tenkacloud-local-api";
+const LOCAL_CHALLENGE_PROXY_PATH = "/__tenkacloud-local-port";
 const LOOPBACK_BROWSER_URL_RE =
   /\bhttp:\/\/(?:127\.0\.0\.1|localhost):(\d+)(?=\/|[?#]|[\s`"'<>)]|$)/g;
 /** [#2392 Phase 2] How often the serve process sweeps for idle containers. */
@@ -123,17 +124,39 @@ export function composeArgsForCli(
   return cli.command === "docker-compose" ? args.slice(1) : args;
 }
 
+type CommandSucceeds = (command: string, args: readonly string[]) => boolean;
+
 function commandSucceeds(command: string, args: readonly string[]): boolean {
   return spawnSync(command, [...args], { stdio: "ignore" }).status === 0;
 }
 
-function resolveComposeCli(): ComposeCli {
-  if (
-    commandSucceeds(DOCKER_COMPOSE_PLUGIN.command, [...DOCKER_COMPOSE_PLUGIN.prefix, "version"])
-  ) {
+function composeCliAvailable(cli: ComposeCli, succeeds: CommandSucceeds): boolean {
+  return succeeds(cli.command, [...cli.prefix, "version"]);
+}
+
+function requestedComposeCli(value: string | undefined): ComposeCli | undefined {
+  const normalized = value?.trim().replace(/\s+/g, " ");
+  if (!normalized) return undefined;
+  if (normalized === "docker compose") return DOCKER_COMPOSE_PLUGIN;
+  if (normalized === "docker-compose") return DOCKER_COMPOSE_STANDALONE;
+  throw new Error("TENKACLOUD_COMPOSE_CLI must be either `docker compose` or `docker-compose`.");
+}
+
+export function resolveComposeCli(
+  env: Pick<NodeJS.ProcessEnv, "TENKACLOUD_COMPOSE_CLI"> = process.env,
+  succeeds: CommandSucceeds = commandSucceeds,
+): ComposeCli {
+  const requested = requestedComposeCli(env.TENKACLOUD_COMPOSE_CLI);
+  if (requested) {
+    if (composeCliAvailable(requested, succeeds)) return requested;
+    throw new Error(
+      `${requested.label} was requested by TENKACLOUD_COMPOSE_CLI, but it is not available.`,
+    );
+  }
+  if (composeCliAvailable(DOCKER_COMPOSE_PLUGIN, succeeds)) {
     return DOCKER_COMPOSE_PLUGIN;
   }
-  if (commandSucceeds(DOCKER_COMPOSE_STANDALONE.command, ["version"])) {
+  if (composeCliAvailable(DOCKER_COMPOSE_STANDALONE, succeeds)) {
     return DOCKER_COMPOSE_STANDALONE;
   }
   throw new Error(
@@ -175,7 +198,9 @@ function browserApiBaseUrl(apiBaseUrl: string, env: CodespacesEnv = process.env)
 
 export function browserDisplayText(text: string, env: CodespacesEnv = process.env): string {
   return text.replace(LOOPBACK_BROWSER_URL_RE, (match, port: string) => {
-    return codespacesForwardedUrl(Number(port), env) ?? match;
+    const portalUrl = codespacesForwardedUrl(PARTICIPANT_PORTAL_DEV_PORT, env);
+    if (!portalUrl) return match;
+    return `${portalUrl}${LOCAL_CHALLENGE_PROXY_PATH}/${port}`;
   });
 }
 

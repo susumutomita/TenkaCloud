@@ -251,6 +251,7 @@ check-synth:
 #   make local-portal              既存の採点 API に Participant Portal を接続
 #   make local-down                コンテナ停止 + runtime-config 復元
 #   make local-evaluate FLAG=...   採点 API 経由でフラグを提出 (= 問題コンテナ /verify に委譲)
+#   TENKACLOUD_COMPOSE_CLI='docker-compose'  standalone compose を明示
 # Issue #2119: `make local-onboard YES=1` pre-approves software installs (also for automation).
 ONBOARD_FLAGS := $(if $(YES),--yes,)
 

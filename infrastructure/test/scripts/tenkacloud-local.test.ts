@@ -6,6 +6,7 @@ import {
   composeArgsForCli,
   generateSecretEnv,
   problemSearchRoots,
+  resolveComposeCli,
 } from "../../../scripts/tenkacloud-local";
 
 describe("problemSearchRoots", () => {
@@ -115,6 +116,36 @@ describe("composeArgsForCli", () => {
   });
 });
 
+describe("resolveComposeCli", () => {
+  it("should prefer docker compose when both compose frontends are available", () => {
+    const cli = resolveComposeCli({}, (command, args) => {
+      return (
+        (command === "docker" && args.join(" ") === "compose version") ||
+        (command === "docker-compose" && args.join(" ") === "version")
+      );
+    });
+    expect(cli).toMatchObject({ command: "docker", prefix: ["compose"], label: "docker compose" });
+  });
+
+  it("should fall back to standalone docker-compose when the docker plugin is unavailable", () => {
+    const cli = resolveComposeCli({}, (command) => command === "docker-compose");
+    expect(cli).toMatchObject({ command: "docker-compose", prefix: [], label: "docker-compose" });
+  });
+
+  it("should allow forcing standalone docker-compose", () => {
+    const cli = resolveComposeCli({ TENKACLOUD_COMPOSE_CLI: "docker-compose" }, (command) => {
+      return command === "docker-compose";
+    });
+    expect(cli).toMatchObject({ command: "docker-compose", prefix: [], label: "docker-compose" });
+  });
+
+  it("should fail loudly when the requested compose frontend is unavailable", () => {
+    expect(() =>
+      resolveComposeCli({ TENKACLOUD_COMPOSE_CLI: "docker-compose" }, () => false),
+    ).toThrow(/docker-compose was requested/);
+  });
+});
+
 describe("buildLocalRuntimeConfig", () => {
   it("should wire the portal to the loopback scoring API in local backend mode", () => {
     const config = buildLocalRuntimeConfig("http://127.0.0.1:3199");
@@ -141,14 +172,14 @@ describe("buildLocalRuntimeConfig", () => {
 });
 
 describe("browserDisplayText", () => {
-  it("should rewrite loopback challenge URLs to Codespaces forwarded URLs", () => {
+  it("should rewrite loopback challenge URLs to the Codespaces portal proxy", () => {
     expect(
       browserDisplayText("Open http://127.0.0.1:18180/admin and http://localhost:18280/healthz.", {
         CODESPACE_NAME: "tenkacloud-demo",
         GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "app.github.dev",
       }),
     ).toBe(
-      "Open https://tenkacloud-demo-18180.app.github.dev/admin and https://tenkacloud-demo-18280.app.github.dev/healthz.",
+      "Open https://tenkacloud-demo-5175.app.github.dev/__tenkacloud-local-port/18180/admin and https://tenkacloud-demo-5175.app.github.dev/__tenkacloud-local-port/18280/healthz.",
     );
   });
 
@@ -158,7 +189,9 @@ describe("browserDisplayText", () => {
         CODESPACE_NAME: "tenkacloud-demo",
         GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "https://app.github.dev/",
       }),
-    ).toBe("Open https://tenkacloud-demo-18180.app.github.dev/search?q=flag#top");
+    ).toBe(
+      "Open https://tenkacloud-demo-5175.app.github.dev/__tenkacloud-local-port/18180/search?q=flag#top",
+    );
   });
 
   it("should leave loopback URLs unchanged outside Codespaces", () => {

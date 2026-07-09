@@ -714,7 +714,8 @@ describe("local-play API: multi-problem session (#2392)", () => {
         browserText: (text) =>
           text.replace(
             /\bhttp:\/\/127\.0\.0\.1:(\d+)(?=\/|[\s`"'<>)]|$)/g,
-            (_match, port: string) => `https://tenkacloud-demo-${port}.app.github.dev`,
+            (_match, port: string) =>
+              `https://tenkacloud-demo-5175.app.github.dev/__tenkacloud-local-port/${port}`,
           ),
       },
     );
@@ -732,9 +733,11 @@ describe("local-play API: multi-problem session (#2392)", () => {
       }
     ).problems[1];
     expect(problem.problemId).toBe("api-idor-demo");
-    expect(problem.instructions).toBe("Open https://tenkacloud-demo-18280.app.github.dev/admin.");
+    expect(problem.instructions).toBe(
+      "Open https://tenkacloud-demo-5175.app.github.dev/__tenkacloud-local-port/18280/admin.",
+    );
     expect(problem.stackOutputs).toEqual({
-      Web: "https://tenkacloud-demo-18280.app.github.dev/",
+      Web: "https://tenkacloud-demo-5175.app.github.dev/__tenkacloud-local-port/18280/",
     });
 
     await handleLocalPlayRequest(
