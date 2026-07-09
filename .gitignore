@@ -177,3 +177,7 @@ tmp
 # working tree に残る node_modules/dist/lambda.zip は git 管理外 (本ディレクトリ自体を ignore)。
 backend/
 sampleimages/
+
+# Agent commit-flow scratch files — never commit (one leaked in PR #2496, removed since)
+.git-commit-msg.txt
+.pr-body.md
