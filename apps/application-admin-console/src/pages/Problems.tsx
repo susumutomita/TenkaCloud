@@ -34,21 +34,19 @@ const OFFICIAL_CATALOG_REPO_URL = "https://github.com/susumutomita/TenkaCloudCha
 const PACK_GUIDANCE_STEPS = [
   {
     labelKey: "problems.pack_guidance_step_init",
-    command: "bun --cwd infrastructure run pack -- init ./my-first-pack",
+    command: 'make pack-init ARGS="./my-first-pack"',
   },
   {
     labelKey: "problems.pack_guidance_step_validate",
-    command: "bun --cwd infrastructure run pack -- validate ./my-first-pack",
+    command: 'make pack-validate ARGS="./my-first-pack"',
   },
   {
     labelKey: "problems.pack_guidance_step_install",
-    command:
-      "bun --cwd infrastructure run pack -- install ./my-first-pack --store ./.tenkacloud/pack-store",
+    command: 'make pack-install ARGS="./my-first-pack"',
   },
   {
     labelKey: "problems.pack_guidance_step_activate",
-    command:
-      "bun --cwd infrastructure run pack -- activate com.example.starter@0.1.0 --tenant <tenant-id> --store ./.tenkacloud/pack-store",
+    command: 'make pack-activate ARGS="com.example.starter@0.1.0 --tenant <tenant-id>"',
   },
   { labelKey: "problems.pack_guidance_step_create_event" },
 ] as const;

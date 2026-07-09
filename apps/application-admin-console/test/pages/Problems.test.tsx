@@ -128,10 +128,10 @@ describe("ProblemsPage", () => {
     expect(screen.getByText("problems.pack_guidance_path_private_title")).toBeInTheDocument();
     expect(screen.getByText("problems.pack_guidance_cli_heading")).toBeInTheDocument();
     for (const command of [
-      "bun --cwd infrastructure run pack -- init ./my-first-pack",
-      "bun --cwd infrastructure run pack -- validate ./my-first-pack",
-      "bun --cwd infrastructure run pack -- install ./my-first-pack --store ./.tenkacloud/pack-store",
-      "bun --cwd infrastructure run pack -- activate com.example.starter@0.1.0 --tenant <tenant-id> --store ./.tenkacloud/pack-store",
+      'make pack-init ARGS="./my-first-pack"',
+      'make pack-validate ARGS="./my-first-pack"',
+      'make pack-install ARGS="./my-first-pack"',
+      'make pack-activate ARGS="com.example.starter@0.1.0 --tenant <tenant-id>"',
     ]) {
       expect(screen.getByText(command)).toBeInTheDocument();
     }
