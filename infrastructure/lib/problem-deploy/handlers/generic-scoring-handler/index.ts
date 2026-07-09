@@ -1,4 +1,4 @@
-import { type DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { EventScoringMeta } from "../../control-data/events-repository.js";
 import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
@@ -43,6 +43,7 @@ import {
   type PhaseEntry,
   parseScoringState,
   resolveDeploymentsRepository,
+  resolveDisruptionsRepository,
   resolveProblemEndpointsRepository,
 } from "./shared.js";
 
@@ -234,7 +235,14 @@ const OPERATOR_EFFECT_WINDOW_MS = 60 * 60 * 1000;
 /**
  * [ADR-033 / #1665] この page の deployment が属する各 event について (未 query のものだけ) disruptions
  * audit table を query し、 operator-fired disruption の active 採点効果を解決して `out` に蓄積する。
- * key は `${eventId}#${teamId}#${problemId}`。 disruptions table 未配線なら no-op。
+ * key は `${eventId}#${teamId}#${problemId}`。
+ *
+ * [Issue #2442 / Phase C3] DDB アクセスは repository seam (`resolveDisruptionsRepository`) に
+ * 移設。 `disruptionsTableName` が空文字なのは 2 通り — pure SQL backend 選択時 (= 正常、 seam が
+ * SQL executor 直結で処理する) と旧 deploy chain (= 真の未配線) — を `controlDataRuntime.
+ * needsManualPrune()` (= pure SQL 選択中かの既存 public predicate、 #2440) で区別する
+ * (`problem-endpoints-handler/endpoints.ts` の `isEndpointsRegistryUnconfigured` と同型)。
+ * 未配線ならこの Lambda 呼び出し全体を壊さないよう no-op で抜ける (= 従来の dormant 挙動を維持)。
  */
 async function loadOperatorEffects(
   shared: GenericScoringSharedResources,
@@ -243,24 +251,22 @@ async function loadOperatorEffects(
   out: Map<string, ActiveDisruptionEffect[]>,
   nowMs: number,
 ): Promise<void> {
-  if (!shared.disruptionsTableName) return;
-  const since = `AUDIT#${new Date(nowMs - OPERATOR_EFFECT_WINDOW_MS).toISOString()}`;
+  if (!shared.disruptionsTableName && !controlDataRuntime.needsManualPrune()) return;
+  const sinceIso = new Date(nowMs - OPERATOR_EFFECT_WINDOW_MS).toISOString();
   const eventIds = new Set<string>();
   for (const it of items) {
     if (typeof it.eventId === "string" && it.eventId.length > 0 && !queriedEvents.has(it.eventId)) {
       eventIds.add(it.eventId);
     }
   }
+  if (eventIds.size === 0) return;
+  const repository = await resolveDisruptionsRepository(shared);
   for (const eventId of eventIds) {
     queriedEvents.add(eventId);
-    const res = await shared.ddb.send(
-      new QueryCommand({
-        TableName: shared.disruptionsTableName,
-        KeyConditionExpression: "PK = :pk AND SK >= :since",
-        ExpressionAttributeValues: { ":pk": `EVENT#${eventId}`, ":since": since },
-      }),
+    const rows: readonly DisruptionAuditRowLike[] = await repository.listAuditSince(
+      eventId,
+      sinceIso,
     );
-    const rows = (res.Items ?? []) as DisruptionAuditRowLike[];
     for (const [teamProblem, effects] of resolveOperatorEffects(
       rows,
       shared.problemsDisruptions,

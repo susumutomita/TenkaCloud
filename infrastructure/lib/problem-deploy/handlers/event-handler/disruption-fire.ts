@@ -23,9 +23,7 @@
 
 import { randomInt } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import type { PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
-import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import type { TeamRecord } from "../../control-data/teams-repository.js";
 import { putEventsBatched } from "../shared/events.js";
@@ -39,6 +37,7 @@ import type {
 } from "./disruption-types.js";
 import {
   type EventSharedResources,
+  resolveDisruptionsRepository,
   resolveEventsRepository,
   resolveTeamsRepository,
 } from "./shared.js";
@@ -91,34 +90,22 @@ function resolveTargetTeams(
  *
  * loser 側で row の DDB 反映 (= 強い整合性ありの Get) を即時参照できる前提だが、 万一
  * eventual な race で row 未到達のケースに備え、 短時間 sleep + 再 Get で 1 度だけ retry。
+ *
+ * [Issue #2442 / Phase C3] Put/Get の DDB アクセスは repository seam (`resolveDisruptionsRepository`)
+ * に移設。 claim outcome は A2 union 契約 (`claimed` / `already`) で表現し、 retry-sleep loop
+ * (= 純粋な業務ロジック) はここに残す。
  */
 async function tryClaimIdempotency(
   shared: EventSharedResources,
   input: DisruptionFireInput,
   draft: DisruptionAuditRow,
 ): Promise<{ kind: "claimed" } | { kind: "duplicate"; row: DisruptionAuditRow }> {
-  const idempotencyKey = `REQUEST#${input.tenantId}#${input.requestId}`;
-  try {
-    await shared.ddb.send(
-      new PutCommand({
-        TableName: shared.disruptionsTableName,
-        Item: {
-          PK: idempotencyKey,
-          SK: "METADATA",
-          GSI1PK: idempotencyKey,
-          GSI1SK: "METADATA",
-          ...draft,
-        },
-        ConditionExpression: "attribute_not_exists(PK)",
-      }),
-    );
-    return { kind: "claimed" };
-  } catch (err) {
-    if (!(err instanceof ConditionalCheckFailedException)) throw err;
-  }
+  const repository = await resolveDisruptionsRepository(shared);
+  const claim = await repository.claimFireIdempotency(draft);
+  if (claim.outcome === "claimed") return { kind: "claimed" };
   // loser: 既存 row を Get で取り直し、 duplicate を返す
   for (let attempt = 0; attempt <= DUPLICATE_RESOLVE_RETRIES; attempt++) {
-    const duplicate = await getDuplicateDisruption(shared, input, idempotencyKey);
+    const duplicate = await repository.getFireIdempotencyRecord(input.tenantId, input.requestId);
     if (duplicate) return { kind: "duplicate", row: duplicate };
     if (attempt < DUPLICATE_RESOLVE_RETRIES) await sleep(DUPLICATE_RESOLVE_RETRY_MS);
   }
@@ -127,45 +114,6 @@ async function tryClaimIdempotency(
     `disruption fire idempotency claim failed for requestId=${input.requestId}: ` +
       "conditional check failed but no prior row visible after retries",
   );
-}
-
-async function getDuplicateDisruption(
-  shared: EventSharedResources,
-  input: DisruptionFireInput,
-  idempotencyKey: string,
-): Promise<DisruptionAuditRow | undefined> {
-  const out = await shared.ddb.send(
-    new GetCommand({
-      TableName: shared.disruptionsTableName,
-      Key: { PK: idempotencyKey, SK: "METADATA" },
-      ConsistentRead: true,
-    }),
-  );
-  const item = out.Item as Partial<DisruptionAuditRow> | undefined;
-  return item?.auditId ? normalizeDuplicateDisruption(item, item.auditId, input) : undefined;
-}
-
-function normalizeDuplicateDisruption(
-  item: Partial<DisruptionAuditRow>,
-  auditId: string,
-  input: DisruptionFireInput,
-): DisruptionAuditRow {
-  return {
-    auditId,
-    tenantId: String(item.tenantId ?? input.tenantId),
-    eventId: String(item.eventId ?? input.eventId),
-    problemId: String(item.problemId ?? input.problemId),
-    disruptionId: String(item.disruptionId ?? input.disruptionId),
-    firedBy: String(item.firedBy ?? input.firedBy),
-    firedAt: String(item.firedAt ?? new Date(input.nowMs).toISOString()),
-    scope: (item.scope ?? input.scope) as DisruptionFireInput["scope"],
-    targetTeamIds: Array.isArray(item.targetTeamIds) ? (item.targetTeamIds as string[]) : [],
-    parameters: (item.parameters && typeof item.parameters === "object"
-      ? item.parameters
-      : {}) as Readonly<Record<string, unknown>>,
-    requestId: String(item.requestId ?? input.requestId),
-    expiresAt: Number(item.expiresAt ?? 0),
-  };
 }
 
 /**
@@ -256,21 +204,10 @@ export async function fireDisruption(
     mergedParameters,
   );
 
-  // 6. AUDIT# row を Put (= append-only audit log)
-  await shared.ddb.send(
-    new PutCommand({
-      TableName: shared.disruptionsTableName,
-      Item: {
-        PK: `EVENT#${input.eventId}`,
-        SK: `AUDIT#${firedAt}#${auditId}`,
-        GSI1PK: `TENANT#${input.tenantId}`,
-        GSI1SK: `AUDIT#${firedAt}#${auditId}`,
-        ...draft,
-      },
-      // 同 SK の上書きを防ぐ (= 万一 ULID collision でも reject)
-      ConditionExpression: "attribute_not_exists(SK)",
-    }),
-  );
+  // 6. AUDIT# row を Put (= append-only audit log)。 同 SK の上書きを防ぐ (= 万一 ULID collision
+  // でも reject) — repository の `appendAudit` が verbatim に持つ。
+  const repository = await resolveDisruptionsRepository(shared);
+  await repository.appendAudit(draft);
 
   // 6b. [ADR-037 Slice 2] recurring fire は RECUR# registry row も書く (= operator が一覧 / 早期解除する
   // ための索引)。 詳細は disruption-recurring.writeRecurringRegistry (非 recurring は no-op)。
@@ -360,6 +297,9 @@ export async function isEventOwnedByTenant(
 
 /**
  * Issue #888 FR-4: audit log の page query。 cursor-based pagination。
+ *
+ * [Issue #2442 / Phase C3] DDB アクセスは repository seam (`resolveDisruptionsRepository`) に
+ * 移設。 limit clamp (1..200 既定 50) は caller-facing 業務ロジックとしてここに残す。
  */
 export async function listDisruptionAudit(
   shared: EventSharedResources,
@@ -367,65 +307,15 @@ export async function listDisruptionAudit(
   options: { limit?: number; cursor?: string } = {},
 ): Promise<{ items: DisruptionAuditRow[]; nextCursor?: string }> {
   const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
-  const exclusiveStartKey = options.cursor ? decodeCursor(options.cursor) : undefined;
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.disruptionsTableName,
-      KeyConditionExpression: "PK = :pk AND begins_with(SK, :ap)",
-      ExpressionAttributeValues: { ":pk": `EVENT#${eventId}`, ":ap": "AUDIT#" },
-      ScanIndexForward: false,
-      Limit: limit,
-      ExclusiveStartKey: exclusiveStartKey,
-    }),
-  );
-  const items: DisruptionAuditRow[] = (out.Items ?? []).map((raw) => {
-    const r = raw as Partial<DisruptionAuditRow> & Record<string, unknown>;
-    return {
-      auditId: String(r.auditId ?? ""),
-      tenantId: String(r.tenantId ?? ""),
-      eventId: String(r.eventId ?? ""),
-      problemId: String(r.problemId ?? ""),
-      disruptionId: String(r.disruptionId ?? ""),
-      firedBy: String(r.firedBy ?? ""),
-      firedAt: String(r.firedAt ?? ""),
-      scope: (r.scope ?? "team") as DisruptionAuditRow["scope"],
-      targetTeamIds: Array.isArray(r.targetTeamIds)
-        ? (r.targetTeamIds as string[])
-        : ([] as readonly string[]),
-      parameters: (r.parameters && typeof r.parameters === "object"
-        ? r.parameters
-        : {}) as Readonly<Record<string, unknown>>,
-      requestId: String(r.requestId ?? ""),
-      expiresAt: Number(r.expiresAt ?? 0),
-    };
+  const repository = await resolveDisruptionsRepository(shared);
+  const page = await repository.listAuditPage(eventId, {
+    limit,
+    ...(options.cursor ? { cursor: options.cursor } : {}),
   });
   return {
-    items,
-    ...(out.LastEvaluatedKey
-      ? { nextCursor: encodeCursor(out.LastEvaluatedKey as Record<string, unknown>) }
-      : {}),
+    items: [...page.items],
+    ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
   };
-}
-
-function encodeCursor(key: Record<string, unknown>): string {
-  return Buffer.from(JSON.stringify(key), "utf8").toString("base64url");
-}
-
-function decodeCursor(cursor: string): Record<string, unknown> | undefined {
-  if (cursor.length > 512) return undefined;
-  try {
-    const json = Buffer.from(cursor, "base64url").toString("utf8");
-    const parsed = JSON.parse(json);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
-    const allow = new Set(["PK", "SK", "GSI1PK", "GSI1SK"]);
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-      if (!allow.has(k)) return undefined;
-      if (typeof v !== "string" || v.length === 0 || v.length > 256) return undefined;
-    }
-    return parsed as Record<string, unknown>;
-  } catch {
-    return undefined;
-  }
 }
 
 /**

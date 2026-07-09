@@ -9,6 +9,7 @@ import {
 import { type ProblemEndpointSlot, parseEndpointsEnv } from "../../../utils/endpoints-metadata.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
+import type { DisruptionsRepository } from "../../control-data/disruptions-repository.js";
 import type { ProblemEndpointsRepository } from "../../control-data/problem-endpoints-repository.js";
 import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
@@ -125,6 +126,27 @@ export function resolveProblemEndpointsRepository(
   return controlDataRuntime.resolveProblemEndpointsRepository({
     ddb: shared.ddb as DynamoDBDocumentClient,
     endpointsTableName: shared.endpointsTableName,
+  });
+}
+
+export interface GenericScoringDisruptionsSharedResources {
+  readonly ddb: Pick<DynamoDBDocumentClient, "send">;
+  readonly disruptionsTableName: string;
+}
+
+/**
+ * [Issue #2442 / Phase C3] Disruptions READ seam for generic-scoring modules (mirror of
+ * {@link resolveProblemEndpointsRepository}). Participates in all five `CONTROL_DATA_BACKEND`
+ * values: `dynamodb` returns DDB, `turso` / `sql` return pure SQL (works even with an empty
+ * `disruptionsTableName` — the pure branch never touches it), and mirror modes write through
+ * DDB then SQL.
+ */
+export function resolveDisruptionsRepository(
+  shared: GenericScoringDisruptionsSharedResources,
+): Promise<DisruptionsRepository> {
+  return controlDataRuntime.resolveDisruptionsRepository({
+    ddb: shared.ddb as DynamoDBDocumentClient,
+    disruptionsTableName: shared.disruptionsTableName,
   });
 }
 

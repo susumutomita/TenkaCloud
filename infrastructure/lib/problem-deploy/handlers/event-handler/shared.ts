@@ -8,6 +8,7 @@ import { getEnv } from "../../../helper-functions.js";
 import type { EffectiveCatalogProvenance } from "../../../problem-pack/effective-catalog.js";
 import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
 import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
+import type { DisruptionsRepository } from "../../control-data/disruptions-repository.js";
 import type { EventsRepository } from "../../control-data/events-repository.js";
 import {
   type ControlDataRepositories,
@@ -117,7 +118,12 @@ export function buildEventSharedResources(): EventSharedResources {
     // loud に受ける (= silent fallback にはならない、eventsTableName/deploymentsTableName
     // と同じ緩和)。
     competitorAccountsTableName: process.env.COMPETITOR_ACCOUNTS_TABLE_NAME ?? "",
-    disruptionsTableName: getEnv("DISRUPTIONS_TABLE_NAME"),
+    // [Issue #2442 / Phase C3] pure SQL backend (turso|sql) では Disruptions table 自体が
+    // synth されず env も配線されないため、`getEnv` の fail-fast に委ねると cold start が
+    // Initialization Error で落ちる (= EventApiLambda 全 route が壊れる)。空文字 default に
+    // 緩和し、dynamodb / mirror backend の誤設定は runtime resolver が fail loud に受ける
+    // (= silent fallback にはならない、competitorAccountsTableName と同じ緩和)。
+    disruptionsTableName: process.env.DISRUPTIONS_TABLE_NAME ?? "",
     eventBusName: getEnv("DEPLOY_EVENT_BUS_NAME"),
     env: getEnv("DEPLOY_ENVIRONMENT"),
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
@@ -317,6 +323,25 @@ export function resolveDeploymentsRepository(
   return controlDataRuntime.resolveDeploymentsRepository({
     ddb: shared.ddb,
     deploymentsTableName: shared.deploymentsTableName,
+  });
+}
+
+/**
+ * [Issue #2442 / Phase C3] Disruptions seam for event-handler modules (`disruption-fire.ts` /
+ * `disruption-recurring.ts`). Default backend stays DynamoDB and emits the same Put/Get/Query/
+ * Update reads through the same injected DocumentClient (byte-identical to the pre-seam inline
+ * access — existing tests that mock `shared.ddb.send` pass unmodified).
+ *
+ * [#2467-era runtime] Delegates to the cold-start-cached `controlDataRuntime` (mirror of
+ * {@link resolveDeploymentsRepository}), so `CONTROL_DATA_BACKEND=turso|sql|turso-mirror|
+ * sql-mirror` all work. `Promise<DisruptionsRepository>` — caller must await before use.
+ */
+export function resolveDisruptionsRepository(
+  shared: Pick<EventSharedResources, "ddb" | "disruptionsTableName">,
+): Promise<DisruptionsRepository> {
+  return controlDataRuntime.resolveDisruptionsRepository({
+    ddb: shared.ddb,
+    disruptionsTableName: shared.disruptionsTableName,
   });
 }
 

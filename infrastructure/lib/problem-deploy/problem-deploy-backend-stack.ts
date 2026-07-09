@@ -375,7 +375,13 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     this.competitorAccountsTable = competitorAccounts?.table;
     this.problemEndpointsTable = endpoints?.table;
     // Issue #888: Red Team Disruption Injection の audit log + idempotency
-    const disruptions = new DisruptionsTable(this, "Disruptions");
+    //
+    // [Issue #2442 / Phase C3] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは Events/Teams/
+    // Deployments/ProblemEndpoints/CompetitorAccounts と同条件で **synth しない**。4 handler サイト
+    // (disruption-fire.ts / disruption-recurring.ts / executor-store.ts / generic-scoring index.ts)
+    // が repository seam (`resolveDisruptionsRepository`) 経由で読み書きするため、pure SQL では
+    // 本 table への参照が残らない (壊れる参照は下記で個別に条件化)。
+    const disruptions = pureSql ? undefined : new DisruptionsTable(this, "Disruptions");
     // Issue #950 (ADR-020 Phase D): admin 操作の append-only 監査ログ。 3 handler Lambda +
     // admin-insight Lambda が PutItem する。 TTL 90 日で自動 GC (= env `AUDIT_RETENTION_DAYS`
     // で 365 / SOC2 enterprise 用に上げる)。
@@ -488,7 +494,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       events?.table,
       teams?.table,
       endpoints?.table,
-      disruptions.table,
+      disruptions?.table,
     ].filter((t): t is Table => t !== undefined);
     const capacityRunbook = new EventCapacityRunbook(this, "EventCapacityRunbook", {
       eventHotTables,
@@ -512,7 +518,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       defaultTenantId: props.defaultTenantId,
       environmentName: props.environmentName,
       // Issue #888: disruption fire / audit / catalog で参照
-      disruptionsTable: disruptions.table,
+      // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant を
+      // EventApiLambda 側で条件化。 disruption 読み書きは repository seam 経由)。
+      disruptionsTable: disruptions?.table,
       // Issue #2410 Slice 2: キャパ監視 (`GET /admin/capacity`) の event-hot 5 テーブル目 +
       // Slice 1 runbook の document 名 (UI が実行コマンド例を表示する)。
       // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant/
@@ -545,8 +553,15 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       environmentName: props.environmentName,
       eventBus,
       deploymentsTable: deployments?.table,
-      disruptionsTable: disruptions.table,
+      // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant を
+      // DisruptionExecutorLambda 側で条件化)。
+      disruptionsTable: disruptions?.table,
       problemsDisruptions: (props.problemsDisruptions ?? {}) as Readonly<Record<string, unknown>>,
+      // Issue #2442: 本 Lambda は EXEC# 冪等 claim の repository seam を実際に使う「DB を開く
+      // Lambda」なので Turso executor 配線を持つ (EventApi と同型)。
+      controlDataBackend: props.controlDataBackend,
+      tursoDatabaseUrl: props.tursoDatabaseUrl,
+      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
     });
 
     // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + STS verify Lambda。
@@ -623,7 +638,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       // 判定し、 実 runTick は最小 IAM の CoordinationDispatcher Lambda へ Invoke で委ねる (下で配線)。
       problemsCoordination: props.problemsCoordination ?? {},
       // [ADR-033 / #1665] operator-fired disruption の active 採点効果を tick で解決する (read-only)。
-      disruptionsTable: disruptions.table,
+      // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant を
+      // GenericScoringLambda 側で条件化。 disruption 読み取りは repository seam 経由)。
+      disruptionsTable: disruptions?.table,
       // [ADR-047] scheduled auto-teardown が bulkTeardownEvent で cross-account role を解決する (read-only)。
       competitorAccountsTable: competitorAccounts?.table,
       // [ADR-047 follow-up] scheduled auto-deploy が bulkDeployEvent で teams を Query (read-only) +

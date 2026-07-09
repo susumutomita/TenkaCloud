@@ -11,6 +11,9 @@ type TeamsRepository = Awaited<ReturnType<typeof controlDataRuntime.resolveTeams
 type NotificationsRepository = Awaited<
   ReturnType<typeof controlDataRuntime.resolveNotificationsRepository>
 >;
+type DisruptionsRepository = Awaited<
+  ReturnType<typeof controlDataRuntime.resolveDisruptionsRepository>
+>;
 
 /**
  * #557 / #539 / #1038: end-to-end transition scenarios for the reconciler.
@@ -149,6 +152,9 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     const pruneNotifications = {
       pruneExpired: vi.fn(async () => 3),
     } as unknown as NotificationsRepository;
+    const pruneDisruptions = {
+      pruneExpired: vi.fn(async () => 4),
+    } as unknown as DisruptionsRepository;
     vi.spyOn(controlDataRuntime, "needsManualPrune").mockReturnValue(true);
     vi.spyOn(controlDataRuntime, "resolveEventsRepository").mockImplementation(async (input) =>
       input.eventsTableName ? listEvents : pruneEvents,
@@ -157,12 +163,16 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     vi.spyOn(controlDataRuntime, "resolveNotificationsRepository").mockResolvedValue(
       pruneNotifications,
     );
+    vi.spyOn(controlDataRuntime, "resolveDisruptionsRepository").mockResolvedValue(
+      pruneDisruptions,
+    );
 
     await reconcileEventStatuses(ctx, NOW_ISO);
 
     expect(pruneEvents.pruneExpired).toHaveBeenCalledWith(nowEpochSeconds);
     expect(pruneTeams.pruneExpired).toHaveBeenCalledWith(nowEpochSeconds);
     expect(pruneNotifications.pruneExpired).toHaveBeenCalledWith(nowEpochSeconds);
+    expect(pruneDisruptions.pruneExpired).toHaveBeenCalledWith(nowEpochSeconds);
     expect(listEvents.listEventsByStatus).toHaveBeenCalledWith([
       "DEPLOYING",
       "READY",
@@ -205,6 +215,9 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     vi.spyOn(controlDataRuntime, "resolveNotificationsRepository").mockResolvedValue({
       pruneExpired: vi.fn(async () => 0),
     } as unknown as NotificationsRepository);
+    vi.spyOn(controlDataRuntime, "resolveDisruptionsRepository").mockResolvedValue({
+      pruneExpired: vi.fn(async () => 0),
+    } as unknown as DisruptionsRepository);
 
     await reconcileEventStatuses(ctx, NOW_ISO);
 

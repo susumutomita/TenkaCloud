@@ -7,12 +7,11 @@
  * AssumeRole / SDK 送信 / scheduler は別 dep (= deploy 判断を伴うため owner)。 ここは DDB のみ。
  */
 
-import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
-import { type DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import type { DeploymentTarget, DisruptionFiredDetail } from "./execute.js";
-import { resolveDeploymentsRepository } from "./shared.js";
+import { resolveDeploymentsRepository, resolveDisruptionsRepository } from "./shared.js";
 
 export interface ExecutorResources {
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
@@ -41,39 +40,23 @@ export async function claimExecution(
   nowMs: number,
   phase: "event" | "inject" | "recurring" = "event",
 ): Promise<"claimed" | "duplicate"> {
-  // [ADR-037] recurring は tick ごとに firedAt (= aws-scheduler 置換済の実時刻) を key に含め、 tick 間は
-  // 別 claim として通しつつ同一 tick の再配送だけ弾く。 event / inject は従来どおり requestId/teamId 単位。
-  const pk =
-    phase === "inject"
-      ? `EXEC#${detail.requestId}#${detail.teamId}#INJECT`
-      : phase === "recurring"
-        ? `EXEC#${detail.requestId}#${detail.teamId}#RECUR#${detail.firedAt}`
-        : `EXEC#${detail.requestId}#${detail.teamId}`;
-  try {
-    await resources.ddb.send(
-      new PutCommand({
-        TableName: resources.disruptionsTableName,
-        Item: {
-          PK: pk,
-          SK: "METADATA",
-          disruptionId: detail.disruptionId,
-          eventId: detail.eventId,
-          problemId: detail.problemId,
-          tenantId: detail.tenantId,
-          teamId: detail.teamId,
-          requestId: detail.requestId,
-          firedAt: detail.firedAt,
-          expiresAt:
-            Math.floor(nowMs / 1000) + (resources.execTtlSeconds ?? DEFAULT_EXEC_TTL_SECONDS),
-        },
-        ConditionExpression: "attribute_not_exists(PK)",
-      }),
-    );
-    return "claimed";
-  } catch (err) {
-    if (err instanceof ConditionalCheckFailedException) return "duplicate";
-    throw err;
-  }
+  // [Issue #2442 / Phase C3] DDB アクセス (conditional PutItem) は repository seam に移設。
+  // `phase` ごとの物理 key 導出は repository の責務 (= 他 aggregate と同じ「物理キーは caller に
+  // 見せない」規約)。 outcome は A2 union 契約 (`claimed`/`already`) を this 関数の既存公開契約
+  // (`"claimed" | "duplicate"`) に畳む — route.ts / execute.ts の呼び出し側は無変更。
+  const repository = await resolveDisruptionsRepository(resources);
+  const outcome = await repository.claimExecutionSlot({
+    requestId: detail.requestId,
+    teamId: detail.teamId,
+    phase,
+    disruptionId: detail.disruptionId,
+    eventId: detail.eventId,
+    problemId: detail.problemId,
+    tenantId: detail.tenantId,
+    firedAt: detail.firedAt,
+    expiresAt: Math.floor(nowMs / 1000) + (resources.execTtlSeconds ?? DEFAULT_EXEC_TTL_SECONDS),
+  });
+  return outcome.outcome === "claimed" ? "claimed" : "duplicate";
 }
 
 /**

@@ -7,6 +7,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
+import { controlDataBackendEnv } from "./control-data-backend-env.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface DisruptionExecutorLambdaProps {
@@ -23,10 +24,28 @@ export interface DisruptionExecutorLambdaProps {
    * (`executor-store.ts` は既に seam 経由)。
    */
   readonly deploymentsTable?: ITable;
-  /** EXEC# 冪等行 (conditional Put) 用。 fire の REQUEST#/AUDIT# と同居。 */
-  readonly disruptionsTable: ITable;
+  /**
+   * EXEC# 冪等行 (conditional Put) 用。 fire の REQUEST#/AUDIT# と同居。
+   *
+   * [Issue #2442 / Phase C3] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
+   * PutItem IAM も付与しない — EXEC# claim は repository seam (`resolveDisruptionsRepository`)
+   * が本 Lambda に配線する Turso executor (下記) 経由で処理する ({@link deploymentsTable} と
+   * 同じ条件)。
+   */
+  readonly disruptionsTable?: ITable;
   /** `{ [problemId]: ProblemDisruptionEntry[] }` (action 込)。 build 時 literal 置換で env 4KB を回避。 */
   readonly problemsDisruptions?: Readonly<Record<string, unknown>>;
+  /**
+   * [Issue #2442 / Phase C3] control-plane data backend (dynamodb|turso|sql|turso-mirror|
+   * sql-mirror)。 `claimExecution` の repository seam がこの env を読む。default (未指定 /
+   * `dynamodb`) は env を足さず byte 互換。`EventApiLambda` と同型の注入パターン。
+   */
+  readonly controlDataBackend?: string;
+  /** Public remote libSQL URL. Never contains authentication material. */
+  readonly tursoDatabaseUrl?: string;
+  /** SSM SecureString parameter name containing the libSQL auth token. */
+  readonly tursoAuthTokenParameterName?: string;
 }
 
 /**
@@ -97,9 +116,18 @@ export class DisruptionExecutorLambda extends Construct {
         ...(props.deploymentsTable
           ? { DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName }
           : {}),
-        DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName,
+        // Issue #2442: 純 SQL backend では table 自体が無いので env も足さない。
+        ...(props.disruptionsTable
+          ? { DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName }
+          : {}),
         REVERT_SCHEDULER_ROLE_ARN: this.schedulerRole.roleArn,
         EXECUTOR_FUNCTION_ARN: executorArn,
+        // Issue #2442: control-plane data backend (default dynamodb は env を足さず byte 互換)。
+        ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
+        ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
+        ...(props.tursoAuthTokenParameterName
+          ? { TURSO_AUTH_TOKEN_PARAMETER_NAME: props.tursoAuthTokenParameterName }
+          : {}),
         NODE_OPTIONS: "--enable-source-maps",
       },
       // disruptions catalog (action 込) を build 時 literal 置換 (env 4KB 回避、 fire と同 catalog)。
@@ -131,6 +159,18 @@ export class DisruptionExecutorLambda extends Construct {
         conditions: { StringLike: { "kms:EncryptionContext:PARAMETER_ARN": ssmArn } },
       }),
     );
+    // [Issue #2442] turso/sql backend が Turso auth token を読むための SSM SecureString read
+    // 権限。 未配線 (= dynamodb default) なら付与しない (`EventApiLambda` と同型)。
+    if (props.tursoAuthTokenParameterName) {
+      this.fn.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ["ssm:GetParameter"],
+          resources: [
+            `arn:${stack.partition}:ssm:${stack.region}:${stack.account}:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
+          ],
+        }),
+      );
+    }
     this.fn.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
@@ -166,14 +206,17 @@ export class DisruptionExecutorLambda extends Construct {
         }),
       );
     }
-    // disruptions: EXEC# 冪等 claim は conditional PutItem のみ。
-    this.fn.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ["dynamodb:PutItem"],
-        resources: [props.disruptionsTable.tableArn],
-      }),
-    );
+    // disruptions: EXEC# 冪等 claim は conditional PutItem のみ。Issue #2442: 純 SQL backend
+    // では table 自体が無いので IAM も付与しない (repository seam が SQL executor 直結で処理する)。
+    if (props.disruptionsTable) {
+      this.fn.addToRolePolicy(
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["dynamodb:PutItem"],
+          resources: [props.disruptionsTable.tableArn],
+        }),
+      );
+    }
     // revert 予約 (scheduler) + その実行 role を渡す PassRole。
     this.fn.addToRolePolicy(
       new iam.PolicyStatement({

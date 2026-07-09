@@ -87,8 +87,13 @@ export interface GenericScoringLambdaProps {
   /**
    * [ADR-033 / #1665] disruptions audit table。 operator-fired disruption の active 採点効果を tick で
    * 解決するため read-only で query する (= scoring-side effect)。
+   *
+   * [Issue #2442 / Phase C3] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
+   * grant も付与しない — operator-fired effect の解決は repository seam
+   * (`resolveDisruptionsRepository`) が SQL executor 直結で処理する。
    */
-  readonly disruptionsTable: ITable;
+  readonly disruptionsTable?: ITable;
   /**
    * [ADR-047] scheduled auto-teardown が `bulkTeardownEvent` 経由で cross-account teardown の
    * competitorRoleArn / externalId を解決するための CompetitorAccounts table (read-only)。
@@ -182,7 +187,10 @@ export class GenericScoringLambda extends Construct {
         // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler の credential path 構築用。
         DEPLOY_ENVIRONMENT: props.environmentName,
         // [ADR-033 / #1665] operator-fired disruption の active 採点効果を解決するための audit table。
-        DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName,
+        // Issue #2442: 純 SQL backend では table 自体が無いので env も足さない。
+        ...(props.disruptionsTable
+          ? { DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName }
+          : {}),
         // [ADR-047] scheduled auto-teardown 用。 buildScheduledTeardownResources がこの env を見て
         // 有効化する (未設定なら scheduled teardown は dormant)。 Issue #2442: 純 SQL backend
         // では table 自体が無いので env も足さない (= dormant のまま安全に倒れる)。
@@ -242,7 +250,8 @@ export class GenericScoringLambda extends Construct {
     props.endpointsTable?.grantReadData(this.fn);
     // [ADR-033 / #1665] disruptions audit table: operator-fired disruption の active 採点効果を
     // event ごとに Query する (= read-only、 scoring-side effect の解決)。
-    props.disruptionsTable.grantReadData(this.fn);
+    // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。
+    props.disruptionsTable?.grantReadData(this.fn);
     // [ADR-047] scheduled auto-teardown: bulkTeardownEvent が CompetitorAccounts から cross-account
     // role / externalId を解決する (= read-only)。 これで scheduled teardown が有効化される。
     // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。

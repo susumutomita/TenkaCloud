@@ -12,6 +12,7 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { COMPETITOR_ACCOUNTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-competitor-accounts-repository";
 import { DEPLOYMENTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-deployments-repository";
+import { DISRUPTIONS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-disruptions-repository";
 import { EVENTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-events-repository";
 import { FEATURE_FLAGS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-feature-flags-repository";
 import { NOTIFICATIONS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-notifications-repository";
@@ -430,11 +431,22 @@ export function makeFakeDdb(options: { readonly pageSize?: number } = {}): Dynam
       // per site (:tprefix TEAM# / :evpfx EVENT#), so extract it from the expr.
       const match = kce.match(/begins_with\(SK,\s*(:[A-Za-z0-9_]+)\)/);
       const prefix = String(values[match?.[1] ?? ":tprefix"]);
-      return paginateBySk(
-        [...table.values()].filter((it) => it.PK === pk && String(it.SK).startsWith(prefix)),
-        cmd,
-        pk,
+      let matched = [...table.values()].filter(
+        (it) => it.PK === pk && String(it.SK).startsWith(prefix),
       );
+      // [Issue #2442 / Phase C3] disruptions `listRecurringByEvent` combines a base-table
+      // begins_with KeyCondition with a `tenantId = :t` FilterExpression.
+      if (cmd.input.FilterExpression) {
+        matched = matched.filter((it) =>
+          evalConditionExpression(
+            cmd.input.FilterExpression as string,
+            it,
+            cmd.input.ExpressionAttributeNames,
+            cmd.input.ExpressionAttributeValues,
+          ),
+        );
+      }
+      return paginateBySk(matched, cmd, pk);
     }
     if (kce.includes("BETWEEN")) {
       // [#2441] PK = :pk AND SK BETWEEN :sk_start AND :sk_end (EVENT# / INBOX# ranges).
@@ -447,6 +459,15 @@ export function makeFakeDdb(options: { readonly pageSize?: number } = {}): Dynam
         cmd,
         pk,
       );
+    }
+    const gteMatch = kce.match(/SK >= (:[A-Za-z0-9_]+)/);
+    if (gteMatch) {
+      // [Issue #2442 / Phase C3] PK = :pk AND SK >= :since (disruptions `listAuditSince` —
+      // open-ended lower bound, no upper bound / begins_with prefix).
+      const since = String(values[gteMatch[1] ?? ""]);
+      return {
+        Items: [...table.values()].filter((it) => it.PK === pk && String(it.SK) >= since),
+      };
     }
     // [#2441] Base-table exact read: PK = :pk AND SK = :sk (cast-event META Query).
     const sk = values[":sk"];
@@ -750,6 +771,7 @@ export function makeSqliteExecutor(): SqlExecutor {
   db.exec(PROBLEM_ENDPOINTS_SCHEMA_SQL);
   db.exec(COMPETITOR_ACCOUNTS_SCHEMA_SQL);
   db.exec(SAML_CONFIG_SCHEMA_SQL);
+  db.exec(DISRUPTIONS_SCHEMA_SQL);
   return {
     run: (sql, params = []) => {
       const result = db.prepare(sql).run(...params);
