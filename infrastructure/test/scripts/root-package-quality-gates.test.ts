@@ -15,12 +15,16 @@ import { discoverWorkspaces, planTask } from "../../../scripts/run-workspaces";
  * every package under `packages` whose package.json declares a `test`/`typecheck` script
  * must be part of the orchestrator's plan for that task, and the root scripts must actually
  * delegate to the orchestrator (otherwise the plan proves nothing).
+ *
+ * `test:coverage` is not asserted here: it is owned by `scripts/run-coverage.ts` (#2513),
+ * and scripts/run-coverage.test.ts pins its 17-dir COVERAGE_WORKSPACES list.
  */
 
 const REPO_ROOT = join(__dirname, "..", "..", "..");
 const PACKAGES_DIR = join(REPO_ROOT, "packages");
 
 interface RootScripts {
+  readonly build: string;
   readonly typecheck: string;
   readonly test: string;
 }
@@ -56,8 +60,9 @@ function plannedDirs(task: "typecheck" | "test"): readonly string[] {
 }
 
 describe("root package.json quality-gate enumeration (issue #2206)", () => {
-  it("should delegate the root typecheck and test scripts to the workspace orchestrator", () => {
-    const { typecheck, test } = rootScripts();
+  it("should delegate the root build, typecheck, and test scripts to the workspace orchestrator", () => {
+    const { build, typecheck, test } = rootScripts();
+    expect(build).toContain("scripts/run-workspaces.ts build");
     expect(typecheck).toContain("scripts/run-workspaces.ts typecheck");
     expect(test).toContain("scripts/run-workspaces.ts test");
   });

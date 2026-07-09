@@ -6,13 +6,14 @@ import { discoverWorkspaces, planTask, TASKS, type WorkspaceInfo } from "./run-w
 
 /**
  * Issue #993 follow-up: the root `package.json` `build` / `typecheck` / `test`
- * / `test:coverage` scripts used to be hand-maintained `bun run --filter <pkg>
- * && ...` chains. Adding a workspace meant remembering to touch four
- * one-liners by hand, and nothing failed loudly if you forgot. This suite
- * pins scripts/run-workspaces.ts as the single reviewable seam that replaced
+ * scripts used to be hand-maintained `bun run --filter <pkg> && ...` chains.
+ * Adding a workspace meant remembering to touch several one-liners by hand,
+ * and nothing failed loudly if you forgot. This suite pins
+ * scripts/run-workspaces.ts as the single reviewable seam that replaced
  * them: the repo-parity test below is the thing a reviewer diffs when a
- * workspace is added, removed, or moved between the build/typecheck/test/
- * test:coverage sets.
+ * workspace is added, removed, or moved between the build/typecheck/test
+ * sets. (`test:coverage` is owned by scripts/run-coverage.ts, #2513, whose
+ * own test pins the 17-dir COVERAGE_WORKSPACES list.)
  */
 
 const repoRoot = join(import.meta.dir, "..");
@@ -84,7 +85,7 @@ describe("discoverWorkspaces", () => {
 });
 
 describe("planTask", () => {
-  const scriptsAll = { build: "x", typecheck: "x", test: "x", "test:coverage": "x" };
+  const scriptsAll = { build: "x", typecheck: "x", test: "x" };
 
   function ws(dir: string, scripts: Record<string, string> = scriptsAll): WorkspaceInfo {
     return { dir, name: dir, scripts };
@@ -92,6 +93,10 @@ describe("planTask", () => {
 
   it("should throw for an unknown task", () => {
     expect(() => planTask("lint", [ws("infrastructure")])).toThrow(/unknown task/i);
+  });
+
+  it("should throw for the retired test:coverage task (owned by run-coverage.ts)", () => {
+    expect(() => planTask("test:coverage", [ws("infrastructure")])).toThrow(/unknown task/i);
   });
 
   it("should throw when a task resolves to zero workspaces", () => {
@@ -103,30 +108,16 @@ describe("planTask", () => {
     const workspaces = [
       ws("infrastructure"),
       ws("apps/a"),
-      ws("apps/b", { typecheck: "x", test: "x", "test:coverage": "x" }), // no build script
+      ws("apps/b", { typecheck: "x", test: "x" }), // no build script
       ws("packages/c"), // has build, but packages/* is never built at the root
     ];
 
     const plan = planTask("build", workspaces);
 
     expect(plan.included.map((w) => w.dir)).toEqual(["infrastructure", "apps/a"]);
-    expect(plan.skipped.map((s) => s.workspace.dir)).toEqual(["apps/b"]);
-    expect(plan.skipped[0]?.reason).toBe("missing-script");
+    expect(plan.skipped.map((w) => w.dir)).toEqual(["apps/b"]);
     // packages/c is filtered out by the group rule, not treated as a "skip".
-    expect(plan.skipped.some((s) => s.workspace.dir === "packages/c")).toBe(false);
-  });
-
-  it("should apply the test:coverage exclude list for apps/developer-portal", () => {
-    const workspaces = [
-      ws("apps/developer-portal"),
-      ws("apps/participant-portal"),
-      ws("packages/format"),
-    ];
-
-    const plan = planTask("test:coverage", workspaces);
-
-    expect(plan.included.map((w) => w.dir)).toEqual(["apps/participant-portal", "packages/format"]);
-    expect(plan.skipped).toEqual([{ workspace: ws("apps/developer-portal"), reason: "excluded" }]);
+    expect(plan.skipped.some((w) => w.dir === "packages/c")).toBe(false);
   });
 
   it("should order the plan group-then-alphabetical regardless of input order", () => {
@@ -150,7 +141,7 @@ describe("planTask", () => {
   });
 
   it("should list every supported task", () => {
-    expect(TASKS).toEqual(["build", "typecheck", "test", "test:coverage"]);
+    expect(TASKS).toEqual(["build", "typecheck", "test"]);
   });
 });
 
@@ -200,18 +191,5 @@ describe("repo parity (the reviewable seam)", () => {
   it("should plan test across all 18 workspaces", () => {
     const plan = planTask("test", workspaces);
     expect(plan.included.map((w) => w.dir)).toEqual(allEighteen);
-  });
-
-  it("should plan test:coverage across all 18 workspaces except apps/developer-portal", () => {
-    const plan = planTask("test:coverage", workspaces);
-    expect(plan.included.map((w) => w.dir)).toEqual(
-      allEighteen.filter((dir) => dir !== "apps/developer-portal"),
-    );
-    expect(plan.skipped).toEqual([
-      {
-        workspace: workspaces.find((w) => w.dir === "apps/developer-portal"),
-        reason: "excluded",
-      },
-    ]);
   });
 });

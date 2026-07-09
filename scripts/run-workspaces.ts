@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 /**
- * Zero-dependency workspace-task orchestrator.
+ * Zero-dependency workspace-task orchestrator for `build` / `typecheck` / `test`.
  *
- * The root `package.json` `build` / `typecheck` / `test` / `test:coverage`
- * scripts used to be hand-maintained `bun run --filter <pkg> && bun run
- * --filter <pkg2> && ...` chains. Two problems with that:
+ * Those root `package.json` scripts used to be hand-maintained
+ * `bun run --filter <pkg> && bun run --filter <pkg2> && ...` chains.
+ * Two problems with that:
  *
  * 1. `bun run --filter <pkg>` can resolve the workspace filter before the
  *    workspace graph is fully settled and return "No packages matched the
@@ -13,7 +13,7 @@
  *    workspace in an `&&` chain only ever reached the *last* element, so
  *    Codecov only ever saw coverage for one workspace.
  * 2. Adding, removing, or excluding a workspace meant remembering to edit
- *    four separate one-liners by hand, with no test catching a forgotten
+ *    several separate one-liners by hand, with no test catching a forgotten
  *    edit.
  *
  * This script replaces the chains with a small discover → plan → execute
@@ -23,14 +23,19 @@
  * now diffs when the workspace list changes, instead of an opaque `&&`
  * chain.
  *
- * Usage: bun run scripts/run-workspaces.ts <build|typecheck|test|test:coverage>
+ * `test:coverage` is deliberately NOT handled here: coverage is owned by
+ * `scripts/run-coverage.ts` (#2513), which carries its own workspace list
+ * (`COVERAGE_WORKSPACES`), the 3-way `--shard` CI matrix, per-workspace
+ * timing, and the fix-coverage-paths post-step.
+ *
+ * Usage: bun run scripts/run-workspaces.ts <build|typecheck|test>
  */
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-export const TASKS = ["build", "typecheck", "test", "test:coverage"] as const;
+export const TASKS = ["build", "typecheck", "test"] as const;
 export type Task = (typeof TASKS)[number];
 
 export function isTask(value: string | undefined): value is Task {
@@ -142,30 +147,17 @@ function groupOf(dir: string): Group {
  * problem-runtime, problem-sdk, problem-test-harness) also define a `build`
  * script: those packages are consumed as TS source via workspace deps, not
  * built as a standalone artifact, so the root `build` chain never included
- * them. Every other task runs across every group (subject to TASK_EXCLUDES).
+ * them. Every other task runs across every group.
  */
 const TASK_GROUPS: Partial<Record<Task, readonly Group[]>> = {
   build: ["infrastructure", "apps"],
 };
 
-/**
- * Per-task explicit exclude list, keyed by workspace dir.
- *
- * apps/developer-portal defines a `test:coverage` script but was never
- * wired into the old root `&&` chain — pre-existing drift that predates
- * this refactor. Preserved here for byte-for-byte parity; a follow-up issue
- * should decide whether to fold it in.
- */
-const TASK_EXCLUDES: Partial<Record<Task, readonly string[]>> = {
-  "test:coverage": ["apps/developer-portal"],
-};
-
-export type SkipReason = "excluded" | "missing-script";
-
 export interface TaskPlan {
   task: Task;
   included: WorkspaceInfo[];
-  skipped: { workspace: WorkspaceInfo; reason: SkipReason }[];
+  /** Workspaces in an eligible group that do not define the requested script. */
+  skipped: WorkspaceInfo[];
 }
 
 function orderWorkspaces(workspaces: WorkspaceInfo[]): WorkspaceInfo[] {
@@ -181,9 +173,8 @@ function orderWorkspaces(workspaces: WorkspaceInfo[]): WorkspaceInfo[] {
  * by directory within each group. Workspaces filtered out by the group rule
  * (e.g. packages/* for `build`) are simply absent from both `included` and
  * `skipped` — that's a structural design choice, not an anomaly. Workspaces
- * excluded by TASK_EXCLUDES, or lacking the requested script, land in
- * `skipped` with a reason so the caller can print a loud (non-silent) log
- * line per skip.
+ * lacking the requested script land in `skipped` so the caller can print a
+ * loud (non-silent) log line per skip.
  */
 export function planTask(task: string, workspaces: WorkspaceInfo[]): TaskPlan {
   if (!isTask(task)) {
@@ -191,25 +182,20 @@ export function planTask(task: string, workspaces: WorkspaceInfo[]): TaskPlan {
   }
 
   const eligibleGroups = TASK_GROUPS[task] ?? GROUP_ORDER;
-  const excludes = new Set(TASK_EXCLUDES[task] ?? []);
 
   const candidates = orderWorkspaces(workspaces).filter((w) =>
     eligibleGroups.includes(groupOf(w.dir)),
   );
 
   const included: WorkspaceInfo[] = [];
-  const skipped: TaskPlan["skipped"] = [];
+  const skipped: WorkspaceInfo[] = [];
 
   for (const workspace of candidates) {
-    if (excludes.has(workspace.dir)) {
-      skipped.push({ workspace, reason: "excluded" });
-      continue;
+    if (task in workspace.scripts) {
+      included.push(workspace);
+    } else {
+      skipped.push(workspace);
     }
-    if (!(task in workspace.scripts)) {
-      skipped.push({ workspace, reason: "missing-script" });
-      continue;
-    }
-    included.push(workspace);
   }
 
   if (included.length === 0) {
@@ -221,12 +207,6 @@ export function planTask(task: string, workspaces: WorkspaceInfo[]): TaskPlan {
 
 function printUsage(): void {
   console.error(`Usage: bun run scripts/run-workspaces.ts <${TASKS.join("|")}>`);
-}
-
-function describeSkip(task: Task, reason: SkipReason): string {
-  return reason === "excluded"
-    ? `excluded from "${task}" (see TASK_EXCLUDES)`
-    : `no "${task}" script`;
 }
 
 function main(): void {
@@ -248,8 +228,8 @@ function main(): void {
     throw error; // unreachable: process.exit() already terminated the process
   }
 
-  for (const { workspace, reason } of plan.skipped) {
-    console.log(`[run-workspaces] skip ${workspace.dir} — ${describeSkip(plan.task, reason)}`);
+  for (const workspace of plan.skipped) {
+    console.log(`[run-workspaces] skip ${workspace.dir} — no "${plan.task}" script`);
   }
 
   const total = plan.included.length;
