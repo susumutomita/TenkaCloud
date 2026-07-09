@@ -5,26 +5,852 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>生成AI時代のCCoEと“作れる”と“出せる”の間にある詰まり</title>
 <meta name="description" content="CCoE実践者コミュニティ関西LT向けの15分デッキ。TenkaCloud、StackStack、ローカルモード、WordPress導入を通じて、生成AI時代のCCoEが作るべき学習導線を整理する。" />
+<link rel="icon" href="../assets/favicon.svg" />
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png" />
 <style>
-:root{--bg:#06111f;--panel:#0d1b2fdd;--line:#5aa2ff66;--gold:#f6ca46;--blue:#7fc0ff;--text:#edf5ff;--muted:#aebbd0;--green:#45d483;--red:#ff6b66;--r:20px;font-family:"Noto Sans JP","Hiragino Sans","Yu Gothic",system-ui,sans-serif}*{box-sizing:border-box}html,body{margin:0;height:100%;background:radial-gradient(circle at 20% 10%,#173b68 0,#06111f 34%,#03070d 100%);color:var(--text)}body{overflow:hidden}.deck{height:100vh;overflow-y:auto;scroll-snap-type:y mandatory}.slide{min-height:100vh;display:grid;place-items:center;padding:5vh 5vw;scroll-snap-align:start}.stage{width:min(1200px,100%);aspect-ratio:16/9;position:relative;padding:54px;border:1px solid var(--line);border-radius:28px;background:linear-gradient(145deg,#0b1728e8,#08111fe8);box-shadow:0 30px 90px #0008,inset 0 0 60px #5aa2ff10;overflow:hidden}.stage:before{content:"";position:absolute;inset:-40%;background:conic-gradient(from 210deg,#0000,#5aa2ff22,#f6ca4620,#0000);filter:blur(18px);animation:spin 28s linear infinite}.content{position:relative;z-index:1;height:100%;display:flex;flex-direction:column}.kicker{font:800 14px/1.2 ui-monospace,monospace;letter-spacing:.18em;color:var(--blue);text-transform:uppercase}.num{position:absolute;right:32px;top:26px;color:#ffffff66;font:900 22px/1 ui-monospace,monospace}.title{font-size:clamp(34px,5vw,68px);line-height:1.13;font-weight:900;letter-spacing:-.04em;margin:.35em 0}.gold{color:var(--gold);text-shadow:0 0 22px #f6ca4640}.lead{font-size:clamp(20px,2.4vw,32px);line-height:1.55;color:#dce9fb;font-weight:800}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-top:28px}.cols3{grid-template-columns:repeat(3,1fr)}.card{border:1px solid var(--line);background:var(--panel);border-radius:var(--r);padding:22px;box-shadow:inset 0 0 30px #5aa2ff0d}.card h3{margin:0 0 10px;font-size:24px}.card p,.card li{color:var(--muted);font-size:18px;line-height:1.55}.big{font-size:34px;font-weight:900}.flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:14px;margin-top:34px}.arrow{font-size:40px;color:var(--blue)}ul{margin:12px 0 0;padding-left:1.2em}.demo{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:auto}.demo .card{min-height:150px;padding:16px}.demo b{display:block;color:var(--gold);font-size:20px;margin-bottom:8px}.note{margin-top:auto;color:#d6e6fa;font-size:20px;line-height:1.5;border-left:5px solid var(--gold);padding:12px 0 12px 18px}.footer{position:absolute;left:54px;right:54px;bottom:28px;display:flex;justify-content:space-between;color:#ffffff70;font:700 13px/1.2 ui-monospace,monospace}.tag{display:inline-flex;gap:.45em;align-items:center;padding:8px 12px;border:1px solid #ffffff24;border-radius:999px;background:#ffffff0a;color:#d7e9ff;font-weight:800}.ok{color:var(--green)}.bad{color:var(--red)}@keyframes spin{to{transform:rotate(1turn)}}@media print{body{overflow:visible}.deck{height:auto;overflow:visible}.slide{min-height:auto;page-break-after:always;padding:0}.stage{width:100vw;height:56.25vw;border-radius:0}}@media(max-width:800px){body{overflow:auto}.stage{aspect-ratio:auto;min-height:86vh;padding:28px}.grid,.cols3,.flow,.demo{grid-template-columns:1fr}.arrow{transform:rotate(90deg)}.footer{position:static;margin-top:20px}.title{font-size:38px}.lead{font-size:22px}}
+@import url("https://fonts.googleapis.com/css2?family=Reggae+One&family=Noto+Sans+JP:wght@700;900&display=swap");
+
+:root {
+  --navy-950:#04070d;
+  --navy-900:#070e1b;
+  --navy-850:#0a1322;
+  --navy-800:#0c1828;
+  --ink-0:#ffffff;
+  --ink-1:#eaf0f8;
+  --ink-2:#c3cddc;
+  --ink-3:#8a96a8;
+  --blue-500:#2f6fd6;
+  --blue-400:#5aa2ff;
+  --blue-300:#83bcff;
+  --gold-200:#fff3cf;
+  --gold-400:#f6ca46;
+  --gold-500:#e0a637;
+  --gold-700:#b97e22;
+  --gold-soft:#f4ecd4;
+  --red-400:#ff5f54;
+  --green-400:#3ad592;
+  --line-1:rgba(255,255,255,.12);
+  --line-2:rgba(255,255,255,.22);
+  --line-blue:rgba(90,162,255,.4);
+  --line-gold:rgba(246,202,70,.5);
+  --card-bg:rgba(13,24,43,.78);
+  --card-bg-2:rgba(16,28,48,.86);
+  --sans:"Noto Sans JP","Inter","Hiragino Sans","Yu Gothic UI",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --brush:"Reggae One","Hiragino Mincho ProN","Yu Mincho",YuMincho,serif;
+  --cut:14px;
+}
+
+* { box-sizing:border-box; }
+html, body {
+  margin:0;
+  width:100%;
+  height:100%;
+  background:var(--navy-950);
+  color:var(--ink-1);
+  font-family:var(--sans);
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+body { overflow:hidden; }
+h1, h2, h3, p { margin:0; }
+
+.deck {
+  height:100vh;
+  overflow-y:scroll;
+  scroll-snap-type:y mandatory;
+}
+.slide {
+  height:100vh;
+  min-height:100vh;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  padding:0;
+  scroll-snap-align:start;
+}
+.stage {
+  position:relative;
+  width:1280px;
+  height:720px;
+  transform:scale(var(--fit,1));
+  transform-origin:center center;
+  overflow:hidden;
+  padding:34px 42px 30px;
+  background:
+    radial-gradient(132% 92% at 50% -16%, rgba(126,160,214,.3), rgba(11,20,36,0) 52%),
+    radial-gradient(80% 56% at 78% 6%, rgba(246,202,70,.13), rgba(11,20,36,0) 56%),
+    radial-gradient(120% 80% at 50% 118%, rgba(3,7,14,.94), rgba(8,15,28,0) 60%),
+    linear-gradient(180deg,#0a1322 0%,#0c1828 46%,#070e1b 100%);
+  border:0;
+  border-radius:0;
+  box-shadow:none;
+}
+.stage::before {
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  z-index:0;
+  background:
+    linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px),
+    linear-gradient(0deg,rgba(255,255,255,.03) 1px,transparent 1px);
+  background-size:58px 58px,58px 58px;
+  -webkit-mask-image:radial-gradient(125% 100% at 50% 0%,#000 28%,transparent 80%);
+  mask-image:radial-gradient(125% 100% at 50% 0%,#000 28%,transparent 80%);
+}
+.stage::after {
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  z-index:0;
+  box-shadow:inset 0 0 170px rgba(0,0,0,.72);
+}
+.stage > * { position:relative; z-index:1; }
+
+.content {
+  height:100%;
+  display:grid;
+  grid-template-rows:auto 1fr auto;
+  gap:18px;
+}
+.demo-content { grid-template-rows:1fr; }
+.topbar {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  min-height:34px;
+}
+.sec-no { display:flex; align-items:baseline; gap:14px; }
+.sec-no b {
+  color:var(--blue-400);
+  font-family:var(--mono);
+  font-size:24px;
+  font-weight:900;
+  border-bottom:3px solid var(--blue-500);
+  padding-bottom:3px;
+}
+.sec-no span { color:var(--ink-1); font-size:16px; font-weight:800; }
+.wordmark {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  color:#fff;
+  font-size:19px;
+  font-weight:900;
+  white-space:nowrap;
+}
+.tc-mark {
+  width:30px;
+  height:30px;
+  display:block;
+  object-fit:contain;
+  border-radius:7px;
+  filter:drop-shadow(0 2px 9px rgba(246,202,70,.35));
+}
+
+.display {
+  color:var(--ink-0);
+  font-weight:900;
+  line-height:1.22;
+  text-shadow:0 2px 24px rgba(0,0,0,.45);
+}
+.brush-gold {
+  font-family:var(--brush);
+  font-weight:400;
+  background:linear-gradient(178deg,var(--gold-200) 4%,var(--gold-400) 42%,var(--gold-500) 72%,var(--gold-700) 100%);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+  filter:drop-shadow(0 3px 22px rgba(246,202,70,.45));
+}
+.kicker {
+  color:var(--blue-300);
+  font-family:var(--mono);
+  font-size:13px;
+  font-weight:900;
+}
+.title {
+  font-size:58px;
+  line-height:1.18;
+  font-weight:900;
+}
+.hero-title { font-size:68px; line-height:1.16; }
+.demo-title { font-size:150px; line-height:1; }
+.lead {
+  color:var(--ink-1);
+  font-size:25px;
+  font-weight:800;
+  line-height:1.56;
+}
+.muted {
+  color:var(--ink-2);
+  font-size:17px;
+  font-weight:700;
+  line-height:1.58;
+}
+.gold { color:var(--gold-400); }
+.ok { color:var(--green-400); }
+.bad { color:var(--red-400); }
+
+.main {
+  min-height:0;
+  display:grid;
+  align-content:center;
+  gap:18px;
+}
+.main.center { place-items:center; text-align:center; }
+.grid {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:16px;
+}
+.grid.three { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.flow {
+  display:grid;
+  grid-template-columns:1fr auto 1fr auto 1fr;
+  align-items:center;
+  gap:12px;
+}
+.chev {
+  color:var(--blue-400);
+  font-size:22px;
+  font-weight:900;
+  display:grid;
+  place-items:center;
+  text-shadow:0 0 12px rgba(90,162,255,.6);
+}
+.panel {
+  position:relative;
+  background:linear-gradient(180deg,var(--card-bg),rgba(9,17,31,.9));
+  border:1px solid var(--line-blue);
+  border-radius:6px;
+  clip-path:polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut));
+  box-shadow:inset 0 0 36px rgba(90,162,255,.05);
+}
+.panel.gold-frame {
+  border-color:var(--line-gold);
+  box-shadow:inset 0 0 36px rgba(246,202,70,.05);
+}
+.card {
+  min-height:185px;
+  padding:22px;
+  display:grid;
+  gap:10px;
+  align-content:start;
+}
+.card h3 {
+  color:var(--ink-0);
+  font-size:23px;
+  font-weight:900;
+  line-height:1.32;
+}
+.card p, .card li {
+  color:var(--ink-2);
+  font-size:16px;
+  font-weight:700;
+  line-height:1.58;
+}
+.card .tag {
+  color:var(--blue-300);
+  font-family:var(--mono);
+  font-size:11.5px;
+  font-weight:900;
+}
+.gold-band {
+  position:relative;
+  display:flex;
+  align-items:center;
+  gap:16px;
+  min-height:58px;
+  padding:13px 22px;
+  border:1px solid var(--line-gold);
+  border-radius:4px;
+  background:
+    linear-gradient(90deg,rgba(246,202,70,.2),rgba(246,202,70,.04) 22% 78%,rgba(246,202,70,.2)),
+    rgba(8,14,26,.7);
+  box-shadow:0 0 40px -14px rgba(246,202,70,.45), inset 0 0 0 1px rgba(246,202,70,.12);
+  color:var(--gold-soft);
+  font-size:19px;
+  font-weight:800;
+  overflow:hidden;
+}
+.gold-band::before, .gold-band::after {
+  content:"";
+  position:absolute;
+  top:-30%;
+  width:120px;
+  height:160%;
+  background:linear-gradient(100deg,transparent,rgba(246,202,70,.35) 35%,rgba(224,166,55,.2) 60%,transparent);
+  transform:skewX(-18deg);
+  pointer-events:none;
+}
+.gold-band::before { left:-34px; }
+.gold-band::after { right:-34px; transform:skewX(18deg); }
+.band-mark {
+  color:var(--gold-400);
+  font-family:var(--mono);
+  font-size:15px;
+  font-weight:900;
+}
+.gold-band strong { color:#fff; font-weight:900; }
+.gold-band em { font-style:normal; color:var(--gold-400); font-weight:900; }
+
+.hero-grid {
+  display:grid;
+  grid-template-columns:1.05fr .95fr;
+  gap:30px;
+  align-items:center;
+}
+.hero-stack { display:grid; gap:14px; }
+.hero-name {
+  display:flex;
+  align-items:center;
+  gap:14px;
+  color:#fff;
+  font-size:48px;
+  font-weight:900;
+}
+.hero-name .tc-mark { width:50px; height:50px; }
+.pill-row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+.pill {
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  min-height:34px;
+  padding:7px 13px;
+  border:1px solid var(--line-gold);
+  border-radius:7px;
+  background:rgba(246,202,70,.1);
+  color:var(--gold-400);
+  font-family:var(--mono);
+  font-size:13px;
+  font-weight:900;
+}
+.pill.dim {
+  color:var(--ink-3);
+  background:transparent;
+  border-style:dashed;
+}
+.problem-box {
+  padding:20px;
+  display:grid;
+  gap:10px;
+}
+.problem-box .ttl {
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  border-bottom:1px solid var(--line-1);
+  padding-bottom:9px;
+}
+.problem-box .ttl b { color:var(--ink-0); font-size:20px; font-weight:900; }
+.problem-box .ttl span { color:var(--blue-300); font-family:var(--mono); font-size:13px; font-weight:900; }
+.problem-box .ttl em { margin-left:auto; color:var(--gold-400); font-style:normal; font-family:var(--mono); font-size:19px; font-weight:900; }
+
+.team-grid {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+  align-items:stretch;
+}
+.team-card {
+  min-height:300px;
+  padding:18px;
+  display:grid;
+  gap:12px;
+  align-content:start;
+}
+.team-id { display:flex; align-items:center; gap:13px; }
+.avatar { width:76px; height:76px; display:block; filter:drop-shadow(0 0 18px rgba(246,202,70,.3)); flex:0 0 auto; }
+.role {
+  color:var(--gold-400);
+  font-family:var(--mono);
+  font-size:11px;
+  font-weight:900;
+}
+.role.blue { color:var(--blue-300); }
+.team-id h3 { color:var(--ink-0); font-size:21px; font-weight:900; line-height:1.15; }
+.team-id small { color:var(--ink-3); font-size:12px; font-weight:700; }
+.sep { height:1px; background:linear-gradient(90deg,transparent,var(--line-gold),transparent); }
+.team-card p { color:var(--ink-2); font-size:14px; font-weight:700; line-height:1.58; }
+
+.link-hero { text-align:center; display:grid; gap:12px; justify-items:center; }
+.link-title { font-size:72px; line-height:1.14; }
+.link-sub { color:var(--ink-1); font-size:20px; font-weight:800; }
+.qr-grid {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:16px;
+  width:min(920px,100%);
+  margin:0 auto;
+}
+.qr-card {
+  min-height:300px;
+  padding:16px;
+  display:grid;
+  gap:9px;
+  justify-items:center;
+  text-align:center;
+  align-content:start;
+  background:linear-gradient(180deg,rgba(13,24,43,.92),rgba(9,17,31,.94));
+}
+.qr-card h3 { color:var(--gold-400); font-size:18px; font-weight:900; }
+.qr-card p { color:var(--ink-3); font-size:13px; font-weight:700; line-height:1.48; }
+.qr-item { display:grid; gap:6px; justify-items:center; text-align:center; width:100%; }
+.qr-item img {
+  width:118px;
+  display:block;
+  background:#fff;
+  padding:5px;
+  border:1px solid var(--line-gold);
+  border-radius:8px;
+  image-rendering:pixelated;
+}
+.qr-item span {
+  color:var(--ink-3);
+  font-family:var(--mono);
+  font-size:10px;
+  font-weight:800;
+}
+
+.progress {
+  position:fixed;
+  top:0;
+  left:0;
+  z-index:20;
+  width:0;
+  height:4px;
+  background:linear-gradient(90deg,var(--gold-400),var(--blue-400));
+  box-shadow:0 0 14px rgba(246,202,70,.5);
+  transition:width .18s ease;
+}
+.counter {
+  position:fixed;
+  right:16px;
+  bottom:14px;
+  z-index:20;
+  padding:4px 11px;
+  border:1px solid var(--line-1);
+  border-radius:999px;
+  background:rgba(10,18,32,.72);
+  color:var(--ink-2);
+  font-family:var(--mono);
+  font-size:12px;
+  backdrop-filter:blur(6px);
+}
+
+@media (max-width:760px) {
+  body { overflow:auto; }
+  .slide { height:auto; min-height:100vh; overflow:visible; }
+  .stage { width:100vw; height:auto; min-height:100vh; transform:none; overflow:visible; padding:18px; }
+  .content { height:auto; }
+  .hero-grid, .grid, .grid.three, .flow, .team-grid, .qr-grid { grid-template-columns:1fr; }
+  .chev { transform:rotate(90deg); }
+  .title, .hero-title { font-size:38px; }
+  .demo-title { font-size:80px; }
+  .lead { font-size:21px; }
+  .gold-band { font-size:15px; }
+  .counter, .progress { display:none; }
+}
+@media print {
+  body { background:#05090f; }
+  .deck { height:auto; overflow:visible; }
+  .slide { height:100vh; min-height:auto; padding:0; page-break-after:always; break-after:page; }
+  .stage { width:100vw; height:100vh; transform:none; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .progress, .counter { display:none; }
+}
 </style>
 </head>
 <body>
-<main class="deck">
-<section class="slide"><div class="stage"><div class="content"><span class="num">01/14</span><div class="kicker">CCoE Kansai LT</div><h1 class="title"><span class="gold">“作れる”</span>と<br /><span class="gold">“出せる”</span>の間にある<br />詰まりを考える</h1><p class="lead">生成AI時代のCCoEは、チェックリストを増やす組織ではなく、安全に前へ進める導線を作る組織になる。</p><div class="footer"><span>TenkaCloud / StackStack</span><span>15 min talk</span></div></div></div></section>
-<section class="slide"><div class="stage"><div class="content"><span class="num">02/14</span><div class="kicker">Origin</div><h2 class="title">AWS GameDayを<br />やりたかった</h2><div class="grid"><div class="card"><h3>好きだったもの</h3><p>制限時間の中で、チームでログ・設定・権限・構成を見て、何を直すべきか判断する実践型の学び。</p></div><div class="card"><h3>作りたかったもの</h3><p>その体験を、コミュニティや社内教育でも再現できる問題作成・運営の土台。</p></div></div><p class="note">スライドで知識を渡すだけでは、運用判断の筋肉は育ちにくい。</p></div></div></section>
-<section class="slide"><div class="stage"><div class="content"><span class="num">03/14</span><div class="kicker">Platform</div><h2 class="title">TenkaCloudを作った</h2><div class="grid cols3"><div class="card"><h3>Battle</h3><p>リアルタイム・チーム戦。攻防や復旧を含むGameDay型。</p></div><div class="card"><h3>Challenge</h3><p>セルフペースの常設問題。JAM型の反復練習。</p></div><div class="card"><h3>Problem packs</h3><p>問題はメタデータ、テンプレート、ポータル拡張で差し替え可能。</p></div></div><p class="note">狙いは「イベントを毎回手作りしない」こと。学習体験を作る側の摩擦も下げる。</p></div></div></section>
-<section class="slide"><div class="stage"><div class="content"><span class="num">04/14</span><div class="kicker">AI-era scenario</div><h2 class="title">生成AI時代っぽい問題：<span class="gold">StackStack</span></h2><p class="lead">お題は「バイブコーディングされたアプリを、安全に社内公開できるか」。</p><div class="grid"><div class="card"><h3>作れる</h3><p>AIでアプリは早く動く。デモもプロトタイプも作れる。</p></div><div class="card"><h3>出せる</h3><p>認証、権限、ログ、設定、デプロイ、運用責任まで見て、はじめて公開できる。</p></div></div></div></div></section>
-<section class="slide"><div class="stage"><div class="content"><span class="num">05/14</span><div class="kicker">Competition design</div><h2 class="title">“作れる”と“出せる”の間を<br />競技にする</h2><div class="flow"><div class="card"><h3>AIで作った感</h3><p>動くが、境界条件が甘い。</p></div><div class="arrow">→</div><div class="card"><h3>運用目線で読む</h3><p>リスクを探し、優先順位を決める。</p></div><div class="arrow">→</div><div class="card"><h3>社内公開へ</h3><p>守るべき線まで修正する。</p></div></div><p class="note">ここで問われるのは、コード生成力ではなく「公開してよい状態を見極める力」。</p></div></div></section>
-<section class="slide"><div class="stage"><div class="content"><span class="num">06/14</span><div class="kicker">What we learned</div><h2 class="title">紹介してみて分かったこと</h2><div class="grid"><div class="card"><h3 class="bad">前提が遠い</h3><p>非エンジニアにとって、AWS・IAM・ネットワーク・脆弱性の言葉は入口から重い。</p></div><div class="card"><h3 class="ok">問題意識はある</h3><p>セキュリティが大事なことは分かる。でも、何から始めればよいかの絵が持ちづらい。</p></div></div><p class="note">課題は「意識の低さ」ではなく「入口のなさ」だった。</p></div></div></section>
-<section class="slide"><div class="stage"><div class="content"><span class="num">07/14</span><div class="kicker">Reframe</div><h2 class="title">だから前段が必要だった</h2><p class="lead">いきなりAWS上の実戦問題ではなく、ローカルで、ひとりで、何度でも試せる導入を置く。</p><div class="grid cols3"><div class="card"><h3>Self-paced</h3><p>時計とチームの圧を外す。</p></div><div class="card"><h3>Local</h3><p>AWSアカウントや請求を要求しない。</p></div><div class="card"><h3>Small wins</h3><p>発見、修正、採点、解説を短いループにする。</p></div></div></div></div></section>
-<section class="slide"><div class="stage"><div class="content"><span class="num">08/14</span><div class="kicker">Why WordPress</div><h2 class="title">WordPressを入口にした理由</h2><div class="grid"><div class="card"><h3>非エンジニアにも馴染みがある</h3><p>「Webサイト」「管理画面」「バックアップ」「プラグイン」は想像しやすい。</p></div><div class="card"><h3>Web運用の基本が詰まっている</h3><p>公開ファイル、設定、ユーザー、ログ、更新、バックアップの扱いを学べる。</p></div></div><p class="note">AWS固有の知識に入る前に、「何を見ると危ないのか」の感覚を育てる。</p></div></div></section>
-<section class="slide"><div class="stage"><div class="content"><span class="num">09/14</span><div class="kicker">Local demo</div><h2 class="title">デモ導線（2.5〜3分）</h2><div class="demo"><div class="card"><b>0:00</b><p>ローカルモードの問題一覧を見る</p></div><div class="card"><b>0:30</b><p>WordPress問題を起動する</p></div><div class="card"><b>1:05</b><p>問題文と観察ポイントを説明する</p></div><div class="card"><b>1:55</b><p>回答提出・採点を見せる</p></div><div class="card"><b>2:35</b><p>解説からStackStackへ接続する</p></div></div><p class="note">ライブ操作が不安な場合は、この5カットをスクリーンショットまたは録画にする。</p></div></div></section>
-<section class="slide"><div class="stage"><div class="content"><span class="num">10/14</span><div class="kicker">Learning from app layer</div><h2 class="title">作ってみて分かったこと</h2><p class="lead">アプリレイヤーだけでも、運用・セキュリティの学びは大きい。</p><div class="grid cols3"><div class="card"><h3>見える</h3><p>ブラウザと管理画面で状態が分かる。</p></div><div class="card"><h3>直せる</h3><p>設定変更の結果をすぐ確認できる。</p></div><div class="card"><h3>語れる</h3><p>「なぜ危ないか」を職種横断で会話しやすい。</p></div></div></div></div></section>
-<section class="slide"><div class="stage"><div class="content"><span class="num">11/14</span><div class="kicker">Path to StackStack</div><h2 class="title">WordPressローカルから<br />StackStackへ</h2><div class="flow"><div class="card"><h3>入口</h3><p>漏れたバックアップを見つける。</p></div><div class="arrow">→</div><div class="card"><h3>一般化</h3><p>公開前に見るべき観点を増やす。</p></div><div class="arrow">→</div><div class="card"><h3>実戦</h3><p>AWS上のアプリ公開判断に挑む。</p></div></div><p class="note">ローカルモードはStackStackの代替ではなく、StackStackに届くための助走。</p></div></div></section>
-<section class="slide"><div class="stage"><div class="content"><span class="num">12/14</span><div class="kicker">CCoE proposal</div><h2 class="title">CCoEへの提案</h2><div class="grid"><div class="card"><h3>チェックリストの山ではない</h3><p>項目を増やすだけだと、非エンジニアには「止められている」体験になりやすい。</p></div><div class="card"><h3>導線と楽しいコンテンツを作る</h3><p>学びやすく、試しやすく、飽きずに続けられる小さな実践を用意する。</p></div></div><p class="note">CCoEはクラウドの専門家であると同時に、組織の学習体験を設計するチームになる。</p></div></div></section>
-<section class="slide"><div class="stage"><div class="content"><span class="num">13/14</span><div class="kicker">Takeaways</div><h2 class="title">まとめ</h2><div class="grid cols3"><div class="card"><h3>1. 生成AIで入口が広がった</h3><p>作る人は増える。公開判断の支援が必要になる。</p></div><div class="card"><h3>2. 詰まりは前提知識にある</h3><p>AWSやセキュリティの前に、観察と判断の練習が要る。</p></div><div class="card"><h3>3. CCoEは導線を作る</h3><p>“作れる”を“出せる”に変える組織になる。</p></div></div></div></div></section>
-<section class="slide"><div class="stage"><div class="content"><span class="num">14/14</span><div class="kicker">Close</div><h2 class="title"><span class="gold">作れる人</span>を増やす時代に、<br /><span class="gold">出せる状態</span>まで伴走する。</h2><p class="lead">TenkaCloud / StackStack は、その間にある学習と実戦のギャップを、楽しく安全に埋めるための試みです。</p><div style="margin-top:34px;display:flex;gap:12px;flex-wrap:wrap"><span class="tag">Local drills</span><span class="tag">WordPress</span><span class="tag">StackStack</span><span class="tag">CCoE enablement</span></div><div class="footer"><span>Thank you</span><span>Issue #2509</span></div></div></div></section>
+<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0" aria-hidden="true">
+  <defs>
+    <linearGradient id="agGold" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#ffeeb0"/><stop offset=".5" stop-color="#f6ca46"/><stop offset="1" stop-color="#a87420"/>
+    </linearGradient>
+    <radialGradient id="avSky" cx=".42" cy=".3" r=".95">
+      <stop stop-color="#f3d88f"/><stop offset=".55" stop-color="#cda14c"/><stop offset="1" stop-color="#6e5120"/>
+    </radialGradient>
+  </defs>
+  <symbol id="av-samurai" viewBox="0 0 64 64">
+    <circle cx="32" cy="32" r="29" fill="url(#avSky)" stroke="url(#agGold)" stroke-width="2.6"/>
+    <path d="M12 50c4-4 10-4 14-1-4-3-2-6 2-6-3-2-1-5 3-4" fill="none" stroke="#9c7730" stroke-width="2.4" opacity=".7"/>
+    <path d="M40 14c6-2 10 1 11 5-4-1-8 0-10 2l-3-2Z" fill="#0d1830"/>
+    <path d="M22 47c-1-10 2-18 9-20l-2-8 7 5 8-2-3 6c5 3 8 9 8 14v5H22Z" fill="#0d1830"/>
+    <path d="M28 26c4-3 10-3 14 0" stroke="#27406e" stroke-width="1.4" fill="none"/>
+  </symbol>
+  <symbol id="av-ninja" viewBox="0 0 64 64">
+    <circle cx="32" cy="32" r="29" fill="url(#avSky)" stroke="url(#agGold)" stroke-width="2.6"/>
+    <path d="M13 50c4-4 9-4 13-2-3-3-1-6 3-5" fill="none" stroke="#9c7730" stroke-width="2.4" opacity=".7"/>
+    <circle cx="32" cy="25" r="10" fill="#0d1830"/>
+    <path d="M21 22h22v5H21Z" fill="#10203c"/>
+    <path d="M43 23l10-5-7 10Z" fill="#0d1830"/>
+    <path d="M26 24.5h9" stroke="#d9b65a" stroke-width="1.6"/>
+    <path d="M20 48c1-8 5-13 12-14 7 1 11 6 12 14Z" fill="#0d1830"/>
+  </symbol>
+  <symbol id="av-kunoichi" viewBox="0 0 64 64">
+    <circle cx="32" cy="32" r="29" fill="url(#avSky)" stroke="url(#agGold)" stroke-width="2.6"/>
+    <path d="M14 49c4-4 9-4 13-2-3-3-1-6 3-5" fill="none" stroke="#9c7730" stroke-width="2.4" opacity=".7"/>
+    <path d="M16 46 44 18l3 3L19 49Z" fill="#0d1830"/>
+    <path d="M44 18l5-3-2 5Z" fill="#caa54b"/>
+    <circle cx="36" cy="14" r="4.4" fill="#0d1830"/>
+    <circle cx="33" cy="26" r="9" fill="#0d1830"/>
+    <path d="M21 48c1-8 5-13 12-13 7 0 11 5 12 13Z" fill="#0d1830"/>
+  </symbol>
+</svg>
+
+<div class="progress" id="progress"></div>
+<div class="counter" id="counter">1 / 16</div>
+
+<main class="deck" id="deck">
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar">
+          <div class="sec-no"><b>01</b><span>CCoE Kansai LT</span></div>
+          <div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div>
+        </div>
+        <div class="main hero-grid">
+          <div class="hero-stack">
+            <div class="hero-name">TenkaCloud<img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" /></div>
+            <h1 class="hero-title display"><span class="brush-gold">“作れる”</span>と<br /><span class="brush-gold">“出せる”</span>の間にある<br />詰まりを考える</h1>
+            <p class="lead">生成AI時代のCCoEは、チェックリストを増やす組織ではなく、安全に前へ進める導線を作る組織になる。</p>
+          </div>
+          <div class="panel gold-frame problem-box">
+            <div class="ttl"><span>talk:</span><b>CCoE enablement</b><em>15 min</em></div>
+            <p class="muted">TenkaCloud、StackStack、ローカルモード、WordPress導入を通じて、組織の学習導線をどう設計するかを整理する。</p>
+            <div class="pill-row">
+              <span class="pill">Local drills</span>
+              <span class="pill">WordPress</span>
+              <span class="pill">StackStack</span>
+            </div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">THEME</span><span>“動く” から “出していい” までの距離を、学習体験として短くする。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar"><div class="sec-no"><b>02</b><span>Origin</span></div><div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div></div>
+        <div class="main">
+          <h2 class="title display">AWS GameDayを<br /><span class="brush-gold">やりたかった。</span></h2>
+          <div class="grid">
+            <div class="panel card"><span class="tag">WHAT I LOVED</span><h3>制限時間の中で判断する</h3><p>チームでログ・設定・権限・構成を見て、何を直すべきかを決める実践型の学び。</p></div>
+            <div class="panel card"><span class="tag">WHAT I WANTED</span><h3>運営の土台を作る</h3><p>その体験を、コミュニティや社内教育でも再現できる問題作成・運営の土台。</p></div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">POINT</span><span>スライドで知識を渡すだけでは、運用判断の筋肉は育ちにくい。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar"><div class="sec-no"><b>03</b><span>Platform</span></div><div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div></div>
+        <div class="main">
+          <h2 class="title display">TenkaCloudを<br /><span class="brush-gold">作った。</span></h2>
+          <div class="grid three">
+            <div class="panel card"><span class="tag">BATTLE</span><h3>リアルタイム・チーム戦</h3><p>攻防や復旧を含むGameDay型の競技を運営する。</p></div>
+            <div class="panel card"><span class="tag">CHALLENGE</span><h3>セルフペースの常設問題</h3><p>JAM型に、ひとりでも何度でも反復練習できる。</p></div>
+            <div class="panel card"><span class="tag">PROBLEM PACKS</span><h3>問題を差し替える</h3><p>メタデータ、テンプレート、ポータル拡張で問題を増やせる。</p></div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">AIM</span><span>イベントを毎回手作りしない。学習体験を作る側の摩擦も下げる。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar"><div class="sec-no"><b>04</b><span>AI-era scenario</span></div><div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div></div>
+        <div class="main">
+          <h2 class="title display">生成AI時代っぽい問題：<br /><span class="brush-gold">StackStack</span></h2>
+          <p class="lead">お題は「バイブコーディングされたアプリを、安全に社内公開できるか」。</p>
+          <div class="grid">
+            <div class="panel card"><span class="tag">CAN BUILD</span><h3>作れる</h3><p>AIでアプリは早く動く。デモもプロトタイプも作れる。</p></div>
+            <div class="panel card gold-frame"><span class="tag">CAN SHIP</span><h3>出せる</h3><p>認証、権限、ログ、設定、デプロイ、運用責任まで見て、はじめて公開できる。</p></div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">STACKSTACK</span><span>“動く” ことと “出してよい” ことは、同じではない。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar"><div class="sec-no"><b>05</b><span>Competition design</span></div><div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div></div>
+        <div class="main">
+          <h2 class="title display">“作れる”と“出せる”の間を<br /><span class="brush-gold">競技にする。</span></h2>
+          <div class="flow">
+            <div class="panel card"><span class="tag">01</span><h3>AIで作った感</h3><p>動くが、境界条件が甘い。</p></div>
+            <div class="chev">▶</div>
+            <div class="panel card"><span class="tag">02</span><h3>運用目線で読む</h3><p>リスクを探し、優先順位を決める。</p></div>
+            <div class="chev">▶</div>
+            <div class="panel card gold-frame"><span class="tag">03</span><h3>社内公開へ</h3><p>守るべき線まで修正する。</p></div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">GAME</span><span>問われるのは、コード生成力ではなく「公開してよい状態を見極める力」。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar"><div class="sec-no"><b>06</b><span>What we learned</span></div><div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div></div>
+        <div class="main">
+          <h2 class="title display">紹介してみて<br /><span class="brush-gold">分かったこと。</span></h2>
+          <div class="grid">
+            <div class="panel card"><span class="tag bad">FRICTION</span><h3>前提が遠い</h3><p>非エンジニアにとって、AWS・IAM・ネットワーク・脆弱性の言葉は入口から重い。</p></div>
+            <div class="panel card gold-frame"><span class="tag ok">NEED</span><h3>問題意識はある</h3><p>セキュリティが大事なことは分かる。でも、何から始めればよいかの絵が持ちづらい。</p></div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">LEARNED</span><span>課題は「意識の低さ」ではなく「入口のなさ」だった。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar"><div class="sec-no"><b>07</b><span>Reframe</span></div><div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div></div>
+        <div class="main">
+          <h2 class="title display">だから<br /><span class="brush-gold">前段が必要だった。</span></h2>
+          <p class="lead">いきなりAWS上の実戦問題ではなく、ローカルで、ひとりで、何度でも試せる導入を置く。</p>
+          <div class="grid three">
+            <div class="panel card"><span class="tag">SELF-PACED</span><h3>時計とチームの圧を外す</h3><p>まずは自分のペースで、観察と修正を試す。</p></div>
+            <div class="panel card"><span class="tag">LOCAL</span><h3>AWSアカウントを要求しない</h3><p>請求や環境準備を気にせず、最初の一歩を踏める。</p></div>
+            <div class="panel card gold-frame"><span class="tag">SMALL WINS</span><h3>短いループにする</h3><p>発見、修正、採点、解説を小さく回す。</p></div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">REFRAME</span><span>StackStackに届く前に、観察と判断の助走を作る。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar"><div class="sec-no"><b>08</b><span>Why WordPress</span></div><div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div></div>
+        <div class="main">
+          <h2 class="title display">WordPressを<br /><span class="brush-gold">入口にした理由。</span></h2>
+          <div class="grid">
+            <div class="panel card"><span class="tag">FAMILIAR</span><h3>非エンジニアにも馴染みがある</h3><p>「Webサイト」「管理画面」「バックアップ」「プラグイン」は想像しやすい。</p></div>
+            <div class="panel card gold-frame"><span class="tag">OPERATIONS</span><h3>Web運用の基本が詰まっている</h3><p>公開ファイル、設定、ユーザー、ログ、更新、バックアップの扱いを学べる。</p></div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">ENTRY</span><span>AWS固有の知識に入る前に、「何を見ると危ないのか」の感覚を育てる。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content demo-content">
+        <div class="main center">
+          <h2 class="demo-title brush-gold">デモ</h2>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar"><div class="sec-no"><b>10</b><span>Learning from app layer</span></div><div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div></div>
+        <div class="main">
+          <h2 class="title display">作ってみて<br /><span class="brush-gold">分かったこと。</span></h2>
+          <p class="lead">アプリレイヤーだけでも、運用・セキュリティの学びは大きい。</p>
+          <div class="grid three">
+            <div class="panel card"><span class="tag">VISIBLE</span><h3>見える</h3><p>ブラウザと管理画面で状態が分かる。</p></div>
+            <div class="panel card"><span class="tag">FIXABLE</span><h3>直せる</h3><p>設定変更の結果をすぐ確認できる。</p></div>
+            <div class="panel card gold-frame"><span class="tag">SHAREABLE</span><h3>語れる</h3><p>「なぜ危ないか」を職種横断で会話しやすい。</p></div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">APP LAYER</span><span>まず見えるものから始めると、職種をまたいだ会話にしやすい。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar"><div class="sec-no"><b>11</b><span>Path to StackStack</span></div><div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div></div>
+        <div class="main">
+          <h2 class="title display">WordPressローカルから<br /><span class="brush-gold">StackStackへ。</span></h2>
+          <div class="flow">
+            <div class="panel card"><span class="tag">ENTRY</span><h3>入口</h3><p>漏れたバックアップを見つける。</p></div>
+            <div class="chev">▶</div>
+            <div class="panel card"><span class="tag">GENERALIZE</span><h3>一般化</h3><p>公開前に見るべき観点を増やす。</p></div>
+            <div class="chev">▶</div>
+            <div class="panel card gold-frame"><span class="tag">BATTLE</span><h3>実戦</h3><p>AWS上のアプリ公開判断に挑む。</p></div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">PATH</span><span>ローカルモードはStackStackの代替ではなく、StackStackに届くための助走。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar"><div class="sec-no"><b>12</b><span>CCoE proposal</span></div><div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div></div>
+        <div class="main">
+          <h2 class="title display">CCoEへの<br /><span class="brush-gold">提案。</span></h2>
+          <div class="grid">
+            <div class="panel card"><span class="tag">NOT ENOUGH</span><h3>チェックリストの山ではない</h3><p>項目を増やすだけだと、非エンジニアには「止められている」体験になりやすい。</p></div>
+            <div class="panel card gold-frame"><span class="tag">WHAT TO DESIGN</span><h3>導線と楽しいコンテンツを作る</h3><p>学びやすく、試しやすく、飽きずに続けられる小さな実践を用意する。</p></div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">CCoE</span><span>クラウドの専門家であると同時に、組織の学習体験を設計するチームになる。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar"><div class="sec-no"><b>13</b><span>Takeaways</span></div><div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div></div>
+        <div class="main">
+          <h2 class="title display">まとめ</h2>
+          <div class="grid three">
+            <div class="panel card"><span class="tag">01</span><h3>生成AIで入口が広がった</h3><p>作る人は増える。公開判断の支援が必要になる。</p></div>
+            <div class="panel card"><span class="tag">02</span><h3>詰まりは前提知識にある</h3><p>AWSやセキュリティの前に、観察と判断の練習が要る。</p></div>
+            <div class="panel card gold-frame"><span class="tag">03</span><h3>CCoEは導線を作る</h3><p>“作れる”を“出せる”に変える組織になる。</p></div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">TAKEAWAY</span><span>生成AI時代のCCoEは、止める門番ではなく、出せる状態まで伴走する。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar"><div class="sec-no"><b>14</b><span>Close</span></div><div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div></div>
+        <div class="main">
+          <h2 class="title display"><span class="brush-gold">作れる人</span>を増やす時代に、<br /><span class="brush-gold">出せる状態</span>まで伴走する。</h2>
+          <p class="lead">TenkaCloud / StackStack は、その間にある学習と実戦のギャップを、楽しく安全に埋めるための試みです。</p>
+          <div class="pill-row">
+            <span class="pill">Local drills</span>
+            <span class="pill">WordPress</span>
+            <span class="pill">StackStack</span>
+            <span class="pill">CCoE enablement</span>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">MESSAGE</span><span>“作れる” の先にある、公開判断と運用の練習場を作る。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar"><div class="sec-no"><b>15</b><span>Team</span></div><div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div></div>
+        <div class="main">
+          <h2 class="title display">クラウド競技が <span class="brush-gold">大好き</span> なメンバーが作っています。</h2>
+          <div class="team-grid">
+            <div class="panel gold-frame team-card">
+              <div class="team-id"><svg class="avatar"><use href="#av-samurai"/></svg><span><span class="role">FOUNDER</span><h3>amedama</h3><small>(Susumu Tomita)</small></span></div>
+              <div class="sep"></div>
+              <p>JAWS DAYS 2024 AWS Game Day <em class="gold">優勝</em>。2026 <em class="gold">準優勝</em>。</p>
+            </div>
+            <div class="panel team-card">
+              <div class="team-id"><svg class="avatar"><use href="#av-ninja"/></svg><span><span class="role blue">TEAM</span><h3>チャーリー</h3></span></div>
+              <div class="sep"></div>
+              <p>JAWS 名古屋運営メンバー。Game Day の熱量を広げたい人。</p>
+            </div>
+            <div class="panel team-card">
+              <div class="team-id"><svg class="avatar"><use href="#av-kunoichi"/></svg><span><span class="role blue">TEAM</span><h3>きせのん</h3></span></div>
+              <div class="sep"></div>
+              <p>JAWS DAYS 2024 Game Day <em class="gold">優勝</em>。AWS 認定全冠。CCoE はじめました。</p>
+            </div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">TEAM</span><span>作れる人はいるかもしれない。でも、熱量ある問題を作れる人はそうそういない。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="stage">
+      <div class="content">
+        <div class="topbar"><div class="sec-no"><b>16</b><span>Links</span></div><div class="wordmark"><img class="tc-mark" src="../assets/svg/tenkacloud-appicon.svg" alt="" />TenkaCloud</div></div>
+        <div class="main">
+          <div class="link-hero">
+            <h2 class="link-title brush-gold">触ってみてください。</h2>
+            <p class="link-sub">問題も、コードも、すべて <em class="gold">OSS</em>。入口は新しいランディングページから。</p>
+          </div>
+          <div class="qr-grid">
+            <div class="panel qr-card">
+              <h3>Repository</h3>
+              <div class="qr-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAB8klEQVRoge2aMZKDMAxFlUlBmSNwlBwNjpajcARKCsZa68s2ZmdTLMQUma+CIfYjhYW+JRkR2vfZQ93WeN/P92BDi4jq1KUZJXYCW7DK3So69rPdPtWGnlO3YuZO7ArspuaZNBZkeNmNvvCk6kzsMxjGgHUheYHY5ZgMExyWRIrYZzBMYWwyYHy64LxVJGINsLLtmuAjFsx/hv29OxP7D1bZgNzGMHhB3hixz2NZfnB9rFGekuDrEqNgiEPETmDir7yNWeoepaZO3ccsNcSaYpAfhz11jxFRYsGwFAvEDmEi9vr3y92XPKTKKEaE2RYLxFpiD8WM7a6DJZLRZk/dgeksxE5giILoheKSLDWwcadIxFphOXVX7LGY21ox+Qex4xjqU7EogK4MUfBvWryQpYZYa8yrpZjV6OpAEN8DKuEidhgzLyBPRKfR1//Vwwv9vldDrBUmkp0FG+Cs1CVIHXZix7GcNCKrCaX892OknSIRa4dlZ6l6bokugQdEdJaqEjuObeaCY2aB4fUpjFhzrOr3moXUJdgONfxJYgexlLqvpdbHaUXaYkf7G2IXYOVgNMqPY11uHNTCRew0lhq5IMwLnkESuxiztqP6NduujCX2byxLjXpWM6YviH4dLRFrihWfVPVpwIdGWhdQxFpitG+zHxp3Rgc25yemAAAAAElFTkSuQmCC" alt="Repository QR" /><span>github.com/susumutomita/TenkaCloud</span></div>
+              <p>ソースコード・サンプルはこちらから。</p>
+            </div>
+            <div class="panel qr-card">
+              <h3>Problems</h3>
+              <div class="qr-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAB8ElEQVRoge2aMZbCMAxExdsiZY6Qo3A0fDSOwhEoU/CitUaycbJsQcAUvFHBEuVni0w0kWVEGN8Xo3rcRE6X8YbULKJ6GeKMEnsBm3GXh1s+o1f7elRLHS8DrpEfYp/ADmrKmFgu2dnSei5XEnsPlj/lZzFsWEIFYh/H7MA/4UPE3oPBUCyXppzTdHTD+deRiHXA6msXmNWC6WfY47czsWewVYww/NHfp3/OEuuGFfvRGmH4OucqKO0msZcw9ImWO2hqW/e0sRpifbAI9JZ4/E+qtRYMWwWxJzFTwR98bVdGuSJwTVsLxPph0VvCl8Rhb91duasQewGTwdqWydxdJm2sBpGq1RDriY26BKxYLa0rQqumxPZhXgtWBUn88VekQoW11RDrhNnReVIMYcpqasmGj/K4GxexfRgWo/Hgq88b40pTYWpmNcT6YmI56y1tSgCxYkqQsUYsYruwYjXIleU/JJFHjkSsC9bOvWJKEN8TVCS2G7uHpf2WWx/p61MEse5YM+/1RvKk7v5lU8P/B7Gd2Ow3Hm9SG6cLdivMfXwIs93UINYF226MxpQAEqZJ10MYYruxkosJu4gLs1WBWFfMpwS2MVrXp6oPNCX2DIY/UEGidfemcb1nRKwrVjWxiUscLPihkbYLKGI9Mca3xS+wgJqx+n/98wAAAABJRU5ErkJggg==" alt="Problems QR" /><span>github.com/susumutomita/TenkaCloudChallenge</span></div>
+              <p>本日出題した問題にチャレンジできます。</p>
+            </div>
+            <div class="panel gold-frame qr-card">
+              <h3>Landing</h3>
+              <div class="qr-item"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsAQMAAABDsxw2AAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAABf0lEQVRoge2ZMZKDMAxFxaSgzBE4CkcLR+MoHIGSgonWkiyj3WTSWpv5vwmxH2n+yJZ+iKDv051dS/k2H8SbrD5pbhvA0mBPM+3Gi+wdRNNJD7ZH+x1giTBxb7upp0XyyLvZK04DS4lJLdoesPQYDbySFiBZLQLLh6nM03XUN/jjoQqsG8auerVZLX5oV4B1w6KGd4uvAtYLq55q1VkBir1ycI6s/eMOLBVW23pvPk5dFawIWC5slc8wjpUX98GslsmMgWXBimYpQNKBmcTI1pJUN4FlweoMVk/LqsVuuboKLA2m7aHNYK3Dd0/D1QYsByZVN7GnUlKATdehCiwHNtvTQ9aPhqm9FEZsYBmwdp/FgVm1tRQYWAYsyCYzs1ezKm32geXBYirFXoAhoOLX8ApYN+zKe0MqdW+ehj4EWAJsZvaQlySVOu2W4z+HKrB82K+AikMBAsuGEcVmf3r7vzOwjpjqaho3amO0Rb/A0mDsWvw+q56OvgHsn2HQt+kHhy2R9zzziEMAAAAASUVORK5CYII=" alt="Landing QR" /><span>www.tenkacloud.com</span></div>
+              <p>TenkaCloud の詳細・最新情報はこちら。</p>
+            </div>
+          </div>
+        </div>
+        <div class="gold-band"><span class="band-mark">THANK YOU</span><span>ともに、クラウドで天下をつかみましょう。</span></div>
+      </div>
+    </div>
+  </section>
 </main>
+
+<script>
+(function(){
+  var deck = document.getElementById("deck");
+  var slides = Array.prototype.slice.call(deck.querySelectorAll(".slide"));
+  var progress = document.getElementById("progress");
+  var counter = document.getElementById("counter");
+
+  function fit(){
+    var scale = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    document.documentElement.style.setProperty("--fit", String(scale));
+  }
+  function current(){
+    return Math.max(0, Math.min(slides.length - 1, Math.round(deck.scrollTop / deck.clientHeight)));
+  }
+  function paint(){
+    var index = current();
+    counter.textContent = (index + 1) + " / " + slides.length;
+    progress.style.width = (slides.length > 1 ? (index / (slides.length - 1)) * 100 : 100) + "%";
+  }
+  function go(index){
+    slides[Math.max(0, Math.min(slides.length - 1, index))].scrollIntoView({ behavior:"smooth" });
+  }
+
+  deck.addEventListener("scroll", paint, { passive:true });
+  window.addEventListener("resize", fit, { passive:true });
+  window.addEventListener("keydown", function(event){
+    if (["ArrowDown","ArrowRight","PageDown"," "].indexOf(event.key) > -1) { event.preventDefault(); go(current() + 1); }
+    else if (["ArrowUp","ArrowLeft","PageUp"].indexOf(event.key) > -1) { event.preventDefault(); go(current() - 1); }
+    else if (event.key === "Home") { event.preventDefault(); go(0); }
+    else if (event.key === "End") { event.preventDefault(); go(slides.length - 1); }
+    else if (event.key === "f" || event.key === "F") {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    }
+  });
+  fit();
+  paint();
+})();
+</script>
 </body>
 </html>
