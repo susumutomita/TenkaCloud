@@ -531,8 +531,16 @@ export interface TeamsRepository {
     <p>
       Phase 1 scopes the seam to the <strong>Events and Teams aggregates in Lite mode</strong> — small
       enough for one PR wave, load-bearing enough to prove the model (team lookup is on the participant
-      hot path). Deployments, ProblemEndpoints, and Disruptions are explicitly <em>not</em> abstracted:
-      they are event-runtime data and stay DynamoDB (Table 4).
+      hot path). At the time this ADR was accepted, Deployments, ProblemEndpoints, and Disruptions were
+      explicitly <em>not</em> abstracted, on the grounds that they are event-runtime data and stay
+      DynamoDB (Table 2). Issues #2440–#2499 subsequently extended the identical repository-seam pattern
+      to every remaining control-data aggregate — Deployments, ProblemEndpoints, CompetitorAccounts +
+      SamlConfig, Disruptions, AdminAuditLog, and SamlIdps — purely so that a single-tenant Lite
+      deployment can run with <code>CONTROL_DATA_BACKEND=turso</code> and zero synthesized DynamoDB
+      tables. That does not change the architectural classification in Table 2: Deployments,
+      ProblemEndpoints, and Disruptions remain event-runtime data, canonically DynamoDB, in SaaS mode and
+      inside the Always-On event runtime. §17 pins the full role split and explains the Lite-mode scale
+      exception that makes an all-Turso Lite deployment safe.
     </p>
     <p>
       <code>CONTROL_DATA_BACKEND</code> resolves to one of five values, in two families
@@ -1210,7 +1218,198 @@ export interface TeamsRepository {
         today's freshness contract without new protocol surface.</p>
     </details>
 
-    <h2>17. Non-goals</h2>
+    <h2>17. Follow-up: the Turso / DynamoDB / D1 / Supabase role split (#2495)</h2>
+    <p>
+      Issue #2495 asked for one place that pins which of the platform's SQL-shaped stores owns which
+      data, now that the repository seam introduced in §5 has grown past its original Events/Teams scope
+      (issues #2440–#2499, Phases A–C). This section is a follow-up, not a new decision: it consolidates
+      what §3, §5, and §16 already established, states the Supabase evaluation explicitly, restates the
+      cost target precisely, and records the concrete trigger for revisiting the D1/Turso store-
+      convergence question §16 raises.
+    </p>
+
+    <h3>17.1 Role split</h3>
+    <table>
+      <caption>Table 12 — Role of each SQL-shaped store across the platform's three deployment modes.</caption>
+      <thead>
+        <tr><th>Store</th><th>Role</th><th>Scope / mode</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Turso</strong> (libSQL)</td>
+          <td>Control-plane data — the Lambda-era bridge store, reachable from both AWS Lambda and
+            Cloudflare Workers (§5.2)</td>
+          <td>Lite mode, opt-in (<code>CONTROL_DATA_BACKEND=turso</code> / <code>turso-mirror</code>);
+            SaaS mode, opt-in, same flag</td>
+          <td class="tag-ok">Adopted (§5)</td></tr>
+        <tr><td><strong>DynamoDB</strong></td>
+          <td>(a) Event-runtime data, canonical, in every mode; (b) the default control-plane backend,
+            byte-compatible with pre-seam behavior</td>
+          <td>All modes: event-runtime tables always exist while a runtime is deployed; Lite/SaaS
+            control-plane tables when <code>CONTROL_DATA_BACKEND=dynamodb</code> (default) or a
+            <code>*-mirror</code> value</td>
+          <td class="tag-ok">Status quo, retained</td></tr>
+        <tr><td><strong>Cloudflare D1</strong></td>
+          <td>Always-On mode's control store (events, teams, score summaries, the tenant→org
+            projection) — Workers-native, not reachable from Lambda as a first-class client (§16)</td>
+          <td>Always-On mode only</td>
+          <td class="tag-ok">Adopted (§16)</td></tr>
+        <tr><td><strong>Supabase</strong> (Postgres)</td>
+          <td>&mdash;</td>
+          <td>&mdash;</td>
+          <td class="tag-bad">Not adopted &mdash; §17.3</td></tr>
+      </tbody>
+    </table>
+
+    <h3>17.2 Boundary: control-plane data vs. event-runtime data, per aggregate</h3>
+    <p>
+      &ldquo;Control-plane store&rdquo; means Turso first in the Lambda-era bridge (Lite/SaaS, opt-in)
+      and D1 in Always-On mode; &ldquo;event-runtime store&rdquo; means DynamoDB, inside the per-event
+      runtime stack.
+    </p>
+    <table>
+      <caption>Table 13 — Canonical home per control-data aggregate.</caption>
+      <thead>
+        <tr><th>Aggregate</th><th>Canonical home</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Events</td><td>Control-plane store</td><td></td></tr>
+        <tr><td>Teams</td><td>Control-plane store</td>
+          <td><code>teamLoginKey</code> stored as a SHA-256 hash only (§4)</td></tr>
+        <tr><td>Feature flags</td><td>Control-plane store</td><td></td></tr>
+        <tr><td>Notifications</td><td>Control-plane store</td><td></td></tr>
+        <tr><td>Scoreboard / deployment summaries</td><td>Control-plane store</td>
+          <td>Materialized summary rows fed by the runtime, not raw events (§5.3)</td></tr>
+        <tr><td><code>teamLoginKey</code> hash lookup</td><td>Control-plane store</td>
+          <td>Same row as Teams above; called out separately because it is the participant hot-path
+            read</td></tr>
+        <tr><td>Deployments (detail state)</td><td>Event-runtime store</td>
+          <td>The full deploy status/history record — not the summary row above</td></tr>
+        <tr><td>Raw score events</td><td>Event-runtime store</td>
+          <td>Per-tick audit timeline; exported to flat storage at event-archive time (§5.3)</td></tr>
+        <tr><td>ProblemEndpoints</td><td>Event-runtime store</td><td></td></tr>
+        <tr><td>Disruptions</td><td>Event-runtime store</td><td></td></tr>
+        <tr><td>Coordination state</td><td>Event-runtime store</td><td></td></tr>
+        <tr><td>Live probe intermediate state</td><td>Event-runtime store</td>
+          <td><code>uptime-*</code> / <code>phased-polling</code> / <code>attack-detection</code>
+            working state (§10)</td></tr>
+      </tbody>
+    </table>
+    <p>
+      <strong>Lite-mode exception.</strong> Under <code>CONTROL_DATA_BACKEND=turso</code>, a
+      single-tenant Lite deployment intentionally puts <em>everything</em> — including Deployments and
+      raw score events — on Turso. This is a direct consequence of §5.1's pure-SQL behavior: CDK stops
+      synthesizing <em>every</em> control-data DynamoDB table in that mode, so there is no DynamoDB left
+      to hold event-runtime data either, and the seam (extended by issues #2440–#2499) covers Deployments
+      through the same <code>SqlDeploymentsRepository</code> the control-plane aggregates use — including
+      a dedicated <code>deployment_score_events</code> table for raw score events
+      (<code>appendScoreEvent</code>). This is safe only because of Lite's scale: the Phase-1 quota
+      validation (§5.3, Table 5) measured a 300-participant, 24-hour event at 864,000 row reads and
+      27,880 row writes — 0.1728% and 0.2788% respectively of Turso's free-tier monthly ceilings
+      (<code>TURSO_FREE_MONTHLY_ROWS_READ</code> = 500,000,000 rows/month,
+      <code>TURSO_FREE_MONTHLY_ROWS_WRITTEN</code> = 10,000,000 rows/month,
+      <code>control-data/quota-model.ts</code>). A single organizer's single event adds Deployments and
+      raw-score-event rows on the same order of magnitude as the summary writes already measured, so it
+      stays comfortably inside that headroom. This is a scale decision, not an architecture change: SaaS
+      mode (many concurrent tenants sharing one monthly quota) and Always-On mode's event runtime (one
+      DynamoDB stack per event, destroyed after — §8) both keep event-runtime data on DynamoDB exactly as
+      Table 2 and Table 13 describe. The Lite exception exists only because Lite mode is, by definition,
+      one organizer's one-event-at-a-time footprint.
+    </p>
+
+    <h3>17.3 Why Supabase is not the first choice here</h3>
+    <p>
+      Supabase is a strong way to get a browser-talking-to-Postgres application running quickly, and
+      nothing here disputes that. It is not adopted as a TenkaCloud store, for three reasons specific to
+      this platform's shape:
+    </p>
+    <ul>
+      <li><strong>Fixed cost per project.</strong> Supabase provisions a dedicated Postgres instance per
+        project — a standing cost of exactly the kind this ADR exists to eliminate (§1, §17.5). It does
+        not offer the row-metered, pay-only-for-what-you-scan model that lets Turso and D1 fit the
+        near-$0 personal path (§5.3, §11).</li>
+      <li><strong>A browser-direct, RLS-centric model that doesn't match Auth0.</strong> Supabase's
+        security model is built around Postgres Row Level Security enforced against Supabase Auth JWTs,
+        with the browser often talking to PostgREST directly. TenkaCloud's organizer and participant
+        authorization already runs through Workers/Lambda middleware in front of Auth0 JWTs (§4) and
+        hashed team keys. Adopting Supabase would mean either re-deriving the same authorization logic as
+        RLS policies (a second, drift-prone copy of the access rules) or routing every request back
+        through a server tier anyway — which gives up the one thing a browser-direct model is optimized
+        for.</li>
+      <li><strong>Responsibility overlap.</strong> Supabase Auth would compete with Auth0 for the same
+        job (§16's Auth0-alternatives discussion already rejects introducing a second IdP); Supabase
+        Storage/Realtime would compete with S3/CloudFront and the polling-first policy (ADR-014).
+        Adopting Supabase would add a vendor without removing any of the vendors it overlaps with.</li>
+    </ul>
+    <p>
+      None of this is a verdict on Supabase in general — it remains a fine first choice for beginner
+      database teaching material, or for another product's MVP that wants an all-in-one Postgres + Auth +
+      Storage stack from day one. It is simply not the fit for a platform that already committed to Auth0
+      for identity and to a row-metered SQLite dialect (Turso/D1) as the near-$0 migration bridge.
+    </p>
+
+    <h3>17.4 <code>CONTROL_DATA_BACKEND</code> migration and rollback (recap)</h3>
+    <p>Full detail lives in §5.1; this table is the one-screen version.</p>
+    <table>
+      <caption>Table 14 — <code>CONTROL_DATA_BACKEND</code> values, recapped from §5.1.</caption>
+      <thead>
+        <tr><th>Value</th><th>Canonical store</th><th>Rollback</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>dynamodb</code> (default)</td><td>DynamoDB</td>
+          <td>n/a — the byte-compatible baseline every other value rolls back to</td></tr>
+        <tr><td><code>turso-mirror</code> / <code>sql-mirror</code></td>
+          <td>DynamoDB (primary); SQL is a validated replica</td>
+          <td class="tag-ok">Free: flip the flag to <code>dynamodb</code>. DynamoDB already holds every
+            row a mirror ever wrote, so nothing is lost.</td></tr>
+        <tr><td><code>turso</code> / <code>sql</code> (pure)</td>
+          <td>Turso/SQL only — CDK does not synthesize the DynamoDB tables</td>
+          <td class="tag-warn">Not free: a write made while running pure SQL only ever reached SQL.
+            Flipping back to <code>dynamodb</code> creates fresh, empty DynamoDB tables —
+            <code>RemovalPolicy.RETAIN</code> keeps the old ones around, orphaned, rather than deleting
+            them, but CloudFormation does not reattach them automatically; recovering their data is a
+            manual export/import.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>17.5 Cost target: eliminate the standing charge, not DynamoDB itself</h3>
+    <p>
+      The goal in this ADR and in #2495 is eliminating the <strong>standing</strong> control-plane
+      DynamoDB cost — the provisioned 1&nbsp;RCU/1&nbsp;WCU per table (the <code>DynamoDbLowCapacity</code>
+      aspect) that accrues 24/7 whether or not an event is running, and that no longer has a reliable
+      always-free allowance on 2025-07-onward AWS accounts (§1). It is not a goal to remove DynamoDB from
+      the platform. Event-runtime DynamoDB tables keep existing under every mode: in Lite mode for the
+      lifetime of <code>make deploy</code>, in SaaS mode inside each tenant's application plane, and in
+      Always-On mode inside the per-event runtime stack that GitHub Actions deploys and destroys around
+      each event (§8). Table 2 and Table 13 both describe this split; §17.2's Lite-mode exception is
+      scale-bounded and does not generalize to SaaS or Always-On mode.
+    </p>
+
+    <h3>17.6 When to revisit D1 vs. Turso convergence</h3>
+    <p>
+      §16 already resolves D1 vs. Turso for the current architecture: D1 is the Always-On control store,
+      Turso is the Lambda-era (Lite/SaaS) bridge, and the two are not competing for the same job today.
+      The concrete trigger for reopening that split — deciding whether to collapse both onto one SQLite
+      host — is either of:
+    </p>
+    <ul>
+      <li><strong>The Lambda-era control plane retires.</strong> If Lite and SaaS mode are ever fully
+        superseded by Always-On mode, or otherwise stop needing a store reachable from AWS Lambda,
+        Turso's reason for existing — reachability from both Lambda and Workers during the strangler
+        migration (§5.2) — disappears, and D1 (or self-hosted <code>sqld</code>, per §12's vendor-risk
+        mitigation) becomes the one remaining SQLite contract, exactly as §16 anticipates.</li>
+      <li><strong>The two schemas must unify for a concrete cross-mode reason.</strong> For example, a
+        requirement to report or audit across Lite/SaaS and Always-On deployments from one query surface,
+        or a compliance requirement for a single retention/audit trail. Until such a requirement exists,
+        keeping the schemas separate but SQLite-compatible (§5.2) costs nothing and avoids a premature
+        migration.</li>
+    </ul>
+    <p>
+      Neither trigger has fired as of this ADR's current state; §14's open validation items track the
+      measurements (Turso Lambda/Workers latency, event-day volumes) that would inform the decision once
+      one does.
+    </p>
+
+    <h2>18. Non-goals</h2>
     <ul>
       <li>No immediate implementation of the Cloudflare migration in this change — this ADR plus the
         Phase-0 invariant amendment only.</li>
@@ -1221,9 +1420,13 @@ export interface TeamsRepository {
       <li>No change to Lite mode's default behavior; the repository seam defaults to DynamoDB there.</li>
       <li>No replacement of SaaS-mode CodeBuild consumers (SBT ScriptJobs, tenant-update pipeline) in
         this ADR's phases.</li>
+      <li>Full abolition of DynamoDB. The cost goal is eliminating the <em>standing</em>
+        provisioned-capacity charge in the control plane (§17.5), not removing DynamoDB from the
+        platform; event-runtime DynamoDB continues to exist for the lifetime of each deployed event in
+        every mode.</li>
     </ul>
 
-    <h2>18. Related</h2>
+    <h2>19. Related</h2>
     <ul>
       <li>Epic #2279 — architecture: always-on Control Plane on Cloudflare (this ADR's mandate).</li>
       <li>ADR-016 — Lite mode single-tenant baseline this mode sits beside.</li>
@@ -1239,6 +1442,8 @@ export interface TeamsRepository {
       <li>#1954, #1973, #1975 — existing Cloudflare Pages/Workers footprint and mode positioning.</li>
       <li>#538, #986, #1381 — deploy concurrency, handler layering, and IAM privilege-split constraints
         carried into §9.</li>
+      <li>#2495 — this follow-up's mandate: pin the Turso/DynamoDB/D1/Supabase role split (§17).
+        #2440–#2499 — the seam-expansion issue chain §17.1/§17.2 draw on.</li>
     </ul>
 
     <footer>
