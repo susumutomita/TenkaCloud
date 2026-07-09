@@ -3,9 +3,9 @@
   "tasks": [
     {
       "label": "▷ ローカルプレイ開始",
-      "detail": "make local YES=1 — starts the scoring API + Participant Portal (Docker required).",
+      "detail": "make local && make local-portal — starts the scoring API, then the browser portal.",
       "type": "shell",
-      "command": "make local YES=1",
+      "command": "(make local-status >/dev/null 2>&1 || make local) && make local-portal",
       "presentation": {
         "reveal": "always",
         "panel": "dedicated",

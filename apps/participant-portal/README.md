@@ -31,6 +31,12 @@ make dev
 # → http://localhost:5175
 ```
 
+`make dev` writes a `dev-mock` `runtime-config.json`, so any non-empty team login
+key signs in without a backend. For the local scoring API and Docker-backed problems,
+run `make local` from the repo root first, then start this portal with
+`make local-portal`; that mode also accepts any non-empty key, but the portal calls
+the local API.
+
 `make help` lists the available targets.
 
 ## Commands

@@ -19,7 +19,7 @@ export JSII_DEPRECATED := quiet
         deploy-always-on-ingress destroy-always-on-ingress synth-always-on-ingress \
         deploy-always-on-runtime archive-always-on-runtime destroy-always-on-runtime synth-always-on-runtime \
         dev synth check-synth \
-        doctor local local-up local-down local-status local-list local-evaluate
+        doctor local-onboard local local-up local-portal local-down local-status local-list local-evaluate
 
 help:
 	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
@@ -223,6 +223,7 @@ destroy-saas:         env-check       ; bash scripts/cleanup.sh
 # Starts all 3 SPA dev servers in parallel (admin-console :5173 / application-admin-console
 # :5174 / participant-portal :5175). Ctrl-C stops all three (bun --parallel propagates SIGINT).
 dev:
+	bun run scripts/participant-portal-runtime-config.ts --cloud-mode mock
 	bun run --filter '@TenkaCloud/admin-console' --filter '@TenkaCloud/application-admin-console' --filter '@TenkaCloud/participant-portal' --parallel dev
 
 # ===== Synth (no deploy) =====
@@ -244,15 +245,16 @@ check-synth:
 # ===== Local play (Docker, no AWS) =====
 # Issue #2054: AWS 非依存の CTF コンテナ。 問題コンテナが `/verify` と採点条件を持ち、
 # TenkaCloud は採点 (participant API / portal / leaderboard / hint) だけを担う。 Kumo は撤去。
-#   make local                     採点 API + Participant Portal を起動 (問題はポータルで選択)
-#   make local PROBLEM=sqli-demo   問題コンテナを pre-start し、採点 API + Portal を起動
+#   make local                     採点 API を起動 (問題コンテナは必要時に起動)
+#   make local PROBLEM=sqli-demo   問題コンテナを pre-start し、採点 API を起動
+#   make local-portal              Participant Portal の Vite dev server を起動
 #   make local-down                コンテナ停止 + runtime-config 復元
 #   make local-evaluate FLAG=...   採点 API 経由でフラグを提出 (= 問題コンテナ /verify に委譲)
-# Issue #2119: `make local YES=1` pre-approves software installs (also for automation).
+# Issue #2119: `make local-onboard YES=1` pre-approves software installs (also for automation).
 ONBOARD_FLAGS := $(if $(YES),--yes,)
 
 # Issue #2119: report-only prerequisite diagnosis (mise trust / submodule / bun /
-# Docker CLI / Compose / daemon). Installs nothing.
+# Docker Compose / daemon). Installs nothing.
 doctor:
 	@command -v bun >/dev/null 2>&1 || { \
 	  echo "Bun is required for diagnostics."; \
@@ -260,35 +262,31 @@ doctor:
 	  exit 1; }
 	@bun run scripts/tenkacloud-onboard.ts doctor
 
-# Issue #2119: a fresh `git clone` → `make local` reaches a running portal.
-# Step 1 (pre-bun): trust mise + ensure bun is installed (consent-gated).
-# Step 2 (bun onboarder): initialize the problems/ submodule + diagnose Docker,
-#   installing only with consent (or YES=1); a non-interactive run without YES=1
-#   stops with the missing prerequisites instead of installing.
-# Step 3: start the scoring API, then the Participant Portal. PROBLEM=<id>
-#   optionally pre-starts a container; otherwise players deploy from the portal.
-local:
+# Issue #2119: optional guided setup. This is the only local-play target that
+# offers to trust mise, install Bun, initialize the problems/ submodule, or help
+# with Docker setup. Keep `make local` itself lightweight and non-installing.
+local-onboard:
 	@sh scripts/onboard-bootstrap.sh $(ONBOARD_FLAGS)
 	@bun run scripts/tenkacloud-onboard.ts preflight $(ONBOARD_FLAGS)
+
+# Issue #2054 / #2392: start only the detached local scoring API and optional
+# Docker problem containers. The browser portal is explicit: `make local-portal`.
+local:
 	@set -e; \
 	problem="$(PROBLEM)"; \
 	if [ -n "$$problem" ]; then \
 	  echo "Pre-starting PROBLEM=$$problem. Run 'make local-list' to see other local-play problems."; \
 	else \
-	  echo "No PROBLEM specified; choose and deploy a problem from the Participant Portal."; \
+	  echo "No PROBLEM specified; starting the local API only. Run 'make local-portal' to deploy from the browser UI."; \
 	fi; \
-	$(MAKE) local-up PROBLEM="$$problem" LOCAL_API_PORT="$(LOCAL_API_PORT)"; \
-	cleanup() { \
-	  trap - EXIT INT TERM; \
-	  $(MAKE) local-down; \
-	}; \
-	trap cleanup EXIT; \
-	trap 'cleanup; exit 130' INT; \
-	trap 'cleanup; exit 143' TERM; \
-	( cd apps/participant-portal && bun run dev --host 127.0.0.1 )
+	$(MAKE) local-up PROBLEM="$$problem" LOCAL_API_PORT="$(LOCAL_API_PORT)"
 
 local-up:
 	@PROBLEM="$(PROBLEM)" LOCAL_API_PORT="$(LOCAL_API_PORT)" bun run scripts/tenkacloud-local.ts up "$(PROBLEM)"
+
+local-portal:
+	@bun run scripts/tenkacloud-local.ts status >/dev/null
+	@( cd apps/participant-portal && bun run dev --host 127.0.0.1 )
 
 local-down:
 	@bun run scripts/tenkacloud-local.ts down

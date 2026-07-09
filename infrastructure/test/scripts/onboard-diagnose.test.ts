@@ -102,16 +102,22 @@ describe("checkBun", () => {
 });
 
 describe("checkDockerCompose", () => {
-  it("should skip when the docker CLI is absent", () => {
-    expect(checkDockerCompose(input({ run: runnerWith({}), fs: fsWith([]) })).status).toBe(
-      "skipped",
-    );
+  it("should skip when neither the docker CLI nor standalone compose is present", () => {
+    const result = checkDockerCompose(input({ run: runnerWith({}), fs: fsWith([]) }));
+    expect(result.status).toBe("skipped");
   });
 
   it("should be ok when the compose plugin responds", () => {
     const run = runnerWith({
       "docker --version": OK("Docker version 27"),
       "docker compose version": OK("Docker Compose version v2.30"),
+    });
+    expect(checkDockerCompose(input({ run, fs: fsWith([]) })).status).toBe("ok");
+  });
+
+  it("should be ok when only standalone docker-compose responds", () => {
+    const run = runnerWith({
+      "docker-compose version": OK("docker-compose version 1.29.2"),
     });
     expect(checkDockerCompose(input({ run, fs: fsWith([]) })).status).toBe("ok");
   });
@@ -144,6 +150,13 @@ describe("checkDockerDaemon", () => {
     });
     expect(checkDockerDaemon(input({ run, fs: fsWith([]) })).status).toBe("action-needed");
   });
+
+  it("should skip daemon probing when standalone docker-compose is the only frontend", () => {
+    const run = runnerWith({
+      "docker-compose version": OK("docker-compose version 1.29.2"),
+    });
+    expect(checkDockerDaemon(input({ run, fs: fsWith([]) })).status).toBe("skipped");
+  });
 });
 
 describe("diagnose / isReady / blockingChecks", () => {
@@ -175,5 +188,18 @@ describe("diagnose / isReady / blockingChecks", () => {
     // docker-compose / docker-daemon are skipped (CLI absent) — not blocking.
     expect(ids).not.toContain("docker-compose");
     expect(ids).not.toContain("docker-daemon");
+  });
+
+  it("should be ready with standalone docker-compose and no docker CLI", () => {
+    const result = diagnose(
+      input({
+        run: runnerWith({
+          "bun --version": OK("1.3.11"),
+          "docker-compose version": OK("docker-compose version 1.29.2"),
+        }),
+        fs: fsWith([`${REPO}/problems/challenges`]),
+      }),
+    );
+    expect(isReady(result)).toBe(true);
   });
 });

@@ -7,7 +7,7 @@
  * This module is the pure state machine: it owns status transitions, the
  * host-port offset pool (one slot per cap unit, so the pool size *is* the cap),
  * LRU eviction, and idle reaping. Docker and the clock are injected, so it is
- * unit-tested with no containers. The API server wires real `docker compose`
+ * unit-tested with no containers. The API server wires real Docker Compose
  * up/down in.
  */
 

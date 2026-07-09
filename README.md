@@ -72,7 +72,8 @@ cloud dev container that GitHub builds for you.
 2. Once the terminal is ready, run the **"▷ ローカルプレイ開始"** task — open the
    Command Palette (`Cmd/Ctrl+Shift+P`) → **Tasks: Run Task** →
    **"▷ ローカルプレイ開始"** (or press `Cmd/Ctrl+Shift+B`, it is the default build
-   task). This runs `make local` for you inside the codespace.
+   task). This runs `make local` and then `make local-portal` for you inside the
+   codespace.
 3. When the terminal shows the Participant Portal is running, open the **PORTS** tab
    in the bottom panel and click the preview (globe) icon next to port **5175**.
 
@@ -85,24 +86,33 @@ cloud dev container that GitHub builds for you.
 
 ### Try it locally (no AWS)
 
-A fresh clone to a running portal. `make local` diagnoses what it needs (mise trust,
-the `problems/` submodule, Bun, the Docker CLI / Compose plugin / daemon) and, only
-with your consent, sets it up — then starts the Participant Portal.
+The local drill loop is split into a lightweight Docker/API process and an
+optional browser portal. `make local` does not install software, trust `mise`, or
+start Vite; it starts the local scoring API and any requested Docker problem
+container. Run the portal only when you want the browser UI.
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
-make local
+make install
+git submodule update --init problems
+make local PROBLEM=<id>
+# optional browser UI:
+make local-portal
 ```
 
 - `make local-list` lists every local-play problem id if you want to pre-start
-  one with `make local PROBLEM=<id>`; otherwise choose and deploy from the portal.
+  one with `make local PROBLEM=<id>`; otherwise start `make local-portal` and
+  deploy from the portal.
+- `make local` accepts either Docker Compose frontend: `docker compose` or
+  standalone `docker-compose`.
 - `make doctor` reports the prerequisites and changes nothing.
-- `make local YES=1` pre-approves software installs (also used by CI / automation).
-  In a non-interactive run without `YES=1`, nothing is installed — the missing
+- `make local-onboard` is the explicit guided setup path. `make local-onboard YES=1`
+  pre-approves software installs (also used by automation). In a
+  non-interactive run without `YES=1`, nothing is installed — the missing
   prerequisites are reported instead.
-- Needs a Docker runtime (Colima or Docker Desktop). If it is missing, `make local`
-  shows the exact install command and asks before running it.
+- Needs a Docker runtime (Colima or Docker Desktop). Vite is needed only for
+  `make local-portal`, not for a CLI/API-only local play run.
 
 ### Deploy on AWS
 

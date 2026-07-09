@@ -8,10 +8,14 @@
     "cpus": 4
   },
   "postCreateCommand": "sh scripts/onboard-bootstrap.sh --yes && bun run scripts/tenkacloud-onboard.ts preflight --yes && make install",
-  "forwardPorts": [5175, 18080, 18280],
+  "forwardPorts": [3199, 5175, 18080, 18280],
   "portsAttributes": {
+    "3199": {
+      "label": "Participant API (make local)",
+      "onAutoForward": "silent"
+    },
     "5175": {
-      "label": "Participant Portal (make local)",
+      "label": "Participant Portal (make local-portal)",
       "onAutoForward": "openPreview"
     },
     "18080-18580": {

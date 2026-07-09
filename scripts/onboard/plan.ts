@@ -66,18 +66,18 @@ function dockerInstallStep(platform: Platform): RemediationStep {
     return {
       id: "docker-cli",
       title: "Install a Docker runtime",
-      why: "Local play starts each challenge in a Docker container via `docker compose`.",
+      why: "Local play starts each challenge in a Docker container via Docker Compose.",
       kind: "software-install",
       commands: ["brew install colima docker docker-compose", "colima start"],
       notes:
-        "Installs the Docker CLI + Compose and creates a lightweight container VM (Colima). " +
+        "Installs the Docker CLI + standalone docker-compose and creates a lightweight container VM (Colima). " +
         "Docker Desktop is an alternative — install it from docker.com and start the app instead.",
     };
   }
   return {
     id: "docker-cli",
     title: "Install a Docker runtime",
-    why: "Local play starts each challenge in a Docker container via `docker compose`.",
+    why: "Local play starts each challenge in a Docker container via Docker Compose.",
     kind: "software-install",
     commands: ["curl -fsSL https://get.docker.com | sh"],
     notes:
@@ -90,8 +90,8 @@ function dockerComposeStep(platform: Platform): RemediationStep {
   return {
     ...dockerInstallStep(platform),
     id: "docker-compose",
-    title: "Install the Docker Compose plugin",
-    why: "Local play uses `docker compose` to bring the challenge container up and down.",
+    title: "Install Docker Compose",
+    why: "Local play accepts either `docker compose` or standalone `docker-compose`.",
   };
 }
 
@@ -160,7 +160,7 @@ export function stepFor(check: CheckResult, platform: Platform): RemediationStep
   }
 }
 
-/** Ordered remediation plan for everything that blocks `make local`. */
+/** Ordered remediation plan for everything that blocks local play. */
 export function planRemediation(
   diagnosis: Diagnosis,
   options: PlanOptions,

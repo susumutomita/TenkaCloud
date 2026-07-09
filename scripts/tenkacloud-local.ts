@@ -27,8 +27,32 @@ import { buildRuntimeConfig } from "./participant-portal-runtime-config";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_API_PORT = 3199;
+const PARTICIPANT_PORTAL_DEV_PORT = 5175;
+const LOCAL_API_PROXY_PATH = "/__tenkacloud-local-api";
 /** [#2392 Phase 2] How often the serve process sweeps for idle containers. */
 const REAP_INTERVAL_MS = 60_000;
+
+export type ComposeCli = Readonly<{
+  command: "docker" | "docker-compose";
+  prefix: readonly string[];
+  label: string;
+}>;
+
+const DOCKER_COMPOSE_PLUGIN: ComposeCli = {
+  command: "docker",
+  prefix: ["compose"],
+  label: "docker compose",
+};
+const DOCKER_COMPOSE_STANDALONE: ComposeCli = {
+  command: "docker-compose",
+  prefix: [],
+  label: "docker-compose",
+};
+
+type CodespacesEnv = Readonly<{
+  CODESPACE_NAME?: string;
+  GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN?: string;
+}>;
 
 interface LocalProcessState {
   readonly pid: number;
@@ -82,17 +106,78 @@ export function composeArgs(
   // problem, which runs from its own compose file.
   if (projectDirectory) base.push("--project-directory", projectDirectory);
   return action === "up"
-    ? [...base, "up", "-d", "--wait"]
+    ? [...base, "up", "-d"]
     : [...base, "down", "--volumes", "--remove-orphans"];
 }
 
-export function buildLocalRuntimeConfig(apiBaseUrl: string) {
+export function composeArgsForCli(
+  cli: ComposeCli,
+  composePath: string,
+  projectName: string,
+  action: "up" | "down",
+  projectDirectory?: string,
+): string[] {
+  const args = composeArgs(composePath, projectName, action, projectDirectory);
+  return cli.command === "docker-compose" ? args.slice(1) : args;
+}
+
+function commandSucceeds(command: string, args: readonly string[]): boolean {
+  return spawnSync(command, [...args], { stdio: "ignore" }).status === 0;
+}
+
+function resolveComposeCli(): ComposeCli {
+  if (
+    commandSucceeds(DOCKER_COMPOSE_PLUGIN.command, [...DOCKER_COMPOSE_PLUGIN.prefix, "version"])
+  ) {
+    return DOCKER_COMPOSE_PLUGIN;
+  }
+  if (commandSucceeds(DOCKER_COMPOSE_STANDALONE.command, ["version"])) {
+    return DOCKER_COMPOSE_STANDALONE;
+  }
+  throw new Error(
+    "Docker Compose is required for local play. Install Docker Desktop / Engine with " +
+      "`docker compose`, or install the standalone `docker-compose` command.",
+  );
+}
+
+function codespacesForwardedUrl(
+  port: number,
+  env: CodespacesEnv = process.env,
+): string | undefined {
+  const name = env.CODESPACE_NAME?.trim();
+  const rawDomain = env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN?.trim();
+  if (!name || !rawDomain) return undefined;
+  const domain = rawDomain
+    .replace(/^https?:\/\//, "")
+    .replace(/\/.*$/, "")
+    .replace(/^\./, "")
+    .replace(/\.$/, "");
+  if (!domain) return undefined;
+  return `https://${name}-${port}.${domain}`;
+}
+
+function browserApiBaseUrl(apiBaseUrl: string, env: CodespacesEnv = process.env): string {
+  const codespacesPortalUrl = codespacesForwardedUrl(PARTICIPANT_PORTAL_DEV_PORT, env);
+  if (codespacesPortalUrl) return `${codespacesPortalUrl}${LOCAL_API_PROXY_PATH}`;
+  try {
+    const url = new URL(apiBaseUrl);
+    const port = Number(url.port);
+    if (Number.isInteger(port) && port > 0) {
+      return codespacesForwardedUrl(port, env) ?? apiBaseUrl;
+    }
+  } catch {
+    // buildRuntimeConfig validates the URL and reports the real error below.
+  }
+  return apiBaseUrl;
+}
+
+export function buildLocalRuntimeConfig(apiBaseUrl: string, env: CodespacesEnv = process.env) {
   // `out`/`print` are unused by buildRuntimeConfig (it returns the object; up()
   // writes the file itself) — pass inert values to satisfy the option type.
   return buildRuntimeConfig({
     cloudMode: "local",
     portalMode: "backend",
-    apiBaseUrl,
+    apiBaseUrl: browserApiBaseUrl(apiBaseUrl, env),
     eventTitle: "TenkaCloud Local",
     eventRegion: "local",
     out: "",
@@ -129,12 +214,7 @@ function positivePort(value: string | undefined, fallback: number, name: string)
 }
 
 function assertDockerAvailable(): void {
-  const result = spawnSync("docker", ["compose", "version"], { stdio: "ignore" });
-  if (result.status !== 0) {
-    throw new Error(
-      "Docker (with the compose plugin) is required for local play. Install Docker Desktop / Engine and retry.",
-    );
-  }
+  resolveComposeCli();
 }
 
 function runCompose(
@@ -145,10 +225,11 @@ function runCompose(
   allowFailure = false,
   projectDirectory?: string,
 ): void {
-  const args = composeArgs(composePath, projectName, action, projectDirectory);
-  const result = spawnSync("docker", args, { cwd: REPO_ROOT, env, stdio: "inherit" });
+  const cli = resolveComposeCli();
+  const args = composeArgsForCli(cli, composePath, projectName, action, projectDirectory);
+  const result = spawnSync(cli.command, args, { cwd: REPO_ROOT, env, stdio: "inherit" });
   if (!allowFailure && result.status !== 0) {
-    throw new Error(`docker ${args.join(" ")} failed`);
+    throw new Error(`${cli.command} ${args.join(" ")} failed`);
   }
 }
 
@@ -368,7 +449,12 @@ async function up(problemArg: string): Promise<void> {
     );
     console.log(`Participant API: ${apiBaseUrl}`);
     await printRunningEndpoints(apiBaseUrl);
-    console.log("Log in to the Participant Portal with any non-empty key.");
+    if (problemIds.length === 0) {
+      console.log(
+        "No problem was pre-started; run `make local PROBLEM=<id>` or start one from the portal.",
+      );
+    }
+    console.log("Optional browser UI: run `make local-portal` and log in with any non-empty key.");
   } catch (error) {
     if (apiPid !== undefined) stopPid(apiPid);
     unlinkIfExists(p.deploymentPath);
@@ -487,7 +573,7 @@ function listProblems(): void {
   if (summaries.length === 0) {
     console.log(
       "No local-play problems found. Run `git submodule update --init` (or `make doctor` / " +
-        "`make local`, which do this for you) to fetch the problems/ catalog.",
+        "`make local-onboard`) to fetch the problems/ catalog.",
     );
     return;
   }
@@ -506,7 +592,7 @@ function usage(): string {
     "",
     "Commands:",
     "  list             List local-play problems (id / category / name)",
-    "  up [problemIds]  Start the warm local session; PROBLEM=a,b,c pre-starts those containers",
+    "  up [problemIds]  Start the detached local API; PROBLEM=a,b,c pre-starts those containers",
     "  serve <path>     Run the local Participant API (used internally by up)",
     "  status           Check the local Participant API",
     "  evaluate <flag>  Submit a flag through the local scoring API",

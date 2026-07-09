@@ -8,7 +8,7 @@
  *
  * Docker + fs are injected (`ContainerRunnerDeps`), so the mechanics are
  * unit-tested with no Docker; the orchestrator / serve process supply the real
- * `docker compose` primitives.
+ * Docker Compose primitives.
  */
 
 import { dirname, join } from "node:path";
