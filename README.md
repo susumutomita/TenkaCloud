@@ -257,8 +257,18 @@ table の有無から切り離されているため、Turso 上のテーブル�
 
 ## Add your own problems
 
+You never fork this platform to add problems. There are two paths, and which one
+you want depends on whether the problem should be shared:
+
+- **Contribute to the official catalog** — for problems the wider community can
+  reuse.
+- **Add a private Problem Pack** — for internal-only or one-off problems that
+  never need to leave your own machine or tenant.
+
+### Option A: contribute to the official catalog
+
 Problems live in their own repo — [TenkaCloudChallenge][catalog], cloned in at deploy
-time. You never fork this platform to add problems:
+time:
 
 1. **Fork** [TenkaCloudChallenge][catalog].
 2. **Author + validate** with its tooling — `scripts/new-problem.ts` scaffolds a
@@ -274,6 +284,36 @@ metadata.json    # catalog display + scoring rule + portal slot wiring
 template.yaml    # CloudFormation deployed into the team's isolated AWS account
 portal/          # optional React components for the Participant Portal
 ```
+
+### Option B: add a private Problem Pack
+
+A **Problem Pack** (Issue #2088) is an offline-validated bundle of one or more
+problems that you install and activate for a single tenant without publishing
+anything to the catalog repo — a fit for internal-only drills or a one-off event
+problem. The `pack` CLI runs entirely locally: no cloud calls, and no network at
+all unless you install from a pinned Git commit.
+
+```bash
+make pack-init ARGS="./my-pack --runtime aws/cloudformation"      # scaffold a pack
+make pack-validate ARGS="./my-pack"                                # check manifest + template
+make pack-install ARGS="./my-pack"                                 # snapshot + lock it
+make pack-activate ARGS="com.example.starter@0.1.0 --tenant demo"  # activate for one tenant
+# then create the event in the Application Admin Console — the activated
+# pack's problems appear in the catalog picker there
+```
+
+More detail:
+
+- Concepts — [`concepts/problem-packs`](./apps/developer-portal/src/app/developers/docs/concepts/problem-packs/page.mdx)
+- Tutorial — [`tutorials/first-pack`](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.mdx)
+- Manifest reference — [`reference/pack-manifest`](./apps/developer-portal/src/app/developers/docs/reference/pack-manifest/page.mdx)
+- Installing from a pinned Git commit — [`README-external-git-pack.md`](./infrastructure/lib/problem-pack/README-external-git-pack.md)
+
+(the developer portal is not deployed yet, so the links above point at the
+in-repo MDX source; every `make pack-*` command above is a live, working CLI today.)
+
+Live, end-to-end verification of this whole flow — init through "visible in the
+console" — is still pending (tracked in #2460).
 
 [catalog]: https://github.com/susumutomita/TenkaCloudChallenge
 
