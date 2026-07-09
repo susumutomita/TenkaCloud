@@ -1,10 +1,15 @@
+import type { CompetitorAccountItem } from "../handlers/competitor-accounts-handler/types.js";
 import type { ProgressionGateConfig } from "../handlers/shared/progression-gate.js";
 import type {
   BulkDeploymentCreateEntry,
   ClearProgressionGateOutcome,
+  CompetitorAccountMutationOutcome,
+  CompetitorAccountRecord,
+  CompetitorAccountsRepository,
   CompositeParentDeploymentRecord,
   CompositeTargetDeploymentRecord,
   CoordinationStateRecord,
+  CreateCompetitorAccountOutcome,
   CreateEventWithTeamsOutcome,
   DeploymentKindScoringResult,
   DeploymentMutationOutcome,
@@ -25,6 +30,8 @@ import type {
   NotificationsRepository,
   ProblemEndpointRecord,
   ProblemEndpointsRepository,
+  SamlConfigRecord,
+  SamlConfigRepository,
   ScheduleFiredKind,
   ScoreEventRecord,
   TeamRecord,
@@ -990,5 +997,97 @@ export class MirroredProblemEndpointsRepository implements ProblemEndpointsRepos
   ): Promise<void> {
     await this.canonical.deleteOverride(tenantId, teamId, problemId, slot);
     await this.replica.deleteOverride(tenantId, teamId, problemId, slot);
+  }
+}
+
+/**
+ * [Issue #2442 / Phase C2] DynamoDB-primary/SQL-replica equivalent for the
+ * CompetitorAccounts aggregate. Conditional writes commit to canonical
+ * DynamoDB first; the replica only applies when the canonical outcome
+ * signals success (`created` / `updated`), mirroring
+ * {@link MirroredEventsRepository}'s conditional-write contract. Reads pass
+ * through to canonical: the tenant's account list is small (no cursor / scan
+ * state to reconcile) and `forEachCompetitorAccountPage` is a full-table
+ * audit sweep, so there is nothing for read-repair to buy over
+ * {@link MirroredProblemEndpointsRepository}'s read-passthrough style.
+ */
+export class MirroredCompetitorAccountsRepository implements CompetitorAccountsRepository {
+  constructor(
+    private readonly canonical: CompetitorAccountsRepository,
+    private readonly replica: CompetitorAccountsRepository,
+  ) {}
+
+  async createAccount(record: CompetitorAccountRecord): Promise<CreateCompetitorAccountOutcome> {
+    const outcome = await this.canonical.createAccount(record);
+    if (outcome.outcome === "created") await this.replica.createAccount(record);
+    return outcome;
+  }
+
+  listAccounts(tenantId: string): Promise<readonly CompetitorAccountRecord[]> {
+    return this.canonical.listAccounts(tenantId);
+  }
+
+  getAccount(tenantId: string, awsAccountId: string): Promise<CompetitorAccountRecord | undefined> {
+    return this.canonical.getAccount(tenantId, awsAccountId);
+  }
+
+  async markVerified(
+    tenantId: string,
+    awsAccountId: string,
+    verifiedAt: string,
+  ): Promise<CompetitorAccountMutationOutcome> {
+    const outcome = await this.canonical.markVerified(tenantId, awsAccountId, verifiedAt);
+    if (outcome.outcome === "updated") {
+      await this.replica.markVerified(tenantId, awsAccountId, verifiedAt);
+    }
+    return outcome;
+  }
+
+  async deleteAccount(
+    tenantId: string,
+    awsAccountId: string,
+  ): Promise<CompetitorAccountMutationOutcome> {
+    const outcome = await this.canonical.deleteAccount(tenantId, awsAccountId);
+    if (outcome.outcome === "updated") await this.replica.deleteAccount(tenantId, awsAccountId);
+    return outcome;
+  }
+
+  hasRemainingAccounts(tenantId: string): Promise<boolean> {
+    return this.canonical.hasRemainingAccounts(tenantId);
+  }
+
+  forEachCompetitorAccountPage(
+    onPage: (items: readonly Partial<CompetitorAccountItem>[]) => Promise<void>,
+  ): Promise<void> {
+    return this.canonical.forEachCompetitorAccountPage(onPage);
+  }
+}
+
+/**
+ * [Issue #2442 / Phase C2] DynamoDB-primary/SQL-replica equivalent for the
+ * SamlConfig sub-aggregate (mirrors {@link MirroredFeatureFlagsRepository}'s
+ * write-through, no-delete-repair shape — `putSamlConfig` is a full replace so
+ * write-through alone keeps the replica converged; `deleteSamlConfig` is
+ * idempotent on both backends).
+ */
+export class MirroredSamlConfigRepository implements SamlConfigRepository {
+  constructor(
+    private readonly canonical: SamlConfigRepository,
+    private readonly replica: SamlConfigRepository,
+  ) {}
+
+  getSamlConfig(tenantId: string): Promise<SamlConfigRecord | undefined> {
+    return this.canonical.getSamlConfig(tenantId);
+  }
+
+  async putSamlConfig(record: SamlConfigRecord): Promise<SamlConfigRecord> {
+    const written = await this.canonical.putSamlConfig(record);
+    await this.replica.putSamlConfig(record);
+    return written;
+  }
+
+  async deleteSamlConfig(tenantId: string): Promise<void> {
+    await this.canonical.deleteSamlConfig(tenantId);
+    await this.replica.deleteSamlConfig(tenantId);
   }
 }

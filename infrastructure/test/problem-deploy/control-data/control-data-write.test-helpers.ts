@@ -10,11 +10,13 @@ import {
   TransactWriteCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { COMPETITOR_ACCOUNTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-competitor-accounts-repository";
 import { DEPLOYMENTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-deployments-repository";
 import { EVENTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-events-repository";
 import { FEATURE_FLAGS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-feature-flags-repository";
 import { NOTIFICATIONS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-notifications-repository";
 import { PROBLEM_ENDPOINTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-problem-endpoints-repository";
+import { SAML_CONFIG_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-saml-config-repository";
 import { TEAMS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-teams-repository";
 import type { SqlExecutor } from "../../../lib/problem-deploy/control-data/types";
 
@@ -676,7 +678,25 @@ export function makeFakeDdb(options: { readonly pageSize?: number } = {}): Dynam
 
   const del = (cmd: DeleteCommand): Record<string, never> => {
     const key = cmd.input.Key as Item;
-    tableFor(cmd.input.TableName).delete(keyOf(key.PK, key.SK));
+    const table = tableFor(cmd.input.TableName);
+    const existing = table.get(keyOf(key.PK, key.SK)) ?? {};
+    // [Issue #2442 / Phase C2] `CompetitorAccountsRepository.deleteAccount` is the
+    // first site to issue a conditional `DeleteCommand`
+    // (`attribute_exists(PK) AND attribute_exists(SK)`, matching the pre-seam
+    // handler's atomic TOCTOU-free existence check) — every prior Delete site
+    // (Teams / ProblemEndpoints / Events / Notifications) is unconditional.
+    if (
+      cmd.input.ConditionExpression &&
+      !evalConditionExpression(
+        cmd.input.ConditionExpression,
+        existing,
+        cmd.input.ExpressionAttributeNames,
+        cmd.input.ExpressionAttributeValues,
+      )
+    ) {
+      throw conditionalCheckFailed();
+    }
+    table.delete(keyOf(key.PK, key.SK));
     return {};
   };
 
@@ -728,6 +748,8 @@ export function makeSqliteExecutor(): SqlExecutor {
   db.exec(FEATURE_FLAGS_SCHEMA_SQL);
   db.exec(DEPLOYMENTS_SCHEMA_SQL);
   db.exec(PROBLEM_ENDPOINTS_SCHEMA_SQL);
+  db.exec(COMPETITOR_ACCOUNTS_SCHEMA_SQL);
+  db.exec(SAML_CONFIG_SCHEMA_SQL);
   return {
     run: (sql, params = []) => {
       const result = db.prepare(sql).run(...params);

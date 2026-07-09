@@ -9,7 +9,7 @@ import {
 /**
  * Phase 3.2 / Issue #603: ExternalId rotation 監査 Lambda。
  *
- * 1 日 1 回 EventBridge Scheduler から起動され、`CompetitorAccounts` table を Scan し、
+ * 1 日 1 回 EventBridge Scheduler から起動され、`CompetitorAccounts` を全件走査し、
  * 各 (tenantId, awsAccountId) の **rotation age (= 「最終 rotate からの経過日数」)** を
  * CloudWatch メトリクスとして emit する。`rotatedAt` が無い行 (= 未 rotate) は
  * `createdAt` を基準にする (= 初期 ExternalId が発行されてから何日経ったか)。
@@ -19,7 +19,7 @@ import {
  *     cleanup Lambda は不要** (= TenkaCloud 規模 = 四半期に 1 回程度の rotate cadence なら
  *     100 version 上限に永遠に達しない)。代わりに「rotate していない tenant」を operator が
  *     可視化できる metric を emit する。
- *   - DDB Scan は MVP 規模 (= tenant ~50 / account ~150) で 1 page で完了する想定。
+ *   - MVP 規模 (= tenant ~50 / account ~150) で 1 page で完了する想定。
  *     成長してきたら EventBridge bus 経由で per-tenant fan-out に置き換える。
  *   - 1 metric = 1 (tenantId, awsAccountId) dimension。operator が CloudWatch Alarm で
  *     "RotationAge > 90 days" を 1 ルールでカバーできる。
@@ -27,6 +27,13 @@ import {
  * Issue #1237: SDK の Command 構築は `repository.ts` に閉じ込める。本 index.ts は
  * 「環境変数 → repository 呼び出し → 結果の構造化ログ」のオーケストレーションに専念
  * し、`@aws-sdk/*` を直接 import しない (= `handler-no-direct-sdk-import` 不変条件)。
+ *
+ * [Issue #2442 / Phase C2] `CompetitorAccounts` の読み取りは repository seam
+ * (`resolveCompetitorAccountsRepository`) 経由になり、`repository.ts` の
+ * `forEachAccountPage` (= B3 の per-page callback パターン、`DeploymentsRepository
+ * .forEachCompleteDeploymentPage` と同型) を1 度呼ぶだけで全ページを走査する
+ * (= 旧 `cursor` 手動ループは廃止)。 backend 選択 (dynamodb/turso/sql) は本 handler から
+ * 透過的。
  *
  * Metric namespace / dimension (= repository が保証する物理形):
  *   - Namespace: `TenkaCloud/CompetitorAccounts`
@@ -39,7 +46,6 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export interface AuditDependencies {
   readonly repositories: Repositories;
-  readonly tableName: string;
   readonly environmentName: string;
   readonly now: () => number;
 }
@@ -64,13 +70,8 @@ export async function collectRotationAges(
 ): Promise<RotationAgeMetricDatum[]> {
   const nowMs = deps.now();
   const datapoints: RotationAgeMetricDatum[] = [];
-  let cursor: Record<string, unknown> | undefined;
-  do {
-    const page = await deps.repositories.competitorAccounts.scanPage({
-      tableName: deps.tableName,
-      cursor,
-    });
-    for (const item of page.items) {
+  await deps.repositories.competitorAccounts.forEachAccountPage(async (items) => {
+    for (const item of items) {
       if (typeof item.tenantId !== "string" || typeof item.awsAccountId !== "string") continue;
       datapoints.push({
         tenantId: item.tenantId,
@@ -78,8 +79,7 @@ export async function collectRotationAges(
         ageDays: computeRotationAgeDays(item, nowMs),
       });
     }
-    cursor = page.nextCursor;
-  } while (cursor);
+  });
   return datapoints;
 }
 
@@ -101,9 +101,13 @@ export async function runAudit(deps: AuditDependencies): Promise<{ readonly coun
 }
 
 export async function handler(): Promise<void> {
+  // [Issue #2442 / Phase C2] pure SQL backend (turso|sql) では CompetitorAccounts table
+  // 自体が synth されず env も配線されない — `getEnv` の fail-fast に委ねると invoke ごとに
+  // Initialization Error になる。空文字 default に緩和し、dynamodb / mirror backend の
+  // 誤設定は runtime resolver (`requireDdbAndTableName`) が fail loud に受ける
+  // (= silent fallback にはならない、他の shared builder と同じ緩和)。
   const deps: AuditDependencies = {
-    repositories: composeRepositories(),
-    tableName: getEnv("COMPETITOR_ACCOUNTS_TABLE_NAME"),
+    repositories: composeRepositories(process.env.COMPETITOR_ACCOUNTS_TABLE_NAME ?? ""),
     environmentName: getEnv("DEPLOY_ENVIRONMENT"),
     now: () => Date.now(),
   };

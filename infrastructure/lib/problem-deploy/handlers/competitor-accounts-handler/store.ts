@@ -1,33 +1,44 @@
 import type { SSMClient } from "@aws-sdk/client-ssm";
-import {
-  DeleteCommand,
-  GetCommand,
-  PutCommand,
-  QueryCommand,
-  UpdateCommand,
-} from "@aws-sdk/lib-dynamodb";
+import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import type {
+  CompetitorAccountRecord,
+  CompetitorAccountsRepository,
+} from "../../control-data/types.js";
 import { deleteExternalId, ensureExternalId } from "../shared/external-id-store.js";
 import type { CompetitorAccountsSharedResources } from "./shared.js";
 import type {
-  CompetitorAccountItem,
   CompetitorAccountSummary,
   CreateCompetitorAccountRequest,
   CreateCompetitorAccountResponse,
 } from "./types.js";
 
-const PK = (tenantId: string) => `TENANT#${tenantId}`;
-const SK = (awsAccountId: string) => `ACCOUNT#${awsAccountId}`;
+/**
+ * [Issue #2442 / Phase C2] Resolves the CompetitorAccounts repository seam
+ * for the injected shared resources. The raw DDB access this module
+ * previously performed inline (PutCommand / QueryCommand / GetCommand /
+ * UpdateCommand / DeleteCommand) now lives behind
+ * {@link controlDataRuntime.resolveCompetitorAccountsRepository}
+ * ({@link DynamoDbCompetitorAccountsRepository} / {@link SqlCompetitorAccountsRepository}).
+ */
+function resolveRepository(
+  shared: CompetitorAccountsSharedResources,
+): Promise<CompetitorAccountsRepository> {
+  return controlDataRuntime.resolveCompetitorAccountsRepository({
+    ddb: shared.ddb,
+    competitorAccountsTableName: shared.tableName,
+  });
+}
 
-const toSummary = (item: Partial<CompetitorAccountItem>): CompetitorAccountSummary => ({
-  awsAccountId: String(item.awsAccountId ?? ""),
-  region: String(item.region ?? "ap-northeast-1"),
-  competitorRoleName: String(item.competitorRoleName ?? ""),
-  alias: typeof item.alias === "string" ? item.alias : undefined,
-  verified: item.verified === true,
-  verifiedAt: typeof item.verifiedAt === "string" ? item.verifiedAt : undefined,
-  createdAt: String(item.createdAt ?? ""),
-  updatedAt: String(item.updatedAt ?? ""),
-  rotatedAt: typeof item.rotatedAt === "string" ? item.rotatedAt : undefined,
+const toSummary = (record: Partial<CompetitorAccountRecord>): CompetitorAccountSummary => ({
+  awsAccountId: String(record.awsAccountId ?? ""),
+  region: String(record.region ?? "ap-northeast-1"),
+  competitorRoleName: String(record.competitorRoleName ?? ""),
+  alias: typeof record.alias === "string" ? record.alias : undefined,
+  verified: record.verified === true,
+  verifiedAt: typeof record.verifiedAt === "string" ? record.verifiedAt : undefined,
+  createdAt: String(record.createdAt ?? ""),
+  updatedAt: String(record.updatedAt ?? ""),
+  rotatedAt: typeof record.rotatedAt === "string" ? record.rotatedAt : undefined,
 });
 
 export class DuplicateCompetitorAccountError extends Error {
@@ -69,7 +80,9 @@ export interface CreateCompetitorAccountContext {
  * `(tenantId, awsAccountId)` の新規登録。
  *
  * 1. SSM の tenant ExternalId を冪等に確保 (= 既存なら回さない、未登録なら 64 文字 hex を発行)
- * 2. DDB に行を Put — 同 (PK, SK) があれば `DuplicateCompetitorAccountError`
+ * 2. repository seam 経由で行を作成 — 同 (tenantId, awsAccountId) が既存なら `conflict`
+ *    outcome (DynamoDB `attribute_not_exists` 不成立 / SQL PRIMARY KEY 違反) を
+ *    `DuplicateCompetitorAccountError` に変換する。
  * 3. 戻り値に `externalId` / `tenkaCloudAccountId` を **1 度だけ** 露出 (一覧 API には載せない)
  */
 export async function createCompetitorAccount(
@@ -83,9 +96,7 @@ export async function createCompetitorAccount(
   );
 
   const nowIso = new Date(ctx.nowMs).toISOString();
-  const item: CompetitorAccountItem = {
-    PK: PK(ctx.tenantId),
-    SK: SK(req.awsAccountId),
+  const record: CompetitorAccountRecord = {
     tenantId: ctx.tenantId,
     awsAccountId: req.awsAccountId,
     region: req.region,
@@ -96,24 +107,15 @@ export async function createCompetitorAccount(
     updatedAt: nowIso,
     createdBy: ctx.createdBy,
   };
-  try {
-    await shared.ddb.send(
-      new PutCommand({
-        TableName: shared.tableName,
-        Item: item,
-        ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
-      }),
-    );
-  } catch (err) {
-    const name = err instanceof Error ? err.name : "";
-    if (name === "ConditionalCheckFailedException") {
-      throw new DuplicateCompetitorAccountError(req.awsAccountId);
-    }
-    throw err;
+
+  const repository = await resolveRepository(shared);
+  const outcome = await repository.createAccount(record);
+  if (outcome.outcome === "conflict") {
+    throw new DuplicateCompetitorAccountError(req.awsAccountId);
   }
 
   return {
-    ...toSummary(item),
+    ...toSummary(record),
     externalId,
     tenkaCloudAccountId: shared.tenkaCloudAccountId,
   };
@@ -124,17 +126,9 @@ export async function listCompetitorAccounts(
   shared: CompetitorAccountsSharedResources,
   tenantId: string,
 ): Promise<readonly CompetitorAccountSummary[]> {
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.tableName,
-      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-      ExpressionAttributeValues: {
-        ":pk": PK(tenantId),
-        ":sk": "ACCOUNT#",
-      },
-    }),
-  );
-  return (out.Items ?? []).map((it) => toSummary(it as Partial<CompetitorAccountItem>));
+  const repository = await resolveRepository(shared);
+  const records = await repository.listAccounts(tenantId);
+  return records.map(toSummary);
 }
 
 export async function getCompetitorAccount(
@@ -142,14 +136,9 @@ export async function getCompetitorAccount(
   tenantId: string,
   awsAccountId: string,
 ): Promise<CompetitorAccountSummary | undefined> {
-  const out = await shared.ddb.send(
-    new GetCommand({
-      TableName: shared.tableName,
-      Key: { PK: PK(tenantId), SK: SK(awsAccountId) },
-    }),
-  );
-  if (!out.Item) return undefined;
-  return toSummary(out.Item as Partial<CompetitorAccountItem>);
+  const repository = await resolveRepository(shared);
+  const record = await repository.getAccount(tenantId, awsAccountId);
+  return record ? toSummary(record) : undefined;
 }
 
 export interface MarkVerifiedContext {
@@ -167,68 +156,35 @@ export async function markCompetitorAccountVerified(
   shared: CompetitorAccountsSharedResources,
   ctx: MarkVerifiedContext,
 ): Promise<CompetitorAccountSummary> {
-  try {
-    const out = await shared.ddb.send(
-      new UpdateCommand({
-        TableName: shared.tableName,
-        Key: { PK: PK(ctx.tenantId), SK: SK(ctx.awsAccountId) },
-        UpdateExpression: "SET verified = :v, verifiedAt = :va, updatedAt = :ua",
-        ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)",
-        ExpressionAttributeValues: {
-          ":v": true,
-          ":va": ctx.verifiedAt,
-          ":ua": ctx.verifiedAt,
-        },
-        ReturnValues: "ALL_NEW",
-      }),
-    );
-    return toSummary((out.Attributes ?? {}) as Partial<CompetitorAccountItem>);
-  } catch (err) {
-    const name = err instanceof Error ? err.name : "";
-    if (name === "ConditionalCheckFailedException") {
-      throw new CompetitorAccountNotFoundError(ctx.awsAccountId);
-    }
-    throw err;
+  const repository = await resolveRepository(shared);
+  const outcome = await repository.markVerified(ctx.tenantId, ctx.awsAccountId, ctx.verifiedAt);
+  if (outcome.outcome === "not_found") {
+    throw new CompetitorAccountNotFoundError(ctx.awsAccountId);
   }
+  return toSummary(outcome.record ?? {});
 }
 
 /**
  * row を削除。**同 tenant の最後の row** だった場合は SSM の ExternalId も削除する (= clean rotation)。
  *
- * `ConditionExpression` で行不在を atomic 検出 (= TOCTOU 回避、1 round-trip 削減)。
- * 残行確認は `Select: COUNT` + `Limit: 1` で wire payload を最小化する。
+ * repository seam の `deleteAccount` outcome で行不在を atomic 検出 (= TOCTOU 回避、1
+ * round-trip 削減)。残行確認は `hasRemainingAccounts` (DynamoDB `Select: COUNT` +
+ * `Limit: 1`) で wire payload を最小化する。
  */
 export async function deleteCompetitorAccount(
   shared: CompetitorAccountsSharedResources,
   tenantId: string,
   awsAccountId: string,
 ): Promise<void> {
-  try {
-    await shared.ddb.send(
-      new DeleteCommand({
-        TableName: shared.tableName,
-        Key: { PK: PK(tenantId), SK: SK(awsAccountId) },
-        ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)",
-      }),
-    );
-  } catch (err) {
-    if (err instanceof Error && err.name === "ConditionalCheckFailedException") {
-      throw new CompetitorAccountNotFoundError(awsAccountId);
-    }
-    throw err;
+  const repository = await resolveRepository(shared);
+  const outcome = await repository.deleteAccount(tenantId, awsAccountId);
+  if (outcome.outcome === "not_found") {
+    throw new CompetitorAccountNotFoundError(awsAccountId);
   }
 
   // 残行ゼロなら SSM の ExternalId も掃除する (= 鍵漏洩リスク減)。
-  const remaining = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.tableName,
-      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-      ExpressionAttributeValues: { ":pk": PK(tenantId), ":sk": "ACCOUNT#" },
-      Select: "COUNT",
-      Limit: 1,
-    }),
-  );
-  if ((remaining.Count ?? 0) === 0) {
+  const hasRemaining = await repository.hasRemainingAccounts(tenantId);
+  if (!hasRemaining) {
     await deleteExternalId({ ssm: shared.ssm as SSMClient, env: shared.env }, tenantId);
   }
 }

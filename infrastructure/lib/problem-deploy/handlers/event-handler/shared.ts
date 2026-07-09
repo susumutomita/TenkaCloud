@@ -110,7 +110,13 @@ export function buildEventSharedResources(): EventSharedResources {
     // backend の誤設定は runtime resolver (`runtime-repositories.ts`) が fail loud に受ける
     // (= silent fallback にはならない、EVENTS_TABLE_NAME/TEAMS_TABLE_NAME と同じ緩和)。
     deploymentsTableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
-    competitorAccountsTableName: getEnv("COMPETITOR_ACCOUNTS_TABLE_NAME"),
+    // [Issue #2442 / Phase C2] pure SQL backend (turso|sql) では CompetitorAccounts table
+    // 自体が synth されず env も配線されないため、`getEnv` の fail-fast に委ねると cold
+    // start が Initialization Error で落ちる (= EventApiLambda 全 route が壊れる)。空文字
+    // default に緩和し、dynamodb / mirror backend の誤設定は runtime resolver が fail
+    // loud に受ける (= silent fallback にはならない、eventsTableName/deploymentsTableName
+    // と同じ緩和)。
+    competitorAccountsTableName: process.env.COMPETITOR_ACCOUNTS_TABLE_NAME ?? "",
     disruptionsTableName: getEnv("DISRUPTIONS_TABLE_NAME"),
     eventBusName: getEnv("DEPLOY_EVENT_BUS_NAME"),
     env: getEnv("DEPLOY_ENVIRONMENT"),

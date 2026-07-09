@@ -14,9 +14,14 @@ import type {
 
 // Phase 3.2 / Issue #603: ExternalId rotation 監査 Lambda のユニットテスト。
 //
-// Lambda は CompetitorAccounts DDB を Scan し、`rotatedAt` (= 未 rotate なら `createdAt`) からの
+// Lambda は CompetitorAccounts を全件走査し、`rotatedAt` (= 未 rotate なら `createdAt`) からの
 // 経過日数を CloudWatch メトリクスに publish する。pure function (`computeRotationAgeDays`) +
 // adapter 経路 (`runAudit`) の 2 層で検証する。
+//
+// [Issue #2442 / Phase C2] `CompetitorAccounts` の読み取りは control-data repository seam
+// 経由になり、`forEachAccountPage` (B3 の per-page callback パターン) を 1 度呼ぶだけで全
+// ページを走査する (= 旧 `scanPage` cursor ループは廃止)。本テストは callback を複数回呼んで
+// multi-page drain をシミュレートする。
 //
 // Issue #1237: index.ts は repository 越しに SDK を呼ぶ。本テストは「handler の orchestration」
 // だけを検証し、SDK Command の物理形 (= ScanCommand / PutMetricDataCommand) の検証は
@@ -26,23 +31,22 @@ const NOW_MS = Date.parse("2026-05-12T00:00:00.000Z");
 
 interface BuiltDeps {
   readonly deps: AuditDependencies;
-  readonly scanPage: ReturnType<typeof vi.fn>;
+  readonly forEachAccountPage: ReturnType<typeof vi.fn>;
   readonly putRotationAge: ReturnType<typeof vi.fn>;
 }
 
 function buildDeps(): BuiltDeps {
-  const scanPage = vi.fn();
+  const forEachAccountPage = vi.fn();
   const putRotationAge = vi.fn().mockResolvedValue(undefined);
-  const competitorAccounts: CompetitorAccountsRepository = { scanPage };
+  const competitorAccounts: CompetitorAccountsRepository = { forEachAccountPage };
   const rotationAgeMetrics: RotationAgeMetricsRepository = { putRotationAge };
   const repositories: Repositories = { competitorAccounts, rotationAgeMetrics };
   const deps: AuditDependencies = {
     repositories,
-    tableName: "TestCompetitorAccounts",
     environmentName: "development",
     now: () => NOW_MS,
   };
-  return { deps, scanPage, putRotationAge };
+  return { deps, forEachAccountPage, putRotationAge };
 }
 
 describe("computeRotationAgeDays (pure)", () => {
@@ -79,31 +83,29 @@ describe("computeRotationAgeDays (pure)", () => {
 describe("collectRotationAges", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("should convert repository Scan items into datapoints", async () => {
-    const { deps, scanPage } = buildDeps();
-    scanPage.mockResolvedValueOnce({
-      items: [
-        {
-          tenantId: "tenant-acme",
-          awsAccountId: "222222222222",
-          rotatedAt: new Date(NOW_MS - 14 * 24 * 60 * 60 * 1000).toISOString(),
-          createdAt: "2025-01-01T00:00:00.000Z",
-        },
-        {
-          tenantId: "tenant-beta",
-          awsAccountId: "333333333333",
-          createdAt: new Date(NOW_MS - 100 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-      ],
-    });
+  it("should convert repository page items into datapoints", async () => {
+    const { deps, forEachAccountPage } = buildDeps();
+    forEachAccountPage.mockImplementationOnce(
+      async (onPage: (items: unknown[]) => Promise<void>) => {
+        await onPage([
+          {
+            tenantId: "tenant-acme",
+            awsAccountId: "222222222222",
+            rotatedAt: new Date(NOW_MS - 14 * 24 * 60 * 60 * 1000).toISOString(),
+            createdAt: "2025-01-01T00:00:00.000Z",
+          },
+          {
+            tenantId: "tenant-beta",
+            awsAccountId: "333333333333",
+            createdAt: new Date(NOW_MS - 100 * 24 * 60 * 60 * 1000).toISOString(),
+          },
+        ]);
+      },
+    );
 
     const datapoints = await collectRotationAges(deps);
 
-    expect(scanPage).toHaveBeenCalledTimes(1);
-    expect(scanPage).toHaveBeenCalledWith({
-      tableName: "TestCompetitorAccounts",
-      cursor: undefined,
-    });
+    expect(forEachAccountPage).toHaveBeenCalledTimes(1);
     expect(datapoints).toHaveLength(2);
     expect(datapoints[0]).toEqual({
       tenantId: "tenant-acme",
@@ -117,55 +119,62 @@ describe("collectRotationAges", () => {
     });
   });
 
-  it("should request a second page when the repository returns nextCursor", async () => {
-    const { deps, scanPage } = buildDeps();
-    const cursor = { PK: "TENANT#tenant-1", SK: "ACCOUNT#111111111111" };
-    scanPage
-      .mockResolvedValueOnce({
-        items: [
+  it("should accumulate datapoints across multiple pages (B3 per-page callback)", async () => {
+    const { deps, forEachAccountPage } = buildDeps();
+    forEachAccountPage.mockImplementationOnce(
+      async (onPage: (items: unknown[]) => Promise<void>) => {
+        await onPage([
           {
             tenantId: "tenant-1",
             awsAccountId: "111111111111",
             createdAt: new Date(NOW_MS - 10 * 24 * 60 * 60 * 1000).toISOString(),
           },
-        ],
-        nextCursor: cursor,
-      })
-      .mockResolvedValueOnce({
-        items: [
+        ]);
+        await onPage([
           {
             tenantId: "tenant-2",
             awsAccountId: "222222222222",
             createdAt: new Date(NOW_MS - 20 * 24 * 60 * 60 * 1000).toISOString(),
           },
-        ],
-      });
+        ]);
+      },
+    );
 
     const datapoints = await collectRotationAges(deps);
-    expect(scanPage).toHaveBeenCalledTimes(2);
+    expect(forEachAccountPage).toHaveBeenCalledTimes(1);
     expect(datapoints).toHaveLength(2);
-    expect(scanPage.mock.calls[1]?.[0]).toEqual({
-      tableName: "TestCompetitorAccounts",
-      cursor,
-    });
+    expect(datapoints.map((d) => d.tenantId)).toEqual(["tenant-1", "tenant-2"]);
   });
 
   it("should skip rows missing tenantId / awsAccountId (absorb inconsistent data)", async () => {
-    const { deps, scanPage } = buildDeps();
-    scanPage.mockResolvedValueOnce({
-      items: [
-        {
-          tenantId: "tenant-ok",
-          awsAccountId: "222222222222",
-          createdAt: "2026-05-01T00:00:00.000Z",
-        },
-        { tenantId: "tenant-bad" /* no awsAccountId */ },
-        { awsAccountId: "333333333333" /* no tenantId */ },
-      ],
-    });
+    const { deps, forEachAccountPage } = buildDeps();
+    forEachAccountPage.mockImplementationOnce(
+      async (onPage: (items: unknown[]) => Promise<void>) => {
+        await onPage([
+          {
+            tenantId: "tenant-ok",
+            awsAccountId: "222222222222",
+            createdAt: "2026-05-01T00:00:00.000Z",
+          },
+          { tenantId: "tenant-bad" /* no awsAccountId */ },
+          { awsAccountId: "333333333333" /* no tenantId */ },
+        ]);
+      },
+    );
     const datapoints = await collectRotationAges(deps);
     expect(datapoints).toHaveLength(1);
     expect(datapoints[0]?.tenantId).toBe("tenant-ok");
+  });
+
+  it("should return an empty array when the table has no rows", async () => {
+    const { deps, forEachAccountPage } = buildDeps();
+    forEachAccountPage.mockImplementationOnce(
+      async (onPage: (items: unknown[]) => Promise<void>) => {
+        await onPage([]);
+      },
+    );
+
+    expect(await collectRotationAges(deps)).toEqual([]);
   });
 });
 
@@ -197,23 +206,25 @@ describe("emitRotationAgeMetrics", () => {
 describe("runAudit (integration)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("should drive Scan via the repository and publish via the metrics repository, returning the count", async () => {
-    const { deps, scanPage, putRotationAge } = buildDeps();
-    scanPage.mockResolvedValueOnce({
-      items: [
-        {
-          tenantId: "tenant-acme",
-          awsAccountId: "222222222222",
-          rotatedAt: new Date(NOW_MS - 5 * 24 * 60 * 60 * 1000).toISOString(),
-          createdAt: "2025-01-01T00:00:00.000Z",
-        },
-      ],
-    });
+  it("should drive the page scan via the repository and publish via the metrics repository, returning the count", async () => {
+    const { deps, forEachAccountPage, putRotationAge } = buildDeps();
+    forEachAccountPage.mockImplementationOnce(
+      async (onPage: (items: unknown[]) => Promise<void>) => {
+        await onPage([
+          {
+            tenantId: "tenant-acme",
+            awsAccountId: "222222222222",
+            rotatedAt: new Date(NOW_MS - 5 * 24 * 60 * 60 * 1000).toISOString(),
+            createdAt: "2025-01-01T00:00:00.000Z",
+          },
+        ]);
+      },
+    );
 
     const out = await runAudit(deps);
 
     expect(out.count).toBe(1);
-    expect(scanPage).toHaveBeenCalledTimes(1);
+    expect(forEachAccountPage).toHaveBeenCalledTimes(1);
     expect(putRotationAge).toHaveBeenCalledTimes(1);
     expect(putRotationAge.mock.calls[0]?.[0].datapoints).toEqual([
       { tenantId: "tenant-acme", awsAccountId: "222222222222", ageDays: 5 },

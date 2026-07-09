@@ -34,8 +34,15 @@ export interface EventApiLambdaProps {
   /**
    * Phase 2.2 (Issue #459): Bulk Deploy が deploy 前に verified=true 行のみ許可する
    * gate のため、CompetitorAccounts table を Read する。
+   *
+   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
+   * `COMPETITOR_ACCOUNTS_TABLE_NAME` は注入せず、grant も付与しない — verified-gate lookup /
+   * CRUD は repository seam (`resolveCompetitorAccountsRepository`) が本 Lambda に既に配線
+   * 済みの Turso executor (`tursoDatabaseUrl` / SSM grant、下記) 経由で処理する
+   * ({@link eventsTable} と同じ条件)。
    */
-  readonly competitorAccountsTable: Table;
+  readonly competitorAccountsTable?: Table;
   /**
    * Phase 2a で `DeployCreateRequested` / `DeployDeleteRequested` を fan-out publish
    * するため、ControlPlane の共通 EventBus への PutEvents 権限を grant する。
@@ -170,7 +177,10 @@ export class EventApiLambda extends Construct {
           : {}),
         // Phase 2.2 (Issue #459): bulk-deploy が CompetitorAccounts table を引いて verified-only
         // gate を実現するため、table 名と SSM path 構築用 env 名を Lambda 環境に注入する。
-        COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName,
+        // Issue #2442: 純 SQL backend では table 自体が無いので env も足さない。
+        ...(props.competitorAccountsTable
+          ? { COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName }
+          : {}),
         DEPLOY_ENVIRONMENT: props.environmentName,
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
         // #686: legacy "unknown-tenant" fallback は削除 (= JWT claim 欠落時は handler が 401)
@@ -216,8 +226,9 @@ export class EventApiLambda extends Construct {
     props.deploymentsTable?.grantReadWriteData(this.fn);
     // Phase 2.2 (Issue #459): CompetitorAccounts は read-only (verified gate のみ)。
     // verify / Put / Delete は CompetitorAccountsApiLambda 側で行うので、本 Lambda には
-    // RW を付与しない (= 最小権限)。
-    props.competitorAccountsTable.grantReadData(this.fn);
+    // RW を付与しない (= 最小権限)。Issue #2442: 純 SQL backend では table 自体が無いので
+    // grant も付与しない。
+    props.competitorAccountsTable?.grantReadData(this.fn);
     props.eventBus.grantPutEventsTo(this.fn);
     // Issue #888: disruption audit + idempotency 用に RW、 EventBus PutEvents は既存付与で十分
     // (= disruption fire でも同 bus に publish するため)。

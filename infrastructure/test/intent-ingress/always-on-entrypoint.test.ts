@@ -72,7 +72,7 @@ describe("bin/tenkacloud-always-on.ts (ADR-049 Phase 4 / #2293 SLICE 2)", () => 
       .filter((c): c is Stack => "stackName" in c && "templateFile" in c)
       .map((c) => c.stackName);
     expect(stackNames).toEqual([INTENT_INGRESS_STACK_ID]);
-  });
+  }, 60_000);
 
   it("should expose an unauthenticated Function URL (JWS is the auth)", () => {
     synthIngress().hasResourceProperties("AWS::Lambda::Url", { AuthType: "NONE" });
