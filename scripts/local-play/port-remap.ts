@@ -88,7 +88,7 @@ export function offsetLoopbackEndpoints(
 }
 
 /** Deep-map every string in `value`, preserving its structure (arrays / objects). */
-function mapStrings<T>(value: T, mapString: (text: string) => string): T {
+export function mapStrings<T>(value: T, mapString: (text: string) => string): T {
   if (typeof value === "string") return mapString(value) as T;
   if (Array.isArray(value)) return value.map((item) => mapStrings(item, mapString)) as T;
   if (value !== null && typeof value === "object") {

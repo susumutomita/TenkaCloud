@@ -701,6 +701,53 @@ describe("local-play API: multi-problem session (#2392)", () => {
     expect(problem.stackOutputs).toEqual({ Web: "http://127.0.0.1:18280/" });
   });
 
+  it("should rewrite display URLs for Codespaces without changing the internal verifier URL", async () => {
+    const withPortInInstructions: ContainerProblem = {
+      ...second,
+      instructions: "Open http://127.0.0.1:18180/admin.",
+    };
+    const verify = vi.fn<VerifyFn>(async () => ({ correct: false }));
+    const state = createLocalPlayState(
+      { problems: [PROBLEM, withPortInInstructions] },
+      {
+        verify,
+        browserText: (text) =>
+          text.replace(
+            /\bhttp:\/\/127\.0\.0\.1:(\d+)(?=\/|[\s`"'<>)]|$)/g,
+            (_match, port: string) => `https://tenkacloud-demo-${port}.app.github.dev`,
+          ),
+      },
+    );
+    await state.lifecycle.ensureRunning(PROBLEM.problemId);
+    await state.lifecycle.ensureRunning(withPortInInstructions.problemId);
+
+    const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const problem = (
+      view.body as {
+        problems: Array<{
+          problemId: string;
+          instructions: string;
+          stackOutputs: Record<string, string>;
+        }>;
+      }
+    ).problems[1];
+    expect(problem.problemId).toBe("api-idor-demo");
+    expect(problem.instructions).toBe("Open https://tenkacloud-demo-18280.app.github.dev/admin.");
+    expect(problem.stackOutputs).toEqual({
+      Web: "https://tenkacloud-demo-18280.app.github.dev/",
+    });
+
+    await handleLocalPlayRequest(
+      post("/portal/me/submit-flag", { problemId: "api-idor-demo", flag: "wrong" }),
+      state,
+      NOW,
+    );
+    expect(verify).toHaveBeenCalledWith("http://127.0.0.1:18281/verify", "wrong", {
+      teamId: "local",
+      problemId: "api-idor-demo",
+    });
+  });
+
   it("should count completed problems and the session score in the leaderboard", async () => {
     const state = await twoProblems(async () => ({ correct: true }));
     await handleLocalPlayRequest(

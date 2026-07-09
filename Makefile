@@ -245,9 +245,10 @@ check-synth:
 # ===== Local play (Docker, no AWS) =====
 # Issue #2054: AWS 非依存の CTF コンテナ。 問題コンテナが `/verify` と採点条件を持ち、
 # TenkaCloud は採点 (participant API / portal / leaderboard / hint) だけを担う。 Kumo は撤去。
-#   make local                     採点 API を起動 (問題コンテナは必要時に起動)
-#   make local PROBLEM=sqli-demo   問題コンテナを pre-start し、採点 API を起動
-#   make local-portal              Participant Portal の Vite dev server を起動
+#   make local                     採点 API + Participant Portal を起動 (問題コンテナは必要時に起動)
+#   make local PROBLEM=sqli-demo   問題コンテナを pre-start し、採点 API + Portal を起動
+#   make local-up                  採点 API のみを起動 (上級者向け)
+#   make local-portal              既存の採点 API に Participant Portal を接続
 #   make local-down                コンテナ停止 + runtime-config 復元
 #   make local-evaluate FLAG=...   採点 API 経由でフラグを提出 (= 問題コンテナ /verify に委譲)
 # Issue #2119: `make local-onboard YES=1` pre-approves software installs (also for automation).
@@ -269,17 +270,26 @@ local-onboard:
 	@sh scripts/onboard-bootstrap.sh $(ONBOARD_FLAGS)
 	@bun run scripts/tenkacloud-onboard.ts preflight $(ONBOARD_FLAGS)
 
-# Issue #2054 / #2392: start only the detached local scoring API and optional
-# Docker problem containers. The browser portal is explicit: `make local-portal`.
+# Issue #2054 / #2392 / #2511: start the detached local scoring API, then the
+# browser portal. `local-up` remains the API-only escape hatch for scripts.
 local:
 	@set -e; \
 	problem="$(PROBLEM)"; \
-	if [ -n "$$problem" ]; then \
-	  echo "Pre-starting PROBLEM=$$problem. Run 'make local-list' to see other local-play problems."; \
+	if bun run scripts/tenkacloud-local.ts status >/dev/null 2>&1; then \
+	  if [ -n "$$problem" ]; then \
+	    echo "Local play is already running; ignoring PROBLEM=$$problem. Run 'make local-down' first to restart with a pre-started problem."; \
+	  else \
+	    echo "Local play is already running; opening Participant Portal."; \
+	  fi; \
 	else \
-	  echo "No PROBLEM specified; starting the local API only. Run 'make local-portal' to deploy from the browser UI."; \
+	  if [ -n "$$problem" ]; then \
+	    echo "Pre-starting PROBLEM=$$problem. Run 'make local-list' to see other local-play problems."; \
+	  else \
+	    echo "Starting local play. Problems start on demand from the browser portal."; \
+	  fi; \
+	  $(MAKE) local-up PROBLEM="$$problem" LOCAL_API_PORT="$(LOCAL_API_PORT)"; \
 	fi; \
-	$(MAKE) local-up PROBLEM="$$problem" LOCAL_API_PORT="$(LOCAL_API_PORT)"
+	$(MAKE) local-portal
 
 local-up:
 	@PROBLEM="$(PROBLEM)" LOCAL_API_PORT="$(LOCAL_API_PORT)" bun run scripts/tenkacloud-local.ts up "$(PROBLEM)"

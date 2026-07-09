@@ -29,6 +29,8 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_API_PORT = 3199;
 const PARTICIPANT_PORTAL_DEV_PORT = 5175;
 const LOCAL_API_PROXY_PATH = "/__tenkacloud-local-api";
+const LOOPBACK_BROWSER_URL_RE =
+  /\bhttp:\/\/(?:127\.0\.0\.1|localhost):(\d+)(?=\/|[?#]|[\s`"'<>)]|$)/g;
 /** [#2392 Phase 2] How often the serve process sweeps for idle containers. */
 const REAP_INTERVAL_MS = 60_000;
 
@@ -169,6 +171,12 @@ function browserApiBaseUrl(apiBaseUrl: string, env: CodespacesEnv = process.env)
     // buildRuntimeConfig validates the URL and reports the real error below.
   }
   return apiBaseUrl;
+}
+
+export function browserDisplayText(text: string, env: CodespacesEnv = process.env): string {
+  return text.replace(LOOPBACK_BROWSER_URL_RE, (match, port: string) => {
+    return codespacesForwardedUrl(Number(port), env) ?? match;
+  });
 }
 
 export function buildLocalRuntimeConfig(apiBaseUrl: string, env: CodespacesEnv = process.env) {
@@ -454,7 +462,9 @@ async function up(problemArg: string): Promise<void> {
         "No problem was pre-started; run `make local PROBLEM=<id>` or start one from the portal.",
       );
     }
-    console.log("Optional browser UI: run `make local-portal` and log in with any non-empty key.");
+    console.log(
+      "Participant Portal opens from `make local`; if you used `make local-up`, run `make local-portal`.",
+    );
   } catch (error) {
     if (apiPid !== undefined) stopPid(apiPid);
     unlinkIfExists(p.deploymentPath);
@@ -481,6 +491,7 @@ async function serve(deploymentPath: string): Promise<void> {
     writePrivateJson(p.unitsPath, { units: [...units.values()] } satisfies RecordedUnits);
   };
   const server = await startLocalPlayServer(port, deployment, {
+    browserText: browserDisplayText,
     startContainer: async (problem, offset) => {
       const started = await runner.start(problem, offset);
       units.set(started.unit.problemId, started.unit);

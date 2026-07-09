@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  browserDisplayText,
   buildLocalRuntimeConfig,
   composeArgs,
   composeArgsForCli,
@@ -136,5 +137,33 @@ describe("buildLocalRuntimeConfig", () => {
       mode: "backend",
       cloudMode: "local",
     });
+  });
+});
+
+describe("browserDisplayText", () => {
+  it("should rewrite loopback challenge URLs to Codespaces forwarded URLs", () => {
+    expect(
+      browserDisplayText("Open http://127.0.0.1:18180/admin and http://localhost:18280/healthz.", {
+        CODESPACE_NAME: "tenkacloud-demo",
+        GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "app.github.dev",
+      }),
+    ).toBe(
+      "Open https://tenkacloud-demo-18180.app.github.dev/admin and https://tenkacloud-demo-18280.app.github.dev/healthz.",
+    );
+  });
+
+  it("should preserve path, query, and fragment when rewriting Codespaces URLs", () => {
+    expect(
+      browserDisplayText("Open http://127.0.0.1:18180/search?q=flag#top", {
+        CODESPACE_NAME: "tenkacloud-demo",
+        GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "https://app.github.dev/",
+      }),
+    ).toBe("Open https://tenkacloud-demo-18180.app.github.dev/search?q=flag#top");
+  });
+
+  it("should leave loopback URLs unchanged outside Codespaces", () => {
+    expect(browserDisplayText("Open http://127.0.0.1:18180/admin.", {})).toBe(
+      "Open http://127.0.0.1:18180/admin.",
+    );
   });
 });
