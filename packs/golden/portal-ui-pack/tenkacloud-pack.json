@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "com.tenkacloud.golden.portal-ui",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "core": "^1.0.0",
   "title": "Golden portal UI pack",
   "description": "Golden reference pack covering the participant portal extension contract: an endpoints[] slot, an optional portal/ dashboard component, and uptime-flat scoring over a probed endpoint.",

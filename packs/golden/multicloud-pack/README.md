@@ -12,8 +12,10 @@ A Composite Runtime spanning AWS, GCP, Azure, and Sakura targets, scored by comp
 
 ## Validate
 
+From the repo root:
+
 ```bash
-bun --cwd infrastructure run pack validate packs/golden/multicloud-pack
+make pack-validate ARGS="packs/golden/multicloud-pack"
 ```
 
 The reusable external-pack CI workflow runs the same offline validation; see

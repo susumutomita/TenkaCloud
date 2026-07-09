@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "com.tenkacloud.golden.basic-aws",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "core": "^1.0.0",
   "title": "Golden basic AWS pack",
   "description": "Golden reference pack covering the most common authoring capability: one aws/cloudformation deploy-only problem and one flag-scored problem. Canonical, executable example an external author can copy.",

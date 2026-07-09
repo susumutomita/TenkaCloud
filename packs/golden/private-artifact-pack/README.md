@@ -12,8 +12,10 @@ The declared private payload and provenance contract: the payload is referenced 
 
 ## Validate
 
+From the repo root:
+
 ```bash
-bun --cwd infrastructure run pack validate packs/golden/private-artifact-pack
+make pack-validate ARGS="packs/golden/private-artifact-pack"
 ```
 
 The reusable external-pack CI workflow runs the same offline validation; see
