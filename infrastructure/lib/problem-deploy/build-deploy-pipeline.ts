@@ -186,11 +186,15 @@ export function buildDeployPipeline(
     // undefined (default core-only, and SaaS pooled which is #2459) adds no resource = byte-identical.
     //
     // Known scope limits (this slice is Lite `make deploy` only):
-    //   - Scoring of pack problems is NOT wired yet — a pack contributes catalog + deploy body only
-    //     (its scoring/endpoints/phases projections are a later slice, #2463).
-    //   - The CodeBuild deploy path (console ACTION=deploy over source.zip) does NOT carry the
-    //     pack store, so pack problems are Lambda-path (`deployViaLambda`) only. That is why this
-    //     loop lives inside the `deployViaLambda` branch.
+    //   - Scoring/endpoints/phases/visibility/runtimes/disruptions/writeups projections ARE now
+    //     composed into the effective bundle (`catalog-source.ts` `SnapshotCatalogSource`, #2463) —
+    //     a pack is no longer catalog + deploy body only.
+    //   - The store's bytes DO travel in the CodeBuild deploy path's `source.zip` since #2505
+    //     (`scripts/package-source-bundle.sh`), but nothing on the SaaS/CodeBuild synth path
+    //     consumes them (`bin/infrastructure.ts` passes no catalog source), and a SaaS synth with
+    //     any pack activation present now fails loud instead of silently ignoring them
+    //     (`saas-pack-guard.ts`, #2459). Pack problems remain Lambda-path (`deployViaLambda`) only,
+    //     which is why this loop lives inside the `deployViaLambda` branch.
     //
     // prune:false is MANDATORY for the same reason as the core deployment above (the source bucket
     // also holds source.zip + the core `problems/` tree). Each pack targets a DISTINCT key prefix, so

@@ -300,13 +300,19 @@ problem. The `pack` CLI runs entirely locally: no cloud calls, and no network at
 all unless you install from a pinned Git commit.
 
 ```bash
-make pack-init ARGS="./my-pack --runtime aws/cloudformation"      # scaffold a pack
-make pack-validate ARGS="./my-pack"                                # check manifest + template
-make pack-install ARGS="./my-pack"                                 # snapshot + lock it
-make pack-activate ARGS="com.example.starter@0.1.0 --tenant demo"  # activate for one tenant
+make pack-init ARGS="./my-pack --runtime aws/cloudformation"        # scaffold a pack
+make pack-validate ARGS="./my-pack"                                  # check manifest + template
+make pack-install ARGS="./my-pack"                                   # snapshot + lock it
+make pack-activate ARGS="com.example.starter@0.1.0 --tenant local"   # activate for one tenant
 # then create the event in the Application Admin Console — the activated
 # pack's problems appear in the catalog picker there
 ```
+
+`local` is Lite mode's fixed tenant id, which is what `make deploy` reads at synth
+time — activate against that tenant id, not an arbitrary name, if the goal is a
+real Lite deploy. This whole flow is scoped to Lite mode: SaaS mode
+(`make deploy-saas`) refuses to synth while any pack activation exists, rather
+than silently dropping it from the pooled catalog.
 
 More detail:
 
@@ -319,7 +325,7 @@ More detail:
 in-repo MDX source; every `make pack-*` command above is a live, working CLI today.)
 
 Live, end-to-end verification of this whole flow — init through "visible in the
-console" — is still pending (tracked in #2460).
+console" — is still pending (tracked in #2459).
 
 [catalog]: https://github.com/susumutomita/TenkaCloudChallenge
 

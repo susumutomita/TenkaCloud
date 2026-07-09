@@ -59,3 +59,39 @@ you want to verify the real `git`-backed transport end to end.
 
 The contracts checked manually here are the same ones the offline e2e asserts
 against injected fakes; only the transport (real `git` over HTTPS) differs.
+
+## Live Lite-mode verification (issue #2459)
+
+The offline suites (`external-git-pack-e2e.test.ts` and, for the fuller
+CLI → synth → event → deployment chain, `pack-lite-full-chain-e2e.test.ts`) prove
+every contract deterministically with no real AWS account. Issue #2459's
+acceptance criterion is different: run the same flow once against real AWS in
+Lite mode and record the evidence. Steps:
+
+1. Install the pinned pack from the separate repository (real `git` transport):
+
+   ```bash
+   make pack-install ARGS="git https://github.com/<you>/external-pack.git --commit <full-40-hex-sha>"
+   ```
+
+2. Activate it for tenant `local` — Lite's fixed tenant id, the only tenant a
+   Lite synth ever reads:
+
+   ```bash
+   make pack-activate ARGS="<packId>@<version> --tenant local"
+   ```
+
+3. Deploy Lite mode against real AWS:
+
+   ```bash
+   make deploy
+   ```
+
+4. In the Application Admin Console, create an event. Confirm the activated
+   pack's problem appears in the catalog picker beside the core problems.
+
+5. Deploy the pack problem to a competitor account from the console, submit the
+   expected flag, and confirm the scoring engine records the solve.
+
+6. Capture logs and/or a screen recording of steps 3-5 and attach them as
+   evidence on #2459.

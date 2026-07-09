@@ -96,3 +96,9 @@ This browser event-creation path is still pending live batch verification, so it
 uses the same preview badge as the event steps in the first-pack tutorial. For the
 broader operator flow, continue with
 [run an event end to end](/developers/docs/operate/run-an-event/).
+
+Packs only reach a real deploy through Lite mode (`make deploy`), which reads
+activations for the fixed tenant id `local` — activate with `--tenant local`, not
+an arbitrary tenant name, once you are past the local rehearsal above. SaaS mode
+(`make deploy-saas`) refuses to synth outright while any pack activation exists,
+rather than silently dropping it from the pooled catalog.
