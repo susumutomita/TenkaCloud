@@ -6,7 +6,7 @@ import type {
   ContainerHintRevealMode,
   ContainerProblem,
 } from "./manifest";
-import { remapContainerProblem } from "./port-remap";
+import { mapStrings, remapContainerProblem } from "./port-remap";
 import { ProblemLifecycle, type ProblemStatus } from "./problem-lifecycle";
 import { type VerifyContext, type VerifyResult, verifySubmission } from "./verify-client";
 
@@ -96,6 +96,8 @@ export interface LocalPlayState {
   /** Score events across all problems (each carries its own problemId). */
   readonly scoreEvents: LocalPlayScoreEvent[];
   readonly verify: VerifyFn;
+  /** Browser-facing rewrite for loopback URLs in problem prose / endpoint outputs. */
+  readonly browserText: (text: string) => string;
   /** [#2392 Phase 2] On-demand container lifecycle (cap / LRU eviction / idle reaping). */
   readonly lifecycle: ProblemLifecycle;
   teamName: string;
@@ -124,6 +126,8 @@ export interface CreateStateOptions {
   readonly idleMs?: number;
   /** Clock injected so cap / idle behavior is deterministic in tests. */
   readonly now?: () => number;
+  /** Rewrite display-only local URLs for browser environments such as Codespaces. */
+  readonly browserText?: (text: string) => string;
   /** Docker start seam; `serve` injects the real `ContainerRunner`. */
   readonly startContainer?: StartProblemContainer;
   /** Docker stop seam; `serve` injects the real `ContainerRunner`. */
@@ -208,6 +212,7 @@ export function createLocalPlayState(
     runtimes,
     scoreEvents: [],
     verify: options.verify ?? verifySubmission,
+    browserText: options.browserText ?? ((text) => text),
     lifecycle,
     teamName: options.teamName ?? "Local Player",
   };
@@ -286,8 +291,13 @@ function isProblemComplete(runtime: ProblemRuntime): boolean {
   return scoring.checks.every((check) => runtime.solved.has(check.id));
 }
 
-function problemView(runtime: ProblemRuntime, now: number, status: ProblemStatus) {
-  const problem = runtime.problem;
+function problemView(
+  runtime: ProblemRuntime,
+  now: number,
+  status: ProblemStatus,
+  browserText: (text: string) => string,
+) {
+  const problem = mapStrings(runtime.problem, browserText);
   const complete = isProblemComplete(runtime);
   const englishText = {
     ...(problem.i18n?.en ?? {}),
@@ -351,7 +361,12 @@ function teamView(state: LocalPlayState, now: number): LocalPlayResponse {
         teamId: LOCAL_CONTEXT.teamId,
       },
       problems: [...state.runtimes.entries()].map(([problemId, runtime]) =>
-        problemView(runtime, now, state.lifecycle.statusOf(problemId) ?? "stopped"),
+        problemView(
+          runtime,
+          now,
+          state.lifecycle.statusOf(problemId) ?? "stopped",
+          state.browserText,
+        ),
       ),
       eventGate: { kind: "ok" },
     },
@@ -559,14 +574,15 @@ function revealHint(
   if (!hint) {
     return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
   }
-  const i18n = hint.i18n ? { i18n: hint.i18n } : {};
+  const i18n = hint.i18n ? { i18n: mapStrings(hint.i18n, state.browserText) } : {};
+  const content = state.browserText(hint.content);
   const existing = runtime.revealedHints.get(hint.id);
   if (existing) {
     return {
       status: StatusCodes.OK,
       body: {
         kind: "already_revealed",
-        content: hint.content,
+        content,
         ...i18n,
         penaltyApplied: 0,
         totalScore: sessionScore(state),
@@ -590,7 +606,7 @@ function revealHint(
     status: StatusCodes.OK,
     body: {
       kind: "ok",
-      content: hint.content,
+      content,
       ...i18n,
       penaltyApplied: penalty,
       totalScore: sessionScore(state),

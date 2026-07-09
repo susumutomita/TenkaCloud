@@ -3,9 +3,9 @@
   "tasks": [
     {
       "label": "▷ ローカルプレイ開始",
-      "detail": "make local && make local-portal — starts the scoring API, then the browser portal.",
+      "detail": "make local — starts the scoring API and browser portal.",
       "type": "shell",
-      "command": "(make local-status >/dev/null 2>&1 || make local) && make local-portal",
+      "command": "make local",
       "presentation": {
         "reveal": "always",
         "panel": "dedicated",
