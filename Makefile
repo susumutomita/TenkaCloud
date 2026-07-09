@@ -12,6 +12,7 @@ export JSII_DEPRECATED := quiet
         lint lint-md lint-text lint-format \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
+        pack-init pack-validate pack-install pack-activate pack-deactivate pack-list \
         env-check env-check-lite env-init \
         deploy deploy-saas destroy destroy-saas \
         deploy-battles destroy-battles \
@@ -104,6 +105,35 @@ tech-debt:    ; $(HARNESS)/tech-debt.ts
 validate-problems:
 	git submodule update --init problems
 	cd problems && bun install --frozen-lockfile --ignore-scripts && bun run scripts/validate-problems.ts
+
+# ===== Problem Packs (#2088, author-side CLI, Issue #2460) =====
+# Thin delegation to the offline `pack` CLI (infrastructure/lib/problem-pack/pack-cli.ts,
+# entry infrastructure/bin/tenkacloud-pack.ts). ARGS carries the subcommand's own
+# positionals/flags verbatim — this Makefile never parses pack syntax itself. Examples:
+#   make pack-init ARGS="./my-pack --runtime aws/cloudformation"
+#   make pack-validate ARGS="./my-pack"
+#   make pack-install ARGS="./my-pack"
+#   make pack-install ARGS="git https://github.com/<you>/my-pack --commit <full-40hex-sha>"
+#   make pack-activate ARGS="my-pack@1.0.0 --tenant demo"
+#   make pack-deactivate ARGS="my-pack@1.0.0 --tenant demo"
+#   make pack-list ARGS="--json"
+# Full subcommand reference (incl. `inspect` / `remove`, not wrapped here):
+# infrastructure/lib/problem-pack/pack-cli.ts
+#
+# CWD constraint: the CLI's default store (`.tenkacloud/pack-store`, pack-cli.ts) resolves
+# relative to the process CWD, and the Lite synth reads it from the REPO ROOT
+# (infrastructure/bin/tenkacloud-lite.ts resolves binDir/../../.tenkacloud/pack-store).
+# So the CLI must run with CWD = repo root — do NOT switch this to a
+# `cd infrastructure && bun run pack` form, or default-store installs land in
+# infrastructure/.tenkacloud/pack-store where nothing reads them.
+PACK := ./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts
+
+pack-init:       ; $(PACK) init $(ARGS)
+pack-validate:   ; $(PACK) validate $(ARGS)
+pack-install:    ; $(PACK) install $(ARGS)
+pack-activate:   ; $(PACK) activate $(ARGS)
+pack-deactivate: ; $(PACK) deactivate $(ARGS)
+pack-list:       ; $(PACK) list $(ARGS)
 
 # ===== CDK =====
 # 環境切替。make deploy ENV=production 等で上書き可能。デフォルトは development。

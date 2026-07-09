@@ -212,6 +212,8 @@ problems/<category>/<id>/
 
 Scoring uses one of six built-in kinds (`flag` / `multi-flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`) — one per problem. The platform's generic scoring Lambda (ADR-012 Phase 3) dispatches them. Don't put problem-specific scoring code into the platform.
 
+For problems that should stay private instead of going through the catalog repo, see the offline **Problem Pack** CLI (Issue #2088) — `infrastructure/lib/problem-pack/pack-cli.ts`, wrapped as `make pack-init` / `pack-validate` / `pack-install` / `pack-activate` / `pack-deactivate` / `pack-list` — documented in the README's [Add your own problems / Option B](./README.md#add-your-own-problems).
+
 ## References
 
 - @CLAUDE.md — full product overview, architecture, command list
