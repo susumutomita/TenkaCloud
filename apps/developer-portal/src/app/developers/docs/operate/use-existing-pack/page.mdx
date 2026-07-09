@@ -1,0 +1,104 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "Use an existing pack" };
+
+# Use an existing pack <MaturityBadge level="preview" />
+
+This is the five-minute organizer path for using a pack that someone else already
+authored. If you need to write or publish a pack, start with the
+[first pack tutorial](/developers/docs/tutorials/first-pack/). For the full model,
+see [problem packs](/developers/docs/concepts/problem-packs/); for the normative
+command list, see the [CLI reference](/developers/docs/reference/cli/).
+
+## Prerequisites
+
+Have one of these:
+
+- An HTTPS Git URL for the pack and the full immutable 40-hex commit SHA to run.
+- A local pack directory, for a local rehearsal before the pack is pinned in Git.
+
+The CLI commands below run from a TenkaCloud repository checkout through the
+`infrastructure` workspace. No AWS credentials are needed until the organizer
+console creates and deploys a real event.
+
+## 1. Install the pinned Git revision
+
+Prefer the Git form for event use. It records `sourceKind: "git"`, the repository
+URL, the resolved commit, any subdir, and the content digest in `packs-lock.json`.
+The `--commit` value must be a full 40-hex SHA; branches, tags, `HEAD`, and short
+hashes are refused by design.
+
+```bash
+bun --cwd infrastructure run pack install git \
+  https://github.com/example/acme-pack.git \
+  --commit <40-hex-commit-sha> \
+  --store ./.tenkacloud/pack-store
+```
+
+Expected shape:
+
+```text
+Pack installed: com.example.event-pack@1.0.0
+  source: git
+  digest: <sha256-content-digest>
+  problems: 3
+```
+
+If you were handed a local pack directory for rehearsal, install it with the local
+form instead, then move to a pinned Git install before sharing it with organizers:
+
+```bash
+bun --cwd infrastructure run pack install ./path/to/pack \
+  --store ./.tenkacloud/pack-store
+```
+
+## 2. Activate it for the tenant
+
+Activation makes one installed immutable revision visible to one tenant. It still
+runs locally against the snapshot store and refuses duplicate problem IDs,
+unavailable runtimes, digest mismatches, and missing installs.
+
+```bash
+bun --cwd infrastructure run pack activate com.example.event-pack@1.0.0 \
+  --tenant acme \
+  --store ./.tenkacloud/pack-store
+```
+
+Expected shape:
+
+```text
+Pack activated for tenant 'acme': com.example.event-pack@1.0.0
+```
+
+## 3. Verify the installed revision
+
+`pack list` verifies the local lock entry that activation points at. It is not a
+tenant-scoped activation view, so pair this with the activation success line above.
+
+```bash
+bun --cwd infrastructure run pack list --store ./.tenkacloud/pack-store
+```
+
+Expected shape:
+
+```text
+Installed packs: 1
+  - com.example.event-pack@1.0.0 (git, 3 problems, <sha256-content-digest>)
+```
+
+## 4. Create the event <MaturityBadge level="preview" />
+
+In the `application-admin-console`, create an event for the same tenant. The event
+picker composes the official catalog with that tenant's activated pack revisions,
+so activated pack problems appear beside the official catalog problems.
+
+At event creation time, the platform pins the effective catalog snapshot. Later
+`install`, `activate`, or `deactivate` operations do not rewrite that event. When
+the organizer deploys a selected problem, the deployment resolves against the
+event's pinned snapshot and carries the problem's pack provenance instead of a
+mutable catalog lookup.
+
+This browser event-creation path is still pending live batch verification, so it
+uses the same preview badge as the event steps in the first-pack tutorial. For the
+broader operator flow, continue with
+[run an event end to end](/developers/docs/operate/run-an-event/).

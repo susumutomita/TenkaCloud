@@ -102,6 +102,23 @@ export const DOC_PAGES: readonly DocPage[] = [
     ],
     body: "Run an event end to end, the operator walkthrough. Create a tenant from the admin-console (onboardingRequest; pooled or PLATINUM silo) and hand the application-admin-console URL to the tenant admin. Connect a competitor account by deploying competitor-bootstrap.yaml, a least-privilege IAM role pinned to the control-plane account id and the tenant ExternalId. Deploy a problem from the application-admin-console event create wizard: pick catalog problems, assign each team account and region, deploy via cross-account CloudFormation, poll status, and tear down. Enable multi-cloud by setting features.nonAwsRuntime in runtime-config.json, then register each team's Sakura, Azure, or GCP credentials in the Team Cloud Credentials panel, which writes them to SSM SecureString via the API so operators never touch SSM directly. イベントを通しで運営する手順。テナント作成、競技者アカウント接続 (competitor-bootstrap.yaml + ExternalId)、問題デプロイ (event 作成 → picker → デプロイ → status ポーリング → teardown)、マルチクラウド有効化 (nonAwsRuntime + Team Cloud Credentials パネル)。",
   },
+  {
+    slug: "operate/use-existing-pack",
+    href: "/developers/docs/operate/use-existing-pack/",
+    title: "Use an existing pack",
+    description:
+      "Install a pinned pack revision, activate it for a tenant, verify it, and use it in an event.",
+    maturity: "preview",
+    section: "Operate",
+    headings: [
+      { id: "prerequisites", text: "Prerequisites" },
+      { id: "install-the-pinned-git-revision", text: "Install the pinned Git revision" },
+      { id: "activate-it-for-the-tenant", text: "Activate it for the tenant" },
+      { id: "verify-the-installed-revision", text: "Verify the installed revision" },
+      { id: "create-the-event", text: "Create the event" },
+    ],
+    body: "Use an existing pack, the five-minute organizer path. Start with an HTTPS Git URL and full immutable 40-hex commit SHA, or a local pack directory for rehearsal. Install the pinned revision with pack install git <https-url> --commit <40-hex-commit-sha> --store ./.tenkacloud/pack-store, then activate it for one tenant with pack activate <id@version> --tenant <tenant> --store ./.tenkacloud/pack-store. Verify the local lock with pack list. In the application-admin-console event picker, activated pack problems appear beside the official catalog, event creation pins the effective catalog snapshot, and deployments carry pack provenance from that pinned snapshot. The event-creation step is preview because the live browser flow is still pending batch verification.",
+  },
   // [Issue #2103] Reference pages. The normative tables on these pages render the
   // GENERATED reference-data module (src/content/reference-data.ts), which the
   // generator derives from the real pack/problem schemas, runtime capability

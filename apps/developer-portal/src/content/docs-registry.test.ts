@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { allRoutes } from "@/lib/routes";
 import { searchIndex } from "@/lib/search";
@@ -5,6 +6,17 @@ import { DOC_PAGES, DOC_SECTIONS, findDocBySlug } from "./docs-registry";
 
 const FIRST_PACK_SLUG = "tutorials/first-pack";
 const FIRST_PACK_HREF = "/developers/docs/tutorials/first-pack/";
+const USE_EXISTING_PACK_SLUG = "operate/use-existing-pack";
+const USE_EXISTING_PACK_HREF = "/developers/docs/operate/use-existing-pack/";
+
+const FIRST_PACK_SOURCE = readFileSync(
+  "src/app/developers/docs/tutorials/first-pack/page.mdx",
+  "utf8",
+);
+const USE_EXISTING_PACK_SOURCE = readFileSync(
+  "src/app/developers/docs/operate/use-existing-pack/page.mdx",
+  "utf8",
+);
 
 describe("docs registry — first pack tutorial", () => {
   it("should register the first pack tutorial page", () => {
@@ -33,6 +45,16 @@ describe("docs registry — first pack tutorial", () => {
     expect(results.some((r) => r.href.startsWith(FIRST_PACK_HREF))).toBe(true);
   });
 
+  it("should branch organizers from first-pack to the use-existing-pack path near the top", () => {
+    const branchLink =
+      "Just want to run an existing pack? → [Use an existing pack](/developers/docs/operate/use-existing-pack/).";
+
+    expect(FIRST_PACK_SOURCE).toContain(branchLink);
+    expect(FIRST_PACK_SOURCE.indexOf(branchLink)).toBeLessThan(
+      FIRST_PACK_SOURCE.indexOf("## 前提条件 (prerequisites)"),
+    );
+  });
+
   it("should keep every tutorial page maturity within the shared vocabulary", () => {
     for (const page of DOC_PAGES) {
       expect(["stable", "preview", "planned"]).toContain(page.maturity);
@@ -44,6 +66,7 @@ describe("docs registry — operator + architecture pages (#2169)", () => {
   const OPERATE_PAGES = [
     "/developers/docs/operate/deploy-paths/",
     "/developers/docs/operate/run-an-event/",
+    USE_EXISTING_PACK_HREF,
   ];
   const ARCHITECTURE_HREF = "/developers/docs/concepts/architecture/";
 
@@ -72,6 +95,28 @@ describe("docs registry — operator + architecture pages (#2169)", () => {
   it("should find the run-an-event page by a competitor-onboarding term in search", () => {
     const results = searchIndex("competitor account ExternalId");
     expect(results.some((r) => r.href === "/developers/docs/operate/run-an-event/")).toBe(true);
+  });
+
+  it("should register the use-existing-pack organizer page as preview documentation", () => {
+    const page = findDocBySlug(USE_EXISTING_PACK_SLUG);
+    expect(page).toBeDefined();
+    expect(page?.href).toBe(USE_EXISTING_PACK_HREF);
+    expect(page?.maturity).toBe("preview");
+  });
+
+  it("should find the use-existing-pack page by pack install and provenance terms", () => {
+    const installResults = searchIndex("pack install git 40-hex");
+    expect(installResults.some((r) => r.href === USE_EXISTING_PACK_HREF)).toBe(true);
+
+    const provenanceResults = searchIndex("pack provenance");
+    expect(provenanceResults.some((r) => r.href === USE_EXISTING_PACK_HREF)).toBe(true);
+  });
+
+  it("should keep the event-creation step preview until live verification is complete", () => {
+    expect(USE_EXISTING_PACK_SOURCE).toContain(
+      '## 4. Create the event <MaturityBadge level="preview" />',
+    );
+    expect(USE_EXISTING_PACK_SOURCE).toContain("pending live batch verification");
   });
 
   it("should find the architecture page by a Japanese search term", () => {
