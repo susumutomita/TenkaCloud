@@ -27,8 +27,10 @@ quick reference; for the full detail, follow the Japanese sections above it.
 AWS アカウントが必要です。
 
 - [Bun](https://bun.sh) 1.3.11
-- リポジトリのチェックアウト (`git clone` 済み)。`pack` CLI は `infrastructure` ワークスペースの
-  `tsx bin/tenkacloud-pack.ts` を `bun --cwd infrastructure run pack ...` から呼び出します。
+- リポジトリのチェックアウト (`git clone` 済み)。`pack` CLI は **リポジトリルートから**
+  `make pack-*` ターゲット経由で呼び出します (実体は
+  `./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts`。CLI の既定 store
+  `./.tenkacloud/pack-store` は CWD 基準で解決されるため、リポジトリルート実行が前提です)。
 - `git` 2.x 以降 (固定リビジョンの SHA を取得する手順で使用)
 
 CLI は完全にオフラインです。ネットワーク・CDK synth・クラウド資格情報を一切使いません。
@@ -39,7 +41,7 @@ CLI は完全にオフラインです。ネットワーク・CDK synth・クラ�
 パック (マニフェスト + 問題 1 個 + プロバイダー成果物のプレースホルダー + README) を生成します。
 
 ```bash
-bun --cwd infrastructure run pack init ./my-first-pack
+make pack-init ARGS="./my-first-pack"
 ```
 
 期待される出力:
@@ -101,7 +103,7 @@ Pack scaffolded at ./my-first-pack (4 files). Run 'pack validate ./my-first-pack
 ランタイム整合などを検査します。
 
 ```bash
-bun --cwd infrastructure run pack validate ./my-first-pack
+make pack-validate ARGS="./my-first-pack"
 ```
 
 期待される出力:
@@ -146,7 +148,7 @@ git -C ./my-first-pack rev-parse HEAD
 ロック → dry-run compose」を原子的に行い、有効化はしません。失敗したインストールは残骸を残しません。
 
 ```bash
-bun --cwd infrastructure run pack install ./my-first-pack --store ./.tenkacloud/pack-store
+make pack-install ARGS="./my-first-pack"
 ```
 
 期待される出力 (`digest` はパック内容のハッシュで、ここでは生成物に対する一例):
@@ -162,16 +164,14 @@ Pack installed: com.example.starter@0.1.0
 完全な 40 桁 SHA が必須です:
 
 ```bash
-bun --cwd infrastructure run pack install git \
-  https://github.com/<you>/my-first-pack.git \
-  --commit <full-40-hex-sha> --store ./.tenkacloud/pack-store
+make pack-install ARGS="git https://github.com/<you>/my-first-pack.git --commit <full-40-hex-sha>"
 ```
 
 ロック (`packs-lock.json`) には `sourceKind: "git"`・解決済みコミット・任意の subdir・
 コンテンツダイジェストが記録されます。インストール済みパックは `list` で確認できます:
 
 ```bash
-bun --cwd infrastructure run pack list --store ./.tenkacloud/pack-store
+make pack-list
 ```
 
 期待される出力:
@@ -187,8 +187,7 @@ Installed packs: 1
 利用不可なランタイム・ダイジェスト不一致・未インストールは拒否されます (終了コード 1)。
 
 ```bash
-bun --cwd infrastructure run pack activate com.example.starter@0.1.0 \
-  --tenant acme --store ./.tenkacloud/pack-store
+make pack-activate ARGS="com.example.starter@0.1.0 --tenant acme"
 ```
 
 期待される出力:
@@ -225,10 +224,8 @@ Pack activated for tenant 'acme': com.example.starter@0.1.0
 削除します。
 
 ```bash
-bun --cwd infrastructure run pack deactivate com.example.starter@0.1.0 \
-  --tenant acme --store ./.tenkacloud/pack-store
-bun --cwd infrastructure run pack remove com.example.starter@0.1.0 \
-  --store ./.tenkacloud/pack-store
+make pack-deactivate ARGS="com.example.starter@0.1.0 --tenant acme"
+./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts remove com.example.starter@0.1.0
 ```
 
 期待される出力:
@@ -287,18 +284,20 @@ Everything up to activation is fully offline; no cloud credentials are needed
 until the final cloud-deploy step.
 
 - [Bun](https://bun.sh) 1.3.11
-- A checkout of the repository (the `pack` CLI runs from the `infrastructure`
-  workspace via `bun --cwd infrastructure run pack ...`)
+- A checkout of the repository (run the `pack` CLI from the **repo root** via the
+  `make pack-*` targets — under the hood
+  `./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts`; the CLI's
+  default store `./.tenkacloud/pack-store` resolves against the CWD, so repo-root
+  execution is what the platform reads)
 - `git` 2.x or later (used to obtain the pinned commit SHA)
 
 ### Create, validate, install, activate
 
 ```bash
-bun --cwd infrastructure run pack init ./my-first-pack
-bun --cwd infrastructure run pack validate ./my-first-pack
-bun --cwd infrastructure run pack install ./my-first-pack --store ./.tenkacloud/pack-store
-bun --cwd infrastructure run pack activate com.example.starter@0.1.0 \
-  --tenant acme --store ./.tenkacloud/pack-store
+make pack-init ARGS="./my-first-pack"
+make pack-validate ARGS="./my-first-pack"
+make pack-install ARGS="./my-first-pack"
+make pack-activate ARGS="com.example.starter@0.1.0 --tenant acme"
 ```
 
 Each command prints a one-line success message (see the Japanese sections above
@@ -311,10 +310,8 @@ immutable. Install a pinned revision with `pack install git <https-url> --commit
 ### Teardown
 
 ```bash
-bun --cwd infrastructure run pack deactivate com.example.starter@0.1.0 \
-  --tenant acme --store ./.tenkacloud/pack-store
-bun --cwd infrastructure run pack remove com.example.starter@0.1.0 \
-  --store ./.tenkacloud/pack-store
+make pack-deactivate ARGS="com.example.starter@0.1.0 --tenant acme"
+./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts remove com.example.starter@0.1.0
 ```
 
 `remove` is refused while an event or activation pins the revision, so deactivate

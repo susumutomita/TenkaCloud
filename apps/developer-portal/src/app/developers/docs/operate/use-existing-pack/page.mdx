@@ -29,10 +29,7 @@ The `--commit` value must be a full 40-hex SHA; branches, tags, `HEAD`, and shor
 hashes are refused by design.
 
 ```bash
-bun --cwd infrastructure run pack install git \
-  https://github.com/example/acme-pack.git \
-  --commit <40-hex-commit-sha> \
-  --store ./.tenkacloud/pack-store
+make pack-install ARGS="git https://github.com/example/acme-pack.git --commit <40-hex-commit-sha>"
 ```
 
 Expected shape:
@@ -48,8 +45,7 @@ If you were handed a local pack directory for rehearsal, install it with the loc
 form instead, then move to a pinned Git install before sharing it with organizers:
 
 ```bash
-bun --cwd infrastructure run pack install ./path/to/pack \
-  --store ./.tenkacloud/pack-store
+make pack-install ARGS="./path/to/pack"
 ```
 
 ## 2. Activate it for the tenant
@@ -59,9 +55,7 @@ runs locally against the snapshot store and refuses duplicate problem IDs,
 unavailable runtimes, digest mismatches, and missing installs.
 
 ```bash
-bun --cwd infrastructure run pack activate com.example.event-pack@1.0.0 \
-  --tenant acme \
-  --store ./.tenkacloud/pack-store
+make pack-activate ARGS="com.example.event-pack@1.0.0 --tenant acme"
 ```
 
 Expected shape:
@@ -76,7 +70,7 @@ Pack activated for tenant 'acme': com.example.event-pack@1.0.0
 tenant-scoped activation view, so pair this with the activation success line above.
 
 ```bash
-bun --cwd infrastructure run pack list --store ./.tenkacloud/pack-store
+make pack-list
 ```
 
 Expected shape:
