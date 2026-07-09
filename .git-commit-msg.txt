@@ -1,0 +1,25 @@
+feat(control-data): ProblemEndpoints seam + conditional synth (C1)
+
+Phase C slice 1 (issue #2442, recommended order): the ProblemEndpoints
+table (endpoint override URLs, no GSI) moves behind a
+ProblemEndpointsRepository seam — putOverride / deleteOverride /
+queryOverrides across DynamoDB (verbatim relocation), SQL (payload +
+denormalized composite-key columns, DDL in initializeControlDataSchema)
+and Mirrored — joining the 5-value backend selection. Both raw access
+sites (problem-endpoints-handler/store.ts and generic-scoring's
+override resolution) now go through the seam; grep shows zero raw
+command residue.
+
+Conditional synth per the A5/B6 pattern: pure SQL skips the table and
+every downstream reference (3 lambda env/grant sets incl. the
+participant-portal EndpointsRW inline policy, eventHotTables,
+CfnOutput, FreeTierAlarms and dashboard widgets). The endpoints
+"misconfigured" guard and capacity monitoring are pure-SQL-aware
+(an absent table name is legitimate there, not a misconfiguration).
+
+Synth pins both directions; parity + byte-pin suites; cold-start
+no-throw pins. 4938 tests green.
+
+Relates #2442 #2435
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>

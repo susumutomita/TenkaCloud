@@ -4,6 +4,7 @@ import { DEPLOYMENTS_SCHEMA_STATEMENTS } from "./sql-deployments-repository.js";
 import { EVENTS_SCHEMA_STATEMENTS } from "./sql-events-repository.js";
 import { FEATURE_FLAGS_SCHEMA_STATEMENTS } from "./sql-feature-flags-repository.js";
 import { NOTIFICATIONS_SCHEMA_STATEMENTS } from "./sql-notifications-repository.js";
+import { PROBLEM_ENDPOINTS_SCHEMA_STATEMENTS } from "./sql-problem-endpoints-repository.js";
 import { TEAMS_SCHEMA_STATEMENTS } from "./sql-teams-repository.js";
 import type { SqlExecutor, SqlParam, SqlRow, SqlRunResult, SqlStatement } from "./types.js";
 
@@ -64,6 +65,7 @@ export async function initializeControlDataSchema(client: LibsqlClient): Promise
     ...NOTIFICATIONS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
     ...FEATURE_FLAGS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
     ...DEPLOYMENTS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...PROBLEM_ENDPOINTS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
     ...SCORE_SUMMARY_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
   ];
   await client.batch(statements, "write");

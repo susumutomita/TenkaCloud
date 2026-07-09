@@ -14,6 +14,7 @@ import { DEPLOYMENTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data
 import { EVENTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-events-repository";
 import { FEATURE_FLAGS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-feature-flags-repository";
 import { NOTIFICATIONS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-notifications-repository";
+import { PROBLEM_ENDPOINTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-problem-endpoints-repository";
 import { TEAMS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-teams-repository";
 import type { SqlExecutor } from "../../../lib/problem-deploy/control-data/types";
 
@@ -726,6 +727,7 @@ export function makeSqliteExecutor(): SqlExecutor {
   db.exec(NOTIFICATIONS_SCHEMA_SQL);
   db.exec(FEATURE_FLAGS_SCHEMA_SQL);
   db.exec(DEPLOYMENTS_SCHEMA_SQL);
+  db.exec(PROBLEM_ENDPOINTS_SCHEMA_SQL);
   return {
     run: (sql, params = []) => {
       const result = db.prepare(sql).run(...params);

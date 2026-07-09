@@ -95,7 +95,8 @@ describe("LogGroupRetention aspect", () => {
         (lg as { Properties?: { RetentionInDays?: number } }).Properties?.RetentionInDays,
       ).toBe(1);
     }
-  });
+    // 実 Lambda construct の bundling を伴うため既定 15s では負荷時に marginal(CI 実測 ~12s)。
+  }, 60_000);
 });
 
 describe("resolveLogRetention", () => {

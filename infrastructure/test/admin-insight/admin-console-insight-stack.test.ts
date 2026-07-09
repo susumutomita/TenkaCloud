@@ -56,7 +56,8 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
           Architectures: ["arm64"],
         }),
       );
-    });
+      // 実 bundling を伴う synth はデフォルト 15s では負荷時に marginal(CI 実測 ~12.4s)。
+    }, 60_000);
 
     it("should pass Deployments / Events / Teams table names to Lambda env", () => {
       const tpl = synthInsightStack();

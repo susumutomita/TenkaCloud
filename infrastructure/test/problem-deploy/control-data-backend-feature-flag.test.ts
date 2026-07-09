@@ -164,58 +164,66 @@ describe("DeployCreate SFN SQL status-writer branch (#2441 Phase B PR-5)", () =>
   );
 });
 
-describe("pure SQL backend does not synth Events/Teams/Deployments tables (#2440 A5 / #2441 Phase B PR-6)", () => {
+describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoints tables (#2440 A5 / #2441 Phase B PR-6 / #2442 Phase C1)", () => {
   it(
-    "should NOT create Events/Teams/Deployments AWS::DynamoDB::Table when controlDataBackend='turso' (pure SQL)",
+    "should NOT create Events/Teams/Deployments/ProblemEndpoints AWS::DynamoDB::Table when controlDataBackend='turso' (pure SQL)",
     () => {
       const tpl = synthWithControlDataBackendTurso();
       const ids = tableLogicalIds(tpl);
       expect(ids.some((id) => id.startsWith("Events"))).toBe(false);
       expect(ids.some((id) => id.startsWith("Teams"))).toBe(false);
       // [Issue #2441 Phase B PR-6] Deployments (GSI3 本、単体最大のコスト源) も pure SQL では
-      // synth されない。ProblemEndpoints / Disruptions / CompetitorAccounts / AdminAuditLog は
-      // 依然 out of scope で存在する (4 tables remain, byte-compat minus Events/Teams/Deployments)。
+      // synth されない。
       expect(ids.some((id) => id.startsWith("Deployments"))).toBe(false);
-      expect(ids.some((id) => id.startsWith("ProblemEndpoints"))).toBe(true);
+      // [Issue #2442 Phase C1] ProblemEndpoints (最小テーブル、条件付き書き込み・Scan 無し) も
+      // pure SQL では synth されない。Disruptions / CompetitorAccounts / AdminAuditLog は
+      // 依然 out of scope で存在する (3 tables remain, byte-compat minus Events/Teams/
+      // Deployments/ProblemEndpoints)。
+      expect(ids.some((id) => id.startsWith("ProblemEndpoints"))).toBe(false);
       expect(ids.some((id) => id.startsWith("Disruptions"))).toBe(true);
       expect(ids.some((id) => id.startsWith("CompetitorAccounts"))).toBe(true);
       expect(ids.some((id) => id.startsWith("AdminAuditLog"))).toBe(true);
-      // No CfnOutput referencing the (nonexistent) Events/Teams/Deployments tables.
+      // No CfnOutput referencing the (nonexistent) Events/Teams/Deployments/ProblemEndpoints tables.
       expect(() => tpl.hasOutput("EventsTableName", {})).toThrow();
       expect(() => tpl.hasOutput("TeamsTableName", {})).toThrow();
       expect(() => tpl.hasOutput("DeploymentsTableName", {})).toThrow();
+      expect(() => tpl.hasOutput("ProblemEndpointsTableName", {})).toThrow();
     },
     SYNTH_TIMEOUT_MS,
   );
 
   it(
-    "should default (dynamodb) synth Events/Teams/Deployments tables and their CfnOutputs (byte-compat)",
+    "should default (dynamodb) synth Events/Teams/Deployments/ProblemEndpoints tables and their CfnOutputs (byte-compat)",
     () => {
       const tpl = synthDefault();
       const ids = tableLogicalIds(tpl);
       expect(ids.some((id) => id.startsWith("Events"))).toBe(true);
       expect(ids.some((id) => id.startsWith("Teams"))).toBe(true);
       expect(ids.some((id) => id.startsWith("Deployments"))).toBe(true);
+      expect(ids.some((id) => id.startsWith("ProblemEndpoints"))).toBe(true);
       tpl.hasOutput("EventsTableName", {});
       tpl.hasOutput("TeamsTableName", {});
       tpl.hasOutput("DeploymentsTableName", {});
+      tpl.hasOutput("ProblemEndpointsTableName", {});
     },
     SYNTH_TIMEOUT_MS,
   );
 
   it(
-    "should still create Events/Teams/Deployments tables + inject CONTROL_DATA_BACKEND='turso-mirror' when the migration-bridge backend is selected",
+    "should still create Events/Teams/Deployments/ProblemEndpoints tables + inject CONTROL_DATA_BACKEND='turso-mirror' when the migration-bridge backend is selected",
     () => {
       const tpl = synthWithControlDataBackendTursoMirror();
       const ids = tableLogicalIds(tpl);
       expect(ids.some((id) => id.startsWith("Events"))).toBe(true);
       expect(ids.some((id) => id.startsWith("Teams"))).toBe(true);
       expect(ids.some((id) => id.startsWith("Deployments"))).toBe(true);
+      expect(ids.some((id) => id.startsWith("ProblemEndpoints"))).toBe(true);
       expect(envOf(tpl, "EventApi").CONTROL_DATA_BACKEND).toBe("turso-mirror");
       expect(envOf(tpl, "GenericScoring").CONTROL_DATA_BACKEND).toBe("turso-mirror");
       tpl.hasOutput("EventsTableName", {});
       tpl.hasOutput("TeamsTableName", {});
       tpl.hasOutput("DeploymentsTableName", {});
+      tpl.hasOutput("ProblemEndpointsTableName", {});
     },
     SYNTH_TIMEOUT_MS,
   );
@@ -227,6 +235,28 @@ describe("pure SQL backend does not synth Events/Teams/Deployments tables (#2440
       for (const id of ["DeployApi", "EventApi", "GenericScoring"] as const) {
         expect(envOf(tpl, id).DEPLOYMENTS_TABLE_NAME, id).toBeUndefined();
       }
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should omit PROBLEM_ENDPOINTS_TABLE_NAME entirely from EventApi/GenericScoring env under turso (#2442 Phase C1, same conditional-spread pattern)",
+    () => {
+      const tpl = synthWithControlDataBackendTurso();
+      for (const id of ["EventApi", "GenericScoring"] as const) {
+        expect(envOf(tpl, id).PROBLEM_ENDPOINTS_TABLE_NAME, id).toBeUndefined();
+      }
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should still inject PROBLEM_ENDPOINTS_TABLE_NAME for default and turso-mirror backends (byte-compat)",
+    () => {
+      expect(envOf(synthDefault(), "EventApi").PROBLEM_ENDPOINTS_TABLE_NAME).toBeDefined();
+      expect(
+        envOf(synthWithControlDataBackendTursoMirror(), "EventApi").PROBLEM_ENDPOINTS_TABLE_NAME,
+      ).toBeDefined();
     },
     SYNTH_TIMEOUT_MS,
   );

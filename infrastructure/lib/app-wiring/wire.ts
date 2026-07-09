@@ -266,7 +266,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
         events: problemDeployBackendStack.eventsTable?.tableName,
         teams: problemDeployBackendStack.teamsTable?.tableName,
         competitorAccounts: problemDeployBackendStack.competitorAccountsTable.tableName,
-        problemEndpoints: problemDeployBackendStack.problemEndpointsTable.tableName,
+        // Issue #2442: 純 SQL backend では ProblemEndpoints table 自体が無い (= undefined)。
+        problemEndpoints: problemDeployBackendStack.problemEndpointsTable?.tableName,
         tenantMappingTable: bootstrapTemplateStack.tenantMappingTable.tableName,
       },
       lambdaFunctionNames: {

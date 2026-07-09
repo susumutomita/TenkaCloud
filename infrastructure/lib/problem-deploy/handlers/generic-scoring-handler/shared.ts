@@ -2,7 +2,6 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { getEnv } from "../../../helper-functions.js";
 import {
   type ProblemDisruptionEntry,
   parseDisruptionsCatalogEnv,
@@ -10,6 +9,7 @@ import {
 import { type ProblemEndpointSlot, parseEndpointsEnv } from "../../../utils/endpoints-metadata.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
+import type { ProblemEndpointsRepository } from "../../control-data/problem-endpoints-repository.js";
 import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { isSsrfSafeUrl } from "../shared/ssrf-guard.js";
@@ -60,7 +60,12 @@ export function buildSharedResources(): GenericScoringSharedResources {
     // runtime resolver (`runtime-repositories.ts`) が fail loud に受ける (= silent fallback には
     // ならない)。
     eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",
-    endpointsTableName: getEnv("PROBLEM_ENDPOINTS_TABLE_NAME"),
+    // [Issue #2442 / Phase C1] pure SQL backend (turso|sql) では ProblemEndpoints table 自体が
+    // synth されず env も配線されないため、毎 tick 呼ばれる本 builder を fail-fast にすると採点
+    // tick そのものが落ちる。空文字 default に緩和し、dynamodb / mirror backend の誤設定は
+    // runtime resolver (`runtime-repositories.ts`) が fail loud に受ける (= silent fallback には
+    // ならない、EVENTS_TABLE_NAME / DEPLOYMENTS_TABLE_NAME と同じ緩和)。
+    endpointsTableName: process.env.PROBLEM_ENDPOINTS_TABLE_NAME ?? "",
     problemsScoring: parseScoringEnv(process.env.BATTLE_PROBLEMS_SCORING),
     problemsEndpoints: parseEndpointsEnv(process.env.PROBLEM_ENDPOINTS),
     problemsDisruptions: parseDisruptionsCatalogEnv(process.env.BATTLE_PROBLEMS_DISRUPTIONS),
@@ -99,6 +104,27 @@ export function resolveDeploymentsRepository(
   return controlDataRuntime.resolveDeploymentsRepository({
     ddb: shared.ddb as DynamoDBDocumentClient,
     deploymentsTableName: shared.deploymentsTableName,
+  });
+}
+
+export interface GenericScoringEndpointsSharedResources {
+  readonly ddb: Pick<DynamoDBDocumentClient, "send">;
+  readonly endpointsTableName: string;
+}
+
+/**
+ * [Issue #2442 / Phase C1] ProblemEndpoints READ seam for generic-scoring modules
+ * (mirror of {@link resolveDeploymentsRepository}). Participates in all five
+ * `CONTROL_DATA_BACKEND` values: `dynamodb` returns DDB, `turso` / `sql` return
+ * pure SQL (works even with an empty `endpointsTableName` — the pure branch
+ * never touches it), and mirror modes write through DDB then SQL.
+ */
+export function resolveProblemEndpointsRepository(
+  shared: GenericScoringEndpointsSharedResources,
+): Promise<ProblemEndpointsRepository> {
+  return controlDataRuntime.resolveProblemEndpointsRepository({
+    ddb: shared.ddb as DynamoDBDocumentClient,
+    endpointsTableName: shared.endpointsTableName,
   });
 }
 

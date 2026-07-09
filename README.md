@@ -12,6 +12,7 @@ isolated accounts.
 
 [Landing page](https://tenkacloud.com) · [Demo portal](https://tenkacloud.com/portal-demo/?demo=1) · [Quickstart](#quickstart) · [Add your own problems](#add-your-own-problems)
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/susumutomita/TenkaCloud)
 [![CI](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 [![Built with CDK](https://img.shields.io/badge/Built%20with-AWS%20CDK-orange)](https://aws.amazon.com/cdk/)
@@ -58,6 +59,30 @@ TenkaCloud turns a problem catalog into a live cloud drill:
 
 ## Quickstart
 
+### Try it in your browser (GitHub Codespaces, zero install)
+
+No AWS account, no local Docker, no `git clone` — everything runs in a disposable
+cloud dev container that GitHub builds for you.
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/susumutomita/TenkaCloud)
+
+1. Click the badge above → **Create codespace on main**. The first build takes a few
+   minutes: it installs Bun, initializes the `problems/` catalog, and starts Docker
+   automatically (see [`.devcontainer/devcontainer.json`](./.devcontainer/devcontainer.json)).
+2. Once the terminal is ready, run the **"▷ ローカルプレイ開始"** task — open the
+   Command Palette (`Cmd/Ctrl+Shift+P`) → **Tasks: Run Task** →
+   **"▷ ローカルプレイ開始"** (or press `Cmd/Ctrl+Shift+B`, it is the default build
+   task). This runs `make local` for you inside the codespace.
+3. When the terminal shows the Participant Portal is running, open the **PORTS** tab
+   in the bottom panel and click the preview (globe) icon next to port **5175**.
+
+> **Stay inside the codespace.** Problem instructions reference
+> `http://127.0.0.1:<port>` URLs (the challenge surface, e.g. port `18080`). Those
+> loopback addresses only resolve correctly from *inside* the codespace: the
+> integrated terminal (`curl http://127.0.0.1:18080/...`) or the **PORTS** tab's
+> preview / "Open in Browser" action. Pasting a `127.0.0.1` URL into a browser tab on
+> your own computer points at your own machine instead, and will not work.
+
 ### Try it locally (no AWS)
 
 A fresh clone to a running portal. `make local` diagnoses what it needs (mise trust,
@@ -90,8 +115,8 @@ connection**.
    in `ap-northeast-1` → **Upload a template file** → upload it → stack name
    **`tenkacloud-lite-launcher`**.
 3. Set **`TenantAdminEmail`** to your Admin Console login email. That is the only
-   required parameter. _(To ship your own problems, also set `ProblemsRepoUrl` — see
-   [Add your own problems](#add-your-own-problems).)_
+   required parameter. *(To ship your own problems, also set `ProblemsRepoUrl` — see
+   [Add your own problems](#add-your-own-problems).)*
 4. Check **acknowledge IAM** and create the stack.
 5. Open the CodeBuild project from the stack's **`StartBuildConsoleUrl`** output and
    press **Start build**.

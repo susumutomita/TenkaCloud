@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "▷ ローカルプレイ開始",
+      "detail": "make local YES=1 — starts the scoring API + Participant Portal (Docker required).",
+      "type": "shell",
+      "command": "make local YES=1",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      },
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}

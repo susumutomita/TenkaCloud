@@ -102,13 +102,13 @@ interface EventHotTable {
 /**
  * event-hot テーブルを解決する。deployments/disruptions は既存の {@link EventSharedResources}
  * (= cold start で getEnv fail-fast 済み) から、problemEndpoints だけ本 slice で追加した env
- * から読む。これらが未配線なら {@link CapacityUnconfiguredError} — 部分的な監視ビューを黙って
- * 返さない (silent fallback 禁止)。
+ * から読む。
  *
- * events/teams は [Issue #2440 / ADR-049 §5.1 Phase A5] 純 SQL backend (turso|sql) 選択時は
- * table 自体が synth されず env も空文字になる (`event-handler/shared.ts` 側で fail-fast を
- * 緩和済み)。その場合はこの 2 role を **監視対象から外す** (= DescribeTable(TableName="") で
- * fail するのを防ぐ)。dynamodb / mirror backend では従来どおり 5 role とも揃う。
+ * events/teams/problemEndpoints は [Issue #2440 / ADR-049 §5.1 Phase A5、Issue #2442 / Phase C1]
+ * 純 SQL backend (turso|sql) 選択時は table 自体が synth されず env も空文字になる
+ * (`event-handler/shared.ts` / `generic-scoring-handler/shared.ts` 側で fail-fast を緩和済み)。
+ * その場合はこの role を **監視対象から外す** (= DescribeTable(TableName="") で fail するのを
+ * 防ぐ)。dynamodb / mirror backend では従来どおり 5 role とも揃う。
  *
  * この並びは stack 側の `EventCapacityRunbook` 配線 (allowedValues + IAM) と
  * `docs/operations/dynamodb-event-capacity.md` の表と対応する。event-hot テーブルを増減する
@@ -121,9 +121,6 @@ export function resolveEventHotTables(
   >,
 ): readonly EventHotTable[] {
   const problemEndpointsTableName = process.env.PROBLEM_ENDPOINTS_TABLE_NAME ?? "";
-  if (problemEndpointsTableName.length === 0) {
-    throw new CapacityUnconfiguredError("PROBLEM_ENDPOINTS_TABLE_NAME");
-  }
   const tables: EventHotTable[] = [
     { role: "deployments", tableName: shared.deploymentsTableName },
     { role: "events", tableName: shared.eventsTableName },

@@ -17,18 +17,19 @@ import {
  * 動作不変 (= health-check-handler.test.ts と同一 assertion)。
  */
 
-describe("buildSharedResources cold start (#2440 ADR-049 §5.1 Phase A5)", () => {
+describe("buildSharedResources cold start (#2440 ADR-049 §5.1 Phase A5 / #2442 Phase C1)", () => {
   const REQUIRED_ENV = {
     DEPLOYMENTS_TABLE_NAME: "Deployments",
-    PROBLEM_ENDPOINTS_TABLE_NAME: "ProblemEndpoints",
   };
 
   beforeEach(() => {
     for (const [k, v] of Object.entries(REQUIRED_ENV)) process.env[k] = v;
     delete process.env.EVENTS_TABLE_NAME;
+    delete process.env.PROBLEM_ENDPOINTS_TABLE_NAME;
   });
   afterEach(() => {
     for (const k of Object.keys(REQUIRED_ENV)) delete process.env[k];
+    delete process.env.PROBLEM_ENDPOINTS_TABLE_NAME;
   });
 
   it("should not throw and should default eventsTableName to '' when EVENTS_TABLE_NAME is unset (pure SQL backend cold start)", () => {
@@ -39,6 +40,16 @@ describe("buildSharedResources cold start (#2440 ADR-049 §5.1 Phase A5)", () =>
   it("should still read EVENTS_TABLE_NAME when present (dynamodb/mirror backend)", () => {
     process.env.EVENTS_TABLE_NAME = "Events";
     expect(buildSharedResources().eventsTableName).toBe("Events");
+  });
+
+  it("should not throw and should default endpointsTableName to '' when PROBLEM_ENDPOINTS_TABLE_NAME is unset (#2442 pure SQL backend cold start)", () => {
+    expect(() => buildSharedResources()).not.toThrow();
+    expect(buildSharedResources().endpointsTableName).toBe("");
+  });
+
+  it("should still read PROBLEM_ENDPOINTS_TABLE_NAME when present (dynamodb/mirror backend)", () => {
+    process.env.PROBLEM_ENDPOINTS_TABLE_NAME = "ProblemEndpoints";
+    expect(buildSharedResources().endpointsTableName).toBe("ProblemEndpoints");
   });
 });
 
