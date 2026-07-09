@@ -61,13 +61,29 @@ export interface AppPlaneCoreProps {
   readonly eventApiLambda: IFunction;
   readonly competitorAccountsApiLambda: IFunction;
   /**
-   * Issue #1312: SAML IdP CRUD 用 DDB Table。 渡された時に本 helper が
-   *   - `SamlIdpLambda` を新規 instantiate (UserPool は同 stack で立てた `IdentityProvider.tenantUserPool` 直結)
-   *   - ApiGateway に `/tenant/idp*` route を生やす
-   * を組み合わせて配線する。 SamlIdpLambda を caller 側で先に立てると ProblemDeploy → Lite UserPool の
-   * 逆方向参照になり `addDependency` cycle になるため、 同 stack 内 instantiation を Lite mode 配線契約とする。
+   * Issue #1312: SAML IdP CRUD 用 DDB Table。 渡された時に本 helper が `SamlIdpLambda` へ
+   * `SAML_IDPS_TABLE_NAME` env + R+W grant を配線する (= `SamlIdpLambda` 自体の生成有無は
+   * {@link attachSamlIdpLambda} が決める — table の有無だけでは決めない、 下記参照)。
+   *
+   * [Issue #2442 / Phase C5] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは caller
+   * (`TenkaCloudLiteStack`) が本 table を synth せず `undefined` を渡す。 IdP CRUD API 自体は
+   * `attachSamlIdpLambda` が独立して制御するため、 table 不在でも Lambda は生成され続ける
+   * (= repository seam 経由で SQL executor に直結する)。
    */
   readonly samlIdpsTable?: Table;
+  /**
+   * [Issue #2442 / Phase C5] `true` のとき `SamlIdpLambda` を新規 instantiate (UserPool は同
+   * stack で立てた `IdentityProvider.tenantUserPool` 直結) + ApiGateway に `/tenant/idp*` route
+   * を生やす。 SamlIdpLambda を caller 側で先に立てると ProblemDeploy → Lite UserPool の逆方向
+   * 参照になり `addDependency` cycle になるため、 同 stack 内 instantiation を Lite mode 配線契約
+   * とする。
+   *
+   * `samlIdpsTable` の有無から意図的に切り離してある: 純 SQL backend では table が synth され
+   * ないが、 Lite mode は `controlDataBackend` の値に関わらず IdP CRUD API を提供し続ける契約
+   * なので、 `TenkaCloudLiteStack` は本 flag を常に `true` で渡す。 未指定 (= SaaS/Full mode の
+   * `TenantTemplateStack`) では Lambda を一切立てず、 既存 CFn 物理差分を 0 件に保つ。
+   */
+  readonly attachSamlIdpLambda?: boolean;
   readonly participantPortalUrl?: string;
   readonly competitorBootstrapTemplateUrl?: string;
   /**
@@ -107,6 +123,16 @@ export interface AppPlaneCoreProps {
    * `features` に焼かれ、application-admin-console の `resolveFeatureFlags` が merge する。
    */
   readonly features?: Readonly<Record<string, boolean>>;
+  /**
+   * [Issue #2442 / Phase C5] control-plane data backend (dynamodb|turso|sql|turso-mirror|
+   * sql-mirror)。 `SamlIdpLambda` へそのまま転送する (default 未指定 / `dynamodb` は env を足さず
+   * byte 互換)。
+   */
+  readonly controlDataBackend?: string;
+  /** [Issue #2442 / Phase C5] `SamlIdpLambda` の Turso executor 配線用 URL。 */
+  readonly tursoDatabaseUrl?: string;
+  /** [Issue #2442 / Phase C5] `SamlIdpLambda` の Turso auth token を格納する SSM parameter 名。 */
+  readonly tursoAuthTokenParameterName?: string;
 }
 
 export interface AppPlaneCoreHandles {
@@ -115,7 +141,8 @@ export interface AppPlaneCoreHandles {
   readonly apiGateway: ApiGateway;
   readonly applicationAdminConsoleUrl: string;
   /**
-   * Issue #1312: `samlIdpsTable` を渡したときに作られる SAML IdP CRUD Lambda。
+   * Issue #1312: `attachSamlIdpLambda: true` を渡したときに作られる SAML IdP CRUD Lambda
+   * (Issue #2442 / Phase C5: table 有無ではなく `attachSamlIdpLambda` が生成有無を決める)。
    * 未配線時は undefined。
    */
   readonly samlIdpLambda?: SamlIdpLambda;
@@ -162,13 +189,19 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
     loginCustomDomain: props.loginCustomDomain,
   });
 
-  // Issue #1312: samlIdpsTable が渡されていれば SAML IdP CRUD Lambda を同 stack で立てる
+  // Issue #1312: attachSamlIdpLambda が true なら SAML IdP CRUD Lambda を同 stack で立てる
   // (= UserPool を cross-stack ref で渡すと cyclic dependency になるため同 stack 配置が契約)。
-  const samlIdpLambda = props.samlIdpsTable
+  // [Issue #2442 / Phase C5] table の有無から意図的に切り離してある — 純 SQL backend では
+  // samlIdpsTable が undefined でも Lambda 自体は生成される (AppPlaneCoreProps.attachSamlIdpLambda
+  // の docstring 参照)。
+  const samlIdpLambda = props.attachSamlIdpLambda
     ? new SamlIdpLambda(scope, "SamlIdp", {
         samlIdpsTable: props.samlIdpsTable,
         userPool: identityProvider.tenantUserPool,
         idpTierGuard: "silo",
+        controlDataBackend: props.controlDataBackend,
+        tursoDatabaseUrl: props.tursoDatabaseUrl,
+        tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
       })
     : undefined;
 

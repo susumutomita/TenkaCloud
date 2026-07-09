@@ -104,6 +104,12 @@ const liteStack = new TenkaCloudLiteStack(app, liteStackNames.app, {
   // Issue #2230 (ADR-035): Lite mode でも deploy 時 feature flag override を焼く
   // (= nonAwsRuntime の検証は Lite が主戦場)。
   features: config.features,
+  // Issue #2442 / Phase C5 (ADR-049 §5.1): control-plane data backend の選択。base props
+  // (`buildProblemDeployBackendBaseProps`) と同じ `config` source を共有し、両モードへ同一に
+  // 届ける (= Lite mode での flag 切替配線、 SamlIdpsTable の条件付き synth に使う)。
+  controlDataBackend: config.controlDataBackend,
+  tursoDatabaseUrl: config.tursoDatabaseUrl,
+  tursoAuthTokenParameterName: config.tursoAuthTokenParameterName,
 });
 applyDynamoLowCapacity(liteStack, config);
 liteStack.addDependency(problemDeployBackend);

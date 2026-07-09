@@ -80,7 +80,7 @@ describe("LibsqlExecutor", () => {
     expect(batch).toHaveBeenCalledTimes(1);
     const [statements, mode] = batch.mock.calls[0] ?? [];
     expect(mode).toBe("write");
-    expect(statements).toHaveLength(32);
+    expect(statements).toHaveLength(33);
     expect(statements.map((entry: { sql: string }) => entry.sql)).toEqual(
       expect.arrayContaining([
         expect.stringContaining("CREATE TABLE IF NOT EXISTS events"),
@@ -101,6 +101,8 @@ describe("LibsqlExecutor", () => {
         // [Issue #2442 / Phase C2] CompetitorAccounts + SamlConfig aggregate schemas.
         expect.stringContaining("CREATE TABLE IF NOT EXISTS competitor_accounts"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS saml_configs"),
+        // [Issue #2442 / Phase C5] SamlIdps aggregate schema (Lite-only IdP registry).
+        expect.stringContaining("CREATE TABLE IF NOT EXISTS saml_idps"),
         // [Issue #2442 / Phase C3] Disruptions aggregate schema (one table per row shape).
         expect.stringContaining("CREATE TABLE IF NOT EXISTS disruption_audit"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS disruption_fire_claims"),
