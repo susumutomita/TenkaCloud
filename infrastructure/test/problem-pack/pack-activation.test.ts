@@ -451,6 +451,42 @@ describe("ActivationStore.deactivate (#2095)", () => {
   });
 });
 
+/**
+ * [Problem Packs / Issue #2459] `ActivationStore.list()` is the cross-tenant read the SaaS-mode
+ * synth guard (`lib/problem-pack/saas-pack-guard.ts`) depends on — it must see every tenant's
+ * activations, not just one, so a pack activated for ANY tenant is caught before a SaaS synth
+ * would silently ignore it.
+ */
+describe("ActivationStore.list (#2459)", () => {
+  it("should return an empty array when no activations exist", () => {
+    installPackFrom("pack-a");
+    const store = new ActivationStore(storeDir, PLATFORM);
+
+    expect(store.list()).toEqual([]);
+  });
+
+  it("should return activations across all tenants, not just one", () => {
+    installPackFrom("pack-a", { problemId: "problem-a" });
+    installPackFrom("pack-b", {
+      manifestOverrides: { id: "com.example.other-pack", version: "2.0.0" },
+      problemId: "problem-b",
+    });
+    const store = new ActivationStore(storeDir, PLATFORM);
+    store.activate({ tenantId: TENANT_A, packId: "com.example.cloud-pack", version: "1.0.0" });
+    store.activate({ tenantId: TENANT_B, packId: "com.example.other-pack", version: "2.0.0" });
+
+    const all = store.list();
+
+    expect(all).toHaveLength(2);
+    expect(all).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tenantId: TENANT_A, packId: "com.example.cloud-pack" }),
+        expect.objectContaining({ tenantId: TENANT_B, packId: "com.example.other-pack" }),
+      ]),
+    );
+  });
+});
+
 describe("createEventSnapshot + EventSnapshotStore (#2095)", () => {
   it("should keep an event pinned after the pack is deactivated", () => {
     installPackFrom("pack-a", { problemId: "pack-only" });

@@ -56,5 +56,14 @@ When an organizer clicks **Deploy** in the console:
 
 The console then polls deployment status until the stack reaches a terminal state.
 
+## Problem packs
+
+Problem packs (see the [first pack tutorial](/developers/docs/tutorials/first-pack/))
+ride the Lite path only. Lite reads activations for the fixed tenant id `local` at
+synth time, so activate with `--tenant local` before `make deploy`. SaaS mode fails
+loud at synth instead when any pack activation exists — it does not silently drop
+them from the pooled catalog. Set `CDK_PARAM_SAAS_IGNORE_PACKS=true` to override and
+proceed anyway; the activations then simply do not appear in any tenant's catalog.
+
 Related: [run an event end to end](/developers/docs/operate/run-an-event/) and the
 [platform architecture](/developers/docs/concepts/architecture/).

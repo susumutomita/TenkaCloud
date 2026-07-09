@@ -8,7 +8,7 @@ export JSII_DEPRECATED := quiet
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install_ci submodule-latest build typecheck test test-coverage clean-test-outdir audit-deps before-commit ci-local \
+.PHONY: help install install_ci submodule-latest build typecheck test test-coverage test-scripts clean-test-outdir audit-deps before-commit ci-local \
         lint lint-md lint-text lint-format \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
@@ -46,6 +46,11 @@ build:         ; bun run build
 typecheck:     ; bun run typecheck
 test:          ; bun run test
 test-coverage: ; bun run test:coverage
+# Issue #2515: fast path for script/CLI-only changes (scripts/*.ts, infrastructure/test/scripts/*)
+# that never touch CDK constructs — runs just that directory, skipping every other workspace and
+# every CDK-synth test file. No architecture-invariant / coverage guarantee: it's a quick local
+# sanity check before `make before-commit`, not a substitute for it.
+test-scripts:  ; bun run --filter '@TenkaCloud/infrastructure' test test/scripts
 # Issues #1295 / #1551: vitest setup pins CDK_OUTDIR to the repo-local
 # infrastructure/cdk.out.test/<worker>. The package test wrapper purges it
 # before and after normal runs; this target remains for interrupted processes.
@@ -65,6 +70,12 @@ before-commit: $(GATE_CHECKS)
 # guard / coverage-gate (100% for agent-owned workspaces) / build, so a green `before-commit`
 # does not guarantee a green CI. `ci-local` runs everything CI runs, in CI's own order, minus
 # the Codecov upload step (network + secret, not meaningful to run locally).
+# Issue #2513: CI runs this same workspace set as a 3-shard matrix (`coverage` job,
+# infrastructure / spas / packages) via `scripts/run-coverage.ts --shard <name>` +
+# `.claude/skills/quality-gates/scripts/check-coverage-gate.ts --shard <name>`, run in parallel
+# with the `ci` job. `test-coverage` below (and `ci-local`, which chains it) instead runs all
+# 3 shards serially in one process — same checks, same workspace set, intentionally different
+# parallelism.
 ci-local:
 	git fetch --no-tags origin main:refs/remotes/origin/main
 	git -C problems fetch --no-tags --unshallow origin 2>/dev/null || git -C problems fetch --no-tags origin || true
@@ -251,6 +262,7 @@ check-synth:
 #   make local-portal              既存の採点 API に Participant Portal を接続
 #   make local-down                コンテナ停止 + runtime-config 復元
 #   make local-evaluate FLAG=...   採点 API 経由でフラグを提出 (= 問題コンテナ /verify に委譲)
+#   TENKACLOUD_COMPOSE_CLI='docker-compose'  standalone compose を明示
 # Issue #2119: `make local-onboard YES=1` pre-approves software installs (also for automation).
 ONBOARD_FLAGS := $(if $(YES),--yes,)
 

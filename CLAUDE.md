@@ -61,6 +61,7 @@ We don't use a single-table DynamoDB design. Each stack owns its own tables (Ten
 | `make build`            | Build every workspace (`infrastructure` → 3 SPAs)                        |
 | `make typecheck`        | `tsc --noEmit` across every workspace                                    |
 | `make test`             | `vitest` across every workspace                                          |
+| `make test-scripts`     | Fast path: infrastructure script/CLI tests only (`test/scripts/`) — no CDK synth |
 | `make lint`             | markdownlint + textlint + biome                                          |
 | `make fix`              | Auto-fix variant of the above (`make format` works too)                  |
 | `make before-commit`    | lint + test — fast local sanity check, NOT a full CI mirror (see below)  |
@@ -126,7 +127,7 @@ ADRs must be self-contained for OSS readers. Do not leave chat context, rolling-
 
 You are not done until they all pass. If something fails, find the root cause and fix the code (don't edit `biome.json` / `vitest.config.ts` / etc. to mask it).
 
-`make before-commit` (lint + test) is a fast sanity check, not a full CI mirror — CI (`.github/workflows/ci.yml`) additionally runs `audit-deps`, the submodule pin guard, **problem-catalog validation** (`make validate-problems` — schema + the bilingual `README.md`/`README.ja.md` invariant, #2254), and a 100％ coverage gate for agent-owned workspaces, so a green `before-commit` does not guarantee a green CI. Run `make ci-local` for the full mirror (same checks CI runs, same order, minus the Codecov upload) before opening a PR if you want that guarantee locally.
+`make before-commit` (lint + test) is a fast sanity check, not a full CI mirror — CI (`.github/workflows/ci.yml`) additionally runs `audit-deps`, the submodule pin guard, **problem-catalog validation** (`make validate-problems` — schema + the bilingual `README.md`/`README.ja.md` invariant, #2254), and a 3-shard coverage matrix (infrastructure / spas / packages, #2513) that runs a per-shard 100％ coverage gate for agent-owned workspaces plus a per-shard Codecov upload that Codecov merges into one commit report, so a green `before-commit` does not guarantee a green CI. Run `make ci-local` for the full mirror (same checks CI runs, same order, minus the Codecov upload) before opening a PR if you want that guarantee locally.
 
 ### Available skills
 

@@ -31,11 +31,15 @@
  * mistaken for done):
  *   - Pack `visibility: private` fails loud at synth because packs do not support
  *     the ADR-008 presigned payload path yet; pack payloads must not be silently public.
- *   - SaaS pooled activation is unwired (#2459): only Lite `bin/tenkacloud-lite.ts`
- *     reads the activation store today.
- *   - Materialization rides the LAMBDA deploy path only. The CodeBuild deploy path
- *     (console ACTION=deploy over the install.sh `source.zip`) does not carry the pack
- *     store, so pack problems are unavailable there.
+ *   - SaaS pooled activation is unwired by design (#2459): only Lite `bin/tenkacloud-lite.ts`
+ *     reads the activation store. `bin/infrastructure.ts` passes no catalog source on the
+ *     SaaS synth path, and `saas-pack-guard.ts` now makes that FAIL LOUD at synth when any
+ *     pack activation exists, rather than silently ignoring it — packs are Lite-only because
+ *     the pooled Application Plane shares one Lambda env across every tenant, so a per-tenant
+ *     effective catalog cannot ride the synth-time esbuild-define mechanism.
+ *   - Materialization rides the LAMBDA deploy path only. Since #2505 the pack store's bytes DO
+ *     travel inside the CodeBuild deploy path's `source.zip` (`scripts/package-source-bundle.sh`),
+ *     but nothing on that path reads them, so pack problems remain unavailable there.
  */
 
 import type { ProblemsCatalogBundle } from "../app-config/types.js";

@@ -76,12 +76,12 @@ cloud dev container that GitHub builds for you.
 3. When the terminal shows the Participant Portal is running, open the **PORTS** tab
    in the bottom panel and click the preview (globe) icon next to port **5175**.
 
-> **Stay inside the codespace.** In the browser portal, local challenge links are
-> rewritten to Codespaces forwarded `https://...app.github.dev` URLs. In the
-> integrated terminal, the underlying loopback form still works
-> (`curl http://127.0.0.1:18080/...`). Pasting a raw `127.0.0.1` URL into a
-> browser tab on your own computer points at your own machine instead, and will
-> not work.
+> **Stay inside the codespace.** In the browser portal, local challenge links go
+> through the Participant Portal preview URL on port `5175`; the portal dev server
+> proxies those requests to the loopback problem port. In the integrated terminal,
+> the underlying loopback form still works (`curl http://127.0.0.1:18080/...`).
+> Pasting a raw `127.0.0.1` URL into a browser tab on your own computer points at
+> your own machine instead, and will not work.
 
 ### Try it locally (no AWS)
 
@@ -101,7 +101,9 @@ make local PROBLEM=<id>
   one with `make local PROBLEM=<id>`; otherwise run `make local` and deploy from
   the portal.
 - `make local` accepts either Docker Compose frontend: `docker compose` or
-  standalone `docker-compose`.
+  standalone `docker-compose`. It auto-detects the frontend; set
+  `TENKACLOUD_COMPOSE_CLI='docker-compose'` or
+  `TENKACLOUD_COMPOSE_CLI='docker compose'` to force one.
 - `make doctor` reports the prerequisites and changes nothing.
 - `make local-onboard` is the explicit guided setup path. `make local-onboard YES=1`
   pre-approves software installs (also used by automation). In a
@@ -300,13 +302,19 @@ problem. The `pack` CLI runs entirely locally: no cloud calls, and no network at
 all unless you install from a pinned Git commit.
 
 ```bash
-make pack-init ARGS="./my-pack --runtime aws/cloudformation"      # scaffold a pack
-make pack-validate ARGS="./my-pack"                                # check manifest + template
-make pack-install ARGS="./my-pack"                                 # snapshot + lock it
-make pack-activate ARGS="com.example.starter@0.1.0 --tenant demo"  # activate for one tenant
+make pack-init ARGS="./my-pack --runtime aws/cloudformation"        # scaffold a pack
+make pack-validate ARGS="./my-pack"                                  # check manifest + template
+make pack-install ARGS="./my-pack"                                   # snapshot + lock it
+make pack-activate ARGS="com.example.starter@0.1.0 --tenant local"   # activate for one tenant
 # then create the event in the Application Admin Console — the activated
 # pack's problems appear in the catalog picker there
 ```
+
+`local` is Lite mode's fixed tenant id, which is what `make deploy` reads at synth
+time — activate against that tenant id, not an arbitrary name, if the goal is a
+real Lite deploy. This whole flow is scoped to Lite mode: SaaS mode
+(`make deploy-saas`) refuses to synth while any pack activation exists, rather
+than silently dropping it from the pooled catalog.
 
 More detail:
 
@@ -319,7 +327,7 @@ More detail:
 in-repo MDX source; every `make pack-*` command above is a live, working CLI today.)
 
 Live, end-to-end verification of this whole flow — init through "visible in the
-console" — is still pending (tracked in #2460).
+console" — is still pending (tracked in #2459).
 
 [catalog]: https://github.com/susumutomita/TenkaCloudChallenge
 

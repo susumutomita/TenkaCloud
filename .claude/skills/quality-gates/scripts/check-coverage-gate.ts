@@ -15,10 +15,16 @@
  *
  * Usage: `make test-coverage && bun run .claude/skills/quality-gates/scripts/check-coverage-gate.ts`
  * (run from the repo root; relocated off the product body — see SKILL.md).
+ *
+ * Issue #2513: `--shard <infrastructure|spas|packages>` narrows both GATED_WORKSPACES and
+ * REPORTED_WORKSPACES down to the workspaces `scripts/run-coverage.ts`'s SHARDS assigns to that
+ * shard, so CI's 3-way coverage matrix can gate each shard independently. CI calls this script
+ * directly (not through run.ts) inside each shard job. No flag = full gate, unchanged.
  */
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { SHARD_NAMES, SHARDS, type ShardName } from "../../../../scripts/run-coverage.ts";
 
 const REPO_ROOT = process.cwd();
 
@@ -117,11 +123,44 @@ function formatTotals(t: LcovTotals): string {
   return `lines ${metricPct(t.lines)}% / functions ${metricPct(t.functions)}% / branches ${metricPct(t.branches)}%`;
 }
 
-function main(): void {
-  const failures: string[] = [];
-  console.log("Coverage gate (#1424) — agent-owned workspaces must be 100%:\n");
+function isShardName(value: string): value is ShardName {
+  return (SHARD_NAMES as readonly string[]).includes(value);
+}
 
-  for (const ws of GATED_WORKSPACES) {
+/** Issue #2513: `--shard <name>` narrows the gate to one shard; no args = full gate (unchanged). */
+function parseShardArg(argv: readonly string[]): ShardName | undefined {
+  if (argv.length === 0) {
+    return undefined;
+  }
+  if (argv.length === 2 && argv[0] === "--shard") {
+    const candidate = argv[1];
+    if (candidate !== undefined && isShardName(candidate)) {
+      return candidate;
+    }
+    console.error(`Unknown shard "${argv[1]}". Known shards: ${SHARD_NAMES.join(", ")}`);
+    process.exit(2);
+  }
+  console.error(
+    `Unknown arguments: ${argv.join(" ")}. Usage: bun run check-coverage-gate.ts [--shard <${SHARD_NAMES.join("|")}>]`,
+  );
+  process.exit(2);
+}
+
+function main(): void {
+  const shard = parseShardArg(process.argv.slice(2));
+  const gatedWorkspaces = shard
+    ? GATED_WORKSPACES.filter((ws) => SHARDS[shard].includes(ws))
+    : GATED_WORKSPACES;
+  const reportedWorkspaces = shard
+    ? REPORTED_WORKSPACES.filter((ws) => SHARDS[shard].includes(ws))
+    : REPORTED_WORKSPACES;
+
+  const failures: string[] = [];
+  console.log(
+    `Coverage gate (#1424)${shard ? ` [shard: ${shard}]` : ""} — agent-owned workspaces must be 100%:\n`,
+  );
+
+  for (const ws of gatedWorkspaces) {
     const r = evaluateWorkspace(ws);
     if (r.totals === null) {
       console.error(
@@ -137,7 +176,7 @@ function main(): void {
   }
 
   console.log("\n参考 (gate 対象外、 100% への道筋):");
-  for (const ws of REPORTED_WORKSPACES) {
+  for (const ws of reportedWorkspaces) {
     const r = evaluateWorkspace(ws);
     console.log(`  • ${ws}: ${r.totals ? formatTotals(r.totals) : "(lcov 不在)"}`);
   }
@@ -148,7 +187,7 @@ function main(): void {
     );
     process.exit(1);
   }
-  console.log(`\n${GATED_WORKSPACES.length} workspace すべて 100%。`);
+  console.log(`\n${gatedWorkspaces.length} workspace すべて 100%。`);
 }
 
 if (import.meta.main) {

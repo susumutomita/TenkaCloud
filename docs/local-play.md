@@ -54,11 +54,24 @@ non-empty team key. The challenge endpoints are shown on the problem page;
 attack them, recover the flag, and submit it.
 
 > Requires Docker Compose. Both `docker compose` and standalone `docker-compose`
-> are supported. The scoring API port defaults to
-> `3199` and can be overridden with `LOCAL_API_PORT`. If it is already taken,
-> `make local` fails loudly rather than adopting a foreign server.
+> are supported. TenkaCloud auto-detects the frontend; set
+> `TENKACLOUD_COMPOSE_CLI='docker-compose'` or
+> `TENKACLOUD_COMPOSE_CLI='docker compose'` to force one. The scoring API port
+> defaults to `3199` and can be overridden with `LOCAL_API_PORT`. If it is already
+> taken, `make local` fails loudly rather than adopting a foreign server.
 > For API-only automation, use `make local-up`; attach the browser later with
 > `make local-portal`.
+
+In Codespaces, browser-facing challenge links are rewritten through the
+Participant Portal dev server on port `5175`:
+
+```text
+https://<codespace>-5175.app.github.dev/__tenkacloud-local-port/18180/...
+```
+
+The portal proxies that path to `http://127.0.0.1:18180/...` inside the
+codespace, so users do not need to manually forward every problem port. Terminal
+commands can still use the raw loopback URL.
 
 ## The `/verify` contract
 
