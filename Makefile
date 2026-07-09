@@ -8,7 +8,7 @@ export JSII_DEPRECATED := quiet
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install_ci submodule-latest build typecheck test test-coverage clean-test-outdir audit-deps before-commit ci-local \
+.PHONY: help install install_ci submodule-latest build typecheck test test-coverage test-scripts clean-test-outdir audit-deps before-commit ci-local \
         lint lint-md lint-text lint-format \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
@@ -46,6 +46,11 @@ build:         ; bun run build
 typecheck:     ; bun run typecheck
 test:          ; bun run test
 test-coverage: ; bun run test:coverage
+# Issue #2515: fast path for script/CLI-only changes (scripts/*.ts, infrastructure/test/scripts/*)
+# that never touch CDK constructs — runs just that directory, skipping every other workspace and
+# every CDK-synth test file. No architecture-invariant / coverage guarantee: it's a quick local
+# sanity check before `make before-commit`, not a substitute for it.
+test-scripts:  ; bun run --filter '@TenkaCloud/infrastructure' test test/scripts
 # Issues #1295 / #1551: vitest setup pins CDK_OUTDIR to the repo-local
 # infrastructure/cdk.out.test/<worker>. The package test wrapper purges it
 # before and after normal runs; this target remains for interrupted processes.
