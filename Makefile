@@ -65,6 +65,12 @@ before-commit: $(GATE_CHECKS)
 # guard / coverage-gate (100% for agent-owned workspaces) / build, so a green `before-commit`
 # does not guarantee a green CI. `ci-local` runs everything CI runs, in CI's own order, minus
 # the Codecov upload step (network + secret, not meaningful to run locally).
+# Issue #2513: CI runs this same workspace set as a 3-shard matrix (`coverage` job,
+# infrastructure / spas / packages) via `scripts/run-coverage.ts --shard <name>` +
+# `.claude/skills/quality-gates/scripts/check-coverage-gate.ts --shard <name>`, run in parallel
+# with the `ci` job. `test-coverage` below (and `ci-local`, which chains it) instead runs all
+# 3 shards serially in one process — same checks, same workspace set, intentionally different
+# parallelism.
 ci-local:
 	git fetch --no-tags origin main:refs/remotes/origin/main
 	git -C problems fetch --no-tags --unshallow origin 2>/dev/null || git -C problems fetch --no-tags origin || true

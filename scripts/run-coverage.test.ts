@@ -1,0 +1,178 @@
+import { describe, expect, it } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  GATED_WORKSPACES,
+  REPORTED_WORKSPACES,
+} from "../.claude/skills/quality-gates/scripts/check-coverage-gate.ts";
+import {
+  COVERAGE_WORKSPACES,
+  formatDuration,
+  parseArgs,
+  resolveWorkspaces,
+  SHARD_NAMES,
+  SHARDS,
+  UsageError,
+  validateWorkspaces,
+} from "./run-coverage.ts";
+
+const root = join(import.meta.dir, "..");
+
+// Issue #2513: hardcode the expected set so an accidental drop from the 17-workspace
+// chain (e.g. someone forgetting to port a workspace when editing this file) fails loudly
+// instead of silently shrinking the coverage matrix.
+const EXPECTED_DIRS = [
+  "infrastructure",
+  "apps/admin-console",
+  "apps/application-admin-console",
+  "apps/participant-portal",
+  "packages/trust-bridge",
+  "packages/auth-client",
+  "packages/saml-utils",
+  "packages/problem-cost",
+  "packages/problem-runtime",
+  "packages/problem-sdk",
+  "packages/format",
+  "packages/coordination-plugin-sdk",
+  "packages/portal-contracts",
+  "packages/web-kit",
+  "packages/portal-plugin-sdk",
+  "packages/problem-test-harness",
+  "apps/always-on-control-plane",
+];
+
+describe("COVERAGE_WORKSPACES", () => {
+  it("should match the 17 workspaces currently in the root test:coverage chain", () => {
+    expect(COVERAGE_WORKSPACES.map((ws) => ws.dir)).toEqual(EXPECTED_DIRS);
+  });
+
+  it("should not include developer-portal, which is intentionally excluded from coverage", () => {
+    expect(COVERAGE_WORKSPACES.some((ws) => ws.dir.includes("developer-portal"))).toBe(false);
+  });
+
+  it("should point every workspace at a dir that exists and a filter matching package.json name", () => {
+    for (const ws of COVERAGE_WORKSPACES) {
+      const dirPath = join(root, ws.dir);
+      expect(existsSync(dirPath)).toBe(true);
+      const pkg = JSON.parse(readFileSync(join(dirPath, "package.json"), "utf8")) as {
+        name: string;
+      };
+      expect(pkg.name).toBe(ws.filter);
+    }
+  });
+});
+
+describe("SHARDS", () => {
+  it("should partition COVERAGE_WORKSPACES exactly, with no duplicates and no empty shard", () => {
+    const allShardDirs = SHARD_NAMES.flatMap((shard) => SHARDS[shard]);
+    expect(new Set(allShardDirs).size).toBe(allShardDirs.length);
+    expect([...allShardDirs].sort()).toEqual(COVERAGE_WORKSPACES.map((ws) => ws.dir).sort());
+    for (const shard of SHARD_NAMES) {
+      expect(SHARDS[shard].length).toBeGreaterThan(0);
+    }
+  });
+
+  it("should assign only infrastructure to the infrastructure shard", () => {
+    expect(SHARDS.infrastructure).toEqual(["infrastructure"]);
+  });
+
+  it("should assign exactly the 3 SPAs to the spas shard", () => {
+    expect(SHARDS.spas).toEqual([
+      "apps/admin-console",
+      "apps/application-admin-console",
+      "apps/participant-portal",
+    ]);
+  });
+
+  it("should assign every remaining package + always-on-control-plane to the packages shard", () => {
+    expect(SHARDS.packages).toEqual([
+      "packages/trust-bridge",
+      "packages/auth-client",
+      "packages/saml-utils",
+      "packages/problem-cost",
+      "packages/problem-runtime",
+      "packages/problem-sdk",
+      "packages/format",
+      "packages/coordination-plugin-sdk",
+      "packages/portal-contracts",
+      "packages/web-kit",
+      "packages/portal-plugin-sdk",
+      "packages/problem-test-harness",
+      "apps/always-on-control-plane",
+    ]);
+  });
+
+  it("should cover every workspace the coverage gate reads, so per-shard gating covers the full gated set", () => {
+    const covered = new Set(COVERAGE_WORKSPACES.map((ws) => ws.dir));
+    for (const ws of [...GATED_WORKSPACES, ...REPORTED_WORKSPACES]) {
+      expect(covered.has(ws)).toBe(true);
+    }
+  });
+});
+
+describe("validateWorkspaces", () => {
+  it("should not throw for the real COVERAGE_WORKSPACES set", () => {
+    expect(() => validateWorkspaces(COVERAGE_WORKSPACES)).not.toThrow();
+  });
+
+  it("should throw loudly on a duplicate workspace dir", () => {
+    const withDuplicate = [...COVERAGE_WORKSPACES, COVERAGE_WORKSPACES[0]];
+    expect(() => validateWorkspaces(withDuplicate)).toThrow();
+  });
+
+  it("should throw loudly on a workspace dir that does not exist on disk", () => {
+    const bogus = [
+      { dir: "does/not/exist", filter: "@tenkacloud/nope", shard: "packages" as const },
+    ];
+    expect(() => validateWorkspaces(bogus)).toThrow();
+  });
+
+  it("should throw loudly on an unknown shard name", () => {
+    const bogus = [
+      { dir: "infrastructure", filter: "@TenkaCloud/infrastructure", shard: "bogus" as never },
+    ];
+    expect(() => validateWorkspaces(bogus)).toThrow();
+  });
+});
+
+describe("parseArgs", () => {
+  it("should select every workspace when called with no arguments", () => {
+    expect(parseArgs([])).toEqual({});
+  });
+
+  it("should select the requested shard for --shard packages", () => {
+    expect(parseArgs(["--shard", "packages"])).toEqual({ shard: "packages" });
+  });
+
+  it("should reject an unknown shard name", () => {
+    expect(() => parseArgs(["--shard", "nope"])).toThrow(UsageError);
+  });
+
+  it("should reject an unknown flag", () => {
+    expect(() => parseArgs(["--bogus"])).toThrow(UsageError);
+  });
+});
+
+describe("resolveWorkspaces", () => {
+  it("should return every workspace, in order, when no shard is given", () => {
+    expect(resolveWorkspaces(undefined)).toEqual(COVERAGE_WORKSPACES);
+  });
+
+  it("should return only the requested shard's workspaces, in order", () => {
+    const dirs = resolveWorkspaces("packages").map((ws) => ws.dir);
+    expect(dirs).toEqual(SHARDS.packages);
+  });
+});
+
+describe("formatDuration", () => {
+  it("should format sub-minute durations as seconds with one decimal place", () => {
+    expect(formatDuration(1234)).toBe("1.2s");
+    expect(formatDuration(59_900)).toBe("59.9s");
+    expect(formatDuration(0)).toBe("0.0s");
+  });
+
+  it("should format minute-plus durations as minutes and seconds", () => {
+    expect(formatDuration(65_000)).toBe("1m5.0s");
+    expect(formatDuration(125_400)).toBe("2m5.4s");
+  });
+});
