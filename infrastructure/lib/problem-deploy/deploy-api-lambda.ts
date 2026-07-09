@@ -26,8 +26,18 @@ export interface DeployApiLambdaProps {
   /**
    * Phase 2.2 (Issue #459): single-deploy / stack-progress が verified=true 行のみ
    * 許可する gate のため、CompetitorAccounts table を Read する。
+   *
+   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
+   * `COMPETITOR_ACCOUNTS_TABLE_NAME` は注入せず、grant も付与しない — verified-gate lookup
+   * は repository seam (`resolveVerifiedCompetitorAccount` → `resolveCompetitorAccountsRepository`)
+   * が処理する ({@link deploymentsTable} と同じ条件)。**注意**: 本 Lambda は
+   * `TURSO_DATABASE_URL` / SSM grant を持たない (= Deployments seam と同じ既存の scope
+   * 外 — 「DB を開く Lambda にだけ secret を持たせる」という既存方針、
+   * `control-data-backend-feature-flag.test.ts` で pin 済み) ため、pure SQL 選択時の
+   * deploy 起動 API は現状スコープ外のまま。
    */
-  readonly competitorAccountsTable: Table;
+  readonly competitorAccountsTable?: Table;
   /**
    * tenantId として handler に渡す `DEFAULT_TENANT_ID` env。Cognito JWT authorizer
    * 結線後は JWT claim から取るが、Function URL 直叩き / dev / unit test では本値を使う。
@@ -125,8 +135,11 @@ export class DeployApiLambda extends Construct {
         ...(props.deploymentsTable
           ? { DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName }
           : {}),
-        // Phase 2.2 (Issue #459)
-        COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName,
+        // Phase 2.2 (Issue #459) / [Issue #2442]: 純 SQL backend では table 自体が無いので
+        // env も足さない (= CFn byte 互換 / DEPLOYMENTS_TABLE_NAME と同じ conditional-spread パターン)。
+        ...(props.competitorAccountsTable
+          ? { COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName }
+          : {}),
         DEPLOY_ENVIRONMENT: props.environmentName,
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
         // #686: legacy "unknown-tenant" fallback は削除 (= JWT claim 欠落時は handler が 401)
@@ -167,7 +180,8 @@ export class DeployApiLambda extends Construct {
     // 引く。AssumeRole / SSM SecureString は CompetitorAccountsApiLambda + State Machine 経由
     // (= 本 Lambda は同期 API 経路のみ担う)。
     props.deploymentsTable?.grantReadWriteData(this.fn);
-    props.competitorAccountsTable.grantReadData(this.fn);
+    // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。
+    props.competitorAccountsTable?.grantReadData(this.fn);
     props.eventBus.grantPutEventsTo(this.fn);
     // Issue #950 (ADR-020 Phase D): admin 操作 audit log を append-only 書き込む。
     // Read は付与しない (= write-only から query を起こす経路を作らない)。

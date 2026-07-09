@@ -1,50 +1,104 @@
 import { PutMetricDataCommand } from "@aws-sdk/client-cloudwatch";
-import { ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DynamoDbCompetitorAccountsRepository } from "../../lib/problem-deploy/control-data/competitor-accounts-repository";
 import {
   createCompetitorAccountsRepository,
   createRotationAgeMetricsRepository,
 } from "../../lib/problem-deploy/handlers/external-id-audit-handler/repository";
+import { makeFakeDdb } from "./control-data/control-data-write.test-helpers";
 
-// Issue #1237: SDK Command construction lives in `repository.ts`. These tests
-// pin the physical shape of the AWS API calls (Namespace / MetricName / Unit /
-// Dimensions / ProjectionExpression) that downstream CloudWatch alarms +
-// dashboards depend on — the handler tests now only check orchestration.
+// [Issue #2442 / Phase C2] The `CompetitorAccounts` Scan itself moved behind the
+// control-data repository seam (`resolveCompetitorAccountsRepository`), so this
+// adapter no longer issues a `ScanCommand` directly — it delegates to
+// `CompetitorAccountsRepository.forEachCompetitorAccountPage` (B3 per-page
+// callback pattern). The `ScanCommand` physical shape (ProjectionExpression /
+// ExclusiveStartKey pagination) is now pinned at the seam layer
+// (`control-data/competitor-accounts-repository.test.ts`); this suite verifies
+// the adapter correctly delegates and streams pages end-to-end. The CloudWatch
+// `PutMetricData` adapter is unaffected by the seam migration and keeps its own
+// physical-shape pin here (Issue #1237: SDK Command construction lives in
+// `repository.ts`, orchestration-only tests live in `external-id-audit-handler.test.ts`).
 
-describe("createCompetitorAccountsRepository", () => {
+describe("createCompetitorAccountsRepository (adapter over the control-data seam)", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("should issue a ScanCommand with the rotation projection and propagate items", async () => {
-    const send = vi.fn().mockResolvedValueOnce({
-      Items: [{ tenantId: "tenant-a", awsAccountId: "111111111111", createdAt: "2026-01-01" }],
+  it("should stream every row's rotation-audit projection via forEachAccountPage", async () => {
+    const ddb = makeFakeDdb();
+    const seed = new DynamoDbCompetitorAccountsRepository(ddb, "AcctTbl");
+    await seed.createAccount({
+      tenantId: "tenant-a",
+      awsAccountId: "111111111111",
+      region: "ap-northeast-1",
+      competitorRoleName: "TenkaCloud-CompetitorDeploy-Role",
+      verified: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      createdBy: "sub-1",
     });
-    const repo = createCompetitorAccountsRepository({ send } as never);
 
-    const page = await repo.scanPage({ tableName: "AcctTbl" });
+    const repository = createCompetitorAccountsRepository({ ddb, tableName: "AcctTbl" });
+    const pages: unknown[][] = [];
+    await repository.forEachAccountPage(async (items) => {
+      pages.push([...items]);
+    });
 
-    expect(send).toHaveBeenCalledTimes(1);
-    const cmd = send.mock.calls[0]?.[0] as ScanCommand;
-    expect(cmd).toBeInstanceOf(ScanCommand);
-    expect(cmd.input.TableName).toBe("AcctTbl");
-    expect(cmd.input.ProjectionExpression).toBe("tenantId, awsAccountId, rotatedAt, createdAt");
-    expect(cmd.input.ExclusiveStartKey).toBeUndefined();
-    expect(page.items).toEqual([
-      { tenantId: "tenant-a", awsAccountId: "111111111111", createdAt: "2026-01-01" },
+    // The in-memory fake does not simulate DynamoDB's server-side
+    // ProjectionExpression trim (that physical shape is pinned separately in
+    // `control-data/competitor-accounts-repository.test.ts`); this suite only
+    // asserts the 4 fields the audit handler actually reads are present and
+    // correct end-to-end through the adapter.
+    expect(pages).toHaveLength(1);
+    expect(pages[0]).toMatchObject([
+      {
+        tenantId: "tenant-a",
+        awsAccountId: "111111111111",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
     ]);
-    expect(page.nextCursor).toBeUndefined();
   });
 
-  it("should forward the cursor to DDB as ExclusiveStartKey and surface LastEvaluatedKey", async () => {
-    const cursor = { PK: "TENANT#a", SK: "ACCOUNT#1" };
-    const next = { PK: "TENANT#b", SK: "ACCOUNT#2" };
-    const send = vi.fn().mockResolvedValueOnce({ Items: [], LastEvaluatedKey: next });
-    const repo = createCompetitorAccountsRepository({ send } as never);
+  it("should call onPage once per physical page across a multi-page scan", async () => {
+    const ddb = makeFakeDdb({ pageSize: 1 });
+    const seed = new DynamoDbCompetitorAccountsRepository(ddb, "AcctTbl");
+    await seed.createAccount({
+      tenantId: "tenant-a",
+      awsAccountId: "111111111111",
+      region: "ap-northeast-1",
+      competitorRoleName: "Role",
+      verified: true,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      createdBy: "sub-1",
+    });
+    await seed.createAccount({
+      tenantId: "tenant-b",
+      awsAccountId: "222222222222",
+      region: "ap-northeast-1",
+      competitorRoleName: "Role",
+      verified: false,
+      createdAt: "2026-01-02T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      createdBy: "sub-2",
+    });
 
-    const page = await repo.scanPage({ tableName: "AcctTbl", cursor });
+    const repository = createCompetitorAccountsRepository({ ddb, tableName: "AcctTbl" });
+    const pageSizes: number[] = [];
+    await repository.forEachAccountPage(async (items) => {
+      pageSizes.push(items.length);
+    });
 
-    const cmd = send.mock.calls[0]?.[0] as ScanCommand;
-    expect(cmd.input.ExclusiveStartKey).toEqual(cursor);
-    expect(page.nextCursor).toEqual(next);
+    expect(pageSizes).toEqual([1, 1]);
+  });
+
+  it("should call onPage zero times when the table is empty", async () => {
+    const ddb = makeFakeDdb();
+    const repository = createCompetitorAccountsRepository({ ddb, tableName: "AcctTbl" });
+    const onPage = vi.fn().mockResolvedValue(undefined);
+
+    await repository.forEachAccountPage(onPage);
+
+    expect(onPage).toHaveBeenCalledTimes(1);
+    expect(onPage).toHaveBeenCalledWith([]);
   });
 });
 

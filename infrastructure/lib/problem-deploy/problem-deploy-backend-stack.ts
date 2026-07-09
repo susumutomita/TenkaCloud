@@ -278,8 +278,14 @@ export class ProblemDeployBackendStack extends cdk.Stack {
    * 選択時は `undefined`。
    */
   public readonly teamsTable?: Table;
-  /** CompetitorAccounts table name is surfaced to ObservabilityStack metrics. */
-  public readonly competitorAccountsTable: Table;
+  /**
+   * CompetitorAccounts table name is surfaced to ObservabilityStack metrics.
+   *
+   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは本 table を
+   * **synth しない** (= `undefined`) — DynamoDB standing cost をゼロにする A5/B6/C1 と同じ条件。
+   * `dynamodb` / `*-mirror` では従来どおり必ず存在する ({@link problemEndpointsTable} と同じ条件)。
+   */
+  public readonly competitorAccountsTable?: Table;
   /**
    * ProblemEndpoints table name is surfaced to ObservabilityStack metrics.
    *
@@ -358,8 +364,15 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     this.teamsTable = teams?.table;
     // Issue #459 / ADR-002 Phase 2.1: tenant ↔ 競技者 AWS account の許可表。
     // 1 行 = 1 (tenantId, awsAccountId)。verified=false は deploy 不可。
-    const competitorAccounts = new CompetitorAccountsTable(this, "CompetitorAccounts");
-    this.competitorAccountsTable = competitorAccounts.table;
+    //
+    // [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは Events/Teams/
+    // Deployments/ProblemEndpoints と同条件で **synth しない**。7 handler サイトが repository
+    // seam (`resolveCompetitorAccountsRepository` / `resolveSamlConfigRepository`) 経由で読み
+    // 書きするため、pure SQL では本 table への参照が残らない (壊れる参照は下記で個別に条件化)。
+    const competitorAccounts = pureSql
+      ? undefined
+      : new CompetitorAccountsTable(this, "CompetitorAccounts");
+    this.competitorAccountsTable = competitorAccounts?.table;
     this.problemEndpointsTable = endpoints?.table;
     // Issue #888: Red Team Disruption Injection の audit log + idempotency
     const disruptions = new DisruptionsTable(this, "Disruptions");
@@ -412,7 +425,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // Phase 2.2 (Issue #459): CompetitorAccounts table + env を渡して verified-only gate を有効化。
     const deployApi = new DeployApiLambda(this, "DeployApi", {
       deploymentsTable: deployments?.table,
-      competitorAccountsTable: competitorAccounts.table,
+      competitorAccountsTable: competitorAccounts?.table,
       eventBus,
       defaultTenantId: props.defaultTenantId,
       problemsCatalog: props.problemsCatalog,
@@ -493,7 +506,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       eventsTable: events?.table,
       teamsTable: teams?.table,
       deploymentsTable: deployments?.table,
-      competitorAccountsTable: competitorAccounts.table,
+      competitorAccountsTable: competitorAccounts?.table,
       eventBus,
       problemsCatalog: props.problemsCatalog,
       defaultTenantId: props.defaultTenantId,
@@ -539,7 +552,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + STS verify Lambda。
     // 独立 Lambda にする理由: SSM SecureString R/W + STS AssumeRole の IAM scope を最小化するため。
     const competitorAccountsApi = new CompetitorAccountsApiLambda(this, "CompetitorAccountsApi", {
-      competitorAccountsTable: competitorAccounts.table,
+      competitorAccountsTable: competitorAccounts?.table,
       environmentName: props.environmentName,
       // Issue #950
       adminAuditLogTable: adminAuditLog.table,
@@ -547,6 +560,10 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       auditLogEnabled: props.auditLogEnabled,
       // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
       controlDataBackend: props.controlDataBackend,
+      // Issue #2442: 本 Lambda は CompetitorAccounts CRUD + SAML config の repository seam を
+      // 実際に使う「DB を開く Lambda」なので Turso executor 配線を持つ (EventApi と同型)。
+      tursoDatabaseUrl: props.tursoDatabaseUrl,
+      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
     });
     this.competitorAccountsApiLambda = competitorAccountsApi.fn;
 
@@ -608,7 +625,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       // [ADR-033 / #1665] operator-fired disruption の active 採点効果を tick で解決する (read-only)。
       disruptionsTable: disruptions.table,
       // [ADR-047] scheduled auto-teardown が bulkTeardownEvent で cross-account role を解決する (read-only)。
-      competitorAccountsTable: competitorAccounts.table,
+      competitorAccountsTable: competitorAccounts?.table,
       // [ADR-047 follow-up] scheduled auto-deploy が bulkDeployEvent で teams を Query (read-only) +
       // catalog で problemId→problemDir を解決する。
       teamsTable: teams?.table,
@@ -636,8 +653,13 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // SSM Parameter Store は 100 version で auto-drop するため明示的な cleanup Lambda は
     // 入れない (= 説明は `external-id-audit-lambda.ts` の docblock を参照)。
     const externalIdAudit = new ExternalIdAuditLambda(this, "ExternalIdAudit", {
-      competitorAccountsTable: competitorAccounts.table,
+      competitorAccountsTable: competitorAccounts?.table,
       environmentName: props.environmentName,
+      // Issue #2442: 本 Lambda 自身が「DB を開く Lambda」(日次 rotation 監査の repository
+      // seam) なので Turso executor 配線を持つ (EventApi/CompetitorAccountsApi と同型)。
+      controlDataBackend: props.controlDataBackend,
+      tursoDatabaseUrl: props.tursoDatabaseUrl,
+      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
     });
     this.externalIdAuditLambda = externalIdAudit.fn;
 
@@ -709,11 +731,16 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         description: "ADR-004 Teams table 名 (1 チーム = 1 行、teamLoginKey は team scope)。",
       });
     }
-    new CfnOutput(this, "CompetitorAccountsTableName", {
-      value: competitorAccounts.table.tableName,
-      description:
-        "Issue #459 / ADR-002 Competitor Accounts table 名 (tenant ↔ 競技者 AWS account 紐付け)。",
-    });
+    // [Issue #2442 / Phase C2] 純 SQL backend では table 自体が無いので output も作らない
+    // (存在しない論理 ID を参照する CfnOutput は synth できない、Events/Teams/Deployments/
+    // ProblemEndpoints と同じ条件)。
+    if (competitorAccounts) {
+      new CfnOutput(this, "CompetitorAccountsTableName", {
+        value: competitorAccounts.table.tableName,
+        description:
+          "Issue #459 / ADR-002 Competitor Accounts table 名 (tenant ↔ 競技者 AWS account 紐付け)。",
+      });
+    }
     new CfnOutput(this, "DeployCreateStateMachineArn", {
       value: this.deployCreateStateMachineArn,
       description: "Deploy 起動を司る Step Functions State Machine の ARN。",

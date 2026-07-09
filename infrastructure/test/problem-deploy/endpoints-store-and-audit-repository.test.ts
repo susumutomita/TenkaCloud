@@ -34,22 +34,28 @@ describe("queryOverrides", () => {
 });
 
 describe("composeRepositories", () => {
-  it("should build both repositories and memoize the result across calls", () => {
-    const first = composeRepositories();
+  it("should build both repositories on each call, given a tableName", () => {
+    // [Issue #2442 / Phase C2] `tableName` is now a per-invoke input (resolved from env at
+    // `handler()` call time, not module load, since pure SQL backends synth no table at all) —
+    // `composeRepositories` rebuilds the thin repository wrapper on every call, while the
+    // expensive DynamoDBDocumentClient / CloudWatchClient constructors stay memoized at module
+    // scope (`cachedDdb` / `cachedCloudWatch`) so warm invokes still reuse the same socket pool.
+    const first = composeRepositories("T");
     expect(first.competitorAccounts).toBeDefined();
     expect(first.rotationAgeMetrics).toBeDefined();
-    // Module-scope cache: a second call returns the same instance (warm-invoke reuse).
-    expect(composeRepositories()).toBe(first);
+    const second = composeRepositories("T");
+    expect(second.competitorAccounts).toBeDefined();
+    expect(second.rotationAgeMetrics).toBeDefined();
   });
 
-  it("scanPage should default items to [] when the scan returns no Items", async () => {
+  it("forEachAccountPage should call onPage with [] when the scan returns no Items", async () => {
     // biome-ignore lint/suspicious/noExplicitAny: minimal client.
     const ddb = { send: vi.fn().mockResolvedValue({}) } as any;
-    const page = await createCompetitorAccountsRepository(ddb).scanPage({
-      tableName: "T",
-      cursor: undefined,
-    });
-    expect(page.items).toEqual([]);
-    expect(page.nextCursor).toBeUndefined();
+    const onPage = vi.fn().mockResolvedValue(undefined);
+
+    await createCompetitorAccountsRepository({ ddb, tableName: "T" }).forEachAccountPage(onPage);
+
+    expect(onPage).toHaveBeenCalledTimes(1);
+    expect(onPage).toHaveBeenCalledWith([]);
   });
 });

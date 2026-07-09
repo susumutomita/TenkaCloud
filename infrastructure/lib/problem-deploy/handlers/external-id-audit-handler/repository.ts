@@ -4,7 +4,8 @@ import {
   PutMetricDataCommand,
 } from "@aws-sdk/client-cloudwatch";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { CompetitorAccountItem } from "../competitor-accounts-handler/types.js";
 
 /**
@@ -15,7 +16,6 @@ import type { CompetitorAccountItem } from "../competitor-accounts-handler/types
  * `.claude/harness/src/rules/handler-no-direct-sdk-import.ts`). This module
  * owns:
  *
- *   - Construction of the `CompetitorAccounts` DDB Scan command + paging.
  *   - Construction of the CloudWatch `PutMetricData` command + dimension
  *     marshalling.
  *   - Construction of the module-scope clients used by the warm Lambda invoke
@@ -25,8 +25,15 @@ import type { CompetitorAccountItem } from "../competitor-accounts-handler/types
  * `CompetitorAccountsRepository` / `RotationAgeMetricsRepository` interfaces
  * and on the `Repositories` factory that wires the production clients.
  *
+ * [Issue #2442 / Phase C2] The `CompetitorAccounts` Scan itself moved behind
+ * the control-data repository seam (`resolveCompetitorAccountsRepository`),
+ * so this module no longer constructs a `ScanCommand` directly — it delegates
+ * to `CompetitorAccountsRepository.forEachCompetitorAccountPage` (the B3
+ * per-page callback pattern), which is transparent to the `dynamodb` /
+ * `turso` / `sql` backend selection.
+ *
  * Behaviour parity (= no runtime change vs the previous in-handler
- * implementation):
+ * implementation) on the `dynamodb` backend:
  *
  *   - `ProjectionExpression` keeps `tenantId, awsAccountId, rotatedAt,
  *     createdAt` so the DDB read footprint is unchanged.
@@ -48,22 +55,18 @@ const METRIC_NAME = "RotationAge";
  */
 const PUT_METRIC_BATCH_SIZE = 1000;
 
-export interface CompetitorAccountsScanPage {
-  /** projection-applied subset of CompetitorAccountItem (tenantId / awsAccountId / rotatedAt / createdAt). */
-  readonly items: readonly Partial<CompetitorAccountItem>[];
-  /** opaque pagination cursor (DDB `LastEvaluatedKey`); `undefined` once iteration completes. */
-  readonly nextCursor?: Record<string, unknown>;
-}
-
 export interface CompetitorAccountsRepository {
   /**
-   * Scan one page of `CompetitorAccounts`. Caller drives the loop using the
-   * returned `nextCursor` to stay agnostic of DDB-specific paging shapes.
+   * [Issue #2442 / Phase C2] Streams every CompetitorAccounts row's
+   * rotation-audit projection (`tenantId` / `awsAccountId` / `rotatedAt` /
+   * `createdAt`), one physical page at a time — the B3 per-page callback
+   * pattern (mirrors `DeploymentsRepository.forEachCompleteDeploymentPage`).
+   * Thin delegate to the control-data seam's
+   * `CompetitorAccountsRepository.forEachCompetitorAccountPage`.
    */
-  scanPage(opts: {
-    readonly tableName: string;
-    readonly cursor?: Record<string, unknown>;
-  }): Promise<CompetitorAccountsScanPage>;
+  forEachAccountPage(
+    onPage: (items: readonly Partial<CompetitorAccountItem>[]) => Promise<void>,
+  ): Promise<void>;
 }
 
 export interface RotationAgeMetricDatum {
@@ -97,22 +100,17 @@ export interface Repositories {
   readonly rotationAgeMetrics: RotationAgeMetricsRepository;
 }
 
-export function createCompetitorAccountsRepository(
-  ddb: Pick<DynamoDBDocumentClient, "send">,
-): CompetitorAccountsRepository {
+export function createCompetitorAccountsRepository(deps: {
+  readonly ddb: DynamoDBDocumentClient;
+  readonly tableName: string;
+}): CompetitorAccountsRepository {
   return {
-    async scanPage({ tableName, cursor }) {
-      const out = await ddb.send(
-        new ScanCommand({
-          TableName: tableName,
-          ProjectionExpression: "tenantId, awsAccountId, rotatedAt, createdAt",
-          ExclusiveStartKey: cursor,
-        }),
-      );
-      return {
-        items: (out.Items ?? []) as Partial<CompetitorAccountItem>[],
-        nextCursor: out.LastEvaluatedKey as Record<string, unknown> | undefined,
-      };
+    async forEachAccountPage(onPage) {
+      const repository = await controlDataRuntime.resolveCompetitorAccountsRepository({
+        ddb: deps.ddb,
+        competitorAccountsTableName: deps.tableName,
+      });
+      await repository.forEachCompetitorAccountPage(onPage);
     },
   };
 }
@@ -148,18 +146,19 @@ export function createRotationAgeMetricsRepository(
 
 /**
  * Module-scope production clients. Lambda warm invokes reuse the same socket
- * pool — keep the constructors outside the request path.
+ * pool — keep the constructors outside the request path. `tableName` is a
+ * per-invoke input (from the env, resolved by the handler), so only the
+ * clients themselves are memoized here; `composeRepositories` is cheap to
+ * re-call every invoke.
  */
-let cachedRepositories: Repositories | undefined;
+let cachedDdb: DynamoDBDocumentClient | undefined;
+let cachedCloudWatch: CloudWatchClient | undefined;
 
-export function composeRepositories(): Repositories {
-  if (!cachedRepositories) {
-    const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
-    const cw = new CloudWatchClient({} satisfies CloudWatchClientConfig);
-    cachedRepositories = {
-      competitorAccounts: createCompetitorAccountsRepository(ddb),
-      rotationAgeMetrics: createRotationAgeMetricsRepository(cw),
-    };
-  }
-  return cachedRepositories;
+export function composeRepositories(tableName: string): Repositories {
+  cachedDdb ??= DynamoDBDocumentClient.from(new DynamoDBClient({}));
+  cachedCloudWatch ??= new CloudWatchClient({} satisfies CloudWatchClientConfig);
+  return {
+    competitorAccounts: createCompetitorAccountsRepository({ ddb: cachedDdb, tableName }),
+    rotationAgeMetrics: createRotationAgeMetricsRepository(cachedCloudWatch),
+  };
 }

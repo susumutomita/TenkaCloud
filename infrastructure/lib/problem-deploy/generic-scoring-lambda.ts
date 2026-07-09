@@ -94,8 +94,15 @@ export interface GenericScoringLambdaProps {
    * competitorRoleArn / externalId を解決するための CompetitorAccounts table (read-only)。
    * これを配線すると `buildScheduledTeardownResources()` が有効化され、 reconciler が
    * teardownAt 経過の event を自動撤去する (未配線なら dormant)。
+   *
+   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
+   * `COMPETITOR_ACCOUNTS_TABLE_NAME` は注入せず grant も付与しない —
+   * `buildScheduledTeardownResources` / `buildScheduledDeployResources` は空文字 env を
+   * 既に「未配線 = dormant」として扱うため、pure SQL では scheduled teardown/deploy が
+   * dormant のまま安全に倒れる ({@link eventsTable} と同じ条件)。
    */
-  readonly competitorAccountsTable: ITable;
+  readonly competitorAccountsTable?: ITable;
   /**
    * [#1422] condition-triggered disruption の publish 先 event bus (= 手動 fire と同じ deploy bus)。
    * scoring Lambda に `events:PutEvents` を least-privilege で付与する。
@@ -177,8 +184,11 @@ export class GenericScoringLambda extends Construct {
         // [ADR-033 / #1665] operator-fired disruption の active 採点効果を解決するための audit table。
         DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName,
         // [ADR-047] scheduled auto-teardown 用。 buildScheduledTeardownResources がこの env を見て
-        // 有効化する (未設定なら scheduled teardown は dormant)。
-        COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName,
+        // 有効化する (未設定なら scheduled teardown は dormant)。 Issue #2442: 純 SQL backend
+        // では table 自体が無いので env も足さない (= dormant のまま安全に倒れる)。
+        ...(props.competitorAccountsTable
+          ? { COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName }
+          : {}),
         // [ADR-047 follow-up] scheduled auto-deploy 用。 buildScheduledDeployResources がこの env +
         // BATTLE_PROBLEMS_CATALOG (下の define) を見て有効化する (未設定なら scheduled deploy は dormant)。
         ...(props.teamsTable ? { TEAMS_TABLE_NAME: props.teamsTable.tableName } : {}),
@@ -235,7 +245,8 @@ export class GenericScoringLambda extends Construct {
     props.disruptionsTable.grantReadData(this.fn);
     // [ADR-047] scheduled auto-teardown: bulkTeardownEvent が CompetitorAccounts から cross-account
     // role / externalId を解決する (= read-only)。 これで scheduled teardown が有効化される。
-    props.competitorAccountsTable.grantReadData(this.fn);
+    // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。
+    props.competitorAccountsTable?.grantReadData(this.fn);
     // [ADR-047 follow-up] scheduled auto-deploy: bulkDeployEvent が event の teams を Query する
     // (= read-only)。 Deployments への TransactWrite / event bus publish は既存 grant を再利用する
     // (deployments.grantReadWriteData + eventBus.grantPutEventsTo)。 これで scheduled deploy が有効化される。

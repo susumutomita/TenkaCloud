@@ -13,7 +13,14 @@ import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-cre
 import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/sakura-credential-store.js";
 
 export interface CompetitorAccountsApiLambdaProps {
-  readonly competitorAccountsTable: Table;
+  /**
+   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
+   * `COMPETITOR_ACCOUNTS_TABLE_NAME` は注入せず、grant も付与しない — CRUD / SAML config は
+   * repository seam (`resolveCompetitorAccountsRepository` / `resolveSamlConfigRepository`)
+   * が下記の Turso executor 配線経由で処理する。
+   */
+  readonly competitorAccountsTable?: Table;
   /** SSM SecureString path 構築用 (`/<env>/tenants/<tenantId>/external-id`)。 */
   readonly environmentName: string;
   /**
@@ -29,6 +36,14 @@ export interface CompetitorAccountsApiLambdaProps {
    * lockstep で env を配線する。default (未指定 / `dynamodb`) は env を足さず byte 互換。
    */
   readonly controlDataBackend?: string;
+  /**
+   * [Issue #2442 / Phase C2] 本 Lambda が CompetitorAccounts CRUD + SAML config の repository
+   * seam を実際に使う「DB を開く Lambda」なので、EventApi/GenericScoring と同じ Turso
+   * executor 配線 (env + SSM GetParameter grant) を持つ。Public remote libSQL URL。
+   */
+  readonly tursoDatabaseUrl?: string;
+  /** SSM SecureString parameter name containing the libSQL auth token. */
+  readonly tursoAuthTokenParameterName?: string;
 }
 
 /**
@@ -65,7 +80,11 @@ export class CompetitorAccountsApiLambda extends Construct {
       timeout: Duration.seconds(15),
       memorySize: 256,
       environment: {
-        COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName,
+        // Issue #2442: 純 SQL backend では table 自体が無いので env も足さない (= CFn byte
+        // 互換 / DEPLOYMENTS_TABLE_NAME と同じ conditional-spread パターン)。
+        ...(props.competitorAccountsTable
+          ? { COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName }
+          : {}),
         DEPLOY_ENVIRONMENT: props.environmentName,
         TENKACLOUD_ACCOUNT_ID: stack.account,
         // Issue #950: audit log table 名 (未配線なら空文字)
@@ -74,12 +93,19 @@ export class CompetitorAccountsApiLambda extends Construct {
         ...auditLogEnabledEnv(props.auditLogEnabled),
         // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
         ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
+        // [Issue #2442]: repository seam の Turso executor 接続情報 (default dynamodb では
+        // props 自体が undefined = env を足さず byte 互換、EventApiLambda と同型の注入パターン)。
+        ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
+        ...(props.tursoAuthTokenParameterName
+          ? { TURSO_AUTH_TOKEN_PARAMETER_NAME: props.tursoAuthTokenParameterName }
+          : {}),
         NODE_OPTIONS: "--enable-source-maps",
       },
     });
 
     // 1. DDB CompetitorAccounts: PutItem / Query / GetItem / UpdateItem / DeleteItem
-    props.competitorAccountsTable.grantReadWriteData(this.fn);
+    // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。
+    props.competitorAccountsTable?.grantReadWriteData(this.fn);
     // Issue #950 (ADR-020 Phase D): admin audit log は write-only。
     props.adminAuditLogTable?.grantWriteData(this.fn);
 
@@ -126,6 +152,21 @@ export class CompetitorAccountsApiLambda extends Construct {
         },
       }),
     );
+
+    // [Issue #2442]: turso/sql backend が Turso auth token を読むための SSM SecureString
+    // read 権限。 未配線 (= dynamodb default) なら付与しない (`EventApiLambda` と同型)。
+    if (props.tursoAuthTokenParameterName) {
+      this.fn.addToRolePolicy(
+        new iam.PolicyStatement({
+          actions: ["ssm:GetParameter"],
+          resources: [
+            `arn:${stack.partition}:ssm:${stack.region}:${
+              stack.account
+            }:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
+          ],
+        }),
+      );
+    }
 
     // 3. STS AssumeRole (verify endpoint)。Resource は 12 桁 account の競技者 IAM Role 形式に絞る。
     //    具体的な競技者 account ID は deploy 時点では決まらないので account を `*` にし、
