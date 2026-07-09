@@ -1,0 +1,22 @@
+{
+  "name": "TenkaCloud (local play, no AWS)",
+  "image": "mcr.microsoft.com/devcontainers/universal:noble",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:4": {}
+  },
+  "hostRequirements": {
+    "cpus": 4
+  },
+  "postCreateCommand": "sh scripts/onboard-bootstrap.sh --yes && bun run scripts/tenkacloud-onboard.ts preflight --yes && make install",
+  "forwardPorts": [5175, 18080, 18280],
+  "portsAttributes": {
+    "5175": {
+      "label": "Participant Portal (make local)",
+      "onAutoForward": "openPreview"
+    },
+    "18080-18580": {
+      "label": "Problem challenge surface (loopback-only — use the integrated terminal or the Ports tab, see README)",
+      "onAutoForward": "notify"
+    }
+  }
+}
