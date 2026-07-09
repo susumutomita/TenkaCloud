@@ -7,6 +7,25 @@ import { _testInternals, I18nProvider, type LocaleCode, useI18n, useT } from "./
  * dict lookup / fallback chain / localStorage persist / dictionary missing key の 4 path を検証。
  */
 
+const PROBLEM_PACK_GUIDANCE_KEYS = [
+  "problems.pack_guidance_open",
+  "problems.pack_guidance_modal_title",
+  "problems.pack_guidance_modal_description",
+  "problems.pack_guidance_path_official_title",
+  "problems.pack_guidance_path_official_body",
+  "problems.pack_guidance_path_private_title",
+  "problems.pack_guidance_path_private_body",
+  "problems.pack_guidance_cli_heading",
+  "problems.pack_guidance_step_init",
+  "problems.pack_guidance_step_validate",
+  "problems.pack_guidance_step_install",
+  "problems.pack_guidance_step_activate",
+  "problems.pack_guidance_step_create_event",
+  "problems.pack_guidance_create_event_note",
+  "problems.pack_guidance_docs_link",
+  "problems.pack_guidance_empty_hint",
+] as const;
+
 describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
   beforeEach(() => {
     if (typeof window !== "undefined") window.localStorage.clear();
@@ -57,6 +76,13 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
       expect(dict).toBeDefined();
       // すべての locale が "locale.name" key を持つ (= UI switcher 表示用)
       expect(_testInternals.resolveKey(dict, "locale.name")).toBeTruthy();
+    }
+  });
+
+  it("should define the problem-pack guidance keys in both ja and en", () => {
+    for (const key of PROBLEM_PACK_GUIDANCE_KEYS) {
+      expect(_testInternals.resolveKey(_testInternals.LOCALE_DICTIONARIES.ja, key)).toBeTruthy();
+      expect(_testInternals.resolveKey(_testInternals.LOCALE_DICTIONARIES.en, key)).toBeTruthy();
     }
   });
 

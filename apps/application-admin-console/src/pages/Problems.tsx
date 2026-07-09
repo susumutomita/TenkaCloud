@@ -5,6 +5,7 @@ import Cards from "@cloudscape-design/components/cards";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import Link from "@cloudscape-design/components/link";
+import Modal from "@cloudscape-design/components/modal";
 import Multiselect, { type MultiselectProps } from "@cloudscape-design/components/multiselect";
 import SegmentedControl, {
   type SegmentedControlProps,
@@ -26,6 +27,95 @@ import {
   toggleTagFilter,
 } from "../lib/problem-filter";
 
+const PROBLEM_PACK_DOCS_URL =
+  "https://github.com/susumutomita/TenkaCloud/tree/main/apps/developer-portal/src/app/developers/docs/tutorials/first-pack";
+const OFFICIAL_CATALOG_REPO_URL = "https://github.com/susumutomita/TenkaCloudChallenge";
+
+const PACK_GUIDANCE_STEPS = [
+  {
+    labelKey: "problems.pack_guidance_step_init",
+    command: "bun --cwd infrastructure run pack -- init ./my-first-pack",
+  },
+  {
+    labelKey: "problems.pack_guidance_step_validate",
+    command: "bun --cwd infrastructure run pack -- validate ./my-first-pack",
+  },
+  {
+    labelKey: "problems.pack_guidance_step_install",
+    command:
+      "bun --cwd infrastructure run pack -- install ./my-first-pack --store ./.tenkacloud/pack-store",
+  },
+  {
+    labelKey: "problems.pack_guidance_step_activate",
+    command:
+      "bun --cwd infrastructure run pack -- activate com.example.starter@0.1.0 --tenant <tenant-id> --store ./.tenkacloud/pack-store",
+  },
+  { labelKey: "problems.pack_guidance_step_create_event" },
+] as const;
+
+type ProblemsT = ReturnType<typeof useT>;
+
+function ProblemPackGuidanceModal({
+  visible,
+  onDismiss,
+  t,
+}: {
+  readonly visible: boolean;
+  readonly onDismiss: () => void;
+  readonly t: ProblemsT;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      onDismiss={onDismiss}
+      header={t("problems.pack_guidance_modal_title")}
+      size="large"
+    >
+      <SpaceBetween size="l">
+        <Box variant="p">{t("problems.pack_guidance_modal_description")}</Box>
+
+        <SpaceBetween size="m">
+          <Box>
+            <Box variant="awsui-key-label">
+              <Link external href={OFFICIAL_CATALOG_REPO_URL}>
+                {t("problems.pack_guidance_path_official_title")}
+              </Link>
+            </Box>
+            <Box>{t("problems.pack_guidance_path_official_body")}</Box>
+          </Box>
+          <Box>
+            <Box variant="awsui-key-label">{t("problems.pack_guidance_path_private_title")}</Box>
+            <Box>{t("problems.pack_guidance_path_private_body")}</Box>
+          </Box>
+        </SpaceBetween>
+
+        <SpaceBetween size="s">
+          <Box variant="awsui-key-label">{t("problems.pack_guidance_cli_heading")}</Box>
+          <SpaceBetween size="xs">
+            {PACK_GUIDANCE_STEPS.map((step, index) => (
+              <Box key={step.labelKey}>
+                <Box variant="awsui-key-label" display="inline">
+                  {index + 1}.
+                </Box>{" "}
+                {t(step.labelKey)}
+                {"command" in step ? (
+                  <Box variant="code" fontSize="body-s">
+                    {step.command}
+                  </Box>
+                ) : null}
+              </Box>
+            ))}
+          </SpaceBetween>
+          <Box color="text-body-secondary">{t("problems.pack_guidance_create_event_note")}</Box>
+          <Link external href={PROBLEM_PACK_DOCS_URL}>
+            {t("problems.pack_guidance_docs_link")}
+          </Link>
+        </SpaceBetween>
+      </SpaceBetween>
+    </Modal>
+  );
+}
+
 /**
  * 問題一覧ページ。Cloudscape Cards で 1 件ずつカード表示する。
  * クリックすると /problems/:id へ遷移して詳細 + Deploy ボタン。
@@ -42,9 +132,12 @@ export function ProblemsPage() {
   const t = useT();
   const problems = listProblemSummaries();
   const [criteria, setCriteria] = useState<ProblemFilterCriteria>(EMPTY_FILTER_CRITERIA);
+  const [packGuidanceOpen, setPackGuidanceOpen] = useState(false);
 
   const filtered = useMemo(() => filterProblems(problems, criteria), [problems, criteria]);
   const tagFacets = useMemo(() => collectTagFacets(problems), [problems]);
+  const openPackGuidance = () => setPackGuidanceOpen(true);
+  const closePackGuidance = () => setPackGuidanceOpen(false);
 
   const difficultyLabel = (d: ProblemSummary["difficulty"]): string =>
     t(`problems.difficulty_${d}`);
@@ -90,11 +183,20 @@ export function ProblemsPage() {
             : `(${problems.length})`
         }
         actions={
-          isFilterActive(criteria) && (
-            <Button onClick={() => setCriteria(EMPTY_FILTER_CRITERIA)}>
-              {t("problems.clear_filter")}
+          <SpaceBetween direction="horizontal" size="xs">
+            {isFilterActive(criteria) ? (
+              <Button onClick={() => setCriteria(EMPTY_FILTER_CRITERIA)}>
+                {t("problems.clear_filter")}
+              </Button>
+            ) : null}
+            <Button
+              iconName="add-plus"
+              onClick={openPackGuidance}
+              data-testid="problem-pack-guidance-open-header"
+            >
+              {t("problems.pack_guidance_open")}
             </Button>
-          )
+          </SpaceBetween>
         }
       >
         {t("problems.header")}
@@ -272,11 +374,17 @@ export function ProblemsPage() {
                 </Button>
               </SpaceBetween>
             ) : (
-              t("problems.empty")
+              <SpaceBetween size="s">
+                <Box variant="p">{t("problems.empty")}</Box>
+                <Box color="text-body-secondary">{t("problems.pack_guidance_empty_hint")}</Box>
+                <Button onClick={openPackGuidance}>{t("problems.pack_guidance_open")}</Button>
+              </SpaceBetween>
             )}
           </Box>
         }
       />
+
+      <ProblemPackGuidanceModal visible={packGuidanceOpen} onDismiss={closePackGuidance} t={t} />
     </SpaceBetween>
   );
 }
