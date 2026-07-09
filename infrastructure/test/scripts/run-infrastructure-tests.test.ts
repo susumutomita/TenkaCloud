@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanCdkTestOutdir } from "../run-vitest";
+import { buildVitestArgs, cleanCdkTestOutdir } from "../run-vitest";
 
 const PACKAGE_JSON_PATH = resolve(__dirname, "..", "..", "package.json");
 const tempDirs: string[] = [];
@@ -34,5 +34,27 @@ describe("infrastructure test runner (#1551)", () => {
 
     expect(scripts.test).toBe("bun run test/run-vitest.ts run");
     expect(scripts["test:coverage"]).toContain("bun run test/run-vitest.ts run --coverage");
+  });
+
+  it("should cap Vitest workers and test timeout by default", () => {
+    expect(buildVitestArgs(["run"], {})).toEqual(["run", "--maxWorkers=2", "--testTimeout=120000"]);
+  });
+
+  it("should keep explicit Vitest worker and timeout overrides", () => {
+    expect(
+      buildVitestArgs(["run", "--maxWorkers=4", "--testTimeout", "300000"], {
+        TENKACLOUD_VITEST_MAX_WORKERS: "1",
+        TENKACLOUD_VITEST_TEST_TIMEOUT_MS: "180000",
+      }),
+    ).toEqual(["run", "--maxWorkers=4", "--testTimeout", "300000"]);
+  });
+
+  it("should allow environment overrides for the default Vitest safety limits", () => {
+    expect(
+      buildVitestArgs(["run"], {
+        TENKACLOUD_VITEST_MAX_WORKERS: "1",
+        TENKACLOUD_VITEST_TEST_TIMEOUT_MS: "180000",
+      }),
+    ).toEqual(["run", "--maxWorkers=1", "--testTimeout=180000"]);
   });
 });
