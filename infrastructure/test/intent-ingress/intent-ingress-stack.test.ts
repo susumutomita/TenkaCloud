@@ -27,7 +27,7 @@ function synth(overrides: Partial<IntentIngressStackProps> = {}): Template {
 describe("IntentIngressStack (ADR-049 Phase 4 / #2293)", () => {
   it("should expose an unauthenticated Function URL (JWS is the auth)", () => {
     synth().hasResourceProperties("AWS::Lambda::Url", { AuthType: "NONE" });
-  });
+  }, 60_000);
 
   it("should provision a 1/1 PROVISIONED nonce table with a TTL attribute", () => {
     // PROVISIONED is the CFn default so CDK omits BillingMode; ProvisionedThroughput

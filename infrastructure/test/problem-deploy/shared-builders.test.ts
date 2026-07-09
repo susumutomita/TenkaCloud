@@ -101,9 +101,10 @@ describe("buildEventSharedResources", () => {
   });
 
   it("should throw when a required env var is missing", () => {
-    // [Issue #2441 Phase B PR-6] DEPLOYMENTS_TABLE_NAME is no longer required (see below);
-    // COMPETITOR_ACCOUNTS_TABLE_NAME remains a `getEnv`-required field.
-    delete process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
+    // [Issue #2441 Phase B PR-6 / #2442 Phase C2] DEPLOYMENTS_TABLE_NAME and
+    // COMPETITOR_ACCOUNTS_TABLE_NAME are no longer required (see below);
+    // DISRUPTIONS_TABLE_NAME remains a `getEnv`-required field.
+    delete process.env.DISRUPTIONS_TABLE_NAME;
     expect(() => buildEventSharedResources()).toThrow();
   });
 
@@ -128,6 +129,16 @@ describe("buildEventSharedResources", () => {
     delete process.env.DEPLOYMENTS_TABLE_NAME;
     expect(() => buildEventSharedResources()).not.toThrow();
     expect(buildEventSharedResources().deploymentsTableName).toBe("");
+  });
+
+  // [Issue #2442 / Phase C2] CompetitorAccounts table is not synthesized under pure SQL
+  // backends either (same condition as Events/Teams/Deployments above), so this builder
+  // must not fail-fast when COMPETITOR_ACCOUNTS_TABLE_NAME is absent (EventApiLambda would
+  // otherwise crash cold start for every route, not just competitor-accounts ones).
+  it("should default competitorAccountsTableName to '' when unset (pure SQL backend cold start)", () => {
+    delete process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
+    expect(() => buildEventSharedResources()).not.toThrow();
+    expect(buildEventSharedResources().competitorAccountsTableName).toBe("");
   });
 });
 

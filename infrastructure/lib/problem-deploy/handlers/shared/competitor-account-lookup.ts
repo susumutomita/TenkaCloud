@@ -1,9 +1,10 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { GetCommand } from "@aws-sdk/lib-dynamodb";
+import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { buildExternalIdParameterName } from "./external-id-store.js";
 
 /**
- * `CompetitorAccounts` DDB 行から「verified=true 行のみ」を引く lookup (Issue #459 Phase 2.2)。
+ * `CompetitorAccounts` 行から「verified=true 行のみ」を引く lookup (Issue #459 Phase 2.2 /
+ * [Issue #2442 Phase C2] repository seam 経由)。
  *
  * Worker 経路 (= bulk-deploy / single-deploy / stack-progress) が deploy 前に呼ぶ。
  * 戻り値が `null` の場合は 「verified=true な行が存在しない」 = backend で reject すべき。
@@ -17,9 +18,9 @@ import { buildExternalIdParameterName } from "./external-id-store.js";
  * 時に SSM SecureString を直接読む。Lambda 側で plain text を返り値に乗せると、不必要に
  * 漏洩経路が増える (= 同 Lambda の他の error log / response にも露出するリスク)。
  *
- * Schema:
- *   PK = `TENANT#<tenantId>` / SK = `ACCOUNT#<awsAccountId>`
- *   {verified: boolean, competitorRoleName: string, region: string, ...}
+ * 生の DDB access はここには無い — `controlDataRuntime.resolveCompetitorAccountsRepository`
+ * 経由で {@link DynamoDbCompetitorAccountsRepository} (default) /
+ * {@link SqlCompetitorAccountsRepository} (Turso/D1) を解決する。
  */
 export interface CompetitorAccountResolveDeps {
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
@@ -52,18 +53,16 @@ export async function resolveVerifiedCompetitorAccount(
   tenantId: string,
   awsAccountId: string,
 ): Promise<VerifiedCompetitorAccount | null> {
-  const out = await deps.ddb.send(
-    new GetCommand({
-      TableName: deps.competitorAccountsTableName,
-      Key: { PK: `TENANT#${tenantId}`, SK: `ACCOUNT#${awsAccountId}` },
-    }),
-  );
-  const item = out.Item;
-  if (!item) return null;
-  if (item.verified !== true) return null;
-  const competitorRoleName = String(item.competitorRoleName ?? "");
+  const repository = await controlDataRuntime.resolveCompetitorAccountsRepository({
+    ddb: deps.ddb as DynamoDBDocumentClient,
+    competitorAccountsTableName: deps.competitorAccountsTableName,
+  });
+  const record = await repository.getAccount(tenantId, awsAccountId);
+  if (!record) return null;
+  if (record.verified !== true) return null;
+  const competitorRoleName = String(record.competitorRoleName ?? "");
   if (!competitorRoleName) return null;
-  const region = String(item.region ?? "");
+  const region = String(record.region ?? "");
   const externalIdParameterName = buildExternalIdParameterName(deps.env, tenantId);
   return {
     awsAccountId,

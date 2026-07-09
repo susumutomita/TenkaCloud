@@ -1,35 +1,38 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { DeleteCommand, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import type { SamlConfigRecord } from "../../control-data/types.js";
 import type { TenantSamlConfigInput, TenantSamlConfigView } from "./saml-types.js";
 
 /**
- * Issue #839 follow-up Phase B: Tenant SAML 設定の DDB persistence 層。
+ * Issue #839 follow-up Phase B / [Issue #2442 Phase C2]: Tenant SAML 設定の永続化層。
  *
  * CompetitorAccounts table (= 既存 PK=`TENANT#<tenantId>` partition) を再利用し、 sparse な
  * `SK="SAML_CONFIG"` 行 1 つを per-tenant で持つ。 Cognito UserPool 側の真実 (= IdP / Client
  * config) は Cognito API から describe で取れるが、 UI が「最後に保存された設定」 を高速に
  * 表示するための写しとして DDB を使う (= Cognito API は 5 RPS quota がある + 数 100ms かかる)。
  *
- * shape:
- *   PK = `TENANT#<tenantId>` (= 既存 partition と相乗り)
- *   SK = `SAML_CONFIG` (= sparse, 1 tenant 1 行)
- *   metadataUrl: string
- *   providerName: string
- *   attributeMapping: map<string, string>
- *   enforceSamlOnly: boolean
- *   updatedAt: ISO 8601
- *   updatedBy: cognito sub (= 監査用)
+ * 生の DDB access はここには無い — `controlDataRuntime.resolveSamlConfigRepository` 経由で
+ * {@link DynamoDbSamlConfigRepository} (default) / {@link SqlSamlConfigRepository} (Turso/D1)
+ * を解決する。**`SAML_CONFIG` 行は `SamlIdps` テーブル (#1312, Lite 専用の別物) とは無関係** —
+ * 混同しないこと。
  */
-
-const SK_SAML_CONFIG = "SAML_CONFIG";
 
 export interface SamlStoreDeps {
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
   readonly tableName: string;
 }
 
-function pk(tenantId: string): string {
-  return `TENANT#${tenantId}`;
+function toView(record: SamlConfigRecord): TenantSamlConfigView {
+  const hasCore = record.metadataUrl.length > 0 && record.providerName.length > 0;
+  return {
+    enabled: hasCore,
+    metadataUrl: record.metadataUrl,
+    providerName: record.providerName,
+    attributeMapping: record.attributeMapping,
+    enforceSamlOnly: record.enforceSamlOnly,
+    updatedAt: record.updatedAt,
+    updatedBy: record.updatedBy,
+  };
 }
 
 /**
@@ -39,15 +42,12 @@ export async function getTenantSamlConfig(
   deps: SamlStoreDeps,
   tenantId: string,
 ): Promise<TenantSamlConfigView | undefined> {
-  const out = await deps.ddb.send(
-    new GetCommand({
-      TableName: deps.tableName,
-      Key: { PK: pk(tenantId), SK: SK_SAML_CONFIG },
-    }),
-  );
-  const item = out.Item as Partial<DdbRow> | undefined;
-  if (!item) return undefined;
-  return rowToView(item);
+  const repository = await controlDataRuntime.resolveSamlConfigRepository({
+    ddb: deps.ddb as DynamoDBDocumentClient,
+    competitorAccountsTableName: deps.tableName,
+  });
+  const record = await repository.getSamlConfig(tenantId);
+  return record ? toView(record) : undefined;
 }
 
 /**
@@ -60,9 +60,8 @@ export async function putTenantSamlConfig(
   input: TenantSamlConfigInput & { readonly providerName: string },
   meta: { readonly updatedAt: string; readonly updatedBy: string },
 ): Promise<TenantSamlConfigView> {
-  const row: DdbRow = {
-    PK: pk(tenantId),
-    SK: SK_SAML_CONFIG,
+  const record: SamlConfigRecord = {
+    tenantId,
     metadataUrl: input.metadataUrl,
     providerName: input.providerName,
     attributeMapping: input.attributeMapping ?? {},
@@ -70,53 +69,21 @@ export async function putTenantSamlConfig(
     updatedAt: meta.updatedAt,
     updatedBy: meta.updatedBy,
   };
-  await deps.ddb.send(
-    new PutCommand({
-      TableName: deps.tableName,
-      Item: row,
-    }),
-  );
-  return rowToView(row);
+  const repository = await controlDataRuntime.resolveSamlConfigRepository({
+    ddb: deps.ddb as DynamoDBDocumentClient,
+    competitorAccountsTableName: deps.tableName,
+  });
+  const written = await repository.putSamlConfig(record);
+  return toView(written);
 }
 
 /**
  * SAML config を削除する (= DELETE endpoint の DDB 部)。 不在なら no-op (= idempotent)。
  */
 export async function deleteTenantSamlConfig(deps: SamlStoreDeps, tenantId: string): Promise<void> {
-  await deps.ddb.send(
-    new DeleteCommand({
-      TableName: deps.tableName,
-      Key: { PK: pk(tenantId), SK: SK_SAML_CONFIG },
-    }),
-  );
-}
-
-interface DdbRow {
-  PK: string;
-  SK: string;
-  metadataUrl: string;
-  providerName: string;
-  attributeMapping: Record<string, string>;
-  enforceSamlOnly: boolean;
-  updatedAt: string;
-  updatedBy: string;
-}
-
-function rowToView(row: Partial<DdbRow>): TenantSamlConfigView {
-  // 行が存在しても enabled は metadataUrl + providerName が揃っているときのみ true。
-  // 不正な partial row (= 旧 schema migration 中) は disabled 扱いで安全に倒す。
-  const hasCore =
-    typeof row.metadataUrl === "string" &&
-    row.metadataUrl.length > 0 &&
-    typeof row.providerName === "string" &&
-    row.providerName.length > 0;
-  return {
-    enabled: hasCore,
-    metadataUrl: row.metadataUrl,
-    providerName: row.providerName,
-    attributeMapping: row.attributeMapping,
-    enforceSamlOnly: row.enforceSamlOnly,
-    updatedAt: row.updatedAt,
-    updatedBy: row.updatedBy,
-  };
+  const repository = await controlDataRuntime.resolveSamlConfigRepository({
+    ddb: deps.ddb as DynamoDBDocumentClient,
+    competitorAccountsTableName: deps.tableName,
+  });
+  await repository.deleteSamlConfig(tenantId);
 }

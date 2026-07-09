@@ -1,28 +1,34 @@
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { type Client, createClient } from "@libsql/client/http";
+import { createCompetitorAccountsRepository } from "./competitor-accounts-repository.js";
 import { createDeploymentsRepository } from "./deployments-repository.js";
 import { createEventsRepository } from "./events-repository.js";
 import { createFeatureFlagsRepository } from "./feature-flags-repository.js";
 import { initializeControlDataSchema, LibsqlExecutor } from "./libsql-executor.js";
 import {
+  MirroredCompetitorAccountsRepository,
   MirroredDeploymentsRepository,
   MirroredEventsRepository,
   MirroredFeatureFlagsRepository,
   MirroredNotificationsRepository,
   MirroredProblemEndpointsRepository,
+  MirroredSamlConfigRepository,
   MirroredTeamsRepository,
 } from "./mirrored-repositories.js";
 import { createNotificationsRepository } from "./notifications-repository.js";
 import { createProblemEndpointsRepository } from "./problem-endpoints-repository.js";
+import { createSamlConfigRepository } from "./saml-config-repository.js";
 import { createTeamsRepository } from "./teams-repository.js";
 import type {
+  CompetitorAccountsRepository,
   ControlDataBackend,
   DeploymentsRepository,
   EventsRepository,
   FeatureFlagsRepository,
   NotificationsRepository,
   ProblemEndpointsRepository,
+  SamlConfigRepository,
   SqlExecutor,
   TeamsRepository,
 } from "./types.js";
@@ -86,6 +92,26 @@ export interface ControlDataRuntime {
     readonly ddb?: DynamoDBDocumentClient;
     readonly endpointsTableName?: string;
   }) => Promise<ProblemEndpointsRepository>;
+  /**
+   * [Issue #2442 / Phase C2] Cold-start resolver for the CompetitorAccounts
+   * seam. Participates in all five `CONTROL_DATA_BACKEND` values like
+   * ProblemEndpoints: `dynamodb` returns DDB, `turso` / `sql` return pure SQL,
+   * and mirror modes write through DDB then SQL while serving reads/scans
+   * from canonical DDB.
+   */
+  readonly resolveCompetitorAccountsRepository: (input: {
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly competitorAccountsTableName?: string;
+  }) => Promise<CompetitorAccountsRepository>;
+  /**
+   * [Issue #2442 / Phase C2] Cold-start resolver for the SamlConfig
+   * sub-aggregate (co-habits the CompetitorAccounts DynamoDB table's
+   * partition; same five-value participation as {@link resolveCompetitorAccountsRepository}).
+   */
+  readonly resolveSamlConfigRepository: (input: {
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly competitorAccountsTableName?: string;
+  }) => Promise<SamlConfigRepository>;
 }
 
 export interface RuntimeEnvironment {
@@ -135,7 +161,8 @@ function requireDdbAndTableName(
     | "eventsTableName"
     | "teamsTableName"
     | "deploymentsTableName"
-    | "endpointsTableName",
+    | "endpointsTableName"
+    | "competitorAccountsTableName",
   backendKind: "dynamodb" | "mirror",
 ): { readonly ddb: DynamoDBDocumentClient; readonly tableName: string } {
   if (!ddb || !tableName) {
@@ -376,6 +403,72 @@ export function createControlDataRuntime(deps: RuntimeDependencies): ControlData
     );
   }
 
+  /** [Issue #2442 / Phase C2] Resolver for the CompetitorAccounts seam (mirrors resolveProblemEndpointsRepository). */
+  async function resolveCompetitorAccountsRepository(input: {
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly competitorAccountsTableName?: string;
+  }): Promise<CompetitorAccountsRepository> {
+    const backend = selectBackend(deps.env);
+    if (backend.kind === "pure") {
+      const sql = await acquireSqlExecutor();
+      return createCompetitorAccountsRepository(backend.dialect, { sql });
+    }
+
+    const requiredInput = requireDdbAndTableName(
+      input.ddb,
+      input.competitorAccountsTableName,
+      "competitorAccountsTableName",
+      backend.kind,
+    );
+    if (backend.kind === "dynamodb") {
+      return createCompetitorAccountsRepository("dynamodb", {
+        ddb: requiredInput.ddb,
+        competitorAccountsTableName: requiredInput.tableName,
+      });
+    }
+    const sql = await acquireSqlExecutor();
+    return new MirroredCompetitorAccountsRepository(
+      createCompetitorAccountsRepository("dynamodb", {
+        ddb: requiredInput.ddb,
+        competitorAccountsTableName: requiredInput.tableName,
+      }),
+      createCompetitorAccountsRepository(backend.dialect, { sql }),
+    );
+  }
+
+  /** [Issue #2442 / Phase C2] Resolver for the SamlConfig sub-aggregate (mirrors resolveCompetitorAccountsRepository). */
+  async function resolveSamlConfigRepository(input: {
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly competitorAccountsTableName?: string;
+  }): Promise<SamlConfigRepository> {
+    const backend = selectBackend(deps.env);
+    if (backend.kind === "pure") {
+      const sql = await acquireSqlExecutor();
+      return createSamlConfigRepository(backend.dialect, { sql });
+    }
+
+    const requiredInput = requireDdbAndTableName(
+      input.ddb,
+      input.competitorAccountsTableName,
+      "competitorAccountsTableName",
+      backend.kind,
+    );
+    if (backend.kind === "dynamodb") {
+      return createSamlConfigRepository("dynamodb", {
+        ddb: requiredInput.ddb,
+        competitorAccountsTableName: requiredInput.tableName,
+      });
+    }
+    const sql = await acquireSqlExecutor();
+    return new MirroredSamlConfigRepository(
+      createSamlConfigRepository("dynamodb", {
+        ddb: requiredInput.ddb,
+        competitorAccountsTableName: requiredInput.tableName,
+      }),
+      createSamlConfigRepository(backend.dialect, { sql }),
+    );
+  }
+
   return {
     needsManualPrune: () => selectBackend(deps.env).kind === "pure",
     resolveRepositories: async (input) => {
@@ -393,6 +486,8 @@ export function createControlDataRuntime(deps: RuntimeDependencies): ControlData
     resolveFeatureFlagsRepository,
     resolveDeploymentsRepository,
     resolveProblemEndpointsRepository,
+    resolveCompetitorAccountsRepository,
+    resolveSamlConfigRepository,
   };
 }
 
