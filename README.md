@@ -134,26 +134,86 @@ CodeBuild project itself.
 
 ## Running costs
 
-TenkaCloud runs in one of two profiles. The default is tuned for AWS-native,
-zero-friction operation; a second profile is being built for individuals who want the
-standing cost as close to $0 as possible.
+TenkaCloud runs in one of two profiles, selected by the
+`CDK_PARAM_CONTROL_DATA_BACKEND` env var (unset = default).
 
 | Profile | For | Control data | Problem deploy |
 | --- | --- | --- | --- |
-| **AWS-native** (default) | Teams / companies who want everything inside AWS | DynamoDB (provisioned 1/1) | Lambda `CreateStack` (default) |
-| **Zero-cost** (opt-in, in progress) | Individuals, trials, personal events | Turso (libSQL) — being introduced | Lambda `CreateStack` (default) |
+| **AWS-native** (default, unset or `dynamodb`) | Teams / companies who want everything inside AWS | DynamoDB (provisioned 1/1), 8 tables + 8 GSIs | Lambda `CreateStack` (default) |
+| **Zero-cost** (opt-in, `turso`) | Individuals, trials, personal events | Turso (libSQL) — 0 DynamoDB tables / 0 GSIs in the Lite synth | Lambda `CreateStack` (default) |
 
 Lite mode (`make deploy`) is already the lean path. The problem-deploy backend runs on
 **Lambda `CreateStack`/`UpdateStack` by default** (no CodeBuild project), and the KMS
-customer-managed key was removed in favor of the AWS-managed key. The one remaining
-standing cost in Lite mode is DynamoDB: eight tables plus eight GSIs pinned at
-PROVISIONED 1/1, which bills even while idle.
+customer-managed key was removed in favor of the AWS-managed key. What is left standing
+on the default profile is DynamoDB: eight tables plus eight GSIs pinned at PROVISIONED
+1/1, which bill even while idle. Opting into `CONTROL_DATA_BACKEND=turso` removes all
+eight of those tables (Events, Teams, Deployments, ProblemEndpoints,
+CompetitorAccounts, Disruptions, AdminAuditLog, and — as of #2499 — SamlIdps) — CDK
+does not synthesize any of them, which is what actually removes the standing cost, not
+just the read/write path. The SAML IdP CRUD API (`/tenant/idp*`) keeps working on the
+Turso profile: the Lambda is decoupled from table presence and resolves the repository
+through the same seam as the other seven tables, so opting into `turso` yields a Lite
+synth with **zero `AWS::DynamoDB::Table` resources**.
 
-### Measured cost (single AWS account, 2026-06)
+### Opt in to the zero-cost profile
+
+1. **Create a Turso database** ([Turso CLI](https://docs.turso.tech/cli/introduction)):
+
+   ```bash
+   turso db create tenkacloud-lite
+   turso db show tenkacloud-lite --url
+   turso db tokens create tenkacloud-lite
+   ```
+
+   `db show --url` prints something like
+   `libsql://tenkacloud-lite-<organization>.turso.io`; keep the token from
+   `db tokens create` for the next step.
+
+2. **Store the token in SSM as a `SecureString`** — never write it into `.env`:
+
+   ```bash
+   aws ssm put-parameter \
+     --name /TenkaCloud/development/turso/auth-token \
+     --type SecureString \
+     --value "<token from step 1>"
+   ```
+
+3. **Add three lines to `infrastructure/environments/<env>/.env`** (copy from the
+   matching `.env.example` first if you have not already):
+
+   ```bash
+   CDK_PARAM_CONTROL_DATA_BACKEND=turso
+   CDK_PARAM_TURSO_DATABASE_URL=libsql://tenkacloud-lite-<organization>.turso.io
+   CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=/TenkaCloud/development/turso/auth-token
+   ```
+
+4. **`make deploy`.** CDK skips synthesizing all eight DynamoDB tables listed above; the
+   first Lambda cold start creates the SQL schema on the Turso database for you (no
+   manual migration step).
+
+The steps above are for a **fresh** stack. Moving an *existing* `dynamodb`-backed stack
+to `turso` is a separate, riskier path: the Events/Teams/Deployments/ProblemEndpoints/
+CompetitorAccounts/Disruptions/AdminAuditLog/SamlIdps DynamoDB tables all use
+`RemovalPolicy.RETAIN`, so cutting over directly orphans them (still billing) instead of
+deleting them. See the `CDK_PARAM_CONTROL_DATA_BACKEND` comment block in
+[`infrastructure/environments/development/.env.example`](./infrastructure/environments/development/.env.example)
+for the `turso-mirror` bridge sequence (mirror first, verify the SQL replica, cut over,
+then manually delete the orphaned tables).
+
+> **Not yet live-verified.** "CDK does not synthesize these 8 tables" (zero
+> `AWS::DynamoDB::Table` resources in the Lite synth) is checked by `Template.fromStack`
+> synth assertions and by repository-seam unit tests — solid evidence the code path
+> exists, but nobody has run `make deploy` with `CONTROL_DATA_BACKEND=turso` against a
+> fresh AWS account + a real Turso database and read the resulting AWS bill yet. The
+> SAML IdP CRUD API is exercised against the SQL repository by unit tests only, not by a
+> live Turso database either. Treat the "near-$0" claim as implemented-and-tested, not
+> as a measured production result.
+
+### Measured cost (single AWS account, 2026-06, AWS-native/`dynamodb` profile)
 
 | Source | Monthly | Status |
 | --- | --- | --- |
-| DynamoDB (provisioned tables) | ~$7.06 | Standing cost — a table bills even at 1/1. Turso backend in progress (tracker #2435) |
+| DynamoDB (provisioned tables) | ~$7.06 | Standing cost on the default `dynamodb` profile — opt into `CONTROL_DATA_BACKEND=turso` above to remove all 8 tables (zero `AWS::DynamoDB::Table` resources in the Lite synth) |
 | CodeBuild (problem deploy) | part of ~$2.55 | **Resolved** — the Lambda deploy path is the default (#2353); no CodeBuild project in Lite mode |
 | CodeBuild (SaaS tenant provisioning) | part of ~$2.55 | SaaS-mode only; not present in Lite mode |
 | KMS customer-managed key | $0 | **Resolved** — AWS-managed key via a CDK Aspect |
@@ -164,9 +224,36 @@ PROVISIONED 1/1, which bills even while idle.
 > make the visible bill read $0, but Usage still accrues from the first hour and becomes
 > a real charge once the credits run out.
 
-The DynamoDB → Turso (libSQL) control-data backend that removes this last standing cost
-is **in progress** (tracker #2435, phases A–C). The opt-in setup steps will be
-documented here once that path is complete.
+### Turso free-plan headroom
+
+[`quota-model.ts`](./infrastructure/lib/problem-deploy/control-data/quota-model.ts)
+models the event-day SQL row traffic against Turso's free-plan monthly quota:
+
+| Turso free-plan quota (as modeled in `quota-model.ts`) | Monthly limit |
+| --- | --- |
+| Row reads | 500,000,000 |
+| Row writes | 10,000,000 |
+
+The model counts one leaderboard-snapshot row read per participant per poll, one
+summary row write per scored change, and one snapshot row write per refresh interval.
+Its test fixture
+([`quota-model.test.ts`](./infrastructure/test/problem-deploy/control-data/quota-model.test.ts))
+— 300 participants, a 30-second leaderboard poll, a 24-hour event, 25,000 summary
+writes, a 30-second snapshot refresh — comes out to 864,000 row reads and 27,880 row
+writes: about 0.17% of the read quota and 0.28% of the write quota. That is a **model of
+an event-day access pattern**, not a bill from a live database — it shows that a single
+mid-size event has wide headroom under the free plan, nothing more.
+
+個人でゼロコストに近い運用をしたい場合は `CDK_PARAM_CONTROL_DATA_BACKEND=turso` を選んでください。
+Turso でデータベースを作成し、発行された token を SSM の SecureString に保存し(`.env` には書きません)、
+`.env` に 3 行(`CDK_PARAM_CONTROL_DATA_BACKEND` / `CDK_PARAM_TURSO_DATABASE_URL` /
+`CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME`)を足してから `make deploy` するだけで、
+DynamoDB の control-data テーブル 8 個(Events / Teams / Deployments / ProblemEndpoints /
+CompetitorAccounts / Disruptions / AdminAuditLog / SamlIdps)がすべて作られなくなり、Lite mode の
+DynamoDB テーブル数は 0 個(GSI も 0 本)になります。SAML IdP の CRUD API(`/tenant/idp*`)は
+table の有無から切り離されているため、Turso 上のテーブル経由で引き続き動作します。ただし、この
+経路は CDK synth とユニットテストで検証済みであり、実際の AWS アカウント + Turso データベースに
+対する live なエンドツーエンド計測はまだ行っていません。実測値の確認が取れ次第この節を更新します。
 
 ## Add your own problems
 
