@@ -1,14 +1,10 @@
 #!/usr/bin/env node
-import * as fs from "node:fs";
-import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
 import { resolveAppConfig } from "../lib/app-config/index.js";
-import type { PackAsset } from "../lib/app-config/types.js";
+import { resolveLitePackCatalog } from "../lib/app-wiring/lite-pack-catalog.js";
 import { buildProblemDeployBackendBaseProps } from "../lib/app-wiring/problem-deploy-backend-props.js";
 import { applyDynamoLowCapacity, applyGlobalAspects } from "../lib/app-wiring/wire/aspects.js";
 import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-backend-stack.js";
-import type { CatalogSource } from "../lib/problem-pack/catalog-source.js";
-import { ActivationStore, tenantCatalogSource } from "../lib/problem-pack/pack-activation.js";
 import { TenkaCloudLiteStack } from "../lib/tenkacloud-lite/index.js";
 import { resolveLiteStackNames } from "../lib/tenkacloud-lite/stack-names.js";
 
@@ -33,7 +29,9 @@ import { resolveLiteStackNames } from "../lib/tenkacloud-lite/stack-names.js";
  */
 
 const app = new cdk.App();
-const liteCatalog = resolveLiteCatalog(import.meta.dirname);
+// [Issue #2459] Extracted to `lib/app-wiring/lite-pack-catalog.ts` for direct unit coverage
+// (was a module-private `resolveLiteCatalog` here). Byte-identical behavior.
+const liteCatalog = resolveLitePackCatalog(import.meta.dirname);
 const config = resolveAppConfig({
   env: process.env,
   binDir: import.meta.dirname,
@@ -41,26 +39,6 @@ const config = resolveAppConfig({
     ? { catalogSource: liteCatalog.catalogSource, packAssets: liteCatalog.packAssets }
     : {}),
 });
-
-/**
- * Resolve the Lite catalog source + pack assets from the local activation store, when one exists.
- *
- * Both are read from the SAME `ActivationStore` for the `local` tenant (#2462): the catalog source
- * lifts active pack problems into the effective catalog, and the pack assets are the on-disk
- * snapshots those catalog keys resolve to. Reading one store keeps the two consistent. Absent store
- * → undefined = the default core-only path (byte-identical synth, no pack materialization).
- */
-function resolveLiteCatalog(
-  binDir: string,
-): { catalogSource: CatalogSource; packAssets: readonly PackAsset[] } | undefined {
-  const packStoreDir = path.resolve(binDir, "..", "..", ".tenkacloud", "pack-store");
-  if (!fs.existsSync(packStoreDir)) return undefined;
-  const store = new ActivationStore(packStoreDir);
-  return {
-    catalogSource: tenantCatalogSource(store, "local"),
-    packAssets: store.packAssetsForTenant("local"),
-  };
-}
 
 // Issue #2193: stack 名 + env suffix 規則は lib/tenkacloud-lite/stack-names.ts に集約
 // (CLI runner `scripts/tenkacloud-lite.ts` と共有し、 describe/destroy の対象名と一致させる)。

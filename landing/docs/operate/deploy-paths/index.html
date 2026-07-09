@@ -91,6 +91,13 @@ the Deployments table, and puts a <code>DeployCreateRequested</code> event on th
 <strong>ExternalId</strong> (always required) and runs a CloudFormation <code>CreateStack</code> there.</li>
 </ol>
 <p>The console then polls deployment status until the stack reaches a terminal state.</p>
+<h2>Problem packs</h2>
+<p>Problem packs (see the <a href="/docs/tutorials/first-pack/">first pack tutorial</a>)
+ride the Lite path only. Lite reads activations for the fixed tenant id <code>local</code> at
+synth time, so activate with <code>--tenant local</code> before <code>make deploy</code>. SaaS mode fails
+loud at synth instead when any pack activation exists — it does not silently drop
+them from the pooled catalog. Set <code>CDK_PARAM_SAAS_IGNORE_PACKS=true</code> to override and
+proceed anyway; the activations then simply do not appear in any tenant&#39;s catalog.</p>
 <p>Related: <a href="/docs/operate/run-an-event/">run an event end to end</a> and the
 <a href="/docs/concepts/architecture/">platform architecture</a>.</p>
 

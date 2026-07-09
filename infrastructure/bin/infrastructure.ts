@@ -2,6 +2,7 @@
 import * as cdk from "aws-cdk-lib";
 import { resolveAppConfig } from "../lib/app-config/index.js";
 import { buildTenkaCloudApp } from "../lib/app-wiring/index.js";
+import { assertSaasSynthHasNoActivePacks } from "../lib/problem-pack/saas-pack-guard.js";
 
 /**
  * TenkaCloud CDK app の composition root。
@@ -27,6 +28,11 @@ const app = new cdk.App();
 if (process.env.CDK_SKIP_BUNDLING === "1") {
   app.node.setContext("aws:cdk:bundling-stacks", []);
 }
+
+// Issue #2459: SaaS mode passes no `catalogSource` to `resolveAppConfig`, so any pack
+// activated via `make pack-activate` would otherwise be silently ignored on `make deploy-saas`.
+// Fail loud BEFORE config resolution so a stray activation never reaches a live SaaS deploy.
+assertSaasSynthHasNoActivePacks(import.meta.dirname, process.env);
 
 const config = resolveAppConfig({
   env: process.env,
