@@ -55,6 +55,17 @@ export interface TenkaCloudLiteStackProps extends StackProps {
   readonly samlAdminAllowlist?: readonly string[];
   /** Issue #2230 (ADR-035): runtime-config.json に焼く SPA feature flag override (未設定 = key なし)。 */
   readonly features?: Readonly<Record<string, boolean>>;
+  /**
+   * [Issue #2442 / Phase C5 / ADR-049 §5.1] control-plane data backend
+   * (dynamodb|turso|sql|turso-mirror|sql-mirror)。 純 SQL (`turso`/`sql`) のときは
+   * `SamlIdpsTable` を synth しない (= DynamoDB standing cost をゼロにする A5/B6/C1-C4 と同じ
+   * 条件)。 default 未指定 / `dynamodb` は既存 CFn と byte 互換。
+   */
+  readonly controlDataBackend?: string;
+  /** [Issue #2442 / Phase C5] Public remote libSQL URL — `controlDataBackend` が turso/sql/*-mirror のとき必須。 */
+  readonly tursoDatabaseUrl?: string;
+  /** [Issue #2442 / Phase C5] Turso auth token を格納する SSM SecureString parameter 名。 */
+  readonly tursoAuthTokenParameterName?: string;
 }
 
 /**
@@ -98,10 +109,16 @@ export class TenkaCloudLiteStack extends Stack {
     const dummyLookup = (): string => liteApiKeyPlaceholder;
 
     // Issue #1312: SAML IdP CRUD 用 DDB Table を本 stack で立て、 AppPlaneCore に渡す。
-    // helper は `samlIdpsTable` 受け取り時に同 stack 内で `SamlIdpLambda` を立て、 ApiGateway に
-    // `/tenant/idp*` route を配線する (= UserPool と SAML IdP Lambda を同 stack 同居させて
-    // cross-stack cyclic dependency を避ける契約)。
-    const samlIdps = new SamlIdpsTable(this, "SamlIdps");
+    // helper は `attachSamlIdpLambda: true` 受け取り時に同 stack 内で `SamlIdpLambda` を立て、
+    // ApiGateway に `/tenant/idp*` route を配線する (= UserPool と SAML IdP Lambda を同 stack
+    // 同居させて cross-stack cyclic dependency を避ける契約)。
+    //
+    // [Issue #2442 / Phase C5] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは本 table を
+    // **synth しない** (= `undefined`) — DynamoDB standing cost をゼロにする A5/B6/C1-C4 と同じ
+    // 条件。 IdP CRUD API 自体は `attachSamlIdpLambda: true` を常に渡すため table の有無に
+    // 関わらず提供され続ける (= repository seam 経由で SQL executor に直結する)。
+    const pureSql = props.controlDataBackend === "turso" || props.controlDataBackend === "sql";
+    const samlIdps = pureSql ? undefined : new SamlIdpsTable(this, "SamlIdps");
 
     const appPlane = buildAppPlaneCore(this, {
       features: props.features,
@@ -112,7 +129,11 @@ export class TenkaCloudLiteStack extends Stack {
       deployApiLambda: props.deployApiLambda,
       eventApiLambda: props.eventApiLambda,
       competitorAccountsApiLambda: props.competitorAccountsApiLambda,
-      samlIdpsTable: samlIdps.table,
+      samlIdpsTable: samlIdps?.table,
+      attachSamlIdpLambda: true,
+      controlDataBackend: props.controlDataBackend,
+      tursoDatabaseUrl: props.tursoDatabaseUrl,
+      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
       participantPortalUrl: props.participantPortalUrl,
       competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl,
       // Issue #1340 Phase 2: env-driven SAML attach (Lite mode は単一 tenant なので

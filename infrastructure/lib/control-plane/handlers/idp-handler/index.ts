@@ -8,6 +8,12 @@
  *      pattern in admin-insight-handler/auth.ts).
  *
  * Storage: `SAML_IDPS_TABLE_NAME` (DDB, PROVISIONED 1/1). PK = `SYSTEM`, SK = `idpId`.
+ * [Issue #2442 / Phase C5]: goes through `createSeamIdpStore`
+ * (`CONTROL_DATA_BACKEND`-aware) rather than unconditionally forcing DynamoDB;
+ * the table name is optional so cold start does not fail-fast when it is
+ * absent. This Lambda is not wired into any CDK stack today (Control Plane
+ * scope is unused — see `saml-idps-table.ts`), so the relaxation only keeps
+ * this file consistent with its Application Plane sibling.
  *
  * Cognito: `CONTROL_PLANE_USER_POOL_ID` env names the SBT ControlPlane UserPool.
  *
@@ -26,7 +32,7 @@ import { StatusCodes } from "http-status-codes";
 import { isSystemAdmin } from "./auth.js";
 import { createCognitoIdpAdapter } from "./cognito-adapter.js";
 import type { IdpScope } from "./core.js";
-import { createDdbIdpStore } from "./ddb-store.js";
+import { createSeamIdpStore } from "./ddb-store.js";
 import { buildIdpApp } from "./routes.js";
 
 function requireEnv(name: string): string {
@@ -38,7 +44,8 @@ function requireEnv(name: string): string {
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const cognito = new CognitoIdentityProviderClient({});
 
-const TABLE_NAME = requireEnv("SAML_IDPS_TABLE_NAME");
+// [Issue #2442 / Phase C5] optional — pure SQL backend never synths SamlIdpsTable.
+const TABLE_NAME = process.env.SAML_IDPS_TABLE_NAME ?? "";
 const USER_POOL_ID = requireEnv("CONTROL_PLANE_USER_POOL_ID");
 
 const app = buildIdpApp({
@@ -52,7 +59,7 @@ const app = buildIdpApp({
     return { kind: "system" };
   },
   deps: {
-    store: createDdbIdpStore({ ddb, tableName: TABLE_NAME }),
+    store: createSeamIdpStore({ ddb, tableName: TABLE_NAME }),
     cognito: createCognitoIdpAdapter({ client: cognito, userPoolId: USER_POOL_ID }),
     now: () => new Date(),
   },

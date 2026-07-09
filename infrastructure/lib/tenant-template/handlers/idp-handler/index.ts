@@ -20,32 +20,21 @@
  *
  *   See PR body for the full pooled-vs-silo trade-off.
  *
- * [USER-REVIEW]: the CDK addition that wires the per-tenant table + IAM
- * scoping (silo UserPool ARN vs pooled UserPool ARN + tenant-prefixed
- * `cognito-idp:*IdentityProvider` perms) is left for the maintainer.
+ * [Issue #2442 / Phase C5]: storage now goes through `createSeamIdpStore`
+ * (`CONTROL_DATA_BACKEND`-aware) instead of unconditionally forcing DynamoDB —
+ * `shared.ts` reads the env / builds the SDK clients so the store construction
+ * below stays a one-line wire-up.
  */
 
-import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { createCognitoIdpAdapter } from "../../../control-plane/handlers/idp-handler/cognito-adapter.js";
-import { createDdbIdpStore } from "../../../control-plane/handlers/idp-handler/ddb-store.js";
+import { createSeamIdpStore } from "../../../control-plane/handlers/idp-handler/ddb-store.js";
 import { buildIdpApp } from "../../../control-plane/handlers/idp-handler/routes.js";
+import { buildIdpSharedResources } from "./shared.js";
 import { createTenantIdpResolveScope } from "./tier-guard.js";
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`Application Plane IdP Lambda env ${name} is not set`);
-  return value;
-}
-
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
-const cognito = new CognitoIdentityProviderClient({});
-
-const TABLE_NAME = requireEnv("SAML_IDPS_TABLE_NAME");
-const USER_POOL_ID = requireEnv("TENANT_USER_POOL_ID");
+const shared = buildIdpSharedResources();
 
 /**
  * Defense-in-depth tier guard.
@@ -69,8 +58,8 @@ const app = buildIdpApp({
   pathPrefix: "/tenant/idp",
   resolveScope: createTenantIdpResolveScope(process.env.IDP_TIER_GUARD),
   deps: {
-    store: createDdbIdpStore({ ddb, tableName: TABLE_NAME }),
-    cognito: createCognitoIdpAdapter({ client: cognito, userPoolId: USER_POOL_ID }),
+    store: createSeamIdpStore({ ddb: shared.ddb, tableName: shared.tableName }),
+    cognito: createCognitoIdpAdapter({ client: shared.cognito, userPoolId: shared.userPoolId }),
     now: () => new Date(),
   },
 });

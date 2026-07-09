@@ -1,3 +1,4 @@
+import type { IdpScope } from "../../control-plane/handlers/idp-handler/core.js";
 import type { CompetitorAccountItem } from "../handlers/competitor-accounts-handler/types.js";
 import type { DisruptionAuditRow } from "../handlers/event-handler/disruption-types.js";
 import type { ProgressionGateConfig } from "../handlers/shared/progression-gate.js";
@@ -42,6 +43,8 @@ import type {
   ProblemEndpointsRepository,
   SamlConfigRecord,
   SamlConfigRepository,
+  SamlIdpRecord,
+  SamlIdpsRepository,
   ScheduleFiredKind,
   ScoreEventRecord,
   TeamRecord,
@@ -1235,5 +1238,35 @@ export class MirroredAdminAuditLogRepository implements AdminAuditLogRepository 
   async pruneExpired(nowEpochSeconds: number): Promise<number> {
     await this.replica.pruneExpired(nowEpochSeconds);
     return this.canonical.pruneExpired(nowEpochSeconds);
+  }
+}
+
+/**
+ * [Issue #2442 / Phase C5] DynamoDB-primary/SQL-replica equivalent for the SamlIdps aggregate
+ * (mirrors {@link MirroredProblemEndpointsRepository}'s read-passthrough / write-through-both
+ * style — no conditional writes, no Scan, the smallest of the C-series aggregates).
+ */
+export class MirroredSamlIdpsRepository implements SamlIdpsRepository {
+  constructor(
+    private readonly canonical: SamlIdpsRepository,
+    private readonly replica: SamlIdpsRepository,
+  ) {}
+
+  list(scope: IdpScope): Promise<readonly SamlIdpRecord[]> {
+    return this.canonical.list(scope);
+  }
+
+  get(scope: IdpScope, idpId: string): Promise<SamlIdpRecord | null> {
+    return this.canonical.get(scope, idpId);
+  }
+
+  async put(scope: IdpScope, config: SamlIdpRecord): Promise<void> {
+    await this.canonical.put(scope, config);
+    await this.replica.put(scope, config);
+  }
+
+  async delete(scope: IdpScope, idpId: string): Promise<void> {
+    await this.canonical.delete(scope, idpId);
+    await this.replica.delete(scope, idpId);
   }
 }

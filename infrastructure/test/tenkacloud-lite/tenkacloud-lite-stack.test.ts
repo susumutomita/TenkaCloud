@@ -4,7 +4,12 @@ import * as cdk from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
 import { beforeAll, describe, expect, it } from "vitest";
-import { TenkaCloudLiteStack } from "../../lib/tenkacloud-lite";
+import { TenkaCloudLiteStack, type TenkaCloudLiteStackProps } from "../../lib/tenkacloud-lite";
+
+// synth() は Lambda asset bundling を含む重い実処理。全 suite 並列時は default 5s を超えて
+// flake するため、個別の pureSql / turso-mirror synth を要する test には明示 timeout を持つ
+// (`SYNTH_TIMEOUT_MS` — problem-deploy-backend-stack.test-helpers.ts と同じ値)。
+const SYNTH_TIMEOUT_MS = 120_000;
 
 /**
  * Issue #778 ADR-016 Phase 3: TenkaCloudLiteStack の最小契約 pin。
@@ -38,7 +43,14 @@ function buildStubLambda(scope: cdk.Stack, id: string): LambdaFunction {
   });
 }
 
-function synth(): Template {
+function synth(
+  overrides: Partial<
+    Omit<
+      TenkaCloudLiteStackProps,
+      "deployApiLambda" | "eventApiLambda" | "competitorAccountsApiLambda"
+    >
+  > = {},
+): Template {
   const app = new cdk.App();
   const stack = new TenkaCloudLiteStack(app, "TestLite", {
     env: { account: "123456789012", region: "ap-northeast-1" },
@@ -62,6 +74,7 @@ function synth(): Template {
       "StubCompetitor",
     ),
     participantPortalUrl: "https://example.cloudfront.net",
+    ...overrides,
   });
   return Template.fromStack(stack);
 }
@@ -169,6 +182,11 @@ describe("TenkaCloudLiteStack (#778 ADR-016 Phase 3)", { timeout: 60_000 }, () =
     expect(vars.IDP_TIER_GUARD).toBe("silo");
     expect(vars.SAML_IDPS_TABLE_NAME).toBeDefined();
     expect(vars.TENANT_USER_POOL_ID).toBeDefined();
+    // [Issue #2442 / Phase C5] default (controlDataBackend unset = dynamodb) must not add
+    // CONTROL_DATA_BACKEND / TURSO_* env — byte-compat with the pre-C5 template.
+    expect(vars.CONTROL_DATA_BACKEND).toBeUndefined();
+    expect(vars.TURSO_DATABASE_URL).toBeUndefined();
+    expect(vars.TURSO_AUTH_TOKEN_PARAMETER_NAME).toBeUndefined();
   });
 
   it("SamlIdp Lambda Role default policy should grant cognito-idp:*IdentityProvider on userpool/* + SamlIdps R+W (#1312)", () => {
@@ -246,4 +264,131 @@ describe("TenkaCloudLiteStack (#778 ADR-016 Phase 3)", { timeout: 60_000 }, () =
     expect(pathParts).toContain("idp");
     expect(pathParts).toContain("{idpId}");
   });
+});
+
+/**
+ * [Issue #2442 / Phase C5] `controlDataBackend` conditional synth for `SamlIdpsTable` — mirrors
+ * `control-data-backend-feature-flag.test.ts`'s pure-SQL / turso-mirror pattern for
+ * `ProblemDeployBackendStack`, but scoped to `TenkaCloudLiteStack` (the actual generation site for
+ * this table — see `saml-idps-table.ts` / `tenkacloud-lite-stack.ts`, NOT
+ * `problem-deploy-backend-stack.ts`). The SamlIdp Lambda / `/tenant/idp*` API is decoupled from
+ * table presence (`attachSamlIdpLambda`): it exists in every backend, only its env/grant change.
+ */
+describe("SamlIdps pure SQL conditional synth (#2442 Phase C5)", () => {
+  beforeAll(() => {
+    ensurePlaceholderDist();
+  });
+
+  function samlIdpFunctionEnv(template: Template): Record<string, unknown> {
+    const functions = template.findResources("AWS::Lambda::Function");
+    const entry = Object.entries(functions).find(
+      ([name]) => name.includes("SamlIdp") && name.includes("Function"),
+    );
+    expect(entry, "expected a Lambda whose logical id contains SamlIdp").toBeDefined();
+    return (
+      (entry?.[1] as { Properties?: { Environment?: { Variables?: Record<string, unknown> } } })
+        ?.Properties?.Environment?.Variables ?? {}
+    );
+  }
+
+  it(
+    "should NOT create a SamlIdps AWS::DynamoDB::Table when controlDataBackend='turso' (pure SQL)",
+    () => {
+      const template = synth({ controlDataBackend: "turso" });
+      template.resourceCountIs("AWS::DynamoDB::Table", 0);
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should still provision the SamlIdp Lambda (attachSamlIdpLambda decoupled from table presence) under controlDataBackend='turso'",
+    () => {
+      const template = synth({ controlDataBackend: "turso" });
+      const vars = samlIdpFunctionEnv(template);
+      // IDP_TIER_GUARD / TENANT_USER_POOL_ID stay pinned — the Lambda + /tenant/idp* API keep
+      // working via the repository seam even though the table is gone.
+      expect(vars.IDP_TIER_GUARD).toBe("silo");
+      expect(vars.TENANT_USER_POOL_ID).toBeDefined();
+      // The table-derived env is absent (no table to name).
+      expect(vars.SAML_IDPS_TABLE_NAME).toBeUndefined();
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should inject CONTROL_DATA_BACKEND + Turso env into the SamlIdp Lambda under controlDataBackend='turso' (the Lambda that opens the DB for this seam)",
+    () => {
+      const template = synth({
+        controlDataBackend: "turso",
+        tursoDatabaseUrl: "libsql://example.turso.io",
+        tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
+      });
+      const vars = samlIdpFunctionEnv(template);
+      expect(vars.CONTROL_DATA_BACKEND).toBe("turso");
+      expect(vars.TURSO_DATABASE_URL).toBe("libsql://example.turso.io");
+      expect(vars.TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe("/tenkacloud/development/turso-token");
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should grant the SamlIdp Lambda ssm:GetParameter scoped to the Turso token parameter under controlDataBackend='turso'",
+    () => {
+      const template = synth({
+        controlDataBackend: "turso",
+        tursoDatabaseUrl: "libsql://example.turso.io",
+        tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
+      });
+      template.hasResourceProperties(
+        "AWS::IAM::Policy",
+        Match.objectLike({
+          PolicyDocument: Match.objectLike({
+            Statement: Match.arrayWith([
+              Match.objectLike({
+                Effect: "Allow",
+                Action: "ssm:GetParameter",
+                Resource: Match.anyValue(),
+              }),
+            ]),
+          }),
+        }),
+      );
+      // The Resource is an Fn::Join of stack tokens (partition/region/account) + the literal
+      // parameter path — assert the literal substring landed somewhere in the synthesized JSON
+      // (same pattern `control-data-backend-feature-flag.test.ts` uses for other C-series Lambdas).
+      expect(JSON.stringify(template.toJSON())).toContain(
+        "parameter/tenkacloud/development/turso-token",
+      );
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should still create the SamlIdps AWS::DynamoDB::Table + inject CONTROL_DATA_BACKEND='turso-mirror' when the migration-bridge backend is selected",
+    () => {
+      const template = synth({
+        controlDataBackend: "turso-mirror",
+        tursoDatabaseUrl: "libsql://example.turso.io",
+        tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
+      });
+      template.resourceCountIs("AWS::DynamoDB::Table", 1);
+      const vars = samlIdpFunctionEnv(template);
+      expect(vars.CONTROL_DATA_BACKEND).toBe("turso-mirror");
+      expect(vars.SAML_IDPS_TABLE_NAME).toBeDefined();
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should default (dynamodb) to a byte-compatible synth — 1 DynamoDB Table, no CONTROL_DATA_BACKEND / TURSO_* env",
+    () => {
+      const template = synth();
+      template.resourceCountIs("AWS::DynamoDB::Table", 1);
+      const vars = samlIdpFunctionEnv(template);
+      expect(vars.CONTROL_DATA_BACKEND).toBeUndefined();
+      expect(vars.TURSO_DATABASE_URL).toBeUndefined();
+      expect(vars.TURSO_AUTH_TOKEN_PARAMETER_NAME).toBeUndefined();
+    },
+    SYNTH_TIMEOUT_MS,
+  );
 });

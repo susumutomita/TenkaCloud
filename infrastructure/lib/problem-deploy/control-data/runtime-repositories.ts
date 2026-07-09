@@ -18,11 +18,13 @@ import {
   MirroredNotificationsRepository,
   MirroredProblemEndpointsRepository,
   MirroredSamlConfigRepository,
+  MirroredSamlIdpsRepository,
   MirroredTeamsRepository,
 } from "./mirrored-repositories.js";
 import { createNotificationsRepository } from "./notifications-repository.js";
 import { createProblemEndpointsRepository } from "./problem-endpoints-repository.js";
 import { createSamlConfigRepository } from "./saml-config-repository.js";
+import { createSamlIdpsRepository } from "./saml-idps-repository.js";
 import { createTeamsRepository } from "./teams-repository.js";
 import type {
   AdminAuditLogRepository,
@@ -35,6 +37,7 @@ import type {
   NotificationsRepository,
   ProblemEndpointsRepository,
   SamlConfigRepository,
+  SamlIdpsRepository,
   SqlExecutor,
   TeamsRepository,
 } from "./types.js";
@@ -138,6 +141,19 @@ export interface ControlDataRuntime {
     readonly ddb?: DynamoDBDocumentClient;
     readonly adminAuditLogTableName?: string;
   }) => Promise<AdminAuditLogRepository>;
+  /**
+   * [Issue #2442 / Phase C5] Cold-start resolver for the SamlIdps seam. Participates in all five
+   * `CONTROL_DATA_BACKEND` values like AdminAuditLog/Disruptions/CompetitorAccounts: `dynamodb`
+   * returns DDB, `turso` / `sql` return pure SQL, and mirror modes write through DDB then SQL
+   * while serving reads from canonical DDB. Unlike every other resolver here, the caller is
+   * **Lite-mode only** (`tenant-template/handlers/idp-handler/index.ts` via
+   * `control-plane/handlers/idp-handler/ddb-store.ts`'s `createSeamIdpStore`) — SaaS/Full mode
+   * never wires the SamlIdps table or Lambda at all.
+   */
+  readonly resolveSamlIdpsRepository: (input: {
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly samlIdpsTableName?: string;
+  }) => Promise<SamlIdpsRepository>;
 }
 
 export interface RuntimeEnvironment {
@@ -190,7 +206,8 @@ function requireDdbAndTableName(
     | "endpointsTableName"
     | "competitorAccountsTableName"
     | "disruptionsTableName"
-    | "adminAuditLogTableName",
+    | "adminAuditLogTableName"
+    | "samlIdpsTableName",
   backendKind: "dynamodb" | "mirror",
 ): { readonly ddb: DynamoDBDocumentClient; readonly tableName: string } {
   if (!ddb || !tableName) {
@@ -563,6 +580,39 @@ export function createControlDataRuntime(deps: RuntimeDependencies): ControlData
     );
   }
 
+  /** [Issue #2442 / Phase C5] Resolver for the SamlIdps seam (mirrors resolveAdminAuditLogRepository). */
+  async function resolveSamlIdpsRepository(input: {
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly samlIdpsTableName?: string;
+  }): Promise<SamlIdpsRepository> {
+    const backend = selectBackend(deps.env);
+    if (backend.kind === "pure") {
+      const sql = await acquireSqlExecutor();
+      return createSamlIdpsRepository(backend.dialect, { sql });
+    }
+
+    const requiredInput = requireDdbAndTableName(
+      input.ddb,
+      input.samlIdpsTableName,
+      "samlIdpsTableName",
+      backend.kind,
+    );
+    if (backend.kind === "dynamodb") {
+      return createSamlIdpsRepository("dynamodb", {
+        ddb: requiredInput.ddb,
+        samlIdpsTableName: requiredInput.tableName,
+      });
+    }
+    const sql = await acquireSqlExecutor();
+    return new MirroredSamlIdpsRepository(
+      createSamlIdpsRepository("dynamodb", {
+        ddb: requiredInput.ddb,
+        samlIdpsTableName: requiredInput.tableName,
+      }),
+      createSamlIdpsRepository(backend.dialect, { sql }),
+    );
+  }
+
   return {
     needsManualPrune: () => selectBackend(deps.env).kind === "pure",
     resolveRepositories: async (input) => {
@@ -584,6 +634,7 @@ export function createControlDataRuntime(deps: RuntimeDependencies): ControlData
     resolveSamlConfigRepository,
     resolveDisruptionsRepository,
     resolveAdminAuditLogRepository,
+    resolveSamlIdpsRepository,
   };
 }
 

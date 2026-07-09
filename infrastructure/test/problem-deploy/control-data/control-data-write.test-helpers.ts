@@ -19,6 +19,7 @@ import { FEATURE_FLAGS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-da
 import { NOTIFICATIONS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-notifications-repository";
 import { PROBLEM_ENDPOINTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-problem-endpoints-repository";
 import { SAML_CONFIG_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-saml-config-repository";
+import { SAML_IDPS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-saml-idps-repository";
 import { TEAMS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-teams-repository";
 import type { SqlExecutor } from "../../../lib/problem-deploy/control-data/types";
 
@@ -789,6 +790,7 @@ export function makeSqliteExecutor(): SqlExecutor {
   db.exec(PROBLEM_ENDPOINTS_SCHEMA_SQL);
   db.exec(COMPETITOR_ACCOUNTS_SCHEMA_SQL);
   db.exec(SAML_CONFIG_SCHEMA_SQL);
+  db.exec(SAML_IDPS_SCHEMA_SQL);
   db.exec(DISRUPTIONS_SCHEMA_SQL);
   db.exec(ADMIN_AUDIT_LOG_SCHEMA_SQL);
   return {
