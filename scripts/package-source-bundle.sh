@@ -101,6 +101,27 @@ require_problem_catalog() {
   fi
 }
 
+# [Problem Packs / #2459 gap 2] `.tenkacloud/pack-store` holds installed pack
+# snapshots plus the `packs-lock.json` lock file + `pack-activations.json`
+# (#2090 / #2462) — repo-root local state, gitignored (`.tenkacloud/` in
+# .gitignore), created by `pack-cli install` / `activate`. It is OPTIONAL: a
+# checkout with no packs installed has no `.tenkacloud/` directory at all, so
+# unlike copy_tree's REQUIRED-directory contract this must not fail when the
+# store is absent. When it IS present, copy failures still fail loudly like
+# every other copy_tree call (set -euo pipefail makes rsync's exit fatal) —
+# there is no silent fallback the other way. Only `pack-store` is copied, not
+# all of `.tenkacloud/` — `.tenkacloud/local/` is unrelated Docker local-play
+# state (`make local`, scripts/tenkacloud-local.ts) that has no business in a
+# CodeBuild source bundle.
+copy_pack_store_if_present() {
+  local pack_store_dir="${SOURCE_BUNDLE_ROOT}/.tenkacloud/pack-store"
+  if [ ! -d "${pack_store_dir}" ]; then
+    echo "[package-source-bundle] no .tenkacloud/pack-store found, skipping (packs are optional)"
+    return 0
+  fi
+  copy_tree ".tenkacloud/pack-store" ".tenkacloud/pack-store"
+}
+
 copy_dist() {
   local app="$1"
   local dist="${SOURCE_BUNDLE_ROOT}/apps/${app}/dist"
@@ -123,6 +144,7 @@ copy_tree "scripts" "scripts"
 copy_tree "problems" "problems"
 require_problem_catalog
 copy_tree "packages" "packages"
+copy_pack_store_if_present
 cp "${SOURCE_BUNDLE_ROOT}/.nvmrc" "${SOURCE_BUNDLE_STAGING_DIR}/.nvmrc"
 cp "${SOURCE_BUNDLE_ROOT}/package.json" "${SOURCE_BUNDLE_STAGING_DIR}/package.json"
 

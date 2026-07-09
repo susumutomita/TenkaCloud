@@ -36,6 +36,23 @@ function makeFixture(): { root: string; workDir: string } {
   return { root, workDir };
 }
 
+// [Problem Packs / #2459 gap 2] Mirrors the real `.tenkacloud/pack-store` layout
+// (#2090 install / #2462 activation): a lock file, an activation file, and one
+// immutable snapshot tree under `snapshots/<packId>/<version>/...`. Also seeds
+// unrelated `.tenkacloud/local/` (Docker local-play, scripts/tenkacloud-local.ts)
+// so the "only pack-store ships" scoping decision is pinned by a test, not just
+// a comment.
+function writePackStoreFixture(root: string): void {
+  write(root, ".tenkacloud/pack-store/packs-lock.json", JSON.stringify({ packs: [] }));
+  write(root, ".tenkacloud/pack-store/pack-activations.json", JSON.stringify({ tenants: {} }));
+  write(
+    root,
+    ".tenkacloud/pack-store/snapshots/com.example.demo-pack/1.0.0/problems/challenges/demo-pack/metadata.json",
+    "{}",
+  );
+  write(root, ".tenkacloud/local/deployment.json", JSON.stringify({ problemId: "demo" }));
+}
+
 function packageFixture(
   root: string,
   workDir: string,
@@ -88,12 +105,55 @@ describe("scripts/package-source-bundle.sh (#1552)", () => {
     expect(files.some((file) => file.includes("cdk.out"))).toBe(false);
     expect(files.some((file) => file.includes("coverage"))).toBe(false);
     expect(files.some((file) => file.includes("unknown-generated-root"))).toBe(false);
+    // No `.tenkacloud/pack-store` on disk (packs are optional) → bundle unchanged.
+    expect(files.some((file) => file.includes(".tenkacloud"))).toBe(false);
 
     const packageJson = spawnSync("unzip", ["-p", archive, "package.json"], {
       encoding: "utf8",
     });
     expect(packageJson.status).toBe(0);
     expect(JSON.parse(packageJson.stdout).workspaces).toEqual(["cdk", "packages/*"]);
+  });
+
+  it("should include .tenkacloud/pack-store in the bundle when installed packs exist", () => {
+    const { root, workDir } = makeFixture();
+    writePackStoreFixture(root);
+
+    const result = packageFixture(root, workDir, {
+      AWS_ACCESS_KEY_ID: "",
+      AWS_SECRET_ACCESS_KEY: "",
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    const archive = join(workDir, "source.zip");
+    const files = listArchive(archive);
+    expect(files).toContain(".tenkacloud/pack-store/packs-lock.json");
+    expect(files).toContain(".tenkacloud/pack-store/pack-activations.json");
+    expect(files).toContain(
+      ".tenkacloud/pack-store/snapshots/com.example.demo-pack/1.0.0/problems/challenges/demo-pack/metadata.json",
+    );
+    // `.tenkacloud/local/` (Docker local-play state) is a different feature and
+    // must not ride along — only `pack-store` is in the copy allowlist.
+    expect(files.some((file) => file.startsWith(".tenkacloud/local"))).toBe(false);
+  });
+
+  it("should build the bundle without .tenkacloud when no pack store is installed", () => {
+    const { root, workDir } = makeFixture();
+    // No .tenkacloud/ directory at all — the common case for a fresh checkout
+    // that never ran `pack-cli install` / `activate`.
+    expect(existsSync(join(root, ".tenkacloud"))).toBe(false);
+
+    const result = packageFixture(root, workDir, {
+      AWS_ACCESS_KEY_ID: "",
+      AWS_SECRET_ACCESS_KEY: "",
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toContain(
+      "no .tenkacloud/pack-store found, skipping",
+    );
+    const files = listArchive(join(workDir, "source.zip"));
+    expect(files.some((file) => file.includes(".tenkacloud"))).toBe(false);
   });
 
   it("should fail loudly when the problems catalog submodule is not checked out", () => {
