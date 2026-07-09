@@ -1,5 +1,5 @@
 import createWrapper from "@cloudscape-design/components/test-utils/dom";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProblemSummary } from "../../src/data/problems";
 
@@ -108,6 +108,53 @@ describe("ProblemsPage", () => {
     ).toBe(true);
   });
 
+  it("should render the header action for adding your own problems", () => {
+    renderPage();
+    expect(screen.getByRole("button", { name: "problems.pack_guidance_open" })).toBeInTheDocument();
+  });
+
+  it("should open the pack guidance modal from the header action and list CLI steps", () => {
+    const { container } = renderPage();
+
+    createWrapper(container)
+      .findButton("[data-testid='problem-pack-guidance-open-header']")
+      ?.click();
+
+    const modal = createWrapper(document.body).findModal();
+    expect(modal).not.toBeNull();
+    expect(modal?.isVisible()).toBe(true);
+    expect(screen.getByText("problems.pack_guidance_modal_title")).toBeInTheDocument();
+    expect(screen.getByText("problems.pack_guidance_path_official_title")).toBeInTheDocument();
+    expect(screen.getByText("problems.pack_guidance_path_private_title")).toBeInTheDocument();
+    expect(screen.getByText("problems.pack_guidance_cli_heading")).toBeInTheDocument();
+    for (const command of [
+      'make pack-init ARGS="./my-first-pack"',
+      'make pack-validate ARGS="./my-first-pack"',
+      'make pack-install ARGS="./my-first-pack"',
+      'make pack-activate ARGS="com.example.starter@0.1.0 --tenant <tenant-id>"',
+    ]) {
+      expect(screen.getByText(command)).toBeInTheDocument();
+    }
+    expect(screen.getByText("problems.pack_guidance_create_event_note")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "problems.pack_guidance_docs_link" }).getAttribute("href"),
+    ).toBe(
+      "https://github.com/susumutomita/TenkaCloud/tree/main/apps/developer-portal/src/app/developers/docs/tutorials/first-pack",
+    );
+  });
+
+  it("should dismiss the pack guidance modal", async () => {
+    const { container } = renderPage();
+
+    createWrapper(container)
+      .findButton("[data-testid='problem-pack-guidance-open-header']")
+      ?.click();
+    expect(createWrapper(document.body).findModal()).not.toBeNull();
+
+    createWrapper(document.body).findModal()?.findDismissButton().click();
+    await waitFor(() => expect(createWrapper(document.body).findModal()?.isVisible()).toBe(false));
+  });
+
   it("should render the runtime provider badge per card (AWS / multi-cloud brand / raw fallback)", () => {
     mockList.mockReturnValue([
       summary({ id: "a", name: "Alpha" }), // aws 既定
@@ -195,6 +242,12 @@ describe("ProblemsPage", () => {
     mockList.mockReturnValue([]);
     renderPage();
     expect(screen.getByText("problems.empty")).toBeInTheDocument();
+    expect(screen.getByText("problems.pack_guidance_empty_hint")).toBeInTheDocument();
+    const guidanceButtons = screen.getAllByRole("button", {
+      name: "problems.pack_guidance_open",
+    });
+    fireEvent.click(guidanceButtons[guidanceButtons.length - 1]);
+    expect(screen.getByText("problems.pack_guidance_modal_title")).toBeInTheDocument();
     expect(screen.getByText("(0)")).toBeInTheDocument();
   });
 
