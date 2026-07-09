@@ -14,6 +14,29 @@ import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-
 // 超えることがあるため 120s (= 分離実行 ~7s に対する安全マージン、hang 検出は維持)。
 export const SYNTH_TIMEOUT_MS = 120_000;
 
+/**
+ * Issue #2515: 全 synth helper 共通のメモ化 wrapper。 元は `cachedDefault` /
+ * `cachedCodeBuild` の 2 個を手組みキャッシュ変数で個別実装していたが (= 残り 11 個は毎回 synth
+ * していた)、引数を持つ helper (`synthLite` / `synthWithPackAssets`) も含めて 1 実装に統一する。
+ * 引数を `JSON.stringify` した文字列をキーにする ── 同一引数の再呼び出しはキャッシュを再利用し、
+ * 異なる引数 (例: `synthLite("LiteStack", ...)` と `synthLite("LiteStack2", ...)`) は別 synth
+ * として区別する。 module scope のキャッシュなので、このヘルパを import する test file 単位で
+ * 有効 (Issue #1249 のメモ化方針と同じ)。
+ */
+function memoizeTemplate<Args extends unknown[]>(
+  synth: (...args: Args) => Template,
+): (...args: Args) => Template {
+  const cache = new Map<string, Template>();
+  return (...args: Args): Template => {
+    const key = JSON.stringify(args);
+    const cached = cache.get(key);
+    if (cached) return cached;
+    const template = synth(...args);
+    cache.set(key, template);
+    return template;
+  };
+}
+
 // 全 it() で同じ Template を使い回す。stack 構造は default props で固定なので、
 // describe ブロック単位で 1 度 synth すれば再利用できる。
 // Issue #1249: ファイル分割後、複数の test file が同じ default Template を読むので、
@@ -24,9 +47,7 @@ export const SYNTH_TIMEOUT_MS = 120_000;
 // stack shape を返す (= CfnDeploy Lambda + ProblemArtifacts BucketDeployment + Lambda-poll SFN、
 // problem-deploy CodeBuild Project は 0 個)。在来 CodeBuild 経路を検証したい test は
 // {@link synthWithCodeBuild} (= CDK_PARAM_DEPLOY_VIA_LAMBDA=false rollback 相当) を使う。
-let cachedDefault: Template | undefined;
-export function synthDefault(): Template {
-  if (cachedDefault) return cachedDefault;
+export const synthDefault = memoizeTemplate((): Template => {
   const app = new cdk.App();
   const stack = new ProblemDeployBackendStack(app, "TestStack", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
@@ -41,17 +62,14 @@ export function synthDefault(): Template {
     deployViaLambda: true,
     environmentName: "development",
   });
-  cachedDefault = Template.fromStack(stack);
-  return cachedDefault;
-}
+  return Template.fromStack(stack);
+});
 
 // Issue #2291 rollback path: `CDK_PARAM_DEPLOY_VIA_LAMBDA=false` は在来 CodeBuild deploy 経路を
 // byte 互換で復元する。problem-deploy CodeBuild Project (と CodeBuild を叩く SFN 定義) を実際に
 // 検証したい test はこの helper を使う (= 既定反転前の synthDefault と同一 shape)。複数 test file
 // から読まれるので synthDefault と同様メモ化する。
-let cachedCodeBuild: Template | undefined;
-export function synthWithCodeBuild(): Template {
-  if (cachedCodeBuild) return cachedCodeBuild;
+export const synthWithCodeBuild = memoizeTemplate((): Template => {
   const app = new cdk.App();
   const stack = new ProblemDeployBackendStack(app, "TestStackCodeBuild", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
@@ -66,13 +84,12 @@ export function synthWithCodeBuild(): Template {
     deployViaLambda: false,
     environmentName: "development",
   });
-  cachedCodeBuild = Template.fromStack(stack);
-  return cachedCodeBuild;
-}
+  return Template.fromStack(stack);
+});
 
 // Issue #2232: useBulkDistributedMap: true を反映させた EventApi Lambda env を検証するための
 // 別 synth (= 既存 synthWithDeployConcurrentBuildLimit と同じ pattern)。
-export function synthWithBulkDistributedMap(): Template {
+export const synthWithBulkDistributedMap = memoizeTemplate((): Template => {
   const app = new cdk.App();
   const stack = new ProblemDeployBackendStack(app, "TestStackWithDistributedMap", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
@@ -85,11 +102,11 @@ export function synthWithBulkDistributedMap(): Template {
     environmentName: "development",
   });
   return Template.fromStack(stack);
-}
+});
 
 // Issue #2311: auditLogEnabled: false を反映させ、 監査を書く Lambda 群の env に
 // AUDIT_LOG_ENABLED="false" が注入されることを検証するための別 synth。
-export function synthWithAuditLogDisabled(): Template {
+export const synthWithAuditLogDisabled = memoizeTemplate((): Template => {
   const app = new cdk.App();
   const stack = new ProblemDeployBackendStack(app, "TestStackAuditDisabled", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
@@ -102,11 +119,11 @@ export function synthWithAuditLogDisabled(): Template {
     environmentName: "development",
   });
   return Template.fromStack(stack);
-}
+});
 
 // Issue #2406: ops monitoring is opt-in via CDK_PARAM_OPS_ALERT_EMAIL. This helper pins the
 // ProblemDeployBackendStack shape when the alerting email is present.
-export function synthWithOpsMonitoring(): Template {
+export const synthWithOpsMonitoring = memoizeTemplate((): Template => {
   const app = new cdk.App();
   const stack = new ProblemDeployBackendStack(app, "TestStackOpsMonitoring", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
@@ -124,13 +141,13 @@ export function synthWithOpsMonitoring(): Template {
     },
   });
   return Template.fromStack(stack);
-}
+});
 
 // Issue #2290 / #2440: controlDataBackend: "turso" を反映させ、監査 Lambda 群の env に
 // CONTROL_DATA_BACKEND="turso" が注入されることを検証するための別 synth (= synthWithAuditLogDisabled
 // と同じ pattern)。[Issue #2440 / ADR-049 §5.1 Phase A5] "turso" は純 SQL backend (Events/Teams
 // テーブルを synth しない) を意味する。
-export function synthWithControlDataBackendTurso(): Template {
+export const synthWithControlDataBackendTurso = memoizeTemplate((): Template => {
   const app = new cdk.App();
   const stack = new ProblemDeployBackendStack(app, "TestStackControlDataTurso", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
@@ -145,12 +162,12 @@ export function synthWithControlDataBackendTurso(): Template {
     environmentName: "development",
   });
   return Template.fromStack(stack);
-}
+});
 
 // [Issue #2440 / ADR-049 §5.1 Phase A5] controlDataBackend: "turso-mirror" (= 移行ブリッジ、
 // DDB 正本 + SQL replica) を反映させた synth。純 SQL の `synthWithControlDataBackendTurso` と
 // 対で、Events/Teams テーブルが従来どおり存在することを pin する。
-export function synthWithControlDataBackendTursoMirror(): Template {
+export const synthWithControlDataBackendTursoMirror = memoizeTemplate((): Template => {
   const app = new cdk.App();
   const stack = new ProblemDeployBackendStack(app, "TestStackControlDataTursoMirror", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
@@ -165,12 +182,13 @@ export function synthWithControlDataBackendTursoMirror(): Template {
     environmentName: "development",
   });
   return Template.fromStack(stack);
-}
+});
 
 // Issue #2291: Lambda deploy 経路 (CfnDeployLambda + EmitDeployFailedEvent + DeployFailureRule) を
 // 明示的に検証するための helper。既定反転後 (#2291 完了) は synthDefault と同一 shape なので、
 // 重複 synth を避けて synthDefault のメモ化 Template をそのまま返す。Lambda 経路を意図する
-// describe が intent-first に読めるよう別名として残す。
+// describe が intent-first に読めるよう別名として残す。単なる delegate なので memoizeTemplate は
+// 不要 (synthDefault 自身が既にメモ化済み)。
 export function synthWithDeployViaLambda(): Template {
   return synthDefault();
 }
@@ -178,7 +196,7 @@ export function synthWithDeployViaLambda(): Template {
 // Issue #2462: active pack の実体を materialize する `packAssets` を渡した Lambda 経路の synth。
 // `problemsRootAbs` は実在ディレクトリを要する (Source.asset が synth 時に stage する) ため、
 // 呼び出し側が fixture dir を作って渡す。
-export function synthWithPackAssets(packAssets: readonly PackAsset[]): Template {
+export const synthWithPackAssets = memoizeTemplate((packAssets: readonly PackAsset[]): Template => {
   const app = new cdk.App();
   const stack = new ProblemDeployBackendStack(app, "TestStackPackAssets", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
@@ -192,10 +210,10 @@ export function synthWithPackAssets(packAssets: readonly PackAsset[]): Template 
     environmentName: "development",
   });
   return Template.fromStack(stack);
-}
+});
 
 // #538: deployConcurrentBuildLimit を反映させた CodeBuild Project を検証するための別 synth。
-export function synthWithDeployConcurrentBuildLimit(): Template {
+export const synthWithDeployConcurrentBuildLimit = memoizeTemplate((): Template => {
   const app = new cdk.App();
   const stack = new ProblemDeployBackendStack(app, "TestStackWithLimit", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
@@ -210,10 +228,11 @@ export function synthWithDeployConcurrentBuildLimit(): Template {
     environmentName: "development",
   });
   return Template.fromStack(stack);
-}
+});
 
 // #778 ADR-016 Phase 2: eventBusArn を省略した Lite mode の synth。 別 stackId / bucket name を渡す。
-export function synthLite(stackId: string, sourceBucketName: string): Template {
+// stackId / sourceBucketName の組み合わせごとにキャッシュされる (= 同じ引数の再呼び出しのみ再利用)。
+export const synthLite = memoizeTemplate((stackId: string, sourceBucketName: string): Template => {
   const app = new cdk.App();
   const stack = new ProblemDeployBackendStack(app, stackId, {
     sourceBucketName,
@@ -225,7 +244,7 @@ export function synthLite(stackId: string, sourceBucketName: string): Template {
     // eventBusArn を省略 (= Lite mode)
   });
   return Template.fromStack(stack);
-}
+});
 
 /**
  * ParticipantPortalLambda 単体 synth (#535 再発防止)。
@@ -235,7 +254,7 @@ export function synthLite(stackId: string, sourceBucketName: string): Template {
  * fail する。Lambda の env / IAM だけ確認できれば十分なので、Lambda construct を
  * 単体で synth する。
  */
-export function synthParticipantPortalLambdaOnly(): Template {
+export const synthParticipantPortalLambdaOnly = memoizeTemplate((): Template => {
   const app = new cdk.App();
   const stack = new cdk.Stack(app, "TestStack");
   const deployments = new cdk.aws_dynamodb.Table(stack, "Deployments", {
@@ -261,14 +280,14 @@ export function synthParticipantPortalLambdaOnly(): Template {
     deployCodeBuildProject: Project.fromProjectName(stack, "DeployCodeBuild", "tc-deploy-project"),
   });
   return Template.fromStack(stack);
-}
+});
 
 /**
  * Issue #2291: ParticipantPortalLambda 単体 synth で `deployJobLogGroup` を渡した (= deployViaLambda
  * ON 相当の) variant。 Lambda 経路の jobId stream を read する `DeployJobLogsRead` grant +
  * `DEPLOY_JOB_LOG_GROUP` env の付与を検証する。 flag OFF 版は `synthParticipantPortalLambdaOnly`。
  */
-export function synthParticipantPortalLambdaOnlyWithJobLogGroup(): Template {
+export const synthParticipantPortalLambdaOnlyWithJobLogGroup = memoizeTemplate((): Template => {
   const app = new cdk.App();
   const stack = new cdk.Stack(app, "TestStack");
   const deployments = new cdk.aws_dynamodb.Table(stack, "Deployments", {
@@ -296,14 +315,14 @@ export function synthParticipantPortalLambdaOnlyWithJobLogGroup(): Template {
     deployJobLogGroup: jobLogGroup,
   });
   return Template.fromStack(stack);
-}
+});
 
 /**
  * ADR-030 Phase 2 (#1420): CoordinationDispatcherLambda 単体 synth。 stack 全体 synth は
  * ParticipantPortalHosting の dist asset を要求するため、 IAM (最小権限) / Function URL の検証は
  * construct 単体で行う (= synthParticipantPortalLambdaOnly と同方針)。
  */
-export function synthCoordinationDispatcherLambdaOnly(): Template {
+export const synthCoordinationDispatcherLambdaOnly = memoizeTemplate((): Template => {
   const app = new cdk.App();
   const stack = new cdk.Stack(app, "TestStack");
   const deployments = new cdk.aws_dynamodb.Table(stack, "Deployments", {
@@ -320,4 +339,4 @@ export function synthCoordinationDispatcherLambdaOnly(): Template {
     environmentName: "development",
   });
   return Template.fromStack(stack);
-}
+});

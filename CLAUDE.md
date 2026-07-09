@@ -61,6 +61,7 @@ We don't use a single-table DynamoDB design. Each stack owns its own tables (Ten
 | `make build`            | Build every workspace (`infrastructure` → 3 SPAs)                        |
 | `make typecheck`        | `tsc --noEmit` across every workspace                                    |
 | `make test`             | `vitest` across every workspace                                          |
+| `make test-scripts`     | Fast path: infrastructure script/CLI tests only (`test/scripts/`) — no CDK synth |
 | `make lint`             | markdownlint + textlint + biome                                          |
 | `make fix`              | Auto-fix variant of the above (`make format` works too)                  |
 | `make before-commit`    | lint + test — fast local sanity check, NOT a full CI mirror (see below)  |
