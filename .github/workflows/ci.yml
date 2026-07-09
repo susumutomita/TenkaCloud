@@ -85,32 +85,92 @@ jobs:
         run: |
           make typecheck
 
-      # Issue #993: 旧 `make test` (= `bun run test --coverage`) は && chain の末尾 workspace
-      # にしか --coverage が渡らず、 codecov に上がる coverage が trust-bridge だけだった。
-      # `test-coverage` target は各 workspace の `test:coverage` script を順に叩き、
-      # 各 workspace 配下に `coverage/lcov.info` を生成する → codecov-action が拾う。
-      - name: Run tests with coverage
-        run: |
-          make test-coverage
-
-      # Issue #1424: agent-owned workspace (3 SPA + 共有 package) の 100% coverage を enforce。
-      # test-coverage が生成した lcov.info を読み 100% 未満なら CI を落とす (= 回帰検知)。
-      # 品質ゲートは本体と分離し .claude/skills/quality-gates へ移設済み (runner を直接呼ぶ)。
-      - name: Coverage gate (100% for agent-owned workspaces)
-        run: |
-          bun run .claude/skills/quality-gates/scripts/run.ts coverage-gate
-
       - name: Build
         run: |
           make build
 
+  # Issue #2513: coverage は元々 `ci` job 内の直列 `make test-coverage` (17 workspace &&
+  # chain) が ~17m13s を占めていた。 workspace を 3 shard (infrastructure / spas / packages,
+  # scripts/run-coverage.ts の SHARDS 定義) に分け、 matrix で並列実行する。 `ci` job には
+  # 依存しない (= 両 job が同時に走り出す) ので、 coverage 自体の短縮に加えて job の直列待ちも
+  # 消える。 shard 内の workspace 実行は従来どおり直列 + fail-fast。
+  coverage:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: infrastructure
+            codecov_files: ./infrastructure/coverage/lcov.info
+          - shard: spas
+            codecov_files: ./apps/admin-console/coverage/lcov.info,./apps/application-admin-console/coverage/lcov.info,./apps/participant-portal/coverage/lcov.info
+          - shard: packages
+            codecov_files: ./packages/trust-bridge/coverage/lcov.info
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: true
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      # Supply Chain Security: Safe Chain for malicious package detection
+      - name: Setup safe-chain
+        continue-on-error: true
+        run: bunx @aikidosec/safe-chain setup-ci
+
+      # Supply Chain Security: Disable lifecycle scripts during install
+      - name: Install packages via packages.json
+        env:
+          npm_config_ignore_scripts: "true"
+          CI: "true"
+        run: make install_ci
+
+      # Issue #993 / #2513: この shard に属する workspace だけを直列実行し coverage/lcov.info を
+      # 生成する (root `test:coverage` script と同じ scripts/run-coverage.ts、 --shard で絞る)。
+      - name: Run tests with coverage (shard ${{ matrix.shard }})
+        run: |
+          bun run scripts/run-coverage.ts --shard ${{ matrix.shard }}
+
+      # Issue #1424 / #2513: agent-owned workspace の 100% coverage を shard 単位で enforce。
+      # 品質ゲートは本体と分離し .claude/skills/quality-gates へ移設済み (--shard で絞って直接呼ぶ、
+      # run.ts は経由しない)。
+      - name: Coverage gate (100% for agent-owned workspaces, shard ${{ matrix.shard }})
+        run: |
+          bun run .claude/skills/quality-gates/scripts/check-coverage-gate.ts --shard ${{ matrix.shard }}
+
       # 3rd-party action は tag (mutable) ではなく commit SHA (immutable) で pin する
       # (= supply-chain attack 防御、 maintainer / attacker が tag を移動できなくする)。 v5.5.4 SHA。
-      - name: Upload coverage reports to Codecov
+      # Codecov は同一 commit に対する複数 upload を 1 つの commit report へマージするため、
+      # shard ごとに分けて upload しても (PR / main push いずれでも) 最終的な report は分割前と
+      # 同じ全体像 (= 元 5 file 分) になる。 base report が欠けることもない。
+      - name: Upload coverage reports to Codecov (shard ${{ matrix.shard }})
         uses: codecov/codecov-action@aa56896cf108bd10b5eb883cd1d24196da57f695 # v5.5.4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           # Codecov 側 outage で CI 全体を落とさない。 coverage 計測は補助、 必須でない。
           fail_ci_if_error: false
           # 各 workspace の coverage/lcov.info を明示的に拾う (= auto-discover に依存しない)。
-          files: ./infrastructure/coverage/lcov.info,./apps/admin-console/coverage/lcov.info,./apps/application-admin-console/coverage/lcov.info,./apps/participant-portal/coverage/lcov.info,./packages/trust-bridge/coverage/lcov.info
+          files: ${{ matrix.codecov_files }}
+
+  # Issue #2513: branch protection 用の安定した単一 check 名。 matrix job (coverage) は shard 数
+  # だけ check が並び、 shard 構成が変わるたびに required status の設定も追随させる必要が出るため
+  # 直接 required にはしにくい。 `if: always()` で matrix の成否に関わらず必ず走らせ、
+  # needs.coverage.result を見て 1 つの check に集約する (third-party action は使わない)。
+  coverage-complete:
+    needs: coverage
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check coverage matrix result
+        run: |
+          if [ "${{ needs.coverage.result }}" != "success" ]; then
+            echo "coverage matrix did not succeed: ${{ needs.coverage.result }}" >&2
+            exit 1
+          fi
+          echo "coverage matrix succeeded"
