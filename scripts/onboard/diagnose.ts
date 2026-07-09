@@ -1,17 +1,17 @@
 /**
- * [Issue #2119] Onboarding diagnosis — detect every prerequisite `make local`
+ * [Issue #2119] Onboarding diagnosis — detect every prerequisite local play
  * needs from a fresh clone, as pure, testable functions.
  *
  * The detection is split from execution/consent so the interpretation logic can
  * be unit-tested without touching the real machine: every check takes an injected
  * {@link CommandRunner} / {@link DiagnoseFs} instead of shelling out directly.
  *
- * Checks (in `make local` preflight order):
+ * Checks (in `make local-onboard` preflight order):
  *   1. mise-trust   — `mise.toml` present but not trusted blocks tool activation
  *   2. submodule    — `problems/` (TenkaCloudChallenge) not initialized → no problems
  *   3. bun          — the platform's package manager / script runner
- *   4. docker-cli   — local-play drives `docker compose` directly
- *   5. docker-compose — the compose plugin (`docker compose`)
+ *   4. docker-cli   — optional when standalone `docker-compose` is installed
+ *   5. docker-compose — the compose frontend (`docker compose` or `docker-compose`)
  *   6. docker-daemon  — the daemon must be running to start containers
  */
 
@@ -138,29 +138,61 @@ export function checkBun(input: DiagnoseInput): CheckResult {
   };
 }
 
-/** Docker CLI — local-play shells out to `docker compose`. */
+function hasDockerCli(input: DiagnoseInput): boolean {
+  return ran(input.run.run("docker", ["--version"]));
+}
+
+function standaloneComposeVersion(input: DiagnoseInput): CommandOutcome {
+  return input.run.run("docker-compose", ["version"]);
+}
+
+function hasStandaloneCompose(input: DiagnoseInput): boolean {
+  return ran(standaloneComposeVersion(input));
+}
+
+/** Docker CLI — optional when standalone docker-compose is available. */
 export function checkDockerCli(input: DiagnoseInput): CheckResult {
   const base = { id: "docker-cli" as const, title: "Docker CLI" };
   const out = input.run.run("docker", ["--version"]);
   if (ran(out)) return { ...base, status: "ok", detail: versionLine(out) };
-  return { ...base, status: "missing", detail: "docker CLI is not installed" };
-}
-
-/**
- * The compose plugin (`docker compose version`). Only meaningful when the CLI is
- * present; otherwise it is `skipped` (the CLI check already reports the gap).
- */
-export function checkDockerCompose(input: DiagnoseInput): CheckResult {
-  const base = { id: "docker-compose" as const, title: "Docker Compose plugin" };
-  if (!ran(input.run.run("docker", ["--version"]))) {
-    return { ...base, status: "skipped", detail: "needs the Docker CLI first" };
+  if (hasStandaloneCompose(input)) {
+    return {
+      ...base,
+      status: "skipped",
+      detail: "standalone docker-compose is available; Docker CLI is optional",
+    };
   }
-  const out = input.run.run("docker", ["compose", "version"]);
-  if (ran(out)) return { ...base, status: "ok", detail: versionLine(out) };
   return {
     ...base,
     status: "missing",
-    detail: "the `docker compose` plugin is not available",
+    detail: "neither Docker CLI nor standalone docker-compose is installed",
+  };
+}
+
+/**
+ * The compose frontend. Prefer the Docker CLI plugin (`docker compose`), but
+ * standalone `docker-compose` is also supported for older local environments.
+ */
+export function checkDockerCompose(input: DiagnoseInput): CheckResult {
+  const base = { id: "docker-compose" as const, title: "Docker Compose" };
+  const dockerCli = hasDockerCli(input);
+  if (!dockerCli && !hasStandaloneCompose(input)) {
+    return {
+      ...base,
+      status: "skipped",
+      detail: "needs `docker compose` or standalone docker-compose first",
+    };
+  }
+  const out = dockerCli ? input.run.run("docker", ["compose", "version"]) : NOT_FOUND;
+  if (ran(out)) return { ...base, status: "ok", detail: versionLine(out) };
+  const standalone = standaloneComposeVersion(input);
+  if (ran(standalone)) {
+    return { ...base, status: "ok", detail: versionLine(standalone) };
+  }
+  return {
+    ...base,
+    status: "missing",
+    detail: "neither `docker compose` nor `docker-compose` is available",
   };
 }
 
@@ -171,8 +203,15 @@ export function checkDockerCompose(input: DiagnoseInput): CheckResult {
  */
 export function checkDockerDaemon(input: DiagnoseInput): CheckResult {
   const base = { id: "docker-daemon" as const, title: "Docker daemon" };
-  if (!ran(input.run.run("docker", ["--version"]))) {
-    return { ...base, status: "skipped", detail: "needs the Docker CLI first" };
+  if (!hasDockerCli(input)) {
+    if (hasStandaloneCompose(input)) {
+      return {
+        ...base,
+        status: "skipped",
+        detail: "standalone docker-compose is available; daemon reachability is checked on start",
+      };
+    }
+    return { ...base, status: "skipped", detail: "needs Docker Compose first" };
   }
   const out = input.run.run("docker", ["info"]);
   if (ran(out)) return { ...base, status: "ok", detail: "daemon is running" };
@@ -201,7 +240,7 @@ export function diagnose(input: DiagnoseInput): Diagnosis {
   };
 }
 
-/** A check that blocks `make local` (anything not ok / skipped). */
+/** A check that blocks local play (anything not ok / skipped). */
 export function blockingChecks(diagnosis: Diagnosis): readonly CheckResult[] {
   return diagnosis.checks.filter((c) => c.status !== "ok" && c.status !== "skipped");
 }

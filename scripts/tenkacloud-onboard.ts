@@ -1,5 +1,5 @@
 /**
- * [Issue #2119] Onboarding entry: make a fresh clone reach `make local`.
+ * [Issue #2119] Optional onboarding entry for local play.
  *
  *   bun run scripts/tenkacloud-onboard.ts doctor      # report prerequisites only
  *   bun run scripts/tenkacloud-onboard.ts preflight   # diagnose → consent → fix
@@ -75,8 +75,8 @@ function doctor(): number {
     return 0;
   }
   console.log(
-    "\nSome prerequisites need action. Run `make local` (it will offer to set them up), " +
-      "or fix them manually with the commands from `make local`.",
+    "\nSome prerequisites need action. Run `make local-onboard` (it will offer to set them up), " +
+      "or fix them manually with the commands from `make doctor`.",
   );
   return 1;
 }
@@ -105,7 +105,7 @@ async function applyStep(
   autoYes: boolean,
 ): Promise<boolean> {
   // A prior step may have already resolved this one (e.g. installing Docker fixes
-  // the CLI, the compose plugin, and the daemon at once).
+  // the CLI, Compose frontend, and the daemon at once).
   if (!stillBlocking(step.id)) return true;
 
   console.log(`\n${formatStep(step, index, total)}`);
@@ -143,7 +143,7 @@ async function preflight(autoYes: boolean): Promise<number> {
     return 0;
   }
   const remaining = planRemediation(after, { platform });
-  console.error(formatManualGuidance(remaining, "make local"));
+  console.error(formatManualGuidance(remaining, "make local-onboard"));
   if (!isInteractive() && !autoYes) {
     console.error(
       "\n(Non-interactive run: software was not installed. Re-run with `--yes` to allow installs.)",

@@ -10,11 +10,22 @@ logger.warn = (msg, opts) => {
   originalWarn(msg, opts);
 };
 
+const LOCAL_API_PROXY_PREFIX = "/__tenkacloud-local-api";
+
 export default defineConfig({
   plugins: [stripProblemWriteupsPlugin(), react()],
   customLogger: logger,
   // admin-console (5173) / application-admin-console (5174) と並走できるよう別ポート。
-  server: { port: 5175 },
+  server: {
+    port: 5175,
+    proxy: {
+      [LOCAL_API_PROXY_PREFIX]: {
+        target: "http://127.0.0.1:3199",
+        changeOrigin: false,
+        rewrite: (path) => path.replace(new RegExp(`^${LOCAL_API_PROXY_PREFIX}`), ""),
+      },
+    },
+  },
   build: {
     chunkSizeWarningLimit: 1200,
     rollupOptions: {

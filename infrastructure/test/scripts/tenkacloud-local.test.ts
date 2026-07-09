@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildLocalRuntimeConfig,
   composeArgs,
+  composeArgsForCli,
   generateSecretEnv,
   problemSearchRoots,
 } from "../../../scripts/tenkacloud-local";
@@ -33,7 +34,7 @@ describe("generateSecretEnv", () => {
 });
 
 describe("composeArgs", () => {
-  it("should build a loopback-only `up --wait` invocation", () => {
+  it("should build a detached `up` invocation", () => {
     expect(composeArgs("/p/local/docker-compose.yml", "tc-local-sqli-demo", "up")).toEqual([
       "compose",
       "-f",
@@ -42,7 +43,6 @@ describe("composeArgs", () => {
       "tc-local-sqli-demo",
       "up",
       "-d",
-      "--wait",
     ]);
   });
 
@@ -70,7 +70,46 @@ describe("composeArgs", () => {
       "/p/b/local",
       "up",
       "-d",
-      "--wait",
+    ]);
+  });
+});
+
+describe("composeArgsForCli", () => {
+  it("should keep the compose subcommand for the Docker CLI plugin", () => {
+    expect(
+      composeArgsForCli(
+        { command: "docker", prefix: ["compose"], label: "docker compose" },
+        "/p/local/docker-compose.yml",
+        "tc-local-sqli-demo",
+        "up",
+      ),
+    ).toEqual([
+      "compose",
+      "-f",
+      "/p/local/docker-compose.yml",
+      "-p",
+      "tc-local-sqli-demo",
+      "up",
+      "-d",
+    ]);
+  });
+
+  it("should omit the compose subcommand for standalone docker-compose", () => {
+    expect(
+      composeArgsForCli(
+        { command: "docker-compose", prefix: [], label: "docker-compose" },
+        "/p/local/docker-compose.yml",
+        "tc-local-sqli-demo",
+        "down",
+      ),
+    ).toEqual([
+      "-f",
+      "/p/local/docker-compose.yml",
+      "-p",
+      "tc-local-sqli-demo",
+      "down",
+      "--volumes",
+      "--remove-orphans",
     ]);
   });
 });
@@ -83,6 +122,19 @@ describe("buildLocalRuntimeConfig", () => {
       mode: "backend",
       cloudMode: "local",
       eventRegion: "local",
+    });
+  });
+
+  it("should use the Codespaces portal-origin API proxy for the browser runtime config", () => {
+    const config = buildLocalRuntimeConfig("http://127.0.0.1:3199", {
+      CODESPACE_NAME: "tenkacloud-demo",
+      GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "app.github.dev",
+    });
+
+    expect(config).toMatchObject({
+      apiBaseUrl: "https://tenkacloud-demo-5175.app.github.dev/__tenkacloud-local-api",
+      mode: "backend",
+      cloudMode: "local",
     });
   });
 });

@@ -15,11 +15,12 @@ make local [PROBLEM=<id>]
   │     • a flag submission is forwarded to the container's /verify
   │     • the verdict is recorded (score / leaderboard / hints / score events)
   │     • PROBLEM=<id> pre-starts a container; otherwise containers start on demand
-  ├─ docker compose up    the selected problem container (loopback only)
+  ├─ Docker Compose up    the selected problem container (loopback only)
   │     • per-deploy random secret (FLAG_SEED, …) injected as env
   │     • the container serves the challenge surface AND POST /verify
-  └─ participant portal    wired via runtime-config (cloudMode:"local")
-make local-down → docker compose down + restore runtime-config
+  └─ runtime-config.json   points optional `make local-portal` at the local API
+make local-portal → participant portal dev server (cloudMode:"local")
+make local-down → Docker Compose down + restore runtime-config
 ```
 
 | Layer                       | Owns     | Responsibility                                                        |
@@ -35,22 +36,24 @@ Lambda) — one `/verify` contract, two runtimes.
 ## Run it
 
 ```bash
-make local                        # start the scoring API + portal; deploy from the portal
+make local                        # start the detached scoring API; containers start on demand
 make local PROBLEM=sqli-demo      # also pre-start that problem container
+make local-portal                 # optional browser UI; deploy/start problems from the portal
 make local-list                   # print every playable problem id
 make local-status                 # is local play running?
 make local-evaluate FLAG='TC{…}'  # submit a flag from the CLI
 make local-down                   # stop everything and restore runtime-config
 ```
 
-Without `PROBLEM=`, `make local` pre-starts no problem containers. It starts the
-loopback scoring API and the Participant Portal dev server; choose a problem
-from the portal screen and deploy it there. Use `PROBLEM=<id>` only when you
-want the CLI to pre-start one or more containers before the portal opens. Log in
-with any non-empty team key. The challenge endpoints are shown on the problem
-page; attack them, recover the flag, and submit it.
+Without `PROBLEM=`, `make local` pre-starts no problem containers. It starts only
+the loopback scoring API. Use `PROBLEM=<id>` when you want the CLI to pre-start
+one or more containers; otherwise run `make local-portal`, log in with any
+non-empty team key, and deploy/start a problem from the portal screen. The
+challenge endpoints are shown on the problem page; attack them, recover the
+flag, and submit it.
 
-> Requires Docker with the compose plugin. The scoring API port defaults to
+> Requires Docker Compose. Both `docker compose` and standalone `docker-compose`
+> are supported. The scoring API port defaults to
 > `3199` and can be overridden with `LOCAL_API_PORT`. If it is already taken,
 > `make local` fails loudly rather than adopting a foreign server.
 

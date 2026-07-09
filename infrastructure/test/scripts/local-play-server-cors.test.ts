@@ -12,9 +12,27 @@ describe("local-play CORS", () => {
     );
   });
 
+  it("should reflect the same Codespace participant portal origin", () => {
+    expect(
+      corsHeaders("https://tenkacloud-demo-5175.app.github.dev", {
+        CODESPACE_NAME: "tenkacloud-demo",
+        GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "app.github.dev",
+      }),
+    ).toMatchObject({
+      "access-control-allow-origin": "https://tenkacloud-demo-5175.app.github.dev",
+      vary: "Origin",
+    });
+  });
+
   it("should send no CORS headers for a non-loopback origin", () => {
     expect(corsHeaders("https://evil.example.com")).toEqual({});
     expect(corsHeaders("http://127.0.0.1.evil.com")).toEqual({});
+    expect(
+      corsHeaders("https://other-codespace-5175.app.github.dev", {
+        CODESPACE_NAME: "tenkacloud-demo",
+        GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "app.github.dev",
+      }),
+    ).toEqual({});
   });
 
   it("should send no CORS headers when there is no Origin (non-browser client)", () => {

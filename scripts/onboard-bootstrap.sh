@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# [Issue #2119] Pre-bun bootstrap for `make local` / `make doctor`.
+# [Issue #2119] Pre-bun bootstrap for `make local-onboard`.
 #
 # This handles ONLY what cannot be a bun script: trusting mise (which gates the
 # pinned tools, including bun) and making bun itself available. Once bun is
@@ -59,7 +59,7 @@ if ! command -v bun >/dev/null 2>&1; then
   fi
   if ! command -v bun >/dev/null 2>&1; then
     echo ""
-    echo "Bun is still not on PATH. Install it, then re-run \`make local\`:"
+    echo "Bun is still not on PATH. Install it, then re-run \`make local-onboard\`:"
     echo "  $bun_cmd"
     echo "  (if bun is managed by mise: mise trust && mise install)"
     exit 1
