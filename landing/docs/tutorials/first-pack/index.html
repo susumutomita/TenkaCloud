@@ -54,6 +54,7 @@
 <p>パックの概念そのものは <a href="/docs/concepts/problem-packs/">problem packs</a> を、
 最初のデプロイ全体像は <a href="/docs/getting-started/">getting started</a> を参照してください。
 このページは契約 (スキーマや診断コードの一覧) を再掲せず、各リファレンスへリンクします。</p>
+<p>Just want to run an existing pack? → <a href="/docs/operate/use-existing-pack/">Use an existing pack</a>.</p>
 <p>The Japanese walkthrough below is the complete source of truth — full manifest and
 metadata examples, exact expected output, the failure-to-diagnostic-code table, and
 the preview event/verification flow. An abridged English summary follows it for
@@ -64,15 +65,17 @@ quick reference; for the full detail, follow the Japanese sections above it.</p>
 AWS アカウントが必要です。</p>
 <ul>
 <li><a href="https://bun.sh">Bun</a> 1.3.11</li>
-<li>リポジトリのチェックアウト (<code>git clone</code> 済み)。<code>pack</code> CLI は <code>infrastructure</code> ワークスペースの
-<code>tsx bin/tenkacloud-pack.ts</code> を <code>bun --cwd infrastructure run pack ...</code> から呼び出します。</li>
+<li>リポジトリのチェックアウト (<code>git clone</code> 済み)。<code>pack</code> CLI は <strong>リポジトリルートから</strong>
+<code>make pack-*</code> ターゲット経由で呼び出します (実体は
+<code>./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts</code>。CLI の既定 store
+<code>./.tenkacloud/pack-store</code> は CWD 基準で解決されるため、リポジトリルート実行が前提です)。</li>
 <li><code>git</code> 2.x 以降 (固定リビジョンの SHA を取得する手順で使用)</li>
 </ul>
 <p>CLI は完全にオフラインです。ネットワーク・CDK synth・クラウド資格情報を一切使いません。</p>
 <h2>1. パックを作成する (scaffold)</h2>
 <p>空の作業ディレクトリから始めます。<code>pack init &lt;dir&gt;</code> は、検証を 0 件の診断で通過する
 パック (マニフェスト + 問題 1 個 + プロバイダー成果物のプレースホルダー + README) を生成します。</p>
-<pre><code class="language-bash">bun --cwd infrastructure run pack init ./my-first-pack
+<pre><code class="language-bash">make pack-init ARGS=&quot;./my-first-pack&quot;
 </code></pre>
 <p>期待される出力:</p>
 <pre><code class="language-text">Pack scaffolded at ./my-first-pack (4 files). Run &#39;pack validate ./my-first-pack&#39; to check it.
@@ -117,7 +120,7 @@ AWS アカウントが必要です。</p>
 <h2>2. パックを検証する (validate)</h2>
 <p><code>pack validate &lt;dir&gt;</code> はオフライン検証器です。スキーマ・問題 ID の一意性・成果物の存在・
 ランタイム整合などを検査します。</p>
-<pre><code class="language-bash">bun --cwd infrastructure run pack validate ./my-first-pack
+<pre><code class="language-bash">make pack-validate ARGS=&quot;./my-first-pack&quot;
 </code></pre>
 <p>期待される出力:</p>
 <pre><code class="language-text">Pack is valid: 1 problem.
@@ -145,7 +148,7 @@ git -C ./my-first-pack rev-parse HEAD
 <h2>4. パックをインストールする (install)</h2>
 <p>ローカルディレクトリからインストールできます。インストールは「検証 → スナップショット →
 ロック → dry-run compose」を原子的に行い、有効化はしません。失敗したインストールは残骸を残しません。</p>
-<pre><code class="language-bash">bun --cwd infrastructure run pack install ./my-first-pack --store ./.tenkacloud/pack-store
+<pre><code class="language-bash">make pack-install ARGS=&quot;./my-first-pack&quot;
 </code></pre>
 <p>期待される出力 (<code>digest</code> はパック内容のハッシュで、ここでは生成物に対する一例):</p>
 <pre><code class="language-text">Pack installed: com.example.starter@0.1.0
@@ -155,13 +158,11 @@ git -C ./my-first-pack rev-parse HEAD
 </code></pre>
 <p>固定した Git リビジョンからインストールするときは <code>install git</code> を使います。HTTPS URL と
 完全な 40 桁 SHA が必須です:</p>
-<pre><code class="language-bash">bun --cwd infrastructure run pack install git \
-  https://github.com/&lt;you&gt;/my-first-pack.git \
-  --commit &lt;full-40-hex-sha&gt; --store ./.tenkacloud/pack-store
+<pre><code class="language-bash">make pack-install ARGS=&quot;git https://github.com/&lt;you&gt;/my-first-pack.git --commit &lt;full-40-hex-sha&gt;&quot;
 </code></pre>
 <p>ロック (<code>packs-lock.json</code>) には <code>sourceKind: &quot;git&quot;</code>・解決済みコミット・任意の subdir・
 コンテンツダイジェストが記録されます。インストール済みパックは <code>list</code> で確認できます:</p>
-<pre><code class="language-bash">bun --cwd infrastructure run pack list --store ./.tenkacloud/pack-store
+<pre><code class="language-bash">make pack-list
 </code></pre>
 <p>期待される出力:</p>
 <pre><code class="language-text">Installed packs: 1
@@ -170,8 +171,7 @@ git -C ./my-first-pack rev-parse HEAD
 <h2>5. テナントに対して有効化する (activate)</h2>
 <p>インストール済みの不変リビジョンを、1 つのテナントに対して有効化します。重複する問題 ID・
 利用不可なランタイム・ダイジェスト不一致・未インストールは拒否されます (終了コード 1)。</p>
-<pre><code class="language-bash">bun --cwd infrastructure run pack activate com.example.starter@0.1.0 \
-  --tenant acme --store ./.tenkacloud/pack-store
+<pre><code class="language-bash">make pack-activate ARGS=&quot;com.example.starter@0.1.0 --tenant acme&quot;
 </code></pre>
 <p>期待される出力:</p>
 <pre><code class="language-text">Pack activated for tenant &#39;acme&#39;: com.example.starter@0.1.0
@@ -195,10 +195,8 @@ git -C ./my-first-pack rev-parse HEAD
 <p>不要になったリビジョンは <code>remove</code> で取り除けます。<strong>イベントや有効化がそのリビジョンを
 固定している間は拒否されます</strong> (不変カタログの保護)。先に <code>deactivate</code> し、固定参照を外してから
 削除します。</p>
-<pre><code class="language-bash">bun --cwd infrastructure run pack deactivate com.example.starter@0.1.0 \
-  --tenant acme --store ./.tenkacloud/pack-store
-bun --cwd infrastructure run pack remove com.example.starter@0.1.0 \
-  --store ./.tenkacloud/pack-store
+<pre><code class="language-bash">make pack-deactivate ARGS=&quot;com.example.starter@0.1.0 --tenant acme&quot;
+./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts remove com.example.starter@0.1.0
 </code></pre>
 <p>期待される出力:</p>
 <pre><code class="language-text">Pack deactivated for tenant &#39;acme&#39;: com.example.starter@0.1.0
@@ -270,16 +268,18 @@ output.</p>
 until the final cloud-deploy step.</p>
 <ul>
 <li><a href="https://bun.sh">Bun</a> 1.3.11</li>
-<li>A checkout of the repository (the <code>pack</code> CLI runs from the <code>infrastructure</code>
-workspace via <code>bun --cwd infrastructure run pack ...</code>)</li>
+<li>A checkout of the repository (run the <code>pack</code> CLI from the <strong>repo root</strong> via the
+<code>make pack-*</code> targets — under the hood
+<code>./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts</code>; the CLI&#39;s
+default store <code>./.tenkacloud/pack-store</code> resolves against the CWD, so repo-root
+execution is what the platform reads)</li>
 <li><code>git</code> 2.x or later (used to obtain the pinned commit SHA)</li>
 </ul>
 <h3>Create, validate, install, activate</h3>
-<pre><code class="language-bash">bun --cwd infrastructure run pack init ./my-first-pack
-bun --cwd infrastructure run pack validate ./my-first-pack
-bun --cwd infrastructure run pack install ./my-first-pack --store ./.tenkacloud/pack-store
-bun --cwd infrastructure run pack activate com.example.starter@0.1.0 \
-  --tenant acme --store ./.tenkacloud/pack-store
+<pre><code class="language-bash">make pack-init ARGS=&quot;./my-first-pack&quot;
+make pack-validate ARGS=&quot;./my-first-pack&quot;
+make pack-install ARGS=&quot;./my-first-pack&quot;
+make pack-activate ARGS=&quot;com.example.starter@0.1.0 --tenant acme&quot;
 </code></pre>
 <p>Each command prints a one-line success message (see the Japanese sections above
 for the exact expected output). Pinning a pack means committing it to a separate
@@ -287,10 +287,8 @@ Git repository and recording the full 40-hex commit SHA; a branch, tag, <code>HE
 or abbreviated hash is rejected by design, which is what makes a pinned revision
 immutable. Install a pinned revision with <code>pack install git &lt;https-url&gt; --commit &lt;full-40-hex-sha&gt;</code>.</p>
 <h3>Teardown</h3>
-<pre><code class="language-bash">bun --cwd infrastructure run pack deactivate com.example.starter@0.1.0 \
-  --tenant acme --store ./.tenkacloud/pack-store
-bun --cwd infrastructure run pack remove com.example.starter@0.1.0 \
-  --store ./.tenkacloud/pack-store
+<pre><code class="language-bash">make pack-deactivate ARGS=&quot;com.example.starter@0.1.0 --tenant acme&quot;
+./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts remove com.example.starter@0.1.0
 </code></pre>
 <p><code>remove</code> is refused while an event or activation pins the revision, so deactivate
 first. There is no <code>update</code> command: a new version is a separate install.</p>
