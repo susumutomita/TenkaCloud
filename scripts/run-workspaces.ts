@@ -1,0 +1,271 @@
+#!/usr/bin/env bun
+/**
+ * Zero-dependency workspace-task orchestrator.
+ *
+ * The root `package.json` `build` / `typecheck` / `test` / `test:coverage`
+ * scripts used to be hand-maintained `bun run --filter <pkg> && bun run
+ * --filter <pkg2> && ...` chains. Two problems with that:
+ *
+ * 1. `bun run --filter <pkg>` can resolve the workspace filter before the
+ *    workspace graph is fully settled and return "No packages matched the
+ *    filter" (see the comment in `.github/workflows/pages.yml`). Issue #993
+ *    hit a sharper variant of the same flakiness: a flag meant for every
+ *    workspace in an `&&` chain only ever reached the *last* element, so
+ *    Codecov only ever saw coverage for one workspace.
+ * 2. Adding, removing, or excluding a workspace meant remembering to edit
+ *    four separate one-liners by hand, with no test catching a forgotten
+ *    edit.
+ *
+ * This script replaces the chains with a small discover → plan → execute
+ * pipeline. `discoverWorkspaces` and `planTask` are pure and unit-tested
+ * (scripts/run-workspaces.test.ts) including a repo-parity test that pins
+ * the exact workspace set per task — *that* test is the seam a reviewer
+ * now diffs when the workspace list changes, instead of an opaque `&&`
+ * chain.
+ *
+ * Usage: bun run scripts/run-workspaces.ts <build|typecheck|test|test:coverage>
+ */
+
+import { spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+export const TASKS = ["build", "typecheck", "test", "test:coverage"] as const;
+export type Task = (typeof TASKS)[number];
+
+export function isTask(value: string | undefined): value is Task {
+  return typeof value === "string" && (TASKS as readonly string[]).includes(value);
+}
+
+export interface WorkspaceInfo {
+  /** Workspace directory, relative to the repo root (e.g. "apps/admin-console"). */
+  dir: string;
+  /** package.json "name" field. */
+  name: string;
+  /** package.json "scripts" map. */
+  scripts: Record<string, string>;
+}
+
+interface RootPackageJson {
+  workspaces?: string[];
+}
+
+interface WorkspacePackageJson {
+  name?: string;
+  scripts?: Record<string, string>;
+}
+
+function readJson<T>(path: string): T {
+  return JSON.parse(readFileSync(path, "utf8")) as T;
+}
+
+/** Expands a trailing "/*" glob (e.g. "apps/*") into its workspace subdirectories. */
+function resolveGlobDirs(rootDir: string, glob: string): string[] {
+  const base = glob.slice(0, -2);
+  const baseAbs = join(rootDir, base);
+  if (!existsSync(baseAbs)) {
+    throw new Error(`workspaces glob "${glob}" points at a missing directory: "${base}"`);
+  }
+
+  const dirs: string[] = [];
+  for (const entry of readdirSync(baseAbs, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const dir = `${base}/${entry.name}`;
+    if (existsSync(join(rootDir, dir, "package.json"))) {
+      dirs.push(dir);
+    }
+  }
+  return dirs;
+}
+
+/** Resolves a literal (non-glob) workspaces entry (e.g. "infrastructure"). */
+function resolveLiteralDir(rootDir: string, entry: string): string {
+  if (!existsSync(join(rootDir, entry, "package.json"))) {
+    throw new Error(`workspaces entry "${entry}" has no package.json`);
+  }
+  return entry;
+}
+
+/** Expands the root `package.json` `workspaces` globs into concrete directories. */
+function resolveWorkspaceDirs(rootDir: string, globs: string[]): string[] {
+  const dirs: string[] = [];
+  for (const glob of globs) {
+    if (glob.endsWith("/*")) {
+      dirs.push(...resolveGlobDirs(rootDir, glob));
+    } else if (glob.includes("*")) {
+      throw new Error(
+        `unsupported workspaces glob (only a literal path or a trailing "/*" is supported): "${glob}"`,
+      );
+    } else {
+      dirs.push(resolveLiteralDir(rootDir, glob));
+    }
+  }
+  return dirs;
+}
+
+function readWorkspaceInfo(rootDir: string, dir: string): WorkspaceInfo {
+  const pkgPath = join(rootDir, dir, "package.json");
+  const pkg = readJson<WorkspacePackageJson>(pkgPath);
+  if (!pkg.name) {
+    throw new Error(`workspace package.json is missing a "name" field: "${pkgPath}"`);
+  }
+  return { dir, name: pkg.name, scripts: pkg.scripts ?? {} };
+}
+
+/**
+ * Parses the root `package.json` `workspaces` globs and reads each matching
+ * workspace's `package.json`. Only literal entries ("infrastructure") and a
+ * trailing "/*" ("apps/*") are supported — nothing fancier, matching what
+ * this repo's root `workspaces` array actually uses.
+ */
+export function discoverWorkspaces(rootDir: string): WorkspaceInfo[] {
+  const rootPkg = readJson<RootPackageJson>(join(rootDir, "package.json"));
+  const dirs = resolveWorkspaceDirs(rootDir, rootPkg.workspaces ?? []);
+  return dirs.map((dir) => readWorkspaceInfo(rootDir, dir));
+}
+
+const GROUP_ORDER = ["infrastructure", "apps", "packages"] as const;
+type Group = (typeof GROUP_ORDER)[number];
+
+function groupOf(dir: string): Group {
+  if (dir === "infrastructure") return "infrastructure";
+  if (dir.startsWith("apps/")) return "apps";
+  if (dir.startsWith("packages/")) return "packages";
+  throw new Error(
+    `cannot classify workspace directory into infrastructure/apps/packages: "${dir}"`,
+  );
+}
+
+/**
+ * `build` intentionally runs only in the infrastructure + apps groups, even
+ * though five packages/* workspaces (trust-bridge, saml-utils,
+ * problem-runtime, problem-sdk, problem-test-harness) also define a `build`
+ * script: those packages are consumed as TS source via workspace deps, not
+ * built as a standalone artifact, so the root `build` chain never included
+ * them. Every other task runs across every group (subject to TASK_EXCLUDES).
+ */
+const TASK_GROUPS: Partial<Record<Task, readonly Group[]>> = {
+  build: ["infrastructure", "apps"],
+};
+
+/**
+ * Per-task explicit exclude list, keyed by workspace dir.
+ *
+ * apps/developer-portal defines a `test:coverage` script but was never
+ * wired into the old root `&&` chain — pre-existing drift that predates
+ * this refactor. Preserved here for byte-for-byte parity; a follow-up issue
+ * should decide whether to fold it in.
+ */
+const TASK_EXCLUDES: Partial<Record<Task, readonly string[]>> = {
+  "test:coverage": ["apps/developer-portal"],
+};
+
+export type SkipReason = "excluded" | "missing-script";
+
+export interface TaskPlan {
+  task: Task;
+  included: WorkspaceInfo[];
+  skipped: { workspace: WorkspaceInfo; reason: SkipReason }[];
+}
+
+function orderWorkspaces(workspaces: WorkspaceInfo[]): WorkspaceInfo[] {
+  return [...workspaces].sort((a, b) => {
+    const groupDiff = GROUP_ORDER.indexOf(groupOf(a.dir)) - GROUP_ORDER.indexOf(groupOf(b.dir));
+    return groupDiff !== 0 ? groupDiff : a.dir.localeCompare(b.dir);
+  });
+}
+
+/**
+ * Pure planning step: given the discovered workspaces, resolves which ones
+ * run `task`, in the order infrastructure -> apps -> packages, alphabetical
+ * by directory within each group. Workspaces filtered out by the group rule
+ * (e.g. packages/* for `build`) are simply absent from both `included` and
+ * `skipped` — that's a structural design choice, not an anomaly. Workspaces
+ * excluded by TASK_EXCLUDES, or lacking the requested script, land in
+ * `skipped` with a reason so the caller can print a loud (non-silent) log
+ * line per skip.
+ */
+export function planTask(task: string, workspaces: WorkspaceInfo[]): TaskPlan {
+  if (!isTask(task)) {
+    throw new Error(`unknown task "${task}" — expected one of: ${TASKS.join(", ")}`);
+  }
+
+  const eligibleGroups = TASK_GROUPS[task] ?? GROUP_ORDER;
+  const excludes = new Set(TASK_EXCLUDES[task] ?? []);
+
+  const candidates = orderWorkspaces(workspaces).filter((w) =>
+    eligibleGroups.includes(groupOf(w.dir)),
+  );
+
+  const included: WorkspaceInfo[] = [];
+  const skipped: TaskPlan["skipped"] = [];
+
+  for (const workspace of candidates) {
+    if (excludes.has(workspace.dir)) {
+      skipped.push({ workspace, reason: "excluded" });
+      continue;
+    }
+    if (!(task in workspace.scripts)) {
+      skipped.push({ workspace, reason: "missing-script" });
+      continue;
+    }
+    included.push(workspace);
+  }
+
+  if (included.length === 0) {
+    throw new Error(`task "${task}" resolved to zero workspaces — refusing to run silently`);
+  }
+
+  return { task, included, skipped };
+}
+
+function printUsage(): void {
+  console.error(`Usage: bun run scripts/run-workspaces.ts <${TASKS.join("|")}>`);
+}
+
+function describeSkip(task: Task, reason: SkipReason): string {
+  return reason === "excluded"
+    ? `excluded from "${task}" (see TASK_EXCLUDES)`
+    : `no "${task}" script`;
+}
+
+function main(): void {
+  const rawTask = process.argv[2];
+  if (!isTask(rawTask)) {
+    printUsage();
+    process.exit(1);
+  }
+
+  const rootDir = resolve(import.meta.dir, "..");
+  const workspaces = discoverWorkspaces(rootDir);
+
+  let plan: TaskPlan;
+  try {
+    plan = planTask(rawTask, workspaces);
+  } catch (error) {
+    console.error(`[run-workspaces] ${(error as Error).message}`);
+    process.exit(1);
+    throw error; // unreachable: process.exit() already terminated the process
+  }
+
+  for (const { workspace, reason } of plan.skipped) {
+    console.log(`[run-workspaces] skip ${workspace.dir} — ${describeSkip(plan.task, reason)}`);
+  }
+
+  const total = plan.included.length;
+  plan.included.forEach((workspace, index) => {
+    console.log(`[run-workspaces] (${index + 1}/${total}) ${workspace.dir} — ${plan.task}`);
+    const result = spawnSync("bun", ["run", plan.task], {
+      cwd: join(rootDir, workspace.dir),
+      stdio: "inherit",
+    });
+    if (result.status !== 0) {
+      console.error(`[run-workspaces] ${workspace.dir} — ${plan.task} failed`);
+      process.exit(result.status ?? 1);
+    }
+  });
+}
+
+if (import.meta.main) {
+  main();
+}
