@@ -150,6 +150,21 @@ describe("buildEventSharedResources", () => {
     expect(() => buildEventSharedResources()).not.toThrow();
     expect(buildEventSharedResources().disruptionsTableName).toBe("");
   });
+
+  // [Issue #2442 / Phase C4] AdminAuditLog table is not synthesized under pure SQL backends
+  // either (same condition as Disruptions above). This field was born optional (`?? ""`) since
+  // `routes/audit-log.ts` always tolerated an unwired audit table (旧 stack 互換), so there is
+  // no throw-before/no-throw-after story here — just the default/explicit branches.
+  it("should default adminAuditLogTableName to '' when unset", () => {
+    delete process.env.ADMIN_AUDIT_LOG_TABLE_NAME;
+    expect(buildEventSharedResources().adminAuditLogTableName).toBe("");
+  });
+
+  it("should read ADMIN_AUDIT_LOG_TABLE_NAME when present", () => {
+    process.env.ADMIN_AUDIT_LOG_TABLE_NAME = "AdminAuditLog";
+    expect(buildEventSharedResources().adminAuditLogTableName).toBe("AdminAuditLog");
+    delete process.env.ADMIN_AUDIT_LOG_TABLE_NAME;
+  });
 });
 
 describe("buildParticipantSharedResources", () => {

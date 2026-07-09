@@ -1,5 +1,6 @@
 import type { Client, InArgs, InStatement, ResultSet } from "@libsql/client/http";
 import { SCORE_SUMMARY_SCHEMA_STATEMENTS } from "./score-summary-schema.js";
+import { ADMIN_AUDIT_LOG_SCHEMA_STATEMENTS } from "./sql-admin-audit-log-repository.js";
 import { COMPETITOR_ACCOUNTS_SCHEMA_STATEMENTS } from "./sql-competitor-accounts-repository.js";
 import { DEPLOYMENTS_SCHEMA_STATEMENTS } from "./sql-deployments-repository.js";
 import { DISRUPTIONS_SCHEMA_STATEMENTS } from "./sql-disruptions-repository.js";
@@ -72,6 +73,7 @@ export async function initializeControlDataSchema(client: LibsqlClient): Promise
     ...COMPETITOR_ACCOUNTS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
     ...SAML_CONFIG_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
     ...DISRUPTIONS_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
+    ...ADMIN_AUDIT_LOG_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
     ...SCORE_SUMMARY_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
   ];
   await client.batch(statements, "write");

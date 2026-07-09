@@ -14,6 +14,9 @@ type NotificationsRepository = Awaited<
 type DisruptionsRepository = Awaited<
   ReturnType<typeof controlDataRuntime.resolveDisruptionsRepository>
 >;
+type AdminAuditLogRepository = Awaited<
+  ReturnType<typeof controlDataRuntime.resolveAdminAuditLogRepository>
+>;
 
 /**
  * #557 / #539 / #1038: end-to-end transition scenarios for the reconciler.
@@ -155,6 +158,9 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     const pruneDisruptions = {
       pruneExpired: vi.fn(async () => 4),
     } as unknown as DisruptionsRepository;
+    const pruneAdminAuditLog = {
+      pruneExpired: vi.fn(async () => 5),
+    } as unknown as AdminAuditLogRepository;
     vi.spyOn(controlDataRuntime, "needsManualPrune").mockReturnValue(true);
     vi.spyOn(controlDataRuntime, "resolveEventsRepository").mockImplementation(async (input) =>
       input.eventsTableName ? listEvents : pruneEvents,
@@ -166,6 +172,10 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     vi.spyOn(controlDataRuntime, "resolveDisruptionsRepository").mockResolvedValue(
       pruneDisruptions,
     );
+    // [Issue #2442 / Phase C4] AdminAuditLog joins the manual-prune tick alongside Disruptions.
+    vi.spyOn(controlDataRuntime, "resolveAdminAuditLogRepository").mockResolvedValue(
+      pruneAdminAuditLog,
+    );
 
     await reconcileEventStatuses(ctx, NOW_ISO);
 
@@ -173,6 +183,7 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     expect(pruneTeams.pruneExpired).toHaveBeenCalledWith(nowEpochSeconds);
     expect(pruneNotifications.pruneExpired).toHaveBeenCalledWith(nowEpochSeconds);
     expect(pruneDisruptions.pruneExpired).toHaveBeenCalledWith(nowEpochSeconds);
+    expect(pruneAdminAuditLog.pruneExpired).toHaveBeenCalledWith(nowEpochSeconds);
     expect(listEvents.listEventsByStatus).toHaveBeenCalledWith([
       "DEPLOYING",
       "READY",
@@ -218,6 +229,12 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     vi.spyOn(controlDataRuntime, "resolveDisruptionsRepository").mockResolvedValue({
       pruneExpired: vi.fn(async () => 0),
     } as unknown as DisruptionsRepository);
+    // [Issue #2442 / Phase C4] AdminAuditLog also joins the resolution Promise.all — must be
+    // mocked or the real (unmocked) resolver throws first (missing ddb/adminAuditLogTableName
+    // under the default dynamodb backend), masking the "temporary SQL outage" assertion below.
+    vi.spyOn(controlDataRuntime, "resolveAdminAuditLogRepository").mockResolvedValue({
+      pruneExpired: vi.fn(async () => 0),
+    } as unknown as AdminAuditLogRepository);
 
     await reconcileEventStatuses(ctx, NOW_ISO);
 

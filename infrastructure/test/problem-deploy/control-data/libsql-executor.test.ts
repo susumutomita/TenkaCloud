@@ -80,7 +80,7 @@ describe("LibsqlExecutor", () => {
     expect(batch).toHaveBeenCalledTimes(1);
     const [statements, mode] = batch.mock.calls[0] ?? [];
     expect(mode).toBe("write");
-    expect(statements).toHaveLength(31);
+    expect(statements).toHaveLength(32);
     expect(statements.map((entry: { sql: string }) => entry.sql)).toEqual(
       expect.arrayContaining([
         expect.stringContaining("CREATE TABLE IF NOT EXISTS events"),
@@ -106,6 +106,8 @@ describe("LibsqlExecutor", () => {
         expect.stringContaining("CREATE TABLE IF NOT EXISTS disruption_fire_claims"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS disruption_recurring"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS disruption_exec_claims"),
+        // [Issue #2442 / Phase C4] AdminAuditLog aggregate schema.
+        expect.stringContaining("CREATE TABLE IF NOT EXISTS admin_audit_log"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS score_summary"),
         expect.stringContaining("idx_score_summary_leaderboard"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS leaderboard_snapshots"),

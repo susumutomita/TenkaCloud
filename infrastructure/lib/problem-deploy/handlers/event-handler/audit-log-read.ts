@@ -1,6 +1,5 @@
-import { type DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { csvEscapeField } from "../../../utils/csv.js";
-import { queryAllItemsBounded } from "../shared/ddb-paginate.js";
+import type { AdminAuditLogRepository, AdminAuditRow } from "../../control-data/types.js";
 
 /**
  * Issue #1292: Tenant Admin 向けに 「自テナントの audit log」 を read する handler module。
@@ -12,7 +11,13 @@ import { queryAllItemsBounded } from "../shared/ddb-paginate.js";
  * で越境不能)。
  *
  * 1 page 50 件、 cursor は base64(LastEvaluatedKey)。 同期返却。
- * env `ADMIN_AUDIT_LOG_TABLE_NAME` が未設定なら caller (= index.ts) で 503 を返す。
+ *
+ * [Issue #2442 / Phase C4] Raw DDB access moved behind {@link AdminAuditLogRepository}
+ * (`resolveAdminAuditLogRepository` in `shared.ts` resolves it). The cursor wire format on the
+ * DynamoDB backend stays byte-identical (plain base64 JSON) — this module no longer computes it
+ * directly, but the repository's `listPage` produces the exact same encoding. env
+ * `ADMIN_AUDIT_LOG_TABLE_NAME` が未設定 (かつ dynamodb/mirror backend) なら caller (= routes/
+ * audit-log.ts) で 503 を返す。
  */
 
 const LIST_LIMIT_DEFAULT = 50;
@@ -21,8 +26,7 @@ const LIST_LIMIT_MAX = 200;
 const EXPORT_MAX_PAGES = 200;
 
 export interface TenantAuditDeps {
-  readonly ddb: DynamoDBDocumentClient;
-  readonly auditTableName: string;
+  readonly repository: AdminAuditLogRepository;
 }
 
 export interface TenantAuditListInput {
@@ -54,52 +58,30 @@ export interface TenantAuditListResponse {
   readonly nextCursor?: string;
 }
 
-function decodeCursor(cursor: string | undefined): Record<string, unknown> | undefined {
-  if (!cursor) return undefined;
-  try {
-    return JSON.parse(Buffer.from(cursor, "base64").toString("utf-8")) as Record<string, unknown>;
-  } catch {
-    return undefined;
-  }
-}
-
-function encodeCursor(key: Record<string, unknown> | undefined): string | undefined {
-  if (!key) return undefined;
-  return Buffer.from(JSON.stringify(key), "utf-8").toString("base64");
-}
-
 export async function listTenantAuditEntries(
   deps: TenantAuditDeps,
   input: TenantAuditListInput,
 ): Promise<TenantAuditListResponse> {
   const limit = Math.min(input.limit ?? LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX);
-  const out = await deps.ddb.send(
-    new QueryCommand({
-      TableName: deps.auditTableName,
-      KeyConditionExpression: "PK = :pk",
-      ExpressionAttributeValues: { ":pk": `TENANT#${input.tenantId}` },
-      Limit: limit,
-      ScanIndexForward: false,
-      ExclusiveStartKey: decodeCursor(input.cursor),
-    }),
-  );
-  const items = (out.Items ?? [])
+  const page = await deps.repository.listPage(`TENANT#${input.tenantId}`, {
+    limit,
+    cursor: input.cursor,
+  });
+  const items = page.items
     .map((row) => toAuditItem(row, input.tenantId))
     .filter((item) => passFilters(item, input));
   return {
     items,
-    ...(out.LastEvaluatedKey
-      ? { nextCursor: encodeCursor(out.LastEvaluatedKey as Record<string, unknown>) }
-      : {}),
+    ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
   };
 }
 
 /**
  * CSV export 用。 page を drain して 1 string に集約する。 上限 5000 行で truncate。
  *
- * tenant scope の PK 固定 query を {@link queryAllItemsBounded} で最大 EXPORT_MAX_PAGES ページ
- * まで drain し (= memory / round-trip を bound)、 {@link listTenantAuditEntries} と同じ
- * map / filter を適用したうえで maxRows で truncate する。
+ * tenant scope の PK 固定 query を {@link AdminAuditLogRepository.listAllByPartition} で最大
+ * EXPORT_MAX_PAGES ページまで drain し (= memory / round-trip を bound)、
+ * {@link listTenantAuditEntries} と同じ map / filter を適用したうえで maxRows で truncate する。
  */
 export async function exportTenantAuditCsv(
   deps: TenantAuditDeps,
@@ -107,17 +89,10 @@ export async function exportTenantAuditCsv(
   options: { maxRows?: number } = {},
 ): Promise<string> {
   const maxRows = options.maxRows ?? 5000;
-  const rows = await queryAllItemsBounded(
-    deps.ddb,
-    {
-      TableName: deps.auditTableName,
-      KeyConditionExpression: "PK = :pk",
-      ExpressionAttributeValues: { ":pk": `TENANT#${input.tenantId}` },
-      Limit: LIST_LIMIT_MAX,
-      ScanIndexForward: false,
-    },
-    EXPORT_MAX_PAGES,
-  );
+  const rows = await deps.repository.listAllByPartition(`TENANT#${input.tenantId}`, {
+    pageSize: LIST_LIMIT_MAX,
+    maxPages: EXPORT_MAX_PAGES,
+  });
   const collected: TenantAuditItem[] = [];
   for (const row of rows) {
     const item = toAuditItem(row, input.tenantId);
@@ -138,26 +113,21 @@ function passFilters(item: TenantAuditItem, input: TenantAuditListInput): boolea
   return true;
 }
 
-function toAuditItem(row: unknown, tenantId: string): TenantAuditItem {
-  const r = row as Record<string, unknown>;
-  const sk = String(r.SK ?? "");
+function toAuditItem(row: AdminAuditRow, tenantId: string): TenantAuditItem {
+  const sk = row.sk;
   return {
     id: sk.startsWith("AUDIT#") ? sk.substring(6) : sk,
     tenantId,
-    actor: String(r.actor ?? "unknown"),
-    ...(typeof r.actorUsername === "string" ? { actorUsername: r.actorUsername } : {}),
-    action: String(r.action ?? ""),
-    outcome: String(r.outcome ?? ""),
-    ...(typeof r.target === "string" ? { target: r.target } : {}),
-    ...(typeof r.ipAddress === "string" ? { ipAddress: r.ipAddress } : {}),
-    ...(typeof r.userAgent === "string" ? { userAgent: r.userAgent } : {}),
-    occurredAt: String(r.occurredAt ?? ""),
-    ...(isRecord(r.extra) ? { extra: r.extra as Record<string, unknown> } : {}),
+    actor: row.actor,
+    ...(row.actorUsername ? { actorUsername: row.actorUsername } : {}),
+    action: row.action,
+    outcome: row.outcome,
+    ...(row.target ? { target: row.target } : {}),
+    ...(row.ipAddress ? { ipAddress: row.ipAddress } : {}),
+    ...(row.userAgent ? { userAgent: row.userAgent } : {}),
+    occurredAt: row.occurredAt,
+    ...(row.extra ? { extra: row.extra as Record<string, unknown> } : {}),
   };
-}
-
-function isRecord(value: unknown): boolean {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 const CSV_COLUMNS = [

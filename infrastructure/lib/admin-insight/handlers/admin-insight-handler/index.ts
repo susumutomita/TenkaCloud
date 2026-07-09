@@ -9,7 +9,7 @@ import { exportAuditEntriesCsv, listAuditEntries } from "./audit.js";
 import { isSystemAdmin, resolveCognitoSub } from "./auth.js";
 import { defaultBudgetsClient, getCostSummary } from "./cost.js";
 import { defaultPipelineClient, listPipelineExecutions } from "./pipeline-executions.js";
-import { buildSharedResources } from "./shared.js";
+import { buildSharedResources, resolveAdminAuditLogRepository } from "./shared.js";
 import { defaultSfnClient, listStateMachineExecutions } from "./state-machine-executions.js";
 import { summarizeTenants } from "./summary.js";
 
@@ -324,10 +324,21 @@ async function handleCostSummary(c: Context): Promise<Response> {
   }
 }
 
+/**
+ * [Issue #2442 / Phase C4] `true` for pure-SQL `CONTROL_DATA_BACKEND` values, where the
+ * AdminAuditLog table is not synthesized (mirrors `handlers/shared/audit-log.ts`'s
+ * `isPureSqlBackend`). An empty `shared.auditTableName` is legitimate there, not a
+ * misconfiguration — only dynamodb/mirror backends require the physical table name.
+ */
+function isPureSqlBackend(): boolean {
+  const backend = process.env.CONTROL_DATA_BACKEND;
+  return backend === "turso" || backend === "sql";
+}
+
 async function handleAuditEntries(c: Context): Promise<Response> {
   const forbidden = auditAndAuthorize(c, "/admin/insight/audit");
   if (forbidden) return forbidden;
-  if (!shared.auditTableName || shared.auditTableName.length === 0) {
+  if (!isPureSqlBackend() && (!shared.auditTableName || shared.auditTableName.length === 0)) {
     return c.json(
       {
         error: "audit_log_unconfigured",
@@ -340,8 +351,9 @@ async function handleAuditEntries(c: Context): Promise<Response> {
   if ("response" in input) return input.response;
   const { scope, tenantId, limit, cursor, from, to, principal, action } = input;
   try {
+    const repository = await resolveAdminAuditLogRepository(shared);
     const result = await listAuditEntries(
-      { ddb: shared.ddb, auditTableName: shared.auditTableName },
+      { repository },
       {
         scope,
         ...(tenantId ? { tenantId } : {}),
@@ -365,15 +377,16 @@ async function handleAuditEntries(c: Context): Promise<Response> {
 async function handleAuditExport(c: Context): Promise<Response> {
   const forbidden = auditAndAuthorize(c, "/admin/insight/audit/export");
   if (forbidden) return forbidden;
-  if (!shared.auditTableName || shared.auditTableName.length === 0) {
+  if (!isPureSqlBackend() && (!shared.auditTableName || shared.auditTableName.length === 0)) {
     return c.json({ error: "audit_log_unconfigured" }, StatusCodes.SERVICE_UNAVAILABLE);
   }
   const input = parseAuditListInput(c);
   if ("response" in input) return input.response;
   const { scope, tenantId, from, to, principal, action } = input;
   try {
+    const repository = await resolveAdminAuditLogRepository(shared);
     const csv = await exportAuditEntriesCsv(
-      { ddb: shared.ddb, auditTableName: shared.auditTableName },
+      { repository },
       {
         scope,
         ...(tenantId ? { tenantId } : {}),

@@ -297,8 +297,15 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   /**
    * Issue #950 (ADR-020 Phase D): admin audit log table。 AdminConsoleInsightStack が
    * cross-stack read で audit UI に出すため公開する (= read-only)。
+   *
+   * [Issue #2442 / Phase C4] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは本 table を
+   * **synth しない** (= `undefined`) — DynamoDB standing cost をゼロにする A5/B6/C1-C3 と同じ
+   * 条件。 `dynamodb` / `*-mirror` では従来どおり必ず存在する ({@link problemEndpointsTable} と
+   * 同じ条件)。 write 元 6 Lambda + admin-insight の read は repository seam
+   * (`resolveAdminAuditLogRepository`) 経由で SQL executor 直結するため、pure SQL では本 table
+   * への参照が残らない (壊れる参照は下記で個別に条件化)。
    */
-  public readonly adminAuditLogTable: Table;
+  public readonly adminAuditLogTable?: Table;
   /**
    * Issue #1053: 競技者向け CFn bootstrap template (`competitor-bootstrap.yaml`) の S3 public
    * URL。 旧実装は `AdminConsoleHostingStack` に同居していたが、 Lite mode で deploy されない
@@ -382,11 +389,18 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // が repository seam (`resolveDisruptionsRepository`) 経由で読み書きするため、pure SQL では
     // 本 table への参照が残らない (壊れる参照は下記で個別に条件化)。
     const disruptions = pureSql ? undefined : new DisruptionsTable(this, "Disruptions");
-    // Issue #950 (ADR-020 Phase D): admin 操作の append-only 監査ログ。 3 handler Lambda +
-    // admin-insight Lambda が PutItem する。 TTL 90 日で自動 GC (= env `AUDIT_RETENTION_DAYS`
+    // Issue #950 (ADR-020 Phase D): admin 操作の append-only 監査ログ。 6 handler Lambda +
+    // admin-insight Lambda が read/write する。 TTL 90 日で自動 GC (= env `AUDIT_RETENTION_DAYS`
     // で 365 / SOC2 enterprise 用に上げる)。
-    const adminAuditLog = new AdminAuditLogTable(this, "AdminAuditLog");
-    this.adminAuditLogTable = adminAuditLog.table;
+    //
+    // [Issue #2442 / Phase C4] Disruptions/CompetitorAccounts/ProblemEndpoints/Events/Teams/
+    // Deployments と同条件で pure SQL backend では **synth しない**。 write 元 6 Lambda
+    // (deploy-api / event-api / competitor-accounts-api / system-audit-writer / sign-in-audit /
+    // admin-insight) は全て repository seam (`writeAuditEvent` / `resolveAdminAuditLogRepository`)
+    // 経由で読み書きするため、pure SQL では本 table への参照が残らない (壊れる参照は下記で個別に
+    // 条件化)。
+    const adminAuditLog = pureSql ? undefined : new AdminAuditLogTable(this, "AdminAuditLog");
+    this.adminAuditLogTable = adminAuditLog?.table;
 
     // Issue #1053: 競技者向け CFn bootstrap template の S3 hosting を本 stack に持つ。
     // 旧 AdminConsoleHostingStack から移管 (= Lite / SaaS 両モード対応 + 3-phase env-var dance 解消)。
@@ -416,12 +430,16 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // SBT events も流れて来ない (= 副作用なし) ため idle で安全。
     new SystemAuditWriterLambda(this, "SystemAuditWriter", {
       eventBus,
-      adminAuditLogTable: adminAuditLog.table,
+      adminAuditLogTable: adminAuditLog?.table,
       environmentName: props.environmentName,
       // Issue #2311: 監査ログ feature flag (off で writeAuditEvent が no-op)。
       auditLogEnabled: props.auditLogEnabled,
       // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
       controlDataBackend: props.controlDataBackend,
+      // Issue #2442: 本 Lambda は SBT tenant onboarding/offboarding 監査の repository seam を
+      // 実際に使う「DB を開く Lambda」なので Turso executor 配線を持つ (EventApi と同型)。
+      tursoDatabaseUrl: props.tursoDatabaseUrl,
+      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
       // Issue #2291: Lambda deploy 経路のとき、失敗 event を拾う DeployFailureRule を有効化
       // (= CodeBuild path の CodeBuild FAILED audit と parity)。flag OFF では Rule なし = byte 互換。
       deployViaLambda: props.deployViaLambda,
@@ -445,7 +463,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         : {}),
       environmentName: props.environmentName,
       // Issue #950 (ADR-020 Phase D): admin audit log を write
-      adminAuditLogTable: adminAuditLog.table,
+      adminAuditLogTable: adminAuditLog?.table,
       // Issue #2311: 監査ログ feature flag。
       auditLogEnabled: props.auditLogEnabled,
       // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
@@ -535,7 +553,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       bulkDeployPayloadBucket: bulkPayloadBucket,
       useBulkDistributedMap: props.useBulkDistributedMap ?? false,
       // Issue #950
-      adminAuditLogTable: adminAuditLog.table,
+      adminAuditLogTable: adminAuditLog?.table,
       // Issue #2311: 監査ログ feature flag。
       auditLogEnabled: props.auditLogEnabled,
       // Issue #2290: control-plane data backend。event-handler の getEventDetail が Events / Teams
@@ -570,7 +588,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       competitorAccountsTable: competitorAccounts?.table,
       environmentName: props.environmentName,
       // Issue #950
-      adminAuditLogTable: adminAuditLog.table,
+      adminAuditLogTable: adminAuditLog?.table,
       // Issue #2311: 監査ログ feature flag。
       auditLogEnabled: props.auditLogEnabled,
       // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。

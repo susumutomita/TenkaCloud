@@ -4,6 +4,18 @@ import { requireRole, resolveTenantId, TENANT_ADMIN_ROLE } from "../../deploy-ha
 import { exportTenantAuditCsv, listTenantAuditEntries } from "../audit-log-read.js";
 import { handleRouteError, parseLimit } from "../route-helpers.js";
 import type { EventSharedResources } from "../shared.js";
+import { resolveAdminAuditLogRepository } from "../shared.js";
+
+/**
+ * [Issue #2442 / Phase C4] `true` for pure-SQL `CONTROL_DATA_BACKEND` values, where the
+ * AdminAuditLog table is not synthesized (mirrors `handlers/shared/audit-log.ts`'s
+ * `isPureSqlBackend`). An empty `ADMIN_AUDIT_LOG_TABLE_NAME` is legitimate there, not a
+ * misconfiguration — only dynamodb/mirror backends require the physical table name.
+ */
+function isPureSqlBackend(): boolean {
+  const backend = process.env.CONTROL_DATA_BACKEND;
+  return backend === "turso" || backend === "sql";
+}
 
 /**
  * Issue #1292: Tenant Admin 向け audit log read routes。
@@ -23,16 +35,18 @@ export function registerAuditLogRoutes(app: Hono, shared: EventSharedResources):
 
 async function handleAuditLogList(c: Context, shared: EventSharedResources): Promise<Response> {
   requireRole(c, [TENANT_ADMIN_ROLE]);
-  const auditTableName = process.env.ADMIN_AUDIT_LOG_TABLE_NAME ?? "";
-  if (auditTableName.length === 0) return auditLogUnconfigured(c);
+  if (!isPureSqlBackend() && shared.adminAuditLogTableName.length === 0) {
+    return auditLogUnconfigured(c);
+  }
   const parsedLimit = parseLimit(c.req.query("limit"));
   if (!parsedLimit) return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
   const parsedFilters = parseAuditFilters(c);
   if (!parsedFilters.ok) return parsedFilters.response;
   try {
     const tenantId = resolveTenantId(c);
+    const repository = await resolveAdminAuditLogRepository(shared);
     const result = await listTenantAuditEntries(
-      { ddb: shared.ddb, auditTableName },
+      { repository },
       {
         tenantId,
         ...(parsedLimit.limit ? { limit: parsedLimit.limit } : {}),
@@ -48,16 +62,15 @@ async function handleAuditLogList(c: Context, shared: EventSharedResources): Pro
 
 async function handleAuditLogExport(c: Context, shared: EventSharedResources): Promise<Response> {
   requireRole(c, [TENANT_ADMIN_ROLE]);
-  const auditTableName = process.env.ADMIN_AUDIT_LOG_TABLE_NAME ?? "";
-  if (auditTableName.length === 0) return auditLogUnconfigured(c);
+  if (!isPureSqlBackend() && shared.adminAuditLogTableName.length === 0) {
+    return auditLogUnconfigured(c);
+  }
   const parsedFilters = parseAuditFilters(c);
   if (!parsedFilters.ok) return parsedFilters.response;
   try {
     const tenantId = resolveTenantId(c);
-    const csv = await exportTenantAuditCsv(
-      { ddb: shared.ddb, auditTableName },
-      { tenantId, ...parsedFilters.filters },
-    );
+    const repository = await resolveAdminAuditLogRepository(shared);
+    const csv = await exportTenantAuditCsv({ repository }, { tenantId, ...parsedFilters.filters });
     return csvResponse(csv, tenantId);
   } catch (err) {
     return handleRouteError(c, "[events] exportTenantAuditCsv failed", {}, err);

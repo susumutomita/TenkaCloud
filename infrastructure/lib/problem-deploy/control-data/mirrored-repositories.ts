@@ -2,6 +2,9 @@ import type { CompetitorAccountItem } from "../handlers/competitor-accounts-hand
 import type { DisruptionAuditRow } from "../handlers/event-handler/disruption-types.js";
 import type { ProgressionGateConfig } from "../handlers/shared/progression-gate.js";
 import type {
+  AdminAuditLogPage,
+  AdminAuditLogRepository,
+  AdminAuditRow,
   BulkDeploymentCreateEntry,
   ClearProgressionGateOutcome,
   CompetitorAccountMutationOutcome,
@@ -1189,6 +1192,44 @@ export class MirroredDisruptionsRepository implements DisruptionsRepository {
     const outcome = await this.canonical.claimExecutionSlot(input);
     if (outcome.outcome === "claimed") await this.replica.claimExecutionSlot(input);
     return outcome;
+  }
+
+  async pruneExpired(nowEpochSeconds: number): Promise<number> {
+    await this.replica.pruneExpired(nowEpochSeconds);
+    return this.canonical.pruneExpired(nowEpochSeconds);
+  }
+}
+
+/**
+ * DynamoDB-primary/SQL-replica equivalent for the AdminAuditLog aggregate (Issue #2442 / Phase
+ * C4). Writes go to canonical then replica (best-effort ordering matches every other Mirrored
+ * class in this file); reads (`listPage` / `listAllByPartition`) pass through to canonical DDB —
+ * cursor formats and page boundaries are backend-specific, same rationale as every other Mirrored
+ * read in this file.
+ */
+export class MirroredAdminAuditLogRepository implements AdminAuditLogRepository {
+  constructor(
+    private readonly canonical: AdminAuditLogRepository,
+    private readonly replica: AdminAuditLogRepository,
+  ) {}
+
+  async appendAudit(row: AdminAuditRow): Promise<void> {
+    await this.canonical.appendAudit(row);
+    await this.replica.appendAudit(row);
+  }
+
+  listPage(
+    pk: string,
+    opts: { readonly limit: number; readonly cursor?: string },
+  ): Promise<AdminAuditLogPage> {
+    return this.canonical.listPage(pk, opts);
+  }
+
+  listAllByPartition(
+    pk: string,
+    opts: { readonly pageSize: number; readonly maxPages: number },
+  ): Promise<readonly AdminAuditRow[]> {
+    return this.canonical.listAllByPartition(pk, opts);
   }
 
   async pruneExpired(nowEpochSeconds: number): Promise<number> {

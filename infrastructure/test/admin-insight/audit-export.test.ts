@@ -3,10 +3,15 @@ import {
   exportAuditEntriesCsv,
   listAuditEntries,
 } from "../../lib/admin-insight/handlers/admin-insight-handler/audit";
+import { DynamoDbAdminAuditLogRepository } from "../../lib/problem-deploy/control-data/admin-audit-log-repository";
 
 /**
  * Issue #1292: listAuditEntries の filter 拡張 (from/to/action/principal) と
  * exportAuditEntriesCsv の CSV 形式を pin する。
+ *
+ * [Issue #2442 / Phase C4] `listAuditEntries` / `exportAuditEntriesCsv` now take a
+ * `{ repository }` dep. Tests wrap the same fake `send` mock in a real
+ * `DynamoDbAdminAuditLogRepository` so the assertions stay behavior-identical.
  */
 
 afterEach(() => vi.clearAllMocks());
@@ -33,8 +38,9 @@ describe("listAuditEntries filter (#1292)", () => {
         },
       ],
     });
+    const repository = new DynamoDbAdminAuditLogRepository({ send } as never, "T");
     const out = await listAuditEntries(
-      { ddb: { send } as never, auditTableName: "T" },
+      { repository },
       {
         scope: "tenant",
         tenantId: "t-1",
@@ -68,8 +74,9 @@ describe("listAuditEntries filter (#1292)", () => {
         },
       ],
     });
+    const repository = new DynamoDbAdminAuditLogRepository({ send } as never, "T");
     const byUsername = await listAuditEntries(
-      { ddb: { send } as never, auditTableName: "T" },
+      { repository },
       { scope: "tenant", tenantId: "t-1", principal: "alice@example.com" },
       "test",
     );
@@ -92,11 +99,8 @@ describe("exportAuditEntriesCsv (#1292)", () => {
         },
       ],
     });
-    const csv = await exportAuditEntriesCsv(
-      { ddb: { send } as never, auditTableName: "T" },
-      { scope: "system" },
-      "prod",
-    );
+    const repository = new DynamoDbAdminAuditLogRepository({ send } as never, "T");
+    const csv = await exportAuditEntriesCsv({ repository }, { scope: "system" }, "prod");
     const lines = csv.split("\n").filter((l) => l.length > 0);
     expect(lines[0]).toBe(
       "occurredAt,tenantId,actor,actorUsername,action,outcome,target,ipAddress,userAgent",

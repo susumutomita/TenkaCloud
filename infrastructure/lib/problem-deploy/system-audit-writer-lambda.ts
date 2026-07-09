@@ -1,8 +1,9 @@
 import * as path from "node:path";
-import { Duration } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { type IEventBus, Rule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
+import { PolicyStatement } from "aws-cdk-lib/aws-iam";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
@@ -13,8 +14,16 @@ import { SBT_ONBOARDING_DETAIL_TYPES } from "./handlers/system-audit-writer/sbt-
 export interface SystemAuditWriterLambdaProps {
   /** SBT ControlPlane が払い出す共通 EventBus。 */
   readonly eventBus: IEventBus;
-  /** ADR-020 Phase D の admin audit log table (= `PK=SYSTEM#<env>` で行を書く)。 */
-  readonly adminAuditLogTable: Table;
+  /**
+   * ADR-020 Phase D の admin audit log table (= `PK=SYSTEM#<env>` で行を書く)。
+   *
+   * [Issue #2442 / Phase C4] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
+   * `ADMIN_AUDIT_LOG_TABLE_NAME` は注入せず grant も付与しない — audit write は repository seam
+   * (`writeAuditEvent` → `resolveAdminAuditLogRepository`) が下記の Turso executor 配線経由で
+   * 処理する (本 Lambda 自身が「DB を開く Lambda」)。
+   */
+  readonly adminAuditLogTable?: Table;
   /** `SYSTEM#<env>` の env suffix (= writeAuditEvent が `DEPLOY_ENVIRONMENT` を読む)。 */
   readonly environmentName: string;
   /**
@@ -26,6 +35,14 @@ export interface SystemAuditWriterLambdaProps {
    * lockstep で env を配線する。default (未指定 / `dynamodb`) は env を足さず byte 互換。
    */
   readonly controlDataBackend?: string;
+  /**
+   * [Issue #2442 / Phase C4] Public remote libSQL URL。本 Lambda は `writeAuditEvent` を通じて
+   * AdminAuditLog repository seam を実際に使う「DB を開く Lambda」なので Turso executor 配線を
+   * 持つ (EventApi/CompetitorAccountsApi/ExternalIdAudit と同型)。
+   */
+  readonly tursoDatabaseUrl?: string;
+  /** SSM SecureString parameter name containing the libSQL auth token. */
+  readonly tursoAuthTokenParameterName?: string;
   /**
    * Issue #2291 (ADR-049 §9): Lambda deploy 経路 (`deployViaLambda=true`) が有効なとき true。
    * true のときだけ `deployFailureRule` (= 共通 bus 上の `TenkaCloud Deploy Failed` を拾う Rule)
@@ -73,17 +90,40 @@ export class SystemAuditWriterLambda extends Construct {
       timeout: Duration.seconds(10),
       memorySize: 256,
       environment: {
-        ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable.tableName,
+        // [Issue #2442] 純 SQL backend では table 自体が無いので env も足さない。
+        ...(props.adminAuditLogTable
+          ? { ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable.tableName }
+          : {}),
         DEPLOY_ENVIRONMENT: props.environmentName,
         // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
         ...auditLogEnabledEnv(props.auditLogEnabled),
         // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
         ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
+        ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
+        ...(props.tursoAuthTokenParameterName
+          ? { TURSO_AUTH_TOKEN_PARAMETER_NAME: props.tursoAuthTokenParameterName }
+          : {}),
         NODE_OPTIONS: "--enable-source-maps",
       },
     });
 
-    props.adminAuditLogTable.grantWriteData(this.fn);
+    // [Issue #2442] 純 SQL backend では table 自体が無いので grant も付与しない。
+    props.adminAuditLogTable?.grantWriteData(this.fn);
+
+    // [Issue #2442]: turso/sql backend が Turso auth token を読むための SSM SecureString
+    // read 権限。 未配線 (= dynamodb default) なら付与しない (`ExternalIdAuditLambda` と同型)。
+    if (props.tursoAuthTokenParameterName) {
+      this.fn.addToRolePolicy(
+        new PolicyStatement({
+          actions: ["ssm:GetParameter"],
+          resources: [
+            `arn:${Stack.of(this).partition}:ssm:${Stack.of(this).region}:${
+              Stack.of(this).account
+            }:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
+          ],
+        }),
+      );
+    }
 
     // SBT `DetailType` enum (= event-manager.d.ts) のうち audit に意味があるものを listen。
     // user / api-key 系の SBT events は別 issue で扱う (本 issue は tenant CRUD に絞る)。
