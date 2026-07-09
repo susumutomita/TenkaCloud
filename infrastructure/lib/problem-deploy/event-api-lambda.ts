@@ -55,8 +55,14 @@ export interface EventApiLambdaProps {
   readonly problemsCatalog: Readonly<Record<string, string>>;
   /**
    * Issue #888: Red Team Disruption Injection の audit + idempotency 用 DDB table。
+   *
+   * [Issue #2442 / Phase C3] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
+   * `DISRUPTIONS_TABLE_NAME` は注入せず、grant も付与しない — disruption fire / audit /
+   * catalog は repository seam (`resolveDisruptionsRepository`) が本 Lambda に既に配線済みの
+   * Turso executor 経由で処理する ({@link eventsTable} と同じ条件)。
    */
-  readonly disruptionsTable: Table;
+  readonly disruptionsTable?: Table;
   /**
    * Issue #2410 Slice 2: キャパ監視 (`GET /admin/capacity`) が DescribeTable する
    * event-hot テーブルの 1 つ。他 4 テーブル (Events / Teams / Deployments / Disruptions)
@@ -127,6 +133,28 @@ export interface EventApiLambdaProps {
   readonly tursoAuthTokenParameterName?: string;
 }
 
+/**
+ * [Issue #2410 Slice 2 / #2440 / #2442] Grants `dynamodb:DescribeTable` on whichever event-hot
+ * tables actually exist. Extracted out of the constructor to keep its cognitive-complexity
+ * budget: under a pure SQL backend the array can be fully empty (Events/Teams/Deployments/
+ * ProblemEndpoints/Disruptions all synth-skipped), and a `PolicyStatement` with zero
+ * `resources` fails CFn's "at least one resource" validation — so the statement itself is
+ * conditional, not just its input tables.
+ */
+function grantEventHotTablesDescribe(
+  fn: NodejsFunction,
+  tables: readonly (Table | undefined)[],
+): void {
+  const eventHotTables = tables.filter((t): t is Table => t !== undefined);
+  if (eventHotTables.length === 0) return;
+  fn.addToRolePolicy(
+    new PolicyStatement({
+      actions: ["dynamodb:DescribeTable"],
+      resources: eventHotTables.map((t) => t.tableArn),
+    }),
+  );
+}
+
 export function eventApiBundlingDefine(props: {
   readonly problemsCatalog: Readonly<Record<string, string>>;
   readonly problemsDisruptions: Readonly<Record<string, readonly unknown[]>>;
@@ -186,7 +214,10 @@ export class EventApiLambda extends Construct {
         // #686: legacy "unknown-tenant" fallback は削除 (= JWT claim 欠落時は handler が 401)
         ...(props.defaultTenantId ? { DEFAULT_TENANT_ID: props.defaultTenantId } : {}),
         // Issue #888: disruption fire / catalog / audit Lambda 経路で参照
-        DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName,
+        // Issue #2442: 純 SQL backend では table 自体が無いので env も足さない。
+        ...(props.disruptionsTable
+          ? { DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName }
+          : {}),
         // Issue #2410 Slice 2: キャパ監視の event-hot 5 テーブル目 + runbook document 名。
         // Issue #2442: 純 SQL backend では table 自体が無いので env も足さない。
         ...(props.problemEndpointsTable
@@ -232,7 +263,8 @@ export class EventApiLambda extends Construct {
     props.eventBus.grantPutEventsTo(this.fn);
     // Issue #888: disruption audit + idempotency 用に RW、 EventBus PutEvents は既存付与で十分
     // (= disruption fire でも同 bus に publish するため)。
-    props.disruptionsTable.grantReadWriteData(this.fn);
+    // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。
+    props.disruptionsTable?.grantReadWriteData(this.fn);
     // Issue #950 (ADR-020 Phase D): admin 操作 audit log は write が中心 (mutate 系 handler の append)。
     // Issue #1313: 追加で Tenant Admin Console 向け read endpoint
     //   GET /admin/audit-log (`registerAuditLogRoutes`) が同 Lambda 内に register 済 (Issue #1292)
@@ -260,21 +292,13 @@ export class EventApiLambda extends Construct {
     // Issue #2410 Slice 2: キャパ監視 (`GET /admin/capacity`) は event-hot 5 テーブルの
     // DescribeTable (現行プロビジョン読み取り) + CloudWatch GetMetricData (消費/throttle) のみ。
     // GetMetricData は resource-level permission 非対応のため resources は "*" (AWS 仕様)。
-    // Issue #2440 / #2442: 純 SQL backend では Events/Teams/ProblemEndpoints が無いので
-    // DescribeTable IAM からも除外する (= 存在しない table ARN を resources に含めない)。
-    const eventHotTables = [
+    grantEventHotTablesDescribe(this.fn, [
       props.eventsTable,
       props.teamsTable,
       props.deploymentsTable,
       props.problemEndpointsTable,
       props.disruptionsTable,
-    ].filter((t): t is Table => t !== undefined);
-    this.fn.addToRolePolicy(
-      new PolicyStatement({
-        actions: ["dynamodb:DescribeTable"],
-        resources: eventHotTables.map((t) => t.tableArn),
-      }),
-    );
+    ]);
     this.fn.addToRolePolicy(
       new PolicyStatement({
         actions: ["cloudwatch:GetMetricData"],

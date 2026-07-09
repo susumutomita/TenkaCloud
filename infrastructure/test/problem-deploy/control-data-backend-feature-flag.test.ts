@@ -29,8 +29,9 @@ function tableLogicalIds(tpl: Template): string[] {
  * 側で検証する (本 file の `synthWithControlDataBackendTurso` は participantPortal 無効)。
  */
 
-// これらの construct id 断片を含む AWS::Lambda::Function が CONTROL_DATA_BACKEND を配線される 6 Lambda。
+// これらの construct id 断片を含む AWS::Lambda::Function が CONTROL_DATA_BACKEND を配線される 7 Lambda。
 // [Issue #2442 / Phase C2] ExternalIdAudit を追加 (CompetitorAccounts repository seam の日次監査)。
+// [Issue #2442 / Phase C3] DisruptionExecutor を追加 (Disruptions EXEC# claim repository seam)。
 const BACKEND_LAMBDA_IDS = [
   "DeployApi",
   "EventApi",
@@ -38,6 +39,7 @@ const BACKEND_LAMBDA_IDS = [
   "SystemAuditWriter",
   "GenericScoring",
   "ExternalIdAudit",
+  "DisruptionExecutor",
 ] as const;
 
 function envOf(tpl: Template, idFragment: string): Record<string, unknown> {
@@ -115,6 +117,12 @@ describe("control-data backend feature flag env wiring (#2290)", () => {
       expect(envOf(tpl, "ExternalIdAudit").TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe(
         "/tenkacloud/development/turso-token",
       );
+      // [Issue #2442 / Phase C3] DisruptionExecutor "opens the DB" for the Disruptions EXEC#
+      // claim repository seam, so it carries the same Turso executor wiring.
+      expect(envOf(tpl, "DisruptionExecutor").TURSO_DATABASE_URL).toBe("libsql://example.turso.io");
+      expect(envOf(tpl, "DisruptionExecutor").TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe(
+        "/tenkacloud/development/turso-token",
+      );
       // The secret reference and permission belong only to the Lambdas that open the DB.
       expect(envOf(tpl, "DeployApi").TURSO_AUTH_TOKEN_PARAMETER_NAME).toBeUndefined();
       expect(envOf(tpl, "SystemAuditWriter").TURSO_AUTH_TOKEN_PARAMETER_NAME).toBeUndefined();
@@ -180,9 +188,9 @@ describe("DeployCreate SFN SQL status-writer branch (#2441 Phase B PR-5)", () =>
   );
 });
 
-describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoints/CompetitorAccounts tables (#2440 A5 / #2441 Phase B PR-6 / #2442 Phase C1+C2)", () => {
+describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoints/CompetitorAccounts/Disruptions tables (#2440 A5 / #2441 Phase B PR-6 / #2442 Phase C1+C2+C3)", () => {
   it(
-    "should NOT create Events/Teams/Deployments/ProblemEndpoints/CompetitorAccounts AWS::DynamoDB::Table when controlDataBackend='turso' (pure SQL)",
+    "should NOT create Events/Teams/Deployments/ProblemEndpoints/CompetitorAccounts/Disruptions AWS::DynamoDB::Table when controlDataBackend='turso' (pure SQL)",
     () => {
       const tpl = synthWithControlDataBackendTurso();
       const ids = tableLogicalIds(tpl);
@@ -195,11 +203,13 @@ describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoi
       // pure SQL では synth されない。
       expect(ids.some((id) => id.startsWith("ProblemEndpoints"))).toBe(false);
       // [Issue #2442 Phase C2] CompetitorAccounts (SAML_CONFIG 行が同 partition に同居) も
-      // pure SQL では synth されない。Disruptions / AdminAuditLog は依然 out of scope で
-      // 存在する (2 tables remain, byte-compat minus Events/Teams/Deployments/
-      // ProblemEndpoints/CompetitorAccounts)。
+      // pure SQL では synth されない。
       expect(ids.some((id) => id.startsWith("CompetitorAccounts"))).toBe(false);
-      expect(ids.some((id) => id.startsWith("Disruptions"))).toBe(true);
+      // [Issue #2442 Phase C3] Disruptions (AUDIT#/RECUR#/REQUEST#/EXEC# の 4 row shape が同居) も
+      // pure SQL では synth されない。AdminAuditLog は依然 out of scope で存在する (1 table
+      // remains, byte-compat minus Events/Teams/Deployments/ProblemEndpoints/
+      // CompetitorAccounts/Disruptions)。
+      expect(ids.some((id) => id.startsWith("Disruptions"))).toBe(false);
       expect(ids.some((id) => id.startsWith("AdminAuditLog"))).toBe(true);
       // No CfnOutput referencing the (nonexistent) Events/Teams/Deployments/ProblemEndpoints/
       // CompetitorAccounts tables.
@@ -213,7 +223,7 @@ describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoi
   );
 
   it(
-    "should default (dynamodb) synth Events/Teams/Deployments/ProblemEndpoints/CompetitorAccounts tables and their CfnOutputs (byte-compat)",
+    "should default (dynamodb) synth Events/Teams/Deployments/ProblemEndpoints/CompetitorAccounts/Disruptions tables and their CfnOutputs (byte-compat)",
     () => {
       const tpl = synthDefault();
       const ids = tableLogicalIds(tpl);
@@ -222,6 +232,7 @@ describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoi
       expect(ids.some((id) => id.startsWith("Deployments"))).toBe(true);
       expect(ids.some((id) => id.startsWith("ProblemEndpoints"))).toBe(true);
       expect(ids.some((id) => id.startsWith("CompetitorAccounts"))).toBe(true);
+      expect(ids.some((id) => id.startsWith("Disruptions"))).toBe(true);
       tpl.hasOutput("EventsTableName", {});
       tpl.hasOutput("TeamsTableName", {});
       tpl.hasOutput("DeploymentsTableName", {});
@@ -232,7 +243,7 @@ describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoi
   );
 
   it(
-    "should still create Events/Teams/Deployments/ProblemEndpoints/CompetitorAccounts tables + inject CONTROL_DATA_BACKEND='turso-mirror' when the migration-bridge backend is selected",
+    "should still create Events/Teams/Deployments/ProblemEndpoints/CompetitorAccounts/Disruptions tables + inject CONTROL_DATA_BACKEND='turso-mirror' when the migration-bridge backend is selected",
     () => {
       const tpl = synthWithControlDataBackendTursoMirror();
       const ids = tableLogicalIds(tpl);
@@ -241,7 +252,9 @@ describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoi
       expect(ids.some((id) => id.startsWith("Deployments"))).toBe(true);
       expect(ids.some((id) => id.startsWith("ProblemEndpoints"))).toBe(true);
       expect(ids.some((id) => id.startsWith("CompetitorAccounts"))).toBe(true);
+      expect(ids.some((id) => id.startsWith("Disruptions"))).toBe(true);
       expect(envOf(tpl, "EventApi").CONTROL_DATA_BACKEND).toBe("turso-mirror");
+      expect(envOf(tpl, "DisruptionExecutor").CONTROL_DATA_BACKEND).toBe("turso-mirror");
       expect(envOf(tpl, "GenericScoring").CONTROL_DATA_BACKEND).toBe("turso-mirror");
       expect(envOf(tpl, "CompetitorAccountsApi").CONTROL_DATA_BACKEND).toBe("turso-mirror");
       expect(envOf(tpl, "ExternalIdAudit").CONTROL_DATA_BACKEND).toBe("turso-mirror");
@@ -310,6 +323,28 @@ describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoi
       expect(envOf(synthDefault(), "EventApi").COMPETITOR_ACCOUNTS_TABLE_NAME).toBeDefined();
       expect(
         envOf(synthWithControlDataBackendTursoMirror(), "EventApi").COMPETITOR_ACCOUNTS_TABLE_NAME,
+      ).toBeDefined();
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should omit DISRUPTIONS_TABLE_NAME entirely from EventApi/DisruptionExecutor/GenericScoring env under turso (#2442 Phase C3, same conditional-spread pattern)",
+    () => {
+      const tpl = synthWithControlDataBackendTurso();
+      for (const id of ["EventApi", "DisruptionExecutor", "GenericScoring"] as const) {
+        expect(envOf(tpl, id).DISRUPTIONS_TABLE_NAME, id).toBeUndefined();
+      }
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should still inject DISRUPTIONS_TABLE_NAME for default and turso-mirror backends (byte-compat)",
+    () => {
+      expect(envOf(synthDefault(), "EventApi").DISRUPTIONS_TABLE_NAME).toBeDefined();
+      expect(
+        envOf(synthWithControlDataBackendTursoMirror(), "EventApi").DISRUPTIONS_TABLE_NAME,
       ).toBeDefined();
     },
     SYNTH_TIMEOUT_MS,

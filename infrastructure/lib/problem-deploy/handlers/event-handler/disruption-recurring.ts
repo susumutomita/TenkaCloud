@@ -16,10 +16,10 @@
  */
 
 import { DeleteScheduleCommand, ResourceNotFoundException } from "@aws-sdk/client-scheduler";
-import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import type { DisruptionRecurringRecord } from "../../control-data/types.js";
 import { recurringScheduleNameOf } from "../disruption-executor-handler/schedule-revert.js";
 import type { DisruptionFireInput } from "./disruption-types.js";
-import type { EventSharedResources } from "./shared.js";
+import { type EventSharedResources, resolveDisruptionsRepository } from "./shared.js";
 
 /** ミリ秒 / 分。 `intervalMinutes` を epoch ms 換算するのに使う。 */
 const MS_PER_MINUTE = 60_000;
@@ -61,52 +61,46 @@ export async function writeRecurringRegistry(
   const endsAt = new Date(
     input.nowMs + input.recurrence.intervalMinutes * input.recurrence.maxFires * MS_PER_MINUTE,
   ).toISOString();
-  await shared.ddb.send(
-    new PutCommand({
-      TableName: shared.disruptionsTableName,
-      Item: {
-        PK: `EVENT#${input.eventId}`,
-        SK: `RECUR#${input.requestId}`,
-        GSI1PK: `TENANT#${input.tenantId}`,
-        GSI1SK: `RECUR#${firedAt}#${input.requestId}`,
-        requestId: input.requestId,
-        tenantId: input.tenantId,
-        eventId: input.eventId,
-        problemId: input.problemId,
-        disruptionId: input.disruptionId,
-        firedBy: input.firedBy,
-        firedAt,
-        scope: input.scope,
-        affectedTeamIds,
-        intervalMinutes: input.recurrence.intervalMinutes,
-        maxFires: input.recurrence.maxFires,
-        endsAt,
-        expiresAt,
-      },
-      ConditionExpression: "attribute_not_exists(SK)",
-    }),
-  );
+  const repository = await resolveDisruptionsRepository(shared);
+  await repository.putRecurringRegistry({
+    requestId: input.requestId,
+    tenantId: input.tenantId,
+    eventId: input.eventId,
+    problemId: input.problemId,
+    disruptionId: input.disruptionId,
+    firedBy: input.firedBy,
+    firedAt,
+    scope: input.scope,
+    affectedTeamIds,
+    intervalMinutes: input.recurrence.intervalMinutes,
+    maxFires: input.recurrence.maxFires,
+    endsAt,
+    expiresAt,
+  });
 }
 
-function toActiveRow(item: Record<string, unknown>): ActiveRecurringRow {
+function toActiveRow(record: DisruptionRecurringRecord): ActiveRecurringRow {
   return {
-    requestId: String(item.requestId ?? ""),
-    problemId: String(item.problemId ?? ""),
-    disruptionId: String(item.disruptionId ?? ""),
-    firedBy: String(item.firedBy ?? ""),
-    firedAt: String(item.firedAt ?? ""),
-    scope: String(item.scope ?? ""),
-    affectedTeamIds: Array.isArray(item.affectedTeamIds) ? (item.affectedTeamIds as string[]) : [],
-    intervalMinutes: Number(item.intervalMinutes ?? 0),
-    maxFires: Number(item.maxFires ?? 0),
-    endsAt: String(item.endsAt ?? ""),
+    requestId: record.requestId,
+    problemId: record.problemId,
+    disruptionId: record.disruptionId,
+    firedBy: record.firedBy,
+    firedAt: record.firedAt,
+    scope: record.scope,
+    affectedTeamIds: record.affectedTeamIds,
+    intervalMinutes: record.intervalMinutes,
+    maxFires: record.maxFires,
+    endsAt: record.endsAt,
   };
 }
 
 /**
  * event の RECUR# registry 行のうち、 まだ動いている (未 cancel + endsAt > now) ものを返す。
- * route 側 `requireEventOwnership` に加え、 service でも `tenantId` で FilterExpression scope する
+ * route 側 `requireEventOwnership` に加え、 service でも `tenantId` で scope する
  * (= 多層防御。 INVARIANT_TENANT_ISOLATION / Issue #997)。
+ *
+ * [Issue #2442 / Phase C3] DDB アクセスは repository seam に移設。「未 cancel + endsAt 未到達」の
+ * filter は業務ロジックとしてここに残す。
  */
 export async function listActiveRecurring(
   shared: EventSharedResources,
@@ -114,18 +108,10 @@ export async function listActiveRecurring(
   tenantId: string,
   nowMs: number,
 ): Promise<ListRecurringResponse> {
-  const out = await shared.ddb.send(
-    new QueryCommand({
-      TableName: shared.disruptionsTableName,
-      KeyConditionExpression: "PK = :pk AND begins_with(SK, :p)",
-      FilterExpression: "tenantId = :t",
-      ExpressionAttributeValues: { ":pk": `EVENT#${eventId}`, ":p": "RECUR#", ":t": tenantId },
-    }),
-  );
+  const repository = await resolveDisruptionsRepository(shared);
+  const rows = await repository.listRecurringByEvent(eventId, tenantId);
   const now = new Date(nowMs).toISOString();
-  const items = (out.Items ?? [])
-    .filter((i) => !i.cancelledAt && String(i.endsAt ?? "") > now)
-    .map(toActiveRow);
+  const items = rows.filter((r) => !r.cancelledAt && r.endsAt > now).map(toActiveRow);
   return { items };
 }
 
@@ -142,7 +128,10 @@ async function deleteScheduleIfExists(shared: EventSharedResources, name: string
 /**
  * 1 件の recurring を早期解除する: per-team の rate schedule を削除し、 registry に cancelledAt を刻む。
  * `tenantId` 不一致 (= 別テナントの requestId を当ててきた) は不在と同じく `not_found` を返し、 存在を
- * 漏らさない。 Update は `ConditionExpression: tenantId = :t` で atomic に scope する (多層防御 / Issue #997)。
+ * 漏らさない。 Update は `tenantId` 条件で atomic に scope する (多層防御 / Issue #997)。
+ *
+ * [Issue #2442 / Phase C3] DDB アクセス (Get + conditional Update) は repository seam に移設。
+ * ownership 事前確認 (Get → tenantId 比較) + schedule 削除ループは業務ロジックとしてここに残す。
  */
 export async function cancelRecurring(
   shared: EventSharedResources,
@@ -151,24 +140,17 @@ export async function cancelRecurring(
   requestId: string,
   nowMs: number,
 ): Promise<CancelRecurringOutcome> {
-  const key = { PK: `EVENT#${eventId}`, SK: `RECUR#${requestId}` };
-  const got = await shared.ddb.send(
-    new GetCommand({ TableName: shared.disruptionsTableName, Key: key }),
-  );
-  const row = got.Item;
+  const repository = await resolveDisruptionsRepository(shared);
+  const row = await repository.getRecurringRegistry(eventId, requestId);
   if (!row || row.tenantId !== tenantId) return "not_found";
-  const teamIds = Array.isArray(row.affectedTeamIds) ? (row.affectedTeamIds as string[]) : [];
-  for (const teamId of teamIds) {
+  for (const teamId of row.affectedTeamIds) {
     await deleteScheduleIfExists(shared, recurringScheduleNameOf(requestId, teamId));
   }
-  await shared.ddb.send(
-    new UpdateCommand({
-      TableName: shared.disruptionsTableName,
-      Key: key,
-      UpdateExpression: "SET cancelledAt = :c",
-      ConditionExpression: "tenantId = :t",
-      ExpressionAttributeValues: { ":c": new Date(nowMs).toISOString(), ":t": tenantId },
-    }),
+  const outcome = await repository.cancelRecurringRegistry(
+    eventId,
+    requestId,
+    tenantId,
+    new Date(nowMs).toISOString(),
   );
-  return "cancelled";
+  return outcome.outcome === "not_found" ? "not_found" : "cancelled";
 }

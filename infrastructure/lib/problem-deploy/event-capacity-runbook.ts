@@ -120,20 +120,29 @@ export class EventCapacityRunbook extends Construct {
 
     // 最小権限: event-hot 5 テーブルへの DescribeTable (差分検出) + UpdateTable (キャパ変更) のみ。
     // UpdateTable の GSI キャパ変更も IAM resource は table ARN (index ARN は不要)。
+    //
+    // [Issue #2442 / Phase C3] `eventHotTables` が空になり得る (= 全 5 テーブルが純 SQL backend で
+    // synth されない構成) — 「PolicyStatement は最低 1 つ resource を要求する」CFn 制約に抵触するため、
+    // 空のときは inline policy 自体を付けない (= automation role はまだ何も出来ない no-op stub。
+    // 全テーブルが無い pure SQL 構成では runbook は元々対象を持たない)。
     const automationRole = new Role(this, "AutomationRole", {
       assumedBy: new ServicePrincipal("ssm.amazonaws.com"),
       description:
         "Least-privilege role for the event capacity runbook: DescribeTable/UpdateTable on event-hot tables only",
-      inlinePolicies: {
-        EventCapacity: new PolicyDocument({
-          statements: [
-            new PolicyStatement({
-              actions: ["dynamodb:DescribeTable", "dynamodb:UpdateTable"],
-              resources: tableArns,
-            }),
-          ],
-        }),
-      },
+      ...(tableArns.length > 0
+        ? {
+            inlinePolicies: {
+              EventCapacity: new PolicyDocument({
+                statements: [
+                  new PolicyStatement({
+                    actions: ["dynamodb:DescribeTable", "dynamodb:UpdateTable"],
+                    resources: tableArns,
+                  }),
+                ],
+              }),
+            },
+          }
+        : {}),
     });
 
     // Document 名は stack 名から決定的に導出する (= 運用 doc / CLI にそのまま書ける)。

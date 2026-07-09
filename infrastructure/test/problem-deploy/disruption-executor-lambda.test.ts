@@ -186,4 +186,59 @@ describe("DisruptionExecutorLambda (ADR-031 #1419)", () => {
     },
     SYNTH_TIMEOUT_MS,
   );
+
+  it(
+    "[Issue #2442 / Phase C3] should synth without DISRUPTIONS_TABLE_NAME env or PutItem IAM when disruptionsTable is omitted (pure SQL backend)",
+    () => {
+      const app = new App();
+      const stack = new Stack(app, "TestStackPureSql");
+      const deployments = new Table(stack, "Deployments", {
+        partitionKey: { name: "PK", type: AttributeType.STRING },
+      });
+      new DisruptionExecutorLambda(stack, "Executor", {
+        environmentName: "development",
+        eventBus: new EventBus(stack, "Bus"),
+        deploymentsTable: deployments,
+        // disruptionsTable omitted — mirrors ProblemDeployBackendStack's `pureSql ? undefined : …`.
+        problemsDisruptions: { "microservice-migration-battle": [{ id: "x" }] },
+        controlDataBackend: "turso",
+        tursoDatabaseUrl: "libsql://example.turso.io",
+        tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
+      });
+      const tpl = Template.fromStack(stack);
+      const fn = tpl.findResources("AWS::Lambda::Function");
+      const entry = Object.entries(fn).find(([name]) => name.includes("Function"));
+      const env = (
+        entry?.[1] as { Properties?: { Environment?: { Variables?: Record<string, unknown> } } }
+      )?.Properties?.Environment?.Variables;
+      expect(env?.DISRUPTIONS_TABLE_NAME).toBeUndefined();
+      expect(env?.CONTROL_DATA_BACKEND).toBe("turso");
+      expect(env?.TURSO_DATABASE_URL).toBe("libsql://example.turso.io");
+      expect(env?.TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe("/tenkacloud/development/turso-token");
+      const actions = inlineActions(tpl);
+      expect(actions).not.toContain("dynamodb:PutItem");
+      // Turso auth token SSM read is still granted (the seam opens the DB via SQL executor).
+      expect(JSON.stringify(tpl.toJSON())).toContain(
+        ":parameter/tenkacloud/development/turso-token",
+      );
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "[Issue #2442 / Phase C3] should NOT grant a Turso SSM parameter read when tursoAuthTokenParameterName is unset (dynamodb default, byte-compat)",
+    () => {
+      const tpl = synth();
+      const env = (
+        Object.values(tpl.findResources("AWS::Lambda::Function"))[0] as {
+          Properties?: { Environment?: { Variables?: Record<string, unknown> } };
+        }
+      )?.Properties?.Environment?.Variables;
+      expect(env?.TURSO_DATABASE_URL).toBeUndefined();
+      expect(env?.TURSO_AUTH_TOKEN_PARAMETER_NAME).toBeUndefined();
+      expect(env?.CONTROL_DATA_BACKEND).toBeUndefined();
+      expect(JSON.stringify(tpl.toJSON())).not.toContain("turso-token");
+    },
+    SYNTH_TIMEOUT_MS,
+  );
 });

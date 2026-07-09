@@ -3,12 +3,14 @@ import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { type Client, createClient } from "@libsql/client/http";
 import { createCompetitorAccountsRepository } from "./competitor-accounts-repository.js";
 import { createDeploymentsRepository } from "./deployments-repository.js";
+import { createDisruptionsRepository } from "./disruptions-repository.js";
 import { createEventsRepository } from "./events-repository.js";
 import { createFeatureFlagsRepository } from "./feature-flags-repository.js";
 import { initializeControlDataSchema, LibsqlExecutor } from "./libsql-executor.js";
 import {
   MirroredCompetitorAccountsRepository,
   MirroredDeploymentsRepository,
+  MirroredDisruptionsRepository,
   MirroredEventsRepository,
   MirroredFeatureFlagsRepository,
   MirroredNotificationsRepository,
@@ -24,6 +26,7 @@ import type {
   CompetitorAccountsRepository,
   ControlDataBackend,
   DeploymentsRepository,
+  DisruptionsRepository,
   EventsRepository,
   FeatureFlagsRepository,
   NotificationsRepository,
@@ -112,6 +115,16 @@ export interface ControlDataRuntime {
     readonly ddb?: DynamoDBDocumentClient;
     readonly competitorAccountsTableName?: string;
   }) => Promise<SamlConfigRepository>;
+  /**
+   * [Issue #2442 / Phase C3] Cold-start resolver for the Disruptions seam. Participates in all
+   * five `CONTROL_DATA_BACKEND` values like ProblemEndpoints/CompetitorAccounts: `dynamodb`
+   * returns DDB, `turso` / `sql` return pure SQL, and mirror modes write through DDB then SQL
+   * while serving reads from canonical DDB.
+   */
+  readonly resolveDisruptionsRepository: (input: {
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly disruptionsTableName?: string;
+  }) => Promise<DisruptionsRepository>;
 }
 
 export interface RuntimeEnvironment {
@@ -162,7 +175,8 @@ function requireDdbAndTableName(
     | "teamsTableName"
     | "deploymentsTableName"
     | "endpointsTableName"
-    | "competitorAccountsTableName",
+    | "competitorAccountsTableName"
+    | "disruptionsTableName",
   backendKind: "dynamodb" | "mirror",
 ): { readonly ddb: DynamoDBDocumentClient; readonly tableName: string } {
   if (!ddb || !tableName) {
@@ -469,6 +483,39 @@ export function createControlDataRuntime(deps: RuntimeDependencies): ControlData
     );
   }
 
+  /** [Issue #2442 / Phase C3] Resolver for the Disruptions seam (mirrors resolveCompetitorAccountsRepository). */
+  async function resolveDisruptionsRepository(input: {
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly disruptionsTableName?: string;
+  }): Promise<DisruptionsRepository> {
+    const backend = selectBackend(deps.env);
+    if (backend.kind === "pure") {
+      const sql = await acquireSqlExecutor();
+      return createDisruptionsRepository(backend.dialect, { sql });
+    }
+
+    const requiredInput = requireDdbAndTableName(
+      input.ddb,
+      input.disruptionsTableName,
+      "disruptionsTableName",
+      backend.kind,
+    );
+    if (backend.kind === "dynamodb") {
+      return createDisruptionsRepository("dynamodb", {
+        ddb: requiredInput.ddb,
+        disruptionsTableName: requiredInput.tableName,
+      });
+    }
+    const sql = await acquireSqlExecutor();
+    return new MirroredDisruptionsRepository(
+      createDisruptionsRepository("dynamodb", {
+        ddb: requiredInput.ddb,
+        disruptionsTableName: requiredInput.tableName,
+      }),
+      createDisruptionsRepository(backend.dialect, { sql }),
+    );
+  }
+
   return {
     needsManualPrune: () => selectBackend(deps.env).kind === "pure",
     resolveRepositories: async (input) => {
@@ -488,6 +535,7 @@ export function createControlDataRuntime(deps: RuntimeDependencies): ControlData
     resolveProblemEndpointsRepository,
     resolveCompetitorAccountsRepository,
     resolveSamlConfigRepository,
+    resolveDisruptionsRepository,
   };
 }
 

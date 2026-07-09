@@ -296,12 +296,17 @@ async function pruneExpiredControlData(nowIso: string): Promise<void> {
     controlDataRuntime.resolveEventsRepository({}),
     controlDataRuntime.resolveTeamsRepository({}),
     controlDataRuntime.resolveNotificationsRepository({}),
+    // [Issue #2442 / Phase C3] Disruptions joins the manual-prune tick (audit / fire-claim /
+    // recurring / exec-claim rows all carry `expiresAt` — same TTL-equivalent sweep as
+    // Events/Teams/Notifications).
+    controlDataRuntime.resolveDisruptionsRepository({}),
   ])
-    .then(([events, teams, notifications]) =>
+    .then(([events, teams, notifications, disruptions]) =>
       Promise.all([
         events.pruneExpired(nowEpochSeconds),
         teams.pruneExpired(nowEpochSeconds),
         notifications.pruneExpired(nowEpochSeconds),
+        disruptions.pruneExpired(nowEpochSeconds),
       ]),
     )
     .catch((err: unknown) => {
