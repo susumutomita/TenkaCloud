@@ -10,6 +10,7 @@ import {
   TransactWriteCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { ADMIN_AUDIT_LOG_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-admin-audit-log-repository";
 import { COMPETITOR_ACCOUNTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-competitor-accounts-repository";
 import { DEPLOYMENTS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-deployments-repository";
 import { DISRUPTIONS_SCHEMA_SQL } from "../../../lib/problem-deploy/control-data/sql-disruptions-repository";
@@ -469,6 +470,16 @@ export function makeFakeDdb(options: { readonly pageSize?: number } = {}): Dynam
         Items: [...table.values()].filter((it) => it.PK === pk && String(it.SK) >= since),
       };
     }
+    if (!kce.includes("SK")) {
+      // [Issue #2442 / Phase C4] Base-table PK-only query (AdminAuditLog `listPage` /
+      // `listAllByPartition`) — no SK condition at all, every row under the partition,
+      // paginated by ScanIndexForward/Limit/ExclusiveStartKey like the begins_with branch.
+      return paginateBySk(
+        [...table.values()].filter((it) => it.PK === pk),
+        cmd,
+        pk,
+      );
+    }
     // [#2441] Base-table exact read: PK = :pk AND SK = :sk (cast-event META Query).
     const sk = values[":sk"];
     return { Items: [...table.values()].filter((it) => it.PK === pk && it.SK === sk) };
@@ -496,8 +507,15 @@ export function makeFakeDdb(options: { readonly pageSize?: number } = {}): Dynam
       // never exercised multi-page Scan drain.
       const zero = Number(values[":zero"]);
       const now = Number(values[":now"]);
+      // [Issue #2442 / Phase C4] AdminAuditLog's native TTL attribute is `ttl` (not
+      // `expiresAt`, per `admin-audit-log-table.ts`'s `timeToLiveAttribute`), aliased as
+      // `#ttl` in its FilterExpression to avoid the reserved-word risk. Resolve via
+      // ExpressionAttributeNames when present, falling back to the `expiresAt` convention
+      // every other aggregate uses.
+      const names = cmd.input.ExpressionAttributeNames as Record<string, string> | undefined;
+      const attr = names?.["#ttl"] ?? "expiresAt";
       const items = [...tableFor(cmd.input.TableName).values()].filter((it) => {
-        const exp = Number(it.expiresAt);
+        const exp = Number(it[attr]);
         return exp > zero && exp <= now;
       });
       return { Items: items };
@@ -772,6 +790,7 @@ export function makeSqliteExecutor(): SqlExecutor {
   db.exec(COMPETITOR_ACCOUNTS_SCHEMA_SQL);
   db.exec(SAML_CONFIG_SCHEMA_SQL);
   db.exec(DISRUPTIONS_SCHEMA_SQL);
+  db.exec(ADMIN_AUDIT_LOG_SCHEMA_SQL);
   return {
     run: (sql, params = []) => {
       const result = db.prepare(sql).run(...params);

@@ -1,6 +1,8 @@
 import { DynamoDBClient, type DynamoDBClient as RawDynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
+import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import type { AdminAuditRow } from "../../control-data/types.js";
 
 /**
  * Issue #950 (ADR-020 Phase D): admin 操作の append-only 監査ログを書き込む shared helper。
@@ -106,9 +108,22 @@ export interface AuditClient {
   send: typeof documentClient.send;
 }
 
+/**
+ * [Issue #2442 / Phase C4] `true` for pure-SQL `CONTROL_DATA_BACKEND` values, where the
+ * AdminAuditLog DynamoDB table is not synthesized (no `ADMIN_AUDIT_LOG_TABLE_NAME` env either) —
+ * the seam routes straight to the SQL executor instead, so an empty table name is legitimate
+ * there, not a misconfiguration (mirrors the A5/B6/C1-C3 pattern).
+ */
+function isPureSqlBackend(): boolean {
+  const backend = process.env.CONTROL_DATA_BACKEND;
+  return backend === "turso" || backend === "sql";
+}
+
 function getEnv(): { tableName: string; env: string } | undefined {
   const tableName = process.env.ADMIN_AUDIT_LOG_TABLE_NAME ?? "";
-  if (tableName.length === 0) return undefined;
+  // dynamodb / mirror backends require the physical table; a legacy stack that never wired the
+  // table stays a no-op (旧 stack 互換). Pure SQL never had a table to begin with.
+  if (!isPureSqlBackend() && tableName.length === 0) return undefined;
   const env = process.env.DEPLOY_ENVIRONMENT ?? "development";
   return { tableName, env };
 }
@@ -118,6 +133,12 @@ function getEnv(): { tableName: string; env: string } | undefined {
  *
  * 戻り値: 書き込んだ場合 true、 env 未配線 / 失敗の場合 false。 caller は戻り値を見ない
  * (= 「best-effort write」 として扱う)。 unit test は env mock + client mock で coverage。
+ *
+ * [Issue #2442 / Phase C4] The actual write now routes through the `AdminAuditLogRepository` seam
+ * (`CONTROL_DATA_BACKEND` 5-value participation, mirrors every other C-phase aggregate). The
+ * best-effort contract is unchanged: the seam itself throws on failure (fail loud, matching every
+ * other repository in this codebase), and this function is the one place that catches it and
+ * degrades to a warning — callers never see a rejected promise.
  */
 export async function writeAuditEvent(
   event: AuditEvent,
@@ -132,30 +153,32 @@ export async function writeAuditEvent(
   const pk = event.tenantId === "SYSTEM" ? `SYSTEM#${cfg.env}` : `TENANT#${event.tenantId}`;
   const ttl = Math.floor(event.occurredAtMs / 1000) + resolveAuditRetentionDays() * SECONDS_PER_DAY;
 
-  const item: Record<string, unknown> = {
-    PK: pk,
-    SK: `AUDIT#${id}`,
-    GSI1PK: `ACTOR#${event.actor}`,
-    GSI1SK: occurredAt,
+  const row: AdminAuditRow = {
+    pk,
+    sk: `AUDIT#${id}`,
+    gsi1pk: `ACTOR#${event.actor}`,
+    gsi1sk: occurredAt,
     actor: event.actor,
     action: event.action,
     outcome: event.outcome,
     occurredAt,
     ttl,
+    ...(event.actorUsername ? { actorUsername: event.actorUsername } : {}),
+    ...(event.target ? { target: event.target } : {}),
+    ...(event.ipAddress ? { ipAddress: event.ipAddress } : {}),
+    ...(event.userAgent ? { userAgent: event.userAgent } : {}),
+    ...(event.extra ? { extra: event.extra } : {}),
   };
-  if (event.actorUsername) item.actorUsername = event.actorUsername;
-  if (event.target) item.target = event.target;
-  if (event.ipAddress) item.ipAddress = event.ipAddress;
-  if (event.userAgent) item.userAgent = event.userAgent;
-  if (event.extra) item.extra = event.extra;
 
   try {
-    await client.send(
-      new PutCommand({
-        TableName: cfg.tableName,
-        Item: item,
-      }),
-    );
+    const repository = await controlDataRuntime.resolveAdminAuditLogRepository({
+      // Structurally-typed `AuditClient` (test-injectable) vs the concrete DynamoDBDocumentClient
+      // the repository expects — production always passes the real singleton; only tests pass a
+      // duck-typed `{ send }` fake here (same cast convention `makeFakeDdb` test helpers use).
+      ddb: client as unknown as DynamoDBDocumentClient,
+      adminAuditLogTableName: cfg.tableName,
+    });
+    await repository.appendAudit(row);
     return true;
   } catch (err) {
     // audit 行欠落は primary 操作の成否に比べて重要度が低い。 log は残すが throw しない。

@@ -27,10 +27,15 @@ const mocks = vi.hoisted(() => ({
   exportAuditEntriesCsv: vi.fn(),
   getCostSummary: vi.fn(),
   listUsageFacts: vi.fn(),
+  // [Issue #2442 / Phase C4] index.ts now resolves an AdminAuditLogRepository before calling
+  // listAuditEntries/exportAuditEntriesCsv (both mocked above, so the fake repository's identity
+  // never matters — it just needs to resolve without throwing).
+  resolveAdminAuditLogRepository: vi.fn().mockResolvedValue({}),
 }));
 const P = "../../lib/admin-insight/handlers/admin-insight-handler";
 vi.mock("../../lib/admin-insight/handlers/admin-insight-handler/shared", () => ({
   buildSharedResources: () => mocks.sharedObj,
+  resolveAdminAuditLogRepository: mocks.resolveAdminAuditLogRepository,
 }));
 vi.mock("../../lib/admin-insight/handlers/admin-insight-handler/auth", () => ({
   isSystemAdmin: mocks.isSystemAdmin,

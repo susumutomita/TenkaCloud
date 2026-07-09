@@ -1,5 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type { AdminAuditLogRepository } from "../../../problem-deploy/control-data/admin-audit-log-repository.js";
 import type { DeploymentsRepository } from "../../../problem-deploy/control-data/deployments-repository.js";
 import type { EventsRepository } from "../../../problem-deploy/control-data/events-repository.js";
 import { controlDataRuntime } from "../../../problem-deploy/control-data/runtime-repositories.js";
@@ -93,5 +94,20 @@ export function resolveDeploymentsRepository(
   return controlDataRuntime.resolveDeploymentsRepository({
     ddb: shared.ddb,
     deploymentsTableName: shared.deploymentsTableName,
+  });
+}
+
+/**
+ * [Issue #2442 / Phase C4] AdminAuditLog read seam for the SystemAdmin cross-tenant `/admin/
+ * insight/audit` route (mirror of {@link resolveDeploymentsRepository}). default backend
+ * (`CONTROL_DATA_BACKEND` unset = dynamodb) stays byte-identical to the pre-seam Query; turso/sql
+ * work via the same cold-start-cached async resolver every other seam in this module uses.
+ */
+export function resolveAdminAuditLogRepository(
+  shared: Pick<AdminInsightSharedResources, "ddb" | "auditTableName">,
+): Promise<AdminAuditLogRepository> {
+  return controlDataRuntime.resolveAdminAuditLogRepository({
+    ddb: shared.ddb,
+    adminAuditLogTableName: shared.auditTableName,
   });
 }

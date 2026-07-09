@@ -1,6 +1,7 @@
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { type Client, createClient } from "@libsql/client/http";
+import { createAdminAuditLogRepository } from "./admin-audit-log-repository.js";
 import { createCompetitorAccountsRepository } from "./competitor-accounts-repository.js";
 import { createDeploymentsRepository } from "./deployments-repository.js";
 import { createDisruptionsRepository } from "./disruptions-repository.js";
@@ -8,6 +9,7 @@ import { createEventsRepository } from "./events-repository.js";
 import { createFeatureFlagsRepository } from "./feature-flags-repository.js";
 import { initializeControlDataSchema, LibsqlExecutor } from "./libsql-executor.js";
 import {
+  MirroredAdminAuditLogRepository,
   MirroredCompetitorAccountsRepository,
   MirroredDeploymentsRepository,
   MirroredDisruptionsRepository,
@@ -23,6 +25,7 @@ import { createProblemEndpointsRepository } from "./problem-endpoints-repository
 import { createSamlConfigRepository } from "./saml-config-repository.js";
 import { createTeamsRepository } from "./teams-repository.js";
 import type {
+  AdminAuditLogRepository,
   CompetitorAccountsRepository,
   ControlDataBackend,
   DeploymentsRepository,
@@ -125,6 +128,16 @@ export interface ControlDataRuntime {
     readonly ddb?: DynamoDBDocumentClient;
     readonly disruptionsTableName?: string;
   }) => Promise<DisruptionsRepository>;
+  /**
+   * [Issue #2442 / Phase C4] Cold-start resolver for the AdminAuditLog seam. Participates in all
+   * five `CONTROL_DATA_BACKEND` values like Disruptions/CompetitorAccounts: `dynamodb` returns
+   * DDB, `turso` / `sql` return pure SQL, and mirror modes write through DDB then SQL while
+   * serving reads from canonical DDB.
+   */
+  readonly resolveAdminAuditLogRepository: (input: {
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly adminAuditLogTableName?: string;
+  }) => Promise<AdminAuditLogRepository>;
 }
 
 export interface RuntimeEnvironment {
@@ -176,7 +189,8 @@ function requireDdbAndTableName(
     | "deploymentsTableName"
     | "endpointsTableName"
     | "competitorAccountsTableName"
-    | "disruptionsTableName",
+    | "disruptionsTableName"
+    | "adminAuditLogTableName",
   backendKind: "dynamodb" | "mirror",
 ): { readonly ddb: DynamoDBDocumentClient; readonly tableName: string } {
   if (!ddb || !tableName) {
@@ -516,6 +530,39 @@ export function createControlDataRuntime(deps: RuntimeDependencies): ControlData
     );
   }
 
+  /** [Issue #2442 / Phase C4] Resolver for the AdminAuditLog seam (mirrors resolveDisruptionsRepository). */
+  async function resolveAdminAuditLogRepository(input: {
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly adminAuditLogTableName?: string;
+  }): Promise<AdminAuditLogRepository> {
+    const backend = selectBackend(deps.env);
+    if (backend.kind === "pure") {
+      const sql = await acquireSqlExecutor();
+      return createAdminAuditLogRepository(backend.dialect, { sql });
+    }
+
+    const requiredInput = requireDdbAndTableName(
+      input.ddb,
+      input.adminAuditLogTableName,
+      "adminAuditLogTableName",
+      backend.kind,
+    );
+    if (backend.kind === "dynamodb") {
+      return createAdminAuditLogRepository("dynamodb", {
+        ddb: requiredInput.ddb,
+        adminAuditLogTableName: requiredInput.tableName,
+      });
+    }
+    const sql = await acquireSqlExecutor();
+    return new MirroredAdminAuditLogRepository(
+      createAdminAuditLogRepository("dynamodb", {
+        ddb: requiredInput.ddb,
+        adminAuditLogTableName: requiredInput.tableName,
+      }),
+      createAdminAuditLogRepository(backend.dialect, { sql }),
+    );
+  }
+
   return {
     needsManualPrune: () => selectBackend(deps.env).kind === "pure",
     resolveRepositories: async (input) => {
@@ -536,6 +583,7 @@ export function createControlDataRuntime(deps: RuntimeDependencies): ControlData
     resolveCompetitorAccountsRepository,
     resolveSamlConfigRepository,
     resolveDisruptionsRepository,
+    resolveAdminAuditLogRepository,
   };
 }
 

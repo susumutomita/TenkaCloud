@@ -7,6 +7,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
  * route 層 (routes/audit-log.ts) は未テストだったので、 unconfigured / limit / from-to /
  * filter / list / CSV export / error の全分岐を pin する。 read service (audit-log-read) は mock、
  * auth は dev override env (DEFAULT_TENANT_ID / DEFAULT_USER_ROLE) で TenantAdmin を inject。
+ *
+ * [Issue #2442 / Phase C4] The route now resolves an `AdminAuditLogRepository` (via
+ * `resolveAdminAuditLogRepository` in `shared.ts`) and passes `{ repository }` to
+ * `listTenantAuditEntries` / `exportTenantAuditCsv` instead of `{ ddb, auditTableName }`. `shared`
+ * is rebuilt per request so it reflects the current `ADMIN_AUDIT_LOG_TABLE_NAME` env (mirrors the
+ * pre-seam route, which read `process.env` fresh on every request).
  */
 const mocks = vi.hoisted(() => ({
   listTenantAuditEntries: vi.fn(),
@@ -22,11 +28,15 @@ const { registerAuditLogRoutes } = await import(
   "../../lib/problem-deploy/handlers/event-handler/routes/audit-log"
 );
 
-// biome-ignore lint/suspicious/noExplicitAny: 最小 shared (route は ddb を read service に渡すだけ)。
-const shared = { ddb: { send: vi.fn() } } as any;
+const buildShared = () =>
+  ({
+    ddb: { send: vi.fn() },
+    adminAuditLogTableName: process.env.ADMIN_AUDIT_LOG_TABLE_NAME ?? "",
+    // biome-ignore lint/suspicious/noExplicitAny: 最小 shared (route は repository resolver に渡すだけ)。
+  }) as any;
 const buildApp = () => {
   const app = new Hono();
-  registerAuditLogRoutes(app, shared);
+  registerAuditLogRoutes(app, buildShared());
   return app;
 };
 
@@ -78,7 +88,7 @@ describe("GET /admin/audit-log", () => {
     expect(res.status).toBe(StatusCodes.OK);
     expect(await res.json()).toEqual({ items: [{ id: "a" }], nextCursor: "c2" });
     expect(mocks.listTenantAuditEntries).toHaveBeenCalledWith(
-      { ddb: shared.ddb, auditTableName: "TestAuditLog" },
+      expect.objectContaining({ repository: expect.anything() }),
       expect.objectContaining({
         tenantId: "tenant-test",
         limit: 10,
@@ -95,7 +105,7 @@ describe("GET /admin/audit-log", () => {
     const res = await buildApp().request("/admin/audit-log");
     expect(res.status).toBe(StatusCodes.OK);
     expect(mocks.listTenantAuditEntries).toHaveBeenCalledWith(
-      { ddb: shared.ddb, auditTableName: "TestAuditLog" },
+      expect.objectContaining({ repository: expect.anything() }),
       { tenantId: "tenant-test" },
     );
   });
@@ -128,7 +138,7 @@ describe("GET /admin/audit-log/export", () => {
     expect(res.headers.get("content-disposition")).toContain("audit-tenant-tenant-test-");
     expect(await res.text()).toBe("ts,principal\n1,alice\n");
     expect(mocks.exportTenantAuditCsv).toHaveBeenCalledWith(
-      { ddb: shared.ddb, auditTableName: "TestAuditLog" },
+      expect.objectContaining({ repository: expect.anything() }),
       expect.objectContaining({ tenantId: "tenant-test", principal: "alice" }),
     );
   });

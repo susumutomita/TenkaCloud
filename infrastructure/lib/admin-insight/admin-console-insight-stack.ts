@@ -288,17 +288,33 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       integration,
     });
 
+    // [Issue #2442 / Phase C4] pure SQL backend (turso|sql) では AdminAuditLogTable 自体が
+    // synth されない (= `props.adminAuditLogTable` は `undefined`) が、 audit write は
+    // repository seam (`writeAuditEvent` → `resolveAdminAuditLogRepository`) が Turso executor
+    // 直結で処理できるため、 SignInAuditLambda の生成条件はテーブルの有無ではなく「audit backend
+    // が何かしら存在するか」に一般化する。 dynamodb backend でテーブルが未配線 (= 旧 stack /
+    // 既存テストの後方互換パス) のときは従来どおり Lambda を作らない。
+    const auditBackendAvailable =
+      Boolean(props.adminAuditLogTable) ||
+      props.controlDataBackend === "turso" ||
+      props.controlDataBackend === "sql";
+
     // Issue #1335 Phase 1: Control Plane Cognito sign-in events を CloudTrail / EventBridge 経由で
     // listen し、 AdminAuditLogTable に audit 行を書き出す Lambda + Rule。 UserPool への直接の
     // trigger 配線 (= addTrigger) は ControlPlane → ProblemDeploy → ControlPlane の循環依存を
     // 引き起こすため避け、 string ID 一致で event filter する設計に揃える。
-    if (props.adminAuditLogTable && props.environmentName) {
+    if (auditBackendAvailable && props.environmentName) {
       new SignInAuditLambda(this, "SignInAudit", {
         userPoolId: props.cognitoUserPool.userPoolId,
         adminAuditLogTable: props.adminAuditLogTable,
         environmentName: props.environmentName,
         // Issue #2311: 監査ログ feature flag。
         auditLogEnabled: props.auditLogEnabled,
+        // [Issue #2442] control-plane data backend。本 Lambda 自身が「DB を開く Lambda」なので
+        // Turso executor 配線を持つ (SystemAuditWriterLambda と同型)。
+        controlDataBackend: props.controlDataBackend,
+        tursoDatabaseUrl: props.tursoDatabaseUrl,
+        tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
         // Phase 1 は tenantId 未指定 → handler が SYSTEM にフォールバック (= 既存挙動)。
       });
     }
@@ -307,7 +323,7 @@ export class AdminConsoleInsightStack extends cdk.Stack {
     // `tenantSignInAudit` は 0..N tenant の (tenantId, userPoolId) pair を持ち、 tenant ごとに
     // CloudTrail Cognito event filter + Lambda + EventBridge Rule を 1 セット立てる。
     // 各 Lambda には AUDIT_TENANT_ID env を渡し、 `TENANT#<tenantId>` partition に書く。
-    if (props.adminAuditLogTable && props.environmentName && props.tenantSignInAudit) {
+    if (auditBackendAvailable && props.environmentName && props.tenantSignInAudit) {
       for (const tenant of props.tenantSignInAudit) {
         // construct id は tenantId を含めて衝突回避 (= ULID / "pooled" / "local" のいずれも CFn 識別子に使える)。
         // `.` / 非英数 はサニタイズ済の前提 (= ULID / 既知 reserved tenantId 規約)。
@@ -318,6 +334,10 @@ export class AdminConsoleInsightStack extends cdk.Stack {
           auditTenantId: tenant.tenantId,
           // Issue #2311: 監査ログ feature flag。
           auditLogEnabled: props.auditLogEnabled,
+          // [Issue #2442] control-plane data backend。 上記 SignInAudit と同型。
+          controlDataBackend: props.controlDataBackend,
+          tursoDatabaseUrl: props.tursoDatabaseUrl,
+          tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
         });
       }
     }

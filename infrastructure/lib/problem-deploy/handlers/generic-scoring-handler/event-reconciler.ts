@@ -300,13 +300,18 @@ async function pruneExpiredControlData(nowIso: string): Promise<void> {
     // recurring / exec-claim rows all carry `expiresAt` — same TTL-equivalent sweep as
     // Events/Teams/Notifications).
     controlDataRuntime.resolveDisruptionsRepository({}),
+    // [Issue #2442 / Phase C4] AdminAuditLog joins the manual-prune tick too (rows carry `ttl`,
+    // DynamoDB's native TTL attribute name — no `ddb`/`adminAuditLogTableName` needed here since
+    // `needsManualPrune()` above already gates this branch to the pure-SQL backend).
+    controlDataRuntime.resolveAdminAuditLogRepository({}),
   ])
-    .then(([events, teams, notifications, disruptions]) =>
+    .then(([events, teams, notifications, disruptions, adminAuditLog]) =>
       Promise.all([
         events.pruneExpired(nowEpochSeconds),
         teams.pruneExpired(nowEpochSeconds),
         notifications.pruneExpired(nowEpochSeconds),
         disruptions.pruneExpired(nowEpochSeconds),
+        adminAuditLog.pruneExpired(nowEpochSeconds),
       ]),
     )
     .catch((err: unknown) => {

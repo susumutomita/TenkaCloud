@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listAuditEntries } from "../../lib/admin-insight/handlers/admin-insight-handler/audit";
+import { DynamoDbAdminAuditLogRepository } from "../../lib/problem-deploy/control-data/admin-audit-log-repository";
 
 /**
  * Issue #950 (ADR-020 Phase D): listAuditEntries の挙動を pin する。
@@ -8,6 +9,10 @@ import { listAuditEntries } from "../../lib/admin-insight/handlers/admin-insight
  * - scope=system → PK=SYSTEM#<env> で Query
  * - ScanIndexForward=false (= 新しい順)
  * - cursor + nextCursor を base64(LastEvaluatedKey) で round-trip
+ *
+ * [Issue #2442 / Phase C4] `listAuditEntries` now takes a `{ repository }` dep. Tests wrap the
+ * same fake `send` mock in a real `DynamoDbAdminAuditLogRepository` so the DDB command
+ * assertions below stay byte-identical.
  */
 
 beforeEach(() => {
@@ -19,12 +24,13 @@ afterEach(() => {
 
 function buildMock() {
   const send = vi.fn();
-  return { ddb: { send }, send };
+  const repository = new DynamoDbAdminAuditLogRepository({ send } as never, "T");
+  return { repository, send };
 }
 
 describe("listAuditEntries (#950)", () => {
   it("scope=tenant should Query with PK=TENANT#<id>", async () => {
-    const { ddb, send } = buildMock();
+    const { repository, send } = buildMock();
     send.mockResolvedValueOnce({
       Items: [
         {
@@ -39,7 +45,7 @@ describe("listAuditEntries (#950)", () => {
       LastEvaluatedKey: undefined,
     });
     const out = await listAuditEntries(
-      { ddb: ddb as never, auditTableName: "T" },
+      { repository },
       { scope: "tenant", tenantId: "t-1", limit: 10 },
       "test-env",
     );
@@ -56,9 +62,9 @@ describe("listAuditEntries (#950)", () => {
   });
 
   it("scope=system should Query with PK=SYSTEM#<env>", async () => {
-    const { ddb, send } = buildMock();
+    const { repository, send } = buildMock();
     send.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
-    await listAuditEntries({ ddb: ddb as never, auditTableName: "T" }, { scope: "system" }, "prod");
+    await listAuditEntries({ repository }, { scope: "system" }, "prod");
     const cmd = send.mock.calls[0]?.[0] as { input?: Record<string, unknown> };
     expect((cmd.input?.ExpressionAttributeValues as Record<string, unknown>)?.[":pk"]).toBe(
       "SYSTEM#prod",
@@ -66,11 +72,11 @@ describe("listAuditEntries (#950)", () => {
   });
 
   it("should return nextCursor as base64 from LastEvaluatedKey", async () => {
-    const { ddb, send } = buildMock();
+    const { repository, send } = buildMock();
     const lastKey = { PK: "TENANT#t-1", SK: "AUDIT#01HX" };
     send.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: lastKey });
     const out = await listAuditEntries(
-      { ddb: ddb as never, auditTableName: "T" },
+      { repository },
       { scope: "tenant", tenantId: "t-1" },
       "test-env",
     );
@@ -78,12 +84,12 @@ describe("listAuditEntries (#950)", () => {
   });
 
   it("should decode the cursor and pass it as ExclusiveStartKey", async () => {
-    const { ddb, send } = buildMock();
+    const { repository, send } = buildMock();
     send.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
     const key = { PK: "TENANT#t-1", SK: "AUDIT#01HX" };
     const cursor = Buffer.from(JSON.stringify(key)).toString("base64");
     await listAuditEntries(
-      { ddb: ddb as never, auditTableName: "T" },
+      { repository },
       { scope: "tenant", tenantId: "t-1", cursor },
       "test-env",
     );
@@ -92,10 +98,10 @@ describe("listAuditEntries (#950)", () => {
   });
 
   it("should clamp limit > 200 to 200", async () => {
-    const { ddb, send } = buildMock();
+    const { repository, send } = buildMock();
     send.mockResolvedValueOnce({ Items: [], LastEvaluatedKey: undefined });
     await listAuditEntries(
-      { ddb: ddb as never, auditTableName: "T" },
+      { repository },
       { scope: "tenant", tenantId: "t-1", limit: 9999 },
       "test-env",
     );
@@ -104,7 +110,7 @@ describe("listAuditEntries (#950)", () => {
   });
 
   it("should correctly map items containing optional attrs (target / ipAddress / userAgent / extra)", async () => {
-    const { ddb, send } = buildMock();
+    const { repository, send } = buildMock();
     send.mockResolvedValueOnce({
       Items: [
         {
@@ -123,7 +129,7 @@ describe("listAuditEntries (#950)", () => {
       ],
     });
     const out = await listAuditEntries(
-      { ddb: ddb as never, auditTableName: "T" },
+      { repository },
       { scope: "tenant", tenantId: "t-1" },
       "test-env",
     );

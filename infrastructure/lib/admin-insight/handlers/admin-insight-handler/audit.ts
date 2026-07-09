@@ -1,4 +1,7 @@
-import { type DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import type {
+  AdminAuditLogRepository,
+  AdminAuditRow,
+} from "../../../problem-deploy/control-data/types.js";
 import { csvEscapeField } from "../../../utils/csv.js";
 
 /**
@@ -13,11 +16,15 @@ import { csvEscapeField } from "../../../utils/csv.js";
  *   - sort key (= SK) は ULID で時系列順、 ScanIndexForward=false で新しい順に返す
  *
  * 1 ページ 50 件、 cursor は base64(LastEvaluatedKey) で次ページ移行。
+ *
+ * [Issue #2442 / Phase C4] Raw DDB access moved behind {@link AdminAuditLogRepository}
+ * (`resolveAdminAuditLogRepository` in `shared.ts` resolves it). The DynamoDB backend's cursor
+ * wire format stays byte-identical (plain base64 JSON) — this module no longer computes it
+ * directly, the repository's `listPage` produces the exact same encoding.
  */
 
 export interface AuditDeps {
-  readonly ddb: DynamoDBDocumentClient;
-  readonly auditTableName: string;
+  readonly repository: AdminAuditLogRepository;
 }
 
 export interface AuditListInput {
@@ -59,20 +66,6 @@ export interface AuditListResponse {
 const LIST_LIMIT_DEFAULT = 50;
 const LIST_LIMIT_MAX = 200;
 
-function decodeCursor(cursor: string | undefined): Record<string, unknown> | undefined {
-  if (!cursor) return undefined;
-  try {
-    return JSON.parse(Buffer.from(cursor, "base64").toString("utf-8")) as Record<string, unknown>;
-  } catch {
-    return undefined;
-  }
-}
-
-function encodeCursor(key: Record<string, unknown> | undefined): string | undefined {
-  if (!key) return undefined;
-  return Buffer.from(JSON.stringify(key), "utf-8").toString("base64");
-}
-
 export async function listAuditEntries(
   deps: AuditDeps,
   input: AuditListInput,
@@ -80,23 +73,12 @@ export async function listAuditEntries(
 ): Promise<AuditListResponse> {
   const limit = Math.min(input.limit ?? LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX);
   const pk = input.scope === "system" ? `SYSTEM#${env}` : `TENANT#${input.tenantId ?? ""}`;
-  const out = await deps.ddb.send(
-    new QueryCommand({
-      TableName: deps.auditTableName,
-      KeyConditionExpression: "PK = :pk",
-      ExpressionAttributeValues: { ":pk": pk },
-      Limit: limit,
-      ScanIndexForward: false,
-      ExclusiveStartKey: decodeCursor(input.cursor),
-    }),
-  );
-  const rawItems = (out.Items ?? []).map((row) => toAuditItem(row, input.scope));
+  const page = await deps.repository.listPage(pk, { limit, cursor: input.cursor });
+  const rawItems = page.items.map((row) => toAuditItem(row, input.scope));
   const items = applyFilters(rawItems, input);
   return {
     items,
-    ...(out.LastEvaluatedKey
-      ? { nextCursor: encodeCursor(out.LastEvaluatedKey as Record<string, unknown>) }
-      : {}),
+    ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
   };
 }
 
@@ -168,28 +150,19 @@ function formatCsv(items: readonly AuditItem[]): string {
   return `${lines.join("\n")}\n`;
 }
 
-function toAuditItem(row: unknown, scope: AuditListInput["scope"]): AuditItem {
-  const r = row as Record<string, unknown>;
-  const sk = String(r.SK ?? "");
+function toAuditItem(row: AdminAuditRow, scope: AuditListInput["scope"]): AuditItem {
+  const sk = row.sk;
   return {
     id: sk.startsWith("AUDIT#") ? sk.substring(6) : sk,
-    tenantId: scope === "system" ? "SYSTEM" : String(r.PK ?? "").replace(/^TENANT#/, ""),
-    actor: String(r.actor ?? "unknown"),
-    ...(optionalString(r, "actorUsername") ? { actorUsername: r.actorUsername as string } : {}),
-    action: String(r.action ?? ""),
-    outcome: String(r.outcome ?? ""),
-    ...(optionalString(r, "target") ? { target: r.target as string } : {}),
-    ...(optionalString(r, "ipAddress") ? { ipAddress: r.ipAddress as string } : {}),
-    ...(optionalString(r, "userAgent") ? { userAgent: r.userAgent as string } : {}),
-    occurredAt: String(r.occurredAt ?? ""),
-    ...(isRecord(r.extra) ? { extra: r.extra } : {}),
+    tenantId: scope === "system" ? "SYSTEM" : row.pk.replace(/^TENANT#/, ""),
+    actor: row.actor,
+    ...(row.actorUsername ? { actorUsername: row.actorUsername } : {}),
+    action: row.action,
+    outcome: row.outcome,
+    ...(row.target ? { target: row.target } : {}),
+    ...(row.ipAddress ? { ipAddress: row.ipAddress } : {}),
+    ...(row.userAgent ? { userAgent: row.userAgent } : {}),
+    occurredAt: row.occurredAt,
+    ...(row.extra ? { extra: row.extra as Record<string, unknown> } : {}),
   };
-}
-
-function optionalString(row: Record<string, unknown>, key: string): boolean {
-  return typeof row[key] === "string";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object";
 }
