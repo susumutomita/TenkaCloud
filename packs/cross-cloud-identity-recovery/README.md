@@ -33,10 +33,10 @@ impersonation). The grader rejects any static key it sees, wherever it appears.
 
 ## Validate
 
-Run the offline validator against this directory:
+Run the offline validator against this directory, from the repo root:
 
 ```bash
-bun --cwd infrastructure run pack validate packs/cross-cloud-identity-recovery
+make pack-validate ARGS="packs/cross-cloud-identity-recovery"
 ```
 
 It must report zero diagnostics. The regression test

@@ -12,8 +12,10 @@ The participant portal extension contract: an endpoints[]slot, an optional porta
 
 ## Validate
 
+From the repo root:
+
 ```bash
-bun --cwd infrastructure run pack validate packs/golden/portal-ui-pack
+make pack-validate ARGS="packs/golden/portal-ui-pack"
 ```
 
 The reusable external-pack CI workflow runs the same offline validation; see

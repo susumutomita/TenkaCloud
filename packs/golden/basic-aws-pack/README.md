@@ -12,8 +12,10 @@ One aws/cloudformation deploy-only problem and one flag-scored problem.
 
 ## Validate
 
+From the repo root:
+
 ```bash
-bun --cwd infrastructure run pack validate packs/golden/basic-aws-pack
+make pack-validate ARGS="packs/golden/basic-aws-pack"
 ```
 
 The reusable external-pack CI workflow runs the same offline validation; see

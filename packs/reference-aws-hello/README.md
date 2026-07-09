@@ -18,10 +18,10 @@ problems/challenges/hello-world/
 
 ## Validate
 
-Run the offline validator against this directory:
+Run the offline validator against this directory, from the repo root:
 
 ```bash
-bun --cwd infrastructure run pack validate packs/reference-aws-hello
+make pack-validate ARGS="packs/reference-aws-hello"
 ```
 
 It must report zero diagnostics. A regression test (`reference-pack.test.ts`)
