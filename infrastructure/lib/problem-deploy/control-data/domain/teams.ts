@@ -6,30 +6,36 @@
  * module as a temporary compatibility barrel while consumers migrate to direct imports.
  */
 
-import type { TeamItem } from "../../handlers/event-handler/types.js";
-
 /**
- * [ADR-049 §5.1] Team aggregate の domain shape。 canonical な DynamoDB 行 (`TeamItem`)
- * から物理 DDB キー (PK / SK / GSI1PK / GSI1SK / GSI2PK / GSI2SK) を除いたもの。 これらの
- * キーは DynamoDB backend の実装詳細であり、 SQLite backend (Turso / D1) は独自の
- * キー / カラムを導出する。 `TeamItem` から派生させることで handler 層と歩調を合わせ、
- * team 属性を 1 つ追加してもこの seam を二度直さずに流れる。
+ * [ADR-049 §5.1] Team aggregate の domain shape。 物理 DDB キー (PK / SK / GSI1PK /
+ * GSI1SK / GSI2PK / GSI2SK) は DynamoDB backend の実装詳細であり、 SQLite backend
+ * (Turso / D1) は独自のキー / カラムを導出する。
  *
- * The domain shape of one competition Team, derived from the canonical DynamoDB
- * row (`TeamItem`) minus its physical DDB keys (PK / SK / GSI1PK / GSI1SK /
- * GSI2PK / GSI2SK — six keys, mirroring the sparse participant-login GSI2). Those
- * keys are an implementation detail of the DynamoDB backend; the SQLite backends
- * derive their own keys / columns.
+ * [Issue #2527 Slice 1 step 2] Source of truth: the physical row
+ * (`handlers/event-handler/types.ts`'s `TeamItem`) derives from this record by
+ * adding the physical keys and re-requiring `teamLoginKey` — team 属性を 1 つ
+ * 追加するときはこの record に足せば handler 層へ流れる (逆方向はない)。
  */
-export type TeamRecord = Omit<
-  TeamItem,
-  "PK" | "SK" | "GSI1PK" | "GSI1SK" | "GSI2PK" | "GSI2SK" | "teamLoginKey"
-> & {
+export type TeamRecord = {
+  eventId: string;
+  teamId: string;
+  tenantId: string;
+  /** 競技者が portal `PATCH /portal/me` で設定する表示名。未設定時は internalSlug を使う。 */
+  displayName?: string;
+  /** operator 入力 (or 自動生成) の内部 slug。CFn StackName 由来になる、deploy 後 immutable。 */
+  internalSlug: string;
   /**
+   * 短命 bearer。team scope (1 key で event 内 N 問題にアクセス可)。
    * Present for DynamoDB reads and when the caller already supplied the key.
    * SQL point/list payloads deliberately omit the plaintext bearer.
    */
   readonly teamLoginKey?: string;
+  /** #528: team の deploy 先 AWS Account ID (12 桁数字)。Bulk Deploy で problem.defaultRegion と
+   *  組み合わせて使う。旧 Event は持たない (= bulk-deploy で problem.defaultAwsAccountId に fallback)。 */
+  awsAccountId?: string;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: number;
 };
 
 /**

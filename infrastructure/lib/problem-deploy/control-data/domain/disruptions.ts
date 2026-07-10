@@ -6,7 +6,34 @@
  * module as a temporary compatibility barrel while consumers migrate to direct imports.
  */
 
-import type { DisruptionAuditRow } from "../../handlers/event-handler/disruption-types.js";
+/** Fire API の request scope。 [Issue #2527 Slice 1 step 2] Source of truth (handler re-exports). */
+export type DisruptionFireScope = "team" | "all" | "random-n";
+
+/**
+ * 1 回の disruption fire の監査行 (append-only)。 physical PK/SK は repository 層が導出する
+ * (この record は最初からキーレス)。 [Issue #2527 Slice 1 step 2] Source of truth; the
+ * handler module (`handlers/event-handler/disruption-types.ts`) re-exports it for
+ * its API/store consumers.
+ */
+export interface DisruptionAuditRow {
+  readonly auditId: string;
+  readonly tenantId: string;
+  readonly eventId: string;
+  readonly problemId: string;
+  readonly disruptionId: string;
+  readonly firedBy: string;
+  readonly firedAt: string;
+  readonly scope: DisruptionFireScope;
+  readonly targetTeamIds: readonly string[];
+  readonly parameters: Readonly<Record<string, unknown>>;
+  readonly requestId: string;
+  readonly expiresAt: number;
+  /**
+   * [ADR-037] scheduled fire で注入が実行される予定時刻 (ISO8601, UTC)。 immediate fire では
+   * 未設定 (= firedAt と同時)。 audit 表示で 「N 分後に予約」 を可視化するために持つ。
+   */
+  readonly scheduledFor?: string;
+}
 
 // ---------------------------------------------------------------------------
 // [Issue #2442 / Phase C3] Disruptions aggregate (Issue #888 / ADR-031 / ADR-037).

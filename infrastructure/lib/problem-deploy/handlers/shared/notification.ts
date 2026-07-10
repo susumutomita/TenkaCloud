@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { NotificationRecord } from "../../control-data/domain/notifications.js";
 
 /**
  * 運営 → 競技者 Notification の DynamoDB 行 shape (ADR-006)。
@@ -11,22 +12,14 @@ import { z } from "zod";
  * 既存 META 行を巻き込まないので Event detail / list の Query には影響しない
  * (sparse な追加行)。TTL は親 event の `expiresAt` を継承し、event archive 後も
  * TTL までは残す (= 競技者の振り返り猶予、ADR-006 D5)。
+ *
+ * [Issue #2527 Slice 1 step 2] The domain fields live on
+ * {@link NotificationRecord} (`control-data/domain/notifications.ts`, the source
+ * of truth); this item only adds the physical DynamoDB keys.
  */
-export interface NotificationItem {
+export interface NotificationItem extends NotificationRecord {
   PK: string;
   SK: string;
-
-  notificationId: string;
-  tenantId: string;
-  eventId: string;
-  title: string;
-  body: string;
-  severity: "info" | "warning";
-  /** 監査用に operator の Cognito sub を残す。UI には出さない。 */
-  createdBy: string;
-  occurredAt: string;
-  /** DDB TTL。event 行の `expiresAt` と同値 (epoch seconds)。 */
-  expiresAt: number;
 }
 
 /**

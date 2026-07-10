@@ -6,10 +6,17 @@
  * module as a temporary compatibility barrel while consumers migrate to direct imports.
  */
 
-import type { TenantFeatureFlagsItem } from "../../handlers/shared/tenant-feature-flags.js";
-
-/** [#2439] TenantFeatureFlags の domain shape(tenantId / flags / updatedAt / updatedBy)。 */
-export type TenantFeatureFlagsRecord = Omit<TenantFeatureFlagsItem, "PK" | "SK">;
+/**
+ * [#2439] TenantFeatureFlags の domain shape(tenantId / flags / updatedAt / updatedBy)。
+ * [Issue #2527 Slice 1 step 2] Source of truth; the physical row
+ * (`handlers/shared/tenant-feature-flags.ts`'s `TenantFeatureFlagsItem`) adds PK/SK.
+ */
+export type TenantFeatureFlagsRecord = {
+  readonly tenantId: string;
+  readonly flags: Record<string, boolean>;
+  readonly updatedAt: string;
+  readonly updatedBy: string;
+};
 
 /**
  * TenantFeatureFlags has no TTL / expiresAt attribute, so it intentionally does

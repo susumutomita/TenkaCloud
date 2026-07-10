@@ -18,7 +18,10 @@
  * This module is storage shape only — no DynamoDB client, no execution.
  */
 
-import type { DeploymentItem, DeploymentStatus } from "./types.js";
+import type {
+  CompositeParentDeploymentRecord,
+  CompositeTargetDeploymentRecord,
+} from "../../control-data/domain/deployments.js";
 
 /** Marks a parent deployment row as the composite coordination record. */
 export const COMPOSITE_RUNTIME_KIND = "composite" as const;
@@ -35,31 +38,14 @@ export const MAX_COMPOSITE_TARGETS = 8;
  * problem-level identity and target count, not a single provider's deploy
  * fields (those live on each target row). Shares the `DEPLOYMENT#{id}` / `META`
  * key convention with every other deployment row but carries no GSI keys.
+ *
+ * [Issue #2527 Slice 1 step 2] The domain fields live on
+ * {@link CompositeParentDeploymentRecord} (source of truth); this item only adds
+ * the physical keys.
  */
-export interface CompositeParentDeploymentItem {
+export interface CompositeParentDeploymentItem extends CompositeParentDeploymentRecord {
   PK: string;
   SK: "META";
-  jobId: string;
-  tenantId: string;
-  problemId: string;
-  runtimeKind: typeof COMPOSITE_RUNTIME_KIND;
-  compositeVersion: number;
-  targetCount: number;
-  status: DeploymentStatus;
-  createdAt: string;
-  updatedAt: string;
-  expiresAt: number;
-  /**
-   * [#2063] Team identity shared with every target row. The parent carries them
-   * so a reader can confirm the whole composite belongs to one team without
-   * fanning out to the targets. Not GSI2-indexed (the parent stays out of the
-   * participant teamLoginKey query until a later issue adds an intentional view).
-   */
-  teamName?: string;
-  teamLoginKey?: string;
-  /** Reserved bulk-deploy grouping fields copied from the validated request. */
-  accountGroupId?: string;
-  problemSetId?: string;
 }
 
 /**
@@ -67,17 +53,14 @@ export interface CompositeParentDeploymentItem {
  * drive it unchanged) plus parent linkage + the GSI3 lookup key. GSI1/GSI2 are
  * intentionally omitted so the target never surfaces in the tenant list or the
  * participant portal query.
+ *
+ * [Issue #2527 Slice 1 step 2] The domain fields live on
+ * {@link CompositeTargetDeploymentRecord} (source of truth); this item only adds
+ * the physical base keys + the GSI3 parent-lookup keys.
  */
-export type CompositeTargetDeploymentItem = Omit<
-  DeploymentItem,
-  "GSI1PK" | "GSI1SK" | "GSI2PK" | "GSI2SK"
-> & {
-  parentDeploymentId: string;
-  targetId: string;
-  targetOrdinal: number;
-  runtimeProvider: string;
-  runtimeEngine: string;
-  runtimeEntry: string;
+export type CompositeTargetDeploymentItem = CompositeTargetDeploymentRecord & {
+  PK: string;
+  SK: "META";
   GSI3PK: string;
   GSI3SK: string;
 };

@@ -6,8 +6,6 @@
  * module as a temporary compatibility barrel while consumers migrate to direct imports.
  */
 
-import type { CompetitorAccountItem } from "../../handlers/competitor-accounts-handler/types.js";
-
 // ---------------------------------------------------------------------------
 // [Issue #2442 / Phase C2] CompetitorAccounts aggregate (Issue #459 / ADR-002).
 //
@@ -26,13 +24,31 @@ import type { CompetitorAccountItem } from "../../handlers/competitor-accounts-h
 
 /**
  * [Issue #2442 / Phase C2] Domain shape of one (tenant, awsAccountId)
- * competitor account row, derived from the canonical DynamoDB row
- * (`CompetitorAccountItem`) minus its physical PK/SK. The SQLite backend
- * derives its own primary key columns (denormalized `tenant_id` /
- * `aws_account_id`, the rest as a JSON `payload`, per
- * {@link SqlCompetitorAccountsRepository}).
+ * competitor account row. The SQLite backend derives its own primary key columns
+ * (denormalized `tenant_id` / `aws_account_id`, the rest as a JSON `payload`,
+ * per {@link SqlCompetitorAccountsRepository}).
+ * [Issue #2527 Slice 1 step 2] Source of truth; the physical row
+ * (`handlers/competitor-accounts-handler/types.ts`'s `CompetitorAccountItem`)
+ * adds PK/SK.
  */
-export type CompetitorAccountRecord = Omit<CompetitorAccountItem, "PK" | "SK">;
+export type CompetitorAccountRecord = {
+  tenantId: string;
+  awsAccountId: string;
+  region: string;
+  competitorRoleName: string;
+  alias?: string;
+  verified: boolean;
+  verifiedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  /**
+   * 最後に ExternalId を rotate した時刻 (Issue #596 / ADR-002 Phase 3.1)。
+   * 過去 row には存在しない (= undefined のときは「未 rotate = createdAt から経過」とみなす)。
+   */
+  rotatedAt?: string;
+  /** Cognito sub (= operator 監査用)。`unknown` の場合は JWT 解決失敗 (test / dev fallback)。 */
+  createdBy: string;
+};
 
 /**
  * [Issue #2442 / Phase C2] Result of {@link CompetitorAccountsRepository.createAccount}.
@@ -116,8 +132,11 @@ export interface CompetitorAccountsRepository {
    * `ProjectionExpression` Scan; the SQL backend has no native pagination at
    * this scale and calls `onPage` once with every row (mirrors every other
    * SQL `forEach*Page` implementation in this file).
+   * [Issue #2527 Slice 1 step 2] The page items are typed as the domain record
+   * projection (the physical-key attributes a backend Scan may carry are an
+   * adapter detail and no longer leak through this port).
    */
   forEachCompetitorAccountPage(
-    onPage: (items: readonly Partial<CompetitorAccountItem>[]) => Promise<void>,
+    onPage: (items: readonly Partial<CompetitorAccountRecord>[]) => Promise<void>,
   ): Promise<void>;
 }

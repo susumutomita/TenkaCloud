@@ -1,5 +1,5 @@
 import { ulid } from "ulid";
-import type { ScoreEventRecord } from "../../control-data/types.js";
+import type { ScoreEventRecord } from "../../control-data/domain/deployments.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 
 /**
@@ -11,48 +11,15 @@ import type { DeploymentItem } from "../deploy-handler/types.js";
  * 既存の SK="META" 行を巻き込まないので /portal/me lookup と GSI2 に影響しない
  * (sparse な追加行)。TTL は親 deployment の `expiresAt` を継承し、event teardown
  * 時に一緒に消える。
+ *
+ * [Issue #2527 Slice 1 step 2] The domain fields (source / points / result docs
+ * included) live on {@link ScoreEventRecord}
+ * (`control-data/domain/deployments.ts`, the source of truth); this item only
+ * adds the physical DynamoDB keys.
  */
-export interface ScoreEventItem {
+export interface ScoreEventItem extends ScoreEventRecord {
   PK: string;
   SK: string;
-
-  jobId: string;
-  problemId: string;
-  /** Phase 2a 以前の旧 deployment は持たない (= history 列も undefined)。 */
-  teamId?: string;
-  eventId?: string;
-  /**
-   * イベント発生源。
-   * - `uptime`: HealthCheck の probe で全 endpoint OK
-   * - `flag`: 競技者の flag 提出が正解
-   * - `flag-wrong`: 競技者の flag 提出が不正解で wrongAnswerPenalty が減点された (Issue #817)
-   * - `attack-detected`: HealthCheck で `lastResult: ok → fail` 遷移を検知 (ADR-005 D2-A、
-   *   Battle Portal の Attack Statistics / History で使う)
-   * - `hint`: 競技者がヒントを開封し penalty が deduct された (Issue #1038 P1 #8、 2026-05-18)。
-   *   旧来 hint reveal は score を直 ADD するだけで score event 履歴に出ず、 「-30 pt なのに
-   *   履歴 0 件」 表示の不整合になっていた。
-   * - `gate-bonus`: Progression Gate (Issue #2283) の完了 bonus。 team override の
-   *   `completionBonus` を Gate challenge 完了時に 1 度だけ加算した marker。
-   */
-  source: "uptime" | "flag" | "flag-wrong" | "attack-detected" | "hint" | "gate-bonus";
-  /**
-   * 加算ポイント。`uptime` = scoring.pointsPerSuccess、`flag` = scoring.points、
-   * `flag-wrong` = -wrongAnswerPenalty (= 減点、 負数)、 `attack-detected` = 0 (= イベント marker のみ)、
-   * `hint` = -hint.penalty (= 減点、 負数)、 `gate-bonus` = teamOverrides[].completionBonus (= 正数)。
-   */
-  points: number;
-  /**
-   * 結果。
-   * - `ok`: `uptime` で全 endpoint OK or `flag` で正解 or `hint` 開封成功
-   * - `wrong`: `flag-wrong` (= 不正解で減点、 Issue #817)
-   * - `down`: `attack-detected` (= 攻撃が刺さって uptime が落ちた)
-   *
-   * Phase 2 以前の event 行は `"ok"` のみ書かれているので backward compatible。
-   */
-  result: "ok" | "wrong" | "down";
-  occurredAt: string;
-  /** 親 deployment の TTL を継承。0 なら無期限 (旧 deployment 互換)。 */
-  expiresAt: number;
 }
 
 /**

@@ -3,9 +3,14 @@
  */
 
 import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
+import type { DisruptionFireScope } from "../../control-data/domain/disruptions.js";
 
-/** Fire API の request scope。 */
-export type DisruptionFireScope = "team" | "all" | "random-n";
+// [Issue #2527 Slice 1 step 2] The domain module owns these shapes; this handler
+// re-exports them so existing importers keep their import path.
+export type {
+  DisruptionAuditRow,
+  DisruptionFireScope,
+} from "../../control-data/domain/disruptions.js";
 
 /** Fire API の入力。 caller (handler) で zod / 手動 validate 済を渡す前提。 */
 export interface DisruptionFireInput {
@@ -52,26 +57,6 @@ export type DisruptionFireOutcome =
   | { kind: "invalid_parameters"; reason: string }
   | { kind: "invalid_scope"; reason: string }
   | { kind: "no_targets" };
-
-export interface DisruptionAuditRow {
-  readonly auditId: string;
-  readonly tenantId: string;
-  readonly eventId: string;
-  readonly problemId: string;
-  readonly disruptionId: string;
-  readonly firedBy: string;
-  readonly firedAt: string;
-  readonly scope: DisruptionFireScope;
-  readonly targetTeamIds: readonly string[];
-  readonly parameters: Readonly<Record<string, unknown>>;
-  readonly requestId: string;
-  readonly expiresAt: number;
-  /**
-   * [ADR-037] scheduled fire で注入が実行される予定時刻 (ISO8601, UTC)。 immediate fire では
-   * 未設定 (= firedAt と同時)。 audit 表示で 「N 分後に予約」 を可視化するために持つ。
-   */
-  readonly scheduledFor?: string;
-}
 
 export interface DisruptionCatalogEntry extends ProblemDisruptionEntry {
   readonly problemId: string;
