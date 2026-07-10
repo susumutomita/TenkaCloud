@@ -49,7 +49,18 @@ AWS event runtime and require a separate archive export.
 | Auth0 role model | The same comparison table excludes Role Management from Free; B2B Essentials lists role-based access control per Organization. The issue's Auth0 RBAC design therefore requires a paid plan or an explicit move to application-owned role claims. | Decision required |
 | Cloudflare commercial use | The current Self-Serve Subscription Agreement grants an organization the right to use the Services and does not impose a blanket non-commercial-use restriction. It does prohibit reselling access, bypassing quotas, and several regulated uses. This engineering review is not legal advice. | Confirmed for implementation |
 | Event-month capacity | Workers Paid has a $5 USD monthly minimum. Free is limited to 100,000 requests/day and 10 ms CPU/invocation, so running an event on Free is unsupported. | Confirmed |
-| D1 versus Turso | The repository now has a D1 implementation, but production read/write volume and cross-region latency have not been measured. | Open |
+| D1 versus Turso | Resolved as a role split, not a single choice (ADR-049 §16/§17): D1 is the Always-On control store (this Worker); Turso stays the Lambda-era (SaaS/Lite) control-data bridge. Neither store's production read/write volume or cross-region latency has been measured against a live workload yet. | Role split decided; live volume/latency measurement still open |
+
+The Lambda-era side of that split now has a pure-SQL mode, not just the
+mirrored bridge: setting `CDK_PARAM_CONTROL_DATA_BACKEND=turso` on a
+problem-deploy-backend deploy (ADR-049 §5.1, issue #2435,
+[`infrastructure/lib/problem-deploy/control-data/`](../../infrastructure/lib/problem-deploy/control-data/))
+makes CDK skip synthesizing the SaaS/Lite control-data DynamoDB tables
+entirely — zero standing capacity on that path — while this Always-On Worker
+keeps D1 regardless of that flag, per the §16 role split above. See
+[CLAUDE.md](../../CLAUDE.md#data-isolation) for the full table list and the
+current live-verification caveat (implemented and unit/synth-tested, not yet
+exercised as a live deploy against a real Turso database).
 
 Sources:
 

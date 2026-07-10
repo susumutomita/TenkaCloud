@@ -154,9 +154,13 @@ describe("problem-pack-ci reusable workflow: stable outputs", () => {
 });
 
 describe("problem-pack-ci reusable workflow: docs example", () => {
-  it("should document the reusable workflow path the external example calls", () => {
-    expect(docsSource).toContain(
-      "susumutomita/TenkaCloud/.github/workflows/problem-pack-ci.yml@v1",
+  it("should document the reusable workflow path pinned to a full SemVer release tag", () => {
+    // The repository has no floating major tags (@v1/@v2) — every release is a
+    // full SemVer tag (see docs/external-pack-ci.md's version policy). Match the
+    // shape rather than a specific tag so this assertion does not go stale on
+    // the next release.
+    expect(docsSource).toMatch(
+      /susumutomita\/TenkaCloud\/\.github\/workflows\/problem-pack-ci\.yml@v\d+\.\d+\.\d+/,
     );
   });
 

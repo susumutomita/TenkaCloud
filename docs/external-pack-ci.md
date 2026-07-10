@@ -19,7 +19,7 @@ on:
 
 jobs:
   validate-pack:
-    uses: susumutomita/TenkaCloud/.github/workflows/problem-pack-ci.yml@v1
+    uses: susumutomita/TenkaCloud/.github/workflows/problem-pack-ci.yml@v0.2.7
     with:
       pack-directory: .
       run-local-tests: true
@@ -29,6 +29,11 @@ jobs:
 That is the whole integration. The workflow checks out your pack, installs only
 the pinned public `@tenkacloud/problem-sdk` CLI, validates the manifest +
 metadata + structure offline, and produces a deterministic JSON report.
+
+`v0.2.7` is the tag current as of this writing; check
+[Releases](https://github.com/susumutomita/TenkaCloud/releases) (or
+`gh release list --repo susumutomita/TenkaCloud --limit 1`) for the latest one
+before you pin.
 
 ## Inputs
 
@@ -76,7 +81,13 @@ The reusable workflow is offline and least-privilege by construction:
 
 ## Version policy
 
-The `@v1` tag of the reusable workflow points at a reviewed, immutable release.
-Breaking changes to the inputs, outputs, or security posture ship under a new
-major tag (`@v2`); additive changes ship within `@v1`. Pin to a major tag (not a
-branch) so an external pack's CI is reproducible.
+The repository does not publish floating major tags (`@v1` / `@v2`) — every
+release is a full SemVer tag covering the whole repository (`v0.0.1` through
+the current `v0.2.7`, and counting), not a tag scoped to just this workflow.
+Pin to one exact tag (not a branch, and not a moving major) so an external
+pack's CI is reproducible; `gh release list --repo susumutomita/TenkaCloud
+--limit 1` finds the latest one. There is no separate major-version contract
+for this workflow's inputs, outputs, or security posture, so treat every tag
+bump as a deliberate step: diff
+`.github/workflows/problem-pack-ci.yml` between your current tag and the new
+one before you move the pin.
