@@ -23,7 +23,7 @@ These areas are active and ready for contributors.
 | Area | Direction | Expected outcome |
 | --- | --- | --- |
 | Problem marketplace | Turn curated examples into a browsable catalog | Authors can discover, copy, and adapt proven competition patterns |
-| Richer scenarios | Expand beyond single-team deploy and score loops | More Battle formats, disruption events, and portal plugins |
+| Battle formats | Grow real-time, head-to-head competition beyond today's single-team deploy/score loop | More Battle formats for organizers to run |
 | Offline emulator | Let contributors test flows without full AWS deployment | LocalStack and frontend mock paths for faster iteration |
 | Operations polish | Make event day diagnosis easier | Clearer deploy logs, sandbox lifecycle state, and health checks |
 
@@ -32,7 +32,7 @@ These areas are active and ready for contributors.
 | Area | Direction |
 | --- | --- |
 | Cloud competition ecosystem | Shared problem packs, reusable judging models, and event templates |
-| Multi-cloud authority transfer | Trust Bridge adapters for more controlled provider operations |
+| Multi-cloud authority transfer | Broaden Trust Bridge's AWS/Azure/GCP adapters (already live as the Always-On mode command seam) to more providers and operation scopes |
 | Author analytics | Feedback loops that show where players get stuck and what to improve |
 
 ## Good First Issue Candidates
