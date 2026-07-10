@@ -13,8 +13,8 @@ reference/
 reference/**
 .claude/
 .claude/**
-infrastructure/cdk.out/
-infrastructure/cdk.out/**
+**/cdk.out/**
+**/cdk.out.test/**
 infrastructure/cloudformation/
 infrastructure/cloudformation/**
 references/
