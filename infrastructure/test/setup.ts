@@ -4,17 +4,17 @@
 // aws-cdk-lib's `App` uses `process.env.CDK_OUTDIR` (cxapi.OUTDIR_ENV) when
 // the `outdir` prop is omitted; otherwise it falls back to
 // `fs.mkdtempSync(path.join(os.tmpdir(), "cdk.out"))`, which is never cleaned
-// up — even on normal test exit. Pinning it to a worker-scoped path inside
-// the repo keeps output owned by this package. test/run-vitest.ts purges the
-// worker directories before and after each run because VITEST_WORKER_ID is not
-// stable across runs.
+// up — even on normal test exit. Pinning it to a run + worker-scoped path inside
+// the repo keeps output owned by this package. VITEST_WORKER_ID is unique only
+// inside one Vitest invocation, so test/run-vitest.ts supplies a unique run ID
+// and purges only that invocation's directory.
 import { join, resolve } from "node:path";
+import { resolveCdkTestRunId, resolveVitestWorkerId } from "./cdk-test-outdir-contract";
 
-process.env.CDK_OUTDIR = join(
-  resolve(__dirname, ".."),
-  "cdk.out.test",
-  process.env.VITEST_WORKER_ID ?? "0",
-);
+const runId = resolveCdkTestRunId();
+const workerId = resolveVitestWorkerId();
+
+process.env.CDK_OUTDIR = join(resolve(__dirname, ".."), "cdk.out.test", runId, workerId);
 
 // Issue #2515: skip real esbuild asset bundling for every CDK stack synthed in the test suite.
 // aws-cdk-lib's `App` constructor unconditionally merges `CDK_CONTEXT_JSON` (cxapi.CONTEXT_ENV)

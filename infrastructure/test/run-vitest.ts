@@ -1,15 +1,16 @@
 import { spawn } from "node:child_process";
 import {
   type Dirent,
-  existsSync,
+  lstatSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
-  statSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { CDK_TEST_RUN_ID_ENV, CDK_TEST_RUN_ID_PATTERN } from "./cdk-test-outdir-contract";
 
 export const CDK_TEST_OUTDIR = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -17,16 +18,59 @@ export const CDK_TEST_OUTDIR = resolve(
   "cdk.out.test",
 );
 
-export function cleanCdkTestOutdir(outdir = CDK_TEST_OUTDIR): void {
-  rmSync(outdir, { force: true, recursive: true });
+function validateCdkTestOutdirRoot(root: string, create: boolean): boolean {
+  let stats = lstatSync(root, { throwIfNoEntry: false });
+  if (!stats && create) {
+    mkdirSync(root, { recursive: true });
+    stats = lstatSync(root, { throwIfNoEntry: false });
+  }
+  if (!stats) return false;
+  if (stats.isSymbolicLink()) {
+    throw new Error(`CDK test outdir root must not be a symbolic link: ${root}`);
+  }
+  if (!stats.isDirectory()) {
+    throw new Error(`CDK test outdir root must be a directory: ${root}`);
+  }
+  return true;
 }
 
-// Issue #2515: recursive `du`-style size, used both to report a leftover cdk.out.test dir found
-// on the pre-run clean and to size up the CDK asset bundles a run produced (see
-// `summarizeBundleAssets`). Pure / unit-testable: takes a path, returns bytes.
+export function createCdkTestRunOutdir(root = CDK_TEST_OUTDIR, ownerPid = process.pid): string {
+  if (!Number.isSafeInteger(ownerPid) || ownerPid <= 0) {
+    throw new Error(`invalid CDK test run owner PID: ${ownerPid}`);
+  }
+  validateCdkTestOutdirRoot(root, true);
+  return mkdtempSync(join(root, `run-${ownerPid}-`));
+}
+
+// Only a direct run-* child created by this runner is a valid automatic cleanup target. The
+// shared root and interrupted siblings are intentionally left for explicit maintenance.
+export function cleanCdkTestRunOutdir(
+  outdir: string,
+  root = CDK_TEST_OUTDIR,
+  ownerPid = process.pid,
+): void {
+  const resolvedRoot = resolve(root);
+  const resolvedOutdir = resolve(outdir);
+  const childName = relative(resolvedRoot, resolvedOutdir);
+  if (!CDK_TEST_RUN_ID_PATTERN.test(childName) || !childName.startsWith(`run-${ownerPid}-`)) {
+    throw new Error(`refusing to clean an unowned CDK test outdir: ${outdir}`);
+  }
+  if (!validateCdkTestOutdirRoot(resolvedRoot, false)) return;
+  const stats = lstatSync(resolvedOutdir, { throwIfNoEntry: false });
+  if (!stats) return;
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    throw new Error(`refusing to clean an unsafe CDK test run outdir: ${outdir}`);
+  }
+  rmSync(resolvedOutdir, { force: true, recursive: true });
+}
+
+// Issue #2515: recursive `du`-style size for the CDK asset bundles a run produced (see
+// `summarizeBundleAssets`). Symlinks are skipped so diagnostics cannot escape the owned tree or
+// recurse through a link cycle.
 export function directorySizeBytes(path: string): number {
-  const stats = statSync(path, { throwIfNoEntry: false });
+  const stats = lstatSync(path, { throwIfNoEntry: false });
   if (!stats) return 0;
+  if (stats.isSymbolicLink()) return 0;
   if (stats.isFile()) return stats.size;
   if (!stats.isDirectory()) return 0;
 
@@ -44,16 +88,22 @@ export function directorySizeBytes(path: string): number {
   return total;
 }
 
-export function formatLeftoverCdkOutdirMessage(sizeBytes: number): string {
-  const sizeMb = (sizeBytes / (1024 * 1024)).toFixed(1);
-  return `removed leftover cdk.out.test (${sizeMb} MB) — likely from an interrupted run`;
+export function formatExistingCdkOutdirMessage(entryCount: number): string {
+  return `found ${entryCount} existing cdk.out.test entries — active parallel, interrupted, or direct run`;
 }
 
-// Logs (does not remove) — call before `cleanCdkTestOutdir()` so an interrupted prior run is
-// visible instead of silently vanishing.
-export function reportLeftoverCdkTestOutdir(outdir = CDK_TEST_OUTDIR): void {
-  if (!existsSync(outdir)) return;
-  console.log(formatLeftoverCdkOutdirMessage(directorySizeBytes(outdir)));
+// Visibility only: existing data may belong to an active parallel run, so never delete it here.
+export function reportExistingCdkTestOutdir(outdir = CDK_TEST_OUTDIR): void {
+  let entryCount: number;
+  try {
+    const stats = lstatSync(outdir, { throwIfNoEntry: false });
+    if (!stats?.isDirectory() || stats.isSymbolicLink()) return;
+    entryCount = readdirSync(outdir).length;
+  } catch {
+    return;
+  }
+  if (entryCount === 0) return;
+  console.log(formatExistingCdkOutdirMessage(entryCount));
 }
 
 const DEFAULT_MAX_WORKERS = "2";
@@ -72,7 +122,7 @@ export function isTimingReportEnabled(
   return Boolean(env.CI) || env.TENKACLOUD_VITEST_TIMINGS === "1";
 }
 
-export function timingReportPath(outdir = CDK_TEST_OUTDIR): string {
+export function timingReportPath(outdir: string): string {
   return join(outdir, "vitest-report.json");
 }
 
@@ -85,6 +135,7 @@ export function buildVitestArgs(
     | "CI"
     | "TENKACLOUD_VITEST_TIMINGS"
   > = process.env,
+  reportOutdir?: string,
 ): string[] {
   const defaults: string[] = [];
 
@@ -107,10 +158,13 @@ export function buildVitestArgs(
     !hasCliOption(args, "--reporter") &&
     !hasCliOption(args, "--outputFile.json")
   ) {
+    if (!reportOutdir) {
+      throw new Error("a run-scoped report outdir is required when Vitest timings are enabled");
+    }
     defaults.push(
       "--reporter=default",
       "--reporter=json",
-      `--outputFile.json=${timingReportPath()}`,
+      `--outputFile.json=${timingReportPath(reportOutdir)}`,
     );
   }
 
@@ -125,6 +179,14 @@ interface VitestJsonTestResult {
 
 interface VitestJsonReport {
   readonly testResults: readonly VitestJsonTestResult[];
+}
+
+export function shouldCleanCdkTestRun(
+  exitCode: number | null,
+  exitSignal: NodeJS.Signals | null,
+  forwardedSignal: boolean,
+): boolean {
+  return exitCode === 0 && exitSignal === null && !forwardedSignal;
 }
 
 export function slowestTestFiles(
@@ -184,10 +246,10 @@ export function formatBundleSummary(summary: { count: number; totalBytes: number
   return `CDK asset bundles produced: ${summary.count} (${totalMb} MB total)`;
 }
 
-// Runs after the vitest child exits (before the `finally` cleanup wipes cdk.out.test) so both
-// the JSON report and the staged assets it reports on still exist on disk. Never allowed to fail
-// the run — a parse error here is a diagnostics-only concern.
-export function printTimingAndBundleReport(outdir = CDK_TEST_OUTDIR): void {
+// Runs after the vitest child exits (before the current run cleanup) so both the JSON report and
+// the staged assets it reports on still exist on disk. Never allowed to fail the run — a parse
+// error here is a diagnostics-only concern.
+export function printTimingAndBundleReport(outdir: string): void {
   try {
     const report = JSON.parse(readFileSync(timingReportPath(outdir), "utf8")) as VitestJsonReport;
     console.log("\nSlowest test files:");
@@ -203,19 +265,24 @@ export function printTimingAndBundleReport(outdir = CDK_TEST_OUTDIR): void {
 }
 
 export async function runVitest(args = process.argv.slice(2)): Promise<number> {
-  reportLeftoverCdkTestOutdir();
-  cleanCdkTestOutdir();
+  reportExistingCdkTestOutdir();
+  const runOutdir = createCdkTestRunOutdir();
 
-  const vitestArgs = buildVitestArgs(args);
+  const vitestArgs = buildVitestArgs(args, process.env, runOutdir);
   const reportEnabled = isTimingReportEnabled();
-  if (reportEnabled) {
-    // The `json` reporter needs its output directory to exist; synth itself creates the
-    // per-worker subdirs lazily, so the top-level dir isn't guaranteed to exist yet.
-    mkdirSync(CDK_TEST_OUTDIR, { recursive: true });
-  }
-
-  const child = spawn("vitest", vitestArgs, { stdio: "inherit" });
-  const forwardSignal = (signal: NodeJS.Signals) => child.kill(signal);
+  const child = spawn("vitest", vitestArgs, {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      [CDK_TEST_RUN_ID_ENV]: basename(runOutdir),
+    },
+  });
+  let forwardedSignal = false;
+  let cleanRunOutdir = false;
+  const forwardSignal = (signal: NodeJS.Signals) => {
+    forwardedSignal = true;
+    child.kill(signal);
+  };
   const signals: NodeJS.Signals[] = ["SIGHUP", "SIGINT", "SIGTERM"];
 
   for (const signal of signals) {
@@ -223,19 +290,27 @@ export async function runVitest(args = process.argv.slice(2)): Promise<number> {
   }
 
   try {
-    const exitCode = await new Promise<number>((resolveExit, reject) => {
+    const result = await new Promise<{
+      exitCode: number | null;
+      signal: NodeJS.Signals | null;
+    }>((resolveExit, reject) => {
       child.once("error", reject);
-      child.once("close", (code) => resolveExit(code ?? 1));
+      child.once("close", (exitCode, signal) => resolveExit({ exitCode, signal }));
     });
     if (reportEnabled) {
-      printTimingAndBundleReport();
+      printTimingAndBundleReport(runOutdir);
     }
-    return exitCode;
+    cleanRunOutdir = shouldCleanCdkTestRun(result.exitCode, result.signal, forwardedSignal);
+    return result.exitCode ?? 1;
   } finally {
     for (const signal of signals) {
       process.off(signal, forwardSignal);
     }
-    cleanCdkTestOutdir();
+    if (cleanRunOutdir) {
+      cleanCdkTestRunOutdir(runOutdir);
+    } else {
+      console.warn(`preserving CDK test output after failed or interrupted run: ${runOutdir}`);
+    }
   }
 }
 
