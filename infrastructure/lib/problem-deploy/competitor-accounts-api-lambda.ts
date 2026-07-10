@@ -78,7 +78,11 @@ export class CompetitorAccountsApiLambda extends Construct {
       entry: path.resolve(import.meta.dirname, "handlers/competitor-accounts-handler/index.ts"),
       // verify endpoint は STS AssumeRole 1 回 (= ~1s) + DDB Update なので 10s で十分。
       timeout: Duration.seconds(15),
-      memorySize: 256,
+      // 256MB では init 中に Runtime.OutOfMemory で落ち、API Gateway が CORS ヘッダ無しの 502 を
+      // 返すため、ブラウザには "Failed to fetch" としてしか見えなかった (競技者アカウント画面)。
+      // 本番実測で init peak は ~676MB (Cognito SAML / STS / 複数 SDK client を eager load)。
+      // 1024MB で余裕を持たせ、同時に CPU も増えて cold start が速くなる。
+      memorySize: 1024,
       environment: {
         // Issue #2442: 純 SQL backend では table 自体が無いので env も足さない (= CFn byte
         // 互換 / DEPLOYMENTS_TABLE_NAME と同じ conditional-spread パターン)。

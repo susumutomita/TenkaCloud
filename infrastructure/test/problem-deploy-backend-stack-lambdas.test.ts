@@ -483,3 +483,34 @@ describe("ProblemDeployBackendStack (MVP-1) — Competitor Accounts API Lambda (
     );
   });
 });
+
+// The tenant-facing admin Hono handlers (deploy / events+feature-flags / competitor-accounts)
+// were OOMing or timing out on their old 256/512MB in production: at those sizes the process
+// hit Runtime.OutOfMemory during init (measured init peak ~676MB for competitor-accounts) or
+// got too little CPU to finish init inside the timeout. A dead Lambda makes API Gateway return
+// a 502 WITHOUT CORS headers, so the browser only saw "Failed to fetch". Pin the raised sizes so
+// a future edit can't silently drop them back under the measured ceiling.
+describe("ProblemDeployBackendStack — admin API Lambdas memory (OOM/timeout fix)", () => {
+  const tpl = synthDefault();
+
+  const memoryOf = (nameFragment: string): number => {
+    const functions = tpl.findResources("AWS::Lambda::Function");
+    const entry = Object.entries(functions).find(
+      ([name]) => name.includes(nameFragment) && name.includes("Function"),
+    );
+    expect(entry, `Lambda matching ${nameFragment} should exist`).toBeDefined();
+    return (entry?.[1] as { Properties?: { MemorySize?: number } }).Properties?.MemorySize ?? 0;
+  };
+
+  it("DeployApi Lambda should be provisioned at 1024MB (was 256MB → init timeout)", () => {
+    expect(memoryOf("DeployApi")).toBe(1024);
+  });
+
+  it("EventApi Lambda should be provisioned at 1024MB (was 512MB → cold-start OOM)", () => {
+    expect(memoryOf("EventApi")).toBe(1024);
+  });
+
+  it("CompetitorAccounts Lambda should be provisioned at 1024MB (was 256MB → init OOM)", () => {
+    expect(memoryOf("CompetitorAccounts")).toBe(1024);
+  });
+});

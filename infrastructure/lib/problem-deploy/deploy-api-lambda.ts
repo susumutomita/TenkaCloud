@@ -128,7 +128,9 @@ export class DeployApiLambda extends Construct {
     this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "handlers/deploy-handler/index.ts"),
       timeout: Duration.seconds(15),
-      memorySize: 256,
+      // 256MB では本番で 255/256MB まで張り付き、CPU 不足で init が遅く 15s timeout を連発
+      // していた (デプロイ履歴 API)。メモリ増で CPU も増え cold start が速くなり timeout も解消。
+      memorySize: 1024,
       environment: {
         // Issue #2441: 純 SQL backend では table 自体が無いので env も足さない (= CFn byte 互換 /
         // EVENTS_TABLE_NAME と同じ conditional-spread パターン)。
