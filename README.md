@@ -1,44 +1,30 @@
 <!-- markdownlint-disable MD033 -->
 <div align="center">
 
+**English** | [日本語](./README.ja.md)
+
 # TenkaCloud
 
 **Run real cloud drills. Build reusable AWS problem catalogs.**
 
-TenkaCloud is a self-hostable, Apache-2.0 platform for running hands-on AWS
-competitions. Organizers manage events, teams, deploys, scoring, hints, and per-team
-AWS Console federation from one application; participants solve real AWS scenarios in
-isolated accounts.
+TenkaCloud is a self-hostable, Apache-2.0 platform for running hands-on AWS competitions. Organizers manage events, teams, deploys, scoring, hints, and per-team AWS Console federation from one application; participants solve real AWS scenarios in isolated accounts.
 
 [Landing page](https://tenkacloud.com) · [Demo portal](https://tenkacloud.com/portal-demo/?demo=1) · [Quickstart](#quickstart) · [Add your own problems](#add-your-own-problems)
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/susumutomita/TenkaCloud)
 [![CI](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
-[![Built with CDK](https://img.shields.io/badge/Built%20with-AWS%20CDK-orange)](https://aws.amazon.com/cdk/)
-[![SBT](https://img.shields.io/badge/SBT-0.3.9-blue)](https://github.com/awslabs/sbt-aws)
 [![codecov](https://codecov.io/gh/susumutomita/TenkaCloud/graph/badge.svg?token=WfleGvJor9)](https://codecov.io/gh/susumutomita/TenkaCloud)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
 
 </div>
 
-> TenkaCloud is an independent open-source project and is not affiliated with,
-> endorsed by, or sponsored by Amazon Web Services, Inc. AWS and related marks are
-> trademarks of Amazon.com, Inc. or its affiliates.
+> TenkaCloud is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Amazon Web Services, Inc. AWS and related marks are trademarks of Amazon.com, Inc. or its affiliates.
 
 ---
 
 ## Vision
 
-TenkaCloud is not only a competition platform. The product direction is a path
-from safe, individual practice to team competition: **local drills → practical
-courses / enterprise training → team competitions / GameDay → global
-community**. Local drills are live today (`make local`); courses, enterprise
-training as a packaged product, and a global community are directions we are
-building toward, not shipped features. See [`docs/vision.md`](./docs/vision.md)
-for the full picture, including what is live today versus where we are still
-headed.
-
-TenkaCloud は競技プラットフォームだけを目指しているわけではありません。個人が安全に練習できるローカルドリルから、実践的なコースや企業研修、チーム対抗の競技・GameDay、そしてグローバルなコミュニティへと進む道筋を目指しています。ローカルドリル (`make local`) は現時点で実際に動きますが、コースや企業研修のパッケージ化、グローバルコミュニティは今後の方向性であり、まだ実装されたものではありません。実装済みと構想中の区別を含めた全体像は [`docs/vision.md`](./docs/vision.md) を参照してください。
+TenkaCloud is not only a competition platform. The product direction is a path from safe, individual practice to team competition: **local drills → practical courses / enterprise training → team competitions / GameDay → global community**. Local drills are live today (`make local`); courses, enterprise training as a packaged product, and a global community are directions we are building toward, not shipped features. See [`docs/vision.md`](./docs/vision.md) for the full picture.
 
 ## What TenkaCloud gives you
 
@@ -47,10 +33,8 @@ TenkaCloud turns a problem catalog into a live cloud drill:
 1. **Create an event** in the Application Admin Console.
 2. **Select problems** from the catalog.
 3. **Register teams** and their AWS account trust settings.
-4. **Deploy problem stacks** into each team's isolated AWS account (cross-account
-   `AssumeRole` + required `ExternalId`).
-5. **Run the event** — participants use the portal for instructions, hints,
-   submissions, scores, and one-click AWS Console federation.
+4. **Deploy problem stacks** into each team's isolated AWS account (cross-account `AssumeRole` + required `ExternalId`).
+5. **Run the event** — participants use the portal for instructions, hints, submissions, scores, and one-click AWS Console federation.
 
 | Style | Use it for | Scoring |
 | --- | --- | --- |
@@ -61,255 +45,75 @@ TenkaCloud turns a problem catalog into a live cloud drill:
 
 ### Try it in your browser (GitHub Codespaces, zero install)
 
-No AWS account, no local Docker, no `git clone` — everything runs in a disposable
-cloud dev container that GitHub builds for you.
+Codespaces plays **cloud-independent drills only** — self-contained Docker container problems that need no AWS account. AWS problems (deployed into your own AWS account) are not playable in Codespaces; see **Deploy on AWS** below for those.
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/susumutomita/TenkaCloud)
 
-1. Click the badge above → **Create codespace on main**. The first build takes a few
-   minutes: it installs Bun, initializes the `problems/` catalog, and starts Docker
-   automatically (see [`.devcontainer/devcontainer.json`](./.devcontainer/devcontainer.json)).
-2. Once the terminal is ready, run the **"▷ ローカルプレイ開始"** task — open the
-   Command Palette (`Cmd/Ctrl+Shift+P`) → **Tasks: Run Task** →
-   **"▷ ローカルプレイ開始"** (or press `Cmd/Ctrl+Shift+B`, it is the default build
-   task). This runs `make local` for you inside the codespace.
-3. When the terminal shows the Participant Portal is running, open the **PORTS** tab
-   in the bottom panel and click the preview (globe) icon next to port **5175**.
+1. Click the badge above → **Create codespace on main** (the first build installs Bun, initializes `problems/`, and starts Docker for you).
+2. Run the **"▷ ローカルプレイ開始"** task (Command Palette → **Tasks: Run Task**, or `Cmd/Ctrl+Shift+B`) — it runs `make local` for you.
+3. Once the Participant Portal is running, open the **PORTS** tab and click the preview icon next to port **5175**.
 
-> **Stay inside the codespace.** In the browser portal, local challenge links go
-> through the Participant Portal preview URL on port `5175`; the portal dev server
-> proxies those requests to the loopback problem port. In the integrated terminal,
-> the underlying loopback form still works (`curl http://127.0.0.1:18080/...`).
-> Pasting a raw `127.0.0.1` URL into a browser tab on your own computer points at
-> your own machine instead, and will not work.
+> Stay inside the codespace: drill links go through the port `5175` preview URL; a raw `127.0.0.1` URL pasted into a browser tab on your own machine will not work.
 
 ### Try it locally (no AWS)
 
-`make local` is the single local drill entry point: it starts the local scoring
-API, any requested Docker problem container, and the Participant Portal. It does
-not install software or trust `mise`; use `make local-onboard` for guided setup.
+`make local` is the single local drill entry point: it starts the local scoring API and the Participant Portal, then you pick and start a drill from the portal screen that opens. It installs nothing and does not trust `mise`; use `make local-onboard` for guided setup.
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make install
 git submodule update --init problems
-make local PROBLEM=<id>
+make local
 ```
 
-- `make local-list` lists every local-play problem id if you want to pre-start
-  one with `make local PROBLEM=<id>`; otherwise run `make local` and deploy from
-  the portal.
-- `make local` accepts either Docker Compose frontend: `docker compose` or
-  standalone `docker-compose`. It auto-detects the frontend; set
-  `TENKACLOUD_COMPOSE_CLI='docker-compose'` or
-  `TENKACLOUD_COMPOSE_CLI='docker compose'` to force one.
-- Started problem containers keep running until you stop them (no idle
-  timeout): the portal **Stop** button stops one problem, and `make local-down`
-  stops the session and every container. Only the running cap (3 containers)
-  stops the least-recently-played problem automatically, to make room for
-  another start.
-- `make doctor` reports the prerequisites and changes nothing.
-- `make local-onboard` is the explicit guided setup path. `make local-onboard YES=1`
-  pre-approves software installs (also used by automation). In a
-  non-interactive run without `YES=1`, nothing is installed — the missing
-  prerequisites are reported instead.
-- Needs a Docker runtime (Colima or Docker Desktop). For API-only scripts, use
-  `make local-up` and attach the browser later with `make local-portal`.
+`make local-list` lists every drill id if you would rather pre-start one with `make local PROBLEM=<id>` instead of picking it from the portal. See [docs/local-play.md](./docs/local-play.md) for that and every other detail.
 
 ### Deploy on AWS
 
-Deploy from the AWS Console. A CloudFormation stack creates a CodeBuild project that
-git-clones this repo and runs the deploy for you — **no local install, no GitHub
-connection**.
+Deploy from the AWS Console — a CloudFormation stack creates a CodeBuild project that git-clones this repo and runs the deploy for you, **no local install, no GitHub connection**.
 
 1. Download [`infrastructure/templates/lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml).
-2. Open the [CloudFormation create-stack page](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template)
-   in `ap-northeast-1` → **Upload a template file** → upload it → stack name
-   **`tenkacloud-lite-launcher`**.
-3. Set **`TenantAdminEmail`** to your Admin Console login email. That is the only
-   required parameter. *(To ship your own problems, also set `ProblemsRepoUrl` — see
-   [Add your own problems](#add-your-own-problems).)*
+2. Open the [CloudFormation create-stack page](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template) in `ap-northeast-1` → **Upload a template file** → upload it → stack name **`tenkacloud-lite-launcher`**.
+3. Set **`TenantAdminEmail`** (the only required parameter) to your Admin Console login email. *(To ship your own problems, also set `ProblemsRepoUrl` — see [Add your own problems](#add-your-own-problems).)*
 4. Check **acknowledge IAM** and create the stack.
-5. Open the CodeBuild project from the stack's **`StartBuildConsoleUrl`** output and
-   press **Start build**.
+5. Open the CodeBuild project from the stack's **`StartBuildConsoleUrl`** output and press **Start build**.
 
-After ~15-30 minutes the build finishes. The **Admin Console** and **Participant Portal**
-URLs are in the **Outputs** of the `tenkacloud-lite` and `tenkacloud-lite-problem-deploy`
-stacks that the build creates. That is your deployment.
+After ~15-30 minutes the build finishes. The **Admin Console** and **Participant Portal** URLs are in the **Outputs** of the `tenkacloud-lite` and `tenkacloud-lite-problem-deploy` stacks that the build creates.
 
-**Tear down:** in the same CodeBuild project, choose **Start build with overrides**, set
-the environment variable `ACTION` to `destroy`, and start it — that deletes the two app
-stacks in the right order. Then delete the `tenkacloud-lite-launcher` stack to remove the
-CodeBuild project itself.
-
-<sub>Prefer a local terminal, or need multi-tenant SaaS? See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md).</sub>
-
-<sub>Running a recurring program with zero always-on AWS compute between events?
-See the [Always-On mode (ADR-049)](./DEPLOYMENT_GUIDE.md#always-on-mode-adr-049)
-section in DEPLOYMENT_GUIDE.md and the operator runbook in
-[docs/always-on/README.md](./docs/always-on/README.md).</sub>
+**Tear down:** in the same CodeBuild project, choose **Start build with overrides**, set `ACTION` to `destroy`, and start it; then delete the `tenkacloud-lite-launcher` stack to remove the CodeBuild project itself.
 
 ## Running costs
 
-TenkaCloud runs in one of two profiles, selected by the
-`CDK_PARAM_CONTROL_DATA_BACKEND` env var (unset = default).
+TenkaCloud runs in one of two profiles, selected by the `CDK_PARAM_CONTROL_DATA_BACKEND` env var (unset = default).
 
 | Profile | For | Control data | Problem deploy |
 | --- | --- | --- | --- |
 | **AWS-native** (default, unset or `dynamodb`) | Teams / companies who want everything inside AWS | DynamoDB (provisioned 1/1), 8 tables + 8 GSIs | Lambda `CreateStack` (default) |
 | **Zero-cost** (opt-in, `turso`) | Individuals, trials, personal events | Turso (libSQL) — 0 DynamoDB tables / 0 GSIs in the Lite synth | Lambda `CreateStack` (default) |
 
-Lite mode (`make deploy`) is already the lean path. The problem-deploy backend runs on
-**Lambda `CreateStack`/`UpdateStack` by default** (no CodeBuild project), and the KMS
-customer-managed key was removed in favor of the AWS-managed key. What is left standing
-on the default profile is DynamoDB: eight tables plus eight GSIs pinned at PROVISIONED
-1/1, which bill even while idle. Opting into `CONTROL_DATA_BACKEND=turso` removes all
-eight of those tables (Events, Teams, Deployments, ProblemEndpoints,
-CompetitorAccounts, Disruptions, AdminAuditLog, and — as of #2499 — SamlIdps) — CDK
-does not synthesize any of them, which is what actually removes the standing cost, not
-just the read/write path. The SAML IdP CRUD API (`/tenant/idp*`) keeps working on the
-Turso profile: the Lambda is decoupled from table presence and resolves the repository
-through the same seam as the other seven tables, so opting into `turso` yields a Lite
-synth with **zero `AWS::DynamoDB::Table` resources**.
-
-### Opt in to the zero-cost profile
-
-1. **Create a Turso database** ([Turso CLI](https://docs.turso.tech/cli/introduction)):
-
-   ```bash
-   turso db create tenkacloud-lite
-   turso db show tenkacloud-lite --url
-   turso db tokens create tenkacloud-lite
-   ```
-
-   `db show --url` prints something like
-   `libsql://tenkacloud-lite-<organization>.turso.io`; keep the token from
-   `db tokens create` for the next step.
-
-2. **Store the token in SSM as a `SecureString`** — never write it into `.env`:
-
-   ```bash
-   aws ssm put-parameter \
-     --name /TenkaCloud/development/turso/auth-token \
-     --type SecureString \
-     --value "<token from step 1>"
-   ```
-
-3. **Add three lines to `infrastructure/environments/<env>/.env`** (copy from the
-   matching `.env.example` first if you have not already):
-
-   ```bash
-   CDK_PARAM_CONTROL_DATA_BACKEND=turso
-   CDK_PARAM_TURSO_DATABASE_URL=libsql://tenkacloud-lite-<organization>.turso.io
-   CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=/TenkaCloud/development/turso/auth-token
-   ```
-
-4. **`make deploy`.** CDK skips synthesizing all eight DynamoDB tables listed above; the
-   first Lambda cold start creates the SQL schema on the Turso database for you (no
-   manual migration step).
-
-The steps above are for a **fresh** stack. Moving an *existing* `dynamodb`-backed stack
-to `turso` is a separate, riskier path: the Events/Teams/Deployments/ProblemEndpoints/
-CompetitorAccounts/Disruptions/AdminAuditLog/SamlIdps DynamoDB tables all use
-`RemovalPolicy.RETAIN`, so cutting over directly orphans them (still billing) instead of
-deleting them. See the `CDK_PARAM_CONTROL_DATA_BACKEND` comment block in
-[`infrastructure/environments/development/.env.example`](./infrastructure/environments/development/.env.example)
-for the `turso-mirror` bridge sequence (mirror first, verify the SQL replica, cut over,
-then manually delete the orphaned tables).
-
-> **Not yet live-verified.** "CDK does not synthesize these 8 tables" (zero
-> `AWS::DynamoDB::Table` resources in the Lite synth) is checked by `Template.fromStack`
-> synth assertions and by repository-seam unit tests — solid evidence the code path
-> exists, but nobody has run `make deploy` with `CONTROL_DATA_BACKEND=turso` against a
-> fresh AWS account + a real Turso database and read the resulting AWS bill yet. The
-> SAML IdP CRUD API is exercised against the SQL repository by unit tests only, not by a
-> live Turso database either. Treat the "near-$0" claim as implemented-and-tested, not
-> as a measured production result.
-
-### Measured cost (single AWS account, 2026-06, AWS-native/`dynamodb` profile)
-
-| Source | Monthly | Status |
-| --- | --- | --- |
-| DynamoDB (provisioned tables) | ~$7.06 | Standing cost on the default `dynamodb` profile — opt into `CONTROL_DATA_BACKEND=turso` above to remove all 8 tables (zero `AWS::DynamoDB::Table` resources in the Lite synth) |
-| CodeBuild (problem deploy) | part of ~$2.55 | **Resolved** — the Lambda deploy path is the default (#2353); no CodeBuild project in Lite mode |
-| CodeBuild (SaaS tenant provisioning) | part of ~$2.55 | SaaS-mode only; not present in Lite mode |
-| KMS customer-managed key | $0 | **Resolved** — AWS-managed key via a CDK Aspect |
-| Retained tables after `destroy` | cumulative | **Resolved** — `make destroy` now warns and prints delete commands (#2445) |
-
-> **Free Tier note.** New-style AWS Free Tier accounts (2025-07 onward) are
-> credit-based: there is **no** always-free 25 RCU/WCU DynamoDB allowance. Credits can
-> make the visible bill read $0, but Usage still accrues from the first hour and becomes
-> a real charge once the credits run out.
-
-### Turso free-plan headroom
-
-[`quota-model.ts`](./infrastructure/lib/problem-deploy/control-data/quota-model.ts)
-models the event-day SQL row traffic against Turso's free-plan monthly quota:
-
-| Turso free-plan quota (as modeled in `quota-model.ts`) | Monthly limit |
-| --- | --- |
-| Row reads | 500,000,000 |
-| Row writes | 10,000,000 |
-
-The model counts one leaderboard-snapshot row read per participant per poll, one
-summary row write per scored change, and one snapshot row write per refresh interval.
-Its test fixture
-([`quota-model.test.ts`](./infrastructure/test/problem-deploy/control-data/quota-model.test.ts))
-— 300 participants, a 30-second leaderboard poll, a 24-hour event, 25,000 summary
-writes, a 30-second snapshot refresh — comes out to 864,000 row reads and 27,880 row
-writes: about 0.17% of the read quota and 0.28% of the write quota. That is a **model of
-an event-day access pattern**, not a bill from a live database — it shows that a single
-mid-size event has wide headroom under the free plan, nothing more.
-
-個人でゼロコストに近い運用をしたい場合は `CDK_PARAM_CONTROL_DATA_BACKEND=turso` を選んでください。
-Turso でデータベースを作成し、発行された token を SSM の SecureString に保存し(`.env` には書きません)、
-`.env` に 3 行(`CDK_PARAM_CONTROL_DATA_BACKEND` / `CDK_PARAM_TURSO_DATABASE_URL` /
-`CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME`)を足してから `make deploy` するだけで、
-DynamoDB の control-data テーブル 8 個(Events / Teams / Deployments / ProblemEndpoints /
-CompetitorAccounts / Disruptions / AdminAuditLog / SamlIdps)がすべて作られなくなり、Lite mode の
-DynamoDB テーブル数は 0 個(GSI も 0 本)になります。SAML IdP の CRUD API(`/tenant/idp*`)は
-table の有無から切り離されているため、Turso 上のテーブル経由で引き続き動作します。ただし、この
-経路は CDK synth とユニットテストで検証済みであり、実際の AWS アカウント + Turso データベースに
-対する live なエンドツーエンド計測はまだ行っていません。実測値の確認が取れ次第この節を更新します。
+Opting in to the zero-cost profile is four steps: create a Turso database, store its token in SSM as a `SecureString`, add three `CDK_PARAM_TURSO_*` lines to your `.env`, then `make deploy`. For the full walkthrough, the migration path for an existing `dynamodb`-backed stack, measured costs, and the current live-verification status, see [docs/running-costs.md](./docs/running-costs.md).
 
 ## Add your own problems
 
-You never fork this platform to add problems. There are two paths, and which one
-you want depends on whether the problem should be shared:
+You never fork this platform to add problems. There are two paths, depending on whether the problem should be shared:
 
-- **Contribute to the official catalog** — for problems the wider community can
-  reuse.
-- **Add a private Problem Pack** — for internal-only or one-off problems that
-  never need to leave your own machine or tenant.
+- **Contribute to the official catalog** — for problems the wider community can reuse.
+- **Add a private Problem Pack** — for internal-only or one-off problems that never need to leave your own machine or tenant.
 
 ### Option A: contribute to the official catalog
 
-Problems live in their own repo — [TenkaCloudChallenge][catalog], cloned in at deploy
-time:
+Problems live in their own repo — [TenkaCloudChallenge][catalog], cloned in at deploy time.
 
 1. **Fork** [TenkaCloudChallenge][catalog].
-2. **Author + validate** with its tooling — `scripts/new-problem.ts` scaffolds a
-   problem; the schema and validators check it before you ship.
-3. **Deploy your catalog** — run the [Quickstart](#quickstart) with `ProblemsRepoUrl`
-   set to your fork. The build clones your catalog instead of the official one; nothing
-   else changes.
+2. **Author + validate** with its tooling — `scripts/new-problem.ts` scaffolds a problem; the schema and validators check it before you ship.
+3. **Deploy your catalog** — run the [Quickstart](#quickstart) with `ProblemsRepoUrl` set to your fork. Nothing else changes.
 
-A problem directory is three files:
-
-```text
-metadata.json    # catalog display + scoring rule + portal slot wiring
-template.yaml    # CloudFormation deployed into the team's isolated AWS account
-portal/          # optional React components for the Participant Portal
-```
+A problem directory is three files: `metadata.json` (catalog display + scoring rule + portal slot wiring), `template.yaml` (the CloudFormation deployed into the team's isolated AWS account), and an optional `portal/` (React components for the Participant Portal).
 
 ### Option B: add a private Problem Pack
 
-A **Problem Pack** (Issue #2088) is an offline-validated bundle of one or more
-problems that you install and activate for a single tenant without publishing
-anything to the catalog repo — a fit for internal-only drills or a one-off event
-problem. The `pack` CLI runs entirely locally: no cloud calls, and no network at
-all unless you install from a pinned Git commit.
+A **Problem Pack** (Issue #2088) is an offline-validated bundle of one or more problems that you install and activate for a single tenant without publishing to the catalog repo — a fit for internal-only drills or a one-off event problem. The `pack` CLI runs entirely locally: no cloud calls, no network unless you install from a pinned Git commit.
 
 ```bash
 make pack-init ARGS="./my-pack --runtime aws/cloudformation"        # scaffold a pack
@@ -320,43 +124,25 @@ make pack-activate ARGS="com.example.starter@0.1.0 --tenant local"   # activate 
 # pack's problems appear in the catalog picker there
 ```
 
-`local` is Lite mode's fixed tenant id, which is what `make deploy` reads at synth
-time — activate against that tenant id, not an arbitrary name, if the goal is a
-real Lite deploy. This whole flow is scoped to Lite mode: SaaS mode
-(`make deploy-saas`) refuses to synth while any pack activation exists, rather
-than silently dropping it from the pooled catalog.
+`local` is Lite mode's fixed tenant id, which is what `make deploy` reads at synth time — activate against that tenant id for a real Lite deploy. SaaS mode (`make deploy-saas`) refuses to synth while any pack activation exists, rather than silently dropping it from the pooled catalog.
 
-More detail:
+More detail: [concepts](./apps/developer-portal/src/app/developers/docs/concepts/problem-packs/page.mdx) · [tutorial](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.mdx) · [manifest reference](./apps/developer-portal/src/app/developers/docs/reference/pack-manifest/page.mdx) · [installing from a pinned Git commit](./infrastructure/lib/problem-pack/README-external-git-pack.md). The developer portal is not deployed yet, so these links point at the in-repo MDX source; every `make pack-*` command above is a live, working CLI today.
 
-- Concepts — [`concepts/problem-packs`](./apps/developer-portal/src/app/developers/docs/concepts/problem-packs/page.mdx)
-- Tutorial — [`tutorials/first-pack`](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.mdx)
-- Manifest reference — [`reference/pack-manifest`](./apps/developer-portal/src/app/developers/docs/reference/pack-manifest/page.mdx)
-- Installing from a pinned Git commit — [`README-external-git-pack.md`](./infrastructure/lib/problem-pack/README-external-git-pack.md)
-
-(the developer portal is not deployed yet, so the links above point at the
-in-repo MDX source; every `make pack-*` command above is a live, working CLI today.)
-
-Live, end-to-end verification of this whole flow — init through "visible in the
-console" — has not happened yet. #2459 (closed 2026-07-09) fixed three wiring gaps
-and added an offline-equivalent chain test, but its closing comment records the
-live AWS run itself as an unfinished acceptance item; there is no successor issue
-tracking it.
+Live, end-to-end verification of the pack flow has not been run yet (#2459 closed with this recorded as remaining work).
 
 [catalog]: https://github.com/susumutomita/TenkaCloudChallenge
 
 ## Enterprise / internal training
 
-If you are considering TenkaCloud for enterprise or internal training use — hands-on
-security/operations drills, evaluation or onboarding exercises, custom/private problem
-sets, or instructor-led workshops — please feel free to reach out via the
-[contact form](https://forms.gle/djVprYmq3hFgJA7P9) or
-[GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions).
+If you are considering TenkaCloud for enterprise or internal training use — hands-on security/operations drills, evaluation or onboarding exercises, custom/private problem sets, or instructor-led workshops — please feel free to reach out via the [contact form](https://forms.gle/djVprYmq3hFgJA7P9) or [GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions). TenkaCloud is open source, but we would love to learn more about real-world training needs.
 
-TenkaCloud is open source, but we would love to learn more about real-world training
-needs, custom exercise requirements, and how organizations want to run hands-on
-operations/security drills.
+## Documentation
 
-企業内での研修・演習・評価・独自教材の提供などで利用を検討される場合は、ぜひ一度お声がけください。TenkaCloud はオープンソースとして公開していますが、実際の現場で求められる題材、運用方法、閉じた環境での利用要件を伺いながら、プロダクトと教材の両方を改善していきたいと考えています。
+- [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) — local terminal deploys, SaaS mode, and [Always-On mode](./DEPLOYMENT_GUIDE.md#always-on-mode-adr-049) (zero always-on compute between events; operator runbook: [docs/always-on/README.md](./docs/always-on/README.md))
+- [docs/local-play.md](./docs/local-play.md) — local drill internals, authoring a container problem, the `/verify` contract
+- [docs/running-costs.md](./docs/running-costs.md) — the cost profiles, the zero-cost opt-in walkthrough, measured costs
+- [docs/vision.md](./docs/vision.md) — product direction and what is live vs. planned
+- [docs/architecture/README.md](./docs/architecture/README.md) — ADRs and system design
 
 ## Contributing
 

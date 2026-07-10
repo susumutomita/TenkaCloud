@@ -1,0 +1,157 @@
+<!-- markdownlint-disable MD033 -->
+<div align="center">
+
+[English](./README.md) | **日本語**
+
+# TenkaCloud
+
+**本物のクラウドドリルを実行し、再利用できる AWS 問題カタログを育てる。**
+
+TenkaCloud は、ハンズオン形式の AWS 競技会を運営するための、セルフホスト可能な Apache-2.0 ライセンスのプラットフォームです。運営者は 1 つのアプリケーションから、イベント・チーム・デプロイ・採点・ヒント・チームごとの AWS コンソール連携をまとめて管理でき、参加者は隔離されたアカウントの中で本物の AWS シナリオを解きます。
+
+[ランディングページ](https://tenkacloud.com) · [デモポータル](https://tenkacloud.com/portal-demo/?demo=1) · [クイックスタート](#クイックスタート) · [自分の問題を追加する](#自分の問題を追加する)
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/susumutomita/TenkaCloud)
+[![CI](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/susumutomita/TenkaCloud/graph/badge.svg?token=WfleGvJor9)](https://codecov.io/gh/susumutomita/TenkaCloud)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
+
+</div>
+
+> TenkaCloud は独立したオープンソースプロジェクトであり、Amazon Web Services, Inc. と提携・承認・後援を受けたものではありません。AWS および関連する商標は Amazon.com, Inc. またはその関連会社の商標です。
+
+英語版が正本であり、この日本語版は追従して更新されます。内容に差異がある場合は [README.md](./README.md) を優先してください。
+
+---
+
+## ビジョン
+
+TenkaCloud は競技プラットフォームだけを目指しているわけではありません。プロダクトの方向性は、個人が安全に練習できる段階から、チームで競い合う段階へと進む一本道です。**ローカルドリル → 実践的なコース / エンタープライズ研修 → チーム対抗の競技 / GameDay → グローバルコミュニティ**。ローカルドリル(`make local`)は今日すでに動いています。コース、パッケージ化されたエンタープライズ研修、グローバルコミュニティは今後目指している方向であり、まだ実装済みの機能ではありません。実装済みと構想中の区別を含めた全体像は [`docs/vision.md`](./docs/vision.md)(英語)を参照してください。
+
+## TenkaCloud が提供するもの
+
+TenkaCloud は、問題カタログをそのまま実際に動くクラウドドリルに変えます。
+
+1. Application Admin Console で **イベントを作成** する。
+2. カタログから **問題を選択** する。
+3. **チームを登録** し、AWS アカウントの trust を設定する。
+4. 各チームの隔離された AWS アカウントに **問題スタックをデプロイ** する(クロスアカウントの `AssumeRole` と、必須の `ExternalId` を使用)。
+5. **イベントを実施** する — 参加者はポータルから、手順・ヒント・提出・スコア・ワンクリックの AWS コンソール連携を利用できる。
+
+| スタイル | 用途 | 採点方式 |
+| --- | --- | --- |
+| **Challenge** | 個別演習形式の AWS タスクやラボ | flag / 解答の提出 |
+| **Battle** | リアルタイムの運用ドリル | ヘルスプローブ、フェーズ型ポーリング、攻撃検知など、カタログが宣言する採点方式 |
+
+## クイックスタート
+
+### ブラウザで試す(GitHub Codespaces、インストール不要)
+
+Codespaces でプレイできるのは **クラウド非依存のドリルのみ** です — AWS アカウントを必要としない、自己完結した Docker コンテナ問題です。自分の AWS アカウントにデプロイする AWS 問題は Codespaces では遊べません。そちらは下の「AWS にデプロイする」を参照してください。
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/susumutomita/TenkaCloud)
+
+1. 上のバッジをクリックして **Create codespace on main** を選ぶ(最初のビルドで Bun のインストール、`problems/` の初期化、Docker の起動まで自動で行われる)。
+2. **「▷ ローカルプレイ開始」** タスクを実行する(コマンドパレット → **Tasks: Run Task**、または `Cmd/Ctrl+Shift+B`)— これが代わりに `make local` を実行してくれる。
+3. Participant Portal が起動したら **PORTS** タブを開き、ポート **5175** の横にあるプレビュー用のアイコンをクリックする。
+
+> Codespaces の中にとどまってください。ドリルへのリンクはポート `5175` のプレビュー URL 経由で解決されます。自分の PC のブラウザタブに生の `127.0.0.1` の URL を貼り付けても、自分の PC 自体を指すだけで動作しません。
+
+### ローカルで試す(AWS 不要)
+
+`make local` はローカルドリルの唯一のエントリーポイントです。ローカルの採点 API と Participant Portal を起動し、開いたポータル画面からドリルを選んで開始します。ソフトウェアのインストールや `mise` の trust は行いません。ガイド付きセットアップが必要な場合は `make local-onboard` を使ってください。
+
+```bash
+git clone https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make install
+git submodule update --init problems
+make local
+```
+
+ドリルを 1 つあらかじめ起動しておきたい場合は、ポータルから選ぶ代わりに `make local PROBLEM=<id>` を使えます。すべてのドリル id は `make local-list` で一覧できます。それ以外の詳細は [docs/local-play.md](./docs/local-play.md)(英語)を参照してください。
+
+### AWS にデプロイする
+
+AWS コンソールからデプロイします。CloudFormation スタックが CodeBuild プロジェクトを作成し、このリポジトリを Git clone してデプロイまで代行してくれます。**ローカルへのインストールも GitHub 連携も不要です**。
+
+1. [`infrastructure/templates/lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml) をダウンロードする。
+2. `ap-northeast-1` の [CloudFormation のスタック作成ページ](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template) を開き、**Upload a template file** でアップロード、スタック名は **`tenkacloud-lite-launcher`** とする。
+3. **`TenantAdminEmail`**(必須パラメータはこれだけ)に、Admin Console のログイン用メールアドレスを設定する。(自分の問題カタログを使いたい場合は `ProblemsRepoUrl` も設定してください — [自分の問題を追加する](#自分の問題を追加する) を参照。)
+4. **acknowledge IAM** にチェックし、スタックを作成する。
+5. スタックの **`StartBuildConsoleUrl`** 出力から CodeBuild プロジェクトを開き、**Start build** を押す。
+
+15〜30 分ほどでビルドが完了します。**Admin Console** と **Participant Portal** の URL は、ビルドが作成する `tenkacloud-lite` / `tenkacloud-lite-problem-deploy` 各スタックの **Outputs** に載っています。これでデプロイは完了です。
+
+**削除する場合:** 同じ CodeBuild プロジェクトで **Start build with overrides** を選び、環境変数 `ACTION` に `destroy` を設定して実行してください — 2 つのアプリスタックが正しい順序で削除されます。その後 `tenkacloud-lite-launcher` スタック自体を削除すると、CodeBuild プロジェクトも消えます。
+
+## 運用コスト
+
+TenkaCloud は `CDK_PARAM_CONTROL_DATA_BACKEND` 環境変数で選べる 2 つのプロファイルのいずれかで動きます(未設定の場合はデフォルト)。
+
+| プロファイル | 向いている人 | 制御データ | 問題デプロイ |
+| --- | --- | --- | --- |
+| **AWS ネイティブ**(デフォルト、未設定 または `dynamodb`) | すべてを AWS 内で完結させたいチーム / 企業 | DynamoDB(プロビジョンド 1/1)、8 テーブル + 8 GSI | Lambda の `CreateStack`(デフォルト) |
+| **ゼロコスト**(オプトイン、`turso`) | 個人利用・トライアル・個人イベント | Turso(libSQL)— Lite synth で DynamoDB テーブル / GSI ともに 0 個 | Lambda の `CreateStack`(デフォルト) |
+
+ゼロコストプロファイルへの切り替えは 4 手順です。Turso データベースを作成し、その token を SSM の `SecureString` に保存し、`.env` に `CDK_PARAM_TURSO_*` の 3 行を追加してから `make deploy` するだけです。詳しい手順、既存スタックの移行パス、実測コスト、現時点での live 検証状況については [docs/running-costs.md](./docs/running-costs.md)(英語)を参照してください。
+
+## 自分の問題を追加する
+
+このプラットフォーム自体を fork する必要は一切ありません。問題を共有したいかどうかによって、2 つの経路があります。
+
+- **公式カタログに貢献する** — 広くコミュニティで再利用してほしい問題向け。
+- **非公開の Problem Pack を追加する** — 社内限定や一度きりのイベント用で、自分のマシンやテナントの外に出す必要がない問題向け。
+
+### オプション A: 公式カタログに貢献する
+
+問題は専用のリポジトリ — [TenkaCloudChallenge][catalog] — に置かれ、デプロイ時に clone されます。
+
+1. [TenkaCloudChallenge][catalog] を **fork** する。
+2. 付属ツールで **問題を作成・検証** する — `scripts/new-problem.ts` が問題の雛形を生成し、スキーマとバリデータが出荷前にチェックしてくれる。
+3. **自分のカタログをデプロイ** する — [クイックスタート](#クイックスタート) の手順を、`ProblemsRepoUrl` に自分の fork を設定した状態で実行する。それ以外は何も変わらない。
+
+問題ディレクトリは 3 つのファイルで構成されます。`metadata.json`(カタログ表示 + 採点ルール + ポータルのスロット配線)、`template.yaml`(チームの隔離された AWS アカウントにデプロイされる CloudFormation)、そして任意の `portal/`(Participant Portal 用の React コンポーネント)です。
+
+### オプション B: 非公開の Problem Pack を追加する
+
+**Problem Pack**(Issue #2088)は、カタログリポジトリに公開することなく、単一テナント向けにインストール・有効化できる、オフラインで検証済みの問題バンドルです。社内限定のドリルや一度きりのイベント用問題に向いています。`pack` CLI はすべてローカルで完結し、クラウド呼び出しは発生しません。固定コミットから install する場合を除き、ネットワーク通信も発生しません。
+
+```bash
+make pack-init ARGS="./my-pack --runtime aws/cloudformation"        # scaffold a pack
+make pack-validate ARGS="./my-pack"                                  # check manifest + template
+make pack-install ARGS="./my-pack"                                   # snapshot + lock it
+make pack-activate ARGS="com.example.starter@0.1.0 --tenant local"   # activate for one tenant
+# then create the event in the Application Admin Console — the activated
+# pack's problems appear in the catalog picker there
+```
+
+`local` は Lite mode の固定テナント id で、`make deploy` が synth 時に読み取る値です。実際に Lite mode でデプロイするのが目的なら、任意の名前ではなくこのテナント id に対して activate してください。この一連の流れは Lite mode に限定されており、SaaS mode(`make deploy-saas`)は pack の activation が 1 つでも存在すると、それを黙って pooled カタログから外すのではなく synth 自体を拒否します。
+
+詳細: [コンセプト](./apps/developer-portal/src/app/developers/docs/concepts/problem-packs/page.mdx) · [チュートリアル](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.mdx) · [マニフェストリファレンス](./apps/developer-portal/src/app/developers/docs/reference/pack-manifest/page.mdx) · [固定コミットからの install](./infrastructure/lib/problem-pack/README-external-git-pack.md)(いずれも英語)。developer portal 自体はまだデプロイされていないため、上記リンクはリポジトリ内の MDX ソースを直接指しています。一方で上記の `make pack-*` コマンドはすべて今日から使える、実際に動く CLI です。
+
+Problem Pack の一連の流れ(init から「コンソールに表示される」まで)の end-to-end での live 検証は、まだ行われていません(#2459 はこれを未完了の残作業として記録した上でクローズされています)。
+
+[catalog]: https://github.com/susumutomita/TenkaCloudChallenge
+
+## エンタープライズ / 社内研修
+
+TenkaCloud をエンタープライズや社内研修の用途 — ハンズオン形式のセキュリティ・運用ドリル、評価・オンボーディング演習、カスタム/非公開の問題セット、講師付きワークショップなど — で検討されている場合は、[お問い合わせフォーム](https://forms.gle/djVprYmq3hFgJA7P9) または [GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions) からお気軽にご連絡ください。TenkaCloud はオープンソースとして公開していますが、実際の現場で求められる研修ニーズや、カスタム演習の要件についてもっと知りたいと考えています。
+
+## ドキュメント
+
+- [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)(英語)— ローカル端末からのデプロイ、SaaS mode、そしてイベント間で常時稼働の AWS リソースをゼロにする [Always-On mode](./DEPLOYMENT_GUIDE.md#always-on-mode-adr-049)(運用者向けランブック: [docs/always-on/README.md](./docs/always-on/README.md))
+- [docs/local-play.md](./docs/local-play.md)(英語)— ローカルドリルの内部実装、コンテナ問題の作り方、`/verify` の契約
+- [docs/running-costs.md](./docs/running-costs.md)(英語)— 2 つのコストプロファイル、ゼロコストへのオプトイン手順、実測コスト
+- [docs/vision.md](./docs/vision.md)(英語)— プロダクトの方向性と、何がすでに動いていて何が構想段階かの区別
+- [docs/architecture/README.md](./docs/architecture/README.md)(英語)— ADR とシステム設計
+
+## コントリビューション
+
+1. [CONTRIBUTING.md](./CONTRIBUTING.md) と [AGENTS.md](./AGENTS.md) を読む(いずれも英語)。
+2. インフラ / テンプレートの変更と、アプリケーションコードの変更は分けて PR にする。
+3. PR を開く前に `make harness` と `make before-commit` を実行する。
+
+## ライセンス
+
+[Apache License 2.0](./LICENSE) — 商用利用、改変、再配布が可能です。
