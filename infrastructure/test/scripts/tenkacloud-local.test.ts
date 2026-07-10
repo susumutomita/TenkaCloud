@@ -8,6 +8,7 @@ import {
   composeFailureMessage,
   generateSecretEnv,
   problemSearchRoots,
+  reclaimStaleSession,
   resolveComposeCli,
 } from "../../../scripts/tenkacloud-local";
 
@@ -245,6 +246,50 @@ describe("buildLocalRuntimeConfig", () => {
       mode: "backend",
       cloudMode: "local",
     });
+  });
+});
+
+describe("reclaimStaleSession", () => {
+  const state = { apiBaseUrl: "http://127.0.0.1:3199", pid: 12345 };
+
+  it("should do nothing when no session state exists", async () => {
+    const probe = vi.fn(async () => true);
+    const release = vi.fn();
+    await reclaimStaleSession(
+      "/repo/.tenkacloud/local/state.json",
+      () => state,
+      probe,
+      release,
+      () => false,
+    );
+    expect(probe).not.toHaveBeenCalled();
+    expect(release).not.toHaveBeenCalled();
+  });
+
+  it("should keep refusing a double start while the recorded API is alive", async () => {
+    const release = vi.fn();
+    await expect(
+      reclaimStaleSession(
+        "/repo/.tenkacloud/local/state.json",
+        () => state,
+        async () => true,
+        release,
+        () => true,
+      ),
+    ).rejects.toThrow(/already running/);
+    expect(release).not.toHaveBeenCalled();
+  });
+
+  it("should reclaim a stale session (Codespace suspend / reboot) so the start proceeds", async () => {
+    const release = vi.fn();
+    await reclaimStaleSession(
+      "/repo/.tenkacloud/local/state.json",
+      () => state,
+      async () => false,
+      release,
+      () => true,
+    );
+    expect(release).toHaveBeenCalledWith(state);
   });
 });
 

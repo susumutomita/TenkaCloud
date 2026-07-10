@@ -481,11 +481,58 @@ function loadLocalPlayCatalog(roots: string[]) {
   return catalog;
 }
 
-async function up(problemArg: string): Promise<void> {
-  const p = paths();
-  if (existsSync(p.statePath)) {
+/** Any HTTP answer from /healthz means the recorded API process is alive. */
+async function apiIsHealthy(apiBaseUrl: string): Promise<boolean> {
+  try {
+    await fetch(`${apiBaseUrl}/healthz`, { signal: AbortSignal.timeout(1_500) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A Codespace suspend / machine reboot kills the detached API process but
+ * leaves state.json behind, so the next `make local` used to dead-end with
+ * "already running. Run `make local-down` first" on every resume. Probe the
+ * recorded API instead of trusting the file: alive → a real double-start
+ * (keep refusing); dead → reclaim the stale session like `down` would and let
+ * this start proceed.
+ */
+export async function reclaimStaleSession<S extends { apiBaseUrl: string }>(
+  statePath: string,
+  readState: () => S,
+  probe: (apiBaseUrl: string) => Promise<boolean>,
+  release: (state: S) => void,
+  fileExists: (path: string) => boolean = existsSync,
+): Promise<void> {
+  if (!fileExists(statePath)) return;
+  const state = readState();
+  if (await probe(state.apiBaseUrl)) {
     throw new Error("Local play is already running. Run `make local-down` first.");
   }
+  console.log(
+    "A previous local-play session did not shut down cleanly (stopped Codespace or reboot?) — reclaiming it.",
+  );
+  release(state);
+}
+
+/** Shared by `down` and the stale-session reclaim: kill the API and restore files. */
+function releaseSessionState(p: ReturnType<typeof paths>, state: LocalProcessState): void {
+  stopPid(state.pid);
+  unlinkIfExists(state.deploymentPath);
+  restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, true);
+  unlinkIfExists(p.statePath);
+}
+
+async function up(problemArg: string): Promise<void> {
+  const p = paths();
+  await reclaimStaleSession(
+    p.statePath,
+    () => readJson<LocalProcessState>(p.statePath),
+    apiIsHealthy,
+    (state) => releaseSessionState(p, state),
+  );
   assertDockerAvailable();
 
   const problemIds = parseProblemIds(problemArg);
@@ -650,11 +697,7 @@ async function evaluate(flag: string): Promise<void> {
 function down(): void {
   const p = paths();
   if (existsSync(p.statePath)) {
-    const state = readJson<LocalProcessState>(p.statePath);
-    stopPid(state.pid);
-    unlinkIfExists(state.deploymentPath);
-    restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, true);
-    unlinkIfExists(p.statePath);
+    releaseSessionState(p, readJson<LocalProcessState>(p.statePath));
   } else {
     unlinkIfExists(p.deploymentPath);
     restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, false);
