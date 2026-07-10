@@ -2,7 +2,10 @@
   "name": "TenkaCloud (local play, no AWS)",
   "image": "mcr.microsoft.com/devcontainers/universal:noble",
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:4": {}
+    "ghcr.io/devcontainers/features/docker-in-docker:4": {},
+    "ghcr.io/devcontainers/features/git-lfs:1": {
+      "autoPull": false
+    }
   },
   "hostRequirements": {
     "cpus": 4

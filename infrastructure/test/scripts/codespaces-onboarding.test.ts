@@ -26,6 +26,21 @@ describe("devcontainer postCreate", () => {
     const { postCreateCommand } = JSON.parse(devcontainer) as { postCreateCommand: string };
     expect(postCreateCommand).toBe("sh scripts/codespaces-setup.sh");
   });
+
+  it("should disable git-lfs autoPull so its hook install cannot abort postCreate", () => {
+    // The universal:noble base image bundles the git-lfs feature, whose
+    // pull-git-lfs-artifacts.sh runs `git lfs update` on create. That collides
+    // with the Codespaces fork post-commit hook ("hook already exists"), exits
+    // non-zero, and the devcontainer CLI then SKIPS our postCreateCommand — the
+    // whole setup never runs. This repo has no LFS files, so autoPull:false
+    // skips that pull entirely and loses nothing.
+    const { features } = JSON.parse(devcontainer) as {
+      features: Record<string, { autoPull?: boolean }>;
+    };
+    const gitLfs = features["ghcr.io/devcontainers/features/git-lfs:1"];
+    expect(gitLfs, "git-lfs feature must be declared to override its options").toBeDefined();
+    expect(gitLfs.autoPull).toBe(false);
+  });
 });
 
 describe("scripts/codespaces-setup.sh", () => {
