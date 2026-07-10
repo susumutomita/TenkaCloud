@@ -9,6 +9,10 @@ Application Plane admin console used by the Tenant Admin (the competition operat
 - **Deploy progress** — Step Functions + CodeBuild execution visualization
 - **Competitor accounts** — register competitor AWS accounts and re-issue ExternalId
 - **Teams / SSO credentials** — issue per-team login keys for each Event
+- **Settings** — per-tenant runtime feature-flag toggles (`src/pages/Settings.tsx`, #2231/#2305)
+- **Audit log** — this tenant's own operation history (deploy / event / user actions), scoped to the tenant only
+- **Identity providers** — SAML IdP CRUD for this tenant's Cognito UserPool (silo tier only)
+- **Tenant users** — invite / list / change role / remove users within this tenant
 
 i18n: Japanese and English.
 

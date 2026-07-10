@@ -11,6 +11,8 @@ SPA used by the System Admin in SaaS mode to operate the Control Plane (the `Con
 - Provisioning jobs (CodePipeline execution history)
 - Audit log
 - Operations dashboard (deep links to CloudWatch Dashboard / AWS Budgets / Alarms)
+- Usage dashboard — tenant usage visualization (`src/pages/Usage.tsx`, #1767)
+- Identity providers — SAML SSO IdP CRUD for the Control Plane Cognito UserPool (`src/pages/IdentityProviders.tsx`, #1293)
 
 i18n: Japanese and English.
 
