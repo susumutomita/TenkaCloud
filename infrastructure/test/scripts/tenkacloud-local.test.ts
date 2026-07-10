@@ -4,6 +4,7 @@ import {
   buildLocalRuntimeConfig,
   composeArgs,
   composeArgsForCli,
+  composeFailureMessage,
   generateSecretEnv,
   problemSearchRoots,
   resolveComposeCli,
@@ -143,6 +144,56 @@ describe("resolveComposeCli", () => {
     expect(() =>
       resolveComposeCli({ TENKACLOUD_COMPOSE_CLI: "docker-compose" }, () => false),
     ).toThrow(/docker-compose was requested/);
+  });
+});
+
+describe("composeFailureMessage", () => {
+  const commandLine = "docker-compose -f /p/local/docker-compose.yml -p tc-local-a up -d";
+
+  it("should include the stderr tail so the portal error carries the cause", () => {
+    const message = composeFailureMessage(
+      commandLine,
+      "Pulling web ...\nBind for 0.0.0.0:18080 failed: port is already allocated\n",
+    );
+    expect(message).toContain(`${commandLine} failed`);
+    expect(message).toContain("port is already allocated");
+  });
+
+  it("should keep the bare failure line when stderr is empty", () => {
+    expect(composeFailureMessage(commandLine, "")).toBe(`${commandLine} failed`);
+  });
+
+  it("should cap the carried stderr to its last 20 lines", () => {
+    const stderr = Array.from({ length: 30 }, (_, i) => `line-${i + 1}`).join("\n");
+    const message = composeFailureMessage(commandLine, stderr);
+    expect(message).not.toContain("line-10\n");
+    expect(message).toContain("line-11");
+    expect(message).toContain("line-30");
+  });
+
+  it("should append a start-the-daemon hint when the Docker daemon is unreachable", () => {
+    const message = composeFailureMessage(
+      commandLine,
+      "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?",
+    );
+    expect(message).toContain("The Docker daemon looks unreachable");
+    expect(message).toContain("colima start");
+  });
+
+  it("should recognize the compose v2 daemon-connect failure shape", () => {
+    const message = composeFailureMessage(
+      commandLine,
+      'error during connect: Get "http://.../v1.24/containers/json": dial unix /Users/x/.colima/default/docker.sock: connect: no such file or directory',
+    );
+    expect(message).toContain("The Docker daemon looks unreachable");
+  });
+
+  it("should not add the daemon hint for an ordinary compose failure", () => {
+    const message = composeFailureMessage(
+      commandLine,
+      'service "web" has neither an image nor a build context',
+    );
+    expect(message).not.toContain("The Docker daemon looks unreachable");
   });
 });
 
