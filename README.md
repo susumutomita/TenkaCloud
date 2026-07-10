@@ -104,6 +104,11 @@ make local PROBLEM=<id>
   standalone `docker-compose`. It auto-detects the frontend; set
   `TENKACLOUD_COMPOSE_CLI='docker-compose'` or
   `TENKACLOUD_COMPOSE_CLI='docker compose'` to force one.
+- Started problem containers keep running until you stop them (no idle
+  timeout): the portal **Stop** button stops one problem, and `make local-down`
+  stops the session and every container. Only the running cap (3 containers)
+  stops the least-recently-played problem automatically, to make room for
+  another start.
 - `make doctor` reports the prerequisites and changes nothing.
 - `make local-onboard` is the explicit guided setup path. `make local-onboard YES=1`
   pre-approves software installs (also used by automation). In a

@@ -32,8 +32,6 @@ const LOCAL_API_PROXY_PATH = "/__tenkacloud-local-api";
 const LOCAL_CHALLENGE_PROXY_PATH = "/__tenkacloud-local-port";
 const LOOPBACK_BROWSER_URL_RE =
   /\bhttp:\/\/(?:127\.0\.0\.1|localhost):(\d+)(?=\/|[?#]|[\s`"'<>)]|$)/g;
-/** [#2392 Phase 2] How often the serve process sweeps for idle containers. */
-const REAP_INTERVAL_MS = 60_000;
 
 export type ComposeCli = Readonly<{
   command: "docker" | "docker-compose";
@@ -458,7 +456,7 @@ async function up(problemArg: string): Promise<void> {
     await waitForLocalApi(apiBaseUrl, problemIds, apiPid, p.logPath);
 
     // Pre-start the requested problems through the API so the serve process's
-    // lifecycle owns every container (cap + idle reaping included).
+    // lifecycle owns every container (cap + LRU eviction included).
     for (const id of problemIds) {
       await startProblemViaApi(apiBaseUrl, id);
     }
@@ -487,6 +485,10 @@ async function up(problemArg: string): Promise<void> {
         "No problem was pre-started; run `make local PROBLEM=<id>` or start one from the portal.",
       );
     }
+    console.log(
+      "Started containers keep running until you stop them: use the portal Stop button " +
+        "for one problem, or `make local-down` to stop everything.",
+    );
     console.log(
       "Participant Portal opens from `make local`; if you used `make local-up`, run `make local-portal`.",
     );
@@ -530,18 +532,11 @@ async function serve(deploymentPath: string): Promise<void> {
     },
   });
 
-  // Idle sweeper: reclaim containers nobody touched for `idleMs`. Unref'd so
-  // the timer alone never keeps the process alive.
-  const reaper = setInterval(() => {
-    void server.state.lifecycle.reapIdle().catch((error) => {
-      console.error(`idle reap failed: ${error instanceof Error ? error.message : String(error)}`);
-    });
-  }, REAP_INTERVAL_MS);
-  reaper.unref();
-
+  // [#2512] No idle sweeper: a started container keeps running until the
+  // participant stops it (portal Stop / `make local-down`) or the running cap
+  // evicts the least-recently-played problem to start another one.
   console.log(`Local Participant API listening on http://127.0.0.1:${server.port}`);
   const shutdown = async () => {
-    clearInterval(reaper);
     await server.close();
     process.exit(0);
   };

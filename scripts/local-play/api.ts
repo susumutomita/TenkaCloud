@@ -23,7 +23,7 @@ import { type VerifyContext, type VerifyResult, verifySubmission } from "./verif
  *
  * [#2392 Phase 2] The session is warm: `deployment.problems` is the WHOLE
  * local-play catalog, but containers start on demand (`ProblemLifecycle` owns
- * the cap / LRU eviction / idle reaping). Docker is injected through
+ * the cap / LRU eviction). Docker is injected through
  * `CreateStateOptions.startContainer` / `stopContainer` — `serve` wires the
  * real `ContainerRunner` in; the default is a dockerless fake so the API is
  * unit-tested with no containers.
@@ -41,8 +41,6 @@ export interface LocalPlayDeployment {
 
 /** [#2392 Phase 2] 同時起動コンテナ数の既定キャップ / default cap on running containers. */
 export const DEFAULT_MAX_RUNNING = 3;
-/** [#2392 Phase 2] 無操作コンテナを回収するまでの既定時間 (15 分) / default idle-reap window. */
-export const DEFAULT_IDLE_MS = 15 * 60 * 1000;
 
 /** Injected docker start: bring `problem` up on `offset` and return the remapped problem + teardown unit. */
 export type StartProblemContainer = (
@@ -98,7 +96,7 @@ export interface LocalPlayState {
   readonly verify: VerifyFn;
   /** Browser-facing rewrite for loopback URLs in problem prose / endpoint outputs. */
   readonly browserText: (text: string) => string;
-  /** [#2392 Phase 2] On-demand container lifecycle (cap / LRU eviction / idle reaping). */
+  /** [#2392 Phase 2] On-demand container lifecycle (cap / LRU eviction; explicit stop only, #2512). */
   readonly lifecycle: ProblemLifecycle;
   teamName: string;
 }
@@ -122,9 +120,7 @@ export interface CreateStateOptions {
   readonly verify?: VerifyFn;
   /** [#2392 Phase 2] Max simultaneously-running containers (default {@link DEFAULT_MAX_RUNNING}). */
   readonly maxRunning?: number;
-  /** [#2392 Phase 2] Idle window before a running container is reaped (default {@link DEFAULT_IDLE_MS}). */
-  readonly idleMs?: number;
-  /** Clock injected so cap / idle behavior is deterministic in tests. */
+  /** Clock injected so cap / LRU-eviction behavior is deterministic in tests. */
   readonly now?: () => number;
   /** Rewrite display-only local URLs for browser environments such as Codespaces. */
   readonly browserText?: (text: string) => string;
@@ -203,10 +199,7 @@ export function createLocalPlayState(
       },
       now: options.now ?? Date.now,
     },
-    {
-      maxRunning: options.maxRunning ?? DEFAULT_MAX_RUNNING,
-      idleMs: options.idleMs ?? DEFAULT_IDLE_MS,
-    },
+    { maxRunning: options.maxRunning ?? DEFAULT_MAX_RUNNING },
   );
   return {
     runtimes,
@@ -442,7 +435,8 @@ async function submitFlag(
   }
   const problem = runtime.problem;
   // [#2392 Phase 2] A stopped container cannot judge — refuse loudly instead of
-  // timing out against a down /verify. Playing keeps the container warm (touch).
+  // timing out against a down /verify. Playing bumps LRU recency (touch) so an
+  // actively played problem is the last pick for cap eviction.
   if (state.lifecycle.statusOf(problem.problemId) !== "running") {
     return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
   }
@@ -558,7 +552,7 @@ function revealHint(
   const runtime = state.runtimes.get(problemId);
   if (!runtime) return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
   // [#2392 Phase 2] Hints are part of playing the problem — gate on a running
-  // container and keep it warm, matching submit.
+  // container and bump its LRU recency, matching submit.
   if (state.lifecycle.statusOf(problemId) !== "running") {
     return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
   }

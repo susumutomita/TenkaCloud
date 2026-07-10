@@ -53,6 +53,14 @@ pre-start one or more containers before the portal opens. Log in with any
 non-empty team key. The challenge endpoints are shown on the problem page;
 attack them, recover the flag, and submit it.
 
+Started containers keep running until an explicit stop — there is no idle
+timeout, so you can leave a problem up, come back later, and its endpoints are
+still there (#2512). The portal problem page's **Stop** button stops one
+problem; `make local-down` stops local play and every recorded container. The
+one automatic stop is the running cap (3 containers by default): starting
+another problem beyond the cap stops the least-recently-played one to free its
+slot.
+
 > Requires Docker Compose. Both `docker compose` and standalone `docker-compose`
 > are supported. TenkaCloud auto-detects the frontend; set
 > `TENKACLOUD_COMPOSE_CLI='docker-compose'` or

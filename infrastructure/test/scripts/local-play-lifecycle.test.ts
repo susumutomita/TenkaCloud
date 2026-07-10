@@ -31,14 +31,12 @@ function makeDeps(over: Partial<LifecycleDeps> = {}) {
 describe("ProblemLifecycle: construction (#2392 Phase 2)", () => {
   it("should reject a non-positive maxRunning", () => {
     const { deps } = makeDeps();
-    expect(() => new ProblemLifecycle(["a"], deps, { maxRunning: 0, idleMs: 1000 })).toThrow(
-      /positive integer/,
-    );
+    expect(() => new ProblemLifecycle(["a"], deps, { maxRunning: 0 })).toThrow(/positive integer/);
   });
 
   it("should start every problem stopped", () => {
     const { deps } = makeDeps();
-    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 2, idleMs: 1000 });
+    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 2 });
     expect(lc.snapshot()).toEqual([
       { problemId: "a", status: "stopped" },
       { problemId: "b", status: "stopped" },
@@ -49,7 +47,7 @@ describe("ProblemLifecycle: construction (#2392 Phase 2)", () => {
 describe("ProblemLifecycle: on-demand start (#2392 Phase 2)", () => {
   it("should start a stopped problem on offset 0 and mark it running", async () => {
     const { deps, started } = makeDeps();
-    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 2, idleMs: 1000 });
+    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 2 });
     const offset = await lc.ensureRunning("a");
     expect(offset).toBe(0);
     expect(started).toEqual([["a", 0]]);
@@ -58,14 +56,14 @@ describe("ProblemLifecycle: on-demand start (#2392 Phase 2)", () => {
 
   it("should give each running problem a distinct port block", async () => {
     const { deps } = makeDeps();
-    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 2, idleMs: 1000 });
+    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 2 });
     expect(await lc.ensureRunning("a")).toBe(0);
     expect(await lc.ensureRunning("b")).toBe(100);
   });
 
   it("should be idempotent + touch when already running (no second container start)", async () => {
     const { deps, started, tick } = makeDeps();
-    const lc = new ProblemLifecycle(["a"], deps, { maxRunning: 1, idleMs: 1000 });
+    const lc = new ProblemLifecycle(["a"], deps, { maxRunning: 1 });
     await lc.ensureRunning("a");
     tick(500);
     const again = await lc.ensureRunning("a");
@@ -81,7 +79,7 @@ describe("ProblemLifecycle: on-demand start (#2392 Phase 2)", () => {
         await gate;
       }),
     });
-    const lc = new ProblemLifecycle(["a"], deps, { maxRunning: 1, idleMs: 1000 });
+    const lc = new ProblemLifecycle(["a"], deps, { maxRunning: 1 });
     const p1 = lc.ensureRunning("a");
     const p2 = lc.ensureRunning("a");
     release();
@@ -91,7 +89,7 @@ describe("ProblemLifecycle: on-demand start (#2392 Phase 2)", () => {
 
   it("should reject an unknown problem", async () => {
     const { deps } = makeDeps();
-    const lc = new ProblemLifecycle(["a"], deps, { maxRunning: 1, idleMs: 1000 });
+    const lc = new ProblemLifecycle(["a"], deps, { maxRunning: 1 });
     await expect(lc.ensureRunning("nope")).rejects.toThrow(/unknown problem/);
   });
 
@@ -101,12 +99,12 @@ describe("ProblemLifecycle: on-demand start (#2392 Phase 2)", () => {
         throw new Error("compose boom");
       }),
     });
-    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 1, idleMs: 1000 });
+    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 1 });
     await expect(lc.ensureRunning("a")).rejects.toThrow(/compose boom/);
     expect(lc.statusOf("a")).toBe("error");
     // the slot was released, so another problem can still start
     const { deps: ok } = makeDeps();
-    const lc2 = new ProblemLifecycle(["a"], ok, { maxRunning: 1, idleMs: 1000 });
+    const lc2 = new ProblemLifecycle(["a"], ok, { maxRunning: 1 });
     expect(await lc2.ensureRunning("a")).toBe(0);
   });
 });
@@ -114,7 +112,7 @@ describe("ProblemLifecycle: on-demand start (#2392 Phase 2)", () => {
 describe("ProblemLifecycle: concurrency cap + LRU eviction (#2392 Phase 2)", () => {
   it("should evict the least-recently-used running problem when at capacity", async () => {
     const { deps, started, stopped, tick, setClock } = makeDeps();
-    const lc = new ProblemLifecycle(["a", "b", "c"], deps, { maxRunning: 2, idleMs: 100_000 });
+    const lc = new ProblemLifecycle(["a", "b", "c"], deps, { maxRunning: 2 });
     setClock(1000);
     await lc.ensureRunning("a"); // a @ t=1000
     tick(10);
@@ -134,10 +132,10 @@ describe("ProblemLifecycle: concurrency cap + LRU eviction (#2392 Phase 2)", () 
   });
 });
 
-describe("ProblemLifecycle: stop + idle reaping (#2392 Phase 2)", () => {
+describe("ProblemLifecycle: explicit stop / stop-all (#2392 Phase 2, #2512)", () => {
   it("should stop a running problem and free its slot", async () => {
     const { deps, stopped } = makeDeps();
-    const lc = new ProblemLifecycle(["a"], deps, { maxRunning: 1, idleMs: 1000 });
+    const lc = new ProblemLifecycle(["a"], deps, { maxRunning: 1 });
     await lc.ensureRunning("a");
     await lc.stop("a");
     expect(stopped).toEqual([["a", 0]]);
@@ -148,28 +146,35 @@ describe("ProblemLifecycle: stop + idle reaping (#2392 Phase 2)", () => {
 
   it("should no-op stop for a problem that is not running", async () => {
     const { deps, stopped } = makeDeps();
-    const lc = new ProblemLifecycle(["a"], deps, { maxRunning: 1, idleMs: 1000 });
+    const lc = new ProblemLifecycle(["a"], deps, { maxRunning: 1 });
     await lc.stop("a");
     await lc.stop("nope");
     expect(stopped).toEqual([]);
   });
 
-  it("should reap only problems idle beyond idleMs", async () => {
+  it("should keep running problems up no matter how long they sit untouched (#2512)", async () => {
     const { deps, stopped, tick } = makeDeps();
-    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 2, idleMs: 1000 });
+    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 2 });
     await lc.ensureRunning("a");
     await lc.ensureRunning("b");
-    tick(1500);
-    lc.touch("b"); // b kept fresh, a is stale
-    await lc.reapIdle();
-    expect(stopped).toEqual([["a", 0]]);
-    expect(lc.statusOf("a")).toBe("stopped");
+    tick(365 * 24 * 60 * 60 * 1000); // a year of inactivity — no time-based stop
+    expect(stopped).toEqual([]);
+    expect(lc.statusOf("a")).toBe("running");
     expect(lc.statusOf("b")).toBe("running");
+  });
+
+  it("should ignore touch for a problem that is not running", async () => {
+    const { deps, stopped } = makeDeps();
+    const lc = new ProblemLifecycle(["a"], deps, { maxRunning: 1 });
+    lc.touch("a"); // stopped → no-op
+    lc.touch("nope"); // unknown → no-op
+    expect(stopped).toEqual([]);
+    expect(lc.statusOf("a")).toBe("stopped");
   });
 
   it("should stop every running problem on stopAll", async () => {
     const { deps, stopped } = makeDeps();
-    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 2, idleMs: 1000 });
+    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 2 });
     await lc.ensureRunning("a");
     await lc.ensureRunning("b");
     await lc.stopAll();

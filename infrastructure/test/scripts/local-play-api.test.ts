@@ -777,6 +777,14 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
     challengeEndpoints: { Web: "http://127.0.0.1:18180/" },
     verifyUrl: "http://127.0.0.1:18181/verify",
   };
+  const XSS: ContainerProblem = {
+    ...PROBLEM,
+    problemId: "xss-demo",
+    name: "XSS Demo",
+    composeProjectName: "tc-local-xss-demo",
+    challengeEndpoints: { Web: "http://127.0.0.1:18380/" },
+    verifyUrl: "http://127.0.0.1:18381/verify",
+  };
   const neverVerify: VerifyFn = async () => {
     throw new Error("verify should not be called");
   };
@@ -991,42 +999,50 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
     expect(state.runtimes.get("sqli-demo")?.score).toBe(0);
   });
 
-  it("should keep an actively played problem warm: submit/reveal touch beats the idle reaper", async () => {
+  it("should keep an actively played problem off cap eviction: submit touch refreshes LRU (#2512)", async () => {
     let clock = 0;
     const state = createLocalPlayState(
-      { problems: [PROBLEM, IDOR] },
-      { verify: async () => ({ correct: false }), now: () => clock, idleMs: 1_000 },
+      { problems: [PROBLEM, IDOR, XSS] },
+      { verify: async () => ({ correct: false }), now: () => clock, maxRunning: 2 },
     );
-    await state.lifecycle.ensureRunning(PROBLEM.problemId); // touched at t=0
-    await state.lifecycle.ensureRunning(IDOR.problemId); // touched at t=0
-    clock = 800;
+    await state.lifecycle.ensureRunning(PROBLEM.problemId); // last played at t=0
+    clock = 10;
+    await state.lifecycle.ensureRunning(IDOR.problemId); // last played at t=10
+    clock = 20;
+    // A (wrong) submission counts as playing sqli-demo → its recency moves to t=20.
     await handleLocalPlayRequest(
       post("/portal/me/submit-flag", { problemId: "sqli-demo", flag: "wrong" }),
       state,
       clock,
     );
-    clock = 1_500; // cutoff = 500: sqli was touched at 800, idor is stale at 0
-    await state.lifecycle.reapIdle();
+    clock = 30;
+    // At the cap: starting a third evicts the LRU — idor, not the just-played sqli.
+    await handleLocalPlayRequest(post("/portal/me/problems/xss-demo/start", {}), state, clock);
     expect(state.lifecycle.statusOf("sqli-demo")).toBe("running");
     expect(state.lifecycle.statusOf("api-idor-demo")).toBe("stopped");
+    expect(state.lifecycle.statusOf("xss-demo")).toBe("running");
   });
 
-  it("should keep a problem warm via hint reveal too", async () => {
+  it("should refresh LRU recency via hint reveal too (#2512)", async () => {
     let clock = 0;
     const state = createLocalPlayState(
-      { problems: [PROBLEM] },
-      { verify: neverVerify, now: () => clock, idleMs: 1_000 },
+      { problems: [PROBLEM, IDOR, XSS] },
+      { verify: neverVerify, now: () => clock, maxRunning: 2 },
     );
     await state.lifecycle.ensureRunning(PROBLEM.problemId);
-    clock = 800;
+    clock = 10;
+    await state.lifecycle.ensureRunning(IDOR.problemId);
+    clock = 20;
     await handleLocalPlayRequest(
       post("/portal/me/problems/sqli-demo/hints/hint-1/reveal", {}),
       state,
       clock,
     );
-    clock = 1_500;
-    await state.lifecycle.reapIdle();
+    clock = 30;
+    await handleLocalPlayRequest(post("/portal/me/problems/xss-demo/start", {}), state, clock);
     expect(state.lifecycle.statusOf("sqli-demo")).toBe("running");
+    expect(state.lifecycle.statusOf("api-idor-demo")).toBe("stopped");
+    expect(state.lifecycle.statusOf("xss-demo")).toBe("running");
   });
 
   it("should evict the LRU running problem when starting beyond maxRunning", async () => {

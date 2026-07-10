@@ -1,14 +1,17 @@
 /**
  * [#2392 Phase 2] On-demand problem lifecycle with a concurrency cap and LRU
- * idle reaping — the scalable core of local play. The warm session knows the
+ * eviction — the scalable core of local play. The warm session knows the
  * whole catalog, but only ever runs at most `maxRunning` containers at once, so
  * the catalog can grow without the machine falling over.
  *
  * This module is the pure state machine: it owns status transitions, the
  * host-port offset pool (one slot per cap unit, so the pool size *is* the cap),
- * LRU eviction, and idle reaping. Docker and the clock are injected, so it is
- * unit-tested with no containers. The API server wires real Docker Compose
- * up/down in.
+ * and LRU eviction. Docker and the clock are injected, so it is unit-tested
+ * with no containers. The API server wires real Docker Compose up/down in.
+ *
+ * [#2512] There is no time-based reaping: a running container stays up until
+ * an explicit stop (portal Stop / `stopAll` on session teardown) or until the
+ * cap evicts the least-recently-played problem to make room for another start.
  */
 
 import { PORT_STRIDE } from "./port-remap";
@@ -20,15 +23,13 @@ export interface LifecycleDeps {
   readonly startContainer: (problemId: string, offset: number) => Promise<void>;
   /** Tear a problem's container down (offset is the one it was started on). */
   readonly stopContainer: (problemId: string, offset: number) => Promise<void>;
-  /** Monotonic clock (ms). Injected so idle reaping is deterministic in tests. */
+  /** Monotonic clock (ms). Injected so LRU eviction is deterministic in tests. */
   readonly now: () => number;
 }
 
 export interface LifecycleOptions {
   /** Max simultaneously-running containers (>= 1). Also the port-pool size. */
   readonly maxRunning: number;
-  /** Stop a running problem after this many ms without a `touch`. */
-  readonly idleMs: number;
 }
 
 export interface ProblemLifecycleView {
@@ -53,7 +54,7 @@ export class ProblemLifecycle {
   constructor(
     problemIds: readonly string[],
     private readonly deps: LifecycleDeps,
-    private readonly options: LifecycleOptions,
+    options: LifecycleOptions,
   ) {
     if (!Number.isInteger(options.maxRunning) || options.maxRunning < 1) {
       throw new Error(`maxRunning must be a positive integer (got ${options.maxRunning})`);
@@ -77,7 +78,7 @@ export class ProblemLifecycle {
     return this.entries.get(problemId)?.status;
   }
 
-  /** Bump last-access so an actively-played problem is not idle-reaped. No-op if not running. */
+  /** Bump last-access so an actively-played problem is not the LRU-eviction victim. No-op if not running. */
   touch(problemId: string): void {
     const entry = this.entries.get(problemId);
     if (entry?.status === "running") entry.lastAccessedAt = this.deps.now();
@@ -112,7 +113,7 @@ export class ProblemLifecycle {
     // (and a freed slot is reused before climbing higher).
     this.freeOffsets.sort((a, b) => a - b);
     const offset = this.freeOffsets.shift();
-    if (offset === undefined) throw new Error("at capacity: no idle problem to evict");
+    if (offset === undefined) throw new Error("at capacity: no running problem to evict");
     entry.status = "starting";
     try {
       await this.deps.startContainer(problemId, offset);
@@ -144,16 +145,6 @@ export class ProblemLifecycle {
     }
   }
 
-  /** Stop every running problem idle for longer than `idleMs`. */
-  async reapIdle(): Promise<void> {
-    const cutoff = this.deps.now() - this.options.idleMs;
-    for (const [problemId, entry] of this.entries) {
-      if (entry.status === "running" && entry.lastAccessedAt <= cutoff) {
-        await this.stop(problemId);
-      }
-    }
-  }
-
   /** Stop every running problem (session teardown). */
   async stopAll(): Promise<void> {
     for (const [problemId, entry] of this.entries) {
@@ -171,7 +162,7 @@ export class ProblemLifecycle {
         victim = problemId;
       }
     }
-    if (victim === undefined) throw new Error("at capacity: no idle problem to evict");
+    if (victim === undefined) throw new Error("at capacity: no running problem to evict");
     await this.stop(victim);
   }
 }
