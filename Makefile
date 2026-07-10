@@ -19,7 +19,7 @@ export JSII_DEPRECATED := quiet
         deploy-always-on-ingress destroy-always-on-ingress synth-always-on-ingress \
         deploy-always-on-runtime archive-always-on-runtime destroy-always-on-runtime synth-always-on-runtime \
         dev synth check-synth \
-        doctor local-onboard local local-up local-portal local-down local-status local-list local-evaluate
+        doctor local-onboard local local-up local-portal local-down local-status local-list local-evaluate ensure-deps
 
 help:
 	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
@@ -284,9 +284,20 @@ local-onboard:
 	@# runs in a fresh shell whose PATH predates that install, so prefix it.
 	@PATH="$$HOME/.bun/bin:$$PATH" bun run scripts/tenkacloud-onboard.ts preflight $(ONBOARD_FLAGS)
 
+# Self-heal missing dependencies so `make local` is a single entry point: on a
+# fresh clone / Codespace that never ran `make install`, the portal's vite is
+# absent and local play used to die with "run make install first". Install once
+# (only when vite is missing — a no-op on a warm tree), then continue.
+ensure-deps:
+	@if [ ! -x node_modules/.bin/vite ] && [ ! -x apps/participant-portal/node_modules/.bin/vite ]; then \
+	  echo "Dependencies are not installed (vite is missing) — running 'make install' first."; \
+	  $(MAKE) install; \
+	fi
+
 # Issue #2054 / #2392 / #2511: start the detached local scoring API, then the
 # browser portal. `local-up` remains the API-only escape hatch for scripts.
 local:
+	@$(MAKE) ensure-deps
 	@set -e; \
 	problem="$(PROBLEM)"; \
 	if bun run scripts/tenkacloud-local.ts status >/dev/null 2>&1; then \
@@ -312,11 +323,9 @@ local-portal:
 	@bun run scripts/tenkacloud-local.ts status >/dev/null
 	@# vite lives in the workspace root's node_modules/.bin (bun hoists it); a
 	@# fresh clone that skipped `make install` would otherwise die with the
-	@# cryptic "vite: command not found" (exit 127) here.
-	@if [ ! -x node_modules/.bin/vite ] && [ ! -x apps/participant-portal/node_modules/.bin/vite ]; then \
-	  echo "Dependencies are not installed (vite is missing). Run 'make install' first."; \
-	  exit 1; \
-	fi
+	@# cryptic "vite: command not found" (exit 127) here. ensure-deps installs it
+	@# on demand so `make local-portal` self-heals like `make local`.
+	@$(MAKE) ensure-deps
 	@( cd apps/participant-portal && bun run dev --host 127.0.0.1 )
 
 local-down:
