@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  autoInitProblemsSubmodule,
   browserDisplayText,
   buildLocalRuntimeConfig,
   composeArgs,
@@ -8,6 +9,31 @@ import {
   problemSearchRoots,
   resolveComposeCli,
 } from "../../../scripts/tenkacloud-local";
+
+describe("autoInitProblemsSubmodule", () => {
+  it("should check out the problems/ submodule when it is registered (fresh clone / Codespace)", () => {
+    const run = vi.fn(() => true);
+    const initialized = autoInitProblemsSubmodule("/repo", run, (p) => p === "/repo/.gitmodules");
+    expect(initialized).toBe(true);
+    expect(run).toHaveBeenCalledWith("git", ["submodule", "update", "--init", "problems"]);
+  });
+
+  it("should do nothing when no submodule is registered (e.g. a source tarball)", () => {
+    const run = vi.fn(() => true);
+    expect(autoInitProblemsSubmodule("/repo", run, () => false)).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("should report failure so callers fall back to the manual instruction", () => {
+    expect(
+      autoInitProblemsSubmodule(
+        "/repo",
+        () => false,
+        () => true,
+      ),
+    ).toBe(false);
+  });
+});
 
 describe("problemSearchRoots", () => {
   it("should search only the catalog groups (problems live in the catalog, not the platform)", () => {

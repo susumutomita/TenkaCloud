@@ -7,7 +7,7 @@
   "hostRequirements": {
     "cpus": 4
   },
-  "postCreateCommand": "sh scripts/onboard-bootstrap.sh --yes && bun run scripts/tenkacloud-onboard.ts preflight --yes && make install",
+  "postCreateCommand": "sh scripts/codespaces-setup.sh",
   "forwardPorts": [3199, 5175, 18080, 18180, 18280],
   "portsAttributes": {
     "3199": {
