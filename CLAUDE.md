@@ -6,27 +6,41 @@ A multi-tenant SaaS cloud competition platform on AWS. Problems are delivered in
 
 ```
 TenkaCloud/
-├── apps/                                    # Vite + React 19 + Cloudscape SPAs
+├── apps/                                    # 5 workspaces: 4 Vite + React 19 + Cloudscape SPAs + 1 Cloudflare Worker
 │   ├── admin-console/                       # System Admin (Control Plane UI, dev :5173)
 │   ├── application-admin-console/           # Tenant Admin (Application Plane UI, dev :5174)
 │   ├── participant-portal/                  # Competitor portal (dev :5175)
-│   └── developer-portal/                    # Pack-author-facing docs/tools SPA
-├── packages/                                # Shared workspace libraries (auth-client, saml-utils,
+│   ├── developer-portal/                    # Pack-author-facing docs/tools SPA
+│   └── always-on-control-plane/             # Cloudflare Worker (ADR-049) — not a Vite SPA; see Always-On mode below
+├── packages/                                # Shared workspace libraries, 12 packages (auth-client, saml-utils,
 │   │                                         # problem-runtime, problem-sdk, format,
 │   │                                         # coordination-plugin-sdk, portal-contracts, web-kit,
 │   │                                         # portal-plugin-sdk, problem-cost, problem-test-harness, trust-bridge)
 ├── infrastructure/                          # CDK (SBT 0.3.9) — every backend is a Lambda
 │   ├── bin/infrastructure.ts                # Stack wiring entry point
-│   ├── lib/
+│   ├── lib/                                 # 25 subdirs (`ls infrastructure/lib`); the significant ones:
 │   │   ├── control-plane-stack.ts           # SBT ControlPlane (Cognito + EventBridge + API)
+│   │   ├── control-plane/                   # ControlPlane helpers (invite email, managed login, MFA policy, SAML admin allowlist)
 │   │   ├── bootstrap-template/              # Tenant pipeline bootstrap (TenantMappingTable)
 │   │   ├── tenant-template/                 # One tenant's API + Cognito + ApplicationConsole hosting
 │   │   ├── tenant-pipeline/                 # Per-tenant provisioning via CodePipeline
 │   │   ├── problem-deploy/                  # Problem deployment into competitor AWS (DDB + Worker Lambda + API)
+│   │   ├── problem-pack/                    # Offline Problem Pack CLI (Issue #2088) — pack-init/validate/install/activate
+│   │   ├── app-plane-core/                  # Lite-mode Application Plane stack (`tenantId="local"`)
+│   │   ├── app-config/                      # resolveAppConfig — per-environment config resolution
+│   │   ├── app-wiring/                      # Cross-stack wiring (Lite pack catalog, problem-deploy-backend props)
+│   │   ├── tenkacloud-lite/                 # Lite mode (ADR-016) stack + up/down CLI
+│   │   ├── always-on-runtime/               # Always-On (ADR-049) per-event CDK stack + cleanup sweeper
+│   │   ├── intent-ingress/                  # Always-On signed-intent ingress (Lambda Function URL)
+│   │   ├── admin-insight/                   # SystemAdmin cross-tenant insight API (Control Plane only)
+│   │   ├── security/                        # CloudFront/Cognito custom domain + security headers
+│   │   ├── observability/                   # CloudWatch dashboard, cost budget, free-tier alarms
 │   │   ├── admin-console-hosting.ts         # admin-console served via S3 + CloudFront
 │   │   ├── cdk-aspect/                      # DynamoDbLowCapacity / DestroyPolicySetter
 │   │   ├── config/                          # config.json schema + interface
 │   │   └── utils/                           # config-loader, iam-helpers
+│   │       # + challenge-payload/, customer-execution/, hosting/, interfaces/, shared/,
+│   │       # source-bundle/, tenant-status-reconciler/ — see `ls infrastructure/lib`
 │   ├── environments/<env>/{config.json,.env}# Per-environment config; .env injects ${VAR:-default}
 │   └── templates/competitor-bootstrap.yaml  # One-time IAM Role rolled out in the competitor account
 ├── scripts/                                 # install.sh / cleanup.sh / provision-tenant.sh, etc.
@@ -34,7 +48,7 @@ TenkaCloud/
 ├── problems/                                # Git submodule → TenkaCloudChallenge (the community catalog).
 │   │                                         # Empty until `git submodule update --init`; cloned fresh at deploy time
 ├── landing/                                 # Static marketing/demo site (GitHub Pages build output + locales)
-└── .github/workflows/ci.yml                 # PR-time lint / typecheck / test / build
+└── .github/workflows/                       # ci.yml (PR-time lint / typecheck / test / build) + others, see below
 ```
 
 ### Plane layout
@@ -58,7 +72,7 @@ We don't use a single-table DynamoDB design. Each stack owns its own tables (Ten
 | Command                 | Purpose                                                                  |
 | ----------------------- | ------------------------------------------------------------------------ |
 | `make install`          | Install dependencies for every workspace (bun)                           |
-| `make build`            | Build every workspace (`infrastructure` → 3 SPAs)                        |
+| `make build`            | Build every workspace (`infrastructure` → every `apps/*` workspace, 5; `packages/*` excluded) |
 | `make typecheck`        | `tsc --noEmit` across every workspace                                    |
 | `make test`             | `vitest` across every workspace                                          |
 | `make test-scripts`     | Fast path: infrastructure script/CLI tests only (`test/scripts/`) — no CDK synth |
@@ -86,7 +100,7 @@ Switch environments with `make deploy ENV=production` and similar. It loads `inf
 
 ## Architecture invariants
 
-Codified as one-rule-per-file under `.claude/harness/src/rules/` (summarized in the table below). `make harness` runs `.claude/harness/bin/architecture.ts` against staged files and reports deviations as errors.
+The `INVARIANT_*` / `ONE_PASS_*` IDs below are **process invariants** — the platform's design and PR-discipline contract, checked by PR review (`/review`, this table) rather than by any single rule file. They are not files under `.claude/harness/src/rules/`.
 
 | ID                                                    | Summary                                                                            |
 | ----------------------------------------------------- | ---------------------------------------------------------------------------------- |
@@ -102,12 +116,21 @@ Codified as one-rule-per-file under `.claude/harness/src/rules/` (summarized in 
 | `ONE_PASS_LOCAL`                                      | Locally, tenant creation → application console → problem deploy → participant join all flow in a single browser pass |
 | `ONE_PASS_AWS`                                        | `make deploy-saas` (SaaS mode) runs all three phases end-to-end: SystemAdmin invite → tenant creation → problem deploy → competitor login |
 
-We also machine-check the following enforcement rules:
+### Machine-checked enforcement rules
+
+Separately, `make harness` runs `.claude/harness/bin/architecture.ts` against staged files and reports deviations as errors. It executes a **rule registry** — one rule per file under `.claude/harness/src/rules/`, registered in `.claude/harness/src/rules/index.ts`:
 
 - `secrets-manager-forbidden` — `@aws-sdk/client-secrets-manager` is forbidden (use SSM Parameter Store SecureString — cost-zero principle)
 - `handler-must-not-call-fetch` — `lib/handlers/` must not call `fetch(` directly (keep it inside Service / Repository)
 - `adr-must-be-html` — ADRs live in `docs/architecture/adr-*.html`. Markdown ADRs are forbidden
 - `adr-self-contained` — ADRs must not retain chat context, rolling-update metadata, or notes about which AI agent owns what
+- `file-too-large` — Warns at 500 lines / errors at 800 lines per file under `infrastructure/lib/`, `apps/*/src/`, `scripts/`, and select `packages/*/src/` (SRP guardrail; existing violations are baselined)
+- `handler-no-direct-sdk-import` — `infrastructure/lib/**/handlers/**/index.ts` must not import `@aws-sdk/client-*` / `@aws-sdk/lib-*` directly; SDK calls belong in a service/repository layer
+- `handler-tenant-isolation` — a tenant-scoped handler that issues a DDB command (Query/Scan/Update/Delete/Put/TransactWrite/BatchWrite) must reference `tenantId` at least once in the same file
+- `iam-wildcard-needs-justify` — `resources: ["*"]` under `infrastructure/lib/**` needs an inline justification (issue/PR ref, `justify:`, or a recognized AWS-API-constraint keyword) within 5 lines
+- `lambda-env-size` — flags `AWS::Lambda::Function` environment-variable blocks approaching the 4KB hard limit (warn ≥2.5KB, error ≥3KB) by walking `cdk.out`
+- `no-aws-trademark-fictions` — blocks AWS GameDay-style fictional company/character names (e.g. "Unicorn.Rentals") from being reused in TenkaCloud content
+- `no-conflict-markers` — blocks committed `<<<<<<<` / `=======` / `>>>>>>>` Git conflict markers
 
 ## Development flow
 
@@ -129,6 +152,15 @@ You are not done until they all pass. If something fails, find the root cause an
 
 `make before-commit` (lint + test) is a fast sanity check, not a full CI mirror — CI (`.github/workflows/ci.yml`) additionally runs `audit-deps`, the submodule pin guard, **problem-catalog validation** (`make validate-problems` — schema + the bilingual `README.md`/`README.ja.md` invariant, #2254), and a 3-shard coverage matrix (infrastructure / spas / packages, #2513) that runs a per-shard 100％ coverage gate for agent-owned workspaces plus a per-shard Codecov upload that Codecov merges into one commit report, so a green `before-commit` does not guarantee a green CI. Run `make ci-local` for the full mirror (same checks CI runs, same order, minus the Codecov upload) before opening a PR if you want that guarantee locally.
 
+### Other workflows
+
+Beyond `ci.yml`, a few narrowly-scoped workflows under `.github/workflows/` run independently:
+
+- **`pages.yml`** — Deploys `landing/` (plus the participant-portal and application-admin-console demo builds) to GitHub Pages on push to `main`.
+- **`submodule-sync.yml`** — Weekly (Mon 00:17 UTC) plus on-demand bump of the `problems/` submodule pin to the tip of its tracked branch, always opened as its own isolated PR so it can't conflict with in-flight work.
+- **`problem-pack-ci.yml`** — Reusable `workflow_call` CI (Issue #2108) that external TenkaCloud problem-pack repos call to validate their pack (schema + local tests) without checking out or deploying the platform itself.
+- **`detect-suspicious-comments.yml`** — Scans new/edited issue and PR comments for suspicious external content and labels the issue `needs-maintainer-review` so a maintainer checks it before anyone opens an attachment (see CONTRIBUTING.md's "Comment attachments" section).
+
 ### Available skills
 
 Live under `.claude/skills/` and are invoked as `/<skill-name>`.
@@ -140,6 +172,7 @@ Live under `.claude/skills/` and are invoked as `/<skill-name>`.
 | `/quality-gates`   | Run the off-body quality-gate checks (HTTP magic numbers / template / coverage / IAM ASCII / merge / submodule) |
 | `/spec`            | Write a technical specification in the Open Web Docs (MDN) style                       |
 | `/blindspot-pass`  | Review-only pass over an Issue / ADR / PR diff / directory to surface unknown-unknowns (unconnected producer/consumer, per-route default drift, split data seams) with code-backed evidence |
+| `/tenka-drill`     | Learner-facing coach for a `make local` drill problem — explains what happened, the root cause, and how it generalizes to competing in Battle/Challenge, then answers follow-ups. Runs in the learner's own Claude Code, not the platform |
 
 ### TDD
 
@@ -200,8 +233,8 @@ if (res.status === 401) throw new PortalAuthError();                       // �
 - Do not implement auth bypasses (this repo has no `AUTH_SKIP`; every request goes through Cognito JWT)
 - No `innerHTML` / `eval` / `dangerouslySetInnerHTML`
 - AssumeRole into competitor accounts **always requires `ExternalId`** (`CDK_PARAM_DEPLOY_EXTERNAL_ID`)
-- The IAM Role in `infrastructure/templates/competitor-bootstrap.yaml` is least-privilege (only CFn CreateStack + whatever AWS services each problem template touches)
-- Dependencies are updated by Renovate / Dependabot; CI runs Safe Chain as a best-effort check for malicious packages (`continue-on-error: true` — its own outage doesn't block CI; `--ignore-scripts` + `audit-deps` are the hard defense)
+- The IAM Role in `infrastructure/templates/competitor-bootstrap.yaml` attaches the AWS managed `AdministratorAccess` policy — deliberately, not least-privilege (Issue #721: granular per-service policies kept missing permissions as new problem templates were added, causing repeated `CREATE_FAILED`/`ROLLBACK_COMPLETE`). Defense-in-depth stands in for least-privilege here: the trust policy is locked to the TenkaCloud account ID + `ExternalId`, `MaxSessionDuration` is 1 hour, and the competitor revokes access in one shot by deleting the stack
+- Dependencies are updated by Dependabot; CI runs Safe Chain as a best-effort check for malicious packages (`continue-on-error: true` — its own outage doesn't block CI; `--ignore-scripts` + `audit-deps` are the hard defense)
 
 ### Supply chain security (mini Shai-Hulud 2nd-wave mitigation, see [blog.flatt.tech/entry/mini_shai_hulud_2nd](https://blog.flatt.tech/entry/mini_shai_hulud_2nd))
 
