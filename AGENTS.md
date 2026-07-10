@@ -47,7 +47,7 @@ If something fails, fix the code. Don't paper over it by editing config files (`
 
 If `make harness` fails, it reports a kebab-case `ruleId` (e.g. `no-conflict-markers`) — cross-reference it with the matching file under `.claude/harness/src/rules/`. Those machine-checked rules are a separate registry from the `INVARIANT_*` / `ONE_PASS_*` process invariants in CLAUDE.md's "Architecture invariants" table, which are checked by PR review instead. The harness's own unit tests are `make harness-test`; the entry points are `.claude/harness/bin/architecture.ts` / `bin/tech-debt.ts`, and the rule logic lives one-rule-per-file under `.claude/harness/src/rules/` and `.claude/harness/src/tech-debt/`.
 
-CI (`.github/workflows/ci.yml`) has two jobs that run in parallel. The `ci` job runs Safe Chain setup (best-effort, `continue-on-error: true` — a Safe Chain outage doesn't block CI) → `make install_ci` → **audit-deps** → **submodule pin guard** → **problem-catalog validation** (`make validate-problems` — schema + the bilingual-README invariant, #2254) → textlint → format check → typecheck → build. The `coverage` job (#2513) runs a 3-shard matrix (infrastructure / spas / packages) — each shard runs `scripts/run-coverage.ts --shard <name>`, its own **100％ coverage gate** (agent-owned workspaces, `check-coverage-gate.ts --shard <name>`), and its own Codecov upload, which Codecov merges into one commit report; `coverage-complete` gives the matrix a single stable check name for branch protection. The bilingual `README.md` + `README.ja.md` contract is a **CI-enforced invariant** on the platform mirror, not just a review item. `before-commit` (lint + test) is a fast local sanity check, not a full CI mirror — it does **not** run audit-deps, the submodule guard, or the coverage gate, so a green `before-commit` does not guarantee a green CI. Run `make ci-local` before opening a PR if you want the full CI mirror locally (same checks, same order, minus the Codecov upload).
+CI (`.github/workflows/ci.yml`) has two jobs that run in parallel. The `ci` job runs Safe Chain setup (best-effort, `continue-on-error: true` — a Safe Chain outage doesn't block CI) → `make install_ci` → **audit-deps** → **submodule pin guard** → **problem-catalog validation** (`make validate-problems` — schema + the bilingual-README invariant, #2254) → textlint → format check → typecheck → build. The `coverage` job (#2513) runs a 3-shard matrix (infrastructure / spas / packages) — each shard runs `scripts/workspace/run-coverage.ts --shard <name>`, its own **100％ coverage gate** (agent-owned workspaces, `check-coverage-gate.ts --shard <name>`), and its own Codecov upload, which Codecov merges into one commit report; `coverage-complete` gives the matrix a single stable check name for branch protection. The bilingual `README.md` + `README.ja.md` contract is a **CI-enforced invariant** on the platform mirror, not just a review item. `before-commit` (lint + test) is a fast local sanity check, not a full CI mirror — it does **not** run audit-deps, the submodule guard, or the coverage gate, so a green `before-commit` does not guarantee a green CI. Run `make ci-local` before opening a PR if you want the full CI mirror locally (same checks, same order, minus the Codecov upload).
 
 ## Available skills
 
@@ -125,7 +125,7 @@ The four defense layers are:
 
 1. **Bun's `trustedDependencies` model**: Bun does not run transitive lifecycle scripts by default. The root `package.json` `trustedDependencies` array is the allowlist (currently empty).
 2. **`.npmrc`**: To protect contributors who fall back to npm / yarn / pnpm, set `ignore-scripts=true` + `min-release-age=168h` (7-day quarantine).
-3. **CI audit** (`make audit-deps`): `scripts/audit-dependencies.ts` scans under `node_modules`, diffs packages with lifecycle scripts (preinstall / install / postinstall / preprepare / prepare / postprepare) against `scripts/audit-baseline.json`, and fails CI on any new addition or any new hook on an existing dep.
+3. **CI audit** (`make audit-deps`): `scripts/security/audit-dependencies.ts` scans under `node_modules`, diffs packages with lifecycle scripts (preinstall / install / postinstall / preprepare / prepare / postprepare) against `scripts/security/audit-baseline.json`, and fails CI on any new addition or any new hook on an existing dep.
 4. **`--ignore-scripts` install + Safe Chain in CI**: `make install_ci` runs `bun install --frozen-lockfile --ignore-scripts`. Aikido Safe Chain also runs in CI to detect malicious packages, but its setup step is `continue-on-error: true` — a Safe Chain outage or setup failure does not block CI (best-effort, not a hard gate). `--ignore-scripts` + `audit-deps` (layers 1-3) are the hard defense; Safe Chain is an additional best-effort check on top.
 
 ### Updating the baseline
@@ -133,7 +133,7 @@ The four defense layers are:
 When adding / updating a dependency, a new package with lifecycle scripts may end up in the baseline. Procedure:
 
 1. Read the package's `package.json` lifecycle scripts by eye and verify there is no suspicious behavior (`curl` / `wget` / OS detection / env-var exfil / file writes / process spawn)
-2. Run `bun run scripts/audit-dependencies.ts --update` to refresh `scripts/audit-baseline.json`
+2. Run `bun run scripts/security/audit-dependencies.ts --update` to refresh `scripts/security/audit-baseline.json`
 3. Document in the PR body the reason for the baseline change and a summary of the scripts you reviewed
 
 If you see something genuinely suspicious (remote download / OS-level persistence / `curl | sh`), do **not** add it to the baseline — stop the PR and report.
@@ -196,11 +196,13 @@ infrastructure/
                                     # (+ 25 subdirs total under lib/; see `ls infrastructure/lib`)
   environments/<env>/              # config.json + .env
   templates/competitor-bootstrap.yaml  # IAM Role to roll out in the competitor account
-scripts/
+scripts/                           # See scripts/README.md for the full index
   install.sh                       # 3-phase deploy orchestration
   cleanup.sh                       # Idempotent teardown
   provision-tenant.sh              # Per-tenant deploy invoked from CodeBuild
   deprovision-tenant.sh            # Tenant teardown
+  workspace/ security/ landing/    # Domain tooling (build/test orchestration, supply-chain audit,
+  onboard/ ops/ local-play/ lib/   # landing generators, onboarding, operator CLIs)
 packs/                             # In-repo sample/golden/reference problem packs (ADR-012 3-asset model)
 problems/                          # Git submodule → TenkaCloudChallenge (the community catalog);
                                     # empty until `git submodule update --init`

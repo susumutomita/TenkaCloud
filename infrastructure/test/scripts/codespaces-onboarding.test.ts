@@ -17,14 +17,20 @@ import { describe, expect, it } from "vitest";
 
 const REPO_ROOT = join(__dirname, "..", "..", "..");
 const devcontainer = readFileSync(join(REPO_ROOT, ".devcontainer", "devcontainer.json"), "utf8");
-const setupScript = readFileSync(join(REPO_ROOT, "scripts", "codespaces-setup.sh"), "utf8");
-const bootstrap = readFileSync(join(REPO_ROOT, "scripts", "onboard-bootstrap.sh"), "utf8");
+const setupScript = readFileSync(
+  join(REPO_ROOT, "scripts", "onboard", "codespaces-setup.sh"),
+  "utf8",
+);
+const bootstrap = readFileSync(
+  join(REPO_ROOT, "scripts", "onboard", "onboard-bootstrap.sh"),
+  "utf8",
+);
 const makefile = readFileSync(join(REPO_ROOT, "Makefile"), "utf8");
 
 describe("devcontainer postCreate", () => {
   it("should run the single setup script instead of a && chain", () => {
     const { postCreateCommand } = JSON.parse(devcontainer) as { postCreateCommand: string };
-    expect(postCreateCommand).toBe("sh scripts/codespaces-setup.sh");
+    expect(postCreateCommand).toBe("sh scripts/onboard/codespaces-setup.sh");
   });
 
   it("should disable git-lfs autoPull so its hook install cannot abort postCreate", () => {
@@ -43,9 +49,9 @@ describe("devcontainer postCreate", () => {
   });
 });
 
-describe("scripts/codespaces-setup.sh", () => {
+describe("scripts/onboard/codespaces-setup.sh", () => {
   it("should run the pre-bun bootstrap with consent pre-approved", () => {
-    expect(setupScript).toContain('sh "$repo_root/scripts/onboard-bootstrap.sh" --yes');
+    expect(setupScript).toContain('sh "$repo_root/scripts/onboard/onboard-bootstrap.sh" --yes');
   });
 
   it("should export ~/.bun/bin onto PATH before the first bun invocation", () => {
@@ -70,7 +76,7 @@ describe("scripts/codespaces-setup.sh", () => {
   });
 });
 
-describe("scripts/onboard-bootstrap.sh", () => {
+describe("scripts/onboard/onboard-bootstrap.sh", () => {
   it("should put a just-installed bun onto this shell's PATH before re-checking", () => {
     const install = bootstrap.indexOf('sh -c "$bun_cmd"');
     const pathExport = bootstrap.indexOf('export PATH="$BUN_INSTALL/bin:$PATH"');

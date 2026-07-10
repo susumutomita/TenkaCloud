@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { discoverWorkspaces, planTask } from "../../../scripts/run-workspaces";
+import { discoverWorkspaces, planTask } from "../../../scripts/workspace/run-workspaces";
 
 /**
  * Issue #2206: the root `typecheck`/`test`/`test:coverage` scripts used to enumerate
@@ -9,15 +9,15 @@ import { discoverWorkspaces, planTask } from "../../../scripts/run-workspaces";
  * `packages` with its own `test`/`typecheck` script could silently be left out of CI —
  * exactly what happened to `@tenkacloud/portal-plugin-sdk` and `@tenkacloud/problem-test`.
  *
- * The hand-maintained chains were replaced by the `scripts/run-workspaces.ts` orchestrator,
+ * The hand-maintained chains were replaced by the `scripts/workspace/run-workspaces.ts` orchestrator,
  * which discovers workspaces from the root `workspaces` globs, so a new package can no
  * longer be forgotten. This test keeps the #2206 blind-spot closed against the new seam:
  * every package under `packages` whose package.json declares a `test`/`typecheck` script
  * must be part of the orchestrator's plan for that task, and the root scripts must actually
  * delegate to the orchestrator (otherwise the plan proves nothing).
  *
- * `test:coverage` is not asserted here: it is owned by `scripts/run-coverage.ts` (#2513),
- * and scripts/run-coverage.test.ts pins its 17-dir COVERAGE_WORKSPACES list.
+ * `test:coverage` is not asserted here: it is owned by `scripts/workspace/run-coverage.ts` (#2513),
+ * and scripts/workspace/run-coverage.test.ts pins its 17-dir COVERAGE_WORKSPACES list.
  */
 
 const REPO_ROOT = join(__dirname, "..", "..", "..");
@@ -62,9 +62,9 @@ function plannedDirs(task: "typecheck" | "test"): readonly string[] {
 describe("root package.json quality-gate enumeration (issue #2206)", () => {
   it("should delegate the root build, typecheck, and test scripts to the workspace orchestrator", () => {
     const { build, typecheck, test } = rootScripts();
-    expect(build).toContain("scripts/run-workspaces.ts build");
-    expect(typecheck).toContain("scripts/run-workspaces.ts typecheck");
-    expect(test).toContain("scripts/run-workspaces.ts test");
+    expect(build).toContain("scripts/workspace/run-workspaces.ts build");
+    expect(typecheck).toContain("scripts/workspace/run-workspaces.ts typecheck");
+    expect(test).toContain("scripts/workspace/run-workspaces.ts test");
   });
 
   it("should list every packages/* with a typecheck script in the root typecheck script", () => {

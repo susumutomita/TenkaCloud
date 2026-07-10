@@ -43,7 +43,8 @@ TenkaCloud/
 │   │       # source-bundle/, tenant-status-reconciler/ — see `ls infrastructure/lib`
 │   ├── environments/<env>/{config.json,.env}# Per-environment config; .env injects ${VAR:-default}
 │   └── templates/competitor-bootstrap.yaml  # One-time IAM Role rolled out in the competitor account
-├── scripts/                                 # install.sh / cleanup.sh / provision-tenant.sh, etc.
+├── scripts/                                 # Deploy-time scripts + product CLIs (top level), domain tooling in
+│                                             # workspace/ security/ landing/ onboard/ ops/ — see scripts/README.md
 ├── packs/                                   # In-repo sample/golden/reference problem packs (ADR-012 3-asset model)
 ├── problems/                                # Git submodule → TenkaCloudChallenge (the community catalog).
 │   │                                         # Empty until `git submodule update --init`; cloned fresh at deploy time
@@ -241,7 +242,7 @@ A four-layer defense against credential-exfil attacks that abuse `prepare` / `po
 
 1. **Bun `trustedDependencies`**: Bun blocks transitive lifecycle scripts by default (secure by default). The `trustedDependencies` array in `package.json` is the explicit allowlist (currently empty).
 2. **`.npmrc`**: `ignore-scripts=true` + `min-release-age=168h` (7-day quarantine, npm 11+). Even if a contributor uses npm / yarn / pnpm, the protection is automatic.
-3. **CI audit** `make audit-deps` (`scripts/audit-dependencies.ts`): Scans `node_modules`, diffs packages with lifecycle scripts against `scripts/audit-baseline.json`, and fails on any new addition or new hook on an existing dep.
+3. **CI audit** `make audit-deps` (`scripts/security/audit-dependencies.ts`): Scans `node_modules`, diffs packages with lifecycle scripts against `scripts/security/audit-baseline.json`, and fails on any new addition or new hook on an existing dep.
 4. **CI install policy** `make install_ci`: `bun install --frozen-lockfile --ignore-scripts` + Aikido Safe Chain malicious package detection (Safe Chain's own setup step is `continue-on-error: true` — best-effort, not a hard CI gate; layers 1-3 are).
 
 Add packages to `trustedDependencies` in a stand-alone PR. Manually verify the script contents and summarize them in the PR body (if you see suspicious `curl` / `wget` / OS persistence / env-var exfil, do not add to the baseline — report it instead).

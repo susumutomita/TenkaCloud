@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const root = join(import.meta.dir, "..");
+const root = join(import.meta.dir, "../..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("landing page SEO", () => {

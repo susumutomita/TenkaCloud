@@ -317,7 +317,7 @@ describe("cleanup.sh idempotency (#2204)", { timeout: 30_000 }, () => {
     expect(status, stderr).toBe(0);
     expect(stdout).toContain("checking for RETAIN-orphaned DynamoDB tables");
     expect(bunCalls).toContain("run");
-    expect(bunCalls).toContain("scripts/report-retained-tables.ts");
+    expect(bunCalls).toContain("scripts/ops/report-retained-tables.ts");
     // The warning check runs before the completion banner (advisory is the final step).
     expect(stdout).toContain("cleanup complete.");
   });

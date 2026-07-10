@@ -7,7 +7,7 @@ import {
   PROMPTS,
   parseExampleKeys,
   runEnvInit,
-} from "../../../scripts/env-init";
+} from "../../../scripts/ops/env-init";
 
 /**
  * Issue #1345: `make env-init` の .env 生成 wizard の挙動 pin。
@@ -16,7 +16,7 @@ import {
  * 一時 dir で再現し、 stdin / stdout を通さずに deterministic に観測する。
  */
 
-describe("scripts/env-init (#1345 Lite mode first-run wizard)", () => {
+describe("scripts/ops/env-init (#1345 Lite mode first-run wizard)", () => {
   let workDir: string;
 
   beforeEach(() => {
