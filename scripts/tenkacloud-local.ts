@@ -122,6 +122,35 @@ export function composeArgsForCli(
   return cli.command === "docker-compose" ? args.slice(1) : args;
 }
 
+// The real cause sits at the END of compose stderr; long pull/build logs stay
+// in the serve log, only this tail travels into the thrown error.
+const COMPOSE_STDERR_TAIL_LINES = 20;
+
+// Daemon-unreachable signatures across Docker Desktop / colima / raw Engine —
+// the one failure a player can always self-serve, so it gets an explicit hint.
+const DOCKER_DAEMON_UNREACHABLE_RE =
+  /cannot connect to the docker daemon|is the docker daemon running|error during connect|docker daemon is not running|dial unix .*docker\.sock/i;
+
+/**
+ * Build the error message for a failed compose invocation. The portal surfaces
+ * this verbatim (`start_failed`), so it must carry the cause: the stderr tail,
+ * plus a "start your Docker daemon" hint when that is what stderr says.
+ */
+export function composeFailureMessage(commandLine: string, stderr: string): string {
+  const trimmed = stderr.trim();
+  const parts = [`${commandLine} failed`];
+  if (trimmed !== "") {
+    parts.push(trimmed.split("\n").slice(-COMPOSE_STDERR_TAIL_LINES).join("\n"));
+  }
+  if (DOCKER_DAEMON_UNREACHABLE_RE.test(trimmed)) {
+    parts.push(
+      "The Docker daemon looks unreachable — start Docker Desktop (or `colima start` / " +
+        "`sudo systemctl start docker`), then retry.",
+    );
+  }
+  return parts.join("\n");
+}
+
 type CommandSucceeds = (command: string, args: readonly string[]) => boolean;
 
 function commandSucceeds(command: string, args: readonly string[]): boolean {
@@ -258,9 +287,20 @@ function runCompose(
 ): void {
   const cli = resolveComposeCli();
   const args = composeArgsForCli(cli, composePath, projectName, action, projectDirectory);
-  const result = spawnSync(cli.command, args, { cwd: REPO_ROOT, env, stdio: "inherit" });
+  // stderr is piped (not inherited) so a failure can carry its cause into the
+  // thrown error — the portal used to show a bare "... failed" while the real
+  // reason sat stranded in the detached serve log. It is re-echoed below so
+  // that log keeps the full output.
+  const result = spawnSync(cli.command, args, {
+    cwd: REPO_ROOT,
+    env,
+    stdio: ["ignore", "inherit", "pipe"],
+    encoding: "utf8",
+  });
+  const stderr = [result.stderr ?? "", result.error?.message ?? ""].filter(Boolean).join("\n");
+  if (stderr !== "") process.stderr.write(stderr.endsWith("\n") ? stderr : `${stderr}\n`);
   if (!allowFailure && result.status !== 0) {
-    throw new Error(`${cli.command} ${args.join(" ")} failed`);
+    throw new Error(composeFailureMessage(`${cli.command} ${args.join(" ")}`, stderr));
   }
 }
 
