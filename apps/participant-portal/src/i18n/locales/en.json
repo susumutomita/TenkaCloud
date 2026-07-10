@@ -333,6 +333,7 @@
     "attack_probe_summary_clear": "All {total} probes blocked",
     "last_scored_label": "Last scored",
     "outputs_header": "Access URLs",
+    "codespaces_terminal_hint": "In Codespaces the URL above is browser-only. From the terminal:",
     "stack_outputs_detail_header": "Deployment outputs (details)",
     "celebrate_header": "🏆 Cleared +{points} pt",
     "celebrate_body": "You've already solved this problem. Move on to the next!",

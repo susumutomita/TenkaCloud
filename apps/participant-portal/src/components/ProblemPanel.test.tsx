@@ -11,6 +11,7 @@ import { AppConfigProvider } from "../config-context";
 import { I18nProvider } from "../i18n";
 import {
   buildAutoDeleteNotice,
+  codespacesLoopbackUrl,
   describeProblemKind,
   getCompleteFlagScoring,
   getCompleteMultiFlagScoring,
@@ -220,6 +221,35 @@ describe("ProblemPanel pure helpers", () => {
     });
   });
 
+  it("should recover the loopback form from a Codespaces challenge-proxy URL", () => {
+    expect(
+      codespacesLoopbackUrl(
+        "https://demo-5175.app.github.dev/__tenkacloud-local-port/18080/api/profile/1",
+      ),
+    ).toBe("http://localhost:18080/api/profile/1");
+  });
+
+  it("should default a bare-port proxy URL to the loopback root and preserve the query", () => {
+    expect(
+      codespacesLoopbackUrl("https://demo-5175.app.github.dev/__tenkacloud-local-port/18080"),
+    ).toBe("http://localhost:18080/");
+    expect(
+      codespacesLoopbackUrl("https://demo-5175.app.github.dev/__tenkacloud-local-port/18080/?q=1"),
+    ).toBe("http://localhost:18080/?q=1");
+  });
+
+  it("should return undefined for non-proxy, malformed, or invalid-port URLs", () => {
+    expect(codespacesLoopbackUrl("https://app.example.com/api/profile/1")).toBeUndefined();
+    expect(codespacesLoopbackUrl("http://127.0.0.1:18080/api/profile/1")).toBeUndefined();
+    expect(codespacesLoopbackUrl("not a url")).toBeUndefined();
+    expect(
+      codespacesLoopbackUrl("https://demo-5175.app.github.dev/__tenkacloud-local-port/0/x"),
+    ).toBeUndefined();
+    expect(
+      codespacesLoopbackUrl("https://demo-5175.app.github.dev/__tenkacloud-local-port/nope/x"),
+    ).toBeUndefined();
+  });
+
   it("should build the auto-delete notice for expired / soon / far / invalid expiry", () => {
     const now = new Date("2026-05-20T00:00:00.000Z").getTime();
     const at = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
@@ -345,6 +375,21 @@ describe("ProblemPanel render branches", () => {
   it("should show the failure reason for FAILED deploys", () => {
     renderPanel({ status: "FAILED", failureReason: "stack rollback" });
     expect(screen.getByText("stack rollback")).toBeInTheDocument();
+  });
+
+  it("should show the terminal loopback hint for a Codespaces challenge-proxy access URL", () => {
+    renderPanel({
+      stackOutputs: {
+        Web: "https://demo-5175.app.github.dev/__tenkacloud-local-port/18080/api/profile/1",
+      },
+    });
+    expect(screen.getByText("http://localhost:18080/api/profile/1")).toBeInTheDocument();
+    expect(screen.getByText(/browser-only|ブラウザ専用/)).toBeInTheDocument();
+  });
+
+  it("should not show the terminal hint for a plain access URL (local / AWS mode)", () => {
+    renderPanel({ stackOutputs: { Web: "http://127.0.0.1:18080/api/profile/1" } });
+    expect(screen.queryByText(/browser-only|ブラウザ専用/)).not.toBeInTheDocument();
   });
 
   it("should show a stale warning for an uptime problem with an old lastScoredAt", () => {

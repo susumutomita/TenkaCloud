@@ -106,6 +106,32 @@ export function isHttpUrlOutput(value: string): boolean {
   return HTTP_URL_OUTPUT_RE.test(value);
 }
 
+// In Codespaces, a loopback challenge URL is rewritten to a portal-proxy URL
+// (`https://<codespace>-5175.<domain>/__tenkacloud-local-port/<port>/…`) so the
+// browser can reach it. That proxy URL is authenticated-browser-only: it can't
+// be curled from the integrated terminal, and a browser address bar can't send
+// an `Authorization` header — so API/curl challenges (IDOR, etc.) are solved
+// against the loopback origin from the terminal. Recover that loopback form
+// from the proxy URL so the portal can show it as a terminal hint.
+const CODESPACES_CHALLENGE_PROXY_PREFIX = "/__tenkacloud-local-port/";
+
+export function codespacesLoopbackUrl(value: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return undefined;
+  }
+  if (!url.pathname.startsWith(CODESPACES_CHALLENGE_PROXY_PREFIX)) return undefined;
+  const rest = url.pathname.slice(CODESPACES_CHALLENGE_PROXY_PREFIX.length);
+  const slash = rest.indexOf("/");
+  const rawPort = slash === -1 ? rest : rest.slice(0, slash);
+  const port = Number(rawPort);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) return undefined;
+  const path = slash === -1 ? "/" : rest.slice(slash);
+  return `http://localhost:${port}${path}${url.search}`;
+}
+
 export function splitStackOutputs(stackOutputs: ParticipantProblemView["stackOutputs"]): {
   readonly accessUrlEntries: StackOutputEntry[];
   readonly detailEntries: StackOutputEntry[];
@@ -395,14 +421,24 @@ export function ProblemPanel({
             {stackOutputs.accessUrlEntries.length > 0 && (
               <Container header={<Header variant="h3">{t("problem_panel.outputs_header")}</Header>}>
                 <KeyValuePairs
-                  items={stackOutputs.accessUrlEntries.map(([label, value]) => ({
-                    label,
-                    value: (
-                      <a href={value} target="_blank" rel="noreferrer noopener">
-                        <code>{value}</code>
-                      </a>
-                    ),
-                  }))}
+                  items={stackOutputs.accessUrlEntries.map(([label, value]) => {
+                    const loopback = codespacesLoopbackUrl(value);
+                    return {
+                      label,
+                      value: (
+                        <SpaceBetween size="xxs">
+                          <a href={value} target="_blank" rel="noreferrer noopener">
+                            <code>{value}</code>
+                          </a>
+                          {loopback && (
+                            <Box fontSize="body-s" color="text-status-inactive">
+                              {t("problem_panel.codespaces_terminal_hint")} <code>{loopback}</code>
+                            </Box>
+                          )}
+                        </SpaceBetween>
+                      ),
+                    };
+                  })}
                 />
               </Container>
             )}
