@@ -3,6 +3,7 @@ import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
+import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { buildAuthErrorHandler, createRoleCheckMiddleware } from "../shared/auth-wiring.js";
 import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
 import { parseSchema } from "../shared/http-parse.js";
@@ -56,7 +57,8 @@ import { CompositeDeployRequestSchema, DeployRequestSchema } from "./types.js";
 const LIST_LIMIT_MAX = 200;
 
 // SDK clients / env を module scope で 1 度だけ build。warm invoke で connection pool 再利用。
-const shared = buildSharedResources();
+// [#2527 Slice 4] Composition root: the entrypoint creates the real control-data runtime.
+const shared = buildSharedResources(createDefaultControlDataRuntime());
 
 /** `?limit=` query を parse し、不正なら null + 400 レスポンスを返す。 */
 function parseLimit(value: string | undefined): { ok: true; limit: number | undefined } | null {

@@ -20,6 +20,7 @@ import { SSMClient } from "@aws-sdk/client-ssm";
 import { STSClient } from "@aws-sdk/client-sts";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { parseDisruptionsCatalogEnv } from "../../../utils/discover-problems-catalog.js";
+import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { assumeCompetitorRole } from "../shared/assume-competitor-role.js";
 import { logDeployTrace } from "../shared/trace-log.js";
 import type { DeploymentTarget, ExecutorDeps } from "./execute.js";
@@ -36,7 +37,9 @@ const ssm = new SSMClient({});
 const sts = new STSClient({});
 const scheduler = new SchedulerClient({});
 
+// [#2527 Slice 4] Composition root: one control-data runtime per Lambda instance.
 const resources: ExecutorResources = {
+  runtime: createDefaultControlDataRuntime(),
   ddb,
   deploymentsTableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
   disruptionsTableName: process.env.DISRUPTIONS_TABLE_NAME ?? "",

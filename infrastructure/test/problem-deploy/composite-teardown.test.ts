@@ -23,6 +23,7 @@ import {
   requestCompositeTeardown,
 } from "../../lib/problem-deploy/handlers/deploy-handler/composite-teardown";
 import type { TeardownOutcome } from "../../lib/problem-deploy/handlers/deploy-handler/delete";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const NOW_ISO = "2026-06-29T00:00:00.000Z";
 const NOW_MS = Date.parse(NOW_ISO);
@@ -111,7 +112,11 @@ function makeFake(): Fake {
     if (cmd instanceof UpdateCommand) return handleUpdate(cmd, store, order);
     throw new Error("unexpected command");
   });
-  return { repo: { ddb: { send }, tableName: "T" }, store, order };
+  return {
+    repo: { runtime: makeTestControlDataRuntime(), ddb: { send }, tableName: "T" },
+    store,
+    order,
+  };
 }
 
 async function seed(fake: Fake, statuses: Record<string, string> = {}): Promise<void> {

@@ -5,7 +5,7 @@ import {
 } from "@aws-sdk/client-cloudwatch";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { CompetitorAccountItem } from "../competitor-accounts-handler/types.js";
 
 /**
@@ -101,12 +101,14 @@ export interface Repositories {
 }
 
 export function createCompetitorAccountsRepository(deps: {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: DynamoDBDocumentClient;
   readonly tableName: string;
 }): CompetitorAccountsRepository {
   return {
     async forEachAccountPage(onPage) {
-      const repository = await controlDataRuntime.resolveCompetitorAccountsRepository({
+      const repository = await deps.runtime.resolveCompetitorAccountsRepository({
         ddb: deps.ddb,
         competitorAccountsTableName: deps.tableName,
       });
@@ -154,11 +156,11 @@ export function createRotationAgeMetricsRepository(
 let cachedDdb: DynamoDBDocumentClient | undefined;
 let cachedCloudWatch: CloudWatchClient | undefined;
 
-export function composeRepositories(tableName: string): Repositories {
+export function composeRepositories(runtime: ControlDataRuntime, tableName: string): Repositories {
   cachedDdb ??= DynamoDBDocumentClient.from(new DynamoDBClient({}));
   cachedCloudWatch ??= new CloudWatchClient({} satisfies CloudWatchClientConfig);
   return {
-    competitorAccounts: createCompetitorAccountsRepository({ ddb: cachedDdb, tableName }),
+    competitorAccounts: createCompetitorAccountsRepository({ runtime, ddb: cachedDdb, tableName }),
     rotationAgeMetrics: createRotationAgeMetricsRepository(cachedCloudWatch),
   };
 }

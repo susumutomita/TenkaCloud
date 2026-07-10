@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import { SqlDeploymentsRepository } from "../../lib/problem-deploy/control-data/deployments-repository";
 import { hashLoginKey } from "../../lib/problem-deploy/control-data/sql-teams-repository";
 import type { DeploymentRecord } from "../../lib/problem-deploy/control-data/types";
-import { applyDeployStatusWrite } from "../../lib/problem-deploy/handlers/deploy-status-writer-handler";
+import {
+  applyDeployStatusWrite,
+  type DeployStatusWriterResources,
+  resolveDeploymentsRepository,
+} from "../../lib/problem-deploy/handlers/deploy-status-writer-handler";
 import { makeSqliteExecutor } from "./control-data/control-data-write.test-helpers";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const AT = "2026-07-08T12:00:00.000Z";
 
@@ -185,6 +190,18 @@ describe("deploy-status-writer-handler", () => {
           { repository },
         ),
       ).resolves.toEqual({ outcome: "not_found" });
+    });
+  });
+
+  describe("resolveDeploymentsRepository (#2527 Slice 4 DI seam)", () => {
+    it("should resolve the repository through the injected runtime", async () => {
+      const resources = {
+        runtime: makeTestControlDataRuntime(),
+        ddb: { send: () => Promise.reject(new Error("no I/O expected")) },
+        deploymentsTableName: "TestDeployments",
+      } as unknown as DeployStatusWriterResources;
+      const repository = await resolveDeploymentsRepository(resources);
+      expect(typeof repository.markDeleted).toBe("function");
     });
   });
 });

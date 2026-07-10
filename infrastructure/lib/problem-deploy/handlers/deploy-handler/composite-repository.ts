@@ -27,6 +27,7 @@ import type {
   DeploymentsCompositePort,
   DeploymentsQueryPort,
 } from "../../control-data/deployments-repository.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import {
   COMPOSITE_RUNTIME_KIND,
   COMPOSITE_VERSION,
@@ -49,6 +50,8 @@ export type CompositeTargetDeploymentRecord = Omit<
 
 /** Injected dependencies. The `ddb` client is created by the caller, not here. */
 export interface CompositeDeploymentRepositoryDeps {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
   readonly tableName: string;
 }

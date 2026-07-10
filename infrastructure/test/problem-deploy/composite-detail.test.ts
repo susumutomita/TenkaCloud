@@ -20,6 +20,7 @@ import {
 import { CompositeOutputsError } from "../../lib/problem-deploy/handlers/deploy-handler/composite-outputs";
 import type { DeploySharedResources } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
 import { getDeployment } from "../../lib/problem-deploy/handlers/deploy-handler/list";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const PARENT_ID = "01HPARENTAAAAAAAAAAAAAAAAA";
 const TENANT = "tenant-acme";
@@ -30,6 +31,7 @@ function buildShared(): {
 } {
   const ddbSend = vi.fn();
   const shared: DeploySharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     competitorAccountsTableName: "TestCompetitorAccounts",
     env: "development",

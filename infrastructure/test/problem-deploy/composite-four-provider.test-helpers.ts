@@ -274,7 +274,11 @@ export function makeFourProviderFake(): FourProviderFake {
     commands.push((cmd as { constructor: { name: string } }).constructor.name);
     return dispatchCommand(cmd, store);
   });
-  const repo: CompositeDeploymentRepositoryDeps = { ddb: { send }, tableName: "TestDeployments" };
+  const repo: CompositeDeploymentRepositoryDeps = {
+    runtime: makeTestControlDataRuntime(),
+    ddb: { send },
+    tableName: "TestDeployments",
+  };
   return {
     repo,
     reconcileDeps: {

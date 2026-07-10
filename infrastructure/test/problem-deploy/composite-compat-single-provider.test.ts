@@ -56,6 +56,7 @@ import {
   discoverProblemsCatalog,
   discoverProblemsRuntime,
 } from "../../lib/utils/discover-problems-catalog";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/presigned-url", () => ({
   generateChallengePayloadUrl: vi.fn(async () => "https://example.invalid/fake.zip"),
@@ -137,6 +138,7 @@ function buildDeployContext(overrides: Partial<DeployContext> = {}): {
     return putSend(cmd);
   });
   const ctx: DeployContext = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     competitorAccountsTableName: "TestCompetitorAccounts",
     env: "development",
@@ -262,6 +264,7 @@ describe("Composite compat: single AWS teardown", () => {
       return ddbSend(cmd);
     });
     const shared: DeploySharedResources = {
+      runtime: makeTestControlDataRuntime(),
       tableName: "TestDeployments",
       competitorAccountsTableName: "TestCompetitorAccounts",
       env: "development",

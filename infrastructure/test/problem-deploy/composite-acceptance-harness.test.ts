@@ -188,7 +188,11 @@ interface PersistenceDouble {
 function makePersistence(): PersistenceDouble {
   const store = new Map<string, Record<string, unknown>>();
   const send = vi.fn(async (cmd: unknown) => dispatchCommand(cmd, store));
-  const repo: CompositeDeploymentRepositoryDeps = { ddb: { send }, tableName: "TestDeployments" };
+  const repo: CompositeDeploymentRepositoryDeps = {
+    runtime: makeTestControlDataRuntime(),
+    ddb: { send },
+    tableName: "TestDeployments",
+  };
   return {
     repo,
     reconcileDeps: {

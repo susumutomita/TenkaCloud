@@ -7,6 +7,7 @@ import {
   parseDeployQuota,
   resolveQuotaTier,
 } from "../../lib/problem-deploy/handlers/deploy-handler/deploy-quota";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #1766: tier 別の同時デプロイクォータ。
@@ -29,7 +30,15 @@ const QUOTA = { basic: 2, advanced: 5, platinum: 10 };
 
 function depsWithActiveCount(count: number) {
   const send = vi.fn().mockResolvedValue({ Count: count });
-  return { deps: { ddb: { send }, tableName: "TestDeployments", quota: QUOTA }, send };
+  return {
+    deps: {
+      runtime: makeTestControlDataRuntime(),
+      ddb: { send },
+      tableName: "TestDeployments",
+      quota: QUOTA,
+    },
+    send,
+  };
 }
 
 describe("parseDeployQuota (#1766)", () => {
@@ -120,7 +129,12 @@ describe("enforceDeployQuota (#1766)", () => {
     const send = vi.fn();
     await expect(
       enforceDeployQuota(
-        { ddb: { send }, tableName: "TestDeployments", quota: undefined },
+        {
+          runtime: makeTestControlDataRuntime(),
+          ddb: { send },
+          tableName: "TestDeployments",
+          quota: undefined,
+        },
         "tenant-a",
         "basic",
       ),
@@ -133,7 +147,12 @@ describe("enforceDeployQuota (#1766)", () => {
       .fn()
       .mockResolvedValueOnce({ Count: 1, LastEvaluatedKey: { PK: "x" } })
       .mockResolvedValueOnce({ Count: 1, LastEvaluatedKey: { PK: "y" } });
-    const deps = { ddb: { send }, tableName: "TestDeployments", quota: QUOTA };
+    const deps = {
+      runtime: makeTestControlDataRuntime(),
+      ddb: { send },
+      tableName: "TestDeployments",
+      quota: QUOTA,
+    };
     await expect(enforceDeployQuota(deps, "tenant-a", "basic")).rejects.toBeInstanceOf(
       DeployQuotaExceededError,
     );

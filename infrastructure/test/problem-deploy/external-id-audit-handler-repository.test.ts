@@ -6,6 +6,7 @@ import {
   createRotationAgeMetricsRepository,
 } from "../../lib/problem-deploy/handlers/external-id-audit-handler/repository";
 import { makeFakeDdb } from "./control-data/control-data-write.test-helpers";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 // [Issue #2442 / Phase C2] The `CompetitorAccounts` Scan itself moved behind the
 // control-data repository seam (`resolveCompetitorAccountsRepository`), so this
@@ -36,7 +37,11 @@ describe("createCompetitorAccountsRepository (adapter over the control-data seam
       createdBy: "sub-1",
     });
 
-    const repository = createCompetitorAccountsRepository({ ddb, tableName: "AcctTbl" });
+    const repository = createCompetitorAccountsRepository({
+      runtime: makeTestControlDataRuntime(),
+      ddb,
+      tableName: "AcctTbl",
+    });
     const pages: unknown[][] = [];
     await repository.forEachAccountPage(async (items) => {
       pages.push([...items]);
@@ -81,7 +86,11 @@ describe("createCompetitorAccountsRepository (adapter over the control-data seam
       createdBy: "sub-2",
     });
 
-    const repository = createCompetitorAccountsRepository({ ddb, tableName: "AcctTbl" });
+    const repository = createCompetitorAccountsRepository({
+      runtime: makeTestControlDataRuntime(),
+      ddb,
+      tableName: "AcctTbl",
+    });
     const pageSizes: number[] = [];
     await repository.forEachAccountPage(async (items) => {
       pageSizes.push(items.length);
@@ -92,7 +101,11 @@ describe("createCompetitorAccountsRepository (adapter over the control-data seam
 
   it("should call onPage zero times when the table is empty", async () => {
     const ddb = makeFakeDdb();
-    const repository = createCompetitorAccountsRepository({ ddb, tableName: "AcctTbl" });
+    const repository = createCompetitorAccountsRepository({
+      runtime: makeTestControlDataRuntime(),
+      ddb,
+      tableName: "AcctTbl",
+    });
     const onPage = vi.fn().mockResolvedValue(undefined);
 
     await repository.forEachAccountPage(onPage);

@@ -58,7 +58,7 @@ export class CompositeParentNotReconcilableError extends Error {
 }
 
 function repoDeps(deps: CompositeParentReconcileDeps): CompositeDeploymentRepositoryDeps {
-  return { ddb: deps.ddb, tableName: deps.deploymentsTableName };
+  return { runtime: deps.runtime, ddb: deps.ddb, tableName: deps.deploymentsTableName };
 }
 
 /**
