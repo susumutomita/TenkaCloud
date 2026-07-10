@@ -32,6 +32,16 @@ const backends: ReadonlyArray<readonly [string, () => NotificationsRepository]> 
     () => new DynamoDbNotificationsRepository(makeFakeDdb(), TABLE),
   ],
   ["SqlNotificationsRepository", () => new SqlNotificationsRepository(makeSqliteExecutor())],
+  // [#2527 Slice 0] Mirror mode (DDB canonical + SQL replica) must satisfy the
+  // same contract; listByEvent cursors stay canonical-only by design.
+  [
+    "MirroredNotificationsRepository",
+    () =>
+      new MirroredNotificationsRepository(
+        new DynamoDbNotificationsRepository(makeFakeDdb(), TABLE),
+        new SqlNotificationsRepository(makeSqliteExecutor()),
+      ),
+  ],
 ];
 
 function encodeForeignCursor(): string {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MirroredTeamsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import {
   createTeamsRepository,
   DynamoDbTeamsRepository,
@@ -13,8 +14,10 @@ import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpe
 
 /**
  * [ADR-049 §5] Parity suite for the Teams repository seam. The SAME assertions run
- * against both backends so DynamoDB (behavior-preserving extraction) and SQLite
- * (Turso / D1 dialect) are provably interchangeable:
+ * against every backend so DynamoDB (behavior-preserving extraction), SQLite
+ * (Turso / D1 dialect), and the mirror composition (DDB canonical + SQL replica,
+ * [#2527 Slice 0] — read-repair restores the canonical login key, so callers see
+ * the DynamoDB-shaped record) are provably interchangeable:
  *   - DynamoDb impl against the shared in-memory fake DocumentClient
  *     (`control-data-write.test-helpers.ts` — real round-trip: put → get returns
  *     the stored row; base-table + GSI2 queries).
@@ -48,6 +51,14 @@ function sampleRecord(overrides: Partial<TeamRecord> = {}): TeamRecord {
 const backends: ReadonlyArray<readonly [string, () => TeamsRepository]> = [
   ["DynamoDbTeamsRepository", () => new DynamoDbTeamsRepository(makeFakeDdb(), TABLE)],
   ["SqlTeamsRepository", () => new SqlTeamsRepository(makeSqliteExecutor())],
+  [
+    "MirroredTeamsRepository",
+    () =>
+      new MirroredTeamsRepository(
+        new DynamoDbTeamsRepository(makeFakeDdb(), TABLE),
+        new SqlTeamsRepository(makeSqliteExecutor()),
+      ),
+  ],
 ];
 
 function withoutLoginKey(record: TeamRecord): TeamRecord {
