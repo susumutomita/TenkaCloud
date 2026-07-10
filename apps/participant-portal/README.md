@@ -7,13 +7,14 @@ Competitors solve problems in the AWS Console, so the portal minimizes hosting c
 ## Features / pages
 
 - `/login` — sign in with the team login key
+- `/setup` — team-name onboarding, shown once to competitors who haven't set a team name yet (guarded by `RequireAuth requireTeamName={false}`)
 - `/` — Home (welcome + event info + cumulative score + quick links to problems)
 - `/problems` — Quests list (filter by Battle / Challenge category and submission state)
 - `/problems/:jobId` — problem detail (`metadata.json` narrative + flag submission + endpoint override + portal plugin slot)
 - `/scoreboard` — Scoreboard with real-time ranking (5-second polling); frozen 30 minutes before competition end
 - `/score-events` — Your team's score-change history with a cumulative score line chart
 - `/notifications` — Operator notifications (info / warning)
-- `/sso` — SSO Credentials for one-click federated sign-in to the AWS Console
+- `/tools/sso` — SSO Credentials for one-click federated sign-in to the AWS Console
 
 i18n: Japanese and English.
 

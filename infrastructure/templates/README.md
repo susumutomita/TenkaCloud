@@ -44,19 +44,24 @@ TenkaCloud 側はこの ARN と ExternalId を用いて AssumeRole し、問題 
 
 ### 付与される権限
 
-作成される Role に対し、問題 CFn が必要とする次の権限を付与します。
+作成される Role には AWS managed policy **`AdministratorAccess`** を付与します。
 
-| サービス       | スコープ                                         | 用途                                   |
-| -------------- | ------------------------------------------------ | -------------------------------------- |
-| CloudFormation | `*`                                              | 問題スタックの create / update / delete |
-| EC2 / VPC      | `*`                                              | 問題 CFn が VPC + EC2 を立てる         |
-| SSM            | `GetParameter*` / `DescribeParameters`           | AMI ID 解決 / セッションマネージャ     |
-| IAM            | `tc-*` の Role / Instance Profile のみ           | 問題 CFn が EC2 instance profile を作る |
-| S3             | `tc-*` バケット / オブジェクト                   | 将来の S3 利用問題向け                 |
-| CloudWatch Logs| `*`                                              | 診断ログ                               |
+これは意図的な設計判断です (Issue #721)。以前はサービスごとにスコープを絞った
+least-privilege ポリシーを使っていましたが、新しい問題テンプレートを追加するたびに
+必要な権限 (hello-world Challenge の `ssm:PutParameter` / microservice-migration-battle
+の `scheduler:*` など) が足りず `CREATE_FAILED` → `ROLLBACK_COMPLETE` になる
+「権限のもぐらたたき」が常態化していました。競技者はこの bootstrap を deploy する
+時点で TenkaCloud が自アカウント内で操作することに同意しており、trust はすでに
+下表の多層防御 (defense-in-depth) で絞られているため、`AdministratorAccess` に
+切り替えて IAM のもぐらたたきを解消し、新しい問題テンプレートが bootstrap を
+再発行させずに deploy できるようにしています。
 
-権限スコープは問題 CFn が実際に必要とするものに合わせて広めに付与している (`ec2:*` など)。
-最小権限化は問題テンプレートが固まった後に絞る方針。
+| 層                          | 内容                                                          |
+| ---------------------------- | -------------------------------------------------------------- |
+| Trust policy                 | TenkaCloud アカウント ID + ExternalId の 2 要素に限定           |
+| ConsoleViewerRole (運営側)   | `tc-*` スコープのみ (PR #710)                                   |
+| MaxSessionDuration           | 1 時間 (3600 秒)                                                |
+| 撤回                         | 競技者がこの stack を削除すれば AssumeRole は即時に拒否される  |
 
 ### 撤回 / クリーンアップ
 
