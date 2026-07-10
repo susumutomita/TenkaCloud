@@ -82,10 +82,22 @@ describe("scripts/onboard-bootstrap.sh", () => {
 });
 
 describe("Makefile local-play guards", () => {
-  it("local-portal should explain a missing vite instead of exiting 127", () => {
-    expect(makefile).toContain(
-      "Dependencies are not installed (vite is missing). Run 'make install' first.",
-    );
+  it("ensure-deps should auto-run make install when vite is missing (not just error out)", () => {
+    // The ensure-deps recipe must install on demand — matched loosely so
+    // whitespace/formatting can change without breaking the intent check.
+    expect(makefile).toMatch(/ensure-deps:/);
+    expect(makefile).toMatch(/vite is missing\)\s*—\s*running 'make install' first/);
+    expect(makefile).toMatch(/\$\(MAKE\) install/);
+  });
+
+  it("make local should ensure deps before starting (single self-healing entry point)", () => {
+    const local = makefile.slice(makefile.indexOf("\nlocal:"));
+    expect(local).toMatch(/\$\(MAKE\) ensure-deps/);
+  });
+
+  it("local-portal should self-heal missing deps via ensure-deps rather than exiting 127", () => {
+    const portal = makefile.slice(makefile.indexOf("\nlocal-portal:"));
+    expect(portal.slice(0, 400)).toMatch(/\$\(MAKE\) ensure-deps/);
   });
 
   it("local-onboard should reach a bun the bootstrap just installed", () => {
