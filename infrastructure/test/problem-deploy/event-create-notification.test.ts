@@ -2,6 +2,7 @@ import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createNotification } from "../../lib/problem-deploy/handlers/event-handler/create-notification";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const TENANT_ID = "tenant-acme";
 const EVENT_ID = "01HZX0K3M3K9ZQHB3MRQHBA1B2";
@@ -10,6 +11,7 @@ const NOW_MS = new Date("2026-05-10T14:42:18.000Z").getTime();
 function buildShared(): { shared: EventSharedResources; ddbSend: ReturnType<typeof vi.fn> } {
   const ddbSend = vi.fn();
   const shared: EventSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     eventsTableName: "TestEvents",
     teamsTableName: "TestTeams",
     deploymentsTableName: "TestDeployments",

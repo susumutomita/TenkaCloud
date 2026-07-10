@@ -1,6 +1,8 @@
 import type { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ControlDataRuntime } from "../../lib/problem-deploy/control-data/runtime-repositories";
 import { collectTeamScoreEvents } from "../../lib/problem-deploy/handlers/event-handler/team-score-events";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #1038 P1 #7: operator (= tenant admin) 視点で同 event の全 team の score event
@@ -8,11 +10,16 @@ import { collectTeamScoreEvents } from "../../lib/problem-deploy/handlers/event-
  */
 
 function buildShared(): {
-  shared: { ddb: { send: ReturnType<typeof vi.fn> }; deploymentsTableName: string };
+  shared: {
+    runtime: ControlDataRuntime;
+    ddb: { send: ReturnType<typeof vi.fn> };
+    deploymentsTableName: string;
+  };
   ddbSend: ReturnType<typeof vi.fn>;
 } {
   const ddbSend = vi.fn();
   const shared = {
+    runtime: makeTestControlDataRuntime(),
     ddb: { send: ddbSend },
     deploymentsTableName: "TestDeployments",
   };

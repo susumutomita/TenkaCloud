@@ -6,6 +6,7 @@ import {
   listDisruptionCatalog,
 } from "../../lib/problem-deploy/handlers/event-handler/disruption-fire";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #1418: disruption-fire.ts の read 系 (isEventOwnedByTenant / listDisruptionAudit /
@@ -28,6 +29,7 @@ const ddb = {
   }),
 };
 const shared = {
+  runtime: makeTestControlDataRuntime(),
   ddb,
   eventsTableName: "Events",
   disruptionsTableName: "Disruptions",

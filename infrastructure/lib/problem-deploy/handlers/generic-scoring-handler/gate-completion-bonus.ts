@@ -3,7 +3,7 @@ import type {
   DeploymentsQueryPort,
   DeploymentsScoringPort,
 } from "../../control-data/deployments-repository.js";
-import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
   CHALLENGE_PREREQUISITE_GATE_FLAG,
@@ -42,6 +42,8 @@ import { resolveDeploymentsRepository } from "./shared.js";
  */
 
 interface GateScoringShared {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: DynamoDBDocumentClient;
   readonly deploymentsTableName: string;
   readonly eventsTableName: string;
@@ -59,11 +61,11 @@ function isGateFlagEnabled(
 ): Promise<boolean> {
   const cached = cache.get(tenantId);
   if (cached) return cached;
-  // [#2450] cold-start cache 済みの async resolver (`controlDataRuntime`) 経由で FeatureFlags
+  // [#2450] cold-start cache 済みの async resolver (injected `shared.runtime`) 経由で FeatureFlags
   // repository を解決するため `CONTROL_DATA_BACKEND=turso|sql` でも動作する。 default backend では
   // 従来と byte 互換の GetCommand が飛ぶ。 tick (1 invocation) 内 cache の構造は不変 —
   // cache に入れる `Promise<boolean>` の構築だけ `.then()` 連結にする。
-  const promise = controlDataRuntime
+  const promise = shared.runtime
     .resolveFeatureFlagsRepository({ ddb: shared.ddb, eventsTableName: shared.eventsTableName })
     .then((repo) => isTenantFeatureEnabled(repo, tenantId, CHALLENGE_PREREQUISITE_GATE_FLAG));
   cache.set(tenantId, promise);

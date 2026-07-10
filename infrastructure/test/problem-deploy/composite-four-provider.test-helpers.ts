@@ -37,6 +37,7 @@ import type {
 import type { DeploymentStatus } from "../../lib/problem-deploy/handlers/deploy-handler/types";
 import type { CompositeParentReconcileDeps } from "../../lib/problem-deploy/handlers/generic-scoring-handler/composite-status-reconciler";
 import type { CompositeTargetProvider } from "../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/composite-probe";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 // ---------------------------------------------------------------------------
 // Deterministic clock + identity constants the whole suite pins.
@@ -276,7 +277,11 @@ export function makeFourProviderFake(): FourProviderFake {
   const repo: CompositeDeploymentRepositoryDeps = { ddb: { send }, tableName: "TestDeployments" };
   return {
     repo,
-    reconcileDeps: { ddb: { send }, deploymentsTableName: "TestDeployments" },
+    reconcileDeps: {
+      runtime: makeTestControlDataRuntime(),
+      ddb: { send },
+      deploymentsTableName: "TestDeployments",
+    },
     store,
     commands,
     setStatus: (deploymentId, status) => {

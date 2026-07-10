@@ -25,9 +25,11 @@ import {
 import { reconcileDeployStatusMaintenance } from "../../lib/problem-deploy/handlers/generic-scoring-handler/composite-status-reconciler";
 import {
   CompositeTeardownNotReconcilableError,
+  type CompositeTeardownReconcileDeps,
   reconcileCompositeParentTeardown,
   reconcileCompositeParentTeardowns,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/composite-teardown-reconciler";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const NOW_ISO = "2026-06-29T00:00:00.000Z";
 const NEXT_ISO = "2026-06-29T01:00:00.000Z";
@@ -49,7 +51,7 @@ function conditionalCheckFailed(): Error & { name: string } {
 }
 
 interface Fake {
-  deps: CompositeDeploymentRepositoryDeps & { deploymentsTableName: string };
+  deps: CompositeDeploymentRepositoryDeps & CompositeTeardownReconcileDeps;
   store: Map<string, Record<string, unknown>>;
   commands: string[];
   setStatus: (id: string, status: string) => void;
@@ -112,7 +114,12 @@ function makeFake(opts: { failUpdate?: boolean } = {}): Fake {
     throw new Error(`unexpected: ${(cmd as { constructor: { name: string } }).constructor.name}`);
   });
   return {
-    deps: { ddb: { send }, tableName: "T", deploymentsTableName: "T" },
+    deps: {
+      runtime: makeTestControlDataRuntime(),
+      ddb: { send },
+      tableName: "T",
+      deploymentsTableName: "T",
+    },
     store,
     commands,
     setStatus: (id, status) => {

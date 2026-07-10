@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import type { ReconcileEventStatusesContext } from "../../lib/problem-deploy/handlers/generic-scoring-handler/event-reconciler";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Shared fixtures / helpers for the `generic-scoring-reconciler` test suite.
@@ -21,6 +22,7 @@ export function buildCtx(): {
 } {
   const ddbSend = vi.fn();
   const ctx: ReconcileEventStatusesContext = {
+    runtime: makeTestControlDataRuntime(),
     ddb: { send: ddbSend } as unknown as ReconcileEventStatusesContext["ddb"],
     eventsTableName: "TestEvents",
     deploymentsTableName: "TestDeployments",

@@ -19,6 +19,7 @@ vi.mock("../../lib/problem-deploy/handlers/event-handler/team-score-events", () 
 const { listEvents, getEventDetail } = await import(
   "../../lib/problem-deploy/handlers/event-handler/list"
 );
+const { makeTestControlDataRuntime } = await import("./control-data/runtime.test-helpers");
 
 const cfg = {
   listItems: [] as Record<string, unknown>[] | undefined,
@@ -39,6 +40,7 @@ const ddb = {
   }),
 };
 const shared = {
+  runtime: makeTestControlDataRuntime(),
   ddb,
   eventsTableName: "Events",
   teamsTableName: "Teams",

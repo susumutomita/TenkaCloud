@@ -5,6 +5,7 @@ import {
   unlockScoring,
 } from "../../lib/problem-deploy/handlers/event-handler/lock-scoring";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const NOW_MS = 1_700_000_000_000;
 const NOW_ISO = new Date(NOW_MS).toISOString();
@@ -15,6 +16,7 @@ function buildShared(): {
 } {
   const ddbSend = vi.fn();
   const shared: EventSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     eventsTableName: "TestEvents",
     teamsTableName: "TestTeams",
     deploymentsTableName: "TestDeployments",

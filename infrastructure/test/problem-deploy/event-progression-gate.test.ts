@@ -5,6 +5,7 @@ import {
   setProgressionGate,
 } from "../../lib/problem-deploy/handlers/event-handler/progression-gate";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #2283: Progression Gate 設定 service 層。
@@ -13,6 +14,7 @@ import type { EventSharedResources } from "../../lib/problem-deploy/handlers/eve
 
 const send = vi.fn();
 const shared = {
+  runtime: makeTestControlDataRuntime(),
   ddb: { send },
   eventsTableName: "TestEvents",
   teamsTableName: "TestTeams",

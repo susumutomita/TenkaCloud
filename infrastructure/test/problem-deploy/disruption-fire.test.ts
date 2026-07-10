@@ -9,6 +9,7 @@ import {
   listDisruptionCatalog,
 } from "../../lib/problem-deploy/handlers/event-handler/disruption-fire";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const NOW_MS = 1_700_000_000_000;
 
@@ -20,6 +21,7 @@ function buildShared(): {
   const ddbSend = vi.fn();
   const eventsSend = vi.fn();
   const shared: EventSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     eventsTableName: "TestEvents",
     teamsTableName: "TestTeams",
     deploymentsTableName: "TestDeployments",

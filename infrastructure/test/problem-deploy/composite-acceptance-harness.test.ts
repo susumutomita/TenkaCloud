@@ -66,6 +66,7 @@ import {
   FOUR_PROVIDER_TENANT_ID,
   targetUrl,
 } from "./composite-four-provider.test-helpers";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 // ---------------------------------------------------------------------------
 // A secret-bearing connection store, so the redaction assertions are meaningful:
@@ -190,7 +191,11 @@ function makePersistence(): PersistenceDouble {
   const repo: CompositeDeploymentRepositoryDeps = { ddb: { send }, tableName: "TestDeployments" };
   return {
     repo,
-    reconcileDeps: { ddb: { send }, deploymentsTableName: "TestDeployments" },
+    reconcileDeps: {
+      runtime: makeTestControlDataRuntime(),
+      ddb: { send },
+      deploymentsTableName: "TestDeployments",
+    },
     store,
     readStatus: (deploymentId) =>
       store.get(`DEPLOYMENT#${deploymentId}|META`)?.status as DeploymentStatus | undefined,

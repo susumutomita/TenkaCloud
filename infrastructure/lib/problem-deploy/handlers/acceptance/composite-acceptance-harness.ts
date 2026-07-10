@@ -400,6 +400,7 @@ export class CompositeAcceptanceHarness {
   async reconcileTeardown(): Promise<DeploymentStatus> {
     const result = await reconcileCompositeParentTeardown(
       {
+        runtime: this.config.reconcileDeps.runtime,
         ddb: this.config.reconcileDeps.ddb,
         deploymentsTableName: this.config.reconcileDeps.deploymentsTableName,
       },
