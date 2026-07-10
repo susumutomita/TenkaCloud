@@ -56,6 +56,12 @@ if ! command -v bun >/dev/null 2>&1; then
   echo "  Install command: $bun_cmd"
   if consent "Install Bun now?"; then
     sh -c "$bun_cmd"
+    # The installer drops bun into ~/.bun/bin and edits the shell profile, but
+    # THIS shell's PATH is unchanged — without this export the re-check below
+    # fails right after a successful install (seen in Codespaces postCreate,
+    # where that false failure aborted the whole setup chain).
+    export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+    export PATH="$BUN_INSTALL/bin:$PATH"
   fi
   if ! command -v bun >/dev/null 2>&1; then
     echo ""

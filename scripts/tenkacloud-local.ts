@@ -84,6 +84,26 @@ export function problemSearchRoots(repoRoot: string): string[] {
   return [join(repoRoot, "problems", "challenges"), join(repoRoot, "problems", "battles")];
 }
 
+/**
+ * A plain clone (and a fresh Codespace) leaves the problems/ submodule empty,
+ * and local play used to bail with a manual "run git submodule update --init"
+ * step — the one command players kept tripping on. Submodule checkout installs
+ * no software (the onboarder already classifies it "safe-auto" in
+ * scripts/onboard/plan.ts), so run it automatically when the catalog is empty
+ * and the submodule is registered. Returns true when the init succeeded —
+ * callers re-scan the catalog then.
+ */
+export function autoInitProblemsSubmodule(
+  repoRoot: string,
+  run: CommandSucceeds = (command, args) =>
+    spawnSync(command, [...args], { cwd: repoRoot, stdio: "inherit" }).status === 0,
+  fileExists: (path: string) => boolean = existsSync,
+): boolean {
+  if (!fileExists(join(repoRoot, ".gitmodules"))) return false;
+  console.log("problems/ catalog is empty — fetching it: git submodule update --init problems");
+  return run("git", ["submodule", "update", "--init", "problems"]);
+}
+
 /** A 256-bit hex secret. One per declared `secretEnv` name, generated per deploy. */
 export function generateSecretEnv(
   names: readonly string[],
@@ -443,6 +463,24 @@ async function printRunningEndpoints(apiBaseUrl: string): Promise<void> {
   }
 }
 
+/** Load the full local-play catalog, self-healing an uninitialized problems/ submodule first. */
+function loadLocalPlayCatalog(roots: string[]) {
+  const load = () =>
+    listLocalPlayProblems(roots).map((summary) =>
+      loadContainerProblem(resolveProblemDir(roots, summary.problemId)),
+    );
+  let catalog = load();
+  if (catalog.length === 0 && autoInitProblemsSubmodule(REPO_ROOT)) {
+    catalog = load();
+  }
+  if (catalog.length === 0) {
+    throw new Error(
+      "No local-play problems found. Run `git submodule update --init` to fetch the problems/ catalog.",
+    );
+  }
+  return catalog;
+}
+
 async function up(problemArg: string): Promise<void> {
   const p = paths();
   if (existsSync(p.statePath)) {
@@ -463,14 +501,7 @@ async function up(problemArg: string): Promise<void> {
   // and containers start on demand. PROBLEM= only selects what to pre-start —
   // none means a warm session with zero containers.
   const roots = problemSearchRoots(REPO_ROOT);
-  const catalog = listLocalPlayProblems(roots).map((summary) =>
-    loadContainerProblem(resolveProblemDir(roots, summary.problemId)),
-  );
-  if (catalog.length === 0) {
-    throw new Error(
-      "No local-play problems found. Run `git submodule update --init` to fetch the problems/ catalog.",
-    );
-  }
+  const catalog = loadLocalPlayCatalog(roots);
   const catalogIds = new Set(catalog.map((problem) => problem.problemId));
   for (const id of problemIds) {
     if (!catalogIds.has(id)) {
@@ -640,7 +671,11 @@ function down(): void {
  * needing to know the id.
  */
 function listProblems(): void {
-  const summaries = listLocalPlayProblems(problemSearchRoots(REPO_ROOT));
+  const roots = problemSearchRoots(REPO_ROOT);
+  let summaries = listLocalPlayProblems(roots);
+  if (summaries.length === 0 && autoInitProblemsSubmodule(REPO_ROOT)) {
+    summaries = listLocalPlayProblems(roots);
+  }
   if (summaries.length === 0) {
     console.log(
       "No local-play problems found. Run `git submodule update --init` (or `make doctor` / " +

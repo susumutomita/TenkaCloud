@@ -280,7 +280,9 @@ doctor:
 # with Docker setup. Keep `make local` itself lightweight and non-installing.
 local-onboard:
 	@sh scripts/onboard-bootstrap.sh $(ONBOARD_FLAGS)
-	@bun run scripts/tenkacloud-onboard.ts preflight $(ONBOARD_FLAGS)
+	@# The bootstrap may have JUST installed bun into ~/.bun/bin; this recipe line
+	@# runs in a fresh shell whose PATH predates that install, so prefix it.
+	@PATH="$$HOME/.bun/bin:$$PATH" bun run scripts/tenkacloud-onboard.ts preflight $(ONBOARD_FLAGS)
 
 # Issue #2054 / #2392 / #2511: start the detached local scoring API, then the
 # browser portal. `local-up` remains the API-only escape hatch for scripts.
@@ -308,6 +310,13 @@ local-up:
 
 local-portal:
 	@bun run scripts/tenkacloud-local.ts status >/dev/null
+	@# vite lives in the workspace root's node_modules/.bin (bun hoists it); a
+	@# fresh clone that skipped `make install` would otherwise die with the
+	@# cryptic "vite: command not found" (exit 127) here.
+	@if [ ! -x node_modules/.bin/vite ] && [ ! -x apps/participant-portal/node_modules/.bin/vite ]; then \
+	  echo "Dependencies are not installed (vite is missing). Run 'make install' first."; \
+	  exit 1; \
+	fi
 	@( cd apps/participant-portal && bun run dev --host 127.0.0.1 )
 
 local-down:
