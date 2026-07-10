@@ -193,7 +193,10 @@ export class EventApiLambda extends Construct {
       // teams=25 × problems=30 = 750 行で 30 秒前後を見込む。Phase 3 で Distributed
       // Map に切り出すまでの暫定。
       timeout: Duration.seconds(60),
-      memorySize: 512,
+      // 512MB では本番実測で 510/512MB まで張り付き、cold start で Runtime.OutOfMemory を
+      // 断続的に起こしていた (機能フラグ / イベント一覧の取得失敗)。events + feature-flags +
+      // disruptions を 1 handler で捌く重量級なので 1024MB へ引き上げる。
+      memorySize: 1024,
       environment: {
         // Issue #2440: 純 SQL backend では table が無いので env も足さない (= CFn byte 互換 /
         // cold start が EVENTS_TABLE_NAME 不在でも通る)。
