@@ -1,5 +1,8 @@
 # Issue 2191 — writeup release plan
 
+> **Status: Shipped** — delivered in PR #2338; #2191 closed 2026-07-03. Kept as
+> a historical plan document.
+
 ## Policy
 
 - Cloud events: release a writeup only when the event gate is `scoring_ended` and the team has

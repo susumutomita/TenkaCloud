@@ -46,6 +46,22 @@ make local-evaluate FLAG='TC{…}'  # submit a flag from the CLI
 make local-down                   # stop everything and restore runtime-config
 ```
 
+On a bare clone, `make local` is a single, self-healing entry point: it
+installs missing workspace dependencies (`ensure-deps`, only when `vite` is
+absent — a no-op on a warm tree) and initializes an empty `problems/`
+submodule (`git submodule update --init problems`) automatically before it
+starts, so a fresh checkout can run `make local` straight away with no
+separate `make install` or `git submodule update --init` step (#2525, #2533).
+`make local-portal` self-heals the same way.
+
+Prefer a guided walkthrough instead? `make doctor` reports on prerequisites
+(mise trust / the `problems/` submodule / Bun / Docker Compose / the Docker
+daemon) without installing anything; `make local-onboard` runs the same
+checks interactively and offers to fix what it finds (trusting mise,
+installing Bun, initializing the submodule, Docker Compose help) — add
+`YES=1` to pre-approve every install for unattended use. Both wrap
+`scripts/tenkacloud-onboard.ts`.
+
 Without `PROBLEM=`, `make local` pre-starts no problem containers. It starts the
 loopback scoring API and browser portal so you can deploy/start a problem from
 the portal screen. Use `PROBLEM=<id>` when you want the CLI to

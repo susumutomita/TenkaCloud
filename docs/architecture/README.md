@@ -24,8 +24,10 @@ ADRs that already exist, but every **new** ADR from here forward uses 3 digits.
 | [adr-012](./adr-012-three-asset-problem-model.html) | Three-asset problem model and built-in scoring kinds | Accepted |
 | [adr-014](./adr-014-polling-first-with-eventbridge-reconciliation.html) | Polling-first with EventBridge reconciliation | Accepted |
 | [adr-016](./adr-016-lite-mode-single-tenant.html) | Lite mode (single-tenant) | Accepted |
+| [adr-028](./adr-028-inter-team-coordination.html) | Inter-team coordination plugin contract | Accepted |
 | [adr-035](./adr-035-feature-flags.html) | Feature flags | Accepted |
 | [adr-048](./adr-048-composite-target-participant-access.html) | Managed participant access for composite targets (AWS / GCP / Azure / Sakura) | Accepted |
+| [adr-049](./adr-049-always-on-cloudflare-control-plane.html) | Always-on control plane on Cloudflare, on-demand AWS event runtime | Accepted |
 
 ## Referenced-but-not-yet-drafted ADR numbers
 
@@ -38,9 +40,6 @@ following are known and intentionally out of scope for that issue's first pass:
   documented — read the referencing code's own comments for the current understanding, and
   consider drafting the ADR (or filing a follow-up issue) instead of adding another dangling
   reference.
-- **ADR-028** (inter-team coordination) — **Accepted**, drafted at
-  [`adr-028-inter-team-coordination.html`](./adr-028-inter-team-coordination.html) alongside Issue
-  #2195's decision to adopt the coordination plugin contract.
 
 ## Adding a new ADR
 
