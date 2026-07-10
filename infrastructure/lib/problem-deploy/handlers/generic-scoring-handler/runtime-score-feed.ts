@@ -1,6 +1,7 @@
 import { GetParameterCommand, type SSMClient } from "@aws-sdk/client-ssm";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { resolveDeploymentsRepository } from "./shared.js";
 
@@ -17,6 +18,8 @@ export interface RuntimeScoreFeedConfig {
 }
 
 export interface RuntimeScoreFeedDependencies {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
   readonly ssm: Pick<SSMClient, "send">;
   readonly fetchImpl?: typeof fetch;
@@ -38,6 +41,7 @@ export async function publishRuntimeScoreFeed(
   // 200-per-page, `ConsistentRead` Scan + `LastEvaluatedKey` drain into the
   // Deployments seam; the per-row aggregation below is unchanged.
   const repository: DeploymentsQueryPort = await resolveDeploymentsRepository({
+    runtime: dependencies.runtime,
     ddb: dependencies.ddb,
     deploymentsTableName: config.deploymentsTableName,
   });

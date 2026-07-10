@@ -5,6 +5,7 @@ import type {
   DeploymentsLifecyclePort,
   DeploymentsQueryPort,
 } from "../../control-data/deployments-repository.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import {
   type AdapterDependencyConfig,
   buildAdapterDependencies,
@@ -51,6 +52,8 @@ export function mapRuntimeStatus(status: RuntimeStatus): DeploymentStatus {
 }
 
 export interface RuntimeReconcileDeps {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: DynamoDBDocumentClient;
   readonly deploymentsTableName: string;
   readonly env: string;

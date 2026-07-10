@@ -11,7 +11,7 @@ import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/sco
 import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
 import type { DisruptionsRepository } from "../../control-data/disruptions-repository.js";
 import type { ProblemEndpointsRepository } from "../../control-data/problem-endpoints-repository.js";
-import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { isSsrfSafeUrl } from "../shared/ssrf-guard.js";
 
@@ -24,6 +24,12 @@ import { isSsrfSafeUrl } from "../shared/ssrf-guard.js";
  * memo (= DDB へ並列書き出し前提)。
  */
 export interface GenericScoringSharedResources {
+  /**
+   * [#2527 Slice 4] Injected control-data runtime — the Lambda entrypoint
+   * (`index.ts`) creates it via `createDefaultControlDataRuntime()` once per
+   * instance; every repository seam below resolves through it.
+   */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: DynamoDBDocumentClient;
   readonly deploymentsTableName: string;
   readonly eventsTableName: string;
@@ -46,8 +52,9 @@ export interface GenericScoringSharedResources {
   readonly sakuraAppRunBaseUrl?: string;
 }
 
-export function buildSharedResources(): GenericScoringSharedResources {
+export function buildSharedResources(runtime: ControlDataRuntime): GenericScoringSharedResources {
   return {
+    runtime,
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     // [Issue #2441 / Phase B PR-6] pure SQL backend (turso|sql) では Deployments table 自体が
     // synth されず env も配線されないため、毎 tick 呼ばれる本 builder を fail-fast にすると採点
@@ -84,6 +91,7 @@ export function buildSharedResources(): GenericScoringSharedResources {
 }
 
 export interface GenericScoringDeploymentsSharedResources {
+  readonly runtime: ControlDataRuntime;
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
   readonly deploymentsTableName: string;
 }
@@ -96,19 +104,20 @@ export interface GenericScoringDeploymentsSharedResources {
  * B4 constraint: the control-data factory fails loudly until the SQL
  * Deployments backend exists.
  *
- * [#2467-era runtime] Delegates to the cold-start-cached `controlDataRuntime`,
+ * [#2467-era runtime] Delegates to the cold-start-cached injected `shared.runtime`,
  * so `Promise<DeploymentsRepository>` — caller must await before use.
  */
 export function resolveDeploymentsRepository(
   shared: GenericScoringDeploymentsSharedResources,
 ): Promise<DeploymentsRepository> {
-  return controlDataRuntime.resolveDeploymentsRepository({
+  return shared.runtime.resolveDeploymentsRepository({
     ddb: shared.ddb as DynamoDBDocumentClient,
     deploymentsTableName: shared.deploymentsTableName,
   });
 }
 
 export interface GenericScoringEndpointsSharedResources {
+  readonly runtime: ControlDataRuntime;
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
   readonly endpointsTableName: string;
 }
@@ -123,13 +132,14 @@ export interface GenericScoringEndpointsSharedResources {
 export function resolveProblemEndpointsRepository(
   shared: GenericScoringEndpointsSharedResources,
 ): Promise<ProblemEndpointsRepository> {
-  return controlDataRuntime.resolveProblemEndpointsRepository({
+  return shared.runtime.resolveProblemEndpointsRepository({
     ddb: shared.ddb as DynamoDBDocumentClient,
     endpointsTableName: shared.endpointsTableName,
   });
 }
 
 export interface GenericScoringDisruptionsSharedResources {
+  readonly runtime: ControlDataRuntime;
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
   readonly disruptionsTableName: string;
 }
@@ -144,7 +154,7 @@ export interface GenericScoringDisruptionsSharedResources {
 export function resolveDisruptionsRepository(
   shared: GenericScoringDisruptionsSharedResources,
 ): Promise<DisruptionsRepository> {
-  return controlDataRuntime.resolveDisruptionsRepository({
+  return shared.runtime.resolveDisruptionsRepository({
     ddb: shared.ddb as DynamoDBDocumentClient,
     disruptionsTableName: shared.disruptionsTableName,
   });

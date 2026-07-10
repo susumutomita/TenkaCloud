@@ -27,9 +27,11 @@ vi.mock("../../lib/problem-deploy/handlers/event-handler/audit-log-read", () => 
 const { registerAuditLogRoutes } = await import(
   "../../lib/problem-deploy/handlers/event-handler/routes/audit-log"
 );
+const { makeTestControlDataRuntime } = await import("./control-data/runtime.test-helpers");
 
 const buildShared = () =>
   ({
+    runtime: makeTestControlDataRuntime(),
     ddb: { send: vi.fn() },
     adminAuditLogTableName: process.env.ADMIN_AUDIT_LOG_TABLE_NAME ?? "",
     // biome-ignore lint/suspicious/noExplicitAny: 最小 shared (route は repository resolver に渡すだけ)。

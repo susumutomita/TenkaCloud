@@ -18,6 +18,7 @@ import {
   type ReconcileEventStatusesContext,
   reconcileEventStatuses,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/event-reconciler";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const NOW_ISO = "2026-05-11T00:00:00.000Z";
 const PAST = "2026-05-10T23:00:00.000Z"; // NOW より前 (= deployAt 経過)
@@ -32,6 +33,7 @@ function buildCtx(over: Partial<ReconcileEventStatusesContext> = {}): {
 } {
   const ddbSend = vi.fn();
   const ctx: ReconcileEventStatusesContext = {
+    runtime: makeTestControlDataRuntime(),
     ddb: { send: ddbSend } as unknown as ReconcileEventStatusesContext["ddb"],
     eventsTableName: "TestEvents",
     deploymentsTableName: "TestDeployments",

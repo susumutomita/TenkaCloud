@@ -81,12 +81,26 @@ export function createControlDataRepositoryResolver(
   return (input) => runtime.resolveRepositories(input);
 }
 
-/** Module singleton backed by process.env, real SSM, and the real libSQL client. */
-export const controlDataRuntime = createControlDataRuntime({
-  env: process.env,
-  ssm: new SSMClient({}),
-  createClient,
-});
+/**
+ * [#2527 Slice 4] Production composition-root factory: a runtime backed by
+ * process.env, real SSM, and the real libSQL client. Lambda entrypoints call
+ * this once at module scope (one cold-start cache per Lambda instance) and
+ * inject the result into their handler shared-resources — handler modules must
+ * not import the module singleton below.
+ */
+export function createDefaultControlDataRuntime(): ControlDataRuntime {
+  return createControlDataRuntime({
+    env: process.env,
+    ssm: new SSMClient({}),
+    createClient,
+  });
+}
+
+/**
+ * Module singleton for entrypoints not yet migrated to injected runtimes
+ * (#2527 Slice 4). Deleted when the last handler family stops importing it.
+ */
+export const controlDataRuntime = createDefaultControlDataRuntime();
 
 export const resolveControlDataRepositories =
   controlDataRuntime.resolveRepositories.bind(controlDataRuntime);

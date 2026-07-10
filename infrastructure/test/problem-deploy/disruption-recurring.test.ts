@@ -6,6 +6,7 @@ import {
   listActiveRecurring,
 } from "../../lib/problem-deploy/handlers/event-handler/disruption-recurring";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * [ADR-037 Slice 2] recurring の一覧 / 早期解除を pin する。 list は未 cancel + 未到達 だけを返し、
@@ -17,6 +18,7 @@ const NOW = Date.parse("2026-06-18T00:00:00.000Z");
 
 function makeShared(ddbSend: ReturnType<typeof vi.fn>, schedulerSend: ReturnType<typeof vi.fn>) {
   return {
+    runtime: makeTestControlDataRuntime(),
     disruptionsTableName: "Disruptions",
     ddb: { send: ddbSend },
     scheduler: { send: schedulerSend },

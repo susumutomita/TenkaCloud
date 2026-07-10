@@ -19,6 +19,7 @@
 
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentsCompositePort } from "../../control-data/deployments-repository.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import {
   type CompositeDeploymentRepositoryDeps,
   getCompositeParent,
@@ -33,6 +34,8 @@ import { reconcileCompositeParentTeardowns } from "./composite-teardown-reconcil
 import { resolveDeploymentsRepository } from "./shared.js";
 
 export interface CompositeParentReconcileDeps {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
   readonly deploymentsTableName: string;
 }

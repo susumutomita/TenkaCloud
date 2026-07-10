@@ -1,7 +1,10 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
 import type { EventScoringMeta } from "../../control-data/events-repository.js";
-import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import {
+  type ControlDataRuntime,
+  createDefaultControlDataRuntime,
+} from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
   buildScheduledDeployResources,
@@ -78,8 +81,12 @@ export interface GenericScoringTickEvent {
   readonly eventId?: string;
 }
 
+// [#2527 Slice 4] Composition root: one control-data runtime per Lambda instance
+// (cold-start SQL executor cache preserved), injected into every shared-resources build.
+const controlDataRuntime = createDefaultControlDataRuntime();
+
 export async function handler(event: GenericScoringTickEvent = {}): Promise<void> {
-  const shared = buildSharedResources();
+  const shared = buildSharedResources(controlDataRuntime);
   const nowMs = Date.now();
   const nowIso = new Date(nowMs).toISOString();
   const runtimeEventId = resolveRuntimeEventId(event);
@@ -93,11 +100,12 @@ export async function handler(event: GenericScoringTickEvent = {}): Promise<void
     ? Promise.resolve()
     : reconcileEventStatuses(
         {
+          runtime: shared.runtime,
           ddb: shared.ddb,
           eventsTableName: shared.eventsTableName,
           deploymentsTableName: shared.deploymentsTableName,
-          teardownDeps: buildScheduledTeardownResources(),
-          deployDeps: buildScheduledDeployResources(),
+          teardownDeps: buildScheduledTeardownResources(shared.runtime),
+          deployDeps: buildScheduledDeployResources(shared.runtime),
         },
         nowIso,
       ).catch((err) => {
@@ -201,7 +209,7 @@ export async function handler(event: GenericScoringTickEvent = {}): Promise<void
           controlPlaneUrl: requiredRuntimeBinding("ALWAYS_ON_CONTROL_PLANE_URL"),
           tokenParameterName: requiredRuntimeBinding("RUNTIME_FEED_TOKEN_PARAMETER_NAME"),
         },
-        { ddb: shared.ddb, ssm: shared.ssm },
+        { runtime: shared.runtime, ddb: shared.ddb, ssm: shared.ssm },
       );
     } catch (error) {
       // Scoring updates have already committed. Throwing here would make EventBridge retry the
@@ -240,7 +248,7 @@ const OPERATOR_EFFECT_WINDOW_MS = 60 * 60 * 1000;
  *
  * [Issue #2442 / Phase C3] DDB アクセスは repository seam (`resolveDisruptionsRepository`) に
  * 移設。 `disruptionsTableName` が空文字なのは 2 通り — pure SQL backend 選択時 (= 正常、 seam が
- * SQL executor 直結で処理する) と旧 deploy chain (= 真の未配線) — を `controlDataRuntime.
+ * SQL executor 直結で処理する) と旧 deploy chain (= 真の未配線) — を injected `shared.runtime.
  * needsManualPrune()` (= pure SQL 選択中かの既存 public predicate、 #2440) で区別する
  * (`problem-endpoints-handler/endpoints.ts` の `isEndpointsRegistryUnconfigured` と同型)。
  * 未配線ならこの Lambda 呼び出し全体を壊さないよう no-op で抜ける (= 従来の dormant 挙動を維持)。
@@ -252,7 +260,7 @@ async function loadOperatorEffects(
   out: Map<string, ActiveDisruptionEffect[]>,
   nowMs: number,
 ): Promise<void> {
-  if (!shared.disruptionsTableName && !controlDataRuntime.needsManualPrune()) return;
+  if (!shared.disruptionsTableName && !shared.runtime.needsManualPrune()) return;
   const sinceIso = new Date(nowMs - OPERATOR_EFFECT_WINDOW_MS).toISOString();
   const eventIds = new Set<string>();
   for (const it of items) {
@@ -309,6 +317,7 @@ async function processDeployment(
   const slots = shared.problemsEndpoints[item.problemId] ?? [];
   // Phase 3.A: 当該 (tenant, team, problem) の override 行を query (= 1 RCU 程度)
   const overrides = await queryOverridesForDeployment(
+    shared.runtime,
     shared.ddb,
     shared.endpointsTableName,
     item.tenantId,
@@ -453,22 +462,27 @@ function foldActiveDisruptionEffects(
  * [Issue #2442 / Phase C1] raw `QueryCommand` は `resolveProblemEndpointsRepository`
  * (control-data seam) 経由に置き換えた。`tableName` が空文字なのは 2 通りある:
  *   - pure SQL backend (`turso`/`sql`) 選択時 — table 自体が synth されず env も配線されない
- *     (= 正常。 `controlDataRuntime.needsManualPrune()` が true を返す — A5 で導入した
+ *     (= 正常。 injected `runtime.needsManualPrune()` が true を返す — A5 で導入した
  *     既存 predicate を再利用して pure backend かどうかを判定する)
  *   - dynamodb / mirror backend で本当に未配線 (= 旧来の「機能無効」状態)
  * 後者だけ `[]` に degrade する (= 1 mis-wired site が tick 全体を落とさない、既存挙動を維持)。
  * pure backend は tableName を無視して seam が SQL executor 直結で解決するため、素通りする。
  */
 export async function queryOverridesForDeployment(
+  runtime: ControlDataRuntime,
   ddb: DynamoDBDocumentClient,
   tableName: string,
   tenantId: string,
   teamId: string,
   problemId: string,
 ): Promise<{ readonly slot: string; readonly overrideUrl: string }[]> {
-  if (!tableName && !controlDataRuntime.needsManualPrune()) return [];
+  if (!tableName && !runtime.needsManualPrune()) return [];
   try {
-    const repo = await resolveProblemEndpointsRepository({ ddb, endpointsTableName: tableName });
+    const repo = await resolveProblemEndpointsRepository({
+      runtime,
+      ddb,
+      endpointsTableName: tableName,
+    });
     const rows = await repo.queryOverrides(tenantId, teamId, problemId);
     return rows
       .filter(

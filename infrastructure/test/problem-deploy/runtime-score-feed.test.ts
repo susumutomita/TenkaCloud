@@ -2,6 +2,7 @@ import { GetParameterCommand } from "@aws-sdk/client-ssm";
 import { ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it, vi } from "vitest";
 import { publishRuntimeScoreFeed } from "../../lib/problem-deploy/handlers/generic-scoring-handler/runtime-score-feed.js";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const CONFIG = {
   eventId: "evt-1",
@@ -31,7 +32,7 @@ function dependencies(
   const fetchImpl = vi.fn(
     async () => new Response(null, { status: options.status ?? 204 }),
   ) as unknown as typeof fetch;
-  return { ddb, ssm, fetchImpl };
+  return { runtime: makeTestControlDataRuntime(), ddb, ssm, fetchImpl };
 }
 
 describe("publishRuntimeScoreFeed", () => {

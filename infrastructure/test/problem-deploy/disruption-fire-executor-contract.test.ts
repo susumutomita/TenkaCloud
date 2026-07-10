@@ -10,6 +10,7 @@ import { fireDisruption } from "../../lib/problem-deploy/handlers/event-handler/
 import type { DisruptionFireInput } from "../../lib/problem-deploy/handlers/event-handler/disruption-types";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
 import type { ProblemDisruptionEntry } from "../../lib/utils/discover-problems-catalog";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * [ADR-031 / Issue #1419] Disruption Phase B の **fire → executor 接合 (contract) test**。
@@ -61,6 +62,7 @@ const fireDdb = {
   }),
 };
 const shared = {
+  runtime: makeTestControlDataRuntime(),
   ddb: fireDdb,
   events: { send: eventsSend },
   eventBusName: "bus",

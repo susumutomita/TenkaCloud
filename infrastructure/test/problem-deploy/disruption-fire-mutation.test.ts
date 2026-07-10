@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireDisruption } from "../../lib/problem-deploy/handlers/event-handler/disruption-fire";
 import type { DisruptionFireInput } from "../../lib/problem-deploy/handlers/event-handler/disruption-types";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #1418: fireDisruption (disruption-fire.ts の mutation 経路) を pin する。 catalog/declaration
@@ -38,6 +39,7 @@ const ddb = {
   }),
 };
 const shared = {
+  runtime: makeTestControlDataRuntime(),
   ddb,
   events: { send: eventsSend },
   eventBusName: "bus",

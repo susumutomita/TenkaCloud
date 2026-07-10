@@ -12,6 +12,7 @@ import {
   withJsonBody,
 } from "../../lib/problem-deploy/handlers/event-handler/route-helpers";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #2196 (RC-21 第1弾): event-handler `route-helpers.ts` の共有プラミングは
@@ -25,6 +26,7 @@ const VALID_ULID = "01HZX0K3M3K9ZQHB3MRQHBA1B2";
 function buildShared(): { shared: EventSharedResources; ddbSend: ReturnType<typeof vi.fn> } {
   const ddbSend = vi.fn();
   const shared: EventSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     eventsTableName: "TestEvents",
     teamsTableName: "TestTeams",
     deploymentsTableName: "TestDeployments",
