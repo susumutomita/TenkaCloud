@@ -112,7 +112,7 @@ export function buildEventSharedResources(): EventSharedResources {
     // table 自体が synth されない (= env も未配線) ため、module-load を`getEnv`の fail-fast に
     // 委ねると cold start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb /
     // mirror backend での誤設定 (= 本来 table がある構成で env を配線し忘れた場合) は runtime
-    // resolver (`runtime-repositories.ts` の `requireDdbAndTableName`) が fail loud に受ける
+    // resolver (`aggregate-resolvers.ts` の `requireDdbAndTableName`) が fail loud に受ける
     // (= silent fallback にはならない)。
     eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",
     teamsTableName: process.env.TEAMS_TABLE_NAME ?? "",
@@ -258,7 +258,7 @@ export function buildScheduledDeployResources(): EventSharedResources | undefine
  * `event-handler/list.ts` の `getEventDetail` と同型 (= 同じ `shared.ddb` / table 名を渡す)。
  * default backend (`CONTROL_DATA_BACKEND` 未設定 = `dynamodb`) では従来と byte 互換の
  * GetCommand / QueryCommand を `shared.ddb` 経由で発火するので CFn 差分ゼロ。 cold-start の
- * client / token cache は resolver 内蔵 (`runtime-repositories.ts`)。 Events META の point read は
+ * client / token cache は resolver 内蔵 (`sql-executor-cache.ts`)。 Events META の point read は
  * `repositories.events.getEvent(tenantId, eventId)` (= tenant scope + 404 判定を内包)、 event 配下
  * team 一覧は `repositories.teams.listTeamsByEvent(eventId)` を使う。
  *
