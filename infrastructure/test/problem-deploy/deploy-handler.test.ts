@@ -8,6 +8,7 @@ import {
   UnknownProblemError,
   UnverifiedCompetitorAccountError,
 } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 // ADR-008 Phase 3 (Issue #642): presigned URL 発行は AWS SDK の signing が必要なので
 // 実 SDK を呼ばずに deterministic な URL を返すよう module を mock する。
@@ -60,6 +61,7 @@ function buildContext(
     return putSend(cmd);
   });
   const ctx: DeployContext = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     competitorAccountsTableName: "TestCompetitorAccounts",
     env: "development",

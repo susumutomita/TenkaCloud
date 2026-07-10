@@ -2,6 +2,7 @@ import { type Context, Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { StatusCodes } from "http-status-codes";
+import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import {
   deleteProblemEndpointOverride,
   listProblemEndpoints,
@@ -83,8 +84,15 @@ const shared = buildParticipantSharedResources();
 // access bridge. The participant Lambda already holds the Deployments table
 // client; the bridge reuses it to resolve a team-scoped target via GSI3 and then
 // delegates to the existing AWS Console / CLI functions (no new IAM grant).
+// [#2527 Slice 4] Entrypoint-created runtime for the bridge's repository deps. The
+// participant family's own seams migrate in a later Slice 4 PR; this instance only
+// serves the composite bridge (same cold-start cache semantics either way).
 const compositeAwsAccessDeps: CompositeAwsAccessBridgeDeps = {
-  repo: { ddb: shared.ddb, tableName: shared.tableName },
+  repo: {
+    runtime: createDefaultControlDataRuntime(),
+    ddb: shared.ddb,
+    tableName: shared.tableName,
+  },
 };
 
 // ADR-030 Phase 2 (#1420): inter-team coordination の op/projection route は専用の最小 IAM

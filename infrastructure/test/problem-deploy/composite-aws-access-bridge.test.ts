@@ -24,6 +24,7 @@ import {
   type CompositeAwsAccessBridgeDeps,
 } from "../../lib/problem-deploy/handlers/participant-handler/composite-aws-access-bridge";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const PARENT_ID = "01HPARENTAAAAAAAAAAAAAAAAA";
 const TARGET_ID = "01HTARGETXXXXXXXXXXXXXXXXXX";
@@ -102,6 +103,7 @@ function buildDeps(rows: Array<Record<string, unknown>>): {
     return {};
   });
   const repo: CompositeDeploymentRepositoryDeps = {
+    runtime: makeTestControlDataRuntime(),
     ddb: { send: ddbSend } as unknown as CompositeDeploymentRepositoryDeps["ddb"],
     tableName: "TestDeployments",
   };

@@ -9,12 +9,15 @@
 
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import type { DeploymentTarget, DisruptionFiredDetail } from "./execute.js";
 import { resolveDeploymentsRepository, resolveDisruptionsRepository } from "./shared.js";
 
 export interface ExecutorResources {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
   /** Deployments テーブル (= deploy-handler が書く row)。 GSI1 = TENANT#。 */
   readonly deploymentsTableName: string;

@@ -23,6 +23,7 @@ import {
   type ProblemRuntime,
   RuntimeNotSupportedError,
 } from "../../lib/problem-deploy/handlers/shared/runtime/index";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/presigned-url", () => ({
   generateChallengePayloadUrl: vi.fn(async () => "https://example.invalid/fake.zip"),
@@ -53,6 +54,7 @@ function buildContext(overrides: Partial<DeployContext> = {}): {
     return putSend(cmd);
   });
   const ctx: DeployContext = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     competitorAccountsTableName: "TestCompetitorAccounts",
     env: "development",

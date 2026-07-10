@@ -1,6 +1,7 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { Context } from "hono";
 import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { extractClaims } from "./auth.js";
 import { resolveDeploymentsRepository } from "./shared.js";
 
@@ -96,6 +97,8 @@ export function resolveQuotaTier(c: Context): QuotaTier {
 }
 
 export interface DeployQuotaDeps {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
   readonly tableName: string;
   readonly quota: DeployQuotaConfig | undefined;

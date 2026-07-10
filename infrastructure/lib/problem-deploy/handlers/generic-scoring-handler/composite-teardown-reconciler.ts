@@ -65,7 +65,7 @@ export class CompositeTeardownNotReconcilableError extends Error {
 }
 
 function repoDeps(deps: CompositeTeardownReconcileDeps): CompositeDeploymentRepositoryDeps {
-  return { ddb: deps.ddb, tableName: deps.deploymentsTableName };
+  return { runtime: deps.runtime, ddb: deps.ddb, tableName: deps.deploymentsTableName };
 }
 
 /**

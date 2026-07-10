@@ -6,6 +6,7 @@ import {
   type ExecutorResources,
   resolveDeployment,
 } from "../../lib/problem-deploy/handlers/disruption-executor-handler/executor-store";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * [ADR-031 / #1419] executor の DDB dep 実装。 claimExecution (冪等 Put) と resolveDeployment
@@ -25,6 +26,7 @@ const detail: DisruptionFiredDetail = {
 
 function makeResources(send: ReturnType<typeof vi.fn>): ExecutorResources {
   return {
+    runtime: makeTestControlDataRuntime(),
     ddb: { send } as unknown as ExecutorResources["ddb"],
     deploymentsTableName: "Deployments",
     disruptionsTableName: "Disruptions",

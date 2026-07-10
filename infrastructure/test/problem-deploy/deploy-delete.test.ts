@@ -3,6 +3,7 @@ import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requestTeardown } from "../../lib/problem-deploy/handlers/deploy-handler/delete";
 import type { DeploySharedResources } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const NOW_MS = 1_700_000_000_000;
 
@@ -38,6 +39,7 @@ function buildShared(options: { unverified?: boolean } = {}): {
     return ddbSend(cmd);
   });
   const shared: DeploySharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     competitorAccountsTableName: "TestCompetitorAccounts",
     env: "development",
@@ -352,6 +354,7 @@ describe("requestTeardown (non-AWS runtime via adapter)", () => {
       Parameter: { Value: JSON.stringify({ accessToken: "tok", accessTokenSecret: "sec" }) },
     }));
     const shared = {
+      runtime: makeTestControlDataRuntime(),
       tableName: "TestDeployments",
       competitorAccountsTableName: "TestCompetitorAccounts",
       env: "development",

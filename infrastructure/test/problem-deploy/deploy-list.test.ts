@@ -6,6 +6,7 @@ import {
   listDeployments,
   toSummary,
 } from "../../lib/problem-deploy/handlers/deploy-handler/list";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 function buildShared(): {
   shared: DeploySharedResources;
@@ -13,6 +14,7 @@ function buildShared(): {
 } {
   const ddbSend = vi.fn();
   const shared: DeploySharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     competitorAccountsTableName: "TestCompetitorAccounts",
     env: "development",
