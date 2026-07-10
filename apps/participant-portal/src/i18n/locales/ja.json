@@ -333,6 +333,7 @@
     "attack_probe_summary_clear": "{total} 件すべて防御できています",
     "last_scored_label": "最終加点",
     "outputs_header": "アクセス先 URL",
+    "codespaces_terminal_hint": "Codespaces では上の URL はブラウザ専用。ターミナルからは:",
     "stack_outputs_detail_header": "デプロイ出力 (詳細)",
     "celebrate_header": "🏆 クリア済み +{points} pt",
     "celebrate_body": "この問題は正解済みです。 引き続き他の問題に挑戦してください！",
