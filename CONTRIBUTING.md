@@ -28,7 +28,10 @@ For first-time contributors:
    [ROADMAP.md](./ROADMAP.md#good-first-issue-candidates)
 2. Create a branch: `git checkout -b feat/your-feature`
 3. Write tests first (TDD). Test titles use the English `should ...` pattern — match this style for consistency with the existing suite.
-4. Run `make before-commit` (lint / format / typecheck / tests / build)
+4. Run `make before-commit` (lint / test) — a fast local sanity check, not a full
+   CI mirror. Run `make ci-local` before opening a PR if you want the full CI
+   mirror (audit-deps / submodule guard / lint / typecheck / coverage-gate / build)
+   locally.
 5. Open a PR (title under 70 characters, Conventional Commits)
 
 ## Comment attachments
