@@ -1,6 +1,10 @@
 import type { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import type { SSMClient } from "@aws-sdk/client-ssm";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type {
+  DeploymentsLifecyclePort,
+  DeploymentsQueryPort,
+} from "../../control-data/deployments-repository.js";
 import {
   type AdapterDependencyConfig,
   buildAdapterDependencies,
@@ -149,7 +153,8 @@ interface ReconcileUpdate {
  * throwing — discarding it here reproduces the pre-seam CCF-swallow.
  */
 async function applyReconcileUpdate(deps: RuntimeReconcileDeps, u: ReconcileUpdate): Promise<void> {
-  const repository = await resolveDeploymentsRepository(deps);
+  const repository: DeploymentsQueryPort & DeploymentsLifecyclePort =
+    await resolveDeploymentsRepository(deps);
   await repository.transitionRuntimeStatus(
     u.jobId,
     u.tenantId,
@@ -171,7 +176,8 @@ export async function reconcileRuntimeStatuses(
   // [Issue #2441 / Phase B3] `forEachRuntimeReconcilablePage` absorbs the
   // 200-per-page Scan + `LastEvaluatedKey` drain into the Deployments seam; the
   // per-page `Promise.all` reconcile fan-out below stays unchanged.
-  const repository = await resolveDeploymentsRepository(deps);
+  const repository: DeploymentsQueryPort & DeploymentsLifecyclePort =
+    await resolveDeploymentsRepository(deps);
   await repository.forEachRuntimeReconcilablePage(async (page) => {
     const items = page as Partial<DeploymentItem>[];
     await Promise.all(

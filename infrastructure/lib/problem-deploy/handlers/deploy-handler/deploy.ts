@@ -6,6 +6,7 @@ import { SSMClient } from "@aws-sdk/client-ssm";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
+import type { DeploymentsLifecyclePort } from "../../control-data/deployments-repository.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
@@ -252,7 +253,7 @@ export async function startDeployment(
     ...runtimeItemFields(runtime),
   };
 
-  const deploymentsRepository = await resolveDeploymentsRepository(ctx);
+  const deploymentsRepository: DeploymentsLifecyclePort = await resolveDeploymentsRepository(ctx);
   await deploymentsRepository.putDeployment(item);
 
   // ADR-008 Phase 3: private 問題 + bucket bind 済なら S3 から 15min TTL presigned URL を

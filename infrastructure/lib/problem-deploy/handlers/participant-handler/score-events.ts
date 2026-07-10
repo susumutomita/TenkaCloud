@@ -1,3 +1,4 @@
+import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import type { ScoreEventItem } from "../shared/score-event.js";
@@ -68,7 +69,7 @@ export async function listScoreEvents(
   // 詰まったときに valid scoring 行が押し出される。LastEvaluatedKey で paginate して
   // valid 行が limit 件集まる (or 親なし) まで読む。MAX_PAGES で暴走防止。
   const MAX_PAGES = 5;
-  const deployments = await resolveDeploymentsRepository(shared);
+  const deployments: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   const eventChunks = await Promise.all(
     liveJobs.map(async (job) => {
       const rows = await deployments.listScoreEvents(job.jobId, {

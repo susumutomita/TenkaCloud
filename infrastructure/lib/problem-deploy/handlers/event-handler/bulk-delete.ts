@@ -1,4 +1,5 @@
 import type { PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
+import type { DeploymentsLifecyclePort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import {
@@ -137,7 +138,7 @@ async function compensateBulkTeardownPublish(
     // [Issue #2441 / Phase B2] `compensateBulkTeardown` folds the CCF into a
     // `conflict` outcome; the try/catch here still guards against any other
     // DDB error (best-effort, matches delete.ts's compensateFailedTeardownPublish).
-    const repository = await resolveDeploymentsRepository(shared);
+    const repository: DeploymentsLifecyclePort = await resolveDeploymentsRepository(shared);
     await repository.compensateBulkTeardown(jobId, tenantId, updatedAt);
   } catch {
     // best-effort: CCF (行が既に DELETING でない) も他の DDB error も握る。 巻き戻し失敗が
@@ -204,7 +205,7 @@ async function transitionBulkTargetToDeleting(
 ): Promise<boolean> {
   // [Issue #2441 / Phase B2] `markDeletingForBulk` folds the CCF into a
   // `conflict` outcome instead of throwing.
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsLifecyclePort = await resolveDeploymentsRepository(shared);
   const outcome = await repository.markDeletingForBulk(jobId, tenantId, updatedAt);
   return outcome.outcome === "updated";
 }

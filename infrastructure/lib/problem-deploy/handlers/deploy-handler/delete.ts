@@ -1,3 +1,7 @@
+import type {
+  DeploymentsLifecyclePort,
+  DeploymentsQueryPort,
+} from "../../control-data/deployments-repository.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
@@ -43,7 +47,8 @@ export async function requestTeardown(
   jobId: string,
   nowMs: number,
 ): Promise<TeardownOutcome> {
-  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const deploymentsRepository: DeploymentsQueryPort & DeploymentsLifecyclePort =
+    await resolveDeploymentsRepository(shared);
   const item = (await deploymentsRepository.getDeployment(jobId)) as
     | Partial<DeploymentItem>
     | undefined;
@@ -193,7 +198,8 @@ async function transitionTeardownToDeleting(
   // Issue #2019: APPROVAL_PENDING is a held, deletable state — an operator rejecting a
   // held deploy must be able to tear it down (its CFn stack was never created, so the
   // DeleteStack the worker issues is a no-op, transitioning the row cleanly to DELETED).
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsQueryPort & DeploymentsLifecyclePort =
+    await resolveDeploymentsRepository(shared);
   const outcome = await repository.markDeleting(
     jobId,
     tenantId,
@@ -236,7 +242,8 @@ async function compensateFailedTeardownPublish(
 ): Promise<void> {
   try {
     // Issue #1200: FAILED 化のタイミングで expiresAt を 7 日 retention に refresh。
-    const repository = await resolveDeploymentsRepository(shared);
+    const repository: DeploymentsQueryPort & DeploymentsLifecyclePort =
+      await resolveDeploymentsRepository(shared);
     await repository.compensateDeleteToFailed(
       jobId,
       tenantId,

@@ -7,6 +7,7 @@ import {
 } from "@aws-sdk/client-cloudformation";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
+import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
 import { buildCfnStuckDiagnosis, type StackStuckDiagnosis } from "../shared/cfn-stuck.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import type { DeploySharedResources } from "./deploy.js";
@@ -201,7 +202,7 @@ export async function getStackProgress(
   tenantId: string,
   jobId: string,
 ): Promise<StackProgressOutcome> {
-  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const deploymentsRepository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
   const item = (await deploymentsRepository.getDeployment(jobId)) as
     | Partial<DeploymentItem>
     | undefined;

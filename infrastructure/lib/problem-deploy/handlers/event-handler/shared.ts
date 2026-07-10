@@ -8,7 +8,10 @@ import { getEnv } from "../../../helper-functions.js";
 import type { EffectiveCatalogProvenance } from "../../../problem-pack/effective-catalog.js";
 import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
 import type { AdminAuditLogRepository } from "../../control-data/admin-audit-log-repository.js";
-import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
+import type {
+  DeploymentsQueryPort,
+  DeploymentsRepository,
+} from "../../control-data/deployments-repository.js";
 import type { DisruptionsRepository } from "../../control-data/disruptions-repository.js";
 import type { EventsRepository } from "../../control-data/events-repository.js";
 import {
@@ -431,6 +434,6 @@ export async function queryDeploymentsByEvent(
   tenantId: string,
   eventId: string,
 ): Promise<Partial<DeploymentItem>[]> {
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
   return [...(await repository.listByTenantAndEvent(tenantId, eventId))];
 }

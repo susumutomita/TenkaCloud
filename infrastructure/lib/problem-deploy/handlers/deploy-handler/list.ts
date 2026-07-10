@@ -1,3 +1,4 @@
+import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
 import { COMPOSITE_RUNTIME_KIND } from "./composite-deployment.js";
 import { buildCompositeDetail, type CompositeDetail } from "./composite-detail.js";
 import type { DeploySharedResources } from "./deploy.js";
@@ -117,7 +118,7 @@ export async function listDeployments(
   request: ListDeploymentsRequest,
 ): Promise<ListDeploymentsResponse> {
   const limit = Math.min(Math.max(request.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
   const page = await repository.listByTenantPage(request.tenantId, {
     limit,
     cursor: request.cursor,
@@ -137,7 +138,7 @@ export async function getDeployment(
   tenantId: string,
   jobId: string,
 ): Promise<DeploymentSummary | undefined> {
-  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const deploymentsRepository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
   const item = (await deploymentsRepository.getDeployment(jobId)) as
     | Partial<DeploymentItem>
     | undefined;

@@ -1,4 +1,8 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type {
+  DeploymentsLifecyclePort,
+  DeploymentsQueryPort,
+} from "../../control-data/deployments-repository.js";
 import type { EventRecord, ScheduleFiredKind } from "../../control-data/events-repository.js";
 import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { bulkTeardownEvent } from "../event-handler/bulk-delete.js";
@@ -185,7 +189,8 @@ async function queryDeploymentRowsForEvent(
   ctx: ReconcileEventStatusesContext,
   event: { tenantId: string; eventId: string },
 ): Promise<DeploymentReconcilerRow[]> {
-  const repository = await resolveDeploymentsRepository(ctx);
+  const repository: DeploymentsQueryPort & DeploymentsLifecyclePort =
+    await resolveDeploymentsRepository(ctx);
   const rows = await repository.listReconcilerRowsByEvent(event.tenantId, event.eventId);
   return rows.map((row) => ({ jobId: row.jobId, status: row.status, updatedAt: row.updatedAt }));
 }
@@ -227,7 +232,8 @@ async function rescueStuckDeletingDeployment(
     // `return false`); an outcome other than "updated" hits the same branch as
     // the old CCF catch, no warning logged. A genuine SDK/network error still
     // throws, caught below and logged exactly like the pre-seam non-CCF catch.
-    const repository = await resolveDeploymentsRepository(ctx);
+    const repository: DeploymentsQueryPort & DeploymentsLifecyclePort =
+      await resolveDeploymentsRepository(ctx);
     const outcome = await repository.markStuckDeletingFailed(
       row.jobId,
       reason,

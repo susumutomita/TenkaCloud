@@ -1,3 +1,4 @@
+import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES, ULID_RE } from "../shared/constants.js";
 import type { ScoreEventItem } from "../shared/score-event.js";
@@ -87,7 +88,7 @@ export async function listBattleAttacks(
   const skStart = `EVENT#${sinceIso}`;
   const skEnd = "EVENT#~";
 
-  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const deploymentsRepository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   const events = (
     await deploymentsRepository.listScoreEventsInRange(target.jobId, skStart, skEnd)
   ).filter((item) => typeof item.source === "string") as Partial<ScoreEventItem>[];

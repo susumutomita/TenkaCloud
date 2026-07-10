@@ -1,3 +1,4 @@
+import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
 import { parseProgressionGate } from "../shared/progression-gate.js";
 import {
   type EventSharedResources,
@@ -121,7 +122,7 @@ export async function getEventDetail(
   // という ADR-004 Phase 2c 統合ギャップへの補正)。GSI1 = TENANT#<tenantId> 全件取得 →
   // eventId で in-memory filter。
   const repositories = await resolveEventRepositories(shared);
-  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const deploymentsRepository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
   const [event, teamRecords, deploymentsOut] = await Promise.all([
     repositories.events.getEvent(tenantId, eventId),
     repositories.teams.listTeamsByEvent(eventId),

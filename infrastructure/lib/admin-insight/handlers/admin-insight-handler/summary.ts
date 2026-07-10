@@ -1,3 +1,4 @@
+import type { DeploymentsQueryPort } from "../../../problem-deploy/control-data/deployments-repository.js";
 import {
   type AdminInsightSharedResources,
   resolveDeploymentsRepository,
@@ -47,7 +48,7 @@ async function countTenantDeployments(
   shared: AdminInsightSharedResources,
   tenantId: string,
 ): Promise<{ activeDeploys: number; failedDeploys: number }> {
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
   const [activeDeploys, failedDeploys] = await Promise.all([
     repository.countActiveByTenant(tenantId, ACTIVE_DEPLOY_STATUSES),
     repository.countActiveByTenant(tenantId, FAILED_DEPLOY_STATUSES),
