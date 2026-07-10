@@ -45,9 +45,9 @@ make before-commit   # lint (markdownlint + textlint + biome) / test
 
 If something fails, fix the code. Don't paper over it by editing config files (`biome.json`, `vitest.config.ts`, `tsconfig.json`).
 
-If `make harness` fails, cross-reference the invariant ID with the matching rule under `.claude/harness/src/rules/`. The harness's own unit tests are `make harness-test`; the entry points are `.claude/harness/bin/architecture.ts` / `bin/tech-debt.ts`, and the rule logic lives one-rule-per-file under `.claude/harness/src/rules/` and `.claude/harness/src/tech-debt/`.
+If `make harness` fails, it reports a kebab-case `ruleId` (e.g. `no-conflict-markers`) — cross-reference it with the matching file under `.claude/harness/src/rules/`. Those machine-checked rules are a separate registry from the `INVARIANT_*` / `ONE_PASS_*` process invariants in CLAUDE.md's "Architecture invariants" table, which are checked by PR review instead. The harness's own unit tests are `make harness-test`; the entry points are `.claude/harness/bin/architecture.ts` / `bin/tech-debt.ts`, and the rule logic lives one-rule-per-file under `.claude/harness/src/rules/` and `.claude/harness/src/tech-debt/`.
 
-CI (`.github/workflows/ci.yml`) has two jobs that run in parallel. The `ci` job runs `make install_ci` → Safe Chain setup (best-effort, `continue-on-error: true` — a Safe Chain outage doesn't block CI) → **audit-deps** → **submodule pin guard** → **problem-catalog validation** (`make validate-problems` — schema + the bilingual-README invariant, #2254) → textlint → format check → typecheck → build. The `coverage` job (#2513) runs a 3-shard matrix (infrastructure / spas / packages) — each shard runs `scripts/run-coverage.ts --shard <name>`, its own **100％ coverage gate** (agent-owned workspaces, `check-coverage-gate.ts --shard <name>`), and its own Codecov upload, which Codecov merges into one commit report; `coverage-complete` gives the matrix a single stable check name for branch protection. The bilingual `README.md` + `README.ja.md` contract is a **CI-enforced invariant** on the platform mirror, not just a review item. `before-commit` (lint + test) is a fast local sanity check, not a full CI mirror — it does **not** run audit-deps, the submodule guard, or the coverage gate, so a green `before-commit` does not guarantee a green CI. Run `make ci-local` before opening a PR if you want the full CI mirror locally (same checks, same order, minus the Codecov upload).
+CI (`.github/workflows/ci.yml`) has two jobs that run in parallel. The `ci` job runs Safe Chain setup (best-effort, `continue-on-error: true` — a Safe Chain outage doesn't block CI) → `make install_ci` → **audit-deps** → **submodule pin guard** → **problem-catalog validation** (`make validate-problems` — schema + the bilingual-README invariant, #2254) → textlint → format check → typecheck → build. The `coverage` job (#2513) runs a 3-shard matrix (infrastructure / spas / packages) — each shard runs `scripts/run-coverage.ts --shard <name>`, its own **100％ coverage gate** (agent-owned workspaces, `check-coverage-gate.ts --shard <name>`), and its own Codecov upload, which Codecov merges into one commit report; `coverage-complete` gives the matrix a single stable check name for branch protection. The bilingual `README.md` + `README.ja.md` contract is a **CI-enforced invariant** on the platform mirror, not just a review item. `before-commit` (lint + test) is a fast local sanity check, not a full CI mirror — it does **not** run audit-deps, the submodule guard, or the coverage gate, so a green `before-commit` does not guarantee a green CI. Run `make ci-local` before opening a PR if you want the full CI mirror locally (same checks, same order, minus the Codecov upload).
 
 ## Available skills
 
@@ -60,6 +60,7 @@ Invoke as `/<skill>`. Implementations live in `.claude/skills/<skill>/SKILL.md`.
 | `/quality-gates`   | Run the off-body quality-gate checks (HTTP magic / template / coverage / merge / submodule) |
 | `/spec`            | Write a technical specification in the Open Web Docs (MDN) style                       |
 | `/blindspot-pass`  | Review-only unknown-unknowns pass over an Issue / ADR / PR diff / directory (code-backed) |
+| `/tenka-drill`     | Learner-facing coach for a `make local` drill problem — root cause + how it generalizes to Battle/Challenge. Runs in the learner's own Claude Code, not the platform |
 
 In addition, the common skills (`/review`, `/security-review`, `/simplify`, `/init`, etc.) that ship with Claude Code itself are also available; they are not TenkaCloud-specific.
 
@@ -161,22 +162,38 @@ In CDK tests, assert against the generated CFn via `Template.fromStack(stack)`. 
 ## Directory cheat sheet
 
 ```
-apps/
+apps/                               # 5 workspaces
   admin-console/                   # System Admin (Cognito Hosted UI / OAuth Code+PKCE)
   application-admin-console/       # Tenant Admin (per-tenant Application Plane)
   participant-portal/              # Competitor portal (per-team login key)
   developer-portal/                # Pack-author-facing docs/tools SPA
-packages/                          # Shared workspace libraries (auth-client, saml-utils,
-                                    # problem-runtime, problem-sdk, format, web-kit, etc. — 10 packages)
+  always-on-control-plane/         # Cloudflare Worker (ADR-049) — not a Vite SPA
+packages/                          # Shared workspace libraries, 12 packages: auth-client,
+                                    # coordination-plugin-sdk, format, portal-contracts,
+                                    # portal-plugin-sdk, problem-cost, problem-runtime,
+                                    # problem-sdk, problem-test-harness, saml-utils,
+                                    # trust-bridge, web-kit
 infrastructure/
   bin/infrastructure.ts            # Wiring for every stack
   lib/control-plane-stack.ts       # SBT ControlPlane
+  lib/control-plane/               # ControlPlane helpers (invite email, managed login, MFA, SAML allowlist)
   lib/bootstrap-template/          # TenantMappingTable
   lib/tenant-template/             # One tenant's API + Cognito + ApplicationConsole
   lib/tenant-pipeline/             # Per-tenant provisioning via CodePipeline
   lib/problem-deploy/              # Problem deployment backend into competitor AWS
+  lib/problem-pack/                # Offline Problem Pack CLI (Issue #2088)
+  lib/app-plane-core/              # Lite-mode Application Plane stack
+  lib/app-config/                  # resolveAppConfig — per-environment config resolution
+  lib/app-wiring/                  # Cross-stack wiring helpers
+  lib/tenkacloud-lite/             # Lite mode (ADR-016) stack + up/down CLI
+  lib/always-on-runtime/           # Always-On (ADR-049) per-event CDK stack + sweeper
+  lib/intent-ingress/              # Always-On signed-intent ingress (Lambda Function URL)
+  lib/admin-insight/               # SystemAdmin cross-tenant insight API
+  lib/security/                    # CloudFront/Cognito custom domain + security headers
+  lib/observability/               # CloudWatch dashboard, cost budget, free-tier alarms
   lib/admin-console-hosting.ts     # admin-console S3 + CloudFront hosting
   lib/cdk-aspect/                  # DynamoDbLowCapacity / DestroyPolicySetter
+                                    # (+ 25 subdirs total under lib/; see `ls infrastructure/lib`)
   environments/<env>/              # config.json + .env
   templates/competitor-bootstrap.yaml  # IAM Role to roll out in the competitor account
 scripts/
@@ -210,7 +227,7 @@ problems/<category>/<id>/
 └── portal/          # Optional (.tsx files declared in dashboard.slots)
 ```
 
-Scoring uses one of six built-in kinds (`flag` / `multi-flag` / `uptime-flat` / `uptime-multi` / `phased-polling` / `attack-detection`) — one per problem. The platform's generic scoring Lambda (ADR-012 Phase 3) dispatches them. Don't put problem-specific scoring code into the platform.
+Scoring declares exactly one `scoring.kind` per problem. The current branches, defined in [`problems/SCHEMA.json`](./problems/SCHEMA.json), are `flag`, `verify`, `multi-verify`, `multi-flag`, `uptime-flat` (legacy alias: `uptime`), `uptime-multi`, `phased-polling`, `attack-detection`, and `composite-probe` (ADR-023 Composite Runtime). The platform's generic scoring Lambda (ADR-012 Phase 3) dispatches them. Don't put problem-specific scoring code into the platform.
 
 For problems that should stay private instead of going through the catalog repo, see the offline **Problem Pack** CLI (Issue #2088) — `infrastructure/lib/problem-pack/pack-cli.ts`, wrapped as `make pack-init` / `pack-validate` / `pack-install` / `pack-activate` / `pack-deactivate` / `pack-list` — documented in the README's [Add your own problems / Option B](./README.md#add-your-own-problems).
 
