@@ -30,7 +30,7 @@ export function buildCompetitorAccountsSharedResources(): CompetitorAccountsShar
     // CompetitorAccounts table 自体が synth されず env も配線されないため、module-load を
     // `getEnv` の fail-fast に委ねると cold start が Initialization Error で落ちる。空文字
     // default に緩和し、dynamodb / mirror backend の誤設定は runtime resolver
-    // (`runtime-repositories.ts` の `requireDdbAndTableName`) が fail loud に受ける
+    // (`aggregate-resolvers.ts` の `requireDdbAndTableName`) が fail loud に受ける
     // (= silent fallback にはならない、event-handler/shared.ts と同じ緩和)。
     tableName: process.env.COMPETITOR_ACCOUNTS_TABLE_NAME ?? "",
     env: getEnv("DEPLOY_ENVIRONMENT"),
