@@ -8,7 +8,7 @@
  *
  * 1. `bun run --filter <pkg>` can resolve the workspace filter before the
  *    workspace graph is fully settled and return "No packages matched the
- *    filter" (see the comment in `.github/workflows/pages.yml`). Issue #993
+ *    filter" when it races a not-yet-finished `bun install`. Issue #993
  *    hit a sharper variant of the same flakiness: a flag meant for every
  *    workspace in an `&&` chain only ever reached the *last* element, so
  *    Codecov only ever saw coverage for one workspace.
