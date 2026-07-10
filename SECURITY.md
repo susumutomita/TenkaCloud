@@ -11,8 +11,8 @@ TenkaCloud is a self-hostable, Apache-2.0 platform. It is deployed from source
 | Older commits / forks | Update to the latest `main` |
 
 Self-hosters should track `main` and redeploy to pick up fixes. Dependencies are
-kept current by Renovate / Dependabot, and CI scans for malicious packages
-(Aikido Safe Chain) on every install.
+kept current by Dependabot (`.github/dependabot.yml`), and CI scans for malicious
+packages (Aikido Safe Chain) on every install.
 
 ## Reporting a vulnerability
 

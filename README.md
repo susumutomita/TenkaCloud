@@ -145,6 +145,11 @@ CodeBuild project itself.
 
 <sub>Prefer a local terminal, or need multi-tenant SaaS? See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md).</sub>
 
+<sub>Running a recurring program with zero always-on AWS compute between events?
+See the [Always-On mode (ADR-049)](./DEPLOYMENT_GUIDE.md#always-on-mode-adr-049)
+section in DEPLOYMENT_GUIDE.md and the operator runbook in
+[docs/always-on/README.md](./docs/always-on/README.md).</sub>
+
 ## Running costs
 
 TenkaCloud runs in one of two profiles, selected by the
@@ -332,7 +337,10 @@ More detail:
 in-repo MDX source; every `make pack-*` command above is a live, working CLI today.)
 
 Live, end-to-end verification of this whole flow — init through "visible in the
-console" — is still pending (tracked in #2459).
+console" — has not happened yet. #2459 (closed 2026-07-09) fixed three wiring gaps
+and added an offline-equivalent chain test, but its closing comment records the
+live AWS run itself as an unfinished acceptance item; there is no successor issue
+tracking it.
 
 [catalog]: https://github.com/susumutomita/TenkaCloudChallenge
 
