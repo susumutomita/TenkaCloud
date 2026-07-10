@@ -6,14 +6,25 @@
  * module as a temporary compatibility barrel while consumers migrate to direct imports.
  */
 
-import type { NotificationItem } from "../../handlers/shared/notification.js";
-
 /**
- * [#2439 / Phase A4] Notifications aggregate の domain shape(EventRecord と同じ流儀で
- * 物理 DDB キーを除いたもの)。 SK 導出 (`NOTIFICATION#<occurredAt>#<notificationId>`) は
- * DynamoDB backend の実装詳細。
+ * [#2439 / Phase A4] Notifications aggregate の domain shape。 SK 導出
+ * (`NOTIFICATION#<occurredAt>#<notificationId>`) は DynamoDB backend の実装詳細。
+ * [Issue #2527 Slice 1 step 2] Source of truth; the physical row
+ * (`handlers/shared/notification.ts`'s `NotificationItem`) adds PK/SK.
  */
-export type NotificationRecord = Omit<NotificationItem, "PK" | "SK">;
+export type NotificationRecord = {
+  notificationId: string;
+  tenantId: string;
+  eventId: string;
+  title: string;
+  body: string;
+  severity: "info" | "warning";
+  /** 監査用に operator の Cognito sub を残す。UI には出さない。 */
+  createdBy: string;
+  occurredAt: string;
+  /** DDB TTL。event 行の `expiresAt` と同値 (epoch seconds)。 */
+  expiresAt: number;
+};
 
 /** [#2439] 1 ページ分の通知(EventsPage の鏡像)。 nextCursor は opaque・backend 固有。 */
 export interface NotificationsPage {

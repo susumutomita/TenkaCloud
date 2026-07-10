@@ -1,34 +1,26 @@
 import type { EffectiveCatalogProvenance } from "../../../problem-pack/effective-catalog.js";
+import type { DeploymentProvenance } from "../../control-data/domain/deployments.js";
 
 /**
- * [Problem Packs / Issue #2096] Deployment + audit pack provenance.
+ * [Problem Packs / Issue #2096] Deployment + audit pack provenance projection.
  *
  * For PACK-SOURCED deployments we persist and display the resolved source
  * identity — pack id / version / content digest plus the event's
  * `catalogSnapshotId`. The provenance is copied from the EVENT-pinned catalog
  * snapshot (#2095), NEVER from client input: the deploy path passes only a
  * server-resolved `EffectiveCatalogProvenance`, and this module projects it onto
- * the display/audit-safe shape below.
+ * the display/audit-safe shape.
  *
  * Core (non-pack) deployments keep the EXISTING row shape and response unchanged:
  * {@link toDeploymentProvenance} returns `undefined` for `source: "core"`, so no
  * `provenance` attribute is ever written or returned for them.
  *
- * Security: the shape is closed to id / version / digest / snapshot id only. A
- * pack's mutable source (`sourceRef`, `snapshotPath`, local directory, git
- * credentials) lives in the lock / snapshot store and never reaches this shape,
- * so it can never appear in an API response, the DDB row, or an audit record.
+ * [Issue #2527 Slice 1 step 2] The {@link DeploymentProvenance} shape itself
+ * (with its closed-surface security rationale) lives on the domain module
+ * (`control-data/domain/deployments.ts`); this handler keeps the projection
+ * functions and re-exports the type for its existing importers.
  */
-export interface DeploymentProvenance {
-  /** Reverse-DNS pack id from the immutable pinned snapshot. */
-  readonly packId: string;
-  /** Exact SemVer of the pack from the immutable pinned snapshot. */
-  readonly packVersion: string;
-  /** Hex content digest of the pinned pack snapshot. */
-  readonly contentDigest: string;
-  /** Deterministic id of the event's pinned catalog snapshot. */
-  readonly catalogSnapshotId: string;
-}
+export type { DeploymentProvenance } from "../../control-data/domain/deployments.js";
 
 /**
  * Project an event-pinned snapshot provenance onto the display/audit-safe

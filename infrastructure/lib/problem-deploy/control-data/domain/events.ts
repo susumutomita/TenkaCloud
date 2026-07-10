@@ -6,22 +6,175 @@
  * module as a temporary compatibility barrel while consumers migrate to direct imports.
  */
 
-import type { EventItem } from "../../handlers/event-handler/types.js";
-import type { ProgressionGateConfig } from "../../handlers/shared/progression-gate.js";
 import type { TeamRecord } from "./teams.js";
+
+/**
+ * [Issue #2527 Slice 1 step 2] Event lifecycle status — the domain union is the
+ * source of truth; the request-validation Zod enum in
+ * `handlers/event-handler/types.ts` (`EventStatusSchema`) is compile-time locked
+ * to this union.
+ */
+export type EventStatus = "DRAFT" | "DEPLOYING" | "READY" | "ENDED" | "TEARDOWN" | "ARCHIVED";
+
+/**
+ * Event 内の 1 問題ごとの deploy target。region は問題テンプレが特定 region 依存の場合が
+ * あるため **problem 単位** で固定。AWS Account ID は #528 以降 **team 単位** に移行する
+ * (= 各 team は自社 AWS account で全問題を deploy する運用モデル)。
+ *
+ * `defaultAwsAccountId` は migration 期間中 optional に保つ:
+ *   - 新規 Event: 不要 (= team.awsAccountId を使う)
+ *   - 旧 Event: 既存値を fallback として使う (bulk-deploy.ts の `team.awsAccountId ??`)
+ *
+ * [Issue #2527 Slice 1 step 2] Source of truth; the validation schema
+ * (`handlers/event-handler/types.ts`'s `EventProblemTargetSchema`, which owns the
+ * problemId / account / region regexes) is compile-time locked to this shape.
+ */
+export type EventProblemTarget = {
+  problemId: string;
+  /** @deprecated #528 で team 単位 (team.awsAccountId) に移行。旧 Event の fallback としてのみ残す */
+  defaultAwsAccountId?: string;
+  defaultRegion: string;
+};
+
+/** Progression Gate (#2283) の team 単位ポリシー。 `required` = Gate 完了まで lock、 `off` = bypass。 */
+export type ProgressionGateTeamPolicy = "required" | "off";
+
+/**
+ * team 単位の上書き。
+ *   - `required`: Gate 完了まで unlock target を開始できない
+ *   - `off`: この team は Gate を bypass (= 最初から全問題)
+ *   - `completionBonus`: Gate 完了時に 1 度だけ付与する固定ボーナス (省略時 0)
+ */
+export type ProgressionGateTeamOverride = {
+  policy: ProgressionGateTeamPolicy;
+  completionBonus?: number;
+};
+
+/**
+ * Event 1 件の Gate 設定 (= `PUT /events/:eventId/progression-gate` body / EventRecord 保存 shape)。
+ *
+ * 初期実装は 「1 つの Gate challenge を起点に指定 target を unlock」 の単一 Gate モデル
+ * (複数 Gate / 分岐ルートは Issue #2283 の将来拡張)。
+ *
+ * [Issue #2527 Slice 1 step 2] Source of truth; the validation schema with the
+ * self-reference / uniqueness refinements stays in
+ * `handlers/shared/progression-gate.ts` (`ProgressionGateConfigSchema`) and is
+ * compile-time locked to this shape.
+ */
+export type ProgressionGateConfig = {
+  gateProblemId: string;
+  unlockTargetIds: string[];
+  defaultPolicy: ProgressionGateTeamPolicy;
+  teamOverrides?: Record<string, ProgressionGateTeamOverride>;
+};
 
 /**
  * [ADR-049 §5.1] Control-plane data behind a repository seam.
  *
- * `EventRecord` is the domain shape of one competition Event, derived from the
- * canonical DynamoDB row (`EventItem`) minus its physical DDB keys
- * (PK / SK / GSI1PK / GSI1SK). Those keys are an implementation detail of the
- * DynamoDB backend; the SQLite backends (Turso / D1) derive their own
- * keys / columns. Deriving from `EventItem` keeps this shape in lock-step with
- * the handler layer — a new event attribute automatically flows through the seam
- * without a second edit here.
+ * `EventRecord` is the domain shape of one competition Event. Physical DDB keys
+ * (PK / SK / GSI1PK / GSI1SK) are an implementation detail of the DynamoDB
+ * backend; the SQLite backends (Turso / D1) derive their own keys / columns.
+ *
+ * [Issue #2527 Slice 1 step 2] Source of truth: the physical row
+ * (`handlers/event-handler/types.ts`'s `EventItem`) derives from this record by
+ * adding the physical keys — a new event attribute is added HERE and flows to
+ * the handler layer, never the reverse.
  */
-export type EventRecord = Omit<EventItem, "PK" | "SK" | "GSI1PK" | "GSI1SK">;
+export type EventRecord = {
+  eventId: string;
+  tenantId: string;
+  name: string;
+  status: EventStatus;
+  problems: EventProblemTarget[];
+  teamCount: number;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: number;
+  /**
+   * [Problem Packs / Issue #2464] Deterministic id of the active catalog snapshot
+   * pinned when this event was created. Present only when the active catalog has
+   * at least one pack-sourced problem; core-only events omit it to keep the
+   * legacy row shape byte-identical.
+   */
+  catalogSnapshotId?: string;
+  /**
+   * [Problem Packs / Issue #2464] Pack-sourced provenance pinned at event creation,
+   * keyed by problem id. Core problems are intentionally absent (`undefined` =
+   * core); this field is omitted entirely when the active catalog has no pack rows.
+   */
+  packProvenance?: Record<string, { packId: string; packVersion: string; contentDigest: string }>;
+  /**
+   * 競技開始時刻 (ISO8601, UTC)。これより前は HealthCheckLambda が probe / 採点を skip。
+   * 未設定なら採点は始まらない (= deploy 直後に勝手にスコアが加算されるのを防ぐ)。
+   * 値は分精度想定 (operator UI が DatePicker + TimeInput で入力)。
+   */
+  startsAt?: string;
+  /**
+   * 競技終了時刻 (ISO8601, UTC)。これ以降は HealthCheckLambda が probe / 採点を skip。
+   * operator が「Event を終了」 button を押した時点で `now()` が書かれ、status も
+   * `ENDED` に遷移する。Bulk Teardown 待たずに採点を停めるための gate (Issue #494)。
+   */
+  endsAt?: string;
+  /**
+   * [ADR-047] 自動撤去予定時刻 (ISO8601, UTC)。毎分 reconciler が `now >= teardownAt` を
+   * 検知すると bulk teardown を自動発火し、撤去し忘れによる課金リークを防ぐ (#1910 の主動機)。
+   * 不変条件: 設定する場合 `teardownAt >= endsAt` (採点 gate を閉じてから撤去する)。
+   * 未設定なら自動撤去なし (= operator が手動で「Event を終了」/ teardown する従来挙動)。
+   */
+  teardownAt?: string;
+  /**
+   * [ADR-047] reconciler が teardownAt に基づき自動 teardown を発火した時刻 (ISO8601, UTC)。
+   * status 遷移 (→ TEARDOWN) が一次の冪等ガードだが、監査 + 二重発火防止の補助として記録する。
+   */
+  teardownFiredAt?: string;
+  /**
+   * [ADR-047 follow-up] 自動デプロイ予定時刻 (ISO8601, UTC)。毎分 reconciler が `now >= deployAt`
+   * を検知すると、 status=DRAFT の event について bulk deploy を自動発火し、 deploy のし忘れ /
+   * 開始時刻直前の手動操作を不要にする (teardownAt の鏡像)。 不変条件: 設定する場合
+   * `deployAt <= endsAt` (deploy → 採点 → 終了 の時系列を保つ)。 未設定なら自動デプロイなし
+   * (= operator が手動で「Deploy」を押す従来挙動)。
+   */
+  deployAt?: string;
+  /**
+   * [ADR-047 follow-up] reconciler が deployAt に基づき自動 deploy を発火した時刻 (ISO8601, UTC)。
+   * status 遷移 (DRAFT → DEPLOYING) が一次の冪等ガードだが、監査 + 二重発火防止の補助として記録する
+   * (teardownFiredAt の鏡像)。
+   */
+  deployFiredAt?: string;
+  /**
+   * Archive 操作で `status=ARCHIVED` に遷移した時刻 (ISO 8601, UTC)。Issue #493。
+   * EventList が ARCHIVED を default view から外すときの sort key としても使える。
+   */
+  archivedAt?: string;
+  /**
+   * 採点 lock flag (#558)。`true` のとき:
+   *   - HealthCheck Lambda は uptime 加点 / probe を skip
+   *   - submit-flag handler は `scoring_locked` outcome を返し score 不変
+   *   - leaderboard / score-events の read は許可 (= 表彰画面で最終 score を見せる)
+   * status (DRAFT/.../ARCHIVED) と直交する軸として持つ (`status=READY (locked)` 等の合成)。
+   * reversible — operator が表彰中に bug 発見した場合 unlock 可能。
+   */
+  scoringLocked?: boolean;
+  /** scoringLocked を true にした時刻 (ISO 8601, UTC)。unlock 時は undefined に戻す。 */
+  scoringLockedAt?: string;
+  /** scoringLocked を変更した operator の Cognito sub (= audit 用)。 */
+  scoringLockedBy?: string;
+  /**
+   * Issue #1038 P1 #9 follow-up: scoreboard freeze window 分数 (= 終了 N 分前から順位を隠す)。
+   * 0 で freeze 無効化、 1〜180 が想定範囲。 未設定なら participant-handler 側 default=30 が
+   * 効く ([[participant-handler/leaderboard.ts:DEFAULT_FREEZE_MINUTES]])。
+   */
+  scoreboardFreezeMinutes?: number;
+  /**
+   * Issue #2283: Progression Gate (問題アンロック / チーム別ハンデ) 設定。
+   * `PUT /events/:eventId/progression-gate` で保存 / `DELETE` で除去。 未設定 = Gate 無し
+   * (= 従来どおり全問題を開始可能)。 enforcement は per-tenant feature flag
+   * `challengePrerequisiteGate` (既定 OFF) が ON のときだけ有効 — 設定が残っていても
+   * flag OFF なら participant / scoring 側は無視するので、 進行中 Event でも flag OFF 切替で
+   * 即 unlock される。 validation schema は `handlers/shared/progression-gate.ts`。
+   */
+  progressionGate?: ProgressionGateConfig;
+};
 
 /**
  * [Issue #2437 / Phase A2] Result of one conditional Event mutation. DynamoDB

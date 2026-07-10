@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { CompetitorAccountRecord } from "../../control-data/domain/competitor-accounts.js";
 
 /**
  * `CompetitorAccounts` DDB 1 行の shape (Issue #459 / ADR-002 Decision 2.1)。
@@ -6,27 +7,14 @@ import { z } from "zod";
  *   PK = `TENANT#<tenantId>`  /  SK = `ACCOUNT#<awsAccountId>`
  *
  * ExternalId は本テーブルに **保存しない** — 同じ tenant の SSM SecureString 経由 (= ADR-002 §2.2)。
+ *
+ * [Issue #2527 Slice 1 step 2] The domain fields live on
+ * {@link CompetitorAccountRecord} (`control-data/domain/competitor-accounts.ts`,
+ * the source of truth); this item only adds the physical DynamoDB keys.
  */
-export interface CompetitorAccountItem {
+export interface CompetitorAccountItem extends CompetitorAccountRecord {
   PK: string;
   SK: string;
-
-  tenantId: string;
-  awsAccountId: string;
-  region: string;
-  competitorRoleName: string;
-  alias?: string;
-  verified: boolean;
-  verifiedAt?: string;
-  createdAt: string;
-  updatedAt: string;
-  /**
-   * 最後に ExternalId を rotate した時刻 (Issue #596 / ADR-002 Phase 3.1)。
-   * 過去 row には存在しない (= undefined のときは「未 rotate = createdAt から経過」とみなす)。
-   */
-  rotatedAt?: string;
-  /** Cognito sub (= operator 監査用)。`unknown` の場合は JWT 解決失敗 (test / dev fallback)。 */
-  createdBy: string;
 }
 
 const AWS_ACCOUNT_ID_RE = /^\d{12}$/;

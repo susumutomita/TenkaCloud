@@ -1,114 +1,34 @@
 import { z } from "zod";
-import {
-  type ProgressionGateConfig,
-  ProgressionGateConfigSchema,
-} from "../shared/progression-gate.js";
+import type {
+  EventProblemTarget,
+  EventRecord,
+  EventStatus,
+} from "../../control-data/domain/events.js";
+import type { TeamRecord } from "../../control-data/domain/teams.js";
+import { ProgressionGateConfigSchema } from "../shared/progression-gate.js";
+
+// [Issue #2527 Slice 1 step 2] The domain module owns these shapes; this handler
+// re-exports them so existing importers keep their import path.
+export type {
+  EventProblemTarget,
+  EventStatus,
+} from "../../control-data/domain/events.js";
 
 /**
  * 1 競技イベント (= ADR-004 の Event aggregate) の DDB 行 shape。
  *
  *   PK     = `EVENT#<eventId>` / SK = `META`
  *   GSI1PK = `TENANT#<tenantId>` / GSI1SK = `<createdAt>` (ISO8601)
+ *
+ * [Issue #2527 Slice 1 step 2] The domain fields live on {@link EventRecord}
+ * (`control-data/domain/events.ts`, the source of truth); this item only adds
+ * the physical DynamoDB keys.
  */
-export interface EventItem {
+export interface EventItem extends EventRecord {
   PK: string;
   SK: "META";
   GSI1PK: string;
   GSI1SK: string;
-
-  eventId: string;
-  tenantId: string;
-  name: string;
-  status: EventStatus;
-  problems: EventProblemTarget[];
-  teamCount: number;
-  createdAt: string;
-  updatedAt: string;
-  expiresAt: number;
-  /**
-   * [Problem Packs / Issue #2464] Deterministic id of the active catalog snapshot
-   * pinned when this event was created. Present only when the active catalog has
-   * at least one pack-sourced problem; core-only events omit it to keep the
-   * legacy row shape byte-identical.
-   */
-  catalogSnapshotId?: string;
-  /**
-   * [Problem Packs / Issue #2464] Pack-sourced provenance pinned at event creation,
-   * keyed by problem id. Core problems are intentionally absent (`undefined` =
-   * core); this field is omitted entirely when the active catalog has no pack rows.
-   */
-  packProvenance?: Record<string, { packId: string; packVersion: string; contentDigest: string }>;
-  /**
-   * 競技開始時刻 (ISO8601, UTC)。これより前は HealthCheckLambda が probe / 採点を skip。
-   * 未設定なら採点は始まらない (= deploy 直後に勝手にスコアが加算されるのを防ぐ)。
-   * 値は分精度想定 (operator UI が DatePicker + TimeInput で入力)。
-   */
-  startsAt?: string;
-  /**
-   * 競技終了時刻 (ISO8601, UTC)。これ以降は HealthCheckLambda が probe / 採点を skip。
-   * operator が「Event を終了」 button を押した時点で `now()` が書かれ、status も
-   * `ENDED` に遷移する。Bulk Teardown 待たずに採点を停めるための gate (Issue #494)。
-   */
-  endsAt?: string;
-  /**
-   * [ADR-047] 自動撤去予定時刻 (ISO8601, UTC)。毎分 reconciler が `now >= teardownAt` を
-   * 検知すると bulk teardown を自動発火し、撤去し忘れによる課金リークを防ぐ (#1910 の主動機)。
-   * 不変条件: 設定する場合 `teardownAt >= endsAt` (採点 gate を閉じてから撤去する)。
-   * 未設定なら自動撤去なし (= operator が手動で「Event を終了」/ teardown する従来挙動)。
-   */
-  teardownAt?: string;
-  /**
-   * [ADR-047] reconciler が teardownAt に基づき自動 teardown を発火した時刻 (ISO8601, UTC)。
-   * status 遷移 (→ TEARDOWN) が一次の冪等ガードだが、監査 + 二重発火防止の補助として記録する。
-   */
-  teardownFiredAt?: string;
-  /**
-   * [ADR-047 follow-up] 自動デプロイ予定時刻 (ISO8601, UTC)。毎分 reconciler が `now >= deployAt`
-   * を検知すると、 status=DRAFT の event について bulk deploy を自動発火し、 deploy のし忘れ /
-   * 開始時刻直前の手動操作を不要にする (teardownAt の鏡像)。 不変条件: 設定する場合
-   * `deployAt <= endsAt` (deploy → 採点 → 終了 の時系列を保つ)。 未設定なら自動デプロイなし
-   * (= operator が手動で「Deploy」を押す従来挙動)。
-   */
-  deployAt?: string;
-  /**
-   * [ADR-047 follow-up] reconciler が deployAt に基づき自動 deploy を発火した時刻 (ISO8601, UTC)。
-   * status 遷移 (DRAFT → DEPLOYING) が一次の冪等ガードだが、監査 + 二重発火防止の補助として記録する
-   * (teardownFiredAt の鏡像)。
-   */
-  deployFiredAt?: string;
-  /**
-   * Archive 操作で `status=ARCHIVED` に遷移した時刻 (ISO 8601, UTC)。Issue #493。
-   * EventList が ARCHIVED を default view から外すときの sort key としても使える。
-   */
-  archivedAt?: string;
-  /**
-   * 採点 lock flag (#558)。`true` のとき:
-   *   - HealthCheck Lambda は uptime 加点 / probe を skip
-   *   - submit-flag handler は `scoring_locked` outcome を返し score 不変
-   *   - leaderboard / score-events の read は許可 (= 表彰画面で最終 score を見せる)
-   * status (DRAFT/.../ARCHIVED) と直交する軸として持つ (`status=READY (locked)` 等の合成)。
-   * reversible — operator が表彰中に bug 発見した場合 unlock 可能。
-   */
-  scoringLocked?: boolean;
-  /** scoringLocked を true にした時刻 (ISO 8601, UTC)。unlock 時は undefined に戻す。 */
-  scoringLockedAt?: string;
-  /** scoringLocked を変更した operator の Cognito sub (= audit 用)。 */
-  scoringLockedBy?: string;
-  /**
-   * Issue #1038 P1 #9 follow-up: scoreboard freeze window 分数 (= 終了 N 分前から順位を隠す)。
-   * 0 で freeze 無効化、 1〜180 が想定範囲。 未設定なら participant-handler 側 default=30 が
-   * 効く ([[participant-handler/leaderboard.ts:DEFAULT_FREEZE_MINUTES]])。
-   */
-  scoreboardFreezeMinutes?: number;
-  /**
-   * Issue #2283: Progression Gate (問題アンロック / チーム別ハンデ) 設定。
-   * `PUT /events/:eventId/progression-gate` で保存 / `DELETE` で除去。 未設定 = Gate 無し
-   * (= 従来どおり全問題を開始可能)。 enforcement は per-tenant feature flag
-   * `challengePrerequisiteGate` (既定 OFF) が ON のときだけ有効 — 設定が残っていても
-   * flag OFF なら participant / scoring 側は無視するので、 進行中 Event でも flag OFF 切替で
-   * 即 unlock される。 shape の正本は `../shared/progression-gate.ts`。
-   */
-  progressionGate?: ProgressionGateConfig;
 }
 
 export const EventStatusSchema = z.enum([
@@ -119,18 +39,12 @@ export const EventStatusSchema = z.enum([
   "TEARDOWN",
   "ARCHIVED",
 ]);
-export type EventStatus = z.infer<typeof EventStatusSchema>;
 
 /**
- * Event 内の 1 問題ごとの deploy target。region は問題テンプレが特定 region 依存の場合が
- * あるため **problem 単位** で固定。AWS Account ID は #528 以降 **team 単位** に移行する
- * (= 各 team は自社 AWS account で全問題を deploy する運用モデル)。
- *
- * `defaultAwsAccountId` は migration 期間中 optional に保つ:
- *   - 新規 Event: 不要 (= team.awsAccountId を使う)
- *   - 旧 Event: 既存値を fallback として使う (bulk-deploy.ts の `team.awsAccountId ??`)
- *
- * Phase 2 で `defaultAwsAccountId` を完全削除する予定。
+ * Event 内の 1 問題ごとの deploy target の validation schema。 shape の正本は
+ * `control-data/domain/events.ts` の {@link EventProblemTarget} (下の lock-step
+ * guard で一致を強制)。 `defaultAwsAccountId` は migration 期間中 optional に保ち、
+ * Phase 2 で完全削除する予定 (#528)。
  */
 export const EventProblemTargetSchema = z.object({
   problemId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/),
@@ -141,7 +55,19 @@ export const EventProblemTargetSchema = z.object({
     .optional(),
   defaultRegion: z.string().regex(/^[a-z]{2}-[a-z]+-\d+$/, "AWS region 形式が不正です"),
 });
-export type EventProblemTarget = z.infer<typeof EventProblemTargetSchema>;
+
+// [Issue #2527 Slice 1 step 2] Compile-time lock-step guards: each validation
+// schema and its domain shape must stay identical (either drifting direction
+// fails typecheck).
+type _MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+const _eventStatusLockstep: _MutuallyAssignable<
+  z.infer<typeof EventStatusSchema>,
+  EventStatus
+> = true;
+const _eventProblemTargetLockstep: _MutuallyAssignable<
+  z.infer<typeof EventProblemTargetSchema>,
+  EventProblemTarget
+> = true;
 
 /**
  * Team aggregate の DDB 行 shape。
@@ -149,30 +75,22 @@ export type EventProblemTarget = z.infer<typeof EventProblemTargetSchema>;
  *   PK     = `EVENT#<eventId>` / SK = `TEAM#<teamId>`
  *   GSI1PK = `TENANT#<tenantId>` / GSI1SK = `EVENT#<eventId>#TEAM#<teamId>`
  *   GSI2PK = `TEAMKEY#<teamLoginKey>` / GSI2SK = `META` (sparse)
+ *
+ * [Issue #2527 Slice 1 step 2] The domain fields live on {@link TeamRecord}
+ * (`control-data/domain/teams.ts`, the source of truth); this item adds the
+ * physical DynamoDB keys and re-requires `teamLoginKey` (the DynamoDB row always
+ * carries the bearer; the domain record keeps it optional because SQL point/list
+ * payloads deliberately omit the plaintext).
  */
-export interface TeamItem {
+export interface TeamItem extends Omit<TeamRecord, "teamLoginKey"> {
   PK: string;
   SK: string;
   GSI1PK: string;
   GSI1SK: string;
   GSI2PK?: string;
   GSI2SK?: string;
-
-  eventId: string;
-  teamId: string;
-  tenantId: string;
-  /** 競技者が portal `PATCH /portal/me` で設定する表示名。未設定時は internalSlug を使う。 */
-  displayName?: string;
-  /** operator 入力 (or 自動生成) の内部 slug。CFn StackName 由来になる、deploy 後 immutable。 */
-  internalSlug: string;
   /** 短命 bearer。team scope (1 key で event 内 N 問題にアクセス可)。 */
   teamLoginKey: string;
-  /** #528: team の deploy 先 AWS Account ID (12 桁数字)。Bulk Deploy で problem.defaultRegion と
-   *  組み合わせて使う。旧 Event は持たない (= bulk-deploy で problem.defaultAwsAccountId に fallback)。 */
-  awsAccountId?: string;
-  createdAt: string;
-  updatedAt: string;
-  expiresAt: number;
 }
 
 /**

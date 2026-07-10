@@ -7,7 +7,16 @@
  */
 
 import type { SamlIdpConfig } from "@tenkacloud/saml-utils";
-import type { IdpScope } from "../../../control-plane/handlers/idp-handler/core.js";
+
+/**
+ * IdP CRUD の scope discriminator — Control Plane は `system`、 Application Plane は
+ * 呼び出し元 tenant。 [Issue #2527 Slice 1 step 2] Source of truth; the shared CRUD
+ * core (`control-plane/handlers/idp-handler/core.ts`) re-exports it for its
+ * handler/store consumers.
+ */
+export type IdpScope =
+  | { readonly kind: "system" }
+  | { readonly kind: "tenant"; readonly tenantId: string };
 
 // ---------------------------------------------------------------------------
 // [Issue #2442 / Phase C5] SamlIdps aggregate (Issue #1312).

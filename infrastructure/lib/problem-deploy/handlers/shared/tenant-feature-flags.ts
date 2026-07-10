@@ -1,3 +1,4 @@
+import type { TenantFeatureFlagsRecord } from "../../control-data/domain/feature-flags.js";
 import type { FeatureFlagsRepository } from "../../control-data/feature-flags-repository.js";
 
 /**
@@ -14,14 +15,14 @@ import type { FeatureFlagsRepository } from "../../control-data/feature-flags-re
  * Turso いずれの backend でも同じ判定を返す (default backend では従来と byte 互換の GetCommand)。
  */
 
-/** FLAGS 行の shape (writer = event-handler/feature-flags.ts と共有する単一定義)。 */
-export interface TenantFeatureFlagsItem {
+/**
+ * FLAGS 行の shape (writer = event-handler/feature-flags.ts と共有する単一定義)。
+ * [Issue #2527 Slice 1 step 2] The domain fields live on
+ * {@link TenantFeatureFlagsRecord} (source of truth); this item only adds PK/SK.
+ */
+export interface TenantFeatureFlagsItem extends TenantFeatureFlagsRecord {
   readonly PK: string;
   readonly SK: "FLAGS";
-  readonly tenantId: string;
-  readonly flags: Record<string, boolean>;
-  readonly updatedAt: string;
-  readonly updatedBy: string;
 }
 
 export function tenantFlagsKey(tenantId: string): { PK: string; SK: "FLAGS" } {

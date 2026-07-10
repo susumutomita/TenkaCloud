@@ -6,16 +6,56 @@
  * module as a temporary compatibility barrel while consumers migrate to direct imports.
  */
 
-import type {
-  CompositeParentDeploymentItem,
-  CompositeTargetDeploymentItem,
-} from "../../handlers/deploy-handler/composite-deployment.js";
-import type {
-  DeploymentItem,
-  DeploymentStatus,
-  HintRevealRecord,
-} from "../../handlers/deploy-handler/types.js";
-import type { ScoreEventItem } from "../../handlers/shared/score-event.js";
+/**
+ * [Issue #2527 Slice 1 step 2] Deployment lifecycle status — the domain union is
+ * the source of truth; the request-validation Zod enum in
+ * `handlers/deploy-handler/types.ts` (`DeploymentStatusSchema`, which carries the
+ * per-status operational docs) is compile-time locked to this union.
+ */
+export type DeploymentStatus =
+  | "PENDING"
+  | "APPROVAL_PENDING"
+  | "IN_PROGRESS"
+  | "COMPLETE"
+  | "FAILED"
+  | "DELETING"
+  | "DELETED"
+  | "EXPIRED"
+  | "AUTO_DELETED";
+
+/**
+ * Issue #742 Phase 2: progressive hint reveal 1 件の記録。 Deployments table の
+ * `hintsRevealed` attribute に append する。
+ *
+ *   - hintId: metadata.scoring.hints[].id を参照 (= ProgressiveHint.id と一致)
+ *   - revealedAt: ISO 8601 string (= 監査 log + UI 表示用)
+ *   - penaltyApplied: 実 deduction された penalty (= metadata 編集後にも記録が drift しないため
+ *     当時値を保存。 metadata.scoring.hints[].penalty 変更時にも score 再計算は走らない)
+ */
+export interface HintRevealRecord {
+  readonly hintId: string;
+  readonly revealedAt: string;
+  readonly penaltyApplied: number;
+}
+
+/**
+ * [Problem Packs / Issue #2096] Deployment + audit pack provenance — the resolved
+ * source identity persisted for PACK-SOURCED deployments. The shape is closed to
+ * id / version / digest / snapshot id only: a pack's mutable source (`sourceRef`,
+ * `snapshotPath`, local directory, git credentials) never reaches this shape, so
+ * it can never appear in an API response, the DDB row, or an audit record. The
+ * projection logic lives in `handlers/shared/deployment-provenance.ts`.
+ */
+export interface DeploymentProvenance {
+  /** Reverse-DNS pack id from the immutable pinned snapshot. */
+  readonly packId: string;
+  /** Exact SemVer of the pack from the immutable pinned snapshot. */
+  readonly packVersion: string;
+  /** Hex content digest of the pinned pack snapshot. */
+  readonly contentDigest: string;
+  /** Deterministic id of the event's pinned catalog snapshot. */
+  readonly catalogSnapshotId: string;
+}
 
 // ---------------------------------------------------------------------------
 // [Issue #2441 / Phase B1] Deployments aggregate — READ seam.
@@ -31,29 +71,225 @@ import type { ScoreEventItem } from "../../handlers/shared/score-event.js";
 // ---------------------------------------------------------------------------
 
 /**
- * [Issue #2441 / Phase B1] The domain shape of one deployment META row, derived
- * from the canonical DynamoDB row (`DeploymentItem`) minus its physical DDB keys
- * (base PK/SK plus GSI1/GSI2/GSI3 — GSI3 lives on composite target rows only,
- * `Omit` is a no-op for the keys `DeploymentItem` does not declare). Those keys
- * are an implementation detail of the DynamoDB backend; the SQLite backend (B4)
- * derives its own keys / columns. Deriving from `DeploymentItem` keeps this
- * shape in lock-step with the handler layer.
+ * [Issue #2441 / Phase B1] The domain shape of one deployment META row.
  *
- * `teamLoginKey` stays on the record in B1 (verbatim relocation). The SHA-256
- * hashing of the participant bearer for the SQL index is a B4 concern, exactly
- * as the Teams seam handled it (#2290) — not a B1 read-path change.
+ * [Issue #2527 Slice 1 step 2] This record is the source of truth: the physical
+ * DynamoDB row (`handlers/deploy-handler/types.ts`'s `DeploymentItem`) derives
+ * from it by adding the base PK/SK plus GSI1/GSI2 keys, so a new deployment
+ * attribute is added HERE and flows to the handler layer — never the reverse.
+ * Physical keys are an implementation detail of the DynamoDB backend; the SQLite
+ * backend derives its own keys / columns.
+ *
+ * `teamLoginKey` stays on the record (verbatim relocation, B1). The SHA-256
+ * hashing of the participant bearer for the SQL index is a backend concern,
+ * exactly as the Teams seam handled it (#2290).
  */
-export type DeploymentRecord = Omit<
-  DeploymentItem,
-  "PK" | "SK" | "GSI1PK" | "GSI1SK" | "GSI2PK" | "GSI2SK" | "GSI3PK" | "GSI3SK"
->;
+export type DeploymentRecord = {
+  jobId: string;
+  problemId: string;
+  tenantId: string;
+  awsAccountId: string;
+  /**
+   * Cross-account deploy RoleArn resolved from CompetitorAccounts. Participant SSO uses it as
+   * the first hop before assuming the per-problem ParticipantViewerRole.
+   */
+  competitorRoleArn?: string;
+  /** SSM SecureString path that stores the tenant ExternalId for cross-account operations. */
+  externalIdParameterName?: string;
+  region: string;
+  /**
+   * 内部 slug。operator が deploy form で入力し、`namePrefix` (CFn StackName) の
+   * 由来となる。CFn StackName は immutable なので、この値も deploy 後に変えない。
+   * 競技者向け表示には `displayTeamName` を優先するため、portal UI には基本出さない。
+   */
+  teamName: string;
+  namePrefix: string;
+  /**
+   * 競技者が portal `PATCH /portal/me` で設定する表示用チーム名。チームビルディング
+   * 体験のため、operator 入力ではなく競技者自身が決める。未設定なら undefined。
+   */
+  displayTeamName?: string;
+  /** 短命キー。API レスポンスで TenantAdmin に 1 度だけ露出し、以降は DDB 内に閉じる。 */
+  teamLoginKey: string;
+  status: DeploymentStatus;
 
-export type CompositeParentDeploymentRecord = Omit<CompositeParentDeploymentItem, "PK" | "SK">;
+  /**
+   * [ADR-026/027/032 / #1410-1412] 非 AWS runtime の問題 (sakura/azure/gcp) を deploy したときの
+   * provider / engine / entry。 teardown / status が CFn 経由か adapter 経由かの判別に使う。
+   * **absent = aws/cloudformation** (legacy 行 / 既定。 = 従来どおり CFn 経路)。
+   */
+  runtimeProvider?: string;
+  runtimeEngine?: string;
+  runtimeEntry?: string;
 
-export type CompositeTargetDeploymentRecord = Omit<
-  CompositeTargetDeploymentItem,
-  "PK" | "SK" | "GSI3PK" | "GSI3SK"
->;
+  /** worker (CFn 起動側) が埋める */
+  stackId?: string;
+  /** Step Functions の CodeBuildStartBuild output (= `Build.Id`) から永続化する build ID。 */
+  buildId?: string;
+  /** StatusUpdater が CFn Outputs を JSON 文字列で書き戻す */
+  stackOutputs?: string;
+  failureReason?: string;
+
+  createdAt: string;
+  updatedAt: string;
+  /** TTL 属性 (epoch seconds)。auto-teardown のキー。 */
+  expiresAt: number;
+
+  /** Reserved for bulk deploy. */
+  accountGroupId?: string;
+  problemSetId?: string;
+
+  /**
+   * ADR-004 Phase 2: bulk deploy 経由で作られた deployment 行は、紐づく Event / Team を
+   * 参照する。旧 `POST /problems/:id/deploy` 経路で作られた行は両方 undefined (後方互換)。
+   */
+  eventId?: string;
+  teamId?: string;
+
+  /**
+   * [Problem Packs / Issue #2096] Pack provenance for a PACK-SOURCED deployment,
+   * copied from the EVENT-pinned catalog snapshot (#2095) at deploy time — never
+   * from client input. Absent for core (non-pack) deployments, so legacy / core
+   * rows stay byte-identical. The detail API surfaces it only when present; the
+   * list summary never does. It carries no local path / source credential.
+   */
+  provenance?: DeploymentProvenance;
+
+  /**
+   * 競技開始時刻 (ISO8601) を Event から denormalize したコピー。HealthCheckLambda が
+   * probe / 採点 gate で参照する (now < eventStartsAt なら skip)。Bulk Deploy 時に
+   * Event.startsAt をコピーし、operator が schedule API で更新したら全 deployment 行へ
+   * 伝播する (event-handler/schedule.ts)。未設定 → 採点無し (= deploy 直後の誤加算防止)。
+   */
+  eventStartsAt?: string;
+  /**
+   * 競技終了時刻 (ISO8601) を Event から denormalize したコピー。HealthCheckLambda が
+   * probe / 採点 gate で参照する (eventEndsAt <= now なら skip)。`POST /events/:id/end`
+   * で operator が明示的に終了させたとき、event-handler が全 deployment 行へ伝播する。
+   * 未設定 → 終了 gate 無し (= 旧 deployment / 終了未指示の event で既存挙動を保つ)。
+   */
+  eventEndsAt?: string;
+
+  /** Scoring engine が加算したチームの累計ポイント。0 default。 */
+  score?: number;
+  /** 最後に scoring が走った時刻 (ISO 8601)。 */
+  lastScoredAt?: string;
+  /** Battle (uptime) で最後の health check が成功したか。 */
+  lastResult?: "ok" | "fail";
+  /** 最新の scoring probe が観測した participant-facing posture snapshot。 */
+  posture?: string;
+  /** 最新の scoring probe が分類した platform tier (例: posture-3 / production)。 */
+  platform?: string;
+  /**
+   * Challenge (flag) で 1 度でも正解 submit されたら true。再提出での重複加算を防ぐ。
+   */
+  flagSubmitted?: boolean;
+  /**
+   * Issue #2283: この行が Progression Gate の Gate challenge で、 完了 bonus
+   * (teamOverrides[].completionBonus) を加算済みなら加算時刻 (ISO 8601)。
+   * `attribute_not_exists` ConditionExpression の冪等 guard として使い、 bonus の
+   * 二重加算をレースから守る (= flagSubmitted と同じ one-time パターン)。
+   */
+  gateBonusAwardedAt?: string;
+  /**
+   * Issue #2283: Gate 完了を scoring tick が latch した時刻 (ISO 8601)。 完了後に uptime
+   * penalty で score が 0 以下へ戻っても unlock 状態を維持するための one-time marker
+   * (bonus の有無と独立に全 team の Gate 行へ書かれる)。
+   */
+  gateCompletedAt?: string;
+  /**
+   * Issue #1796: multi-flag kind で正解済みの sub-flag id の集合。 DynamoDB の String Set (SS)
+   * として保持し、 lib-dynamodb が JS `Set<string>` ↔ SS を marshal する。 旧 row / 手書き行は
+   * 持たない (= 「未解答」 と等価) ので、 単一 `flagSubmitted` boolean を集合へ拡張した形。
+   * flag ごとに 1 回だけ ADD し、 `ConditionExpression` で 2 重加算を防ぐ。
+   */
+  solvedFlagIds?: ReadonlySet<string>;
+  /**
+   * Issue #817: Challenge (flag) で不正解 submit を受けた累計回数。 0 default。
+   * `wrongAnswerPenalty > 0` の問題で 1 不正解ごとに ADD 1 + score 減算する経路で使う。
+   */
+  wrongAnswerCount?: number;
+  /**
+   * 直近の health check で endpoint ごとに probe した結果の JSON 文字列。
+   * shape: `{ [outputKey]: { ok, checkedAt, since? } }`。
+   * `since` は ok=false が続いている開始時刻 (= attack を検知した時刻)。
+   * Battle 防御側が「どの endpoint が何分前から落ちている」を画面で見るため。
+   */
+  endpointsHealth?: string;
+  /**
+   * [Issue #2422] uptime-multi の直近サイクル attack-probe 結果の JSON 文字列。
+   * shape: `{ checkedAt?, probes: [{ label?, symptom?, outcome, penalty }] }`。
+   * 「green (200) なのに満点でない理由」 (= まだ刺さっている probe) を participant portal に
+   * 見せる。 非スポイラー不変条件により slot / path (= 正確な endpoint)・脆弱性クラスは含めない。
+   * attackProbes を持つ問題でのみ書かれ、 旧行 / 他 kind は本属性を持たない (= 後方互換)。
+   */
+  attackProbes?: string;
+  /**
+   * ADR-012 Phase 3.B: 5 種 builtin kind の中で polling 越しに per-deployment で保持する
+   * scoring state の JSON 文字列。
+   * - `attack-detection` の前回 counter (= 差分加算の baseline)
+   * - `phased-polling` の bonus once 制御 flag map
+   * shape: `{ attackCount?: number, bonusAwarded?: Record<string, true> }`。
+   * dispatcher が UpdateItem で書き戻し、 次 tick で read-through に復元する。
+   */
+  scoringState?: string;
+  /**
+   * Issue #742 Phase 2: 競技者が reveal した progressive hint の記録。 reveal は idempotent
+   * (= 同 hintId 重複は no-op、 penalty は 1 度だけ適用)。
+   *
+   * shape: `[{ hintId, revealedAt: ISO8601, penaltyApplied }]`
+   *
+   * DDB は schemaless なので table 側の structural 変更は不要 (= attribute を新規追加するだけ)。
+   * 旧 row は本 attribute を持たない → 「未 reveal」 と等価。
+   */
+  hintsRevealed?: readonly HintRevealRecord[];
+};
+
+/**
+ * [Composite Runtime / Issue #2061] Composite parent coordination record — owns
+ * the problem-level identity and target count, not a single provider's deploy
+ * fields (those live on each target record). [Issue #2527 Slice 1 step 2] Source
+ * of truth; the physical row (`composite-deployment.ts`) adds PK/SK.
+ */
+export type CompositeParentDeploymentRecord = {
+  jobId: string;
+  tenantId: string;
+  problemId: string;
+  runtimeKind: "composite";
+  compositeVersion: number;
+  targetCount: number;
+  status: DeploymentStatus;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: number;
+  /**
+   * [#2063] Team identity shared with every target row. The parent carries them
+   * so a reader can confirm the whole composite belongs to one team without
+   * fanning out to the targets. Not GSI2-indexed (the parent stays out of the
+   * participant teamLoginKey query until a later issue adds an intentional view).
+   */
+  teamName?: string;
+  teamLoginKey?: string;
+  /** Reserved bulk-deploy grouping fields copied from the validated request. */
+  accountGroupId?: string;
+  problemSetId?: string;
+};
+
+/**
+ * [Composite Runtime / Issue #2061] Composite target record — a full deployment
+ * record (so existing execution paths can drive it unchanged) plus parent
+ * linkage, with the runtime triple required (a target always names its
+ * provider). [Issue #2527 Slice 1 step 2] Source of truth; the physical row
+ * (`composite-deployment.ts`) adds PK/SK + the GSI3 parent-lookup keys.
+ */
+export type CompositeTargetDeploymentRecord = DeploymentRecord & {
+  parentDeploymentId: string;
+  targetId: string;
+  targetOrdinal: number;
+  runtimeProvider: string;
+  runtimeEngine: string;
+  runtimeEntry: string;
+};
 
 /**
  * [Issue #2441 / Phase B2] Result of one conditional Deployment mutation. Mirrors
@@ -89,12 +325,51 @@ export interface BulkDeploymentCreateEntry {
 /**
  * [Issue #2441 / Phase B1] The domain shape of one `EVENT#<isoTs>#<ulid>` score
  * event row (the sparse scoring-history sub-aggregate that co-habits the
- * `DEPLOYMENT#<jobId>` partition), derived from `ScoreEventItem` minus its
- * physical base PK/SK. Written by `shared/score-event.ts`; read by the four
- * timeline sites (battle-attacks / score-events / leaderboard-score-events /
- * team-score-events).
+ * `DEPLOYMENT#<jobId>` partition). Written by `shared/score-event.ts`; read by
+ * the four timeline sites (battle-attacks / score-events /
+ * leaderboard-score-events / team-score-events). [Issue #2527 Slice 1 step 2]
+ * Source of truth; the physical row (`shared/score-event.ts`'s `ScoreEventItem`)
+ * adds the base PK/SK.
  */
-export type ScoreEventRecord = Omit<ScoreEventItem, "PK" | "SK">;
+export type ScoreEventRecord = {
+  jobId: string;
+  problemId: string;
+  /** Phase 2a 以前の旧 deployment は持たない (= history 列も undefined)。 */
+  teamId?: string;
+  eventId?: string;
+  /**
+   * イベント発生源。
+   * - `uptime`: HealthCheck の probe で全 endpoint OK
+   * - `flag`: 競技者の flag 提出が正解
+   * - `flag-wrong`: 競技者の flag 提出が不正解で wrongAnswerPenalty が減点された (Issue #817)
+   * - `attack-detected`: HealthCheck で `lastResult: ok → fail` 遷移を検知 (ADR-005 D2-A、
+   *   Battle Portal の Attack Statistics / History で使う)
+   * - `hint`: 競技者がヒントを開封し penalty が deduct された (Issue #1038 P1 #8、 2026-05-18)。
+   *   旧来 hint reveal は score を直 ADD するだけで score event 履歴に出ず、 「-30 pt なのに
+   *   履歴 0 件」 表示の不整合になっていた。
+   * - `gate-bonus`: Progression Gate (Issue #2283) の完了 bonus。 team override の
+   *   `completionBonus` を Gate challenge 完了時に 1 度だけ加算した marker。
+   */
+  source: "uptime" | "flag" | "flag-wrong" | "attack-detected" | "hint" | "gate-bonus";
+  /**
+   * 加算ポイント。`uptime` = scoring.pointsPerSuccess、`flag` = scoring.points、
+   * `flag-wrong` = -wrongAnswerPenalty (= 減点、 負数)、 `attack-detected` = 0 (= イベント marker のみ)、
+   * `hint` = -hint.penalty (= 減点、 負数)、 `gate-bonus` = teamOverrides[].completionBonus (= 正数)。
+   */
+  points: number;
+  /**
+   * 結果。
+   * - `ok`: `uptime` で全 endpoint OK or `flag` で正解 or `hint` 開封成功
+   * - `wrong`: `flag-wrong` (= 不正解で減点、 Issue #817)
+   * - `down`: `attack-detected` (= 攻撃が刺さって uptime が落ちた)
+   *
+   * Phase 2 以前の event 行は `"ok"` のみ書かれているので backward compatible。
+   */
+  result: "ok" | "wrong" | "down";
+  occurredAt: string;
+  /** 親 deployment の TTL を継承。0 なら無期限 (旧 deployment 互換)。 */
+  expiresAt: number;
+};
 
 /**
  * [Issue #2441 / Phase B1] The domain shape of one `INBOX#<isoTs>#<ulid>`
@@ -135,489 +410,4 @@ export interface CoordinationStateRecord {
 export interface DeploymentsPage {
   readonly items: readonly DeploymentRecord[];
   readonly nextCursor?: string;
-}
-
-/**
- * [Issue #2441 / Phase B1] Aggregate-scoped **read** repository for the
- * Deployments aggregate — domain methods, not a generic key-value shim (mirror
- * of {@link EventsRepository} / {@link TeamsRepository}). Only the DynamoDB
- * backend exists in B1 ({@link DynamoDbDeploymentsRepository}); `turso` / `sql`
- * fail loudly through {@link createDeploymentsRepository} until B4 lands the SQL
- * implementation.
- *
- * Fixed contract for every method:
- *  - The DynamoDB request (KeyCondition / Filter / Projection / placeholder
- *    names / Limit / ScanIndexForward) is a **verbatim** relocation of the named
- *    pre-seam site — B1 changes zero request bytes.
- *  - Full-page drain (the `ddb-paginate` helpers / the inline `event-handler`
- *    loop) is absorbed as an internal responsibility; the `maxPages` bound of a
- *    bounded drain survives as a method argument.
- *  - Projection-bearing queries narrow their return to a `Pick<DeploymentRecord,
- *    …>` (byte-compat AND type-honesty). A projection that carries the physical
- *    `PK` returns the domain `jobId` (derived from `DEPLOYMENT#<jobId>`) instead
- *    — the seam never leaks a physical key.
- *  - `getDeployment` / `queryDeploymentMeta` return the raw row without a tenant
- *    check: the pre-seam sites 404-fold cross-tenant reads in the caller, so the
- *    tenant predicate deliberately stays there (unchanged behavior).
- */
-export interface DeploymentsRepository {
-  /**
-   * META point read via `GetItem` (`PK = DEPLOYMENT#<jobId>`, `SK = META`).
-   * Sites: `deploy-handler/{retry,delete,list,stack-progress}` + composite
-   * `getRawRow`. The tenant / status guards stay in the caller (raw read).
-   */
-  getDeployment(jobId: string): Promise<DeploymentRecord | undefined>;
-  /**
-   * META read via `Query` (`PK = :pk AND SK = :sk`) — the ONE site
-   * (`participant-handler/cast-event.ts`) that reads the META row with a Query
-   * rather than a GetItem. Kept as its own method so the wire call (Query, not
-   * Get) stays byte-identical; folding it into {@link getDeployment} would swap
-   * the DynamoDB command.
-   */
-  queryDeploymentMeta(jobId: string): Promise<DeploymentRecord | undefined>;
-
-  /**
-   * One GSI1 page for a tenant, newest-first (`GSI1PK = TENANT#<id>`,
-   * `ScanIndexForward=false`, `Limit`, opaque cursor). Site:
-   * `deploy-handler/list.ts` `listDeployments`. The `problemId` in-memory filter
-   * and the DEFAULT/MAX limit clamp stay in the caller.
-   */
-  listByTenantPage(
-    tenantId: string,
-    opts: { readonly limit: number; readonly cursor?: string },
-  ): Promise<DeploymentsPage>;
-  /**
-   * Active-deployment count for a tenant (`Select=COUNT`, `FilterExpression`
-   * `#s IN (…)` built from `activeStatuses`, full-page drain). Site:
-   * `deploy-handler/deploy-quota.ts`. `opts.stopAtCount` preserves the pre-seam
-   * early-break (stop paging once the running count reaches the quota — the
-   * caller only needs the `>= limit` decision, so a capped count suffices).
-   */
-  countActiveByTenant(
-    tenantId: string,
-    activeStatuses: readonly string[],
-    opts?: { readonly stopAtCount?: number },
-  ): Promise<number>;
-  /**
-   * Every deployment for a `(tenant, event)` pair (GSI1 + `FilterExpression`
-   * `eventId = :ev`, full-page drain, full record). Sites:
-   * `participant-handler/{leaderboard,leaderboard-score-events}` +
-   * `event-handler/shared.ts` `queryDeploymentsByEvent` (no-projection caller).
-   * The drain is the #1797 / #1815 correctness fix — folded in here.
-   */
-  listByTenantAndEvent(tenantId: string, eventId: string): Promise<readonly DeploymentRecord[]>;
-  /**
-   * Deployment `jobId`s for a `(tenant, event)` pair (GSI1 + `FilterExpression`
-   * `eventId = :ev` + `ProjectionExpression "PK"`, full-page drain). Site:
-   * `event-handler/shared.ts` `queryDeploymentsByEvent` called with `"PK"`
-   * (`end-event` / `schedule` propagation). Returns the domain `jobId` derived
-   * from the projected `PK`.
-   */
-  listDeploymentKeysByEvent(tenantId: string, eventId: string): Promise<readonly string[]>;
-  /**
-   * Reconciler view of a `(tenant, event)` pair (GSI1 + `FilterExpression`
-   * `eventId = :ev` + `ProjectionExpression "PK, #status, updatedAt"`, full-page
-   * drain). Site: `generic-scoring-handler/event-reconciler.ts`. `jobId` is
-   * derived from the projected `PK`.
-   */
-  listReconcilerRowsByEvent(
-    tenantId: string,
-    eventId: string,
-  ): Promise<readonly Pick<DeploymentRecord, "jobId" | "status" | "updatedAt">[]>;
-  /**
-   * The COMPLETE deployment(s) for a fired `(tenant, event, team, problem)`
-   * disruption (GSI1 + `FilterExpression` `eventId = :ev AND teamId = :tid AND
-   * problemId = :pid`, full-page drain). Site:
-   * `disruption-executor-handler/executor-store.ts`. The COMPLETE / cross-account
-   * selection stays in the caller.
-   */
-  listByEventTeamProblem(
-    tenantId: string,
-    eventId: string,
-    teamId: string,
-    problemId: string,
-  ): Promise<readonly DeploymentRecord[]>;
-  /**
-   * Non-terminal rows sharing a `namePrefix` for a tenant (GSI1 +
-   * `FilterExpression` `namePrefix = :np` + `ProjectionExpression
-   * "namePrefix, jobId, #s"`, full-page drain). Site:
-   * `deploy-handler/cloud-action-enforcement.ts`. The self-exclusion + status
-   * classification stay in the caller.
-   */
-  findByNamePrefix(
-    tenantId: string,
-    namePrefix: string,
-  ): Promise<readonly Pick<DeploymentRecord, "namePrefix" | "jobId" | "status">[]>;
-  /**
-   * Admin per-event detail summaries for a tenant (GSI1, no filter,
-   * `ProjectionExpression "PK, teamId, eventId, displayTeamName, teamName,
-   * problemId, jobId, #s"`, **single page** — the pre-seam
-   * `event-handler/list.ts` `getEventDetail` issues one Query, no drain). The
-   * eventId in-memory grouping stays in the caller.
-   */
-  listDeploymentSummariesByTenant(
-    tenantId: string,
-  ): Promise<
-    readonly Pick<
-      DeploymentRecord,
-      "jobId" | "teamId" | "eventId" | "displayTeamName" | "teamName" | "problemId" | "status"
-    >[]
-  >;
-
-  /**
-   * Participant bearer lookup by `teamLoginKey` (GSI2 `TEAMKEY#<key>`, sparse,
-   * single page). Sites: `participant-handler/shared.ts` `queryTeamItems` (the
-   * participant-login source of truth) + `generic-scoring-handler/gate-completion-bonus.ts`.
-   * Byte-compat is the top priority here — this is the participant login path.
-   */
-  listByTeamLoginKey(teamLoginKey: string): Promise<readonly DeploymentRecord[]>;
-
-  /**
-   * A composite parent's target rows (GSI3 `PARENT_DEPLOYMENT#<id>`,
-   * `ScanIndexForward=true` = declared order, single page). Site:
-   * `deploy-handler/composite-repository.ts`. The `isCompositeTargetItem` filter
-   * stays in the caller (the sparse GSI3 already scopes to target rows).
-   */
-  listCompositeTargets(parentDeploymentId: string): Promise<readonly DeploymentRecord[]>;
-
-  /**
-   * A deployment's score-event history (`PK = DEPLOYMENT#<jobId> AND
-   * begins_with(SK, "EVENT#")`, `ScanIndexForward=false`, `Limit=pageSize`,
-   * bounded to `opts.maxPages` pages — omit `maxPages` to drain fully). Sites:
-   * `participant-handler/{score-events,leaderboard-score-events}` +
-   * `event-handler/team-score-events.ts`. The `toView` domain filter + the
-   * final truncate stay in the caller.
-   */
-  listScoreEvents(
-    jobId: string,
-    opts: { readonly pageSize: number; readonly maxPages?: number },
-  ): Promise<readonly ScoreEventRecord[]>;
-  /**
-   * A deployment's score events over an SK range (`PK = :pk AND SK BETWEEN
-   * :sk_start AND :sk_end`, `ScanIndexForward=false`, full-page drain). Site:
-   * `participant-handler/battle-attacks.ts` (EVENT# timeline window). The
-   * caller builds the `EVENT#<iso>` / `EVENT#~` bounds and applies its
-   * `source` filter.
-   */
-  listScoreEventsInRange(
-    jobId: string,
-    fromSk: string,
-    toSk: string,
-  ): Promise<readonly ScoreEventRecord[]>;
-  /**
-   * A deployment's inbox events over an SK range — the byte-identical
-   * `SK BETWEEN` query as {@link listScoreEventsInRange} (shared internally), but
-   * over the `INBOX#` sub-aggregate, so its return is the honest
-   * {@link InboxEventRecord}. Site: `participant-handler/cast-event.ts`
-   * `queryInboxRows`.
-   */
-  listInboxEventsInRange(
-    jobId: string,
-    fromSk: string,
-    toSk: string,
-  ): Promise<readonly InboxEventRecord[]>;
-
-  /**
-   * The per-event inter-team coordination state (`GetItem`
-   * `PK = COORD#<tenantId>#<eventId>`, `SK = STATE`). Returns `undefined` when
-   * the row is absent (= uninitialized). Site:
-   * `participant-handler/coordination-store.ts` `readCoordinationState`.
-   */
-  readCoordinationState(
-    tenantId: string,
-    eventId: string,
-  ): Promise<CoordinationStateRecord | undefined>;
-
-  // ---------------------------------------------------------------------------
-  // [Issue #2441 / Phase B3] Full-table Scans, per-page callback. Unlike the
-  // GSI1/GSI2/GSI3 `list*` reads above (which drain internally and return every
-  // row), these mirror `handlers/shared/ddb-paginate.ts`'s `forEachScanPage`:
-  // the caller supplies `onPage`, and the backend invokes it once per physical
-  // page so per-page fan-out (BatchGet / bounded `Promise.all`) stays intact —
-  // collecting every row into memory first would change that fan-out width.
-  // Every FilterExpression / ProjectionExpression / Limit is a verbatim
-  // relocation of the named pre-seam site.
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Every `status=COMPLETE` deployment, optionally scoped to one `eventId`
-   * (`FilterExpression` `#status = :complete [AND eventId = :eventId]`,
-   * `Limit=200`). Site: `generic-scoring-handler/index.ts` (the scoring-tick
-   * dispatch scan). `eventId === undefined` runs the unscoped (global tick)
-   * variant; the caller's own `eventId` equality re-check (confused-deputy
-   * guard for mocks / malformed rows) stays in the caller.
-   */
-  forEachCompleteDeploymentPage(
-    eventId: string | undefined,
-    onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
-  ): Promise<void>;
-  /**
-   * Composite parent rows in a non-terminal deploy-phase status
-   * (`FilterExpression` `runtimeKind = :composite AND #s IN (:p, :i)` fixed to
-   * `PENDING`/`IN_PROGRESS`, `Limit=200`). Site:
-   * `generic-scoring-handler/composite-status-reconciler.ts`
-   * `reconcileCompositeParents`.
-   */
-  forEachCompositeDeployReconcilablePage(
-    onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
-  ): Promise<void>;
-  /**
-   * Composite parent rows currently `DELETING` (`FilterExpression`
-   * `runtimeKind = :composite AND #s = :deleting`, `Limit=200`). Site:
-   * `generic-scoring-handler/composite-teardown-reconciler.ts`
-   * `reconcileCompositeParentTeardowns`. A distinct method from
-   * {@link forEachCompositeDeployReconcilablePage} because the FilterExpression
-   * differs (`=` vs `IN`), per the seam's one-method-per-expression rule.
-   */
-  forEachCompositeTeardownPendingPage(
-    onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
-  ): Promise<void>;
-  /**
-   * Active non-AWS runtime rows (`FilterExpression`
-   * `attribute_exists(runtimeProvider) AND #s IN (:p, :i, :c, :d)` fixed to
-   * `PENDING`/`IN_PROGRESS`/`COMPLETE`/`DELETING`, `Limit=200`). Site:
-   * `generic-scoring-handler/runtime-status-reconciler.ts`
-   * `reconcileRuntimeStatuses`.
-   */
-  forEachRuntimeReconcilablePage(
-    onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
-  ): Promise<void>;
-  /**
-   * COMPLETE deployments for one `eventId` with a team score
-   * (`FilterExpression` `#status = :complete AND eventId = :eventId AND
-   * attribute_exists(teamId) AND attribute_exists(score)`,
-   * `ProjectionExpression "eventId, teamId, problemId, score"`,
-   * `ConsistentRead=true`, `Limit=200`). Site:
-   * `generic-scoring-handler/runtime-score-feed.ts` `publishRuntimeScoreFeed`.
-   */
-  forEachRuntimeScoreFeedPage(
-    eventId: string,
-    onPage: (
-      items: readonly Pick<DeploymentRecord, "eventId" | "teamId" | "problemId" | "score">[],
-    ) => Promise<void>,
-  ): Promise<void>;
-
-  // ---------------------------------------------------------------------------
-  // [Issue #2441 / Phase B2] Conditional/atomic writes. Every DynamoDB
-  // UpdateExpression / ConditionExpression lives in the backend verbatim; callers
-  // consume outcome data instead of catching backend-specific CCF exceptions.
-  // ---------------------------------------------------------------------------
-
-  putDeployment(record: DeploymentRecord): Promise<void>;
-  /**
-   * DeployCreate SFN `MarkInProgress`: unconditional `SET #status = :status,
-   * updatedAt = :updatedAt`. It intentionally has no tenant/status condition so
-   * SFN task retries rewrite the same state instead of branching on a CCF.
-   */
-  markCreateInProgress(jobId: string, at: string): Promise<DeploymentMutationOutcome>;
-  /**
-   * DeployCreate SFN `MarkSucceeded` / `MarkSucceededWithoutBuildId`: writes
-   * COMPLETE plus stack metadata. `buildId` is omitted on the Lambda deploy path
-   * and must not clear an existing attribute, matching the SFN UpdateExpression.
-   */
-  markCreateSucceeded(
-    jobId: string,
-    stackId: string,
-    stackOutputs: string,
-    buildId: string | undefined,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  /**
-   * DeployCreate SFN `MarkFailed` / `MarkFailedWithoutBuildId`: writes FAILED
-   * plus the failure reason. `buildId` follows the same optional semantics as
-   * {@link markCreateSucceeded}.
-   */
-  markCreateFailed(
-    jobId: string,
-    failureReason: string,
-    buildId: string | undefined,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  /**
-   * [Issue #2441 / Phase B PR-6] DeployDelete SFN `MarkDeleted`: unconditional
-   * `SET #status = :status, updatedAt = :updatedAt REMOVE GSI2PK, GSI2SK` — same
-   * at-least-once, condition-free semantics as {@link markCreateInProgress}. The
-   * `REMOVE GSI2PK, GSI2SK` clears the sparse participant-login-key index (SQL
-   * backends clear the `team_login_key_hash` column instead) so a deleted
-   * deployment no longer resolves via `listByTeamLoginKey`. DeployDelete's own
-   * `MarkFailed` state reuses {@link markCreateFailed} (with `buildId` undefined)
-   * since the DDB UpdateExpression is byte-identical.
-   */
-  markDeleted(jobId: string, at: string): Promise<DeploymentMutationOutcome>;
-  markFailedIfPending(
-    jobId: string,
-    tenantId: string,
-    reason: string,
-    at: string,
-    expiresAt: number,
-  ): Promise<DeploymentMutationOutcome>;
-  retryToPending(jobId: string, tenantId: string, at: string): Promise<DeploymentMutationOutcome>;
-  compensateRetryToFailed(
-    jobId: string,
-    tenantId: string,
-    reason: string,
-    at: string,
-    expiresAt: number,
-  ): Promise<DeploymentMutationOutcome>;
-  markDeleting(
-    jobId: string,
-    tenantId: string,
-    at: string,
-    expiresAt: number,
-  ): Promise<DeploymentMutationOutcome>;
-  compensateDeleteToFailed(
-    jobId: string,
-    tenantId: string,
-    reason: string,
-    at: string,
-    expiresAt: number,
-  ): Promise<DeploymentMutationOutcome>;
-  markApprovalPending(
-    jobId: string,
-    tenantId: string,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  failCompositeTargetIfPending(
-    jobId: string,
-    reason: string,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  markCompositeParentDeleting(jobId: string, at: string): Promise<DeploymentMutationOutcome>;
-  putCompositeParent(record: CompositeParentDeploymentRecord): Promise<DeploymentMutationOutcome>;
-  putCompositeTarget(record: CompositeTargetDeploymentRecord): Promise<DeploymentMutationOutcome>;
-
-  applyMultiFlagCorrectScore(
-    jobId: string,
-    points: number,
-    flagId: string,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  applyMultiFlagWrongPenalty(
-    jobId: string,
-    penalty: number,
-    flagId: string,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  applyFlagWrongPenalty(
-    jobId: string,
-    penalty: number,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  applyFlagCorrectScore(
-    jobId: string,
-    points: number,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  applyHintPenalty(
-    jobId: string,
-    hint: HintRevealRecord,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  updateDisplayTeamName(
-    jobId: string,
-    name: string,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-
-  applyKindScoringResult(
-    jobId: string,
-    result: DeploymentKindScoringResult,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  casCompositeParentStatus(
-    jobId: string,
-    previousStatus: DeploymentStatus,
-    nextStatus: DeploymentStatus,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  latchGateCompleted(jobId: string, at: string): Promise<DeploymentMutationOutcome>;
-  awardGateBonusAtomic(
-    parent: Pick<DeploymentRecord, "jobId" | "problemId" | "teamId" | "eventId" | "expiresAt">,
-    bonus: number,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  setScoringState(jobId: string, stateJson: string, at: string): Promise<DeploymentMutationOutcome>;
-  markStuckDeletingFailed(
-    jobId: string,
-    reason: string,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  transitionRuntimeStatus(
-    jobId: string,
-    tenantId: string,
-    currentStatus: DeploymentStatus,
-    nextStatus: DeploymentStatus,
-    stackOutputs: string | undefined,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-
-  compensateBulkTeardown(
-    jobId: string,
-    tenantId: string,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  markDeletingForBulk(
-    jobId: string,
-    tenantId: string,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  applySchedulePatch(
-    jobId: string,
-    tenantId: string,
-    patch: DeploymentSchedulePatch,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  createBulkDeployments(
-    tenantId: string,
-    entries: readonly BulkDeploymentCreateEntry[],
-  ): Promise<DeploymentMutationOutcome>;
-  compensateBulkCreateToFailed(
-    jobId: string,
-    tenantId: string,
-    reason: string,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-  stampEventEndsAt(
-    jobId: string,
-    tenantId: string,
-    endsAt: string,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
-
-  // ---------------------------------------------------------------------------
-  // [Issue #2441 / Phase B3] Sub-aggregate writes (verbatim Puts / conditional
-  // Put moved from `handlers/shared/`).
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Appends one score-event row (`PK = DEPLOYMENT#<jobId>`, `SK =
-   * EVENT#<occurredAt>#<ulid>` — the physical SK is derived here, never
-   * supplied by the caller). Site: `handlers/shared/score-event.ts`
-   * `writeScoreEvent` (callers: `apply-kind-result.ts` / `submit-flag.ts` /
-   * `reveal-hint.ts`).
-   */
-  appendScoreEvent(record: ScoreEventRecord): Promise<void>;
-  /**
-   * Appends one inter-team inbox row (`PK = DEPLOYMENT#<jobId>`, `SK =
-   * INBOX#<occurredAt>#<inboxId>`). `jobId` is the **target** deployment (the
-   * recipient's partition); `inboxId` is the caller-generated ulid that also
-   * becomes the domain-visible cast-event id. Site:
-   * `participant-handler/cast-event.ts` `castEvent`.
-   */
-  appendInboxEvent(jobId: string, inboxId: string, record: InboxEventRecord): Promise<void>;
-  /**
-   * Optimistic-lock write of the per-event coordination state (`PutItem`,
-   * `ConditionExpression "attribute_not_exists(version) OR version =
-   * :expected"`, `version` set to `expectedVersion + 1`). Mirrors the A2/B2
-   * union contract: `conflict` folds the DynamoDB `ConditionalCheckFailed`
-   * instead of throwing (never `not_found` — a first write creates the row).
-   * Site: `participant-handler/coordination-store.ts` `writeCoordinationState`.
-   */
-  writeCoordinationState(
-    tenantId: string,
-    eventId: string,
-    state: unknown,
-    expectedVersion: number,
-    at: string,
-  ): Promise<DeploymentMutationOutcome>;
 }

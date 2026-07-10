@@ -18,10 +18,12 @@ import {
   UpdateIdpInputSchema,
   validateSamlMetadata,
 } from "@tenkacloud/saml-utils";
+import type { IdpScope } from "../../../problem-deploy/control-data/domain/saml-idps.js";
 
-export type IdpScope =
-  | { readonly kind: "system" }
-  | { readonly kind: "tenant"; readonly tenantId: string };
+// [Issue #2527 Slice 1 step 2] The scope discriminator is owned by the SamlIdps
+// domain module (the repository seam it scopes); re-exported here so the
+// idp-handler / tenant-template consumers keep their import path.
+export type { IdpScope } from "../../../problem-deploy/control-data/domain/saml-idps.js";
 
 /**
  * DDB-shaped persistence port. The Control Plane uses a single-PK table

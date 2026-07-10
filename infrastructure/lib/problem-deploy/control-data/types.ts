@@ -16,6 +16,7 @@
 export type * from "./domain/admin-audit.js";
 export type * from "./domain/competitor-accounts.js";
 export type * from "./domain/deployments.js";
+export type * from "./domain/deployments-port.js";
 export type * from "./domain/disruptions.js";
 export type * from "./domain/events.js";
 export type * from "./domain/feature-flags.js";

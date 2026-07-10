@@ -1,6 +1,20 @@
 import { z } from "zod";
+import type {
+  ProgressionGateConfig,
+  ProgressionGateTeamOverride,
+  ProgressionGateTeamPolicy,
+} from "../../control-data/domain/events.js";
 import type { DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES, PROBLEM_ID_RE } from "./constants.js";
+
+// [Issue #2527 Slice 1 step 2] The domain module owns the Gate config shapes;
+// this handler keeps the validation schemas (compile-time locked below) and
+// re-exports the types so existing importers keep their import path.
+export type {
+  ProgressionGateConfig,
+  ProgressionGateTeamOverride,
+  ProgressionGateTeamPolicy,
+} from "../../control-data/domain/events.js";
 
 /**
  * Issue #2283: Event Deployment の Progression Gate (問題アンロック / チーム別ハンデ)。
@@ -36,7 +50,6 @@ export const GATE_PROBLEM_ID_RE = PROBLEM_ID_RE;
 export const MAX_COMPLETION_BONUS = 100_000;
 
 export const ProgressionGateTeamPolicySchema = z.enum(["required", "off"]);
-export type ProgressionGateTeamPolicy = z.infer<typeof ProgressionGateTeamPolicySchema>;
 
 /**
  * team 単位の上書き。
@@ -50,7 +63,6 @@ export const ProgressionGateTeamOverrideSchema = z
     completionBonus: z.number().int().min(0).max(MAX_COMPLETION_BONUS).optional(),
   })
   .strict();
-export type ProgressionGateTeamOverride = z.infer<typeof ProgressionGateTeamOverrideSchema>;
 
 /**
  * Event 1 件の Gate 設定 (= `PUT /events/:eventId/progression-gate` body / EventItem 保存 shape)。
@@ -79,7 +91,23 @@ export const ProgressionGateConfigSchema = z
     message: "unlockTargetIds must be unique",
     path: ["unlockTargetIds"],
   });
-export type ProgressionGateConfig = z.infer<typeof ProgressionGateConfigSchema>;
+
+// [Issue #2527 Slice 1 step 2] Compile-time lock-step guards: each validation
+// schema and its domain shape must stay identical (either drifting direction
+// fails typecheck).
+type _MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+const _gateTeamPolicyLockstep: _MutuallyAssignable<
+  z.infer<typeof ProgressionGateTeamPolicySchema>,
+  ProgressionGateTeamPolicy
+> = true;
+const _gateTeamOverrideLockstep: _MutuallyAssignable<
+  z.infer<typeof ProgressionGateTeamOverrideSchema>,
+  ProgressionGateTeamOverride
+> = true;
+const _gateConfigLockstep: _MutuallyAssignable<
+  z.infer<typeof ProgressionGateConfigSchema>,
+  ProgressionGateConfig
+> = true;
 
 /**
  * DDB 行に保存された値を寛容に parse する (= 手書き行 / 旧 shape への防御)。
