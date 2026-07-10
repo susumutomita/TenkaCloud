@@ -6,16 +6,20 @@ import {
   type EventsRepository,
   SqlEventsRepository,
 } from "../../../lib/problem-deploy/control-data/events-repository";
+import { MirroredEventsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 /**
  * [ADR-049 §5] Parity suite for the Events repository seam. The SAME assertions
- * run against both backends so DynamoDB (behavior-preserving extraction) and
- * SQLite (Turso / D1 dialect) are provably interchangeable:
+ * run against every backend so DynamoDB (behavior-preserving extraction),
+ * SQLite (Turso / D1 dialect), and mirror mode are provably interchangeable:
  *   - DynamoDb impl against a faithful in-memory fake DocumentClient (real
  *     round-trip: put → get returns the stored row).
  *   - Sql impl against Node's built-in `node:sqlite` DatabaseSync (`:memory:`),
  *     so no new dependency is introduced.
+ *   - Mirrored composition (DDB canonical + SQL replica) — [#2527 Slice 0] the
+ *     `turso-mirror` / `sql-mirror` bridge must satisfy the exact same contract
+ *     as each backend alone.
  */
 
 const TABLE = "Events";
@@ -38,6 +42,14 @@ function sampleRecord(overrides: Partial<EventRecord> = {}): EventRecord {
 const backends: ReadonlyArray<readonly [string, () => EventsRepository]> = [
   ["DynamoDbEventsRepository", () => new DynamoDbEventsRepository(makeFakeDdb(), TABLE)],
   ["SqlEventsRepository", () => new SqlEventsRepository(makeSqliteExecutor())],
+  [
+    "MirroredEventsRepository",
+    () =>
+      new MirroredEventsRepository(
+        new DynamoDbEventsRepository(makeFakeDdb(), TABLE),
+        new SqlEventsRepository(makeSqliteExecutor()),
+      ),
+  ],
 ];
 
 describe.each(backends)("EventsRepository parity: %s", (_name, makeRepo) => {

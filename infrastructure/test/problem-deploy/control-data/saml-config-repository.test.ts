@@ -38,6 +38,16 @@ function sampleRecord(overrides: Partial<SamlConfigRecord> = {}): SamlConfigReco
 const backends: ReadonlyArray<readonly [string, () => SamlConfigRepository]> = [
   ["DynamoDbSamlConfigRepository", () => new DynamoDbSamlConfigRepository(makeFakeDdb(), TABLE)],
   ["SqlSamlConfigRepository", () => new SqlSamlConfigRepository(makeSqliteExecutor())],
+  // [#2527 Slice 0] Mirror mode (DDB canonical + SQL replica) must satisfy the
+  // same contract as each backend alone.
+  [
+    "MirroredSamlConfigRepository",
+    () =>
+      new MirroredSamlConfigRepository(
+        new DynamoDbSamlConfigRepository(makeFakeDdb(), TABLE),
+        new SqlSamlConfigRepository(makeSqliteExecutor()),
+      ),
+  ],
 ];
 
 describe.each(backends)("SamlConfigRepository parity: %s", (_name, makeRepo) => {

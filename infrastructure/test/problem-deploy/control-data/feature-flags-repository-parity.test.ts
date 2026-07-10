@@ -27,6 +27,16 @@ const backends: ReadonlyArray<readonly [string, () => FeatureFlagsRepository]> =
     () => new DynamoDbFeatureFlagsRepository(makeFakeDdb(), TABLE),
   ],
   ["SqlFeatureFlagsRepository", () => new SqlFeatureFlagsRepository(makeSqliteExecutor())],
+  // [#2527 Slice 0] Mirror mode (DDB canonical + SQL replica) must satisfy the
+  // same contract as each backend alone.
+  [
+    "MirroredFeatureFlagsRepository",
+    () =>
+      new MirroredFeatureFlagsRepository(
+        new DynamoDbFeatureFlagsRepository(makeFakeDdb(), TABLE),
+        new SqlFeatureFlagsRepository(makeSqliteExecutor()),
+      ),
+  ],
 ];
 
 describe.each(backends)("FeatureFlagsRepository parity: %s", (_name, makeRepo) => {
