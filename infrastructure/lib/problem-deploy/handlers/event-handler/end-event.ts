@@ -1,3 +1,7 @@
+import type {
+  DeploymentsLifecyclePort,
+  DeploymentsQueryPort,
+} from "../../control-data/deployments-repository.js";
 import {
   type EventSharedResources,
   resolveDeploymentsRepository,
@@ -58,7 +62,8 @@ export async function endEvent(
   // updated: 成功判定は outcome 自身が担う。 post-image 無しの degenerate 応答
   // (ALL_NEW が Attributes を返さない) は repository 層が not_found に畳み済み。
 
-  const repo = await resolveDeploymentsRepository(shared);
+  const repo: DeploymentsQueryPort & DeploymentsLifecyclePort =
+    await resolveDeploymentsRepository(shared);
   const targetJobIds = await repo.listDeploymentKeysByEvent(tenantId, eventId);
 
   // #872: tenantId 一致を atomic に強制 (= queryDeploymentsByEvent が GSI1=TENANT#... で

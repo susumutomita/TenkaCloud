@@ -1,4 +1,8 @@
 import { z } from "zod";
+import type {
+  DeploymentsLifecyclePort,
+  DeploymentsQueryPort,
+} from "../../control-data/deployments-repository.js";
 import { ULID_RE as JOB_ID_RE } from "../shared/constants.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
@@ -97,7 +101,8 @@ async function retryOne(
   jobId: string,
   now: () => number,
 ): Promise<RetryDeploymentResult> {
-  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const deploymentsRepository: DeploymentsQueryPort & DeploymentsLifecyclePort =
+    await resolveDeploymentsRepository(shared);
   const item = (await deploymentsRepository.getDeployment(jobId)) as
     | Partial<DeploymentItem>
     | undefined;
@@ -149,7 +154,8 @@ async function transitionRetryToPending(
   // [Issue #2441 / Phase B2] `retryToPending` folds the CCF into `conflict` —
   // no probe (fire-and-forget shape), so the boolean collapse below is
   // byte-identical to the pre-seam try/catch.
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsQueryPort & DeploymentsLifecyclePort =
+    await resolveDeploymentsRepository(shared);
   const outcome = await repository.retryToPending(jobId, tenantId, new Date(now()).toISOString());
   return outcome.outcome === "updated";
 }
@@ -216,7 +222,8 @@ async function compensateRetryPublishFailure(
 ): Promise<void> {
   try {
     // Issue #1200: FAILED terminal 化のタイミングで expiresAt を 7 日 retention に refresh。
-    const repository = await resolveDeploymentsRepository(shared);
+    const repository: DeploymentsQueryPort & DeploymentsLifecyclePort =
+      await resolveDeploymentsRepository(shared);
     await repository.compensateRetryToFailed(
       jobId,
       tenantId,

@@ -1,4 +1,7 @@
-import type { BulkDeploymentCreateEntry } from "../../../control-data/deployments-repository.js";
+import type {
+  BulkDeploymentCreateEntry,
+  DeploymentsLifecyclePort,
+} from "../../../control-data/deployments-repository.js";
 import {
   type EventSharedResources,
   resolveDeploymentsRepository,
@@ -29,7 +32,7 @@ export async function writeBulkDeployPlan(
 ): Promise<void> {
   const opsPerEntry = replacesExisting ? 2 : 1;
   const planPerChunk = Math.floor(TRANSACT_WRITE_BATCH / opsPerEntry);
-  const repo = await resolveDeploymentsRepository(shared);
+  const repo: DeploymentsLifecyclePort = await resolveDeploymentsRepository(shared);
   const writes: Promise<void>[] = [];
   for (let index = 0; index < plan.length; index += planPerChunk) {
     writes.push(writeBulkDeployChunk(repo, tenantId, plan.slice(index, index + planPerChunk)));
@@ -38,7 +41,7 @@ export async function writeBulkDeployPlan(
 }
 
 async function writeBulkDeployChunk(
-  repo: Awaited<ReturnType<typeof resolveDeploymentsRepository>>,
+  repo: DeploymentsLifecyclePort,
   tenantId: string,
   chunk: readonly PlanEntry[],
 ): Promise<void> {
@@ -87,7 +90,7 @@ export async function markPublishFailuresFailed(
   failures: readonly PublishFailure[],
   updatedAt: string,
 ): Promise<void> {
-  const repo = await resolveDeploymentsRepository(shared);
+  const repo: DeploymentsLifecyclePort = await resolveDeploymentsRepository(shared);
   await Promise.all(
     failures.map((failure) =>
       repo.compensateBulkCreateToFailed(

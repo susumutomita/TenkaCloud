@@ -1,3 +1,7 @@
+import type {
+  DeploymentsQueryPort,
+  DeploymentsScoringPort,
+} from "../../control-data/deployments-repository.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import type { ScoreEventItem } from "../shared/score-event.js";
@@ -95,7 +99,8 @@ export async function getLeaderboardScoreEvents(
 
   // #1797/#1815: pre-seam this endpoint read one GSI1 page only. The repository
   // method owns the full drain, matching leaderboard/event-handler correctness.
-  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const deploymentsRepository: DeploymentsQueryPort & DeploymentsScoringPort =
+    await resolveDeploymentsRepository(shared);
   const eventDeployments = (await deploymentsRepository.listByTenantAndEvent(
     tenantId,
     eventId,
@@ -186,7 +191,8 @@ async function collectTeamEvents(
   deploymentJobIds: readonly string[],
 ): Promise<TeamScoreEventView[]> {
   const collected: TeamScoreEventView[] = [];
-  const deployments = await resolveDeploymentsRepository(shared);
+  const deployments: DeploymentsQueryPort & DeploymentsScoringPort =
+    await resolveDeploymentsRepository(shared);
   await Promise.all(
     deploymentJobIds.map(async (jobId) => {
       const rows = await deployments.listScoreEvents(jobId, {

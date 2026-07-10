@@ -1,5 +1,6 @@
 import { GetParameterCommand, type SSMClient } from "@aws-sdk/client-ssm";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { resolveDeploymentsRepository } from "./shared.js";
 
@@ -36,7 +37,7 @@ export async function publishRuntimeScoreFeed(
   // [Issue #2441 / Phase B3] `forEachRuntimeScoreFeedPage` absorbs the
   // 200-per-page, `ConsistentRead` Scan + `LastEvaluatedKey` drain into the
   // Deployments seam; the per-row aggregation below is unchanged.
-  const repository = await resolveDeploymentsRepository({
+  const repository: DeploymentsQueryPort = await resolveDeploymentsRepository({
     ddb: dependencies.ddb,
     deploymentsTableName: config.deploymentsTableName,
   });

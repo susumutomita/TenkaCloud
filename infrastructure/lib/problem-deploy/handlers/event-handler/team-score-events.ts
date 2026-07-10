@@ -1,3 +1,4 @@
+import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
 import type { ScoreEventItem } from "../shared/score-event.js";
 import { type EventSharedResources, resolveDeploymentsRepository } from "./shared.js";
 import type { TeamScoreEvents, TeamScoreEventView } from "./types.js";
@@ -76,7 +77,7 @@ async function collectEventsForDeployments(
   deploymentJobIds: readonly string[],
 ): Promise<TeamScoreEventView[]> {
   const collected: TeamScoreEventView[] = [];
-  const deployments = await resolveDeploymentsRepository(shared);
+  const deployments: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   await Promise.all(
     deploymentJobIds.map(async (jobId) => {
       // 1 deployment partition あたり最大 MAX_PAGES_PER_DEPLOYMENT ページまで drain (= 1 request

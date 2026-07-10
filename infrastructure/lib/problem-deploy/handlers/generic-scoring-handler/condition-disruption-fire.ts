@@ -1,3 +1,4 @@
+import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { putEventsBatched } from "../shared/events.js";
 import { buildActiveDisruptionEffect } from "./disruption-effects.js";
@@ -83,7 +84,7 @@ export async function maybeFireConditionDisruptions(
   });
   // [Issue #2441 / Phase B2] Unconditional write (no ConditionExpression) — the
   // seam call is byte-identical to the pre-seam UpdateCommand.
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   await repository.setScoringState(item.jobId, stateJson, nowIso);
 }
 

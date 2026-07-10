@@ -1,5 +1,6 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { Context } from "hono";
+import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
 import { extractClaims } from "./auth.js";
 import { resolveDeploymentsRepository } from "./shared.js";
 
@@ -111,7 +112,7 @@ export async function enforceDeployQuota(
 ): Promise<void> {
   if (!deps.quota) return;
   const limit = deps.quota[tier];
-  const repository = await resolveDeploymentsRepository(deps);
+  const repository: DeploymentsQueryPort = await resolveDeploymentsRepository(deps);
   const active = await repository.countActiveByTenant(tenantId, ACTIVE_STATUSES, {
     stopAtCount: limit,
   });

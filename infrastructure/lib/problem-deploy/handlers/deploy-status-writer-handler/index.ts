@@ -1,7 +1,11 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
-import type { DeploymentMutationOutcome, DeploymentsRepository } from "../../control-data/types.js";
+import type {
+  DeploymentMutationOutcome,
+  DeploymentsLifecyclePort,
+  DeploymentsRepository,
+} from "../../control-data/types.js";
 
 export type DeployStatusWriterTransition =
   | "markInProgress"
@@ -25,7 +29,8 @@ export interface DeployStatusWriterResources {
 }
 
 export interface DeployStatusWriterDeps {
-  readonly repository: DeploymentsRepository;
+  /** [Issue #2527 Slice 2] SFN 書き戻しは lifecycle capability だけを要求する。 */
+  readonly repository: DeploymentsLifecyclePort;
 }
 
 function requireString(value: unknown, field: string): string {

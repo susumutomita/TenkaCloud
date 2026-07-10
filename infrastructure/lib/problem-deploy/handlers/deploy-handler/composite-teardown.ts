@@ -24,6 +24,7 @@
  * cloud. Parent + target rows are never deleted here.
  */
 
+import type { DeploymentsCompositePort } from "../../control-data/deployments-repository.js";
 import {
   type CompositeDeploymentRepositoryDeps,
   getCompositeParent,
@@ -98,7 +99,7 @@ async function markParentDeleting(
   deps: CompositeTeardownDeps,
   parentDeploymentId: string,
 ): Promise<void> {
-  const repository = await resolveDeploymentsRepository(deps.repo);
+  const repository: DeploymentsCompositePort = await resolveDeploymentsRepository(deps.repo);
   await repository.markCompositeParentDeleting(
     parentDeploymentId,
     new Date(deps.now()).toISOString(),

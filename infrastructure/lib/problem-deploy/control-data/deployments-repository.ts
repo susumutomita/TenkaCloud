@@ -19,8 +19,16 @@ export type {
   DeploymentMutationOutcome,
   DeploymentRecord,
   DeploymentSchedulePatch,
+  // [Issue #2527 Slice 2] Capability ports — consumers depend on the minimal
+  // port(s) they call; the full DeploymentsRepository composition stays at
+  // composition boundaries (resolvers / implementors) only.
+  DeploymentsCompositePort,
+  DeploymentsCoordinationPort,
+  DeploymentsLifecyclePort,
   DeploymentsPage,
+  DeploymentsQueryPort,
   DeploymentsRepository,
+  DeploymentsScoringPort,
   InboxEventRecord,
   ScoreEventRecord,
 } from "./types.js";

@@ -1,4 +1,8 @@
 import { ulid } from "ulid";
+import type {
+  DeploymentsQueryPort,
+  DeploymentsScoringPort,
+} from "../../control-data/deployments-repository.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES, ULID_RE } from "../shared/constants.js";
 import {
@@ -153,7 +157,8 @@ export async function castEvent(
   const sender = pickSenderContext(myItems);
   if (!sender) return { kind: "not_ready" };
 
-  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const deploymentsRepository: DeploymentsQueryPort & DeploymentsScoringPort =
+    await resolveDeploymentsRepository(shared);
   const target = (await deploymentsRepository.queryDeploymentMeta(input.targetJobId)) as
     | Partial<DeploymentItem>
     | undefined;
@@ -208,7 +213,8 @@ async function queryInboxRows(
   const sinceIso = new Date(sinceMs).toISOString();
   const skStart = `${INBOX_SK_PREFIX}${sinceIso}`;
   const skEnd = `${INBOX_SK_PREFIX}~`;
-  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const deploymentsRepository: DeploymentsQueryPort & DeploymentsScoringPort =
+    await resolveDeploymentsRepository(shared);
   return [...(await deploymentsRepository.listInboxEventsInRange(jobId, skStart, skEnd))] as Record<
     string,
     unknown

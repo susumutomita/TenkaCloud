@@ -1,4 +1,5 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
 import type { EventScoringMeta } from "../../control-data/events-repository.js";
 import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
@@ -148,7 +149,7 @@ export async function handler(event: GenericScoringTickEvent = {}): Promise<void
   // [Issue #2441 / Phase B3] `forEachCompleteDeploymentPage` absorbs the
   // 200-per-page Scan + `LastEvaluatedKey` drain into the Deployments seam;
   // per-page BatchGet / parallel processing below stays unchanged.
-  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const deploymentsRepository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
   await deploymentsRepository.forEachCompleteDeploymentPage(runtimeEventId, async (page) => {
     // The backend applies FilterExpression server-side. Keep the in-process check as a
     // confused-deputy guard for mocks, future query adapters, and malformed rows.
@@ -537,6 +538,7 @@ export {
   reconcileEventStatuses,
   resolveEventStatusTransition,
 } from "./event-reconciler.js";
+
 export { parsePhasesEnv } from "./phases-env.js";
 // Re-export pure helpers for tests
 export { isScoringActive } from "./scoring-active.js";

@@ -1,4 +1,5 @@
 import type { LeaderboardEntry, LeaderboardResponse } from "@tenkacloud/portal-contracts";
+import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { getEventGate } from "./event-gate.js";
@@ -70,7 +71,7 @@ export async function getLeaderboard(
   // なので RCU は変わらないが network / Lambda 内処理量を節約。
   // #1815: 全ページ drain しないと TENANT# パーティションが 1MB 超のとき後続ページの team が
   // leaderboard から欠落する (= 順位表に出ない / scores 欠落の公平性 bug)。
-  const deploymentsRepository = await resolveDeploymentsRepository(shared);
+  const deploymentsRepository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
   const eventDeployments = (await deploymentsRepository.listByTenantAndEvent(
     tenantId,
     eventId,

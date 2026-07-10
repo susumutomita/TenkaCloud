@@ -4,6 +4,7 @@ import type {
   MultiFlagEntry,
   ProblemScoringMetadata,
 } from "../../../utils/scoring-metadata.js";
+import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { flagMatches } from "../generic-scoring-handler/kinds/flag.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
@@ -162,7 +163,7 @@ async function scoreCorrectMultiFlag(
   // solvedFlagIds に entry.id が未収録のときだけ ADD する (= 2 重加算をレースから守る)。
   const now = new Date().toISOString();
   const jobId = String(item.jobId ?? "");
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   const outcome = await repository.applyMultiFlagCorrectScore(jobId, entry.points, entry.id, now);
   // [Issue #2441 / Phase B2] `applyMultiFlagCorrectScore` folds the CCF into
   // `conflict` (no probe) instead of throwing.
@@ -188,7 +189,7 @@ async function scoreWrongMultiFlag(
   // 既に解済の flag は減点しない (= correct 経路と同じ not-already-solved condition)。
   // [Issue #2441 / Phase B2] `applyMultiFlagWrongPenalty` folds the CCF into
   // `conflict` (no probe) instead of throwing.
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   const outcome = await repository.applyMultiFlagWrongPenalty(jobId, penalty, entry.id, now);
   if (outcome.outcome !== "updated") {
     return { kind: "already_scored", totalScore: Number(item.score ?? 0) };
@@ -210,7 +211,7 @@ async function writeMultiFlagScoreEvent(
   points: number,
   occurredAt: string,
 ): Promise<void> {
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   await repository.appendScoreEvent(
     buildScoreEventRecord(
       {
@@ -244,7 +245,7 @@ async function scoreWrongFlag(
   const jobId = String(item.jobId ?? "");
   // [Issue #2441 / Phase B2] `applyFlagWrongPenalty` folds the CCF into
   // `conflict` (no probe) instead of throwing.
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   const outcome = await repository.applyFlagWrongPenalty(jobId, penalty, wrongNow);
   if (outcome.outcome !== "updated") {
     return { kind: "already_scored", totalScore: Number(item.score ?? 0) };
@@ -278,7 +279,7 @@ async function scoreCorrectFlag(
   const jobId = String(item.jobId ?? "");
   // [Issue #2441 / Phase B2] `applyFlagCorrectScore` folds the CCF into
   // `conflict` (no probe) instead of throwing.
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   const outcome = await repository.applyFlagCorrectScore(jobId, scoring.points, now);
   if (outcome.outcome !== "updated") {
     return { kind: "already_scored", totalScore: Number(item.score ?? 0) + scoring.points };
@@ -303,7 +304,7 @@ async function writeFlagScoreEvent(
   points: number,
   occurredAt: string,
 ): Promise<void> {
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   await repository.appendScoreEvent(
     buildScoreEventRecord(
       {

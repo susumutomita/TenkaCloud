@@ -8,6 +8,7 @@
  */
 
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import type { DeploymentTarget, DisruptionFiredDetail } from "./execute.js";
@@ -76,7 +77,7 @@ export async function resolveDeployment(
   // #1815: 全ページ drain。GSI1(TENANT#)+filter は対象行が後続ページに居ると missed になり、
   // resolveDeployment が undefined を返して disruption が silent no-op する (= この関数が
   // 直そうとした不具合そのものの再来)。
-  const repository = await resolveDeploymentsRepository(resources);
+  const repository: DeploymentsQueryPort = await resolveDeploymentsRepository(resources);
   const items = (await repository.listByEventTeamProblem(
     detail.tenantId,
     detail.eventId,

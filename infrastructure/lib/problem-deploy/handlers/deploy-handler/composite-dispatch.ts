@@ -27,6 +27,7 @@
  */
 
 import { COMPOSITE_PROVIDERS } from "@tenkacloud/problem-runtime";
+import type { DeploymentsCompositePort } from "../../control-data/deployments-repository.js";
 import type { ProblemRuntimeAdapter } from "../shared/runtime/adapter.js";
 import {
   type CompositeDeploymentRepositoryDeps,
@@ -123,7 +124,7 @@ async function markTargetFailed(
   targetDeploymentId: string,
   reason: string,
 ): Promise<void> {
-  const repository = await resolveDeploymentsRepository(deps.repo);
+  const repository: DeploymentsCompositePort = await resolveDeploymentsRepository(deps.repo);
   await repository.failCompositeTargetIfPending(
     targetDeploymentId,
     reason,

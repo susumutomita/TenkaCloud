@@ -23,6 +23,10 @@
  */
 
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type {
+  DeploymentsCompositePort,
+  DeploymentsQueryPort,
+} from "../../control-data/deployments-repository.js";
 import {
   COMPOSITE_RUNTIME_KIND,
   COMPOSITE_VERSION,
@@ -155,7 +159,8 @@ export async function createCompositeParent(
     ...(input.problemSetId ? { problemSetId: input.problemSetId } : {}),
   };
 
-  const repository = await resolveDeploymentsRepository(deps);
+  const repository: DeploymentsQueryPort & DeploymentsCompositePort =
+    await resolveDeploymentsRepository(deps);
   const outcome = await repository.putCompositeParent(item);
   if (outcome.outcome === "updated") return item;
 
@@ -234,7 +239,8 @@ export async function createCompositeTarget(
   // 3. Persist, guarding against a concurrent writer racing the same PK.
   // [Issue #2441 / Phase B2] `putCompositeTarget` folds the CCF into a
   // `conflict` outcome (no probe) instead of throwing.
-  const repository = await resolveDeploymentsRepository(deps);
+  const repository: DeploymentsQueryPort & DeploymentsCompositePort =
+    await resolveDeploymentsRepository(deps);
   const outcome = await repository.putCompositeTarget(item);
   if (outcome.outcome !== "updated") {
     throw new CompositeTargetConflictError(
@@ -271,7 +277,8 @@ export async function listCompositeTargets(
   deps: CompositeDeploymentRepositoryDeps,
   parentDeploymentId: string,
 ): Promise<CompositeTargetDeploymentRecord[]> {
-  const repository = await resolveDeploymentsRepository(deps);
+  const repository: DeploymentsQueryPort & DeploymentsCompositePort =
+    await resolveDeploymentsRepository(deps);
   const rows = await repository.listCompositeTargets(parentDeploymentId);
   // The sparse GSI3 is populated only by composite target rows. The pre-seam
   // `isCompositeTargetItem` guard depended on SK === "META", but the repository
@@ -284,7 +291,8 @@ async function getRawRow(
   deps: CompositeDeploymentRepositoryDeps,
   deploymentId: string,
 ): Promise<Record<string, unknown> | undefined> {
-  const repository = await resolveDeploymentsRepository(deps);
+  const repository: DeploymentsQueryPort & DeploymentsCompositePort =
+    await resolveDeploymentsRepository(deps);
   return (await repository.getDeployment(deploymentId)) as Record<string, unknown> | undefined;
 }
 

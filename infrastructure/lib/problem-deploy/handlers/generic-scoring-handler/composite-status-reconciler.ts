@@ -18,6 +18,7 @@
  */
 
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type { DeploymentsCompositePort } from "../../control-data/deployments-repository.js";
 import {
   type CompositeDeploymentRepositoryDeps,
   getCompositeParent,
@@ -103,7 +104,7 @@ export async function reconcileCompositeParentDeployStatus(
   // `conflict` outcome instead of throwing — only write when the parent is
   // still what we read AND is a composite parent; a concurrent writer makes
   // this a no-op, not an error, exactly as the pre-seam CCF-catch did.
-  const repository = await resolveDeploymentsRepository(deps);
+  const repository: DeploymentsCompositePort = await resolveDeploymentsRepository(deps);
   const outcome = await repository.casCompositeParentStatus(
     input.parentDeploymentId,
     previousStatus,
@@ -128,7 +129,7 @@ export async function reconcileCompositeParents(
   // the physical PK) — the pre-seam raw-item `String(item.jobId ?? "")` guard
   // defended against a row with no PK at all, which cannot occur through the
   // seam (mirrors the B2 `applyKindResult` jobId-tightening precedent).
-  const repository = await resolveDeploymentsRepository(deps);
+  const repository: DeploymentsCompositePort = await resolveDeploymentsRepository(deps);
   await repository.forEachCompositeDeployReconcilablePage(async (page) => {
     await Promise.all(
       page.map((item) => {

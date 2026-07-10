@@ -1,4 +1,5 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type { DeploymentsCoordinationPort } from "../../control-data/deployments-repository.js";
 import { resolveDeploymentsRepository } from "./shared.js";
 
 /**
@@ -38,7 +39,7 @@ export async function readCoordinationState(
   tenantId: string,
   eventId: string,
 ): Promise<CoordinationStateRow | undefined> {
-  const repository = await resolveDeploymentsRepository(deps);
+  const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
   return repository.readCoordinationState(tenantId, eventId);
 }
 
@@ -57,7 +58,7 @@ export async function writeCoordinationState(
   expectedVersion: number,
   nowIso: string,
 ): Promise<WriteCoordinationOutcome> {
-  const repository = await resolveDeploymentsRepository(deps);
+  const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
   const outcome = await repository.writeCoordinationState(
     tenantId,
     eventId,

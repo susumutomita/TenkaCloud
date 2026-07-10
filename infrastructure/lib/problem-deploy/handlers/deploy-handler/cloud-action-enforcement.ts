@@ -7,6 +7,10 @@ import {
   INTENT_VERSION,
 } from "@TenkaCloud/trust-bridge";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type {
+  DeploymentsLifecyclePort,
+  DeploymentsQueryPort,
+} from "../../control-data/deployments-repository.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { logDeployTrace } from "../shared/trace-log.js";
 import { resolveDeploymentsRepository } from "./shared.js";
@@ -74,7 +78,8 @@ async function replacesExistingStack(
   namePrefix: string,
   selfJobId: string,
 ): Promise<boolean> {
-  const repository = await resolveDeploymentsRepository(deps);
+  const repository: DeploymentsQueryPort & DeploymentsLifecyclePort =
+    await resolveDeploymentsRepository(deps);
   const items = await repository.findByNamePrefix(tenantId, namePrefix);
   for (const item of items) {
     // Skip our own just-written row — it is not a stack we would "replace".
@@ -174,7 +179,8 @@ export interface HoldForApprovalInput {
  * behavior byte-identical.
  */
 export async function holdForApproval(input: HoldForApprovalInput): Promise<void> {
-  const repository = await resolveDeploymentsRepository(input);
+  const repository: DeploymentsQueryPort & DeploymentsLifecyclePort =
+    await resolveDeploymentsRepository(input);
   const outcome = await repository.markApprovalPending(input.jobId, input.tenantId, input.nowIso);
   if (outcome.outcome !== "updated") {
     throw new Error(

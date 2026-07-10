@@ -1,4 +1,8 @@
-import type { DeploymentSchedulePatch } from "../../control-data/deployments-repository.js";
+import type {
+  DeploymentSchedulePatch,
+  DeploymentsLifecyclePort,
+  DeploymentsQueryPort,
+} from "../../control-data/deployments-repository.js";
 import type { EventSchedulePatch } from "../../control-data/events-repository.js";
 import {
   type EventSharedResources,
@@ -261,7 +265,8 @@ async function propagateSchedule(
   patch: DeploymentSchedulePatch,
   now: string,
 ): Promise<number> {
-  const repo = await resolveDeploymentsRepository(shared);
+  const repo: DeploymentsQueryPort & DeploymentsLifecyclePort =
+    await resolveDeploymentsRepository(shared);
   const targetJobIds = await repo.listDeploymentKeysByEvent(tenantId, eventId);
   await Promise.all(
     targetJobIds.map((jobId) => repo.applySchedulePatch(jobId, tenantId, patch, now)),

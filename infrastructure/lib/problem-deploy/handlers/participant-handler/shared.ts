@@ -5,7 +5,10 @@ import { getEnv } from "../../../helper-functions.js";
 import { type ProblemEndpointSlot, parseEndpointsEnv } from "../../../utils/endpoints-metadata.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 import { type ProblemWriteup, parseWriteupsEnv } from "../../../utils/writeup-metadata.js";
-import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
+import type {
+  DeploymentsQueryPort,
+  DeploymentsRepository,
+} from "../../control-data/deployments-repository.js";
 import type { FeatureFlagsRepository } from "../../control-data/feature-flags-repository.js";
 import type { NotificationsRepository } from "../../control-data/notifications-repository.js";
 import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
@@ -121,7 +124,7 @@ export async function queryTeamItems(
   shared: ParticipantSharedResources,
   teamLoginKey: string,
 ): Promise<Partial<DeploymentItem>[]> {
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
   const rows = await repository.listByTeamLoginKey(teamLoginKey);
   // queryTeamItems is still shared with B2/B3 write handlers. The repository
   // returns domain records (no physical keys), so keep this legacy helper's

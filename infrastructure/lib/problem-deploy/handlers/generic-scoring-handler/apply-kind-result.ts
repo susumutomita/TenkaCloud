@@ -1,3 +1,4 @@
+import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { buildScoreEventRecord } from "../shared/score-event.js";
 import {
@@ -42,7 +43,7 @@ export async function applyKindResult(
 ): Promise<void> {
   if (!item.jobId) return;
 
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   await repository.applyKindScoringResult(item.jobId, result, nowIso);
 
   // score event 行 (= 履歴 marker) を append。失敗は throw して outer
@@ -66,7 +67,7 @@ export async function appendKindScoreEvents(
   // [Issue #2441 / Phase B3] `appendScoreEvent` replaces the direct
   // `writeScoreEvent(ddb, tableName, ...)` I/O call — same resolved repository
   // as `applyKindScoringResult` above.
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   for (const ev of result.scoreEvents) {
     // #1244: 失敗は log + throw。 上位 (= processDeployment の .catch) で 1 deployment 単位に
     // 隔離されるので他 deployment の採点は止まらないが、 score event 抜けは CloudWatch に

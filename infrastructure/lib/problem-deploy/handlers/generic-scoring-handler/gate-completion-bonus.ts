@@ -1,4 +1,8 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type {
+  DeploymentsQueryPort,
+  DeploymentsScoringPort,
+} from "../../control-data/deployments-repository.js";
 import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
@@ -113,7 +117,8 @@ async function latchCompletedAt(
   nowIso: string,
 ): Promise<void> {
   if (typeof item.gateCompletedAt === "string") return;
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsQueryPort & DeploymentsScoringPort =
+    await resolveDeploymentsRepository(shared);
   await repository.latchGateCompleted(item.jobId, nowIso);
 }
 
@@ -136,7 +141,8 @@ async function awardBonusTransact(
   nowIso: string,
 ): Promise<void> {
   try {
-    const repository = await resolveDeploymentsRepository(shared);
+    const repository: DeploymentsQueryPort & DeploymentsScoringPort =
+      await resolveDeploymentsRepository(shared);
     await repository.awardGateBonusAtomic(
       {
         jobId: item.jobId,
@@ -203,7 +209,8 @@ async function fetchGateCompleted(
     typeof item.GSI2PK === "string" && item.GSI2PK.length > 0 ? item.GSI2PK : undefined;
   if (!teamKey) return false;
   const loginKey = teamKey.startsWith("TEAMKEY#") ? teamKey.slice("TEAMKEY#".length) : teamKey;
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsQueryPort & DeploymentsScoringPort =
+    await resolveDeploymentsRepository(shared);
   const rows = (await repository.listByTeamLoginKey(loginKey)) as Partial<DeploymentItem>[];
   // 完了済 Gate を teardown しても latch 行 (gateCompletedAt) を拾って完了を保持する
   // (participant guard の selectGateCompletionRow と同じ durable 判定 → 挙動を揃える)。

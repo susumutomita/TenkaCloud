@@ -1,4 +1,7 @@
-import type { DeploymentRecord } from "../../control-data/deployments-repository.js";
+import type {
+  DeploymentRecord,
+  DeploymentsScoringPort,
+} from "../../control-data/deployments-repository.js";
 import type { DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { decorateTeamView } from "./challenge-access.js";
@@ -63,7 +66,7 @@ export async function setDisplayTeamName(
   // [Issue #2441 / Phase B2] `updateDisplayTeamName` is unconditional (no
   // ConditionExpression) — the outcome is always `updated` with the ALL_NEW
   // record, byte-identical to the pre-seam per-row UpdateCommand.
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   const updateResults = await Promise.all(
     editable.map((item) => repository.updateDisplayTeamName(String(item.jobId ?? ""), name, now)),
   );

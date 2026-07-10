@@ -23,6 +23,7 @@
  */
 
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import type { DeploymentsCompositePort } from "../../control-data/deployments-repository.js";
 import {
   type CompositeDeploymentRepositoryDeps,
   getCompositeParent,
@@ -106,7 +107,7 @@ export async function reconcileCompositeParentTeardown(
   // reconciler — the two Update expressions were identical) folds the CCF into a
   // `conflict` outcome instead of throwing: only write when the parent is still
   // DELETING AND a composite parent, a concurrent writer makes this a no-op.
-  const repository = await resolveDeploymentsRepository(deps);
+  const repository: DeploymentsCompositePort = await resolveDeploymentsRepository(deps);
   const outcome = await repository.casCompositeParentStatus(
     input.parentDeploymentId,
     "DELETING",
@@ -134,7 +135,7 @@ export async function reconcileCompositeParentTeardowns(
   // domain `DeploymentRecord`, whose `jobId` is a required field (derived from
   // the physical PK) — mirrors the same tightening in
   // `composite-status-reconciler.ts` `reconcileCompositeParents`.
-  const repository = await resolveDeploymentsRepository(deps);
+  const repository: DeploymentsCompositePort = await resolveDeploymentsRepository(deps);
   await repository.forEachCompositeTeardownPendingPage(async (page) => {
     await Promise.all(
       page.map((item) => {

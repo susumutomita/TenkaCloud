@@ -1,4 +1,5 @@
 import type { ProblemScoringMetadata, ProgressiveHint } from "../../../utils/scoring-metadata.js";
+import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
 import { buildScoreEventRecord } from "../shared/score-event.js";
@@ -144,7 +145,7 @@ async function updateHintReveal(
   const jobId = String(item.jobId ?? "");
   // [Issue #2441 / Phase B2] `applyHintPenalty` folds the CCF into `conflict`
   // (no probe) instead of throwing.
-  const repository = await resolveDeploymentsRepository(shared);
+  const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
   const outcome = await repository.applyHintPenalty(jobId, record, now);
   if (outcome.outcome !== "updated") {
     // Race: 同 hintId が他経路で既に append された。 already_revealed として返す。
@@ -180,7 +181,7 @@ async function writeHintScoreEvent(
   // 握り潰す fallback 禁止」 違反だったので、 失敗は log した上で throw し、
   // route-helpers の internal_error 経路で 500 を返す (= CloudWatch + Portal retry に乗せる)。
   try {
-    const repository = await resolveDeploymentsRepository(shared);
+    const repository: DeploymentsScoringPort = await resolveDeploymentsRepository(shared);
     await repository.appendScoreEvent(
       buildScoreEventRecord(
         {
