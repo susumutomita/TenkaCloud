@@ -61,6 +61,26 @@ describe("noAwsTrademarkFictions", () => {
     expect(findings).toEqual([]);
   });
 
+  it("should NOT flag a line that documents the rule itself by its own id (e.g. CLAUDE.md's rule table)", () => {
+    const findings = noAwsTrademarkFictions.check(
+      ctx({
+        "CLAUDE.md":
+          '- `no-aws-trademark-fictions` — blocks AWS GameDay-style fictional company/character names (e.g. "Unicorn.Rentals") from being reused in TenkaCloud content',
+      }),
+    );
+    expect(findings).toEqual([]);
+  });
+
+  it("should still flag a genuine `Unicorn.Rentals` usage elsewhere in CLAUDE.md that does not mention the rule id", () => {
+    const findings = noAwsTrademarkFictions.check(
+      ctx({
+        "CLAUDE.md": "Keep Unicorn.Rentals returning 200 while under attack.",
+      }),
+    );
+    expect(findings.length).toBe(1);
+    expect(findings[0]?.match).toBe("Unicorn.Rentals");
+  });
+
   it("should not scan its own source / test file (= fixtures contain banned strings)", () => {
     const findings = noAwsTrademarkFictions.check(
       ctx({

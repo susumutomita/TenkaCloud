@@ -15,6 +15,12 @@ import type { Finding, Rule, RuleContext } from "../types.ts";
  * `docs/lore/world.html` のように 「AWS GameDay からの inspiration」 を明示する文脈で
  * 名前を comparison 目的で引きたい場合は、 行末 / 行内に `// allow-aws-fiction:` か
  * `<!-- allow-aws-fiction: ... -->` (HTML) のマーカーを置けば例外扱いになる。
+ *
+ * CLAUDE.md / AGENTS.md の machine-checked rule 一覧のように、 本 rule 自身の id
+ * (`no-aws-trademark-fictions`) を名指しして「この rule が何を blocks するか」を
+ * 説明するドキュメント行は、 誤用ではなく自己文書化なので同じ行に限り例外にする
+ * (Issue #2551)。 これは rule id を含む行だけの狭い例外なので、 CLAUDE.md の他の
+ * 行 (id へ言及しない地の文) は引き続き検査対象のまま。
  */
 
 const FORBIDDEN_FICTION_NAMES: readonly RegExp[] = [
@@ -43,6 +49,11 @@ const SCAN_EXTENSIONS = new Set([
 
 const ALLOW_MARKER = /allow-aws-fiction\b/;
 
+// この rule 自身の id。 `noAwsTrademarkFictions.id` と同一の定数を参照させることで、
+// 「rule id を名指しする行は自己文書化として exempt」の判定と rule 登録 (index.ts の id)
+// の間で文字列の二重管理を避ける。
+const RULE_ID = "no-aws-trademark-fictions";
+
 function shouldScan(path: string): boolean {
   // 本 rule 自身 / そのテストは検査対象外 (rule 説明やテスト fixture が banned 文字列を含むため)
   if (path.endsWith("no-aws-trademark-fictions.ts")) return false;
@@ -61,6 +72,9 @@ function findFirstForbidden(
   for (let i = 0; i < lines.length; i += 1) {
     const l = lines[i] ?? "";
     if (ALLOW_MARKER.test(l)) continue;
+    // 自己文書化 exemption: rule id そのものを名指しする行 (= 「この rule は何を
+    // blocks するか」を説明する machine-checked rule table 等) は誤用ではない。
+    if (l.includes(RULE_ID)) continue;
     for (const re of FORBIDDEN_FICTION_NAMES) {
       const m = re.exec(l);
       if (m) return { line: i + 1, match: m[0], pattern: re.source };
@@ -70,7 +84,7 @@ function findFirstForbidden(
 }
 
 export const noAwsTrademarkFictions: Rule = {
-  id: "no-aws-trademark-fictions",
+  id: RULE_ID,
   severity: "error",
   check(ctx: RuleContext): readonly Finding[] {
     const findings: Finding[] = [];
@@ -85,7 +99,7 @@ export const noAwsTrademarkFictions: Rule = {
       const hit = findFirstForbidden(content);
       if (!hit) continue;
       findings.push({
-        ruleId: "no-aws-trademark-fictions",
+        ruleId: RULE_ID,
         severity: "error",
         filePath: path,
         line: hit.line,
