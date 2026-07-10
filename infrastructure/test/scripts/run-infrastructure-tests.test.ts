@@ -1,18 +1,28 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildVitestArgs,
-  cleanCdkTestOutdir,
+  cleanCdkTestRunOutdir,
+  createCdkTestRunOutdir,
   directorySizeBytes,
   findAssetPaths,
   formatBundleSummary,
-  formatLeftoverCdkOutdirMessage,
+  formatExistingCdkOutdirMessage,
   formatSlowestTestFiles,
   isTimingReportEnabled,
   printTimingAndBundleReport,
-  reportLeftoverCdkTestOutdir,
+  reportExistingCdkTestOutdir,
+  shouldCleanCdkTestRun,
   slowestTestFiles,
   summarizeBundleAssets,
   timingReportPath,
@@ -28,18 +38,6 @@ afterEach(() => {
 });
 
 describe("infrastructure test runner (#1551)", () => {
-  it("should remove stale CDK test synth output", () => {
-    const root = mkdtempSync(join(tmpdir(), "tenkacloud-cdk-out-"));
-    tempDirs.push(root);
-    const staleFile = join(root, "worker-123", "asset.zip");
-    mkdirSync(join(root, "worker-123"), { recursive: true });
-    writeFileSync(staleFile, "stale");
-
-    cleanCdkTestOutdir(root);
-
-    expect(existsSync(root)).toBe(false);
-  });
-
   it("should route normal and coverage test runs through the cleanup wrapper", () => {
     const scripts = JSON.parse(readFileSync(PACKAGE_JSON_PATH, "utf8")).scripts as Record<
       string,
@@ -48,6 +46,32 @@ describe("infrastructure test runner (#1551)", () => {
 
     expect(scripts.test).toBe("bun run test/run-vitest.ts run");
     expect(scripts["test:coverage"]).toContain("bun run test/run-vitest.ts run --coverage");
+  });
+
+  it("should create distinct run outdirs and clean only the requested direct child", () => {
+    const root = mkdtempSync(join(tmpdir(), "tenkacloud-cdk-runs-"));
+    tempDirs.push(root);
+    const firstRun = createCdkTestRunOutdir(root, 101);
+    const secondRun = createCdkTestRunOutdir(root, 202);
+    writeFileSync(join(firstRun, "first.template.json"), "{}");
+    writeFileSync(join(secondRun, "second.template.json"), "{}");
+
+    cleanCdkTestRunOutdir(firstRun, root, 101);
+
+    expect(existsSync(firstRun)).toBe(false);
+    expect(() => cleanCdkTestRunOutdir(secondRun, root, 101)).toThrow(/unowned/);
+    expect(existsSync(secondRun)).toBe(true);
+  });
+
+  it("should reject a symlinked shared CDK outdir root", () => {
+    const parent = mkdtempSync(join(tmpdir(), "tenkacloud-cdk-symlink-"));
+    tempDirs.push(parent);
+    const target = join(parent, "target");
+    const root = join(parent, "root-link");
+    mkdirSync(target);
+    symlinkSync(target, root, "dir");
+
+    expect(() => createCdkTestRunOutdir(root, 101)).toThrow(/symbolic link/);
   });
 
   it("should cap Vitest workers and test timeout by default", () => {
@@ -73,10 +97,9 @@ describe("infrastructure test runner (#1551)", () => {
   });
 });
 
-// Issue #2515: leftover cdk.out.test visibility — a stale dir found on the *pre-run* clean is
-// evidence of an interrupted prior run, so it's worth a log line (with size) instead of silently
-// vanishing.
-describe("leftover cdk.out.test visibility (#2515)", () => {
+// Issue #2515: existing cdk.out.test visibility. Existing data can belong to a parallel run or
+// an interrupted run, so the runner reports it but never assumes that it is safe to delete.
+describe("existing cdk.out.test visibility (#2515)", () => {
   it("should compute the recursive size of a directory tree", () => {
     const root = mkdtempSync(join(tmpdir(), "tenkacloud-du-"));
     tempDirs.push(root);
@@ -91,31 +114,38 @@ describe("leftover cdk.out.test visibility (#2515)", () => {
     expect(directorySizeBytes(join(tmpdir(), "tenkacloud-does-not-exist-xyz"))).toBe(0);
   });
 
-  it("should format the leftover-dir message with size in MB", () => {
-    expect(formatLeftoverCdkOutdirMessage(2 * 1024 * 1024)).toBe(
-      "removed leftover cdk.out.test (2.0 MB) — likely from an interrupted run",
+  it("should format the existing-dir message with a top-level entry count", () => {
+    expect(formatExistingCdkOutdirMessage(2)).toBe(
+      "found 2 existing cdk.out.test entries — active parallel, interrupted, or direct run",
     );
   });
 
-  it("should log the leftover message only when the dir already exists", () => {
+  it("should log the existing-data message only when the dir contains data", () => {
     const root = mkdtempSync(join(tmpdir(), "tenkacloud-leftover-"));
     tempDirs.push(root);
     writeFileSync(join(root, "asset.zip"), "x".repeat(1024 * 1024));
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    reportLeftoverCdkTestOutdir(root);
+    reportExistingCdkTestOutdir(root);
 
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("removed leftover cdk.out.test"));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("existing cdk.out.test entries"));
     logSpy.mockRestore();
   });
 
-  it("should not log anything when there is no leftover dir", () => {
+  it("should not log anything when the directory is missing", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    reportLeftoverCdkTestOutdir(join(tmpdir(), "tenkacloud-no-leftover-xyz"));
+    reportExistingCdkTestOutdir(join(tmpdir(), "tenkacloud-no-leftover-xyz"));
 
     expect(logSpy).not.toHaveBeenCalled();
     logSpy.mockRestore();
+  });
+
+  it("should clean only a successful run that was not interrupted", () => {
+    expect(shouldCleanCdkTestRun(0, null, false)).toBe(true);
+    expect(shouldCleanCdkTestRun(1, null, false)).toBe(false);
+    expect(shouldCleanCdkTestRun(null, "SIGTERM", false)).toBe(false);
+    expect(shouldCleanCdkTestRun(0, null, true)).toBe(false);
   });
 });
 
@@ -136,14 +166,23 @@ describe("Vitest timing/bundle report (#2515)", () => {
   });
 
   it("should add default+json reporter flags to buildVitestArgs when the report is enabled", () => {
-    expect(buildVitestArgs(["run"], { TENKACLOUD_VITEST_TIMINGS: "1" })).toEqual([
+    const root = mkdtempSync(join(tmpdir(), "tenkacloud-report-run-"));
+    tempDirs.push(root);
+
+    expect(buildVitestArgs(["run"], { TENKACLOUD_VITEST_TIMINGS: "1" }, root)).toEqual([
       "run",
       "--maxWorkers=2",
       "--testTimeout=120000",
       "--reporter=default",
       "--reporter=json",
-      `--outputFile.json=${timingReportPath()}`,
+      `--outputFile.json=${timingReportPath(root)}`,
     ]);
+  });
+
+  it("should require a run-scoped outdir when the timing report is enabled", () => {
+    expect(() => buildVitestArgs(["run"], { TENKACLOUD_VITEST_TIMINGS: "1" })).toThrow(
+      /report outdir is required/,
+    );
   });
 
   it("should not add reporter flags when the caller already passed --reporter", () => {

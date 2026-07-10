@@ -8,7 +8,7 @@ export JSII_DEPRECATED := quiet
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install install_ci submodule-latest build typecheck test test-coverage test-scripts clean-test-outdir audit-deps before-commit ci-local \
+.PHONY: help install install_ci submodule-latest build typecheck test test-coverage test-scripts audit-deps before-commit ci-local \
         lint lint-md lint-text lint-format \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
@@ -52,9 +52,8 @@ test-coverage: ; bun run test:coverage
 # sanity check before `make before-commit`, not a substitute for it.
 test-scripts:  ; bun run --filter '@TenkaCloud/infrastructure' test test/scripts
 # Issues #1295 / #1551: vitest setup pins CDK_OUTDIR to the repo-local
-# infrastructure/cdk.out.test/<worker>. The package test wrapper purges it
-# before and after normal runs; this target remains for interrupted processes.
-clean-test-outdir: ; rm -rf infrastructure/cdk.out.test
+# infrastructure/cdk.out.test/<run>/<worker>. The wrapper purges only its own successful run;
+# interrupted, failed, and direct invocations are preserved and reported for manual inspection.
 # 依存パッケージの lifecycle script 監査 (mini Shai-Hulud 2nd 対策)。 CI が走らせる。
 audit-deps:    ; bun run audit:dependencies
 # Pre-PR gate for the product BODY, run by the pre-commit hook. 品質ゲート (HTTP magic number /
