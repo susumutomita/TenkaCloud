@@ -23,6 +23,13 @@ import { makeSqliteExecutor } from "./control-data/control-data-write.test-helpe
  * pure SQL mode, so the fake must seed a verified competitor-account row too
  * (Fable review note) — omitting it would surface `UnverifiedCompetitorAccountError`
  * and mask the actual regression this test targets.
+ *
+ * [#2527 Slice 4, post-merge] `startDeployment`'s own Deployments read/write now
+ * resolves through the per-context injected `ctx.runtime` (see `shared.ts`)
+ * rather than the module singleton, so `resolveDeploymentsRepository` is faked
+ * on `ctx.runtime` directly (`fakeRuntime` below); `resolveVerifiedCompetitorAccount`
+ * (called by `competitor-account-lookup.ts`) has not migrated off the singleton
+ * yet, so it still needs the module mock for `resolveCompetitorAccountsRepository`.
  */
 const sql = makeSqliteExecutor();
 const deploymentsRepository = new SqlDeploymentsRepository(sql);
@@ -43,6 +50,10 @@ const { startDeployment } = await import("../../lib/problem-deploy/handlers/depl
 type DeployContext = Parameters<typeof startDeployment>[0];
 type DeployInvocation = Parameters<typeof startDeployment>[1];
 
+const fakeRuntime = {
+  resolveDeploymentsRepository: vi.fn().mockResolvedValue(deploymentsRepository),
+} as unknown as DeployContext["runtime"];
+
 describe("startDeployment against a pure SQL (turso/sql) control-data backend", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -61,6 +72,7 @@ describe("startDeployment against a pure SQL (turso/sql) control-data backend", 
   it("should create a deployment row through the SQL repository seam and publish DeployCreateRequested", async () => {
     const eventsSend = vi.fn().mockResolvedValue({});
     const ctx: DeployContext = {
+      runtime: fakeRuntime,
       // Table names are unused in pure SQL mode (the repository seam never
       // touches ctx.ddb); kept non-empty only to match the DeployContext shape.
       tableName: "unused-in-pure-sql-mode",
@@ -101,6 +113,7 @@ describe("startDeployment against a pure SQL (turso/sql) control-data backend", 
       "../../lib/problem-deploy/handlers/deploy-handler/deploy"
     );
     const ctx: DeployContext = {
+      runtime: fakeRuntime,
       tableName: "unused-in-pure-sql-mode",
       competitorAccountsTableName: "unused-in-pure-sql-mode",
       env: "development",

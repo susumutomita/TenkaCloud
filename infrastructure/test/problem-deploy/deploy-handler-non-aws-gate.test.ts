@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
 
 /**
  * [Issue #2561] Regression tests: a single-provider non-AWS problem
@@ -53,6 +54,7 @@ function buildContext(overrides: Partial<DeployContext> = {}): {
   const eventsSend = vi.fn().mockResolvedValue({});
   const ddbSend = vi.fn(async (cmd: unknown) => putSend(cmd));
   const ctx: DeployContext = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     competitorAccountsTableName: "TestCompetitorAccounts",
     env: "development",
