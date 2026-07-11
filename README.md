@@ -47,6 +47,14 @@ TenkaCloud turns a problem catalog into a live cloud drill:
 
 Codespaces plays **cloud-independent drills only** — self-contained Docker container problems that need no AWS account. AWS problems (deployed into your own AWS account) are not playable in Codespaces; see **Deploy on AWS** below for those.
 
+<div align="center">
+  <a href="./docs/assets/codespaces-local-mode/codespaces-local-mode-readme-1280x720.mp4">
+    <img src="./docs/assets/codespaces-local-mode/codespaces-local-mode-readme-preview.gif" alt="Bilingual 15-second GitHub Codespaces local-mode demo" width="800">
+  </a>
+  <br>
+  <sub>Bilingual 15-second tour: Codespaces → <code>make local</code> → start a drill → instant local scoring.</sub>
+</div>
+
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/susumutomita/TenkaCloud)
 
 1. Click the badge above → **Create codespace on main** (the first build installs Bun, initializes `problems/`, and starts Docker for you).

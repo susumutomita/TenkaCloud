@@ -49,6 +49,14 @@ TenkaCloud は、問題カタログをそのまま実際に動くクラウドド
 
 Codespaces でプレイできるのは **クラウド非依存のドリルのみ** です — AWS アカウントを必要としない、自己完結した Docker コンテナ問題です。自分の AWS アカウントにデプロイする AWS 問題は Codespaces では遊べません。そちらは下の「AWS にデプロイする」を参照してください。
 
+<div align="center">
+  <a href="./docs/assets/codespaces-local-mode/codespaces-local-mode-readme-1280x720.mp4">
+    <img src="./docs/assets/codespaces-local-mode/codespaces-local-mode-readme-preview.gif" alt="GitHub Codespaces のローカルモードを日英 2 言語で 15 秒で紹介する動画" width="800">
+  </a>
+  <br>
+  <sub>日英 2 言語で 15 秒: Codespaces → <code>make local</code> → ドリル起動 → ローカル採点。</sub>
+</div>
+
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/susumutomita/TenkaCloud)
 
 1. 上のバッジをクリックして **Create codespace on main** を選ぶ(最初のビルドで Bun のインストール、`problems/` の初期化、Docker の起動まで自動で行われる)。
