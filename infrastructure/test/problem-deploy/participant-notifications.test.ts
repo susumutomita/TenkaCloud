@@ -5,6 +5,7 @@ import {
   NOTIFICATIONS_MAX_LIMIT,
 } from "../../lib/problem-deploy/handlers/participant-handler/notifications";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const TEAM_KEY = "KEY1";
 const EVENT_ID = "01HZX0K3M3K9ZQHB3MRQHBA1B2";
@@ -15,6 +16,7 @@ function buildShared(): {
 } {
   const ddbSend = vi.fn();
   const shared: ParticipantSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     eventsTableName: "TestEvents",
     ddb: { send: ddbSend } as unknown as ParticipantSharedResources["ddb"],

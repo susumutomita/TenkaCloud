@@ -176,7 +176,7 @@ describe("buildEventSharedResources", () => {
 
 describe("buildParticipantSharedResources", () => {
   it("should default the endpoints table to '' when unset", () => {
-    const s = buildParticipantSharedResources();
+    const s = buildParticipantSharedResources(makeTestControlDataRuntime());
     expect(s.tableName).toBe("Deployments");
     expect(s.eventsTableName).toBe("Events");
     expect(s.endpointsTableName).toBe(""); // PROBLEM_ENDPOINTS_TABLE_NAME ?? ""
@@ -186,14 +186,16 @@ describe("buildParticipantSharedResources", () => {
 
   it("should use PROBLEM_ENDPOINTS_TABLE_NAME when present", () => {
     process.env.PROBLEM_ENDPOINTS_TABLE_NAME = "Endpoints";
-    expect(buildParticipantSharedResources().endpointsTableName).toBe("Endpoints");
+    expect(buildParticipantSharedResources(makeTestControlDataRuntime()).endpointsTableName).toBe(
+      "Endpoints",
+    );
   });
 
   it("should throw when a required env var is missing", () => {
     // [Issue #2441 Phase B PR-6] DEPLOYMENTS_TABLE_NAME is no longer required (see below);
     // DEPLOY_ENVIRONMENT remains a `getEnv`-required field.
     delete process.env.DEPLOY_ENVIRONMENT;
-    expect(() => buildParticipantSharedResources()).toThrow();
+    expect(() => buildParticipantSharedResources(makeTestControlDataRuntime())).toThrow();
   });
 
   // Issue #2440 (ADR-049 §5.1 Phase A5): pure SQL backend (turso|sql) では Events table 自体が
@@ -201,8 +203,8 @@ describe("buildParticipantSharedResources", () => {
   // が落ちるため空文字 default に緩和した。
   it("should default eventsTableName to '' when unset (pure SQL backend cold start)", () => {
     delete process.env.EVENTS_TABLE_NAME;
-    expect(() => buildParticipantSharedResources()).not.toThrow();
-    expect(buildParticipantSharedResources().eventsTableName).toBe("");
+    expect(() => buildParticipantSharedResources(makeTestControlDataRuntime())).not.toThrow();
+    expect(buildParticipantSharedResources(makeTestControlDataRuntime()).eventsTableName).toBe("");
   });
 
   // [Issue #2441 / Phase B PR-6] Deployments table is not synthesized under pure SQL
@@ -210,14 +212,15 @@ describe("buildParticipantSharedResources", () => {
   // when DEPLOYMENTS_TABLE_NAME is absent.
   it("should default tableName to '' when DEPLOYMENTS_TABLE_NAME is unset (pure SQL backend cold start)", () => {
     delete process.env.DEPLOYMENTS_TABLE_NAME;
-    expect(() => buildParticipantSharedResources()).not.toThrow();
-    expect(buildParticipantSharedResources().tableName).toBe("");
+    expect(() => buildParticipantSharedResources(makeTestControlDataRuntime())).not.toThrow();
+    expect(buildParticipantSharedResources(makeTestControlDataRuntime()).tableName).toBe("");
   });
 });
 
 describe("queryTeamItems", () => {
   it("should return the queried items", async () => {
     const shared = {
+      runtime: makeTestControlDataRuntime(),
       ddb: { send: vi.fn().mockResolvedValue({ Items: [{ jobId: "j1" }] }) },
       tableName: "Deployments",
     } as unknown as ParticipantSharedResources;
@@ -226,6 +229,7 @@ describe("queryTeamItems", () => {
 
   it("should default to [] when the query returns no Items", async () => {
     const shared = {
+      runtime: makeTestControlDataRuntime(),
       ddb: { send: vi.fn().mockResolvedValue({}) },
       tableName: "Deployments",
     } as unknown as ParticipantSharedResources;

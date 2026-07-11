@@ -23,19 +23,24 @@
  *     (`control-plane/handlers/idp-handler/index.ts`,
  *     `tenant-template/handlers/idp-handler/index.ts`). Every `list`/`get`/`put`/
  *     `delete` call resolves the backend via
- *     `controlDataRuntime.resolveSamlIdpsRepository` (its SQL executor is
+ *     the injected runtime's `resolveSamlIdpsRepository` (its SQL executor is
  *     cold-start-cached across warm invocations), so pure SQL (`turso`/`sql`)
  *     works even though `SamlIdpsTable` is never synthesized for that backend.
  */
 
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { DynamoDbSamlIdpsRepository } from "../../../problem-deploy/control-data/dynamodb-saml-idps-repository.js";
-import { controlDataRuntime } from "../../../problem-deploy/control-data/runtime-repositories.js";
+import type { ControlDataRuntime } from "../../../problem-deploy/control-data/runtime-repositories.js";
 import type { IdpScope, IdpStore } from "./core.js";
 
 export interface DdbIdpStoreOptions {
   readonly ddb: DynamoDBDocumentClient;
   readonly tableName: string;
+}
+
+/** [#2527 Slice 4] Seam options: the entrypoint injects its control-data runtime. */
+export interface SeamIdpStoreOptions extends DdbIdpStoreOptions {
+  readonly runtime: ControlDataRuntime;
 }
 
 /**
@@ -50,14 +55,14 @@ export function createDdbIdpStore(opts: DdbIdpStoreOptions): IdpStore {
 /**
  * [Issue #2442 / Phase C5] `CONTROL_DATA_BACKEND`-aware {@link IdpStore}.
  * `opts.tableName` may be `""` (pure SQL cold start, `SamlIdpsTable` not
- * synthesized) — `controlDataRuntime.resolveSamlIdpsRepository` only requires a
+ * synthesized) — the injected runtime's `resolveSamlIdpsRepository` only requires a
  * non-empty value when the resolved backend is `dynamodb` or a `*-mirror`
  * variant; the empty string is normalized to `undefined` before the resolver
  * sees it so the pure-SQL branch never treats "" as a real table name.
  */
-export function createSeamIdpStore(opts: DdbIdpStoreOptions): IdpStore {
+export function createSeamIdpStore(opts: SeamIdpStoreOptions): IdpStore {
   const resolve = () =>
-    controlDataRuntime.resolveSamlIdpsRepository({
+    opts.runtime.resolveSamlIdpsRepository({
       ddb: opts.ddb,
       samlIdpsTableName: opts.tableName || undefined,
     });

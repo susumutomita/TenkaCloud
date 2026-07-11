@@ -29,11 +29,15 @@ import type { Context } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { StatusCodes } from "http-status-codes";
+import { createDefaultControlDataRuntime } from "../../../problem-deploy/control-data/runtime-repositories.js";
 import { isSystemAdmin } from "./auth.js";
 import { createCognitoIdpAdapter } from "./cognito-adapter.js";
 import type { IdpScope } from "./core.js";
 import { createSeamIdpStore } from "./ddb-store.js";
 import { buildIdpApp } from "./routes.js";
+
+// [#2527 Slice 4] Composition root: one control-data runtime per Lambda instance.
+const controlDataRuntime = createDefaultControlDataRuntime();
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -59,7 +63,7 @@ const app = buildIdpApp({
     return { kind: "system" };
   },
   deps: {
-    store: createSeamIdpStore({ ddb, tableName: TABLE_NAME }),
+    store: createSeamIdpStore({ runtime: controlDataRuntime, ddb, tableName: TABLE_NAME }),
     cognito: createCognitoIdpAdapter({ client: cognito, userPoolId: USER_POOL_ID }),
     now: () => new Date(),
   },

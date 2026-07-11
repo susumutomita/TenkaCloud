@@ -78,21 +78,17 @@ import { setDisplayTeamName } from "./update.js";
  * は `route-helpers.ts` に集約。 Issue #1242 以降、 body / query / path-param は
  * `participant-handler/schemas.ts` の zod schema 経由で全 route 統一 validate する。
  */
-const shared = buildParticipantSharedResources();
+// [#2527 Slice 4] Composition root: one control-data runtime per Lambda instance,
+// shared by the participant seams and the composite AWS-access bridge below.
+const controlDataRuntime = createDefaultControlDataRuntime();
+const shared = buildParticipantSharedResources(controlDataRuntime);
 
 // [Composite Runtime / Issue #2077] Repository deps for the composite-target AWS
 // access bridge. The participant Lambda already holds the Deployments table
 // client; the bridge reuses it to resolve a team-scoped target via GSI3 and then
 // delegates to the existing AWS Console / CLI functions (no new IAM grant).
-// [#2527 Slice 4] Entrypoint-created runtime for the bridge's repository deps. The
-// participant family's own seams migrate in a later Slice 4 PR; this instance only
-// serves the composite bridge (same cold-start cache semantics either way).
 const compositeAwsAccessDeps: CompositeAwsAccessBridgeDeps = {
-  repo: {
-    runtime: createDefaultControlDataRuntime(),
-    ddb: shared.ddb,
-    tableName: shared.tableName,
-  },
+  repo: { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
 };
 
 // ADR-030 Phase 2 (#1420): inter-team coordination の op/projection route は専用の最小 IAM

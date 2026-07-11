@@ -1,9 +1,11 @@
 import type { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { summarizeTenants } from "../../lib/admin-insight/handlers/admin-insight-handler/summary";
+import { makeTestControlDataRuntime } from "../problem-deploy/control-data/runtime.test-helpers";
 
 function buildShared(send: ReturnType<typeof vi.fn>) {
   return {
+    runtime: makeTestControlDataRuntime(),
     deploymentsTableName: "TestDeployments",
     eventsTableName: "TestEvents",
     teamsTableName: "TestTeams",

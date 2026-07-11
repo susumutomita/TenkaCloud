@@ -9,6 +9,7 @@ import {
   type PluginImporter,
 } from "../../lib/problem-deploy/handlers/participant-handler/coordination-plugin-loader.js";
 import type { CoordinationStoreDeps } from "../../lib/problem-deploy/handlers/participant-handler/coordination-store.js";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
 
 /**
  * ADR-028 D6 (#1420): 問題同梱 coordination plugin の動的 import loader を pin する。
@@ -45,7 +46,11 @@ function fakeStore(getItem?: Record<string, unknown>): CoordinationStoreDeps {
     if (cmd instanceof PutCommand) return {};
     throw new Error("unexpected command");
   });
-  return { ddb: { send } as never, tableName: "Deployments" };
+  return {
+    runtime: makeTestControlDataRuntime(),
+    ddb: { send } as never,
+    tableName: "Deployments",
+  };
 }
 
 /** moduleRef を無視して固定 module を返す importer。 */

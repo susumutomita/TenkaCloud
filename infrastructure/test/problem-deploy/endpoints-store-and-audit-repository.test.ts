@@ -21,7 +21,14 @@ describe("queryOverrides", () => {
         .mockResolvedValue({ Items: [{ PK: "p", SK: "SLOT#a", overrideUrl: "https://x" }] }),
       // biome-ignore lint/suspicious/noExplicitAny: minimal DynamoDBDocumentClient for the call.
     } as any;
-    const out = await queryOverrides(ddb, "T", "tenant", "team", "p1");
+    const out = await queryOverrides(
+      makeTestControlDataRuntime(),
+      ddb,
+      "T",
+      "tenant",
+      "team",
+      "p1",
+    );
     expect(out).toHaveLength(1);
     // The PK/SK condition is built from the (tenant, team, problem) tuple.
     expect(ddb.send).toHaveBeenCalledTimes(1);
@@ -30,7 +37,9 @@ describe("queryOverrides", () => {
   it("should default to [] when the query returns no Items", async () => {
     // biome-ignore lint/suspicious/noExplicitAny: minimal client.
     const ddb = { send: vi.fn().mockResolvedValue({}) } as any;
-    expect(await queryOverrides(ddb, "T", "tenant", "team", "p1")).toEqual([]);
+    expect(
+      await queryOverrides(makeTestControlDataRuntime(), ddb, "T", "tenant", "team", "p1"),
+    ).toEqual([]);
   });
 });
 

@@ -105,7 +105,7 @@ export async function handleGetTenantSamlConfig(
   tenantId: string,
 ): Promise<SamlRouteResult> {
   const view = await getTenantSamlConfig(
-    { ddb: shared.ddb, tableName: shared.tableName },
+    { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
     tenantId,
   );
   if (!view) {
@@ -158,7 +158,7 @@ export async function handlePutTenantSamlConfig(
 
   // 3. DDB persist (= UI が次回 GET で current state を見れる)。
   const view = await putTenantSamlConfig(
-    { ddb: shared.ddb, tableName: shared.tableName },
+    { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
     ctx.tenantId,
     { ...input, providerName, attributeMapping },
     { updatedAt: ctx.nowIso, updatedBy: ctx.updatedBy },
@@ -197,7 +197,7 @@ export async function handleDeleteTenantSamlConfig(
 ): Promise<SamlRouteResult> {
   // 既存 config を読んで providerName を決める。 無ければ default 名で attempt (= 不在なら no-op)。
   const existing = await getTenantSamlConfig(
-    { ddb: shared.ddb, tableName: shared.tableName },
+    { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
     ctx.tenantId,
   );
   const providerName = existing?.providerName ?? DEFAULT_SAML_PROVIDER_NAME;
@@ -209,7 +209,10 @@ export async function handleDeleteTenantSamlConfig(
   await deleteSamlProvider(cognitoDeps, providerName);
 
   // 3. DDB row 削除。
-  await deleteTenantSamlConfig({ ddb: shared.ddb, tableName: shared.tableName }, ctx.tenantId);
+  await deleteTenantSamlConfig(
+    { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
+    ctx.tenantId,
+  );
 
   console.log(
     JSON.stringify({

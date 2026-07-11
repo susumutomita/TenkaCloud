@@ -1,5 +1,5 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { ProblemEndpointRecord } from "../../control-data/types.js";
 
 /**
@@ -7,7 +7,7 @@ import type { ProblemEndpointRecord } from "../../control-data/types.js";
  * override row. Re-exported under its pre-seam name (`EndpointOverrideItem`)
  * for the existing callers (`resolve.ts`) — the raw DDB access these three
  * functions used to perform inline now lives behind
- * {@link controlDataRuntime.resolveProblemEndpointsRepository}
+ * the injected runtime's `resolveProblemEndpointsRepository`
  * ({@link DynamoDbProblemEndpointsRepository} / {@link SqlProblemEndpointsRepository}),
  * so this is the domain record (no physical PK/SK), not a raw DDB item.
  *
@@ -26,6 +26,7 @@ export interface PutOverrideArgs {
 }
 
 export async function putOverride(
+  runtime: ControlDataRuntime,
   ddb: DynamoDBDocumentClient,
   tableName: string,
   args: PutOverrideArgs,
@@ -38,7 +39,7 @@ export async function putOverride(
     overrideUrl: args.overrideUrl,
     updatedAt: args.nowIso,
   };
-  const repo = await controlDataRuntime.resolveProblemEndpointsRepository({
+  const repo = await runtime.resolveProblemEndpointsRepository({
     ddb,
     endpointsTableName: tableName,
   });
@@ -54,11 +55,12 @@ export interface DeleteOverrideArgs {
 }
 
 export async function deleteOverride(
+  runtime: ControlDataRuntime,
   ddb: DynamoDBDocumentClient,
   tableName: string,
   args: DeleteOverrideArgs,
 ): Promise<void> {
-  const repo = await controlDataRuntime.resolveProblemEndpointsRepository({
+  const repo = await runtime.resolveProblemEndpointsRepository({
     ddb,
     endpointsTableName: tableName,
   });
@@ -66,13 +68,14 @@ export async function deleteOverride(
 }
 
 export async function queryOverrides(
+  runtime: ControlDataRuntime,
   ddb: DynamoDBDocumentClient,
   tableName: string,
   tenantId: string,
   teamId: string,
   problemId: string,
 ): Promise<EndpointOverrideItem[]> {
-  const repo = await controlDataRuntime.resolveProblemEndpointsRepository({
+  const repo = await runtime.resolveProblemEndpointsRepository({
     ddb,
     endpointsTableName: tableName,
   });

@@ -15,6 +15,7 @@ import {
   upsertProblemEndpointOverride,
 } from "../../lib/problem-deploy/handlers/problem-endpoints-handler/endpoints";
 import type { ProblemScoringMetadata } from "../../lib/utils/scoring-metadata";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #2283: locked challenge への競技操作が server-side で拒否されることの経路別検証。
@@ -123,6 +124,7 @@ function buildScenario(opts: ScenarioOpts = {}) {
   });
 
   const shared = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     eventsTableName: "TestEvents",
     endpointsTableName: "TestEndpoints",

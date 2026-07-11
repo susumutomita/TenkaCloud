@@ -2,6 +2,7 @@ import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminInsightSharedResources } from "../../lib/admin-insight/handlers/admin-insight-handler/shared";
 import { summarizeTenants } from "../../lib/admin-insight/handlers/admin-insight-handler/summary";
+import { makeTestControlDataRuntime } from "../problem-deploy/control-data/runtime.test-helpers";
 
 /**
  * Issue #1418: admin-insight summary.ts は 75% branch だった。既存 summary.test は active/failed
@@ -30,6 +31,7 @@ const ddb = {
   }),
 };
 const shared = {
+  runtime: makeTestControlDataRuntime(),
   ddb,
   deploymentsTableName: "Deployments",
   eventsTableName: "Events",

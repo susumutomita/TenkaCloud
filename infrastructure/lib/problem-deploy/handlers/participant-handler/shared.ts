@@ -11,7 +11,7 @@ import type {
 } from "../../control-data/deployments-repository.js";
 import type { FeatureFlagsRepository } from "../../control-data/feature-flags-repository.js";
 import type { NotificationsRepository } from "../../control-data/notifications-repository.js";
-import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 
 /**
@@ -21,6 +21,8 @@ import type { DeploymentItem } from "../deploy-handler/types.js";
  * 必要最小限の shape を独自に定義する。
  */
 export interface ParticipantSharedResources {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly tableName: string;
   /**
    * Events table 名 (ADR-006 Notifications で参照)。`GET /portal/me/notifications` は
@@ -51,8 +53,11 @@ export interface ParticipantSharedResources {
   readonly problemsEndpoints: Record<string, readonly ProblemEndpointSlot[]>;
 }
 
-export function buildParticipantSharedResources(): ParticipantSharedResources {
+export function buildParticipantSharedResources(
+  runtime: ControlDataRuntime,
+): ParticipantSharedResources {
   return {
+    runtime,
     // [Issue #2441 / Phase B PR-6] pure SQL backend (turso|sql) では Deployments table 自体が
     // synth されず env も配線されないため、module-load を fail-fast にすると cold start が落ちる。
     // 空文字 default に緩和し、dynamodb / mirror backend の誤設定は runtime resolver
@@ -77,6 +82,8 @@ export function buildParticipantSharedResources(): ParticipantSharedResources {
 }
 
 export interface ParticipantDeploymentsTableSharedResources {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly tableName: string;
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
 }
@@ -89,13 +96,13 @@ export interface ParticipantDeploymentsTableSharedResources {
  * known B4 constraint: the control-data factory fails loudly until the SQL
  * Deployments backend exists.
  *
- * [#2467-era runtime] Delegates to the cold-start-cached `controlDataRuntime`,
+ * [#2467-era runtime] Delegates to the cold-start-cached injected `shared.runtime`,
  * so `Promise<DeploymentsRepository>` — caller must await before use.
  */
 export function resolveDeploymentsRepository(
   shared: ParticipantDeploymentsTableSharedResources,
 ): Promise<DeploymentsRepository> {
-  return controlDataRuntime.resolveDeploymentsRepository({
+  return shared.runtime.resolveDeploymentsRepository({
     ddb: shared.ddb as DynamoDBDocumentClient,
     deploymentsTableName: shared.tableName,
   });
@@ -138,15 +145,15 @@ export async function queryTeamItems(
  * (`CONTROL_DATA_BACKEND` 未設定 = dynamodb) では従来と byte 互換の Query を `shared.ddb`
  * 経由で発火する。 participant portal は通知の read しか行わない。
  *
- * [#2450] cold-start cache 済みの async resolver (`controlDataRuntime`) 経由で解決するため
+ * [#2450] cold-start cache 済みの async resolver (injected `shared.runtime`) 経由で解決するため
  * `CONTROL_DATA_BACKEND=turso|sql` でも Mirrored で動作する (read は canonical DDB の passthrough)。
  * SSM GetParameter + libsql client 構築は turso 選択時のみ・Lambda instance ごとに 1 回だけ
  * (dynamodb default では SSM に触れず byte 互換)。 `Promise` を返すので caller は await する。
  */
 export function resolveNotificationsRepository(
-  shared: Pick<ParticipantSharedResources, "ddb" | "eventsTableName">,
+  shared: Pick<ParticipantSharedResources, "runtime" | "ddb" | "eventsTableName">,
 ): Promise<NotificationsRepository> {
-  return controlDataRuntime.resolveNotificationsRepository({
+  return shared.runtime.resolveNotificationsRepository({
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
   });
@@ -160,9 +167,9 @@ export function resolveNotificationsRepository(
  * `CONTROL_DATA_BACKEND=turso|sql` でも Mirrored で動作する。 `Promise` を返す。
  */
 export function resolveFeatureFlagsRepository(
-  shared: Pick<ParticipantSharedResources, "ddb" | "eventsTableName">,
+  shared: Pick<ParticipantSharedResources, "runtime" | "ddb" | "eventsTableName">,
 ): Promise<FeatureFlagsRepository> {
-  return controlDataRuntime.resolveFeatureFlagsRepository({
+  return shared.runtime.resolveFeatureFlagsRepository({
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
   });

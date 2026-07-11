@@ -13,6 +13,7 @@ import {
 import type { PluginImporter } from "../../lib/problem-deploy/handlers/participant-handler/coordination-plugin-loader.js";
 import type { CoordinationStoreDeps } from "../../lib/problem-deploy/handlers/participant-handler/coordination-store.js";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared.js";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
 
 /**
  * ADR-028 D4/D5 (#1420): coordination route handler を pin する。
@@ -46,7 +47,11 @@ function fakeStore(getItem?: Record<string, unknown>): CoordinationStoreDeps {
     if (cmd instanceof PutCommand) return {};
     throw new Error("unexpected command");
   });
-  return { ddb: { send } as never, tableName: "Deployments" };
+  return {
+    runtime: makeTestControlDataRuntime(),
+    ddb: { send } as never,
+    tableName: "Deployments",
+  };
 }
 
 const importerOf =
@@ -136,6 +141,7 @@ describe("makeCoordinationScopeResolver", () => {
   function fakeShared(items: Partial<DeploymentItem>[]): ParticipantSharedResources {
     const send = vi.fn(async () => ({ Items: items }));
     return {
+      runtime: makeTestControlDataRuntime(),
       tableName: "Deployments",
       eventsTableName: "Events",
       endpointsTableName: "",

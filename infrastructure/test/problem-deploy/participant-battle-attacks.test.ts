@@ -5,6 +5,7 @@ import {
   listBattleAttacks,
 } from "../../lib/problem-deploy/handlers/participant-handler/battle-attacks";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const VALID_JOB_ID = "01HZX0K3M3K9ZQHB3MRQHBA1B2";
 const TEAM_KEY = "KEY1";
@@ -13,6 +14,7 @@ const NOW_MS = new Date("2026-05-10T10:00:00.000Z").getTime();
 function buildShared(): { shared: ParticipantSharedResources; ddbSend: ReturnType<typeof vi.fn> } {
   const ddbSend = vi.fn();
   const shared: ParticipantSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     eventsTableName: "TestEvents",
     ddb: { send: ddbSend } as unknown as ParticipantSharedResources["ddb"],

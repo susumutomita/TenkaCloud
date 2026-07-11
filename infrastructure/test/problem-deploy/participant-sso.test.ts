@@ -2,6 +2,7 @@ import { AssumeRoleCommand } from "@aws-sdk/client-sts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
 import { getConsoleSigninUrl } from "../../lib/problem-deploy/handlers/participant-handler/sso";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const { stsSend, stsClientConfigs, ssmSend } = vi.hoisted(() => ({
   stsSend: vi.fn(),
@@ -29,6 +30,7 @@ function buildShared(): { shared: ParticipantSharedResources; ddbSend: ReturnTyp
   const ddbSend = vi.fn();
   ssmSend.mockResolvedValue({ Parameter: { Value: "tenant-external-id-123456" } });
   const shared: ParticipantSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     eventsTableName: "TestEvents",
     ddb: { send: ddbSend } as unknown as ParticipantSharedResources["ddb"],

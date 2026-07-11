@@ -8,6 +8,7 @@ import {
   validatePayload,
 } from "../../lib/problem-deploy/handlers/participant-handler/cast-event";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Inter-team event dispatch primitive の挙動を pin する unit test。
@@ -23,6 +24,7 @@ const NOW_MS = new Date("2026-05-21T12:00:00.000Z").getTime();
 function buildShared(): { shared: ParticipantSharedResources; ddbSend: ReturnType<typeof vi.fn> } {
   const ddbSend = vi.fn();
   const shared: ParticipantSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     eventsTableName: "TestEvents",
     endpointsTableName: "",

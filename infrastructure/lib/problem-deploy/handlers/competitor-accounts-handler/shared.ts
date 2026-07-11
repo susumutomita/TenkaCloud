@@ -4,6 +4,7 @@ import { SSMClient } from "@aws-sdk/client-ssm";
 import { STSClient } from "@aws-sdk/client-sts";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 
 /**
  * Competitor Accounts handler の module-scope shared resources。
@@ -15,6 +16,8 @@ import { getEnv } from "../../../helper-functions.js";
  * Lambda は warm invoke で SDK client を 1 つだけ持つ (= cold start 軽減)。
  */
 export interface CompetitorAccountsSharedResources {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly tableName: string;
   readonly env: string;
   readonly tenkaCloudAccountId: string;
@@ -24,8 +27,11 @@ export interface CompetitorAccountsSharedResources {
   readonly cognito: CognitoIdentityProviderClient;
 }
 
-export function buildCompetitorAccountsSharedResources(): CompetitorAccountsSharedResources {
+export function buildCompetitorAccountsSharedResources(
+  runtime: ControlDataRuntime,
+): CompetitorAccountsSharedResources {
   return {
+    runtime,
     // [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは
     // CompetitorAccounts table 自体が synth されず env も配線されないため、module-load を
     // `getEnv` の fail-fast に委ねると cold start が Initialization Error で落ちる。空文字
