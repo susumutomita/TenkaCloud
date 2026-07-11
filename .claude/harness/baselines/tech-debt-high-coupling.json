@@ -83,12 +83,6 @@
       "filePath": "infrastructure/lib/problem-deploy/handlers/participant-handler/index.ts",
       "line": 1,
       "match": "ge-16-imports"
-    },
-    {
-      "ruleId": "high-coupling",
-      "filePath": "infrastructure/lib/problem-deploy/problem-deploy-backend-stack.ts",
-      "line": 1,
-      "match": "ge-26-imports"
     }
   ]
 }
