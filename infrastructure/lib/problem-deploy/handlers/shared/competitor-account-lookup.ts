@@ -1,5 +1,5 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { buildExternalIdParameterName } from "./external-id-store.js";
 
 /**
@@ -18,11 +18,13 @@ import { buildExternalIdParameterName } from "./external-id-store.js";
  * 時に SSM SecureString を直接読む。Lambda 側で plain text を返り値に乗せると、不必要に
  * 漏洩経路が増える (= 同 Lambda の他の error log / response にも露出するリスク)。
  *
- * 生の DDB access はここには無い — `controlDataRuntime.resolveCompetitorAccountsRepository`
+ * 生の DDB access はここには無い — injected runtime の `resolveCompetitorAccountsRepository`
  * 経由で {@link DynamoDbCompetitorAccountsRepository} (default) /
  * {@link SqlCompetitorAccountsRepository} (Turso/D1) を解決する。
  */
 export interface CompetitorAccountResolveDeps {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
   readonly competitorAccountsTableName: string;
   readonly env: string;
@@ -53,7 +55,7 @@ export async function resolveVerifiedCompetitorAccount(
   tenantId: string,
   awsAccountId: string,
 ): Promise<VerifiedCompetitorAccount | null> {
-  const repository = await controlDataRuntime.resolveCompetitorAccountsRepository({
+  const repository = await deps.runtime.resolveCompetitorAccountsRepository({
     ddb: deps.ddb as DynamoDBDocumentClient,
     competitorAccountsTableName: deps.competitorAccountsTableName,
   });

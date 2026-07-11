@@ -1,7 +1,10 @@
 import { DynamoDBClient, type DynamoDBClient as RawDynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
-import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import {
+  type ControlDataRuntime,
+  createDefaultControlDataRuntime,
+} from "../../control-data/runtime-repositories.js";
 import type { AdminAuditRow } from "../../control-data/types.js";
 
 /**
@@ -104,6 +107,16 @@ const documentClient = DynamoDBDocumentClient.from(
   new DynamoDBClient({}) satisfies RawDynamoDBClient,
 );
 
+/**
+ * [#2527 Slice 4] Default control-data runtime for this fire-and-forget audit
+ * side-channel — the same injectable-with-real-default convention as
+ * `documentClient` above. The 12 `void writeAuditEvent(...)` call sites across
+ * four Lambda families stay signature-free; tests (and any future caller that
+ * wants the entrypoint's instance) inject a runtime explicitly instead. This is
+ * the one deliberate self-composed runtime left after the Slice 4 DI migration.
+ */
+const defaultAuditRuntime = createDefaultControlDataRuntime();
+
 export interface AuditClient {
   send: typeof documentClient.send;
 }
@@ -143,6 +156,7 @@ function getEnv(): { tableName: string; env: string } | undefined {
 export async function writeAuditEvent(
   event: AuditEvent,
   client: AuditClient = documentClient,
+  runtime: ControlDataRuntime = defaultAuditRuntime,
 ): Promise<boolean> {
   // Issue #2311: feature flag で無効化されていれば table 配線に関係なく no-op。
   if (!isAuditLoggingEnabled()) return false;
@@ -171,7 +185,7 @@ export async function writeAuditEvent(
   };
 
   try {
-    const repository = await controlDataRuntime.resolveAdminAuditLogRepository({
+    const repository = await runtime.resolveAdminAuditLogRepository({
       // Structurally-typed `AuditClient` (test-injectable) vs the concrete DynamoDBDocumentClient
       // the repository expects — production always passes the real singleton; only tests pass a
       // duck-typed `{ send }` fake here (same cast convention `makeFakeDdb` test helpers use).

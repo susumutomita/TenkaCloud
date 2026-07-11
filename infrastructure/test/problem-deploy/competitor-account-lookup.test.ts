@@ -1,12 +1,14 @@
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it, vi } from "vitest";
 import { resolveVerifiedCompetitorAccount } from "../../lib/problem-deploy/handlers/shared/competitor-account-lookup";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const TENANT_ID = "tenant-acme";
 const ACCOUNT_ID = "123456789012";
 
 function buildDeps(send: ReturnType<typeof vi.fn>) {
   return {
+    runtime: makeTestControlDataRuntime(),
     ddb: { send } as unknown as Parameters<typeof resolveVerifiedCompetitorAccount>[0]["ddb"],
     competitorAccountsTableName: "TestCompetitorAccounts",
     env: "development",

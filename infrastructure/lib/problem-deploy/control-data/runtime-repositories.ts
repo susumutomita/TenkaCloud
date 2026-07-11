@@ -17,9 +17,9 @@ import type {
  * `backend-config.ts` (CONTROL_DATA_BACKEND parsing), `sql-executor-cache.ts`
  * (SSM + libSQL cold-start cache), and `aggregate-resolvers.ts` (the eleven
  * per-aggregate backend resolvers) — and this file only composes them into the
- * {@link ControlDataRuntime} shape plus the process-wide singleton. Every
- * symbol consumers import from this path is unchanged; the extracted types
- * (`RuntimeEnvironment`, `RuntimeDependencies`) now live in their modules.
+ * {@link ControlDataRuntime} shape. There is no module singleton: every Lambda
+ * entrypoint creates its own runtime via {@link createDefaultControlDataRuntime}
+ * and injects it into its handler family's shared resources.
  */
 
 export interface ControlDataRepositories {
@@ -85,8 +85,10 @@ export function createControlDataRepositoryResolver(
  * [#2527 Slice 4] Production composition-root factory: a runtime backed by
  * process.env, real SSM, and the real libSQL client. Lambda entrypoints call
  * this once at module scope (one cold-start cache per Lambda instance) and
- * inject the result into their handler shared-resources — handler modules must
- * not import the module singleton below.
+ * inject the result into their handler shared-resources — handler modules
+ * receive the runtime through their deps and never compose one themselves
+ * (the sole exception is the fire-and-forget audit side-channel's documented
+ * default in `handlers/shared/audit-log.ts`).
  */
 export function createDefaultControlDataRuntime(): ControlDataRuntime {
   return createControlDataRuntime({
@@ -95,12 +97,3 @@ export function createDefaultControlDataRuntime(): ControlDataRuntime {
     createClient,
   });
 }
-
-/**
- * Module singleton for entrypoints not yet migrated to injected runtimes
- * (#2527 Slice 4). Deleted when the last handler family stops importing it.
- */
-export const controlDataRuntime = createDefaultControlDataRuntime();
-
-export const resolveControlDataRepositories =
-  controlDataRuntime.resolveRepositories.bind(controlDataRuntime);

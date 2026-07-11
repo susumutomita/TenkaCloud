@@ -24,23 +24,15 @@ import { makeSqliteExecutor } from "./control-data/control-data-write.test-helpe
  * (Fable review note) — omitting it would surface `UnverifiedCompetitorAccountError`
  * and mask the actual regression this test targets.
  *
- * [#2527 Slice 4, post-merge] `startDeployment`'s own Deployments read/write now
- * resolves through the per-context injected `ctx.runtime` (see `shared.ts`)
- * rather than the module singleton, so `resolveDeploymentsRepository` is faked
- * on `ctx.runtime` directly (`fakeRuntime` below); `resolveVerifiedCompetitorAccount`
- * (called by `competitor-account-lookup.ts`) has not migrated off the singleton
- * yet, so it still needs the module mock for `resolveCompetitorAccountsRepository`.
+ * [#2527 Slice 4] Every seam `startDeployment` reaches now resolves through the
+ * per-context injected `ctx.runtime` — Deployments directly (see `shared.ts`) and
+ * the verified competitor-account lookup via `deps.runtime`
+ * (`competitor-account-lookup.ts`) — so `fakeRuntime` fakes both resolvers and no
+ * module mock of `runtime-repositories` is needed.
  */
 const sql = makeSqliteExecutor();
 const deploymentsRepository = new SqlDeploymentsRepository(sql);
 const competitorAccountsRepository = new SqlCompetitorAccountsRepository(sql);
-
-vi.mock("../../lib/problem-deploy/control-data/runtime-repositories.js", () => ({
-  controlDataRuntime: {
-    resolveDeploymentsRepository: vi.fn().mockResolvedValue(deploymentsRepository),
-    resolveCompetitorAccountsRepository: vi.fn().mockResolvedValue(competitorAccountsRepository),
-  },
-}));
 
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/presigned-url", () => ({
   generateChallengePayloadUrl: vi.fn(),
@@ -52,6 +44,7 @@ type DeployInvocation = Parameters<typeof startDeployment>[1];
 
 const fakeRuntime = {
   resolveDeploymentsRepository: vi.fn().mockResolvedValue(deploymentsRepository),
+  resolveCompetitorAccountsRepository: vi.fn().mockResolvedValue(competitorAccountsRepository),
 } as unknown as DeployContext["runtime"];
 
 describe("startDeployment against a pure SQL (turso/sql) control-data backend", () => {

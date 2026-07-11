@@ -88,6 +88,7 @@ export async function requestTeardown(
   // ケースは undefined のまま — CodeBuild は同 account 経路に倒れる)。
   const verified = await resolveVerifiedCompetitorAccount(
     {
+      runtime: shared.runtime,
       ddb: shared.ddb,
       competitorAccountsTableName: shared.competitorAccountsTableName,
       env: shared.env,
