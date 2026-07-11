@@ -11,6 +11,7 @@ import {
   readCoordinationState,
   writeCoordinationState,
 } from "../../lib/problem-deploy/handlers/participant-handler/coordination-store.js";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
 
 /**
  * ADR-028 D3/D6 (#1420): coordination state store + dispatcher orchestration の pin。
@@ -55,7 +56,14 @@ function fakeStore(opts: {
     }
     throw new Error("unexpected command");
   });
-  return { store: { ddb: { send } as never, tableName: "Deployments" }, send };
+  return {
+    store: {
+      runtime: makeTestControlDataRuntime(),
+      ddb: { send } as never,
+      tableName: "Deployments",
+    },
+    send,
+  };
 }
 
 describe("coordination-store", () => {
@@ -99,7 +107,11 @@ describe("coordination-store", () => {
     const send = vi.fn(async () => {
       throw new Error("ddb down");
     });
-    const store = { ddb: { send } as never, tableName: "Deployments" };
+    const store = {
+      runtime: makeTestControlDataRuntime(),
+      ddb: { send } as never,
+      tableName: "Deployments",
+    };
     await expect(writeCoordinationState(store, "tn1", "e1", {}, 0, "now")).rejects.toThrow(
       "ddb down",
     );

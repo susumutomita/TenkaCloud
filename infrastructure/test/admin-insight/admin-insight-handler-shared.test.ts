@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildSharedResources } from "../../lib/admin-insight/handlers/admin-insight-handler/shared";
+import {
+  buildSharedResources,
+  resolveAdminAuditLogRepository,
+} from "../../lib/admin-insight/handlers/admin-insight-handler/shared";
+import { makeTestControlDataRuntime } from "../problem-deploy/control-data/runtime.test-helpers";
 
 /**
  * Issue #2440 (ADR-049 §5.1 Phase A5) / #2441 (Phase B PR-6): pure SQL backend (turso|sql)
@@ -21,8 +25,8 @@ describe("AdminInsight buildSharedResources cold start (#2440 / #2441)", () => {
   });
 
   it("should not throw and should default eventsTableName/teamsTableName to '' when unset (pure SQL backend cold start)", () => {
-    expect(() => buildSharedResources()).not.toThrow();
-    const s = buildSharedResources();
+    expect(() => buildSharedResources(makeTestControlDataRuntime())).not.toThrow();
+    const s = buildSharedResources(makeTestControlDataRuntime());
     expect(s.eventsTableName).toBe("");
     expect(s.teamsTableName).toBe("");
   });
@@ -30,21 +34,30 @@ describe("AdminInsight buildSharedResources cold start (#2440 / #2441)", () => {
   it("should still read EVENTS_TABLE_NAME/TEAMS_TABLE_NAME when present (dynamodb/mirror backend)", () => {
     process.env.EVENTS_TABLE_NAME = "Events";
     process.env.TEAMS_TABLE_NAME = "Teams";
-    const s = buildSharedResources();
+    const s = buildSharedResources(makeTestControlDataRuntime());
     expect(s.eventsTableName).toBe("Events");
     expect(s.teamsTableName).toBe("Teams");
   });
 
   it("should not throw and should default deploymentsTableName to '' when DEPLOYMENTS_TABLE_NAME is missing (#2441 pure SQL backend cold start)", () => {
     delete process.env.DEPLOYMENTS_TABLE_NAME;
-    expect(() => buildSharedResources()).not.toThrow();
-    const s = buildSharedResources();
+    expect(() => buildSharedResources(makeTestControlDataRuntime())).not.toThrow();
+    const s = buildSharedResources(makeTestControlDataRuntime());
     expect(s.deploymentsTableName).toBe("");
   });
 
   it("should still read DEPLOYMENTS_TABLE_NAME when present (dynamodb/mirror backend)", () => {
     process.env.DEPLOYMENTS_TABLE_NAME = "Deployments";
-    const s = buildSharedResources();
+    const s = buildSharedResources(makeTestControlDataRuntime());
     expect(s.deploymentsTableName).toBe("Deployments");
+  });
+
+  it("should resolve the AdminAuditLog repository through the injected runtime (#2527 Slice 4)", async () => {
+    const repository = await resolveAdminAuditLogRepository({
+      runtime: makeTestControlDataRuntime(),
+      ddb: { send: () => Promise.reject(new Error("no I/O expected")) } as never,
+      auditTableName: "TestAdminAuditLog",
+    });
+    expect(typeof repository.appendAudit).toBe("function");
   });
 });

@@ -1,4 +1,3 @@
-import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { getPrerequisiteBlockByEventId } from "../participant-handler/challenge-access.js";
 import { type ParticipantSharedResources, queryTeamItems } from "../participant-handler/shared.js";
@@ -42,14 +41,14 @@ function isAuthorizedDeployment(d: Partial<DeploymentItem> | undefined): d is Au
  *   - pure SQL backend (`turso`/`sql`) 選択時 — `ProblemDeployBackendStack` が本 table を
  *     synth しないため env も配線されない (= 正常。 store.ts の seam が SQL executor 直結で処理する)
  *   - 旧 deploy chain — table 自体が未配線 (= 真の misconfigured)
- * `controlDataRuntime.needsManualPrune()` は「pure SQL backend が選択されているか」を返す
+ * injected `shared.runtime.needsManualPrune()` は「pure SQL backend が選択されているか」を返す
  * 既存の public predicate (A5, #2440) を再利用して両者を区別する — 空文字を無条件に
  * misconfigured 扱いすると、 pure SQL backend で常に 500 になる regression を生む。
  */
 function isEndpointsRegistryUnconfigured(
-  shared: Pick<ParticipantSharedResources, "endpointsTableName">,
+  shared: Pick<ParticipantSharedResources, "endpointsTableName" | "runtime">,
 ): boolean {
-  return !shared.endpointsTableName && !controlDataRuntime.needsManualPrune();
+  return !shared.endpointsTableName && !shared.runtime.needsManualPrune();
 }
 
 export type ListEndpointsOutcome =
@@ -98,6 +97,7 @@ export async function listProblemEndpoints(
   if (prerequisite) return prerequisite;
 
   const overrides = await queryOverrides(
+    shared.runtime,
     shared.ddb,
     shared.endpointsTableName,
     deployment.tenantId,
@@ -185,7 +185,7 @@ export async function upsertProblemEndpointOverride(
   if (prerequisite) return prerequisite;
 
   const tenantId = deployment.tenantId;
-  await putOverride(shared.ddb, shared.endpointsTableName, {
+  await putOverride(shared.runtime, shared.ddb, shared.endpointsTableName, {
     tenantId,
     teamId: deployment.teamId,
     problemId,
@@ -196,6 +196,7 @@ export async function upsertProblemEndpointOverride(
 
   // 直後の GET と同等の view を返す (= UI から再 GET 不要)。
   const overrides = await queryOverrides(
+    shared.runtime,
     shared.ddb,
     shared.endpointsTableName,
     tenantId,
@@ -253,13 +254,14 @@ export async function deleteProblemEndpointOverride(
   if (prerequisite) return prerequisite;
 
   const tenantId = deployment.tenantId;
-  await deleteOverride(shared.ddb, shared.endpointsTableName, {
+  await deleteOverride(shared.runtime, shared.ddb, shared.endpointsTableName, {
     tenantId,
     teamId: deployment.teamId,
     problemId,
     slot,
   });
   const overrides = await queryOverrides(
+    shared.runtime,
     shared.ddb,
     shared.endpointsTableName,
     tenantId,

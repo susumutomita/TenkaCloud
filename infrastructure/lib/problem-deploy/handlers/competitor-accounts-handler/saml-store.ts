@@ -1,5 +1,5 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { SamlConfigRecord } from "../../control-data/types.js";
 import type { TenantSamlConfigInput, TenantSamlConfigView } from "./saml-types.js";
 
@@ -11,13 +11,15 @@ import type { TenantSamlConfigInput, TenantSamlConfigView } from "./saml-types.j
  * config) は Cognito API から describe で取れるが、 UI が「最後に保存された設定」 を高速に
  * 表示するための写しとして DDB を使う (= Cognito API は 5 RPS quota がある + 数 100ms かかる)。
  *
- * 生の DDB access はここには無い — `controlDataRuntime.resolveSamlConfigRepository` 経由で
+ * 生の DDB access はここには無い — injected runtime の `resolveSamlConfigRepository` 経由で
  * {@link DynamoDbSamlConfigRepository} (default) / {@link SqlSamlConfigRepository} (Turso/D1)
  * を解決する。**`SAML_CONFIG` 行は `SamlIdps` テーブル (#1312, Lite 専用の別物) とは無関係** —
  * 混同しないこと。
  */
 
 export interface SamlStoreDeps {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
   readonly tableName: string;
 }
@@ -42,7 +44,7 @@ export async function getTenantSamlConfig(
   deps: SamlStoreDeps,
   tenantId: string,
 ): Promise<TenantSamlConfigView | undefined> {
-  const repository = await controlDataRuntime.resolveSamlConfigRepository({
+  const repository = await deps.runtime.resolveSamlConfigRepository({
     ddb: deps.ddb as DynamoDBDocumentClient,
     competitorAccountsTableName: deps.tableName,
   });
@@ -69,7 +71,7 @@ export async function putTenantSamlConfig(
     updatedAt: meta.updatedAt,
     updatedBy: meta.updatedBy,
   };
-  const repository = await controlDataRuntime.resolveSamlConfigRepository({
+  const repository = await deps.runtime.resolveSamlConfigRepository({
     ddb: deps.ddb as DynamoDBDocumentClient,
     competitorAccountsTableName: deps.tableName,
   });
@@ -81,7 +83,7 @@ export async function putTenantSamlConfig(
  * SAML config を削除する (= DELETE endpoint の DDB 部)。 不在なら no-op (= idempotent)。
  */
 export async function deleteTenantSamlConfig(deps: SamlStoreDeps, tenantId: string): Promise<void> {
-  const repository = await controlDataRuntime.resolveSamlConfigRepository({
+  const repository = await deps.runtime.resolveSamlConfigRepository({
     ddb: deps.ddb as DynamoDBDocumentClient,
     competitorAccountsTableName: deps.tableName,
   });

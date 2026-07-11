@@ -26,7 +26,7 @@ export interface AdminInsightApiLambdaProps {
    * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `EVENTS_TABLE_NAME` も grant も付与しない — Events 集計は repository seam
-   * (`resolveEventsRepository` / `controlDataRuntime`) が SQL executor 直結で処理する。
+   * (`resolveEventsRepository` / injected runtime) が SQL executor 直結で処理する。
    */
   readonly eventsTable?: Table;
   /**
@@ -77,7 +77,7 @@ export interface AdminInsightApiLambdaProps {
    * `EventApiLambda` と同型。
    *
    * `"turso"` / `"sql"` 指定時は handler 層 (`admin-insight-handler/shared.ts` の
-   * `resolveEventsRepository`) が cold-start cache 済みの async resolver (`controlDataRuntime`)
+   * `resolveEventsRepository`) が cold-start cache 済みの async resolver (injected runtime)
    * 経由で Mirrored repository を解決するため、 `/admin/insight/tenants/summary` は正しく動作する
    * (read は Mirrored の canonical DDB passthrough)。 Turso auth token を読む SSM read 権限は
    * `tursoAuthTokenParameterName` 指定時にのみ付与される (下記 `ssm:GetParameter` policy)。

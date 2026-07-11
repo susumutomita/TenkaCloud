@@ -12,6 +12,7 @@ import {
   parseCoordinationTickBatch,
 } from "../../lib/problem-deploy/handlers/participant-handler/coordination-tick.js";
 import type { CoordinationTickBatch } from "../../lib/problem-deploy/handlers/shared/coordination-tick-contract.js";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
 
 /**
  * ADR-028 scoring-driven tick (#2324) の **dispatcher 側 tick host**。 plugin の runTick を最小 IAM の
@@ -71,7 +72,15 @@ function fakeDdb(opts: {
     }
     throw new Error("unexpected command");
   });
-  return { store: { ddb: { send } as never, tableName: "Deployments" }, puts, send };
+  return {
+    store: {
+      runtime: makeTestControlDataRuntime(),
+      ddb: { send } as never,
+      tableName: "Deployments",
+    },
+    puts,
+    send,
+  };
 }
 
 const depsWith = (
@@ -189,7 +198,11 @@ describe("handleCoordinationTickBatch", () => {
       }
       throw new Error("unexpected");
     });
-    const store: CoordinationStoreDeps = { ddb: { send } as never, tableName: "Deployments" };
+    const store: CoordinationStoreDeps = {
+      runtime: makeTestControlDataRuntime(),
+      ddb: { send } as never,
+      tableName: "Deployments",
+    };
     const res = await handleCoordinationTickBatch(
       depsWith(importerOf(windowPlugin), store),
       batch([capTarget(), capTarget({ eventId: "e2" })]),
@@ -208,7 +221,11 @@ describe("handleCoordinationTickBatch", () => {
       if (cmd instanceof GetCommand) throw "plain get failure";
       return {};
     });
-    const store: CoordinationStoreDeps = { ddb: { send } as never, tableName: "Deployments" };
+    const store: CoordinationStoreDeps = {
+      runtime: makeTestControlDataRuntime(),
+      ddb: { send } as never,
+      tableName: "Deployments",
+    };
     const res = await handleCoordinationTickBatch(
       depsWith(importerOf(windowPlugin), store),
       batch([capTarget()]),

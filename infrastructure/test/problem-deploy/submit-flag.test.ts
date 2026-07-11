@@ -6,6 +6,7 @@ import {
   submitFlag,
 } from "../../lib/problem-deploy/handlers/participant-handler/submit-flag";
 import type { ProblemScoringMetadata } from "../../lib/utils/scoring-metadata";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 function buildShared(): {
   shared: ParticipantSharedResources;
@@ -13,6 +14,7 @@ function buildShared(): {
 } {
   const ddbSend = vi.fn();
   const shared: ParticipantSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     eventsTableName: "TestEvents",
     ddb: { send: ddbSend } as unknown as ParticipantSharedResources["ddb"],

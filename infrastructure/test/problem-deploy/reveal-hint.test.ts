@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { revealHint } from "../../lib/problem-deploy/handlers/participant-handler/reveal-hint";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
 import type { ProblemScoringMetadata } from "../../lib/utils/scoring-metadata";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const TEAM_KEY = "team-key-abc";
 const TEAM_PK = "DEPLOYMENT#01HZX0K3M3K9ZQHB3MRQHBA1B2";
@@ -10,6 +11,7 @@ const TEAM_PK = "DEPLOYMENT#01HZX0K3M3K9ZQHB3MRQHBA1B2";
 function buildShared(): { shared: ParticipantSharedResources; ddbSend: ReturnType<typeof vi.fn> } {
   const ddbSend = vi.fn();
   const shared: ParticipantSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     eventsTableName: "TestEvents",
     ddb: { send: ddbSend } as unknown as ParticipantSharedResources["ddb"],

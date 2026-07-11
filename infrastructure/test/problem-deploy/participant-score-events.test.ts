@@ -2,6 +2,7 @@ import type { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { listScoreEvents } from "../../lib/problem-deploy/handlers/participant-handler/score-events";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 function buildShared(): {
   shared: ParticipantSharedResources;
@@ -9,6 +10,7 @@ function buildShared(): {
 } {
   const ddbSend = vi.fn();
   const shared: ParticipantSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     eventsTableName: "TestEvents",
     ddb: { send: ddbSend } as unknown as ParticipantSharedResources["ddb"],

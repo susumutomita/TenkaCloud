@@ -2,6 +2,7 @@ import { AssumeRoleCommand } from "@aws-sdk/client-sts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
 import { getCliCredentials } from "../../lib/problem-deploy/handlers/participant-handler/sso";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #1197: CLI / SDK 用一時資格情報。 Console federation と同じ 2 段 AssumeRole
@@ -35,6 +36,7 @@ function buildShared(): { shared: ParticipantSharedResources; ddbSend: ReturnTyp
   const ddbSend = vi.fn();
   ssmSend.mockResolvedValue({ Parameter: { Value: "tenant-external-id-123456" } });
   const shared: ParticipantSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     eventsTableName: "TestEvents",
     endpointsTableName: "",

@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { StatusCodes } from "http-status-codes";
+import { createDefaultControlDataRuntime } from "../../../problem-deploy/control-data/runtime-repositories.js";
 import { secureApiHeaders } from "../../../problem-deploy/handlers/shared/secure-headers.js";
 import { listUsageFacts } from "../../../problem-deploy/handlers/usage-metering-handler/repository.js";
 import { exportAuditEntriesCsv, listAuditEntries } from "./audit.js";
@@ -44,7 +45,8 @@ import { summarizeTenants } from "./summary.js";
  */
 
 // SDK clients / env は module scope で 1 度だけ build。warm invoke で connection pool 再利用。
-const shared = buildSharedResources();
+// [#2527 Slice 4] Composition root: one control-data runtime per Lambda instance.
+const shared = buildSharedResources(createDefaultControlDataRuntime());
 
 const TENANT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
