@@ -7,12 +7,14 @@ import { assertionRoulette } from "./assertion-roulette.ts";
 import { circularDependency } from "./circular-dependency.ts";
 import { highCoupling } from "./high-coupling.ts";
 import { magicNumber } from "./magic-number.ts";
+import { oversizedFile } from "./oversized-file.ts";
 
 export const TECH_DEBT_RULES: readonly Rule[] = [
   assertionRoulette,
   highCoupling,
   magicNumber,
   circularDependency,
+  oversizedFile,
 ];
 
 export interface RunOptions {
@@ -58,6 +60,7 @@ Rules:
   magic-number         Status codes / timeouts / ports as numeric literals in production code.
   circular-dependency  ES module import cycles detected via Tarjan SCC (size >= 4 -> error).
                        In-tree implementation; no dep on madge or any external tool.
+  oversized-file       Production files > 400 lines (> 800 -> error), the #2527 split guideline.
 
 Baselines:
   Per-rule baseline at .claude/harness/baselines/tech-debt-<rule-id>.json.
