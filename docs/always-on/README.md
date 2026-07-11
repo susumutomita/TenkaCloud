@@ -170,6 +170,31 @@ identity. An ingress 4xx (the command itself was rejected, e.g. an unknown
 problem) surfaces as `422` with the ingress' stable reason code; an ingress 5xx
 or an unreachable ingress surfaces as `502`.
 
+## OIDC command seam (ADR-050, #2555)
+
+ADR-050 supersedes the signed-intent seam above: the Worker serves an OIDC
+discovery document and JWKS (`/.well-known/openid-configuration`,
+`/.well-known/jwks.json`; ES256 key in the Workers secret
+`OIDC_SIGNING_PRIVATE_JWK`), and AWS trusts it through IAM web-identity
+federation instead of a bespoke verify Lambda. Register the trust with:
+
+```sh
+make deploy-always-on-command \
+  CDK_PARAM_ALWAYS_ON_ISSUER_URL=https://<worker-origin> \
+  CDK_PARAM_EVENT_BUS_ARN=arn:aws:events:<region>:<account>:event-bus/<deploy-bus>
+```
+
+The stack (`tenkacloud-always-on-command`) registers the Worker origin as an
+IAM OIDC identity provider and creates the federated role
+`tenkacloud-alwayson-command`, whose trust policy pins `aud` to
+`sts.amazonaws.com` and `sub` to `tenkacloud:always-on:command:*`
+(the Worker mints `sub = tenkacloud:always-on:command:<tenantId>:<eventId>`),
+and whose only permission is `events:PutEvents` to that one bus with
+`events:source = tenkacloud.deploy`. Bind the emitted `CommandRoleArnOutput`
+to the Worker once the command path switches to
+`sts:AssumeRoleWithWebIdentity` (issue #2555 slice C). The signed-intent
+ingress sections above remain accurate until slice D retires that seam.
+
 ## Event-month plan runbook
 
 1. At least seven days before an event, enable Workers Paid for the Cloudflare
