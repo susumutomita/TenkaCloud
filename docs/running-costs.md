@@ -2,6 +2,8 @@
 
 This is the full detail behind the [README's Running costs summary](../README.md#running-costs): what each profile costs, the opt-in walkthrough for the zero-cost profile, the migration path for an existing stack, measured numbers, and what has and has not been live-verified.
 
+> **Before you opt in — not yet live-verified.** Every claim on this page is implemented and covered by CDK-synth and repository-seam unit tests, but nobody has run `make deploy` with `CONTROL_DATA_BACKEND=turso` against a fresh AWS account and a real Turso database and read the resulting AWS bill yet. See [Live-verification status](#live-verification-status) at the bottom of this page before relying on the zero-cost profile for a real event.
+
 ## The two profiles
 
 TenkaCloud runs in one of two profiles, selected by the `CDK_PARAM_CONTROL_DATA_BACKEND` env var (unset = default).
@@ -46,7 +48,7 @@ The steps below are for a **fresh** stack. See [Migrating an existing stack](#mi
    CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=/TenkaCloud/development/turso/auth-token
    ```
 
-4. **`make deploy`.** CDK skips synthesizing all eight DynamoDB tables listed above; the first Lambda cold start creates the SQL schema on the Turso database for you (no manual migration step).
+4. **`make deploy`.** CDK skips synthesizing all eight DynamoDB tables listed above; the first Lambda cold start creates the SQL schema on the Turso database for you (no manual migration step). `env-check-lite` (the gate `make deploy` runs first) validates that both `CDK_PARAM_TURSO_DATABASE_URL` and `CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME` are set whenever `CDK_PARAM_CONTROL_DATA_BACKEND` is `turso`/`sql`/`turso-mirror`/`sql-mirror`, so a missing value fails immediately instead of after a full SPA build or, worse, at the deploy Lambda's first cold start.
 
 ## Migrating an existing stack
 
