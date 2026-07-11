@@ -161,8 +161,10 @@ describe("startDeployment with runtime-aware dispatch (ADR-023 / Issue #1268)", 
 /**
  * [ADR-026 / Issue #1412] sakura/apprun dispatch wiring。 SSM (per-team key store) が配線されたときだけ
  * executable になり、 AppRun REST へ deploy する (EventBridge は使わない)。 鍵未登録は loud に throw、
- * SSM 未配線では reserved のまま。 注: 現状の verified-AWS-account gate は provider 非依存なので test では
- * verified account を mock で満たす (= gate の provider 対応は follow-up)。
+ * SSM 未配線では reserved のまま。 [Issue #2561] verified-AWS-account gate は provider-aware になった
+ * (`resolveDeployAuthorization`) ため、 sakura/apprun は AWS competitor account 不要 — test の
+ * `buildContext` が満たす verified account fixture は非 AWS runtime の deploy には使われない
+ * (AWS runtime の他テストのためだけに残る共有 fixture)。
  */
 describe("startDeployment sakura/apprun dispatch (ADR-026 / Issue #1412)", () => {
   const sakuraRuntime: ProblemRuntime = { provider: "sakura", engine: "apprun", entry: "img:1" };
@@ -244,7 +246,8 @@ describe("startDeployment sakura/apprun dispatch (ADR-026 / Issue #1412)", () =>
 /**
  * [ADR-032 / Issue #1410] azure/bicep dispatch wiring。 SSM (per-team Azure credential) + Entra token client
  * が配線されたときだけ executable になり、 ARM Deployment Stacks REST へ deploy する (EventBridge は使わない)。
- * config 未登録は loud throw、 SSM 未配線では reserved のまま。 verified-AWS-account gate は #1412 同様 follow-up。
+ * config 未登録は loud throw、 SSM 未配線では reserved のまま。 [Issue #2561] verified-AWS-account gate は
+ * provider-aware になったため、 azure/bicep も #1412 と同じく AWS competitor account 不要。
  */
 describe("startDeployment azure/bicep dispatch (ADR-032 / Issue #1410)", () => {
   const azureRuntime: ProblemRuntime = { provider: "azure", engine: "bicep", entry: "main.json" };

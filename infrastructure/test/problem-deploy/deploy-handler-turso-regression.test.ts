@@ -9,11 +9,15 @@ import { makeSqliteExecutor } from "./control-data/control-data-write.test-helpe
  * deploy path touches is resolved through the SQL seam. Before this fix,
  * `DeployApiLambda` was wired without `TURSO_DATABASE_URL` /
  * `TURSO_AUTH_TOKEN_PARAMETER_NAME`, so `acquireSqlExecutor()` threw at
- * runtime and every deploy/list/retry call failed — this test exercises the
- * actual repository resolution seam (`controlDataRuntime`) that the Lambda
- * calls at request time, swapped for a real in-memory SQLite-backed
- * `SqlExecutor` instead of a real libSQL/SSM round-trip, so it fails red
- * without a code fix and proves a real SQL round-trip (not just env wiring).
+ * runtime and every deploy/list/retry call failed — that CDK env/IAM wiring
+ * bug itself is pinned by the synth assertion in
+ * `control-data-backend-feature-flag.test.ts` (the actual red→green for
+ * #2560), not by this file. This test instead exercises the repository
+ * resolution seam (`controlDataRuntime`) `startDeployment` calls at request
+ * time, swapped for a real in-memory SQLite-backed `SqlExecutor` (via
+ * `makeSqliteExecutor`) instead of a real libSQL/SSM round-trip, to prove a
+ * genuine SQL round-trip (deployment row actually written and readable back)
+ * — not just that the env/IAM wiring exists.
  *
  * `resolveVerifiedCompetitorAccount` also resolves through the same seam in
  * pure SQL mode, so the fake must seed a verified competitor-account row too
