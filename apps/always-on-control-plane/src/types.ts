@@ -19,6 +19,12 @@ export interface TeamContext {
 export interface SecretBindings {
   readonly INTENT_SIGNING_PRIVATE_JWK?: string;
   /**
+   * ES256 key pair backing the OIDC IdP surface (ADR-050); only the public
+   * half is served from the JWKS route. A Workers secret; optional here
+   * because a misconfigured deployment must fail loudly at use.
+   */
+  readonly OIDC_SIGNING_PRIVATE_JWK?: string;
+  /**
    * System-admin bearer for the tenant-onboarding endpoint (`/v1/system/*`). A Workers
    * secret; optional here because a misconfigured deployment must fail loudly at use.
    */

@@ -2,6 +2,7 @@
   "$schema": "../../node_modules/wrangler/config-schema.json",
   // Private signing material is never a var. Configure it with:
   // bunx wrangler secret put INTENT_SIGNING_PRIVATE_JWK --env <environment>
+  // bunx wrangler secret put OIDC_SIGNING_PRIVATE_JWK --env <environment>   (ADR-050 OIDC IdP key)
   "name": "tenkacloud-always-on-control-plane",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-03",

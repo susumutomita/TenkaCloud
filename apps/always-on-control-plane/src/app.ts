@@ -18,6 +18,12 @@ import {
   intentGatewayFromEnvironment,
   issueDeployIntentCommand,
 } from "./deploy-intents.js";
+import {
+  buildOpenIdConfiguration,
+  JWKS_PATH,
+  OPENID_CONFIGURATION_PATH,
+  publicJwkFromEnvironment,
+} from "./oidc.js";
 import { type CheckpointInput, ControlStore, type EventInput } from "./store.js";
 import type { AppEnvironment } from "./types.js";
 
@@ -151,6 +157,15 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
         clientId: context.env.AUTH0_CLIENT_ID,
       },
     }),
+  );
+
+  // OIDC IdP surface (ADR-050): public documents AWS IAM fetches to validate the
+  // command-path tokens exchanged via sts:AssumeRoleWithWebIdentity.
+  app.get(OPENID_CONFIGURATION_PATH, (context) =>
+    context.json(buildOpenIdConfiguration(new URL(context.req.url).origin)),
+  );
+  app.get(JWKS_PATH, async (context) =>
+    context.json({ keys: [await publicJwkFromEnvironment(context.env)] }),
   );
 
   app.use("/v1/system/*", options.systemAuth ?? systemAdminMiddleware);
