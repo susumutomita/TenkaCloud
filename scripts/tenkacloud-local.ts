@@ -1,289 +1,49 @@
-import { spawn, spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import {
-  chmodSync,
-  closeSync,
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { LocalPlayDeployment } from "./local-play/api";
-import { ContainerRunner, type LocalComposeUnit } from "./local-play/container-runner";
+import {
+  autoInitProblemsSubmodule,
+  loadLocalPlayCatalog,
+  problemSearchRoots,
+} from "./local-play/catalog-loader";
+import { browserDisplayText, buildLocalRuntimeConfig } from "./local-play/codespaces-links";
+import type { LocalComposeUnit } from "./local-play/container-runner";
 import { parseProblemIds } from "./local-play/deployment-plan";
 import {
-  listLocalPlayProblems,
-  loadContainerProblem,
-  resolveProblemDir,
-} from "./local-play/manifest";
+  createContainerRunner,
+  resolveComposeCli,
+  startDetachedServe,
+  waitForReachable,
+} from "./local-play/docker-adapter";
+import { listLocalPlayProblems } from "./local-play/manifest";
 import { assertPortFree, waitForLocalApi } from "./local-play/readiness";
 import { startLocalPlayServer } from "./local-play/server";
+import {
+  type LocalPaths,
+  type LocalProcessState,
+  type RecordedUnits,
+  readJson,
+  reclaimStaleSession,
+  releaseSessionState,
+  resolveLocalPaths,
+  restoreRuntimeConfig,
+  stopPid,
+  unlinkIfExists,
+  writePrivateJson,
+} from "./local-play/session-state";
 import { listSimulatedCloudProblems } from "./local-play/simulator";
-import { buildRuntimeConfig } from "./ops/participant-portal-runtime-config";
+
+/**
+ * [#2527 Slice 6] The local-play CLI entrypoint: command routing + composition only.
+ * The four concern layers live in `scripts/local-play/` — `docker-adapter.ts`
+ * (process/container adapter), `session-state.ts` (on-disk session state),
+ * `codespaces-links.ts` (browser URL presentation), `catalog-loader.ts` (catalog) —
+ * and the commands below orchestrate them.
+ */
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_API_PORT = 3199;
-const PARTICIPANT_PORTAL_DEV_PORT = 5175;
-const LOCAL_API_PROXY_PATH = "/__tenkacloud-local-api";
-const LOCAL_CHALLENGE_PROXY_PATH = "/__tenkacloud-local-port";
-const LOOPBACK_BROWSER_URL_RE =
-  /\bhttp:\/\/(?:127\.0\.0\.1|localhost):(\d+)(?=\/|[?#]|[\s`"'<>)]|$)/g;
-
-export type ComposeCli = Readonly<{
-  command: "docker" | "docker-compose";
-  prefix: readonly string[];
-  label: string;
-}>;
-
-const DOCKER_COMPOSE_PLUGIN: ComposeCli = {
-  command: "docker",
-  prefix: ["compose"],
-  label: "docker compose",
-};
-const DOCKER_COMPOSE_STANDALONE: ComposeCli = {
-  command: "docker-compose",
-  prefix: [],
-  label: "docker-compose",
-};
-
-type CodespacesEnv = Readonly<{
-  CODESPACE_NAME?: string;
-  GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN?: string;
-}>;
-
-interface LocalProcessState {
-  readonly pid: number;
-  readonly apiBaseUrl: string;
-  /** The pre-started problems (`PROBLEM=a,b,c`); the API serves the whole catalog. */
-  readonly problemIds: readonly string[];
-  readonly deploymentPath: string;
-  readonly runtimeConfigPath: string;
-  readonly runtimeConfigBackupPath?: string;
-}
-
-/**
- * [#2392 Phase 2] `units.json` — the serve process's persisted mirror of its
- * running compose units. Containers are started INSIDE the detached serve
- * process, so `down` (a separate process) reads this file to know what to tear
- * down — even after a crash.
- */
-interface RecordedUnits {
-  readonly units: readonly LocalComposeUnit[];
-}
-
-/**
- * The catalog groups, searched in order. Problems live only in the
- * TenkaCloudChallenge catalog (the `problems/` submodule) — never in the
- * platform repo (ADR-008 / ADR-012).
- */
-export function problemSearchRoots(repoRoot: string): string[] {
-  return [join(repoRoot, "problems", "challenges"), join(repoRoot, "problems", "battles")];
-}
-
-/**
- * A plain clone (and a fresh Codespace) leaves the problems/ submodule empty,
- * and local play used to bail with a manual "run git submodule update --init"
- * step — the one command players kept tripping on. Submodule checkout installs
- * no software (the onboarder already classifies it "safe-auto" in
- * scripts/onboard/plan.ts), so run it automatically when the catalog is empty
- * and the submodule is registered. Returns true when the init succeeded —
- * callers re-scan the catalog then.
- */
-export function autoInitProblemsSubmodule(
-  repoRoot: string,
-  run: CommandSucceeds = (command, args) =>
-    spawnSync(command, [...args], { cwd: repoRoot, stdio: "inherit" }).status === 0,
-  fileExists: (path: string) => boolean = existsSync,
-): boolean {
-  if (!fileExists(join(repoRoot, ".gitmodules"))) return false;
-  console.log("problems/ catalog is empty — fetching it: git submodule update --init problems");
-  return run("git", ["submodule", "update", "--init", "problems"]);
-}
-
-/** A 256-bit hex secret. One per declared `secretEnv` name, generated per deploy. */
-export function generateSecretEnv(
-  names: readonly string[],
-  randomHex: () => string = () => randomBytes(32).toString("hex"),
-): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const name of names) env[name] = randomHex();
-  return env;
-}
-
-export function composeArgs(
-  composePath: string,
-  projectName: string,
-  action: "up" | "down",
-  projectDirectory?: string,
-): string[] {
-  const base = ["compose", "-f", composePath, "-p", projectName];
-  // [#2392] When a problem runs from a port-remapped copy in .tenkacloud/local,
-  // pin --project-directory to the original problem dir so relative build
-  // contexts and volume mounts still resolve. Omitted (identity) for the first
-  // problem, which runs from its own compose file.
-  if (projectDirectory) base.push("--project-directory", projectDirectory);
-  return action === "up"
-    ? [...base, "up", "-d"]
-    : [...base, "down", "--volumes", "--remove-orphans"];
-}
-
-export function composeArgsForCli(
-  cli: ComposeCli,
-  composePath: string,
-  projectName: string,
-  action: "up" | "down",
-  projectDirectory?: string,
-): string[] {
-  const args = composeArgs(composePath, projectName, action, projectDirectory);
-  return cli.command === "docker-compose" ? args.slice(1) : args;
-}
-
-// The real cause sits at the END of compose stderr; long pull/build logs stay
-// in the serve log, only this tail travels into the thrown error.
-const COMPOSE_STDERR_TAIL_LINES = 20;
-
-// Daemon-unreachable signatures across Docker Desktop / colima / raw Engine —
-// the one failure a player can always self-serve, so it gets an explicit hint.
-const DOCKER_DAEMON_UNREACHABLE_RE =
-  /cannot connect to the docker daemon|is the docker daemon running|error during connect|docker daemon is not running|dial unix .*docker\.sock/i;
-
-/**
- * Build the error message for a failed compose invocation. The portal surfaces
- * this verbatim (`start_failed`), so it must carry the cause: the stderr tail,
- * plus a "start your Docker daemon" hint when that is what stderr says.
- */
-export function composeFailureMessage(commandLine: string, stderr: string): string {
-  const trimmed = stderr.trim();
-  const parts = [`${commandLine} failed`];
-  if (trimmed !== "") {
-    parts.push(trimmed.split("\n").slice(-COMPOSE_STDERR_TAIL_LINES).join("\n"));
-  }
-  if (DOCKER_DAEMON_UNREACHABLE_RE.test(trimmed)) {
-    parts.push(
-      "The Docker daemon looks unreachable — start Docker Desktop (or `colima start` / " +
-        "`sudo systemctl start docker`), then retry.",
-    );
-  }
-  return parts.join("\n");
-}
-
-type CommandSucceeds = (command: string, args: readonly string[]) => boolean;
-
-function commandSucceeds(command: string, args: readonly string[]): boolean {
-  return spawnSync(command, [...args], { stdio: "ignore" }).status === 0;
-}
-
-function composeCliAvailable(cli: ComposeCli, succeeds: CommandSucceeds): boolean {
-  return succeeds(cli.command, [...cli.prefix, "version"]);
-}
-
-function requestedComposeCli(value: string | undefined): ComposeCli | undefined {
-  const normalized = value?.trim().replace(/\s+/g, " ");
-  if (!normalized) return undefined;
-  if (normalized === "docker compose") return DOCKER_COMPOSE_PLUGIN;
-  if (normalized === "docker-compose") return DOCKER_COMPOSE_STANDALONE;
-  throw new Error("TENKACLOUD_COMPOSE_CLI must be either `docker compose` or `docker-compose`.");
-}
-
-export function resolveComposeCli(
-  env: Pick<NodeJS.ProcessEnv, "TENKACLOUD_COMPOSE_CLI"> = process.env,
-  succeeds: CommandSucceeds = commandSucceeds,
-): ComposeCli {
-  const requested = requestedComposeCli(env.TENKACLOUD_COMPOSE_CLI);
-  if (requested) {
-    if (composeCliAvailable(requested, succeeds)) return requested;
-    throw new Error(
-      `${requested.label} was requested by TENKACLOUD_COMPOSE_CLI, but it is not available.`,
-    );
-  }
-  if (composeCliAvailable(DOCKER_COMPOSE_PLUGIN, succeeds)) {
-    return DOCKER_COMPOSE_PLUGIN;
-  }
-  if (composeCliAvailable(DOCKER_COMPOSE_STANDALONE, succeeds)) {
-    return DOCKER_COMPOSE_STANDALONE;
-  }
-  throw new Error(
-    "Docker Compose is required for local play. Install Docker Desktop / Engine with " +
-      "`docker compose`, or install the standalone `docker-compose` command.",
-  );
-}
-
-function codespacesForwardedUrl(
-  port: number,
-  env: CodespacesEnv = process.env,
-): string | undefined {
-  const name = env.CODESPACE_NAME?.trim();
-  const rawDomain = env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN?.trim();
-  if (!name || !rawDomain) return undefined;
-  const domain = rawDomain
-    .replace(/^https?:\/\//, "")
-    .replace(/\/.*$/, "")
-    .replace(/^\./, "")
-    .replace(/\.$/, "");
-  if (!domain) return undefined;
-  return `https://${name}-${port}.${domain}`;
-}
-
-function browserApiBaseUrl(apiBaseUrl: string, env: CodespacesEnv = process.env): string {
-  const codespacesPortalUrl = codespacesForwardedUrl(PARTICIPANT_PORTAL_DEV_PORT, env);
-  if (codespacesPortalUrl) return `${codespacesPortalUrl}${LOCAL_API_PROXY_PATH}`;
-  try {
-    const url = new URL(apiBaseUrl);
-    const port = Number(url.port);
-    if (Number.isInteger(port) && port > 0) {
-      return codespacesForwardedUrl(port, env) ?? apiBaseUrl;
-    }
-  } catch {
-    // buildRuntimeConfig validates the URL and reports the real error below.
-  }
-  return apiBaseUrl;
-}
-
-export function browserDisplayText(text: string, env: CodespacesEnv = process.env): string {
-  return text.replace(LOOPBACK_BROWSER_URL_RE, (match, port: string) => {
-    const portalUrl = codespacesForwardedUrl(PARTICIPANT_PORTAL_DEV_PORT, env);
-    if (!portalUrl) return match;
-    return `${portalUrl}${LOCAL_CHALLENGE_PROXY_PATH}/${port}`;
-  });
-}
-
-export function buildLocalRuntimeConfig(apiBaseUrl: string, env: CodespacesEnv = process.env) {
-  // `out`/`print` are unused by buildRuntimeConfig (it returns the object; up()
-  // writes the file itself) — pass inert values to satisfy the option type.
-  return buildRuntimeConfig({
-    cloudMode: "local",
-    portalMode: "backend",
-    apiBaseUrl: browserApiBaseUrl(apiBaseUrl, env),
-    eventTitle: "TenkaCloud Local",
-    eventRegion: "local",
-    out: "",
-    print: false,
-  });
-}
-
-function paths() {
-  const localDir = process.env.TENKACLOUD_LOCAL_DIR ?? join(REPO_ROOT, ".tenkacloud", "local");
-  return {
-    localDir,
-    statePath: join(localDir, "state.json"),
-    deploymentPath: join(localDir, "deployment.json"),
-    unitsPath: join(localDir, "units.json"),
-    runtimeConfigBackupPath: join(localDir, "runtime-config.backup.json"),
-    logPath: join(localDir, "api.log"),
-    runtimeConfigPath: join(
-      REPO_ROOT,
-      "apps",
-      "participant-portal",
-      "public",
-      "runtime-config.json",
-    ),
-  };
-}
 
 function positivePort(value: string | undefined, fallback: number, name: string): number {
   if (value === undefined || value.length === 0) return fallback;
@@ -298,133 +58,12 @@ function assertDockerAvailable(): void {
   resolveComposeCli();
 }
 
-function runCompose(
-  composePath: string,
-  projectName: string,
-  action: "up" | "down",
-  env: NodeJS.ProcessEnv,
-  allowFailure = false,
-  projectDirectory?: string,
-): void {
-  const cli = resolveComposeCli();
-  const args = composeArgsForCli(cli, composePath, projectName, action, projectDirectory);
-  // stderr is piped (not inherited) so a failure can carry its cause into the
-  // thrown error — the portal used to show a bare "... failed" while the real
-  // reason sat stranded in the detached serve log. It is re-echoed below so
-  // that log keeps the full output.
-  const result = spawnSync(cli.command, args, {
-    cwd: REPO_ROOT,
-    env,
-    stdio: ["ignore", "inherit", "pipe"],
-    encoding: "utf8",
-  });
-  const stderr = [result.stderr ?? "", result.error?.message ?? ""].filter(Boolean).join("\n");
-  if (stderr !== "") process.stderr.write(stderr.endsWith("\n") ? stderr : `${stderr}\n`);
-  if (!allowFailure && result.status !== 0) {
-    throw new Error(composeFailureMessage(`${cli.command} ${args.join(" ")}`, stderr));
-  }
-}
-
-function readJson<T>(path: string): T {
-  return JSON.parse(readFileSync(path, "utf8")) as T;
-}
-
-function writePrivateJson(path: string, value: unknown): void {
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  chmodSync(path, 0o600);
-}
-
-async function waitForReachable(url: string, label: string, timeoutMs = 60_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      // Any HTTP answer (even 401/404/405) means the container is listening.
-      await fetch(url, { redirect: "manual" });
-      return;
-    } catch {
-      // Connection refused while the container boots; keep polling.
-    }
-    await new Promise((r) => setTimeout(r, 300));
-  }
-  throw new Error(`Timed out waiting for ${label}: ${url}`);
-}
-
-function startApi(deploymentPath: string, port: number, logPath: string): number {
-  const logFd = openSync(logPath, "a");
-  try {
-    const child = spawn(
-      process.execPath,
-      ["run", join(REPO_ROOT, "scripts", "tenkacloud-local.ts"), "serve", deploymentPath],
-      {
-        cwd: REPO_ROOT,
-        detached: true,
-        env: { ...process.env, LOCAL_API_PORT: String(port) },
-        stdio: ["ignore", logFd, logFd],
-      },
-    );
-    child.unref();
-    if (!child.pid) throw new Error("failed to start local Participant API");
-    return child.pid;
-  } finally {
-    closeSync(logFd);
-  }
-}
-
-function stopPid(pid: number): void {
-  try {
-    process.kill(pid, "SIGTERM");
-  } catch {
-    // Idempotent: the process may already have exited.
-  }
-}
-
-function unlinkIfExists(path: string): void {
-  if (existsSync(path)) unlinkSync(path);
-}
-
-/**
- * Restore the participant-portal runtime-config from its backup. When a backup
- * exists it holds the developer's original config — copy it back and drop the
- * backup. Otherwise, remove the local config we wrote (`removeIfNoBackup`) or
- * leave the file alone when we can't tell whether it is ours.
- */
-function restoreRuntimeConfig(
-  backupPath: string,
-  configPath: string,
-  removeIfNoBackup: boolean,
-): void {
-  if (existsSync(backupPath)) {
-    copyFileSync(backupPath, configPath);
-    unlinkIfExists(backupPath);
-  } else if (removeIfNoBackup) {
-    unlinkIfExists(configPath);
-  }
-}
-
-/**
- * [#2392 Phase 2] The real docker adapter for the on-demand lifecycle: a
- * `ContainerRunner` wired to this process's compose / readiness / secret / fs
- * primitives. `serve` injects it into the API; `up` / `down` use it to reclaim
- * recorded units.
- */
-function createContainerRunner(localDir: string): ContainerRunner {
-  return new ContainerRunner(localDir, {
-    runCompose,
-    waitForReachable: (url, label) => waitForReachable(url, label),
-    generateSecretEnv,
-    readCompose: (path) => readFileSync(path, "utf8"),
-    writeTempCompose: (path, content) => writeFileSync(path, content, "utf8"),
-    removeTempCompose: unlinkIfExists,
-    log: (message) => console.log(message),
-  });
-}
-
 /**
  * Tear down every container recorded in `units.json` (idempotent compose down)
  * and drop the file. Used by `down`, by `up`'s failure cleanup, and by `up` to
  * reclaim leftovers from a crashed previous session before starting a new one.
  */
-function tearDownRecordedUnits(p: ReturnType<typeof paths>): void {
+function tearDownRecordedUnits(p: LocalPaths): void {
   if (!existsSync(p.unitsPath)) return;
   const runner = createContainerRunner(p.localDir);
   for (const unit of readJson<RecordedUnits>(p.unitsPath).units) runner.stop(unit);
@@ -464,24 +103,6 @@ async function printRunningEndpoints(apiBaseUrl: string): Promise<void> {
   }
 }
 
-/** Load the full local-play catalog, self-healing an uninitialized problems/ submodule first. */
-function loadLocalPlayCatalog(roots: string[]) {
-  const load = () =>
-    listLocalPlayProblems(roots).map((summary) =>
-      loadContainerProblem(resolveProblemDir(roots, summary.problemId)),
-    );
-  let catalog = load();
-  if (catalog.length === 0 && autoInitProblemsSubmodule(REPO_ROOT)) {
-    catalog = load();
-  }
-  if (catalog.length === 0) {
-    throw new Error(
-      "No local-play problems found. Run `git submodule update --init` to fetch the problems/ catalog.",
-    );
-  }
-  return catalog;
-}
-
 /** Any HTTP answer from /healthz means the recorded API process is alive. */
 async function apiIsHealthy(apiBaseUrl: string): Promise<boolean> {
   try {
@@ -492,42 +113,8 @@ async function apiIsHealthy(apiBaseUrl: string): Promise<boolean> {
   }
 }
 
-/**
- * A Codespace suspend / machine reboot kills the detached API process but
- * leaves state.json behind, so the next `make local` used to dead-end with
- * "already running. Run `make local-down` first" on every resume. Probe the
- * recorded API instead of trusting the file: alive → a real double-start
- * (keep refusing); dead → reclaim the stale session like `down` would and let
- * this start proceed.
- */
-export async function reclaimStaleSession<S extends { apiBaseUrl: string }>(
-  statePath: string,
-  readState: () => S,
-  probe: (apiBaseUrl: string) => Promise<boolean>,
-  release: (state: S) => void,
-  fileExists: (path: string) => boolean = existsSync,
-): Promise<void> {
-  if (!fileExists(statePath)) return;
-  const state = readState();
-  if (await probe(state.apiBaseUrl)) {
-    throw new Error("Local play is already running. Run `make local-down` first.");
-  }
-  console.log(
-    "A previous local-play session did not shut down cleanly (stopped Codespace or reboot?) — reclaiming it.",
-  );
-  release(state);
-}
-
-/** Shared by `down` and the stale-session reclaim: kill the API and restore files. */
-function releaseSessionState(p: ReturnType<typeof paths>, state: LocalProcessState): void {
-  stopPid(state.pid);
-  unlinkIfExists(state.deploymentPath);
-  restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, true);
-  unlinkIfExists(p.statePath);
-}
-
 async function up(problemArg: string): Promise<void> {
-  const p = paths();
+  const p = resolveLocalPaths();
   await reclaimStaleSession(
     p.statePath,
     () => readJson<LocalProcessState>(p.statePath),
@@ -549,7 +136,7 @@ async function up(problemArg: string): Promise<void> {
   // and containers start on demand. PROBLEM= only selects what to pre-start —
   // none means a warm session with zero containers.
   const roots = problemSearchRoots(REPO_ROOT);
-  const catalog = loadLocalPlayCatalog(roots);
+  const catalog = loadLocalPlayCatalog(REPO_ROOT, roots);
   const catalogIds = new Set(catalog.map((problem) => problem.problemId));
   for (const id of problemIds) {
     if (!catalogIds.has(id)) {
@@ -571,7 +158,7 @@ async function up(problemArg: string): Promise<void> {
   try {
     const deployment: LocalPlayDeployment = { problems: catalog };
     writePrivateJson(p.deploymentPath, deployment);
-    apiPid = startApi(p.deploymentPath, apiPort, p.logPath);
+    apiPid = startDetachedServe(p.deploymentPath, apiPort, p.logPath);
     await waitForLocalApi(apiBaseUrl, problemIds, apiPid, p.logPath);
 
     // Pre-start the requested problems through the API so the serve process's
@@ -624,7 +211,7 @@ async function serve(deploymentPath: string): Promise<void> {
   if (!existsSync(deploymentPath)) {
     throw new Error(`Local deployment state was not found: ${deploymentPath}`);
   }
-  const p = paths();
+  const p = resolveLocalPaths();
   const deployment = readJson<LocalPlayDeployment>(deploymentPath);
   const port = positivePort(process.env.LOCAL_API_PORT, DEFAULT_API_PORT, "LOCAL_API_PORT");
 
@@ -665,7 +252,7 @@ async function serve(deploymentPath: string): Promise<void> {
 }
 
 async function status(): Promise<void> {
-  const p = paths();
+  const p = resolveLocalPaths();
   if (!existsSync(p.statePath)) throw new Error("Local play is not running.");
   const state = readJson<LocalProcessState>(p.statePath);
   await waitForReachable(`${state.apiBaseUrl}/healthz`, "local Participant API", 3_000);
@@ -677,7 +264,7 @@ async function status(): Promise<void> {
 }
 
 async function evaluate(flag: string): Promise<void> {
-  const p = paths();
+  const p = resolveLocalPaths();
   if (!existsSync(p.statePath)) throw new Error("Local play is not running.");
   const state = readJson<LocalProcessState>(p.statePath);
   // Submit to PROBLEM when it names a problem in the session, else the first one.
@@ -696,7 +283,7 @@ async function evaluate(flag: string): Promise<void> {
 }
 
 function down(): void {
-  const p = paths();
+  const p = resolveLocalPaths();
   if (existsSync(p.statePath)) {
     releaseSessionState(p, readJson<LocalProcessState>(p.statePath));
   } else {
