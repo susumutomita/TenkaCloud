@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { LocalPlayDeployment } from "./local-play/api";
+import type { LocalPlayDeployment } from "./local-play/api-state";
 import {
   autoInitProblemsSubmodule,
   loadLocalPlayCatalog,
