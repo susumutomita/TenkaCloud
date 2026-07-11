@@ -17,6 +17,7 @@ export JSII_DEPRECATED := quiet
         deploy deploy-saas destroy destroy-saas \
         deploy-battles destroy-battles \
         deploy-always-on-ingress destroy-always-on-ingress synth-always-on-ingress \
+        deploy-always-on-command destroy-always-on-command synth-always-on-command \
         deploy-always-on-runtime archive-always-on-runtime destroy-always-on-runtime synth-always-on-runtime \
         dev synth check-synth \
         doctor local-onboard local local-up local-portal local-down local-status local-list local-evaluate ensure-deps
@@ -443,6 +444,46 @@ destroy-always-on-ingress:
 	  exit 1; \
 	fi
 	$(CDK) destroy --app "$(ALWAYS_ON_INGRESS_APP)" --all --force
+
+# ===== Always-On OIDC command seam (ADR-050 / #2555) =====
+# Worker (slice A の OIDC IdP) を IAM OIDC provider として登録し、frozen `tenkacloud.deploy` を
+# `events:PutEvents` する以外なにもできない federated role `tenkacloud-alwayson-command` を立てる。
+# ingress と同じく event 非依存の singleton bootstrap (bin/tenkacloud-always-on-command.ts)。
+#
+# 必須 env: CDK_PARAM_ALWAYS_ON_ISSUER_URL (= Worker origin。/.well-known/openid-configuration を配信) /
+#           CDK_PARAM_EVENT_BUS_ARN (= 既存 deploy bus。ingress target と同じ env 名)。
+# 任意 env: CDK_PARAM_ALWAYS_ON_OIDC_PROVIDER_ARN (既存 provider を import) /
+#           CDK_PARAM_ALWAYS_ON_COMMAND_SUBJECT (sub claim pattern override) /
+#           CDK_PARAM_ALWAYS_ON_COMMAND_ROLE_NAME (物理 role 名 override)。
+#
+# 使い方:
+#   make deploy-always-on-command \
+#     CDK_PARAM_ALWAYS_ON_ISSUER_URL=https://tenkacloud-always-on-control-plane.example.workers.dev \
+#     CDK_PARAM_EVENT_BUS_ARN=arn:aws:events:ap-northeast-1:123456789012:event-bus/...
+ALWAYS_ON_COMMAND_APP := bunx tsx bin/tenkacloud-always-on-command.ts
+
+deploy-always-on-command:
+	@if [ -z "$${CDK_PARAM_ALWAYS_ON_ISSUER_URL}" ]; then \
+	  echo "error: CDK_PARAM_ALWAYS_ON_ISSUER_URL が未指定 (= OIDC discovery を配信する Worker origin)。" >&2; \
+	  echo "  例: make deploy-always-on-command CDK_PARAM_ALWAYS_ON_ISSUER_URL=https://<worker>.workers.dev" >&2; \
+	  exit 1; \
+	fi
+	@if [ -z "$${CDK_PARAM_EVENT_BUS_ARN}" ]; then \
+	  echo "error: CDK_PARAM_EVENT_BUS_ARN が未指定 (= command role が PutEvents する既存 deploy bus)。" >&2; \
+	  exit 1; \
+	fi
+	$(CDK) deploy --app "$(ALWAYS_ON_COMMAND_APP)" --all $(APPROVAL)
+
+synth-always-on-command: export CDK_SKIP_BUNDLING := 1
+synth-always-on-command:
+	$(CDK) synth --app "$(ALWAYS_ON_COMMAND_APP)" --all --quiet
+
+destroy-always-on-command:
+	@if [ -z "$${CDK_PARAM_ALWAYS_ON_ISSUER_URL}" ] || [ -z "$${CDK_PARAM_EVENT_BUS_ARN}" ]; then \
+	  echo "error: CDK_PARAM_ALWAYS_ON_ISSUER_URL / CDK_PARAM_EVENT_BUS_ARN が未指定 (destroy も app synth のため必須)。" >&2; \
+	  exit 1; \
+	fi
+	$(CDK) destroy --app "$(ALWAYS_ON_COMMAND_APP)" --all --force
 
 # ===== Always-On per-event runtime (ADR-049 Phase 4 / #2363) =====
 # ingress (上) は event 非依存の singleton。ここは event ごとに立て/畳む per-event runtime stack
