@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CompetitorAccountsSharedResources } from "../../lib/problem-deploy/handlers/competitor-accounts-handler/shared";
 import {
   CompetitorAccountNotFoundError,
+  CompetitorAccountNotVerifiedError,
   createCompetitorAccount,
   DuplicateCompetitorAccountError,
   deleteCompetitorAccount,
@@ -286,5 +287,13 @@ describe("deleteCompetitorAccount", () => {
     await deleteCompetitorAccount(shared, "tenant-acme", "222222222222");
 
     expect(ssmSend.mock.calls.length).toBe(0);
+  });
+
+  it("should carry the awsAccountId and a verify-first hint on CompetitorAccountNotVerifiedError (#868 gate contract)", () => {
+    const err = new CompetitorAccountNotVerifiedError("123456789012");
+    expect(err.name).toBe("CompetitorAccountNotVerifiedError");
+    expect(err.awsAccountId).toBe("123456789012");
+    expect(err.message).toContain("123456789012");
+    expect(err.message).toContain("verify");
   });
 });
