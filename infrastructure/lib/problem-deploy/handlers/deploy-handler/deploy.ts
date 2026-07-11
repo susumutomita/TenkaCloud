@@ -7,18 +7,24 @@ import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
 import type { DeploymentsLifecyclePort } from "../../control-data/deployments-repository.js";
+import { getAzureCredential } from "../shared/azure-credential-store.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
+import { getGcpCredential } from "../shared/gcp-credential-store.js";
 import {
+  AZURE_PROVIDER,
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
+  GCP_PROVIDER,
   makeProblemRuntimeDescriptorResolver,
   makeProblemRuntimeResolver,
   type ProblemRuntime,
   type ProblemRuntimeDescriptor,
+  SAKURA_PROVIDER,
   selectAdapter,
 } from "../shared/runtime/index.js";
+import { getSakuraCredential } from "../shared/sakura-credential-store.js";
 import { logDeployTrace } from "../shared/trace-log.js";
 import { emitShadowAudit } from "../shared/trust-bridge-shadow.js";
 import {
@@ -39,7 +45,7 @@ import { dispatchPreparedDeployment } from "./prepared-dispatch.js";
 import { generateChallengePayloadUrl } from "./presigned-url.js";
 import { resolveDeploymentsRepository } from "./shared.js";
 import { generateTeamLoginKey } from "./team-key.js";
-import type { DeploymentItem, DeployRequest, DeployResponse } from "./types.js";
+import type { CompositeDeployRequest, DeploymentItem, DeployResponse } from "./types.js";
 
 /**
  * deploy worker の実行コンテキスト。 provider 別 adapter 依存の DI surface (env / tenantId / events /
@@ -103,7 +109,16 @@ export interface DeployContext extends AdapterDependencyConfig {
   readonly cloudActionEnforcementMode?: CloudActionEnforcementMode;
 }
 
-export type DeployInvocation = DeployRequest & {
+/**
+ * [Issue #2561] `awsAccountId` / `region` are required only when the resolved
+ * problem runtime is `aws/cloudformation` (the route's default). A non-AWS
+ * single-provider problem (gcp/azure/sakura) needs neither — it is keyed on
+ * `teamName`/`teamSlug` against the provider's own per-team credential store.
+ * Reuses {@link CompositeDeployRequest}'s exact relaxation (it already models
+ * "AWS fields required only when the plan/runtime actually targets AWS") so
+ * the two optional-AWS-input shapes never drift apart.
+ */
+export type DeployInvocation = CompositeDeployRequest & {
   readonly problemId: string;
   /** #1766: JWT claim から解決済みの quota tier。未指定は最も厳しい basic に倒す。 */
   readonly quotaTier?: QuotaTier;
@@ -176,6 +191,105 @@ export class UnverifiedCompetitorAccountError extends Error {
 }
 
 /**
+ * [Issue #2561] The resolved runtime is `aws/cloudformation` but the request
+ * omitted `awsAccountId`/`region`. The route's strict `DeployRequestSchema`
+ * already guarantees this cannot happen for a real HTTP request; this is
+ * defense-in-depth for direct `startDeployment` callers (unit tests, future
+ * entry points) now that {@link DeployInvocation} accepts the same optional
+ * shape non-AWS single-provider deploys use.
+ */
+export class AwsAccountRequiredError extends Error {
+  constructor() {
+    super("aws/cloudformation runtime requires awsAccountId and region");
+    this.name = "AwsAccountRequiredError";
+  }
+}
+
+/**
+ * [Issue #2561] No per-team credential is registered for a non-AWS
+ * single-provider problem's provider (`gcp`/`azure`/`sakura`). Thrown BEFORE
+ * any DDB/SQL write or EventBridge publish (fail-closed, mirrors
+ * `UnverifiedCompetitorAccountError`'s pre-mutation gate for AWS).
+ */
+export class NonAwsCredentialUnregisteredError extends Error {
+  constructor(
+    public readonly provider: string,
+    public readonly teamSlug: string,
+  ) {
+    super(`no ${provider} credential registered for team ${teamSlug}`);
+    this.name = "NonAwsCredentialUnregisteredError";
+  }
+}
+
+/**
+ * [Issue #2561] Fail-closed pre-mutation check that a non-AWS single-provider
+ * problem's team actually has a credential registered. Keyed by
+ * `(ctx.tenantId, teamSlug)` — never `teamSlug` alone — so this preserves the
+ * same tenant-isolation property `resolveVerifiedCompetitorAccount` provides
+ * for AWS. `ctx.ssm` is guaranteed defined here: `selectAdapter` above only
+ * returns a sakura/azure/gcp adapter when `buildAdapterDependencies` saw
+ * `ctx.ssm` truthy (otherwise it already threw `RuntimeNotSupportedError`).
+ */
+async function assertNonAwsCredentialRegistered(
+  ctx: DeployContext,
+  provider: string,
+  teamSlug: string,
+): Promise<void> {
+  const deps = { ssm: ctx.ssm as NonNullable<DeployContext["ssm"]>, env: ctx.env };
+  const credential =
+    provider === SAKURA_PROVIDER
+      ? await getSakuraCredential(deps, ctx.tenantId, teamSlug)
+      : provider === AZURE_PROVIDER
+        ? await getAzureCredential(deps, ctx.tenantId, teamSlug)
+        : provider === GCP_PROVIDER
+          ? await getGcpCredential(deps, ctx.tenantId, teamSlug)
+          : undefined;
+  if (!credential) throw new NonAwsCredentialUnregisteredError(provider, teamSlug);
+}
+
+/** Resolved AWS-side identifiers a successful gate check produces; empty for non-AWS. */
+interface DeployAuthorization {
+  readonly awsAccountId: string;
+  readonly region: string;
+  readonly competitorRoleArn?: string;
+  readonly externalIdParameterName?: string;
+}
+
+/**
+ * [Issue #2561] Runs the pre-mutation authorization gate for `runtime`'s
+ * provider and returns the resolved AWS identifiers (empty strings / undefined
+ * for a non-AWS single-provider deploy). Extracted out of `startDeployment` to
+ * keep the provider branch — and its cognitive complexity — out of the main
+ * DDB-Put/EventBridge-publish orchestration.
+ */
+async function resolveDeployAuthorization(
+  ctx: DeployContext,
+  runtime: ProblemRuntime,
+  request: DeployInvocation,
+  teamSlug: string,
+): Promise<DeployAuthorization> {
+  if (runtime.provider !== EXECUTABLE_PROVIDER) {
+    await assertNonAwsCredentialRegistered(ctx, runtime.provider, teamSlug);
+    return { awsAccountId: "", region: "" };
+  }
+  if (!request.awsAccountId || !request.region) throw new AwsAccountRequiredError();
+  // Phase 2.2 (Issue #459): verified=true な行が無ければ deploy しない (= fail-closed)。
+  // 同 account deploy の dev fallback も廃止 — 全 deploy は verified なれた account のみ。
+  const verified = await resolveVerifiedCompetitorAccount(
+    { ddb: ctx.ddb, competitorAccountsTableName: ctx.competitorAccountsTableName, env: ctx.env },
+    ctx.tenantId,
+    request.awsAccountId,
+  );
+  if (!verified) throw new UnverifiedCompetitorAccountError(request.awsAccountId);
+  return {
+    awsAccountId: request.awsAccountId,
+    region: request.region,
+    competitorRoleArn: verified.competitorRoleArn,
+    externalIdParameterName: verified.externalIdParameterName,
+  };
+}
+
+/**
  * 1 件の deploy job を起動する。
  *
  * DDB Put → EventBridge Publish の順序は失敗セマンティクスが要求する: PutEvents が
@@ -203,18 +317,16 @@ export async function startDeployment(
   const teamSlug = slugify(request.teamName);
   const adapter = selectAdapter(runtime, buildAdapterDependencies(ctx, runtime, teamSlug));
 
-  // Phase 2.2 (Issue #459): verified=true な行が無ければ deploy しない (= fail-closed)。
-  // 同 account deploy の dev fallback も廃止 — 全 deploy は verified なれた account のみ。
-  const verified = await resolveVerifiedCompetitorAccount(
-    {
-      ddb: ctx.ddb,
-      competitorAccountsTableName: ctx.competitorAccountsTableName,
-      env: ctx.env,
-    },
-    ctx.tenantId,
-    request.awsAccountId,
-  );
-  if (!verified) throw new UnverifiedCompetitorAccountError(request.awsAccountId);
+  // [Issue #2561] Single-provider deploys split on the resolved runtime's
+  // provider BEFORE any cloud mutation, same spirit as the pre-mutation
+  // runtime-adapter gate above: AWS keeps the existing verified=true
+  // CompetitorAccounts gate (Phase 2.2 / Issue #459); a non-AWS provider
+  // (gcp/azure/sakura) is gated on its own per-team credential store instead —
+  // an AWS competitor account is not what authorizes a GCP/Azure/Sakura-only
+  // deploy, so requiring one blocked every non-AWS single-provider deploy even
+  // after `nonAwsRuntime` + per-team credentials were configured correctly.
+  const { awsAccountId, region, competitorRoleArn, externalIdParameterName } =
+    await resolveDeployAuthorization(ctx, runtime, request, teamSlug);
 
   // #1766 (+PR-1803 review): クォータはより具体的な検証 (unknown problem / runtime 不一致 /
   // unverified account) の後、cloud mutation (DDB Put / EventBridge publish) の直前に
@@ -236,9 +348,12 @@ export async function startDeployment(
     jobId,
     problemId: request.problemId,
     tenantId: ctx.tenantId,
-    awsAccountId: request.awsAccountId,
-    competitorRoleArn: verified.competitorRoleArn,
-    region: request.region,
+    // [Issue #2561] "" for a non-AWS single-provider deploy (mirrors the composite
+    // parent row's exact `?? ""` precedent, `composite-deploy.ts`) — the row is
+    // still keyed/tracked by jobId/teamSlug, not by an AWS account it never had.
+    awsAccountId,
+    ...(competitorRoleArn ? { competitorRoleArn } : {}),
+    region,
     teamName: request.teamName,
     namePrefix,
     teamLoginKey,
@@ -271,7 +386,7 @@ export async function startDeployment(
     namePrefix: item.namePrefix,
     region: item.region,
     awsAccountId: item.awsAccountId,
-    ...(verified.competitorRoleArn ? { competitorRoleArn: verified.competitorRoleArn } : {}),
+    ...(competitorRoleArn ? { competitorRoleArn } : {}),
     nowMs,
     ttlSeconds: 900,
     action: "deploy",
@@ -323,10 +438,8 @@ export async function startDeployment(
       namePrefix: item.namePrefix,
       region: item.region,
       awsAccountId: item.awsAccountId,
-      ...(verified.competitorRoleArn ? { competitorRoleArn: verified.competitorRoleArn } : {}),
-      ...(verified.externalIdParameterName
-        ? { externalIdParameterName: verified.externalIdParameterName }
-        : {}),
+      ...(competitorRoleArn ? { competitorRoleArn } : {}),
+      ...(externalIdParameterName ? { externalIdParameterName } : {}),
       ...(challengePayloadUrl ? { challengePayloadUrl } : {}),
     });
   } catch (err) {
