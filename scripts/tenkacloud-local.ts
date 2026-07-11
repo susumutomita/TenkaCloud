@@ -23,6 +23,7 @@ import {
 } from "./local-play/manifest";
 import { assertPortFree, waitForLocalApi } from "./local-play/readiness";
 import { startLocalPlayServer } from "./local-play/server";
+import { listSimulatedCloudProblems } from "./local-play/simulator";
 import { buildRuntimeConfig } from "./ops/participant-portal-runtime-config";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -719,7 +720,8 @@ function listProblems(): void {
   if (summaries.length === 0 && autoInitProblemsSubmodule(REPO_ROOT)) {
     summaries = listLocalPlayProblems(roots);
   }
-  if (summaries.length === 0) {
+  const simulated = listSimulatedCloudProblems(roots);
+  if (summaries.length === 0 && simulated.length === 0) {
     console.log(
       "No local-play problems found. Run `git submodule update --init` (or `make doctor` / " +
         "`make local-onboard`) to fetch the problems/ catalog.",
@@ -732,6 +734,26 @@ function listProblems(): void {
   console.log(`  ${"id".padEnd(idWidth)}  ${"category".padEnd(categoryWidth)}  name`);
   for (const s of summaries) {
     console.log(`  ${s.problemId.padEnd(idWidth)}  ${s.category.padEnd(categoryWidth)}  ${s.name}`);
+  }
+  if (simulated.length > 0) {
+    console.log("\nSimulated-cloud problems (require TENKACLOUD_SIMULATOR_URL):\n");
+    const simIdWidth = Math.max(...simulated.map((s) => s.problemId.length), "id".length);
+    const simCategoryWidth = Math.max(
+      ...simulated.map((s) => s.category.length),
+      "category".length,
+    );
+    console.log(
+      `  ${"id".padEnd(simIdWidth)}  ${"category".padEnd(simCategoryWidth)}  runtime  name`,
+    );
+    for (const s of simulated) {
+      const runtime =
+        "kind" in s.runtime
+          ? `composite(${s.runtime.targets.map((target) => `${target.provider}/${target.engine}`).join("+")})`
+          : `${s.runtime.provider}/${s.runtime.engine}`;
+      console.log(
+        `  ${s.problemId.padEnd(simIdWidth)}  ${s.category.padEnd(simCategoryWidth)}  ${runtime.padEnd(24)}  ${s.name}`,
+      );
+    }
   }
 }
 
