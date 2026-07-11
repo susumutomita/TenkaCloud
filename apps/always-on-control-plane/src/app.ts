@@ -1,3 +1,4 @@
+import { DEPLOY_AWS_ACCOUNT_ID_PATTERN } from "@TenkaCloud/trust-bridge";
 import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -13,11 +14,12 @@ import {
   teamBearerMiddleware,
 } from "./auth.js";
 import {
-  type DeployIntentCommandInput,
-  DeployIntentCommandInputSchema,
-  intentGatewayFromEnvironment,
-  issueDeployIntentCommand,
-} from "./deploy-intents.js";
+  CompetitorAccountRegistrationSchema,
+  commandGatewayFromEnvironment,
+  type DeployCommandInput,
+  DeployCommandInputSchema,
+  executeDeployCommand,
+} from "./deploy-commands.js";
 import {
   buildOpenIdConfiguration,
   JWKS_PATH,
@@ -41,8 +43,8 @@ interface AppOptions {
   readonly systemAuth?: MiddlewareHandler<AppEnvironment>;
   /** Event-runtime score-feed gate for `/v1/runtime/*`; injectable for tests. */
   readonly runtimeAuth?: MiddlewareHandler<AppEnvironment>;
-  /** Transport used to reach the AWS intent ingress; injectable for tests. */
-  readonly intentFetch?: typeof fetch;
+  /** Transport used to reach AWS (STS + EventBridge); injectable for tests. */
+  readonly commandFetch?: typeof fetch;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -91,8 +93,8 @@ function eventInput(body: JsonObject): EventInput {
   };
 }
 
-function deployIntentInput(body: JsonObject): DeployIntentCommandInput {
-  const parsed = DeployIntentCommandInputSchema.safeParse(body);
+function deployCommandInput(body: JsonObject): DeployCommandInput {
+  const parsed = DeployCommandInputSchema.safeParse(body);
   if (!parsed.success) {
     const message = parsed.error.issues
       .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
@@ -118,7 +120,7 @@ function checkpointInput(body: JsonObject): CheckpointInput {
 }
 
 export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
-  const intentFetch = options.intentFetch ?? (fetch.bind(globalThis) as typeof fetch);
+  const commandFetch = options.commandFetch ?? (fetch.bind(globalThis) as typeof fetch);
   const app = new Hono<AppEnvironment>();
   app.use("*", secureHeaders());
   app.use(
@@ -191,6 +193,31 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
       tenantId,
       suspended: rawSuspended ?? false,
     });
+    return context.body(null, StatusCodes.NO_CONTENT);
+  });
+
+  // Register (or update) a tenant-owned deployment account for the OIDC command
+  // path (ADR-050). Deploy/destroy commands fail closed against this projection.
+  app.put("/v1/system/competitor-accounts/:tenantId/:awsAccountId", async (context) => {
+    const tenantId = context.req.param("tenantId").trim();
+    if (tenantId.length === 0) {
+      throw new HTTPException(StatusCodes.BAD_REQUEST, { message: "tenantId must be non-empty" });
+    }
+    const awsAccountId = context.req.param("awsAccountId");
+    if (!DEPLOY_AWS_ACCOUNT_ID_PATTERN.test(awsAccountId)) {
+      throw new HTTPException(StatusCodes.BAD_REQUEST, {
+        message: "awsAccountId must be a 12-digit AWS account id",
+      });
+    }
+    const parsed = CompetitorAccountRegistrationSchema.safeParse(await readObject(context.req));
+    if (!parsed.success) {
+      const message = parsed.error.issues
+        .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+        .join("; ");
+      throw new HTTPException(StatusCodes.BAD_REQUEST, { message });
+    }
+    const store = new ControlStore(context.env.CONTROL_DB);
+    await store.upsertCompetitorAccountProjection({ tenantId, awsAccountId, ...parsed.data });
     return context.body(null, StatusCodes.NO_CONTENT);
   });
 
@@ -338,34 +365,37 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
     async (context) => {
       const organizer = context.get("organizer");
       const eventId = context.req.param("eventId");
-      const input = deployIntentInput(await readObject(context.req));
+      const input = deployCommandInput(await readObject(context.req));
       const store = new ControlStore(context.env.CONTROL_DB);
       if (!(await store.hasTeam(organizer.tenantId, eventId, input.teamId))) {
         throw new HTTPException(StatusCodes.NOT_FOUND, { message: "team not found" });
       }
-      const gateway = intentGatewayFromEnvironment(context.env, intentFetch);
-      const outcome = await issueDeployIntentCommand(
-        { ...input, tenantId: organizer.tenantId, eventId },
+      const gateway = commandGatewayFromEnvironment(context.env, commandFetch);
+      const outcome = await executeDeployCommand(
+        {
+          ...input,
+          tenantId: organizer.tenantId,
+          eventId,
+          // The issuer must equal the origin IAM registered as the OIDC provider.
+          issuer: new URL(context.req.url).origin,
+        },
         gateway,
+        (tenantId, awsAccountId) => store.resolveCompetitorAccount(tenantId, awsAccountId),
       );
       if (!outcome.accepted) {
         console.error(
           JSON.stringify({
-            event: "always-on.deploy-intent.rejected",
-            ingressStatus: outcome.ingressStatus,
+            event: "always-on.deploy-command.rejected",
+            kind: outcome.kind,
             reason: outcome.reason,
           }),
         );
-        // An ingress 4xx means the organizer's command itself was rejected
-        // (correctable input, e.g. an unknown problemId) — that is not a
-        // gateway failure. Ingress 5xx and unreachable-transport map to 502.
-        const commandRejected =
-          outcome.ingressStatus !== undefined &&
-          outcome.ingressStatus >= StatusCodes.BAD_REQUEST &&
-          outcome.ingressStatus < StatusCodes.INTERNAL_SERVER_ERROR;
+        // "rejected" = the organizer's command itself was refused (correctable
+        // input/state, e.g. an unknown problemId or an unregistered account).
+        // "gateway" = the STS exchange or the publish failed on the AWS side.
         return context.json(
-          { error: "deploy intent rejected by ingress", reason: outcome.reason },
-          commandRejected ? StatusCodes.UNPROCESSABLE_ENTITY : StatusCodes.BAD_GATEWAY,
+          { error: "deploy command rejected", reason: outcome.reason },
+          outcome.kind === "rejected" ? StatusCodes.UNPROCESSABLE_ENTITY : StatusCodes.BAD_GATEWAY,
         );
       }
       return context.json(

@@ -86,6 +86,11 @@ export type {
 } from "./ddb-nonce-store.js";
 export { DdbNonceStore } from "./ddb-nonce-store.js";
 export {
+  DEPLOY_NAMING_VECTORS,
+  deploySlugify,
+  deployStackPrefix,
+} from "./deploy-command-naming.js";
+export {
   DEPLOY_AWS_ACCOUNT_ID_PATTERN,
   DEPLOY_AWS_REGION_PATTERN,
   DEPLOY_COMMAND_PATTERN_VECTORS,

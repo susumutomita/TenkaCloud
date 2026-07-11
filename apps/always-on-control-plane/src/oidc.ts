@@ -65,12 +65,22 @@ async function jwkThumbprint(x: string, y: string): Promise<string> {
   return base64UrlEncode(new Uint8Array(digest));
 }
 
+export interface OidcSigningKey {
+  /** Validated private JWK, importable for ES256 signing (the command path). */
+  readonly privateJwk: Record<string, unknown>;
+  /** The served public half; its `kid` is what minted tokens must carry. */
+  readonly publicJwk: EcPublicJwk;
+}
+
 /**
- * Derive the served public JWK from the private signing secret. The result is
- * built member-by-member so private material (`d`, `key_ops`, …) can never
- * leak into the JWKS; a misconfigured deployment fails loudly at use.
+ * Parse + validate the Workers secret into the signing key pair view. The
+ * public half is built member-by-member so private material (`d`, `key_ops`,
+ * …) can never leak into the JWKS; a misconfigured deployment fails loudly at
+ * use. `d` is required — a public-only JWK cannot back the command path.
  */
-export async function publicJwkFromEnvironment(environment: OidcEnvironment): Promise<EcPublicJwk> {
+export async function signingKeyFromEnvironment(
+  environment: OidcEnvironment,
+): Promise<OidcSigningKey> {
   const raw = environment.OIDC_SIGNING_PRIVATE_JWK;
   if (raw === undefined || raw === "") {
     throw new Error("OIDC_SIGNING_PRIVATE_JWK is not configured");
@@ -90,7 +100,16 @@ export async function publicJwkFromEnvironment(environment: OidcEnvironment): Pr
   }
   const x = requiredJwkMember(jwk, "x");
   const y = requiredJwkMember(jwk, "y");
+  const d = requiredJwkMember(jwk, "d");
   const kid =
     typeof jwk.kid === "string" && jwk.kid.length > 0 ? jwk.kid : await jwkThumbprint(x, y);
-  return { kty: "EC", crv: "P-256", x, y, kid, use: "sig", alg: OIDC_SIGNING_ALGORITHM };
+  return {
+    privateJwk: { kty: "EC", crv: "P-256", x, y, d },
+    publicJwk: { kty: "EC", crv: "P-256", x, y, kid, use: "sig", alg: OIDC_SIGNING_ALGORITHM },
+  };
+}
+
+/** Derive only the served public JWK from the private signing secret. */
+export async function publicJwkFromEnvironment(environment: OidcEnvironment): Promise<EcPublicJwk> {
+  return (await signingKeyFromEnvironment(environment)).publicJwk;
 }

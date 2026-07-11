@@ -43,6 +43,57 @@ export class ControlStore {
       .run();
   }
 
+  /**
+   * Register (or update) a tenant-owned deployment account for the OIDC
+   * command path (ADR-050). The pair is the fail-closed precondition of every
+   * deploy/destroy command (#2362 posture, control-store edition).
+   */
+  async upsertCompetitorAccountProjection(input: {
+    readonly tenantId: string;
+    readonly awsAccountId: string;
+    readonly competitorRoleArn: string;
+    readonly externalIdParameterName: string;
+  }): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO competitor_account_projection
+           (tenant_id, aws_account_id, competitor_role_arn, external_id_parameter_name, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(tenant_id, aws_account_id) DO UPDATE SET
+           competitor_role_arn = excluded.competitor_role_arn,
+           external_id_parameter_name = excluded.external_id_parameter_name,
+           updated_at = excluded.updated_at`,
+      )
+      .bind(
+        input.tenantId,
+        input.awsAccountId,
+        input.competitorRoleArn,
+        input.externalIdParameterName,
+        new Date().toISOString(),
+      )
+      .run();
+  }
+
+  /** Resolve a registered tenant-owned account; null (= fail closed) when absent. */
+  async resolveCompetitorAccount(
+    tenantId: string,
+    awsAccountId: string,
+  ): Promise<{
+    readonly competitorRoleArn: string;
+    readonly externalIdParameterName: string;
+  } | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT competitor_role_arn AS competitorRoleArn,
+                external_id_parameter_name AS externalIdParameterName
+           FROM competitor_account_projection
+          WHERE tenant_id = ? AND aws_account_id = ?`,
+      )
+      .bind(tenantId, awsAccountId)
+      .first<{ competitorRoleArn: string; externalIdParameterName: string }>();
+    return row;
+  }
+
   async listEvents(tenantId: string): Promise<readonly Record<string, unknown>[]> {
     const result = await this.db
       .prepare(
