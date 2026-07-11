@@ -15,7 +15,7 @@
  *
  * 失敗時は現行の `&&` chain と同じ fail-fast semantics を保つ (最初に失敗した workspace で
  * 停止し、 そこまでの timing summary を表示してから exit 1 = 失敗が workspace に紐づけて追える)。
- * 全 workspace 成功後は `scripts/fix-coverage-paths.ts` (#993、 idempotent かつ absent file は
+ * 全 workspace 成功後は `scripts/workspace/fix-coverage-paths.ts` (#993、 idempotent かつ absent file は
  * skip するので shard mode でも安全) を実行し、 その exit code をそのまま伝播する。
  */
 
@@ -23,7 +23,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
-const REPO_ROOT = resolve(import.meta.dir, "..");
+const REPO_ROOT = resolve(import.meta.dir, "../..");
 
 export type ShardName = "infrastructure" | "spas" | "packages";
 
@@ -37,7 +37,7 @@ export interface CoverageWorkspace {
 
 // Issue #2513: the single source of truth for which workspaces `test:coverage` covers.
 // Order + membership must stay identical to the (now-retired) root package.json chain —
-// scripts/run-coverage.test.ts hardcodes the expected 17-dir list to catch accidental drops.
+// scripts/workspace/run-coverage.test.ts hardcodes the expected 17-dir list to catch accidental drops.
 export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
   { dir: "infrastructure", filter: "@TenkaCloud/infrastructure", shard: "infrastructure" },
   { dir: "apps/admin-console", filter: "@TenkaCloud/admin-console", shard: "spas" },
@@ -126,7 +126,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     return { shard: candidate };
   }
   throw new UsageError(
-    `Unknown arguments: ${argv.join(" ")}. Usage: bun run scripts/run-coverage.ts [--shard <${SHARD_NAMES.join("|")}>]`,
+    `Unknown arguments: ${argv.join(" ")}. Usage: bun run scripts/workspace/run-coverage.ts [--shard <${SHARD_NAMES.join("|")}>]`,
   );
 }
 
@@ -225,7 +225,7 @@ function printSummary(results: readonly TimingResult[]): void {
 }
 
 function runFixCoveragePaths(): number {
-  const result = spawnSync("bun", ["run", "scripts/fix-coverage-paths.ts"], {
+  const result = spawnSync("bun", ["run", "scripts/workspace/fix-coverage-paths.ts"], {
     cwd: REPO_ROOT,
     stdio: "inherit",
   });

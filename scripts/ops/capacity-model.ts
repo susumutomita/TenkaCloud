@@ -17,7 +17,7 @@ import {
   modelDeploymentsTable,
   PROVISIONED_RCU,
   PROVISIONED_WCU,
-} from "./lib/capacity-model";
+} from "../lib/capacity-model";
 
 function round(n: number): string {
   return n.toFixed(2);

@@ -8,9 +8,9 @@
 # no problems/ submodule, where `make local` then failed on both.
 set -eu
 
-repo_root=$(cd "$(dirname "$0")/.." && pwd)
+repo_root=$(cd "$(dirname "$0")/../.." && pwd)
 
-sh "$repo_root/scripts/onboard-bootstrap.sh" --yes
+sh "$repo_root/scripts/onboard/onboard-bootstrap.sh" --yes
 
 # Pick up a bun the bootstrap just installed (no-op when bun already existed).
 export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"

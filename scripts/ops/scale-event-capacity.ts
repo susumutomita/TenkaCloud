@@ -17,7 +17,7 @@ import {
   applyCapacityPlan,
   DEFAULT_MAX_UNITS_PER_TABLE,
   planCapacityChange,
-} from "./lib/scale-event-capacity";
+} from "../lib/scale-event-capacity";
 
 interface ParsedArgs {
   readonly readCapacity: number;

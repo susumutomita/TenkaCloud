@@ -23,7 +23,7 @@ import {
 } from "./local-play/manifest";
 import { assertPortFree, waitForLocalApi } from "./local-play/readiness";
 import { startLocalPlayServer } from "./local-play/server";
-import { buildRuntimeConfig } from "./participant-portal-runtime-config";
+import { buildRuntimeConfig } from "./ops/participant-portal-runtime-config";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_API_PORT = 3199;

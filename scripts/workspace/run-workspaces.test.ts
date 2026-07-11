@@ -9,14 +9,14 @@ import { discoverWorkspaces, planTask, TASKS, type WorkspaceInfo } from "./run-w
  * scripts used to be hand-maintained `bun run --filter <pkg> && ...` chains.
  * Adding a workspace meant remembering to touch several one-liners by hand,
  * and nothing failed loudly if you forgot. This suite pins
- * scripts/run-workspaces.ts as the single reviewable seam that replaced
+ * scripts/workspace/run-workspaces.ts as the single reviewable seam that replaced
  * them: the repo-parity test below is the thing a reviewer diffs when a
  * workspace is added, removed, or moved between the build/typecheck/test
- * sets. (`test:coverage` is owned by scripts/run-coverage.ts, #2513, whose
+ * sets. (`test:coverage` is owned by scripts/workspace/run-coverage.ts, #2513, whose
  * own test pins the 17-dir COVERAGE_WORKSPACES list.)
  */
 
-const repoRoot = join(import.meta.dir, "..");
+const repoRoot = join(import.meta.dir, "../..");
 
 describe("discoverWorkspaces", () => {
   let fixtureRoot: string;

@@ -29,7 +29,7 @@ import {
   evaluateFaultTimeline,
   type FireRequestInput,
   type HealthSample,
-} from "./lib/disruption-live-fire";
+} from "../lib/disruption-live-fire";
 
 const EXIT_OK = 0;
 const EXIT_FAIL = 1;

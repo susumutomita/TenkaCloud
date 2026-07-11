@@ -32,7 +32,7 @@ consent() {
   esac
 }
 
-repo_root=$(cd "$(dirname "$0")/.." && pwd)
+repo_root=$(cd "$(dirname "$0")/../.." && pwd)
 
 # 1) mise trust — only when mise.toml exists, mise is installed, and it is untrusted.
 if [ -f "$repo_root/mise.toml" ] && command -v mise >/dev/null 2>&1; then

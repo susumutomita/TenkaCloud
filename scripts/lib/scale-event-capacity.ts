@@ -2,13 +2,13 @@
  * [Issue #1667] Runtime-adjustable DynamoDB capacity — pure planner + guardrails.
  *
  * The `DynamoDbLowCapacity` aspect pins every table to 1 RCU / 1 WCU at deploy time (cost-zero
- * baseline). The capacity model (`scripts/capacity-model.ts`) shows that throttles at ~8 teams.
+ * baseline). The capacity model (`scripts/ops/capacity-model.ts`) shows that throttles at ~8 teams.
  * For a larger event the operator needs to raise capacity **without a redeploy** and return it
  * to 1/1 at teardown — exactly the "運用中に変更できるように" improvement the owner asked for.
  *
  * This module is the **pure plan + guardrail** layer (no AWS calls): it validates the target,
  * caps per-table units, and warns when the total leaves the 25/25 Free Tier (= will incur cost).
- * The actual `UpdateTable` lives in the CLI (`scripts/scale-event-capacity.ts`) behind an
+ * The actual `UpdateTable` lives in the CLI (`scripts/ops/scale-event-capacity.ts`) behind an
  * injected client so this stays unit-testable. The aspect re-pins to 1/1 on the next deploy, so
  * a runtime raise is a deliberate, temporary, event-window override — not a permanent change.
  *

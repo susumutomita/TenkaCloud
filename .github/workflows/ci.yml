@@ -49,7 +49,7 @@ jobs:
         run: make install_ci
 
       # Supply Chain Security: dependency lifecycle script auditor。
-      # scripts/audit-baseline.json と比較し、 新規 lifecycle script 付き package /
+      # scripts/security/audit-baseline.json と比較し、 新規 lifecycle script 付き package /
       # 既存 dep の新規 hook 追加を検出して fail させる (= mini Shai-Hulud 2nd 対策、
       # https://blog.flatt.tech/entry/mini_shai_hulud_2nd)。
       - name: Audit dependency lifecycle scripts
@@ -91,7 +91,7 @@ jobs:
 
   # Issue #2513: coverage は元々 `ci` job 内の直列 `make test-coverage` (17 workspace &&
   # chain) が ~17m13s を占めていた。 workspace を 3 shard (infrastructure / spas / packages,
-  # scripts/run-coverage.ts の SHARDS 定義) に分け、 matrix で並列実行する。 `ci` job には
+  # scripts/workspace/run-coverage.ts の SHARDS 定義) に分け、 matrix で並列実行する。 `ci` job には
   # 依存しない (= 両 job が同時に走り出す) ので、 coverage 自体の短縮に加えて job の直列待ちも
   # 消える。 shard 内の workspace 実行は従来どおり直列 + fail-fast。
   coverage:
@@ -132,10 +132,10 @@ jobs:
         run: make install_ci
 
       # Issue #993 / #2513: この shard に属する workspace だけを直列実行し coverage/lcov.info を
-      # 生成する (root `test:coverage` script と同じ scripts/run-coverage.ts、 --shard で絞る)。
+      # 生成する (root `test:coverage` script と同じ scripts/workspace/run-coverage.ts、 --shard で絞る)。
       - name: Run tests with coverage (shard ${{ matrix.shard }})
         run: |
-          bun run scripts/run-coverage.ts --shard ${{ matrix.shard }}
+          bun run scripts/workspace/run-coverage.ts --shard ${{ matrix.shard }}
 
       # Issue #1424 / #2513: agent-owned workspace の 100% coverage を shard 単位で enforce。
       # 品質ゲートは本体と分離し .claude/skills/quality-gates へ移設済み (--shard で絞って直接呼ぶ、

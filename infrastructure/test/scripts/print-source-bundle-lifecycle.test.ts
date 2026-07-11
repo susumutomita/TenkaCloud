@@ -2,7 +2,15 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const SCRIPT = resolve(__dirname, "..", "..", "..", "scripts", "print-source-bundle-lifecycle.ts");
+const SCRIPT = resolve(
+  __dirname,
+  "..",
+  "..",
+  "..",
+  "scripts",
+  "ops",
+  "print-source-bundle-lifecycle.ts",
+);
 
 /**
  * Run the emit script with a deterministic env. SYSTEM_ADMIN_EMAIL and the
@@ -20,7 +28,7 @@ function runLifecycle(overrides: Record<string, string> = {}): ReturnType<typeof
   });
 }
 
-describe("scripts/print-source-bundle-lifecycle.ts", () => {
+describe("scripts/ops/print-source-bundle-lifecycle.ts", () => {
   it("should emit a policy in Lite mode without SYSTEM_ADMIN_EMAIL set", () => {
     // Reproduces the CodeBuild Lite-deploy failure: the buildspec injects
     // TENANT_ADMIN_EMAIL but not SYSTEM_ADMIN_EMAIL. The lifecycle policy must not

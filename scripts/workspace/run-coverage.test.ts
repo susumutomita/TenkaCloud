@@ -4,7 +4,7 @@ import { join } from "node:path";
 import {
   GATED_WORKSPACES,
   REPORTED_WORKSPACES,
-} from "../.claude/skills/quality-gates/scripts/check-coverage-gate.ts";
+} from "../../.claude/skills/quality-gates/scripts/check-coverage-gate.ts";
 import {
   COVERAGE_WORKSPACES,
   formatDuration,
@@ -16,7 +16,7 @@ import {
   validateWorkspaces,
 } from "./run-coverage.ts";
 
-const root = join(import.meta.dir, "..");
+const root = join(import.meta.dir, "../..");
 
 // Issue #2513: hardcode the expected set so an accidental drop from the 17-workspace
 // chain (e.g. someone forgetting to port a workspace when editing this file) fails loudly

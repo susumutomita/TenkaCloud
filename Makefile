@@ -46,7 +46,7 @@ build:         ; bun run build
 typecheck:     ; bun run typecheck
 test:          ; bun run test
 test-coverage: ; bun run test:coverage
-# Issue #2515: fast path for script/CLI-only changes (scripts/*.ts, infrastructure/test/scripts/*)
+# Issue #2515: fast path for script/CLI-only changes (scripts/**/*.ts, infrastructure/test/scripts/*)
 # that never touch CDK constructs — runs just that directory, skipping every other workspace and
 # every CDK-synth test file. No architecture-invariant / coverage guarantee: it's a quick local
 # sanity check before `make before-commit`, not a substitute for it.
@@ -70,7 +70,7 @@ before-commit: $(GATE_CHECKS)
 # does not guarantee a green CI. `ci-local` runs everything CI runs, in CI's own order, minus
 # the Codecov upload step (network + secret, not meaningful to run locally).
 # Issue #2513: CI runs this same workspace set as a 3-shard matrix (`coverage` job,
-# infrastructure / spas / packages) via `scripts/run-coverage.ts --shard <name>` +
+# infrastructure / spas / packages) via `scripts/workspace/run-coverage.ts --shard <name>` +
 # `.claude/skills/quality-gates/scripts/check-coverage-gate.ts --shard <name>`, run in parallel
 # with the `ci` job. `test-coverage` below (and `ci-local`, which chains it) instead runs all
 # 3 shards serially in one process — same checks, same workspace set, intentionally different
@@ -204,7 +204,7 @@ env-check-lite:
 # (TENANT_ADMIN_EMAIL / AWS_REGION / CDK_PARAM_DEPLOY_EXTERNAL_ID) を埋め、
 # infrastructure/environments/$(ENV)/.env を生成する。 既存 .env があれば skip。
 env-init:
-	@ENV=$(ENV) bun run scripts/env-init.ts
+	@ENV=$(ENV) bun run scripts/ops/env-init.ts
 
 # Issue #955: デフォルトの make deploy は Lite (= single-tenant) mode。
 # 大半の利用者は 1 人 1 大会の主催で multi-tenant 抽象 (= SBT ControlPlane / tenant pipeline /
@@ -233,7 +233,7 @@ destroy-saas:         env-check       ; bash scripts/cleanup.sh
 # Starts all 3 SPA dev servers in parallel (admin-console :5173 / application-admin-console
 # :5174 / participant-portal :5175). Ctrl-C stops all three (bun --parallel propagates SIGINT).
 dev:
-	bun run scripts/participant-portal-runtime-config.ts --cloud-mode mock
+	bun run scripts/ops/participant-portal-runtime-config.ts --cloud-mode mock
 	bun run --filter '@TenkaCloud/admin-console' --filter '@TenkaCloud/application-admin-console' --filter '@TenkaCloud/participant-portal' --parallel dev
 
 # ===== Synth (no deploy) =====
@@ -278,7 +278,7 @@ doctor:
 # offers to trust mise, install Bun, initialize the problems/ submodule, or help
 # with Docker setup. Keep `make local` itself lightweight and non-installing.
 local-onboard:
-	@sh scripts/onboard-bootstrap.sh $(ONBOARD_FLAGS)
+	@sh scripts/onboard/onboard-bootstrap.sh $(ONBOARD_FLAGS)
 	@# The bootstrap may have JUST installed bun into ~/.bun/bin; this recipe line
 	@# runs in a fresh shell whose PATH predates that install, so prefix it.
 	@PATH="$$HOME/.bun/bin:$$PATH" bun run scripts/tenkacloud-onboard.ts preflight $(ONBOARD_FLAGS)
