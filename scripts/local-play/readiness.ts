@@ -1,5 +1,5 @@
 import { createServer } from "node:net";
-import { isLocalApiHealthy } from "./api";
+import { isLocalApiHealthy } from "./api-state";
 
 /**
  * Returns true if a process with `pid` is still running. `process.kill(pid, 0)`

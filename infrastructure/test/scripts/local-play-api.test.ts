@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import { handleLocalPlayRequest } from "../../../scripts/local-play/api";
 import {
   createLocalPlayState,
-  handleLocalPlayRequest,
   isLocalApiHealthy,
   type LocalPlayRequest,
   type VerifyFn,
-} from "../../../scripts/local-play/api";
+} from "../../../scripts/local-play/api-state";
 import type { ContainerProblem } from "../../../scripts/local-play/manifest";
 
 const PROBLEM: ContainerProblem = {

@@ -1,16 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   autoInitProblemsSubmodule,
+  problemSearchRoots,
+} from "../../../scripts/local-play/catalog-loader";
+import {
   browserDisplayText,
   buildLocalRuntimeConfig,
+} from "../../../scripts/local-play/codespaces-links";
+import {
   composeArgs,
   composeArgsForCli,
   composeFailureMessage,
   generateSecretEnv,
-  problemSearchRoots,
-  reclaimStaleSession,
   resolveComposeCli,
-} from "../../../scripts/tenkacloud-local";
+} from "../../../scripts/local-play/docker-adapter";
+import { reclaimStaleSession } from "../../../scripts/local-play/session-state";
 
 describe("autoInitProblemsSubmodule", () => {
   it("should check out the problems/ submodule when it is registered (fresh clone / Codespace)", () => {
