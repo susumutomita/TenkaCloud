@@ -75,8 +75,11 @@ describe("ShellLayout", () => {
     expect(mockSetLocale).toHaveBeenCalledWith("en");
   });
 
-  it("should navigate via a side navigation link", () => {
+  it("should group navigation by operator jobs and navigate via side links", () => {
     const { container } = renderShell();
+    expect(container).toHaveTextContent("nav.event_ops_section");
+    expect(container).toHaveTextContent("nav.content_section");
+
     const problemsLink = must(
       must(createWrapper(container).findSideNavigation(), "side nav").findLinkByHref("/problems"),
       "problems link",

@@ -24,7 +24,9 @@
     "tenant_users": "ユーザー",
     "identity_providers": "ID プロバイダ",
     "settings": "設定",
-    "admin_section": "管理"
+    "admin_section": "管理",
+    "event_ops_section": "イベント運営",
+    "content_section": "出題コンテンツ"
   },
   "settings": {
     "header": "フィーチャーフラグ",
