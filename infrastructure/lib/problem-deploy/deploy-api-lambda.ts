@@ -31,11 +31,14 @@ export interface DeployApiLambdaProps {
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `COMPETITOR_ACCOUNTS_TABLE_NAME` は注入せず、grant も付与しない — verified-gate lookup
    * は repository seam (`resolveVerifiedCompetitorAccount` → `resolveCompetitorAccountsRepository`)
-   * が処理する ({@link deploymentsTable} と同じ条件)。**注意**: 本 Lambda は
-   * `TURSO_DATABASE_URL` / SSM grant を持たない (= Deployments seam と同じ既存の scope
-   * 外 — 「DB を開く Lambda にだけ secret を持たせる」という既存方針、
-   * `control-data-backend-feature-flag.test.ts` で pin 済み) ため、pure SQL 選択時の
-   * deploy 起動 API は現状スコープ外のまま。
+   * が処理する ({@link deploymentsTable} と同じ条件)。
+   *
+   * [Issue #2560] 本 Lambda は `startDeployment` (`resolveDeploymentsRepository`) と
+   * `resolveVerifiedCompetitorAccount` (`resolveCompetitorAccountsRepository`) の両方を通じて
+   * 実際に SQL executor を acquire する — つまり EventApi / GenericScoring 等と同じ
+   * 「DB を開く Lambda」であり、{@link tursoDatabaseUrl} / {@link tursoAuthTokenParameterName}
+   * を持つのが正しい適用（以前は「本 Lambda は DB を開かない」という誤った前提でこの配線が
+   * scope-out されていたため、pure SQL 選択時の deploy 起動 API 全体が動作しなかった）。
    */
   readonly competitorAccountsTable?: Table;
   /**
@@ -90,6 +93,10 @@ export interface DeployApiLambdaProps {
    * 同じ注入面に揃える)。default (未指定 / `dynamodb`) は env を足さず byte 互換。
    */
   readonly controlDataBackend?: string;
+  /** [Issue #2560] Public remote libSQL URL. Never contains authentication material. */
+  readonly tursoDatabaseUrl?: string;
+  /** [Issue #2560] SSM SecureString parameter name containing the libSQL auth token. */
+  readonly tursoAuthTokenParameterName?: string;
   /**
    * #1766: tier 別の同時デプロイ上限。指定時は `DEPLOY_QUOTA_BY_TIER` env (JSON) を注入し、
    * handler が deploy 受付時に enforce する (超過 = 429)。未指定はクォータ無効 (空文字 env)。
@@ -156,6 +163,12 @@ export class DeployApiLambda extends Construct {
         ...auditLogEnabledEnv(props.auditLogEnabled),
         // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
         ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
+        // [Issue #2560] EventApi と同型: 純 SQL 選択時、本 Lambda も deploymentsRepository /
+        // competitorAccountsRepository 経由で SQL executor を acquire するため Turso 接続情報が要る。
+        ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
+        ...(props.tursoAuthTokenParameterName
+          ? { TURSO_AUTH_TOKEN_PARAMETER_NAME: props.tursoAuthTokenParameterName }
+          : {}),
         // #1766: tier 別同時デプロイ上限 (未配線なら空文字 = クォータ無効)
         DEPLOY_QUOTA_BY_TIER: props.deployQuotaByTier
           ? JSON.stringify(props.deployQuotaByTier)
@@ -259,5 +272,19 @@ export class DeployApiLambda extends Construct {
     // ADR-008 Phase 3 (Issue #642): private 問題 payload の S3 GetObject 権限。
     // bucket 未指定なら no-op (= dormant、 最小権限維持)。
     grantChallengePayloadRead(this, this.fn, props.challengePayloadBucketName);
+
+    // [Issue #2560] Turso SecureString read — EventApiLambda と同じ pattern。
+    // `tursoAuthTokenParameterName` 未配線 (= dynamodb backend) なら no-op。
+    if (props.tursoAuthTokenParameterName) {
+      this.fn.addToRolePolicy(
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["ssm:GetParameter"],
+          resources: [
+            `arn:${stack.partition}:ssm:${stack.region}:${stack.account}:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
+          ],
+        }),
+      );
+    }
   }
 }

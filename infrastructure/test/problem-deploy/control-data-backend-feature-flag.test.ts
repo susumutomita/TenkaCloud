@@ -130,12 +130,16 @@ describe("control-data backend feature flag env wiring (#2290)", () => {
       expect(envOf(tpl, "SystemAuditWriter").TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe(
         "/tenkacloud/development/turso-token",
       );
-      // The secret reference and permission belong only to the Lambdas that open the DB.
-      // [Issue #2442 / Phase C4] DeployApi wires ADMIN_AUDIT_LOG_TABLE_NAME (dormant — no
-      // deploy-handler route calls `writeAuditEvent` today, unlike CompetitorAccountsApi/
-      // EventApi/SystemAuditWriter) so it never resolves the AdminAuditLogRepository and stays
-      // without Turso creds (same "prepared but unused" status as `audit-wrapper.ts`).
-      expect(envOf(tpl, "DeployApi").TURSO_AUTH_TOKEN_PARAMETER_NAME).toBeUndefined();
+      // [Issue #2560] DeployApi *does* open the DB: `startDeployment` resolves
+      // `resolveDeploymentsRepository` and `resolveVerifiedCompetitorAccount` resolves
+      // `resolveCompetitorAccountsRepository`, both of which acquire a SQL executor in pure
+      // turso/sql mode. It therefore carries the same Turso executor wiring as EventApi/
+      // GenericScoring/CompetitorAccountsApi (previously this was wired as "scope out",
+      // which made every deploy/list/retry call throw in pure turso/sql mode).
+      expect(envOf(tpl, "DeployApi").TURSO_DATABASE_URL).toBe("libsql://example.turso.io");
+      expect(envOf(tpl, "DeployApi").TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe(
+        "/tenkacloud/development/turso-token",
+      );
       tpl.hasResourceProperties("AWS::IAM::Policy", {
         PolicyDocument: {
           Statement: Match.arrayWith([

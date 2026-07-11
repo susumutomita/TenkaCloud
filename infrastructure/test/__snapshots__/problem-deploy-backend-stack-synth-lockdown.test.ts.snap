@@ -12259,6 +12259,30 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
           "Effect": "Allow",
           "Resource": "arn:aws:iam::*:role/TenkaCloud-*",
         },
+        {
+          "Action": "ssm:GetParameter",
+          "Effect": "Allow",
+          "Resource": {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":ssm:",
+                {
+                  "Ref": "AWS::Region",
+                },
+                ":",
+                {
+                  "Ref": "AWS::AccountId",
+                },
+                ":parameter/tenkacloud/development/turso-token",
+              ],
+            ],
+          },
+        },
       ],
       "Version": "2012-10-17",
     },
@@ -13764,6 +13788,8 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
     "DEPLOY_EVENT_BUS_NAME": "test-bus",
     "DEPLOY_QUOTA_BY_TIER": "",
     "NODE_OPTIONS": "--enable-source-maps",
+    "TURSO_AUTH_TOKEN_PARAMETER_NAME": "/tenkacloud/development/turso-token",
+    "TURSO_DATABASE_URL": "libsql://example.turso.io",
   },
   "DeployStatusWriterFunctionC158D7E4": {
     "CONTROL_DATA_BACKEND": "turso",
@@ -15246,6 +15272,30 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — turso-mirr
           "Action": "sts:AssumeRole",
           "Effect": "Allow",
           "Resource": "arn:aws:iam::*:role/TenkaCloud-*",
+        },
+        {
+          "Action": "ssm:GetParameter",
+          "Effect": "Allow",
+          "Resource": {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":ssm:",
+                {
+                  "Ref": "AWS::Region",
+                },
+                ":",
+                {
+                  "Ref": "AWS::AccountId",
+                },
+                ":parameter/tenkacloud/development/turso-token",
+              ],
+            ],
+          },
         },
       ],
       "Version": "2012-10-17",
@@ -17640,6 +17690,8 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — turso-mirr
     "DEPLOY_EVENT_BUS_NAME": "test-bus",
     "DEPLOY_QUOTA_BY_TIER": "",
     "NODE_OPTIONS": "--enable-source-maps",
+    "TURSO_AUTH_TOKEN_PARAMETER_NAME": "/tenkacloud/development/turso-token",
+    "TURSO_DATABASE_URL": "libsql://example.turso.io",
   },
   "DescribeStackFunction225490F1": {
     "NODE_OPTIONS": "--enable-source-maps",
