@@ -21,13 +21,28 @@ const FIXTURE_ENV = "test-turso-env-check-lite-fixture";
 const FIXTURE_DIR = join(REPO_ROOT, "infrastructure", "environments", FIXTURE_ENV);
 const FIXTURE_ENV_FILE = join(FIXTURE_DIR, ".env");
 
+// Vars this recipe reads that must come ONLY from the fixture .env, never from
+// the calling shell — `make`'s `-include $(ENV_FILE)` + bare `export` (Makefile:157-158)
+// means any of these already exported in the test runner's environment would
+// silently override the fixture and make a test pass/fail for the wrong reason.
+const ENV_KEYS_UNDER_TEST = [
+  "TENANT_ADMIN_EMAIL",
+  "SYSTEM_ADMIN_EMAIL",
+  "CDK_PARAM_CONTROL_DATA_BACKEND",
+  "CDK_PARAM_TURSO_DATABASE_URL",
+  "CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME",
+] as const;
+
 function runEnvCheckLite(envFileContent: string): { status: number | null; output: string } {
   mkdirSync(FIXTURE_DIR, { recursive: true });
   writeFileSync(FIXTURE_ENV_FILE, envFileContent, "utf8");
+  const sanitizedEnv = { ...process.env };
+  for (const key of ENV_KEYS_UNDER_TEST) delete sanitizedEnv[key];
   const result = spawnSync("make", ["env-check-lite", `ENV=${FIXTURE_ENV}`], {
     cwd: REPO_ROOT,
     encoding: "utf8",
     timeout: 30_000,
+    env: sanitizedEnv,
   });
   return { status: result.status, output: `${result.stdout}\n${result.stderr}` };
 }
@@ -57,7 +72,7 @@ describe("make env-check-lite Turso/SQL validation (#2564)", () => {
     );
     expect(status).not.toBe(0);
     expect(output).toContain("CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME");
-    expect(output).not.toContain("CDK_PARAM_TURSO_DATABASE_URL は");
+    expect(output).not.toContain("CDK_PARAM_TURSO_DATABASE_URL");
   });
 
   it.each([
