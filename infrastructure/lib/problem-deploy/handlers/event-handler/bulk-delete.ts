@@ -220,6 +220,7 @@ async function buildBulkTeardownDetail(
     ? undefined
     : await resolveVerifiedCompetitorAccount(
         {
+          runtime: shared.runtime,
           ddb: shared.ddb,
           competitorAccountsTableName: shared.competitorAccountsTableName,
           env: shared.env,

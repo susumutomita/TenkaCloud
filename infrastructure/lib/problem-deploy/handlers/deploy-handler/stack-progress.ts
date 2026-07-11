@@ -225,6 +225,7 @@ export async function getStackProgress(
   // 旧 deployment 行 / 未 verify) で従来通り。
   const verified = await resolveVerifiedCompetitorAccount(
     {
+      runtime: shared.runtime,
       ddb: shared.ddb,
       competitorAccountsTableName: shared.competitorAccountsTableName,
       env: shared.env,

@@ -20,6 +20,7 @@ import { UnverifiedCompetitorAccountError } from "../../lib/problem-deploy/handl
 import { buildAzureCredentialParameterName } from "../../lib/problem-deploy/handlers/shared/azure-credential-store";
 import { buildGcpCredentialParameterName } from "../../lib/problem-deploy/handlers/shared/gcp-credential-store";
 import { buildSakuraCredentialParameterName } from "../../lib/problem-deploy/handlers/shared/sakura-credential-store";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const ENV = "test";
 const TENANT = "tenant-acme";
@@ -89,7 +90,12 @@ function makeDeps(
   ssm: { send: ReturnType<typeof vi.fn> },
 ): CompositeTargetConnectionDeps {
   return {
-    aws: { ddb: { send: ddb.send }, competitorAccountsTableName: "CompetitorAccounts", env: ENV },
+    aws: {
+      runtime: makeTestControlDataRuntime(),
+      ddb: { send: ddb.send },
+      competitorAccountsTableName: "CompetitorAccounts",
+      env: ENV,
+    },
     credentials: { ssm: { send: ssm.send }, env: ENV },
   };
 }

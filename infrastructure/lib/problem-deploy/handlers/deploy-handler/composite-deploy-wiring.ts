@@ -68,6 +68,7 @@ export function buildCompositeDeployDeps(
             resolveCompositeTargetConnection(
               {
                 aws: {
+                  runtime: ctx.runtime,
                   ddb: ctx.ddb,
                   competitorAccountsTableName: ctx.competitorAccountsTableName,
                   env: ctx.env,

@@ -33,7 +33,7 @@ export interface ParticipantPortalLambdaProps {
    * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `EVENTS_TABLE_NAME` も EventsRead IAM も付与しない — notifications / feature-flags は
-   * repository seam (`controlDataRuntime`) が SQL executor 直結で処理する。
+   * repository seam (entrypoint 注入の control-data runtime) が SQL executor 直結で処理する。
    */
   readonly eventsTable?: ITable;
   /**
@@ -85,7 +85,7 @@ export interface ParticipantPortalLambdaProps {
   /**
    * [Issue #2440 / ADR-049 §5.1 Phase A5] control-plane data backend (dynamodb|turso|sql|
    * turso-mirror|sql-mirror)。 notifications / feature-flags の repository seam
-   * (`controlDataRuntime`) がこの env を読む。default (未指定 / `dynamodb`) は env を足さず
+   * (entrypoint 注入の control-data runtime) がこの env を読む。default (未指定 / `dynamodb`) は env を足さず
    * byte 互換。`EventApiLambda` と同型の注入パターン。
    */
   readonly controlDataBackend?: string;

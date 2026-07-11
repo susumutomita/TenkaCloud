@@ -5,6 +5,7 @@ import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { StatusCodes } from "http-status-codes";
+import { createDefaultControlDataRuntime } from "../../problem-deploy/control-data/runtime-repositories.js";
 import { parseProblemsCatalog } from "../../problem-deploy/handlers/shared/catalog.js";
 import { resolveVerifiedCompetitorAccount } from "../../problem-deploy/handlers/shared/competitor-account-lookup.js";
 import { publishProblemEvent } from "../../problem-deploy/handlers/shared/events.js";
@@ -87,6 +88,8 @@ async function buildDeps(): Promise<IntentIngressDeps> {
   const secret = await resolveVerifySecret(ssm);
   const publicJwk = await resolveVerifyPublicKey(ssm);
   const dynamodb = new DynamoDBClient(clientConfig);
+  // [#2527 Slice 4] Composition root: one control-data runtime per Lambda instance.
+  const controlDataRuntime = createDefaultControlDataRuntime();
   const ddb = DynamoDBDocumentClient.from(dynamodb);
 
   const nonceStore = new DdbNonceStore({
@@ -112,6 +115,7 @@ async function buildDeps(): Promise<IntentIngressDeps> {
     resolveVerifiedAccount: async (tenantId, awsAccountId) => {
       const verified = await resolveVerifiedCompetitorAccount(
         {
+          runtime: controlDataRuntime,
           ddb,
           competitorAccountsTableName,
           env: deployEnvironment,

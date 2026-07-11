@@ -279,7 +279,12 @@ async function resolveDeployAuthorization(
   // Phase 2.2 (Issue #459): verified=true な行が無ければ deploy しない (= fail-closed)。
   // 同 account deploy の dev fallback も廃止 — 全 deploy は verified なれた account のみ。
   const verified = await resolveVerifiedCompetitorAccount(
-    { ddb: ctx.ddb, competitorAccountsTableName: ctx.competitorAccountsTableName, env: ctx.env },
+    {
+      runtime: ctx.runtime,
+      ddb: ctx.ddb,
+      competitorAccountsTableName: ctx.competitorAccountsTableName,
+      env: ctx.env,
+    },
     ctx.tenantId,
     request.awsAccountId,
   );

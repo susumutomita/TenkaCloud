@@ -25,6 +25,7 @@ export async function resolveBulkVerifiedAccounts(
     Array.from(accountIds).map(async (accountId) => {
       const account = await resolveVerifiedCompetitorAccount(
         {
+          runtime: shared.runtime,
           ddb: shared.ddb,
           competitorAccountsTableName: shared.competitorAccountsTableName,
           env: shared.env,
