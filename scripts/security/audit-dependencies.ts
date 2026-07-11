@@ -32,7 +32,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(__dirname, "..");
+const REPO_ROOT = resolve(__dirname, "../..");
 const BASELINE_PATH = join(__dirname, "audit-baseline.json");
 
 const LIFECYCLE_SCRIPT_KEYS = [

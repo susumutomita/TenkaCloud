@@ -24,7 +24,9 @@
     "tenant_users": "Users",
     "identity_providers": "Identity providers",
     "settings": "Settings",
-    "admin_section": "Admin"
+    "admin_section": "Admin",
+    "event_ops_section": "Event operations",
+    "content_section": "Challenge content"
   },
   "settings": {
     "header": "Feature flags",

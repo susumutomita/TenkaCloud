@@ -7,6 +7,7 @@ import {
   retryDeployments,
   validateRetryRequest,
 } from "../../lib/problem-deploy/handlers/deploy-handler/retry";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #911 (#895 Phase 2.D): retry API の挙動契約 test。
@@ -32,6 +33,7 @@ function buildShared(): {
   const ddbSend = vi.fn();
   const eventsSend = vi.fn();
   const shared: DeploySharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     competitorAccountsTableName: "TestCompetitorAccounts",
     env: "development",

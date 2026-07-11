@@ -27,6 +27,7 @@ import type {
   ResolveCompositeTargetConnectionInput,
   TargetConnection,
 } from "../../lib/problem-deploy/handlers/deploy-handler/composite-target-connection";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const NOW_ISO = "2026-06-29T00:00:00.000Z";
 const NOW_MS = Date.parse(NOW_ISO);
@@ -130,7 +131,7 @@ function makeFake(): Fake {
     );
   });
   return {
-    deps: { ddb: { send }, tableName: "TestDeployments" },
+    deps: { runtime: makeTestControlDataRuntime(), ddb: { send }, tableName: "TestDeployments" },
     store,
     commands,
     resetLog: () => {

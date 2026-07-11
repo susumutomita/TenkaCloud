@@ -22,6 +22,7 @@ import {
   getCompositeTarget,
   listCompositeTargets,
 } from "../../lib/problem-deploy/handlers/deploy-handler/composite-repository";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const NOW_ISO = "2026-06-28T00:00:00.000Z";
 const EXPIRES_AT = 9_999_999_999;
@@ -80,7 +81,7 @@ function makeFakeDdb(): FakeDdb {
   });
 
   return {
-    deps: { ddb: { send }, tableName: "TestDeployments" },
+    deps: { runtime: makeTestControlDataRuntime(), ddb: { send }, tableName: "TestDeployments" },
     rows: () => [...store.values()],
     putCount: (pk: string) => puts.filter((p) => p === pk).length,
   };
@@ -436,7 +437,11 @@ describe("composite deployment repository (#2061)", () => {
       }
       throw new Error("unexpected");
     });
-    const deps = { ddb: { send }, tableName: "TestDeployments" };
+    const deps = {
+      runtime: makeTestControlDataRuntime(),
+      ddb: { send },
+      tableName: "TestDeployments",
+    };
     await expect(createCompositeTarget(deps, targetInput())).rejects.toBeInstanceOf(
       CompositeTargetConflictError,
     );
@@ -463,7 +468,7 @@ describe("composite deployment repository (#2061)", () => {
   it("returns an empty target list when the GSI3 query yields no Items field", async () => {
     const send = vi.fn(async () => ({}) as { Items?: undefined });
     const targets = await listCompositeTargets(
-      { ddb: { send }, tableName: "TestDeployments" },
+      { runtime: makeTestControlDataRuntime(), ddb: { send }, tableName: "TestDeployments" },
       "parent-1",
     );
     expect(targets).toEqual([]);
@@ -475,7 +480,10 @@ describe("composite deployment repository (#2061)", () => {
       return { Item: undefined };
     });
     await expect(
-      createCompositeParent({ ddb: { send }, tableName: "TestDeployments" }, parentInput()),
+      createCompositeParent(
+        { runtime: makeTestControlDataRuntime(), ddb: { send }, tableName: "TestDeployments" },
+        parentInput(),
+      ),
     ).rejects.toThrow(/throughput exceeded/);
   });
 
@@ -487,7 +495,10 @@ describe("composite deployment repository (#2061)", () => {
       throw new Error("unexpected");
     });
     await expect(
-      createCompositeTarget({ ddb: { send }, tableName: "TestDeployments" }, targetInput()),
+      createCompositeTarget(
+        { runtime: makeTestControlDataRuntime(), ddb: { send }, tableName: "TestDeployments" },
+        targetInput(),
+      ),
     ).rejects.toThrow(/throughput exceeded/);
   });
 

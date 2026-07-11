@@ -238,7 +238,7 @@ fi
 # 残存テーブルを列挙して billing 警告を出す (削除はしない — 誤削除防止)。 report スクリプトは
 # 常に exit 0 だが、 万一 bun 不在等で失敗しても cleanup の冪等性 / exit code は壊さない。
 log "checking for RETAIN-orphaned DynamoDB tables (billing warning only)..."
-bun run "${TenkaCloud_ROOT}/scripts/report-retained-tables.ts" \
+bun run "${TenkaCloud_ROOT}/scripts/ops/report-retained-tables.ts" \
   || log "  retained-table check skipped (non-fatal)"
 
 log "cleanup complete."

@@ -1,5 +1,5 @@
 import type { SSMClient } from "@aws-sdk/client-ssm";
-import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+
 import type {
   CompetitorAccountRecord,
   CompetitorAccountsRepository,
@@ -17,13 +17,13 @@ import type {
  * for the injected shared resources. The raw DDB access this module
  * previously performed inline (PutCommand / QueryCommand / GetCommand /
  * UpdateCommand / DeleteCommand) now lives behind
- * {@link controlDataRuntime.resolveCompetitorAccountsRepository}
+ * the injected runtime's `resolveCompetitorAccountsRepository`
  * ({@link DynamoDbCompetitorAccountsRepository} / {@link SqlCompetitorAccountsRepository}).
  */
 function resolveRepository(
   shared: CompetitorAccountsSharedResources,
 ): Promise<CompetitorAccountsRepository> {
-  return controlDataRuntime.resolveCompetitorAccountsRepository({
+  return shared.runtime.resolveCompetitorAccountsRepository({
     ddb: shared.ddb,
     competitorAccountsTableName: shared.tableName,
   });

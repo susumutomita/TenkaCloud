@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { isLoopbackUrl } from "./local-play/loopback";
+import { isLoopbackUrl } from "../local-play/loopback";
 
 export type AppMode = "dev-mock" | "backend";
 export type CloudMode = "real" | "mock" | "local";

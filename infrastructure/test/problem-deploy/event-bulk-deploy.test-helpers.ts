@@ -16,6 +16,7 @@
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import { vi } from "vitest";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 export const NOW_MS = 1_700_000_000_000;
 
@@ -62,6 +63,7 @@ export function buildShared(
     return originalSend(cmd);
   });
   const shared: EventSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     eventsTableName: "TestEvents",
     teamsTableName: "TestTeams",
     deploymentsTableName: "TestDeployments",

@@ -43,11 +43,12 @@ TenkaCloud/
 │   │       # source-bundle/, tenant-status-reconciler/ — see `ls infrastructure/lib`
 │   ├── environments/<env>/{config.json,.env}# Per-environment config; .env injects ${VAR:-default}
 │   └── templates/competitor-bootstrap.yaml  # One-time IAM Role rolled out in the competitor account
-├── scripts/                                 # install.sh / cleanup.sh / provision-tenant.sh, etc.
+├── scripts/                                 # Deploy-time scripts + product CLIs (top level), domain tooling in
+│                                             # workspace/ security/ landing/ onboard/ ops/ — see scripts/README.md
 ├── packs/                                   # In-repo sample/golden/reference problem packs (ADR-012 3-asset model)
 ├── problems/                                # Git submodule → TenkaCloudChallenge (the community catalog).
 │   │                                         # Empty until `git submodule update --init`; cloned fresh at deploy time
-├── landing/                                 # Static marketing/demo site (GitHub Pages build output + locales)
+├── landing/                                 # Static marketing/demo site (Cloudflare Pages publish dir + locales)
 └── .github/workflows/                       # ci.yml (PR-time lint / typecheck / test / build) + others, see below
 ```
 
@@ -156,7 +157,6 @@ You are not done until they all pass. If something fails, find the root cause an
 
 Beyond `ci.yml`, a few narrowly-scoped workflows under `.github/workflows/` run independently:
 
-- **`pages.yml`** — Deploys `landing/` (plus the participant-portal and application-admin-console demo builds) to GitHub Pages on push to `main`.
 - **`submodule-sync.yml`** — Weekly (Mon 00:17 UTC) plus on-demand bump of the `problems/` submodule pin to the tip of its tracked branch, always opened as its own isolated PR so it can't conflict with in-flight work.
 - **`problem-pack-ci.yml`** — Reusable `workflow_call` CI (Issue #2108) that external TenkaCloud problem-pack repos call to validate their pack (schema + local tests) without checking out or deploying the platform itself.
 - **`detect-suspicious-comments.yml`** — Scans new/edited issue and PR comments for suspicious external content and labels the issue `needs-maintainer-review` so a maintainer checks it before anyone opens an attachment (see CONTRIBUTING.md's "Comment attachments" section).
@@ -242,7 +242,7 @@ A four-layer defense against credential-exfil attacks that abuse `prepare` / `po
 
 1. **Bun `trustedDependencies`**: Bun blocks transitive lifecycle scripts by default (secure by default). The `trustedDependencies` array in `package.json` is the explicit allowlist (currently empty).
 2. **`.npmrc`**: `ignore-scripts=true` + `min-release-age=168h` (7-day quarantine, npm 11+). Even if a contributor uses npm / yarn / pnpm, the protection is automatic.
-3. **CI audit** `make audit-deps` (`scripts/audit-dependencies.ts`): Scans `node_modules`, diffs packages with lifecycle scripts against `scripts/audit-baseline.json`, and fails on any new addition or new hook on an existing dep.
+3. **CI audit** `make audit-deps` (`scripts/security/audit-dependencies.ts`): Scans `node_modules`, diffs packages with lifecycle scripts against `scripts/security/audit-baseline.json`, and fails on any new addition or new hook on an existing dep.
 4. **CI install policy** `make install_ci`: `bun install --frozen-lockfile --ignore-scripts` + Aikido Safe Chain malicious package detection (Safe Chain's own setup step is `continue-on-error: true` — best-effort, not a hard CI gate; layers 1-3 are).
 
 Add packages to `trustedDependencies` in a stand-alone PR. Manually verify the script contents and summarize them in the PR body (if you see suspicious `curl` / `wget` / OS persistence / env-var exfil, do not add to the baseline — report it instead).

@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ControlDataRuntime } from "../../lib/problem-deploy/control-data/runtime-repositories";
 import {
   deleteProblemEndpointOverride,
   listProblemEndpoints,
   upsertProblemEndpointOverride,
 } from "../../lib/problem-deploy/handlers/problem-endpoints-handler/endpoints";
 import type { ProblemEndpointSlot } from "../../lib/utils/endpoints-metadata";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * problem-endpoints-handler の business logic 単体テスト。`queryTeamItems` は
@@ -26,8 +28,10 @@ function buildShared(opts: {
   endpointsTableName?: string;
   problemsEndpoints?: Record<string, readonly ProblemEndpointSlot[]>;
   ddbSend?: ReturnType<typeof vi.fn>;
+  runtime?: ControlDataRuntime;
 }) {
   return {
+    runtime: opts.runtime ?? makeTestControlDataRuntime(),
     tableName: "Deployments",
     eventsTableName: "Events",
     endpointsTableName: opts.endpointsTableName ?? "ProblemEndpoints",
@@ -146,16 +150,14 @@ describe("listProblemEndpoints", () => {
     // pure SQL (turso|sql) は ProblemEndpoints table 自体を synth しないため env が空文字になる
     // (= 正常状態)。 空文字を無条件に misconfigured 扱いすると pure SQL backend で常に 500 になる
     // regression を生む — queryTeamItems まで到達することを確認する。
-    process.env.CONTROL_DATA_BACKEND = "turso";
-    try {
-      mockedQueryTeamItems.mockResolvedValueOnce([]);
-      const shared = buildShared({ endpointsTableName: "" });
-      const r = await listProblemEndpoints(shared, "key", "battle-1");
-      expect(r.kind).toBe("unauthorized");
-      expect(mockedQueryTeamItems).toHaveBeenCalledTimes(1);
-    } finally {
-      delete process.env.CONTROL_DATA_BACKEND;
-    }
+    mockedQueryTeamItems.mockResolvedValueOnce([]);
+    const shared = buildShared({
+      endpointsTableName: "",
+      runtime: makeTestControlDataRuntime({ CONTROL_DATA_BACKEND: "turso" }),
+    });
+    const r = await listProblemEndpoints(shared, "key", "battle-1");
+    expect(r.kind).toBe("unauthorized");
+    expect(mockedQueryTeamItems).toHaveBeenCalledTimes(1);
   });
 
   it("#703: should always populate defaultKey from metadata default.key so the UI can hint even without stackOutputs", async () => {

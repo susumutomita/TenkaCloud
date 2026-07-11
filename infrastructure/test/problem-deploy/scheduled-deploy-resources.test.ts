@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildScheduledDeployResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import {
+  buildScheduledDeployResources,
+  buildScheduledTeardownResources,
+} from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * [ADR-047 follow-up] `buildScheduledDeployResources` の段階的有効化ガード (= teardown 配線の鏡像)。
@@ -37,7 +41,7 @@ afterEach(() => {
 
 describe("buildScheduledDeployResources (ADR-047 follow-up)", () => {
   it("should return undefined when no env is wired (dormant)", () => {
-    expect(buildScheduledDeployResources()).toBeUndefined();
+    expect(buildScheduledDeployResources(makeTestControlDataRuntime())).toBeUndefined();
   });
 
   it.each(
@@ -46,18 +50,18 @@ describe("buildScheduledDeployResources (ADR-047 follow-up)", () => {
     for (const [key, value] of Object.entries(REQUIRED_ENV)) {
       if (key !== missing) process.env[key] = value;
     }
-    expect(buildScheduledDeployResources()).toBeUndefined();
+    expect(buildScheduledDeployResources(makeTestControlDataRuntime())).toBeUndefined();
   });
 
   it("should return undefined when BATTLE_PROBLEMS_CATALOG is an empty catalog (no problemDir to resolve)", () => {
     for (const [key, value] of Object.entries(REQUIRED_ENV)) process.env[key] = value;
     process.env.BATTLE_PROBLEMS_CATALOG = JSON.stringify({});
-    expect(buildScheduledDeployResources()).toBeUndefined();
+    expect(buildScheduledDeployResources(makeTestControlDataRuntime())).toBeUndefined();
   });
 
   it("should build full resources (teams + catalog) when every required env is wired", () => {
     for (const [key, value] of Object.entries(REQUIRED_ENV)) process.env[key] = value;
-    const res = buildScheduledDeployResources();
+    const res = buildScheduledDeployResources(makeTestControlDataRuntime());
     expect(res).toBeDefined();
     expect(res?.eventsTableName).toBe("Events");
     expect(res?.deploymentsTableName).toBe("Deployments");
@@ -75,7 +79,57 @@ describe("buildScheduledDeployResources (ADR-047 follow-up)", () => {
 
   it("should default DISRUPTIONS_TABLE_NAME to empty string when unset", () => {
     for (const [key, value] of Object.entries(REQUIRED_ENV)) process.env[key] = value;
-    const res = buildScheduledDeployResources();
+    const res = buildScheduledDeployResources(makeTestControlDataRuntime());
     expect(res?.disruptionsTableName).toBe("");
+  });
+
+  it("should place the injected runtime on the built resources", () => {
+    for (const [key, value] of Object.entries(REQUIRED_ENV)) process.env[key] = value;
+    const runtime = makeTestControlDataRuntime();
+    expect(buildScheduledDeployResources(runtime)?.runtime).toBe(runtime);
+  });
+});
+
+/**
+ * [ADR-047] `buildScheduledTeardownResources` の段階的有効化ガード (deploy 側の鏡像)。
+ * teardown は Teams / catalog を使わないため必須 env が deploy より狭い。
+ */
+describe("buildScheduledTeardownResources (ADR-047)", () => {
+  const TEARDOWN_REQUIRED_ENV = {
+    COMPETITOR_ACCOUNTS_TABLE_NAME: "Accounts",
+    EVENTS_TABLE_NAME: "Events",
+    DEPLOYMENTS_TABLE_NAME: "Deployments",
+    DEPLOY_EVENT_BUS_NAME: "bus",
+    DEPLOY_ENVIRONMENT: "test",
+  } as const;
+
+  it("should return undefined when no env is wired (dormant)", () => {
+    expect(buildScheduledTeardownResources(makeTestControlDataRuntime())).toBeUndefined();
+  });
+
+  it.each(
+    Object.keys(TEARDOWN_REQUIRED_ENV),
+  )("should return undefined when only %s is missing (every required env is needed)", (missing) => {
+    for (const [key, value] of Object.entries(TEARDOWN_REQUIRED_ENV)) {
+      if (key !== missing) process.env[key] = value;
+    }
+    expect(buildScheduledTeardownResources(makeTestControlDataRuntime())).toBeUndefined();
+  });
+
+  it("should build teardown resources with the injected runtime and safe placeholders", () => {
+    for (const [key, value] of Object.entries(TEARDOWN_REQUIRED_ENV)) process.env[key] = value;
+    const runtime = makeTestControlDataRuntime();
+    const res = buildScheduledTeardownResources(runtime);
+    expect(res).toBeDefined();
+    expect(res?.runtime).toBe(runtime);
+    expect(res?.eventsTableName).toBe("Events");
+    expect(res?.deploymentsTableName).toBe("Deployments");
+    expect(res?.competitorAccountsTableName).toBe("Accounts");
+    expect(res?.eventBusName).toBe("bus");
+    expect(res?.env).toBe("test");
+    // teardown 未使用 field は安全な placeholder (bulkTeardownEvent は参照しない)。
+    expect(res?.teamsTableName).toBe("");
+    expect(res?.problemsCatalog).toEqual({});
+    expect(res?.useBulkDistributedMap).toBe(false);
   });
 });

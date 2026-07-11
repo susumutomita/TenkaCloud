@@ -5,6 +5,7 @@ import {
   type RuntimeReconcileDeps,
   reconcileRuntimeDeployment,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/runtime-status-reconciler.js";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler の振る舞い pin。 RuntimeStatus→
@@ -20,6 +21,7 @@ function deps(
   ssmSend: ReturnType<typeof vi.fn>,
 ): RuntimeReconcileDeps {
   return {
+    runtime: makeTestControlDataRuntime(),
     ddb: { send: ddbSend } as never,
     deploymentsTableName: "TestDeployments",
     env: "development",

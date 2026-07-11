@@ -6,12 +6,13 @@ import {
   QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
 import type { SamlIdpConfig } from "@tenkacloud/saml-utils";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   createDdbIdpStore,
   createSeamIdpStore,
 } from "../../lib/control-plane/handlers/idp-handler/ddb-store";
 import { DynamoDbSamlIdpsRepository } from "../../lib/problem-deploy/control-data/dynamodb-saml-idps-repository";
+import { makeTestControlDataRuntime } from "../problem-deploy/control-data/runtime.test-helpers";
 
 /**
  * [Issue #2442 / Phase C5] `createDdbIdpStore` / `createSeamIdpStore` coverage.
@@ -26,9 +27,9 @@ import { DynamoDbSamlIdpsRepository } from "../../lib/problem-deploy/control-dat
  * five-value `CONTROL_DATA_BACKEND` selection logic is already fully covered by
  * `resolveSamlIdpsRepository (runtime)` in
  * `test/problem-deploy/control-data/saml-idps-repository.test.ts` against a
- * locally constructed `createControlDataRuntime`, not the process-wide
- * singleton this file delegates to — hitting `turso`/`sql` through the real
- * singleton here would require live SSM / libSQL network calls.
+ * locally constructed `createControlDataRuntime`, same as the injected test
+ * runtime here — hitting `turso`/`sql` through a real runtime here would
+ * require live SSM / libSQL network calls.
  */
 
 const TABLE = "SamlIdps";
@@ -95,18 +96,12 @@ describe("createDdbIdpStore", () => {
 });
 
 describe("createSeamIdpStore (default dynamodb backend)", () => {
-  const ORIGINAL_BACKEND = process.env.CONTROL_DATA_BACKEND;
-
-  beforeEach(() => {
-    delete process.env.CONTROL_DATA_BACKEND;
-  });
-  afterEach(() => {
-    if (ORIGINAL_BACKEND === undefined) delete process.env.CONTROL_DATA_BACKEND;
-    else process.env.CONTROL_DATA_BACKEND = ORIGINAL_BACKEND;
-  });
-
   it("should round-trip put/get/list/delete via the resolved DynamoDB backend", async () => {
-    const store = createSeamIdpStore({ ddb: makeFakeIdpDdb(), tableName: TABLE });
+    const store = createSeamIdpStore({
+      runtime: makeTestControlDataRuntime(),
+      ddb: makeFakeIdpDdb(),
+      tableName: TABLE,
+    });
     const scope = { kind: "tenant" as const, tenantId: "tenant-a" };
 
     await store.put(scope, record());
@@ -118,7 +113,11 @@ describe("createSeamIdpStore (default dynamodb backend)", () => {
   });
 
   it("should normalize an empty tableName ('' — pure SQL cold start default) to undefined and fail loud under the dynamodb backend", async () => {
-    const store = createSeamIdpStore({ ddb: makeFakeIdpDdb(), tableName: "" });
+    const store = createSeamIdpStore({
+      runtime: makeTestControlDataRuntime(),
+      ddb: makeFakeIdpDdb(),
+      tableName: "",
+    });
     const scope = { kind: "tenant" as const, tenantId: "tenant-a" };
 
     await expect(store.list(scope)).rejects.toThrow(/dynamodb backend requires/);

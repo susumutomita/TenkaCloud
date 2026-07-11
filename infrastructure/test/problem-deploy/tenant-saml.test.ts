@@ -31,6 +31,7 @@ import {
   TenantSamlConfigInputSchema,
 } from "../../lib/problem-deploy/handlers/competitor-accounts-handler/saml-types";
 import type { CompetitorAccountsSharedResources } from "../../lib/problem-deploy/handlers/competitor-accounts-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #839 follow-up Phase B: tenant-managed SAML 設定の handler / SDK wrapper / DDB store / schema を
@@ -289,6 +290,7 @@ function makeSharedAndDdb() {
   const ddbSend = vi.fn();
   const cognitoSend = vi.fn();
   const shared: CompetitorAccountsSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestCompetitorAccounts",
     env: "development",
     tenkaCloudAccountId: "123456789012",
@@ -312,7 +314,10 @@ describe("saml-store DDB CRUD", () => {
 
   it("getTenantSamlConfig: 行 不在なら undefined", async () => {
     ddbSend.mockResolvedValueOnce({});
-    const r = await getTenantSamlConfig({ ddb: shared.ddb, tableName: shared.tableName }, "t1");
+    const r = await getTenantSamlConfig(
+      { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
+      "t1",
+    );
     expect(r).toBeUndefined();
     const cmd = ddbSend.mock.calls[0][0] as GetCommand;
     expect(cmd.input.Key).toEqual({ PK: "TENANT#t1", SK: "SAML_CONFIG" });
@@ -331,7 +336,10 @@ describe("saml-store DDB CRUD", () => {
         updatedBy: "sub-1",
       },
     });
-    const r = await getTenantSamlConfig({ ddb: shared.ddb, tableName: shared.tableName }, "t1");
+    const r = await getTenantSamlConfig(
+      { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
+      "t1",
+    );
     expect(r?.enabled).toBe(true);
     expect(r?.metadataUrl).toBe("https://idp/m.xml");
   });
@@ -339,7 +347,7 @@ describe("saml-store DDB CRUD", () => {
   it("putTenantSamlConfig: PutCommand を発行し view を返す", async () => {
     ddbSend.mockResolvedValueOnce({});
     const r = await putTenantSamlConfig(
-      { ddb: shared.ddb, tableName: shared.tableName },
+      { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
       "t1",
       {
         metadataUrl: "https://idp/m.xml",
@@ -361,7 +369,10 @@ describe("saml-store DDB CRUD", () => {
 
   it("deleteTenantSamlConfig: DeleteCommand を発行 (idempotent)", async () => {
     ddbSend.mockResolvedValueOnce({});
-    await deleteTenantSamlConfig({ ddb: shared.ddb, tableName: shared.tableName }, "t1");
+    await deleteTenantSamlConfig(
+      { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
+      "t1",
+    );
     const cmd = ddbSend.mock.calls[0][0] as DeleteCommand;
     expect(cmd.input.Key).toEqual({ PK: "TENANT#t1", SK: "SAML_CONFIG" });
   });

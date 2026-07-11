@@ -7,6 +7,7 @@ import {
   ExternalIdMissingError,
   verifyCompetitorAccount,
 } from "../../lib/problem-deploy/handlers/competitor-accounts-handler/verify";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const NOW_MS = 1_700_000_000_000;
 
@@ -20,6 +21,7 @@ function buildShared(): {
   const ssmSend = vi.fn();
   const stsSend = vi.fn();
   const shared: CompetitorAccountsSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestCompetitorAccounts",
     env: "development",
     tenkaCloudAccountId: "111111111111",

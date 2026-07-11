@@ -3,6 +3,7 @@ import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
+import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import {
   ForbiddenRoleError,
   MissingTenantClaimError,
@@ -61,7 +62,8 @@ import {
 
 const AWS_ACCOUNT_ID_RE = /^\d{12}$/;
 
-const shared = buildCompetitorAccountsSharedResources();
+// [#2527 Slice 4] Composition root: one control-data runtime per Lambda instance.
+const shared = buildCompetitorAccountsSharedResources(createDefaultControlDataRuntime());
 
 const app = new Hono();
 

@@ -16,6 +16,7 @@ import {
   collectCompositeOutputs,
 } from "../../lib/problem-deploy/handlers/deploy-handler/composite-outputs";
 import type { CompositeDeploymentRepositoryDeps } from "../../lib/problem-deploy/handlers/deploy-handler/composite-repository";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const PARENT = "parent-1";
 
@@ -49,7 +50,7 @@ function makeFake(targets: SeedTarget[]): CompositeDeploymentRepositoryDeps {
     }
     throw new Error("unexpected command");
   });
-  return { ddb: { send }, tableName: "T" };
+  return { runtime: makeTestControlDataRuntime(), ddb: { send }, tableName: "T" };
 }
 
 describe("collectCompositeOutputs (#2069)", () => {

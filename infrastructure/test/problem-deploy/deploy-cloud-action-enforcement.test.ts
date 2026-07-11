@@ -27,6 +27,7 @@ import {
   type DeployInvocation,
   startDeployment,
 } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/presigned-url", () => ({
   generateChallengePayloadUrl: vi.fn(async () => "https://example.invalid/fake.zip"),
@@ -75,6 +76,7 @@ function buildContext(
     return putSend(cmd);
   });
   const ctx: DeployContext = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     competitorAccountsTableName: "TestCompetitorAccounts",
     env: "development",

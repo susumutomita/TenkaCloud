@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setEventSchedule } from "../../lib/problem-deploy/handlers/event-handler/schedule";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
 import { ScheduleEventRequestSchema } from "../../lib/problem-deploy/handlers/event-handler/types";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const NOW_MS = 1_700_000_000_000;
 const NOW_ISO = new Date(NOW_MS).toISOString();
@@ -15,6 +16,7 @@ function buildShared(): {
 } {
   const ddbSend = vi.fn();
   const shared: EventSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     eventsTableName: "TestEvents",
     teamsTableName: "TestTeams",
     deploymentsTableName: "TestDeployments",

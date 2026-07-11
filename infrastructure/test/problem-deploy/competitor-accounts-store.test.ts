@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CompetitorAccountsSharedResources } from "../../lib/problem-deploy/handlers/competitor-accounts-handler/shared";
 import {
   CompetitorAccountNotFoundError,
+  CompetitorAccountNotVerifiedError,
   createCompetitorAccount,
   DuplicateCompetitorAccountError,
   deleteCompetitorAccount,
@@ -17,6 +18,7 @@ import {
   listCompetitorAccounts,
   markCompetitorAccountVerified,
 } from "../../lib/problem-deploy/handlers/competitor-accounts-handler/store";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const NOW_MS = 1_700_000_000_000;
 const NOW_ISO = new Date(NOW_MS).toISOString();
@@ -31,6 +33,7 @@ function buildShared(): {
   const ssmSend = vi.fn();
   const stsSend = vi.fn();
   const shared: CompetitorAccountsSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestCompetitorAccounts",
     env: "development",
     tenkaCloudAccountId: "111111111111",
@@ -284,5 +287,13 @@ describe("deleteCompetitorAccount", () => {
     await deleteCompetitorAccount(shared, "tenant-acme", "222222222222");
 
     expect(ssmSend.mock.calls.length).toBe(0);
+  });
+
+  it("should carry the awsAccountId and a verify-first hint on CompetitorAccountNotVerifiedError (#868 gate contract)", () => {
+    const err = new CompetitorAccountNotVerifiedError("123456789012");
+    expect(err.name).toBe("CompetitorAccountNotVerifiedError");
+    expect(err.awsAccountId).toBe("123456789012");
+    expect(err.message).toContain("123456789012");
+    expect(err.message).toContain("verify");
   });
 });

@@ -66,10 +66,23 @@ export function ShellLayout({
       navHeaderText={t("nav.menu")}
       navItems={[
         { type: "link", href: "/", text: t("nav.home") },
-        { type: "link", href: "/events", text: t("nav.events") },
-        { type: "link", href: "/problems", text: t("nav.problems") },
-        { type: "link", href: "/deployments", text: t("nav.deployments") },
-        { type: "link", href: "/competitor-accounts", text: t("nav.competitor_accounts") },
+        // Product-design pass: users first choose between the operator's two primary
+        // jobs (run an event / prepare content), then secondary operations. This keeps
+        // the left rail from looking like one undifferentiated list of destinations.
+        {
+          type: "section",
+          text: t("nav.event_ops_section"),
+          items: [
+            { type: "link", href: "/events", text: t("nav.events") },
+            { type: "link", href: "/deployments", text: t("nav.deployments") },
+            { type: "link", href: "/competitor-accounts", text: t("nav.competitor_accounts") },
+          ],
+        },
+        {
+          type: "section",
+          text: t("nav.content_section"),
+          items: [{ type: "link", href: "/problems", text: t("nav.problems") }],
+        },
         // 管理系 (監査ログ / IdP) は日常運用メニューと混ざると見つけにくいので、 1 つの
         // category section にまとめて flat な羅列を解消する。
         {

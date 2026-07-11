@@ -1,4 +1,5 @@
 import { getEnv } from "../../../helper-functions.js";
+import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import type { CompetitorAccountItem } from "../competitor-accounts-handler/types.js";
 import {
   composeRepositories,
@@ -100,6 +101,9 @@ export async function runAudit(deps: AuditDependencies): Promise<{ readonly coun
   return { count: datapoints.length };
 }
 
+// [#2527 Slice 4] Composition root: one control-data runtime per Lambda instance.
+const controlDataRuntime = createDefaultControlDataRuntime();
+
 export async function handler(): Promise<void> {
   // [Issue #2442 / Phase C2] pure SQL backend (turso|sql) では CompetitorAccounts table
   // 自体が synth されず env も配線されない — `getEnv` の fail-fast に委ねると invoke ごとに
@@ -107,7 +111,10 @@ export async function handler(): Promise<void> {
   // 誤設定は runtime resolver (`requireDdbAndTableName`) が fail loud に受ける
   // (= silent fallback にはならない、他の shared builder と同じ緩和)。
   const deps: AuditDependencies = {
-    repositories: composeRepositories(process.env.COMPETITOR_ACCOUNTS_TABLE_NAME ?? ""),
+    repositories: composeRepositories(
+      controlDataRuntime,
+      process.env.COMPETITOR_ACCOUNTS_TABLE_NAME ?? "",
+    ),
     environmentName: getEnv("DEPLOY_ENVIRONMENT"),
     now: () => Date.now(),
   };

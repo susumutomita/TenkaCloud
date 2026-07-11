@@ -31,8 +31,12 @@ import { handle } from "hono/aws-lambda";
 import { createCognitoIdpAdapter } from "../../../control-plane/handlers/idp-handler/cognito-adapter.js";
 import { createSeamIdpStore } from "../../../control-plane/handlers/idp-handler/ddb-store.js";
 import { buildIdpApp } from "../../../control-plane/handlers/idp-handler/routes.js";
+import { createDefaultControlDataRuntime } from "../../../problem-deploy/control-data/runtime-repositories.js";
 import { buildIdpSharedResources } from "./shared.js";
 import { createTenantIdpResolveScope } from "./tier-guard.js";
+
+// [#2527 Slice 4] Composition root: one control-data runtime per Lambda instance.
+const controlDataRuntime = createDefaultControlDataRuntime();
 
 const shared = buildIdpSharedResources();
 
@@ -58,7 +62,11 @@ const app = buildIdpApp({
   pathPrefix: "/tenant/idp",
   resolveScope: createTenantIdpResolveScope(process.env.IDP_TIER_GUARD),
   deps: {
-    store: createSeamIdpStore({ ddb: shared.ddb, tableName: shared.tableName }),
+    store: createSeamIdpStore({
+      runtime: controlDataRuntime,
+      ddb: shared.ddb,
+      tableName: shared.tableName,
+    }),
     cognito: createCognitoIdpAdapter({ client: shared.cognito, userPoolId: shared.userPoolId }),
     now: () => new Date(),
   },

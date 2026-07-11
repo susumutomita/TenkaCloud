@@ -10,6 +10,7 @@ import {
 } from "../../lib/problem-deploy/handlers/participant-handler/challenge-access";
 import type { EventGate } from "../../lib/problem-deploy/handlers/participant-handler/event-gate";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #2283: challenge access 判定の単一箇所 (participant 側 enforcement)。
@@ -19,6 +20,7 @@ import type { ParticipantSharedResources } from "../../lib/problem-deploy/handle
 
 const send = vi.fn();
 const shared = {
+  runtime: makeTestControlDataRuntime(),
   ddb: { send },
   tableName: "TestDeployments",
   eventsTableName: "TestEvents",

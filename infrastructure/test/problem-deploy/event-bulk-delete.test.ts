@@ -3,6 +3,7 @@ import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bulkTeardownEvent } from "../../lib/problem-deploy/handlers/event-handler/bulk-delete";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const NOW_MS = 1_700_000_000_000;
 
@@ -14,6 +15,7 @@ function buildShared(): {
   const ddbSend = vi.fn();
   const eventsSend = vi.fn();
   const shared: EventSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     eventsTableName: "TestEvents",
     teamsTableName: "TestTeams",
     deploymentsTableName: "TestDeployments",

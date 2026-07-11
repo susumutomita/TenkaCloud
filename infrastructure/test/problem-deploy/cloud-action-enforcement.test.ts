@@ -13,6 +13,7 @@ import {
   holdForApproval,
   parseEnforcementMode,
 } from "../../lib/problem-deploy/handlers/deploy-handler/cloud-action-enforcement";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 describe("parseEnforcementMode", () => {
   it("should parse 'enforce' (case / whitespace insensitive)", () => {
@@ -40,6 +41,7 @@ describe("buildCloudActionPolicy", () => {
 
 describe("evaluateDeployGate", () => {
   const deps = (send: ReturnType<typeof vi.fn>) => ({
+    runtime: makeTestControlDataRuntime(),
     ddb: { send } as never,
     tableName: "T",
   });
@@ -150,6 +152,7 @@ describe("holdForApproval", () => {
   it("should conditionally flip PENDING → APPROVAL_PENDING for our own tenant row", async () => {
     const send = vi.fn().mockResolvedValue({});
     await holdForApproval({
+      runtime: makeTestControlDataRuntime(),
       ddb: { send } as never,
       tableName: "T",
       jobId: "01HX",

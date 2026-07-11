@@ -9,6 +9,7 @@ import {
   routePut,
 } from "../../lib/problem-deploy/handlers/competitor-accounts-handler/saml-routes";
 import type { CompetitorAccountsSharedResources } from "../../lib/problem-deploy/handlers/competitor-accounts-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #1424: SAML route orchestrators (routeGet / routePut / routeDelete) + Cognito-deps
@@ -37,6 +38,7 @@ const ctx = (opts: {
   }) as unknown as Context;
 
 const shared = {
+  runtime: makeTestControlDataRuntime(),
   ddb: { send: vi.fn().mockResolvedValue({}) },
   cognito: { send: vi.fn().mockResolvedValue({ UserPoolClient: {} }) },
   tableName: "TestCompetitorAccounts",

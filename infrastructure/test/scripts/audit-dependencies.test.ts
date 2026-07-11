@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { runAudit } from "../../../scripts/audit-dependencies";
+import { runAudit } from "../../../scripts/security/audit-dependencies";
 
 /**
  * ADR (mini Shai-Hulud 2nd 対策) のための audit-dependencies.ts の挙動 pin。
@@ -35,7 +35,7 @@ describe("audit-dependencies (ADR mini Shai-Hulud 2nd 対策)", () => {
 
   it("should return ok=false / mode='baseline-missing' when the baseline is missing", () => {
     writePackage("safe-pkg", { scripts: { test: "noop" } });
-    // BASELINE_PATH は scripts/audit-baseline.json で固定。 ここでは production baseline を
+    // BASELINE_PATH は scripts/security/audit-baseline.json で固定。 ここでは production baseline を
     // 触らない (= production node_modules vs production baseline は別 test で見る) ので、
     // node_modules を tmpRoot に向けるだけで挙動を観測する。 production baseline がある状態
     // で fake node_modules を渡すと "全部消えた" 状態の diff になる → 確認は別 case で。
@@ -107,7 +107,7 @@ describe("audit-dependencies (ADR mini Shai-Hulud 2nd 対策)", () => {
   // `make audit-deps` を実行する。 ここでは unit pin に絞る。
   it("should never skip on missing baseline: mode should be returned deterministically even on production node_modules", () => {
     // production node_modules を fake に置き換えずに呼ぶケース (= baseline がある + 現状一致)。
-    // 期待: 別途実行される `bun run scripts/audit-dependencies.ts` で ok=true になっていることが
+    // 期待: 別途実行される `bun run scripts/security/audit-dependencies.ts` で ok=true になっていることが
     // 整合の証拠。 本 test は呼び出し interface が落ちないことだけ pin。
     const outcome = runAudit();
     expect(outcome.totalScanned).toBeGreaterThanOrEqual(0);

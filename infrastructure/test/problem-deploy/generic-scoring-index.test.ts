@@ -6,6 +6,7 @@ import {
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #1424: generic scoring dispatcher Lambda (index.ts, ADR-012 Phase 3.B) の
@@ -208,6 +209,7 @@ beforeEach(() => {
   });
   mocks.publishRuntimeScoreFeed.mockResolvedValue(undefined);
   shared = {
+    runtime: makeTestControlDataRuntime(),
     ddb,
     deploymentsTableName: "TestDeployments",
     eventsTableName: EVENTS_TABLE,
@@ -379,16 +381,13 @@ describe("processDeployment guard branches", () => {
     // TURSO_DATABASE_URL still fails loudly, but now at env validation (before the libSQL
     // client is built), so the surfaced message is the missing-env one rather than the old
     // sync-factory "SqlExecutor" error. The fail-loud (not fail-closed) contract is unchanged.
-    const previous = process.env.CONTROL_DATA_BACKEND;
-    process.env.CONTROL_DATA_BACKEND = "turso";
+    // [#2527 Slice 4] The backend selection is injected via the shared runtime (the handler no
+    // longer reads the module-global singleton), so this test injects a turso-selecting runtime
+    // through the mocked buildSharedResources return instead of flipping process.env.
+    shared.runtime = makeTestControlDataRuntime({ CONTROL_DATA_BACKEND: "turso" });
     shared.problemsScoring = { p1: { kind: "uptime-flat" } };
-    try {
-      await expect(runWith(baseItem())).rejects.toThrow(/TURSO_DATABASE_URL is required/);
-      expect(mocks.runUptimeFlatKind).not.toHaveBeenCalled();
-    } finally {
-      if (previous === undefined) delete process.env.CONTROL_DATA_BACKEND;
-      else process.env.CONTROL_DATA_BACKEND = previous;
-    }
+    await expect(runWith(baseItem())).rejects.toThrow(/TURSO_DATABASE_URL is required/);
+    expect(mocks.runUptimeFlatKind).not.toHaveBeenCalled();
   });
 
   it("should skip a problem with no scoring config", async () => {
@@ -554,8 +553,15 @@ describe("applyKindResult / appendKindScoreEvents", () => {
 
 describe("queryOverridesForDeployment (exported)", () => {
   it("should return [] when the table name is empty", async () => {
-    // biome-ignore lint/suspicious/noExplicitAny: 直接呼び出し用の最小 ddb。
-    const out = await queryOverridesForDeployment({} as any, "", "t", "team", "p");
+    const out = await queryOverridesForDeployment(
+      makeTestControlDataRuntime(),
+      // biome-ignore lint/suspicious/noExplicitAny: 直接呼び出し用の最小 ddb。
+      {} as any,
+      "",
+      "t",
+      "team",
+      "p",
+    );
     expect(out).toEqual([]);
   });
 
@@ -569,30 +575,60 @@ describe("queryOverridesForDeployment (exported)", () => {
         ],
       }),
     };
-    // biome-ignore lint/suspicious/noExplicitAny: 直接呼び出し用の最小 ddb。
-    const out = await queryOverridesForDeployment(fakeDdb as any, "T", "t", "team", "p");
+    const out = await queryOverridesForDeployment(
+      makeTestControlDataRuntime(),
+      // biome-ignore lint/suspicious/noExplicitAny: 直接呼び出し用の最小 ddb。
+      fakeDdb as any,
+      "T",
+      "t",
+      "team",
+      "p",
+    );
     expect(out).toEqual([{ slot: "a", overrideUrl: "https://x" }]);
   });
 
   it("should default to [] when the query returns no Items", async () => {
     const fakeDdb = { send: vi.fn().mockResolvedValue({}) };
-    // biome-ignore lint/suspicious/noExplicitAny: 直接呼び出し用の最小 ddb。
-    expect(await queryOverridesForDeployment(fakeDdb as any, "T", "t", "team", "p")).toEqual([]);
+    expect(
+      await queryOverridesForDeployment(
+        makeTestControlDataRuntime(),
+        // biome-ignore lint/suspicious/noExplicitAny: 直接呼び出し用の最小 ddb。
+        fakeDdb as any,
+        "T",
+        "t",
+        "team",
+        "p",
+      ),
+    ).toEqual([]);
   });
 
   it("should wrap a query error with context", async () => {
     const fakeDdb = { send: vi.fn().mockRejectedValue(new Error("ddb down")) };
     await expect(
-      // biome-ignore lint/suspicious/noExplicitAny: 直接呼び出し用の最小 ddb。
-      queryOverridesForDeployment(fakeDdb as any, "T", "t", "team", "p"),
+      queryOverridesForDeployment(
+        makeTestControlDataRuntime(),
+        // biome-ignore lint/suspicious/noExplicitAny: 直接呼び出し用の最小 ddb。
+        fakeDdb as any,
+        "T",
+        "t",
+        "team",
+        "p",
+      ),
     ).rejects.toThrow(/queryOverrides failed for t\/team\/p/);
   });
 
   it("should stringify a non-Error rejection in the wrapped message", async () => {
     const fakeDdb = { send: vi.fn().mockRejectedValue("plain string failure") };
     await expect(
-      // biome-ignore lint/suspicious/noExplicitAny: 直接呼び出し用の最小 ddb。
-      queryOverridesForDeployment(fakeDdb as any, "T", "t", "team", "p"),
+      queryOverridesForDeployment(
+        makeTestControlDataRuntime(),
+        // biome-ignore lint/suspicious/noExplicitAny: 直接呼び出し用の最小 ddb。
+        fakeDdb as any,
+        "T",
+        "t",
+        "team",
+        "p",
+      ),
     ).rejects.toThrow(/plain string failure/);
   });
 });

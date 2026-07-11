@@ -42,6 +42,7 @@ import {
 } from "../../lib/problem-deploy/handlers/event-handler/shared";
 import { computeCatalogSnapshotId } from "../../lib/problem-pack/event-pin";
 import { runPackCli } from "../../lib/problem-pack/pack-cli";
+import { makeTestControlDataRuntime } from "../problem-deploy/control-data/runtime.test-helpers";
 
 const PACK_ID = "com.example.starter"; // pack-cli.ts DEFAULT_INIT_PACK_ID
 const PACK_VERSION = "0.1.0"; // init-pack.ts buildManifest
@@ -177,7 +178,7 @@ async function buildFixture() {
 
   const ddbSend = vi.fn().mockResolvedValue({});
   const shared: EventSharedResources = {
-    ...buildEventSharedResources(),
+    ...buildEventSharedResources(makeTestControlDataRuntime()),
     ddb: { send: ddbSend } as unknown as EventSharedResources["ddb"],
   };
 

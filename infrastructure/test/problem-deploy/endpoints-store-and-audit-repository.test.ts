@@ -4,6 +4,7 @@ import {
   createCompetitorAccountsRepository,
 } from "../../lib/problem-deploy/handlers/external-id-audit-handler/repository";
 import { queryOverrides } from "../../lib/problem-deploy/handlers/problem-endpoints-handler/store";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #1418: 残っていた 2 つの小さな service-module 分岐を pin する。
@@ -20,7 +21,14 @@ describe("queryOverrides", () => {
         .mockResolvedValue({ Items: [{ PK: "p", SK: "SLOT#a", overrideUrl: "https://x" }] }),
       // biome-ignore lint/suspicious/noExplicitAny: minimal DynamoDBDocumentClient for the call.
     } as any;
-    const out = await queryOverrides(ddb, "T", "tenant", "team", "p1");
+    const out = await queryOverrides(
+      makeTestControlDataRuntime(),
+      ddb,
+      "T",
+      "tenant",
+      "team",
+      "p1",
+    );
     expect(out).toHaveLength(1);
     // The PK/SK condition is built from the (tenant, team, problem) tuple.
     expect(ddb.send).toHaveBeenCalledTimes(1);
@@ -29,7 +37,9 @@ describe("queryOverrides", () => {
   it("should default to [] when the query returns no Items", async () => {
     // biome-ignore lint/suspicious/noExplicitAny: minimal client.
     const ddb = { send: vi.fn().mockResolvedValue({}) } as any;
-    expect(await queryOverrides(ddb, "T", "tenant", "team", "p1")).toEqual([]);
+    expect(
+      await queryOverrides(makeTestControlDataRuntime(), ddb, "T", "tenant", "team", "p1"),
+    ).toEqual([]);
   });
 });
 
@@ -40,10 +50,10 @@ describe("composeRepositories", () => {
     // `composeRepositories` rebuilds the thin repository wrapper on every call, while the
     // expensive DynamoDBDocumentClient / CloudWatchClient constructors stay memoized at module
     // scope (`cachedDdb` / `cachedCloudWatch`) so warm invokes still reuse the same socket pool.
-    const first = composeRepositories("T");
+    const first = composeRepositories(makeTestControlDataRuntime(), "T");
     expect(first.competitorAccounts).toBeDefined();
     expect(first.rotationAgeMetrics).toBeDefined();
-    const second = composeRepositories("T");
+    const second = composeRepositories(makeTestControlDataRuntime(), "T");
     expect(second.competitorAccounts).toBeDefined();
     expect(second.rotationAgeMetrics).toBeDefined();
   });
@@ -53,7 +63,11 @@ describe("composeRepositories", () => {
     const ddb = { send: vi.fn().mockResolvedValue({}) } as any;
     const onPage = vi.fn().mockResolvedValue(undefined);
 
-    await createCompetitorAccountsRepository({ ddb, tableName: "T" }).forEachAccountPage(onPage);
+    await createCompetitorAccountsRepository({
+      runtime: makeTestControlDataRuntime(),
+      ddb,
+      tableName: "T",
+    }).forEachAccountPage(onPage);
 
     expect(onPage).toHaveBeenCalledTimes(1);
     expect(onPage).toHaveBeenCalledWith([]);

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveTargetAccessCapability } from "../../lib/problem-deploy/handlers/deploy-handler/composite-target-access";
 import { lookupTeamByLoginKey } from "../../lib/problem-deploy/handlers/participant-handler/lookup";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 function buildShared(scoring: ParticipantSharedResources["problemsScoring"] = {}): {
   shared: ParticipantSharedResources;
@@ -10,6 +11,7 @@ function buildShared(scoring: ParticipantSharedResources["problemsScoring"] = {}
 } {
   const ddbSend = vi.fn();
   const shared: ParticipantSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     eventsTableName: "TestEvents",
     ddb: { send: ddbSend } as unknown as ParticipantSharedResources["ddb"],

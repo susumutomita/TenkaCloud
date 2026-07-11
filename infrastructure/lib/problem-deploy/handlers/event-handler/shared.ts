@@ -14,10 +14,9 @@ import type {
 } from "../../control-data/deployments-repository.js";
 import type { DisruptionsRepository } from "../../control-data/disruptions-repository.js";
 import type { EventsRepository } from "../../control-data/events-repository.js";
-import {
-  type ControlDataRepositories,
-  controlDataRuntime,
-  resolveControlDataRepositories,
+import type {
+  ControlDataRepositories,
+  ControlDataRuntime,
 } from "../../control-data/runtime-repositories.js";
 import type { TeamsRepository } from "../../control-data/teams-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
@@ -57,6 +56,13 @@ export type PackCatalogProvenance = Extract<
  * `env` を share する。
  */
 export interface EventSharedResources {
+  /**
+   * [#2527 Slice 4] Injected control-data runtime. The Lambda entrypoint
+   * (`index.ts`) creates it via `createDefaultControlDataRuntime()` and every
+   * repository seam below resolves through it — handler modules no longer
+   * import the module-global singleton.
+   */
+  readonly runtime: ControlDataRuntime;
   readonly eventsTableName: string;
   readonly teamsTableName: string;
   readonly deploymentsTableName: string;
@@ -106,8 +112,9 @@ export interface EventSharedResources {
   readonly resolveDeploymentProvenance?: DeploymentProvenanceResolver;
 }
 
-export function buildEventSharedResources(): EventSharedResources {
+export function buildEventSharedResources(runtime: ControlDataRuntime): EventSharedResources {
   return {
+    runtime,
     // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso|sql) 選択時は Events/Teams
     // table 自体が synth されない (= env も未配線) ため、module-load を`getEnv`の fail-fast に
     // 委ねると cold start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb /
@@ -161,7 +168,9 @@ export function buildEventSharedResources(): EventSharedResources {
  * オーナーが generic-scoring Lambda に CompetitorAccounts read grant + env を足す前は scheduled
  * teardown が dormant になり、 毎分 tick / 採点を一切壊さない。
  */
-export function buildScheduledTeardownResources(): EventSharedResources | undefined {
+export function buildScheduledTeardownResources(
+  runtime: ControlDataRuntime,
+): EventSharedResources | undefined {
   const competitorAccountsTableName = process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
   const eventsTableName = process.env.EVENTS_TABLE_NAME;
   const deploymentsTableName = process.env.DEPLOYMENTS_TABLE_NAME;
@@ -177,6 +186,7 @@ export function buildScheduledTeardownResources(): EventSharedResources | undefi
     return undefined;
   }
   return {
+    runtime,
     eventsTableName,
     deploymentsTableName,
     competitorAccountsTableName,
@@ -209,7 +219,9 @@ export function buildScheduledTeardownResources(): EventSharedResources | undefi
  * (= teardown 配線 (#1910) と同じ段階的有効化モデル)。 `bulkDeployEvent` は teams を Query し
  * problemsCatalog で problemId→problemDir を解決するため、 teardown の placeholder では不足する。
  */
-export function buildScheduledDeployResources(): EventSharedResources | undefined {
+export function buildScheduledDeployResources(
+  runtime: ControlDataRuntime,
+): EventSharedResources | undefined {
   const competitorAccountsTableName = process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
   const eventsTableName = process.env.EVENTS_TABLE_NAME;
   const deploymentsTableName = process.env.DEPLOYMENTS_TABLE_NAME;
@@ -229,6 +241,7 @@ export function buildScheduledDeployResources(): EventSharedResources | undefine
     return undefined;
   }
   return {
+    runtime,
     eventsTableName,
     deploymentsTableName,
     teamsTableName,
@@ -270,7 +283,7 @@ export function buildScheduledDeployResources(): EventSharedResources | undefine
 export function resolveEventRepositories(
   shared: EventSharedResources,
 ): Promise<ControlDataRepositories> {
-  return resolveControlDataRepositories({
+  return shared.runtime.resolveRepositories({
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
     teamsTableName: shared.teamsTableName,
@@ -286,16 +299,16 @@ export function resolveEventRepositories(
  * や、 毎分 reconciler (generic-scoring Lambda) のような Events-only writer でも安全に使える。
  * default backend では従来と byte 互換の Get/UpdateCommand を `shared.ddb` 経由で発火する。
  *
- * [#2450] cold-start cache 済みの async resolver (`controlDataRuntime`) 経由で解決するため、
+ * [#2450] cold-start cache 済みの async resolver (injected `shared.runtime`) 経由で解決するため、
  * `CONTROL_DATA_BACKEND=turso|sql` でも Mirrored で動作する (read は canonical DDB の passthrough)。
  * SSM GetParameter (WithDecryption) + libsql client 構築は turso 選択時のみ・Lambda instance
  * ごとに 1 回だけ (dynamodb default では SSM に触れず、 発火コマンドも従来と byte 互換)。
  * `Promise<EventsRepository>` を返すので caller は await してからメソッドを呼ぶ。
  */
 export function resolveEventsRepository(
-  shared: Pick<EventSharedResources, "ddb" | "eventsTableName">,
+  shared: Pick<EventSharedResources, "runtime" | "ddb" | "eventsTableName">,
 ): Promise<EventsRepository> {
-  return controlDataRuntime.resolveEventsRepository({
+  return shared.runtime.resolveEventsRepository({
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
   });
@@ -309,11 +322,11 @@ export function resolveEventsRepository(
  * では従来と byte 互換の QueryCommand (`PK = EVENT#<eventId> AND begins_with(SK, "TEAM#")`) を
  * `shared.ddb` 経由で発火し、 teamId 昇順の {@link TeamRecord}[] を返す。
  *
- * [#2450] events-only seam と同じく cold-start cache 済みの async resolver (`controlDataRuntime`)
+ * [#2450] events-only seam と同じく cold-start cache 済みの async resolver (injected `shared.runtime`)
  * 経由で解決するため、 `CONTROL_DATA_BACKEND=turso|sql` でも Mirrored で動作する。 `Promise` を返す。
  */
 export function resolveTeamsRepository(shared: EventSharedResources): Promise<TeamsRepository> {
-  return controlDataRuntime.resolveTeamsRepository({
+  return shared.runtime.resolveTeamsRepository({
     ddb: shared.ddb,
     teamsTableName: shared.teamsTableName,
   });
@@ -327,14 +340,14 @@ export function resolveTeamsRepository(shared: EventSharedResources): Promise<Te
  * known B4 constraint: the control-data factory fails loudly until the SQL
  * Deployments backend exists.
  *
- * [#2467-era runtime] Delegates to the cold-start-cached `controlDataRuntime`
+ * [#2467-era runtime] Delegates to the cold-start-cached injected `shared.runtime`
  * (mirror of {@link resolveEventsRepository} / {@link resolveTeamsRepository}),
  * so `Promise<DeploymentsRepository>` — caller must await before use.
  */
 export function resolveDeploymentsRepository(
-  shared: Pick<EventSharedResources, "ddb" | "deploymentsTableName">,
+  shared: Pick<EventSharedResources, "runtime" | "ddb" | "deploymentsTableName">,
 ): Promise<DeploymentsRepository> {
-  return controlDataRuntime.resolveDeploymentsRepository({
+  return shared.runtime.resolveDeploymentsRepository({
     ddb: shared.ddb,
     deploymentsTableName: shared.deploymentsTableName,
   });
@@ -346,14 +359,14 @@ export function resolveDeploymentsRepository(
  * Update reads through the same injected DocumentClient (byte-identical to the pre-seam inline
  * access — existing tests that mock `shared.ddb.send` pass unmodified).
  *
- * [#2467-era runtime] Delegates to the cold-start-cached `controlDataRuntime` (mirror of
+ * [#2467-era runtime] Delegates to the cold-start-cached injected `shared.runtime` (mirror of
  * {@link resolveDeploymentsRepository}), so `CONTROL_DATA_BACKEND=turso|sql|turso-mirror|
  * sql-mirror` all work. `Promise<DisruptionsRepository>` — caller must await before use.
  */
 export function resolveDisruptionsRepository(
-  shared: Pick<EventSharedResources, "ddb" | "disruptionsTableName">,
+  shared: Pick<EventSharedResources, "runtime" | "ddb" | "disruptionsTableName">,
 ): Promise<DisruptionsRepository> {
-  return controlDataRuntime.resolveDisruptionsRepository({
+  return shared.runtime.resolveDisruptionsRepository({
     ddb: shared.ddb,
     disruptionsTableName: shared.disruptionsTableName,
   });
@@ -363,13 +376,13 @@ export function resolveDisruptionsRepository(
  * [Issue #2442 / Phase C4] AdminAuditLog seam for `routes/audit-log.ts` (tenant-scoped audit read
  * — Issue #1292). Default backend stays DynamoDB and emits the same Query through the same
  * injected DocumentClient (byte-identical to the pre-seam inline access). Delegates to the
- * cold-start-cached `controlDataRuntime` (mirror of {@link resolveDisruptionsRepository}), so
+ * cold-start-cached injected `shared.runtime` (mirror of {@link resolveDisruptionsRepository}), so
  * `CONTROL_DATA_BACKEND=turso|sql|turso-mirror|sql-mirror` all work.
  */
 export function resolveAdminAuditLogRepository(
-  shared: Pick<EventSharedResources, "ddb" | "adminAuditLogTableName">,
+  shared: Pick<EventSharedResources, "runtime" | "ddb" | "adminAuditLogTableName">,
 ): Promise<AdminAuditLogRepository> {
-  return controlDataRuntime.resolveAdminAuditLogRepository({
+  return shared.runtime.resolveAdminAuditLogRepository({
     ddb: shared.ddb,
     adminAuditLogTableName: shared.adminAuditLogTableName,
   });

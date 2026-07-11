@@ -4,7 +4,7 @@ import type {
   DeploymentsQueryPort,
 } from "../../control-data/deployments-repository.js";
 import type { EventRecord, ScheduleFiredKind } from "../../control-data/events-repository.js";
-import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { bulkTeardownEvent } from "../event-handler/bulk-delete.js";
 import { bulkDeployEvent } from "../event-handler/bulk-deploy.js";
 import { type EventSharedResources, resolveEventsRepository } from "../event-handler/shared.js";
@@ -67,6 +67,8 @@ export function resolveEventStatusTransition(
 }
 
 export interface ReconcileEventStatusesContext {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: DynamoDBDocumentClient;
   readonly eventsTableName: string;
   readonly deploymentsTableName: string;
@@ -286,30 +288,30 @@ export async function reconcileEventStatuses(
   ctx: ReconcileEventStatusesContext,
   nowIso: string,
 ): Promise<void> {
-  await pruneExpiredControlData(nowIso);
+  await pruneExpiredControlData(ctx.runtime, nowIso);
   const repository = await resolveEventsRepository(ctx);
   const events = await repository.listEventsByStatus(RECONCILED_STATUSES);
   const nowMs = Date.parse(nowIso);
   await Promise.all(events.map((event) => reconcileSingleEvent(ctx, event, nowIso, nowMs)));
 }
 
-async function pruneExpiredControlData(nowIso: string): Promise<void> {
-  if (!controlDataRuntime.needsManualPrune()) return;
+async function pruneExpiredControlData(runtime: ControlDataRuntime, nowIso: string): Promise<void> {
+  if (!runtime.needsManualPrune()) return;
   const nowMs = Date.parse(nowIso);
   if (!Number.isFinite(nowMs)) return;
   const nowEpochSeconds = Math.floor(nowMs / 1000);
   await Promise.all([
-    controlDataRuntime.resolveEventsRepository({}),
-    controlDataRuntime.resolveTeamsRepository({}),
-    controlDataRuntime.resolveNotificationsRepository({}),
+    runtime.resolveEventsRepository({}),
+    runtime.resolveTeamsRepository({}),
+    runtime.resolveNotificationsRepository({}),
     // [Issue #2442 / Phase C3] Disruptions joins the manual-prune tick (audit / fire-claim /
     // recurring / exec-claim rows all carry `expiresAt` — same TTL-equivalent sweep as
     // Events/Teams/Notifications).
-    controlDataRuntime.resolveDisruptionsRepository({}),
+    runtime.resolveDisruptionsRepository({}),
     // [Issue #2442 / Phase C4] AdminAuditLog joins the manual-prune tick too (rows carry `ttl`,
     // DynamoDB's native TTL attribute name — no `ddb`/`adminAuditLogTableName` needed here since
     // `needsManualPrune()` above already gates this branch to the pure-SQL backend).
-    controlDataRuntime.resolveAdminAuditLogRepository({}),
+    runtime.resolveAdminAuditLogRepository({}),
   ])
     .then(([events, teams, notifications, disruptions, adminAuditLog]) =>
       Promise.all([

@@ -3,7 +3,7 @@ import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { AdminAuditLogRepository } from "../../../problem-deploy/control-data/admin-audit-log-repository.js";
 import type { DeploymentsRepository } from "../../../problem-deploy/control-data/deployments-repository.js";
 import type { EventsRepository } from "../../../problem-deploy/control-data/events-repository.js";
-import { controlDataRuntime } from "../../../problem-deploy/control-data/runtime-repositories.js";
+import type { ControlDataRuntime } from "../../../problem-deploy/control-data/runtime-repositories.js";
 
 /**
  * AdminInsight Lambda が module load で 1 度だけ作るリソース束。
@@ -18,6 +18,8 @@ import { controlDataRuntime } from "../../../problem-deploy/control-data/runtime
  * loud に受ける (= silent fallback にはならない)。
  */
 export interface AdminInsightSharedResources {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly deploymentsTableName: string;
   readonly eventsTableName: string;
   readonly teamsTableName: string;
@@ -36,9 +38,10 @@ export interface AdminInsightSharedResources {
   readonly environmentName: string;
 }
 
-export function buildSharedResources(): AdminInsightSharedResources {
+export function buildSharedResources(runtime: ControlDataRuntime): AdminInsightSharedResources {
   const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
   return {
+    runtime,
     // [Issue #2441 / Phase B PR-6] pure SQL backend (turso|sql) では Deployments table 自体が
     // synth されず env も配線されない。EVENTS_TABLE_NAME/TEAMS_TABLE_NAME と同じ空文字 default。
     deploymentsTableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
@@ -63,16 +66,16 @@ export function buildSharedResources(): AdminInsightSharedResources {
  * dynamodb) では従来と byte 互換の Query を `shared.ddb` 経由で発火する。 admin-insight は
  * Events の read-only 集計のみ行う (mutating method は使わない) ため、 events-only seam で十分。
  *
- * [#2450] turso 対応済み: cold-start cache 済みの async resolver (`controlDataRuntime`) 経由で
+ * [#2450] turso 対応済み: cold-start cache 済みの async resolver (injected `shared.runtime`) 経由で
  * 解決するため `CONTROL_DATA_BACKEND=turso|sql` でも動作する (read は Mirrored の canonical
  * passthrough)。 `AdminInsightApiLambdaProps.controlDataBackend` に `"turso"` を渡すと
  * `CONTROL_DATA_BACKEND` env が注入され、 SSM read 権限は `tursoAuthTokenParameterName` 指定時に
  * 付与される。 `Promise<EventsRepository>` を返すので caller は await する。
  */
 export function resolveEventsRepository(
-  shared: Pick<AdminInsightSharedResources, "ddb" | "eventsTableName">,
+  shared: Pick<AdminInsightSharedResources, "runtime" | "ddb" | "eventsTableName">,
 ): Promise<EventsRepository> {
-  return controlDataRuntime.resolveEventsRepository({
+  return shared.runtime.resolveEventsRepository({
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
   });
@@ -89,9 +92,9 @@ export function resolveEventsRepository(
  * one full-item Query into two `Select=COUNT` queries (see `countActiveByTenant`).
  */
 export function resolveDeploymentsRepository(
-  shared: Pick<AdminInsightSharedResources, "ddb" | "deploymentsTableName">,
+  shared: Pick<AdminInsightSharedResources, "runtime" | "ddb" | "deploymentsTableName">,
 ): Promise<DeploymentsRepository> {
-  return controlDataRuntime.resolveDeploymentsRepository({
+  return shared.runtime.resolveDeploymentsRepository({
     ddb: shared.ddb,
     deploymentsTableName: shared.deploymentsTableName,
   });
@@ -104,9 +107,9 @@ export function resolveDeploymentsRepository(
  * work via the same cold-start-cached async resolver every other seam in this module uses.
  */
 export function resolveAdminAuditLogRepository(
-  shared: Pick<AdminInsightSharedResources, "ddb" | "auditTableName">,
+  shared: Pick<AdminInsightSharedResources, "runtime" | "ddb" | "auditTableName">,
 ): Promise<AdminAuditLogRepository> {
-  return controlDataRuntime.resolveAdminAuditLogRepository({
+  return shared.runtime.resolveAdminAuditLogRepository({
     ddb: shared.ddb,
     adminAuditLogTableName: shared.auditTableName,
   });

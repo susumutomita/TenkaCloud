@@ -12,6 +12,7 @@ import {
   maybeLatchGateCompletion,
   type TenantFlagCache,
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/gate-completion-bonus";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #2283: scoring tick 側の Progression Gate 処理。
@@ -22,6 +23,7 @@ import {
 
 const send = vi.fn();
 const shared = {
+  runtime: makeTestControlDataRuntime(),
   ddb: { send } as unknown as DynamoDBDocumentClient,
   deploymentsTableName: "TestDeployments",
   eventsTableName: "TestEvents",

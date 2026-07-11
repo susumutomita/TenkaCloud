@@ -1,6 +1,7 @@
 import type { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it, vi } from "vitest";
 import { queryDeploymentsByEvent } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * [Issue #2441 / Phase B PR-6] `queryDeploymentsByEvent` used to have a raw-`QueryCommand`
@@ -18,6 +19,7 @@ import { queryDeploymentsByEvent } from "../../lib/problem-deploy/handlers/event
  */
 describe("queryDeploymentsByEvent (#2441 Phase B PR-6: repository seam, no raw bypass)", () => {
   const buildShared = (sendSpy: ReturnType<typeof vi.fn>) => ({
+    runtime: makeTestControlDataRuntime(),
     ddb: { send: sendSpy } as never,
     deploymentsTableName: "TestDeployments",
     eventsTableName: "TestEvents",

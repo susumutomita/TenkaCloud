@@ -16,7 +16,7 @@
  */
 
 import { spawn } from "node:child_process";
-import { type AwsResult, reportRetainedTables } from "./lib/retained-tables";
+import { type AwsResult, reportRetainedTables } from "../lib/retained-tables";
 
 function defaultAwsRunner(args: readonly string[]): Promise<AwsResult> {
   return new Promise((resolveFn) => {

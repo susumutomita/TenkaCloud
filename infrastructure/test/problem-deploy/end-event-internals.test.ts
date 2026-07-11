@@ -2,6 +2,7 @@ import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { endEvent } from "../../lib/problem-deploy/handlers/event-handler/end-event";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #1418: endEvent (event-handler/end-event.ts) は 62.5% branch だった。 ConditionalCheckFailed
@@ -34,6 +35,7 @@ const ddb = {
   }),
 };
 const shared = {
+  runtime: makeTestControlDataRuntime(),
   ddb,
   eventsTableName: "Events",
   // resolveEventRepositories (mirror 対応 seam) が Teams repo も構築するため必須。

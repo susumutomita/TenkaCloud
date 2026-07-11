@@ -2,6 +2,7 @@ import { type Context, Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { StatusCodes } from "http-status-codes";
+import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import {
   type CoordinationHandlerDeps,
   handleCoordinationOp,
@@ -36,7 +37,8 @@ import { defaultS3PluginImporter } from "./s3-plugin-importer.js";
  * synth-bundle 済み .mjs を materialize → `import()` する (= 最小 IAM 下での動的 load)。 未配線
  * (= bucket env 空) なら reject し、 load 不可 → `unavailable` / fallback で participant API を壊さない。
  */
-const shared = buildParticipantSharedResources();
+// [#2527 Slice 4] Composition root: one control-data runtime per Lambda instance.
+const shared = buildParticipantSharedResources(createDefaultControlDataRuntime());
 
 const pluginBucket = process.env.COORDINATION_PLUGIN_BUCKET ?? "";
 const coordinationImporter: PluginImporter = pluginBucket
@@ -47,7 +49,7 @@ const coordinationConfig = parseCoordinationConfig(process.env.PROBLEM_COORDINAT
 
 const coordinationDeps: CoordinationHandlerDeps = {
   importer: coordinationImporter,
-  store: { ddb: shared.ddb, tableName: shared.tableName },
+  store: { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
   resolveScope: makeCoordinationScopeResolver(shared, coordinationConfig),
 };
 

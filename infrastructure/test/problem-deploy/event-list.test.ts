@@ -2,6 +2,7 @@ import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getEventDetail, listEvents } from "../../lib/problem-deploy/handlers/event-handler/list";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 function buildShared(): {
   shared: EventSharedResources;
@@ -9,6 +10,7 @@ function buildShared(): {
 } {
   const ddbSend = vi.fn();
   const shared: EventSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     eventsTableName: "TestEvents",
     teamsTableName: "TestTeams",
     deploymentsTableName: "TestDeployments",

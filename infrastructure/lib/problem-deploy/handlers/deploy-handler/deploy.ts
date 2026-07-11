@@ -7,6 +7,7 @@ import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
 import { getEnv } from "../../../helper-functions.js";
 import type { DeploymentsLifecyclePort } from "../../control-data/deployments-repository.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { getAzureCredential } from "../shared/azure-credential-store.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
@@ -54,6 +55,8 @@ import type { CompositeDeployRequest, DeploymentItem, DeployResponse } from "./t
  * visibility / runtime resolver を追加する。
  */
 export interface DeployContext extends AdapterDependencyConfig {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly tableName: string;
   /**
    * Phase 2.2 (Issue #459): CompetitorAccounts table 名 + SSM SecureString path env 名。
@@ -332,7 +335,7 @@ export async function startDeployment(
   // unverified account) の後、cloud mutation (DDB Put / EventBridge publish) の直前に
   // enforce する。先頭で弾くと、本来 404/422 を返すべきリクエストまで 429 で隠れる。
   await enforceDeployQuota(
-    { ddb: ctx.ddb, tableName: ctx.tableName, quota: ctx.deployQuota },
+    { runtime: ctx.runtime, ddb: ctx.ddb, tableName: ctx.tableName, quota: ctx.deployQuota },
     ctx.tenantId,
     request.quotaTier ?? "basic",
   );
@@ -406,6 +409,7 @@ export async function startDeployment(
   // the adapter, so **no AssumeRole / CloudFormation runs**.
   const held = await maybeHoldDeploy({
     mode: ctx.cloudActionEnforcementMode ?? "shadow",
+    runtime: ctx.runtime,
     ddb: ctx.ddb,
     tableName: ctx.tableName,
     jobId,
@@ -488,6 +492,12 @@ export async function startDeployment(
  * SDK client / env を再利用するため module scope に hoist する。
  */
 export interface DeploySharedResources {
+  /**
+   * [#2527 Slice 4] Injected control-data runtime — the Lambda entrypoint
+   * (`index.ts`) creates it via `createDefaultControlDataRuntime()` once per
+   * instance; every repository seam resolves through it.
+   */
+  readonly runtime: ControlDataRuntime;
   readonly tableName: string;
   readonly competitorAccountsTableName: string;
   readonly env: string;
@@ -526,10 +536,11 @@ export interface DeploySharedResources {
   readonly cloudActionEnforcementMode: CloudActionEnforcementMode;
 }
 
-export function buildSharedResources(): DeploySharedResources {
+export function buildSharedResources(runtime: ControlDataRuntime): DeploySharedResources {
   // ChallengePayloadStack 未 deploy なら env は空文字列で届く。 dormant 扱いに正規化。
   const challengePayloadBucket = process.env.CHALLENGE_PAYLOAD_BUCKET || undefined;
   return {
+    runtime,
     // [Issue #2441 / Phase B PR-6] pure SQL backend (turso|sql) では Deployments table 自体が
     // synth されず env も配線されないため、module-load を `getEnv` の fail-fast に委ねると
     // cold start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb / mirror

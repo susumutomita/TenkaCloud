@@ -1,6 +1,9 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import { controlDataRuntime } from "../../control-data/runtime-repositories.js";
+import {
+  type ControlDataRuntime,
+  createDefaultControlDataRuntime,
+} from "../../control-data/runtime-repositories.js";
 import type {
   DeploymentMutationOutcome,
   DeploymentsLifecyclePort,
@@ -24,6 +27,8 @@ export interface DeployStatusWriterEvent {
 }
 
 export interface DeployStatusWriterResources {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: DynamoDBDocumentClient;
   readonly deploymentsTableName: string;
 }
@@ -93,8 +98,11 @@ export async function applyDeployStatusWrite(
   }
 }
 
-export function buildDeployStatusWriterResources(): DeployStatusWriterResources {
+export function buildDeployStatusWriterResources(
+  runtime: ControlDataRuntime,
+): DeployStatusWriterResources {
   return {
+    runtime,
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     deploymentsTableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
   };
@@ -103,13 +111,14 @@ export function buildDeployStatusWriterResources(): DeployStatusWriterResources 
 export function resolveDeploymentsRepository(
   resources: DeployStatusWriterResources,
 ): Promise<DeploymentsRepository> {
-  return controlDataRuntime.resolveDeploymentsRepository({
+  return resources.runtime.resolveDeploymentsRepository({
     ddb: resources.ddb,
     deploymentsTableName: resources.deploymentsTableName,
   });
 }
 
-const shared = buildDeployStatusWriterResources();
+// [#2527 Slice 4] Composition root: one control-data runtime per Lambda instance.
+const shared = buildDeployStatusWriterResources(createDefaultControlDataRuntime());
 
 export async function handler(event: DeployStatusWriterEvent): Promise<DeploymentMutationOutcome> {
   const repository = await resolveDeploymentsRepository(shared);

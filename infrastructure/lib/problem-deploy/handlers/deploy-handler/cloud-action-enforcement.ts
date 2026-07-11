@@ -11,6 +11,7 @@ import type {
   DeploymentsLifecyclePort,
   DeploymentsQueryPort,
 } from "../../control-data/deployments-repository.js";
+import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { logDeployTrace } from "../shared/trace-log.js";
 import { resolveDeploymentsRepository } from "./shared.js";
@@ -58,6 +59,8 @@ export function buildCloudActionPolicy(mode: CloudActionEnforcementMode): CloudA
 }
 
 export interface ReplacementLookupDeps {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: DynamoDBDocumentClient;
   readonly tableName: string;
 }
@@ -157,6 +160,8 @@ export async function evaluateDeployGate(
 }
 
 export interface HoldForApprovalInput {
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: DynamoDBDocumentClient;
   readonly tableName: string;
   readonly jobId: string;
@@ -191,6 +196,8 @@ export async function holdForApproval(input: HoldForApprovalInput): Promise<void
 
 export interface MaybeHoldDeployInput {
   readonly mode: CloudActionEnforcementMode;
+  /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
+  readonly runtime: ControlDataRuntime;
   readonly ddb: DynamoDBDocumentClient;
   readonly tableName: string;
   readonly jobId: string;
@@ -214,7 +221,7 @@ export interface MaybeHoldDeployInput {
 export async function maybeHoldDeploy(input: MaybeHoldDeployInput): Promise<DeployResponse | null> {
   const gate = await evaluateDeployGate({
     mode: input.mode,
-    deps: { ddb: input.ddb, tableName: input.tableName },
+    deps: { runtime: input.runtime, ddb: input.ddb, tableName: input.tableName },
     tenantId: input.tenantId,
     namePrefix: input.namePrefix,
     jobId: input.jobId,
@@ -223,6 +230,7 @@ export async function maybeHoldDeploy(input: MaybeHoldDeployInput): Promise<Depl
     return null;
   }
   await holdForApproval({
+    runtime: input.runtime,
     ddb: input.ddb,
     tableName: input.tableName,
     jobId: input.jobId,

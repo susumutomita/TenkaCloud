@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
+import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { TENANT_ADMIN_ROLE, TENANT_ROLES } from "../deploy-handler/auth.js";
 import { buildAuthErrorHandler, createRoleCheckMiddleware } from "../shared/auth-wiring.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
@@ -46,7 +47,9 @@ import { buildEventSharedResources } from "./shared.js";
  * middleware / onError handler / route group の wiring のみを担当する (Issue #1250)。
  */
 
-const shared = buildEventSharedResources();
+// [#2527 Slice 4] Composition root: the entrypoint creates the real control-data
+// runtime once per Lambda instance (cold-start cache preserved) and injects it.
+const shared = buildEventSharedResources(createDefaultControlDataRuntime());
 
 const app = new Hono();
 

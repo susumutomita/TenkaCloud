@@ -22,6 +22,7 @@ import {
   TargetAccessDescriptorSchema,
   type TargetAccessProvider,
 } from "../../lib/problem-deploy/handlers/deploy-handler/composite-target-access";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const PARENT_ID = "01HPARENTAAAAAAAAAAAAAAAAA";
 const TARGET_ID = "01HTARGETxxxxxxxxxxxxxxxxxx";
@@ -33,6 +34,7 @@ function buildDeps(): {
 } {
   const ddbSend = vi.fn();
   const deps: CompositeDeploymentRepositoryDeps = {
+    runtime: makeTestControlDataRuntime(),
     ddb: { send: ddbSend },
     tableName: "TestDeployments",
   };

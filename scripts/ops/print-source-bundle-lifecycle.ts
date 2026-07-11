@@ -16,12 +16,13 @@
  */
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
-import type { SourceBundleConfig } from "../infrastructure/lib/config/config-interface";
-import { buildSourceBundleLifecyclePolicy } from "../infrastructure/lib/source-bundle/lifecycle-policy";
+import type { SourceBundleConfig } from "../../infrastructure/lib/config/config-interface";
+import { buildSourceBundleLifecyclePolicy } from "../../infrastructure/lib/source-bundle/lifecycle-policy";
 
 const env = process.argv[2] ?? process.env.ENV ?? "development";
 const configPath = path.resolve(
   __dirname,
+  "..",
   "..",
   "infrastructure",
   "environments",

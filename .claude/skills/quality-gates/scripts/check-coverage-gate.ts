@@ -17,14 +17,14 @@
  * (run from the repo root; relocated off the product body — see SKILL.md).
  *
  * Issue #2513: `--shard <infrastructure|spas|packages>` narrows both GATED_WORKSPACES and
- * REPORTED_WORKSPACES down to the workspaces `scripts/run-coverage.ts`'s SHARDS assigns to that
+ * REPORTED_WORKSPACES down to the workspaces `scripts/workspace/run-coverage.ts`'s SHARDS assigns to that
  * shard, so CI's 3-way coverage matrix can gate each shard independently. CI calls this script
  * directly (not through run.ts) inside each shard job. No flag = full gate, unchanged.
  */
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { SHARD_NAMES, SHARDS, type ShardName } from "../../../../scripts/run-coverage.ts";
+import { SHARD_NAMES, SHARDS, type ShardName } from "../../../../scripts/workspace/run-coverage.ts";
 
 const REPO_ROOT = process.cwd();
 

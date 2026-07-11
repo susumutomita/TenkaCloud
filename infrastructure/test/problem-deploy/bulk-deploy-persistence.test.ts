@@ -6,6 +6,7 @@ import {
   writeBulkDeployPlan,
 } from "../../lib/problem-deploy/handlers/event-handler/bulk-deploy/persistence";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #1418: bulk-deploy/persistence.ts は 33% branch だった。 writeBulkDeployPlan の
@@ -31,6 +32,7 @@ const ddb = {
   }),
 };
 const shared = {
+  runtime: makeTestControlDataRuntime(),
   ddb,
   eventsTableName: "Events",
   // resolveEventRepositories (mirror 対応 seam) が Teams repo も構築するため必須。

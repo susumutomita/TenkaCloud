@@ -5,6 +5,7 @@ import {
   buildParticipantSharedResources,
   queryTeamItems,
 } from "../../lib/problem-deploy/handlers/participant-handler/shared";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
  * Issue #1418: 2 つの shared-resource builder (event-handler/shared.ts +
@@ -43,7 +44,7 @@ afterEach(() => {
 
 describe("buildEventSharedResources", () => {
   it("should read required env, defaulting optionals when absent", () => {
-    const s = buildEventSharedResources();
+    const s = buildEventSharedResources(makeTestControlDataRuntime());
     expect(s.eventsTableName).toBe("Events");
     expect(s.disruptionsTableName).toBe("Disruptions");
     expect(s.bulkDeployPayloadBucket).toBe(""); // BULK_DEPLOY_PAYLOAD_BUCKET ?? ""
@@ -66,7 +67,7 @@ describe("buildEventSharedResources", () => {
         contentDigest: "sha256-abc",
       },
     });
-    const s = buildEventSharedResources();
+    const s = buildEventSharedResources(makeTestControlDataRuntime());
     expect(s.bulkDeployPayloadBucket).toBe("payloads");
     expect(s.useBulkDistributedMap).toBe(true);
     expect(s.problemsDisruptions).toMatchObject({ p1: [{ id: "d1" }] });
@@ -82,7 +83,7 @@ describe("buildEventSharedResources", () => {
 
   it("should fall back to {} when BATTLE_PROBLEMS_DISRUPTIONS is invalid JSON", () => {
     process.env.BATTLE_PROBLEMS_DISRUPTIONS = "{not json";
-    expect(buildEventSharedResources().problemsDisruptions).toEqual({});
+    expect(buildEventSharedResources(makeTestControlDataRuntime()).problemsDisruptions).toEqual({});
   });
 
   it("should fall back to {} and warn when BATTLE_PROBLEMS_PROVENANCE has an invalid shape", () => {
@@ -90,14 +91,16 @@ describe("buildEventSharedResources", () => {
     process.env.BATTLE_PROBLEMS_PROVENANCE = JSON.stringify({
       p1: { source: "core" },
     });
-    expect(buildEventSharedResources().problemsProvenance).toEqual({});
+    expect(buildEventSharedResources(makeTestControlDataRuntime()).problemsProvenance).toEqual({});
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("BATTLE_PROBLEMS_PROVENANCE"));
     warn.mockRestore();
   });
 
   it("should treat a non-true distributed-map flag as false", () => {
     process.env.BULK_DEPLOY_VIA_DISTRIBUTED_MAP = "false";
-    expect(buildEventSharedResources().useBulkDistributedMap).toBe(false);
+    expect(buildEventSharedResources(makeTestControlDataRuntime()).useBulkDistributedMap).toBe(
+      false,
+    );
   });
 
   it("should throw when a required env var is missing", () => {
@@ -105,7 +108,7 @@ describe("buildEventSharedResources", () => {
     // COMPETITOR_ACCOUNTS_TABLE_NAME, and DISRUPTIONS_TABLE_NAME are no longer required (see
     // below); DEPLOY_EVENT_BUS_NAME remains a `getEnv`-required field.
     delete process.env.DEPLOY_EVENT_BUS_NAME;
-    expect(() => buildEventSharedResources()).toThrow();
+    expect(() => buildEventSharedResources(makeTestControlDataRuntime())).toThrow();
   });
 
   // Issue #2440 (ADR-049 §5.1 Phase A5): pure SQL backend (turso|sql) 選択時は Events/Teams
@@ -116,8 +119,8 @@ describe("buildEventSharedResources", () => {
   it("should default eventsTableName/teamsTableName to '' when unset (pure SQL backend cold start)", () => {
     delete process.env.EVENTS_TABLE_NAME;
     delete process.env.TEAMS_TABLE_NAME;
-    expect(() => buildEventSharedResources()).not.toThrow();
-    const s = buildEventSharedResources();
+    expect(() => buildEventSharedResources(makeTestControlDataRuntime())).not.toThrow();
+    const s = buildEventSharedResources(makeTestControlDataRuntime());
     expect(s.eventsTableName).toBe("");
     expect(s.teamsTableName).toBe("");
   });
@@ -127,8 +130,8 @@ describe("buildEventSharedResources", () => {
   // fail-fast when DEPLOYMENTS_TABLE_NAME is absent.
   it("should default deploymentsTableName to '' when unset (pure SQL backend cold start)", () => {
     delete process.env.DEPLOYMENTS_TABLE_NAME;
-    expect(() => buildEventSharedResources()).not.toThrow();
-    expect(buildEventSharedResources().deploymentsTableName).toBe("");
+    expect(() => buildEventSharedResources(makeTestControlDataRuntime())).not.toThrow();
+    expect(buildEventSharedResources(makeTestControlDataRuntime()).deploymentsTableName).toBe("");
   });
 
   // [Issue #2442 / Phase C2] CompetitorAccounts table is not synthesized under pure SQL
@@ -137,8 +140,10 @@ describe("buildEventSharedResources", () => {
   // otherwise crash cold start for every route, not just competitor-accounts ones).
   it("should default competitorAccountsTableName to '' when unset (pure SQL backend cold start)", () => {
     delete process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
-    expect(() => buildEventSharedResources()).not.toThrow();
-    expect(buildEventSharedResources().competitorAccountsTableName).toBe("");
+    expect(() => buildEventSharedResources(makeTestControlDataRuntime())).not.toThrow();
+    expect(
+      buildEventSharedResources(makeTestControlDataRuntime()).competitorAccountsTableName,
+    ).toBe("");
   });
 
   // [Issue #2442 / Phase C3] Disruptions table is not synthesized under pure SQL backends
@@ -147,8 +152,8 @@ describe("buildEventSharedResources", () => {
   // otherwise crash cold start for every route, not just disruption ones).
   it("should default disruptionsTableName to '' when unset (pure SQL backend cold start)", () => {
     delete process.env.DISRUPTIONS_TABLE_NAME;
-    expect(() => buildEventSharedResources()).not.toThrow();
-    expect(buildEventSharedResources().disruptionsTableName).toBe("");
+    expect(() => buildEventSharedResources(makeTestControlDataRuntime())).not.toThrow();
+    expect(buildEventSharedResources(makeTestControlDataRuntime()).disruptionsTableName).toBe("");
   });
 
   // [Issue #2442 / Phase C4] AdminAuditLog table is not synthesized under pure SQL backends
@@ -157,19 +162,21 @@ describe("buildEventSharedResources", () => {
   // no throw-before/no-throw-after story here — just the default/explicit branches.
   it("should default adminAuditLogTableName to '' when unset", () => {
     delete process.env.ADMIN_AUDIT_LOG_TABLE_NAME;
-    expect(buildEventSharedResources().adminAuditLogTableName).toBe("");
+    expect(buildEventSharedResources(makeTestControlDataRuntime()).adminAuditLogTableName).toBe("");
   });
 
   it("should read ADMIN_AUDIT_LOG_TABLE_NAME when present", () => {
     process.env.ADMIN_AUDIT_LOG_TABLE_NAME = "AdminAuditLog";
-    expect(buildEventSharedResources().adminAuditLogTableName).toBe("AdminAuditLog");
+    expect(buildEventSharedResources(makeTestControlDataRuntime()).adminAuditLogTableName).toBe(
+      "AdminAuditLog",
+    );
     delete process.env.ADMIN_AUDIT_LOG_TABLE_NAME;
   });
 });
 
 describe("buildParticipantSharedResources", () => {
   it("should default the endpoints table to '' when unset", () => {
-    const s = buildParticipantSharedResources();
+    const s = buildParticipantSharedResources(makeTestControlDataRuntime());
     expect(s.tableName).toBe("Deployments");
     expect(s.eventsTableName).toBe("Events");
     expect(s.endpointsTableName).toBe(""); // PROBLEM_ENDPOINTS_TABLE_NAME ?? ""
@@ -179,14 +186,16 @@ describe("buildParticipantSharedResources", () => {
 
   it("should use PROBLEM_ENDPOINTS_TABLE_NAME when present", () => {
     process.env.PROBLEM_ENDPOINTS_TABLE_NAME = "Endpoints";
-    expect(buildParticipantSharedResources().endpointsTableName).toBe("Endpoints");
+    expect(buildParticipantSharedResources(makeTestControlDataRuntime()).endpointsTableName).toBe(
+      "Endpoints",
+    );
   });
 
   it("should throw when a required env var is missing", () => {
     // [Issue #2441 Phase B PR-6] DEPLOYMENTS_TABLE_NAME is no longer required (see below);
     // DEPLOY_ENVIRONMENT remains a `getEnv`-required field.
     delete process.env.DEPLOY_ENVIRONMENT;
-    expect(() => buildParticipantSharedResources()).toThrow();
+    expect(() => buildParticipantSharedResources(makeTestControlDataRuntime())).toThrow();
   });
 
   // Issue #2440 (ADR-049 §5.1 Phase A5): pure SQL backend (turso|sql) では Events table 自体が
@@ -194,8 +203,8 @@ describe("buildParticipantSharedResources", () => {
   // が落ちるため空文字 default に緩和した。
   it("should default eventsTableName to '' when unset (pure SQL backend cold start)", () => {
     delete process.env.EVENTS_TABLE_NAME;
-    expect(() => buildParticipantSharedResources()).not.toThrow();
-    expect(buildParticipantSharedResources().eventsTableName).toBe("");
+    expect(() => buildParticipantSharedResources(makeTestControlDataRuntime())).not.toThrow();
+    expect(buildParticipantSharedResources(makeTestControlDataRuntime()).eventsTableName).toBe("");
   });
 
   // [Issue #2441 / Phase B PR-6] Deployments table is not synthesized under pure SQL
@@ -203,14 +212,15 @@ describe("buildParticipantSharedResources", () => {
   // when DEPLOYMENTS_TABLE_NAME is absent.
   it("should default tableName to '' when DEPLOYMENTS_TABLE_NAME is unset (pure SQL backend cold start)", () => {
     delete process.env.DEPLOYMENTS_TABLE_NAME;
-    expect(() => buildParticipantSharedResources()).not.toThrow();
-    expect(buildParticipantSharedResources().tableName).toBe("");
+    expect(() => buildParticipantSharedResources(makeTestControlDataRuntime())).not.toThrow();
+    expect(buildParticipantSharedResources(makeTestControlDataRuntime()).tableName).toBe("");
   });
 });
 
 describe("queryTeamItems", () => {
   it("should return the queried items", async () => {
     const shared = {
+      runtime: makeTestControlDataRuntime(),
       ddb: { send: vi.fn().mockResolvedValue({ Items: [{ jobId: "j1" }] }) },
       tableName: "Deployments",
     } as unknown as ParticipantSharedResources;
@@ -219,6 +229,7 @@ describe("queryTeamItems", () => {
 
   it("should default to [] when the query returns no Items", async () => {
     const shared = {
+      runtime: makeTestControlDataRuntime(),
       ddb: { send: vi.fn().mockResolvedValue({}) },
       tableName: "Deployments",
     } as unknown as ParticipantSharedResources;

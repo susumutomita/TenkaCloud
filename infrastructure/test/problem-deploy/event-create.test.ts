@@ -11,6 +11,7 @@ import {
   CreateEventRequestSchema,
 } from "../../lib/problem-deploy/handlers/event-handler/types";
 import { computeCatalogSnapshotId } from "../../lib/problem-pack/event-pin";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const NOW_MS = 1_700_000_000_000;
 const CREATED_AT = new Date(NOW_MS).toISOString();
@@ -51,6 +52,7 @@ function buildShared(overrides: Partial<EventSharedResources> = {}): {
 } {
   const ddbSend = vi.fn();
   const shared: EventSharedResources = {
+    runtime: makeTestControlDataRuntime(),
     eventsTableName: "TestEvents",
     teamsTableName: "TestTeams",
     ddb: { send: ddbSend } as unknown as EventSharedResources["ddb"],

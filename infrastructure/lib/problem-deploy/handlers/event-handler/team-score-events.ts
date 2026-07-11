@@ -30,7 +30,7 @@ export interface DeploymentRefForScoreEvents {
  * 表示順 / displayName を継承する。 teamId 不明な deployment は捨てる (= safety)。
  */
 export async function collectTeamScoreEvents(
-  shared: Pick<EventSharedResources, "ddb" | "deploymentsTableName">,
+  shared: Pick<EventSharedResources, "runtime" | "ddb" | "deploymentsTableName">,
   args: {
     readonly deployments: readonly DeploymentRefForScoreEvents[];
     readonly displayNameByTeamId: ReadonlyMap<string, string>;
@@ -73,7 +73,7 @@ export async function collectTeamScoreEvents(
 }
 
 async function collectEventsForDeployments(
-  shared: Pick<EventSharedResources, "ddb" | "deploymentsTableName">,
+  shared: Pick<EventSharedResources, "runtime" | "ddb" | "deploymentsTableName">,
   deploymentJobIds: readonly string[],
 ): Promise<TeamScoreEventView[]> {
   const collected: TeamScoreEventView[] = [];

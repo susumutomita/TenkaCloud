@@ -8,7 +8,7 @@
  *
  * 1. `bun run --filter <pkg>` can resolve the workspace filter before the
  *    workspace graph is fully settled and return "No packages matched the
- *    filter" (see the comment in `.github/workflows/pages.yml`). Issue #993
+ *    filter" when it races a not-yet-finished `bun install`. Issue #993
  *    hit a sharper variant of the same flakiness: a flag meant for every
  *    workspace in an `&&` chain only ever reached the *last* element, so
  *    Codecov only ever saw coverage for one workspace.
@@ -18,17 +18,17 @@
  *
  * This script replaces the chains with a small discover → plan → execute
  * pipeline. `discoverWorkspaces` and `planTask` are pure and unit-tested
- * (scripts/run-workspaces.test.ts) including a repo-parity test that pins
+ * (scripts/workspace/run-workspaces.test.ts) including a repo-parity test that pins
  * the exact workspace set per task — *that* test is the seam a reviewer
  * now diffs when the workspace list changes, instead of an opaque `&&`
  * chain.
  *
  * `test:coverage` is deliberately NOT handled here: coverage is owned by
- * `scripts/run-coverage.ts` (#2513), which carries its own workspace list
+ * `scripts/workspace/run-coverage.ts` (#2513), which carries its own workspace list
  * (`COVERAGE_WORKSPACES`), the 3-way `--shard` CI matrix, per-workspace
  * timing, and the fix-coverage-paths post-step.
  *
- * Usage: bun run scripts/run-workspaces.ts <build|typecheck|test>
+ * Usage: bun run scripts/workspace/run-workspaces.ts <build|typecheck|test>
  */
 
 import { spawnSync } from "node:child_process";
@@ -206,7 +206,7 @@ export function planTask(task: string, workspaces: WorkspaceInfo[]): TaskPlan {
 }
 
 function printUsage(): void {
-  console.error(`Usage: bun run scripts/run-workspaces.ts <${TASKS.join("|")}>`);
+  console.error(`Usage: bun run scripts/workspace/run-workspaces.ts <${TASKS.join("|")}>`);
 }
 
 function main(): void {
@@ -216,7 +216,7 @@ function main(): void {
     process.exit(1);
   }
 
-  const rootDir = resolve(import.meta.dir, "..");
+  const rootDir = resolve(import.meta.dir, "../..");
   const workspaces = discoverWorkspaces(rootDir);
 
   let plan: TaskPlan;

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const REPO_ROOT = new URL("../../../", import.meta.url).pathname;
-const SCRIPT = join(REPO_ROOT, "scripts/participant-portal-runtime-config.ts");
+const SCRIPT = join(REPO_ROOT, "scripts/ops/participant-portal-runtime-config.ts");
 const tempDirs: string[] = [];
 
 function runConfig(args: readonly string[]): { stdout: string; stderr: string; status: number } {

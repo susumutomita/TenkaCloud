@@ -1,7 +1,7 @@
 /* TenkaCloud developer docs — landing-design content pages (Issue #2433).
    Self-contained like legal-pages.css, but aligned to the landing design system:
    the ink palette, Inter + Noto Sans JP + JetBrains Mono, 10px radius. Loaded by
-   the generated pages under landing/docs/ (scripts/generate-landing-docs.ts). */
+   the generated pages under landing/docs/ (scripts/landing/generate-landing-docs.ts). */
 
 :root {
   --ink: #07111f;

@@ -37,14 +37,14 @@ export function buildCompositeDeployDeps(
   ctx: DeployContext,
   teamName: string,
 ): CompositeDeployDeps {
-  const repo = { ddb: ctx.ddb, tableName: ctx.tableName };
+  const repo = { runtime: ctx.runtime, ddb: ctx.ddb, tableName: ctx.tableName };
 
   return {
     buildPlan: buildCompositeDeploymentPlan,
     tenantId: ctx.tenantId,
     enforceQuota: (tenantId, tier) =>
       enforceDeployQuota(
-        { ddb: ctx.ddb, tableName: ctx.tableName, quota: ctx.deployQuota },
+        { runtime: ctx.runtime, ddb: ctx.ddb, tableName: ctx.tableName, quota: ctx.deployQuota },
         tenantId,
         tier,
       ),

@@ -4,6 +4,7 @@ import {
   buildCfnConsoleUrl,
   getStackProgress,
 } from "../../lib/problem-deploy/handlers/deploy-handler/stack-progress";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const TENANT = "tenant-acme";
 const JOB_ID = "01HXYZ12345678901234567890";
@@ -47,6 +48,7 @@ function buildShared(options: { verified?: boolean } = {}): {
     return ddbSend(cmd);
   });
   const shared: DeploySharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     competitorAccountsTableName: "TestCompetitorAccounts",
     env: "development",

@@ -18,6 +18,7 @@ import type {
   DeploymentItem,
   DeploymentProvenance,
 } from "../../lib/problem-deploy/handlers/deploy-handler/types";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 const JOB_ID = "01HJOBxxxxxxxxxxxxxxxxxxxx";
 const TENANT = "tenant-acme";
@@ -35,6 +36,7 @@ function buildShared(): {
 } {
   const ddbSend = vi.fn();
   const shared: DeploySharedResources = {
+    runtime: makeTestControlDataRuntime(),
     tableName: "TestDeployments",
     competitorAccountsTableName: "TestCompetitorAccounts",
     env: "development",
